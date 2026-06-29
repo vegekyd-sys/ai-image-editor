@@ -89,7 +89,7 @@ export default function MoveableTestPage() {
   };
 
   return (
-    <div style={{ background: '#111', minHeight: '100dvh', padding: 20, color: '#fff', fontFamily: 'monospace' }}>
+    <div className="makaron-ios-page makaron-ios-page-x" style={{ background: '#111', minHeight: '100dvh', padding: 20, color: '#fff', fontFamily: 'monospace' }}>
       <h2 style={{ fontSize: 16, marginBottom: 4 }}>useLayoutEffect + translate/scale Demo</h2>
       <p style={{ fontSize: 12, color: '#888', marginBottom: 12 }}>{status}</p>
       <p style={{ fontSize: 11, color: '#666', marginBottom: 12 }}>
@@ -169,7 +169,7 @@ export default function MoveableTestPage() {
       {exportUrl && (
         <div>
           <div style={{ fontSize: 13, color: '#aaa', marginBottom: 4 }}>Export result:</div>
-          <img src={exportUrl} style={{ width: 600, border: '1px solid #333', borderRadius: 8 }} />
+          <img src={exportUrl} alt="Exported Remotion preview" style={{ width: 600, border: '1px solid #333', borderRadius: 8 }} />
         </div>
       )}
     </div>

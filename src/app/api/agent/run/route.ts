@@ -5,6 +5,7 @@ import { runMakaronAgent, withLocale } from '@/lib/agent';
 import { AgentDualWriter } from '@/lib/agentDualWriter';
 import { buildPromptContext } from '@/lib/agent-context';
 import { requireCredits, deductByTokens } from '@/lib/billing/credits';
+import { getRequestLocale } from '@/lib/server-locale';
 
 export const maxDuration = 800;
 
@@ -31,6 +32,9 @@ export async function POST(req: NextRequest) {
       preferredModel,
       isNsfw,
       videoModel,
+      videoResolution,
+      videoAuto,
+      audioAttachments,
     } = await req.json();
 
     if (!projectId || !prompt) {
@@ -44,7 +48,7 @@ export async function POST(req: NextRequest) {
     const creditCheck = await requireCredits(userId, 5);
     if (!creditCheck.ok) return creditCheck.response;
 
-    const locale = req.cookies.get('locale')?.value ?? 'en';
+    const locale = getRequestLocale(req);
 
     // Query timeline version
     const { data: projectRow } = await supabase.from('projects').select('timeline_version').eq('id', projectId).single();
@@ -78,6 +82,7 @@ export async function POST(req: NextRequest) {
       hasAnnotation,
       isDraft,
       referenceImageCount,
+      audioAttachments,
     });
 
     // Write user message to DB (frontend does this itself, headless mode must do it here)
@@ -122,6 +127,9 @@ export async function POST(req: NextRequest) {
           locale,
           preferredModel,
           videoModel,
+          videoResolution,
+          videoAuto,
+          audioAttachments: ctx.audioAttachments,
           snapshotImages: ctx.snapshotImages,
           currentSnapshotIndex: ctx.currentSnapshotIndex,
           isNsfw,

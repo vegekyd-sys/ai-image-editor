@@ -13,6 +13,7 @@
 
 # testing
 /coverage
+/test-output/
 
 # next.js
 /.next/
@@ -20,6 +21,7 @@
 
 # production
 /build
+/ios/build/
 
 # misc
 .DS_Store
@@ -30,6 +32,11 @@ npm-debug.log*
 yarn-debug.log*
 yarn-error.log*
 .pnpm-debug.log*
+console-errors.log
+*-trace*.json.gz
+trace-*.json.gz
+snapshot-before-test.md
+HANDOFF*.md
 
 # env files (can opt-in for committing if needed)
 .env*
@@ -52,9 +59,25 @@ next-env.d.ts
 !src/**/*.png
 !public/**/*.jpg
 !public/**/*.png
+!ios/App/App/Assets.xcassets/AppIcon.appiconset/AppIcon-512@2x.png
+
+# App Store / marketing asset binaries stay local; track README/docs only.
+app-store-assets/**/*.jpg
+app-store-assets/**/*.jpeg
+app-store-assets/**/*.png
+app-store-assets/**/*.webp
+app-store-assets/**/*.heic
+app-store-assets/**/*.pdf
+app-store-assets/**/*.mp4
+app-store-assets/**/*.mov
 
 # dev scripts
 /scripts/
+!/scripts/
+/scripts/*
+!/scripts/makaron-release-check.mjs
+!/scripts/makaron-worktree-fastpath.mjs
+!/scripts/backfill-annual-subscription-credits.mjs
 
 
 # claude code local settings
@@ -67,6 +90,12 @@ test-kling.mjs
 
 # Screenshots (Playwright / Chrome DevTools)
 /screenshots/
+
+# local generated artifacts
+/tmp/
+/output/
+/outputs/
+/.playwright-cli/
 
 # workspace agent runtime data
 .workspace/

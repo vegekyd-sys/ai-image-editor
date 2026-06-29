@@ -5,6 +5,7 @@ import { ProjectAnimation } from '@/types';
 import { useLocale } from '@/lib/i18n';
 import PillCarousel from '@/components/PillCarousel';
 import { getModelInfo } from '@/lib/model-registry';
+import type { TranslationKey } from '@/lib/locales/zh';
 
 function ElapsedTimer({ since }: { since: string }) {
   const sinceMs = new Date(since || undefined as unknown as string).getTime();
@@ -30,12 +31,15 @@ interface VideoResultCardProps {
   onCreateNew: () => void;
   onAbandon: (taskId: string) => void;
   onRetry?: (anim: ProjectAnimation) => void;
+  onFrameEdit?: (anim: ProjectAnimation, time: number) => void;
   onViewDetail: (anim: ProjectAnimation) => void;
+  currentTime?: number;
+  currentDuration?: number;
   isDesktop?: boolean;
 }
 
 export default function VideoResultCard({
-  animations, selectedVideoId, onSelectVideo, onCreateNew, onAbandon, onRetry, onViewDetail, isDesktop,
+  animations, selectedVideoId, onSelectVideo, onCreateNew, onAbandon, onRetry, onFrameEdit, onViewDetail, currentTime = 0, currentDuration = 0, isDesktop,
 }: VideoResultCardProps) {
   const { t } = useLocale();
 
@@ -47,6 +51,12 @@ export default function VideoResultCard({
     return clean.length > 14 ? clean.slice(0, 13) + '…' : clean;
   }
 
+  function videoModelLabel(model?: string | null): string {
+    if (!model || model === 'upload') return '';
+    const modelInfo = getModelInfo(model);
+    return modelInfo ? t(modelInfo.nameKey as TranslationKey) : model;
+  }
+
   const completed = animations.filter(a => a.status === 'completed' && a.videoUrl);
   const processing = animations.filter(a => a.status === 'processing');
   const failed = animations.filter(a => a.status === 'failed' || a.status === 'abandoned');
@@ -55,6 +65,9 @@ export default function VideoResultCard({
 
   const thumbSize = isDesktop ? 64 : 72;
   const cardWidth = isDesktop ? 176 : 200;
+  const detailWidth = isDesktop ? 40 : 44;
+  const frameEditWidth = cardWidth + detailWidth;
+  const frameEditAnim = all.find(a => a.id === selectedVideoId && a.status === 'completed' && !!a.videoUrl);
 
   const selectedPillRef = useRef<HTMLDivElement>(null);
   useEffect(() => {
@@ -66,6 +79,18 @@ export default function VideoResultCard({
       {t('video.count', all.length)}
     </span>
   );
+
+  function formatTime(seconds: number) {
+    if (!seconds || !isFinite(seconds)) return '0:00';
+    const mins = Math.floor(seconds / 60);
+    return `${mins}:${Math.floor(seconds % 60).toString().padStart(2, '0')}`;
+  }
+
+  function clampTime(seconds: number) {
+    if (!isFinite(seconds)) return 0;
+    const max = currentDuration && isFinite(currentDuration) ? currentDuration : seconds;
+    return Math.max(0, Math.min(max, seconds));
+  }
 
   return (
     <>
@@ -84,8 +109,7 @@ export default function VideoResultCard({
           const thumbUrl = anim.imageUrl;
           const title = videoTitle(anim.prompt, idx);
 
-          const modelInfo = anim.videoModel ? getModelInfo(anim.videoModel) : undefined;
-          const modelLabel = anim.videoModel === 'upload' ? '' : (modelInfo?.id || anim.videoModel || '').slice(0, 2).toUpperCase();
+          const modelLabel = videoModelLabel(anim.videoModel);
           const durationLabel = anim.duration ? `${Math.round(anim.duration)}s` : null;
           let statusText: React.ReactNode;
           if (isCompleted) {
@@ -102,6 +126,7 @@ export default function VideoResultCard({
             <div
               key={anim.id}
               ref={isSelected ? selectedPillRef : undefined}
+              data-makaron-editor-tap-target="true"
               className={`flex-shrink-0 flex items-stretch rounded-2xl overflow-hidden border transition-all animate-tip-in ${
                 isSelected
                   ? 'border-fuchsia-500 ring-1 ring-fuchsia-500/50'
@@ -110,6 +135,7 @@ export default function VideoResultCard({
               style={{ background: isSelected ? 'rgba(217,70,239,0.12)' : 'rgba(217,70,239,0.06)' }}
             >
               <button
+                data-makaron-editor-tap-target="true"
                 onClick={() => { if (isCompleted) onSelectVideo(anim.id); onViewDetail(anim); }}
                 className="text-left hover:brightness-110 active:scale-[0.97] overflow-hidden cursor-pointer"
                 style={{
@@ -164,10 +190,11 @@ export default function VideoResultCard({
               </button>
 
               <button
+                data-makaron-editor-tap-target="true"
                 onClick={() => onViewDetail(anim)}
                 className="flex flex-col items-center justify-center overflow-hidden cursor-pointer active:scale-95 hover:brightness-110"
                 style={{
-                  width: isDesktop ? 40 : 44,
+                  width: detailWidth,
                   background: 'rgba(255,255,255,0.03)',
                   borderLeft: '1px solid rgba(255,255,255,0.06)',
                   transition: 'transform 0.1s',
@@ -197,6 +224,52 @@ export default function VideoResultCard({
             style={{ background: 'rgba(255,255,255,0.02)' }}
           >
             {t('video.noVideos')}
+          </div>
+        )}
+
+        {frameEditAnim && onFrameEdit && (
+          <div
+            data-testid="video-frame-edit-pill"
+            className="flex-shrink-0 flex items-stretch rounded-2xl overflow-hidden border border-white/10 transition-all animate-tip-in"
+            style={{
+              background: 'rgba(217,70,239,0.06)',
+              width: frameEditWidth,
+            }}
+          >
+            <button
+              onClick={() => onFrameEdit(frameEditAnim, clampTime(currentTime))}
+              className="text-left hover:brightness-110 active:scale-[0.97] overflow-hidden cursor-pointer"
+              style={{
+                width: '100%',
+                transition: 'filter 0.15s, transform 0.1s',
+                background: 'transparent',
+                border: 'none',
+              }}
+            >
+              <div className="flex">
+                <div
+                  className="flex-shrink-0 bg-white/5 relative overflow-hidden flex items-center justify-center"
+                  style={{ width: thumbSize, height: thumbSize }}
+                >
+                  <svg
+                    width="17" height="17" viewBox="0 0 24 24" fill="none"
+                    stroke="currentColor" strokeWidth="2.3" strokeLinecap="round" strokeLinejoin="round"
+                    className="text-white/45"
+                  >
+                    <path d="M4 7h3l1.5-2h7L17 7h3v12H4z" />
+                    <circle cx="12" cy="13" r="3.5" />
+                  </svg>
+                </div>
+                <div className={`min-w-0 flex-1 flex flex-col justify-center ${isDesktop ? 'px-2.5 py-1.5' : 'px-3 py-2'}`}>
+                  <div className={`text-white font-semibold leading-tight truncate ${isDesktop ? 'text-[12px]' : 'text-[13px]'}`}>
+                    {t('video.frameEdit')}
+                  </div>
+                  <div className={`text-white/50 leading-snug mt-0.5 truncate ${isDesktop ? 'text-[11px]' : 'text-[11px]'}`}>
+                    {t('video.frameEditHint', formatTime(currentTime))}
+                  </div>
+                </div>
+              </div>
+            </button>
           </div>
         )}
       </PillCarousel>

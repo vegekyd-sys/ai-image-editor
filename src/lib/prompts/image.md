@@ -180,8 +180,8 @@ Omit this line if the user explicitly requested text or captions.
 ## Using Reference Images
 
 - Images in the snapshot timeline, `<<<media_1>>>`, `<<<media_2>>>`, and so on: use `media_index` to edit, `reference_media_indices` to reference. Never use `image_refs` for these.
-- Images not in the timeline, such as workspace skill assets or files from `list_files`: use `image_refs` with their URLs.
-- Example: `list_files('skills/my-skill/assets/')` gives URLs. Pass those URLs to `image_refs`.
+- Images not in the timeline, such as workspace skill assets or files from `list_files`: use `image_refs` with provider URLs returned for those assets.
+- Example: `list_files('skills/my-skill/assets/')` gives asset entries. Pass their provider URLs to `image_refs`.
 - `image_refs` works for text-to-image too. No `media_index` is needed. Just pass references and a prompt.
 - `image_refs` are not remembered between tool calls. If you need the same references again, pass them again.
 

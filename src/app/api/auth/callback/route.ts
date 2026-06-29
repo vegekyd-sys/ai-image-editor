@@ -5,7 +5,8 @@ import { getSupabaseAdmin } from '@/lib/supabase/service'
 import { readAttributionCookie, sendMetaCapiEvent } from '@/lib/marketing/meta-capi'
 
 export async function GET(request: NextRequest) {
-  const { searchParams, origin } = new URL(request.url)
+  const { searchParams } = new URL(request.url)
+  const origin = getPublicOrigin(request)
   const code = searchParams.get('code')
 
   if (!code) {
@@ -104,17 +105,33 @@ export async function GET(request: NextRequest) {
   const redirectUrl = isNewUser ? `${origin}/home?welcome=1` : `${origin}/projects`
   if (isNewUser) {
     const attribution = readAttributionCookie(request.cookies.get('mkr_attribution')?.value)
+    let eventSourceUrl = `${origin}/home`
+    if (typeof attribution.landing_path === 'string') {
+      try {
+        eventSourceUrl = new URL(attribution.landing_path, origin).toString()
+      } catch {}
+    }
     await sendMetaCapiEvent({
       eventName: 'CompleteRegistration',
       eventId: `registration.${user.id}`,
       userId: user.id,
       email: user.email,
       request,
-      eventSourceUrl: `${origin}/home`,
+      eventSourceUrl,
       customData: attribution,
     })
   }
   return buildRedirectPage(redirectUrl, cookiesToSetOnResponse)
+}
+
+export function getPublicOrigin(request: NextRequest) {
+  const url = new URL(request.url)
+  const forwardedProto = request.headers.get('x-forwarded-proto')?.split(',')[0]?.trim()
+  const forwardedHost = request.headers.get('x-forwarded-host')?.split(',')[0]?.trim()
+  const proto = forwardedProto || url.protocol.replace(':', '') || 'http'
+  const host = forwardedHost || request.headers.get('host') || url.host
+  const normalizedHost = host.replace(/^0\.0\.0\.0(?::|$)/, (match) => match.replace('0.0.0.0', '127.0.0.1'))
+  return `${proto}://${normalizedHost}`
 }
 
 /**
@@ -133,6 +150,16 @@ function buildRedirectPage(
 var r=sessionStorage.getItem('mkr_return_url')||localStorage.getItem('mkr_return_url');
 sessionStorage.removeItem('mkr_return_url');
 localStorage.removeItem('mkr_return_url');
+var skillMatch=r&&r.match(/^\\/home\\/([^/?]+)/);
+if(skillMatch){
+  if((navigator.userAgent||'').indexOf('MakaronIOS')!==-1){
+    sessionStorage.setItem('makaron:ios-pending-home-skill-id',skillMatch[1]);
+    localStorage.setItem('makaron:ios-pending-home-skill-id',skillMatch[1]);
+    r='/home';
+  }else{
+    r='/home?skill='+encodeURIComponent(skillMatch[1]);
+  }
+}
 var welcome="${redirectUrl}".includes('welcome=1');
 if(r){var sep=r.includes('?')?'&':'?';window.location.href=r+(welcome?sep+'welcome=1':'');}
 else{window.location.href="${redirectUrl}";}

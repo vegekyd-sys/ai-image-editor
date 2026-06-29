@@ -1,0 +1,97 @@
+import React from 'react';
+import { describe, expect, it, vi } from 'vitest';
+import { fireEvent, render, screen } from '@testing-library/react';
+import AgentChatView from '@/components/AgentChatView';
+import { LocaleProvider } from '@/lib/i18n';
+import { Message, Snapshot } from '@/types';
+
+vi.mock('@/lib/supabase/storage', () => ({
+  getThumbnailUrl: (url: string, width: number) => `${url}?w=${width}`,
+}));
+
+describe('AgentChatView inline image preview', () => {
+  it('navigates generated message images back to GUI', () => {
+    const onImageTap = vi.fn();
+    const message: Message = {
+      id: 'msg-image',
+      role: 'assistant',
+      content: '',
+      image: 'https://example.com/generated.jpg',
+      timestamp: Date.now(),
+    };
+    const snapshot: Snapshot = {
+      id: 'snap-image',
+      image: 'https://example.com/generated.jpg',
+      imageUrl: 'https://example.com/generated.jpg',
+      tips: [],
+      messageId: 'msg-image',
+    };
+
+    render(
+      <LocaleProvider>
+        <AgentChatView
+          messages={[message]}
+          isAgentActive={false}
+          agentStatus=""
+          currentImage="https://example.com/current.jpg"
+          onSendMessage={() => {}}
+          onBack={() => {}}
+          onPipTap={() => {}}
+          onImageTap={onImageTap}
+          snapshots={[snapshot]}
+          mode="overlay"
+        />
+      </LocaleProvider>,
+    );
+
+    fireEvent.click(screen.getByAltText('Generated'));
+
+    expect(onImageTap).toHaveBeenCalledWith(
+      'msg-image',
+      expect.objectContaining({ width: expect.any(Number), height: expect.any(Number) }),
+      'https://example.com/generated.jpg',
+    );
+    expect(screen.queryByTestId('cui-inline-image-preview')).toBeNull();
+  });
+
+  it('opens the dev-style image ref popover from an @ image reference chip', () => {
+    const onImageTap = vi.fn();
+    const message: Message = {
+      id: 'msg-text',
+      role: 'assistant',
+      content: 'Use `<<<image_1>>>` as the source.',
+      timestamp: Date.now(),
+    };
+    const snapshot: Snapshot = {
+      id: 'snap-image',
+      image: 'https://example.com/generated.jpg',
+      imageUrl: 'https://example.com/generated.jpg',
+      tips: [],
+      messageId: 'msg-image',
+    };
+
+    render(
+      <LocaleProvider>
+        <AgentChatView
+          messages={[message]}
+          isAgentActive={false}
+          agentStatus=""
+          currentImage="https://example.com/current.jpg"
+          onSendMessage={() => {}}
+          onBack={() => {}}
+          onPipTap={() => {}}
+          onImageTap={onImageTap}
+          snapshots={[snapshot]}
+          mode="overlay"
+        />
+      </LocaleProvider>,
+    );
+
+    fireEvent.click(screen.getByTestId('image-ref-chip-1'));
+
+    const preview = screen.getByTestId('cui-inline-image-preview');
+    expect(preview).toBeTruthy();
+    expect(preview.querySelector('img')).toBeTruthy();
+    expect(onImageTap).not.toHaveBeenCalled();
+  });
+});

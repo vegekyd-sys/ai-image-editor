@@ -14,6 +14,9 @@ import FileRefChip from '@/components/FileRefChip';
 import FileViewer from '@/components/FileViewer';
 import ModelSelector from '@/components/ModelSelector';
 import SkillSelector, { type SkillItem } from '@/components/SkillSelector';
+import { splitCompletionActions } from '@/lib/artifact-actions';
+import { removeAllInlineVideoUrls, removeRenderableInlineVideoUrls, resolveInlineVideoCandidate } from '@/lib/cui-video-url';
+import type { ArtifactCompletionAction as CompletionAction } from '@/types';
 
 /** Inline video in CUI — natural AR, play/pause, @N badge, tap to navigate with time sync */
 const videoArCache = new Map<string, string>();
@@ -142,6 +145,47 @@ function EditPromptCard({ prompt, inputImages, editModel }: { prompt: string; in
           </p>
         </div>
       )}
+    </div>
+  );
+}
+
+function CompletionActionCard({ actions, disabled, onAction }: {
+  actions: CompletionAction[];
+  disabled?: boolean;
+  onAction?: (action: CompletionAction) => void;
+}) {
+  if (!actions.length) return null;
+  return (
+    <div className="mt-2 rounded-xl overflow-hidden" style={{ maxWidth: 308, background: 'rgba(255,255,255,0.055)', border: '1px solid rgba(255,255,255,0.08)' }}>
+      <div className="px-3.5 py-3">
+        <div className="text-[11px] font-medium mb-1" style={{ color: 'rgba(255,255,255,0.42)' }}>
+          下一步
+        </div>
+        <div className="flex flex-col gap-2">
+          {actions.map((action, idx) => (
+            <div key={`${action.label}-${idx}`} className="flex items-center gap-2">
+              <div className="flex-1 min-w-0">
+                <div className="text-[12px] font-medium truncate" style={{ color: 'rgba(255,255,255,0.82)' }}>
+                  {action.label}
+                </div>
+                {action.description && (
+                  <div className="text-[10px] truncate" style={{ color: 'rgba(255,255,255,0.34)' }}>
+                    {action.description}
+                  </div>
+                )}
+              </div>
+              <button
+                disabled={disabled}
+                onClick={() => onAction?.(action)}
+                className="px-3 py-1.5 rounded-full flex-shrink-0 active:scale-95 transition-transform text-[11px] font-semibold disabled:opacity-40"
+                style={{ background: 'rgba(192,38,211,0.20)', color: '#f0abfc', border: '1px solid rgba(192,38,211,0.28)' }}
+              >
+                继续
+              </button>
+            </div>
+          ))}
+        </div>
+      </div>
     </div>
   );
 }
@@ -358,7 +402,7 @@ function CollapsibleCode({ text, isPanel }: { text: string; isPanel: boolean }) 
 /** Shared Markdown renderer to avoid duplicating component overrides.
  *  <<<media_N>>> and <<<image_N>>> tokens are converted to `MEDIA_REF_N` inline code before parsing,
  *  then the `code` component renders ImageRefChip for matching tokens. */
-function MarkdownBlock({ text, isPanel, snapshots, onNavigateToSnapshot, onViewFile }: { text: string; isPanel: boolean; snapshots?: Snapshot[]; onNavigateToSnapshot?: (index: number) => void; onViewFile?: (path: string) => void }) {
+function MarkdownBlock({ text, isPanel, snapshots, onNavigateToSnapshot, onPreviewSnapshot, onViewFile }: { text: string; isPanel: boolean; snapshots?: Snapshot[]; onNavigateToSnapshot?: (index: number) => void; onPreviewSnapshot?: (index: number, triggerEl?: HTMLElement | null) => void; onViewFile?: (path: string) => void }) {
   // Replace <<<media_N>>> and <<<image_N>>> with inline code `MEDIA_REF_N` so markdown structure stays intact
   let processed = snapshots
     ? text.replace(/<<<(?:image|media)_(\d+)>>>/g, '`MEDIA_REF_$1`')
@@ -384,7 +428,7 @@ function MarkdownBlock({ text, isPanel, snapshots, onNavigateToSnapshot, onViewF
         const m = str.match(/^MEDIA_REF_(\d+)$/);
         if (m) {
           const idx = parseInt(m[1]) - 1;
-          return <ImageRefChip index={idx} snapshot={snapshots[idx]} onNavigate={onNavigateToSnapshot} />;
+          return <ImageRefChip index={idx} snapshot={snapshots[idx]} onNavigate={onNavigateToSnapshot} onPreview={onPreviewSnapshot} />;
         }
       }
       // Intercept FILE_REF tokens → render FileRefChip
@@ -434,7 +478,7 @@ function MarkdownBlock({ text, isPanel, snapshots, onNavigateToSnapshot, onViewF
     th: ({ children }: { children?: React.ReactNode }) => <th className="px-3 py-1.5 text-left font-semibold" style={{ borderBottom: '1px solid rgba(255,255,255,0.12)', color: 'rgba(255,255,255,0.6)' }}>{children}</th>,
     td: ({ children }: { children?: React.ReactNode }) => <td className="px-3 py-1.5" style={{ borderBottom: '1px solid rgba(255,255,255,0.06)' }}>{children}</td>,
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }), [snapshots, onNavigateToSnapshot, onViewFile, isPanel]);
+  }), [snapshots, onNavigateToSnapshot, onPreviewSnapshot, onViewFile, isPanel]);
 
   return (
     <ReactMarkdown
@@ -447,6 +491,13 @@ function MarkdownBlock({ text, isPanel, snapshots, onNavigateToSnapshot, onViewF
 }
 
 export type PreferredModel = 'auto' | 'gemini' | 'qwen' | 'pony' | 'wai' | 'openai';
+
+export interface ComposerDraftAttachment {
+  id: string;
+  type: 'image';
+  data: string;
+  thumbnail?: string;
+}
 
 interface AgentChatViewProps {
   messages: Message[];
@@ -469,8 +520,12 @@ interface AgentChatViewProps {
   currentSnapshotIndex?: number;
   preferredModel?: PreferredModel;
   onModelChange?: (model: PreferredModel) => void;
+  videoAuto?: boolean;
+  onVideoAutoChange?: (auto: boolean) => void;
   videoModel?: import('@/types').VideoModel;
   onVideoModelChange?: (model: import('@/types').VideoModel) => void;
+  videoResolution?: import('@/types').VideoResolution;
+  onVideoResolutionChange?: (resolution: import('@/types').VideoResolution) => void;
   /** Navigate GUI canvas to snapshot by 0-based index */
   onNavigateToSnapshot?: (index: number) => void;
   /** Tap video in CUI → jump to GUI video entry */
@@ -479,6 +534,8 @@ interface AgentChatViewProps {
   onDesignPoster?: (messageId: string, posterDataUrl: string) => void;
   /** User selected a music track from MusicCard */
   onMusicSelect?: (track: { audioUrl: string; duration: number; title: string; tags: string; trackIndex: number }) => void;
+  /** User selected a next-step action from an artifact card */
+  onArtifactAction?: (action: CompletionAction) => void;
   /** Background task running (music generation, video rendering) — show status even when agent is idle */
   hasBackgroundTask?: boolean;
   /** Open CreditPopup when credits are exhausted */
@@ -488,6 +545,8 @@ interface AgentChatViewProps {
   /** Skills for skill picker */
   skills?: SkillItem[];
   selectedSkill?: string | null;
+  draftText?: string;
+  draftAttachments?: ComposerDraftAttachment[];
   onSkillChange?: (skill: string | null) => void;
   onDeleteSkill?: (name: string) => void;
   onUploadSkill?: () => void;
@@ -516,17 +575,24 @@ export default function AgentChatView({
   currentSnapshotIndex,
   preferredModel = 'auto',
   onModelChange,
+  videoAuto = true,
+  onVideoAutoChange,
   videoModel = getDefaultVideoModelId(),
   onVideoModelChange,
+  videoResolution = 'auto',
+  onVideoResolutionChange,
   onNavigateToSnapshot,
   onVideoTap,
   onDesignPoster,
   onMusicSelect,
+  onArtifactAction,
   hasBackgroundTask = false,
   onOpenCreditPopup,
   projectId,
   skills,
   selectedSkill,
+  draftText,
+  draftAttachments,
   onSkillChange,
   onDeleteSkill,
   onUploadSkill,
@@ -543,6 +609,7 @@ export default function AgentChatView({
   }, [snapshots]);
 
   const [input, setInput] = useState('');
+  const lastDraftTextRef = useRef<string | undefined>(undefined);
   const [viewingFile, setViewingFile] = useState<string | null>(null);
   // Unified attachment system: images + videos in one array
   interface Attachment {
@@ -561,6 +628,13 @@ export default function AgentChatView({
   const processingCount = attachments.filter(a => a.status === 'processing').length;
   const allReady = attachments.length > 0 && attachments.every(a => a.status === 'ready' || a.status === 'error');
   const [isExiting, setIsExiting] = useState(false);
+  const [inlineImagePreview, setInlineImagePreview] = useState<{
+    src: string;
+    snapIdx: number | null;
+    style: React.CSSProperties;
+  } | null>(null);
+  const [inlineImagePreviewLoadedUrl, setInlineImagePreviewLoadedUrl] = useState<string | null>(null);
+  const inlineImagePreviewRef = useRef<HTMLSpanElement>(null);
   const [isDragOver, setIsDragOver] = useState(false);
   const dragCountRef = useRef(0);
   // eslint-disable-next-line @typescript-eslint/no-unused-vars
@@ -577,26 +651,100 @@ export default function AgentChatView({
   const headerRef = useRef<HTMLDivElement>(null);
   const [headerH, setHeaderH] = useState(56);
   const [inputBarH, setInputBarH] = useState(96);
+
   // ── Keyboard inset (visualViewport) — no container resize, no jump ──
   const [kbInset, setKbInset] = useState(0);
+  const [nativeKbInset, setNativeKbInset] = useState(0);
+  const syncKeyboardInsetFromViewport = useCallback(() => {
+    const vv = window.visualViewport;
+    if (!vv) return;
+    const inset = Math.max(0, window.innerHeight - vv.height - vv.offsetTop);
+    setKbInset(Math.round(inset));
+  }, []);
+  const keepInputAboveKeyboard = useCallback(() => {
+    syncKeyboardInsetFromViewport();
+    window.setTimeout(syncKeyboardInsetFromViewport, 80);
+    window.setTimeout(syncKeyboardInsetFromViewport, 220);
+    window.setTimeout(() => {
+      inputBarRef.current?.scrollIntoView({ block: 'end', inline: 'nearest' });
+    }, 260);
+  }, [syncKeyboardInsetFromViewport]);
   useEffect(() => {
     const vv = window.visualViewport;
     if (!vv) return;
-    const update = () => {
-      const inset = Math.max(0, window.innerHeight - vv.height - vv.offsetTop);
-      setKbInset(Math.round(inset));
+    vv.addEventListener('resize', syncKeyboardInsetFromViewport);
+    vv.addEventListener('scroll', syncKeyboardInsetFromViewport);
+    return () => {
+      vv.removeEventListener('resize', syncKeyboardInsetFromViewport);
+      vv.removeEventListener('scroll', syncKeyboardInsetFromViewport);
     };
-    vv.addEventListener('resize', update);
-    vv.addEventListener('scroll', update);
-    return () => { vv.removeEventListener('resize', update); vv.removeEventListener('scroll', update); };
+  }, [syncKeyboardInsetFromViewport]);
+  useEffect(() => {
+    const readNativeInset = () => {
+      const raw = getComputedStyle(document.documentElement)
+        .getPropertyValue('--makaron-native-keyboard-inset')
+        .trim();
+      const next = Number.parseFloat(raw);
+      setNativeKbInset(Number.isFinite(next) ? Math.max(0, Math.round(next)) : 0);
+    };
+    const onNativeInset = (event: Event) => {
+      const inset = (event as CustomEvent<{ inset?: number }>).detail?.inset;
+      if (typeof inset === 'number') {
+        setNativeKbInset(Math.max(0, Math.round(inset)));
+      } else {
+        readNativeInset();
+      }
+    };
+    readNativeInset();
+    window.addEventListener('makaron-keyboard-inset-change', onNativeInset);
+    return () => window.removeEventListener('makaron-keyboard-inset-change', onNativeInset);
   }, []);
+  const effectiveKbInset = Math.max(kbInset, nativeKbInset);
+  const keyboardInsetCss = `max(var(--makaron-native-keyboard-inset, 0px), ${kbInset}px)`;
+
+  useEffect(() => {
+    if (draftText === lastDraftTextRef.current) return;
+    lastDraftTextRef.current = draftText;
+    if (!draftText) return;
+    setInput(draftText);
+    requestAnimationFrame(() => {
+      inputRef.current?.focus();
+      inputRef.current?.setSelectionRange(draftText.length, draftText.length);
+    });
+  }, [draftText]);
+
+  const lastDraftAttachmentsRef = useRef<string | undefined>(undefined);
+  useEffect(() => {
+    if (!draftAttachments?.length) return;
+    const key = draftAttachments.map(a => `${a.id}:${a.data.length}`).join('|');
+    if (key === lastDraftAttachmentsRef.current) return;
+    lastDraftAttachmentsRef.current = key;
+    setAttachments(prev => {
+      const withoutDraftDuplicates = prev.filter(att => !draftAttachments.some(d => d.id === att.id));
+      return [
+        ...withoutDraftDuplicates,
+        ...draftAttachments.map(att => ({
+          id: att.id,
+          type: att.type,
+          thumbnail: att.thumbnail || att.data,
+          status: 'ready' as const,
+          data: att.data,
+        })),
+      ];
+    });
+    requestAnimationFrame(() => {
+      const len = inputRef.current?.value.length ?? 0;
+      inputRef.current?.focus();
+      inputRef.current?.setSelectionRange(len, len);
+    });
+  }, [draftAttachments]);
 
   // ── PiP drag state ──────────────────────────────────────────────
   type PipCorner = 'tl' | 'tr' | 'ml' | 'mr' | 'bl' | 'br';
   const PIP_SIZES = [116, 200] as const; // md / lg (small removed)
   const PIP_M = 14;
   const INPUT_GRADIENT_TOP = 32; // paddingTop on input bar wrapper (gradient zone)
-  const PIP_BOTTOM_OFFSET = inputBarH - INPUT_GRADIENT_TOP + 4; // just above actual input box
+  const PIP_BOTTOM_OFFSET = inputBarH - INPUT_GRADIENT_TOP + 4 + effectiveKbInset; // just above actual input box
   const PIP_PEEK = 28;        // px visible when hidden at right edge
   const PIP_EXTRA_PULL = 60;  // px past right margin needed to trigger tuck
 
@@ -716,9 +864,9 @@ export default function AgentChatView({
       pipStartedAtLeftEdge.current = false;
       // Tap PiP body → hero animation + return to GUI
       const pipEl = _e.currentTarget as HTMLElement;
-      const kbOpen = window.visualViewport
+      const kbOpen = effectiveKbInset > 50 || (window.visualViewport
         ? window.innerHeight - window.visualViewport.height > 50
-        : false;
+        : false);
       if (kbOpen) {
         // Dismiss keyboard first; re-measure PiP rect after it closes, then animate
         inputRef.current?.blur();
@@ -733,7 +881,7 @@ export default function AgentChatView({
         handleBack();
       }
     }
-  }, [pipFloatPos, headerH, pipHidden, PIP, PIP_M, PIP_BOTTOM_OFFSET, PIP_EXTRA_PULL, handleBack, onPipTap]);
+  }, [pipFloatPos, headerH, pipHidden, PIP, PIP_M, PIP_BOTTOM_OFFSET, PIP_EXTRA_PULL, effectiveKbInset, handleBack, onPipTap]);
   // ────────────────────────────────────────────────────────────────
 
   useEffect(() => {
@@ -864,13 +1012,87 @@ export default function AgentChatView({
     if (isExiting) onBack();
   }, [isExiting, onBack]);
 
+  const openInlineImagePreview = useCallback((src: string, snapIdx: number | null, triggerEl?: HTMLElement | null) => {
+    if (!src) return;
+    const triggerRect = triggerEl?.getBoundingClientRect();
+    const pw = Math.min(300, window.innerWidth * 0.6);
+    let left = (window.innerWidth - pw) / 2;
+    let top = Math.max(8, Math.min(96, window.innerHeight - pw - 8));
+    if (triggerRect) {
+      const triggerCenter = triggerRect.left + triggerRect.width / 2;
+      left = triggerCenter - pw / 2;
+      if (left < 8) left = 8;
+      if (left + pw > window.innerWidth - 8) left = window.innerWidth - 8 - pw;
+      const spaceAbove = triggerRect.top - 8;
+      const spaceBelow = window.innerHeight - triggerRect.bottom - 8;
+      top = spaceAbove >= pw || spaceAbove >= spaceBelow
+        ? triggerRect.top - pw - 4
+        : triggerRect.bottom + 4;
+      top = Math.max(8, Math.min(top, window.innerHeight - pw - 8));
+    }
+    setInlineImagePreview({
+      src,
+      snapIdx,
+      style: {
+        position: 'absolute',
+        top,
+        left,
+        width: pw,
+        height: pw,
+        zIndex: 9999,
+      },
+    });
+  }, []);
+
   const handleInlineImageClick = useCallback((messageId: string, e?: React.MouseEvent) => {
-    const imgEl = e?.currentTarget?.querySelector('img') as HTMLImageElement | null;
-    const rect = imgEl?.getBoundingClientRect();
-    const ar = (imgEl?.naturalWidth && imgEl?.naturalHeight) ? imgEl.naturalWidth / imgEl.naturalHeight : undefined;
-    setIsExiting(true);
-    onImageTap(messageId, rect ?? undefined, imgEl?.src);
-  }, [onImageTap]);
+    const triggerEl = e?.currentTarget as HTMLElement | undefined;
+    const imgEl = triggerEl?.querySelector('img') as HTMLImageElement | null;
+    const msg = messages.find(m => m.id === messageId);
+    const previewSrc = msg?.image || imgEl?.src || '';
+    const snapIdx = getSnapshotIndex(messageId);
+    if (!previewSrc) return;
+    openInlineImagePreview(previewSrc, snapIdx, triggerEl);
+  }, [getSnapshotIndex, messages, openInlineImagePreview]);
+
+  const handleGeneratedImageClick = useCallback((messageId: string, e?: React.MouseEvent) => {
+    const triggerEl = e?.currentTarget as HTMLElement | undefined;
+    const imgEl = triggerEl?.querySelector('img') as HTMLImageElement | null;
+    const msg = messages.find(m => m.id === messageId);
+    const imgRect = imgEl?.getBoundingClientRect() || triggerEl?.getBoundingClientRect();
+    const imgSrc = msg?.image || imgEl?.src || '';
+    onImageTap(messageId, imgRect, imgSrc);
+  }, [messages, onImageTap]);
+
+  const handlePreviewSnapshot = useCallback((index: number, triggerEl?: HTMLElement | null) => {
+    const snapshot = snapshots[index];
+    const previewSrc = snapshot?.imageUrl || snapshot?.image || '';
+    openInlineImagePreview(previewSrc, index + 1, triggerEl);
+  }, [openInlineImagePreview, snapshots]);
+
+  useEffect(() => {
+    if (!inlineImagePreview) return;
+    const close = () => setInlineImagePreview(null);
+    const isOutside = (target: EventTarget | null) => {
+      if (!target) return false;
+      const node = target as Node;
+      if (inlineImagePreviewRef.current?.contains(node)) return false;
+      return true;
+    };
+    const onPointerDown = (event: PointerEvent) => {
+      if (isOutside(event.target)) close();
+    };
+    const onTouchStart = (event: TouchEvent) => {
+      if (isOutside(event.target)) close();
+    };
+    document.addEventListener('scroll', close, true);
+    document.addEventListener('pointerdown', onPointerDown, true);
+    document.addEventListener('touchstart', onTouchStart, true);
+    return () => {
+      document.removeEventListener('scroll', close, true);
+      document.removeEventListener('pointerdown', onPointerDown, true);
+      document.removeEventListener('touchstart', onTouchStart, true);
+    };
+  }, [inlineImagePreview]);
 
   const handleInlineVideoClick = useCallback((e: React.MouseEvent, videoUrl: string, animId?: string, startTime?: number) => {
     if (!onVideoTap) return;
@@ -924,7 +1146,7 @@ export default function AgentChatView({
         <div
           ref={headerRef}
           className="absolute top-0 left-0 z-50 px-3"
-          style={{ paddingTop: 'max(0.75rem, env(safe-area-inset-top))' }}
+          style={{ paddingTop: 'var(--makaron-cui-header-top, max(0.75rem, env(safe-area-inset-top)))' }}
         >
           <button
             data-testid="chat-back"
@@ -1044,7 +1266,7 @@ export default function AgentChatView({
       )}
 
       {/* ── Messages ── */}
-      <div ref={messagesRef} className="flex-1 overflow-y-auto overscroll-contain hide-scrollbar px-4 min-h-0" style={{ gap: 0, paddingTop: isPanel ? '16px' : 'calc(max(0.75rem, env(safe-area-inset-top)) + 2.75rem)', paddingBottom: isPanel ? '0' : `${inputBarH}px` }}>
+      <div ref={messagesRef} className="flex-1 overflow-y-auto overscroll-contain hide-scrollbar px-4 min-h-0" style={{ gap: 0, paddingTop: isPanel ? '16px' : 'var(--makaron-cui-messages-top, calc(max(0.75rem, env(safe-area-inset-top)) + 2.75rem))', paddingBottom: isPanel ? '0' : `calc(${inputBarH}px + ${keyboardInsetCss})` }}>
         {/* Empty state or loading */}
         {messages.length === 0 && (
           messagesLoading ? (
@@ -1146,35 +1368,44 @@ export default function AgentChatView({
                         </div>
                       </details>
                     ))}
-                    {msg.content && !msg.content.startsWith('[CREDITS_EXHAUSTED:') && (
-                      <div className="markdown-body">
-                        <MarkdownBlock
-                          key={msg.id}
-                          text={fixMarkdownDelimiters(msg.content.replace(/https?:\/\/\S+\.mp4\S*/g, '').replace(/\nanim:[a-f0-9-]+/g, '').replace(/\nsnap:[a-f0-9-]+/g, '').replace(/\n?music:\d+\|[^\n]*/g, ''))}
-                          isPanel={isPanel}
-                          snapshots={snapshots}
-                          onNavigateToSnapshot={onNavigateToSnapshot}
-                          onViewFile={setViewingFile}
-                        />
-                        {/* Inline video — natural aspect ratio, play button, tap to navigate */}
-                        {(() => {
-                          if (msg.design || msg.image) return null;
-                          if (msg.content.includes('```')) return null;
-                          const mp4Match = msg.content.match(/https?:\/\/\S+\.mp4\S*/);
-                          if (!mp4Match) return null;
-                          const animIdMatch = msg.content.match(/anim:([a-f0-9-]+)/);
-                          const snapIdMatch = msg.content.match(/snap:([a-f0-9-]+)/);
-                          const navId = snapIdMatch?.[1] || animIdMatch?.[1];
-                          const videoSnap = navId ? snapshots.find(s => s.id === navId) : null;
-                          const vw = videoSnap?.videoMeta?.width || 0;
-                          const vh = videoSnap?.videoMeta?.height || 0;
-                          const videoAR = vw && vh ? `${vw}/${vh}` : '9/16';
-                          const posterUrl = videoSnap?.imageUrl || videoSnap?.image || undefined;
-                          const snapIdx = videoSnap ? snapshots.indexOf(videoSnap) + 1 : undefined;
-                          return <InlineCuiVideo url={mp4Match[0]} aspectRatio={videoAR} posterUrl={posterUrl} snapIndex={snapIdx} isDesktop={isPanel} onNavigate={(e, time) => handleInlineVideoClick(e, mp4Match[0], navId, time)} />;
-                        })()}
-                      </div>
-                    )}
+                    {msg.content && !msg.content.startsWith('[CREDITS_EXHAUSTED:') && (() => {
+                      const { text: visibleText, actions } = splitCompletionActions(msg.content);
+                      const inlineVideo = msg.design || msg.image || msg.content.includes('```')
+                        ? null
+                        : resolveInlineVideoCandidate(msg.content, snapshots);
+                      const visibleWithoutVideoUrls = inlineVideo
+                        ? removeAllInlineVideoUrls(visibleText)
+                        : removeRenderableInlineVideoUrls(visibleText);
+                      return (
+                        <div className="markdown-body">
+                          <MarkdownBlock
+                            key={msg.id}
+                            text={fixMarkdownDelimiters(visibleWithoutVideoUrls.replace(/\nanim:[a-f0-9-]+/g, '').replace(/\nsnap:[a-f0-9-]+/g, '').replace(/\n?music:\d+\|[^\n]*/g, ''))}
+                            isPanel={isPanel}
+                            snapshots={snapshots}
+                            onNavigateToSnapshot={onNavigateToSnapshot}
+                            onPreviewSnapshot={handlePreviewSnapshot}
+                            onViewFile={setViewingFile}
+                          />
+                          {/* Inline video — natural aspect ratio, play button, tap to navigate */}
+                          {(() => {
+                            if (!inlineVideo) return null;
+                            const { url: videoUrl, navId, videoSnap } = inlineVideo;
+                            const vw = videoSnap?.videoMeta?.width || 0;
+                            const vh = videoSnap?.videoMeta?.height || 0;
+                            const videoAR = vw && vh ? `${vw}/${vh}` : '9/16';
+                            const posterUrl = videoSnap?.imageUrl || videoSnap?.image || undefined;
+                            const snapIdx = videoSnap ? snapshots.indexOf(videoSnap) + 1 : undefined;
+                            return <InlineCuiVideo url={videoUrl} aspectRatio={videoAR} posterUrl={posterUrl} snapIndex={snapIdx} isDesktop={isPanel} onNavigate={(e, time) => handleInlineVideoClick(e, videoUrl, navId, time)} />;
+                          })()}
+                          <CompletionActionCard
+                            actions={actions}
+                            disabled={readOnly || isAgentActive}
+                            onAction={onArtifactAction}
+                          />
+                        </div>
+                      );
+                    })()}
 
                     {/* Typing dots — show when active, last message, no content yet */}
                     {!msg.content && isAgentActive && idx === messages.length - 1 && (
@@ -1190,7 +1421,7 @@ export default function AgentChatView({
                       const snapIdx = getSnapshotIndex(msg.id);
                       return (
                         <button
-                          onClick={(e) => handleInlineImageClick(msg.id, e)}
+                          onClick={(e) => handleGeneratedImageClick(msg.id, e)}
                           className="block w-full mt-3 active:opacity-75 transition-opacity relative"
                         >
                           {/* eslint-disable-next-line @next/next/no-img-element */}
@@ -1226,7 +1457,7 @@ export default function AgentChatView({
                               style={{ border: '1px solid rgba(255,255,255,0.08)', height: 160, width: 'auto' }}
                             />
                             <span className="absolute bottom-1.5 left-1.5 bg-black/60 backdrop-blur text-white text-[10px] font-medium px-1.5 py-0.5 rounded-md">
-                              {i + 1}/{msg.images!.length}
+                              {msg.imageCaptions?.[i] || `${i + 1}/${msg.images!.length}`}
                             </span>
                           </button>
                         ))}
@@ -1339,15 +1570,15 @@ export default function AgentChatView({
 
       {!readOnly && <div
         ref={inputBarRef}
-        className={isPanel ? 'flex-shrink-0 px-3' : 'absolute left-0 right-0 px-3'}
+        className={isPanel ? 'flex-shrink-0 px-3' : 'fixed left-0 right-0 px-3'}
         style={isPanel ? {
           paddingBottom: '12px',
           paddingTop: '12px',
           borderTop: '1px solid rgba(255,255,255,0.06)',
           zIndex: 20,
         } : {
-          bottom: kbInset > 0 ? `${kbInset}px` : 0,
-          paddingBottom: kbInset > 0 ? '8px' : 'max(0.75rem, env(safe-area-inset-bottom))',
+          bottom: keyboardInsetCss,
+          paddingBottom: effectiveKbInset > 0 ? '8px' : 'var(--makaron-cui-input-safe-bottom, max(0.75rem, env(safe-area-inset-bottom)))',
           paddingTop: '32px',
           background: 'linear-gradient(to bottom, transparent 0%, #0a0a0a 32px)',
           zIndex: 20,
@@ -1368,6 +1599,8 @@ export default function AgentChatView({
             aria-label="Chat with agent"
             value={input}
             rows={1}
+            onFocus={keepInputAboveKeyboard}
+            onClick={keepInputAboveKeyboard}
             onChange={(e) => setInput(e.target.value)}
             onKeyDown={(e) => {
               if ((e.key === 'Enter' || e.code === 'Enter') && e.altKey) {
@@ -1414,8 +1647,12 @@ export default function AgentChatView({
               <ModelSelector
                 preferredModel={preferredModel}
                 onModelChange={onModelChange}
+                videoAuto={videoAuto}
+                onVideoAutoChange={onVideoAutoChange}
                 videoModel={videoModel}
                 onVideoModelChange={onVideoModelChange}
+                videoResolution={videoResolution}
+                onVideoResolutionChange={onVideoResolutionChange}
                 onOpenChange={(isOpen) => setModelSelectorOpen(isOpen)}
               />
             )}
@@ -1424,7 +1661,12 @@ export default function AgentChatView({
             {attachments.length > 0 && (
               <div className="hide-scrollbar" style={{ display: 'flex', alignItems: 'center', gap: 8, flex: 1, minWidth: 0, overflowX: 'auto', paddingTop: 2 }}>
                 {attachments.map((att) => (
-                  <div key={att.id} className="relative flex-shrink-0">
+                  <div
+                    key={att.id}
+                    className="relative flex-shrink-0"
+                    data-testid={att.type === 'image' ? 'chat-attachment-image' : 'chat-attachment-video'}
+                    data-attachment-status={att.status}
+                  >
                     {att.thumbnail ? (
                       // eslint-disable-next-line @next/next/no-img-element
                       <img src={att.thumbnail} alt="" className="w-9 h-9 rounded-lg object-cover" style={{ border: '1px solid rgba(255,255,255,0.12)' }} />
@@ -1508,6 +1750,55 @@ export default function AgentChatView({
           </div>
         </div>
       </div>}
+      {inlineImagePreview && (() => {
+        const previewUrl = inlineImagePreview.src.startsWith('http')
+          ? getThumbnailUrl(inlineImagePreview.src, 400, 90, 400, 'cover')
+          : inlineImagePreview.src;
+        const imgLoaded = inlineImagePreviewLoadedUrl === previewUrl;
+        return (
+          <span
+            ref={inlineImagePreviewRef}
+            data-testid="cui-inline-image-preview"
+            className="rounded-xl overflow-hidden shadow-2xl border border-white/10 bg-black"
+            style={{
+              ...inlineImagePreview.style,
+              display: 'block',
+              WebkitTouchCallout: 'none',
+              WebkitUserSelect: 'none',
+              userSelect: 'none',
+            }}
+            onClick={(e) => e.stopPropagation()}
+            onContextMenu={(e) => e.preventDefault()}
+          >
+            {!imgLoaded && (
+              <span style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', position: 'absolute', inset: 0, background: '#111' }}>
+                <span style={{ display: 'flex', gap: 4, alignItems: 'center' }}>
+                  {inlineImagePreview.snapIdx !== null && (
+                    <span className="text-white/30 text-xs">@{inlineImagePreview.snapIdx}</span>
+                  )}
+                  <span className="animate-spin" style={{ width: 14, height: 14, border: '2px solid rgba(255,255,255,0.15)', borderTopColor: 'rgba(255,255,255,0.5)', borderRadius: '50%' }} />
+                </span>
+              </span>
+            )}
+            {/* eslint-disable-next-line @next/next/no-img-element */}
+            <img
+              src={previewUrl}
+              alt=""
+              draggable={false}
+              onLoad={() => setInlineImagePreviewLoadedUrl(previewUrl)}
+              style={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block', WebkitTouchCallout: 'none', WebkitUserSelect: 'none', userSelect: 'none' }}
+            />
+            {imgLoaded && inlineImagePreview.snapIdx !== null && (
+              <span
+                className="bg-black/60 backdrop-blur text-white text-sm font-medium px-1.5 py-0.5 rounded-md"
+                style={{ position: 'absolute', bottom: 8, left: 8 }}
+              >
+                @{inlineImagePreview.snapIdx}
+              </span>
+            )}
+          </span>
+        );
+      })()}
     </div>
     {viewingFile && <FileViewer path={viewingFile} onClose={() => setViewingFile(null)} />}
     </>

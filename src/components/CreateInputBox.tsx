@@ -24,10 +24,19 @@ export interface CreateInputBoxProps {
   swipeRef?: React.RefObject<HTMLDivElement | null>;
   placeholder?: string;
   createLabel?: string;
+  promptPanel?: React.ReactNode;
+  actionMode?: boolean;
+  actionEyebrow?: string;
+  actionTitle?: string;
+  actionSubtitle?: string;
+  actionMeta?: string;
+  actionIdleNote?: string;
+  actionSelectedNote?: string;
   showLoginIcon?: boolean;
   onSubmit: () => void;
   onSlotClick?: () => void;
-  onTextareaFocus?: () => void;
+  onFilesSelected?: (files: File[]) => void;
+  onTextareaFocus?: (e: React.FocusEvent<HTMLTextAreaElement>) => void;
   onTextareaBlur?: () => void;
   // Skill selector props
   skills: SkillItem[];
@@ -57,9 +66,18 @@ export default function CreateInputBox({
   swipeRef,
   placeholder = '',
   createLabel = 'Create',
+  promptPanel,
+  actionMode = false,
+  actionEyebrow,
+  actionTitle,
+  actionSubtitle,
+  actionMeta,
+  actionIdleNote = 'No credit card',
+  actionSelectedNote = 'Photo selected',
   showLoginIcon = false,
   onSubmit,
   onSlotClick,
+  onFilesSelected,
   onTextareaFocus,
   onTextareaBlur,
   skills,
@@ -83,6 +101,14 @@ export default function CreateInputBox({
   } = input;
 
   const cardTouchRef = useRef<{ startX: number; startY: number; locked: 'x' | 'y' | null } | null>(null);
+  const mobileSwipeElRef = useRef<HTMLDivElement | null>(null);
+
+  const setMobileSwipeRef = useCallback((el: HTMLDivElement | null) => {
+    mobileSwipeElRef.current = el;
+    if (swipeRef) {
+      (swipeRef as { current: HTMLDivElement | null }).current = el;
+    }
+  }, [swipeRef]);
 
   const registerSwipe = useCallback((el: HTMLDivElement | null) => {
     if (!el) return () => {};
@@ -104,18 +130,295 @@ export default function CreateInputBox({
   }, [setCardDragX]);
 
   useEffect(() => {
-    if (!swipeRef?.current) return;
-    const cleanup = registerSwipe(swipeRef.current);
+    const el = mobileSwipeElRef.current;
+    if (!el || isDesktop || files.length < 2) return;
+    const cleanup = registerSwipe(el);
     return cleanup;
-  }, [files.length, registerSwipe, swipeRef]);
+  }, [files.length, isDesktop, registerSwipe]);
 
   const internalTextareaRef = useRef<HTMLTextAreaElement>(null);
   const taRef = externalTextareaRef || internalTextareaRef;
+  const liquidInputClassName = 'mkr-input-box mkr-input-box-liquid';
+  const handlePrimaryAction = useCallback(() => {
+    if (creating) return;
+    if (files.length > 0 || text.trim()) {
+      onSubmit();
+      return;
+    }
+    onSlotClick ? onSlotClick() : fileInputRef.current?.click();
+  }, [creating, fileInputRef, files.length, onSlotClick, onSubmit, text]);
+
+  const hiddenFileInput = (
+    <input
+      ref={fileInputRef}
+      type="file"
+      accept="image/*,video/*,.heic,.heif"
+      multiple
+      style={{ position: 'absolute', opacity: 0, pointerEvents: 'none', width: 0, height: 0 }}
+      onChange={(e) => {
+        const f = Array.from(e.target.files ?? []);
+        e.target.value = '';
+        if (f.length) {
+          onFilesSelected?.(f);
+          addFiles(f);
+        }
+      }}
+    />
+  );
+
+  if (actionMode) {
+    const firstPreview = previews[0];
+    const hasFiles = files.length > 0;
+    return (
+      <div
+        ref={boxRef}
+        className={liquidInputClassName}
+        role="button"
+        tabIndex={0}
+        onClick={handlePrimaryAction}
+        onKeyDown={(e) => {
+          if (e.key === 'Enter' || e.key === ' ') {
+            e.preventDefault();
+            handlePrimaryAction();
+          }
+        }}
+        onDragEnter={onDragEnter}
+        onDragOver={onDragOver}
+        onDragLeave={onDragLeave}
+        onDrop={onDrop}
+        style={{
+          position: 'relative',
+          display: 'flex',
+          alignItems: 'stretch',
+          gap: 0,
+          minHeight: isDesktop ? 96 : 86,
+          borderRadius: 18,
+          overflow: 'hidden',
+          cursor: creating ? 'default' : 'pointer',
+          pointerEvents: 'auto',
+          border: dragOver ? '1px solid rgba(217,70,239,0.58)' : '1px solid rgba(255,255,255,0.18)',
+          background: dragOver
+            ? 'linear-gradient(135deg, rgba(217,70,239,0.10), rgba(12,14,18,0.46) 42%, rgba(34,211,238,0.05))'
+            : 'linear-gradient(145deg, rgba(55,57,66,0.36), rgba(13,14,19,0.48) 48%, rgba(6,7,10,0.56))',
+          backdropFilter: 'blur(16px) saturate(142%) contrast(108%)',
+          WebkitBackdropFilter: 'blur(16px) saturate(142%) contrast(108%)',
+          boxShadow: '0 16px 40px rgba(0,0,0,0.48), inset 0 0.5px 0 rgba(255,255,255,0.15), inset 0 -14px 26px rgba(0,0,0,0.16)',
+          transition: 'transform 0.18s ease, border-color 0.2s ease, background 0.2s ease',
+        }}
+      >
+        <div style={{
+          position: 'absolute',
+          inset: 0,
+          background: 'linear-gradient(135deg, rgba(255,255,255,0.055), transparent 42%), radial-gradient(circle at 88% 75%, rgba(217,70,239,0.10), transparent 30%)',
+          pointerEvents: 'none',
+        }} />
+
+        <div
+          data-testid="photo-slot"
+          onClick={(e) => {
+            e.stopPropagation();
+            if (!creating) onSlotClick ? onSlotClick() : fileInputRef.current?.click();
+          }}
+          style={{
+            position: 'relative',
+            zIndex: 1,
+            width: collapseSlot ? 0 : isDesktop ? 96 : 82,
+            flexShrink: 0,
+            borderRight: 'none',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            opacity: collapseSlot ? 0 : 1,
+            background: hasFiles ? 'rgba(0,0,0,0.18)' : 'rgba(0,0,0,0.12)',
+            overflow: 'hidden',
+            transition: 'width 0.25s cubic-bezier(0.22, 1, 0.36, 1), opacity 0.2s',
+          }}
+        >
+          <div style={{
+            width: isDesktop ? 62 : 56,
+            height: isDesktop ? 62 : 56,
+            borderRadius: 14,
+            overflow: 'hidden',
+            border: hasFiles ? '1px solid rgba(255,255,255,0.24)' : '1px solid rgba(217,70,239,0.28)',
+            background: hasFiles ? 'rgba(255,255,255,0.08)' : 'rgba(217,70,239,0.04)',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            boxShadow: hasFiles ? '0 8px 20px rgba(0,0,0,0.32)' : 'none',
+          }}>
+            {hasFiles && firstPreview && firstPreview !== 'heic-pending' ? (
+              // eslint-disable-next-line @next/next/no-img-element
+              <img src={firstPreview} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block' }} />
+            ) : hasFiles && firstPreview === null ? (
+              <Spinner size={18} />
+            ) : (
+              <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="rgba(217,70,239,0.55)" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round">
+                <path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z" />
+                <circle cx="12" cy="13" r="4" />
+              </svg>
+            )}
+          </div>
+          {hasFiles && files.length > 1 && (
+            <div style={{
+              position: 'absolute',
+              right: 10,
+              bottom: 9,
+              padding: '2px 7px',
+              borderRadius: 999,
+              background: 'rgba(217,70,239,0.92)',
+              color: '#fff',
+              fontSize: 11,
+              fontWeight: 800,
+              boxShadow: '0 4px 12px rgba(0,0,0,0.32)',
+            }}>
+              {files.length}
+            </div>
+          )}
+          {hasFiles && !creating && (
+            <div
+              onClick={(e) => { e.stopPropagation(); input.removeFile(0); }}
+              style={{
+                position: 'absolute',
+                top: 14,
+                right: 10,
+                width: 18,
+                height: 18,
+                borderRadius: '50%',
+                background: 'rgba(0,0,0,0.62)',
+                border: '1px solid rgba(255,255,255,0.18)',
+                color: '#fff',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                fontSize: 12,
+                cursor: 'pointer',
+              }}
+            >
+              &#x2715;
+            </div>
+          )}
+        </div>
+
+        <div style={{
+          position: 'relative',
+          zIndex: 1,
+          flex: 1,
+          minWidth: 0,
+          display: 'flex',
+          flexDirection: 'column',
+          justifyContent: 'center',
+          gap: collapseSlot ? 8 : 10,
+          padding: isDesktop ? '14px 14px 12px' : '12px 12px 10px',
+        }}>
+          {!collapseSlot && (
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8, minWidth: 0 }}>
+            {actionEyebrow && (
+              <span style={{
+                flexShrink: 0,
+                display: 'inline-flex',
+                alignItems: 'center',
+                height: 22,
+                padding: '0 8px',
+                borderRadius: 999,
+                background: 'rgba(217,70,239,0.13)',
+                border: '1px solid rgba(217,70,239,0.20)',
+                color: '#f0abfc',
+                fontSize: 12,
+                fontWeight: 700,
+                letterSpacing: '0.01em',
+              }}>
+                {actionEyebrow}
+              </span>
+            )}
+            {actionMeta && (
+              <span style={{
+                minWidth: 0,
+                overflow: 'hidden',
+                textOverflow: 'ellipsis',
+                whiteSpace: 'nowrap',
+                color: 'rgba(255,255,255,0.58)',
+                fontSize: 12,
+                fontWeight: 650,
+              }}>
+                {actionMeta}
+              </span>
+            )}
+          </div>
+          )}
+          <div>
+            <div style={{
+              color: 'rgba(255,255,255,0.96)',
+              fontSize: isDesktop ? 18 : 17,
+              lineHeight: 1.18,
+              fontWeight: 700,
+              letterSpacing: '-0.01em',
+              whiteSpace: 'normal',
+              overflowWrap: 'anywhere',
+            }}>
+              {actionTitle || createLabel}
+            </div>
+            {actionSubtitle && (
+              <div style={{
+                marginTop: 5,
+                color: 'rgba(255,255,255,0.54)',
+                fontSize: isDesktop ? 13 : 12,
+                lineHeight: 1.32,
+                fontWeight: 500,
+              }}>
+                {actionSubtitle}
+              </div>
+            )}
+          </div>
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 10 }}>
+            <div style={{
+              display: 'flex',
+              alignItems: 'center',
+              gap: 6,
+              color: 'rgba(255,255,255,0.56)',
+              fontSize: 12,
+              fontWeight: 650,
+              minWidth: 0,
+            }}>
+              <span style={{ width: 6, height: 6, borderRadius: '50%', background: '#f0abfc', boxShadow: '0 0 12px rgba(240,171,252,0.9)', flexShrink: 0 }} />
+              <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                {hasFiles ? actionSelectedNote : actionIdleNote}
+              </span>
+            </div>
+            <div style={{
+              flexShrink: 0,
+              display: 'inline-flex',
+              alignItems: 'center',
+              gap: 7,
+              padding: isDesktop ? '9px 13px' : '8px 12px',
+              borderRadius: 999,
+              background: 'rgba(217,70,239,0.13)',
+              border: '1px solid rgba(217,70,239,0.20)',
+              color: 'rgba(240,171,252,0.98)',
+              fontSize: isDesktop ? 14 : 13,
+              fontWeight: 750,
+              letterSpacing: '0.015em',
+              boxShadow: 'none',
+            }}>
+              {creating ? <Spinner size={13} /> : null}
+              {createLabel}
+              {!creating && (
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.6" strokeLinecap="round" strokeLinejoin="round">
+                  <path d="M5 12h14" />
+                  <path d="m13 6 6 6-6 6" />
+                </svg>
+              )}
+            </div>
+          </div>
+        </div>
+        {hiddenFileInput}
+      </div>
+    );
+  }
 
   return (
     <div
       ref={boxRef}
-      className="mkr-input-box"
+      className={liquidInputClassName}
       onDragEnter={onDragEnter}
       onDragOver={onDragOver}
       onDragLeave={onDragLeave}
@@ -123,16 +426,20 @@ export default function CreateInputBox({
       style={{
         display: 'flex', gap: 0,
         borderRadius: 18,
-        border: dragOver ? '1px solid rgba(217,70,239,0.6)' : `1px solid rgba(255,255,255,${isInline ? 0.1 : 0.18})`,
-        background: dragOver ? 'rgba(217,70,239,0.08)' : isInline ? 'rgba(255,255,255,0.03)' : 'rgba(15,15,15,0.65)',
+        border: dragOver ? '1px solid rgba(217,70,239,0.58)' : `0.5px solid rgba(255,255,255,${isInline ? 0.13 : 0.16})`,
+        background: dragOver
+          ? 'linear-gradient(135deg, rgba(217,70,239,0.10), rgba(12,14,18,0.46) 42%, rgba(34,211,238,0.05))'
+          : isInline
+            ? 'linear-gradient(145deg, rgba(55,57,66,0.28), rgba(12,13,18,0.36) 50%, rgba(5,6,9,0.44))'
+            : 'linear-gradient(145deg, rgba(55,57,66,0.36), rgba(13,14,19,0.48) 48%, rgba(6,7,10,0.56))',
         overflow: 'hidden',
         transition: 'border-color 0.2s, background 0.2s',
-        ...(isInline ? {} : {
-          backdropFilter: 'blur(20px)',
-          WebkitBackdropFilter: 'blur(20px)',
-          pointerEvents: 'auto' as const,
-          boxShadow: '0 0 0 0.5px rgba(255,255,255,0.08), 0 8px 32px rgba(0,0,0,0.8), 0 0 60px 30px rgba(0,0,0,0.5)',
-        }),
+        backdropFilter: isInline ? 'blur(12px) saturate(136%) contrast(108%)' : 'blur(16px) saturate(142%) contrast(108%)',
+        WebkitBackdropFilter: isInline ? 'blur(12px) saturate(136%) contrast(108%)' : 'blur(16px) saturate(142%) contrast(108%)',
+        pointerEvents: isInline ? undefined : 'auto' as const,
+        boxShadow: isInline
+          ? '0 12px 30px rgba(0,0,0,0.28), inset 0 0.5px 0 rgba(255,255,255,0.13), inset 0 -10px 22px rgba(0,0,0,0.12)'
+          : '0 16px 40px rgba(0,0,0,0.48), inset 0 0.5px 0 rgba(255,255,255,0.15), inset 0 -14px 26px rgba(0,0,0,0.16)',
       }}
     >
       {/* Left: + button / photo slot */}
@@ -144,7 +451,7 @@ export default function CreateInputBox({
           flexShrink: 0, alignSelf: 'stretch',
           display: 'flex', alignItems: 'center', justifyContent: 'center',
           cursor: creating || collapseSlot ? 'default' : 'pointer',
-          borderRight: collapseSlot ? 'none' : '1px solid rgba(255,255,255,0.08)',
+          borderRight: 'none',
           position: 'relative', overflow: 'hidden',
           background: files.length > 0 ? 'transparent' : 'rgba(217,70,239,0.04)',
           transition: 'width 0.25s cubic-bezier(0.22, 1, 0.36, 1), border-right 0.2s',
@@ -205,7 +512,8 @@ export default function CreateInputBox({
               </div>
             ) : (
               <div
-                ref={swipeRef}
+                ref={setMobileSwipeRef}
+                data-testid="mobile-upload-swipe-stack"
                 data-idx={Math.min(cardIndex, files.length - 1)}
                 data-count={files.length}
                 style={{ position: 'absolute', inset: 6 }}
@@ -268,45 +576,70 @@ export default function CreateInputBox({
 
       {/* Right: textarea + bottom toolbar */}
       <div style={{ flex: 1, display: 'flex', flexDirection: 'column' }}>
-        <textarea
-          ref={taRef}
-          value={text}
-          onChange={(e) => { setText(e.target.value); }}
-          onFocus={onTextareaFocus}
-          onBlur={onTextareaBlur}
-          onKeyDown={(e) => {
-            if ((e.key === 'Enter' || e.code === 'Enter') && e.altKey) {
-              e.preventDefault();
-              const ta = e.currentTarget;
-              const start = ta.selectionStart;
-              const end = ta.selectionEnd;
-              const val = ta.value;
-              setText(val.substring(0, start) + '\n' + val.substring(end));
-              requestAnimationFrame(() => { ta.selectionStart = ta.selectionEnd = start + 1; });
-              return;
-            }
-            const isMobile = 'ontouchstart' in window;
-            if (e.key === 'Enter' && !e.shiftKey && !e.nativeEvent.isComposing && !isMobile && (text.trim() || files.length > 0)) {
-              e.preventDefault();
-              onSubmit();
-            }
-          }}
-          placeholder={placeholder}
-          disabled={creating}
-          rows={2}
-          style={{
-            border: 'none', background: 'transparent',
-            color: 'rgba(255,255,255,0.88)', fontSize: '17px', lineHeight: 1.45,
-            padding: '12px 14px 4px',
-            outline: 'none', resize: 'none',
-            fontFamily: 'inherit',
-            caretColor: '#d946ef',
-            minHeight: 40,
-            maxHeight: '8rem',
-            overflowY: 'auto',
-            display: 'block', width: '100%',
-          }}
-        />
+        {promptPanel ? (
+          <div
+            role={onSlotClick ? 'button' : undefined}
+            tabIndex={onSlotClick ? 0 : undefined}
+            onClick={() => { if (!creating) onSlotClick?.(); }}
+            onKeyDown={(e) => {
+              if (!onSlotClick || creating) return;
+              if (e.key === 'Enter' || e.key === ' ') {
+                e.preventDefault();
+                onSlotClick();
+              }
+            }}
+            style={{
+              padding: '14px 16px 5px',
+              minHeight: 76,
+              display: 'flex',
+              flexDirection: 'column',
+              justifyContent: 'center',
+              cursor: onSlotClick && !creating ? 'pointer' : 'default',
+            }}
+          >
+            {promptPanel}
+          </div>
+        ) : (
+          <textarea
+            ref={taRef}
+            value={text}
+            onChange={(e) => { setText(e.target.value); }}
+            onFocus={onTextareaFocus}
+            onBlur={onTextareaBlur}
+            onKeyDown={(e) => {
+              if ((e.key === 'Enter' || e.code === 'Enter') && e.altKey) {
+                e.preventDefault();
+                const ta = e.currentTarget;
+                const start = ta.selectionStart;
+                const end = ta.selectionEnd;
+                const val = ta.value;
+                setText(val.substring(0, start) + '\n' + val.substring(end));
+                requestAnimationFrame(() => { ta.selectionStart = ta.selectionEnd = start + 1; });
+                return;
+              }
+              const isMobile = 'ontouchstart' in window;
+              if (e.key === 'Enter' && !e.shiftKey && !e.nativeEvent.isComposing && !isMobile && (text.trim() || files.length > 0)) {
+                e.preventDefault();
+                onSubmit();
+              }
+            }}
+            placeholder={placeholder}
+            disabled={creating}
+            rows={2}
+            style={{
+              border: 'none', background: 'transparent',
+              color: 'rgba(255,255,255,0.88)', fontSize: '17px', lineHeight: 1.45,
+              padding: '12px 14px 4px',
+              outline: 'none', resize: 'none',
+              fontFamily: 'inherit',
+              caretColor: '#d946ef',
+              minHeight: 40,
+              maxHeight: '8rem',
+              overflowY: 'auto',
+              display: 'block', width: '100%',
+            }}
+          />
+        )}
         <div style={{ display: 'flex', alignItems: 'center', gap: 4, padding: '4px 8px 8px' }}>
           <div className="hide-scrollbar" onWheel={(e) => { if (e.deltaY !== 0) { e.currentTarget.scrollLeft += e.deltaY; e.preventDefault(); } }}
             style={{ display: 'flex', alignItems: 'center', gap: 4, flex: 1, minWidth: 0, overflowX: 'auto', paddingTop: 4 }}>
@@ -339,7 +672,14 @@ export default function CreateInputBox({
           <button
             className="mkr-create-btn"
             data-testid="create-project"
-            onClick={() => { if (text.trim() || files.length > 0) { onSubmit(); } else { onSlotClick ? onSlotClick() : fileInputRef.current?.click(); } }}
+            onClick={(e) => {
+              e.stopPropagation();
+              if (text.trim() || files.length > 0) {
+                onSubmit();
+              } else {
+                onSlotClick ? onSlotClick() : fileInputRef.current?.click();
+              }
+            }}
             disabled={creating}
             style={{ flexShrink: 0, display: 'flex', alignItems: 'center', gap: '5px', padding: '5px 10px', borderRadius: '14px', background: 'none', border: 'none', color: 'rgba(217,70,239,0.9)', fontSize: '0.75rem', fontWeight: 500, letterSpacing: '0.03em', cursor: creating ? 'default' : 'pointer', fontFamily: 'inherit' }}
           >
@@ -355,14 +695,7 @@ export default function CreateInputBox({
         </div>
       </div>
       {/* Hidden file input for photo/video uploads */}
-      <input
-        ref={fileInputRef}
-        type="file"
-        accept="image/*,video/*,.heic,.heif"
-        multiple
-        style={{ position: 'absolute', opacity: 0, pointerEvents: 'none', width: 0, height: 0 }}
-        onChange={(e) => { const f = Array.from(e.target.files ?? []); e.target.value = ''; if (f.length) addFiles(f); }}
-      />
+      {hiddenFileInput}
     </div>
   );
 }

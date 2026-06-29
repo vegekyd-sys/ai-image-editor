@@ -72,6 +72,16 @@ export function useCreateInput() {
     setPreviews(prev => prev.filter((_, j) => j !== index));
   }, []);
 
+  const restoreDraftImages = useCallback((images: string[]) => {
+    if (images.length === 0) return;
+    const placeholders = images.slice(0, MAX_FILES).map((_, index) =>
+      new File([], `restored-draft-${index + 1}.jpg`, { type: 'image/jpeg' })
+    );
+    setFiles(placeholders);
+    setPreviews(images.slice(0, MAX_FILES));
+    setCardIndex(999);
+  }, []);
+
   const clear = useCallback(() => {
     setFiles([]);
     setPreviews([]);
@@ -92,7 +102,7 @@ export function useCreateInput() {
   return {
     files, previews, text, setText, creating, setCreating,
     fileInputRef, cardIndex, setCardIndex, cardDragX, setCardDragX,
-    addFiles, removeFile, clear, submit,
+    addFiles, removeFile, restoreDraftImages, clear, submit,
   };
 }
 

@@ -63,25 +63,41 @@ export async function POST(req: NextRequest) {
     }
   }
 
-  const response = NextResponse.json({ activated: true, isNew: true, credits })
+  const registrationEventId = `registration.${user.id}`
+  const startTrialEventId = `starttrial.${user.id}`
+  const response = NextResponse.json({
+    activated: true,
+    isNew: true,
+    credits,
+    metaEvents: {
+      CompleteRegistration: registrationEventId,
+      ...(credits > 0 ? { StartTrial: startTrialEventId } : {}),
+    },
+  })
   const attribution = readAttributionCookie(req.cookies.get('mkr_attribution')?.value)
+  let eventSourceUrl = `${req.nextUrl.origin}/home`
+  if (typeof attribution.landing_path === 'string') {
+    try {
+      eventSourceUrl = new URL(attribution.landing_path, req.nextUrl.origin).toString()
+    } catch {}
+  }
   await sendMetaCapiEvent({
     eventName: 'CompleteRegistration',
-    eventId: `registration.${user.id}`,
+    eventId: registrationEventId,
     userId: user.id,
     email: user.email,
     request: req,
-    eventSourceUrl: 'https://www.makaron.app/home',
+    eventSourceUrl,
     customData: attribution,
   })
   if (credits > 0) {
     await sendMetaCapiEvent({
       eventName: 'StartTrial',
-      eventId: `starttrial.${user.id}`,
+      eventId: startTrialEventId,
       userId: user.id,
       email: user.email,
       request: req,
-      eventSourceUrl: 'https://www.makaron.app/home',
+      eventSourceUrl,
       customData: { credits, ...attribution },
     })
   }

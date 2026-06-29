@@ -6,6 +6,7 @@ import { getKlingTask } from '@/lib/kling'
 import { getKlingTask as getKlingTaskPiAPI } from '@/lib/piapi'
 import { uploadVideo, isPermanentUrl } from '@/lib/supabase/storage'
 import type { VideoMeta } from '@/types'
+import { buildVideoFailureActions } from '@/lib/artifact-actions'
 import { getRemotionExportJob } from '@/lib/remotion-export'
 
 export const maxDuration = 60
@@ -59,6 +60,15 @@ export async function GET(
       // Provider URL still in DB — persist hasn't finished yet, tell caller to keep polling
       return NextResponse.json({ status: 'rendering', snapshotId, imageUrl: snap.image_url || undefined })
     }
+    if (videoMeta.status === 'failed') {
+      return NextResponse.json({
+        status: 'failed',
+        snapshotId,
+        imageUrl: snap.image_url || undefined,
+        error: videoMeta.error,
+        completionActions: buildVideoFailureActions(videoMeta),
+      })
+    }
 
     if (!videoMeta.taskId) {
       return NextResponse.json({ error: 'No task ID' }, { status: 400 })
@@ -66,7 +76,7 @@ export async function GET(
 
     if (videoMeta.taskId.startsWith('remotion-export-pending-')) {
       return NextResponse.json({
-        status: videoMeta.status === 'failed' ? 'failed' : 'processing',
+        status: 'processing',
         snapshotId,
         imageUrl: snap.image_url || undefined,
         error: videoMeta.error,
@@ -94,16 +104,23 @@ export async function GET(
       if (job.status === 'failed') {
         const updatedMeta: VideoMeta = { ...videoMeta, status: 'failed', error: job.error || 'Remotion export failed' }
         await admin.from('snapshots').update({ video_meta: updatedMeta }).eq('id', snapshotId)
-        return NextResponse.json({ status: 'failed', snapshotId, imageUrl: snap.image_url || undefined, error: updatedMeta.error })
+        return NextResponse.json({
+          status: 'failed',
+          snapshotId,
+          imageUrl: snap.image_url || undefined,
+          error: updatedMeta.error,
+          completionActions: buildVideoFailureActions(updatedMeta),
+        })
       }
       return NextResponse.json({ status: 'processing', snapshotId, imageUrl: snap.image_url || undefined })
     }
 
     // Poll provider — route by taskId prefix
-    // task-unified-* = Evolink SeeDance, cgt-* = SeeDance (Volcengine), mc-* = Motion Control, else = Kling
+    // task-unified-* = Evolink SeeDance, cgt-* = SeeDance (Volcengine), mc-* = Motion Control, xai-* = Grok, else = Kling
     const isEvolink = videoMeta.taskId.startsWith('task-unified-')
     const isSeedance = videoMeta.taskId.startsWith('cgt-')
     const isMotionControl = videoMeta.taskId.startsWith('mc-')
+    const isXai = videoMeta.taskId.startsWith('xai-')
     const provider = process.env.ANIMATE_PROVIDER || 'kling'
     let result: { taskId: string; status: string; videoUrl?: string; error?: string }
     const realTaskId = isMotionControl ? videoMeta.taskId.slice(3) : videoMeta.taskId
@@ -118,6 +135,9 @@ export async function GET(
       const { getKlingMotionControlTask } = await import('@/lib/kling')
       result = await getKlingMotionControlTask(realTaskId)
       result.taskId = videoMeta.taskId
+    } else if (isXai) {
+      const { getXaiVideoTask } = await import('@/lib/xai-video')
+      result = await getXaiVideoTask(videoMeta.taskId)
     } else if (provider === 'piapi') {
       result = await getKlingTaskPiAPI(videoMeta.taskId)
     } else {
@@ -188,6 +208,13 @@ export async function GET(
     if (result.status === 'failed') {
       const { handleVideoFailure } = await import('@/lib/video-lifecycle')
       await handleVideoFailure(snapshotId, result.error)
+      return NextResponse.json({
+        status: 'failed',
+        snapshotId,
+        imageUrl: snap.image_url || undefined,
+        error: result.error,
+        completionActions: buildVideoFailureActions({ ...videoMeta, status: 'failed', error: result.error }),
+      })
     }
 
     return NextResponse.json({ status: result.status, snapshotId, imageUrl: snap.image_url || undefined, error: result.error })

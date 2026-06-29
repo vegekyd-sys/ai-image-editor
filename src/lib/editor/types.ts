@@ -1,4 +1,4 @@
-import type { VideoModel } from '@/types'
+import type { VideoModel, VideoResolution } from '@/types'
 
 export interface AnimationState {
   imageUrls: string[]
@@ -12,6 +12,7 @@ export interface AnimationState {
   duration: number | null  // null = smart mode (API decides 3-15s)
   pollSeconds: number
   videoModel: VideoModel
+  videoResolution?: VideoResolution
 }
 
 export interface HeroAnim {

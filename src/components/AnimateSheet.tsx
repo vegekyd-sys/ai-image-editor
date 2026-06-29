@@ -1,12 +1,13 @@
 'use client';
 
 import { useState, useCallback, useRef, useEffect } from 'react';
-import { Snapshot, ProjectAnimation } from '@/types';
+import { Snapshot, ProjectAnimation, type VideoResolution } from '@/types';
 import type { AnimationState } from '@/components/Editor';
 import { useLocale } from '@/lib/i18n';
 import MediaRefText from '@/components/MediaRefText';
+import { getThumbnailUrl } from '@/lib/supabase/storage';
 import { getModelInfo, getVideoModels } from '@/lib/model-registry';
-import { getDefaultVideoModelId, getVideoModelCapability } from '@/lib/video-model-capabilities';
+import { estimateVideoProviderCostUsd, getDefaultVideoModelId, getVideoModelCapability, normalizeVideoResolution } from '@/lib/video-model-capabilities';
 
 interface AnimateSheetProps {
   snapshots: Snapshot[];
@@ -31,8 +32,13 @@ export default function AnimateSheet({
 }: AnimateSheetProps) {
   const { t } = useLocale();
   const isDetail = mode === 'detail' && !!detailAnimation;
-  const { prompt, userHint, status, error, duration, videoModel = getDefaultVideoModelId() } = animationState;
+  const { prompt, userHint, status, error, duration, videoModel = getDefaultVideoModelId(), videoResolution = 'auto' } = animationState;
   const videoModels = getVideoModels();
+  const videoCapability = getVideoModelCapability(videoModel);
+  const resolutionOptions = videoCapability.supportedResolutions ?? [];
+  const resolvedResolution = videoResolution === 'auto'
+    ? videoCapability.defaultResolution
+    : normalizeVideoResolution(videoModel, videoResolution);
   const getVideoModelLabel = (id?: string | null) => {
     if (!id || id === 'upload') return '';
     const modelInfo = getModelInfo(id);
@@ -41,6 +47,13 @@ export default function AnimateSheet({
 
   const [excludedIndices, setExcludedIndices] = useState<Set<number>>(new Set());
   const [selectedThumbId, setSelectedThumbId] = useState<string | null>(null);
+  const [inlineImagePreview, setInlineImagePreview] = useState<{
+    src: string;
+    snapIdx: number;
+    style: React.CSSProperties;
+  } | null>(null);
+  const [inlineImagePreviewLoadedUrl, setInlineImagePreviewLoadedUrl] = useState<string | null>(null);
+  const inlineImagePreviewRef = useRef<HTMLSpanElement>(null);
 
   const allSnapshots = snapshots.filter(s => s.imageUrl?.startsWith('http'));
   const activeSnapshots = allSnapshots.filter((_, i) => !excludedIndices.has(i));
@@ -115,7 +128,7 @@ export default function AnimateSheet({
       const res = await fetch('/api/video-snapshot', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ projectId, imageUrls: urls, prompt: prompt.trim(), duration, videoModel }),
+        body: JSON.stringify({ projectId, imageUrls: urls, prompt: prompt.trim(), duration, videoModel, videoResolution }),
       });
       const json = await res.json();
       if (!res.ok) throw new Error(json.error || 'Failed to create task');
@@ -127,7 +140,7 @@ export default function AnimateSheet({
         : raw.replace(/Error:\s*/g, '').replace(/<[^>]+>/g, '').slice(0, 100);
       onStateChange({ error: friendly, status: 'error' });
     }
-  }, [prompt, projectId, activeUrls, duration, videoModel, onStateChange, t]);
+  }, [prompt, projectId, activeUrls, duration, videoModel, videoResolution, onStateChange, t]);
 
   const canGenerate = prompt.trim().length > 0 && status === 'ready' && activeUrls.length >= 1;
   const canGenerateScript = activeUrls.length >= 1 && (status === 'idle' || status === 'error' || status === 'ready');
@@ -138,6 +151,70 @@ export default function AnimateSheet({
     : (detailAnimation?.snapshotUrls ?? []);
   const detailPrompt = detailAnimation?.prompt ?? '';
   const detailDuration = detailAnimation?.duration;
+  const detailResolution = detailAnimation?.videoModel && detailAnimation.videoModel !== 'upload'
+    ? normalizeVideoResolution(detailAnimation.videoModel, detailAnimation.videoResolution ?? 'auto')
+    : null;
+  const detailAspectRatio = detailAnimation?.videoAspectRatio && detailAnimation.videoAspectRatio !== 'auto'
+    ? detailAnimation.videoAspectRatio
+    : null;
+
+  const openInlineImagePreview = useCallback((index: number, triggerEl?: HTMLElement | null) => {
+    const src = detailUrls[index];
+    if (!src || !sheetRef.current) return;
+    const sheetRect = sheetRef.current.getBoundingClientRect();
+    const triggerRect = triggerEl?.getBoundingClientRect();
+    const pw = Math.min(300, window.innerWidth * 0.6, Math.max(160, sheetRect.width - 16));
+    let viewportLeft = sheetRect.left + (sheetRect.width - pw) / 2;
+    let viewportTop = sheetRect.top + Math.max(8, Math.min(96, sheetRect.height - pw - 8));
+    if (triggerRect) {
+      viewportLeft = triggerRect.left + triggerRect.width / 2 - pw / 2;
+      viewportLeft = Math.max(sheetRect.left + 8, Math.min(viewportLeft, sheetRect.right - pw - 8));
+
+      const spaceAbove = triggerRect.top - sheetRect.top - 8;
+      const spaceBelow = sheetRect.bottom - triggerRect.bottom - 8;
+      viewportTop = spaceAbove >= pw || spaceAbove >= spaceBelow
+        ? triggerRect.top - pw - 4
+        : triggerRect.bottom + 4;
+      viewportTop = Math.max(sheetRect.top + 8, Math.min(viewportTop, sheetRect.bottom - pw - 8));
+    }
+    setInlineImagePreview({
+      src,
+      snapIdx: index + 1,
+      style: {
+        position: 'absolute',
+        left: viewportLeft - sheetRect.left,
+        top: viewportTop - sheetRect.top,
+        width: pw,
+        height: pw,
+        zIndex: 9999,
+      },
+    });
+  }, [detailUrls]);
+
+  useEffect(() => {
+    if (!inlineImagePreview) return;
+    const close = () => setInlineImagePreview(null);
+    const isOutside = (target: EventTarget | null) => {
+      if (!target) return false;
+      const node = target as Node;
+      if (inlineImagePreviewRef.current?.contains(node)) return false;
+      return true;
+    };
+    const onPointerDown = (event: PointerEvent) => {
+      if (isOutside(event.target)) close();
+    };
+    const onTouchStart = (event: TouchEvent) => {
+      if (isOutside(event.target)) close();
+    };
+    document.addEventListener('scroll', close, true);
+    document.addEventListener('pointerdown', onPointerDown, true);
+    document.addEventListener('touchstart', onTouchStart, true);
+    return () => {
+      document.removeEventListener('scroll', close, true);
+      document.removeEventListener('pointerdown', onPointerDown, true);
+      document.removeEventListener('touchstart', onTouchStart, true);
+    };
+  }, [inlineImagePreview]);
 
   const getBottomButton = () => {
     if (status === 'submitting') {
@@ -165,7 +242,7 @@ export default function AnimateSheet({
         .animate-sheet-thumb:active { transform: scale(0.93); }
       `}</style>
 
-      <div ref={sheetRef} style={{
+      <div ref={sheetRef} data-testid="animate-sheet" style={{
         position: 'fixed',
         ...(isDesktop ? {
           top: 0, right: 0, bottom: 0, width: desktopWidth,
@@ -242,7 +319,7 @@ export default function AnimateSheet({
                 marginBottom: 16,
               }}>
                 {detailPrompt ? (
-                  <MediaRefText text={detailPrompt} mediaUrls={detailUrls} />
+                  <MediaRefText text={detailPrompt} mediaUrls={detailUrls} onPreview={openInlineImagePreview} />
                 ) : <span style={{ color: 'rgba(255,255,255,0.3)' }}>{t('animate.noScript')}</span>}
               </div>
 
@@ -264,6 +341,26 @@ export default function AnimateSheet({
                 }}>
                   {detailDuration != null ? t('animate.seconds', Math.round(detailDuration)) : t('animate.smart')}
                 </div>
+                {detailResolution && (
+                <div style={{
+                  padding: '6px 12px', background: 'rgba(255,255,255,0.04)',
+                  borderRadius: 8, border: '1px solid rgba(255,255,255,0.06)',
+                  fontSize: '0.78rem', color: 'rgba(255,255,255,0.5)',
+                  fontWeight: 600,
+                }}>
+                  {detailResolution.toUpperCase()}
+                </div>
+                )}
+                {detailAspectRatio && (
+                <div style={{
+                  padding: '6px 12px', background: 'rgba(255,255,255,0.04)',
+                  borderRadius: 8, border: '1px solid rgba(255,255,255,0.06)',
+                  fontSize: '0.78rem', color: 'rgba(255,255,255,0.5)',
+                  fontWeight: 600,
+                }}>
+                  {detailAspectRatio}
+                </div>
+                )}
                 <div style={{
                   padding: '6px 12px', borderRadius: 8,
                   border: '1px solid',
@@ -499,11 +596,11 @@ export default function AnimateSheet({
                     fontSize: '0.7rem', color: 'rgba(255,255,255,0.35)',
                     fontWeight: 600, marginBottom: 5, letterSpacing: '0.03em',
                   }}>{t('animate.model')}</div>
-                  <div style={{ display: 'flex', gap: 6 }}>
+                  <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
                     {videoModels.map(m => (
-                      <button key={m.id} onClick={() => onStateChange({ videoModel: m.id })}
+                      <button key={m.id} onClick={() => onStateChange({ videoModel: m.id, videoResolution: 'auto' })}
                         style={{
-                          flex: 1, padding: '8px 12px', borderRadius: 10,
+                          flex: '1 1 120px', padding: '8px 12px', borderRadius: 10,
                           border: `1px solid ${videoModel === m.id ? 'rgba(232,121,249,0.5)' : 'rgba(255,255,255,0.08)'}`,
                           background: videoModel === m.id ? 'rgba(232,121,249,0.1)' : 'rgba(255,255,255,0.04)',
                           color: videoModel === m.id ? '#e879f9' : 'rgba(255,255,255,0.5)',
@@ -512,6 +609,38 @@ export default function AnimateSheet({
                         {t(m.nameKey as Parameters<typeof t>[0])}
                       </button>
                     ))}
+                  </div>
+                </div>
+              )}
+
+              {/* Resolution selector */}
+              {status !== 'submitting' && resolutionOptions.length > 0 && (
+                <div style={{ marginBottom: 10 }}>
+                  <div style={{
+                    fontSize: '0.7rem', color: 'rgba(255,255,255,0.35)',
+                    fontWeight: 600, marginBottom: 5, letterSpacing: '0.03em',
+                  }}>{t('model.resolution')}</div>
+                  <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
+                    {(['auto', ...resolutionOptions] as VideoResolution[]).map(resolution => {
+                      const active = resolution === 'auto'
+                        ? videoResolution === 'auto'
+                        : videoResolution !== 'auto' && resolvedResolution === resolution;
+                      const label = resolution === 'auto'
+                        ? `${t('model.resolution.auto')} ${videoCapability.defaultResolution ?? ''}`.trim()
+                        : resolution.toUpperCase();
+                      return (
+                        <button key={resolution} onClick={() => onStateChange({ videoResolution: resolution })}
+                          style={{
+                            padding: '7px 10px', borderRadius: 9,
+                            border: `1px solid ${active ? 'rgba(232,121,249,0.5)' : 'rgba(255,255,255,0.08)'}`,
+                            background: active ? 'rgba(232,121,249,0.1)' : 'rgba(255,255,255,0.04)',
+                            color: active ? '#e879f9' : 'rgba(255,255,255,0.5)',
+                            fontSize: '0.78rem', fontWeight: 700, cursor: 'pointer',
+                          }}>
+                          {label}
+                        </button>
+                      );
+                    })}
                   </div>
                 </div>
               )}
@@ -556,8 +685,8 @@ export default function AnimateSheet({
                     }}>
                       {duration != null
                         ? (() => {
-                          const costPerSecond = getVideoModelCapability(videoModel).estimatedCostPerSecondUsd;
-                          return costPerSecond != null ? `~$${(duration * costPerSecond).toFixed(2)}` : t('animate.costByDuration');
+                          const cost = estimateVideoProviderCostUsd({ model: videoModel, resolution: videoResolution, durationSec: duration, imageCount: activeUrls.length });
+                          return cost != null ? `~$${cost.toFixed(2)}` : t('animate.costByDuration');
                         })()
                         : t('animate.costByDuration')}
                     </div>
@@ -639,6 +768,54 @@ export default function AnimateSheet({
             </button>
           </div>
         )}
+
+        {inlineImagePreview && (() => {
+          const previewUrl = inlineImagePreview.src.startsWith('http')
+            ? getThumbnailUrl(inlineImagePreview.src, 400, 90, 400, 'cover')
+            : inlineImagePreview.src;
+          const imgLoaded = inlineImagePreviewLoadedUrl === previewUrl;
+          return (
+            <span
+              ref={inlineImagePreviewRef}
+              data-testid="animate-inline-image-preview"
+              className="rounded-xl overflow-hidden shadow-2xl border border-white/10 bg-black"
+              style={{
+                ...inlineImagePreview.style,
+                display: 'block',
+                WebkitTouchCallout: 'none',
+                WebkitUserSelect: 'none',
+                userSelect: 'none',
+              }}
+              onClick={(e) => e.stopPropagation()}
+              onContextMenu={(e) => e.preventDefault()}
+            >
+              {!imgLoaded && (
+                <span style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', position: 'absolute', inset: 0, background: '#111' }}>
+                  <span style={{ display: 'flex', gap: 4, alignItems: 'center' }}>
+                    <span className="text-white/30 text-xs">@{inlineImagePreview.snapIdx}</span>
+                    <span className="animate-spin" style={{ width: 14, height: 14, border: '2px solid rgba(255,255,255,0.15)', borderTopColor: 'rgba(255,255,255,0.5)', borderRadius: '50%' }} />
+                  </span>
+                </span>
+              )}
+              {/* eslint-disable-next-line @next/next/no-img-element */}
+              <img
+                src={previewUrl}
+                alt=""
+                draggable={false}
+                onLoad={() => setInlineImagePreviewLoadedUrl(previewUrl)}
+                style={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block', WebkitTouchCallout: 'none', WebkitUserSelect: 'none', userSelect: 'none' }}
+              />
+              {imgLoaded && (
+                <span
+                  className="bg-black/60 backdrop-blur text-white text-sm font-medium px-1.5 py-0.5 rounded-md"
+                  style={{ position: 'absolute', bottom: 8, left: 8 }}
+                >
+                  @{inlineImagePreview.snapIdx}
+                </span>
+              )}
+            </span>
+          );
+        })()}
       </div>
     </>
   );

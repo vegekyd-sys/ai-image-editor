@@ -13,7 +13,8 @@ export interface EvolinkTaskInput {
   images: string[]           // 0-9 public URLs
   duration?: number          // 4-15 (omit for default 5)
   aspectRatio?: string       // adaptive/16:9/9:16/1:1/4:3/3:4/21:9
-  quality?: string           // 720p (default) / 480p
+  quality?: string           // 480p / 720p / 1080p depending on model
+  model?: string
   generateAudio?: boolean    // default true
   videoUrls?: string[]       // 0-3 reference videos; <=50MB, width/height 300-6000px, frame pixels 409,600-2,086,876
   audioUrls?: string[]       // 0-3 reference audios
@@ -32,12 +33,9 @@ export async function createEvolinkTask(input: EvolinkTaskInput): Promise<string
     throw new Error('EVOLINK_API_KEY not configured')
   }
 
-  const { prompt, images, duration, aspectRatio, quality, generateAudio, videoUrls, audioUrls } = input
+  const { prompt, images, duration, aspectRatio, quality, model: requestedModel, generateAudio, videoUrls, audioUrls } = input
 
-  const hasMedia = images.length > 0 || (videoUrls && videoUrls.length > 0)
-  const model = hasMedia
-    ? 'seedance-2.0-fast-reference-to-video'
-    : 'seedance-2.0-fast-text-to-video'
+  const model = requestedModel || 'seedance-2.0-fast-reference-to-video'
 
   const payload: Record<string, unknown> = {
     model,

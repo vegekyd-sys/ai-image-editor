@@ -22,9 +22,31 @@ export async function getVideoStatus(input: GetVideoStatusInput): Promise<GetVid
   }
 
   try {
-    // Route by taskId prefix: task-unified-* = Evolink, cgt-* = SeeDance Volcengine
+    // Route by taskId prefix: task-unified-* = Evolink, cgt-* = SeeDance Volcengine, xai-* = Grok
     const isEvolink = taskId.startsWith('task-unified-');
     const isSeedance = isEvolink || taskId.startsWith('cgt-');
+    const isXai = taskId.startsWith('xai-');
+
+    if (isXai) {
+      const { getXaiVideoTask } = await import('../xai-video');
+      const result = await getXaiVideoTask(taskId);
+
+      let message: string;
+      switch (result.status) {
+        case 'pending': message = 'Grok video task is queued.'; break;
+        case 'processing': message = `Grok video is rendering${result.progress != null ? ` (${result.progress}%)` : ''}. It is usually around 30-40 seconds.`; break;
+        case 'completed': message = `Grok video rendering completed${result.costUsd != null ? ` (reported cost $${result.costUsd.toFixed(4)})` : ''}!`; break;
+        case 'failed': message = `Grok video rendering failed: ${result.error || 'Unknown error'}`; break;
+      }
+
+      return {
+        success: true,
+        status: result.status,
+        videoUrl: result.videoUrl,
+        error: result.error,
+        message,
+      };
+    }
 
     if (isEvolink) {
       const { getEvolinkTask } = await import('../evolink');
@@ -76,7 +98,7 @@ export async function getVideoStatus(input: GetVideoStatusInput): Promise<GetVid
       };
     }
 
-    // Fallback: piapi or kling (default)
+    // Fallback: piapi/kling-style task ids.
     const provider = process.env.ANIMATE_PROVIDER || 'kling';
 
     if (provider === 'piapi') {

@@ -5,6 +5,7 @@ import { usePathname, useSearchParams } from 'next/navigation'
 import { useEffect, useRef, useState } from 'react'
 import { captureMarketingAttribution } from '@/lib/marketing/attribution'
 import { trackCheckoutSuccessFromUrl, trackMetaEvent } from '@/lib/marketing/meta-pixel'
+import { isMakaronIOSApp } from '@/lib/native-app'
 
 const PIXEL_ID = process.env.NEXT_PUBLIC_META_PIXEL_ID
 
@@ -12,9 +13,17 @@ export default function MarketingTracker() {
   const pathname = usePathname()
   const searchParams = useSearchParams()
   const lastPageKey = useRef('')
-  const [pixelReady, setPixelReady] = useState(!PIXEL_ID)
+  const [nativeApp, setNativeApp] = useState<boolean | null>(null)
+  const [pixelReady, setPixelReady] = useState(false)
 
   useEffect(() => {
+    const inNativeApp = isMakaronIOSApp()
+    setNativeApp(inNativeApp)
+    if (!PIXEL_ID && !inNativeApp) setPixelReady(true)
+  }, [])
+
+  useEffect(() => {
+    if (nativeApp !== false) return
     const params = new URLSearchParams(searchParams.toString())
     captureMarketingAttribution(pathname, params)
 
@@ -34,9 +43,9 @@ export default function MarketingTracker() {
     }
 
     if (pixelReady) trackCheckoutSuccessFromUrl(params)
-  }, [pathname, searchParams, pixelReady])
+  }, [pathname, searchParams, pixelReady, nativeApp])
 
-  if (!PIXEL_ID) return null
+  if (!PIXEL_ID || nativeApp !== false) return null
 
   return (
     <>

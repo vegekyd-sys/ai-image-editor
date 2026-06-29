@@ -112,13 +112,10 @@ async function resolveRemoteImagesForSandbox(design: DesignPayload): Promise<{
 }> {
   const cache = new Map<string, Promise<string | null>>();
   const urlPattern = /https?:\/\/[^\s"'`<>)}\]]+\.(?:jpg|jpeg|png|webp|gif)(?:[^\s"'`<>)}\]]*)?/gi;
-  const storagePattern = /https?:\/\/[^\s"'`<>)}\]]*\/storage\/v1\/object\/public\/(?![^\s"'`<>)}\]]*\.(?:mp3|wav|m4a|aac|ogg|mp4|webm|mov))[^\s"'`<>)}\]]*/gi;
-  const urls = new Set<string>();
-  for (const m of design.code.matchAll(urlPattern)) urls.add(m[0]);
-  for (const m of design.code.matchAll(storagePattern)) urls.add(m[0]);
-
   let code = design.code;
-  await Promise.all([...urls].map(async (url) => {
+  const urls = Array.from(new Set(code.match(urlPattern) || [])).filter(isRemoteImageUrl);
+
+  await Promise.all(urls.map(async (url) => {
     let promise = cache.get(url);
     if (!promise) {
       promise = remoteImageToDataUrl(url);
@@ -187,7 +184,6 @@ export async function renderDesignFrame(
   const durationInFrames = dur > 0 ? Math.max(1, Math.round(fps * dur)) : 1;
   // Unique output file per render — prevents concurrent renders from overwriting each other
   const outputFile = `/tmp/still-${frame}-${Date.now()}.jpeg`;
-  const resolvedDesign = await resolveRemoteImagesForSandbox(design);
 
   // Retry once if Sandbox is gone (410/expired)
   for (let attempt = 0; attempt < 2; attempt++) {
@@ -200,8 +196,8 @@ export async function renderDesignFrame(
         sandbox,
         compositionId: 'dynamic-design',
         inputProps: {
-          code: prepareRemotionCodeForSandbox(resolvedDesign.code),
-          designProps: resolvedDesign.props,
+          code: prepareRemotionCodeForSandbox(design.code),
+          designProps: design.props || {},
           fps,
           durationInFrames,
           width: design.width || 1080,

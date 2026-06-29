@@ -2,9 +2,12 @@
 
 import AgentCopyButton from './AgentCopyButton'
 
+const INSTALL_SKILL_COMMAND = 'npx makaron-cli setup'
+
 export default function AgentContent() {
   return (
-    <div className="min-h-screen w-full bg-black text-gray-200 font-mono p-6 md:p-12 max-w-4xl mx-auto overflow-hidden">
+    <div className="makaron-ios-page makaron-ios-page-x min-h-screen w-full bg-black text-gray-200 font-mono p-6 md:p-12 overflow-hidden">
+      <div className="max-w-4xl mx-auto">
       <header className="flex items-center gap-2 mb-12">
         <h1 className="text-2xl font-bold text-white">makaron<span className="text-fuchsia-400">-cli</span></h1>
         <AgentCopyButton />
@@ -25,10 +28,13 @@ export default function AgentContent() {
       {/* Install */}
       <section className="mb-12">
         <h2 className="text-lg text-fuchsia-400 mb-4">Install</h2>
+        <p className="text-sm text-gray-400 mb-4">
+          Ask your agent to install <code className="text-fuchsia-300">makaron-cli</code> globally and add the Makaron Agent Skill.
+        </p>
         <div className="bg-gray-900 rounded-lg p-4 flex items-center justify-between gap-3">
-          <code className="text-sm text-gray-200 whitespace-nowrap">npx makaron-cli</code>
+          <code className="min-w-0 text-sm text-gray-200 overflow-x-auto whitespace-pre">{INSTALL_SKILL_COMMAND}</code>
           <button
-            onClick={() => { navigator.clipboard?.writeText('npx makaron-cli').catch(() => {}); }}
+            onClick={() => { navigator.clipboard?.writeText(INSTALL_SKILL_COMMAND).catch(() => {}); }}
             className="shrink-0 px-3 py-1.5 rounded-md border border-gray-700 text-xs text-gray-400 hover:text-white hover:border-gray-500 transition-colors"
           >
             Copy
@@ -156,7 +162,7 @@ npx makaron-cli music status <taskId>`}
         <h2 className="text-lg text-fuchsia-400 mb-4">Important Notes</h2>
         <ul className="list-disc list-inside space-y-1 text-sm text-gray-300">
           <li>One project = one conversation thread. All history preserved.</li>
-          <li>Videos take 2-5 minutes. Use <code className="text-fuchsia-300">watch</code> to get URL when ready.</li>
+          <li>Most videos take 3-5 minutes; Grok is usually around 30-40 seconds. Use <code className="text-fuchsia-300">watch</code> to get URL when ready.</li>
           <li>Music takes ~60 seconds. Images typically 15-30 seconds.</li>
           <li>Always use <code className="text-fuchsia-300">chat</code> as primary interface — even for single edits.</li>
           <li>stdout = machine-readable JSON/text. Human-friendly logs → stderr.</li>
@@ -231,6 +237,7 @@ Share claim_url with a human. They log in and link the API key to your account.`
       <footer className="border-t border-gray-800 pt-6 pb-16 text-sm text-gray-500">
         <p>Makaron AI — One Man Studio</p>
       </footer>
+      </div>
     </div>
   )
 }

@@ -59,7 +59,6 @@ describe('downloadAsset animated Remotion Save', () => {
     const setIsSaving = vi.fn()
     const setAgentStatus = vi.fn()
     const showSaveToast = vi.fn()
-    const onCreateExportSnapshot = vi.fn()
 
     await downloadAsset({
       timeline: ['poster'],
@@ -72,7 +71,6 @@ describe('downloadAsset animated Remotion Save', () => {
       setIsSaving,
       setAgentStatus,
       showSaveToast,
-      onCreateExportSnapshot,
       t: ((key: string) => key) as never,
       projectTitle: 'Project',
     })
@@ -80,7 +78,6 @@ describe('downloadAsset animated Remotion Save', () => {
     expect(exportDesignVideo).toHaveBeenCalledWith(animatedSnapshot.design, expect.any(Function))
     expect(fetchMock).not.toHaveBeenCalledWith('/api/remotion/export', expect.anything())
     expect(fetchMock.mock.calls.some(([url]) => String(url).startsWith('/api/remotion/export'))).toBe(false)
-    expect(onCreateExportSnapshot).not.toHaveBeenCalled()
     expect(clicked).toBe(true)
     expect(clickedHref).toBe(objectUrl)
     expect(setIsSaving).toHaveBeenNthCalledWith(1, true)

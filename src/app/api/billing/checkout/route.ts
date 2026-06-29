@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
 import { getStripe, CREDIT_TIERS, TierId } from '@/lib/billing/stripe'
+import { getOrCreateStripeCustomer } from '@/lib/billing/subscription'
 
 function buildReturnUrl(origin: string, path: string | undefined, params: Record<string, string>) {
   const url = new URL(path || '/dashboard', origin)
@@ -24,10 +25,18 @@ export async function POST(req: NextRequest) {
 
   const stripe = getStripe()
   const origin = req.headers.get('origin') || 'https://www.makaron.app'
+  const customerId = await getOrCreateStripeCustomer(user.id, user.email!)
 
   const session = await stripe.checkout.sessions.create({
     mode: 'payment',
-    customer_email: user.email,
+    customer: customerId,
+    customer_update: {
+      name: 'auto',
+      address: 'auto',
+    },
+    billing_address_collection: 'auto',
+    tax_id_collection: { enabled: true },
+    invoice_creation: { enabled: true },
     metadata: {
       user_id: user.id,
       tier: tier,

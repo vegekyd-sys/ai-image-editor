@@ -22,3 +22,13 @@ vitest.config.ts
 .playwright-mcp/
 .claude/
 test-output/
+ios/**
+build/**
+.next/**
+home-perf-trace*.json*
+trace-editor-load*.json*
+makaron-intro/renders/**
+docs/meta-swipe-runs/*-assets/**
+tmp/
+output/
+.playwright-cli/

@@ -10,14 +10,16 @@ export async function GET() {
   const user = session?.user
   if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
 
-  const [balance, subscription] = await Promise.all([
-    getBalance(user.id),
-    getActiveSubscription(user.id),
-  ])
+  const balance = await getBalance(user.id)
+  const subscription = await getActiveSubscription(user.id).catch((error) => {
+    console.error('[billing/credits] subscription lookup failed:', error)
+    return null
+  })
 
   return NextResponse.json({
     ...balance,
     subscription: subscription ? {
+      provider: subscription.provider,
       planId: subscription.planId,
       status: subscription.status,
       billingInterval: subscription.billingInterval,

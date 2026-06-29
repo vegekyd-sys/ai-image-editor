@@ -18,4 +18,3 @@ describe('AgentChatView code block rendering', () => {
     expect(source).not.toContain('lines.length > 3')
   })
 })
-

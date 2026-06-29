@@ -1,12 +1,8 @@
 import { useCallback, useSyncExternalStore } from 'react';
+import { getVisualViewportKeyboardInset } from '@/lib/ios-keyboard';
 
 function getVisualViewportInset(): number {
-  if (typeof window === 'undefined') return 0;
-
-  const visualViewport = window.visualViewport;
-  if (!visualViewport) return 0;
-
-  return Math.round(Math.max(0, window.innerHeight - visualViewport.height - visualViewport.offsetTop));
+  return getVisualViewportKeyboardInset();
 }
 
 /**

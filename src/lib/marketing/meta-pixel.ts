@@ -1,6 +1,7 @@
 'use client'
 
 import { getMarketingAttribution, type MarketingAttribution } from './attribution'
+import { isMakaronIOSApp } from '@/lib/native-app'
 
 export type MetaStandardEvent =
   | 'PageView'
@@ -12,8 +13,24 @@ export type MetaStandardEvent =
   | 'Subscribe'
   | 'Purchase'
 
+export type MetaCustomEvent =
+  | 'UploadIntent'
+  | 'FileSelected'
+
+export type MetaEventName = MetaStandardEvent | MetaCustomEvent
+
 type MetaEventParams = Record<string, string | number | boolean | undefined>
 const ANON_ID_KEY = 'mkr_anonymous_id'
+const STANDARD_EVENTS = new Set<MetaEventName>([
+  'PageView',
+  'ViewContent',
+  'CompleteRegistration',
+  'CustomizeProduct',
+  'StartTrial',
+  'InitiateCheckout',
+  'Subscribe',
+  'Purchase',
+])
 
 declare global {
   interface Window {
@@ -57,11 +74,12 @@ function getAnonymousId(): string | undefined {
 }
 
 function logFirstPartyMarketingEvent(
-  event: MetaStandardEvent,
+  event: MetaEventName,
   params: MetaEventParams,
   eventId: string,
 ) {
   if (typeof window === 'undefined') return
+  if (isMakaronIOSApp()) return
 
   const attribution = getMarketingAttribution()
   const payload = {
@@ -95,12 +113,13 @@ function logFirstPartyMarketingEvent(
 }
 
 export function trackMetaEvent(
-  event: MetaStandardEvent,
+  event: MetaEventName,
   params: MetaEventParams = {},
   eventId?: string,
   attempt = 0,
 ) {
   if (typeof window === 'undefined') return
+  if (isMakaronIOSApp()) return
   const finalEventId = eventId || createMetaEventId(event.toLowerCase())
   const merged = { ...attributionParams(), ...params }
   if (attempt === 0) logFirstPartyMarketingEvent(event, merged, finalEventId)
@@ -110,7 +129,11 @@ export function trackMetaEvent(
     }
     return
   }
-  window.fbq('track', event, merged, { eventID: finalEventId })
+  if (STANDARD_EVENTS.has(event)) {
+    window.fbq('track', event as MetaStandardEvent, merged, { eventID: finalEventId })
+  } else {
+    window.fbq('trackCustom', event, merged, { eventID: finalEventId })
+  }
 }
 
 export function trackCheckoutStart(

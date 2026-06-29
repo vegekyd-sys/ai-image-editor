@@ -14,6 +14,12 @@
  *   projects/{id}/...              — Project-level (hidden this release)
  */
 
+import { createWriteStream, existsSync } from 'fs';
+import { mkdir, readFile as readLocalFile, stat, writeFile as writeLocalFile } from 'fs/promises';
+import { tmpdir } from 'os';
+import path from 'path';
+import { Readable } from 'stream';
+import { pipeline } from 'stream/promises';
 import { parseSkillMd, type ParsedSkill } from './skill-registry';
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -28,12 +34,35 @@ export interface WorkspaceFile {
   storageUrl?: string;
   updatedAt?: string;
   isBuiltIn?: boolean;  // true for src/skills/ files
+  localPath?: string;
+  localAvailable?: boolean;
 }
 
 export interface WorkspaceReadResult {
   content: string;       // text content or data:... URL for binary
   contentType: string;
   storageUrl?: string;
+  path?: string;
+  localPath?: string;
+}
+
+export interface WorkspaceFileHandle {
+  path: string;
+  contentType: string;
+  size?: number;
+  storageUrl?: string;
+  updatedAt?: string;
+  localPath?: string;
+  localAvailable: boolean;
+  hydrated?: boolean;
+  isBuiltIn?: boolean;
+}
+
+export interface WorkspaceWriteResult {
+  success: boolean;
+  storageUrl?: string;
+  localPath?: string;
+  error?: string;
 }
 
 // ── Cache ───────────────────────────────────────────────────────────────────
@@ -62,6 +91,71 @@ function setCache<T>(key: string, value: T, ttl = CACHE_TTL): void {
 
 export function clearWorkspaceCache(): void {
   cache.clear();
+}
+
+// ── Local workspace mirror ──────────────────────────────────────────────────
+
+function localWorkspaceBase(): string {
+  return process.env.MAKARON_WORKSPACE_CACHE_DIR || path.join(tmpdir(), 'makaron-workspaces');
+}
+
+function safeUserSegment(userId: string): string {
+  return userId.replace(/[^a-zA-Z0-9_.-]/g, '_');
+}
+
+function normalizeWorkspacePath(filePath: string): string {
+  const normalized = path.posix.normalize(filePath.replace(/\\/g, '/')).replace(/^\/+/, '');
+  if (!normalized || normalized === '.' || normalized.startsWith('../') || normalized.includes('/../')) {
+    throw new Error(`Invalid workspace path: ${filePath}`);
+  }
+  return normalized;
+}
+
+export function getLocalWorkspaceRoot(userId: string): string {
+  return path.join(localWorkspaceBase(), safeUserSegment(userId), 'workspace');
+}
+
+export function getLocalWorkspacePath(userId: string, filePath: string): string {
+  const normalized = normalizeWorkspacePath(filePath);
+  return path.join(getLocalWorkspaceRoot(userId), ...normalized.split('/'));
+}
+
+async function localFileMatches(localPath: string, expectedSize?: number): Promise<boolean> {
+  try {
+    const s = await stat(localPath);
+    return expectedSize == null || s.size === expectedSize;
+  } catch {
+    return false;
+  }
+}
+
+async function writeLocalMirror(userId: string, filePath: string, body: string | Buffer): Promise<string> {
+  const localPath = getLocalWorkspacePath(userId, filePath);
+  await mkdir(path.dirname(localPath), { recursive: true });
+  await writeLocalFile(localPath, body);
+  return localPath;
+}
+
+async function hydrateLocalMirror(file: WorkspaceFile, userId: string): Promise<WorkspaceFileHandle> {
+  const localPath = getLocalWorkspacePath(userId, file.path);
+  if (await localFileMatches(localPath, file.size)) {
+    console.log(`[workspace] local hit ${file.path}`);
+    return { ...file, localPath, localAvailable: true, hydrated: false };
+  }
+
+  if (!file.storageUrl) {
+    return { ...file, localPath, localAvailable: false, hydrated: false };
+  }
+
+  console.log(`[workspace] hydrate ${file.path}`);
+  const response = await fetch(file.storageUrl);
+  if (!response.ok || !response.body) {
+    throw new Error(`Failed to hydrate workspace file ${file.path}: ${response.status}`);
+  }
+
+  await mkdir(path.dirname(localPath), { recursive: true });
+  await pipeline(Readable.fromWeb(response.body as any), createWriteStream(localPath));
+  return { ...file, localPath, localAvailable: true, hydrated: true };
 }
 
 // ── MIME type helpers ──────────────────────────────────────────────────────
@@ -107,13 +201,18 @@ async function dbListFiles(supabase: SupabaseClient, userId: string, pattern?: s
     return [];
   }
 
-  return (data || []).map((row: { path: string; content_type: string; size_bytes: number | null; storage_url: string; updated_at: string | null }) => ({
-    path: row.path,
-    contentType: row.content_type,
-    size: row.size_bytes ?? undefined,
-    storageUrl: row.storage_url,
-    updatedAt: row.updated_at ?? undefined,
-  }));
+  return (data || []).map((row: { path: string; content_type: string; size_bytes: number | null; storage_url: string; updated_at: string | null }) => {
+    const localPath = getLocalWorkspacePath(userId, row.path);
+    return {
+      path: row.path,
+      contentType: row.content_type,
+      size: row.size_bytes ?? undefined,
+      storageUrl: row.storage_url,
+      updatedAt: row.updated_at ?? undefined,
+      localPath,
+      localAvailable: existsSync(localPath),
+    };
+  });
 }
 
 /** Read file content from Storage via its URL */
@@ -142,12 +241,20 @@ async function dbWriteFile(
   content: string | Buffer,
   contentType?: string,
   marketplaceId?: string,
-): Promise<{ success: boolean; storageUrl?: string; error?: string }> {
+): Promise<WorkspaceWriteResult> {
   const ct = contentType || pathToContentType(path);
   const sp = storagePath(userId, path);
   const isText = ct.startsWith('text/') || ct === 'application/json';
   const body = isText && typeof content === 'string' ? content : (Buffer.isBuffer(content) ? content : Buffer.from(content));
   const sizeBytes = typeof content === 'string' ? Buffer.byteLength(content, 'utf-8') : (Buffer.isBuffer(content) ? content.length : 0);
+  let localPath: string | undefined;
+
+  try {
+    localPath = await writeLocalMirror(userId, path, body);
+    console.log(`[workspace] local write ${path}`);
+  } catch (e) {
+    console.warn('[workspace] local write failed:', e);
+  }
 
   // Upload to Storage
   const { error: uploadError } = await supabase.storage
@@ -180,7 +287,7 @@ async function dbWriteFile(
   }
 
   cache.clear();
-  return { success: true, storageUrl: publicUrl };
+  return { success: true, storageUrl: publicUrl, localPath };
 }
 
 /** Delete file from Storage + workspace_files */
@@ -294,6 +401,43 @@ export function readBuiltInFile(filePath: string): WorkspaceReadResult | null {
   } catch { return null; }
 }
 
+export async function resolveWorkspaceFile(
+  filePath: string,
+  supabase?: SupabaseClient,
+  userId?: string,
+  options: { hydrate?: boolean } = {},
+): Promise<WorkspaceFileHandle | null> {
+  if (supabase && userId) {
+    const files = await dbListFiles(supabase, userId, filePath);
+    const file = files.find(f => f.path === filePath);
+    if (file) {
+      if (options.hydrate) {
+        return hydrateLocalMirror(file, userId);
+      }
+      const localPath = getLocalWorkspacePath(userId, file.path);
+      return {
+        ...file,
+        localPath,
+        localAvailable: await localFileMatches(localPath, file.size),
+        hydrated: false,
+      };
+    }
+  }
+
+  const builtIn = readBuiltInFile(filePath);
+  if (builtIn) {
+    return {
+      path: filePath,
+      contentType: builtIn.contentType,
+      storageUrl: builtIn.storageUrl,
+      localAvailable: false,
+      isBuiltIn: true,
+    };
+  }
+
+  return null;
+}
+
 /** Load built-in skills as ParsedSkill map (for skill manifest + getSkill) */
 function loadBuiltInSkills(): Map<string, ParsedSkill> {
   const cacheKey = 'builtInSkills';
@@ -376,11 +520,27 @@ export async function readFile(filePath: string, supabase?: SupabaseClient, user
 
   // Try Supabase first
   if (supabase && userId) {
-    const files = await dbListFiles(supabase, userId, filePath);
-    const file = files.find(f => f.path === filePath);
+    const file = await resolveWorkspaceFile(filePath, supabase, userId, { hydrate: true });
+    if (file?.localPath && file.localAvailable) {
+      if (file.contentType.startsWith('text/') || file.contentType === 'application/json') {
+        const result = { content: await readLocalFile(file.localPath, 'utf-8'), contentType: file.contentType, storageUrl: file.storageUrl, path: file.path, localPath: file.localPath };
+        setCache(cacheKey, result);
+        return result;
+      }
+      const buffer = await readLocalFile(file.localPath);
+      const result = { content: `data:${file.contentType};base64,${buffer.toString('base64')}`, contentType: file.contentType, storageUrl: file.storageUrl, path: file.path, localPath: file.localPath };
+      setCache(cacheKey, result);
+      return result;
+    }
+
     if (file?.storageUrl) {
       const result = await fetchFileContent(file.storageUrl, file.contentType);
-      if (result) { setCache(cacheKey, result); return result; }
+      if (result) {
+        result.path = file.path;
+        result.localPath = file.localPath;
+        setCache(cacheKey, result);
+        return result;
+      }
     }
   }
 
@@ -402,7 +562,7 @@ export async function writeFile(
   userId: string,
   contentType?: string,
   marketplaceId?: string,
-): Promise<{ success: boolean; storageUrl?: string; error?: string }> {
+): Promise<WorkspaceWriteResult> {
   return dbWriteFile(supabase, userId, filePath, content, contentType, marketplaceId);
 }
 
