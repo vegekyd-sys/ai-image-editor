@@ -203,36 +203,34 @@ async function runFrontendSaveE2E(browser: Browser, email: string, password: str
   })
   await page.goto(`${baseUrl}/projects/${projectId}`)
   await page.getByRole('button', { name: 'Save' }).waitFor({ timeout: 60_000 })
-  await page.getByRole('button', { name: 'Save' }).click()
-  let videoUrl = ''
-  for (let i = 0; i < 90; i++) {
-    const { data, error } = await admin
-      .from('snapshots')
-      .select('video_meta')
-      .eq('project_id', projectId)
-      .eq('type', 'video')
-      .order('sort_order', { ascending: false })
-      .limit(5)
-    if (error) throw new Error(error.message)
-    const completed = (data || [])
-      .map(row => row.video_meta as { status?: string; videoUrl?: string } | null)
-      .find(meta => meta?.status === 'completed' && typeof meta.videoUrl === 'string')
-    if (completed?.videoUrl) {
-      videoUrl = completed.videoUrl
-      break
-    }
-    await wait(3000)
+  const saveButton = page.getByRole('button', { name: 'Save' })
+  const downloadPromise = page.waitForEvent('download', { timeout: 180_000 })
+  await saveButton.click()
+  await page.getByRole('button', { name: 'Saving' }).waitFor({ timeout: 30_000 })
+  const download = await downloadPromise
+  const outputPath = path.join(tmpDir, 'frontend-save.mp4')
+  await download.saveAs(outputPath)
+  const probe = await ffprobe(outputPath)
+  if (Math.abs(probe.duration - 2) > 0.25) {
+    throw new Error(`Frontend Save expected ~2s MP4, got ${probe.duration}s`)
   }
-  if (!videoUrl) throw new Error('Frontend Save did not complete a timeline MP4 snapshot')
-  const probe = await downloadAndProbe(videoUrl, path.join(tmpDir, 'frontend-save.mp4'))
-  if (probe.width !== 720 || probe.height !== 1280) {
-    throw new Error(`Frontend Save expected 720x1280 MP4, got ${probe.width}x${probe.height}`)
+  if (!probe.width || !probe.height) {
+    throw new Error(`Frontend Save produced invalid MP4 dimensions: ${probe.width}x${probe.height}`)
   }
-  if (!exportRequests.some(req => req.includes('/api/remotion/export'))) {
-    throw new Error('Frontend Save did not call /api/remotion/export')
+  if (exportRequests.some(req => req.includes('/api/remotion/export'))) {
+    throw new Error('Frontend Save unexpectedly called /api/remotion/export')
+  }
+  const { count, error } = await admin
+    .from('snapshots')
+    .select('id', { count: 'exact', head: true })
+    .eq('project_id', projectId)
+    .eq('type', 'video')
+  if (error) throw new Error(error.message)
+  if ((count || 0) !== 0) {
+    throw new Error(`Frontend Save unexpectedly published ${count} video snapshots`)
   }
   await context.close()
-  return { probe, exportRequests: exportRequests.length, videoUrl }
+  return { probe, exportRequests: exportRequests.length, outputPath }
 }
 
 async function runAgentE2E(key: string, projectId: string, tmpDir: string) {
