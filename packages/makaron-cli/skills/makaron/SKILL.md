@@ -94,6 +94,7 @@ Returns immediately:
 | Fix one moment in a video from a screenshot | `npx makaron-cli chat --project <id> --image screenshot.png "@4 this frame should be Paris; only fix this moment"` |
 | Cut or assemble video | `npx makaron-cli chat --project <id> --video clip.mp4 "cut out the dead air and keep the best 20 seconds"` |
 | Add music | `npx makaron-cli chat --project <id> "add calm piano background music"` |
+| Beat-sync video from audio | `npx makaron-cli chat --project auto --audio beat.mp3 --video-model seedance-fast --video-resolution 480p "make a beat-synced video"` |
 | Create motion design | `npx makaron-cli chat --project <id> "make an animated Instagram story with this image"` |
 
 ### Marketplace skills
@@ -157,6 +158,26 @@ npx makaron-cli chat --project auto --video https://example.com/dance.mp4 -b "ex
 Supported formats: MP4, MOV, WebM. CLI local video uploads support max 50MB, max 120s with 1s metadata tolerance, and <=1080p / 2,086,876 frame pixels. The frontend can transcode larger videos before upload; the CLI uploads directly to Storage and rejects videos above those limits. Videos are uploaded to the project timeline. The Agent can analyze scenes, edit content, compose multiple clips, extend duration, and add effects — all via natural language. Seedance video-reference editing is still limited to ~15s provider references, so longer uploaded videos should be split/prepared by the agent before model submission; Kling remains the base/direct edit path.
 
 Use `chat --project <id|auto> --video ...` for any project/timeline video work. Direct video commands are standalone raw-tool calls.
+
+### With reference audio (MP3/WAV)
+
+Use `--audio` when a song, beat, or voice recording should guide the video generation. Audio is imported into the project music library and passed to the agent as `audio_1`, `audio_2`, etc.; it does not become a timeline media item.
+
+```bash
+# Local audio: validate, upload, import, then generate with Seedance
+npx makaron-cli chat --project auto \
+  --audio beat.mp3 \
+  --video-model seedance-fast \
+  --video-resolution 480p \
+  -b "make a 15s beat-synced video from this music"
+
+# Public audio URL: store the URL directly, no mirroring
+npx makaron-cli chat --project <id> \
+  --audio https://example.com/voice.wav \
+  -b "use this voice recording as the pacing reference for the video"
+```
+
+Local audio supports MP3/WAV, 2-15s duration, and max 15MB. Reference audio is currently supported for Seedance video generation; Kling and Grok will return a clear unsupported-model error if audio refs are used.
 
 ### Fix one video moment from a screenshot
 

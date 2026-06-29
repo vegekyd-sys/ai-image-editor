@@ -13,9 +13,11 @@ const CHANGELOG: ChangelogEntry[] = [
     date: '2026-06-29',
     en: { title: 'Liquid Glass UI Refresh', items: [
       'Home, Projects, Updates, account menus, and input areas now share a softer Liquid Glass style, with faster navigation and safer mobile/iOS spacing.',
+      'Makaron CLI now supports `--audio`, so agents can create videos guided by a song, beat, or voice recording directly from the terminal.',
     ]},
     zh: { title: 'Liquid Glass UI 升级', items: [
       '首页、项目页、更新、账号菜单和输入框统一为更克制的 Liquid Glass 风格，同时优化了切换速度和移动端/iOS 安全区适配。',
+      'Makaron CLI 现在支持 `--audio`，可以把音乐、节拍或录音作为参考音频传给视频生成，让视频跟着声音走。',
     ]},
   },
   {

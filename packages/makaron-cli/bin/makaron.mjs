@@ -279,7 +279,7 @@ Options:
   --project <id|auto>       Project to work in. Use "auto" to create one.
   --image <file|url>        Attach a reference image or screenshot. Repeatable.
   --video <file|url>        Attach a video to the project timeline. Repeatable.
-  --audio <file|url>        Attach reference audio/music for this turn. MP3/WAV, repeatable.
+  --audio <file|url>        Attach a song, beat, or voice reference. MP3/WAV, repeatable.
   --skill <id|label|name>   Use an installed skill or auto-install a matched marketplace skill.
   --model <name>            Preferred image/model route.
   --video-model <name>      Preferred video model: seedance-fast, seedance-mini, seedance, kling, or grok.
@@ -1366,6 +1366,7 @@ Commands:
   chat --project <id> "message"      Chat (non-blocking, polls for result)
   chat --project <id> --skill <id>   Use or auto-install a marketplace skill
   chat --project <id> --video <file> Attach video to conversation
+  chat --project <id> --audio <file> Attach song/beat/voice reference
   chat --project <id> -b "message"   Background: submit and print runId
   chat --project <id> --stream "msg" Legacy: stream SSE in real-time
   chat --project <id> --json "msg"   Output structured JSON result
