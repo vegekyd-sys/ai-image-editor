@@ -100,6 +100,32 @@ describe('video model reference limits', () => {
     expect(result.message).toContain('EVOLINK_API_KEY')
   })
 
+  it('requires audio refs to be explicitly referenced in the story prompt', async () => {
+    const missing = await createVideo({
+      script: 'Beat synced mascot\n\nAnimate <<<media_1>>> to the uploaded music.',
+      images: ['https://example.com/image.jpg'],
+      audioUrls: ['https://example.com/beat.mp3'],
+      duration: 15,
+      videoModel: 'seedance-mini',
+    })
+
+    expect(missing.success).toBe(false)
+    expect(missing.message).toContain('Reference audio was passed but not referenced in story_prompt')
+    expect(missing.message).toContain('<<<audio_1>>>')
+
+    const referenced = await createVideo({
+      script: 'Beat synced mascot\n\nUse <<<audio_1>>> as the soundtrack and rhythm reference. Animate <<<media_1>>> on the beat.',
+      images: ['https://example.com/image.jpg'],
+      audioUrls: ['https://example.com/beat.mp3'],
+      duration: 15,
+      videoModel: 'seedance-mini',
+    })
+
+    expect(referenced.success).toBe(false)
+    expect(referenced.message).not.toContain('Reference audio was passed')
+    expect(referenced.message).toContain('EVOLINK_API_KEY')
+  })
+
   it('keeps Seedance Mini video references on Mini guardrails', async () => {
     const tiny = await createVideo({
       script: 'Mini tiny reference\n\nRestyle <<<media_1>>>.',

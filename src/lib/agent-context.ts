@@ -310,8 +310,8 @@ export async function buildPromptContext(
         const title = audio.title || `Reference audio ${i + 1}`;
         const duration = typeof audio.duration === 'number' ? `, ${formatSecondsForPrompt(audio.duration)}s` : '';
         const track = typeof audio.trackIndex === 'number' ? `, project_music track_index=${audio.trackIndex}` : '';
-        return `${label}: ${title}${duration}${track}, ${audio.audioUrl}`;
-      }).join('\n')}\nUse these as music/audio references via audio_refs, e.g. ["audio_1"]. They are not <<<media_N>>> items and must not be referenced through the Timeline Media Index.\n\n`
+        return `<<<${label}>>> [audio] — ${title}${duration}${track}, ${audio.audioUrl}`;
+      }).join('\n')}\nUse these as music/audio references. To use one in video generation, mention its marker in story_prompt and pass audio_refs, e.g. story_prompt includes <<<audio_1>>> and audio_refs is ["audio_1"]. Audio markers are not Timeline Media Index items and must not be referenced as <<<media_N>>>.\n\n`
     : '';
 
   // Assemble

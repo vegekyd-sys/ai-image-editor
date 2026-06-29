@@ -79,6 +79,13 @@ function resolveSeedanceReferenceAspectRatio(
   return resolveVideoProviderAspectRatio(provider, aspectRatio);
 }
 
+function findAudioMarkers(prompt: string): Set<number> {
+  return new Set(
+    Array.from(prompt.matchAll(/<<<audio_(\d+)>>>/gi), match => Number(match[1]))
+      .filter(n => Number.isInteger(n) && n > 0)
+  );
+}
+
 export async function createVideo(input: CreateVideoInput): Promise<CreateVideoResult> {
   const { script, images, duration, aspectRatio, videoModel, videoResolution, videoUrl, videoReferType, videoUrls, audioUrls, referenceVideoDuration, referenceVideoMetas, keepOriginalSound, motionControl, characterOrientation } = input;
   const hasVideoReference = !!videoUrl || !!videoUrls?.length;
@@ -150,6 +157,19 @@ export async function createVideo(input: CreateVideoInput): Promise<CreateVideoR
     // Filter to only referenced images and remap indices (preserves index alignment)
     // filterAndRemapImages will enforce the 7-image limit on the filtered result
     const { filteredImages, finalPrompt } = filterAndRemapImages(script, images);
+
+    if (hasAudioReference) {
+      const audioMarkers = findAudioMarkers(finalPrompt);
+      const missing = (audioUrls || [])
+        .map((_, index) => index + 1)
+        .filter(index => !audioMarkers.has(index));
+      if (missing.length > 0) {
+        return {
+          success: false,
+          message: `Reference audio was passed but not referenced in story_prompt. Add ${missing.map(index => `<<<audio_${index}>>>`).join(', ')} to the story_prompt near the soundtrack/rhythm instruction, and keep audio_refs set.`,
+        };
+      }
+    }
 
     if (filteredImages.length === 0 && images.length > 0 && !hasVideoReference) {
       return {

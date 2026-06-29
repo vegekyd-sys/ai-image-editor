@@ -66,8 +66,8 @@ describe('agent audio index', () => {
     expect(ctx.fullPrompt).toContain('<<<media_1>>> [image]')
     expect(ctx.fullPrompt).not.toContain('<<<media_2>>>')
     expect(ctx.fullPrompt).toContain('[Audio Index - not Timeline Media]')
-    expect(ctx.fullPrompt).toContain('audio_1: beat.mp3, 15s, project_music track_index=0, https://example.com/beat.mp3')
-    expect(ctx.fullPrompt).toContain('Use these as music/audio references via audio_refs')
+    expect(ctx.fullPrompt).toContain('<<<audio_1>>> [audio] — beat.mp3, 15s, project_music track_index=0, https://example.com/beat.mp3')
+    expect(ctx.fullPrompt).toContain('story_prompt includes <<<audio_1>>> and audio_refs is ["audio_1"]')
     expect(ctx.audioAttachments).toEqual([{
       audioUrl: 'https://example.com/beat.mp3',
       title: 'beat.mp3',
