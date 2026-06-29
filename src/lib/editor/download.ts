@@ -1,4 +1,4 @@
-import type { Snapshot, VideoMeta } from '@/types';
+import type { Snapshot } from '@/types';
 import type { LocaleContextValue } from '@/lib/i18n';
 import { snapFromTimeline } from './timeline-utils';
 
@@ -14,38 +14,8 @@ export interface DownloadAssetParams {
   setAgentStatus: (msg: string) => void;
   showSaveToast: () => void;
   onCreateExportSnapshot?: (snapshot: Snapshot) => void;
-  onUpdateExportSnapshot?: (snapshotId: string, videoMeta: VideoMeta) => void;
   t: LocaleContextValue['t'];
   projectTitle?: string;
-  projectId?: string;
-}
-
-async function pollRemotionExport(jobId: string, onProgress: (progress: number | null) => void): Promise<{
-  url: string;
-  durationSeconds?: number | null;
-  width?: number | null;
-  height?: number | null;
-}> {
-  while (true) {
-    const res = await fetch(`/api/remotion/export/${jobId}`);
-    if (!res.ok) throw new Error(`Export status failed: ${res.status}`);
-    const data = await res.json();
-    if (data.status === 'completed') {
-      const url = data.url || data.storageUrl || data.storage_url;
-      if (!url) throw new Error('Export completed without a video URL');
-      return {
-        url,
-        durationSeconds: typeof data.duration_seconds === 'number' ? data.duration_seconds : null,
-        width: typeof data.width === 'number' ? data.width : null,
-        height: typeof data.height === 'number' ? data.height : null,
-      };
-    }
-    if (data.status === 'failed') {
-      throw new Error(data.error || 'Export failed');
-    }
-    onProgress(typeof data.progress === 'number' ? data.progress : null);
-    await new Promise(resolve => setTimeout(resolve, data.next_poll_after_ms || 3000));
-  }
 }
 
 async function downloadVideoBlob(videoSrc: string): Promise<Blob> {
@@ -101,12 +71,12 @@ export async function downloadAsset(params: DownloadAssetParams): Promise<void> 
     currentVideoUrl,
     draftParentIndex,
     snapshotsRef,
+    pendingVideoRef,
     setIsSaving,
     setAgentStatus,
     showSaveToast,
     t,
     projectTitle,
-    projectId,
   } = params;
 
   // Video download — proxy through our API to avoid CORS
@@ -125,63 +95,75 @@ export async function downloadAsset(params: DownloadAssetParams): Promise<void> 
     return;
   }
 
-  // Animated design → export as MP4 via backend Remotion worker
+  // Animated design → export as MP4 in the browser so top-right Save keeps the
+  // current frontend behavior. CLI/CUI use the backend materialization worker.
   const snapIdx = snapFromTimeline(viewIndex, draftParentIndex);
   const currentSnap = snapIdx !== null ? snapshotsRef.current[snapIdx] : undefined;
   if (currentSnap?.design?.animation) {
+    const isMobile = /iPhone|iPad|Android/i.test(navigator.userAgent);
+
+    // Mobile step 2: video already exported → share with a fresh user gesture.
+    if (isMobile && pendingVideoRef.current) {
+      const { blob, filename } = pendingVideoRef.current;
+      pendingVideoRef.current = null;
+      const file = new File([blob], filename, { type: 'video/mp4' });
+      try {
+        if (typeof navigator.share === 'function' && navigator.canShare?.({ files: [file] })) {
+          await navigator.share({ files: [file] });
+          setAgentStatus(t('editor.done'));
+          showSaveToast();
+        } else {
+          const url = URL.createObjectURL(blob);
+          window.open(url, '_blank');
+          setAgentStatus(t('editor.done'));
+          showSaveToast();
+          setTimeout(() => URL.revokeObjectURL(url), 120000);
+        }
+      } catch { /* user cancelled share sheet */ }
+      return;
+    }
+
     setIsSaving(true);
+    setAgentStatus('Exporting video...');
     // Pause Remotion Player during export to avoid competing for resources
     document.dispatchEvent(new Event('music-play'));
     try {
-      if (!projectId) throw new Error('Project context is required for MP4 export');
-
-      const createRes = await fetch('/api/remotion/export', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          projectId,
-          snapshotId: currentSnap.id,
-          designPath: currentSnap.designPath,
-          design: currentSnap.design,
-          outputType: 'video',
-          renderProfile: 'fast_720p',
-          publish: false,
-          name: `save-${currentSnap.id || Date.now()}`,
-        }),
+      const { exportDesignVideo } = await import('@/components/RemotionRenderer');
+      const blob = await exportDesignVideo(currentSnap.design, (p) => {
+        setAgentStatus(`Exporting video... ${Math.round(p.progress * 100)}%`);
       });
-      const created = await createRes.json();
-      if (!createRes.ok) throw new Error(created.error || `Export failed: ${createRes.status}`);
-      const jobId = created.jobId || created.id;
-      if (!jobId) throw new Error('Export job was not created');
 
-      setAgentStatus('Exporting video...');
-      const finish = async () => {
-        const exported = created.status === 'completed' && (created.url || created.storageUrl || created.storage_url)
-          ? {
-              url: created.url || created.storageUrl || created.storage_url,
-              durationSeconds: typeof created.duration_seconds === 'number' ? created.duration_seconds : null,
-              width: typeof created.width === 'number' ? created.width : null,
-              height: typeof created.height === 'number' ? created.height : null,
-          }
-          : await pollRemotionExport(jobId, (progress) => {
-        if (progress !== null && progress >= 0.995) setAgentStatus('Preparing download...');
-        else if (progress !== null) setAgentStatus(`Exporting video... ${Math.round(progress * 100)}%`);
-        else setAgentStatus('Exporting video...');
-      });
-        setAgentStatus('Downloading video...');
-        try {
-          await saveVideoUrl(exported.url, `makaron-${projectTitle || 'composition'}-${Date.now()}.mp4`);
-          setAgentStatus(t('editor.done'));
-          showSaveToast();
-        } finally {
+      const filename = `makaron-design-${Date.now()}.mp4`;
+      if (isMobile) {
+        const file = new File([blob], filename, { type: 'video/mp4' });
+        if (typeof navigator.share === 'function' && navigator.canShare?.({ files: [file] })) {
+          pendingVideoRef.current = { blob, filename };
           setIsSaving(false);
+          setAgentStatus(t('editor.videoReady'));
+          return;
         }
-      };
-      void finish().catch((err) => {
-        const msg = err instanceof Error ? err.message : String(err);
+
+        const url = URL.createObjectURL(blob);
+        const link = document.createElement('a');
+        link.href = url;
+        link.download = filename;
+        link.click();
+        setTimeout(() => URL.revokeObjectURL(url), 60000);
         setIsSaving(false);
-        setAgentStatus(`Export failed: ${msg.slice(0, 100)}`);
-      });
+        setAgentStatus(t('editor.done'));
+        showSaveToast();
+        return;
+      }
+
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement('a');
+      link.href = url;
+      link.download = filename;
+      link.click();
+      setTimeout(() => URL.revokeObjectURL(url), 60000);
+      setIsSaving(false);
+      setAgentStatus(t('editor.done'));
+      showSaveToast();
     } catch (e) {
       const msg = e instanceof Error ? e.message : String(e);
       console.error('MP4 export failed:', msg, e);
