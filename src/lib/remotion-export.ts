@@ -16,6 +16,7 @@ import {
 import { resolveVideoUrlsInCode } from '@/lib/video-url-resolver'
 import { resolveAudioUrlsInCode } from '@/lib/audio-url-resolver'
 import { VIDEO_PLACEHOLDER_IMAGE } from '@/lib/editor/timeline-derivations'
+import type { RemotionLambdaOutputDestination } from '@/lib/remotion-lambda-renderer'
 
 export type RemotionExportStatus = 'queued' | 'rendering' | 'completed' | 'failed'
 export type RemotionExportOutputType = 'video' | 'image'
@@ -136,6 +137,61 @@ function lambdaObjectKeyFromUrl(url: string, bucketName?: string | null): string
 
 function quoteContentDispositionFilename(filename: string): string {
   return filename.replace(/["\\\r\n]/g, '_')
+}
+
+function workspaceStoragePath(userId: string, path: string): string {
+  return `${userId}/workspace/${path}`
+}
+
+function resolveSupabaseS3OutputDestination(
+  supabase: SupabaseClient,
+  userId: string,
+  workspacePath: string,
+): (RemotionLambdaOutputDestination & { publicUrl: string; storagePath: string }) | null {
+  if (process.env.REMOTION_LAMBDA_SUPABASE_DIRECT_OUTPUT === 'false') return null
+  const endpoint = process.env.SUPABASE_S3_ENDPOINT
+  const region = process.env.SUPABASE_S3_REGION
+  const accessKeyId = process.env.SUPABASE_S3_ACCESS_KEY_ID
+  const secretAccessKey = process.env.SUPABASE_S3_SECRET_ACCESS_KEY
+  if (!endpoint || !region || !accessKeyId || !secretAccessKey) return null
+
+  const bucketName = process.env.SUPABASE_S3_BUCKET || 'images'
+  const storagePath = workspaceStoragePath(userId, workspacePath)
+  const { data } = supabase.storage.from(bucketName).getPublicUrl(storagePath)
+  return {
+    bucketName,
+    key: storagePath,
+    storagePath,
+    publicUrl: toPublicStorageUrl(data.publicUrl),
+    privacy: 'no-acl',
+    s3OutputProvider: {
+      endpoint,
+      region: region as NonNullable<RemotionLambdaOutputDestination['s3OutputProvider']['region']>,
+      accessKeyId,
+      secretAccessKey,
+      forcePathStyle: true,
+    },
+  }
+}
+
+async function indexDirectWorkspaceFile(
+  supabase: SupabaseClient,
+  userId: string,
+  path: string,
+  storageUrl: string,
+  contentType: string,
+  sizeBytes?: number | null,
+): Promise<void> {
+  const { error } = await supabase.from('workspace_files').upsert({
+    user_id: userId,
+    path,
+    content_type: contentType,
+    size_bytes: sizeBytes || 0,
+    storage_url: storageUrl,
+    updated_at: nowIso(),
+  }, { onConflict: 'user_id,path' })
+  if (error) throw new Error(`Workspace index update failed: ${error.message}`)
+  workspace.clearWorkspaceCache()
 }
 
 function even(value: number): number {
@@ -554,10 +610,13 @@ async function publishExportedVideo(
   design: DesignPayload,
   output: { width: number; height: number },
   targetSnapshotId?: string,
+  stageTimings?: Record<string, number>,
 ): Promise<string> {
   const admin = getSupabaseAdmin()
   const snapshotId = targetSnapshotId || crypto.randomUUID()
+  const sortStart = Date.now()
   const { data: sortData } = await admin.rpc('next_sort_order', { p_project_id: job.project_id })
+  if (stageTimings) stageTimings.publishNextSortOrderMs = (stageTimings.publishNextSortOrderMs || 0) + Date.now() - sortStart
   const description = typeof job.metadata?.name === 'string' ? job.metadata.name : 'Remotion export'
   const videoMeta: VideoMeta = {
     taskId: `remotion-export-${job.id}`,
@@ -576,8 +635,12 @@ async function publishExportedVideo(
   }
   let imageUrl = VIDEO_PLACEHOLDER_IMAGE
   try {
+    const posterStart = Date.now()
     const posterBuffer = await extractVideoPoster(url)
+    if (stageTimings) stageTimings.publishExtractPosterMs = (stageTimings.publishExtractPosterMs || 0) + Date.now() - posterStart
+    const uploadPosterStart = Date.now()
     imageUrl = await uploadPoster(admin, job.user_id, job.project_id, snapshotId, posterBuffer) || imageUrl
+    if (stageTimings) stageTimings.publishUploadPosterMs = (stageTimings.publishUploadPosterMs || 0) + Date.now() - uploadPosterStart
   } catch (err) {
     console.warn('[remotion-export] poster extraction failed:', err)
   }
@@ -594,6 +657,7 @@ async function publishExportedVideo(
     description,
   }
   let error: { message: string } | null = null
+  const snapshotWriteStart = Date.now()
   if (targetSnapshotId) {
     const updateResult = await admin.from('snapshots').update({
         image_url: row.image_url,
@@ -610,6 +674,7 @@ async function publishExportedVideo(
     const insertResult = await admin.from('snapshots').insert(row)
     error = insertResult.error
   }
+  if (stageTimings) stageTimings.publishSnapshotWriteMs = (stageTimings.publishSnapshotWriteMs || 0) + Date.now() - snapshotWriteStart
   if (error) throw new Error(`Publish failed: ${error.message}`)
   return snapshotId
 }
@@ -617,10 +682,13 @@ async function publishExportedVideo(
 async function executeRemotionExportJob(job: RemotionExportJob): Promise<RemotionExportResult> {
   const admin = getSupabaseAdmin()
   const startedAt = job.started_at ? Date.parse(job.started_at) || Date.now() : Date.now()
+  const stageTimings: Record<string, number> = {}
 
   try {
+    const loadStart = Date.now()
     const { design, designPath } = await loadJobDesign(job, admin)
     const resolvedDesign = await normalizeDesignForServer(design, job.project_id, admin)
+    stageTimings.resolveDesignMs = Date.now() - loadStart
     const renderProfile = job.metadata?.renderProfile === 'source' ? 'source' : 'fast_720p'
     const renderTarget = resolveRemotionRenderProfile(resolvedDesign, renderProfile)
     const fps = resolvedDesign.animation?.fps || 30
@@ -652,12 +720,49 @@ async function executeRemotionExportJob(job: RemotionExportJob): Promise<Remotio
     const outputMetadata: Record<string, unknown> = {}
     if (job.output_type === 'video' && process.env.REMOTION_RENDERER === 'lambda') {
       const { renderDesignVideoLambdaToUrl } = await import('@/lib/remotion-lambda-renderer')
+      const directOutputDestination = job.publish
+        ? resolveSupabaseS3OutputDestination(admin, job.user_id, workspacePath)
+        : null
+      const lambdaStart = Date.now()
       const lambdaResult = await renderDesignVideoLambdaToUrl(resolvedDesign, {
         scale: renderTarget.scale,
         onProgress: updateProgress,
+        outputDestination: directOutputDestination || undefined,
       })
-      const lambdaWorkspacePath = `s3://${lambdaResult.bucketName}/${new URL(lambdaResult.url).pathname.split('/').slice(2).join('/')}`
-      if (job.publish) {
+      stageTimings.lambdaWallMs = Date.now() - lambdaStart
+      const lambdaWorkspacePath = directOutputDestination
+        ? `s3://${directOutputDestination.bucketName}/${directOutputDestination.key}`
+        : `s3://${lambdaResult.bucketName}/${new URL(lambdaResult.url).pathname.split('/').slice(2).join('/')}`
+      if (job.publish && directOutputDestination) {
+        await admin.from('remotion_export_jobs').update({
+          progress: 1,
+          heartbeat_at: nowIso(),
+          metadata: {
+            ...(job.metadata || {}),
+            finalizing: 'indexing-direct-supabase-output',
+            lambdaRenderId: lambdaResult.renderId,
+            lambdaOutputSizeInBytes: lambdaResult.outputSizeInBytes || null,
+            directSupabaseStoragePath: directOutputDestination.storagePath,
+          },
+        }).eq('id', job.id)
+        const indexStart = Date.now()
+        publicUrl = directOutputDestination.publicUrl
+        finalWorkspacePath = workspacePath
+        await indexDirectWorkspaceFile(
+          admin,
+          job.user_id,
+          workspacePath,
+          publicUrl,
+          contentType,
+          lambdaResult.outputSizeInBytes || null,
+        )
+        stageTimings.workspaceIndexMs = Date.now() - indexStart
+        stageTimings.lambdaOutputDownloadMs = 0
+        stageTimings.workspaceWriteMs = 0
+        outputMetadata.lambdaDirectSupabaseOutput = true
+        outputMetadata.lambdaDirectSupabaseBucket = directOutputDestination.bucketName
+        outputMetadata.lambdaDirectSupabaseKey = directOutputDestination.key
+      } else if (job.publish) {
         await admin.from('remotion_export_jobs').update({
           progress: 1,
           heartbeat_at: nowIso(),
@@ -667,7 +772,9 @@ async function executeRemotionExportJob(job: RemotionExportJob): Promise<Remotio
             lambdaRenderId: lambdaResult.renderId,
           },
         }).eq('id', job.id)
+        const downloadStart = Date.now()
         const buffer = await fetchRemoteBuffer(lambdaResult.url)
+        stageTimings.lambdaOutputDownloadMs = Date.now() - downloadStart
         await admin.from('remotion_export_jobs').update({
           progress: 1,
           heartbeat_at: nowIso(),
@@ -678,13 +785,16 @@ async function executeRemotionExportJob(job: RemotionExportJob): Promise<Remotio
             lambdaOutputSizeInBytes: lambdaResult.outputSizeInBytes || null,
           },
         }).eq('id', job.id)
+        const workspaceUploadStart = Date.now()
         const saved = await workspace.writeFile(workspacePath, buffer, admin, job.user_id, contentType)
+        stageTimings.workspaceWriteMs = Date.now() - workspaceUploadStart
         if (!saved.success || !saved.storageUrl) {
           throw new Error(saved.error || 'Workspace upload failed')
         }
         publicUrl = toPublicStorageUrl(saved.storageUrl)
         finalWorkspacePath = workspacePath
         outputMetadata.lambdaMirroredSizeInBytes = buffer.length
+        outputMetadata.lambdaDirectSupabaseOutput = false
       } else {
         publicUrl = lambdaResult.url
         finalWorkspacePath = lambdaWorkspacePath
@@ -709,7 +819,9 @@ async function executeRemotionExportJob(job: RemotionExportJob): Promise<Remotio
           })
         : await renderDesignFrame(resolvedDesign, 0)
 
+      const workspaceUploadStart = Date.now()
       const saved = await workspace.writeFile(workspacePath, buffer, admin, job.user_id, contentType)
+      stageTimings.workspaceWriteMs = Date.now() - workspaceUploadStart
       if (!saved.success || !saved.storageUrl) {
         throw new Error(saved.error || 'Workspace upload failed')
       }
@@ -726,23 +838,26 @@ async function executeRemotionExportJob(job: RemotionExportJob): Promise<Remotio
     }
     if (job.publish && job.output_type === 'video') {
       const publishSnapshotIds = readPublishSnapshotIds(job.metadata)
+      const publishStart = Date.now()
       if (publishSnapshotIds.length > 0) {
         const publishedIds: string[] = []
         for (const snapshotId of publishSnapshotIds) {
           publishedIds.push(await publishExportedVideo({
+            ...job,
+            duration_seconds: durationSeconds,
+          }, publicUrl, finalWorkspacePath, resolvedDesign, { width: renderTarget.width, height: renderTarget.height }, snapshotId, stageTimings))
+        }
+        metadata.publishedSnapshotId = publishedIds[0]
+        metadata.publishedSnapshotIds = publishedIds
+      } else {
+        metadata.publishedSnapshotId = await publishExportedVideo({
           ...job,
           duration_seconds: durationSeconds,
-        }, publicUrl, finalWorkspacePath, resolvedDesign, { width: renderTarget.width, height: renderTarget.height }, snapshotId))
+        }, publicUrl, finalWorkspacePath, resolvedDesign, { width: renderTarget.width, height: renderTarget.height }, undefined, stageTimings)
       }
-      metadata.publishedSnapshotId = publishedIds[0]
-      metadata.publishedSnapshotIds = publishedIds
-    } else {
-      metadata.publishedSnapshotId = await publishExportedVideo({
-        ...job,
-        duration_seconds: durationSeconds,
-      }, publicUrl, finalWorkspacePath, resolvedDesign, { width: renderTarget.width, height: renderTarget.height })
+      stageTimings.publishVideoMs = Date.now() - publishStart
     }
-  }
+    stageTimings.totalServerJobMs = Date.now() - startedAt
 
     const completedUpdate = {
       status: 'completed' as const,
@@ -765,6 +880,7 @@ async function executeRemotionExportJob(job: RemotionExportJob): Promise<Remotio
         outputWidth: renderTarget.width,
         outputHeight: renderTarget.height,
         scale: renderTarget.scale,
+        stageTimings,
       },
       completed_at: nowIso(),
     }

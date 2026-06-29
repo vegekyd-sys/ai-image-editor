@@ -5,6 +5,19 @@ import { resolveRemotionLambdaEncodingSettings } from '@/lib/remotion-encoding'
 import { prepareRemotionCodeForSandbox } from '@/lib/remotion-server'
 
 type LambdaRenderProgress = Awaited<ReturnType<typeof getRenderProgress>>
+type LambdaRenderInput = Parameters<typeof renderMediaOnLambda>[0]
+type LambdaProgressInput = Parameters<typeof getRenderProgress>[0]
+
+export interface RemotionLambdaOutputDestination {
+  bucketName: string
+  key: string
+  s3OutputProvider: NonNullable<LambdaRenderInput['outName']> extends infer OutName
+    ? OutName extends { s3OutputProvider?: infer Provider }
+      ? NonNullable<Provider>
+      : never
+    : never
+  privacy?: LambdaRenderInput['privacy']
+}
 
 export interface RemotionLambdaTimingSummary {
   totalSeconds: number
@@ -124,6 +137,24 @@ function sleep(ms: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, ms))
 }
 
+async function retryTransient<T>(
+  fn: () => Promise<T>,
+  attempts: number,
+  delayMs: number,
+): Promise<T> {
+  let lastError: unknown
+  for (let attempt = 1; attempt <= attempts; attempt++) {
+    try {
+      return await fn()
+    } catch (err) {
+      lastError = err
+      if (attempt === attempts) break
+      await sleep(delayMs * attempt)
+    }
+  }
+  throw lastError
+}
+
 function progressValue(progress: LambdaRenderProgress): number {
   if (typeof progress.overallProgress === 'number') return progress.overallProgress
   return progress.done ? 1 : 0
@@ -178,6 +209,7 @@ export async function renderDesignVideoLambdaToUrl(
   options: {
     onProgress?: (progress: unknown) => void | Promise<void>
     scale?: number
+    outputDestination?: RemotionLambdaOutputDestination
   } = {},
 ): Promise<RemotionLambdaUrlResult> {
   const region = process.env.REMOTION_LAMBDA_REGION || process.env.AWS_REGION || 'us-east-1'
@@ -202,6 +234,7 @@ export async function renderDesignVideoLambdaToUrl(
   const useOffthreadVideo = process.env.REMOTION_LAMBDA_USE_OFFTHREAD_VIDEO === 'true'
   const logLevel = process.env.REMOTION_LAMBDA_LOG_LEVEL || 'warn'
   const timeoutInMilliseconds = readPositiveInteger(process.env.REMOTION_LAMBDA_TIMEOUT_MS, 120000)
+  const progressRetryAttempts = readPositiveInteger(process.env.REMOTION_LAMBDA_PROGRESS_RETRIES, 3)
   const preparedCode = prepareRemotionCodeForSandbox(design.code)
   const hasAudioSources = hasRemotionAudioSources(design.code)
   const encoding = resolveRemotionLambdaEncodingSettings()
@@ -245,6 +278,12 @@ export async function renderDesignVideoLambdaToUrl(
     timeoutInMilliseconds,
     logLevel: logLevel as Parameters<typeof renderMediaOnLambda>[0]['logLevel'],
     deleteAfter: deleteAfter as Parameters<typeof renderMediaOnLambda>[0]['deleteAfter'],
+    privacy: options.outputDestination?.privacy,
+    outName: options.outputDestination ? {
+      bucketName: options.outputDestination.bucketName,
+      key: options.outputDestination.key,
+      s3OutputProvider: options.outputDestination.s3OutputProvider,
+    } : undefined,
     metadata: {
       renderer: 'makaron-remotion-lambda',
       rendererFunctionName: rendererFunctionName || functionName,
@@ -272,13 +311,24 @@ export async function renderDesignVideoLambdaToUrl(
 
   while (true) {
     const pollStartMs = Date.now()
-    const progress = await withRemotionAwsCredentials(() => getRenderProgress({
+    const progressInput: LambdaProgressInput = {
       region: region as Parameters<typeof getRenderProgress>[0]['region'],
       functionName,
       bucketName: started.bucketName,
       renderId: started.renderId,
       logLevel: logLevel as Parameters<typeof getRenderProgress>[0]['logLevel'],
-    }))
+    }
+    if (options.outputDestination) {
+      progressInput.s3OutputProvider = options.outputDestination.s3OutputProvider
+      progressInput.forcePathStyle = options.outputDestination.s3OutputProvider.forcePathStyle
+    }
+    const progress = await retryTransient(
+      () => withRemotionAwsCredentials(() => getRenderProgress({
+        ...progressInput,
+      })),
+      progressRetryAttempts,
+      1000,
+    )
     const pollEndMs = Date.now()
     pollDurationsMs.push(pollEndMs - pollStartMs)
     await options.onProgress?.({
