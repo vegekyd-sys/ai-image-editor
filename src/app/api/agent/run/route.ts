@@ -34,6 +34,7 @@ export async function POST(req: NextRequest) {
       videoModel,
       videoResolution,
       videoAuto,
+      audioAttachments,
     } = await req.json();
 
     if (!projectId || !prompt) {
@@ -81,6 +82,7 @@ export async function POST(req: NextRequest) {
       hasAnnotation,
       isDraft,
       referenceImageCount,
+      audioAttachments,
     });
 
     // Write user message to DB (frontend does this itself, headless mode must do it here)
@@ -127,6 +129,7 @@ export async function POST(req: NextRequest) {
           videoModel,
           videoResolution,
           videoAuto,
+          audioAttachments,
           snapshotImages: ctx.snapshotImages,
           currentSnapshotIndex: ctx.currentSnapshotIndex,
           isNsfw,

@@ -38,9 +38,8 @@ function convertImageRefs(prompt: string): string {
 /**
  * Build SeeDance content array from prompt + images.
  * Decides image role based on count:
- *  - 1 image → first_frame (image-to-video)
- *  - 2 images → first_frame + last_frame
- *  - 3+ images → all reference_image (multimodal reference)
+ *  - Makaron treats all Seedance image inputs as references.
+ *  - Do not infer image-to-video / first-frame / last-frame modes from count.
  */
 function buildContent(prompt: string, images: string[]): Record<string, unknown>[] {
   const content: Record<string, unknown>[] = [
@@ -49,19 +48,10 @@ function buildContent(prompt: string, images: string[]): Record<string, unknown>
 
   for (let i = 0; i < images.length; i++) {
     const url = images[i]
-    let role: string
-    if (images.length === 1) {
-      role = 'first_frame'
-    } else if (images.length === 2) {
-      role = i === 0 ? 'first_frame' : 'last_frame'
-    } else {
-      role = 'reference_image'
-    }
-
     content.push({
       type: 'image_url',
       image_url: { url },
-      role,
+      role: 'reference_image',
     })
   }
 

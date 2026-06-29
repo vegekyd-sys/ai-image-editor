@@ -1,4 +1,4 @@
-import { describe, expect, it } from 'vitest'
+import { describe, expect, it, vi } from 'vitest'
 import { createVideo } from '@/lib/skills/create-video'
 import { estimateVideoCredits, getDefaultVideoModelId, getVideoModelCapability, normalizeVideoModelId, normalizeVideoResolution, resolveAgentVideoSelection, resolveClosestSupportedAspectRatio, resolveVideoGenerationRoute, resolveVideoProviderAspectRatio } from '@/lib/video-model-capabilities'
 
@@ -128,6 +128,38 @@ describe('video model reference limits', () => {
     expect(valid.success).toBe(false)
     expect(valid.message).not.toContain('reference video size')
     expect(valid.message).toContain('EVOLINK_API_KEY')
+  })
+
+  it('submits single-image Seedance Fast through the reference-to-video provider model', async () => {
+    vi.resetModules()
+    vi.stubEnv('EVOLINK_API_KEY', 'test-evolink-key')
+    const fetchMock = vi.fn(async (_url: string | URL | Request, init?: RequestInit) => {
+      const body = JSON.parse(String(init?.body || '{}'))
+      expect(body.model).toBe('seedance-2.0-fast-reference-to-video')
+      expect(body.image_urls).toEqual(['https://example.com/image.jpg'])
+      return new Response(JSON.stringify({ id: 'task-test-seedance-reference' }), { status: 200 })
+    })
+    vi.stubGlobal('fetch', fetchMock)
+
+    try {
+      const { createVideo: createVideoFresh } = await import('@/lib/skills/create-video')
+      const result = await createVideoFresh({
+        script: 'Single image reference\n\nAnimate <<<media_1>>> with a gentle camera push.',
+        images: ['https://example.com/image.jpg'],
+        duration: 5,
+        videoModel: 'seedance-fast',
+        videoResolution: '480p',
+      })
+
+      expect(result.success).toBe(true)
+      expect(result.providerModel).toBe('seedance-2.0-fast-reference-to-video')
+      expect(result.taskId).toBe('task-test-seedance-reference')
+      expect(fetchMock).toHaveBeenCalledTimes(1)
+    } finally {
+      vi.unstubAllGlobals()
+      vi.unstubAllEnvs()
+      vi.resetModules()
+    }
   })
 
   it('does not invent a Kling reference-video lower resolution limit', async () => {

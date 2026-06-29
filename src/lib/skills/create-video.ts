@@ -14,6 +14,7 @@ export interface CreateVideoInput {
   videoUrl?: string;                    // Reference video URL (explicit from agent)
   videoReferType?: 'base' | 'feature';  // default: 'base'
   videoUrls?: string[];                 // Auto-detected video references from timeline
+  audioUrls?: string[];                 // SeeDance reference audios (0-3)
   referenceVideoDuration?: number;       // Timeline video duration; output should match when editing video
   referenceVideoMetas?: VideoReferenceMeta[];
   keepOriginalSound?: boolean;          // default: false
@@ -28,18 +29,6 @@ export interface CreateVideoResult {
   videoModel?: string;
   providerModel?: string;
   message: string;
-}
-
-function resolveEvolinkProviderModel(provider: string, fallbackModel: string | undefined, imageCount: number, hasVideoReference: boolean): string | undefined {
-  const base =
-    provider === 'seedance-mini' ? 'seedance-2.0-mini'
-    : provider === 'seedance-fast' ? 'seedance-2.0-fast'
-    : provider === 'seedance' ? 'seedance-2.0'
-    : undefined;
-  if (!base) return fallbackModel;
-  if (hasVideoReference || imageCount > 2) return `${base}-reference-to-video`;
-  if (imageCount > 0) return `${base}-image-to-video`;
-  return `${base}-text-to-video`;
 }
 
 async function probeReferenceVideoMeta(url: string): Promise<VideoReferenceMeta | null> {
@@ -91,8 +80,9 @@ function resolveSeedanceReferenceAspectRatio(
 }
 
 export async function createVideo(input: CreateVideoInput): Promise<CreateVideoResult> {
-  const { script, images, duration, aspectRatio, videoModel, videoResolution, videoUrl, videoReferType, videoUrls, referenceVideoDuration, referenceVideoMetas, keepOriginalSound, motionControl, characterOrientation } = input;
+  const { script, images, duration, aspectRatio, videoModel, videoResolution, videoUrl, videoReferType, videoUrls, audioUrls, referenceVideoDuration, referenceVideoMetas, keepOriginalSound, motionControl, characterOrientation } = input;
   const hasVideoReference = !!videoUrl || !!videoUrls?.length;
+  const hasAudioReference = !!audioUrls?.length;
   const provider = normalizeVideoModelId(videoModel);
   const route = resolveVideoGenerationRoute({ model: provider, resolution: videoResolution });
   const capability = getVideoModelCapability(provider);
@@ -108,12 +98,26 @@ export async function createVideo(input: CreateVideoInput): Promise<CreateVideoR
   });
 
   if (modelError) return { success: false, message: modelError };
+  if (hasAudioReference && route.provider !== 'seedance') {
+    return {
+      success: false,
+      message: 'Reference audio is only supported by Seedance video models.',
+    };
+  }
+  if ((audioUrls?.length || 0) > 3) {
+    return {
+      success: false,
+      message: 'Seedance supports at most 3 reference audio files per generation.',
+    };
+  }
   const resolvedReferenceVideoMetas = await fillReferenceVideoMetas(seedanceVideoUrls, referenceVideoMetas);
 
   if (images.length === 0 && !hasVideoReference) {
     return {
       success: false,
-      message: 'No images or video reference provided.',
+      message: hasAudioReference
+        ? 'Reference audio cannot be used alone. Provide an image or video reference for the video generation.'
+        : 'No images or video reference provided.',
     };
   }
 
@@ -186,7 +190,7 @@ export async function createVideo(input: CreateVideoInput): Promise<CreateVideoR
 
     const loggedVideoRefType = videoUrl ? (videoReferType ?? 'base') : (videoUrls?.length ? 'feature' : undefined);
     const providerAspectRatio = resolveSeedanceReferenceAspectRatio(provider, aspectRatio, seedanceVideoUrls.length > 0, resolvedReferenceVideoMetas);
-    console.log(`\n🎬 [create_video] provider=${provider}, resolution=${route.resolution}, ${filteredImages.length}/${images.length} images, duration=${resolvedDuration ?? 'smart'}, aspectRatio=${providerAspectRatio ?? 'auto'}${hasVideoReference ? `, video=${loggedVideoRefType}` : ''}`);
+    console.log(`\n🎬 [create_video] provider=${provider}, resolution=${route.resolution}, ${filteredImages.length}/${images.length} images, duration=${resolvedDuration ?? 'smart'}, aspectRatio=${providerAspectRatio ?? 'auto'}${hasVideoReference ? `, video=${loggedVideoRefType}` : ''}${hasAudioReference ? `, audio=${audioUrls?.length}` : ''}`);
     console.log(`Script (${finalPrompt.length} chars): ${finalPrompt.slice(0, 150)}...`);
 
     let taskId: string;
@@ -206,7 +210,7 @@ export async function createVideo(input: CreateVideoInput): Promise<CreateVideoR
 
     if (route.provider === 'seedance') {
       const { createEvolinkTask } = await import('../evolink');
-      const providerModel = resolveEvolinkProviderModel(provider, route.providerModel, filteredImages.length, seedanceVideoUrls.length > 0);
+      const providerModel = route.providerModel;
       taskId = await createEvolinkTask({
         prompt: finalPrompt,
         images: filteredImages,
@@ -215,6 +219,7 @@ export async function createVideo(input: CreateVideoInput): Promise<CreateVideoR
         quality: route.resolution,
         model: providerModel,
         videoUrls: seedanceVideoUrls.length ? seedanceVideoUrls : undefined,
+        audioUrls: audioUrls?.length ? audioUrls : undefined,
       });
       console.log(`✅ [create_video] SeeDance (Evolink) task created: ${taskId}`);
       return {
