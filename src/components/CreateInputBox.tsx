@@ -104,6 +104,7 @@ export default function CreateInputBox({
 
   const cardTouchRef = useRef<{ startX: number; startY: number; locked: 'x' | 'y' | null } | null>(null);
   const mobileSwipeElRef = useRef<HTMLDivElement | null>(null);
+  const primaryTouchHandledAtRef = useRef(0);
 
   const setMobileSwipeRef = useCallback((el: HTMLDivElement | null) => {
     mobileSwipeElRef.current = el;
@@ -160,6 +161,17 @@ export default function CreateInputBox({
     }
     openFilePicker();
   }, [creating, files.length, onSubmit, openFilePicker, submitWhenEmpty, text]);
+  const handlePrimaryActionClick = useCallback((e?: React.MouseEvent) => {
+    e?.stopPropagation();
+    if (Date.now() - primaryTouchHandledAtRef.current < 700) return;
+    handlePrimaryAction();
+  }, [handlePrimaryAction]);
+  const handlePrimaryActionTouchStart = useCallback((e: React.TouchEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    primaryTouchHandledAtRef.current = Date.now();
+    handlePrimaryAction();
+  }, [handlePrimaryAction]);
 
   const hiddenFileInput = (
     <input
@@ -397,7 +409,13 @@ export default function CreateInputBox({
                 {hasFiles ? actionSelectedNote : actionIdleNote}
               </span>
             </div>
-            <div style={{
+              <button
+              type="button"
+              data-testid="create-project"
+              onClick={handlePrimaryActionClick}
+              onTouchStart={handlePrimaryActionTouchStart}
+              disabled={creating}
+              style={{
               flexShrink: 0,
               display: 'inline-flex',
               alignItems: 'center',
@@ -411,6 +429,10 @@ export default function CreateInputBox({
               fontWeight: 750,
               letterSpacing: '0.015em',
               boxShadow: 'none',
+              appearance: 'none',
+              WebkitAppearance: 'none',
+              cursor: creating ? 'default' : 'pointer',
+              touchAction: 'manipulation',
             }}>
               {creating ? <Spinner size={13} /> : null}
               {createLabel}
@@ -420,7 +442,7 @@ export default function CreateInputBox({
                   <path d="m13 6 6 6-6 6" />
                 </svg>
               )}
-            </div>
+            </button>
           </div>
         </div>
         {hiddenFileInput}

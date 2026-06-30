@@ -47,9 +47,11 @@ function CreateInputHarness() {
 function EmptyCreateInputHarness({
   onSubmit,
   submitWhenEmpty = false,
+  actionMode = false,
 }: {
   onSubmit: () => void
   submitWhenEmpty?: boolean
+  actionMode?: boolean
 }) {
   const input = useCreateInput()
 
@@ -58,6 +60,7 @@ function EmptyCreateInputHarness({
       input={input}
       slotWidth={80}
       isDesktop={false}
+      actionMode={actionMode}
       submitWhenEmpty={submitWhenEmpty}
       onSubmit={onSubmit}
       skills={[]}
@@ -104,6 +107,17 @@ describe('CreateInputBox', () => {
     render(<EmptyCreateInputHarness onSubmit={onSubmit} submitWhenEmpty />)
 
     fireEvent.click(screen.getByTestId('create-project'))
+
+    expect(onSubmit).toHaveBeenCalledTimes(1)
+  })
+
+  it('submits action-mode primary CTA on the first touch without a duplicate click', () => {
+    const onSubmit = vi.fn()
+    render(<EmptyCreateInputHarness onSubmit={onSubmit} submitWhenEmpty actionMode />)
+
+    const cta = screen.getByTestId('create-project')
+    fireEvent.touchStart(cta, { touches: [{ clientX: 120, clientY: 40 }] })
+    fireEvent.click(cta)
 
     expect(onSubmit).toHaveBeenCalledTimes(1)
   })

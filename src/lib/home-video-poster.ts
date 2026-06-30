@@ -1,10 +1,10 @@
 'use client'
 
-import { cacheMediaUrl, mediaCacheKeyForUrl } from '@/lib/imageCache'
+import { cacheMediaBlob, cacheMediaUrl, getCachedMediaObjectUrl, mediaCacheKeyForUrl } from '@/lib/imageCache'
 import { normalizeDomain } from '@/lib/supabase/storage'
 import { useEffect, useState } from 'react'
 
-const POSTER_PREFIX = 'makaron:home-video-poster:'
+const POSTER_PREFIX = 'media:home-video-poster:'
 const POSTER_TIMEOUT_MS = 4500
 const POSTER_MAX_WIDTH = 480
 
@@ -16,30 +16,22 @@ function posterStorageKey(src: string): string {
   return `${POSTER_PREFIX}${src}`
 }
 
-function readStoredPoster(src: string): string | null | undefined {
+function readMemoryPoster(src: string): string | null | undefined {
   if (posterCache.has(src)) return posterCache.get(src) ?? null
-  if (typeof window === 'undefined') return undefined
-  try {
-    const stored = sessionStorage.getItem(posterStorageKey(src))
-    if (stored) {
-      posterCache.set(src, stored)
-      return stored
-    }
-  } catch {}
   return undefined
 }
 
-function storePoster(src: string, poster: string | null): void {
+function storeMemoryPoster(src: string, poster: string | null): void {
   posterCache.set(src, poster)
-  if (!poster || typeof window === 'undefined') return
-  try {
-    sessionStorage.setItem(posterStorageKey(src), poster)
-  } catch {
-    // Poster cache is best-effort; video playback must not depend on storage.
-  }
 }
 
-function capturePosterFrame(videoSrc: string): Promise<string | null> {
+function canvasToJpegBlob(canvas: HTMLCanvasElement): Promise<Blob | null> {
+  return new Promise((resolve) => {
+    canvas.toBlob((blob) => resolve(blob), 'image/jpeg', 0.72)
+  })
+}
+
+function capturePosterFrame(videoSrc: string): Promise<Blob | null> {
   if (typeof document === 'undefined') return Promise.resolve(null)
 
   return new Promise((resolve) => {
@@ -47,7 +39,7 @@ function capturePosterFrame(videoSrc: string): Promise<string | null> {
     let settled = false
     let timeoutId = 0
 
-    const finish = (poster: string | null) => {
+    const finish = (poster: Blob | null) => {
       if (settled) return
       settled = true
       window.clearTimeout(timeoutId)
@@ -59,7 +51,7 @@ function capturePosterFrame(videoSrc: string): Promise<string | null> {
       resolve(poster)
     }
 
-    const draw = () => {
+    const draw = async () => {
       const width = video.videoWidth
       const height = video.videoHeight
       if (!width || !height) {
@@ -78,7 +70,7 @@ function capturePosterFrame(videoSrc: string): Promise<string | null> {
           return
         }
         ctx.drawImage(video, 0, 0, canvas.width, canvas.height)
-        finish(canvas.toDataURL('image/jpeg', 0.72))
+        finish(await canvasToJpegBlob(canvas))
       } catch {
         finish(null)
       }
@@ -102,12 +94,12 @@ function capturePosterFrame(videoSrc: string): Promise<string | null> {
 
 export function getCachedHomeVideoPoster(src: string): string | null {
   const normalizedSrc = normalizeDomain(src)
-  return readStoredPoster(normalizedSrc) ?? null
+  return readMemoryPoster(normalizedSrc) ?? null
 }
 
 export function warmHomeVideoPoster(src: string): Promise<string | null> {
   const normalizedSrc = normalizeDomain(src)
-  const cached = readStoredPoster(normalizedSrc)
+  const cached = readMemoryPoster(normalizedSrc)
   if (cached !== undefined) return Promise.resolve(cached)
 
   const inFlight = posterInFlight.get(normalizedSrc)
@@ -116,10 +108,20 @@ export function warmHomeVideoPoster(src: string): Promise<string | null> {
   const task = posterQueue
     .catch(() => undefined)
     .then(async () => {
-      const key = mediaCacheKeyForUrl(normalizedSrc)
-      const videoSrc = await cacheMediaUrl(normalizedSrc, key) ?? normalizedSrc
-      const poster = await capturePosterFrame(videoSrc)
-      storePoster(normalizedSrc, poster)
+      const posterKey = posterStorageKey(normalizedSrc)
+      const cachedPoster = await getCachedMediaObjectUrl(posterKey)
+      if (cachedPoster) {
+        storeMemoryPoster(normalizedSrc, cachedPoster)
+        return cachedPoster
+      }
+
+      const videoKey = mediaCacheKeyForUrl(normalizedSrc)
+      const videoSrc = await cacheMediaUrl(normalizedSrc, videoKey) ?? normalizedSrc
+      const posterBlob = await capturePosterFrame(videoSrc)
+      const poster = posterBlob
+        ? await cacheMediaBlob(posterKey, posterBlob, 'image/jpeg')
+        : null
+      storeMemoryPoster(normalizedSrc, poster)
       return poster
     })
     .finally(() => {

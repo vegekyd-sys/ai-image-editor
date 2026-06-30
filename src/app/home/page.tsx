@@ -1041,8 +1041,8 @@ function HomePageInner() {
     const returnPath = window.location.pathname + window.location.search
     localStorage.setItem('mkr_return_url', returnPath)
     sessionStorage.setItem('mkr_return_url', returnPath)
-    router.push('/login')
-  }, [router, saveContextBeforeLogin])
+    void requireAuth()
+  }, [requireAuth, saveContextBeforeLogin])
 
   const saveCreateDraftBeforeLogin = useCallback(async (files: File[], prompt?: string) => {
     const homeSkill = selectedDetail || activeSkill
@@ -1332,7 +1332,7 @@ function HomePageInner() {
   const remainingPhotoCount = Math.max(requiredPhotoCount - selectedPhotoCount, 0)
   const hasEnoughPhotos = remainingPhotoCount === 0
   const isGuestSkillAction = !user && !!activeSkill
-  const shouldLoginOnEmptyCreate = !authLoading && !user && !activeSkill
+  const shouldLoginOnEmptyCreate = !user && !activeSkill
   const formatPhotoCount = (count: number) => locale === 'zh'
     ? `${count} 张照片`
     : `${count} photo${count === 1 ? '' : 's'}`

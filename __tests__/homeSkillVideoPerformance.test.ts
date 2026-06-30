@@ -30,4 +30,17 @@ describe('home skill video performance guardrails', () => {
     expect(homePage).toContain('suspended: !!selectedDetail')
     expect(homePage).toContain('active: template.id === selectedDetail?.id')
   })
+
+  it('persists generated home video posters through the IndexedDB media cache', () => {
+    const posterSource = fs.readFileSync(path.join(root, 'src/lib/home-video-poster.ts'), 'utf8')
+    const imageCacheSource = fs.readFileSync(path.join(root, 'src/lib/imageCache.ts'), 'utf8')
+
+    expect(posterSource).toContain('cacheMediaBlob')
+    expect(posterSource).toContain('getCachedMediaObjectUrl')
+    expect(posterSource).toContain("const POSTER_PREFIX = 'media:home-video-poster:'")
+    expect(posterSource).not.toContain('sessionStorage')
+    expect(posterSource).not.toContain('toDataURL')
+    expect(imageCacheSource).toContain('export async function cacheMediaBlob')
+    expect(imageCacheSource).toContain("const MEDIA_BLOB_STORE = 'media-blobs'")
+  })
 })
