@@ -40,7 +40,10 @@ Makaron CLI is not just a raw model wrapper. It is a project-based creative agen
 
 ## Install
 
+Install `makaron-cli` globally and add the Makaron Agent Skill.
+
 ```bash
+npx makaron-cli setup
 npx makaron-cli --help
 ```
 

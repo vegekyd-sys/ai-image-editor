@@ -37,6 +37,12 @@ AI creative studio for images, videos, music, and agent-native media workflows.
 
 ## Agent And CLI
 
+Install `makaron-cli` globally and add the Makaron Agent Skill:
+
+```bash
+npx makaron-cli setup
+```
+
 The default agent workflow is `chat`: create or continue a project, upload media, ask for the creative result, then fetch URLs when the run is ready.
 
 ```bash
