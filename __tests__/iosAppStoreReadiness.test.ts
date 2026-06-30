@@ -273,6 +273,8 @@ describe('iOS App Store readiness guardrails', () => {
     expect(home).toContain('const blurHomeComposers = useCallback');
     expect(home).toContain('inlineTextareaRef.current?.blur()');
     expect(home).toContain('setKbInset(0)');
+    expect(home).toContain("const showAgentLanding = showGuestModeToggle && viewMode === 'agent' && !hasSelectedDetail");
+    expect(home).toContain("setViewMode('human')");
     expect(home).toContain("transform: (showFixedInput || selectedDetail) ? 'translateY(0)' : 'translateY(calc(100% + 20px))'");
     expect(home).toContain("isIOSAppShell && showFixedInput && !selectedDetail ? { opacity: 0, pointerEvents: 'none' as const } : {}");
     expect(home).not.toContain('const focusFixedComposer = useCallback');

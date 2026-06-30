@@ -214,7 +214,7 @@ function HomePageInner() {
   const activeSkillId = selectedDetail?.id || searchParams.get('skill') || pathSkillId || null
   const activeSkill = selectedDetail || (activeSkillId ? homeSkills.find(s => s.id === activeSkillId) || null : null)
   const showGuestModeToggle = !authLoading && !user
-  const showAgentLanding = showGuestModeToggle && viewMode === 'agent'
+  const showAgentLanding = showGuestModeToggle && viewMode === 'agent' && !hasSelectedDetail
 
   const blurHomeComposers = useCallback(() => {
     textareaRef.current?.blur()
@@ -691,6 +691,7 @@ function HomePageInner() {
     if (!skill) return
 
     openedFromUrlRef.current = true
+    setViewMode('human')
     setSelectedDetail(skill)
     setSelectedSkill(skill.skill_path ? skill.id : null)
     createInput.setText(skill.prompt)
@@ -1320,6 +1321,7 @@ function HomePageInner() {
       return
     }
     openedFromUrlRef.current = false
+    setViewMode('human')
     const rect = (e.currentTarget as HTMLElement).getBoundingClientRect()
     setHeroRect(rect)
     setHeroExpanded(false)
@@ -1704,7 +1706,7 @@ function HomePageInner() {
           <ModeToggle
             mode={viewMode}
             onToggle={setViewMode}
-            hidden={viewMode === 'human' && (showFixedInput || !!selectedDetail)}
+            hidden={!!selectedDetail || (viewMode === 'human' && showFixedInput)}
           />
         )}
       </div>
@@ -1889,6 +1891,7 @@ function HomePageInner() {
                 if (newIdx !== detailSwipeRef.current.startIdx) {
                   const t = homeSkills[newIdx]
                   if (t) {
+                    setViewMode('human')
                     setSelectedDetail(t)
                     setSelectedSkill(t.skill_path ? t.id : null)
                     createInput.clear()
@@ -1916,6 +1919,7 @@ function HomePageInner() {
                 }
                 const t = homeSkills[newIdx]
                 if (t) {
+                  setViewMode('human')
                   setSelectedDetail(t)
                   setSelectedSkill(t.skill_path ? t.id : null)
                   createInput.clear()
