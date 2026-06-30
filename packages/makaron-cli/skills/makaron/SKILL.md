@@ -352,6 +352,15 @@ npx makaron-cli responses get <runId> --materialize --wait --pick first_video_ur
 
 `materialize` defaults to `--wait`, `--publish`, and `fast_720p`, so the completed MP4 is added back to the timeline like CUI. Use `--no-publish` only when you need a file URL without a new timeline video. The completed export reports `duration_seconds`, `render_seconds`, and `realtime_ratio`; use those metrics instead of provider-video ETA rules.
 
+For JSON-to-MP4, pass a Makaron/Remotion composition JSON with `--design-json`. This is the correct CLI path when another agent already has the composition JSON and only needs the exported video:
+
+```bash
+npx makaron-cli materialize --project <projectId> --design-json composition.json --pick url
+cat composition.json | npx makaron-cli materialize --project <projectId> --design-json - --pick url
+```
+
+Keep `--project` because exports are project-scoped and publish back to the timeline by default. Use `--no-publish` only when you want the MP4 URL without adding a timeline video.
+
 ## Recommended Pattern: Service Flow (Feishu/OpenClaw/Group Chat)
 
 When serving end-users in a chat environment (Feishu, Slack, Discord), use this proactive message pattern:

@@ -117,6 +117,15 @@ npx makaron-cli responses get <runId> --materialize --wait --pick first_video_ur
 npx makaron-cli responses get <runId> --export-compositions --wait --pick first_video_url
 ```
 
+To turn a Makaron Remotion design JSON file directly into an MP4, use `--design-json`. The JSON must be a Makaron/Remotion composition payload, not a provider-video task response. Always pass the destination project because published exports and storage paths are project-scoped:
+
+```bash
+npx makaron-cli materialize --project <projectId> --design-json composition.json --pick url
+cat composition.json | npx makaron-cli materialize --project <projectId> --design-json - --pick url
+```
+
+This JSON-to-MP4 path uses the same defaults as timeline materialize: `--wait`, `--publish`, and `fast_720p`. Add `--no-publish` only when another agent needs the MP4 URL but should not add a timeline video.
+
 The completed export reports `duration_seconds`, `render_seconds`, and `realtime_ratio` so agents can compare video length against export time. Do not apply provider-video ETA rules to Remotion materialize; with a warm exporter it is often near video length to tens of seconds, while cold starts can be longer.
 
 In production, run the exporter as a separate warm worker:
