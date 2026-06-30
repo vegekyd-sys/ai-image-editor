@@ -1712,15 +1712,33 @@ Default profile is fast_720p (short side 720, no upscale) for speed. Default pub
               height: job.height || undefined,
             };
             if (publishSnapshotId) {
+              const pendingVideoMeta: VideoMeta = {
+                ...videoMeta,
+                taskId: `remotion-export-pending-${job.id}`,
+                videoUrl: job.storage_url || '',
+                providerUrl: job.storage_url || '',
+              };
+              if (job.status !== 'completed') {
+                const { data: sortData } = await ctx.supabase.rpc('next_sort_order', { p_project_id: ctx.projectId });
+                const { error: pendingInsertError } = await ctx.supabase.from('snapshots').upsert({
+                  id: publishSnapshotId,
+                  project_id: ctx.projectId,
+                  image_url: VIDEO_PLACEHOLDER_IMAGE,
+                  tips: [],
+                  message_id: '',
+                  sort_order: sortData ?? 0,
+                  type: 'video',
+                  video_meta: pendingVideoMeta,
+                  description: name || 'Materialized Remotion composition',
+                }, { onConflict: 'id' });
+                if (pendingInsertError) {
+                  throw new Error(`Pending export snapshot insert failed: ${pendingInsertError.message}`);
+                }
+              }
               ctx.pendingVideoSnapshot = {
                 snapshotId: publishSnapshotId,
                 taskId,
-                videoMeta: {
-                  ...videoMeta,
-                  taskId: `remotion-export-pending-${job.id}`,
-                  videoUrl: job.storage_url || '',
-                  providerUrl: job.storage_url || '',
-                },
+                videoMeta: pendingVideoMeta,
               };
             }
             return {

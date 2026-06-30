@@ -1,12 +1,12 @@
-import { getRenderProgress, renderMediaOnLambda } from '@remotion/lambda-client'
 import type { DesignPayload } from '@/types'
 import { hasRemotionAudioSources } from '@/lib/remotion-audio'
 import { resolveRemotionLambdaEncodingSettings } from '@/lib/remotion-encoding'
 import { prepareRemotionCodeForSandbox } from '@/lib/remotion-server'
 
-type LambdaRenderProgress = Awaited<ReturnType<typeof getRenderProgress>>
-type LambdaRenderInput = Parameters<typeof renderMediaOnLambda>[0]
-type LambdaProgressInput = Parameters<typeof getRenderProgress>[0]
+type RemotionLambdaClient = typeof import('@remotion/lambda-client')
+type LambdaRenderProgress = Awaited<ReturnType<RemotionLambdaClient['getRenderProgress']>>
+type LambdaRenderInput = Parameters<RemotionLambdaClient['renderMediaOnLambda']>[0]
+type LambdaProgressInput = Parameters<RemotionLambdaClient['getRenderProgress']>[0]
 
 export interface RemotionLambdaOutputDestination {
   bucketName: string
@@ -53,7 +53,7 @@ export interface RemotionLambdaUrlResult {
 }
 
 function readEnv(name: string): string | undefined {
-  const value = process.env[name]?.replace(/\\[rn]|[\r\n]/g, '').trim()
+  const value = process.env[name]?.replace(/\\[rn]|[\u0000-\u001F\u007F]/g, '').trim()
   return value || undefined
 }
 
@@ -71,7 +71,7 @@ function readBooleanEnv(name: string): boolean {
   return value === '1' || value === 'true'
 }
 
-function readX264Preset(): Parameters<typeof renderMediaOnLambda>[0]['x264Preset'] {
+function readX264Preset(): LambdaRenderInput['x264Preset'] {
   const value = readEnv('REMOTION_LAMBDA_X264_PRESET') || 'ultrafast'
   const allowed = new Set([
     'ultrafast',
@@ -88,7 +88,7 @@ function readX264Preset(): Parameters<typeof renderMediaOnLambda>[0]['x264Preset
   if (!allowed.has(value)) {
     throw new Error(`Unsupported REMOTION_LAMBDA_X264_PRESET: ${value}`)
   }
-  return value as Parameters<typeof renderMediaOnLambda>[0]['x264Preset']
+  return value as LambdaRenderInput['x264Preset']
 }
 
 function lambdaEnv(name: string): string {
@@ -100,9 +100,9 @@ function lambdaEnv(name: string): string {
 function readRemotionAwsCredentials():
   | { accessKeyId: string; secretAccessKey: string; sessionToken?: string }
   | null {
-  const accessKeyId = readEnv('REMOTION_AWS_ACCESS_KEY_ID') || readEnv('REMOTION_AWS_ACCESS_KEY')
-  const secretAccessKey = readEnv('REMOTION_AWS_SECRET_ACCESS_KEY') || readEnv('REMOTION_AWS_SECRET_KEY')
-  const sessionToken = readEnv('REMOTION_AWS_SESSION_TOKEN')
+  const accessKeyId = readEnv('REMOTION_AWS_ACCESS_KEY_ID') || readEnv('REMOTION_AWS_ACCESS_KEY') || readEnv('AWS_ACCESS_KEY_ID')
+  const secretAccessKey = readEnv('REMOTION_AWS_SECRET_ACCESS_KEY') || readEnv('REMOTION_AWS_SECRET_KEY') || readEnv('AWS_SECRET_ACCESS_KEY')
+  const sessionToken = readEnv('REMOTION_AWS_SESSION_TOKEN') || readEnv('AWS_SESSION_TOKEN')
   if (!accessKeyId || !secretAccessKey) return null
   return {
     accessKeyId,
@@ -114,18 +114,32 @@ function readRemotionAwsCredentials():
 async function withRemotionAwsCredentials<T>(fn: () => Promise<T>): Promise<T> {
   const credentials = readRemotionAwsCredentials()
   if (!credentials) return fn()
+  const region = readEnv('REMOTION_LAMBDA_REGION') || readEnv('AWS_REGION')
 
   const previous = {
     AWS_ACCESS_KEY_ID: process.env.AWS_ACCESS_KEY_ID,
     AWS_SECRET_ACCESS_KEY: process.env.AWS_SECRET_ACCESS_KEY,
     AWS_SESSION_TOKEN: process.env.AWS_SESSION_TOKEN,
+    AWS_REGION: process.env.AWS_REGION,
+    REMOTION_AWS_ACCESS_KEY_ID: process.env.REMOTION_AWS_ACCESS_KEY_ID,
+    REMOTION_AWS_ACCESS_KEY: process.env.REMOTION_AWS_ACCESS_KEY,
+    REMOTION_AWS_SECRET_ACCESS_KEY: process.env.REMOTION_AWS_SECRET_ACCESS_KEY,
+    REMOTION_AWS_SECRET_KEY: process.env.REMOTION_AWS_SECRET_KEY,
+    REMOTION_AWS_SESSION_TOKEN: process.env.REMOTION_AWS_SESSION_TOKEN,
   }
   process.env.AWS_ACCESS_KEY_ID = credentials.accessKeyId
   process.env.AWS_SECRET_ACCESS_KEY = credentials.secretAccessKey
+  process.env.REMOTION_AWS_ACCESS_KEY_ID = credentials.accessKeyId
+  process.env.REMOTION_AWS_SECRET_ACCESS_KEY = credentials.secretAccessKey
+  delete process.env.REMOTION_AWS_ACCESS_KEY
+  delete process.env.REMOTION_AWS_SECRET_KEY
+  if (region) process.env.AWS_REGION = region
   if (credentials.sessionToken) {
     process.env.AWS_SESSION_TOKEN = credentials.sessionToken
+    process.env.REMOTION_AWS_SESSION_TOKEN = credentials.sessionToken
   } else {
     delete process.env.AWS_SESSION_TOKEN
+    delete process.env.REMOTION_AWS_SESSION_TOKEN
   }
   try {
     return await fn()
@@ -136,6 +150,18 @@ async function withRemotionAwsCredentials<T>(fn: () => Promise<T>): Promise<T> {
     else process.env.AWS_SECRET_ACCESS_KEY = previous.AWS_SECRET_ACCESS_KEY
     if (previous.AWS_SESSION_TOKEN === undefined) delete process.env.AWS_SESSION_TOKEN
     else process.env.AWS_SESSION_TOKEN = previous.AWS_SESSION_TOKEN
+    if (previous.AWS_REGION === undefined) delete process.env.AWS_REGION
+    else process.env.AWS_REGION = previous.AWS_REGION
+    if (previous.REMOTION_AWS_ACCESS_KEY_ID === undefined) delete process.env.REMOTION_AWS_ACCESS_KEY_ID
+    else process.env.REMOTION_AWS_ACCESS_KEY_ID = previous.REMOTION_AWS_ACCESS_KEY_ID
+    if (previous.REMOTION_AWS_ACCESS_KEY === undefined) delete process.env.REMOTION_AWS_ACCESS_KEY
+    else process.env.REMOTION_AWS_ACCESS_KEY = previous.REMOTION_AWS_ACCESS_KEY
+    if (previous.REMOTION_AWS_SECRET_ACCESS_KEY === undefined) delete process.env.REMOTION_AWS_SECRET_ACCESS_KEY
+    else process.env.REMOTION_AWS_SECRET_ACCESS_KEY = previous.REMOTION_AWS_SECRET_ACCESS_KEY
+    if (previous.REMOTION_AWS_SECRET_KEY === undefined) delete process.env.REMOTION_AWS_SECRET_KEY
+    else process.env.REMOTION_AWS_SECRET_KEY = previous.REMOTION_AWS_SECRET_KEY
+    if (previous.REMOTION_AWS_SESSION_TOKEN === undefined) delete process.env.REMOTION_AWS_SESSION_TOKEN
+    else process.env.REMOTION_AWS_SESSION_TOKEN = previous.REMOTION_AWS_SESSION_TOKEN
   }
 }
 
@@ -245,63 +271,66 @@ export async function renderDesignVideoLambdaToUrl(
   const hasAudioSources = hasRemotionAudioSources(design.code)
   const encoding = resolveRemotionLambdaEncodingSettings()
   const audioBitrate = hasAudioSources ? encoding.audioBitrate : null
-  const crf = encoding.videoBitrate ? undefined : readPositiveNumber(process.env.REMOTION_LAMBDA_CRF, 23)
+  const crf = encoding.videoBitrate ? undefined : readPositiveNumber(readEnv('REMOTION_LAMBDA_CRF'), 23)
   const t0 = Date.now()
   const submitStartMs = Date.now()
 
-  const started = await withRemotionAwsCredentials(() => renderMediaOnLambda({
-    region: region as Parameters<typeof renderMediaOnLambda>[0]['region'],
-    functionName,
-    rendererFunctionName,
-    serveUrl,
-    composition: 'dynamic-design',
-    inputProps: {
-      code: preparedCode,
-      designProps: design.props || {},
-      fps,
-      durationInFrames,
-      width: design.width || 1080,
-      height: design.height || 1920,
-      skipFontLoading: true,
-      useOffthreadVideo,
-      useNativeVideo: true,
-    },
-    codec: 'h264',
-    imageFormat: 'jpeg',
-    scale,
-    crf,
-    videoBitrate: encoding.videoBitrate,
-    audioBitrate,
-    x264Preset,
-    framesPerLambda,
-    concurrency,
-    concurrencyPerLambda: readPositiveInteger(readEnv('REMOTION_LAMBDA_CONCURRENCY_PER_LAMBDA'), 1),
-    chromiumOptions: { disableWebSecurity: true, gl: null },
-    muted: !hasAudioSources,
-    audioCodec: hasAudioSources ? 'aac' : null,
-    jpegQuality,
-    maxRetries: readPositiveInteger(readEnv('REMOTION_LAMBDA_MAX_RETRIES'), 1),
-    timeoutInMilliseconds,
-    logLevel: logLevel as Parameters<typeof renderMediaOnLambda>[0]['logLevel'],
-    deleteAfter: deleteAfter as Parameters<typeof renderMediaOnLambda>[0]['deleteAfter'],
-    privacy: options.outputDestination?.privacy,
-    outName: options.outputDestination ? {
-      bucketName: options.outputDestination.bucketName,
-      key: options.outputDestination.key,
-      s3OutputProvider: options.outputDestination.s3OutputProvider,
-    } : undefined,
-    metadata: {
-      renderer: 'makaron-remotion-lambda',
-      rendererFunctionName: rendererFunctionName || functionName,
-      x264Preset: String(x264Preset),
-      crf: crf === undefined ? '' : String(crf),
-      videoBitrate: encoding.videoBitrate || '',
-      audioBitrate: audioBitrate || '',
-      framesPerLambda: framesPerLambda ? String(framesPerLambda) : '',
-      concurrency: concurrency ? String(concurrency) : '',
-      chunkingMode: concurrency ? 'concurrency' : 'framesPerLambda',
-    },
-  }))
+  const started = await withRemotionAwsCredentials(async () => {
+    const { renderMediaOnLambda } = await import('@remotion/lambda-client')
+    return renderMediaOnLambda({
+      region: region as LambdaRenderInput['region'],
+      functionName,
+      rendererFunctionName,
+      serveUrl,
+      composition: 'dynamic-design',
+      inputProps: {
+        code: preparedCode,
+        designProps: design.props || {},
+        fps,
+        durationInFrames,
+        width: design.width || 1080,
+        height: design.height || 1920,
+        skipFontLoading: true,
+        useOffthreadVideo,
+        useNativeVideo: true,
+      },
+      codec: 'h264',
+      imageFormat: 'jpeg',
+      scale,
+      crf,
+      videoBitrate: encoding.videoBitrate,
+      audioBitrate,
+      x264Preset,
+      framesPerLambda,
+      concurrency,
+      concurrencyPerLambda: readPositiveInteger(readEnv('REMOTION_LAMBDA_CONCURRENCY_PER_LAMBDA'), 1),
+      chromiumOptions: { disableWebSecurity: true, gl: null },
+      muted: !hasAudioSources,
+      audioCodec: hasAudioSources ? 'aac' : null,
+      jpegQuality,
+      maxRetries: readPositiveInteger(readEnv('REMOTION_LAMBDA_MAX_RETRIES'), 1),
+      timeoutInMilliseconds,
+      logLevel: logLevel as LambdaRenderInput['logLevel'],
+      deleteAfter: deleteAfter as LambdaRenderInput['deleteAfter'],
+      privacy: options.outputDestination?.privacy,
+      outName: options.outputDestination ? {
+        bucketName: options.outputDestination.bucketName,
+        key: options.outputDestination.key,
+        s3OutputProvider: options.outputDestination.s3OutputProvider,
+      } : undefined,
+      metadata: {
+        renderer: 'makaron-remotion-lambda',
+        rendererFunctionName: rendererFunctionName || functionName,
+        x264Preset: String(x264Preset),
+        crf: crf === undefined ? '' : String(crf),
+        videoBitrate: encoding.videoBitrate || '',
+        audioBitrate: audioBitrate || '',
+        framesPerLambda: framesPerLambda ? String(framesPerLambda) : '',
+        concurrency: concurrency ? String(concurrency) : '',
+        chunkingMode: concurrency ? 'concurrency' : 'framesPerLambda',
+      },
+    })
+  })
   const submitEndMs = Date.now()
   const pollDurationsMs: number[] = []
 
@@ -318,20 +347,23 @@ export async function renderDesignVideoLambdaToUrl(
   while (true) {
     const pollStartMs = Date.now()
     const progressInput: LambdaProgressInput = {
-      region: region as Parameters<typeof getRenderProgress>[0]['region'],
+      region: region as LambdaProgressInput['region'],
       functionName,
       bucketName: started.bucketName,
       renderId: started.renderId,
-      logLevel: logLevel as Parameters<typeof getRenderProgress>[0]['logLevel'],
+      logLevel: logLevel as LambdaProgressInput['logLevel'],
     }
     if (options.outputDestination) {
       progressInput.s3OutputProvider = options.outputDestination.s3OutputProvider
       progressInput.forcePathStyle = options.outputDestination.s3OutputProvider.forcePathStyle
     }
     const progress = await retryTransient(
-      () => withRemotionAwsCredentials(() => getRenderProgress({
-        ...progressInput,
-      })),
+      () => withRemotionAwsCredentials(async () => {
+        const { getRenderProgress } = await import('@remotion/lambda-client')
+        return getRenderProgress({
+          ...progressInput,
+        })
+      }),
       progressRetryAttempts,
       1000,
     )

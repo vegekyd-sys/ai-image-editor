@@ -110,7 +110,7 @@ function nowIso() {
 }
 
 function readEnv(name: string): string | undefined {
-  const value = process.env[name]?.replace(/\\[rn]|[\r\n]/g, '').trim()
+  const value = process.env[name]?.replace(/\\[rn]|[\u0000-\u001F\u007F]/g, '').trim()
   return value || undefined
 }
 
@@ -141,9 +141,9 @@ function remotionExportStaleCutoffIso(): string {
 function readRemotionAwsCredentials():
   | { accessKeyId: string; secretAccessKey: string; sessionToken?: string }
   | null {
-  const accessKeyId = readEnv('REMOTION_AWS_ACCESS_KEY_ID') || readEnv('REMOTION_AWS_ACCESS_KEY')
-  const secretAccessKey = readEnv('REMOTION_AWS_SECRET_ACCESS_KEY') || readEnv('REMOTION_AWS_SECRET_KEY')
-  const sessionToken = readEnv('REMOTION_AWS_SESSION_TOKEN')
+  const accessKeyId = readEnv('REMOTION_AWS_ACCESS_KEY_ID') || readEnv('REMOTION_AWS_ACCESS_KEY') || readEnv('AWS_ACCESS_KEY_ID')
+  const secretAccessKey = readEnv('REMOTION_AWS_SECRET_ACCESS_KEY') || readEnv('REMOTION_AWS_SECRET_KEY') || readEnv('AWS_SECRET_ACCESS_KEY')
+  const sessionToken = readEnv('REMOTION_AWS_SESSION_TOKEN') || readEnv('AWS_SESSION_TOKEN')
   if (!accessKeyId || !secretAccessKey) return null
   return sessionToken
     ? { accessKeyId, secretAccessKey, sessionToken }
