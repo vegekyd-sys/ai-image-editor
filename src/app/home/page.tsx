@@ -929,6 +929,14 @@ function HomePageInner() {
     if (activeSkill?.id) rememberIOSSkillReturn(activeSkill.id)
   }, [activeSkill, createInput.text, rememberIOSSkillReturn])
 
+  const goToLoginFromEmptyCreate = useCallback(() => {
+    saveContextBeforeLogin()
+    const returnPath = window.location.pathname + window.location.search
+    localStorage.setItem('mkr_return_url', returnPath)
+    sessionStorage.setItem('mkr_return_url', returnPath)
+    router.push('/login')
+  }, [router, saveContextBeforeLogin])
+
   const saveCreateDraftBeforeLogin = useCallback(async (files: File[], prompt?: string) => {
     const homeSkill = selectedDetail || activeSkill
     const imageFiles = files.filter(file => file.type.startsWith('image/') || isHeicFile(file))
@@ -1217,6 +1225,7 @@ function HomePageInner() {
   const remainingPhotoCount = Math.max(requiredPhotoCount - selectedPhotoCount, 0)
   const hasEnoughPhotos = remainingPhotoCount === 0
   const isGuestSkillAction = !user && !!activeSkill
+  const shouldLoginOnEmptyCreate = !authLoading && !user && !activeSkill
   const formatPhotoCount = (count: number) => locale === 'zh'
     ? `${count} 张照片`
     : `${count} photo${count === 1 ? '' : 's'}`
@@ -1277,6 +1286,10 @@ function HomePageInner() {
   }, [activeSkill?.id, isGuestSkillAction, skillActionMeta])
 
   const handleCreateOrUpload = useCallback(() => {
+    if (shouldLoginOnEmptyCreate && createInput.files.length === 0 && !createInput.text.trim()) {
+      goToLoginFromEmptyCreate()
+      return
+    }
     if (isGuestSkillAction && createInput.files.length < requiredPhotoCount) {
       rememberIOSSkillReturn(activeSkill?.id)
       trackUploadIntent('primary_action')
@@ -1284,7 +1297,7 @@ function HomePageInner() {
       return
     }
     handleCreate()
-  }, [activeSkill?.id, createInput.fileInputRef, createInput.files.length, handleCreate, isGuestSkillAction, rememberIOSSkillReturn, requiredPhotoCount, trackUploadIntent])
+  }, [activeSkill?.id, createInput.fileInputRef, createInput.files.length, createInput.text, goToLoginFromEmptyCreate, handleCreate, isGuestSkillAction, rememberIOSSkillReturn, requiredPhotoCount, shouldLoginOnEmptyCreate, trackUploadIntent])
 
   const handleInputSlotClick = useCallback(async () => {
     if (!user && selectedDetail) {
@@ -1533,6 +1546,7 @@ function HomePageInner() {
                 ? (locale === 'zh' ? '可以预览了' : 'Ready to preview')
                 : (locale === 'zh' ? `还需要 ${formatPhotoCount(remainingPhotoCount)}` : `${formatPhotoCount(remainingPhotoCount)} more needed`)}
               showLoginIcon={!user}
+              submitWhenEmpty={shouldLoginOnEmptyCreate}
               onSubmit={handleCreateOrUpload}
               onSlotClick={handleInputSlotClick}
               onFilesSelected={(files) => trackFileSelected(files, 'file_input')}
@@ -1704,6 +1718,7 @@ function HomePageInner() {
                 ? (locale === 'zh' ? '可以预览了' : 'Ready to preview')
                 : (locale === 'zh' ? `还需要 ${formatPhotoCount(remainingPhotoCount)}` : `${formatPhotoCount(remainingPhotoCount)} more needed`)}
               showLoginIcon={!user}
+              submitWhenEmpty={shouldLoginOnEmptyCreate}
               onSubmit={handleCreateOrUpload}
               onSlotClick={handleInputSlotClick}
               onFilesSelected={(files) => trackFileSelected(files, 'file_input')}

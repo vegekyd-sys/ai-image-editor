@@ -44,6 +44,29 @@ function CreateInputHarness() {
   )
 }
 
+function EmptyCreateInputHarness({
+  onSubmit,
+  submitWhenEmpty = false,
+}: {
+  onSubmit: () => void
+  submitWhenEmpty?: boolean
+}) {
+  const input = useCreateInput()
+
+  return (
+    <CreateInputBox
+      input={input}
+      slotWidth={80}
+      isDesktop={false}
+      submitWhenEmpty={submitWhenEmpty}
+      onSubmit={onSubmit}
+      skills={[]}
+      selectedSkill={null}
+      onSkillChange={vi.fn()}
+    />
+  )
+}
+
 describe('CreateInputBox', () => {
   beforeEach(() => {
     Object.defineProperty(URL, 'createObjectURL', {
@@ -74,5 +97,14 @@ describe('CreateInputBox', () => {
     await waitFor(() => {
       expect(stack.getAttribute('data-idx')).toBe('0')
     })
+  })
+
+  it('can submit the primary action even when the input is empty', () => {
+    const onSubmit = vi.fn()
+    render(<EmptyCreateInputHarness onSubmit={onSubmit} submitWhenEmpty />)
+
+    fireEvent.click(screen.getByTestId('create-project'))
+
+    expect(onSubmit).toHaveBeenCalledTimes(1)
   })
 })

@@ -33,6 +33,7 @@ export interface CreateInputBoxProps {
   actionIdleNote?: string;
   actionSelectedNote?: string;
   showLoginIcon?: boolean;
+  submitWhenEmpty?: boolean;
   onSubmit: () => void;
   onSlotClick?: () => void;
   onFilesSelected?: (files: File[]) => void;
@@ -75,6 +76,7 @@ export default function CreateInputBox({
   actionIdleNote = 'No credit card',
   actionSelectedNote = 'Photo selected',
   showLoginIcon = false,
+  submitWhenEmpty = false,
   onSubmit,
   onSlotClick,
   onFilesSelected,
@@ -152,8 +154,12 @@ export default function CreateInputBox({
       onSubmit();
       return;
     }
+    if (submitWhenEmpty) {
+      onSubmit();
+      return;
+    }
     openFilePicker();
-  }, [creating, files.length, onSubmit, openFilePicker, text]);
+  }, [creating, files.length, onSubmit, openFilePicker, submitWhenEmpty, text]);
 
   const hiddenFileInput = (
     <input
@@ -684,6 +690,8 @@ export default function CreateInputBox({
             onClick={(e) => {
               e.stopPropagation();
               if (text.trim() || files.length > 0) {
+                onSubmit();
+              } else if (submitWhenEmpty) {
                 onSubmit();
               } else {
                 openFilePicker();
