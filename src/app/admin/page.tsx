@@ -138,7 +138,7 @@ export default function AdminPage() {
   const [metaStatus, setMetaStatus] = useState<MetaStatus | null>(null)
   const [metaLoading, setMetaLoading] = useState(false)
   const [metaError, setMetaError] = useState('')
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+
   const [homeSkills, setHomeSkills] = useState<any[]>([])
   const [modalSkill, setModalSkill] = useState<any | 'new' | null>(null) // null closed, 'new' new, or skill object for edit
   const [loading, setLoading] = useState(true)
@@ -1002,7 +1002,7 @@ export default function AdminPage() {
                     <td className="py-2 px-2 text-white/40">{skill.sort_order}</td>
                     <td className="py-2 px-2">
                       {skill.image && (
-                        // eslint-disable-next-line @next/next/no-img-element
+
                         <img src={skill.image} alt="" style={{ maxHeight: 48, maxWidth: 64, objectFit: 'contain', borderRadius: 4 }} />
                       )}
                     </td>
@@ -1137,7 +1137,7 @@ function SkillEditorModal({ skill, onClose, onSaved }: {
             <div className="flex items-start gap-3">
               <div className="w-20 h-16 rounded-lg bg-white/5 border border-white/10 flex items-center justify-center overflow-hidden shrink-0">
                 {image.trim() ? (
-                  // eslint-disable-next-line @next/next/no-img-element
+
                   <img src={image} alt="" style={{ maxHeight: '100%', maxWidth: '100%', objectFit: 'contain' }} />
                 ) : (
                   <span className="text-white/20 text-xs">preview</span>
@@ -1218,7 +1218,7 @@ function SkillEditorModal({ skill, onClose, onSaved }: {
                 <div key={i} className="flex items-center gap-2">
                   <div className="w-14 h-14 rounded-lg bg-white/5 border border-white/10 flex items-center justify-center overflow-hidden shrink-0">
                     {beforeImages[i]?.trim() ? (
-                      // eslint-disable-next-line @next/next/no-img-element
+
                       <img src={beforeImages[i]} alt="" style={{ maxHeight: '100%', maxWidth: '100%', objectFit: 'cover' }} />
                     ) : (
                       <span className="text-white/20 text-xs">{i + 1}</span>

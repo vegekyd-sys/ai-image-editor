@@ -361,7 +361,7 @@ export default function LoginPage() {
   // Auto-submit when all 8 digits filled
   useEffect(() => {
     if (otpDigits.every(d => d) && view === 'verify-otp') handleVerifyOtp()
-  }, [otpDigits]) // eslint-disable-line react-hooks/exhaustive-deps
+  }, [otpDigits])
 
   function mapError(msg: string): string {
     const map: Record<string, string> = {

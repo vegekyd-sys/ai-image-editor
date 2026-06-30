@@ -35,7 +35,7 @@ export async function POST(req: NextRequest) {
     }
 
     // Fallback: existing user with projects (legacy users before activation system)
-    const { count } = await admin
+    await admin
       .from('projects')
       .select('id', { count: 'exact', head: true })
       .eq('user_id', user.id)

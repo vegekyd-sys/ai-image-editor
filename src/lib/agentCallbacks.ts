@@ -22,7 +22,7 @@ export interface AgentCallbackContext {
   setDesignDraftParent?: (idx: number | null) => void;
   setPendingNotification?: (n: { text: string; targetIndex: number }) => void;
   setSelectedVideoId?: (id: string) => void;
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+
   setAnimationState?: (state: any) => void;
 
   // Refs
@@ -45,7 +45,7 @@ export interface AgentCallbackContext {
 
   // Callback functions (from Editor)
   cacheImage: (key: string, data: string) => void;
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+
   fetchTipsForSnapshot: (...args: any[]) => void;
   onSaveSnapshot?: (snap: Snapshot, sortOrder: number, onUploaded?: (url: string) => void) => void;
   onUpdateDescription?: (snapId: string, desc: string) => void;
@@ -54,7 +54,7 @@ export interface AgentCallbackContext {
   compressBase64Image?: (img: string, maxBytes: number) => Promise<string>;
 
   // i18n
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+
   t: (...args: any[]) => string;
 
   // Music

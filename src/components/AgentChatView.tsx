@@ -95,7 +95,7 @@ function EditPromptCard({ prompt, inputImages, editModel }: { prompt: string; in
       >
         {/* Reference image thumbnail in collapsed header */}
         {!open && inputImages?.[0] && inputImages[0].length > 10 && (
-          // eslint-disable-next-line @next/next/no-img-element
+
           <img
             src={inputImages[0]}
             alt=""
@@ -118,7 +118,7 @@ function EditPromptCard({ prompt, inputImages, editModel }: { prompt: string; in
               <div className="flex gap-2 flex-wrap">
                 {inputImages.filter(img => img && img.length > 10).map((img, i) => (
                   <div key={i} className="flex flex-col gap-1">
-                    {/* eslint-disable-next-line @next/next/no-img-element */}
+                    { }
                     <img
                       src={img}
                       alt={`Input ${i + 1} to Gemini`}
@@ -477,7 +477,7 @@ function MarkdownBlock({ text, isPanel, snapshots, onNavigateToSnapshot, onPrevi
     ),
     th: ({ children }: { children?: React.ReactNode }) => <th className="px-3 py-1.5 text-left font-semibold" style={{ borderBottom: '1px solid rgba(255,255,255,0.12)', color: 'rgba(255,255,255,0.6)' }}>{children}</th>,
     td: ({ children }: { children?: React.ReactNode }) => <td className="px-3 py-1.5" style={{ borderBottom: '1px solid rgba(255,255,255,0.06)' }}>{children}</td>,
-  // eslint-disable-next-line react-hooks/exhaustive-deps
+
   }), [snapshots, onNavigateToSnapshot, onPreviewSnapshot, onViewFile, isPanel]);
 
   return (
@@ -583,7 +583,6 @@ export default function AgentChatView({
   onVideoResolutionChange,
   onNavigateToSnapshot,
   onVideoTap,
-  onDesignPoster,
   onMusicSelect,
   onArtifactAction,
   hasBackgroundTask = false,
@@ -623,8 +622,6 @@ export default function AgentChatView({
     height?: number;
   }
   const [attachments, setAttachments] = useState<Attachment[]>([]);
-  // Legacy compat: derive attachedImages for existing code that reads it
-  const attachedImages = attachments.filter(a => a.type === 'image' && a.status === 'ready' && a.data).map(a => a.data!);
   const processingCount = attachments.filter(a => a.status === 'processing').length;
   const allReady = attachments.length > 0 && attachments.every(a => a.status === 'ready' || a.status === 'error');
   const [isExiting, setIsExiting] = useState(false);
@@ -918,7 +915,7 @@ export default function AgentChatView({
     if (content) ro.observe(content);
     const timer = setTimeout(() => { ro.disconnect(); mountRoRef.current = null; }, 5000); // Extended for reconnect replay
     return () => { ro.disconnect(); mountRoRef.current = null; clearTimeout(timer); cancelAnimationFrame(rafId); };
-  // eslint-disable-next-line react-hooks/exhaustive-deps
+
   }, []);
 
   // Auto-scroll ONLY when AI is actively streaming content (not on mount or status changes)
@@ -1193,7 +1190,7 @@ export default function AgentChatView({
           onPointerUp={onPipPointerUp}
           onPointerCancel={onPipPointerUp}
         >
-          {/* eslint-disable-next-line @next/next/no-img-element */}
+          { }
           <img
             src={currentImage}
             alt="Current photo"
@@ -1312,7 +1309,7 @@ export default function AgentChatView({
                     {msg.editInputImages && msg.editInputImages.length > 0 && (
                       <div className={`flex gap-1.5 p-2 ${msg.content ? 'pb-1' : ''}`}>
                         {msg.editInputImages.map((img, i) => (
-                          // eslint-disable-next-line @next/next/no-img-element
+
                           <img key={i} src={img} alt="" className="w-20 h-20 rounded-xl object-cover flex-shrink-0" />
                         ))}
                       </div>
@@ -1424,7 +1421,7 @@ export default function AgentChatView({
                           onClick={(e) => handleGeneratedImageClick(msg.id, e)}
                           className="block w-full mt-3 active:opacity-75 transition-opacity relative"
                         >
-                          {/* eslint-disable-next-line @next/next/no-img-element */}
+                          { }
                           <img
                             src={msg.image.startsWith('http') ? getThumbnailUrl(msg.image, isPanel ? 680 : 1024, 75, 2000, 'contain') : msg.image}
                             alt="Generated"
@@ -1449,7 +1446,7 @@ export default function AgentChatView({
                             onClick={(e) => handleInlineImageClick(msg.id, e)}
                             className="flex-shrink-0 active:opacity-75 transition-opacity relative"
                           >
-                            {/* eslint-disable-next-line @next/next/no-img-element */}
+                            { }
                             <img
                               src={url.startsWith('http') ? getThumbnailUrl(url, isPanel ? 340 : 512, 75, 1000, 'contain') : url}
                               alt={`Frame ${i + 1}`}
@@ -1668,7 +1665,7 @@ export default function AgentChatView({
                     data-attachment-status={att.status}
                   >
                     {att.thumbnail ? (
-                      // eslint-disable-next-line @next/next/no-img-element
+
                       <img src={att.thumbnail} alt="" className="w-9 h-9 rounded-lg object-cover" style={{ border: '1px solid rgba(255,255,255,0.12)' }} />
                     ) : (
                       <div className="w-9 h-9 rounded-lg" style={{ background: 'rgba(255,255,255,0.06)', border: '1px solid rgba(255,255,255,0.1)' }} />
@@ -1780,7 +1777,7 @@ export default function AgentChatView({
                 </span>
               </span>
             )}
-            {/* eslint-disable-next-line @next/next/no-img-element */}
+            { }
             <img
               src={previewUrl}
               alt=""

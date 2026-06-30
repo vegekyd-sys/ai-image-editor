@@ -180,7 +180,7 @@ export default function ImageRefChip({ index, snapshot, onNavigate, onPreview }:
           </span>
         </span>
       )}
-      {/* eslint-disable-next-line @next/next/no-img-element */}
+      { }
       <img
         src={previewUrl}
         alt=""
@@ -236,7 +236,7 @@ export default function ImageRefChip({ index, snapshot, onNavigate, onPreview }:
       >
         <span aria-hidden="true" className="absolute -inset-x-2 -inset-y-2 pointer-events-none" />
         {thumbUrl && (
-          // eslint-disable-next-line @next/next/no-img-element
+
           <img
             src={thumbUrl}
             alt=""

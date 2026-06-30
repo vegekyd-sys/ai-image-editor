@@ -1,6 +1,6 @@
 import type { CSSProperties } from 'react'
 
-/* eslint-disable @next/next/no-img-element */
+
 
 type SparkProps = {
   size?: number | string

@@ -11,10 +11,6 @@ type Translations = typeof zh;
 type TKey = keyof Translations;
 
 // Resolved value: if function, return its return type; otherwise string
-type TValue<K extends TKey> = Translations[K] extends (...args: infer A) => infer R
-  ? (...args: A) => R
-  : string;
-
 export interface LocaleContextValue {
   locale: Locale;
   setLocale: (locale: Locale) => void;
@@ -65,7 +61,7 @@ export function LocaleProvider({ children }: { children: React.ReactNode }) {
     const dict = translations[locale] ?? translations.zh;
     const val = dict[key] ?? translations.zh[key];
     if (typeof val === 'function') {
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+
       return String((val as (...a: unknown[]) => unknown)(...(args as unknown[])));
     }
     return String(val ?? key);

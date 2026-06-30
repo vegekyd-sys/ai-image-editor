@@ -32,7 +32,6 @@ export default function DesignEditPanel({
   }, [onSelectField, isDragging]);
 
   // Scroll selected card into view
-  const selectedRef = useRef<HTMLDivElement>(null);
   useEffect(() => {
     if (!selectedFieldId) return;
     const el = cardRefs.current.get(selectedFieldId);

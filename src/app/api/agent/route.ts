@@ -26,7 +26,7 @@ export async function POST(req: NextRequest) {
 
     const endReadBody = perf.span('read_body');
     const { prompt, image, animationImageUrls, animationImages, projectId, analysisOnly, analysisContext, isVideoAnalysis,
-            tipReaction, committedTip, currentTips, tipsTeaser, tipsPayload, nameProject, description,
+            tipReaction, committedTip, tipsTeaser, tipsPayload, nameProject, description,
             previewsReady, readyTips, preferredModel, snapshotImages, currentSnapshotIndex, isNsfw,
             musicReady, musicAudioUrl, currentDesign, currentDesignPath, videoModel, videoResolution, videoAuto,
             headless, hasAnnotation, isDraft, referenceImageCount, uploadedVideoCount, audioAttachments } = await req.json();

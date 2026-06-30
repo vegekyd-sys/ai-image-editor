@@ -139,14 +139,21 @@ export default function CreateInputBox({
   const internalTextareaRef = useRef<HTMLTextAreaElement>(null);
   const taRef = externalTextareaRef || internalTextareaRef;
   const liquidInputClassName = 'mkr-input-box mkr-input-box-liquid';
+  const openFilePicker = useCallback(() => {
+    if (onSlotClick) {
+      onSlotClick();
+    } else {
+      fileInputRef.current?.click();
+    }
+  }, [fileInputRef, onSlotClick]);
   const handlePrimaryAction = useCallback(() => {
     if (creating) return;
     if (files.length > 0 || text.trim()) {
       onSubmit();
       return;
     }
-    onSlotClick ? onSlotClick() : fileInputRef.current?.click();
-  }, [creating, fileInputRef, files.length, onSlotClick, onSubmit, text]);
+    openFilePicker();
+  }, [creating, files.length, onSubmit, openFilePicker, text]);
 
   const hiddenFileInput = (
     <input
@@ -217,7 +224,7 @@ export default function CreateInputBox({
           data-testid="photo-slot"
           onClick={(e) => {
             e.stopPropagation();
-            if (!creating) onSlotClick ? onSlotClick() : fileInputRef.current?.click();
+            if (!creating) openFilePicker();
           }}
           style={{
             position: 'relative',
@@ -247,7 +254,7 @@ export default function CreateInputBox({
             boxShadow: hasFiles ? '0 8px 20px rgba(0,0,0,0.32)' : 'none',
           }}>
             {hasFiles && firstPreview && firstPreview !== 'heic-pending' ? (
-              // eslint-disable-next-line @next/next/no-img-element
+
               <img src={firstPreview} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block' }} />
             ) : hasFiles && firstPreview === null ? (
               <Spinner size={18} />
@@ -445,7 +452,9 @@ export default function CreateInputBox({
       {/* Left: + button / photo slot */}
       <div
         data-testid="photo-slot"
-        onClick={() => { if (!creating && !collapseSlot) { onSlotClick ? onSlotClick() : fileInputRef.current?.click(); } }}
+        onClick={() => {
+          if (!creating && !collapseSlot) openFilePicker();
+        }}
         style={{
           width: collapseSlot ? 0 : slotWidth,
           flexShrink: 0, alignSelf: 'stretch',
@@ -466,7 +475,7 @@ export default function CreateInputBox({
           <>
             {previews[0] && previews[0] !== 'heic-pending' ? (
               <>
-                {/* eslint-disable-next-line @next/next/no-img-element */}
+                { }
                 <img src={previews[0]} alt="" style={{ position: 'absolute', inset: 0, width: '100%', height: '100%', objectFit: 'cover' }} />
                 {creating && files[0]?.type.startsWith('video/') && (
                   <div style={{ position: 'absolute', inset: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'rgba(0,0,0,0.5)' }}>
@@ -501,7 +510,7 @@ export default function CreateInputBox({
                   return layers.map((layer, li) => (
                     <div key={li} style={cardStyle(layer.rotate, layer.z)}>
                       {layer.preview && layer.preview !== 'heic-pending' ? (
-                        // eslint-disable-next-line @next/next/no-img-element
+
                         <img src={layer.preview} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
                       ) : layer.preview === null ? (
                         <div style={{ width: '100%', height: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center' }}><Spinner size={12} /></div>
@@ -546,7 +555,7 @@ export default function CreateInputBox({
                         transition: dragging ? 'none' : 'transform 0.25s ease, opacity 0.25s ease',
                       }}>
                         {layer.preview && layer.preview !== 'heic-pending' ? (
-                          // eslint-disable-next-line @next/next/no-img-element
+
                           <img src={layer.preview} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover', pointerEvents: 'none' }} />
                         ) : layer.preview === null ? (
                           <div style={{ width: '100%', height: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center' }}><Spinner size={12} /></div>
@@ -646,7 +655,7 @@ export default function CreateInputBox({
             {isDesktop && files.length >= 2 && previews.map((preview, i) => (
               <div key={i} style={{ position: 'relative', flexShrink: 0 }}>
                 {preview && preview !== 'heic-pending' ? (
-                  // eslint-disable-next-line @next/next/no-img-element
+
                   <img src={preview} alt="" style={{ width: 36, height: 36, borderRadius: 8, objectFit: 'cover', display: 'block', border: '1px solid rgba(255,255,255,0.12)' }} />
                 ) : (
                   <div style={{ width: 36, height: 36, borderRadius: 8, background: 'rgba(255,255,255,0.06)', border: '1px solid rgba(255,255,255,0.1)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}><Spinner size={10} /></div>
@@ -677,7 +686,7 @@ export default function CreateInputBox({
               if (text.trim() || files.length > 0) {
                 onSubmit();
               } else {
-                onSlotClick ? onSlotClick() : fileInputRef.current?.click();
+                openFilePicker();
               }
             }}
             disabled={creating}

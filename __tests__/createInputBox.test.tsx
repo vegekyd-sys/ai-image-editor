@@ -28,7 +28,7 @@ function CreateInputHarness() {
       new File(['two'], 'two.jpg', { type: 'image/jpeg' }),
       new File(['three'], 'three.jpg', { type: 'image/jpeg' }),
     ])
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+
   }, [])
 
   return (

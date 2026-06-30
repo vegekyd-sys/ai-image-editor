@@ -257,7 +257,7 @@ export default function RemotionRenderer({ design, onError, mode = 'inline', hid
   const playerRef = useRef<PlayerRef>(null);
   const wrapperRef = useRef<HTMLDivElement>(null);
   const onPlayerRefRef = useRef(onPlayerRef);
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+
   const [Component, setComponent] = useState<React.ComponentType<any> | null>(null);
   const [inputProps, setInputProps] = useState<Record<string, unknown>>({});
   const [compileError, setCompileError] = useState<string | null>(null);
@@ -306,7 +306,7 @@ export default function RemotionRenderer({ design, onError, mode = 'inline', hid
       cancelled = true;
       blobUrls.forEach(url => URL.revokeObjectURL(url));
     };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+
   }, [design.code, design.props]);
 
   // Expose container and player refs to parent
@@ -370,7 +370,7 @@ export default function RemotionRenderer({ design, onError, mode = 'inline', hid
           acknowledgeRemotionLicense
           // Poster: show snapshot image while buffering / before play — prevents blank frames
           renderPoster={posterImage ? () => (
-            <img src={posterImage} style={{ width: '100%', height: '100%', objectFit: 'contain' }} />
+            <img src={posterImage} alt="" style={{ width: '100%', height: '100%', objectFit: 'contain' }} />
           ) : undefined}
           showPosterWhenUnplayed={!!posterImage}
           showPosterWhenBuffering={false}
@@ -431,7 +431,7 @@ async function resolveVideoUrls(code: string): Promise<{ code: string; blobUrls:
 
 async function resolveAudioUrls(code: string): Promise<{ code: string; blobUrls: string[] }> {
   // Strip blob: audio URLs (expired after refresh) — both JSX and createElement forms
-  let cleaned = code
+  const cleaned = code
     .replace(/<Audio[^>]*src=["']?blob:[^>]*\/>/g, '')
     .replace(/React\.createElement\(Audio,\s*\{[^}]*src:\s*"blob:[^"]*"[^)]*\)\s*,?/g, '');
   // Match audio URLs in both <Audio src="..."> and React.createElement(Audio, { src: "..." }) forms

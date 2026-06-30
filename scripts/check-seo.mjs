@@ -83,7 +83,7 @@ async function checkSitemap() {
 }
 
 async function checkPage({ path, title, h1 }) {
-  const { url, text } = await fetchText(path);
+  const { text } = await fetchText(path);
   const canonicalUrl = `${publicBaseUrl}${path}`;
   expectIncludes(text, `<title>${title}`, `${path} title`);
   expectCanonical(text, canonicalUrl);

@@ -1570,7 +1570,7 @@ function ProjectCard({
       )}
 
       {/* Full-bleed photo — iOS app avoids transform/WebP thumbnails to keep WKWebView return stable. */}
-      {/* eslint-disable-next-line @next/next/no-img-element */}
+      { }
       <img
         src={imageSrc}
         alt={project.title}

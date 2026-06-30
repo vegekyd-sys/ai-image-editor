@@ -128,14 +128,14 @@ export class AgentDualWriter {
       case 'render':  // agent.ts now yields 'render'; 'design' kept for backward compat
       case 'design': {
         await this.flushContent();
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+
         const published = (event as any).published === true;
 
         if (published) {
           // Published design — create real Snapshot in DB
           const snapId = crypto.randomUUID();
           const designPath = `code/${snapId}.json`;
-          // eslint-disable-next-line @typescript-eslint/no-explicit-any
+
           const designDesc = (event as any).description as string | undefined;
           const designJson = JSON.stringify({
             code: event.code, width: event.width, height: event.height,
@@ -222,7 +222,7 @@ export class AgentDualWriter {
       case 'error': {
         await this.flushContent();
         await this.saveCurrentMessage();
-        // eslint-disable-next-line @typescript-eslint/no-unused-vars
+
         const { type, ...data } = event as Record<string, unknown>;
         await this.insertEvent('error', data);
         this.tryEnqueue(event);
@@ -280,7 +280,7 @@ export class AgentDualWriter {
       case 'image_analyzed':
       case 'nsfw_detected': {
         await this.flushContent();
-        // eslint-disable-next-line @typescript-eslint/no-unused-vars
+
         const { type: _t, ...rest } = event as Record<string, unknown>;
         await this.insertEvent(event.type, rest);
         this.tryEnqueue(event);

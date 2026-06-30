@@ -195,15 +195,6 @@ async function login() {
   console.error(`   Token saved to ${AUTH_FILE}`);
 }
 
-function getAuthCookie() {
-  const auth = loadAuth();
-  if (!auth) {
-    console.error('Not logged in. Run: npx makaron-cli login');
-    process.exit(1);
-  }
-  return { cookie: buildCookie(auth), baseUrl: process.env.MAKARON_URL || auth._baseUrl || BASE_URL };
-}
-
 function getAuth() {
   const apiKey = process.env.MAKARON_API_KEY;
   if (apiKey) {

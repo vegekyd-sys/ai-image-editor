@@ -106,7 +106,7 @@ export default function AnnotationToolbar({
         {attachedImage && (
           <div className="flex items-center gap-1.5 px-3 pb-2">
             <div className="relative flex-shrink-0">
-              {/* eslint-disable-next-line @next/next/no-img-element */}
+              { }
               <img
                 src={attachedImage}
                 alt=""

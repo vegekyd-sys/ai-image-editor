@@ -15,9 +15,7 @@ import { streamAgent } from '@/lib/agentStream';
 import { useAgentRun } from '@/hooks/useAgentRun';
 import { makeAgentCallbacks } from '@/lib/agentCallbacks';
 // projectEventLogger removed — events only needed for ReplayEngine (not active)
-import dynamic from 'next/dynamic';
 import { getBabelStatus, subscribeBabelStatus, type BabelStatus } from '@/lib/evalRemotionJSX';
-const RemotionRenderer = dynamic(() => import('@/components/RemotionRenderer'), { ssr: false });
 import { acquireTipsSlot, releaseTipsSlot, generateId, snapFromTimeline, timelineFromSnap, getImageForApi } from '@/lib/editor/timeline-utils';
 import { buildDesignsMap, buildImageTimeline, getNearbyOptimizedPreloadUrls, getPreviousImageForCompare, shouldShowCanvasPlaceholder, VIDEO_PLACEHOLDER_IMAGE } from '@/lib/editor/timeline-derivations';
 import { type AnimationState, type HeroAnim } from '@/lib/editor/types';
@@ -196,7 +194,6 @@ export default function Editor({
   // Payment success detection is handled by CreditPopup autoDetectPayment
   // Camera rotation panel
   const [showCameraPanel, setShowCameraPanel] = useState(false);
-  const [isRotating, setIsRotating] = useState(false);
   // Animation state: lifted from AnimateSheet so it persists across GUI↔CUI switches
   const [animationState, setAnimationState] = useState<AnimationState | null>(null);
   // All animations for this project (loaded from DB + newly created)
@@ -285,7 +282,7 @@ export default function Editor({
 
   // Music generation state
   const [musicTaskId, setMusicTaskId] = useState<string | null>(initialMusicTaskId ?? null);
-  const [musicTracks, setMusicTracks] = useState<{ audioUrl: string; duration: number; title: string; tags: string; trackIndex: number }[]>([]);
+  const [, setMusicTracks] = useState<{ audioUrl: string; duration: number; title: string; tags: string; trackIndex: number }[]>([]);
   const musicMsgIdRef = useRef<string>(''); // which assistant message to attach tracks to
   const musicPollingRef = useRef(!!initialMusicTaskId); // true during music polling — prevents onDone from resetting status
   const agentAbortRef = useRef<AbortController>(new AbortController());
@@ -370,7 +367,7 @@ export default function Editor({
   }, [initialMessages]);
 
   // ── Background Agent reconnection ──────────────────────────────
-  const { activeRunId, isReconnecting, reconnect: agentReconnect, disconnect: agentDisconnect } = useAgentRun({
+  const { activeRunId, reconnect: agentReconnect, disconnect: agentDisconnect } = useAgentRun({
     projectId: projectId ?? '',
     enabled: !!projectId && (initialSnapshots?.length ?? 0) > 0,
     skipRunIdRef: agentRunIdRef,
@@ -553,7 +550,6 @@ const isTipsFetchingRef = useRef(isTipsFetching);
 
   const isViewingVideo = contentType === 'video';
   const isViewingVideoV2 = isViewingVideo && isV2;
-  const isViewingVideoV1 = isViewingVideo && !isV2;
   // Currently selected video for canvas playback (v1 only)
   const currentVideo = (selectedVideoId && animations.find(a => a.id === selectedVideoId))
     || animations.find(a => a.status === 'completed' && !!a.videoUrl);
@@ -1726,7 +1722,7 @@ const isTipsFetchingRef = useRef(isTipsFetching);
     // Delay slightly to ensure DualWriter has flushed user message to DB
     const reloadTimer = window.setTimeout(() => window.location.reload(), 1500);
     return () => window.clearTimeout(reloadTimer);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+
   }, [activeRunId, disableAgentLiveReload, inactive]);
 
   // Shared: merge annotations → send to agent, then exit annotation mode
@@ -1807,7 +1803,8 @@ const isTipsFetchingRef = useRef(isTipsFetching);
     });
   };
 
-  // ── Generate animation prompt via Agent (runs in background, no CUI switch) ──
+  // Legacy story-script path kept as a source-level guardrail for media-index
+  // wording. Current video creation flows route through AnimateSheet/Agent tools.
   const animPromptInFlightRef = useRef(false);
   const normalizeLegacyCompositionDescription = useCallback((description: string | undefined, fallback: string) => {
     if (!description) return fallback;
@@ -1817,7 +1814,7 @@ const isTipsFetchingRef = useRef(isTipsFetching);
     return description;
   }, []);
 
-  const generateAnimationPrompt = useCallback(async (overrideImageUrls?: string[]) => {
+  const _generateAnimationPrompt = useCallback(async (overrideImageUrls?: string[]) => {
     const imageUrls = overrideImageUrls || animationStateRef.current?.imageUrls;
     if (!projectId || !imageUrls?.length) return;
     if (isAgentActiveRef.current || animPromptInFlightRef.current) return;
@@ -2475,7 +2472,7 @@ Select the best 3-7 items for a compelling video. You do NOT need to use all or 
       const latest = animations.find(a => a.status === 'completed' && !!a.videoUrl);
       if (latest) setSelectedVideoId(latest.id);
     }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+
   }, [isViewingVideo]);
 
   // Poll all processing animations (v1 only — v2 uses snapshot polling above)
@@ -2764,7 +2761,7 @@ Select the best 3-7 items for a compelling video. You do NOT need to use all or 
       pendingNavigateToVideoRef.current = false;
       setViewIndex(videoTimelineIndex);
     }
-  // eslint-disable-next-line react-hooks/exhaustive-deps
+
   }, [animations.length, snapshots.length]);
 
   // Watch for animations completing — send CUI notification + StatusBar update (v1 only)
@@ -4081,7 +4078,7 @@ Select the best 3-7 items for a compelling video. You do NOT need to use all or 
                 : 'none',
             } as CSSProperties}
           >
-            {/* eslint-disable-next-line @next/next/no-img-element */}
+            { }
             <img
               src={currentDisplayImage}
               draggable={false}
@@ -4109,10 +4106,10 @@ Select the best 3-7 items for a compelling video. You do NOT need to use all or 
         >
           {heroAnim.objectCover ? (
             // Both containers are squares → object-cover always shows the same center crop, no squish
-            /* eslint-disable-next-line @next/next/no-img-element */
+
             <img src={heroAnim.src} draggable={false} alt="" className="w-full h-full object-cover" />
           ) : (
-            /* eslint-disable-next-line @next/next/no-img-element */
+
             <img
               src={heroAnim.src}
               draggable={false}

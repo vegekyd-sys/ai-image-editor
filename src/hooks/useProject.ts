@@ -340,7 +340,7 @@ export function useProject(projectId: string, userId: string) {
         const supabase = getSupabase()
 
         // Upload base64 preview images to Storage, replace with URLs
-        // eslint-disable-next-line @typescript-eslint/no-unused-vars
+
         const tipsForDb = await Promise.all(tips.map(async ({ previewStatus, ...rest }) => {
 
           // Already a Storage URL — keep it
@@ -358,7 +358,7 @@ export function useProject(projectId: string, userId: string) {
             // Skip if already failed too many times
             const attempts = uploadAttemptsRef.current.get(filename) ?? 0
             if (attempts >= MAX_UPLOAD_ATTEMPTS) {
-              // eslint-disable-next-line @typescript-eslint/no-unused-vars
+
               const { previewImage, ...noPreview } = rest
               return noPreview
             }
@@ -370,7 +370,7 @@ export function useProject(projectId: string, userId: string) {
               return { ...rest, previewImage: imageUrl }
             }
             // Upload failed — strip base64 (too large for jsonb)
-            // eslint-disable-next-line @typescript-eslint/no-unused-vars
+
             const { previewImage: _stripped, ...noPreview } = rest
             return noPreview
           }

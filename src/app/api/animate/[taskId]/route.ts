@@ -24,7 +24,7 @@ export async function GET(
         .select('project_id, projects(is_public)')
         .eq('piapi_task_id', taskId)
         .single()
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+
       const proj = animCheck?.projects as any
       const isPublic = Array.isArray(proj) ? proj[0]?.is_public : proj?.is_public
       if (!isPublic) return authResult.error
@@ -75,7 +75,7 @@ export async function GET(
         .eq('piapi_task_id', taskId)
 
       // Persist video to Supabase Storage after response is sent
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+
       const projects = anim?.projects as any
       const ownerUserId = Array.isArray(projects) ? projects[0]?.user_id : projects?.user_id
       if (anim?.project_id && ownerUserId) {

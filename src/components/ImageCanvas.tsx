@@ -94,7 +94,7 @@ interface ImageCanvasProps {
 export default function ImageCanvas({
   timeline, currentIndex, onIndexChange, isEditing,
   isDraft, isDraftLoading, draftTimelineIndex, onDismissDraft, previousImage, onAnimate,
-  hasVideo, isVideoEntry, videoUrl, videoProcessing, videoFailed, videoModel, videoPosterImage, isDesktop,
+  isVideoEntry, videoUrl, videoProcessing, videoFailed, videoModel, videoPosterImage, isDesktop,
   annotationMode, annotationTool, annotationEntries, onAddAnnotationEntry,
   onUpdateAnnotationEntry, onDeleteAnnotationEntry,
   annotationColor, annotationLineWidth, onStartTextEdit, textEditing,
@@ -136,7 +136,7 @@ export default function ImageCanvas({
 
   // Design overlay refs (for editable designs)
   const [designContainerEl, setDesignContainerEl] = useState<HTMLDivElement | null>(null);
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+
   const [designPlayerRef, setDesignPlayerRef] = useState<any>(null);
 
   // When an editable is selected: pause player
@@ -786,7 +786,7 @@ export default function ImageCanvas({
     remotionStartedRef.current = false;
     updateRemotionUI();
     return () => player?.pause();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+
   }, [currentIndex, currentDesign?.code]);
 
   // Pause on buffering, resume when assets ready — like a real video player
@@ -1033,7 +1033,7 @@ export default function ImageCanvas({
                 ? timeline[currentIndex]
                 : timeline.slice(0, -1).filter(t => t !== VIDEO_SENTINEL).pop();
               return posterSrc ? (
-                // eslint-disable-next-line @next/next/no-img-element
+
                 <img
                   src={posterSrc}
                   alt=""
@@ -1189,7 +1189,7 @@ export default function ImageCanvas({
         ) : isVideoEntry && !videoUrl && (videoProcessing || videoFailed) ? (
           /* Video processing/failed state: show placeholder + overlay */
           <div className="relative w-full h-full">
-            {/* eslint-disable-next-line @next/next/no-img-element */}
+            { }
             <img
               src={videoPosterImage || VIDEO_PLACEHOLDER_IMAGE}
               alt="preview"
@@ -1400,7 +1400,7 @@ export default function ImageCanvas({
         ) : displayImage ? (
           isLongContent ? (
             <div ref={longScrollRef} className="w-full h-full overflow-y-auto overflow-x-hidden">
-              {/* eslint-disable-next-line @next/next/no-img-element */}
+              { }
               <img
                 ref={imgElRef}
                 src={displayImage}
@@ -1416,7 +1416,7 @@ export default function ImageCanvas({
               />
             </div>
           ) : (
-            /* eslint-disable-next-line @next/next/no-img-element */
+
             <img
               ref={imgElRef}
               src={displayImage}

@@ -29,7 +29,7 @@ export async function GET(req: NextRequest) {
   const { data: rows } = await admin.rpc('get_invite_code_users') as { data: { invite_code_used: string, email: string }[] | null }
 
   // Fallback: direct query if RPC not available
-  let usersByCode: Record<string, string[]> = {}
+  const usersByCode: Record<string, string[]> = {}
   if (!rows) {
     const { data: profiles } = await admin
       .from('user_profiles')

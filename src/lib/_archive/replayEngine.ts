@@ -436,7 +436,7 @@ export class ReplayEngine {
  * Paginates to bypass Supabase's default 1000 row limit.
  */
 export async function loadReplayEvents(
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+
   supabase: any,
   projectId: string,
 ): Promise<AgentEventRow[]> {

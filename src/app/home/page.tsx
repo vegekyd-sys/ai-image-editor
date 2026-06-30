@@ -161,7 +161,7 @@ function HomePageInner() {
   const inputBoxRef = useRef<HTMLDivElement>(null)
   const textareaRef = useRef<HTMLTextAreaElement>(null)
   const [photoSlotWidth, setPhotoSlotWidth] = useState(80)
-  const [inputBoxHeight, setInputBoxHeight] = useState(0)
+  const [, setInputBoxHeight] = useState(0)
   const inputWrapperRef = useRef<HTMLDivElement>(null)
   const [inputWrapperHeight, setInputWrapperHeight] = useState(0)
   const [slotDragOver, setSlotDragOver] = useState(-1)
@@ -169,8 +169,7 @@ function HomePageInner() {
   const [selectedSkill, setSelectedSkill] = useState<string | null>(null)
   const [availableSkills, setAvailableSkills] = useState<{ name: string; label: string; icon: string; color: string; builtIn: boolean }[]>([])
   const [skillMenuOpen, setSkillMenuOpen] = useState(false)
-  const [skillMenuPos, setSkillMenuPos] = useState<{ bottom: number; left: number } | null>(null)
-  const [skillUploading, setSkillUploading] = useState(false)
+  const [, setSkillUploading] = useState(false)
   const [installingSkill, setInstallingSkill] = useState(false)
   const skillFileRef = useRef<HTMLInputElement>(null)
   const skillMenuRef = useRef<HTMLDivElement>(null)
@@ -376,7 +375,7 @@ function HomePageInner() {
   const [placeholderIdx, setPlaceholderIdx] = useState(0)
   const [showWelcome, setShowWelcome] = useState(false)
   const [welcomeCredits, setWelcomeCredits] = useState(0)
-  useEffect(() => { setPlaceholderIdx(Math.floor(Math.random() * placeholders.length)) }, []) // eslint-disable-line react-hooks/exhaustive-deps
+  useEffect(() => { setPlaceholderIdx(Math.floor(Math.random() * placeholders.length)) }, [])
 
   // Restore state from login redirect + detect welcome
   const returnTextRef = useRef<string | null>(null)
@@ -699,7 +698,7 @@ function HomePageInner() {
     detailPathActiveRef.current = true
     writeSkillDetailPath(skillId, 'replace')
     if (pendingIOSSkillId === skillId) clearIOSSkillReturn()
-  }, [clearIOSSkillReturn, homeSkills, isIOSAppShell, pathSkillId, searchParams, selectedDetail, writeSkillDetailPath]) // eslint-disable-line react-hooks/exhaustive-deps
+  }, [clearIOSSkillReturn, homeSkills, isIOSAppShell, pathSkillId, searchParams, selectedDetail, writeSkillDetailPath])
 
   // Position slide when overlay DOM mounts via ref callback (stable — no deps to avoid re-bindinging)
   const detailSnapCallbackRef = useCallback((el: HTMLDivElement | null) => {
@@ -869,7 +868,7 @@ function HomePageInner() {
     const next = el.scrollHeight
     if (prev !== next) {
       el.style.height = `${prev}px`
-      el.offsetHeight // force reflow
+      el.getBoundingClientRect() // force reflow
       el.style.transition = 'height 0.15s ease'
       el.style.height = `${next}px`
     } else {
@@ -1119,7 +1118,7 @@ function HomePageInner() {
               }}>
               {isActive && createInput.previews[i] && createInput.previews[i] !== 'heic-pending' ? (
                 <>
-                  {/* eslint-disable-next-line @next/next/no-img-element */}
+                  { }
                   <img src={createInput.previews[i]!} alt="" style={{ position: 'absolute', inset: 0, width: '100%', height: '100%', objectFit: 'cover' }} />
                   {!createInput.creating && (
                     <div onClick={(e) => { e.stopPropagation(); createInput.removeFile(i) }}
@@ -1161,7 +1160,7 @@ function HomePageInner() {
               />
             </svg>
             {befores.map((url, i, arr) => (
-              /* eslint-disable-next-line @next/next/no-img-element */
+
               <img key={i} src={getThumbnailUrl(url, 200, 60, 250, 'cover')} alt=""
                 style={{
                   width: 96, height: 120, objectFit: 'cover',
@@ -1299,7 +1298,7 @@ function HomePageInner() {
     const src = variant === 'thumb'
       ? getThumbnailUrl(url, 400, 70, 533, 'cover')
       : getOptimizedUrl(url, 95)
-    // eslint-disable-next-line @next/next/no-img-element
+
     return <img
       src={src}
       alt={alt}
@@ -1344,7 +1343,7 @@ function HomePageInner() {
 
   return (
     <>
-      {/* eslint-disable-next-line @next/next/no-css-tags */}
+      { }
       <style>{`@import url('https://fonts.googleapis.com/css2?family=Caveat:wght@400;500&display=swap');`}</style>
       <style>{`
         .mkr-page { font-family: inherit; }
@@ -1733,7 +1732,7 @@ function HomePageInner() {
             transition: 'all 0.35s cubic-bezier(0.22, 1, 0.36, 1)',
             opacity: heroExpanded ? 0 : 1,
           }}>
-            {/* eslint-disable-next-line @next/next/no-img-element */}
+            { }
             {renderCoverMedia(selectedDetail.image, '', 'hero', { priority: true, extraStyle: { position: 'absolute' } })}
           </div>
         )
@@ -1745,7 +1744,7 @@ function HomePageInner() {
       {selectedDetail && (
         <div aria-hidden style={{ position: 'absolute', width: 0, height: 0, overflow: 'hidden', pointerEvents: 'none' }}>
           {homeSkills.flatMap(s => (s.before_images || []).slice(0, 3)).map((url, i) => (
-            /* eslint-disable-next-line @next/next/no-img-element */
+
             <img key={`preload-${i}`} src={getThumbnailUrl(url, 200, 60, 250, 'cover')} alt="" />
           ))}
         </div>
@@ -2016,14 +2015,5 @@ function HomePageInner() {
         </>
       )}
     </>
-  )
-}
-
-function Spinner({ size = 20 }: { size?: number }) {
-  return (
-    <svg className="mkr-spin" width={size} height={size} viewBox="0 0 24 24">
-      <circle cx="12" cy="12" r="10" stroke="rgba(217,70,239,0.12)" strokeWidth="2.5" fill="none" />
-      <path fill="rgba(217,70,239,0.7)" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
-    </svg>
   )
 }

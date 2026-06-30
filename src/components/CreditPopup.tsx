@@ -109,7 +109,7 @@ export default function CreditPopup({ open: externalOpen, onClose: externalOnClo
       }).catch(() => { if (attempts < 30) setTimeout(poll, 1000); });
     };
     poll();
-  }, [autoDetectPayment]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [autoDetectPayment]);
 
   const hasSubscription = !!(subscription && subscription.status !== 'canceled');
 

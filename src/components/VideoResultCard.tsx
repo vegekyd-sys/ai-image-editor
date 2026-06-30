@@ -39,7 +39,7 @@ interface VideoResultCardProps {
 }
 
 export default function VideoResultCard({
-  animations, selectedVideoId, onSelectVideo, onCreateNew, onAbandon, onRetry, onFrameEdit, onViewDetail, currentTime = 0, currentDuration = 0, isDesktop,
+  animations, selectedVideoId, onSelectVideo, onFrameEdit, onViewDetail, currentTime = 0, currentDuration = 0, isDesktop,
 }: VideoResultCardProps) {
   const { t } = useLocale();
 
@@ -151,7 +151,7 @@ export default function VideoResultCard({
                     style={{ width: thumbSize, height: thumbSize }}
                   >
                     {thumbUrl ? (
-                      // eslint-disable-next-line @next/next/no-img-element
+
                       <img src={thumbUrl} alt="" className="w-full h-full object-cover" />
                     ) : (
                       <div className="w-full h-full bg-zinc-800" />

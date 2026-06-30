@@ -13,7 +13,7 @@ interface DesignOverlayProps {
   onUpdateProp: (key: string, value: unknown) => void;
   onStartEdit?: (fieldId: string) => void;
   onVisibleFieldsChange?: (visibleIds: string[]) => void;
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+
   playerRef?: any;
 }
 
@@ -234,7 +234,6 @@ export default function DesignOverlay({
         `[data-editable="${selectedFieldIdRef.current}"]`
       ) as HTMLElement | null;
       if (el) {
-        const pos = props[`_pos_${selectedFieldIdRef.current}`] as { x: number; y: number } | undefined;
         el.style.scale = `${+newW.toFixed(4)} ${+newH.toFixed(4)}`;
       }
 

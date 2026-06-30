@@ -1,6 +1,6 @@
 'use client';
 
-import { ReactNode, useRef, useEffect } from 'react';
+import { ReactNode, useEffect } from 'react';
 import { useHorizontalScroll } from '@/hooks/useHorizontalScroll';
 
 interface PillCarouselProps {
@@ -23,7 +23,7 @@ export default function PillCarousel({ children, toolbar, isDesktop, scrollToRef
   // Auto-scroll a target element into view
   useEffect(() => {
     scrollToRef?.current?.scrollIntoView({ behavior: 'smooth', block: 'nearest', inline: 'nearest' });
-  }, [scrollToRef?.current]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [scrollToRef?.current]);
 
   return (
     <div className="flex flex-col">

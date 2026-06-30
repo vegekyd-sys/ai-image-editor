@@ -5,8 +5,6 @@ import { z } from 'zod';
 import sharp from 'sharp';
 import { validateDesign } from './design-harness';
 import type { ModelId } from './models/types';
-import { buildCameraPrompt, snapToNearest, AZIMUTH_MAP, ELEVATION_MAP, DISTANCE_MAP, AZIMUTH_STEPS, ELEVATION_STEPS, DISTANCE_STEPS } from './camera-utils';
-import { InferenceClient } from '@huggingface/inference';
 import { editImage } from './skills/edit-image';
 import { rotateCamera } from './skills/rotate-camera';
 import { createVideo } from './skills/create-video';
@@ -20,7 +18,6 @@ import creativePrompt from './prompts/creative.md';
 import wildPrompt from './prompts/wild.md';
 import captionsPrompt from './prompts/captions.md';
 import generateImageToolPrompt from './prompts/generate_image_tool.md';
-import animatePrompt from './prompts/animate.md';
 import type { Tip, VideoMeta, VideoModel } from '@/types';
 import { toPublicStorageUrl } from '@/lib/supabase/storage';
 import type { AgentPerf } from './agent-perf';
@@ -49,7 +46,7 @@ interface AgentContext {
   currentImage: string;       // base64 data URL – updated after each generation
   referenceImages?: string[]; // base64 data URLs – user-uploaded references (up to 3)
   projectId: string;
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+
   supabase?: any;             // Supabase client for workspace operations
   userId?: string;            // Current user ID for workspace
   /** Images generated during this run (base64). Streamed to frontend out-of-band. */
@@ -880,7 +877,7 @@ function estTokens(chars: number): number {
 }
 
 /** Build system prompt with lightweight skill manifest (not full templates) */
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
+
 async function buildSystemPrompt(userSkills?: ParsedSkill[], supabase?: any, userId?: string, projectId?: string): Promise<string> {
   const base = getAgentSystemPrompt();
   const manifest = await workspace.getSkillManifest(supabase, userId);
@@ -998,7 +995,7 @@ function createTools(ctx: AgentContext) {
         }
 
         // Resolve reference images: user-uploaded + snapshot indices
-        let resolvedRefs = ctx.referenceImages ? [...ctx.referenceImages] : [];
+        const resolvedRefs = ctx.referenceImages ? [...ctx.referenceImages] : [];
         console.log(`🎯 [generate_image] skill="${skill || 'none'}" refs=${resolvedRefs.length} editPrompt="${editPrompt.slice(0, 80)}"`);
         if (reference_media_indices?.length) {
           for (const refIdx of reference_media_indices) {
@@ -1352,7 +1349,7 @@ Hard constraints:
         const buf = await fetchImageBuffer(imageSource, { maxBytes: 600_000, maxPx: 1024, quality: 75 });
         return { base64Data: buf.toString('base64'), mimeType: 'image/jpeg', question };
       },
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+
       toModelOutput({ output }: { output: any }) {
         // No image available — return text-only error
         if (!output.base64Data || output.error) {
@@ -1496,7 +1493,7 @@ Use mode="locate_frame" when the user provides a screenshot/frame and you need t
           return { error: `Video analysis failed: ${err instanceof Error ? err.message : String(err)}` };
         }
       },
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+
       toModelOutput({ output }: { output: any }) {
         if (output.error) {
           return { type: 'content' as const, value: [{ type: 'text' as const, text: output.error }] };
@@ -1586,7 +1583,7 @@ For timeline videos, pass media_index. For external audio/video URLs, pass media
           return { error: `ASR transcription failed: ${err instanceof Error ? err.message : String(err)}` };
         }
       },
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+
       toModelOutput({ output }: { output: any }) {
         if (output.error) {
           return { type: 'content' as const, value: [{ type: 'text' as const, text: output.error }] };
@@ -1785,7 +1782,7 @@ Returns the rendered image so you can see it with your vision.`,
           return { error: `Failed to capture frame ${targetFrame}: ${msg}` };
         }
       },
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+
       toModelOutput({ output }: { output: any }) {
         if (output.error) {
           return { type: 'content' as const, value: [{ type: 'text' as const, text: output.error }] };
@@ -1891,7 +1888,7 @@ Use this to read skill instructions (SKILL.md), reference images, or your memory
 
         return { content: result.content, type: result.contentType, path: filePath };
       },
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+
       toModelOutput({ output }: { output: any }) {
         if (output.error) {
           return { type: 'content' as const, value: [{ type: 'text' as const, text: output.error }] };
@@ -1991,7 +1988,7 @@ Path is auto-generated from the current project and output type. Just provide a 
 
         // Publish: when fromLastRunCode and publish !== false, promote the last draft to a real Snapshot
         if (fromLastRunCode && shouldPublish !== false) {
-          // eslint-disable-next-line @typescript-eslint/no-explicit-any
+
           const drafts = (ctx as any).__runCodeDrafts || [];
           const lastDraft = drafts[drafts.length - 1];
 
@@ -2003,9 +2000,9 @@ Path is auto-generated from the current project and output type. Just provide a 
             ctx.snapshotImages.push(preview);
             ctx.currentSnapshotIndex = ctx.snapshotImages.length - 1;
 
-            // eslint-disable-next-line @typescript-eslint/no-explicit-any
+
             (ctx as any).__pendingDesign = designPayload;
-            // eslint-disable-next-line @typescript-eslint/no-explicit-any
+
             (ctx as any).__pendingDesignPublished = true;
 
             console.log(`📌 [agent] design published via write_file: <<<media_${ctx.snapshotImages.length}>>>`);
@@ -2481,7 +2478,7 @@ Node media runtime provides \`require\`, \`process\`, \`ffmpegPath\`, \`inputFil
           return { type: 'text' as const, content: `Code execution error: ${msg}` };
         }
       },
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+
       toModelOutput({ output }: { output: any }) {
         if (output.type === 'image' && output.base64Data) {
           return {
@@ -2540,7 +2537,7 @@ Node media runtime provides \`require\`, \`process\`, \`ffmpegPath\`, \`inputFil
 }
 
 /** Log tool description sizes — call after createTools. */
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
+
 function logToolSizes(tools: Record<string, any>): number {
   const entries = Object.entries(tools)
     .map(([name, t]) => ({ name, chars: (t?.description || '').length }))
@@ -2581,7 +2578,7 @@ export async function* runMakaronAgent(
   prompt: string,
   currentImage: string,
   projectId: string,
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+
   options?: { analysisOnly?: boolean; analysisContext?: 'initial' | 'post-edit'; isVideoAnalysis?: boolean; tipReactionOnly?: boolean; referenceImages?: string[]; animationImageUrls?: string[]; animationImages?: string[]; locale?: string; preferredModel?: ModelId; videoModel?: string; videoResolution?: import('@/types').VideoResolution; videoAuto?: boolean; audioAttachments?: AudioAttachment[]; snapshotImages?: string[]; currentSnapshotIndex?: number; isNsfw?: boolean; userSkills?: ParsedSkill[]; supabase?: any; userId?: string; currentDesign?: { code: string; width: number; height: number; props?: Record<string, unknown>; animation?: { fps: number; durationInSeconds: number; format?: string } }; currentDesignPath?: string; history?: ModelMessage[]; timelineVersion?: number; perf?: AgentPerf },
 ): AsyncGenerator<AgentStreamEvent> {
   const perf = options?.perf;
@@ -2635,7 +2632,7 @@ export async function* runMakaronAgent(
 
   // Build user message content — animation mode includes all snapshot images as visual content
   const animImages = options?.animationImages;
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+
   let userContent: any;
   if (animImages?.length && !analysisOnly && !tipReactionOnly) {
     // Multi-image user message: text + all snapshot images
@@ -2741,7 +2738,7 @@ export async function* runMakaronAgent(
   }
 
   try {
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+
     const endStreamInit = perf?.span('model_stream_init', { projectId });
     const result = (streamText as any)({
       model: MODEL,
@@ -2971,7 +2968,7 @@ export async function* runMakaronAgent(
 
       // ── Tool result — flush generated images + animation task ───────────────
       if (event.type === 'tool-result') {
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+
         const toolName = (event as any).toolName as string | undefined;
         const toolCallId = ((event as any).toolCallId as string | undefined) || activeToolCallId;
         const toolOutput = ((event as any).output ?? (event as any).result) as unknown;
@@ -2993,7 +2990,7 @@ export async function* runMakaronAgent(
 
         // Emit image_analyzed event so frontend can save the description
         if (toolName === 'analyze_image' || toolName === 'analyze_video') {
-          // eslint-disable-next-line @typescript-eslint/no-explicit-any
+
           const analyzeInput = (event as any).input as { media_index?: number } | undefined;
           const analyzedIdx = analyzeInput?.media_index ?? (ctx.currentSnapshotIndex + 1);
           yield { type: 'image_analyzed', imageIndex: analyzedIdx };
@@ -3001,7 +2998,7 @@ export async function* runMakaronAgent(
 
         // Emit preview_frame_captured so frontend shows the screenshot in CUI
         if (toolName === 'preview_frame') {
-          // eslint-disable-next-line @typescript-eslint/no-explicit-any
+
           const toolOutput = (event as any).output as { workspaceUrl?: string } | undefined;
           const wsUrl = toolOutput?.workspaceUrl;
           if (wsUrl) {
@@ -3030,7 +3027,7 @@ export async function* runMakaronAgent(
 
         // Detect generate_image failure or NSFW content block
         if (toolName === 'generate_image') {
-          // eslint-disable-next-line @typescript-eslint/no-explicit-any
+
           const toolResult = (event as any).result as { contentBlocked?: boolean } | undefined;
           if (toolResult?.contentBlocked) {
             yield { type: 'nsfw_detected' };
@@ -3072,7 +3069,7 @@ export async function* runMakaronAgent(
 
       // ── Error from stream ──────────────────────────────────────────────────
       if (event.type === 'error') {
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+
         const err = (event as any).error;
         const errMsg = err instanceof Error ? err.message : String(err);
         yield { type: 'error', message: errMsg };
@@ -3202,7 +3199,7 @@ const TIPS_CATEGORY_INFO: Record<'enhance' | 'creative' | 'wild' | 'captions', {
   },
 };
 
-function buildTipsSystemPrompt(category: 'enhance' | 'creative' | 'wild' | 'captions', locale?: string): string {
+function buildTipsSystemPrompt(category: 'enhance' | 'creative' | 'wild' | 'captions'): string {
   const info = TIPS_CATEGORY_INFO[category];
   const labelNote = category === 'captions'
     ? 'label: 2-3 words, include scene/style context.'

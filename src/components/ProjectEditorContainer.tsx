@@ -184,7 +184,7 @@ export default function ProjectEditorContainer({
       setLoaded(true)
     })
     return () => { cancelled = true }
-  // eslint-disable-next-line react-hooks/exhaustive-deps
+
   }, [projectId, isInlineActive])
 
   const userId = user?.id

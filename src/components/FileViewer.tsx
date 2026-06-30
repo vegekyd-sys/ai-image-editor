@@ -12,8 +12,6 @@ export default function FileViewer({ path, onClose }: FileViewerProps) {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
-  const fileName = path.split('/').pop() || path;
-
   useEffect(() => {
     // Try to read file from workspace via API or local fetch
     const loadFile = async () => {

@@ -128,7 +128,7 @@ export async function GET(
       .order('seq');
 
     // Build output[] — unified typed artifact array
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+
     const output: Record<string, any>[] = [];
     let textContent = '';
     let textSeq = 0;
@@ -253,7 +253,7 @@ export async function GET(
               .eq('id', v.snapshot_id)
               .single();
             if (!snap?.video_meta) return;
-            // eslint-disable-next-line @typescript-eslint/no-explicit-any
+
             const videoMeta = snap.video_meta as any;
             if (videoMeta.status === 'completed' && videoMeta.videoUrl) {
               // Only return completed if URL is our Storage (not provider URL)
@@ -379,7 +379,7 @@ export async function GET(
                     .eq('piapi_task_id', taskId);
                   v.status = 'completed';
                   v.url = result.videoUrl;
-                  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+
                   const projects = anim.projects as any;
                   const ownerUserId = Array.isArray(projects) ? projects[0]?.user_id : projects?.user_id;
                   if (anim.project_id && ownerUserId) {

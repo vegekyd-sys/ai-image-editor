@@ -14,7 +14,7 @@ import { transform as sucraseTransform } from 'sucrase';
 const { Sequence, useVideoConfig, delayRender, continueRender } = Remotion;
 
 // Sequence wrapper: auto-inject premountFor={fps} for smooth video cuts
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
+
 const AutoPremountSequence = React.forwardRef(function AutoPremountSequence(props: any, ref: React.Ref<HTMLDivElement>) {
   const { fps } = useVideoConfig();
   return React.createElement(Sequence, { ...props, premountFor: props.premountFor ?? fps, ref });
@@ -113,11 +113,6 @@ function hasCJK(text: string): boolean {
   return /[\u4e00-\u9fff\u3400-\u4dbf\u3000-\u303f\u3040-\u309f\u30a0-\u30ff\uac00-\ud7af]/.test(text);
 }
 
-/** Check if text contains emoji characters */
-function hasEmoji(text: string): boolean {
-  return /[\u{1F300}-\u{1F9FF}\u{2600}-\u{26FF}\u{2700}-\u{27BF}\u{FE00}-\u{FE0F}\u{1FA00}-\u{1FA9F}]/u.test(text);
-}
-
 /** Load Noto Color Emoji font */
 async function loadEmojiFont(): Promise<void> {
   try {
@@ -135,7 +130,10 @@ async function loadEmojiFont(): Promise<void> {
 
 export const DynamicDesign: React.FC<Record<string, unknown>> = ({ code, designProps }) => {
   const codeStr = typeof code === 'string' ? code : '';
-  const propsObj = (typeof designProps === 'object' && designProps !== null ? designProps : {}) as Record<string, unknown>;
+  const propsObj = useMemo(
+    () => (typeof designProps === 'object' && designProps !== null ? designProps : {}) as Record<string, unknown>,
+    [designProps],
+  );
   const Component = useMemo(() => compileAndEval(codeStr), [codeStr]);
 
   // Combine code + props for font detection
@@ -144,7 +142,6 @@ export const DynamicDesign: React.FC<Record<string, unknown>> = ({ code, designP
     return codeStr + '\n' + propsStr;
   }, [codeStr, propsObj]);
 
-  const [fontsReady, setFontsReady] = useState(false);
   const handleRef = useRef<number | null>(null);
 
   useEffect(() => {
@@ -169,7 +166,6 @@ export const DynamicDesign: React.FC<Record<string, unknown>> = ({ code, designP
         }
       } catch { /* continue even if fonts fail */ }
 
-      setFontsReady(true);
       continueRender(handle);
       handleRef.current = null;
     })();

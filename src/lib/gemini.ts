@@ -23,7 +23,7 @@ export class ContentBlockedError extends Error {
   }
 }
 
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
+
 function checkBlockReason(result: any, label: string): void {
   const blockReason = result?.promptFeedback?.blockReason;
   if (blockReason) {
@@ -95,14 +95,7 @@ const SYSTEM_PROMPT = `你是世界上最好的照片编辑AI。你能深入理�
 
 type TipCategory = 'enhance' | 'creative' | 'wild' | 'captions';
 
-const CATEGORY_CN: Record<TipCategory, string> = {
-  enhance: 'enhance（专业增强）',
-  creative: 'creative（趣味创意）',
-  wild: 'wild（疯狂脑洞）',
-  captions: 'captions（创意文案）',
-};
-
-function withLocale(prompt: string, locale?: string): string {
+export function withLocale(prompt: string, locale?: string): string {
   if (locale === 'en') return `${prompt}\n\nReply in English.`;
   if (locale === 'zh') return `${prompt}\n\nReply in Chinese.`;
   return prompt;
@@ -517,7 +510,7 @@ export async function generatePreviewImageGoogle(
 
   // Build content parts: text-only when no image, image+text otherwise
   const isTextOnly = !imageBase64;
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+
   let contentParts: any[];
   if (isTextOnly) {
     contentParts = [{ text: editPrompt }];
@@ -536,7 +529,7 @@ export async function generatePreviewImageGoogle(
   });
 
   checkBlockReason(result, 'Google');
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+
   const usageMeta = (result as any).usageMetadata;
   const usage = usageMeta ? { inputTokens: usageMeta.promptTokenCount ?? 0, outputTokens: usageMeta.candidatesTokenCount ?? 0, modelId: MODEL } : undefined;
 
@@ -594,6 +587,7 @@ export async function generatePreviewImageOpenRouter(
     temperature: 1.0,
     reasoning: { effort: thinkingEffort || 'minimal' },
     messages: [
+      { role: 'system', content: systemPrompt },
       { role: 'user', content: userContent },
     ],
   };
@@ -1222,7 +1216,7 @@ async function* streamTipsByCategoryBedrock(
 // ── Shared Incremental JSON Parser ──────────────────────────────
 
 async function* streamToTextIterator(
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+
   stream: AsyncIterable<any>,
 ): AsyncGenerator<string> {
   for await (const chunk of stream) {

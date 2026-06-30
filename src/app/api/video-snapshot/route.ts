@@ -50,7 +50,6 @@ export async function POST(req: NextRequest) {
     if (!creditCheck.ok) return creditCheck.response
 
     // Save original imageUrls before mutation (for detail view display)
-    const allSourceUrls: string[] = [...inputImageUrls, ...(inputVideoUrl ? [inputVideoUrl] : [])].filter((u: string) => !!u)
     const originalImageUrlsByIndex = [...inputImageUrls]
     const originalFirstUrl = inputImageUrls.find((u: string) => u?.startsWith('http') && !u.endsWith('.mp4')) || ''
 
