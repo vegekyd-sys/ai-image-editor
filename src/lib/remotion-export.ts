@@ -1,7 +1,5 @@
 import type { SupabaseClient } from '@supabase/supabase-js'
 import { createHash } from 'node:crypto'
-import { GetObjectCommand, S3Client } from '@aws-sdk/client-s3'
-import { getSignedUrl } from '@aws-sdk/s3-request-presigner'
 import type { DesignPayload, VideoMeta } from '@/types'
 import { getSupabaseAdmin } from '@/lib/supabase/service'
 import { toPublicStorageUrl, uploadPoster } from '@/lib/supabase/storage'
@@ -477,11 +475,15 @@ export async function resolveRemotionExportDownloadUrl(job: RemotionExportJob): 
   if (!bucketName || !key || !credentials) return job.storage_url
 
   const name = slugify(typeof job.metadata?.name === 'string' ? job.metadata.name : undefined)
-  const client = new S3Client({
-    region: process.env.REMOTION_LAMBDA_REGION || process.env.AWS_REGION || 'us-east-1',
-    credentials,
-  })
   try {
+    const [{ GetObjectCommand, S3Client }, { getSignedUrl }] = await Promise.all([
+      import('@aws-sdk/client-s3'),
+      import('@aws-sdk/s3-request-presigner'),
+    ])
+    const client = new S3Client({
+      region: process.env.REMOTION_LAMBDA_REGION || process.env.AWS_REGION || 'us-east-1',
+      credentials,
+    })
     return await getSignedUrl(
       client,
       new GetObjectCommand({
