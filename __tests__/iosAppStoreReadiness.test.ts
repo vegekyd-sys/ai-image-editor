@@ -267,7 +267,10 @@ describe('iOS App Store readiness guardrails', () => {
     expect(home).toContain("window.addEventListener('pageshow', scheduleSync)");
     expect(home).toContain("window.addEventListener('makaron-ios-page-stack-back', scheduleSync as EventListener)");
     expect(home).toContain("window.visualViewport?.addEventListener('scroll', scheduleSync)");
-    expect(home).toContain('bottom: textareaFocused && effectiveKbInset > 0');
+    expect(home).toContain('const fixedComposerViewportInset = !isDesktop && (showFixedInput || selectedDetail || textareaFocused)');
+    expect(home).toContain("bottom: fixedComposerBottom");
+    expect(home).toContain("max(env(safe-area-inset-bottom, 0px), ${fixedComposerViewportInset}px)");
+    expect(home).toContain('const updateViewportInset = useCallback');
     expect(home).toContain('const effectiveKbInset = Math.max(kbInset, nativeKbInset)');
     expect(home).toContain("window.addEventListener('makaron-keyboard-inset-change', onNativeInset)");
     expect(home).toContain('const blurHomeComposers = useCallback');
@@ -275,6 +278,10 @@ describe('iOS App Store readiness guardrails', () => {
     expect(home).toContain('setKbInset(0)');
     expect(home).toContain("const showAgentLanding = showGuestModeToggle && viewMode === 'agent' && !hasSelectedDetail");
     expect(home).toContain("setViewMode('human')");
+    expect(home).toContain('detailCloseTimerRef');
+    expect(home).toContain('const clearDetailCloseTimer = useCallback');
+    expect(home).toContain('window.clearTimeout(detailCloseTimerRef.current)');
+    expect(home).toContain('clearDetailCloseTimer()');
     expect(home).toContain("transform: (showFixedInput || selectedDetail) ? 'translateY(0)' : 'translateY(calc(100% + 20px))'");
     expect(home).toContain("isIOSAppShell && showFixedInput && !selectedDetail ? { opacity: 0, pointerEvents: 'none' as const } : {}");
     expect(home).not.toContain('const focusFixedComposer = useCallback');

@@ -190,6 +190,7 @@ function HomePageInner() {
   const [inlineBoxHeight, setInlineBoxHeight] = useState(0)
   const [showFixedInput, setShowFixedInput] = useState(false)
   const fixedInputSyncFrameRef = useRef<number | null>(null)
+  const detailCloseTimerRef = useRef<number | null>(null)
   const [shareToast, setShareToast] = useState(false)
   const openedFromUrlRef = useRef(false)
   const detailPathActiveRef = useRef(false)
@@ -265,14 +266,24 @@ function HomePageInner() {
     setSkillBackPanSettling(false)
   }, [])
 
+  const clearDetailCloseTimer = useCallback(() => {
+    if (detailCloseTimerRef.current === null) return
+    window.clearTimeout(detailCloseTimerRef.current)
+    detailCloseTimerRef.current = null
+  }, [])
+
   const closeSkillDetail = useCallback((historyMode: 'none' | 'pushHome' = 'none', options?: { preservePan?: boolean; skipHeroCollapse?: boolean }) => {
+    clearDetailCloseTimer()
+    setTextareaFocused(false)
+    setKbInset(0)
     if (options?.skipHeroCollapse) {
       setSelectedDetail(null)
       setHeroRect(null)
       resetSkillBackPan()
     } else {
       setHeroExpanded(false)
-      setTimeout(() => {
+      detailCloseTimerRef.current = window.setTimeout(() => {
+        detailCloseTimerRef.current = null
         setSelectedDetail(null)
         setHeroRect(null)
         resetSkillBackPan()
@@ -287,7 +298,9 @@ function HomePageInner() {
       if (isIOSAppShell) window.history.replaceState(null, '', '/home')
       else window.history.pushState(null, '', '/home')
     }
-  }, [clearIOSSkillReturn, createInput, isIOSAppShell, resetSkillBackPan])
+  }, [clearDetailCloseTimer, clearIOSSkillReturn, createInput, isIOSAppShell, resetSkillBackPan])
+
+  useEffect(() => () => clearDetailCloseTimer(), [clearDetailCloseTimer])
 
   const handleSkillBackPanStart = useCallback((e: React.TouchEvent<HTMLDivElement>) => {
     if (!selectedDetailRef.current || isDesktop || !isIOSAppShell || e.touches.length !== 1) return
@@ -538,17 +551,27 @@ function HomePageInner() {
     return undefined
   }, [])
 
+  const updateViewportInset = useCallback(() => {
+    const vv = window.visualViewport
+    if (!vv) {
+      setKbInset(0)
+      return
+    }
+    const inset = Math.max(0, window.innerHeight - vv.height - vv.offsetTop)
+    setKbInset(Math.round(inset))
+  }, [])
+
   useEffect(() => {
     const vv = window.visualViewport
     if (!vv) return
-    const update = () => {
-      const inset = Math.max(0, window.innerHeight - vv.height - vv.offsetTop)
-      setKbInset(Math.round(inset))
+    updateViewportInset()
+    vv.addEventListener('resize', updateViewportInset)
+    vv.addEventListener('scroll', updateViewportInset)
+    return () => {
+      vv.removeEventListener('resize', updateViewportInset)
+      vv.removeEventListener('scroll', updateViewportInset)
     }
-    vv.addEventListener('resize', update)
-    vv.addEventListener('scroll', update)
-    return () => { vv.removeEventListener('resize', update); vv.removeEventListener('scroll', update) }
-  }, [])
+  }, [updateViewportInset])
   useEffect(() => {
     if (!isIOSAppShell) return
     const readNativeInset = () => {
@@ -691,6 +714,10 @@ function HomePageInner() {
     if (!skill) return
 
     openedFromUrlRef.current = true
+    clearDetailCloseTimer()
+    setTextareaFocused(false)
+    setKbInset(0)
+    updateViewportInset()
     setViewMode('human')
     setSelectedDetail(skill)
     setSelectedSkill(skill.skill_path ? skill.id : null)
@@ -699,7 +726,7 @@ function HomePageInner() {
     detailPathActiveRef.current = true
     writeSkillDetailPath(skillId, 'replace')
     if (pendingIOSSkillId === skillId) clearIOSSkillReturn()
-  }, [clearIOSSkillReturn, homeSkills, isIOSAppShell, pathSkillId, searchParams, selectedDetail, writeSkillDetailPath])
+  }, [clearDetailCloseTimer, clearIOSSkillReturn, homeSkills, isIOSAppShell, pathSkillId, searchParams, selectedDetail, updateViewportInset, writeSkillDetailPath])
 
   // Position slide when overlay DOM mounts via ref callback (stable — no deps to avoid re-bindinging)
   const detailSnapCallbackRef = useCallback((el: HTMLDivElement | null) => {
@@ -747,11 +774,7 @@ function HomePageInner() {
     setTextareaFocused(true)
     if (!isDesktop) setShowFixedInput(!inlineTextareaFocused)
     const sync = () => {
-      const vv = window.visualViewport
-      if (vv) {
-        const inset = Math.max(0, window.innerHeight - vv.height - vv.offsetTop)
-        setKbInset(Math.round(inset))
-      }
+      updateViewportInset()
       if (!inlineTextareaFocused) {
         inputWrapperRef.current?.scrollIntoView({ block: 'end', inline: 'nearest', behavior: 'smooth' })
       }
@@ -759,7 +782,7 @@ function HomePageInner() {
     sync()
     window.setTimeout(sync, 80)
     window.setTimeout(sync, 220)
-  }, [isDesktop])
+  }, [isDesktop, updateViewportInset])
 
   useEffect(() => {
     if (isDesktop) return
@@ -1321,6 +1344,10 @@ function HomePageInner() {
       return
     }
     openedFromUrlRef.current = false
+    clearDetailCloseTimer()
+    setTextareaFocused(false)
+    setKbInset(0)
+    updateViewportInset()
     setViewMode('human')
     const rect = (e.currentTarget as HTMLElement).getBoundingClientRect()
     setHeroRect(rect)
@@ -1342,6 +1369,12 @@ function HomePageInner() {
     })
   }
 
+  const fixedComposerViewportInset = !isDesktop && (showFixedInput || selectedDetail || textareaFocused)
+    ? effectiveKbInset
+    : 0
+  const fixedComposerBottom = isDesktop
+    ? '24px'
+    : `max(env(safe-area-inset-bottom, 0px), ${fixedComposerViewportInset}px)`
 
   return (
     <>
@@ -1620,7 +1653,7 @@ function HomePageInner() {
         {!isDesktop && (showFixedInput || selectedDetail) && (
           <div style={{
             position: 'fixed', left: 0, right: 0, bottom: 0,
-            height: 'calc(env(safe-area-inset-bottom, 0px) + 40px)',
+            height: `calc(${fixedComposerBottom} + 40px)`,
             background: 'linear-gradient(to top, #000 0%, transparent 100%)',
             pointerEvents: 'none',
             zIndex: Z.INPUT - 1,
@@ -1630,7 +1663,7 @@ function HomePageInner() {
         {/* ── Bottom Input Box (fixed, slides in when inline is off-screen) ── */}
         <div ref={inputWrapperRef} data-makaron-home-fixed-composer="true" style={{
           position: 'fixed', left: 0, right: 0,
-          bottom: textareaFocused && effectiveKbInset > 0 ? `${effectiveKbInset}px` : isDesktop ? '24px' : 'env(safe-area-inset-bottom, 0px)',
+          bottom: fixedComposerBottom,
           zIndex: Z.INPUT,
           pointerEvents: 'none',
           ...(isDesktop ? {
@@ -1891,6 +1924,10 @@ function HomePageInner() {
                 if (newIdx !== detailSwipeRef.current.startIdx) {
                   const t = homeSkills[newIdx]
                   if (t) {
+                    clearDetailCloseTimer()
+                    setTextareaFocused(false)
+                    setKbInset(0)
+                    updateViewportInset()
                     setViewMode('human')
                     setSelectedDetail(t)
                     setSelectedSkill(t.skill_path ? t.id : null)
@@ -1919,6 +1956,10 @@ function HomePageInner() {
                 }
                 const t = homeSkills[newIdx]
                 if (t) {
+                  clearDetailCloseTimer()
+                  setTextareaFocused(false)
+                  setKbInset(0)
+                  updateViewportInset()
                   setViewMode('human')
                   setSelectedDetail(t)
                   setSelectedSkill(t.skill_path ? t.id : null)
