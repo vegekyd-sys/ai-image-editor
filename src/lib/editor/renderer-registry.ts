@@ -18,6 +18,7 @@ export interface CanvasOverrides {
   videoUrl?: string | null;
   videoProcessing?: boolean;
   videoFailed?: boolean;
+  videoTaskId?: string | null;
   videoPosterImage?: string;
   editableFields?: EditableField[];
   designProps?: Record<string, unknown>;

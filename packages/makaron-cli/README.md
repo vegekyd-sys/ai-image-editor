@@ -155,7 +155,7 @@ npx makaron-cli composition export --project <projectId> --snapshot <snapshotId>
 npx makaron-cli composition status <jobId> --wait
 ```
 
-`materialize` defaults to `--wait`, `--publish`, and the `fast_720p` profile (short side 720, no upscale). Use `--profile source` only when full source resolution is required.
+`materialize` is the preferred high-level command for Remotion-to-MP4. It defaults to `--wait`, `--publish`, and the `fast_720p` profile (short side 720, no upscale), so the completed MP4 is also added back to the project timeline like CUI. Use `--no-publish` only when you need a file URL without a new timeline video. Use `--profile source` only when full source resolution is required.
 
 For a run that produced an animated composition, materialize before picking the video URL:
 
@@ -164,7 +164,7 @@ npx makaron-cli responses get <runId> --materialize --wait --pick first_video_ur
 npx makaron-cli responses get <runId> --export-compositions --wait --pick first_video_url
 ```
 
-The completed export reports `duration_seconds`, `render_seconds`, and `realtime_ratio` so agents can compare video length against export time.
+The completed export reports `duration_seconds`, `render_seconds`, and `realtime_ratio` so agents can compare video length against export time. Do not apply provider-video ETA rules to Remotion materialize; with a warm exporter it is often near video length to tens of seconds, while cold starts can be longer.
 
 In production, run the exporter as a separate warm worker:
 
@@ -418,7 +418,7 @@ send_message "All done!"
 - One project = one conversation thread. All history is preserved.
 - One run at a time per project. New message interrupts previous run.
 - Multi-image: `create --image a.jpg --image b.jpg` or `chat --image ref.jpg`.
-- Most videos take 3-5 minutes; Grok is usually around 30-40 seconds. Use `responses get <runId> --wait --json` for the default customer-service path.
+- Provider-generated videos can take 3-5 minutes; Grok is usually around 30-40 seconds. Remotion compositions should be converted with `materialize` / `responses get --materialize`, and timing should be read from `duration_seconds`, `render_seconds`, and `realtime_ratio`.
 - Music takes ~60 seconds. Appears in output when done.
 - Images are typically ready in 15-30 seconds.
 - stdout is always machine-readable JSON/text. Human-friendly logs go to stderr.

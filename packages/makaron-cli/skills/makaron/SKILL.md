@@ -340,6 +340,18 @@ type CompletionAction = {
 | Motion design | "create an Instagram story with animated text" |
 | Multi-step | "edit the photo then make a video from it" |
 
+## Export editable Remotion compositions
+
+Animated Remotion compositions are saved as editable timeline/code artifacts first. Use `materialize` as the preferred high-level Remotion-to-MP4 command:
+
+```bash
+npx makaron-cli materialize --project <projectId> --media <N> --pick url
+npx makaron-cli materialize --project <projectId> --design-json composition.json --pick url
+npx makaron-cli responses get <runId> --materialize --wait --pick first_video_url
+```
+
+`materialize` defaults to `--wait`, `--publish`, and `fast_720p`, so the completed MP4 is added back to the timeline like CUI. Use `--no-publish` only when you need a file URL without a new timeline video. The completed export reports `duration_seconds`, `render_seconds`, and `realtime_ratio`; use those metrics instead of provider-video ETA rules.
+
 ## Recommended Pattern: Service Flow (Feishu/OpenClaw/Group Chat)
 
 When serving end-users in a chat environment (Feishu, Slack, Discord), use this proactive message pattern:
@@ -381,7 +393,7 @@ send_message "All done!"
 - One project = one conversation thread. All history is preserved.
 - One run at a time per project. New message interrupts previous run.
 - Multi-image: `create --image a.jpg --image b.jpg` or `chat --image ref.jpg`.
-- Most videos take 3-5 minutes; Grok is usually around 30-40 seconds. Use `responses get <runId> --wait --json` for the default customer-service path.
+- Provider-generated videos can take 3-5 minutes; Grok is usually around 30-40 seconds. Remotion compositions should be converted with `materialize` / `responses get --materialize`, and timing should be read from `duration_seconds`, `render_seconds`, and `realtime_ratio`.
 - Music takes ~60 seconds. Appears in output when done.
 - Images are typically ready in 15-30 seconds.
 - stdout is always machine-readable JSON/text. Human-friendly logs go to stderr.
