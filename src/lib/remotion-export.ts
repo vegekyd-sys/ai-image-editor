@@ -2,9 +2,8 @@ import type { SupabaseClient } from '@supabase/supabase-js'
 import { createHash } from 'node:crypto'
 import type { DesignPayload, VideoMeta } from '@/types'
 import { getSupabaseAdmin } from '@/lib/supabase/service'
-import { toPublicStorageUrl, uploadPoster } from '@/lib/supabase/storage'
+import { toPublicStorageUrl } from '@/lib/supabase/storage'
 import * as workspace from '@/lib/workspace'
-import { extractVideoPoster } from '@/lib/video-poster'
 import { resolveRemotionLambdaEncodingSettings } from '@/lib/remotion-encoding'
 import {
   prepareRemotionCodeForSandbox,
@@ -705,17 +704,8 @@ async function publishExportedVideo(
     width: output.width,
     height: output.height,
   }
-  let imageUrl = VIDEO_PLACEHOLDER_IMAGE
-  try {
-    const posterStart = Date.now()
-    const posterBuffer = await extractVideoPoster(url)
-    if (stageTimings) stageTimings.publishExtractPosterMs = (stageTimings.publishExtractPosterMs || 0) + Date.now() - posterStart
-    const uploadPosterStart = Date.now()
-    imageUrl = await uploadPoster(admin, job.user_id, job.project_id, snapshotId, posterBuffer) || imageUrl
-    if (stageTimings) stageTimings.publishUploadPosterMs = (stageTimings.publishUploadPosterMs || 0) + Date.now() - uploadPosterStart
-  } catch (err) {
-    console.warn('[remotion-export] poster extraction failed:', err)
-  }
+  const imageUrl = VIDEO_PLACEHOLDER_IMAGE
+  if (stageTimings) stageTimings.publishPosterDeferredToClient = 1
 
   const row = {
     id: snapshotId,
