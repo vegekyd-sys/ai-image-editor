@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { authenticateRequest } from '@/lib/api-auth';
 import { uploadImage, uploadVideo, isPermanentUrl } from '@/lib/supabase/storage';
+import { readAttributionCookie, sendMetaCapiEvent } from '@/lib/marketing/meta-capi';
 import sharp from 'sharp';
 import type { SupabaseClient } from '@supabase/supabase-js';
 import type { VideoMeta } from '@/types';
@@ -62,6 +63,46 @@ async function fillMissingVideoDimensions(
   return dims ? { width: dims.width, height: dims.height } : current;
 }
 
+function resolveMarketingSourceUrl(req: NextRequest, attribution: Record<string, unknown>): string {
+  const landingPath = typeof attribution.landing_path === 'string' ? attribution.landing_path : '';
+  if (landingPath.startsWith('/')) {
+    try {
+      return new URL(landingPath, req.url).toString();
+    } catch {}
+  }
+  return req.headers.get('referer') || req.url;
+}
+
+async function sendCustomizeProductCapi(
+  req: NextRequest,
+  input: {
+    userId: string;
+    projectId: string;
+    metaEventId?: string;
+    skillId?: string;
+    hasPrompt?: boolean;
+  },
+) {
+  if (!input.metaEventId) return;
+  const attribution = readAttributionCookie(req.cookies.get('mkr_attribution')?.value);
+  const skillId = input.skillId || (typeof attribution.skill_id === 'string' ? attribution.skill_id : undefined);
+  await sendMetaCapiEvent({
+    eventName: 'CustomizeProduct',
+    eventId: input.metaEventId,
+    userId: input.userId,
+    request: req,
+    eventSourceUrl: resolveMarketingSourceUrl(req, attribution),
+    customData: {
+      ...attribution,
+      project_id: input.projectId,
+      skill_id: skillId,
+      content_type: 'project',
+      content_name: skillId || 'custom_project',
+      has_prompt: Boolean(input.hasPrompt),
+    },
+  });
+}
+
 /**
  * POST /api/projects/create — Create a new project with an initial image.
  *
@@ -74,7 +115,19 @@ export async function POST(req: NextRequest) {
     if ('error' in authResult) return authResult.error;
     const { userId, supabase } = authResult.auth;
 
-    const { imageUrl, imageBase64, imageUrls, imageBase64s, videoUrls, videoMetas, title, _addToProject } = await req.json();
+    const {
+      imageUrl,
+      imageBase64,
+      imageUrls,
+      imageBase64s,
+      videoUrls,
+      videoMetas,
+      title,
+      _addToProject,
+      metaEventId,
+      skillId: marketingSkillId,
+      hasPrompt: marketingHasPrompt,
+    } = await req.json();
 
     // Support single or multiple images
     const urls: (string | undefined)[] = imageUrls || (imageUrl ? [imageUrl] : []);
@@ -177,6 +230,13 @@ export async function POST(req: NextRequest) {
     if (imageCount === 0 && videos.length === 0) {
       const projectId = crypto.randomUUID();
       await supabase.from('projects').insert({ id: projectId, user_id: userId, title: title || 'Untitled', timeline_version: 2 });
+      await sendCustomizeProductCapi(req, {
+        userId,
+        projectId,
+        metaEventId,
+        skillId: marketingSkillId,
+        hasPrompt: marketingHasPrompt,
+      });
       return NextResponse.json({
         projectId,
         snapshots: [],
@@ -195,6 +255,13 @@ export async function POST(req: NextRequest) {
     if (projectError) {
       return NextResponse.json({ error: projectError.message }, { status: 500 });
     }
+    await sendCustomizeProductCapi(req, {
+      userId,
+      projectId,
+      metaEventId,
+      skillId: marketingSkillId,
+      hasPrompt: marketingHasPrompt,
+    });
 
     // Create snapshots for each image
     let sortOrder = 0;

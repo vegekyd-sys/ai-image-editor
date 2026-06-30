@@ -17,16 +17,17 @@ printf 'value' | npx vercel env add NAME production --force
 printf 'value' | npx vercel env add NAME preview --force
 ```
 
-## Production Qwen / Vast worker guardrail（2026-06-04）
+## Production Qwen / Vast worker guardrail（2026-06-24）
 
 当前线上 Qwen/ComfyUI 走**长期租赁 Vast 实例**，不要按 Serverless 思路处理。
 
-- 生产实例：`38953964`，label `makaron-qwen-a6000-prod-v2-20260601`，RTX A6000 48GB，固定域名 `https://comfyui.makaron.app`。
+- 生产实例：`38761988`，label `makaron-qwen-a6000-benchmark`，RTX A6000 48GB，固定域名 `https://comfyui.makaron.app`。
 - 这台机器必须保持 running。禁止在普通 cleanup / scan / cost-saving 中 stop、destroy、recycle、update template 或把它和旧实验机一起批量处理。
-- 旧实验机 `37898939` 不是生产机；任何清理旧实例时都必须显式排除 `38953964`。
-- 生产自愈入口：`docs/ops/vast/ensure-makaron-qwen-vast.sh`。它会检查 `38953964`，若实例停了则 start，随后通过 SSH 启动 `/workspace/makaron-qwen-onstart.sh` 并等待线上 health 变绿。
+- 旧实验机 `37898939`、旧生产机 `38953964`、慢迁移机 `40942907` 都不是当前生产机；任何清理或迁移都必须显式保护 `38761988`。
+- 生产自愈入口：`docs/ops/vast/ensure-makaron-qwen-vast.sh`。它会检查 `38761988`，若实例停了则 start，随后通过 SSH 启动 `/workspace/makaron-qwen-onstart.sh` 并等待线上 health 变绿。
 - 机器内自愈脚本在 `docs/ops/vast/makaron-qwen-onstart.sh` 和 `docs/ops/vast/makaron-qwen-watchdog.sh`；远端对应 `/workspace/makaron-qwen-onstart.sh` 和 `/workspace/makaron-watchdog.sh`。
-- 如果确实需要停止/替换这台生产实例，必须先得到用户明确批准，并先确认替代实例、Cloudflare tunnel、Vercel env、`/api/health` 和真实 Qwen 生成都已验证。
+- Qwen、Pony、WAI 都通过同一个 `https://comfyui.makaron.app` hostname 验收；Pony 需要 `fucktasticAnimePony_v22`，WAI 需要 `waiIllustriousSDXL_v160.safetensors`。
+- 如果确实需要停止/替换这台生产实例，必须先得到用户明确批准，并先确认替代实例、Cloudflare tunnel、Vercel env、`/api/health` 和真实 Qwen/Pony/WAI 生成都已验证。
 
 ## i18n（多语言，2026-03-04）
 

@@ -258,7 +258,7 @@ export default function RemotionRenderer({ design, onError, mode = 'inline', hid
   const playerRef = useRef<PlayerRef>(null);
   const wrapperRef = useRef<HTMLDivElement>(null);
   const onPlayerRefRef = useRef(onPlayerRef);
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+
   const [Component, setComponent] = useState<React.ComponentType<any> | null>(null);
   const [inputProps, setInputProps] = useState<Record<string, unknown>>({});
   const [compileError, setCompileError] = useState<string | null>(null);
@@ -275,9 +275,7 @@ export default function RemotionRenderer({ design, onError, mode = 'inline', hid
     (async () => {
       try {
         await preloadBabel().catch(() => {});
-        const { code: videoResolved, blobUrls: videoBlobUrls } = await resolveVideoUrls(design.code);
-        blobUrls.push(...videoBlobUrls);
-        if (cancelled) { blobUrls.forEach(url => URL.revokeObjectURL(url)); return; }
+        const videoResolved = resolvePreviewVideoUrls(design.code);
         const { code: resolvedCode, props: resolvedProps, blobUrls: imageBlobUrls } = await resolveDesignImageUrls(design, videoResolved);
         blobUrls.push(...imageBlobUrls);
         if (cancelled) { blobUrls.forEach(url => URL.revokeObjectURL(url)); return; }
@@ -307,7 +305,7 @@ export default function RemotionRenderer({ design, onError, mode = 'inline', hid
       cancelled = true;
       blobUrls.forEach(url => URL.revokeObjectURL(url));
     };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+
   }, [design.code, design.props]);
 
   // Expose container and player refs to parent
@@ -426,7 +424,7 @@ export default function RemotionRenderer({ design, onError, mode = 'inline', hid
           acknowledgeRemotionLicense
           // Poster: show snapshot image while buffering / before play — prevents blank frames
           renderPoster={posterImage ? () => (
-            <img src={posterImage} style={{ width: '100%', height: '100%', objectFit: 'contain' }} />
+            <img src={posterImage} alt="" style={{ width: '100%', height: '100%', objectFit: 'contain' }} />
           ) : undefined}
           showPosterWhenUnplayed={!!posterImage}
           showPosterWhenBuffering={false}
@@ -447,6 +445,16 @@ export default function RemotionRenderer({ design, onError, mode = 'inline', hid
 
 // Session-level cache: video URL → blob URL (avoids re-downloading on timeline switch)
 const videoBlobCache = new Map<string, string>();
+
+/** Browser preview should stream videos with Range requests instead of blocking
+ * on full-file blob downloads. Full blob resolution is only needed by web render/export. */
+function resolvePreviewVideoUrls(code: string): string {
+  const videoExtPattern = /https?:\/\/[^\s"'`<>)}\]]+\.(mp4|webm|mov)([^\s"'`<>)}\]]*)/gi;
+  return code.replace(videoExtPattern, (url) => {
+    if (url.includes('/api/proxy-video?')) return url;
+    return `/api/proxy-video?url=${encodeURIComponent(url)}`;
+  });
+}
 
 /** Pre-fetch remote video URLs via server proxy → blob URLs (fixes CORS for renderMediaOnWeb) */
 async function resolveVideoUrls(code: string): Promise<{ code: string; blobUrls: string[] }> {
@@ -487,7 +495,7 @@ async function resolveVideoUrls(code: string): Promise<{ code: string; blobUrls:
 
 async function resolveAudioUrls(code: string): Promise<{ code: string; blobUrls: string[] }> {
   // Strip blob: audio URLs (expired after refresh) — both JSX and createElement forms
-  let cleaned = code
+  const cleaned = code
     .replace(/<Audio[^>]*src=["']?blob:[^>]*\/>/g, '')
     .replace(/React\.createElement\(Audio,\s*\{[^}]*src:\s*"blob:[^"]*"[^)]*\)\s*,?/g, '');
   // Match audio URLs in both <Audio src="..."> and React.createElement(Audio, { src: "..." }) forms

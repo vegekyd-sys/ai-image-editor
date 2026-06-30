@@ -102,7 +102,7 @@ export function useAgentRun({ projectId, enabled, skipRunIdRef, isActiveRef }: U
     poll()
     const timer = setInterval(poll, 3000)
     return () => clearInterval(timer)
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+
   }, [enabled, projectId, activeRunId])
 
   const disconnect = useCallback(() => {

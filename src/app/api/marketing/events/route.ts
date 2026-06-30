@@ -81,7 +81,7 @@ export async function POST(req: NextRequest) {
     referrer: cleanString(body.referrer) ?? null,
     user_agent: cleanString(req.headers.get('user-agent')) ?? null,
     fbp: cleanString(req.cookies.get('_fbp')?.value, SHORT_TEXT_MAX) ?? null,
-    fbc: cleanString(req.cookies.get('_fbc')?.value, SHORT_TEXT_MAX) ?? null,
+    fbc: cleanString(req.cookies.get('_fbc')?.value, SHORT_TEXT_MAX) ?? pickString(attribution, 'fbc') ?? null,
     utm_source: pickString(attribution, 'utm_source') ?? null,
     utm_medium: pickString(attribution, 'utm_medium') ?? null,
     utm_campaign: pickString(attribution, 'utm_campaign') ?? null,

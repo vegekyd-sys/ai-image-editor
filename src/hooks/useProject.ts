@@ -74,14 +74,20 @@ export function useProject(projectId: string, userId: string) {
     const dbSnapshots: DbSnapshot[] = snapshotsRes.data ?? []
     const dbMessages: DbMessage[] = messagesRes.data ?? []
     const previewImagesByMessage = new Map<string, string[]>()
+    const previewCaptionsByMessage = new Map<string, string[]>()
     for (const event of previewFramesRes.data ?? []) {
       const data = event.data as Record<string, unknown> | null
       const messageId = typeof data?.messageId === 'string' ? data.messageId : ''
       const workspaceUrl = typeof data?.workspaceUrl === 'string' ? data.workspaceUrl : ''
+      const caption = typeof data?.caption === 'string' ? data.caption : ''
       if (!messageId || !workspaceUrl) continue
       previewImagesByMessage.set(messageId, [
         ...(previewImagesByMessage.get(messageId) ?? []),
         workspaceUrl,
+      ])
+      previewCaptionsByMessage.set(messageId, [
+        ...(previewCaptionsByMessage.get(messageId) ?? []),
+        caption,
       ])
     }
 
@@ -178,14 +184,18 @@ export function useProject(projectId: string, userId: string) {
         projectId: m.project_id,
         ...(linkedSnapshot ? { image: linkedSnapshot.image } : {}),
         ...(previewImagesByMessage.has(m.id) ? { images: previewImagesByMessage.get(m.id) } : {}),
+        ...(previewCaptionsByMessage.has(m.id) ? { imageCaptions: previewCaptionsByMessage.get(m.id) } : {}),
         ...(linkedSnapshot?.design ? { design: linkedSnapshot.design } : {}),
       }
     })
 
     const animations: ProjectAnimation[] = (animationRes.data ?? []).map((row: Record<string, unknown>) => {
       const taskId = (row.piapi_task_id as string) ?? null;
-      const videoModel: 'kling' | 'seedance' = taskId?.startsWith('task-unified-') || taskId?.startsWith('cgt-')
-        ? 'seedance' : 'kling';
+      const videoModel = taskId?.startsWith('task-unified-') || taskId?.startsWith('cgt-')
+        ? 'seedance'
+        : taskId?.startsWith('xai-')
+          ? 'grok'
+          : 'kling';
       return {
         id: row.id as string,
         projectId,
@@ -256,8 +266,12 @@ export function useProject(projectId: string, userId: string) {
 
         // Upsert snapshot row (upsert handles React StrictMode double-invoke)
         // Don't overwrite message_id if DualWriter already set it (DualWriter's ID matches messages table)
-        const { data: existing } = await supabase.from('snapshots').select('message_id').eq('id', snapshot.id).maybeSingle()
+        const { data: existing } = await supabase.from('snapshots').select('message_id, video_meta').eq('id', snapshot.id).maybeSingle()
         const messageId = existing?.message_id || snapshot.messageId
+        const existingVideoMeta = existing?.video_meta as VideoMeta | null | undefined
+        const videoMeta = existingVideoMeta?.status === 'completed' && snapshot.videoMeta?.status === 'processing'
+          ? existingVideoMeta
+          : snapshot.videoMeta
 
         const { error } = await supabase.from('snapshots').upsert({
           id: snapshot.id,
@@ -269,7 +283,7 @@ export function useProject(projectId: string, userId: string) {
           ...(snapshot.description ? { description: snapshot.description } : {}),
           ...(snapshot.type ? { type: snapshot.type } : {}),
           ...(designPath ? { design_path: designPath } : {}),
-          ...(snapshot.videoMeta ? { video_meta: snapshot.videoMeta } : {}),
+          ...(videoMeta ? { video_meta: videoMeta } : {}),
           ...(snapshot.metadata ? { metadata: snapshot.metadata } : {}),
         }, { onConflict: 'id' })
 
@@ -330,7 +344,7 @@ export function useProject(projectId: string, userId: string) {
         const supabase = getSupabase()
 
         // Upload base64 preview images to Storage, replace with URLs
-        // eslint-disable-next-line @typescript-eslint/no-unused-vars
+
         const tipsForDb = await Promise.all(tips.map(async ({ previewStatus, ...rest }) => {
 
           // Already a Storage URL — keep it
@@ -348,7 +362,7 @@ export function useProject(projectId: string, userId: string) {
             // Skip if already failed too many times
             const attempts = uploadAttemptsRef.current.get(filename) ?? 0
             if (attempts >= MAX_UPLOAD_ATTEMPTS) {
-              // eslint-disable-next-line @typescript-eslint/no-unused-vars
+
               const { previewImage, ...noPreview } = rest
               return noPreview
             }
@@ -360,7 +374,7 @@ export function useProject(projectId: string, userId: string) {
               return { ...rest, previewImage: imageUrl }
             }
             // Upload failed — strip base64 (too large for jsonb)
-            // eslint-disable-next-line @typescript-eslint/no-unused-vars
+
             const { previewImage: _stripped, ...noPreview } = rest
             return noPreview
           }

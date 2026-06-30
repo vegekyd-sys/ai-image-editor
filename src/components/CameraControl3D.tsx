@@ -128,7 +128,7 @@ function DraggableCameraModel({
   }, [gl, onPointerMove, onDragEnd]);
 
   const handlePointerDown = useCallback(
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+
     (e: any) => {
       e.stopPropagation();
       isDragging.current = true;
@@ -201,7 +201,7 @@ function SceneContent({
   onCameraChange: (c: CameraState) => void;
 }) {
   const camModelPos = cameraPos(cam.azimuth, cam.elevation, cam.distance);
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+
   const orbitRef = useRef<any>(null);
 
   const handleDragStart = useCallback(() => {

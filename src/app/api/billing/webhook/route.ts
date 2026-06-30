@@ -1,11 +1,23 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { getStripe } from '@/lib/billing/stripe'
-import { addCredits } from '@/lib/billing/credits'
+import { grantCreditsAndRecordPurchase } from '@/lib/billing/credits'
 import { getSupabaseAdmin } from '@/lib/supabase/service'
 import { getPlan, getPlanByPriceId } from '@/lib/billing/plans'
 import { upsertSubscription } from '@/lib/billing/subscription'
+import {
+  buildSubscriptionPurchaseKey,
+  getSubscriptionGrantCredits,
+  getSubscriptionPurchaseSource,
+  type BillingInterval,
+} from '@/lib/billing/subscription-grants'
 import { sendMetaCapiEvent } from '@/lib/marketing/meta-capi'
 import type Stripe from 'stripe'
+
+type SubscriptionLookup = {
+  user_id: string
+  plan_id: string
+  billing_interval: BillingInterval
+}
 
 function parseMetadataJson(raw?: string | null): Record<string, unknown> {
   if (!raw) return {}
@@ -13,6 +25,18 @@ function parseMetadataJson(raw?: string | null): Record<string, unknown> {
     return JSON.parse(raw) as Record<string, unknown>
   } catch {
     return {}
+  }
+}
+
+// Stripe 2026 puts subscription periods on the subscription item.
+// Keep top-level fallback for older payloads and test fixtures.
+function getSubscriptionPeriod(sub: any): { start: Date | null; end: Date | null } {
+  const item = sub.items?.data?.[0]
+  const start = item?.current_period_start ?? sub.current_period_start
+  const end = item?.current_period_end ?? sub.current_period_end
+  return {
+    start: start ? new Date(start * 1000) : null,
+    end: end ? new Date(end * 1000) : null,
   }
 }
 
@@ -51,8 +75,8 @@ export async function POST(req: NextRequest) {
         const customerId = typeof session.customer === 'string' ? session.customer : session.customer?.toString() || ''
 
         // Fetch subscription details from Stripe
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
         const sub = await stripe.subscriptions.retrieve(stripeSubscriptionId) as any
+        const period = getSubscriptionPeriod(sub)
         await upsertSubscription(
           userId,
           stripeSubscriptionId,
@@ -60,8 +84,8 @@ export async function POST(req: NextRequest) {
           planId,
           interval || 'month',
           sub.status,
-          sub.current_period_start ? new Date(sub.current_period_start * 1000) : null,
-          sub.current_period_end ? new Date(sub.current_period_end * 1000) : null,
+          period.start,
+          period.end,
           sub.cancel_at_period_end ?? false,
         )
         if (session.metadata?.meta_event_id) {
@@ -111,16 +135,22 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ received: true })
     }
 
-    await addCredits(userId, credits)
+    const stripeInvoiceId = typeof session.invoice === 'string'
+      ? session.invoice
+      : session.invoice?.id ?? null
 
-    await admin.from('credit_purchases').insert({
-      user_id: userId,
-      stripe_session_id: session.id,
+    const grant = await grantCreditsAndRecordPurchase({
+      userId,
       credits,
-      amount_usd: amountUsd,
-      status: 'completed',
+      amountUsd,
+      stripeSessionId: session.id,
+      stripeInvoiceId,
       source: 'topup',
     })
+    if (!grant.granted) {
+      console.log(`[Stripe webhook] checkout.session already processed: ${session.id}`)
+      return NextResponse.json({ received: true })
+    }
 
     if (session.metadata?.meta_event_id) {
       await sendMetaCapiEvent({
@@ -149,7 +179,6 @@ export async function POST(req: NextRequest) {
   // invoice.payment_succeeded or invoice_payment.paid — Stripe fires all three
   // for the same payment, causing triple credit grants.
   if (event.type === 'invoice.paid') {
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const invoice = event.data.object as any
     const invoiceId = invoice.id as string
     // Stripe 2026 API: subscription in parent.subscription_details.subscription
@@ -170,14 +199,14 @@ export async function POST(req: NextRequest) {
     }
 
     // Look up subscription in our DB (retry — checkout.session.completed may still be writing)
-    let sub: { user_id: string; plan_id: string } | null = null
+    let sub: SubscriptionLookup | null = null
     for (let attempt = 0; attempt < 5; attempt++) {
       const { data } = await admin
         .from('subscriptions')
-        .select('user_id, plan_id')
+        .select('user_id, plan_id, billing_interval')
         .eq('stripe_subscription_id', subscriptionId)
         .single()
-      if (data) { sub = data; break }
+      if (data) { sub = data as SubscriptionLookup; break }
       if (attempt < 4) await new Promise(r => setTimeout(r, 2000))
     }
 
@@ -192,26 +221,26 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ received: true })
     }
 
-    // Add monthly credits
-    await addCredits(sub.user_id, plan.monthlyCredits)
-
-    // Record purchase (idempotent via unique stripe_invoice_id index)
-    await admin.from('credit_purchases').insert({
-      user_id: sub.user_id,
-      stripe_session_id: subscriptionId,
-      stripe_invoice_id: invoice.id,
-      credits: plan.monthlyCredits,
-      amount_usd: (invoice.amount_paid || 0) / 100,
-      status: 'completed',
-      source: 'subscription',
+    const interval = sub.billing_interval === 'year' ? 'year' : 'month'
+    const credits = getSubscriptionGrantCredits(plan, interval)
+    const grant = await grantCreditsAndRecordPurchase({
+      userId: sub.user_id,
+      credits,
+      amountUsd: (invoice.amount_paid || 0) / 100,
+      stripeSessionId: buildSubscriptionPurchaseKey(subscriptionId, invoiceId),
+      stripeInvoiceId: invoiceId,
+      source: getSubscriptionPurchaseSource(interval),
     })
+    if (!grant.granted) {
+      console.log(`[Stripe webhook] invoice already processed: ${invoiceId}`)
+      return NextResponse.json({ received: true })
+    }
 
-    console.log(`[Stripe webhook] Subscription credit: +${plan.monthlyCredits} credits to user ${sub.user_id} (plan=${sub.plan_id}, invoice=${invoice.id})`)
+    console.log(`[Stripe webhook] Subscription credit: +${credits} credits to user ${sub.user_id} (plan=${sub.plan_id}, interval=${interval}, invoice=${invoice.id})`)
   }
 
   // ── Subscription updated (plan change, status change) ─────────
   if (event.type === 'customer.subscription.updated') {
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const sub = event.data.object as any
     const { data: dbSub } = await admin
       .from('subscriptions')
@@ -224,12 +253,13 @@ export async function POST(req: NextRequest) {
       const priceId = sub.items.data[0]?.price?.id
       const plan = priceId ? getPlanByPriceId(priceId) : null
       const interval = sub.items.data[0]?.price?.recurring?.interval as 'month' | 'year' | undefined
+      const period = getSubscriptionPeriod(sub)
 
       await admin.from('subscriptions').update({
         status: sub.status,
         cancel_at_period_end: sub.cancel_at_period_end,
-        current_period_start: new Date(sub.current_period_start * 1000).toISOString(),
-        current_period_end: new Date(sub.current_period_end * 1000).toISOString(),
+        current_period_start: period.start?.toISOString() ?? null,
+        current_period_end: period.end?.toISOString() ?? null,
         ...(plan ? { plan_id: plan.id } : {}),
         ...(interval ? { billing_interval: interval } : {}),
         updated_at: new Date().toISOString(),

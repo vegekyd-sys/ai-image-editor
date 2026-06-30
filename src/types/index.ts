@@ -24,6 +24,7 @@ export interface Message {
   content: string;
   image?: string;        // base64 data URL (single image, e.g. generate_image result)
   images?: string[];     // multiple images (e.g. preview_frame captures)
+  imageCaptions?: string[]; // optional labels for images, e.g. captured video frame time
   editPrompt?: string;   // the English editPrompt sent to generate_image (for transparency)
   editModel?: string;    // which model generated the image ('gemini' | 'qwen')
   editInputImages?: string[]; // images passed to Gemini as input (1 = normal, 2 = face restoration)
@@ -130,6 +131,8 @@ export interface DbMessage {
 }
 
 export type VideoModel = string
+export type VideoResolution = '480p' | '720p' | '1080p' | '4k' | 'auto'
+export type VideoAspectRatio = 'auto' | '16:9' | '9:16' | '1:1' | '4:3' | '3:4' | '21:9' | '3:2' | '2:3'
 
 export interface TranscriptWord {
   text: string;
@@ -159,6 +162,13 @@ export interface VideoTranscript {
   createdAt?: string;
 }
 
+export interface ArtifactCompletionAction {
+  label: string;
+  prompt: string;
+  description?: string;
+  policy?: 'confirm' | 'auto';
+}
+
 export interface VideoMeta {
   taskId: string | null;
   videoUrl: string | null;
@@ -170,6 +180,11 @@ export interface VideoMeta {
   status: 'processing' | 'completed' | 'failed' | 'abandoned';
   duration: number | null;
   model: VideoModel;
+  resolution?: VideoResolution;
+  aspectRatio?: VideoAspectRatio;
+  providerModel?: string;
+  providerMode?: string;
+  providerCostUsd?: number;
   createdAt?: string;
   error?: string;
   width?: number;
@@ -177,6 +192,7 @@ export interface VideoMeta {
   creditsCharged?: number;
   refunded?: boolean;
   transcript?: VideoTranscript;
+  completionActions?: ArtifactCompletionAction[];
 }
 
 
@@ -192,5 +208,7 @@ export interface ProjectAnimation {
   duration?: number | null;
   createdAt: string;
   videoModel?: VideoModel;
+  videoResolution?: VideoResolution;
+  videoAspectRatio?: VideoAspectRatio;
   error?: string;
 }

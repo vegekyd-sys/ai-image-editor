@@ -14,8 +14,11 @@ export const MODEL_REGISTRY: ModelInfo[] = [
   { id: 'qwen', nameKey: 'model.qwen.name', descKey: 'model.qwen.desc', category: 'image', speedLabel: '~15s' },
   { id: 'openai', nameKey: 'model.openai.name', descKey: 'model.openai.desc', category: 'image', speedLabel: '~50s' },
   // Video
-  { id: 'kling', nameKey: 'model.kling.name', descKey: 'model.kling.desc', category: 'video', speedLabel: '~180s' },
-  { id: 'seedance', nameKey: 'model.seedance.name', descKey: 'model.seedance.desc', category: 'video', speedLabel: '~300s $$$' },
+  { id: 'seedance-fast', nameKey: 'model.seedanceFast.name', descKey: 'model.seedanceFast.desc', category: 'video', speedLabel: '~180s' },
+  { id: 'seedance-mini', nameKey: 'model.seedanceMini.name', descKey: 'model.seedanceMini.desc', category: 'video', speedLabel: 'Mini' },
+  { id: 'seedance', nameKey: 'model.seedance.name', descKey: 'model.seedance.desc', category: 'video', speedLabel: '1080p' },
+  { id: 'kling', nameKey: 'model.kling.name', descKey: 'model.kling.desc', category: 'video', speedLabel: '4K' },
+  { id: 'grok', nameKey: 'model.grok.name', descKey: 'model.grok.desc', category: 'video', speedLabel: '30-40s' },
 ];
 
 export function getImageModels(): ModelInfo[] {

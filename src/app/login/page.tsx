@@ -5,28 +5,37 @@ import Link from 'next/link'
 import { createClient } from '@/lib/supabase/client'
 import type { SupabaseClient } from '@supabase/supabase-js'
 import { useLocale, LocaleToggle } from '@/lib/i18n'
+import { isMakaronIOSApp, userAgentHasMakaronIOSToken } from '@/lib/native-app'
 import RollingTagline from '@/components/RollingTagline'
 import { MakaronSpark, MAKARON_WORDMARK_STYLE } from '@/components/MakaronLogo'
 import { createMetaEventId, trackMetaEvent } from '@/lib/marketing/meta-pixel'
 
 type View = 'form' | 'verify-otp' | 'forgot-password' | 'reset-password'
 type OtpPurpose = 'signup' | 'recovery'
+const IOS_PENDING_HOME_SKILL_KEY = 'makaron:ios-pending-home-skill-id'
 
 function isInAppBrowser(): boolean {
   if (typeof navigator === 'undefined') return false
   const ua = navigator.userAgent || ''
-  return /MicroMessenger|WeChat|QQ|DingTalk|Douyin|BytedanceWebview|FBAN|FBAV|Instagram|Line|Twitter/i.test(ua)
+  return userAgentHasMakaronIOSToken(ua)
+    || /MicroMessenger|WeChat|QQ|DingTalk|Douyin|BytedanceWebview|FBAN|FBAV|Instagram|Line|Twitter/i.test(ua)
+}
+
+function isAppleLoginEnabled(): boolean {
+  return process.env.NEXT_PUBLIC_ENABLE_APPLE_LOGIN === 'true'
 }
 
 export default function LoginPage() {
   const { t } = useLocale()
   const [view, setView] = useState<View>('form')
   const [inApp] = useState(isInAppBrowser)
+  const [appleLoginEnabled] = useState(isAppleLoginEnabled)
 
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
   const [loading, setLoading] = useState(false)
   const [googleLoading, setGoogleLoading] = useState(false)
+  const [appleLoading, setAppleLoading] = useState(false)
   const [error, setError] = useState('')
 
   // OTP state (8 digits)
@@ -43,9 +52,34 @@ export default function LoginPage() {
   const [resetSuccess, setResetSuccess] = useState(false)
 
   const supabaseRef = useRef<SupabaseClient | null>(null)
+  const pageRef = useRef<HTMLDivElement | null>(null)
   function getSupabase() {
     if (!supabaseRef.current) supabaseRef.current = createClient()
     return supabaseRef.current
+  }
+
+  const keepFocusedFieldVisible = (target: EventTarget | null) => {
+    const el = target instanceof HTMLElement ? target : null
+    if (!el) return
+    const adjust = () => {
+      const page = pageRef.current
+      const vv = window.visualViewport
+      el.scrollIntoView({ block: 'center', inline: 'nearest', behavior: 'smooth' })
+      if (!page || !vv) {
+        return
+      }
+
+      const rect = el.getBoundingClientRect()
+      const visibleTop = vv.offsetTop + 24
+      const visibleBottom = vv.offsetTop + vv.height - 24
+      if (rect.bottom > visibleBottom) {
+        page.scrollBy({ top: rect.bottom - visibleBottom, behavior: 'smooth' })
+      } else if (rect.top < visibleTop) {
+        page.scrollBy({ top: rect.top - visibleTop, behavior: 'smooth' })
+      }
+    }
+    window.setTimeout(adjust, 80)
+    window.setTimeout(adjust, 260)
   }
 
 
@@ -57,15 +91,27 @@ export default function LoginPage() {
   }, [resendCooldown])
 
   function getReturnUrl(): string {
-    return localStorage.getItem('mkr_return_url') || ''
+    return sessionStorage.getItem('mkr_return_url') || localStorage.getItem('mkr_return_url') || ''
+  }
+
+  function resolveReturnUrlForRuntime(returnUrl: string): string {
+    const skillMatch = returnUrl.match(/^\/home\/([^/?]+)/)
+    if (!skillMatch) return returnUrl
+    const skillId = skillMatch[1]
+    if (isMakaronIOSApp()) {
+      sessionStorage.setItem(IOS_PENDING_HOME_SKILL_KEY, skillId)
+      localStorage.setItem(IOS_PENDING_HOME_SKILL_KEY, skillId)
+      return '/home'
+    }
+    return `/home?skill=${encodeURIComponent(skillId)}`
   }
 
   function redirectAfterAuth() {
     let returnUrl = getReturnUrl()
+    sessionStorage.removeItem('mkr_return_url')
     localStorage.removeItem('mkr_return_url')
     // mkr_return_text and mkr_return_skill are consumed by the home page on mount
-    const skillMatch = returnUrl.match(/^\/home\/([^/?]+)/)
-    if (skillMatch) returnUrl = `/home?skill=${skillMatch[1]}`
+    returnUrl = resolveReturnUrlForRuntime(returnUrl)
     window.location.href = returnUrl || '/'
   }
 
@@ -80,6 +126,19 @@ export default function LoginPage() {
       },
     })
     if (error) { setError(t('auth.networkError')); setGoogleLoading(false) }
+  }
+
+  // ── Apple OAuth ──
+  const handleAppleLogin = async () => {
+    setAppleLoading(true)
+    setError('')
+    const { error } = await getSupabase().auth.signInWithOAuth({
+      provider: 'apple',
+      options: {
+        redirectTo: `${window.location.origin}/api/auth/callback`,
+      },
+    })
+    if (error) { setError(t('auth.networkError')); setAppleLoading(false) }
   }
 
   // ── Smart Continue ──
@@ -193,11 +252,12 @@ export default function LoginPage() {
       // Signup verified — redirect (new user goes to home with welcome)
       if (otpPurpose === 'signup') {
         trackMetaEvent('CompleteRegistration', {}, createMetaEventId('registration'))
-        let returnUrl = localStorage.getItem('mkr_return_url') || ''
+        let returnUrl = getReturnUrl()
+        sessionStorage.removeItem('mkr_return_url')
         localStorage.removeItem('mkr_return_url')
-        // Convert /home/{skillId} to /home?skill={skillId} to avoid server redirect losing query params
-        const skillMatch = returnUrl.match(/^\/home\/([^/?]+)/)
-        if (skillMatch) returnUrl = `/home?skill=${skillMatch[1]}`
+        // H5 can use ?skill=, while the iOS native shell keeps /home and reopens
+        // the detail from a pending key so the native page stack stays stable.
+        returnUrl = resolveReturnUrlForRuntime(returnUrl)
         const target = returnUrl || '/home'
         const sep = target.includes('?') ? '&' : '?'
         // Small delay to ensure Supabase SDK writes session cookie before redirect
@@ -301,7 +361,7 @@ export default function LoginPage() {
   // Auto-submit when all 8 digits filled
   useEffect(() => {
     if (otpDigits.every(d => d) && view === 'verify-otp') handleVerifyOtp()
-  }, [otpDigits]) // eslint-disable-line react-hooks/exhaustive-deps
+  }, [otpDigits])
 
   function mapError(msg: string): string {
     const map: Record<string, string> = {
@@ -324,15 +384,29 @@ export default function LoginPage() {
       @import url('https://fonts.googleapis.com/css2?family=Caveat:wght@400;500&display=swap');
       .mkr-handwrite { font-family: 'Caveat', cursive; }
     `}</style>
-    <div className="min-h-dvh bg-black flex items-center justify-center px-6 relative overflow-hidden">
+    <div
+      ref={pageRef}
+      className="makaron-ios-page makaron-ios-page-x min-h-dvh bg-black flex items-center justify-center px-6 relative overflow-y-auto overscroll-contain"
+      style={{
+        WebkitOverflowScrolling: 'touch',
+        paddingBottom: 'calc(32px + env(safe-area-inset-bottom, 0px) + var(--makaron-native-keyboard-inset, 0px))',
+      }}
+    >
       <div className="absolute inset-0 pointer-events-none" style={{
         background: 'radial-gradient(ellipse 60% 40% at 50% 60%, rgba(217,70,239,0.06) 0%, transparent 70%)',
       }} />
-      <div style={{ position: 'absolute', top: 20, left: 20, zIndex: 10 }}>
+      <div
+        style={{
+          position: 'absolute',
+          top: 'calc(env(safe-area-inset-top, 0px) + 12px)',
+          left: 'max(20px, env(safe-area-inset-left, 0px))',
+          zIndex: 10,
+        }}
+      >
         <LocaleToggle />
       </div>
 
-      <div className="w-full max-w-sm relative z-10">
+      <div className="w-full max-w-sm relative z-10 py-10">
         {/* Wordmark */}
         <div className="flex items-center justify-center gap-3 mb-1">
           <MakaronSpark size={30} />
@@ -347,7 +421,54 @@ export default function LoginPage() {
         {/* ══════ FORM VIEW ══════ */}
         {view === 'form' && (
           <>
-            {!inApp && (
+            {inApp && appleLoginEnabled ? (
+              <>
+                <button
+                  onClick={handleAppleLogin}
+                  disabled={appleLoading}
+                  className="w-full py-3 rounded-xl font-semibold transition-all disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-3"
+                  style={{ background: '#fff', border: '1px solid rgba(255,255,255,0.2)', color: '#050505' }}
+                >
+                  {appleLoading ? (
+                    <svg className="animate-spin h-5 w-5" viewBox="0 0 24 24"><circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" fill="none" /><path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" /></svg>
+                  ) : (
+                    <>
+                      <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
+                        <path d="M16.37 1.51c0 1.08-.43 2.1-1.15 2.88-.78.85-2.06 1.5-3.08 1.42-.13-1.04.38-2.16 1.1-2.96.8-.89 2.18-1.52 3.13-1.34Zm3.96 16.02c-.59 1.35-.87 1.96-1.62 3.15-1.05 1.67-2.53 3.75-4.36 3.77-1.63.02-2.05-1.09-4.26-1.08-2.22.01-2.68 1.1-4.31 1.08-1.83-.02-3.22-1.89-4.27-3.56-2.94-4.69-3.25-10.2-1.44-13.13C1.36 5.71 3.4 4.51 5.31 4.51c1.95 0 3.18 1.07 4.79 1.07 1.57 0 2.52-1.07 4.78-1.07 1.71 0 3.52.93 4.8 2.55-4.22 2.31-3.54 8.34.65 10.47Z" />
+                      </svg>
+                      {t('auth.continueWithApple')}
+                    </>
+                  )}
+                </button>
+
+                <button
+                  onClick={handleGoogleLogin}
+                  disabled={googleLoading}
+                  className="w-full mt-3 py-3 rounded-xl font-medium transition-all disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-3"
+                  style={{ background: 'rgba(255,255,255,0.07)', border: '1px solid rgba(255,255,255,0.15)', color: '#fff' }}
+                >
+                  {googleLoading ? (
+                    <svg className="animate-spin h-5 w-5" viewBox="0 0 24 24"><circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" fill="none" /><path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" /></svg>
+                  ) : (
+                    <>
+                      <svg width="18" height="18" viewBox="0 0 24 24">
+                        <path d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z" fill="#4285F4"/>
+                        <path d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z" fill="#34A853"/>
+                        <path d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l2.85-2.22.81-.62z" fill="#FBBC05"/>
+                        <path d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z" fill="#EA4335"/>
+                      </svg>
+                      {t('auth.continueWithGoogle')}
+                    </>
+                  )}
+                </button>
+
+                <div className="flex items-center gap-3 my-6">
+                  <div className="flex-1 h-px bg-white/10" />
+                  <span className="text-white/25 text-xs">{t('auth.orDivider')}</span>
+                  <div className="flex-1 h-px bg-white/10" />
+                </div>
+              </>
+            ) : !inApp ? (
               <>
                 <button
                   onClick={handleGoogleLogin}
@@ -376,13 +497,13 @@ export default function LoginPage() {
                   <div className="flex-1 h-px bg-white/10" />
                 </div>
               </>
-            )}
+            ) : null}
 
 
             <form onSubmit={handleContinue} className="space-y-4">
-              <input type="email" placeholder={t('auth.email')} value={email} onChange={(e) => { setEmail(e.target.value); setError('') }} required
+              <input type="email" placeholder={t('auth.email')} value={email} onFocus={(e) => keepFocusedFieldVisible(e.currentTarget)} onChange={(e) => { setEmail(e.target.value); setError('') }} required
                 className="w-full px-4 py-3 rounded-lg bg-white/[0.07] text-white placeholder-white/30 border border-white/10 focus:border-fuchsia-500/50 focus:outline-none focus:ring-1 focus:ring-fuchsia-500/50 transition-colors" />
-              <input type="password" placeholder={t('auth.password')} value={password} onChange={(e) => { setPassword(e.target.value); setError('') }} required minLength={6}
+              <input type="password" placeholder={t('auth.password')} value={password} onFocus={(e) => keepFocusedFieldVisible(e.currentTarget)} onChange={(e) => { setPassword(e.target.value); setError('') }} required minLength={6}
                 className="w-full px-4 py-3 rounded-lg bg-white/[0.07] text-white placeholder-white/30 border border-white/10 focus:border-fuchsia-500/50 focus:outline-none focus:ring-1 focus:ring-fuchsia-500/50 transition-colors" />
 
               {error && <p className="text-red-400 text-sm text-center">{error}</p>}
@@ -431,6 +552,7 @@ export default function LoginPage() {
                   inputMode="numeric"
                   maxLength={1}
                   value={digit}
+                  onFocus={(e) => keepFocusedFieldVisible(e.currentTarget)}
                   onChange={(e) => handleOtpChange(i, e.target.value)}
                   onKeyDown={(e) => handleOtpKeyDown(i, e)}
                   autoFocus={i === 0}
@@ -474,7 +596,7 @@ export default function LoginPage() {
           <div>
             <h2 className="text-white text-xl font-bold text-center mb-6">{t('auth.resetPassword.title')}</h2>
             <form onSubmit={handleForgotSubmit} className="space-y-4">
-              <input type="email" placeholder={t('auth.email')} value={email} onChange={(e) => { setEmail(e.target.value); setError('') }} required
+              <input type="email" placeholder={t('auth.email')} value={email} onFocus={(e) => keepFocusedFieldVisible(e.currentTarget)} onChange={(e) => { setEmail(e.target.value); setError('') }} required
                 className="w-full px-4 py-3 rounded-lg bg-white/[0.07] text-white placeholder-white/30 border border-white/10 focus:border-fuchsia-500/50 focus:outline-none focus:ring-1 focus:ring-fuchsia-500/50 transition-colors" />
 
               {error && <p className="text-red-400 text-sm text-center">{error}</p>}
@@ -505,7 +627,7 @@ export default function LoginPage() {
               </div>
             ) : (
               <form onSubmit={handleResetPassword} className="space-y-4">
-                <input type="password" placeholder={t('auth.resetPassword.newPassword')} value={newPassword} onChange={(e) => setNewPassword(e.target.value)} required minLength={6}
+                <input type="password" placeholder={t('auth.resetPassword.newPassword')} value={newPassword} onFocus={(e) => keepFocusedFieldVisible(e.currentTarget)} onChange={(e) => setNewPassword(e.target.value)} required minLength={6}
                   className="w-full px-4 py-3 rounded-lg bg-white/[0.07] text-white placeholder-white/30 border border-white/10 focus:border-fuchsia-500/50 focus:outline-none focus:ring-1 focus:ring-fuchsia-500/50 transition-colors" />
 
                 {error && <p className="text-red-400 text-sm text-center">{error}</p>}

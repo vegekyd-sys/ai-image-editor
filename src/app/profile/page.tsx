@@ -1,13 +1,15 @@
 'use client'
 
 import { useState, useRef, useEffect } from 'react'
-import Link from 'next/link'
+import { useRouter } from 'next/navigation'
 import { useAuth } from '@/hooks/useAuth'
 import { useLocale } from '@/lib/i18n'
 import { createBrowserClient } from '@supabase/ssr'
 import { getThumbnailUrl } from '@/lib/supabase/storage'
+import { navigateBackInIOSApp } from '@/lib/native-navigation'
 
 export default function ProfilePage() {
+  const router = useRouter()
   const { user, loading, signOut } = useAuth()
   const { locale } = useLocale()
   const t = locale === 'zh'
@@ -39,7 +41,7 @@ export default function ProfilePage() {
 
   if (loading) {
     return (
-      <div className="min-h-dvh bg-black flex items-center justify-center">
+      <div className="makaron-ios-page makaron-ios-page-x min-h-dvh bg-black flex items-center justify-center">
         <svg className="animate-spin h-6 w-6 text-fuchsia-500" viewBox="0 0 24 24">
           <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" fill="none" />
           <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
@@ -126,14 +128,20 @@ export default function ProfilePage() {
     color: 'white', fontSize: '0.85rem', outline: 'none',
   }
 
+  const handleBackToApp = () => {
+    if (navigateBackInIOSApp('/projects')) return
+    router.push('/projects')
+  }
+
   return (
-    <div className="min-h-dvh bg-black text-white p-6 max-w-lg mx-auto">
+    <div className="makaron-ios-page makaron-ios-page-x min-h-dvh bg-black text-white p-6">
+      <div className="max-w-lg mx-auto">
       {/* Header */}
       <div className="flex items-center justify-between mb-8">
         <h1 className="text-2xl font-bold">{t ? '账户' : 'Account'}</h1>
-        <Link href="/projects" className="text-white/40 text-sm hover:text-white/60">
+        <button onClick={handleBackToApp} className="text-white/40 text-sm hover:text-white/60">
           &larr; {t ? '返回' : 'Back'}
-        </Link>
+        </button>
       </div>
 
       {/* Avatar + Name */}
@@ -282,6 +290,7 @@ export default function ProfilePage() {
           {t ? '退出登录' : 'Sign Out'}
         </button>
       </section>
+      </div>
     </div>
   )
 }

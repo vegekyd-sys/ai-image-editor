@@ -53,7 +53,7 @@ export default async function ProjectLayout({ children, params }: { children: Re
             <div className="flex-1 min-w-0 flex flex-col">
               {/* Canvas area — slight padding so tall images (9:16) don't touch edges, hiding sub-px height mismatch with Editor */}
               <div className="flex-1 min-h-0 relative overflow-hidden flex items-center justify-center p-[2px]">
-                {/* eslint-disable-next-line @next/next/no-img-element */}
+                { }
                 <img src={lcpUrl} alt="" className="w-full h-full object-contain" fetchPriority="high" />
               </div>
               {/* Bottom bar: StatusBar (46) + TipsBar/VideoCard + CategoryTabs = 166px mobile, 146px desktop */}

@@ -65,14 +65,14 @@ describe('agent media scenario matrix', () => {
     expect(generateImageTool).toContain("read_file('prompts/image.md')")
     expect(generateImageTool).toContain('media_index')
     expect(generateImageTool).toContain('reference_media_indices')
-    expect(generateImageTool).toContain('`image_refs` is only for external workspace URLs')
+    expect(generateImageTool).toContain('`image_refs` is only for workspace asset provider URLs')
     expect(generateImageTool).toContain("Context Mode for `model='openai'`")
   })
 
-  it('keeps video generation default on SeeDance while allowing cheaper Kling', () => {
-    expect(agent).toContain('Default video model follows the app selection, usually SeeDance')
-    expect(animate).toContain('usually SeeDance')
-    expect(animate).toContain('prefer Kling only when duration and capability allow it')
+  it('keeps video generation default on SeeDance Fast while separating standard SeeDance', () => {
+    expect(agent).toContain('Default video model follows the app selection, usually SeeDance 2.0 Fast')
+    expect(animate).toContain('usually SeeDance 2.0 Fast')
+    expect(animate).toContain('Treat `seedance-fast` and standard `seedance` as separate models')
     expect(ffmpegSkill).toContain('| SeeDance | 15s | 15.5s | <=50MB; width/height 300-6000px')
     expect(ffmpegSkill).toContain('Default video model, higher quality')
     expect(ffmpegSkill).toContain('| Kling | 15s | 10.5s | <=200MB; resolution <=2K')
@@ -298,5 +298,21 @@ describe('video script harness old and new scenarios', () => {
       motionControl: true,
       model: 'kling',
     })).toBeNull()
+  })
+
+  it('new Grok video scenario accepts one image and rejects multi-image references', () => {
+    expect(validateVideoScript({
+      prompt: 'Shot 1 (1s): Animate <<<media_1>>> with a slow push-in.',
+      imageCount: 1,
+      model: 'grok',
+      duration: 1,
+    })).toBeNull()
+
+    expect(validateVideoScript({
+      prompt: 'Shot 1 (1s): Blend <<<media_1>>> and <<<media_2>>>.',
+      imageCount: 2,
+      model: 'grok',
+      duration: 1,
+    })).toContain('supports at most 1 reference image')
   })
 })

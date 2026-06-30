@@ -1,7 +1,8 @@
 'use client'
 
 import { useState, useEffect, useCallback } from 'react'
-import Link from 'next/link'
+import { useRouter } from 'next/navigation'
+import { navigateBackInIOSApp } from '@/lib/native-navigation'
 
 interface InviteCode {
   id: string
@@ -116,6 +117,7 @@ function actionValue(insights: MetaInsightsSummary | null, actionType: string): 
 }
 
 export default function AdminPage() {
+  const router = useRouter()
   const [tab, setTab] = useState<'codes' | 'waitlist' | 'billing' | 'skills' | 'meta'>('codes')
   const [codes, setCodes] = useState<InviteCode[]>([])
   const [waitlist, setWaitlist] = useState<WaitlistEntry[]>([])
@@ -136,9 +138,8 @@ export default function AdminPage() {
   const [metaStatus, setMetaStatus] = useState<MetaStatus | null>(null)
   const [metaLoading, setMetaLoading] = useState(false)
   const [metaError, setMetaError] = useState('')
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+
   const [homeSkills, setHomeSkills] = useState<any[]>([])
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const [modalSkill, setModalSkill] = useState<any | 'new' | null>(null) // null closed, 'new' new, or skill object for edit
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
@@ -243,9 +244,14 @@ export default function AdminPage() {
     }
   }
 
+  const handleBackToApp = () => {
+    if (navigateBackInIOSApp('/projects')) return
+    router.push('/projects')
+  }
+
   if (error) {
     return (
-      <div className="min-h-dvh bg-black flex items-center justify-center text-red-400 text-lg">
+      <div className="makaron-ios-page makaron-ios-page-x min-h-dvh bg-black flex items-center justify-center text-red-400 text-lg">
         {error}
       </div>
     )
@@ -253,7 +259,7 @@ export default function AdminPage() {
 
   if (loading) {
     return (
-      <div className="min-h-dvh bg-black flex items-center justify-center">
+      <div className="makaron-ios-page makaron-ios-page-x min-h-dvh bg-black flex items-center justify-center">
         <svg className="animate-spin h-6 w-6 text-fuchsia-500" viewBox="0 0 24 24">
           <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" fill="none" />
           <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
@@ -263,10 +269,13 @@ export default function AdminPage() {
   }
 
   return (
-    <div className="min-h-dvh bg-black text-white p-6 max-w-5xl mx-auto">
+    <div className="makaron-ios-page makaron-ios-page-x min-h-dvh bg-black text-white p-6">
+      <div className="max-w-2xl mx-auto">
       <div className="flex items-center justify-between mb-8">
         <h1 className="text-2xl font-bold">Admin</h1>
-        <Link href="/projects" className="text-white/40 text-sm hover:text-white/60">← Back to app</Link>
+        <button type="button" onClick={handleBackToApp} className="text-white/40 text-sm hover:text-white/60">
+          ← Back to app
+        </button>
       </div>
 
       {/* Tabs */}
@@ -993,7 +1002,7 @@ export default function AdminPage() {
                     <td className="py-2 px-2 text-white/40">{skill.sort_order}</td>
                     <td className="py-2 px-2">
                       {skill.image && (
-                        // eslint-disable-next-line @next/next/no-img-element
+
                         <img src={skill.image} alt="" style={{ maxHeight: 48, maxWidth: 64, objectFit: 'contain', borderRadius: 4 }} />
                       )}
                     </td>
@@ -1049,19 +1058,19 @@ export default function AdminPage() {
         </>
       )}
 
-      {modalSkill && (
-        <SkillEditorModal
-          skill={modalSkill === 'new' ? null : modalSkill}
-          onClose={() => setModalSkill(null)}
-          onSaved={() => { setModalSkill(null); fetchHomeSkills() }}
-        />
-      )}
+        {modalSkill && (
+          <SkillEditorModal
+            skill={modalSkill === 'new' ? null : modalSkill}
+            onClose={() => setModalSkill(null)}
+            onSaved={() => { setModalSkill(null); fetchHomeSkills() }}
+          />
+        )}
+      </div>
     </div>
   )
 }
 
 function SkillEditorModal({ skill, onClose, onSaved }: {
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   skill: any | null
   onClose: () => void
   onSaved: () => void
@@ -1128,7 +1137,7 @@ function SkillEditorModal({ skill, onClose, onSaved }: {
             <div className="flex items-start gap-3">
               <div className="w-20 h-16 rounded-lg bg-white/5 border border-white/10 flex items-center justify-center overflow-hidden shrink-0">
                 {image.trim() ? (
-                  // eslint-disable-next-line @next/next/no-img-element
+
                   <img src={image} alt="" style={{ maxHeight: '100%', maxWidth: '100%', objectFit: 'contain' }} />
                 ) : (
                   <span className="text-white/20 text-xs">preview</span>
@@ -1209,7 +1218,7 @@ function SkillEditorModal({ skill, onClose, onSaved }: {
                 <div key={i} className="flex items-center gap-2">
                   <div className="w-14 h-14 rounded-lg bg-white/5 border border-white/10 flex items-center justify-center overflow-hidden shrink-0">
                     {beforeImages[i]?.trim() ? (
-                      // eslint-disable-next-line @next/next/no-img-element
+
                       <img src={beforeImages[i]} alt="" style={{ maxHeight: '100%', maxWidth: '100%', objectFit: 'cover' }} />
                     ) : (
                       <span className="text-white/20 text-xs">{i + 1}</span>

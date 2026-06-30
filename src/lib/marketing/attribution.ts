@@ -6,6 +6,8 @@ export interface MarketingAttribution {
   utm_campaign?: string
   utm_content?: string
   utm_term?: string
+  fbclid?: string
+  fbc?: string
   skill_id?: string
   landing_path?: string
   first_seen_at?: string
@@ -31,6 +33,9 @@ function writeCookie(value: MarketingAttribution) {
   try {
     const encoded = encodeURIComponent(JSON.stringify(value))
     document.cookie = `${COOKIE_KEY}=${encoded}; path=/; max-age=${ATTR_TTL_SECONDS}; SameSite=Lax`
+    if (value.fbc) {
+      document.cookie = `_fbc=${value.fbc}; path=/; max-age=${ATTR_TTL_SECONDS}; SameSite=Lax`
+    }
   } catch {}
 }
 
@@ -41,6 +46,11 @@ export function captureMarketingAttribution(pathname: string, searchParams: URLS
   for (const key of UTM_KEYS) {
     const value = searchParams.get(key)
     if (value) incoming[key] = value
+  }
+  const fbclid = searchParams.get('fbclid')
+  if (fbclid) {
+    incoming.fbclid = fbclid
+    incoming.fbc = `fb.1.${Date.now()}.${fbclid}`
   }
 
   const skillId = searchParams.get('skill') || (pathname.startsWith('/home/') ? pathname.split('/')[2] : '')

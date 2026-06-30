@@ -1,0 +1,52 @@
+[
+  {
+    "id": "feishu-user-screenshot-9s",
+    "video": "~/Downloads/飞书20260609-125622.mp4",
+    "screenshot": "~/Downloads/截屏2026-06-17 17.44.35.png",
+    "expectedTimestamp": 9.0,
+    "toleranceSeconds": 1.0,
+    "modelMinSeconds": 4,
+    "maxWindowSeconds": 5,
+    "question": "用户截了播放器里 0:09 附近的画面，希望把这个城市背景换成巴黎，画风不变。忽略播放器 UI 控件。"
+  },
+  {
+    "id": "feishu-generated-frame-2s",
+    "video": "~/Downloads/飞书20260609-125622.mp4",
+    "captureTimestamp": 2.0,
+    "expectedTimestamp": 2.0,
+    "toleranceSeconds": 0.75,
+    "modelMinSeconds": 4,
+    "maxWindowSeconds": 5,
+    "question": "Locate this exact extracted frame in the source video."
+  },
+  {
+    "id": "feishu-generated-frame-5s",
+    "video": "~/Downloads/飞书20260609-125622.mp4",
+    "captureTimestamp": 5.0,
+    "expectedTimestamp": 5.0,
+    "toleranceSeconds": 0.75,
+    "modelMinSeconds": 4,
+    "maxWindowSeconds": 5,
+    "question": "Locate this exact extracted frame in the source video."
+  },
+  {
+    "id": "feishu-generated-frame-9s",
+    "video": "~/Downloads/飞书20260609-125622.mp4",
+    "captureTimestamp": 9.0,
+    "expectedTimestamp": 9.0,
+    "toleranceSeconds": 0.75,
+    "modelMinSeconds": 4,
+    "maxWindowSeconds": 5,
+    "question": "Locate this exact extracted frame in the source video."
+  },
+  {
+    "id": "feishu-generated-frame-12s",
+    "video": "~/Downloads/飞书20260609-125622.mp4",
+    "captureTimestamp": 12.0,
+    "expectedTimestamp": 12.0,
+    "toleranceSeconds": 0.75,
+    "modelMinSeconds": 4,
+    "maxWindowSeconds": 5,
+    "question": "Locate this exact extracted frame in the source video."
+  }
+]

@@ -5,6 +5,7 @@ import { runMakaronAgent, withLocale } from '@/lib/agent';
 import { AgentDualWriter } from '@/lib/agentDualWriter';
 import { requireCredits, deductByTokens } from '@/lib/billing/credits';
 import { AgentPerf } from '@/lib/agent-perf';
+import { getRequestLocale } from '@/lib/server-locale';
 
 export const maxDuration = 800;
 
@@ -25,17 +26,17 @@ export async function POST(req: NextRequest) {
 
     const endReadBody = perf.span('read_body');
     const { prompt, image, animationImageUrls, animationImages, projectId, analysisOnly, analysisContext, isVideoAnalysis,
-            tipReaction, committedTip, currentTips, tipsTeaser, tipsPayload, nameProject, description,
+            tipReaction, committedTip, tipsTeaser, tipsPayload, nameProject, description,
             previewsReady, readyTips, preferredModel, snapshotImages, currentSnapshotIndex, isNsfw,
-            musicReady, musicAudioUrl, currentDesign, currentDesignPath, videoModel,
-            headless, hasAnnotation, isDraft, referenceImageCount, uploadedVideoCount } = await req.json();
+            musicReady, musicAudioUrl, currentDesign, currentDesignPath, videoModel, videoResolution, videoAuto,
+            headless, hasAnnotation, isDraft, referenceImageCount, uploadedVideoCount, audioAttachments } = await req.json();
     endReadBody({
       projectId: projectId || null,
       promptChars: typeof prompt === 'string' ? prompt.length : 0,
       hasImage: !!image,
       headless: !!headless,
     });
-    const locale = req.cookies.get('locale')?.value ?? 'zh';
+    const locale = getRequestLocale(req);
 
     if (!projectId || (!tipsTeaser && !nameProject && !previewsReady && !uploadedVideoCount && !image && !prompt)) {
       return new Response(
@@ -45,10 +46,10 @@ export async function POST(req: NextRequest) {
     }
 
     const MOCK_TEXTS = {
-      tipsTeaser: '试试把它变成微缩模型？特别适合这种场景。',
-      tipReaction: '效果很棒！新图很自然。',
-      nameProject: '咖啡下午茶',
-      previewsReady: '预览图都好了！那个模仿猴的创意太逗了，快去试试看~',
+      tipsTeaser: locale === 'en' ? 'Try turning it into a miniature scene.' : '试试把它变成微缩模型？特别适合这种场景。',
+      tipReaction: locale === 'en' ? 'Nice, that edit feels natural.' : '效果很棒！新图很自然。',
+      nameProject: locale === 'en' ? 'Coffee Afternoon' : '咖啡下午茶',
+      previewsReady: locale === 'en' ? 'Your previews are ready. The playful one is worth a look.' : '预览图都好了！那个模仿猴的创意太逗了，快去试试看~',
     };
 
     // Only dual-write for normal agent flow (not lightweight teaser/name/reaction/analysis branches)
@@ -210,6 +211,7 @@ export async function POST(req: NextRequest) {
           let agentCurrentDesign = currentDesign;
           let agentCurrentDesignPath = typeof currentDesignPath === 'string' ? currentDesignPath : undefined;
           let agentHistory: ModelMessage[] = [];
+          let agentAudioAttachments = audioAttachments;
 
           if (needsPromptContext) {
             // Unified context: both frontend and headless use buildPromptContext.
@@ -224,6 +226,7 @@ export async function POST(req: NextRequest) {
               isDraft,
               referenceImageCount: referenceImageCount || undefined,
               uploadedVideoCount: uploadedVideoCount || undefined,
+              audioAttachments,
             });
             endContext({
               promptChars: ctx.fullPrompt.length,
@@ -241,6 +244,7 @@ export async function POST(req: NextRequest) {
             agentCurrentDesign = currentDesign || ctx.currentDesign;
             agentCurrentDesignPath = agentCurrentDesignPath || ctx.currentDesignPath;
             agentHistory = ctx.history;
+            agentAudioAttachments = ctx.audioAttachments;
           } else {
             perf.mark('build_prompt_context_skipped', {
               reason: 'analysisOnly_request_has_media',
@@ -276,7 +280,7 @@ export async function POST(req: NextRequest) {
           try {
             const endAgentStream = perf.span('agent_stream', { projectId, runId: runId || null });
             try {
-              for await (const event of runMakaronAgent(agentPrompt, agentImage, projectId, { analysisOnly, analysisContext, isVideoAnalysis, animationImageUrls: animationImageUrls?.length ? animationImageUrls : undefined, animationImages: animationImages?.length ? animationImages : undefined, locale, preferredModel, videoModel, snapshotImages: agentSnapshotImages, currentSnapshotIndex: agentCurrentSnapshotIndex, isNsfw, supabase, userId: userId, currentDesign: agentCurrentDesign, currentDesignPath: agentCurrentDesignPath, history: agentHistory, timelineVersion, perf })) {
+              for await (const event of runMakaronAgent(agentPrompt, agentImage, projectId, { analysisOnly, analysisContext, isVideoAnalysis, animationImageUrls: animationImageUrls?.length ? animationImageUrls : undefined, animationImages: animationImages?.length ? animationImages : undefined, locale, preferredModel, videoModel, videoResolution, videoAuto, audioAttachments: agentAudioAttachments, snapshotImages: agentSnapshotImages, currentSnapshotIndex: agentCurrentSnapshotIndex, isNsfw, supabase, userId: userId, currentDesign: agentCurrentDesign, currentDesignPath: agentCurrentDesignPath, history: agentHistory, timelineVersion, perf })) {
                 if (event.type === 'usage') { usageEvent = event; continue; }
                 if (writer) {
                   await writer.processAndEnqueue(event);

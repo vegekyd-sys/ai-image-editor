@@ -1,6 +1,6 @@
 import type { CSSProperties } from 'react'
 
-/* eslint-disable @next/next/no-img-element */
+
 
 type SparkProps = {
   size?: number | string
@@ -17,7 +17,9 @@ export function MakaronSpark({
 }: SparkProps) {
   return (
     <img
-      src="/brand/makaron-spark-mark.png"
+      src="/brand/makaron-spark-mark-192.webp"
+      srcSet="/brand/makaron-spark-mark-192.webp 192w, /brand/makaron-spark-mark-256.webp 256w"
+      sizes="64px"
       alt={title}
       className={className}
       style={{

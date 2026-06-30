@@ -290,6 +290,35 @@ export async function addCredits(userId: string, credits: number): Promise<numbe
   return newBalance
 }
 
+export async function grantCreditsAndRecordPurchase(params: {
+  userId: string
+  credits: number
+  amountUsd: number
+  stripeSessionId: string
+  stripeInvoiceId?: string | null
+  source: string
+}): Promise<{ granted: boolean; balance: number }> {
+  const admin = getSupabaseAdmin()
+  const { data, error } = await admin.rpc('grant_credits_and_record_purchase', {
+    p_user_id: params.userId,
+    p_credits: params.credits,
+    p_amount_usd: params.amountUsd,
+    p_stripe_session_id: params.stripeSessionId,
+    p_stripe_invoice_id: params.stripeInvoiceId ?? null,
+    p_source: params.source,
+  })
+
+  if (error) {
+    console.error('[billing] grant_credits_and_record_purchase failed:', error)
+    throw error
+  }
+
+  return {
+    granted: data?.granted === true,
+    balance: Number(data?.balance ?? 0),
+  }
+}
+
 export async function refundCredits(userId: string, credits: number, toolName: string): Promise<number> {
   const admin = getSupabaseAdmin()
   const { data } = await admin

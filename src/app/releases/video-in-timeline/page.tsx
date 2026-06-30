@@ -245,7 +245,7 @@ export default function VideoInTimelineReleasePage() {
   }, []);
 
   return (
-    <div className="min-h-screen bg-black text-white overflow-x-hidden relative">
+    <div className="makaron-ios-page makaron-ios-page-x min-h-screen bg-black text-white overflow-x-hidden relative">
       {/* CSS Animations */}
       <style>{`
         @keyframes float {

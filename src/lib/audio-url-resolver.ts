@@ -15,6 +15,10 @@ export async function resolveAudioUrlsInCode(
   projectId: string,
   supabase: SupabaseClient,
 ): Promise<ResolveResult> {
+  if (!/https?:\/\//i.test(code)) {
+    return { code, changed: false }
+  }
+
   const { data: tracks } = await supabase
     .from('project_music')
     .select('audio_url, suno_audio_url, stream_audio_url')
@@ -28,7 +32,7 @@ export async function resolveAudioUrlsInCode(
 
   for (const track of tracks) {
     const permanent = track.audio_url
-    if (!permanent?.includes('.supabase.co/')) continue
+    if (!permanent || !/(\.supabase\.co\/|cdn\.makaron\.app\/)/i.test(permanent)) continue
 
     // Replace stream URL → permanent
     if (track.stream_audio_url && track.stream_audio_url !== permanent && resolved.includes(track.stream_audio_url)) {

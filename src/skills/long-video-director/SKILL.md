@@ -170,6 +170,7 @@ Use `animate.md` for final segment scripts and preflight. The compiled scripts m
 - use the user's language for readable action, sound, and style descriptions
 - keep required format tokens in English: `Shot N (Xs):`, `Style:`, and media refs
 - include every important `<<<media_N>>>` ref directly in the segment
+- include the segment's approved storyboard ref directly in the segment, normally near the start as `Storyboard: <<<media_N>>>`
 - embed seams into the script body
 - avoid hidden dependencies such as "continue from previous segment"
 - end with `Style:`
@@ -177,6 +178,7 @@ Use `animate.md` for final segment scripts and preflight. The compiled scripts m
 Before presenting scripts, review:
 - every approved asset is referenced where needed
 - every segment uses its approved storyboard ref
+- each segment's storyboard and anchor refs are present in the exact script text, not only in the surrounding preflight notes
 - every seam is present in adjacent scripts
 - every segment stays within 15s
 - no required character or prop was dropped
@@ -197,4 +199,12 @@ Before calling `generate_animation`, show a short preflight:
 
 If any item is missing, stop.
 
-After approval, submit each segment independently with `generate_animation`. Treat final assembly or MP4 concatenation as outside this standalone skill unless another workflow is explicitly invoked.
+After approval, submit each segment independently with `generate_animation`.
+
+For every `generate_animation` call:
+- `story_prompt` must contain that segment's storyboard ref and required anchor refs as `<<<media_N>>>` markers.
+- The exact `story_prompt` sent to the tool must include the refs. Do not rely on refs appearing only in CUI text, preflight notes, or prior conversation.
+- If a required storyboard or anchor ref is missing from the exact `story_prompt`, stop and rewrite the segment script before calling the tool.
+- The video provider only receives media refs that are present in the final tool submission.
+
+Treat final assembly or MP4 concatenation as outside this standalone skill unless another workflow is explicitly invoked.

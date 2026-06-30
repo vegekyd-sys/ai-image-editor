@@ -7,9 +7,9 @@
  */
 
 // fs/path are used server-side only — dynamic require to avoid client bundle issues
-// eslint-disable-next-line @typescript-eslint/no-require-imports
+
 const fs = typeof window === 'undefined' ? require('fs') as typeof import('fs') : null;
-// eslint-disable-next-line @typescript-eslint/no-require-imports
+
 const path = typeof window === 'undefined' ? require('path') as typeof import('path') : null;
 
 export interface MakaronSkillMeta {
@@ -170,7 +170,7 @@ export function getAllSkills(): ParsedSkill[] {
 // ── User skills (from DB) ───────────────────────────────────────────────────
 
 /** Load user skills from Supabase user_skills table */
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
+
 export async function loadUserSkills(supabase: any, userId: string): Promise<ParsedSkill[]> {
   const { data } = await supabase
     .from('user_skills')

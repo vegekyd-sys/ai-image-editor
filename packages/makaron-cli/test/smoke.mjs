@@ -2,7 +2,7 @@ import assert from 'node:assert/strict';
 import http from 'node:http';
 import os from 'node:os';
 import path from 'node:path';
-import { mkdtempSync, readFileSync, rmSync } from 'node:fs';
+import { mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { spawn } from 'node:child_process';
 
 const cliPath = new URL('../bin/makaron.mjs', import.meta.url);
@@ -15,7 +15,8 @@ const server = http.createServer(async (req, res) => {
   req.on('data', chunk => chunks.push(chunk));
   await new Promise(resolve => req.on('end', resolve));
   const rawBody = Buffer.concat(chunks).toString('utf-8');
-  const body = rawBody ? JSON.parse(rawBody) : null;
+  const contentType = req.headers['content-type'] || '';
+  const body = rawBody && String(contentType).includes('application/json') ? JSON.parse(rawBody) : null;
   const url = new URL(req.url, 'http://127.0.0.1');
   requests.push({ method: req.method, pathname: url.pathname, search: url.search, body });
 
@@ -24,8 +25,65 @@ const server = http.createServer(async (req, res) => {
     res.end(JSON.stringify(data));
   };
 
+  if (req.method === 'GET' && url.pathname === '/api/home-skills') {
+    sendJson(200, [
+      {
+        id: 'skill_market_1',
+        labels: { en: 'Diamond Bling', zh: '夜店钻石风' },
+        image: 'https://cdn.example/diamond.jpg',
+        prompt: 'Nightclub diamond bling portrait',
+        skill_path: 'https://cdn.example/diamond.zip',
+        image_count: 1,
+        sort_order: 1,
+        updated_at: '2026-01-01T00:00:00.000Z',
+      },
+      {
+        id: 'prompt_market_1',
+        labels: { en: 'Prompt Only' },
+        image: 'https://cdn.example/prompt.jpg',
+        prompt: 'A prompt-only marketplace item',
+        skill_path: null,
+        image_count: 1,
+        sort_order: 2,
+        updated_at: '2026-01-01T00:00:00.000Z',
+      },
+    ]);
+    return;
+  }
+
+  if (req.method === 'POST' && url.pathname === '/api/skills') {
+    assert.equal(req.headers.authorization, 'Bearer mk_test_smoke');
+    assert.equal(body.skillPath, 'https://cdn.example/diamond.zip');
+    assert.equal(body.homeSkillId, 'skill_market_1');
+    sendJson(200, { success: true, skillName: 'diamond-bling', assetsUploaded: 1 });
+    return;
+  }
+
+  if (req.method === 'POST' && url.pathname === '/api/storage/upload-url') {
+    assert.equal(req.headers.authorization, 'Bearer mk_test_smoke');
+    sendJson(200, {
+      uploadUrl: `${baseUrl}/upload/mock-image`,
+      token: 'signed_upload_token',
+      path: 'mock/upload.jpg',
+      publicUrl: 'https://cdn.example/uploaded-image.jpg',
+      contentType: body.contentType,
+    });
+    return;
+  }
+
+  if (req.method === 'PUT' && url.pathname === '/upload/mock-image') {
+    assert.equal(req.headers.authorization, 'Bearer signed_upload_token');
+    res.writeHead(200, { 'Content-Type': 'application/json' });
+    res.end('{}');
+    return;
+  }
+
   if (req.method === 'POST' && url.pathname === '/api/projects/create') {
-    sendJson(200, { projectId: 'project-auto-1', snapshots: [] });
+    const snapshots = (body?.imageUrls || []).map((imageUrl, index) => ({
+      snapshotId: `snap_uploaded_${index + 1}`,
+      imageUrl,
+    }));
+    sendJson(200, { projectId: body?._addToProject || 'project-auto-1', snapshots });
     return;
   }
 
@@ -42,6 +100,59 @@ const server = http.createServer(async (req, res) => {
       incomplete: false,
       output: [{ id: 'out_1', type: 'image', url: 'https://cdn.example/image.png' }],
       result: { images: [{ imageUrl: 'https://cdn.example/image.png' }] },
+    });
+    return;
+  }
+
+  if (req.method === 'GET' && url.pathname === '/api/agent/run/run_failed_video') {
+    sendJson(200, {
+      id: 'run_failed_video',
+      project_id: 'project-auto-1',
+      status: 'failed',
+      incomplete: false,
+      output: [{
+        id: 'out_video_failed',
+        type: 'video',
+        status: 'failed',
+        task_id: 'task-unified-blocked',
+        error: 'Content policy blocked the request',
+        completion_actions: [{
+          label: '改安全点重试',
+          description: '换成更容易通过审核的版本',
+          prompt: '刚才这个视频生成失败了，帮我改安全一点再试。',
+          policy: 'confirm',
+        }],
+      }],
+      result: {
+        videos: [{
+          taskId: 'task-unified-blocked',
+          status: 'failed',
+          completionActions: [{
+            label: '改安全点重试',
+            description: '换成更容易通过审核的版本',
+            prompt: '刚才这个视频生成失败了，帮我改安全一点再试。',
+          }],
+        }],
+      },
+    });
+    return;
+  }
+
+  if (req.method === 'GET' && url.pathname === '/api/agent/run/run_comp_1') {
+    sendJson(200, {
+      id: 'run_comp_1',
+      project_id: 'project-auto-1',
+      status: 'completed',
+      incomplete: false,
+      output: [{
+        id: 'design_comp_1',
+        type: 'design',
+        animated: true,
+        snapshot_id: 'snap_comp_1',
+        width: 720,
+        height: 1280,
+      }],
+      result: { designs: [{ width: 720, height: 1280 }] },
     });
     return;
   }
@@ -77,7 +188,40 @@ const server = http.createServer(async (req, res) => {
           width: 720,
           height: 1280,
         },
+        {
+          id: 'media_3',
+          index: 3,
+          ref: '<<<media_3>>>',
+          type: 'composition',
+          status: 'completed',
+          snapshot_id: 'snap_comp_1',
+          snapshotId: 'snap_comp_1',
+          codePath: 'code/snap_comp_1.json',
+          description: 'Editable Remotion composition',
+        },
       ],
+    });
+    return;
+  }
+
+  if (req.method === 'POST' && url.pathname === '/api/remotion/export') {
+    sendJson(200, { jobId: 'export_job_1', id: 'export_job_1', status: 'queued', projectId: body.projectId });
+    return;
+  }
+
+  if (req.method === 'GET' && url.pathname === '/api/remotion/export/export_job_1') {
+    sendJson(200, {
+      id: 'export_job_1',
+      status: 'completed',
+      projectId: 'project-auto-1',
+      url: 'https://cdn.example/remotion-export.mp4',
+      storageUrl: 'https://cdn.example/remotion-export.mp4',
+      workspacePath: 'project-auto-1/media/remotion-export.mp4',
+      duration_seconds: 4,
+      render_seconds: 5,
+      realtime_ratio: 0.8,
+      width: 720,
+      height: 1280,
     });
     return;
   }
@@ -113,6 +257,11 @@ const baseUrl = await new Promise(resolve => {
 });
 
 const tmpHome = mkdtempSync(path.join(os.tmpdir(), 'makaron-cli-smoke-'));
+const tinyImagePath = path.join(tmpHome, 'tiny.jpg');
+writeFileSync(tinyImagePath, Buffer.from([
+  0xff, 0xd8, 0xff, 0xe0, 0x00, 0x10, 0x4a, 0x46, 0x49, 0x46, 0x00, 0x01,
+  0xff, 0xd9,
+]));
 
 function runCli(args, options = {}) {
   return new Promise((resolve, reject) => {
@@ -123,6 +272,7 @@ function runCli(args, options = {}) {
         MAKARON_URL: baseUrl,
         MAKARON_APP_URL: 'https://app.example',
         MAKARON_API_KEY: options.apiKey === false ? '' : 'mk_test_smoke',
+        MAKARON_DISABLE_UPDATE_CHECK: '1',
       },
       stdio: ['ignore', 'pipe', 'pipe'],
     });
@@ -141,10 +291,69 @@ async function expectSuccess(args, options) {
   return result;
 }
 
+async function expectHelp(args, expectedText) {
+  const requestCount = requests.length;
+  const result = await expectSuccess(args, { apiKey: false });
+  assert.match(result.stdout, expectedText, `${args.join(' ')} did not print expected help\nstdout:\n${result.stdout}`);
+  assert.equal(result.stderr, '', `${args.join(' ')} should not print auth or execution errors\nstderr:\n${result.stderr}`);
+  assert.equal(requests.length, requestCount, `${args.join(' ')} should not make HTTP requests`);
+  return result;
+}
+
+async function expectFailure(args, options) {
+  const result = await runCli(args, options);
+  assert.notEqual(result.code, 0, `${args.join(' ')} unexpectedly succeeded\nstdout:\n${result.stdout}\nstderr:\n${result.stderr}`);
+  return result;
+}
+
 try {
   {
     const result = await expectSuccess(['--version']);
     assert.equal(result.stdout.trim(), pkg.version);
+  }
+
+  for (const [helpArgs, expectedText] of [
+    [[], /Makaron CLI/],
+    [['--help'], /Makaron CLI/],
+    [['login', '--help'], /Usage: makaron login/],
+    [['create', '--help'], /Usage: makaron create/],
+    [['chat', '--help'], /--skill <id\|label\|name>/],
+    [['responses', '--help'], /Responses commands:/],
+    [['responses', 'get', '--help'], /Usage: makaron responses get/],
+    [['responses', 'watch', '--help'], /Usage: makaron responses watch/],
+    [['responses', 'list', '--help'], /Usage: makaron responses list/],
+    [['materialize', '--help'], /Usage: makaron materialize/],
+    [['composition', '--help'], /Composition commands:/],
+    [['list', '--help'], /Usage: makaron list/],
+    [['setup', '--help'], /Usage: makaron setup/],
+    [['install-skill', '--help'], /Usage: makaron install-skill/],
+    [['project', '--help'], /Project commands:/],
+    [['project', 'media', '--help'], /Usage: makaron project media/],
+    [['abort', '--help'], /Usage: makaron abort/],
+    [['skills', '--help'], /Skill marketplace commands:/],
+    [['skills', 'list', '--help'], /Usage: makaron skills list/],
+    [['skills', 'search', '--help'], /Usage: makaron skills search/],
+    [['skills', 'show', '--help'], /Usage: makaron skills show/],
+    [['skills', 'install', '--help'], /Usage: makaron skills install/],
+    [['edit', '--help'], /Usage: makaron edit/],
+    [['analyze', '--help'], /Usage: makaron analyze/],
+    [['video', '--help'], /Video commands:/],
+    [['video', 'script', '--help'], /Usage: makaron video script/],
+    [['video', 'create', '--help'], /Usage: makaron video create/],
+    [['video', 'status', '--help'], /Usage: makaron video status/],
+    [['music', '--help'], /Music commands:/],
+    [['music', 'create', '--help'], /Usage: makaron music create/],
+    [['music', 'status', '--help'], /Usage: makaron music status/],
+    [['admin', '--help'], /Admin commands:/],
+    [['admin', 'skills', '--help'], /Usage: makaron admin skills/],
+    [['admin', 'upload', '--help'], /Usage: makaron admin upload/],
+    [['admin', 'fetch-skill', '--help'], /Usage: makaron admin fetch-skill/],
+    [['admin', 'set-admin', '--help'], /Usage: makaron admin set-admin/],
+    [['register', '--help'], /Usage: makaron register/],
+    [['register', '--verify', '--help'], /Usage: makaron register --verify/],
+    [['claim', '--help'], /Usage: makaron claim/],
+  ]) {
+    await expectHelp(helpArgs, expectedText);
   }
 
   {
@@ -164,6 +373,77 @@ try {
   }
 
   {
+    const result = await expectSuccess(['chat', '--project', 'project-existing-1', '--image', tinyImagePath, '--json', '-b', 'use this reference']);
+    const data = JSON.parse(result.stdout);
+    assert.equal(data.projectId, 'project-existing-1');
+
+    const uploadUrlRequest = requests.filter(req => req.pathname === '/api/storage/upload-url').at(-1);
+    assert.equal(uploadUrlRequest?.body?.projectId, 'project-existing-1');
+    assert.equal(uploadUrlRequest?.body?.filename, 'tiny.jpg');
+    assert.equal(uploadUrlRequest?.body?.contentType, 'image/jpeg');
+
+    const signedPutRequest = requests.filter(req => req.pathname === '/upload/mock-image').at(-1);
+    assert.equal(signedPutRequest?.method, 'PUT');
+
+    const createRequest = requests.filter(req => req.pathname === '/api/projects/create').at(-1);
+    assert.deepEqual(createRequest?.body, {
+      _addToProject: 'project-existing-1',
+      imageUrls: ['https://cdn.example/uploaded-image.jpg'],
+    });
+
+    const runRequest = requests.filter(req => req.pathname === '/api/agent/run').at(-1);
+    assert.equal(runRequest?.body?.projectId, 'project-existing-1');
+    assert.equal(runRequest?.body?.prompt, 'use this reference');
+  }
+
+  {
+    const result = await expectSuccess(['skills', 'list', '--json'], { apiKey: false });
+    const data = JSON.parse(result.stdout);
+    assert.equal(data.skills.length, 2);
+    assert.equal(data.skills[0].id, 'skill_market_1');
+    assert.equal(data.skills[0].label, 'Diamond Bling');
+    assert.equal(data.skills[0].hasSkill, true);
+  }
+
+  {
+    const result = await expectSuccess(['skills', 'search', 'diamond', '--json'], { apiKey: false });
+    const data = JSON.parse(result.stdout);
+    assert.equal(data.skills.length, 1);
+    assert.equal(data.skills[0].id, 'skill_market_1');
+  }
+
+  {
+    const result = await expectSuccess(['skills', 'search', '夜店钻石风', '--json'], { apiKey: false });
+    const data = JSON.parse(result.stdout);
+    assert.equal(data.skills.length, 1);
+    assert.equal(data.skills[0].id, 'skill_market_1');
+  }
+
+  {
+    const result = await expectSuccess(['skills', 'show', 'Diamond Bling', '--json'], { apiKey: false });
+    const data = JSON.parse(result.stdout);
+    assert.equal(data.id, 'skill_market_1');
+    assert.equal(data.skillPath, 'https://cdn.example/diamond.zip');
+  }
+
+  {
+    const result = await expectSuccess(['skills', 'install', 'skill_market_1', '--json']);
+    const data = JSON.parse(result.stdout);
+    assert.equal(data.success, true);
+    assert.equal(data.skillName, 'diamond-bling');
+    assert.equal(data.marketplaceId, 'skill_market_1');
+  }
+
+  {
+    await expectSuccess(['chat', '--project', 'auto', '--skill', '夜店钻石风', '--json', '-b', 'make me shine']);
+    const runRequests = requests.filter(req => req.pathname === '/api/agent/run');
+    const runRequest = runRequests.at(-1);
+    assert.equal(runRequest?.body?.prompt, '[Active skill: diamond-bling]\nmake me shine');
+    const installRequests = requests.filter(req => req.pathname === '/api/skills');
+    assert.equal(installRequests.at(-1)?.body?.homeSkillId, 'skill_market_1');
+  }
+
+  {
     const result = await expectSuccess(['responses', 'get', 'run_mock_1', '--json']);
     const data = JSON.parse(result.stdout);
     assert.equal(data.projectId, 'project-auto-1');
@@ -180,12 +460,59 @@ try {
     const result = await expectSuccess(['project', 'media', 'project-auto-1', '--json']);
     const data = JSON.parse(result.stdout);
     assert.equal(data.projectId, 'project-auto-1');
-    assert.equal(data.media.length, 2);
+    assert.equal(data.media.length, 3);
     assert.equal(data.media[0].ref, '<<<media_1>>>');
     assert.equal(data.media[1].type, 'video');
     assert.equal(data.media[1].duration, 12.4);
+    assert.equal(data.media[2].type, 'composition');
     const mediaRequest = requests.find(req => req.pathname === '/api/projects/project-auto-1/media');
     assert.equal(mediaRequest?.method, 'GET');
+  }
+
+  {
+    const result = await expectSuccess(['composition', 'export', '--project', 'project-auto-1', '--media', '3', '--wait']);
+    assert.equal(result.stdout.trim(), 'https://cdn.example/remotion-export.mp4');
+    const exportRequest = requests.filter(req => req.pathname === '/api/remotion/export').at(-1);
+    assert.equal(exportRequest?.method, 'POST');
+    assert.equal(exportRequest?.body?.snapshotId, 'snap_comp_1');
+    assert.equal(exportRequest?.body?.designPath, 'code/snap_comp_1.json');
+    assert.equal(exportRequest?.body?.renderProfile, 'fast_720p');
+    assert.equal(exportRequest?.body?.publish, false);
+  }
+
+  {
+    const designPath = path.join(tmpHome, 'composition.json');
+    writeFileSync(designPath, JSON.stringify({
+      code: 'export default function Comp(){ return null; }',
+      width: 1080,
+      height: 1920,
+      animation: { fps: 30, durationInSeconds: 1 },
+    }));
+    const result = await expectSuccess(['materialize', '--project', 'project-auto-1', '--design-json', designPath, '--pick', 'url']);
+    assert.equal(result.stdout.trim(), 'https://cdn.example/remotion-export.mp4');
+    const exportRequest = requests.filter(req => req.pathname === '/api/remotion/export').at(-1);
+    assert.equal(exportRequest?.body?.publish, true);
+    assert.equal(exportRequest?.body?.renderProfile, 'fast_720p');
+    assert.equal(exportRequest?.body?.design?.width, 1080);
+  }
+
+  {
+    const result = await expectSuccess(['responses', 'get', 'run_comp_1', '--export-compositions', '--pick', 'first_video_url']);
+    assert.equal(result.stdout.trim(), 'https://cdn.example/remotion-export.mp4');
+  }
+
+  {
+    const result = await expectSuccess(['responses', 'get', 'run_comp_1', '--materialize', '--pick', 'first_video_url']);
+    assert.equal(result.stdout.trim(), 'https://cdn.example/remotion-export.mp4');
+    const exportRequest = requests.filter(req => req.pathname === '/api/remotion/export').at(-1);
+    assert.equal(exportRequest?.body?.publish, true);
+  }
+
+  {
+    const result = await expectSuccess(['responses', 'get', 'run_comp_1', '--materialize', '--wait', '--pick', 'first_video_url']);
+    assert.equal(result.stdout.trim(), 'https://cdn.example/remotion-export.mp4');
+    const exportRequest = requests.filter(req => req.pathname === '/api/remotion/export').at(-1);
+    assert.equal(exportRequest?.body?.publish, true);
   }
 
   {
@@ -202,6 +529,31 @@ try {
     assert.equal(lines[0].event, 'output.added');
     assert.equal(lines.at(-1).event, 'done');
     assert.equal(lines.at(-1).status, 'completed');
+  }
+
+  {
+    const result = await expectFailure(['responses', 'get', 'run_failed_video', '--json']);
+    const data = JSON.parse(result.stdout);
+    assert.equal(data.status, 'failed');
+    assert.equal(data.output[0].status, 'failed');
+    assert.equal(data.output[0].completion_actions[0].label, '改安全点重试');
+  }
+
+  {
+    const result = await expectFailure(['responses', 'get', 'run_failed_video', '--pick', 'next_steps']);
+    const data = JSON.parse(result.stdout);
+    assert.equal(data[0].label, '改安全点重试');
+    assert.equal(data[0].source, 'out_video_failed');
+  }
+
+  {
+    const result = await expectFailure(['responses', 'watch', 'run_failed_video', '--jsonl', '--interval', '1']);
+    const lines = result.stdout.trim().split('\n').map(line => JSON.parse(line));
+    assert.equal(lines[0].event, 'output.added');
+    assert.equal(lines[0].item.status, 'failed');
+    assert.equal(lines[0].item.completion_actions[0].label, '改安全点重试');
+    assert.equal(lines.at(-1).event, 'done');
+    assert.equal(lines.at(-1).status, 'failed');
   }
 
   {

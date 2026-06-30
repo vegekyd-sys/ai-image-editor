@@ -8,20 +8,6 @@ import sharp from 'sharp';
 // ComfyUI API helpers (with configurable baseUrl)
 // ---------------------------------------------------------------------------
 
-async function uploadImage(buf: Buffer, filename: string, baseUrl: string): Promise<string> {
-  const formData = new FormData();
-  formData.append('image', new Blob([new Uint8Array(buf)], { type: 'image/png' }), filename);
-  formData.append('overwrite', 'true');
-
-  const res = await fetch(`${baseUrl}/upload/image`, { method: 'POST', body: formData });
-  if (!res.ok) {
-    const err = await res.text().catch(() => '');
-    throw new Error(`ComfyUI upload failed: ${res.status} ${err.slice(0, 200)}`);
-  }
-  const data = await res.json();
-  return data.name;
-}
-
 async function submitWorkflow(workflow: Record<string, unknown>, baseUrl: string): Promise<string> {
   const res = await fetch(`${baseUrl}/prompt`, {
     method: 'POST',

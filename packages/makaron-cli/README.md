@@ -7,8 +7,10 @@ Makaron is a multimodal AI creative agent. You talk to it via `makaron chat`, an
 ## Setup
 
 ```bash
-npm install -g makaron-cli
-# or use directly: npx makaron-cli
+# Install makaron-cli globally and add the Makaron Agent Skill.
+npx makaron-cli setup
+
+npx makaron-cli --help
 ```
 
 ### Get your API key
@@ -75,6 +77,10 @@ npx makaron-cli responses get $RUN_ID --wait --json
 
 Use `chat` for all creative tasks. Makaron Agent decides how to execute — it can edit images, generate videos, compose music, and create designs in a single conversation.
 
+```bash
+npx makaron-cli chat --help
+```
+
 ### Submit a request
 
 ```bash
@@ -90,6 +96,36 @@ Returns immediately:
 ```json
 {"runId": "xxx", "projectId": "...", "projectUrl": "https://www.makaron.app/projects/...", "status": "running"}
 ```
+
+### Common workflows
+
+| What you want | Example |
+|--------------|---------|
+| Edit an image | `npx makaron-cli chat --project <id> --image photo.jpg "remove the person in the background"` |
+| Generate an image | `npx makaron-cli chat --project auto "generate a cinematic poster of a rainy Tokyo alley"` |
+| Make a video from the current project | `npx makaron-cli chat --project <id> "make this into a 5 second cinematic video"` |
+| Fix one moment in a video from a screenshot | `npx makaron-cli chat --project <id> --image screenshot.png "@4 this frame should be Paris; only fix this moment"` |
+| Cut or assemble video | `npx makaron-cli chat --project <id> --video clip.mp4 "cut out the dead air and keep the best 20 seconds"` |
+| Add music | `npx makaron-cli chat --project <id> "add calm piano background music"` |
+| Beat-sync video from audio | `npx makaron-cli chat --project auto --audio beat.mp3 --video-model seedance-fast --video-resolution 480p "make a beat-synced video"` |
+| Create motion design | `npx makaron-cli chat --project <id> "make an animated Instagram story with this image"` |
+
+### Marketplace skills
+
+External users can browse, install, and use marketplace skills with only `MAKARON_API_KEY`:
+
+```bash
+npx makaron-cli skills list
+npx makaron-cli skills search "football"
+npx makaron-cli skills search "足球"
+npx makaron-cli skills show <marketplace-id-or-label>
+npx makaron-cli skills install <marketplace-id-or-label>
+
+# chat auto-installs matched marketplace skills before starting the run
+npx makaron-cli chat --project auto --image selfie.jpg --skill <marketplace-id-or-label> -b "make this with the selected skill"
+```
+
+`--skill` accepts an installed skill name, a marketplace UUID, or a unique marketplace label. If a marketplace skill is matched, the CLI installs or reuses it and sends `[Active skill: <installed-skill-name>]` to Makaron Agent. Ordinary users do not need admin commands, and the CLI intentionally does not expose skill deletion.
 
 ### With additional images (existing project)
 
@@ -107,6 +143,47 @@ npx makaron-cli project media <projectId> --json
 
 This is project-scoped. `responses get <runId> --pick output` only returns artifacts from one run; `project media` returns the whole project timeline: original uploads, references, generated images, video snapshots, and editable compositions.
 
+### Export editable Remotion compositions
+
+Animated Remotion compositions are saved as editable timeline/code artifacts first. To materialize one into an MP4 that CLI, V, or another service can read, call the backend export worker:
+
+```bash
+npx makaron-cli materialize --project <projectId> --media <N> --pick url
+npx makaron-cli materialize --project <projectId> --design-json composition.json --pick url
+npx makaron-cli composition export --project <projectId> --media <N> --wait
+npx makaron-cli composition export --project <projectId> --snapshot <snapshotId> --wait
+npx makaron-cli composition status <jobId> --wait
+```
+
+`materialize` is the preferred high-level command for Remotion-to-MP4. It defaults to `--wait`, `--publish`, and the `fast_720p` profile (short side 720, no upscale), so the completed MP4 is also added back to the project timeline like CUI. Use `--no-publish` only when you need a file URL without a new timeline video. Use `--profile source` only when full source resolution is required.
+
+For a run that produced an animated composition, materialize before picking the video URL:
+
+```bash
+npx makaron-cli responses get <runId> --materialize --wait --pick first_video_url
+npx makaron-cli responses get <runId> --export-compositions --wait --pick first_video_url
+```
+
+To turn a Makaron Remotion design JSON file directly into an MP4, use `--design-json`. The JSON must be a Makaron/Remotion composition payload, not a provider-video task response. Always pass the destination project because published exports and storage paths are project-scoped:
+
+```bash
+npx makaron-cli materialize --project <projectId> --design-json composition.json --pick url
+cat composition.json | npx makaron-cli materialize --project <projectId> --design-json - --pick url
+```
+
+This JSON-to-MP4 path uses the same defaults as timeline materialize: `--wait`, `--publish`, and `fast_720p`. Add `--no-publish` only when another agent needs the MP4 URL but should not add a timeline video.
+
+The completed export reports `duration_seconds`, `render_seconds`, and `realtime_ratio` so agents can compare video length against export time. Do not apply provider-video ETA rules to Remotion materialize; with a warm exporter it is often near video length to tens of seconds, while cold starts can be longer.
+
+In production, run the exporter as a separate warm worker:
+
+```bash
+REMOTION_EXPORT_INLINE_AFTER=false npm run worker:remotion-export:check
+REMOTION_EXPORT_INLINE_AFTER=false npm run worker:remotion-export
+```
+
+Keeping this worker warm avoids paying sandbox cold-start cost on every CLI or service call.
+
 ### With video input (MP4/MOV/WebM)
 
 ```bash
@@ -123,6 +200,32 @@ npx makaron-cli chat --project <id> --video clip1.mp4 --video clip2.mp4 -b "spli
 Video files are uploaded via signed URL. CLI local video uploads support `.mp4`, `.mov`, or `.webm`, max 50MB, max 120s with 1s metadata tolerance, and <=1080p / 2,086,876 frame pixels. The frontend can transcode larger videos before upload; the CLI uploads directly to Storage and rejects videos above those limits.
 The agent understands video content natively — it can analyze scenes, edit, extend, and compose videos. Seedance video-reference editing is still limited to ~15s provider references, so longer uploaded videos should be split/prepared by the agent before model submission; Kling remains the base/direct edit path.
 Use `chat --project <id|auto> --video ...` for any project/timeline video work. Direct `video create` is standalone and does not write timeline entries.
+
+### With reference audio (MP3/WAV)
+
+Attach a short song, beat, or voice recording when the video should follow audio pacing:
+
+```bash
+npx makaron-cli chat --project auto \
+  --audio beat.mp3 \
+  --video-model seedance-fast \
+  --video-resolution 480p \
+  -b "make a 15s beat-synced video"
+```
+
+`--audio` accepts repeatable local files or public URLs. Local MP3/WAV files must be 2-15s and <=15MB; reference audio currently works with Seedance video generation.
+
+### Fix one video moment from a screenshot
+
+When a video is mostly good but one moment needs a local fix, attach a screenshot of the problem frame and describe the correction in normal language:
+
+```bash
+npx makaron-cli chat --project <id> \
+  --image screenshot.png \
+  "@4 this frame should be Paris, keep the same style and only fix this moment"
+```
+
+Makaron can locate the screenshot in the video, regenerate only the nearby segment, and then print a `Next steps` command when the new clip should be stitched back into the full MP4.
 
 ### Check status (single query)
 
@@ -170,15 +273,14 @@ npx makaron-cli edit --image photo.jpg "add cinematic warm lighting"
 # Text-to-image (no input)
 npx makaron-cli edit "a cyberpunk cityscape at night"
 
-# With model/skill/reference
-npx makaron-cli edit --image photo.jpg --model openai --skill captions "add title"
+# With model/reference
 npx makaron-cli edit --image photo.jpg --ref style.jpg "match this style"
 
 # Output to file
 npx makaron-cli edit --image photo.jpg --out result.jpg "make it dramatic"
 ```
 
-Options: `--image`, `--model gemini|qwen|openai|pony|wai`, `--skill enhance|creative|wild|captions`, `--ref <file>` (up to 3), `--aspect <ratio>`, `--out <path>`
+Options: `--image`, `--model gemini|qwen|openai|pony|wai`, `--ref <file>` (up to 3), `--aspect <ratio>`, `--out <path>`
 
 ### `video` — Standalone video tools (no project timeline)
 
@@ -191,10 +293,12 @@ npx makaron-cli analyze --video input.mp4 "describe the key actions and pacing"
 
 # 3a. Submit image-to-video rendering (images must be public URLs from step 1 or uploaded)
 npx makaron-cli video create --script "Shot 1 (5s): <<<image_1>>> ..." --image https://...jpg --duration 5 --model kling
+npx makaron-cli video create --script "Shot 1 (5s): <<<image_1>>> slow cinematic push-in with native ambience" --image https://...jpg --duration 5 --model grok
+npx makaron-cli video create --script "Shot 1 (15s): <<<image_1>>> and <<<image_2>>> build a neon one-person studio" --image https://...jpg --image https://...webp --duration 15 --model seedance-mini --video-resolution 480p --aspect 9:16
 
 # 3b. Edit a video from a local file or public URL
-npx makaron-cli video create --script "make it funny" --video input.mp4 --duration 5 --model seedance
-npx makaron-cli video create --script "make it warmer and cinematic" --video https://example.com/input.mp4 --duration 5 --model seedance
+npx makaron-cli video create --script "make it funny" --video input.mp4 --duration 5 --model seedance-fast
+npx makaron-cli video create --script "make it warmer and cinematic" --video https://example.com/input.mp4 --duration 5 --model seedance --video-resolution 1080p
 
 # 4. Check status
 npx makaron-cli video status <taskId>
@@ -206,9 +310,9 @@ For project/timeline video editing, use:
 npx makaron-cli chat --project <id|auto> --video input.mp4 -b "make it funny"
 ```
 
-Options for `video create`: `--script "..."`, `--script-file <path>`, `--image <url>` (repeatable, up to 7), `--video <file|url>`, `--duration <seconds>`, `--aspect 9:16|16:9|1:1`, `--model kling|seedance`. SeeDance accepts integer output duration 4-15s (default 5s); Kling supports 5-15s.
+Options for `video create`: `--script "..."`, `--script-file <path>`, `--image <url>` (repeatable, up to 7), `--video <file|url>`, `--duration <seconds>`, `--aspect 9:16|16:9|1:1`, `--model seedance-fast|seedance-mini|seedance|kling|grok`, `--video-resolution auto|480p|720p|1080p|4k`. Default model is `seedance-fast`. SeeDance accepts integer output duration 4-15s (default 5s); `seedance-mini` supports 480p/720p and is best for cheaper drafts/multi-size tests; Kling supports 5-15s; Grok 1.5 supports 1-15s single-image-to-video only. For `--model grok`, forced `--aspect` is ignored to avoid xAI stretching the source image; pad/create the image at the target shape first or use another model.
 
-Video edit model behavior: `--model kling --video` uses Kling base/direct edit internally; `--model seedance --video` uses the Seedance video-reference path and requires target <=15s, <=50MB, width/height 300-6000px, aspect ratio 0.4-2.5, and frame pixels 409,600-2,086,876. Tiny metadata padding up to 15.5s is accepted and output duration is clamped to 15s.
+Video edit model behavior: `--model kling --video` uses Kling base/direct edit internally; `--model seedance-fast --video`, `--model seedance-mini --video`, or `--model seedance --video` uses the SeeDance video-reference path and requires target <=15s, <=50MB, width/height 300-6000px, aspect ratio 0.4-2.5, and frame pixels 409,600-2,086,876. Tiny metadata padding up to 15.5s is accepted and output duration is clamped to 15s. Grok does not support video references.
 
 ### `music` — Music generation
 
@@ -237,8 +341,15 @@ type MakaronOutput =
   | { id: string; type: "text"; status: "completed"; content: string }
   | { id: string; type: "image"; status: "completed"; url: string; snapshot_id: string }
   | { id: string; type: "design"; status: "completed"; url: string; width: number; height: number; animated: boolean; duration?: number }
-  | { id: string; type: "video"; status: "queued"|"rendering"|"completed"|"failed"; task_id: string; url?: string; elapsed_seconds?: number }
+  | { id: string; type: "video"; status: "queued"|"rendering"|"completed"|"failed"; task_id: string; snapshot_id?: string; url?: string; elapsed_seconds?: number; width?: number; height?: number; error?: string; completion_actions?: CompletionAction[] }
   | { id: string; type: "music"; status: "queued"|"rendering"|"completed"|"failed"; task_id: string; url?: string; elapsed_seconds?: number }
+
+type CompletionAction = {
+  label: string
+  prompt: string
+  description?: string
+  policy?: "confirm" | "auto"
+}
 ```
 
 ## Polling Rules
@@ -247,6 +358,7 @@ type MakaronOutput =
 2. Use `next_poll_after_ms` as interval (default 5000ms)
 3. Stop when `status` is `"completed"`, `"failed"`, or `"aborted"`
 4. Top-level `status: "completed"` means ALL artifacts are ready (including rendered videos)
+5. If an async video fails, top-level `status` is `"failed"` and the failed video may include `completion_actions` for a safe retry or diagnosis. Agents can surface these as the next user-confirmed step.
 
 ## Exit Codes
 
@@ -266,6 +378,7 @@ type MakaronOutput =
 | Text-to-image | "generate a cyberpunk cityscape" |
 | Video from image | "create a 5 second video of her walking" |
 | Video with model | "use seedance model, make a 5s video" |
+| Real MP4 edits | `--video clip.mp4 "trim this to the best 20 seconds and preserve audio"` |
 | **Edit video** | **"put Iron Man armor on me in this video"** |
 | **Compose videos** | **"combine @1 and @2 into one party video"** |
 | **Extend video** | **"continue the story for 10 more seconds"** |
@@ -314,12 +427,13 @@ send_message "All done!"
 - One project = one conversation thread. All history is preserved.
 - One run at a time per project. New message interrupts previous run.
 - Multi-image: `create --image a.jpg --image b.jpg` or `chat --image ref.jpg`.
-- Videos take 2-5 minutes to render. Use `responses get <runId> --wait --json` for the default customer-service path.
+- Provider-generated videos can take 3-5 minutes; Grok is usually around 30-40 seconds. Remotion compositions should be converted with `materialize` / `responses get --materialize`, and timing should be read from `duration_seconds`, `render_seconds`, and `realtime_ratio`.
 - Music takes ~60 seconds. Appears in output when done.
 - Images are typically ready in 15-30 seconds.
 - stdout is always machine-readable JSON/text. Human-friendly logs go to stderr.
 - Always use `chat` as the primary interface — even for single image edits.
 - `edit`/`video`/`music` are fallback tools for when `chat` is unavailable or you need raw model access without project context.
+- The CLI checks npm for updates at most once per day and prints update notices to stderr. Set `MAKARON_DISABLE_UPDATE_CHECK=1` to disable it.
 
 ## Admin: Skill Marketplace Operations
 

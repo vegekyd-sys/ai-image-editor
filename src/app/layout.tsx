@@ -2,6 +2,8 @@ import type { Metadata, Viewport } from "next";
 import { Geist, Geist_Mono } from "next/font/google";
 import { Suspense } from "react";
 import AuthProvider from "@/components/AuthProvider";
+import NativeAppBootstrap from "@/components/NativeAppBootstrap";
+import NativeIOSPageStack from "@/components/NativeIOSPageStack";
 import MarketingTracker from "@/components/MarketingTracker";
 import { LocaleProvider } from "@/lib/i18n";
 import { DEFAULT_DESCRIPTION, DEFAULT_OG_IMAGE, SITE_NAME, SITE_URL } from "@/lib/seo";
@@ -68,13 +70,18 @@ export default function RootLayout({
       <head>
         <link rel="preconnect" href="https://cdn.makaron.app" />
       </head>
-      <body className="antialiased bg-black">
+      <body
+        className={`${geistSans.variable} ${geistMono.variable} antialiased bg-black`}
+      >
         <LocaleProvider>
           <AuthProvider>
+            <NativeAppBootstrap />
             <Suspense fallback={null}>
               <MarketingTracker />
             </Suspense>
-            {children}
+            <Suspense fallback={<>{children}</>}>
+              <NativeIOSPageStack>{children}</NativeIOSPageStack>
+            </Suspense>
           </AuthProvider>
         </LocaleProvider>
       </body>

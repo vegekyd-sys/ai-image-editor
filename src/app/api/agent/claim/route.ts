@@ -61,7 +61,7 @@ async function handleAgentClaimRequest(req: NextRequest) {
   })
 }
 
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
+
 async function validateClaimToken(admin: any, token: string): Promise<Response | null> {
   const { data: claimRow } = await admin
     .from('agent_challenges')

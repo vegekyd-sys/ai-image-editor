@@ -1,6 +1,6 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { makeAgentCallbacks, type AgentCallbackContext } from '@/lib/agentCallbacks';
-import type { Message } from '@/types';
+import type { Message, Snapshot } from '@/types';
 
 function createMockContext(overrides?: Partial<AgentCallbackContext>): AgentCallbackContext {
   return {
@@ -151,6 +151,32 @@ describe('makeAgentCallbacks', () => {
       expect(messages[0].image).toBe('data:image/jpeg;base64,abc');
     });
 
+    it('restores inline image by snapshot messageId when reconnect current turn is stale', () => {
+      messages = [
+        { id: 'stale-msg', role: 'assistant', content: '', timestamp: Date.now() },
+        { id: 'linked-msg', role: 'assistant', content: 'done', timestamp: Date.now() },
+      ];
+      const snapshots = [
+        { id: 'snap-1', image: '', imageUrl: 'https://old.url', tips: [], messageId: 'linked-msg' },
+      ];
+      ctx = createMockContext({
+        snapshotsRef: { current: snapshots },
+        setMessages: vi.fn((updater: (prev: typeof messages) => typeof messages) => {
+          messages = updater(messages);
+        }),
+        setSnapshots: vi.fn((updater) => {
+          updater(snapshots as never);
+        }),
+      });
+
+      const { callbacks } = makeAgentCallbacks(ctx);
+      callbacks.onNewTurn?.('stale-msg');
+      callbacks.onImage?.('', 'gemini', 'snap-1', 'https://storage.url/generated.jpg');
+
+      expect(messages.find(m => m.id === 'linked-msg')?.image).toBe('https://storage.url/generated.jpg');
+      expect(messages.find(m => m.id === 'stale-msg')?.image).toBeUndefined();
+    });
+
     it('calls fetchTipsForSnapshot', () => {
       const { callbacks } = makeAgentCallbacks(ctx);
       callbacks.onNewTurn?.('msg-1');
@@ -246,6 +272,28 @@ describe('makeAgentCallbacks', () => {
 
       // Description should have been saved (first paragraph, max 300 chars)
       expect(ctx.onUpdateDescription).toHaveBeenCalledWith('snap-0', 'A photo of a cat');
+    });
+
+    it('keeps pending analyzed index when new_turn arrives before analysis text', () => {
+      let snapshots: Snapshot[] = [{ id: 'video-0', image: '', tips: [], messageId: '', type: 'video' }];
+      ctx = createMockContext({
+        setMessages: vi.fn((updater: (prev: typeof messages) => typeof messages) => {
+          messages = updater(messages);
+        }),
+        setSnapshots: vi.fn((updater) => {
+          snapshots = updater(snapshots as never) as never;
+        }),
+        snapshotsRef: { current: snapshots as never },
+      });
+
+      const { callbacks } = makeAgentCallbacks(ctx);
+      callbacks.onImageAnalyzed?.(1); // analyze_video tool result arrives before final assistant turn
+      callbacks.onNewTurn?.('msg-1');
+      callbacks.onContent?.('This video shows a product update.');
+      callbacks.onDone?.();
+
+      expect(ctx.onUpdateDescription).toHaveBeenCalledWith('video-0', 'This video shows a product update.');
+      expect(snapshots[0].description).toBe('This video shows a product update.');
     });
   });
 

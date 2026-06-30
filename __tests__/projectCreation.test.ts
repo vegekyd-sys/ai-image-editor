@@ -9,7 +9,7 @@
 
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { makeAgentCallbacks, type AgentCallbackContext } from '@/lib/agentCallbacks';
-import type { Message, Snapshot, DesignPayload } from '@/types';
+import type { Message, Snapshot } from '@/types';
 
 function createMockContext(overrides?: Partial<AgentCallbackContext>): AgentCallbackContext {
   return {

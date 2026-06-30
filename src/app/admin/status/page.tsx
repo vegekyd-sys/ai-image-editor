@@ -66,7 +66,7 @@ export default function StatusPage() {
   }, [fetchHealth])
 
   return (
-    <div style={{ minHeight: '100dvh', background: '#0a0a0a', color: '#e5e5e5', padding: '24px 16px', fontFamily: 'system-ui, -apple-system, sans-serif' }}>
+    <div className="makaron-ios-page makaron-ios-page-x" style={{ minHeight: '100dvh', background: '#0a0a0a', color: '#e5e5e5', padding: '24px 16px', fontFamily: 'system-ui, -apple-system, sans-serif' }}>
       <div style={{ maxWidth: 600, margin: '0 auto' }}>
         <h1 style={{ fontSize: 24, fontWeight: 700, marginBottom: 8 }}>Makaron Status</h1>
 

@@ -15,6 +15,13 @@ import * as workspace from './workspace';
 import { buildModelHistoryFromRows, type DbToolHistoryRow } from './agentToolHistory';
 import { formatVideoMediaSpec } from './media-aspect';
 
+export interface AudioAttachmentContext {
+  audioUrl: string;
+  title?: string;
+  duration?: number;
+  trackIndex?: number;
+}
+
 export interface PromptContextOptions {
   /** 0-based index of the snapshot the user is viewing. Defaults to last. */
   currentSnapshotIndex?: number;
@@ -28,6 +35,8 @@ export interface PromptContextOptions {
   referenceImageCount?: number;
   /** Number of just-uploaded videos (for context hint with media index) */
   uploadedVideoCount?: number;
+  /** Audio references for this turn. Not part of Timeline Media Index. */
+  audioAttachments?: AudioAttachmentContext[];
 }
 
 export interface PromptContextResult {
@@ -40,6 +49,8 @@ export interface PromptContextResult {
   currentSnapshotIndex: number;
   currentDesign?: DesignPayload;
   currentDesignPath?: string;
+  /** Project-scoped audio refs available as audio_1, audio_2, ... (not media_N). */
+  audioAttachments: AudioAttachmentContext[];
 }
 
 interface DbSnapshot {
@@ -59,6 +70,48 @@ interface DbMessage {
   role: 'user' | 'assistant';
   content: string;
   created_at: string;
+}
+
+interface DbProjectMusic {
+  audio_url?: string | null;
+  suno_audio_url?: string | null;
+  stream_audio_url?: string | null;
+  duration?: number | null;
+  title?: string | null;
+  track_index?: number | null;
+  status?: string | null;
+  tags?: string | null;
+}
+
+function getUsableAudioUrl(row: DbProjectMusic): string {
+  return row.audio_url || row.suno_audio_url || row.stream_audio_url || '';
+}
+
+function normalizeAudioAttachment(audio: AudioAttachmentContext): AudioAttachmentContext | null {
+  if (!audio.audioUrl || !/^https?:\/\//.test(audio.audioUrl)) return null;
+  return {
+    audioUrl: audio.audioUrl,
+    title: audio.title,
+    duration: typeof audio.duration === 'number' && Number.isFinite(audio.duration) ? audio.duration : undefined,
+    trackIndex: typeof audio.trackIndex === 'number' && Number.isFinite(audio.trackIndex) ? audio.trackIndex : undefined,
+  };
+}
+
+function mergeAudioAttachments(
+  projectAudios: AudioAttachmentContext[],
+  turnAudios: AudioAttachmentContext[] | undefined,
+): AudioAttachmentContext[] {
+  const merged: AudioAttachmentContext[] = [];
+  const seen = new Set<string>();
+  for (const audio of [...projectAudios, ...(turnAudios || [])]) {
+    const normalized = normalizeAudioAttachment(audio);
+    if (!normalized) continue;
+    const key = normalized.audioUrl.trim();
+    if (seen.has(key)) continue;
+    seen.add(key);
+    merged.push(normalized);
+  }
+  return merged;
 }
 
 function normalizeLegacyCompositionDescription(description: string | undefined, fallback: string): string {
@@ -83,10 +136,12 @@ export async function buildPromptContext(
   userId: string,
   options: PromptContextOptions,
 ): Promise<PromptContextResult> {
-  const { userMessage, hasAnnotation, isDraft, referenceImageCount, uploadedVideoCount } = options;
+  const { userMessage, hasAnnotation, isDraft, referenceImageCount, uploadedVideoCount, audioAttachments } = options;
 
-  // Query snapshots, visible messages, and private tool history in parallel.
-  const [snapshotsRes, messagesRes, toolHistoryRes] = await Promise.all([
+  // Query snapshots, visible messages, private tool history, and project audio
+  // in parallel. Audio is a separate project-scoped index; it never occupies
+  // Timeline Media Index slots like <<<media_N>>>.
+  const [snapshotsRes, messagesRes, toolHistoryRes, musicRes] = await Promise.all([
     supabase
       .from('snapshots')
       .select('id, image_url, description, type, design_path, tips, sort_order, video_meta, metadata')
@@ -103,11 +158,31 @@ export async function buildPromptContext(
       .eq('project_id', projectId)
       .eq('user_id', userId)
       .order('created_at', { ascending: true }),
+    supabase
+      .from('project_music')
+      .select('audio_url, suno_audio_url, stream_audio_url, duration, title, track_index, status, tags')
+      .eq('project_id', projectId)
+      .eq('user_id', userId)
+      .in('status', ['completed', 'streaming'])
+      .order('track_index', { ascending: true })
+      .limit(20),
   ]);
 
   const snapshots: DbSnapshot[] = snapshotsRes.data ?? [];
   const messages: DbMessage[] = messagesRes.data ?? [];
   const toolHistory: DbToolHistoryRow[] = toolHistoryRes.data ?? [];
+  const projectAudios: AudioAttachmentContext[] = ((musicRes.data ?? []) as DbProjectMusic[])
+    .map((row) => {
+      const audioUrl = getUsableAudioUrl(row);
+      return {
+        audioUrl,
+        title: row.title || undefined,
+        duration: typeof row.duration === 'number' ? row.duration : undefined,
+        trackIndex: typeof row.track_index === 'number' ? row.track_index : undefined,
+      };
+    })
+    .filter((audio) => !!audio.audioUrl);
+  const resolvedAudioAttachments = mergeAudioAttachments(projectAudios, audioAttachments);
 
   const currentSnapshotIndex = options.currentSnapshotIndex ?? Math.max(0, snapshots.length - 1);
   const currentSnap = snapshots[currentSnapshotIndex];
@@ -212,8 +287,13 @@ export async function buildPromptContext(
     ? `[DRAFT PREVIEW MODE] The user is viewing a tip preview (not yet committed). This draft image is NOT in the media index. Omit media_index to edit this draft directly.\n\n`
     : '';
 
-  const refContext = referenceImageCount
+  const isFrameAnchoredVideoEdit = !!(referenceImageCount && /@\d+/.test(userMessage) && /\b\d+:\d{2}\b/.test(userMessage));
+  const refContext = referenceImageCount && !isFrameAnchoredVideoEdit
     ? `[用户上传了 ${referenceImageCount} 张参考图，已自动传给 generate_image 工具使用]\n\n`
+    : '';
+
+  const frameAnchoredVideoEditContext = isFrameAnchoredVideoEdit
+    ? `[Frame-anchored video edit]\nThe user attached a screenshot/frame and referenced a video moment in the text. Treat the attached image as the visual anchor for local video repair: read skills/video-segment-edit/SKILL.md, locate the moment with analyze_video({ mode: "locate_frame" }) using the screenshot + referenced video, and do not call generate_animation until the user explicitly confirms generation.\n\n`
     : '';
 
   const videoUploadContext = uploadedVideoCount
@@ -224,8 +304,18 @@ export async function buildPromptContext(
       })()
     : '';
 
+  const audioAttachmentContext = resolvedAudioAttachments.length
+    ? `[Audio Index - not Timeline Media]\n${resolvedAudioAttachments.map((audio, i) => {
+        const label = `audio_${i + 1}`;
+        const title = audio.title || `Reference audio ${i + 1}`;
+        const duration = typeof audio.duration === 'number' ? `, ${formatSecondsForPrompt(audio.duration)}s` : '';
+        const track = typeof audio.trackIndex === 'number' ? `, project_music track_index=${audio.trackIndex}` : '';
+        return `<<<${label}>>> [audio] — ${title}${duration}${track}, ${audio.audioUrl}`;
+      }).join('\n')}\nUse these as music/audio references. To use one in video generation, mention its marker in story_prompt and pass audio_refs, e.g. story_prompt includes <<<audio_1>>> and audio_refs is ["audio_1"]. Audio markers are not Timeline Media Index items and must not be referenced as <<<media_N>>>.\n\n`
+    : '';
+
   // Assemble
-  const fullPrompt = `${videoWarning}${designWarning}${annotationWarning}${draftWarning}${snapshotWarning}${metaContext}${descriptionContext}${snapshotIndexContext}${designContext}${tipsContext}${refContext}${videoUploadContext}[User request — detect language and reply in the same language]\n${userMessage}`;
+  const fullPrompt = `${videoWarning}${designWarning}${annotationWarning}${draftWarning}${snapshotWarning}${metaContext}${descriptionContext}${snapshotIndexContext}${designContext}${tipsContext}${refContext}${frameAnchoredVideoEditContext}${videoUploadContext}${audioAttachmentContext}[User request — detect language and reply in the same language]\n${userMessage}`;
 
   const snapshotImages = snapshots.map((s) => {
     const videoMeta = s.video_meta as Record<string, unknown> | undefined;
@@ -240,5 +330,10 @@ export async function buildPromptContext(
     currentSnapshotIndex,
     currentDesign,
     currentDesignPath,
+    audioAttachments: resolvedAudioAttachments,
   };
+}
+
+function formatSecondsForPrompt(seconds: number): string {
+  return Number.isInteger(seconds) ? String(seconds) : seconds.toFixed(1).replace(/\.0$/, '');
 }

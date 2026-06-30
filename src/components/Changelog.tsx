@@ -1,12 +1,103 @@
 'use client';
 
+import { useEffect, useState, type CSSProperties } from 'react';
+
 interface ChangelogEntry {
   date: string;
-  en: { title: string; items: string[]; link?: { label: string; href: string } };
-  zh: { title: string; items: string[]; link?: { label: string; href: string } };
+  en: { title: string; items: string[]; link?: { label: string; href: string; variant?: 'text' | 'button' } };
+  zh: { title: string; items: string[]; link?: { label: string; href: string; variant?: 'text' | 'button' } };
 }
 
 const CHANGELOG: ChangelogEntry[] = [
+  {
+    date: '2026-06-30',
+    en: { title: 'Makaron for iPhone is live', items: [
+      'Makaron now spans iOS, web, mobile web, and CLI.',
+      'Projects, chat history, Skills, image previews, video tools, and credits stay shared across every surface.',
+      'One more native trick is waiting in the wings. Siri is getting closer.',
+    ], link: { label: 'Download on the App Store', href: 'https://apps.apple.com/app/id6779672002', variant: 'button' }},
+    zh: { title: 'Makaron iPhone 版正式上线', items: [
+      'Makaron 现在覆盖 iOS、Web、H5 和 CLI。',
+      '项目、聊天记录、Skills、图片预览、视频工具和 credits 会在所有入口之间共享。',
+      '还有一个原生小秘密正在靠近：Siri 会很快加入这场创作。',
+    ], link: { label: '下载 iPhone App', href: 'https://apps.apple.com/app/id6779672002', variant: 'button' }},
+  },
+  {
+    date: '2026-06-30',
+    en: { title: 'Remotion MP4 Export', items: [
+      'Animated Remotion designs can now become real MP4 videos you can play, download, share, and keep editing from the timeline.',
+      'Makaron can also export MP4s from saved designs or design JSON, so agent-made motion work is easier to hand off and reuse.',
+      'Export progress now feels clearer in the app, with better status text while your video is being prepared.',
+    ]},
+    zh: { title: 'Remotion MP4 导出', items: [
+      'Remotion 做出来的动画现在可以变成真正的 MP4，在时间线里播放、下载、分享，也能继续接着改。',
+      '保存过的设计和 design JSON 也可以直接导出 MP4，Agent 做出来的动态作品更容易交付和复用。',
+      '导出过程里的状态提示更清楚了，准备视频时不会再显示不准确的等待时间。',
+    ]},
+  },
+  {
+    date: '2026-06-29',
+    en: { title: 'Liquid Glass UI Refresh', items: [
+      'Home, Projects, Updates, account menus, and input areas now share a softer Liquid Glass style, with faster navigation and safer mobile/iOS spacing.',
+      'Makaron CLI now supports `--audio`, so agents can create videos guided by a song, beat, or voice recording directly from the terminal.',
+    ]},
+    zh: { title: 'Liquid Glass UI 升级', items: [
+      '首页、项目页、更新、账号菜单和输入框统一为更克制的 Liquid Glass 风格，同时优化了切换速度和移动端/iOS 安全区适配。',
+      'Makaron CLI 现在支持 `--audio`，可以把音乐、节拍或录音作为参考音频传给视频生成，让视频跟着声音走。',
+    ]},
+  },
+  {
+    date: '2026-06-26',
+    en: { title: 'iOS TestFlight Begins', items: [
+      'Makaron for iPhone is now preparing for App Store launch, with TestFlight testing open for the first release candidate.',
+      'The iOS app connects to the live Makaron workspace, so projects, chat, image previews, video tools, and credits stay in sync with the web app.',
+      'Subscriptions and top-ups are now handled through Apple on iOS, while the web app continues to use the existing checkout flow.',
+    ]},
+    zh: { title: 'iOS TestFlight 开始测试', items: [
+      'Makaron iPhone 版已进入 App Store 上线准备阶段，首个候选版本开始 TestFlight 测试。',
+      'iOS App 连接同一套 Makaron 工作区，项目、对话、图片预览、视频工具和 credits 会与网页端同步。',
+      'iOS 上的订阅和充值现在通过 Apple 完成，网页端继续沿用原有支付流程。',
+    ]},
+  },
+  {
+    date: '2026-06-25',
+    en: { title: 'SeeDance Mini', items: [
+      'SeeDance 2.0 Mini is now available for lower-cost 480p/720p video drafts.',
+      'Mini reference videos now keep the real timeline source, inferred aspect ratio, and correct credit logs.',
+    ]},
+    zh: { title: 'SeeDance Mini', items: [
+      'SeeDance 2.0 Mini 上线，可用于更低成本的 480p/720p 视频草稿。',
+      'Mini 参考视频现在会保留真实时间线来源、自动推断比例，并正确记录计费。',
+    ]},
+  },
+  {
+    date: '2026-06-21',
+    en: { title: 'Major Video Model Upgrade', items: [
+      'Grok 1.5 is here: turn a photo into video in about 30–40 seconds, with surprisingly strong results.',
+      'SeeDance 2.0 is now available as the high-quality option, separate from Fast. It costs more, but delivers SOTA-level video quality.',
+      'Kling O3 now supports 4K output, so you can create sharper, higher-end videos directly in Makaron.',
+    ]},
+    zh: { title: '视频模型重大升级', items: [
+      'Grok 1.5 上线：可以把照片迅速动起来，通常 30–40 秒完成，效果非常出色。',
+      'SeeDance 2.0 上线：这是区别于 Fast 的高画质版本，价格更高，但效果应该是目前 SOTA。',
+      'Kling O3 支持 4K：可以直接输出更清晰、更高规格的视频。',
+    ]},
+  },
+  {
+    date: '2026-06-18',
+    en: { title: 'Frame-Based Video Repair', items: [
+      'When a video has one awkward moment, tap "Edit video here" to capture that frame and continue in chat with the screenshot already attached.',
+      'Tell Makaron what feels wrong — "make this frame Paris", "the hand looks weird here", or "around this second" — and it focuses on that moment instead of remaking the whole video.',
+      'Makaron locates the matching segment from the screenshot, prepares a local repair, and waits for your confirmation before rendering.',
+      'The rebuilt workspace keeps source videos, captured frames, segments, and generated clips reusable across follow-up steps.',
+    ]},
+    zh: { title: '按当前帧修视频', items: [
+      '视频里只有某一帧不对时，点“从这帧改视频”就能截下当前画面，并带着截图直接进入聊天。',
+      '像平时说话一样描述就行："这帧换成巴黎"、"这里手有点怪"、"大概这一秒不对"；Makaron 会聚焦这个画面附近，只重做这一小段。',
+      'Makaron 会根据截图找到对应片段，准备局部修复方案，并等你确认后再渲染。',
+      '新的工作区会复用源视频、截帧、裁剪片段和生成结果，后续继续修改不用来回找文件。',
+    ]},
+  },
   {
     date: '2026-06-12',
     en: { title: 'Editable Image & Video Layers', items: [
@@ -20,6 +111,21 @@ const CHANGELOG: ChangelogEntry[] = [
       '在画布上点选图层，就能直接移动和缩放，不用为了小调整重新让 Agent 生成整张图。',
       '视频片段新增 trim 条：支持播放、拖动时间戳、拖起止把手，以及整体移动裁剪区间。',
       '长海报类项目更好改了：上下滚动时，选中框会持续跟住内容。',
+    ]},
+  },
+  {
+    date: '2026-06-07',
+    en: { title: 'Voice Writing & Video Cuts', items: [
+      'Makaron can now draft from spoken video: it listens to uploaded clips and turns speech into editing context.',
+      'Turn a raw talking-head clip into a cleaner draft by asking Agent to tighten pauses, breaths, and dead air.',
+      'Ask for the strongest lines, then cut around those moments to shape a sharper short video.',
+      'Video edits, previews, and analysis results stay on the timeline, so the next prompt can keep building from the same material.',
+    ]},
+    zh: { title: '语音撰写与视频剪辑', items: [
+      'Makaron 现在可以用视频里的口播来写稿：先听懂语音，再把逐字稿和时间点交给 Agent。',
+      '可以直接让 Agent 收紧停顿、气口和废话，把一段原始口播剪成更干净的初稿。',
+      '也可以让 Agent 找出金句，再围绕这些高光时刻剪出更有重点的短视频。',
+      '剪好的视频、预览和分析结果都会留在时间线上，下一轮可以接着同一份素材继续改。',
     ]},
   },
   {
@@ -595,32 +701,130 @@ const CHANGELOG: ChangelogEntry[] = [
   },
 ];
 
+const changelogGlassStyle: CSSProperties = {
+  background:
+    'linear-gradient(180deg, rgba(46,47,56,0.68), rgba(17,18,24,0.75) 48%, rgba(7,8,11,0.86))',
+  border: '0.5px solid rgba(255,255,255,0.11)',
+  boxShadow:
+    '0 24px 64px rgba(0,0,0,0.50), inset 0 0.5px 0 rgba(255,255,255,0.14), inset 0 -16px 30px rgba(0,0,0,0.22)',
+  backdropFilter: 'blur(32px) saturate(158%) contrast(106%)',
+  WebkitBackdropFilter: 'blur(32px) saturate(158%) contrast(106%)',
+  isolation: 'isolate',
+};
+
+const changelogGlassHighlightStyle: CSSProperties = {
+  position: 'absolute',
+  inset: 0,
+  pointerEvents: 'none',
+  borderRadius: 'inherit',
+  background:
+    'radial-gradient(circle at 18% -8%, rgba(255,255,255,0.18), rgba(255,255,255,0.045) 24%, transparent 52%), linear-gradient(126deg, rgba(255,255,255,0.058), rgba(255,255,255,0.014) 36%, rgba(236,72,153,0.028) 74%, rgba(34,211,238,0.022))',
+  mixBlendMode: 'screen',
+  opacity: 0.66,
+};
+
+const changelogGlassEdgeStyle: CSSProperties = {
+  position: 'absolute',
+  inset: 1,
+  pointerEvents: 'none',
+  borderRadius: 'inherit',
+  boxShadow:
+    'inset 0 0 0 0.5px rgba(255,255,255,0.045), inset 0 10px 18px rgba(255,255,255,0.032), inset 0 -0.5px 0 rgba(0,0,0,0.34), inset 1px 0 0 rgba(56,189,248,0.032), inset -1px 0 0 rgba(236,72,153,0.034)',
+};
+
+const iOSAppTopGap = 'max(96px, calc(env(safe-area-inset-top, 0px) + 40px))';
+const iOSAppBottomGap = 'max(14px, env(safe-area-inset-bottom, 0px))';
+
 export default function Changelog({ onClose, locale }: { onClose: () => void; locale: string }) {
   const isZh = locale === 'zh';
+  const [isIOSApp, setIsIOSApp] = useState(false);
+
+  useEffect(() => {
+    setIsIOSApp(document.documentElement.classList.contains('makaron-ios-app') || navigator.userAgent.includes('MakaronIOS'));
+  }, []);
 
   return (
     <div
-      className="fixed inset-0 z-50 flex items-end sm:items-center justify-center"
+      className="fixed inset-0 z-[1000] flex items-end sm:items-center justify-center"
       onClick={onClose}
+      style={isIOSApp ? {
+        boxSizing: 'border-box',
+        paddingTop: iOSAppTopGap,
+        paddingBottom: iOSAppBottomGap,
+      } : undefined}
     >
       {/* Backdrop */}
-      <div className="absolute inset-0 bg-black/60 backdrop-blur-sm" />
-
-      {/* Modal — full screen on mobile, centered card on desktop */}
       <div
-        className="relative w-full h-full sm:h-auto sm:max-w-xl sm:mx-4 sm:max-h-[80dvh] sm:rounded-2xl overflow-hidden flex flex-col"
-        style={{ background: 'rgba(20,20,20,0.97)', border: '1px solid rgba(255,255,255,0.08)' }}
+        className="absolute inset-0"
+        style={{
+          background:
+            'radial-gradient(circle at 50% 0%, rgba(255,255,255,0.065), transparent 32%), rgba(0,0,0,0.54)',
+          backdropFilter: 'blur(5px) saturate(120%)',
+          WebkitBackdropFilter: 'blur(5px) saturate(120%)',
+        }}
+      />
+
+      {/* Modal */}
+      <div
+        className={isIOSApp
+          ? 'relative w-[calc(100%-24px)] max-w-xl rounded-[22px] overflow-hidden flex flex-col'
+          : 'relative mb-2 w-[calc(100%-24px)] max-w-xl max-h-[calc(100dvh-64px)] rounded-[22px] sm:mb-0 sm:mx-4 sm:max-h-[80dvh] overflow-hidden flex flex-col'
+        }
+        role="dialog"
+        aria-modal="true"
+        aria-label={isZh ? '更新' : 'Updates'}
+        style={{
+          ...changelogGlassStyle,
+          maxHeight: isIOSApp ? `calc(100dvh - ${iOSAppTopGap} - ${iOSAppBottomGap})` : undefined,
+        }}
         onClick={(e) => e.stopPropagation()}
       >
+        <div style={changelogGlassHighlightStyle} />
+        <div style={changelogGlassEdgeStyle} />
+
         {/* Header */}
-        <div className="flex-shrink-0 flex items-center justify-between px-5 py-4" style={{ borderBottom: '1px solid rgba(255,255,255,0.06)' }}>
-          <h2 className="text-base font-semibold" style={{ color: 'rgba(255,255,255,0.85)' }}>
-            {isZh ? '更新日志' : "What's New"}
-          </h2>
+        <div
+          className="relative z-[1] flex-shrink-0 flex items-center justify-between px-5 py-4"
+          style={{
+            borderBottom: '0.5px solid rgba(255,255,255,0.07)',
+            background:
+              'linear-gradient(180deg, rgba(255,255,255,0.035), rgba(255,255,255,0.01))',
+          }}
+        >
+          <div className="flex items-center gap-2.5">
+            <span
+              className="inline-flex h-7 w-7 items-center justify-center rounded-full"
+              style={{
+                color: 'rgba(255,255,255,0.76)',
+                background: 'rgba(255,255,255,0.045)',
+                border: '0.5px solid rgba(255,255,255,0.08)',
+                boxShadow: 'inset 0 0.5px 0 rgba(255,255,255,0.12)',
+              }}
+            >
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                <path d="M12 3v3" />
+                <path d="M12 18v3" />
+                <path d="M3 12h3" />
+                <path d="M18 12h3" />
+                <path d="m6.4 6.4 2.1 2.1" />
+                <path d="m15.5 15.5 2.1 2.1" />
+                <path d="m17.6 6.4-2.1 2.1" />
+                <path d="m8.5 15.5-2.1 2.1" />
+              </svg>
+            </span>
+            <h2 className="text-base font-semibold" style={{ color: 'rgba(255,255,255,0.88)' }}>
+              {isZh ? '更新' : 'Updates'}
+            </h2>
+          </div>
           <button
             onClick={onClose}
+            aria-label={isZh ? '关闭更新' : 'Close updates'}
             className="w-7 h-7 flex items-center justify-center rounded-full"
-            style={{ background: 'rgba(255,255,255,0.08)' }}
+            style={{
+              background: 'rgba(255,255,255,0.045)',
+              border: '0.5px solid rgba(255,255,255,0.08)',
+              boxShadow: 'inset 0 0.5px 0 rgba(255,255,255,0.12)',
+            }}
           >
             <svg width="12" height="12" viewBox="0 0 12 12" fill="none" stroke="rgba(255,255,255,0.5)" strokeWidth="1.5" strokeLinecap="round">
               <line x1="2" y1="2" x2="10" y2="10" /><line x1="10" y1="2" x2="2" y2="10" />
@@ -629,13 +833,13 @@ export default function Changelog({ onClose, locale }: { onClose: () => void; lo
         </div>
 
         {/* Scrollable entries */}
-        <div className="flex-1 overflow-y-auto overscroll-contain px-5 pb-6" style={{ WebkitOverflowScrolling: 'touch' }}>
+        <div className="relative z-[1] flex-1 overflow-y-auto overscroll-contain px-5 pb-6" style={{ WebkitOverflowScrolling: 'touch' }}>
           {CHANGELOG.map((entry, i) => {
             const loc = isZh ? entry.zh : entry.en;
             return (
               <div key={entry.date} className={i > 0 ? 'mt-5' : 'mt-3'}>
                 <div className="flex items-center gap-2.5 mb-1.5">
-                  <span className="text-[11px] font-mono tabular-nums" style={{ color: 'rgba(192,38,211,0.7)' }}>
+                  <span className="text-[11px] font-mono tabular-nums" style={{ color: 'rgba(232,121,249,0.76)' }}>
                     {entry.date}
                   </span>
                   <span className="text-[13px] font-medium" style={{ color: 'rgba(255,255,255,0.75)' }}>
@@ -653,10 +857,39 @@ export default function Changelog({ onClose, locale }: { onClose: () => void; lo
                 {loc.link && (
                   <a
                     href={loc.link.href}
-                    className="inline-block mt-2 ml-1 text-[12.5px] font-medium"
-                    style={{ color: 'rgba(192,38,211,0.9)' }}
+                    className={loc.link.variant === 'button'
+                      ? 'group inline-flex mt-3 ml-1 h-10 min-w-[128px] items-center justify-center rounded-[11px] px-2.5 text-left'
+                      : 'inline-block mt-2 ml-1 text-[12.5px] font-medium'
+                    }
+                    style={loc.link.variant === 'button' ? {
+                      color: 'rgba(255,255,255,0.96)',
+                      background:
+                        'linear-gradient(180deg, rgba(21,22,26,0.98), rgba(3,4,7,0.96))',
+                      border: '0.5px solid rgba(255,255,255,0.18)',
+                      boxShadow:
+                        '0 16px 34px rgba(0,0,0,0.34), inset 0 0.5px 0 rgba(255,255,255,0.24), inset 0 -10px 18px rgba(255,255,255,0.025)',
+                      backdropFilter: 'blur(18px) saturate(140%)',
+                      WebkitBackdropFilter: 'blur(18px) saturate(140%)',
+                    } : { color: 'rgba(232,121,249,0.88)' }}
                   >
-                    {loc.link.label}
+                    {loc.link.variant === 'button' ? (
+                      <span className="flex items-center gap-1.5">
+                        <img
+                          src="/brand/makaron-app-icon-512.png"
+                          alt=""
+                          className="h-6 w-6 rounded-[6px]"
+                          style={{ boxShadow: '0 1px 6px rgba(0,0,0,0.32)' }}
+                        />
+                        <span className="flex flex-col leading-none">
+                          <span className="text-[8.5px] font-medium tracking-[0px]" style={{ color: 'rgba(255,255,255,0.58)' }}>
+                            {isZh ? '立即前往' : 'Download on the'}
+                          </span>
+                          <span className="mt-1 text-[14px] font-semibold tracking-[0px]" style={{ color: 'rgba(255,255,255,0.96)' }}>
+                            {isZh ? 'App Store' : 'App Store'}
+                          </span>
+                        </span>
+                      </span>
+                    ) : loc.link.label}
                   </a>
                 )}
               </div>

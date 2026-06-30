@@ -43,7 +43,7 @@ function TipThumbnail({ tip, onRetryPreview, originalIndex }: {
         {isStorageUrl && !imgLoaded && (
           <div className="absolute inset-0 bg-white/5 animate-pulse" />
         )}
-        {/* eslint-disable-next-line @next/next/no-img-element */}
+        { }
         <img
           src={displayUrl}
           alt=""

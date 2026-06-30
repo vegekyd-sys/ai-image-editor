@@ -15,9 +15,8 @@ interface AgentStatusBarProps {
   onSeeNotification?: () => void;
 }
 
-export default function AgentStatusBar({ statusText, isActive, onOpenChat, isViewingDraft, hideChat, onAnimate, hasVideo, snapshotCount = 0, notification, onSeeNotification }: AgentStatusBarProps) {
+export default function AgentStatusBar({ statusText, isActive, onOpenChat, isViewingDraft, hideChat, notification, onSeeNotification }: AgentStatusBarProps) {
   const { t } = useLocale();
-  const videoLit = snapshotCount > 3 && !hasVideo;
   // Determine dot color and breathe speed based on state
   const isGeneratingImages = statusText.includes('previews') || statusText.includes('预览');
   const isFetchingTips = statusText === t('status.generatingTips');

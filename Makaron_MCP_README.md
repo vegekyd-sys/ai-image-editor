@@ -118,7 +118,7 @@ const result = await client.callTool({
 | `script` | string | ✅ | 视频脚本（Kling 格式，含 `<<<image_N>>>` 引用） |
 | `images` | string[] | ✅ | 1-7 张图片的公开 URL（必须 https://） |
 | `duration` | number | | 时长：3/5/7/10/15 秒。省略=智能模式（API 自动决定） |
-| `aspectRatio` | string | | 宽高比：`"9:16"` / `"16:9"` / `"1:1"` |
+| `aspectRatio` | string | | 宽高比：`"9:16"` / `"16:9"` / `"1:1"`；Grok 单图转视频会忽略强制比例以避免拉伸源图 |
 | `videoModel` | string | | 视频模型：`kling`（默认，$0.112/s）/ `seedance`（SeeDance 2.0，支持真人脸，$0.161/s） |
 
 **返回：**
@@ -159,7 +159,7 @@ const result = await client.callTool({
 | `editPrompt` | string | ✅ | 编辑要求 |
 | `images` | string[] | | 可选参考图公开 URL |
 | `duration` | number | | 输出时长：3/5/7/10/15 秒 |
-| `aspectRatio` | string | | 宽高比 |
+| `aspectRatio` | string | | 宽高比；Grok 单图转视频会忽略强制比例以避免拉伸源图 |
 | `videoModel` | string | | `kling`（默认）/ `seedance` |
 | `referType` | string | | `base` / `feature`；Seedance 默认 `feature` |
 | `keepOriginalSound` | boolean | | 是否保留原视频声音 |

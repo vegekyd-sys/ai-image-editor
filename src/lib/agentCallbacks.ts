@@ -3,6 +3,7 @@ import type { Snapshot, Tip, ProjectAnimation, VideoModel } from '@/types';
 import type { DesignPayload } from '@/types';
 import { VIDEO_PLACEHOLDER_IMAGE } from '@/lib/editor/timeline-derivations';
 import { getDefaultVideoModelId } from '@/lib/video-model-capabilities';
+import { appendSnapshotDedupeVideo } from '@/lib/video-snapshot-dedupe';
 
 /**
  * Context for creating unified agent callbacks.
@@ -21,7 +22,7 @@ export interface AgentCallbackContext {
   setDesignDraftParent?: (idx: number | null) => void;
   setPendingNotification?: (n: { text: string; targetIndex: number }) => void;
   setSelectedVideoId?: (id: string) => void;
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+
   setAnimationState?: (state: any) => void;
 
   // Refs
@@ -44,7 +45,7 @@ export interface AgentCallbackContext {
 
   // Callback functions (from Editor)
   cacheImage: (key: string, data: string) => void;
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+
   fetchTipsForSnapshot: (...args: any[]) => void;
   onSaveSnapshot?: (snap: Snapshot, sortOrder: number, onUploaded?: (url: string) => void) => void;
   onUpdateDescription?: (snapId: string, desc: string) => void;
@@ -53,7 +54,7 @@ export interface AgentCallbackContext {
   compressBase64Image?: (img: string, maxBytes: number) => Promise<string>;
 
   // i18n
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+
   t: (...args: any[]) => string;
 
   // Music
@@ -98,15 +99,21 @@ export function makeAgentCallbacks(ctx: AgentCallbackContext) {
   let lastAnalyzedIdx: number | null = null;
   let analyzedTextBuf = '';
 
-  const flushAnalyzedDesc = () => {
+  const flushAnalyzedDesc = (options?: { keepPendingIfEmpty?: boolean }) => {
     if (lastAnalyzedIdx !== null && analyzedTextBuf.trim()) {
       const desc = analyzedTextBuf.split('\n\n')[0].trim().slice(0, 300);
       const snapIdx = lastAnalyzedIdx - 1;
       const snap = ctx.snapshotsRef.current[snapIdx];
       if (snap && !snap.description) {
-        ctx.setSnapshots(prev => prev.map(s => s.id === snap.id ? { ...s, description: desc } : s));
+        ctx.setSnapshots(prev => {
+          const next = prev.map(s => s.id === snap.id ? { ...s, description: desc } : s);
+          ctx.snapshotsRef.current = next;
+          return next;
+        });
         ctx.onUpdateDescription?.(snap.id, desc);
       }
+    } else if (options?.keepPendingIfEmpty && lastAnalyzedIdx !== null) {
+      return;
     }
     lastAnalyzedIdx = null;
     analyzedTextBuf = '';
@@ -174,7 +181,7 @@ export function makeAgentCallbacks(ctx: AgentCallbackContext) {
     },
 
     onNewTurn: (serverMessageId) => {
-      flushAnalyzedDesc();
+      flushAnalyzedDesc({ keepPendingIfEmpty: true });
       const newId = serverMessageId || generateId();
       currentMsgId = newId;
       agentMsgIds.push(newId);
@@ -203,20 +210,32 @@ export function makeAgentCallbacks(ctx: AgentCallbackContext) {
       console.log(`⏱️ [agent] IMAGE received at +${elapsed}s (${usedModel || 'gemini'} took ${genDuration}s)`);
 
       const snapId = serverSnapshotId || generateId();
+      const displayImage = serverImageUrl || imageData;
+      const existingSnapshot = ctx.snapshotsRef.current.find(s => s.id === snapId);
+      const targetMessageId = existingSnapshot?.messageId || currentMsgId;
       const editDesc = ctx.lastEditPromptRef.current
         ? `[agent] ${ctx.lastEditPromptRef.current.slice(0, 100)}`
         : undefined;
       const newSnapshot: Snapshot = {
         id: snapId,
-        image: imageData,
+        image: displayImage,
         tips: [],
-        messageId: currentMsgId,
+        messageId: targetMessageId,
         description: editDesc,
         ...(serverImageUrl ? { imageUrl: serverImageUrl } : {}),
       };
 
       ctx.setSnapshots(prev => {
-        if (prev.some(s => s.id === snapId)) return prev;
+        if (prev.some(s => s.id === snapId)) {
+          return prev.map(s => s.id === snapId
+            ? {
+              ...s,
+              image: s.image || displayImage,
+              ...(serverImageUrl && !s.imageUrl ? { imageUrl: serverImageUrl } : {}),
+              messageId: s.messageId || targetMessageId,
+            }
+            : s);
+        }
         return [...prev, newSnapshot];
       });
 
@@ -224,9 +243,9 @@ export function makeAgentCallbacks(ctx: AgentCallbackContext) {
         ctx.setSnapshots(prev => prev.map(s => s.id === snapId ? { ...s, imageUrl: url } : s));
       });
       if (editDesc) ctx.onUpdateDescription?.(snapId, editDesc);
-      ctx.cacheImage(`snap:${snapId}`, imageData);
+      ctx.cacheImage(`snap:${snapId}`, displayImage);
 
-      ctx.fetchTipsForSnapshot(snapId, imageData, 'none');
+      ctx.fetchTipsForSnapshot(snapId, displayImage, 'none');
       ctx.autoFetchTriggered.current = true;
       setStatus(ctx.t('status.imageGenerated'));
 
@@ -242,15 +261,31 @@ export function makeAgentCallbacks(ctx: AgentCallbackContext) {
       const capturedInputImages = ctx.lastEditInputImagesRef.current;
       ctx.lastEditPromptRef.current = null;
       ctx.lastEditInputImagesRef.current = null;
-      ctx.setMessages(prev => prev.map(m =>
-        m.id === id ? {
-          ...m,
-          image: imageData,
-          editPrompt: capturedPrompt ?? undefined,
-          editModel: usedModel ?? undefined,
-          editInputImages: capturedInputImages ?? undefined,
-        } : m,
-      ));
+      ctx.setMessages(prev => {
+        const primaryMessageId = targetMessageId || id;
+        const candidateIds = new Set([primaryMessageId].filter(Boolean));
+        let attached = false;
+        const attach = (m: import('@/types').Message) => {
+          attached = true;
+          return {
+            ...m,
+            image: displayImage,
+            editPrompt: capturedPrompt ?? m.editPrompt,
+            editModel: usedModel ?? m.editModel,
+            editInputImages: capturedInputImages ?? m.editInputImages,
+          };
+        };
+
+        let next = prev.map(m => candidateIds.has(m.id) ? attach(m) : m);
+        if (!attached) {
+          const lastAssistantIdx = [...next].reverse().findIndex(m => m.role === 'assistant');
+          if (lastAssistantIdx >= 0) {
+            const idx = next.length - 1 - lastAssistantIdx;
+            next = next.map((m, i) => i === idx ? attach(m) : m);
+          }
+        }
+        return next;
+      });
 
     },
 
@@ -343,7 +378,7 @@ export function makeAgentCallbacks(ctx: AgentCallbackContext) {
         type: 'video',
         videoMeta,
       };
-      ctx.setSnapshots(prev => prev.some(s => s.id === snapshotId) ? prev : [...prev, newSnap]);
+      ctx.setSnapshots(prev => appendSnapshotDedupeVideo(prev, newSnap));
       if (ctx.pendingNavigateToVideoRef) ctx.pendingNavigateToVideoRef.current = true;
     },
 

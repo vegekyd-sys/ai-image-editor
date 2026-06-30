@@ -3,6 +3,7 @@ import { createClient } from '@/lib/supabase/server';
 import { streamTipsByCategory, ContentBlockedError, type UsageAccum } from '@/lib/gemini';
 import { getSkill } from '@/lib/workspace';
 import { requireCredits, deductByTokens, deductCredits } from '@/lib/billing/credits';
+import { getRequestLocale } from '@/lib/server-locale';
 
 export const maxDuration = 60;
 
@@ -22,7 +23,7 @@ export async function POST(req: NextRequest) {
     if (!creditCheck.ok) return creditCheck.response;
 
     const { image, category, metadata, count = 2, existingLabels, skillName } = await req.json();
-    const locale = req.cookies.get('locale')?.value ?? 'zh';
+    const locale = getRequestLocale(req);
 
     if (!image || !category) {
       return new Response(JSON.stringify({ error: 'image and category are required' }), {
