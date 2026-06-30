@@ -4,11 +4,24 @@ import { useEffect, useState, type CSSProperties } from 'react';
 
 interface ChangelogEntry {
   date: string;
-  en: { title: string; items: string[]; link?: { label: string; href: string } };
-  zh: { title: string; items: string[]; link?: { label: string; href: string } };
+  en: { title: string; items: string[]; link?: { label: string; href: string; variant?: 'text' | 'button' } };
+  zh: { title: string; items: string[]; link?: { label: string; href: string; variant?: 'text' | 'button' } };
 }
 
 const CHANGELOG: ChangelogEntry[] = [
+  {
+    date: '2026-06-30',
+    en: { title: 'Makaron for iPhone is live', items: [
+      'Makaron now spans iOS, web, mobile web, and CLI.',
+      'Projects, chat history, Skills, image previews, video tools, and credits stay shared across every surface.',
+      'One more native trick is waiting in the wings. Siri is getting closer.',
+    ], link: { label: 'Download on the App Store', href: 'https://apps.apple.com/app/id6779672002', variant: 'button' }},
+    zh: { title: 'Makaron iPhone 版正式上线', items: [
+      'Makaron 现在覆盖 iOS、Web、H5 和 CLI。',
+      '项目、聊天记录、Skills、图片预览、视频工具和 credits 会在所有入口之间共享。',
+      '还有一个原生小秘密正在靠近：Siri 会很快加入这场创作。',
+    ], link: { label: '下载 iPhone App', href: 'https://apps.apple.com/app/id6779672002', variant: 'button' }},
+  },
   {
     date: '2026-06-29',
     en: { title: 'Liquid Glass UI Refresh', items: [
@@ -816,10 +829,39 @@ export default function Changelog({ onClose, locale }: { onClose: () => void; lo
                 {loc.link && (
                   <a
                     href={loc.link.href}
-                    className="inline-block mt-2 ml-1 text-[12.5px] font-medium"
-                    style={{ color: 'rgba(232,121,249,0.88)' }}
+                    className={loc.link.variant === 'button'
+                      ? 'group inline-flex mt-3 ml-1 h-10 min-w-[128px] items-center justify-center rounded-[11px] px-2.5 text-left'
+                      : 'inline-block mt-2 ml-1 text-[12.5px] font-medium'
+                    }
+                    style={loc.link.variant === 'button' ? {
+                      color: 'rgba(255,255,255,0.96)',
+                      background:
+                        'linear-gradient(180deg, rgba(21,22,26,0.98), rgba(3,4,7,0.96))',
+                      border: '0.5px solid rgba(255,255,255,0.18)',
+                      boxShadow:
+                        '0 16px 34px rgba(0,0,0,0.34), inset 0 0.5px 0 rgba(255,255,255,0.24), inset 0 -10px 18px rgba(255,255,255,0.025)',
+                      backdropFilter: 'blur(18px) saturate(140%)',
+                      WebkitBackdropFilter: 'blur(18px) saturate(140%)',
+                    } : { color: 'rgba(232,121,249,0.88)' }}
                   >
-                    {loc.link.label}
+                    {loc.link.variant === 'button' ? (
+                      <span className="flex items-center gap-1.5">
+                        <img
+                          src="/brand/makaron-app-icon-512.png"
+                          alt=""
+                          className="h-6 w-6 rounded-[6px]"
+                          style={{ boxShadow: '0 1px 6px rgba(0,0,0,0.32)' }}
+                        />
+                        <span className="flex flex-col leading-none">
+                          <span className="text-[8.5px] font-medium tracking-[0px]" style={{ color: 'rgba(255,255,255,0.58)' }}>
+                            {isZh ? '立即前往' : 'Download on the'}
+                          </span>
+                          <span className="mt-1 text-[14px] font-semibold tracking-[0px]" style={{ color: 'rgba(255,255,255,0.96)' }}>
+                            {isZh ? 'App Store' : 'App Store'}
+                          </span>
+                        </span>
+                      </span>
+                    ) : loc.link.label}
                   </a>
                 )}
               </div>
