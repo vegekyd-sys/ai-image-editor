@@ -1,0 +1,33 @@
+app = "makaron-remotion-export-worker"
+primary_region = "sin"
+
+[build]
+  dockerfile = "Dockerfile.remotion-worker"
+
+[processes]
+  worker = "npm run worker:remotion-export"
+
+[env]
+  NODE_ENV = "production"
+  REMOTION_RENDERER = "local"
+  REMOTION_LOCAL_CONCURRENCY = "4"
+  REMOTION_LOCAL_SKIP_FONTS = "true"
+  REMOTION_LOCAL_MEDIA_CACHE_DIR = "/data/media-cache"
+  REMOTION_LOCAL_OUTPUT_DIR = "/data/renders"
+  REMOTION_LOCAL_BUNDLE_DIR = "/data/remotion-bundle"
+  REMOTION_LOCAL_MEDIA_PORT = "5123"
+  REMOTION_BROWSER_EXECUTABLE = "/usr/bin/chromium"
+  REMOTION_CHROME_MODE = "chrome-for-testing"
+  REMOTION_BROWSER_LAUNCH_TIMEOUT_MS = "90000"
+  REMOTION_EXPORT_WORKER_CONCURRENCY = "1"
+  REMOTION_EXPORT_WORKER_POLL_MS = "3000"
+
+[[mounts]]
+  source = "remotion_cache"
+  destination = "/data"
+  processes = ["worker"]
+
+[[vm]]
+  size = "performance-4x"
+  memory = "8gb"
+  processes = ["worker"]

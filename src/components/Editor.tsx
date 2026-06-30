@@ -3,7 +3,7 @@
 import { useState, useRef, useCallback, useMemo, useEffect, type CSSProperties, type TouchEvent as ReactTouchEvent } from 'react';
 import { flushSync } from 'react-dom';
 import { useRouter } from 'next/navigation';
-import { Message, Tip, Snapshot, PhotoMetadata, AnnotationEntry, ProjectAnimation, DesignPayload, type VideoModel, type VideoResolution, type ArtifactCompletionAction } from '@/types';
+import { Message, Tip, Snapshot, PhotoMetadata, AnnotationEntry, ProjectAnimation, DesignPayload, type VideoMeta, type VideoModel, type VideoResolution, type ArtifactCompletionAction } from '@/types';
 import ImageCanvas from '@/components/ImageCanvas';
 import TipsBar from '@/components/TipsBar';
 import AgentStatusBar from '@/components/AgentStatusBar';
@@ -45,6 +45,7 @@ import { createClient as createBrowserSupabase } from '@/lib/supabase/client';
 import { AZIMUTH_MAP, ELEVATION_MAP, DISTANCE_MAP, AZIMUTH_STEPS, ELEVATION_STEPS, DISTANCE_STEPS, snapToNearest, type CameraState } from '@/lib/camera-utils';
 import { readNativeJSONCache, writeNativeJSONCache } from '@/lib/native-app-cache';
 import { getDefaultVideoModelId, isFastVideoRenderModel, normalizeVideoResolution } from '@/lib/video-model-capabilities';
+import { isRemotionExportTaskId } from '@/lib/remotion-export-flags';
 import { formatVideoMediaSpec } from '@/lib/media-aspect';
 import { serializeCompletionActions } from '@/lib/artifact-actions';
 import { appendSnapshotDedupeVideo, dedupeVideoSnapshots } from '@/lib/video-snapshot-dedupe';
@@ -94,6 +95,14 @@ interface CreditsPayload {
 
 interface SkillsPayload {
   skills?: { name: string; label: string; icon: string; builtIn?: boolean }[];
+}
+
+function shouldMergeFreshVideoMeta(current?: VideoMeta, fresh?: VideoMeta): boolean {
+  if (!fresh) return false;
+  if (!current) return true;
+  if (fresh.status === 'completed') return true;
+  if (current.status === 'completed') return false;
+  return JSON.stringify(current) !== JSON.stringify(fresh);
 }
 
 export default function Editor({
@@ -344,7 +353,10 @@ export default function Editor({
           updated = { ...updated, design: fresh.design };
           changed = true;
         }
-        if (fresh.videoMeta && JSON.stringify(fresh.videoMeta) !== JSON.stringify(updated.videoMeta)) {
+        // Merge video state from Supabase over stale project cache.
+        // Example: one retry succeeds after an earlier job marked the same
+        // publish snapshot failed; the completed DB state must win on reload.
+        if (shouldMergeFreshVideoMeta(updated.videoMeta, fresh.videoMeta)) {
           updated = { ...updated, videoMeta: fresh.videoMeta };
           changed = true;
         }
@@ -2796,14 +2808,17 @@ Select the best 3-7 items for a compelling video. You do NOT need to use all or 
   }, [animations, messages, onSaveMessage, isV2]);
 
   // Update StatusBar with video rendering progress
-  const processingVideoModel = snapshots.find(s => s.type === 'video' && s.videoMeta?.status === 'processing')?.videoMeta?.model
+  const processingVideoSnap = snapshots.find(s => s.type === 'video' && s.videoMeta?.status === 'processing');
+  const processingVideoModel = processingVideoSnap?.videoMeta?.model
     ?? animations.find(a => a.status === 'processing')?.videoModel
     ?? animationState?.videoModel
     ?? null;
   const videoProcessing = snapshots.some(s => s.type === 'video' && s.videoMeta?.status === 'processing');
-  const videoRenderingStatus = isFastVideoRenderModel(processingVideoModel)
-    ? t('status.videoRenderingFast')
-    : t('status.videoRenderingEllipsis');
+  const videoRenderingStatus = isRemotionExportTaskId(processingVideoSnap?.videoMeta?.taskId)
+    ? t('status.remotionExportRendering')
+    : (isFastVideoRenderModel(processingVideoModel)
+      ? t('status.videoRenderingFast')
+      : t('status.videoRenderingEllipsis'));
   useEffect(() => {
     if (animationState?.status === 'generating_prompt') {
       setAgentStatus(t('status.writingScript'));
@@ -3465,6 +3480,9 @@ Select the best 3-7 items for a compelling video. You do NOT need to use all or 
                   ? (currentSnap?.videoMeta?.status === 'processing')
                   : (isViewingVideo && !currentVideo?.videoUrl && animations.some(a => a.status === 'processing'))}
                 videoFailed={isViewingVideoV2 ? (currentSnap?.videoMeta?.status === 'failed') : false}
+                videoTaskId={isViewingVideoV2
+                  ? (currentSnap?.videoMeta?.taskId ?? null)
+                  : (currentVideo?.taskId ?? null)}
                 videoModel={isViewingVideoV2
                   ? (currentSnap?.videoMeta?.model ?? null)
                   : (currentVideo?.videoModel ?? null)}

@@ -18,12 +18,18 @@ import creativePrompt from './prompts/creative.md';
 import wildPrompt from './prompts/wild.md';
 import captionsPrompt from './prompts/captions.md';
 import generateImageToolPrompt from './prompts/generate_image_tool.md';
-import type { Tip, VideoMeta, VideoModel } from '@/types';
+import type { DesignPayload, Tip, VideoMeta, VideoModel } from '@/types';
 import { toPublicStorageUrl } from '@/lib/supabase/storage';
 import type { AgentPerf } from './agent-perf';
 import { createTextDeltaState, normalizeTextDelta } from './agent-text-delta';
 import { formatAspectRatio } from './media-aspect';
 import { filterWorkspaceFilesForAgentScope } from './agent-workspace-scope';
+import {
+  createRemotionExportJob,
+  runRemotionExportJob,
+  type RemotionRenderProfile,
+} from '@/lib/remotion-export';
+import { VIDEO_PLACEHOLDER_IMAGE } from '@/lib/editor/timeline-derivations';
 
 const MAX_VIDEO_DIMENSION_PROBE_BYTES = 220 * 1024 * 1024;
 
@@ -468,6 +474,48 @@ async function resolveVideoUrlForMediaIndex(ctx: AgentContext, mediaIndex: numbe
   }
 
   return { idx: v.idx, error: `No real video file found at <<<media_${mediaIndex}>>>. Use preview_frame only for Remotion compositions with design_path.` };
+}
+
+async function resolveCompositionSource(ctx: AgentContext, input: {
+  media_index?: number;
+  snapshot_id?: string;
+  design_path?: string;
+}): Promise<{
+  mediaIndex?: number;
+  snapshotId?: string;
+  designPath?: string;
+  design?: DesignPayload;
+  error?: string;
+}> {
+  if (input.design_path) {
+    return { snapshotId: input.snapshot_id, designPath: input.design_path };
+  }
+  if (input.snapshot_id && !input.media_index) {
+    return { snapshotId: input.snapshot_id };
+  }
+  if (input.media_index !== undefined) {
+    const v = validateImageIndex(ctx.snapshotImages, input.media_index);
+    if (v.error) return { error: v.error };
+    if (!ctx.supabase) return { error: 'Timeline lookup requires workspace access.' };
+
+    const { data: snaps, error } = await ctx.supabase
+      .from('snapshots')
+      .select('id, type, design_path')
+      .eq('project_id', ctx.projectId)
+      .order('sort_order', { ascending: true });
+    if (error) return { error: `Snapshot lookup failed: ${error.message}` };
+
+    const snap = snaps?.[v.idx] as { id?: string; type?: string; design_path?: string | null } | undefined;
+    if (!snap) return { error: `No snapshot found for <<<media_${input.media_index}>>>.` };
+    if (!snap.design_path) {
+      return { error: `<<<media_${input.media_index}>>> is ${snap.type || 'media'}, not an editable Remotion composition.` };
+    }
+    return { mediaIndex: input.media_index, snapshotId: snap.id, designPath: snap.design_path };
+  }
+
+  const design = (ctx as any).__lastDesignPayload as DesignPayload | undefined;
+  if (design?.code) return { design };
+  return { error: 'No composition source found. Use run_code first, or pass media_index/snapshot_id/design_path.' };
 }
 
 async function resolveImageForAnalysis(ctx: AgentContext, options: {
@@ -1599,6 +1647,152 @@ For timeline videos, pass media_index. For external audio/video URLs, pass media
             text: `${output.cached ? 'Cached ' : ''}ASR result${output.media_index ? ` for <<<media_${output.media_index}>>>` : ''}:\n\n${formatTranscriptForModel(transcript)}`,
           }],
         };
+      },
+    }),
+
+    materialize_media: tool({
+      description: `Export an editable Remotion composition into a real MP4 video.
+Use this when the user asks to save/export/materialize/turn a composition into MP4. It accepts a timeline media_index, snapshot_id, design_path, or the current unsaved composition from run_code.
+Default profile is fast_720p (short side 720, no upscale) for speed. Default publish=true so the exported MP4 appears as a new <<<media_N>>> video. By default the tool queues a durable async export like video generation; polling/cron completes it and reports either success or failure. Set wait=true only when the user explicitly needs the final URL in this response.`,
+      inputSchema: z.object({
+        media_index: z.number().optional().describe('1-based media index, e.g. 3 for <<<media_3>>>. Must point to an editable Remotion composition.'),
+        snapshot_id: z.string().optional().describe('Snapshot ID of an editable Remotion composition.'),
+        design_path: z.string().optional().describe('Workspace design JSON path, e.g. code/<snapshotId>.json.'),
+        name: z.string().optional().describe('Short output slug/name.'),
+        profile: z.enum(['fast_720p', 'source']).optional().describe('fast_720p for speed, source for full source resolution.'),
+        publish: z.boolean().optional().describe('Default true. Publish exported MP4 into the project timeline.'),
+        wait: z.boolean().optional().describe('Default false. Queue asynchronously and let polling/cron complete. Set true only to wait for final MP4 URL before responding.'),
+      }),
+      execute: async ({ media_index, snapshot_id, design_path, name, profile, publish, wait }) => {
+        if (!ctx.supabase || !ctx.userId) {
+          return { success: false, error: 'materialize_media requires an authenticated project workspace.' };
+        }
+        const source = await resolveCompositionSource(ctx, {
+          media_index,
+          snapshot_id,
+          design_path,
+        });
+        if (source.error) return { success: false, error: source.error };
+
+        try {
+          const shouldPublish = publish !== false;
+          const shouldWait = wait === true;
+          const publishSnapshotId = shouldPublish && !shouldWait ? crypto.randomUUID() : undefined;
+          const job = await createRemotionExportJob({
+            userId: ctx.userId,
+            projectId: ctx.projectId,
+            snapshotId: source.snapshotId,
+            designPath: source.designPath,
+            design: source.design,
+            outputType: 'video',
+            renderProfile: (profile || 'fast_720p') as RemotionRenderProfile,
+            publish: shouldPublish,
+            publishSnapshotId,
+            name: name || 'materialized-composition',
+          });
+
+          if (!shouldWait) {
+            const taskId = `remotion-export-${job.id}`;
+            const videoMeta: VideoMeta = {
+              taskId,
+              videoUrl: job.storage_url || '',
+              providerUrl: job.storage_url || '',
+              videoPath: job.workspace_path || '',
+              prompt: name || 'Materialized Remotion composition',
+              sourceSnapshotIds: source.snapshotId ? [source.snapshotId] : [],
+              sourceUrls: [],
+              status: job.status === 'completed' && job.storage_url ? 'completed' : 'processing',
+              duration: job.duration_seconds || null,
+              model: 'upload',
+              createdAt: new Date().toISOString(),
+              width: job.width || undefined,
+              height: job.height || undefined,
+            };
+            if (publishSnapshotId) {
+              const pendingVideoMeta: VideoMeta = {
+                ...videoMeta,
+                taskId: `remotion-export-pending-${job.id}`,
+                videoUrl: job.storage_url || '',
+                providerUrl: job.storage_url || '',
+              };
+              if (job.status !== 'completed') {
+                const { data: sortData } = await ctx.supabase.rpc('next_sort_order', { p_project_id: ctx.projectId });
+                const { error: pendingInsertError } = await ctx.supabase.from('snapshots').upsert({
+                  id: publishSnapshotId,
+                  project_id: ctx.projectId,
+                  image_url: VIDEO_PLACEHOLDER_IMAGE,
+                  tips: [],
+                  message_id: '',
+                  sort_order: sortData ?? 0,
+                  type: 'video',
+                  video_meta: pendingVideoMeta,
+                  description: name || 'Materialized Remotion composition',
+                }, { onConflict: 'id' });
+                if (pendingInsertError) {
+                  throw new Error(`Pending export snapshot insert failed: ${pendingInsertError.message}`);
+                }
+              }
+              ctx.pendingVideoSnapshot = {
+                snapshotId: publishSnapshotId,
+                taskId,
+                videoMeta: pendingVideoMeta,
+              };
+            }
+            return {
+              success: true,
+              queued: job.status !== 'completed',
+              jobId: job.id,
+              status: job.status,
+              taskId,
+              publishSnapshotId,
+              message: shouldPublish
+                ? `Queued MP4 export. It will appear as a video in the timeline. Job: ${job.id}`
+                : `Queued MP4 export. Job: ${job.id}`,
+            };
+          }
+
+          const result = await runRemotionExportJob(job.id);
+          const completed = result.job;
+          const videoUrl = completed.storage_url || '';
+          const publishedSnapshotId = typeof completed.metadata?.publishedSnapshotId === 'string'
+            ? completed.metadata.publishedSnapshotId
+            : undefined;
+          const videoMeta: VideoMeta | null = videoUrl ? {
+            taskId: `remotion-export-${completed.id}`,
+            videoUrl,
+            providerUrl: videoUrl,
+            videoPath: completed.workspace_path || '',
+            prompt: name || 'Materialized Remotion composition',
+            sourceSnapshotIds: source.snapshotId ? [source.snapshotId] : [],
+            sourceUrls: [videoUrl],
+            status: 'completed',
+            duration: completed.duration_seconds || null,
+            model: 'upload',
+            createdAt: new Date().toISOString(),
+            width: completed.width || undefined,
+            height: completed.height || undefined,
+          } : null;
+          if (publishedSnapshotId && videoMeta) {
+            ctx.pendingVideoSnapshot = {
+              snapshotId: publishedSnapshotId,
+              taskId: videoMeta.taskId || `remotion-export-${completed.id}`,
+              videoMeta,
+            };
+          }
+          return {
+            success: completed.status === 'completed',
+            jobId: completed.id,
+            status: completed.status,
+            videoUrl,
+            workspacePath: completed.workspace_path,
+            publishedSnapshotId,
+            durationSeconds: completed.duration_seconds,
+            renderSeconds: completed.render_seconds,
+            realtimeRatio: completed.realtime_ratio,
+          };
+        } catch (err) {
+          return { success: false, error: err instanceof Error ? err.message : String(err) };
+        }
       },
     }),
 

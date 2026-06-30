@@ -1,0 +1,11 @@
+.git
+.next
+.env
+.env.*
+node_modules
+outputs
+coverage
+.remotion-bundle
+.remotion-bundle-local
+tmp
+*.log

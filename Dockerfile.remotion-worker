@@ -1,0 +1,44 @@
+FROM node:24-bookworm
+
+RUN apt-get update \
+  && apt-get install -y --no-install-recommends \
+    ca-certificates \
+    chromium \
+    ffmpeg \
+    fonts-liberation \
+    fonts-noto-cjk \
+    fonts-noto-color-emoji \
+    libcairo2-dev \
+    libgif-dev \
+    libjpeg-dev \
+    libpango1.0-dev \
+    librsvg2-dev \
+    make \
+    g++ \
+    pkg-config \
+    python3 \
+  && rm -rf /var/lib/apt/lists/*
+
+WORKDIR /app
+
+ENV NODE_ENV=production
+ENV REMOTION_RENDERER=local
+ENV REMOTION_LOCAL_CONCURRENCY=4
+ENV REMOTION_LOCAL_SKIP_FONTS=true
+ENV REMOTION_LOCAL_MEDIA_CACHE_DIR=/data/media-cache
+ENV REMOTION_LOCAL_OUTPUT_DIR=/data/renders
+ENV REMOTION_LOCAL_BUNDLE_DIR=/data/remotion-bundle
+ENV REMOTION_LOCAL_MEDIA_PORT=5123
+ENV REMOTION_BROWSER_EXECUTABLE=/usr/bin/chromium
+ENV REMOTION_CHROME_MODE=chrome-for-testing
+ENV REMOTION_BROWSER_LAUNCH_TIMEOUT_MS=90000
+
+COPY package.json package-lock.json ./
+COPY patches ./patches
+RUN npm ci --include=dev
+
+COPY . .
+
+RUN mkdir -p /data/media-cache /data/renders /data/remotion-bundle
+
+CMD ["npm", "run", "worker:remotion-export"]

@@ -142,6 +142,11 @@ function formatSeconds(seconds) {
   return Number.isInteger(seconds) ? String(seconds) : seconds.toFixed(1).replace(/\.0$/, '');
 }
 
+function readJsonInput(filePath) {
+  const raw = filePath === '-' ? fs.readFileSync(0, 'utf-8') : fs.readFileSync(filePath, 'utf-8');
+  return JSON.parse(raw);
+}
+
 // ─── Auth ────────────────────────────────────────────────────────────────────
 
 function loadAuth() {
@@ -469,7 +474,14 @@ async function submitRun(baseUrl, headers, projectId, prompt, opts = {}) {
 }
 
 async function pollRun(baseUrl, headers, runId, opts = {}) {
-  const { json = false, waitForArtifacts = false, background = false } = opts;
+  const {
+    json = false,
+    waitForArtifacts = false,
+    background = false,
+    exportCompositions = false,
+    publishExports = false,
+    returnDataOnly = false,
+  } = opts;
   if (background) return;
 
   let lastSeq = -1;
@@ -550,11 +562,17 @@ async function pollRun(baseUrl, headers, runId, opts = {}) {
     // Check terminal status
     if (data.status === 'completed' || data.status === 'failed' || data.status === 'aborted') {
       if (printedText && !json) process.stdout.write('\n');
+      if (data.status === 'completed' && exportCompositions) {
+        data = await exportAnimatedCompositionsFromRun(baseUrl, headers, data, {
+          publish: publishExports,
+          quiet: json || returnDataOnly,
+        });
+      }
 
-      if (json) {
+      if (json && !returnDataOnly) {
         // Structured JSON output — add projectUrl
         console.log(JSON.stringify(normalizeRunResponse(data), null, 2));
-      } else {
+      } else if (!returnDataOnly) {
         process.stderr.write('\n━━━ Results ━━━\n');
         if (data.result) {
           for (const img of data.result.images || []) process.stderr.write(`🖼️  Image: ${img.imageUrl}\n`);
@@ -768,7 +786,7 @@ async function listProjectMedia(baseUrl, headers, projectId, opts = {}) {
   if (!res.ok) { console.error('Project media failed:', await res.text()); process.exit(1); }
   const data = await res.json();
   if (opts.json) {
-    console.log(JSON.stringify(data, null, 2));
+    if (!opts.silent) console.log(JSON.stringify(data, null, 2));
     return data;
   }
 
@@ -788,6 +806,158 @@ async function listProjectMedia(baseUrl, headers, projectId, opts = {}) {
     const url = item.url ? `\n      ${item.url}` : '';
     console.log(`  ${String(item.index).padStart(2)}. ${ref} [${item.type}${status}${duration}${dimensions}]${description}${url}`);
   }
+  return data;
+}
+
+async function pollRemotionExport(baseUrl, headers, jobId, opts = {}) {
+  const start = Date.now();
+  while (true) {
+    const res = await fetch(`${baseUrl}/api/remotion/export/${jobId}`, { headers });
+    if (!res.ok) { process.stderr.write(`Export status failed ${res.status}: ${await res.text()}\n`); process.exit(1); }
+    const data = await res.json();
+    if (data.status === 'completed' || data.status === 'failed') {
+      if (opts.json) {
+        console.log(JSON.stringify(data, null, 2));
+      } else if (data.status === 'completed') {
+        const duration = typeof data.duration_seconds === 'number' ? `${data.duration_seconds.toFixed(2)}s` : 'unknown';
+        const render = typeof data.render_seconds === 'number' ? `${data.render_seconds.toFixed(2)}s` : 'unknown';
+        const ratio = typeof data.realtime_ratio === 'number' ? data.realtime_ratio.toFixed(2) : 'unknown';
+        if (!opts.quiet) {
+          process.stderr.write(`✅ Export complete\n`);
+          process.stderr.write(`   Video duration: ${duration}\n`);
+          process.stderr.write(`   Export time: ${render}\n`);
+          process.stderr.write(`   Duration/export ratio: ${ratio}:1\n`);
+          console.log(data.url || data.storageUrl || '');
+        }
+      } else if (!opts.quiet) {
+        process.stderr.write(`❌ Export failed: ${data.error || 'unknown error'}\n`);
+      }
+      if (data.status === 'failed') process.exit(1);
+      return data;
+    }
+
+    const elapsed = Math.round((Date.now() - start) / 1000);
+    const pct = typeof data.progress === 'number' ? ` ${(data.progress * 100).toFixed(0)}%` : '';
+    if (!opts.quiet) process.stderr.write(`\r🎬 Export ${data.status}${pct} (${elapsed}s)`);
+    await new Promise(r => setTimeout(r, data.next_poll_after_ms || 3000));
+  }
+}
+
+async function exportComposition(baseUrl, headers, opts = {}) {
+  const body = {
+    projectId: opts.projectId,
+    snapshotId: opts.snapshotId,
+    designPath: opts.designPath,
+    design: opts.design,
+    outputType: opts.outputType || 'video',
+    renderProfile: opts.renderProfile || 'fast_720p',
+    publish: opts.publish === true,
+    name: opts.name,
+  };
+
+  if (opts.mediaIndex) {
+    if (!body.projectId) {
+      process.stderr.write('Usage: makaron materialize --project <id> --media <N> [--wait] [--publish] [--name <slug>] [--json]\n');
+      process.exit(1);
+    }
+    const mediaData = await listProjectMedia(baseUrl, headers, opts.projectId, { json: true, silent: true });
+    const item = (mediaData.media || []).find(m => Number(m.index) === Number(opts.mediaIndex));
+    if (!item) {
+      process.stderr.write(`No media item at index ${opts.mediaIndex}\n`);
+      process.exit(1);
+    }
+    if (item.type !== 'composition' && !item.codePath) {
+      process.stderr.write(`Media ${opts.mediaIndex} is ${item.type}, not a Remotion composition.\n`);
+      process.exit(1);
+    }
+    body.snapshotId = item.snapshotId || item.snapshot_id;
+    body.designPath = item.codePath || item.designPath || body.designPath;
+  }
+
+  if (!body.projectId || (!body.snapshotId && !body.designPath && !body.design)) {
+    process.stderr.write('Usage: makaron materialize --project <id> (--media <N> | --snapshot <snapshotId> | --design-path <path> | --design-json <file|->) [--wait] [--publish] [--name <slug>] [--json]\n');
+    process.exit(1);
+  }
+
+  const res = await fetch(`${baseUrl}/api/remotion/export`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...headers },
+    body: JSON.stringify(body),
+  });
+  const data = await res.json();
+  if (!res.ok) {
+    process.stderr.write(`Export failed ${res.status}: ${JSON.stringify(data)}\n`);
+    process.exit(1);
+  }
+
+  if (opts.wait) {
+    if (!opts.quiet) process.stderr.write(`🎬 Export queued: ${data.jobId || data.id}\n`);
+    return pollRemotionExport(baseUrl, headers, data.jobId || data.id, { json: opts.json, quiet: opts.quiet });
+  }
+
+  if (!opts.quiet) {
+    if (opts.json) console.log(JSON.stringify(data, null, 2));
+    else console.log(data.jobId || data.id);
+  }
+  return data;
+}
+
+function pickExportValue(data, pick) {
+  if (!pick) return undefined;
+  if (pick === 'url' || pick === 'video_url' || pick === 'first_video_url') return data.url || data.storageUrl || data.storage_url;
+  if (pick === 'job_id' || pick === 'id') return data.jobId || data.id;
+  if (pick === 'workspace_path') return data.workspacePath || data.workspace_path;
+  if (pick === 'status') return data.status;
+  if (pick === 'output') return data;
+  return data[pick];
+}
+
+async function exportAnimatedCompositionsFromRun(baseUrl, headers, data, opts = {}) {
+  const projectId = data.projectId || data.project_id;
+  if (!projectId) return data;
+  const designs = (data.output || []).filter(o => o.type === 'design' && o.animated && o.snapshot_id);
+  if (!designs.length) return data;
+
+  const exported = [];
+  for (const design of designs) {
+    if (!opts.quiet) process.stderr.write(`\n🎬 Exporting composition snapshot ${design.snapshot_id}...\n`);
+    const job = await exportComposition(baseUrl, headers, {
+      projectId,
+      snapshotId: design.snapshot_id,
+      wait: true,
+      publish: opts.publish === true,
+      name: `run-${data.id || 'composition'}-${design.snapshot_id}`,
+      quiet: opts.quiet,
+    });
+    exported.push(job);
+    if (job?.url || job?.storageUrl) {
+      data.output = data.output || [];
+      data.output.push({
+        id: `export_${job.id}`,
+        type: 'video',
+        status: 'completed',
+        url: job.url || job.storageUrl,
+        export_job_id: job.id,
+        source_snapshot_id: design.snapshot_id,
+        duration: job.duration_seconds,
+        render_seconds: job.render_seconds,
+        realtime_ratio: job.realtime_ratio,
+        width: job.width,
+        height: job.height,
+      });
+      data.result = data.result || {};
+      data.result.videos = data.result.videos || [];
+      data.result.videos.push({
+        taskId: `remotion-export-${job.id}`,
+        status: 'completed',
+        videoUrl: job.url || job.storageUrl,
+        duration: job.duration_seconds,
+        renderSeconds: job.render_seconds,
+        realtimeRatio: job.realtime_ratio,
+      });
+    }
+  }
+  data.remotion_exports = exported;
   return data;
 }
 
@@ -1364,6 +1534,12 @@ Commands:
 
   responses get <runId>              Get run status and results
   responses get <runId> --wait       Poll until completed
+  responses get <runId> --materialize --wait --pick first_video_url
+                                     Export and publish Remotion compositions as MP4
+  materialize --project <id> --media <N> --pick url
+                                     Convert editable composition/JSON to MP4
+  composition export --project <id> --media <N> --wait
+                                     Export editable Remotion composition to MP4
   responses list --project <id>      List runs for a project
   abort <runId>                      Abort a running Agent
   skills list|search|show|install    Browse and install marketplace skills
@@ -1432,13 +1608,17 @@ function printHelp(topic, subtopic) {
   } else if (topic === 'chat') {
     printChatHelp();
   } else if (topic === 'responses' || topic === 'run') {
-    if (subtopic === 'get') console.log('Usage: makaron responses get <runId> [--wait] [--json] [--pick <field>]');
+    if (subtopic === 'get') console.log('Usage: makaron responses get <runId> [--wait] [--json] [--pick <field>] [--materialize|--export-compositions] [--publish-exports]');
     else if (subtopic === 'watch') console.log('Usage: makaron responses watch <runId> [--jsonl] [--interval <ms>]');
     else if (subtopic === 'list') console.log('Usage: makaron responses list --project <id>');
     else console.log(`Responses commands:
   responses get <runId>                  Get status and output (JSON)
   responses get <runId> --wait           Poll until completed
   responses get <runId> --pick <field>   Extract: first_image_url, first_video_url, project_url, output
+  responses get <runId> --export-compositions --wait --pick first_video_url
+                                            Export animated compositions before picking video URL
+  responses get <runId> --materialize --wait --pick first_video_url
+                                            Export and publish animated compositions as MP4
   responses watch <runId> --jsonl        Watch until done (incremental events)
   responses list --project <id>          List runs for a project
 `);
@@ -1468,6 +1648,16 @@ function printHelp(topic, subtopic) {
 
 Use with chat:
   makaron chat --project auto --skill <id|label> "your request"
+`);
+  } else if (topic === 'materialize') {
+    console.log(`Usage: makaron materialize --project <id> (--media <N> | --snapshot <snapshotId> | --design-path <path> | --design-json <file|->) [--wait] [--publish|--no-publish] [--profile fast_720p|source] [--pick url|job_id|status]`);
+  } else if (topic === 'composition' || topic === 'compositions') {
+    console.log(`Composition commands:
+  composition export --project <id> --media <N> --wait
+  composition export --project <id> --snapshot <snapshotId> --wait
+  composition export --project <id> --design-path <path> --wait
+  composition export --project <id> --design-json composition.json --wait
+  composition status <jobId> [--wait] [--json]
 `);
   } else if (topic === 'edit') {
     console.log('Usage: makaron edit [--image <file|url>] [--model gemini|qwen|openai] [--skill enhance|creative|wild|captions] [--ref <file>] [--out <file>] "prompt"');
@@ -1800,20 +1990,41 @@ if (!command || command === '--help' || command === '-h' || command === 'help') 
 
   if (sub === 'get') {
     const runId = args[2];
-    if (!runId) { console.error('Usage: makaron responses get <runId> [--wait] [--json] [--pick <field>]'); process.exit(1); }
-    let wait = false, pick = null;
+    if (!runId) { console.error('Usage: makaron responses get <runId> [--wait] [--json] [--pick <field>] [--materialize|--export-compositions]'); process.exit(1); }
+    let wait = false, jsonOutput = false, pick = null, exportCompositions = false, publishExports = false;
     for (let i = 3; i < args.length; i++) {
       if (args[i] === '--wait') wait = true;
+      if (args[i] === '--json') jsonOutput = true;
+      if (args[i] === '--export-compositions') exportCompositions = true;
+      if (args[i] === '--materialize') {
+        exportCompositions = true;
+        publishExports = true;
+      }
+      if (args[i] === '--publish-exports') publishExports = true;
       if (args[i] === '--pick' && args[i + 1]) pick = args[++i];
     }
 
     if (wait) {
-      await pollRun(baseUrl, headers, runId, { json: true });
+      const data = await pollRun(baseUrl, headers, runId, {
+        json: true,
+        exportCompositions,
+        publishExports,
+        returnDataOnly: !!pick || !jsonOutput,
+      });
+      if (pick) {
+        const picked = applyPick(data, pick);
+        if (picked !== undefined) console.log(typeof picked === 'string' ? picked : JSON.stringify(picked));
+      } else if (!jsonOutput) {
+        console.log(JSON.stringify(data, null, 2));
+      }
     } else {
       const res = await fetch(`${baseUrl}/api/agent/run/${runId}`, { headers });
       if (!res.ok) { process.stderr.write(`Error ${res.status}: ${await res.text()}\n`); process.exit(1); }
-      const data = await res.json();
+      let data = await res.json();
       normalizeRunResponse(data);
+      if (exportCompositions && data.status === 'completed') {
+        data = await exportAnimatedCompositionsFromRun(baseUrl, headers, data, { publish: publishExports, quiet: jsonOutput || !!pick });
+      }
       if (pick) {
         const picked = applyPick(data, pick);
         if (picked !== undefined) console.log(typeof picked === 'string' ? picked : JSON.stringify(picked));
@@ -1856,6 +2067,10 @@ if (!command || command === '--help' || command === '-h' || command === 'help') 
   responses get <runId>                  Get status and output (JSON)
   responses get <runId> --wait           Poll until completed
   responses get <runId> --pick <field>   Extract: first_image_url, first_video_url, project_url, output
+  responses get <runId> --export-compositions --wait --pick first_video_url
+                                            Export animated compositions before picking video URL
+  responses get <runId> --materialize --wait --pick first_video_url
+                                            Export and publish animated compositions as MP4
   responses watch <runId> --jsonl        Watch until done (incremental events)
   responses list --project <id>          List runs for a project
 `);
@@ -1863,6 +2078,81 @@ if (!command || command === '--help' || command === '-h' || command === 'help') 
 } else if (command === 'list' || command === 'ls') {
   const { headers, baseUrl } = getAuth();
   await listProjects(baseUrl, headers);
+} else if (command === 'materialize') {
+  const { headers, baseUrl } = getAuth();
+  const opts = { wait: true, publish: true, json: false, outputType: 'video', renderProfile: 'fast_720p', pick: null, quiet: false };
+  for (let i = 1; i < args.length; i++) {
+    if (args[i] === '--project' && args[i + 1]) opts.projectId = args[++i];
+    else if (args[i] === '--media' && args[i + 1]) opts.mediaIndex = Number(args[++i]);
+    else if (args[i] === '--snapshot' && args[i + 1]) opts.snapshotId = args[++i];
+    else if (args[i] === '--design-path' && args[i + 1]) opts.designPath = args[++i];
+    else if (args[i] === '--design-json' && args[i + 1]) opts.design = readJsonInput(args[++i]);
+    else if (args[i] === '--name' && args[i + 1]) opts.name = args[++i];
+    else if (args[i] === '--type' && args[i + 1]) opts.outputType = args[++i];
+    else if (args[i] === '--profile' && args[i + 1]) opts.renderProfile = args[++i];
+    else if (args[i] === '--render-profile' && args[i + 1]) opts.renderProfile = args[++i];
+    else if (args[i] === '--no-publish') opts.publish = false;
+    else if (args[i] === '--publish') opts.publish = true;
+    else if (args[i] === '--no-wait') opts.wait = false;
+    else if (args[i] === '--wait') opts.wait = true;
+    else if (args[i] === '--json') opts.json = true;
+    else if (args[i] === '--pick' && args[i + 1]) opts.pick = args[++i];
+  }
+  if (opts.pick) opts.quiet = true;
+  const data = await exportComposition(baseUrl, headers, opts);
+  if (opts.pick) {
+    const picked = pickExportValue(data, opts.pick);
+    if (picked !== undefined) console.log(typeof picked === 'string' ? picked : JSON.stringify(picked));
+  }
+} else if (command === 'composition' || command === 'compositions') {
+  const { headers, baseUrl } = getAuth();
+  const sub = args[1];
+  if (sub === 'export') {
+    const opts = { wait: false, publish: false, json: false, outputType: 'video', renderProfile: 'fast_720p', pick: null, quiet: false };
+    for (let i = 2; i < args.length; i++) {
+      if (args[i] === '--project' && args[i + 1]) opts.projectId = args[++i];
+      else if (args[i] === '--media' && args[i + 1]) opts.mediaIndex = Number(args[++i]);
+      else if (args[i] === '--snapshot' && args[i + 1]) opts.snapshotId = args[++i];
+      else if (args[i] === '--design-path' && args[i + 1]) opts.designPath = args[++i];
+      else if (args[i] === '--design-json' && args[i + 1]) opts.design = readJsonInput(args[++i]);
+      else if (args[i] === '--name' && args[i + 1]) opts.name = args[++i];
+      else if (args[i] === '--type' && args[i + 1]) opts.outputType = args[++i];
+      else if (args[i] === '--profile' && args[i + 1]) opts.renderProfile = args[++i];
+      else if (args[i] === '--render-profile' && args[i + 1]) opts.renderProfile = args[++i];
+      else if (args[i] === '--publish') opts.publish = true;
+      else if (args[i] === '--wait') opts.wait = true;
+      else if (args[i] === '--json') opts.json = true;
+      else if (args[i] === '--pick' && args[i + 1]) opts.pick = args[++i];
+    }
+    if (opts.pick) opts.quiet = true;
+    const data = await exportComposition(baseUrl, headers, opts);
+    if (opts.pick) {
+      const picked = pickExportValue(data, opts.pick);
+      if (picked !== undefined) console.log(typeof picked === 'string' ? picked : JSON.stringify(picked));
+    }
+  } else if (sub === 'status') {
+    const jobId = args[2];
+    if (!jobId) { console.error('Usage: makaron composition status <jobId> [--wait] [--json]'); process.exit(1); }
+    const wait = args.includes('--wait');
+    const json = args.includes('--json');
+    if (wait) await pollRemotionExport(baseUrl, headers, jobId, { json });
+    else {
+      const res = await fetch(`${baseUrl}/api/remotion/export/${jobId}`, { headers });
+      if (!res.ok) { process.stderr.write(`Export status failed ${res.status}: ${await res.text()}\n`); process.exit(1); }
+      const data = await res.json();
+      if (json) console.log(JSON.stringify(data, null, 2));
+      else console.log(`${data.id}  ${data.status}  ${data.url || ''}`);
+      if (data.status === 'failed') process.exit(1);
+    }
+  } else {
+    console.log(`Composition commands:
+  composition export --project <id> --media <N> --wait
+  composition export --project <id> --snapshot <snapshotId> --wait
+  composition export --project <id> --design-path <path> --wait
+  composition export --project <id> --design-json composition.json --wait
+  composition status <jobId> [--wait] [--json]
+`);
+  }
 } else if (command === 'skills') {
   const sub = args[1] || 'list';
   const baseUrl = process.env.MAKARON_URL || DEFAULT_URL;

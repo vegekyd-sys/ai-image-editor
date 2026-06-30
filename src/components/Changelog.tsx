@@ -23,6 +23,19 @@ const CHANGELOG: ChangelogEntry[] = [
     ], link: { label: '下载 iPhone App', href: 'https://apps.apple.com/app/id6779672002', variant: 'button' }},
   },
   {
+    date: '2026-06-30',
+    en: { title: 'Remotion MP4 Export', items: [
+      'Animated Remotion designs can now become real MP4 videos you can play, download, share, and keep editing from the timeline.',
+      'Makaron can also export MP4s from saved designs or design JSON, so agent-made motion work is easier to hand off and reuse.',
+      'Export progress now feels clearer in the app, with better status text while your video is being prepared.',
+    ]},
+    zh: { title: 'Remotion MP4 导出', items: [
+      'Remotion 做出来的动画现在可以变成真正的 MP4，在时间线里播放、下载、分享，也能继续接着改。',
+      '保存过的设计和 design JSON 也可以直接导出 MP4，Agent 做出来的动态作品更容易交付和复用。',
+      '导出过程里的状态提示更清楚了，准备视频时不会再显示不准确的等待时间。',
+    ]},
+  },
+  {
     date: '2026-06-29',
     en: { title: 'Liquid Glass UI Refresh', items: [
       'Home, Projects, Updates, account menus, and input areas now share a softer Liquid Glass style, with faster navigation and safer mobile/iOS spacing.',

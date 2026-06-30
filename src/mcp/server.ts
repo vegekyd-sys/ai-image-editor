@@ -233,7 +233,7 @@ Tips:
 IMPORTANT:
 - images must be publicly accessible URLs (not base64). Upload to storage first.
 - script should use <<<media_N>>> format (from makaron_write_video_script output)
-- Most video rendering takes 3-5 minutes; Grok is usually around 30-40 seconds. Use makaron_get_video_status to poll.
+- Provider-generated video rendering takes 3-5 minutes; Grok is usually around 30-40 seconds. Use makaron_get_video_status to poll.
 - Duration: omit for smart mode. SeeDance supports integer output duration 4-15s (default 5s); Kling supports 5-15s; Grok 1.5 supports 1-15s for single-image.
 - Resolution: omit or use "auto" for the selected model default. seedance-fast/seedance-mini/grok support 480p/720p; seedance supports 480p/720p/1080p; kling supports 720p/1080p/4k.
 
@@ -304,7 +304,7 @@ IMPORTANT:
 - When referType is "feature": the video provides style/motion reference. Images define the actual content.
 - For videoModel "seedance-fast", "seedance-mini", or "seedance", use referType "feature" (default for SeeDance). Base/direct edit is Kling-only.
 - images (if any) must be publicly accessible URLs
-- Most video rendering takes 3-5 minutes; Grok is usually around 30-40 seconds. Use makaron_get_video_status to poll.
+- Provider-generated video rendering takes 3-5 minutes; Grok is usually around 30-40 seconds. Use makaron_get_video_status to poll.
 
 Example: Edit a video to add cinematic color grading:
   videoUrl: "https://...", editPrompt: "Apply warm cinematic color grading with film grain", videoModel: "seedance-fast"`,
@@ -405,7 +405,7 @@ IMPORTANT:
 
 Status values:
 - pending: task queued
-- processing: rendering in progress (usually 3-5 minutes; Grok usually 30-40 seconds)
+- processing: provider rendering in progress (usually 3-5 minutes; Grok usually 30-40 seconds)
 - completed: done, videoUrl available
 - failed: error occurred
 

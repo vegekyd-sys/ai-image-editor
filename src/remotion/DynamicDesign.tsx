@@ -5,7 +5,7 @@
 
 import React, { useState, useEffect, useMemo, useRef, useCallback } from 'react';
 import * as Remotion from 'remotion';
-import { Audio, Video } from '@remotion/media';
+import { Audio as MediaAudio, Video as MediaVideo } from '@remotion/media';
 import * as RemotionPaths from '@remotion/paths';
 import * as RemotionNoise from '@remotion/noise';
 import { getAvailableFonts } from '@remotion/google-fonts';
@@ -20,20 +20,26 @@ const AutoPremountSequence = React.forwardRef(function AutoPremountSequence(prop
   return React.createElement(Sequence, { ...props, premountFor: props.premountFor ?? fps, ref });
 });
 
-const REMOTION_SCOPE: Record<string, unknown> = {
-  React, useState, useEffect, useCallback, useMemo, useRef,
-  ...Remotion,
-  ...RemotionPaths,
-  ...RemotionNoise,
-  // @remotion/media Video/Audio: supports web-renderer export + trimBefore/trimAfter
-  Audio, Video,
-  // OffthreadVideo not supported in web-renderer — alias to @remotion/media Video
-  OffthreadVideo: Video,
-  // Override: Sequence with auto premountFor
-  Sequence: AutoPremountSequence,
-};
-delete REMOTION_SCOPE['default'];
-delete REMOTION_SCOPE['__esModule'];
+function createRemotionScope(useOffthreadVideo: boolean, useNativeVideo: boolean): Record<string, unknown> {
+  const serverVideo = Remotion.OffthreadVideo || MediaVideo;
+  const nativeVideo = Remotion.Video || MediaVideo;
+  const scope: Record<string, unknown> = {
+    React, useState, useEffect, useCallback, useMemo, useRef,
+    ...Remotion,
+    ...RemotionPaths,
+    ...RemotionNoise,
+    // @remotion/media keeps browser/web-renderer preview behavior; server export can opt into
+    // Remotion-native Video so the renderer can collect source-video audio assets.
+    Audio: MediaAudio,
+    Video: useOffthreadVideo ? serverVideo : useNativeVideo ? nativeVideo : MediaVideo,
+    OffthreadVideo: useOffthreadVideo ? serverVideo : MediaVideo,
+    // Override: Sequence with auto premountFor
+    Sequence: AutoPremountSequence,
+  };
+  delete scope.default;
+  delete scope.__esModule;
+  return scope;
+}
 
 function normalizeRemotionScopeDeclarations(code: string): string {
   return code
@@ -65,7 +71,7 @@ function pickRemotionComponentName(code: string): string {
   return names[names.length - 1] || 'Design';
 }
 
-function compileAndEval(code: string): React.ComponentType<Record<string, unknown>> | null {
+function compileAndEval(code: string, scope: Record<string, unknown>): React.ComponentType<Record<string, unknown>> | null {
   try {
     const src = normalizeRemotionScopeDeclarations(code);
     const { code: compiled } = sucraseTransform(src, {
@@ -74,8 +80,8 @@ function compileAndEval(code: string): React.ComponentType<Record<string, unknow
     });
     const fnName = pickRemotionComponentName(src);
     const execCode = `${compiled}\nreturn ${fnName};`;
-    const scopeKeys = Object.keys(REMOTION_SCOPE);
-    const scopeValues = Object.values(REMOTION_SCOPE);
+    const scopeKeys = Object.keys(scope);
+    const scopeValues = Object.values(scope);
     const factory = new Function(...scopeKeys, execCode);
     return factory(...scopeValues);
   } catch (err) {
@@ -128,13 +134,17 @@ async function loadEmojiFont(): Promise<void> {
 
 // ─── Component ────────────────────────────────────────────────────────────
 
-export const DynamicDesign: React.FC<Record<string, unknown>> = ({ code, designProps }) => {
+export const DynamicDesign: React.FC<Record<string, unknown>> = ({ code, designProps, skipFontLoading, useOffthreadVideo, useNativeVideo }) => {
   const codeStr = typeof code === 'string' ? code : '';
   const propsObj = useMemo(
     () => (typeof designProps === 'object' && designProps !== null ? designProps : {}) as Record<string, unknown>,
     [designProps],
   );
-  const Component = useMemo(() => compileAndEval(codeStr), [codeStr]);
+  const remotionScope = useMemo(
+    () => createRemotionScope(useOffthreadVideo === true, useNativeVideo === true),
+    [useNativeVideo, useOffthreadVideo],
+  );
+  const Component = useMemo(() => compileAndEval(codeStr, remotionScope), [codeStr, remotionScope]);
 
   // Combine code + props for font detection
   const allText = useMemo(() => {
@@ -142,10 +152,15 @@ export const DynamicDesign: React.FC<Record<string, unknown>> = ({ code, designP
     return codeStr + '\n' + propsStr;
   }, [codeStr, propsObj]);
 
+  const [, setFontsReady] = useState(false);
   const handleRef = useRef<number | null>(null);
 
   useEffect(() => {
     if (!codeStr) return;
+    if (skipFontLoading === true) {
+      setFontsReady(true);
+      return;
+    }
     const handle = delayRender('Loading fonts for design');
     handleRef.current = handle;
 

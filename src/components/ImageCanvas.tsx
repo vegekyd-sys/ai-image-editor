@@ -10,6 +10,7 @@ import { containRect } from '@/lib/image/geometry';
 import { useLocale } from '@/lib/i18n';
 import { VIDEO_PLACEHOLDER_IMAGE } from '@/lib/editor/timeline-derivations';
 import { isFastVideoRenderModel } from '@/lib/video-model-capabilities';
+import { isRemotionExportTaskId } from '@/lib/remotion-export-flags';
 
 const RemotionRenderer = dynamic(() => import('@/components/RemotionRenderer'), { ssr: false });
 
@@ -39,6 +40,7 @@ interface ImageCanvasProps {
   videoUrl?: string | null;
   videoProcessing?: boolean; // true when rendering but no videoUrl yet
   videoFailed?: boolean;
+  videoTaskId?: string | null;
   videoModel?: string | null;
   videoPosterImage?: string; // last snapshot image to show while processing
   isDesktop?: boolean;
@@ -94,7 +96,7 @@ interface ImageCanvasProps {
 export default function ImageCanvas({
   timeline, currentIndex, onIndexChange, isEditing,
   isDraft, isDraftLoading, draftTimelineIndex, onDismissDraft, previousImage, onAnimate,
-  isVideoEntry, videoUrl, videoProcessing, videoFailed, videoModel, videoPosterImage, isDesktop,
+  isVideoEntry, videoUrl, videoProcessing, videoFailed, videoTaskId, videoModel, videoPosterImage, isDesktop,
   annotationMode, annotationTool, annotationEntries, onAddAnnotationEntry,
   onUpdateAnnotationEntry, onDeleteAnnotationEntry,
   annotationColor, annotationLineWidth, onStartTextEdit, textEditing,
@@ -118,9 +120,11 @@ export default function ImageCanvas({
   onVideoFrameCaptured,
 }: ImageCanvasProps) {
   const { t } = useLocale();
-  const videoRenderTimeHint = isFastVideoRenderModel(videoModel)
-    ? t('canvas.grokUsuallyTakes')
-    : t('canvas.usuallyTakes');
+  const videoRenderTimeHint = isRemotionExportTaskId(videoTaskId)
+    ? t('canvas.remotionExportUsuallyTakes')
+    : (isFastVideoRenderModel(videoModel)
+      ? t('canvas.grokUsuallyTakes')
+      : t('canvas.usuallyTakes'));
   const touchStartX = useRef(0);
   const touchStartY = useRef(0);
   const swiping = useRef(false);

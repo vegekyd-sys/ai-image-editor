@@ -12,6 +12,14 @@ function isPermanentUrl(url: string): boolean {
   return PERMANENT_HOSTS.some(h => url.includes(h))
 }
 
+function hasResolvableVideoUrl(code: string): boolean {
+  const videoUrlPattern = /https?:\/\/[^\s"'`<>)}\]]+\.(mp4|webm|mov)([^\s"'`<>)}\]]*)/gi
+  for (const match of code.matchAll(videoUrlPattern)) {
+    if (!isPermanentUrl(match[0])) return true
+  }
+  return false
+}
+
 /**
  * Replace temporary provider video URLs in design code with permanent Supabase URLs.
  * Two strategies:
@@ -23,6 +31,8 @@ export async function resolveVideoUrlsInCode(
   projectId: string,
   supabase: SupabaseClient,
 ): Promise<ResolveResult> {
+  if (!hasResolvableVideoUrl(code)) return { code, changed: false }
+
   const { data: videoSnaps } = await supabase
     .from('snapshots')
     .select('video_meta')
