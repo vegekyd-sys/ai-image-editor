@@ -52,8 +52,13 @@ export interface RemotionLambdaUrlResult {
   progress: LambdaRenderProgress
 }
 
+function readEnv(name: string): string | undefined {
+  const value = process.env[name]?.replace(/\\[rn]|[\r\n]/g, '').trim()
+  return value || undefined
+}
+
 function readPositiveNumber(value: string | undefined, fallback: number): number {
-  const parsed = Number(value)
+  const parsed = Number(value?.trim())
   return Number.isFinite(parsed) && parsed > 0 ? parsed : fallback
 }
 
@@ -62,12 +67,12 @@ function readPositiveInteger(value: string | undefined, fallback: number): numbe
 }
 
 function readBooleanEnv(name: string): boolean {
-  const value = process.env[name]
+  const value = readEnv(name)
   return value === '1' || value === 'true'
 }
 
 function readX264Preset(): Parameters<typeof renderMediaOnLambda>[0]['x264Preset'] {
-  const value = process.env.REMOTION_LAMBDA_X264_PRESET || 'ultrafast'
+  const value = readEnv('REMOTION_LAMBDA_X264_PRESET') || 'ultrafast'
   const allowed = new Set([
     'ultrafast',
     'superfast',
@@ -87,7 +92,7 @@ function readX264Preset(): Parameters<typeof renderMediaOnLambda>[0]['x264Preset
 }
 
 function lambdaEnv(name: string): string {
-  const value = process.env[name]
+  const value = readEnv(name)
   if (!value) throw new Error(`${name} is required when REMOTION_RENDERER=lambda`)
   return value
 }
@@ -95,13 +100,14 @@ function lambdaEnv(name: string): string {
 function readRemotionAwsCredentials():
   | { accessKeyId: string; secretAccessKey: string; sessionToken?: string }
   | null {
-  const accessKeyId = process.env.REMOTION_AWS_ACCESS_KEY_ID || process.env.REMOTION_AWS_ACCESS_KEY
-  const secretAccessKey = process.env.REMOTION_AWS_SECRET_ACCESS_KEY || process.env.REMOTION_AWS_SECRET_KEY
+  const accessKeyId = readEnv('REMOTION_AWS_ACCESS_KEY_ID') || readEnv('REMOTION_AWS_ACCESS_KEY')
+  const secretAccessKey = readEnv('REMOTION_AWS_SECRET_ACCESS_KEY') || readEnv('REMOTION_AWS_SECRET_KEY')
+  const sessionToken = readEnv('REMOTION_AWS_SESSION_TOKEN')
   if (!accessKeyId || !secretAccessKey) return null
   return {
     accessKeyId,
     secretAccessKey,
-    sessionToken: process.env.REMOTION_AWS_SESSION_TOKEN,
+    ...(sessionToken ? { sessionToken } : {}),
   }
 }
 
@@ -212,29 +218,29 @@ export async function renderDesignVideoLambdaToUrl(
     outputDestination?: RemotionLambdaOutputDestination
   } = {},
 ): Promise<RemotionLambdaUrlResult> {
-  const region = process.env.REMOTION_LAMBDA_REGION || process.env.AWS_REGION || 'us-east-1'
+  const region = readEnv('REMOTION_LAMBDA_REGION') || readEnv('AWS_REGION') || 'us-east-1'
   const functionName = lambdaEnv('REMOTION_LAMBDA_FUNCTION_NAME')
-  const rendererFunctionName = process.env.REMOTION_LAMBDA_RENDERER_FUNCTION_NAME || undefined
+  const rendererFunctionName = readEnv('REMOTION_LAMBDA_RENDERER_FUNCTION_NAME')
   const serveUrl = lambdaEnv('REMOTION_LAMBDA_SERVE_URL')
   const fps = design.animation?.fps || 30
   const dur = design.animation?.durationInSeconds || 1 / fps
   const durationInFrames = Math.max(1, Math.round(fps * dur))
   const scale = Number.isFinite(options.scale) && options.scale && options.scale > 0 ? options.scale : 1
   const useLegacyConcurrency = readBooleanEnv('REMOTION_LAMBDA_USE_CONCURRENCY')
-  const concurrency = useLegacyConcurrency && process.env.REMOTION_LAMBDA_CONCURRENCY
-    ? readPositiveInteger(process.env.REMOTION_LAMBDA_CONCURRENCY, 10)
+  const concurrency = useLegacyConcurrency && readEnv('REMOTION_LAMBDA_CONCURRENCY')
+    ? readPositiveInteger(readEnv('REMOTION_LAMBDA_CONCURRENCY'), 10)
     : undefined
   const framesPerLambda = concurrency
     ? undefined
-    : readPositiveInteger(process.env.REMOTION_LAMBDA_FRAMES_PER_LAMBDA, 20)
-  const pollMs = readPositiveInteger(process.env.REMOTION_LAMBDA_POLL_MS, 1000)
+    : readPositiveInteger(readEnv('REMOTION_LAMBDA_FRAMES_PER_LAMBDA'), 20)
+  const pollMs = readPositiveInteger(readEnv('REMOTION_LAMBDA_POLL_MS'), 1000)
   const x264Preset = readX264Preset()
-  const jpegQuality = readPositiveInteger(process.env.REMOTION_LAMBDA_JPEG_QUALITY, 80)
-  const deleteAfter = process.env.REMOTION_LAMBDA_DELETE_AFTER || null
-  const useOffthreadVideo = process.env.REMOTION_LAMBDA_USE_OFFTHREAD_VIDEO === 'true'
-  const logLevel = process.env.REMOTION_LAMBDA_LOG_LEVEL || 'warn'
-  const timeoutInMilliseconds = readPositiveInteger(process.env.REMOTION_LAMBDA_TIMEOUT_MS, 120000)
-  const progressRetryAttempts = readPositiveInteger(process.env.REMOTION_LAMBDA_PROGRESS_RETRIES, 3)
+  const jpegQuality = readPositiveInteger(readEnv('REMOTION_LAMBDA_JPEG_QUALITY'), 80)
+  const deleteAfter = readEnv('REMOTION_LAMBDA_DELETE_AFTER') || null
+  const useOffthreadVideo = readEnv('REMOTION_LAMBDA_USE_OFFTHREAD_VIDEO') === 'true'
+  const logLevel = readEnv('REMOTION_LAMBDA_LOG_LEVEL') || 'warn'
+  const timeoutInMilliseconds = readPositiveInteger(readEnv('REMOTION_LAMBDA_TIMEOUT_MS'), 120000)
+  const progressRetryAttempts = readPositiveInteger(readEnv('REMOTION_LAMBDA_PROGRESS_RETRIES'), 3)
   const preparedCode = prepareRemotionCodeForSandbox(design.code)
   const hasAudioSources = hasRemotionAudioSources(design.code)
   const encoding = resolveRemotionLambdaEncodingSettings()
@@ -269,12 +275,12 @@ export async function renderDesignVideoLambdaToUrl(
     x264Preset,
     framesPerLambda,
     concurrency,
-    concurrencyPerLambda: readPositiveInteger(process.env.REMOTION_LAMBDA_CONCURRENCY_PER_LAMBDA, 1),
+    concurrencyPerLambda: readPositiveInteger(readEnv('REMOTION_LAMBDA_CONCURRENCY_PER_LAMBDA'), 1),
     chromiumOptions: { disableWebSecurity: true, gl: null },
     muted: !hasAudioSources,
     audioCodec: hasAudioSources ? 'aac' : null,
     jpegQuality,
-    maxRetries: readPositiveInteger(process.env.REMOTION_LAMBDA_MAX_RETRIES, 1),
+    maxRetries: readPositiveInteger(readEnv('REMOTION_LAMBDA_MAX_RETRIES'), 1),
     timeoutInMilliseconds,
     logLevel: logLevel as Parameters<typeof renderMediaOnLambda>[0]['logLevel'],
     deleteAfter: deleteAfter as Parameters<typeof renderMediaOnLambda>[0]['deleteAfter'],

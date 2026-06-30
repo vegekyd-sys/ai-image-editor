@@ -7,6 +7,11 @@
 import type { DesignPayload } from '@/types';
 import { hasRemotionAudioSources } from '@/lib/remotion-audio';
 
+function readEnv(name: string): string | undefined {
+  const value = process.env[name]?.replace(/\\[rn]|[\r\n]/g, '').trim();
+  return value || undefined;
+}
+
 // ─── Sandbox pool (reuse across renders and requests) ─────────────────────
 
 type SandboxInstance = import('@vercel/sandbox').Sandbox;
@@ -236,19 +241,19 @@ export async function renderDesignVideo(
     scale?: number;
   } = {},
 ): Promise<Buffer> {
-  if (process.env.REMOTION_RENDERER === 'lambda') {
+  if (readEnv('REMOTION_RENDERER') === 'lambda') {
     const { renderDesignVideoLambda } = await import('@/lib/remotion-lambda-renderer');
     return renderDesignVideoLambda(design, options);
   }
 
-  if (process.env.REMOTION_RENDERER === 'local') {
+  if (readEnv('REMOTION_RENDERER') === 'local') {
     const { renderDesignVideoLocal } = await import('@/lib/remotion-local-renderer');
     return renderDesignVideoLocal(design, {
       ...options,
-      concurrency: process.env.REMOTION_LOCAL_CONCURRENCY || 4,
-      cacheDir: process.env.REMOTION_LOCAL_MEDIA_CACHE_DIR,
-      mediaServerPort: Number(process.env.REMOTION_LOCAL_MEDIA_PORT || 5123),
-      skipFontLoading: process.env.REMOTION_LOCAL_SKIP_FONTS !== 'false',
+      concurrency: readEnv('REMOTION_LOCAL_CONCURRENCY') || 4,
+      cacheDir: readEnv('REMOTION_LOCAL_MEDIA_CACHE_DIR'),
+      mediaServerPort: Number(readEnv('REMOTION_LOCAL_MEDIA_PORT') || 5123),
+      skipFontLoading: readEnv('REMOTION_LOCAL_SKIP_FONTS') !== 'false',
     });
   }
 

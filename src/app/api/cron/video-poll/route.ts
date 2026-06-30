@@ -3,7 +3,7 @@ import { getSupabaseAdmin } from '@/lib/supabase/service'
 import { handleVideoFailure } from '@/lib/video-lifecycle'
 import type { VideoMeta } from '@/types'
 
-export const maxDuration = 60
+export const maxDuration = 800
 
 export async function GET(req: NextRequest) {
   if (req.headers.get('authorization') !== `Bearer ${process.env.CRON_SECRET}`) {
@@ -66,5 +66,21 @@ export async function GET(req: NextRequest) {
     }
   }
 
-  return NextResponse.json({ processed, total: stale?.length || 0 })
+  let remotionProcessed = 0
+  let remotionError: string | undefined
+  try {
+    const { runNextRemotionExportJob } = await import('@/lib/remotion-export')
+    const remotionResult = await runNextRemotionExportJob()
+    if (remotionResult) remotionProcessed = 1
+  } catch (err) {
+    remotionError = err instanceof Error ? err.message : String(err)
+    console.error('[cron/video-poll] Error running Remotion export worker:', err)
+  }
+
+  return NextResponse.json({
+    processed,
+    total: stale?.length || 0,
+    remotionProcessed,
+    ...(remotionError ? { remotionError } : {}),
+  })
 }

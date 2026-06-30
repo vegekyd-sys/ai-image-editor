@@ -7,14 +7,27 @@ import { getKlingTask as getKlingTaskPiAPI } from '@/lib/piapi'
 import { uploadVideo, isPermanentUrl } from '@/lib/supabase/storage'
 import type { VideoMeta } from '@/types'
 import { buildVideoFailureActions } from '@/lib/artifact-actions'
-import { getRemotionExportJob } from '@/lib/remotion-export'
+import { getRemotionExportJob, runRemotionExportJob } from '@/lib/remotion-export'
 
-export const maxDuration = 60
+export const maxDuration = 800
 
 type SnapshotProject = { user_id?: string; is_public?: boolean } | Array<{ user_id?: string; is_public?: boolean }>
 
 function getProjectInfo(projects: SnapshotProject | null | undefined) {
   return Array.isArray(projects) ? projects[0] : projects
+}
+
+function runRemotionExportAfterResponse(jobId: string) {
+  after(async () => {
+    try {
+      await runRemotionExportJob(jobId)
+    } catch (err) {
+      const message = err instanceof Error ? err.message : String(err)
+      if (!message.includes('already rendering')) {
+        console.error(`[video-snapshot] Remotion export worker failed for ${jobId}:`, err)
+      }
+    }
+  })
 }
 
 export async function GET(
@@ -74,22 +87,17 @@ export async function GET(
       return NextResponse.json({ error: 'No task ID' }, { status: 400 })
     }
 
-    if (videoMeta.taskId.startsWith('remotion-export-pending-')) {
-      return NextResponse.json({
-        status: 'processing',
-        snapshotId,
-        imageUrl: snap.image_url || undefined,
-        error: videoMeta.error,
-      })
-    }
-
-    if (videoMeta.taskId.startsWith('remotion-export-')) {
-      const jobId = videoMeta.taskId.slice('remotion-export-'.length)
+    if (videoMeta.taskId.startsWith('remotion-export-pending-') || videoMeta.taskId.startsWith('remotion-export-')) {
+      const isPendingSnapshot = videoMeta.taskId.startsWith('remotion-export-pending-')
+      const jobId = videoMeta.taskId.slice(
+        isPendingSnapshot ? 'remotion-export-pending-'.length : 'remotion-export-'.length,
+      )
       const job = await getRemotionExportJob(jobId)
       if (!job) return NextResponse.json({ status: 'processing', snapshotId, imageUrl: snap.image_url || undefined })
       if (job.status === 'completed' && job.storage_url) {
         const updatedMeta: VideoMeta = {
           ...videoMeta,
+          taskId: `remotion-export-${job.id}`,
           status: 'completed',
           videoUrl: job.storage_url,
           providerUrl: job.storage_url,
@@ -102,7 +110,12 @@ export async function GET(
         return NextResponse.json({ status: 'completed', videoUrl: job.storage_url, snapshotId, imageUrl: snap.image_url || undefined })
       }
       if (job.status === 'failed') {
-        const updatedMeta: VideoMeta = { ...videoMeta, status: 'failed', error: job.error || 'Remotion export failed' }
+        const updatedMeta: VideoMeta = {
+          ...videoMeta,
+          taskId: `remotion-export-${job.id}`,
+          status: 'failed',
+          error: job.error || 'Remotion export failed',
+        }
         await admin.from('snapshots').update({ video_meta: updatedMeta }).eq('id', snapshotId)
         return NextResponse.json({
           status: 'failed',
@@ -112,6 +125,7 @@ export async function GET(
           completionActions: buildVideoFailureActions(updatedMeta),
         })
       }
+      runRemotionExportAfterResponse(job.id)
       return NextResponse.json({ status: 'processing', snapshotId, imageUrl: snap.image_url || undefined })
     }
 

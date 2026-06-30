@@ -1656,7 +1656,7 @@ For timeline videos, pass media_index. For external audio/video URLs, pass media
     materialize_media: tool({
       description: `Export an editable Remotion composition into a real MP4 video.
 Use this when the user asks to save/export/materialize/turn a composition into MP4. It accepts a timeline media_index, snapshot_id, design_path, or the current unsaved composition from run_code.
-Default profile is fast_720p (short side 720, no upscale) for speed. Default publish=true so the exported MP4 appears as a new <<<media_N>>> video. By default the tool queues asynchronously like video generation; set wait=true only when the user explicitly needs the final URL in this response.`,
+Default profile is fast_720p (short side 720, no upscale) for speed. Default publish=true so the exported MP4 appears as a new <<<media_N>>> video. By default the tool queues a durable async export like video generation; polling/cron completes it and reports either success or failure. Set wait=true only when the user explicitly needs the final URL in this response.`,
       inputSchema: z.object({
         media_index: z.number().optional().describe('1-based media index, e.g. 3 for <<<media_3>>>. Must point to an editable Remotion composition.'),
         snapshot_id: z.string().optional().describe('Snapshot ID of an editable Remotion composition.'),
@@ -1664,7 +1664,7 @@ Default profile is fast_720p (short side 720, no upscale) for speed. Default pub
         name: z.string().optional().describe('Short output slug/name.'),
         profile: z.enum(['fast_720p', 'source']).optional().describe('fast_720p for speed, source for full source resolution.'),
         publish: z.boolean().optional().describe('Default true. Publish exported MP4 into the project timeline.'),
-        wait: z.boolean().optional().describe('Default false. Wait for final MP4 URL before responding.'),
+        wait: z.boolean().optional().describe('Default false. Queue asynchronously and let polling/cron complete. Set true only to wait for final MP4 URL before responding.'),
       }),
       execute: async ({ media_index, snapshot_id, design_path, name, profile, publish, wait }) => {
         if (!ctx.supabase || !ctx.userId) {
@@ -1696,11 +1696,6 @@ Default profile is fast_720p (short side 720, no upscale) for speed. Default pub
 
           if (!shouldWait) {
             const taskId = `remotion-export-${job.id}`;
-            if (job.status !== 'completed') {
-              void runRemotionExportJob(job.id).catch((err) => {
-                console.error('[agent] async materialize_media failed:', err);
-              });
-            }
             const videoMeta: VideoMeta = {
               taskId,
               videoUrl: job.storage_url || '',

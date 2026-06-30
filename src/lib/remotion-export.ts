@@ -109,12 +109,41 @@ function nowIso() {
   return new Date().toISOString()
 }
 
+function readEnv(name: string): string | undefined {
+  const value = process.env[name]?.replace(/\\[rn]|[\r\n]/g, '').trim()
+  return value || undefined
+}
+
+function readPositiveIntegerEnv(name: string, fallback: number): number {
+  const raw = readEnv(name)
+  if (!raw) return fallback
+  const parsed = Number.parseInt(raw, 10)
+  return Number.isFinite(parsed) && parsed > 0 ? parsed : fallback
+}
+
+function remotionExportStaleMs(): number {
+  return readPositiveIntegerEnv('REMOTION_EXPORT_STALE_MS', 2 * 60 * 1000)
+}
+
+function isStaleRenderingJob(job: Pick<RemotionExportJob, 'status' | 'heartbeat_at' | 'started_at'>): boolean {
+  if (job.status !== 'rendering') return false
+  const stamp = job.heartbeat_at || job.started_at
+  if (!stamp) return true
+  const timestamp = Date.parse(stamp)
+  if (!Number.isFinite(timestamp)) return true
+  return Date.now() - timestamp > remotionExportStaleMs()
+}
+
+function remotionExportStaleCutoffIso(): string {
+  return new Date(Date.now() - remotionExportStaleMs()).toISOString()
+}
+
 function readRemotionAwsCredentials():
   | { accessKeyId: string; secretAccessKey: string; sessionToken?: string }
   | null {
-  const accessKeyId = process.env.REMOTION_AWS_ACCESS_KEY_ID || process.env.REMOTION_AWS_ACCESS_KEY
-  const secretAccessKey = process.env.REMOTION_AWS_SECRET_ACCESS_KEY || process.env.REMOTION_AWS_SECRET_KEY
-  const sessionToken = process.env.REMOTION_AWS_SESSION_TOKEN
+  const accessKeyId = readEnv('REMOTION_AWS_ACCESS_KEY_ID') || readEnv('REMOTION_AWS_ACCESS_KEY')
+  const secretAccessKey = readEnv('REMOTION_AWS_SECRET_ACCESS_KEY') || readEnv('REMOTION_AWS_SECRET_KEY')
+  const sessionToken = readEnv('REMOTION_AWS_SESSION_TOKEN')
   if (!accessKeyId || !secretAccessKey) return null
   return sessionToken
     ? { accessKeyId, secretAccessKey, sessionToken }
@@ -146,14 +175,14 @@ function resolveSupabaseS3OutputDestination(
   userId: string,
   workspacePath: string,
 ): (RemotionLambdaOutputDestination & { publicUrl: string; storagePath: string }) | null {
-  if (process.env.REMOTION_LAMBDA_SUPABASE_DIRECT_OUTPUT === 'false') return null
-  const endpoint = process.env.SUPABASE_S3_ENDPOINT
-  const region = process.env.SUPABASE_S3_REGION
-  const accessKeyId = process.env.SUPABASE_S3_ACCESS_KEY_ID
-  const secretAccessKey = process.env.SUPABASE_S3_SECRET_ACCESS_KEY
+  if (readEnv('REMOTION_LAMBDA_SUPABASE_DIRECT_OUTPUT') === 'false') return null
+  const endpoint = readEnv('SUPABASE_S3_ENDPOINT')
+  const region = readEnv('SUPABASE_S3_REGION')
+  const accessKeyId = readEnv('SUPABASE_S3_ACCESS_KEY_ID')
+  const secretAccessKey = readEnv('SUPABASE_S3_SECRET_ACCESS_KEY')
   if (!endpoint || !region || !accessKeyId || !secretAccessKey) return null
 
-  const bucketName = process.env.SUPABASE_S3_BUCKET || 'images'
+  const bucketName = readEnv('SUPABASE_S3_BUCKET') || 'images'
   const storagePath = workspaceStoragePath(userId, workspacePath)
   const { data } = supabase.storage.from(bucketName).getPublicUrl(storagePath)
   return {
@@ -209,7 +238,7 @@ function fingerprintDesign(
   outputType: RemotionExportOutputType,
   renderProfile: RemotionRenderProfile,
 ): string {
-  const renderer = process.env.REMOTION_RENDERER || 'vercel'
+  const renderer = readEnv('REMOTION_RENDERER') || 'vercel'
   const lambdaEncoding = outputType === 'video' && renderer === 'lambda'
     ? resolveRemotionLambdaEncodingSettings()
     : null
@@ -222,8 +251,8 @@ function fingerprintDesign(
       ...(lambdaEncoding ? {
         lambdaVideoBitrate: lambdaEncoding.videoBitrate,
         lambdaAudioBitrate: lambdaEncoding.audioBitrate,
-        lambdaX264Preset: process.env.REMOTION_LAMBDA_X264_PRESET || 'ultrafast',
-        lambdaJpegQuality: process.env.REMOTION_LAMBDA_JPEG_QUALITY || '80',
+        lambdaX264Preset: readEnv('REMOTION_LAMBDA_X264_PRESET') || 'ultrafast',
+        lambdaJpegQuality: readEnv('REMOTION_LAMBDA_JPEG_QUALITY') || '80',
       } : {}),
     },
     design: {
@@ -330,8 +359,8 @@ export function resolveRemotionRenderProfile(
 }
 
 function remotionWorkerId() {
-  return process.env.REMOTION_EXPORT_WORKER_ID
-    || process.env.VERCEL_REGION
+  return readEnv('REMOTION_EXPORT_WORKER_ID')
+    || readEnv('VERCEL_REGION')
     || `pid-${process.pid || 'unknown'}`
 }
 
@@ -468,9 +497,9 @@ export async function resolveRemotionExportDownloadUrl(job: RemotionExportJob): 
   if (!job.storage_url) return null
   if (job.output_type !== 'video' || job.metadata?.lambdaDirectDownload !== true) return job.storage_url
 
-  const bucketName = typeof job.metadata?.lambdaBucketName === 'string' ? job.metadata.lambdaBucketName : null
-  const sourceUrl = typeof job.metadata?.lambdaOutputUrl === 'string' ? job.metadata.lambdaOutputUrl : job.storage_url
-  const key = lambdaObjectKeyFromUrl(sourceUrl, bucketName)
+    const bucketName = typeof job.metadata?.lambdaBucketName === 'string' ? job.metadata.lambdaBucketName : null
+    const sourceUrl = typeof job.metadata?.lambdaOutputUrl === 'string' ? job.metadata.lambdaOutputUrl : job.storage_url
+    const key = lambdaObjectKeyFromUrl(sourceUrl, bucketName)
   const credentials = readRemotionAwsCredentials()
   if (!bucketName || !key || !credentials) return job.storage_url
 
@@ -481,7 +510,7 @@ export async function resolveRemotionExportDownloadUrl(job: RemotionExportJob): 
       import('@aws-sdk/s3-request-presigner'),
     ])
     const client = new S3Client({
-      region: process.env.REMOTION_LAMBDA_REGION || process.env.AWS_REGION || 'us-east-1',
+      region: readEnv('REMOTION_LAMBDA_REGION') || readEnv('AWS_REGION') || 'us-east-1',
       credentials,
     })
     return await getSignedUrl(
@@ -516,16 +545,17 @@ export async function checkRemotionExportQueueReady(): Promise<RemotionExportQue
 
 async function claimRemotionExportJob(jobId: string): Promise<RemotionExportJob | null> {
   const admin = getSupabaseAdmin()
+  const claimedAt = nowIso()
   const { data, error } = await admin
     .from('remotion_export_jobs')
     .update({
       status: 'rendering',
       progress: 0,
-      started_at: nowIso(),
+      started_at: claimedAt,
       completed_at: null,
       error: null,
       worker_id: remotionWorkerId(),
-      heartbeat_at: nowIso(),
+      heartbeat_at: claimedAt,
     })
     .eq('id', jobId)
     .eq('status', 'queued')
@@ -537,7 +567,33 @@ async function claimRemotionExportJob(jobId: string): Promise<RemotionExportJob 
   const current = await getRemotionExportJob(jobId)
   if (!current) throw new Error('Export job not found')
   if (current.status === 'completed') return current
-  if (current.status === 'rendering') return null
+  if (current.status === 'rendering') {
+    if (!isStaleRenderingJob(current)) return null
+    const reclaimedAt = nowIso()
+    const { data: reclaimed, error: reclaimError } = await admin
+      .from('remotion_export_jobs')
+      .update({
+        status: 'rendering',
+        progress: 0,
+        started_at: reclaimedAt,
+        completed_at: null,
+        error: null,
+        worker_id: remotionWorkerId(),
+        heartbeat_at: reclaimedAt,
+        metadata: {
+          ...(current.metadata || {}),
+          reclaimedAt,
+          reclaimedFromWorkerId: current.worker_id || null,
+          reclaimedPreviousHeartbeatAt: current.heartbeat_at || null,
+        },
+      })
+      .eq('id', jobId)
+      .eq('status', 'rendering')
+      .select('*')
+      .maybeSingle()
+    if (reclaimError) throw new Error(reclaimError.message)
+    return reclaimed as RemotionExportJob | null
+  }
   throw new Error(`Export job is ${current.status}`)
 }
 
@@ -552,6 +608,20 @@ export async function claimNextRemotionExportJob(limit = 5): Promise<RemotionExp
   if (error) throw new Error(error.message)
 
   for (const candidate of data || []) {
+    const claimed = await claimRemotionExportJob(candidate.id)
+    if (claimed) return claimed
+  }
+  const staleCutoff = remotionExportStaleCutoffIso()
+  const { data: staleData, error: staleError } = await admin
+    .from('remotion_export_jobs')
+    .select('id')
+    .eq('status', 'rendering')
+    .or(`heartbeat_at.is.null,heartbeat_at.lt.${staleCutoff}`)
+    .order('heartbeat_at', { ascending: true, nullsFirst: true })
+    .limit(limit)
+  if (staleError) throw new Error(staleError.message)
+
+  for (const candidate of staleData || []) {
     const claimed = await claimRemotionExportJob(candidate.id)
     if (claimed) return claimed
   }
@@ -720,7 +790,7 @@ async function executeRemotionExportJob(job: RemotionExportJob): Promise<Remotio
     let publicUrl: string
     let finalWorkspacePath = workspacePath
     const outputMetadata: Record<string, unknown> = {}
-    if (job.output_type === 'video' && process.env.REMOTION_RENDERER === 'lambda') {
+    if (job.output_type === 'video' && readEnv('REMOTION_RENDERER') === 'lambda') {
       const { renderDesignVideoLambdaToUrl } = await import('@/lib/remotion-lambda-renderer')
       const directOutputDestination = job.publish
         ? resolveSupabaseS3OutputDestination(admin, job.user_id, workspacePath)
