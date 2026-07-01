@@ -261,6 +261,37 @@ describe('video model reference limits', () => {
     expect(estimateVideoCredits({ model: 'grok', resolution: '720p', durationSec: 1, imageCount: 1 })).toBe(30)
   })
 
+  it('models Gemini Omni as a fast 720p image and video edit provider', () => {
+    expect(normalizeVideoResolution('google-omni', 'auto')).toBe('720p')
+    expect(resolveVideoGenerationRoute({ model: 'google-omni', resolution: 'auto' })).toMatchObject({
+      model: 'google-omni',
+      resolution: '720p',
+      provider: 'google-omni',
+      providerModel: 'gemini-omni-flash-preview',
+    })
+    expect(getVideoModelCapability('google-omni')).toMatchObject({
+      minOutputDuration: 3,
+      maxOutputDuration: 10,
+      supportsVideoReference: true,
+      supportsBaseVideoEdit: true,
+      maxReferenceVideoDuration: 10.5,
+      maxImageReferences: 1,
+    })
+    expect(estimateVideoCredits({ model: 'google-omni', durationSec: 5, imageCount: 1 })).toBe(100)
+  })
+
+  it('fails fast before calling Google Omni image-to-video with multiple images', async () => {
+    const result = await createVideo({
+      script: 'Omni multi image\n\nAnimate <<<media_1>>> and <<<media_2>>> together.',
+      images: ['https://example.com/one.jpg', 'https://example.com/two.jpg'],
+      duration: 5,
+      videoModel: 'google-omni',
+    })
+
+    expect(result.success).toBe(false)
+    expect(result.message).toContain('Gemini Omni Flash supports at most 1 reference images per request')
+  })
+
   it('locks explicit app video model and resolution over agent tool guesses', () => {
     const selection = resolveAgentVideoSelection({
       appModel: 'seedance',
@@ -319,6 +350,8 @@ describe('video model reference limits', () => {
     expect(resolveVideoProviderAspectRatio('grok', 'auto')).toBeUndefined()
     expect(resolveVideoProviderAspectRatio('grok', '3:2')).toBeUndefined()
     expect(resolveVideoProviderAspectRatio('kling', 'auto')).toBeUndefined()
+    expect(resolveVideoProviderAspectRatio('google-omni', '9:16')).toBe('9:16')
+    expect(resolveVideoProviderAspectRatio('google-omni', '1:1')).toBe('1:1')
   })
 
   it('validates model-specific video aspect ratios before provider submission', async () => {

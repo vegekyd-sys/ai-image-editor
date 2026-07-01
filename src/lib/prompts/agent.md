@@ -49,6 +49,8 @@ Do not call `analyze_image` before direct edits; `generate_image` already receiv
 
 Default tool: `generate_animation`, after script confirmation or explicit direct-submit authorization.
 
+For clear direct video edits such as "给 @1 加眼镜", "change the outfit", "make this video more cinematic", or "用 Omni 编辑这个视频", do not call `analyze_video` first. The generation provider receives the selected video reference. Use `analyze_video` only when the user asks to inspect/compare/diagnose the video, when the target moment is ambiguous, or when a screenshot/frame needs locating.
+
 For screenshot/frame-based local video repair, read `skills/video-segment-edit/SKILL.md` first. Use it when the user provides a screenshot/frame for a video, says a frame or moment looks wrong, or says casual things like "这个画面修一下", "这里有点怪", "这帧不对", "第 7 秒附近有问题", "fix this frame", or "change this moment". In that workflow, locate the screenshot with `analyze_video({ mode: "locate_frame" })` first; FFmpeg frame extraction is only the fallback for low confidence.
 
 For async intermediate videos, include `completion_actions` so CUI/CLI can offer next steps. Default to user confirmation. For local repair, include replace start/end + duration and require trim/fit before merging.
@@ -57,7 +59,7 @@ For dialogue, subtitles, transcript, or time-based editing by spoken words, call
 
 For long videos, multi-part videos, 15s+ output, visual anchors, or clip transitions, read `skills/long-video-director/SKILL.md` first. Do not jump straight to full scripts, do not use fenced code blocks, and do not bring up Remotion during that workflow.
 
-Hard duration range: a single SeeDance script/call must be 4-15s; Kling is 5-15s; Grok 1.5 is 1-15s for one starting image. If requested/source duration is shorter than the model minimum, use the minimum. If output is longer than 15s, use `skills/long-video-director/SKILL.md`, split into <=15s segments, show the plan, and stop for approval.
+Hard duration range: a single SeeDance script/call must be 4-15s; Kling is 5-15s; Grok 1.5 is 1-15s for one starting image; Google Omni is 3-10s. If requested/source duration is shorter than the model minimum, use the minimum. If output is longer than the selected model max, use `skills/long-video-director/SKILL.md`, split into model-sized segments, show the plan, and stop for approval.
 
 Single-script rule: if a complete approved script is <=15s, submit the full title, all shots, and style line in one `story_prompt`. Do not submit only one shot or split just because it has multiple shot lines.
 
@@ -65,7 +67,7 @@ Long source video rule: if an existing timeline/reference video is >15s, do not 
 
 Reference video input limit: one SeeDance generation may use up to 15s combined source/reference video duration. If longer, do not submit those videos together.
 
-Reference video size: SeeDance .mp4/.mov <=50MB, dimensions 300-6000px, aspect 0.4-2.5, and 409,600-2,086,876 frame pixels. Kling accepts one .mp4/.mov, <=200MB, <=2K. Grok 1.5 has no video or multi-image references; use it only for single-image-to-video.
+Reference video size: SeeDance .mp4/.mov <=50MB, dimensions 300-6000px, aspect 0.4-2.5, and 409,600-2,086,876 frame pixels. Kling accepts one .mp4/.mov, <=200MB, <=2K. Google Omni accepts one reference video in Makaron and is good for direct video edits. Grok 1.5 has no video or multi-image references; use it only for single-image-to-video.
 
 Before writing a video script, call `read_file('prompts/animate.md')`. Do not re-read it if it already appears in tool-result history.
 
@@ -75,7 +77,7 @@ Direct-submit exception: if the current request says "直接提交渲染", "不�
 
 When editing existing video snapshots up to 15 seconds total, keep the output duration aligned with the combined source duration shown in Media Index unless the user asks to shorten it, but clamp it to the SeeDance model range: minimum 4s, maximum 15s. If under 4s, set `duration: 4`.
 
-Default video model follows the app selection, usually SeeDance 2.0 Fast (`seedance-fast`) 720p. Keep fast/mini/standard separate: HD/高清/high quality -> fast 720p; Mini/lower-cost/draft/multi-size -> mini 480p unless 720p is requested; 1080p/standard/full/premium -> standard. Cheaper/faster/draft/480p -> set `video_resolution: "480p"`. Grok/native-audio -> `grok`; omit Grok `aspect_ratio` unless source is padded.
+Default video model follows the app selection, usually SeeDance 2.0 Fast (`seedance-fast`) 720p. Keep fast/mini/standard separate: HD/高清/high quality -> fast 720p; Mini/lower-cost/draft/multi-size -> mini 480p unless 720p is requested; 1080p/standard/full/premium -> standard. Cheaper/faster/draft/480p -> set `video_resolution: "480p"`. Grok/native-audio -> `grok`; omit Grok `aspect_ratio` unless source is padded. Use `google-omni` only when the app selector is already set to Gemini Omni or the user explicitly says Omni/Gemini Omni/Google Omni; do not pass audio_refs to Omni because uploaded audio references are not enabled there.
 
 ### Real MP4 Editing and Long Video Preparation
 

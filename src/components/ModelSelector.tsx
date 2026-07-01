@@ -455,6 +455,11 @@ export default function ModelSelector({
   const selectedVideoResolution = videoResolution === 'auto'
     ? selectedVideoCapability.defaultResolution
     : normalizeVideoResolution(videoModel, videoResolution);
+  const modelLabel = !imageAuto
+    ? preferredModel
+    : !videoAuto
+      ? `${selectedVideoCapability.label} ${String(selectedVideoResolution).toUpperCase()}`
+      : 'auto';
   const resolutionOptions = selectedVideoCapability.supportedResolutions ?? [];
 
   return (
@@ -464,8 +469,9 @@ export default function ModelSelector({
         ref={triggerRef}
         data-testid="model-selector"
         data-current-model={preferredModel}
+        data-current-video-model={videoModel}
         data-video-auto={videoAuto}
-        aria-label={`Model: ${preferredModel}. Click to open selector.`}
+        aria-label={`Model: ${modelLabel}. Click to open selector.`}
         onClick={() => setOpen(v => !v)}
         className="w-8 h-8 flex-shrink-0 flex items-center justify-center rounded-full transition-all active:scale-95"
         style={{

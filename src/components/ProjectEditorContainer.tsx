@@ -23,6 +23,17 @@ interface ProjectEditorContainerProps {
   isInlineActive?: boolean
 }
 
+function dedupeMessagesById(messages: Message[]): Message[] {
+  const byId = new Map<string, Message>()
+  for (const message of messages) {
+    const existing = byId.get(message.id)
+    if (!existing || (!existing.content && message.content)) {
+      byId.set(message.id, message)
+    }
+  }
+  return Array.from(byId.values()).sort((a, b) => (a.timestamp || 0) - (b.timestamp || 0))
+}
+
 export default function ProjectEditorContainer({
   projectId,
   className = 'page-slide-in',
@@ -56,7 +67,7 @@ export default function ProjectEditorContainer({
   })
   const [initialMessages, setInitialMessages] = useState<Message[] | null>(() => {
     const sync = getCachedProjectDataSync(projectId)
-    return sync ? sync.messages as Message[] : null
+    return sync ? dedupeMessagesById(sync.messages as Message[]) : null
   })
   const [initialTitle, setInitialTitle] = useState<string>(() => {
     const sync = getCachedProjectDataSync(projectId)
@@ -179,7 +190,7 @@ export default function ProjectEditorContainer({
       if (cancelled || shownRef.current) return
       shownRef.current = true
       setInitialSnapshots(dedupeVideoSnapshots(patched))
-      setInitialMessages(cached.messages as Message[])
+      setInitialMessages(dedupeMessagesById(cached.messages as Message[]))
       setInitialTitle(cached.title)
       setLoaded(true)
     })
@@ -229,20 +240,18 @@ export default function ProjectEditorContainer({
         }
       }
 
-      const completedActionVideos = snapshots.filter(s =>
+      const completedVideos = snapshots.filter(s =>
         s.type === 'video' &&
         s.videoMeta?.status === 'completed' &&
-        s.videoMeta.videoUrl &&
-        s.videoMeta.completionActions?.length
+        s.videoMeta.videoUrl
       )
-      for (const snap of completedActionVideos) {
+      for (const snap of completedVideos) {
         if (messages.some(m => m.content?.includes(`snap:${snap.id}`))) continue
         const actionLines = serializeCompletionActions(snap.videoMeta?.completionActions)
-        if (!actionLines) continue
         messages.push({
           id: `video-action-${snap.id}`,
           role: 'assistant',
-          content: `🎬 视频已生成\n${snap.videoMeta!.videoUrl}\nsnap:${snap.id}\n${actionLines}`,
+          content: `🎬 视频已生成\n${snap.videoMeta!.videoUrl}\nsnap:${snap.id}${actionLines ? `\n${actionLines}` : ''}`,
           timestamp: Date.now(),
         })
       }
@@ -269,7 +278,7 @@ export default function ProjectEditorContainer({
       if (cancelled) return
       shownRef.current = true
       setInitialSnapshots(dedupeVideoSnapshots(patched))
-      setInitialMessages(messages)
+      setInitialMessages(dedupeMessagesById(messages))
       setInitialTitle(title)
       setLoaded(true)
     }).catch((err: unknown) => {

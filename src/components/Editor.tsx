@@ -54,6 +54,17 @@ export type { AnimationState } from '@/lib/editor/types';
 
 type EditorCompletionAction = ArtifactCompletionAction;
 
+function dedupeMessagesById(messages: Message[]): Message[] {
+  const byId = new Map<string, Message>();
+  for (const message of messages) {
+    const existing = byId.get(message.id);
+    if (!existing || (!existing.content && message.content)) {
+      byId.set(message.id, message);
+    }
+  }
+  return Array.from(byId.values()).sort((a, b) => (a.timestamp || 0) - (b.timestamp || 0));
+}
+
 function formatFrameEditTime(seconds: number) {
   if (!seconds || !isFinite(seconds)) return '0:00';
   const mins = Math.floor(seconds / 60);
@@ -146,7 +157,7 @@ export default function Editor({
   }, [readOnly, router]);
   const [cuiPanelWidth, setCuiPanelWidth] = useState(500);
   const cuiPanelRef = useRef<HTMLDivElement>(null);
-  const [messages, setMessages] = useState<Message[]>(initialMessages ?? []);
+  const [messages, setMessages] = useState<Message[]>(() => dedupeMessagesById(initialMessages ?? []));
   const [snapshots, setSnapshots] = useState<Snapshot[]>(dedupeVideoSnapshots(initialSnapshots ?? []));
 
   // eslint-disable-next-line @typescript-eslint/no-unused-vars
@@ -368,13 +379,14 @@ export default function Editor({
 
   useEffect(() => {
     if (!initialMessages?.length) return;
+    const dedupedInitialMessages = dedupeMessagesById(initialMessages);
     setMessages(prev => {
-      if (prev.length === 0) return initialMessages;
+      if (prev.length === 0) return dedupedInitialMessages;
       // Strict ID-based dedup: build complete list from initialMessages, then append any live messages not in it
-      const initialIds = new Set(initialMessages.map(m => m.id));
+      const initialIds = new Set(dedupedInitialMessages.map(m => m.id));
       const liveOnly = prev.filter(m => !initialIds.has(m.id));
-      if (liveOnly.length === 0) return initialMessages;
-      return [...initialMessages, ...liveOnly];
+      if (liveOnly.length === 0) return dedupedInitialMessages;
+      return dedupeMessagesById([...dedupedInitialMessages, ...liveOnly]);
     });
   }, [initialMessages]);
 
@@ -1591,6 +1603,7 @@ const isTipsFetchingRef = useRef(isTipsFetching);
       pendingAnalysisRef, pendingTeaserRef, hasTriggeredNamingRef,
       draftParentIndexRef, viewIndexRef, pendingNavigateToVideoRef,
       cacheImage, fetchTipsForSnapshot, onSaveSnapshot, onUpdateDescription,
+      onSaveMessage,
       triggerProjectNaming, triggerTipsTeaser, compressBase64Image,
       t, initialTitle, userPromptText: text,
       onInsufficientCredits: (balance) => {
@@ -1719,6 +1732,7 @@ const isTipsFetchingRef = useRef(isTipsFetching);
         pendingAnalysisRef, pendingTeaserRef, hasTriggeredNamingRef,
         draftParentIndexRef, viewIndexRef, pendingNavigateToVideoRef,
         cacheImage, fetchTipsForSnapshot, onSaveSnapshot, onUpdateDescription,
+        onSaveMessage,
         triggerProjectNaming, triggerTipsTeaser, compressBase64Image,
         t,
         onInsufficientCredits: (balance) => { setCreditBalance(balance); setCreditExhausted(true); },

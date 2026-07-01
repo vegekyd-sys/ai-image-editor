@@ -233,9 +233,9 @@ Tips:
 IMPORTANT:
 - images must be publicly accessible URLs (not base64). Upload to storage first.
 - script should use <<<media_N>>> format (from makaron_write_video_script output)
-- Provider-generated video rendering takes 3-5 minutes; Grok is usually around 30-40 seconds. Use makaron_get_video_status to poll.
-- Duration: omit for smart mode. SeeDance supports integer output duration 4-15s (default 5s); Kling supports 5-15s; Grok 1.5 supports 1-15s for single-image.
-- Resolution: omit or use "auto" for the selected model default. seedance-fast/seedance-mini/grok support 480p/720p; seedance supports 480p/720p/1080p; kling supports 720p/1080p/4k.
+- Provider-generated video rendering takes 3-5 minutes; Grok is usually around 30-40 seconds; Gemini Omni is usually around 30-70 seconds plus Storage handoff. Use makaron_get_video_status to poll.
+- Duration: omit for smart mode. SeeDance supports integer output duration 4-15s (default 5s); Kling supports 5-15s; Grok 1.5 supports 1-15s for single-image; Gemini Omni supports 3-10s in Makaron.
+- Resolution: omit or use "auto" for the selected model default. seedance-fast/seedance-mini/grok support 480p/720p; seedance supports 480p/720p/1080p; kling supports 720p/1080p/4k; google-omni outputs 720p.
 
 Models:
 - seedance-fast (default) — SeeDance 2.0 Fast via Evolink, 480p/720p, default 720p
@@ -243,6 +243,7 @@ Models:
 - seedance — SeeDance 2.0 standard via Evolink, supports 480p/720p/1080p
 - kling — Kling v3-omni, supports 720p/1080p/4k
 - grok — Grok Video 1.5 via xAI, fastest single-image-to-video, native audio, defaults to 480p at $0.08/s + $0.01/input image
+- google-omni — Gemini Omni Flash via Google, fast image/video generation and editing, native generated audio, no uploaded audio references
 
 Example script format:
 Shot 1 (2s): Wide shot, <<<media_1>>> ...
@@ -251,9 +252,9 @@ Style: Cinematic, warm golden light.`,
     {
       script: z.string().describe('Video script with <<<media_N>>> references'),
       images: z.array(z.string().url()).min(1).max(7).describe('Publicly accessible image URLs'),
-      duration: z.number().optional().describe('Duration in seconds. SeeDance accepts integer output duration 4-15s (default 5s); Kling supports 5-15s; Grok 1.5 supports 1-15s for one image. Omit for smart mode.'),
+      duration: z.number().optional().describe('Duration in seconds. SeeDance accepts integer output duration 4-15s (default 5s); Kling supports 5-15s; Grok 1.5 supports 1-15s; Gemini Omni supports 3-10s. Omit for smart mode.'),
       aspectRatio: z.enum(['auto', '16:9', '9:16', '1:1', '4:3', '3:4', '21:9', '3:2', '2:3']).optional().describe('Aspect ratio. Use auto/adaptive or a provider-supported ratio. Seedance supports 21:9. Grok image-to-video ignores forced ratios to avoid stretching the source image; pad the source or choose another model for a fixed final shape.'),
-      videoModel: z.enum(['seedance-fast', 'seedance-mini', 'seedance', 'kling', 'grok']).optional().describe('Video model: seedance-fast (default), seedance-mini (lower-cost drafts), seedance (standard/1080p), kling (1080p/4k), or grok (fastest single-image-to-video with native audio)'),
+      videoModel: z.enum(['seedance-fast', 'seedance-mini', 'seedance', 'kling', 'grok', 'google-omni']).optional().describe('Video model: seedance-fast (default), seedance-mini (lower-cost drafts), seedance (standard/1080p), kling (1080p/4k), grok (fastest single-image-to-video with native audio), or google-omni (fast Gemini Omni image/video generation and editing with native generated audio)'),
       videoResolution: z.enum(['auto', '480p', '720p', '1080p', '4k']).optional().describe('Output resolution. Use auto to follow the selected model default.'),
     },
     async (params) => {
@@ -281,7 +282,7 @@ Style: Cinematic, warm golden light.`,
           });
         }
         return { content: [{ type: 'text' as const, text: result.success
-          ? `${result.message}\n\nTask ID: ${result.taskId}`
+          ? `${result.message}\n\nTask ID: ${result.taskId}${result.videoUrl ? `\n\nProvider Video URL: ${result.videoUrl}` : ''}`
           : result.message }] };
       } catch (e) {
         const msg = e instanceof Error ? e.message : String(e);
@@ -304,7 +305,7 @@ IMPORTANT:
 - When referType is "feature": the video provides style/motion reference. Images define the actual content.
 - For videoModel "seedance-fast", "seedance-mini", or "seedance", use referType "feature" (default for SeeDance). Base/direct edit is Kling-only.
 - images (if any) must be publicly accessible URLs
-- Provider-generated video rendering takes 3-5 minutes; Grok is usually around 30-40 seconds. Use makaron_get_video_status to poll.
+- Provider-generated video rendering takes 3-5 minutes; Grok is usually around 30-40 seconds; Gemini Omni is usually around 30-70 seconds plus Storage handoff. Use makaron_get_video_status to poll.
 
 Example: Edit a video to add cinematic color grading:
   videoUrl: "https://...", editPrompt: "Apply warm cinematic color grading with film grain", videoModel: "seedance-fast"`,
@@ -312,9 +313,9 @@ Example: Edit a video to add cinematic color grading:
       videoUrl: z.string().url().describe('Video URL to edit (MP4/MOV/WebM, target ≤15s with tiny metadata padding accepted, ≤1080p, ≤200MB)'),
       editPrompt: z.string().describe('Editing instructions describing what to change'),
       images: z.array(z.string().url()).max(7).optional().describe('Optional reference images (public URLs)'),
-      duration: z.number().optional().describe('Output duration in seconds. SeeDance accepts integer output duration 4-15s (default 5s); Kling supports 5-15s; Grok 1.5 supports 1-15s for one image but does not edit/reference videos. Omit for smart mode.'),
+      duration: z.number().optional().describe('Output duration in seconds. SeeDance accepts integer output duration 4-15s (default 5s); Kling supports 5-15s; Grok 1.5 supports 1-15s for one image but does not edit/reference videos; Gemini Omni supports 3-10s video editing in Makaron. Omit for smart mode.'),
       aspectRatio: z.enum(['auto', '16:9', '9:16', '1:1', '4:3', '3:4', '21:9', '3:2', '2:3']).optional().describe('Aspect ratio. Use auto/adaptive or a provider-supported ratio.'),
-      videoModel: z.enum(['seedance-fast', 'seedance-mini', 'seedance', 'kling', 'grok']).optional().describe('Video model: seedance-fast (default reference-video edit), seedance-mini (lower-cost drafts), seedance (standard/1080p), kling (base/direct edit), or grok (single-image only; no video edit)'),
+      videoModel: z.enum(['seedance-fast', 'seedance-mini', 'seedance', 'kling', 'grok', 'google-omni']).optional().describe('Video model: seedance-fast (default reference-video edit), seedance-mini (lower-cost drafts), seedance (standard/1080p), kling (base/direct edit), grok (single-image only; no video edit), or google-omni (fast direct video edit with native generated audio)'),
       videoResolution: z.enum(['auto', '480p', '720p', '1080p', '4k']).optional().describe('Output resolution. Use auto to follow the selected model default.'),
       referType: z.enum(['base', 'feature']).optional().describe('Video role: "base" (edit this video, default) or "feature" (use as style/motion reference)'),
       keepOriginalSound: z.boolean().optional().describe('Keep original video sound (default: false)'),
@@ -349,7 +350,7 @@ Example: Edit a video to add cinematic color grading:
           });
         }
         return { content: [{ type: 'text' as const, text: result.success
-          ? `${result.message}\n\nTask ID: ${result.taskId}`
+          ? `${result.message}\n\nTask ID: ${result.taskId}${result.videoUrl ? `\n\nProvider Video URL: ${result.videoUrl}` : ''}`
           : result.message }] };
       } catch (e) {
         const msg = e instanceof Error ? e.message : String(e);

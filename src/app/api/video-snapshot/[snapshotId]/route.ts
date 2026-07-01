@@ -30,6 +30,71 @@ function runRemotionExportAfterResponse(jobId: string) {
   })
 }
 
+async function fetchProviderVideoBuffer(videoUrl: string): Promise<Uint8Array | null> {
+  if (videoUrl.startsWith('https://generativelanguage.googleapis.com/') || videoUrl.startsWith('data:')) {
+    const { fetchGoogleOmniVideoBytes } = await import('@/lib/google-omni-video')
+    return fetchGoogleOmniVideoBytes(videoUrl)
+  }
+  const res = await fetch(videoUrl)
+  if (!res.ok) return null
+  return new Uint8Array(await res.arrayBuffer())
+}
+
+function persistProviderVideoAfterResponse(options: {
+  admin: ReturnType<typeof getSupabaseAdmin>
+  ownerUserId: string
+  projectId: string
+  snapshotId: string
+  videoMeta: VideoMeta
+  providerVideoUrl: string
+}) {
+  after(async () => {
+    try {
+      const buffer = await fetchProviderVideoBuffer(options.providerVideoUrl)
+      if (!buffer) return
+
+      const { probeMP4Dimensions } = await import('@/lib/mp4-probe')
+      const dims = probeMP4Dimensions(buffer) || { width: 1080, height: 1920 }
+
+      const permanentUrl = await uploadVideo(options.admin, options.ownerUserId, options.projectId, options.snapshotId, buffer)
+      if (permanentUrl) {
+        const finalMeta: VideoMeta = {
+          ...options.videoMeta,
+          status: 'completed',
+          videoUrl: permanentUrl,
+          providerUrl: options.providerVideoUrl,
+          videoPath: `${options.ownerUserId}/projects/${options.projectId}/animation/${options.snapshotId}.mp4`,
+          width: dims.width,
+          height: dims.height,
+        }
+        await options.admin
+          .from('snapshots')
+          .update({ video_meta: finalMeta })
+          .eq('id', options.snapshotId)
+        console.log(`Video snapshot ${options.snapshotId} persisted (${dims.width}x${dims.height})`)
+
+        try {
+          const { extractVideoPoster } = await import('@/lib/video-poster')
+          const posterBuffer = await extractVideoPoster(permanentUrl)
+          const posterPath = `${options.ownerUserId}/${options.projectId}/posters/${options.snapshotId}.jpg`
+          const { error: posterErr } = await options.admin.storage.from('images').upload(posterPath, posterBuffer, { contentType: 'image/jpeg', upsert: true })
+          if (!posterErr) {
+            const { data: urlData } = options.admin.storage.from('images').getPublicUrl(posterPath)
+            if (urlData?.publicUrl) {
+              await options.admin.from('snapshots').update({ image_url: urlData.publicUrl }).eq('id', options.snapshotId)
+              console.log(`Video poster extracted: ${options.snapshotId}`)
+            }
+          }
+        } catch (posterErr) {
+          console.warn('Video poster extraction failed (non-fatal):', posterErr)
+        }
+      }
+    } catch (err) {
+      console.error('Video snapshot persist error:', err)
+    }
+  })
+}
+
 export async function GET(
   req: NextRequest,
   { params }: { params: Promise<{ snapshotId: string }> }
@@ -70,6 +135,14 @@ export async function GET(
       if (isPermanent || isRemotionExport) {
         return NextResponse.json({ status: 'completed', videoUrl: videoMeta.videoUrl, snapshotId, imageUrl: snap.image_url || undefined })
       }
+      persistProviderVideoAfterResponse({
+        admin,
+        ownerUserId,
+        projectId: snap.project_id,
+        snapshotId,
+        videoMeta,
+        providerVideoUrl: videoMeta.videoUrl,
+      })
       // Provider URL still in DB — persist hasn't finished yet, tell caller to keep polling
       return NextResponse.json({ status: 'rendering', snapshotId, imageUrl: snap.image_url || undefined })
     }
@@ -130,11 +203,12 @@ export async function GET(
     }
 
     // Poll provider — route by taskId prefix
-    // task-unified-* = Evolink SeeDance, cgt-* = SeeDance (Volcengine), mc-* = Motion Control, xai-* = Grok, else = Kling
+    // task-unified-* = Evolink SeeDance, cgt-* = SeeDance (Volcengine), mc-* = Motion Control, xai-* = Grok, google-omni-* = Gemini Omni, else = Kling
     const isEvolink = videoMeta.taskId.startsWith('task-unified-')
     const isSeedance = videoMeta.taskId.startsWith('cgt-')
     const isMotionControl = videoMeta.taskId.startsWith('mc-')
     const isXai = videoMeta.taskId.startsWith('xai-')
+    const isGoogleOmni = videoMeta.taskId.startsWith('google-omni-')
     const provider = process.env.ANIMATE_PROVIDER || 'kling'
     let result: { taskId: string; status: string; videoUrl?: string; error?: string }
     const realTaskId = isMotionControl ? videoMeta.taskId.slice(3) : videoMeta.taskId
@@ -152,6 +226,12 @@ export async function GET(
     } else if (isXai) {
       const { getXaiVideoTask } = await import('@/lib/xai-video')
       result = await getXaiVideoTask(videoMeta.taskId)
+    } else if (isGoogleOmni) {
+      if (videoMeta.taskId.startsWith('google-omni-job-') && !videoMeta.videoUrl && !videoMeta.providerUrl) {
+        return NextResponse.json({ status: 'processing', snapshotId, imageUrl: snap.image_url || undefined })
+      }
+      const { getGoogleOmniVideoTask } = await import('@/lib/google-omni-video')
+      result = await getGoogleOmniVideoTask(videoMeta.taskId, videoMeta.videoUrl || videoMeta.providerUrl)
     } else if (provider === 'piapi') {
       result = await getKlingTaskPiAPI(videoMeta.taskId)
     } else {
@@ -166,52 +246,13 @@ export async function GET(
         .update({ video_meta: updatedMeta })
         .eq('id', snapshotId)
 
-      // Persist video to Supabase Storage + extract poster (after response)
-      const projectId = snap.project_id
-      after(async () => {
-        try {
-          const res = await fetch(result.videoUrl!)
-          if (!res.ok) return
-          const buffer = new Uint8Array(await res.arrayBuffer())
-
-          const { probeMP4Dimensions } = await import('@/lib/mp4-probe')
-          const dims = probeMP4Dimensions(buffer) || { width: 1080, height: 1920 }
-
-          const permanentUrl = await uploadVideo(admin, ownerUserId, projectId, snapshotId, buffer)
-          if (permanentUrl) {
-            const finalMeta: VideoMeta = {
-              ...updatedMeta,
-              videoUrl: permanentUrl,
-              videoPath: `${ownerUserId}/projects/${projectId}/animation/${snapshotId}.mp4`,
-              width: dims.width,
-              height: dims.height,
-            }
-            await admin
-              .from('snapshots')
-              .update({ video_meta: finalMeta })
-              .eq('id', snapshotId)
-            console.log(`Video snapshot ${snapshotId} persisted (${dims.width}x${dims.height})`)
-
-            // Extract poster frame and update image_url
-            try {
-              const { extractVideoPoster } = await import('@/lib/video-poster')
-              const posterBuffer = await extractVideoPoster(permanentUrl)
-              const posterPath = `${ownerUserId}/${projectId}/posters/${snapshotId}.jpg`
-              const { error: posterErr } = await admin.storage.from('images').upload(posterPath, posterBuffer, { contentType: 'image/jpeg', upsert: true })
-              if (!posterErr) {
-                const { data: urlData } = admin.storage.from('images').getPublicUrl(posterPath)
-                if (urlData?.publicUrl) {
-                  await admin.from('snapshots').update({ image_url: urlData.publicUrl }).eq('id', snapshotId)
-                  console.log(`Video poster extracted: ${snapshotId}`)
-                }
-              }
-            } catch (posterErr) {
-              console.warn('Video poster extraction failed (non-fatal):', posterErr)
-            }
-          }
-        } catch (err) {
-          console.error('Video snapshot persist error:', err)
-        }
+      persistProviderVideoAfterResponse({
+        admin,
+        ownerUserId,
+        projectId: snap.project_id,
+        snapshotId,
+        videoMeta: updatedMeta,
+        providerVideoUrl: result.videoUrl,
       })
 
       // Return completed immediately with provider URL — frontend can play it right away

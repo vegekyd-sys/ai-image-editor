@@ -10,6 +10,19 @@ interface ChangelogEntry {
 
 const CHANGELOG: ChangelogEntry[] = [
   {
+    date: '2026-07-01',
+    en: { title: 'Gemini Omni for Fast Video Editing', items: [
+      'Gemini Omni is now available as a fast 720p video editing model in Makaron.',
+      'Use it from the model selector, CUI, or makaron-cli chat to restyle short clips, animate one image, or make quick video revisions.',
+      'Makaron also handles Omni guardrails more clearly, with safer fallback wording for prompts involving brands, known characters, or other protected IP.',
+    ]},
+    zh: { title: 'Gemini Omni 快速视频编辑', items: [
+      'Gemini Omni 已接入 Makaron，定位为快速 720p 视频编辑模型。',
+      '现在可以从模型选择器、CUI 或 makaron-cli chat 触发，用来给短视频换风格、让单张图动起来，或快速做一版视频修改。',
+      '针对品牌、知名角色和受保护 IP 等更容易触发审核的请求，Makaron 会给出更清楚的失败提示和更安全的原创替代表达。',
+    ]},
+  },
+  {
     date: '2026-06-30',
     en: { title: 'Makaron for iPhone is live', items: [
       'Makaron now spans iOS, web, mobile web, and CLI.',

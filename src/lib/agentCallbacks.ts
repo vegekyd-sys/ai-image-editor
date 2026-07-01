@@ -1,9 +1,10 @@
 import type { AgentStreamCallbacks } from './agentStream';
-import type { Snapshot, Tip, ProjectAnimation, VideoModel } from '@/types';
+import type { Message, Snapshot, Tip, ProjectAnimation, VideoModel } from '@/types';
 import type { DesignPayload } from '@/types';
 import { VIDEO_PLACEHOLDER_IMAGE } from '@/lib/editor/timeline-derivations';
 import { getDefaultVideoModelId } from '@/lib/video-model-capabilities';
 import { appendSnapshotDedupeVideo } from '@/lib/video-snapshot-dedupe';
+import { serializeCompletionActions } from '@/lib/artifact-actions';
 
 /**
  * Context for creating unified agent callbacks.
@@ -47,6 +48,7 @@ export interface AgentCallbackContext {
   cacheImage: (key: string, data: string) => void;
 
   fetchTipsForSnapshot: (...args: any[]) => void;
+  onSaveMessage?: (message: Message) => void;
   onSaveSnapshot?: (snap: Snapshot, sortOrder: number, onUploaded?: (url: string) => void) => void;
   onUpdateDescription?: (snapId: string, desc: string) => void;
   triggerProjectNaming?: (text: string) => void;
@@ -380,6 +382,21 @@ export function makeAgentCallbacks(ctx: AgentCallbackContext) {
       };
       ctx.setSnapshots(prev => appendSnapshotDedupeVideo(prev, newSnap));
       if (ctx.pendingNavigateToVideoRef) ctx.pendingNavigateToVideoRef.current = true;
+
+      if (videoMeta.status === 'completed' && videoMeta.videoUrl) {
+        const actionLines = serializeCompletionActions(videoMeta.completionActions);
+        const videoMsg: Message = {
+          id: `video-inline-${snapshotId}`,
+          role: 'assistant',
+          content: `🎬 ${ctx.t('status.videoDone')}\n${videoMeta.videoUrl}\nsnap:${snapshotId}${actionLines ? `\n${actionLines}` : ''}`,
+          timestamp: Date.now(),
+        };
+        ctx.setMessages(prev => {
+          if (prev.some(m => m.content?.includes(videoMeta.videoUrl!) || m.content?.includes(`snap:${snapshotId}`))) return prev;
+          ctx.onSaveMessage?.(videoMsg);
+          return [...prev, videoMsg];
+        });
+      }
     },
 
     onMusicTask: (taskId) => {

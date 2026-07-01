@@ -1,5 +1,6 @@
 import { streamText, tool, stepCountIs } from 'ai';
 import type { ModelMessage } from 'ai';
+import { after } from 'next/server';
 import { createAmazonBedrock } from '@ai-sdk/amazon-bedrock';
 import { z } from 'zod';
 import sharp from 'sharp';
@@ -19,7 +20,7 @@ import wildPrompt from './prompts/wild.md';
 import captionsPrompt from './prompts/captions.md';
 import generateImageToolPrompt from './prompts/generate_image_tool.md';
 import type { DesignPayload, Tip, VideoMeta, VideoModel } from '@/types';
-import { toPublicStorageUrl } from '@/lib/supabase/storage';
+import { isPermanentUrl, toPublicStorageUrl, uploadVideo } from '@/lib/supabase/storage';
 import type { AgentPerf } from './agent-perf';
 import { createTextDeltaState, normalizeTextDelta } from './agent-text-delta';
 import { formatAspectRatio } from './media-aspect';
@@ -32,6 +33,78 @@ import {
 import { VIDEO_PLACEHOLDER_IMAGE } from '@/lib/editor/timeline-derivations';
 
 const MAX_VIDEO_DIMENSION_PROBE_BYTES = 220 * 1024 * 1024;
+
+function runGoogleOmniVideoSnapshotAfterResponse(options: {
+  userId: string;
+  projectId: string;
+  snapshotId: string;
+  taskId: string;
+  videoMeta: VideoMeta;
+  createVideoInput: Parameters<typeof createVideo>[0];
+}) {
+  after(async () => {
+    const { getSupabaseAdmin } = await import('@/lib/supabase/service');
+    const admin = getSupabaseAdmin();
+    try {
+      const result = await createVideo(options.createVideoInput);
+      if (!result.success || !result.videoUrl) {
+        await admin.from('snapshots').update({
+          video_meta: {
+            ...options.videoMeta,
+            status: 'failed',
+            error: result.message || 'Google Omni video generation failed',
+          },
+        }).eq('id', options.snapshotId);
+        return;
+      }
+
+      const { probeMP4Dimensions } = await import('@/lib/mp4-probe');
+      const providerVideoUrl = result.videoUrl;
+      const buffer = providerVideoUrl.startsWith('https://generativelanguage.googleapis.com/') || providerVideoUrl.startsWith('data:')
+        ? await (await import('@/lib/google-omni-video')).fetchGoogleOmniVideoBytes(providerVideoUrl)
+        : new Uint8Array(await (await fetch(providerVideoUrl)).arrayBuffer());
+      const dims = probeMP4Dimensions(buffer);
+      const permanentUrl = await uploadVideo(admin, options.userId, options.projectId, options.snapshotId, buffer);
+      const finalUrl = permanentUrl || providerVideoUrl;
+      const finalMeta: VideoMeta = {
+        ...options.videoMeta,
+        taskId: result.taskId || options.taskId,
+        status: 'completed',
+        videoUrl: finalUrl,
+        providerUrl: providerVideoUrl,
+        videoPath: permanentUrl ? `${options.userId}/${options.projectId}/videos/${options.snapshotId}.mp4` : options.videoMeta.videoPath,
+        ...(dims?.width ? { width: dims.width } : {}),
+        ...(dims?.height ? { height: dims.height } : {}),
+      };
+      await admin.from('snapshots').update({ video_meta: finalMeta }).eq('id', options.snapshotId);
+
+      if (permanentUrl) {
+        try {
+          const { extractVideoPoster } = await import('@/lib/video-poster');
+          const posterBuffer = await extractVideoPoster(permanentUrl);
+          const posterPath = `${options.userId}/${options.projectId}/posters/${options.snapshotId}.jpg`;
+          const { error: posterErr } = await admin.storage.from('images').upload(posterPath, posterBuffer, { contentType: 'image/jpeg', upsert: true });
+          if (!posterErr) {
+            const { data: urlData } = admin.storage.from('images').getPublicUrl(posterPath);
+            if (urlData?.publicUrl) {
+              await admin.from('snapshots').update({ image_url: urlData.publicUrl }).eq('id', options.snapshotId);
+            }
+          }
+        } catch (posterErr) {
+          console.warn('[google-omni] poster extraction failed:', posterErr);
+        }
+      }
+    } catch (error) {
+      await admin.from('snapshots').update({
+        video_meta: {
+          ...options.videoMeta,
+          status: 'failed',
+          error: error instanceof Error ? error.message : String(error),
+        },
+      }).eq('id', options.snapshotId);
+    }
+  });
+}
 
 // ---------------------------------------------------------------------------
 // Model
@@ -1100,28 +1173,28 @@ Hard constraints:
 - To EDIT a video: reference it with \`<<<media_N>>>\` and describe the changes. The selected model must support reference videos.
 - To use CLI/app imported reference music/audio for pacing or beat sync, mention its Audio Index marker in \`story_prompt\` (for example \`<<<audio_1>>>\`) AND pass \`audio_refs\` like ["audio_1"]. Audio refs are NOT Timeline Media Index refs. Reference audio is only supported by SeeDance/SeeDance Fast/SeeDance Mini.
 - Works for Kling, SeeDance, SeeDance Mini, and Grok, but respect capability limits and tool errors.
-- Single-call total duration: SeeDance/SeeDance Mini is 4-15 seconds (4s minimum output, 5s default/common preset); Kling is 5-15 seconds; Grok 1.5 is 1-15 seconds for one starting image. If the user asks for anything shorter than the selected model's minimum, or referenced source videos total less than that minimum, write a compact script at the model minimum and set duration to that minimum. If the user wants 30s, 60s, 1-2 minutes, or anything longer than 15s, do not call this tool with one long script. Use \`skills/long-video-director/SKILL.md\` and split into self-contained segments of 15s or less.
+- Single-call total duration: SeeDance/SeeDance Mini is 4-15 seconds (4s minimum output, 5s default/common preset); Kling is 5-15 seconds; Grok 1.5 is 1-15 seconds for one starting image; Google Omni is 3-10 seconds. If the user asks for anything shorter than the selected model's minimum, or referenced source videos total less than that minimum, write a compact script at the model minimum and set duration to that minimum. If the user wants 30s, 60s, 1-2 minutes, or anything longer than the selected model's max, do not call this tool with one long script. Use \`skills/long-video-director/SKILL.md\` and split into self-contained segments within the selected model limit.
 - If a complete script totals 15 seconds or less, submit it as one video generation call. Put the whole title, every \`Shot N (Xs):\` line, and the \`Style:\` line into the same \`story_prompt\`; set \`duration\` to the total script duration when known. Do not submit only one shot, the first shot, or one line from the script.
 - If the source video may exceed model limits, call \`read_file('skills/video-ffmpeg-lab/SKILL.md')\` and split it once with \`run_code({ runtime: "node" })\` before submitting generation.
 - Total duration must fit the selected model's capability. Do not shrink a long source to 5s just to bypass a limit; split first.
 - Long source video rule: if a timeline/reference video is longer than 15 seconds, do not shrink the whole source into one 5s or 15s edit. Use \`skills/long-video-director/SKILL.md\`, analyze/split it into self-contained segments of 15s or less, and submit one script per segment after approval.
 - Reference video input limit: for one SeeDance generation, the combined source duration of all timeline/uploaded/reference videos used in the script must be 15 seconds or less. This is a single-generation input limit; do not submit videos whose combined duration is longer than 15s together in one call.
-- Reference video size limit: for one SeeDance generation, every reference video must be .mp4/.mov, <=50MB, width and height each 300-6000px, aspect ratio 0.4-2.5, and frame pixels width*height between 409,600 and 2,086,876. Tiny videos below 409,600 frame pixels must be resized/padded before submission. For Kling, use one .mp4/.mov reference video, <=200MB, resolution <=2K; no explicit Kling video resolution lower bound is documented. Grok 1.5 does not support video references or multi-image references in Makaron; use it only for single-image-to-video.
+- Reference video size limit: for one SeeDance generation, every reference video must be .mp4/.mov, <=50MB, width and height each 300-6000px, aspect ratio 0.4-2.5, and frame pixels width*height between 409,600 and 2,086,876. Tiny videos below 409,600 frame pixels must be resized/padded before submission. For Kling, use one .mp4/.mov reference video, <=200MB, resolution <=2K; no explicit Kling video resolution lower bound is documented. Grok 1.5 does not support video references or multi-image references in Makaron; use it only for single-image-to-video. Google Omni supports one uploaded/reference video in Makaron and is best for fast image/video-to-video edits with native generated audio; uploaded audio_refs are not supported by Google Omni.
 - Video edit duration lock: when editing timeline videos up to 15 seconds total, output duration should match the combined source duration from Media Index, clamped to the selected model range. For SeeDance, clamp to 4-15s; if combined source duration is under 4s, set \`duration: 4\`. For long-video pipelines, duration lock applies per FFmpeg chunk.
-- Default model follows app selection, usually SeeDance 2.0 Fast (\`seedance-fast\`) at 720p. If the app selector has an explicit non-default model or explicit resolution, the backend keeps that app selection, so align the script with the selected route. Generic "HD"/"高清"/"high quality" requests still use \`seedance-fast\` 720p. Use \`seedance-mini\` only when the user asks for Seedance Mini, lower cost, draft, or multi-size testing; prefer 480p unless they ask for 720p. Use standard \`seedance\` only when the user explicitly asks for 1080p, standard/full SeeDance 2.0, or premium/highest-resolution output. If the user asks for cheaper/faster/draft/480p, set \`video_resolution: "480p"\` when supported. If the user asks for Kling Pro/HD/1080p, use model \`kling\` with \`video_resolution: "1080p"\`; if they ask for Kling 4K, use model \`kling\` with \`video_resolution: "4k"\`. If the user asks for Grok by name ("用 Grok 生成", "use grok", "用 grok 做"), fastest generation, or native audio from one image, use model \`grok\` and write a single-image-to-video script.
+- Default model follows app selection, usually SeeDance 2.0 Fast (\`seedance-fast\`) at 720p. If the app selector has an explicit non-default model or explicit resolution, the backend keeps that app selection, so align the script with the selected route. Generic "HD"/"高清"/"high quality" requests still use \`seedance-fast\` 720p. Use \`seedance-mini\` only when the user asks for Seedance Mini, lower cost, draft, or multi-size testing; prefer 480p unless they ask for 720p. Use standard \`seedance\` only when the user explicitly asks for 1080p, standard/full SeeDance 2.0, or premium/highest-resolution output. If the user asks for cheaper/faster/draft/480p, set \`video_resolution: "480p"\` when supported. If the user asks for Kling Pro/HD/1080p, use model \`kling\` with \`video_resolution: "1080p"\`; if they ask for Kling 4K, use model \`kling\` with \`video_resolution: "4k"\`. If the user asks for Grok by name ("用 Grok 生成", "use grok", "用 grok 做"), fastest generation, or native audio from one image, use model \`grok\` and write a single-image-to-video script. Use model \`google-omni\` only when the app selector is already Gemini Omni or the user explicitly asks for Omni/Gemini Omni/Google Omni; treat it as a fast short 720p video editing model with native generated audio, and do not pass audio_refs to Google Omni.
 - Grok aspect-ratio rule: for Grok single-image-to-video, do not pass \`aspect_ratio\`. xAI stretches the source image when a forced ratio differs from the image. If the user asks for a different final shape, choose Seedance/Kling or first create/pad the source image to that target shape, then generate.
 - \`video_ref_url\`: ONLY for external videos not in Media Index (e.g. from workspace/list_files). Never put video URLs in prompt text.
 - If the generated video is an intermediate artifact, pass \`completion_actions\` so CUI/CLI can show the next step after rendering finishes. These actions are user-confirmed by default; do not rely on the user remembering what to do next. For local video repair, include exact replaceStart/replaceEnd/replacementDuration and say to trim/fit the patch to that duration before merging so the final video keeps the original duration.
 - The script must have been shown to the user and confirmed before this tool is called, unless the user's current request explicitly asks for direct submission without confirmation.`,
       inputSchema: z.object({
         story_prompt: z.string().describe('The video script. First line = short title (2-5 words), then the script body. Use <<<media_N>>> to reference images/videos and <<<audio_N>>> to reference audio from the Audio Index. Total duration must be 15 seconds or less.'),
-        duration: z.number().optional().describe('Duration in seconds. SeeDance/SeeDance Mini accepts integer output duration 4-15s (default 5s); Kling accepts 5-15s; Grok 1.5 accepts 1-15s for one image. Never pass below the selected model minimum. For timeline video edits up to 15s total, set this to the combined source video duration from Media Index clamped to the selected model range. Do not submit multiple reference videos together if their combined source duration exceeds 15s. Omit for smart mode only when generating from photos.'),
+        duration: z.number().optional().describe('Duration in seconds. SeeDance/SeeDance Mini accepts integer output duration 4-15s (default 5s); Kling accepts 5-15s; Grok 1.5 accepts 1-15s for one image; Google Omni accepts 3-10s. Never pass below the selected model minimum. For timeline video edits, set this to the combined source video duration from Media Index clamped to the selected model range. Do not submit multiple reference videos together if their combined source duration exceeds the selected model limit. Omit for smart mode only when generating from photos.'),
         aspect_ratio: z.enum(['16:9', '9:16', '1:1', '4:3', '3:4', '21:9', '3:2', '2:3']).optional().describe('Output aspect ratio. Pass it only when the user asks for a specific shape and the selected model can safely honor it. For Grok single-image-to-video, omit this field because xAI stretches the source image when a forced ratio differs from the image. Seedance supports 16:9/9:16/1:1/4:3/3:4/21:9/adaptive; Makaron intentionally does not pass forced ratios to Grok image-to-video.'),
-        model: z.string().optional().describe('Video model/provider id. Default follows the app selection (usually seedance-fast) at 720p. Generic HD/高清/high quality requests should still use seedance-fast; use seedance-mini for explicit Mini/lower-cost/draft/multi-size tests; use seedance only for explicit 1080p, standard/full SeeDance, or premium/highest-resolution requests. Supported ids include seedance-fast, seedance-mini, seedance, kling, and grok.'),
-        video_resolution: z.enum(['480p', '720p', '1080p', '4k', 'auto']).optional().describe('Output resolution. Omit/auto follows the selected model default. Generic HD/高清/high quality means seedance-fast 720p, not 1080p. seedance-fast/seedance-mini support 480p/720p; seedance supports 480p/720p/1080p; kling supports 720p/1080p/4k; grok supports 480p/720p.'),
+        model: z.string().optional().describe('Video model/provider id. Default follows the app selection (usually seedance-fast) at 720p. Generic HD/高清/high quality requests should still use seedance-fast; use seedance-mini for explicit Mini/lower-cost/draft/multi-size tests; use seedance only for explicit 1080p, standard/full SeeDance, or premium/highest-resolution requests. Use google-omni only for explicit Omni/Gemini Omni/Google Omni or when the app selector is already Gemini Omni; it is a fast short 720p video editing model with native generated audio. Supported ids include seedance-fast, seedance-mini, seedance, kling, grok, and google-omni.'),
+        video_resolution: z.enum(['480p', '720p', '1080p', '4k', 'auto']).optional().describe('Output resolution. Omit/auto follows the selected model default. Generic HD/高清/high quality means seedance-fast 720p, not 1080p. seedance-fast/seedance-mini support 480p/720p; seedance supports 480p/720p/1080p; kling supports 720p/1080p/4k; grok supports 480p/720p; google-omni outputs 720p.'),
         media_refs: z.array(z.string()).optional().describe('Additional image URLs NOT already in Media Index (e.g. workspace files from list_files). Images in Media Index are auto-available — just use <<<media_N>>> in script. Passing Media Index URLs here will be rejected.'),
         audio_refs: z.array(z.string()).optional().describe('Reference audio labels from the Audio Index block, e.g. ["audio_1"]. Use for beat sync, pacing, or music reference. These are separate from <<<media_N>>> and only supported by SeeDance models.'),
-        video_ref_url: z.string().optional().describe('External reference video URL (from workspace/skill assets via list_files). For timeline videos, just use <<<media_N>>> — they are auto-routed. Only use this for external URLs not in Media Index. SeeDance video references must be <=50MB, width/height 300-6000px, aspect ratio 0.4-2.5, frame pixels 409,600-2,086,876. Kling video references must be <=200MB and <=2K; no explicit lower resolution is documented. Grok does not support video references in Makaron yet.'),
+        video_ref_url: z.string().optional().describe('External reference video URL (from workspace/skill assets via list_files). For timeline videos, just use <<<media_N>>> — they are auto-routed. Only use this for external URLs not in Media Index. SeeDance video references must be <=50MB, width/height 300-6000px, aspect ratio 0.4-2.5, frame pixels 409,600-2,086,876. Kling video references must be <=200MB and <=2K; no explicit lower resolution is documented. Google Omni accepts one reference video in Makaron. Grok does not support video references in Makaron yet.'),
         video_ref_type: z.enum(['base', 'feature']).optional().describe('How to use the reference video. feature (default): reference motion/style. base: direct edit (Kling only, output duration=input). Almost always use feature.'),
         keep_original_sound: z.boolean().optional().describe('Keep audio from reference video. Default: false.'),
         motion_control: z.boolean().optional().describe('Use Kling Motion Control for precise action transfer from reference video. Requires video_ref_url. Duration = reference video length. No detailed prompt needed — just a title. Kling only.'),
@@ -1166,7 +1239,12 @@ Hard constraints:
             return { success: false as const, message: resolvedAudioRefs.error };
           }
           if (resolvedAudioRefs.audioUrls.length > 0 && videoRoute.provider !== 'seedance') {
-            return { success: false as const, message: 'Reference audio is only supported by Seedance video models. Choose seedance-fast, seedance-mini, or seedance, or remove audio_refs.' };
+            return {
+              success: false as const,
+              message: videoRoute.provider === 'google-omni'
+                ? 'Google Omni can generate native audio from the prompt, but uploaded audio_refs are not enabled in the current API. Choose seedance-fast, seedance-mini, or seedance for audio_refs, or remove audio_refs and describe the soundtrack for Omni.'
+                : 'Reference audio is only supported by Seedance video models. Choose seedance-fast, seedance-mini, or seedance, or remove audio_refs.',
+            };
           }
 
           // Video harness: validate before calling API
@@ -1255,7 +1333,7 @@ Hard constraints:
             model: videoModel,
           });
 
-          const skillResult = await createVideo({
+          const createVideoInput = {
             script: story_prompt,
             images: imageUrls,
             duration: effectiveDuration,
@@ -1271,7 +1349,22 @@ Hard constraints:
             motionControl: motion_control,
             characterOrientation: character_orientation,
             audioUrls: resolvedAudioRefs.audioUrls.length ? resolvedAudioRefs.audioUrls : undefined,
-          });
+          };
+          const isGoogleOmniAsync = videoRoute.provider === 'google-omni';
+          if (isGoogleOmniAsync && !ctx.userId) {
+            return { success: false as const, message: 'Google Omni video jobs require an authenticated workspace so the completed video can be saved to Storage.' };
+          }
+
+          const skillResult = isGoogleOmniAsync
+            ? {
+              success: true as const,
+              taskId: `google-omni-job-${crypto.randomUUID()}`,
+              videoModel,
+              providerModel: videoRoute.providerModel,
+              status: 'processing' as const,
+              message: 'Google Omni video job queued in Makaron.',
+            }
+            : await createVideo(createVideoInput);
 
           if (!skillResult.success || !skillResult.taskId) {
             console.error('[generate_animation] createVideo failed:', skillResult.message);
@@ -1300,17 +1393,18 @@ Hard constraints:
           const { VIDEO_PLACEHOLDER_IMAGE } = await import('@/lib/editor/timeline-derivations');
           const videoMeta: import('@/types').VideoMeta = {
             taskId,
-            videoUrl: null,
+            videoUrl: skillResult.videoUrl || null,
             prompt: story_prompt,
             sourceSnapshotIds: sourceVideoSnapshotIds,
             sourceUrls: sourceUrls.length > 0 ? sourceUrls : (originalFirstUrl ? [originalFirstUrl] : []),
-            status: 'processing',
+            status: skillResult.status === 'completed' && skillResult.videoUrl ? 'completed' : 'processing',
             duration: effectiveDuration || null,
             model: actualVideoModel as import('@/types').VideoModel,
             resolution: actualVideoRoute.resolution,
             aspectRatio: selectedAspectRatio,
             providerModel: skillResult.providerModel || actualVideoRoute.providerModel,
             providerMode: actualVideoRoute.providerMode,
+            providerUrl: skillResult.videoUrl,
             createdAt: new Date().toISOString(),
             ...(completion_actions?.length ? {
               completionActions: completion_actions.slice(0, 4).map(action => ({
@@ -1352,7 +1446,38 @@ Hard constraints:
             ? videoSec * actualVideoRoute.estimatedCostPerSecondUsd + referencedImageUrls.length * (actualVideoRoute.estimatedInputCostUsdPerImage ?? 0)
             : undefined;
           if (providerCostUsd != null) videoMeta.providerCostUsd = providerCostUsd;
+
+          if (!isGoogleOmniAsync && skillResult.status === 'completed' && skillResult.videoUrl && ctx.userId && !isPermanentUrl(skillResult.videoUrl)) {
+            try {
+              const { probeMP4Dimensions } = await import('@/lib/mp4-probe');
+              const buffer = skillResult.videoUrl.startsWith('https://generativelanguage.googleapis.com/') || skillResult.videoUrl.startsWith('data:')
+                ? await (await import('@/lib/google-omni-video')).fetchGoogleOmniVideoBytes(skillResult.videoUrl)
+                : new Uint8Array(await (await fetch(skillResult.videoUrl)).arrayBuffer());
+              const permanentUrl = await uploadVideo(supabase, ctx.userId, ctx.projectId, snapshotId, buffer);
+              if (permanentUrl) {
+                const dims = probeMP4Dimensions(buffer);
+                videoMeta.videoUrl = permanentUrl;
+                videoMeta.providerUrl = skillResult.videoUrl;
+                videoMeta.videoPath = `${ctx.userId}/${ctx.projectId}/videos/${snapshotId}.mp4`;
+                if (dims?.width) videoMeta.width = dims.width;
+                if (dims?.height) videoMeta.height = dims.height;
+              }
+            } catch (persistError) {
+              console.warn('[generate_animation] provider video persistence failed:', persistError);
+            }
+          }
           await supabase.from('snapshots').update({ video_meta: videoMeta }).eq('id', snapshotId);
+
+          if (isGoogleOmniAsync && ctx.userId) {
+            runGoogleOmniVideoSnapshotAfterResponse({
+              userId: ctx.userId,
+              projectId: ctx.projectId,
+              snapshotId,
+              taskId,
+              videoMeta,
+              createVideoInput,
+            });
+          }
 
           ctx.pendingVideoSnapshot = { snapshotId, taskId, videoMeta };
 
@@ -1364,7 +1489,9 @@ Hard constraints:
 
           const renderTimeMessage = actualVideoModel === 'grok'
             ? 'Grok is usually around 30-40 seconds.'
-            : 'Rendering usually takes 3-5 minutes.';
+            : actualVideoModel === 'google-omni'
+              ? 'Google Omni is usually around 30-70 seconds, then a short Storage handoff.'
+              : 'Rendering usually takes 3-5 minutes.';
           return {
             success: true as const,
             taskId,
@@ -1424,7 +1551,7 @@ Hard constraints:
     analyze_video: tool({
       description: `Analyze video content using Gemini vision.
 
-Default mode describes scenes/actions/pacing/audio cues in a timeline video.
+Default mode describes scenes/actions/pacing/audio cues in a timeline video. Do not call this before clear direct video edits such as adding glasses, changing outfit, or using Omni to edit a referenced video; generate_animation already receives selected video references. Use analyze_video only for inspection, comparison, diagnosis, ambiguous targets, or frame-location workflows.
 
 Use mode="locate_frame" when the user provides a screenshot/frame and you need to find where that frame appears in a video. This is the primary locator for screenshot-based local video edits. Provide the video as media_index and the screenshot as image_url, image_media_index, or workspace_path. For checking a known timestamp visually, use preview_frame instead.`,
       inputSchema: z.object({

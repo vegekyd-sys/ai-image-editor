@@ -310,9 +310,9 @@ For project/timeline video editing, use:
 npx makaron-cli chat --project <id|auto> --video input.mp4 -b "make it funny"
 ```
 
-Options for `video create`: `--script "..."`, `--script-file <path>`, `--image <url>` (repeatable, up to 7), `--video <file|url>`, `--duration <seconds>`, `--aspect 9:16|16:9|1:1`, `--model seedance-fast|seedance-mini|seedance|kling|grok`, `--video-resolution auto|480p|720p|1080p|4k`. Default model is `seedance-fast`. SeeDance accepts integer output duration 4-15s (default 5s); `seedance-mini` supports 480p/720p and is best for cheaper drafts/multi-size tests; Kling supports 5-15s; Grok 1.5 supports 1-15s single-image-to-video only. For `--model grok`, forced `--aspect` is ignored to avoid xAI stretching the source image; pad/create the image at the target shape first or use another model.
+Options for `video create`: `--script "..."`, `--script-file <path>`, `--image <url>` (repeatable, up to 7), `--video <file|url>`, `--duration <seconds>`, `--aspect 9:16|16:9|1:1`, `--model seedance-fast|seedance-mini|seedance|kling|grok|google-omni`, `--video-resolution auto|480p|720p|1080p|4k`. Default model is `seedance-fast`. SeeDance accepts integer output duration 4-15s (default 5s); `seedance-mini` supports 480p/720p and is best for cheaper drafts/multi-size tests; Kling supports 5-15s; Grok 1.5 supports 1-15s single-image-to-video only; Gemini Omni supports 3-10s fast 720p image/video generation and editing with native generated audio. For `--model grok`, forced `--aspect` is ignored to avoid xAI stretching the source image; pad/create the image at the target shape first or use another model.
 
-Video edit model behavior: `--model kling --video` uses Kling base/direct edit internally; `--model seedance-fast --video`, `--model seedance-mini --video`, or `--model seedance --video` uses the SeeDance video-reference path and requires target <=15s, <=50MB, width/height 300-6000px, aspect ratio 0.4-2.5, and frame pixels 409,600-2,086,876. Tiny metadata padding up to 15.5s is accepted and output duration is clamped to 15s. Grok does not support video references.
+Video edit model behavior: `--model kling --video` uses Kling base/direct edit internally; `--model seedance-fast --video`, `--model seedance-mini --video`, or `--model seedance --video` uses the SeeDance video-reference path and requires target <=15s, <=50MB, width/height 300-6000px, aspect ratio 0.4-2.5, and frame pixels 409,600-2,086,876. `--model google-omni --video` uses Gemini Omni direct video editing and accepts one reference video in Makaron. Output duration is clamped to 3-10s. Grok does not support video references.
 
 ### `music` — Music generation
 
@@ -427,7 +427,7 @@ send_message "All done!"
 - One project = one conversation thread. All history is preserved.
 - One run at a time per project. New message interrupts previous run.
 - Multi-image: `create --image a.jpg --image b.jpg` or `chat --image ref.jpg`.
-- Provider-generated videos can take 3-5 minutes; Grok is usually around 30-40 seconds. Remotion compositions should be converted with `materialize` / `responses get --materialize`, and timing should be read from `duration_seconds`, `render_seconds`, and `realtime_ratio`.
+- Provider-generated videos can take 3-5 minutes; Grok is usually around 30-40 seconds; Gemini Omni is usually around 30-70 seconds plus Storage handoff. Remotion compositions should be converted with `materialize` / `responses get --materialize`, and timing should be read from `duration_seconds`, `render_seconds`, and `realtime_ratio`.
 - Music takes ~60 seconds. Appears in output when done.
 - Images are typically ready in 15-30 seconds.
 - stdout is always machine-readable JSON/text. Human-friendly logs go to stderr.

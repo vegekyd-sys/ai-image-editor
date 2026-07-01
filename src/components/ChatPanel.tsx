@@ -52,8 +52,8 @@ export default function ChatPanel({ messages, isLoading, onSendMessage }: ChatPa
             <p className="text-xs">I&apos;ll analyze it and suggest edits</p>
           </div>
         )}
-        {messages.map((msg) => (
-          <MessageBubble key={msg.id} message={msg} />
+        {messages.map((msg, idx) => (
+          <MessageBubble key={`${msg.id}:${idx}`} message={msg} />
         ))}
         {isLoading && <TypingIndicator />}
         <div ref={messagesEndRef} />

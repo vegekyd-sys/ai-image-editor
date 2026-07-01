@@ -1293,7 +1293,7 @@ export default function AgentChatView({
         {/* Message list */}
         <div className={`flex flex-col ${isPanel ? 'gap-3' : 'gap-5'}`}>
           {messages.map((msg, idx) => (
-            <div key={msg.id}>
+            <div key={`${msg.id}:${idx}`}>
               {msg.role === 'user' ? (
                 /* User bubble — right-aligned pill */
                 <div className="flex justify-end">
@@ -1376,7 +1376,7 @@ export default function AgentChatView({
                       return (
                         <div className="markdown-body">
                           <MarkdownBlock
-                            key={msg.id}
+                            key={`${msg.id}:${idx}:markdown`}
                             text={fixMarkdownDelimiters(visibleWithoutVideoUrls.replace(/\nanim:[a-f0-9-]+/g, '').replace(/\nsnap:[a-f0-9-]+/g, '').replace(/\n?music:\d+\|[^\n]*/g, ''))}
                             isPanel={isPanel}
                             snapshots={snapshots}
