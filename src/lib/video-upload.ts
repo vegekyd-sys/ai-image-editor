@@ -57,11 +57,11 @@ async function extractVideoInfo(file: File): Promise<{
   return { blobUrl, duration, width, height };
 }
 
-/** Check if file is likely mobile-safe H.264 MP4, so we can skip transcode. */
+/** Check if file is likely H.264 (MP4 or MOV — both use H.264, skip transcode) */
 function isLikelyH264(file: File): boolean {
   const type = file.type;
   const name = file.name.toLowerCase();
-  return type === 'video/mp4' || name.endsWith('.mp4');
+  return type === 'video/mp4' || type === 'video/quicktime' || name.endsWith('.mp4') || name.endsWith('.mov');
 }
 
 /** Calculate output dimensions (max ~1080p, preserve aspect ratio, even numbers) */
