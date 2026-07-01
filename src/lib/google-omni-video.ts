@@ -25,8 +25,14 @@ function getGoogleApiKey(): string {
   return key
 }
 
+export function normalizeGoogleOmniMimeType(mimeType: string): string {
+  const normalized = mimeType.trim().toLowerCase()
+  if (normalized === 'video/quicktime') return 'video/mov'
+  return normalized
+}
+
 function contentTypeToMime(contentType: string | null, fallback: string): string {
-  return contentType?.split(';')[0]?.trim() || fallback
+  return normalizeGoogleOmniMimeType(contentType?.split(';')[0]?.trim() || fallback)
 }
 
 function extensionMime(url: string): string {
@@ -34,7 +40,7 @@ function extensionMime(url: string): string {
   if (clean.endsWith('.png')) return 'image/png'
   if (clean.endsWith('.webp')) return 'image/webp'
   if (clean.endsWith('.mp4')) return 'video/mp4'
-  if (clean.endsWith('.mov')) return 'video/quicktime'
+  if (clean.endsWith('.mov')) return 'video/mov'
   if (clean.endsWith('.webm')) return 'video/webm'
   return 'image/jpeg'
 }
