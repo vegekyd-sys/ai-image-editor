@@ -16,6 +16,7 @@
     "lint": "eslint",
     "release:check": "node scripts/makaron-release-check.mjs",
     "worktree:fastpath": "node scripts/makaron-worktree-fastpath.mjs",
+    "audit:glass": "node scripts/audit-liquid-glass-perf.mjs",
     "check:seo": "node scripts/check-seo.mjs",
     "test:cli": "npm --prefix packages/makaron-cli test",
     "lint:agent-docs": "node scripts/lint-makaron-cli-agent-docs.mjs",

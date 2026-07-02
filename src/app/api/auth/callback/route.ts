@@ -124,7 +124,7 @@ export async function GET(request: NextRequest) {
   return buildRedirectPage(redirectUrl, cookiesToSetOnResponse)
 }
 
-export function getPublicOrigin(request: NextRequest) {
+function getPublicOrigin(request: NextRequest) {
   const url = new URL(request.url)
   const forwardedProto = request.headers.get('x-forwarded-proto')?.split(',')[0]?.trim()
   const forwardedHost = request.headers.get('x-forwarded-host')?.split(',')[0]?.trim()

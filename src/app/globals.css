@@ -344,6 +344,16 @@ textarea {
   animation: makaron-input-energy-flow 8.6s ease-in-out infinite;
 }
 
+.mkr-liquid-pill::after {
+  background:
+    linear-gradient(115deg, transparent 0%, rgba(255,255,255,0.055) 34%, rgba(232,121,249,0.08) 52%, transparent 74%),
+    radial-gradient(ellipse at 50% 108%, rgba(217,70,239,0.08), transparent 58%);
+  background-size: 100% 100%, 100% 100%;
+  background-position: 0 0, 0 0;
+  opacity: 0.22;
+  animation: none;
+}
+
 .mkr-liquid-placeholder {
   overflow: hidden;
   border: 0.5px solid rgba(255,255,255,0.075);
@@ -430,6 +440,142 @@ textarea {
     0 12px 32px rgba(0,0,0,0.26);
 }
 
+.mkr-liquid-nav {
+  position: fixed;
+  left: 50%;
+  bottom: calc(env(safe-area-inset-bottom, 0px) + 5px);
+  z-index: 210;
+  padding: 4px;
+  border-radius: 999px;
+  overflow: hidden;
+  clip-path: inset(0 round 999px);
+  isolation: isolate;
+  touch-action: manipulation;
+  border: 0.5px solid rgba(255,255,255,0.08);
+  background:
+    radial-gradient(circle at 18% 0%, rgba(255,255,255,0.095), transparent 34%),
+    radial-gradient(circle at 94% 105%, rgba(217,70,239,0.09), transparent 48%),
+    linear-gradient(145deg, rgba(18,18,24,0.62), rgba(0,0,0,0.44));
+  box-shadow:
+    inset 0 1px 0 rgba(255,255,255,0.12),
+    inset 0 -1px 0 rgba(255,255,255,0.025),
+    0 12px 30px rgba(0,0,0,0.30);
+  backdrop-filter: blur(13px) saturate(1.24) contrast(1.04);
+  -webkit-backdrop-filter: blur(13px) saturate(1.24) contrast(1.04);
+  transition: opacity 180ms ease, transform 220ms cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+.mkr-liquid-nav > * {
+  position: relative;
+  z-index: 1;
+}
+
+.mkr-liquid-nav::before,
+.mkr-liquid-nav::after,
+.mkr-liquid-nav-indicator::before,
+.mkr-liquid-nav-indicator::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  pointer-events: none;
+}
+
+.mkr-liquid-nav::before {
+  background:
+    linear-gradient(115deg, rgba(255,255,255,0.055), transparent 40%, rgba(34,211,238,0.02) 72%, transparent),
+    radial-gradient(ellipse at 50% -24%, rgba(255,255,255,0.095), transparent 62%);
+  mix-blend-mode: screen;
+  opacity: 0.36;
+}
+
+.mkr-liquid-nav::after {
+  inset: 1px;
+  box-shadow:
+    inset 0 0 0 0.5px rgba(255,255,255,0.05),
+    inset 0 -10px 18px rgba(0,0,0,0.13),
+    inset 1px 0 0 rgba(34,211,238,0.018),
+    inset -1px 0 0 rgba(217,70,239,0.026);
+  opacity: 0.86;
+}
+
+.mkr-liquid-nav-track {
+  position: relative;
+  z-index: 1;
+  display: grid;
+}
+
+.mkr-liquid-nav-indicator {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: 0;
+  border-radius: 999px;
+  overflow: hidden;
+  border: 0.5px solid rgba(255,255,255,0.105);
+  background:
+    radial-gradient(circle at 20% 0%, rgba(255,255,255,0.14), transparent 34%),
+    radial-gradient(circle at 92% 96%, rgba(217,70,239,0.14), transparent 48%),
+    linear-gradient(145deg, rgba(43,43,52,0.58), rgba(12,12,18,0.38));
+  box-shadow:
+    inset 0 1px 0 rgba(255,255,255,0.17),
+    inset 0 -1px 0 rgba(255,255,255,0.03),
+    0 8px 22px rgba(0,0,0,0.22);
+  backdrop-filter: blur(11px) saturate(1.28) contrast(1.02);
+  -webkit-backdrop-filter: blur(11px) saturate(1.28) contrast(1.02);
+  transition: transform 260ms cubic-bezier(0.22, 1, 0.36, 1);
+  will-change: transform;
+}
+
+.mkr-liquid-nav-indicator::before {
+  background:
+    linear-gradient(125deg, rgba(255,255,255,0.08), transparent 38%, rgba(34,211,238,0.026) 72%, rgba(255,255,255,0.026)),
+    radial-gradient(ellipse at 50% -22%, rgba(255,255,255,0.12), transparent 62%);
+  mix-blend-mode: screen;
+  opacity: 0.48;
+}
+
+.mkr-liquid-nav-indicator::after {
+  inset: -1px;
+  background:
+    linear-gradient(120deg, transparent 20%, rgba(255,255,255,0.045) 42%, rgba(232,121,249,0.062) 58%, transparent 78%),
+    radial-gradient(ellipse at 50% 110%, rgba(217,70,239,0.07), transparent 62%);
+  mix-blend-mode: screen;
+  opacity: 0.22;
+}
+
+.mkr-liquid-nav-button {
+  position: relative;
+  z-index: 2;
+  min-width: 92px;
+  height: 34px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0 12px;
+  border: 0;
+  border-radius: 999px;
+  background: transparent;
+  box-shadow: none;
+  color: rgba(255,255,255,0.74);
+  font-family: inherit;
+  font-size: 12px;
+  font-weight: 760;
+  letter-spacing: 0;
+  cursor: pointer;
+  text-shadow: 0 1px 5px rgba(0,0,0,0.72);
+  transition: color 180ms ease, transform 160ms ease;
+  -webkit-tap-highlight-color: transparent;
+}
+
+.mkr-liquid-nav-button[data-active="true"] {
+  color: rgba(255,255,255,0.98);
+}
+
+.mkr-liquid-nav-button:active {
+  transform: scale(0.97);
+}
+
 .mkr-liquid-side-action {
   background:
     radial-gradient(circle at 22% 0%, rgba(255,255,255,0.14), transparent 34%),
@@ -502,36 +648,36 @@ textarea {
 
 .mkr-liquid-media-badge {
   overflow: hidden;
-  border: 0.5px solid rgba(255,255,255,0.095);
+  border: 0.5px solid rgba(255,255,255,0.14);
   background:
-    linear-gradient(145deg, rgba(16,16,20,0.30), rgba(3,3,6,0.16)),
-    radial-gradient(circle at 92% 110%, rgba(217,70,239,0.08), transparent 50%);
-  box-shadow: inset 0 1px 0 rgba(255,255,255,0.08), 0 6px 14px rgba(0,0,0,0.12);
-  backdrop-filter: blur(7px) saturate(1.18);
-  -webkit-backdrop-filter: blur(7px) saturate(1.18);
+    linear-gradient(145deg, rgba(16,16,20,0.48), rgba(3,3,6,0.30)),
+    radial-gradient(circle at 92% 110%, rgba(217,70,239,0.10), transparent 50%);
+  box-shadow: inset 0 1px 0 rgba(255,255,255,0.11), 0 7px 16px rgba(0,0,0,0.20);
+  backdrop-filter: blur(9px) saturate(1.22);
+  -webkit-backdrop-filter: blur(9px) saturate(1.22);
 }
 
 .mkr-liquid-media-badge::before {
   z-index: 0;
-  background: linear-gradient(110deg, rgba(255,255,255,0.08), transparent 42%, rgba(34,211,238,0.025) 72%, transparent);
-  opacity: 0.28;
+  background: linear-gradient(110deg, rgba(255,255,255,0.10), transparent 42%, rgba(34,211,238,0.028) 72%, transparent);
+  opacity: 0.34;
   mix-blend-mode: screen;
 }
 
 .mkr-liquid-play-button {
   overflow: hidden;
-  border: 0.5px solid rgba(255,255,255,0.12);
+  border: 0.5px solid rgba(255,255,255,0.17);
   background:
-    radial-gradient(circle at 24% 8%, rgba(255,255,255,0.11), transparent 34%),
-    radial-gradient(circle at 92% 96%, rgba(217,70,239,0.10), transparent 48%),
-    linear-gradient(145deg, rgba(20,20,25,0.42), rgba(4,4,7,0.22));
+    radial-gradient(circle at 24% 8%, rgba(255,255,255,0.14), transparent 34%),
+    radial-gradient(circle at 92% 96%, rgba(217,70,239,0.12), transparent 48%),
+    linear-gradient(145deg, rgba(20,20,25,0.58), rgba(4,4,7,0.36));
   box-shadow:
-    inset 0 1px 0 rgba(255,255,255,0.13),
-    inset 0 -1px 0 rgba(255,255,255,0.025),
-    0 12px 30px rgba(0,0,0,0.22),
-    0 0 20px rgba(217,70,239,0.06);
-  backdrop-filter: blur(11px) saturate(1.26) contrast(1.02);
-  -webkit-backdrop-filter: blur(11px) saturate(1.26) contrast(1.02);
+    inset 0 1px 0 rgba(255,255,255,0.16),
+    inset 0 -1px 0 rgba(255,255,255,0.035),
+    0 13px 32px rgba(0,0,0,0.30),
+    0 0 20px rgba(217,70,239,0.07);
+  backdrop-filter: blur(12px) saturate(1.3) contrast(1.04);
+  -webkit-backdrop-filter: blur(12px) saturate(1.3) contrast(1.04);
 }
 
 .mkr-liquid-play-button::before {
@@ -540,7 +686,7 @@ textarea {
     linear-gradient(135deg, rgba(255,255,255,0.08), transparent 35%, rgba(34,211,238,0.03) 72%, rgba(255,255,255,0.025)),
     radial-gradient(ellipse at 50% -20%, rgba(255,255,255,0.12), transparent 60%);
   mix-blend-mode: screen;
-  opacity: 0.42;
+  opacity: 0.50;
 }
 
 .mkr-liquid-play-button::after {
@@ -552,15 +698,15 @@ textarea {
   background-size: 100% 100%, 100% 100%;
   background-position: 0 0, 0 0;
   mix-blend-mode: screen;
-  opacity: 0.16;
+  opacity: 0.20;
   animation: none;
 }
 
 .mkr-liquid-inline-play {
   overflow: hidden;
-  border: 0.5px solid rgba(255,255,255,0.16);
-  background: rgba(0,0,0,0.22);
-  box-shadow: inset 0 1px 0 rgba(255,255,255,0.12), 0 6px 14px rgba(0,0,0,0.16);
+  border: 0.5px solid rgba(255,255,255,0.22);
+  background: rgba(0,0,0,0.42);
+  box-shadow: inset 0 1px 0 rgba(255,255,255,0.14), 0 7px 16px rgba(0,0,0,0.24);
 }
 
 .mkr-liquid-inline-play::before {
@@ -572,13 +718,13 @@ textarea {
 
 .mkr-liquid-timeline-rail {
   overflow: hidden;
-  border: 0.5px solid rgba(255,255,255,0.075);
+  border: 0.5px solid rgba(255,255,255,0.12);
   background:
-    radial-gradient(circle at 18% 0%, rgba(255,255,255,0.075), transparent 34%),
-    linear-gradient(145deg, rgba(14,14,18,0.26), rgba(0,0,0,0.14));
-  box-shadow: inset 0 1px 0 rgba(255,255,255,0.075), 0 8px 22px rgba(0,0,0,0.13);
-  backdrop-filter: blur(8px) saturate(1.16);
-  -webkit-backdrop-filter: blur(8px) saturate(1.16);
+    radial-gradient(circle at 18% 0%, rgba(255,255,255,0.10), transparent 34%),
+    linear-gradient(145deg, rgba(14,14,18,0.44), rgba(0,0,0,0.30));
+  box-shadow: inset 0 1px 0 rgba(255,255,255,0.10), 0 9px 24px rgba(0,0,0,0.24);
+  backdrop-filter: blur(10px) saturate(1.2);
+  -webkit-backdrop-filter: blur(10px) saturate(1.2);
 }
 
 .mkr-liquid-timeline-rail::before,
@@ -588,21 +734,21 @@ textarea {
 }
 
 .mkr-liquid-timeline-rail::before {
-  background: linear-gradient(115deg, rgba(255,255,255,0.055), transparent 38%, rgba(34,211,238,0.022) 70%, transparent);
-  opacity: 0.28;
+  background: linear-gradient(115deg, rgba(255,255,255,0.075), transparent 38%, rgba(34,211,238,0.028) 70%, transparent);
+  opacity: 0.34;
 }
 
 .mkr-liquid-timeline-rail::after {
   inset: -1px;
-  background: radial-gradient(ellipse at 50% 115%, rgba(217,70,239,0.09), transparent 62%);
-  opacity: 0.28;
+  background: radial-gradient(ellipse at 50% 115%, rgba(217,70,239,0.11), transparent 62%);
+  opacity: 0.32;
 }
 
 .mkr-liquid-timeline-dot {
   overflow: hidden;
-  border: 0.5px solid rgba(255,255,255,0.14);
-  background: rgba(255,255,255,0.13);
-  box-shadow: inset 0 1px 0 rgba(255,255,255,0.12), 0 3px 8px rgba(0,0,0,0.10);
+  border: 0.5px solid rgba(255,255,255,0.22);
+  background: rgba(255,255,255,0.26);
+  box-shadow: inset 0 1px 0 rgba(255,255,255,0.16), 0 3px 8px rgba(0,0,0,0.18);
   backdrop-filter: none;
   -webkit-backdrop-filter: none;
 }
@@ -615,17 +761,17 @@ textarea {
 }
 
 .mkr-liquid-timeline-dot-active {
-  border-color: rgba(255,255,255,0.20);
+  border-color: rgba(255,255,255,0.28);
   background:
-    linear-gradient(145deg, rgba(255,255,255,0.54), rgba(232,121,249,0.30)),
-    radial-gradient(circle at 80% 90%, rgba(34,211,238,0.13), transparent 52%);
-  box-shadow: inset 0 1px 0 rgba(255,255,255,0.22), 0 0 12px rgba(232,121,249,0.12);
+    linear-gradient(145deg, rgba(255,255,255,0.68), rgba(232,121,249,0.38)),
+    radial-gradient(circle at 80% 90%, rgba(34,211,238,0.16), transparent 52%);
+  box-shadow: inset 0 1px 0 rgba(255,255,255,0.28), 0 0 14px rgba(232,121,249,0.16);
 }
 
 .mkr-liquid-timeline-dot-reference {
-  background: rgba(0,0,0,0.12);
+  background: rgba(0,0,0,0.24);
   border-style: dashed;
-  border-color: rgba(255,255,255,0.42);
+  border-color: rgba(255,255,255,0.54);
 }
 
 .mkr-liquid-seek-track {
