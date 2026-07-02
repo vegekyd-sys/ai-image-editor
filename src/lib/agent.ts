@@ -1332,6 +1332,24 @@ Hard constraints:
             referenceVideoDuration,
             model: videoModel,
           });
+          let providerVideoRefUrl = video_ref_url;
+          let providerAutoVideoUrls = autoVideoUrls;
+          if (allVideoUrls.length > 0 && ctx.userId && ctx.projectId) {
+            const { prepareProviderVideoReferences } = await import('@/lib/provider-video-reference');
+            const referenceSupabase = ctx.supabase || (await import('@/lib/supabase/service')).getSupabaseAdmin();
+            const prepared = await prepareProviderVideoReferences({
+              supabase: referenceSupabase,
+              userId: ctx.userId,
+              projectId: ctx.projectId,
+              urls: allVideoUrls,
+              reason: videoRoute.provider,
+            });
+            if (prepared.normalized.length > 0) {
+              console.log(`[generate_animation] normalized ${prepared.normalized.length} video reference(s) for provider input`);
+            }
+            providerVideoRefUrl = video_ref_url ? prepared.urls[0] : undefined;
+            providerAutoVideoUrls = video_ref_url ? [] : prepared.urls;
+          }
 
           const createVideoInput = {
             script: story_prompt,
@@ -1340,9 +1358,9 @@ Hard constraints:
             aspectRatio: selectedAspectRatio,
             videoModel,
             videoResolution: videoRoute.resolution,
-            videoUrl: video_ref_url,
+            videoUrl: providerVideoRefUrl,
             videoReferType: video_ref_type,
-            videoUrls: autoVideoUrls.length ? autoVideoUrls : undefined,
+            videoUrls: providerAutoVideoUrls.length ? providerAutoVideoUrls : undefined,
             referenceVideoDuration,
             referenceVideoMetas: referenceVideoMetas.length ? referenceVideoMetas : undefined,
             keepOriginalSound: keep_original_sound,

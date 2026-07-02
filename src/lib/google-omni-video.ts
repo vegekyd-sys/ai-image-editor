@@ -1,7 +1,8 @@
+import { transcodeVideoBufferToSdrMp4 } from '@/lib/provider-video-reference'
+
 const GOOGLE_OMNI_MODEL = 'gemini-omni-flash-preview'
 const GOOGLE_OMNI_ENDPOINT = 'https://generativelanguage.googleapis.com/v1beta/interactions'
 const MAX_FETCH_BYTES = 55 * 1024 * 1024
-const TRANSCODE_TIMEOUT_MS = 60_000
 
 export interface GoogleOmniVideoTaskInput {
   prompt: string
@@ -46,44 +47,6 @@ function extensionMime(url: string): string {
   return 'image/jpeg'
 }
 
-async function transcodeMovToSdrMp4(buffer: Buffer<ArrayBufferLike>): Promise<Buffer<ArrayBufferLike>> {
-  const [{ execFile }, { promises: fs }, { tmpdir }, path, { promisify }, { findFfmpeg }] = await Promise.all([
-    import('child_process'),
-    import('fs'),
-    import('os'),
-    import('path'),
-    import('util'),
-    import('./ffmpeg-runtime'),
-  ])
-  const execFileAsync = promisify(execFile)
-  const dir = await fs.mkdtemp(path.join(tmpdir(), 'makaron-omni-mov-'))
-  const inputPath = path.join(dir, 'input.mov')
-  const outputPath = path.join(dir, 'output.mp4')
-
-  try {
-    await fs.writeFile(inputPath, buffer)
-    const ffmpeg = await findFfmpeg()
-    await execFileAsync(ffmpeg, [
-      '-hide_banner',
-      '-y',
-      '-i', inputPath,
-      '-map', '0:v:0',
-      '-map', '0:a:0?',
-      '-vf', 'zscale=t=linear:npl=100,format=gbrpf32le,tonemap=tonemap=hable:desat=0,zscale=p=bt709:t=bt709:m=bt709:r=tv,format=yuv420p',
-      '-c:v', 'libx264',
-      '-preset', 'veryfast',
-      '-crf', '20',
-      '-c:a', 'aac',
-      '-b:a', '128k',
-      '-movflags', '+faststart',
-      outputPath,
-    ], { timeout: TRANSCODE_TIMEOUT_MS, maxBuffer: 10 * 1024 * 1024 })
-    return Buffer.from(await fs.readFile(outputPath))
-  } finally {
-    await fs.rm(dir, { recursive: true, force: true }).catch(() => {})
-  }
-}
-
 async function fetchAsBase64(url: string, fallbackMime?: string): Promise<{ data: string; mimeType: string; bytes: number }> {
   const res = await fetch(url)
   if (!res.ok) throw new Error(`Failed to fetch reference media ${res.status}: ${url}`)
@@ -100,7 +63,7 @@ async function fetchAsBase64(url: string, fallbackMime?: string): Promise<{ data
   let mimeType = contentTypeToMime(res.headers.get('content-type'), fallbackMime || extensionMime(url))
   if (mimeType === 'video/mov') {
     console.log('[google-omni] transcoding MOV reference to SDR MP4 before provider upload')
-    buffer = await transcodeMovToSdrMp4(buffer)
+    buffer = await transcodeVideoBufferToSdrMp4(buffer)
     if (buffer.length > MAX_FETCH_BYTES) {
       throw new Error(`Transcoded reference media is too large (${(buffer.length / 1024 / 1024).toFixed(1)}MB). Google Omni inline upload limit in Makaron is 55MB.`)
     }

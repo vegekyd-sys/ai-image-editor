@@ -93,6 +93,24 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: `Reference video duration too long (${referenceVideoDuration.toFixed(1).replace(/\.0$/, '')}s). Maximum 15s with small metadata tolerance.` }, { status: 400 })
     }
     const effectiveDuration = duration ?? (referenceVideoDuration != null ? Math.min(15, Math.round(referenceVideoDuration)) : undefined)
+    const originalVideoUrls = [...(inputVideoUrl ? [inputVideoUrl] : []), ...autoVideoUrls]
+    let providerInputVideoUrl = inputVideoUrl
+    let providerAutoVideoUrls = autoVideoUrls
+    if (originalVideoUrls.length > 0) {
+      const { prepareProviderVideoReferences } = await import('@/lib/provider-video-reference')
+      const prepared = await prepareProviderVideoReferences({
+        supabase,
+        userId,
+        projectId,
+        urls: originalVideoUrls,
+        reason: videoRoute.provider,
+      })
+      if (prepared.normalized.length > 0) {
+        console.log(`[video-snapshot] normalized ${prepared.normalized.length} video reference(s) for provider input`)
+      }
+      providerInputVideoUrl = inputVideoUrl ? prepared.urls[0] : undefined
+      providerAutoVideoUrls = inputVideoUrl ? [] : prepared.urls
+    }
 
     const skillResult = await createVideo({
       script: prompt,
@@ -101,9 +119,9 @@ export async function POST(req: NextRequest) {
       aspectRatio,
       videoModel: selectedVideoModel,
       videoResolution: videoRoute.resolution,
-      videoUrl: inputVideoUrl,
+      videoUrl: providerInputVideoUrl,
       videoReferType,
-      videoUrls: autoVideoUrls.length ? autoVideoUrls : undefined,
+      videoUrls: providerAutoVideoUrls.length ? providerAutoVideoUrls : undefined,
       referenceVideoDuration,
       referenceVideoMetas: referenceVideoMetas.length ? referenceVideoMetas : undefined,
       keepOriginalSound,
