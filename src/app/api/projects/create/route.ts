@@ -1,4 +1,4 @@
-import { NextRequest, NextResponse } from 'next/server';
+import { after, NextRequest, NextResponse } from 'next/server';
 import { authenticateRequest } from '@/lib/api-auth';
 import { uploadImage, uploadVideo, isPermanentUrl } from '@/lib/supabase/storage';
 import { readAttributionCookie, sendMetaCapiEvent } from '@/lib/marketing/meta-capi';
@@ -100,6 +100,26 @@ async function sendCustomizeProductCapi(
       content_name: skillId || 'custom_project',
       has_prompt: Boolean(input.hasPrompt),
     },
+  });
+}
+
+function sendCustomizeProductCapiAfter(
+  req: NextRequest,
+  input: {
+    userId: string;
+    projectId: string;
+    metaEventId?: string;
+    skillId?: string;
+    hasPrompt?: boolean;
+  },
+) {
+  if (!input.metaEventId) return;
+  after(async () => {
+    try {
+      await sendCustomizeProductCapi(req, input);
+    } catch (error) {
+      console.warn('[projects/create] Meta CAPI event failed:', error);
+    }
   });
 }
 
@@ -229,8 +249,11 @@ export async function POST(req: NextRequest) {
     // Text-to-image: no images/videos, just create empty project (agent will generate)
     if (imageCount === 0 && videos.length === 0) {
       const projectId = crypto.randomUUID();
-      await supabase.from('projects').insert({ id: projectId, user_id: userId, title: title || 'Untitled', timeline_version: 2 });
-      await sendCustomizeProductCapi(req, {
+      const { error: projectError } = await supabase.from('projects').insert({ id: projectId, user_id: userId, title: title || 'Untitled', timeline_version: 2 });
+      if (projectError) {
+        return NextResponse.json({ error: projectError.message }, { status: 500 });
+      }
+      sendCustomizeProductCapiAfter(req, {
         userId,
         projectId,
         metaEventId,
@@ -255,7 +278,7 @@ export async function POST(req: NextRequest) {
     if (projectError) {
       return NextResponse.json({ error: projectError.message }, { status: 500 });
     }
-    await sendCustomizeProductCapi(req, {
+    sendCustomizeProductCapiAfter(req, {
       userId,
       projectId,
       metaEventId,

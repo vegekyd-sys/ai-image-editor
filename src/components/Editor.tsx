@@ -2441,11 +2441,12 @@ Select the best 3-7 items for a compelling video. You do NOT need to use all or 
       // ── Step 7: Agent request (if prompt) ──
       if (hasPrompt) {
         const skillPrefix = pendingSkill ? `[Active skill: ${pendingSkill}]\n` : '';
+        if (!isDesktop) setViewMode('cui');
         handleAgentRequest(skillPrefix + pendingPrompt!);
       }
 
       // ── Step 8: CUI mode ──
-      if ((hasPrompt || isMulti) && !isDesktop) {
+      if (isMulti && !isDesktop) {
         setViewMode('cui');
       }
     };
