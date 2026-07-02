@@ -101,6 +101,7 @@ export default function TipsBar({ tips, isLoading, isEditing, onTipClick, onTipC
     return result;
   }, [tips]);
   const hasTips = tips.length > 0;
+  const showEmptyRetry = !hasTips && !isLoading && !!onRetryAll;
   // Which categories currently have at least one tip
   const enabledCategories = useMemo(() => new Set<string>(tips.map(t => t.category)), [tips]);
 
@@ -228,7 +229,7 @@ export default function TipsBar({ tips, isLoading, isEditing, onTipClick, onTipC
         onMouseMove={onMouseMove}
         onMouseUp={onMouseUp}
         onMouseLeave={onMouseUp}
-        className={`flex items-end gap-2 px-3 pt-2 pb-1.5 overflow-x-auto hide-scrollbar ${isDesktop ? 'min-h-[70px] select-none' : 'min-h-[78px]'}`}
+        className={`flex items-end gap-2 px-3 pt-2 pb-1.5 overflow-x-auto hide-scrollbar ${isDesktop ? 'h-[78px] select-none' : 'h-[86px]'}`}
         style={isDragging ? { cursor: 'grabbing' } : undefined}
         data-dragging={isDragging || undefined}
       >
@@ -405,11 +406,12 @@ export default function TipsBar({ tips, isLoading, isEditing, onTipClick, onTipC
           </div>
         )}
 
-        {/* All tips failed — retry button */}
-        {!hasTips && !isLoading && !!failedCategories?.size && (
+        {/* Empty or failed tips — manual reload */}
+        {showEmptyRetry && (
           <button
             onClick={onRetryAll}
-            className="flex-shrink-0 mx-auto flex items-center gap-2 px-4 py-2.5 rounded-full border border-white/10 active:scale-95 transition-transform cursor-pointer"
+            aria-label={t('tips.reload')}
+            className="flex-shrink-0 mx-auto mb-3 flex items-center gap-2 px-4 py-2.5 rounded-full border border-white/10 active:scale-95 transition-transform cursor-pointer"
             style={{ background: 'rgba(255,255,255,0.05)' }}
           >
             <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="text-white/50">

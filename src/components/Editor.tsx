@@ -1115,7 +1115,7 @@ const isTipsFetchingRef = useRef(isTipsFetching);
     previewAbortRef.current = new AbortController();
     lastTipsRequestRef.current = { snapshotId, image: imageInput, previewMode, autoPreviewCategory };
     if (!isAgentActiveRef.current) {
-      setAgentStatus(t('status.thinking'));
+      setAgentStatus(t('status.generatingTips'));
     }
 
     const categories: ('enhance' | 'creative' | 'wild' | 'captions')[] = ['enhance', 'creative', 'wild', 'captions'];
@@ -1303,12 +1303,37 @@ const isTipsFetchingRef = useRef(isTipsFetching);
     doRetry();
   }, [handleTipEvent]);
 
+  const startTipsFetchForSnapshot = useCallback((
+    snap: Snapshot | undefined,
+    previewMode: 'full' | 'none' = 'full',
+    autoPreviewCategory?: string,
+  ) => {
+    const image = getImageForApi(snap);
+    if (!snap || !image) return false;
+    if (image.startsWith('data:')) {
+      compressBase64Image(image, 600_000)
+        .then(img => fetchTipsForSnapshot(snap.id, img, previewMode, autoPreviewCategory))
+        .catch(err => {
+          console.warn('[tips] failed to prepare image for tips retry:', err);
+          fetchTipsForSnapshot(snap.id, image, previewMode, autoPreviewCategory);
+        });
+    } else {
+      fetchTipsForSnapshot(snap.id, image, previewMode, autoPreviewCategory);
+    }
+    return true;
+  }, [fetchTipsForSnapshot]);
+
   // Retry all failed categories at once
   const retryAllTips = useCallback(() => {
+    setFailedCategories(new Set());
+    const visibleSnap = snapshotsRef.current[tipsSourceIndex]
+      ?? snapshotsRef.current[snapFromTimeline(viewIndexRef.current, draftParentIndexRef.current) ?? 0];
+    if (startTipsFetchForSnapshot(visibleSnap)) return;
+
     const req = lastTipsRequestRef.current;
     if (!req) return;
     fetchTipsForSnapshot(req.snapshotId, req.image, req.previewMode, req.autoPreviewCategory);
-  }, [fetchTipsForSnapshot]);
+  }, [fetchTipsForSnapshot, startTipsFetchForSnapshot, tipsSourceIndex]);
 
   // Load more tips of a specific category and append to the given snapshot
   const fetchMoreTipsForCategory = useCallback((
@@ -2454,25 +2479,24 @@ Select the best 3-7 items for a compelling video. You do NOT need to use all or 
     init();
   }, [pendingImages, pendingMetadata, pendingPrompt, pendingSkill, fetchTipsForSnapshot, onSaveSnapshot, runAutoAnalysis, handleAgentRequest, isDesktop]);
 
-  // Existing project with no tips on latest snapshot — auto-fetch (skip design snapshots)
-  const autoFetchTriggered = useRef(false);
+  // Existing project/current timeline item with no tips — auto-fetch once per snapshot.
+  // Do not mark a snapshot attempted until it has a usable image; cached projects can
+  // briefly hydrate snapshot metadata before image/imageUrl is available.
+  const autoFetchTriggered = useRef<Set<string>>(new Set());
   useEffect(() => {
     if (inactive) return;
-    if (autoFetchTriggered.current || pendingImages?.length) return;
-    const lastSnap = snapshots[snapshots.length - 1];
-    if (!lastSnap || lastSnap.tips.length > 0) return;
-    if (lastSnap.type === 'video') return;
+    if (pendingImages?.length || isTipsFetching) return;
+    const snap = snapshots[tipsSourceIndex];
+    if (!snap || snap.tips.length > 0) return;
+    if (snap.type === 'video') return;
     // Animated design snapshots don't need tips (still designs do)
-    if (lastSnap.design?.animation) return;
-    autoFetchTriggered.current = true;
-    const image = getImageForApi(lastSnap);
+    if (snap.design?.animation) return;
+    if (autoFetchTriggered.current.has(snap.id)) return;
+    const image = getImageForApi(snap);
     if (!image) return;
-    if (image.startsWith('data:')) {
-      compressBase64Image(image, 600_000).then(img => fetchTipsForSnapshot(lastSnap.id, img));
-    } else {
-      fetchTipsForSnapshot(lastSnap.id, image);
-    }
-  }, [snapshots, pendingImages, fetchTipsForSnapshot, inactive]);
+    autoFetchTriggered.current.add(snap.id);
+    startTipsFetchForSnapshot(snap);
+  }, [snapshots, tipsSourceIndex, pendingImages, isTipsFetching, inactive, startTipsFetchForSnapshot]);
 
   // Pick up late-arriving initialAnimations (from Supabase fetch after cache-init)
   // Pick up late-arriving initialMusicTaskId (from Supabase fetch after cache-init)
@@ -3349,7 +3373,7 @@ Select the best 3-7 items for a compelling video. You do NOT need to use all or 
   return (
     <div
       data-testid="editor"
-      data-tips-status={isTipsFetching ? 'loading' : (snapshots[0]?.tips?.length ? 'ready' : 'empty')}
+      data-tips-status={isTipsFetching ? 'loading' : (currentTips.length ? 'ready' : 'empty')}
       data-tips-count={snapshots.reduce((n, s) => n + (s.tips?.length || 0), 0)}
       data-agent-status={isAgentActive ? 'active' : 'idle'}
       data-snapshot-count={snapshots.length}
