@@ -24,7 +24,7 @@ function createMockContext(overrides?: Partial<AgentCallbackContext>): AgentCall
     codeStreamRef: { current: null },
     agentRunIdRef: { current: null },
     agentTimerRef: { current: null },
-    autoFetchTriggered: { current: false },
+    autoFetchTriggered: { current: new Set() },
     pendingAnalysisRef: { current: [] },
     pendingTeaserRef: { current: null },
     hasTriggeredNamingRef: { current: false },

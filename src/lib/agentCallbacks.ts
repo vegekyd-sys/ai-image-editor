@@ -36,7 +36,7 @@ export interface AgentCallbackContext {
   codeStreamRef: { current: { msgId: string; code: string; shown: number; pendingText?: string; pendingRaf?: number } | null };
   agentRunIdRef: { current: string | null };
   agentTimerRef: { current: { phase: string } | null };
-  autoFetchTriggered: { current: boolean };
+  autoFetchTriggered: { current: Set<string> };
   pendingAnalysisRef: { current: { id: string; image: string }[] };
   pendingTeaserRef: { current: { snapshotId: string; tips: Tip[] } | null };
   hasTriggeredNamingRef: { current: boolean };
@@ -248,7 +248,7 @@ export function makeAgentCallbacks(ctx: AgentCallbackContext) {
       ctx.cacheImage(`snap:${snapId}`, displayImage);
 
       ctx.fetchTipsForSnapshot(snapId, displayImage, 'none');
-      ctx.autoFetchTriggered.current = true;
+      ctx.autoFetchTriggered.current.add(snapId);
       setStatus(ctx.t('status.imageGenerated'));
 
       // "See" button if user is not on the new snapshot
