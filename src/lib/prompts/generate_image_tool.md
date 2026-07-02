@@ -12,7 +12,7 @@ Core contract:
 - `image_refs` is only for workspace asset provider URLs, not timeline snapshots.
 - `skill` may be `enhance`, `creative`, `wild`, `captions`, or a user skill. Use it for general style intent; omit it for precise manual instructions.
 - To restore details from the original photo, edit the current snapshot with `media_index` and pass the original timeline snapshot, usually `<<<media_1>>>`, through `reference_media_indices`.
-- `model` is optional. Use `qwen` for NSFW-risk requests. Use `openai` for accurate text rendering, face identity complaints, layout/mockup images, and director storyboard images required by `long-video-director`.
+- `model` is optional. Use `qwen` for NSFW-risk requests. Use `openai` for accurate text rendering, face identity complaints, layout/mockup images, and director storyboard images required by `long-video-director`. Use `gemini-lite` only when the user explicitly asks for Nano Banana 2 Lite / Lite.
 
 Built-in skill fast-path routing is summarized in `agent.md`. If that fast path selects a built-in skill, read only that one skill prompt file once, unless it already appears in tool-result history. Do not read `prompts/image.md` just to route the skill. For precise manual instructions, omit `skill` and write the full editPrompt yourself.
 

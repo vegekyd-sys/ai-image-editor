@@ -287,6 +287,8 @@ const zh = {
   'model.tab.video': '视频',
   'model.gemini.name': 'Nano Banana 2',
   'model.gemini.desc': '快速通用，大多数编辑的默认选择。',
+  'model.geminiLite.name': 'Nano Banana 2 Lite',
+  'model.geminiLite.desc': '低成本路径，适合快速草稿。',
   'model.qwen.name': 'Qwen Edit',
   'model.qwen.desc': '人脸保真最佳，可处理 NSFW 内容。',
   'model.openai.name': 'GPT Image 2',

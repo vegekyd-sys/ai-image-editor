@@ -22,6 +22,7 @@ export const geminiBackend: ModelBackend = {
   async generate(req: GenerateImageRequest): Promise<{ image: string | null; usage?: TokenUsage }> {
     // Multi-reference path: user photo as edit base (first), then reference images
     if (req.references?.length) {
+      const multiRefThinking = req.thinkingEffort === 'high' ? 'high' : 'minimal';
       const allRefs = [
         ...(req.image ? [{ url: req.image, role: 'Photo to edit (base image)' }] : []),
         ...req.references,
@@ -30,7 +31,7 @@ export const geminiBackend: ModelBackend = {
         allRefs,
         req.prompt,
         req.aspectRatio,
-        req.thinkingEffort,
+        multiRefThinking,
       );
       return { image };
     }

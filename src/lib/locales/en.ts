@@ -287,6 +287,8 @@ const en = {
   'model.tab.video': 'Video',
   'model.gemini.name': 'Nano Banana 2',
   'model.gemini.desc': 'Fast and versatile. Default for most edits.',
+  'model.geminiLite.name': 'Nano Banana 2 Lite',
+  'model.geminiLite.desc': 'Lower-cost path for fast drafts.',
   'model.qwen.name': 'Qwen Edit',
   'model.qwen.desc': 'Best face preservation. Handles NSFW content.',
   'model.openai.name': 'GPT Image 2',
