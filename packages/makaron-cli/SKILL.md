@@ -211,7 +211,7 @@ npx makaron-cli edit --image photo.jpg --ref style.jpg "match this style"
 npx makaron-cli edit --image photo.jpg --out result.jpg "make it dramatic"
 ```
 
-Options: `--image`, `--model gemini|qwen|openai|pony|wai`, `--skill enhance|creative|wild|captions`, `--ref <file>` (up to 3), `--aspect <ratio>`, `--out <path>`
+Options: `--image`, `--model gemini|gemini-lite|qwen|openai|pony|wai`, `--skill enhance|creative|wild|captions`, `--ref <file>` (up to 3), `--aspect <ratio>`, `--out <path>`
 
 ### `video` — Standalone video tools (no project timeline)
 
