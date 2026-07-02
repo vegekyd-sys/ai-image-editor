@@ -70,11 +70,10 @@ export default function FloatingPanel({ onClose, isDesktop, children }: Floating
       {/* × close — outside box, top-left */}
       <button
         onClick={onClose}
-        className="w-7 h-7 flex items-center justify-center rounded-full cursor-pointer mb-1.5"
+        className="mkr-liquid-icon-button w-7 h-7 flex items-center justify-center rounded-full cursor-pointer mb-1.5"
         style={{
-          background: '#1a1a1a',
-          border: '1px solid rgba(255,255,255,0.08)',
-          boxShadow: '0 4px 24px rgba(0,0,0,0.5), 0 0 0 1px rgba(255,255,255,0.04)',
+          background: 'linear-gradient(145deg, rgba(26,26,31,0.72), rgba(8,8,12,0.50))',
+          border: '0.5px solid rgba(255,255,255,0.11)',
         }}
       >
         <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="rgba(255,255,255,0.6)" strokeWidth="3" strokeLinecap="round">
@@ -84,11 +83,11 @@ export default function FloatingPanel({ onClose, isDesktop, children }: Floating
 
       {/* Content container */}
       <div
-        className="rounded-2xl"
+        className="mkr-liquid-surface rounded-2xl"
         style={{
-          background: '#1a1a1a',
-          border: '1px solid rgba(255,255,255,0.08)',
-          boxShadow: '0 4px 24px rgba(0,0,0,0.5), 0 0 0 1px rgba(255,255,255,0.04)',
+          background: 'linear-gradient(145deg, rgba(26,26,31,0.72), rgba(8,8,12,0.50))',
+          border: '0.5px solid rgba(255,255,255,0.11)',
+          boxShadow: '0 18px 55px rgba(0,0,0,0.34), inset 0 1px 0 rgba(255,255,255,0.09)',
           cursor: isDesktop ? (isDragging ? 'grabbing' : 'grab') : undefined,
         }}
       >

@@ -1548,10 +1548,10 @@ function ProjectCard({
     aspectRatio: '1 / 1',
     borderRadius: '16px',
     overflow: 'hidden',
-    background: '#120d1a',
+    background: 'linear-gradient(145deg, rgba(18,13,26,0.50), rgba(8,8,12,0.66))',
     animationDelay: shouldAnimateIn ? `${index * 0.04}s` : undefined,
     textDecoration: 'none',
-    border: 'none',
+    border: '0.5px solid rgba(255,255,255,0.075)',
     padding: 0,
     width: '100%',
     color: 'inherit',
@@ -1563,9 +1563,8 @@ function ProjectCard({
     <>
       {/* Placeholder shimmer while image loads */}
       {!loaded && !useIOSSafeImageUrls && (
-        <div style={{
+        <div className="mkr-liquid-placeholder" style={{
           position: 'absolute', inset: 0,
-          background: 'linear-gradient(135deg, #120d1a 0%, #1c1026 50%, #120d1a 100%)',
         }} />
       )}
 
@@ -1662,14 +1661,14 @@ function ProjectCard({
 
       {/* Top-right more button */}
       <button
-        className="mkr-more-btn"
+        className="mkr-more-btn mkr-liquid-icon-button"
         onClick={(e) => { e.preventDefault(); onMore(e) }}
         style={{
           position: 'absolute', top: '8px', right: '8px',
-          background: 'rgba(0,0,0,0.45)',
+          background: 'rgba(0,0,0,0.36)',
           backdropFilter: 'blur(6px)',
           WebkitBackdropFilter: 'blur(6px)',
-          border: 'none',
+          border: '0.5px solid rgba(255,255,255,0.12)',
           borderRadius: '8px',
           color: 'rgba(255,255,255,0.75)',
           width: '28px', height: '28px',
