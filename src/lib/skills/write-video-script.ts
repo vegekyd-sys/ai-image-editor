@@ -1,17 +1,20 @@
 import { generateText } from 'ai';
-import { createAmazonBedrock } from '@ai-sdk/amazon-bedrock';
+import { createBedrockAnthropic } from '@ai-sdk/amazon-bedrock/anthropic';
 import sharp from 'sharp';
 import { readFileSync } from 'fs';
 import { join } from 'path';
 import { parseTotalDuration } from '../kling';
 import animatePrompt from '../prompts/animate.md';
+import { getAgentModelId } from '../bedrock-models';
 
-const bedrock = createAmazonBedrock({
-  region: process.env.AWS_REGION?.trim(),
-  accessKeyId: process.env.AWS_ACCESS_KEY_ID?.trim(),
-  secretAccessKey: process.env.AWS_SECRET_ACCESS_KEY?.trim(),
-});
-const MODEL = bedrock('us.anthropic.claude-sonnet-4-6');
+function getModel() {
+  const bedrockAnthropic = createBedrockAnthropic({
+    region: process.env.AWS_REGION?.trim(),
+    accessKeyId: process.env.AWS_ACCESS_KEY_ID?.trim(),
+    secretAccessKey: process.env.AWS_SECRET_ACCESS_KEY?.trim(),
+  });
+  return bedrockAnthropic(getAgentModelId());
+}
 
 // Lazy-loaded animate.md from disk (for standalone MCP server / non-webpack environments)
 let _diskAnimatePrompt: string | null = null;
@@ -90,7 +93,7 @@ export async function writeVideoScript(input: WriteVideoScriptInput): Promise<Wr
 
     // Call Bedrock Sonnet (non-streaming)
     const result = await generateText({
-      model: MODEL,
+      model: getModel(),
       system: prompt,
       messages: [
         {

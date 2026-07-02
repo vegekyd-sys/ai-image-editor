@@ -24,7 +24,7 @@ describe('agent media scenario matrix', () => {
   const mediaAspect = read('src/lib/media-aspect.ts')
 
   it('keeps the core agent prompt as a lightweight router', () => {
-    expect(agent.length).toBeLessThan(9_000)
+    expect(agent.length).toBeLessThan(10_000)
     expect(agent).toContain("read_file('prompts/image.md')")
     expect(agent).toContain("read_file('prompts/animate.md')")
     expect(agent).toContain('`skills/video-ffmpeg-lab/SKILL.md`')
@@ -35,6 +35,7 @@ describe('agent media scenario matrix', () => {
     expect(agent).toContain('call `transcribe_audio` first')
     expect(agent).toContain('prompts/remotion-composition.md')
     expect(agent).toContain('Use `generate_music` only when the user asks')
+    expect(agentTs).toContain('helper components must receive values through their own parameters')
   })
 
   it('preserves old image scenarios in the dedicated image guide', () => {
@@ -67,6 +68,12 @@ describe('agent media scenario matrix', () => {
     expect(generateImageTool).toContain('reference_media_indices')
     expect(generateImageTool).toContain('`image_refs` is only for workspace asset provider URLs')
     expect(generateImageTool).toContain("Context Mode for `model='openai'`")
+  })
+
+  it('prevents Remotion helper components from reading outer props', () => {
+    expect(remotion).toContain('Only `Composition(props)` may read `props` directly')
+    expect(remotion).toContain('Helper components must receive every value they use as function parameters')
+    expect(remotion).toContain('never reference outer `props`')
   })
 
   it('keeps video generation default on SeeDance Fast while separating standard SeeDance', () => {

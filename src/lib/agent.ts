@@ -1,6 +1,6 @@
 import { streamText, tool, stepCountIs } from 'ai';
 import type { ModelMessage } from 'ai';
-import { createAmazonBedrock } from '@ai-sdk/amazon-bedrock';
+import { createBedrockAnthropic } from '@ai-sdk/amazon-bedrock/anthropic';
 import { z } from 'zod';
 import sharp from 'sharp';
 import { validateDesign } from './design-harness';
@@ -30,6 +30,9 @@ import {
   type RemotionRenderProfile,
 } from '@/lib/remotion-export';
 import { VIDEO_PLACEHOLDER_IMAGE } from '@/lib/editor/timeline-derivations';
+import { getAgentModelId } from './bedrock-models';
+import { describeBedrockToolUseInputIssue, normalizeBedrockToolUseInputs } from './bedrock-tool-inputs';
+import { mergePatchProps } from './patch-props';
 
 const MAX_VIDEO_DIMENSION_PROBE_BYTES = 220 * 1024 * 1024;
 
@@ -37,12 +40,28 @@ const MAX_VIDEO_DIMENSION_PROBE_BYTES = 220 * 1024 * 1024;
 // Model
 // ---------------------------------------------------------------------------
 
-const bedrock = createAmazonBedrock({
-  region: process.env.AWS_REGION?.trim(),
-  accessKeyId: process.env.AWS_ACCESS_KEY_ID?.trim(),
-  secretAccessKey: process.env.AWS_SECRET_ACCESS_KEY?.trim(),
-});
-const MODEL = bedrock(process.env.AGENT_MODEL || 'us.anthropic.claude-sonnet-4-6');
+function getAgentModel() {
+  const bedrockAnthropic = createBedrockAnthropic({
+    region: process.env.AWS_REGION?.trim(),
+    accessKeyId: process.env.AWS_ACCESS_KEY_ID?.trim(),
+    secretAccessKey: process.env.AWS_SECRET_ACCESS_KEY?.trim(),
+  });
+  return bedrockAnthropic(getAgentModelId());
+}
+const ANTHROPIC_CACHE_CONTROL = { anthropic: { cacheControl: { type: 'ephemeral' } } } as const;
+const MAX_VISIBLE_RUN_CODE_STARTS = 2;
+
+function getRunCodeIntro(runCodeInputStarts: number, locale: 'zh' | 'en'): string | null {
+  if (runCodeInputStarts > MAX_VISIBLE_RUN_CODE_STARTS) return null;
+  if (locale === 'en') {
+    return runCodeInputStarts === 1
+      ? 'I am writing the Remotion code now.'
+      : 'I am adjusting the code and checking the result.';
+  }
+  return runCodeInputStarts === 1
+    ? '我开始写 Remotion 代码。'
+    : '我继续调整代码并检查结果。';
+}
 
 // ---------------------------------------------------------------------------
 // Types
@@ -117,7 +136,7 @@ export type AgentStreamEvent =
   | { type: 'content'; text: string }
   | { type: 'new_turn' }  // signals start of a new assistant response (after tool result)
   | { type: 'image'; image: string; usedModel?: string; snapshotId?: string; imageUrl?: string; description?: string }
-  | { type: 'tool_call'; tool: string; input: Record<string, unknown>; images?: string[]; toolCallId?: string; step?: number }
+  | { type: 'tool_call'; tool: string; input: Record<string, unknown>; displayInput?: Record<string, unknown>; images?: string[]; toolCallId?: string; step?: number }
   | { type: 'tool_result'; tool: string; toolCallId?: string; step?: number; output?: unknown }
   | { type: 'animation_task'; taskId: string; prompt: string; imageUrls?: string[]; model?: string }
   | { type: 'video_snapshot'; snapshotId: string; taskId: string; videoMeta: import('@/types').VideoMeta }
@@ -2292,14 +2311,15 @@ Runtimes:
 
 Return exactly one supported shape:
 - \`{ type: 'render', code, width, height, editables?, props?, animation? }\`
-- \`{ type: 'patch', edits, props?, code_path? }\`
+- \`{ type: 'patch', edits?, props?, code_path? }\`
 - \`{ type: 'image', data, mimeType }\`
 - \`{ type: 'video', path, contentType?, description?, duration?, width?, height? }\`
 - \`{ type: 'files', outputs: [{ path, contentType, description? }] }\`
 - \`{ type: 'text', content }\`
 - \`{ type: 'error', message }\`
 
-Composition hard rules: use Remotion \`<Img>\`, not \`<img>\`; declare editable user-facing text; use system CJK fonts; keep mobile image layers light. For timeline videos, preserve the selected Media Index video aspect ratio when all selected videos share one aspect: 9:16 sources must return a 9:16 canvas such as 1080x1920, never a 16:9 canvas. For mixed-aspect sources, choose the user/platform/current composition target and use contain/background; do not claim the runtime forced one source's aspect.
+Composition hard rules: use Remotion \`<Img>\`, not \`<img>\`; declare editable user-facing text; use system CJK fonts; keep mobile image layers light. Only \`Composition(props)\` may read \`props\` directly; helper components must receive values through their own parameters and must never reference outer \`props\` (prevents \`props is not defined\` in Lambda). For timeline videos, preserve the selected Media Index video aspect ratio when all selected videos share one aspect: 9:16 sources must return a 9:16 canvas such as 1080x1920, never a 16:9 canvas. For mixed-aspect sources, choose the user/platform/current composition target and use contain/background; do not claim the runtime forced one source's aspect.
+For first Remotion drafts, send one complete executable JavaScript body that returns the render object. Do not send a fragment like \`const code = \\\`\` without the final \`return { type: 'render', code, ... }\`. Keep long videos concise by using arrays, helper components, and interpolations instead of writing frame-by-frame code.
 
 Node media runtime provides \`require\`, \`process\`, \`ffmpegPath\`, \`inputFiles\`, \`outputDir\`, \`workDir\`, \`workspaceDir\`, \`saveOutput(localPath)\`, and \`probeVideo(path)\`. Workspace files are local to the runtime: use \`workspace_paths\` and \`inputFiles[n].inputPath\`, never download or reconstruct Storage URLs. For \`runtime: "node"\`, any referenced timeline media like \`<<<media_1>>>\` MUST be passed as \`media_refs: [1]\`; any existing workspace file from \`list_files\` MUST be passed as \`workspace_paths: ["project/media/file.mp4"]\`. The system resolves both to local workspace-backed files before your code runs. \`ffprobePath\` may be empty in deployment; prefer \`probeVideo(path)\`. Use \`type: "files"\` for chunks and \`type: "video"\` for the final MP4. If ordinary timeline splicing was routed to composition, do not switch to node just because preview needs adjustment; patch the composition or report the preview issue.`,
       inputSchema: z.object({
@@ -2310,10 +2330,11 @@ Node media runtime provides \`require\`, \`process\`, \`ffmpegPath\`, \`inputFil
         runtime: z.enum(['composition', 'design', 'node']).optional().describe('composition = safe Remotion/editable composition runtime. design = legacy alias for composition. node = fully open backend Node runtime with fs/child_process/ffmpeg for real MP4 editing.'),
       }),
       execute: async ({ code, description: desc, media_refs, workspace_paths, runtime }) => {
+        const executableCode = code;
         console.log(`🔧 [run_code] ${desc || 'executing code'}...`);
         const startTime = Date.now();
         // Store raw code for write_file({ fromLastRunCode: true })
-        (ctx as any).__lastRunCode = code;
+        (ctx as any).__lastRunCode = executableCode;
 
         // Refresh snapshotImages URLs from DB — ensures URLs are valid
         if (ctx.supabase && ctx.projectId) {
@@ -2335,7 +2356,7 @@ Node media runtime provides \`require\`, \`process\`, \`ffmpegPath\`, \`inputFil
             supabase: ctx.supabase,
           });
           const mediaResult = await runNodeMediaCode({
-            code,
+            code: executableCode,
             description: desc,
             mediaRefs: media_refs,
             workspacePaths: workspace_paths,
@@ -2469,7 +2490,7 @@ Node media runtime provides \`require\`, \`process\`, \`ffmpegPath\`, \`inputFil
             setTimeout, clearTimeout, Promise, // needed for async code
           });
 
-          const wrappedCode = `(async () => { 'use strict';\n${code}\n})()`;
+          const wrappedCode = `(async () => { 'use strict';\n${executableCode}\n})()`;
           const script = new vm.Script(wrappedCode);
           const result = await script.runInContext(context, { timeout: 30_000 });
 
@@ -2502,8 +2523,8 @@ Node media runtime provides \`require\`, \`process\`, \`ffmpegPath\`, \`inputFil
             }
           };
 
-          // { type: 'patch', edits: [...] } — Incremental search & replace on last composition or a specific composition via code_path
-          if (result?.type === 'patch' && Array.isArray(result.edits)) {
+          // { type: 'patch', edits?: [...], props?: {...} } — Incremental update on last composition or code_path
+          if (result?.type === 'patch' && (Array.isArray(result.edits) || result.props !== undefined)) {
             let baseDesign = (ctx as any).__lastDesignPayload;
 
             // code_path: load a different design from workspace as patch base
@@ -2523,16 +2544,18 @@ Node media runtime provides \`require\`, \`process\`, \`ffmpegPath\`, \`inputFil
               return { type: 'text' as const, content: 'Patch failed: no base composition. Provide code_path in the patch result, e.g. return { type: "patch", code_path: "code/...", edits: [...] }. Do not fall back to render unless the user asked for a new composition.' };
             }
             let code = baseDesign.code;
-            for (const edit of result.edits) {
-              if (typeof edit.old !== 'string' || typeof edit.new !== 'string') {
-                return { type: 'text' as const, content: 'Patch failed: each edit must have "old" and "new" strings.' };
+            if (Array.isArray(result.edits)) {
+              for (const edit of result.edits) {
+                if (typeof edit.old !== 'string' || typeof edit.new !== 'string') {
+                  return { type: 'text' as const, content: 'Patch failed: each edit must have "old" and "new" strings.' };
+                }
+                const count = code.split(edit.old).length - 1;
+                if (count === 0) return { type: 'text' as const, content: `Patch failed: old_string not found in current code.\n"${edit.old.slice(0, 100)}"` };
+                if (count > 1) return { type: 'text' as const, content: `Patch failed: old_string matches ${count} times. Add more surrounding context to make it unique.\n"${edit.old.slice(0, 100)}"` };
+                code = code.replace(edit.old, edit.new);
               }
-              const count = code.split(edit.old).length - 1;
-              if (count === 0) return { type: 'text' as const, content: `Patch failed: old_string not found in current code.\n"${edit.old.slice(0, 100)}"` };
-              if (count > 1) return { type: 'text' as const, content: `Patch failed: old_string matches ${count} times. Add more surrounding context to make it unique.\n"${edit.old.slice(0, 100)}"` };
-              code = code.replace(edit.old, edit.new);
             }
-            const mergedProps = result.props ? { ...(baseDesign.props || {}), ...result.props } : baseDesign.props;
+            const mergedProps = mergePatchProps(baseDesign.props, result.props);
             const patched = {
               ...baseDesign,
               code: resolveMediaMarkersInString(code, ctx.snapshotImages),
@@ -2691,9 +2714,9 @@ Node media runtime provides \`require\`, \`process\`, \`ffmpegPath\`, \`inputFil
     }),
 
     generate_music: tool({
-      // Cache point marker — cache all tools preceding this one (PR #8137 patch).
+      // Cache point marker — cache all tools preceding this one.
       // Must stay on the LAST tool in this map so the whole tools block is cached.
-      providerOptions: { bedrock: { cachePoint: { type: 'default' } } },
+      providerOptions: ANTHROPIC_CACHE_CONTROL,
       description: `Generate background music for the current composition/video. Returns 2 tracks (~30s). Focus on matching the mood and tone of the video content — genre, energy level, emotion, instruments.`,
       inputSchema: z.object({
         prompt: z.string().describe('Music description: genre, mood, energy, instruments (no timing, no artist names)'),
@@ -2844,7 +2867,7 @@ export async function* runMakaronAgent(
     const promptHasCompositionPointer = typeof prompt === 'string'
       && (prompt.includes('[Current Composition]') || prompt.includes('[Current composition pointer]'));
     const designInjection = options?.currentDesignPath && !promptHasCompositionPointer
-      ? `[Current composition pointer]\npath: ${options.currentDesignPath}${options.currentDesign ? `\nwidth: ${options.currentDesign.width}\nheight: ${options.currentDesign.height}${options.currentDesign.animation ? `\nanimation: ${options.currentDesign.animation.durationInSeconds}s @ ${options.currentDesign.animation.fps}fps` : ''}` : ''}\nTo modify this existing composition, call run_code with a JS return value like { type: 'patch', code_path: '${options.currentDesignPath}', edits: [...] } and runtime: "composition". Do not render from scratch unless the user asks for a new composition.\n\n`
+      ? `[Current composition pointer]\npath: ${options.currentDesignPath}${options.currentDesign ? `\nwidth: ${options.currentDesign.width}\nheight: ${options.currentDesign.height}${options.currentDesign.animation ? `\nanimation: ${options.currentDesign.animation.durationInSeconds}s @ ${options.currentDesign.animation.fps}fps` : ''}` : ''}\nTo modify this existing composition, call run_code with a JS return value like { type: 'patch', code_path: '${options.currentDesignPath}', edits: [...] } or { type: 'patch', code_path: '${options.currentDesignPath}', props: {...} } and runtime: "composition". Use props-only patches for text/data changes. Do not render from scratch unless the user asks for a new composition.\n\n`
       : '';
     userContent = analysisOnly ? analysisPrompt : (designInjection + prompt);
   }
@@ -2925,7 +2948,7 @@ export async function* runMakaronAgent(
   if (history.length >= 2) {
     for (let i = msgs.length - 2; i >= 0; i--) {
       if (msgs[i].role === 'assistant' || msgs[i].role === 'tool') {
-        msgs[i].providerOptions = { bedrock: { cachePoint: { type: 'default' } } };
+        msgs[i].providerOptions = ANTHROPIC_CACHE_CONTROL;
         break;
       }
     }
@@ -2935,15 +2958,20 @@ export async function* runMakaronAgent(
 
     const endStreamInit = perf?.span('model_stream_init', { projectId });
     const result = (streamText as any)({
-      model: MODEL,
-      system: [{ role: 'system', content: systemPrompt, providerOptions: { bedrock: { cachePoint: { type: 'default' } } } }],
+      model: getAgentModel(),
+      system: [{ role: 'system', content: systemPrompt, providerOptions: ANTHROPIC_CACHE_CONTROL }],
       messages: msgs,
       ...(tools ? { tools } : {}),
       ...(analysisOnly && tools ? { activeTools: [isVideoAnalysis ? 'analyze_video' : 'analyze_image'] } : {}),
       stopWhen: stepCountIs(maxSteps),
+      prepareStep: ({ messages }: { messages: ModelMessage[] }) => ({
+        messages: normalizeBedrockToolUseInputs(messages),
+      }),
       onStepFinish: () => { stepCount++; },
       providerOptions: {
         anthropic: {
+          disableParallelToolUse: true,
+          toolStreaming: false,
           contextManagement: {
             edits: [
               {
@@ -2964,6 +2992,7 @@ export async function* runMakaronAgent(
 
     // State machine for extracting code from run_code tool-input-delta
     let codeExtractor: { buffer: string; state: 'waiting' | 'in_code' | 'done'; escaped: boolean; sent: number } | null = null;
+    let runCodeInputStarts = 0;
     const textDeltaState = createTextDeltaState();
 
     for await (const event of result.fullStream) {
@@ -2992,8 +3021,14 @@ export async function* runMakaronAgent(
       if (event.type === 'tool-input-start') {
         const toolName = (event as any).toolName ?? '';
         if (toolName === 'run_code') {
+          runCodeInputStarts++;
           codeExtractor = { buffer: '', state: 'waiting', escaped: false, sent: 0 };
           const isEnLocale = options?.locale === 'en';
+          const intro = getRunCodeIntro(runCodeInputStarts, isEnLocale ? 'en' : 'zh');
+          if (intro) {
+            yield { type: 'new_turn' };
+            yield { type: 'content', text: intro };
+          }
           yield { type: 'status' as const, text: isEnLocale ? 'Generating code...' : '代码生成中...' };
         }
         continue;
@@ -3134,17 +3169,21 @@ export async function* runMakaronAgent(
             ];
           }
         }
-        // For run_code: truncate code in tool_call event (full code already streamed via tool-input-delta)
+        // For run_code: keep the real input for persistence/model history, but send a
+        // compact display input to the client. Replaying a UI-truncated code string
+        // teaches the next model turn to copy "... (N chars)" as executable code.
         const toolInput = event.input as Record<string, unknown>;
         const isRunCode = event.toolName === 'run_code' && typeof toolInput.code === 'string';
+        const displayInput = isRunCode
+          ? { ...toolInput, code: `[code streamed separately: ${(toolInput.code as string).length} chars]` }
+          : toolInput;
         yield {
           type: 'tool_call',
           tool: event.toolName,
           toolCallId: activeToolCallId,
           step: stepCount,
-          input: isRunCode
-            ? { ...toolInput, code: ((toolInput.code as string)).slice(0, 100) + `... (${(toolInput.code as string).length} chars)` }
-            : toolInput,
+          input: toolInput,
+          ...(displayInput !== toolInput ? { displayInput } : {}),
           ...(toolCallImages ? { images: toolCallImages } : {}),
         };
         // If code wasn't streamed via delta (edge case), send it now
@@ -3294,7 +3333,7 @@ export async function* runMakaronAgent(
     try {
       const usage = await result.totalUsage;
       if (usage) {
-        const modelId = process.env.AGENT_MODEL || 'us.anthropic.claude-opus-4-6-v1';
+        const modelId = getAgentModelId();
         // Vercel AI SDK v6 semantics (VERIFIED from official source):
         //   - `usage.inputTokens` = TOTAL (noCache + cacheRead + cacheWrite)
         //     See ai/src/types/usage.ts asLanguageModelUsage — `inputTokens: usage.inputTokens.total`
@@ -3320,6 +3359,10 @@ export async function* runMakaronAgent(
 
     yield { type: 'done' };
   } catch (err) {
+    const bedrockToolInputIssue = describeBedrockToolUseInputIssue(err);
+    if (bedrockToolInputIssue) {
+      console.error(`[agent] Bedrock toolUse input issue: ${bedrockToolInputIssue}`);
+    }
     console.log(`⏱️ [agent] ERROR at +${((Date.now() - agentStartTime) / 1000).toFixed(1)}s: ${err instanceof Error ? err.message : String(err)}`);
     yield { type: 'error', message: err instanceof Error ? err.message : String(err) };
   }
@@ -3453,7 +3496,7 @@ export async function* streamTipsWithClaude(
 ${template}${locale === 'en' ? TIPS_JSON_FORMAT_EN : TIPS_JSON_FORMAT_ZH}`;
 
   const { textStream } = streamText({
-    model: MODEL,
+    model: getAgentModel(),
     system: systemPrompt,
     messages: [
       {

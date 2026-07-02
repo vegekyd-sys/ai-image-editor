@@ -49,6 +49,12 @@ export interface DbVisibleMessage {
 const DATA_URL_RE = /^data:(image|video|audio)\//i;
 const BASE64ISH_RE = /^[A-Za-z0-9+/=\r\n]+$/;
 const DANGEROUS_KEYS = new Set(['image', 'images', 'base64Data', 'data', 'buffer']);
+const TRUNCATED_RUN_CODE_MARKERS = [
+  /\.\.\. \(\d+ chars\)/,
+  /\.\.\.\(truncated\)/,
+  /\[truncated: \d+ chars omitted\]/,
+  /\[code streamed separately: \d+ chars\]/,
+];
 
 function jsonChars(value: unknown): number {
   try {
@@ -353,10 +359,19 @@ function normalizeToolResultOutput(output: unknown): ToolResultOutput {
   return { type: 'json', value: output ?? {} };
 }
 
+function isReplayableToolRow(row: DbToolHistoryRow): boolean {
+  if (row.tool_name !== 'run_code') return true;
+  const input = row.input && typeof row.input === 'object' ? row.input as JsonRecord : {};
+  const code = input.code;
+  if (typeof code !== 'string' || !code.trim()) return false;
+  return !TRUNCATED_RUN_CODE_MARKERS.some(marker => marker.test(code));
+}
+
 export function buildToolHistoryMessages(rows: DbToolHistoryRow[]): ModelMessage[] {
   const messages: ModelMessage[] = [];
   const validRows = rows
     .filter(row => row.tool_call_id && row.tool_name)
+    .filter(isReplayableToolRow)
     .sort((a, b) => a.seq - b.seq);
   if (!validRows.length) return messages;
 

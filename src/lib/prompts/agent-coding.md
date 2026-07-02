@@ -18,7 +18,7 @@ Return exactly one supported object:
 
 ```js
 { type: 'render', code, width, height, editables?, props?, animation? }
-{ type: 'patch', edits, props?, code_path? }
+{ type: 'patch', edits?, props?, code_path? }
 { type: 'image', data, mimeType }
 { type: 'video', path, contentType?, description?, duration?, width?, height? }
 { type: 'files', outputs: [{ path, contentType, description? }] }
@@ -38,12 +38,14 @@ return {
   code_path: 'code/snapshot-id.json', // required when editing a persisted workspace composition
   edits: [
     { old: 'exact string in current code', new: 'replacement string' }
-  ]
+  ],
+  props: { /* optional text/data edits */ }
 }
 ```
 
 - Each `old` string must match exactly once. If it is ambiguous, include more surrounding context.
 - Use patch for modify, add, or delete operations.
+- Use props-only patches for text/data changes: `{ type: 'patch', code_path, props: {...} }`.
 - Include `props` when changing editable values alongside code.
 - If the current context includes `[Current Composition]`, `[Current composition pointer]`, or `[composition code: ...]`, include that exact path as `code_path`.
 - If you need exact strings for a persisted composition, call `read_file(code_path)` once, then still return `type: "patch"` with the same `code_path`.

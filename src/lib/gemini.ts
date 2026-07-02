@@ -1,6 +1,6 @@
 import { GoogleGenAI, Chat, Type } from '@google/genai';
 import { streamText } from 'ai';
-import { createAmazonBedrock } from '@ai-sdk/amazon-bedrock';
+import { createBedrockAnthropic } from '@ai-sdk/amazon-bedrock/anthropic';
 import { Tip } from '@/types';
 import enhancePrompt from './prompts/enhance.md';
 import creativePrompt from './prompts/creative.md';
@@ -8,6 +8,7 @@ import wildPrompt from './prompts/wild.md';
 import captionsPrompt from './prompts/captions.md';
 import sharp from 'sharp';
 import fs from 'fs';
+import { getTipsBedrockModelId, supportsTemperature } from './bedrock-models';
 
 const LOG_FILE = '/tmp/tips-timing.log';
 function tlog(msg: string) {
@@ -53,15 +54,13 @@ const TIPS_TEMPERATURE = parseFloat(process.env.TIPS_TEMPERATURE || '0.9');
 const TIPS_THINKING_OVERRIDE = process.env.TIPS_THINKING as 'minimal' | 'low' | 'high' | undefined;
 type TipsProvider = 'bedrock' | 'openrouter' | 'google';
 
-// Bedrock instance for tips (lazy init)
-let _bedrockForTips: ReturnType<typeof createAmazonBedrock> | null = null;
 function getBedrockForTips() {
-  if (!_bedrockForTips) _bedrockForTips = createAmazonBedrock({
+  const bedrockForTips = createBedrockAnthropic({
     region: process.env.AWS_REGION?.trim(),
     accessKeyId: process.env.AWS_ACCESS_KEY_ID?.trim(),
     secretAccessKey: process.env.AWS_SECRET_ACCESS_KEY?.trim(),
   });
-  return _bedrockForTips('anthropic.claude-sonnet-4-6');
+  return bedrockForTips(getTipsBedrockModelId());
 }
 
 // ── Google SDK singleton ────────────────────────────────────────
@@ -1173,13 +1172,14 @@ async function* streamTipsByCategoryBedrock(
     ? new URL(imageBase64)
     : imageBase64.startsWith('data:') ? imageBase64 : `data:image/jpeg;base64,${imageBase64}`;
   const { systemPrompt, userText } = buildTipsPrompt(category, metadata, count, existingLabels, skillContext);
+  const bedrockModelId = getTipsBedrockModelId();
 
   const t0 = Date.now();
-  tlog(`[tips:bedrock:${category}] stream start`);
+  tlog(`[tips:bedrock:${category}] stream start model=${bedrockModelId}`);
 
   const result = await streamText({
     model: getBedrockForTips(),
-    temperature: TIPS_TEMPERATURE,
+    ...(supportsTemperature(bedrockModelId) ? { temperature: TIPS_TEMPERATURE } : {}),
     system: systemPrompt,
     messages: [
       {
@@ -1205,7 +1205,7 @@ async function* streamTipsByCategoryBedrock(
       if (usage) {
         usageAccum.inputTokens += usage.inputTokens ?? 0;
         usageAccum.outputTokens += usage.outputTokens ?? 0;
-        usageAccum.model = 'anthropic.claude-sonnet-4-6'; // Sonnet is always text output, rate is correct
+        usageAccum.model = bedrockModelId; // Sonnet is always text output, rate is correct
       }
     } catch { /* best effort */ }
   }

@@ -4,6 +4,8 @@ Use this prompt only for editable Remotion compositions: motion graphics, video 
 
 Use `runtime: "composition"` for new work. `runtime: "design"` is a legacy alias that maps to the same implementation.
 
+If the user explicitly asks to use Remotion, make reasonable creative assumptions and build the composition instead of asking a clarifying question. For broad themes such as "35秒微信成长视频", create an editable placeholder narrative with plausible scene labels, dates, counters, and captions; the user can refine the copy after seeing a draft.
+
 When the user asks to put two existing timeline videos together, cut clips freely, add transitions, add subtitles, or make a sequence that can be edited later, this is the default runtime. Use Remotion `<Sequence>` and `<Video>` rather than FFmpeg.
 
 Do not fall back to FFmpeg/node for ordinary timeline splicing just because a preview needs adjustment or the first composition attempt is imperfect. Patch the Remotion composition, save/publish the editable composition, or report the preview issue. Use FFmpeg only when the user explicitly asks for a real file-level MP4 operation/export.
@@ -49,8 +51,8 @@ Subsequent edits:
 ```js
 return {
   type: 'patch',
-  edits: [{ old: 'exact existing string', new: 'replacement string' }],
-  props
+  edits: [{ old: 'exact existing string', new: 'replacement string' }], // optional
+  props // optional, can be the only patch body for text/data edits
 }
 ```
 
@@ -66,6 +68,7 @@ Available APIs include all exports from `remotion`, `@remotion/media`, `@remotio
 
 - Do not import Remotion packages, destructure from `window.Remotion`, or write `Remotion.AbsoluteFill`. All APIs are already in scope. Use `<AbsoluteFill>`, `<Video>`, `<Sequence>`, and hooks directly.
 - Name the main exported component `Composition`. Helper components are allowed, but the renderable timeline should be `function Composition(props) { ... }`.
+- Only `Composition(props)` may read `props` directly. Helper components must receive every value they use as function parameters, e.g. `function TitleCard({ title, subtitle }) { ... }`; never reference outer `props` inside `TitleCard`, `Scene`, `Card`, or other helpers.
 - Use Remotion `<Img>`, never HTML `<img>`.
 - Use Remotion `<Video>` or `<OffthreadVideo>`, never HTML `<video>`.
 - Use `<Sequence>` for every scene or clip so media mounts only when needed.
