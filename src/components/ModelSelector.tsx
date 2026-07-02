@@ -20,8 +20,8 @@ interface ModelSelectorProps {
 }
 
 const ROW_HEIGHT = 68;
-const MAX_VISIBLE_ROWS = 3;
-const LIST_HEIGHT = ROW_HEIGHT * MAX_VISIBLE_ROWS;
+const PANEL_BODY_HEIGHT = ROW_HEIGHT * 5;
+const AUTO_TIPS_FOOTER_HEIGHT = ROW_HEIGHT + 14;
 
 function ModelIcon({ size = 18 }: { size?: number }) {
   return (
@@ -375,13 +375,24 @@ export default function ModelSelector({
   const [activeTab, setActiveTab] = useState<'image' | 'video'>('image');
   const wrapperRef = useRef<HTMLDivElement>(null);
   const triggerRef = useRef<HTMLButtonElement>(null);
+  const scrollBodyRef = useRef<HTMLDivElement>(null);
   const [popoverPos, setPopoverPos] = useState<{ bottom: number; left?: number; right?: number } | null>(null);
+  const [canScrollDown, setCanScrollDown] = useState(false);
   const [autoTips, setAutoTips] = useState(() =>
     typeof window !== 'undefined' ? (localStorage.getItem('mkr_auto_tips') ?? 'auto') !== 'off' : true
   );
 
   const imageAuto = preferredModel === 'auto';
   const currentAuto = activeTab === 'image' ? imageAuto : videoAuto;
+
+  const updateScrollHint = useCallback(() => {
+    const el = scrollBodyRef.current;
+    if (!el) {
+      setCanScrollDown(false);
+      return;
+    }
+    setCanScrollDown(el.scrollTop + el.clientHeight < el.scrollHeight - 2);
+  }, []);
 
   useEffect(() => {
     if (!open) return;
@@ -451,16 +462,31 @@ export default function ModelSelector({
   const videoModels = getVideoModels();
   const models = activeTab === 'image' ? imageModels : videoModels;
   const selectedId = activeTab === 'image' ? (imageAuto ? null : preferredModel) : (videoAuto ? null : videoModel);
+  const selectedImageModel = imageModels.find(model => model.id === preferredModel);
+  const selectedImageLabel = selectedImageModel
+    ? t(selectedImageModel.nameKey as Parameters<typeof t>[0])
+    : preferredModel;
   const selectedVideoCapability = getVideoModelCapability(videoModel);
   const selectedVideoResolution = videoResolution === 'auto'
     ? selectedVideoCapability.defaultResolution
     : normalizeVideoResolution(videoModel, videoResolution);
   const modelLabel = !imageAuto
-    ? preferredModel
+    ? selectedImageLabel
     : !videoAuto
       ? `${selectedVideoCapability.label} ${String(selectedVideoResolution).toUpperCase()}`
       : 'auto';
   const resolutionOptions = selectedVideoCapability.supportedResolutions ?? [];
+
+  useEffect(() => {
+    const el = scrollBodyRef.current;
+    if (el) el.scrollTop = 0;
+    window.setTimeout(updateScrollHint, 0);
+  }, [activeTab, updateScrollHint]);
+
+  useEffect(() => {
+    if (!open) return;
+    window.setTimeout(updateScrollHint, 0);
+  }, [open, activeTab, models.length, selectedId, autoTips, selectedVideoResolution, updateScrollHint]);
 
   return (
     <div ref={wrapperRef} style={{ position: 'relative' }}>
@@ -503,6 +529,25 @@ export default function ModelSelector({
             padding: '14px 10px 10px',
           }}
         >
+          <style>{`
+            .model-selector-scroll {
+              scrollbar-width: thin;
+              scrollbar-color: rgba(255,255,255,0.22) transparent;
+            }
+            .model-selector-scroll::-webkit-scrollbar {
+              width: 6px;
+            }
+            .model-selector-scroll::-webkit-scrollbar-track {
+              background: transparent;
+            }
+            .model-selector-scroll::-webkit-scrollbar-thumb {
+              background: rgba(255,255,255,0.16);
+              border-radius: 999px;
+            }
+            .model-selector-scroll:hover::-webkit-scrollbar-thumb {
+              background: rgba(255,255,255,0.26);
+            }
+          `}</style>
           {/* Header */}
           <div style={{
             display: 'flex',
@@ -549,95 +594,137 @@ export default function ModelSelector({
             ))}
           </div>
 
-          {/* Model list — video rows can expand to show resolution inline. */}
-          <div style={{
-            ...(activeTab === 'image' ? { height: LIST_HEIGHT } : { maxHeight: 360 }),
-            overflowY: activeTab === 'video' || models.length > MAX_VISIBLE_ROWS ? 'auto' : 'hidden',
-            display: 'flex',
-            flexDirection: 'column',
-            gap: 2,
-          }}>
-            {models.map(model => {
-              if (activeTab === 'video') {
+          <div style={{ position: 'relative', height: PANEL_BODY_HEIGHT }}>
+            {/* Model list — fixed body height for image/video, with overflow hint. */}
+            <div
+              ref={scrollBodyRef}
+              className="model-selector-scroll"
+              onScroll={updateScrollHint}
+              style={{
+                height: activeTab === 'image' ? PANEL_BODY_HEIGHT - AUTO_TIPS_FOOTER_HEIGHT : PANEL_BODY_HEIGHT,
+                overflowY: 'auto',
+                display: 'flex',
+                flexDirection: 'column',
+                gap: 2,
+                paddingRight: 2,
+                paddingBottom: canScrollDown ? 24 : 0,
+              }}
+            >
+              {models.map(model => {
+                if (activeTab === 'video') {
+                  return (
+                    <VideoModelRow
+                      key={model.id}
+                      model={model}
+                      name={t(model.nameKey as Parameters<typeof t>[0])}
+                      desc={t(model.descKey as Parameters<typeof t>[0])}
+                      selected={model.id === selectedId}
+                      onSelect={() => handleVideoSelect(model.id)}
+                      resolutionLabel={t('model.resolution')}
+                      resolutionOptions={resolutionOptions}
+                      selectedVideoResolution={selectedVideoResolution}
+                      onResolutionSelect={handleVideoResolutionSelect}
+                    />
+                  );
+                }
                 return (
-                  <VideoModelRow
+                  <ModelRow
                     key={model.id}
                     model={model}
                     name={t(model.nameKey as Parameters<typeof t>[0])}
                     desc={t(model.descKey as Parameters<typeof t>[0])}
                     selected={model.id === selectedId}
-                    onSelect={() => handleVideoSelect(model.id)}
-                    resolutionLabel={t('model.resolution')}
-                    resolutionOptions={resolutionOptions}
-                    selectedVideoResolution={selectedVideoResolution}
-                    onResolutionSelect={handleVideoResolutionSelect}
+                    disabled={false}
+                    onSelect={() => handleImageSelect(model.id)}
                   />
                 );
-              }
-              return (
-                <ModelRow
-                  key={model.id}
-                  model={model}
-                  name={t(model.nameKey as Parameters<typeof t>[0])}
-                  desc={t(model.descKey as Parameters<typeof t>[0])}
-                  selected={model.id === selectedId}
-                  disabled={false}
-                  onSelect={() => handleImageSelect(model.id)}
-                />
-              );
-            })}
-          </div>
-
-          {activeTab === 'image' && (
-            <div style={{ borderTop: '1px solid rgba(255,255,255,0.06)', marginTop: 6, paddingTop: 6 }}>
-              <button
-                onClick={() => handleAutoTipsToggle(!autoTips)}
+              })}
+            </div>
+            {canScrollDown && (
+              <div
                 style={{
+                  position: 'absolute',
+                  left: 0,
+                  right: 0,
+                  bottom: activeTab === 'image' ? AUTO_TIPS_FOOTER_HEIGHT : 0,
+                  height: 36,
+                  pointerEvents: 'none',
+                  borderBottomLeftRadius: 12,
+                  borderBottomRightRadius: 12,
+                  background: 'linear-gradient(to bottom, rgba(22,22,22,0), rgba(22,22,22,0.92))',
                   display: 'flex',
-                  alignItems: 'center',
-                  gap: 10,
-                  width: '100%',
-                  height: ROW_HEIGHT,
-                  padding: '0 12px',
-                  borderRadius: 12,
-                  border: 'none',
-                  background: autoTips ? 'rgba(232,121,249,0.08)' : 'transparent',
-                  cursor: 'pointer',
-                  transition: 'background 0.15s',
-                  textAlign: 'left',
+                  alignItems: 'flex-end',
+                  justifyContent: 'center',
+                  paddingBottom: 4,
                 }}
               >
-                <div style={{
-                  width: 32, height: 32, borderRadius: 8,
-                  background: 'rgba(255,255,255,0.06)',
-                  display: 'flex', alignItems: 'center', justifyContent: 'center',
-                  flexShrink: 0,
-                  color: autoTips ? '#e879f9' : 'rgba(255,255,255,0.4)',
-                }}>
-                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
-                    <rect x="2" y="2" width="20" height="20" rx="2" />
-                    <path d="M7 12h10M12 7v10" />
-                  </svg>
-                </div>
-                <div style={{ flex: 1, minWidth: 0 }}>
-                  <div style={{ fontSize: 13, fontWeight: 600, color: autoTips ? '#e879f9' : 'rgba(255,255,255,0.85)' }}>
-                    {t('model.autoTips')}
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="rgba(255,255,255,0.42)" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+                  <path d="M7 10l5 5 5-5" />
+                </svg>
+              </div>
+            )}
+            {activeTab === 'image' && (
+              <div
+                style={{
+                  position: 'absolute',
+                  left: 0,
+                  right: 0,
+                  bottom: 0,
+                  height: AUTO_TIPS_FOOTER_HEIGHT,
+                  borderTop: '1px solid rgba(255,255,255,0.06)',
+                  paddingTop: 6,
+                  background: '#161616',
+                }}
+              >
+                <button
+                  onClick={() => handleAutoTipsToggle(!autoTips)}
+                  style={{
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: 10,
+                    width: '100%',
+                    height: ROW_HEIGHT,
+                    padding: '0 12px',
+                    borderRadius: 12,
+                    border: 'none',
+                    background: autoTips ? 'rgba(232,121,249,0.08)' : 'transparent',
+                    cursor: 'pointer',
+                    transition: 'background 0.15s',
+                    textAlign: 'left',
+                  }}
+                >
+                  <div style={{
+                    width: 32, height: 32, borderRadius: 8,
+                    background: 'rgba(255,255,255,0.06)',
+                    display: 'flex', alignItems: 'center', justifyContent: 'center',
+                    flexShrink: 0,
+                    color: autoTips ? '#e879f9' : 'rgba(255,255,255,0.4)',
+                  }}>
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+                      <rect x="2" y="2" width="20" height="20" rx="2" />
+                      <path d="M7 12h10M12 7v10" />
+                    </svg>
                   </div>
-                  <div style={{ fontSize: 11, color: 'rgba(255,255,255,0.35)', marginTop: 1, lineHeight: 1.3 }}>
-                    {t('model.autoTips.desc')}
+                  <div style={{ flex: 1, minWidth: 0 }}>
+                    <div style={{ fontSize: 13, fontWeight: 600, color: autoTips ? '#e879f9' : 'rgba(255,255,255,0.85)' }}>
+                      {t('model.autoTips')}
+                    </div>
+                    <div style={{ fontSize: 11, color: 'rgba(255,255,255,0.35)', marginTop: 1, lineHeight: 1.3 }}>
+                      {t('model.autoTips.desc')}
+                    </div>
                   </div>
-                </div>
-                <div style={{
-                  width: 18, height: 18, borderRadius: 9,
-                  border: `2px solid ${autoTips ? '#c026d3' : 'rgba(255,255,255,0.15)'}`,
-                  display: 'flex', alignItems: 'center', justifyContent: 'center',
-                  flexShrink: 0,
-                }}>
-                  {autoTips && <div style={{ width: 10, height: 10, borderRadius: 5, background: '#c026d3' }} />}
-                </div>
-              </button>
-            </div>
-          )}
+                  <div style={{
+                    width: 18, height: 18, borderRadius: 9,
+                    border: `2px solid ${autoTips ? '#c026d3' : 'rgba(255,255,255,0.15)'}`,
+                    display: 'flex', alignItems: 'center', justifyContent: 'center',
+                    flexShrink: 0,
+                  }}>
+                    {autoTips && <div style={{ width: 10, height: 10, borderRadius: 5, background: '#c026d3' }} />}
+                  </div>
+                </button>
+              </div>
+            )}
+          </div>
         </div>
       )}
     </div>

@@ -10,6 +10,17 @@ interface ChangelogEntry {
 
 const CHANGELOG: ChangelogEntry[] = [
   {
+    date: '2026-07-02',
+    en: { title: 'Nano Banana 2 Lite', items: [
+      'Nano Banana 2 Lite is now available in the image model selector for faster, lower-cost previews and edits.',
+      'It supports multi-reference image edits and is optimized for fast 1K drafts.',
+    ]},
+    zh: { title: 'Nano Banana 2 Lite', items: [
+      '图片模型选择器新增 Nano Banana 2 Lite，用于更快、更低成本的预览和编辑。',
+      '支持多参考图编辑，适合快速生成 1K 草稿。',
+    ]},
+  },
+  {
     date: '2026-07-01',
     en: { title: 'Gemini Omni for Fast Video Editing', items: [
       'Gemini Omni is now available as a fast 720p video editing model in Makaron.',
