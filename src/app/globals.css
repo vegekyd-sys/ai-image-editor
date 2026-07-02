@@ -451,17 +451,20 @@ textarea {
   clip-path: inset(0 round 999px);
   isolation: isolate;
   touch-action: manipulation;
-  border: 0.5px solid rgba(255,255,255,0.08);
+  border: 0.5px solid rgba(255,255,255,0.115);
   background:
-    radial-gradient(circle at 18% 0%, rgba(255,255,255,0.095), transparent 34%),
-    radial-gradient(circle at 94% 105%, rgba(217,70,239,0.09), transparent 48%),
-    linear-gradient(145deg, rgba(18,18,24,0.62), rgba(0,0,0,0.44));
+    radial-gradient(ellipse at 28% -22%, rgba(255,255,255,0.18), rgba(255,255,255,0.045) 38%, transparent 66%),
+    radial-gradient(circle at 94% 105%, rgba(217,70,239,0.12), transparent 48%),
+    radial-gradient(circle at 4% 86%, rgba(34,211,238,0.035), transparent 42%),
+    linear-gradient(145deg, rgba(18,18,24,0.58), rgba(0,0,0,0.40));
   box-shadow:
-    inset 0 1px 0 rgba(255,255,255,0.12),
-    inset 0 -1px 0 rgba(255,255,255,0.025),
+    inset 0 1px 0 rgba(255,255,255,0.18),
+    inset 0 -1px 0 rgba(255,255,255,0.035),
+    inset 1px 0 0 rgba(34,211,238,0.045),
+    inset -1px 0 0 rgba(217,70,239,0.055),
     0 12px 30px rgba(0,0,0,0.30);
-  backdrop-filter: blur(13px) saturate(1.24) contrast(1.04);
-  -webkit-backdrop-filter: blur(13px) saturate(1.24) contrast(1.04);
+  backdrop-filter: blur(14px) saturate(1.32) contrast(1.05);
+  -webkit-backdrop-filter: blur(14px) saturate(1.32) contrast(1.05);
   transition: opacity 180ms ease, transform 220ms cubic-bezier(0.22, 1, 0.36, 1);
 }
 
@@ -483,20 +486,21 @@ textarea {
 
 .mkr-liquid-nav::before {
   background:
-    linear-gradient(115deg, rgba(255,255,255,0.055), transparent 40%, rgba(34,211,238,0.02) 72%, transparent),
-    radial-gradient(ellipse at 50% -24%, rgba(255,255,255,0.095), transparent 62%);
+    linear-gradient(110deg, transparent 6%, rgba(255,255,255,0.10) 18%, transparent 39%, rgba(34,211,238,0.032) 70%, rgba(255,255,255,0.045) 88%, transparent),
+    radial-gradient(ellipse at 50% -24%, rgba(255,255,255,0.15), transparent 62%);
   mix-blend-mode: screen;
-  opacity: 0.36;
+  opacity: 0.46;
 }
 
 .mkr-liquid-nav::after {
   inset: 1px;
   box-shadow:
-    inset 0 0 0 0.5px rgba(255,255,255,0.05),
-    inset 0 -10px 18px rgba(0,0,0,0.13),
-    inset 1px 0 0 rgba(34,211,238,0.018),
-    inset -1px 0 0 rgba(217,70,239,0.026);
-  opacity: 0.86;
+    inset 0 0 0 0.5px rgba(255,255,255,0.075),
+    inset 0 9px 16px rgba(255,255,255,0.045),
+    inset 0 -10px 18px rgba(0,0,0,0.12),
+    inset 1px 0 0 rgba(34,211,238,0.04),
+    inset -1px 0 0 rgba(217,70,239,0.048);
+  opacity: 0.92;
 }
 
 .mkr-liquid-nav-track {
@@ -512,36 +516,39 @@ textarea {
   left: 0;
   border-radius: 999px;
   overflow: hidden;
-  border: 0.5px solid rgba(255,255,255,0.105);
+  border: 0.5px solid rgba(255,255,255,0.155);
   background:
-    radial-gradient(circle at 20% 0%, rgba(255,255,255,0.14), transparent 34%),
-    radial-gradient(circle at 92% 96%, rgba(217,70,239,0.14), transparent 48%),
-    linear-gradient(145deg, rgba(43,43,52,0.58), rgba(12,12,18,0.38));
+    radial-gradient(ellipse at 28% -16%, rgba(255,255,255,0.24), rgba(255,255,255,0.065) 40%, transparent 68%),
+    radial-gradient(circle at 92% 96%, rgba(217,70,239,0.16), transparent 48%),
+    radial-gradient(circle at 4% 86%, rgba(34,211,238,0.05), transparent 40%),
+    linear-gradient(145deg, rgba(50,50,60,0.58), rgba(12,12,18,0.34));
   box-shadow:
-    inset 0 1px 0 rgba(255,255,255,0.17),
-    inset 0 -1px 0 rgba(255,255,255,0.03),
+    inset 0 1px 0 rgba(255,255,255,0.24),
+    inset 0 -1px 0 rgba(255,255,255,0.04),
+    inset 1px 0 0 rgba(34,211,238,0.04),
+    inset -1px 0 0 rgba(217,70,239,0.05),
     0 8px 22px rgba(0,0,0,0.22);
-  backdrop-filter: blur(11px) saturate(1.28) contrast(1.02);
-  -webkit-backdrop-filter: blur(11px) saturate(1.28) contrast(1.02);
+  backdrop-filter: blur(12px) saturate(1.36) contrast(1.04);
+  -webkit-backdrop-filter: blur(12px) saturate(1.36) contrast(1.04);
   transition: transform 260ms cubic-bezier(0.22, 1, 0.36, 1);
   will-change: transform;
 }
 
 .mkr-liquid-nav-indicator::before {
   background:
-    linear-gradient(125deg, rgba(255,255,255,0.08), transparent 38%, rgba(34,211,238,0.026) 72%, rgba(255,255,255,0.026)),
-    radial-gradient(ellipse at 50% -22%, rgba(255,255,255,0.12), transparent 62%);
+    linear-gradient(125deg, rgba(255,255,255,0.13), transparent 36%, rgba(34,211,238,0.04) 70%, rgba(255,255,255,0.045)),
+    radial-gradient(ellipse at 50% -22%, rgba(255,255,255,0.18), transparent 62%);
   mix-blend-mode: screen;
-  opacity: 0.48;
+  opacity: 0.58;
 }
 
 .mkr-liquid-nav-indicator::after {
   inset: -1px;
   background:
-    linear-gradient(120deg, transparent 20%, rgba(255,255,255,0.045) 42%, rgba(232,121,249,0.062) 58%, transparent 78%),
-    radial-gradient(ellipse at 50% 110%, rgba(217,70,239,0.07), transparent 62%);
+    linear-gradient(120deg, transparent 16%, rgba(255,255,255,0.09) 39%, rgba(232,121,249,0.095) 58%, transparent 78%),
+    radial-gradient(ellipse at 50% 110%, rgba(217,70,239,0.095), transparent 62%);
   mix-blend-mode: screen;
-  opacity: 0.22;
+  opacity: 0.34;
 }
 
 .mkr-liquid-nav-button {
