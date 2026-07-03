@@ -22,6 +22,7 @@ describe('agent media scenario matrix', () => {
   const agentRoute = read('src/app/api/agent/route.ts')
   const designHarness = read('src/lib/design-harness.ts')
   const mediaAspect = read('src/lib/media-aspect.ts')
+  const compositionDuration = read('src/lib/composition-duration.ts')
 
   it('keeps the core agent prompt as a lightweight router', () => {
     expect(agent.length).toBeLessThan(10_000)
@@ -178,7 +179,7 @@ describe('agent media scenario matrix', () => {
     expect(agentTs).toContain('call preview_frame before telling the user it is complete')
     expect(agentTs).toContain('animation.durationInSeconds matches the final frame count')
     expect(agentTs).toContain('normalizeCompositionAnimation')
-    expect(agentTs).toContain('inferCompositionTotalFrames')
+    expect(compositionDuration).toContain('inferCompositionTotalFrames')
     expect(agentTs).toContain('resolveMediaMarkersInValue')
     expect(designHarness).toContain('unresolved Media Index placeholder')
     expect(agentTs).not.toContain('[Current Remotion composition code')
