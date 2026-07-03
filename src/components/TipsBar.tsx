@@ -229,7 +229,7 @@ export default function TipsBar({ tips, isLoading, isEditing, onTipClick, onTipC
         onMouseMove={onMouseMove}
         onMouseUp={onMouseUp}
         onMouseLeave={onMouseUp}
-        className={`flex items-end gap-2 px-3 pt-2 pb-1.5 overflow-x-auto hide-scrollbar ${isDesktop ? 'min-h-[70px] select-none' : 'min-h-[78px]'}`}
+        className={`flex h-[86px] items-end gap-2 px-3 pt-2 pb-1.5 overflow-x-auto hide-scrollbar ${isDesktop ? 'select-none' : ''}`}
         style={isDragging ? { cursor: 'grabbing' } : undefined}
         data-dragging={isDragging || undefined}
       >

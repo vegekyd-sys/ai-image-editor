@@ -123,6 +123,7 @@ export default function LiquidGlassNav({
         opacity: hidden ? 0 : 1,
         pointerEvents: hidden ? 'none' : 'auto',
         transform: hidden ? 'translateX(-50%) translateY(14px) scale(0.98)' : 'translateX(-50%)',
+        touchAction: 'manipulation',
       }}
       onPointerEnter={() => {
         if (!onChange) warmRoute(active === 'explore' ? 'projects' : 'explore')
