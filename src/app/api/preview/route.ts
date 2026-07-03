@@ -1,6 +1,7 @@
 import { NextRequest } from 'next/server';
 import { createClient } from '@/lib/supabase/server';
 import { generateImage } from '@/lib/model-router';
+import { generateTipsPreviewImageOpenRouter } from '@/lib/gemini';
 import { requireCredits, deductByTokens, deductCredits } from '@/lib/billing/credits';
 
 export const maxDuration = 120;
@@ -38,7 +39,15 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    const result = await generateImage({ image, prompt: editPrompt, aspectRatio, category, isNsfw });
+    let liteResult: Awaited<ReturnType<typeof generateTipsPreviewImageOpenRouter>> = { image: null };
+    try {
+      liteResult = await generateTipsPreviewImageOpenRouter(image, editPrompt, aspectRatio);
+    } catch (error) {
+      console.warn('[preview] Lite preview failed, falling back to model-router:', error);
+    }
+    const result = liteResult.image
+      ? { image: liteResult.image, model: 'gemini' as const, fallbackUsed: false, contentBlocked: undefined, usage: liteResult.usage }
+      : await generateImage({ image, prompt: editPrompt, aspectRatio, category, isNsfw });
 
     // Deduct credits regardless of success (API tokens already consumed)
     if (result.usage) {

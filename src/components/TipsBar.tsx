@@ -41,7 +41,7 @@ function TipThumbnail({ tip, onRetryPreview, originalIndex }: {
     return (
       <div className="w-full h-full relative">
         {isStorageUrl && !imgLoaded && (
-          <div className="absolute inset-0 bg-white/5 animate-pulse" />
+          <div className="mkr-liquid-placeholder absolute inset-0" />
         )}
         { }
         <img
@@ -101,6 +101,7 @@ export default function TipsBar({ tips, isLoading, isEditing, onTipClick, onTipC
     return result;
   }, [tips]);
   const hasTips = tips.length > 0;
+  const showEmptyRetry = !hasTips && !isLoading && !!onRetryAll;
   // Which categories currently have at least one tip
   const enabledCategories = useMemo(() => new Set<string>(tips.map(t => t.category)), [tips]);
 
@@ -228,7 +229,7 @@ export default function TipsBar({ tips, isLoading, isEditing, onTipClick, onTipC
         onMouseMove={onMouseMove}
         onMouseUp={onMouseUp}
         onMouseLeave={onMouseUp}
-        className={`flex items-end gap-2 px-3 pt-2 pb-1.5 overflow-x-auto hide-scrollbar ${isDesktop ? 'min-h-[70px] select-none' : 'min-h-[78px]'}`}
+        className={`flex h-[86px] items-end gap-2 px-3 pt-2 pb-1.5 overflow-x-auto hide-scrollbar ${isDesktop ? 'select-none' : ''}`}
         style={isDragging ? { cursor: 'grabbing' } : undefined}
         data-dragging={isDragging || undefined}
       >
@@ -267,11 +268,11 @@ export default function TipsBar({ tips, isLoading, isEditing, onTipClick, onTipC
                   data-tip-status={tip.previewStatus || 'pending'}
                   onClick={handleCardClick}
                   disabled={isEditing}
-                  className={`${isDesktop ? 'w-[176px]' : 'w-[200px]'} text-left hover:brightness-110 active:scale-[0.97] disabled:opacity-40 border overflow-hidden cursor-pointer ${
+                  className={`mkr-liquid-pill mkr-liquid-pill-strong ${isDesktop ? 'w-[176px]' : 'w-[200px]'} text-left hover:brightness-110 active:scale-[0.97] disabled:opacity-40 border overflow-hidden cursor-pointer ${
                     missingPrompt
                       ? 'border-white/5 opacity-50'
                       : isSelected
-                        ? 'border-fuchsia-500 ring-1 ring-fuchsia-500/50'
+                        ? 'mkr-liquid-pill-selected border-fuchsia-500 ring-1 ring-fuchsia-500/50'
                         : 'border-white/10'
                   }`}
                   style={{
@@ -279,12 +280,12 @@ export default function TipsBar({ tips, isLoading, isEditing, onTipClick, onTipC
                     transition: 'border-radius 0.2s ease-out, filter 0.15s, transform 0.1s, border-color 0.15s',
                     background:
                       tip.category === 'enhance'
-                        ? 'rgba(217,70,239,0.06)'
+                        ? 'linear-gradient(145deg, rgba(217,70,239,0.075), rgba(12,12,16,0.44))'
                         : tip.category === 'creative'
-                          ? 'rgba(217,70,239,0.12)'
+                          ? 'linear-gradient(145deg, rgba(217,70,239,0.13), rgba(12,12,16,0.46))'
                           : tip.category === 'wild'
-                            ? 'rgba(239,68,68,0.12)'
-                            : 'rgba(245,158,11,0.12)',
+                            ? 'linear-gradient(145deg, rgba(239,68,68,0.12), rgba(12,12,16,0.46))'
+                            : 'linear-gradient(145deg, rgba(245,158,11,0.12), rgba(12,12,16,0.46))',
                   }}
                 >
                   <div className="flex">
@@ -319,36 +320,38 @@ export default function TipsBar({ tips, isLoading, isEditing, onTipClick, onTipC
                     transition: 'width 0.2s ease-out',
                   }}
                 >
-                  <button
-                    onClick={() => onTipCommit?.(tip, originalIndex)}
-                    className={`${isDesktop ? 'w-[64px]' : 'w-[72px]'} h-full flex flex-col items-center justify-center gap-1.5 rounded-r-2xl border border-l-0 border-fuchsia-500 active:scale-95 overflow-hidden relative group cursor-pointer`}
-                    style={{
-                      background: 'linear-gradient(135deg, rgba(217,70,239,0.18) 0%, rgba(192,38,211,0.32) 100%)',
-                      transition: 'transform 0.1s',
-                    }}
-                  >
-                    {/* Hover shimmer */}
-                    <div
-                      className="absolute inset-0 opacity-0 group-hover:opacity-100 pointer-events-none"
+                  {showCommit && (
+                    <button
+                      onClick={() => onTipCommit?.(tip, originalIndex)}
+                      className={`mkr-liquid-pill mkr-liquid-side-action ${isDesktop ? 'w-[64px]' : 'w-[72px]'} h-full flex flex-col items-center justify-center gap-1.5 rounded-r-2xl border border-l-0 border-fuchsia-500 active:scale-95 overflow-hidden relative group cursor-pointer`}
                       style={{
-                        background: 'linear-gradient(135deg, rgba(217,70,239,0.12) 0%, rgba(192,38,211,0.22) 100%)',
-                        transition: 'opacity 0.2s',
+                        background: 'linear-gradient(135deg, rgba(217,70,239,0.18) 0%, rgba(192,38,211,0.32) 100%)',
+                        transition: 'transform 0.1s',
                       }}
-                    />
-                    {/* Arrow icon */}
-                    <svg
-                      width="18" height="18" viewBox="0 0 24 24" fill="none"
-                      stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"
-                      className="text-fuchsia-300 relative z-10"
                     >
-                      <path d="M5 12h14" />
-                      <path d="m12 5 7 7-7 7" />
-                    </svg>
-                    {/* Label */}
-                    <span className="text-fuchsia-200 text-[10px] font-semibold tracking-wide leading-tight text-center relative z-10 whitespace-nowrap">
-                      {t('tips.continueEditing')}
-                    </span>
-                  </button>
+                      {/* Hover shimmer */}
+                      <div
+                        className="absolute inset-0 opacity-0 group-hover:opacity-100 pointer-events-none"
+                        style={{
+                          background: 'linear-gradient(135deg, rgba(217,70,239,0.12) 0%, rgba(192,38,211,0.22) 100%)',
+                          transition: 'opacity 0.2s',
+                        }}
+                      />
+                      {/* Arrow icon */}
+                      <svg
+                        width="18" height="18" viewBox="0 0 24 24" fill="none"
+                        stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"
+                        className="text-fuchsia-300 relative z-10"
+                      >
+                        <path d="M5 12h14" />
+                        <path d="m12 5 7 7-7 7" />
+                      </svg>
+                      {/* Label */}
+                      <span className="text-fuchsia-200 text-[10px] font-semibold tracking-wide leading-tight text-center relative z-10 whitespace-nowrap">
+                        {t('tips.continueEditing')}
+                      </span>
+                    </button>
+                  )}
                 </div>
               </div>
 
@@ -357,7 +360,7 @@ export default function TipsBar({ tips, isLoading, isEditing, onTipClick, onTipC
                 <button
                   onClick={() => onLoadMore(tip.category)}
                   disabled={isEditing || loadingMoreCategories?.has(tip.category)}
-                  className={`flex-shrink-0 rounded-2xl border border-dashed border-white/15 flex flex-col items-center justify-center gap-1 active:scale-95 transition-transform disabled:opacity-40 cursor-pointer ${isDesktop ? 'w-[44px] h-[64px]' : 'w-[52px] h-[72px]'}`}
+                  className={`mkr-liquid-pill mkr-liquid-pill-strong flex-shrink-0 rounded-2xl border border-dashed border-white/15 flex flex-col items-center justify-center gap-1 active:scale-95 transition-transform disabled:opacity-40 cursor-pointer ${isDesktop ? 'w-[44px] h-[64px]' : 'w-[52px] h-[72px]'}`}
                   style={{ background: meta.activeBg.replace('0.18', '0.08') }}
                 >
                   {loadingMoreCategories?.has(tip.category) ? (
@@ -382,12 +385,12 @@ export default function TipsBar({ tips, isLoading, isEditing, onTipClick, onTipC
             {[1, 2, 3, 4, 5, 6].map((i) => (
               <div
                 key={i}
-                className={`flex-shrink-0 rounded-2xl bg-fuchsia-500/8 animate-pulse border border-fuchsia-500/10 flex ${isDesktop ? 'w-[176px] h-[64px]' : 'w-[200px] h-[72px]'}`}
+                className={`mkr-liquid-placeholder mkr-liquid-placeholder-passive flex-shrink-0 rounded-2xl border border-fuchsia-500/10 flex ${isDesktop ? 'w-[176px] h-[64px]' : 'w-[200px] h-[72px]'}`}
               >
-                <div className={`${isDesktop ? 'w-[64px]' : 'w-[72px]'} h-full bg-white/5`} />
+                <div className={`${isDesktop ? 'w-[64px]' : 'w-[72px]'} h-full`} style={{ background: 'rgba(255,255,255,0.045)' }} />
                 <div className="flex-1 p-2.5 space-y-1.5">
-                  <div className="h-3 w-16 bg-white/10 rounded" />
-                  <div className="h-2.5 w-24 bg-white/5 rounded" />
+                  <div className="mkr-liquid-placeholder-line h-3 w-16 rounded" />
+                  <div className="mkr-liquid-placeholder-line h-2.5 w-24 rounded" />
                 </div>
               </div>
             ))}
@@ -396,7 +399,7 @@ export default function TipsBar({ tips, isLoading, isEditing, onTipClick, onTipC
 
         {/* More tips loading indicator */}
         {hasTips && isLoading && tips.length < 6 && (
-          <div className="flex-shrink-0 w-[60px] h-[72px] rounded-2xl bg-fuchsia-500/5 border border-fuchsia-500/10 flex items-center justify-center animate-pulse">
+          <div className="mkr-liquid-placeholder mkr-liquid-placeholder-passive flex-shrink-0 w-[60px] h-[72px] rounded-2xl border border-fuchsia-500/10 flex items-center justify-center">
             <div className="flex gap-0.5">
               <div className="w-1 h-1 bg-fuchsia-400/40 rounded-full typing-dot" />
               <div className="w-1 h-1 bg-fuchsia-400/40 rounded-full typing-dot" />
@@ -405,11 +408,12 @@ export default function TipsBar({ tips, isLoading, isEditing, onTipClick, onTipC
           </div>
         )}
 
-        {/* All tips failed — retry button */}
-        {!hasTips && !isLoading && !!failedCategories?.size && (
+        {/* Empty or failed tips — manual reload */}
+        {showEmptyRetry && (
           <button
             onClick={onRetryAll}
-            className="flex-shrink-0 mx-auto flex items-center gap-2 px-4 py-2.5 rounded-full border border-white/10 active:scale-95 transition-transform cursor-pointer"
+            aria-label={t('tips.reload')}
+            className="mkr-liquid-pill mkr-liquid-pill-strong flex-shrink-0 mx-auto flex items-center gap-2 px-4 py-2.5 rounded-full border border-white/10 active:scale-95 transition-transform cursor-pointer"
             style={{ background: 'rgba(255,255,255,0.05)' }}
           >
             <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="text-white/50">

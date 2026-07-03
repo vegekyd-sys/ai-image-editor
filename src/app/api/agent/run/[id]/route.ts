@@ -48,6 +48,7 @@ async function pollVideoProvider(taskId: string): Promise<{ taskId: string; stat
   const isSeedance = taskId.startsWith('cgt-');
   const isMotionControl = taskId.startsWith('mc-');
   const isXai = taskId.startsWith('xai-');
+  const isGoogleOmni = taskId.startsWith('google-omni-');
   const realTaskId = isMotionControl ? taskId.slice(3) : taskId;
 
   if (isEvolink) {
@@ -63,6 +64,9 @@ async function pollVideoProvider(taskId: string): Promise<{ taskId: string; stat
   } else if (isXai) {
     const { getXaiVideoTask } = await import('@/lib/xai-video');
     return getXaiVideoTask(taskId);
+  } else if (isGoogleOmni) {
+    const { getGoogleOmniVideoTask } = await import('@/lib/google-omni-video');
+    return getGoogleOmniVideoTask(taskId);
   } else {
     const { getKlingTask } = await import('@/lib/kling');
     return getKlingTask(taskId);
@@ -272,12 +276,57 @@ export async function GET(
                 if (videoMeta.createdAt) {
                   v.elapsed_seconds = Math.round((Date.now() - new Date(videoMeta.createdAt).getTime()) / 1000);
                 }
+                const snapshotId = v.snapshot_id as string;
+                const projectId = snap.project_id;
+                const providerVideoUrl = videoMeta.videoUrl as string;
+                after(async () => {
+                  try {
+                    const { uploadVideo } = await import('@/lib/supabase/storage');
+                    const { probeMP4Dimensions } = await import('@/lib/mp4-probe');
+                    const buffer = providerVideoUrl.startsWith('https://generativelanguage.googleapis.com/') || providerVideoUrl.startsWith('data:')
+                      ? await (await import('@/lib/google-omni-video')).fetchGoogleOmniVideoBytes(providerVideoUrl)
+                      : new Uint8Array(await (await fetch(providerVideoUrl)).arrayBuffer());
+                    const dims = probeMP4Dimensions(buffer) || { width: 1080, height: 1920 };
+                    const adminClient = getSupabaseAdmin();
+                    const permanentUrl = await uploadVideo(adminClient, ownerUserId, projectId, snapshotId, buffer);
+                    if (permanentUrl) {
+                      const finalMeta = { ...videoMeta, videoUrl: permanentUrl, providerUrl: providerVideoUrl, videoPath: `${ownerUserId}/projects/${projectId}/animation/${snapshotId}.mp4`, width: dims.width, height: dims.height };
+                      await adminClient.from('snapshots')
+                        .update({ video_meta: finalMeta })
+                        .eq('id', snapshotId);
+                      try {
+                        const { extractVideoPoster } = await import('@/lib/video-poster');
+                        const posterBuffer = await extractVideoPoster(permanentUrl);
+                        const posterPath = `${ownerUserId}/${projectId}/posters/${snapshotId}.jpg`;
+                        const { error: posterErr } = await adminClient.storage.from('images').upload(posterPath, posterBuffer, { contentType: 'image/jpeg', upsert: true });
+                        if (!posterErr) {
+                          const { data: urlData } = adminClient.storage.from('images').getPublicUrl(posterPath);
+                          if (urlData?.publicUrl) {
+                            await adminClient.from('snapshots').update({ image_url: urlData.publicUrl }).eq('id', snapshotId);
+                            console.log(`Video poster extracted: ${snapshotId}`);
+                          }
+                        }
+                      } catch (pe) {
+                        console.warn('Video poster extraction failed (non-fatal):', pe);
+                      }
+                    }
+                  } catch (err) {
+                    console.error('Video persist error:', err);
+                  }
+                });
               }
             } else if (videoMeta.status === 'failed') {
               v.status = 'failed';
               v.error = videoMeta.error;
               v.completion_actions = buildVideoFailureActions(videoMeta);
             } else if (videoMeta.status === 'processing' && videoMeta.taskId) {
+              if (typeof videoMeta.taskId === 'string' && videoMeta.taskId.startsWith('google-omni-job-') && !videoMeta.videoUrl && !videoMeta.providerUrl) {
+                v.status = 'rendering';
+                if (videoMeta.createdAt) {
+                  v.elapsed_seconds = Math.round((Date.now() - new Date(videoMeta.createdAt).getTime()) / 1000);
+                }
+                return;
+              }
               // Actively poll provider API
               try {
                 const taskId = videoMeta.taskId as string;
@@ -299,9 +348,9 @@ export async function GET(
                     try {
                       const { uploadVideo } = await import('@/lib/supabase/storage');
                       const { probeMP4Dimensions } = await import('@/lib/mp4-probe');
-                      const res = await fetch(pollResult.videoUrl!);
-                      if (!res.ok) return;
-                      const buffer = new Uint8Array(await res.arrayBuffer());
+                      const buffer = pollResult.videoUrl!.startsWith('https://generativelanguage.googleapis.com/') || pollResult.videoUrl!.startsWith('data:')
+                        ? await (await import('@/lib/google-omni-video')).fetchGoogleOmniVideoBytes(pollResult.videoUrl!)
+                        : new Uint8Array(await (await fetch(pollResult.videoUrl!)).arrayBuffer());
                       const dims = probeMP4Dimensions(buffer) || { width: 1080, height: 1920 };
                       const adminClient = getSupabaseAdmin();
                       const permanentUrl = await uploadVideo(adminClient, ownerUserId, projectId, snapshotId, buffer);
@@ -474,13 +523,13 @@ export async function GET(
 
     // Determine effective status:
     // - "completed" only when agent is done AND all video/music are terminal
-    const agentDone = run.status === 'completed' || run.status === 'failed' || run.status === 'aborted';
     const hasPendingArtifacts = [...videoItems, ...musicItems].some(
       o => o.status === 'queued' || o.status === 'rendering'
     );
     const hasFailedArtifacts = [...videoItems, ...musicItems].some(
       o => o.status === 'failed'
     );
+    const agentDone = run.status === 'completed' || run.status === 'failed' || run.status === 'aborted';
     const effectiveStatus = agentDone && hasPendingArtifacts
       ? 'in_progress'
       : (agentDone && run.status === 'completed' && hasFailedArtifacts ? 'failed' : run.status);

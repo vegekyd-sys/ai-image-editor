@@ -186,6 +186,7 @@ Shot 2 (3s): Close-up, ...
 - **SeeDance**: Best visual quality. Supports real human faces and reference video. Reference video size: .mp4/.mov, <=50MB, width/height 300-6000px, aspect ratio 0.4-2.5, frame pixels 409,600-2,086,876.
 - **SeeDance Mini**: Lower-cost Seedance route for drafts and multi-size tests. Supports 480p/720p, real human faces, image/video/audio references, and the same reference-video size limits as SeeDance.
 - **Grok 1.5**: Fastest image-to-video option with native audio. One source image can be 1-15s. It does not support multi-image or timeline/reference video editing in Makaron. Do not force `aspect_ratio`; keep the source image ratio unless the image has first been padded/created to the desired shape.
+- **Gemini Omni**: Fast 720p short video editing with native generated audio. Treat it as a backup/specialized model, not the default. Use `google-omni` only when the app selector is already set to Gemini Omni or the user explicitly asks for Omni/Gemini Omni/Google Omni. It supports 3-10s output and 16:9 or 9:16. Image-to-video accepts exactly one image; if multiple timeline images are relevant, pick the strongest single image or ask the user which one to use. It accepts one reference video in Makaron. Do not pass uploaded `audio_refs`; describe the soundtrack in the prompt instead.
 
 ## Reference Video Usage
 

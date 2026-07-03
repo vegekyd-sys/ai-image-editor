@@ -28,6 +28,8 @@ export interface CreateVideoResult {
   taskId?: string;
   videoModel?: string;
   providerModel?: string;
+  videoUrl?: string;
+  status?: 'completed' | 'processing' | 'pending' | 'failed';
   message: string;
 }
 
@@ -108,7 +110,9 @@ export async function createVideo(input: CreateVideoInput): Promise<CreateVideoR
   if (hasAudioReference && route.provider !== 'seedance') {
     return {
       success: false,
-      message: 'Reference audio is only supported by Seedance video models.',
+      message: route.provider === 'google-omni'
+        ? 'Google Omni generates native audio from the prompt, but uploaded reference audio is not enabled in the current API. Use Seedance for audio_refs, or describe the soundtrack in the prompt for Omni.'
+        : 'Reference audio is only supported by Seedance video models.',
     };
   }
   if ((audioUrls?.length || 0) > 3) {
@@ -259,6 +263,33 @@ export async function createVideo(input: CreateVideoInput): Promise<CreateVideoR
         resolution: route.resolution as '480p' | '720p',
       });
       console.log(`✅ [create_video] Grok Video task created: ${taskId}`);
+    } else if (route.provider === 'google-omni') {
+      const { createGoogleOmniVideoTask } = await import('../google-omni-video');
+      if ((videoUrls?.length || 0) > 1 || (videoUrl && (videoUrls?.length || 0) > 0)) {
+        return {
+          success: false,
+          message: 'Google Omni supports one reference video per request in Makaron. Split multi-video workflows into separate tasks.',
+        };
+      }
+      const omniResult = await createGoogleOmniVideoTask({
+        prompt: finalPrompt,
+        images: filteredImages,
+        duration: resolvedDuration != null ? resolvedDuration : undefined,
+        aspectRatio: providerAspectRatio,
+        videoUrl,
+        videoUrls,
+      });
+      taskId = omniResult.taskId;
+      console.log(`✅ [create_video] Google Omni video completed: ${taskId}`);
+      return {
+        success: true,
+        taskId,
+        videoModel: provider,
+        providerModel: route.providerModel,
+        videoUrl: omniResult.videoUrl,
+        status: omniResult.status,
+        message: `Google Omni video generated. Task ID: ${taskId}. Use makaron_get_video_status to persist and retrieve the final URL.`,
+      };
     } else if (route.provider === 'piapi') {
       const { createKlingTask: createKlingTaskPiAPI } = await import('../piapi');
       taskId = await createKlingTaskPiAPI({

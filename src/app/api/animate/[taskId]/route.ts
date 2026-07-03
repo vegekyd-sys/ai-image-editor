@@ -31,11 +31,12 @@ export async function GET(
     }
 
     // Poll task — route by taskId prefix or env var
-    // task-unified-* = Evolink SeeDance, cgt-* = SeeDance (Volcengine), mc-* = Motion Control, xai-* = Grok, else = Kling
+    // task-unified-* = Evolink SeeDance, cgt-* = SeeDance (Volcengine), mc-* = Motion Control, xai-* = Grok, google-omni-* = Gemini Omni, else = Kling
     const isEvolink = taskId.startsWith('task-unified-')
     const isSeedance = taskId.startsWith('cgt-')
     const isMotionControl = taskId.startsWith('mc-')
     const isXai = taskId.startsWith('xai-')
+    const isGoogleOmni = taskId.startsWith('google-omni-')
     const provider = process.env.ANIMATE_PROVIDER || 'kling'
     let result: { taskId: string; status: string; videoUrl?: string; error?: string }
     const realTaskId = isMotionControl ? taskId.slice(3) : taskId
@@ -53,6 +54,15 @@ export async function GET(
     } else if (isXai) {
       const { getXaiVideoTask } = await import('@/lib/xai-video')
       result = await getXaiVideoTask(taskId)
+    } else if (isGoogleOmni) {
+      const admin = getSupabaseAdmin()
+      const { data: anim } = await admin
+        .from('project_animations')
+        .select('video_url')
+        .eq('piapi_task_id', taskId)
+        .maybeSingle()
+      const { getGoogleOmniVideoTask } = await import('@/lib/google-omni-video')
+      result = await getGoogleOmniVideoTask(taskId, anim?.video_url || undefined)
     } else if (provider === 'piapi') {
       result = await getKlingTaskPiAPI(taskId)
     } else {
@@ -85,12 +95,9 @@ export async function GET(
         const ownerId = ownerUserId as string
         after(async () => {
           try {
-            const res = await fetch(videoUrl)
-            if (!res.ok) {
-              console.error(`Video download failed: ${res.status}`)
-              return
-            }
-            const buffer = new Uint8Array(await res.arrayBuffer())
+            const buffer = videoUrl.startsWith('https://generativelanguage.googleapis.com/') || videoUrl.startsWith('data:')
+              ? await (await import('@/lib/google-omni-video')).fetchGoogleOmniVideoBytes(videoUrl)
+              : new Uint8Array(await (await fetch(videoUrl)).arrayBuffer())
             const adminClient = getSupabaseAdmin()
             const permanentUrl = await uploadVideo(adminClient, ownerId, projectId, animId, buffer)
             if (permanentUrl) {

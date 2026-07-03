@@ -10,6 +10,41 @@ interface ChangelogEntry {
 
 const CHANGELOG: ChangelogEntry[] = [
   {
+    date: '2026-07-03',
+    en: { title: 'Liquid Glass Polish', items: [
+      'The Home, Projects, and editor surfaces now share a clearer Liquid Glass treatment across navigation, placeholders, model controls, video pills, and input areas.',
+      'Mobile account gestures are more reliable, and the Explore / Projects switcher is easier to read over bright media.',
+    ]},
+    zh: { title: 'Liquid Glass 细节打磨', items: [
+      '首页、项目页和编辑页的导航、占位符、模型选择、视频 pill 与输入框统一了更清晰的 Liquid Glass 质感。',
+      '移动端账号菜单手势更稳定，Explore / Projects 切换器在明亮图片和视频上也更容易看清。',
+    ]},
+  },
+  {
+    date: '2026-07-02',
+    en: { title: 'Nano Banana 2 Lite', items: [
+      'Nano Banana 2 Lite is now available in the image model selector for faster, lower-cost previews and edits.',
+      'It supports multi-reference image edits and is optimized for fast 1K drafts.',
+    ]},
+    zh: { title: 'Nano Banana 2 Lite', items: [
+      '图片模型选择器新增 Nano Banana 2 Lite，用于更快、更低成本的预览和编辑。',
+      '支持多参考图编辑，适合快速生成 1K 草稿。',
+    ]},
+  },
+  {
+    date: '2026-07-01',
+    en: { title: 'Gemini Omni for Fast Video Editing', items: [
+      'Gemini Omni is now available as a fast 720p video editing model in Makaron.',
+      'Use it from the model selector, CUI, or makaron-cli chat to restyle short clips, animate one image, or make quick video revisions.',
+      'Makaron also handles Omni guardrails more clearly, with safer fallback wording for prompts involving brands, known characters, or other protected IP.',
+    ]},
+    zh: { title: 'Gemini Omni 快速视频编辑', items: [
+      'Gemini Omni 已接入 Makaron，定位为快速 720p 视频编辑模型。',
+      '现在可以从模型选择器、CUI 或 makaron-cli chat 触发，用来给短视频换风格、让单张图动起来，或快速做一版视频修改。',
+      '针对品牌、知名角色和受保护 IP 等更容易触发审核的请求，Makaron 会给出更清楚的失败提示和更安全的原创替代表达。',
+    ]},
+  },
+  {
     date: '2026-06-30',
     en: { title: 'Makaron for iPhone is live', items: [
       'Makaron now spans iOS, web, mobile web, and CLI.',

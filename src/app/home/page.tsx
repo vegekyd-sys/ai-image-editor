@@ -1712,12 +1712,12 @@ function HomePageInner() {
             gap: isDesktop ? '14px' : '10px',
           }}>
             {homeSkills.length === 0 && Array.from({ length: 8 }, (_, i) => (
-              <div key={`sk-${i}`} className="mkr-skeleton" style={{
+              <div key={`sk-${i}`} className="mkr-liquid-placeholder" style={{
                 aspectRatio: '3 / 4', borderRadius: 16,
                 animationDelay: `${i * 0.1}s`,
               }}>
                 <div style={{ position: 'absolute', bottom: 14, left: 14, right: 14 }}>
-                  <div className="mkr-skeleton" style={{ width: '60%', height: 14, borderRadius: 6 }} />
+                  <div className="mkr-liquid-placeholder-line" style={{ width: '60%', height: 14, borderRadius: 6 }} />
                 </div>
               </div>
             ))}
@@ -1731,8 +1731,8 @@ function HomePageInner() {
                   aspectRatio: '3 / 4',
                   borderRadius: '16px',
                   overflow: 'hidden',
-                  background: '#120d1a',
-                  border: '1px solid rgba(255,255,255,0.06)',
+                  background: 'linear-gradient(145deg, rgba(18,13,26,0.48), rgba(8,8,12,0.64))',
+                  border: '0.5px solid rgba(255,255,255,0.08)',
                   animationDelay: `${i * 0.06}s`,
                   ...(heroRect && selectedDetail?.id === template.id ? { opacity: 0 } : {}),
                 }}

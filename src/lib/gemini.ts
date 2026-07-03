@@ -42,6 +42,8 @@ const MODEL = process.env.IMAGE_MODEL || 'gemini-3-pro-image-preview';
 
 const OPENROUTER_BASE = 'https://openrouter.ai/api/v1/chat/completions';
 const OPENROUTER_MODEL = `google/${MODEL}`;
+const TIPS_OPENROUTER_MODEL = normalizeOpenRouterModel(process.env.TIPS_OPENROUTER_MODEL || 'gemini-3.1-flash-lite');
+const TIPS_PREVIEW_IMAGE_MODEL = process.env.TIPS_PREVIEW_IMAGE_MODEL || 'google/gemini-3.1-flash-lite-image';
 
 // Tips provider config — change TIPS_PROVIDER env var for A/B testing
 // 'bedrock' = Claude Sonnet (fast, default) | 'openrouter' = gemini-3 via OR | 'google' = direct Google SDK
@@ -53,6 +55,7 @@ const TIPS_TEMPERATURE = parseFloat(process.env.TIPS_TEMPERATURE || '0.9');
 // Override with TIPS_THINKING env var to apply to ALL categories
 const TIPS_THINKING_OVERRIDE = process.env.TIPS_THINKING as 'minimal' | 'low' | 'high' | undefined;
 type TipsProvider = 'bedrock' | 'openrouter' | 'google';
+type OpenRouterReasoningEffort = 'minimal' | 'low' | 'medium' | 'high';
 
 function getBedrockForTips() {
   const bedrockForTips = createBedrockAnthropic({
@@ -233,6 +236,10 @@ function openrouterHeaders() {
     'Authorization': `Bearer ${process.env.OPENROUTER_API_KEY}`,
     'Content-Type': 'application/json',
   };
+}
+
+function normalizeOpenRouterModel(model: string): string {
+  return model.includes('/') ? model : `google/${model}`;
 }
 
 // ── Session Management ──────────────────────────────────────────
@@ -564,8 +571,10 @@ export async function generatePreviewImageOpenRouter(
   imageBase64: string,
   editPrompt: string,
   aspectRatio?: string,
-  thinkingEffort?: 'minimal' | 'high',
+  thinkingEffort?: OpenRouterReasoningEffort,
+  modelOverride?: string,
 ): Promise<{ image: string | null; usage?: { inputTokens: number; outputTokens: number; modelId: string } }> {
+  const modelId = modelOverride ? normalizeOpenRouterModel(modelOverride) : OPENROUTER_MODEL;
   // Text-only generation (no input image) uses a different system prompt
   const isTextToImage = !imageBase64;
   const systemPrompt = isTextToImage
@@ -580,7 +589,7 @@ export async function generatePreviewImageOpenRouter(
       ];
 
   const body: Record<string, unknown> = {
-    model: OPENROUTER_MODEL,
+    model: modelId,
     stream: false,
     modalities: ['image', 'text'],
     temperature: 1.0,
@@ -590,12 +599,12 @@ export async function generatePreviewImageOpenRouter(
       { role: 'user', content: userContent },
     ],
   };
-  if (aspectRatio) {
+  if (aspectRatio && aspectRatio !== 'auto') {
     body.image_config = { aspect_ratio: aspectRatio };
   }
 
   const bodyJson = JSON.stringify(body);
-  console.log(`[OpenRouter] generatePreview reasoning=${thinkingEffort || 'minimal'} bodySize=${(bodyJson.length/1024).toFixed(0)}KB`);
+  console.log(`[OpenRouter] generatePreview model=${modelId} reasoning=${thinkingEffort || 'minimal'} bodySize=${(bodyJson.length/1024).toFixed(0)}KB`);
   const t0 = Date.now();
   const res = await fetch(OPENROUTER_BASE, {
     method: 'POST',
@@ -616,7 +625,7 @@ export async function generatePreviewImageOpenRouter(
   console.log(`[OpenRouter] TTFB=${ttfb}ms download=${downloadMs}ms total=${Date.now() - t0}ms`);
 
 
-  const orUsage = data.usage ? { inputTokens: data.usage.prompt_tokens ?? 0, outputTokens: data.usage.completion_tokens ?? 0, modelId: OPENROUTER_MODEL } : undefined;
+  const orUsage = data.usage ? { inputTokens: data.usage.prompt_tokens ?? 0, outputTokens: data.usage.completion_tokens ?? 0, modelId } : undefined;
 
   const choice = data.choices?.[0]?.message;
   if (!choice) {
@@ -647,6 +656,22 @@ export async function generatePreviewImageOpenRouter(
   return { image: null, usage: orUsage };
 }
 
+export async function generateTipsPreviewImageOpenRouter(
+  imageBase64: string,
+  editPrompt: string,
+  aspectRatio?: string,
+): Promise<{ image: string | null; usage?: { inputTokens: number; outputTokens: number; modelId: string } }> {
+  const modelId = normalizeOpenRouterModel(TIPS_PREVIEW_IMAGE_MODEL);
+  const thinkingEffort = (process.env.TIPS_PREVIEW_THINKING || 'low') as OpenRouterReasoningEffort;
+  return generatePreviewImageOpenRouter(
+    imageBase64,
+    editPrompt,
+    aspectRatio,
+    thinkingEffort,
+    modelId,
+  );
+}
+
 // ── Multi-Reference Image Generation ────────────────────────────
 // Used when an edit needs multiple explicit input images.
 // Each image gets a labeled role so Gemini knows what to do with each.
@@ -661,6 +686,7 @@ export async function generateImageWithReferences(
   editPrompt: string,
   aspectRatio?: string,
   thinkingEffort?: 'minimal' | 'high',
+  modelOverride?: string,
 ): Promise<string | null> {
   // Build a prompt that labels each image by its role
   const imageLabels = images
@@ -669,7 +695,7 @@ export async function generateImageWithReferences(
   const fullPrompt = `${imageLabels}\n\n${editPrompt}`;
 
   const urls = images.map(img => img.url);
-  const result = await generateWithMultipleImages(urls, fullPrompt, true, thinkingEffort);
+  const result = await generateWithMultipleImages(urls, fullPrompt, true, thinkingEffort, modelOverride);
 
   if (result.text) {
     console.log(`[generateImageWithReferences] model text: ${result.text.slice(0, 300)}`);
@@ -682,7 +708,7 @@ export async function generateImageWithReferences(
   console.warn('⚠️ [generateImageWithReferences] multi-image failed, falling back to single image');
   const base = images[0].url;
   const fallback = PROVIDER === 'openrouter'
-    ? await generatePreviewImageOpenRouter(base, editPrompt, aspectRatio, thinkingEffort)
+    ? await generatePreviewImageOpenRouter(base, editPrompt, aspectRatio, thinkingEffort, modelOverride)
     : await generatePreviewImageGoogle(base, editPrompt, aspectRatio);
   return fallback.image;
 }
@@ -694,9 +720,10 @@ export async function generateWithMultipleImages(
   prompt: string,
   wantImage: boolean,
   thinkingEffort?: 'minimal' | 'high',
+  modelOverride?: string,
 ): Promise<{ text?: string; image?: string }> {
   if (PROVIDER === 'openrouter') {
-    return generateMultiImageOpenRouter(images, prompt, wantImage, thinkingEffort);
+    return generateMultiImageOpenRouter(images, prompt, wantImage, thinkingEffort, modelOverride);
   } else {
     return generateMultiImageGoogle(images, prompt, wantImage);
   }
@@ -758,7 +785,9 @@ async function generateMultiImageOpenRouter(
   prompt: string,
   wantImage: boolean,
   thinkingEffort?: 'minimal' | 'high',
+  modelOverride?: string,
 ): Promise<{ text?: string; image?: string }> {
+  const modelId = modelOverride ? normalizeOpenRouterModel(modelOverride) : OPENROUTER_MODEL;
   const content: Array<Record<string, unknown>> = [];
 
   for (const img of images) {
@@ -767,7 +796,7 @@ async function generateMultiImageOpenRouter(
   content.push({ type: 'text', text: prompt });
 
   const body: Record<string, unknown> = {
-    model: OPENROUTER_MODEL,
+    model: modelId,
     stream: false,
     temperature: 1.0,
     reasoning: { effort: thinkingEffort || 'minimal' },
@@ -776,7 +805,7 @@ async function generateMultiImageOpenRouter(
     ],
   };
 
-  console.log(`[OpenRouter] generateMultiImage reasoning=${thinkingEffort || 'minimal'}`);
+  console.log(`[OpenRouter] generateMultiImage model=${modelId} reasoning=${thinkingEffort || 'minimal'}`);
   if (wantImage) {
     body.modalities = ['image', 'text'];
   }
@@ -880,7 +909,7 @@ export async function* streamFastTips(imageBase64: string): AsyncGenerator<Omit<
     method: 'POST',
     headers: openrouterHeaders(),
     body: JSON.stringify({
-      model: OPENROUTER_MODEL,
+      model: TIPS_OPENROUTER_MODEL,
       stream: true,
       messages: [
         { role: 'system', content: FAST_TIPS_SYSTEM },
@@ -915,7 +944,7 @@ export async function generateEditPromptForTip(
     method: 'POST',
     headers: openrouterHeaders(),
     body: JSON.stringify({
-      model: OPENROUTER_MODEL,
+      model: TIPS_OPENROUTER_MODEL,
       stream: false,
       messages: [
         { role: 'system', content: systemPrompt },
@@ -1119,7 +1148,7 @@ async function* streamTipsByCategoryOpenRouter(
     method: 'POST',
     headers: openrouterHeaders(),
     body: JSON.stringify({
-      model: OPENROUTER_MODEL,
+      model: TIPS_OPENROUTER_MODEL,
       stream: true,
       reasoning,
       messages: [
@@ -1151,7 +1180,7 @@ async function* streamTipsByCategoryOpenRouter(
 
   // Set model for billing — Tips output is text, use :text rate suffix
   if (usageAccum) {
-    usageAccum.model = OPENROUTER_MODEL + ':text';
+    usageAccum.model = TIPS_OPENROUTER_MODEL + ':text';
   }
 
   tlog(`[tips:openrouter:${category}] stream done at +${Date.now() - t0}ms`);

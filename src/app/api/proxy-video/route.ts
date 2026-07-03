@@ -2,6 +2,17 @@ import { NextRequest, NextResponse } from 'next/server'
 
 export const maxDuration = 60
 
+function isGoogleGenerativeFileDownloadUrl(url: string): boolean {
+  try {
+    const parsed = new URL(url)
+    return parsed.hostname === 'generativelanguage.googleapis.com'
+      && parsed.pathname.startsWith('/v1beta/files/')
+      && parsed.pathname.endsWith(':download')
+  } catch {
+    return false
+  }
+}
+
 export async function GET(req: NextRequest) {
   const url = req.nextUrl.searchParams.get('url')
   if (!url) {
@@ -17,6 +28,9 @@ export async function GET(req: NextRequest) {
     const range = !isFull ? req.headers.get('range') : null
     const fetchHeaders: HeadersInit = {}
     if (range) fetchHeaders['Range'] = range
+    if (isGoogleGenerativeFileDownloadUrl(url) && process.env.GOOGLE_API_KEY) {
+      fetchHeaders['x-goog-api-key'] = process.env.GOOGLE_API_KEY
+    }
 
     const res = await fetch(url, { headers: fetchHeaders })
     if (!res.ok && res.status !== 206) {

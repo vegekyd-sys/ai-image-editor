@@ -63,18 +63,19 @@ export default function DesignEditPanel({
                 if (el) cardRefs.current.set(field.id, el);
                 else cardRefs.current.delete(field.id);
               }}
-              className={`flex items-stretch overflow-hidden border transition-all cursor-pointer active:scale-[0.97] ${isDesktop ? 'w-[176px]' : 'w-[200px]'} ${
+              className={`mkr-liquid-pill flex items-stretch overflow-hidden border transition-all cursor-pointer active:scale-[0.97] ${isDesktop ? 'w-[176px]' : 'w-[200px]'} ${
                 isSelected
                   ? 'border-fuchsia-500 ring-1 ring-fuchsia-500/50 rounded-l-2xl rounded-r-none border-r-0'
                   : 'border-white/10 hover:border-white/20 rounded-2xl'
               }`}
               style={{
-                background: isSelected ? 'rgba(217,70,239,0.12)' : 'rgba(217,70,239,0.06)',
+                background: isSelected ? 'linear-gradient(145deg, rgba(217,70,239,0.14), rgba(12,12,16,0.46))' : 'linear-gradient(145deg, rgba(217,70,239,0.075), rgba(12,12,16,0.42))',
               }}
               onClick={() => handleCardClick(field)}
             >
               <div
-                className={`flex-shrink-0 flex items-center justify-center bg-white/5 ${isDesktop ? 'w-[64px] h-[64px]' : 'w-[72px] h-[72px]'}`}
+                className={`flex-shrink-0 flex items-center justify-center ${isDesktop ? 'w-[64px] h-[64px]' : 'w-[72px] h-[72px]'}`}
+                style={{ background: 'rgba(255,255,255,0.045)' }}
               >
                 <span className="text-white/30 text-[20px]">T</span>
               </div>
@@ -95,33 +96,35 @@ export default function DesignEditPanel({
                 transition: 'width 0.2s ease-out',
               }}
             >
-              <button
-                onClick={() => onStartEdit(field.id)}
-                className={`${isDesktop ? 'w-[64px]' : 'w-[72px]'} h-full flex flex-col items-center justify-center gap-1.5 rounded-r-2xl border border-l-0 border-fuchsia-500 active:scale-95 overflow-hidden relative group cursor-pointer`}
-                style={{
-                  background: 'linear-gradient(135deg, rgba(217,70,239,0.18) 0%, rgba(192,38,211,0.32) 100%)',
-                  transition: 'transform 0.1s',
-                }}
-              >
-                <div
-                  className="absolute inset-0 opacity-0 group-hover:opacity-100 pointer-events-none"
+              {showEditButton && (
+                <button
+                  onClick={() => onStartEdit(field.id)}
+                  className={`mkr-liquid-pill mkr-liquid-side-action ${isDesktop ? 'w-[64px]' : 'w-[72px]'} h-full flex flex-col items-center justify-center gap-1.5 rounded-r-2xl border border-l-0 border-fuchsia-500 active:scale-95 overflow-hidden relative group cursor-pointer`}
                   style={{
-                    background: 'linear-gradient(135deg, rgba(217,70,239,0.12) 0%, rgba(192,38,211,0.22) 100%)',
-                    transition: 'opacity 0.2s',
+                    background: 'linear-gradient(135deg, rgba(217,70,239,0.18) 0%, rgba(192,38,211,0.32) 100%)',
+                    transition: 'transform 0.1s',
                   }}
-                />
-                <svg
-                  width="16" height="16" viewBox="0 0 24 24" fill="none"
-                  stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"
-                  className="text-fuchsia-300 relative z-10"
                 >
-                  <path d="M17 3a2.85 2.83 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5Z" />
-                  <path d="m15 5 4 4" />
-                </svg>
-                <span className="text-fuchsia-200 text-[10px] font-semibold tracking-wide leading-tight text-center relative z-10 whitespace-nowrap">
-                  Edit
-                </span>
-              </button>
+                  <div
+                    className="absolute inset-0 opacity-0 group-hover:opacity-100 pointer-events-none"
+                    style={{
+                      background: 'linear-gradient(135deg, rgba(217,70,239,0.12) 0%, rgba(192,38,211,0.22) 100%)',
+                      transition: 'opacity 0.2s',
+                    }}
+                  />
+                  <svg
+                    width="16" height="16" viewBox="0 0 24 24" fill="none"
+                    stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"
+                    className="text-fuchsia-300 relative z-10"
+                  >
+                    <path d="M17 3a2.85 2.83 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5Z" />
+                    <path d="m15 5 4 4" />
+                  </svg>
+                  <span className="text-fuchsia-200 text-[10px] font-semibold tracking-wide leading-tight text-center relative z-10 whitespace-nowrap">
+                    Edit
+                  </span>
+                </button>
+              )}
             </div>
           </div>
         );

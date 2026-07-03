@@ -7,7 +7,7 @@ import { VIDEO_PLACEHOLDER_IMAGE } from '@/lib/editor/timeline-derivations'
 import { estimateVideoCredits, normalizeVideoModelId, resolveVideoGenerationRoute } from '@/lib/video-model-capabilities'
 import type { VideoMeta } from '@/types'
 
-export const maxDuration = 30
+export const maxDuration = 800
 
 export async function POST(req: NextRequest) {
   try {
@@ -93,6 +93,24 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: `Reference video duration too long (${referenceVideoDuration.toFixed(1).replace(/\.0$/, '')}s). Maximum 15s with small metadata tolerance.` }, { status: 400 })
     }
     const effectiveDuration = duration ?? (referenceVideoDuration != null ? Math.min(15, Math.round(referenceVideoDuration)) : undefined)
+    const originalVideoUrls = [...(inputVideoUrl ? [inputVideoUrl] : []), ...autoVideoUrls]
+    let providerInputVideoUrl = inputVideoUrl
+    let providerAutoVideoUrls = autoVideoUrls
+    if (originalVideoUrls.length > 0) {
+      const { prepareProviderVideoReferences } = await import('@/lib/provider-video-reference')
+      const prepared = await prepareProviderVideoReferences({
+        supabase,
+        userId,
+        projectId,
+        urls: originalVideoUrls,
+        reason: videoRoute.provider,
+      })
+      if (prepared.normalized.length > 0) {
+        console.log(`[video-snapshot] normalized ${prepared.normalized.length} video reference(s) for provider input`)
+      }
+      providerInputVideoUrl = inputVideoUrl ? prepared.urls[0] : undefined
+      providerAutoVideoUrls = inputVideoUrl ? [] : prepared.urls
+    }
 
     const skillResult = await createVideo({
       script: prompt,
@@ -101,9 +119,9 @@ export async function POST(req: NextRequest) {
       aspectRatio,
       videoModel: selectedVideoModel,
       videoResolution: videoRoute.resolution,
-      videoUrl: inputVideoUrl,
+      videoUrl: providerInputVideoUrl,
       videoReferType,
-      videoUrls: autoVideoUrls.length ? autoVideoUrls : undefined,
+      videoUrls: providerAutoVideoUrls.length ? providerAutoVideoUrls : undefined,
       referenceVideoDuration,
       referenceVideoMetas: referenceVideoMetas.length ? referenceVideoMetas : undefined,
       keepOriginalSound,
@@ -126,18 +144,19 @@ export async function POST(req: NextRequest) {
 
     const videoMeta: VideoMeta = {
       taskId,
-      videoUrl: null,
+      videoUrl: skillResult.videoUrl || null,
       prompt,
       sourceSnapshotIds: [...(Array.isArray(sourceSnapshotIds) ? sourceSnapshotIds : []), ...autoVideoSnapshotIds],
       sourceUrls: sourceUrls.length > 0
         ? sourceUrls
         : (originalFirstUrl ? [originalFirstUrl] : []),
-      status: 'processing',
+      status: skillResult.status === 'completed' && skillResult.videoUrl ? 'completed' : 'processing',
       duration: effectiveDuration || null,
       model: actualVideoModel,
       resolution: actualVideoRoute.resolution,
       aspectRatio,
       providerModel: skillResult.providerModel || actualVideoRoute.providerModel,
+      providerUrl: skillResult.videoUrl,
       providerMode: actualVideoRoute.providerMode,
       createdAt: new Date().toISOString(),
     }

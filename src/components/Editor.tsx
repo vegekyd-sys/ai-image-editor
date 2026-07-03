@@ -54,6 +54,17 @@ export type { AnimationState } from '@/lib/editor/types';
 
 type EditorCompletionAction = ArtifactCompletionAction;
 
+function dedupeMessagesById(messages: Message[]): Message[] {
+  const byId = new Map<string, Message>();
+  for (const message of messages) {
+    const existing = byId.get(message.id);
+    if (!existing || (!existing.content && message.content)) {
+      byId.set(message.id, message);
+    }
+  }
+  return Array.from(byId.values()).sort((a, b) => (a.timestamp || 0) - (b.timestamp || 0));
+}
+
 function formatFrameEditTime(seconds: number) {
   if (!seconds || !isFinite(seconds)) return '0:00';
   const mins = Math.floor(seconds / 60);
@@ -146,7 +157,7 @@ export default function Editor({
   }, [readOnly, router]);
   const [cuiPanelWidth, setCuiPanelWidth] = useState(500);
   const cuiPanelRef = useRef<HTMLDivElement>(null);
-  const [messages, setMessages] = useState<Message[]>(initialMessages ?? []);
+  const [messages, setMessages] = useState<Message[]>(() => dedupeMessagesById(initialMessages ?? []));
   const [snapshots, setSnapshots] = useState<Snapshot[]>(dedupeVideoSnapshots(initialSnapshots ?? []));
 
   // eslint-disable-next-line @typescript-eslint/no-unused-vars
@@ -368,13 +379,14 @@ export default function Editor({
 
   useEffect(() => {
     if (!initialMessages?.length) return;
+    const dedupedInitialMessages = dedupeMessagesById(initialMessages);
     setMessages(prev => {
-      if (prev.length === 0) return initialMessages;
+      if (prev.length === 0) return dedupedInitialMessages;
       // Strict ID-based dedup: build complete list from initialMessages, then append any live messages not in it
-      const initialIds = new Set(initialMessages.map(m => m.id));
+      const initialIds = new Set(dedupedInitialMessages.map(m => m.id));
       const liveOnly = prev.filter(m => !initialIds.has(m.id));
-      if (liveOnly.length === 0) return initialMessages;
-      return [...initialMessages, ...liveOnly];
+      if (liveOnly.length === 0) return dedupedInitialMessages;
+      return dedupeMessagesById([...dedupedInitialMessages, ...liveOnly]);
     });
   }, [initialMessages]);
 
@@ -1103,7 +1115,7 @@ const isTipsFetchingRef = useRef(isTipsFetching);
     previewAbortRef.current = new AbortController();
     lastTipsRequestRef.current = { snapshotId, image: imageInput, previewMode, autoPreviewCategory };
     if (!isAgentActiveRef.current) {
-      setAgentStatus(t('status.thinking'));
+      setAgentStatus(t('status.generatingTips'));
     }
 
     const categories: ('enhance' | 'creative' | 'wild' | 'captions')[] = ['enhance', 'creative', 'wild', 'captions'];
@@ -1291,12 +1303,37 @@ const isTipsFetchingRef = useRef(isTipsFetching);
     doRetry();
   }, [handleTipEvent]);
 
+  const startTipsFetchForSnapshot = useCallback((
+    snap: Snapshot | undefined,
+    previewMode: 'full' | 'none' = 'full',
+    autoPreviewCategory?: string,
+  ) => {
+    const image = getImageForApi(snap);
+    if (!snap || !image) return false;
+    if (image.startsWith('data:')) {
+      compressBase64Image(image, 600_000)
+        .then(img => fetchTipsForSnapshot(snap.id, img, previewMode, autoPreviewCategory))
+        .catch(err => {
+          console.warn('[tips] failed to prepare image for tips retry:', err);
+          fetchTipsForSnapshot(snap.id, image, previewMode, autoPreviewCategory);
+        });
+    } else {
+      fetchTipsForSnapshot(snap.id, image, previewMode, autoPreviewCategory);
+    }
+    return true;
+  }, [fetchTipsForSnapshot]);
+
   // Retry all failed categories at once
   const retryAllTips = useCallback(() => {
+    setFailedCategories(new Set());
+    const visibleSnap = snapshotsRef.current[tipsSourceIndex]
+      ?? snapshotsRef.current[snapFromTimeline(viewIndexRef.current, draftParentIndexRef.current) ?? 0];
+    if (startTipsFetchForSnapshot(visibleSnap)) return;
+
     const req = lastTipsRequestRef.current;
     if (!req) return;
     fetchTipsForSnapshot(req.snapshotId, req.image, req.previewMode, req.autoPreviewCategory);
-  }, [fetchTipsForSnapshot]);
+  }, [fetchTipsForSnapshot, startTipsFetchForSnapshot, tipsSourceIndex]);
 
   // Load more tips of a specific category and append to the given snapshot
   const fetchMoreTipsForCategory = useCallback((
@@ -1591,6 +1628,7 @@ const isTipsFetchingRef = useRef(isTipsFetching);
       pendingAnalysisRef, pendingTeaserRef, hasTriggeredNamingRef,
       draftParentIndexRef, viewIndexRef, pendingNavigateToVideoRef,
       cacheImage, fetchTipsForSnapshot, onSaveSnapshot, onUpdateDescription,
+      onSaveMessage,
       triggerProjectNaming, triggerTipsTeaser, compressBase64Image,
       t, initialTitle, userPromptText: text,
       onInsufficientCredits: (balance) => {
@@ -1719,6 +1757,7 @@ const isTipsFetchingRef = useRef(isTipsFetching);
         pendingAnalysisRef, pendingTeaserRef, hasTriggeredNamingRef,
         draftParentIndexRef, viewIndexRef, pendingNavigateToVideoRef,
         cacheImage, fetchTipsForSnapshot, onSaveSnapshot, onUpdateDescription,
+        onSaveMessage,
         triggerProjectNaming, triggerTipsTeaser, compressBase64Image,
         t,
         onInsufficientCredits: (balance) => { setCreditBalance(balance); setCreditExhausted(true); },
@@ -2427,11 +2466,12 @@ Select the best 3-7 items for a compelling video. You do NOT need to use all or 
       // ── Step 7: Agent request (if prompt) ──
       if (hasPrompt) {
         const skillPrefix = pendingSkill ? `[Active skill: ${pendingSkill}]\n` : '';
+        if (!isDesktop) setViewMode('cui');
         handleAgentRequest(skillPrefix + pendingPrompt!);
       }
 
       // ── Step 8: CUI mode ──
-      if ((hasPrompt || isMulti) && !isDesktop) {
+      if (isMulti && !isDesktop) {
         setViewMode('cui');
       }
     };
@@ -2439,25 +2479,24 @@ Select the best 3-7 items for a compelling video. You do NOT need to use all or 
     init();
   }, [pendingImages, pendingMetadata, pendingPrompt, pendingSkill, fetchTipsForSnapshot, onSaveSnapshot, runAutoAnalysis, handleAgentRequest, isDesktop]);
 
-  // Existing project with no tips on latest snapshot — auto-fetch (skip design snapshots)
-  const autoFetchTriggered = useRef(false);
+  // Existing project/current timeline item with no tips — auto-fetch once per snapshot.
+  // Do not mark a snapshot attempted until it has a usable image; cached projects can
+  // briefly hydrate snapshot metadata before image/imageUrl is available.
+  const autoFetchTriggered = useRef<Set<string>>(new Set());
   useEffect(() => {
     if (inactive) return;
-    if (autoFetchTriggered.current || pendingImages?.length) return;
-    const lastSnap = snapshots[snapshots.length - 1];
-    if (!lastSnap || lastSnap.tips.length > 0) return;
-    if (lastSnap.type === 'video') return;
+    if (pendingImages?.length || isTipsFetching) return;
+    const snap = snapshots[tipsSourceIndex];
+    if (!snap || snap.tips.length > 0) return;
+    if (snap.type === 'video') return;
     // Animated design snapshots don't need tips (still designs do)
-    if (lastSnap.design?.animation) return;
-    autoFetchTriggered.current = true;
-    const image = getImageForApi(lastSnap);
+    if (snap.design?.animation) return;
+    if (autoFetchTriggered.current.has(snap.id)) return;
+    const image = getImageForApi(snap);
     if (!image) return;
-    if (image.startsWith('data:')) {
-      compressBase64Image(image, 600_000).then(img => fetchTipsForSnapshot(lastSnap.id, img));
-    } else {
-      fetchTipsForSnapshot(lastSnap.id, image);
-    }
-  }, [snapshots, pendingImages, fetchTipsForSnapshot, inactive]);
+    autoFetchTriggered.current.add(snap.id);
+    startTipsFetchForSnapshot(snap);
+  }, [snapshots, tipsSourceIndex, pendingImages, isTipsFetching, inactive, startTipsFetchForSnapshot]);
 
   // Pick up late-arriving initialAnimations (from Supabase fetch after cache-init)
   // Pick up late-arriving initialMusicTaskId (from Supabase fetch after cache-init)
@@ -3334,7 +3373,7 @@ Select the best 3-7 items for a compelling video. You do NOT need to use all or 
   return (
     <div
       data-testid="editor"
-      data-tips-status={isTipsFetching ? 'loading' : (snapshots[0]?.tips?.length ? 'ready' : 'empty')}
+      data-tips-status={isTipsFetching ? 'loading' : (currentTips.length ? 'ready' : 'empty')}
       data-tips-count={snapshots.reduce((n, s) => n + (s.tips?.length || 0), 0)}
       data-agent-status={isAgentActive ? 'active' : 'idle'}
       data-snapshot-count={snapshots.length}
@@ -3401,7 +3440,12 @@ Select the best 3-7 items for a compelling video. You do NOT need to use all or 
                 <div className="absolute inset-0 flex items-center justify-center">
                   <button
                     onClick={() => fileInputRef.current?.click()}
-                    className="flex flex-col items-center gap-4 text-white/60 hover:text-white/80 transition-colors"
+                    className="mkr-liquid-empty-state flex flex-col items-center gap-4 text-white/60 hover:text-white/80 transition-colors active:scale-[0.98]"
+                    style={{
+                      borderRadius: 24,
+                      padding: '28px 30px 24px',
+                      minWidth: 220,
+                    }}
                   >
                     <svg width="64" height="64" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.2" strokeLinecap="round" strokeLinejoin="round">
                       <rect x="3" y="3" width="18" height="18" rx="2" ry="2" />
@@ -3626,11 +3670,17 @@ Select the best 3-7 items for a compelling video. You do NOT need to use all or 
                     <button
                       onClick={handleDownload}
                       disabled={isSaving}
-                      className={`px-3 py-1.5 rounded-full text-xs font-medium backdrop-blur-sm border transition-all cursor-pointer ${
+                      className={`mkr-liquid-pill px-3 py-1.5 rounded-full text-xs font-medium border transition-all cursor-pointer active:scale-95 disabled:cursor-default ${
                         isSaving
-                          ? 'text-white/50 bg-fuchsia-500/10 border-fuchsia-500/20'
-                          : 'text-white bg-fuchsia-500/20 border-fuchsia-500/30'
+                          ? 'text-white/55'
+                          : 'text-white'
                       }`}
+                      style={{
+                        border: isSaving ? '0.5px solid rgba(232,121,249,0.18)' : '0.5px solid rgba(232,121,249,0.30)',
+                        background: isSaving
+                          ? 'linear-gradient(145deg, rgba(217,70,239,0.12), rgba(10,10,14,0.34))'
+                          : 'linear-gradient(145deg, rgba(217,70,239,0.20), rgba(10,10,14,0.38))',
+                      }}
                     >
                       {isSaving ? (
                         <span className="flex items-center gap-1.5">

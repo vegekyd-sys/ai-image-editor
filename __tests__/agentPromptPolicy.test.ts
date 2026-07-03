@@ -87,7 +87,7 @@ describe('agent prompt policy guards', () => {
 
     expect(agent).toContain('Hard duration range: a single SeeDance script/call must be 4-15s; Kling is 5-15s')
     expect(agent).toContain('If requested/source duration is shorter than the model minimum, use the minimum')
-    expect(agent).toContain('If output is longer than 15s, use `skills/long-video-director/SKILL.md`')
+    expect(agent).toContain('If output is longer than the selected model max, use `skills/long-video-director/SKILL.md`')
     expect(agent).toContain('Single-script rule: if a complete approved script is <=15s')
     expect(agent).toContain('Do not submit only one shot or split just because it has multiple shot lines')
     expect(agent).toContain('Long source video rule: if an existing timeline/reference video is >15s')

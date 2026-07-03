@@ -15,7 +15,7 @@ export interface VideoModelCapability {
   defaultResolution?: VideoResolution
   supportedAspectRatios?: VideoAspectRatio[]
   estimatedCostPerSecondUsdByResolution?: Partial<Record<VideoResolution, number>>
-  provider?: 'kling' | 'seedance' | 'grok' | 'piapi'
+  provider?: 'kling' | 'seedance' | 'grok' | 'google-omni' | 'piapi'
   providerModel?: string
 }
 
@@ -27,7 +27,7 @@ export type VideoAspectRatioInput = VideoAspectRatio | 'auto' | null | undefined
 export interface VideoGenerationRoute {
   model: string
   label: string
-  provider: 'kling' | 'seedance' | 'grok' | 'piapi' | string
+  provider: 'kling' | 'seedance' | 'grok' | 'google-omni' | 'piapi' | string
   providerModel?: string
   providerMode?: 'std' | 'pro' | '4k'
   resolution: VideoResolution
@@ -201,6 +201,27 @@ const MODEL_CAPABILITIES: Record<string, VideoModelCapability> = {
     supportedAspectRatios: ['16:9', '9:16', '1:1', '4:3', '3:4', '3:2', '2:3'],
     provider: 'grok',
     providerModel: 'grok-imagine-video-1.5',
+  },
+  'google-omni': {
+    id: 'google-omni',
+    label: 'Gemini Omni Flash',
+    minOutputDuration: 3,
+    maxOutputDuration: 10,
+    maxReferenceVideoDuration: 10.5,
+    referenceVideoSize: {
+      maxFileSizeMb: 55,
+      description: '<=55MB inline upload in Makaron; one video reference per request',
+    },
+    supportsVideoReference: true,
+    supportsBaseVideoEdit: true,
+    longVideoChunkSeconds: 10,
+    estimatedCostPerSecondUsd: 0.1,
+    maxImageReferences: 1,
+    supportedResolutions: ['720p'],
+    defaultResolution: '720p',
+    supportedAspectRatios: ['16:9', '9:16'],
+    provider: 'google-omni',
+    providerModel: 'gemini-omni-flash-preview',
   },
   piapi: {
     id: 'piapi',
@@ -435,7 +456,8 @@ export function estimateVideoCredits(options: {
 }
 
 export function isFastVideoRenderModel(model?: string | null): boolean {
-  return normalizeVideoModelId(model) === 'grok'
+  const normalized = normalizeVideoModelId(model)
+  return normalized === 'grok' || normalized === 'google-omni'
 }
 
 export function resolveVideoOutputDuration(options: {

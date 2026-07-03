@@ -5,7 +5,7 @@ import { filterAndRemapImages } from '@/lib/kling'
 import { requireCredits, deductFixedCredits } from '@/lib/billing/credits'
 import { estimateVideoCredits, normalizeVideoModelId, resolveVideoGenerationRoute } from '@/lib/video-model-capabilities'
 
-export const maxDuration = 30
+export const maxDuration = 800
 
 export async function POST(req: NextRequest) {
   try {
@@ -71,6 +71,21 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: `Reference video duration too long (${referenceVideoDuration.toFixed(1).replace(/\.0$/, '')}s). Maximum 15s with small metadata tolerance.` }, { status: 400 })
     }
     const effectiveDuration = duration ?? (referenceVideoDuration != null ? Math.min(15, Math.round(referenceVideoDuration)) : undefined)
+    let providerAutoVideoUrls = autoVideoUrls
+    if (autoVideoUrls.length > 0) {
+      const { prepareProviderVideoReferences } = await import('@/lib/provider-video-reference')
+      const prepared = await prepareProviderVideoReferences({
+        supabase,
+        userId: user.id,
+        projectId,
+        urls: autoVideoUrls,
+        reason: videoRoute.provider,
+      })
+      if (prepared.normalized.length > 0) {
+        console.log(`[animate] normalized ${prepared.normalized.length} video reference(s) for provider input`)
+      }
+      providerAutoVideoUrls = prepared.urls
+    }
 
     // Call skill layer (stateless, no DB)
     const skillResult = await createVideo({
@@ -80,7 +95,7 @@ export async function POST(req: NextRequest) {
       aspectRatio,
       videoModel: selectedVideoModel,
       videoResolution: videoRoute.resolution,
-      videoUrls: autoVideoUrls.length ? autoVideoUrls : undefined,
+      videoUrls: providerAutoVideoUrls.length ? providerAutoVideoUrls : undefined,
       referenceVideoDuration,
       referenceVideoMetas: referenceVideoMetas.length ? referenceVideoMetas : undefined,
     })
@@ -98,9 +113,10 @@ export async function POST(req: NextRequest) {
       .insert({
         project_id: projectId,
         piapi_task_id: taskId,
-        status: 'processing',
+        status: skillResult.status === 'completed' && skillResult.videoUrl ? 'completed' : 'processing',
         prompt: finalPrompt,
         snapshot_urls: filteredImages,
+        video_url: skillResult.videoUrl || null,
       })
       .select('id')
       .single()

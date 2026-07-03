@@ -85,7 +85,7 @@ function EditPromptCard({ prompt, inputImages, editModel }: { prompt: string; in
   const { t } = useLocale();
   const [open, setOpen] = useState(false);
   const inputImageLabels = [t('chat.currentImage'), t('chat.referenceImage')];
-  const modelLabels: Record<string, string> = { gemini: 'nano banana 2', qwen: 'qwen edit', pony: 'pony anime', wai: 'wai illustrious', openai: 'OpenAI Image 2' };
+  const modelLabels: Record<string, string> = { gemini: 'nano banana 2', 'gemini-lite': 'nano banana 2 lite', qwen: 'qwen edit', pony: 'pony anime', wai: 'wai illustrious', openai: 'OpenAI Image 2' };
   const modelLabel = modelLabels[editModel || ''] || editModel || 'model';
   return (
     <div className="mt-2 rounded-xl overflow-hidden" style={{ border: '1px solid rgba(255,255,255,0.08)', background: 'rgba(255,255,255,0.04)', maxWidth: 308 }}>
@@ -490,7 +490,7 @@ function MarkdownBlock({ text, isPanel, snapshots, onNavigateToSnapshot, onPrevi
   );
 }
 
-export type PreferredModel = 'auto' | 'gemini' | 'qwen' | 'pony' | 'wai' | 'openai';
+export type PreferredModel = 'auto' | 'gemini' | 'gemini-lite' | 'qwen' | 'pony' | 'wai' | 'openai';
 
 export interface ComposerDraftAttachment {
   id: string;
@@ -1293,7 +1293,7 @@ export default function AgentChatView({
         {/* Message list */}
         <div className={`flex flex-col ${isPanel ? 'gap-3' : 'gap-5'}`}>
           {messages.map((msg, idx) => (
-            <div key={msg.id}>
+            <div key={`${msg.id}:${idx}`}>
               {msg.role === 'user' ? (
                 /* User bubble — right-aligned pill */
                 <div className="flex justify-end">
@@ -1376,7 +1376,7 @@ export default function AgentChatView({
                       return (
                         <div className="markdown-body">
                           <MarkdownBlock
-                            key={msg.id}
+                            key={`${msg.id}:${idx}:markdown`}
                             text={fixMarkdownDelimiters(visibleWithoutVideoUrls.replace(/\nanim:[a-f0-9-]+/g, '').replace(/\nsnap:[a-f0-9-]+/g, '').replace(/\n?music:\d+\|[^\n]*/g, ''))}
                             isPanel={isPanel}
                             snapshots={snapshots}
@@ -1583,10 +1583,14 @@ export default function AgentChatView({
       >
         {/* Two-row layout: textarea on top, toolbar on bottom */}
         <div
+          className="mkr-input-box-liquid"
           style={{
-            background: '#161616',
+            background: 'linear-gradient(145deg, rgba(24,24,30,0.72), rgba(8,8,12,0.58))',
             borderRadius: '20px',
-            border: '1px solid rgba(255,255,255,0.07)',
+            border: '0.5px solid rgba(255,255,255,0.11)',
+            boxShadow: '0 18px 48px rgba(0,0,0,0.28), inset 0 1px 0 rgba(255,255,255,0.09)',
+            backdropFilter: 'blur(20px) saturate(1.35)',
+            WebkitBackdropFilter: 'blur(20px) saturate(1.35)',
           }}
         >
           {/* Row 1: Textarea */}
@@ -1627,10 +1631,11 @@ export default function AgentChatView({
             <button
               onClick={() => imageInputRef.current?.click()}
               disabled={isAgentActive || attachments.length >= 10}
-              className="w-8 h-8 flex-shrink-0 flex items-center justify-center rounded-full transition-all active:scale-90"
+              className="mkr-liquid-icon-button w-8 h-8 flex-shrink-0 flex items-center justify-center rounded-full transition-all active:scale-90"
               style={{
-                background: attachments.length > 0 ? 'rgba(192,38,211,0.22)' : 'rgba(255,255,255,0.08)',
+                background: attachments.length > 0 ? 'linear-gradient(145deg, rgba(192,38,211,0.24), rgba(10,10,14,0.38))' : 'linear-gradient(145deg, rgba(255,255,255,0.08), rgba(10,10,14,0.34))',
                 color: attachments.length > 0 ? 'rgba(217,70,239,0.9)' : 'rgba(255,255,255,0.35)',
+                border: '0.5px solid rgba(255,255,255,0.10)',
               }}
             >
               <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
@@ -1685,8 +1690,8 @@ export default function AgentChatView({
                     {/* Remove button */}
                     <button
                       onClick={() => setAttachments(prev => prev.filter(a => a.id !== att.id))}
-                      className="absolute -top-1 -right-1 w-3.5 h-3.5 rounded-full flex items-center justify-center"
-                      style={{ background: 'rgba(20,20,20,0.9)', border: '1px solid rgba(255,255,255,0.18)' }}
+                      className="mkr-liquid-icon-button absolute -top-1 -right-1 w-3.5 h-3.5 rounded-full flex items-center justify-center"
+                      style={{ background: 'rgba(20,20,24,0.72)', border: '0.5px solid rgba(255,255,255,0.18)' }}
                     >
                       <svg width="6" height="6" viewBox="0 0 24 24" fill="none" stroke="rgba(255,255,255,0.85)" strokeWidth="3.5" strokeLinecap="round">
                         <line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/>
@@ -1719,8 +1724,8 @@ export default function AgentChatView({
                 data-testid="chat-stop"
                 aria-label="Stop agent"
                 onClick={onAbort}
-                className="w-8 h-8 flex-shrink-0 flex items-center justify-center rounded-full transition-all active:scale-90 cursor-pointer"
-                style={{ background: 'rgba(239,68,68,0.2)', color: '#ef4444' }}
+                className="mkr-liquid-icon-button w-8 h-8 flex-shrink-0 flex items-center justify-center rounded-full transition-all active:scale-90 cursor-pointer"
+                style={{ background: 'linear-gradient(145deg, rgba(239,68,68,0.22), rgba(10,10,14,0.36))', color: '#ef4444', border: '0.5px solid rgba(239,68,68,0.26)' }}
 >
                 <svg width="12" height="12" viewBox="0 0 12 12" fill="currentColor">
                   <rect x="1" y="1" width="10" height="10" rx="2" />
@@ -1732,10 +1737,11 @@ export default function AgentChatView({
                 aria-label="Send message"
                 onClick={handleSubmit}
                 disabled={!allReady && attachments.length > 0 ? true : (!input.trim() && attachments.length === 0)}
-                className="w-8 h-8 flex-shrink-0 flex items-center justify-center rounded-full transition-all active:scale-90"
+                className="mkr-liquid-icon-button w-8 h-8 flex-shrink-0 flex items-center justify-center rounded-full transition-all active:scale-90"
                 style={{
-                  background: (input.trim() || (attachments.length > 0 && allReady)) ? '#c026d3' : 'rgba(255,255,255,0.08)',
+                  background: (input.trim() || (attachments.length > 0 && allReady)) ? 'linear-gradient(145deg, rgba(192,38,211,0.92), rgba(145,18,178,0.74))' : 'linear-gradient(145deg, rgba(255,255,255,0.08), rgba(10,10,14,0.34))',
                   color: (input.trim() || (attachments.length > 0 && allReady)) ? '#fff' : 'rgba(255,255,255,0.25)',
+                  border: (input.trim() || (attachments.length > 0 && allReady)) ? '0.5px solid rgba(232,121,249,0.40)' : '0.5px solid rgba(255,255,255,0.10)',
                 }}
               >
                 <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">

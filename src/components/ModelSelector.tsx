@@ -1,6 +1,7 @@
 'use client';
 
 import { useState, useRef, useEffect, useCallback } from 'react';
+import { createPortal } from 'react-dom';
 import type { PreferredModel } from './AgentChatView';
 import type { VideoModel, VideoResolution } from '@/types';
 import { getImageModels, getVideoModels, type ModelInfo } from '@/lib/model-registry';
@@ -20,8 +21,8 @@ interface ModelSelectorProps {
 }
 
 const ROW_HEIGHT = 68;
-const MAX_VISIBLE_ROWS = 3;
-const LIST_HEIGHT = ROW_HEIGHT * MAX_VISIBLE_ROWS;
+const PANEL_BODY_HEIGHT = ROW_HEIGHT * 5;
+const AUTO_TIPS_FOOTER_HEIGHT = ROW_HEIGHT + 14;
 
 function ModelIcon({ size = 18 }: { size?: number }) {
   return (
@@ -92,6 +93,7 @@ function ModelRow({
     <button
       onClick={onSelect}
       disabled={disabled}
+      className={selected && !disabled ? 'mkr-liquid-pill' : ''}
       style={{
         display: 'flex',
         alignItems: 'center',
@@ -101,7 +103,7 @@ function ModelRow({
         padding: '0 12px',
         borderRadius: 12,
         border: 'none',
-        background: selected && !disabled ? 'rgba(232,121,249,0.08)' : 'transparent',
+        background: selected && !disabled ? 'linear-gradient(145deg, rgba(232,121,249,0.12), rgba(10,10,14,0.32))' : 'transparent',
         cursor: disabled ? 'default' : 'pointer',
         transition: 'background 0.15s',
         textAlign: 'left',
@@ -252,10 +254,11 @@ function VideoModelRow({
 }) {
   return (
     <div
+      className={selected ? 'mkr-liquid-pill' : ''}
       style={{
         width: '100%',
         borderRadius: 12,
-        background: selected ? 'rgba(232,121,249,0.08)' : 'transparent',
+        background: selected ? 'linear-gradient(145deg, rgba(232,121,249,0.12), rgba(10,10,14,0.32))' : 'transparent',
         flexShrink: 0,
         transition: 'background 0.15s',
       }}
@@ -375,7 +378,10 @@ export default function ModelSelector({
   const [activeTab, setActiveTab] = useState<'image' | 'video'>('image');
   const wrapperRef = useRef<HTMLDivElement>(null);
   const triggerRef = useRef<HTMLButtonElement>(null);
+  const popoverRef = useRef<HTMLDivElement>(null);
+  const scrollBodyRef = useRef<HTMLDivElement>(null);
   const [popoverPos, setPopoverPos] = useState<{ bottom: number; left?: number; right?: number } | null>(null);
+  const [canScrollDown, setCanScrollDown] = useState(false);
   const [autoTips, setAutoTips] = useState(() =>
     typeof window !== 'undefined' ? (localStorage.getItem('mkr_auto_tips') ?? 'auto') !== 'off' : true
   );
@@ -383,10 +389,24 @@ export default function ModelSelector({
   const imageAuto = preferredModel === 'auto';
   const currentAuto = activeTab === 'image' ? imageAuto : videoAuto;
 
+  const updateScrollHint = useCallback(() => {
+    const el = scrollBodyRef.current;
+    if (!el) {
+      setCanScrollDown(false);
+      return;
+    }
+    setCanScrollDown(el.scrollTop + el.clientHeight < el.scrollHeight - 2);
+  }, []);
+
   useEffect(() => {
     if (!open) return;
     const handler = (e: PointerEvent) => {
-      if (wrapperRef.current && !wrapperRef.current.contains(e.target as Node)) {
+      const target = e.target as Node;
+      if (
+        wrapperRef.current &&
+        !wrapperRef.current.contains(target) &&
+        !popoverRef.current?.contains(target)
+      ) {
         setOpen(false);
       }
     };
@@ -451,11 +471,31 @@ export default function ModelSelector({
   const videoModels = getVideoModels();
   const models = activeTab === 'image' ? imageModels : videoModels;
   const selectedId = activeTab === 'image' ? (imageAuto ? null : preferredModel) : (videoAuto ? null : videoModel);
+  const selectedImageModel = imageModels.find(model => model.id === preferredModel);
+  const selectedImageLabel = selectedImageModel
+    ? t(selectedImageModel.nameKey as Parameters<typeof t>[0])
+    : preferredModel;
   const selectedVideoCapability = getVideoModelCapability(videoModel);
   const selectedVideoResolution = videoResolution === 'auto'
     ? selectedVideoCapability.defaultResolution
     : normalizeVideoResolution(videoModel, videoResolution);
+  const modelLabel = !imageAuto
+    ? selectedImageLabel
+    : !videoAuto
+      ? `${selectedVideoCapability.label} ${String(selectedVideoResolution).toUpperCase()}`
+      : 'auto';
   const resolutionOptions = selectedVideoCapability.supportedResolutions ?? [];
+
+  useEffect(() => {
+    const el = scrollBodyRef.current;
+    if (el) el.scrollTop = 0;
+    window.setTimeout(updateScrollHint, 0);
+  }, [activeTab, updateScrollHint]);
+
+  useEffect(() => {
+    if (!open) return;
+    window.setTimeout(updateScrollHint, 0);
+  }, [open, activeTab, models.length, selectedId, autoTips, selectedVideoResolution, updateScrollHint]);
 
   return (
     <div ref={wrapperRef} style={{ position: 'relative' }}>
@@ -464,13 +504,17 @@ export default function ModelSelector({
         ref={triggerRef}
         data-testid="model-selector"
         data-current-model={preferredModel}
+        data-current-video-model={videoModel}
         data-video-auto={videoAuto}
-        aria-label={`Model: ${preferredModel}. Click to open selector.`}
+        aria-label={`Model: ${modelLabel}. Click to open selector.`}
         onClick={() => setOpen(v => !v)}
-        className="w-8 h-8 flex-shrink-0 flex items-center justify-center rounded-full transition-all active:scale-95"
+        className="mkr-liquid-icon-button w-8 h-8 flex-shrink-0 flex items-center justify-center rounded-full transition-all active:scale-95"
         style={{
-          background: (!imageAuto || !videoAuto) ? 'rgba(192,38,211,0.15)' : open ? 'rgba(255,255,255,0.12)' : 'rgba(255,255,255,0.08)',
-          color: (!imageAuto || !videoAuto) ? 'rgba(192,38,211,0.85)' : open ? 'rgba(255,255,255,0.5)' : 'rgba(255,255,255,0.35)',
+          background: (!imageAuto || !videoAuto) || open
+            ? 'linear-gradient(145deg, rgba(217,70,239,0.18), rgba(10,10,14,0.34))'
+            : 'linear-gradient(145deg, rgba(255,255,255,0.08), rgba(10,10,14,0.34))',
+          border: ((!imageAuto || !videoAuto) || open) ? '0.5px solid rgba(232,121,249,0.24)' : '0.5px solid rgba(255,255,255,0.10)',
+          color: (!imageAuto || !videoAuto) ? 'rgba(217,70,239,0.9)' : open ? 'rgba(240,171,252,0.82)' : 'rgba(255,255,255,0.35)',
         }}
       >
         <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
@@ -481,18 +525,23 @@ export default function ModelSelector({
       </button>
 
       {/* Popover */}
-      {open && popoverPos && (
+      {open && popoverPos && typeof document !== 'undefined' && createPortal((
         <div
+          ref={popoverRef}
+          className="mkr-liquid-popover"
           style={{
             position: 'fixed',
             bottom: popoverPos.bottom,
             ...(popoverPos.left != null ? { left: popoverPos.left } : {}),
             ...(popoverPos.right != null ? { right: popoverPos.right } : {}),
             ...(popoverPos.left != null && popoverPos.right != null ? {} : { width: 300 }),
-            background: '#161616',
-            border: '1px solid rgba(255,255,255,0.1)',
-            borderRadius: 16,
-            boxShadow: '0 8px 32px rgba(0,0,0,0.6)',
+            pointerEvents: 'auto' as const,
+            background: 'linear-gradient(145deg, rgba(25,25,31,0.80), rgba(7,7,11,0.66))',
+            border: '0.5px solid rgba(255,255,255,0.12)',
+            borderRadius: 12,
+            boxShadow: '0 22px 60px rgba(0,0,0,0.48), inset 0 1px 0 rgba(255,255,255,0.09)',
+            backdropFilter: 'blur(24px) saturate(1.35)',
+            WebkitBackdropFilter: 'blur(24px) saturate(1.35)',
             zIndex: 500,
             padding: '14px 10px 10px',
           }}
@@ -543,97 +592,141 @@ export default function ModelSelector({
             ))}
           </div>
 
-          {/* Model list — video rows can expand to show resolution inline. */}
-          <div style={{
-            ...(activeTab === 'image' ? { height: LIST_HEIGHT } : { maxHeight: 360 }),
-            overflowY: activeTab === 'video' || models.length > MAX_VISIBLE_ROWS ? 'auto' : 'hidden',
-            display: 'flex',
-            flexDirection: 'column',
-            gap: 2,
-          }}>
-            {models.map(model => {
-              if (activeTab === 'video') {
+          <div style={{ position: 'relative', height: PANEL_BODY_HEIGHT }}>
+            {/* Model list — fixed body height for image/video, with overflow hint. */}
+            <div
+              ref={scrollBodyRef}
+              className="model-selector-scroll"
+              onScroll={updateScrollHint}
+              style={{
+                height: activeTab === 'image' ? PANEL_BODY_HEIGHT - AUTO_TIPS_FOOTER_HEIGHT : PANEL_BODY_HEIGHT,
+                overflowY: 'auto',
+                display: 'flex',
+                flexDirection: 'column',
+                gap: 2,
+                paddingRight: 2,
+                paddingBottom: canScrollDown ? 24 : 0,
+              }}
+            >
+              {models.map(model => {
+                if (activeTab === 'video') {
+                  return (
+                    <VideoModelRow
+                      key={model.id}
+                      model={model}
+                      name={t(model.nameKey as Parameters<typeof t>[0])}
+                      desc={t(model.descKey as Parameters<typeof t>[0])}
+                      selected={model.id === selectedId}
+                      onSelect={() => handleVideoSelect(model.id)}
+                      resolutionLabel={t('model.resolution')}
+                      resolutionOptions={resolutionOptions}
+                      selectedVideoResolution={selectedVideoResolution}
+                      onResolutionSelect={handleVideoResolutionSelect}
+                    />
+                  );
+                }
                 return (
-                  <VideoModelRow
+                  <ModelRow
                     key={model.id}
                     model={model}
                     name={t(model.nameKey as Parameters<typeof t>[0])}
                     desc={t(model.descKey as Parameters<typeof t>[0])}
                     selected={model.id === selectedId}
-                    onSelect={() => handleVideoSelect(model.id)}
-                    resolutionLabel={t('model.resolution')}
-                    resolutionOptions={resolutionOptions}
-                    selectedVideoResolution={selectedVideoResolution}
-                    onResolutionSelect={handleVideoResolutionSelect}
+                    disabled={false}
+                    onSelect={() => handleImageSelect(model.id)}
                   />
                 );
-              }
-              return (
-                <ModelRow
-                  key={model.id}
-                  model={model}
-                  name={t(model.nameKey as Parameters<typeof t>[0])}
-                  desc={t(model.descKey as Parameters<typeof t>[0])}
-                  selected={model.id === selectedId}
-                  disabled={false}
-                  onSelect={() => handleImageSelect(model.id)}
-                />
-              );
-            })}
-          </div>
-
-          {activeTab === 'image' && (
-            <div style={{ borderTop: '1px solid rgba(255,255,255,0.06)', marginTop: 6, paddingTop: 6 }}>
-              <button
-                onClick={() => handleAutoTipsToggle(!autoTips)}
+              })}
+            </div>
+            {canScrollDown && (
+              <div
                 style={{
+                  position: 'absolute',
+                  left: 0,
+                  right: 0,
+                  bottom: activeTab === 'image' ? AUTO_TIPS_FOOTER_HEIGHT : 0,
+                  height: 36,
+                  pointerEvents: 'none',
+                  borderBottomLeftRadius: 12,
+                  borderBottomRightRadius: 12,
+                  background: 'linear-gradient(to bottom, rgba(7,7,11,0), rgba(7,7,11,0.82))',
                   display: 'flex',
-                  alignItems: 'center',
-                  gap: 10,
-                  width: '100%',
-                  height: ROW_HEIGHT,
-                  padding: '0 12px',
-                  borderRadius: 12,
-                  border: 'none',
-                  background: autoTips ? 'rgba(232,121,249,0.08)' : 'transparent',
-                  cursor: 'pointer',
-                  transition: 'background 0.15s',
-                  textAlign: 'left',
+                  alignItems: 'flex-end',
+                  justifyContent: 'center',
+                  paddingBottom: 4,
                 }}
               >
-                <div style={{
-                  width: 32, height: 32, borderRadius: 8,
-                  background: 'rgba(255,255,255,0.06)',
-                  display: 'flex', alignItems: 'center', justifyContent: 'center',
-                  flexShrink: 0,
-                  color: autoTips ? '#e879f9' : 'rgba(255,255,255,0.4)',
-                }}>
-                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
-                    <rect x="2" y="2" width="20" height="20" rx="2" />
-                    <path d="M7 12h10M12 7v10" />
-                  </svg>
-                </div>
-                <div style={{ flex: 1, minWidth: 0 }}>
-                  <div style={{ fontSize: 13, fontWeight: 600, color: autoTips ? '#e879f9' : 'rgba(255,255,255,0.85)' }}>
-                    {t('model.autoTips')}
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="rgba(255,255,255,0.42)" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+                  <path d="M7 10l5 5 5-5" />
+                </svg>
+              </div>
+            )}
+
+            {activeTab === 'image' && (
+              <div
+                style={{
+                  position: 'absolute',
+                  left: 0,
+                  right: 0,
+                  bottom: 0,
+                  height: AUTO_TIPS_FOOTER_HEIGHT,
+                  borderTop: '0.5px solid rgba(255,255,255,0.05)',
+                  paddingTop: 6,
+                  background: 'transparent',
+                }}
+              >
+                <button
+                  onClick={() => handleAutoTipsToggle(!autoTips)}
+                  className={autoTips ? 'mkr-liquid-pill' : ''}
+                  style={{
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: 10,
+                    width: '100%',
+                    height: ROW_HEIGHT,
+                    padding: '0 12px',
+                    borderRadius: 12,
+                    border: 'none',
+                    background: autoTips ? 'linear-gradient(145deg, rgba(232,121,249,0.12), rgba(10,10,14,0.32))' : 'transparent',
+                    cursor: 'pointer',
+                    transition: 'background 0.15s',
+                    textAlign: 'left',
+                  }}
+                >
+                  <div style={{
+                    width: 32, height: 32, borderRadius: 8,
+                    background: 'rgba(255,255,255,0.06)',
+                    display: 'flex', alignItems: 'center', justifyContent: 'center',
+                    flexShrink: 0,
+                    color: autoTips ? '#e879f9' : 'rgba(255,255,255,0.4)',
+                  }}>
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+                      <rect x="2" y="2" width="20" height="20" rx="2" />
+                      <path d="M7 12h10M12 7v10" />
+                    </svg>
                   </div>
-                  <div style={{ fontSize: 11, color: 'rgba(255,255,255,0.35)', marginTop: 1, lineHeight: 1.3 }}>
-                    {t('model.autoTips.desc')}
+                  <div style={{ flex: 1, minWidth: 0 }}>
+                    <div style={{ fontSize: 13, fontWeight: 600, color: autoTips ? '#e879f9' : 'rgba(255,255,255,0.85)' }}>
+                      {t('model.autoTips')}
+                    </div>
+                    <div style={{ fontSize: 11, color: 'rgba(255,255,255,0.35)', marginTop: 1, lineHeight: 1.3 }}>
+                      {t('model.autoTips.desc')}
+                    </div>
                   </div>
-                </div>
-                <div style={{
-                  width: 18, height: 18, borderRadius: 9,
-                  border: `2px solid ${autoTips ? '#c026d3' : 'rgba(255,255,255,0.15)'}`,
-                  display: 'flex', alignItems: 'center', justifyContent: 'center',
-                  flexShrink: 0,
-                }}>
-                  {autoTips && <div style={{ width: 10, height: 10, borderRadius: 5, background: '#c026d3' }} />}
-                </div>
-              </button>
-            </div>
-          )}
+                  <div style={{
+                    width: 18, height: 18, borderRadius: 9,
+                    border: `2px solid ${autoTips ? '#c026d3' : 'rgba(255,255,255,0.15)'}`,
+                    display: 'flex', alignItems: 'center', justifyContent: 'center',
+                    flexShrink: 0,
+                  }}>
+                    {autoTips && <div style={{ width: 10, height: 10, borderRadius: 5, background: '#c026d3' }} />}
+                  </div>
+                </button>
+              </div>
+            )}
+          </div>
         </div>
-      )}
+      ), document.body)}
     </div>
   );
 }
