@@ -10,6 +10,17 @@ interface ChangelogEntry {
 
 const CHANGELOG: ChangelogEntry[] = [
   {
+    date: '2026-07-03',
+    en: { title: 'Liquid Glass Polish', items: [
+      'The Home, Projects, and editor surfaces now share a clearer Liquid Glass treatment across navigation, placeholders, model controls, video pills, and input areas.',
+      'Mobile account gestures are more reliable, and the Explore / Projects switcher is easier to read over bright media.',
+    ]},
+    zh: { title: 'Liquid Glass 细节打磨', items: [
+      '首页、项目页和编辑页的导航、占位符、模型选择、视频 pill 与输入框统一了更清晰的 Liquid Glass 质感。',
+      '移动端账号菜单手势更稳定，Explore / Projects 切换器在明亮图片和视频上也更容易看清。',
+    ]},
+  },
+  {
     date: '2026-07-01',
     en: { title: 'Gemini Omni for Fast Video Editing', items: [
       'Gemini Omni is now available as a fast 720p video editing model in Makaron.',

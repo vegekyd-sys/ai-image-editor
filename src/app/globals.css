@@ -583,6 +583,65 @@ textarea {
   transform: scale(0.97);
 }
 
+@media (min-width: 768px) {
+  .mkr-liquid-nav {
+    border-color: rgba(255,255,255,0.16);
+    background:
+      radial-gradient(ellipse at 30% -24%, rgba(255,255,255,0.16), rgba(255,255,255,0.05) 36%, transparent 66%),
+      radial-gradient(circle at 95% 105%, rgba(217,70,239,0.10), transparent 48%),
+      linear-gradient(145deg, rgba(17,18,24,0.76), rgba(0,0,0,0.62));
+    box-shadow:
+      inset 0 1px 0 rgba(255,255,255,0.18),
+      inset 0 -1px 0 rgba(255,255,255,0.04),
+      inset 1px 0 0 rgba(34,211,238,0.04),
+      inset -1px 0 0 rgba(217,70,239,0.05),
+      0 14px 34px rgba(0,0,0,0.38);
+    backdrop-filter: blur(16px) saturate(1.34) contrast(1.06);
+    -webkit-backdrop-filter: blur(16px) saturate(1.34) contrast(1.06);
+  }
+
+  .mkr-liquid-nav::before {
+    opacity: 0.36;
+  }
+
+  .mkr-liquid-nav::after {
+    box-shadow:
+      inset 0 0 0 0.5px rgba(255,255,255,0.085),
+      inset 0 8px 14px rgba(255,255,255,0.035),
+      inset 0 -12px 22px rgba(0,0,0,0.20),
+      inset 1px 0 0 rgba(34,211,238,0.035),
+      inset -1px 0 0 rgba(217,70,239,0.042);
+  }
+
+  .mkr-liquid-nav-indicator {
+    border-color: rgba(255,255,255,0.20);
+    background:
+      radial-gradient(ellipse at 28% -18%, rgba(255,255,255,0.22), rgba(255,255,255,0.07) 42%, transparent 70%),
+      radial-gradient(circle at 92% 96%, rgba(217,70,239,0.13), transparent 48%),
+      linear-gradient(145deg, rgba(63,64,76,0.72), rgba(14,15,22,0.56));
+    box-shadow:
+      inset 0 1px 0 rgba(255,255,255,0.23),
+      inset 0 -1px 0 rgba(255,255,255,0.045),
+      0 8px 22px rgba(0,0,0,0.28);
+    backdrop-filter: blur(14px) saturate(1.32) contrast(1.04);
+    -webkit-backdrop-filter: blur(14px) saturate(1.32) contrast(1.04);
+  }
+
+  .mkr-liquid-nav-button {
+    color: rgba(255,255,255,0.90);
+    text-shadow:
+      0 1px 2px rgba(0,0,0,0.96),
+      0 0 12px rgba(0,0,0,0.72);
+  }
+
+  .mkr-liquid-nav-button[data-active="true"] {
+    color: #fff;
+    text-shadow:
+      0 1px 2px rgba(0,0,0,0.92),
+      0 0 14px rgba(0,0,0,0.72);
+  }
+}
+
 .mkr-liquid-side-action {
   background:
     radial-gradient(circle at 22% 0%, rgba(255,255,255,0.14), transparent 34%),
