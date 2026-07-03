@@ -670,9 +670,9 @@ export default function ModelSelector({
                   right: 0,
                   bottom: 0,
                   height: AUTO_TIPS_FOOTER_HEIGHT,
-                  borderTop: '1px solid rgba(255,255,255,0.06)',
+                  borderTop: '0.5px solid rgba(255,255,255,0.05)',
                   paddingTop: 6,
-                  background: 'linear-gradient(145deg, rgba(25,25,31,0.72), rgba(7,7,11,0.60))',
+                  background: 'transparent',
                 }}
               >
                 <button
