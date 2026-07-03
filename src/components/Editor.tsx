@@ -3440,7 +3440,12 @@ Select the best 3-7 items for a compelling video. You do NOT need to use all or 
                 <div className="absolute inset-0 flex items-center justify-center">
                   <button
                     onClick={() => fileInputRef.current?.click()}
-                    className="flex flex-col items-center gap-4 text-white/60 hover:text-white/80 transition-colors"
+                    className="mkr-liquid-empty-state flex flex-col items-center gap-4 text-white/60 hover:text-white/80 transition-colors active:scale-[0.98]"
+                    style={{
+                      borderRadius: 24,
+                      padding: '28px 30px 24px',
+                      minWidth: 220,
+                    }}
                   >
                     <svg width="64" height="64" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.2" strokeLinecap="round" strokeLinejoin="round">
                       <rect x="3" y="3" width="18" height="18" rx="2" ry="2" />
@@ -3665,11 +3670,17 @@ Select the best 3-7 items for a compelling video. You do NOT need to use all or 
                     <button
                       onClick={handleDownload}
                       disabled={isSaving}
-                      className={`px-3 py-1.5 rounded-full text-xs font-medium backdrop-blur-sm border transition-all cursor-pointer ${
+                      className={`mkr-liquid-pill px-3 py-1.5 rounded-full text-xs font-medium border transition-all cursor-pointer active:scale-95 disabled:cursor-default ${
                         isSaving
-                          ? 'text-white/50 bg-fuchsia-500/10 border-fuchsia-500/20'
-                          : 'text-white bg-fuchsia-500/20 border-fuchsia-500/30'
+                          ? 'text-white/55'
+                          : 'text-white'
                       }`}
+                      style={{
+                        border: isSaving ? '0.5px solid rgba(232,121,249,0.18)' : '0.5px solid rgba(232,121,249,0.30)',
+                        background: isSaving
+                          ? 'linear-gradient(145deg, rgba(217,70,239,0.12), rgba(10,10,14,0.34))'
+                          : 'linear-gradient(145deg, rgba(217,70,239,0.20), rgba(10,10,14,0.38))',
+                      }}
                     >
                       {isSaving ? (
                         <span className="flex items-center gap-1.5">

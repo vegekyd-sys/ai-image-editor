@@ -1,6 +1,7 @@
 'use client';
 
 import { useState, useRef, useEffect, useCallback } from 'react';
+import { createPortal } from 'react-dom';
 import type { PreferredModel } from './AgentChatView';
 import type { VideoModel, VideoResolution } from '@/types';
 import { getImageModels, getVideoModels, type ModelInfo } from '@/lib/model-registry';
@@ -92,6 +93,7 @@ function ModelRow({
     <button
       onClick={onSelect}
       disabled={disabled}
+      className={selected && !disabled ? 'mkr-liquid-pill' : ''}
       style={{
         display: 'flex',
         alignItems: 'center',
@@ -101,7 +103,7 @@ function ModelRow({
         padding: '0 12px',
         borderRadius: 12,
         border: 'none',
-        background: selected && !disabled ? 'rgba(232,121,249,0.08)' : 'transparent',
+        background: selected && !disabled ? 'linear-gradient(145deg, rgba(232,121,249,0.12), rgba(10,10,14,0.32))' : 'transparent',
         cursor: disabled ? 'default' : 'pointer',
         transition: 'background 0.15s',
         textAlign: 'left',
@@ -252,10 +254,11 @@ function VideoModelRow({
 }) {
   return (
     <div
+      className={selected ? 'mkr-liquid-pill' : ''}
       style={{
         width: '100%',
         borderRadius: 12,
-        background: selected ? 'rgba(232,121,249,0.08)' : 'transparent',
+        background: selected ? 'linear-gradient(145deg, rgba(232,121,249,0.12), rgba(10,10,14,0.32))' : 'transparent',
         flexShrink: 0,
         transition: 'background 0.15s',
       }}
@@ -375,6 +378,7 @@ export default function ModelSelector({
   const [activeTab, setActiveTab] = useState<'image' | 'video'>('image');
   const wrapperRef = useRef<HTMLDivElement>(null);
   const triggerRef = useRef<HTMLButtonElement>(null);
+  const popoverRef = useRef<HTMLDivElement>(null);
   const scrollBodyRef = useRef<HTMLDivElement>(null);
   const [popoverPos, setPopoverPos] = useState<{ bottom: number; left?: number; right?: number } | null>(null);
   const [canScrollDown, setCanScrollDown] = useState(false);
@@ -397,7 +401,12 @@ export default function ModelSelector({
   useEffect(() => {
     if (!open) return;
     const handler = (e: PointerEvent) => {
-      if (wrapperRef.current && !wrapperRef.current.contains(e.target as Node)) {
+      const target = e.target as Node;
+      if (
+        wrapperRef.current &&
+        !wrapperRef.current.contains(target) &&
+        !popoverRef.current?.contains(target)
+      ) {
         setOpen(false);
       }
     };
@@ -499,10 +508,13 @@ export default function ModelSelector({
         data-video-auto={videoAuto}
         aria-label={`Model: ${modelLabel}. Click to open selector.`}
         onClick={() => setOpen(v => !v)}
-        className="w-8 h-8 flex-shrink-0 flex items-center justify-center rounded-full transition-all active:scale-95"
+        className="mkr-liquid-icon-button w-8 h-8 flex-shrink-0 flex items-center justify-center rounded-full transition-all active:scale-95"
         style={{
-          background: (!imageAuto || !videoAuto) ? 'rgba(192,38,211,0.15)' : open ? 'rgba(255,255,255,0.12)' : 'rgba(255,255,255,0.08)',
-          color: (!imageAuto || !videoAuto) ? 'rgba(192,38,211,0.85)' : open ? 'rgba(255,255,255,0.5)' : 'rgba(255,255,255,0.35)',
+          background: (!imageAuto || !videoAuto) || open
+            ? 'linear-gradient(145deg, rgba(217,70,239,0.18), rgba(10,10,14,0.34))'
+            : 'linear-gradient(145deg, rgba(255,255,255,0.08), rgba(10,10,14,0.34))',
+          border: ((!imageAuto || !videoAuto) || open) ? '0.5px solid rgba(232,121,249,0.24)' : '0.5px solid rgba(255,255,255,0.10)',
+          color: (!imageAuto || !videoAuto) ? 'rgba(217,70,239,0.9)' : open ? 'rgba(240,171,252,0.82)' : 'rgba(255,255,255,0.35)',
         }}
       >
         <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
@@ -513,41 +525,27 @@ export default function ModelSelector({
       </button>
 
       {/* Popover */}
-      {open && popoverPos && (
+      {open && popoverPos && typeof document !== 'undefined' && createPortal((
         <div
+          ref={popoverRef}
+          className="mkr-liquid-popover"
           style={{
             position: 'fixed',
             bottom: popoverPos.bottom,
             ...(popoverPos.left != null ? { left: popoverPos.left } : {}),
             ...(popoverPos.right != null ? { right: popoverPos.right } : {}),
             ...(popoverPos.left != null && popoverPos.right != null ? {} : { width: 300 }),
-            background: '#161616',
-            border: '1px solid rgba(255,255,255,0.1)',
-            borderRadius: 16,
-            boxShadow: '0 8px 32px rgba(0,0,0,0.6)',
+            pointerEvents: 'auto' as const,
+            background: 'linear-gradient(145deg, rgba(25,25,31,0.80), rgba(7,7,11,0.66))',
+            border: '0.5px solid rgba(255,255,255,0.12)',
+            borderRadius: 12,
+            boxShadow: '0 22px 60px rgba(0,0,0,0.48), inset 0 1px 0 rgba(255,255,255,0.09)',
+            backdropFilter: 'blur(24px) saturate(1.35)',
+            WebkitBackdropFilter: 'blur(24px) saturate(1.35)',
             zIndex: 500,
             padding: '14px 10px 10px',
           }}
         >
-          <style>{`
-            .model-selector-scroll {
-              scrollbar-width: thin;
-              scrollbar-color: rgba(255,255,255,0.22) transparent;
-            }
-            .model-selector-scroll::-webkit-scrollbar {
-              width: 6px;
-            }
-            .model-selector-scroll::-webkit-scrollbar-track {
-              background: transparent;
-            }
-            .model-selector-scroll::-webkit-scrollbar-thumb {
-              background: rgba(255,255,255,0.16);
-              border-radius: 999px;
-            }
-            .model-selector-scroll:hover::-webkit-scrollbar-thumb {
-              background: rgba(255,255,255,0.26);
-            }
-          `}</style>
           {/* Header */}
           <div style={{
             display: 'flex',
@@ -651,7 +649,7 @@ export default function ModelSelector({
                   pointerEvents: 'none',
                   borderBottomLeftRadius: 12,
                   borderBottomRightRadius: 12,
-                  background: 'linear-gradient(to bottom, rgba(22,22,22,0), rgba(22,22,22,0.92))',
+                  background: 'linear-gradient(to bottom, rgba(7,7,11,0), rgba(7,7,11,0.82))',
                   display: 'flex',
                   alignItems: 'flex-end',
                   justifyContent: 'center',
@@ -663,6 +661,7 @@ export default function ModelSelector({
                 </svg>
               </div>
             )}
+
             {activeTab === 'image' && (
               <div
                 style={{
@@ -673,11 +672,12 @@ export default function ModelSelector({
                   height: AUTO_TIPS_FOOTER_HEIGHT,
                   borderTop: '1px solid rgba(255,255,255,0.06)',
                   paddingTop: 6,
-                  background: '#161616',
+                  background: 'linear-gradient(145deg, rgba(25,25,31,0.72), rgba(7,7,11,0.60))',
                 }}
               >
                 <button
                   onClick={() => handleAutoTipsToggle(!autoTips)}
+                  className={autoTips ? 'mkr-liquid-pill' : ''}
                   style={{
                     display: 'flex',
                     alignItems: 'center',
@@ -687,7 +687,7 @@ export default function ModelSelector({
                     padding: '0 12px',
                     borderRadius: 12,
                     border: 'none',
-                    background: autoTips ? 'rgba(232,121,249,0.08)' : 'transparent',
+                    background: autoTips ? 'linear-gradient(145deg, rgba(232,121,249,0.12), rgba(10,10,14,0.32))' : 'transparent',
                     cursor: 'pointer',
                     transition: 'background 0.15s',
                     textAlign: 'left',
@@ -726,7 +726,7 @@ export default function ModelSelector({
             )}
           </div>
         </div>
-      )}
+      ), document.body)}
     </div>
   );
 }

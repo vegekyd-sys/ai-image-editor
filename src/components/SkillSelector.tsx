@@ -105,12 +105,12 @@ export default function SkillSelector({
       <button
         ref={triggerRef}
         onClick={handleTriggerClick}
-        className="flex-shrink-0 flex items-center transition-all active:scale-95"
+        className={(selectedSkill || installing || open) ? 'mkr-liquid-pill flex-shrink-0 flex items-center transition-all active:scale-95' : 'flex-shrink-0 flex items-center transition-all active:scale-95'}
         style={{
           padding: (selectedSkill || installing || open) ? '4px 10px' : '5px 6px',
           borderRadius: (selectedSkill || installing || open) ? 12 : 0,
-          border: 'none',
-          background: (selectedSkill || installing || open) ? 'rgba(217,70,239,0.15)' : 'none',
+          border: (selectedSkill || installing || open) ? '0.5px solid rgba(232,121,249,0.24)' : 'none',
+          background: (selectedSkill || installing || open) ? 'linear-gradient(145deg, rgba(217,70,239,0.15), rgba(10,10,14,0.30))' : 'none',
           color: (selectedSkill || installing || open) ? '#f0abfc' : 'rgba(255,255,255,0.45)',
           fontSize: '0.75rem',
           fontWeight: 500,
@@ -141,6 +141,7 @@ export default function SkillSelector({
       {open && popoverPos && typeof document !== 'undefined' && createPortal(
         <div
           ref={popoverRef}
+          className="mkr-liquid-popover"
           style={{
             position: 'fixed',
             ...(popoverPos.bottom != null ? { bottom: popoverPos.bottom } : {}),
@@ -151,11 +152,13 @@ export default function SkillSelector({
             maxHeight: 320,
             overflowY: 'auto',
             pointerEvents: 'auto' as const,
-            background: '#161616',
-            border: '1px solid rgba(255,255,255,0.1)',
+            background: 'linear-gradient(145deg, rgba(25,25,31,0.80), rgba(7,7,11,0.66))',
+            border: '0.5px solid rgba(255,255,255,0.12)',
             borderRadius: 12,
             padding: '4px 0',
-            boxShadow: '0 8px 32px rgba(0,0,0,0.6)',
+            boxShadow: '0 22px 60px rgba(0,0,0,0.48), inset 0 1px 0 rgba(255,255,255,0.09)',
+            backdropFilter: 'blur(24px) saturate(1.35)',
+            WebkitBackdropFilter: 'blur(24px) saturate(1.35)',
             zIndex: 500,
           }}
         >
@@ -166,10 +169,11 @@ export default function SkillSelector({
             <button
               key={skill.name}
               onClick={() => { onSkillChange(selectedSkill === skill.name ? null : skill.name); setOpen(false); }}
-              className={`w-full flex items-center justify-between border-none cursor-pointer text-left transition-colors hover:bg-white/[0.06] ${selectedSkill === skill.name ? 'bg-fuchsia-400/[0.08]' : ''}`}
+              className={`w-full flex items-center justify-between border-none cursor-pointer text-left transition-colors hover:bg-white/[0.06] ${selectedSkill === skill.name ? 'mkr-liquid-pill' : ''}`}
               style={{
                 padding: '12px 12px',
                 borderRadius: 10,
+                background: selectedSkill === skill.name ? 'linear-gradient(145deg, rgba(232,121,249,0.12), rgba(10,10,14,0.32))' : 'transparent',
                 color: selectedSkill === skill.name ? '#e879f9' : 'rgba(255,255,255,0.85)',
                 fontSize: 13,
                 fontWeight: 600,
