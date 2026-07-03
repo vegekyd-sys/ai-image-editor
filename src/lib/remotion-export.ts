@@ -14,6 +14,7 @@ import { resolveVideoUrlsInCode } from '@/lib/video-url-resolver'
 import { resolveAudioUrlsInCode } from '@/lib/audio-url-resolver'
 import { VIDEO_PLACEHOLDER_IMAGE } from '@/lib/editor/timeline-derivations'
 import type { RemotionLambdaOutputDestination } from '@/lib/remotion-lambda-renderer'
+import { normalizeCompositionAnimation } from '@/lib/composition-duration'
 
 export type RemotionExportStatus = 'queued' | 'rendering' | 'completed' | 'failed'
 export type RemotionExportOutputType = 'video' | 'image'
@@ -80,18 +81,20 @@ function parseDesignPayload(content: string): DesignPayload {
   if (!isObject(parsed) || typeof parsed.code !== 'string') {
     throw new Error('Workspace design file is not a valid Remotion composition payload')
   }
+  const animation = isObject(parsed.animation)
+    ? normalizeCompositionAnimation(parsed.code, {
+        fps: Number(parsed.animation.fps) || 30,
+        durationInSeconds: Number(parsed.animation.durationInSeconds) || Number(parsed.animation.duration) || undefined,
+        durationInFrames: Number(parsed.animation.durationInFrames) || undefined,
+        ...(typeof parsed.animation.format === 'string' ? { format: parsed.animation.format } : {}),
+      })
+    : undefined
   return {
     code: parsed.code,
     width: Number(parsed.width) || 1080,
     height: Number(parsed.height) || 1920,
     props: isObject(parsed.props) ? parsed.props : undefined,
-    animation: isObject(parsed.animation)
-      ? {
-          fps: Number(parsed.animation.fps) || 30,
-          durationInSeconds: Number(parsed.animation.durationInSeconds) || Number(parsed.animation.duration) || 1,
-          ...(typeof parsed.animation.format === 'string' ? { format: parsed.animation.format } : {}),
-        }
-      : undefined,
+    animation,
     editables: Array.isArray(parsed.editables) ? parsed.editables as DesignPayload['editables'] : undefined,
   }
 }

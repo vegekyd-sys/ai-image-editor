@@ -12,6 +12,8 @@ import { createVideo } from './skills/create-video';
 import { estimateVideoCredits, resolveAgentVideoSelection, resolveVideoGenerationRoute, resolveVideoOutputDuration, validateVideoModelRequest } from './video-model-capabilities';
 import { deductFixedCredits } from './billing/credits';
 import { createMusic } from './skills/create-music';
+import { createVoiceover } from './skills/create-voiceover';
+import { listVolcengineTtsVoices } from './volcengine-tts';
 import { transcribeWithVolcengineAsr, type VolcengineAsrTranscript, type TranscriptWord } from './volcengine-asr';
 import agentPrompt from './prompts/agent.md';
 import enhancePrompt from './prompts/enhance.md';
@@ -20,11 +22,12 @@ import wildPrompt from './prompts/wild.md';
 import captionsPrompt from './prompts/captions.md';
 import generateImageToolPrompt from './prompts/generate_image_tool.md';
 import type { DesignPayload, Tip, VideoMeta, VideoModel } from '@/types';
-import { isPermanentUrl, toPublicStorageUrl, uploadVideo } from '@/lib/supabase/storage';
+import { isPermanentUrl, toPublicStorageUrl, uploadAudio, uploadVideo } from '@/lib/supabase/storage';
 import type { AgentPerf } from './agent-perf';
 import { createTextDeltaState, normalizeTextDelta } from './agent-text-delta';
 import { formatAspectRatio } from './media-aspect';
 import { filterWorkspaceFilesForAgentScope } from './agent-workspace-scope';
+import { normalizeCompositionAnimation } from './composition-duration';
 import {
   createRemotionExportJob,
   runRemotionExportJob,
@@ -267,39 +270,6 @@ function resolveMediaMarkersInValue(value: unknown, snapshotImages: string[]): u
     );
   }
   return value;
-}
-
-function inferCompositionTotalFrames(code: string): number | null {
-  let maxFrame = 0;
-  let found = false;
-  const sequencePattern = /<Sequence\b([^>]*)>/g;
-  for (const match of code.matchAll(sequencePattern)) {
-    const attrs = match[1] || '';
-    const from = Number(attrs.match(/\bfrom=\{?(\d+)\}?/)?.[1] || 0);
-    const duration = Number(attrs.match(/\bdurationInFrames=\{?(\d+)\}?/)?.[1] || 0);
-    if (!Number.isFinite(from) || !Number.isFinite(duration) || duration <= 0) continue;
-    found = true;
-    maxFrame = Math.max(maxFrame, from + duration);
-  }
-  return found ? maxFrame : null;
-}
-
-function normalizeCompositionAnimation(
-  code: string,
-  animation: { fps?: number; durationInSeconds?: number; format?: string } | undefined
-): { fps: number; durationInSeconds: number; format?: string } | undefined {
-  if (!animation) return undefined;
-  const fps = Number(animation.fps) || 30;
-  const inferredFrames = inferCompositionTotalFrames(code);
-  if (!inferredFrames) {
-    return { ...animation, fps, durationInSeconds: Number(animation.durationInSeconds) || 5 };
-  }
-  const inferredSeconds = Number((inferredFrames / fps).toFixed(3));
-  const currentSeconds = Number(animation.durationInSeconds) || inferredSeconds;
-  if (Math.abs(currentSeconds - inferredSeconds) > 0.05) {
-    return { ...animation, fps, durationInSeconds: inferredSeconds };
-  }
-  return { ...animation, fps, durationInSeconds: currentSeconds };
 }
 
 function formatMs(ms: number | null | undefined): string {
@@ -2831,6 +2801,156 @@ Node media runtime provides \`require\`, \`process\`, \`ffmpegPath\`, \`inputFil
         return {
           type: 'content' as const,
           value: [{ type: 'text' as const, text: output.content || 'Code executed successfully.' }],
+        };
+      },
+    }),
+
+    list_voiceover_voices: tool({
+      description: `Fetch the current Volcengine Doubao / Seed Speech voice catalog so you can choose the best voice for a voiceover.
+
+Call this before generate_voiceover unless the user explicitly supplied a concrete voice_id or the conversation already contains a fresh voice catalog. Use the returned language, gender, scenario, style tags, and descriptions to pick a fitting voice for the user's content. Prefer voices whose language and scenario match the script; avoid novelty, rock, character, dialect, or highly stylized voices unless the user's task asks for that style.`,
+      inputSchema: z.object({
+        query: z.string().optional().describe('Optional short description of what you need, e.g. "warm Chinese sales narration", "English energetic product demo", "古风女声". The tool returns the full catalog plus filtered suggestions when possible.'),
+        force_refresh: z.boolean().optional().describe('Set true to bypass the short server-side cache and call Volcengine ListSpeakers again. Default false.'),
+      }),
+      execute: async ({ query, force_refresh }) => {
+        const catalog = await listVolcengineTtsVoices({ forceRefresh: force_refresh, allowFallback: true });
+        const normalizedQuery = query?.trim().toLowerCase();
+        const scored = catalog.voices.map((voice) => {
+          const haystack = [
+            voice.id,
+            voice.name,
+            voice.language,
+            voice.gender,
+            voice.scenario,
+            voice.description,
+            voice.resourceId,
+            voice.model,
+            ...voice.styles,
+          ].filter(Boolean).join(' ').toLowerCase();
+          let score = 0;
+          if (normalizedQuery) {
+            for (const token of normalizedQuery.split(/[\s,，、;；/|]+/).filter(Boolean)) {
+              if (haystack.includes(token)) score += 2;
+            }
+          }
+          if (/中文|chinese|zh|普通话/.test(normalizedQuery || '') && /(^zh|中文|mandarin|普通话)/i.test(haystack)) score += 4;
+          if (/英文|english|en\b/.test(normalizedQuery || '') && /(^en|english|英文)/i.test(haystack)) score += 4;
+          if (/男|male/.test(normalizedQuery || '') && /male|男/.test(haystack)) score += 3;
+          if (/女|female/.test(normalizedQuery || '') && /female|女/.test(haystack)) score += 3;
+          if (/销售|sales|口播/.test(normalizedQuery || '') && /sales|口播|直播|广告|营销|general|通用|narration|旁白/.test(haystack)) score += 3;
+          return { voice, score };
+        }).sort((a, b) => b.score - a.score);
+        const suggestions = scored.filter(item => item.score > 0).slice(0, 12).map(item => item.voice);
+        return {
+          ...catalog,
+          count: catalog.voices.length,
+          suggestions: suggestions.length ? suggestions : catalog.voices.slice(0, 12),
+          query,
+        };
+      },
+      toModelOutput({ output }: { output: any }) {
+        const voices = Array.isArray(output.suggestions) ? output.suggestions : [];
+        const rows = voices.map((voice: any, index: number) => {
+          const tags = [
+            voice.language,
+            voice.gender,
+            voice.scenario,
+            ...(Array.isArray(voice.styles) ? voice.styles : []),
+          ].filter(Boolean).join(', ');
+          return `${index + 1}. ${voice.id}${voice.name ? ` — ${voice.name}` : ''}${tags ? ` (${tags})` : ''}${voice.description ? `: ${voice.description}` : ''}`;
+        }).join('\n');
+        const warning = output.warning ? `\nWarning: ${output.warning}` : '';
+        return {
+          type: 'content' as const,
+          value: [{
+            type: 'text' as const,
+            text: `Volcengine voice catalog source=${output.source}, total=${output.count || output.voices?.length || 0}.${warning}\nSuggested voices:\n${rows || 'No voices returned.'}\n\nChoose one voice_id and pass it to generate_voiceover.`,
+          }],
+        };
+      },
+    }),
+
+    generate_voiceover: tool({
+      description: `Generate a spoken narration / voiceover audio clip with Volcengine Doubao Seed TTS, upload it to the project, and add it to the Audio Index.
+
+Use this when the user asks for narration, voiceover, dialogue, spoken explainer audio, sales-style oral copy, or when a video/composition clearly needs a human spoken line. Do not use it for background music; use generate_music for music. Do not use it for generic video ambience/sound effects unless the user specifically asks for spoken words.
+
+The generated audio becomes an Audio Index item (<<<audio_N>>>) in later turns, so it can be used as a Seedance reference audio or as a Remotion <Audio> source. Before calling this tool, call list_voiceover_voices and choose a concrete voice_id that fits the script, unless the user explicitly supplied one. If list_voiceover_voices returns fallback only, you may still use the best fallback voice but mention that the full voice catalog was unavailable.`,
+      inputSchema: z.object({
+        text: z.string().describe('The exact spoken text to synthesize. Keep it natural and speakable; rewrite stiff copy into oral narration first when appropriate.'),
+        title: z.string().optional().describe('Short title for the audio card/index, e.g. "Hook voiceover" or "Product narration".'),
+        voice_id: z.string().optional().describe('Optional Doubao speaker id / voice type. Omit to use the project default.'),
+        resource_id: z.enum(['seed-tts-2.0', 'seed-icl-2.0', 'seed-tts-1.0', 'seed-tts-1.0-concurr']).optional().describe('Volcengine resource id. Use seed-tts-2.0 for standard Doubao TTS voices; use seed-icl-2.0 only for authorized cloned voices.'),
+        speech_rate: z.number().min(-50).max(100).optional().describe('Speech speed. 0 is natural, 100 is 2x, -50 is 0.5x. Prefer 0 unless the user asks for faster/slower delivery.'),
+        context_prompt: z.string().optional().describe('Optional short voice direction for Seed TTS 2.0, e.g. "用轻松、真诚、有现场感的口吻".'),
+      }),
+      execute: async ({ text, title, voice_id, resource_id, speech_rate, context_prompt }) => {
+        if (!ctx.supabase || !ctx.userId) {
+          return { success: false as const, message: 'generate_voiceover requires an authenticated project workspace.' };
+        }
+
+        const result = await createVoiceover({
+          text,
+          title,
+          voiceId: voice_id,
+          resourceId: resource_id,
+          speechRate: speech_rate,
+          contextPrompt: context_prompt,
+        });
+        if (!result.success || !result.audio || !result.tts || !result.taskId) {
+          return { success: false as const, message: result.message };
+        }
+
+        const audioUrl = await uploadAudio(ctx.supabase, ctx.userId, ctx.projectId, result.taskId, 0, result.audio);
+        if (!audioUrl) {
+          return { success: false as const, message: 'Voiceover was generated but failed to upload to project storage.' };
+        }
+
+        const { data: latestRows } = await ctx.supabase
+          .from('project_music')
+          .select('track_index')
+          .eq('project_id', ctx.projectId)
+          .eq('user_id', ctx.userId)
+          .order('track_index', { ascending: false })
+          .limit(1);
+        const trackIndex = Number(latestRows?.[0]?.track_index ?? -1) + 1;
+        const trackTitle = (result.title || title || 'Generated voiceover').slice(0, 120);
+        const { error: insertError } = await ctx.supabase.from('project_music').upsert({
+          suno_task_id: result.taskId,
+          track_index: trackIndex,
+          project_id: ctx.projectId,
+          user_id: ctx.userId,
+          prompt: text,
+          audio_url: audioUrl,
+          suno_audio_url: null,
+          stream_audio_url: null,
+          duration: null,
+          title: trackTitle,
+          tags: `voiceover,tts,doubao,${result.tts.resourceId}`,
+          status: 'completed',
+          selected: false,
+        }, { onConflict: 'suno_task_id,track_index' });
+        if (insertError) {
+          return { success: false as const, message: `Voiceover uploaded but DB insert failed: ${insertError.message}`, audioUrl };
+        }
+
+        ctx.audioAttachments = [
+          ...(ctx.audioAttachments || []),
+          { audioUrl, title: trackTitle, trackIndex },
+        ];
+
+        return {
+          success: true as const,
+          message: `Voiceover generated and added to Audio Index as <<<audio_${(ctx.audioAttachments || []).length}>>>.`,
+          audioUrl,
+          title: trackTitle,
+          taskId: result.taskId,
+          model: result.tts.model,
+          voiceId: result.tts.voiceId,
+          resourceId: result.tts.resourceId,
+          textLength: result.tts.textLength,
+          sentenceCount: result.tts.sentences.length,
         };
       },
     }),
