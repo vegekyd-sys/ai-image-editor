@@ -1,10 +1,10 @@
 import type { ModelMessage } from 'ai';
 
-export const TOOL_HISTORY_MAX_ROWS_PER_RUN = 20;
-export const TOOL_HISTORY_MAX_CHARS_PER_RUN = 120_000;
-export const TOOL_HISTORY_MAX_INPUT_CHARS = 6_000;
-export const TOOL_HISTORY_MAX_OUTPUT_CHARS = 30_000;
-export const TOOL_HISTORY_MAX_ANALYSIS_CHARS = 6_000;
+export const TOOL_HISTORY_MAX_ROWS_PER_RUN = 80;
+export const TOOL_HISTORY_MAX_CHARS_PER_RUN = 600_000;
+export const TOOL_HISTORY_MAX_INPUT_CHARS = 20_000;
+export const TOOL_HISTORY_MAX_OUTPUT_CHARS = 80_000;
+export const TOOL_HISTORY_MAX_ANALYSIS_CHARS = 18_000;
 export const TOOL_HISTORY_MAX_LIST_FILES = 500;
 
 type JsonRecord = Record<string, unknown>;
@@ -220,7 +220,21 @@ function compactSmallStatusOutput(output: JsonRecord, omitted: string[]): ToolRe
       contentBlocked: safe.contentBlocked,
       taskId: safe.taskId,
       model: safe.model ?? safe.usedModel,
+      mediaIndex: safe.mediaIndex,
+      imageUrl: safe.imageUrl,
+      snapshotId: safe.snapshotId,
+      provider: safe.provider,
+      title: safe.title,
+      audioUrl: safe.audioUrl,
+      providerAudioUrl: safe.providerAudioUrl,
+      streamAudioUrl: safe.streamAudioUrl,
+      trackIndex: safe.trackIndex,
       duration: safe.duration,
+      generationSeconds: safe.generationSeconds,
+      tags: safe.tags,
+      voiceId: safe.voiceId,
+      resourceId: safe.resourceId,
+      textLength: safe.textLength,
     },
   };
 }

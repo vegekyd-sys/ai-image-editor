@@ -11,3 +11,7 @@ export function getTipsBedrockModelId(): string {
 export function supportsTemperature(modelId: string): boolean {
   return !/anthropic\.claude-sonnet-5$/i.test(modelId);
 }
+
+export function isClaudeSonnet5Model(modelId: string): boolean {
+  return /anthropic\.claude-sonnet-5$/i.test(modelId);
+}

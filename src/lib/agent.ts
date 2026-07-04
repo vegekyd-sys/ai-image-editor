@@ -36,7 +36,7 @@ import {
   type RemotionRenderProfile,
 } from '@/lib/remotion-export';
 import { VIDEO_PLACEHOLDER_IMAGE } from '@/lib/editor/timeline-derivations';
-import { getAgentModelId } from './bedrock-models';
+import { getAgentModelId, isClaudeSonnet5Model } from './bedrock-models';
 import { describeBedrockToolUseInputIssue, normalizeBedrockToolUseInputs } from './bedrock-tool-inputs';
 import { mergePatchProps } from './patch-props';
 
@@ -127,6 +127,38 @@ function getAgentModel() {
   return bedrockAnthropic(getAgentModelId());
 }
 const ANTHROPIC_CACHE_CONTROL = { anthropic: { cacheControl: { type: 'ephemeral' } } } as const;
+
+function getAnthropicContextManagement(modelId: string) {
+  if (isClaudeSonnet5Model(modelId)) {
+    return {
+      edits: [
+        {
+          type: 'clear_tool_uses_20250919',
+          trigger: { type: 'input_tokens', value: 650000 },
+          keep: { type: 'tool_uses', value: 24 },
+        },
+        {
+          type: 'compact_20260112',
+          trigger: { type: 'input_tokens', value: 900000 },
+        },
+      ],
+    };
+  }
+
+  return {
+    edits: [
+      {
+        type: 'clear_tool_uses_20250919',
+        trigger: { type: 'input_tokens', value: 80000 },
+        keep: { type: 'tool_uses', value: 3 },
+      },
+      {
+        type: 'compact_20260112',
+        trigger: { type: 'input_tokens', value: 150000 },
+      },
+    ],
+  };
+}
 
 // ---------------------------------------------------------------------------
 // Types
@@ -261,6 +293,24 @@ function resolveAudioRefs(audioAttachments: AudioAttachment[] | undefined, refs:
   return { audioUrls };
 }
 
+function addAudioAttachment(ctx: AgentContext, audio: AudioAttachment | null | undefined): number {
+  if (!audio?.audioUrl || !/^https?:\/\//.test(audio.audioUrl)) {
+    return ctx.audioAttachments?.length || 0;
+  }
+
+  const next = [...(ctx.audioAttachments || [])];
+  const existing = next.findIndex(item => item.audioUrl === audio.audioUrl);
+  if (existing >= 0) {
+    next[existing] = { ...next[existing], ...audio };
+    ctx.audioAttachments = next;
+    return existing + 1;
+  }
+
+  next.push(audio);
+  ctx.audioAttachments = next;
+  return next.length;
+}
+
 function cleanMusicField(value: unknown, fallback = ''): string {
   return String(value ?? fallback).replace(/[|\n\r]/g, ' ').trim();
 }
@@ -291,6 +341,60 @@ function formatGeneratedAudioForCui(toolName: string | undefined, output: unknow
   );
 
   return `\n\n🎵 音频已生成: ${title}\nmusic:${safeTrackIndex}|${title}|${safeDuration}|${tags}|${audioUrl}|${audioUrl}\n`;
+}
+
+function formatGeneratedAudioForModel(toolName: string, output: unknown): string {
+  if (!output || typeof output !== 'object') return 'Audio tool completed.';
+  const record = output as Record<string, unknown>;
+  if (record.success === false) {
+    return `Audio generation failed: ${String(record.message || 'unknown error')}`;
+  }
+  const title = cleanMusicField(record.title, toolName === 'generate_voiceover' ? 'Generated voiceover' : 'Generated audio');
+  const audioUrl = typeof record.audioUrl === 'string' && /^https?:\/\//.test(record.audioUrl)
+    ? record.audioUrl
+    : '';
+  const duration = typeof record.duration === 'number' && Number.isFinite(record.duration)
+    ? `${Math.round(record.duration)}s`
+    : 'unknown duration';
+  const trackIndex = typeof record.trackIndex === 'number' && Number.isFinite(record.trackIndex)
+    ? record.trackIndex
+    : undefined;
+  const marker = trackIndex != null ? `<<<audio_${trackIndex + 1}>>>` : 'Audio Index';
+  const provider = cleanMusicField(record.provider || record.model, '');
+  const resolved = audioUrl
+    ? `Resolved public audioUrl: ${audioUrl}\nUse this exact URL directly in Remotion <Audio src={...}> props/code. Do not regenerate this audio unless the duration or style is wrong.`
+    : 'No public audioUrl was returned; do not use this result as playable audio.';
+  return [
+    `${title} generated successfully (${duration}${provider ? `, ${provider}` : ''}).`,
+    `Added to Audio Index as ${marker}.`,
+    resolved,
+    typeof record.message === 'string' ? `Tool message: ${record.message}` : '',
+  ].filter(Boolean).join('\n');
+}
+
+function formatGeneratedImageForModel(output: unknown): string {
+  if (!output || typeof output !== 'object') return 'Image tool completed.';
+  const record = output as Record<string, unknown>;
+  if (record.success === false) {
+    return `Image generation failed: ${String(record.message || 'unknown error')}`;
+  }
+  const mediaIndex = typeof record.mediaIndex === 'number' && Number.isFinite(record.mediaIndex)
+    ? record.mediaIndex
+    : undefined;
+  const marker = mediaIndex ? `<<<media_${mediaIndex}>>>` : 'the new Media Index item';
+  const imageUrl = typeof record.imageUrl === 'string' && /^https?:\/\//.test(record.imageUrl)
+    ? record.imageUrl
+    : '';
+  const urlLine = imageUrl
+    ? `Resolved image URL: ${imageUrl}`
+    : `A public image URL may not be available in this same tool result yet because upload happens asynchronously.`;
+  return [
+    `Image generated successfully and added to the timeline as ${marker}.`,
+    urlLine,
+    `For Remotion composition run_code, use ${imageUrl ? 'the resolved URL' : marker} directly in props/code; run_code resolves Media Index markers before rendering.`,
+    `Do not call list_files or write_file(fromWorkspaceOutputs) to find this generated image. It is timeline media, not a workspace file output.`,
+    typeof record.message === 'string' ? `Tool message: ${record.message}` : '',
+  ].filter(Boolean).join('\n');
 }
 
 function resolveMediaMarkersInString(value: string, snapshotImages: string[]): string {
@@ -1181,6 +1285,12 @@ function createTools(ctx: AgentContext) {
           ...(mediaIndex ? { mediaIndex } : {}),
           ...(imageUrl?.startsWith('http') ? { imageUrl } : {}),
           contentBlocked: skillResult.contentBlocked,
+        };
+      },
+      toModelOutput({ output }: { output: any }) {
+        return {
+          type: 'content' as const,
+          value: [{ type: 'text' as const, text: formatGeneratedImageForModel(output) }],
         };
       },
     }),
@@ -2995,14 +3105,11 @@ The generated audio becomes an Audio Index item (<<<audio_N>>>) in later turns. 
           return { success: false as const, message: `Voiceover uploaded but DB insert failed: ${insertError.message}`, audioUrl };
         }
 
-        ctx.audioAttachments = [
-          ...(ctx.audioAttachments || []),
-          { audioUrl, title: trackTitle, trackIndex },
-        ];
+        const audioIndex = addAudioAttachment(ctx, { audioUrl, title: trackTitle, trackIndex });
 
         return {
           success: true as const,
-          message: `Voiceover generated and added to Audio Index as <<<audio_${(ctx.audioAttachments || []).length}>>>.\nResolved voiceover URL: ${audioUrl}\nUse this URL directly in Remotion <Audio src>; do not use the <<<audio_${(ctx.audioAttachments || []).length}>>> marker inside composition code or props.`,
+          message: `Voiceover generated and added to Audio Index as <<<audio_${audioIndex}>>>.\nResolved voiceover URL: ${audioUrl}\nUse this URL directly in Remotion <Audio src>; do not use the <<<audio_${audioIndex}>>> marker inside composition code or props.`,
           audioUrl,
           title: trackTitle,
           trackIndex,
@@ -3012,6 +3119,12 @@ The generated audio becomes an Audio Index item (<<<audio_N>>>) in later turns. 
           resourceId: result.tts.resourceId,
           textLength: result.tts.textLength,
           sentenceCount: result.tts.sentences.length,
+        };
+      },
+      toModelOutput({ output }: { output: any }) {
+        return {
+          type: 'content' as const,
+          value: [{ type: 'text' as const, text: formatGeneratedAudioForModel('generate_voiceover', output) }],
         };
       },
     }),
@@ -3042,12 +3155,27 @@ ${formatAudioCapabilitiesForAgent()}`,
           projectId: ctx.projectId,
         });
         if (result.success) {
+          if (result.audioUrl) {
+            const audioIndex = addAudioAttachment(ctx, {
+              audioUrl: result.audioUrl,
+              title: result.title || title || 'Generated audio',
+              duration: result.duration,
+              trackIndex: result.trackIndex,
+            });
+            result.message = `${result.message}\nAdded to Audio Index as <<<audio_${audioIndex}>>>.\nResolved audio URL: ${result.audioUrl}\nUse this URL directly in Remotion <Audio src>; do not rely on the marker inside composition code or props.`;
+          }
           import('./billing/credits').then(({ deductCredits }) =>
             deductCredits(ctx.userId ?? '', null, 'create_music')
               .catch(e => console.error('[billing] generate_audio deduct error:', e))
           );
         }
         return result;
+      },
+      toModelOutput({ output }: { output: any }) {
+        return {
+          type: 'content' as const,
+          value: [{ type: 'text' as const, text: formatGeneratedAudioForModel('generate_audio', output) }],
+        };
       },
     }),
 
@@ -3076,6 +3204,15 @@ ${formatAudioCapabilitiesForAgent()}`,
             projectId: ctx.projectId,
           });
           if (result.success) {
+            if (result.audioUrl) {
+              const audioIndex = addAudioAttachment(ctx, {
+                audioUrl: result.audioUrl,
+                title: result.title || 'Generated music',
+                duration: result.duration,
+                trackIndex: result.trackIndex,
+              });
+              result.message = `${result.message}\nAdded to Audio Index as <<<audio_${audioIndex}>>>.\nResolved music URL: ${result.audioUrl}\nUse this URL directly in Remotion <Audio src>; do not rely on the marker inside composition code or props.`;
+            }
             import('./billing/credits').then(({ deductCredits }) =>
               deductCredits(ctx.userId ?? '', null, 'create_music')
                 .catch(e => console.error('[billing] generate_music deduct error:', e))
@@ -3107,6 +3244,12 @@ ${formatAudioCapabilitiesForAgent()}`,
           }
         }
         return result;
+      },
+      toModelOutput({ output }: { output: any }) {
+        return {
+          type: 'content' as const,
+          value: [{ type: 'text' as const, text: formatGeneratedAudioForModel('generate_music', output) }],
+        };
       },
     }),
 
@@ -3317,6 +3460,7 @@ export async function* runMakaronAgent(
   try {
 
     const endStreamInit = perf?.span('model_stream_init', { projectId });
+    const agentModelId = getAgentModelId();
     const result = (streamText as any)({
       model: getAgentModel(),
       system: [{ role: 'system', content: systemPrompt, providerOptions: ANTHROPIC_CACHE_CONTROL }],
@@ -3332,19 +3476,7 @@ export async function* runMakaronAgent(
         anthropic: {
           disableParallelToolUse: true,
           toolStreaming: false,
-          contextManagement: {
-            edits: [
-              {
-                type: 'clear_tool_uses_20250919',
-                trigger: { type: 'input_tokens', value: 80000 },
-                keep: { type: 'tool_uses', value: 3 },
-              },
-              {
-                type: 'compact_20260112',
-                trigger: { type: 'input_tokens', value: 150000 },
-              },
-            ],
-          },
+          contextManagement: getAnthropicContextManagement(agentModelId),
         },
       },
     });
