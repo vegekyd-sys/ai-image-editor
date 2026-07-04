@@ -291,6 +291,7 @@ function sanitizeOutput(toolName: string, rawOutput: unknown, omitted: string[])
     case 'rotate_camera':
     case 'list_voiceover_voices':
     case 'generate_voiceover':
+    case 'generate_audio':
     case 'generate_music':
       return compactSmallStatusOutput(output, omitted);
     case 'analyze_image':
