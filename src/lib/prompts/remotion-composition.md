@@ -68,6 +68,10 @@ Available APIs include all exports from `remotion`, `@remotion/media`, `@remotio
 
 - Do not import Remotion packages, destructure from `window.Remotion`, or write `Remotion.AbsoluteFill`. All APIs are already in scope. Use `<AbsoluteFill>`, `<Video>`, `<Sequence>`, and hooks directly.
 - Name the main exported component `Composition`. Helper components are allowed, but the renderable timeline should be `function Composition(props) { ... }`.
+- Do not use ES module syntax inside the returned composition code. Never write
+  `import ...` or `export default ...`. The composition code should define
+  `function Composition(props) { ... }` in the shared runtime scope and return
+  that via the `{ type: 'render', code, ... }` wrapper.
 - Only `Composition(props)` may read `props` directly. Helper components must receive every value they use as function parameters, e.g. `function TitleCard({ title, subtitle }) { ... }`; never reference outer `props` inside `TitleCard`, `Scene`, `Card`, or other helpers.
 - Use Remotion `<Img>`, never HTML `<img>`.
 - Use Remotion `<Video>` or `<OffthreadVideo>`, never HTML `<video>`.

@@ -558,8 +558,6 @@ async function resolveCompositionSource(ctx: AgentContext, input: {
     return { snapshotId: input.snapshot_id };
   }
   if (input.media_index !== undefined) {
-    const v = validateImageIndex(ctx.snapshotImages, input.media_index);
-    if (v.error) return { error: v.error };
     if (!ctx.supabase) return { error: 'Timeline lookup requires workspace access.' };
 
     const { data: snaps, error } = await ctx.supabase
@@ -569,7 +567,13 @@ async function resolveCompositionSource(ctx: AgentContext, input: {
       .order('sort_order', { ascending: true });
     if (error) return { error: `Snapshot lookup failed: ${error.message}` };
 
-    const snap = snaps?.[v.idx] as { id?: string; type?: string; design_path?: string | null } | undefined;
+    const idx = input.media_index - 1;
+    const available = snaps?.length || 0;
+    if (!Number.isInteger(input.media_index) || idx < 0 || idx >= available) {
+      return { error: `Invalid index ${input.media_index}. Available: 1-${available}.` };
+    }
+
+    const snap = snaps?.[idx] as { id?: string; type?: string; design_path?: string | null } | undefined;
     if (!snap) return { error: `No snapshot found for <<<media_${input.media_index}>>>.` };
     if (!snap.design_path) {
       return { error: `<<<media_${input.media_index}>>> is ${snap.type || 'media'}, not an editable Remotion composition.` };
@@ -1146,8 +1150,19 @@ function createTools(ctx: AgentContext) {
           // so base64 entries get replaced with http URLs for downstream tools
           await refreshSnapshotUrls(ctx);
         }
-        const indexInfo = skillResult.image ? ` Now <<<media_${ctx.snapshotImages.length}>>>.` : '';
-        return { success: skillResult.success as true, message: skillResult.message + indexInfo, contentBlocked: skillResult.contentBlocked };
+        const mediaIndex = skillResult.image ? ctx.snapshotImages.length : undefined;
+        const imageUrl = mediaIndex ? ctx.snapshotImages[mediaIndex - 1] : undefined;
+        const urlInfo = imageUrl?.startsWith('http')
+          ? ` Resolved image URL: ${imageUrl}. Use this URL directly in Remotion composition props/code; do not use the <<<media_${mediaIndex}>>> marker inside composition code.`
+          : '';
+        const indexInfo = mediaIndex ? ` Now <<<media_${mediaIndex}>>>.${urlInfo}` : '';
+        return {
+          success: skillResult.success as true,
+          message: skillResult.message + indexInfo,
+          ...(mediaIndex ? { mediaIndex } : {}),
+          ...(imageUrl?.startsWith('http') ? { imageUrl } : {}),
+          contentBlocked: skillResult.contentBlocked,
+        };
       },
     }),
 
@@ -2119,11 +2134,12 @@ Returns the rendered image so you can see it with your vision.`,
         }
         const time = (output.frame / output.fps).toFixed(1);
         const loc = output.workspacePath ? ` Saved: ${output.workspacePath}` : '';
+        const nextStep = ' Render succeeded. Treat this as a successful preview_frame result; if the attached frame is usable and there is no explicit error above, do not rewrite the composition just because the tool did not provide a natural-language visual critique. Continue with write_file when the user asked to publish.';
         return {
           type: 'content' as const,
           value: [
             { type: 'media' as const, data: output.base64Data, mediaType: output.mimeType },
-            { type: 'text' as const, text: `Frame ${output.frame}/${output.totalFrames} (${time}s).${loc}${output.question ? ` Focus: ${output.question}` : ''}` },
+            { type: 'text' as const, text: `Frame ${output.frame}/${output.totalFrames} (${time}s).${loc}${output.question ? ` Focus: ${output.question}.` : ''}${nextStep}` },
           ],
         };
       },
@@ -2901,7 +2917,7 @@ Call this before generate_voiceover unless the user explicitly supplied a concre
 
 Use this when the task needs accurate scripted speech: narration, voiceover, dialogue, spoken explainer audio, product introductions, tutorials, sales-style oral copy, or when a video/composition clearly needs a human spoken line. Do not use it for background music, ambience, sound effects, character-voice experiments, or mixed sound design; use generate_audio for prompt-first audio and generate_music with provider="suno" only for full songs.
 
-The generated audio becomes an Audio Index item (<<<audio_N>>>) in later turns, so it can be used as a Seedance reference audio or as a Remotion <Audio> source. Before calling this tool, call list_voiceover_voices and choose a concrete voice_id that fits the script, unless the user explicitly supplied one. If list_voiceover_voices returns fallback only, you may still use the best fallback voice but mention that the full voice catalog was unavailable.`,
+The generated audio becomes an Audio Index item (<<<audio_N>>>) in later turns. Use the audio marker only as a conversational/Seedance reference label. In Remotion composition code, always use the returned public audioUrl directly as the <Audio src>; never put <<<audio_N>>> in props or <Audio src>. Before calling this tool, call list_voiceover_voices and choose a concrete voice_id that fits the script, unless the user explicitly supplied one. If list_voiceover_voices returns fallback only, you may still use the best fallback voice but mention that the full voice catalog was unavailable.`,
       inputSchema: z.object({
         text: z.string().describe('The exact spoken text to synthesize. Keep it natural and speakable; rewrite stiff copy into oral narration first when appropriate.'),
         title: z.string().optional().describe('Short title for the audio card/index, e.g. "Hook voiceover" or "Product narration".'),
@@ -2967,7 +2983,7 @@ The generated audio becomes an Audio Index item (<<<audio_N>>>) in later turns, 
 
         return {
           success: true as const,
-          message: `Voiceover generated and added to Audio Index as <<<audio_${(ctx.audioAttachments || []).length}>>>.`,
+          message: `Voiceover generated and added to Audio Index as <<<audio_${(ctx.audioAttachments || []).length}>>>.\nResolved voiceover URL: ${audioUrl}\nUse this URL directly in Remotion <Audio src>; do not use the <<<audio_${(ctx.audioAttachments || []).length}>>> marker inside composition code or props.`,
           audioUrl,
           title: trackTitle,
           taskId: result.taskId,

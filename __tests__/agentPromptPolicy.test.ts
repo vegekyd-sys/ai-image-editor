@@ -27,7 +27,43 @@ describe('agent prompt policy guards', () => {
     expect(agentTs).toContain('For raw video snapshots: use timestamp')
     expect(agentTs).toContain("source: 'video'")
     expect(agentTs).toContain("source: 'composition'")
+    expect(agentTs).toContain('Render succeeded. Treat this as a successful preview_frame result')
+    expect(agentTs).toContain('Continue with write_file when the user asked to publish')
     expect(agentTs).not.toContain('extract_video_frame: tool')
+  })
+
+  it('keeps Remotion composition code in the local runtime shape', () => {
+    const remotion = read('src/lib/prompts/remotion-composition.md')
+
+    expect(remotion).toContain('Never write')
+    expect(remotion).toContain('export default')
+    expect(remotion).toContain('function Composition(props)')
+    expect(remotion).toContain('Do not use ES module syntax')
+  })
+
+  it('returns resolved generate_image URLs for Remotion composition use', () => {
+    const agentTs = read('src/lib/agent.ts')
+
+    expect(agentTs).toContain('Resolved image URL:')
+    expect(agentTs).toContain('Use this URL directly in Remotion composition props/code')
+    expect(agentTs).toContain('do not use the <<<media_${mediaIndex}>>> marker inside composition code')
+  })
+
+  it('uses full timeline snapshots when materializing Remotion compositions', () => {
+    const agentTs = read('src/lib/agent.ts')
+
+    expect(agentTs).toContain("select('id, type, design_path')")
+    expect(agentTs).toContain('const available = snaps?.length || 0')
+    expect(agentTs).toContain('Invalid index ${input.media_index}. Available: 1-${available}.')
+    expect(agentTs).toContain('not an editable Remotion composition')
+  })
+
+  it('returns resolved voiceover URLs for Remotion audio use', () => {
+    const agentTs = read('src/lib/agent.ts')
+
+    expect(agentTs).toContain('Resolved voiceover URL:')
+    expect(agentTs).toContain('Use this URL directly in Remotion <Audio src>')
+    expect(agentTs).toContain('do not use the <<<audio_${(ctx.audioAttachments || []).length}>>> marker inside composition code or props')
   })
 
   it('keeps uploaded video auto-analysis in the tool-aware history path', () => {

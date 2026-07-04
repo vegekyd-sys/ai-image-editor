@@ -2,6 +2,7 @@ import { getAudioModelCapability } from './audio-model-capabilities'
 
 const BASE_URL = 'https://api.evolink.ai'
 const DEFAULT_MODEL = 'doubao-seed-audio-1-0'
+const DEFAULT_FETCH_TIMEOUT_MS = 60_000
 
 export interface EvolinkSeedAudioInput {
   prompt: string
@@ -45,6 +46,26 @@ function pollIntervalMs(): number {
   return Number.isFinite(value) && value > 0 ? value : 3000
 }
 
+function fetchTimeoutMs(): number {
+  const value = Number(process.env.EVOLINK_SEED_AUDIO_FETCH_TIMEOUT_MS)
+  return Number.isFinite(value) && value > 0 ? value : DEFAULT_FETCH_TIMEOUT_MS
+}
+
+async function fetchWithTimeout(input: string | URL, init?: RequestInit): Promise<Response> {
+  const controller = new AbortController()
+  const timeout = setTimeout(() => controller.abort(), fetchTimeoutMs())
+  try {
+    return await fetch(input, { ...init, signal: init?.signal || controller.signal })
+  } catch (err) {
+    if (err instanceof Error && err.name === 'AbortError') {
+      throw new Error(`EvoLink Seed Audio request timed out after ${fetchTimeoutMs()}ms.`)
+    }
+    throw err
+  } finally {
+    clearTimeout(timeout)
+  }
+}
+
 function withDurationHint(prompt: string, durationSeconds?: number): string {
   if (!durationSeconds) return prompt
   if (/约?\s*\d+(\.\d+)?\s*秒/.test(prompt) || /\b\d+(\.\d+)?\s*(s|sec|second|seconds)\b/i.test(prompt)) {
@@ -63,7 +84,7 @@ export async function generateWithEvolinkSeedAudio(input: EvolinkSeedAudioInput)
   }
 
   const startedAt = Date.now()
-  const submitRes = await fetch(`${BASE_URL}/v1/audios/generations`, {
+  const submitRes = await fetchWithTimeout(`${BASE_URL}/v1/audios/generations`, {
     method: 'POST',
     headers: headers(),
     body: JSON.stringify({
@@ -92,7 +113,7 @@ export async function generateWithEvolinkSeedAudio(input: EvolinkSeedAudioInput)
   const intervalMs = pollIntervalMs()
   for (let poll = 0; poll < 80; poll++) {
     await sleep(intervalMs)
-    const statusRes = await fetch(`${BASE_URL}/v1/tasks/${taskId}`, {
+    const statusRes = await fetchWithTimeout(`${BASE_URL}/v1/tasks/${taskId}`, {
       headers: { Authorization: `Bearer ${apiKey()}` },
     })
     const statusText = await statusRes.text()
