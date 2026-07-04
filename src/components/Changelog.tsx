@@ -10,6 +10,21 @@ interface ChangelogEntry {
 
 const CHANGELOG: ChangelogEntry[] = [
   {
+    date: '2026-07-04',
+    en: { title: 'Sonnet 5, Voiceover, and Remotion Explainers', items: [
+      'Makaron Agent now runs on Claude Sonnet 5, with compatibility fixes for the new code-output patterns and tool-input shape.',
+      'Voiceover generation is now part of the agent workflow: Makaron can create cute spoken narration with Volcengine Doubao Seed TTS, upload the audio, and place it into Remotion compositions.',
+      'Remotion explainer videos can combine screenshots, generated mascot stickers, Spark motion, and TTS voiceover into one editable 60-second timeline item.',
+      'Public project links now load Remotion composition previews without requiring login, including compositions that do not have editable text fields.',
+    ]},
+    zh: { title: 'Sonnet 5、配音和 Remotion 产品视频', items: [
+      'Makaron Agent 已升级到 Claude Sonnet 5，并补齐了新模型在代码输出、tool input 结构上的兼容。',
+      '配音生成进入 Agent 工作流：Makaron 可以用火山 Doubao Seed TTS 生成可爱的口播旁白，上传音频，并插入 Remotion composition。',
+      'Remotion explainer 视频现在可以把产品截图、生成的 mascot sticker、Spark 动效和 TTS 配音组合成一个可编辑的 60 秒时间线作品。',
+      '公开项目链接现在无需登录也能预览 Remotion composition，包括没有可编辑文本字段的 composition。',
+    ]},
+  },
+  {
     date: '2026-07-03',
     en: { title: 'Liquid Glass Polish', items: [
       'The Home, Projects, and editor surfaces now share a clearer Liquid Glass treatment across navigation, placeholders, model controls, video pills, and input areas.',
