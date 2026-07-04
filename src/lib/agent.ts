@@ -1,7 +1,7 @@
 import { streamText, tool, stepCountIs } from 'ai';
 import type { ModelMessage } from 'ai';
 import { after } from 'next/server';
-import { createAmazonBedrock } from '@ai-sdk/amazon-bedrock';
+import { createBedrockAnthropic } from '@ai-sdk/amazon-bedrock/anthropic';
 import { z } from 'zod';
 import sharp from 'sharp';
 import { validateDesign } from './design-harness';
@@ -11,7 +11,11 @@ import { rotateCamera } from './skills/rotate-camera';
 import { createVideo } from './skills/create-video';
 import { estimateVideoCredits, resolveAgentVideoSelection, resolveVideoGenerationRoute, resolveVideoOutputDuration, validateVideoModelRequest } from './video-model-capabilities';
 import { deductFixedCredits } from './billing/credits';
+import { createAudio } from './skills/create-audio';
 import { createMusic } from './skills/create-music';
+import { createVoiceover } from './skills/create-voiceover';
+import { formatAudioCapabilitiesForAgent } from './audio-model-capabilities';
+import { listVolcengineTtsVoices } from './volcengine-tts';
 import { transcribeWithVolcengineAsr, type VolcengineAsrTranscript, type TranscriptWord } from './volcengine-asr';
 import agentPrompt from './prompts/agent.md';
 import enhancePrompt from './prompts/enhance.md';
@@ -20,17 +24,21 @@ import wildPrompt from './prompts/wild.md';
 import captionsPrompt from './prompts/captions.md';
 import generateImageToolPrompt from './prompts/generate_image_tool.md';
 import type { DesignPayload, Tip, VideoMeta, VideoModel } from '@/types';
-import { isPermanentUrl, toPublicStorageUrl, uploadVideo } from '@/lib/supabase/storage';
+import { isPermanentUrl, toPublicStorageUrl, uploadAudio, uploadVideo } from '@/lib/supabase/storage';
 import type { AgentPerf } from './agent-perf';
 import { createTextDeltaState, normalizeTextDelta } from './agent-text-delta';
 import { formatAspectRatio } from './media-aspect';
 import { filterWorkspaceFilesForAgentScope } from './agent-workspace-scope';
+import { normalizeCompositionAnimation } from './composition-duration';
 import {
   createRemotionExportJob,
   runRemotionExportJob,
   type RemotionRenderProfile,
 } from '@/lib/remotion-export';
 import { VIDEO_PLACEHOLDER_IMAGE } from '@/lib/editor/timeline-derivations';
+import { getAgentModelId, isClaudeSonnet5Model } from './bedrock-models';
+import { describeBedrockToolUseInputIssue, normalizeBedrockToolUseInputs } from './bedrock-tool-inputs';
+import { mergePatchProps } from './patch-props';
 
 const MAX_VIDEO_DIMENSION_PROBE_BYTES = 220 * 1024 * 1024;
 
@@ -110,12 +118,47 @@ function runGoogleOmniVideoSnapshotAfterResponse(options: {
 // Model
 // ---------------------------------------------------------------------------
 
-const bedrock = createAmazonBedrock({
-  region: process.env.AWS_REGION?.trim(),
-  accessKeyId: process.env.AWS_ACCESS_KEY_ID?.trim(),
-  secretAccessKey: process.env.AWS_SECRET_ACCESS_KEY?.trim(),
-});
-const MODEL = bedrock(process.env.AGENT_MODEL || 'us.anthropic.claude-sonnet-4-6');
+function getAgentModel() {
+  const bedrockAnthropic = createBedrockAnthropic({
+    region: process.env.AWS_REGION?.trim(),
+    accessKeyId: process.env.AWS_ACCESS_KEY_ID?.trim(),
+    secretAccessKey: process.env.AWS_SECRET_ACCESS_KEY?.trim(),
+  });
+  return bedrockAnthropic(getAgentModelId());
+}
+const ANTHROPIC_CACHE_CONTROL = { anthropic: { cacheControl: { type: 'ephemeral' } } } as const;
+
+function getAnthropicContextManagement(modelId: string) {
+  if (isClaudeSonnet5Model(modelId)) {
+    return {
+      edits: [
+        {
+          type: 'clear_tool_uses_20250919',
+          trigger: { type: 'input_tokens', value: 650000 },
+          keep: { type: 'tool_uses', value: 24 },
+        },
+        {
+          type: 'compact_20260112',
+          trigger: { type: 'input_tokens', value: 900000 },
+        },
+      ],
+    };
+  }
+
+  return {
+    edits: [
+      {
+        type: 'clear_tool_uses_20250919',
+        trigger: { type: 'input_tokens', value: 80000 },
+        keep: { type: 'tool_uses', value: 3 },
+      },
+      {
+        type: 'compact_20260112',
+        trigger: { type: 'input_tokens', value: 150000 },
+      },
+    ],
+  };
+}
 
 // ---------------------------------------------------------------------------
 // Types
@@ -190,7 +233,7 @@ export type AgentStreamEvent =
   | { type: 'content'; text: string }
   | { type: 'new_turn' }  // signals start of a new assistant response (after tool result)
   | { type: 'image'; image: string; usedModel?: string; snapshotId?: string; imageUrl?: string; description?: string }
-  | { type: 'tool_call'; tool: string; input: Record<string, unknown>; images?: string[]; toolCallId?: string; step?: number }
+  | { type: 'tool_call'; tool: string; input: Record<string, unknown>; displayInput?: Record<string, unknown>; images?: string[]; toolCallId?: string; step?: number }
   | { type: 'tool_result'; tool: string; toolCallId?: string; step?: number; output?: unknown }
   | { type: 'animation_task'; taskId: string; prompt: string; imageUrls?: string[]; model?: string }
   | { type: 'video_snapshot'; snapshotId: string; taskId: string; videoMeta: import('@/types').VideoMeta }
@@ -250,6 +293,110 @@ function resolveAudioRefs(audioAttachments: AudioAttachment[] | undefined, refs:
   return { audioUrls };
 }
 
+function addAudioAttachment(ctx: AgentContext, audio: AudioAttachment | null | undefined): number {
+  if (!audio?.audioUrl || !/^https?:\/\//.test(audio.audioUrl)) {
+    return ctx.audioAttachments?.length || 0;
+  }
+
+  const next = [...(ctx.audioAttachments || [])];
+  const existing = next.findIndex(item => item.audioUrl === audio.audioUrl);
+  if (existing >= 0) {
+    next[existing] = { ...next[existing], ...audio };
+    ctx.audioAttachments = next;
+    return existing + 1;
+  }
+
+  next.push(audio);
+  ctx.audioAttachments = next;
+  return next.length;
+}
+
+function cleanMusicField(value: unknown, fallback = ''): string {
+  return String(value ?? fallback).replace(/[|\n\r]/g, ' ').trim();
+}
+
+function formatGeneratedAudioForCui(toolName: string | undefined, output: unknown): string | null {
+  if (!toolName || !['generate_voiceover', 'generate_audio', 'generate_music'].includes(toolName)) return null;
+  if (!output || typeof output !== 'object') return null;
+  const record = output as Record<string, unknown>;
+  if (record.success === false) return null;
+  const audioUrl = typeof record.audioUrl === 'string' && /^https?:\/\//.test(record.audioUrl)
+    ? record.audioUrl
+    : typeof record.url === 'string' && /^https?:\/\//.test(record.url)
+      ? record.url
+      : '';
+  if (!audioUrl) return null;
+
+  const title = cleanMusicField(
+    record.title,
+    toolName === 'generate_voiceover' ? 'Generated voiceover' : 'Generated audio',
+  );
+  const duration = Number(record.duration);
+  const safeDuration = Number.isFinite(duration) && duration > 0 ? Math.round(duration) : 0;
+  const trackIndex = Number(record.trackIndex);
+  const safeTrackIndex = Number.isInteger(trackIndex) && trackIndex >= 0 ? trackIndex : 0;
+  const tags = cleanMusicField(
+    record.tags,
+    toolName === 'generate_voiceover' ? 'voiceover,tts' : 'audio,generated',
+  );
+
+  return `\n\n🎵 音频已生成: ${title}\nmusic:${safeTrackIndex}|${title}|${safeDuration}|${tags}|${audioUrl}|${audioUrl}\n`;
+}
+
+function formatGeneratedAudioForModel(toolName: string, output: unknown): string {
+  if (!output || typeof output !== 'object') return 'Audio tool completed.';
+  const record = output as Record<string, unknown>;
+  if (record.success === false) {
+    return `Audio generation failed: ${String(record.message || 'unknown error')}`;
+  }
+  const title = cleanMusicField(record.title, toolName === 'generate_voiceover' ? 'Generated voiceover' : 'Generated audio');
+  const audioUrl = typeof record.audioUrl === 'string' && /^https?:\/\//.test(record.audioUrl)
+    ? record.audioUrl
+    : '';
+  const duration = typeof record.duration === 'number' && Number.isFinite(record.duration)
+    ? `${Math.round(record.duration)}s`
+    : 'unknown duration';
+  const trackIndex = typeof record.trackIndex === 'number' && Number.isFinite(record.trackIndex)
+    ? record.trackIndex
+    : undefined;
+  const marker = trackIndex != null ? `<<<audio_${trackIndex + 1}>>>` : 'Audio Index';
+  const provider = cleanMusicField(record.provider || record.model, '');
+  const resolved = audioUrl
+    ? `Resolved public audioUrl: ${audioUrl}\nUse this exact URL directly in Remotion <Audio src={...}> props/code. Do not regenerate this audio unless the duration or style is wrong.`
+    : 'No public audioUrl was returned; do not use this result as playable audio.';
+  return [
+    `${title} generated successfully (${duration}${provider ? `, ${provider}` : ''}).`,
+    `Added to Audio Index as ${marker}.`,
+    resolved,
+    typeof record.message === 'string' ? `Tool message: ${record.message}` : '',
+  ].filter(Boolean).join('\n');
+}
+
+function formatGeneratedImageForModel(output: unknown): string {
+  if (!output || typeof output !== 'object') return 'Image tool completed.';
+  const record = output as Record<string, unknown>;
+  if (record.success === false) {
+    return `Image generation failed: ${String(record.message || 'unknown error')}`;
+  }
+  const mediaIndex = typeof record.mediaIndex === 'number' && Number.isFinite(record.mediaIndex)
+    ? record.mediaIndex
+    : undefined;
+  const marker = mediaIndex ? `<<<media_${mediaIndex}>>>` : 'the new Media Index item';
+  const imageUrl = typeof record.imageUrl === 'string' && /^https?:\/\//.test(record.imageUrl)
+    ? record.imageUrl
+    : '';
+  const urlLine = imageUrl
+    ? `Resolved image URL: ${imageUrl}`
+    : `A public image URL may not be available in this same tool result yet because upload happens asynchronously.`;
+  return [
+    `Image generated successfully and added to the timeline as ${marker}.`,
+    urlLine,
+    `For Remotion composition run_code, use ${imageUrl ? 'the resolved URL' : marker} directly in props/code; run_code resolves Media Index markers before rendering.`,
+    `Do not call list_files or write_file(fromWorkspaceOutputs) to find this generated image. It is timeline media, not a workspace file output.`,
+    typeof record.message === 'string' ? `Tool message: ${record.message}` : '',
+  ].filter(Boolean).join('\n');
+}
+
 function resolveMediaMarkersInString(value: string, snapshotImages: string[]): string {
   return value.replace(/<<<media_(\d+)>>>/g, (marker, rawIndex) => {
     const media = snapshotImages[Number(rawIndex) - 1];
@@ -267,39 +414,6 @@ function resolveMediaMarkersInValue(value: unknown, snapshotImages: string[]): u
     );
   }
   return value;
-}
-
-function inferCompositionTotalFrames(code: string): number | null {
-  let maxFrame = 0;
-  let found = false;
-  const sequencePattern = /<Sequence\b([^>]*)>/g;
-  for (const match of code.matchAll(sequencePattern)) {
-    const attrs = match[1] || '';
-    const from = Number(attrs.match(/\bfrom=\{?(\d+)\}?/)?.[1] || 0);
-    const duration = Number(attrs.match(/\bdurationInFrames=\{?(\d+)\}?/)?.[1] || 0);
-    if (!Number.isFinite(from) || !Number.isFinite(duration) || duration <= 0) continue;
-    found = true;
-    maxFrame = Math.max(maxFrame, from + duration);
-  }
-  return found ? maxFrame : null;
-}
-
-function normalizeCompositionAnimation(
-  code: string,
-  animation: { fps?: number; durationInSeconds?: number; format?: string } | undefined
-): { fps: number; durationInSeconds: number; format?: string } | undefined {
-  if (!animation) return undefined;
-  const fps = Number(animation.fps) || 30;
-  const inferredFrames = inferCompositionTotalFrames(code);
-  if (!inferredFrames) {
-    return { ...animation, fps, durationInSeconds: Number(animation.durationInSeconds) || 5 };
-  }
-  const inferredSeconds = Number((inferredFrames / fps).toFixed(3));
-  const currentSeconds = Number(animation.durationInSeconds) || inferredSeconds;
-  if (Math.abs(currentSeconds - inferredSeconds) > 0.05) {
-    return { ...animation, fps, durationInSeconds: inferredSeconds };
-  }
-  return { ...animation, fps, durationInSeconds: currentSeconds };
 }
 
 function formatMs(ms: number | null | undefined): string {
@@ -567,8 +681,6 @@ async function resolveCompositionSource(ctx: AgentContext, input: {
     return { snapshotId: input.snapshot_id };
   }
   if (input.media_index !== undefined) {
-    const v = validateImageIndex(ctx.snapshotImages, input.media_index);
-    if (v.error) return { error: v.error };
     if (!ctx.supabase) return { error: 'Timeline lookup requires workspace access.' };
 
     const { data: snaps, error } = await ctx.supabase
@@ -578,7 +690,13 @@ async function resolveCompositionSource(ctx: AgentContext, input: {
       .order('sort_order', { ascending: true });
     if (error) return { error: `Snapshot lookup failed: ${error.message}` };
 
-    const snap = snaps?.[v.idx] as { id?: string; type?: string; design_path?: string | null } | undefined;
+    const idx = input.media_index - 1;
+    const available = snaps?.length || 0;
+    if (!Number.isInteger(input.media_index) || idx < 0 || idx >= available) {
+      return { error: `Invalid index ${input.media_index}. Available: 1-${available}.` };
+    }
+
+    const snap = snaps?.[idx] as { id?: string; type?: string; design_path?: string | null } | undefined;
     if (!snap) return { error: `No snapshot found for <<<media_${input.media_index}>>>.` };
     if (!snap.design_path) {
       return { error: `<<<media_${input.media_index}>>> is ${snap.type || 'media'}, not an editable Remotion composition.` };
@@ -1155,8 +1273,25 @@ function createTools(ctx: AgentContext) {
           // so base64 entries get replaced with http URLs for downstream tools
           await refreshSnapshotUrls(ctx);
         }
-        const indexInfo = skillResult.image ? ` Now <<<media_${ctx.snapshotImages.length}>>>.` : '';
-        return { success: skillResult.success as true, message: skillResult.message + indexInfo, contentBlocked: skillResult.contentBlocked };
+        const mediaIndex = skillResult.image ? ctx.snapshotImages.length : undefined;
+        const imageUrl = mediaIndex ? ctx.snapshotImages[mediaIndex - 1] : undefined;
+        const urlInfo = imageUrl?.startsWith('http')
+          ? ` Resolved image URL: ${imageUrl}. Use this URL directly in Remotion composition props/code; do not use the <<<media_${mediaIndex}>>> marker inside composition code.`
+          : '';
+        const indexInfo = mediaIndex ? ` Now <<<media_${mediaIndex}>>>.${urlInfo}` : '';
+        return {
+          success: skillResult.success as true,
+          message: skillResult.message + indexInfo,
+          ...(mediaIndex ? { mediaIndex } : {}),
+          ...(imageUrl?.startsWith('http') ? { imageUrl } : {}),
+          contentBlocked: skillResult.contentBlocked,
+        };
+      },
+      toModelOutput({ output }: { output: any }) {
+        return {
+          type: 'content' as const,
+          value: [{ type: 'text' as const, text: formatGeneratedImageForModel(output) }],
+        };
       },
     }),
 
@@ -2128,11 +2263,12 @@ Returns the rendered image so you can see it with your vision.`,
         }
         const time = (output.frame / output.fps).toFixed(1);
         const loc = output.workspacePath ? ` Saved: ${output.workspacePath}` : '';
+        const nextStep = ' Render succeeded. Treat this as a successful preview_frame result; if the attached frame is usable and there is no explicit error above, do not rewrite the composition just because the tool did not provide a natural-language visual critique. Continue with write_file when the user asked to publish.';
         return {
           type: 'content' as const,
           value: [
             { type: 'media' as const, data: output.base64Data, mediaType: output.mimeType },
-            { type: 'text' as const, text: `Frame ${output.frame}/${output.totalFrames} (${time}s).${loc}${output.question ? ` Focus: ${output.question}` : ''}` },
+            { type: 'text' as const, text: `Frame ${output.frame}/${output.totalFrames} (${time}s).${loc}${output.question ? ` Focus: ${output.question}.` : ''}${nextStep}` },
           ],
         };
       },
@@ -2437,16 +2573,17 @@ Runtimes:
 
 Return exactly one supported shape:
 - \`{ type: 'render', code, width, height, editables?, props?, animation? }\`
-- \`{ type: 'patch', edits, props?, code_path? }\`
+- \`{ type: 'patch', edits?, props?, code_path? }\`
 - \`{ type: 'image', data, mimeType }\`
 - \`{ type: 'video', path, contentType?, description?, duration?, width?, height? }\`
 - \`{ type: 'files', outputs: [{ path, contentType, description? }] }\`
 - \`{ type: 'text', content }\`
 - \`{ type: 'error', message }\`
 
-Composition hard rules: use Remotion \`<Img>\`, not \`<img>\`; declare editable user-facing text; use system CJK fonts; keep mobile image layers light. For timeline videos, preserve the selected Media Index video aspect ratio when all selected videos share one aspect: 9:16 sources must return a 9:16 canvas such as 1080x1920, never a 16:9 canvas. For mixed-aspect sources, choose the user/platform/current composition target and use contain/background; do not claim the runtime forced one source's aspect.
+Composition hard rules: use Remotion \`<Img>\`, not \`<img>\`; declare editable user-facing text; use system CJK fonts; keep mobile image layers light. Only \`Composition(props)\` may read \`props\` directly; helper components must receive values through their own parameters and must never reference outer \`props\` (prevents \`props is not defined\` in Lambda). For timeline videos, preserve the selected Media Index video aspect ratio when all selected videos share one aspect: 9:16 sources must return a 9:16 canvas such as 1080x1920, never a 16:9 canvas. For mixed-aspect sources, choose the user/platform/current composition target and use contain/background; do not claim the runtime forced one source's aspect.
+For first Remotion drafts, send one complete executable JavaScript body that returns the render object. Do not send a fragment like \`const code = \\\`\` without the final \`return { type: 'render', code, ... }\`. Keep long videos concise by using arrays, helper components, and interpolations instead of writing frame-by-frame code.
 
-Node media runtime provides \`require\`, \`process\`, \`ffmpegPath\`, \`inputFiles\`, \`outputDir\`, \`workDir\`, \`workspaceDir\`, \`saveOutput(localPath)\`, and \`probeVideo(path)\`. Workspace files are local to the runtime: use \`workspace_paths\` and \`inputFiles[n].inputPath\`, never download or reconstruct Storage URLs. For \`runtime: "node"\`, any referenced timeline media like \`<<<media_1>>>\` MUST be passed as \`media_refs: [1]\`; any existing workspace file from \`list_files\` MUST be passed as \`workspace_paths: ["project/media/file.mp4"]\`. The system resolves both to local workspace-backed files before your code runs. \`ffprobePath\` may be empty in deployment; prefer \`probeVideo(path)\`. Use \`type: "files"\` for chunks and \`type: "video"\` for the final MP4. If ordinary timeline splicing was routed to composition, do not switch to node just because preview needs adjustment; patch the composition or report the preview issue.`,
+Node media runtime provides \`require\`, \`process\`, \`ffmpegPath\`, \`inputFiles\`, \`outputDir\`, \`workDir\`, \`workspaceDir\`, \`saveOutput(localPath)\`, and \`probeVideo(path)\`. Most Node built-ins are available, plus media packages such as \`sharp\`, \`jszip\`, \`exifr\`, \`heic-convert\`, \`canvas\`, \`remotion\`, and Remotion media utilities. Arbitrary local/package require, env secrets, and escape/debug modules are blocked. Workspace files are local to the runtime: use \`workspace_paths\` and \`inputFiles[n].inputPath\`, never download or reconstruct Storage URLs. For \`runtime: "node"\`, any referenced timeline media like \`<<<media_1>>>\` MUST be passed as \`media_refs: [1]\`; any existing workspace file from \`list_files\` MUST be passed as \`workspace_paths: ["project/media/file.mp4"]\`. The system resolves both to local workspace-backed files before your code runs. \`ffprobePath\` may be empty in deployment; prefer \`probeVideo(path)\`. Use \`type: "files"\` for chunks and \`type: "video"\` for the final MP4. If ordinary timeline splicing was routed to composition, do not switch to node just because preview needs adjustment; patch the composition or report the preview issue.`,
       inputSchema: z.object({
         code: z.string().describe('JavaScript code to execute. Must return a result object.'),
         description: z.string().optional().describe('Brief description of what this code does. For compositions/videos, describe the content and visual style (e.g. "15s cinematic video: 4 scenes of temple visit with Ken Burns + fade transitions, Japanese text overlays"). This is stored as the snapshot description — be specific.'),
@@ -2455,10 +2592,11 @@ Node media runtime provides \`require\`, \`process\`, \`ffmpegPath\`, \`inputFil
         runtime: z.enum(['composition', 'design', 'node']).optional().describe('composition = safe Remotion/editable composition runtime. design = legacy alias for composition. node = fully open backend Node runtime with fs/child_process/ffmpeg for real MP4 editing.'),
       }),
       execute: async ({ code, description: desc, media_refs, workspace_paths, runtime }) => {
+        const executableCode = code;
         console.log(`🔧 [run_code] ${desc || 'executing code'}...`);
         const startTime = Date.now();
         // Store raw code for write_file({ fromLastRunCode: true })
-        (ctx as any).__lastRunCode = code;
+        (ctx as any).__lastRunCode = executableCode;
 
         // Refresh snapshotImages URLs from DB — ensures URLs are valid
         if (ctx.supabase && ctx.projectId) {
@@ -2480,7 +2618,7 @@ Node media runtime provides \`require\`, \`process\`, \`ffmpegPath\`, \`inputFil
             supabase: ctx.supabase,
           });
           const mediaResult = await runNodeMediaCode({
-            code,
+            code: executableCode,
             description: desc,
             mediaRefs: media_refs,
             workspacePaths: workspace_paths,
@@ -2614,7 +2752,7 @@ Node media runtime provides \`require\`, \`process\`, \`ffmpegPath\`, \`inputFil
             setTimeout, clearTimeout, Promise, // needed for async code
           });
 
-          const wrappedCode = `(async () => { 'use strict';\n${code}\n})()`;
+          const wrappedCode = `(async () => { 'use strict';\n${executableCode}\n})()`;
           const script = new vm.Script(wrappedCode);
           const result = await script.runInContext(context, { timeout: 30_000 });
 
@@ -2647,8 +2785,8 @@ Node media runtime provides \`require\`, \`process\`, \`ffmpegPath\`, \`inputFil
             }
           };
 
-          // { type: 'patch', edits: [...] } — Incremental search & replace on last composition or a specific composition via code_path
-          if (result?.type === 'patch' && Array.isArray(result.edits)) {
+          // { type: 'patch', edits?: [...], props?: {...} } — Incremental update on last composition or code_path
+          if (result?.type === 'patch' && (Array.isArray(result.edits) || result.props !== undefined)) {
             let baseDesign = (ctx as any).__lastDesignPayload;
 
             // code_path: load a different design from workspace as patch base
@@ -2668,16 +2806,18 @@ Node media runtime provides \`require\`, \`process\`, \`ffmpegPath\`, \`inputFil
               return { type: 'text' as const, content: 'Patch failed: no base composition. Provide code_path in the patch result, e.g. return { type: "patch", code_path: "code/...", edits: [...] }. Do not fall back to render unless the user asked for a new composition.' };
             }
             let code = baseDesign.code;
-            for (const edit of result.edits) {
-              if (typeof edit.old !== 'string' || typeof edit.new !== 'string') {
-                return { type: 'text' as const, content: 'Patch failed: each edit must have "old" and "new" strings.' };
+            if (Array.isArray(result.edits)) {
+              for (const edit of result.edits) {
+                if (typeof edit.old !== 'string' || typeof edit.new !== 'string') {
+                  return { type: 'text' as const, content: 'Patch failed: each edit must have "old" and "new" strings.' };
+                }
+                const count = code.split(edit.old).length - 1;
+                if (count === 0) return { type: 'text' as const, content: `Patch failed: old_string not found in current code.\n"${edit.old.slice(0, 100)}"` };
+                if (count > 1) return { type: 'text' as const, content: `Patch failed: old_string matches ${count} times. Add more surrounding context to make it unique.\n"${edit.old.slice(0, 100)}"` };
+                code = code.replace(edit.old, edit.new);
               }
-              const count = code.split(edit.old).length - 1;
-              if (count === 0) return { type: 'text' as const, content: `Patch failed: old_string not found in current code.\n"${edit.old.slice(0, 100)}"` };
-              if (count > 1) return { type: 'text' as const, content: `Patch failed: old_string matches ${count} times. Add more surrounding context to make it unique.\n"${edit.old.slice(0, 100)}"` };
-              code = code.replace(edit.old, edit.new);
             }
-            const mergedProps = result.props ? { ...(baseDesign.props || {}), ...result.props } : baseDesign.props;
+            const mergedProps = mergePatchProps(baseDesign.props, result.props);
             const patched = {
               ...baseDesign,
               code: resolveMediaMarkersInString(code, ctx.snapshotImages),
@@ -2835,17 +2975,252 @@ Node media runtime provides \`require\`, \`process\`, \`ffmpegPath\`, \`inputFil
       },
     }),
 
+    list_voiceover_voices: tool({
+      description: `Fetch the current Volcengine Doubao / Seed Speech voice catalog so you can choose the best voice for a voiceover.
+
+Call this before generate_voiceover unless the user explicitly supplied a concrete voice_id or the conversation already contains a fresh voice catalog. Use the returned language, gender, scenario, style tags, and descriptions to pick a fitting voice for the user's content. Prefer voices whose language and scenario match the script; avoid novelty, rock, character, dialect, or highly stylized voices unless the user's task asks for that style.`,
+      inputSchema: z.object({
+        query: z.string().optional().describe('Optional short description of what you need, e.g. "warm Chinese sales narration", "English energetic product demo", "古风女声". The tool returns the full catalog plus filtered suggestions when possible.'),
+        force_refresh: z.boolean().optional().describe('Set true to bypass the short server-side cache and call Volcengine ListSpeakers again. Default false.'),
+      }),
+      execute: async ({ query, force_refresh }) => {
+        const catalog = await listVolcengineTtsVoices({ forceRefresh: force_refresh, allowFallback: true });
+        const normalizedQuery = query?.trim().toLowerCase();
+        const scored = catalog.voices.map((voice) => {
+          const haystack = [
+            voice.id,
+            voice.name,
+            voice.language,
+            voice.gender,
+            voice.scenario,
+            voice.description,
+            voice.resourceId,
+            voice.model,
+            ...voice.styles,
+          ].filter(Boolean).join(' ').toLowerCase();
+          let score = 0;
+          if (normalizedQuery) {
+            for (const token of normalizedQuery.split(/[\s,，、;；/|]+/).filter(Boolean)) {
+              if (haystack.includes(token)) score += 2;
+            }
+          }
+          if (/中文|chinese|zh|普通话/.test(normalizedQuery || '') && /(^zh|中文|mandarin|普通话)/i.test(haystack)) score += 4;
+          if (/英文|english|en\b/.test(normalizedQuery || '') && /(^en|english|英文)/i.test(haystack)) score += 4;
+          if (/男|male/.test(normalizedQuery || '') && /male|男/.test(haystack)) score += 3;
+          if (/女|female/.test(normalizedQuery || '') && /female|女/.test(haystack)) score += 3;
+          if (/销售|sales|口播|旁白|解说|explainer|narration/.test(normalizedQuery || '') && /sales|口播|直播|广告|营销|general|通用|narration|旁白/.test(haystack)) score += 3;
+          return { voice, score };
+        }).sort((a, b) => b.score - a.score);
+        const suggestions = scored.filter(item => item.score > 0).slice(0, 12).map(item => item.voice);
+        return {
+          ...catalog,
+          count: catalog.voices.length,
+          suggestions: suggestions.length ? suggestions : catalog.voices.slice(0, 12),
+          query,
+        };
+      },
+      toModelOutput({ output }: { output: any }) {
+        const voices = Array.isArray(output.suggestions) ? output.suggestions : [];
+        const rows = voices.map((voice: any, index: number) => {
+          const tags = [
+            voice.language,
+            voice.gender,
+            voice.scenario,
+            ...(Array.isArray(voice.styles) ? voice.styles : []),
+          ].filter(Boolean).join(', ');
+          return `${index + 1}. ${voice.id}${voice.name ? ` — ${voice.name}` : ''}${tags ? ` (${tags})` : ''}${voice.description ? `: ${voice.description}` : ''}`;
+        }).join('\n');
+        const warning = output.warning ? `\nWarning: ${output.warning}` : '';
+        return {
+          type: 'content' as const,
+          value: [{
+            type: 'text' as const,
+            text: `Volcengine voice catalog source=${output.source}, total=${output.count || output.voices?.length || 0}.${warning}\nSuggested voices:\n${rows || 'No voices returned.'}\n\nChoose one voice_id and pass it to generate_voiceover.`,
+          }],
+        };
+      },
+    }),
+
+    generate_voiceover: tool({
+      description: `Generate a spoken narration / voiceover audio clip with Volcengine Doubao Seed TTS, upload it to the project, and add it to the Audio Index.
+
+Use this when the task needs accurate scripted speech: narration, voiceover, dialogue, spoken explainer audio, product introductions, tutorials, sales-style oral copy, or when a video/composition clearly needs a human spoken line. Do not use it for background music, ambience, sound effects, character-voice experiments, or mixed sound design; use generate_audio for prompt-first audio and generate_music with provider="suno" only for full songs.
+
+The generated audio becomes an Audio Index item (<<<audio_N>>>) in later turns. Use the audio marker only as a conversational/Seedance reference label. In Remotion composition code, always use the returned public audioUrl directly as the <Audio src>; never put <<<audio_N>>> in props or <Audio src>. Before calling this tool, call list_voiceover_voices and choose a concrete voice_id that fits the script, unless the user explicitly supplied one. If list_voiceover_voices returns fallback only, you may still use the best fallback voice but mention that the full voice catalog was unavailable.`,
+      inputSchema: z.object({
+        text: z.string().describe('The exact spoken text to synthesize. Keep it natural and speakable; rewrite stiff copy into oral narration first when appropriate.'),
+        title: z.string().optional().describe('Short title for the audio card/index, e.g. "Hook voiceover" or "Product narration".'),
+        voice_id: z.string().optional().describe('Optional Doubao speaker id / voice type. Omit to use the project default.'),
+        resource_id: z.enum(['seed-tts-2.0', 'seed-icl-2.0', 'seed-tts-1.0', 'seed-tts-1.0-concurr']).optional().describe('Volcengine resource id. Use seed-tts-2.0 for standard Doubao TTS voices; use seed-icl-2.0 only for authorized cloned voices.'),
+        speech_rate: z.number().min(-50).max(100).optional().describe('Speech speed. 0 is natural, 100 is 2x, -50 is 0.5x. Prefer 0 unless the user asks for faster/slower delivery.'),
+        context_prompt: z.string().optional().describe('Optional short voice direction for Seed TTS 2.0, e.g. "用轻松、真诚、有现场感的口吻".'),
+      }),
+      execute: async ({ text, title, voice_id, resource_id, speech_rate, context_prompt }) => {
+        if (!ctx.supabase || !ctx.userId) {
+          return { success: false as const, message: 'generate_voiceover requires an authenticated project workspace.' };
+        }
+
+        const result = await createVoiceover({
+          text,
+          title,
+          voiceId: voice_id,
+          resourceId: resource_id,
+          speechRate: speech_rate,
+          contextPrompt: context_prompt,
+        });
+        if (!result.success || !result.audio || !result.tts || !result.taskId) {
+          return { success: false as const, message: result.message };
+        }
+
+        const { data: latestRows } = await ctx.supabase
+          .from('project_music')
+          .select('track_index')
+          .eq('project_id', ctx.projectId)
+          .eq('user_id', ctx.userId)
+          .order('track_index', { ascending: false })
+          .limit(1);
+        const trackIndex = Number(latestRows?.[0]?.track_index ?? -1) + 1;
+        const audioUrl = await uploadAudio(ctx.supabase, ctx.userId, ctx.projectId, result.taskId, trackIndex, result.audio);
+        if (!audioUrl) {
+          return { success: false as const, message: 'Voiceover was generated but failed to upload to project storage.' };
+        }
+
+        const trackTitle = (result.title || title || 'Generated voiceover').slice(0, 120);
+        const { error: insertError } = await ctx.supabase.from('project_music').upsert({
+          suno_task_id: result.taskId,
+          track_index: trackIndex,
+          project_id: ctx.projectId,
+          user_id: ctx.userId,
+          prompt: text,
+          audio_url: audioUrl,
+          suno_audio_url: null,
+          stream_audio_url: null,
+          duration: null,
+          title: trackTitle,
+          tags: `voiceover,tts,doubao,${result.tts.resourceId}`,
+          status: 'completed',
+          selected: false,
+        }, { onConflict: 'suno_task_id,track_index' });
+        if (insertError) {
+          return { success: false as const, message: `Voiceover uploaded but DB insert failed: ${insertError.message}`, audioUrl };
+        }
+
+        const audioIndex = addAudioAttachment(ctx, { audioUrl, title: trackTitle, trackIndex });
+
+        return {
+          success: true as const,
+          message: `Voiceover generated and added to Audio Index as <<<audio_${audioIndex}>>>.\nResolved voiceover URL: ${audioUrl}\nUse this URL directly in Remotion <Audio src>; do not use the <<<audio_${audioIndex}>>> marker inside composition code or props.`,
+          audioUrl,
+          title: trackTitle,
+          trackIndex,
+          taskId: result.taskId,
+          model: result.tts.model,
+          voiceId: result.tts.voiceId,
+          resourceId: result.tts.resourceId,
+          textLength: result.tts.textLength,
+          sentenceCount: result.tts.sentences.length,
+        };
+      },
+      toModelOutput({ output }: { output: any }) {
+        return {
+          type: 'content' as const,
+          value: [{ type: 'text' as const, text: formatGeneratedAudioForModel('generate_voiceover', output) }],
+        };
+      },
+    }),
+
+    generate_audio: tool({
+      description: `Generate audio from a natural-language prompt.
+
+This is prompt-first: describe the sound directly. Do not force a rigid category. The prompt may describe background music, sound effects, ambience, character voice, or a mixed sound-design scene.
+
+Use generate_voiceover instead when exact scripted narration is required, especially for explainer videos, tutorials, and product introductions. Use generate_music with provider="suno" only when the user explicitly wants a full song, lyrics, vocals, or song structure.
+
+Available audio model notes:
+${formatAudioCapabilitiesForAgent()}`,
+      inputSchema: z.object({
+        prompt: z.string().describe('Natural-language description of the audio to create. Include duration, mood, instruments, sound effects, voice direction, and constraints directly in the prompt.'),
+        duration_seconds: z.number().optional().describe('Requested duration in seconds. Seed Audio supports up to 120 seconds. Also include the duration in the prompt for best results.'),
+        title: z.string().optional().describe('Short title for the generated audio asset.'),
+        model: z.enum(['auto', 'evolink-seed-audio']).optional().describe('Audio model. Omit or use auto for the default Seed Audio model.'),
+      }),
+      execute: async ({ prompt, duration_seconds, title, model }) => {
+        const result = await createAudio({
+          prompt,
+          durationSeconds: duration_seconds,
+          title,
+          model,
+          supabase: ctx.supabase,
+          userId: ctx.userId,
+          projectId: ctx.projectId,
+        });
+        if (result.success) {
+          if (result.audioUrl) {
+            const audioIndex = addAudioAttachment(ctx, {
+              audioUrl: result.audioUrl,
+              title: result.title || title || 'Generated audio',
+              duration: result.duration,
+              trackIndex: result.trackIndex,
+            });
+            result.message = `${result.message}\nAdded to Audio Index as <<<audio_${audioIndex}>>>.\nResolved audio URL: ${result.audioUrl}\nUse this URL directly in Remotion <Audio src>; do not rely on the marker inside composition code or props.`;
+          }
+          import('./billing/credits').then(({ deductCredits }) =>
+            deductCredits(ctx.userId ?? '', null, 'create_music')
+              .catch(e => console.error('[billing] generate_audio deduct error:', e))
+          );
+        }
+        return result;
+      },
+      toModelOutput({ output }: { output: any }) {
+        return {
+          type: 'content' as const,
+          value: [{ type: 'text' as const, text: formatGeneratedAudioForModel('generate_audio', output) }],
+        };
+      },
+    }),
+
     generate_music: tool({
-      // Cache point marker — cache all tools preceding this one (PR #8137 patch).
+      // Cache point marker — cache all tools preceding this one.
       // Must stay on the LAST tool in this map so the whole tools block is cached.
-      providerOptions: { bedrock: { cachePoint: { type: 'default' } } },
-      description: `Generate background music for the current composition/video. Returns 2 tracks (~30s). Focus on matching the mood and tone of the video content — genre, energy level, emotion, instruments.`,
+      providerOptions: ANTHROPIC_CACHE_CONTROL,
+      description: `Compatibility music tool. For ordinary short-video background music or music beds, this uses Seed Audio by default and returns one persisted audio asset. For full songs, lyrics, vocals, verse/chorus structure, or when the user asks for Suno, set provider="suno"; that legacy path returns a task ID and two candidate tracks.`,
       inputSchema: z.object({
         prompt: z.string().describe('Music description: genre, mood, energy, instruments (no timing, no artist names)'),
         instrumental: z.boolean().optional().describe('No vocals (default: true)'),
         style: z.string().optional().describe('Genre/mood tags for custom mode'),
+        duration_seconds: z.number().optional().describe('Requested duration for Seed Audio music beds. Seed Audio supports up to 120 seconds.'),
+        provider: z.enum(['auto', 'evolink-seed-audio', 'suno']).optional().describe('Use suno only for full songs, lyrics, or vocal music. Omit/auto uses Seed Audio for short-video music beds.'),
       }),
-      execute: async ({ prompt, instrumental, style }) => {
+      execute: async ({ prompt, instrumental, style, duration_seconds, provider }) => {
+        const shouldUseSuno = provider === 'suno' || instrumental === false || !!style;
+        if (!shouldUseSuno) {
+          const result = await createAudio({
+            prompt,
+            durationSeconds: duration_seconds,
+            title: 'Generated music',
+            model: provider === 'evolink-seed-audio' ? provider : 'auto',
+            supabase: ctx.supabase,
+            userId: ctx.userId,
+            projectId: ctx.projectId,
+          });
+          if (result.success) {
+            if (result.audioUrl) {
+              const audioIndex = addAudioAttachment(ctx, {
+                audioUrl: result.audioUrl,
+                title: result.title || 'Generated music',
+                duration: result.duration,
+                trackIndex: result.trackIndex,
+              });
+              result.message = `${result.message}\nAdded to Audio Index as <<<audio_${audioIndex}>>>.\nResolved music URL: ${result.audioUrl}\nUse this URL directly in Remotion <Audio src>; do not rely on the marker inside composition code or props.`;
+            }
+            import('./billing/credits').then(({ deductCredits }) =>
+              deductCredits(ctx.userId ?? '', null, 'create_music')
+                .catch(e => console.error('[billing] generate_music deduct error:', e))
+            );
+          }
+          return result;
+        }
+
         const result = await createMusic({ prompt, instrumental, style });
         if (result.taskId) {
           (ctx as any).musicTaskId = result.taskId;
@@ -2869,6 +3244,12 @@ Node media runtime provides \`require\`, \`process\`, \`ffmpegPath\`, \`inputFil
           }
         }
         return result;
+      },
+      toModelOutput({ output }: { output: any }) {
+        return {
+          type: 'content' as const,
+          value: [{ type: 'text' as const, text: formatGeneratedAudioForModel('generate_music', output) }],
+        };
       },
     }),
 
@@ -2989,7 +3370,7 @@ export async function* runMakaronAgent(
     const promptHasCompositionPointer = typeof prompt === 'string'
       && (prompt.includes('[Current Composition]') || prompt.includes('[Current composition pointer]'));
     const designInjection = options?.currentDesignPath && !promptHasCompositionPointer
-      ? `[Current composition pointer]\npath: ${options.currentDesignPath}${options.currentDesign ? `\nwidth: ${options.currentDesign.width}\nheight: ${options.currentDesign.height}${options.currentDesign.animation ? `\nanimation: ${options.currentDesign.animation.durationInSeconds}s @ ${options.currentDesign.animation.fps}fps` : ''}` : ''}\nTo modify this existing composition, call run_code with a JS return value like { type: 'patch', code_path: '${options.currentDesignPath}', edits: [...] } and runtime: "composition". Do not render from scratch unless the user asks for a new composition.\n\n`
+      ? `[Current composition pointer]\npath: ${options.currentDesignPath}${options.currentDesign ? `\nwidth: ${options.currentDesign.width}\nheight: ${options.currentDesign.height}${options.currentDesign.animation ? `\nanimation: ${options.currentDesign.animation.durationInSeconds}s @ ${options.currentDesign.animation.fps}fps` : ''}` : ''}\nTo modify this existing composition, call run_code with a JS return value like { type: 'patch', code_path: '${options.currentDesignPath}', edits: [...] } or { type: 'patch', code_path: '${options.currentDesignPath}', props: {...} } and runtime: "composition". Use props-only patches for text/data changes. Do not render from scratch unless the user asks for a new composition.\n\n`
       : '';
     userContent = analysisOnly ? analysisPrompt : (designInjection + prompt);
   }
@@ -3070,7 +3451,7 @@ export async function* runMakaronAgent(
   if (history.length >= 2) {
     for (let i = msgs.length - 2; i >= 0; i--) {
       if (msgs[i].role === 'assistant' || msgs[i].role === 'tool') {
-        msgs[i].providerOptions = { bedrock: { cachePoint: { type: 'default' } } };
+        msgs[i].providerOptions = ANTHROPIC_CACHE_CONTROL;
         break;
       }
     }
@@ -3079,29 +3460,23 @@ export async function* runMakaronAgent(
   try {
 
     const endStreamInit = perf?.span('model_stream_init', { projectId });
+    const agentModelId = getAgentModelId();
     const result = (streamText as any)({
-      model: MODEL,
-      system: [{ role: 'system', content: systemPrompt, providerOptions: { bedrock: { cachePoint: { type: 'default' } } } }],
+      model: getAgentModel(),
+      system: [{ role: 'system', content: systemPrompt, providerOptions: ANTHROPIC_CACHE_CONTROL }],
       messages: msgs,
       ...(tools ? { tools } : {}),
       ...(analysisOnly && tools ? { activeTools: [isVideoAnalysis ? 'analyze_video' : 'analyze_image'] } : {}),
       stopWhen: stepCountIs(maxSteps),
+      prepareStep: ({ messages }: { messages: ModelMessage[] }) => ({
+        messages: normalizeBedrockToolUseInputs(messages),
+      }),
       onStepFinish: () => { stepCount++; },
       providerOptions: {
         anthropic: {
-          contextManagement: {
-            edits: [
-              {
-                type: 'clear_tool_uses_20250919',
-                trigger: { type: 'input_tokens', value: 80000 },
-                keep: { type: 'tool_uses', value: 3 },
-              },
-              {
-                type: 'compact_20260112',
-                trigger: { type: 'input_tokens', value: 150000 },
-              },
-            ],
-          },
+          disableParallelToolUse: true,
+          toolStreaming: false,
+          contextManagement: getAnthropicContextManagement(agentModelId),
         },
       },
     });
@@ -3225,6 +3600,12 @@ export async function* runMakaronAgent(
             : (q ? `分析视频：${q.slice(0, 40)}` : '分析视频') };
         } else if (event.toolName === 'transcribe_audio') {
           yield { type: 'status', text: isEnLocale ? 'Transcribing audio...' : '转写音频中...' };
+        } else if (event.toolName === 'list_voiceover_voices') {
+          yield { type: 'status', text: isEnLocale ? 'Choosing voice...' : '选择配音音色中...' };
+        } else if (event.toolName === 'generate_voiceover') {
+          yield { type: 'status', text: isEnLocale ? 'Generating voiceover...' : '生成配音中...' };
+        } else if (event.toolName === 'generate_audio' || event.toolName === 'generate_music') {
+          yield { type: 'status', text: isEnLocale ? 'Generating audio...' : '生成音频中...' };
         } else if (event.toolName === 'preview_frame') {
           const input = event.input as { frame?: number; timestamp?: number };
           const hint = input.frame !== undefined ? `frame ${input.frame}` : input.timestamp !== undefined ? `${input.timestamp}s` : 'frame 0';
@@ -3279,17 +3660,21 @@ export async function* runMakaronAgent(
             ];
           }
         }
-        // For run_code: truncate code in tool_call event (full code already streamed via tool-input-delta)
+        // For run_code: keep the real input for persistence/model history, but send a
+        // compact display input to the client. Replaying a UI-truncated code string
+        // teaches the next model turn to copy "... (N chars)" as executable code.
         const toolInput = event.input as Record<string, unknown>;
         const isRunCode = event.toolName === 'run_code' && typeof toolInput.code === 'string';
+        const displayInput = isRunCode
+          ? { ...toolInput, code: `[code streamed separately: ${(toolInput.code as string).length} chars]` }
+          : toolInput;
         yield {
           type: 'tool_call',
           tool: event.toolName,
           toolCallId: activeToolCallId,
           step: stepCount,
-          input: isRunCode
-            ? { ...toolInput, code: ((toolInput.code as string)).slice(0, 100) + `... (${(toolInput.code as string).length} chars)` }
-            : toolInput,
+          input: toolInput,
+          ...(displayInput !== toolInput ? { displayInput } : {}),
           ...(toolCallImages ? { images: toolCallImages } : {}),
         };
         // If code wasn't streamed via delta (edge case), send it now
@@ -3324,6 +3709,10 @@ export async function* runMakaronAgent(
         yield { type: 'status', text: isEnLocale ? 'Thinking...' : 'Agent 正在思考...' };
         if (toolName) {
           yield { type: 'tool_result', tool: toolName, toolCallId, step: stepCount, output: toolOutput };
+          const generatedAudioLine = formatGeneratedAudioForCui(toolName, toolOutput);
+          if (generatedAudioLine) {
+            yield { type: 'content', text: generatedAudioLine };
+          }
         }
         activeToolCallId = undefined;
 
@@ -3439,7 +3828,7 @@ export async function* runMakaronAgent(
     try {
       const usage = await result.totalUsage;
       if (usage) {
-        const modelId = process.env.AGENT_MODEL || 'us.anthropic.claude-opus-4-6-v1';
+        const modelId = getAgentModelId();
         // Vercel AI SDK v6 semantics (VERIFIED from official source):
         //   - `usage.inputTokens` = TOTAL (noCache + cacheRead + cacheWrite)
         //     See ai/src/types/usage.ts asLanguageModelUsage — `inputTokens: usage.inputTokens.total`
@@ -3465,6 +3854,10 @@ export async function* runMakaronAgent(
 
     yield { type: 'done' };
   } catch (err) {
+    const bedrockToolInputIssue = describeBedrockToolUseInputIssue(err);
+    if (bedrockToolInputIssue) {
+      console.error(`[agent] Bedrock toolUse input issue: ${bedrockToolInputIssue}`);
+    }
     console.log(`⏱️ [agent] ERROR at +${((Date.now() - agentStartTime) / 1000).toFixed(1)}s: ${err instanceof Error ? err.message : String(err)}`);
     yield { type: 'error', message: err instanceof Error ? err.message : String(err) };
   }
@@ -3598,7 +3991,7 @@ export async function* streamTipsWithClaude(
 ${template}${locale === 'en' ? TIPS_JSON_FORMAT_EN : TIPS_JSON_FORMAT_ZH}`;
 
   const { textStream } = streamText({
-    model: MODEL,
+    model: getAgentModel(),
     system: systemPrompt,
     messages: [
       {

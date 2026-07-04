@@ -85,7 +85,7 @@ describe('Remotion export worker contract', () => {
     expect(exporter).toContain("replace(/\\\\[rn]|[\\u0000-\\u001F\\u007F]/g, '').trim()")
     expect(read('src/lib/remotion-lambda-renderer.ts')).toContain("replace(/\\\\[rn]|[\\u0000-\\u001F\\u007F]/g, '').trim()")
     expect(read('src/lib/supabase/service.ts')).toContain("replace(/\\\\[rn]|[\\u0000-\\u001F\\u007F]/g, '').trim()")
-    expect(read('src/lib/remotion-lambda-renderer.ts')).toContain("readEnv('AWS_ACCESS_KEY_ID')")
+    expect(read('src/lib/remotion-lambda-renderer.ts')).not.toContain('process.env.AWS_ACCESS_KEY_ID =')
     expect(exporter).toContain("readEnv('AWS_ACCESS_KEY_ID')")
     expect(exporter).toContain('renderDesignVideoLambdaToUrl')
     expect(exporter).toContain('if (job.publish)')

@@ -568,9 +568,9 @@ describe('credits', () => {
   });
 
   describe('getTokenRate matching', () => {
-    it('strips region prefix for Bedrock models', async () => {
+    it('strips inference profile prefix for Bedrock models', async () => {
       const rates = [
-        { model_id: 'anthropic.claude-sonnet-4-6', display_name: 'Sonnet', input_per_1m: 3, output_per_1m: 15, markup: 2, is_active: true },
+        { model_id: 'anthropic.claude-sonnet-5', display_name: 'Sonnet', input_per_1m: 2, output_per_1m: 10, markup: 2, is_active: true },
       ];
       const ratesChain = mockQuery(rates);
       ratesChain.order = vi.fn().mockResolvedValue({ data: rates, error: null });
@@ -579,10 +579,13 @@ describe('credits', () => {
       const { getTokenRate, invalidateTokenRateCache } = await import('@/lib/billing/token-rates');
       invalidateTokenRateCache();
 
-      // "us.anthropic.claude-sonnet-4-6" should match "anthropic.claude-sonnet-4-6" after stripping "us."
-      const rate = await getTokenRate('us.anthropic.claude-sonnet-4-6');
-      expect(rate).not.toBeNull();
-      expect(rate!.display_name).toBe('Sonnet');
+      // Inference profiles should match the base Anthropic rate row after stripping the profile prefix.
+      const usRate = await getTokenRate('us.anthropic.claude-sonnet-5');
+      const globalRate = await getTokenRate('global.anthropic.claude-sonnet-5');
+      expect(usRate).not.toBeNull();
+      expect(globalRate).not.toBeNull();
+      expect(usRate!.display_name).toBe('Sonnet');
+      expect(globalRate!.display_name).toBe('Sonnet');
     });
 
     it('matches by prefix for versioned models', async () => {

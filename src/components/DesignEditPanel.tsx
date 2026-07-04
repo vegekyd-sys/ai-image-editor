@@ -6,8 +6,8 @@ import { useHorizontalScroll } from '@/hooks/useHorizontalScroll';
 import PillCarousel from '@/components/PillCarousel';
 
 interface DesignEditPanelProps {
-  editables: EditableField[];
-  props: Record<string, unknown>;
+  editables?: EditableField[];
+  props?: Record<string, unknown>;
   onUpdateProp: (key: string, value: string) => void;
   selectedFieldId: string | null;
   onSelectField: (id: string | null) => void;
@@ -16,8 +16,8 @@ interface DesignEditPanelProps {
 }
 
 export default function DesignEditPanel({
-  editables,
-  props,
+  editables = [],
+  props = {},
   selectedFieldId,
   onSelectField,
   onStartEdit,

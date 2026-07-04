@@ -232,12 +232,10 @@ export class AgentDualWriter {
       case 'tool_call': {
         await this.flushContent();
         await this.saveCurrentMessage();
-        const input = { ...event.input };
-        if (typeof input.code === 'string' && input.code.length > 2000) {
-          input.code = input.code.slice(0, 2000) + '...(truncated)';
-        }
-        delete input.image;
-        delete input.images;
+        const input = this.sanitizeToolInputForHistory(event.input);
+        const displayInput = event.displayInput
+          ? this.sanitizeToolInputForDisplay(event.displayInput)
+          : this.sanitizeToolInputForDisplay(input);
         if (event.toolCallId) {
           this.pendingToolCalls.set(event.toolCallId, {
             tool: event.tool,
@@ -245,8 +243,8 @@ export class AgentDualWriter {
             step: event.step ?? 0,
           });
         }
-        await this.insertEvent('tool_call', { tool: event.tool, input });
-        this.tryEnqueue(event);
+        await this.insertEvent('tool_call', { tool: event.tool, input: displayInput });
+        this.tryEnqueue({ ...event, input: displayInput });
         return;
       }
 
@@ -316,7 +314,7 @@ export class AgentDualWriter {
 
   /** Save accumulated message text to messages table. */
   private async saveCurrentMessage() {
-    if (!this.messageText.trim()) return;
+    if (!this.messageText.trim() && !this.currentMessageHasImage) return;
     try {
       await this.supabase.from('messages').upsert({
         id: this.currentMessageId,
@@ -352,6 +350,23 @@ export class AgentDualWriter {
     } catch (err) {
       console.error('[DualWriter] Failed to insert event:', type, err);
     }
+  }
+
+  private sanitizeToolInputForHistory(input: Record<string, unknown>) {
+    const safe = { ...input };
+    delete safe.image;
+    delete safe.images;
+    return safe;
+  }
+
+  private sanitizeToolInputForDisplay(input: Record<string, unknown>) {
+    const safe = { ...input };
+    delete safe.image;
+    delete safe.images;
+    if (typeof safe.code === 'string' && safe.code.length > 2000) {
+      safe.code = `[code streamed separately: ${safe.code.length} chars]`;
+    }
+    return safe;
   }
 
   private async persistToolResult(event: Extract<AgentStreamEvent, { type: 'tool_result' }>) {

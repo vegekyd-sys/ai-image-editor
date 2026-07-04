@@ -2,11 +2,11 @@ import * as childProcess from 'child_process'
 import * as crypto from 'crypto'
 import * as fs from 'fs'
 import * as fsPromises from 'fs/promises'
+import { builtinModules, createRequire } from 'module'
 import * as os from 'os'
 import path from 'path'
-import * as stream from 'stream'
 import * as url from 'url'
-import * as util from 'util'
+import sharp from 'sharp'
 import { findFfmpeg, findFfprobe, probeVideoFile, type VideoProbe } from './ffmpeg-runtime'
 import * as workspace from './workspace'
 import { toPublicStorageUrl } from '@/lib/supabase/storage'
@@ -17,6 +17,41 @@ const { tmpdir } = os
 const { pathToFileURL } = url
 const INPUT_DOWNLOAD_CONCURRENCY = 2
 const INPUT_DOWNLOAD_TIMEOUT_MS = 180_000
+const serverRequire = createRequire(import.meta.url)
+const BLOCKED_NODE_MODULES = new Set([
+  'cluster',
+  'inspector',
+  'inspector/promises',
+  'module',
+  'repl',
+  'vm',
+  'worker_threads',
+])
+const ALLOWED_MEDIA_PACKAGES = new Set([
+  '@remotion/media',
+  '@remotion/media-utils',
+  '@remotion/renderer',
+  'canvas',
+  'exifr',
+  'heic-convert',
+  'jszip',
+  'remotion',
+  'sharp',
+])
+const SAFE_ENV_KEYS = new Set([
+  'CI',
+  'FFMPEG_PATH',
+  'FFPROBE_PATH',
+  'LANG',
+  'LC_ALL',
+  'NODE_ENV',
+  'PATH',
+  'TMP',
+  'TMPDIR',
+  'TEMP',
+  'TZ',
+])
+const SENSITIVE_ENV_RE = /(api|auth|credential|database|key|password|private|secret|session|signing|supabase|token|webhook)/i
 
 type SupabaseClient = any
 
@@ -272,31 +307,138 @@ function normalizeOutputs(raw: unknown, outputDir: string): MediaSandboxOutput[]
     }))
 }
 
-function createNodeMediaRequire(): NodeRequire {
+function normalizeModuleId(id: string): string {
+  return id.startsWith('node:') ? id.slice(5) : id
+}
+
+function sanitizeProcessEnv(extra?: NodeJS.ProcessEnv): NodeJS.ProcessEnv {
+  const env: Record<string, string> = {}
+  for (const key of SAFE_ENV_KEYS) {
+    const value = process.env[key]
+    if (value !== undefined) env[key] = value
+  }
+  if (extra) {
+    for (const [key, value] of Object.entries(extra)) {
+      if (value === undefined || SENSITIVE_ENV_RE.test(key)) continue
+      env[key] = value
+    }
+  }
+  return env as NodeJS.ProcessEnv
+}
+
+function withSafeChildOptions(options: unknown, cwd: string): unknown {
+  if (!options || typeof options === 'function') return { cwd, env: sanitizeProcessEnv() }
+  if (typeof options !== 'object') return options
+  const record = options as Record<string, unknown>
+  return {
+    ...record,
+    cwd: typeof record.cwd === 'string' ? record.cwd : cwd,
+    env: sanitizeProcessEnv(record.env as NodeJS.ProcessEnv | undefined),
+  }
+}
+
+function createSafeChildProcess(cwd: string): typeof childProcess {
+  return {
+    ...childProcess,
+    exec: ((command: string, optionsOrCallback?: unknown, callback?: unknown) => {
+      if (typeof optionsOrCallback === 'function') {
+        return (childProcess.exec as any)(command, withSafeChildOptions(undefined, cwd), optionsOrCallback)
+      }
+      return (childProcess.exec as any)(command, withSafeChildOptions(optionsOrCallback, cwd), callback)
+    }) as typeof childProcess.exec,
+    execFile: ((file: string, argsOrOptionsOrCallback?: unknown, optionsOrCallback?: unknown, callback?: unknown) => {
+      if (Array.isArray(argsOrOptionsOrCallback)) {
+        if (typeof optionsOrCallback === 'function') {
+          return (childProcess.execFile as any)(file, argsOrOptionsOrCallback, withSafeChildOptions(undefined, cwd), optionsOrCallback)
+        }
+        return (childProcess.execFile as any)(file, argsOrOptionsOrCallback, withSafeChildOptions(optionsOrCallback, cwd), callback)
+      }
+      if (typeof argsOrOptionsOrCallback === 'function') {
+        return (childProcess.execFile as any)(file, [], withSafeChildOptions(undefined, cwd), argsOrOptionsOrCallback)
+      }
+      return (childProcess.execFile as any)(file, [], withSafeChildOptions(argsOrOptionsOrCallback, cwd), optionsOrCallback)
+    }) as typeof childProcess.execFile,
+    spawn: ((command: string, argsOrOptions?: unknown, options?: unknown) => {
+      if (Array.isArray(argsOrOptions)) {
+        return childProcess.spawn(command, argsOrOptions, withSafeChildOptions(options, cwd) as childProcess.SpawnOptions)
+      }
+      return childProcess.spawn(command, [], withSafeChildOptions(argsOrOptions, cwd) as childProcess.SpawnOptions)
+    }) as typeof childProcess.spawn,
+    execSync: ((command: string, options?: unknown) => {
+      return childProcess.execSync(command, withSafeChildOptions(options, cwd) as childProcess.ExecSyncOptions)
+    }) as typeof childProcess.execSync,
+    execFileSync: ((file: string, argsOrOptions?: unknown, options?: unknown) => {
+      if (Array.isArray(argsOrOptions)) {
+        return childProcess.execFileSync(file, argsOrOptions, withSafeChildOptions(options, cwd) as childProcess.ExecFileSyncOptions)
+      }
+      return childProcess.execFileSync(file, [], withSafeChildOptions(argsOrOptions, cwd) as childProcess.ExecFileSyncOptions)
+    }) as typeof childProcess.execFileSync,
+    spawnSync: ((command: string, argsOrOptions?: unknown, options?: unknown) => {
+      if (Array.isArray(argsOrOptions)) {
+        return childProcess.spawnSync(command, argsOrOptions, withSafeChildOptions(options, cwd) as childProcess.SpawnSyncOptions)
+      }
+      return childProcess.spawnSync(command, [], withSafeChildOptions(argsOrOptions, cwd) as childProcess.SpawnSyncOptions)
+    }) as typeof childProcess.spawnSync,
+  }
+}
+
+function createSafeProcess(cwd: string) {
+  return {
+    arch: process.arch,
+    argv: ['node', path.join(cwd, 'agent-media-code.js')],
+    cwd: () => cwd,
+    env: sanitizeProcessEnv(),
+    hrtime: process.hrtime.bind(process),
+    memoryUsage: process.memoryUsage.bind(process),
+    nextTick: process.nextTick.bind(process),
+    pid: process.pid,
+    platform: process.platform,
+    release: process.release,
+    stderr: process.stderr,
+    stdin: process.stdin,
+    stdout: process.stdout,
+    title: 'makaron-media-runtime',
+    uptime: process.uptime.bind(process),
+    version: process.version,
+    versions: process.versions,
+    chdir: () => {
+      throw new Error('process.chdir is not available in the Node media runtime. Use absolute paths from workDir/outputDir/inputFiles instead.')
+    },
+    exit: () => {
+      throw new Error('process.exit is not available in the Node media runtime. Return a result object instead.')
+    },
+    kill: () => {
+      throw new Error('process.kill is not available in the Node media runtime.')
+    },
+  }
+}
+
+function createNodeMediaRequire(cwd: string): NodeRequire {
   const builtins: Record<string, unknown> = {
+    child_process: createSafeChildProcess(cwd),
+    'node:child_process': createSafeChildProcess(cwd),
     fs,
     'node:fs': fs,
     'fs/promises': fsPromises,
     'node:fs/promises': fsPromises,
     path,
     'node:path': path,
-    os,
-    'node:os': os,
-    child_process: childProcess,
-    'node:child_process': childProcess,
-    util,
-    'node:util': util,
-    stream,
-    'node:stream': stream,
-    url,
-    'node:url': url,
-    crypto,
-    'node:crypto': crypto,
+    sharp,
   }
 
   return ((id: string) => {
+    const normalized = normalizeModuleId(id)
+    if (BLOCKED_NODE_MODULES.has(normalized)) {
+      throw new Error(`Module "${id}" is not available in the Node media runtime for safety.`)
+    }
     if (id in builtins) return builtins[id]
-    throw new Error(`Module "${id}" is not available in the Node media runtime. Use Node built-ins such as fs, path, child_process, util, os, stream, url, and crypto.`)
+    if (builtinModules.includes(normalized) || builtinModules.includes(id)) {
+      return serverRequire(id)
+    }
+    if (ALLOWED_MEDIA_PACKAGES.has(id)) {
+      return serverRequire(id)
+    }
+    throw new Error(`Module "${id}" is not available in the Node media runtime. Node built-ins and media packages are available; arbitrary local files or npm packages are blocked for safety.`)
   }) as NodeRequire
 }
 
@@ -431,13 +573,13 @@ export async function runNodeMediaCode(options: RunNodeMediaCodeOptions): Promis
       ffprobePath,
     }
 
-    const localRequire = createNodeMediaRequire()
+    const localRequire = createNodeMediaRequire(workDir)
+    const safeProcess = createSafeProcess(workDir)
     const AsyncFunction = Object.getPrototypeOf(async function () {}).constructor
     const runner = new AsyncFunction(
       'require',
       'process',
       'console',
-      'Buffer',
       'fetch',
       'ctx',
       'context',
@@ -460,9 +602,8 @@ export async function runNodeMediaCode(options: RunNodeMediaCodeOptions): Promis
     const result = await withTimeout(
       runner(
         localRequire,
-        process,
+        safeProcess,
         console,
-        Buffer,
         fetch,
         context,
         context,

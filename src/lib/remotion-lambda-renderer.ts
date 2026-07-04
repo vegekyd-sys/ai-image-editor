@@ -97,72 +97,12 @@ function lambdaEnv(name: string): string {
   return value
 }
 
-function readRemotionAwsCredentials():
-  | { accessKeyId: string; secretAccessKey: string; sessionToken?: string }
-  | null {
-  const accessKeyId = readEnv('REMOTION_AWS_ACCESS_KEY_ID') || readEnv('REMOTION_AWS_ACCESS_KEY') || readEnv('AWS_ACCESS_KEY_ID')
-  const secretAccessKey = readEnv('REMOTION_AWS_SECRET_ACCESS_KEY') || readEnv('REMOTION_AWS_SECRET_KEY') || readEnv('AWS_SECRET_ACCESS_KEY')
-  const sessionToken = readEnv('REMOTION_AWS_SESSION_TOKEN') || readEnv('AWS_SESSION_TOKEN')
-  if (!accessKeyId || !secretAccessKey) return null
-  return {
-    accessKeyId,
-    secretAccessKey,
-    ...(sessionToken ? { sessionToken } : {}),
-  }
-}
-
 async function withRemotionAwsCredentials<T>(fn: () => Promise<T>): Promise<T> {
-  const credentials = readRemotionAwsCredentials()
-  if (!credentials) return fn()
-  const region = readEnv('REMOTION_LAMBDA_REGION') || readEnv('AWS_REGION')
-
-  const previous = {
-    AWS_ACCESS_KEY_ID: process.env.AWS_ACCESS_KEY_ID,
-    AWS_SECRET_ACCESS_KEY: process.env.AWS_SECRET_ACCESS_KEY,
-    AWS_SESSION_TOKEN: process.env.AWS_SESSION_TOKEN,
-    AWS_REGION: process.env.AWS_REGION,
-    REMOTION_AWS_ACCESS_KEY_ID: process.env.REMOTION_AWS_ACCESS_KEY_ID,
-    REMOTION_AWS_ACCESS_KEY: process.env.REMOTION_AWS_ACCESS_KEY,
-    REMOTION_AWS_SECRET_ACCESS_KEY: process.env.REMOTION_AWS_SECRET_ACCESS_KEY,
-    REMOTION_AWS_SECRET_KEY: process.env.REMOTION_AWS_SECRET_KEY,
-    REMOTION_AWS_SESSION_TOKEN: process.env.REMOTION_AWS_SESSION_TOKEN,
-  }
-  process.env.AWS_ACCESS_KEY_ID = credentials.accessKeyId
-  process.env.AWS_SECRET_ACCESS_KEY = credentials.secretAccessKey
-  process.env.REMOTION_AWS_ACCESS_KEY_ID = credentials.accessKeyId
-  process.env.REMOTION_AWS_SECRET_ACCESS_KEY = credentials.secretAccessKey
-  delete process.env.REMOTION_AWS_ACCESS_KEY
-  delete process.env.REMOTION_AWS_SECRET_KEY
-  if (region) process.env.AWS_REGION = region
-  if (credentials.sessionToken) {
-    process.env.AWS_SESSION_TOKEN = credentials.sessionToken
-    process.env.REMOTION_AWS_SESSION_TOKEN = credentials.sessionToken
-  } else {
-    delete process.env.AWS_SESSION_TOKEN
-    delete process.env.REMOTION_AWS_SESSION_TOKEN
-  }
-  try {
-    return await fn()
-  } finally {
-    if (previous.AWS_ACCESS_KEY_ID === undefined) delete process.env.AWS_ACCESS_KEY_ID
-    else process.env.AWS_ACCESS_KEY_ID = previous.AWS_ACCESS_KEY_ID
-    if (previous.AWS_SECRET_ACCESS_KEY === undefined) delete process.env.AWS_SECRET_ACCESS_KEY
-    else process.env.AWS_SECRET_ACCESS_KEY = previous.AWS_SECRET_ACCESS_KEY
-    if (previous.AWS_SESSION_TOKEN === undefined) delete process.env.AWS_SESSION_TOKEN
-    else process.env.AWS_SESSION_TOKEN = previous.AWS_SESSION_TOKEN
-    if (previous.AWS_REGION === undefined) delete process.env.AWS_REGION
-    else process.env.AWS_REGION = previous.AWS_REGION
-    if (previous.REMOTION_AWS_ACCESS_KEY_ID === undefined) delete process.env.REMOTION_AWS_ACCESS_KEY_ID
-    else process.env.REMOTION_AWS_ACCESS_KEY_ID = previous.REMOTION_AWS_ACCESS_KEY_ID
-    if (previous.REMOTION_AWS_ACCESS_KEY === undefined) delete process.env.REMOTION_AWS_ACCESS_KEY
-    else process.env.REMOTION_AWS_ACCESS_KEY = previous.REMOTION_AWS_ACCESS_KEY
-    if (previous.REMOTION_AWS_SECRET_ACCESS_KEY === undefined) delete process.env.REMOTION_AWS_SECRET_ACCESS_KEY
-    else process.env.REMOTION_AWS_SECRET_ACCESS_KEY = previous.REMOTION_AWS_SECRET_ACCESS_KEY
-    if (previous.REMOTION_AWS_SECRET_KEY === undefined) delete process.env.REMOTION_AWS_SECRET_KEY
-    else process.env.REMOTION_AWS_SECRET_KEY = previous.REMOTION_AWS_SECRET_KEY
-    if (previous.REMOTION_AWS_SESSION_TOKEN === undefined) delete process.env.REMOTION_AWS_SESSION_TOKEN
-    else process.env.REMOTION_AWS_SESSION_TOKEN = previous.REMOTION_AWS_SESSION_TOKEN
-  }
+  // @remotion/lambda-client reads REMOTION_AWS_* before AWS_* by itself.
+  // Do not temporarily overwrite global AWS_* in the Next.js process: concurrent
+  // agent requests may initialize Bedrock with Remotion's IAM user and then fail
+  // Sonnet 5 calls with an unrelated 403.
+  return fn()
 }
 
 function sleep(ms: number): Promise<void> {

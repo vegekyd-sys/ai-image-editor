@@ -1,5 +1,6 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { makeAgentCallbacks, type AgentCallbackContext } from '@/lib/agentCallbacks';
+import { inferCompositionTotalFrames, normalizeCompositionAnimation } from '@/lib/composition-duration';
 import type { Message } from '@/types';
 
 // ── Helper: mock context ──────────────────────────────────────────────────
@@ -112,6 +113,67 @@ describe('preview_frame — frame number resolution', () => {
   it('still design ignores frame > 0', () => {
     // No animation → totalFrames = 1 → clamp to 0
     expect(resolveFrame({ frame: 10 })).toBe(0);
+  });
+});
+
+describe('Remotion composition duration inference', () => {
+  it('infers total frames from expression-backed Sequence duration', () => {
+    const code = `
+      function Composition(props) {
+        const fps = 30;
+        const totalF = fps * 62;
+        return (
+          <AbsoluteFill>
+            <Sequence from={0} durationInFrames={totalF}>
+              <Audio src={props.voiceoverUrl} />
+            </Sequence>
+          </AbsoluteFill>
+        );
+      }
+    `;
+
+    expect(inferCompositionTotalFrames(code)).toBe(1860);
+  });
+
+  it('uses total frame constants when scenes are generated dynamically', () => {
+    const code = `
+      function Composition() {
+        const fps = 30;
+        const totalFrames = Math.round(fps * 58.968);
+        return <AbsoluteFill>{scenes.map(scene => <Sequence key={scene.id} from={scene.from} durationInFrames={scene.duration} />)}</AbsoluteFill>;
+      }
+    `;
+
+    expect(inferCompositionTotalFrames(code)).toBe(1769);
+  });
+
+  it('does not shrink explicit long duration from partial nested Sequence inference', () => {
+    const code = `
+      function Composition() {
+        return (
+          <AbsoluteFill>
+            <Sequence from={0} durationInFrames={8}><Logo /></Sequence>
+            {scenes.map(scene => <Sequence key={scene.id} from={scene.from} durationInFrames={scene.duration} />)}
+          </AbsoluteFill>
+        );
+      }
+    `;
+
+    expect(normalizeCompositionAnimation(code, { fps: 30, durationInSeconds: 62 })).toEqual({
+      fps: 30,
+      durationInSeconds: 62,
+    });
+  });
+
+  it('restores seconds from explicit durationInFrames metadata', () => {
+    expect(normalizeCompositionAnimation('function Composition() { return null }', {
+      fps: 30,
+      durationInFrames: 1860,
+      durationInSeconds: 0.267,
+    })).toEqual({
+      fps: 30,
+      durationInSeconds: 62,
+    });
   });
 });
 

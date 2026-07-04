@@ -10,6 +10,21 @@ interface ChangelogEntry {
 
 const CHANGELOG: ChangelogEntry[] = [
   {
+    date: '2026-07-04',
+    en: { title: 'Sonnet 5 Explainer Video Agent', items: [
+      'Makaron Agent now runs on Claude Sonnet 5 with the right Bedrock model handling, token pricing, tool-input normalization, and larger context management for long creative runs.',
+      'The new Explainer Video skill turns a short prompt into an editable Remotion video with voiceover, synced subtitles, background music, generated images, preview-frame self-checks, and final timeline publishing.',
+      'Voiceover is now first-class: Volcengine Doubao Seed TTS can generate narration and transcribe it for subtitle timing.',
+      'Seed Audio is available from the agent for prompt-first background music and sound effects.',
+    ]},
+    zh: { title: 'Sonnet 5 Explainer Video Agent', items: [
+      'Makaron Agent 已升级到 Claude Sonnet 5，并补齐 Bedrock 模型处理、token 定价、tool input 归一化，以及长视频创作所需的更大上下文管理。',
+      '新增 Explainer Video skill：用户只需要一句简单 prompt，就能生成可编辑 Remotion 视频，包含旁白、同步字幕、背景音乐、生图素材、关键帧自检和最终发布时间线。',
+      'TTS 旁白成为一等能力：火山 Doubao Seed TTS 可以生成口播，并转写出字幕时间轴。',
+      'Seed Audio 已接入 Agent，可用 prompt-first 方式生成背景音乐和音效。',
+    ]},
+  },
+  {
     date: '2026-07-03',
     en: { title: 'Liquid Glass Polish', items: [
       'The Home, Projects, and editor surfaces now share a clearer Liquid Glass treatment across navigation, placeholders, model controls, video pills, and input areas.',

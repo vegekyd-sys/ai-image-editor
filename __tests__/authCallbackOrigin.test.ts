@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { getPublicOrigin } from '@/app/api/auth/callback/route';
+import { getPublicOrigin } from '@/lib/auth/public-origin';
 
 describe('auth callback public origin', () => {
   it('normalizes local 0.0.0.0 callback redirects to a browser-reachable host', () => {

@@ -27,7 +27,66 @@ describe('agent prompt policy guards', () => {
     expect(agentTs).toContain('For raw video snapshots: use timestamp')
     expect(agentTs).toContain("source: 'video'")
     expect(agentTs).toContain("source: 'composition'")
+    expect(agentTs).toContain('Render succeeded. Treat this as a successful preview_frame result')
+    expect(agentTs).toContain('Continue with write_file when the user asked to publish')
     expect(agentTs).not.toContain('extract_video_frame: tool')
+  })
+
+  it('does not inject canned run_code narration into CUI messages', () => {
+    const agentTs = read('src/lib/agent.ts')
+
+    expect(agentTs).toContain('Generating code...')
+    expect(agentTs).toContain('代码生成中...')
+    expect(agentTs).not.toContain('I am writing the Remotion code now')
+    expect(agentTs).not.toContain('I am adjusting the code and checking the result')
+    expect(agentTs).not.toContain('getRunCodeIntro')
+  })
+
+  it('keeps Remotion composition code in the local runtime shape', () => {
+    const remotion = read('src/lib/prompts/remotion-composition.md')
+
+    expect(remotion).toContain('Never write')
+    expect(remotion).toContain('export default')
+    expect(remotion).toContain('function Composition(props)')
+    expect(remotion).toContain('Do not use ES module syntax')
+  })
+
+  it('returns resolved generate_image URLs for Remotion composition use', () => {
+    const agentTs = read('src/lib/agent.ts')
+
+    expect(agentTs).toContain('Resolved image URL:')
+    expect(agentTs).toContain('Use this URL directly in Remotion composition props/code')
+    expect(agentTs).toContain('do not use the <<<media_${mediaIndex}>>> marker inside composition code')
+  })
+
+  it('uses full timeline snapshots when materializing Remotion compositions', () => {
+    const agentTs = read('src/lib/agent.ts')
+
+    expect(agentTs).toContain("select('id, type, design_path')")
+    expect(agentTs).toContain('const available = snaps?.length || 0')
+    expect(agentTs).toContain('Invalid index ${input.media_index}. Available: 1-${available}.')
+    expect(agentTs).toContain('not an editable Remotion composition')
+  })
+
+  it('returns resolved voiceover URLs for Remotion audio use', () => {
+    const agentTs = read('src/lib/agent.ts')
+
+    expect(agentTs).toContain('Resolved voiceover URL:')
+    expect(agentTs).toContain('Use this URL directly in Remotion <Audio src>')
+    expect(agentTs).toContain('do not use the <<<audio_${(ctx.audioAttachments || []).length}>>> marker inside composition code or props')
+  })
+
+  it('surfaces generated audio progress and playable cards in CUI', () => {
+    const agentTs = read('src/lib/agent.ts')
+    const reconnect = read('src/hooks/useAgentRun.ts')
+
+    expect(agentTs).toContain('formatGeneratedAudioForCui')
+    expect(agentTs).toContain('生成配音中')
+    expect(agentTs).toContain('生成音频中')
+    expect(agentTs).toContain('music:${safeTrackIndex}|${title}|${safeDuration}|${tags}|${audioUrl}|${audioUrl}')
+    expect(agentTs).toContain('const generatedAudioLine = formatGeneratedAudioForCui(toolName, toolOutput)')
+    expect(reconnect).toContain("case 'music_task'")
+    expect(reconnect).toContain('callbacks.onMusicTask?.')
   })
 
   it('keeps uploaded video auto-analysis in the tool-aware history path', () => {

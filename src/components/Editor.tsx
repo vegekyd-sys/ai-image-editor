@@ -581,8 +581,10 @@ const isTipsFetchingRef = useRef(isTipsFetching);
   // Design editable: current snapshot has a design with editables
   const currentDesignSnap = snapshots[currentSnapIndex];
   const isViewingDesign = contentType === 'design';
+  const currentDesignEditables = currentDesignSnap?.design?.editables ?? [];
+  const currentDesignProps = (currentDesignSnap?.design?.props || {}) as Record<string, unknown>;
   const editingDesignField = editingDesignFieldId
-    ? currentDesignSnap?.design?.editables?.find(f => f.id === editingDesignFieldId) ?? null
+    ? currentDesignEditables.find(f => f.id === editingDesignFieldId) ?? null
     : null;
 
   // Unified "current display image" — poster for video, timeline image otherwise
@@ -3564,8 +3566,8 @@ Select the best 3-7 items for a compelling video. You do NOT need to use all or 
                 pullDownActive={pullProgress !== null}
                 onPullDown={handlePullDown}
                 onPullDownEnd={handlePullDownEnd}
-                editableFields={isViewingDesign ? currentDesignSnap!.design!.editables : undefined}
-                designProps={isViewingDesign ? (currentDesignSnap!.design!.props || {}) as Record<string, unknown> : undefined}
+                editableFields={isViewingDesign ? currentDesignEditables : undefined}
+                designProps={isViewingDesign ? currentDesignProps : undefined}
                 selectedEditableId={selectedEditableFieldId}
                 onSelectEditable={setSelectedEditableFieldId}
                 onUpdateProp={handleDesignPropUpdate}
@@ -3924,12 +3926,12 @@ Select the best 3-7 items for a compelling video. You do NOT need to use all or 
                     currentDuration={videoGuiDuration}
                     isDesktop={isDesktop}
                   />
-                ) : isViewingDesign ? (
+                ) : isViewingDesign && currentDesignEditables.length > 0 ? (
                   <DesignEditPanel
                     editables={visibleEditableIds.length > 0
-                      ? currentDesignSnap!.design!.editables!.filter(f => visibleEditableIds.includes(f.id))
-                      : currentDesignSnap!.design!.editables!}
-                    props={(currentDesignSnap!.design!.props || {}) as Record<string, unknown>}
+                      ? currentDesignEditables.filter(f => visibleEditableIds.includes(f.id))
+                      : currentDesignEditables}
+                    props={currentDesignProps}
                     onUpdateProp={(key, value) => handleDesignPropUpdate(key, value)}
                     selectedFieldId={selectedEditableFieldId}
                     onSelectField={setSelectedEditableFieldId}

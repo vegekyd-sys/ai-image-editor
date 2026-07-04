@@ -23,6 +23,19 @@ export interface TokenBreakdown {
 // 1 credit = $0.01
 const CREDIT_VALUE = 0.01
 
+const DEFAULT_TOKEN_RATES: TokenRate[] = [
+  {
+    model_id: 'anthropic.claude-sonnet-5',
+    display_name: 'Claude Sonnet 5',
+    input_per_1m: 2.00,
+    output_per_1m: 10.00,
+    cache_read_per_1m: 0.20,
+    cache_write_per_1m: 2.50,
+    markup: 2.0,
+    is_active: true,
+  },
+]
+
 // In-memory cache with TTL (same pattern as pricing.ts)
 let cache: { data: TokenRate[]; ts: number } | null = null
 const CACHE_TTL = 5 * 60 * 1000 // 5 minutes
@@ -35,7 +48,12 @@ export async function getAllTokenRates(): Promise<TokenRate[]> {
     .select('*')
     .eq('is_active', true)
     .order('model_id')
-  const rates = (data ?? []) as TokenRate[]
+  const dbRates = (data ?? []) as TokenRate[]
+  const dbModelIds = new Set(dbRates.map(rate => rate.model_id))
+  const rates = [
+    ...dbRates,
+    ...DEFAULT_TOKEN_RATES.filter(rate => !dbModelIds.has(rate.model_id)),
+  ]
   cache = { data: rates, ts: Date.now() }
   return rates
 }
@@ -50,8 +68,8 @@ export async function getTokenRate(modelId: string): Promise<TokenRate | null> {
   // Exact match
   const exact = all.find(r => r.model_id === modelId)
   if (exact) return exact
-  // Strip region prefix (e.g. "us.anthropic.xxx" → "anthropic.xxx") and retry
-  const stripped = modelId.replace(/^(us|eu|ap)\./i, '')
+  // Strip inference profile prefix (e.g. "us.anthropic.xxx" or "global.anthropic.xxx" -> "anthropic.xxx") and retry
+  const stripped = modelId.replace(/^(us|eu|ap|global)\./i, '')
   if (stripped !== modelId) {
     const strippedMatch = all.find(r => r.model_id === stripped)
     if (strippedMatch) return strippedMatch
