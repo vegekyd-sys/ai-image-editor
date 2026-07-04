@@ -13,13 +13,9 @@ export async function GET(req: NextRequest) {
     const supabase = await createClient();
     const { data: { session } } = await supabase.auth.getSession();
     const userId = session?.user?.id;
+    const projectId = req.nextUrl.searchParams.get('projectId');
 
-    if (!userId) {
-      const projectId = req.nextUrl.searchParams.get('projectId');
-      if (!projectId) {
-        return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
-      }
-
+    if (projectId) {
       const admin = getSupabaseAdmin();
       const { data: project } = await admin
         .from('projects')
@@ -27,7 +23,7 @@ export async function GET(req: NextRequest) {
         .eq('id', projectId)
         .maybeSingle<{ user_id: string | null; is_public: boolean | null }>();
 
-      if (!project?.is_public || !project.user_id) {
+      if (!project?.user_id || (!project.is_public && userId !== project.user_id)) {
         return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
       }
 
@@ -48,6 +44,10 @@ export async function GET(req: NextRequest) {
       }
 
       return NextResponse.json({ content: result.content, contentType: result.contentType });
+    }
+
+    if (!userId) {
+      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
 
     const result = await readFile(path, supabase, userId);
