@@ -38,12 +38,12 @@ const CHANGELOG: ChangelogEntry[] = [
   {
     date: '2026-07-02',
     en: { title: 'Nano Banana 2 Lite', items: [
-      'Nano Banana 2 Lite is now available in the image model selector for faster, lower-cost previews and edits.',
-      'It supports multi-reference image edits and is optimized for fast 1K drafts.',
+      'Tips still use the primary creative model for their text ideas, while their image previews now use Nano Banana 2 Lite for faster, lower-cost drafts.',
+      'Nano Banana 2 Lite is also available in the image model selector when you explicitly want a fast 1K draft edit.',
     ]},
     zh: { title: 'Nano Banana 2 Lite', items: [
-      '图片模型选择器新增 Nano Banana 2 Lite，用于更快、更低成本的预览和编辑。',
-      '支持多参考图编辑，适合快速生成 1K 草稿。',
+      'Tips 的文字创意继续使用原来的主模型，只有图片预览缩略图默认改用 Nano Banana 2 Lite，速度更快、成本更低。',
+      '图片模型选择器里也保留 Nano Banana 2 Lite；当你明确想要快速 1K 草稿编辑时可以手动选择。',
     ]},
   },
   {
