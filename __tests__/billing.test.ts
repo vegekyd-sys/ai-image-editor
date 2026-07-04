@@ -89,6 +89,23 @@ describe('token-rates', () => {
     expect(credits).toBe(1);
   });
 
+  it('tokensToCredits uses image-output pricing for Nano Banana 2 Lite images', async () => {
+    const { tokensToCredits } = await import('@/lib/billing/token-rates');
+    const rate = {
+      model_id: 'google/gemini-3.1-flash-lite-image',
+      display_name: 'OR Nano Banana 2 Lite',
+      input_per_1m: 0.25,
+      output_per_1m: 30.00,
+      markup: 2.0,
+      is_active: true,
+    };
+
+    // Similar to real tips preview logs: 1.5K input + 3K image output tokens.
+    // Cost ~= $0.0904, with 2x markup -> 19 credits.
+    const credits = tokensToCredits(rate, 1539, 3030);
+    expect(credits).toBe(19);
+  });
+
   it('tokensToCredits returns minimum 1 for non-zero usage', async () => {
     const { tokensToCredits } = await import('@/lib/billing/token-rates');
     const rate = {

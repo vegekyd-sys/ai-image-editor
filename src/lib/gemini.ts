@@ -42,7 +42,8 @@ const MODEL = process.env.IMAGE_MODEL || 'gemini-3-pro-image-preview';
 
 const OPENROUTER_BASE = 'https://openrouter.ai/api/v1/chat/completions';
 const OPENROUTER_MODEL = `google/${MODEL}`;
-const TIPS_OPENROUTER_MODEL = normalizeOpenRouterModel(process.env.TIPS_OPENROUTER_MODEL || 'gemini-3.1-flash-lite');
+const TIPS_OPENROUTER_MODEL = OPENROUTER_MODEL;
+// Tip text should stay on the primary creative model; only the image preview thumbnails use Lite by default.
 const TIPS_PREVIEW_IMAGE_MODEL = process.env.TIPS_PREVIEW_IMAGE_MODEL || 'google/gemini-3.1-flash-lite-image';
 
 // Tips provider config — change TIPS_PROVIDER env var for A/B testing
