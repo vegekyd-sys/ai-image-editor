@@ -434,6 +434,24 @@ export function makeAgentCallbacks(ctx: AgentCallbackContext) {
         currentMsgId = serverId;
         agentMsgIds[0] = serverId;
         ctx.setMessages(prev => prev.map(m => m.id === oldId ? { ...m, id: serverId } : m));
+        return;
+      }
+
+      // The server sends the first assistant message id in a response header
+      // before any SSE content arrives. If no local placeholder exists yet,
+      // create one so tool-only events such as preview_frame have a visible
+      // CUI container even when the model has not emitted text.
+      if (!currentMsgId) {
+        currentMsgId = serverId;
+        agentMsgIds.push(serverId);
+        ctx.setMessages(prev => prev.some(m => m.id === serverId)
+          ? prev
+          : [...prev, {
+            id: serverId,
+            role: 'assistant' as const,
+            content: '',
+            timestamp: Date.now(),
+          }]);
       }
     },
 

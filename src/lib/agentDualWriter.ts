@@ -314,7 +314,7 @@ export class AgentDualWriter {
 
   /** Save accumulated message text to messages table. */
   private async saveCurrentMessage() {
-    if (!this.messageText.trim()) return;
+    if (!this.messageText.trim() && !this.currentMessageHasImage) return;
     try {
       await this.supabase.from('messages').upsert({
         id: this.currentMessageId,
