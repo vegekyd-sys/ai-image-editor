@@ -14,8 +14,8 @@ const CHANGELOG: ChangelogEntry[] = [
     en: { title: 'Sonnet 5 Explainer Video Agent', items: [
       'Makaron Agent now runs on Claude Sonnet 5 with the right Bedrock model handling, token pricing, tool-input normalization, and larger context management for long creative runs.',
       'The new Explainer Video skill turns a short prompt into an editable Remotion video with voiceover, synced subtitles, background music, generated images, preview-frame self-checks, and final timeline publishing.',
-      'Voiceover is now first-class: Volcengine Doubao Seed TTS can generate narration, upload it, transcribe it for subtitle timing, and keep the resolved audio URL available for Remotion code.',
-      'Seed Audio is available from the agent as prompt-first music and sound generation, with audio cards and durable URLs carried through the CUI and tool history.',
+      'Voiceover is now first-class: Volcengine Doubao Seed TTS can generate narration and transcribe it for subtitle timing.',
+      'Seed Audio is available from the agent for prompt-first background music and sound effects.',
       'Public project links now preview Remotion compositions without login, including 90-second explainers with editable titles and audio-backed playback.',
       'CUI progress is clearer during long runs: tool statuses, audio cards, preview-frame galleries, and final publish summaries stay visible instead of hard-coded filler messages.',
       'Agent runtime got sturdier for media work, with a more permissive local media sandbox and an audit report command for inspecting run timing, tool calls, preview frames, and published artifacts.',
@@ -23,8 +23,8 @@ const CHANGELOG: ChangelogEntry[] = [
     zh: { title: 'Sonnet 5 Explainer Video Agent', items: [
       'Makaron Agent 已升级到 Claude Sonnet 5，并补齐 Bedrock 模型处理、token 定价、tool input 归一化，以及长视频创作所需的更大上下文管理。',
       '新增 Explainer Video skill：用户只需要一句简单 prompt，就能生成可编辑 Remotion 视频，包含旁白、同步字幕、背景音乐、生图素材、关键帧自检和最终发布时间线。',
-      'TTS 旁白成为一等能力：火山 Doubao Seed TTS 可以生成口播，上传音频，转写字幕时间轴，并把 resolved audio URL 稳定交给 Remotion 代码使用。',
-      'Seed Audio 已接入 Agent，可用 prompt-first 方式生成音乐和音效；CUI 会显示音频卡片，并在工具历史里保留可用的音频 URL。',
+      'TTS 旁白成为一等能力：火山 Doubao Seed TTS 可以生成口播，并转写出字幕时间轴。',
+      'Seed Audio 已接入 Agent，可用 prompt-first 方式生成背景音乐和音效。',
       '公开项目链接现在无需登录即可预览 Remotion composition，包括 90 秒 explainer、可编辑标题和带音频的播放体验。',
       'CUI 长任务进度更清楚：tool status、音频卡片、preview frame 图组和最终发布总结会持续显示，不再靠硬编码占位文案撑场。',
       'Agent 媒体运行时更稳：本地 media sandbox 更开放，新增 run audit 报告工具，用来检查耗时、tool 调用、preview frame 和最终产物。',
