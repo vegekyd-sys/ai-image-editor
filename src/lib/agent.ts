@@ -127,19 +127,6 @@ function getAgentModel() {
   return bedrockAnthropic(getAgentModelId());
 }
 const ANTHROPIC_CACHE_CONTROL = { anthropic: { cacheControl: { type: 'ephemeral' } } } as const;
-const MAX_VISIBLE_RUN_CODE_STARTS = 2;
-
-function getRunCodeIntro(runCodeInputStarts: number, locale: 'zh' | 'en'): string | null {
-  if (runCodeInputStarts > MAX_VISIBLE_RUN_CODE_STARTS) return null;
-  if (locale === 'en') {
-    return runCodeInputStarts === 1
-      ? 'I am writing the Remotion code now.'
-      : 'I am adjusting the code and checking the result.';
-  }
-  return runCodeInputStarts === 1
-    ? '我开始写 Remotion 代码。'
-    : '我继续调整代码并检查结果。';
-}
 
 // ---------------------------------------------------------------------------
 // Types
@@ -272,6 +259,38 @@ function resolveAudioRefs(audioAttachments: AudioAttachment[] | undefined, refs:
     return { audioUrls, error: `Invalid audio_refs: ${invalid.join(', ')}. Available audio refs: ${available}. Audio refs are separate from <<<media_N>>>.` };
   }
   return { audioUrls };
+}
+
+function cleanMusicField(value: unknown, fallback = ''): string {
+  return String(value ?? fallback).replace(/[|\n\r]/g, ' ').trim();
+}
+
+function formatGeneratedAudioForCui(toolName: string | undefined, output: unknown): string | null {
+  if (!toolName || !['generate_voiceover', 'generate_audio', 'generate_music'].includes(toolName)) return null;
+  if (!output || typeof output !== 'object') return null;
+  const record = output as Record<string, unknown>;
+  if (record.success === false) return null;
+  const audioUrl = typeof record.audioUrl === 'string' && /^https?:\/\//.test(record.audioUrl)
+    ? record.audioUrl
+    : typeof record.url === 'string' && /^https?:\/\//.test(record.url)
+      ? record.url
+      : '';
+  if (!audioUrl) return null;
+
+  const title = cleanMusicField(
+    record.title,
+    toolName === 'generate_voiceover' ? 'Generated voiceover' : 'Generated audio',
+  );
+  const duration = Number(record.duration);
+  const safeDuration = Number.isFinite(duration) && duration > 0 ? Math.round(duration) : 0;
+  const trackIndex = Number(record.trackIndex);
+  const safeTrackIndex = Number.isInteger(trackIndex) && trackIndex >= 0 ? trackIndex : 0;
+  const tags = cleanMusicField(
+    record.tags,
+    toolName === 'generate_voiceover' ? 'voiceover,tts' : 'audio,generated',
+  );
+
+  return `\n\n🎵 音频已生成: ${title}\nmusic:${safeTrackIndex}|${title}|${safeDuration}|${tags}|${audioUrl}|${audioUrl}\n`;
 }
 
 function resolveMediaMarkersInString(value: string, snapshotImages: string[]): string {
@@ -2986,6 +3005,7 @@ The generated audio becomes an Audio Index item (<<<audio_N>>>) in later turns. 
           message: `Voiceover generated and added to Audio Index as <<<audio_${(ctx.audioAttachments || []).length}>>>.\nResolved voiceover URL: ${audioUrl}\nUse this URL directly in Remotion <Audio src>; do not use the <<<audio_${(ctx.audioAttachments || []).length}>>> marker inside composition code or props.`,
           audioUrl,
           title: trackTitle,
+          trackIndex,
           taskId: result.taskId,
           model: result.tts.model,
           voiceId: result.tts.voiceId,
@@ -3332,7 +3352,6 @@ export async function* runMakaronAgent(
 
     // State machine for extracting code from run_code tool-input-delta
     let codeExtractor: { buffer: string; state: 'waiting' | 'in_code' | 'done'; escaped: boolean; sent: number } | null = null;
-    let runCodeInputStarts = 0;
     const textDeltaState = createTextDeltaState();
 
     for await (const event of result.fullStream) {
@@ -3361,14 +3380,8 @@ export async function* runMakaronAgent(
       if (event.type === 'tool-input-start') {
         const toolName = (event as any).toolName ?? '';
         if (toolName === 'run_code') {
-          runCodeInputStarts++;
           codeExtractor = { buffer: '', state: 'waiting', escaped: false, sent: 0 };
           const isEnLocale = options?.locale === 'en';
-          const intro = getRunCodeIntro(runCodeInputStarts, isEnLocale ? 'en' : 'zh');
-          if (intro) {
-            yield { type: 'new_turn' };
-            yield { type: 'content', text: intro };
-          }
           yield { type: 'status' as const, text: isEnLocale ? 'Generating code...' : '代码生成中...' };
         }
         continue;
@@ -3455,6 +3468,12 @@ export async function* runMakaronAgent(
             : (q ? `分析视频：${q.slice(0, 40)}` : '分析视频') };
         } else if (event.toolName === 'transcribe_audio') {
           yield { type: 'status', text: isEnLocale ? 'Transcribing audio...' : '转写音频中...' };
+        } else if (event.toolName === 'list_voiceover_voices') {
+          yield { type: 'status', text: isEnLocale ? 'Choosing voice...' : '选择配音音色中...' };
+        } else if (event.toolName === 'generate_voiceover') {
+          yield { type: 'status', text: isEnLocale ? 'Generating voiceover...' : '生成配音中...' };
+        } else if (event.toolName === 'generate_audio' || event.toolName === 'generate_music') {
+          yield { type: 'status', text: isEnLocale ? 'Generating audio...' : '生成音频中...' };
         } else if (event.toolName === 'preview_frame') {
           const input = event.input as { frame?: number; timestamp?: number };
           const hint = input.frame !== undefined ? `frame ${input.frame}` : input.timestamp !== undefined ? `${input.timestamp}s` : 'frame 0';
@@ -3558,6 +3577,10 @@ export async function* runMakaronAgent(
         yield { type: 'status', text: isEnLocale ? 'Thinking...' : 'Agent 正在思考...' };
         if (toolName) {
           yield { type: 'tool_result', tool: toolName, toolCallId, step: stepCount, output: toolOutput };
+          const generatedAudioLine = formatGeneratedAudioForCui(toolName, toolOutput);
+          if (generatedAudioLine) {
+            yield { type: 'content', text: generatedAudioLine };
+          }
         }
         activeToolCallId = undefined;
 

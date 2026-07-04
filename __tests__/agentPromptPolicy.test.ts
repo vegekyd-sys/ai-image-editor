@@ -32,6 +32,16 @@ describe('agent prompt policy guards', () => {
     expect(agentTs).not.toContain('extract_video_frame: tool')
   })
 
+  it('does not inject canned run_code narration into CUI messages', () => {
+    const agentTs = read('src/lib/agent.ts')
+
+    expect(agentTs).toContain('Generating code...')
+    expect(agentTs).toContain('代码生成中...')
+    expect(agentTs).not.toContain('I am writing the Remotion code now')
+    expect(agentTs).not.toContain('I am adjusting the code and checking the result')
+    expect(agentTs).not.toContain('getRunCodeIntro')
+  })
+
   it('keeps Remotion composition code in the local runtime shape', () => {
     const remotion = read('src/lib/prompts/remotion-composition.md')
 
@@ -64,6 +74,19 @@ describe('agent prompt policy guards', () => {
     expect(agentTs).toContain('Resolved voiceover URL:')
     expect(agentTs).toContain('Use this URL directly in Remotion <Audio src>')
     expect(agentTs).toContain('do not use the <<<audio_${(ctx.audioAttachments || []).length}>>> marker inside composition code or props')
+  })
+
+  it('surfaces generated audio progress and playable cards in CUI', () => {
+    const agentTs = read('src/lib/agent.ts')
+    const reconnect = read('src/hooks/useAgentRun.ts')
+
+    expect(agentTs).toContain('formatGeneratedAudioForCui')
+    expect(agentTs).toContain('生成配音中')
+    expect(agentTs).toContain('生成音频中')
+    expect(agentTs).toContain('music:${safeTrackIndex}|${title}|${safeDuration}|${tags}|${audioUrl}|${audioUrl}')
+    expect(agentTs).toContain('const generatedAudioLine = formatGeneratedAudioForCui(toolName, toolOutput)')
+    expect(reconnect).toContain("case 'music_task'")
+    expect(reconnect).toContain('callbacks.onMusicTask?.')
   })
 
   it('keeps uploaded video auto-analysis in the tool-aware history path', () => {
