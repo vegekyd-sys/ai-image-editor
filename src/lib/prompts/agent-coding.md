@@ -82,6 +82,7 @@ Read `skills/video-ffmpeg-lab/SKILL.md` before real MP4 work.
 
 Available in `runtime: "node"`:
 - `require`, `process`, `Buffer`, `fetch`, and normal Node built-ins.
+- Media packages including `sharp`, `jszip`, `exifr`, `heic-convert`, `canvas`, `remotion`, and Remotion media utilities. Arbitrary local/package require, env secrets, and escape/debug modules are blocked.
 - `ffmpegPath`, `workDir`, `inputDir`, `outputDir`, `workspaceDir`.
 - `ffprobePath` may be empty in deployment. Prefer `probeVideo(path)` instead of calling ffprobe directly.
 - `inputFiles`: local files resolved from `media_refs` and `workspace_paths`, with `{ index, kind, inputPath, contentType, source, workspacePath, duration, width, height }`.

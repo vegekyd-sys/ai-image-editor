@@ -186,4 +186,72 @@ describe('local-first workspace runtime', () => {
       await rm(cacheDir, { recursive: true, force: true })
     }
   })
+
+  it('allows broad Node built-ins and media packages in node media code', async () => {
+    const result = await runNodeMediaCode({
+      code: `
+        const { Buffer } = require('buffer');
+        const { once } = require('events');
+        const timers = require('timers/promises');
+        const zlib = require('zlib');
+        const sharp = require('sharp');
+        const payload = Buffer.from('hello').toString('base64');
+        const zipped = zlib.gzipSync('ok');
+        await timers.setTimeout(1);
+        return { type: 'text', content: JSON.stringify({
+          payload,
+          hasOnce: typeof once === 'function',
+          gzipBytes: zipped.length,
+          hasSharp: typeof sharp === 'function'
+        }) };
+      `,
+      mediaItems: [],
+      projectId: 'project-1',
+      userId: 'user-1',
+      timeoutMs: 10_000,
+    })
+
+    expect(result.type).toBe('text')
+    const payload = JSON.parse(result.content || '{}')
+    expect(payload).toMatchObject({
+      payload: 'aGVsbG8=',
+      hasOnce: true,
+      hasSharp: true,
+    })
+    expect(payload.gzipBytes).toBeGreaterThan(0)
+  })
+
+  it('blocks require escapes and filters secret env in node media code', async () => {
+    const previousSecret = process.env.SUPABASE_SERVICE_ROLE_KEY
+    process.env.SUPABASE_SERVICE_ROLE_KEY = 'secret-for-test'
+    try {
+      const result = await runNodeMediaCode({
+        code: `
+          let moduleBlocked = false;
+          let vmBlocked = false;
+          try { require('module'); } catch { moduleBlocked = true; }
+          try { require('vm'); } catch { vmBlocked = true; }
+          return { type: 'text', content: JSON.stringify({
+            moduleBlocked,
+            vmBlocked,
+            leakedSecret: Boolean(process.env.SUPABASE_SERVICE_ROLE_KEY)
+          }) };
+        `,
+        mediaItems: [],
+        projectId: 'project-1',
+        userId: 'user-1',
+        timeoutMs: 10_000,
+      })
+
+      expect(result.type).toBe('text')
+      expect(JSON.parse(result.content || '{}')).toEqual({
+        moduleBlocked: true,
+        vmBlocked: true,
+        leakedSecret: false,
+      })
+    } finally {
+      if (previousSecret == null) delete process.env.SUPABASE_SERVICE_ROLE_KEY
+      else process.env.SUPABASE_SERVICE_ROLE_KEY = previousSecret
+    }
+  })
 })
