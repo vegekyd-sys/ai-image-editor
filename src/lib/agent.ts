@@ -11,7 +11,11 @@ import { rotateCamera } from './skills/rotate-camera';
 import { createVideo } from './skills/create-video';
 import { estimateVideoCredits, resolveAgentVideoSelection, resolveVideoGenerationRoute, resolveVideoOutputDuration, validateVideoModelRequest } from './video-model-capabilities';
 import { deductFixedCredits } from './billing/credits';
+import { createAudio } from './skills/create-audio';
 import { createMusic } from './skills/create-music';
+import { createVoiceover } from './skills/create-voiceover';
+import { formatAudioCapabilitiesForAgent } from './audio-model-capabilities';
+import { listVolcengineTtsVoices } from './volcengine-tts';
 import { transcribeWithVolcengineAsr, type VolcengineAsrTranscript, type TranscriptWord } from './volcengine-asr';
 import agentPrompt from './prompts/agent.md';
 import enhancePrompt from './prompts/enhance.md';
@@ -20,7 +24,7 @@ import wildPrompt from './prompts/wild.md';
 import captionsPrompt from './prompts/captions.md';
 import generateImageToolPrompt from './prompts/generate_image_tool.md';
 import type { DesignPayload, Tip, VideoMeta, VideoModel } from '@/types';
-import { isPermanentUrl, toPublicStorageUrl, uploadVideo } from '@/lib/supabase/storage';
+import { isPermanentUrl, toPublicStorageUrl, uploadAudio, uploadVideo } from '@/lib/supabase/storage';
 import type { AgentPerf } from './agent-perf';
 import { createTextDeltaState, normalizeTextDelta } from './agent-text-delta';
 import { formatAspectRatio } from './media-aspect';
@@ -2835,17 +2839,222 @@ Node media runtime provides \`require\`, \`process\`, \`ffmpegPath\`, \`inputFil
       },
     }),
 
+    list_voiceover_voices: tool({
+      description: `Fetch the current Volcengine Doubao / Seed Speech voice catalog so you can choose a concrete voice for TTS voiceover.
+
+Call this before generate_voiceover unless the user explicitly supplied a voice_id or the conversation already contains a fresh catalog. Use the returned language, gender, scenario, style tags, and descriptions to pick a voice that fits the script.`,
+      inputSchema: z.object({
+        query: z.string().optional().describe('Optional short description of the desired voice, e.g. "warm Chinese explainer female", "English energetic product demo", "古风女声".'),
+        force_refresh: z.boolean().optional().describe('Bypass the short server-side cache and call Volcengine again. Default false.'),
+      }),
+      execute: async ({ query, force_refresh }) => {
+        const catalog = await listVolcengineTtsVoices({ forceRefresh: force_refresh, allowFallback: true });
+        const normalizedQuery = query?.trim().toLowerCase();
+        const scored = catalog.voices.map((voice) => {
+          const haystack = [
+            voice.id,
+            voice.name,
+            voice.language,
+            voice.gender,
+            voice.scenario,
+            voice.description,
+            voice.resourceId,
+            voice.model,
+            ...voice.styles,
+          ].filter(Boolean).join(' ').toLowerCase();
+          let score = 0;
+          if (normalizedQuery) {
+            for (const token of normalizedQuery.split(/[\s,，、;；/|]+/).filter(Boolean)) {
+              if (haystack.includes(token)) score += 2;
+            }
+          }
+          if (/中文|chinese|zh|普通话/.test(normalizedQuery || '') && /(^zh|中文|mandarin|普通话)/i.test(haystack)) score += 4;
+          if (/英文|english|en\b/.test(normalizedQuery || '') && /(^en|english|英文)/i.test(haystack)) score += 4;
+          if (/男|male/.test(normalizedQuery || '') && /male|男/.test(haystack)) score += 3;
+          if (/女|female/.test(normalizedQuery || '') && /female|女/.test(haystack)) score += 3;
+          if (/旁白|解说|explainer|narration|口播/.test(normalizedQuery || '') && /sales|口播|直播|广告|营销|general|通用|narration|旁白/.test(haystack)) score += 3;
+          return { voice, score };
+        }).sort((a, b) => b.score - a.score);
+        const suggestions = scored.filter(item => item.score > 0).slice(0, 12).map(item => item.voice);
+        return {
+          ...catalog,
+          count: catalog.voices.length,
+          suggestions: suggestions.length ? suggestions : catalog.voices.slice(0, 12),
+          query,
+        };
+      },
+      toModelOutput({ output }: { output: any }) {
+        const voices = Array.isArray(output.suggestions) ? output.suggestions : [];
+        const rows = voices.map((voice: any, index: number) => {
+          const tags = [
+            voice.language,
+            voice.gender,
+            voice.scenario,
+            ...(Array.isArray(voice.styles) ? voice.styles : []),
+          ].filter(Boolean).join(', ');
+          return `${index + 1}. ${voice.id}${voice.name ? ` — ${voice.name}` : ''}${tags ? ` (${tags})` : ''}${voice.description ? `: ${voice.description}` : ''}`;
+        }).join('\n');
+        const warning = output.warning ? `\nWarning: ${output.warning}` : '';
+        return {
+          type: 'content' as const,
+          value: [{
+            type: 'text' as const,
+            text: `Volcengine voice catalog source=${output.source}, total=${output.count || output.voices?.length || 0}.${warning}\nSuggested voices:\n${rows || 'No voices returned.'}\n\nChoose one voice_id and pass it to generate_voiceover.`,
+          }],
+        };
+      },
+    }),
+
+    generate_voiceover: tool({
+      description: `Generate exact spoken narration with Volcengine Doubao Seed TTS, upload it to the project, and add it to the Audio Index.
+
+Use this when the task needs accurate scripted speech: explainer videos, product introductions, tutorials, narration, dialogue, or sales-style oral copy. For background music, ambience, sound effects, character-voice experiments, or mixed sound design, use generate_audio instead.`,
+      inputSchema: z.object({
+        text: z.string().describe('The exact spoken text to synthesize. Keep it natural and speakable; rewrite stiff copy into oral narration first when appropriate.'),
+        title: z.string().optional().describe('Short title for the audio index, e.g. "Hook voiceover" or "Product narration".'),
+        voice_id: z.string().optional().describe('Optional Doubao speaker id / voice type. Prefer choosing this from list_voiceover_voices.'),
+        resource_id: z.enum(['seed-tts-2.0', 'seed-icl-2.0', 'seed-tts-1.0', 'seed-tts-1.0-concurr']).optional().describe('Volcengine resource id. Use seed-tts-2.0 for standard Doubao TTS voices.'),
+        speech_rate: z.number().min(-50).max(100).optional().describe('Speech speed. 0 is natural, 100 is 2x, -50 is 0.5x.'),
+        context_prompt: z.string().optional().describe('Optional short delivery direction, e.g. "用轻松、真诚、有现场感的口吻".'),
+      }),
+      execute: async ({ text, title, voice_id, resource_id, speech_rate, context_prompt }) => {
+        if (!ctx.supabase || !ctx.userId) {
+          return { success: false as const, message: 'generate_voiceover requires an authenticated project workspace.' };
+        }
+
+        const result = await createVoiceover({
+          text,
+          title,
+          voiceId: voice_id,
+          resourceId: resource_id,
+          speechRate: speech_rate,
+          contextPrompt: context_prompt,
+        });
+        if (!result.success || !result.audio || !result.tts || !result.taskId) {
+          return { success: false as const, message: result.message };
+        }
+
+        const { data: latestRows } = await ctx.supabase
+          .from('project_music')
+          .select('track_index')
+          .eq('project_id', ctx.projectId)
+          .eq('user_id', ctx.userId)
+          .order('track_index', { ascending: false })
+          .limit(1);
+        const trackIndex = Number(latestRows?.[0]?.track_index ?? -1) + 1;
+        const audioUrl = await uploadAudio(ctx.supabase, ctx.userId, ctx.projectId, result.taskId, trackIndex, result.audio);
+        if (!audioUrl) {
+          return { success: false as const, message: 'Voiceover was generated but failed to upload to project storage.' };
+        }
+
+        const trackTitle = (result.title || title || 'Generated voiceover').slice(0, 120);
+        const { error: insertError } = await ctx.supabase.from('project_music').upsert({
+          suno_task_id: result.taskId,
+          track_index: trackIndex,
+          project_id: ctx.projectId,
+          user_id: ctx.userId,
+          prompt: text,
+          audio_url: audioUrl,
+          suno_audio_url: null,
+          stream_audio_url: null,
+          duration: null,
+          title: trackTitle,
+          tags: `voiceover,tts,doubao,${result.tts.resourceId}`,
+          status: 'completed',
+          selected: false,
+        }, { onConflict: 'suno_task_id,track_index' });
+        if (insertError) {
+          return { success: false as const, message: `Voiceover uploaded but DB insert failed: ${insertError.message}`, audioUrl };
+        }
+
+        ctx.audioAttachments = [
+          ...(ctx.audioAttachments || []),
+          { audioUrl, title: trackTitle, trackIndex },
+        ];
+
+        return {
+          success: true as const,
+          message: `Voiceover generated and added to Audio Index as <<<audio_${(ctx.audioAttachments || []).length}>>>.`,
+          audioUrl,
+          title: trackTitle,
+          taskId: result.taskId,
+          model: result.tts.model,
+          voiceId: result.tts.voiceId,
+          resourceId: result.tts.resourceId,
+          textLength: result.tts.textLength,
+          sentenceCount: result.tts.sentences.length,
+        };
+      },
+    }),
+
+    generate_audio: tool({
+      description: `Generate audio from a natural-language prompt.
+
+This is prompt-first: describe the sound directly. Do not force a rigid category. The prompt may describe background music, sound effects, ambience, character voice, or a mixed sound-design scene.
+
+Use generate_voiceover instead when exact scripted narration is required, especially for explainer videos, tutorials, and product introductions. Use generate_music with provider="suno" only when the user explicitly wants a full song, lyrics, vocals, or song structure.
+
+Available audio model notes:
+${formatAudioCapabilitiesForAgent()}`,
+      inputSchema: z.object({
+        prompt: z.string().describe('Natural-language description of the audio to create. Include duration, mood, instruments, sound effects, voice direction, and constraints directly in the prompt.'),
+        duration_seconds: z.number().optional().describe('Requested duration in seconds. Seed Audio supports up to 120 seconds. Also include the duration in the prompt for best results.'),
+        title: z.string().optional().describe('Short title for the generated audio asset.'),
+        model: z.enum(['auto', 'evolink-seed-audio']).optional().describe('Audio model. Omit or use auto for the default Seed Audio model.'),
+      }),
+      execute: async ({ prompt, duration_seconds, title, model }) => {
+        const result = await createAudio({
+          prompt,
+          durationSeconds: duration_seconds,
+          title,
+          model,
+          supabase: ctx.supabase,
+          userId: ctx.userId,
+          projectId: ctx.projectId,
+        });
+        if (result.success) {
+          import('./billing/credits').then(({ deductCredits }) =>
+            deductCredits(ctx.userId ?? '', null, 'create_music')
+              .catch(e => console.error('[billing] generate_audio deduct error:', e))
+          );
+        }
+        return result;
+      },
+    }),
+
     generate_music: tool({
       // Cache point marker — cache all tools preceding this one (PR #8137 patch).
       // Must stay on the LAST tool in this map so the whole tools block is cached.
       providerOptions: { bedrock: { cachePoint: { type: 'default' } } },
-      description: `Generate background music for the current composition/video. Returns 2 tracks (~30s). Focus on matching the mood and tone of the video content — genre, energy level, emotion, instruments.`,
+      description: `Compatibility music tool. For ordinary short-video background music or music beds, this uses Seed Audio by default and returns one persisted audio asset. For full songs, lyrics, vocals, verse/chorus structure, or when the user asks for Suno, set provider="suno"; that legacy path returns a task ID and two candidate tracks.`,
       inputSchema: z.object({
         prompt: z.string().describe('Music description: genre, mood, energy, instruments (no timing, no artist names)'),
         instrumental: z.boolean().optional().describe('No vocals (default: true)'),
         style: z.string().optional().describe('Genre/mood tags for custom mode'),
+        duration_seconds: z.number().optional().describe('Requested duration for Seed Audio music beds. Seed Audio supports up to 120 seconds.'),
+        provider: z.enum(['auto', 'evolink-seed-audio', 'suno']).optional().describe('Use suno only for full songs, lyrics, or vocal music. Omit/auto uses Seed Audio for short-video music beds.'),
       }),
-      execute: async ({ prompt, instrumental, style }) => {
+      execute: async ({ prompt, instrumental, style, duration_seconds, provider }) => {
+        const shouldUseSuno = provider === 'suno' || instrumental === false || !!style;
+        if (!shouldUseSuno) {
+          const result = await createAudio({
+            prompt,
+            durationSeconds: duration_seconds,
+            title: 'Generated music',
+            model: provider === 'evolink-seed-audio' ? provider : 'auto',
+            supabase: ctx.supabase,
+            userId: ctx.userId,
+            projectId: ctx.projectId,
+          });
+          if (result.success) {
+            import('./billing/credits').then(({ deductCredits }) =>
+              deductCredits(ctx.userId ?? '', null, 'create_music')
+                .catch(e => console.error('[billing] generate_music deduct error:', e))
+            );
+          }
+          return result;
+        }
+
         const result = await createMusic({ prompt, instrumental, style });
         if (result.taskId) {
           (ctx as any).musicTaskId = result.taskId;
