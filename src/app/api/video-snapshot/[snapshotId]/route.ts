@@ -30,6 +30,20 @@ function runRemotionExportAfterResponse(jobId: string) {
   })
 }
 
+function repairVideoPosterAfterResponse(options: {
+  admin: ReturnType<typeof getSupabaseAdmin>
+  ownerUserId: string
+  projectId: string
+  snapshotId: string
+  videoUrl: string | null | undefined
+  currentImageUrl?: string | null
+}) {
+  after(async () => {
+    const { ensureVideoPosterForSnapshot } = await import('@/lib/video-poster-repair')
+    await ensureVideoPosterForSnapshot(options)
+  })
+}
+
 async function fetchProviderVideoBuffer(videoUrl: string): Promise<Uint8Array | null> {
   if (videoUrl.startsWith('https://generativelanguage.googleapis.com/') || videoUrl.startsWith('data:')) {
     const { fetchGoogleOmniVideoBytes } = await import('@/lib/google-omni-video')
@@ -47,6 +61,7 @@ function persistProviderVideoAfterResponse(options: {
   snapshotId: string
   videoMeta: VideoMeta
   providerVideoUrl: string
+  currentImageUrl?: string | null
 }) {
   after(async () => {
     try {
@@ -73,21 +88,16 @@ function persistProviderVideoAfterResponse(options: {
           .eq('id', options.snapshotId)
         console.log(`Video snapshot ${options.snapshotId} persisted (${dims.width}x${dims.height})`)
 
-        try {
-          const { extractVideoPoster } = await import('@/lib/video-poster')
-          const posterBuffer = await extractVideoPoster(permanentUrl)
-          const posterPath = `${options.ownerUserId}/${options.projectId}/posters/${options.snapshotId}.jpg`
-          const { error: posterErr } = await options.admin.storage.from('images').upload(posterPath, posterBuffer, { contentType: 'image/jpeg', upsert: true })
-          if (!posterErr) {
-            const { data: urlData } = options.admin.storage.from('images').getPublicUrl(posterPath)
-            if (urlData?.publicUrl) {
-              await options.admin.from('snapshots').update({ image_url: urlData.publicUrl }).eq('id', options.snapshotId)
-              console.log(`Video poster extracted: ${options.snapshotId}`)
-            }
-          }
-        } catch (posterErr) {
-          console.warn('Video poster extraction failed (non-fatal):', posterErr)
-        }
+        const { ensureVideoPosterForSnapshot } = await import('@/lib/video-poster-repair')
+        await ensureVideoPosterForSnapshot({
+          admin: options.admin,
+          ownerUserId: options.ownerUserId,
+          projectId: options.projectId,
+          snapshotId: options.snapshotId,
+          videoUrl: permanentUrl,
+          currentImageUrl: options.currentImageUrl,
+          videoBuffer: buffer,
+        })
       }
     } catch (err) {
       console.error('Video snapshot persist error:', err)
@@ -133,6 +143,14 @@ export async function GET(
       const isPermanent = isPermanentUrl(videoMeta.videoUrl)
       const isRemotionExport = videoMeta.taskId?.startsWith('remotion-export-') === true
       if (isPermanent || isRemotionExport) {
+        repairVideoPosterAfterResponse({
+          admin,
+          ownerUserId,
+          projectId: snap.project_id,
+          snapshotId,
+          videoUrl: videoMeta.videoUrl,
+          currentImageUrl: snap.image_url,
+        })
         return NextResponse.json({ status: 'completed', videoUrl: videoMeta.videoUrl, snapshotId, imageUrl: snap.image_url || undefined })
       }
       persistProviderVideoAfterResponse({
@@ -142,6 +160,7 @@ export async function GET(
         snapshotId,
         videoMeta,
         providerVideoUrl: videoMeta.videoUrl,
+        currentImageUrl: snap.image_url,
       })
       // Provider URL still in DB — persist hasn't finished yet, tell caller to keep polling
       return NextResponse.json({ status: 'rendering', snapshotId, imageUrl: snap.image_url || undefined })
@@ -180,6 +199,14 @@ export async function GET(
           height: job.height || videoMeta.height,
         }
         await admin.from('snapshots').update({ video_meta: updatedMeta }).eq('id', snapshotId)
+        repairVideoPosterAfterResponse({
+          admin,
+          ownerUserId,
+          projectId: snap.project_id,
+          snapshotId,
+          videoUrl: job.storage_url,
+          currentImageUrl: snap.image_url,
+        })
         return NextResponse.json({ status: 'completed', videoUrl: job.storage_url, snapshotId, imageUrl: snap.image_url || undefined })
       }
       if (job.status === 'failed') {
@@ -253,6 +280,7 @@ export async function GET(
         snapshotId,
         videoMeta: updatedMeta,
         providerVideoUrl: result.videoUrl,
+        currentImageUrl: snap.image_url,
       })
 
       // Return completed immediately with provider URL — frontend can play it right away

@@ -12,6 +12,7 @@ import { getCachedImages, getCachedProjectsListSync, getCachedProjectsList, getL
 import { isHeicFile } from '@/lib/imageUtils'
 import { useLocale } from '@/lib/i18n'
 import { getOriginFormatThumbnailUrl, getThumbnailUrl } from '@/lib/supabase/storage'
+import { VIDEO_PLACEHOLDER_IMAGE } from '@/lib/editor/timeline-derivations'
 import { createProject } from '@/lib/createProject'
 import { warmProjectEditorCache, warmProjectEditorCaches } from '@/lib/project-editor-cache'
 import { readNativeJSONCache, writeNativeJSONCache } from '@/lib/native-app-cache'
@@ -31,6 +32,11 @@ interface ProjectWithSnapshots {
   created_at: string
   snapshots: { id: string; image_url: string; sort_order: number }[]
   hasVideo?: boolean
+}
+
+function isProjectCoverImageUrl(url?: string | null): url is string {
+  if (!url) return false
+  return url !== VIDEO_PLACEHOLDER_IMAGE && !url.endsWith(VIDEO_PLACEHOLDER_IMAGE)
 }
 
 // Skill type for client-side rendering
@@ -1531,9 +1537,9 @@ function ProjectCard({
   onNavigate: (e: React.MouseEvent<HTMLElement>, project: ProjectWithSnapshots) => void
   onWarm?: () => void
 }) {
-  // Use last snapshot with an actual image URL (skip design snapshots with empty image_url)
-  const lastSnap = project.snapshots.filter(s => s.image_url).pop() ?? project.snapshots[project.snapshots.length - 1]
-  const imageSrc = lastSnap.image_url
+  // Use last snapshot with a real display image; video placeholders are repaired asynchronously.
+  const lastSnap = project.snapshots.filter(s => isProjectCoverImageUrl(s.image_url)).pop()
+  const imageSrc = lastSnap?.image_url
     ? useIOSSafeImageUrls
       ? getOriginFormatThumbnailUrl(lastSnap.image_url, 400, 50, 400)
       : getThumbnailUrl(lastSnap.image_url, 400, 50, 400)
