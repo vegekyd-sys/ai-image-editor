@@ -7,12 +7,7 @@ import { findFfmpeg } from './ffmpeg-runtime'
 
 const execFileAsync = promisify(execFile)
 
-/**
- * Extract a poster frame from a video URL using ffmpeg-static.
- * Fetches the video, extracts frame at 0.5s, returns JPEG buffer.
- * ~1-2s total (fetch + decode + encode).
- */
-export async function extractVideoPoster(videoUrl: string): Promise<Buffer> {
+async function extractVideoPosterFromFile(input: Buffer | Uint8Array): Promise<Buffer> {
   const ffmpegPath = await findFfmpeg()
 
   const dir = await mkdtemp(path.join(tmpdir(), 'poster-'))
@@ -20,12 +15,7 @@ export async function extractVideoPoster(videoUrl: string): Promise<Buffer> {
   const outputPath = path.join(dir, 'poster.jpg')
 
   try {
-    // Fetch video (only first 5MB for speed)
-    const res = await fetch(videoUrl, {
-      headers: { 'Range': 'bytes=0-5242879' },
-    })
-    const buffer = Buffer.from(await res.arrayBuffer())
-    await writeFile(inputPath, buffer)
+    await writeFile(inputPath, input)
 
     // Extract frame at 0.5s
     await execFileAsync(ffmpegPath, [
@@ -49,4 +39,26 @@ export async function extractVideoPoster(videoUrl: string): Promise<Buffer> {
     await unlink(outputPath).catch(() => {})
     await unlink(dir).catch(() => {}) // rmdir
   }
+}
+
+/**
+ * Extract a poster frame from already-fetched video bytes.
+ */
+export async function extractVideoPosterFromBuffer(videoBuffer: Buffer | Uint8Array): Promise<Buffer> {
+  return extractVideoPosterFromFile(videoBuffer)
+}
+
+/**
+ * Extract a poster frame from a video URL using ffmpeg-static.
+ * Fetches the first 5MB, extracts frame at 0.5s, returns JPEG buffer.
+ * ~1-2s total (fetch + decode + encode).
+ */
+export async function extractVideoPoster(videoUrl: string): Promise<Buffer> {
+  const res = await fetch(videoUrl, {
+    headers: { 'Range': 'bytes=0-5242879' },
+  })
+  if (!res.ok) {
+    throw new Error(`Video poster fetch failed: ${res.status}`)
+  }
+  return extractVideoPosterFromFile(Buffer.from(await res.arrayBuffer()))
 }

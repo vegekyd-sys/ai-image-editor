@@ -270,6 +270,17 @@ export async function GET(
                 if (Array.isArray(videoMeta.completionActions) && videoMeta.completionActions.length) {
                   v.completion_actions = videoMeta.completionActions;
                 }
+                after(async () => {
+                  const { ensureVideoPosterForSnapshot } = await import('@/lib/video-poster-repair');
+                  await ensureVideoPosterForSnapshot({
+                    admin: getSupabaseAdmin(),
+                    ownerUserId,
+                    projectId: snap.project_id,
+                    snapshotId: v.snapshot_id as string,
+                    videoUrl: videoMeta.videoUrl,
+                    currentImageUrl: snap.image_url,
+                  });
+                });
               } else {
                 // Still persisting to Storage — tell CLI to keep polling
                 v.status = 'rendering';
@@ -294,21 +305,16 @@ export async function GET(
                       await adminClient.from('snapshots')
                         .update({ video_meta: finalMeta })
                         .eq('id', snapshotId);
-                      try {
-                        const { extractVideoPoster } = await import('@/lib/video-poster');
-                        const posterBuffer = await extractVideoPoster(permanentUrl);
-                        const posterPath = `${ownerUserId}/${projectId}/posters/${snapshotId}.jpg`;
-                        const { error: posterErr } = await adminClient.storage.from('images').upload(posterPath, posterBuffer, { contentType: 'image/jpeg', upsert: true });
-                        if (!posterErr) {
-                          const { data: urlData } = adminClient.storage.from('images').getPublicUrl(posterPath);
-                          if (urlData?.publicUrl) {
-                            await adminClient.from('snapshots').update({ image_url: urlData.publicUrl }).eq('id', snapshotId);
-                            console.log(`Video poster extracted: ${snapshotId}`);
-                          }
-                        }
-                      } catch (pe) {
-                        console.warn('Video poster extraction failed (non-fatal):', pe);
-                      }
+                      const { ensureVideoPosterForSnapshot } = await import('@/lib/video-poster-repair');
+                      await ensureVideoPosterForSnapshot({
+                        admin: adminClient,
+                        ownerUserId,
+                        projectId,
+                        snapshotId,
+                        videoUrl: permanentUrl,
+                        currentImageUrl: snap.image_url,
+                        videoBuffer: buffer,
+                      });
                     }
                   } catch (err) {
                     console.error('Video persist error:', err);
@@ -359,22 +365,16 @@ export async function GET(
                         await adminClient.from('snapshots')
                           .update({ video_meta: finalMeta })
                           .eq('id', snapshotId);
-                        // Extract poster from the persisted video
-                        try {
-                          const { extractVideoPoster } = await import('@/lib/video-poster');
-                          const posterBuffer = await extractVideoPoster(permanentUrl);
-                          const posterPath = `${ownerUserId}/${projectId}/posters/${snapshotId}.jpg`;
-                          const { error: posterErr } = await adminClient.storage.from('images').upload(posterPath, posterBuffer, { contentType: 'image/jpeg', upsert: true });
-                          if (!posterErr) {
-                            const { data: urlData } = adminClient.storage.from('images').getPublicUrl(posterPath);
-                            if (urlData?.publicUrl) {
-                              await adminClient.from('snapshots').update({ image_url: urlData.publicUrl }).eq('id', snapshotId);
-                              console.log(`Video poster extracted: ${snapshotId}`);
-                            }
-                          }
-                        } catch (pe) {
-                          console.warn('Video poster extraction failed (non-fatal):', pe);
-                        }
+                        const { ensureVideoPosterForSnapshot } = await import('@/lib/video-poster-repair');
+                        await ensureVideoPosterForSnapshot({
+                          admin: adminClient,
+                          ownerUserId,
+                          projectId,
+                          snapshotId,
+                          videoUrl: permanentUrl,
+                          currentImageUrl: snap.image_url,
+                          videoBuffer: buffer,
+                        });
                       }
                     } catch (err) {
                       console.error('Video snapshot persist error:', err);
