@@ -2,11 +2,13 @@ import { describe, expect, it } from 'vitest';
 import {
   buildModelHistoryFromRows,
   sanitizeToolHistory,
+  TOOL_HISTORY_MAX_OUTPUT_CHARS,
+  TOOL_HISTORY_MAX_ROWS_PER_RUN,
 } from '../src/lib/agentToolHistory';
 
 describe('agent tool history sanitizer', () => {
   it('keeps markdown read_file content but caps it', () => {
-    const md = `${'a'.repeat(31_000)}data:image/png;base64,abcd`;
+    const md = `${'a'.repeat(TOOL_HISTORY_MAX_OUTPUT_CHARS + 1_000)}data:image/png;base64,abcd`;
     const result = sanitizeToolHistory(
       'read_file',
       { path: 'prompts/enhance.md' },
@@ -17,7 +19,7 @@ describe('agent tool history sanitizer', () => {
     expect(result.output.type).toBe('text');
     expect(JSON.stringify(result.output)).toContain('[prompts/enhance.md]');
     expect(JSON.stringify(result.output)).not.toContain('data:image');
-    expect(result.outputChars).toBeLessThanOrEqual(30_200);
+    expect(result.outputChars).toBeLessThanOrEqual(TOOL_HISTORY_MAX_OUTPUT_CHARS + 500);
     expect(result.omitted).toContain('truncated_read_file');
     expect(result.omitted).toContain('removed_data_url_image');
   });
@@ -66,7 +68,7 @@ describe('agent tool history sanitizer', () => {
       'read_file',
       { path: 'prompts/animate.md' },
       { path: 'prompts/animate.md', type: 'text/markdown', content: 'full prompt' },
-      { rows: 20, chars: 10 },
+      { rows: TOOL_HISTORY_MAX_ROWS_PER_RUN, chars: 10 },
     );
 
     expect(result.omitted).toContain('run_budget_exceeded');
