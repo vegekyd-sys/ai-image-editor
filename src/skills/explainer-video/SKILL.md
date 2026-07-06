@@ -67,9 +67,8 @@ This reference step is required. Do not skip it because the topic sounds simple.
   bottom safe area.
 - Sound design is part of the planning pass. Use `generate_audio` when music,
   ambient texture, UI sounds, transitions, or scene-specific sound effects would
-  make the explanation clearer or more memorable. Use `generate_music` with
-  `provider: "suno"` only when the user asks for a full song, lyrics, vocals, or
-  song structure.
+  make the explanation clearer or more memorable. Use `generate_music` for
+  background music beds or soundtrack-style requests; it uses Seed Audio.
 
 ## Direct Execution Rule
 
@@ -105,8 +104,8 @@ wrong or expensive.
    - Exact spoken narration -> `generate_voiceover`.
    - Prompt-first music bed, ambience, sound effects, UI blips, risers, impacts,
      or mixed sound design -> `generate_audio`.
-   - Full song / lyrics / vocals / verse-chorus request -> `generate_music` with
-     `provider: "suno"`.
+   - Music / soundtrack / song-structure request -> `generate_music`; new music
+     generation uses Seed Audio, not Suno.
 9. Generate only the sticker/image assets chosen in the cue sheet. If an asset
    is an overlay, read `skills/sticker-maker/SKILL.md` first and make it a
    transparent PNG sticker instead of a hard-to-place rectangular image.
@@ -135,8 +134,8 @@ silent, text-only, or voice-only output.
   Remotion FPS/timebase as scenes and subtitles.
 - Audio duration must fit the video duration. Fade or trim music/effects at the
   ending rather than extending the video.
-- Do not use `generate_voiceover` for music or effects. Do not use Suno unless
-  the user wants an actual song.
+- Do not use `generate_voiceover` for music or effects. Do not use Suno for new
+  music generation.
 - Audio Index markers such as `<<<audio_N>>>` are labels, not playable URLs.
   Use the returned public `audioUrl` directly in Remotion `<Audio src={...}>`
   props/code. Never put `<<<audio_N>>>` inside composition props or `<Audio>`.

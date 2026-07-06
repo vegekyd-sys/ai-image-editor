@@ -1,7 +1,7 @@
 export interface AudioModelCapability {
   id: string
   label: string
-  provider: 'evolink' | 'suno' | 'tts'
+  provider: 'evolink' | 'tts'
   providerModel?: string
   maxDurationSeconds: number
   defaultFormat: 'mp3' | 'wav'
@@ -28,19 +28,6 @@ const AUDIO_MODEL_CAPABILITIES: Record<string, AudioModelCapability> = {
       'Returned provider URLs are temporary and should be persisted immediately.',
     ],
   },
-  suno: {
-    id: 'suno',
-    label: 'Suno',
-    provider: 'suno',
-    maxDurationSeconds: 240,
-    defaultFormat: 'mp3',
-    estimatedLatencySeconds: [45, 90],
-    recommendedConcurrency: 1,
-    notes: [
-      'Use when the user explicitly asks for a full song, lyrics, vocals, or song structure.',
-      'Returns provider task IDs and is polled through the legacy music pipeline.',
-    ],
-  },
   'volcengine-seed-tts': {
     id: 'volcengine-seed-tts',
     label: 'Seed TTS 2.0',
@@ -63,6 +50,7 @@ const AUDIO_MODEL_ALIASES: Record<string, string> = {
   'doubao-seed-audio-1-0': 'evolink-seed-audio',
   evolink: 'evolink-seed-audio',
   'evolink-seed': 'evolink-seed-audio',
+  suno: 'evolink-seed-audio',
   tts: 'volcengine-seed-tts',
   voiceover: 'volcengine-seed-tts',
 }
@@ -82,7 +70,7 @@ export function getAudioModelCapability(model?: string | null): AudioModelCapabi
   return AUDIO_MODEL_CAPABILITIES[id] || {
     id,
     label: id,
-    provider: id === 'suno' ? 'suno' : 'evolink',
+    provider: 'evolink',
     maxDurationSeconds: 120,
     defaultFormat: 'mp3',
     notes: ['Unknown audio model. The provider adapter must be registered before use.'],

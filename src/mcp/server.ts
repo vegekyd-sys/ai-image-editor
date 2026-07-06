@@ -440,14 +440,13 @@ Poll every 10-15 seconds. Do NOT poll in a tight loop.`,
 
   server.tool(
     'makaron_create_music',
-    `Generate background music using Suno AI. Returns a taskId for polling.
+    `Generate background music using Seed Audio. Returns a completed audio URL when generation succeeds.
 
-- Music generation takes 2-3 minutes. Use makaron_get_music_status to poll.
-- Each generation produces 2 tracks — poll returns the first track's URL.
-- Default: instrumental (no vocals). Set instrumental=false for vocals.
+- Music generation waits for the provider result and returns one persisted audio asset when project persistence is available.
+- Default: instrumental background music, no vocals.
 - Prompt: describe genre, mood, instruments (e.g. "gentle piano, cinematic, warm strings").
 - Style: optional genre/mood tags for custom mode (e.g. "lo-fi, ambient, chill").
-- Generated audio files are kept for 15 days.`,
+- New music generation no longer uses Suno.`,
     {
       prompt: z.string().describe('Music description: genre, mood, instruments (max 500 chars)'),
       instrumental: z.boolean().optional().describe('Instrumental only, no vocals (default: true)'),
@@ -470,7 +469,7 @@ Poll every 10-15 seconds. Do NOT poll in a tight loop.`,
           await options?.onToolComplete?.('makaron_create_music', undefined, Date.now() - t0);
         }
         return { content: [{ type: 'text' as const, text: result.success
-          ? `${result.message}\n\nTask ID: ${result.taskId}`
+          ? `${result.message}\n\nAudio URL: ${result.audioUrl || 'not returned'}\nTask ID: ${result.taskId || 'n/a'}`
           : result.message }] };
       } catch (e) {
         const msg = e instanceof Error ? e.message : String(e);

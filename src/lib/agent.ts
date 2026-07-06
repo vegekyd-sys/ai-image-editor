@@ -12,7 +12,6 @@ import { createVideo } from './skills/create-video';
 import { estimateVideoCredits, resolveAgentVideoSelection, resolveVideoGenerationRoute, resolveVideoOutputDuration, validateVideoModelRequest } from './video-model-capabilities';
 import { deductFixedCredits } from './billing/credits';
 import { createAudio } from './skills/create-audio';
-import { createMusic } from './skills/create-music';
 import { createVoiceover } from './skills/create-voiceover';
 import { formatAudioCapabilitiesForAgent } from './audio-model-capabilities';
 import { listVolcengineTtsVoices } from './volcengine-tts';
@@ -315,32 +314,66 @@ function cleanMusicField(value: unknown, fallback = ''): string {
   return String(value ?? fallback).replace(/[|\n\r]/g, ' ').trim();
 }
 
+function getPlayableAudioUrl(record: Record<string, unknown>): string {
+  return typeof record.audioUrl === 'string' && /^https?:\/\//.test(record.audioUrl)
+    ? record.audioUrl
+    : typeof record.streamAudioUrl === 'string' && /^https?:\/\//.test(record.streamAudioUrl)
+      ? record.streamAudioUrl
+      : typeof record.url === 'string' && /^https?:\/\//.test(record.url)
+        ? record.url
+        : '';
+}
+
+function formatMusicLine(record: Record<string, unknown>, fallbackTrackIndex = 0): string | null {
+  const audioUrl = getPlayableAudioUrl(record);
+  if (!audioUrl) return null;
+
+  const title = cleanMusicField(record.title, 'Generated audio');
+  const duration = Number(record.duration);
+  const safeDuration = Number.isFinite(duration) && duration > 0 ? Math.round(duration) : 0;
+  const trackIndex = Number(record.trackIndex);
+  const safeTrackIndex = Number.isInteger(trackIndex) && trackIndex >= 0 ? trackIndex : fallbackTrackIndex;
+  const tags = cleanMusicField(record.tags, 'audio,generated');
+  const playUrl = typeof record.streamAudioUrl === 'string' && /^https?:\/\//.test(record.streamAudioUrl)
+    ? record.streamAudioUrl
+    : audioUrl;
+  const finalUrl = typeof record.providerAudioUrl === 'string' && /^https?:\/\//.test(record.providerAudioUrl)
+    ? record.providerAudioUrl
+    : (playUrl === audioUrl ? audioUrl : '');
+
+  return `music:${safeTrackIndex}|${title}|${safeDuration}|${tags}|${playUrl}|${finalUrl}`;
+}
+
 function formatGeneratedAudioForCui(toolName: string | undefined, output: unknown): string | null {
   if (!toolName || !['generate_voiceover', 'generate_audio', 'generate_music'].includes(toolName)) return null;
   if (!output || typeof output !== 'object') return null;
   const record = output as Record<string, unknown>;
   if (record.success === false) return null;
-  const audioUrl = typeof record.audioUrl === 'string' && /^https?:\/\//.test(record.audioUrl)
-    ? record.audioUrl
-    : typeof record.url === 'string' && /^https?:\/\//.test(record.url)
-      ? record.url
-      : '';
-  if (!audioUrl) return null;
 
+  const tracks = Array.isArray(record.tracks)
+    ? record.tracks
+        .map((track, index) => track && typeof track === 'object' ? formatMusicLine(track as Record<string, unknown>, index) : null)
+        .filter((line): line is string => !!line)
+    : [];
+  if (tracks.length) {
+    return `\n\n🎵 音频已生成\n${tracks.join('\n')}\n`;
+  }
+
+  const audioUrl = getPlayableAudioUrl(record);
+  if (!audioUrl) return null;
   const title = cleanMusicField(
     record.title,
     toolName === 'generate_voiceover' ? 'Generated voiceover' : 'Generated audio',
   );
-  const duration = Number(record.duration);
-  const safeDuration = Number.isFinite(duration) && duration > 0 ? Math.round(duration) : 0;
-  const trackIndex = Number(record.trackIndex);
-  const safeTrackIndex = Number.isInteger(trackIndex) && trackIndex >= 0 ? trackIndex : 0;
-  const tags = cleanMusicField(
-    record.tags,
-    toolName === 'generate_voiceover' ? 'voiceover,tts' : 'audio,generated',
-  );
+  const line = formatMusicLine({
+    ...record,
+    title,
+    tags: cleanMusicField(record.tags, toolName === 'generate_voiceover' ? 'voiceover,tts' : 'audio,generated'),
+    audioUrl,
+  });
+  if (!line) return null;
 
-  return `\n\n🎵 音频已生成: ${title}\nmusic:${safeTrackIndex}|${title}|${safeDuration}|${tags}|${audioUrl}|${audioUrl}\n`;
+  return `\n\n🎵 音频已生成: ${title}\n${line}\n`;
 }
 
 function formatGeneratedAudioForModel(toolName: string, output: unknown): string {
@@ -349,10 +382,37 @@ function formatGeneratedAudioForModel(toolName: string, output: unknown): string
   if (record.success === false) {
     return `Audio generation failed: ${String(record.message || 'unknown error')}`;
   }
+  if (Array.isArray(record.tracks)) {
+    const trackLines = record.tracks
+      .map((track, index) => {
+        if (!track || typeof track !== 'object') return '';
+        const item = track as Record<string, unknown>;
+        const audioUrl = getPlayableAudioUrl(item);
+        if (!audioUrl) return '';
+        const title = cleanMusicField(item.title, `Generated music ${index + 1}`);
+        const duration = typeof item.duration === 'number' && Number.isFinite(item.duration)
+          ? `${Math.round(item.duration)}s`
+          : 'unknown duration';
+        const audioIndex = typeof item.audioIndex === 'number' && Number.isFinite(item.audioIndex)
+          ? item.audioIndex
+          : index + 1;
+        const providerFinal = typeof item.providerAudioUrl === 'string' && item.providerAudioUrl !== audioUrl
+          ? `\n  Provider final URL, if already available: ${item.providerAudioUrl}`
+          : '';
+        return `- <<<audio_${audioIndex}>>> ${title} (${duration})\n  Resolved public audioUrl: ${audioUrl}${providerFinal}`;
+      })
+      .filter(Boolean);
+    if (trackLines.length) {
+      return [
+        `${trackLines.length} audio track(s) are ready.`,
+        'Choose the best track for the user request. Use the exact chosen audioUrl directly in Remotion <Audio src={...}> props/code.',
+        'Do not put <<<audio_N>>> markers inside Remotion code; markers are only labels for choosing.',
+        ...trackLines,
+      ].filter(Boolean).join('\n');
+    }
+  }
   const title = cleanMusicField(record.title, toolName === 'generate_voiceover' ? 'Generated voiceover' : 'Generated audio');
-  const audioUrl = typeof record.audioUrl === 'string' && /^https?:\/\//.test(record.audioUrl)
-    ? record.audioUrl
-    : '';
+  const audioUrl = getPlayableAudioUrl(record);
   const duration = typeof record.duration === 'number' && Number.isFinite(record.duration)
     ? `${Math.round(record.duration)}s`
     : 'unknown duration';
@@ -3044,7 +3104,7 @@ Call this before generate_voiceover unless the user explicitly supplied a concre
     generate_voiceover: tool({
       description: `Generate a spoken narration / voiceover audio clip with Volcengine Doubao Seed TTS, upload it to the project, and add it to the Audio Index.
 
-Use this when the task needs accurate scripted speech: narration, voiceover, dialogue, spoken explainer audio, product introductions, tutorials, sales-style oral copy, or when a video/composition clearly needs a human spoken line. Do not use it for background music, ambience, sound effects, character-voice experiments, or mixed sound design; use generate_audio for prompt-first audio and generate_music with provider="suno" only for full songs.
+Use this when the task needs accurate scripted speech: narration, voiceover, dialogue, spoken explainer audio, product introductions, tutorials, sales-style oral copy, or when a video/composition clearly needs a human spoken line. Do not use it for background music, ambience, sound effects, character-voice experiments, or mixed sound design; use generate_audio or generate_music for prompt-first Seed Audio assets.
 
 The generated audio becomes an Audio Index item (<<<audio_N>>>) in later turns. Use the audio marker only as a conversational/Seedance reference label. In Remotion composition code, always use the returned public audioUrl directly as the <Audio src>; never put <<<audio_N>>> in props or <Audio src>. Before calling this tool, call list_voiceover_voices and choose a concrete voice_id that fits the script, unless the user explicitly supplied one. If list_voiceover_voices returns fallback only, you may still use the best fallback voice but mention that the full voice catalog was unavailable.`,
       inputSchema: z.object({
@@ -3134,7 +3194,7 @@ The generated audio becomes an Audio Index item (<<<audio_N>>>) in later turns. 
 
 This is prompt-first: describe the sound directly. Do not force a rigid category. The prompt may describe background music, sound effects, ambience, character voice, or a mixed sound-design scene.
 
-Use generate_voiceover instead when exact scripted narration is required, especially for explainer videos, tutorials, and product introductions. Use generate_music with provider="suno" only when the user explicitly wants a full song, lyrics, vocals, or song structure.
+Use generate_voiceover instead when exact scripted narration is required, especially for explainer videos, tutorials, and product introductions. Use generate_music for background music beds; it also uses Seed Audio.
 
 Available audio model notes:
 ${formatAudioCapabilitiesForAgent()}`,
@@ -3183,65 +3243,45 @@ ${formatAudioCapabilitiesForAgent()}`,
       // Cache point marker — cache all tools preceding this one.
       // Must stay on the LAST tool in this map so the whole tools block is cached.
       providerOptions: ANTHROPIC_CACHE_CONTROL,
-      description: `Compatibility music tool. For ordinary short-video background music or music beds, this uses Seed Audio by default and returns one persisted audio asset. For full songs, lyrics, vocals, verse/chorus structure, or when the user asks for Suno, set provider="suno"; that legacy path returns a task ID and two candidate tracks.`,
+      description: `Generate background music with Seed Audio and return one persisted audio asset. Use this for short-video music beds, soundtrack, score, ambience-driven music, and polished vlog/commercial background tracks. Do not use Suno; all new music generation routes go through Seed Audio.`,
       inputSchema: z.object({
         prompt: z.string().describe('Music description: genre, mood, energy, instruments (no timing, no artist names)'),
         instrumental: z.boolean().optional().describe('No vocals (default: true)'),
         style: z.string().optional().describe('Genre/mood tags for custom mode'),
         duration_seconds: z.number().optional().describe('Requested duration for Seed Audio music beds. Seed Audio supports up to 120 seconds.'),
-        provider: z.enum(['auto', 'evolink-seed-audio', 'suno']).optional().describe('Use suno only for full songs, lyrics, or vocal music. Omit/auto uses Seed Audio for short-video music beds.'),
+        provider: z.enum(['auto', 'evolink-seed-audio']).optional().describe('Omit or use auto for Seed Audio. Kept only for compatibility.'),
       }),
       execute: async ({ prompt, instrumental, style, duration_seconds, provider }) => {
-        const shouldUseSuno = provider === 'suno' || instrumental === false || !!style;
-        if (!shouldUseSuno) {
-          const result = await createAudio({
-            prompt,
-            durationSeconds: duration_seconds,
-            title: 'Generated music',
-            model: provider === 'evolink-seed-audio' ? provider : 'auto',
-            supabase: ctx.supabase,
-            userId: ctx.userId,
-            projectId: ctx.projectId,
-          });
-          if (result.success) {
-            if (result.audioUrl) {
-              const audioIndex = addAudioAttachment(ctx, {
-                audioUrl: result.audioUrl,
-                title: result.title || 'Generated music',
-                duration: result.duration,
-                trackIndex: result.trackIndex,
-              });
-              result.message = `${result.message}\nAdded to Audio Index as <<<audio_${audioIndex}>>>.\nResolved music URL: ${result.audioUrl}\nUse this URL directly in Remotion <Audio src>; do not rely on the marker inside composition code or props.`;
-            }
-            import('./billing/credits').then(({ deductCredits }) =>
-              deductCredits(ctx.userId ?? '', null, 'create_music')
-                .catch(e => console.error('[billing] generate_music deduct error:', e))
-            );
+        const musicPrompt = [
+          prompt,
+          style ? `Style tags: ${style}.` : '',
+          instrumental === false
+            ? 'Use subtle vocal texture only if it supports the requested music bed; avoid dominant sung lyrics unless explicitly required.'
+            : 'Instrumental background music only, no vocals or lyrics.',
+        ].filter(Boolean).join('\n');
+        const result = await createAudio({
+          prompt: musicPrompt,
+          durationSeconds: duration_seconds,
+          title: 'Generated music',
+          model: provider === 'evolink-seed-audio' ? provider : 'auto',
+          supabase: ctx.supabase,
+          userId: ctx.userId,
+          projectId: ctx.projectId,
+        });
+        if (result.success) {
+          if (result.audioUrl) {
+            const audioIndex = addAudioAttachment(ctx, {
+              audioUrl: result.audioUrl,
+              title: result.title || 'Generated music',
+              duration: result.duration,
+              trackIndex: result.trackIndex,
+            });
+            result.message = `${result.message}\nAdded to Audio Index as <<<audio_${audioIndex}>>>.\nResolved music URL: ${result.audioUrl}\nUse this URL directly in Remotion <Audio src>; do not rely on the marker inside composition code or props.`;
           }
-          return result;
-        }
-
-        const result = await createMusic({ prompt, instrumental, style });
-        if (result.taskId) {
-          (ctx as any).musicTaskId = result.taskId;
-          // Bill for music generation
           import('./billing/credits').then(({ deductCredits }) =>
             deductCredits(ctx.userId ?? '', null, 'create_music')
               .catch(e => console.error('[billing] generate_music deduct error:', e))
           );
-          // Fire-and-forget: write pending rows to DB for polling resume after reload
-          if (ctx.supabase && ctx.userId) {
-            Promise.all([0, 1].map(idx =>
-              ctx.supabase.from('project_music').upsert({
-                suno_task_id: result.taskId,
-                track_index: idx,
-                project_id: ctx.projectId,
-                user_id: ctx.userId,
-                prompt,
-                status: 'pending',
-              }, { onConflict: 'suno_task_id,track_index' })
-            )).catch(() => {});
-          }
         }
         return result;
       },

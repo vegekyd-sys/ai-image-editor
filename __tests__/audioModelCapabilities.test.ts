@@ -11,6 +11,7 @@ describe('audio model capabilities', () => {
     expect(normalizeAudioModelId()).toBe('evolink-seed-audio')
     expect(normalizeAudioModelId('auto')).toBe('evolink-seed-audio')
     expect(normalizeAudioModelId('doubao-seed-audio-1-0')).toBe('evolink-seed-audio')
+    expect(normalizeAudioModelId('suno')).toBe('evolink-seed-audio')
 
     expect(getAudioModelCapability()).toMatchObject({
       id: 'evolink-seed-audio',
@@ -37,5 +38,6 @@ describe('audio model capabilities', () => {
     expect(text).toContain('evolink-seed-audio')
     expect(text).toContain('volcengine-seed-tts')
     expect(text).toContain('Use the dedicated generate_voiceover tool')
+    expect(text).not.toContain('Suno')
   })
 })

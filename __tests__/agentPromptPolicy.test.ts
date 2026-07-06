@@ -73,7 +73,7 @@ describe('agent prompt policy guards', () => {
 
     expect(agentTs).toContain('Resolved voiceover URL:')
     expect(agentTs).toContain('Use this URL directly in Remotion <Audio src>')
-    expect(agentTs).toContain('do not use the <<<audio_${(ctx.audioAttachments || []).length}>>> marker inside composition code or props')
+    expect(agentTs).toContain('marker inside composition code or props')
   })
 
   it('surfaces generated audio progress and playable cards in CUI', () => {
@@ -83,7 +83,13 @@ describe('agent prompt policy guards', () => {
     expect(agentTs).toContain('formatGeneratedAudioForCui')
     expect(agentTs).toContain('生成配音中')
     expect(agentTs).toContain('生成音频中')
-    expect(agentTs).toContain('music:${safeTrackIndex}|${title}|${safeDuration}|${tags}|${audioUrl}|${audioUrl}')
+    expect(agentTs).toContain('formatMusicLine')
+    expect(agentTs).toContain('music:${safeTrackIndex}|${title}|${safeDuration}|${tags}|${playUrl}|${finalUrl}')
+    expect(agentTs).toContain('all new music generation routes go through Seed Audio')
+    expect(agentTs).toContain("provider: z.enum(['auto', 'evolink-seed-audio'])")
+    expect(agentTs).not.toContain('waitForPreview: true')
+    expect(agentTs).not.toContain("provider=\"suno\"")
+    expect(agentTs).not.toContain("provider: z.enum(['auto', 'evolink-seed-audio', 'suno'])")
     expect(agentTs).toContain('const generatedAudioLine = formatGeneratedAudioForCui(toolName, toolOutput)')
     expect(reconnect).toContain("case 'music_task'")
     expect(reconnect).toContain('callbacks.onMusicTask?.')
