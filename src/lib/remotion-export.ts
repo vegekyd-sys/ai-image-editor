@@ -127,6 +127,10 @@ function remotionExportStaleMs(): number {
   return readPositiveIntegerEnv('REMOTION_EXPORT_STALE_MS', 2 * 60 * 1000)
 }
 
+function remotionWorkspaceMirrorMaxBytes(): number {
+  return readPositiveIntegerEnv('REMOTION_WORKSPACE_MIRROR_MAX_BYTES', 500 * 1024 * 1024)
+}
+
 function isStaleRenderingJob(job: Pick<RemotionExportJob, 'status' | 'heartbeat_at' | 'started_at'>): boolean {
   if (job.status !== 'rendering') return false
   const stamp = job.heartbeat_at || job.started_at
@@ -789,16 +793,40 @@ async function executeRemotionExportJob(job: RemotionExportJob): Promise<Remotio
         ? resolveSupabaseS3OutputDestination(admin, job.user_id, workspacePath)
         : null
       const lambdaStart = Date.now()
-      const lambdaResult = await renderDesignVideoLambdaToUrl(resolvedDesign, {
-        scale: renderTarget.scale,
-        onProgress: updateProgress,
-        outputDestination: directOutputDestination || undefined,
-      })
+      let usedDirectOutputDestination = Boolean(directOutputDestination)
+      let directOutputError: string | null = null
+      let lambdaResult: Awaited<ReturnType<typeof renderDesignVideoLambdaToUrl>>
+      try {
+        lambdaResult = await renderDesignVideoLambdaToUrl(resolvedDesign, {
+          scale: renderTarget.scale,
+          onProgress: updateProgress,
+          outputDestination: directOutputDestination || undefined,
+        })
+      } catch (err) {
+        if (!directOutputDestination) throw err
+        directOutputError = err instanceof Error ? err.message : String(err)
+        console.warn('[remotion-export] Lambda direct Supabase output failed; retrying with default Lambda output:', directOutputError)
+        await admin.from('remotion_export_jobs').update({
+          heartbeat_at: nowIso(),
+          metadata: {
+            ...(job.metadata || {}),
+            finalizing: 'retrying-lambda-default-output',
+            lambdaDirectSupabaseOutputError: directOutputError,
+          },
+        }).eq('id', job.id)
+        const retryStart = Date.now()
+        lambdaResult = await renderDesignVideoLambdaToUrl(resolvedDesign, {
+          scale: renderTarget.scale,
+          onProgress: updateProgress,
+        })
+        stageTimings.lambdaDirectOutputRetryMs = Date.now() - retryStart
+        usedDirectOutputDestination = false
+      }
       stageTimings.lambdaWallMs = Date.now() - lambdaStart
-      const lambdaWorkspacePath = directOutputDestination
+      const lambdaWorkspacePath = usedDirectOutputDestination && directOutputDestination
         ? `s3://${directOutputDestination.bucketName}/${directOutputDestination.key}`
         : `s3://${lambdaResult.bucketName}/${new URL(lambdaResult.url).pathname.split('/').slice(2).join('/')}`
-      if (job.publish && directOutputDestination) {
+      if (job.publish && usedDirectOutputDestination && directOutputDestination) {
         await admin.from('remotion_export_jobs').update({
           progress: 1,
           heartbeat_at: nowIso(),
@@ -828,38 +856,53 @@ async function executeRemotionExportJob(job: RemotionExportJob): Promise<Remotio
         outputMetadata.lambdaDirectSupabaseBucket = directOutputDestination.bucketName
         outputMetadata.lambdaDirectSupabaseKey = directOutputDestination.key
       } else if (job.publish) {
-        await admin.from('remotion_export_jobs').update({
-          progress: 1,
-          heartbeat_at: nowIso(),
-          metadata: {
-            ...(job.metadata || {}),
-            finalizing: 'downloading-lambda-output',
-            lambdaRenderId: lambdaResult.renderId,
-          },
-        }).eq('id', job.id)
-        const downloadStart = Date.now()
-        const buffer = await fetchRemoteBuffer(lambdaResult.url)
-        stageTimings.lambdaOutputDownloadMs = Date.now() - downloadStart
-        await admin.from('remotion_export_jobs').update({
-          progress: 1,
-          heartbeat_at: nowIso(),
-          metadata: {
-            ...(job.metadata || {}),
-            finalizing: 'uploading-workspace-copy',
-            lambdaRenderId: lambdaResult.renderId,
-            lambdaOutputSizeInBytes: lambdaResult.outputSizeInBytes || null,
-          },
-        }).eq('id', job.id)
-        const workspaceUploadStart = Date.now()
-        const saved = await workspace.writeFile(workspacePath, buffer, admin, job.user_id, contentType)
-        stageTimings.workspaceWriteMs = Date.now() - workspaceUploadStart
-        if (!saved.success || !saved.storageUrl) {
-          throw new Error(saved.error || 'Workspace upload failed')
+        if (directOutputError) {
+          outputMetadata.lambdaDirectSupabaseOutputFallback = true
+          outputMetadata.lambdaDirectSupabaseOutputError = directOutputError
         }
-        publicUrl = toPublicStorageUrl(saved.storageUrl)
-        finalWorkspacePath = workspacePath
-        outputMetadata.lambdaMirroredSizeInBytes = buffer.length
-        outputMetadata.lambdaDirectSupabaseOutput = false
+        const mirrorMaxBytes = remotionWorkspaceMirrorMaxBytes()
+        const outputSize = lambdaResult.outputSizeInBytes || null
+        if (outputSize && outputSize > mirrorMaxBytes) {
+          publicUrl = lambdaResult.url
+          finalWorkspacePath = lambdaWorkspacePath
+          outputMetadata.lambdaDirectDownload = true
+          outputMetadata.lambdaDirectSupabaseOutput = false
+          outputMetadata.lambdaWorkspaceMirrorSkipped = 'output-too-large'
+          outputMetadata.lambdaWorkspaceMirrorMaxBytes = mirrorMaxBytes
+        } else {
+          await admin.from('remotion_export_jobs').update({
+            progress: 1,
+            heartbeat_at: nowIso(),
+            metadata: {
+              ...(job.metadata || {}),
+              finalizing: 'downloading-lambda-output',
+              lambdaRenderId: lambdaResult.renderId,
+            },
+          }).eq('id', job.id)
+          const downloadStart = Date.now()
+          const buffer = await fetchRemoteBuffer(lambdaResult.url)
+          stageTimings.lambdaOutputDownloadMs = Date.now() - downloadStart
+          await admin.from('remotion_export_jobs').update({
+            progress: 1,
+            heartbeat_at: nowIso(),
+            metadata: {
+              ...(job.metadata || {}),
+              finalizing: 'uploading-workspace-copy',
+              lambdaRenderId: lambdaResult.renderId,
+              lambdaOutputSizeInBytes: lambdaResult.outputSizeInBytes || null,
+            },
+          }).eq('id', job.id)
+          const workspaceUploadStart = Date.now()
+          const saved = await workspace.writeFile(workspacePath, buffer, admin, job.user_id, contentType)
+          stageTimings.workspaceWriteMs = Date.now() - workspaceUploadStart
+          if (!saved.success || !saved.storageUrl) {
+            throw new Error(saved.error || 'Workspace upload failed')
+          }
+          publicUrl = toPublicStorageUrl(saved.storageUrl)
+          finalWorkspacePath = workspacePath
+          outputMetadata.lambdaMirroredSizeInBytes = buffer.length
+          outputMetadata.lambdaDirectSupabaseOutput = false
+        }
       } else {
         publicUrl = lambdaResult.url
         finalWorkspacePath = lambdaWorkspacePath
