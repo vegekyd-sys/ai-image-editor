@@ -20,6 +20,10 @@ export interface CreateMusicResult {
   providerAudioUrl?: string
   title?: string
   duration?: number
+  creditsUsed?: number
+  generationSeconds?: number
+  provider?: string
+  model?: string
   tags?: string
   trackIndex?: number
   message: string
@@ -67,6 +71,10 @@ export async function createMusic(input: CreateMusicInput): Promise<CreateMusicR
     providerAudioUrl: result.providerAudioUrl,
     title: result.title || 'Generated music',
     duration: result.duration,
+    creditsUsed: result.creditsUsed,
+    generationSeconds: result.generationSeconds,
+    provider: result.provider,
+    model: result.model,
     tags: ['audio', 'music', 'seed-audio', result.provider, result.model].filter(Boolean).join(','),
     trackIndex: result.trackIndex,
     message: `${result.message} Music is ready with Seed Audio.`,

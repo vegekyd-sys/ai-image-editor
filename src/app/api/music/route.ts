@@ -1,7 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
 import { createMusic } from '@/lib/skills/create-music'
-import { requireCredits, deductCredits } from '@/lib/billing/credits'
+import { requireCredits } from '@/lib/billing/credits'
+import { deductSeedAudioCredits, seedAudioMakaronCredits } from '@/lib/billing/seed-audio'
 
 export const maxDuration = 30
 
@@ -19,7 +20,10 @@ export async function POST(req: NextRequest) {
     }
 
     // Pre-flight credit check
-    const creditCheck = await requireCredits(user.id, 10)
+    const creditCheck = await requireCredits(
+      user.id,
+      seedAudioMakaronCredits({ durationSeconds: durationSeconds ?? 20 }) || 10,
+    )
     if (!creditCheck.ok) return creditCheck.response
 
     const result = await createMusic({
@@ -36,8 +40,13 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: result.message }, { status: 500 })
     }
 
-    // Deduct credits for music generation (fire-and-forget)
-    deductCredits(user.id, null, 'create_music')
+    // Deduct credits for Seed Audio by actual generated-audio usage.
+    deductSeedAudioCredits(user.id, {
+      durationSeconds: result.duration,
+      providerCreditsUsed: result.creditsUsed,
+      model: result.model,
+      generationSeconds: result.generationSeconds,
+    })
       .catch(e => console.error('[billing] music deduct error:', e))
 
     return NextResponse.json({

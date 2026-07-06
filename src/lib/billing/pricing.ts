@@ -7,6 +7,11 @@ interface ToolPricing {
   is_free: boolean
 }
 
+const DEFAULT_TOOL_PRICING: Record<string, { credits: number; isFree: boolean }> = {
+  create_seed_audio: { credits: 10, isFree: false },
+  create_voiceover: { credits: 2, isFree: false },
+}
+
 // In-memory cache with TTL
 let cache: { data: ToolPricing[]; ts: number } | null = null
 const CACHE_TTL = 5 * 60 * 1000 // 5 minutes
@@ -23,7 +28,7 @@ export async function getAllPricing(): Promise<ToolPricing[]> {
 export async function getToolPrice(toolName: string): Promise<{ credits: number; isFree: boolean } | null> {
   const all = await getAllPricing()
   const entry = all.find(p => p.tool_name === toolName)
-  if (!entry) return null
+  if (!entry) return DEFAULT_TOOL_PRICING[toolName] ?? null
   return { credits: entry.credits, isFree: entry.is_free }
 }
 

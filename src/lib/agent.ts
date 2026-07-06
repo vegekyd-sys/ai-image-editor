@@ -10,7 +10,8 @@ import { editImage } from './skills/edit-image';
 import { rotateCamera } from './skills/rotate-camera';
 import { createVideo } from './skills/create-video';
 import { estimateVideoCredits, resolveAgentVideoSelection, resolveVideoGenerationRoute, resolveVideoOutputDuration, validateVideoModelRequest } from './video-model-capabilities';
-import { deductFixedCredits } from './billing/credits';
+import { deductCredits, deductFixedCredits } from './billing/credits';
+import { deductSeedAudioCredits } from './billing/seed-audio';
 import { createAudio } from './skills/create-audio';
 import { createVoiceover } from './skills/create-voiceover';
 import { formatAudioCapabilitiesForAgent } from './audio-model-capabilities';
@@ -3167,6 +3168,9 @@ The generated audio becomes an Audio Index item (<<<audio_N>>>) in later turns. 
 
         const audioIndex = addAudioAttachment(ctx, { audioUrl, title: trackTitle, trackIndex });
 
+        deductCredits(ctx.userId, null, 'create_voiceover', result.tts.model)
+          .catch(e => console.error('[billing] generate_voiceover deduct error:', e));
+
         return {
           success: true as const,
           message: `Voiceover generated and added to Audio Index as <<<audio_${audioIndex}>>>.\nResolved voiceover URL: ${audioUrl}\nUse this URL directly in Remotion <Audio src>; do not use the <<<audio_${audioIndex}>>> marker inside composition code or props.`,
@@ -3224,10 +3228,12 @@ ${formatAudioCapabilitiesForAgent()}`,
             });
             result.message = `${result.message}\nAdded to Audio Index as <<<audio_${audioIndex}>>>.\nResolved audio URL: ${result.audioUrl}\nUse this URL directly in Remotion <Audio src>; do not rely on the marker inside composition code or props.`;
           }
-          import('./billing/credits').then(({ deductCredits }) =>
-            deductCredits(ctx.userId ?? '', null, 'create_music')
-              .catch(e => console.error('[billing] generate_audio deduct error:', e))
-          );
+          deductSeedAudioCredits(ctx.userId ?? '', {
+            durationSeconds: result.duration,
+            providerCreditsUsed: result.creditsUsed,
+            model: result.model,
+            generationSeconds: result.generationSeconds,
+          }).catch(e => console.error('[billing] generate_audio deduct error:', e));
         }
         return result;
       },
@@ -3278,10 +3284,12 @@ ${formatAudioCapabilitiesForAgent()}`,
             });
             result.message = `${result.message}\nAdded to Audio Index as <<<audio_${audioIndex}>>>.\nResolved music URL: ${result.audioUrl}\nUse this URL directly in Remotion <Audio src>; do not rely on the marker inside composition code or props.`;
           }
-          import('./billing/credits').then(({ deductCredits }) =>
-            deductCredits(ctx.userId ?? '', null, 'create_music')
-              .catch(e => console.error('[billing] generate_music deduct error:', e))
-          );
+          deductSeedAudioCredits(ctx.userId ?? '', {
+            durationSeconds: result.duration,
+            providerCreditsUsed: result.creditsUsed,
+            model: result.model,
+            generationSeconds: result.generationSeconds,
+          }).catch(e => console.error('[billing] generate_music deduct error:', e));
         }
         return result;
       },

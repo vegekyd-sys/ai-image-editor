@@ -55,7 +55,21 @@ function formatResult(image: string, message: string, prefix: string) {
 
 export interface McpServerOptions {
   /** Called after each tool completes successfully. Used for billing. */
-  onToolComplete?: (toolName: string, model?: string, durationMs?: number, usage?: { inputTokens: number; outputTokens: number; modelId: string }, meta?: { videoDurationSec?: number; imageCount?: number; videoModel?: string; videoResolution?: string }) => void | Promise<void>;
+  onToolComplete?: (
+    toolName: string,
+    model?: string,
+    durationMs?: number,
+    usage?: { inputTokens: number; outputTokens: number; modelId: string },
+    meta?: {
+      videoDurationSec?: number
+      imageCount?: number
+      videoModel?: string
+      videoResolution?: string
+      seedAudioDurationSec?: number
+      seedAudioProviderCredits?: number
+      seedAudioGenerationSec?: number
+    },
+  ) => void | Promise<void>;
   /** Called before each tool executes. Return false to reject (insufficient credits). */
   onToolStart?: (toolName: string) => Promise<{ allowed: boolean; message?: string }>;
 }
@@ -455,7 +469,7 @@ Poll every 10-15 seconds. Do NOT poll in a tight loop.`,
     async (params) => {
       try {
         if (options?.onToolStart) {
-          const check = await options.onToolStart('makaron_create_music');
+          const check = await options.onToolStart('makaron_create_seed_audio');
           if (!check.allowed) return { content: [{ type: 'text' as const, text: check.message || 'Insufficient credits' }] };
         }
         const t0 = Date.now();
@@ -466,7 +480,11 @@ Poll every 10-15 seconds. Do NOT poll in a tight loop.`,
         });
 
         if (result.success) {
-          await options?.onToolComplete?.('makaron_create_music', undefined, Date.now() - t0);
+          await options?.onToolComplete?.('makaron_create_seed_audio', result.model, Date.now() - t0, undefined, {
+            seedAudioDurationSec: result.duration,
+            seedAudioProviderCredits: result.creditsUsed,
+            seedAudioGenerationSec: result.generationSeconds,
+          });
         }
         return { content: [{ type: 'text' as const, text: result.success
           ? `${result.message}\n\nAudio URL: ${result.audioUrl || 'not returned'}\nTask ID: ${result.taskId || 'n/a'}`

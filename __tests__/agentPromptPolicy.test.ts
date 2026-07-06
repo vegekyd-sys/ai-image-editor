@@ -74,6 +74,8 @@ describe('agent prompt policy guards', () => {
     expect(agentTs).toContain('Resolved voiceover URL:')
     expect(agentTs).toContain('Use this URL directly in Remotion <Audio src>')
     expect(agentTs).toContain('marker inside composition code or props')
+    expect(agentTs).toContain("deductCredits(ctx.userId, null, 'create_voiceover', result.tts.model)")
+    expect(agentTs).toContain('[billing] generate_voiceover deduct error:')
   })
 
   it('surfaces generated audio progress and playable cards in CUI', () => {
@@ -90,6 +92,9 @@ describe('agent prompt policy guards', () => {
     expect(agentTs).not.toContain('waitForPreview: true')
     expect(agentTs).not.toContain("provider=\"suno\"")
     expect(agentTs).not.toContain("provider: z.enum(['auto', 'evolink-seed-audio', 'suno'])")
+    expect(agentTs).toContain('deductSeedAudioCredits')
+    expect(agentTs).toContain('providerCreditsUsed: result.creditsUsed')
+    expect(agentTs).not.toContain("deductCredits(ctx.userId ?? '', null, 'create_music')")
     expect(agentTs).toContain('const generatedAudioLine = formatGeneratedAudioForCui(toolName, toolOutput)')
     expect(reconnect).toContain("case 'music_task'")
     expect(reconnect).toContain('callbacks.onMusicTask?.')

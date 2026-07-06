@@ -1,7 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
 import { createAudio } from '@/lib/skills/create-audio'
-import { requireCredits, deductCredits } from '@/lib/billing/credits'
+import { requireCredits } from '@/lib/billing/credits'
+import { deductSeedAudioCredits, seedAudioMakaronCredits } from '@/lib/billing/seed-audio'
 
 export const maxDuration = 120
 
@@ -17,7 +18,8 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: 'prompt is required' }, { status: 400 })
     }
 
-    const creditCheck = await requireCredits(user.id, 10)
+    const estimatedCredits = seedAudioMakaronCredits({ durationSeconds: durationSeconds ?? duration_seconds ?? 20 })
+    const creditCheck = await requireCredits(user.id, estimatedCredits || 10)
     if (!creditCheck.ok) return creditCheck.response
 
     const result = await createAudio({
@@ -34,7 +36,12 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: result.message }, { status: 500 })
     }
 
-    deductCredits(user.id, null, 'create_music')
+    deductSeedAudioCredits(user.id, {
+      durationSeconds: result.duration,
+      providerCreditsUsed: result.creditsUsed,
+      model: result.model,
+      generationSeconds: result.generationSeconds,
+    })
       .catch(e => console.error('[billing] audio deduct error:', e))
 
     return NextResponse.json(result)
