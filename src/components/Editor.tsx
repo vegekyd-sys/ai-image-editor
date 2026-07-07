@@ -49,6 +49,7 @@ import { isRemotionExportTaskId } from '@/lib/remotion-export-flags';
 import { formatVideoMediaSpec } from '@/lib/media-aspect';
 import { serializeCompletionActions } from '@/lib/artifact-actions';
 import { appendSnapshotDedupeVideo, dedupeVideoSnapshots } from '@/lib/video-snapshot-dedupe';
+import { isGeneratedVideoSnapshot } from '@/lib/video-snapshot-kind';
 
 export type { AnimationState } from '@/lib/editor/types';
 
@@ -550,7 +551,8 @@ const isTipsFetchingRef = useRef(isTipsFetching);
   // Video entry detection
   // v1: last item in timeline (sentinel) when any animation exists
   // v2: any snapshot with type='video' at current viewIndex
-  const hasVideo = hasAnyAnimation;
+  const hasGeneratedVideoSnapshot = snapshots.some(isGeneratedVideoSnapshot);
+  const hasVideo = hasAnyAnimation || hasGeneratedVideoSnapshot;
   const videoTimelineIndex = !isV2 && hasAnyAnimation ? timeline.length - 1 : -1;
   const currentSnapIndex = snapFromTimeline(viewIndex, draftParentIndex) ?? 0;
   const currentSnap = snapshots[currentSnapIndex];
@@ -4248,11 +4250,16 @@ Select the best 3-7 items for a compelling video. You do NOT need to use all or 
               description: designDesc || '[composition]',
               design: currentDesign,
             };
+            const newIndex = snapshotsRef.current.length;
             setSnapshots(prev => {
               if (prev.some(s => s.id === snapId)) return prev;
-              return [...prev, newSnapshot];
+              const next = [...prev, newSnapshot];
+              snapshotsRef.current = next;
+              return next;
             });
-            onSaveSnapshot?.(newSnapshot, snapshotsRef.current.length, (url) => {
+            viewIndexRef.current = newIndex;
+            setViewIndex(newIndex);
+            onSaveSnapshot?.(newSnapshot, newIndex, (url) => {
               setSnapshots(prev => prev.map(s => s.id === snapId ? { ...s, imageUrl: url } : s));
             });
             setMessages((prev) => prev.map((m) =>

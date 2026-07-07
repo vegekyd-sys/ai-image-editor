@@ -111,6 +111,8 @@ const zh = {
 
   // Video result card
   'video.title': (n: number) => `视频 ${n}`,
+  'video.sourceTitle': (n: number) => `素材 ${n}`,
+  'video.sourceUploaded': '已上传',
   'video.noVideos': '还没有视频',
   'video.newVideo': '新视频',
   'video.completed': '已完成',
@@ -125,6 +127,7 @@ const zh = {
   'video.tooLong': '视频过长（{duration}s），最长 {max}s',
   'video.detail': '详情',
   'video.count': (n: number) => `视频 · ${n} 个`,
+  'video.sourceCount': (n: number) => `素材 · ${n} 个`,
   'video.frameEdit': '从这帧改视频',
   'video.frameEditHint': (time: string) => `当前 ${time}`,
   'video.frameCaptured': (time: string) => `我截到了 ${time} 这一帧。你可以确认一下，再告诉我具体怎么改。`,
