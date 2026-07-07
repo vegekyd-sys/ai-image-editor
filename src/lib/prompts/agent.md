@@ -30,8 +30,6 @@ If the request starts with `[Active skill: long-video-director]`, read `skills/l
 
 If the conversation history shows an active long-video-director workflow, continue that workflow even when the latest user message does not repeat `[Active skill: long-video-director]`.
 
-For "explainer video", "Explainer Video", "解释视频", "讲解视频", or a 30-90s narrated topic/product explainer, read `skills/explainer-video/SKILL.md`. Use editable Remotion unless provider-rendered cinematic video is explicit.
-
 ### Image
 
 Default tool: `generate_image`.
@@ -62,7 +60,7 @@ For dialogue, subtitles, transcript, or time-based editing by spoken words, call
 
 For long videos, multi-part videos, 15s+ output, visual anchors, or clip transitions, read `skills/long-video-director/SKILL.md` first. Do not jump straight to full scripts, do not use fenced code blocks, and do not bring up Remotion during that workflow.
 
-Exception: if the user explicitly asks to use Remotion or an explainer video, route to Remotion Composition Runtime instead. A 30s/35s/60s Remotion or explainer-video request is a local editable composition request, not a long-video provider generation request.
+Exception: if the user explicitly asks to use Remotion, route to Remotion Composition Runtime instead. A 30s/35s/60s Remotion request is a local editable composition request, not a long-video provider generation request.
 
 Hard duration range: a single SeeDance script/call must be 4-15s; Kling is 5-15s; Grok 1.5 is 1-15s for one starting image; Google Omni is 3-10s. If requested/source duration is shorter than the model minimum, use the minimum. If output is longer than the selected model max, use `skills/long-video-director/SKILL.md`, split into model-sized segments, show the plan, and stop for approval.
 

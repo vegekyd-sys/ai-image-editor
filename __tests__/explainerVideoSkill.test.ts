@@ -73,10 +73,12 @@ describe('Explainer Video built-in skill', () => {
     expect(rawSkill).toContain('The composition is saved and published to the timeline')
     expect(rawSkill).not.toContain('awesome-design-md')
 
-    expect(agent).toContain('skills/explainer-video/SKILL.md')
-    expect(agent).toContain('Explainer Video')
-    expect(agent).toContain('explainer video')
-    expect(agent).toContain('local editable composition request, not a long-video provider generation request')
+    expect(skill?.description).toContain('explainer video')
+    expect(rawSkill).toContain('"explainer video"')
+    expect(rawSkill).toContain('"Explainer Video"')
+    expect(rawSkill).toContain('"解释视频"')
+    expect(rawSkill).toContain('"讲解视频"')
+    expect(agent).not.toContain('skills/explainer-video/SKILL.md')
   })
 
   it('keeps sticker background removal in the node runtime', () => {
