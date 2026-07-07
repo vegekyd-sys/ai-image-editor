@@ -35,7 +35,7 @@
     "mcp:http": "npx tsx --require ./md-loader.cjs mcp-server.ts"
   },
   "dependencies": {
-    "@ai-sdk/amazon-bedrock": "^4.0.126",
+    "@ai-sdk/amazon-bedrock": "^5.0.12",
     "@apple/app-store-server-library": "^3.1.0",
     "@aws-crypto/crc32c": "^5.2.0",
     "@aws-sdk/client-lambda": "^3.986.0",
@@ -74,7 +74,7 @@
     "@tensorflow/tfjs-core": "^4.22.0",
     "@vercel/sandbox": "^1.9.3",
     "@vladmandic/face-api": "^1.7.15",
-    "ai": "^6.0.217",
+    "ai": "^7.0.16",
     "canvas": "^3.2.1",
     "dotenv": "^17.3.1",
     "exifr": "^7.1.3",

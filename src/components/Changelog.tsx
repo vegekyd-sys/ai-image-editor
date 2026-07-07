@@ -13,9 +13,11 @@ const CHANGELOG: ChangelogEntry[] = [
     date: '2026-07-07',
     en: { title: 'Video Director for Remotion', items: [
       'Remotion compositions now use a shared director contract for story, pacing, scenes, transitions, and review instead of web-style design references.',
+      'Agent is now on AI SDK 7 with Sonnet 5 thinking-disabled correctly applied, making first responses much faster while keeping Sonnet 4.6 rollback simple.',
     ]},
     zh: { title: 'Remotion Video Director', items: [
       'Remotion composition 现在会先走共享 Director contract，关注故事、节奏、场景、转场和验收，不再依赖网页式设计参考。',
+      'Agent 已升级到 AI SDK 7，并正确关闭 Sonnet 5 thinking，首字速度明显提升，同时保留一键切回 Sonnet 4.6 的回退路径。',
     ]},
   },
   {

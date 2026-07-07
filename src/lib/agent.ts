@@ -127,6 +127,26 @@ function getAgentModel() {
   return bedrockAnthropic(getAgentModelId());
 }
 const ANTHROPIC_CACHE_CONTROL = { anthropic: { cacheControl: { type: 'ephemeral' } } } as const;
+const ANTHROPIC_REASONING_EFFORTS = new Set(['low', 'medium', 'high', 'xhigh', 'max']);
+const ANTHROPIC_THINKING_MODES = new Set(['adaptive', 'disabled']);
+
+function modelFileContent(base64Data: string, mediaType: string) {
+  return {
+    type: 'file' as const,
+    data: { type: 'data' as const, data: base64Data },
+    mediaType,
+  };
+}
+
+function getAnthropicReasoningEffort() {
+  const effort = process.env.AGENT_REASONING_EFFORT?.trim().toLowerCase();
+  return effort && ANTHROPIC_REASONING_EFFORTS.has(effort) ? effort : undefined;
+}
+
+function getAnthropicThinkingMode() {
+  const mode = process.env.AGENT_THINKING_MODE?.trim().toLowerCase();
+  return mode && ANTHROPIC_THINKING_MODES.has(mode) ? mode : undefined;
+}
 
 function getAnthropicContextManagement(modelId: string) {
   if (isClaudeSonnet5Model(modelId)) {
@@ -1750,7 +1770,7 @@ Hard constraints:
         return {
           type: 'content' as const,
           value: [
-            { type: 'media' as const, data: output.base64Data, mediaType: output.mimeType },
+            modelFileContent(output.base64Data, output.mimeType),
             {
               type: 'text' as const,
               text: output.question
@@ -2328,7 +2348,7 @@ Returns the rendered image so you can see it with your vision.`,
         return {
           type: 'content' as const,
           value: [
-            { type: 'media' as const, data: output.base64Data, mediaType: output.mimeType },
+            modelFileContent(output.base64Data, output.mimeType),
             { type: 'text' as const, text: `Frame ${output.frame}/${output.totalFrames} (${time}s).${loc}${output.question ? ` Focus: ${output.question}.` : ''}${nextStep}` },
           ],
         };
@@ -2433,7 +2453,7 @@ Use this to read skill instructions (SKILL.md), reference images, or your memory
           return {
             type: 'content' as const,
             value: [
-              { type: 'media' as const, data: output.base64Data, mediaType: output.mimeType },
+              modelFileContent(output.base64Data, output.mimeType),
               { type: 'text' as const, text: `Workspace image: ${output.path}` },
             ],
           };
@@ -3024,7 +3044,7 @@ Node media runtime provides \`require\`, \`process\`, \`ffmpegPath\`, \`inputFil
           return {
             type: 'content' as const,
             value: [
-              { type: 'media' as const, data: output.base64Data, mediaType: output.mimeType || 'image/jpeg' },
+              modelFileContent(output.base64Data, output.mimeType || 'image/jpeg'),
               { type: 'text' as const, text: output.description ? `Code output: ${output.description}` : 'Code produced an image.' },
             ],
           };
@@ -3509,6 +3529,8 @@ export async function* runMakaronAgent(
 
     const endStreamInit = perf?.span('model_stream_init', { projectId });
     const agentModelId = getAgentModelId();
+    const thinkingMode = getAnthropicThinkingMode();
+    const reasoningEffort = getAnthropicReasoningEffort();
     const result = (streamText as any)({
       model: getAgentModel(),
       system: [{ role: 'system', content: systemPrompt, providerOptions: ANTHROPIC_CACHE_CONTROL }],
@@ -3524,6 +3546,8 @@ export async function* runMakaronAgent(
         anthropic: {
           disableParallelToolUse: true,
           toolStreaming: false,
+          ...(thinkingMode ? { thinking: { type: thinkingMode } } : {}),
+          ...(thinkingMode !== 'disabled' && reasoningEffort ? { effort: reasoningEffort } : {}),
           contextManagement: getAnthropicContextManagement(agentModelId),
         },
       },

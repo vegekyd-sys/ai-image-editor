@@ -1,0 +1,67 @@
+diff --git a/node_modules/@ai-sdk/amazon-bedrock/dist/index.js b/node_modules/@ai-sdk/amazon-bedrock/dist/index.js
+index 1a5b4c5..319d9af 100644
+--- a/node_modules/@ai-sdk/amazon-bedrock/dist/index.js
++++ b/node_modules/@ai-sdk/amazon-bedrock/dist/index.js
+@@ -305,6 +305,10 @@ async function prepareTools({
+         }
+       }
+     });
++    const toolCachePoint = getCachePoint(tool.providerOptions);
++    if (toolCachePoint) {
++      amazonBedrockTools.push(toolCachePoint);
++    }
+   }
+   let amazonBedrockToolChoice = void 0;
+   if (!usingAnthropicTools && amazonBedrockTools.length > 0 && toolChoice) {
+diff --git a/node_modules/@ai-sdk/amazon-bedrock/src/amazon-bedrock-prepare-tools.ts b/node_modules/@ai-sdk/amazon-bedrock/src/amazon-bedrock-prepare-tools.ts
+index 59622a1..7bb42e9 100644
+--- a/node_modules/@ai-sdk/amazon-bedrock/src/amazon-bedrock-prepare-tools.ts
++++ b/node_modules/@ai-sdk/amazon-bedrock/src/amazon-bedrock-prepare-tools.ts
+@@ -2,6 +2,7 @@ import {
+   UnsupportedFunctionalityError,
+   type JSONObject,
+   type LanguageModelV4CallOptions,
++  type SharedV4ProviderMetadata,
+   type SharedV4Warning,
+ } from '@ai-sdk/provider';
+ import { asSchema } from '@ai-sdk/provider-utils';
+@@ -10,10 +11,26 @@ import {
+   prepareTools as prepareAnthropicTools,
+ } from '@ai-sdk/anthropic/internal';
+ import type {
++  AmazonBedrockCachePoint,
+   AmazonBedrockTool,
+   AmazonBedrockToolConfiguration,
+ } from './amazon-bedrock-api-types';
+ 
++function getCachePoint(
++  providerMetadata: SharedV4ProviderMetadata | undefined,
++): AmazonBedrockCachePoint | undefined {
++  const cachePointConfig = (providerMetadata?.amazonBedrock?.cachePoint ??
++    providerMetadata?.bedrock?.cachePoint) as
++    | AmazonBedrockCachePoint['cachePoint']
++    | undefined;
++
++  if (!cachePointConfig) {
++    return undefined;
++  }
++
++  return { cachePoint: cachePointConfig };
++}
++
+ export async function prepareTools({
+   tools,
+   toolChoice,
+@@ -154,6 +171,12 @@ export async function prepareTools({
+         },
+       },
+     });
++
++    // patch: preserve Bedrock prompt-cache breakpoints on tool definitions.
++    const toolCachePoint = getCachePoint(tool.providerOptions);
++    if (toolCachePoint) {
++      amazonBedrockTools.push(toolCachePoint);
++    }
+   }
+ 
+   // Handle toolChoice for standard Bedrock tools, but NOT for Anthropic provider-defined tools
