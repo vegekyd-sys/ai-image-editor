@@ -57,6 +57,13 @@ export default function VideoResultCard({
     return modelInfo ? t(modelInfo.nameKey as TranslationKey) : model;
   }
 
+  function isSourceUpload(anim: ProjectAnimation): boolean {
+    return anim.videoModel === 'upload'
+      && !anim.taskId
+      && !anim.prompt.trim()
+      && (!anim.snapshotUrls || anim.snapshotUrls.length === 0);
+  }
+
   const completed = animations.filter(a => a.status === 'completed' && a.videoUrl);
   const processing = animations.filter(a => a.status === 'processing');
   const failed = animations.filter(a => a.status === 'failed' || a.status === 'abandoned');
@@ -68,6 +75,7 @@ export default function VideoResultCard({
   const detailWidth = isDesktop ? 40 : 44;
   const frameEditWidth = cardWidth + detailWidth;
   const frameEditAnim = all.find(a => a.id === selectedVideoId && a.status === 'completed' && !!a.videoUrl);
+  const allSourceUploads = all.length > 0 && all.every(isSourceUpload);
 
   const selectedPillRef = useRef<HTMLDivElement>(null);
   useEffect(() => {
@@ -76,7 +84,7 @@ export default function VideoResultCard({
 
   const toolbar = (
     <span className={`text-white/20 tracking-wide font-medium ${isDesktop ? 'text-[10px]' : 'text-[11px]'}`}>
-      {t('video.count', all.length)}
+      {allSourceUploads ? t('video.sourceCount', all.length) : t('video.count', all.length)}
     </span>
   );
 
@@ -106,14 +114,17 @@ export default function VideoResultCard({
           const isCompleted = anim.status === 'completed' && !!anim.videoUrl;
           const isProcessing = anim.status === 'processing';
           const isFailed = anim.status === 'failed';
+          const sourceUpload = isSourceUpload(anim);
           const thumbUrl = anim.imageUrl;
-          const title = videoTitle(anim.prompt, idx);
+          const title = sourceUpload ? t('video.sourceTitle', idx + 1) : videoTitle(anim.prompt, idx);
 
           const modelLabel = videoModelLabel(anim.videoModel);
           const durationLabel = anim.duration ? `${Math.round(anim.duration)}s` : null;
           let statusText: React.ReactNode;
           if (isCompleted) {
-            statusText = durationLabel ? `${durationLabel}${modelLabel ? ` · ${modelLabel}` : ''}` : (modelLabel || t('video.completed'));
+            statusText = sourceUpload
+              ? (durationLabel ? `${durationLabel} · ${t('video.sourceUploaded')}` : t('video.sourceUploaded'))
+              : (durationLabel ? `${durationLabel}${modelLabel ? ` · ${modelLabel}` : ''}` : (modelLabel || t('video.completed')));
           } else if (isProcessing) {
             statusText = <><ElapsedTimer since={anim.createdAt} />{modelLabel ? ` · ${modelLabel}` : ''}</>;
           } else if (isFailed) {

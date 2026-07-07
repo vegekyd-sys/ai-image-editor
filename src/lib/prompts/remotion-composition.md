@@ -6,6 +6,25 @@ Use `runtime: "composition"` for new work. `runtime: "design"` is a legacy alias
 
 If the user explicitly asks to use Remotion, make reasonable creative assumptions and build the composition instead of asking a clarifying question. For broad themes such as "35秒微信成长视频", create an editable placeholder narrative with plausible scene labels, dates, counters, and captions; the user can refine the copy after seeing a draft.
 
+## Director Contract
+
+Every editable Remotion composition must be planned as a video, not as a web
+layout. Before creating a new composition, or making a major visual/timing
+patch to an existing composition, read
+`skills/_shared/remotion-director-contract.md`.
+
+Relationship:
+- Director layer: purpose, audience, core message, emotional arc, scene order,
+  pacing, focal subject, transition language, audio/subtitle relation, and
+  review criteria.
+- Composition layer: `function Composition(props)`, `width`, `height`, `fps`,
+  `animation.durationInSeconds`, `<Sequence>` timing, media components, editable
+  props, and frame-driven animation.
+
+Do not let Remotion implementation details invent a webpage-like structure. The
+director contract comes first; this composition prompt turns that direction into
+an executable Makaron timeline.
+
 When the user asks to put two existing timeline videos together, cut clips freely, add transitions, add subtitles, or make a sequence that can be edited later, this is the default runtime. Use Remotion `<Sequence>` and `<Video>` rather than FFmpeg.
 
 Do not fall back to FFmpeg/node for ordinary timeline splicing just because a preview needs adjustment or the first composition attempt is imperfect. Patch the Remotion composition, save/publish the editable composition, or report the preview issue. Use FFmpeg only when the user explicitly asks for a real file-level MP4 operation/export.

@@ -111,6 +111,8 @@ const en = {
 
   // Video result card
   'video.title': (n: number) => `Video ${n}`,
+  'video.sourceTitle': (n: number) => `Source ${n}`,
+  'video.sourceUploaded': 'Uploaded',
   'video.noVideos': 'No videos yet',
   'video.newVideo': 'New video',
   'video.completed': 'Completed',
@@ -125,6 +127,7 @@ const en = {
   'video.tooLong': 'Video too long ({duration}s). Maximum {max}s.',
   'video.detail': 'Detail',
   'video.count': (n: number) => `${n} video${n !== 1 ? 's' : ''}`,
+  'video.sourceCount': (n: number) => `${n} source${n !== 1 ? 's' : ''}`,
   'video.frameEdit': 'Edit video here',
   'video.frameEditHint': (time: string) => `Current ${time}`,
   'video.frameCaptured': (time: string) => `I captured the frame at ${time}. Check it, then tell me what to change.`,

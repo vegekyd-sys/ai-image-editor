@@ -35,22 +35,24 @@ If the user explicitly asks for a provider-rendered cinematic video instead,
 route to the video generation flow. Otherwise, build an editable Remotion
 composition.
 
-## Design Reference First
+## Shared Remotion Director Contract First
 
-Before planning the video, inspect the local full copy of `awesome-design-md`:
+Before planning the video, inspect the shared Remotion Director contract and
+its local copy of `remotion-video-director`:
 
-1. Read `skills/explainer-video/references/awesome-design-md/README.md`.
-2. Pick the closest brand/domain reference under
-   `skills/explainer-video/references/awesome-design-md/design-md/*/DESIGN.md`.
-   If an exact match exists, use it. For example, SpaceX should read
-   `design-md/spacex/DESIGN.md`.
-3. If there is no exact match, choose 1-2 relevant references and briefly
-   internalize their typography, palette, motion density, layout rhythm, and
-   do/don't guidance.
-4. Apply the reference as visual direction, not as copy. Do not claim the video
-   is official brand work unless the user says so.
+1. Read `skills/_shared/remotion-director-contract.md`.
+2. Read `skills/_shared/remotion-video-director/SKILL.md`.
+3. Read `skills/_shared/remotion-video-director/references/video-archetypes.md`.
+4. Read `skills/_shared/remotion-video-director/references/remotion-patterns.md`.
+5. Read `skills/_shared/remotion-video-director/references/component-library.md`.
+6. Choose a creative direction, scene archetype set, emotional arc, pacing model,
+   and layout contract before writing Remotion code.
+7. Apply the contract as video direction: shot flow, frame hierarchy, timing,
+   transition language, typography scale, audio attitude, and review criteria.
+   Do not reduce it to a color palette or website design system.
 
-This reference step is required. Do not skip it because the topic sounds simple.
+This shared contract is required for all Makaron Remotion compositions. Do not
+skip it because the topic sounds simple.
 
 ## Default Deliverable
 
@@ -80,41 +82,47 @@ wrong or expensive.
 ## Production Flow
 
 1. Read `prompts/remotion-composition.md` before the first `run_code` call.
-2. Read the required design reference files from `awesome-design-md`.
-3. Plan 6-8 scenes with exact time ranges that sum to the target duration.
-4. Create a compact asset-and-audio cue sheet before generating media:
+2. Read the shared Remotion Director contract and required video-director
+   reference files.
+3. Create a compact creative brief: purpose, audience, core message, desired
+   action, emotional arc, creative direction, audio strategy, and visual style.
+4. Plan 6-8 scenes with exact time ranges that sum to the target duration.
+5. Create a layout contract before writing code: one focal point per scene,
+   readable text zones, subtitle-safe lower area, transition pattern, and the
+   component/archetype used by each scene.
+6. Create a compact asset-and-audio cue sheet before generating media:
    for each scene, name the narration cue, sound cue, main visual layer, and
    whether it needs a sticker overlay, full generated image, generated video
    insert, or no generated media.
-5. Write a speakable narration script. Keep it human and paced:
+7. Write a speakable narration script. Keep it human and paced:
    about 120-145 English words per minute or 180-230 Chinese characters per
    minute.
-6. Unless the user explicitly requested a silent/text-only video, call
+8. Unless the user explicitly requested a silent/text-only video, call
    `list_voiceover_voices`, choose a fitting voice, then call
    `generate_voiceover`.
    Keep the narration short enough for the requested duration. If the generated
    voiceover is more than 10% longer than the requested video, regenerate a
    shorter script or trim/fade it; never change the video duration to match an
    overly long narration.
-7. After `generate_voiceover`, call `transcribe_audio({ media_url: audioUrl })`
+9. After `generate_voiceover`, call `transcribe_audio({ media_url: audioUrl })`
    on the returned public audio URL. Use the real ASR utterance/word timecodes
    for subtitle timing. Do not rely only on estimated text length timing when
    ASR is available.
-8. Decide the audio layer:
+10. Decide the audio layer:
    - Exact spoken narration -> `generate_voiceover`.
    - Prompt-first music bed, ambience, sound effects, UI blips, risers, impacts,
      or mixed sound design -> `generate_audio`.
    - Music / soundtrack / song-structure request -> `generate_music`; new music
      generation uses Seed Audio, not Suno.
-9. Generate only the sticker/image assets chosen in the cue sheet. If an asset
+11. Generate only the sticker/image assets chosen in the cue sheet. If an asset
    is an overlay, read `skills/sticker-maker/SKILL.md` first and make it a
    transparent PNG sticker instead of a hard-to-place rectangular image.
-10. Build the video with `run_code({ runtime: "composition" })`.
-11. Save the draft with `write_file({ fromLastRunCode: true, publish: false })`.
-12. Verify at least three frames with `preview_frame`: early hook, middle
+12. Build the video with `run_code({ runtime: "composition" })`.
+13. Save the draft with `write_file({ fromLastRunCode: true, publish: false })`.
+14. Verify at least three frames with `preview_frame`: early hook, middle
    explanation, and closing CTA/summary. Include subtitle readability in the
    check.
-13. Patch if needed, then publish with
+15. Patch if needed, then publish with
    `write_file({ fromLastRunCode: true, name: "explainer-video-..." })`.
 
 ## Audio And Sound Design Contract
@@ -217,10 +225,16 @@ audio, subtitles, Remotion motion, and stickers feel intentionally directed.
 
 The composition should feel like a real explainer, not a static slide deck.
 
-- Start from the selected `awesome-design-md` reference: palette, type scale,
-  spacing, density, visual attitude, and restraint.
+- Start from the shared Remotion Director contract and selected
+  `remotion-video-director` creative direction: purpose,
+  audience, core message, emotional arc, scene archetypes, pacing, audio attitude,
+  and frame hierarchy.
 - Use animated diagrams, timelines, callout labels, progress bars, map paths,
   chart reveals, zooms, parallax, and clean scene transitions.
+- Do not default to webpage structures: hero sections, card grids, pricing-like
+  panels, dense dashboard widgets, many pills, or static side-by-side blocks.
+- Let time solve layout density: reveal one strong idea at a time instead of
+  shrinking text or packing more UI into one frame.
 - Keep the first working composition compact enough to render reliably. Prefer
   a clean 6-8 scene composition over an oversized one-shot code dump; patch
   polish after preview checks.
@@ -251,7 +265,9 @@ The composition should feel like a real explainer, not a static slide deck.
 
 Before saying it is done:
 
-- The relevant `awesome-design-md` reference was read and applied.
+- The relevant `remotion-video-director` reference files were read and applied.
+- The creative brief, scene plan, layout contract, and cue sheet were internally
+  created before code.
 - `animation.durationInSeconds` matches the requested duration.
 - Voiceover and generated audio fit within that duration, or are trimmed/faded
   to fit.

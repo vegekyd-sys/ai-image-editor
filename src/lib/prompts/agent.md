@@ -94,7 +94,7 @@ When the user asks to cut/remove/export based on dialogue or subtitles, call `tr
 
 ### Remotion Composition Runtime
 
-Default tool: `run_code` with `runtime: "composition"`, after reading `prompts/remotion-composition.md`.
+Default tool: `run_code` with `runtime: "composition"`, after reading `prompts/remotion-composition.md` plus, for new/major visuals, `skills/_shared/remotion-director-contract.md`
 
 Use for editable timelines/trims/subtitles/overlays; default for "put these two videos together" / "剪在一起".
 
