@@ -35,21 +35,24 @@ If the user explicitly asks for a provider-rendered cinematic video instead,
 route to the video generation flow. Otherwise, build an editable Remotion
 composition.
 
-## Video Director Reference First
+## Shared Remotion Director Contract First
 
-Before planning the video, inspect the local copy of `remotion-video-director`:
+Before planning the video, inspect the shared Remotion Director contract and
+its local copy of `remotion-video-director`:
 
-1. Read `skills/explainer-video/references/remotion-video-director/SKILL.md`.
-2. Read `skills/explainer-video/references/remotion-video-director/references/video-archetypes.md`.
-3. Read `skills/explainer-video/references/remotion-video-director/references/remotion-patterns.md`.
-4. Read `skills/explainer-video/references/remotion-video-director/references/component-library.md`.
-5. Choose a creative direction, scene archetype set, emotional arc, pacing model,
+1. Read `skills/_shared/remotion-director-contract.md`.
+2. Read `skills/_shared/remotion-video-director/SKILL.md`.
+3. Read `skills/_shared/remotion-video-director/references/video-archetypes.md`.
+4. Read `skills/_shared/remotion-video-director/references/remotion-patterns.md`.
+5. Read `skills/_shared/remotion-video-director/references/component-library.md`.
+6. Choose a creative direction, scene archetype set, emotional arc, pacing model,
    and layout contract before writing Remotion code.
-6. Apply the reference as video direction: shot flow, frame hierarchy, timing,
+7. Apply the contract as video direction: shot flow, frame hierarchy, timing,
    transition language, typography scale, audio attitude, and review criteria.
    Do not reduce it to a color palette or website design system.
 
-This reference step is required. Do not skip it because the topic sounds simple.
+This shared contract is required for all Makaron Remotion compositions. Do not
+skip it because the topic sounds simple.
 
 ## Default Deliverable
 
@@ -79,7 +82,8 @@ wrong or expensive.
 ## Production Flow
 
 1. Read `prompts/remotion-composition.md` before the first `run_code` call.
-2. Read the required video-director reference files.
+2. Read the shared Remotion Director contract and required video-director
+   reference files.
 3. Create a compact creative brief: purpose, audience, core message, desired
    action, emotional arc, creative direction, audio strategy, and visual style.
 4. Plan 6-8 scenes with exact time ranges that sum to the target duration.
@@ -221,7 +225,8 @@ audio, subtitles, Remotion motion, and stickers feel intentionally directed.
 
 The composition should feel like a real explainer, not a static slide deck.
 
-- Start from the selected `remotion-video-director` creative direction: purpose,
+- Start from the shared Remotion Director contract and selected
+  `remotion-video-director` creative direction: purpose,
   audience, core message, emotional arc, scene archetypes, pacing, audio attitude,
   and frame hierarchy.
 - Use animated diagrams, timelines, callout labels, progress bars, map paths,

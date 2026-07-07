@@ -2,7 +2,7 @@
 
 Use this prompt for the `run_code` execution contract: return shapes, patching, workspace files, verification, and runtime routing.
 
-Do not use this as a Remotion creative guide. For editable timelines, motion graphics, subtitles, overlays, trims, or Remotion Player work, read `prompts/remotion-composition.md`.
+Do not use this as a Remotion creative guide. For editable timelines, motion graphics, subtitles, overlays, trims, or Remotion Player work, read `prompts/remotion-composition.md`; for new compositions or major visual/timing patches, also read `skills/_shared/remotion-director-contract.md`.
 
 ## Runtime Chooser
 

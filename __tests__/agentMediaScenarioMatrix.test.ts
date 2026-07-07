@@ -13,6 +13,7 @@ describe('agent media scenario matrix', () => {
   const animate = read('src/lib/prompts/animate.md')
   const coding = read('src/lib/prompts/agent-coding.md')
   const remotion = read('src/lib/prompts/remotion-composition.md')
+  const remotionDirectorContract = read('src/skills/_shared/remotion-director-contract.md')
   const ffmpegSkill = read('src/skills/video-ffmpeg-lab/SKILL.md')
   const agentTs = read('src/lib/agent.ts')
   const agentContext = read('src/lib/agent-context.ts')
@@ -35,8 +36,25 @@ describe('agent media scenario matrix', () => {
     expect(agent).toContain('Default tool: `run_code` with `runtime: "composition"`')
     expect(agent).toContain('call `transcribe_audio` first')
     expect(agent).toContain('prompts/remotion-composition.md')
+    expect(agent).toContain('skills/_shared/remotion-director-contract.md')
     expect(agent).toContain('Use `generate_music` only when the user asks')
     expect(agentTs).toContain('helper components must receive values through their own parameters')
+  })
+
+  it('applies the Remotion director contract to all composition work', () => {
+    expect(remotion).toContain('Director Contract')
+    expect(remotion).toContain('Every editable Remotion composition must be planned as a video')
+    expect(remotion).toContain('skills/_shared/remotion-director-contract.md')
+    expect(remotion).toContain('Director layer: purpose, audience, core message')
+    expect(remotion).toContain('Composition layer: `function Composition(props)`')
+    expect(coding).toContain('skills/_shared/remotion-director-contract.md')
+    expect(remotionDirectorContract).toContain('Director Layer vs Composition Layer')
+    expect(remotionDirectorContract).toContain('The director layer decides what the viewer experiences over time')
+    expect(remotionDirectorContract).toContain('The Remotion composition layer implements that direction')
+    expect(remotionDirectorContract).toContain('Do not let the implementation layer invent the creative structure by accident')
+    expect(remotionDirectorContract).toContain('Do not default to hero sections, card grids')
+    expect(remotionDirectorContract).toContain('The final plan must map cleanly to `<Sequence>` ranges')
+    expect(remotionDirectorContract).toContain('skills/_shared/remotion-video-director/references/remotion-patterns.md')
   })
 
   it('preserves old image scenarios in the dedicated image guide', () => {
