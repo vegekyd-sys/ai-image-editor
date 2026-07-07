@@ -10,6 +10,15 @@ interface ChangelogEntry {
 
 const CHANGELOG: ChangelogEntry[] = [
   {
+    date: '2026-07-07',
+    en: { title: 'Video Director for Remotion', items: [
+      'Remotion compositions now use a shared director contract for story, pacing, scenes, transitions, and review instead of web-style design references.',
+    ]},
+    zh: { title: 'Remotion Video Director', items: [
+      'Remotion composition 现在会先走共享 Director contract，关注故事、节奏、场景、转场和验收，不再依赖网页式设计参考。',
+    ]},
+  },
+  {
     date: '2026-07-04',
     en: { title: 'Sonnet 5 Explainer Video Agent', items: [
       'Makaron Agent now runs on Claude Sonnet 5 with the right Bedrock model handling, token pricing, tool-input normalization, and larger context management for long creative runs.',
