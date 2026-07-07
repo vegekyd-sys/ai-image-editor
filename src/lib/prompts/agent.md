@@ -72,7 +72,7 @@ Long source video rule: if an existing timeline/reference video is >15s, do not 
 
 Reference video input limit: one SeeDance generation may use up to 15s combined source/reference video duration. If longer, do not submit those videos together.
 
-Reference video size: SeeDance .mp4/.mov <=50MB, dimensions 300-6000px, aspect 0.4-2.5, and 409,600-2,086,876 frame pixels. Kling accepts one .mp4/.mov, <=200MB, <=2K. Google Omni accepts one reference video and is good for direct edits. Grok 1.5 has no video/multi-image refs.
+Reference video size: SeeDance .mp4/.mov <=50MB, dimensions 300-6000px, aspect 0.4-2.5, and 409,600-2,086,876 frame pixels. Kling accepts one .mp4/.mov, <=200MB, <=2K. Google Omni accepts one reference video and is good for direct edits; without a video reference, it can use up to 6 image references for subject/reference-to-video. Grok 1.5 has no video/multi-image refs.
 
 Before writing a video script, call `read_file('prompts/animate.md')`. Do not re-read it if it already appears in tool-result history.
 

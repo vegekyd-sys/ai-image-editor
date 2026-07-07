@@ -275,21 +275,29 @@ describe('video model reference limits', () => {
       supportsVideoReference: true,
       supportsBaseVideoEdit: true,
       maxReferenceVideoDuration: 10.5,
-      maxImageReferences: 1,
+      maxImageReferences: 6,
     })
     expect(estimateVideoCredits({ model: 'google-omni', durationSec: 5, imageCount: 1 })).toBe(100)
   })
 
-  it('fails fast before calling Google Omni image-to-video with multiple images', async () => {
+  it('fails fast before calling Google Omni with more than six image references', async () => {
     const result = await createVideo({
-      script: 'Omni multi image\n\nAnimate <<<media_1>>> and <<<media_2>>> together.',
-      images: ['https://example.com/one.jpg', 'https://example.com/two.jpg'],
+      script: 'Omni too many images\n\nAnimate <<<media_1>>>, <<<media_2>>>, <<<media_3>>>, <<<media_4>>>, <<<media_5>>>, <<<media_6>>>, and <<<media_7>>> together.',
+      images: [
+        'https://example.com/one.jpg',
+        'https://example.com/two.jpg',
+        'https://example.com/three.jpg',
+        'https://example.com/four.jpg',
+        'https://example.com/five.jpg',
+        'https://example.com/six.jpg',
+        'https://example.com/seven.jpg',
+      ],
       duration: 5,
       videoModel: 'google-omni',
     })
 
     expect(result.success).toBe(false)
-    expect(result.message).toContain('Gemini Omni Flash supports at most 1 reference images per request')
+    expect(result.message).toContain('Gemini Omni Flash supports at most 6 reference images per request')
   })
 
   it('locks explicit app video model and resolution over agent tool guesses', () => {

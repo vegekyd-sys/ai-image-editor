@@ -258,7 +258,7 @@ Models:
 - seedance — SeeDance 2.0 standard via Evolink, supports 480p/720p/1080p
 - kling — Kling v3-omni, supports 720p/1080p/4k
 - grok — Grok Video 1.5 via xAI, fastest single-image-to-video, native audio, defaults to 480p at $0.08/s + $0.01/input image
-- google-omni — Gemini Omni Flash via Google, fast image/video generation and editing, native generated audio, no uploaded audio references
+- google-omni — Gemini Omni Flash via Google, fast image/video generation and editing, up to 6 image references without a video reference, one video reference for direct edits, native generated audio, no uploaded audio references
 
 Example script format:
 Shot 1 (2s): Wide shot, <<<media_1>>> ...

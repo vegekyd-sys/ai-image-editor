@@ -132,7 +132,7 @@ export async function createGoogleOmniVideoTask(input: GoogleOmniVideoTaskInput)
 
   const videoRef = videoRefs[0]
   const prompt = toOmniPrompt(input.prompt, input.duration)
-  const task = videoRef ? 'edit' : imageParts.length > 0 ? 'image_to_video' : 'text_to_video'
+  const task = videoRef ? 'edit' : imageParts.length > 1 ? 'reference_to_video' : imageParts.length > 0 ? 'image_to_video' : 'text_to_video'
   const responseFormat: Record<string, unknown> = {
     type: 'video',
     delivery: 'uri',

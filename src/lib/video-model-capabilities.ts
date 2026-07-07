@@ -216,7 +216,7 @@ const MODEL_CAPABILITIES: Record<string, VideoModelCapability> = {
     supportsBaseVideoEdit: true,
     longVideoChunkSeconds: 10,
     estimatedCostPerSecondUsd: 0.1,
-    maxImageReferences: 1,
+    maxImageReferences: 6,
     supportedResolutions: ['720p'],
     defaultResolution: '720p',
     supportedAspectRatios: ['16:9', '9:16'],
