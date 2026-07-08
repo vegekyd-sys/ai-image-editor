@@ -10,6 +10,10 @@ export async function GET(request: NextRequest) {
   const origin = getPublicOrigin(request)
   const code = searchParams.get('code')
 
+  if (searchParams.get('native_oauth') === '1') {
+    return buildNativeOAuthCallbackPage(request)
+  }
+
   if (!code) {
     return NextResponse.redirect(`${origin}/login`)
   }
@@ -123,6 +127,19 @@ export async function GET(request: NextRequest) {
     })
   }
   return buildRedirectPage(redirectUrl, cookiesToSetOnResponse)
+}
+
+function buildNativeOAuthCallbackPage(request: NextRequest) {
+  const callbackUrl = new URL('app.makaron.ios://auth/callback')
+  request.nextUrl.searchParams.forEach((value, key) => {
+    callbackUrl.searchParams.append(key, value)
+  })
+  const target = callbackUrl.toString()
+
+  return new NextResponse(
+    `<!DOCTYPE html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width"><title>Returning to Makaron...</title></head><body style="background:#000;color:#fff;display:flex;align-items:center;justify-content:center;height:100vh;font-family:-apple-system,BlinkMacSystemFont,sans-serif"><script>window.location.replace(${JSON.stringify(target)});</script><a style="color:#d946ef" href=${JSON.stringify(target)}>Return to Makaron</a></body></html>`,
+    { status: 200, headers: { 'Content-Type': 'text/html' } }
+  )
 }
 
 /**

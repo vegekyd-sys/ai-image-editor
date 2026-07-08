@@ -18,6 +18,7 @@
 		A10F00000000000000000002 /* PrivacyInfo.xcprivacy in Resources */ = {isa = PBXBuildFile; fileRef = A10F00000000000000000001 /* PrivacyInfo.xcprivacy */; };
 		A10F00000000000000000004 /* MakaronBridgeViewController.swift in Sources */ = {isa = PBXBuildFile; fileRef = A10F00000000000000000003 /* MakaronBridgeViewController.swift */; };
 		A10F00000000000000000006 /* SceneDelegate.swift in Sources */ = {isa = PBXBuildFile; fileRef = A10F00000000000000000005 /* SceneDelegate.swift */; };
+		A10F00000000000000000009 /* MakaronExternalLinkPlugin.swift in Sources */ = {isa = PBXBuildFile; fileRef = A10F00000000000000000008 /* MakaronExternalLinkPlugin.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
@@ -35,6 +36,7 @@
 		A10F00000000000000000003 /* MakaronBridgeViewController.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MakaronBridgeViewController.swift; sourceTree = "<group>"; };
 		A10F00000000000000000005 /* SceneDelegate.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SceneDelegate.swift; sourceTree = "<group>"; };
 		A10F00000000000000000007 /* MakaronLocal.storekit */ = {isa = PBXFileReference; lastKnownFileType = "com.apple.dt.storekitbundle"; path = MakaronLocal.storekit; sourceTree = "<group>"; };
+		A10F00000000000000000008 /* MakaronExternalLinkPlugin.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MakaronExternalLinkPlugin.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -73,6 +75,7 @@
 				504EC3071FED79650016851F /* AppDelegate.swift */,
 				A10F00000000000000000005 /* SceneDelegate.swift */,
 				A10F00000000000000000003 /* MakaronBridgeViewController.swift */,
+				A10F00000000000000000008 /* MakaronExternalLinkPlugin.swift */,
 				504EC30B1FED79650016851F /* Main.storyboard */,
 				504EC30E1FED79650016851F /* Assets.xcassets */,
 				504EC3101FED79650016851F /* LaunchScreen.storyboard */,
@@ -170,6 +173,7 @@
 				504EC3081FED79650016851F /* AppDelegate.swift in Sources */,
 				A10F00000000000000000006 /* SceneDelegate.swift in Sources */,
 				A10F00000000000000000004 /* MakaronBridgeViewController.swift in Sources */,
+				A10F00000000000000000009 /* MakaronExternalLinkPlugin.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
