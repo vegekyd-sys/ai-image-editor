@@ -11,10 +11,18 @@ metadata:
     color: "#e879f9"
     tipsEnabled: false
     builtIn: true
+    userSelectable: true
+    manifestVisible: true
     defaultAspectRatio: "16:9"
     studioRunRecipe: "screen-demo"
     studioRunProfile: "capture-or-synthetic"
     sourceMediaRequired: false
+    sourceProject: "openmontage"
+    sourceSkill: "screen-demo"
+    sourceKind: "pipeline"
+    supportLevel: "native"
+    adapterFamily: "video-workflow"
+    canonicalSkill: "screen-demo"
     tags: [video, workflow, studio-run, product-demo, screen, terminal, remotion]
 ---
 

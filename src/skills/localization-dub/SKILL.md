@@ -10,10 +10,18 @@ metadata:
     color: "#f0abfc"
     tipsEnabled: false
     builtIn: true
+    userSelectable: true
+    manifestVisible: true
     defaultAspectRatio: "16:9"
     studioRunRecipe: "localization-dub"
     studioRunProfile: "source-led-variant"
     sourceMediaRequired: true
+    sourceProject: "openmontage"
+    sourceSkill: "localization-dub"
+    sourceKind: "pipeline"
+    supportLevel: "native"
+    adapterFamily: "video-workflow"
+    canonicalSkill: "localization-dub"
     tags: [video, workflow, studio-run, localization, subtitles, dubbing, remotion]
 ---
 

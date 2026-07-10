@@ -123,4 +123,42 @@ describe('AgentDualWriter', () => {
       },
     ]);
   });
+
+  it('emits every Studio Run update from a batched artifact write', async () => {
+    const inserts: Array<{ table: string; row: Record<string, unknown> }> = [];
+    const fakeSupabase = {
+      from: (table: string) => ({
+        insert: async (row: Record<string, unknown>) => {
+          inserts.push({ table, row });
+          return { error: null };
+        },
+      }),
+    };
+    const writer = new AgentDualWriter('run-id', fakeSupabase as never, 'user-id', 'project-id');
+    await writer.processAndEnqueue({
+      type: 'tool_call',
+      tool: 'studio_run',
+      toolCallId: 'studio-tool',
+      step: 1,
+      input: { operation: 'put_artifacts' },
+    });
+    await writer.processAndEnqueue({
+      type: 'tool_result',
+      tool: 'studio_run',
+      toolCallId: 'studio-tool',
+      step: 1,
+      output: {
+        studioRunUpdates: [
+          { studioRun: { runId: 'studio', currentStage: 'proposal' }, artifactPath: 'brief.json' },
+          { studioRun: { runId: 'studio', currentStage: 'script' }, artifactPath: 'proposal.json' },
+        ],
+      },
+    });
+
+    const studioEvents = inserts.filter(item => item.table === 'agent_events' && item.row.type === 'studio_run');
+    expect(studioEvents.map(item => item.row.data)).toEqual([
+      { runId: 'studio', currentStage: 'proposal', artifactPath: 'brief.json' },
+      { runId: 'studio', currentStage: 'script', artifactPath: 'proposal.json' },
+    ]);
+  });
 });

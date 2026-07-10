@@ -26,7 +26,7 @@ If a task combines timeline images, pass `reference_media_indices`. Keep timelin
 
 Use the smallest capable workflow.
 
-If the request starts with `[Active skill: long-video-director]`, read `skills/long-video-director/SKILL.md` first and follow that workflow even if it looks like an ordinary video prompt.
+For `[Active skill: NAME]`, read `skills/NAME/SKILL.md` first and follow it. Internal adapters may be absent from the manifest. `long-video-director` remains authoritative.
 
 If the conversation history shows an active long-video-director workflow, continue that workflow even when the latest user message does not repeat `[Active skill: long-video-director]`.
 

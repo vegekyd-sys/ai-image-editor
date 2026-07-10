@@ -18,7 +18,9 @@ Criticism must be observable and actionable.
 
 1. Materialize the MP4.
 2. Verify container, duration, resolution, FPS, and audio presence.
-3. Sample at least four frames across opening, body, transition, and ending.
+3. For short-form work, sample at least three frames across opening, strongest
+   body beat, and ending. Add a transition frame for videos longer than 15
+   seconds, multi-scene edits, or any transition with visible risk.
 4. Check black/blank frames, missing media, unreadable text, overlaps, source
    crop, subtitle safe areas, and final-frame quality.
 5. Check audio for unexpected silence, intelligible speech, music balance, and

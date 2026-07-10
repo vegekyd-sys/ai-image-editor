@@ -698,7 +698,9 @@ export async function getSkillManifest(supabase?: SupabaseClient, userId?: strin
   const cached = getCached<string>(cacheKey);
   if (cached !== undefined) return cached;
 
-  const builtIn = [...loadBuiltInSkills().values()].filter(s => !LEGACY_PROMPTS.has(s.name));
+  const builtIn = [...loadBuiltInSkills().values()].filter(s => (
+    !LEGACY_PROMPTS.has(s.name) && s.makaron?.manifestVisible !== false
+  ));
   const lines: string[] = builtIn.map(s => {
     const extras: string[] = [];
     if (s.makaron?.referenceImages?.length) extras.push('has reference images');

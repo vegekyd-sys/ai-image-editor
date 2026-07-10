@@ -25,4 +25,10 @@ describe('design harness compile preflight', () => {
       code: "const { AbsoluteFill } = require('remotion'); function Draft() { return <AbsoluteFill />; }",
     })).toMatch(/require\/module\.exports syntax is not supported/);
   });
+
+  it('accepts the injected THREE namespace without an import', () => {
+    expect(validateDesign({
+      code: 'function ThreeDesign() { const color = new THREE.Color("#d946ef"); return <AbsoluteFill style={{backgroundColor: color.getStyle()}} />; }',
+    })).toBeNull();
+  });
 });

@@ -11,10 +11,18 @@ metadata:
     color: "#d946ef"
     tipsEnabled: false
     builtIn: true
+    userSelectable: true
+    manifestVisible: true
     defaultAspectRatio: "16:9"
     studioRunRecipe: "character-animation"
     studioRunProfile: "local-character-animation"
     sourceMediaRequired: false
+    sourceProject: "openmontage"
+    sourceSkill: "character-animation"
+    sourceKind: "pipeline"
+    supportLevel: "native"
+    adapterFamily: "character"
+    canonicalSkill: "character-animation"
     tags: [video, workflow, studio-run, character, rig, pose, remotion]
 ---
 

@@ -30,4 +30,25 @@ describe('agent reliability policy', () => {
     expect(agent).toContain('getStudioArtifactJsonSchema');
     expect(agent).toContain("operation === 'validate'");
   });
+
+  it('supports batched auto-approved planning without hiding stage events', () => {
+    const agent = read('src/lib/agent.ts');
+    const writer = read('src/lib/agentDualWriter.ts');
+    const contract = read('src/skills/_shared/studio-production/production-contract.md');
+    const fastPath = read('src/lib/prompts/studio-remotion-fast-path.md');
+    const review = read('src/skills/_shared/studio-production/review-contract.md');
+    expect(agent).toContain("'put_artifacts'");
+    expect(agent).toContain('putPersistedStudioArtifacts');
+    expect(agent).toContain('stageSchemas: Object.fromEntries');
+    expect(agent).toContain('output.stageSchemas');
+    expect(writer).toContain('studioRunUpdates');
+    expect(contract).toContain('Reuse the complete `stageSchemas`');
+    expect(contract).toContain('preview three representative frames');
+    expect(contract).toContain('Do not add a fourth preview');
+    expect(contract).toContain('Do not compute SHA');
+    expect(fastPath).toContain('replaces `prompts/agent-coding.md`');
+    expect(fastPath).toContain('materialize once');
+    expect(review).toContain('sample at least three frames');
+    expect(review).toContain('videos longer than 15');
+  });
 });

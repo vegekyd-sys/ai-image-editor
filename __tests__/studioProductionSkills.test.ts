@@ -18,6 +18,9 @@ const recipes = [
   { name: 'screen-demo', profile: 'capture-or-synthetic', sourceRequired: false },
   { name: 'localization-dub', profile: 'source-led-variant', sourceRequired: true },
   { name: 'character-animation', profile: 'local-character-animation', sourceRequired: false },
+  { name: 'avatar-spokesperson', profile: 'generated-presenter', sourceRequired: false },
+  { name: 'music-to-video', profile: 'audio-led-local-animation', sourceRequired: false },
+  { name: 'website-to-video', profile: 'site-led-remotion', sourceRequired: false },
 ] as const;
 
 describe('Studio production skills', () => {

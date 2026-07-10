@@ -4,7 +4,9 @@ import {
   createStudioRun,
   getStudioArtifactJsonSchema,
   parseStudioRun,
+  putPersistedStudioArtifacts,
   putStudioArtifact,
+  type StudioRunStore,
   type StudioRun,
   type StudioStageId,
   studioArtifactPath,
@@ -243,5 +245,68 @@ describe('Studio Run controller', () => {
       now,
     });
     expect(result.run.status).toBe('completed');
+  });
+
+  it('persists a contiguous auto-approved planning batch stage by stage', async () => {
+    const savedStages: StudioStageId[] = [];
+    const store: StudioRunStore = {
+      async saveRun() { return 'run.json'; },
+      async saveArtifact(_run, stage) { savedStages.push(stage); return `${stage}.json`; },
+      async loadRun() { return null; },
+      async listRuns() { return []; },
+    };
+    const run = makeRun('auto');
+    const stages = ['brief', 'proposal', 'script', 'storyboard', 'assets'] as StudioStageId[];
+    const result = await putPersistedStudioArtifacts({
+      store,
+      run,
+      artifacts: stages.map(stage => ({ stage, artifact: artifacts[stage] })),
+    });
+
+    expect(savedStages).toEqual(stages);
+    expect(result.updates).toHaveLength(5);
+    expect(result.updates.map(update => update.run.currentStage)).toEqual([
+      'proposal', 'script', 'storyboard', 'assets', 'composition',
+    ]);
+    expect(result.run.currentStage).toBe('composition');
+  });
+
+  it('refuses batch persistence for guided runs or non-contiguous stages', async () => {
+    const store: StudioRunStore = {
+      async saveRun() { return 'run.json'; },
+      async saveArtifact() { return 'artifact.json'; },
+      async loadRun() { return null; },
+      async listRuns() { return []; },
+    };
+    await expect(putPersistedStudioArtifacts({
+      store,
+      run: makeRun('guided'),
+      artifacts: [{ stage: 'brief', artifact: artifacts.brief }],
+    })).rejects.toThrow(/only available for auto-approved/);
+    await expect(putPersistedStudioArtifacts({
+      store,
+      run: makeRun('auto'),
+      artifacts: [{ stage: 'proposal', artifact: artifacts.proposal }],
+    })).rejects.toThrow(/expected brief, received proposal/);
+  });
+
+  it('preflights the full batch before writing any artifact', async () => {
+    const savedStages: StudioStageId[] = [];
+    const store: StudioRunStore = {
+      async saveRun() { return 'run.json'; },
+      async saveArtifact(_run, stage) { savedStages.push(stage); return `${stage}.json`; },
+      async loadRun() { return null; },
+      async listRuns() { return []; },
+    };
+
+    await expect(putPersistedStudioArtifacts({
+      store,
+      run: makeRun('auto'),
+      artifacts: [
+        { stage: 'brief', artifact: artifacts.brief },
+        { stage: 'proposal', artifact: {} },
+      ],
+    })).rejects.toThrow();
+    expect(savedStages).toEqual([]);
   });
 });

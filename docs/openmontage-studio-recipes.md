@@ -33,8 +33,11 @@ The highest-leverage ideas became shared Makaron director contracts:
 | podcast repurpose | `content-repurpose` / `podcast-video` mode | added |
 | localization dub | `localization-dub` | added |
 | character animation | `character-animation` | added, local proof first |
+| avatar spokesperson | `avatar-spokesperson` | added; precise lip sync is capability-gated |
+| music-led video | `music-to-video` | added; original audio drives the edit |
+| website showcase | `website-to-video` | added; real capture/screenshot evidence required |
 | long-form craft guidance | `long-video-director` | existing; not forced into the 10-minute Studio Run limit |
-| avatar spokesperson / lip sync | `photo-to-video` remains available | not relabeled as lip sync; no honest dedicated tool contract yet |
+| exact phoneme lip sync | provider capability gate | never implied by the adapter when the selected route lacks it |
 
 The consolidation is intentional: users keep meaningful production choices,
 while closely related batch/source modes share one maintained skill instead of
@@ -62,6 +65,9 @@ Discover the built-in recipes:
 ```bash
 makaron skills list --built-in --json
 makaron skills show cinematic-video --built-in --json
+
+# Inspect every OpenMontage source-name adapter, including internal craft skills
+makaron skills list --built-in --openmontage --json
 ```
 
 Start a guided smoke without paid asset generation:

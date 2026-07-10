@@ -8,6 +8,7 @@ import * as Remotion from 'remotion';
 import { Audio as MediaAudio, Video as MediaVideo } from '@remotion/media';
 import * as RemotionPaths from '@remotion/paths';
 import * as RemotionNoise from '@remotion/noise';
+import * as THREE from 'three';
 import { getAvailableFonts } from '@remotion/google-fonts';
 import { transform as sucraseTransform } from 'sucrase';
 import { normalizeRemotionScopeDeclarations } from '@/lib/remotion-code-normalization';
@@ -26,6 +27,7 @@ function createRemotionScope(useOffthreadVideo: boolean, useNativeVideo: boolean
   const nativeVideo = Remotion.Video || MediaVideo;
   const scope: Record<string, unknown> = {
     React, useState, useEffect, useCallback, useMemo, useRef,
+    THREE,
     ...Remotion,
     ...RemotionPaths,
     ...RemotionNoise,

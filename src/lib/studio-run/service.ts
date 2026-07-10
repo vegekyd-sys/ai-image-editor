@@ -46,6 +46,55 @@ export async function putPersistedStudioArtifact(input: {
   return { run: result.run, artifactPath, invalidated: result.invalidated };
 }
 
+export async function putPersistedStudioArtifacts(input: {
+  store: StudioRunStore;
+  run: StudioRun;
+  artifacts: Array<{ stage: StudioStageId; artifact: unknown }>;
+}): Promise<{
+  run: StudioRun;
+  updates: Array<{ run: StudioRun; artifactPath: string; invalidated: StudioStageId[] }>;
+}> {
+  if (input.run.approvalPolicy !== 'auto') {
+    throw new Error('put_artifacts is only available for auto-approved Studio Runs');
+  }
+  if (input.artifacts.length === 0) throw new Error('put_artifacts requires at least one artifact');
+
+  let run = input.run;
+  const prepared: Array<{
+    stage: StudioStageId;
+    artifactPath: string;
+    result: ReturnType<typeof putStudioArtifact>;
+  }> = [];
+  for (const item of input.artifacts) {
+    if (run.currentStage !== item.stage) {
+      throw new Error(`put_artifacts must be contiguous: expected ${run.currentStage || 'complete'}, received ${item.stage}`);
+    }
+    const nextVersion = run.stages[item.stage].artifactVersion + 1;
+    const artifactPath = studioArtifactPath(run.projectId, run.id, item.stage, nextVersion);
+    const result = putStudioArtifact({
+      run,
+      stage: item.stage,
+      artifact: item.artifact,
+      artifactPath,
+    });
+    prepared.push({ stage: item.stage, artifactPath, result });
+    run = result.run;
+    if (run.status === 'failed' || run.status === 'awaiting_approval') break;
+  }
+
+  const updates: Array<{ run: StudioRun; artifactPath: string; invalidated: StudioStageId[] }> = [];
+  for (const item of prepared) {
+    await input.store.saveArtifact(item.result.run, item.stage, item.result.ref.version, item.result.artifact);
+    await input.store.saveRun(item.result.run);
+    updates.push({
+      run: item.result.run,
+      artifactPath: item.artifactPath,
+      invalidated: item.result.invalidated,
+    });
+  }
+  return { run, updates };
+}
+
 export async function approvePersistedStudioStage(input: {
   store: StudioRunStore;
   run: StudioRun;

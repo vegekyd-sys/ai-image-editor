@@ -24,6 +24,14 @@ export interface MakaronSkillMeta {
   studioRunRecipe?: string;
   studioRunProfile?: string;
   sourceMediaRequired?: boolean;
+  userSelectable?: boolean;
+  manifestVisible?: boolean;
+  sourceProject?: string;
+  sourceSkill?: string;
+  sourceKind?: string;
+  supportLevel?: string;
+  adapterFamily?: string;
+  canonicalSkill?: string;
   referenceImages?: string[];
   referenceVideos?: string[];
   tags?: string[];
@@ -104,6 +112,14 @@ export function parseSkillMd(content: string): ParsedSkill | null {
       else if (k === 'studioRunRecipe') makaron.studioRunRecipe = clean;
       else if (k === 'studioRunProfile') makaron.studioRunProfile = clean;
       else if (k === 'sourceMediaRequired') makaron.sourceMediaRequired = clean === 'true';
+      else if (k === 'userSelectable') makaron.userSelectable = clean !== 'false';
+      else if (k === 'manifestVisible') makaron.manifestVisible = clean !== 'false';
+      else if (k === 'sourceProject') makaron.sourceProject = clean;
+      else if (k === 'sourceSkill') makaron.sourceSkill = clean;
+      else if (k === 'sourceKind') makaron.sourceKind = clean;
+      else if (k === 'supportLevel') makaron.supportLevel = clean;
+      else if (k === 'adapterFamily') makaron.adapterFamily = clean;
+      else if (k === 'canonicalSkill') makaron.canonicalSkill = clean;
       else if (k === 'modelPreference' || k === 'tags' || k === 'referenceImages' || k === 'referenceVideos') {
         if (clean.startsWith('[')) {
           (makaron as Record<string, unknown>)[k] = clean.slice(1, -1).split(',').map(s => s.trim());

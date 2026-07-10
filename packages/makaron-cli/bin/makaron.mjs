@@ -1022,7 +1022,7 @@ async function fetchMarketplaceSkills(baseUrl, opts = {}) {
 }
 
 async function fetchBuiltInSkills(baseUrl) {
-  const res = await fetch(`${baseUrl}/api/skills`);
+  const res = await fetch(`${baseUrl}/api/skills?include=internal`);
   if (!res.ok) {
     process.stderr.write(`Error ${res.status}: ${await res.text()}\n`);
     process.exit(1);
@@ -1040,7 +1040,10 @@ function printBuiltInSkills(skills) {
   for (const skill of skills) {
     const recipe = skill.studioRunRecipe ? `  [Studio Run: ${skill.studioRunRecipe}]` : '';
     const source = skill.sourceMediaRequired ? '  [source media required]' : '';
-    console.log(`  ${skill.name}${recipe}${source}`);
+    const adapter = skill.sourceProject === 'openmontage'
+      ? `  [OpenMontage: ${skill.supportLevel || 'adapted'}${skill.canonicalSkill && skill.canonicalSkill !== skill.name ? ` -> ${skill.canonicalSkill}` : ''}]`
+      : '';
+    console.log(`  ${skill.name}${recipe}${source}${adapter}`);
     if (skill.description) console.log(`    ${String(skill.description).replace(/\s+/g, ' ').trim()}`);
   }
 }
@@ -1674,7 +1677,9 @@ function printHelp(topic, subtopic) {
     else if (subtopic === 'show') console.log('Usage: makaron skills show <marketplace-id|label> [--json]');
     else if (subtopic === 'install') console.log('Usage: makaron skills install <marketplace-id|label> [--json]');
     else console.log(`Skill commands:
-  skills list --built-in              List built-in Makaron skills and Studio Run recipes
+  skills list --built-in              List all built-in Makaron skills and Studio Run recipes
+  skills list --built-in --openmontage
+                                      List OpenMontage-native adapters only
   skills list                         List marketplace skills
   skills search <query>               Search marketplace skills
   skills show <id|label> --built-in   Show a built-in skill
@@ -2196,7 +2201,10 @@ if (!command || command === '--help' || command === '-h' || command === 'help') 
 
   if (sub === 'list') {
     const builtIn = args.includes('--built-in');
-    const skills = builtIn ? await fetchBuiltInSkills(baseUrl) : await fetchMarketplaceSkills(baseUrl);
+    let skills = builtIn ? await fetchBuiltInSkills(baseUrl) : await fetchMarketplaceSkills(baseUrl);
+    if (builtIn && args.includes('--openmontage')) {
+      skills = skills.filter(skill => skill.sourceProject === 'openmontage');
+    }
     if (jsonOutput) console.log(JSON.stringify({ skills }, null, 2));
     else if (builtIn) printBuiltInSkills(skills);
     else printMarketplaceSkills(skills);
@@ -2237,7 +2245,9 @@ if (!command || command === '--help' || command === '-h' || command === 'help') 
     else console.log(data.skillName);
   } else {
     console.log(`Skill commands:
-  skills list --built-in              List built-in Makaron skills and Studio Run recipes
+  skills list --built-in              List all built-in Makaron skills and Studio Run recipes
+  skills list --built-in --openmontage
+                                      List OpenMontage-native adapters only
   skills list                         List marketplace skills
   skills search <query>               Search marketplace skills
   skills show <id|label> --built-in   Show a built-in skill

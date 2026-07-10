@@ -439,6 +439,19 @@ export class AgentDualWriter {
   private async maybePersistStudioRunEvent(output: unknown) {
     if (!output || typeof output !== 'object') return;
     const result = output as Record<string, unknown>;
+    if (Array.isArray(result.studioRunUpdates)) {
+      for (const update of result.studioRunUpdates) {
+        if (!update || typeof update !== 'object') continue;
+        const item = update as Record<string, unknown>;
+        if (!item.studioRun || typeof item.studioRun !== 'object') continue;
+        await this.insertEvent('studio_run', {
+          ...(item.studioRun as Record<string, unknown>),
+          ...(typeof item.artifactPath === 'string' ? { artifactPath: item.artifactPath } : {}),
+          ...(Array.isArray(item.invalidated) ? { invalidated: item.invalidated } : {}),
+        });
+      }
+      return;
+    }
     const studioRun = result.studioRun;
     if (!studioRun || typeof studioRun !== 'object') return;
     await this.insertEvent('studio_run', {

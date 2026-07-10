@@ -11,7 +11,7 @@ export function normalizeRemotionScopeDeclarations(code: string): string {
 // Common names injected as parameters by DynamicDesign. Declaring one with
 // const/let inside the generated body is a syntax error in new Function().
 export const DYNAMIC_DESIGN_SCOPE_NAMES = [
-  'React', 'useState', 'useEffect', 'useCallback', 'useMemo', 'useRef',
+  'React', 'useState', 'useEffect', 'useCallback', 'useMemo', 'useRef', 'THREE',
   'Composition', 'AbsoluteFill', 'Audio', 'Video', 'OffthreadVideo', 'Sequence',
   'Series', 'Img', 'IFrame', 'Folder', 'Still', 'Freeze', 'Loop',
   'Html5Audio', 'Html5Video', 'AnimatedImage', 'useCurrentFrame', 'useVideoConfig',

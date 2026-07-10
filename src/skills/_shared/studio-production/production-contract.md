@@ -16,8 +16,11 @@ work the same across video types.
    - `taste-direction.md` for new art direction or atelier work.
    - `audio-direction.md` for narration, source speech, music, or dubbing.
    - `review-contract.md` before every gated artifact and final delivery.
-4. Persist each stage with `studio_run(operation: "put_artifact")` before
-   moving to the next one.
+4. Persist each stage before moving to the next one. For `approval_policy=auto`,
+   prefer one `studio_run(operation: "put_artifacts")` call for the contiguous
+   text-only planning stages from brief through assets. Each artifact is still
+   validated, stored, and emitted to CUI separately. Guided/manual runs continue
+   to use one `put_artifact` at a time.
 5. Build editable video with `run_code({ runtime: "composition" })`, inspect
    representative frames with `preview_frame`, and materialize the MP4 before
    final review.
@@ -37,7 +40,7 @@ work the same across video types.
   preview frames.
 - `review`: technical, visual, audio, and delivery-promise checks against the
   materialized MP4.
-- `delivery`: final MP4, editable source, hash, and delivery time.
+- `delivery`: final MP4, editable source, optional hash, and delivery time.
 
 ## Approval Policy
 
@@ -56,3 +59,18 @@ work the same across video types.
   references, not callable Makaron tools.
 - Quick trims, one-off image animation, and tiny utility edits do not need a
   Studio Run.
+
+## Fast Path
+
+- Prefer existing timeline/workspace assets and local code before paid generation.
+- Reuse the complete `stageSchemas` returned by `studio_run start`; do not call
+  `schema` separately for stages already present there. Use `schema` and
+  `status` only for recovery or after validation errors.
+- Before the first composition `run_code`, read
+  `prompts/studio-remotion-fast-path.md`. It replaces the longer generic coding,
+  Remotion composition, and director guides for this Studio Run.
+- Build one complete composition, preview three representative frames in
+  parallel, publish once, and materialize once.
+- Do not add a fourth preview after three clean representative frames.
+- Probe source/output media once. Reuse that result for review and delivery.
+- Do not compute SHA unless the user explicitly requests an integrity checksum.

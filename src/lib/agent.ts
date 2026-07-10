@@ -2020,8 +2020,9 @@ For timeline videos, pass media_index. For external audio/video URLs, pass media
 Use this for explainer-video and other substantial directed video skills, not quick edits.
 The run persists typed artifacts in the existing project workspace and enforces dependencies, approval policy, resume state, and downstream invalidation.
 Operations:
-- start: create the run before producing the brief.
+- start: create the run before producing the brief. It returns all eight stageSchemas in one response; reuse them instead of making separate schema calls.
 - put_artifact: validate and persist the completed stage artifact. Use the exact stage order brief, proposal, script, storyboard, assets, composition, review, delivery.
+- put_artifacts: for approval_policy=auto only, validate and persist a contiguous batch of adjacent artifacts. Prefer one batch for brief through assets to reduce latency while preserving one CUI event per stage.
 - approve: approve a guided/manual stage that is awaiting approval.
 - status: load the current run after a new turn or interrupted session. It returns the JSON Schema for the current stage.
 - schema: return the JSON Schema for a requested stage before authoring its artifact.
@@ -2029,7 +2030,7 @@ Operations:
 - invalidate: deliberately reopen a stage and invalidate only its downstream dependents.
 For approval_policy=auto, gated artifacts are approved automatically and recorded in the decision log. Never claim a stage is complete until put_artifact succeeds.`,
       inputSchema: z.object({
-        operation: z.enum(['start', 'put_artifact', 'approve', 'status', 'invalidate', 'schema', 'validate']),
+        operation: z.enum(['start', 'put_artifact', 'put_artifacts', 'approve', 'status', 'invalidate', 'schema', 'validate']),
         run_id: z.string().optional(),
         recipe: z.string().optional(),
         title: z.string().optional(),
@@ -2046,10 +2047,14 @@ For approval_policy=auto, gated artifacts are approved automatically and recorde
         }).optional(),
         stage: z.enum(['brief', 'proposal', 'script', 'storyboard', 'assets', 'composition', 'review', 'delivery']).optional(),
         artifact: z.unknown().optional(),
+        artifacts: z.array(z.object({
+          stage: z.enum(['brief', 'proposal', 'script', 'storyboard', 'assets', 'composition', 'review', 'delivery']),
+          artifact: z.unknown(),
+        })).min(1).max(8).optional(),
         summary: z.string().optional(),
         reason: z.string().optional(),
       }),
-      execute: async ({ operation, run_id, recipe, title, approval_policy, delivery_promise, stage, artifact, summary, reason }) => {
+      execute: async ({ operation, run_id, recipe, title, approval_policy, delivery_promise, stage, artifact, artifacts, summary, reason }) => {
         if (!ctx.supabase || !ctx.userId || !ctx.projectId) {
           return { success: false, error: 'Studio Run requires an authenticated project workspace.' };
         }
@@ -2071,6 +2076,16 @@ For approval_policy=auto, gated artifacts are approved automatically and recorde
               success: true,
               studioRun: studio.summarizeStudioRun(run),
               statePath: studio.studioRunStatePath(run.projectId, run.id),
+              stageSchemas: Object.fromEntries(([
+                'brief',
+                'proposal',
+                'script',
+                'storyboard',
+                'assets',
+                'composition',
+                'review',
+                'delivery',
+              ] as const).map(stageId => [stageId, studio.getStudioArtifactJsonSchema(stageId)])),
             };
           }
 
@@ -2100,6 +2115,21 @@ For approval_policy=auto, gated artifacts are approved automatically and recorde
             if (artifact === undefined) return { success: false, error: 'validate requires artifact' };
             const validated = studio.validateStudioArtifact(schemaStage, artifact);
             return { success: true, valid: true, stage: schemaStage, artifact: validated };
+          }
+          if (operation === 'put_artifacts') {
+            if (!artifacts?.length) return { success: false, error: 'put_artifacts requires artifacts' };
+            const result = await studio.putPersistedStudioArtifacts({ store, run, artifacts });
+            const updates = result.updates.map(update => ({
+              studioRun: studio.summarizeStudioRun(update.run, update.artifactPath),
+              artifactPath: update.artifactPath,
+              invalidated: update.invalidated,
+            }));
+            return {
+              success: true,
+              studioRun: studio.summarizeStudioRun(result.run),
+              studioRunUpdates: updates,
+              artifactPaths: updates.map(update => update.artifactPath),
+            };
           }
           if (!stage) return { success: false, error: `${operation} requires stage` };
 
@@ -2132,12 +2162,57 @@ For approval_policy=auto, gated artifacts are approved automatically and recorde
           return { success: false, error: err instanceof Error ? err.message : String(err) };
         }
       },
+      toModelOutput({ output }: { output: any }) {
+        if (output.error) {
+          return { type: 'content' as const, value: [{ type: 'text' as const, text: output.error }] };
+        }
+        if (output.schema || output.currentStageSchema || output.stageSchemas) {
+          return {
+            type: 'content' as const,
+            value: [{
+              type: 'text' as const,
+              text: JSON.stringify({
+                ...(output.studioRun ? { studioRun: output.studioRun } : {}),
+                ...(output.statePath ? { statePath: output.statePath } : {}),
+                ...(output.stage ? { stage: output.stage } : {}),
+                ...(output.schema ? { schema: output.schema } : {}),
+                ...(output.currentStageSchema ? { currentStageSchema: output.currentStageSchema } : {}),
+                ...(output.stageSchemas ? { stageSchemas: output.stageSchemas } : {}),
+              }),
+            }],
+          };
+        }
+        if (Array.isArray(output.studioRunUpdates)) {
+          const paths = output.studioRunUpdates
+            .map((update: any) => update?.artifactPath)
+            .filter((value: unknown): value is string => typeof value === 'string');
+          const run = output.studioRun || {};
+          return {
+            type: 'content' as const,
+            value: [{
+              type: 'text' as const,
+              text: `Studio Run persisted ${paths.length} stage artifact${paths.length === 1 ? '' : 's'}:\n${paths.map((path: string) => `- ${path}`).join('\n')}\nCurrent stage: ${run.currentStage || 'complete'}; status: ${run.status || 'unknown'}.`,
+            }],
+          };
+        }
+        if (output.valid) {
+          return { type: 'content' as const, value: [{ type: 'text' as const, text: `Studio Run ${output.stage} artifact is valid.` }] };
+        }
+        const run = output.studioRun || {};
+        return {
+          type: 'content' as const,
+          value: [{
+            type: 'text' as const,
+            text: `Studio Run ${run.runId || ''}: ${run.status || 'updated'}; current stage: ${run.currentStage || 'complete'}${output.artifactPath ? `; artifact: ${output.artifactPath}` : ''}.`,
+          }],
+        };
+      },
     }),
 
     materialize_media: tool({
       description: `Export an editable Remotion composition into a real MP4 video.
 Use this when the user asks to save/export/materialize/turn a composition into MP4. It accepts a timeline media_index, snapshot_id, design_path, or the current unsaved composition from run_code.
-Default profile is fast_720p (short side 720, no upscale) for speed. Default publish=true so the exported MP4 appears as a new <<<media_N>>> video. By default the tool queues a durable async export like video generation; polling/cron completes it and reports either success or failure. Set wait=true only when the user explicitly needs the final URL in this response.`,
+Default profile is fast_720p (short side 720, no upscale) for speed. Default publish=true so the exported MP4 appears as a new <<<media_N>>> video. By default the tool queues a durable async export like video generation; polling/cron completes it and reports either success or failure. Set wait=true on the first call when the current response must include the final URL. A repeated call for the same unchanged composition reuses the fingerprint-matched queued/completed job and does not render twice.`,
       inputSchema: z.object({
         media_index: z.number().optional().describe('1-based media index, e.g. 3 for <<<media_3>>>. Must point to an editable Remotion composition.'),
         snapshot_id: z.string().optional().describe('Snapshot ID of an editable Remotion composition.'),
@@ -2778,7 +2853,7 @@ Path is auto-generated from the current project and output type. Just provide a 
     run_code: tool({
       description: `Execute JavaScript.
 
-Before first use, read \`prompts/agent-coding.md\`. For Remotion/editable compositions, also read \`prompts/remotion-composition.md\`. For real file-level MP4 splitting, exact trimming/export, transcode, frames, audio muxing, long-video preparation, or final assembly of generated chunks, also read \`skills/video-ffmpeg-lab/SKILL.md\`. Do not re-read a guide already present in tool-result history.
+Before first use, follow one reading path. For Studio Run video skills that already require \`prompts/studio-remotion-fast-path.md\`, that compact guide replaces \`prompts/agent-coding.md\`, \`prompts/remotion-composition.md\`, and \`skills/_shared/remotion-director-contract.md\`; do not read the three longer guides too. Otherwise read \`prompts/agent-coding.md\`, plus \`prompts/remotion-composition.md\` for Remotion/editable compositions. For real file-level MP4 splitting, exact trimming/export, transcode, frames, audio muxing, long-video preparation, or final assembly of generated chunks, also read \`skills/video-ffmpeg-lab/SKILL.md\`. Do not re-read a guide already present in tool-result history.
 
 Runtimes:
 - \`runtime: "composition"\`: Remotion/editable composition draft, animated template, overlay, sharp utility.
