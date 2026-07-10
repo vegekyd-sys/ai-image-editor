@@ -29,6 +29,10 @@ export async function GET() {
       color: s.makaron?.color || '#a78bfa',
       builtIn: s.makaron?.builtIn || false,
       description: s.description || '',
+      tags: s.makaron?.tags || [],
+      studioRunRecipe: s.makaron?.studioRunRecipe,
+      studioRunProfile: s.makaron?.studioRunProfile,
+      sourceMediaRequired: s.makaron?.sourceMediaRequired || false,
       referenceImages: s.makaron?.referenceImages || [],
     }));
 

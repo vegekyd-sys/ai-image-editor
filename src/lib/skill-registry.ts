@@ -21,6 +21,9 @@ export interface MakaronSkillMeta {
   modelPreference?: string[];
   faceProtection?: 'strict' | 'default' | 'none';
   defaultAspectRatio?: string;
+  studioRunRecipe?: string;
+  studioRunProfile?: string;
+  sourceMediaRequired?: boolean;
   referenceImages?: string[];
   referenceVideos?: string[];
   tags?: string[];
@@ -98,6 +101,9 @@ export function parseSkillMd(content: string): ParsedSkill | null {
       else if (k === 'builtIn') makaron.builtIn = clean === 'true';
       else if (k === 'faceProtection') makaron.faceProtection = clean as 'strict' | 'default' | 'none';
       else if (k === 'defaultAspectRatio') makaron.defaultAspectRatio = clean;
+      else if (k === 'studioRunRecipe') makaron.studioRunRecipe = clean;
+      else if (k === 'studioRunProfile') makaron.studioRunProfile = clean;
+      else if (k === 'sourceMediaRequired') makaron.sourceMediaRequired = clean === 'true';
       else if (k === 'modelPreference' || k === 'tags' || k === 'referenceImages' || k === 'referenceVideos') {
         if (clean.startsWith('[')) {
           (makaron as Record<string, unknown>)[k] = clean.slice(1, -1).split(',').map(s => s.trim());

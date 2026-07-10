@@ -51,6 +51,32 @@ const server = http.createServer(async (req, res) => {
     return;
   }
 
+  if (req.method === 'GET' && url.pathname === '/api/skills') {
+    sendJson(200, {
+      skills: [
+        {
+          name: 'cinematic-video',
+          label: 'Cinematic Video',
+          builtIn: true,
+          description: 'Produce an authored cinematic short.',
+          studioRunRecipe: 'cinematic-video',
+          studioRunProfile: 'generated-or-hybrid',
+          sourceMediaRequired: false,
+        },
+        {
+          name: 'source-video-studio',
+          label: 'Source Video Studio',
+          builtIn: true,
+          description: 'Edit real uploaded footage.',
+          studioRunRecipe: 'source-video-studio',
+          studioRunProfile: 'source-led',
+          sourceMediaRequired: true,
+        },
+      ],
+    });
+    return;
+  }
+
   if (req.method === 'POST' && url.pathname === '/api/skills') {
     assert.equal(req.headers.authorization, 'Bearer mk_test_smoke');
     assert.equal(body.skillPath, 'https://cdn.example/diamond.zip');
@@ -112,6 +138,25 @@ const server = http.createServer(async (req, res) => {
       incomplete: false,
       output: [{ id: 'out_1', type: 'image', url: 'https://cdn.example/image.png' }],
       result: { images: [{ imageUrl: 'https://cdn.example/image.png' }] },
+    });
+    return;
+  }
+
+  if (req.method === 'GET' && url.pathname === '/api/agent/run/run_studio_1') {
+    sendJson(200, {
+      id: 'run_studio_1',
+      project_id: 'project-auto-1',
+      status: 'completed',
+      incomplete: false,
+      output: [{
+        id: 'out_studio_1',
+        type: 'studio_run',
+        status: 'awaiting_approval',
+        run_id: 'studio_1',
+        recipe: 'cinematic-video',
+        current_stage: 'proposal',
+      }],
+      result: {},
     });
     return;
   }
@@ -342,7 +387,7 @@ try {
     [['project', '--help'], /Project commands:/],
     [['project', 'media', '--help'], /Usage: makaron project media/],
     [['abort', '--help'], /Usage: makaron abort/],
-    [['skills', '--help'], /Skill marketplace commands:/],
+    [['skills', '--help'], /Skill commands:/],
     [['skills', 'list', '--help'], /Usage: makaron skills list/],
     [['skills', 'search', '--help'], /Usage: makaron skills search/],
     [['skills', 'show', '--help'], /Usage: makaron skills show/],
@@ -457,6 +502,20 @@ try {
   }
 
   {
+    const result = await expectSuccess(['skills', 'list', '--built-in', '--json']);
+    const data = JSON.parse(result.stdout);
+    assert.equal(data.skills.length, 2);
+    assert.equal(data.skills[0].studioRunRecipe, 'cinematic-video');
+  }
+
+  {
+    const result = await expectSuccess(['skills', 'show', 'source-video-studio', '--built-in', '--json']);
+    const data = JSON.parse(result.stdout);
+    assert.equal(data.sourceMediaRequired, true);
+    assert.equal(data.studioRunProfile, 'source-led');
+  }
+
+  {
     await expectSuccess(['chat', '--project', 'auto', '--skill', '夜店钻石风', '--json', '-b', 'make me shine']);
     const runRequests = requests.filter(req => req.pathname === '/api/agent/run');
     const runRequest = runRequests.at(-1);
@@ -476,6 +535,18 @@ try {
   {
     const result = await expectSuccess(['responses', 'get', 'run_mock_1', '--pick', 'project_url']);
     assert.equal(result.stdout.trim(), 'https://app.example/projects/project-auto-1');
+  }
+
+  {
+    const result = await expectSuccess(['responses', 'get', 'run_studio_1', '--pick', 'studio_recipe']);
+    assert.equal(result.stdout.trim(), 'cinematic-video');
+  }
+
+  {
+    const result = await expectSuccess(['responses', 'get', 'run_studio_1', '--pick', 'studio_run']);
+    const studioRun = JSON.parse(result.stdout);
+    assert.equal(studioRun.current_stage, 'proposal');
+    assert.equal(studioRun.status, 'awaiting_approval');
   }
 
   {

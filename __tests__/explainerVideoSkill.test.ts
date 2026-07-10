@@ -16,6 +16,8 @@ describe('Explainer Video built-in skill', () => {
     const skill = parseSkillMd(rawSkill)
 
     expect(skill?.name).toBe('explainer-video')
+    expect(skill?.makaron.studioRunRecipe).toBe('explainer-video')
+    expect(skill?.makaron.studioRunProfile).toBe('generated-explainer')
     expect(skill?.makaron.builtIn).toBe(true)
     expect(skill?.makaron.tags).toContain('explainer')
     expect(skill?.allowedTools).toEqual(expect.arrayContaining([

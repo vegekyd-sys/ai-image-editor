@@ -12,6 +12,9 @@ metadata:
     color: "#8b5cf6"
     tipsEnabled: false
     builtIn: true
+    studioRunRecipe: "explainer-video"
+    studioRunProfile: "generated-explainer"
+    sourceMediaRequired: false
     tags: [video, workflow, explainer, remotion, voiceover, subtitles, audio]
 ---
 
