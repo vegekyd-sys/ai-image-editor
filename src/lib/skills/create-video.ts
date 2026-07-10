@@ -1,5 +1,5 @@
 import { filterAndRemapImages, parseTotalDuration } from '../kling';
-import { getVideoModelCapability, normalizeVideoModelId, resolveClosestSupportedAspectRatio, resolveVideoGenerationRoute, resolveVideoOutputDuration, resolveVideoProviderAspectRatio, validateVideoModelRequest, type VideoAspectRatioInput, type VideoReferenceMeta, type VideoResolutionInput } from '@/lib/video-model-capabilities';
+import { getVideoModelCapability, normalizeVideoModelId, resolveClosestSupportedAspectRatio, resolveVideoGenerationRoute, resolveVideoOutputDuration, resolveVideoProviderAspectRatio, resolveVideoProviderModel, supportsNativeTextToVideo, validateVideoModelRequest, type VideoAspectRatioInput, type VideoReferenceMeta, type VideoResolutionInput } from '@/lib/video-model-capabilities';
 
 const MAX_REFERENCE_VIDEO_PROBE_BYTES = 55 * 1024 * 1024;
 
@@ -124,12 +124,18 @@ export async function createVideo(input: CreateVideoInput): Promise<CreateVideoR
   const resolvedReferenceVideoMetas = await fillReferenceVideoMetas(seedanceVideoUrls, referenceVideoMetas);
 
   if (images.length === 0 && !hasVideoReference) {
-    return {
-      success: false,
-      message: hasAudioReference
-        ? 'Reference audio cannot be used alone. Provide an image or video reference for the video generation.'
-        : 'No images or video reference provided.',
-    };
+    if (hasAudioReference) {
+      return {
+        success: false,
+        message: 'Reference audio cannot be used alone. Provide an image or video reference for the video generation.',
+      };
+    }
+    if (!supportsNativeTextToVideo(provider)) {
+      return {
+        success: false,
+        message: `${capability.label} requires an image or video reference. Native text-to-video is currently available through SeeDance models.`,
+      };
+    }
   }
 
   try {
@@ -234,7 +240,13 @@ export async function createVideo(input: CreateVideoInput): Promise<CreateVideoR
 
     if (route.provider === 'seedance') {
       const { createEvolinkTask } = await import('../evolink');
-      const providerModel = route.providerModel;
+      const providerModel = resolveVideoProviderModel({
+        model: provider,
+        resolution: route.resolution,
+        imageReferenceCount: filteredImages.length,
+        hasVideoReference: seedanceVideoUrls.length > 0,
+        hasAudioReference,
+      });
       taskId = await createEvolinkTask({
         prompt: finalPrompt,
         images: filteredImages,

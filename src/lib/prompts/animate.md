@@ -7,7 +7,7 @@ Default model behavior: follow the app's selected video model, usually SeeDance 
 Execution behavior: when the user clearly asks to create or edit a video from CUI, write the script and call `generate_animation`. Ask for confirmation only when the request is underspecified, key source media is missing, or the user explicitly asks to review the script first.
 
 ## Input
-- 1-7 snapshot images (photo edits in various styles)
+- 0-7 snapshot images (zero images means native SeeDance text-to-video)
 - A Media Index describing what each snapshot contains
 - Optional: user style/mood preference
 - Optional: reference video from skill assets
@@ -30,6 +30,9 @@ If the prompt references one or more uploaded/reference videos, their **combined
 ## Modes
 
 Choose the best mode based on user intent. Modes are mutually exclusive.
+
+### Text-to-Video Mode
+When no source media is provided and the selected model is SeeDance, write the scene directly from the user's text. Do not add `<<<media_N>>>` markers and do not call `generate_image` first unless the user explicitly asks for an intermediate still/reference.
 
 ### Reference Mode (default)
 Images serve as visual references. Prompt uses `<<<media_N>>>` to reference them.

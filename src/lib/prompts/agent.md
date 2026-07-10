@@ -50,6 +50,8 @@ Do not call `analyze_image` before direct edits; `generate_image` already receiv
 
 Default tool: `generate_animation`, after script confirmation or explicit direct-submit authorization.
 
+SeeDance supports native text-to-video. When the user asks for a video from text and supplies no source media, write a text-only script with no `<<<media_N>>>` markers and call `generate_animation` with `seedance-fast` (or the explicitly selected SeeDance model). Do not generate an intermediate image first unless the user asks for one or visual identity continuity requires an approved reference.
+
 For clear direct video edits ("给 @1 加眼镜", outfit/style changes, Omni edits), do not call `analyze_video` first; the provider receives the selected video. Use `analyze_video` only to inspect/compare/diagnose, resolve an ambiguous moment, or locate a screenshot/frame.
 
 For screenshot/frame-based local video repair, read `skills/video-segment-edit/SKILL.md` first. Use it when a screenshot/frame/moment looks wrong; locate the screenshot with `analyze_video({ mode: "locate_frame" })` first. FFmpeg extraction is only the low-confidence fallback.

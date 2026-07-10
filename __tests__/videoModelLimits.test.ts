@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from 'vitest'
 import { createVideo } from '@/lib/skills/create-video'
-import { estimateVideoCredits, getDefaultVideoModelId, getVideoModelCapability, normalizeVideoModelId, normalizeVideoResolution, resolveAgentVideoSelection, resolveClosestSupportedAspectRatio, resolveVideoGenerationRoute, resolveVideoProviderAspectRatio } from '@/lib/video-model-capabilities'
+import { estimateVideoCredits, getDefaultVideoModelId, getVideoModelCapability, normalizeVideoModelId, normalizeVideoResolution, resolveAgentVideoSelection, resolveClosestSupportedAspectRatio, resolveVideoGenerationRoute, resolveVideoProviderAspectRatio, resolveVideoProviderModel } from '@/lib/video-model-capabilities'
 
 describe('video model reference limits', () => {
   it('defaults video generation to SeeDance 2.0 Fast', () => {
@@ -27,6 +27,10 @@ describe('video model reference limits', () => {
     })
     expect(estimateVideoCredits({ model: 'seedance-mini', resolution: '480p', durationSec: 15, imageCount: 2 })).toBe(168)
     expect(estimateVideoCredits({ model: 'seedance-mini', resolution: '720p', durationSec: 15, imageCount: 2 })).toBe(360)
+    expect(resolveVideoProviderModel({ model: 'seedance-fast', imageReferenceCount: 0 })).toBe('seedance-2.0-fast-text-to-video')
+    expect(resolveVideoProviderModel({ model: 'seedance-mini', imageReferenceCount: 0 })).toBe('seedance-2.0-mini-text-to-video')
+    expect(resolveVideoProviderModel({ model: 'seedance', imageReferenceCount: 0 })).toBe('seedance-2.0-text-to-video')
+    expect(resolveVideoProviderModel({ model: 'seedance-fast', imageReferenceCount: 1 })).toBe('seedance-2.0-fast-reference-to-video')
   })
 
   it('maps non-standard vertical reference videos to supported Seedance aspect ratios', () => {
@@ -186,6 +190,51 @@ describe('video model reference limits', () => {
       vi.unstubAllEnvs()
       vi.resetModules()
     }
+  })
+
+  it('submits zero-media Seedance Fast through the native text-to-video provider model', async () => {
+    vi.resetModules()
+    vi.stubEnv('EVOLINK_API_KEY', 'test-evolink-key')
+    const fetchMock = vi.fn(async (_url: string | URL | Request, init?: RequestInit) => {
+      const body = JSON.parse(String(init?.body || '{}'))
+      expect(body.model).toBe('seedance-2.0-fast-text-to-video')
+      expect(body).not.toHaveProperty('image_urls')
+      expect(body).not.toHaveProperty('video_urls')
+      return new Response(JSON.stringify({ id: 'task-test-seedance-text' }), { status: 200 })
+    })
+    vi.stubGlobal('fetch', fetchMock)
+
+    try {
+      const { createVideo: createVideoFresh } = await import('@/lib/skills/create-video')
+      const result = await createVideoFresh({
+        script: 'Neon city awakening\n\nA cinematic neon city wakes at dawn with slow aerial camera movement.',
+        images: [],
+        duration: 5,
+        videoModel: 'seedance-fast',
+        videoResolution: '720p',
+      })
+
+      expect(result.success).toBe(true)
+      expect(result.providerModel).toBe('seedance-2.0-fast-text-to-video')
+      expect(result.taskId).toBe('task-test-seedance-text')
+      expect(fetchMock).toHaveBeenCalledTimes(1)
+    } finally {
+      vi.unstubAllGlobals()
+      vi.unstubAllEnvs()
+      vi.resetModules()
+    }
+  })
+
+  it('still rejects zero-media generation for providers without text-to-video support', async () => {
+    const result = await createVideo({
+      script: 'Neon city awakening\n\nA cinematic neon city wakes at dawn.',
+      images: [],
+      duration: 5,
+      videoModel: 'grok',
+    })
+
+    expect(result.success).toBe(false)
+    expect(result.message).toContain('requires an image or video reference')
   })
 
   it('does not invent a Kling reference-video lower resolution limit', async () => {

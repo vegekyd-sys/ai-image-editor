@@ -92,6 +92,18 @@ const server = http.createServer(async (req, res) => {
     return;
   }
 
+  if (req.method === 'POST' && url.pathname === '/api/mcp') {
+    assert.equal(req.headers.authorization, 'Bearer mk_test_smoke');
+    sendJson(200, {
+      jsonrpc: '2.0',
+      id: body?.id ?? 1,
+      result: {
+        content: [{ type: 'text', text: 'Video rendering task created.\n\nTask ID: task-unified-text-smoke' }],
+      },
+    });
+    return;
+  }
+
   if (req.method === 'GET' && url.pathname === '/api/agent/run/run_mock_1') {
     sendJson(200, {
       id: 'run_mock_1',
@@ -394,6 +406,16 @@ try {
     const runRequest = requests.filter(req => req.pathname === '/api/agent/run').at(-1);
     assert.equal(runRequest?.body?.projectId, 'project-existing-1');
     assert.equal(runRequest?.body?.prompt, 'use this reference');
+  }
+
+  {
+    const result = await expectSuccess(['video', 'create', '--script', 'A neon one-person studio wakes at dawn', '--duration', '5', '--model', 'seedance-fast']);
+    assert.match(result.stdout, /Task ID: task-unified-text-smoke/);
+    const mcpRequest = requests.filter(req => req.pathname === '/api/mcp').at(-1);
+    assert.equal(mcpRequest?.body?.params?.name, 'makaron_create_video');
+    assert.deepEqual(mcpRequest?.body?.params?.arguments?.images, []);
+    assert.equal(mcpRequest?.body?.params?.arguments?.videoModel, 'seedance-fast');
+    assert.equal(mcpRequest?.body?.params?.arguments?.duration, 5);
   }
 
   {

@@ -246,8 +246,8 @@ Tips:
     `Submit a video rendering task. Returns a taskId for polling.
 
 IMPORTANT:
-- images must be publicly accessible URLs (not base64). Upload to storage first.
-- script should use <<<media_N>>> format (from makaron_write_video_script output)
+- SeeDance supports native text-to-video with no images. For image/reference generation, images must be publicly accessible URLs (not base64).
+- When images are provided, script should use <<<media_N>>> format (from makaron_write_video_script output). Text-to-video scripts should not invent media markers.
 - Provider-generated video rendering takes 3-5 minutes; Grok is usually around 30-40 seconds; Gemini Omni is usually around 30-70 seconds plus Storage handoff. Use makaron_get_video_status to poll.
 - Duration: omit for smart mode. SeeDance supports integer output duration 4-15s (default 5s); Kling supports 5-15s; Grok 1.5 supports 1-15s for single-image; Gemini Omni supports 3-10s in Makaron.
 - Resolution: omit or use "auto" for the selected model default. seedance-fast/seedance-mini/grok support 480p/720p; seedance supports 480p/720p/1080p; kling supports 720p/1080p/4k; google-omni outputs 720p.
@@ -266,7 +266,7 @@ Shot 2 (3s): Close-up, <<<media_2>>> ...
 Style: Cinematic, warm golden light.`,
     {
       script: z.string().describe('Video script with <<<media_N>>> references'),
-      images: z.array(z.string().url()).min(1).max(7).describe('Publicly accessible image URLs'),
+      images: z.array(z.string().url()).max(7).default([]).describe('Optional public image URLs. Omit or pass [] for native SeeDance text-to-video.'),
       duration: z.number().optional().describe('Duration in seconds. SeeDance accepts integer output duration 4-15s (default 5s); Kling supports 5-15s; Grok 1.5 supports 1-15s; Gemini Omni supports 3-10s. Omit for smart mode.'),
       aspectRatio: z.enum(['auto', '16:9', '9:16', '1:1', '4:3', '3:4', '21:9', '3:2', '2:3']).optional().describe('Aspect ratio. Use auto/adaptive or a provider-supported ratio. Seedance supports 21:9. Grok image-to-video ignores forced ratios to avoid stretching the source image; pad the source or choose another model for a fixed final shape.'),
       videoModel: z.enum(['seedance-fast', 'seedance-mini', 'seedance', 'kling', 'grok', 'google-omni']).optional().describe('Video model: seedance-fast (default), seedance-mini (lower-cost drafts), seedance (standard/1080p), kling (1080p/4k), grok (fastest single-image-to-video with native audio), or google-omni (fast Gemini Omni image/video generation and editing with native generated audio)'),

@@ -1385,7 +1385,7 @@ Use this tool after the user has confirmed a video script that is already visibl
 
 Hard constraints:
 - First line of script = short title (2-5 words). Then script body.
-- Use \`<<<media_N>>>\` to reference images AND videos (N starts at 1). Videos in the timeline are auto-routed — just reference them like images.
+- Use \`<<<media_N>>>\` to reference images AND videos (N starts at 1). Videos in the timeline are auto-routed — just reference them like images. For native SeeDance text-to-video with no source media, use no media markers and do not generate an intermediate image first.
 - To EDIT a video: reference it with \`<<<media_N>>>\` and describe the changes. The selected model must support reference videos.
 - To use CLI/app imported reference music/audio for pacing or beat sync, mention its Audio Index marker in \`story_prompt\` (for example \`<<<audio_1>>>\`) AND pass \`audio_refs\` like ["audio_1"]. Audio refs are NOT Timeline Media Index refs. Reference audio is only supported by SeeDance/SeeDance Fast/SeeDance Mini.
 - Works for Kling, SeeDance, SeeDance Mini, and Grok, but respect capability limits and tool errors.
@@ -1403,7 +1403,7 @@ Hard constraints:
 - If the generated video is an intermediate artifact, pass \`completion_actions\` so CUI/CLI can show the next step after rendering finishes. These actions are user-confirmed by default; do not rely on the user remembering what to do next. For local video repair, include exact replaceStart/replaceEnd/replacementDuration and say to trim/fit the patch to that duration before merging so the final video keeps the original duration.
 - The script must have been shown to the user and confirmed before this tool is called, unless the user's current request explicitly asks for direct submission without confirmation.`,
       inputSchema: z.object({
-        story_prompt: z.string().describe('The video script. First line = short title (2-5 words), then the script body. Use <<<media_N>>> to reference images/videos and <<<audio_N>>> to reference audio from the Audio Index. Total duration must be 15 seconds or less.'),
+        story_prompt: z.string().describe('The video script. First line = short title (2-5 words), then the script body. Use <<<media_N>>> only when referencing available images/videos, and <<<audio_N>>> for Audio Index references. Native SeeDance text-to-video uses no media markers. Total duration must be 15 seconds or less.'),
         duration: z.number().optional().describe('Duration in seconds. SeeDance/SeeDance Mini accepts integer output duration 4-15s (default 5s); Kling accepts 5-15s; Grok 1.5 accepts 1-15s for one image; Google Omni accepts 3-10s. Never pass below the selected model minimum. For timeline video edits, set this to the combined source video duration from Media Index clamped to the selected model range. Do not submit multiple reference videos together if their combined source duration exceeds the selected model limit. Omit for smart mode only when generating from photos.'),
         aspect_ratio: z.enum(['16:9', '9:16', '1:1', '4:3', '3:4', '21:9', '3:2', '2:3']).optional().describe('Output aspect ratio. Pass it only when the user asks for a specific shape and the selected model can safely honor it. For Grok single-image-to-video, omit this field because xAI stretches the source image when a forced ratio differs from the image. Seedance supports 16:9/9:16/1:1/4:3/3:4/21:9/adaptive; Makaron intentionally does not pass forced ratios to Grok image-to-video.'),
         model: z.string().optional().describe('Video model/provider id. Default follows the app selection (usually seedance-fast) at 720p. Generic HD/高清/high quality requests should still use seedance-fast; use seedance-mini for explicit Mini/lower-cost/draft/multi-size tests; use seedance only for explicit 1080p, standard/full SeeDance, or premium/highest-resolution requests. Use google-omni only for explicit Omni/Gemini Omni/Google Omni or when the app selector is already Gemini Omni; it is a fast short 720p video editing model with native generated audio. Supported ids include seedance-fast, seedance-mini, seedance, kling, grok, and google-omni.'),
@@ -1433,22 +1433,22 @@ Hard constraints:
         if (media_refs?.length) {
           imageUrls = [...(imageUrls || []), ...media_refs.filter(u => u.startsWith('http'))];
         }
-        if (!imageUrls?.length) {
-          return { success: false as const, message: 'No image URLs available yet — images may still be uploading. Please wait and try again.' };
+        const videoSelection = resolveAgentVideoSelection({
+          appModel: (ctx as any).videoModel,
+          appResolution: (ctx as any).videoResolution,
+          appAuto: (ctx as any).videoAuto,
+          toolModel: model,
+          toolResolution: video_resolution,
+        });
+        const videoModel = videoSelection.model;
+        const videoRoute = resolveVideoGenerationRoute({
+          model: videoModel,
+          resolution: videoSelection.resolution,
+        });
+        if (!imageUrls?.length && !video_ref_url && videoRoute.provider !== 'seedance') {
+          return { success: false as const, message: `${videoRoute.label} requires an image or video reference. Use a SeeDance model for native text-to-video.` };
         }
         try {
-          const videoSelection = resolveAgentVideoSelection({
-            appModel: (ctx as any).videoModel,
-            appResolution: (ctx as any).videoResolution,
-            appAuto: (ctx as any).videoAuto,
-            toolModel: model,
-            toolResolution: video_resolution,
-          });
-          const videoModel = videoSelection.model;
-          const videoRoute = resolveVideoGenerationRoute({
-            model: videoModel,
-            resolution: videoSelection.resolution,
-          });
           const selectedAspectRatio = aspect_ratio;
           const resolvedAudioRefs = resolveAudioRefs(ctx.audioAttachments, audio_refs);
           if (resolvedAudioRefs.error) {

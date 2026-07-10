@@ -24,6 +24,10 @@ describe('agent media scenario matrix', () => {
   const designHarness = read('src/lib/design-harness.ts')
   const mediaAspect = read('src/lib/media-aspect.ts')
   const compositionDuration = read('src/lib/composition-duration.ts')
+  const animateRoute = read('src/app/api/animate/route.ts')
+  const videoSnapshotRoute = read('src/app/api/video-snapshot/route.ts')
+  const mcpServer = read('src/mcp/server.ts')
+  const cli = read('packages/makaron-cli/bin/makaron.mjs')
 
   it('keeps the core agent prompt as a lightweight router', () => {
     expect(agent.length).toBeLessThan(10_000)
@@ -105,6 +109,19 @@ describe('agent media scenario matrix', () => {
     expect(ffmpegSkill).toContain('Cheaper option, supports base video edit')
     expect(ffmpegSkill).toContain('call `transcribe_audio` before `run_code`')
     expect(ffmpegSkill).not.toContain('Cheaper/default')
+  })
+
+  it('keeps native SeeDance text-to-video reachable without generating an intermediate image', () => {
+    expect(agent).toContain('SeeDance supports native text-to-video')
+    expect(agent).toContain('Do not generate an intermediate image first')
+    expect(animate).toContain('zero images means native SeeDance text-to-video')
+    expect(animate).toContain('do not call `generate_image` first')
+    expect(agentTs).toContain("videoRoute.provider !== 'seedance'")
+    expect(animateRoute).toContain("videoRoute.provider !== 'seedance'")
+    expect(videoSnapshotRoute).toContain("videoRoute.provider !== 'seedance'")
+    expect(mcpServer).toContain("default([]).describe('Optional public image URLs")
+    expect(cli).toContain('const isSeedanceModel =')
+    expect(cli).toContain('!images.length && !video && !isSeedanceModel')
   })
 
   it('separates generic coding, Remotion composition, and node media outputs', () => {

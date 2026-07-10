@@ -17,8 +17,9 @@ export async function POST(req: NextRequest) {
     const { projectId, imageUrls, prompt, duration, aspectRatio, videoModel, videoResolution } = await req.json()
     const selectedVideoModel = normalizeVideoModelId(videoModel)
     const videoRoute = resolveVideoGenerationRoute({ model: selectedVideoModel, resolution: videoResolution })
+    const inputImageUrls: string[] = Array.isArray(imageUrls) ? [...imageUrls] : []
 
-    if (!projectId || !imageUrls?.length || !prompt) {
+    if (!projectId || !prompt || (inputImageUrls.length === 0 && videoRoute.provider !== 'seedance')) {
       return NextResponse.json({ error: 'Missing required fields' }, { status: 400 })
     }
 
@@ -63,7 +64,7 @@ export async function POST(req: NextRequest) {
           if (Number.isFinite(sourceDuration) && sourceDuration > 0) {
             referenceVideoDuration = (referenceVideoDuration ?? 0) + sourceDuration
           }
-          imageUrls[ref - 1] = ''
+          inputImageUrls[ref - 1] = ''
         }
       }
     }
@@ -90,7 +91,7 @@ export async function POST(req: NextRequest) {
     // Call skill layer (stateless, no DB)
     const skillResult = await createVideo({
       script: prompt,
-      images: imageUrls,
+      images: inputImageUrls,
       duration: effectiveDuration,
       aspectRatio,
       videoModel: selectedVideoModel,
@@ -107,7 +108,7 @@ export async function POST(req: NextRequest) {
     const taskId = skillResult.taskId
 
     // Persist to DB (API route responsibility)
-    const { filteredImages, finalPrompt } = filterAndRemapImages(prompt, imageUrls)
+    const { filteredImages, finalPrompt } = filterAndRemapImages(prompt, inputImageUrls)
     const { data: animation, error } = await supabase
       .from('project_animations')
       .insert({

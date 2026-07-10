@@ -33,7 +33,7 @@ export async function POST(req: NextRequest) {
     const inputImageUrls: string[] = Array.isArray(imageUrls) ? [...imageUrls] : []
     const inputVideoUrl = typeof videoUrl === 'string' && videoUrl.startsWith('http') ? videoUrl : undefined
 
-    if (!projectId || !prompt || (inputImageUrls.length === 0 && !inputVideoUrl)) {
+    if (!projectId || !prompt || (inputImageUrls.length === 0 && !inputVideoUrl && videoRoute.provider !== 'seedance')) {
       return NextResponse.json({ error: 'Missing required fields' }, { status: 400 })
     }
 

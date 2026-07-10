@@ -349,6 +349,41 @@ export function resolveVideoGenerationRoute(options: {
   }
 }
 
+function getSeedanceProviderBase(model?: string | null): string | undefined {
+  const id = normalizeVideoModelId(model)
+  if (id === 'seedance-fast') return 'seedance-2.0-fast'
+  if (id === 'seedance-mini') return 'seedance-2.0-mini'
+  if (id === 'seedance') return 'seedance-2.0'
+  return undefined
+}
+
+export function supportsNativeTextToVideo(model?: string | null): boolean {
+  return getSeedanceProviderBase(model) != null
+}
+
+export function resolveVideoProviderModel(options: {
+  model?: string | null
+  resolution?: VideoResolutionInput
+  imageReferenceCount?: number
+  hasVideoReference?: boolean
+  hasAudioReference?: boolean
+}): string | undefined {
+  const route = resolveVideoGenerationRoute({
+    model: options.model,
+    resolution: options.resolution,
+  })
+  const hasReferenceMedia =
+    (options.imageReferenceCount ?? 0) > 0 ||
+    options.hasVideoReference === true ||
+    options.hasAudioReference === true
+
+  if (supportsNativeTextToVideo(route.model) && !hasReferenceMedia) {
+    return `${getSeedanceProviderBase(route.model)}-text-to-video`
+  }
+
+  return route.providerModel
+}
+
 export function validateVideoResolutionRequest(options: {
   model?: string | null
   resolution?: VideoResolutionInput
