@@ -2,6 +2,11 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { createProject, createProjectFromStagedMedia } from '@/lib/createProject'
 import { cacheCreateDraft, clearCreateDraft, getCreateDraft } from '@/lib/imageCache'
 
+vi.mock('@/lib/supabase/storage', () => ({
+  uploadImage: vi.fn(async (_supabase, _userId, projectId: string, filename: string) =>
+    `https://cdn.makaron.app/${projectId}/${filename}`),
+}))
+
 vi.mock('@/lib/image/compress', () => ({
   compressImageFile: vi.fn(async () => 'data:image/jpeg;base64,compressed'),
 }))
@@ -47,9 +52,10 @@ describe('createProject upload flow', () => {
 
     expect(result?.projectId).toBe('project-from-api')
     expect(supabase.from).not.toHaveBeenCalled()
-    expect(JSON.parse(sessionStorage.getItem('pendingImages') || '[]')).toEqual([
-      'data:image/jpeg;base64,compressed',
-    ])
+    const pendingImages = JSON.parse(sessionStorage.getItem('pendingImages') || '[]') as string[]
+    expect(pendingImages).toHaveLength(1)
+    expect(pendingImages[0]).toMatch(/^https:\/\/cdn\.makaron\.app\/project-from-api\/snapshot-/)
+    expect(sessionStorage.getItem('pendingImages')).not.toContain('data:image')
     expect(fetchMock).toHaveBeenCalledWith('/api/projects/create', expect.any(Object))
   })
 
@@ -88,9 +94,10 @@ describe('createProject upload flow', () => {
 
     expect(result?.projectId).toBe('restored-project')
     expect(supabase.from).not.toHaveBeenCalled()
-    expect(JSON.parse(sessionStorage.getItem('pendingImages') || '[]')).toEqual([
-      'data:image/jpeg;base64,restored',
-    ])
+    const pendingImages = JSON.parse(sessionStorage.getItem('pendingImages') || '[]') as string[]
+    expect(pendingImages).toHaveLength(1)
+    expect(pendingImages[0]).toMatch(/^https:\/\/cdn\.makaron\.app\/restored-project\/snapshot-/)
+    expect(sessionStorage.getItem('pendingImages')).not.toContain('data:image')
     expect(JSON.parse(sessionStorage.getItem('pendingMetadata') || '{}')).toEqual({ location: 'Draft City' })
     expect(sessionStorage.getItem('pendingPrompt')).toBe('make it cinematic')
     expect(sessionStorage.getItem('pendingSkill')).toBe('installed-skill')
@@ -115,5 +122,31 @@ describe('createProject upload flow', () => {
 
     await clearCreateDraft()
     await expect(getCreateDraft()).resolves.toBeNull()
+  })
+
+  it('never writes large base64 image payloads into sessionStorage', async () => {
+    const originalSetItem = Storage.prototype.setItem
+    const setItem = vi.spyOn(Storage.prototype, 'setItem').mockImplementation(function (this: Storage, key, value) {
+      if (key === 'pendingImages' && value.includes('data:image')) {
+        throw new DOMException('Setting the value exceeded the quota.', 'QuotaExceededError')
+      }
+      return originalSetItem.call(this, key, value)
+    })
+    vi.stubGlobal('fetch', vi.fn(async (url: string) => {
+      if (url === '/api/marketing/events') return new Response('{}', { status: 200 })
+      return new Response(JSON.stringify({ projectId: 'large-image-project', snapshots: [] }), {
+        status: 200,
+        headers: { 'Content-Type': 'application/json' },
+      })
+    }))
+
+    const files = [
+      new File(['large-a'], 'large-a.jpg', { type: 'image/jpeg' }),
+      new File(['large-b'], 'large-b.jpg', { type: 'image/jpeg' }),
+    ]
+    await expect(createProject({} as never, 'user-1', files)).resolves.toMatchObject({ projectId: 'large-image-project' })
+
+    expect(setItem).not.toHaveBeenCalledWith('pendingImages', expect.stringContaining('data:image'))
+    expect(JSON.parse(sessionStorage.getItem('pendingImages') || '[]')).toHaveLength(2)
   })
 })

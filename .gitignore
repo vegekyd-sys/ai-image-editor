@@ -79,6 +79,7 @@ app-store-assets/**/*.mov
 !/scripts/makaron-worktree-fastpath.mjs
 !/scripts/backfill-annual-subscription-credits.mjs
 !/scripts/audit-liquid-glass-perf.mjs
+!/scripts/studio-run-golden.ts
 
 
 # claude code local settings
@@ -99,6 +100,7 @@ test-kling.mjs
 /outputs/
 /artifacts/
 /.playwright-cli/
+/.remotion-bundle-local/
 
 # workspace agent runtime data
 .workspace/

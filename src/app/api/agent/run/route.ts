@@ -111,6 +111,7 @@ export async function POST(req: NextRequest) {
     // Run agent after response is sent — next/server after() keeps the function alive
     after(async () => {
       let abortCheckCount = 0;
+      let streamFailed = false;
       const isAborted = async () => {
         if (++abortCheckCount % 10 !== 0) return false;
         const { data } = await supabase.from('agent_runs').select('status').eq('id', runId).single();
@@ -141,6 +142,7 @@ export async function POST(req: NextRequest) {
           history: ctx.history,
           timelineVersion,
         })) {
+          if (event.type === 'error') streamFailed = true;
           if (event.type === 'usage') {
             totalInputTokens += event.inputTokens ?? 0;
             totalOutputTokens += event.outputTokens ?? 0;
@@ -178,7 +180,7 @@ export async function POST(req: NextRequest) {
         .select('status').eq('id', runId).single();
       if (finalRun?.status === 'running') {
         await supabase.from('agent_runs').update({
-          status: 'completed', ended_at: new Date().toISOString(),
+          status: streamFailed ? 'failed' : 'completed', ended_at: new Date().toISOString(),
         }).eq('id', runId);
       }
 
@@ -206,7 +208,7 @@ export async function POST(req: NextRequest) {
         console.error('[agent/run] auto-name error:', e);
       }
 
-      console.log(`[agent/run] Run ${runId} completed`);
+      console.log(`[agent/run] Run ${runId} ${streamFailed ? 'failed' : 'completed'}`);
     });
 
     return NextResponse.json({ runId, status: 'running' });

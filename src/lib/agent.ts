@@ -37,6 +37,7 @@ import {
 } from '@/lib/remotion-export';
 import { VIDEO_PLACEHOLDER_IMAGE } from '@/lib/editor/timeline-derivations';
 import { getAgentModelId, isClaudeSonnet5Model } from './bedrock-models';
+import { normalizeAgentErrorMessage } from './agent-error';
 import { describeBedrockToolUseInputIssue, normalizeBedrockToolUseInputs } from './bedrock-tool-inputs';
 import { mergePatchProps } from './patch-props';
 
@@ -2011,6 +2012,106 @@ For timeline videos, pass media_index. For external audio/video URLs, pass media
       },
     }),
 
+    studio_run: tool({
+      description: `Create and advance a durable Makaron Studio Run for multi-stage video production.
+Use this for explainer-video and other substantial directed video skills, not quick edits.
+The run persists typed artifacts in the existing project workspace and enforces dependencies, approval policy, resume state, and downstream invalidation.
+Operations:
+- start: create the run before producing the brief.
+- put_artifact: validate and persist the completed stage artifact. Use the exact stage order brief, proposal, script, storyboard, assets, composition, review, delivery.
+- approve: approve a guided/manual stage that is awaiting approval.
+- status: load the current run after a new turn or interrupted session.
+- invalidate: deliberately reopen a stage and invalidate only its downstream dependents.
+For approval_policy=auto, gated artifacts are approved automatically and recorded in the decision log. Never claim a stage is complete until put_artifact succeeds.`,
+      inputSchema: z.object({
+        operation: z.enum(['start', 'put_artifact', 'approve', 'status', 'invalidate']),
+        run_id: z.string().optional(),
+        recipe: z.string().optional(),
+        title: z.string().optional(),
+        approval_policy: z.enum(['auto', 'guided', 'manual']).optional(),
+        delivery_promise: z.object({
+          durationSeconds: z.number().positive().max(600),
+          width: z.number().int().positive(),
+          height: z.number().int().positive(),
+          fps: z.number().positive().max(120),
+          renderRuntime: z.enum(['remotion', 'ffmpeg', 'provider-video']),
+          compositionMode: z.enum(['editable', 'atelier', 'templated']),
+          audioRequired: z.boolean(),
+          subtitlesRequired: z.boolean(),
+        }).optional(),
+        stage: z.enum(['brief', 'proposal', 'script', 'storyboard', 'assets', 'composition', 'review', 'delivery']).optional(),
+        artifact: z.unknown().optional(),
+        summary: z.string().optional(),
+        reason: z.string().optional(),
+      }),
+      execute: async ({ operation, run_id, recipe, title, approval_policy, delivery_promise, stage, artifact, summary, reason }) => {
+        if (!ctx.supabase || !ctx.userId || !ctx.projectId) {
+          return { success: false, error: 'Studio Run requires an authenticated project workspace.' };
+        }
+        try {
+          const studio = await import('./studio-run');
+          const store = new studio.WorkspaceStudioRunStore(ctx.supabase, ctx.userId);
+
+          if (operation === 'start') {
+            if (!delivery_promise) return { success: false, error: 'start requires delivery_promise' };
+            const run = await studio.startPersistedStudioRun({
+              store,
+              projectId: ctx.projectId,
+              recipe: recipe || 'explainer-video',
+              title: title || 'Studio Run',
+              approvalPolicy: approval_policy || 'guided',
+              deliveryPromise: delivery_promise,
+            });
+            return {
+              success: true,
+              studioRun: studio.summarizeStudioRun(run),
+              statePath: studio.studioRunStatePath(run.projectId, run.id),
+            };
+          }
+
+          let run = run_id ? await store.loadRun(ctx.projectId, run_id) : (await store.listRuns(ctx.projectId))[0];
+          if (!run) return { success: false, error: 'Studio Run not found. Start one first.' };
+
+          if (operation === 'status') {
+            return {
+              success: true,
+              studioRun: studio.summarizeStudioRun(run),
+              statePath: studio.studioRunStatePath(run.projectId, run.id),
+            };
+          }
+          if (!stage) return { success: false, error: `${operation} requires stage` };
+
+          if (operation === 'put_artifact') {
+            if (artifact === undefined) return { success: false, error: 'put_artifact requires artifact' };
+            const result = await studio.putPersistedStudioArtifact({ store, run, stage, artifact });
+            return {
+              success: true,
+              studioRun: studio.summarizeStudioRun(result.run, result.artifactPath),
+              artifactPath: result.artifactPath,
+              invalidated: result.invalidated,
+            };
+          }
+          if (operation === 'approve') {
+            run = await studio.approvePersistedStudioStage({ store, run, stage, summary });
+            return { success: true, studioRun: studio.summarizeStudioRun(run) };
+          }
+          const result = await studio.invalidatePersistedStudioStage({
+            store,
+            run,
+            stage,
+            reason: reason || `Reopened ${stage} for revision`,
+          });
+          return {
+            success: true,
+            studioRun: studio.summarizeStudioRun(result.run),
+            invalidated: result.invalidated,
+          };
+        } catch (err) {
+          return { success: false, error: err instanceof Error ? err.message : String(err) };
+        }
+      },
+    }),
+
     materialize_media: tool({
       description: `Export an editable Remotion composition into a real MP4 video.
 Use this when the user asks to save/export/materialize/turn a composition into MP4. It accepts a timeline media_index, snapshot_id, design_path, or the current unsaved composition from run_code.
@@ -3871,7 +3972,7 @@ export async function* runMakaronAgent(
       if (event.type === 'error') {
 
         const err = (event as any).error;
-        const errMsg = err instanceof Error ? err.message : String(err);
+        const errMsg = normalizeAgentErrorMessage(err);
         yield { type: 'error', message: errMsg };
         return;
       }
@@ -3930,8 +4031,9 @@ export async function* runMakaronAgent(
     if (bedrockToolInputIssue) {
       console.error(`[agent] Bedrock toolUse input issue: ${bedrockToolInputIssue}`);
     }
-    console.log(`⏱️ [agent] ERROR at +${((Date.now() - agentStartTime) / 1000).toFixed(1)}s: ${err instanceof Error ? err.message : String(err)}`);
-    yield { type: 'error', message: err instanceof Error ? err.message : String(err) };
+    const errorMessage = normalizeAgentErrorMessage(err);
+    console.log(`⏱️ [agent] ERROR at +${((Date.now() - agentStartTime) / 1000).toFixed(1)}s: ${errorMessage}`);
+    yield { type: 'error', message: errorMessage };
   }
 }
 

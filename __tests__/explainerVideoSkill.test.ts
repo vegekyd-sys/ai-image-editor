@@ -20,9 +20,11 @@ describe('Explainer Video built-in skill', () => {
     expect(skill?.makaron.tags).toContain('explainer')
     expect(skill?.allowedTools).toEqual(expect.arrayContaining([
       'read_file',
+      'studio_run',
       'run_code',
       'write_file',
       'preview_frame',
+      'materialize_media',
       'list_voiceover_voices',
       'generate_voiceover',
       'transcribe_audio',
@@ -43,6 +45,9 @@ describe('Explainer Video built-in skill', () => {
     expect(rawSkill).toContain('Target duration: use the user')
     expect(rawSkill).toContain('If missing, make 60s')
     expect(rawSkill).toContain('The requested duration is a hard contract')
+    expect(rawSkill).toContain('Start a `studio_run` before producing the brief')
+    expect(rawSkill).toContain('all eight stages')
+    expect(rawSkill).toContain('A failed Studio Run artifact write')
     expect(rawSkill).toContain('never change the video duration to match an')
     expect(rawSkill).toContain('Voiceover is part of this skill by default')
     expect(rawSkill).toContain('Subtitles are part of this skill by default')

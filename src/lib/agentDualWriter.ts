@@ -400,6 +400,9 @@ export class AgentDualWriter {
     if (pending.tool === 'analyze_video') {
       await this.maybePersistVideoAnalysisDescription(pending.input, event.output);
     }
+    if (pending.tool === 'studio_run') {
+      await this.maybePersistStudioRunEvent(event.output);
+    }
 
     try {
       await this.supabase.from('agent_tool_history').insert({
@@ -431,6 +434,19 @@ export class AgentDualWriter {
         error: err instanceof Error ? err.message : String(err),
       });
     }
+  }
+
+  private async maybePersistStudioRunEvent(output: unknown) {
+    if (!output || typeof output !== 'object') return;
+    const result = output as Record<string, unknown>;
+    const studioRun = result.studioRun;
+    if (!studioRun || typeof studioRun !== 'object') return;
+    await this.insertEvent('studio_run', {
+      ...(studioRun as Record<string, unknown>),
+      ...(typeof result.statePath === 'string' ? { statePath: result.statePath } : {}),
+      ...(typeof result.artifactPath === 'string' ? { artifactPath: result.artifactPath } : {}),
+      ...(Array.isArray(result.invalidated) ? { invalidated: result.invalidated } : {}),
+    });
   }
 
   private normalizeSnapshotDescription(value: unknown): string | null {

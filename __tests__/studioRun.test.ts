@@ -1,0 +1,209 @@
+import { describe, expect, it } from 'vitest';
+import {
+  approveStudioStage,
+  createStudioRun,
+  parseStudioRun,
+  putStudioArtifact,
+  type StudioRun,
+  type StudioStageId,
+  studioArtifactPath,
+  studioRunStatePath,
+} from '@/lib/studio-run';
+
+const now = '2026-07-10T00:00:00.000Z';
+
+function makeRun(policy: 'auto' | 'guided' = 'auto'): StudioRun {
+  return createStudioRun({
+    id: 'run-1',
+    projectId: 'project-1',
+    recipe: 'explainer-video',
+    title: 'Makaron One Man Studio',
+    approvalPolicy: policy,
+    deliveryPromise: {
+      durationSeconds: 50,
+      width: 1920,
+      height: 1080,
+      fps: 30,
+      renderRuntime: 'remotion',
+      compositionMode: 'editable',
+      audioRequired: true,
+      subtitlesRequired: false,
+    },
+    now,
+  });
+}
+
+const artifacts: Record<StudioStageId, unknown> = {
+  brief: {
+    version: '1.0', title: 'Makaron', objective: 'Explain the product', audience: 'Creators',
+    coreMessage: 'One brief becomes a studio', language: 'zh-CN', durationSeconds: 50, aspectRatio: '16:9',
+  },
+  proposal: {
+    version: '1.0',
+    concepts: [
+      { id: 'a', title: 'One Brief', hook: 'One sentence', visualDirection: 'Signal map', motionLanguage: 'Branch and converge' },
+      { id: 'b', title: 'Two Doors', hook: 'Human and agent', visualDirection: 'Split screen', motionLanguage: 'Parallel tracks' },
+    ],
+    selectedConceptId: 'a', rationale: 'Most direct product story', estimatedCostUsd: 0,
+    deliveryPromise: makeRun().deliveryPromise,
+  },
+  script: {
+    version: '1.0', title: 'Makaron', totalDurationSeconds: 50,
+    sections: [{ id: 's1', startSeconds: 0, endSeconds: 50, narration: 'Narration', onScreenText: ['Makaron'] }],
+  },
+  storyboard: {
+    version: '1.0', artDirection: 'Dark editorial signal system', layoutContract: 'One focal point', subtitleSafeArea: 'Bottom 15 percent clear',
+    scenes: [{ id: 'scene-1', startSeconds: 0, endSeconds: 50, purpose: 'Explain', focalPoint: 'Spark', visualTreatment: 'Branching rails', transitionOut: 'fade', assetIds: ['spark'] }],
+  },
+  assets: {
+    version: '1.0', totalCostUsd: 0, missingAssetIds: [],
+    assets: [{ id: 'spark', type: 'image', path: 'public/brand/makaron-spark-mark.png', source: 'project-owned', sceneIds: ['scene-1'], status: 'ready', costUsd: 0 }],
+  },
+  composition: {
+    version: '1.0', runtime: 'remotion', mode: 'editable', designPath: 'code/makaron.json', width: 1920, height: 1080,
+    fps: 30, durationSeconds: 50, sceneIds: ['scene-1'], previewFramePaths: ['a.png', 'b.png', 'c.png'], editable: true,
+  },
+  review: {
+    version: '1.0', outputPath: 'outputs/final.mp4', status: 'pass',
+    technical: { validContainer: true, durationSeconds: 50, resolution: '1920x1080', fps: 30, hasAudio: true },
+    visual: { framesSampled: 6, contactSheetPath: 'outputs/contact.png', blackFramesDetected: false, missingAssets: false, unreadableText: false, overlapDetected: false },
+    audio: { integratedLufs: -14, truePeakDbfs: -2, unexpectedSilence: false, narrationPresent: true, musicPresent: true },
+    runtimePromiseHonored: true, issues: [],
+  },
+  delivery: {
+    version: '1.0', outputPath: 'outputs/final.mp4', editableSourcePath: 'code/makaron.json',
+    sha256: 'a'.repeat(64), deliveredAt: '2026-07-10T00:10:00.000Z',
+  },
+};
+
+function put(run: StudioRun, stage: StudioStageId, time = now) {
+  return putStudioArtifact({
+    run,
+    stage,
+    artifact: artifacts[stage],
+    artifactPath: `project-1/studio-runs/run-1/artifacts/${stage}.json`,
+    now: time,
+  });
+}
+
+describe('Studio Run controller', () => {
+  it('runs the complete auto-approved explainer pipeline and records approvals', () => {
+    let run = makeRun('auto');
+    for (const stage of ['brief', 'proposal', 'script', 'storyboard', 'assets', 'composition', 'review', 'delivery'] as StudioStageId[]) {
+      run = put(run, stage).run;
+    }
+    expect(run.status).toBe('completed');
+    expect(run.currentStage).toBeNull();
+    expect(run.decisions.filter(decision => decision.category === 'approval')).toHaveLength(5);
+    expect(parseStudioRun(JSON.stringify(run))).toEqual(run);
+  });
+
+  it('stops a guided run at approval and resumes after explicit approval', () => {
+    let run = makeRun('guided');
+    run = put(run, 'brief').run;
+    run = put(run, 'proposal').run;
+    expect(run.status).toBe('awaiting_approval');
+    expect(() => put(run, 'script')).toThrow(/incomplete dependencies proposal/);
+    run = approveStudioStage({ run, stage: 'proposal', now });
+    expect(run.status).toBe('running');
+    expect(run.currentStage).toBe('script');
+  });
+
+  it('invalidates only downstream artifacts when an upstream artifact changes', () => {
+    let run = makeRun('auto');
+    for (const stage of ['brief', 'proposal', 'script', 'storyboard', 'assets', 'composition'] as StudioStageId[]) {
+      run = put(run, stage).run;
+    }
+    const result = put(run, 'script', '2026-07-10T00:05:00.000Z');
+    expect(result.invalidated).toEqual(['storyboard', 'assets', 'composition']);
+    expect(result.run.stages.proposal.status).toBe('completed');
+    expect(result.run.stages.script.status).toBe('completed');
+    expect(result.run.stages.storyboard.status).toBe('invalidated');
+    expect(result.run.artifacts.storyboard).toBeUndefined();
+    expect(result.run.currentStage).toBe('storyboard');
+  });
+
+  it('rejects artifacts that skip dependencies or fail their contract', () => {
+    const run = makeRun('auto');
+    expect(() => put(run, 'script')).toThrow(/incomplete dependencies proposal/);
+    expect(() => putStudioArtifact({
+      run,
+      stage: 'brief',
+      artifact: { version: '1.0' },
+      artifactPath: 'bad.json',
+      now,
+    })).toThrow();
+  });
+
+  it('refuses a passing final review with failed visual checks', () => {
+    let run = makeRun('auto');
+    for (const stage of ['brief', 'proposal', 'script', 'storyboard', 'assets', 'composition'] as StudioStageId[]) {
+      run = put(run, stage).run;
+    }
+    expect(() => putStudioArtifact({
+      run,
+      stage: 'review',
+      artifact: {
+        ...(artifacts.review as Record<string, unknown>),
+        visual: {
+          ...(artifacts.review as any).visual,
+          overlapDetected: true,
+        },
+      },
+      artifactPath: 'review.json',
+      now,
+    })).toThrow(/passing review/);
+  });
+
+  it('enforces the locked delivery promise at composition and review', () => {
+    let run = makeRun();
+    for (const stage of ['brief', 'proposal', 'script', 'storyboard', 'assets'] as StudioStageId[]) run = put(run, stage).run;
+    expect(() => putStudioArtifact({
+      run,
+      stage: 'composition',
+      artifact: { ...(artifacts.composition as object), width: 1080, height: 1920 },
+      artifactPath: 'wrong-composition.json',
+      now,
+    })).toThrow('composition does not honor delivery promise: resolution');
+
+    run = put(run, 'composition').run;
+    expect(() => putStudioArtifact({
+      run,
+      stage: 'review',
+      artifact: {
+        ...(artifacts.review as object),
+        technical: { ...(artifacts.review as any).technical, durationSeconds: 47 },
+      },
+      artifactPath: 'wrong-review.json',
+      now,
+    })).toThrow('review does not honor delivery promise: review duration');
+  });
+
+  it('blocks delivery until final review passes and clears stale completion time when reopened', () => {
+    let run = makeRun();
+    for (const stage of ['brief', 'proposal', 'script', 'storyboard', 'assets', 'composition'] as StudioStageId[]) run = put(run, stage).run;
+    run = putStudioArtifact({
+      run,
+      stage: 'review',
+      artifact: { ...(artifacts.review as object), status: 'revise', issues: ['Tighten scene four'] },
+      artifactPath: 'review-revise.json',
+      now,
+    }).run;
+    expect(run.status).toBe('failed');
+    expect(() => put(run, 'delivery')).toThrow('incomplete dependencies review');
+
+    run = putStudioArtifact({ run, stage: 'review', artifact: artifacts.review, artifactPath: 'review-pass.json', now }).run;
+    run = put(run, 'delivery').run;
+    expect(run.completedAt).toBe(now);
+    run = putStudioArtifact({ run, stage: 'brief', artifact: artifacts.brief, artifactPath: 'brief-v2.json', now }).run;
+    expect(run.status).toBe('running');
+    expect(run.completedAt).toBeUndefined();
+  });
+
+  it('uses project-scoped workspace paths for resumable state and versioned artifacts', () => {
+    expect(studioRunStatePath('project-1', 'run-1')).toBe('project-1/studio-runs/run-1/run.json');
+    expect(studioArtifactPath('project-1', 'run-1', 'script', 2)).toBe(
+      'project-1/studio-runs/run-1/artifacts/script.v2.json',
+    );
+  });
+});

@@ -17,6 +17,7 @@ import SkillSelector, { type SkillItem } from '@/components/SkillSelector';
 import { splitCompletionActions } from '@/lib/artifact-actions';
 import { removeAllInlineVideoUrls, removeRenderableInlineVideoUrls, resolveInlineVideoCandidate } from '@/lib/cui-video-url';
 import type { ArtifactCompletionAction as CompletionAction } from '@/types';
+import { buildStudioRunStagePlacements, StudioRunProgress, StudioRunStageCard, useStudioRun } from '@/components/StudioRunDock';
 
 /** Inline video in CUI — natural AR, play/pause, @N badge, tap to navigate with time sync */
 const videoArCache = new Map<string, string>();
@@ -608,6 +609,16 @@ export default function AgentChatView({
   }, [snapshots]);
 
   const [input, setInput] = useState('');
+  const studioRun = useStudioRun(projectId, isAgentActive);
+  const studioStagePlacements = useMemo(() => {
+    const placements = buildStudioRunStagePlacements(messages.map(message => message.timestamp), studioRun.run);
+    const byMessage = new Map<number, typeof placements>();
+    for (const placement of placements) {
+      const current = byMessage.get(placement.afterMessageIndex) || [];
+      byMessage.set(placement.afterMessageIndex, [...current, placement]);
+    }
+    return byMessage;
+  }, [messages, studioRun.run]);
   const lastDraftTextRef = useRef<string | undefined>(undefined);
   const [viewingFile, setViewingFile] = useState<string | null>(null);
   // Unified attachment system: images + videos in one array
@@ -1292,6 +1303,18 @@ export default function AgentChatView({
 
         {/* Message list */}
         <div className={`flex flex-col ${isPanel ? 'gap-3' : 'gap-5'}`}>
+          {studioStagePlacements.get(-1)?.map(placement => (
+            <StudioRunStageCard
+              key={`studio-stage-${placement.stage.id}-v${placement.stage.artifactVersion}`}
+              stage={placement.stage}
+              status={placement.status}
+              artifact={placement.stage.artifactPath ? studioRun.artifacts[placement.stage.artifactPath] : undefined}
+              ordinal={(studioRun.run?.stages.findIndex(stage => stage.id === placement.stage.id) ?? -1) + 1}
+              total={studioRun.run?.stages.length || 8}
+              isPanel={isPanel}
+              onViewArtifact={setViewingFile}
+            />
+          ))}
           {messages.map((msg, idx) => (
             <div key={`${msg.id}:${idx}`}>
               {msg.role === 'user' ? (
@@ -1488,6 +1511,19 @@ export default function AgentChatView({
 
                 </div>
               )}
+
+              {studioStagePlacements.get(idx)?.map(placement => (
+                <StudioRunStageCard
+                  key={`studio-stage-${placement.stage.id}-v${placement.stage.artifactVersion}`}
+                  stage={placement.stage}
+                  status={placement.status}
+                  artifact={placement.stage.artifactPath ? studioRun.artifacts[placement.stage.artifactPath] : undefined}
+                  ordinal={(studioRun.run?.stages.findIndex(stage => stage.id === placement.stage.id) ?? -1) + 1}
+                  total={studioRun.run?.stages.length || 8}
+                  isPanel={isPanel}
+                  onViewArtifact={setViewingFile}
+                />
+              ))}
             </div>
           ))}
 
@@ -1500,6 +1536,7 @@ export default function AgentChatView({
               </span>
             </div>
           )}
+
         </div>
 
         <div ref={messagesEndRef} />
@@ -1581,6 +1618,7 @@ export default function AgentChatView({
           zIndex: 20,
         }}
       >
+        <StudioRunProgress studioRun={studioRun} />
         {/* Two-row layout: textarea on top, toolbar on bottom */}
         <div
           className="mkr-input-box-liquid"

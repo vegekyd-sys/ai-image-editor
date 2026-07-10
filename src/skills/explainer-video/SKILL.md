@@ -5,7 +5,7 @@ description: >
   feature, company, or process. Use Makaron's current Remotion composition
   runtime with design references, synced subtitles, voiceover, generated
   sound design, and optional generated media/sticker overlays.
-allowed-tools: read_file run_code write_file preview_frame list_voiceover_voices generate_voiceover transcribe_audio generate_audio generate_music generate_image analyze_image analyze_video
+allowed-tools: read_file studio_run run_code write_file preview_frame materialize_media list_voiceover_voices generate_voiceover transcribe_audio generate_audio generate_music generate_image analyze_image analyze_video
 metadata:
   makaron:
     icon: "🎙️"
@@ -81,49 +81,63 @@ wrong or expensive.
 
 ## Production Flow
 
-1. Read `prompts/remotion-composition.md` before the first `run_code` call.
-2. Read the shared Remotion Director contract and required video-director
+1. Start a `studio_run` before producing the brief. Use the user's explicit
+   approval preference; when they preauthorize the full run, set
+   `approval_policy: "auto"`. Lock duration, resolution, FPS, runtime, editable
+   mode, narration, and subtitle promise in `delivery_promise`.
+2. Read `prompts/remotion-composition.md` before the first `run_code` call.
+3. Read the shared Remotion Director contract and required video-director
    reference files.
-3. Create a compact creative brief: purpose, audience, core message, desired
+4. Create a compact creative brief: purpose, audience, core message, desired
    action, emotional arc, creative direction, audio strategy, and visual style.
-4. Plan 6-8 scenes with exact time ranges that sum to the target duration.
-5. Create a layout contract before writing code: one focal point per scene,
+   Persist it with `studio_run(operation: "put_artifact", stage: "brief")`.
+5. Produce at least two genuinely different concepts and persist the selected
+   proposal artifact. Do not continue if its Studio Run gate is awaiting approval.
+6. Write and persist the timed script artifact.
+7. Plan 6-8 scenes with exact time ranges that sum to the target duration.
+8. Create a layout contract before writing code: one focal point per scene,
    readable text zones, subtitle-safe lower area, transition pattern, and the
    component/archetype used by each scene.
-6. Create a compact asset-and-audio cue sheet before generating media:
+   Persist this as the storyboard artifact before generating assets.
+9. Create a compact asset-and-audio cue sheet before generating media:
    for each scene, name the narration cue, sound cue, main visual layer, and
    whether it needs a sticker overlay, full generated image, generated video
    insert, or no generated media.
-7. Write a speakable narration script. Keep it human and paced:
+10. Write a speakable narration script. Keep it human and paced:
    about 120-145 English words per minute or 180-230 Chinese characters per
    minute.
-8. Unless the user explicitly requested a silent/text-only video, call
+11. Unless the user explicitly requested a silent/text-only video, call
    `list_voiceover_voices`, choose a fitting voice, then call
    `generate_voiceover`.
    Keep the narration short enough for the requested duration. If the generated
    voiceover is more than 10% longer than the requested video, regenerate a
    shorter script or trim/fade it; never change the video duration to match an
    overly long narration.
-9. After `generate_voiceover`, call `transcribe_audio({ media_url: audioUrl })`
+12. After `generate_voiceover`, call `transcribe_audio({ media_url: audioUrl })`
    on the returned public audio URL. Use the real ASR utterance/word timecodes
    for subtitle timing. Do not rely only on estimated text length timing when
    ASR is available.
-10. Decide the audio layer:
+13. Decide the audio layer:
    - Exact spoken narration -> `generate_voiceover`.
    - Prompt-first music bed, ambience, sound effects, UI blips, risers, impacts,
      or mixed sound design -> `generate_audio`.
    - Music / soundtrack / song-structure request -> `generate_music`; new music
      generation uses Seed Audio, not Suno.
-11. Generate only the sticker/image assets chosen in the cue sheet. If an asset
+14. Generate only the sticker/image assets chosen in the cue sheet. If an asset
    is an overlay, read `skills/sticker-maker/SKILL.md` first and make it a
    transparent PNG sticker instead of a hard-to-place rectangular image.
-12. Build the video with `run_code({ runtime: "composition" })`.
-13. Save the draft with `write_file({ fromLastRunCode: true, publish: false })`.
-14. Verify at least three frames with `preview_frame`: early hook, middle
+15. Persist the asset manifest only after every referenced asset is ready.
+16. Build the video with `run_code({ runtime: "composition" })`.
+17. Save the draft with `write_file({ fromLastRunCode: true, publish: false })`,
+   then persist the composition artifact with its real design path.
+18. Verify at least three frames with `preview_frame`: early hook, middle
    explanation, and closing CTA/summary. Include subtitle readability in the
    check.
-15. Patch if needed, then publish with
-   `write_file({ fromLastRunCode: true, name: "explainer-video-..." })`.
+19. Materialize the MP4 with `materialize_media`. Run technical, visual, audio,
+   and runtime-promise review against the actual MP4, then persist `review`.
+20. Only when review status is `pass`, publish the editable composition and MP4,
+   persist `delivery`, and report completion. A failed Studio Run artifact write
+   is a blocker, not a warning.
 
 ## Audio And Sound Design Contract
 
@@ -282,3 +296,8 @@ Before saying it is done:
 - Generated images/videos/stickers were used only when they made the
   explanation clearer or more memorable.
 - The final reply states what was created and where to view it, concisely.
+- A Studio Run exists with schema-valid artifacts for all eight stages.
+- The Studio Run reaches `completed`; no stage remains invalidated, pending, or
+  awaiting approval.
+- The final review references the actual materialized MP4 and cannot pass while
+  technical, visual, audio, or runtime-promise checks fail.

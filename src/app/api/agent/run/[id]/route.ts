@@ -128,7 +128,7 @@ export async function GET(
       .from('agent_events')
       .select('type, data, seq, created_at')
       .eq('run_id', runId)
-      .in('type', ['image', 'render', 'animation_task', 'video_snapshot', 'music_task', 'content', 'error'])
+      .in('type', ['image', 'render', 'animation_task', 'video_snapshot', 'music_task', 'studio_run', 'content', 'error'])
       .order('seq');
 
     // Build output[] — unified typed artifact array
@@ -210,6 +210,22 @@ export async function GET(
           created_at: e.created_at,
         });
         legacyMusic.push({ taskId: e.data.taskId });
+      } else if (e.type === 'studio_run' && e.data?.runId) {
+        output.push({
+          id: `out_${++outputSeq}`,
+          type: 'studio_run',
+          status: e.data.status || 'running',
+          run_id: e.data.runId,
+          title: e.data.title,
+          recipe: e.data.recipe,
+          current_stage: e.data.currentStage,
+          approval_policy: e.data.approvalPolicy,
+          stages: e.data.stages,
+          state_path: e.data.statePath,
+          artifact_path: e.data.artifactPath,
+          invalidated: e.data.invalidated,
+          created_at: e.created_at,
+        });
       } else if (e.type === 'error') {
         errorMsg = e.data?.message;
       }
