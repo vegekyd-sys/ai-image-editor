@@ -111,6 +111,13 @@ describe('agent prompt policy guards', () => {
     expect(agentRoute).toContain('const isNormalMode = !tipsTeaser && !nameProject && !previewsReady && !tipReaction && !analysisOnly')
   })
 
+  it('reconnects text-only CUI projects before the first snapshot exists', () => {
+    const editor = read('src/components/Editor.tsx')
+
+    expect(editor).toContain('enabled: !!projectId && !inactive')
+    expect(editor).not.toContain('enabled: !!projectId && (initialSnapshots?.length ?? 0) > 0')
+  })
+
   it('keeps built-in image skill triggers visible before the image guide is read', () => {
     const agent = read('src/lib/prompts/agent.md')
     const agentTs = read('src/lib/agent.ts')

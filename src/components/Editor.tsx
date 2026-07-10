@@ -17,7 +17,7 @@ import { makeAgentCallbacks } from '@/lib/agentCallbacks';
 // projectEventLogger removed — events only needed for ReplayEngine (not active)
 import { getBabelStatus, subscribeBabelStatus, type BabelStatus } from '@/lib/evalRemotionJSX';
 import { acquireTipsSlot, releaseTipsSlot, generateId, snapFromTimeline, timelineFromSnap, getImageForApi } from '@/lib/editor/timeline-utils';
-import { buildDesignsMap, buildImageTimeline, getNearbyOptimizedPreloadUrls, getPreviousImageForCompare, shouldShowCanvasPlaceholder, VIDEO_PLACEHOLDER_IMAGE } from '@/lib/editor/timeline-derivations';
+import { buildDesignsMap, buildImageTimeline, getInitialEditorViewMode, getNearbyOptimizedPreloadUrls, getPreviousImageForCompare, shouldShowCanvasPlaceholder, VIDEO_PLACEHOLDER_IMAGE } from '@/lib/editor/timeline-derivations';
 import { type AnimationState, type HeroAnim } from '@/lib/editor/types';
 import { resolveContentType, type RendererContext, type ContentType } from '@/lib/editor/renderer-registry';
 
@@ -172,7 +172,13 @@ export default function Editor({
   const [isTipsFetching, setIsTipsFetching] = useState(false);
   const [failedCategories, setFailedCategories] = useState<Set<Tip['category']>>(new Set());
   const [viewIndex, setViewIndex] = useState(0);
-  const [viewMode, setViewMode] = useState<'gui' | 'cui'>('gui');
+  const [viewMode, setViewMode] = useState<'gui' | 'cui'>(() => getInitialEditorViewMode({
+    isDesktop,
+    hasGuiContent: (initialSnapshots?.length ?? 0) > 0
+      || (pendingImages?.length ?? 0) > 0
+      || (pendingVideos?.length ?? 0) > 0
+      || (initialAnimations?.length ?? 0) > 0,
+  }));
   const [cuiPanX, setCuiPanX] = useState(0);
   const [cuiPanActive, setCuiPanActive] = useState(false);
   const [cuiPanSettling, setCuiPanSettling] = useState(false);
@@ -394,7 +400,9 @@ export default function Editor({
   // ── Background Agent reconnection ──────────────────────────────
   const { activeRunId, reconnect: agentReconnect, disconnect: agentDisconnect } = useAgentRun({
     projectId: projectId ?? '',
-    enabled: !!projectId && (initialSnapshots?.length ?? 0) > 0,
+    // Text-only/CLI projects can have an active run before their first snapshot.
+    // Reconnect follows the project run, not whether GUI content already exists.
+    enabled: !!projectId && !inactive,
     skipRunIdRef: agentRunIdRef,
     isActiveRef: isAgentActiveRef,
   });
