@@ -14,6 +14,7 @@ import type { DesignPayload, Tip } from '@/types';
 import * as workspace from './workspace';
 import { buildModelHistoryFromRows, type DbToolHistoryRow } from './agentToolHistory';
 import { formatVideoMediaSpec } from './media-aspect';
+import { loadCompositionDraft } from './composition-draft';
 
 export interface AudioAttachmentContext {
   audioUrl: string;
@@ -49,6 +50,7 @@ export interface PromptContextResult {
   currentSnapshotIndex: number;
   currentDesign?: DesignPayload;
   currentDesignPath?: string;
+  recoverableDesignPath?: string;
   /** Project-scoped audio refs available as audio_1, audio_2, ... (not media_N). */
   audioAttachments: AudioAttachmentContext[];
 }
@@ -141,7 +143,7 @@ export async function buildPromptContext(
   // Query snapshots, visible messages, private tool history, and project audio
   // in parallel. Audio is a separate project-scoped index; it never occupies
   // Timeline Media Index slots like <<<media_N>>>.
-  const [snapshotsRes, messagesRes, toolHistoryRes, musicRes] = await Promise.all([
+  const [snapshotsRes, messagesRes, toolHistoryRes, musicRes, recoverableDraft] = await Promise.all([
     supabase
       .from('snapshots')
       .select('id, image_url, description, type, design_path, tips, sort_order, video_meta, metadata')
@@ -166,6 +168,7 @@ export async function buildPromptContext(
       .in('status', ['completed', 'streaming'])
       .order('track_index', { ascending: true })
       .limit(20),
+    loadCompositionDraft({ projectId, supabase, userId }),
   ]);
 
   const snapshots: DbSnapshot[] = snapshotsRes.data ?? [];
@@ -191,12 +194,23 @@ export async function buildPromptContext(
   // their design_path is only a Remotion playback wrapper, not user-editable code)
   let currentDesign: DesignPayload | undefined;
   const currentSnapIsVideo = currentSnap?.type === 'video';
-  const currentDesignPath = currentSnap?.design_path && !currentSnapIsVideo ? currentSnap.design_path : undefined;
+  let currentDesignPath = currentSnap?.design_path && !currentSnapIsVideo ? currentSnap.design_path : undefined;
   if (currentDesignPath) {
     try {
       const file = await workspace.readFile(currentDesignPath, supabase, userId);
       if (file) currentDesign = JSON.parse(file.content);
     } catch { /* design load failed, continue without */ }
+  }
+
+  // An interrupted patch of the composition currently being viewed is newer
+  // than its published timeline source, so resume from the autosave. For other
+  // selected media, expose only a recovery pointer and keep the timeline source authoritative.
+  if (
+    currentDesignPath &&
+    recoverableDraft?.draft.__makaronDraft.sourceDesignPath === currentDesignPath
+  ) {
+    currentDesign = recoverableDraft.draft;
+    currentDesignPath = recoverableDraft.path;
   }
 
   // --- Build context blocks (same format as Editor.tsx) ---
@@ -278,6 +292,10 @@ export async function buildPromptContext(
       ).join('\n')}\nUser may have edited these values in the GUI. Preserve/merge current props when patching.\n` : ''}\n`
     : '';
 
+  const recoverableDraftContext = recoverableDraft && recoverableDraft.path !== currentDesignPath
+    ? `[Recoverable Composition Draft]\npath: ${recoverableDraft.path}\nsavedAt: ${recoverableDraft.draft.__makaronDraft.savedAt}${recoverableDraft.draft.__makaronDraft.sourceDesignPath ? `\nsource: ${recoverableDraft.draft.__makaronDraft.sourceDesignPath}` : ''}\nThis workspace draft was autosaved by run_code but is not necessarily published to the timeline. Use it when the user asks to continue or recover that composition; otherwise keep the selected Timeline Media authoritative. Pass this exact path as code_path to run_code patch mode, design_path to preview_frame/materialize_media, or read it with read_file.\n\n`
+    : '';
+
   // Frontend-only warnings
   const annotationWarning = hasAnnotation
     ? `[ANNOTATION MODE] The current image has red annotations drawn by the user. You MUST edit THIS image based on the annotations — do NOT use media_index to switch to another snapshot. Call analyze_image first (without media_index) to see the annotations, then generate_image (without media_index) to edit.\n\n`
@@ -315,7 +333,7 @@ export async function buildPromptContext(
     : '';
 
   // Assemble
-  const fullPrompt = `${videoWarning}${designWarning}${annotationWarning}${draftWarning}${snapshotWarning}${metaContext}${descriptionContext}${snapshotIndexContext}${designContext}${tipsContext}${refContext}${frameAnchoredVideoEditContext}${videoUploadContext}${audioAttachmentContext}[User request — detect language and reply in the same language]\n${userMessage}`;
+  const fullPrompt = `${videoWarning}${designWarning}${annotationWarning}${draftWarning}${snapshotWarning}${metaContext}${descriptionContext}${snapshotIndexContext}${designContext}${recoverableDraftContext}${tipsContext}${refContext}${frameAnchoredVideoEditContext}${videoUploadContext}${audioAttachmentContext}[User request — detect language and reply in the same language]\n${userMessage}`;
 
   const snapshotImages = snapshots.map((s) => {
     const videoMeta = s.video_meta as Record<string, unknown> | undefined;
@@ -330,6 +348,7 @@ export async function buildPromptContext(
     currentSnapshotIndex,
     currentDesign,
     currentDesignPath,
+    recoverableDesignPath: recoverableDraft?.path,
     audioAttachments: resolvedAudioAttachments,
   };
 }

@@ -270,3 +270,10 @@ export type StudioRun = z.infer<typeof studioRunSchema>;
 export function validateStudioArtifact(stage: StudioStageId, artifact: unknown): unknown {
   return studioArtifactSchemas[stage].parse(artifact);
 }
+
+export function getStudioArtifactJsonSchema(stage: StudioStageId): Record<string, unknown> {
+  return z.toJSONSchema(studioArtifactSchemas[stage], {
+    target: 'draft-7',
+    unrepresentable: 'any',
+  }) as Record<string, unknown>;
+}

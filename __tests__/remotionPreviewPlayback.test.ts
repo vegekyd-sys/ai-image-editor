@@ -38,14 +38,16 @@ describe('Remotion preview playback contract', () => {
   it('normalizes common agent Remotion scope declarations before evaluating code', () => {
     const evalSource = read('src/lib/evalRemotionJSX.ts')
     const sandboxSource = read('src/remotion/DynamicDesign.tsx')
+    const normalizationSource = read('src/lib/remotion-code-normalization.ts')
 
     expect(evalSource).toContain('(?:window\\.)?Remotion')
     expect(evalSource).toContain('window\\.Remotion\\.')
     expect(evalSource).toContain('Remotion\\.')
 
-    expect(sandboxSource).toContain('(?:window\\.)?Remotion')
-    expect(sandboxSource).toContain('window\\.Remotion\\.')
-    expect(sandboxSource).toContain('Remotion\\.')
+    expect(sandboxSource).toContain('normalizeRemotionScopeDeclarations')
+    expect(normalizationSource).toContain('(?:window\\.)?Remotion')
+    expect(normalizationSource).toContain('window\\.Remotion\\.')
+    expect(normalizationSource).toContain('Remotion\\.')
   })
 
   it('prefers the primary composition instead of the first helper function', () => {

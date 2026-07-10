@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import {
   approveStudioStage,
   createStudioRun,
+  getStudioArtifactJsonSchema,
   parseStudioRun,
   putStudioArtifact,
   type StudioRun,
@@ -205,5 +206,19 @@ describe('Studio Run controller', () => {
     expect(studioArtifactPath('project-1', 'run-1', 'script', 2)).toBe(
       'project-1/studio-runs/run-1/artifacts/script.v2.json',
     );
+  });
+
+  it('publishes machine-readable schemas for every stage', () => {
+    const storyboard = getStudioArtifactJsonSchema('storyboard') as {
+      properties?: { scenes?: { items?: { required?: string[] } } };
+    };
+    expect(storyboard.properties?.scenes?.items?.required).toContain('focalPoint');
+
+    const composition = getStudioArtifactJsonSchema('composition') as {
+      required?: string[];
+    };
+    expect(composition.required).toEqual(expect.arrayContaining([
+      'designPath', 'width', 'height', 'fps', 'durationSeconds', 'previewFramePaths',
+    ]));
   });
 });

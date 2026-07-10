@@ -6,6 +6,10 @@
 
 import { transform as sucraseTransform } from 'sucrase';
 import type { EditableField } from '@/types';
+import {
+  DYNAMIC_DESIGN_SCOPE_NAMES,
+  normalizeRemotionScopeDeclarations,
+} from './remotion-code-normalization';
 
 export interface DesignResult {
   code: string;
@@ -85,10 +89,20 @@ function autoFixVideoTags(code: string): string {
 /** Compile code with Sucrase — syntax check only, no runtime execution */
 function checkCompile(code: string): string | null {
   try {
-    sucraseTransform(code.trim(), {
+    if (/^\s*(?:import|export)\b/m.test(code)) {
+      return '⚠️ Composition compile error: import/export module syntax is not supported. Declare the component directly and try again.';
+    }
+    if (/\brequire\s*\(|\bmodule\.exports\b|\bexports\s*\./.test(code)) {
+      return '⚠️ Composition compile error: require/module.exports syntax is not supported in DynamicDesign. Use the injected Remotion and React names directly.';
+    }
+    const source = normalizeRemotionScopeDeclarations(code);
+    const { code: compiled } = sucraseTransform(source, {
       transforms: ['typescript', 'jsx'],
       jsxRuntime: 'classic',
     });
+    // DynamicDesign evaluates the compiled body with new Function(). Parse it
+    // the same way here so browser-incompatible syntax fails before rendering.
+    new Function(...DYNAMIC_DESIGN_SCOPE_NAMES, `"use strict";\n${compiled}\nreturn undefined;`);
     return null;
   } catch (err) {
     const msg = err instanceof Error ? err.message : String(err);

@@ -104,7 +104,7 @@ For subtitle overlays or transcript-driven editable trims, call `transcribe_audi
 
 `runtime: "design"` is a legacy alias. Internal `design` names are historical and do not mean generic layout/mockup/image tasks should use Remotion.
 
-Composition outputs are drafts until `write_file({ fromLastRunCode: true, name: "..." })` publishes them.
+`run_code` autosaves composition drafts; `write_file` publishes them to the timeline.
 
 Node media outputs are workspace results. To publish exported workspace media later, call `write_file({ fromWorkspaceOutputs: true, mediaType: "video"|"image"|"all", limit: N })`; do not re-run FFmpeg.
 

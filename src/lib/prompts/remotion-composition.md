@@ -75,7 +75,7 @@ return {
 }
 ```
 
-After every meaningful render or patch, save the code with `write_file({ fromLastRunCode: true, name: "slug", publish: false })`. Publish with `write_file({ fromLastRunCode: true, name: "slug" })` when the result is ready for the timeline.
+Every successful render or patch is automatically saved to the recovery `code_path` returned by `run_code`. Use `write_file({ fromLastRunCode: true, name: "slug", publish: false })` only for a named checkpoint. Publish with `write_file({ fromLastRunCode: true, name: "slug" })` when the result is ready for the timeline.
 
 If the change includes transitions, subtitles, overlays, trim timing, cropping, or other visible timeline edits, call `preview_frame` on stable middle frames before telling the user it is complete or publishing it.
 
@@ -85,7 +85,7 @@ When changing trim timing or total sequence length, update `animation.durationIn
 
 Available APIs include all exports from `remotion`, `@remotion/media`, `@remotion/paths`, and `@remotion/noise`.
 
-- Do not import Remotion packages, destructure from `window.Remotion`, or write `Remotion.AbsoluteFill`. All APIs are already in scope. Use `<AbsoluteFill>`, `<Video>`, `<Sequence>`, and hooks directly.
+- Do not import or `require()` Remotion packages, destructure from `window.Remotion`, or write `Remotion.AbsoluteFill`. All APIs are already in scope. Use `<AbsoluteFill>`, `<Video>`, `<Sequence>`, and hooks directly.
 - Name the main exported component `Composition`. Helper components are allowed, but the renderable timeline should be `function Composition(props) { ... }`.
 - Do not use ES module syntax inside the returned composition code. Never write
   `import ...` or `export default ...`. The composition code should define

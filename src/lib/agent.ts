@@ -40,6 +40,7 @@ import { getAgentModelId, isClaudeSonnet5Model } from './bedrock-models';
 import { normalizeAgentErrorMessage } from './agent-error';
 import { describeBedrockToolUseInputIssue, normalizeBedrockToolUseInputs } from './bedrock-tool-inputs';
 import { mergePatchProps } from './patch-props';
+import { persistCompositionDraft } from './composition-draft';
 
 const MAX_VIDEO_DIMENSION_PROBE_BYTES = 220 * 1024 * 1024;
 
@@ -229,6 +230,8 @@ interface AgentContext {
   userSkills?: ParsedSkill[];
   /** Timeline version: 1 = legacy (project_animations), 2 = video-in-timeline (snapshots) */
   timelineVersion?: number;
+  /** Published or autosaved composition used as the source for this turn. */
+  currentDesignPath?: string;
 }
 
 interface AudioAttachment {
@@ -2020,11 +2023,13 @@ Operations:
 - start: create the run before producing the brief.
 - put_artifact: validate and persist the completed stage artifact. Use the exact stage order brief, proposal, script, storyboard, assets, composition, review, delivery.
 - approve: approve a guided/manual stage that is awaiting approval.
-- status: load the current run after a new turn or interrupted session.
+- status: load the current run after a new turn or interrupted session. It returns the JSON Schema for the current stage.
+- schema: return the JSON Schema for a requested stage before authoring its artifact.
+- validate: validate a stage artifact without persisting it.
 - invalidate: deliberately reopen a stage and invalidate only its downstream dependents.
 For approval_policy=auto, gated artifacts are approved automatically and recorded in the decision log. Never claim a stage is complete until put_artifact succeeds.`,
       inputSchema: z.object({
-        operation: z.enum(['start', 'put_artifact', 'approve', 'status', 'invalidate']),
+        operation: z.enum(['start', 'put_artifact', 'approve', 'status', 'invalidate', 'schema', 'validate']),
         run_id: z.string().optional(),
         recipe: z.string().optional(),
         title: z.string().optional(),
@@ -2077,7 +2082,24 @@ For approval_policy=auto, gated artifacts are approved automatically and recorde
               success: true,
               studioRun: studio.summarizeStudioRun(run),
               statePath: studio.studioRunStatePath(run.projectId, run.id),
+              currentStageSchema: run.currentStage ? studio.getStudioArtifactJsonSchema(run.currentStage) : null,
             };
+          }
+          if (operation === 'schema') {
+            const schemaStage = stage || run.currentStage;
+            if (!schemaStage) return { success: false, error: 'schema requires stage when the run is complete' };
+            return {
+              success: true,
+              stage: schemaStage,
+              schema: studio.getStudioArtifactJsonSchema(schemaStage),
+            };
+          }
+          if (operation === 'validate') {
+            const schemaStage = stage || run.currentStage;
+            if (!schemaStage) return { success: false, error: 'validate requires stage when the run is complete' };
+            if (artifact === undefined) return { success: false, error: 'validate requires artifact' };
+            const validated = studio.validateStudioArtifact(schemaStage, artifact);
+            return { success: true, valid: true, stage: schemaStage, artifact: validated };
           }
           if (!stage) return { success: false, error: `${operation} requires stage` };
 
@@ -2267,13 +2289,23 @@ Omit media_index to use the current (last edited) composition.
 Returns the rendered image so you can see it with your vision.`,
       inputSchema: z.object({
         media_index: z.number().optional().describe('1-based snapshot index (<<<media_1>>> = 1). Target a Remotion composition or raw video. Omit to use current composition.'),
+        design_path: z.string().optional().describe('Workspace path of an autosaved or persisted Remotion composition. Use the exact path returned by run_code or shown in Recoverable Composition Draft.'),
         frame: z.number().optional().describe('0-based frame number.'),
         timestamp: z.number().optional().describe('Time in seconds (e.g. 2.5). Converted to frame using fps.'),
         question: z.string().optional().describe('What to focus on when viewing this frame.'),
       }),
-      execute: async ({ media_index, frame, timestamp, question }) => {
+      execute: async ({ media_index, design_path, frame, timestamp, question }) => {
         let design = (ctx as any).__lastDesignPayload;
         let rawVideo: { url: string; duration?: number; fps?: number } | null = null;
+        if (design_path) {
+          try {
+            const file = await workspace.readFile(design_path, ctx.supabase, ctx.userId);
+            if (!file) return { error: `Composition not found: ${design_path}` };
+            design = JSON.parse(file.content);
+          } catch (err) {
+            return { error: `Could not load composition ${design_path}: ${err instanceof Error ? err.message : String(err)}` };
+          }
+        }
         const targetMediaIndex = media_index ?? (!design ? ctx.currentSnapshotIndex + 1 : undefined);
 
         // Load composition payload from a specific snapshot if media_index provided.
@@ -3011,6 +3043,20 @@ Node media runtime provides \`require\`, \`process\`, \`ffmpegPath\`, \`inputFil
             const harnessError = validateDesign({ code: patched.code, props: patched.props });
             if (harnessError) return { type: 'text' as const, content: harnessError };
 
+            if (!ctx.supabase || !ctx.userId) {
+              return { type: 'text' as const, content: 'Patch passed validation but cannot be safely autosaved because workspace access is unavailable.' };
+            }
+            const autosave = await persistCompositionDraft({
+              projectId: ctx.projectId,
+              userId: ctx.userId,
+              supabase: ctx.supabase,
+              design: patched,
+              sourceDesignPath: typeof result.code_path === 'string' ? result.code_path : ctx.currentDesignPath,
+            });
+            if (!autosave.success) {
+              return { type: 'text' as const, content: `Patch passed validation but autosave failed after 3 attempts: ${autosave.error}. Retry run_code before ending the turn.` };
+            }
+
             (ctx as any).__pendingDesign = patched;
             (ctx as any).__pendingDesignPublished = false; // draft — canvas preview only, no snapshot
             (ctx as any).__lastDesignPayload = patched;
@@ -3022,14 +3068,14 @@ Node media runtime provides \`require\`, \`process\`, \`ffmpegPath\`, \`inputFil
             // Update last draft (patch updates existing draft, doesn't create new one)
             const drafts = (ctx as any).__runCodeDrafts;
             if (drafts.length > 0) {
-              drafts[drafts.length - 1] = { type: 'design', payload: patched };
+              drafts[drafts.length - 1] = { type: 'design', payload: patched, codePath: autosave.path };
             } else {
-              drafts.push({ type: 'design', payload: patched });
+              drafts.push({ type: 'design', payload: patched, codePath: autosave.path });
             }
 
             const draftIdx = drafts.length;
             const patchSource = result.code_path ? ` from ${result.code_path}` : '';
-            return { type: 'text' as const, content: `Patched${patchSource} — draft ${draftIdx} updated. Draft is not saved yet: immediately call write_file({ fromLastRunCode: true, name: "slug", publish: false }) to save the editable workspace draft. If this changed trim timing, confirm animation.durationInSeconds matches the final frame count. If this changed transitions, subtitles, overlays, trim timing, cropping, or will be published, call preview_frame before telling the user it is complete. Publish later with write_file({ fromLastRunCode: true, name: "slug" }).` };
+            return { type: 'text' as const, code_path: autosave.path, content: `Patched${patchSource} — draft ${draftIdx} autosaved to ${autosave.path}. If this changed trim timing, confirm animation.durationInSeconds matches the final frame count. If this changed transitions, subtitles, overlays, trim timing, cropping, or will be published, call preview_frame before telling the user it is complete. Use write_file({ fromLastRunCode: true, name: "slug" }) only when publishing a timeline snapshot or creating a named checkpoint.` };
           }
 
           // { type: 'render' (or legacy 'design'), code: '...' } — Store for event loop to emit as SSE
@@ -3078,6 +3124,19 @@ Node media runtime provides \`require\`, \`process\`, \`ffmpegPath\`, \`inputFil
               description: autoDesc,
               ...(result.editables ? { editables: result.editables } : {}),
             };
+            if (!ctx.supabase || !ctx.userId) {
+              return { type: 'text' as const, content: 'Composition passed validation but cannot be safely autosaved because workspace access is unavailable.' };
+            }
+            const autosave = await persistCompositionDraft({
+              projectId: ctx.projectId,
+              userId: ctx.userId,
+              supabase: ctx.supabase,
+              design: designPayload,
+              sourceDesignPath: ctx.currentDesignPath,
+            });
+            if (!autosave.success) {
+              return { type: 'text' as const, content: `Composition passed validation but autosave failed after 3 attempts: ${autosave.error}. Retry run_code before ending the turn.` };
+            }
             (ctx as any).__pendingDesign = designPayload;
             (ctx as any).__pendingDesignPublished = false; // draft — canvas preview only, no snapshot
             (ctx as any).__lastDesignPayload = designPayload;
@@ -3088,10 +3147,10 @@ Node media runtime provides \`require\`, \`process\`, \`ffmpegPath\`, \`inputFil
             if (!(ctx as any).__runCodeDrafts) (ctx as any).__runCodeDrafts = [];
 
             // Push new draft (no auto-screenshot — Agent uses preview_frame tool to check)
-            (ctx as any).__runCodeDrafts.push({ type: 'design', payload: designPayload });
+            (ctx as any).__runCodeDrafts.push({ type: 'design', payload: designPayload, codePath: autosave.path });
             const draftIdx = (ctx as any).__runCodeDrafts.length;
 
-            return { type: 'text' as const, content: `Composition ready — draft ${draftIdx}. Draft is not saved yet: immediately call write_file({ fromLastRunCode: true, name: "<descriptive-slug>", publish: false }) to save the editable workspace draft. If this changed trim timing, confirm animation.durationInSeconds matches the final frame count. If this includes transitions, subtitles, overlays, trim timing, cropping, or will be published, call preview_frame before telling the user it is complete. Publish later with write_file({ fromLastRunCode: true, name: "<descriptive-slug>" }).` };
+            return { type: 'text' as const, code_path: autosave.path, content: `Composition ready — draft ${draftIdx} autosaved to ${autosave.path}. If this changed trim timing, confirm animation.durationInSeconds matches the final frame count. If this includes transitions, subtitles, overlays, trim timing, cropping, or will be published, call preview_frame with design_path if the run resumes later. Use write_file({ fromLastRunCode: true, name: "<descriptive-slug>" }) only to publish a timeline snapshot or create a named checkpoint.` };
           }
 
           // Helper: handle sharp image result — auto-sends to frontend (no draft/publish needed)
@@ -3489,6 +3548,7 @@ export async function* runMakaronAgent(
     supabase: options?.supabase,
     userId: options?.userId,
     timelineVersion: options?.timelineVersion,
+    currentDesignPath: options?.currentDesignPath,
   };
 
   const allTools = createTools(ctx);
@@ -3503,7 +3563,11 @@ export async function* runMakaronAgent(
   const analysisOnly = options?.analysisOnly ?? false;
   const isVideoAnalysis = options?.isVideoAnalysis ?? false;
   const tipReactionOnly = options?.tipReactionOnly ?? false;
-  const maxSteps = analysisOnly ? 2 : tipReactionOnly ? 1 : 30;
+  const configuredMaxSteps = Number.parseInt(process.env.AGENT_MAX_STEPS || '', 10);
+  const normalMaxSteps = Number.isFinite(configuredMaxSteps)
+    ? Math.min(120, Math.max(30, configuredMaxSteps))
+    : 60;
+  const maxSteps = analysisOnly ? 2 : tipReactionOnly ? 1 : normalMaxSteps;
   const videoMediaIndex = isVideoAnalysis ? (options?.currentSnapshotIndex ?? 0) + 1 : 0;
   const analysisPrompt = withLocale(
     isVideoAnalysis ? ANALYSIS_PROMPT_VIDEO_TEMPLATE(videoMediaIndex)

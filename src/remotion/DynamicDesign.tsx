@@ -10,6 +10,7 @@ import * as RemotionPaths from '@remotion/paths';
 import * as RemotionNoise from '@remotion/noise';
 import { getAvailableFonts } from '@remotion/google-fonts';
 import { transform as sucraseTransform } from 'sucrase';
+import { normalizeRemotionScopeDeclarations } from '@/lib/remotion-code-normalization';
 
 const { Sequence, useVideoConfig, delayRender, continueRender } = Remotion;
 
@@ -39,16 +40,6 @@ function createRemotionScope(useOffthreadVideo: boolean, useNativeVideo: boolean
   delete scope.default;
   delete scope.__esModule;
   return scope;
-}
-
-function normalizeRemotionScopeDeclarations(code: string): string {
-  return code
-    .trim()
-    .replace(/^\s*(?:const|let|var)\s*\{[^}]*\}\s*=\s*(?:window\.)?Remotion\s*;?\s*$/gm, '')
-    .replace(/^\s*(?:const|let|var)\s+Remotion\s*=\s*window\.Remotion\s*;?\s*$/gm, '')
-    .replace(/\bwindow\.Remotion\./g, '')
-    .replace(/\bRemotion\./g, '')
-    .trim();
 }
 
 function pickRemotionComponentName(code: string): string {
