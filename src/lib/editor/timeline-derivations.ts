@@ -5,6 +5,16 @@ import { snapFromTimeline } from './timeline-utils';
 export const VIDEO_TIMELINE_SENTINEL = '__VIDEO__';
 export const VIDEO_PLACEHOLDER_IMAGE = '/video-placeholder.png';
 
+export function getInitialEditorViewMode({
+  isDesktop,
+  hasGuiContent,
+}: {
+  isDesktop: boolean;
+  hasGuiContent: boolean;
+}): 'gui' | 'cui' {
+  return !isDesktop && !hasGuiContent ? 'cui' : 'gui';
+}
+
 export function getSnapshotTimelineImage(
   snapshot: Snapshot | undefined,
   snapshotIndex: number,
