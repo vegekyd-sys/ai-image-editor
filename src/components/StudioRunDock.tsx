@@ -240,7 +240,9 @@ function ArtifactDetail({ stageId, artifact }: { stageId: string; artifact: unkn
     <div>
       <DetailRow label="成片">{text(artifact.outputPath)}</DetailRow>
       <DetailRow label="可编辑源">{text(artifact.editableSourcePath)}</DetailRow>
-      <DetailRow label="校验值">{text(artifact.sha256)}</DetailRow>
+      {typeof artifact.sha256 === 'string' && artifact.sha256 ? (
+        <DetailRow label="校验值">{artifact.sha256}</DetailRow>
+      ) : null}
       <DetailRow label="交付时间">{text(artifact.deliveredAt)}</DetailRow>
     </div>
   );

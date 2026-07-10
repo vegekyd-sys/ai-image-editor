@@ -212,6 +212,8 @@ describe('Studio Run controller', () => {
     const storyboard = getStudioArtifactJsonSchema('storyboard') as {
       properties?: { scenes?: { items?: { required?: string[] } } };
     };
+    expect('~standard' in storyboard).toBe(false);
+    expect(Object.getPrototypeOf(storyboard)).toBe(Object.prototype);
     expect(storyboard.properties?.scenes?.items?.required).toContain('focalPoint');
 
     const composition = getStudioArtifactJsonSchema('composition') as {
@@ -220,5 +222,26 @@ describe('Studio Run controller', () => {
     expect(composition.required).toEqual(expect.arrayContaining([
       'designPath', 'width', 'height', 'fps', 'durationSeconds', 'previewFramePaths',
     ]));
+
+    const delivery = getStudioArtifactJsonSchema('delivery') as {
+      required?: string[];
+    };
+    expect(delivery.required).not.toContain('sha256');
+  });
+
+  it('allows delivery without computing an output SHA', () => {
+    let run = makeRun('auto');
+    for (const stage of ['brief', 'proposal', 'script', 'storyboard', 'assets', 'composition', 'review'] as StudioStageId[]) {
+      run = put(run, stage).run;
+    }
+    const { sha256: _sha256, ...deliveryWithoutSha } = artifacts.delivery as Record<string, unknown>;
+    const result = putStudioArtifact({
+      run,
+      stage: 'delivery',
+      artifact: deliveryWithoutSha,
+      artifactPath: 'delivery.json',
+      now,
+    });
+    expect(result.run.status).toBe('completed');
   });
 });

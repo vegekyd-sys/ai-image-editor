@@ -191,7 +191,7 @@ const deliverySchema = z.object({
   version: z.literal('1.0'),
   outputPath: z.string().min(1),
   editableSourcePath: z.string().min(1),
-  sha256: z.string().regex(/^[a-f0-9]{64}$/),
+  sha256: z.string().regex(/^[a-f0-9]{64}$/).optional(),
   deliveredAt: z.string().datetime(),
 });
 
@@ -272,8 +272,12 @@ export function validateStudioArtifact(stage: StudioStageId, artifact: unknown):
 }
 
 export function getStudioArtifactJsonSchema(stage: StudioStageId): Record<string, unknown> {
-  return z.toJSONSchema(studioArtifactSchemas[stage], {
+  const schema = z.toJSONSchema(studioArtifactSchemas[stage], {
     target: 'draft-7',
     unrepresentable: 'any',
-  }) as Record<string, unknown>;
+  });
+
+  // Zod's generated object retains the source schema in its prototype chain.
+  // Tool results must be plain JSON before AI SDK feeds them back to the model.
+  return JSON.parse(JSON.stringify(schema)) as Record<string, unknown>;
 }
