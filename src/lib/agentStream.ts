@@ -1,4 +1,5 @@
 import type { AgentStreamEvent } from './agent';
+import type { AgentModelPreference } from './agent-models';
 
 export type { AgentStreamEvent };
 
@@ -40,6 +41,7 @@ export async function streamAgent(
     previewsReady?: boolean; readyTips?: object[];
     musicReady?: boolean; musicAudioUrl?: string;
     preferredModel?: string;
+    agentModel?: AgentModelPreference;
     videoModel?: string;
     videoResolution?: string;
     videoAuto?: boolean;

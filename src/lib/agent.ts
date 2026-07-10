@@ -37,8 +37,15 @@ import {
 } from '@/lib/remotion-export';
 import { VIDEO_PLACEHOLDER_IMAGE } from '@/lib/editor/timeline-derivations';
 import { getAgentModelId, isClaudeSonnet5Model } from './bedrock-models';
-import { describeBedrockToolUseInputIssue, normalizeBedrockToolUseInputs } from './bedrock-tool-inputs';
+import { describeBedrockToolUseInputIssue } from './bedrock-tool-inputs';
 import { mergePatchProps } from './patch-props';
+import type { AgentModelPreference } from './agent-models';
+import {
+  createAgentModelRuntime,
+  getAgentProviderOptions,
+  sumOpenRouterProviderCost,
+  type AgentModelRuntime,
+} from './agent-model-runtime';
 
 const MAX_VIDEO_DIMENSION_PROBE_BYTES = 220 * 1024 * 1024;
 
@@ -126,7 +133,6 @@ function getAgentModel() {
   });
   return bedrockAnthropic(getAgentModelId());
 }
-const ANTHROPIC_CACHE_CONTROL = { anthropic: { cacheControl: { type: 'ephemeral' } } } as const;
 const ANTHROPIC_REASONING_EFFORTS = new Set(['low', 'medium', 'high', 'xhigh', 'max']);
 const ANTHROPIC_THINKING_MODES = new Set(['adaptive', 'disabled']);
 
@@ -268,7 +274,7 @@ export type AgentStreamEvent =
   | { type: 'render'; code: string; width: number; height: number; props?: Record<string, unknown>; animation?: { fps: number; durationInSeconds: number; format?: string }; editables?: import('@/types').EditableField[]; published?: boolean; previewUrl?: string }  // Agent React design for browser rendering
   | { type: 'design'; code: string; width: number; height: number; props?: Record<string, unknown>; animation?: { fps: number; durationInSeconds: number; format?: string }; editables?: import('@/types').EditableField[]; published?: boolean }  // @deprecated — backward compat alias for 'render'
   | { type: 'music_task'; taskId: string }  // emitted when generate_music tool creates a task — frontend polls
-  | { type: 'usage'; inputTokens: number; outputTokens: number; cacheReadTokens?: number; cacheWriteTokens?: number; model: string }  // token usage for billing (inputTokens = noCache only)
+  | { type: 'usage'; inputTokens: number; outputTokens: number; cacheReadTokens?: number; cacheWriteTokens?: number; providerCostUsd?: number; model: string }  // token usage for billing (inputTokens = noCache only)
   | { type: 'done' }
   | { type: 'error'; message: string };
 
@@ -1290,7 +1296,7 @@ function buildLightweightSystemPrompt(mode: 'analysis' | 'tipReaction', locale?:
 // Tools (Vercel AI SDK style, closure over AgentContext)
 // ---------------------------------------------------------------------------
 
-function createTools(ctx: AgentContext) {
+function createTools(ctx: AgentContext, runtime: AgentModelRuntime, locale?: string) {
   return {
     generate_image: tool({
       description: generateImageToolPrompt,
@@ -1756,10 +1762,33 @@ Hard constraints:
         }
 
         const buf = await fetchImageBuffer(imageSource, { maxBytes: 600_000, maxPx: 1024, quality: 75 });
+        if (!runtime.spec.supportsImageInput) {
+          const { analyzeImageContent } = await import('./gemini');
+          const analysis = await analyzeImageContent(
+            `data:image/jpeg;base64,${buf.toString('base64')}`,
+            question,
+            ctx.userId,
+          );
+          return { analysis, question };
+        }
         return { base64Data: buf.toString('base64'), mimeType: 'image/jpeg', question };
       },
 
       toModelOutput({ output }: { output: any }) {
+        if (output.analysis) {
+          const languageRule = locale === 'en'
+            ? 'Answer the user in English.'
+            : locale === 'zh'
+              ? 'Answer the user in Chinese.'
+              : 'Answer in the same language as the user.';
+          return {
+            type: 'content' as const,
+            value: [{
+              type: 'text' as const,
+              text: `${output.analysis}\n\nUse the analysis above as visual evidence. ${languageRule}`,
+            }],
+          };
+        }
         // No image available — return text-only error
         if (!output.base64Data || output.error) {
           return {
@@ -3268,7 +3297,9 @@ ${formatAudioCapabilitiesForAgent()}`,
     generate_music: tool({
       // Cache point marker — cache all tools preceding this one.
       // Must stay on the LAST tool in this map so the whole tools block is cached.
-      providerOptions: ANTHROPIC_CACHE_CONTROL,
+      ...(runtime.cachePointProviderOptions
+        ? { providerOptions: runtime.cachePointProviderOptions }
+        : {}),
       description: `Generate background music with Seed Audio and return one persisted audio asset. Use this for short-video music beds, soundtrack, score, ambience-driven music, and polished vlog/commercial background tracks. Do not use Suno; all new music generation routes go through Seed Audio.`,
       inputSchema: z.object({
         prompt: z.string().describe('Music description: genre, mood, energy, instruments (no timing, no artist names)'),
@@ -3367,9 +3398,10 @@ export async function* runMakaronAgent(
   currentImage: string,
   projectId: string,
 
-  options?: { analysisOnly?: boolean; analysisContext?: 'initial' | 'post-edit'; isVideoAnalysis?: boolean; tipReactionOnly?: boolean; referenceImages?: string[]; animationImageUrls?: string[]; animationImages?: string[]; locale?: string; preferredModel?: ModelId; videoModel?: string; videoResolution?: import('@/types').VideoResolution; videoAuto?: boolean; audioAttachments?: AudioAttachment[]; snapshotImages?: string[]; currentSnapshotIndex?: number; isNsfw?: boolean; userSkills?: ParsedSkill[]; supabase?: any; userId?: string; currentDesign?: { code: string; width: number; height: number; props?: Record<string, unknown>; animation?: { fps: number; durationInSeconds: number; format?: string } }; currentDesignPath?: string; history?: ModelMessage[]; timelineVersion?: number; perf?: AgentPerf },
+  options?: { analysisOnly?: boolean; analysisContext?: 'initial' | 'post-edit'; isVideoAnalysis?: boolean; tipReactionOnly?: boolean; referenceImages?: string[]; animationImageUrls?: string[]; animationImages?: string[]; locale?: string; preferredModel?: ModelId; agentModel?: AgentModelPreference; videoModel?: string; videoResolution?: import('@/types').VideoResolution; videoAuto?: boolean; audioAttachments?: AudioAttachment[]; snapshotImages?: string[]; currentSnapshotIndex?: number; isNsfw?: boolean; userSkills?: ParsedSkill[]; supabase?: any; userId?: string; currentDesign?: { code: string; width: number; height: number; props?: Record<string, unknown>; animation?: { fps: number; durationInSeconds: number; format?: string } }; currentDesignPath?: string; history?: ModelMessage[]; timelineVersion?: number; perf?: AgentPerf },
 ): AsyncGenerator<AgentStreamEvent> {
   const perf = options?.perf;
+  const runtime = createAgentModelRuntime(options?.agentModel, projectId);
   const ctx: AgentContext = {
     currentImage,
     referenceImages: options?.referenceImages,
@@ -3390,7 +3422,7 @@ export async function* runMakaronAgent(
     timelineVersion: options?.timelineVersion,
   };
 
-  const allTools = createTools(ctx);
+  const allTools = createTools(ctx, runtime, options?.locale);
   perf?.mark('agent_tools_created', { toolCount: Object.keys(allTools).length });
   let imagesSent = 0;
   let stepCount = 0;
@@ -3422,7 +3454,7 @@ export async function* runMakaronAgent(
   const animImages = options?.animationImages;
 
   let userContent: any;
-  if (animImages?.length && !analysisOnly && !tipReactionOnly) {
+  if (animImages?.length && runtime.spec.supportsImageInput && !analysisOnly && !tipReactionOnly) {
     // Multi-image user message: text + all snapshot images
     userContent = [
       { type: 'text' as const, text: prompt },
@@ -3440,7 +3472,10 @@ export async function* runMakaronAgent(
     const designInjection = options?.currentDesignPath && !promptHasCompositionPointer
       ? `[Current composition pointer]\npath: ${options.currentDesignPath}${options.currentDesign ? `\nwidth: ${options.currentDesign.width}\nheight: ${options.currentDesign.height}${options.currentDesign.animation ? `\nanimation: ${options.currentDesign.animation.durationInSeconds}s @ ${options.currentDesign.animation.fps}fps` : ''}` : ''}\nTo modify this existing composition, call run_code with a JS return value like { type: 'patch', code_path: '${options.currentDesignPath}', edits: [...] } or { type: 'patch', code_path: '${options.currentDesignPath}', props: {...} } and runtime: "composition". Use props-only patches for text/data changes. Do not render from scratch unless the user asks for a new composition.\n\n`
       : '';
-    userContent = analysisOnly ? analysisPrompt : (designInjection + prompt);
+    const textOnlyVisionNote = animImages?.length && !runtime.spec.supportsImageInput
+      ? '\n\n[Selected Agent model is text-only. Use analyze_image on the relevant Media Index entries before making image-dependent decisions.]'
+      : '';
+    userContent = analysisOnly ? analysisPrompt : (designInjection + prompt + textOnlyVisionNote);
   }
 
   // Build system prompt. Lightweight modes must stay small: they power
@@ -3451,9 +3486,12 @@ export async function* runMakaronAgent(
     userSkills: options?.userSkills?.length ?? 0,
     mode: tipReactionOnly ? 'tipReaction' : analysisOnly ? 'analysis' : 'normal',
   });
-  const systemPrompt = (analysisOnly || tipReactionOnly)
+  const baseSystemPrompt = (analysisOnly || tipReactionOnly)
     ? buildLightweightSystemPrompt(analysisOnly ? 'analysis' : 'tipReaction', options?.locale)
     : await buildSystemPrompt(options?.userSkills, options?.supabase, options?.userId, projectId);
+  const systemPrompt = runtime.spec.provider === 'deepseek' && options?.locale
+    ? `${baseSystemPrompt}\n\nCRITICAL OUTPUT LANGUAGE: ${options.locale === 'en' ? 'ENGLISH ONLY' : 'CHINESE ONLY'}. This rule still applies after every tool result.`
+    : baseSystemPrompt;
   endSystemPrompt?.({ systemChars: systemPrompt.length });
 
   // Observability — per-request summary
@@ -3481,6 +3519,8 @@ export async function* runMakaronAgent(
     userImages: userImagesCount,
     historyTurns: history.length,
     mode: tipReactionOnly ? 'tipReaction' : analysisOnly ? 'analysis' : 'normal',
+    agentModel: runtime.spec.id,
+    provider: runtime.spec.provider,
   });
 
   // Optional full-request dump for offline diffing
@@ -3514,12 +3554,12 @@ export async function* runMakaronAgent(
   // cache point; otherwise expensive tool results sit outside cached prefix.
   // Only worth the cacheWrite cost when the conversation has real history
   // (≥ 2 prior turns including at least one model/tool response). Short sessions skip.
-  const msgs: Array<ModelMessage & { providerOptions?: Record<string, unknown> }> =
+  const msgs: Array<ModelMessage & { providerOptions?: Record<string, any> }> =
     [...history, { role: 'user', content: userContent } as ModelMessage];
-  if (history.length >= 2) {
+  if (runtime.cachePointProviderOptions && history.length >= 2) {
     for (let i = msgs.length - 2; i >= 0; i--) {
       if (msgs[i].role === 'assistant' || msgs[i].role === 'tool') {
-        msgs[i].providerOptions = ANTHROPIC_CACHE_CONTROL;
+        msgs[i].providerOptions = runtime.cachePointProviderOptions;
         break;
       }
     }
@@ -3528,29 +3568,33 @@ export async function* runMakaronAgent(
   try {
 
     const endStreamInit = perf?.span('model_stream_init', { projectId });
-    const agentModelId = getAgentModelId();
+    const agentModelId = runtime.spec.providerModelId;
     const thinkingMode = getAnthropicThinkingMode();
     const reasoningEffort = getAnthropicReasoningEffort();
     const result = (streamText as any)({
-      model: getAgentModel(),
-      system: [{ role: 'system', content: systemPrompt, providerOptions: ANTHROPIC_CACHE_CONTROL }],
+      model: runtime.model,
+      system: [{
+        role: 'system',
+        content: systemPrompt,
+        ...(runtime.cachePointProviderOptions
+          ? { providerOptions: runtime.cachePointProviderOptions }
+          : {}),
+      }],
       messages: msgs,
       ...(tools ? { tools } : {}),
       ...(analysisOnly && tools ? { activeTools: [isVideoAnalysis ? 'analyze_video' : 'analyze_image'] } : {}),
       stopWhen: stepCountIs(maxSteps),
       prepareStep: ({ messages }: { messages: ModelMessage[] }) => ({
-        messages: normalizeBedrockToolUseInputs(messages),
+        messages: runtime.normalizeMessages(messages),
       }),
       onStepFinish: () => { stepCount++; },
-      providerOptions: {
-        anthropic: {
-          disableParallelToolUse: true,
-          toolStreaming: false,
-          ...(thinkingMode ? { thinking: { type: thinkingMode } } : {}),
-          ...(thinkingMode !== 'disabled' && reasoningEffort ? { effort: reasoningEffort } : {}),
-          contextManagement: getAnthropicContextManagement(agentModelId),
-        },
-      },
+      providerOptions: getAgentProviderOptions(runtime, {
+        anthropicThinkingMode: thinkingMode,
+        reasoningEffort,
+        anthropicContextManagement: runtime.spec.provider === 'bedrock-anthropic'
+          ? getAnthropicContextManagement(agentModelId)
+          : undefined,
+      }),
     });
     endStreamInit?.();
 
@@ -3900,7 +3944,7 @@ export async function* runMakaronAgent(
     try {
       const usage = await result.totalUsage;
       if (usage) {
-        const modelId = getAgentModelId();
+        const modelId = runtime.spec.billingModelId;
         // Vercel AI SDK v6 semantics (VERIFIED from official source):
         //   - `usage.inputTokens` = TOTAL (noCache + cacheRead + cacheWrite)
         //     See ai/src/types/usage.ts asLanguageModelUsage — `inputTokens: usage.inputTokens.total`
@@ -3915,18 +3959,21 @@ export async function* runMakaronAgent(
         const noCache = d?.noCacheTokens ?? Math.max(0, (u.inputTokens ?? 0) - cacheRead - cacheWrite);
         const totalInput = u.inputTokens ?? (noCache + cacheRead + cacheWrite);
         const hitRate = totalInput > 0 ? ((cacheRead / totalInput) * 100).toFixed(1) : '0';
+        const providerCostUsd = sumOpenRouterProviderCost(runtime, await result.steps);
         console.log(
-          `[agent-usage] totalInput=${totalInput} (noCache=${noCache} cacheRead=${cacheRead} cacheWrite=${cacheWrite}) output=${u.outputTokens ?? 0} hitRate=${hitRate}% model=${modelId}`
+          `[agent-usage] totalInput=${totalInput} (noCache=${noCache} cacheRead=${cacheRead} cacheWrite=${cacheWrite}) output=${u.outputTokens ?? 0} hitRate=${hitRate}% model=${modelId} provider=${runtime.spec.provider}${providerCostUsd != null ? ` providerCostUsd=${providerCostUsd.toFixed(6)}` : ''}`
         );
         // Emit noCache as `inputTokens` so consumers billing with the legacy 2-arg signature
         // (tokensToCredits) no longer overcharge by billing cache at base rate.
-        yield { type: 'usage', inputTokens: noCache, outputTokens: u.outputTokens ?? 0, cacheReadTokens: cacheRead, cacheWriteTokens: cacheWrite, model: modelId };
+        yield { type: 'usage', inputTokens: noCache, outputTokens: u.outputTokens ?? 0, cacheReadTokens: cacheRead, cacheWriteTokens: cacheWrite, providerCostUsd, model: modelId };
       }
     } catch { /* best effort — don't fail the stream if usage unavailable */ }
 
     yield { type: 'done' };
   } catch (err) {
-    const bedrockToolInputIssue = describeBedrockToolUseInputIssue(err);
+    const bedrockToolInputIssue = runtime.spec.provider === 'bedrock-anthropic'
+      ? describeBedrockToolUseInputIssue(err)
+      : null;
     if (bedrockToolInputIssue) {
       console.error(`[agent] Bedrock toolUse input issue: ${bedrockToolInputIssue}`);
     }

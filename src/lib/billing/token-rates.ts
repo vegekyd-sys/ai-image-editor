@@ -25,12 +25,62 @@ const CREDIT_VALUE = 0.01
 
 const DEFAULT_TOKEN_RATES: TokenRate[] = [
   {
+    model_id: 'anthropic.claude-sonnet-4-6',
+    display_name: 'Claude Sonnet 4.6',
+    input_per_1m: 3.00,
+    output_per_1m: 15.00,
+    cache_read_per_1m: 0.30,
+    cache_write_per_1m: 3.75,
+    markup: 2.0,
+    is_active: true,
+  },
+  {
     model_id: 'anthropic.claude-sonnet-5',
     display_name: 'Claude Sonnet 5',
     input_per_1m: 2.00,
     output_per_1m: 10.00,
     cache_read_per_1m: 0.20,
     cache_write_per_1m: 2.50,
+    markup: 2.0,
+    is_active: true,
+  },
+  {
+    model_id: 'anthropic.claude-opus-4-8',
+    display_name: 'Claude Opus 4.8',
+    input_per_1m: 5.00,
+    output_per_1m: 25.00,
+    cache_read_per_1m: 0.50,
+    cache_write_per_1m: 6.25,
+    markup: 2.0,
+    is_active: true,
+  },
+  {
+    model_id: 'x-ai/grok-4.5',
+    display_name: 'Grok 4.5',
+    input_per_1m: 2.00,
+    output_per_1m: 6.00,
+    cache_read_per_1m: 0.50,
+    cache_write_per_1m: 0,
+    markup: 2.0,
+    is_active: true,
+  },
+  {
+    model_id: 'deepseek/deepseek-v4-pro',
+    display_name: 'DeepSeek V4 Pro',
+    input_per_1m: 0.435,
+    output_per_1m: 0.87,
+    cache_read_per_1m: 0.003625,
+    cache_write_per_1m: 0,
+    markup: 2.0,
+    is_active: true,
+  },
+  {
+    model_id: 'gemini-3-flash-preview',
+    display_name: 'Gemini 3 Flash Preview',
+    input_per_1m: 0.50,
+    output_per_1m: 3.00,
+    cache_read_per_1m: 0.05,
+    cache_write_per_1m: 0.50,
     markup: 2.0,
     is_active: true,
   },
@@ -120,4 +170,9 @@ export function tokensToCredits(
     cacheWrite: 0,
     output: outputTokens,
   })
+}
+
+export function providerCostToCredits(providerCostUsd: number, markup: number): number {
+  if (!Number.isFinite(providerCostUsd) || providerCostUsd <= 0) return 0
+  return Math.ceil(providerCostUsd * markup / CREDIT_VALUE)
 }

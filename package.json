@@ -36,6 +36,7 @@
   },
   "dependencies": {
     "@ai-sdk/amazon-bedrock": "^5.0.12",
+    "@ai-sdk/openai": "^4.0.8",
     "@apple/app-store-server-library": "^3.1.0",
     "@aws-crypto/crc32c": "^5.2.0",
     "@aws-sdk/client-lambda": "^3.986.0",
@@ -52,6 +53,7 @@
     "@google/genai": "^1.40.0",
     "@huggingface/inference": "^4.13.14",
     "@modelcontextprotocol/sdk": "^1.27.1",
+    "@openrouter/ai-sdk-provider": "^3.0.0",
     "@react-three/drei": "^10.7.7",
     "@react-three/fiber": "^9.5.0",
     "@remotion/bundler": "4.0.446",
