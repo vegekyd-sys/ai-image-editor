@@ -10,6 +10,11 @@ interface ChangelogEntry {
 
 const CHANGELOG: ChangelogEntry[] = [
   {
+    date: '2026-07-10',
+    en: { title: 'Native SeeDance Text-to-Video', items: ['Makaron can now generate SeeDance videos directly from text without creating an intermediate reference image first.'] },
+    zh: { title: 'SeeDance 原生文生视频', items: ['Makaron 现在可以直接用文字生成 SeeDance 视频，不再需要先生成一张中间参考图。'] },
+  },
+  {
     date: '2026-07-07',
     en: { title: 'Video Director for Remotion', items: [
       'Remotion compositions now use a shared director contract for story, pacing, scenes, transitions, and review instead of web-style design references.',
