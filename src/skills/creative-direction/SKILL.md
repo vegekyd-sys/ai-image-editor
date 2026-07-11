@@ -159,3 +159,21 @@ render settings identical. Change only `creativeMode`. Score both versions 1-5:
 
 Prefer the directed version only when the contact sheet and final MP4 show a
 visible improvement. The existence of a treatment is not evidence by itself.
+
+## Timing Every Test
+
+Every sample, A/B variant, and revision round must be timed. Record the CLI
+run ID and wall-clock start before execution. Report cumulative seconds for:
+
+- audio/assets ready, when applicable;
+- planning artifacts complete;
+- first valid composition;
+- first and final contact sheet;
+- export queued and MP4 actually ready;
+- Agent response complete and Studio Delivery complete.
+
+Also report composition source characters, revision count, preview count, and
+export count. Distinguish model/tool time from asynchronous export queue and
+render time. Never claim a speed improvement from fewer steps or shorter code
+alone. Compare the same milestone against the previous controlled run. A test
+without timing evidence is incomplete.

@@ -122,3 +122,28 @@ The storytelling regression is fixed. Visual craft is not yet finished: the
 final contact sheet remains dark and uses too little of the canvas. The next
 iteration should focus on framing scale, richer materials, and stronger focal
 hierarchy without reopening the narrative contract.
+
+### V4 Timing Ledger
+
+Agent run: `02904379-27a5-49b1-886b-bec43f526cc9`
+
+| Milestone | Elapsed |
+| --- | ---: |
+| Music ready | 178.9s |
+| Voiceover ready | 205.5s |
+| Planning and assets persisted | 293.0s |
+| First valid composition | 450.9s |
+| First contact sheet | 467.7s |
+| Revised composition | 574.6s |
+| Final contact sheet | 592.0s |
+| Published editable composition | 605.5s |
+| Export queued | 611.6s |
+| Agent response complete | 670.1s wall clock |
+| MP4 actually ready | 708.2s wall clock |
+| Studio Delivery complete | 775.7s wall clock |
+
+The Lambda render itself took 35.1 seconds; queue delay and the separate
+Delivery-finalization turn account for the gap after the Agent response. V4
+used two previews and one justified composition revision, then one publish and
+one export. This is a quality recovery run, not a speed win: audio generation
+and the richer 9,168-character composition made it slower than V3.

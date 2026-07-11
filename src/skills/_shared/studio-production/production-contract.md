@@ -85,3 +85,13 @@ work the same across video types.
 - Do not add another preview after one clean hook/body/end contact sheet.
 - Probe source/output media once. Reuse that result for review and delivery.
 - Do not compute SHA unless the user explicitly requests an integrity checksum.
+
+## Test Timing
+
+For every Studio Run used as a sample or acceptance test, retain its Agent run
+ID and report elapsed milestones from the event log. Separate Agent completion,
+MP4-ready time, and Delivery completion; asynchronous export may make them
+different. Include planning, asset/audio generation, first composition, visual
+review/revision, export, total wall time, and counts for revisions, previews,
+and exports. Do not report an aesthetic comparison without its production-time
+comparison.

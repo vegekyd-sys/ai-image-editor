@@ -72,6 +72,9 @@ describe('Studio production skills', () => {
     expect(motion).toContain('does not mean "no audio"');
     expect(motion).toContain('Theme-fit visuals do not replace storytelling');
     expect(creative).toContain('A/B Review');
+    expect(creative).toContain('Timing Every Test');
+    expect(creative).toContain('without timing evidence is incomplete');
+    expect(production).toContain('Separate Agent completion');
     expect(creative).toContain('6500 source');
     expect(audio).toContain('Treat audio as part of the edit');
     expect(review).toContain('Materialize the MP4');
