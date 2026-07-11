@@ -562,10 +562,18 @@ export function makeAgentCallbacks(ctx: AgentCallbackContext) {
       if (currentMsgId) {
         const id = currentMsgId;
         ctx.setMessages(prev => prev.map(m =>
-          m.id === id ? { ...m, content: m.content || ctx.t('editor.errorRetry') } : m,
+          m.id === id ? { ...m, content: m.content || msg || ctx.t('editor.errorRetry') } : m,
         ));
       }
       ctx.onCleanup?.();
+    },
+
+    onDisconnect: (runId) => {
+      console.warn(`[agent] SSE disconnected for run ${runId}; switching to persisted event replay`);
+      // Let useAgentRun's watcher discover this still-running DB row. Keeping
+      // the id here would make skipRunIdRef suppress the reconnect forever.
+      if (ctx.agentRunIdRef.current === runId) ctx.agentRunIdRef.current = null;
+      setStatus(ctx.t('editor.reconnecting'));
     },
 
     onInsufficientCredits: (balance) => {

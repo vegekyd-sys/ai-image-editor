@@ -6,6 +6,12 @@ import { AgentDualWriter } from '@/lib/agentDualWriter';
 import { buildPromptContext } from '@/lib/agent-context';
 import { requireCredits, deductByTokens } from '@/lib/billing/credits';
 import { getRequestLocale } from '@/lib/server-locale';
+import { resolvePersistedRunStatus } from '@/lib/agent-terminal';
+import {
+  isAgentModelPreference,
+  resolveAgentModelSpec,
+  type AgentModelPreference,
+} from '@/lib/agent-models';
 
 export const maxDuration = 800;
 
@@ -17,10 +23,13 @@ export const maxDuration = 800;
  * All results are written to DB via DualWriter (no SSE needed).
  */
 export async function POST(req: NextRequest) {
+  let createdRunId: string | undefined;
+  let cleanupSupabase: any;
   try {
     const authResult = await authenticateRequest(req);
     if ('error' in authResult) return authResult.error;
     const { userId, supabase } = authResult.auth;
+    cleanupSupabase = supabase;
 
     const {
       projectId,
@@ -30,6 +39,7 @@ export async function POST(req: NextRequest) {
       isDraft,
       referenceImageCount,
       preferredModel,
+      agentModel,
       isNsfw,
       videoModel,
       videoResolution,
@@ -44,6 +54,12 @@ export async function POST(req: NextRequest) {
       );
     }
 
+    if (agentModel !== undefined && !isAgentModelPreference(agentModel)) {
+      return NextResponse.json({ error: 'Unsupported agentModel' }, { status: 400 });
+    }
+    const requestedAgentModel = agentModel as AgentModelPreference | undefined;
+    const resolvedAgentModel = resolveAgentModelSpec(requestedAgentModel, process.env.AGENT_MODEL);
+
     // Pre-flight credit check
     const creditCheck = await requireCredits(userId, 5);
     if (!creditCheck.ok) return creditCheck.response;
@@ -54,9 +70,9 @@ export async function POST(req: NextRequest) {
     const { data: projectRow } = await supabase.from('projects').select('timeline_version').eq('id', projectId).single();
     const timelineVersion: number = (projectRow as Record<string, unknown>)?.timeline_version as number ?? 1;
 
-    // Mark stale running runs as failed
+    // Supersede any prior run and let its worker observe cancellation.
     await supabase.from('agent_runs')
-      .update({ status: 'failed', ended_at: new Date().toISOString() })
+      .update({ status: 'aborted', ended_at: new Date().toISOString() })
       .eq('project_id', projectId)
       .eq('user_id', userId)
       .eq('status', 'running');
@@ -67,13 +83,22 @@ export async function POST(req: NextRequest) {
       user_id: userId,
       status: 'running',
       prompt: prompt.slice(0, 500),
-      metadata: { locale, preferredModel, isNsfw, headless: true },
+      metadata: {
+        locale,
+        preferredModel,
+        requestedAgentModel: requestedAgentModel ?? 'auto',
+        agentModel: resolvedAgentModel.id,
+        agentProviderModel: resolvedAgentModel.providerModelId,
+        isNsfw,
+        headless: true,
+      },
     }).select('id').single();
 
     const runId = run?.id;
     if (!runId) {
       return NextResponse.json({ error: 'Failed to create run' }, { status: 500 });
     }
+    createdRunId = runId;
 
     // Build context from DB (no frontend needed)
     const ctx = await buildPromptContext(projectId, supabase, userId, {
@@ -83,6 +108,7 @@ export async function POST(req: NextRequest) {
       isDraft,
       referenceImageCount,
       audioAttachments,
+      currentRunId: runId,
     });
 
     // Write user message to DB (frontend does this itself, headless mode must do it here)
@@ -97,10 +123,20 @@ export async function POST(req: NextRequest) {
 
     // DualWriter in headless mode (no SSE controller)
     const writer = new AgentDualWriter(runId, supabase, userId, projectId);
+    await writer.persistHeartbeat();
 
     // Store firstMessageId in run metadata
     await supabase.from('agent_runs').update({
-      metadata: { locale, preferredModel, isNsfw, headless: true, firstMessageId: writer.firstMessageId },
+      metadata: {
+        locale,
+        preferredModel,
+        requestedAgentModel: requestedAgentModel ?? 'auto',
+        agentModel: resolvedAgentModel.id,
+        agentProviderModel: resolvedAgentModel.providerModelId,
+        isNsfw,
+        headless: true,
+        firstMessageId: writer.firstMessageId,
+      },
     }).eq('id', runId);
 
     // Load user skills
@@ -110,23 +146,39 @@ export async function POST(req: NextRequest) {
 
     // Run agent after response is sent — next/server after() keeps the function alive
     after(async () => {
+      const modelAbortController = new AbortController();
+      const heartbeat = setInterval(() => {
+        void writer.persistHeartbeat();
+        void supabase.from('agent_runs').select('status').eq('id', runId).single()
+          .then(({ data }) => {
+            if (data?.status !== 'running' && !modelAbortController.signal.aborted) {
+              modelAbortController.abort('Agent run reached a persisted terminal status');
+            }
+          });
+      }, 10_000);
+      try {
       let abortCheckCount = 0;
-      let streamFailed = false;
-      const isAborted = async () => {
-        if (++abortCheckCount % 10 !== 0) return false;
+      const shouldStop = async (force = false) => {
+        if (!force && ++abortCheckCount % 10 !== 0) return false;
         const { data } = await supabase.from('agent_runs').select('status').eq('id', runId).single();
-        return data?.status === 'aborted';
+        return data?.status !== 'running';
       };
 
       let totalInputTokens = 0;
       let totalOutputTokens = 0;
       let totalCacheReadTokens = 0;
       let totalCacheWriteTokens = 0;
+      let providerCostUsd: number | undefined;
       let agentModel = '';
+      let sawDone = false;
+      let sawError = false;
+      let wasStopped = false;
+      let terminalError: Extract<import('@/lib/agent').AgentStreamEvent, { type: 'error' }> | null = null;
       try {
         for await (const event of runMakaronAgent(ctx.fullPrompt, ctx.snapshotImages[ctx.currentSnapshotIndex] || '', projectId, {
           locale,
           preferredModel,
+          agentModel: requestedAgentModel,
           videoModel,
           videoResolution,
           videoAuto,
@@ -141,29 +193,82 @@ export async function POST(req: NextRequest) {
           currentDesignPath: ctx.currentDesignPath,
           history: ctx.history,
           timelineVersion,
+          abortSignal: modelAbortController.signal,
         })) {
-          if (event.type === 'error') streamFailed = true;
+          if (event.type === 'done') sawDone = true;
+          if (event.type === 'error') {
+            sawError = true;
+            terminalError = event;
+          }
           if (event.type === 'usage') {
             totalInputTokens += event.inputTokens ?? 0;
             totalOutputTokens += event.outputTokens ?? 0;
             totalCacheReadTokens += event.cacheReadTokens ?? 0;
             totalCacheWriteTokens += event.cacheWriteTokens ?? 0;
+            providerCostUsd = event.providerCostUsd;
             if (event.model) agentModel = event.model;
           }
           await writer.processAndEnqueue(event);
-          if (await isAborted()) {
-            console.log(`[agent/run] Run ${runId} aborted`);
+          if (await shouldStop()) {
+            console.log(`[agent/run] Run ${runId} stopped by persisted terminal status`);
+            wasStopped = true;
             break;
           }
         }
       } catch (err) {
         const msg = err instanceof Error ? err.message : String(err);
         console.error(`[agent/run] Run ${runId} error:`, msg);
-        await writer.processAndEnqueue({ type: 'error', message: msg });
+        const fallbackTerminal = terminalError ?? {
+          type: 'error' as const,
+          code: 'agent_stream_error',
+          recoverable: false,
+          message: msg,
+        };
+        try {
+          await writer.processAndEnqueue(fallbackTerminal);
+        } catch (persistError) {
+          console.error(`[agent/run] Run ${runId} terminal error persistence failed:`, persistError);
+        }
+        if (totalInputTokens > 0 || totalOutputTokens > 0 || totalCacheReadTokens > 0 || totalCacheWriteTokens > 0) {
+          deductByTokens(
+            userId, 'agent', agentModel || 'unknown',
+            totalInputTokens, totalOutputTokens,
+            undefined, undefined,
+            { cacheRead: totalCacheReadTokens, cacheWrite: totalCacheWriteTokens },
+            providerCostUsd,
+          ).catch(e => console.error('[agent/run] billing error:', e));
+        }
+        const { data: failedRun } = await supabase.from('agent_runs')
+          .select('metadata').eq('id', runId).single();
         await supabase.from('agent_runs').update({
-          status: 'failed', ended_at: new Date().toISOString(),
-        }).eq('id', runId);
+          status: 'failed',
+          ended_at: new Date().toISOString(),
+          metadata: {
+            ...((failedRun?.metadata as Record<string, unknown> | null) ?? {}),
+            terminal: {
+              code: fallbackTerminal.code,
+              recoverable: fallbackTerminal.recoverable === true,
+              checkpoint: fallbackTerminal.checkpoint,
+              message: fallbackTerminal.message,
+            },
+          },
+        }).eq('id', runId).eq('status', 'running');
         return;
+      }
+
+      if (!sawDone && !sawError && await shouldStop(true)) wasStopped = true;
+
+      if (!sawDone && !sawError && !wasStopped) {
+        terminalError = {
+          type: 'error',
+          code: 'missing_terminal_event',
+          recoverable: true,
+          message: locale === 'en'
+            ? 'The agent connection ended without a completed result. Your saved work is preserved; send “continue” to resume.'
+            : 'Agent 在没有完成结果时结束了。已保存的工作会保留，发送“继续”即可恢复。',
+        };
+        sawError = true;
+        await writer.processAndEnqueue(terminalError);
       }
 
       await writer.flush();
@@ -174,18 +279,36 @@ export async function POST(req: NextRequest) {
           totalInputTokens, totalOutputTokens,
           undefined, undefined,
           { cacheRead: totalCacheReadTokens, cacheWrite: totalCacheWriteTokens },
+          providerCostUsd,
         ).catch(e => console.error('[agent/run] billing error:', e));
       }
       const { data: finalRun } = await supabase.from('agent_runs')
-        .select('status').eq('id', runId).single();
+        .select('status, metadata').eq('id', runId).single();
       if (finalRun?.status === 'running') {
+        const terminalStatus = resolvePersistedRunStatus({
+          currentStatus: finalRun.status,
+          sawDone,
+          sawError,
+        });
         await supabase.from('agent_runs').update({
-          status: streamFailed ? 'failed' : 'completed', ended_at: new Date().toISOString(),
-        }).eq('id', runId);
+          status: terminalStatus,
+          ended_at: new Date().toISOString(),
+          ...(terminalError ? {
+            metadata: {
+              ...((finalRun.metadata as Record<string, unknown> | null) ?? {}),
+              terminal: {
+                code: terminalError.code,
+                recoverable: terminalError.recoverable === true,
+                checkpoint: terminalError.checkpoint,
+                message: terminalError.message,
+              },
+            },
+          } : {}),
+        }).eq('id', runId).eq('status', 'running');
       }
 
-      // Auto-name project if still Untitled
-      try {
+      // Auto-name only after an actually completed agent run.
+      if (sawDone && !sawError && !wasStopped) try {
         const { data: proj } = await supabase.from('projects').select('title').eq('id', projectId).single();
         if (proj && (!proj.title || proj.title === 'Untitled' || proj.title === '未命名' || proj.title === '未命名项目')) {
           const nameSource = prompt.slice(0, 200);
@@ -195,7 +318,9 @@ export async function POST(req: NextRequest) {
               locale,
             );
             let projectName = '';
-            for await (const ev of runMakaronAgent(namePrompt, '', projectId, { tipReactionOnly: true, locale })) {
+            for await (const ev of runMakaronAgent(namePrompt, '', projectId, {
+              tipReactionOnly: true, locale, agentModel: requestedAgentModel,
+            })) {
               if (ev.type === 'content' && ev.text) projectName += ev.text;
             }
             projectName = projectName.trim().replace(/^["']|["']$/g, '');
@@ -208,13 +333,24 @@ export async function POST(req: NextRequest) {
         console.error('[agent/run] auto-name error:', e);
       }
 
-      console.log(`[agent/run] Run ${runId} ${streamFailed ? 'failed' : 'completed'}`);
+      console.log(`[agent/run] Run ${runId} terminal sawDone=${sawDone} sawError=${sawError}`);
+      } finally {
+        clearInterval(heartbeat);
+      }
     });
 
     return NextResponse.json({ runId, status: 'running' });
   } catch (err) {
     const msg = err instanceof Error ? err.message : String(err);
     console.error('[agent/run] Request error:', msg);
+    if (createdRunId && cleanupSupabase) {
+      try {
+        await cleanupSupabase.from('agent_runs').update({
+          status: 'failed',
+          ended_at: new Date().toISOString(),
+        }).eq('id', createdRunId).eq('status', 'running');
+      } catch { /* best effort */ }
+    }
     return NextResponse.json({ error: msg }, { status: 500 });
   }
 }

@@ -27,6 +27,7 @@ const APP_URL = process.env.MAKARON_APP_URL || DEFAULT_URL;
 const NPM_PACKAGE_NAME = 'makaron-cli';
 const UPDATE_CHECK_INTERVAL_MS = 24 * 60 * 60 * 1000;
 const UPDATE_CHECK_TIMEOUT_MS = 400;
+const AGENT_MODELS = ['auto', 'sonnet-4.6', 'sonnet-5', 'opus-4.8', 'grok-4.5', 'deepseek-v4-pro'];
 
 // Public anon key (safe to embed — only enables auth, not data access)
 const SUPABASE_URL = 'https://sdyrtztrjgmmpnirswxt.supabase.co';
@@ -49,6 +50,18 @@ const SEEDANCE_MIN_VIDEO_SIDE = 300;
 const SEEDANCE_MAX_VIDEO_SIDE = 6000;
 const SEEDANCE_MIN_VIDEO_ASPECT = 0.4;
 const SEEDANCE_MAX_VIDEO_ASPECT = 2.5;
+
+function warnLegacyModelFlag(replacement) {
+  process.stderr.write(`⚠️  --model is deprecated here; use ${replacement}.\n`);
+}
+
+function validateAgentModel(value) {
+  if (!AGENT_MODELS.includes(value)) {
+    process.stderr.write(`❌ Unknown agent model: ${value}\nChoose one of: ${AGENT_MODELS.join(', ')}\n`);
+    process.exit(1);
+  }
+  return value;
+}
 
 function getCliVersion() {
   try {
@@ -277,8 +290,9 @@ Options:
   --video <file|url>        Attach a video to the project timeline. Repeatable.
   --audio <file|url>        Attach a song, beat, or voice reference. MP3/WAV, repeatable.
   --skill <id|label|name>   Use an installed skill or auto-install a matched marketplace skill.
-  --model <name>            Preferred image/model route.
+  --image-model <name>      Image model: gemini, gemini-lite, qwen, openai, pony, or wai.
   --video-model <name>      Preferred video model: seedance-fast, seedance-mini, seedance, kling, grok, or google-omni.
+  --agent-model <name>      Agent model: auto, sonnet-4.6, sonnet-5, opus-4.8, grok-4.5, or deepseek-v4-pro.
   --video-resolution <res>  Video resolution: auto, 480p, 720p, 1080p, or 4k.
   --background, -b          Submit and print a runId.
   --json                    Output structured JSON.
@@ -333,7 +347,7 @@ async function abortRun(baseUrl, headers, runId) {
   } catch { /* best effort */ }
 }
 
-async function streamAgent(baseUrl, headers, projectId, prompt) {
+async function streamAgent(baseUrl, headers, projectId, prompt, opts = {}) {
   const controller = new AbortController();
   const res = await fetch(`${baseUrl}/api/agent`, {
     method: 'POST',
@@ -345,6 +359,10 @@ async function streamAgent(baseUrl, headers, projectId, prompt) {
       projectId,
       prompt,
       headless: true,
+      ...(opts.preferredModel ? { preferredModel: opts.preferredModel } : {}),
+      ...(opts.videoModel ? { videoModel: opts.videoModel } : {}),
+      ...(opts.videoResolution ? { videoResolution: opts.videoResolution } : {}),
+      ...(opts.agentModel && opts.agentModel !== 'auto' ? { agentModel: opts.agentModel } : {}),
     }),
     signal: controller.signal,
   });
@@ -452,6 +470,7 @@ async function streamAgent(baseUrl, headers, projectId, prompt) {
 async function submitRun(baseUrl, headers, projectId, prompt, opts = {}) {
   const body = { projectId, prompt };
   if (opts.preferredModel) body.preferredModel = opts.preferredModel;
+  if (opts.agentModel && opts.agentModel !== 'auto') body.agentModel = opts.agentModel;
   if (opts.videoModel) body.videoModel = opts.videoModel;
   if (opts.videoResolution) body.videoResolution = opts.videoResolution;
   if (opts.currentSnapshotIndex != null) body.currentSnapshotIndex = opts.currentSnapshotIndex;
@@ -1700,18 +1719,18 @@ Use with chat:
   composition status <jobId> [--wait] [--json]
 `);
   } else if (topic === 'edit') {
-    console.log('Usage: makaron edit [--image <file|url>] [--model gemini|gemini-lite|qwen|openai|pony|wai] [--skill enhance|creative|wild|captions] [--ref <file>] [--out <file>] "prompt"');
+    console.log('Usage: makaron edit [--image <file|url>] [--image-model gemini|gemini-lite|qwen|openai|pony|wai] [--skill enhance|creative|wild|captions] [--ref <file>] [--out <file>] "prompt"');
   } else if (topic === 'analyze') {
     console.log('Usage: makaron analyze --video <file|url> ["question"]');
   } else if (topic === 'video') {
     if (subtopic === 'script') console.log('Usage: makaron video script --image <file> [--image <file>] [--lang en|zh] "direction"');
-    else if (subtopic === 'create') console.log('Usage: makaron video create --script "..." [--image <url> | --video <public-url>] [--duration 10] [--aspect 9:16] [--model seedance-fast|seedance-mini|seedance|kling|grok|google-omni] [--video-resolution auto|480p|720p|1080p|4k] [--keep-original-sound]');
+    else if (subtopic === 'create') console.log('Usage: makaron video create --script "..." [--image <url> | --video <public-url>] [--duration 10] [--aspect 9:16] [--video-model seedance-fast|seedance-mini|seedance|kling|grok|google-omni] [--video-resolution auto|480p|720p|1080p|4k] [--keep-original-sound]');
     else if (subtopic === 'status') console.log('Usage: makaron video status <taskId> | --snapshot <snapshotId> [--wait]');
     else console.log(`Video commands:
   video script --image <file> [--image <file>] "direction"   Write video script
-  video create --script "..." --model seedance-fast          Native text-to-video (no image required)
+  video create --script "..." --video-model seedance-fast    Native text-to-video (no image required)
   video create --script "..." --image <url> [--duration 10]  Submit video task
-  video create --script "..." --video <public-url> [--model seedance-fast|seedance-mini|seedance|kling|google-omni]  Edit a video (standalone; Grok does not support video refs)
+  video create --script "..." --video <public-url> [--video-model seedance-fast|seedance-mini|seedance|kling|google-omni]  Edit a video (standalone; Grok does not support video refs)
   video status <taskId>                                      Check video status
   video status --snapshot <snapshotId> [--wait]              Check v2 video snapshot
 `);
@@ -1797,6 +1816,7 @@ if (!command || command === '--help' || command === '-h' || command === 'help') 
   let videoModel = undefined;
   let videoResolution = undefined;
   let preferredModel = undefined;
+  let agentModel = process.env.MAKARON_AGENT_MODEL || 'auto';
   for (let i = 1; i < args.length; i++) {
     if (args[i] === '--project' && args[i + 1]) projectId = args[++i];
     else if (args[i] === '--image' && args[i + 1]) chatImages.push(args[++i]);
@@ -1809,7 +1829,12 @@ if (!command || command === '--help' || command === '-h' || command === 'help') 
     else if (args[i] === '--json') jsonOutput = true;
     else if (args[i] === '--video-model' && args[i + 1]) videoModel = args[++i];
     else if (args[i] === '--video-resolution' && args[i + 1]) videoResolution = args[++i];
-    else if (args[i] === '--model' && args[i + 1]) preferredModel = args[++i];
+    else if (args[i] === '--image-model' && args[i + 1]) preferredModel = args[++i];
+    else if (args[i] === '--agent-model' && args[i + 1]) agentModel = args[++i];
+    else if (args[i] === '--model' && args[i + 1]) {
+      warnLegacyModelFlag('--image-model');
+      preferredModel = args[++i];
+    }
     else promptParts.push(args[i]);
   }
   const prompt = promptParts.join(' ');
@@ -1818,6 +1843,7 @@ if (!command || command === '--help' || command === '-h' || command === 'help') 
     console.error('Run: makaron chat --help');
     process.exit(1);
   }
+  agentModel = validateAgentModel(agentModel);
   const { headers, baseUrl } = getAuth();
   // Split images into URLs vs local files
   const imageUrlList = chatImages.filter(p => p.startsWith('http://') || p.startsWith('https://'));
@@ -2003,7 +2029,7 @@ if (!command || command === '--help' || command === '-h' || command === 'help') 
 
   if (useStream) {
     // Legacy SSE mode
-    const { results } = await streamAgent(baseUrl, headers, projectId, finalPrompt);
+    const { results } = await streamAgent(baseUrl, headers, projectId, finalPrompt, { videoModel, videoResolution, preferredModel, agentModel });
     process.stderr.write('\n━━━ Results ━━━\n');
     for (const img of results.images) process.stderr.write(`🖼️  Image: ${img.imageUrl}\n`);
     for (const d of results.designs) process.stderr.write(`🎨  ${d.desc}\n`);
@@ -2012,7 +2038,7 @@ if (!command || command === '--help' || command === '-h' || command === 'help') 
     for (const task of results.musicTasks) await pollMusic(baseUrl, headers, task.taskId);
   } else {
     // Default: fire-and-forget + poll
-    const { runId } = await submitRun(baseUrl, headers, projectId, finalPrompt, { videoModel, videoResolution, preferredModel, audioAttachments });
+    const { runId } = await submitRun(baseUrl, headers, projectId, finalPrompt, { videoModel, videoResolution, preferredModel, agentModel, audioAttachments });
     if (background) {
       // Just print runId and exit
       if (jsonOutput) {
@@ -2292,7 +2318,11 @@ if (!command || command === '--help' || command === '-h' || command === 'help') 
   let outputPath = null;
   for (let i = 1; i < args.length; i++) {
     if (args[i] === '--image' && args[i + 1]) editArgs.image = imageToArg(args[++i]);
-    else if (args[i] === '--model' && args[i + 1]) editArgs.model = args[++i];
+    else if (args[i] === '--image-model' && args[i + 1]) editArgs.model = args[++i];
+    else if (args[i] === '--model' && args[i + 1]) {
+      warnLegacyModelFlag('--image-model');
+      editArgs.model = args[++i];
+    }
     else if (args[i] === '--skill' && args[i + 1]) editArgs.skill = args[++i];
     else if (args[i] === '--ref' && args[i + 1]) {
       editArgs.referenceImages = editArgs.referenceImages || [];
@@ -2303,7 +2333,7 @@ if (!command || command === '--help' || command === '-h' || command === 'help') 
     else promptParts.push(args[i]);
   }
   editArgs.editPrompt = promptParts.join(' ');
-  if (!editArgs.editPrompt) { console.error('Usage: makaron edit [--image <file|url>] [--model gemini|gemini-lite|qwen|openai|pony|wai] [--ref <file>] [--out <file>] "prompt"'); process.exit(1); }
+  if (!editArgs.editPrompt) { console.error('Usage: makaron edit [--image <file|url>] [--image-model gemini|gemini-lite|qwen|openai|pony|wai] [--ref <file>] [--out <file>] "prompt"'); process.exit(1); }
   process.stderr.write('🎨 Generating...\n');
   const result = await callMcpTool(baseUrl, headers, 'makaron_edit_image', editArgs);
   saveMcpImage(result, outputPath);
@@ -2348,7 +2378,11 @@ if (!command || command === '--help' || command === '-h' || command === 'help') 
       else if (args[i] === '--script-file' && args[i + 1]) script = fs.readFileSync(args[++i], 'utf-8');
       else if (args[i] === '--duration' && args[i + 1]) duration = Number(args[++i]);
       else if (args[i] === '--aspect' && args[i + 1]) aspectRatio = args[++i];
-      else if (args[i] === '--model' && args[i + 1]) videoModel = args[++i];
+      else if (args[i] === '--video-model' && args[i + 1]) videoModel = args[++i];
+      else if (args[i] === '--model' && args[i + 1]) {
+        warnLegacyModelFlag('--video-model');
+        videoModel = args[++i];
+      }
       else if (args[i] === '--video-resolution' && args[i + 1]) videoResolution = args[++i];
       else if (args[i] === '--resolution' && args[i + 1]) videoResolution = args[++i];
       else if (args[i] === '--keep-original-sound') keepOriginalSound = true;
@@ -2361,7 +2395,7 @@ if (!command || command === '--help' || command === '-h' || command === 'help') 
     const selectedVideoModel = videoModel || 'seedance-fast';
     const isSeedanceModel = selectedVideoModel === 'seedance-fast' || selectedVideoModel === 'seedance-mini' || selectedVideoModel === 'seedance';
     if (!script || (!images.length && !video && !isSeedanceModel)) {
-      console.error('Usage: makaron video create --script "..." [--image <url> | --video <public-url>] [--duration 10] [--aspect 9:16] [--model seedance-fast|seedance-mini|seedance|kling|grok|google-omni] [--video-resolution auto|480p|720p|1080p|4k] [--keep-original-sound]');
+      console.error('Usage: makaron video create --script "..." [--image <url> | --video <public-url>] [--duration 10] [--aspect 9:16] [--video-model seedance-fast|seedance-mini|seedance|kling|grok|google-omni] [--video-resolution auto|480p|720p|1080p|4k] [--keep-original-sound]');
       process.exit(1);
     }
 
@@ -2446,9 +2480,9 @@ if (!command || command === '--help' || command === '-h' || command === 'help') 
   } else {
     console.log(`Video commands:
   video script --image <file> [--image <file>] "direction"   Write video script
-  video create --script "..." --model seedance-fast          Native text-to-video (no image required)
+  video create --script "..." --video-model seedance-fast    Native text-to-video (no image required)
   video create --script "..." --image <url> [--duration 10]  Submit video task
-  video create --script "..." --video <public-url> [--model seedance-fast|seedance-mini|seedance|kling|google-omni]  Edit a video (standalone; Grok does not support video refs)
+  video create --script "..." --video <public-url> [--video-model seedance-fast|seedance-mini|seedance|kling|google-omni]  Edit a video (standalone; Grok does not support video refs)
   video status <taskId>                                      Check video status
   video status --snapshot <snapshotId> [--wait]              Check v2 video snapshot
 `);

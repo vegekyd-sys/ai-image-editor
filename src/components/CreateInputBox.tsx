@@ -3,6 +3,8 @@
 import { useRef, useCallback, useEffect } from 'react';
 import type { CreateInputState } from '@/hooks/useCreateInput';
 import SkillSelector, { type SkillItem } from '@/components/SkillSelector';
+import AgentModelChip from '@/components/AgentModelChip';
+import type { AgentModelPreference } from '@/lib/agent-models';
 
 function Spinner({ size = 20 }: { size?: number }) {
   return (
@@ -48,6 +50,8 @@ export interface CreateInputBoxProps {
   installingSkill?: boolean;
   overrideLabel?: string | null;
   skillDirection?: 'up' | 'down';
+  agentModel?: AgentModelPreference;
+  onAgentModelChange?: (model: AgentModelPreference) => void;
   // Drag-drop
   dragOver?: boolean;
   onDragEnter?: (e: React.DragEvent) => void;
@@ -90,6 +94,8 @@ export default function CreateInputBox({
   installingSkill,
   overrideLabel,
   skillDirection,
+  agentModel = 'auto',
+  onAgentModelChange,
   dragOver = false,
   onDragEnter,
   onDragOver,
@@ -678,6 +684,9 @@ export default function CreateInputBox({
           />
         )}
         <div style={{ display: 'flex', alignItems: 'center', gap: 4, padding: '4px 8px 8px' }}>
+          {onAgentModelChange && (
+            <AgentModelChip value={agentModel} onChange={onAgentModelChange} disabled={creating} />
+          )}
           <div className="hide-scrollbar" onWheel={(e) => { if (e.deltaY !== 0) { e.currentTarget.scrollLeft += e.deltaY; e.preventDefault(); } }}
             style={{ display: 'flex', alignItems: 'center', gap: 4, flex: 1, minWidth: 0, overflowX: 'auto', paddingTop: 4 }}>
             {isDesktop && files.length >= 2 && previews.map((preview, i) => (

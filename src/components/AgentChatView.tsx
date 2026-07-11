@@ -13,9 +13,10 @@ import ImageRefChip from '@/components/ImageRefChip';
 import FileRefChip from '@/components/FileRefChip';
 import FileViewer from '@/components/FileViewer';
 import ModelSelector from '@/components/ModelSelector';
+import type { AgentModelPreference } from '@/lib/agent-models';
 import SkillSelector, { type SkillItem } from '@/components/SkillSelector';
 import { splitCompletionActions } from '@/lib/artifact-actions';
-import { removeAllInlineVideoUrls, removeRenderableInlineVideoUrls, resolveInlineVideoCandidate } from '@/lib/cui-video-url';
+import { removeAllInlineVideoUrls, removeInlineMediaNavigationMarkers, removeRenderableInlineVideoUrls, resolveInlineVideoCandidate } from '@/lib/cui-video-url';
 import type { ArtifactCompletionAction as CompletionAction } from '@/types';
 import { buildStudioRunStagePlacements, StudioRunProgress, StudioRunStageCard, useStudioRun } from '@/components/StudioRunDock';
 
@@ -527,6 +528,8 @@ interface AgentChatViewProps {
   onVideoModelChange?: (model: import('@/types').VideoModel) => void;
   videoResolution?: import('@/types').VideoResolution;
   onVideoResolutionChange?: (resolution: import('@/types').VideoResolution) => void;
+  agentModel?: AgentModelPreference;
+  onAgentModelChange?: (model: AgentModelPreference) => void;
   /** Navigate GUI canvas to snapshot by 0-based index */
   onNavigateToSnapshot?: (index: number) => void;
   /** Tap video in CUI → jump to GUI video entry */
@@ -582,6 +585,8 @@ export default function AgentChatView({
   onVideoModelChange,
   videoResolution = 'auto',
   onVideoResolutionChange,
+  agentModel = 'auto',
+  onAgentModelChange,
   onNavigateToSnapshot,
   onVideoTap,
   onMusicSelect,
@@ -1322,9 +1327,9 @@ export default function AgentChatView({
             <div key={`${msg.id}:${idx}`}>
               {msg.role === 'user' ? (
                 /* User bubble — right-aligned pill */
-                <div className="flex justify-end">
+                <div className="flex min-w-0 justify-end overflow-hidden">
                   <div
-                    className={`text-white/90 leading-relaxed max-w-[82%] ${isPanel ? 'text-[17px]' : 'text-[21px]'}`}
+                    className={`min-w-0 overflow-hidden text-white/90 leading-relaxed max-w-[82%] ${isPanel ? 'text-[17px]' : 'text-[21px]'}`}
                     style={{
                       background: '#222222',
                       borderRadius: isPanel ? '14px 14px 4px 14px' : '18px 18px 5px 18px',
@@ -1333,7 +1338,10 @@ export default function AgentChatView({
                   >
                     {/* Attached reference images — square thumbnails */}
                     {msg.editInputImages && msg.editInputImages.length > 0 && (
-                      <div className={`flex gap-1.5 p-2 ${msg.content ? 'pb-1' : ''}`}>
+                      <div
+                        className={`hide-scrollbar flex max-w-full gap-1.5 overflow-x-auto overscroll-x-contain p-2 ${msg.content ? 'pb-1' : ''}`}
+                        style={{ WebkitOverflowScrolling: 'touch', touchAction: 'pan-x' }}
+                      >
                         {msg.editInputImages.map((img, i) => (
 
                           <img key={i} src={img} alt="" className="w-20 h-20 rounded-xl object-cover flex-shrink-0" />
@@ -1403,7 +1411,7 @@ export default function AgentChatView({
                         <div className="markdown-body">
                           <MarkdownBlock
                             key={`${msg.id}:${idx}:markdown`}
-                            text={fixMarkdownDelimiters(visibleWithoutVideoUrls.replace(/\nanim:[a-f0-9-]+/g, '').replace(/\nsnap:[a-f0-9-]+/g, '').replace(/\n?music:\d+\|[^\n]*/g, ''))}
+                            text={fixMarkdownDelimiters(removeInlineMediaNavigationMarkers(visibleWithoutVideoUrls).replace(/\n?music:\d+\|[^\n]*/g, ''))}
                             isPanel={isPanel}
                             snapshots={snapshots}
                             onNavigateToSnapshot={onNavigateToSnapshot}
@@ -1700,13 +1708,15 @@ export default function AgentChatView({
                 onVideoModelChange={onVideoModelChange}
                 videoResolution={videoResolution}
                 onVideoResolutionChange={onVideoResolutionChange}
-                onOpenChange={(isOpen) => setModelSelectorOpen(isOpen)}
+                agentModel={agentModel}
+                onAgentModelChange={onAgentModelChange}
+                onOpenChange={setModelSelectorOpen}
               />
             )}
 
             {/* Unified attachments — scrollable thumbnails */}
             {attachments.length > 0 && (
-              <div className="hide-scrollbar" style={{ display: 'flex', alignItems: 'center', gap: 8, flex: 1, minWidth: 0, overflowX: 'auto', paddingTop: 2 }}>
+              <div className="hide-scrollbar" style={{ display: 'flex', alignItems: 'center', gap: 8, flex: 1, minWidth: 0, overflowX: 'auto', padding: '6px 6px 2px 0' }}>
                 {attachments.map((att) => (
                   <div
                     key={att.id}
@@ -1735,8 +1745,9 @@ export default function AgentChatView({
                     {/* Remove button */}
                     <button
                       onClick={() => setAttachments(prev => prev.filter(a => a.id !== att.id))}
-                      className="mkr-liquid-icon-button absolute -top-1 -right-1 w-3.5 h-3.5 rounded-full flex items-center justify-center"
-                      style={{ background: 'rgba(20,20,24,0.72)', border: '0.5px solid rgba(255,255,255,0.18)' }}
+                      aria-label="Remove attachment"
+                      className="w-3.5 h-3.5 rounded-full flex items-center justify-center"
+                      style={{ position: 'absolute', top: -4, right: -4, zIndex: 2, background: 'rgba(20,20,24,0.88)', border: '0.5px solid rgba(255,255,255,0.22)', boxShadow: '0 2px 8px rgba(0,0,0,0.35)' }}
                     >
                       <svg width="6" height="6" viewBox="0 0 24 24" fill="none" stroke="rgba(255,255,255,0.85)" strokeWidth="3.5" strokeLinecap="round">
                         <line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/>

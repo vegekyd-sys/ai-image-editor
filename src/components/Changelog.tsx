@@ -10,6 +10,17 @@ interface ChangelogEntry {
 
 const CHANGELOG: ChangelogEntry[] = [
   {
+    date: '2026-07-11',
+    en: { title: 'Choose Your Agent Model', items: [
+      'Makaron Agent can now use Sonnet 4.6, Sonnet 5, Opus 4.8, Grok 4.5, or DeepSeek V4 Pro — choose the right brain for each project.',
+      'Your choice stays with the project, repeat runs benefit from prompt caching, and DeepSeek can understand images when needed.',
+    ]},
+    zh: { title: '选择你的 Agent 模型', items: [
+      'Makaron Agent 现在可以选择 Sonnet 4.6、Sonnet 5、Opus 4.8、Grok 4.5 或 DeepSeek V4 Pro，为每个项目选择更合适的大脑。',
+      '模型选择会随项目保存，重复任务可以复用缓存；DeepSeek 需要看图时也能自动理解图片。',
+    ]},
+  },
+  {
     date: '2026-07-10',
     en: { title: 'Native SeeDance Text-to-Video', items: ['Makaron can now generate SeeDance videos directly from text without creating an intermediate reference image first.'] },
     zh: { title: 'SeeDance 原生文生视频', items: ['Makaron 现在可以直接用文字生成 SeeDance 视频，不再需要先生成一张中间参考图。'] },

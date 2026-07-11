@@ -11,6 +11,7 @@ import { createProject } from '@/lib/createProject'
 import { getCachedImages, getCachedProjectData, cacheProjectData, getCachedProjectDataSync } from '@/lib/imageCache'
 import { buildVideoFailureActions, serializeCompletionActions } from '@/lib/artifact-actions'
 import { dedupeVideoSnapshots } from '@/lib/video-snapshot-dedupe'
+import { isCompletedGeneratedVideoSnapshot, isFailedGeneratedVideoSnapshot } from '@/lib/video-snapshot-kind'
 
 interface ProjectEditorContainerProps {
   projectId: string
@@ -304,6 +305,7 @@ export default function ProjectEditorContainer({
       if (cancelled) return
       if (userId) cacheProjectData(projectId, snapshots, messages, title)
       setTimelineVersion(tv)
+      const restoredSnapshots = dedupeVideoSnapshots(snapshots)
 
       if (animations.length > 0) {
         setInitialAnimations(animations)
@@ -331,11 +333,7 @@ export default function ProjectEditorContainer({
         }
       }
 
-      const completedVideos = snapshots.filter(s =>
-        s.type === 'video' &&
-        s.videoMeta?.status === 'completed' &&
-        s.videoMeta.videoUrl
-      )
+      const completedVideos = restoredSnapshots.filter(isCompletedGeneratedVideoSnapshot)
       for (const snap of completedVideos) {
         if (messages.some(m => m.content?.includes(`snap:${snap.id}`))) continue
         const actionLines = serializeCompletionActions(snap.videoMeta?.completionActions)
@@ -347,10 +345,7 @@ export default function ProjectEditorContainer({
         })
       }
 
-      const failedVideos = snapshots.filter(s =>
-        s.type === 'video' &&
-        s.videoMeta?.status === 'failed'
-      )
+      const failedVideos = restoredSnapshots.filter(isFailedGeneratedVideoSnapshot)
       for (const snap of failedVideos) {
         if (messages.some(m => m.content?.includes(`snap:${snap.id}`))) continue
         const actionLines = serializeCompletionActions(buildVideoFailureActions(snap.videoMeta))
@@ -364,11 +359,11 @@ export default function ProjectEditorContainer({
       }
 
       console.log(`⏱️ [page] music/video restore done: ${(performance.now() - pageT0).toFixed(0)}ms`)
-      const patched = await patchFromImageCache(snapshots)
+      const patched = await patchFromImageCache(restoredSnapshots)
       console.log(`⏱️ [page] patchFromImageCache done: ${(performance.now() - pageT0).toFixed(0)}ms`)
       if (cancelled) return
       shownRef.current = true
-      setInitialSnapshots(dedupeVideoSnapshots(patched))
+      setInitialSnapshots(patched)
       setInitialMessages(dedupeMessagesById(messages))
       setInitialTitle(title)
       setLoaded(true)

@@ -50,6 +50,8 @@ import { formatVideoMediaSpec } from '@/lib/media-aspect';
 import { serializeCompletionActions } from '@/lib/artifact-actions';
 import { appendSnapshotDedupeVideo, dedupeVideoSnapshots } from '@/lib/video-snapshot-dedupe';
 import { isGeneratedVideoSnapshot } from '@/lib/video-snapshot-kind';
+import type { AgentModelPreference } from '@/lib/agent-models';
+import { loadAgentModelPreference, saveAgentModelPreference } from '@/lib/agent-model-preference';
 
 export type { AnimationState } from '@/lib/editor/types';
 
@@ -258,6 +260,18 @@ export default function Editor({
   const [videoAuto, setVideoAuto] = useState(true);
   const videoAutoRef = useRef(true);
   useEffect(() => { videoAutoRef.current = videoAuto; }, [videoAuto]);
+  const [agentModel, setAgentModel] = useState<AgentModelPreference>('auto');
+  const agentModelRef = useRef<AgentModelPreference>('auto');
+  useEffect(() => {
+    const next = projectId ? loadAgentModelPreference(projectId) : 'auto';
+    agentModelRef.current = next;
+    setAgentModel(next);
+  }, [projectId]);
+  const handleAgentModelChange = useCallback((next: AgentModelPreference) => {
+    agentModelRef.current = next;
+    setAgentModel(next);
+    if (projectId) saveAgentModelPreference(projectId, next);
+  }, [projectId]);
   const [availableSkills, setAvailableSkills] = useState<{ name: string; label: string; icon: string; builtIn?: boolean }[]>(() => (
     readNativeJSONCache<SkillsPayload>('/api/skills')?.skills ?? []
   ));
@@ -675,7 +689,10 @@ const isTipsFetchingRef = useRef(isTipsFetching);
     try {
       let teaser = '';
       await streamAgent(
-        { prompt: '', image: '', projectId, tipsTeaser: true, tipsPayload },
+        {
+          prompt: '', image: '', projectId, tipsTeaser: true, tipsPayload,
+          ...(agentModelRef.current !== 'auto' ? { agentModel: agentModelRef.current } : {}),
+        },
         {
           onContent: (delta) => { teaser += delta; },
           onDone: () => {
@@ -714,7 +731,10 @@ const isTipsFetchingRef = useRef(isTipsFetching);
 
     try {
       await streamAgent(
-        { prompt: '', image: '', projectId, previewsReady: true, readyTips },
+        {
+          prompt: '', image: '', projectId, previewsReady: true, readyTips,
+          ...(agentModelRef.current !== 'auto' ? { agentModel: agentModelRef.current } : {}),
+        },
         {
           onContent: (delta) => {
             setMessages((prev) => prev.map((m) =>
@@ -745,7 +765,10 @@ const isTipsFetchingRef = useRef(isTipsFetching);
     let name = '';
     try {
       await streamAgent(
-        { prompt: '', image: '', projectId, nameProject: true, description },
+        {
+          prompt: '', image: '', projectId, nameProject: true, description,
+          ...(agentModelRef.current !== 'auto' ? { agentModel: agentModelRef.current } : {}),
+        },
         {
           onContent: (delta) => { name += delta; },
           onDone: () => { if (name.trim()) { onRenameProject(name.trim()); } },
@@ -949,7 +972,10 @@ const isTipsFetchingRef = useRef(isTipsFetching);
 
     try {
       await streamAgent(
-        { prompt: '', image: imageBase64, projectId, tipReaction: true, committedTip, currentTips: siblingTips },
+        {
+          prompt: '', image: imageBase64, projectId, tipReaction: true, committedTip, currentTips: siblingTips,
+          ...(agentModelRef.current !== 'auto' ? { agentModel: agentModelRef.current } : {}),
+        },
         {
           onContent: (delta) => {
             setMessages((prev) => prev.map((m) =>
@@ -1450,7 +1476,12 @@ const isTipsFetchingRef = useRef(isTipsFetching);
       }) : undefined;
       const snapIndex = options?.isVideo ? snapshotsRef.current.findIndex(s => s.id === snapshotId) : undefined;
       await streamAgent(
-        { prompt: '', image: imageBase64, projectId, analysisOnly: true, analysisContext: context, isVideoAnalysis: options?.isVideo, snapshotImages: snapshotImagesForAnalysis, currentSnapshotIndex: snapIndex !== undefined && snapIndex >= 0 ? snapIndex : undefined },
+        {
+          prompt: '', image: imageBase64, projectId, analysisOnly: true, analysisContext: context,
+          isVideoAnalysis: options?.isVideo, snapshotImages: snapshotImagesForAnalysis,
+          currentSnapshotIndex: snapIndex !== undefined && snapIndex >= 0 ? snapIndex : undefined,
+          ...(agentModelRef.current !== 'auto' ? { agentModel: agentModelRef.current } : {}),
+        },
         {
           onStatus: (s) => { if (!silent) setAgentStatus(s); },
           onContent: (delta) => {
@@ -1511,6 +1542,9 @@ const isTipsFetchingRef = useRef(isTipsFetching);
 
   // Agent request: route user message through Makaron Agent
   const handleAgentRequest = useCallback(async (text: string, attachedImages?: string[], overrideImage?: string, options?: { silent?: boolean; displayImages?: string[]; uploadedVideoCount?: number }) => {
+    // Freeze the selected LLM at submit time. Upload waits below must not let a
+    // later selector change mutate an already-submitted request.
+    const agentModelForRequest = agentModelRef.current;
     // CUI reference images → append as new snapshots (so agent sees them in Media Index)
     if (attachedImages?.length && !overrideImage) {
       const newSnaps: Snapshot[] = [];
@@ -1693,7 +1727,7 @@ const isTipsFetchingRef = useRef(isTipsFetching);
 
     try {
       await streamAgent(
-        { prompt: text, image: imageForApi, projectId, ...(preferredModelRef.current !== 'auto' ? { preferredModel: preferredModelRef.current } : {}), videoModel: videoModelRef.current, videoResolution: videoResolutionRef.current, videoAuto: videoAutoRef.current, snapshotImages: snapshotImagesForApi, currentSnapshotIndex: contextSnapshotIndex, isNsfw: isNsfwRef.current || undefined, ...(snapshotsRef.current[contextSnapshotIndex]?.design && snapshotsRef.current[contextSnapshotIndex]?.type !== 'video' ? { currentDesign: snapshotsRef.current[contextSnapshotIndex].design, currentDesignPath: snapshotsRef.current[contextSnapshotIndex].designPath } : {}), hasAnnotation: !!overrideImage, isDraft: isDraftMode, referenceImageCount: attachedImages?.length || 0, uploadedVideoCount: options?.uploadedVideoCount || 0 },
+        { prompt: text, image: imageForApi, projectId, ...(preferredModelRef.current !== 'auto' ? { preferredModel: preferredModelRef.current } : {}), ...(agentModelForRequest !== 'auto' ? { agentModel: agentModelForRequest } : {}), videoModel: videoModelRef.current, videoResolution: videoResolutionRef.current, videoAuto: videoAutoRef.current, snapshotImages: snapshotImagesForApi, currentSnapshotIndex: contextSnapshotIndex, isNsfw: isNsfwRef.current || undefined, ...(snapshotsRef.current[contextSnapshotIndex]?.design && snapshotsRef.current[contextSnapshotIndex]?.type !== 'video' ? { currentDesign: snapshotsRef.current[contextSnapshotIndex].design, currentDesignPath: snapshotsRef.current[contextSnapshotIndex].designPath } : {}), hasAnnotation: !!overrideImage, isDraft: isDraftMode, referenceImageCount: attachedImages?.length || 0, uploadedVideoCount: options?.uploadedVideoCount || 0 },
         agentCallbacks,
         agentAbortRef.current.signal,
       );
@@ -1831,6 +1865,7 @@ const isTipsFetchingRef = useRef(isTipsFetching);
           design,
           designPath: `code/${snapId}.json`,
           videoMeta: {
+            origin: 'source-upload',
             taskId: null, videoUrl: v.url, prompt: '', sourceSnapshotIds: [], sourceUrls: [],
             status: 'completed', duration: v.duration, model: 'upload', createdAt: new Date().toISOString(),
           },
@@ -1942,6 +1977,7 @@ Select the best 3-7 items for a compelling video. You do NOT need to use all or 
           animationImageUrls: imageUrls,
           // Pass URLs directly — Bedrock fetches them server-side (much faster than uploading base64)
           animationImages: imageUrls,
+          ...(agentModelRef.current !== 'auto' ? { agentModel: agentModelRef.current } : {}),
         },
         {
           onStatus: (s) => setAgentStatus(s),
@@ -2247,6 +2283,7 @@ Select the best 3-7 items for a compelling video. You do NOT need to use all or 
         messageId: '',
         type: 'video',
         videoMeta: {
+          origin: 'source-upload',
           taskId: null,
           videoUrl: null,
           prompt: '',
@@ -2398,6 +2435,7 @@ Select the best 3-7 items for a compelling video. You do NOT need to use all or 
             design,
             designPath: `code/${snapId}.json`,
             videoMeta: {
+              origin: 'source-upload',
               taskId: null, videoUrl: v.videoUrl, prompt: '', sourceSnapshotIds: [], sourceUrls: [],
               status: 'completed', duration: v.duration, model: 'upload', createdAt: new Date().toISOString(),
             },
@@ -3325,6 +3363,8 @@ Select the best 3-7 items for a compelling video. You do NOT need to use all or 
     currentSnapshotIndex: isViewingVideo ? (currentSnapIndex + 1) : (snapFromTimeline(viewIndex, draftParentIndex) ?? draftParentIndex ?? 0) + 1,
     preferredModel: preferredModel as PreferredModel,
     onModelChange: setPreferredModel,
+    agentModel,
+    onAgentModelChange: handleAgentModelChange,
     videoAuto,
     onVideoAutoChange: (auto: boolean) => {
       setVideoAuto(auto);
@@ -3392,6 +3432,7 @@ Select the best 3-7 items for a compelling video. You do NOT need to use all or 
       data-current-snapshot={viewIndex}
       data-view-mode={viewMode}
       data-preferred-model={preferredModel}
+      data-agent-model={agentModel}
       className={`makaron-editor-shell h-dvh bg-black relative z-[1] overflow-hidden flex ${isDesktop ? 'flex-row' : 'flex-col'}`}
     >
       <input

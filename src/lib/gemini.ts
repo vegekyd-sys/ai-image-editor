@@ -1686,3 +1686,44 @@ export async function analyzeVideoContent(
     return result.text || '';
   }
 }
+
+/**
+ * Vision fallback for text-only Agent models (for example DeepSeek V4 Pro).
+ * The main Agent receives only the resulting text, so its provider never sees
+ * an unsupported image content block.
+ */
+export async function analyzeImageContent(
+  image: string,
+  question?: string,
+  userId?: string,
+): Promise<string> {
+  const ai = getAI();
+  const model = 'gemini-3-flash-preview';
+  const resolved = await ensureBase64Server(image);
+  const mimeType = resolved.match(/^data:(image\/[^;]+);base64,/)?.[1] || 'image/jpeg';
+  const base64 = resolved.replace(/^data:image\/[^;]+;base64,/, '');
+  const prompt = question?.trim()
+    ? `Analyze this image for an editing agent. Focus on: ${question.trim()} Respond in English only.`
+    : 'Analyze this image in detail for a photo editing agent. Describe subjects, identities and distinguishing features, composition, objects, text, lighting, mood, and any details that matter for an edit. Respond in English only.';
+
+  const result = await ai.models.generateContent({
+    model,
+    contents: [{ role: 'user', parts: [
+      { inlineData: { mimeType, data: base64 } },
+      { text: prompt },
+    ] }],
+  });
+  const usage = result.usageMetadata;
+  if (usage && userId) {
+    import('./billing/credits').then(({ deductByTokens }) =>
+      deductByTokens(
+        userId,
+        'analyze_image',
+        model,
+        usage.promptTokenCount || 0,
+        usage.candidatesTokenCount || 0,
+      ).catch(e => console.error('[billing] analyze_image deduct error:', e))
+    );
+  }
+  return result.text || '';
+}

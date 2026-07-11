@@ -374,7 +374,7 @@ try {
     [['--help'], /Makaron CLI/],
     [['login', '--help'], /Usage: makaron login/],
     [['create', '--help'], /Usage: makaron create/],
-    [['chat', '--help'], /--skill <id\|label\|name>/],
+    [['chat', '--help'], /--agent-model <name>/],
     [['responses', '--help'], /Responses commands:/],
     [['responses', 'get', '--help'], /Usage: makaron responses get/],
     [['responses', 'watch', '--help'], /Usage: makaron responses watch/],
@@ -430,6 +430,27 @@ try {
   }
 
   {
+    await expectSuccess(['chat', '--project', 'project-models-1', '--agent-model', 'deepseek-v4-pro', '--image-model', 'qwen', '--video-model', 'grok', '--json', '-b', 'use explicit models']);
+    const runRequest = requests.filter(req => req.pathname === '/api/agent/run').at(-1);
+    assert.equal(runRequest?.body?.agentModel, 'deepseek-v4-pro');
+    assert.equal(runRequest?.body?.preferredModel, 'qwen');
+    assert.equal(runRequest?.body?.videoModel, 'grok');
+  }
+
+  {
+    const result = await expectFailure(['chat', '--project', 'project-models-1', '--agent-model', 'mystery-model', 'fail clearly']);
+    assert.match(result.stderr, /Unknown agent model: mystery-model/);
+    assert.match(result.stderr, /sonnet-5/);
+  }
+
+  {
+    const result = await expectSuccess(['chat', '--project', 'project-models-1', '--model', 'qwen', '--json', '-b', 'legacy image flag']);
+    assert.match(result.stderr, /--model is deprecated here; use --image-model/);
+    const runRequest = requests.filter(req => req.pathname === '/api/agent/run').at(-1);
+    assert.equal(runRequest?.body?.preferredModel, 'qwen');
+  }
+
+  {
     const result = await expectSuccess(['chat', '--project', 'project-existing-1', '--image', tinyImagePath, '--json', '-b', 'use this reference']);
     const data = JSON.parse(result.stdout);
     assert.equal(data.projectId, 'project-existing-1');
@@ -454,7 +475,7 @@ try {
   }
 
   {
-    const result = await expectSuccess(['video', 'create', '--script', 'A neon one-person studio wakes at dawn', '--duration', '5', '--model', 'seedance-fast']);
+    const result = await expectSuccess(['video', 'create', '--script', 'A neon one-person studio wakes at dawn', '--duration', '5', '--video-model', 'seedance-fast']);
     assert.match(result.stdout, /Task ID: task-unified-text-smoke/);
     const mcpRequest = requests.filter(req => req.pathname === '/api/mcp').at(-1);
     assert.equal(mcpRequest?.body?.params?.name, 'makaron_create_video');

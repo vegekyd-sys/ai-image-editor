@@ -23,6 +23,8 @@ import CreateInputBox from '@/components/CreateInputBox'
 import { MakaronSpark, MAKARON_WORDMARK_STYLE } from '@/components/MakaronLogo'
 import ProjectEditorContainer from '@/components/ProjectEditorContainer'
 import LiquidGlassNav from '@/components/LiquidGlassNav'
+import { loadCreateAgentModelPreference, saveAgentModelPreference, saveCreateAgentModelPreference } from '@/lib/agent-model-preference'
+import type { AgentModelPreference } from '@/lib/agent-models'
 
 interface ProjectWithSnapshots {
   id: string
@@ -149,6 +151,7 @@ function ProjectsPageInner() {
     return getCachedProjectsListSync(cachedUserId) === null
   })
   const createInput = useCreateInput()
+  const [createAgentModel, setCreateAgentModel] = useState<AgentModelPreference>('auto')
   const inputBoxRef = useRef<HTMLDivElement>(null)
   const extractedMetadataRef = useRef<import('@/types').PhotoMetadata | undefined>(undefined)
   const [photoSlotWidth, setPhotoSlotWidth] = useState(80)
@@ -160,6 +163,15 @@ function ProjectsPageInner() {
     readNativeJSONCache<CreditsPayload>('/api/billing/credits')?.balance ?? null
   ))
   const [showWelcome, setShowWelcome] = useState(false)
+
+  useEffect(() => {
+    setCreateAgentModel(loadCreateAgentModelPreference())
+  }, [])
+
+  const handleCreateAgentModelChange = useCallback((model: AgentModelPreference) => {
+    setCreateAgentModel(model)
+    saveCreateAgentModelPreference(model)
+  }, [])
   const [, setSkillUploading] = useState(false)
   const [, setSkillUploadError] = useState<string | null>(null)
   const handleSkillUpload = useCallback(async (file: File) => {
@@ -817,6 +829,7 @@ function ProjectsPageInner() {
       if (selectedSkill) opts.skill = selectedSkill
       const result = await createProject(supabase, user.id, files, Object.keys(opts).length ? opts : undefined, extractedMetadataRef.current)
       if (!result) throw new Error('Failed to create project')
+      saveAgentModelPreference(result.projectId, createAgentModel)
       if (useIOSInlineProjectNavigation) {
         createInput.setCreating(false)
         openIOSProject(result.projectId)
@@ -832,7 +845,7 @@ function ProjectsPageInner() {
       }
       createInput.setCreating(false)
     }
-  }, [user, createInput, router, selectedSkill, t, useIOSInlineProjectNavigation, openIOSProject])
+  }, [user, createAgentModel, createInput, router, selectedSkill, t, useIOSInlineProjectNavigation, openIOSProject])
 
   // Unified create: text only, image only, or both — all go through handleCreateProject
   const handleCreate = useCallback(async () => {
@@ -1172,7 +1185,8 @@ function ProjectsPageInner() {
       `}</style>
 
       <div
-        className={`mkr-page makaron-projects-page${navigating ? ' page-slide-out' : ''}`}
+        className={`mkr-page mkr-primary-surface makaron-projects-page${navigating ? ' page-slide-out' : ''}`}
+        data-makaron-surface="projects"
         data-page-instance={projectsPageInstanceIdRef.current}
         style={{
           minHeight: '100dvh',
@@ -1183,7 +1197,7 @@ function ProjectsPageInner() {
       >
 
         {/* Ambient glow — center at 40% so top is black, fades to purple below */}
-        <div style={{
+        <div className="mkr-surface-ambient" style={{
           position: 'fixed', top: 0, left: 0, right: 0,
           height: '520px', pointerEvents: 'none', zIndex: 0,
           background: 'radial-gradient(ellipse at 50% 40%, rgba(217,70,239,0.22) 0%, transparent 65%)',
@@ -1213,27 +1227,29 @@ function ProjectsPageInner() {
           position: 'relative', zIndex: 1,
         }}>
           {/* Wordmark row: Makaron Spark + Makaron */}
-          <div style={{
-            display: 'flex', alignItems: 'center', gap: '12px',
-          }}>
-            <MakaronSpark size="clamp(34px, 6vw, 52px)" />
-
-            {/* Wordmark */}
+          <div className="mkr-surface-brand flex flex-col items-center">
             <div style={{
-              ...MAKARON_WORDMARK_STYLE,
-              fontSize: 'clamp(3rem, 12vw, 5rem)',
+              display: 'flex', alignItems: 'center', gap: '12px',
             }}>
-              Makaron
+              <MakaronSpark size="clamp(34px, 6vw, 52px)" />
+
+              {/* Wordmark */}
+              <div style={{
+                ...MAKARON_WORDMARK_STYLE,
+                fontSize: 'clamp(3rem, 12vw, 5rem)',
+              }}>
+                Makaron
+              </div>
+            </div>
+
+            {/* Subtitle */}
+            <div style={{ marginTop: '4px' }}>
+              <RollingTagline className="text-[1.25rem] tracking-wide" />
             </div>
           </div>
 
-          {/* Subtitle */}
-          <div style={{ marginTop: '4px' }}>
-            <RollingTagline className="text-[1.25rem] tracking-wide" />
-          </div>
-
           {/* Create input: shared component */}
-          <div style={{ marginTop: '32px', width: '100%', padding: '0 16px', maxWidth: '480px' }}>
+          <div className="mkr-surface-composer" style={{ marginTop: '32px', width: '100%', padding: '0 16px', maxWidth: '480px' }}>
             <CreateInputBox
               input={createInput}
               slotWidth={photoSlotWidth}
@@ -1246,6 +1262,8 @@ function ProjectsPageInner() {
               skills={availableSkills}
               selectedSkill={selectedSkill}
               onSkillChange={setSelectedSkill}
+              agentModel={createAgentModel}
+              onAgentModelChange={handleCreateAgentModelChange}
               onDeleteSkill={(name) => {
                 setAvailableSkills(prev => {
                   const next = prev.filter(s => s.name !== name)

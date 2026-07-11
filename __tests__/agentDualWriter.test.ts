@@ -70,6 +70,97 @@ describe('AgentDualWriter', () => {
     });
   });
 
+  it('persists a recoverable terminal message and its draft checkpoint', async () => {
+    const inserts: Array<{ table: string; row: Record<string, unknown> }> = [];
+    const upserts: Array<{ table: string; row: Record<string, unknown> }> = [];
+    const fakeSupabase = {
+      from: (table: string) => ({
+        insert: async (row: Record<string, unknown>) => {
+          inserts.push({ table, row });
+          return { error: null };
+        },
+        upsert: async (row: Record<string, unknown>) => {
+          upserts.push({ table, row });
+          return { error: null };
+        },
+      }),
+    };
+    const writer = new AgentDualWriter('run-id', fakeSupabase as never, 'user-id', 'project-id');
+
+    await writer.processAndEnqueue({
+      type: 'error',
+      code: 'empty_final_step',
+      recoverable: true,
+      message: '草稿已经保存，发送“继续”即可恢复。',
+      checkpoint: { draftPath: 'project/code/draft.json', lastTool: 'preview_frame' },
+    });
+
+    expect(upserts).toContainEqual({
+      table: 'messages',
+      row: expect.objectContaining({ content: '草稿已经保存，发送“继续”即可恢复。' }),
+    });
+    expect(inserts).toContainEqual({
+      table: 'agent_events',
+      row: expect.objectContaining({
+        type: 'error',
+        data: expect.objectContaining({
+          code: 'empty_final_step',
+          recoverable: true,
+          checkpoint: { draftPath: 'project/code/draft.json', lastTool: 'preview_frame' },
+        }),
+      }),
+    });
+  });
+
+  it('refuses to persist done after a preview-only empty final turn', async () => {
+    const fakeSupabase = {
+      from: () => ({
+        insert: async () => ({ error: null }),
+        upsert: async () => ({ error: null }),
+      }),
+    };
+    const writer = new AgentDualWriter('run-id', fakeSupabase as never, 'user-id', 'project-id');
+
+    await writer.processAndEnqueue({
+      type: 'preview_frame_captured',
+      workspaceUrl: 'https://storage.example.com/frame.jpg',
+    });
+    await writer.processAndEnqueue({ type: 'new_turn' });
+
+    await expect(writer.processAndEnqueue({ type: 'done' }))
+      .rejects.toThrow('Refusing empty agent completion');
+  });
+
+  it('does not mark a published design delivered when snapshot persistence fails', async () => {
+    const fakeSupabase = {
+      storage: {
+        from: () => ({
+          upload: async () => ({ error: null }),
+          getPublicUrl: () => ({ data: { publicUrl: 'https://storage.example.com/design.json' } }),
+        }),
+      },
+      rpc: async () => ({ data: 1 }),
+      from: (table: string) => ({
+        insert: async () => ({ error: null }),
+        upsert: async () => ({
+          error: table === 'snapshots' ? { message: 'snapshot write failed' } : null,
+        }),
+      }),
+    };
+    const writer = new AgentDualWriter('run-id', fakeSupabase as never, 'user-id', 'project-id');
+
+    await expect(writer.processAndEnqueue({
+      type: 'render',
+      code: 'export default function Demo() { return null }',
+      width: 1080,
+      height: 1920,
+      published: true,
+    })).rejects.toThrow('Failed to persist published design snapshot');
+
+    await expect(writer.processAndEnqueue({ type: 'done' }))
+      .rejects.toThrow('Refusing empty agent completion');
+  });
+
   it('backfills video snapshot description from analyze_video tool results', async () => {
     const updates: Array<{ table: string; row: Record<string, unknown>; id?: string }> = [];
     const snapshots = [

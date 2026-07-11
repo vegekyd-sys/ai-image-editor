@@ -98,6 +98,18 @@ describe('makeAgentCallbacks', () => {
     });
   });
 
+  describe('onDisconnect', () => {
+    it('releases the active run id so the persistent watcher can reconnect', () => {
+      ctx.agentRunIdRef.current = 'run-live';
+      const { callbacks } = makeAgentCallbacks(ctx);
+
+      callbacks.onDisconnect?.('run-live');
+
+      expect(ctx.agentRunIdRef.current).toBeNull();
+      expect(ctx.setAgentStatus).toHaveBeenCalledWith('editor.reconnecting');
+    });
+  });
+
   describe('onImage', () => {
     it('creates snapshot with server IDs', () => {
       let snapshots: { id: string; image: string; messageId: string }[] = [];
@@ -330,7 +342,7 @@ describe('makeAgentCallbacks', () => {
       callbacks.onNewTurn?.('msg-1');
       callbacks.onError?.('Something went wrong');
 
-      expect(messages[0].content).toBe('editor.errorRetry');
+      expect(messages[0].content).toBe('Something went wrong');
     });
 
     it('calls onCleanup if provided', () => {

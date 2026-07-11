@@ -27,6 +27,8 @@ import { useCreateInput } from '@/hooks/useCreateInput'
 import CreateInputBox from '@/components/CreateInputBox'
 import MakaronLogo from '@/components/MakaronLogo'
 import LiquidGlassNav from '@/components/LiquidGlassNav'
+import { loadCreateAgentModelPreference, saveAgentModelPreference, saveCreateAgentModelPreference } from '@/lib/agent-model-preference'
+import type { AgentModelPreference } from '@/lib/agent-models'
 
 const Z = { INPUT: 100, HERO_FLY: 90, OVERLAY: 80, AMBIENT: 0 } as const
 const IOS_SKILL_BACK_EDGE_PX = 36
@@ -265,6 +267,7 @@ function HomePageInner() {
 
   const [viewMode, setViewMode] = useState<'human' | 'agent'>('human')
   const createInput = useCreateInput()
+  const [createAgentModel, setCreateAgentModel] = useState<AgentModelPreference>('auto')
   const inputBoxRef = useRef<HTMLDivElement>(null)
   const textareaRef = useRef<HTMLTextAreaElement>(null)
   const [photoSlotWidth, setPhotoSlotWidth] = useState(80)
@@ -283,6 +286,15 @@ function HomePageInner() {
   const [selectedDetail, setSelectedDetail] = useState<HomeSkill | null>(null)
   const [heroRect, setHeroRect] = useState<DOMRect | null>(null)
   const [heroExpanded, setHeroExpanded] = useState(false)
+
+  useEffect(() => {
+    setCreateAgentModel(loadCreateAgentModelPreference())
+  }, [])
+
+  const handleCreateAgentModelChange = useCallback((model: AgentModelPreference) => {
+    setCreateAgentModel(model)
+    saveCreateAgentModelPreference(model)
+  }, [])
   const detailSnapRef = useRef<HTMLDivElement>(null)
   const detailInnerRef = useRef<HTMLDivElement>(null)
   const detailSwipeRef = useRef<{ startY: number; startIdx: number; swiping: boolean } | null>(null)
@@ -1097,6 +1109,7 @@ function HomePageInner() {
       if (skillName) opts.skill = skillName
       const result = await createProject(supabase, authedUser.id, files, Object.keys(opts).length ? opts : undefined)
       if (!result) throw new Error('Failed to create project')
+      saveAgentModelPreference(result.projectId, createAgentModel)
       void clearCreateDraft()
       router.push(`/projects/${result.projectId}`)
     } catch (err) {
@@ -1108,7 +1121,7 @@ function HomePageInner() {
       }
       createInput.setCreating(false)
     }
-  }, [activeSkill, createInput, installHomeSkill, requireAuth, router, saveContextBeforeLogin, saveCreateDraftBeforeLogin, selectedDetail, selectedSkill, t, user])
+  }, [activeSkill, createAgentModel, createInput, installHomeSkill, requireAuth, router, saveContextBeforeLogin, saveCreateDraftBeforeLogin, selectedDetail, selectedSkill, t, user])
 
   const consumeDraftRef = useRef(false)
   useEffect(() => {
@@ -1578,7 +1591,11 @@ function HomePageInner() {
         .hide-scrollbar::-webkit-scrollbar { display: none; }
       `}</style>
 
-      <div className="mkr-page" style={{ minHeight: '100dvh', background: '#000', color: '#fff', overflowX: 'hidden', display: 'flex', flexDirection: 'column' }}>
+      <div
+        className="mkr-page mkr-primary-surface"
+        data-makaron-surface="explore"
+        style={{ minHeight: '100dvh', background: '#000', color: '#fff', overflowX: 'hidden', display: 'flex', flexDirection: 'column' }}
+      >
         <input
           ref={skillFileRef}
           type="file"
@@ -1592,7 +1609,7 @@ function HomePageInner() {
         />
 
         {/* Ambient glow */}
-        <div style={{
+        <div className="mkr-surface-ambient" style={{
           position: 'fixed', top: 0, left: 0, right: 0,
           height: '520px', pointerEvents: 'none', zIndex: Z.AMBIENT,
           background: 'radial-gradient(ellipse at 50% 40%, rgba(217,70,239,0.22) 0%, transparent 65%)',
@@ -1611,21 +1628,23 @@ function HomePageInner() {
           <div className="pointer-events-none absolute top-[-80px] left-1/2 -translate-x-1/2 w-[700px] h-[600px] rounded-full bg-[radial-gradient(ellipse,#d946ef18_0%,transparent_70%)]" />
 
           <div className="relative z-10 flex flex-col items-center text-center pt-10 lg:pt-16 px-6 max-w-[660px]">
-            <MakaronLogo
-              markSize="clamp(34px, 6vw, 52px)"
-              className="mt-4"
-              textClassName="text-[52px] lg:text-[88px] font-extrabold tracking-[-0.04em] leading-[1]"
-            />
-            <p className="mt-3 leading-tight">
-              <RollingTagline className="text-2xl lg:text-[32px]" />
-            </p>
+            <div className="mkr-surface-brand flex flex-col items-center">
+              <MakaronLogo
+                markSize="clamp(34px, 6vw, 52px)"
+                className="mt-4"
+                textClassName="text-[52px] lg:text-[88px] font-extrabold tracking-[-0.04em] leading-[1]"
+              />
+              <p className="mt-3 leading-tight">
+                <RollingTagline className="text-2xl lg:text-[32px]" />
+              </p>
+            </div>
             <p className="mt-6 text-[15px] lg:text-lg text-[#a1a1aa] leading-relaxed max-w-[480px]">
               {t('landing.heroDesc1')}<br />{t('landing.heroDesc2')}
             </p>
           </div>
 
           {/* ── Inline Input Box ── */}
-          <div ref={inlineInputRef} data-makaron-home-inline-composer="true" className="relative z-10" style={{
+          <div ref={inlineInputRef} data-makaron-home-inline-composer="true" className="mkr-surface-composer relative z-10" style={{
             marginTop: '32px', width: '100%', maxWidth: '480px', padding: '0 16px',
             ...(isIOSAppShell && showFixedInput && !selectedDetail ? { opacity: 0, pointerEvents: 'none' as const } : {}),
           }}>
@@ -1659,6 +1678,8 @@ function HomePageInner() {
               skills={availableSkills}
               selectedSkill={selectedSkill}
               onSkillChange={setSelectedSkill}
+              agentModel={createAgentModel}
+              onAgentModelChange={handleCreateAgentModelChange}
               onDeleteSkill={(name) => {
                 setAvailableSkills(prev => {
                   const next = prev.filter(s => s.name !== name)
@@ -1831,6 +1852,8 @@ function HomePageInner() {
               skills={availableSkills}
               selectedSkill={selectedSkill}
               onSkillChange={setSelectedSkill}
+              agentModel={createAgentModel}
+              onAgentModelChange={handleCreateAgentModelChange}
               onDeleteSkill={(name) => {
                 setAvailableSkills(prev => {
                   const next = prev.filter(s => s.name !== name)

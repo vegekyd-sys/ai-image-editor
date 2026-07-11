@@ -11,7 +11,9 @@ describe('headless agent error handling', () => {
 
   it('marks a headless stream error as failed', () => {
     const route = readFileSync(path.resolve(process.cwd(), 'src/app/api/agent/run/route.ts'), 'utf8');
-    expect(route).toContain("if (event.type === 'error') streamFailed = true");
-    expect(route).toContain("status: streamFailed ? 'failed' : 'completed'");
+    expect(route).toContain("if (event.type === 'error') {");
+    expect(route).toContain('sawError = true');
+    expect(route).toContain('resolvePersistedRunStatus({');
+    expect(route).toContain('status: terminalStatus');
   });
 });

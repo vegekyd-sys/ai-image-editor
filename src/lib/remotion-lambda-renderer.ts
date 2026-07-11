@@ -97,11 +97,36 @@ function lambdaEnv(name: string): string {
   return value
 }
 
+const REMOTION_AWS_ENV_NAMES = [
+  'REMOTION_AWS_ACCESS_KEY_ID',
+  'REMOTION_AWS_SECRET_ACCESS_KEY',
+  'REMOTION_AWS_SESSION_TOKEN',
+  'AWS_ACCESS_KEY_ID',
+  'AWS_SECRET_ACCESS_KEY',
+  'AWS_SESSION_TOKEN',
+] as const
+
+/**
+ * Remotion's Lambda client reads AWS credentials directly from process.env.
+ * Normalize the values in place before it constructs an Authorization header;
+ * Vercel env values written with `echo` may otherwise contain a trailing LF.
+ */
+export function sanitizeRemotionAwsEnvironment(): void {
+  for (const name of REMOTION_AWS_ENV_NAMES) {
+    const raw = process.env[name]
+    if (raw === undefined) continue
+    const clean = raw.replace(/\\[rn]|[\u0000-\u001F\u007F]/g, '').trim()
+    if (clean) process.env[name] = clean
+    else delete process.env[name]
+  }
+}
+
 async function withRemotionAwsCredentials<T>(fn: () => Promise<T>): Promise<T> {
   // @remotion/lambda-client reads REMOTION_AWS_* before AWS_* by itself.
   // Do not temporarily overwrite global AWS_* in the Next.js process: concurrent
   // agent requests may initialize Bedrock with Remotion's IAM user and then fail
   // Sonnet 5 calls with an unrelated 403.
+  sanitizeRemotionAwsEnvironment()
   return fn()
 }
 

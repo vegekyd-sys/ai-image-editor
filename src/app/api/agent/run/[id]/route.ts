@@ -7,6 +7,24 @@ import { buildVideoFailureActions } from '@/lib/artifact-actions';
 
 type RunProject = { is_public?: boolean } | Array<{ is_public?: boolean }>;
 
+const DEFAULT_AGENT_RUN_STALE_MS = 90_000;
+
+function getAgentRunStaleMs(): number {
+  const configured = Number(process.env.AGENT_RUN_STALE_MS || DEFAULT_AGENT_RUN_STALE_MS);
+  return Number.isFinite(configured)
+    ? Math.max(45_000, Math.min(configured, 10 * 60_000))
+    : DEFAULT_AGENT_RUN_STALE_MS;
+}
+
+function extractSavedDraftPath(output: unknown): string | undefined {
+  if (!output || typeof output !== 'object') return undefined;
+  const record = output as Record<string, unknown>;
+  const value = record.value && typeof record.value === 'object'
+    ? record.value as Record<string, unknown>
+    : record;
+  return typeof value.path === 'string' && value.path.trim() ? value.path : undefined;
+}
+
 function normalizeMediaIdentity(value?: string | null): string | null {
   if (!value) return null;
   return value.split('#')[0].split('?')[0];
@@ -113,6 +131,57 @@ export async function GET(
     }
     if (hasBearerAuth && 'error' in authResult) return authResult.error;
     const ownerUserId = run.user_id as string;
+
+    // A platform hard-kill cannot run route finally blocks. Heartbeats make
+    // that failure observable: after the lease expires, atomically close the
+    // run and preserve the latest saved write_file draft as a resume point.
+    if (run.status === 'running') {
+      const { data: lastEvent } = await admin
+        .from('agent_events')
+        .select('created_at')
+        .eq('run_id', runId)
+        .order('created_at', { ascending: false })
+        .limit(1)
+        .maybeSingle();
+      const lastActivityAt = Date.parse(lastEvent?.created_at || run.started_at || '') || 0;
+      if (lastActivityAt > 0 && Date.now() - lastActivityAt > getAgentRunStaleMs()) {
+        const { data: draftRows } = await admin
+          .from('agent_tool_history')
+          .select('output')
+          .eq('run_id', runId)
+          .eq('tool_name', 'write_file')
+          .order('created_at', { ascending: false })
+          .limit(5);
+        const draftPath = (draftRows || [])
+          .map((row: { output?: unknown }) => extractSavedDraftPath(row.output))
+          .find(Boolean);
+        const isEn = (run.metadata as Record<string, unknown> | null)?.locale === 'en';
+        const message = draftPath
+          ? (isEn
+              ? 'The agent runtime stopped, but your draft was saved. Send “continue” to resume from it.'
+              : 'Agent 运行环境已中断，但草稿已经保存。发送“继续”会从这份草稿恢复。')
+          : (isEn
+              ? 'The agent runtime stopped and no resumable draft was saved. Please retry the request.'
+              : 'Agent 运行环境已中断，且没有可恢复的草稿。请重新发送请求。');
+        const metadata = {
+          ...((run.metadata as Record<string, unknown> | null) ?? {}),
+          terminal: {
+            code: 'stale_run_lease_expired',
+            recoverable: Boolean(draftPath),
+            checkpoint: draftPath ? { draftPath, lastTool: 'write_file' } : undefined,
+            message,
+          },
+        };
+        const { data: reconciled } = await admin
+          .from('agent_runs')
+          .update({ status: 'failed', ended_at: new Date().toISOString(), metadata })
+          .eq('id', runId)
+          .eq('status', 'running')
+          .select('status, ended_at, metadata')
+          .maybeSingle();
+        if (reconciled) Object.assign(run, reconciled);
+      }
+    }
 
     const url = new URL(req.url);
     const wantEvents = url.searchParams.get('events') === 'true';
@@ -228,6 +297,15 @@ export async function GET(
         });
       } else if (e.type === 'error') {
         errorMsg = e.data?.message;
+      }
+    }
+
+    // A terminal error is also stored on the run row. Use it when an event
+    // insert was interrupted so reconnect never turns a failed run silent.
+    if (!errorMsg && run.status === 'failed') {
+      const terminal = (run.metadata as Record<string, unknown> | null)?.terminal as Record<string, unknown> | undefined;
+      if (typeof terminal?.message === 'string' && terminal.message.trim()) {
+        errorMsg = terminal.message;
       }
     }
 
