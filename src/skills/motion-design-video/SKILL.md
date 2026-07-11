@@ -43,10 +43,14 @@ technical visualizations, illustrative explainers, and motion-led social pieces.
    color. Name the main reveal, motion energy, and final lockup.
 4. Script in visual beats with enough hold time to read. For data, simplify to
    the few values needed for the claim and never distort scale.
+   A complete branded piece must name its subject, show setup-transformation-
+   payoff, and reserve a readable final hold for the exact closing line.
 5. Storyboard one dominant event per scene. Avoid repeating one centered card.
 6. Build frame-driven Remotion animation with `useCurrentFrame`, interpolation,
    and springs. CSS transitions are not deterministic enough for rendering.
-7. Coordinate sound hits with meaningful motion. Keep subtitles and labels
+7. Coordinate sound hits with meaningful motion. Unless the user explicitly
+   requests a silent video, include narration, music, or designed sound; "no
+   narration" does not mean "no audio". Keep subtitles and labels
    inside safe areas at the final aspect ratio.
 8. Preview hook, strongest body beat, and final lockup together in one
    `preview_frame` contact sheet before materializing.
@@ -55,3 +59,6 @@ technical visualizations, illustrative explainers, and motion-led social pieces.
 
 Motion must reveal hierarchy, causality, comparison, or emotion. If the same
 information works just as well as static slides, revise the concept.
+Theme-fit visuals do not replace storytelling. Reject an attractive visual test
+that never names the subject, lacks a payoff, ends mid-action, or has no audio
+support without an explicit silent-video request.

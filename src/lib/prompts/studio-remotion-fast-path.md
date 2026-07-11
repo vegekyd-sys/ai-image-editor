@@ -26,6 +26,9 @@ candidates. The selected form must score at least 4/5 for theme specificity and
 remain recognizable when copy and logos are hidden.
 Keep this comparison inside the existing Proposal artifact and planning batch;
 do not spend another tool call or a separate prose response on it.
+The hidden-copy check is counterfactual QA only. The delivered composition must
+still render the approved subject name, semantic copy, and final line from
+props. Preserve setup, transformation, payoff, and a deliberate ending hold.
 
 ## One-Pass Runtime
 

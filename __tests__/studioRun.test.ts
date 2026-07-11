@@ -52,6 +52,12 @@ const artifacts: Record<StudioStageId, unknown> = {
     creativeTreatmentVersion: 2,
     creativeTreatment: {
       thesis: 'Turn one brief into visible creative momentum',
+      narrativeSpine: {
+        setup: 'One creator starts with an unfinished brief',
+        transformation: 'Makaron coordinates script, frame, rhythm, and review',
+        payoff: 'The coordinated work becomes a finished film',
+        finalLine: 'Makaron. One brief. A finished film.',
+      },
       themeEvidence: ['one brief', 'script, frame, and rhythm stages'],
       evidenceMapping: [
         { evidence: 'one brief', visibleCue: 'a page stack', motionRole: 'fans into production tracks' },
@@ -89,8 +95,8 @@ const artifacts: Record<StudioStageId, unknown> = {
   review: {
     version: '1.0', outputPath: 'outputs/final.mp4', status: 'pass',
     technical: { validContainer: true, durationSeconds: 50, resolution: '1920x1080', fps: 30, hasAudio: true },
-    visual: { framesSampled: 3, contactSheetPath: 'outputs/contact.png', blackFramesDetected: false, missingAssets: false, unreadableText: false, overlapDetected: false, themeFidelity: true, signatureFrameAchieved: true, visualFormFit: true, visibleThemeEvidenceCount: 2, genericShapeRisk: false },
-    audio: { integratedLufs: -14, truePeakDbfs: -2, unexpectedSilence: false, narrationPresent: true, musicPresent: true },
+    visual: { framesSampled: 3, contactSheetPath: 'outputs/contact.png', blackFramesDetected: false, missingAssets: false, unreadableText: false, overlapDetected: false, themeFidelity: true, signatureFrameAchieved: true, visualFormFit: true, visibleThemeEvidenceCount: 2, genericShapeRisk: false, subjectNamed: true, storyArcComplete: true, endingResolves: true },
+    audio: { integratedLufs: -14, truePeakDbfs: -2, unexpectedSilence: false, narrationPresent: true, musicPresent: true, soundDesignPresent: true, audioSupportsStory: true },
     runtimePromiseHonored: true, issues: [],
   },
   delivery: {
@@ -199,6 +205,24 @@ describe('Studio Run controller', () => {
     })).toThrow(/passing review/);
   });
 
+  it('refuses a visual study that does not finish the story or support it with audio', () => {
+    let run = makeRun('auto');
+    for (const stage of ['brief', 'proposal', 'script', 'storyboard', 'assets', 'composition'] as StudioStageId[]) {
+      run = put(run, stage).run;
+    }
+    expect(() => putStudioArtifact({
+      run,
+      stage: 'review',
+      artifact: {
+        ...(artifacts.review as Record<string, unknown>),
+        visual: { ...(artifacts.review as any).visual, subjectNamed: false, storyArcComplete: false, endingResolves: false },
+        audio: { ...(artifacts.review as any).audio, audioSupportsStory: false },
+      },
+      artifactPath: 'incomplete-story-review.json',
+      now,
+    })).toThrow(/passing review/);
+  });
+
   it('enforces the locked delivery promise at composition and review', () => {
     let run = makeRun();
     for (const stage of ['brief', 'proposal', 'script', 'storyboard', 'assets'] as StudioStageId[]) run = put(run, stage).run;
@@ -269,6 +293,7 @@ describe('Studio Run controller', () => {
       properties?: Record<string, unknown>;
     };
     expect(treatment.properties).toHaveProperty('themeEvidence');
+    expect(treatment.properties).toHaveProperty('narrativeSpine');
     expect(treatment.properties).toHaveProperty('evidenceMapping');
     expect(treatment.properties).toHaveProperty('bestVisualForm');
     expect(treatment.properties).toHaveProperty('visualFit');
@@ -292,6 +317,7 @@ describe('Studio Run controller', () => {
     expect(review.properties?.visual?.properties?.framesSampled?.minimum).toBe(3);
     expect(review.properties?.visual?.properties).toHaveProperty('visibleThemeEvidenceCount');
     expect(review.properties?.visual?.properties).toHaveProperty('genericShapeRisk');
+    expect(review.properties?.visual?.properties).toHaveProperty('storyArcComplete');
 
     const delivery = getStudioArtifactJsonSchema('delivery') as {
       required?: string[];

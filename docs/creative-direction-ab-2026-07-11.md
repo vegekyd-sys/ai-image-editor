@@ -95,3 +95,30 @@ The run also exposed a duplicate-export cost. It rendered `fast_720p`, then
 rendered 1080p because the delivery promise had locked 1920x1080. The fast path
 now locks 1280x720 when speed is requested and resolution is unspecified, or
 uses `source` on the first export when a larger promise is explicit.
+
+## Complete Story V4
+
+Project: <http://localhost:3039/projects/67e6ac6a-e1e0-479f-944c-ebd5a1b0e2a7>
+
+MP4: <https://cdn.makaron.app/storage/v1/object/public/images/5955d413-cad2-4814-b094-7fdf62d20400/workspace/67e6ac6a-e1e0-479f-944c-ebd5a1b0e2a7/media/remotion-makaron-brand-film-15s-38f08988.mp4>
+
+V3 exposed a conceptual regression: the hidden-copy counterfactual was treated
+as an instruction to omit semantic copy, and a speed-oriented prompt removed
+narration without preserving another audio layer. The result was a visual study,
+not a complete Makaron film.
+
+V4 separates the two contracts. Theme-fit imagery must survive a hidden-copy
+test, while the delivered film must still name Makaron, complete setup-
+transformation-payoff, hold on an intentional final line, and include narrative
+audio unless silence is explicitly requested.
+
+The 15.06-second V4 output contains H.264 video and AAC audio at 1280x720 and
+30fps. It includes generated Mandarin narration, restrained background music,
+semantic Chinese copy, five studio-native visual cues, and a 2.5-second Makaron
+final lockup. Contact-sheet review caught generic storyboard/script blocks and
+triggered one justified revision before the single publish and export.
+
+The storytelling regression is fixed. Visual craft is not yet finished: the
+final contact sheet remains dark and uses too little of the canvas. The next
+iteration should focus on framing scale, richer materials, and stronger focal
+hierarchy without reopening the narrative contract.

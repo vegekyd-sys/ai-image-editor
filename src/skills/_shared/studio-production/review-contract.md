@@ -26,6 +26,8 @@ Criticism must be observable and actionable.
 5. Check audio for unexpected silence, intelligible speech, music balance, and
    sync.
 6. Confirm the locked runtime and editability promise were honored.
+7. Confirm the story names its subject, completes setup-transformation-payoff,
+   and holds long enough on an intentional ending.
 
 ## Creative Risk Checks
 
@@ -41,6 +43,10 @@ Criticism must be observable and actionable.
 - Theme evidence: at least two subject-native cues remain legible when copy and
   logos are hidden, and each cue participates in the motion rather than sitting
   as decoration.
+- Semantic completeness: the visual metaphor supports rather than replaces the
+  subject name, core claim, payoff, and final line.
+- Audio intent: unless silence was explicitly requested, narration, music, or
+  sound design supports the narrative and final resolution.
 
 A passing review has no unresolved blocking issue. If revision is needed,
 invalidate the earliest responsible Studio Run stage and regenerate downstream

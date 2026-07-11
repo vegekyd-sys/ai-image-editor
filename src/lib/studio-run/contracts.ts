@@ -78,6 +78,12 @@ const visualFitSchema = z.object({
 
 const creativeTreatmentSchema = z.object({
   thesis: z.string().min(1),
+  narrativeSpine: z.object({
+    setup: z.string().min(1),
+    transformation: z.string().min(1),
+    payoff: z.string().min(1),
+    finalLine: z.string().min(1),
+  }).optional(),
   themeEvidence: z.array(z.string().min(1)).min(2).optional(),
   evidenceMapping: z.array(z.object({
     evidence: z.string().min(1),
@@ -124,9 +130,9 @@ const proposalSchema = z.object({
   }
   if (value.creativeMode === 'directed' && value.creativeTreatmentVersion === 2) {
     const treatment = value.creativeTreatment;
-    if (!treatment?.themeEvidence || !treatment.evidenceMapping || !treatment.bestVisualForm
+    if (!treatment?.narrativeSpine || !treatment.themeEvidence || !treatment.evidenceMapping || !treatment.bestVisualForm
       || !treatment.formRationale || !treatment.rejectedForms || !treatment.visualFit) {
-      ctx.addIssue({ code: 'custom', message: 'creativeTreatmentVersion 2 requires theme evidence, evidence mapping, form selection, rejected forms, and visual fit' });
+      ctx.addIssue({ code: 'custom', message: 'creativeTreatmentVersion 2 requires a narrative spine, theme evidence, evidence mapping, form selection, rejected forms, and visual fit' });
     }
   }
 });
@@ -220,6 +226,9 @@ const finalReviewSchema = z.object({
     visualFormFit: z.boolean().optional(),
     visibleThemeEvidenceCount: z.number().int().nonnegative().optional(),
     genericShapeRisk: z.boolean().optional(),
+    subjectNamed: z.boolean().optional(),
+    storyArcComplete: z.boolean().optional(),
+    endingResolves: z.boolean().optional(),
   }),
   audio: z.object({
     integratedLufs: z.number(),
@@ -227,6 +236,8 @@ const finalReviewSchema = z.object({
     unexpectedSilence: z.boolean(),
     narrationPresent: z.boolean(),
     musicPresent: z.boolean(),
+    soundDesignPresent: z.boolean().optional(),
+    audioSupportsStory: z.boolean().optional(),
   }),
   runtimePromiseHonored: z.boolean(),
   issues: z.array(z.string()),
@@ -245,7 +256,11 @@ const finalReviewSchema = z.object({
   value.visual.visualFormFit !== false &&
   (value.visual.visibleThemeEvidenceCount === undefined || value.visual.visibleThemeEvidenceCount >= 2) &&
   value.visual.genericShapeRisk !== true &&
+  value.visual.subjectNamed !== false &&
+  value.visual.storyArcComplete !== false &&
+  value.visual.endingResolves !== false &&
   !value.audio.unexpectedSilence &&
+  value.audio.audioSupportsStory !== false &&
   value.runtimePromiseHonored &&
   value.issues.length === 0
 ), { message: 'a passing review cannot contain failed checks' });

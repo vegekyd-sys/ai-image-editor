@@ -50,6 +50,7 @@ describe('Studio production skills', () => {
     const production = read('src/skills/_shared/studio-production/production-contract.md');
     const reference = read('src/skills/_shared/studio-production/reference-analysis.md');
     const creative = read('src/skills/creative-direction/SKILL.md');
+    const motion = read('src/skills/motion-design-video/SKILL.md');
     const audio = read('src/skills/_shared/studio-production/audio-direction.md');
     const review = read('src/skills/_shared/studio-production/review-contract.md');
 
@@ -66,6 +67,10 @@ describe('Studio production skills', () => {
     expect(creative).toContain('350 Chinese characters');
     expect(creative).toContain('subject-native visual nouns');
     expect(creative).toContain('genericShapeRisk');
+    expect(creative).toContain('diagnostic test, not a delivery instruction');
+    expect(creative).toContain('storyArcComplete');
+    expect(motion).toContain('does not mean "no audio"');
+    expect(motion).toContain('Theme-fit visuals do not replace storytelling');
     expect(creative).toContain('A/B Review');
     expect(creative).toContain('6500 source');
     expect(audio).toContain('Treat audio as part of the edit');

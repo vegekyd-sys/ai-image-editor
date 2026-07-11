@@ -61,6 +61,12 @@ Use this counterfactual test: hide all copy and logos. The signature frame and
 main transformation should still suggest this subject or its defining action.
 If they do not, return to theme evidence before storyboarding.
 
+This is a diagnostic test, not a delivery instruction. Do not remove useful
+copy, narration, or brand naming from the actual film. A complete branded video
+must establish a setup, show the subject causing a transformation, deliver a
+payoff, and end on an intentional product or subject lockup. The audience should
+hear or read the subject name before the ending and see it in the final hold.
+
 Map at least two pieces of theme evidence to a visible cue and a motion role.
 Use subject-native visual nouns: for a studio these might be page stacks,
 frames, waveforms, edit tracks, review marks, lenses, or a conductor gesture.
@@ -84,6 +90,12 @@ For normal complete-video work, write this compact object into the Proposal:
   "creativeTreatmentVersion": 2,
   "creativeTreatment": {
     "thesis": "One sentence joining intended feeling to a subject-specific visual cause.",
+    "narrativeSpine": {
+      "setup": "The initial tension or unmet need.",
+      "transformation": "What the named subject visibly does.",
+      "payoff": "The completed outcome or changed state.",
+      "finalLine": "The exact final brand or subject line."
+    },
     "themeEvidence": ["concrete subject evidence 1", "concrete subject evidence 2"],
     "evidenceMapping": [
       {"evidence": "subject evidence 1", "visibleCue": "recognizable shape or material", "motionRole": "meaningful action"},
@@ -115,7 +127,9 @@ English words or 350 Chinese characters. Generate only the selected composition.
 
 ## Handoff
 
-- Script: pace ideas according to the treatment's rhythm.
+- Script: pace ideas according to the treatment's rhythm. Preserve the complete
+  narrative spine and name the product or subject explicitly; visual metaphor
+  never replaces semantic clarity.
 - Storyboard: each scene names a distinct focal composition and a meaningful
   event derived from the visual mechanism.
 - Composition: use the material system consistently; do not add a generic card
@@ -128,6 +142,9 @@ English words or 350 Chinese characters. Generate only the selected composition.
   `visibleThemeEvidenceCount` from the contact sheet and fail when it is below
   two. Set `genericShapeRisk: true` when generic primitives carry the idea only
   because labels or narration explain them.
+  Also fail `subjectNamed`, `storyArcComplete`, `endingResolves`, or
+  `audioSupportsStory` when the result is a visual study rather than a complete
+  film.
 
 ## A/B Review
 
