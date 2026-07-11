@@ -16,7 +16,7 @@ import ModelSelector from '@/components/ModelSelector';
 import type { AgentModelPreference } from '@/lib/agent-models';
 import SkillSelector, { type SkillItem } from '@/components/SkillSelector';
 import { splitCompletionActions } from '@/lib/artifact-actions';
-import { removeAllInlineVideoUrls, removeRenderableInlineVideoUrls, resolveInlineVideoCandidate } from '@/lib/cui-video-url';
+import { removeAllInlineVideoUrls, removeInlineMediaNavigationMarkers, removeRenderableInlineVideoUrls, resolveInlineVideoCandidate } from '@/lib/cui-video-url';
 import type { ArtifactCompletionAction as CompletionAction } from '@/types';
 
 /** Inline video in CUI — natural AR, play/pause, @N badge, tap to navigate with time sync */
@@ -1385,7 +1385,7 @@ export default function AgentChatView({
                         <div className="markdown-body">
                           <MarkdownBlock
                             key={`${msg.id}:${idx}:markdown`}
-                            text={fixMarkdownDelimiters(visibleWithoutVideoUrls.replace(/\nanim:[a-f0-9-]+/g, '').replace(/\nsnap:[a-f0-9-]+/g, '').replace(/\n?music:\d+\|[^\n]*/g, ''))}
+                            text={fixMarkdownDelimiters(removeInlineMediaNavigationMarkers(visibleWithoutVideoUrls).replace(/\n?music:\d+\|[^\n]*/g, ''))}
                             isPanel={isPanel}
                             snapshots={snapshots}
                             onNavigateToSnapshot={onNavigateToSnapshot}

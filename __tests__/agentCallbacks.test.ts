@@ -342,7 +342,7 @@ describe('makeAgentCallbacks', () => {
       callbacks.onNewTurn?.('msg-1');
       callbacks.onError?.('Something went wrong');
 
-      expect(messages[0].content).toBe('editor.errorRetry');
+      expect(messages[0].content).toBe('Something went wrong');
     });
 
     it('calls onCleanup if provided', () => {

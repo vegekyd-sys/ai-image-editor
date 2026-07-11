@@ -37,6 +37,8 @@ export interface PromptContextOptions {
   uploadedVideoCount?: number;
   /** Audio references for this turn. Not part of Timeline Media Index. */
   audioAttachments?: AudioAttachmentContext[];
+  /** Run being created for this request; excluded when locating a prior checkpoint. */
+  currentRunId?: string | null;
 }
 
 export interface PromptContextResult {
@@ -114,6 +116,17 @@ function mergeAudioAttachments(
   return merged;
 }
 
+export function buildAgentRecoveryContext(
+  userMessage: string,
+  metadata: Record<string, unknown> | null | undefined,
+): string {
+  const terminal = metadata?.terminal as Record<string, unknown> | undefined;
+  const checkpoint = terminal?.checkpoint as Record<string, unknown> | undefined;
+  const resumeIntent = /^(?:请)?\s*(?:(?:继续|接着|恢复|重试|续上)(?:\s|$|[，。！？,.!?]|做|改|完成|刚才)|(?:continue|resume|retry)\b)/i.test(userMessage.trim());
+  if (!resumeIntent || terminal?.recoverable !== true || !checkpoint?.draftPath) return '';
+  return `[Recoverable Agent Checkpoint]\nThe previous run stopped before completion, but its editable draft was saved. Resume from this exact checkpoint; do not recreate the work from the original media.\ndraft path: ${String(checkpoint.draftPath)}${checkpoint.previewUrl ? `\nlast preview: ${String(checkpoint.previewUrl)}` : ''}${checkpoint.lastTool ? `\nlast completed tool: ${String(checkpoint.lastTool)}` : ''}\nRead the draft path, apply the pending modification, preview it, and publish the final artifact when that was the user's original request.\n\n`;
+}
+
 function normalizeLegacyCompositionDescription(description: string | undefined, fallback: string): string {
   if (!description) return fallback;
   const trimmed = description.trim();
@@ -141,7 +154,7 @@ export async function buildPromptContext(
   // Query snapshots, visible messages, private tool history, and project audio
   // in parallel. Audio is a separate project-scoped index; it never occupies
   // Timeline Media Index slots like <<<media_N>>>.
-  const [snapshotsRes, messagesRes, toolHistoryRes, musicRes] = await Promise.all([
+  const [snapshotsRes, messagesRes, toolHistoryRes, musicRes, recoverableRunRes] = await Promise.all([
     supabase
       .from('snapshots')
       .select('id, image_url, description, type, design_path, tips, sort_order, video_meta, metadata')
@@ -166,6 +179,13 @@ export async function buildPromptContext(
       .in('status', ['completed', 'streaming'])
       .order('track_index', { ascending: true })
       .limit(20),
+    supabase
+      .from('agent_runs')
+      .select('id, status, metadata, started_at')
+      .eq('project_id', projectId)
+      .eq('user_id', userId)
+      .order('started_at', { ascending: false })
+      .limit(3),
   ]);
 
   const snapshots: DbSnapshot[] = snapshotsRes.data ?? [];
@@ -183,6 +203,15 @@ export async function buildPromptContext(
     })
     .filter((audio) => !!audio.audioUrl);
   const resolvedAudioAttachments = mergeAudioAttachments(projectAudios, audioAttachments);
+  const priorRun = Array.isArray(recoverableRunRes.data)
+    ? recoverableRunRes.data.find((row: { id?: string }) => row.id !== options.currentRunId)
+    : undefined;
+  // Only the immediately preceding run may be resumed. This prevents an old
+  // failed checkpoint from resurfacing after a newer successful run.
+  const recoverableMetadata = priorRun?.status === 'failed'
+    ? priorRun.metadata as Record<string, unknown> | null | undefined
+    : undefined;
+  const recoveryContext = buildAgentRecoveryContext(userMessage, recoverableMetadata);
 
   const currentSnapshotIndex = options.currentSnapshotIndex ?? Math.max(0, snapshots.length - 1);
   const currentSnap = snapshots[currentSnapshotIndex];
@@ -315,7 +344,7 @@ export async function buildPromptContext(
     : '';
 
   // Assemble
-  const fullPrompt = `${videoWarning}${designWarning}${annotationWarning}${draftWarning}${snapshotWarning}${metaContext}${descriptionContext}${snapshotIndexContext}${designContext}${tipsContext}${refContext}${frameAnchoredVideoEditContext}${videoUploadContext}${audioAttachmentContext}[User request — detect language and reply in the same language]\n${userMessage}`;
+  const fullPrompt = `${recoveryContext}${videoWarning}${designWarning}${annotationWarning}${draftWarning}${snapshotWarning}${metaContext}${descriptionContext}${snapshotIndexContext}${designContext}${tipsContext}${refContext}${frameAnchoredVideoEditContext}${videoUploadContext}${audioAttachmentContext}[User request — detect language and reply in the same language]\n${userMessage}`;
 
   const snapshotImages = snapshots.map((s) => {
     const videoMeta = s.video_meta as Record<string, unknown> | undefined;

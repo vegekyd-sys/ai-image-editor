@@ -562,7 +562,7 @@ export function makeAgentCallbacks(ctx: AgentCallbackContext) {
       if (currentMsgId) {
         const id = currentMsgId;
         ctx.setMessages(prev => prev.map(m =>
-          m.id === id ? { ...m, content: m.content || ctx.t('editor.errorRetry') } : m,
+          m.id === id ? { ...m, content: m.content || msg || ctx.t('editor.errorRetry') } : m,
         ));
       }
       ctx.onCleanup?.();

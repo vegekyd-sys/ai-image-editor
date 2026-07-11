@@ -24,6 +24,7 @@ export class AgentDualWriter {
   private messageText = '';
   private currentMessageId = crypto.randomUUID();
   private currentMessageHasImage = false;
+  private currentTurnHasDelivery = false;
   private pendingToolCalls = new Map<string, {
     tool: string;
     input: Record<string, unknown>;
@@ -91,19 +92,20 @@ export class AgentDualWriter {
         // Write snapshots table
         if (imageUrl && !prePublishedSnapshotId) {
           const sortOrder = await this.nextSortOrder();
-          await this.supabase.from('snapshots').upsert({
+          const { error } = await this.supabase.from('snapshots').upsert({
             id: snapshotId,
             project_id: this.projectId,
             image_url: imageUrl,
             tips: [],
             message_id: this.currentMessageId,
             sort_order: sortOrder,
-          }, { onConflict: 'id' }).then(({ error }) => {
-            if (error) console.error('[DualWriter] snapshot upsert error:', error);
-          });
+          }, { onConflict: 'id' });
+          if (error) throw new Error(`Failed to persist generated image snapshot: ${error.message}`);
           this.currentMessageHasImage = true;
+          this.currentTurnHasDelivery = true;
         } else if (imageUrl) {
           this.currentMessageHasImage = true;
+          this.currentTurnHasDelivery = true;
         }
 
         // Write agent_events
@@ -144,26 +146,28 @@ export class AgentDualWriter {
           });
 
           // Upload design JSON to workspace + index in workspace_files for agent read_file
-          try {
-            const storagePath = `${this.userId}/workspace/${designPath}`;
-            await this.supabase.storage.from('images')
-              .upload(storagePath, new Blob([designJson], { type: 'application/json' }), { upsert: true });
-            const { data: urlData } = this.supabase.storage.from('images').getPublicUrl(storagePath);
-            await this.supabase.from('workspace_files').upsert({
-              user_id: this.userId,
-              path: designPath,
-              content_type: 'application/json',
-              size_bytes: designJson.length,
-              storage_url: urlData?.publicUrl || '',
-              updated_at: new Date().toISOString(),
-            }, { onConflict: 'user_id,path' });
-          } catch (err) {
-            console.error('[DualWriter] design upload error:', err);
+          const storagePath = `${this.userId}/workspace/${designPath}`;
+          const { error: designUploadError } = await this.supabase.storage.from('images')
+            .upload(storagePath, new Blob([designJson], { type: 'application/json' }), { upsert: true });
+          if (designUploadError) {
+            throw new Error(`Failed to persist published design: ${designUploadError.message}`);
+          }
+          const { data: urlData } = this.supabase.storage.from('images').getPublicUrl(storagePath);
+          const { error: workspaceIndexError } = await this.supabase.from('workspace_files').upsert({
+            user_id: this.userId,
+            path: designPath,
+            content_type: 'application/json',
+            size_bytes: designJson.length,
+            storage_url: urlData?.publicUrl || '',
+            updated_at: new Date().toISOString(),
+          }, { onConflict: 'user_id,path' });
+          if (workspaceIndexError) {
+            throw new Error(`Failed to index published design: ${workspaceIndexError.message}`);
           }
 
           // Write snapshots table
           const sortOrder = await this.nextSortOrder();
-          await this.supabase.from('snapshots').upsert({
+          const { error: snapshotError } = await this.supabase.from('snapshots').upsert({
             id: snapId,
             project_id: this.projectId,
             image_url: '',
@@ -172,10 +176,12 @@ export class AgentDualWriter {
             sort_order: sortOrder,
             description: designDesc || '[composition]',
             design_path: designPath,
-          }, { onConflict: 'id' }).then(({ error }) => {
-            if (error) console.error('[DualWriter] design snapshot upsert error:', error);
-          });
+          }, { onConflict: 'id' });
+          if (snapshotError) {
+            throw new Error(`Failed to persist published design snapshot: ${snapshotError.message}`);
+          }
           this.currentMessageHasImage = true;
+          this.currentTurnHasDelivery = true;
 
           // Write agent_events
           await this.insertEvent(event.type, {
@@ -205,6 +211,7 @@ export class AgentDualWriter {
         this.messageText = '';
         this.currentMessageId = crypto.randomUUID();
         this.currentMessageHasImage = false;
+        this.currentTurnHasDelivery = false;
         await this.insertEvent('new_turn', { messageId: this.currentMessageId });
         // SSE: include new messageId
         this.tryEnqueue({ type: 'new_turn', messageId: this.currentMessageId });
@@ -212,19 +219,27 @@ export class AgentDualWriter {
       }
 
       case 'done': {
+        if (!this.messageText.trim() && !this.currentTurnHasDelivery) {
+          throw new Error('Refusing empty agent completion without final text or a delivered artifact');
+        }
         await this.flushContent();
-        await this.saveCurrentMessage();
-        await this.insertEvent('done', {});
+        await this.saveCurrentMessage(true);
+        await this.insertEvent('done', {}, true);
         this.tryEnqueue(event);
         return;
       }
 
       case 'error': {
         await this.flushContent();
-        await this.saveCurrentMessage();
+        if (event.message && !this.messageText.includes(event.message)) {
+          this.messageText = this.messageText.trim()
+            ? `${this.messageText.trimEnd()}\n\n${event.message}`
+            : event.message;
+        }
+        await this.saveCurrentMessage(true);
 
         const { type, ...data } = event as Record<string, unknown>;
-        await this.insertEvent('error', data);
+        await this.insertEvent('error', data, true);
         this.tryEnqueue(event);
         return;
       }
@@ -279,6 +294,19 @@ export class AgentDualWriter {
       case 'nsfw_detected': {
         await this.flushContent();
 
+        if (event.type === 'animation_task' || event.type === 'video_snapshot') {
+          this.currentTurnHasDelivery = true;
+        }
+
+        const { type: _t, ...rest } = event as Record<string, unknown>;
+        await this.insertEvent(event.type, rest);
+        this.tryEnqueue(event);
+        return;
+      }
+
+      case 'music_task': {
+        await this.flushContent();
+        this.currentTurnHasDelivery = true;
         const { type: _t, ...rest } = event as Record<string, unknown>;
         await this.insertEvent(event.type, rest);
         this.tryEnqueue(event);
@@ -312,19 +340,26 @@ export class AgentDualWriter {
   /** Get the current message ID (for the first message before any new_turn). */
   get firstMessageId() { return this.currentMessageId; }
 
+  /** Durable liveness lease used to reconcile platform-killed runs. */
+  async persistHeartbeat() {
+    await this.insertEvent('heartbeat', { at: new Date().toISOString() });
+  }
+
   /** Save accumulated message text to messages table. */
-  private async saveCurrentMessage() {
+  private async saveCurrentMessage(required = false) {
     if (!this.messageText.trim() && !this.currentMessageHasImage) return;
     try {
-      await this.supabase.from('messages').upsert({
+      const { error } = await this.supabase.from('messages').upsert({
         id: this.currentMessageId,
         project_id: this.projectId,
         role: 'assistant',
         content: this.messageText,
         has_image: this.currentMessageHasImage,
       }, { onConflict: 'id' });
+      if (error) throw error;
     } catch (err) {
       console.error('[DualWriter] message upsert error:', err);
+      if (required) throw err;
     }
   }
 
@@ -338,17 +373,19 @@ export class AgentDualWriter {
     }
   }
 
-  private async insertEvent(type: string, data: Record<string, unknown>) {
+  private async insertEvent(type: string, data: Record<string, unknown>, required = false) {
     try {
-      await this.supabase.from('agent_events').insert({
+      const { error } = await this.supabase.from('agent_events').insert({
         run_id: this.runId,
         project_id: this.projectId,
         type,
         data,
         seq: this.seq++,
       });
+      if (error) throw error;
     } catch (err) {
       console.error('[DualWriter] Failed to insert event:', type, err);
+      if (required) throw err;
     }
   }
 

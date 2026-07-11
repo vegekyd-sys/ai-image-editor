@@ -230,6 +230,7 @@ export async function POST(req: NextRequest) {
         }
 
         const videoMeta: VideoMeta = {
+          origin: 'source-upload',
           taskId: null, videoUrl: permanentUrl, prompt: '',
           sourceSnapshotIds: [], sourceUrls: [],
           status: 'completed', duration: providedMeta?.duration ?? null, model: 'upload',
@@ -361,6 +362,7 @@ export async function POST(req: NextRequest) {
       }
 
       const videoMeta: VideoMeta = {
+        origin: 'source-upload',
         taskId: null, videoUrl: permanentUrl, prompt: '',
         sourceSnapshotIds: [], sourceUrls: [],
         status: 'completed', duration: providedMeta?.duration ?? null, model: 'upload',

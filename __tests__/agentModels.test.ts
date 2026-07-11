@@ -4,7 +4,7 @@ import {
   normalizeAgentModelPreference,
   resolveAgentModelSpec,
 } from '@/lib/agent-models';
-import { createAgentModelRuntime } from '@/lib/agent-model-runtime';
+import { createAgentModelRuntime, getAgentProviderOptions } from '@/lib/agent-model-runtime';
 
 describe('agent model catalog', () => {
   it('exposes the five product model ids in selector order', () => {
@@ -50,6 +50,27 @@ describe('agent model catalog', () => {
     } finally {
       if (previous === undefined) delete process.env.DEEPSEEK_API_KEY;
       else process.env.DEEPSEEK_API_KEY = previous;
+    }
+  });
+
+  it('does not leak Anthropic reasoning effort into Grok', () => {
+    const previousOpenRouterKey = process.env.OPENROUTER_API_KEY;
+    const previousAnthropicEffort = process.env.AGENT_REASONING_EFFORT;
+    const previousOpenRouterEffort = process.env.OPENROUTER_AGENT_REASONING_EFFORT;
+    process.env.OPENROUTER_API_KEY = 'test-key';
+    process.env.AGENT_REASONING_EFFORT = 'max';
+    delete process.env.OPENROUTER_AGENT_REASONING_EFFORT;
+    try {
+      const runtime = createAgentModelRuntime('grok-4.5', 'project-a');
+      expect(getAgentProviderOptions(runtime, { reasoningEffort: 'max' }))
+        .toMatchObject({ openrouter: { reasoning: { effort: 'low' } } });
+    } finally {
+      if (previousOpenRouterKey === undefined) delete process.env.OPENROUTER_API_KEY;
+      else process.env.OPENROUTER_API_KEY = previousOpenRouterKey;
+      if (previousAnthropicEffort === undefined) delete process.env.AGENT_REASONING_EFFORT;
+      else process.env.AGENT_REASONING_EFFORT = previousAnthropicEffort;
+      if (previousOpenRouterEffort === undefined) delete process.env.OPENROUTER_AGENT_REASONING_EFFORT;
+      else process.env.OPENROUTER_AGENT_REASONING_EFFORT = previousOpenRouterEffort;
     }
   });
 });

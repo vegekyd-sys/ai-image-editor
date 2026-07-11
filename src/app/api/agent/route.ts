@@ -6,6 +6,7 @@ import { AgentDualWriter } from '@/lib/agentDualWriter';
 import { requireCredits, deductByTokens } from '@/lib/billing/credits';
 import { AgentPerf } from '@/lib/agent-perf';
 import { getRequestLocale } from '@/lib/server-locale';
+import { resolvePersistedRunStatus } from '@/lib/agent-terminal';
 import {
   isAgentModelPreference,
   resolveAgentModelSpec,
@@ -79,9 +80,10 @@ export async function POST(req: NextRequest) {
     let firstMessageId: string | null = null;
     if (isNormalMode) {
       const endRunCreate = perf.span('create_agent_run', { projectId, userId });
-      // Mark any stale running runs as failed before creating a new one
+      // Supersede any prior run. `aborted` is observable by the old worker;
+      // `failed` was not, so the old model could keep producing side effects.
       await supabase.from('agent_runs')
-        .update({ status: 'failed', ended_at: new Date().toISOString() })
+        .update({ status: 'aborted', ended_at: new Date().toISOString() })
         .eq('project_id', projectId)
         .eq('user_id', userId)
         .eq('status', 'running');
@@ -119,6 +121,10 @@ export async function POST(req: NextRequest) {
         perf.mark('first_sse_sent', { eventType: 'status' });
         // Track token usage for billing
         let usageEvent: Extract<import('@/lib/agent').AgentStreamEvent, { type: 'usage' }> | null = null;
+        let sawDone = false;
+        let sawError = false;
+        let wasStopped = false;
+        let terminalError: Extract<import('@/lib/agent').AgentStreamEvent, { type: 'error' }> | null = null;
 
         // Helper: iterate agent stream, capture usage event
         async function iterateAgent(gen: AsyncIterable<import('@/lib/agent').AgentStreamEvent>, ctrl: ReadableStreamDefaultController) {
@@ -133,6 +139,7 @@ export async function POST(req: NextRequest) {
           ? new AgentDualWriter(runId, supabase, userId, projectId, controller, encoder)
           : null;
         if (writer) {
+          await writer.persistHeartbeat();
           firstMessageId = writer.firstMessageId;
           // Store firstMessageId in run metadata for reconnect
           supabase.from('agent_runs').update({
@@ -267,6 +274,7 @@ export async function POST(req: NextRequest) {
               referenceImageCount: referenceImageCount || undefined,
               uploadedVideoCount: uploadedVideoCount || undefined,
               audioAttachments,
+              currentRunId: runId,
             });
             endContext({
               promptChars: ctx.fullPrompt.length,
@@ -306,21 +314,36 @@ export async function POST(req: NextRequest) {
           }
 
           // Normal agent request — SSE heartbeat every 10s to prevent proxy idle timeout
+          const modelAbortController = new AbortController();
           const heartbeat = setInterval(() => {
             try { controller.enqueue(encoder.encode(`: heartbeat\n\n`)); } catch { /* disconnected */ }
+            if (writer) void writer.persistHeartbeat();
+            if (runId) {
+              void supabase.from('agent_runs').select('status').eq('id', runId).single()
+                .then(({ data }) => {
+                  if (data?.status !== 'running' && !modelAbortController.signal.aborted) {
+                    modelAbortController.abort('Agent run reached a persisted terminal status');
+                  }
+                });
+            }
           }, 10_000);
           // Periodically check if run was aborted (user clicked abort in CUI)
           let abortCheckCount = 0;
-          const isAborted = async () => {
-            if (!runId || ++abortCheckCount % 10 !== 0) return false; // check every ~10 events
+          const shouldStop = async (force = false) => {
+            if (!runId || (!force && ++abortCheckCount % 10 !== 0)) return false; // check every ~10 events
             const { data } = await supabase.from('agent_runs').select('status').eq('id', runId).single();
-            return data?.status === 'aborted';
+            return data?.status !== 'running';
           };
 
           try {
             const endAgentStream = perf.span('agent_stream', { projectId, runId: runId || null });
             try {
-              for await (const event of runMakaronAgent(agentPrompt, agentImage, projectId, { analysisOnly, analysisContext, isVideoAnalysis, animationImageUrls: animationImageUrls?.length ? animationImageUrls : undefined, animationImages: animationImages?.length ? animationImages : undefined, locale, preferredModel, agentModel: requestedAgentModel, videoModel, videoResolution, videoAuto, audioAttachments: agentAudioAttachments, snapshotImages: agentSnapshotImages, currentSnapshotIndex: agentCurrentSnapshotIndex, isNsfw, supabase, userId: userId, currentDesign: agentCurrentDesign, currentDesignPath: agentCurrentDesignPath, history: agentHistory, timelineVersion, perf })) {
+              for await (const event of runMakaronAgent(agentPrompt, agentImage, projectId, { analysisOnly, analysisContext, isVideoAnalysis, animationImageUrls: animationImageUrls?.length ? animationImageUrls : undefined, animationImages: animationImages?.length ? animationImages : undefined, locale, preferredModel, agentModel: requestedAgentModel, videoModel, videoResolution, videoAuto, audioAttachments: agentAudioAttachments, snapshotImages: agentSnapshotImages, currentSnapshotIndex: agentCurrentSnapshotIndex, isNsfw, supabase, userId: userId, currentDesign: agentCurrentDesign, currentDesignPath: agentCurrentDesignPath, history: agentHistory, timelineVersion, perf, abortSignal: modelAbortController.signal })) {
+                if (event.type === 'done') sawDone = true;
+                if (event.type === 'error') {
+                  sawError = true;
+                  terminalError = event;
+                }
                 if (event.type === 'usage') { usageEvent = event; continue; }
                 if (writer) {
                   await writer.processAndEnqueue(event);
@@ -328,10 +351,24 @@ export async function POST(req: NextRequest) {
                   controller.enqueue(encoder.encode(`data: ${JSON.stringify(event)}\n\n`));
                 }
                 // Check abort after processing event
-                if (await isAborted()) {
-                  console.log('[agent] Run aborted by user');
+                if (await shouldStop()) {
+                  console.log('[agent] Run stopped by persisted terminal status');
+                  wasStopped = true;
                   break;
                 }
+              }
+              if (!sawDone && !sawError && await shouldStop(true)) wasStopped = true;
+              if (writer && !sawDone && !sawError && !wasStopped) {
+                terminalError = {
+                  type: 'error',
+                  code: 'missing_terminal_event',
+                  recoverable: true,
+                  message: locale === 'en'
+                    ? 'The agent connection ended without a completed result. Your saved work is preserved; send “continue” to resume.'
+                    : 'Agent 在没有完成结果时结束了。已保存的工作会保留，发送“继续”即可恢复。',
+                };
+                sawError = true;
+                await writer.processAndEnqueue(terminalError);
               }
             } finally {
               endAgentStream();
@@ -343,22 +380,21 @@ export async function POST(req: NextRequest) {
           const msg = err instanceof Error ? err.message : String(err);
           console.error('Agent stream error:', msg);
           const errorEvent = { type: 'error' as const, message: msg };
+          sawError = true;
+          terminalError = errorEvent;
           if (writer) {
-            await writer.processAndEnqueue(errorEvent);
+            try {
+              await writer.processAndEnqueue(errorEvent);
+            } catch (persistError) {
+              console.error('Failed to persist terminal agent error:', persistError);
+              writer.tryEnqueue(errorEvent);
+            }
           } else {
             controller.enqueue(
               encoder.encode(`data: ${JSON.stringify(errorEvent)}\n\n`),
             );
           }
-          // Mark run as failed
-          if (runId) {
-            try {
-              await supabase.from('agent_runs').update({
-                status: 'failed',
-                ended_at: new Date().toISOString(),
-              }).eq('id', runId);
-            } catch { /* best effort */ }
-          }
+          // Finalization below atomically persists failed + terminal metadata.
         } finally {
           // Deduct credits based on token usage (fire-and-forget)
           if (usageEvent) {
@@ -382,23 +418,40 @@ export async function POST(req: NextRequest) {
             await writer.flush();
             endWriterFlush();
           }
-          // Mark run as completed
+          // A closed transport is not completion evidence. Only an explicit
+          // validated done event may transition a running run to completed.
           if (runId) {
             try {
               const endRunComplete = perf.span('complete_agent_run', { projectId, runId });
               const { data: run } = await supabase.from('agent_runs')
-                .select('status').eq('id', runId).single();
+                .select('status, metadata').eq('id', runId).single();
               if (run?.status === 'running') {
+                const terminalStatus = resolvePersistedRunStatus({
+                  currentStatus: run.status,
+                  sawDone,
+                  sawError,
+                });
                 await supabase.from('agent_runs').update({
-                  status: 'completed',
+                  status: terminalStatus,
                   ended_at: new Date().toISOString(),
-                }).eq('id', runId);
+                  ...(terminalError ? {
+                    metadata: {
+                      ...((run.metadata as Record<string, unknown> | null) ?? {}),
+                      terminal: {
+                        code: terminalError.code,
+                        recoverable: terminalError.recoverable === true,
+                        checkpoint: terminalError.checkpoint,
+                        message: terminalError.message,
+                      },
+                    },
+                  } : {}),
+                }).eq('id', runId).eq('status', 'running');
               }
-              endRunComplete({ status: run?.status || null });
+              endRunComplete({ status: run?.status || null, sawDone, sawError });
             } catch { /* best effort */ }
           }
-          // Headless: auto-name project if still "Untitled"
-          if (headless) {
+          // Headless: auto-name project only after a validated completion.
+          if (headless && sawDone && !sawError && !wasStopped) {
             try {
               const { data: proj } = await supabase.from('projects').select('title').eq('id', projectId).single();
               if (proj?.title === 'Untitled' || !proj?.title) {

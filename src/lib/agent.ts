@@ -46,6 +46,7 @@ import {
   sumOpenRouterProviderCost,
   type AgentModelRuntime,
 } from './agent-model-runtime';
+import { classifyModelTermination } from './agent-terminal';
 
 const MAX_VIDEO_DIMENSION_PROBE_BYTES = 220 * 1024 * 1024;
 
@@ -276,7 +277,13 @@ export type AgentStreamEvent =
   | { type: 'music_task'; taskId: string }  // emitted when generate_music tool creates a task — frontend polls
   | { type: 'usage'; inputTokens: number; outputTokens: number; cacheReadTokens?: number; cacheWriteTokens?: number; providerCostUsd?: number; model: string }  // token usage for billing (inputTokens = noCache only)
   | { type: 'done' }
-  | { type: 'error'; message: string };
+  | {
+      type: 'error';
+      message: string;
+      code?: string;
+      recoverable?: boolean;
+      checkpoint?: { draftPath?: string; previewUrl?: string; lastTool?: string; finishReason?: string; rawFinishReason?: string };
+    };
 
 // Skill types (workspace replaces hardcoded SKILL_PROMPTS map)
 import { type ParsedSkill } from './skill-registry';
@@ -2570,6 +2577,9 @@ Path is auto-generated from the current project and output type. Just provide a 
         if (!result.success) {
           return { success: false, message: `Write failed: ${result.error}` };
         }
+        if (fromLastRunCode) {
+          (ctx as any).__lastSavedDraftPath = savePath;
+        }
 
         // Publish: when fromLastRunCode and publish !== false, promote the last draft to a real Snapshot
         if (fromLastRunCode && shouldPublish !== false) {
@@ -3398,7 +3408,7 @@ export async function* runMakaronAgent(
   currentImage: string,
   projectId: string,
 
-  options?: { analysisOnly?: boolean; analysisContext?: 'initial' | 'post-edit'; isVideoAnalysis?: boolean; tipReactionOnly?: boolean; referenceImages?: string[]; animationImageUrls?: string[]; animationImages?: string[]; locale?: string; preferredModel?: ModelId; agentModel?: AgentModelPreference; videoModel?: string; videoResolution?: import('@/types').VideoResolution; videoAuto?: boolean; audioAttachments?: AudioAttachment[]; snapshotImages?: string[]; currentSnapshotIndex?: number; isNsfw?: boolean; userSkills?: ParsedSkill[]; supabase?: any; userId?: string; currentDesign?: { code: string; width: number; height: number; props?: Record<string, unknown>; animation?: { fps: number; durationInSeconds: number; format?: string } }; currentDesignPath?: string; history?: ModelMessage[]; timelineVersion?: number; perf?: AgentPerf },
+  options?: { analysisOnly?: boolean; analysisContext?: 'initial' | 'post-edit'; isVideoAnalysis?: boolean; tipReactionOnly?: boolean; referenceImages?: string[]; animationImageUrls?: string[]; animationImages?: string[]; locale?: string; preferredModel?: ModelId; agentModel?: AgentModelPreference; videoModel?: string; videoResolution?: import('@/types').VideoResolution; videoAuto?: boolean; audioAttachments?: AudioAttachment[]; snapshotImages?: string[]; currentSnapshotIndex?: number; isNsfw?: boolean; userSkills?: ParsedSkill[]; supabase?: any; userId?: string; currentDesign?: { code: string; width: number; height: number; props?: Record<string, unknown>; animation?: { fps: number; durationInSeconds: number; format?: string } }; currentDesignPath?: string; history?: ModelMessage[]; timelineVersion?: number; perf?: AgentPerf; abortSignal?: AbortSignal },
 ): AsyncGenerator<AgentStreamEvent> {
   const perf = options?.perf;
   const runtime = createAgentModelRuntime(options?.agentModel, projectId);
@@ -3566,12 +3576,102 @@ export async function* runMakaronAgent(
   }
 
   try {
-
-    const endStreamInit = perf?.span('model_stream_init', { projectId });
     const agentModelId = runtime.spec.providerModelId;
     const thinkingMode = getAnthropicThinkingMode();
     const reasoningEffort = getAnthropicReasoningEffort();
-    const result = (streamText as any)({
+    const configuredStepTimeout = Number(process.env.AGENT_MODEL_STEP_TIMEOUT_MS || 150_000);
+    const stepTimeoutMs = Number.isFinite(configuredStepTimeout)
+      ? Math.max(30_000, Math.min(configuredStepTimeout, 240_000))
+      : 150_000;
+    const attemptResults: any[] = [];
+    let billedNoCacheTokens = 0;
+    let billedCacheReadTokens = 0;
+    let billedCacheWriteTokens = 0;
+    let billedOutputTokens = 0;
+    const billedStepMetadata: Array<{ providerMetadata?: Record<string, unknown> }> = [];
+    let usageEmitted = false;
+    let attemptMessages: ModelMessage[] = msgs;
+    let result: any = null;
+    let recoveryAttempt = 0;
+    let recoveryTextOnly = false;
+    const recoveryBlockedTools = new Set<string>();
+    const nonRepeatableTools = new Set([
+      'generate_image',
+      'generate_animation',
+      'transcribe_audio',
+      'materialize_media',
+      'rotate_camera',
+      'delete_file',
+      'generate_voiceover',
+      'generate_audio',
+      'generate_music',
+    ]);
+
+    const recordStepUsage = (event: any) => {
+      const usage = event?.usage as {
+        inputTokens?: number;
+        outputTokens?: number;
+        cachedInputTokens?: number;
+        inputTokenDetails?: {
+          noCacheTokens?: number;
+          cacheReadTokens?: number;
+          cacheWriteTokens?: number;
+        };
+      } | undefined;
+      if (!usage) return;
+      const details = usage.inputTokenDetails;
+      const cacheRead = details?.cacheReadTokens ?? usage.cachedInputTokens ?? 0;
+      const cacheWrite = details?.cacheWriteTokens ?? 0;
+      const noCache = details?.noCacheTokens
+        ?? Math.max(0, (usage.inputTokens ?? 0) - cacheRead - cacheWrite);
+      billedNoCacheTokens += noCache;
+      billedCacheReadTokens += cacheRead;
+      billedCacheWriteTokens += cacheWrite;
+      billedOutputTokens += usage.outputTokens ?? 0;
+      billedStepMetadata.push({ providerMetadata: event.providerMetadata });
+    };
+
+    const buildUsageEvent = (): Extract<AgentStreamEvent, { type: 'usage' }> | null => {
+      if (usageEmitted || billedStepMetadata.length === 0) return null;
+      usageEmitted = true;
+      const modelId = runtime.spec.billingModelId;
+      const totalInput = billedNoCacheTokens + billedCacheReadTokens + billedCacheWriteTokens;
+      const hitRate = totalInput > 0
+        ? ((billedCacheReadTokens / totalInput) * 100).toFixed(1)
+        : '0';
+      const providerCostUsd = sumOpenRouterProviderCost(runtime, billedStepMetadata);
+      console.log(
+        `[agent-usage] totalInput=${totalInput} (noCache=${billedNoCacheTokens} cacheRead=${billedCacheReadTokens} cacheWrite=${billedCacheWriteTokens}) output=${billedOutputTokens} hitRate=${hitRate}% model=${modelId} provider=${runtime.spec.provider}${providerCostUsd != null ? ` providerCostUsd=${providerCostUsd.toFixed(6)}` : ''}`
+      );
+      return {
+        type: 'usage',
+        inputTokens: billedNoCacheTokens,
+        outputTokens: billedOutputTokens,
+        cacheReadTokens: billedCacheReadTokens,
+        cacheWriteTokens: billedCacheWriteTokens,
+        providerCostUsd,
+        model: modelId,
+      };
+    };
+
+    while (true) {
+      let sawFinish = false;
+      let finishReason: string | undefined;
+      let rawFinishReason: string | undefined;
+      let finalStepTextChars = 0;
+      let finalStepToolCalls = 0;
+      let finalStepDeliveredArtifact = false;
+      let attemptDeliveredArtifact = false;
+      const attemptCommittedTools = new Set<string>();
+      let streamError: unknown;
+      let lastTool = '';
+
+      const endStreamInit = perf?.span('model_stream_init', { projectId, recoveryAttempt });
+      const remainingInvocationBudgetMs = Math.max(30_000, 720_000 - (Date.now() - agentStartTime));
+      const recoveryActiveTools = tools && recoveryBlockedTools.size > 0
+        ? Object.keys(tools).filter((toolName) => !recoveryBlockedTools.has(toolName))
+        : undefined;
+      result = (streamText as any)({
       model: runtime.model,
       system: [{
         role: 'system',
@@ -3580,14 +3680,21 @@ export async function* runMakaronAgent(
           ? { providerOptions: runtime.cachePointProviderOptions }
           : {}),
       }],
-      messages: msgs,
+      messages: attemptMessages,
       ...(tools ? { tools } : {}),
-      ...(analysisOnly && tools ? { activeTools: [isVideoAnalysis ? 'analyze_video' : 'analyze_image'] } : {}),
+      ...(recoveryTextOnly && tools ? { toolChoice: 'none' as const } : {}),
+      ...(analysisOnly && tools
+        ? { activeTools: [isVideoAnalysis ? 'analyze_video' : 'analyze_image'] }
+        : recoveryActiveTools
+          ? { activeTools: recoveryActiveTools }
+          : {}),
       stopWhen: stepCountIs(maxSteps),
       prepareStep: ({ messages }: { messages: ModelMessage[] }) => ({
         messages: runtime.normalizeMessages(messages),
       }),
       onStepFinish: () => { stepCount++; },
+      timeout: { stepMs: stepTimeoutMs, totalMs: remainingInvocationBudgetMs },
+      ...(options?.abortSignal ? { abortSignal: options.abortSignal } : {}),
       providerOptions: getAgentProviderOptions(runtime, {
         anthropicThinkingMode: thinkingMode,
         reasoningEffort,
@@ -3595,14 +3702,39 @@ export async function* runMakaronAgent(
           ? getAnthropicContextManagement(agentModelId)
           : undefined,
       }),
-    });
-    endStreamInit?.();
+      });
+      attemptResults.push(result);
+      endStreamInit?.();
 
     // State machine for extracting code from run_code tool-input-delta
     let codeExtractor: { buffer: string; state: 'waiting' | 'in_code' | 'done'; escaped: boolean; sent: number } | null = null;
     const textDeltaState = createTextDeltaState();
 
-    for await (const event of result.fullStream) {
+      try {
+        for await (const event of result.fullStream) {
+      if (event.type === 'start-step') {
+        finalStepTextChars = 0;
+        finalStepToolCalls = 0;
+        finalStepDeliveredArtifact = false;
+        if (stepCount > 0) yield { type: 'new_turn' };
+        continue;
+      }
+      if (event.type === 'finish-step') {
+        recordStepUsage(event);
+        finishReason = (event as any).finishReason;
+        rawFinishReason = (event as any).rawFinishReason;
+        continue;
+      }
+      if (event.type === 'finish') {
+        sawFinish = true;
+        finishReason = (event as any).finishReason;
+        rawFinishReason = (event as any).rawFinishReason;
+        continue;
+      }
+      if (event.type === 'abort') {
+        streamError = new Error((event as any).reason || 'Model stream aborted');
+        continue;
+      }
       // ── TTFB — log first stream event that indicates model is producing output ──
       if (!firstContentAt && (event.type === 'reasoning-start' || event.type === 'reasoning-delta' || event.type === 'text-delta' || event.type === 'tool-input-start')) {
         firstContentAt = Date.now();
@@ -3688,7 +3820,10 @@ export async function* runMakaronAgent(
       // ── Text delta ──────────────────────────────────────────────────────────
       if (event.type === 'text-delta') {
         const text = normalizeTextDelta(event as { delta?: unknown; textDelta?: unknown; text?: unknown }, textDeltaState);
-        if (text) yield { type: 'content', text };
+        if (text) {
+          finalStepTextChars += text.trim().length;
+          yield { type: 'content', text };
+        }
         continue;
       }
 
@@ -3696,6 +3831,8 @@ export async function* runMakaronAgent(
       if (event.type === 'tool-call') {
         toolCallStartTime = Date.now();
         toolCallName = event.toolName;
+        lastTool = event.toolName;
+        finalStepToolCalls++;
         activeToolCallId = (event as { toolCallId?: string }).toolCallId || crypto.randomUUID();
         console.log(`⏱️ [agent] tool-call "${event.toolName}" at +${((Date.now() - agentStartTime) / 1000).toFixed(1)}s`);
         perf?.mark('tool_call', {
@@ -3825,6 +3962,15 @@ export async function* runMakaronAgent(
         yield { type: 'status', text: isEnLocale ? 'Thinking...' : 'Agent 正在思考...' };
         if (toolName) {
           yield { type: 'tool_result', tool: toolName, toolCallId, step: stepCount, output: toolOutput };
+          const outputRecord = toolOutput && typeof toolOutput === 'object'
+            ? toolOutput as Record<string, unknown>
+            : undefined;
+          const toolSucceeded = outputRecord?.success !== false
+            && outputRecord?.status !== 'failed'
+            && !(outputRecord?.error && outputRecord?.success !== true);
+          if (toolSucceeded && nonRepeatableTools.has(toolName)) {
+            attemptCommittedTools.add(toolName);
+          }
           const generatedAudioLine = formatGeneratedAudioForCui(toolName, toolOutput);
           if (generatedAudioLine) {
             yield { type: 'content', text: generatedAudioLine };
@@ -3861,6 +4007,10 @@ export async function* runMakaronAgent(
             const previewUrl = drafts?.[drafts.length - 1]?.previewUrl || undefined;
             console.log(`🎨 [agent] emitting render SSE (published=${published}): ${pendingDesign.width}x${pendingDesign.height}, code ${pendingDesign.code?.length} chars${previewUrl ? ', preview: ' + previewUrl.slice(-40) : ''}`);
             yield { type: 'render', code: pendingDesign.code, width: pendingDesign.width, height: pendingDesign.height, props: pendingDesign.props, animation: pendingDesign.animation, editables: pendingDesign.editables, published, previewUrl };
+            if (published) {
+              finalStepDeliveredArtifact = true;
+              attemptDeliveredArtifact = true;
+            }
             (ctx as any).__pendingDesign = null;
             (ctx as any).__pendingDesignPublished = undefined;
           } else if (toolName === 'run_code') {
@@ -3884,11 +4034,20 @@ export async function* runMakaronAgent(
 
         while (imagesSent < ctx.generatedImages.length) {
           yield { type: 'image', image: ctx.generatedImages[imagesSent], usedModel: ctx.lastUsedModel };
+          finalStepDeliveredArtifact = true;
+          attemptDeliveredArtifact = true;
           imagesSent++;
         }
+        const hadPendingImageSnapshots = Boolean(ctx.pendingImageSnapshots?.length);
         yield* flushPendingImageSnapshots(ctx);
+        if (hadPendingImageSnapshots) {
+          finalStepDeliveredArtifact = true;
+          attemptDeliveredArtifact = true;
+        }
         if (ctx.animationTaskId) {
           yield { type: 'animation_task', taskId: ctx.animationTaskId, prompt: ctx.animationPrompt || '', imageUrls: ctx.animationImageUrls_, model: ctx.animationModel };
+          finalStepDeliveredArtifact = true;
+          attemptDeliveredArtifact = true;
           ctx.animationTaskId = undefined;
           ctx.animationPrompt = undefined;
           ctx.animationImageUrls_ = undefined;
@@ -3897,15 +4056,21 @@ export async function* runMakaronAgent(
         if (ctx.pendingVideoSnapshots?.length) {
           for (const pending of ctx.pendingVideoSnapshots) {
             yield { type: 'video_snapshot', ...pending };
+            finalStepDeliveredArtifact = true;
+            attemptDeliveredArtifact = true;
           }
           ctx.pendingVideoSnapshots = undefined;
         }
         if (ctx.pendingVideoSnapshot) {
           yield { type: 'video_snapshot', ...ctx.pendingVideoSnapshot };
+          finalStepDeliveredArtifact = true;
+          attemptDeliveredArtifact = true;
           ctx.pendingVideoSnapshot = undefined;
         }
         if ((ctx as any).musicTaskId) {
           yield { type: 'music_task', taskId: (ctx as any).musicTaskId };
+          finalStepDeliveredArtifact = true;
+          attemptDeliveredArtifact = true;
           (ctx as any).musicTaskId = undefined;
         }
         continue;
@@ -3913,17 +4078,90 @@ export async function* runMakaronAgent(
 
       // ── Error from stream ──────────────────────────────────────────────────
       if (event.type === 'error') {
+        streamError = (event as any).error;
+        // AI SDK emits finish-step (with usage) and finish(error) after the
+        // error part. Drain the stream so failed reasoning is still billed and
+        // the terminal classification sees the real provider finish reason.
+        continue;
+      }
 
-        const err = (event as any).error;
-        const errMsg = err instanceof Error ? err.message : String(err);
-        yield { type: 'error', message: errMsg };
+        }
+      } catch (err) {
+        streamError = err;
+      }
+
+      const assessment = classifyModelTermination({
+        sawFinish,
+        finishReason,
+        rawFinishReason,
+        finalStepTextChars,
+        finalStepToolCalls,
+        finalStepDeliveredArtifact,
+        streamError,
+      });
+
+      if (options?.abortSignal?.aborted) {
+        const usageEvent = buildUsageEvent();
+        if (usageEvent) yield usageEvent;
         return;
       }
 
-      // ── New step start (after tool result, model begins next turn) ──────────
-      if (event.type === 'start-step' && stepCount > 0) {
-        yield { type: 'new_turn' };
+      if (assessment.ok) break;
+
+      let attemptSteps: any[] = [];
+      try { attemptSteps = await result.steps; } catch { /* stream may have failed before a complete step */ }
+      const canRecover = assessment.retryable
+        && recoveryAttempt < 1
+        && Date.now() - agentStartTime < 600_000;
+      if (canRecover) {
+        recoveryAttempt++;
+        recoveryTextOnly = attemptDeliveredArtifact;
+        for (const toolName of attemptCommittedTools) recoveryBlockedTools.add(toolName);
+        const responseMessages = attemptSteps.flatMap((step: any) => step?.response?.messages ?? []);
+        const savedDraftPath = (ctx as any).__lastSavedDraftPath as string | undefined;
+        const recoveryInstruction = attemptDeliveredArtifact
+          ? 'A finished artifact was already delivered in the previous step. Do not call any tool, regenerate, republish, or create another task. Only provide the concise final reply for the existing delivered result.'
+          : `Continue from the existing tool results and saved draft; do not restart from the original media.${savedDraftPath ? ` The exact saved draft path is: ${savedDraftPath}.` : ''}${recoveryBlockedTools.size ? ` Do not repeat these already-completed tools: ${[...recoveryBlockedTools].join(', ')}; use their existing results.` : ''} Complete the pending modification you already planned. If the user requested a finished artifact, publish the updated artifact before your concise final reply.`;
+        attemptMessages = [
+          ...attemptMessages,
+          ...responseMessages,
+          {
+            role: 'user',
+            content: `[System recovery] The previous model step ended before it delivered a usable response (${assessment.code || 'incomplete'}). ${recoveryInstruction}`,
+          } as ModelMessage,
+        ];
+        const isEn = options?.locale === 'en';
+        yield { type: 'status', text: isEn ? 'The last step stalled — resuming from the saved draft...' : '上一轮卡住了，正在从已保存草稿继续...' };
+        console.warn(`[agent] recovering incomplete model step code=${assessment.code} finish=${finishReason || 'missing'} raw=${rawFinishReason || ''}`);
+        continue;
       }
+
+      const drafts = (ctx as any).__runCodeDrafts as Array<{ previewUrl?: string }> | undefined;
+      const checkpoint = {
+        draftPath: (ctx as any).__lastSavedDraftPath as string | undefined,
+        previewUrl: drafts?.[drafts.length - 1]?.previewUrl,
+        lastTool: lastTool || toolCallName || undefined,
+        finishReason,
+        rawFinishReason,
+      };
+      const isEn = options?.locale === 'en';
+      const recoverable = assessment.retryable && Boolean(checkpoint.draftPath);
+      const usageEvent = buildUsageEvent();
+      if (usageEvent) yield usageEvent;
+      yield {
+        type: 'error',
+        code: assessment.code || 'incomplete_agent_step',
+        recoverable,
+        checkpoint,
+        message: recoverable
+          ? (isEn
+              ? 'The model stopped before completing the promised change. Your draft is saved; send “continue” to resume from it.'
+              : '模型在完成刚才承诺的修改前中断了。草稿已经保存，发送“继续”会从这份草稿恢复。')
+          : (isEn
+              ? 'The model stopped before completing this request and no resumable draft was saved. Please retry the request.'
+              : '模型在完成本次请求前中断，且没有可恢复的草稿。请重新发送请求。'),
+      };
+      return;
     }
 
     // Flush remaining images
@@ -3940,34 +4178,11 @@ export async function* runMakaronAgent(
       stepCount,
     });
 
-    // Emit token usage for billing — totalUsage aggregates across all steps (multi-turn)
-    try {
-      const usage = await result.totalUsage;
-      if (usage) {
-        const modelId = runtime.spec.billingModelId;
-        // Vercel AI SDK v6 semantics (VERIFIED from official source):
-        //   - `usage.inputTokens` = TOTAL (noCache + cacheRead + cacheWrite)
-        //     See ai/src/types/usage.ts asLanguageModelUsage — `inputTokens: usage.inputTokens.total`
-        //     See @ai-sdk/amazon-bedrock/src/convert-bedrock-usage.ts — `total = input + read + write`
-        //   - To bill correctly, we MUST use inputTokenDetails.{noCacheTokens,cacheReadTokens,cacheWriteTokens}
-        //     and charge each at its own rate. Using `inputTokens` directly billed cache @ base 1× (overcharge).
-        const u = usage as { inputTokens?: number; outputTokens?: number; cachedInputTokens?: number; inputTokenDetails?: { noCacheTokens?: number; cacheReadTokens?: number; cacheWriteTokens?: number } };
-        const d = u.inputTokenDetails;
-        const cacheRead = d?.cacheReadTokens ?? u.cachedInputTokens ?? 0;
-        const cacheWrite = d?.cacheWriteTokens ?? 0;
-        // Prefer explicit noCacheTokens; fall back to (total − cache parts) for robustness.
-        const noCache = d?.noCacheTokens ?? Math.max(0, (u.inputTokens ?? 0) - cacheRead - cacheWrite);
-        const totalInput = u.inputTokens ?? (noCache + cacheRead + cacheWrite);
-        const hitRate = totalInput > 0 ? ((cacheRead / totalInput) * 100).toFixed(1) : '0';
-        const providerCostUsd = sumOpenRouterProviderCost(runtime, await result.steps);
-        console.log(
-          `[agent-usage] totalInput=${totalInput} (noCache=${noCache} cacheRead=${cacheRead} cacheWrite=${cacheWrite}) output=${u.outputTokens ?? 0} hitRate=${hitRate}% model=${modelId} provider=${runtime.spec.provider}${providerCostUsd != null ? ` providerCostUsd=${providerCostUsd.toFixed(6)}` : ''}`
-        );
-        // Emit noCache as `inputTokens` so consumers billing with the legacy 2-arg signature
-        // (tokensToCredits) no longer overcharge by billing cache at base rate.
-        yield { type: 'usage', inputTokens: noCache, outputTokens: u.outputTokens ?? 0, cacheReadTokens: cacheRead, cacheWriteTokens: cacheWrite, providerCostUsd, model: modelId };
-      }
-    } catch { /* best effort — don't fail the stream if usage unavailable */ }
+    // Emit token usage across the initial and automatic recovery attempts.
+    // Usage is accumulated from finish-step events so a later timeout cannot
+    // erase the tokens already consumed by completed steps.
+    const usageEvent = buildUsageEvent();
+    if (usageEvent) yield usageEvent;
 
     yield { type: 'done' };
   } catch (err) {

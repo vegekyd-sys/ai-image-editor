@@ -1865,6 +1865,7 @@ const isTipsFetchingRef = useRef(isTipsFetching);
           design,
           designPath: `code/${snapId}.json`,
           videoMeta: {
+            origin: 'source-upload',
             taskId: null, videoUrl: v.url, prompt: '', sourceSnapshotIds: [], sourceUrls: [],
             status: 'completed', duration: v.duration, model: 'upload', createdAt: new Date().toISOString(),
           },
@@ -2282,6 +2283,7 @@ Select the best 3-7 items for a compelling video. You do NOT need to use all or 
         messageId: '',
         type: 'video',
         videoMeta: {
+          origin: 'source-upload',
           taskId: null,
           videoUrl: null,
           prompt: '',
@@ -2433,6 +2435,7 @@ Select the best 3-7 items for a compelling video. You do NOT need to use all or 
             design,
             designPath: `code/${snapId}.json`,
             videoMeta: {
+              origin: 'source-upload',
               taskId: null, videoUrl: v.videoUrl, prompt: '', sourceSnapshotIds: [], sourceUrls: [],
               status: 'completed', duration: v.duration, model: 'upload', createdAt: new Date().toISOString(),
             },
