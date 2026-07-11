@@ -10,11 +10,11 @@ Studio Run, Remotion, FFmpeg, and provider routes remain the execution layer.
 
 | Source surface | Total | Native | Adapted | Excluded | Unavailable |
 | --- | ---: | ---: | ---: | ---: | ---: |
-| `.agents/skills` | 78 | 37 | 23 | 8 | 10 |
+| `.agents/skills` | 78 | 33 | 2 | 8 | 35 |
 | `pipeline_defs` | 13 | 3 | 9 | 0 | 1 |
-| Combined catalog | 91 | 40 | 32 | 8 | 11 |
+| Combined catalog | 91 | 36 | 11 | 8 | 36 |
 
-The 72 supported source names are materialized as built-in Makaron skills.
+The 47 supported source names are materialized as built-in Makaron skills.
 Source names remain CLI-addressable even when several map to one maintained
 Makaron workflow.
 
@@ -37,6 +37,16 @@ Makaron workflow.
 - `framework-smoke`: OpenMontage's test-only pipeline is not a product recipe.
 - `gsap-*`: Makaron does not install or expose GSAP. Remotion can reproduce
   some motion patterns, but prompt-only translation is not a GSAP runtime.
+- Library-only craft aliases such as Manim, Lottie, D3, Framer Motion, Mermaid,
+  Tailwind, and Vercel guidance are unavailable until their runtime or distinct
+  source methodology is actually integrated.
+- Provider-name aliases such as ACE-Step, ElevenLabs, BFL/FLUX, DashScope,
+  HeyGen, LTX, and face swap are unavailable unless Makaron executes that
+  provider instead of silently substituting another model.
+- `threejs-interaction`, `threejs-loaders`, and `threejs-postprocessing` require
+  interaction semantics or addons that are not present in the shared renderer.
+- `video-download` and `playwright-recording` require yt-dlp/browser recording
+  capabilities that are not exposed in the agent media runtime.
 
 ## Product Surface
 
@@ -59,13 +69,13 @@ from the UI selector and the per-run skill manifest.
 | generated video | `generate_animation`, Seedance/Kling/Grok/Google Omni |
 | voice/music/SFX | voiceover, transcription, audio, and music tools |
 | exact media editing | Node `run_code` plus FFmpeg/FFprobe |
-| motion/Manim/Lottie craft | deterministic Remotion composition |
+| motion graphics | deterministic Remotion composition |
 | GSAP | unavailable until the runtime is installed and renderer-tested |
-| Three.js | injected `THREE` namespace inside DynamicDesign |
+| Three.js core | injected `THREE` namespace inside DynamicDesign |
 | complete production | Studio Run plus editable composition and reviewed MP4 |
 
-Adapted provider skills never claim that an unavailable external vendor was
-used. They preserve the creative intent and announce the Makaron-native route.
+Provider-named skills are only marked supported when Makaron has a real route
+for that provider. Similar output from another model does not count.
 
 ## Speed Path
 
@@ -129,7 +139,7 @@ Representative live acceptance must cover at least:
   640x360, 30fps, 48kHz stereo, 6.037s.
 - Seedance 2.0 provider: exact hidden skill activation, native text-to-video,
   one `seedance-mini` submission; H.264, 864x496, 24fps, 4.096s.
-- Coverage/API/CLI: all 91 upstream entries accounted for, 72 supported source
+- Coverage/API/CLI: all 91 upstream entries accounted for, 47 supported source
   names CLI-addressable, 8 HyperFrames entries excluded, and only six migrated
   end-to-end workflows visible in the product selector.
 - Automated suite: 437 of 438 repository tests pass. The sole failure is the

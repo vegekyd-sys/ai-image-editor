@@ -36,6 +36,18 @@ const group = (
   canonicalSkill,
 }));
 
+const unavailableGroup = (
+  names: readonly string[],
+  family: OpenMontageSkillFamily,
+  reason: string,
+): OpenMontageSkillCatalogEntry[] => names.map(name => ({
+  name,
+  sourceKind: 'agent-skill',
+  family,
+  supportLevel: 'unavailable',
+  reason,
+}));
+
 const excludedHyperFrames = [
   'hyperframes',
   'hyperframes-animation',
@@ -48,7 +60,8 @@ const excludedHyperFrames = [
 ] as const;
 
 const agentSkills: OpenMontageSkillCatalogEntry[] = [
-  ...group(['acestep', 'elevenlabs', 'music'], 'audio', 'music-to-video'),
+  ...group(['music'], 'audio', 'music-to-video'),
+  ...unavailableGroup(['acestep', 'elevenlabs'], 'audio', 'Makaron has its own Seed Audio and voiceover routes, but does not execute the named provider runtime. A provider-name alias would overstate support.'),
   ...group(['doubao-tts', 'sound-effects', 'speech-to-text', 'text-to-speech'], 'audio', 'explainer-video', 'native'),
   ...group(['media-use'], 'audio', 'motion-design-video', 'native'),
   {
@@ -57,7 +70,7 @@ const agentSkills: OpenMontageSkillCatalogEntry[] = [
     studioRunProfile: 'audio-led-local-animation', sourceMediaRequired: false,
   },
   ...group(['canvas-procedural-animation', 'character-animation-qa', 'character-rigging', 'pose-library-design', 'svg-character-animation'], 'character', 'character-animation', 'native'),
-  ...group(['beautiful-mermaid', 'd3-viz', 'framer-motion', 'lottie-bodymovin'], 'composition', 'motion-design-video'),
+  ...unavailableGroup(['beautiful-mermaid', 'd3-viz', 'framer-motion', 'lottie-bodymovin'], 'composition', 'The named library/runtime is not installed or injected. Generic Remotion translation is not an implementation of this source skill.'),
   ...(['gsap-core', 'gsap-frameworks', 'gsap-performance', 'gsap-plugins', 'gsap-react', 'gsap-scrolltrigger', 'gsap-timeline', 'gsap-utils'] as const).map(name => ({
     name,
     sourceKind: 'agent-skill' as const,
@@ -65,20 +78,22 @@ const agentSkills: OpenMontageSkillCatalogEntry[] = [
     supportLevel: 'unavailable' as const,
     reason: 'Makaron does not install or expose the GSAP runtime. Remotion can reproduce some motion patterns, but prompt-only translation is not an implemented GSAP skill.',
   })),
-  ...group(['manim-composer', 'manimce-best-practices', 'manimgl-best-practices'], 'composition', 'motion-design-video'),
+  ...unavailableGroup(['manim-composer', 'manimce-best-practices', 'manimgl-best-practices'], 'composition', 'Makaron does not expose a Manim runtime. Recreating a scene in Remotion is not execution of the named Manim skill.'),
   ...group(['motion-graphics', 'remotion', 'remotion-best-practices', 'synthetic-screen-recording'], 'composition', 'motion-design-video', 'native'),
-  ...group(['tailwind-design-system', 'vercel-composition-patterns', 'vercel-react-best-practices'], 'composition', 'motion-design-video'),
-  ...group(['threejs-animation', 'threejs-fundamentals', 'threejs-geometry', 'threejs-interaction', 'threejs-lighting', 'threejs-loaders', 'threejs-materials', 'threejs-postprocessing', 'threejs-shaders', 'threejs-textures'], 'composition', 'motion-design-video', 'native'),
-  ...group(['bfl-api', 'flux-best-practices'], 'image', 'sticker-maker'),
+  ...unavailableGroup(['tailwind-design-system', 'vercel-composition-patterns', 'vercel-react-best-practices'], 'composition', 'The migrated adapter contained no distinct source methodology or executable capability beyond the canonical Remotion workflow.'),
+  ...group(['threejs-animation', 'threejs-fundamentals', 'threejs-geometry', 'threejs-lighting', 'threejs-materials', 'threejs-shaders', 'threejs-textures'], 'composition', 'motion-design-video', 'native'),
+  ...unavailableGroup(['threejs-interaction', 'threejs-loaders', 'threejs-postprocessing'], 'composition', 'The shared runtime injects the core THREE namespace, but not interactive input semantics or addon modules such as GLTFLoader and EffectComposer.'),
+  ...unavailableGroup(['bfl-api', 'flux-best-practices'], 'image', 'Makaron does not expose the BFL/FLUX provider route. Prompt-style reuse through another image model is not provider support.'),
   ...group(['comfyui'], 'image', 'sticker-maker', 'native'),
-  ...group(['dashscope'], 'image', 'explainer-video'),
-  ...group(['ffmpeg', 'video-download', 'video-edit'], 'media', 'video-ffmpeg-lab', 'native'),
+  ...unavailableGroup(['dashscope'], 'image', 'Makaron uses separate Qwen, voiceover, and transcription routes rather than the named DashScope integration.'),
+  ...group(['ffmpeg', 'video-edit'], 'media', 'video-ffmpeg-lab', 'native'),
+  ...unavailableGroup(['video-download'], 'media', 'The Node media runtime can transform existing files and direct media URLs but does not expose yt-dlp or the upstream download runtime.'),
   ...group(['video-understand'], 'media', 'source-video-studio', 'native'),
   ...group(['visual-style', 'web-design-guidelines'], 'quality', 'motion-design-video', 'native'),
   ...group(['ai-video-gen', 'create-video', 'seedance-2-0'], 'video-generation', 'photo-to-video', 'native'),
-  ...group(['avatar-video', 'faceswap', 'heygen', 'ltx2', 'video-toolkit'], 'video-generation', 'photo-to-video'),
+  ...unavailableGroup(['avatar-video', 'faceswap', 'heygen', 'ltx2', 'video-toolkit'], 'video-generation', 'Makaron does not execute the named provider/toolkit. Routing to another video model would misrepresent the requested capability.'),
   ...group(['grok-media'], 'video-generation', 'photo-to-video', 'native'),
-  ...group(['playwright-recording'], 'video-workflow', 'screen-demo'),
+  ...unavailableGroup(['playwright-recording'], 'video-workflow', 'The agent media runtime does not expose browser automation or Playwright recording. Uploaded captures and synthetic screen demos remain supported separately.'),
   ...group(['video-translate'], 'video-workflow', 'localization-dub', 'native'),
   {
     name: 'website-to-video', sourceKind: 'agent-skill', family: 'video-workflow', supportLevel: 'adapted',

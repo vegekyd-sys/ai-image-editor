@@ -55,7 +55,7 @@ describe('OpenMontage full skill migration', () => {
     expect(pipelineNames).toEqual([...sourcePipelines].sort());
     expect(agentNames).toHaveLength(OPENMONTAGE_SOURCE_AGENT_SKILL_COUNT);
     expect(pipelineNames).toHaveLength(OPENMONTAGE_SOURCE_PIPELINE_COUNT);
-    expect(getOpenMontageCoverageSummary()).toEqual({ native: 40, adapted: 32, excluded: 8, unavailable: 11 });
+    expect(getOpenMontageCoverageSummary()).toEqual({ native: 36, adapted: 11, excluded: 8, unavailable: 36 });
   });
 
   it('excludes only HyperFrames and records non-product capabilities honestly', () => {
@@ -66,18 +66,27 @@ describe('OpenMontage full skill migration', () => {
     ]);
     const unavailable = OPENMONTAGE_SKILL_CATALOG.filter(entry => entry.supportLevel === 'unavailable').map(entry => entry.name).sort();
     expect(unavailable).toEqual([
-      'agents', 'framework-smoke', 'gsap-core', 'gsap-frameworks',
-      'gsap-performance', 'gsap-plugins', 'gsap-react', 'gsap-scrolltrigger',
-      'gsap-timeline', 'gsap-utils', 'setup-api-key',
+      'acestep', 'agents', 'avatar-video', 'beautiful-mermaid', 'bfl-api', 'd3-viz',
+      'dashscope', 'elevenlabs', 'faceswap', 'flux-best-practices', 'framer-motion',
+      'framework-smoke', 'gsap-core', 'gsap-frameworks', 'gsap-performance',
+      'gsap-plugins', 'gsap-react', 'gsap-scrolltrigger', 'gsap-timeline', 'gsap-utils',
+      'heygen', 'lottie-bodymovin', 'ltx2', 'manim-composer',
+      'manimce-best-practices', 'manimgl-best-practices', 'playwright-recording',
+      'setup-api-key', 'tailwind-design-system', 'threejs-interaction',
+      'threejs-loaders', 'threejs-postprocessing', 'vercel-composition-patterns',
+      'vercel-react-best-practices', 'video-download', 'video-toolkit',
     ]);
     for (const entry of OPENMONTAGE_SKILL_CATALOG.filter(item => ['excluded', 'unavailable'].includes(item.supportLevel))) {
       expect(entry.reason).toBeTruthy();
+    }
+    for (const entry of OPENMONTAGE_SKILL_CATALOG.filter(item => item.sourceKind === 'agent-skill' && item.supportLevel === 'unavailable')) {
+      expect(existsSync(path.join(root, 'src', 'skills', entry.name, 'SKILL.md')), entry.name).toBe(false);
     }
   });
 
   it('materializes every supported source name as a Makaron built-in skill', () => {
     const migrated = getMigratedOpenMontageSkills();
-    expect(migrated).toHaveLength(72);
+    expect(migrated).toHaveLength(47);
     for (const entry of migrated) {
       const file = path.join(root, 'src', 'skills', entry.name, 'SKILL.md');
       expect(existsSync(file), entry.name).toBe(true);
@@ -91,25 +100,18 @@ describe('OpenMontage full skill migration', () => {
     }
   });
 
-  it('keeps direct provider adapters independent from unrelated style workflows', () => {
+  it('keeps only provider skills with real Makaron execution routes', () => {
     const seedance = readFileSync(path.join(root, 'src/skills/seedance-2-0/SKILL.md'), 'utf8');
-    const bfl = readFileSync(path.join(root, 'src/skills/bfl-api/SKILL.md'), 'utf8');
-    const dashscope = parseSkillMd(readFileSync(path.join(root, 'src/skills/dashscope/SKILL.md'), 'utf8'));
     expect(seedance).not.toContain('Read `skills/photo-to-video/SKILL.md`');
     expect(seedance).toContain('native text-to-video');
     expect(seedance).toContain('low-cost draft/mini to `seedance-mini`');
-    expect(bfl).not.toContain('Read `skills/sticker-maker/SKILL.md`');
-    expect(dashscope?.allowedTools).toEqual(expect.arrayContaining([
-      'generate_image', 'generate_voiceover', 'transcribe_audio',
-    ]));
+    expect(existsSync(path.join(root, 'src/skills/bfl-api/SKILL.md'))).toBe(false);
+    expect(existsSync(path.join(root, 'src/skills/dashscope/SKILL.md'))).toBe(false);
   });
 
   it('keeps internal craft adapters out of the per-run manifest', async () => {
     const manifest = await getSkillManifest();
     expect(manifest).not.toContain('**gsap-core**');
-    for (const name of sourceAgentSkills.filter(name => name.startsWith('gsap-'))) {
-      expect(existsSync(path.join(root, 'src', 'skills', name, 'SKILL.md')), name).toBe(false);
-    }
     expect(manifest).not.toContain('**threejs-shaders**');
     expect(manifest).toContain('**music-to-video**');
     expect(manifest).toContain('**website-to-video**');
