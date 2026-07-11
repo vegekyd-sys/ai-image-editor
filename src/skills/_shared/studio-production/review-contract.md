@@ -36,6 +36,11 @@ Criticism must be observable and actionable.
 - Source betrayal: generated filler displaced the footage or voice the user
   asked to preserve.
 - Generic design: the piece could be relabeled for another product unchanged.
+- Generic-shape risk: labels claim a subject, but the visible nouns are only
+  circles, squares, glow, arrows, or undifferentiated panels.
+- Theme evidence: at least two subject-native cues remain legible when copy and
+  logos are hidden, and each cue participates in the motion rather than sitting
+  as decoration.
 
 A passing review has no unresolved blocking issue. If revision is needed,
 invalidate the earliest responsible Studio Run stage and regenerate downstream

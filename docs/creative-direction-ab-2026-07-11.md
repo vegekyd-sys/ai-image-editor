@@ -59,3 +59,39 @@ The creative contract succeeds at replacing generic centered slides with a visua
 - [ ] Directed visual framing consistently fills the canvas with a strong focal hierarchy.
 - [ ] A reusable scene-archetype library reduces directed generation time toward baseline speed.
 
+## Theme-Fit V3
+
+Project: <http://localhost:3039/projects/999d82e8-eb9f-4e77-b3c0-64fbac621f81>
+
+MP4 (1080p): <https://cdn.makaron.app/storage/v1/object/public/images/5955d413-cad2-4814-b094-7fdf62d20400/workspace/999d82e8-eb9f-4e77-b3c0-64fbac621f81/media/remotion-solo-studio-orchestration-03435781.mp4>
+
+The first V3 attempt was aborted after it read the director contracts but spent
+too long before starting Studio Run. Candidate comparison was then constrained
+to schema fields, integer scores, and one short theme-connection sentence per
+concept. The retry completed in 340.9 seconds.
+
+V3 compared three forms without rendering rejected candidates:
+
+| Form | Theme | Recognition | Motion | Efficiency | Result |
+| --- | ---: | ---: | ---: | ---: | --- |
+| System choreography | 5 | 4 | 5 | 4 | selected |
+| Object transformation | 4 | 4 | 4 | 5 | rejected |
+| Scale reveal | 4 | 3 | 3 | 4 | rejected |
+
+Planning through Assets completed at 124.2 seconds. The first valid direct
+composition landed at 216.4 seconds with 3,060 source characters, so the
+post-planning composition interval was 92.2 seconds. This is about 104 seconds
+faster than Directed v2's comparable interval. Contact-sheet review took 9.0
+seconds and required one call.
+
+The composition is brighter, larger, and more readable than v1/v2. Its person
+activating four stations and converging them into a finished screen is more
+theme-related than generic text slides. It still fails the stricter visual-noun
+test: four colored squares could represent many unrelated products. The
+contract now requires at least two subject-native visible cues with motion roles
+and rejects `genericShapeRisk`.
+
+The run also exposed a duplicate-export cost. It rendered `fast_720p`, then
+rendered 1080p because the delivery promise had locked 1920x1080. The fast path
+now locks 1280x720 when speed is requested and resolution is unspecified, or
+uses `source` on the first export when a larger promise is explicit.

@@ -28,18 +28,45 @@ subject, then make script, storyboard, motion, audio, and review obey it.
 
 Ask these internally, then decide. Do not present a long questionnaire.
 
-1. **Subject truth**: What is physically, culturally, or emotionally distinctive
-   about this subject? Avoid generic claims such as innovative, premium, or fast.
+1. **Theme evidence**: Name at least two concrete objects, behaviors, spaces,
+   rituals, constraints, or cultural signals that belong to this subject. Avoid
+   generic claims such as innovative, premium, or fast.
 2. **Productive tension**: Which contrast gives the piece energy: private/public,
    chaos/control, tiny/immense, human/system, past/future, or a better specific pair?
-3. **Visual mechanism**: Turn the truth and tension into an action the viewer can
+3. **Best visual form**: Consider three forms before choosing one: object
+   transformation, system choreography, journey/map, process/ritual, scale
+   reveal, evidence montage, character behavior, or spatial reveal. A form is
+   only a candidate when it grows directly from the theme evidence.
+4. **Visual mechanism**: Turn the truth and tension into an action the viewer can
    see over time. Prefer transformation, accumulation, pursuit, collision, reveal,
    compression, or another meaningful behavior over decorative floating objects.
-4. **Signature frame**: Describe one still frame that would identify this video
+5. **Signature frame**: Describe one still frame that would identify this video
    with the logo and copy hidden.
-5. **Scene contrast**: Give adjacent scenes different silhouettes, focal positions,
+6. **Scene contrast**: Give adjacent scenes different silhouettes, focal positions,
    scale relationships, and image/text roles while preserving one visual grammar.
-6. **Restraint**: Ban the three most tempting cliches for this exact project.
+7. **Restraint**: Ban the three most tempting cliches for this exact project.
+
+## Theme-Fit Selection
+
+Do this inside the Proposal; do not render three candidate videos and do not
+write a separate analysis. Each concept gets only `themeConnection`,
+`visualForm`, and four integer `visualFit` scores: theme specificity,
+recognition speed, motion potential, and production efficiency. Keep each
+connection to one short sentence. Select the strongest total that still has
+theme specificity >= 4, then immediately continue to script and storyboard in
+the same planning batch. Reject a visually impressive form when it could
+advertise an unrelated product after changing only the copy.
+
+Use this counterfactual test: hide all copy and logos. The signature frame and
+main transformation should still suggest this subject or its defining action.
+If they do not, return to theme evidence before storyboarding.
+
+Map at least two pieces of theme evidence to a visible cue and a motion role.
+Use subject-native visual nouns: for a studio these might be page stacks,
+frames, waveforms, edit tracks, review marks, lenses, or a conductor gesture.
+Generic circles, squares, glow, arrows, and color changes are supporting
+grammar, not theme evidence. A primitive does not become subject-specific just
+because a hidden label names it.
 
 The mechanism should simplify production, not justify more decoration. Prefer
 one large transformation with a few bold states over many tiny objects, labels,
@@ -54,8 +81,23 @@ For normal complete-video work, write this compact object into the Proposal:
 ```json
 {
   "creativeMode": "directed",
+  "creativeTreatmentVersion": 2,
   "creativeTreatment": {
     "thesis": "One sentence joining intended feeling to a subject-specific visual cause.",
+    "themeEvidence": ["concrete subject evidence 1", "concrete subject evidence 2"],
+    "evidenceMapping": [
+      {"evidence": "subject evidence 1", "visibleCue": "recognizable shape or material", "motionRole": "meaningful action"},
+      {"evidence": "subject evidence 2", "visibleCue": "recognizable shape or material", "motionRole": "meaningful action"}
+    ],
+    "bestVisualForm": "The selected form or scene archetype.",
+    "formRationale": "Why this form expresses the theme better than the alternatives.",
+    "rejectedForms": ["alternative and why it is weaker", "alternative and why it is weaker"],
+    "visualFit": {
+      "themeSpecificity": 5,
+      "recognitionSpeed": 4,
+      "motionPotential": 5,
+      "productionEfficiency": 4
+    },
     "visualMechanism": "The recurring action or transformation that carries meaning.",
     "signatureFrame": "The strongest recognizable frame with copy hidden.",
     "rhythm": "Opening, escalation, release, and final hold in one short line.",
@@ -67,7 +109,9 @@ For normal complete-video work, write this compact object into the Proposal:
 ```
 
 Keep the entire treatment concise enough to scan in the CUI. It is a decision,
-not an essay. Two concepts must differ in visual mechanism, not only palette.
+not an essay. Two concepts must differ in theme-derived visual form, not only
+palette. The complete candidate comparison and treatment should stay below 220
+English words or 350 Chinese characters. Generate only the selected composition.
 
 ## Handoff
 
@@ -78,7 +122,12 @@ not an essay. Two concepts must differ in visual mechanism, not only palette.
   or centered-title spine when the treatment calls for another behavior.
 - Audio: reinforce meaningful visual events, not every entrance.
 - Review: inspect hook/body/end together. Fail a visually clean result when it
-  is generic, repetitive, or unrelated to the treatment.
+  is generic, repetitive, or unrelated to the treatment. Hide copy mentally:
+  fail `themeFidelity`, `signatureFrameAchieved`, or `visualFormFit` when the
+  underlying imagery does not carry the chosen theme. Set
+  `visibleThemeEvidenceCount` from the contact sheet and fail when it is below
+  two. Set `genericShapeRisk: true` when generic primitives carry the idea only
+  because labels or narration explain them.
 
 ## A/B Review
 

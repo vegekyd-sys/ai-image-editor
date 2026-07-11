@@ -60,6 +60,12 @@ describe('Studio production skills', () => {
     expect(production).toContain('skills/creative-direction/SKILL.md');
     expect(creative).toContain('Inspiration Pass');
     expect(creative).toContain('creativeTreatment');
+    expect(creative).toContain('Theme-Fit Selection');
+    expect(creative).toContain('hide all copy and logos');
+    expect(creative).toContain('do not render three candidate videos');
+    expect(creative).toContain('350 Chinese characters');
+    expect(creative).toContain('subject-native visual nouns');
+    expect(creative).toContain('genericShapeRisk');
     expect(creative).toContain('A/B Review');
     expect(creative).toContain('6500 source');
     expect(audio).toContain('Treat audio as part of the edit');

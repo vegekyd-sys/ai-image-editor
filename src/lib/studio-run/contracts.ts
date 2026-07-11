@@ -69,8 +69,25 @@ const briefSchema = z.object({
   aspectRatio: z.string().regex(/^\d+:\d+$/),
 });
 
+const visualFitSchema = z.object({
+  themeSpecificity: z.number().int().min(1).max(5),
+  recognitionSpeed: z.number().int().min(1).max(5),
+  motionPotential: z.number().int().min(1).max(5),
+  productionEfficiency: z.number().int().min(1).max(5),
+});
+
 const creativeTreatmentSchema = z.object({
   thesis: z.string().min(1),
+  themeEvidence: z.array(z.string().min(1)).min(2).optional(),
+  evidenceMapping: z.array(z.object({
+    evidence: z.string().min(1),
+    visibleCue: z.string().min(1),
+    motionRole: z.string().min(1),
+  })).min(2).optional(),
+  bestVisualForm: z.string().min(1).optional(),
+  formRationale: z.string().min(1).optional(),
+  rejectedForms: z.array(z.string().min(1)).min(2).optional(),
+  visualFit: visualFitSchema.optional(),
   visualMechanism: z.string().min(1),
   signatureFrame: z.string().min(1),
   rhythm: z.string().min(1),
@@ -87,10 +104,14 @@ const proposalSchema = z.object({
     hook: z.string().min(1),
     visualDirection: z.string().min(1),
     motionLanguage: z.string().min(1),
+    themeConnection: z.string().min(1).optional(),
+    visualForm: z.string().min(1).optional(),
+    visualFit: visualFitSchema.optional(),
   })).min(2),
   selectedConceptId: z.string().min(1),
   rationale: z.string().min(1),
   creativeMode: z.enum(['baseline', 'directed']).optional(),
+  creativeTreatmentVersion: z.literal(2).optional(),
   creativeTreatment: creativeTreatmentSchema.optional(),
   deliveryPromise: deliveryPromiseSchema,
   estimatedCostUsd: z.number().nonnegative(),
@@ -100,6 +121,13 @@ const proposalSchema = z.object({
   }
   if (value.creativeMode === 'directed' && !value.creativeTreatment) {
     ctx.addIssue({ code: 'custom', message: 'directed proposals require creativeTreatment' });
+  }
+  if (value.creativeMode === 'directed' && value.creativeTreatmentVersion === 2) {
+    const treatment = value.creativeTreatment;
+    if (!treatment?.themeEvidence || !treatment.evidenceMapping || !treatment.bestVisualForm
+      || !treatment.formRationale || !treatment.rejectedForms || !treatment.visualFit) {
+      ctx.addIssue({ code: 'custom', message: 'creativeTreatmentVersion 2 requires theme evidence, evidence mapping, form selection, rejected forms, and visual fit' });
+    }
   }
 });
 
@@ -187,6 +215,11 @@ const finalReviewSchema = z.object({
     sceneDistinctness: z.boolean().optional(),
     subjectSpecificity: z.boolean().optional(),
     motionCarriesMeaning: z.boolean().optional(),
+    themeFidelity: z.boolean().optional(),
+    signatureFrameAchieved: z.boolean().optional(),
+    visualFormFit: z.boolean().optional(),
+    visibleThemeEvidenceCount: z.number().int().nonnegative().optional(),
+    genericShapeRisk: z.boolean().optional(),
   }),
   audio: z.object({
     integratedLufs: z.number(),
@@ -207,6 +240,11 @@ const finalReviewSchema = z.object({
   value.visual.sceneDistinctness !== false &&
   value.visual.subjectSpecificity !== false &&
   value.visual.motionCarriesMeaning !== false &&
+  value.visual.themeFidelity !== false &&
+  value.visual.signatureFrameAchieved !== false &&
+  value.visual.visualFormFit !== false &&
+  (value.visual.visibleThemeEvidenceCount === undefined || value.visual.visibleThemeEvidenceCount >= 2) &&
+  value.visual.genericShapeRisk !== true &&
   !value.audio.unexpectedSilence &&
   value.runtimePromiseHonored &&
   value.issues.length === 0

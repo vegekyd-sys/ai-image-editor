@@ -11,6 +11,11 @@ work the same across video types.
    skill's `metadata.makaron.studioRunRecipe` value.
 2. Lock the delivery promise. Do not silently change duration, canvas, FPS,
    runtime, editability, audio, or subtitle requirements later.
+   - When the user does not specify resolution and explicitly prioritizes
+     speed, lock `1280x720` for 16:9 or an equivalent 720-short-side canvas.
+   - When the promise is larger than the `fast_720p` result, materialize with
+     `profile: "source"` on the first and only export. Never render fast and
+     then render source merely to repair a known resolution mismatch.
 3. Read only the shared director modules needed by the recipe:
    - `skills/creative-direction/SKILL.md` once for every complete video needing
      new art direction. It replaces `taste-direction.md`; skip it only for a
@@ -31,8 +36,10 @@ work the same across video types.
 
 - `brief`: outcome, audience, source/reference status, format, and constraints.
 - `proposal`: at least two meaningfully different treatments, the compact
-  subject-specific `creativeTreatment` for directed work, honest tool path,
-  cost estimate, selected direction, and locked delivery promise.
+  subject-specific `creativeTreatment` for directed work, concrete theme
+  evidence, a paper-only visual-form comparison, honest tool path, cost
+  estimate, selected direction, and locked delivery promise. Render only the
+  selected form.
 - `script`: the timed content spine. For source-led work this can be transcript
   selections, edit beats, or translated cues instead of new narration.
 - `storyboard`: shot/scene plan, focal point, treatment, transition, safe areas,

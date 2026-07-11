@@ -14,11 +14,18 @@ criteria. Build a video timeline, not a webpage. Keep the hook legible in the
 opening, create one clear focal action per beat, and end on visible content.
 
 For normal complete-video work, the Proposal must set `creativeMode` to
-`directed` and include the compact `creativeTreatment` from
+`directed`, set `creativeTreatmentVersion` to `2`, and include the compact `creativeTreatment` from
 `skills/creative-direction/SKILL.md`. Make the composition visibly obey its
 visual mechanism, signature frame, rhythm, material system, contrast plan, and
 anti-cliches. Use `baseline` only for an explicit A/B control or template-speed
 request. Do not invent a second style plan during composition.
+
+Before composition, select the best visual form from three theme-derived
+candidates using the Proposal-only fit test. Do not code or preview the rejected
+candidates. The selected form must score at least 4/5 for theme specificity and
+remain recognizable when copy and logos are hidden.
+Keep this comparison inside the existing Proposal artifact and planning batch;
+do not spend another tool call or a separate prose response on it.
 
 ## One-Pass Runtime
 
@@ -77,3 +84,8 @@ Check black frames, clipping, text readability, subject crops, scene timing,
 final-frame content, and audio presence. Persist Composition, Review, and
 Delivery artifacts together when auto approval and contiguous stage order allow
 it.
+
+Match export profile to the locked promise before materializing. Use
+`fast_720p` only when its resulting dimensions satisfy the promise; otherwise
+use `source` on the first export. Do not create a fast export as a disposable
+preview because the contact sheet already serves that purpose.
