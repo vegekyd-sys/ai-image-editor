@@ -48,6 +48,16 @@ const artifacts: Record<StudioStageId, unknown> = {
       { id: 'b', title: 'Two Doors', hook: 'Human and agent', visualDirection: 'Split screen', motionLanguage: 'Parallel tracks' },
     ],
     selectedConceptId: 'a', rationale: 'Most direct product story', estimatedCostUsd: 0,
+    creativeMode: 'directed',
+    creativeTreatment: {
+      thesis: 'Turn one brief into visible creative momentum',
+      visualMechanism: 'A signal branches into authored scenes and converges as a finished film',
+      signatureFrame: 'One bright brief line crossing a field of finished visual worlds',
+      rhythm: 'Quiet signal, accelerating branches, confident final lockup',
+      materialSystem: 'Ink black, electric accents, editorial type, crisp kinetic rails',
+      contrastPlan: ['single line to full field', 'small prompt to cinematic frame'],
+      antiCliches: ['dashboard cards', 'floating feature pills', 'generic purple glow'],
+    },
     deliveryPromise: makeRun().deliveryPromise,
   },
   script: {
@@ -69,7 +79,7 @@ const artifacts: Record<StudioStageId, unknown> = {
   review: {
     version: '1.0', outputPath: 'outputs/final.mp4', status: 'pass',
     technical: { validContainer: true, durationSeconds: 50, resolution: '1920x1080', fps: 30, hasAudio: true },
-    visual: { framesSampled: 6, contactSheetPath: 'outputs/contact.png', blackFramesDetected: false, missingAssets: false, unreadableText: false, overlapDetected: false },
+    visual: { framesSampled: 3, contactSheetPath: 'outputs/contact.png', blackFramesDetected: false, missingAssets: false, unreadableText: false, overlapDetected: false },
     audio: { integratedLufs: -14, truePeakDbfs: -2, unexpectedSilence: false, narrationPresent: true, musicPresent: true },
     runtimePromiseHonored: true, issues: [],
   },
@@ -218,12 +228,23 @@ describe('Studio Run controller', () => {
     expect(Object.getPrototypeOf(storyboard)).toBe(Object.prototype);
     expect(storyboard.properties?.scenes?.items?.required).toContain('focalPoint');
 
+    const proposal = getStudioArtifactJsonSchema('proposal') as {
+      properties?: Record<string, unknown>;
+    };
+    expect(proposal.properties).toHaveProperty('creativeMode');
+    expect(proposal.properties).toHaveProperty('creativeTreatment');
+
     const composition = getStudioArtifactJsonSchema('composition') as {
       required?: string[];
     };
     expect(composition.required).toEqual(expect.arrayContaining([
       'designPath', 'width', 'height', 'fps', 'durationSeconds', 'previewFramePaths',
     ]));
+
+    const review = getStudioArtifactJsonSchema('review') as {
+      properties?: { visual?: { properties?: { framesSampled?: { minimum?: number } } } };
+    };
+    expect(review.properties?.visual?.properties?.framesSampled?.minimum).toBe(3);
 
     const delivery = getStudioArtifactJsonSchema('delivery') as {
       required?: string[];

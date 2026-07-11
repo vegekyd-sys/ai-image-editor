@@ -30,7 +30,7 @@ Read these before production:
 
 1. `skills/_shared/studio-production/production-contract.md`
 2. `skills/_shared/studio-production/reference-analysis.md`
-3. `skills/_shared/studio-production/taste-direction.md`
+3. `skills/creative-direction/SKILL.md`
 4. `skills/_shared/studio-production/audio-direction.md` when audio is used
 5. `skills/_shared/studio-production/review-contract.md`
 6. `skills/_shared/remotion-director-contract.md`

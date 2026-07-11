@@ -69,6 +69,16 @@ const briefSchema = z.object({
   aspectRatio: z.string().regex(/^\d+:\d+$/),
 });
 
+const creativeTreatmentSchema = z.object({
+  thesis: z.string().min(1),
+  visualMechanism: z.string().min(1),
+  signatureFrame: z.string().min(1),
+  rhythm: z.string().min(1),
+  materialSystem: z.string().min(1),
+  contrastPlan: z.array(z.string().min(1)).min(2),
+  antiCliches: z.array(z.string().min(1)).min(3),
+});
+
 const proposalSchema = z.object({
   version: z.literal('1.0'),
   concepts: z.array(z.object({
@@ -80,10 +90,17 @@ const proposalSchema = z.object({
   })).min(2),
   selectedConceptId: z.string().min(1),
   rationale: z.string().min(1),
+  creativeMode: z.enum(['baseline', 'directed']).optional(),
+  creativeTreatment: creativeTreatmentSchema.optional(),
   deliveryPromise: deliveryPromiseSchema,
   estimatedCostUsd: z.number().nonnegative(),
-}).refine(value => value.concepts.some(concept => concept.id === value.selectedConceptId), {
-  message: 'selectedConceptId must reference a concept',
+}).superRefine((value, ctx) => {
+  if (!value.concepts.some(concept => concept.id === value.selectedConceptId)) {
+    ctx.addIssue({ code: 'custom', message: 'selectedConceptId must reference a concept' });
+  }
+  if (value.creativeMode === 'directed' && !value.creativeTreatment) {
+    ctx.addIssue({ code: 'custom', message: 'directed proposals require creativeTreatment' });
+  }
 });
 
 const scriptSchema = z.object({
@@ -160,12 +177,16 @@ const finalReviewSchema = z.object({
     hasAudio: z.boolean(),
   }),
   visual: z.object({
-    framesSampled: z.number().int().min(4),
+    framesSampled: z.number().int().min(3),
     contactSheetPath: z.string().min(1),
     blackFramesDetected: z.boolean(),
     missingAssets: z.boolean(),
     unreadableText: z.boolean(),
     overlapDetected: z.boolean(),
+    slideshowRisk: z.boolean().optional(),
+    sceneDistinctness: z.boolean().optional(),
+    subjectSpecificity: z.boolean().optional(),
+    motionCarriesMeaning: z.boolean().optional(),
   }),
   audio: z.object({
     integratedLufs: z.number(),
@@ -182,6 +203,10 @@ const finalReviewSchema = z.object({
   !value.visual.missingAssets &&
   !value.visual.unreadableText &&
   !value.visual.overlapDetected &&
+  value.visual.slideshowRisk !== true &&
+  value.visual.sceneDistinctness !== false &&
+  value.visual.subjectSpecificity !== false &&
+  value.visual.motionCarriesMeaning !== false &&
   !value.audio.unexpectedSilence &&
   value.runtimePromiseHonored &&
   value.issues.length === 0

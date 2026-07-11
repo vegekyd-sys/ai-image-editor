@@ -39,7 +39,7 @@ not invoke OpenMontage Python tools, HyperFrames, or unexposed provider APIs.
   not an unavailable vendor implementation.
 - Use project timeline media and workspace files as the source of truth.
 - For auto-approved Studio Runs, batch adjacent text stages when possible,
-  preview three representative frames, publish once, and materialize once.
+  preview hook/body/end in one contact sheet, publish once, and materialize once.
 - If the exact capability is unavailable, stop with the concrete gap instead of
   silently producing a different class of result.
 

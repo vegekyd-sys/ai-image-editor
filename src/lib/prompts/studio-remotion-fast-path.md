@@ -13,20 +13,24 @@ order, pacing, focal subject, transition language, audio relation, and review
 criteria. Build a video timeline, not a webpage. Keep the hook legible in the
 opening, create one clear focal action per beat, and end on visible content.
 
+For normal complete-video work, the Proposal must set `creativeMode` to
+`directed` and include the compact `creativeTreatment` from
+`skills/creative-direction/SKILL.md`. Make the composition visibly obey its
+visual mechanism, signature frame, rhythm, material system, contrast plan, and
+anti-cliches. Use `baseline` only for an explicit A/B control or template-speed
+request. Do not invent a second style plan during composition.
+
 ## One-Pass Runtime
 
-Use `runtime: "composition"` and return exactly one complete first draft:
+Use `runtime: "composition"` and send exactly one complete first draft through
+the direct `composition` input. Do not wrap JSX inside executable `code`:
 
 ```js
-return {
-  type: 'render',
-  code,
-  width,
-  height,
-  props,
-  editables,
-  animation: { fps, durationInSeconds }
-}
+run_code({
+  runtime: 'composition',
+  description,
+  composition: { code, width, height, props, editables, animation: { fps, durationInSeconds } }
+})
 ```
 
 The `code` string must define `function Composition(props) { ... }`. React,
@@ -35,6 +39,12 @@ use `import`, `export`, `require`, `window.Remotion`, or module syntax. Use
 `useCurrentFrame`, `useVideoConfig`, `interpolate`, `spring`, `Easing`,
 `AbsoluteFill`, and `Sequence` directly. Motion must be deterministic from the
 current frame, not timers or browser interaction.
+
+Creative lift must come from one strong mechanism, scale, contrast, timing, and
+composition rather than source-code volume. For a local video of 15 seconds or
+less with no source media, target at most 6500 composition characters and three
+helper components. Reuse arrays and primitives. Avoid tiny decorative labels,
+dense grids, and nested template literals.
 
 Only `Composition(props)` may read outer `props`. Every helper receives its
 values as parameters. Use Remotion `<Img>`, `<Video>`, `<OffthreadVideo>`, and
@@ -55,9 +65,10 @@ equal to the approved timeline.
 
 ## Verify And Publish
 
-After the first successful `run_code`, preview three stable representative
-frames in parallel: hook, body/strongest beat, and ending. Patch only when a
-preview exposes a real defect. Then publish once with
+After the first successful `run_code`, make one `preview_frame` call with three
+stable representative frames: hook, body/strongest beat, and ending. This
+returns one contact sheet for comparative review. Patch only when it exposes a
+real defect. Then publish once with
 `write_file({ fromLastRunCode: true, name })` and materialize once. Do not make a
 second named checkpoint, re-render an unchanged composition, or sample extra
 frames after a clean three-frame review.

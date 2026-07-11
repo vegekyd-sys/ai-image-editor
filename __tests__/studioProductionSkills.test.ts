@@ -49,7 +49,7 @@ describe('Studio production skills', () => {
   it('keeps production intelligence in shared director contracts', () => {
     const production = read('src/skills/_shared/studio-production/production-contract.md');
     const reference = read('src/skills/_shared/studio-production/reference-analysis.md');
-    const taste = read('src/skills/_shared/studio-production/taste-direction.md');
+    const creative = read('src/skills/creative-direction/SKILL.md');
     const audio = read('src/skills/_shared/studio-production/audio-direction.md');
     const review = read('src/skills/_shared/studio-production/review-contract.md');
 
@@ -57,7 +57,11 @@ describe('Studio production skills', () => {
     expect(production).toContain('not callable Makaron tools');
     expect(reference).toContain('five dimensions');
     expect(reference).toContain('Separate `keep` from `change`');
-    expect(taste).toContain('Distinctness Review');
+    expect(production).toContain('skills/creative-direction/SKILL.md');
+    expect(creative).toContain('Inspiration Pass');
+    expect(creative).toContain('creativeTreatment');
+    expect(creative).toContain('A/B Review');
+    expect(creative).toContain('6500 source');
     expect(audio).toContain('Treat audio as part of the edit');
     expect(review).toContain('Materialize the MP4');
     expect(review).toContain('Slideshow risk');

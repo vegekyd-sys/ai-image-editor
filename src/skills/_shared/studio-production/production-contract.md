@@ -12,8 +12,10 @@ work the same across video types.
 2. Lock the delivery promise. Do not silently change duration, canvas, FPS,
    runtime, editability, audio, or subtitle requirements later.
 3. Read only the shared director modules needed by the recipe:
+   - `skills/creative-direction/SKILL.md` once for every complete video needing
+     new art direction. It replaces `taste-direction.md`; skip it only for a
+     mechanical edit, explicit template replication, or an A/B baseline.
    - `reference-analysis.md` for reference-led work.
-   - `taste-direction.md` for new art direction or atelier work.
    - `audio-direction.md` for narration, source speech, music, or dubbing.
    - `review-contract.md` before every gated artifact and final delivery.
 4. Persist each stage before moving to the next one. For `approval_policy=auto`,
@@ -28,7 +30,8 @@ work the same across video types.
 ## Stage Meanings
 
 - `brief`: outcome, audience, source/reference status, format, and constraints.
-- `proposal`: at least two meaningfully different treatments, honest tool path,
+- `proposal`: at least two meaningfully different treatments, the compact
+  subject-specific `creativeTreatment` for directed work, honest tool path,
   cost estimate, selected direction, and locked delivery promise.
 - `script`: the timed content spine. For source-led work this can be transcript
   selections, edit beats, or translated cues instead of new narration.
@@ -69,8 +72,9 @@ work the same across video types.
 - Before the first composition `run_code`, read
   `prompts/studio-remotion-fast-path.md`. It replaces the longer generic coding,
   Remotion composition, and director guides for this Studio Run.
-- Build one complete composition, preview three representative frames in
-  parallel, publish once, and materialize once.
-- Do not add a fourth preview after three clean representative frames.
+- Build one complete composition, call `preview_frame` once with three
+  representative frames to create one contact sheet, publish once, and
+  materialize once.
+- Do not add another preview after one clean hook/body/end contact sheet.
 - Probe source/output media once. Reuse that result for review and delivery.
 - Do not compute SHA unless the user explicitly requests an integrity checksum.

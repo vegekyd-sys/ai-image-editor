@@ -34,8 +34,10 @@ technical visualizations, illustrative explainers, and motion-led social pieces.
 
 ## Workflow
 
-1. Read `skills/_shared/studio-production/production-contract.md`, the shared
-   taste, audio, reviewer, and Remotion director contracts.
+1. Read `skills/_shared/studio-production/production-contract.md`. For new art
+   direction, read `skills/creative-direction/SKILL.md`; it replaces the older
+   generic taste pass. Before composition, use the compact Studio Remotion fast
+   path instead of loading every long director reference.
 2. Start recipe `motion-design-video`; record the chosen mode in the brief.
 3. Offer concepts that differ in visual mechanism, not just typography or
    color. Name the main reveal, motion energy, and final lockup.
@@ -46,8 +48,8 @@ technical visualizations, illustrative explainers, and motion-led social pieces.
    and springs. CSS transitions are not deterministic enough for rendering.
 7. Coordinate sound hits with meaningful motion. Keep subtitles and labels
    inside safe areas at the final aspect ratio.
-8. Preview the opening state, main hit, dense information frame, and final
-   lockup before materializing.
+8. Preview hook, strongest body beat, and final lockup together in one
+   `preview_frame` contact sheet before materializing.
 
 ## Quality Bar
 

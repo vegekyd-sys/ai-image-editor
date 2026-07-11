@@ -233,6 +233,8 @@ interface AgentContext {
   timelineVersion?: number;
   /** Published or autosaved composition used as the source for this turn. */
   currentDesignPath?: string;
+  /** Export attempts for an unchanged composition during this agent turn. */
+  materializeAttempts?: Map<string, number>;
 }
 
 interface AudioAttachment {
@@ -745,7 +747,18 @@ async function resolveCompositionSource(ctx: AgentContext, input: {
     return { snapshotId: input.snapshot_id, designPath: input.design_path };
   }
   if (input.snapshot_id && !input.media_index) {
-    return { snapshotId: input.snapshot_id };
+    if (!ctx.supabase) return { snapshotId: input.snapshot_id };
+    const { data: snapshot, error } = await ctx.supabase
+      .from('snapshots')
+      .select('design_path')
+      .eq('project_id', ctx.projectId)
+      .eq('id', input.snapshot_id)
+      .maybeSingle();
+    if (error) return { error: `Snapshot lookup failed: ${error.message}` };
+    return {
+      snapshotId: input.snapshot_id,
+      designPath: typeof snapshot?.design_path === 'string' ? snapshot.design_path : undefined,
+    };
   }
   if (input.media_index !== undefined) {
     if (!ctx.supabase) return { error: 'Timeline lookup requires workspace access.' };
@@ -2194,7 +2207,7 @@ For approval_policy=auto, gated artifacts are approved automatically and recorde
     materialize_media: tool({
       description: `Export an editable Remotion composition into a real MP4 video.
 Use this when the user asks to save/export/materialize/turn a composition into MP4. It accepts a timeline media_index, snapshot_id, design_path, or the current unsaved composition from run_code.
-Default profile is fast_720p (short side 720, no upscale) for speed. Default publish=true so the exported MP4 appears as a new <<<media_N>>> video. By default the tool queues a durable async export like video generation; polling/cron completes it and reports either success or failure. Set wait=true on the first call when the current response must include the final URL. A repeated call for the same unchanged composition reuses the fingerprint-matched queued/completed job and does not render twice.`,
+Default profile is fast_720p (short side 720, no upscale) for speed. Default publish=true so the exported MP4 appears as a new <<<media_N>>> video. By default the tool queues a durable async export like video generation; polling/cron completes it and reports either success or failure. Set wait=true on the first call when the current response must include the final URL. A repeated call for the same unchanged composition reuses the fingerprint-matched queued/completed job and does not render twice. If the same unchanged composition fails twice in one turn, stop retrying and report export as blocked.`,
       inputSchema: z.object({
         media_index: z.number().optional().describe('1-based media index, e.g. 3 for <<<media_3>>>. Must point to an editable Remotion composition.'),
         snapshot_id: z.string().optional().describe('Snapshot ID of an editable Remotion composition.'),
@@ -2214,6 +2227,21 @@ Default profile is fast_720p (short side 720, no upscale) for speed. Default pub
           design_path,
         });
         if (source.error) return { success: false, error: source.error };
+
+        const sourceKey = source.designPath
+          || source.snapshotId
+          || (source.design ? JSON.stringify([source.design.code, source.design.props, source.design.animation]) : 'current-composition');
+        const attempts = ctx.materializeAttempts || new Map<string, number>();
+        ctx.materializeAttempts = attempts;
+        const attemptCount = attempts.get(sourceKey) || 0;
+        if (attemptCount >= 2) {
+          return {
+            success: false,
+            blocked: true,
+            error: 'MP4 export already failed twice for this unchanged composition in this turn. Do not call materialize_media again. Keep the editable composition and contact sheet, then report export as blocked.',
+          };
+        }
+        attempts.set(sourceKey, attemptCount + 1);
 
         try {
           const shouldPublish = publish !== false;
@@ -2338,20 +2366,23 @@ Default profile is fast_720p (short side 720, no upscale) for speed. Default pub
     }),
 
     preview_frame: tool({
-      description: `Capture a visual frame at a specific frame number or timestamp.
+      description: `Capture one visual frame or a 2-6 frame contact sheet.
 Use media_index to target any timeline snapshot. Remotion compositions are rendered with Remotion; raw uploaded/generated videos are extracted with FFmpeg.
 For raw video snapshots: use timestamp to see specific moments in the actual MP4/MOV/WebM.
 For understanding video content (what happens, scenes, pacing), use analyze_video instead.
 Omit media_index to use the current (last edited) composition.
+For Studio Run review, prefer one call with frames or timestamps for hook/body/end. It renders the frames concurrently and returns one labeled contact sheet plus the individual workspace paths.
 Returns the rendered image so you can see it with your vision.`,
       inputSchema: z.object({
         media_index: z.number().optional().describe('1-based snapshot index (<<<media_1>>> = 1). Target a Remotion composition or raw video. Omit to use current composition.'),
         design_path: z.string().optional().describe('Workspace path of an autosaved or persisted Remotion composition. Use the exact path returned by run_code or shown in Recoverable Composition Draft.'),
         frame: z.number().optional().describe('0-based frame number.'),
         timestamp: z.number().optional().describe('Time in seconds (e.g. 2.5). Converted to frame using fps.'),
+        frames: z.array(z.number()).min(2).max(6).optional().describe('For a composition contact sheet: 2-6 frame numbers rendered in one call. Prefer three representative hook/body/end frames for Studio Run review.'),
+        timestamps: z.array(z.number()).min(2).max(6).optional().describe('For a composition contact sheet: 2-6 timestamps in seconds. Use instead of frames.'),
         question: z.string().optional().describe('What to focus on when viewing this frame.'),
       }),
-      execute: async ({ media_index, design_path, frame, timestamp, question }) => {
+      execute: async ({ media_index, design_path, frame, timestamp, frames, timestamps, question }) => {
         let design = (ctx as any).__lastDesignPayload;
         let rawVideo: { url: string; duration?: number; fps?: number } | null = null;
         if (design_path) {
@@ -2411,6 +2442,100 @@ Returns the rendered image so you can see it with your vision.`,
           const resolved = await resolveVideoUrlForMediaIndex(ctx, targetMediaIndex);
           if (resolved.videoUrl) {
             rawVideo = { url: resolved.videoUrl, duration: resolved.duration, fps: resolved.fps };
+          }
+        }
+
+        const batchRequested = Boolean(frames?.length || timestamps?.length);
+        if (batchRequested && rawVideo) {
+          return { error: 'Batch contact sheets currently target Remotion compositions. For raw video understanding use analyze_video, or call preview_frame once per required timestamp.' };
+        }
+
+        if (batchRequested && design) {
+          const fps = design.animation?.fps || 30;
+          const dur = design.animation?.durationInSeconds || 0;
+          const totalFrames = dur > 0 ? Math.max(1, Math.round(fps * dur)) : 1;
+          const requested = frames?.length
+            ? frames
+            : (timestamps || []).map(value => Math.round(value * fps));
+          const targetFrames = [...new Set(requested.map(value => Math.max(0, Math.min(Math.round(value), totalFrames - 1))))];
+          if (targetFrames.length < 2) return { error: 'Contact sheet frames collapse to fewer than two unique in-range frames.' };
+
+          try {
+            const { renderDesignFrame } = await import('./remotion-server');
+            const { createContactSheet } = await import('./contact-sheet');
+            const rendered = await Promise.all(targetFrames.map(targetFrame => renderDesignFrame(design, targetFrame)));
+            const stamp = Date.now();
+            const framePaths = targetFrames.map(targetFrame => `${ctx.projectId}/drafts/design-contact-frame${targetFrame}-${stamp}.jpg`);
+            const frameUrls: string[] = [];
+            const userId = ctx.userId;
+
+            if (ctx.supabase && userId) {
+              const writes = await Promise.all(rendered.map((jpegBuffer, index) =>
+                workspace.writeFile(framePaths[index]!, jpegBuffer, ctx.supabase, userId, 'image/jpeg')
+              ));
+              writes.forEach((write, index) => {
+                if (!write.storageUrl) return;
+                const storageUrl = toPublicStorageUrl(write.storageUrl);
+                frameUrls[index] = storageUrl;
+                rememberWorkspaceMediaOutputs(ctx, [{
+                  path: framePaths[index],
+                  storageUrl,
+                  contentType: 'image/jpeg',
+                  description: `composition frame ${targetFrames[index]}`,
+                  updatedAt: new Date().toISOString(),
+                }]);
+              });
+            }
+
+            const contactSheet = await createContactSheet(
+              rendered.map((image, index) => ({
+                image,
+                label: `#${index + 1}  frame ${targetFrames[index]}  ${(targetFrames[index] / fps).toFixed(1)}s`,
+              })),
+              design.width || 1080,
+              design.height || 1920,
+            );
+            const contactSheetPath = `${ctx.projectId}/drafts/design-contact-sheet-${stamp}.jpg`;
+            let workspaceUrl = '';
+            if (ctx.supabase && userId) {
+              const write = await workspace.writeFile(contactSheetPath, contactSheet, ctx.supabase, userId, 'image/jpeg');
+              if (write.storageUrl) {
+                workspaceUrl = toPublicStorageUrl(write.storageUrl);
+                rememberWorkspaceMediaOutputs(ctx, [{
+                  path: contactSheetPath,
+                  storageUrl: workspaceUrl,
+                  contentType: 'image/jpeg',
+                  description: `composition contact sheet for frames ${targetFrames.join(', ')}`,
+                  updatedAt: new Date().toISOString(),
+                }]);
+              }
+            }
+
+            const drafts = (ctx as any).__runCodeDrafts || [];
+            const previewBase64 = `data:image/jpeg;base64,${contactSheet.toString('base64')}`;
+            if (drafts.length > 0) {
+              drafts[drafts.length - 1].previewBase64 = previewBase64;
+              if (workspaceUrl) drafts[drafts.length - 1].previewUrl = workspaceUrl;
+            }
+
+            console.log(`🖼️ [agent] preview_frame: contact sheet ${targetFrames.join(',')} (${(contactSheet.length / 1024).toFixed(0)} KB)`);
+            return {
+              base64Data: contactSheet.toString('base64'),
+              mimeType: 'image/jpeg',
+              source: 'composition-contact-sheet',
+              frames: targetFrames,
+              framePaths,
+              frameUrls,
+              totalFrames,
+              fps,
+              question,
+              workspaceUrl,
+              workspacePath: contactSheetPath,
+            };
+          } catch (err) {
+            const msg = err instanceof Error ? err.message : String(err);
+            console.error(`⚠️ [agent] preview_frame contact sheet failed: ${msg}`);
+            return { error: `Failed to capture contact sheet: ${msg}` };
           }
         }
 
@@ -2531,6 +2656,16 @@ Returns the rendered image so you can see it with your vision.`,
       toModelOutput({ output }: { output: any }) {
         if (output.error) {
           return { type: 'content' as const, value: [{ type: 'text' as const, text: output.error }] };
+        }
+        if (Array.isArray(output.frames)) {
+          const loc = output.workspacePath ? ` Saved: ${output.workspacePath}` : '';
+          return {
+            type: 'content' as const,
+            value: [
+              modelFileContent(output.base64Data, output.mimeType),
+              { type: 'text' as const, text: `Contact sheet frames ${output.frames.join(', ')} of ${output.totalFrames}.${loc} Individual frame paths: ${(output.framePaths || []).join(', ')}.${output.question ? ` Focus: ${output.question}.` : ''} Compare all frames together for scene distinctness, subject specificity, meaningful motion, readability, and slideshow risk. If clean, publish without adding another preview call.` },
+            ],
+          };
         }
         const time = (output.frame / output.fps).toFixed(1);
         const loc = output.workspacePath ? ` Saved: ${output.workspacePath}` : '';
@@ -2851,23 +2986,44 @@ Return exactly one supported shape:
 - \`{ type: 'text', content }\`
 - \`{ type: 'error', message }\`
 
+For a first composition draft, prefer the top-level \`composition\` input over wrapping JSX inside executable \`code\`. Pass \`composition: { code, width, height, props, editables, animation }\`; the harness validates and autosaves it directly. This avoids nested-code quoting failures and is the fastest Studio Run path. Keep executable \`code\` for patches, images, Node media work, and legacy calls.
+
 Composition hard rules: use Remotion \`<Img>\`, not \`<img>\`; declare editable user-facing text; use system CJK fonts; keep mobile image layers light. Reference timeline media in composition code and props with the literal 1-based marker \`<<<media_N>>>\`; the runtime resolves markers to current URLs before validation, autosave, preview, and export. Never translate Media Index N into \`ctx.snapshotImages[N]\` because that JavaScript array is 0-based. Only \`Composition(props)\` may read \`props\` directly; helper components must receive values through their own parameters and must never reference outer \`props\` (prevents \`props is not defined\` in Lambda). For timeline videos, preserve the selected Media Index video aspect ratio when all selected videos share one aspect: 9:16 sources must return a 9:16 canvas such as 1080x1920, never a 16:9 canvas. For mixed-aspect sources, choose the user/platform/current composition target and use contain/background; do not claim the runtime forced one source's aspect.
-For first Remotion drafts, send one complete executable JavaScript body that returns the render object. Do not send a fragment like \`const code = \\\`\` without the final \`return { type: 'render', code, ... }\`. Keep long videos concise by using arrays, helper components, and interpolations instead of writing frame-by-frame code.
+For legacy first-draft calls without \`composition\`, send one complete executable JavaScript body that returns the render object. Do not send a fragment like \`const code = \\\`\` without the final \`return { type: 'render', code, ... }\`. Keep long videos concise by using arrays, helper components, and interpolations instead of writing frame-by-frame code.
 
 Node media runtime provides \`require\`, \`process\`, \`ffmpegPath\`, \`inputFiles\`, \`outputDir\`, \`workDir\`, \`workspaceDir\`, \`saveOutput(localPath)\`, and \`probeVideo(path)\`. Most Node built-ins are available, plus media packages such as \`sharp\`, \`jszip\`, \`exifr\`, \`heic-convert\`, \`canvas\`, \`remotion\`, and Remotion media utilities. Arbitrary local/package require, env secrets, and escape/debug modules are blocked. Workspace files are local to the runtime: use \`workspace_paths\` and \`inputFiles[n].inputPath\`, never download or reconstruct Storage URLs. For \`runtime: "node"\`, any referenced timeline media like \`<<<media_1>>>\` MUST be passed as \`media_refs: [1]\`; any existing workspace file from \`list_files\` MUST be passed as \`workspace_paths: ["project/media/file.mp4"]\`. The system resolves both to local workspace-backed files before your code runs. \`ffprobePath\` may be empty in deployment; prefer \`probeVideo(path)\`. Use \`type: "files"\` for chunks and \`type: "video"\` for the final MP4. If ordinary timeline splicing was routed to composition, do not switch to node just because preview needs adjustment; patch the composition or report the preview issue.`,
       inputSchema: z.object({
-        code: z.string().describe('JavaScript code to execute. Must return a result object.'),
+        code: z.string().optional().describe('JavaScript code to execute. Required for node, patch, image, and legacy calls. For a first Remotion draft prefer the direct composition input instead.'),
+        composition: z.object({
+          code: z.string().min(1).describe('Direct Remotion component source. Define function Composition(props) without import/export. This string is validated directly, not executed as nested JavaScript.'),
+          width: z.number().int().positive(),
+          height: z.number().int().positive(),
+          props: z.record(z.string(), z.unknown()).optional(),
+          editables: z.array(z.object({
+            id: z.string().min(1),
+            type: z.string().min(1),
+            label: z.string(),
+            propKey: z.string().min(1),
+          }).passthrough()).optional(),
+          animation: z.object({
+            fps: z.number().positive(),
+            durationInSeconds: z.number().positive(),
+            format: z.string().optional(),
+          }).optional(),
+        }).optional().describe('Preferred first-draft Remotion payload. Avoids wrapping composition source inside another executable code string.'),
         description: z.string().optional().describe('Brief description of what this code does. For compositions/videos, describe the content and visual style (e.g. "15s cinematic video: 4 scenes of temple visit with Ken Burns + fade transitions, Japanese text overlays"). This is stored as the snapshot description — be specific.'),
         media_refs: z.array(z.number()).optional().describe('1-based Media Index indices referenced by the user (e.g. [1] for <<<media_1>>>). REQUIRED for runtime:"node" FFmpeg work on timeline media; the system resolves them to local workspace-backed inputFiles[0], inputFiles[1], ... . Do not hardcode Media Index URLs for FFmpeg inputs. For ordinary editable splicing of two timeline videos, use runtime:"composition" instead.'),
         workspace_paths: z.array(z.string()).optional().describe('Workspace file paths from list_files/read_file, e.g. ["project-id/media/clip.mp4"]. For runtime:"node", pass these instead of downloading or copying storage URLs; they are resolved to local inputFiles after media_refs.'),
         runtime: z.enum(['composition', 'design', 'node']).optional().describe('composition = safe Remotion/editable composition runtime. design = legacy alias for composition. node = fully open backend Node runtime with fs/child_process/ffmpeg for real MP4 editing.'),
+      }).refine(value => Boolean(value.code || value.composition), {
+        message: 'Provide executable code or a direct composition payload.',
       }),
-      execute: async ({ code, description: desc, media_refs, workspace_paths, runtime }) => {
-        const executableCode = code;
+      execute: async ({ code, composition, description: desc, media_refs, workspace_paths, runtime }) => {
+        const executableCode = code || '';
         console.log(`🔧 [run_code] ${desc || 'executing code'}...`);
         const startTime = Date.now();
         // Store raw code for write_file({ fromLastRunCode: true })
-        (ctx as any).__lastRunCode = executableCode;
+        (ctx as any).__lastRunCode = composition ? JSON.stringify(composition, null, 2) : executableCode;
 
         // Refresh snapshotImages URLs from DB — ensures URLs are valid
         if (ctx.supabase && ctx.projectId) {
@@ -2879,6 +3035,9 @@ Node media runtime provides \`require\`, \`process\`, \`ffmpegPath\`, \`inputFil
         }
 
         if (runtime === 'node') {
+          if (!code) {
+            return { type: 'text' as const, content: 'Node media runtime requires executable code; composition is only for Remotion first drafts.' };
+          }
           if (!ctx.supabase || !ctx.userId) {
             return { type: 'text' as const, content: 'Node media runtime requires workspace access. Please try again after the project finishes loading.' };
           }
@@ -2973,6 +3132,10 @@ Node media runtime provides \`require\`, \`process\`, \`ffmpegPath\`, \`inputFil
           console.log(`  [${i}] ${img ? (img.startsWith('http') ? img : `base64:${img.length}chars`) : 'EMPTY'}`);
         });
         try {
+          let result: any;
+          if (composition) {
+            result = { type: 'render', ...composition };
+          } else {
           // Pre-fetch requested snapshot images as Buffers
           let preloadedImages: Buffer[] = [];
           if (media_refs?.length) {
@@ -3025,7 +3188,8 @@ Node media runtime provides \`require\`, \`process\`, \`ffmpegPath\`, \`inputFil
 
           const wrappedCode = `(async () => { 'use strict';\n${executableCode}\n})()`;
           const script = new vm.Script(wrappedCode);
-          const result = await script.runInContext(context, { timeout: 30_000 });
+          result = await script.runInContext(context, { timeout: 30_000 });
+          }
 
           const elapsed = ((Date.now() - startTime) / 1000).toFixed(1);
           console.log(`✅ [run_code] done in ${elapsed}s, result type: ${typeof result}, isBuffer: ${Buffer.isBuffer(result)}, keys: ${result && typeof result === 'object' ? Object.keys(result).join(',') : 'N/A'}, dataType: ${result?.data ? `${typeof result.data} / ${result.data.constructor?.name} / len=${result.data.length || 'N/A'}` : 'no data'}`);
@@ -3901,8 +4065,9 @@ export async function* runMakaronAgent(
         } else if (event.toolName === 'generate_audio' || event.toolName === 'generate_music') {
           yield { type: 'status', text: isEnLocale ? 'Generating audio...' : '生成音频中...' };
         } else if (event.toolName === 'preview_frame') {
-          const input = event.input as { frame?: number; timestamp?: number };
-          const hint = input.frame !== undefined ? `frame ${input.frame}` : input.timestamp !== undefined ? `${input.timestamp}s` : 'frame 0';
+          const input = event.input as { frame?: number; timestamp?: number; frames?: number[]; timestamps?: number[] };
+          const batch = input.frames?.length ? input.frames.join(', ') : input.timestamps?.length ? input.timestamps.map(value => `${value}s`).join(', ') : '';
+          const hint = batch || (input.frame !== undefined ? `frame ${input.frame}` : input.timestamp !== undefined ? `${input.timestamp}s` : 'frame 0');
           yield { type: 'status', text: isEnLocale ? `Capturing ${hint}...` : `截帧 ${hint}...` };
         } else if (event.toolName === 'generate_image') {
           yield { type: 'status', text: isEnLocale ? 'Generating image...' : '生成图片中...' };
@@ -3958,9 +4123,19 @@ export async function* runMakaronAgent(
         // compact display input to the client. Replaying a UI-truncated code string
         // teaches the next model turn to copy "... (N chars)" as executable code.
         const toolInput = event.input as Record<string, unknown>;
-        const isRunCode = event.toolName === 'run_code' && typeof toolInput.code === 'string';
+        const directComposition = toolInput.composition && typeof toolInput.composition === 'object'
+          ? toolInput.composition as Record<string, unknown>
+          : undefined;
+        const streamedCode = typeof toolInput.code === 'string'
+          ? toolInput.code
+          : typeof directComposition?.code === 'string'
+            ? directComposition.code
+            : undefined;
+        const isRunCode = event.toolName === 'run_code' && typeof streamedCode === 'string';
         const displayInput = isRunCode
-          ? { ...toolInput, code: `[code streamed separately: ${(toolInput.code as string).length} chars]` }
+          ? directComposition
+            ? { ...toolInput, composition: { ...directComposition, code: `[code streamed separately: ${streamedCode.length} chars]` } }
+            : { ...toolInput, code: `[code streamed separately: ${streamedCode.length} chars]` }
           : toolInput;
         yield {
           type: 'tool_call',
@@ -3973,7 +4148,7 @@ export async function* runMakaronAgent(
         };
         // If code wasn't streamed via delta (edge case), send it now
         if (isRunCode && (!codeExtractor || codeExtractor.state === 'waiting')) {
-          const code = toolInput.code as string;
+          const code = streamedCode;
           const CHUNK = 500;
           for (let i = 0; i < code.length; i += CHUNK) {
             yield { type: 'code_stream', text: code.slice(i, i + CHUNK) };

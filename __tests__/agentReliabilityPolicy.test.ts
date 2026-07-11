@@ -43,12 +43,22 @@ describe('agent reliability policy', () => {
     expect(agent).toContain('output.stageSchemas');
     expect(writer).toContain('studioRunUpdates');
     expect(contract).toContain('Reuse the complete `stageSchemas`');
-    expect(contract).toContain('preview three representative frames');
-    expect(contract).toContain('Do not add a fourth preview');
+    expect(contract).toContain('call `preview_frame` once with three');
+    expect(contract).toContain('Do not add another preview');
+    expect(fastPath).toContain('direct `composition` input');
+    expect(fastPath).toContain('6500 composition characters');
     expect(contract).toContain('Do not compute SHA');
     expect(fastPath).toContain('replaces `prompts/agent-coding.md`');
     expect(fastPath).toContain('materialize once');
     expect(review).toContain('sample at least three frames');
     expect(review).toContain('videos longer than 15');
+  });
+
+  it('stops repeated MP4 export attempts for an unchanged composition', () => {
+    const agent = read('src/lib/agent.ts');
+    expect(agent).toContain('materializeAttempts?: Map<string, number>');
+    expect(agent).toContain('attemptCount >= 2');
+    expect(agent).toContain('Do not call materialize_media again');
+    expect(agent).toContain(".select('design_path')");
   });
 });
