@@ -13,6 +13,7 @@ import ImageRefChip from '@/components/ImageRefChip';
 import FileRefChip from '@/components/FileRefChip';
 import FileViewer from '@/components/FileViewer';
 import ModelSelector from '@/components/ModelSelector';
+import type { AgentModelPreference } from '@/lib/agent-models';
 import SkillSelector, { type SkillItem } from '@/components/SkillSelector';
 import { splitCompletionActions } from '@/lib/artifact-actions';
 import { removeAllInlineVideoUrls, removeRenderableInlineVideoUrls, resolveInlineVideoCandidate } from '@/lib/cui-video-url';
@@ -526,6 +527,8 @@ interface AgentChatViewProps {
   onVideoModelChange?: (model: import('@/types').VideoModel) => void;
   videoResolution?: import('@/types').VideoResolution;
   onVideoResolutionChange?: (resolution: import('@/types').VideoResolution) => void;
+  agentModel?: AgentModelPreference;
+  onAgentModelChange?: (model: AgentModelPreference) => void;
   /** Navigate GUI canvas to snapshot by 0-based index */
   onNavigateToSnapshot?: (index: number) => void;
   /** Tap video in CUI → jump to GUI video entry */
@@ -581,6 +584,8 @@ export default function AgentChatView({
   onVideoModelChange,
   videoResolution = 'auto',
   onVideoResolutionChange,
+  agentModel = 'auto',
+  onAgentModelChange,
   onNavigateToSnapshot,
   onVideoTap,
   onMusicSelect,
@@ -1655,7 +1660,9 @@ export default function AgentChatView({
                 onVideoModelChange={onVideoModelChange}
                 videoResolution={videoResolution}
                 onVideoResolutionChange={onVideoResolutionChange}
-                onOpenChange={(isOpen) => setModelSelectorOpen(isOpen)}
+                agentModel={agentModel}
+                onAgentModelChange={onAgentModelChange}
+                onOpenChange={setModelSelectorOpen}
               />
             )}
 

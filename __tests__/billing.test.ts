@@ -71,6 +71,12 @@ describe('token-rates', () => {
     expect(credits).toBe(60);
   });
 
+  it('providerCostToCredits uses actual routed cost and markup', async () => {
+    const { providerCostToCredits } = await import('@/lib/billing/token-rates');
+    expect(providerCostToCredits(0.01193466, 2)).toBe(3);
+    expect(providerCostToCredits(0, 2)).toBe(0);
+  });
+
   it('tokensToCredits computes correctly for Gemini Flash (cheap)', async () => {
     const { tokensToCredits } = await import('@/lib/billing/token-rates');
     const rate = {
@@ -274,6 +280,23 @@ describe('token-rates', () => {
     const rate = await getTokenRate('us.anthropic.claude-opus-4-6-v1');
     expect(rate).not.toBeNull();
     expect(rate!.display_name).toBe('Opus');
+  });
+
+  it('includes the exact Gemini vision-bridge rate used by DeepSeek', async () => {
+    const chain = mockQuery([]);
+    mockFrom.mockReturnValue(chain);
+    chain.order = vi.fn().mockResolvedValue({ data: [], error: null });
+
+    const { getTokenRate, invalidateTokenRateCache } = await import('@/lib/billing/token-rates');
+    invalidateTokenRateCache();
+
+    const rate = await getTokenRate('gemini-3-flash-preview');
+    expect(rate).toMatchObject({
+      input_per_1m: 0.5,
+      output_per_1m: 3,
+      cache_read_per_1m: 0.05,
+      cache_write_per_1m: 0.5,
+    });
   });
 });
 

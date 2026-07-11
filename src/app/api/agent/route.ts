@@ -6,6 +6,11 @@ import { AgentDualWriter } from '@/lib/agentDualWriter';
 import { requireCredits, deductByTokens } from '@/lib/billing/credits';
 import { AgentPerf } from '@/lib/agent-perf';
 import { getRequestLocale } from '@/lib/server-locale';
+import {
+  isAgentModelPreference,
+  resolveAgentModelSpec,
+  type AgentModelPreference,
+} from '@/lib/agent-models';
 
 export const maxDuration = 800;
 
@@ -27,7 +32,7 @@ export async function POST(req: NextRequest) {
     const endReadBody = perf.span('read_body');
     const { prompt, image, animationImageUrls, animationImages, projectId, analysisOnly, analysisContext, isVideoAnalysis,
             tipReaction, committedTip, tipsTeaser, tipsPayload, nameProject, description,
-            previewsReady, readyTips, preferredModel, snapshotImages, currentSnapshotIndex, isNsfw,
+            previewsReady, readyTips, preferredModel, agentModel, snapshotImages, currentSnapshotIndex, isNsfw,
             musicReady, musicAudioUrl, currentDesign, currentDesignPath, videoModel, videoResolution, videoAuto,
             headless, hasAnnotation, isDraft, referenceImageCount, uploadedVideoCount, audioAttachments } = await req.json();
     endReadBody({
@@ -37,6 +42,15 @@ export async function POST(req: NextRequest) {
       headless: !!headless,
     });
     const locale = getRequestLocale(req);
+
+    if (agentModel !== undefined && !isAgentModelPreference(agentModel)) {
+      return new Response(
+        JSON.stringify({ error: 'Unsupported agentModel' }),
+        { status: 400, headers: { 'Content-Type': 'application/json' } },
+      );
+    }
+    const requestedAgentModel = agentModel as AgentModelPreference | undefined;
+    const resolvedAgentModel = resolveAgentModelSpec(requestedAgentModel, process.env.AGENT_MODEL);
 
     if (!projectId || (!tipsTeaser && !nameProject && !previewsReady && !uploadedVideoCount && !image && !prompt)) {
       return new Response(
@@ -77,7 +91,15 @@ export async function POST(req: NextRequest) {
         user_id: userId,
         status: 'running',
         prompt: (prompt ?? '').slice(0, 500),
-        metadata: { locale, preferredModel, isNsfw, analysisOnly },
+        metadata: {
+          locale,
+          preferredModel,
+          requestedAgentModel: requestedAgentModel ?? 'auto',
+          agentModel: resolvedAgentModel.id,
+          agentProviderModel: resolvedAgentModel.providerModelId,
+          isNsfw,
+          analysisOnly,
+        },
       }).select('id').single();
       runId = run?.id ?? null;
       endRunCreate({ runId: runId || null });
@@ -96,7 +118,7 @@ export async function POST(req: NextRequest) {
         });
         perf.mark('first_sse_sent', { eventType: 'status' });
         // Track token usage for billing
-        let usageEvent: { inputTokens: number; outputTokens: number; cacheReadTokens?: number; cacheWriteTokens?: number; model: string } | null = null;
+        let usageEvent: Extract<import('@/lib/agent').AgentStreamEvent, { type: 'usage' }> | null = null;
 
         // Helper: iterate agent stream, capture usage event
         async function iterateAgent(gen: AsyncIterable<import('@/lib/agent').AgentStreamEvent>, ctrl: ReadableStreamDefaultController) {
@@ -114,7 +136,16 @@ export async function POST(req: NextRequest) {
           firstMessageId = writer.firstMessageId;
           // Store firstMessageId in run metadata for reconnect
           supabase.from('agent_runs').update({
-            metadata: { locale, preferredModel, isNsfw, analysisOnly, firstMessageId },
+            metadata: {
+              locale,
+              preferredModel,
+              requestedAgentModel: requestedAgentModel ?? 'auto',
+              agentModel: resolvedAgentModel.id,
+              agentProviderModel: resolvedAgentModel.providerModelId,
+              isNsfw,
+              analysisOnly,
+              firstMessageId,
+            },
           }).eq('id', runId).then(() => {});
         }
 
@@ -133,7 +164,9 @@ export async function POST(req: NextRequest) {
               `Here are edit suggestions for a photo:\n${tipsSummary}\n\nPick the most interesting one. Write a single teaser sentence (under 15 words) starting with "Try...". Output only that sentence.`,
               locale,
             );
-            await iterateAgent(runMakaronAgent(teaserPrompt, '', projectId, { tipReactionOnly: true, locale }), controller);
+            await iterateAgent(runMakaronAgent(teaserPrompt, '', projectId, {
+              tipReactionOnly: true, locale, agentModel: requestedAgentModel,
+            }), controller);
             return;
           }
 
@@ -144,7 +177,9 @@ export async function POST(req: NextRequest) {
               `Based on this photo description, give a concise project name (2-4 words): ${desc}. Output only the name, no punctuation or explanation.`,
               locale,
             );
-            await iterateAgent(runMakaronAgent(namePrompt, '', projectId, { tipReactionOnly: true, locale }), controller);
+            await iterateAgent(runMakaronAgent(namePrompt, '', projectId, {
+              tipReactionOnly: true, locale, agentModel: requestedAgentModel,
+            }), controller);
             return;
           }
 
@@ -163,7 +198,9 @@ export async function POST(req: NextRequest) {
               `All ${tips.length} edit suggestion previews are ready:\n${tipsSummary}\n\nIn 1-2 sentences, tell the user previews are ready and they can scroll TipsBar. Comment on one interesting one. Friendly tone, don't start with "I".`,
               locale,
             );
-            await iterateAgent(runMakaronAgent(readyPrompt, '', projectId, { tipReactionOnly: true, locale }), controller);
+            await iterateAgent(runMakaronAgent(readyPrompt, '', projectId, {
+              tipReactionOnly: true, locale, agentModel: requestedAgentModel,
+            }), controller);
             return;
           }
 
@@ -174,7 +211,8 @@ export async function POST(req: NextRequest) {
               locale,
             );
             await iterateAgent(runMakaronAgent(musicPrompt, image || '', projectId, {
-              locale, snapshotImages, currentSnapshotIndex, supabase, userId: userId,
+              locale, agentModel: requestedAgentModel,
+              snapshotImages, currentSnapshotIndex, supabase, userId: userId,
             }), controller);
             return;
           }
@@ -191,7 +229,9 @@ export async function POST(req: NextRequest) {
               `User just committed an edit via TipsBar:\n${tip.emoji} ${tip.label} (${tip.category}): ${tip.desc}\n\nReact naturally in 1 sentence, like a friend. Then in 1 short sentence, inspire what direction they could explore next with this photo (e.g. mood, lighting, story element) — but do NOT recommend specific tips. Don't start with "I".`,
               locale,
             );
-            await iterateAgent(runMakaronAgent(reactionPrompt, image, projectId, { tipReactionOnly: true, locale }), controller);
+            await iterateAgent(runMakaronAgent(reactionPrompt, image, projectId, {
+              tipReactionOnly: true, locale, agentModel: requestedAgentModel,
+            }), controller);
             return;
           }
 
@@ -280,7 +320,7 @@ export async function POST(req: NextRequest) {
           try {
             const endAgentStream = perf.span('agent_stream', { projectId, runId: runId || null });
             try {
-              for await (const event of runMakaronAgent(agentPrompt, agentImage, projectId, { analysisOnly, analysisContext, isVideoAnalysis, animationImageUrls: animationImageUrls?.length ? animationImageUrls : undefined, animationImages: animationImages?.length ? animationImages : undefined, locale, preferredModel, videoModel, videoResolution, videoAuto, audioAttachments: agentAudioAttachments, snapshotImages: agentSnapshotImages, currentSnapshotIndex: agentCurrentSnapshotIndex, isNsfw, supabase, userId: userId, currentDesign: agentCurrentDesign, currentDesignPath: agentCurrentDesignPath, history: agentHistory, timelineVersion, perf })) {
+              for await (const event of runMakaronAgent(agentPrompt, agentImage, projectId, { analysisOnly, analysisContext, isVideoAnalysis, animationImageUrls: animationImageUrls?.length ? animationImageUrls : undefined, animationImages: animationImages?.length ? animationImages : undefined, locale, preferredModel, agentModel: requestedAgentModel, videoModel, videoResolution, videoAuto, audioAttachments: agentAudioAttachments, snapshotImages: agentSnapshotImages, currentSnapshotIndex: agentCurrentSnapshotIndex, isNsfw, supabase, userId: userId, currentDesign: agentCurrentDesign, currentDesignPath: agentCurrentDesignPath, history: agentHistory, timelineVersion, perf })) {
                 if (event.type === 'usage') { usageEvent = event; continue; }
                 if (writer) {
                   await writer.processAndEnqueue(event);
@@ -328,6 +368,7 @@ export async function POST(req: NextRequest) {
               usageEvent.inputTokens, usageEvent.outputTokens,
               undefined, undefined,
               { cacheRead: usageEvent.cacheReadTokens ?? 0, cacheWrite: usageEvent.cacheWriteTokens ?? 0 },
+              usageEvent.providerCostUsd,
             )
               .then(() => endBilling({ ok: true }))
               .catch(e => {

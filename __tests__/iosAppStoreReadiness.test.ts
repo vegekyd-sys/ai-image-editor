@@ -33,7 +33,8 @@ describe('iOS App Store readiness guardrails', () => {
     expect(loginPage).toContain("return '/home'");
     expect(loginPage).toContain('NEXT_PUBLIC_ENABLE_APPLE_LOGIN');
     expect(loginPage).toContain('inApp && appleLoginEnabled');
-    expect(loginPage).toContain(') : !inApp ? (');
+    expect(loginPage).toContain('const showGoogleOAuth = !inApp || iosApp || showAppleOAuth');
+    expect(loginPage).toContain('{showGoogleOAuth && (');
     expect(loginPage).toContain('handleAppleLogin');
     expect(loginPage).toContain("provider: 'apple'");
     expect(loginPage).toContain("provider: 'google'");

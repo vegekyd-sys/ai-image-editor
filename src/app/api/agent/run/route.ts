@@ -6,6 +6,11 @@ import { AgentDualWriter } from '@/lib/agentDualWriter';
 import { buildPromptContext } from '@/lib/agent-context';
 import { requireCredits, deductByTokens } from '@/lib/billing/credits';
 import { getRequestLocale } from '@/lib/server-locale';
+import {
+  isAgentModelPreference,
+  resolveAgentModelSpec,
+  type AgentModelPreference,
+} from '@/lib/agent-models';
 
 export const maxDuration = 800;
 
@@ -30,6 +35,7 @@ export async function POST(req: NextRequest) {
       isDraft,
       referenceImageCount,
       preferredModel,
+      agentModel,
       isNsfw,
       videoModel,
       videoResolution,
@@ -43,6 +49,12 @@ export async function POST(req: NextRequest) {
         { status: 400 },
       );
     }
+
+    if (agentModel !== undefined && !isAgentModelPreference(agentModel)) {
+      return NextResponse.json({ error: 'Unsupported agentModel' }, { status: 400 });
+    }
+    const requestedAgentModel = agentModel as AgentModelPreference | undefined;
+    const resolvedAgentModel = resolveAgentModelSpec(requestedAgentModel, process.env.AGENT_MODEL);
 
     // Pre-flight credit check
     const creditCheck = await requireCredits(userId, 5);
@@ -67,7 +79,15 @@ export async function POST(req: NextRequest) {
       user_id: userId,
       status: 'running',
       prompt: prompt.slice(0, 500),
-      metadata: { locale, preferredModel, isNsfw, headless: true },
+      metadata: {
+        locale,
+        preferredModel,
+        requestedAgentModel: requestedAgentModel ?? 'auto',
+        agentModel: resolvedAgentModel.id,
+        agentProviderModel: resolvedAgentModel.providerModelId,
+        isNsfw,
+        headless: true,
+      },
     }).select('id').single();
 
     const runId = run?.id;
@@ -100,7 +120,16 @@ export async function POST(req: NextRequest) {
 
     // Store firstMessageId in run metadata
     await supabase.from('agent_runs').update({
-      metadata: { locale, preferredModel, isNsfw, headless: true, firstMessageId: writer.firstMessageId },
+      metadata: {
+        locale,
+        preferredModel,
+        requestedAgentModel: requestedAgentModel ?? 'auto',
+        agentModel: resolvedAgentModel.id,
+        agentProviderModel: resolvedAgentModel.providerModelId,
+        isNsfw,
+        headless: true,
+        firstMessageId: writer.firstMessageId,
+      },
     }).eq('id', runId);
 
     // Load user skills
@@ -121,11 +150,13 @@ export async function POST(req: NextRequest) {
       let totalOutputTokens = 0;
       let totalCacheReadTokens = 0;
       let totalCacheWriteTokens = 0;
+      let providerCostUsd: number | undefined;
       let agentModel = '';
       try {
         for await (const event of runMakaronAgent(ctx.fullPrompt, ctx.snapshotImages[ctx.currentSnapshotIndex] || '', projectId, {
           locale,
           preferredModel,
+          agentModel: requestedAgentModel,
           videoModel,
           videoResolution,
           videoAuto,
@@ -146,6 +177,7 @@ export async function POST(req: NextRequest) {
             totalOutputTokens += event.outputTokens ?? 0;
             totalCacheReadTokens += event.cacheReadTokens ?? 0;
             totalCacheWriteTokens += event.cacheWriteTokens ?? 0;
+            providerCostUsd = event.providerCostUsd;
             if (event.model) agentModel = event.model;
           }
           await writer.processAndEnqueue(event);
@@ -172,6 +204,7 @@ export async function POST(req: NextRequest) {
           totalInputTokens, totalOutputTokens,
           undefined, undefined,
           { cacheRead: totalCacheReadTokens, cacheWrite: totalCacheWriteTokens },
+          providerCostUsd,
         ).catch(e => console.error('[agent/run] billing error:', e));
       }
       const { data: finalRun } = await supabase.from('agent_runs')
@@ -193,7 +226,9 @@ export async function POST(req: NextRequest) {
               locale,
             );
             let projectName = '';
-            for await (const ev of runMakaronAgent(namePrompt, '', projectId, { tipReactionOnly: true, locale })) {
+            for await (const ev of runMakaronAgent(namePrompt, '', projectId, {
+              tipReactionOnly: true, locale, agentModel: requestedAgentModel,
+            })) {
               if (ev.type === 'content' && ev.text) projectName += ev.text;
             }
             projectName = projectName.trim().replace(/^["']|["']$/g, '');

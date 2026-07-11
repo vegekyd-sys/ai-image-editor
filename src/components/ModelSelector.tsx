@@ -1,10 +1,11 @@
 'use client';
 
-import { useState, useRef, useEffect, useCallback } from 'react';
+import { useState, useRef, useEffect, useCallback, useId } from 'react';
 import { createPortal } from 'react-dom';
 import type { PreferredModel } from './AgentChatView';
 import type { VideoModel, VideoResolution } from '@/types';
-import { getImageModels, getVideoModels, type ModelInfo } from '@/lib/model-registry';
+import { getAgentModels, getImageModels, getVideoModels, type ModelInfo } from '@/lib/model-registry';
+import type { AgentModelPreference } from '@/lib/agent-models';
 import { useLocale } from '@/lib/i18n';
 import { getDefaultVideoModelId, getVideoModelCapability, normalizeVideoResolution } from '@/lib/video-model-capabilities';
 
@@ -17,12 +18,15 @@ interface ModelSelectorProps {
   onVideoModelChange?: (model: VideoModel) => void;
   videoResolution?: VideoResolution;
   onVideoResolutionChange?: (resolution: VideoResolution) => void;
+  agentModel?: AgentModelPreference;
+  onAgentModelChange?: (model: AgentModelPreference) => void;
   onOpenChange?: (open: boolean) => void;
 }
 
 const ROW_HEIGHT = 68;
 const PANEL_BODY_HEIGHT = ROW_HEIGHT * 5;
 const AUTO_TIPS_FOOTER_HEIGHT = ROW_HEIGHT + 14;
+const PANEL_CHROME_HEIGHT = 104;
 
 function ModelIcon({ size = 18 }: { size?: number }) {
   return (
@@ -34,10 +38,13 @@ function ModelIcon({ size = 18 }: { size?: number }) {
   );
 }
 
-function AutoToggle({ on, onChange, label }: { on: boolean; onChange: (v: boolean) => void; label: string }) {
+function AutoToggle({ on, onChange, label, testId }: { on: boolean; onChange: (v: boolean) => void; label: string; testId?: string }) {
   return (
     <button
       onClick={() => onChange(!on)}
+      data-testid={testId}
+      aria-pressed={on}
+      aria-label={label}
       style={{
         display: 'flex',
         alignItems: 'center',
@@ -81,6 +88,7 @@ function ModelRow({
   selected,
   disabled,
   onSelect,
+  testId,
 }: {
   model: ModelInfo;
   name: string;
@@ -88,11 +96,16 @@ function ModelRow({
   selected: boolean;
   disabled: boolean;
   onSelect: () => void;
+  testId?: string;
 }) {
   return (
     <button
       onClick={onSelect}
       disabled={disabled}
+      data-testid={testId}
+      data-model-id={model.id}
+      data-model-category={model.category}
+      aria-pressed={selected}
       className={selected && !disabled ? 'mkr-liquid-pill' : ''}
       style={{
         display: 'flex',
@@ -370,24 +383,40 @@ export default function ModelSelector({
   onVideoModelChange,
   videoResolution = 'auto',
   onVideoResolutionChange,
+  agentModel = 'auto',
+  onAgentModelChange,
   onOpenChange,
 }: ModelSelectorProps) {
   const { t } = useLocale();
+  const popoverId = useId();
+  const popoverTitleId = `${popoverId}-title`;
   const [open, setOpen] = useState(false);
   useEffect(() => { onOpenChange?.(open); }, [open, onOpenChange]);
-  const [activeTab, setActiveTab] = useState<'image' | 'video'>('image');
+  const [activeTab, setActiveTab] = useState<'image' | 'video' | 'agent'>('image');
   const wrapperRef = useRef<HTMLDivElement>(null);
   const triggerRef = useRef<HTMLButtonElement>(null);
   const popoverRef = useRef<HTMLDivElement>(null);
   const scrollBodyRef = useRef<HTMLDivElement>(null);
-  const [popoverPos, setPopoverPos] = useState<{ bottom: number; left?: number; right?: number } | null>(null);
+  const didFocusPopoverRef = useRef(false);
+  const [popoverPos, setPopoverPos] = useState<{
+    bottom: number;
+    bodyHeight: number;
+    maxHeight: number;
+    left?: number;
+    right?: number;
+  } | null>(null);
   const [canScrollDown, setCanScrollDown] = useState(false);
   const [autoTips, setAutoTips] = useState(() =>
     typeof window !== 'undefined' ? (localStorage.getItem('mkr_auto_tips') ?? 'auto') !== 'off' : true
   );
 
   const imageAuto = preferredModel === 'auto';
-  const currentAuto = activeTab === 'image' ? imageAuto : videoAuto;
+  const agentAuto = agentModel === 'auto';
+  const currentAuto = activeTab === 'image'
+    ? imageAuto
+    : activeTab === 'video'
+      ? videoAuto
+      : agentAuto;
 
   const updateScrollHint = useCallback(() => {
     const el = scrollBodyRef.current;
@@ -411,34 +440,79 @@ export default function ModelSelector({
       }
     };
     document.addEventListener('pointerdown', handler);
-    return () => document.removeEventListener('pointerdown', handler);
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.key !== 'Escape') return;
+      event.preventDefault();
+      setOpen(false);
+      window.requestAnimationFrame(() => triggerRef.current?.focus());
+    };
+    document.addEventListener('keydown', handleKeyDown);
+    return () => {
+      document.removeEventListener('pointerdown', handler);
+      document.removeEventListener('keydown', handleKeyDown);
+    };
+  }, [open]);
+
+  const updatePopoverPosition = useCallback(() => {
+    if (!open || !triggerRef.current) return;
+    const rect = triggerRef.current.getBoundingClientRect();
+    const visualViewportTop = window.visualViewport?.offsetTop ?? 0;
+    const isMobile = window.innerWidth < 640;
+    // CSS fixed positioning uses the layout viewport. The trigger is already
+    // raised above the software keyboard, so visualViewport.height must not be
+    // used as the bottom coordinate or the popover falls behind the keyboard.
+    const bottom = Math.max(8, window.innerHeight - rect.top + 8);
+    const maxHeight = Math.max(0, rect.top - visualViewportTop - 8);
+    const bodyHeight = Math.max(0, Math.min(PANEL_BODY_HEIGHT, maxHeight - PANEL_CHROME_HEIGHT));
+    if (isMobile) {
+      setPopoverPos({ bottom, bodyHeight, maxHeight, left: 12, right: 12 });
+      return;
+    }
+
+    const panelWidth = 300;
+    const spaceRight = window.innerWidth - rect.left;
+    const spaceLeft = rect.right;
+    if (spaceRight >= panelWidth + 8) {
+      setPopoverPos({ bottom, bodyHeight, maxHeight, left: Math.max(8, rect.left) });
+    } else if (spaceLeft >= panelWidth + 8) {
+      setPopoverPos({ bottom, bodyHeight, maxHeight, right: Math.max(8, window.innerWidth - rect.right) });
+    } else {
+      setPopoverPos({ bottom, bodyHeight, maxHeight, left: Math.max(8, (window.innerWidth - panelWidth) / 2) });
+    }
   }, [open]);
 
   useEffect(() => {
-    if (open && triggerRef.current) {
-      const rect = triggerRef.current.getBoundingClientRect();
-      const isMobile = window.innerWidth < 640;
-      const bottom = window.innerHeight - rect.top + 8;
-      if (isMobile) {
-        setPopoverPos({ bottom, left: 12, right: 12 });
-      } else {
-        const panelWidth = 300;
-        const spaceRight = window.innerWidth - rect.left;
-        const spaceLeft = rect.right;
-        if (spaceRight >= panelWidth + 8) {
-          setPopoverPos({ bottom, left: Math.max(8, rect.left) });
-        } else if (spaceLeft >= panelWidth + 8) {
-          setPopoverPos({ bottom, right: Math.max(8, window.innerWidth - rect.right) });
-        } else {
-          setPopoverPos({ bottom, left: Math.max(8, (window.innerWidth - panelWidth) / 2) });
-        }
-      }
+    if (!open) return;
+    updatePopoverPosition();
+    window.addEventListener('resize', updatePopoverPosition);
+    window.visualViewport?.addEventListener('resize', updatePopoverPosition);
+    window.visualViewport?.addEventListener('scroll', updatePopoverPosition);
+    return () => {
+      window.removeEventListener('resize', updatePopoverPosition);
+      window.visualViewport?.removeEventListener('resize', updatePopoverPosition);
+      window.visualViewport?.removeEventListener('scroll', updatePopoverPosition);
+    };
+  }, [open, updatePopoverPosition]);
+
+  useEffect(() => {
+    if (!open) {
+      didFocusPopoverRef.current = false;
+      return;
     }
-  }, [open]);
+    if (!popoverPos || didFocusPopoverRef.current) return;
+    didFocusPopoverRef.current = true;
+    window.requestAnimationFrame(() => {
+      document.getElementById(`${popoverId}-tab-${activeTab}`)?.focus();
+    });
+  }, [activeTab, open, popoverId, popoverPos]);
 
   const handleAutoToggle = useCallback((on: boolean) => {
     if (activeTab === 'video') {
       onVideoAutoChange?.(on);
+      return;
+    }
+    if (activeTab === 'agent') {
+      onAgentModelChange?.(on ? 'auto' : 'sonnet-5');
       return;
     }
     if (on) {
@@ -446,7 +520,7 @@ export default function ModelSelector({
     } else {
       onModelChange('gemini');
     }
-  }, [activeTab, onModelChange, onVideoAutoChange]);
+  }, [activeTab, onAgentModelChange, onModelChange, onVideoAutoChange]);
 
   const handleImageSelect = useCallback((id: string) => {
     onModelChange(id as PreferredModel);
@@ -462,6 +536,10 @@ export default function ModelSelector({
     onVideoResolutionChange?.(resolution);
   }, [onVideoResolutionChange]);
 
+  const handleAgentSelect = useCallback((id: string) => {
+    onAgentModelChange?.(id as AgentModelPreference);
+  }, [onAgentModelChange]);
+
   const handleAutoTipsToggle = useCallback((on: boolean) => {
     setAutoTips(on);
     localStorage.setItem('mkr_auto_tips', on ? 'auto' : 'off');
@@ -469,12 +547,25 @@ export default function ModelSelector({
 
   const imageModels = getImageModels();
   const videoModels = getVideoModels();
-  const models = activeTab === 'image' ? imageModels : videoModels;
-  const selectedId = activeTab === 'image' ? (imageAuto ? null : preferredModel) : (videoAuto ? null : videoModel);
+  const agentModels = getAgentModels();
+  const models = activeTab === 'image'
+    ? imageModels
+    : activeTab === 'video'
+      ? videoModels
+      : agentModels;
+  const selectedId = activeTab === 'image'
+    ? (imageAuto ? null : preferredModel)
+    : activeTab === 'video'
+      ? (videoAuto ? null : videoModel)
+      : (agentAuto ? null : agentModel);
   const selectedImageModel = imageModels.find(model => model.id === preferredModel);
   const selectedImageLabel = selectedImageModel
     ? t(selectedImageModel.nameKey as Parameters<typeof t>[0])
     : preferredModel;
+  const selectedAgentModel = agentModels.find(model => model.id === agentModel);
+  const selectedAgentLabel = selectedAgentModel
+    ? t(selectedAgentModel.nameKey as Parameters<typeof t>[0])
+    : agentModel;
   const selectedVideoCapability = getVideoModelCapability(videoModel);
   const selectedVideoResolution = videoResolution === 'auto'
     ? selectedVideoCapability.defaultResolution
@@ -483,7 +574,10 @@ export default function ModelSelector({
     ? selectedImageLabel
     : !videoAuto
       ? `${selectedVideoCapability.label} ${String(selectedVideoResolution).toUpperCase()}`
-      : 'auto';
+      : !agentAuto
+        ? `Agent: ${selectedAgentLabel}`
+        : 'auto';
+  const hasExplicitModel = !imageAuto || !videoAuto || !agentAuto;
   const resolutionOptions = selectedVideoCapability.supportedResolutions ?? [];
 
   useEffect(() => {
@@ -505,16 +599,20 @@ export default function ModelSelector({
         data-testid="model-selector"
         data-current-model={preferredModel}
         data-current-video-model={videoModel}
+        data-current-agent-model={agentModel}
         data-video-auto={videoAuto}
+        aria-expanded={open}
+        aria-haspopup="dialog"
+        aria-controls={popoverId}
         aria-label={`Model: ${modelLabel}. Click to open selector.`}
         onClick={() => setOpen(v => !v)}
         className="mkr-liquid-icon-button w-8 h-8 flex-shrink-0 flex items-center justify-center rounded-full transition-all active:scale-95"
         style={{
-          background: (!imageAuto || !videoAuto) || open
+          background: hasExplicitModel || open
             ? 'linear-gradient(145deg, rgba(217,70,239,0.18), rgba(10,10,14,0.34))'
             : 'linear-gradient(145deg, rgba(255,255,255,0.08), rgba(10,10,14,0.34))',
-          border: ((!imageAuto || !videoAuto) || open) ? '0.5px solid rgba(232,121,249,0.24)' : '0.5px solid rgba(255,255,255,0.10)',
-          color: (!imageAuto || !videoAuto) ? 'rgba(217,70,239,0.9)' : open ? 'rgba(240,171,252,0.82)' : 'rgba(255,255,255,0.35)',
+          border: (hasExplicitModel || open) ? '0.5px solid rgba(232,121,249,0.24)' : '0.5px solid rgba(255,255,255,0.10)',
+          color: hasExplicitModel ? 'rgba(217,70,239,0.9)' : open ? 'rgba(240,171,252,0.82)' : 'rgba(255,255,255,0.35)',
         }}
       >
         <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
@@ -528,6 +626,10 @@ export default function ModelSelector({
       {open && popoverPos && typeof document !== 'undefined' && createPortal((
         <div
           ref={popoverRef}
+          id={popoverId}
+          role="dialog"
+          aria-modal="false"
+          aria-labelledby={popoverTitleId}
           className="mkr-liquid-popover"
           style={{
             position: 'fixed',
@@ -544,6 +646,8 @@ export default function ModelSelector({
             WebkitBackdropFilter: 'blur(24px) saturate(1.35)',
             zIndex: 500,
             padding: '14px 10px 10px',
+            maxHeight: popoverPos.maxHeight,
+            overflow: 'hidden',
           }}
         >
           {/* Header */}
@@ -554,14 +658,19 @@ export default function ModelSelector({
             padding: '0 6px',
             marginBottom: 12,
           }}>
-            <span style={{ fontSize: 14, fontWeight: 700, color: 'rgba(255,255,255,0.9)' }}>
+            <span id={popoverTitleId} style={{ fontSize: 14, fontWeight: 700, color: 'rgba(255,255,255,0.9)' }}>
               {t('model.title')}
             </span>
-            <AutoToggle on={currentAuto} onChange={handleAutoToggle} label={t('model.auto')} />
+            <AutoToggle
+              on={currentAuto}
+              onChange={handleAutoToggle}
+              label={t('model.auto')}
+              testId={`model-auto-${activeTab}`}
+            />
           </div>
 
           {/* Tabs */}
-          <div style={{
+          <div role="tablist" aria-label={t('model.title')} style={{
             display: 'flex',
             background: 'rgba(255,255,255,0.04)',
             borderRadius: 10,
@@ -570,10 +679,34 @@ export default function ModelSelector({
             marginLeft: 4,
             marginRight: 4,
           }}>
-            {(['image', 'video'] as const).map(tab => (
+            {(['image', 'video', 'agent'] as const).map(tab => (
               <button
                 key={tab}
+                id={`${popoverId}-tab-${tab}`}
+                role="tab"
+                data-testid={`model-tab-${tab}`}
+                aria-selected={activeTab === tab}
+                aria-controls={`${popoverId}-panel-${tab}`}
+                tabIndex={activeTab === tab ? 0 : -1}
                 onClick={() => setActiveTab(tab)}
+                onKeyDown={(event) => {
+                  const tabs = ['image', 'video', 'agent'] as const;
+                  const currentIndex = tabs.indexOf(tab);
+                  const nextIndex = event.key === 'ArrowRight'
+                    ? (currentIndex + 1) % tabs.length
+                    : event.key === 'ArrowLeft'
+                      ? (currentIndex - 1 + tabs.length) % tabs.length
+                      : event.key === 'Home'
+                        ? 0
+                        : event.key === 'End'
+                          ? tabs.length - 1
+                          : currentIndex;
+                  if (nextIndex === currentIndex && !['Home', 'End'].includes(event.key)) return;
+                  event.preventDefault();
+                  const nextTab = tabs[nextIndex];
+                  setActiveTab(nextTab);
+                  document.getElementById(`${popoverId}-tab-${nextTab}`)?.focus();
+                }}
                 style={{
                   flex: 1,
                   padding: '6px 0',
@@ -592,14 +725,29 @@ export default function ModelSelector({
             ))}
           </div>
 
-          <div style={{ position: 'relative', height: PANEL_BODY_HEIGHT }}>
+          {(['image', 'video', 'agent'] as const).map(panelTab => (
+            <div
+              key={panelTab}
+              id={`${popoverId}-panel-${panelTab}`}
+              role="tabpanel"
+              aria-labelledby={`${popoverId}-tab-${panelTab}`}
+              hidden={activeTab !== panelTab}
+              style={{
+                position: 'relative',
+                height: popoverPos.bodyHeight,
+                display: activeTab === panelTab ? 'block' : 'none',
+              }}
+            >
+              {activeTab === panelTab && (<>
             {/* Model list — fixed body height for image/video, with overflow hint. */}
             <div
               ref={scrollBodyRef}
               className="model-selector-scroll"
               onScroll={updateScrollHint}
               style={{
-                height: activeTab === 'image' ? PANEL_BODY_HEIGHT - AUTO_TIPS_FOOTER_HEIGHT : PANEL_BODY_HEIGHT,
+                height: activeTab === 'image'
+                  ? Math.max(0, popoverPos.bodyHeight - AUTO_TIPS_FOOTER_HEIGHT)
+                  : popoverPos.bodyHeight,
                 overflowY: 'auto',
                 display: 'flex',
                 flexDirection: 'column',
@@ -633,7 +781,10 @@ export default function ModelSelector({
                     desc={t(model.descKey as Parameters<typeof t>[0])}
                     selected={model.id === selectedId}
                     disabled={false}
-                    onSelect={() => handleImageSelect(model.id)}
+                    onSelect={() => activeTab === 'agent'
+                      ? handleAgentSelect(model.id)
+                      : handleImageSelect(model.id)}
+                    testId={activeTab === 'agent' ? `agent-model-${model.id}` : undefined}
                   />
                 );
               })}
@@ -724,7 +875,9 @@ export default function ModelSelector({
                 </button>
               </div>
             )}
-          </div>
+              </>)}
+            </div>
+          ))}
         </div>
       ), document.body)}
     </div>

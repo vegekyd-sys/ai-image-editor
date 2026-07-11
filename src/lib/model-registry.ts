@@ -1,4 +1,4 @@
-export type ModelCategory = 'image' | 'video';
+export type ModelCategory = 'image' | 'video' | 'agent';
 
 export interface ModelInfo {
   id: string;
@@ -21,6 +21,12 @@ export const MODEL_REGISTRY: ModelInfo[] = [
   { id: 'kling', nameKey: 'model.kling.name', descKey: 'model.kling.desc', category: 'video', speedLabel: '4K' },
   { id: 'grok', nameKey: 'model.grok.name', descKey: 'model.grok.desc', category: 'video', speedLabel: '30-40s' },
   { id: 'google-omni', nameKey: 'model.googleOmni.name', descKey: 'model.googleOmni.desc', category: 'video', speedLabel: '30-70s' },
+  // Agent LLM
+  { id: 'sonnet-4.6', nameKey: 'model.sonnet46.name', descKey: 'model.sonnet46.desc', category: 'agent', speedLabel: 'Fast' },
+  { id: 'sonnet-5', nameKey: 'model.sonnet5.name', descKey: 'model.sonnet5.desc', category: 'agent', speedLabel: 'Default' },
+  { id: 'opus-4.8', nameKey: 'model.opus48.name', descKey: 'model.opus48.desc', category: 'agent', speedLabel: 'Best' },
+  { id: 'grok-4.5', nameKey: 'model.grok45.name', descKey: 'model.grok45.desc', category: 'agent', speedLabel: 'Fast' },
+  { id: 'deepseek-v4-pro', nameKey: 'model.deepseekV4Pro.name', descKey: 'model.deepseekV4Pro.desc', category: 'agent', speedLabel: 'Value' },
 ];
 
 export function getImageModels(): ModelInfo[] {
@@ -29,6 +35,10 @@ export function getImageModels(): ModelInfo[] {
 
 export function getVideoModels(): ModelInfo[] {
   return MODEL_REGISTRY.filter(m => m.category === 'video');
+}
+
+export function getAgentModels(): ModelInfo[] {
+  return MODEL_REGISTRY.filter(m => m.category === 'agent');
 }
 
 export function getModelInfo(id: string): ModelInfo | undefined {
