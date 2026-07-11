@@ -55,7 +55,7 @@ describe('OpenMontage full skill migration', () => {
     expect(pipelineNames).toEqual([...sourcePipelines].sort());
     expect(agentNames).toHaveLength(OPENMONTAGE_SOURCE_AGENT_SKILL_COUNT);
     expect(pipelineNames).toHaveLength(OPENMONTAGE_SOURCE_PIPELINE_COUNT);
-    expect(getOpenMontageCoverageSummary()).toEqual({ native: 40, adapted: 40, excluded: 8, unavailable: 3 });
+    expect(getOpenMontageCoverageSummary()).toEqual({ native: 40, adapted: 32, excluded: 8, unavailable: 11 });
   });
 
   it('excludes only HyperFrames and records non-product capabilities honestly', () => {
@@ -65,7 +65,11 @@ describe('OpenMontage full skill migration', () => {
       'hyperframes-creative', 'hyperframes-media', 'hyperframes-registry', 'remotion-to-hyperframes',
     ]);
     const unavailable = OPENMONTAGE_SKILL_CATALOG.filter(entry => entry.supportLevel === 'unavailable').map(entry => entry.name).sort();
-    expect(unavailable).toEqual(['agents', 'framework-smoke', 'setup-api-key']);
+    expect(unavailable).toEqual([
+      'agents', 'framework-smoke', 'gsap-core', 'gsap-frameworks',
+      'gsap-performance', 'gsap-plugins', 'gsap-react', 'gsap-scrolltrigger',
+      'gsap-timeline', 'gsap-utils', 'setup-api-key',
+    ]);
     for (const entry of OPENMONTAGE_SKILL_CATALOG.filter(item => ['excluded', 'unavailable'].includes(item.supportLevel))) {
       expect(entry.reason).toBeTruthy();
     }
@@ -73,7 +77,7 @@ describe('OpenMontage full skill migration', () => {
 
   it('materializes every supported source name as a Makaron built-in skill', () => {
     const migrated = getMigratedOpenMontageSkills();
-    expect(migrated).toHaveLength(80);
+    expect(migrated).toHaveLength(72);
     for (const entry of migrated) {
       const file = path.join(root, 'src', 'skills', entry.name, 'SKILL.md');
       expect(existsSync(file), entry.name).toBe(true);
@@ -103,6 +107,9 @@ describe('OpenMontage full skill migration', () => {
   it('keeps internal craft adapters out of the per-run manifest', async () => {
     const manifest = await getSkillManifest();
     expect(manifest).not.toContain('**gsap-core**');
+    for (const name of sourceAgentSkills.filter(name => name.startsWith('gsap-'))) {
+      expect(existsSync(path.join(root, 'src', 'skills', name, 'SKILL.md')), name).toBe(false);
+    }
     expect(manifest).not.toContain('**threejs-shaders**');
     expect(manifest).toContain('**music-to-video**');
     expect(manifest).toContain('**website-to-video**');

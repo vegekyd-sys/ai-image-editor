@@ -10,11 +10,11 @@ Studio Run, Remotion, FFmpeg, and provider routes remain the execution layer.
 
 | Source surface | Total | Native | Adapted | Excluded | Unavailable |
 | --- | ---: | ---: | ---: | ---: | ---: |
-| `.agents/skills` | 78 | 37 | 31 | 8 | 2 |
+| `.agents/skills` | 78 | 37 | 23 | 8 | 10 |
 | `pipeline_defs` | 13 | 3 | 9 | 0 | 1 |
-| Combined catalog | 91 | 40 | 40 | 8 | 3 |
+| Combined catalog | 91 | 40 | 32 | 8 | 11 |
 
-The 80 supported source names are materialized as built-in Makaron skills.
+The 72 supported source names are materialized as built-in Makaron skills.
 Source names remain CLI-addressable even when several map to one maintained
 Makaron workflow.
 
@@ -35,6 +35,8 @@ Makaron workflow.
   Makaron media-production capability.
 - `setup-api-key`: Makaron owns provider credentials server-side.
 - `framework-smoke`: OpenMontage's test-only pipeline is not a product recipe.
+- `gsap-*`: Makaron does not install or expose GSAP. Remotion can reproduce
+  some motion patterns, but prompt-only translation is not a GSAP runtime.
 
 ## Product Surface
 
@@ -45,8 +47,8 @@ The CUI selector stays focused. It adds three genuinely new user choices:
 - `website-to-video`
 
 Existing `character-animation`, `screen-demo`, and `localization-dub` remain
-visible. Provider and craft adapters such as `gsap-core`, `threejs-shaders`,
-`ffmpeg`, and `doubao-tts` are available by exact CLI skill name but are hidden
+visible. Provider and craft adapters such as `threejs-shaders`, `ffmpeg`, and
+`doubao-tts` are available by exact CLI skill name but are hidden
 from the UI selector and the per-run skill manifest.
 
 ## Runtime Mapping
@@ -57,7 +59,8 @@ from the UI selector and the per-run skill manifest.
 | generated video | `generate_animation`, Seedance/Kling/Grok/Google Omni |
 | voice/music/SFX | voiceover, transcription, audio, and music tools |
 | exact media editing | Node `run_code` plus FFmpeg/FFprobe |
-| motion/Manim/GSAP/Lottie | deterministic Remotion composition |
+| motion/Manim/Lottie craft | deterministic Remotion composition |
+| GSAP | unavailable until the runtime is installed and renderer-tested |
 | Three.js | injected `THREE` namespace inside DynamicDesign |
 | complete production | Studio Run plus editable composition and reviewed MP4 |
 
@@ -126,7 +129,7 @@ Representative live acceptance must cover at least:
   640x360, 30fps, 48kHz stereo, 6.037s.
 - Seedance 2.0 provider: exact hidden skill activation, native text-to-video,
   one `seedance-mini` submission; H.264, 864x496, 24fps, 4.096s.
-- Coverage/API/CLI: all 91 upstream entries accounted for, 80 supported source
+- Coverage/API/CLI: all 91 upstream entries accounted for, 72 supported source
   names CLI-addressable, 8 HyperFrames entries excluded, and only six migrated
   end-to-end workflows visible in the product selector.
 - Automated suite: 437 of 438 repository tests pass. The sole failure is the
