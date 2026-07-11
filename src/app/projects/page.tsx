@@ -23,6 +23,8 @@ import CreateInputBox from '@/components/CreateInputBox'
 import { MakaronSpark, MAKARON_WORDMARK_STYLE } from '@/components/MakaronLogo'
 import ProjectEditorContainer from '@/components/ProjectEditorContainer'
 import LiquidGlassNav from '@/components/LiquidGlassNav'
+import { loadCreateAgentModelPreference, saveAgentModelPreference, saveCreateAgentModelPreference } from '@/lib/agent-model-preference'
+import type { AgentModelPreference } from '@/lib/agent-models'
 
 interface ProjectWithSnapshots {
   id: string
@@ -149,6 +151,7 @@ function ProjectsPageInner() {
     return getCachedProjectsListSync(cachedUserId) === null
   })
   const createInput = useCreateInput()
+  const [createAgentModel, setCreateAgentModel] = useState<AgentModelPreference>('auto')
   const inputBoxRef = useRef<HTMLDivElement>(null)
   const extractedMetadataRef = useRef<import('@/types').PhotoMetadata | undefined>(undefined)
   const [photoSlotWidth, setPhotoSlotWidth] = useState(80)
@@ -160,6 +163,15 @@ function ProjectsPageInner() {
     readNativeJSONCache<CreditsPayload>('/api/billing/credits')?.balance ?? null
   ))
   const [showWelcome, setShowWelcome] = useState(false)
+
+  useEffect(() => {
+    setCreateAgentModel(loadCreateAgentModelPreference())
+  }, [])
+
+  const handleCreateAgentModelChange = useCallback((model: AgentModelPreference) => {
+    setCreateAgentModel(model)
+    saveCreateAgentModelPreference(model)
+  }, [])
   const [, setSkillUploading] = useState(false)
   const [, setSkillUploadError] = useState<string | null>(null)
   const handleSkillUpload = useCallback(async (file: File) => {
@@ -817,6 +829,7 @@ function ProjectsPageInner() {
       if (selectedSkill) opts.skill = selectedSkill
       const result = await createProject(supabase, user.id, files, Object.keys(opts).length ? opts : undefined, extractedMetadataRef.current)
       if (!result) throw new Error('Failed to create project')
+      saveAgentModelPreference(result.projectId, createAgentModel)
       if (useIOSInlineProjectNavigation) {
         createInput.setCreating(false)
         openIOSProject(result.projectId)
@@ -832,7 +845,7 @@ function ProjectsPageInner() {
       }
       createInput.setCreating(false)
     }
-  }, [user, createInput, router, selectedSkill, t, useIOSInlineProjectNavigation, openIOSProject])
+  }, [user, createAgentModel, createInput, router, selectedSkill, t, useIOSInlineProjectNavigation, openIOSProject])
 
   // Unified create: text only, image only, or both — all go through handleCreateProject
   const handleCreate = useCallback(async () => {
@@ -1249,6 +1262,8 @@ function ProjectsPageInner() {
               skills={availableSkills}
               selectedSkill={selectedSkill}
               onSkillChange={setSelectedSkill}
+              agentModel={createAgentModel}
+              onAgentModelChange={handleCreateAgentModelChange}
               onDeleteSkill={(name) => {
                 setAvailableSkills(prev => {
                   const next = prev.filter(s => s.name !== name)

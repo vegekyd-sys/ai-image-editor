@@ -27,6 +27,8 @@ import { useCreateInput } from '@/hooks/useCreateInput'
 import CreateInputBox from '@/components/CreateInputBox'
 import MakaronLogo from '@/components/MakaronLogo'
 import LiquidGlassNav from '@/components/LiquidGlassNav'
+import { loadCreateAgentModelPreference, saveAgentModelPreference, saveCreateAgentModelPreference } from '@/lib/agent-model-preference'
+import type { AgentModelPreference } from '@/lib/agent-models'
 
 const Z = { INPUT: 100, HERO_FLY: 90, OVERLAY: 80, AMBIENT: 0 } as const
 const IOS_SKILL_BACK_EDGE_PX = 36
@@ -265,6 +267,7 @@ function HomePageInner() {
 
   const [viewMode, setViewMode] = useState<'human' | 'agent'>('human')
   const createInput = useCreateInput()
+  const [createAgentModel, setCreateAgentModel] = useState<AgentModelPreference>('auto')
   const inputBoxRef = useRef<HTMLDivElement>(null)
   const textareaRef = useRef<HTMLTextAreaElement>(null)
   const [photoSlotWidth, setPhotoSlotWidth] = useState(80)
@@ -283,6 +286,15 @@ function HomePageInner() {
   const [selectedDetail, setSelectedDetail] = useState<HomeSkill | null>(null)
   const [heroRect, setHeroRect] = useState<DOMRect | null>(null)
   const [heroExpanded, setHeroExpanded] = useState(false)
+
+  useEffect(() => {
+    setCreateAgentModel(loadCreateAgentModelPreference())
+  }, [])
+
+  const handleCreateAgentModelChange = useCallback((model: AgentModelPreference) => {
+    setCreateAgentModel(model)
+    saveCreateAgentModelPreference(model)
+  }, [])
   const detailSnapRef = useRef<HTMLDivElement>(null)
   const detailInnerRef = useRef<HTMLDivElement>(null)
   const detailSwipeRef = useRef<{ startY: number; startIdx: number; swiping: boolean } | null>(null)
@@ -1097,6 +1109,7 @@ function HomePageInner() {
       if (skillName) opts.skill = skillName
       const result = await createProject(supabase, authedUser.id, files, Object.keys(opts).length ? opts : undefined)
       if (!result) throw new Error('Failed to create project')
+      saveAgentModelPreference(result.projectId, createAgentModel)
       void clearCreateDraft()
       router.push(`/projects/${result.projectId}`)
     } catch (err) {
@@ -1108,7 +1121,7 @@ function HomePageInner() {
       }
       createInput.setCreating(false)
     }
-  }, [activeSkill, createInput, installHomeSkill, requireAuth, router, saveContextBeforeLogin, saveCreateDraftBeforeLogin, selectedDetail, selectedSkill, t, user])
+  }, [activeSkill, createAgentModel, createInput, installHomeSkill, requireAuth, router, saveContextBeforeLogin, saveCreateDraftBeforeLogin, selectedDetail, selectedSkill, t, user])
 
   const consumeDraftRef = useRef(false)
   useEffect(() => {
@@ -1665,6 +1678,8 @@ function HomePageInner() {
               skills={availableSkills}
               selectedSkill={selectedSkill}
               onSkillChange={setSelectedSkill}
+              agentModel={createAgentModel}
+              onAgentModelChange={handleCreateAgentModelChange}
               onDeleteSkill={(name) => {
                 setAvailableSkills(prev => {
                   const next = prev.filter(s => s.name !== name)
@@ -1837,6 +1852,8 @@ function HomePageInner() {
               skills={availableSkills}
               selectedSkill={selectedSkill}
               onSkillChange={setSelectedSkill}
+              agentModel={createAgentModel}
+              onAgentModelChange={handleCreateAgentModelChange}
               onDeleteSkill={(name) => {
                 setAvailableSkills(prev => {
                   const next = prev.filter(s => s.name !== name)

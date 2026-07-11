@@ -73,7 +73,12 @@ npx makaron-cli chat --project <id> --json -b "<prompt>"
 # Auto-create project (with or without images)
 npx makaron-cli chat --project auto --image photo.jpg --json -b "make it cinematic"
 npx makaron-cli chat --project auto --image img1.jpg --image img2.jpg --json -b "combine these"
+
+# Choose each model role explicitly
+npx makaron-cli chat --project auto --agent-model deepseek-v4-pro --image-model qwen "design a product poster"
 ```
+
+Model flags are role-specific: `--agent-model` controls reasoning and tool use, `--image-model` controls image generation/editing, and `--video-model` controls video generation. `--agent-model` accepts `auto|sonnet-4.6|sonnet-5|opus-4.8|grok-4.5|deepseek-v4-pro`. `MAKARON_AGENT_MODEL` can set the default for automation; the command flag takes precedence. The legacy `--model` flag remains temporarily supported with a deprecation warning.
 
 Returns immediately:
 ```json
@@ -204,14 +209,14 @@ npx makaron-cli edit --image photo.jpg "add cinematic warm lighting"
 npx makaron-cli edit "a cyberpunk cityscape at night"
 
 # With model/skill/reference
-npx makaron-cli edit --image photo.jpg --model openai --skill captions "add title"
+npx makaron-cli edit --image photo.jpg --image-model openai --skill captions "add title"
 npx makaron-cli edit --image photo.jpg --ref style.jpg "match this style"
 
 # Output to file
 npx makaron-cli edit --image photo.jpg --out result.jpg "make it dramatic"
 ```
 
-Options: `--image`, `--model gemini|gemini-lite|qwen|openai|pony|wai`, `--skill enhance|creative|wild|captions`, `--ref <file>` (up to 3), `--aspect <ratio>`, `--out <path>`
+Options: `--image`, `--image-model gemini|gemini-lite|qwen|openai|pony|wai`, `--skill enhance|creative|wild|captions`, `--ref <file>` (up to 3), `--aspect <ratio>`, `--out <path>`
 
 ### `video` — Standalone video tools (no project timeline)
 
@@ -223,14 +228,14 @@ npx makaron-cli video script --image img1.jpg "cinematic story"
 npx makaron-cli analyze --video input.mp4 "describe the key actions and pacing"
 
 # 3a. Submit image-to-video rendering (images must be public URLs from step 1 or uploaded)
-npx makaron-cli video create --script "Shot 1 (5s): <<<image_1>>> ..." --image https://...jpg --duration 5 --model kling
+npx makaron-cli video create --script "Shot 1 (5s): <<<image_1>>> ..." --image https://...jpg --duration 5 --video-model kling
 
 # 3b. Native SeeDance text-to-video (no image required)
-npx makaron-cli video create --script "Shot 1 (5s): A neon one-person studio wakes at dawn" --duration 5 --model seedance-fast --aspect 16:9
+npx makaron-cli video create --script "Shot 1 (5s): A neon one-person studio wakes at dawn" --duration 5 --video-model seedance-fast --aspect 16:9
 
 # 3c. Edit a video from a local file or public URL
-npx makaron-cli video create --script "make it funny" --video input.mp4 --duration 5 --model seedance
-npx makaron-cli video create --script "make it warmer and cinematic" --video https://example.com/input.mp4 --duration 5 --model seedance
+npx makaron-cli video create --script "make it funny" --video input.mp4 --duration 5 --video-model seedance
+npx makaron-cli video create --script "make it warmer and cinematic" --video https://example.com/input.mp4 --duration 5 --video-model seedance
 
 # 4. Check status
 npx makaron-cli video status <taskId>
@@ -242,9 +247,9 @@ npx makaron-cli video status <taskId>
 npx makaron-cli chat --project <id|auto> --video input.mp4 -b "make it funny"
 ```
 
-Options for `video create`: `--script "..."`, `--script-file <path>`, `--image <url>` (repeatable, up to 7), `--video <file|url>`, `--duration <seconds>`, `--aspect 9:16|16:9|1:1`, `--model seedance-fast|seedance-mini|seedance|kling|grok|google-omni`. SeeDance accepts native text-to-video with no image and integer output duration 4-15s (default 5s); Kling supports 5-15s.
+Options for `video create`: `--script "..."`, `--script-file <path>`, `--image <url>` (repeatable, up to 7), `--video <file|url>`, `--duration <seconds>`, `--aspect 9:16|16:9|1:1`, `--video-model seedance-fast|seedance-mini|seedance|kling|grok|google-omni`. SeeDance accepts native text-to-video with no image and integer output duration 4-15s (default 5s); Kling supports 5-15s.
 
-Video edit model behavior: `--model kling --video` uses Kling base/direct edit internally; `--model seedance --video` uses the Seedance video-reference path and requires target <=15s, <=50MB, width/height 300-6000px, aspect ratio 0.4-2.5, and frame pixels 409,600-2,086,876. Tiny metadata padding up to 15.5s is accepted and output duration is clamped to 15s.
+Video edit model behavior: `--video-model kling --video` uses Kling base/direct edit internally; `--video-model seedance --video` uses the Seedance video-reference path and requires target <=15s, <=50MB, width/height 300-6000px, aspect ratio 0.4-2.5, and frame pixels 409,600-2,086,876. Tiny metadata padding up to 15.5s is accepted and output duration is clamped to 15s.
 
 ### `music` — Music generation
 
