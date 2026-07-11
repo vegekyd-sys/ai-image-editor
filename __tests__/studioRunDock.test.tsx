@@ -51,6 +51,7 @@ function HookHarness() {
 
 afterEach(() => {
   vi.unstubAllGlobals();
+  window.sessionStorage.clear();
 });
 
 describe('Studio Run CUI surfaces', () => {
@@ -144,5 +145,47 @@ describe('Studio Run CUI surfaces', () => {
     const table = screen.getByTestId('studio-run-progress-table');
     fireEvent.pointerDown(table);
     expect(screen.queryByTestId('studio-run-progress-table')).toBeNull();
+  });
+
+  it('lets the user dismiss a stopped run and keeps that run hidden for the session', () => {
+    const { rerender } = render(<StudioRunProgress studioRun={{ run, artifacts: {} }} isAgentActive={false} />);
+
+    fireEvent.click(screen.getByTestId('studio-run-progress-dismiss'));
+    expect(screen.queryByTestId('studio-run-progress')).toBeNull();
+
+    rerender(<StudioRunProgress studioRun={{ run: { ...run }, artifacts: {} }} isAgentActive={false} />);
+    expect(screen.queryByTestId('studio-run-progress')).toBeNull();
+  });
+
+  it('keeps active work visible without a manual dismiss action', () => {
+    render(<StudioRunProgress studioRun={{ run, artifacts: {} }} isAgentActive />);
+    expect(screen.getByTestId('studio-run-progress')).toBeTruthy();
+    expect(screen.queryByTestId('studio-run-progress-dismiss')).toBeNull();
+  });
+
+  it('keeps completed progress visible until a newer user request appears', () => {
+    const completedRun: StudioRunSummary = {
+      ...run,
+      status: 'completed',
+      currentStage: null,
+      stages: run.stages.map(stage => ({ ...stage, status: 'completed' })),
+    };
+    const { rerender } = render(
+      <StudioRunProgress
+        studioRun={{ run: completedRun, artifacts: {} }}
+        latestUserMessageTimestamp={Date.parse(completedRun.updatedAt) - 1}
+      />,
+    );
+
+    expect(screen.getByText(`已完成：${run.title}`)).toBeTruthy();
+    expect(screen.getByTestId('studio-run-progress-dismiss')).toBeTruthy();
+
+    rerender(
+      <StudioRunProgress
+        studioRun={{ run: completedRun, artifacts: {} }}
+        latestUserMessageTimestamp={Date.parse(completedRun.updatedAt) + 1}
+      />,
+    );
+    expect(screen.queryByTestId('studio-run-progress')).toBeNull();
   });
 });

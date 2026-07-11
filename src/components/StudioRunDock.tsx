@@ -28,6 +28,10 @@ export interface StudioRunViewModel {
   artifacts: Record<string, unknown>;
 }
 
+function dismissalKey(runId: string): string {
+  return `makaron:studio-run-progress-dismissed:${runId}`;
+}
+
 const stageLabels: Record<string, { short: string; title: string }> = {
   brief: { short: 'Brief', title: '创作简报' },
   proposal: { short: 'Proposal', title: '创意提案' },
@@ -277,11 +281,27 @@ export function useStudioRun(projectId: string | undefined, active: boolean): St
   return { run, artifacts };
 }
 
-export function StudioRunProgress({ studioRun }: { studioRun: StudioRunViewModel }) {
+export function StudioRunProgress({
+  studioRun,
+  isAgentActive = false,
+  latestUserMessageTimestamp,
+}: {
+  studioRun: StudioRunViewModel;
+  isAgentActive?: boolean;
+  latestUserMessageTimestamp?: number;
+}) {
   const { run, artifacts } = studioRun;
   const [expanded, setExpanded] = useState(false);
+  const [dismissedRunId, setDismissedRunId] = useState<string | null>(null);
   const toggleRef = useRef<HTMLButtonElement>(null);
   const completed = useMemo(() => run?.stages.filter(stage => stage.status === 'completed').length || 0, [run]);
+  const runId = run?.runId;
+
+  useEffect(() => {
+    if (!runId) return;
+    setExpanded(false);
+    setDismissedRunId(window.sessionStorage.getItem(dismissalKey(runId)) === 'true' ? runId : null);
+  }, [runId]);
 
   useEffect(() => {
     if (!expanded) return;
@@ -293,11 +313,25 @@ export function StudioRunProgress({ studioRun }: { studioRun: StudioRunViewModel
     return () => document.removeEventListener('pointerdown', closeOnNextPointer);
   }, [expanded]);
 
-  if (!run) return null;
+  if (!run || dismissedRunId === run.runId) return null;
+
+  const isTerminal = run.status === 'completed' || run.status === 'cancelled' || run.status === 'failed';
+  const hasNewerUserRequest = isTerminal
+    && typeof latestUserMessageTimestamp === 'number'
+    && latestUserMessageTimestamp > Date.parse(run.updatedAt);
+  if (hasNewerUserRequest) return null;
+
+  const canDismiss = isTerminal || !isAgentActive;
+
+  const dismiss = () => {
+    window.sessionStorage.setItem(dismissalKey(run.runId), 'true');
+    setExpanded(false);
+    setDismissedRunId(run.runId);
+  };
 
   const currentLabel = run.currentStage ? stageLabels[run.currentStage]?.title : null;
   return (
-    <section data-testid="studio-run-progress" className="px-1 pb-2.5">
+    <section data-testid="studio-run-progress" className="relative px-1 pb-2.5">
       {expanded && (
         <div data-testid="studio-run-progress-table" className="mb-3 max-h-[38vh] overflow-y-auto border-b border-white/[0.07]">
           {run.stages.map((stage, index) => {
@@ -328,14 +362,14 @@ export function StudioRunProgress({ studioRun }: { studioRun: StudioRunViewModel
         type="button"
         data-testid="studio-run-progress-toggle"
         onClick={() => setExpanded(value => !value)}
-        className="w-full text-left active:opacity-70 transition-opacity"
+        className="w-full pr-7 text-left active:opacity-70 transition-opacity"
         aria-expanded={expanded}
         aria-label="Studio Run 总进度"
       >
         <div className="flex items-center gap-2.5 mb-2">
           <span className="text-[10px] font-semibold uppercase" style={{ color: 'rgba(255,255,255,0.52)', letterSpacing: 0 }}>Studio Run</span>
           <span className="text-[10px] truncate flex-1" style={{ color: 'rgba(255,255,255,0.62)' }}>
-            {currentLabel ? `正在进行：${currentLabel}` : run.title}
+            {currentLabel ? `正在进行：${currentLabel}` : run.status === 'completed' ? `已完成：${run.title}` : run.title}
           </span>
           <span className="text-[10px] tabular-nums" style={{ color: run.status === 'completed' ? '#e879f9' : 'rgba(255,255,255,0.42)' }}>{completed}/{run.stages.length}</span>
           <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="rgba(255,255,255,0.34)" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={{ transform: expanded ? 'rotate(180deg)' : undefined, transition: 'transform 160ms ease' }}>
@@ -358,6 +392,19 @@ export function StudioRunProgress({ studioRun }: { studioRun: StudioRunViewModel
           })}
         </div>
       </button>
+      {canDismiss && (
+        <button
+          type="button"
+          data-testid="studio-run-progress-dismiss"
+          onClick={dismiss}
+          className="absolute right-1 top-0 flex h-5 w-5 items-center justify-center text-[17px] leading-none transition-opacity hover:opacity-100"
+          style={{ color: 'rgba(255,255,255,0.36)' }}
+          aria-label="隐藏 Studio Run 进度"
+          title="隐藏 Studio Run 进度"
+        >
+          ×
+        </button>
+      )}
     </section>
   );
 }

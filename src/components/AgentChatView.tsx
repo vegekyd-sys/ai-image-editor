@@ -610,6 +610,9 @@ export default function AgentChatView({
 
   const [input, setInput] = useState('');
   const studioRun = useStudioRun(projectId, isAgentActive);
+  const latestUserMessageTimestamp = useMemo(() => messages.reduce((latest, message) => (
+    message.role === 'user' ? Math.max(latest, message.timestamp) : latest
+  ), 0), [messages]);
   const studioStagePlacements = useMemo(() => {
     const placements = buildStudioRunStagePlacements(messages.map(message => message.timestamp), studioRun.run);
     const byMessage = new Map<number, typeof placements>();
@@ -1618,7 +1621,11 @@ export default function AgentChatView({
           zIndex: 20,
         }}
       >
-        <StudioRunProgress studioRun={studioRun} />
+        <StudioRunProgress
+          studioRun={studioRun}
+          isAgentActive={isAgentActive}
+          latestUserMessageTimestamp={latestUserMessageTimestamp || undefined}
+        />
         {/* Two-row layout: textarea on top, toolbar on bottom */}
         <div
           className="mkr-input-box-liquid"
