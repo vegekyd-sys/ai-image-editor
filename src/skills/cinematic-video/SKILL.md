@@ -27,7 +27,6 @@ Do not route ordinary tutorials or quick social clips here.
 ## Required Directors
 
 Read `skills/_shared/studio-production/production-contract.md`,
-`skills/creative-direction/SKILL.md`,
 `skills/_shared/studio-production/audio-direction.md`,
 `skills/_shared/studio-production/review-contract.md`, and
 `skills/_shared/remotion-director-contract.md` before planning. If a reference

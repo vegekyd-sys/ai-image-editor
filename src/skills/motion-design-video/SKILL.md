@@ -34,10 +34,9 @@ technical visualizations, illustrative explainers, and motion-led social pieces.
 
 ## Workflow
 
-1. Read `skills/_shared/studio-production/production-contract.md`. For new art
-   direction, read `skills/creative-direction/SKILL.md`; it replaces the older
-   generic taste pass. Before composition, use the compact Studio Remotion fast
-   path instead of loading every long director reference.
+1. Read `skills/_shared/studio-production/production-contract.md`. Before
+   composition, use the compact Studio Remotion fast path instead of loading
+   every long director reference.
 2. Start recipe `motion-design-video`; record the chosen mode in the brief.
 3. Offer concepts that differ in visual mechanism, not just typography or
    color. Name the main reveal, motion energy, and final lockup.
@@ -59,6 +58,6 @@ technical visualizations, illustrative explainers, and motion-led social pieces.
 
 Motion must reveal hierarchy, causality, comparison, or emotion. If the same
 information works just as well as static slides, revise the concept.
-Theme-fit visuals do not replace storytelling. Reject an attractive visual test
+Visual execution does not replace storytelling. Reject an attractive visual test
 that never names the subject, lacks a payoff, ends mid-action, or has no audio
 support without an explicit silent-video request.

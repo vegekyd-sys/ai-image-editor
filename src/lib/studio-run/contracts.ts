@@ -69,39 +69,6 @@ const briefSchema = z.object({
   aspectRatio: z.string().regex(/^\d+:\d+$/),
 });
 
-const visualFitSchema = z.object({
-  themeSpecificity: z.number().int().min(1).max(5),
-  recognitionSpeed: z.number().int().min(1).max(5),
-  motionPotential: z.number().int().min(1).max(5),
-  productionEfficiency: z.number().int().min(1).max(5),
-});
-
-const creativeTreatmentSchema = z.object({
-  thesis: z.string().min(1),
-  narrativeSpine: z.object({
-    setup: z.string().min(1),
-    transformation: z.string().min(1),
-    payoff: z.string().min(1),
-    finalLine: z.string().min(1),
-  }).optional(),
-  themeEvidence: z.array(z.string().min(1)).min(2).optional(),
-  evidenceMapping: z.array(z.object({
-    evidence: z.string().min(1),
-    visibleCue: z.string().min(1),
-    motionRole: z.string().min(1),
-  })).min(2).optional(),
-  bestVisualForm: z.string().min(1).optional(),
-  formRationale: z.string().min(1).optional(),
-  rejectedForms: z.array(z.string().min(1)).min(2).optional(),
-  visualFit: visualFitSchema.optional(),
-  visualMechanism: z.string().min(1),
-  signatureFrame: z.string().min(1),
-  rhythm: z.string().min(1),
-  materialSystem: z.string().min(1),
-  contrastPlan: z.array(z.string().min(1)).min(2),
-  antiCliches: z.array(z.string().min(1)).min(3),
-});
-
 const proposalSchema = z.object({
   version: z.literal('1.0'),
   concepts: z.array(z.object({
@@ -110,30 +77,14 @@ const proposalSchema = z.object({
     hook: z.string().min(1),
     visualDirection: z.string().min(1),
     motionLanguage: z.string().min(1),
-    themeConnection: z.string().min(1).optional(),
-    visualForm: z.string().min(1).optional(),
-    visualFit: visualFitSchema.optional(),
   })).min(2),
   selectedConceptId: z.string().min(1),
   rationale: z.string().min(1),
-  creativeMode: z.enum(['baseline', 'directed']).optional(),
-  creativeTreatmentVersion: z.literal(2).optional(),
-  creativeTreatment: creativeTreatmentSchema.optional(),
   deliveryPromise: deliveryPromiseSchema,
   estimatedCostUsd: z.number().nonnegative(),
 }).superRefine((value, ctx) => {
   if (!value.concepts.some(concept => concept.id === value.selectedConceptId)) {
     ctx.addIssue({ code: 'custom', message: 'selectedConceptId must reference a concept' });
-  }
-  if (value.creativeMode === 'directed' && !value.creativeTreatment) {
-    ctx.addIssue({ code: 'custom', message: 'directed proposals require creativeTreatment' });
-  }
-  if (value.creativeMode === 'directed' && value.creativeTreatmentVersion === 2) {
-    const treatment = value.creativeTreatment;
-    if (!treatment?.narrativeSpine || !treatment.themeEvidence || !treatment.evidenceMapping || !treatment.bestVisualForm
-      || !treatment.formRationale || !treatment.rejectedForms || !treatment.visualFit) {
-      ctx.addIssue({ code: 'custom', message: 'creativeTreatmentVersion 2 requires a narrative spine, theme evidence, evidence mapping, form selection, rejected forms, and visual fit' });
-    }
   }
 });
 
@@ -217,23 +168,9 @@ const finalReviewSchema = z.object({
     missingAssets: z.boolean(),
     unreadableText: z.boolean(),
     overlapDetected: z.boolean(),
-    slideshowRisk: z.boolean().optional(),
-    sceneDistinctness: z.boolean().optional(),
-    subjectSpecificity: z.boolean().optional(),
-    motionCarriesMeaning: z.boolean().optional(),
-    themeFidelity: z.boolean().optional(),
-    signatureFrameAchieved: z.boolean().optional(),
-    visualFormFit: z.boolean().optional(),
-    visibleThemeEvidenceCount: z.number().int().nonnegative().optional(),
-    genericShapeRisk: z.boolean().optional(),
     subjectNamed: z.boolean().optional(),
     storyArcComplete: z.boolean().optional(),
     endingResolves: z.boolean().optional(),
-    canvasUseIntentional: z.boolean().optional(),
-    focalScaleStrong: z.boolean().optional(),
-    materialDepthVisible: z.boolean().optional(),
-    contrastHierarchyClear: z.boolean().optional(),
-    brandLockupDominant: z.boolean().optional(),
   }),
   audio: z.object({
     integratedLufs: z.number(),
@@ -252,23 +189,9 @@ const finalReviewSchema = z.object({
   !value.visual.missingAssets &&
   !value.visual.unreadableText &&
   !value.visual.overlapDetected &&
-  value.visual.slideshowRisk !== true &&
-  value.visual.sceneDistinctness !== false &&
-  value.visual.subjectSpecificity !== false &&
-  value.visual.motionCarriesMeaning !== false &&
-  value.visual.themeFidelity !== false &&
-  value.visual.signatureFrameAchieved !== false &&
-  value.visual.visualFormFit !== false &&
-  (value.visual.visibleThemeEvidenceCount === undefined || value.visual.visibleThemeEvidenceCount >= 2) &&
-  value.visual.genericShapeRisk !== true &&
   value.visual.subjectNamed !== false &&
   value.visual.storyArcComplete !== false &&
   value.visual.endingResolves !== false &&
-  value.visual.canvasUseIntentional !== false &&
-  value.visual.focalScaleStrong !== false &&
-  value.visual.materialDepthVisible !== false &&
-  value.visual.contrastHierarchyClear !== false &&
-  value.visual.brandLockupDominant !== false &&
   !value.audio.unexpectedSilence &&
   value.audio.audioSupportsStory !== false &&
   value.runtimePromiseHonored &&

@@ -49,7 +49,6 @@ describe('Studio production skills', () => {
   it('keeps production intelligence in shared director contracts', () => {
     const production = read('src/skills/_shared/studio-production/production-contract.md');
     const reference = read('src/skills/_shared/studio-production/reference-analysis.md');
-    const creative = read('src/skills/creative-direction/SKILL.md');
     const motion = read('src/skills/motion-design-video/SKILL.md');
     const audio = read('src/skills/_shared/studio-production/audio-direction.md');
     const review = read('src/skills/_shared/studio-production/review-contract.md');
@@ -58,31 +57,15 @@ describe('Studio production skills', () => {
     expect(production).toContain('not callable Makaron tools');
     expect(reference).toContain('five dimensions');
     expect(reference).toContain('Separate `keep` from `change`');
-    expect(production).toContain('skills/creative-direction/SKILL.md');
-    expect(creative).toContain('Inspiration Pass');
-    expect(creative).toContain('creativeTreatment');
-    expect(creative).toContain('Theme-Fit Selection');
-    expect(creative).toContain('hide all copy and logos');
-    expect(creative).toContain('do not render three candidate videos');
-    expect(creative).toContain('350 Chinese characters');
-    expect(creative).toContain('subject-native visual nouns');
-    expect(creative).toContain('genericShapeRisk');
-    expect(creative).toContain('diagnostic test, not a delivery instruction');
-    expect(creative).toContain('storyArcComplete');
     expect(motion).toContain('does not mean "no audio"');
-    expect(motion).toContain('Theme-fit visuals do not replace storytelling');
-    expect(creative).toContain('A/B Review');
-    expect(creative).toContain('Timing Every Test');
-    expect(creative).toContain('Framing And Material Pass');
-    expect(creative).toContain('at least 70% of');
-    expect(creative).toContain('newly created project');
+    expect(motion).toContain('Visual execution does not replace storytelling');
     expect(production).toContain('fresh project and');
-    expect(creative).toContain('without timing evidence is incomplete');
     expect(production).toContain('Separate Agent completion');
-    expect(creative).toContain('6500 source');
+    expect(production).not.toContain('creative-direction/SKILL.md');
     expect(audio).toContain('Treat audio as part of the edit');
     expect(review).toContain('Materialize the MP4');
-    expect(review).toContain('Slideshow risk');
+    expect(review).toContain('Semantic completeness');
+    expect(review).toContain('full-resolution frame paths');
   });
 
   it('exposes built-in Studio Run metadata to the CLI API', () => {

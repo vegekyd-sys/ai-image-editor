@@ -17,9 +17,6 @@ work the same across video types.
      `profile: "source"` on the first and only export. Never render fast and
      then render source merely to repair a known resolution mismatch.
 3. Read only the shared director modules needed by the recipe:
-   - `skills/creative-direction/SKILL.md` once for every complete video needing
-     new art direction. It replaces `taste-direction.md`; skip it only for a
-     mechanical edit, explicit template replication, or an A/B baseline.
    - `reference-analysis.md` for reference-led work.
    - `audio-direction.md` for narration, source speech, music, or dubbing.
    - `review-contract.md` before every gated artifact and final delivery.
@@ -35,11 +32,8 @@ work the same across video types.
 ## Stage Meanings
 
 - `brief`: outcome, audience, source/reference status, format, and constraints.
-- `proposal`: at least two meaningfully different treatments, the compact
-  subject-specific `creativeTreatment` for directed work, concrete theme
-  evidence, a paper-only visual-form comparison, honest tool path, cost
-  estimate, selected direction, and locked delivery promise. Render only the
-  selected form.
+- `proposal`: at least two meaningfully different treatments, an honest tool
+  path, cost estimate, selected direction, and locked delivery promise.
 - `script`: the timed content spine. For source-led work this can be transcript
   selections, edit beats, or translated cues instead of new narration.
 - `storyboard`: shot/scene plan, focal point, treatment, transition, safe areas,

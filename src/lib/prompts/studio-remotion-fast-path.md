@@ -13,27 +13,10 @@ order, pacing, focal subject, transition language, audio relation, and review
 criteria. Build a video timeline, not a webpage. Keep the hook legible in the
 opening, create one clear focal action per beat, and end on visible content.
 
-For normal complete-video work, the Proposal must set `creativeMode` to
-`directed`, set `creativeTreatmentVersion` to `2`, and include the compact `creativeTreatment` from
-`skills/creative-direction/SKILL.md`. Make the composition visibly obey its
-visual mechanism, signature frame, rhythm, material system, contrast plan, and
-anti-cliches. Use `baseline` only for an explicit A/B control or template-speed
-request. Do not invent a second style plan during composition.
-
-Before composition, select the best visual form from three theme-derived
-candidates using the Proposal-only fit test. Do not code or preview the rejected
-candidates. The selected form must score at least 4/5 for theme specificity and
-remain recognizable when copy and logos are hidden.
-Keep this comparison inside the existing Proposal artifact and planning batch;
-do not spend another tool call or a separate prose response on it.
-The hidden-copy check is counterfactual QA only. The delivered composition must
-still render the approved subject name, semantic copy, and final line from
-props. Preserve setup, transformation, payoff, and a deliberate ending hold.
-
-For an explicitly visual-only refinement, reuse the published composition and
-its audio/text/timing contract. Do not restart Studio planning or regenerate
-media. Increase focal scale, intentional canvas occupancy, material depth,
-contrast hierarchy, and final-lockup dominance without changing the narrative.
+For complete branded work, preserve setup, transformation, payoff, explicit
+subject naming, and a deliberate ending hold. The delivered composition must
+render the approved semantic copy and final line from props. Do not invent a
+second narrative during composition.
 
 ## One-Pass Runtime
 
@@ -55,11 +38,10 @@ use `import`, `export`, `require`, `window.Remotion`, or module syntax. Use
 `AbsoluteFill`, and `Sequence` directly. Motion must be deterministic from the
 current frame, not timers or browser interaction.
 
-Creative lift must come from one strong mechanism, scale, contrast, timing, and
-composition rather than source-code volume. For a local video of 15 seconds or
-less with no source media, target at most 6500 composition characters and three
-helper components. Reuse arrays and primitives. Avoid tiny decorative labels,
-dense grids, and nested template literals.
+For a local video of 15 seconds or less with no source media, target at most
+6500 composition characters and three helper components. Reuse arrays and
+primitives. Avoid tiny decorative labels, dense grids, and nested template
+literals.
 
 Only `Composition(props)` may read outer `props`. Every helper receives its
 values as parameters. Use Remotion `<Img>`, `<Video>`, `<OffthreadVideo>`, and

@@ -1,5 +1,18 @@
 # Creative Direction A/B - 2026-07-11
 
+## Final Decision
+
+The generic creative-direction harness was rejected after V1-V5 testing. Later
+versions became slower and more literal while self-reported aesthetic scores did
+not predict human preference. The built-in skill, mandatory recipe references,
+theme/visual-fit Proposal fields, and subjective Review booleans were removed.
+
+Retained changes are limited to measured production improvements: direct
+composition payloads, compact source budgets, concurrent contact sheets,
+three-frame short-form review, export retry limits, render-profile selection,
+promotion of completed exports without rerendering, story/audio completeness,
+fresh-project test isolation, and milestone timing.
+
 ## Goal
 
 Test two independent changes against the same 12-second Makaron script:

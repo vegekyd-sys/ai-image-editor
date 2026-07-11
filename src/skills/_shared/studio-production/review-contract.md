@@ -32,27 +32,16 @@ Criticism must be observable and actionable.
 7. Confirm the story names its subject, completes setup-transformation-payoff,
    and holds long enough on an intentional ending.
 
-## Creative Risk Checks
+## Delivery Risk Checks
 
-- Slideshow risk: still frames with only fades, repeated card layouts, or no
-  meaningful camera/element choreography.
 - Reference drift: promised pacing or structure disappeared without an explicit
   decision.
 - Source betrayal: generated filler displaced the footage or voice the user
   asked to preserve.
-- Generic design: the piece could be relabeled for another product unchanged.
-- Generic-shape risk: labels claim a subject, but the visible nouns are only
-  circles, squares, glow, arrows, or undifferentiated panels.
-- Theme evidence: at least two subject-native cues remain legible when copy and
-  logos are hidden, and each cue participates in the motion rather than sitting
-  as decoration.
 - Semantic completeness: the visual metaphor supports rather than replaces the
   subject name, core claim, payoff, and final line.
 - Audio intent: unless silence was explicitly requested, narration, music, or
   sound design supports the narrative and final resolution.
-- Frame craft: active content uses the canvas intentionally, the focal subject
-  dominates, subject-native materials have visible depth, contrast creates a
-  clear hierarchy, and the final lockup is the strongest final-frame event.
 
 A passing review has no unresolved blocking issue. If revision is needed,
 invalidate the earliest responsible Studio Run stage and regenerate downstream
