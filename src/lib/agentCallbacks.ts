@@ -568,6 +568,14 @@ export function makeAgentCallbacks(ctx: AgentCallbackContext) {
       ctx.onCleanup?.();
     },
 
+    onDisconnect: (runId) => {
+      console.warn(`[agent] SSE disconnected for run ${runId}; switching to persisted event replay`);
+      // Let useAgentRun's watcher discover this still-running DB row. Keeping
+      // the id here would make skipRunIdRef suppress the reconnect forever.
+      if (ctx.agentRunIdRef.current === runId) ctx.agentRunIdRef.current = null;
+      setStatus(ctx.t('editor.reconnecting'));
+    },
+
     onInsufficientCredits: (balance) => {
       // Insert a system message in CUI — popup only opens when user taps "Top Up"
       const sysMsg: import('@/types').Message = {

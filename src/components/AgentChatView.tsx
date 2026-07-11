@@ -1301,9 +1301,9 @@ export default function AgentChatView({
             <div key={`${msg.id}:${idx}`}>
               {msg.role === 'user' ? (
                 /* User bubble — right-aligned pill */
-                <div className="flex justify-end">
+                <div className="flex min-w-0 justify-end overflow-hidden">
                   <div
-                    className={`text-white/90 leading-relaxed max-w-[82%] ${isPanel ? 'text-[17px]' : 'text-[21px]'}`}
+                    className={`min-w-0 overflow-hidden text-white/90 leading-relaxed max-w-[82%] ${isPanel ? 'text-[17px]' : 'text-[21px]'}`}
                     style={{
                       background: '#222222',
                       borderRadius: isPanel ? '14px 14px 4px 14px' : '18px 18px 5px 18px',
@@ -1312,7 +1312,10 @@ export default function AgentChatView({
                   >
                     {/* Attached reference images — square thumbnails */}
                     {msg.editInputImages && msg.editInputImages.length > 0 && (
-                      <div className={`flex gap-1.5 p-2 ${msg.content ? 'pb-1' : ''}`}>
+                      <div
+                        className={`hide-scrollbar flex max-w-full gap-1.5 overflow-x-auto overscroll-x-contain p-2 ${msg.content ? 'pb-1' : ''}`}
+                        style={{ WebkitOverflowScrolling: 'touch', touchAction: 'pan-x' }}
+                      >
                         {msg.editInputImages.map((img, i) => (
 
                           <img key={i} src={img} alt="" className="w-20 h-20 rounded-xl object-cover flex-shrink-0" />
@@ -1668,7 +1671,7 @@ export default function AgentChatView({
 
             {/* Unified attachments — scrollable thumbnails */}
             {attachments.length > 0 && (
-              <div className="hide-scrollbar" style={{ display: 'flex', alignItems: 'center', gap: 8, flex: 1, minWidth: 0, overflowX: 'auto', paddingTop: 2 }}>
+              <div className="hide-scrollbar" style={{ display: 'flex', alignItems: 'center', gap: 8, flex: 1, minWidth: 0, overflowX: 'auto', padding: '6px 6px 2px 0' }}>
                 {attachments.map((att) => (
                   <div
                     key={att.id}
@@ -1697,8 +1700,9 @@ export default function AgentChatView({
                     {/* Remove button */}
                     <button
                       onClick={() => setAttachments(prev => prev.filter(a => a.id !== att.id))}
-                      className="mkr-liquid-icon-button absolute -top-1 -right-1 w-3.5 h-3.5 rounded-full flex items-center justify-center"
-                      style={{ background: 'rgba(20,20,24,0.72)', border: '0.5px solid rgba(255,255,255,0.18)' }}
+                      aria-label="Remove attachment"
+                      className="w-3.5 h-3.5 rounded-full flex items-center justify-center"
+                      style={{ position: 'absolute', top: -4, right: -4, zIndex: 2, background: 'rgba(20,20,24,0.88)', border: '0.5px solid rgba(255,255,255,0.22)', boxShadow: '0 2px 8px rgba(0,0,0,0.35)' }}
                     >
                       <svg width="6" height="6" viewBox="0 0 24 24" fill="none" stroke="rgba(255,255,255,0.85)" strokeWidth="3.5" strokeLinecap="round">
                         <line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/>
