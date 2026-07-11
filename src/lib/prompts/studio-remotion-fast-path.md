@@ -30,6 +30,11 @@ The hidden-copy check is counterfactual QA only. The delivered composition must
 still render the approved subject name, semantic copy, and final line from
 props. Preserve setup, transformation, payoff, and a deliberate ending hold.
 
+For an explicitly visual-only refinement, reuse the published composition and
+its audio/text/timing contract. Do not restart Studio planning or regenerate
+media. Increase focal scale, intentional canvas occupancy, material depth,
+contrast hierarchy, and final-lockup dominance without changing the narrative.
+
 ## One-Pass Runtime
 
 Use `runtime: "composition"` and send exactly one complete first draft through

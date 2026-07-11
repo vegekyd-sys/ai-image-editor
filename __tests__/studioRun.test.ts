@@ -95,7 +95,7 @@ const artifacts: Record<StudioStageId, unknown> = {
   review: {
     version: '1.0', outputPath: 'outputs/final.mp4', status: 'pass',
     technical: { validContainer: true, durationSeconds: 50, resolution: '1920x1080', fps: 30, hasAudio: true },
-    visual: { framesSampled: 3, contactSheetPath: 'outputs/contact.png', blackFramesDetected: false, missingAssets: false, unreadableText: false, overlapDetected: false, themeFidelity: true, signatureFrameAchieved: true, visualFormFit: true, visibleThemeEvidenceCount: 2, genericShapeRisk: false, subjectNamed: true, storyArcComplete: true, endingResolves: true },
+    visual: { framesSampled: 3, contactSheetPath: 'outputs/contact.png', blackFramesDetected: false, missingAssets: false, unreadableText: false, overlapDetected: false, themeFidelity: true, signatureFrameAchieved: true, visualFormFit: true, visibleThemeEvidenceCount: 2, genericShapeRisk: false, subjectNamed: true, storyArcComplete: true, endingResolves: true, canvasUseIntentional: true, focalScaleStrong: true, materialDepthVisible: true, contrastHierarchyClear: true, brandLockupDominant: true },
     audio: { integratedLufs: -14, truePeakDbfs: -2, unexpectedSilence: false, narrationPresent: true, musicPresent: true, soundDesignPresent: true, audioSupportsStory: true },
     runtimePromiseHonored: true, issues: [],
   },
@@ -318,6 +318,9 @@ describe('Studio Run controller', () => {
     expect(review.properties?.visual?.properties).toHaveProperty('visibleThemeEvidenceCount');
     expect(review.properties?.visual?.properties).toHaveProperty('genericShapeRisk');
     expect(review.properties?.visual?.properties).toHaveProperty('storyArcComplete');
+    expect(review.properties?.visual?.properties).toHaveProperty('canvasUseIntentional');
+    expect(review.properties?.visual?.properties).toHaveProperty('materialDepthVisible');
+    expect(review.properties?.visual?.properties).toHaveProperty('brandLockupDominant');
 
     const delivery = getStudioArtifactJsonSchema('delivery') as {
       required?: string[];

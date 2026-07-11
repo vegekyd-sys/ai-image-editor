@@ -73,6 +73,10 @@ describe('Studio production skills', () => {
     expect(motion).toContain('Theme-fit visuals do not replace storytelling');
     expect(creative).toContain('A/B Review');
     expect(creative).toContain('Timing Every Test');
+    expect(creative).toContain('Framing And Material Pass');
+    expect(creative).toContain('at least 70% of');
+    expect(creative).toContain('newly created project');
+    expect(production).toContain('fresh project and');
     expect(creative).toContain('without timing evidence is incomplete');
     expect(production).toContain('Separate Agent completion');
     expect(creative).toContain('6500 source');

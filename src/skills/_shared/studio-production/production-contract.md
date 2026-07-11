@@ -89,7 +89,9 @@ work the same across video types.
 ## Test Timing
 
 For every Studio Run used as a sample or acceptance test, retain its Agent run
-ID and report elapsed milestones from the event log. Separate Agent completion,
+ID and report elapsed milestones from the event log. Create a fresh project and
+fresh Studio Run for every test round; source URLs may be reused as controlled
+inputs, but do not refine an older test project. Separate Agent completion,
 MP4-ready time, and Delivery completion; asynchronous export may make them
 different. Include planning, asset/audio generation, first composition, visual
 review/revision, export, total wall time, and counts for revisions, previews,

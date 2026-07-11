@@ -23,6 +23,9 @@ Criticism must be observable and actionable.
    seconds, multi-scene edits, or any transition with visible risk.
 4. Check black/blank frames, missing media, unreadable text, overlaps, source
    crop, subtitle safe areas, and final-frame quality.
+   When a compact contact sheet looks ambiguous at its display scale, inspect
+   the corresponding full-resolution frame paths before declaring a black or
+   blank frame.
 5. Check audio for unexpected silence, intelligible speech, music balance, and
    sync.
 6. Confirm the locked runtime and editability promise were honored.
@@ -47,6 +50,9 @@ Criticism must be observable and actionable.
   subject name, core claim, payoff, and final line.
 - Audio intent: unless silence was explicitly requested, narration, music, or
   sound design supports the narrative and final resolution.
+- Frame craft: active content uses the canvas intentionally, the focal subject
+  dominates, subject-native materials have visible depth, contrast creates a
+  clear hierarchy, and the final lockup is the strongest final-frame event.
 
 A passing review has no unresolved blocking issue. If revision is needed,
 invalidate the earliest responsible Studio Run stage and regenerate downstream

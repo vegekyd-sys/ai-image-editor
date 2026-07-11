@@ -454,6 +454,35 @@ export async function createRemotionExportJob(input: CreateRemotionExportJobInpu
     || (reusableRows || [])[0]
   if (reusable) {
     let job = await addPublishSnapshotId(reusable as RemotionExportJob, input.publishSnapshotId)
+    const reusableNeedsPromotion = !job.workspace_path?.startsWith(`${job.project_id}/`)
+      || !job.storage_url?.includes('/workspace/')
+    if (job.status === 'completed' && input.publish && reusableNeedsPromotion && job.storage_url) {
+      const extension = job.output_type === 'video' ? 'mp4' : 'jpg'
+      const contentType = job.output_type === 'video' ? 'video/mp4' : 'image/jpeg'
+      const name = slugify(typeof job.metadata?.name === 'string' ? job.metadata.name : input.name)
+      const workspacePath = `${job.project_id}/media/remotion-${name}-${job.id.slice(0, 8)}.${extension}`
+      const buffer = await fetchRemoteBuffer(job.storage_url)
+      const saved = await workspace.writeFile(workspacePath, buffer, admin, job.user_id, contentType)
+      if (!saved.success || !saved.storageUrl) {
+        throw new Error(saved.error || 'Reusable export promotion failed')
+      }
+      const { error: promotionError } = await admin.from('remotion_export_jobs').update({
+        publish: true,
+        storage_url: saved.storageUrl,
+        workspace_path: workspacePath,
+        metadata: {
+          ...(job.metadata || {}),
+          promotedReusableExport: true,
+        },
+      }).eq('id', job.id)
+      if (promotionError) throw new Error(promotionError.message)
+      job = await getRemotionExportJob(job.id) || {
+        ...job,
+        publish: true,
+        storage_url: saved.storageUrl,
+        workspace_path: workspacePath,
+      }
+    }
     if (job.status === 'completed' && input.publishSnapshotId && job.storage_url && job.output_type === 'video') {
       await publishExportedVideo(job, job.storage_url, job.workspace_path || '', fingerprintSource, {
         width: job.width || resolveRemotionRenderProfile(fingerprintSource, renderProfile).width,

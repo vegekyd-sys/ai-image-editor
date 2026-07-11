@@ -75,6 +75,9 @@ describe('Remotion export worker contract', () => {
     expect(exporter).toContain('metadata.renderProfile')
     expect(exporter).toContain('fingerprintDesign')
     expect(exporter).toContain('publishSnapshotIds')
+    expect(exporter).toContain('promotedReusableExport')
+    expect(exporter).toContain('reusableNeedsPromotion')
+    expect(exporter).toContain('Reusable export promotion failed')
     expect(exporter).toContain(".eq('status', 'queued')")
     expect(exporter).toContain('REMOTION_EXPORT_STALE_MS')
     expect(exporter).toContain('isStaleRenderingJob')
@@ -122,6 +125,7 @@ describe('Remotion export worker contract', () => {
     const packageJson = read('package.json')
 
     expect(postRoute).toContain('createRemotionExportJob')
+    expect(postRoute).toContain("publish && outputType === 'video' ? crypto.randomUUID()")
     expect(postRoute).toContain('runRemotionExportJob')
     expect(postRoute).toContain('REMOTION_EXPORT_INLINE_AFTER')
     expect(getRoute).toContain('duration_seconds')

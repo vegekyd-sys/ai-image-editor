@@ -147,3 +147,60 @@ Delivery-finalization turn account for the gap after the Agent response. V4
 used two previews and one justified composition revision, then one publish and
 one export. This is a quality recovery run, not a speed win: audio generation
 and the richer 9,168-character composition made it slower than V3.
+
+## Visual Craft V5 Cold Start
+
+Project: <http://localhost:3039/projects/98bf7c23-f231-43fe-8375-d1db7a46e917>
+
+MP4: <https://cdn.makaron.app/storage/v1/object/public/images/5955d413-cad2-4814-b094-7fdf62d20400/workspace/98bf7c23-f231-43fe-8375-d1db7a46e917/media/remotion-composition-3821b2bd.mp4>
+
+V5 was created as a fresh project and cold-start Studio Run. It reused V4's
+narration and music URLs as controlled inputs but did not continue editing the
+V4 project. Story, copy, duration, audio, and final line were locked; only
+framing, canvas use, material depth, contrast hierarchy, and lockup scale were
+changed.
+
+The three sampled-frame average luma rose from V4's `18.9/255` to V5's
+`151.5/255`. The setup and process frames now use a warm, bright canvas and the
+final Makaron wordmark dominates at thumbnail scale. Active paper stacks,
+film-strip frames, waveform tracks, and review marks occupy most of the process
+frame. The character remains deliberately simple, so illustration craft is
+still the next quality ceiling.
+
+The first contact sheet exposed one real defect: the material stack fully
+covered the director's head. One revision moved the stack upward while keeping
+intentional material occlusion. Full-resolution frame files confirmed the
+opening, process, and ending frames were valid; the compact contact sheet alone
+was visually ambiguous at its display scale.
+
+### V5 Timing Ledger
+
+Project: `98bf7c23-f231-43fe-8375-d1db7a46e917`
+
+Agent run: `f3891faa-ca42-488d-a541-90646d9a9927`
+
+| Milestone | Elapsed |
+| --- | ---: |
+| Studio Run started | 28.4s |
+| Planning and reused assets persisted | 167.3s |
+| First valid composition | 394.9s |
+| First contact sheet | 415.4s |
+| Targeted middle-frame inspection | 528.7s |
+| Revised composition | 673.7s |
+| Final contact sheet | 694.3s |
+| Review persisted | 779.6s |
+| Published editable composition | 785.2s |
+| Agent stopped after two export failures | 829.4s wall clock |
+| Recovery Lambda MP4 ready | 995.4s wall clock |
+| Reusable MP4 promoted to durable workspace media | 10.09s promotion time, no rerender |
+| Studio Delivery complete | 1320.3s wall clock |
+
+The recovery render itself took 33.47 seconds. Export recovery exposed a
+product bug: a completed non-published job was reused for `--publish` but
+retained a temporary Lambda URL. The export harness now promotes the existing
+MP4 into the project workspace and timeline without rendering it again.
+
+V5 used one planning batch, two contact sheets, one targeted full frame, one
+revision, one publish, and two failed in-run export calls. The later recovery
+render and durable promotion are reported separately rather than hidden inside
+the successful visual result.

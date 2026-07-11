@@ -145,6 +145,28 @@ English words or 350 Chinese characters. Generate only the selected composition.
   Also fail `subjectNamed`, `storyArcComplete`, `endingResolves`, or
   `audioSupportsStory` when the result is a visual study rather than a complete
   film.
+  Fail `canvasUseIntentional`, `focalScaleStrong`, `materialDepthVisible`,
+  `contrastHierarchyClear`, or `brandLockupDominant` when the story is complete
+  but the composition still looks small, flat, muddy, or visually unresolved.
+
+## Framing And Material Pass
+
+After theme and story are locked, strengthen craft without reopening either:
+
+- **Canvas use**: the active visual system should normally span at least 70% of
+  frame width and 60% of frame height. Negative space must have a clear role,
+  not result from placing a small composition in the center.
+- **Focal scale**: the primary subject or transformation should dominate the
+  silhouette at every sampled beat. Use a deliberate scale ladder from setup
+  to payoff instead of keeping every object the same medium size.
+- **Material depth**: express subject-native materials through edges, layers,
+  perforations, paper overlap, tracks, highlights, cast shadows, and occlusion.
+  Flat rectangles with labels are placeholders, not final art direction.
+- **Contrast hierarchy**: separate focal, supporting, and atmospheric layers by
+  luminance and saturation. A cinematic dark frame still needs clearly lit key
+  surfaces; darkness must not swallow most of the information.
+- **Final lockup**: make the brand and final line the dominant final-frame
+  event, readable at thumbnail size, with enough hold to feel resolved.
 
 ## A/B Review
 
@@ -162,8 +184,12 @@ visible improvement. The existence of a treatment is not evidence by itself.
 
 ## Timing Every Test
 
-Every sample, A/B variant, and revision round must be timed. Record the CLI
-run ID and wall-clock start before execution. Report cumulative seconds for:
+Every sample, A/B variant, and revision round must use a newly created project,
+new Agent run ID, and independent Studio Run. Reuse identical source assets by
+URL when controlling variables, but never continue editing the previous round's
+project: the goal is to test cold-start product behavior, not polish one film.
+Record the project ID, CLI run ID, and wall-clock start before execution. Report
+cumulative seconds for:
 
 - audio/assets ready, when applicable;
 - planning artifacts complete;

@@ -229,6 +229,11 @@ const finalReviewSchema = z.object({
     subjectNamed: z.boolean().optional(),
     storyArcComplete: z.boolean().optional(),
     endingResolves: z.boolean().optional(),
+    canvasUseIntentional: z.boolean().optional(),
+    focalScaleStrong: z.boolean().optional(),
+    materialDepthVisible: z.boolean().optional(),
+    contrastHierarchyClear: z.boolean().optional(),
+    brandLockupDominant: z.boolean().optional(),
   }),
   audio: z.object({
     integratedLufs: z.number(),
@@ -259,6 +264,11 @@ const finalReviewSchema = z.object({
   value.visual.subjectNamed !== false &&
   value.visual.storyArcComplete !== false &&
   value.visual.endingResolves !== false &&
+  value.visual.canvasUseIntentional !== false &&
+  value.visual.focalScaleStrong !== false &&
+  value.visual.materialDepthVisible !== false &&
+  value.visual.contrastHierarchyClear !== false &&
+  value.visual.brandLockupDominant !== false &&
   !value.audio.unexpectedSilence &&
   value.audio.audioSupportsStory !== false &&
   value.runtimePromiseHonored &&

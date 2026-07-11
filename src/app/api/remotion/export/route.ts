@@ -33,6 +33,7 @@ export async function POST(req: NextRequest) {
     const renderProfile = (body.renderProfile || body.render_profile || 'fast_720p') as RemotionRenderProfile
     const publish = body.publish === true
     const publishSnapshotId = body.publishSnapshotId || body.publish_snapshot_id
+      || (publish && outputType === 'video' ? crypto.randomUUID() : undefined)
     const name = typeof body.name === 'string' ? body.name : undefined
 
     if (!projectId) {
