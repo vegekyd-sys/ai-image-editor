@@ -35,8 +35,9 @@ technical visualizations, illustrative explainers, and motion-led social pieces.
 ## Workflow
 
 1. Read `skills/_shared/studio-production/production-contract.md`. Before
-   composition, use the compact Studio Remotion fast path instead of loading
-   every long director reference.
+   composition, read `prompts/remotion-composition.md` and follow
+   `skills/_shared/remotion-director-contract.md`, including its required
+   references.
 2. Start recipe `motion-design-video`; record the chosen mode in the brief.
 3. Offer concepts that differ in visual mechanism, not just typography or
    color. Name the main reveal, motion energy, and final lockup.

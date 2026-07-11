@@ -64,15 +64,16 @@ work the same across video types.
 - Quick trims, one-off image animation, and tiny utility edits do not need a
   Studio Run.
 
-## Fast Path
+## Efficient Execution
 
 - Prefer existing timeline/workspace assets and local code before paid generation.
 - Reuse the complete `stageSchemas` returned by `studio_run start`; do not call
   `schema` separately for stages already present there. Use `schema` and
   `status` only for recovery or after validation errors.
 - Before the first composition `run_code`, read
-  `prompts/studio-remotion-fast-path.md`. It replaces the longer generic coding,
-  Remotion composition, and director guides for this Studio Run.
+  `prompts/remotion-composition.md` and follow its original director contract at
+  `skills/_shared/remotion-director-contract.md`. Studio Run does not replace or
+  abbreviate the composition and director guidance.
 - Build one complete composition, call `preview_frame` once with three
   representative frames to create one contact sheet, publish once, and
   materialize once.

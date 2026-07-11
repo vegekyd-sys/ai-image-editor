@@ -2970,7 +2970,7 @@ Path is auto-generated from the current project and output type. Just provide a 
     run_code: tool({
       description: `Execute JavaScript.
 
-Before first use, follow one reading path. For Studio Run video skills that already require \`prompts/studio-remotion-fast-path.md\`, that compact guide replaces \`prompts/agent-coding.md\`, \`prompts/remotion-composition.md\`, and \`skills/_shared/remotion-director-contract.md\`; do not read the three longer guides too. Otherwise read \`prompts/agent-coding.md\`, plus \`prompts/remotion-composition.md\` for Remotion/editable compositions. For real file-level MP4 splitting, exact trimming/export, transcode, frames, audio muxing, long-video preparation, or final assembly of generated chunks, also read \`skills/video-ffmpeg-lab/SKILL.md\`. Do not re-read a guide already present in tool-result history.
+Before first use, read \`prompts/agent-coding.md\`, plus \`prompts/remotion-composition.md\` for Remotion/editable compositions. For new compositions or major visual/timing patches, follow \`skills/_shared/remotion-director-contract.md\` and its required references. Studio Run uses the same original Composition and Director guidance; it does not replace them with a compact creative prompt. For real file-level MP4 splitting, exact trimming/export, transcode, frames, audio muxing, long-video preparation, or final assembly of generated chunks, also read \`skills/video-ffmpeg-lab/SKILL.md\`. Do not re-read a guide already present in tool-result history.
 
 Runtimes:
 - \`runtime: "composition"\`: Remotion/editable composition draft, animated template, overlay, sharp utility.

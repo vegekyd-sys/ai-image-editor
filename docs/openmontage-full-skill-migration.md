@@ -77,15 +77,16 @@ from the UI selector and the per-run skill manifest.
 Provider-named skills are only marked supported when Makaron has a real route
 for that provider. Similar output from another model does not count.
 
-## Speed Path
+## Efficient Execution
 
 - Internal adapters do not enter the normal system prompt.
 - `studio_run start` returns all eight stage schemas in one response, avoiding
   separate schema tool calls.
 - Auto-approved runs can persist Brief through Assets with one
   `studio_run.put_artifacts` call while emitting one CUI event per stage.
-- Studio Run compositions use the compact `studio-remotion-fast-path` instead
-  of loading three overlapping generic guides.
+- Studio Run compositions use the original `remotion-composition` and
+  `remotion-director-contract` guidance. Execution savings do not replace or
+  abbreviate the creative contract.
 - Existing project assets and local code are preferred over paid generation.
 - Compositions use one build, three parallel frame previews, one publish, and
   one materialization pass.

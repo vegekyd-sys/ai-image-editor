@@ -35,7 +35,8 @@ describe('agent reliability policy', () => {
     const agent = read('src/lib/agent.ts');
     const writer = read('src/lib/agentDualWriter.ts');
     const contract = read('src/skills/_shared/studio-production/production-contract.md');
-    const fastPath = read('src/lib/prompts/studio-remotion-fast-path.md');
+    const composition = read('src/lib/prompts/remotion-composition.md');
+    const director = read('src/skills/_shared/remotion-director-contract.md');
     const review = read('src/skills/_shared/studio-production/review-contract.md');
     expect(agent).toContain("'put_artifacts'");
     expect(agent).toContain('putPersistedStudioArtifacts');
@@ -45,11 +46,14 @@ describe('agent reliability policy', () => {
     expect(contract).toContain('Reuse the complete `stageSchemas`');
     expect(contract).toContain('call `preview_frame` once with three');
     expect(contract).toContain('Do not add another preview');
-    expect(fastPath).toContain('direct `composition` input');
-    expect(fastPath).toContain('6500 composition characters');
+    expect(contract).toContain('`prompts/remotion-composition.md`');
+    expect(contract).toContain('`skills/_shared/remotion-director-contract.md`');
+    expect(contract).toContain('does not replace or');
+    expect(agent).toContain('same original Composition and Director guidance');
+    expect(composition).toContain('## Composition Quality');
+    expect(director).toContain('## Anti-Web Rules');
     expect(contract).toContain('Do not compute SHA');
-    expect(fastPath).toContain('replaces `prompts/agent-coding.md`');
-    expect(fastPath).toContain('materialize once');
+    expect(contract).toContain('materialize once');
     expect(review).toContain('sample at least three frames');
     expect(review).toContain('videos longer than 15');
   });
