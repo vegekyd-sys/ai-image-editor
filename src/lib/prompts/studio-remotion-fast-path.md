@@ -41,7 +41,10 @@ values as parameters. Use Remotion `<Img>`, `<Video>`, `<OffthreadVideo>`, and
 `<Audio>`, never HTML media tags. Put each scene or clip in a `<Sequence>`.
 Use `trimBefore` and `trimAfter`, not deprecated `startFrom` or `endAt`.
 
-Use real Media Index URLs in code or props, never `<<<media_N>>>` placeholders.
+Use literal 1-based `<<<media_N>>>` markers in code or props. `run_code` resolves
+them to current URLs before validation, autosave, preview, and export. Never map
+Media Index N to `ctx.snapshotImages[N]`; the array is 0-based and will shift the
+media sequence.
 Keep uploaded source audio authoritative and include it through `<Audio>`. Match
 the requested or source aspect ratio. Keep filters and simultaneous media layers
 modest, animate transform/opacity, and use system CJK fonts.

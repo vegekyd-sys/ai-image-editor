@@ -29,7 +29,7 @@ When the user asks to put two existing timeline videos together, cut clips freel
 
 Do not fall back to FFmpeg/node for ordinary timeline splicing just because a preview needs adjustment or the first composition attempt is imperfect. Patch the Remotion composition, save/publish the editable composition, or report the preview issue. Use FFmpeg only when the user explicitly asks for a real file-level MP4 operation/export.
 
-For timeline media, use actual Media Index URLs in props or code. Do not leave `<<<media_N>>>` placeholders inside `props.clipA`, `<Video src>`, or saved composition code. `<<<media_N>>>` is only a conversational reference; Remotion preview/export needs a real URL.
+For timeline media, put the literal 1-based `<<<media_N>>>` marker in props or code, including `props.clipA`, `<Img src>`, and `<Video src>`. `run_code` resolves every marker to the current URL before validation, autosave, preview, and export. Never manually translate Media Index N to `ctx.snapshotImages[N]`: Media Index is 1-based while that JavaScript array is 0-based, so manual indexing shifts every image and makes the final item undefined.
 
 Generated image URLs and timeline image URLs are valid Remotion media sources. Put them in `props` or code and render them with `<Img src={...}>`; do not claim that generated images cannot be used by the Remotion sandbox. If an image overlay fails, first check syntax, quoting, URL truncation, `<Img>` usage, and prop wiring, then patch the composition.
 

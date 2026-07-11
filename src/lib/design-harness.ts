@@ -116,15 +116,15 @@ function checkImageReferences(code: string, props?: Record<string, unknown>): st
   const serialized = JSON.stringify({ code, props });
 
   if (serialized.includes('"ctx.snapshotImages') || serialized.includes("'ctx.snapshotImages")) {
-    return '⚠️ Composition rejected: ctx.snapshotImages[N] was passed as a string literal instead of being evaluated. Use template literal interpolation: `${ctx.snapshotImages[N]}` to embed the actual URL. Regenerate.';
+    return '⚠️ Composition rejected: ctx.snapshotImages[N] was passed as a string literal. Use the 1-based <<<media_N>>> marker in composition code or props; run_code resolves it before rendering. Regenerate.';
   }
 
   if (/<<<media_\d+>>>/.test(serialized)) {
-    return '⚠️ Composition rejected: unresolved Media Index placeholder found. Use actual ctx.snapshotImages[N] URLs or props resolved from Media Index. Regenerate.';
+    return '⚠️ Composition rejected: a Media Index marker could not be resolved. Check that <<<media_N>>> uses an available 1-based Media Index number, then regenerate.';
   }
 
   if (/data:image\/[^;]+;base64,[A-Za-z0-9+/=]{5120000,}/.test(serialized)) {
-    return '⚠️ Composition rejected: Base64 image data >5MB found in code/props. Use ctx.snapshotImages[N] URLs for full-size images. Regenerate.';
+    return '⚠️ Composition rejected: Base64 image data >5MB found in code/props. Use the corresponding <<<media_N>>> marker for full-size timeline images. Regenerate.';
   }
 
   return null;
@@ -148,10 +148,10 @@ function checkImageUrls(code: string): string | null {
 
   for (const src of srcValues) {
     if (!src || src === 'undefined' || src === 'null' || src === '') {
-      return '⚠️ Composition rejected: An <Img> tag has an empty or undefined src. Make sure all ctx.snapshotImages[N] have valid URLs. Regenerate.';
+      return '⚠️ Composition rejected: An <Img> tag has an empty or undefined src. Use a valid <<<media_N>>> marker or HTTPS URL. Regenerate.';
     }
     if (!src.startsWith('https://') && !src.startsWith('data:image/')) {
-      return `⚠️ Composition rejected: Image src "${src.substring(0, 60)}..." is not a valid HTTPS URL. Use ctx.snapshotImages[N]. Regenerate.`;
+      return `⚠️ Composition rejected: Image src "${src.substring(0, 60)}..." is not a valid HTTPS URL. Use a valid <<<media_N>>> marker or HTTPS URL. Regenerate.`;
     }
   }
 

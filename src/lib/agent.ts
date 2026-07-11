@@ -41,6 +41,7 @@ import { normalizeAgentErrorMessage } from './agent-error';
 import { describeBedrockToolUseInputIssue, normalizeBedrockToolUseInputs } from './bedrock-tool-inputs';
 import { mergePatchProps } from './patch-props';
 import { persistCompositionDraft } from './composition-draft';
+import { resolveMediaMarkersInString, resolveMediaMarkersInValue } from './media-markers';
 
 const MAX_VIDEO_DIMENSION_PROBE_BYTES = 220 * 1024 * 1024;
 
@@ -480,25 +481,6 @@ function formatGeneratedImageForModel(output: unknown): string {
     `Do not call list_files or write_file(fromWorkspaceOutputs) to find this generated image. It is timeline media, not a workspace file output.`,
     typeof record.message === 'string' ? `Tool message: ${record.message}` : '',
   ].filter(Boolean).join('\n');
-}
-
-function resolveMediaMarkersInString(value: string, snapshotImages: string[]): string {
-  return value.replace(/<<<media_(\d+)>>>/g, (marker, rawIndex) => {
-    const media = snapshotImages[Number(rawIndex) - 1];
-    return media || marker;
-  });
-}
-
-function resolveMediaMarkersInValue(value: unknown, snapshotImages: string[]): unknown {
-  if (typeof value === 'string') return resolveMediaMarkersInString(value, snapshotImages);
-  if (Array.isArray(value)) return value.map(item => resolveMediaMarkersInValue(item, snapshotImages));
-  if (value && typeof value === 'object') {
-    return Object.fromEntries(
-      Object.entries(value as Record<string, unknown>)
-        .map(([key, item]) => [key, resolveMediaMarkersInValue(item, snapshotImages)])
-    );
-  }
-  return value;
 }
 
 function formatMs(ms: number | null | undefined): string {
@@ -2869,7 +2851,7 @@ Return exactly one supported shape:
 - \`{ type: 'text', content }\`
 - \`{ type: 'error', message }\`
 
-Composition hard rules: use Remotion \`<Img>\`, not \`<img>\`; declare editable user-facing text; use system CJK fonts; keep mobile image layers light. Only \`Composition(props)\` may read \`props\` directly; helper components must receive values through their own parameters and must never reference outer \`props\` (prevents \`props is not defined\` in Lambda). For timeline videos, preserve the selected Media Index video aspect ratio when all selected videos share one aspect: 9:16 sources must return a 9:16 canvas such as 1080x1920, never a 16:9 canvas. For mixed-aspect sources, choose the user/platform/current composition target and use contain/background; do not claim the runtime forced one source's aspect.
+Composition hard rules: use Remotion \`<Img>\`, not \`<img>\`; declare editable user-facing text; use system CJK fonts; keep mobile image layers light. Reference timeline media in composition code and props with the literal 1-based marker \`<<<media_N>>>\`; the runtime resolves markers to current URLs before validation, autosave, preview, and export. Never translate Media Index N into \`ctx.snapshotImages[N]\` because that JavaScript array is 0-based. Only \`Composition(props)\` may read \`props\` directly; helper components must receive values through their own parameters and must never reference outer \`props\` (prevents \`props is not defined\` in Lambda). For timeline videos, preserve the selected Media Index video aspect ratio when all selected videos share one aspect: 9:16 sources must return a 9:16 canvas such as 1080x1920, never a 16:9 canvas. For mixed-aspect sources, choose the user/platform/current composition target and use contain/background; do not claim the runtime forced one source's aspect.
 For first Remotion drafts, send one complete executable JavaScript body that returns the render object. Do not send a fragment like \`const code = \\\`\` without the final \`return { type: 'render', code, ... }\`. Keep long videos concise by using arrays, helper components, and interpolations instead of writing frame-by-frame code.
 
 Node media runtime provides \`require\`, \`process\`, \`ffmpegPath\`, \`inputFiles\`, \`outputDir\`, \`workDir\`, \`workspaceDir\`, \`saveOutput(localPath)\`, and \`probeVideo(path)\`. Most Node built-ins are available, plus media packages such as \`sharp\`, \`jszip\`, \`exifr\`, \`heic-convert\`, \`canvas\`, \`remotion\`, and Remotion media utilities. Arbitrary local/package require, env secrets, and escape/debug modules are blocked. Workspace files are local to the runtime: use \`workspace_paths\` and \`inputFiles[n].inputPath\`, never download or reconstruct Storage URLs. For \`runtime: "node"\`, any referenced timeline media like \`<<<media_1>>>\` MUST be passed as \`media_refs: [1]\`; any existing workspace file from \`list_files\` MUST be passed as \`workspace_paths: ["project/media/file.mp4"]\`. The system resolves both to local workspace-backed files before your code runs. \`ffprobePath\` may be empty in deployment; prefer \`probeVideo(path)\`. Use \`type: "files"\` for chunks and \`type: "video"\` for the final MP4. If ordinary timeline splicing was routed to composition, do not switch to node just because preview needs adjustment; patch the composition or report the preview issue.`,

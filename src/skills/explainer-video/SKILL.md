@@ -215,8 +215,10 @@ video a plain code-only slide deck.
 - Animate sticker overlays as part of the explanation: float in, orbit, point,
   stamp, connect two diagram nodes, or react to an audio hit. Do not leave them
   static unless the scene needs a calm anchor.
-- If the generated image tool returns a resolved `imageUrl`, use that URL in
-  Remotion props/code. Never put `<<<media_N>>>` markers inside composition code.
+- For generated or uploaded timeline images, use the literal 1-based
+  `<<<media_N>>>` marker in Remotion props/code. `run_code` resolves it before
+  validation and rendering; never map Media Index N to the 0-based
+  `ctx.snapshotImages[N]` array yourself.
 - Generated assets must serve one of three roles: main subject, explanatory
   support, or tasteful decoration. Skip assets that are merely filler.
 - Keep simultaneous media count low for mobile performance. Use one strong
