@@ -1,5 +1,5 @@
 import { execFile } from 'child_process'
-import { mkdir, mkdtemp, readFile, rm, writeFile } from 'fs/promises'
+import { mkdir, mkdtemp, readFile, rm, stat, writeFile } from 'fs/promises'
 import { tmpdir } from 'os'
 import path from 'path'
 import { promisify } from 'util'
@@ -43,6 +43,7 @@ export interface VolcengineAsrTranscript {
 
 interface VolcengineAsrOptions {
   mediaUrl: string
+  localMediaPath?: string
   uid?: string
   language?: string
   requestId?: string
@@ -120,11 +121,21 @@ async function downloadMedia(mediaUrl: string, dir: string): Promise<string> {
   return inputPath
 }
 
-async function extractAudioBase64(mediaUrl: string): Promise<{ data: string; extractedAudio: boolean }> {
+async function extractAudioBase64(mediaUrl: string, localMediaPath?: string): Promise<{ data: string; extractedAudio: boolean }> {
   const workDir = await mkdtemp(path.join(tmpdir(), 'makaron-asr-'))
   try {
     await mkdir(workDir, { recursive: true })
-    const inputPath = await downloadMedia(mediaUrl, workDir)
+    let inputPath: string
+    if (localMediaPath) {
+      const localStat = await stat(localMediaPath)
+      if (!localStat.isFile()) throw new Error('Local ASR media path is not a file.')
+      if (localStat.size > MAX_DOWNLOAD_BYTES) {
+        throw new Error(`Local media is too large for ASR preprocessing (${Math.round(localStat.size / 1024 / 1024)}MB).`)
+      }
+      inputPath = localMediaPath
+    } else {
+      inputPath = await downloadMedia(mediaUrl, workDir)
+    }
     const outputPath = path.join(workDir, 'audio.mp3')
     const ffmpegPath = await findFfmpeg()
 
@@ -220,10 +231,10 @@ export async function transcribeWithVolcengineAsr(options: VolcengineAsrOptions)
 
   let audio: { url: string } | { data: string }
   let extractedAudio = false
-  if (isAudioUrl(options.mediaUrl)) {
+  if (isAudioUrl(options.mediaUrl) && !options.localMediaPath) {
     audio = { url: options.mediaUrl }
   } else {
-    const extracted = await extractAudioBase64(options.mediaUrl)
+    const extracted = await extractAudioBase64(options.mediaUrl, options.localMediaPath)
     audio = { data: extracted.data }
     extractedAudio = extracted.extractedAudio
   }

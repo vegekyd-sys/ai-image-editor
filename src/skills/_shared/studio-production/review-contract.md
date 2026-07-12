@@ -5,6 +5,9 @@ Criticism must be observable and actionable.
 
 ## Stage Reviews
 
+- A draft carrying `__makaronScaffold: true` is only a durable structural
+  checkpoint. It must never pass Composition, Review, publish, or Delivery.
+  Apply the original Composition and Director guidance first.
 - Brief: a concrete audience, outcome, and source/reference classification.
 - Proposal: concepts differ in structure and visual mechanism; the selected
   path is feasible with current Makaron tools and budget.
@@ -28,6 +31,9 @@ Criticism must be observable and actionable.
    blank frame.
 5. Check audio for unexpected silence, intelligible speech, music balance, and
    sync.
+   Numeric LUFS and true-peak fields must come from an actual measurement tool.
+   Write `null` for either value when it was not measured; never estimate a
+   plausible-looking number from listening or from the composition settings.
 6. Confirm the locked runtime and editability promise were honored.
 7. Confirm the story names its subject, completes setup-transformation-payoff,
    and holds long enough on an intentional ending.

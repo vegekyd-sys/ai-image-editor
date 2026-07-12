@@ -230,12 +230,17 @@ function ArtifactDetail({ stageId, artifact }: { stageId: string; artifact: unkn
     const technical = isRecord(artifact.technical) ? artifact.technical : {};
     const visual = isRecord(artifact.visual) ? artifact.visual : {};
     const audio = isRecord(artifact.audio) ? artifact.audio : {};
+    const hasMeasuredLoudness = typeof audio.integratedLufs === 'number' && typeof audio.truePeakDbfs === 'number';
     return (
       <div>
         <DetailRow label="结论">{artifact.status === 'pass' ? '通过' : text(artifact.status)}</DetailRow>
         <DetailRow label="技术检查">{text(technical.resolution)} · {numberText(technical.fps)} FPS · {technical.hasAudio ? '含音频' : '无音频'}</DetailRow>
         <DetailRow label="视觉检查">采样 {numberText(visual.framesSampled)} 帧 · {visual.blackFramesDetected ? '发现黑帧' : '无黑帧'} · {visual.overlapDetected ? '发现遮挡' : '无元素遮挡'}</DetailRow>
-        <DetailRow label="音频检查">{numberText(audio.integratedLufs)} LUFS · True Peak {numberText(audio.truePeakDbfs)} dBFS</DetailRow>
+        <DetailRow label="音频检查">
+          {hasMeasuredLoudness
+            ? `${numberText(audio.integratedLufs)} LUFS · True Peak ${numberText(audio.truePeakDbfs)} dBFS`
+            : `响度未测量 · ${technical.hasAudio ? '已确认含音频' : '无音频'}`}
+        </DetailRow>
       </div>
     );
   }

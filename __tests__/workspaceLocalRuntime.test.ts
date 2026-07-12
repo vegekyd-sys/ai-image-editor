@@ -1,4 +1,4 @@
-import { describe, expect, it } from 'vitest'
+import { afterEach, describe, expect, it, vi } from 'vitest'
 import { existsSync } from 'fs'
 import { mkdtemp, rm } from 'fs/promises'
 import { tmpdir } from 'os'
@@ -62,6 +62,11 @@ function createFakeSupabase() {
 }
 
 describe('local-first workspace runtime', () => {
+  afterEach(() => {
+    vi.unstubAllGlobals()
+    workspace.clearWorkspaceCache()
+  })
+
   it('scopes default file listing to the current project while preserving explicit pattern searches', () => {
     const files = [
       { path: 'project-1/media/source.mp4' },
@@ -130,6 +135,79 @@ describe('local-first workspace runtime', () => {
       })
       expect(read?.content).toContain('data:video/mp4;base64,')
       expect(supabase.uploads).toHaveLength(1)
+    } finally {
+      if (previousCacheDir == null) delete process.env.MAKARON_WORKSPACE_CACHE_DIR
+      else process.env.MAKARON_WORKSPACE_CACHE_DIR = previousCacheDir
+      await rm(cacheDir, { recursive: true, force: true })
+    }
+  })
+
+  it('skips remote duplicates of built-in skills and reads user skills from the local mirror', async () => {
+    const cacheDir = await mkdtemp(join(tmpdir(), 'makaron-workspace-skills-test-'))
+    const previousCacheDir = process.env.MAKARON_WORKSPACE_CACHE_DIR
+    process.env.MAKARON_WORKSPACE_CACHE_DIR = cacheDir
+    const supabase = createFakeSupabase()
+    supabase.rows.push({
+      user_id: null,
+      path: 'skills/explainer-video/SKILL.md',
+      content_type: 'text/markdown',
+      size_bytes: 100,
+      storage_url: 'https://cdn.example.com/duplicate-built-in.md',
+    })
+
+    try {
+      await workspace.writeFile(
+        'skills/local-test-skill/SKILL.md',
+        '---\nname: local-test-skill\ndescription: Local test skill\n---\nUse the local mirror.',
+        supabase,
+        'user-1',
+        'text/markdown',
+      )
+      workspace.clearWorkspaceCache()
+      const fetchMock = vi.fn(() => {
+        throw new Error('getAllSkills should not need the network')
+      })
+      vi.stubGlobal('fetch', fetchMock)
+
+      const skills = await workspace.getAllSkills(supabase, 'user-1')
+
+      expect(skills.some(skill => skill.name === 'explainer-video')).toBe(true)
+      expect(skills.some(skill => skill.name === 'local-test-skill')).toBe(true)
+      expect(fetchMock).not.toHaveBeenCalled()
+    } finally {
+      if (previousCacheDir == null) delete process.env.MAKARON_WORKSPACE_CACHE_DIR
+      else process.env.MAKARON_WORKSPACE_CACHE_DIR = previousCacheDir
+      await rm(cacheDir, { recursive: true, force: true })
+    }
+  })
+
+  it('does not upload a returned output twice after saveOutput already persisted it', async () => {
+    const cacheDir = await mkdtemp(join(tmpdir(), 'makaron-workspace-output-dedupe-test-'))
+    const previousCacheDir = process.env.MAKARON_WORKSPACE_CACHE_DIR
+    process.env.MAKARON_WORKSPACE_CACHE_DIR = cacheDir
+    const supabase = createFakeSupabase()
+
+    try {
+      const result = await runNodeMediaCode({
+        code: `
+          const fs = require('fs');
+          const path = require('path');
+          const output = path.join(outputDir, 'sprite.png');
+          fs.writeFileSync(output, Buffer.from('one upload'));
+          await saveOutput(output);
+          return { type: 'files', outputs: [{ path: output, contentType: 'image/png' }] };
+        `,
+        mediaItems: [],
+        projectId: 'project-1',
+        userId: 'user-1',
+        supabase,
+        timeoutMs: 10_000,
+      })
+
+      expect(result.type).toBe('files')
+      expect(supabase.uploads).toHaveLength(1)
+      expect(result.outputs[0]?.workspacePath).toContain('project-1/media/')
+      expect(result.outputs[0]?.storageUrl).toContain('example.supabase.co')
     } finally {
       if (previousCacheDir == null) delete process.env.MAKARON_WORKSPACE_CACHE_DIR
       else process.env.MAKARON_WORKSPACE_CACHE_DIR = previousCacheDir

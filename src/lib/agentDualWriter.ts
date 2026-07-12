@@ -3,6 +3,51 @@ import type { AgentStreamEvent } from './agent';
 import { uploadImage } from './supabase/storage';
 import { sanitizeToolHistory, type ToolHistoryBudget } from './agentToolHistory';
 
+const EVENT_WRITE_RETRY_DELAYS_MS = [0, 75, 250, 750] as const;
+
+function errorChain(error: unknown): unknown[] {
+  const chain: unknown[] = [];
+  const seen = new Set<unknown>();
+  let current = error;
+  while (current && chain.length < 6 && !seen.has(current)) {
+    chain.push(current);
+    seen.add(current);
+    current = typeof current === 'object' && 'cause' in current
+      ? (current as { cause?: unknown }).cause
+      : undefined;
+  }
+  return chain;
+}
+
+function errorCode(error: unknown): string {
+  return typeof error === 'object' && error && 'code' in error
+    ? String((error as { code?: unknown }).code || '')
+    : '';
+}
+
+function errorMessage(error: unknown): string {
+  if (error instanceof Error) return error.message;
+  return typeof error === 'object' && error && 'message' in error
+    ? String((error as { message?: unknown }).message || '')
+    : String(error || '');
+}
+
+function isDuplicateWrite(error: unknown): boolean {
+  return errorChain(error).some(item => errorCode(item) === '23505');
+}
+
+function isTransientWriteError(error: unknown): boolean {
+  const values = errorChain(error);
+  const codes = values.map(errorCode).join(' ');
+  const messages = values.map(errorMessage).join(' ');
+  return /ECONNRESET|ETIMEDOUT|ECONNREFUSED|ENETUNREACH|EHOSTUNREACH|EAI_AGAIN|UND_ERR|ABORT_ERR/i.test(codes)
+    || /fetch failed|network|socket|timed?\s*out|timeout|connection reset|\b(?:429|502|503|504)\b/i.test(messages);
+}
+
+function sleep(ms: number): Promise<void> {
+  return new Promise(resolve => setTimeout(resolve, ms));
+}
+
 /**
  * Server-side persistence for agent events. Handles:
  * 1. agent_events table (always — for replay/audit)
@@ -40,7 +85,10 @@ export class AgentDualWriter {
     private projectId: string,
     private controller?: ReadableStreamDefaultController | null,
     private encoder?: TextEncoder | null,
-  ) {}
+    initialMessageId?: string | null,
+  ) {
+    if (initialMessageId) this.currentMessageId = initialMessageId;
+  }
 
   /** Write enriched event to SSE stream. No-op in headless mode (no controller). */
   tryEnqueue(event: Record<string, unknown>) {
@@ -288,6 +336,29 @@ export class AgentDualWriter {
         return;
       }
 
+      case 'context_compaction': {
+        await this.flushContent();
+        await this.insertEvent('context_compaction', {
+          summary: event.summary,
+          appliedEdits: event.appliedEdits,
+          inputTokens: event.inputTokens,
+        });
+        // Provider compaction is model state, not visible assistant copy.
+        return;
+      }
+
+      case 'coding': {
+        await this.insertEvent('coding', {});
+        this.tryEnqueue(event);
+        return;
+      }
+
+      case 'code_stream': {
+        await this.insertEvent('code_stream', { text: event.text, done: event.done });
+        this.tryEnqueue(event);
+        return;
+      }
+
       case 'animation_task':
       case 'video_snapshot':
       case 'image_analyzed':
@@ -340,6 +411,24 @@ export class AgentDualWriter {
   /** Get the current message ID (for the first message before any new_turn). */
   get firstMessageId() { return this.currentMessageId; }
 
+  /** Continue one execution's append-only event sequence across worker attempts. */
+  async initializeSequence() {
+    const { data, error } = await this.supabase
+      .from('agent_events')
+      .select('seq')
+      .eq('run_id', this.runId)
+      .order('seq', { ascending: false })
+      .limit(1)
+      .maybeSingle();
+    if (error) throw new Error(`Failed to initialize Agent event sequence: ${error.message}`);
+    this.seq = typeof data?.seq === 'number' ? data.seq + 1 : 0;
+  }
+
+  async beginContinuationTurn() {
+    await this.insertEvent('new_turn', { messageId: this.currentMessageId });
+    this.tryEnqueue({ type: 'new_turn', messageId: this.currentMessageId });
+  }
+
   /** Durable liveness lease used to reconcile platform-killed runs. */
   async persistHeartbeat() {
     await this.insertEvent('heartbeat', { at: new Date().toISOString() });
@@ -374,19 +463,32 @@ export class AgentDualWriter {
   }
 
   private async insertEvent(type: string, data: Record<string, unknown>, required = false) {
-    try {
-      const { error } = await this.supabase.from('agent_events').insert({
-        run_id: this.runId,
-        project_id: this.projectId,
-        type,
-        data,
-        seq: this.seq++,
-      });
-      if (error) throw error;
-    } catch (err) {
-      console.error('[DualWriter] Failed to insert event:', type, err);
-      if (required) throw err;
+    const row = {
+      id: crypto.randomUUID(),
+      run_id: this.runId,
+      project_id: this.projectId,
+      type,
+      data,
+      seq: this.seq++,
+    };
+    let lastError: unknown;
+    for (let attempt = 0; attempt < EVENT_WRITE_RETRY_DELAYS_MS.length; attempt += 1) {
+      const delayMs = EVENT_WRITE_RETRY_DELAYS_MS[attempt];
+      if (delayMs) await sleep(delayMs);
+      try {
+        const { error } = await this.supabase.from('agent_events').insert(row);
+        if (error) throw error;
+        return;
+      } catch (err) {
+        if (isDuplicateWrite(err)) return;
+        lastError = err;
+        const canRetry = isTransientWriteError(err) && attempt < EVENT_WRITE_RETRY_DELAYS_MS.length - 1;
+        if (!canRetry) break;
+        console.warn(`[DualWriter] transient event write failure (${type}, retry ${attempt + 1})`, err);
+      }
     }
+    console.error('[DualWriter] Failed to insert event:', type, lastError);
+    if (required) throw lastError;
   }
 
   private sanitizeToolInputForHistory(input: Record<string, unknown>) {

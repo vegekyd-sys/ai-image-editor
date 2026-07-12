@@ -20,13 +20,47 @@ export interface ModelTerminationObservation {
 export interface ModelTerminationAssessment {
   ok: boolean;
   retryable: boolean;
-  code?: 'stream_error' | 'missing_finish' | 'empty_final_step' | 'truncated' | 'provider_error' | 'content_filter' | 'unfinished_tool_turn';
+  code?: 'stream_error' | 'missing_finish' | 'empty_final_step' | 'truncated' | 'provider_error' | 'content_filter' | 'unfinished_tool_turn' | 'studio_run_incomplete';
   detail?: string;
 }
 
-function errorDetail(error: unknown): string {
-  if (error instanceof Error) return error.message;
-  return error == null ? '' : String(error);
+export function shouldUseTextOnlyRecovery(input: {
+  deliveredArtifact: boolean;
+  activeStudioRun: boolean;
+}): boolean {
+  return input.deliveredArtifact && !input.activeStudioRun;
+}
+
+export function shouldContinueActiveStudioRun(input: {
+  activeStudioRun: boolean;
+  studioRunTouched: boolean;
+  runCodeStarted: boolean;
+  recoveryPrompt: boolean;
+}): boolean {
+  return input.activeStudioRun && (
+    input.studioRunTouched
+    || input.runCodeStarted
+    || input.recoveryPrompt
+  );
+}
+
+export function describeModelStreamError(error: unknown, depth = 0): string {
+  if (error == null) return '';
+  if (depth > 3) return '';
+  if (typeof error !== 'object') return String(error);
+
+  const record = error as Record<string, unknown>;
+  const name = error instanceof Error ? error.name : typeof record.name === 'string' ? record.name : '';
+  const message = error instanceof Error ? error.message : typeof record.message === 'string' ? record.message : '';
+  const code = typeof record.code === 'string' ? record.code : '';
+  const statusCode = typeof record.statusCode === 'number'
+    ? String(record.statusCode)
+    : typeof (record.$metadata as Record<string, unknown> | undefined)?.httpStatusCode === 'number'
+      ? String((record.$metadata as Record<string, unknown>).httpStatusCode)
+      : '';
+  const own = [name, message, code && `code=${code}`, statusCode && `status=${statusCode}`].filter(Boolean).join(': ');
+  const cause = describeModelStreamError(record.cause, depth + 1);
+  return [own, cause && `cause=${cause}`].filter(Boolean).join(' | ') || String(error);
 }
 
 /**
@@ -43,7 +77,7 @@ export function classifyModelTermination(
       ok: false,
       retryable: true,
       code: 'stream_error',
-      detail: errorDetail(observation.streamError),
+      detail: describeModelStreamError(observation.streamError),
     };
   }
 

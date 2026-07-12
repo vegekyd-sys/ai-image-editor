@@ -17,6 +17,7 @@ describe('agent reliability policy', () => {
     const agent = read('src/lib/agent.ts');
     const coding = read('src/lib/prompts/agent-coding.md');
     expect(agent.match(/persistCompositionDraft\(\{/g)).toHaveLength(2);
+    expect(agent.match(/__lastSavedDraftPath = autosave\.path/g)).toHaveLength(2);
     expect(agent).toContain('code_path: autosave.path');
     expect(agent).toContain('design_path: z.string().optional()');
     expect(agent).not.toContain('Draft is not saved yet');
@@ -64,5 +65,12 @@ describe('agent reliability policy', () => {
     expect(agent).toContain('attemptCount >= 2');
     expect(agent).toContain('Do not call materialize_media again');
     expect(agent).toContain(".select('design_path')");
+  });
+
+  it('returns the exact published video media index for final review', () => {
+    const agent = read('src/lib/agent.ts');
+    expect(agent).toContain('ctx.snapshotImages.push(videoUrl)');
+    expect(agent).toContain('mediaIndex: publishedMediaIndex');
+    expect(agent).toContain('Use media_index=${publishedMediaIndex} for final video review.');
   });
 });

@@ -6,6 +6,7 @@ import {
   parseStudioRun,
   putPersistedStudioArtifacts,
   putStudioArtifact,
+  studioArtifactSchemas,
   type StudioRunStore,
   type StudioRun,
   type StudioStageId,
@@ -90,6 +91,16 @@ function put(run: StudioRun, stage: StudioStageId, time = now) {
 }
 
 describe('Studio Run controller', () => {
+  it('accepts an honest unmeasured loudness result', () => {
+    const baseReview = artifacts.review as Record<string, unknown>;
+    const baseAudio = baseReview.audio as Record<string, unknown>;
+    const review = {
+      ...baseReview,
+      audio: { ...baseAudio, integratedLufs: null, truePeakDbfs: null },
+    };
+    expect(() => studioArtifactSchemas.review.parse(review)).not.toThrow();
+  });
+
   it('runs the complete auto-approved explainer pipeline and records approvals', () => {
     let run = makeRun('auto');
     for (const stage of ['brief', 'proposal', 'script', 'storyboard', 'assets', 'composition', 'review', 'delivery'] as StudioStageId[]) {

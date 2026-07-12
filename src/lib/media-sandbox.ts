@@ -550,13 +550,22 @@ export async function runNodeMediaCode(options: RunNodeMediaCodeOptions): Promis
       return { ...result, storageUrl: result.storageUrl ? toPublicStorageUrl(result.storageUrl) : undefined }
     }
 
+    const savedOutputsByLocalPath = new Map<string, {
+      workspacePath: string;
+      storageUrl?: string;
+      contentType: string;
+      size: number;
+    }>()
+
     const saveOutput = async (localPath: string, workspacePath?: string, contentType?: string) => {
       const fullPath = normalizeLocalPath(localPath, outputDir)
       const body = await readFile(fullPath)
       const ct = contentType || guessContentType(fullPath)
       const outPath = workspacePath || `${options.projectId}/media/${Date.now()}-${path.basename(fullPath)}`
       const saved = await saveToWorkspace(outPath, body, ct)
-      return { ...saved, workspacePath: outPath, contentType: ct, size: body.length }
+      const output = { ...saved, workspacePath: outPath, contentType: ct, size: body.length }
+      savedOutputsByLocalPath.set(path.resolve(fullPath), output)
+      return output
     }
 
     const context = {
@@ -632,6 +641,15 @@ export async function runNodeMediaCode(options: RunNodeMediaCodeOptions): Promis
     }
 
     for (const output of outputs) {
+      const previouslySaved = output.path
+        ? savedOutputsByLocalPath.get(path.resolve(output.path))
+        : undefined
+      if (previouslySaved && !output.storageUrl) {
+        output.workspacePath = previouslySaved.workspacePath
+        output.storageUrl = previouslySaved.storageUrl
+        output.contentType = output.contentType || previouslySaved.contentType
+      }
+
       if (!output.storageUrl && output.path && existsSync(output.path)) {
         const body = await readFile(output.path)
         const ct = output.contentType || guessContentType(output.path)

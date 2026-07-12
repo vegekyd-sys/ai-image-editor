@@ -45,6 +45,7 @@ export async function POST(req: NextRequest) {
       videoResolution,
       videoAuto,
       audioAttachments,
+      clientPersistedUserMessage,
     } = await req.json();
 
     if (!projectId || !prompt) {
@@ -112,14 +113,16 @@ export async function POST(req: NextRequest) {
     });
 
     // Write user message to DB (frontend does this itself, headless mode must do it here)
-    const userMessageId = crypto.randomUUID();
-    await supabase.from('messages').insert({
-      id: userMessageId,
-      project_id: projectId,
-      role: 'user',
-      content: prompt,
-      has_image: false,
-    });
+    if (!clientPersistedUserMessage) {
+      const userMessageId = crypto.randomUUID();
+      await supabase.from('messages').insert({
+        id: userMessageId,
+        project_id: projectId,
+        role: 'user',
+        content: prompt,
+        has_image: false,
+      });
+    }
 
     // DualWriter in headless mode (no SSE controller)
     const writer = new AgentDualWriter(runId, supabase, userId, projectId);
@@ -143,6 +146,71 @@ export async function POST(req: NextRequest) {
     const { getAllSkills } = await import('@/lib/workspace');
     const allSkills = await getAllSkills(supabase, userId);
     const userSkills = allSkills.filter(s => !s.makaron?.builtIn);
+
+    // Durable execution is the default path. Keep the legacy one-function
+    // runner below as an explicit rollback switch while the new worker soaks.
+    if (process.env.AGENT_DURABLE_EXECUTION !== 'false') {
+      const executionPolicy = {
+        durable: true,
+        attemptBudgetMs: 420_000,
+        attemptMaxSteps: 24,
+        leaseSeconds: 480,
+        maxAttempts: 40,
+        maxTotalInputTokens: 12_000_000,
+      };
+      const metadata = {
+        locale,
+        preferredModel,
+        requestedAgentModel: requestedAgentModel ?? 'auto',
+        agentModel: resolvedAgentModel.id,
+        agentProviderModel: resolvedAgentModel.providerModelId,
+        isNsfw,
+        headless: true,
+        firstMessageId: writer.firstMessageId,
+        executionRequest: {
+          locale,
+          preferredModel,
+          requestedAgentModel: requestedAgentModel ?? 'auto',
+          videoModel,
+          videoResolution,
+          videoAuto,
+          currentSnapshotIndex,
+          hasAnnotation,
+          isDraft,
+          referenceImageCount,
+          isNsfw,
+          audioAttachments,
+          origin: req.nextUrl.origin,
+        },
+      };
+      const { error: executionUpdateError } = await supabase.from('agent_runs').update({
+        objective: prompt,
+        execution_policy: executionPolicy,
+        current_work_unit: 'agent',
+        next_attempt_at: new Date().toISOString(),
+        metadata,
+      }).eq('id', runId);
+      if (executionUpdateError) {
+        throw new Error(`Failed to initialize durable Agent execution: ${executionUpdateError.message}`);
+      }
+      const { runAgentExecutionAttempt } = await import('@/lib/agent-execution-runner');
+      after(async () => {
+        try {
+          await runAgentExecutionAttempt(runId, { admin: supabase as any, workerId: `initial-${crypto.randomUUID()}` });
+        } catch (executionError) {
+          console.error(`[agent/run] durable attempt failed for ${runId}:`, executionError);
+          // Leave the execution running with its due timestamp. Cron recovery
+          // will reclaim it after the lease instead of losing the user task.
+        }
+      });
+      return NextResponse.json({
+        runId,
+        executionId: runId,
+        firstMessageId: writer.firstMessageId,
+        status: 'running',
+        durable: true,
+      });
+    }
 
     // Run agent after response is sent — next/server after() keeps the function alive
     after(async () => {

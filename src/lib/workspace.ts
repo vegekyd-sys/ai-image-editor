@@ -163,6 +163,8 @@ async function hydrateLocalMirror(file: WorkspaceFile, userId: string): Promise<
 function extToContentType(ext: string): string {
   const map: Record<string, string> = {
     '.md': 'text/markdown', '.txt': 'text/plain', '.json': 'application/json',
+    '.js': 'text/javascript', '.jsx': 'text/javascript',
+    '.ts': 'text/typescript', '.tsx': 'text/typescript', '.css': 'text/css',
     '.jpg': 'image/jpeg', '.jpeg': 'image/jpeg', '.png': 'image/png',
     '.gif': 'image/gif', '.webp': 'image/webp', '.pdf': 'application/pdf',
     '.zip': 'application/zip',
@@ -675,10 +677,21 @@ export async function getAllSkills(supabase?: SupabaseClient, userId?: string): 
   if (supabase && userId) {
     const userFiles = await dbListFiles(supabase, userId, 'skills/%/SKILL.md');
     const parsedUserSkills = await Promise.all(userFiles.map(async (file) => {
-      if (!file.storageUrl) return null;
-      const result = await fetchFileContent(file.storageUrl, file.contentType);
-      if (!result) return null;
-      const parsed = parseSkillMd(result.content);
+      const pathName = file.path.match(/^skills\/([^/]+)\/SKILL\.md$/)?.[1];
+      if (!pathName || builtIn.has(pathName)) return null;
+
+      let content: string | null = null;
+      if (file.localAvailable && file.localPath) {
+        try {
+          content = await readLocalFile(file.localPath, 'utf-8');
+        } catch { /* fall back to the provider URL below */ }
+      }
+      if (!content && file.storageUrl) {
+        const result = await fetchFileContent(file.storageUrl, file.contentType);
+        content = result?.content || null;
+      }
+      if (!content) return null;
+      const parsed = parseSkillMd(content);
       return parsed && !builtIn.has(parsed.name) ? parsed : null;
     }));
     for (const parsed of parsedUserSkills) {

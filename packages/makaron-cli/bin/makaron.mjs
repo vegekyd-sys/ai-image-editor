@@ -28,6 +28,7 @@ const NPM_PACKAGE_NAME = 'makaron-cli';
 const UPDATE_CHECK_INTERVAL_MS = 24 * 60 * 60 * 1000;
 const UPDATE_CHECK_TIMEOUT_MS = 400;
 const AGENT_MODELS = ['auto', 'sonnet-4.6', 'sonnet-5', 'opus-4.8', 'grok-4.5', 'deepseek-v4-pro'];
+const AGENT_WAIT_TIMEOUT_SECONDS = Math.max(900, Number(process.env.MAKARON_AGENT_WAIT_TIMEOUT_SECONDS || 10_800));
 
 // Public anon key (safe to embed — only enables auth, not data access)
 const SUPABASE_URL = 'https://sdyrtztrjgmmpnirswxt.supabase.co';
@@ -519,7 +520,7 @@ async function pollRun(baseUrl, headers, runId, opts = {}) {
     try {
       const res = await fetch(`${baseUrl}/api/agent/run/${runId}?${params}`, { headers });
       if (!res.ok) {
-        if (elapsed > 800) { process.stderr.write(`\n❌ Timeout after ${elapsed}s\n`); process.exit(1); }
+        if (elapsed > AGENT_WAIT_TIMEOUT_SECONDS) { process.stderr.write(`\n❌ Timeout after ${elapsed}s\n`); process.exit(1); }
         continue;
       }
       data = await res.json();
@@ -627,11 +628,15 @@ async function pollRun(baseUrl, headers, runId, opts = {}) {
 // ─── Pick Helper ────────────────────────────────────────────────────────────
 
 function applyPick(data, field) {
+  const videoUrls = [...new Set([
+    ...(data.output || []).filter(o => o.type === 'video' && o.url).map(o => o.url),
+    ...(data.result?.videos || []).filter(v => v.videoUrl).map(v => v.videoUrl),
+  ])];
   switch (field) {
     case 'first_image_url': return data.output?.find(o => o.type === 'image')?.url || null;
     case 'image_urls': return (data.output || []).filter(o => o.type === 'image' && o.url).map(o => o.url);
-    case 'first_video_url': return data.output?.find(o => o.type === 'video' && o.url)?.url || null;
-    case 'video_urls': return (data.output || []).filter(o => o.type === 'video' && o.url).map(o => o.url);
+    case 'first_video_url': return videoUrls[0] || null;
+    case 'video_urls': return videoUrls;
     case 'first_design_url': return data.output?.find(o => o.type === 'design')?.url || null;
     case 'design_urls': return (data.output || []).filter(o => o.type === 'design' && o.url).map(o => o.url);
     case 'first_music_url': return data.output?.find(o => o.type === 'music' && o.url)?.url || null;
@@ -665,7 +670,7 @@ async function watchRun(baseUrl, headers, runId, opts = {}) {
     try {
       const res = await fetch(`${baseUrl}/api/agent/run/${runId}`, { headers });
       if (!res.ok) {
-        if (elapsed > 800) { process.stderr.write(`Timeout after ${elapsed}s\n`); process.exit(2); }
+        if (elapsed > AGENT_WAIT_TIMEOUT_SECONDS) { process.stderr.write(`Timeout after ${elapsed}s\n`); process.exit(2); }
         await new Promise(r => setTimeout(r, interval));
         continue;
       }

@@ -173,8 +173,8 @@ const finalReviewSchema = z.object({
     endingResolves: z.boolean().optional(),
   }),
   audio: z.object({
-    integratedLufs: z.number(),
-    truePeakDbfs: z.number(),
+    integratedLufs: z.number().nullable().describe('Measured integrated loudness in LUFS. Use null when no measurement tool was run; never estimate.'),
+    truePeakDbfs: z.number().nullable().describe('Measured true peak in dBFS. Use null when no measurement tool was run; never estimate.'),
     unexpectedSilence: z.boolean(),
     narrationPresent: z.boolean(),
     musicPresent: z.boolean(),

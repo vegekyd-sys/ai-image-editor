@@ -161,6 +161,24 @@ const server = http.createServer(async (req, res) => {
     return;
   }
 
+  if (req.method === 'GET' && url.pathname === '/api/agent/run/run_legacy_video') {
+    sendJson(200, {
+      id: 'run_legacy_video',
+      project_id: 'project-auto-1',
+      status: 'completed',
+      incomplete: false,
+      output: [],
+      result: {
+        videos: [{
+          taskId: 'studio-delivery-run_legacy_video',
+          status: 'completed',
+          videoUrl: 'https://cdn.example/legacy-delivery.mp4',
+        }],
+      },
+    });
+    return;
+  }
+
   if (req.method === 'GET' && url.pathname === '/api/agent/run/run_failed_video') {
     sendJson(200, {
       id: 'run_failed_video',
@@ -568,6 +586,16 @@ try {
     const studioRun = JSON.parse(result.stdout);
     assert.equal(studioRun.current_stage, 'proposal');
     assert.equal(studioRun.status, 'awaiting_approval');
+  }
+
+  {
+    const result = await expectSuccess(['responses', 'get', 'run_legacy_video', '--pick', 'first_video_url']);
+    assert.equal(result.stdout.trim(), 'https://cdn.example/legacy-delivery.mp4');
+  }
+
+  {
+    const result = await expectSuccess(['responses', 'get', 'run_legacy_video', '--pick', 'video_urls']);
+    assert.deepEqual(JSON.parse(result.stdout), ['https://cdn.example/legacy-delivery.mp4']);
   }
 
   {

@@ -2,6 +2,32 @@ import { describe, expect, it } from 'vitest';
 import { AgentDualWriter } from '../src/lib/agentDualWriter';
 
 describe('AgentDualWriter', () => {
+  it('retries transient event writes with one stable id and sequence', async () => {
+    const rows: Array<Record<string, unknown>> = [];
+    let attempts = 0;
+    const fakeSupabase = {
+      from: () => ({
+        insert: async (row: Record<string, unknown>) => {
+          attempts += 1;
+          rows.push(row);
+          if (attempts === 1) {
+            const error = new Error('fetch failed') as Error & { cause?: unknown };
+            error.cause = { code: 'ECONNRESET', message: 'socket disconnected' };
+            throw error;
+          }
+          return { error: null };
+        },
+      }),
+    };
+    const writer = new AgentDualWriter('run-id', fakeSupabase as never, 'user-id', 'project-id');
+
+    await writer.persistHeartbeat();
+
+    expect(attempts).toBe(2);
+    expect(rows[0].id).toBe(rows[1].id);
+    expect(rows[0].seq).toBe(rows[1].seq);
+  });
+
   it('clears content buffer before awaiting DB inserts', async () => {
     const inserted: Array<{ type: string; data: { text?: string } }> = [];
     const fakeSupabase = {

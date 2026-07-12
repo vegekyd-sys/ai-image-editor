@@ -1,9 +1,11 @@
 /**
  * Design harness — compile check + auto-fix on Agent's run_code design output.
- * Only checks syntax (Sucrase compile). Does NOT dry-run with mock scope —
- * that was blocking valid code using noise2D, paths, etc.
+ * It performs static checks only. Runtime dry-runs with a mock scope used to
+ * reject valid compositions that call injected helpers such as noise2D.
  */
 
+import { parse } from '@babel/parser';
+import traverse from '@babel/traverse';
 import { transform as sucraseTransform } from 'sucrase';
 import type { EditableField } from '@/types';
 import {
@@ -18,6 +20,28 @@ export interface DesignResult {
   [key: string]: unknown;
 }
 
+const SAFE_RUNTIME_GLOBALS = new Set([
+  ...DYNAMIC_DESIGN_SCOPE_NAMES,
+  'undefined', 'NaN', 'Infinity',
+  'Object', 'Function', 'Boolean', 'Symbol', 'Error', 'AggregateError',
+  'EvalError', 'RangeError', 'ReferenceError', 'SyntaxError', 'TypeError', 'URIError',
+  'Number', 'BigInt', 'Math', 'Date', 'String', 'RegExp', 'Array',
+  'Int8Array', 'Uint8Array', 'Uint8ClampedArray', 'Int16Array', 'Uint16Array',
+  'Int32Array', 'Uint32Array', 'BigInt64Array', 'BigUint64Array',
+  'Float32Array', 'Float64Array', 'ArrayBuffer', 'SharedArrayBuffer', 'DataView',
+  'Map', 'Set', 'WeakMap', 'WeakSet', 'WeakRef', 'FinalizationRegistry',
+  'JSON', 'Promise', 'Reflect', 'Proxy', 'Intl',
+  'parseFloat', 'parseInt', 'isFinite', 'isNaN', 'decodeURI', 'decodeURIComponent',
+  'encodeURI', 'encodeURIComponent', 'escape', 'unescape',
+  'console', 'globalThis', 'window', 'document', 'navigator', 'location',
+  'performance', 'crypto', 'CSS', 'URL', 'URLSearchParams', 'Blob', 'File',
+  'FileReader', 'FormData', 'Headers', 'Request', 'Response', 'TextEncoder',
+  'TextDecoder', 'AbortController', 'AbortSignal', 'Image', 'ImageData',
+  'fetch', 'atob', 'btoa', 'structuredClone', 'queueMicrotask',
+  'setTimeout', 'clearTimeout', 'setInterval', 'clearInterval',
+  'requestAnimationFrame', 'cancelAnimationFrame',
+]);
+
 /**
  * Validate a design result from run_code. Returns null if valid,
  * or an error message string if the design should be rejected.
@@ -31,19 +55,50 @@ export function validateDesign(result: DesignResult): string | null {
   const compileError = checkCompile(result.code);
   if (compileError) return compileError;
 
-  // Check 2: Image references
+  // Check 2: References that would only fail once Player/export evaluates code
+  const referenceError = checkUnresolvedIdentifiers(result.code);
+  if (referenceError) return referenceError;
+
+  // Check 3: Image references
   const imageError = checkImageReferences(result.code, result.props);
   if (imageError) return imageError;
 
-  // Check 3: Image URLs valid
+  // Check 4: Image URLs valid
   const urlError = checkImageUrls(result.code);
   if (urlError) return urlError;
 
-  // Check 4: Editables validation
+  // Check 5: Editables validation
   const editablesError = validateEditables(result.editables);
   if (editablesError) return editablesError;
 
   return null;
+}
+
+/** Catch missing constants/components before a remote render discovers them. */
+function checkUnresolvedIdentifiers(code: string): string | null {
+  try {
+    const ast = parse(normalizeRemotionScopeDeclarations(code), {
+      sourceType: 'script',
+      plugins: ['jsx', 'typescript'],
+    });
+    const unresolved = new Set<string>();
+    traverse(ast, {
+      ReferencedIdentifier(path) {
+        const name = path.node.name;
+        if (!path.scope.hasBinding(name) && !SAFE_RUNTIME_GLOBALS.has(name)) {
+          unresolved.add(name);
+        }
+      },
+    });
+    if (unresolved.size === 0) return null;
+    const names = [...unresolved].sort();
+    const shown = names.slice(0, 8).join(', ');
+    const suffix = names.length > 8 ? `, +${names.length - 8} more` : '';
+    return `⚠️ Composition compile error: unresolved identifier${names.length === 1 ? '' : 's'} ${shown}${suffix}. Define every constant and component in the composition, then try again.`;
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : String(err);
+    return `⚠️ Composition compile error: ${msg}. Fix the syntax error in your code and try again.`;
+  }
 }
 
 /** Validate editable fields declaration. Returns error message or null. */

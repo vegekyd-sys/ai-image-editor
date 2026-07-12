@@ -149,8 +149,22 @@ function getVoiceId(inputVoiceId?: string): string {
   )
 }
 
-function getResourceId(inputResourceId?: string): string {
-  return inputResourceId?.trim() || env('VOLCENGINE_TTS_RESOURCE_ID') || DEFAULT_RESOURCE_ID
+export function inferVolcengineTtsResourceId(voiceId?: string): string {
+  const normalized = voiceId?.trim() || ''
+  if (/^ICL_/i.test(normalized)) return 'seed-icl-2.0'
+  if (/_(?:mars|moon)_bigtts$/i.test(normalized)) return 'seed-tts-1.0'
+  return DEFAULT_RESOURCE_ID
+}
+
+function getResourceId(inputResourceId?: string, voiceId?: string): string {
+  const configured = inputResourceId?.trim() || env('VOLCENGINE_TTS_RESOURCE_ID')
+  const inferred = inferVolcengineTtsResourceId(voiceId)
+  // Legacy Mars/Moon voices are rejected by Seed TTS 2.0 even when a stale
+  // catalog entry or model supplies that default explicitly.
+  if (inferred !== DEFAULT_RESOURCE_ID && (!configured || configured === DEFAULT_RESOURCE_ID)) {
+    return inferred
+  }
+  return configured || inferred
 }
 
 function buildHeaders(resourceId: string, requestId: string): HeadersInit {
@@ -361,6 +375,8 @@ function normalizeVoice(record: JsonRecord): VolcengineTtsVoice | null {
   const id = stringFromFields(record, ['VoiceType', 'voice_type', 'SpeakerID', 'SpeakerId', 'Speaker', 'speaker', 'VoiceId', 'voice_id', 'speaker_id', 'ID', 'id'])
   if (!id) return null
   const styles = arrayFromFields(record, ['Style', 'style', 'Styles', 'styles', 'Tag', 'Tags', 'tags', 'Category', 'Categories', 'category', 'Scenario', 'scenario', 'TimbreTag', 'timbre_tag', 'NormalLabels', 'SpecialLabels', 'Age'])
+  const listedResourceId = stringFromFields(record, ['ResourceId', 'ResourceID', 'resource_id', 'Resource', 'resource'])
+  const inferredResourceId = inferVolcengineTtsResourceId(id)
   return {
     id,
     name: stringFromFields(record, ['Name', 'name', 'DisplayName', 'display_name', 'SpeakerName', 'speaker_name', 'TimbreName', 'timbre_name']),
@@ -369,7 +385,9 @@ function normalizeVoice(record: JsonRecord): VolcengineTtsVoice | null {
     styles,
     scenario: stringFromFields(record, ['Scenario', 'scenario', 'Scene', 'scene', 'UseCase', 'use_case']),
     description: stringFromFields(record, ['Description', 'description', 'Desc', 'desc', 'Introduction', 'introduction']),
-    resourceId: stringFromFields(record, ['ResourceId', 'ResourceID', 'resource_id', 'Resource', 'resource']) || DEFAULT_RESOURCE_ID,
+    resourceId: inferredResourceId !== DEFAULT_RESOURCE_ID && (!listedResourceId || listedResourceId === DEFAULT_RESOURCE_ID)
+      ? inferredResourceId
+      : listedResourceId || inferredResourceId,
     model: stringFromFields(record, ['Model', 'model', 'ModelName', 'model_name']),
     raw: record,
   }
@@ -403,7 +421,7 @@ function normalizeBigModelTimbres(payload: JsonRecord): VolcengineTtsVoice[] {
       styles: [...new Set(styles)].filter(Boolean),
       scenario: categories.map(category => stringFromFields(category, ['Category']) || '').filter(Boolean).join(', ') || undefined,
       description: demoText,
-      resourceId: id.startsWith('ICL_') ? 'seed-icl-2.0' : DEFAULT_RESOURCE_ID,
+      resourceId: inferVolcengineTtsResourceId(id),
       raw: timbre,
     })
   }
@@ -550,8 +568,8 @@ export async function synthesizeWithVolcengineTts(input: VolcengineTtsInput): Pr
   if (!text) throw new Error('TTS text is required')
 
   const requestId = input.requestId || crypto.randomUUID()
-  const resourceId = getResourceId(input.resourceId)
   const voiceId = getVoiceId(input.voiceId)
+  const resourceId = getResourceId(input.resourceId, voiceId)
   const format = input.format || 'mp3'
   const sampleRate = input.sampleRate || 24000
   const headers = buildHeaders(resourceId, requestId)

@@ -31,6 +31,25 @@ export interface AgentStreamCallbacks {
   onInsufficientCredits?: (balance: number) => void;
 }
 
+type AgentRequestBody = Parameters<typeof streamAgent>[0];
+type AgentErrorEvent = Extract<AgentStreamEvent, { type: 'error' }>;
+
+export const MAX_STUDIO_RUN_AUTO_RESUMES = 2;
+
+export function shouldAutoResumeStudioRun(event: AgentErrorEvent, attempt: number): boolean {
+  return event.recoverable === true
+    && Boolean(event.checkpoint?.studioRunId)
+    && attempt < MAX_STUDIO_RUN_AUTO_RESUMES;
+}
+
+export function buildStudioRunAutoResumePrompt(event: AgentErrorEvent): string {
+  const checkpoint = event.checkpoint;
+  const partial = checkpoint?.streamedCodePath
+    ? ` A partial streamed code checkpoint exists at ${checkpoint.streamedCodePath} (${checkpoint.streamedCodeChars || 0} chars); read it once for useful components and continue from it instead of inventing the same code again.`
+    : '';
+  return `[System automatic recovery] Continue Studio Run ${checkpoint?.studioRunId || ''}${checkpoint?.studioRunStage ? ` from stage ${checkpoint.studioRunStage}` : ''}. Call studio_run status first, then read only the persisted script, storyboard, and assets artifacts needed for the current stage.${partial} Do not reread skill, prompt, director, component-library, or reference files. For a 30s+ first composition, immediately create a concise, valid scaffold under 9000 source characters using scene data arrays and shared components; autosave it with run_code before adding visual refinements in smaller patches. Reuse all persisted stage artifacts and existing media. Continue directly until review and delivery; do not ask the user to send “continue”.`;
+}
+
 export async function streamAgent(
   body: {
     prompt: string; image: string; projectId: string;
@@ -54,9 +73,152 @@ export async function streamAgent(
     isDraft?: boolean;
     referenceImageCount?: number;
     uploadedVideoCount?: number;
+    audioAttachments?: Array<{ audioUrl: string; title?: string; duration?: number; trackIndex?: number }>;
+    durable?: boolean;
   },
   callbacks: AgentStreamCallbacks,
   signal?: AbortSignal,
+): Promise<void> {
+  const durableNormalRequest = body.durable === true
+    && !body.analysisOnly
+    && !body.tipReaction
+    && !body.tipsTeaser
+    && !body.nameProject
+    && !body.previewsReady
+    && !body.musicReady;
+  if (durableNormalRequest) return streamDurableAgent(body, callbacks, signal);
+  return streamAgentAttempt(body, callbacks, signal, 0);
+}
+
+interface PersistedAgentEvent {
+  type: string;
+  data?: Record<string, any>;
+  seq: number;
+}
+
+function dispatchPersistedAgentEvent(event: PersistedAgentEvent, callbacks: AgentStreamCallbacks) {
+  const data = event.data || {};
+  switch (event.type) {
+    case 'status': callbacks.onStatus?.(String(data.text || '')); break;
+    case 'content': callbacks.onContent?.(String(data.text || '')); break;
+    case 'new_turn': callbacks.onNewTurn?.(data.messageId); break;
+    case 'tool_call': callbacks.onToolCall?.(String(data.tool || ''), data.input || {}, data.images); break;
+    case 'image': callbacks.onImage?.(data.imageUrl || '', data.usedModel, data.snapshotId, data.imageUrl); break;
+    case 'render':
+    case 'design': callbacks.onRender?.(data as Parameters<NonNullable<AgentStreamCallbacks['onRender']>>[0]); break;
+    case 'animation_task': callbacks.onAnimationTask?.(data.taskId, data.prompt || '', data.imageUrls, data.model); break;
+    case 'video_snapshot': callbacks.onVideoSnapshot?.(data.snapshotId, data.taskId, data.videoMeta); break;
+    case 'music_task': callbacks.onMusicTask?.(data.taskId); break;
+    case 'image_analyzed': callbacks.onImageAnalyzed?.(data.imageIndex); break;
+    case 'preview_frame_captured': callbacks.onPreviewFrame?.(data.workspaceUrl); break;
+    case 'nsfw_detected': callbacks.onNsfwDetected?.(); break;
+    case 'coding': callbacks.onCoding?.(); break;
+    case 'code_stream': callbacks.onCodeStream?.(data.text || '', Boolean(data.done)); break;
+  }
+}
+
+async function streamDurableAgent(
+  body: AgentRequestBody,
+  callbacks: AgentStreamCallbacks,
+  signal?: AbortSignal,
+): Promise<void> {
+  const response = await fetch('/api/agent/run', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      projectId: body.projectId,
+      prompt: body.prompt,
+      preferredModel: body.preferredModel,
+      agentModel: body.agentModel,
+      videoModel: body.videoModel,
+      videoResolution: body.videoResolution,
+      videoAuto: body.videoAuto,
+      currentSnapshotIndex: body.currentSnapshotIndex,
+      hasAnnotation: body.hasAnnotation,
+      isDraft: body.isDraft,
+      referenceImageCount: body.referenceImageCount,
+      isNsfw: body.isNsfw,
+      audioAttachments: body.audioAttachments,
+      clientPersistedUserMessage: true,
+    }),
+    signal,
+  });
+  if (!response.ok) {
+    if (response.status === 402) {
+      const data = await response.json().catch(() => ({}));
+      callbacks.onInsufficientCredits?.(data.balance ?? 0);
+      return;
+    }
+    callbacks.onError?.(await response.text().catch(() => 'Failed to start Agent execution'));
+    return;
+  }
+  const started = await response.json() as { runId: string; firstMessageId?: string };
+  callbacks.onRunId?.(started.runId);
+  if (started.firstMessageId) callbacks.onMessageId?.(started.firstMessageId);
+
+  const abortRun = () => {
+    void fetch('/api/agent/abort', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ runId: started.runId }),
+    });
+  };
+  signal?.addEventListener('abort', abortRun, { once: true });
+
+  let lastSeq = -1;
+  let firstMessageSeen = false;
+  try {
+    while (!signal?.aborted) {
+      const params = new URLSearchParams({ events: 'true' });
+      if (lastSeq >= 0) params.set('after', String(lastSeq));
+      let runResponse: Response;
+      try {
+        runResponse = await fetch(`/api/agent/run/${started.runId}?${params.toString()}`, { signal });
+      } catch {
+        if (signal?.aborted) return;
+        await new Promise(resolve => setTimeout(resolve, 1200));
+        continue;
+      }
+      if (!runResponse.ok) {
+        await new Promise(resolve => setTimeout(resolve, 1200));
+        continue;
+      }
+      const run = await runResponse.json() as {
+        status: string;
+        first_message_id?: string;
+        events?: PersistedAgentEvent[];
+        error?: { message?: string };
+        next_poll_after_ms?: number;
+      };
+      if (!firstMessageSeen && run.first_message_id) {
+        firstMessageSeen = true;
+        callbacks.onMessageId?.(run.first_message_id);
+      }
+      for (const event of run.events || []) {
+        if (event.seq <= lastSeq) continue;
+        lastSeq = event.seq;
+        dispatchPersistedAgentEvent(event, callbacks);
+      }
+      if (run.status === 'completed') {
+        callbacks.onDone?.();
+        return;
+      }
+      if (run.status === 'failed' || run.status === 'aborted') {
+        callbacks.onError?.(run.error?.message || (run.status === 'aborted' ? 'Agent run aborted' : 'Agent run failed'));
+        return;
+      }
+      await new Promise(resolve => setTimeout(resolve, Math.min(run.next_poll_after_ms || 1200, 3000)));
+    }
+  } finally {
+    signal?.removeEventListener('abort', abortRun);
+  }
+}
+
+async function streamAgentAttempt(
+  body: AgentRequestBody,
+  callbacks: AgentStreamCallbacks,
+  signal: AbortSignal | undefined,
+  autoResumeAttempt: number,
 ): Promise<void> {
   const res = await fetch('/api/agent', {
     method: 'POST',
@@ -91,6 +253,7 @@ export async function streamAgent(
   const decoder = new TextDecoder();
   let buffer = '';
   let receivedDone = false;
+  let recoveryEvent: AgentErrorEvent | null = null;
 
   while (true) {
     const { done, value } = await reader.read();
@@ -172,13 +335,28 @@ export async function streamAgent(
             break;
           case 'error':
             receivedDone = true;
-            callbacks.onError?.(event.message);
+            if (shouldAutoResumeStudioRun(event, autoResumeAttempt)) {
+              recoveryEvent = event;
+            } else {
+              callbacks.onError?.(event.message);
+            }
             break;
         }
       } catch (e) {
         console.warn('[agentStream] failed to parse SSE event:', (e as Error)?.message, 'line length:', line.length, 'preview:', line.slice(0, 200));
       }
     }
+  }
+
+  if (recoveryEvent && !signal?.aborted) {
+    callbacks.onStatus?.(`Studio Run 中断，正在自动恢复（${autoResumeAttempt + 1}/${MAX_STUDIO_RUN_AUTO_RESUMES}）...`);
+    await streamAgentAttempt(
+      { ...body, prompt: buildStudioRunAutoResumePrompt(recoveryEvent) },
+      callbacks,
+      signal,
+      autoResumeAttempt + 1,
+    );
+    return;
   }
 
   // Stream ended without done/error event (e.g. Vercel timeout, network cut)

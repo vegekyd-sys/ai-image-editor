@@ -105,6 +105,34 @@ describe('Studio Run CUI surfaces', () => {
     expect(onViewArtifact).toHaveBeenCalledWith('project/studio-runs/run-1/artifacts/brief.v1.json');
   });
 
+  it('labels unmeasured review loudness honestly', () => {
+    const reviewRun: StudioRunSummary = {
+      ...run,
+      currentStage: 'delivery',
+      stages: run.stages.map(stage => stage.id === 'review'
+        ? { ...stage, status: 'completed', artifactPath: 'project/review.json' }
+        : stage),
+    };
+    render(
+      <StudioRunStageCard
+        stage={reviewRun.stages[6]}
+        status="completed"
+        artifact={{
+          status: 'pass',
+          technical: { resolution: '1280x720', fps: 30, hasAudio: true },
+          visual: { framesSampled: 5, blackFramesDetected: false, overlapDetected: false },
+          audio: { integratedLufs: null, truePeakDbfs: null },
+        }}
+        ordinal={7}
+        total={8}
+        isPanel={false}
+      />,
+    );
+
+    expect(screen.getByText(/响度未测量/)).toBeTruthy();
+    expect(screen.queryByText(/null LUFS/)).toBeNull();
+  });
+
   it('keeps only the compact progress surface at the composer', () => {
     const source = readFileSync(path.join(root, 'src/components/AgentChatView.tsx'), 'utf8');
     const inputBar = source.indexOf('ref={inputBarRef}');

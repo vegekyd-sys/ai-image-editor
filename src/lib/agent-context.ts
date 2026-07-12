@@ -15,6 +15,18 @@ import * as workspace from './workspace';
 import { buildModelHistoryFromRows, type DbToolHistoryRow } from './agentToolHistory';
 import { formatVideoMediaSpec } from './media-aspect';
 import { loadCompositionDraft } from './composition-draft';
+import { WorkspaceStudioRunStore } from './studio-run';
+import {
+  buildTypedCompactionMessage,
+  formatDurableExecutionSnapshot,
+  getAgentContextPolicy,
+  normalizeExecutionSnapshot,
+  selectModelHistoryWithinBudget,
+  tailModelHistoryAtomically,
+  type AgentContextPolicy,
+  type ContextSelectionStats,
+  type DurableExecutionSnapshot,
+} from './agent-execution';
 
 export interface AudioAttachmentContext {
   audioUrl: string;
@@ -40,6 +52,12 @@ export interface PromptContextOptions {
   audioAttachments?: AudioAttachmentContext[];
   /** Run being created for this request; excluded when locating a prior checkpoint. */
   currentRunId?: string | null;
+  /** Durable execution id. agent_runs remains the shared CLI/CUI execution id. */
+  executionRunId?: string | null;
+  /** Model-aware context policy. Defaults to the conservative 200K policy. */
+  contextPolicy?: AgentContextPolicy;
+  /** Durable server attempt after attempt 1; use the typed handoff plus a compact atomic tail. */
+  durableContinuation?: boolean;
 }
 
 export interface PromptContextResult {
@@ -55,6 +73,8 @@ export interface PromptContextResult {
   recoverableDesignPath?: string;
   /** Project-scoped audio refs available as audio_1, audio_2, ... (not media_N). */
   audioAttachments: AudioAttachmentContext[];
+  executionSnapshot?: DurableExecutionSnapshot;
+  contextStats: ContextSelectionStats;
 }
 
 interface DbSnapshot {
@@ -124,9 +144,38 @@ export function buildAgentRecoveryContext(
 ): string {
   const terminal = metadata?.terminal as Record<string, unknown> | undefined;
   const checkpoint = terminal?.checkpoint as Record<string, unknown> | undefined;
-  const resumeIntent = /^(?:请)?\s*(?:(?:继续|接着|恢复|重试|续上)(?:\s|$|[，。！？,.!?]|做|改|完成|刚才)|(?:continue|resume|retry)\b)/i.test(userMessage.trim());
-  if (!resumeIntent || terminal?.recoverable !== true || !checkpoint?.draftPath) return '';
-  return `[Recoverable Agent Checkpoint]\nThe previous run stopped before completion, but its editable draft was saved. Resume from this exact checkpoint; do not recreate the work from the original media.\ndraft path: ${String(checkpoint.draftPath)}${checkpoint.previewUrl ? `\nlast preview: ${String(checkpoint.previewUrl)}` : ''}${checkpoint.lastTool ? `\nlast completed tool: ${String(checkpoint.lastTool)}` : ''}\nRead the draft path, apply the pending modification, preview it, and publish the final artifact when that was the user's original request.\n\n`;
+  const resumeIntent = /^(?:请)?\s*(?:(?:继续|接着|恢复|重试|续上)(?:\s|$|[，。！？,.!?]|做|改|完成|刚才|之前|前面|上次|原来|原先|此前)|(?:continue|resume|retry)\b)/i.test(userMessage.trim());
+  if (!resumeIntent || terminal?.recoverable !== true || (!checkpoint?.draftPath && !checkpoint?.studioRunId)) return '';
+  const draftContext = checkpoint.draftPath
+    ? `\ndraft path: ${String(checkpoint.draftPath)}${checkpoint.previewUrl ? `\nlast preview: ${String(checkpoint.previewUrl)}` : ''}`
+    : '';
+  const studioContext = checkpoint.studioRunId
+    ? `\nstudio run id: ${String(checkpoint.studioRunId)}${checkpoint.studioRunStage ? `\ncurrent studio stage: ${String(checkpoint.studioRunStage)}` : ''}${checkpoint.studioRunStatePath ? `\nstudio state path: ${String(checkpoint.studioRunStatePath)}` : ''}`
+    : '';
+  const streamedCodeContext = checkpoint.streamedCodePath
+    ? `\npartial streamed code: ${String(checkpoint.streamedCodePath)} (${Number(checkpoint.streamedCodeChars) || 0} chars)`
+    : '';
+  const nextAction = checkpoint.studioRunId
+    ? 'Call studio_run status first, then read only the persisted script, storyboard, and assets artifacts needed for the current stage. Do not reread skill, prompt, director, component-library, or reference files. For a 30s+ first composition, create a concise compilable scaffold under 9000 source characters and autosave it before adding refinements with smaller patches.'
+    : 'Read the draft path and apply the pending modification.';
+  return `[Recoverable Agent Checkpoint]\nThe previous run stopped before completion, but durable work was saved. Resume from this exact checkpoint; do not recreate the work from the original media.${draftContext}${studioContext}${streamedCodeContext}${checkpoint.lastTool ? `\nlast completed tool: ${String(checkpoint.lastTool)}` : ''}\n${nextAction} Preview and publish the final artifact when that was the user's original request.\n\n`;
+}
+
+export function selectPriorTerminalRun<T extends { id?: string; status?: string }>(
+  runs: T[] | null | undefined,
+  currentRunId?: string | null,
+): T | undefined {
+  return runs?.find((row) => (
+    row.id !== currentRunId
+    && row.status !== 'running'
+    && row.status !== 'aborted'
+  ));
+}
+
+export function isStudioRunContinuationRequest(userMessage: string): boolean {
+  const message = userMessage.trim();
+  return /(?:继续|接着|恢复|续上|跑完|完成|continue|resume).{0,48}studio\s*run/i.test(message)
+    || /studio\s*run.{0,48}(?:继续|接着|恢复|续上|跑完|完成|continue|resume)/i.test(message);
 }
 
 function normalizeLegacyCompositionDescription(description: string | undefined, fallback: string): string {
@@ -156,7 +205,24 @@ export async function buildPromptContext(
   // Query snapshots, visible messages, private tool history, and project audio
   // in parallel. Audio is a separate project-scoped index; it never occupies
   // Timeline Media Index slots like <<<media_N>>>.
-  const [snapshotsRes, messagesRes, toolHistoryRes, musicRes, recoverableDraft, recoverableRunRes] = await Promise.all([
+  const studioRunStore = new WorkspaceStudioRunStore(supabase, userId);
+  const executionSnapshotPromise = options.executionRunId
+    ? supabase
+        .from('agent_context_snapshots')
+        .select('content, run_id')
+        .eq('project_id', projectId)
+        .order('created_at', { ascending: false })
+        .limit(1)
+        .maybeSingle()
+    : Promise.resolve({ data: null, error: null });
+  const executionRunPromise = options.executionRunId
+    ? supabase
+        .from('agent_runs')
+        .select('objective, prompt, acceptance_criteria, current_work_unit')
+        .eq('id', options.executionRunId)
+        .maybeSingle()
+    : Promise.resolve({ data: null, error: null });
+  const [snapshotsRes, recentMessagesRes, originMessageRes, toolHistoryRes, musicRes, recoverableDraft, recoverableRunRes, studioRuns, executionSnapshotRes, executionRunRes] = await Promise.all([
     supabase
       .from('snapshots')
       .select('id, image_url, description, type, design_path, tips, sort_order, video_meta, metadata')
@@ -166,13 +232,21 @@ export async function buildPromptContext(
       .from('messages')
       .select('id, role, content, created_at')
       .eq('project_id', projectId)
-      .order('created_at', { ascending: true }),
+      .order('created_at', { ascending: false })
+      .limit(400),
+    supabase
+      .from('messages')
+      .select('id, role, content, created_at')
+      .eq('project_id', projectId)
+      .order('created_at', { ascending: true })
+      .limit(1),
     supabase
       .from('agent_tool_history')
       .select('created_at, run_id, step, seq, tool_call_id, tool_name, input, output')
       .eq('project_id', projectId)
       .eq('user_id', userId)
-      .order('created_at', { ascending: true }),
+      .order('created_at', { ascending: false })
+      .limit(800),
     supabase
       .from('project_music')
       .select('audio_url, suno_audio_url, stream_audio_url, duration, title, track_index, status, tags')
@@ -188,12 +262,21 @@ export async function buildPromptContext(
       .eq('project_id', projectId)
       .eq('user_id', userId)
       .order('started_at', { ascending: false })
-      .limit(3),
+      .limit(10),
+    studioRunStore.listRuns(projectId).catch(() => []),
+    executionSnapshotPromise,
+    executionRunPromise,
   ]);
 
   const snapshots: DbSnapshot[] = snapshotsRes.data ?? [];
-  const messages: DbMessage[] = messagesRes.data ?? [];
-  const toolHistory: DbToolHistoryRow[] = toolHistoryRes.data ?? [];
+  const recentMessages = ([...(recentMessagesRes.data ?? [])] as DbMessage[]).reverse();
+  const originMessage = (originMessageRes.data?.[0] as DbMessage | undefined);
+  const messages: DbMessage[] = originMessage && !recentMessages.some(message => (
+    message.id && originMessage.id ? message.id === originMessage.id : message.created_at === originMessage.created_at
+  ))
+    ? [originMessage, ...recentMessages]
+    : recentMessages;
+  const toolHistory: DbToolHistoryRow[] = ([...(toolHistoryRes.data ?? [])] as DbToolHistoryRow[]).reverse();
   const projectAudios: AudioAttachmentContext[] = ((musicRes.data ?? []) as DbProjectMusic[])
     .map((row) => {
       const audioUrl = getUsableAudioUrl(row);
@@ -206,15 +289,58 @@ export async function buildPromptContext(
     })
     .filter((audio) => !!audio.audioUrl);
   const resolvedAudioAttachments = mergeAudioAttachments(projectAudios, audioAttachments);
-  const priorRun = Array.isArray(recoverableRunRes.data)
-    ? recoverableRunRes.data.find((row: { id?: string }) => row.id !== options.currentRunId)
-    : undefined;
-  // Only the immediately preceding run may be resumed. This prevents an old
-  // failed checkpoint from resurfacing after a newer successful run.
+  const priorRun = selectPriorTerminalRun(recoverableRunRes.data, options.currentRunId);
+  // Skip transport-level aborted/running rows, then use only the nearest true
+  // terminal run. A newer completed run still blocks stale failed checkpoints.
   const recoverableMetadata = priorRun?.status === 'failed'
     ? priorRun.metadata as Record<string, unknown> | null | undefined
     : undefined;
   const recoveryContext = buildAgentRecoveryContext(userMessage, recoverableMetadata);
+  const activeStudioRun = studioRuns.find(run => run.status === 'running' && run.currentStage);
+  const activeStudioContinuation = Boolean(
+    activeStudioRun && isStudioRunContinuationRequest(userMessage),
+  );
+  const activeStudioRunContext = activeStudioContinuation && activeStudioRun
+    ? `[Active Studio Run]\nstudio run id: ${activeStudioRun.id}\ncurrent studio stage: ${activeStudioRun.currentStage}\nstudio state path: ${activeStudioRun.projectId}/studio-runs/${activeStudioRun.id}/run.json\nCall studio_run status first, then read only the persisted artifacts required by the current stage. Do not reread skill, prompt, director, component-library, or reference files.\n\n`
+    : '';
+  const executionRow = executionRunRes.data as {
+    objective?: string | null;
+    prompt?: string | null;
+    acceptance_criteria?: unknown;
+    current_work_unit?: string | null;
+  } | null;
+  const executionObjective = executionRow?.objective || executionRow?.prompt || originMessage?.content || userMessage;
+  const priorSnapshot = executionSnapshotRes.data?.content
+    ? normalizeExecutionSnapshot(executionSnapshotRes.data.content, {
+        objective: executionObjective,
+        currentWorkUnit: executionRow?.current_work_unit || activeStudioRun?.currentStage || 'agent',
+        nextAction: 'Continue the unfinished objective from durable project artifacts.',
+      })
+    : undefined;
+  const persistedSnapshot = priorSnapshot && executionSnapshotRes.data?.run_id !== options.executionRunId
+    ? {
+        ...priorSnapshot,
+        objective: executionObjective,
+        acceptanceCriteria: Array.isArray(executionRow?.acceptance_criteria)
+          ? executionRow.acceptance_criteria.filter((item): item is string => typeof item === 'string')
+          : priorSnapshot.acceptanceCriteria,
+        currentWorkUnit: executionRow?.current_work_unit || activeStudioRun?.currentStage || 'agent',
+        nextAction: 'Start the current request while preserving relevant prior decisions and durable artifacts.',
+      }
+    : priorSnapshot;
+  const executionSnapshot = options.executionRunId
+    ? persistedSnapshot ?? normalizeExecutionSnapshot({
+        objective: executionObjective,
+        acceptanceCriteria: Array.isArray(executionRow?.acceptance_criteria) ? executionRow?.acceptance_criteria : [],
+        currentWorkUnit: executionRow?.current_work_unit || activeStudioRun?.currentStage || 'agent',
+        nextAction: 'Start the objective and create the first durable artifact before broad exploration.',
+      }, {
+        objective: executionObjective,
+        currentWorkUnit: 'agent',
+        nextAction: 'Start the objective.',
+      })
+    : undefined;
+  const executionContext = formatDurableExecutionSnapshot(executionSnapshot);
 
   const currentSnapshotIndex = options.currentSnapshotIndex ?? Math.max(0, snapshots.length - 1);
   const currentSnap = snapshots[currentSnapshotIndex];
@@ -261,7 +387,24 @@ export async function buildPromptContext(
   // Conversation history — real AI SDK ModelMessage[] turns, including private
   // sanitized tool call/results. Drop trailing user messages so the current
   // turn's prompt isn't duplicated if the caller already wrote it to DB.
-  const history = buildModelHistoryFromRows(messages, toolHistory, 50);
+  const rebuiltHistory = buildModelHistoryFromRows(messages, toolHistory, 400);
+  const typedCompaction = buildTypedCompactionMessage(executionSnapshot);
+  // A provider compaction block summarizes everything before it. Keep it typed
+  // and add only a small local tail, rather than replaying summarized input.
+  const durableHistoryTail = tailModelHistoryAtomically(rebuiltHistory, 16);
+  const rawHistory = typedCompaction
+    ? [typedCompaction, ...durableHistoryTail]
+    : options.durableContinuation && executionSnapshot
+      ? durableHistoryTail
+      : rebuiltHistory;
+  const contextPolicy = options.contextPolicy ?? getAgentContextPolicy('default');
+  const selectedHistory = selectModelHistoryWithinBudget({
+    messages: rawHistory,
+    policy: contextPolicy,
+    reservedTokens: Math.ceil((executionContext.length + userMessage.length) / 3),
+    snapshot: executionSnapshot,
+  });
+  const history = selectedHistory.messages;
 
   // Tips
   const currentTips: Tip[] = Array.isArray(currentSnap?.tips) ? currentSnap.tips : [];
@@ -362,7 +505,7 @@ export async function buildPromptContext(
     : '';
 
   // Assemble
-  const fullPrompt = `${recoveryContext}${videoWarning}${designWarning}${annotationWarning}${draftWarning}${snapshotWarning}${metaContext}${descriptionContext}${snapshotIndexContext}${designContext}${recoverableDraftContext}${tipsContext}${refContext}${frameAnchoredVideoEditContext}${videoUploadContext}${audioAttachmentContext}[User request — detect language and reply in the same language]\n${userMessage}`;
+  const fullPrompt = `${executionContext}${recoveryContext}${activeStudioRunContext}${videoWarning}${designWarning}${annotationWarning}${draftWarning}${snapshotWarning}${metaContext}${descriptionContext}${snapshotIndexContext}${designContext}${recoverableDraftContext}${tipsContext}${refContext}${frameAnchoredVideoEditContext}${videoUploadContext}${audioAttachmentContext}[User request — detect language and reply in the same language]\n${userMessage}`;
 
   const snapshotImages = snapshots.map((s) => {
     const videoMeta = s.video_meta as Record<string, unknown> | undefined;
@@ -379,6 +522,8 @@ export async function buildPromptContext(
     currentDesignPath,
     recoverableDesignPath: recoverableDraft?.path,
     audioAttachments: resolvedAudioAttachments,
+    executionSnapshot,
+    contextStats: selectedHistory.stats,
   };
 }
 
