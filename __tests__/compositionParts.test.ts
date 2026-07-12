@@ -35,7 +35,7 @@ describe('composition parts', () => {
         { path: 'project-1/drafts/composition-parts/foundation.js', content: 'const a = 1;' },
         { path: 'project-1/drafts/composition-parts/10-root.js', content: 'function Composition() {}' },
       ],
-    })).toThrow('must be numbered');
+    })).toThrow('numeric prefix');
 
     const duplicate = 'project-1/drafts/composition-parts/00-foundation.js';
     expect(() => assembleCompositionParts({
@@ -66,5 +66,35 @@ describe('composition parts', () => {
         { path: 'project-1/drafts/composition-parts/90-root.js', content: source },
       ],
     }).code).toContain(source);
+  });
+
+  it('preserves rich multi-scene compositions without aggregate size or part-count trimming', () => {
+    const richParts = Array.from({ length: 10 }, (_, index) => ({
+      path: `project-1/drafts/composition-parts/${String(index).padStart(2, '0')}-scene.js`,
+      content: 'x'.repeat(3_000),
+    }));
+    expect(assembleCompositionParts({ projectId: 'project-1', parts: richParts }).totalChars)
+      .toBe(30_000);
+
+    const longFormParts = Array.from({ length: 120 }, (_, index) => ({
+      path: `project-1/drafts/composition-parts/${String(index).padStart(3, '0')}-scene.js`,
+      content: `const scene${index} = ${index};`,
+    }));
+    const assembled = assembleCompositionParts({ projectId: 'project-1', parts: longFormParts });
+    expect(assembled.paths).toHaveLength(120);
+    expect(assembled.code).toContain('const scene119 = 119;');
+  });
+
+  it('orders numeric prefixes correctly beyond two digits', () => {
+    const assembled = assembleCompositionParts({
+      projectId: 'project-1',
+      parts: [
+        { path: 'project-1/drafts/composition-parts/120-ending.js', content: 'const ending = true;' },
+        { path: 'project-1/drafts/composition-parts/20-middle.js', content: 'const middle = true;' },
+        { path: 'project-1/drafts/composition-parts/00-start.js', content: 'const start = true;' },
+      ],
+    });
+    expect(assembled.paths.map(path => path.split('/').at(-1)))
+      .toEqual(['00-start.js', '20-middle.js', '120-ending.js']);
   });
 });

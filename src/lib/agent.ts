@@ -2994,7 +2994,7 @@ Use this to read skill instructions (SKILL.md), reference images, or your memory
 
     write_file: tool({
       description: `Write a file to your workspace. Use this to save memory, create skills, or organize your workspace.
-For durable Studio Composition work, write numbered source parts under \`<project-id>/drafts/composition-parts/\` one file per model step, wait for its result, then assemble them with run_code.composition_parts. Filenames MUST match two digits plus a slug, for example \`00-foundation.js\`, \`10-scenes-a.js\`, and \`90-root.js\`. Each part has a hard limit of 5000 source characters; prefer 6-12 parts under 1200 characters each for long videos. The assembled source may use 2-16 files and at most 18000 characters total. Parts share one lexical scope: do not use import/export. Rewriting the same numbered path is retry-safe. If a part is too large, split its content across new numbered files; renaming unchanged oversized content will still fail.
+For durable Studio Composition work, write numbered source parts under \`<project-id>/drafts/composition-parts/\` one cohesive component per model step, wait for its result, then assemble them with run_code.composition_parts. Filenames MUST use a numeric prefix of at least two digits plus a slug, for example \`00-foundation.js\`, \`10-scenes-a.js\`, \`90-root.js\`, or \`120-chapter.js\`. Each part has a hard transport limit of 5000 source characters; use focused parts around 2000-4000 characters each. There is no aggregate source-size or part-count limit. Parts share one scope: do not use import/export. Rewriting the same numbered path is retry-safe. Never shorten approved narration, subtitles, scenes, animation, or visual detail to reduce source size. If one part exceeds 5000, split that component across new numbered files; renaming unchanged oversized content will still fail. Assemble by passing either the explicit paths or the composition-parts directory; directory mode discovers and numerically orders all valid .js parts without repeating the path list.
 Set fromLastRunCode=true to save the last run_code output.
 Composition runtime: publish=false saves the draft code only; default publish=true saves and publishes a timeline Snapshot.
 Node media runtime: \`type: "files"\` outputs are already saved workspace files. If they are user-facing MP4 deliverables from split/trim/export/transcode, publish them with fromWorkspaceOutputs before final reply. \`type: "video"\` is a single final MP4 and can be published with write_file. Do not use node/FFmpeg as a fallback for ordinary editable timeline splicing of existing videos; patch or publish the Remotion composition instead.
@@ -3064,7 +3064,7 @@ Path is auto-generated from the current project and output type. Just provide a 
           if (!COMPOSITION_PART_FILENAME_PATTERN.test(filename)) {
             return {
               success: false,
-              message: `Composition part filename must match 00-name.js (two digits, lowercase letters/numbers/hyphens): ${filename}`,
+              message: `Composition part filename must use a numeric prefix of at least two digits plus a lowercase slug, such as 00-name.js or 120-scene.js: ${filename}`,
             };
           }
           const sourceChars = fileContent.trim().length;
@@ -3209,7 +3209,7 @@ Return exactly one supported shape:
 
 For a first composition draft, prefer the top-level \`composition\` input over wrapping JSX inside executable \`code\`. Pass \`composition: { code, width, height, props, editables, animation }\`; the harness validates and autosaves it directly. This avoids nested-code quoting failures and is the fastest Studio Run path. Keep executable \`code\` for patches, images, Node media work, and legacy calls.
 
-For durable Studio Composition work, use \`write_file\` to author 2-16 numbered source parts and then pass \`composition_parts: { paths, width, height, props, editables, animation }\`. Every path MUST be under \`<project-id>/drafts/composition-parts/\` and match \`00-name.js\` (two digits, lowercase slug). Each file has a hard limit of 5000 source characters and the assembled source has a hard limit of 18000; for long videos prefer 6-12 files under 1200 characters each. Files are concatenated in lexical order into one scope, so do not use import/export. The harness validates and autosaves them without asking the model to repeat the complete source in one tool call.
+For durable Studio Composition work, use \`write_file\` to author numbered source parts and then pass \`composition_parts: { directory, width, height, props, editables, animation }\`, or use \`paths\` for an explicit subset. Every file MUST be under \`<project-id>/drafts/composition-parts/\` and use a numeric prefix of at least two digits plus a lowercase slug. Each file has a hard transport limit of 5000 source characters. There is no aggregate source-size or part-count limit. Files are concatenated by numeric prefix into one scope, so do not use import/export. Preserve approved narration, subtitles, scenes, animation, and visual detail; never trim creative content to satisfy a source-size target. The harness discovers, validates, and autosaves the parts without asking the model to repeat the complete source or a long path list in one tool call.
 
 For a 30s+ first composition, the first \`run_code\` call must be a concise, complete, compilable scaffold under 9000 source characters. Use scene data arrays and shared components instead of bespoke code per scene. Autosave that scaffold first, then add visual refinements with smaller patch calls. Never spend a whole model step writing one giant first draft.
 
@@ -3237,7 +3237,8 @@ Node media runtime provides \`require\`, \`process\`, \`ffmpegPath\`, \`inputFil
           }).optional(),
         }).optional().describe('Preferred first-draft Remotion payload. Avoids wrapping composition source inside another executable code string.'),
         composition_parts: z.object({
-          paths: z.array(z.string()).min(2).max(16).describe('2-16 workspace .js files under <project-id>/drafts/composition-parts/. Every filename must match 00-name.js. Each part must be <=5000 source characters; assembled total <=18000. Files share one lexical scope and are assembled in filename order.'),
+          paths: z.array(z.string()).min(2).optional().describe('Optional explicit subset of numbered workspace .js files under <project-id>/drafts/composition-parts/. No part-count or aggregate-size limit. Files are assembled by numeric prefix.'),
+          directory: z.string().optional().describe('Preferred for complete or long compositions: <project-id>/drafts/composition-parts. The server discovers every valid numbered .js part in this directory, so the model does not repeat a long paths array.'),
           width: z.number().int().positive(),
           height: z.number().int().positive(),
           props: z.record(z.string(), z.unknown()).optional(),
@@ -3252,7 +3253,9 @@ Node media runtime provides \`require\`, \`process\`, \`ffmpegPath\`, \`inputFil
             durationInSeconds: z.number().positive(),
             format: z.string().optional(),
           }).optional(),
-        }).optional().describe('Durable multipart Remotion payload. Write one small numbered part per model step, then commit by path without repeating the source.'),
+        }).refine(value => Boolean(value.paths?.length || value.directory), {
+          message: 'Provide composition_parts.paths or composition_parts.directory.',
+        }).optional().describe('Durable multipart Remotion payload. Write one small numbered part per model step, then assemble by directory or explicit paths without repeating the source.'),
         description: z.string().optional().describe('Brief description of what this code does. For compositions/videos, describe the content and visual style (e.g. "15s cinematic video: 4 scenes of temple visit with Ken Burns + fade transitions, Japanese text overlays"). This is stored as the snapshot description — be specific.'),
         media_refs: z.array(z.number()).optional().describe('1-based Media Index indices referenced by the user (e.g. [1] for <<<media_1>>>). REQUIRED for runtime:"node" FFmpeg work on timeline media; the system resolves them to local workspace-backed inputFiles[0], inputFiles[1], ... . Do not hardcode Media Index URLs for FFmpeg inputs. For ordinary editable splicing of two timeline videos, use runtime:"composition" instead.'),
         workspace_paths: z.array(z.string()).optional().describe('Workspace file paths from list_files/read_file, e.g. ["project-id/media/clip.mp4"]. For runtime:"node", pass these instead of downloading or copying storage URLs; they are resolved to local inputFiles after media_refs.'),
@@ -3273,14 +3276,32 @@ Node media runtime provides \`require\`, \`process\`, \`ffmpegPath\`, \`inputFil
             return { type: 'text' as const, content: 'Composition parts require workspace access.' };
           }
           try {
+            let partPaths = composition_parts.paths ?? [];
+            if (composition_parts.directory) {
+              const expectedDirectory = compositionPartsPrefix(ctx.projectId).replace(/\/$/, '');
+              const requestedDirectory = composition_parts.directory.replace(/\/+$/, '');
+              if (requestedDirectory !== expectedDirectory) {
+                return { type: 'text' as const, content: `Composition parts directory must be ${expectedDirectory}` };
+              }
+              const files = await workspace.listFiles(`${expectedDirectory}/*`, ctx.supabase, ctx.userId);
+              partPaths = files
+                .map(file => file.path)
+                .filter(filePath => {
+                  const filename = filePath.slice(`${expectedDirectory}/`.length);
+                  return COMPOSITION_PART_FILENAME_PATTERN.test(filename);
+                });
+            }
+            if (partPaths.length < 2) {
+              return { type: 'text' as const, content: 'At least two valid numbered composition parts are required.' };
+            }
             const loaded: Array<{ path: string; content: string }> = [];
-            for (const partPath of composition_parts.paths) {
+            for (const partPath of partPaths) {
               const file = await workspace.readFile(partPath, ctx.supabase, ctx.userId);
               if (!file) return { type: 'text' as const, content: `Composition part not found: ${partPath}` };
               loaded.push({ path: partPath, content: file.content });
             }
             const assembled = assembleCompositionParts({ projectId: ctx.projectId, parts: loaded });
-            const { paths: _paths, ...metadata } = composition_parts;
+            const { paths: _paths, directory: _directory, ...metadata } = composition_parts;
             resolvedComposition = { ...metadata, code: assembled.code };
             (ctx as any).__compositionPartPaths = assembled.paths;
             console.log(`[run_code] assembled ${assembled.paths.length} composition parts (${assembled.totalChars} chars)`);
@@ -4237,7 +4258,7 @@ export async function* runMakaronAgent(
     ? `\n\n## Durable execution contract\nThis is attempt ${options.execution.attemptNo} of execution ${options.execution.runId}, work unit ${options.execution.workUnitKey}. The execution may continue in a fresh model context. Preserve decisions and durable artifact pointers by calling execution_checkpoint after each meaningful work unit and before a long, risky generation step. Produce the first durable mutation within 90 seconds when the work unit is composition/code. Do not repeat expensive side effects whose tool result is already present. A handoff is progress, not failure.`
     : '';
   const durableCompositionDirective = options?.execution?.workUnitKey === 'studio:composition'
-    ? `\n\n## Durable Composition transport\nKeep the full original Composition and Director creative standard, but do not emit a monolithic run_code composition payload in this work unit. Long tool-input streams can be reset before the call closes. Use list_files once for ${projectId}/drafts/composition-parts/*, then author the final Remotion source as 6-12 numbered files such as 00-foundation.js through 90-root.js. Write exactly one part per model step with write_file, keep each part under 1200 source characters, and wait for its tool result before writing the next. Rewriting the same numbered path is safe after recovery. Do not use import/export; the files are concatenated into one scope. When all parts exist, call run_code once with composition_parts.paths, runtime composition, dimensions, props, editables, and animation. This changes only persistence and transport; it must not simplify the approved story, audio, visual direction, or ending.`
+    ? `\n\n## Durable Composition transport\nKeep the full original Composition and Director creative standard, but do not emit a monolithic run_code composition payload in this work unit. Long tool-input streams can reset before the call closes. Author the final Remotion source as numbered files under ${projectId}/drafts/composition-parts, one cohesive part per model step with write_file. Keep each part under the 5000-character transport limit, wait for its tool result, and create as many parts as the approved content needs. Parts around 2000-4000 characters are expected. Rewriting the same numbered path is safe after recovery. Do not use import/export; the files are concatenated into one scope with no aggregate source-size or part-count limit. Never shorten approved narration, subtitles, scenes, animation, or visual detail to reduce source size. When all parts exist, call run_code once with composition_parts.directory set to ${projectId}/drafts/composition-parts, plus runtime composition, dimensions, props, editables, and animation. This changes only persistence and transport; it must not simplify the approved story, audio, visual direction, or ending.`
     : '';
   const executionSystemPrompt = `${baseSystemPrompt}${durableExecutionDirective}${durableCompositionDirective}`;
   const systemPrompt = runtime.spec.provider === 'deepseek' && options?.locale

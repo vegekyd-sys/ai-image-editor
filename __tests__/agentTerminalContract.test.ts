@@ -40,8 +40,10 @@ describe('agent terminal contract wiring', () => {
     expect(agentSource).toContain('streamed-run-code.partial.js');
     expect(agentSource).toContain('persistStreamedCodeCheckpoint(true)');
     expect(agentSource).toContain('under 9000 source characters');
-    expect(agentSource).toContain('hard limit of 5000 source characters');
-    expect(agentSource).toContain('assembled source has a hard limit of 18000');
+    expect(agentSource).toContain('hard transport limit of 5000 source characters');
+    expect(agentSource).toContain('no aggregate source-size or part-count limit');
+    expect(agentSource).toContain('Never shorten approved narration, subtitles, scenes, animation, or visual detail');
+    expect(agentSource).toContain('composition_parts.directory');
     expect(agentSource).toContain('Split the content across new numbered files');
     expect(agentSource).toContain("? effort : 'medium'");
     expect(agentSource).toContain("keep: { type: 'tool_uses', value: 24 }");
