@@ -13,6 +13,7 @@ export function normalizeRemotionScopeDeclarations(code: string): string {
 export const DYNAMIC_DESIGN_SCOPE_NAMES = [
   'React', 'useState', 'useEffect', 'useCallback', 'useMemo', 'useRef', 'THREE',
   'Composition', 'AbsoluteFill', 'Audio', 'Video', 'OffthreadVideo', 'Sequence',
+  'MakaronCaptionOverlay',
   'Series', 'Img', 'IFrame', 'Folder', 'Still', 'Freeze', 'Loop',
   'Html5Audio', 'Html5Video', 'AnimatedImage', 'useCurrentFrame', 'useVideoConfig',
   'interpolate', 'spring', 'Easing', 'random', 'staticFile', 'delayRender',

@@ -93,6 +93,11 @@ Available APIs include all exports from `remotion`, `@remotion/media`, `@remotio
   that via the `{ type: 'render', code, ... }` wrapper.
 - Only `Composition(props)` may read `props` directly. Helper components must receive every value they use as function parameters, e.g. `function TitleCard({ title, subtitle }) { ... }`; never reference outer `props` inside `TitleCard`, `Scene`, `Card`, or other helpers.
 - Use Remotion `<Img>`, never HTML `<img>`.
+- `MakaronCaptionOverlay` is injected into the runtime. For ASR-timed subtitles,
+  pass the `captionCuePath` returned by `transcribe_audio` in composition props;
+  `run_code` hydrates `props.captions`, then render
+  `<MakaronCaptionOverlay words={props.captions} />`. Do not copy a large cue
+  array through model context or replace subtitles with static scene labels.
 - Use Remotion `<Video>` or `<OffthreadVideo>`, never HTML `<video>`.
 - Use `<Sequence>` for every scene or clip so media mounts only when needed.
 - Use `trimBefore`, `trimAfter`, `playbackRate`, and `volume` on `<Video>` for non-destructive timeline edits.

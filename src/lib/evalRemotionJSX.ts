@@ -14,6 +14,7 @@ import * as Remotion from 'remotion';
 import { Audio, Video } from '@remotion/media';
 import * as RemotionPaths from '@remotion/paths';
 import * as RemotionNoise from '@remotion/noise';
+import { MakaronCaptionOverlay } from '@/remotion/MakaronCaptionOverlay';
 
 const { Sequence, useVideoConfig } = Remotion;
 
@@ -36,6 +37,7 @@ const REMOTION_SCOPE: Record<string, unknown> = {
   ...RemotionNoise,
   // @remotion/media Video/Audio: supports web-renderer export + trimBefore/trimAfter
   Audio, Video,
+  MakaronCaptionOverlay,
   // OffthreadVideo not supported in web-renderer — alias to @remotion/media Video
   OffthreadVideo: Video,
   // Override: Sequence with auto premountFor

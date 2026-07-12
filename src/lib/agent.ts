@@ -17,6 +17,7 @@ import { createVoiceover } from './skills/create-voiceover';
 import { formatAudioCapabilitiesForAgent } from './audio-model-capabilities';
 import { listVolcengineTtsVoices } from './volcengine-tts';
 import { transcribeWithVolcengineAsr, type VolcengineAsrTranscript, type TranscriptWord } from './volcengine-asr';
+import { makeCaptionCueSheet, readCaptionCueSheet, validateCaptionCues } from './caption-cues';
 import agentPrompt from './prompts/agent.md';
 import enhancePrompt from './prompts/enhance.md';
 import creativePrompt from './prompts/creative.md';
@@ -566,7 +567,7 @@ function formatTranscriptWords(words: TranscriptWord[] | undefined, maxChars: nu
   return out;
 }
 
-function formatTranscriptForModel(transcript: VolcengineAsrTranscript): string {
+function formatTranscriptForModel(transcript: VolcengineAsrTranscript, includeWordTimings = true): string {
   const lines: string[] = [
     `Transcript (${transcript.provider}/${transcript.model}, ${transcript.durationMs ? `${formatMs(transcript.durationMs)}s` : 'duration unknown'}):`,
     transcript.text || '(empty transcript)',
@@ -574,7 +575,7 @@ function formatTranscriptForModel(transcript: VolcengineAsrTranscript): string {
     'Utterance timecodes:',
   ];
 
-  let charBudget = 24_000;
+  let charBudget = includeWordTimings ? 24_000 : 8_000;
   for (const [idx, utterance] of transcript.utterances.entries()) {
     const line = `${idx + 1}. [${formatMs(utterance.startMs)}s-${formatMs(utterance.endMs)}s]${utterance.speaker ? ` speaker ${utterance.speaker}` : ''} ${utterance.text}`;
     if (charBudget - line.length < 0) {
@@ -583,7 +584,7 @@ function formatTranscriptForModel(transcript: VolcengineAsrTranscript): string {
     }
     lines.push(line);
     charBudget -= line.length;
-    const words = formatTranscriptWords(utterance.words, Math.min(1200, charBudget));
+    const words = includeWordTimings ? formatTranscriptWords(utterance.words, Math.min(1200, charBudget)) : '';
     if (words) {
       const wordLine = `   words: ${words}`;
       if (charBudget - wordLine.length < 0) {
@@ -596,6 +597,24 @@ function formatTranscriptForModel(transcript: VolcengineAsrTranscript): string {
   }
 
   return lines.join('\n');
+}
+
+async function hydrateCaptionCueProps<T extends { props?: Record<string, unknown> }>(
+  ctx: AgentContext,
+  composition: T,
+): Promise<T> {
+  const cuePath = composition.props?.captionCuePath;
+  if (typeof cuePath !== 'string') return composition;
+  if (!cuePath.startsWith(`${ctx.projectId}/`) || !ctx.supabase || !ctx.userId) {
+    throw new Error(`captionCuePath must be a readable file inside ${ctx.projectId}/`);
+  }
+  const file = await workspace.readFile(cuePath, ctx.supabase, ctx.userId);
+  if (!file) throw new Error(`Caption cue sheet not found: ${cuePath}`);
+  const captions = readCaptionCueSheet(JSON.parse(file.content));
+  if (!captions) throw new Error(`Caption cue sheet has no captions array: ${cuePath}`);
+  const cueError = validateCaptionCues(captions);
+  if (cueError) throw new Error(cueError);
+  return { ...composition, props: { ...composition.props, captions } };
 }
 
 async function validateCompositionMediaAspect(
@@ -2026,6 +2045,21 @@ For timeline videos, pass media_index. For external audio/video URLs, pass media
         let localMediaPath: string | undefined;
         let snapshotId: string | undefined;
         let videoMeta: Record<string, unknown> | undefined;
+        const withCueSheet = async (transcript: VolcengineAsrTranscript, cached: boolean) => {
+          const cueSheet = makeCaptionCueSheet(transcript);
+          let captionCuePath: string | undefined;
+          if (ctx.supabase && ctx.userId && cueSheet.captions.length > 0) {
+            captionCuePath = `${ctx.projectId}/captions/${transcript.requestId}.json`;
+            await workspace.writeFile(
+              captionCuePath,
+              JSON.stringify(cueSheet, null, 2),
+              ctx.supabase,
+              ctx.userId,
+              'application/json',
+            );
+          }
+          return { transcript, captions: cueSheet.captions, captionCuePath, cached, media_index, videoUrl: transcript.sourceUrl || resolvedUrl };
+        };
 
         if (!resolvedUrl && media_index !== undefined) {
           const v = validateImageIndex(ctx.snapshotImages, media_index);
@@ -2048,7 +2082,7 @@ For timeline videos, pass media_index. For external audio/video URLs, pass media
             videoMeta = snap?.video_meta as Record<string, unknown> | undefined;
             const cached = videoMeta?.transcript as VolcengineAsrTranscript | undefined;
             if (cached?.text && !force_refresh) {
-              return { transcript: cached, cached: true, media_index, videoUrl: cached.sourceUrl || resolvedUrl };
+              return withCueSheet(cached, true);
             }
             resolvedUrl = resolvedUrl || (videoMeta?.videoUrl as string | undefined);
             const videoPath = typeof videoMeta?.videoPath === 'string' ? videoMeta.videoPath : '';
@@ -2084,7 +2118,7 @@ For timeline videos, pass media_index. For external audio/video URLs, pass media
             if (updateError) console.error('[transcribe_audio] transcript cache update failed:', updateError.message);
           }
 
-          return { transcript, cached: false, media_index, videoUrl: resolvedUrl };
+          return withCueSheet(transcript, false);
         } catch (err) {
           return { error: `ASR transcription failed: ${err instanceof Error ? err.message : String(err)}` };
         }
@@ -2102,7 +2136,14 @@ For timeline videos, pass media_index. For external audio/video URLs, pass media
           type: 'content' as const,
           value: [{
             type: 'text' as const,
-            text: `${output.cached ? 'Cached ' : ''}ASR result${output.media_index ? ` for <<<media_${output.media_index}>>>` : ''}:\n\n${formatTranscriptForModel(transcript)}`,
+            text: [
+              `${output.cached ? 'Cached ' : ''}ASR result${output.media_index ? ` for <<<media_${output.media_index}>>>` : ''}:`,
+              output.captionCuePath
+                ? `Word-level caption cue sheet: ${output.captionCuePath}\nFor a Remotion composition, set props.captionCuePath to this path. run_code injects the full props.captions array without copying it through model context.`
+                : 'No durable caption cue sheet was written; use the returned word timings directly.',
+              '',
+              formatTranscriptForModel(transcript, !output.captionCuePath),
+            ].join('\n'),
           }],
         };
       },
@@ -2299,6 +2340,22 @@ For approval_policy=auto, gated artifacts are approved automatically and recorde
                         success: false,
                         error: 'Composition is still the structural scaffold. Apply the original Composition/Director guidance with run_code before persisting the composition stage.',
                       };
+                    }
+                    if (run.deliveryPromise.subtitlesRequired) {
+                      const animation = design.animation && typeof design.animation === 'object'
+                        ? design.animation as Record<string, unknown>
+                        : undefined;
+                      const props = design.props && typeof design.props === 'object'
+                        ? design.props as Record<string, unknown>
+                        : undefined;
+                      const captionError = validateCaptionCues(props?.captions, Number(animation?.durationInSeconds));
+                      if (captionError) return { success: false, error: captionError };
+                      if (!String(design.code || '').includes('MakaronCaptionOverlay')) {
+                        return {
+                          success: false,
+                          error: 'Subtitles are required, but the composition does not render the injected MakaronCaptionOverlay. Static scene labels are not timed subtitles.',
+                        };
+                      }
                     }
                   } catch { /* malformed artifacts are handled by normal validation */ }
                 }
@@ -3324,6 +3381,13 @@ Node media runtime provides \`require\`, \`process\`, \`ffmpegPath\`, \`inputFil
             return { type: 'text' as const, content: `Composition parts failed: ${error instanceof Error ? error.message : String(error)}` };
           }
         }
+        if (resolvedComposition) {
+          try {
+            resolvedComposition = await hydrateCaptionCueProps(ctx, resolvedComposition);
+          } catch (error) {
+            return { type: 'text' as const, content: `Caption cue hydration failed: ${error instanceof Error ? error.message : String(error)}` };
+          }
+        }
         // Store raw code for write_file({ fromLastRunCode: true })
         (ctx as any).__lastRunCode = resolvedComposition ? JSON.stringify(resolvedComposition, null, 2) : executableCode;
 
@@ -3555,11 +3619,16 @@ Node media runtime provides \`require\`, \`process\`, \`ffmpegPath\`, \`inputFil
               }
             }
             const mergedProps = mergePatchProps(baseDesign.props, result.props);
-            const patched = {
+            let patched = {
               ...baseDesign,
               code: resolveMediaMarkersInString(code, ctx.snapshotImages),
               props: resolveMediaMarkersInValue(mergedProps, ctx.snapshotImages) as Record<string, unknown> | undefined,
             };
+            try {
+              patched = await hydrateCaptionCueProps(ctx, patched);
+            } catch (error) {
+              return { type: 'text' as const, content: `Caption cue hydration failed: ${error instanceof Error ? error.message : String(error)}` };
+            }
             if ((baseDesign as Record<string, unknown>).__makaronScaffold === true) {
               delete (patched as Record<string, unknown>).__makaronScaffold;
               (patched as Record<string, unknown>).description = desc || 'Director-refined Studio composition';

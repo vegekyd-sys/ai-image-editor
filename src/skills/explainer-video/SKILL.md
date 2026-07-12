@@ -118,8 +118,10 @@ wrong or expensive.
    overly long narration.
 12. After `generate_voiceover`, call `transcribe_audio({ media_url: audioUrl })`
    on the returned public audio URL. Use the real ASR utterance/word timecodes
-   for subtitle timing. Do not rely only on estimated text length timing when
-   ASR is available.
+   for subtitle timing. Keep the returned `captionCuePath`; pass it unchanged as
+   `props.captionCuePath` in `run_code`. The harness loads the full cue sheet into
+   `props.captions`, so long subtitles do not consume model context. Do not rely
+   only on estimated text length timing when ASR is available.
 13. Decide the audio layer:
    - Exact spoken narration -> `generate_voiceover`.
    - Prompt-first music bed, ambience, sound effects, UI blips, risers, impacts,
@@ -157,7 +159,9 @@ on top. Consider an audio bed in every video unless the user explicitly asks for
 silent, text-only, or voice-only output.
 
 - Keep voiceover intelligible. Music and ambience should sit under narration,
-  with lower volume and no busy vocals.
+  with lower volume and no busy vocals. Duck the music under spoken sections;
+  use absolute narration timestamps for volume changes so drift cannot
+  accumulate across scenes.
 - Use `generate_audio` for prompt-first assets: subtle background music,
   transition whooshes, notification ticks, magical sparkles, classroom ambience,
   sci-fi hums, battle-arena impacts, UI sounds, or one mixed sound-design track.
@@ -185,7 +189,14 @@ Every explainer video must have subtitles unless the user explicitly declines.
   per-character effects that make reading harder.
 - Subtitle cue timing must come from the TTS audio timeline when possible:
   use ASR from `transcribe_audio` after generating voiceover.
+- Render `props.captions` with the injected `<MakaronCaptionOverlay
+  words={props.captions} />`. It is available in both preview and export without
+  imports. Static scene labels or one caption per scene do not replace timed
+  subtitles.
 - Scene timing and subtitle cues must share the same FPS/timebase.
+- Treat narration timestamps as edit decisions: reveal the visual evidence,
+  label, stat, or action at the absolute moment the narration refers to it, not
+  merely somewhere inside the same scene.
 - The active subtitle should support the current visual idea. If ASR splits a
   sentence too finely, merge adjacent short cues without breaking timing.
 - Do not let subtitles cover the primary subject, charts, timeline labels, or

@@ -58,6 +58,10 @@ describe('agent reliability policy', () => {
     expect(contract).toContain('materialize it once');
     expect(review).toContain('## Composition Draft Gate');
     expect(review).toContain('generic hook/body/end sample is not enough');
+    expect(agent).toContain('hydrateCaptionCueProps');
+    expect(agent).toContain('run.deliveryPromise.subtitlesRequired');
+    expect(contract).toContain('durable word-level cue sheet');
+    expect(composition).toContain('MakaronCaptionOverlay');
   });
 
   it('stops repeated MP4 export attempts for an unchanged composition', () => {
