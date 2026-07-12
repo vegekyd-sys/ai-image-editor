@@ -65,7 +65,9 @@ const artifacts: Record<StudioStageId, unknown> = {
   },
   composition: {
     version: '1.0', runtime: 'remotion', mode: 'editable', designPath: 'code/makaron.json', width: 1920, height: 1080,
-    fps: 30, durationSeconds: 50, sceneIds: ['scene-1'], previewFramePaths: ['a.png', 'b.png', 'c.png'], editable: true,
+    fps: 30, durationSeconds: 50, sceneIds: ['scene-1'], previewFramePaths: ['a.png', 'b.png', 'c.png'],
+    draftGate: { expectedDurationFrames: 1500, timelineDurationFrames: 1500, boundaryFramesChecked: 0, endingFrameChecked: true, audioSources: 'resolved', unresolvedIssues: [] },
+    editable: true,
   },
   review: {
     version: '1.0', outputPath: 'outputs/final.mp4', status: 'pass',
@@ -147,6 +149,22 @@ describe('Studio Run controller', () => {
       artifactPath: 'bad.json',
       now,
     })).toThrow();
+  });
+
+  it('blocks composition until the first draft covers every boundary and ending frame', () => {
+    const composition = artifacts.composition as Record<string, unknown>;
+    expect(() => studioArtifactSchemas.composition.parse({
+      ...composition,
+      sceneIds: ['scene-1', 'scene-2', 'scene-3'],
+      draftGate: {
+        expectedDurationFrames: 1500,
+        timelineDurationFrames: 1444,
+        boundaryFramesChecked: 1,
+        endingFrameChecked: false,
+        audioSources: 'resolved',
+        unresolvedIssues: ['black transition frame'],
+      },
+    })).toThrow(/timelineDurationFrames|scene boundary|final visible frame|resolve draft issues/);
   });
 
   it('refuses a passing final review with failed visual checks', () => {
@@ -257,7 +275,7 @@ describe('Studio Run controller', () => {
       required?: string[];
     };
     expect(composition.required).toEqual(expect.arrayContaining([
-      'designPath', 'width', 'height', 'fps', 'durationSeconds', 'previewFramePaths',
+      'designPath', 'width', 'height', 'fps', 'durationSeconds', 'previewFramePaths', 'draftGate',
     ]));
 
     const review = getStudioArtifactJsonSchema('review') as {

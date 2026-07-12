@@ -45,8 +45,9 @@ describe('agent reliability policy', () => {
     expect(agent).toContain('output.stageSchemas');
     expect(writer).toContain('studioRunUpdates');
     expect(contract).toContain('Reuse the complete `stageSchemas`');
-    expect(contract).toContain('call `preview_frame` once with three');
-    expect(contract).toContain('Do not add another preview');
+    expect(contract).toContain('Composition draft gate');
+    expect(contract).toContain('every scene boundary');
+    expect(contract).toContain('only persists the already-reviewed paths');
     expect(contract).toContain('`prompts/remotion-composition.md`');
     expect(contract).toContain('`skills/_shared/remotion-director-contract.md`');
     expect(contract).toContain('does not replace or');
@@ -54,9 +55,9 @@ describe('agent reliability policy', () => {
     expect(composition).toContain('## Composition Quality');
     expect(director).toContain('## Anti-Web Rules');
     expect(contract).toContain('Do not compute SHA');
-    expect(contract).toContain('materialize once');
-    expect(review).toContain('sample at least three frames');
-    expect(review).toContain('videos longer than 15');
+    expect(contract).toContain('materialize it once');
+    expect(review).toContain('## Composition Draft Gate');
+    expect(review).toContain('generic hook/body/end sample is not enough');
   });
 
   it('stops repeated MP4 export attempts for an unchanged composition', () => {
@@ -65,6 +66,18 @@ describe('agent reliability policy', () => {
     expect(agent).toContain('attemptCount >= 2');
     expect(agent).toContain('Do not call materialize_media again');
     expect(agent).toContain(".select('design_path')");
+  });
+
+  it('keeps corrected composition exports available across recovery and out of delivery', () => {
+    const agent = read('src/lib/agent.ts');
+    const nonRepeatable = agent.slice(
+      agent.indexOf('const nonRepeatableTools = new Set(['),
+      agent.indexOf(']);', agent.indexOf('const nonRepeatableTools = new Set([')),
+    );
+    expect(nonRepeatable).not.toContain("'materialize_media'");
+    expect(agent).toContain("studioCheckpoint.studioRunStage === 'delivery'");
+    expect(agent).toContain('shouldPreferLatestDraft');
+    expect(agent).toContain('design_path: shouldPreferLatestDraft ? latestDraftPath : design_path');
   });
 
   it('returns the exact published video media index for final review', () => {

@@ -25,9 +25,12 @@ work the same across video types.
    text-only planning stages from brief through assets. Each artifact is still
    validated, stored, and emitted to CUI separately. Guided/manual runs continue
    to use one `put_artifact` at a time.
-5. Build editable video with `run_code({ runtime: "composition" })`, inspect
-   representative frames with `preview_frame`, and materialize the MP4 before
-   final review.
+5. Build editable video with `run_code({ runtime: "composition" })`, save the
+   first complete draft, and pass the Composition draft gate before any publish
+   or MP4 export. The gate checks exact timeline duration, every scene boundary,
+   the final visible frame, resolved audio sources, and zero unresolved issue.
+   Publish the exact gated draft, materialize it once, then perform the final
+   MP4 review.
 
 ## Stage Meanings
 
@@ -40,8 +43,9 @@ work the same across video types.
   and asset links.
 - `assets`: every source, generated asset, voice, music, font, and code module
   that the composition actually uses. Missing assets block composition.
-- `composition`: the real editable Remotion design path plus three or more
-  preview frames.
+- `composition`: the real editable Remotion design path plus draft-gate evidence
+  for full timeline coverage, every scene boundary, the ending, audio sources,
+  and three or more preview frames.
 - `review`: technical, visual, audio, and delivery-promise checks against the
   materialized MP4.
 - `delivery`: final MP4, editable source, optional hash, and delivery time.
@@ -74,10 +78,20 @@ work the same across video types.
   `prompts/remotion-composition.md` and follow its original director contract at
   `skills/_shared/remotion-director-contract.md`. Studio Run does not replace or
   abbreviate the composition and director guidance.
-- Build one complete composition, call `preview_frame` once with three
-  representative frames to create one contact sheet, publish once, and
-  materialize once.
-- Do not add another preview after one clean hook/body/end contact sheet.
+- Build one complete composition and save its exact `design_path` before visual
+  review. Derive all scene-boundary timestamps from the storyboard/root
+  timeline, then batch those boundaries, a hook/body frame, and the final
+  visible frame into the minimum number of 2-6 frame `preview_frame` calls.
+- Do not publish or materialize until exact frame-count math, every boundary,
+  the ending, and required audio URLs pass the Composition draft gate.
+- After one clean gate, publish that exact `design_path` once and materialize it
+  once. Do not export a timeline `media_index` that may point to an older
+  snapshot. If the draft changes, recheck only affected boundaries plus the
+  ending before replacing the published snapshot.
+- Final Review checks the real MP4 for renderer/container/audio drift. Delivery
+  only persists the already-reviewed paths; it must not call `run_code`,
+  `preview_frame`, `write_file`, or `materialize_media`. Invalidate back to
+  Composition when a revision is required.
 - Probe source/output media once. Reuse that result for review and delivery.
 - Do not compute SHA unless the user explicitly requests an integrity checksum.
 

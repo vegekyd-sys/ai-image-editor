@@ -132,15 +132,23 @@ wrong or expensive.
 15. Persist the asset manifest only after every referenced asset is ready.
 16. Build the video with `run_code({ runtime: "composition" })`.
 17. Save the draft with `write_file({ fromLastRunCode: true, publish: false })`,
-   then persist the composition artifact with its real design path.
-18. Verify at least three frames with `preview_frame`: early hook, middle
-   explanation, and closing CTA/summary. Include subtitle readability in the
-   check.
-19. Materialize the MP4 with `materialize_media`. Run technical, visual, audio,
-   and runtime-promise review against the actual MP4, then persist `review`.
-20. Only when review status is `pass`, publish the editable composition and MP4,
-   persist `delivery`, and report completion. A failed Studio Run artifact write
-   is a blocker, not a warning.
+   and run the Composition draft gate before publishing or exporting. Calculate
+   the exact expected frame count, confirm the scene timeline covers it, inspect
+   every scene boundary plus the final visible frame with batched
+   `preview_frame` calls, and confirm all required audio props contain real URLs.
+   Patch the draft until this gate has no unresolved issue, then persist the
+   composition artifact with its real design path and `draftGate` evidence.
+18. Publish that exact gated draft once. Do not publish an older timeline
+   snapshot or use its `media_index` as the export source.
+19. Materialize the exact gated `design_path` once with `materialize_media`.
+   Run container, visual-renderer, audio, and runtime-promise review against the
+   actual MP4, then persist `review`.
+20. Delivery is bookkeeping only: when review status is `pass`, persist the
+   already-reviewed MP4 path and editable source path, approve if authorized,
+   and report completion. Never patch, preview, publish, or render in Delivery.
+   If a blocking issue is found after Composition, invalidate back to
+   Composition and rerun its draft gate. A failed Studio Run artifact write is
+   a blocker, not a warning.
 
 ## Audio And Sound Design Contract
 

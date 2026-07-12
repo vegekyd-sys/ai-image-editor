@@ -147,7 +147,28 @@ const compositionSchema = z.object({
   durationSeconds: z.number().positive(),
   sceneIds: z.array(z.string()).min(1),
   previewFramePaths: z.array(z.string()).min(3),
+  draftGate: z.object({
+    expectedDurationFrames: z.number().int().positive(),
+    timelineDurationFrames: z.number().int().positive(),
+    boundaryFramesChecked: z.number().int().nonnegative(),
+    endingFrameChecked: z.boolean(),
+    audioSources: z.enum(['resolved', 'not-required']),
+    unresolvedIssues: z.array(z.string()),
+  }),
   editable: z.boolean(),
+}).superRefine((value, ctx) => {
+  const expectedFrames = Math.round(value.durationSeconds * value.fps);
+  const requiredBoundaries = Math.max(0, value.sceneIds.length - 1);
+  const checks: Array<[boolean, (string | number)[], string]> = [
+    [value.draftGate.expectedDurationFrames === expectedFrames, ['draftGate', 'expectedDurationFrames'], `expectedDurationFrames must equal durationSeconds * fps (${expectedFrames})`],
+    [value.draftGate.timelineDurationFrames === expectedFrames, ['draftGate', 'timelineDurationFrames'], `timelineDurationFrames must cover the full composition (${expectedFrames})`],
+    [value.draftGate.boundaryFramesChecked >= requiredBoundaries, ['draftGate', 'boundaryFramesChecked'], `check every scene boundary before review (${requiredBoundaries} required)`],
+    [value.draftGate.endingFrameChecked, ['draftGate', 'endingFrameChecked'], 'check the final visible frame before review'],
+    [value.draftGate.unresolvedIssues.length === 0, ['draftGate', 'unresolvedIssues'], 'resolve draft issues before review'],
+  ];
+  for (const [valid, path, message] of checks) {
+    if (!valid) ctx.addIssue({ code: 'custom', path, message });
+  }
 });
 
 const finalReviewSchema = z.object({

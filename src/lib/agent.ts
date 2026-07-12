@@ -2381,7 +2381,8 @@ For approval_policy=auto, gated artifacts are approved automatically and recorde
     materialize_media: tool({
       description: `Export an editable Remotion composition into a real MP4 video.
 Use this when the user asks to save/export/materialize/turn a composition into MP4. It accepts a timeline media_index, snapshot_id, design_path, or the current unsaved composition from run_code.
-Default profile is fast_720p (short side 720, no upscale) for speed. Default publish=true so the exported MP4 appears as a new <<<media_N>>> video. A completed synchronous export returns the exact mediaIndex for subsequent analyze_video/preview_frame calls; use that returned index instead of guessing. By default the tool queues a durable async export like video generation; polling/cron completes it and reports either success or failure. Set wait=true on the first call when the current response must include the final URL. A repeated call for the same unchanged composition reuses the fingerprint-matched queued/completed job and does not render twice. If the same unchanged composition fails twice in one turn, stop retrying and report export as blocked.`,
+Default profile is fast_720p (short side 720, no upscale) for speed. Default publish=true so the exported MP4 appears as a new <<<media_N>>> video. A completed synchronous export returns the exact mediaIndex for subsequent analyze_video/preview_frame calls; use that returned index instead of guessing. By default the tool queues a durable async export like video generation; polling/cron completes it and reports either success or failure. Set wait=true on the first call when the current response must include the final URL. A repeated call for the same unchanged composition reuses the fingerprint-matched queued/completed job and does not render twice. If the same unchanged composition fails twice in one turn, stop retrying and report export as blocked.
+For Studio Run, materialize only during Review after the Composition draft gate passes. Pass the exact gated design_path; do not use an older timeline media_index when a newer autosaved draft exists. Delivery is bookkeeping only and cannot start another render.`,
       inputSchema: z.object({
         media_index: z.number().optional().describe('1-based media index, e.g. 3 for <<<media_3>>>. Must point to an editable Remotion composition.'),
         snapshot_id: z.string().optional().describe('Snapshot ID of an editable Remotion composition.'),
@@ -2395,10 +2396,24 @@ Default profile is fast_720p (short side 720, no upscale) for speed. Default pub
         if (!ctx.supabase || !ctx.userId) {
           return { success: false, error: 'materialize_media requires an authenticated project workspace.' };
         }
+        const studioCheckpoint = await getStudioRunCheckpoint(ctx);
+        if (studioCheckpoint.studioRunStage === 'delivery') {
+          return {
+            success: false,
+            blocked: true,
+            error: 'Studio Run Delivery cannot render or revise media. Use the already reviewed MP4, or invalidate Composition and return to its draft gate before rendering again.',
+          };
+        }
+        const latestDraftPath = (ctx as any).__lastSavedDraftPath as string | undefined;
+        const shouldPreferLatestDraft = studioCheckpoint.studioRunStage === 'review'
+          && Boolean(latestDraftPath)
+          && media_index !== undefined
+          && !snapshot_id
+          && !design_path;
         const source = await resolveCompositionSource(ctx, {
-          media_index,
+          media_index: shouldPreferLatestDraft ? undefined : media_index,
           snapshot_id,
-          design_path,
+          design_path: shouldPreferLatestDraft ? latestDraftPath : design_path,
         });
         if (source.error) return { success: false, error: source.error };
 
@@ -4367,7 +4382,6 @@ export async function* runMakaronAgent(
       'generate_image',
       'generate_animation',
       'transcribe_audio',
-      'materialize_media',
       'rotate_camera',
       'delete_file',
       'generate_voiceover',

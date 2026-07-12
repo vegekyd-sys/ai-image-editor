@@ -17,13 +17,34 @@ Criticism must be observable and actionable.
   clear subtitle/UI safe areas.
 - Assets: every referenced file is ready, attributable, and linked to scenes.
 
+## Composition Draft Gate
+
+Run this gate on the first complete autosaved Remotion draft, before publishing
+the composition or materializing an MP4.
+
+1. Compute `expectedDurationFrames = round(durationSeconds * fps)` and confirm
+   the scene timeline covers exactly that duration. Overlap must not shorten the
+   ending or leave uncovered tail frames.
+2. Inspect every scene boundary at its exact transition time. Batch timestamps
+   into 2-6 frame contact sheets; include stable hook/body frames and the final
+   visible frame. A generic hook/body/end sample is not enough for a multi-scene
+   video with transitions.
+3. Check for black/blank frames, transition gaps, accidental double exposure,
+   missing media, unreadable text, subtitle collisions, and ending-frame loss.
+4. Confirm required audio props are resolved public URLs, not undefined values
+   or `<<<audio_N>>>` markers.
+5. Patch and rerun only the affected boundary/ending checks until there are no
+   unresolved issues. Persist this evidence in the Composition `draftGate`.
+
+Only a passing draft gate may advance to Review.
+
 ## Final Review
 
 1. Materialize the MP4.
 2. Verify container, duration, resolution, FPS, and audio presence.
-3. For short-form work, sample at least three frames across opening, strongest
-   body beat, and ending. Add a transition frame for videos longer than 15
-   seconds, multi-scene edits, or any transition with visible risk.
+3. Sample opening, strongest body beat, ending, and one previously checked risky
+   transition to detect renderer drift. Reuse the Composition draft-gate plan;
+   do not restart timeline debugging from scratch.
 4. Check black/blank frames, missing media, unreadable text, overlaps, source
    crop, subtitle safe areas, and final-frame quality.
    When a compact contact sheet looks ambiguous at its display scale, inspect
@@ -51,4 +72,6 @@ Criticism must be observable and actionable.
 
 A passing review has no unresolved blocking issue. If revision is needed,
 invalidate the earliest responsible Studio Run stage and regenerate downstream
-work instead of patching the delivery record.
+work instead of patching the delivery record. Delivery must not render, patch,
+preview, or publish media; it only records the already-reviewed output and
+editable source paths.
