@@ -249,7 +249,7 @@ function fingerprintDesign(
     ? resolveRemotionLambdaEncodingSettings()
     : null
   const payload = {
-    renderer: 'remotion-export-v3',
+    renderer: 'remotion-export-v4',
     outputType,
     renderProfile,
     outputSettings: {

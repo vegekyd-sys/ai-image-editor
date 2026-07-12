@@ -74,6 +74,7 @@ describe('Remotion export worker contract', () => {
     expect(exporter).toContain('resolveRemotionRenderProfile')
     expect(exporter).toContain('metadata.renderProfile')
     expect(exporter).toContain('fingerprintDesign')
+    expect(exporter).toContain("renderer: 'remotion-export-v4'")
     expect(exporter).toContain('publishSnapshotIds')
     expect(exporter).toContain('promotedReusableExport')
     expect(exporter).toContain('reusableNeedsPromotion')
