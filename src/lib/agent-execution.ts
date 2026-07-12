@@ -78,20 +78,12 @@ export function isRetryableProviderOutage(detail: unknown): boolean {
   return /(?:serviceunavailableexception|bedrock.{0,120}(?:unable to process|service unavailable)|\b503\b|econnreset|tls connection was established)/i.test(detail);
 }
 
-export function getAgentContextPolicy(modelId: string): AgentContextPolicy {
-  if (modelId === 'sonnet-5' || modelId.includes('claude-sonnet-5')) {
-    return {
-      contextWindowTokens: 1_000_000,
-      historySoftLimitTokens: 420_000,
-      providerClearToolUsesAtTokens: 500_000,
-      providerCompactAtTokens: 650_000,
-    };
-  }
+export function getAgentContextPolicy(_modelId: string): AgentContextPolicy {
   return {
-    contextWindowTokens: 200_000,
-    historySoftLimitTokens: 105_000,
-    providerClearToolUsesAtTokens: 120_000,
-    providerCompactAtTokens: 155_000,
+    contextWindowTokens: 1_000_000,
+    historySoftLimitTokens: 420_000,
+    providerClearToolUsesAtTokens: 500_000,
+    providerCompactAtTokens: 650_000,
   };
 }
 

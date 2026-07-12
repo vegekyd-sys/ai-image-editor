@@ -18,12 +18,14 @@ function message(role: 'user' | 'assistant', content: string): ModelMessage {
 }
 
 describe('durable Agent execution', () => {
-  it('uses a model-aware share of the 1M Sonnet 5 context window', () => {
-    const policy = getAgentContextPolicy('sonnet-5');
-    expect(policy.contextWindowTokens).toBe(1_000_000);
-    expect(policy.historySoftLimitTokens).toBeGreaterThanOrEqual(400_000);
-    expect(policy.providerCompactAtTokens).toBeLessThan(800_000);
-    expect(policy.historySoftLimitTokens).toBeLessThan(policy.providerCompactAtTokens);
+  it('uses the shared 1M context policy for every Agent provider', () => {
+    for (const modelId of ['sonnet-4.6', 'sonnet-5', 'opus-4.8', 'grok-4.5', 'deepseek-v4-pro']) {
+      const policy = getAgentContextPolicy(modelId);
+      expect(policy.contextWindowTokens).toBe(1_000_000);
+      expect(policy.historySoftLimitTokens).toBeGreaterThanOrEqual(400_000);
+      expect(policy.providerCompactAtTokens).toBeLessThan(800_000);
+      expect(policy.historySoftLimitTokens).toBeLessThan(policy.providerCompactAtTokens);
+    }
   });
 
   it('keeps all useful history while it fits and trims atomically when it does not', () => {

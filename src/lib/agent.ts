@@ -36,7 +36,7 @@ import {
   type RemotionRenderProfile,
 } from '@/lib/remotion-export';
 import { VIDEO_PLACEHOLDER_IMAGE } from '@/lib/editor/timeline-derivations';
-import { getAgentModelId, isClaudeSonnet5Model } from './bedrock-models';
+import { getAgentModelId } from './bedrock-models';
 import { normalizeAgentErrorMessage } from './agent-error';
 import {
   findSnapshotMediaIndex,
@@ -173,7 +173,7 @@ function modelFileContent(base64Data: string, mediaType: string) {
 
 function getAnthropicReasoningEffort() {
   const effort = process.env.AGENT_REASONING_EFFORT?.trim().toLowerCase();
-  return effort && ANTHROPIC_REASONING_EFFORTS.has(effort) ? effort : undefined;
+  return effort && ANTHROPIC_REASONING_EFFORTS.has(effort) ? effort : 'medium';
 }
 
 function getAnthropicThinkingMode() {
@@ -182,13 +182,13 @@ function getAnthropicThinkingMode() {
 }
 
 function getAnthropicContextManagement(modelId: string) {
-  const policy = getAgentContextPolicy(isClaudeSonnet5Model(modelId) ? 'sonnet-5' : modelId);
+  const policy = getAgentContextPolicy(modelId);
   return {
     edits: [
       {
         type: 'clear_tool_uses_20250919',
         trigger: { type: 'input_tokens', value: policy.providerClearToolUsesAtTokens },
-        keep: { type: 'tool_uses', value: isClaudeSonnet5Model(modelId) ? 24 : 6 },
+        keep: { type: 'tool_uses', value: 24 },
       },
       {
         type: 'compact_20260112',

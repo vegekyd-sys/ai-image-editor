@@ -43,6 +43,8 @@ describe('agent terminal contract wiring', () => {
     expect(agentSource).toContain('hard limit of 5000 source characters');
     expect(agentSource).toContain('assembled source has a hard limit of 18000');
     expect(agentSource).toContain('Split the content across new numbered files');
+    expect(agentSource).toContain("? effort : 'medium'");
+    expect(agentSource).toContain("keep: { type: 'tool_uses', value: 24 }");
     expect(agentSource).toContain('if (toolName) lastTool = toolName');
     expect(agentContextSource).toContain('activeStudioContinuation');
     expect(agentContextSource).toContain('[Active Studio Run]');

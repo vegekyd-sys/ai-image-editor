@@ -111,15 +111,15 @@ export function getAgentProviderOptions(
     };
   }
 
-  // AGENT_REASONING_EFFORT is an Anthropic/Bedrock control. Reusing it for
-  // OpenRouter made Grok inherit Sonnet's much heavier reasoning policy and
-  // could spend minutes thinking after a preview without producing a reply.
+  // Keep provider overrides independent so a temporary Sonnet high/max setting
+  // does not silently change Grok. Both providers default to the dev baseline:
+  // medium reasoning effort.
   const configuredOpenRouterEffort = process.env.OPENROUTER_AGENT_REASONING_EFFORT?.trim().toLowerCase();
   const allowedOpenRouterEfforts = new Set(['none', 'minimal', 'low', 'medium', 'high', 'xhigh', 'max']);
   const openRouterEffort = configuredOpenRouterEffort && allowedOpenRouterEfforts.has(configuredOpenRouterEffort)
     ? configuredOpenRouterEffort
     : runtime.spec.id === 'grok-4.5'
-      ? 'low'
+      ? 'medium'
       : undefined;
 
   return {

@@ -53,7 +53,7 @@ describe('agent model catalog', () => {
     }
   });
 
-  it('does not leak Anthropic reasoning effort into Grok', () => {
+  it('keeps Grok on its independent medium default instead of leaking Anthropic effort', () => {
     const previousOpenRouterKey = process.env.OPENROUTER_API_KEY;
     const previousAnthropicEffort = process.env.AGENT_REASONING_EFFORT;
     const previousOpenRouterEffort = process.env.OPENROUTER_AGENT_REASONING_EFFORT;
@@ -63,7 +63,7 @@ describe('agent model catalog', () => {
     try {
       const runtime = createAgentModelRuntime('grok-4.5', 'project-a');
       expect(getAgentProviderOptions(runtime, { reasoningEffort: 'max' }))
-        .toMatchObject({ openrouter: { reasoning: { effort: 'low' } } });
+        .toMatchObject({ openrouter: { reasoning: { effort: 'medium' } } });
     } finally {
       if (previousOpenRouterKey === undefined) delete process.env.OPENROUTER_API_KEY;
       else process.env.OPENROUTER_API_KEY = previousOpenRouterKey;
