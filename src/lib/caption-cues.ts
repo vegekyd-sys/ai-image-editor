@@ -69,6 +69,7 @@ export function validateCaptionCues(
     if (typeof endMs !== 'number' || !Number.isFinite(endMs) || endMs <= startMs) return `Caption cue ${index + 1} has an invalid endMs.`;
     if (startMs < previousStart) return `Caption cue ${index + 1} is not in chronological order.`;
     if (durationMs !== null && startMs >= durationMs) return `Caption cue ${index + 1} starts after the composition ends.`;
+    if (durationMs !== null && endMs > durationMs + 250) return `Caption cue ${index + 1} ends after the composition ends.`;
     previousStart = startMs;
   }
   return null;

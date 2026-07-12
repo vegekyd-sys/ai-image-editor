@@ -47,6 +47,7 @@ describe('word-level caption cues', () => {
       { word: 'a', startMs: 100, endMs: 200 },
     ], 2)).toContain('chronological');
     expect(validateCaptionCues([{ word: 'late', startMs: 2100, endMs: 2200 }], 2)).toContain('composition ends');
+    expect(validateCaptionCues([{ word: 'long', startMs: 1900, endMs: 2400 }], 2)).toContain('ends after');
     expect(validateCaptionCues(captionsFromTranscript(transcript), 2)).toBeNull();
   });
 

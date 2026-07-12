@@ -2350,7 +2350,7 @@ For approval_policy=auto, gated artifacts are approved automatically and recorde
                         : undefined;
                       const captionError = validateCaptionCues(props?.captions, Number(animation?.durationInSeconds));
                       if (captionError) return { success: false, error: captionError };
-                      if (!String(design.code || '').includes('MakaronCaptionOverlay')) {
+                      if (!/<MakaronCaptionOverlay\b/.test(String(design.code || ''))) {
                         return {
                           success: false,
                           error: 'Subtitles are required, but the composition does not render the injected MakaronCaptionOverlay. Static scene labels are not timed subtitles.',
