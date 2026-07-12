@@ -12,7 +12,6 @@ import * as THREE from 'three';
 import { getAvailableFonts } from '@remotion/google-fonts';
 import { transform as sucraseTransform } from 'sucrase';
 import { normalizeRemotionScopeDeclarations } from '@/lib/remotion-code-normalization';
-import { MakaronCaptionOverlay } from './MakaronCaptionOverlay';
 
 const { Sequence, useVideoConfig, delayRender, continueRender } = Remotion;
 
@@ -35,7 +34,6 @@ function createRemotionScope(useOffthreadVideo: boolean, useNativeVideo: boolean
     // @remotion/media keeps browser/web-renderer preview behavior; server export can opt into
     // Remotion-native Video so the renderer can collect source-video audio assets.
     Audio: MediaAudio,
-    MakaronCaptionOverlay,
     Video: useOffthreadVideo ? serverVideo : useNativeVideo ? nativeVideo : MediaVideo,
     OffthreadVideo: useOffthreadVideo ? serverVideo : MediaVideo,
     // Override: Sequence with auto premountFor

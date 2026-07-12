@@ -51,13 +51,13 @@ describe('word-level caption cues', () => {
     expect(validateCaptionCues(captionsFromTranscript(transcript), 2)).toBeNull();
   });
 
-  it('injects one shared caption renderer into preview and export scopes', () => {
+  it('does not force one shared visual caption renderer', () => {
     const root = path.resolve(__dirname, '..');
     const preview = fs.readFileSync(path.join(root, 'src/lib/evalRemotionJSX.ts'), 'utf8');
     const exportRuntime = fs.readFileSync(path.join(root, 'src/remotion/DynamicDesign.tsx'), 'utf8');
     const scopeNames = fs.readFileSync(path.join(root, 'src/lib/remotion-code-normalization.ts'), 'utf8');
-    expect(preview).toContain('MakaronCaptionOverlay');
-    expect(exportRuntime).toContain('MakaronCaptionOverlay');
-    expect(scopeNames).toContain("'MakaronCaptionOverlay'");
+    expect(preview).not.toContain('MakaronCaptionOverlay');
+    expect(exportRuntime).not.toContain('MakaronCaptionOverlay');
+    expect(scopeNames).not.toContain('MakaronCaptionOverlay');
   });
 });

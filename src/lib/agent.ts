@@ -2350,10 +2350,10 @@ For approval_policy=auto, gated artifacts are approved automatically and recorde
                         : undefined;
                       const captionError = validateCaptionCues(props?.captions, Number(animation?.durationInSeconds));
                       if (captionError) return { success: false, error: captionError };
-                      if (!/<MakaronCaptionOverlay\b/.test(String(design.code || ''))) {
+                      if (!/\bcaptions\b/.test(String(design.code || ''))) {
                         return {
                           success: false,
-                          error: 'Subtitles are required, but the composition does not render the injected MakaronCaptionOverlay. Static scene labels are not timed subtitles.',
+                          error: 'Subtitles are required, but the composition code does not use the hydrated props.captions timing data. Render those cues with a project-specific subtitle component; static scene labels are not timed subtitles.',
                         };
                       }
                     }

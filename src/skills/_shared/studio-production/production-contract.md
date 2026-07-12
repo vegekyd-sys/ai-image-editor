@@ -86,8 +86,9 @@ work the same across video types.
   the ending, and required audio URLs pass the Composition draft gate.
 - When subtitles are promised, use the durable word-level cue sheet returned by
   `transcribe_audio`: pass `captionCuePath` in composition props and render the
-  injected `MakaronCaptionOverlay`. This is a working artifact between ASR and
-  Composition, not a new Studio stage and not a creative constraint on scenes.
+  hydrated `props.captions` with a project-specific subtitle component. This is
+  a working artifact between ASR and Composition, not a new Studio stage and
+  not a visual style constraint.
 - After one clean gate, publish that exact `design_path` once and materialize it
   once. Do not export a timeline `media_index` that may point to an older
   snapshot. If the draft changes, recheck only affected boundaries plus the

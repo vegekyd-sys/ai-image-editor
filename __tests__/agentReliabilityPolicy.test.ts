@@ -61,7 +61,7 @@ describe('agent reliability policy', () => {
     expect(agent).toContain('hydrateCaptionCueProps');
     expect(agent).toContain('run.deliveryPromise.subtitlesRequired');
     expect(contract).toContain('durable word-level cue sheet');
-    expect(composition).toContain('MakaronCaptionOverlay');
+    expect(composition).toContain('build a subtitle component');
   });
 
   it('stops repeated MP4 export attempts for an unchanged composition', () => {

@@ -121,7 +121,9 @@ wrong or expensive.
    for subtitle timing. Keep the returned `captionCuePath`; pass it unchanged as
    `props.captionCuePath` in `run_code`. The harness loads the full cue sheet into
    `props.captions`, so long subtitles do not consume model context. Do not rely
-   only on estimated text length timing when ASR is available.
+   only on estimated text length timing when ASR is available. Put the path in
+   the first composition payload; do not `read_file` the cue sheet, manually
+   convert its words, or add subtitles in a later patch.
 13. Decide the audio layer:
    - Exact spoken narration -> `generate_voiceover`.
    - Prompt-first music bed, ambience, sound effects, UI blips, risers, impacts,
@@ -189,10 +191,11 @@ Every explainer video must have subtitles unless the user explicitly declines.
   per-character effects that make reading harder.
 - Subtitle cue timing must come from the TTS audio timeline when possible:
   use ASR from `transcribe_audio` after generating voiceover.
-- Render `props.captions` with the injected `<MakaronCaptionOverlay
-  words={props.captions} />`. It is available in both preview and export without
-  imports. Static scene labels or one caption per scene do not replace timed
-  subtitles.
+- Render `props.captions` with a project-specific subtitle component written in
+  the composition. The cue data is standardized; the visual treatment is not.
+  Choose phrase grouping, placement, typography, highlighting, and background
+  treatment to suit the subject and art direction. Static scene labels or one
+  caption per scene do not replace timed subtitles.
 - Scene timing and subtitle cues must share the same FPS/timebase.
 - Treat narration timestamps as edit decisions: reveal the visual evidence,
   label, stat, or action at the absolute moment the narration refers to it, not
