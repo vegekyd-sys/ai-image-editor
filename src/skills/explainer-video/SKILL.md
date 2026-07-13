@@ -118,12 +118,12 @@ wrong or expensive.
    overly long narration.
 12. After `generate_voiceover`, call `transcribe_audio({ media_url: audioUrl })`
    on the returned public audio URL. Use the real ASR utterance/word timecodes
-   for subtitle timing. Keep the returned `captionCuePath`; pass it unchanged as
-   `props.captionCuePath` in `run_code`. The harness loads the full cue sheet into
-   `props.captions`, so long subtitles do not consume model context. Do not rely
-   only on estimated text length timing when ASR is available. Put the path in
-   the first composition payload; do not `read_file` the cue sheet, manually
-   convert its words, or add subtitles in a later patch.
+   for subtitle timing. In the first composition, write the project-specific
+   subtitle renderer against `props.captions`; `run_code` automatically finds
+   the latest project cue sheet, stores its `captionCuePath`, and injects the
+   full cue array. Long subtitles therefore do not consume model context. Do
+   not `read_file` the cue sheet, manually convert its words, construct a second
+   caption array, or add subtitles in a later patch.
 13. Decide the audio layer:
    - Exact spoken narration -> `generate_voiceover`.
    - Prompt-first music bed, ambience, sound effects, UI blips, risers, impacts,

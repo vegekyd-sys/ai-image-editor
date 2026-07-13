@@ -600,13 +600,22 @@ function formatTranscriptForModel(transcript: VolcengineAsrTranscript, includeWo
 }
 
 async function hydrateCaptionCueProps<T extends {
+  code?: string;
   props?: Record<string, unknown>;
   animation?: { fps?: number };
 }>(
   ctx: AgentContext,
   composition: T,
 ): Promise<T> {
-  const cuePath = composition.props?.captionCuePath;
+  let cuePath = typeof composition.props?.captionCuePath === 'string'
+    ? composition.props.captionCuePath
+    : (ctx as any).__lastCaptionCuePath;
+  if (typeof cuePath !== 'string' && /\bcaptions\b/.test(String(composition.code || '')) && ctx.supabase && ctx.userId) {
+    const cueFiles = await workspace.listFiles(`${ctx.projectId}/captions/*.json`, ctx.supabase, ctx.userId);
+    cuePath = cueFiles
+      .filter(file => file.path.startsWith(`${ctx.projectId}/captions/`))
+      .sort((a, b) => Date.parse(b.updatedAt || '') - Date.parse(a.updatedAt || ''))[0]?.path;
+  }
   if (typeof cuePath !== 'string') return composition;
   if (!cuePath.startsWith(`${ctx.projectId}/`) || !ctx.supabase || !ctx.userId) {
     throw new Error(`captionCuePath must be a readable file inside ${ctx.projectId}/`);
@@ -618,7 +627,7 @@ async function hydrateCaptionCueProps<T extends {
   const cueError = validateCaptionCues(captions);
   if (cueError) throw new Error(cueError);
   const renderCaptions = addCaptionRenderingAliases(captions, Number(composition.animation?.fps || 30));
-  return { ...composition, props: { ...composition.props, captions: renderCaptions } };
+  return { ...composition, props: { ...composition.props, captionCuePath: cuePath, captions: renderCaptions } };
 }
 
 async function validateCompositionMediaAspect(
@@ -2061,6 +2070,7 @@ For timeline videos, pass media_index. For external audio/video URLs, pass media
               ctx.userId,
               'application/json',
             );
+            (ctx as any).__lastCaptionCuePath = captionCuePath;
           }
           return { transcript, captions: cueSheet.captions, captionCuePath, cached, media_index, videoUrl: transcript.sourceUrl || resolvedUrl };
         };
@@ -2143,7 +2153,7 @@ For timeline videos, pass media_index. For external audio/video URLs, pass media
             text: [
               `${output.cached ? 'Cached ' : ''}ASR result${output.media_index ? ` for <<<media_${output.media_index}>>>` : ''}:`,
               output.captionCuePath
-                ? `Word-level caption cue sheet: ${output.captionCuePath}\nFor a Remotion composition, set props.captionCuePath to this path. run_code injects the full props.captions array without copying it through model context.`
+                ? `Word-level caption cue sheet: ${output.captionCuePath}\nFor a Remotion composition, write the project-specific renderer against props.captions. run_code automatically attaches the latest cue sheet and injects both millisecond and frame aliases; do not read, copy, or reshape the cue file in model context.`
                 : 'No durable caption cue sheet was written; use the returned word timings directly.',
               '',
               formatTranscriptForModel(transcript, !output.captionCuePath),

@@ -93,16 +93,17 @@ Available APIs include all exports from `remotion`, `@remotion/media`, `@remotio
   that via the `{ type: 'render', code, ... }` wrapper.
 - Only `Composition(props)` may read `props` directly. Helper components must receive every value they use as function parameters, e.g. `function TitleCard({ title, subtitle }) { ... }`; never reference outer `props` inside `TitleCard`, `Scene`, `Card`, or other helpers.
 - Use Remotion `<Img>`, never HTML `<img>`.
-- For ASR-timed subtitles, pass the `captionCuePath` returned by
-  `transcribe_audio` in composition props. `run_code` hydrates
+- For ASR-timed subtitles, write the project-specific renderer against
+  `props.captions` in the first composition. `run_code` automatically finds the
+  latest project cue sheet, persists its `captionCuePath`, and hydrates
   `props.captions`. Each cue contains `{ word, startMs, endMs, text,
   startFrame, endFrame }`; the frame aliases use this composition's FPS. Build a
   subtitle component whose layout, phrase grouping,
   type, color, placement, and active-word treatment fit this video's subject.
-  Put `captionCuePath` in the first composition payload. Do not read the cue
-  file, manually convert/copy a large cue array through model context, add it in
-  a cleanup patch, use a fixed universal subtitle style, or replace subtitles
-  with static scene labels.
+  Do not read the cue file, manually convert/copy a large cue array through
+  model context, construct another caption schema, add it in a cleanup patch,
+  use a fixed universal subtitle style, or replace subtitles with static scene
+  labels.
 - Use Remotion `<Video>` or `<OffthreadVideo>`, never HTML `<video>`.
 - Use `<Sequence>` for every scene or clip so media mounts only when needed.
 - Use `trimBefore`, `trimAfter`, `playbackRate`, and `volume` on `<Video>` for non-destructive timeline edits.
