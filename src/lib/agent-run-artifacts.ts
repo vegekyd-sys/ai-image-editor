@@ -4,7 +4,7 @@ interface StudioRunToolHistoryRow {
 }
 
 export interface StudioDeliveryVideo {
-  url: string;
+  outputPath: string;
   editableSourcePath?: string;
   createdAt?: string;
 }
@@ -25,13 +25,13 @@ export function extractStudioDeliveryVideo(
     const outputPath = typeof artifact?.outputPath === 'string'
       ? artifact.outputPath.trim()
       : '';
-    if (!/^https?:\/\//i.test(outputPath)) continue;
+    if (!outputPath) continue;
 
     const editableSourcePath = typeof artifact?.editableSourcePath === 'string'
       ? artifact.editableSourcePath.trim()
       : '';
     return {
-      url: outputPath,
+      outputPath,
       ...(editableSourcePath ? { editableSourcePath } : {}),
       ...(row.created_at ? { createdAt: row.created_at } : {}),
     };

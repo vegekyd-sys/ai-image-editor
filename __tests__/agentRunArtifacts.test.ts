@@ -16,16 +16,16 @@ describe('agent run artifact recovery', () => {
         },
       },
     ])).toEqual({
-      url: 'https://cdn.example/final.mp4',
+      outputPath: 'https://cdn.example/final.mp4',
       editableSourcePath: 'project/code/final.json',
       createdAt: '2026-07-12T09:54:28Z',
     });
   });
 
-  it('ignores non-delivery and non-URL artifacts', () => {
+  it('accepts run-scoped workspace paths and ignores non-delivery artifacts', () => {
     expect(extractStudioDeliveryVideo([
       { input: { operation: 'put_artifact', stage: 'review', artifact: { outputPath: 'https://cdn.example/review.mp4' } } },
       { input: { operation: 'put_artifact', stage: 'delivery', artifact: { outputPath: 'project/media/final.mp4' } } },
-    ])).toBeNull();
+    ])).toEqual({ outputPath: 'project/media/final.mp4' });
   });
 });

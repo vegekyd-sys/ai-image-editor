@@ -6,6 +6,7 @@ import { isPermanentUrl } from '@/lib/supabase/storage';
 import { buildVideoFailureActions } from '@/lib/artifact-actions';
 import { dispatchAgentExecutionAttempt } from '@/lib/agent-execution-dispatch';
 import { extractStudioDeliveryVideo } from '@/lib/agent-run-artifacts';
+import { resolveWorkspaceFile } from '@/lib/workspace';
 
 type RunProject = { is_public?: boolean } | Array<{ is_public?: boolean }>;
 
@@ -367,7 +368,7 @@ export async function GET(
         .order('created_at', { ascending: false })
         .limit(20);
       const deliveryVideo = extractStudioDeliveryVideo(studioToolRows);
-      if (deliveryVideo && isPermanentUrl(deliveryVideo.url)) {
+      if (deliveryVideo) {
         const { data: candidateSnapshots } = await admin
           .from('snapshots')
           .select('id, image_url, video_meta, created_at')
@@ -376,24 +377,40 @@ export async function GET(
           .gte('created_at', run.started_at)
           .order('created_at', { ascending: false })
           .limit(20);
-        const deliveryIdentity = normalizeMediaIdentity(deliveryVideo.url);
+        let deliveryUrl = /^https?:\/\//i.test(deliveryVideo.outputPath)
+          ? deliveryVideo.outputPath
+          : undefined;
+        const deliveryIdentity = normalizeMediaIdentity(deliveryUrl);
         const snapshot = (candidateSnapshots ?? []).find(candidate => {
           const meta = candidate.video_meta as Record<string, unknown> | null;
-          return normalizeMediaIdentity(typeof meta?.videoUrl === 'string' ? meta.videoUrl : undefined) === deliveryIdentity;
+          const videoPath = typeof meta?.videoPath === 'string' ? meta.videoPath : undefined;
+          const videoUrl = typeof meta?.videoUrl === 'string' ? meta.videoUrl : undefined;
+          return videoPath === deliveryVideo.outputPath
+            || (deliveryIdentity !== null && normalizeMediaIdentity(videoUrl) === deliveryIdentity);
         });
         const meta = snapshot?.video_meta as Record<string, unknown> | null;
+        if (!deliveryUrl && typeof meta?.videoUrl === 'string') deliveryUrl = meta.videoUrl;
+        if (!deliveryUrl && !/^https?:\/\//i.test(deliveryVideo.outputPath)) {
+          const handle = await resolveWorkspaceFile(deliveryVideo.outputPath, admin, ownerUserId);
+          if (typeof handle?.storageUrl === 'string') deliveryUrl = handle.storageUrl;
+        }
+        if (!deliveryUrl || !isPermanentUrl(deliveryUrl)) {
+          deliveryUrl = undefined;
+        }
+        const resolvedDeliveryIdentity = normalizeMediaIdentity(deliveryUrl);
         const taskId = typeof meta?.taskId === 'string' ? meta.taskId : `studio-delivery-${runId}`;
         const alreadyIndexed = output.some(item =>
           item.type === 'video'
           && ((snapshot?.id && item.snapshot_id === snapshot.id)
-            || normalizeMediaIdentity(typeof item.url === 'string' ? item.url : undefined) === deliveryIdentity)
+            || (resolvedDeliveryIdentity !== null
+              && normalizeMediaIdentity(typeof item.url === 'string' ? item.url : undefined) === resolvedDeliveryIdentity))
         );
-        if (!alreadyIndexed) {
+        if (deliveryUrl && !alreadyIndexed) {
           output.push({
             id: `out_${++outputSeq}`,
             type: 'video',
             status: 'completed',
-            url: deliveryVideo.url,
+            url: deliveryUrl,
             task_id: taskId,
             snapshot_id: snapshot?.id,
             poster_url: snapshot?.image_url,
@@ -406,7 +423,7 @@ export async function GET(
             taskId,
             prompt: typeof meta?.prompt === 'string' ? meta.prompt : undefined,
             status: 'completed',
-            videoUrl: deliveryVideo.url,
+            videoUrl: deliveryUrl,
             completionActions: meta?.completionActions,
           });
         }
