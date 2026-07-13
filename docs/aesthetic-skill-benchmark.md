@@ -13,16 +13,17 @@ harness. Human preference decides the winner; the Agent does not self-rank.
 - Language: Chinese
 - Subject: Makaron, a one-person AI creative studio
 - Reference role: Pixel Wizard and Spark must be recognizable visual subjects,
-  and may be used to generate derivative poses/forms.
+  with exactly three meaningful derivative character/image roles generated from
+  the reference.
 - Workflow: `explainer-video`, auto approval, editable Remotion, voiceover,
   background music, ASR-timed subtitles, final MP4
-- Asset budget: the reference board plus no more than three generated derivative
+- Asset budget: the reference board plus exactly three generated derivative
   character/image roles; no provider-generated video inserts
 
 ## Locked Prompt
 
 ```text
-做一条30秒中文16:9的Makaron explainer video。使用我上传的Makaron mascot参考图：Pixel Wizard是引导角色，Spark是创作能量；可以基于参考图生成更多有意义的角色姿态或形态。讲清楚一个人如何在Makaron里从想法出发，调用AI完成图片、视频、声音和编辑，最后交付一条完整作品。要有完整旁白、背景音乐、与声音同步且符合画面主题的字幕，并在结尾明确出现Makaron。自动推进到最终MP4，不要向我确认。
+做一条30秒中文16:9的Makaron explainer video。使用我上传的Makaron mascot参考图：Pixel Wizard是引导角色，Spark是创作能量；基于参考图生成恰好3个有意义的衍生角色素材，不使用provider生成的视频插入。旁白全文固定为：“一个想法，常常卡在制作的第一步。打开 Makaron，Pixel Wizard 把它变成创作任务。Spark 点亮图像，AI 让画面动起来，再加入旁白、音乐和字幕。调整节奏、构图与细节，让图片、视频、声音和编辑汇成完整作品。从念头到交付，这就是 Makaron，一人也能拥有的 AI 创作工作室。”不得改写、增删或调换旁白。要有背景音乐、与声音同步且符合画面主题的字幕，并在结尾明确出现Makaron。自动推进到最终MP4，不要向我确认。
 ```
 
 Do not add the lens name, benchmark language, or extra creative direction to the

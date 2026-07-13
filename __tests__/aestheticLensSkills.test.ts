@@ -37,7 +37,7 @@ describe('aesthetic lens benchmark skills', () => {
     expect(contract).toContain('unlimited aggregate source');
     expect(contract).toContain('Human A/B preference');
     expect(benchmark).toContain('30 seconds');
-    expect(benchmark).toContain('no more than three generated');
+    expect(benchmark).toContain('exactly three generated');
     expect(benchmark).toContain('no provider-generated video inserts');
     expect(benchmark).toContain('first Composition autosave');
   });
