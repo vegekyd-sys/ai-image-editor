@@ -13,7 +13,7 @@ import {
   type AgentModelPreference,
 } from '@/lib/agent-models';
 
-export const maxDuration = 800;
+export const maxDuration = 1800;
 
 /**
  * POST /api/agent/run — Fire-and-forget agent execution.

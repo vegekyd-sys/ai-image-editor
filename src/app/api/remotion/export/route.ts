@@ -9,7 +9,7 @@ import {
   type RemotionRenderProfile,
 } from '@/lib/remotion-export'
 
-export const maxDuration = 800
+export const maxDuration = 1800
 
 function appUrl(req: NextRequest): string {
   return process.env.MAKARON_APP_URL || new URL(req.url).origin

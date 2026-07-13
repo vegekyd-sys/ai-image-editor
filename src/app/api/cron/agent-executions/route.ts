@@ -2,7 +2,7 @@ import { after, NextRequest, NextResponse } from 'next/server';
 import { getSupabaseAdmin } from '@/lib/supabase/service';
 import { runAgentExecutionAttempt } from '@/lib/agent-execution-runner';
 
-export const maxDuration = 800;
+export const maxDuration = 1800;
 
 export async function GET(req: NextRequest) {
   if (req.headers.get('authorization') !== `Bearer ${process.env.CRON_SECRET}`) {
@@ -31,4 +31,3 @@ export async function GET(req: NextRequest) {
   }
   return NextResponse.json({ scheduled: runIds.length, runIds });
 }
-

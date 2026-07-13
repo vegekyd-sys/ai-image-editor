@@ -2,7 +2,7 @@ import { after, NextRequest, NextResponse } from 'next/server';
 import { runAgentExecutionAttempt } from '@/lib/agent-execution-runner';
 import { verifyAgentExecutionDispatchToken } from '@/lib/agent-execution-dispatch';
 
-export const maxDuration = 800;
+export const maxDuration = 1800;
 
 export async function POST(
   req: NextRequest,
