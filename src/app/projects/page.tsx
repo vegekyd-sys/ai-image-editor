@@ -1185,8 +1185,7 @@ function ProjectsPageInner() {
       `}</style>
 
       <div
-        className={`mkr-page mkr-primary-surface makaron-projects-page${navigating ? ' page-slide-out' : ''}`}
-        data-makaron-surface="projects"
+        className={`mkr-page makaron-projects-page${navigating ? ' page-slide-out' : ''}`}
         data-page-instance={projectsPageInstanceIdRef.current}
         style={{
           minHeight: '100dvh',
@@ -1197,7 +1196,7 @@ function ProjectsPageInner() {
       >
 
         {/* Ambient glow — center at 40% so top is black, fades to purple below */}
-        <div className="mkr-surface-ambient" style={{
+        <div style={{
           position: 'fixed', top: 0, left: 0, right: 0,
           height: '520px', pointerEvents: 'none', zIndex: 0,
           background: 'radial-gradient(ellipse at 50% 40%, rgba(217,70,239,0.22) 0%, transparent 65%)',
@@ -1227,29 +1226,27 @@ function ProjectsPageInner() {
           position: 'relative', zIndex: 1,
         }}>
           {/* Wordmark row: Makaron Spark + Makaron */}
-          <div className="mkr-surface-brand flex flex-col items-center">
+          <div style={{
+            display: 'flex', alignItems: 'center', gap: '12px',
+          }}>
+            <MakaronSpark size="clamp(34px, 6vw, 52px)" />
+
+            {/* Wordmark */}
             <div style={{
-              display: 'flex', alignItems: 'center', gap: '12px',
+              ...MAKARON_WORDMARK_STYLE,
+              fontSize: 'clamp(3rem, 12vw, 5rem)',
             }}>
-              <MakaronSpark size="clamp(34px, 6vw, 52px)" />
-
-              {/* Wordmark */}
-              <div style={{
-                ...MAKARON_WORDMARK_STYLE,
-                fontSize: 'clamp(3rem, 12vw, 5rem)',
-              }}>
-                Makaron
-              </div>
-            </div>
-
-            {/* Subtitle */}
-            <div style={{ marginTop: '4px' }}>
-              <RollingTagline className="text-[1.25rem] tracking-wide" />
+              Makaron
             </div>
           </div>
 
+          {/* Subtitle */}
+          <div style={{ marginTop: '4px' }}>
+            <RollingTagline className="text-[1.25rem] tracking-wide" />
+          </div>
+
           {/* Create input: shared component */}
-          <div className="mkr-surface-composer" style={{ marginTop: '32px', width: '100%', padding: '0 16px', maxWidth: '480px' }}>
+          <div style={{ marginTop: '32px', width: '100%', padding: '0 16px', maxWidth: '480px' }}>
             <CreateInputBox
               input={createInput}
               slotWidth={photoSlotWidth}

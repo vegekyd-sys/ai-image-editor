@@ -1591,11 +1591,7 @@ function HomePageInner() {
         .hide-scrollbar::-webkit-scrollbar { display: none; }
       `}</style>
 
-      <div
-        className="mkr-page mkr-primary-surface"
-        data-makaron-surface="explore"
-        style={{ minHeight: '100dvh', background: '#000', color: '#fff', overflowX: 'hidden', display: 'flex', flexDirection: 'column' }}
-      >
+      <div className="mkr-page" style={{ minHeight: '100dvh', background: '#000', color: '#fff', overflowX: 'hidden', display: 'flex', flexDirection: 'column' }}>
         <input
           ref={skillFileRef}
           type="file"
@@ -1609,7 +1605,7 @@ function HomePageInner() {
         />
 
         {/* Ambient glow */}
-        <div className="mkr-surface-ambient" style={{
+        <div style={{
           position: 'fixed', top: 0, left: 0, right: 0,
           height: '520px', pointerEvents: 'none', zIndex: Z.AMBIENT,
           background: 'radial-gradient(ellipse at 50% 40%, rgba(217,70,239,0.22) 0%, transparent 65%)',
@@ -1628,23 +1624,21 @@ function HomePageInner() {
           <div className="pointer-events-none absolute top-[-80px] left-1/2 -translate-x-1/2 w-[700px] h-[600px] rounded-full bg-[radial-gradient(ellipse,#d946ef18_0%,transparent_70%)]" />
 
           <div className="relative z-10 flex flex-col items-center text-center pt-10 lg:pt-16 px-6 max-w-[660px]">
-            <div className="mkr-surface-brand flex flex-col items-center">
-              <MakaronLogo
-                markSize="clamp(34px, 6vw, 52px)"
-                className="mt-4"
-                textClassName="text-[52px] lg:text-[88px] font-extrabold tracking-[-0.04em] leading-[1]"
-              />
-              <p className="mt-3 leading-tight">
-                <RollingTagline className="text-2xl lg:text-[32px]" />
-              </p>
-            </div>
+            <MakaronLogo
+              markSize="clamp(34px, 6vw, 52px)"
+              className="mt-4"
+              textClassName="text-[52px] lg:text-[88px] font-extrabold tracking-[-0.04em] leading-[1]"
+            />
+            <p className="mt-3 leading-tight">
+              <RollingTagline className="text-2xl lg:text-[32px]" />
+            </p>
             <p className="mt-6 text-[15px] lg:text-lg text-[#a1a1aa] leading-relaxed max-w-[480px]">
               {t('landing.heroDesc1')}<br />{t('landing.heroDesc2')}
             </p>
           </div>
 
           {/* ── Inline Input Box ── */}
-          <div ref={inlineInputRef} data-makaron-home-inline-composer="true" className="mkr-surface-composer relative z-10" style={{
+          <div ref={inlineInputRef} data-makaron-home-inline-composer="true" className="relative z-10" style={{
             marginTop: '32px', width: '100%', maxWidth: '480px', padding: '0 16px',
             ...(isIOSAppShell && showFixedInput && !selectedDetail ? { opacity: 0, pointerEvents: 'none' as const } : {}),
           }}>
