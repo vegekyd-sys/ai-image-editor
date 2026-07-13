@@ -25,6 +25,8 @@ describe('iOS attribution release contract', () => {
     expect(plugin).toContain('Settings.shared.isAdvertiserIDCollectionEnabled = false')
     expect(plugin).toContain('Settings.shared.isAutoLogAppEventsEnabled = true')
     expect(plugin).toContain('Settings.shared.isSKAdNetworkReportEnabled = true')
+    expect(plugin).toContain('#if DEBUG')
+    expect(plugin).toContain('Settings.shared.loggingBehaviors.insert(.networkRequests)')
     expect(plugin).toContain('ApplicationDelegate.shared.application')
     expect(plugin.indexOf('ApplicationDelegate.shared.application')).toBeLessThan(
       plugin.indexOf('Settings.shared.isAdvertiserIDCollectionEnabled = false'),
@@ -32,6 +34,7 @@ describe('iOS attribution release contract', () => {
     expect(plugin).toContain('AppEvents.Name.completedRegistration')
     expect(plugin).toContain('AppEvents.Name.customizeProduct')
     expect(plugin).toContain('AppEvents.Name.initiatedCheckout')
+    expect(plugin.match(/AppEvents\.shared\.flush\(\)/g)).toHaveLength(3)
     expect(plugin).not.toContain('AppEvents.shared.userID')
     expect(appDelegate).toContain('MetaAppEventsLifecycle.application')
   })

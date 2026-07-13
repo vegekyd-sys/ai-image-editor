@@ -9,6 +9,10 @@ public enum MetaAppEventsLifecycle {
         _ application: UIApplication,
         didFinishLaunchingWithOptions launchOptions: [UIApplication.LaunchOptionsKey: Any]?
     ) -> Bool {
+        #if DEBUG
+        Settings.shared.loggingBehaviors.insert(.appEvents)
+        Settings.shared.loggingBehaviors.insert(.networkRequests)
+        #endif
         let initialized = ApplicationDelegate.shared.application(
             application,
             didFinishLaunchingWithOptions: launchOptions
@@ -38,6 +42,8 @@ public class MetaAppEventsPlugin: CAPPlugin, CAPBridgedPlugin {
     ])
 
     @objc func initialize(_ call: CAPPluginCall) {
+        // Flush the automatic activation/install event as soon as the web bridge is ready.
+        AppEvents.shared.flush()
         var payload: JSObject = [
             "initialized": true,
             "anonymousId": AppEvents.shared.anonymousID
@@ -74,6 +80,8 @@ public class MetaAppEventsPlugin: CAPPlugin, CAPBridgedPlugin {
         } else {
             AppEvents.shared.logEvent(name, parameters: parameters)
         }
+        // Funnel events are low-volume and should reach Meta before the app is suspended.
+        AppEvents.shared.flush()
         call.resolve(["tracked": true])
     }
 
