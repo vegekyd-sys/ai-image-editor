@@ -98,6 +98,9 @@ Available APIs include all exports from `remotion`, `@remotion/media`, `@remotio
   latest project cue sheet, persists its `captionCuePath`, and hydrates
   `props.captions`. Each cue contains `{ word, startMs, endMs, text,
   startFrame, endFrame }`; the frame aliases use this composition's FPS. Build a
+  subtitle component from these cues directly. For generated voiceover, the
+  cue words and punctuation are already aligned to the exact TTS script while
+  retaining ASR timing; do not perform another spelling-correction pass. Build a
   subtitle component whose layout, phrase grouping,
   type, color, placement, and active-word treatment fit this video's subject.
   Do not read the cue file, manually convert/copy a large cue array through

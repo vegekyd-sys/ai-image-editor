@@ -1,7 +1,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { describe, expect, it } from 'vitest';
-import { addCaptionRenderingAliases, captionsFromTranscript, makeCaptionCueSheet, validateCaptionCues } from '../src/lib/caption-cues';
+import { addCaptionRenderingAliases, alignCaptionWordsToReference, captionTokensFromReferenceText, captionsFromTranscript, makeCaptionCueSheet, validateCaptionCues } from '../src/lib/caption-cues';
 import type { VolcengineAsrTranscript } from '../src/lib/volcengine-asr';
 
 const transcript: VolcengineAsrTranscript = {
@@ -34,8 +34,40 @@ describe('word-level caption cues', () => {
     expect(makeCaptionCueSheet(transcript)).toMatchObject({
       version: '1.0',
       source: 'volcengine-asr',
+      lexicalSource: 'volcengine-asr',
       requestId: 'request-1',
       durationMs: 1800,
+    });
+  });
+
+  it('uses the exact voiceover wording and punctuation without changing ASR timing', () => {
+    const raw = [
+      { word: '打', startMs: 100, endMs: 200 },
+      { word: '开', startMs: 200, endMs: 300 },
+      { word: 'Macrom', startMs: 300, endMs: 900 },
+    ];
+    expect(captionTokensFromReferenceText('打开 Makaron。')).toEqual(['打', '开', 'Makaron。']);
+    expect(alignCaptionWordsToReference(raw, '打开 Makaron。')).toEqual([
+      { word: '打', startMs: 100, endMs: 200 },
+      { word: '开', startMs: 200, endMs: 300 },
+      { word: 'Makaron。', startMs: 300, endMs: 900 },
+    ]);
+    expect(alignCaptionWordsToReference(raw, 'token count')).toBe(raw);
+    expect(makeCaptionCueSheet({
+      ...transcript,
+      utterances: [{
+        text: '打开 Macrom',
+        startMs: 100,
+        endMs: 900,
+        words: raw.map(cue => ({ text: cue.word, startMs: cue.startMs, endMs: cue.endMs })),
+      }],
+    }, '打开 Makaron。')).toMatchObject({
+      lexicalSource: 'voiceover-script',
+      captions: [
+        { word: '打', startMs: 100, endMs: 200 },
+        { word: '开', startMs: 200, endMs: 300 },
+        { word: 'Makaron。', startMs: 300, endMs: 900 },
+      ],
     });
   });
 

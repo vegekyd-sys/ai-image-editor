@@ -15,13 +15,46 @@ export interface MakaronRenderCaption extends MakaronWordCaption {
 export interface MakaronCaptionCueSheet {
   version: '1.0';
   source: 'volcengine-asr';
+  lexicalSource: 'volcengine-asr' | 'voiceover-script';
   requestId: string;
   durationMs: number | null;
   captions: MakaronWordCaption[];
 }
 
-export function captionsFromTranscript(transcript: VolcengineAsrTranscript): MakaronWordCaption[] {
-  return transcript.utterances.flatMap(utterance => utterance.words)
+const REFERENCE_TOKEN = /[\p{Script=Han}\p{Script=Hiragana}\p{Script=Katakana}\p{Script=Hangul}]|[\p{L}\p{N}]+(?:['’._+-][\p{L}\p{N}]+)*|[，。！？、；：,.!?;:]/gu;
+const REFERENCE_PUNCTUATION = /^[，。！？、；：,.!?;:]$/u;
+
+export function captionTokensFromReferenceText(text: string): string[] {
+  const tokens: string[] = [];
+  for (const match of text.matchAll(REFERENCE_TOKEN)) {
+    const token = match[0];
+    if (REFERENCE_PUNCTUATION.test(token)) {
+      if (tokens.length > 0) tokens[tokens.length - 1] += token;
+      continue;
+    }
+    tokens.push(token);
+  }
+  return tokens;
+}
+
+export function alignCaptionWordsToReference(
+  captions: MakaronWordCaption[],
+  referenceText?: string,
+): MakaronWordCaption[] {
+  if (!referenceText?.trim()) return captions;
+  const referenceTokens = captionTokensFromReferenceText(referenceText);
+  if (referenceTokens.length !== captions.length) return captions;
+  return captions.map((caption, index) => ({
+    ...caption,
+    word: referenceTokens[index],
+  }));
+}
+
+export function captionsFromTranscript(
+  transcript: VolcengineAsrTranscript,
+  referenceText?: string,
+): MakaronWordCaption[] {
+  const captions = transcript.utterances.flatMap(utterance => utterance.words)
     .filter(word => (
       word.text.trim().length > 0
       && typeof word.startMs === 'number'
@@ -36,15 +69,25 @@ export function captionsFromTranscript(transcript: VolcengineAsrTranscript): Mak
       endMs: word.endMs as number,
     }))
     .sort((a, b) => a.startMs - b.startMs || a.endMs - b.endMs);
+  return alignCaptionWordsToReference(captions, referenceText);
 }
 
-export function makeCaptionCueSheet(transcript: VolcengineAsrTranscript): MakaronCaptionCueSheet {
+export function makeCaptionCueSheet(
+  transcript: VolcengineAsrTranscript,
+  referenceText?: string,
+): MakaronCaptionCueSheet {
+  const rawCaptions = captionsFromTranscript(transcript);
+  const referenceTokens = referenceText ? captionTokensFromReferenceText(referenceText) : [];
+  const canAlignReference = referenceTokens.length > 0 && referenceTokens.length === rawCaptions.length;
   return {
     version: '1.0',
     source: 'volcengine-asr',
+    lexicalSource: canAlignReference ? 'voiceover-script' : 'volcengine-asr',
     requestId: transcript.requestId,
     durationMs: transcript.durationMs,
-    captions: captionsFromTranscript(transcript),
+    captions: canAlignReference
+      ? alignCaptionWordsToReference(rawCaptions, referenceText)
+      : rawCaptions,
   };
 }
 

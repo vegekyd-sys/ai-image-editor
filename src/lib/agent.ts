@@ -630,6 +630,31 @@ async function hydrateCaptionCueProps<T extends {
   return { ...composition, props: { ...composition.props, captionCuePath: cuePath, captions: renderCaptions } };
 }
 
+async function resolveVoiceoverCaptionReference(
+  ctx: AgentContext,
+  audioUrl?: string,
+): Promise<string | undefined> {
+  if (!audioUrl) return undefined;
+  const inMemory = (ctx as any).__voiceoverTextByUrl?.[audioUrl];
+  if (typeof inMemory === 'string' && inMemory.trim()) return inMemory;
+  if (!ctx.supabase || !ctx.userId) return undefined;
+
+  const { data, error } = await ctx.supabase
+    .from('project_music')
+    .select('prompt,tags')
+    .eq('project_id', ctx.projectId)
+    .eq('user_id', ctx.userId)
+    .eq('audio_url', audioUrl)
+    .limit(1);
+  if (error) {
+    console.warn('[transcribe_audio] voiceover script lookup failed:', error.message);
+    return undefined;
+  }
+  const row = data?.[0] as { prompt?: unknown; tags?: unknown } | undefined;
+  if (typeof row?.tags !== 'string' || !row.tags.split(',').includes('voiceover')) return undefined;
+  return typeof row.prompt === 'string' && row.prompt.trim() ? row.prompt : undefined;
+}
+
 async function validateCompositionMediaAspect(
   ctx: AgentContext,
   result: { code: string; props?: Record<string, unknown>; width?: number; height?: number },
@@ -2059,7 +2084,11 @@ For timeline videos, pass media_index. For external audio/video URLs, pass media
         let snapshotId: string | undefined;
         let videoMeta: Record<string, unknown> | undefined;
         const withCueSheet = async (transcript: VolcengineAsrTranscript, cached: boolean) => {
-          const cueSheet = makeCaptionCueSheet(transcript);
+          const referenceText = await resolveVoiceoverCaptionReference(
+            ctx,
+            resolvedUrl || transcript.sourceUrl,
+          );
+          const cueSheet = makeCaptionCueSheet(transcript, referenceText);
           let captionCuePath: string | undefined;
           if (ctx.supabase && ctx.userId && cueSheet.captions.length > 0) {
             captionCuePath = `${ctx.projectId}/captions/${transcript.requestId}.json`;
@@ -2072,7 +2101,15 @@ For timeline videos, pass media_index. For external audio/video URLs, pass media
             );
             (ctx as any).__lastCaptionCuePath = captionCuePath;
           }
-          return { transcript, captions: cueSheet.captions, captionCuePath, cached, media_index, videoUrl: transcript.sourceUrl || resolvedUrl };
+          return {
+            transcript,
+            captions: cueSheet.captions,
+            captionCuePath,
+            captionLexicalSource: cueSheet.lexicalSource,
+            cached,
+            media_index,
+            videoUrl: transcript.sourceUrl || resolvedUrl,
+          };
         };
 
         if (!resolvedUrl && media_index !== undefined) {
@@ -2153,7 +2190,7 @@ For timeline videos, pass media_index. For external audio/video URLs, pass media
             text: [
               `${output.cached ? 'Cached ' : ''}ASR result${output.media_index ? ` for <<<media_${output.media_index}>>>` : ''}:`,
               output.captionCuePath
-                ? `Word-level caption cue sheet: ${output.captionCuePath}\nFor a Remotion composition, write the project-specific renderer against props.captions. run_code automatically attaches the latest cue sheet and injects both millisecond and frame aliases; do not read, copy, or reshape the cue file in model context.`
+                ? `Word-level caption cue sheet: ${output.captionCuePath}\nFor a Remotion composition, write the project-specific renderer against props.captions. run_code automatically attaches the latest cue sheet and injects both millisecond and frame aliases; do not read, copy, reshape, or spelling-correct the cue file in model context.${output.captionLexicalSource === 'voiceover-script' ? ' Cue words and punctuation are already aligned to the exact generated voiceover script while retaining ASR timing.' : ''}`
                 : 'No durable caption cue sheet was written; use the returned word timings directly.',
               '',
               formatTranscriptForModel(transcript, !output.captionCuePath),
@@ -3962,6 +3999,10 @@ The generated audio becomes an Audio Index item (<<<audio_N>>>) in later turns. 
         }
 
         const audioIndex = addAudioAttachment(ctx, { audioUrl, title: trackTitle, trackIndex });
+        (ctx as any).__voiceoverTextByUrl = {
+          ...((ctx as any).__voiceoverTextByUrl ?? {}),
+          [audioUrl]: text,
+        };
 
         deductCredits(ctx.userId, null, 'create_voiceover', result.tts.model)
           .catch(e => console.error('[billing] generate_voiceover deduct error:', e));
