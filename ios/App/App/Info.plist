@@ -11,7 +11,7 @@
 	<key>FacebookAppID</key>
 	<string>1690601878920639</string>
 	<key>FacebookClientToken</key>
-	<string>$(FACEBOOK_CLIENT_TOKEN)</string>
+	<string>3aec175e7355013cc4a5a88ed8397499</string>
 	<key>FacebookDisplayName</key>
 	<string>Makaron</string>
 	<key>FacebookAutoLogAppEventsEnabled</key>

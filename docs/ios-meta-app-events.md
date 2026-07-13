@@ -16,7 +16,7 @@ Meta receives conversion signals directly from its SDK and uses them for Ads Man
 1. In Meta for Developers, open app `1690601878920639`.
 2. Add the iOS platform with bundle ID `app.makaron.ios` and App Store ID `6779672002`.
 3. Copy the app's Client Token from **App settings > Advanced > Security > Client token**.
-4. Add a user-defined Xcode build setting named `FACEBOOK_CLIENT_TOKEN` to the Makaron target for Debug and Release. The value is embedded into `FacebookClientToken` in `Info.plist` at build time.
+4. Confirm the Client Token is embedded as `FacebookClientToken` in `ios/App/App/Info.plist`. The release-readiness test rejects a missing token or build-setting placeholder.
 5. In Events Manager, connect the Meta app data source to the Makaron ad account and confirm app event measurement is enabled.
 6. Configure Aggregated Event Measurement priorities after events arrive. Start with `CompleteRegistration`; keep `InitiateCheckout`, `Subscribe`, and `Purchase` below it.
 
@@ -44,7 +44,7 @@ The bridge does not send Makaron's Supabase user UUID to Meta. First-party `mark
 
 ## Release verification
 
-1. Add the Client Token and make a fresh development build on a physical iPhone.
+1. Make a fresh development build on a physical iPhone.
 2. In Meta Events Manager, open **Test events** for the iOS app data source.
 3. Delete Makaron from the phone, reinstall it, launch it, and confirm an app activation appears.
 4. Open a skill, select a photo, create the project, and register.

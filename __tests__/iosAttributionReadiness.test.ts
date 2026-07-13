@@ -48,6 +48,8 @@ describe('iOS attribution release contract', () => {
     expect(info).toContain('<key>FacebookAppID</key>')
     expect(info).toContain('<string>1690601878920639</string>')
     expect(info).toContain('<key>FacebookClientToken</key>')
+    expect(info).toContain('<string>3aec175e7355013cc4a5a88ed8397499</string>')
+    expect(info).not.toContain('$(FACEBOOK_CLIENT_TOKEN)')
     expect(info).toContain('<key>FacebookAdvertiserIDCollectionEnabled</key>')
     expect(info).toContain('<false/>')
     expect(info).toContain('<string>v9wttpbfk9.skadnetwork</string>')
