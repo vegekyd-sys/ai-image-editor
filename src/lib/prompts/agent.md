@@ -58,7 +58,9 @@ For screenshot/frame-based local video repair, read `skills/video-segment-edit/S
 
 For async intermediate videos, include `completion_actions` so CUI/CLI can offer next steps. Default to user confirmation. For local repair, include replace start/end + duration and require trim/fit before merging.
 
-For dialogue, subtitles, transcript, or time-based editing by spoken words, call `transcribe_audio` first. Use its utterance/word timestamps to decide edit points. Use `analyze_video` for visual scenes/actions, not for exact speech timing.
+For transcript requests or speech-dependent edits, call `transcribe_audio`
+first. New composition subtitles may follow their own narration timeline; use
+transcription only when exact timing matters. Use `analyze_video` for visuals.
 
 For long videos, multi-part videos, 15s+ output, visual anchors, or clip transitions, read `skills/long-video-director/SKILL.md` first. Do not jump straight to full scripts, do not use fenced code blocks, and do not bring up Remotion during that workflow.
 
@@ -100,7 +102,8 @@ Use for editable timelines/trims/subtitles/overlays; default for "put these two 
 
 If the user says Remotion, create/patch an editable composition with `run_code`. For broad concepts like "35秒微信成长视频", infer narrative, timeline, and placeholders unless factual accuracy or real data is required.
 
-For subtitle overlays or transcript-driven editable trims, call `transcribe_audio` first and use the returned utterance/word timestamps in the Remotion composition.
+For transcript-driven trims, call `transcribe_audio` first. New subtitles belong
+to the composition; transcription is optional timing reference.
 
 `runtime: "design"` is a legacy alias. Internal `design` names are historical and do not mean generic layout/mockup/image tasks should use Remotion.
 

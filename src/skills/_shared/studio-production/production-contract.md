@@ -84,11 +84,10 @@ work the same across video types.
   visible frame into the minimum number of 2-6 frame `preview_frame` calls.
 - Do not publish or materialize until exact frame-count math, every boundary,
   the ending, and required audio URLs pass the Composition draft gate.
-- When subtitles are promised, use the durable word-level cue sheet returned by
-  `transcribe_audio`: pass `captionCuePath` in composition props and render the
-  hydrated `props.captions` with a project-specific subtitle component. This is
-  a working artifact between ASR and Composition, not a new Studio stage and
-  not a visual style constraint.
+- When subtitles are promised, author them as part of the Composition's own
+  scene design. `transcribe_audio` may provide editorial timing reference, but
+  the harness does not create a separate caption artifact, inject caption props,
+  impose a cue schema, or select a visual renderer.
 - After one clean gate, publish that exact `design_path` once and materialize it
   once. Do not export a timeline `media_index` that may point to an older
   snapshot. If the draft changes, recheck only affected boundaries plus the

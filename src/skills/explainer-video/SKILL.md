@@ -116,17 +116,13 @@ wrong or expensive.
    voiceover is more than 10% longer than the requested video, regenerate a
    shorter script or trim/fade it; never change the video duration to match an
    overly long narration.
-12. After `generate_voiceover`, call `transcribe_audio({ media_url: audioUrl })`
-   on the returned public audio URL. Use the real ASR utterance/word timecodes
-   for subtitle timing. In the first composition, write the project-specific
-   subtitle renderer against `props.captions`; `run_code` automatically finds
-   the latest project cue sheet, stores its `captionCuePath`, and injects the
-   full cue array. This authoritative array is rehydrated after every render
-   and patch, so treat it as read-only. Group phrases inside the renderer and
-   derive or clamp animation windows from each cue's real duration; a word cue
-   may span only a few frames. Long subtitles therefore do not consume model
-   context. Do not `read_file` the cue sheet, manually convert its words,
-   construct a second caption array, or add subtitles in a later patch.
+12. After `generate_voiceover`, use its script and duration to author any
+   subtitles or kinetic text directly in the first composition. Call
+   `transcribe_audio({ media_url: audioUrl })` only when real speech timestamps
+   will materially improve synchronization. It is a reference tool, not a
+   caption service: the harness does not generate cue files, inject caption
+   props, choose phrase boundaries, or impose a renderer. You own the wording,
+   timing, JSX, and visual treatment as part of the scene design.
 13. Decide the audio layer:
    - Exact spoken narration -> `generate_voiceover`.
    - Prompt-first music bed, ambience, sound effects, UI blips, risers, impacts,
@@ -182,34 +178,21 @@ silent, text-only, or voice-only output.
   Use the returned public `audioUrl` directly in Remotion `<Audio src={...}>`
   props/code. Never put `<<<audio_N>>>` inside composition props or `<Audio>`.
 
-## Subtitle Contract
+## Subtitles As Composition
 
 Every explainer video must have subtitles unless the user explicitly declines.
 
-- Render subtitles in the lower safe area, centered, with max width around
-  78-86% of the canvas.
-- Use a refined caption container: semi-transparent dark background, subtle
-  border or shadow, comfortable horizontal padding, 1-2 lines max.
-- Subtitles should enter elegantly: fade, slight rise, or type-on. Avoid noisy
-  per-character effects that make reading harder.
-- Subtitle cue timing must come from the TTS audio timeline when possible:
-  use ASR from `transcribe_audio` after generating voiceover.
-- Render `props.captions` with a project-specific subtitle component written in
-  the composition. The cue data is standardized; the visual treatment is not.
-  Every injected cue contains both `{ word, startMs, endMs }` and rendering
-  aliases `{ text, startFrame, endFrame }`, calculated from the composition FPS.
-  Use one timing pair consistently; do not invent another cue shape.
-  Choose phrase grouping, placement, typography, highlighting, and background
-  treatment to suit the subject and art direction. Static scene labels or one
-  caption per scene do not replace timed subtitles.
-- Scene timing and subtitle cues must share the same FPS/timebase.
-- Treat narration timestamps as edit decisions: reveal the visual evidence,
-  label, stat, or action at the absolute moment the narration refers to it, not
-  merely somewhere inside the same scene.
-- The active subtitle should support the current visual idea. If ASR splits a
-  sentence too finely, merge adjacent short cues without breaking timing.
-- Do not let subtitles cover the primary subject, charts, timeline labels, or
-  lower-third UI. Patch after `preview_frame` if needed.
+- Write subtitle text, timing data, JSX, and animation in the same composition
+  as the scenes they support. There is no required prop name, cue shape,
+  placement, container, or shared overlay.
+- Treat subtitles as part of the visual direction. A scene may use restrained
+  dialogue captions, kinetic typography, integrated labels, or another readable
+  treatment that fits its subject and composition.
+- Use the narration script and, when useful, `transcribe_audio` timestamps as
+  source material. Do not copy raw ASR output blindly; decide phrase boundaries
+  and timing as an editor.
+- Check representative speaking frames with `preview_frame` for readability,
+  synchronization, subject occlusion, and visual coherence before publishing.
 
 ## Generated Media And Sticker Inserts
 

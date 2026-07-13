@@ -9,7 +9,9 @@ Treat audio as part of the edit, not a final attachment.
 - Use `list_voiceover_voices` and choose a voice for the role, not only gender
   or accent.
 - Generate a short sample when voice identity materially affects the piece.
-- Transcribe generated narration and use real timecodes for subtitles.
+- When measured speech timing materially improves the edit, transcribe the
+  generated narration and use those timecodes as editorial reference. Do not
+  create a separate caption artifact or renderer.
 - If speech exceeds the locked duration by more than 10%, rewrite or tighten it;
   do not casually lengthen the video.
 

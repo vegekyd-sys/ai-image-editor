@@ -58,15 +58,14 @@ describe('agent reliability policy', () => {
     expect(contract).toContain('materialize it once');
     expect(review).toContain('## Composition Draft Gate');
     expect(review).toContain('generic hook/body/end sample is not enough');
-    expect(agent).toContain('hydrateCaptionCueProps');
-    expect(agent).toContain('run.deliveryPromise.subtitlesRequired');
-    expect(agent).toContain('usesFrameTiming');
-    expect(agent).toContain("`${ctx.projectId}/captions/*.json`");
-    expect(agent).toContain('__lastCaptionCuePath');
-    expect(agent).toContain('/caption|subtitle/i');
-    expect(agent).toContain('subtitle renderer must read props.captions directly');
-    expect(contract).toContain('durable word-level cue sheet');
-    expect(composition).toContain('subtitle component whose layout');
+    expect(agent).not.toContain('hydrateCaptionCueProps');
+    expect(agent).not.toContain('captionCuePath');
+    expect(agent).not.toContain('__lastCaptionCuePath');
+    expect(agent).not.toContain("`${ctx.projectId}/captions/*.json`");
+    expect(contract).toContain('author them as part of the Composition');
+    expect(contract).toContain('does not create a separate caption artifact');
+    expect(composition).toContain('authored directly inside this');
+    expect(composition).toContain('does not generate separate caption data');
   });
 
   it('stops repeated MP4 export attempts for an unchanged composition', () => {

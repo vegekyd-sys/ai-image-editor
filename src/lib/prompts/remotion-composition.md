@@ -93,25 +93,12 @@ Available APIs include all exports from `remotion`, `@remotion/media`, `@remotio
   that via the `{ type: 'render', code, ... }` wrapper.
 - Only `Composition(props)` may read `props` directly. Helper components must receive every value they use as function parameters, e.g. `function TitleCard({ title, subtitle }) { ... }`; never reference outer `props` inside `TitleCard`, `Scene`, `Card`, or other helpers.
 - Use Remotion `<Img>`, never HTML `<img>`.
-- For ASR-timed subtitles, write the project-specific renderer against
-  `props.captions` in the first composition. `run_code` automatically finds the
-  latest project cue sheet, persists its `captionCuePath`, and hydrates
-  `props.captions`. Each cue contains `{ word, startMs, endMs, text,
-  startFrame, endFrame }`; the frame aliases use this composition's FPS. Build a
-  subtitle component from these cues directly. For generated voiceover, the
-  cue words and punctuation are already aligned to the exact TTS script while
-  retaining ASR timing. Each `word`/`text` also preserves any required leading
-  whitespace and trailing punctuation, so concatenate cues directly rather than
-  inserting or stripping spaces. `props.captions` is authoritative and is
-  rehydrated after every render and patch; treat the array as read-only. Group
-  phrases inside the subtitle renderer, and derive or clamp animation windows
-  from each cue's real duration because a word cue may span only a few frames.
-  Do not perform another spelling-correction pass. Build a subtitle component whose layout, phrase grouping,
-  type, color, placement, and active-word treatment fit this video's subject.
-  Do not read the cue file, manually convert/copy a large cue array through
-  model context, construct another caption schema, add it in a cleanup patch,
-  use a fixed universal subtitle style, or replace subtitles with static scene
-  labels.
+- Subtitles, kinetic text, and scene labels are authored directly inside this
+  composition. The harness does not generate separate caption data, require a
+  shared cue schema, or provide a universal subtitle overlay. If
+  `transcribe_audio` was used, treat its timestamps as optional editorial
+  reference and choose the wording, grouping, timing, placement, typography,
+  and motion that best serve the current frame and art direction.
 - Use Remotion `<Video>` or `<OffthreadVideo>`, never HTML `<video>`.
 - Use `<Sequence>` for every scene or clip so media mounts only when needed.
 - Use `trimBefore`, `trimAfter`, `playbackRate`, and `volume` on `<Video>` for non-destructive timeline edits.
