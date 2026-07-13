@@ -1,0 +1,22 @@
+{
+  "name": "@makaron/capacitor-meta-app-events",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Makaron iOS app events bridge for the official Meta SDK",
+  "main": "dist/plugin.cjs.js",
+  "module": "dist/esm/index.js",
+  "types": "dist/esm/index.d.ts",
+  "files": [
+    "dist/",
+    "ios/Sources/",
+    "Package.swift"
+  ],
+  "peerDependencies": {
+    "@capacitor/core": ">=8.0.0"
+  },
+  "capacitor": {
+    "ios": {
+      "src": "ios"
+    }
+  }
+}

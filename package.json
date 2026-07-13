@@ -52,6 +52,7 @@
     "@fal-ai/client": "^1.9.5",
     "@google/genai": "^1.40.0",
     "@huggingface/inference": "^4.13.14",
+    "@makaron/capacitor-meta-app-events": "file:plugins/capacitor-meta-app-events",
     "@modelcontextprotocol/sdk": "^1.27.1",
     "@openrouter/ai-sdk-provider": "^3.0.0",
     "@react-three/drei": "^10.7.7",

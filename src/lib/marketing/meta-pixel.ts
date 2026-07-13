@@ -1,6 +1,8 @@
 'use client'
 
 import { getMarketingAttribution, type MarketingAttribution } from './attribution'
+import { getOrCreateMarketingAnonymousId } from './identity'
+import { getMobileAppEventsContext, trackMobileAppEvent } from './mobile-app-events'
 import { isMakaronIOSApp } from '@/lib/native-app'
 
 export type MetaStandardEvent =
@@ -16,11 +18,11 @@ export type MetaStandardEvent =
 export type MetaCustomEvent =
   | 'UploadIntent'
   | 'FileSelected'
+  | 'AppFirstOpen'
 
 export type MetaEventName = MetaStandardEvent | MetaCustomEvent
 
 type MetaEventParams = Record<string, string | number | boolean | undefined>
-const ANON_ID_KEY = 'mkr_anonymous_id'
 const STANDARD_EVENTS = new Set<MetaEventName>([
   'PageView',
   'ViewContent',
@@ -60,37 +62,26 @@ function attributionParams(attribution?: MarketingAttribution): MetaEventParams 
   }
 }
 
-function getAnonymousId(): string | undefined {
-  if (typeof window === 'undefined') return undefined
-  try {
-    const existing = localStorage.getItem(ANON_ID_KEY)
-    if (existing) return existing
-    const next = createMetaEventId('anon')
-    localStorage.setItem(ANON_ID_KEY, next)
-    return next
-  } catch {
-    return undefined
-  }
-}
-
 function logFirstPartyMarketingEvent(
   event: MetaEventName,
   params: MetaEventParams,
   eventId: string,
 ) {
   if (typeof window === 'undefined') return
-  if (isMakaronIOSApp()) return
 
   const attribution = getMarketingAttribution()
+  const nativeApp = isMakaronIOSApp()
   const payload = {
     eventName: event,
     eventId,
-    eventSource: 'browser',
+    eventSource: nativeApp ? 'ios_app' : 'browser',
     params,
-    attribution,
+    attribution: nativeApp
+      ? { ...attribution, mobile_sdk: getMobileAppEventsContext() }
+      : attribution,
     skillId: params.skill_id || attribution.skill_id,
     projectId: params.project_id,
-    anonymousId: getAnonymousId(),
+    anonymousId: getOrCreateMarketingAnonymousId(),
     url: window.location.href,
     path: `${window.location.pathname}${window.location.search}`,
     referrer: document.referrer,
@@ -119,10 +110,14 @@ export function trackMetaEvent(
   attempt = 0,
 ) {
   if (typeof window === 'undefined') return
-  if (isMakaronIOSApp()) return
+  const nativeApp = isMakaronIOSApp()
   const finalEventId = eventId || createMetaEventId(event.toLowerCase())
   const merged = { ...attributionParams(), ...params }
-  if (attempt === 0) logFirstPartyMarketingEvent(event, merged, finalEventId)
+  if (attempt === 0) {
+    logFirstPartyMarketingEvent(event, merged, finalEventId)
+    if (nativeApp) void trackMobileAppEvent(event, merged, finalEventId)
+  }
+  if (nativeApp) return
   if (!window.fbq) {
     if (attempt < 6) {
       window.setTimeout(() => trackMetaEvent(event, params, finalEventId, attempt + 1), 500)

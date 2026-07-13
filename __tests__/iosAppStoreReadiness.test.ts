@@ -773,14 +773,17 @@ describe('iOS App Store readiness guardrails', () => {
     expect(project).toContain('PrivacyInfo.xcprivacy in Resources');
   });
 
-  it('suppresses Meta marketing tracking inside the iOS native app shell', () => {
+  it('routes iOS marketing events to first-party storage and native attribution without loading Pixel', () => {
     const tracker = fs.readFileSync(path.join(root, 'src/components/MarketingTracker.tsx'), 'utf8');
     const pixel = fs.readFileSync(path.join(root, 'src/lib/marketing/meta-pixel.ts'), 'utf8');
     const capi = fs.readFileSync(path.join(root, 'src/lib/marketing/meta-capi.ts'), 'utf8');
 
     expect(tracker).toContain('isMakaronIOSApp');
+    expect(tracker).toContain('nativeApp === null');
     expect(tracker).toContain('nativeApp !== false');
-    expect(pixel).toContain('if (isMakaronIOSApp()) return');
+    expect(pixel).toContain("eventSource: nativeApp ? 'ios_app' : 'browser'");
+    expect(pixel).toContain('trackMobileAppEvent');
+    expect(pixel).toContain('if (nativeApp) return');
     expect(capi).toContain('MAKARON_IOS_USER_AGENT_TOKEN');
     expect(capi).toContain('user-agent');
   });

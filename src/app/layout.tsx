@@ -5,6 +5,7 @@ import AuthProvider from "@/components/AuthProvider";
 import NativeAppBootstrap from "@/components/NativeAppBootstrap";
 import NativeIOSPageStack from "@/components/NativeIOSPageStack";
 import MarketingTracker from "@/components/MarketingTracker";
+import MobileAppEventsBootstrap from "@/components/MobileAppEventsBootstrap";
 import { LocaleProvider } from "@/lib/i18n";
 import { DEFAULT_DESCRIPTION, DEFAULT_OG_IMAGE, SITE_NAME, SITE_URL } from "@/lib/seo";
 import "./globals.css";
@@ -76,6 +77,7 @@ export default function RootLayout({
         <LocaleProvider>
           <AuthProvider>
             <NativeAppBootstrap />
+            <MobileAppEventsBootstrap />
             <Suspense fallback={null}>
               <MarketingTracker />
             </Suspense>
