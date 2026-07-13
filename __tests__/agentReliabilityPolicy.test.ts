@@ -60,8 +60,9 @@ describe('agent reliability policy', () => {
     expect(review).toContain('generic hook/body/end sample is not enough');
     expect(agent).toContain('hydrateCaptionCueProps');
     expect(agent).toContain('run.deliveryPromise.subtitlesRequired');
+    expect(agent).toContain('usesFrameTiming');
     expect(contract).toContain('durable word-level cue sheet');
-    expect(composition).toContain('build a subtitle component');
+    expect(composition).toContain('subtitle component whose layout');
   });
 
   it('stops repeated MP4 export attempts for an unchanged composition', () => {

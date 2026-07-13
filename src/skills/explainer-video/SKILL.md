@@ -193,6 +193,9 @@ Every explainer video must have subtitles unless the user explicitly declines.
   use ASR from `transcribe_audio` after generating voiceover.
 - Render `props.captions` with a project-specific subtitle component written in
   the composition. The cue data is standardized; the visual treatment is not.
+  Every injected cue contains both `{ word, startMs, endMs }` and rendering
+  aliases `{ text, startFrame, endFrame }`, calculated from the composition FPS.
+  Use one timing pair consistently; do not invent another cue shape.
   Choose phrase grouping, placement, typography, highlighting, and background
   treatment to suit the subject and art direction. Static scene labels or one
   caption per scene do not replace timed subtitles.

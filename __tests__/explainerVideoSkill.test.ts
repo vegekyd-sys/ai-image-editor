@@ -78,6 +78,7 @@ describe('Explainer Video built-in skill', () => {
     expect(rawSkill).toContain('`props.captionCuePath`')
     expect(rawSkill).toContain('do not `read_file` the cue sheet')
     expect(rawSkill).toContain('project-specific subtitle component')
+    expect(rawSkill).toContain('`{ text, startFrame, endFrame }`')
     expect(rawSkill).toContain('Static scene labels')
     expect(rawSkill).toContain('visual treatment is not')
     expect(rawSkill).toContain('read and follow')

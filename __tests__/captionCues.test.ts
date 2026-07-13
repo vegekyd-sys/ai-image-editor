@@ -1,7 +1,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { describe, expect, it } from 'vitest';
-import { captionsFromTranscript, makeCaptionCueSheet, validateCaptionCues } from '../src/lib/caption-cues';
+import { addCaptionRenderingAliases, captionsFromTranscript, makeCaptionCueSheet, validateCaptionCues } from '../src/lib/caption-cues';
 import type { VolcengineAsrTranscript } from '../src/lib/volcengine-asr';
 
 const transcript: VolcengineAsrTranscript = {
@@ -49,6 +49,13 @@ describe('word-level caption cues', () => {
     expect(validateCaptionCues([{ word: 'late', startMs: 2100, endMs: 2200 }], 2)).toContain('composition ends');
     expect(validateCaptionCues([{ word: 'long', startMs: 1900, endMs: 2400 }], 2)).toContain('ends after');
     expect(validateCaptionCues(captionsFromTranscript(transcript), 2)).toBeNull();
+  });
+
+  it('provides millisecond and frame aliases without choosing a visual style', () => {
+    expect(addCaptionRenderingAliases(captionsFromTranscript(transcript), 30)).toEqual([
+      { word: '你好', text: '你好', startMs: 100, endMs: 700, startFrame: 3, endFrame: 21 },
+      { word: 'Makaron', text: 'Makaron', startMs: 900, endMs: 1600, startFrame: 27, endFrame: 48 },
+    ]);
   });
 
   it('does not force one shared visual caption renderer', () => {

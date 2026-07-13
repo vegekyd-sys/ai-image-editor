@@ -95,7 +95,9 @@ Available APIs include all exports from `remotion`, `@remotion/media`, `@remotio
 - Use Remotion `<Img>`, never HTML `<img>`.
 - For ASR-timed subtitles, pass the `captionCuePath` returned by
   `transcribe_audio` in composition props. `run_code` hydrates
-  `props.captions`; build a subtitle component whose layout, phrase grouping,
+  `props.captions`. Each cue contains `{ word, startMs, endMs, text,
+  startFrame, endFrame }`; the frame aliases use this composition's FPS. Build a
+  subtitle component whose layout, phrase grouping,
   type, color, placement, and active-word treatment fit this video's subject.
   Put `captionCuePath` in the first composition payload. Do not read the cue
   file, manually convert/copy a large cue array through model context, add it in

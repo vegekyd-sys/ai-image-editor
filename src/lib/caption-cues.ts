@@ -6,6 +6,12 @@ export interface MakaronWordCaption {
   endMs: number;
 }
 
+export interface MakaronRenderCaption extends MakaronWordCaption {
+  text: string;
+  startFrame: number;
+  endFrame: number;
+}
+
 export interface MakaronCaptionCueSheet {
   version: '1.0';
   source: 'volcengine-asr';
@@ -47,6 +53,22 @@ export function readCaptionCueSheet(value: unknown): MakaronWordCaption[] | null
   if (!value || typeof value !== 'object') return null;
   const captions = (value as Record<string, unknown>).captions;
   return Array.isArray(captions) ? captions as MakaronWordCaption[] : null;
+}
+
+export function addCaptionRenderingAliases(
+  captions: MakaronWordCaption[],
+  fps: number,
+): MakaronRenderCaption[] {
+  const safeFps = Number.isFinite(fps) && fps > 0 ? fps : 30;
+  return captions.map(cue => ({
+    ...cue,
+    text: cue.word,
+    startFrame: Math.round(cue.startMs / 1000 * safeFps),
+    endFrame: Math.max(
+      Math.round(cue.startMs / 1000 * safeFps) + 1,
+      Math.round(cue.endMs / 1000 * safeFps),
+    ),
+  }));
 }
 
 export function validateCaptionCues(

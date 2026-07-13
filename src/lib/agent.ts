@@ -17,7 +17,7 @@ import { createVoiceover } from './skills/create-voiceover';
 import { formatAudioCapabilitiesForAgent } from './audio-model-capabilities';
 import { listVolcengineTtsVoices } from './volcengine-tts';
 import { transcribeWithVolcengineAsr, type VolcengineAsrTranscript, type TranscriptWord } from './volcengine-asr';
-import { makeCaptionCueSheet, readCaptionCueSheet, validateCaptionCues } from './caption-cues';
+import { addCaptionRenderingAliases, makeCaptionCueSheet, readCaptionCueSheet, validateCaptionCues } from './caption-cues';
 import agentPrompt from './prompts/agent.md';
 import enhancePrompt from './prompts/enhance.md';
 import creativePrompt from './prompts/creative.md';
@@ -599,7 +599,10 @@ function formatTranscriptForModel(transcript: VolcengineAsrTranscript, includeWo
   return lines.join('\n');
 }
 
-async function hydrateCaptionCueProps<T extends { props?: Record<string, unknown> }>(
+async function hydrateCaptionCueProps<T extends {
+  props?: Record<string, unknown>;
+  animation?: { fps?: number };
+}>(
   ctx: AgentContext,
   composition: T,
 ): Promise<T> {
@@ -614,7 +617,8 @@ async function hydrateCaptionCueProps<T extends { props?: Record<string, unknown
   if (!captions) throw new Error(`Caption cue sheet has no captions array: ${cuePath}`);
   const cueError = validateCaptionCues(captions);
   if (cueError) throw new Error(cueError);
-  return { ...composition, props: { ...composition.props, captions } };
+  const renderCaptions = addCaptionRenderingAliases(captions, Number(composition.animation?.fps || 30));
+  return { ...composition, props: { ...composition.props, captions: renderCaptions } };
 }
 
 async function validateCompositionMediaAspect(
@@ -2350,10 +2354,13 @@ For approval_policy=auto, gated artifacts are approved automatically and recorde
                         : undefined;
                       const captionError = validateCaptionCues(props?.captions, Number(animation?.durationInSeconds));
                       if (captionError) return { success: false, error: captionError };
-                      if (!/\bcaptions\b/.test(String(design.code || ''))) {
+                      const compositionCode = String(design.code || '');
+                      const usesMsTiming = /\bstartMs\b/.test(compositionCode) && /\bendMs\b/.test(compositionCode);
+                      const usesFrameTiming = /\bstartFrame\b/.test(compositionCode) && /\bendFrame\b/.test(compositionCode);
+                      if (!/\bcaptions\b/.test(compositionCode) || (!usesMsTiming && !usesFrameTiming)) {
                         return {
                           success: false,
-                          error: 'Subtitles are required, but the composition code does not use the hydrated props.captions timing data. Render those cues with a project-specific subtitle component; static scene labels are not timed subtitles.',
+                          error: 'Subtitles are required, but the composition code does not use hydrated props.captions timing fields. Use either startMs/endMs or startFrame/endFrame in a project-specific subtitle component; static scene labels are not timed subtitles.',
                         };
                       }
                     }
