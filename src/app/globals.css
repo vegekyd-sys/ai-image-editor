@@ -371,11 +371,10 @@ textarea {
   height: 100%;
   padding: 0;
   border: 0;
-  background: rgba(0,0,0,0.16);
-  backdrop-filter: blur(1.5px) saturate(1.05);
-  -webkit-backdrop-filter: blur(1.5px) saturate(1.05);
+  background: rgba(0,0,0,0.28);
+  backdrop-filter: none;
+  -webkit-backdrop-filter: none;
   pointer-events: auto;
-  animation: mkr-create-model-backdrop-in 220ms ease both;
 }
 
 .mkr-create-model-panel {
@@ -386,15 +385,13 @@ textarea {
   border-radius: 22px;
   pointer-events: auto;
   background:
-    radial-gradient(circle at 12% -8%, rgba(255,255,255,0.19), transparent 31%),
-    radial-gradient(circle at 88% 108%, rgba(217,70,239,0.19), transparent 42%),
-    linear-gradient(145deg, rgba(34,34,42,0.82), rgba(8,8,13,0.86));
+    radial-gradient(circle at 12% -8%, rgba(255,255,255,0.10), transparent 31%),
+    radial-gradient(circle at 88% 108%, rgba(217,70,239,0.11), transparent 42%),
+    linear-gradient(145deg, #24222b, #111017 72%);
   border: 0.5px solid rgba(255,255,255,0.16);
   box-shadow: 0 28px 80px rgba(0,0,0,0.62), inset 0 1px 0 rgba(255,255,255,0.13);
-  backdrop-filter: blur(30px) saturate(1.48) contrast(1.04);
-  -webkit-backdrop-filter: blur(30px) saturate(1.48) contrast(1.04);
-  transform-origin: 22px calc(100% + 12px);
-  animation: mkr-create-model-open 430ms cubic-bezier(0.16, 1, 0.3, 1) both;
+  backdrop-filter: none;
+  -webkit-backdrop-filter: none;
   overflow: hidden;
   overscroll-behavior: contain;
 }
@@ -501,47 +498,6 @@ textarea {
 .mkr-create-model-option[data-active="true"] .mkr-create-model-check {
   border: 4px solid #d946ef;
   box-shadow: 0 0 14px rgba(217,70,239,0.26);
-}
-
-@keyframes mkr-create-model-open {
-  0% {
-    opacity: 0;
-    transform: translate3d(-8px, 12px, 0) scale(0.12, 0.07);
-    border-radius: 999px;
-    filter: blur(7px) saturate(1.8);
-  }
-  38% {
-    opacity: 1;
-    transform: translate3d(0, -3px, 0) scale(1.025, 0.96);
-    filter: blur(0) saturate(1.35);
-  }
-  70% {
-    transform: translate3d(0, 1px, 0) scale(0.992, 1.012);
-  }
-  100% {
-    opacity: 1;
-    transform: translate3d(0, 0, 0) scale(1);
-    border-radius: 22px;
-    filter: blur(0) saturate(1);
-  }
-}
-
-@keyframes mkr-create-model-backdrop-in {
-  from { opacity: 0; }
-  to { opacity: 1; }
-}
-
-@media (max-width: 639px) {
-  .mkr-create-model-panel {
-    transform-origin: 18px calc(100% + 14px);
-  }
-}
-
-@media (prefers-reduced-motion: reduce) {
-  .mkr-create-model-panel,
-  .mkr-create-model-backdrop {
-    animation-duration: 1ms;
-  }
 }
 
 .mkr-liquid-empty-state::after,
