@@ -610,7 +610,8 @@ async function hydrateCaptionCueProps<T extends {
   let cuePath = typeof composition.props?.captionCuePath === 'string'
     ? composition.props.captionCuePath
     : (ctx as any).__lastCaptionCuePath;
-  if (typeof cuePath !== 'string' && /\bcaptions\b/.test(String(composition.code || '')) && ctx.supabase && ctx.userId) {
+  const codeUsesTimedText = /caption|subtitle/i.test(String(composition.code || ''));
+  if (typeof cuePath !== 'string' && codeUsesTimedText && ctx.supabase && ctx.userId) {
     const cueFiles = await workspace.listFiles(`${ctx.projectId}/captions/*.json`, ctx.supabase, ctx.userId);
     cuePath = cueFiles
       .filter(file => file.path.startsWith(`${ctx.projectId}/captions/`))
@@ -622,6 +623,9 @@ async function hydrateCaptionCueProps<T extends {
   }
   const file = await workspace.readFile(cuePath, ctx.supabase, ctx.userId);
   if (!file) throw new Error(`Caption cue sheet not found: ${cuePath}`);
+  if (codeUsesTimedText && !/\bprops(?:\?\.|\.)captions\b/.test(String(composition.code || ''))) {
+    throw new Error('The project-specific subtitle renderer must read props.captions directly. Keep its visual style, but do not hardcode or duplicate caption cue data.');
+  }
   const captions = readCaptionCueSheet(JSON.parse(file.content));
   if (!captions) throw new Error(`Caption cue sheet has no captions array: ${cuePath}`);
   const cueError = validateCaptionCues(captions);

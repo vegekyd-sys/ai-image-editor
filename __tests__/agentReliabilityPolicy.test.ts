@@ -63,6 +63,8 @@ describe('agent reliability policy', () => {
     expect(agent).toContain('usesFrameTiming');
     expect(agent).toContain("`${ctx.projectId}/captions/*.json`");
     expect(agent).toContain('__lastCaptionCuePath');
+    expect(agent).toContain('/caption|subtitle/i');
+    expect(agent).toContain('subtitle renderer must read props.captions directly');
     expect(contract).toContain('durable word-level cue sheet');
     expect(composition).toContain('subtitle component whose layout');
   });

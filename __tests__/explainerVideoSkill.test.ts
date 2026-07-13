@@ -12,6 +12,7 @@ function read(rel: string) {
 describe('Explainer Video built-in skill', () => {
   it('uses the current Remotion composition architecture', () => {
     const agent = read('src/lib/prompts/agent.md')
+    const compositionPrompt = read('src/lib/prompts/remotion-composition.md')
     const rawSkill = read('src/skills/explainer-video/SKILL.md')
     const skill = parseSkillMd(rawSkill)
 
@@ -76,6 +77,9 @@ describe('Explainer Video built-in skill', () => {
     expect(rawSkill).toContain('Unless the user explicitly requested a silent/text-only video')
     expect(rawSkill).toContain('call `transcribe_audio({ media_url: audioUrl })`')
     expect(rawSkill).toContain('automatically finds')
+    expect(rawSkill).toContain('authoritative array is rehydrated after every render')
+    expect(rawSkill).toContain('Group phrases inside the renderer')
+    expect(rawSkill).toContain('may span only a few frames')
     expect(rawSkill).toContain('not `read_file` the cue sheet')
     expect(rawSkill).toContain('construct a second')
     expect(rawSkill).toContain('project-specific subtitle component')
@@ -87,6 +91,9 @@ describe('Explainer Video built-in skill', () => {
     expect(rawSkill).toContain('At least three `preview_frame` checks')
     expect(rawSkill).toContain('The composition is saved and published to the timeline')
     expect(rawSkill).not.toContain('awesome-design-md')
+    expect(compositionPrompt).toContain('props.captions` is authoritative')
+    expect(compositionPrompt).toContain('treat the array as read-only')
+    expect(compositionPrompt).toContain('derive or clamp animation windows')
 
     expect(skill?.description).toContain('explainer video')
     expect(rawSkill).toContain('"explainer video"')

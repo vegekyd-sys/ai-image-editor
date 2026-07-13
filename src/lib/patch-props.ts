@@ -4,13 +4,10 @@ function isPlainRecord(value: unknown): value is Record<string, unknown> {
 
 function mergePatchValue(base: unknown, patch: unknown): unknown {
   if (patch === undefined) return base;
-  if (Array.isArray(base) && Array.isArray(patch)) {
-    const merged = [...base];
-    patch.forEach((item, index) => {
-      merged[index] = mergePatchValue(base[index], item);
-    });
-    return merged;
-  }
+  // Arrays are ordered values, not object-shaped patches. Replacing them keeps
+  // removed timeline items, captions, and keyframes from surviving as stale
+  // tail entries after a props-only patch.
+  if (Array.isArray(patch)) return patch;
   if (isPlainRecord(base) && isPlainRecord(patch)) {
     const merged: Record<string, unknown> = { ...base };
     for (const [key, value] of Object.entries(patch)) {

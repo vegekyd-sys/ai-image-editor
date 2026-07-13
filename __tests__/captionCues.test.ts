@@ -77,6 +77,30 @@ describe('word-level caption cues', () => {
     ]);
   });
 
+  it('keeps exact script wording when ASR splits one token differently', () => {
+    const raw = ['打', '开', 'Mac', 'rom', 'Pixel', 'Wizard', '把', '任', '务'].map((word, index) => ({
+      word,
+      startMs: index * 100,
+      endMs: (index + 1) * 100,
+    }));
+    const reference = '打开 Makaron，Pixel Wizard 把任务';
+    const aligned = alignCaptionWordsToReference(raw, reference);
+
+    expect(aligned.map(cue => cue.word)).toEqual(captionTokensFromReferenceText(reference));
+    expect(aligned[0].startMs).toBe(0);
+    expect(aligned.at(-1)?.endMs).toBe(900);
+    expect(aligned.every(cue => cue.endMs > cue.startMs)).toBe(true);
+    expect(makeCaptionCueSheet({
+      ...transcript,
+      utterances: [{
+        text: raw.map(cue => cue.word).join(''),
+        startMs: 0,
+        endMs: 900,
+        words: raw.map(cue => ({ text: cue.word, startMs: cue.startMs, endMs: cue.endMs })),
+      }],
+    }, reference).lexicalSource).toBe('voiceover-script');
+  });
+
   it('rejects absent, malformed, unordered, and out-of-range cues', () => {
     expect(validateCaptionCues([], 2)).toContain('props.captions');
     expect(validateCaptionCues([{ word: 'a', startMs: 10, endMs: 5 }], 2)).toContain('invalid endMs');

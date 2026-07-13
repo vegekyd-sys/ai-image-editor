@@ -121,9 +121,12 @@ wrong or expensive.
    for subtitle timing. In the first composition, write the project-specific
    subtitle renderer against `props.captions`; `run_code` automatically finds
    the latest project cue sheet, stores its `captionCuePath`, and injects the
-   full cue array. Long subtitles therefore do not consume model context. Do
-   not `read_file` the cue sheet, manually convert its words, construct a second
-   caption array, or add subtitles in a later patch.
+   full cue array. This authoritative array is rehydrated after every render
+   and patch, so treat it as read-only. Group phrases inside the renderer and
+   derive or clamp animation windows from each cue's real duration; a word cue
+   may span only a few frames. Long subtitles therefore do not consume model
+   context. Do not `read_file` the cue sheet, manually convert its words,
+   construct a second caption array, or add subtitles in a later patch.
 13. Decide the audio layer:
    - Exact spoken narration -> `generate_voiceover`.
    - Prompt-first music bed, ambience, sound effects, UI blips, risers, impacts,

@@ -47,11 +47,48 @@ export function alignCaptionWordsToReference(
 ): MakaronWordCaption[] {
   if (!referenceText?.trim()) return captions;
   const referenceTokens = captionTokensFromReferenceText(referenceText);
-  if (referenceTokens.length !== captions.length) return captions;
-  return captions.map((caption, index) => ({
-    ...caption,
-    word: referenceTokens[index],
-  }));
+  if (referenceTokens.length === captions.length) {
+    return captions.map((caption, index) => ({
+      ...caption,
+      word: referenceTokens[index],
+    }));
+  }
+
+  // TTS and ASR describe the same generated voiceover, but ASR can occasionally
+  // split or merge one word. Preserve its timing envelope while remapping the
+  // exact script only when the token-count drift is small.
+  const largerCount = Math.max(referenceTokens.length, captions.length);
+  if (
+    referenceTokens.length === 0
+    || captions.length === 0
+    || Math.abs(referenceTokens.length - captions.length) / largerCount > 0.12
+  ) {
+    return captions;
+  }
+
+  const boundaries = [captions[0].startMs];
+  for (let index = 1; index < captions.length; index++) {
+    boundaries.push(Math.round((captions[index - 1].endMs + captions[index].startMs) / 2));
+  }
+  boundaries.push(captions[captions.length - 1].endMs);
+
+  const sampleBoundary = (position: number): number => {
+    const lower = Math.floor(position);
+    const upper = Math.min(boundaries.length - 1, Math.ceil(position));
+    if (lower === upper) return boundaries[lower];
+    const progress = position - lower;
+    return Math.round(boundaries[lower] + (boundaries[upper] - boundaries[lower]) * progress);
+  };
+
+  return referenceTokens.map((word, index) => {
+    const startMs = sampleBoundary(index * captions.length / referenceTokens.length);
+    const sampledEnd = sampleBoundary((index + 1) * captions.length / referenceTokens.length);
+    return {
+      word,
+      startMs,
+      endMs: Math.max(startMs + 1, sampledEnd),
+    };
+  });
 }
 
 export function captionsFromTranscript(
@@ -81,17 +118,15 @@ export function makeCaptionCueSheet(
   referenceText?: string,
 ): MakaronCaptionCueSheet {
   const rawCaptions = captionsFromTranscript(transcript);
-  const referenceTokens = referenceText ? captionTokensFromReferenceText(referenceText) : [];
-  const canAlignReference = referenceTokens.length > 0 && referenceTokens.length === rawCaptions.length;
+  const alignedCaptions = alignCaptionWordsToReference(rawCaptions, referenceText);
+  const canAlignReference = alignedCaptions !== rawCaptions;
   return {
     version: '1.0',
     source: 'volcengine-asr',
     lexicalSource: canAlignReference ? 'voiceover-script' : 'volcengine-asr',
     requestId: transcript.requestId,
     durationMs: transcript.durationMs,
-    captions: canAlignReference
-      ? alignCaptionWordsToReference(rawCaptions, referenceText)
-      : rawCaptions,
+    captions: alignedCaptions,
   };
 }
 
