@@ -26,13 +26,17 @@ const REFERENCE_PUNCTUATION = /^[，。！？、；：,.!?;:]$/u;
 
 export function captionTokensFromReferenceText(text: string): string[] {
   const tokens: string[] = [];
+  let previousEnd = 0;
   for (const match of text.matchAll(REFERENCE_TOKEN)) {
     const token = match[0];
+    const matchIndex = match.index ?? previousEnd;
+    const gap = text.slice(previousEnd, matchIndex);
+    previousEnd = matchIndex + token.length;
     if (REFERENCE_PUNCTUATION.test(token)) {
       if (tokens.length > 0) tokens[tokens.length - 1] += token;
       continue;
     }
-    tokens.push(token);
+    tokens.push(`${tokens.length > 0 && /\s/u.test(gap) ? ' ' : ''}${token}`);
   }
   return tokens;
 }

@@ -46,11 +46,11 @@ describe('word-level caption cues', () => {
       { word: '开', startMs: 200, endMs: 300 },
       { word: 'Macrom', startMs: 300, endMs: 900 },
     ];
-    expect(captionTokensFromReferenceText('打开 Makaron。')).toEqual(['打', '开', 'Makaron。']);
+    expect(captionTokensFromReferenceText('打开 Makaron。')).toEqual(['打', '开', ' Makaron。']);
     expect(alignCaptionWordsToReference(raw, '打开 Makaron。')).toEqual([
       { word: '打', startMs: 100, endMs: 200 },
       { word: '开', startMs: 200, endMs: 300 },
-      { word: 'Makaron。', startMs: 300, endMs: 900 },
+      { word: ' Makaron。', startMs: 300, endMs: 900 },
     ]);
     expect(alignCaptionWordsToReference(raw, 'token count')).toBe(raw);
     expect(makeCaptionCueSheet({
@@ -66,9 +66,15 @@ describe('word-level caption cues', () => {
       captions: [
         { word: '打', startMs: 100, endMs: 200 },
         { word: '开', startMs: 200, endMs: 300 },
-        { word: 'Makaron。', startMs: 300, endMs: 900 },
+        { word: ' Makaron。', startMs: 300, endMs: 900 },
       ],
     });
+    expect(captionTokensFromReferenceText('Makaron， Pixel Wizard 把')).toEqual([
+      'Makaron，',
+      ' Pixel',
+      ' Wizard',
+      ' 把',
+    ]);
   });
 
   it('rejects absent, malformed, unordered, and out-of-range cues', () => {

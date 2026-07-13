@@ -100,7 +100,9 @@ Available APIs include all exports from `remotion`, `@remotion/media`, `@remotio
   startFrame, endFrame }`; the frame aliases use this composition's FPS. Build a
   subtitle component from these cues directly. For generated voiceover, the
   cue words and punctuation are already aligned to the exact TTS script while
-  retaining ASR timing; do not perform another spelling-correction pass. Build a
+  retaining ASR timing. Each `word`/`text` also preserves any required leading
+  whitespace and trailing punctuation, so concatenate cues directly rather than
+  inserting or stripping spaces. Do not perform another spelling-correction pass. Build a
   subtitle component whose layout, phrase grouping,
   type, color, placement, and active-word treatment fit this video's subject.
   Do not read the cue file, manually convert/copy a large cue array through
