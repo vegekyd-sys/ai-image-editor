@@ -36,7 +36,8 @@ describe('LocaleProvider', () => {
 
     await waitFor(() => expect(screen.getByTestId('locale-probe').textContent).toBe('ja:ログイン'));
     expect(document.documentElement.lang).toBe('ja-JP');
-    expect(screen.getAllByRole('option').map((option) => option.textContent)).toEqual([
+    fireEvent.click(screen.getByRole('button', { name: '言語を選択' }));
+    expect(screen.getAllByRole('menuitemradio').map((option) => option.textContent)).toEqual([
       '简体中文',
       '繁體中文',
       '日本語',
@@ -52,7 +53,8 @@ describe('LocaleProvider', () => {
       </LocaleProvider>,
     );
 
-    fireEvent.change(screen.getByRole('combobox'), { target: { value: 'zh-Hant' } });
+    fireEvent.click(screen.getByRole('button', { name: '选择语言' }));
+    fireEvent.click(screen.getByRole('menuitemradio', { name: '繁體中文' }));
 
     await waitFor(() => expect(screen.getByTestId('locale-probe').textContent).toBe('zh-Hant:登入'));
     expect(localStorage.getItem('locale')).toBe('zh-Hant');

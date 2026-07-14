@@ -268,6 +268,7 @@ export default function TopBar({ authReturnPath }: TopBarProps) {
     warmTopBarMenuRoutes()
     const handler = (e: MouseEvent) => {
       const target = e.target as Node
+      if (target instanceof Element && target.closest('[data-makaron-locale-popover]')) return
       if (userMenuRef.current?.contains(target)) return
       if (mobileMenuRef.current?.contains(target)) return
       setUserMenuOpen(false)
@@ -588,7 +589,7 @@ export default function TopBar({ authReturnPath }: TopBarProps) {
                         <button onClick={() => navigateTopBar('/skills')} style={desktopMenuBtnStyle} onMouseEnter={onDesktopItemEnter} onMouseLeave={onDesktopItemLeave}>
                           <span>Skills</span>
                         </button>
-                        <LocaleToggle style={{ ...desktopMenuBtnStyle, minHeight: 38 }} />
+                        <LocaleToggle variant="menu" style={{ ...desktopMenuBtnStyle, minHeight: 38 }} />
                         <div style={accountSeparatorStyle} />
                         <button
                           onClick={() => { setUserMenuOpen(false); signOut() }}
@@ -699,7 +700,7 @@ export default function TopBar({ authReturnPath }: TopBarProps) {
                               <button onClick={() => navigateTopBar('/skills')} style={mobileMenuBtnStyle}>
                                 <span>Skills</span>
                               </button>
-                              <LocaleToggle style={{ ...mobileMenuBtnStyle, minHeight: 50 }} />
+                              <LocaleToggle variant="menu" style={{ ...mobileMenuBtnStyle, minHeight: 50 }} />
                             </nav>
 
                             <div style={{ marginTop: 'auto', paddingTop: 18 }}>

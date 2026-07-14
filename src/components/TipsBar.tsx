@@ -360,7 +360,7 @@ export default function TipsBar({ tips, isLoading, isEditing, onTipClick, onTipC
                 <button
                   onClick={() => onLoadMore(tip.category)}
                   disabled={isEditing || loadingMoreCategories?.has(tip.category)}
-                  className={`mkr-liquid-pill mkr-liquid-pill-strong flex-shrink-0 rounded-2xl border border-dashed border-white/15 flex flex-col items-center justify-center gap-1 active:scale-95 transition-transform disabled:opacity-40 cursor-pointer ${isDesktop ? 'w-[44px] h-[64px]' : 'w-[52px] h-[72px]'}`}
+                  className={`mkr-liquid-pill mkr-liquid-pill-strong flex-shrink-0 rounded-2xl border border-dashed border-white/15 flex flex-col items-center justify-center gap-1 px-2 active:scale-95 transition-transform disabled:opacity-40 cursor-pointer ${isDesktop ? 'min-w-[56px] h-[64px]' : 'min-w-[64px] h-[72px]'}`}
                   style={{ background: meta.activeBg.replace('0.18', '0.08') }}
                 >
                   {loadingMoreCategories?.has(tip.category) ? (
@@ -370,7 +370,7 @@ export default function TipsBar({ tips, isLoading, isEditing, onTipClick, onTipC
                       <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" className="opacity-50">
                         <path d="M12 5v14M5 12h14" />
                       </svg>
-                      <span className="text-[9px] font-medium" style={{ color: meta.activeText, opacity: 0.7 }}>{t('tips.more')}</span>
+                      <span className="text-[9px] font-medium whitespace-nowrap" style={{ color: meta.activeText, opacity: 0.7 }}>{t('tips.more')}</span>
                     </>
                   )}
                 </button>
