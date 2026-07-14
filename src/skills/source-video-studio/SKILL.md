@@ -4,7 +4,7 @@ description: >
   Turn real uploaded footage into a polished talking-head edit, hybrid story,
   documentary montage, or source-led feature while preserving the footage as
   the primary evidence.
-allowed-tools: read_file studio_run analyze_video transcribe_audio analyze_image generate_image generate_animation generate_audio generate_music run_code write_file preview_frame materialize_media
+allowed-tools: read_file studio_run prepare_visual_asset analyze_video transcribe_audio analyze_image generate_image generate_animation generate_audio generate_music run_code write_file preview_frame materialize_media
 metadata:
   makaron:
     icon: "◉"

@@ -3,7 +3,7 @@ name: content-repurpose
 description: >
   Convert a long video, interview, webinar, livestream, or podcast into ranked
   short clips, audiograms, quote-led videos, and a coherent batch package.
-allowed-tools: read_file studio_run analyze_video transcribe_audio analyze_image generate_image generate_audio generate_music run_code write_file preview_frame materialize_media
+allowed-tools: read_file studio_run prepare_visual_asset analyze_video transcribe_audio analyze_image generate_image generate_audio generate_music run_code write_file preview_frame materialize_media
 metadata:
   makaron:
     icon: "✂"

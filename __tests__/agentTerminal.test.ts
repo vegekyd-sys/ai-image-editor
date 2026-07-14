@@ -3,7 +3,10 @@ import {
   classifyModelTermination,
   describeModelStreamError,
   resolvePersistedRunStatus,
+  shouldCompleteDurableStudioRun,
   shouldContinueActiveStudioRun,
+  shouldHandoffToStudioComposition,
+  shouldStopAfterStudioToolStep,
   shouldUseTextOnlyRecovery,
 } from '@/lib/agent-terminal';
 
@@ -87,6 +90,86 @@ describe('agent terminal semantics', () => {
       studioRunTouched: true,
       runCodeStarted: true,
       recoveryPrompt: true,
+    })).toBe(false);
+  });
+
+  it('keeps a durable Studio work unit alive while an async asset finishes', () => {
+    expect(shouldContinueActiveStudioRun({
+      activeStudioRun: true,
+      studioRunTouched: false,
+      runCodeStarted: false,
+      recoveryPrompt: false,
+      attemptWorkUnit: 'studio:assets',
+    })).toBe(true);
+    expect(shouldContinueActiveStudioRun({
+      activeStudioRun: true,
+      studioRunTouched: false,
+      runCodeStarted: false,
+      recoveryPrompt: false,
+      attemptWorkUnit: 'agent',
+    })).toBe(false);
+  });
+
+  it('hands Composition to a dedicated durable attempt before code generation starts', () => {
+    expect(shouldHandoffToStudioComposition({
+      durableExecution: true,
+      attemptWorkUnit: 'studio:assets',
+      currentStage: 'composition',
+    })).toBe(true);
+    expect(shouldHandoffToStudioComposition({
+      durableExecution: true,
+      attemptWorkUnit: 'studio:composition',
+      currentStage: 'composition',
+    })).toBe(false);
+    expect(shouldHandoffToStudioComposition({
+      durableExecution: false,
+      attemptWorkUnit: 'studio:assets',
+      currentStage: 'composition',
+    })).toBe(false);
+  });
+
+  it('stops the AI SDK tool loop on the same step that advances Assets to Composition', () => {
+    expect(shouldStopAfterStudioToolStep({
+      durableExecution: true,
+      attemptWorkUnit: 'studio:assets',
+      toolResults: [{
+        toolName: 'studio_run',
+        output: { success: true, studioRun: { status: 'running', currentStage: 'composition' } },
+      }],
+    })).toBe(true);
+    expect(shouldStopAfterStudioToolStep({
+      durableExecution: true,
+      attemptWorkUnit: 'studio:composition',
+      toolResults: [{
+        toolName: 'studio_run',
+        output: { success: true, studioRun: { status: 'running', currentStage: 'composition' } },
+      }],
+    })).toBe(false);
+    expect(shouldStopAfterStudioToolStep({
+      durableExecution: true,
+      attemptWorkUnit: 'studio:assets',
+      toolResults: [{
+        toolName: 'write_file',
+        output: { success: true },
+      }],
+    })).toBe(false);
+  });
+
+  it('ends a durable execution as soon as Delivery completes the Studio Run', () => {
+    expect(shouldCompleteDurableStudioRun({
+      durableExecution: true,
+      status: 'completed',
+      currentStage: null,
+    })).toBe(true);
+    expect(shouldCompleteDurableStudioRun({
+      durableExecution: false,
+      status: 'completed',
+      currentStage: null,
+    })).toBe(false);
+    expect(shouldCompleteDurableStudioRun({
+      durableExecution: true,
+      status: 'running',
+      currentStage: 'review',
     })).toBe(false);
   });
 

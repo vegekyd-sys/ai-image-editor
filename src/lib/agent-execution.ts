@@ -60,6 +60,16 @@ export interface ExecutionLeaseState {
   lease_token?: string | null;
 }
 
+export function resolveExecutionHandoffWorkUnit(
+  currentWorkUnit: string,
+  checkpoint?: Record<string, unknown>,
+): string {
+  const studioRunStage = checkpoint?.studioRunStage;
+  return typeof studioRunStage === 'string' && studioRunStage.trim()
+    ? `studio:${studioRunStage}`
+    : currentWorkUnit;
+}
+
 export function isConfirmedExecutionLeaseLoss(input: {
   renewSucceeded: boolean;
   renewError?: unknown;

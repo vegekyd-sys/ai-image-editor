@@ -31,30 +31,63 @@ the composition or materializing an MP4.
    video with transitions.
 3. Check for black/blank frames, transition gaps, accidental double exposure,
    missing media, unreadable text, subtitle collisions, and ending-frame loss.
-4. Confirm required audio props are resolved public URLs, not undefined values
+   Compare each sampled frame to its Storyboard `visualPlan`. A close/medium
+   hero rendered as a small centered icon on a mostly empty field is an
+   underfilled frame and must be patched before export.
+4. For each narrated Script section, inspect the representative speaking frame
+   recorded in `subtitleSyncEvidence`. The displayed phrase must describe the
+   same beat as both the current picture and the narration actually sounding
+   then. Planned Script ranges alone are not timing evidence for a continuous
+   TTS file. Use ASR timing, retime mismatches, and keep evidence linked to the
+   persisted Storyboard scene. Do not standardize wording, placement,
+   typography, JSX, or animation to pass this gate.
+   Composition timing must exactly reuse Storyboard `narrationTimingEvidence`;
+   do not silently invent a second timing map after assets are generated.
+   Composition must also record the exact `subtitleText` it authored at each
+   representative frame. It may use the spoken line or a concise phrase from
+   that same Script section's `onScreenText`; do not force a transcript when
+   kinetic or integrated copy better serves the scene. Unrelated copy from a
+   different beat is invalid.
+   Studio Run verifies that every claimed phrase exists in the saved
+   Composition code, props, or editables; evidence cannot invent unseen copy.
+   In Final Review, preview the materialized MP4 at every representative time
+   and persist one `subtitleVisualEvidence` record per section with that raw
+   `drafts/video-...` frame path, the exact displayed phrase, and the
+   observed non-text subject/action. `displayedText` must exactly match Composition
+   `subtitleText`; a design-preview frame or unrelated phrase is not valid
+   evidence.
+   Do not use the title or subtitle itself as the observed picture. This is a
+   semantic scene check, not a subtitle styling or word-level timing template.
+5. Confirm required audio props are resolved public URLs, not undefined values
    or `<<<audio_N>>>` markers.
-5. Patch and rerun only the affected boundary/ending checks until there are no
+6. Patch and rerun only the affected boundary/ending checks until there are no
    unresolved issues. Persist this evidence in the Composition `draftGate`.
 
 Only a passing draft gate may advance to Review.
 
 ## Final Review
 
-1. Materialize the MP4.
+1. Materialize the MP4 from the exact gated design with `wait: true` and retain
+   the returned `.mp4` URL/path. Editable Composition JSON is not review media.
 2. Verify container, duration, resolution, FPS, and audio presence.
 3. Sample opening, strongest body beat, ending, and one previously checked risky
    transition to detect renderer drift. Reuse the Composition draft-gate plan;
    do not restart timeline debugging from scratch.
 4. Check black/blank frames, missing media, unreadable text, overlaps, source
    crop, subtitle safe areas, and final-frame quality.
+   Recheck visual-plan fidelity and reject underfilled frames even when all
+   text remains readable.
    When a compact contact sheet looks ambiguous at its display scale, inspect
    the corresponding full-resolution frame paths before declaring a black or
    blank frame.
 5. Check audio for unexpected silence, intelligible speech, music balance, and
-   sync.
-   Numeric LUFS and true-peak fields must come from an actual measurement tool.
-   Write `null` for either value when it was not measured; never estimate a
-   plausible-looking number from listening or from the composition settings.
+   sync. Reconfirm that each sampled subtitle or kinetic phrase matches the
+   active narration and visible beat in the materialized MP4; readable but
+   semantically early or late text is a review failure.
+   Numeric LUFS and true-peak fields must come from the deterministic FFmpeg
+   measurement attached to `materialize_media`; Studio Run fills these values
+   from the final MP4 and never trusts estimates from listening or Composition
+   volume settings.
 6. Confirm the locked runtime and editability promise were honored.
 7. Confirm the story names its subject, completes setup-transformation-payoff,
    and holds long enough on an intentional ending.

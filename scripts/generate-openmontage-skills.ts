@@ -24,13 +24,13 @@ const familyConfig: Record<OpenMontageSkillFamily, {
   },
   character: {
     icon: '人',
-    tools: ['read_file', 'studio_run', 'analyze_image', 'analyze_video', 'generate_image', 'generate_audio', 'generate_music', 'list_voiceover_voices', 'generate_voiceover', 'run_code', 'write_file', 'preview_frame', 'materialize_media'],
+    tools: ['read_file', 'studio_run', 'prepare_visual_asset', 'analyze_image', 'analyze_video', 'generate_image', 'generate_audio', 'generate_music', 'list_voiceover_voices', 'generate_voiceover', 'run_code', 'write_file', 'preview_frame', 'materialize_media'],
     direction: 'Lock the character spec, layer order, pivots, poses, expressions, and action beats before animation. Prefer frame-driven SVG, Canvas, or Remotion motion and inspect representative poses.',
     completion: 'Deliver the reusable character source plus sampled frames and, when requested, the materialized MP4.',
   },
   composition: {
     icon: '✦',
-    tools: ['read_file', 'studio_run', 'analyze_image', 'analyze_video', 'generate_image', 'generate_audio', 'generate_music', 'list_voiceover_voices', 'generate_voiceover', 'transcribe_audio', 'run_code', 'write_file', 'preview_frame', 'materialize_media'],
+    tools: ['read_file', 'studio_run', 'prepare_visual_asset', 'analyze_image', 'analyze_video', 'generate_image', 'generate_audio', 'generate_music', 'list_voiceover_voices', 'generate_voiceover', 'transcribe_audio', 'run_code', 'write_file', 'preview_frame', 'materialize_media'],
     direction: 'Translate the source craft into deterministic frame-driven Remotion. Use injected React, Remotion, and THREE primitives; external animation APIs are guidance unless Makaron explicitly exposes them.',
     completion: 'Deliver an editable composition, preview the hook/body/ending, then materialize once.',
   },
@@ -60,7 +60,7 @@ const familyConfig: Record<OpenMontageSkillFamily, {
   },
   'video-workflow': {
     icon: '◫',
-    tools: ['read_file', 'studio_run', 'analyze_video', 'analyze_image', 'transcribe_audio', 'generate_image', 'generate_animation', 'generate_audio', 'generate_music', 'list_voiceover_voices', 'generate_voiceover', 'run_code', 'write_file', 'preview_frame', 'materialize_media'],
+    tools: ['read_file', 'studio_run', 'prepare_visual_asset', 'analyze_video', 'analyze_image', 'transcribe_audio', 'generate_image', 'generate_animation', 'generate_audio', 'generate_music', 'list_voiceover_voices', 'generate_voiceover', 'run_code', 'write_file', 'preview_frame', 'materialize_media'],
     direction: 'Run the full Studio Run contract for substantial work. Preserve source evidence, make production choices explicit, and use the canonical Makaron workflow for execution.',
     completion: 'Complete all applicable stages with an editable source, reviewed MP4, and delivery artifact.',
   },

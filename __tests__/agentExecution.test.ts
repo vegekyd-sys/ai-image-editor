@@ -6,6 +6,7 @@ import {
   getAgentContextPolicy,
   isConfirmedExecutionLeaseLoss,
   isRetryableProviderOutage,
+  resolveExecutionHandoffWorkUnit,
   selectModelHistoryWithinBudget,
   shouldScheduleNextAttempt,
   stableOperationKey,
@@ -72,6 +73,13 @@ describe('durable Agent execution', () => {
     expect(handoff).toContain('保留原始 Composition 指导');
     expect(handoff).toContain('studio/storyboard.json');
     expect(handoff).toContain('先写可编译 scaffold');
+  });
+
+  it('records the persisted Studio stage as the next durable work unit', () => {
+    expect(resolveExecutionHandoffWorkUnit('studio:assets', {
+      studioRunStage: 'composition',
+    })).toBe('studio:composition');
+    expect(resolveExecutionHandoffWorkUnit('agent', {})).toBe('agent');
   });
 
   it('round-trips provider compaction as an Anthropic typed block', () => {

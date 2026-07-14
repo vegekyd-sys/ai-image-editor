@@ -70,6 +70,12 @@ function assertArtifactHonorsDeliveryPromise(run: StudioRun, stage: StudioStageI
     const lastScene = value.scenes[value.scenes.length - 1];
     if (!nearlyEqual(lastScene.endSeconds, promise.durationSeconds)) mismatch('scene duration');
   }
+  if (stage === 'assets' && promise.audioRequired) {
+    const hasAudioAsset = value.assets.some((asset: { type?: string }) => (
+      asset.type === 'audio' || asset.type === 'music'
+    ));
+    if (!hasAudioAsset) mismatch('required audio asset');
+  }
   if (stage === 'composition') {
     if (value.runtime !== promise.renderRuntime) mismatch('runtime');
     if (value.mode !== promise.compositionMode) mismatch('composition mode');

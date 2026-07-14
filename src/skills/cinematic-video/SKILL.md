@@ -4,7 +4,7 @@ description: >
   Produce an authored trailer, teaser, launch film, mood piece, or cinematic
   short with shot-led storytelling, deliberate sound design, and a distinct
   editable visual language.
-allowed-tools: read_file studio_run analyze_video analyze_image generate_image generate_animation list_voiceover_voices generate_voiceover transcribe_audio generate_audio generate_music run_code write_file preview_frame materialize_media
+allowed-tools: read_file studio_run prepare_visual_asset analyze_video analyze_image generate_image generate_animation list_voiceover_voices generate_voiceover transcribe_audio generate_audio generate_music run_code write_file preview_frame materialize_media
 metadata:
   makaron:
     icon: "🎞️"
@@ -29,8 +29,10 @@ Do not route ordinary tutorials or quick social clips here.
 Read `skills/_shared/studio-production/production-contract.md`,
 `skills/_shared/studio-production/audio-direction.md`,
 `skills/_shared/studio-production/review-contract.md`, and
-`skills/_shared/remotion-director-contract.md` before planning. If a reference
-is supplied, also read the reference analysis director.
+`skills/_shared/remotion-director-contract.md` before planning. Also read
+`skills/_shared/visual-direction/SKILL.md` for the per-shot carrier, scale, and
+depth plan. If a reference is supplied, also read the reference analysis
+director.
 
 ## Workflow
 

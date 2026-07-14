@@ -37,6 +37,12 @@ patch to an existing one, read:
 3. `skills/_shared/remotion-video-director/references/remotion-patterns.md`
 4. `skills/_shared/remotion-video-director/references/component-library.md`
 
+For a complete theme-driven video, also read
+`skills/_shared/visual-direction/SKILL.md`. This is the independent visual
+decision layer: it chooses the per-scene carrier, shot scale, depth, and asset
+role before media generation or Composition code. For a mechanical trim, splice,
+or tiny patch, skip it.
+
 For tiny text-only patches, prop changes, typo fixes, or mechanical trim
 adjustments, do not re-read the references if this contract is already present
 in the recent tool history.
@@ -50,6 +56,9 @@ Before writing or patching composition code, create a compact internal plan:
 - **Scene map**: scene names, exact frame/time ranges, and the one idea in each scene.
 - **Focal subject**: the viewer's first read in every representative frame.
 - **Media role**: decide whether source footage, generated images, stickers, text, or diagrams carry the scene.
+- **Visual carrier**: for substantial scenes, write the `visualPlan` from the
+  Visual Director and choose one primary carrier: native, plate, cutout, or
+  edge-video.
 - **Audio/subtitle relation**: decide whether voice, music, captions, or original sound drives timing.
 - **Verification plan**: choose stable hook, middle, and ending frames to preview before publishing.
 

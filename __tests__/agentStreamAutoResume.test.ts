@@ -40,7 +40,10 @@ describe('Studio Run automatic stream recovery', () => {
     expect(prompt).toContain('Reuse all persisted stage artifacts');
     expect(prompt).toContain('Do not reread skill, prompt, director, component-library, or reference files');
     expect(prompt).toContain('streamed-run-code.partial.js');
-    expect(prompt).toContain('under 9000 source characters');
+    expect(prompt).toContain('composition-parts');
+    expect(prompt).toContain('composition_parts.directory');
+    expect(prompt).toContain('do not restart a monolithic run_code payload');
+    expect(prompt).not.toContain('under 9000 source characters');
   });
 
   it('starts a fresh request automatically and only completes once', async () => {

@@ -156,7 +156,7 @@ export function buildAgentRecoveryContext(
     ? `\npartial streamed code: ${String(checkpoint.streamedCodePath)} (${Number(checkpoint.streamedCodeChars) || 0} chars)`
     : '';
   const nextAction = checkpoint.studioRunId
-    ? 'Call studio_run status first, then read only the persisted script, storyboard, and assets artifacts needed for the current stage. Do not reread skill, prompt, director, component-library, or reference files. For a 30s+ first composition, create a concise compilable scaffold under 9000 source characters and autosave it before adding refinements with smaller patches.'
+    ? 'Call studio_run status first, then read only the persisted script, storyboard, and assets artifacts needed for the current stage. Do not reread skill, prompt, director, component-library, or reference files. In Composition, write numbered source files under <project-id>/drafts/composition-parts, salvage complete definitions from any partial stream, and assemble once with composition_parts.directory. Do not restart a monolithic run_code payload or trim to an aggregate source-size target.'
     : 'Read the draft path and apply the pending modification.';
   return `[Recoverable Agent Checkpoint]\nThe previous run stopped before completion, but durable work was saved. Resume from this exact checkpoint; do not recreate the work from the original media.${draftContext}${studioContext}${streamedCodeContext}${checkpoint.lastTool ? `\nlast completed tool: ${String(checkpoint.lastTool)}` : ''}\n${nextAction} Preview and publish the final artifact when that was the user's original request.\n\n`;
 }

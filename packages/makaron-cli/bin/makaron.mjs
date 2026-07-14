@@ -588,6 +588,7 @@ async function pollRun(baseUrl, headers, runId, opts = {}) {
 
     // Check terminal status
     if (data.status === 'completed' || data.status === 'failed' || data.status === 'aborted') {
+      normalizeRunResponse(data);
       if (printedText && !json) process.stdout.write('\n');
       if (data.status === 'completed' && exportCompositions) {
         data = await exportAnimatedCompositionsFromRun(baseUrl, headers, data, {
@@ -619,7 +620,7 @@ async function pollRun(baseUrl, headers, runId, opts = {}) {
         process.stderr.write(`🔗  ${APP_URL}/projects/${data.projectId}\n`);
       }
 
-      if (data.status === 'failed') process.exit(1);
+      if (data.status === 'failed' || data.status === 'aborted') process.exit(1);
       return data;
     }
   }

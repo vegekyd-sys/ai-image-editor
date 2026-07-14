@@ -21,10 +21,11 @@ work the same across video types.
    - `audio-direction.md` for narration, source speech, music, or dubbing.
    - `review-contract.md` before every gated artifact and final delivery.
 4. Persist each stage before moving to the next one. For `approval_policy=auto`,
-   prefer one `studio_run(operation: "put_artifacts")` call for the contiguous
-   text-only planning stages from brief through assets. Each artifact is still
-   validated, stored, and emitted to CUI separately. Guided/manual runs continue
-   to use one `put_artifact` at a time.
+   batch only adjacent stages whose evidence is already known. A continuous
+   narration run should persist Brief through Script, generate and transcribe
+   the narration, then author Storyboard from real speech timing before Assets.
+   Each artifact is still validated, stored, and emitted to CUI separately.
+   Guided/manual runs continue to use one `put_artifact` at a time.
 5. Build editable video with `run_code({ runtime: "composition" })`, save the
    first complete draft, and pass the Composition draft gate before any publish
    or MP4 export. The gate checks exact timeline duration, every scene boundary,
@@ -40,12 +41,13 @@ work the same across video types.
 - `script`: the timed content spine. For source-led work this can be transcript
   selections, edit beats, or translated cues instead of new narration.
 - `storyboard`: shot/scene plan, focal point, treatment, transition, safe areas,
-  and asset links.
+  asset links, and real narration timing evidence when subtitles are promised.
 - `assets`: every source, generated asset, voice, music, font, and code module
-  that the composition actually uses. Missing assets block composition.
+  that the composition actually uses. Persist this stage only after required
+  voice/music generation; missing assets or promised audio block composition.
 - `composition`: the real editable Remotion design path plus draft-gate evidence
   for full timeline coverage, every scene boundary, the ending, audio sources,
-  and three or more preview frames.
+  three or more preview frames, and per-section subtitle/narration/visual timing.
 - `review`: technical, visual, audio, and delivery-promise checks against the
   materialized MP4.
 - `delivery`: final MP4, editable source, optional hash, and delivery time.
@@ -78,22 +80,63 @@ work the same across video types.
   `prompts/remotion-composition.md` and follow its original director contract at
   `skills/_shared/remotion-director-contract.md`. Studio Run does not replace or
   abbreviate the composition and director guidance.
+- For complete theme-driven work, read `skills/_shared/visual-direction/SKILL.md`
+  before Storyboard. Store one primary visual carrier and shot-scale decision in
+  each substantial scene's optional `visualPlan`; old runs without this field
+  remain valid.
+- If a scene selects `cutout` or `edge-video`, read
+  `skills/_shared/visual-asset-bridge/SKILL.md`, call `prepare_visual_asset`
+  during Assets, and store the returned record in that asset's optional
+  `prepared` field. Set `visualPlan.primaryAssetId`, the manifest asset ID, and
+  the Bridge `asset_id` to the same value; set the manifest path to
+  `preparedUrl`. Studio Run rejects ad hoc keying for these carriers. Do not add
+  another Studio stage or a fixed renderer.
 - Build one complete composition and save its exact `design_path` before visual
   review. Derive all scene-boundary timestamps from the storyboard/root
   timeline, then batch those boundaries, a hook/body frame, and the final
   visible frame into the minimum number of 2-6 frame `preview_frame` calls.
 - Do not publish or materialize until exact frame-count math, every boundary,
-  the ending, and required audio URLs pass the Composition draft gate.
+  the ending, required audio URLs, visual-plan fidelity, absence of underfilled
+  scenes, and subtitle/narration/visual alignment pass the Composition draft
+  gate.
 - When subtitles are promised, author them as part of the Composition's own
   scene design. `transcribe_audio` may provide editorial timing reference, but
   the harness does not create a separate caption artifact, inject caption props,
   impose a cue schema, or select a visual renderer.
+- Resolve continuous narration timing before final Storyboard. Generate or load
+  the voice track after Script, call `transcribe_audio`, and set Storyboard scene
+  boundaries so every narrated section fits its linked visual beat. Do not keep
+  convenient equal-length scenes when the real speech has already drifted.
+  Persist one `narrationTimingEvidence` record per narrated Script section;
+  Studio Run blocks Storyboard before Assets when these ranges do not fit.
+- Before the Composition gate passes, inspect representative speaking frames
+  and confirm a three-way match: the authored subtitle or kinetic phrase, the
+  visual action/information on screen, and the narration actually sounding at
+  that time. Do not infer speech timing from planned Script section boundaries.
+  A continuous voiceover needs real timing evidence from `transcribe_audio`;
+  independently placed scene clips may use their explicit Remotion start times.
+  Persist one `subtitleSyncEvidence` record per narrated Script section. The
+  record must include the exact `subtitleText` authored in the Composition at
+  its representative frame. That text may preserve the spoken line or use a
+  concise phrase already authored in that same Script section's
+  `onScreenText`; it does not have to duplicate narration word for word. It
+  cannot introduce unrelated copy from another beat. The harness cross-checks its linked Storyboard range and
+  representative overlap, and verifies that every claimed `subtitleText`
+  exists in the saved Composition code, props, or editables, without prescribing
+  placement, typography, JSX, or animation. Retiming and visual treatment remain
+  the Agent's job.
+- Lock `width` and `height` from the approved delivery promise before the first
+  `run_code` call. The harness rejects a mismatched Studio Composition before
+  autosave, preview, or publication; do not prototype in another orientation.
 - After one clean gate, publish that exact `design_path` once and materialize it
   once. Do not export a timeline `media_index` that may point to an older
   snapshot. If the draft changes, recheck only affected boundaries plus the
   ending before replacing the published snapshot.
 - Final Review checks the real MP4 for renderer/container/audio drift. Delivery
-  only persists the already-reviewed paths; it must not call `run_code`,
+  requires an actual `.mp4` output path; editable Composition JSON belongs only
+  in `editableSourcePath`. The harness derives both paths from persisted Review
+  and Composition artifacts and stamps `deliveredAt`; the Agent must not spend
+  extra turns reconstructing those mechanical fields. Delivery only persists the already-reviewed paths; it must not call `run_code`,
   `preview_frame`, `write_file`, or `materialize_media`. Invalidate back to
   Composition when a revision is required.
 - Probe source/output media once. Reuse that result for review and delivery.

@@ -80,6 +80,8 @@ app-store-assets/**/*.mov
 !/scripts/backfill-annual-subscription-credits.mjs
 !/scripts/audit-liquid-glass-perf.mjs
 !/scripts/studio-run-golden.ts
+!/scripts/sticker-bridge-acceptance.ts
+!/scripts/edge-video-bridge-acceptance.ts
 
 
 # claude code local settings

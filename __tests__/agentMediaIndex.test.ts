@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import {
   findSnapshotMediaIndex,
+  pinAgentMediaUrl,
   rebuildAgentSnapshotUrls,
   snapshotUrlForAgent,
 } from '@/lib/agent-media-index';
@@ -35,5 +36,15 @@ describe('Agent Media Index synchronization', () => {
   it('returns the true one-based timeline index for a published snapshot id', () => {
     expect(findSnapshotMediaIndex(rows, 'video-2')).toBe(2);
     expect(findSnapshotMediaIndex(rows, 'missing')).toBeUndefined();
+  });
+
+  it('pins a completed export URL over a temporarily stale timeline placeholder', () => {
+    expect(pinAgentMediaUrl([
+      'https://cdn.example.com/image-1.jpg',
+      'https://cdn.example.com/video-placeholder.jpg',
+    ], 2, 'https://cdn.example.com/final.mp4')).toEqual([
+      'https://cdn.example.com/image-1.jpg',
+      'https://cdn.example.com/final.mp4',
+    ]);
   });
 });

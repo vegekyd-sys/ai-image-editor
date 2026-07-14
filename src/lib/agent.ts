@@ -17,6 +17,7 @@ import { createVoiceover } from './skills/create-voiceover';
 import { formatAudioCapabilitiesForAgent } from './audio-model-capabilities';
 import { listVolcengineTtsVoices } from './volcengine-tts';
 import { transcribeWithVolcengineAsr, type VolcengineAsrTranscript, type TranscriptWord } from './volcengine-asr';
+import { prepareVisualAsset, resolvePreparedVisualAssetById } from './visual-assets/bridge';
 import agentPrompt from './prompts/agent.md';
 import enhancePrompt from './prompts/enhance.md';
 import creativePrompt from './prompts/creative.md';
@@ -40,6 +41,7 @@ import { getAgentModelId } from './bedrock-models';
 import { normalizeAgentErrorMessage } from './agent-error';
 import {
   findSnapshotMediaIndex,
+  pinAgentMediaUrl,
   rebuildAgentSnapshotUrls,
   type AgentSnapshotIndexRow,
 } from './agent-media-index';
@@ -63,7 +65,10 @@ import {
 import {
   classifyModelTermination,
   describeModelStreamError,
+  shouldCompleteDurableStudioRun,
   shouldContinueActiveStudioRun,
+  shouldHandoffToStudioComposition,
+  shouldStopAfterStudioToolStep,
   shouldUseTextOnlyRecovery,
 } from './agent-terminal';
 import {
@@ -73,6 +78,7 @@ import {
   stableOperationKey,
   type DurableExecutionRef,
 } from './agent-execution';
+import { buildDurableCompositionGuidance } from './studio-composition-guidance';
 
 const MAX_VIDEO_DIMENSION_PROBE_BYTES = 220 * 1024 * 1024;
 
@@ -257,6 +263,18 @@ interface StudioRunCheckpoint {
   studioRunId?: string;
   studioRunStage?: string;
   studioRunStatePath?: string;
+  deliveryPromise?: { width: number; height: number };
+}
+
+function studioCompositionPromiseError(
+  checkpoint: StudioRunCheckpoint,
+  design: { width?: unknown; height?: unknown },
+): string | undefined {
+  if (!['composition', 'review'].includes(checkpoint.studioRunStage || '') || !checkpoint.deliveryPromise) return;
+  const width = Number(design.width);
+  const height = Number(design.height);
+  if (width === checkpoint.deliveryPromise.width && height === checkpoint.deliveryPromise.height) return;
+  return `Studio Composition must keep the locked delivery resolution ${checkpoint.deliveryPromise.width}x${checkpoint.deliveryPromise.height}; received ${width || 'missing'}x${height || 'missing'}. Reuse the Brief/Proposal delivery promise before previewing or publishing.`;
 }
 
 interface StreamedCodeCheckpoint {
@@ -275,6 +293,10 @@ async function getStudioRunCheckpoint(ctx: AgentContext): Promise<StudioRunCheck
       studioRunId: run.id,
       studioRunStage: run.currentStage,
       studioRunStatePath: studio.studioRunStatePath(run.projectId, run.id),
+      deliveryPromise: {
+        width: run.deliveryPromise.width,
+        height: run.deliveryPromise.height,
+      },
     };
   } catch (error) {
     console.warn('[agent] failed to resolve Studio Run recovery checkpoint:', error);
@@ -2107,6 +2129,135 @@ For timeline videos, pass media_index. For external audio/video URLs, pass media
       },
     }),
 
+    prepare_visual_asset: tool({
+      description: `Prepare generated or supplied media for visual compositing without choosing the final layout.
+
+Use mode "cutout" for a chroma-background image that should become a transparent PNG. The deterministic bridge removes border-connected chroma plus sizeable enclosed high-confidence chroma pockets, despills semi-transparent edges, preserves only tiny isolated same-color subject details, computes subject/safe boxes, and renders a five-background QA sheet.
+
+Use mode "edge-video" for an ordinary opaque clip generated with quiet edges close to the intended Remotion background. The bridge samples the clip over time, measures edge color/detail/drift, preserves a cached workspace copy, and returns target background, edge palette, feather guidance, and a QA contact sheet. It never creates transparent video or a fixed renderer.
+
+Call this during the Studio Assets stage after reading skills/_shared/visual-asset-bridge/SKILL.md. On a resumed run, call it with mode + asset_id and no media source first; the bridge resolves the latest cached prepared record by semantic id. Use the returned preparedUrl in Composition. If quality is revise/fail, inspect the contact sheet and regenerate or reprepare the source instead of hiding the problem by shrinking it.`,
+      inputSchema: z.object({
+        mode: z.enum(['cutout', 'edge-video']),
+        media_index: z.number().int().positive().optional().describe('Literal 1-based Media Index item to prepare.'),
+        source_url: z.string().optional().describe('Public media URL or data URL. Use when the source is not in Media Index.'),
+        asset_id: z.string().optional().describe('Stable semantic id used by Storyboard and Asset Manifest. With no media source, resolves the latest cached prepared asset after recovery.'),
+        role: z.enum(['hero', 'support', 'decoration']).optional(),
+        key_color: z.string().regex(/^#[0-9a-f]{6}$/i).optional().describe('Explicit chroma key color for cutout, e.g. #00ff00. Omit for border auto-detection.'),
+        target_background: z.string().regex(/^#[0-9a-f]{6}$/i).optional().describe('Intended Remotion background for edge-video analysis.'),
+        force_refresh: z.boolean().optional().describe('Ignore cached preparation and rebuild the asset.'),
+      }),
+      execute: async ({ mode, media_index, source_url, asset_id, role, key_color, target_background, force_refresh }) => {
+        if (!ctx.supabase || !ctx.userId) return { success: false, error: 'Visual Asset Bridge requires an authenticated project workspace.' };
+        let sourceUrl = source_url;
+        let sourceSnapshotId: string | undefined;
+        if (media_index !== undefined) {
+          const snapshots = await refreshSnapshotUrls(ctx);
+          const validated = validateImageIndex(ctx.snapshotImages, media_index);
+          if (validated.error) return { success: false, error: validated.error };
+          sourceUrl = ctx.snapshotImages[validated.idx];
+          sourceSnapshotId = snapshots?.[validated.idx]?.id as string | undefined;
+        }
+        try {
+          const cachedAsset = !sourceUrl && asset_id && !force_refresh
+            ? await resolvePreparedVisualAssetById({
+              projectId: ctx.projectId,
+              userId: ctx.userId,
+              supabase: ctx.supabase,
+              assetId: asset_id,
+            })
+            : null;
+          if (!sourceUrl && !asset_id) {
+            return { success: false, error: 'Provide media_index, source_url, or asset_id to recover a prepared asset.' };
+          }
+          if (!sourceUrl && !cachedAsset) {
+            return { success: false, error: `No prepared visual asset found for asset_id "${asset_id}". Provide its media_index or source_url once.` };
+          }
+          if (cachedAsset && cachedAsset.mode !== mode) {
+            return { success: false, error: `Prepared asset "${asset_id}" uses mode ${cachedAsset.mode}, not ${mode}.` };
+          }
+          const result = cachedAsset
+            ? { asset: cachedAsset, cached: true }
+            : await prepareVisualAsset({
+              projectId: ctx.projectId,
+              userId: ctx.userId,
+              supabase: ctx.supabase,
+              sourceUrl: sourceUrl!,
+              mode,
+              assetId: asset_id,
+              role,
+              sourceSnapshotId,
+              keyColor: key_color,
+              targetBackground: target_background,
+              forceRefresh: force_refresh,
+            });
+          rememberWorkspaceMediaOutputs(ctx, [
+            {
+              path: result.asset.sourceWorkspacePath,
+              storageUrl: result.asset.sourceWorkspaceUrl,
+              contentType: inferWorkspaceContentType(result.asset.sourceWorkspacePath),
+              description: `${result.asset.assetId} source`,
+            },
+            {
+              path: result.asset.workspacePath,
+              storageUrl: result.asset.preparedUrl,
+              contentType: result.asset.kind === 'image' ? 'image/png' : inferWorkspaceContentType(result.asset.workspacePath),
+              description: `${result.asset.assetId} prepared ${result.asset.mode}`,
+            },
+            ...(result.asset.quality.contactSheetPath && result.asset.quality.contactSheetUrl ? [{
+              path: result.asset.quality.contactSheetPath,
+              storageUrl: result.asset.quality.contactSheetUrl,
+              contentType: result.asset.mode === 'cutout' ? 'image/png' : 'image/jpeg',
+              description: `${result.asset.assetId} visual asset QA`,
+            }] : []),
+          ]);
+          let qaPreviewBase64: string | undefined;
+          if (runtime.spec.supportsImageInput && result.asset.quality.contactSheetPath) {
+            const qaFile = await workspace.resolveWorkspaceFile(
+              result.asset.quality.contactSheetPath,
+              ctx.supabase,
+              ctx.userId,
+              { hydrate: true },
+            );
+            if (qaFile?.localPath) {
+              const qaPreview = await sharp(qaFile.localPath)
+                .resize({ width: 640, withoutEnlargement: true })
+                .jpeg({ quality: 78 })
+                .toBuffer();
+              qaPreviewBase64 = qaPreview.toString('base64');
+            }
+          }
+          return {
+            success: true,
+            cached: result.cached,
+            ready: result.asset.status === 'ready',
+            asset: result.asset,
+            qaPreviewBase64,
+            message: result.asset.status === 'ready'
+              ? `Prepared ${result.asset.assetId} is ready for Composition.`
+              : `Prepared ${result.asset.assetId} needs revision. Inspect ${result.asset.quality.contactSheetPath}.`,
+          };
+        } catch (error) {
+          return { success: false, error: `Visual asset preparation failed: ${error instanceof Error ? error.message : String(error)}` };
+        }
+      },
+      toModelOutput({ output }: { output: any }) {
+        if (!output.success) {
+          return { type: 'content' as const, value: [{ type: 'text' as const, text: output.error || 'Visual asset preparation failed.' }] };
+        }
+        return {
+          type: 'content' as const,
+          value: [
+            ...(output.qaPreviewBase64 ? [modelFileContent(output.qaPreviewBase64, 'image/jpeg')] : []),
+            {
+              type: 'text' as const,
+              text: `${output.message}\nCached: ${output.cached ? 'yes' : 'no'}\nThe image above is the QA contact sheet. Inspect it directly before declaring pass; status metadata alone is not visual approval.\nPreparedVisualAsset:\n${JSON.stringify(output.asset, null, 2)}`,
+            },
+          ],
+        };
+      },
+    }),
+
     execution_checkpoint: tool({
       description: `Persist a typed handoff for a durable Agent execution. Use it after completing a meaningful work unit, after making a decision that later attempts must preserve, and before a long composition/code generation step. This is not a progress message for the user. Keep it concise and factual. Include durable workspace paths instead of copying file contents.`,
       inputSchema: z.object({
@@ -2240,6 +2391,107 @@ For approval_policy=auto, gated artifacts are approved automatically and recorde
 
           let run = run_id ? await store.loadRun(ctx.projectId, run_id) : (await store.listRuns(ctx.projectId))[0];
           if (!run) return { success: false, error: 'Studio Run not found. Start one first.' };
+          const runAtOperationStart = run;
+
+          const loadStudioArtifact = async (artifactStage: 'script' | 'storyboard' | 'composition'): Promise<unknown> => {
+            const ref = runAtOperationStart.artifacts[artifactStage];
+            if (!ref) throw new Error(`Composition subtitle sync requires the persisted ${artifactStage} artifact.`);
+            const file = await workspace.readFile(ref.path, ctx.supabase, ctx.userId);
+            if (!file) throw new Error(`Could not read Studio Run ${artifactStage} artifact at ${ref.path}.`);
+            return JSON.parse(file.content);
+          };
+          const assertCompositionSubtitleSync = async (
+            candidate: unknown,
+            overrides: { script?: unknown; storyboard?: unknown } = {},
+          ): Promise<void> => {
+            if (!runAtOperationStart.deliveryPromise.subtitlesRequired) return;
+            const composition = studio.validateStudioArtifact('composition', candidate) as Record<string, any>;
+            const script = studio.validateStudioArtifact(
+              'script',
+              overrides.script ?? await loadStudioArtifact('script'),
+            ) as Record<string, any>;
+            const storyboard = studio.validateStudioArtifact(
+              'storyboard',
+              overrides.storyboard ?? await loadStudioArtifact('storyboard'),
+            ) as Record<string, any>;
+            studio.assertSubtitleSyncEvidence({
+              required: true,
+              script: script as any,
+              storyboard: storyboard as any,
+              compositionSceneIds: composition.sceneIds,
+              evidence: composition.draftGate.subtitleSyncEvidence,
+            });
+            const designFile = await workspace.readFile(composition.designPath, ctx.supabase, ctx.userId);
+            if (!designFile) {
+              throw new Error(`Composition subtitle sync requires the saved design at ${composition.designPath}.`);
+            }
+            let design: unknown;
+            try {
+              design = JSON.parse(designFile.content);
+            } catch {
+              throw new Error(`Composition subtitle sync could not parse the saved design at ${composition.designPath}.`);
+            }
+            studio.assertCompositionSubtitleTextAuthored({
+              evidence: composition.draftGate.subtitleSyncEvidence,
+              design,
+            });
+          };
+          const assertStoryboardNarrationTiming = async (
+            candidate: unknown,
+            scriptOverride?: unknown,
+          ): Promise<void> => {
+            if (!runAtOperationStart.deliveryPromise.subtitlesRequired) return;
+            const storyboard = studio.validateStudioArtifact('storyboard', candidate) as Record<string, any>;
+            const script = studio.validateStudioArtifact(
+              'script',
+              scriptOverride ?? await loadStudioArtifact('script'),
+            ) as Record<string, any>;
+            studio.assertStoryboardNarrationTimingEvidence({
+              required: true,
+              script: script as any,
+              storyboard: storyboard as any,
+            });
+          };
+          const assertAssetsUseVisualBridge = async (
+            candidate: unknown,
+            storyboardOverride?: unknown,
+          ): Promise<void> => {
+            const manifest = studio.validateStudioArtifact('assets', candidate) as Record<string, any>;
+            const storyboard = studio.validateStudioArtifact(
+              'storyboard',
+              storyboardOverride ?? await loadStudioArtifact('storyboard'),
+            ) as Record<string, any>;
+            await studio.assertPersistedVisualAssetBridgeEvidence({
+              storyboard: storyboard as any,
+              manifest: manifest as any,
+              resolvePreparedAsset: assetId => resolvePreparedVisualAssetById({
+                projectId: ctx.projectId,
+                userId: ctx.userId!,
+                supabase: ctx.supabase!,
+                assetId,
+              }),
+            });
+          };
+          const assertReviewSubtitleVisualSync = async (
+            candidate: unknown,
+            compositionOverride?: unknown,
+          ): Promise<void> => {
+            if (!runAtOperationStart.deliveryPromise.subtitlesRequired) return;
+            const review = studio.validateStudioArtifact('review', candidate) as Record<string, any>;
+            const composition = studio.validateStudioArtifact(
+              'composition',
+              compositionOverride ?? await loadStudioArtifact('composition'),
+            ) as Record<string, any>;
+            studio.assertSubtitleVisualReviewEvidence({
+              required: true,
+              compositionEvidence: composition.draftGate.subtitleSyncEvidence,
+              reviewEvidence: review.visual.subtitleVisualEvidence,
+            });
+            for (const item of review.visual.subtitleVisualEvidence as Array<{ framePath: string }>) {
+              const frame = await workspace.readFile(item.framePath, ctx.supabase, ctx.userId);
+              if (!frame) throw new Error(`Review frame does not exist in the project workspace: ${item.framePath}`);
+            }
+          };
 
           if (operation === 'status') {
             return {
@@ -2263,10 +2515,42 @@ For approval_policy=auto, gated artifacts are approved automatically and recorde
             if (!schemaStage) return { success: false, error: 'validate requires stage when the run is complete' };
             if (artifact === undefined) return { success: false, error: 'validate requires artifact' };
             const validated = studio.validateStudioArtifact(schemaStage, artifact);
+            if (schemaStage === 'storyboard') await assertStoryboardNarrationTiming(validated);
+            if (schemaStage === 'composition') await assertCompositionSubtitleSync(validated);
+            if (schemaStage === 'assets') await assertAssetsUseVisualBridge(validated);
+            if (schemaStage === 'review') await assertReviewSubtitleVisualSync(validated);
             return { success: true, valid: true, stage: schemaStage, artifact: validated };
           }
           if (operation === 'put_artifacts') {
             if (!artifacts?.length) return { success: false, error: 'put_artifacts requires artifacts' };
+            const storyboardItem = artifacts.find(item => item.stage === 'storyboard');
+            if (storyboardItem) {
+              await assertStoryboardNarrationTiming(
+                storyboardItem.artifact,
+                artifacts.find(item => item.stage === 'script')?.artifact,
+              );
+            }
+            const compositionItem = artifacts.find(item => item.stage === 'composition');
+            if (compositionItem) {
+              await assertCompositionSubtitleSync(compositionItem.artifact, {
+                script: artifacts.find(item => item.stage === 'script')?.artifact,
+                storyboard: artifacts.find(item => item.stage === 'storyboard')?.artifact,
+              });
+            }
+            const assetsItem = artifacts.find(item => item.stage === 'assets');
+            if (assetsItem) {
+              await assertAssetsUseVisualBridge(
+                assetsItem.artifact,
+                artifacts.find(item => item.stage === 'storyboard')?.artifact,
+              );
+            }
+            const reviewItem = artifacts.find(item => item.stage === 'review');
+            if (reviewItem) {
+              await assertReviewSubtitleVisualSync(
+                reviewItem.artifact,
+                artifacts.find(item => item.stage === 'composition')?.artifact,
+              );
+            }
             const result = await studio.putPersistedStudioArtifacts({ store, run, artifacts });
             const updates = result.updates.map(update => ({
               studioRun: studio.summarizeStudioRun(update.run, update.artifactPath),
@@ -2284,7 +2568,31 @@ For approval_policy=auto, gated artifacts are approved automatically and recorde
 
           if (operation === 'put_artifact') {
             if (artifact === undefined) return { success: false, error: 'put_artifact requires artifact' };
+            if (stage === 'delivery') {
+              const reviewRef = run.artifacts.review;
+              const compositionRef = run.artifacts.composition;
+              const reviewFile = reviewRef ? await workspace.readFile(reviewRef.path, ctx.supabase, ctx.userId) : null;
+              const compositionFile = compositionRef
+                ? await workspace.readFile(compositionRef.path, ctx.supabase, ctx.userId)
+                : null;
+              if (!reviewFile || !compositionFile) {
+                return { success: false, error: 'Delivery requires persisted Review and Composition artifacts.' };
+              }
+              const reviewed = JSON.parse(reviewFile.content) as Record<string, unknown>;
+              const composition = JSON.parse(compositionFile.content) as Record<string, unknown>;
+              if (typeof reviewed.outputPath !== 'string' || typeof composition.designPath !== 'string') {
+                return { success: false, error: 'Delivery could not resolve the reviewed MP4 or editable Composition source.' };
+              }
+              artifact = studio.normalizeStudioDeliveryArtifact({
+                candidate: artifact,
+                reviewedOutputPath: reviewed.outputPath,
+                compositionDesignPath: composition.designPath,
+              });
+            }
+            if (stage === 'storyboard') await assertStoryboardNarrationTiming(artifact);
+            if (stage === 'assets') await assertAssetsUseVisualBridge(artifact);
             if (stage === 'composition') {
+              await assertCompositionSubtitleSync(artifact);
               const designPath = artifact && typeof artifact === 'object'
                 ? (artifact as Record<string, unknown>).designPath
                 : undefined;
@@ -2301,6 +2609,99 @@ For approval_policy=auto, gated artifacts are approved automatically and recorde
                     }
                   } catch { /* malformed artifacts are handled by normal validation */ }
                 }
+              }
+            }
+            if (stage === 'review' && artifact && typeof artifact === 'object') {
+              await assertReviewSubtitleVisualSync(artifact);
+              const review = artifact as Record<string, any>;
+              const outputPath = typeof review.outputPath === 'string' ? review.outputPath : '';
+              if (run.deliveryPromise.renderRuntime === 'remotion' && /\.mp4(?:[?#]|$)/i.test(outputPath)) {
+                const { data: jobs, error } = await ctx.supabase
+                  .from('remotion_export_jobs')
+                  .select('id,status,output_type,workspace_path,storage_url,content_type,duration_seconds,width,height,fps,metadata')
+                  .eq('project_id', ctx.projectId)
+                  .eq('user_id', ctx.userId)
+                  .order('created_at', { ascending: false })
+                  .limit(50);
+                if (error) return { success: false, error: `Could not verify the materialized MP4: ${error.message}` };
+                const normalize = (value: unknown) => typeof value === 'string' ? value.split(/[?#]/, 1)[0] : '';
+                const normalizedOutput = normalize(outputPath);
+                const job = (jobs || []).find((candidate: Record<string, unknown>) => (
+                  normalize(candidate.storage_url) === normalizedOutput || candidate.workspace_path === outputPath
+                ));
+                if (!job || job.status !== 'completed' || job.output_type !== 'video') {
+                  return {
+                    success: false,
+                    error: 'Review requires the completed MP4 returned by materialize_media. Editable JSON and queued export paths cannot pass Review.',
+                  };
+                }
+                if (job.content_type && job.content_type !== 'video/mp4') {
+                  return { success: false, error: `Review output is not an MP4 container (${job.content_type}).` };
+                }
+                const technical = review.technical || {};
+                const jobResolution = job.width && job.height ? `${job.width}x${job.height}` : '';
+                if (jobResolution && technical.resolution !== jobResolution) {
+                  return { success: false, error: `Review resolution ${technical.resolution} does not match exported MP4 ${jobResolution}.` };
+                }
+                if (job.duration_seconds && Math.abs(Number(technical.durationSeconds) - Number(job.duration_seconds)) > Math.max(0.1, 2 / run.deliveryPromise.fps)) {
+                  return { success: false, error: 'Review duration does not match the materialized MP4.' };
+                }
+                if (job.fps && Math.abs(Number(technical.fps) - Number(job.fps)) > 0.05) {
+                  return { success: false, error: 'Review FPS does not match the materialized MP4.' };
+                }
+                if (technical.hasAudio) {
+                  const jobMetadata = job.metadata && typeof job.metadata === 'object'
+                    ? job.metadata as Record<string, unknown>
+                    : {};
+                  const storedMeasurement = jobMetadata.audioAnalysis && typeof jobMetadata.audioAnalysis === 'object'
+                    ? jobMetadata.audioAnalysis as Record<string, unknown>
+                    : null;
+                  let measurement: { integratedLufs: number; truePeakDbfs: number } | null = storedMeasurement
+                    && typeof storedMeasurement.integratedLufs === 'number'
+                    && typeof storedMeasurement.truePeakDbfs === 'number'
+                    ? {
+                        integratedLufs: storedMeasurement.integratedLufs,
+                        truePeakDbfs: storedMeasurement.truePeakDbfs,
+                      }
+                    : null;
+                  if (!measurement) {
+                    if (typeof job.storage_url !== 'string' || !job.storage_url) {
+                      return { success: false, error: 'Review could not measure audio because the completed MP4 URL is missing.' };
+                    }
+                    try {
+                      const { measureAudioLoudness } = await import('./ffmpeg-runtime');
+                      measurement = await measureAudioLoudness(job.storage_url);
+                      await ctx.supabase
+                        .from('remotion_export_jobs')
+                        .update({ metadata: { ...jobMetadata, audioAnalysis: measurement } })
+                        .eq('id', job.id);
+                    } catch (measurementError) {
+                      return {
+                        success: false,
+                        error: `Review could not measure final MP4 loudness: ${measurementError instanceof Error ? measurementError.message : String(measurementError)}`,
+                      };
+                    }
+                  }
+                  if (!measurement) {
+                    return { success: false, error: 'Review could not resolve final MP4 loudness measurements.' };
+                  }
+                  review.audio = {
+                    ...(review.audio || {}),
+                    integratedLufs: measurement.integratedLufs,
+                    truePeakDbfs: measurement.truePeakDbfs,
+                  };
+                }
+              }
+            }
+            if (stage === 'delivery' && artifact && typeof artifact === 'object') {
+              const outputPath = (artifact as Record<string, unknown>).outputPath;
+              const reviewRef = run.artifacts.review;
+              const reviewFile = reviewRef ? await workspace.readFile(reviewRef.path, ctx.supabase, ctx.userId) : null;
+              const reviewedOutputPath = reviewFile
+                ? (JSON.parse(reviewFile.content) as Record<string, unknown>).outputPath
+                : undefined;
+              if (typeof outputPath !== 'string' || outputPath !== reviewedOutputPath) {
+                return { success: false, error: 'Delivery outputPath must exactly match the MP4 that passed Review.' };
               }
             }
             const result = await studio.putPersistedStudioArtifact({ store, run, stage, artifact });
@@ -2381,7 +2782,7 @@ For approval_policy=auto, gated artifacts are approved automatically and recorde
       description: `Export an editable Remotion composition into a real MP4 video.
 Use this when the user asks to save/export/materialize/turn a composition into MP4. It accepts a timeline media_index, snapshot_id, design_path, or the current unsaved composition from run_code.
 Default profile is fast_720p (short side 720, no upscale) for speed. Default publish=true so the exported MP4 appears as a new <<<media_N>>> video. A completed synchronous export returns the exact mediaIndex for subsequent analyze_video/preview_frame calls; use that returned index instead of guessing. By default the tool queues a durable async export like video generation; polling/cron completes it and reports either success or failure. Set wait=true on the first call when the current response must include the final URL. A repeated call for the same unchanged composition reuses the fingerprint-matched queued/completed job and does not render twice. If the same unchanged composition fails twice in one turn, stop retrying and report export as blocked.
-For Studio Run, materialize only during Review after the Composition draft gate passes. Pass the exact gated design_path; do not use an older timeline media_index when a newer autosaved draft exists. Delivery is bookkeeping only and cannot start another render.`,
+For Studio Run, materialize only during Review after the Composition draft gate passes. Review always renders the gated composition at its locked source resolution in one pass, even if profile is omitted or fast_720p is requested. Pass the exact gated design_path; do not use an older timeline media_index when a newer autosaved draft exists. Delivery is bookkeeping only and cannot start another render.`,
       inputSchema: z.object({
         media_index: z.number().optional().describe('1-based media index, e.g. 3 for <<<media_3>>>. Must point to an editable Remotion composition.'),
         snapshot_id: z.string().optional().describe('Snapshot ID of an editable Remotion composition.'),
@@ -2434,6 +2835,9 @@ For Studio Run, materialize only during Review after the Composition draft gate 
         try {
           const shouldPublish = publish !== false;
           const shouldWait = wait === true;
+          const renderProfile: RemotionRenderProfile = studioCheckpoint.studioRunStage === 'review'
+            ? 'source'
+            : (profile || 'fast_720p');
           const publishSnapshotId = shouldPublish && !shouldWait ? crypto.randomUUID() : undefined;
           const job = await createRemotionExportJob({
             userId: ctx.userId,
@@ -2442,7 +2846,7 @@ For Studio Run, materialize only during Review after the Composition draft gate 
             designPath: source.designPath,
             design: source.design,
             outputType: 'video',
-            renderProfile: (profile || 'fast_720p') as RemotionRenderProfile,
+            renderProfile,
             publish: shouldPublish,
             publishSnapshotId,
             name: name || 'materialized-composition',
@@ -2511,6 +2915,9 @@ For Studio Run, materialize only during Review after the Composition draft gate 
           const result = await runRemotionExportJob(job.id);
           const completed = result.job;
           const videoUrl = completed.storage_url || '';
+          const audioAnalysis = completed.metadata?.audioAnalysis && typeof completed.metadata.audioAnalysis === 'object'
+            ? completed.metadata.audioAnalysis
+            : undefined;
           const publishedSnapshotId = typeof completed.metadata?.publishedSnapshotId === 'string'
             ? completed.metadata.publishedSnapshotId
             : undefined;
@@ -2539,6 +2946,8 @@ For Studio Run, materialize only during Review after the Composition draft gate 
             const orderedSnapshots = await refreshSnapshotUrls(ctx);
             const actualMediaIndex = findSnapshotMediaIndex(orderedSnapshots, publishedSnapshotId);
             if (actualMediaIndex) {
+              const pinnedUrls = pinAgentMediaUrl(ctx.snapshotImages, actualMediaIndex, videoUrl);
+              ctx.snapshotImages.splice(0, ctx.snapshotImages.length, ...pinnedUrls);
               ctx.currentSnapshotIndex = actualMediaIndex - 1;
               publishedMediaIndex = actualMediaIndex;
             } else {
@@ -2564,6 +2973,7 @@ For Studio Run, materialize only during Review after the Composition draft gate 
             durationSeconds: completed.duration_seconds,
             renderSeconds: completed.render_seconds,
             realtimeRatio: completed.realtime_ratio,
+            audioAnalysis,
             message: publishedMediaIndex
               ? `Exported MP4 is available as <<<media_${publishedMediaIndex}>>>. Use media_index=${publishedMediaIndex} for final video review.`
               : undefined,
@@ -3225,7 +3635,7 @@ For a first composition draft, prefer the top-level \`composition\` input over w
 
 For durable Studio Composition work, use \`write_file\` to author numbered source parts and then pass \`composition_parts: { directory, width, height, props, editables, animation }\`, or use \`paths\` for an explicit subset. Every file MUST be under \`<project-id>/drafts/composition-parts/\` and use a numeric prefix of at least two digits plus a lowercase slug. Each file has a hard transport limit of 5000 source characters. There is no aggregate source-size or part-count limit. Files are concatenated by numeric prefix into one scope, so do not use import/export. Preserve approved narration, subtitles, scenes, animation, and visual detail; never trim creative content to satisfy a source-size target. The harness discovers, validates, and autosaves the parts without asking the model to repeat the complete source or a long path list in one tool call.
 
-For a 30s+ first composition, the first \`run_code\` call must be a concise, complete, compilable scaffold under 9000 source characters. Use scene data arrays and shared components instead of bespoke code per scene. Autosave that scaffold first, then add visual refinements with smaller patch calls. Never spend a whole model step writing one giant first draft.
+For a 30s+ first composition, author numbered composition parts before the first \`run_code\` call, then assemble the complete draft once with \`composition_parts.directory\`. Use scene data arrays and shared components where they help, but do not impose an aggregate source-size target or trim approved creative detail.
 
 Composition hard rules: use Remotion \`<Img>\`, not \`<img>\`; declare editable user-facing text; use system CJK fonts; keep mobile image layers light. Reference timeline media in composition code and props with the literal 1-based marker \`<<<media_N>>>\`; the runtime resolves markers to current URLs before validation, autosave, preview, and export. Never translate Media Index N into \`ctx.snapshotImages[N]\` because that JavaScript array is 0-based. Only \`Composition(props)\` may read \`props\` directly; helper components must receive values through their own parameters and must never reference outer \`props\` (prevents \`props is not defined\` in Lambda). For timeline videos, preserve the selected Media Index video aspect ratio when all selected videos share one aspect: 9:16 sources must return a 9:16 canvas such as 1080x1920, never a 16:9 canvas. For mixed-aspect sources, choose the user/platform/current composition target and use contain/background; do not claim the runtime forced one source's aspect.
 For legacy first-draft calls without \`composition\`, send one complete executable JavaScript body that returns the render object. Do not send a fragment like \`const code = \\\`\` without the final \`return { type: 'render', code, ... }\`. Keep long videos concise by using arrays, helper components, and interpolations instead of writing frame-by-frame code.
@@ -3566,6 +3976,9 @@ Node media runtime provides \`require\`, \`process\`, \`ffmpegPath\`, \`inputFil
             patched.animation = normalizeCompositionAnimation(patched.code, patched.animation);
             if (result.editables) patched.editables = result.editables;
 
+            const promiseError = studioCompositionPromiseError(await getStudioRunCheckpoint(ctx), patched);
+            if (promiseError) return { type: 'text' as const, content: promiseError };
+
             const harnessError = validateDesign({ code: patched.code, props: patched.props });
             if (harnessError) return { type: 'text' as const, content: harnessError };
 
@@ -3615,6 +4028,11 @@ Node media runtime provides \`require\`, \`process\`, \`ffmpegPath\`, \`inputFil
                 durationInSeconds: result.durationInSeconds || result.duration || 5,
               };
             }
+            const promiseError = studioCompositionPromiseError(await getStudioRunCheckpoint(ctx), {
+              width: result.width,
+              height: result.height,
+            });
+            if (promiseError) return { type: 'text' as const, content: promiseError };
             // ── Composition harness: compile + image reference checks ──
             const resolvedCode = resolveMediaMarkersInString(result.code, ctx.snapshotImages);
             const resolvedProps = resolveMediaMarkersInValue(result.props, ctx.snapshotImages) as Record<string, unknown> | undefined;
@@ -4037,6 +4455,7 @@ const DURABLE_IDEMPOTENT_TOOLS = new Set([
   'generate_voiceover',
   'generate_audio',
   'generate_music',
+  'prepare_visual_asset',
 ]);
 
 function wrapDurableIdempotentTools(
@@ -4268,12 +4687,15 @@ export async function* runMakaronAgent(
     ? buildLightweightSystemPrompt(analysisOnly ? 'analysis' : 'tipReaction', options?.locale)
     : await buildSystemPrompt(options?.userSkills, options?.supabase, options?.userId, projectId);
   const durableExecutionDirective = options?.execution
-    ? `\n\n## Durable execution contract\nThis is attempt ${options.execution.attemptNo} of execution ${options.execution.runId}, work unit ${options.execution.workUnitKey}. The execution may continue in a fresh model context. Preserve decisions and durable artifact pointers by calling execution_checkpoint after each meaningful work unit and before a long, risky generation step. Produce the first durable mutation within 90 seconds when the work unit is composition/code. Do not repeat expensive side effects whose tool result is already present. A handoff is progress, not failure.`
+    ? `\n\n## Durable execution contract\nThis is attempt ${options.execution.attemptNo} of execution ${options.execution.runId}, work unit ${options.execution.workUnitKey}. The execution may continue in a fresh model context. Preserve decisions and durable artifact pointers by calling execution_checkpoint after each meaningful work unit and before a long, risky generation step. Produce the first durable mutation within 90 seconds when the work unit is composition/code. If this attempt advances a Studio Run into Composition, immediately switch to numbered composition parts even when this work unit started in an earlier stage; never begin a monolithic run_code payload. Do not repeat expensive side effects whose tool result is already present. A handoff is progress, not failure.`
     : '';
   const durableCompositionDirective = options?.execution?.workUnitKey === 'studio:composition'
     ? `\n\n## Durable Composition transport\nKeep the full original Composition and Director creative standard, but do not emit a monolithic run_code composition payload in this work unit. Long tool-input streams can reset before the call closes. Author the final Remotion source as numbered files under ${projectId}/drafts/composition-parts, one cohesive part per model step with write_file. Keep each part under the 5000-character transport limit, wait for its tool result, and create as many parts as the approved content needs. Parts around 2000-4000 characters are expected. Rewriting the same numbered path is safe after recovery. Do not use import/export; the files are concatenated into one scope with no aggregate source-size or part-count limit. Never shorten approved narration, subtitles, scenes, animation, or visual detail to reduce source size. When all parts exist, call run_code once with composition_parts.directory set to ${projectId}/drafts/composition-parts, plus runtime composition, dimensions, props, editables, and animation. This changes only persistence and transport; it must not simplify the approved story, audio, visual direction, or ending.`
     : '';
-  const executionSystemPrompt = `${baseSystemPrompt}${durableExecutionDirective}${durableCompositionDirective}`;
+  const durableCompositionGuidance = options?.execution?.workUnitKey === 'studio:composition'
+    ? buildDurableCompositionGuidance()
+    : '';
+  const executionSystemPrompt = `${baseSystemPrompt}${durableExecutionDirective}${durableCompositionDirective}${durableCompositionGuidance}`;
   const systemPrompt = runtime.spec.provider === 'deepseek' && options?.locale
     ? `${executionSystemPrompt}\n\nCRITICAL OUTPUT LANGUAGE: ${options.locale === 'en' ? 'ENGLISH ONLY' : 'CHINESE ONLY'}. This rule still applies after every tool result.`
     : executionSystemPrompt;
@@ -4373,6 +4795,7 @@ export async function* runMakaronAgent(
     let recoveryTextOnly = false;
     let studioRunTouchedThisTurn = false;
     let runCodeStartedThisTurn = false;
+    const executionAttemptWorkUnit = options?.execution?.workUnitKey;
     const studioRunRecoveryPrompt = prompt.includes('[System automatic recovery]')
       || prompt.includes('[Recoverable Agent Checkpoint]');
     const recoveryBlockedTools = new Set<string>();
@@ -4385,6 +4808,7 @@ export async function* runMakaronAgent(
       'generate_voiceover',
       'generate_audio',
       'generate_music',
+      'prepare_visual_asset',
     ]);
 
     const recordStepUsage = (event: any) => {
@@ -4443,6 +4867,8 @@ export async function* runMakaronAgent(
       let finalStepDeliveredArtifact = false;
       let attemptDeliveredArtifact = false;
       const attemptCommittedTools = new Set<string>();
+      let durableStageHandoff: { code: 'studio_stage_handoff'; detail: string } | undefined;
+      let durableStudioCompletion: { detail: string } | undefined;
       let streamError: unknown;
       let lastTool = '';
 
@@ -4471,7 +4897,16 @@ export async function* runMakaronAgent(
         : recoveryActiveTools
           ? { activeTools: recoveryActiveTools }
           : {}),
-      stopWhen: stepCountIs(maxSteps),
+      stopWhen: [
+        stepCountIs(maxSteps),
+        ({ steps }: { steps: Array<{ toolResults?: Array<{ toolName?: string; output?: unknown }> }> }) => (
+          shouldStopAfterStudioToolStep({
+            durableExecution: Boolean(ctx.execution),
+            attemptWorkUnit: executionAttemptWorkUnit,
+            toolResults: steps.at(-1)?.toolResults,
+          })
+        ),
+      ],
       prepareStep: ({ messages }: { messages: ModelMessage[] }) => ({
         messages: runtime.normalizeMessages(messages),
       }),
@@ -4547,6 +4982,7 @@ export async function* runMakaronAgent(
             };
           }
         }
+        if (durableStageHandoff || durableStudioCompletion) break;
         continue;
       }
       if (event.type === 'finish') {
@@ -4868,6 +5304,37 @@ export async function* runMakaronAgent(
                 console.error('[agent-execution] composition scaffold failed:', scaffoldError);
               }
             }
+            if (shouldHandoffToStudioComposition({
+              durableExecution: Boolean(ctx.execution),
+              attemptWorkUnit: executionAttemptWorkUnit,
+              currentStage: typeof studioSummary?.currentStage === 'string'
+                ? studioSummary.currentStage
+                : undefined,
+            })) {
+              durableStageHandoff = {
+                code: 'studio_stage_handoff',
+                detail: 'Composition is ready to continue in a dedicated durable attempt.',
+              };
+            }
+            if (shouldCompleteDurableStudioRun({
+              durableExecution: Boolean(ctx.execution),
+              status: typeof studioSummary?.status === 'string' ? studioSummary.status : undefined,
+              currentStage: typeof studioSummary?.currentStage === 'string'
+                ? studioSummary.currentStage
+                : null,
+            })) {
+              durableStudioCompletion = {
+                detail: 'Studio Run completed and all delivery artifacts were persisted.',
+              };
+              finalStepDeliveredArtifact = true;
+              attemptDeliveredArtifact = true;
+              yield {
+                type: 'content',
+                text: options?.locale === 'en'
+                  ? 'Studio Run complete. The final video, editable source, and review evidence are archived.'
+                  : 'Studio Run 已完成，最终视频、可编辑源和验收记录均已归档。',
+              };
+            }
           }
           if (toolSucceeded && nonRepeatableTools.has(toolName)) {
             attemptCommittedTools.add(toolName);
@@ -4995,15 +5462,28 @@ export async function* runMakaronAgent(
 
       if (streamError) await persistStreamedCodeCheckpoint(true);
 
-      let assessment = classifyModelTermination({
-        sawFinish,
-        finishReason,
-        rawFinishReason,
-        finalStepTextChars,
-        finalStepToolCalls,
-        finalStepDeliveredArtifact,
-        streamError,
-      });
+      let assessment = durableStudioCompletion
+        ? {
+            ok: true,
+            retryable: false,
+            detail: durableStudioCompletion.detail,
+          }
+        : durableStageHandoff
+          ? {
+              ok: false,
+              retryable: true,
+              code: durableStageHandoff.code,
+              detail: durableStageHandoff.detail,
+            }
+          : classifyModelTermination({
+              sawFinish,
+              finishReason,
+              rawFinishReason,
+              finalStepTextChars,
+              finalStepToolCalls,
+              finalStepDeliveredArtifact,
+              streamError,
+            });
 
       if (assessment.ok) {
         const activeStudioCheckpoint = await getStudioRunCheckpoint(ctx);
@@ -5012,6 +5492,7 @@ export async function* runMakaronAgent(
           studioRunTouched: studioRunTouchedThisTurn,
           runCodeStarted: runCodeStartedThisTurn,
           recoveryPrompt: studioRunRecoveryPrompt,
+          attemptWorkUnit: executionAttemptWorkUnit,
         })) {
           assessment = {
             ok: false,
@@ -5033,6 +5514,7 @@ export async function* runMakaronAgent(
       let attemptSteps: any[] = [];
       try { attemptSteps = await result.steps; } catch { /* stream may have failed before a complete step */ }
       const canRecover = assessment.retryable
+        && !durableStageHandoff
         && recoveryAttempt < 1
         && Date.now() - agentStartTime < 600_000;
       if (canRecover) {
@@ -5050,9 +5532,12 @@ export async function* runMakaronAgent(
         const studioRecovery = studioCheckpoint.studioRunId
           ? ` Resume Studio Run ${studioCheckpoint.studioRunId} at stage ${studioCheckpoint.studioRunStage}. Call studio_run status first, then continue that stage directly. Do not reread skill, prompt, or reference files already present in the conversation history.`
           : '';
+        const compositionRecovery = studioCheckpoint.studioRunStage === 'composition'
+          ? ` Switch immediately to numbered source files under ${ctx.projectId}/drafts/composition-parts. Salvage complete reusable definitions from the partial stream into a numbered part, then continue with additional parts; do not stream the monolithic run_code payload again. Assemble once with composition_parts.directory after all parts are durable.`
+          : '';
         const recoveryInstruction = textOnlyRecovery
           ? 'A finished artifact was already delivered in the previous step. Do not call any tool, regenerate, republish, or create another task. Only provide the concise final reply for the existing delivered result.'
-          : `Continue from the existing tool results and saved draft; do not restart from the original media.${savedDraftPath ? ` The exact saved draft path is: ${savedDraftPath}.` : ''}${streamedCheckpoint?.streamedCodePath ? ` Partial streamed code was saved at ${streamedCheckpoint.streamedCodePath} (${streamedCheckpoint.streamedCodeChars || 0} chars); read it once and salvage useful components.` : ''}${studioRecovery}${recoveryBlockedTools.size ? ` Do not repeat these already-completed tools: ${[...recoveryBlockedTools].join(', ')}; use their existing results.` : ''} For a 30s+ first composition, create a concise compilable scaffold under 9000 source characters and autosave it before refinements. Complete the pending modification you already planned. If the user requested a finished artifact, publish the updated artifact before your concise final reply.`;
+          : `Continue from the existing tool results and saved draft; do not restart from the original media.${savedDraftPath ? ` The exact saved draft path is: ${savedDraftPath}.` : ''}${streamedCheckpoint?.streamedCodePath ? ` Partial streamed code was saved at ${streamedCheckpoint.streamedCodePath} (${streamedCheckpoint.streamedCodeChars || 0} chars); read it once and salvage useful components.` : ''}${studioRecovery}${compositionRecovery}${recoveryBlockedTools.size ? ` Do not repeat these already-completed tools: ${[...recoveryBlockedTools].join(', ')}; use their existing results.` : ''} Complete the pending modification you already planned. If the user requested a finished artifact, publish the updated artifact before your concise final reply.`;
         attemptMessages = [
           ...attemptMessages,
           ...responseMessages,

@@ -24,6 +24,7 @@ describe('Explainer Video built-in skill', () => {
     expect(skill?.allowedTools).toEqual(expect.arrayContaining([
       'read_file',
       'studio_run',
+      'prepare_visual_asset',
       'run_code',
       'write_file',
       'preview_frame',
@@ -38,6 +39,7 @@ describe('Explainer Video built-in skill', () => {
     expect(rawSkill).toContain('local Remotion composition workflow')
     expect(rawSkill).toContain('not the Open Montage workflow runtime')
     expect(rawSkill).toContain('skills/_shared/remotion-director-contract.md')
+    expect(rawSkill).toContain('skills/_shared/visual-direction/SKILL.md')
     expect(rawSkill).toContain('remotion-video-director')
     expect(rawSkill).toContain('skills/_shared/remotion-video-director/references/video-archetypes.md')
     expect(rawSkill).toContain('skills/_shared/remotion-video-director/references/remotion-patterns.md')
@@ -62,26 +64,34 @@ describe('Explainer Video built-in skill', () => {
     expect(rawSkill).toContain('Audio Index markers such as `<<<audio_N>>>` are labels')
     expect(rawSkill).toContain('Use the returned public `audioUrl` directly in Remotion')
     expect(rawSkill).toContain('Never put `<<<audio_N>>>` inside composition props or `<Audio>`')
-    expect(rawSkill).toContain('Create a compact asset-and-audio cue sheet before generating media')
+    expect(rawSkill).toContain('Create a compact asset-and-audio cue sheet before generating remaining')
     expect(rawSkill).toContain('Scene -> narration beat -> sound beat -> base Remotion motion')
     expect(rawSkill).toContain('Do not default to webpage structures')
     expect(rawSkill).toContain('Let time solve layout density')
     expect(rawSkill).toContain('Prefer stickers for foreground insertions')
     expect(rawSkill).toContain('Rectangular generated images are')
-    expect(rawSkill).toContain('usually 1-3 strong')
+    expect(rawSkill).toContain('There is no')
+    expect(rawSkill).toContain('fixed sticker quota')
     expect(rawSkill).toContain('use the literal 1-based')
     expect(rawSkill).toContain('never map Media Index N to the 0-based')
     expect(rawSkill).toContain('Scene Cue Sheet Pattern')
     expect(rawSkill).toContain('All Chinese,')
     expect(rawSkill).toContain('Unexpected identifier')
     expect(rawSkill).toContain('Unless the user explicitly requested a silent/text-only video')
-    expect(rawSkill).toContain('`transcribe_audio({ media_url: audioUrl })` only when')
-    expect(rawSkill).toContain('reference tool, not a')
+    expect(rawSkill).toContain('`transcribe_audio({ media_url: audioUrl })` when a single continuous')
+    expect(rawSkill).toContain('planned Script ranges are not proof')
+    expect(rawSkill).toContain('timing evidence, not a')
     expect(rawSkill).toContain('does not generate cue files')
-    expect(rawSkill).toContain('You own the wording')
+    expect(rawSkill).toContain('They do not choose subtitle text styling')
     expect(rawSkill).toContain('There is no required prop name')
     expect(rawSkill).toContain('Treat subtitles as part of the visual direction')
     expect(rawSkill).toContain('Do not copy raw ASR output blindly')
+    expect(rawSkill).toContain('three-way semantic match')
+    expect(rawSkill).toContain('subtitleSyncEvidence')
+    expect(rawSkill).toContain('before Storyboard')
+    expect(rawSkill).toContain('narrationTimingEvidence')
+    expect(rawSkill).toContain('rejects narration')
+    expect(rawSkill).toContain('primaryAssetId')
     expect(rawSkill).toContain('read and follow')
     expect(rawSkill).toContain('skills/sticker-maker/SKILL.md')
     expect(rawSkill).toContain('At least three `preview_frame` checks')
@@ -99,12 +109,14 @@ describe('Explainer Video built-in skill', () => {
     expect(agent).not.toContain('skills/explainer-video/SKILL.md')
   })
 
-  it('keeps sticker background removal in the node runtime', () => {
+  it('uses the first-class Visual Asset Bridge for sticker preparation', () => {
     const sticker = read('src/skills/sticker-maker/SKILL.md')
 
-    expect(sticker).toContain('run_code({ runtime: "node" })')
-    expect(sticker).toContain('sharp')
-    expect(sticker).toContain('不要用 `runtime: "composition"` 做贴纸抠图')
-    expect(sticker).toContain('真实 `imageUrl`')
+    expect(sticker).toContain('prepare_visual_asset({')
+    expect(sticker).toContain('five-background QA sheet')
+    expect(sticker).toContain('enclosed high-confidence chroma pockets')
+    expect(sticker).toContain('residualChromaRatio')
+    expect(sticker).not.toContain('run_code({ runtime: "node" })')
+    expect(sticker).not.toContain('sharp')
   })
 })

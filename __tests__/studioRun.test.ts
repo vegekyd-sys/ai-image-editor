@@ -1,8 +1,13 @@
 import { describe, expect, it } from 'vitest';
 import {
   approveStudioStage,
+  assertCompositionSubtitleTextAuthored,
+  assertSubtitleSyncEvidence,
+  assertSubtitleVisualReviewEvidence,
+  assertStoryboardNarrationTimingEvidence,
   createStudioRun,
   getStudioArtifactJsonSchema,
+  normalizeStudioDeliveryArtifact,
   parseStudioRun,
   putPersistedStudioArtifacts,
   putStudioArtifact,
@@ -61,18 +66,21 @@ const artifacts: Record<StudioStageId, unknown> = {
   },
   assets: {
     version: '1.0', totalCostUsd: 0, missingAssetIds: [],
-    assets: [{ id: 'spark', type: 'image', path: 'public/brand/makaron-spark-mark.png', source: 'project-owned', sceneIds: ['scene-1'], status: 'ready', costUsd: 0 }],
+    assets: [
+      { id: 'spark', type: 'image', path: 'public/brand/makaron-spark-mark.png', source: 'project-owned', sceneIds: ['scene-1'], status: 'ready', costUsd: 0 },
+      { id: 'voice', type: 'audio', path: 'audio/voice.mp3', source: 'generated', sceneIds: ['scene-1'], status: 'ready', costUsd: 0 },
+    ],
   },
   composition: {
     version: '1.0', runtime: 'remotion', mode: 'editable', designPath: 'code/makaron.json', width: 1920, height: 1080,
     fps: 30, durationSeconds: 50, sceneIds: ['scene-1'], previewFramePaths: ['a.png', 'b.png', 'c.png'],
-    draftGate: { expectedDurationFrames: 1500, timelineDurationFrames: 1500, boundaryFramesChecked: 0, endingFrameChecked: true, audioSources: 'resolved', unresolvedIssues: [] },
+    draftGate: { expectedDurationFrames: 1500, timelineDurationFrames: 1500, boundaryFramesChecked: 0, endingFrameChecked: true, audioSources: 'resolved', visualPlanChecked: true, underfilledSceneIds: [], subtitleSyncEvidence: [], unresolvedIssues: [] },
     editable: true,
   },
   review: {
     version: '1.0', outputPath: 'outputs/final.mp4', status: 'pass',
     technical: { validContainer: true, durationSeconds: 50, resolution: '1920x1080', fps: 30, hasAudio: true },
-    visual: { framesSampled: 3, contactSheetPath: 'outputs/contact.png', blackFramesDetected: false, missingAssets: false, unreadableText: false, overlapDetected: false, subjectNamed: true, storyArcComplete: true, endingResolves: true },
+    visual: { framesSampled: 3, contactSheetPath: 'outputs/contact.png', blackFramesDetected: false, missingAssets: false, unreadableText: false, overlapDetected: false, subjectNamed: true, storyArcComplete: true, endingResolves: true, visualPlanHonored: true, underfilledFramesDetected: false, subtitleNarrationVisualAligned: true, subtitleVisualEvidence: [] },
     audio: { integratedLufs: -14, truePeakDbfs: -2, unexpectedSilence: false, narrationPresent: true, musicPresent: true, soundDesignPresent: true, audioSupportsStory: true },
     runtimePromiseHonored: true, issues: [],
   },
@@ -93,6 +101,20 @@ function put(run: StudioRun, stage: StudioStageId, time = now) {
 }
 
 describe('Studio Run controller', () => {
+  it('derives mechanical Delivery fields from reviewed Studio artifacts', () => {
+    expect(normalizeStudioDeliveryArtifact({
+      candidate: { version: '2.0', outputPath: 'wrong/media.mp4', deliveredAt: 'not-a-date' },
+      reviewedOutputPath: 'project/media/final.mp4',
+      compositionDesignPath: 'project/drafts/latest-composition.json',
+      now,
+    })).toEqual({
+      version: '1.0',
+      outputPath: 'project/media/final.mp4',
+      editableSourcePath: 'project/drafts/latest-composition.json',
+      deliveredAt: now,
+    });
+  });
+
   it('accepts an honest unmeasured loudness result', () => {
     const baseReview = artifacts.review as Record<string, unknown>;
     const baseAudio = baseReview.audio as Record<string, unknown>;
@@ -162,9 +184,207 @@ describe('Studio Run controller', () => {
         boundaryFramesChecked: 1,
         endingFrameChecked: false,
         audioSources: 'resolved',
+        visualPlanChecked: false,
+        underfilledSceneIds: ['scene-2'],
+        subtitleSyncEvidence: [{
+          scriptSectionId: 's1',
+          sceneId: 'scene-1',
+          visualStartSeconds: 0,
+          visualEndSeconds: 10,
+          narrationStartSeconds: 0,
+          narrationEndSeconds: 10,
+          representativeFrameSeconds: 12,
+          subtitleText: 'Narration',
+          timingSource: 'transcribe_audio',
+        }],
         unresolvedIssues: ['black transition frame'],
       },
-    })).toThrow(/timelineDurationFrames|scene boundary|final visible frame|resolve draft issues/);
+    })).toThrow(/timelineDurationFrames|scene boundary|final visible frame|representativeFrameSeconds|resolve draft issues/);
+  });
+
+  it('cross-checks subtitle timing evidence against Script and Storyboard instead of trusting a boolean', () => {
+    const script = {
+      sections: [
+        { id: 'video', narration: '再让画面动起来', onScreenText: ['生成视频'] },
+        { id: 'audio', narration: '也让声音加入故事', onScreenText: ['生成音乐'] },
+      ],
+    };
+    const storyboard = {
+      scenes: [
+        { id: 'video-scene', startSeconds: 8.8, endSeconds: 12.2 },
+        { id: 'audio-scene', startSeconds: 12.2, endSeconds: 16 },
+      ],
+      narrationTimingEvidence: [
+        {
+          scriptSectionId: 'video', sceneId: 'video-scene', narrationStartSeconds: 9.02,
+          narrationEndSeconds: 11.78, timingSource: 'transcribe_audio' as const,
+        },
+        {
+          scriptSectionId: 'audio', sceneId: 'audio-scene', narrationStartSeconds: 12.42,
+          narrationEndSeconds: 15.66, timingSource: 'transcribe_audio' as const,
+        },
+      ],
+    };
+    const aligned = [
+      {
+        scriptSectionId: 'video', sceneId: 'video-scene', visualStartSeconds: 8.8, visualEndSeconds: 12.2,
+        narrationStartSeconds: 9.02, narrationEndSeconds: 11.78, representativeFrameSeconds: 10.4,
+        subtitleText: '再让画面动起来',
+        timingSource: 'transcribe_audio' as const,
+      },
+      {
+        scriptSectionId: 'audio', sceneId: 'audio-scene', visualStartSeconds: 12.2, visualEndSeconds: 16,
+        narrationStartSeconds: 12.42, narrationEndSeconds: 15.66, representativeFrameSeconds: 14,
+        subtitleText: '也让声音加入故事',
+        timingSource: 'transcribe_audio' as const,
+      },
+    ];
+
+    expect(() => assertSubtitleSyncEvidence({
+      required: true,
+      script,
+      storyboard,
+      compositionSceneIds: ['video-scene', 'audio-scene'],
+      evidence: aligned,
+    })).not.toThrow();
+
+    expect(() => assertSubtitleSyncEvidence({
+      required: true,
+      script,
+      storyboard: {
+        scenes: [
+          { id: 'video-scene', startSeconds: 10, endSeconds: 15 },
+          { id: 'audio-scene', startSeconds: 15, endSeconds: 20.5 },
+        ],
+        narrationTimingEvidence: storyboard.narrationTimingEvidence,
+      },
+      compositionSceneIds: ['video-scene', 'audio-scene'],
+      evidence: aligned,
+    })).toThrow(/does not match Storyboard|starts before scene/);
+  });
+
+  it('allows either faithful narration or concise text authored for the same Script section', () => {
+    const script = {
+      sections: [{
+        id: 'sound',
+        narration: '配上专属音乐和音效，作品眨时有了灵魂。',
+        onScreenText: ['声音魔法'],
+      }],
+    };
+    const storyboard = {
+      scenes: [{ id: 'sound-scene', startSeconds: 20, endSeconds: 25 }],
+      narrationTimingEvidence: [{
+        scriptSectionId: 'sound', sceneId: 'sound-scene', narrationStartSeconds: 20.2,
+        narrationEndSeconds: 24.5, timingSource: 'transcribe_audio' as const,
+      }],
+    };
+    const evidence = {
+      scriptSectionId: 'sound', sceneId: 'sound-scene', visualStartSeconds: 20, visualEndSeconds: 25,
+      narrationStartSeconds: 20.2, narrationEndSeconds: 24.5, representativeFrameSeconds: 22,
+      subtitleText: '配上专属音乐和音效，作品瞬间有了灵魂。',
+      timingSource: 'transcribe_audio' as const,
+    };
+
+    expect(() => assertSubtitleSyncEvidence({
+      required: true,
+      script,
+      storyboard,
+      compositionSceneIds: ['sound-scene'],
+      evidence: [evidence],
+    })).not.toThrow();
+    expect(() => assertSubtitleSyncEvidence({
+      required: true,
+      script,
+      storyboard,
+      compositionSceneIds: ['sound-scene'],
+      evidence: [{ ...evidence, subtitleText: '声音魔法' }],
+    })).not.toThrow();
+    expect(() => assertSubtitleSyncEvidence({
+      required: true,
+      script,
+      storyboard,
+      compositionSceneIds: ['sound-scene'],
+      evidence: [{ ...evidence, subtitleText: '无限创意' }],
+    })).toThrow(/Script section's authored on-screen text/);
+  });
+
+  it('requires claimed subtitle text to exist in the saved Composition source', () => {
+    const evidence = [{
+      scriptSectionId: 'video', sceneId: 'video-scene', visualStartSeconds: 8.8, visualEndSeconds: 12.2,
+      narrationStartSeconds: 9.02, narrationEndSeconds: 11.78, representativeFrameSeconds: 10.4,
+      subtitleText: '再让画面动起来', timingSource: 'transcribe_audio' as const,
+    }];
+
+    expect(() => assertCompositionSubtitleTextAuthored({
+      evidence,
+      design: { code: 'function Composition() {}', props: { captions: ['再让画面动起来'] } },
+    })).not.toThrow();
+    expect(() => assertCompositionSubtitleTextAuthored({
+      evidence,
+      design: { code: 'function Composition() {}', props: { title: '视频生成' } },
+    })).toThrow(/not authored in the saved Composition/);
+  });
+
+  it('blocks Storyboard before Assets when real narration falls outside its linked scene', () => {
+    const script = {
+      sections: [{ id: 'music', narration: '让声音加入故事', onScreenText: ['生成音乐'] }],
+    };
+    const aligned = {
+      scenes: [{ id: 'music-scene', startSeconds: 12.2, endSeconds: 16 }],
+      narrationTimingEvidence: [{
+        scriptSectionId: 'music', sceneId: 'music-scene', narrationStartSeconds: 12.42,
+        narrationEndSeconds: 15.66, timingSource: 'transcribe_audio' as const,
+      }],
+    };
+    expect(() => assertStoryboardNarrationTimingEvidence({ required: true, script, storyboard: aligned })).not.toThrow();
+    expect(() => assertStoryboardNarrationTimingEvidence({
+      required: true,
+      script,
+      storyboard: {
+        scenes: [{ id: 'music-scene', startSeconds: 15, endSeconds: 20.5 }],
+        narrationTimingEvidence: aligned.narrationTimingEvidence,
+      },
+    })).toThrow(/starts before Storyboard scene/);
+  });
+
+  it('requires Review to describe the observed picture instead of trusting a semantic boolean', () => {
+    const compositionEvidence = [{
+      scriptSectionId: 'video', sceneId: 'video-scene', visualStartSeconds: 8.8, visualEndSeconds: 12.2,
+      narrationStartSeconds: 9.02, narrationEndSeconds: 11.78, representativeFrameSeconds: 10.4,
+      subtitleText: '让画面动起来',
+      timingSource: 'transcribe_audio' as const,
+    }];
+    const aligned = [{
+      scriptSectionId: 'video', sceneId: 'video-scene', representativeFrameSeconds: 10.4,
+      framePath: 'project-1/drafts/video-final-t10-40.jpg', displayedText: '让画面动起来',
+      observedVisualContent: '胶片角色推动一段正在播放的画面', alignment: 'pass' as const,
+    }];
+
+    expect(() => assertSubtitleVisualReviewEvidence({
+      required: true,
+      compositionEvidence,
+      reviewEvidence: aligned,
+    })).not.toThrow();
+    expect(() => assertSubtitleVisualReviewEvidence({
+      required: true,
+      compositionEvidence,
+      reviewEvidence: [{ ...aligned[0], observedVisualContent: '让画面动起来' }],
+    })).toThrow(/non-text picture/);
+    expect(() => assertSubtitleVisualReviewEvidence({
+      required: true,
+      compositionEvidence,
+      reviewEvidence: [],
+    })).toThrow(/requires exactly one/);
+    expect(() => assertSubtitleVisualReviewEvidence({
+      required: true,
+      compositionEvidence,
+      reviewEvidence: [{ ...aligned[0], displayedText: 'Bring your ideas to life in video' }],
+    })).toThrow(/must match Composition subtitleText/);
+    expect(() => assertSubtitleVisualReviewEvidence({
+      required: true,
+      compositionEvidence,
+      reviewEvidence: [{ ...aligned[0], framePath: 'project-1/drafts/design-contact-frame.jpg' }],
+    })).toThrow(/must come from previewing the final MP4/);
   });
 
   it('refuses a passing final review with failed visual checks', () => {
@@ -202,6 +422,39 @@ describe('Studio Run controller', () => {
       },
       artifactPath: 'incomplete-story-review.json',
       now,
+    })).toThrow(/passing review/);
+  });
+
+  it('rejects missing promised audio, editable JSON delivery, and underfilled visual reviews', () => {
+    let run = makeRun('auto');
+    for (const stage of ['brief', 'proposal', 'script', 'storyboard'] as StudioStageId[]) run = put(run, stage).run;
+    expect(() => putStudioArtifact({
+      run,
+      stage: 'assets',
+      artifact: {
+        ...(artifacts.assets as Record<string, unknown>),
+        assets: [(artifacts.assets as any).assets[0]],
+      },
+      artifactPath: 'assets-without-audio.json',
+      now,
+    })).toThrow('assets does not honor delivery promise: required audio asset');
+
+    expect(() => studioArtifactSchemas.review.parse({
+      ...(artifacts.review as Record<string, unknown>),
+      outputPath: 'code/editable-composition.json',
+    })).toThrow(/materialized MP4/);
+    expect(() => studioArtifactSchemas.delivery.parse({
+      ...(artifacts.delivery as Record<string, unknown>),
+      outputPath: 'code/editable-composition.json',
+    })).toThrow(/materialized MP4/);
+    expect(() => studioArtifactSchemas.review.parse({
+      ...(artifacts.review as Record<string, unknown>),
+      visual: {
+        ...(artifacts.review as any).visual,
+        visualPlanHonored: false,
+        underfilledFramesDetected: true,
+        subtitleNarrationVisualAligned: false,
+      },
     })).toThrow(/passing review/);
   });
 

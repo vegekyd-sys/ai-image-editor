@@ -20,8 +20,53 @@ export interface ModelTerminationObservation {
 export interface ModelTerminationAssessment {
   ok: boolean;
   retryable: boolean;
-  code?: 'stream_error' | 'missing_finish' | 'empty_final_step' | 'truncated' | 'provider_error' | 'content_filter' | 'unfinished_tool_turn' | 'studio_run_incomplete';
+  code?: 'stream_error' | 'missing_finish' | 'empty_final_step' | 'truncated' | 'provider_error' | 'content_filter' | 'unfinished_tool_turn' | 'studio_run_incomplete' | 'studio_stage_handoff';
   detail?: string;
+}
+
+export function shouldHandoffToStudioComposition(input: {
+  durableExecution: boolean;
+  attemptWorkUnit?: string;
+  currentStage?: string;
+}): boolean {
+  return input.durableExecution
+    && input.currentStage === 'composition'
+    && input.attemptWorkUnit !== 'studio:composition';
+}
+
+export function shouldCompleteDurableStudioRun(input: {
+  durableExecution: boolean;
+  status?: string;
+  currentStage?: string | null;
+}): boolean {
+  return input.durableExecution
+    && input.status === 'completed'
+    && !input.currentStage;
+}
+
+export function shouldStopAfterStudioToolStep(input: {
+  durableExecution: boolean;
+  attemptWorkUnit?: string;
+  toolResults?: ReadonlyArray<{ toolName?: string; output?: unknown }>;
+}): boolean {
+  if (!input.durableExecution) return false;
+  return Boolean(input.toolResults?.some(result => {
+    if (result.toolName !== 'studio_run' || !result.output || typeof result.output !== 'object') return false;
+    const output = result.output as Record<string, unknown>;
+    if (output.success === false || !output.studioRun || typeof output.studioRun !== 'object') return false;
+    const studioRun = output.studioRun as Record<string, unknown>;
+    const currentStage = typeof studioRun.currentStage === 'string' ? studioRun.currentStage : undefined;
+    const status = typeof studioRun.status === 'string' ? studioRun.status : undefined;
+    return shouldHandoffToStudioComposition({
+      durableExecution: true,
+      attemptWorkUnit: input.attemptWorkUnit,
+      currentStage,
+    }) || shouldCompleteDurableStudioRun({
+      durableExecution: true,
+      status,
+      currentStage: currentStage || null,
+    });
+  }));
 }
 
 export function shouldUseTextOnlyRecovery(input: {
@@ -36,11 +81,13 @@ export function shouldContinueActiveStudioRun(input: {
   studioRunTouched: boolean;
   runCodeStarted: boolean;
   recoveryPrompt: boolean;
+  attemptWorkUnit?: string;
 }): boolean {
   return input.activeStudioRun && (
     input.studioRunTouched
     || input.runCodeStarted
     || input.recoveryPrompt
+    || Boolean(input.attemptWorkUnit?.startsWith('studio:'))
   );
 }
 

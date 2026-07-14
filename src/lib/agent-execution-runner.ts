@@ -15,6 +15,7 @@ import {
   isConfirmedExecutionLeaseLoss,
   isRetryableProviderOutage,
   normalizeExecutionSnapshot,
+  resolveExecutionHandoffWorkUnit,
   shouldScheduleNextAttempt,
   type DurableExecutionSnapshot,
   type ExecutionLeaseState,
@@ -212,6 +213,7 @@ async function buildHandoffSnapshot(input: {
 }): Promise<DurableExecutionSnapshot> {
   const previous = await input.store.latestSnapshot(input.run.id);
   const checkpoint = input.terminal?.checkpoint as Record<string, unknown> | undefined;
+  const handoffWorkUnit = resolveExecutionHandoffWorkUnit(input.workUnit, checkpoint);
   const acceptanceCriteria = Array.isArray(input.run.acceptance_criteria)
     ? input.run.acceptance_criteria.filter((item): item is string => typeof item === 'string')
     : previous?.acceptanceCriteria ?? [];
@@ -231,14 +233,14 @@ async function buildHandoffSnapshot(input: {
       ...artifactPointers(checkpoint),
     ],
     openQuestions: previous?.openQuestions,
-    currentWorkUnit: input.workUnit,
+    currentWorkUnit: handoffWorkUnit,
     nextAction,
     attemptSummary: attemptSummary || previous?.attemptSummary,
     checkpoint,
     providerCompaction: input.providerCompaction || previous?.providerCompaction,
   }, {
     objective: input.run.objective || input.claim.objective || input.run.prompt || 'Complete the requested Agent task.',
-    currentWorkUnit: input.workUnit,
+    currentWorkUnit: handoffWorkUnit,
     nextAction,
   });
 }

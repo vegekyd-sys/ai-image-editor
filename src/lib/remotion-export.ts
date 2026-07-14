@@ -15,6 +15,7 @@ import { resolveAudioUrlsInCode } from '@/lib/audio-url-resolver'
 import { VIDEO_PLACEHOLDER_IMAGE } from '@/lib/editor/timeline-derivations'
 import type { RemotionLambdaOutputDestination } from '@/lib/remotion-lambda-renderer'
 import { normalizeCompositionAnimation } from '@/lib/composition-duration'
+import { measureAudioLoudness } from '@/lib/ffmpeg-runtime'
 
 export type RemotionExportStatus = 'queued' | 'rendering' | 'completed' | 'failed'
 export type RemotionExportOutputType = 'video' | 'image'
@@ -963,6 +964,16 @@ async function executeRemotionExportJob(job: RemotionExportJob): Promise<Remotio
         throw new Error(saved.error || 'Workspace upload failed')
       }
       publicUrl = toPublicStorageUrl(saved.storageUrl)
+    }
+
+    if (job.output_type === 'video') {
+      const audioAnalysisStart = Date.now()
+      try {
+        outputMetadata.audioAnalysis = await measureAudioLoudness(publicUrl)
+      } catch (error) {
+        outputMetadata.audioAnalysisError = error instanceof Error ? error.message : String(error)
+      }
+      stageTimings.audioAnalysisMs = Date.now() - audioAnalysisStart
     }
 
     const renderSeconds = (Date.now() - startedAt) / 1000

@@ -21,6 +21,10 @@ describe('agent terminal contract wiring', () => {
     expect(agentSource).toContain("toolChoice: 'none' as const");
     expect(agentSource).toContain('shouldUseTextOnlyRecovery({');
     expect(agentSource).toContain('shouldContinueActiveStudioRun({');
+    expect(agentSource).toContain('shouldCompleteDurableStudioRun({');
+    expect(agentSource).toContain('shouldHandoffToStudioComposition({');
+    expect(agentSource).toContain("code: 'studio_stage_handoff'");
+    expect(agentSource).toContain('&& !durableStageHandoff');
     expect(agentSource).toContain("code: 'studio_run_incomplete'");
     expect(agentSource).toContain("run.status !== 'running'");
     expect(agentSource).toContain('recoveryBlockedTools.add(toolName)');
@@ -31,6 +35,7 @@ describe('agent terminal contract wiring', () => {
       agentSource.indexOf("if (event.type === 'finish')"),
     );
     expect(finishStepBlock).not.toContain('sawFinish = true');
+    expect(finishStepBlock).toContain('if (durableStageHandoff || durableStudioCompletion) break;');
     expect(agentSource).toContain('The exact saved draft path is:');
     expect(agentSource).toContain('__lastSavedDraftPath = autosave.path');
     expect(agentSource).toContain('getStudioRunCheckpoint(ctx)');
@@ -39,7 +44,8 @@ describe('agent terminal contract wiring', () => {
     expect(agentStreamSource).toContain('buildStudioRunAutoResumePrompt(recoveryEvent)');
     expect(agentSource).toContain('streamed-run-code.partial.js');
     expect(agentSource).toContain('persistStreamedCodeCheckpoint(true)');
-    expect(agentSource).toContain('under 9000 source characters');
+    expect(agentSource).not.toContain('under 9000 source characters');
+    expect(agentSource).toContain('never begin a monolithic run_code payload');
     expect(agentSource).toContain('hard transport limit of 5000 source characters');
     expect(agentSource).toContain('no aggregate source-size or part-count limit');
     expect(agentSource).toContain('Never shorten approved narration, subtitles, scenes, animation, or visual detail');

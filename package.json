@@ -10,6 +10,8 @@
     "start:ios": "MOCK_AI=true next start -H 0.0.0.0 -p 3001",
     "test": "vitest run",
     "acceptance:agent-execution": "tsx scripts/agent-execution-acceptance.ts",
+    "acceptance:edge-video-bridge": "tsx scripts/edge-video-bridge-acceptance.ts",
+    "acceptance:sticker-bridge": "tsx scripts/sticker-bridge-acceptance.ts",
     "test:ios": "vitest run __tests__/ios*.test.ts __tests__/ios*.test.tsx",
     "smoke:ios-final": "node scripts/ios-final-smoke.mjs",
     "ios:local": "node tools/ios-local-config.mjs",

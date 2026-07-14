@@ -37,6 +37,7 @@ describe('Studio production skills', () => {
     expect(skill?.allowedTools).toEqual(expect.arrayContaining([
       'read_file',
       'studio_run',
+      'prepare_visual_asset',
       'run_code',
       'write_file',
       'preview_frame',
@@ -52,6 +53,7 @@ describe('Studio production skills', () => {
     const motion = read('src/skills/motion-design-video/SKILL.md');
     const audio = read('src/skills/_shared/studio-production/audio-direction.md');
     const review = read('src/skills/_shared/studio-production/review-contract.md');
+    const agent = read('src/lib/agent.ts');
 
     expect(production).toContain('stages remain stable');
     expect(production).toContain('not callable Makaron tools');
@@ -61,11 +63,25 @@ describe('Studio production skills', () => {
     expect(motion).toContain('Visual execution does not replace storytelling');
     expect(production).toContain('fresh project and');
     expect(production).toContain('Separate Agent completion');
+    expect(production).toContain('skills/_shared/visual-direction/SKILL.md');
+    expect(production).toContain('skills/_shared/visual-asset-bridge/SKILL.md');
+    expect(production).toContain('optional `visualPlan`');
+    expect(production).toContain('`prepared` field');
     expect(production).not.toContain('creative-direction/SKILL.md');
     expect(audio).toContain('Treat audio as part of the edit');
     expect(review).toContain('Materialize the MP4');
     expect(review).toContain('Semantic completeness');
     expect(review).toContain('full-resolution frame paths');
+    expect(review).toContain('subtitleSyncEvidence');
+    expect(review).toContain('subtitleVisualEvidence');
+    expect(review).toContain('observed non-text subject/action');
+    expect(production).toContain('subtitle/narration/visual alignment');
+    expect(production).toContain('Generate or load');
+    expect(production).toContain('cross-checks its linked Storyboard range');
+    expect(production).toContain('narrationTimingEvidence');
+    expect(agent).toContain("studioCheckpoint.studioRunStage === 'review'");
+    expect(agent).toContain("? 'source'");
+    expect(agent).toContain('Studio Composition must keep the locked delivery resolution');
   });
 
   it('exposes built-in Studio Run metadata to the CLI API', () => {
@@ -77,5 +93,7 @@ describe('Studio production skills', () => {
     expect(cli).toContain("args.includes('--built-in')");
     expect(cli).toContain("case 'studio_recipe'");
     expect(cli).toContain("case 'studio_run'");
+    expect(cli).toContain("normalizeRunResponse(data);\n      if (printedText && !json)");
+    expect(cli).toContain("if (data.status === 'failed' || data.status === 'aborted') process.exit(1);");
   });
 });

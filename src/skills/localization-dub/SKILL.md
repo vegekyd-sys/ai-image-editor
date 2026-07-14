@@ -3,7 +3,7 @@ name: localization-dub
 description: >
   Translate an existing video into subtitle, dub, or subtitle-plus-dub variants
   while preserving source timing, protected terms, claims, and editable layout.
-allowed-tools: read_file studio_run analyze_video transcribe_audio list_voiceover_voices generate_voiceover generate_audio run_code write_file preview_frame materialize_media
+allowed-tools: read_file studio_run prepare_visual_asset analyze_video transcribe_audio list_voiceover_voices generate_voiceover generate_audio run_code write_file preview_frame materialize_media
 metadata:
   makaron:
     icon: "文"

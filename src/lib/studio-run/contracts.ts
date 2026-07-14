@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import { preparedVisualAssetSchema, sceneVisualPlanSchema } from '../visual-assets/contracts';
 
 export const STUDIO_STAGE_IDS = [
   'brief',
@@ -58,6 +59,18 @@ const timedSectionSchema = z.object({
   message: 'endSeconds must be greater than startSeconds',
 });
 
+const narrationTimingSourceSchema = z.enum(['transcribe_audio', 'explicit-audio-placement']);
+
+const narrationTimingEvidenceSchema = z.object({
+  scriptSectionId: z.string().min(1),
+  sceneId: z.string().min(1),
+  narrationStartSeconds: z.number().nonnegative(),
+  narrationEndSeconds: z.number().positive(),
+  timingSource: narrationTimingSourceSchema,
+}).refine(value => value.narrationEndSeconds > value.narrationStartSeconds, {
+  message: 'narrationEndSeconds must be after narrationStartSeconds',
+});
+
 const briefSchema = z.object({
   version: z.literal('1.0'),
   title: z.string().min(1),
@@ -111,12 +124,14 @@ const storyboardSchema = z.object({
     visualTreatment: z.string().min(1),
     transitionOut: z.string().min(1),
     assetIds: z.array(z.string()),
+    visualPlan: sceneVisualPlanSchema.optional(),
   }).refine(scene => scene.endSeconds > scene.startSeconds, {
     message: 'scene endSeconds must be greater than startSeconds',
   })).min(1),
   artDirection: z.string().min(1),
   layoutContract: z.string().min(1),
   subtitleSafeArea: z.string().min(1),
+  narrationTimingEvidence: z.array(narrationTimingEvidenceSchema).optional(),
 });
 
 const assetManifestSchema = z.object({
@@ -129,11 +144,57 @@ const assetManifestSchema = z.object({
     sceneIds: z.array(z.string()).min(1),
     status: z.enum(['ready', 'missing', 'failed']),
     costUsd: z.number().nonnegative(),
+    role: z.enum(['hero', 'support', 'decoration']).optional(),
+    prepared: preparedVisualAssetSchema.optional(),
   })).min(1),
   totalCostUsd: z.number().nonnegative(),
   missingAssetIds: z.array(z.string()),
 }).refine(value => value.assets.every(asset => asset.status === 'ready') && value.missingAssetIds.length === 0, {
   message: 'all assets must be ready before composition',
+});
+
+const mp4OutputPathSchema = z.string().min(1).refine((value) => {
+  const pathWithoutQuery = value.split(/[?#]/, 1)[0];
+  return /\.mp4$/i.test(pathWithoutQuery);
+}, { message: 'outputPath must reference a materialized MP4, not an editable composition' });
+
+const subtitleSyncEvidenceSchema = z.object({
+  scriptSectionId: z.string().min(1),
+  sceneId: z.string().min(1),
+  visualStartSeconds: z.number().nonnegative(),
+  visualEndSeconds: z.number().positive(),
+  narrationStartSeconds: z.number().nonnegative(),
+  narrationEndSeconds: z.number().positive(),
+  representativeFrameSeconds: z.number().nonnegative(),
+  subtitleText: z.string().min(1).describe('Exact caption text authored for this representative frame.'),
+  timingSource: narrationTimingSourceSchema,
+}).superRefine((value, ctx) => {
+  if (value.visualEndSeconds <= value.visualStartSeconds) {
+    ctx.addIssue({ code: 'custom', path: ['visualEndSeconds'], message: 'visualEndSeconds must be after visualStartSeconds' });
+  }
+  if (value.narrationEndSeconds <= value.narrationStartSeconds) {
+    ctx.addIssue({ code: 'custom', path: ['narrationEndSeconds'], message: 'narrationEndSeconds must be after narrationStartSeconds' });
+  }
+  if (
+    value.representativeFrameSeconds < Math.max(value.visualStartSeconds, value.narrationStartSeconds)
+    || value.representativeFrameSeconds > Math.min(value.visualEndSeconds, value.narrationEndSeconds)
+  ) {
+    ctx.addIssue({
+      code: 'custom',
+      path: ['representativeFrameSeconds'],
+      message: 'representativeFrameSeconds must fall inside both the visual and narration ranges',
+    });
+  }
+});
+
+const subtitleVisualReviewEvidenceSchema = z.object({
+  scriptSectionId: z.string().min(1),
+  sceneId: z.string().min(1),
+  representativeFrameSeconds: z.number().nonnegative(),
+  framePath: z.string().min(1),
+  displayedText: z.string().min(1).describe('Exact caption visible in this final-MP4 frame. It must match Composition subtitleText; do not translate, summarize, or substitute the scene title.'),
+  observedVisualContent: z.string().min(1),
+  alignment: z.enum(['pass', 'fail']),
 });
 
 const compositionSchema = z.object({
@@ -153,6 +214,9 @@ const compositionSchema = z.object({
     boundaryFramesChecked: z.number().int().nonnegative(),
     endingFrameChecked: z.boolean(),
     audioSources: z.enum(['resolved', 'not-required']),
+    visualPlanChecked: z.boolean(),
+    underfilledSceneIds: z.array(z.string()),
+    subtitleSyncEvidence: z.array(subtitleSyncEvidenceSchema),
     unresolvedIssues: z.array(z.string()),
   }),
   editable: z.boolean(),
@@ -164,6 +228,8 @@ const compositionSchema = z.object({
     [value.draftGate.timelineDurationFrames === expectedFrames, ['draftGate', 'timelineDurationFrames'], `timelineDurationFrames must cover the full composition (${expectedFrames})`],
     [value.draftGate.boundaryFramesChecked >= requiredBoundaries, ['draftGate', 'boundaryFramesChecked'], `check every scene boundary before review (${requiredBoundaries} required)`],
     [value.draftGate.endingFrameChecked, ['draftGate', 'endingFrameChecked'], 'check the final visible frame before review'],
+    [value.draftGate.visualPlanChecked, ['draftGate', 'visualPlanChecked'], 'compare rendered frames against the Storyboard visual plan'],
+    [value.draftGate.underfilledSceneIds.length === 0, ['draftGate', 'underfilledSceneIds'], 'patch underfilled scenes before review'],
     [value.draftGate.unresolvedIssues.length === 0, ['draftGate', 'unresolvedIssues'], 'resolve draft issues before review'],
   ];
   for (const [valid, path, message] of checks) {
@@ -173,7 +239,7 @@ const compositionSchema = z.object({
 
 const finalReviewSchema = z.object({
   version: z.literal('1.0'),
-  outputPath: z.string().min(1),
+  outputPath: mp4OutputPathSchema,
   status: z.enum(['pass', 'revise', 'fail']),
   technical: z.object({
     validContainer: z.boolean(),
@@ -192,6 +258,10 @@ const finalReviewSchema = z.object({
     subjectNamed: z.boolean().optional(),
     storyArcComplete: z.boolean().optional(),
     endingResolves: z.boolean().optional(),
+    visualPlanHonored: z.boolean(),
+    underfilledFramesDetected: z.boolean(),
+    subtitleNarrationVisualAligned: z.boolean(),
+    subtitleVisualEvidence: z.array(subtitleVisualReviewEvidenceSchema),
   }),
   audio: z.object({
     integratedLufs: z.number().nullable().describe('Measured integrated loudness in LUFS. Use null when no measurement tool was run; never estimate.'),
@@ -213,6 +283,10 @@ const finalReviewSchema = z.object({
   value.visual.subjectNamed !== false &&
   value.visual.storyArcComplete !== false &&
   value.visual.endingResolves !== false &&
+  value.visual.visualPlanHonored &&
+  !value.visual.underfilledFramesDetected &&
+  value.visual.subtitleNarrationVisualAligned &&
+  value.visual.subtitleVisualEvidence.every(item => item.alignment === 'pass') &&
   !value.audio.unexpectedSilence &&
   value.audio.audioSupportsStory !== false &&
   value.runtimePromiseHonored &&
@@ -221,7 +295,7 @@ const finalReviewSchema = z.object({
 
 const deliverySchema = z.object({
   version: z.literal('1.0'),
-  outputPath: z.string().min(1),
+  outputPath: mp4OutputPathSchema,
   editableSourcePath: z.string().min(1),
   sha256: z.string().regex(/^[a-f0-9]{64}$/).optional(),
   deliveredAt: z.string().datetime(),
@@ -237,6 +311,24 @@ export const studioArtifactSchemas = {
   review: finalReviewSchema,
   delivery: deliverySchema,
 } satisfies Record<StudioStageId, z.ZodType>;
+
+export function normalizeStudioDeliveryArtifact(input: {
+  candidate: unknown;
+  reviewedOutputPath: string;
+  compositionDesignPath: string;
+  now?: string;
+}): z.infer<typeof deliverySchema> {
+  const candidate = input.candidate && typeof input.candidate === 'object'
+    ? input.candidate as Record<string, unknown>
+    : {};
+  return deliverySchema.parse({
+    version: '1.0',
+    outputPath: input.reviewedOutputPath,
+    editableSourcePath: input.compositionDesignPath,
+    deliveredAt: input.now || new Date().toISOString(),
+    ...(typeof candidate.sha256 === 'string' ? { sha256: candidate.sha256 } : {}),
+  });
+}
 
 export const stageDefinitions: Record<StudioStageId, {
   dependencies: StudioStageId[];

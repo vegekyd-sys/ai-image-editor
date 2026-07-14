@@ -29,3 +29,15 @@ export function findSnapshotMediaIndex(
   const index = rows.findIndex(row => row.id === snapshotId);
   return index >= 0 ? index + 1 : undefined;
 }
+
+export function pinAgentMediaUrl(
+  existing: string[],
+  mediaIndex: number,
+  mediaUrl: string,
+): string[] {
+  if (!Number.isInteger(mediaIndex) || mediaIndex < 1 || !mediaUrl) return [...existing];
+  const next = [...existing];
+  while (next.length < mediaIndex) next.push('');
+  next[mediaIndex - 1] = mediaUrl;
+  return next;
+}
