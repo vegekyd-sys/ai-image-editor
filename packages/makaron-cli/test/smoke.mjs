@@ -326,7 +326,7 @@ try {
 
   for (const [helpArgs, expectedText] of [
     [[], /Makaron CLI/],
-    [['--help'], /Makaron CLI/],
+    [['--help'], /--agent-model <name>/],
     [['login', '--help'], /Usage: makaron login/],
     [['create', '--help'], /Usage: makaron create/],
     [['chat', '--help'], /--agent-model <name>/],
@@ -366,6 +366,15 @@ try {
     [['claim', '--help'], /Usage: makaron claim/],
   ]) {
     await expectHelp(helpArgs, expectedText);
+  }
+
+  {
+    const result = await expectHelp(['--help'], /--agent-model <name>/);
+    assert.match(result.stdout, /--image-model <name>/);
+    assert.match(result.stdout, /--video-model <name>/);
+    assert.match(result.stdout, /deepseek-v4-pro/);
+    assert.match(result.stdout, /MAKARON_AGENT_MODEL/);
+    assert.match(result.stdout, /legacy --model flag is deprecated/);
   }
 
   {
