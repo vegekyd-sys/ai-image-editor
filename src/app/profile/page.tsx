@@ -11,8 +11,7 @@ import { navigateBackInIOSApp } from '@/lib/native-navigation'
 export default function ProfilePage() {
   const router = useRouter()
   const { user, loading, signOut } = useAuth()
-  const { locale } = useLocale()
-  const t = locale === 'zh'
+  const { t } = useLocale()
 
   const [displayName, setDisplayName] = useState('')
   const [avatarUrl, setAvatarUrl] = useState<string | null>(null)
@@ -72,11 +71,11 @@ export default function ProfilePage() {
     setPasswordError('')
     setPasswordSuccess(false)
     if (newPassword !== confirmPassword) {
-      setPasswordError(t ? '两次密码不一致' : 'Passwords do not match')
+      setPasswordError(t('profile.passwordMismatch'))
       return
     }
     if (newPassword.length < 6) {
-      setPasswordError(t ? '密码至少 6 位' : 'Password must be at least 6 characters')
+      setPasswordError(t('profile.passwordTooShort'))
       return
     }
     setSavingPassword(true)
@@ -89,7 +88,7 @@ export default function ProfilePage() {
     setSavingPassword(false)
     if (!res.ok) {
       setPasswordError(data.error === 'Current password is incorrect'
-        ? (t ? '当前密码错误' : 'Current password is incorrect')
+        ? t('profile.incorrectPassword')
         : data.error)
     } else {
       setPasswordSuccess(true)
@@ -138,9 +137,9 @@ export default function ProfilePage() {
       <div className="max-w-lg mx-auto">
       {/* Header */}
       <div className="flex items-center justify-between mb-8">
-        <h1 className="text-2xl font-bold">{t ? '账户' : 'Account'}</h1>
+        <h1 className="text-2xl font-bold">{t('profile.title')}</h1>
         <button onClick={handleBackToApp} className="text-white/40 text-sm hover:text-white/60">
-          &larr; {t ? '返回' : 'Back'}
+          &larr; {t('profile.back')}
         </button>
       </div>
 
@@ -167,7 +166,7 @@ export default function ProfilePage() {
             </div>
           )}
           <div className="absolute bottom-0 inset-x-0 bg-black/60 text-[0.55rem] text-center py-0.5 text-white/70">
-            {t ? '修改' : 'Edit'}
+            {t('profile.editAvatar')}
           </div>
         </button>
         <input
@@ -186,7 +185,7 @@ export default function ProfilePage() {
       {/* Display Name */}
       <section className="mb-8">
         <label className="block text-white/50 text-xs uppercase tracking-wider mb-2">
-          {t ? '显示名称' : 'Display Name'}
+          {t('profile.displayName')}
         </label>
         <div className="flex gap-2">
           <input
@@ -194,25 +193,25 @@ export default function ProfilePage() {
             value={displayName}
             onChange={e => { setDisplayName(e.target.value); setNameSuccess(false) }}
             style={inputStyle}
-            placeholder={t ? '输入名称' : 'Enter name'}
+            placeholder={t('profile.enterName')}
           />
           <button
             onClick={handleSaveName}
             disabled={savingName}
             className="px-4 py-2 rounded-lg bg-fuchsia-600 text-white text-sm font-medium hover:bg-fuchsia-500 disabled:opacity-40 transition-all shrink-0"
           >
-            {savingName ? '...' : (t ? '保存' : 'Save')}
+            {savingName ? '...' : t('project.save')}
           </button>
         </div>
         {nameSuccess && (
-          <div className="text-green-400 text-xs mt-2">{t ? '已保存' : 'Saved'}</div>
+          <div className="text-green-400 text-xs mt-2">{t('profile.saved')}</div>
         )}
       </section>
 
       {/* Email (read-only) */}
       <section className="mb-8">
         <label className="block text-white/50 text-xs uppercase tracking-wider mb-2">
-          {t ? '邮箱' : 'Email'}
+          {t('profile.email')}
         </label>
         <div style={{ ...inputStyle, color: 'rgba(255,255,255,0.5)', cursor: 'not-allowed' }}>
           {user.email}
@@ -227,7 +226,7 @@ export default function ProfilePage() {
             className="flex items-center justify-between w-full text-left"
           >
             <span className="text-white/50 text-xs uppercase tracking-wider">
-              {t ? '修改密码' : 'Change Password'}
+              {t('profile.changePassword')}
             </span>
             <svg
               width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor"
@@ -246,35 +245,35 @@ export default function ProfilePage() {
                   value={currentPassword}
                   onChange={e => setCurrentPassword(e.target.value)}
                   style={inputStyle}
-                  placeholder={t ? '当前密码' : 'Current password'}
+                  placeholder={t('profile.currentPassword')}
                 />
                 <input
                   type="password"
                   value={newPassword}
                   onChange={e => setNewPassword(e.target.value)}
                   style={inputStyle}
-                  placeholder={t ? '新密码' : 'New password'}
+                  placeholder={t('profile.newPassword')}
                 />
                 <input
                   type="password"
                   value={confirmPassword}
                   onChange={e => setConfirmPassword(e.target.value)}
                   style={inputStyle}
-                  placeholder={t ? '确认新密码' : 'Confirm new password'}
+                  placeholder={t('profile.confirmNewPassword')}
                 />
               </div>
               {passwordError && (
                 <div className="text-red-400 text-xs mt-2">{passwordError}</div>
               )}
               {passwordSuccess && (
-                <div className="text-green-400 text-xs mt-2">{t ? '密码已更新' : 'Password updated'}</div>
+                <div className="text-green-400 text-xs mt-2">{t('profile.passwordUpdated')}</div>
               )}
               <button
                 onClick={handleChangePassword}
                 disabled={savingPassword || !currentPassword || !newPassword}
                 className="mt-3 px-4 py-2 rounded-lg bg-white/10 text-white text-sm hover:bg-white/15 disabled:opacity-30 transition-all"
               >
-                {savingPassword ? '...' : (t ? '更新密码' : 'Update Password')}
+                {savingPassword ? '...' : t('profile.updatePassword')}
               </button>
             </div>
           )}
@@ -287,7 +286,7 @@ export default function ProfilePage() {
           onClick={signOut}
           className="text-white/40 text-sm hover:text-white/60 transition-all"
         >
-          {t ? '退出登录' : 'Sign Out'}
+          {t('profile.signOut')}
         </button>
       </section>
       </div>

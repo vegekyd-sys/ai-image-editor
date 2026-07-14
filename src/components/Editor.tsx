@@ -38,7 +38,7 @@ import { useVisualViewportInset } from '@/hooks/useVisualViewportInset';
 import { compressBase64Image, compressImageFile, isHeicFile } from '@/lib/imageUtils';
 import { containRect, coverRect } from '@/lib/image/geometry';
 import { extractPhotoMetadata, enrichMetadataLocation } from '@/lib/image/metadata';
-import { useLocale } from '@/lib/i18n';
+import { getPromptLanguage, getTranslationVariants, useLocale } from '@/lib/i18n';
 import { getThumbnailUrl, getOptimizedUrl } from '@/lib/supabase/storage';
 import { resolveAudioUrlsInCode } from '@/lib/audio-url-resolver';
 import { createClient as createBrowserSupabase } from '@/lib/supabase/client';
@@ -56,6 +56,13 @@ import { loadAgentModelPreference, saveAgentModelPreference } from '@/lib/agent-
 export type { AnimationState } from '@/lib/editor/types';
 
 type EditorCompletionAction = ArtifactCompletionAction;
+
+const PREVIEW_STATUS_PREFIXES = getTranslationVariants('status.generatingPreviews', 0, 0)
+  .map((value) => value.replace(/\s*0\/0$/, ''));
+
+function isPreviewGenerationStatus(status: string): boolean {
+  return PREVIEW_STATUS_PREFIXES.some((prefix) => status.startsWith(prefix));
+}
 
 function dedupeMessagesById(messages: Message[]): Message[] {
   const byId = new Map<string, Message>();
@@ -1920,7 +1927,7 @@ const isTipsFetchingRef = useRef(isTipsFetching);
 
     const n = imageUrls.length;
     const userHint = animationStateRef.current?.userHint?.trim() || '';
-    const langInstr = locale === 'en' ? 'Write the script in English.' : '用中文写脚本。';
+    const langInstr = `Write the script in ${getPromptLanguage(locale)}.`;
     const hintLine = userHint ? `\nUser requirements: ${userHint}` : '';
 
     // Build Media Index with descriptions so Agent can pick items intelligently
@@ -2306,11 +2313,11 @@ Select the best 3-7 items for a compelling video. You do NOT need to use all or 
 
       // Step 3: Transcode + upload
       const result = await processVideoUpload(file, (progress) => {
-        setAgentStatus(`视频转码中 ${Math.round(progress * 100)}%`);
+        setAgentStatus(t('status.videoTranscoding', Math.round(progress * 100)));
       });
 
       // Step 4: Upload to Supabase
-      setAgentStatus('上传视频...');
+      setAgentStatus(t('status.uploadingVideo'));
       const supabase = (await import('@/lib/supabase/client')).createClient();
       const uid = (await supabase.auth.getUser()).data.user?.id;
       if (!uid) throw new Error('Not authenticated');
@@ -2370,7 +2377,7 @@ Select the best 3-7 items for a compelling video. You do NOT need to use all or 
         setSnapshots(prev => prev.filter(s => s.id !== snapId));
         return null;
       }
-      setAgentStatus(`视频上传失败: ${msg}`);
+      setAgentStatus(t('status.videoUploadFailed', msg));
       setSnapshots(prev => prev.map(s =>
         s.id === snapId ? { ...s, videoMeta: { ...s.videoMeta!, status: 'failed' as const } } : s
       ));
@@ -2705,7 +2712,7 @@ Select the best 3-7 items for a compelling video. You do NOT need to use all or 
       const y = x + generating;
       setAgentStatus(t('status.generatingPreviews', x, y));
     } else if (settled === total && !isAgentActive) {
-      setAgentStatus(prev => prev === t('status.generatingPreviews', 0, 0) || prev.includes('previews') || prev.includes('预览') ? t('editor.greeting') : prev);
+      setAgentStatus(prev => isPreviewGenerationStatus(prev) ? t('editor.greeting') : prev);
     }
   }, [snapshots, tipsSourceIndex, isAgentActive, isTipsFetching]);
 
@@ -4144,7 +4151,7 @@ Select the best 3-7 items for a compelling video. You do NOT need to use all or 
           }}
         >
           <p className="text-white text-lg font-medium text-center leading-relaxed tracking-wider whitespace-pre-line">
-            {locale === 'zh' ? '进入聊天\n继续编辑' : 'Entering Chat\nContinue Editing'}
+            {t('editor.enteringChat')}
           </p>
         </div>
       </>)}

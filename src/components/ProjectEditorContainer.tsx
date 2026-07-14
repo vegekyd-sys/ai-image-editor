@@ -12,6 +12,7 @@ import { getCachedImages, getCachedProjectData, cacheProjectData, getCachedProje
 import { buildVideoFailureActions, serializeCompletionActions } from '@/lib/artifact-actions'
 import { dedupeVideoSnapshots } from '@/lib/video-snapshot-dedupe'
 import { isCompletedGeneratedVideoSnapshot, isFailedGeneratedVideoSnapshot } from '@/lib/video-snapshot-kind'
+import { useLocale } from '@/lib/i18n'
 
 interface ProjectEditorContainerProps {
   projectId: string
@@ -131,6 +132,7 @@ export default function ProjectEditorContainer({
   isInlineActive = true,
 }: ProjectEditorContainerProps) {
   const { user, loading: authLoading } = useAuth()
+  const { t } = useLocale()
   const router = useRouter()
   const navigatingRef = useRef(false)
   const leaveEditor = useCallback((path: '/projects' | '/login') => {
@@ -340,7 +342,7 @@ export default function ProjectEditorContainer({
         messages.push({
           id: `video-action-${snap.id}`,
           role: 'assistant',
-          content: `🎬 视频已生成\n${snap.videoMeta!.videoUrl}\nsnap:${snap.id}${actionLines ? `\n${actionLines}` : ''}`,
+          content: `🎬 ${t('status.videoDone')}\n${snap.videoMeta!.videoUrl}\nsnap:${snap.id}${actionLines ? `\n${actionLines}` : ''}`,
           timestamp: Date.now(),
         })
       }
@@ -353,7 +355,7 @@ export default function ProjectEditorContainer({
         messages.push({
           id: `video-failed-${snap.id}`,
           role: 'assistant',
-          content: `⚠️ 视频生成失败${reason}\nsnap:${snap.id}${actionLines ? `\n${actionLines}` : ''}`,
+          content: `⚠️ ${t('status.videoFailed')}${reason}\nsnap:${snap.id}${actionLines ? `\n${actionLines}` : ''}`,
           timestamp: Date.now(),
         })
       }
@@ -379,7 +381,7 @@ export default function ProjectEditorContainer({
     })
 
     return () => { cancelled = true }
-  }, [userId, projectId, loadProject, isPublicProject, isNewProject, isInlineActive])
+  }, [userId, projectId, loadProject, isPublicProject, isNewProject, isInlineActive, t])
 
   const handleSaveSnapshot = useCallback((snapshot: Snapshot, sortOrder: number, onUploaded?: (imageUrl: string) => void) => {
     saveSnapshot(snapshot, sortOrder, onUploaded)

@@ -7,6 +7,7 @@ import { requireCredits, deductByTokens } from '@/lib/billing/credits';
 import { AgentPerf } from '@/lib/agent-perf';
 import { getRequestLocale } from '@/lib/server-locale';
 import { resolvePersistedRunStatus } from '@/lib/agent-terminal';
+import { translate } from '@/lib/locales';
 import {
   isAgentModelPreference,
   resolveAgentModelSpec,
@@ -61,10 +62,10 @@ export async function POST(req: NextRequest) {
     }
 
     const MOCK_TEXTS = {
-      tipsTeaser: locale === 'en' ? 'Try turning it into a miniature scene.' : '试试把它变成微缩模型？特别适合这种场景。',
-      tipReaction: locale === 'en' ? 'Nice, that edit feels natural.' : '效果很棒！新图很自然。',
-      nameProject: locale === 'en' ? 'Coffee Afternoon' : '咖啡下午茶',
-      previewsReady: locale === 'en' ? 'Your previews are ready. The playful one is worth a look.' : '预览图都好了！那个模仿猴的创意太逗了，快去试试看~',
+      tipsTeaser: translate(locale, 'agent.mock.tipsTeaser'),
+      tipReaction: translate(locale, 'agent.mock.tipReaction'),
+      nameProject: translate(locale, 'agent.mock.nameProject'),
+      previewsReady: translate(locale, 'agent.mock.previewsReady'),
     };
 
     // Only dual-write for normal agent flow (not lightweight teaser/name/reaction/analysis branches)
@@ -116,7 +117,7 @@ export async function POST(req: NextRequest) {
         };
         enqueue({
           type: 'status',
-          text: locale === 'en' ? 'Starting...' : '开始处理...',
+          text: translate(locale, 'agent.status.starting'),
         });
         perf.mark('first_sse_sent', { eventType: 'status' });
         // Track token usage for billing
@@ -363,9 +364,7 @@ export async function POST(req: NextRequest) {
                   type: 'error',
                   code: 'missing_terminal_event',
                   recoverable: true,
-                  message: locale === 'en'
-                    ? 'The agent connection ended without a completed result. Your saved work is preserved; send “continue” to resume.'
-                    : 'Agent 在没有完成结果时结束了。已保存的工作会保留，发送“继续”即可恢复。',
+                  message: translate(locale, 'agent.error.connectionEnded'),
                 };
                 sawError = true;
                 await writer.processAndEnqueue(terminalError);

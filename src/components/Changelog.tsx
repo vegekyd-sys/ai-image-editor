@@ -798,7 +798,9 @@ const iOSAppTopGap = 'max(96px, calc(env(safe-area-inset-top, 0px) + 40px))';
 const iOSAppBottomGap = 'max(14px, env(safe-area-inset-bottom, 0px))';
 
 export default function Changelog({ onClose, locale }: { onClose: () => void; locale: string }) {
-  const isZh = locale === 'zh';
+  // Historical release notes currently have Chinese and English editions.
+  // Traditional Chinese follows the Chinese edition; Japanese falls back to English.
+  const isZh = locale === 'zh' || locale === 'zh-Hant';
   const [isIOSApp, setIsIOSApp] = useState(false);
 
   useEffect(() => {

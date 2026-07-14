@@ -243,8 +243,8 @@ describe('iOS App Store readiness guardrails', () => {
     expect(topBar.indexOf('router.push(path)', navigateTopBarStart)).toBeLessThan(topBar.indexOf('scheduleTopBarWarm(path)', navigateTopBarStart));
     expect(topBar).toContain('if (!userMenuOpen) return');
     expect(topBar).toContain('warmTopBarMenuRoutes()');
-    expect(topBar).toContain("aria-label={locale === 'zh' ? '打开数据面板' : 'Open dashboard'}");
-    expect(topBar).toContain("aria-label={locale === 'zh' ? '打开个人菜单' : 'Open account menu'}");
+    expect(topBar).toContain("aria-label={t('nav.openDashboard')}");
+    expect(topBar).toContain("aria-label={t('nav.openAccountMenu')}");
     expect(topBar).toContain('data-makaron-user-menu-trigger');
     expect(topBar).toContain('minWidth: 44');
     expect(topBar).toContain('minHeight: 44');

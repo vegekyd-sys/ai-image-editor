@@ -6,7 +6,7 @@ import { usePathname, useRouter, useSearchParams } from 'next/navigation'
 import { useEffect, useState, useRef, useCallback, Suspense } from 'react'
 import { useIsDesktop } from '@/hooks/useIsDesktop'
 import { isHeicFile } from '@/lib/imageUtils'
-import { useLocale } from '@/lib/i18n'
+import { pickLocalizedValue, useLocale } from '@/lib/i18n'
 import { compressCreateImageFile, createProject, createProjectFromStagedMedia } from '@/lib/createProject'
 import { createClient } from '@/lib/supabase/client'
 import { cacheCreateDraft, cacheMediaUrl, clearCreateDraft, getCachedMediaObjectUrl, getCreateDraft, mediaCacheKeyForUrl } from '@/lib/imageCache'
@@ -487,22 +487,14 @@ function HomePageInner() {
     }
   }, [closeSkillDetail, resetSkillBackPan])
 
-  const placeholders = locale === 'zh' ? [
-    '把这些图片做个 vlog',
-    '用这张产品图帮我做一套小红书素材',
-    '把我P的美一点',
-    '给我的猫拍一组表情包',
-    '把这张图片变成个电商海报',
-    '把这几张照片做成一个故事板，加上配乐',
-    '一张照片，帮我探索 6 个完全不同的方向',
-  ] : [
-    'Turn these photos into a vlog',
-    'Make a set of social media content from this product shot',
-    'Make me look better',
-    "Create an emoji pack from my cat's photo",
-    'Turn this photo into an e-commerce poster',
-    'Storyboard these photos and add a soundtrack',
-    'One photo, show me 6 completely different directions',
+  const placeholders = [
+    t('home.placeholder.1'),
+    t('home.placeholder.2'),
+    t('home.placeholder.3'),
+    t('home.placeholder.4'),
+    t('home.placeholder.5'),
+    t('home.placeholder.6'),
+    t('home.placeholder.7'),
   ]
   const [placeholderIdx, setPlaceholderIdx] = useState(0)
   const [showWelcome, setShowWelcome] = useState(false)
@@ -1216,7 +1208,7 @@ function HomePageInner() {
     const now = Date.now()
     if (lastUploadIntentRef.current?.key === dedupeKey && now - lastUploadIntentRef.current.at < 700) return
     lastUploadIntentRef.current = { at: now, key: dedupeKey }
-    const skillLabel = activeSkill.labels[locale] || activeSkill.labels.en || activeSkill.id
+    const skillLabel = pickLocalizedValue(activeSkill.labels, locale, activeSkill.id)
     trackMetaEvent('UploadIntent', {
       content_type: 'skill',
       content_name: skillLabel,
@@ -1334,11 +1326,11 @@ function HomePageInner() {
 
   const guestSkillCreateLabel = selectedDetail && !user
     ? createInput.files.length > 0
-      ? (locale === 'zh' ? '生成免费预览' : 'Create free preview')
-      : (locale === 'zh' ? '上传照片' : 'Upload photo')
+      ? t('home.createFreePreview')
+      : t('home.uploadPhoto')
     : !user
-      ? (locale === 'zh' ? '免费试用' : 'Try free')
-      : 'Create'
+      ? t('home.tryFree')
+      : t('home.create')
 
   const requiredPhotoCount = Math.max(1, activeSkill?.image_count ?? 1)
   const selectedPhotoCount = createInput.files.length
@@ -1346,34 +1338,32 @@ function HomePageInner() {
   const hasEnoughPhotos = remainingPhotoCount === 0
   const isGuestSkillAction = !user && !!activeSkill
   const shouldLoginOnEmptyCreate = !user && !activeSkill
-  const formatPhotoCount = (count: number) => locale === 'zh'
-    ? `${count} 张照片`
-    : `${count} photo${count === 1 ? '' : 's'}`
+  const formatPhotoCount = (count: number) => t('home.photoCount', count)
 
   const skillActionCreateLabel = isGuestSkillAction
     ? hasEnoughPhotos
-      ? (locale === 'zh' ? '免费预览' : 'Preview free')
-      : (locale === 'zh' ? '上传照片' : 'Upload photo')
+      ? t('home.previewFree')
+      : t('home.uploadPhoto')
     : guestSkillCreateLabel
 
   const skillActionTitle = isGuestSkillAction
     ? hasEnoughPhotos
-      ? (locale === 'zh' ? '看看你的版本' : 'See your version')
+      ? t('home.seeYourVersion')
       : selectedPhotoCount > 0
-        ? (locale === 'zh' ? '快好了' : 'Almost ready')
-        : (locale === 'zh' ? '上传一张照片' : 'Upload one photo')
+        ? t('home.almostReady')
+        : t('home.uploadOnePhoto')
     : undefined
 
   const skillActionSubtitle = isGuestSkillAction
     ? hasEnoughPhotos
-      ? (locale === 'zh' ? '一键生成预览，无需信用卡。' : 'Generate a preview. No credit card.')
+      ? t('home.previewNoCard')
       : selectedPhotoCount > 0
-        ? (locale === 'zh' ? `再补 ${formatPhotoCount(remainingPhotoCount)}，即可免费预览。` : `Add ${formatPhotoCount(remainingPhotoCount)} to preview free.`)
-        : (locale === 'zh' ? '免费生成预览，无需信用卡。' : 'Get a free preview. No credit card.')
+        ? t('home.addPhotosToPreview', formatPhotoCount(remainingPhotoCount))
+        : t('home.freePreviewNoCard')
     : undefined
 
   const skillActionMeta = isGuestSkillAction && activeSkill
-    ? (activeSkill.labels[locale] || activeSkill.labels.en || null)
+    ? (pickLocalizedValue(activeSkill.labels, locale) || null)
     : null
 
   const trackUploadIntent = useCallback((source: string) => {
@@ -1464,7 +1454,7 @@ function HomePageInner() {
 
   const renderTemplateLabel = (template: { labels: Record<string, string> }) => (
     <div style={{ fontSize: '1.2rem', fontWeight: 700, color: '#fff' }}>
-      {template.labels[locale] || template.labels.en || ''}
+      {pickLocalizedValue(template.labels, locale)}
     </div>
   )
 
@@ -1654,14 +1644,14 @@ function HomePageInner() {
               placeholder={placeholders[placeholderIdx]}
               createLabel={skillActionCreateLabel}
               actionMode={isGuestSkillAction}
-              actionEyebrow={isGuestSkillAction ? (locale === 'zh' ? '免费预览' : 'Free preview') : undefined}
+              actionEyebrow={isGuestSkillAction ? t('home.previewFree') : undefined}
               actionTitle={skillActionTitle}
               actionSubtitle={skillActionSubtitle}
               actionMeta={skillActionMeta || undefined}
-              actionIdleNote={locale === 'zh' ? `需要 ${formatPhotoCount(requiredPhotoCount)}` : `${formatPhotoCount(requiredPhotoCount)} needed`}
+              actionIdleNote={t('home.photosNeeded', formatPhotoCount(requiredPhotoCount))}
               actionSelectedNote={hasEnoughPhotos
-                ? (locale === 'zh' ? '可以预览了' : 'Ready to preview')
-                : (locale === 'zh' ? `还需要 ${formatPhotoCount(remainingPhotoCount)}` : `${formatPhotoCount(remainingPhotoCount)} more needed`)}
+                ? t('home.previewReady')
+                : t('home.morePhotosNeeded', formatPhotoCount(remainingPhotoCount))}
               showLoginIcon={!user}
               submitWhenEmpty={shouldLoginOnEmptyCreate}
               onSubmit={handleCreateOrUpload}
@@ -1684,7 +1674,7 @@ function HomePageInner() {
               }}
               onUploadSkill={() => skillFileRef.current?.click()}
               installingSkill={installingSkill}
-              overrideLabel={selectedSkill ? (availableSkills.find(s => s.name === selectedSkill)?.label || homeSkills.find(s => s.id === selectedSkill)?.labels[locale] || null) : null}
+              overrideLabel={selectedSkill ? (availableSkills.find(s => s.name === selectedSkill)?.label || pickLocalizedValue(homeSkills.find(s => s.id === selectedSkill)?.labels, locale) || null) : null}
               skillDirection="down"
               dragOver={dragOver}
               onDragEnter={(e) => { e.preventDefault(); dragCounterRef.current++; setDragOver(true) }}
@@ -1772,7 +1762,7 @@ function HomePageInner() {
                     color: '#fff',
                     lineHeight: 1.3,
                   }}>
-                    {template.labels[locale] || template.labels.en || ''}
+                    {pickLocalizedValue(template.labels, locale)}
                   </div>
                 </div>
 
@@ -1828,14 +1818,14 @@ function HomePageInner() {
               placeholder={placeholders[placeholderIdx]}
               createLabel={skillActionCreateLabel}
               actionMode={isGuestSkillAction}
-              actionEyebrow={isGuestSkillAction ? (locale === 'zh' ? '免费预览' : 'Free preview') : undefined}
+              actionEyebrow={isGuestSkillAction ? t('home.previewFree') : undefined}
               actionTitle={skillActionTitle}
               actionSubtitle={skillActionSubtitle}
               actionMeta={skillActionMeta || undefined}
-              actionIdleNote={locale === 'zh' ? `需要 ${formatPhotoCount(requiredPhotoCount)}` : `${formatPhotoCount(requiredPhotoCount)} needed`}
+              actionIdleNote={t('home.photosNeeded', formatPhotoCount(requiredPhotoCount))}
               actionSelectedNote={hasEnoughPhotos
-                ? (locale === 'zh' ? '可以预览了' : 'Ready to preview')
-                : (locale === 'zh' ? `还需要 ${formatPhotoCount(remainingPhotoCount)}` : `${formatPhotoCount(remainingPhotoCount)} more needed`)}
+                ? t('home.previewReady')
+                : t('home.morePhotosNeeded', formatPhotoCount(remainingPhotoCount))}
               showLoginIcon={!user}
               submitWhenEmpty={shouldLoginOnEmptyCreate}
               onSubmit={handleCreateOrUpload}
@@ -1858,7 +1848,7 @@ function HomePageInner() {
               }}
               onUploadSkill={() => skillFileRef.current?.click()}
               installingSkill={installingSkill}
-              overrideLabel={selectedSkill ? (availableSkills.find(s => s.name === selectedSkill)?.label || homeSkills.find(s => s.id === selectedSkill)?.labels[locale] || null) : null}
+              overrideLabel={selectedSkill ? (availableSkills.find(s => s.name === selectedSkill)?.label || pickLocalizedValue(homeSkills.find(s => s.id === selectedSkill)?.labels, locale) || null) : null}
               skillDirection="up"
               dragOver={dragOver}
               onDragEnter={(e) => { e.preventDefault(); dragCounterRef.current++; setDragOver(true) }}
@@ -1962,7 +1952,7 @@ function HomePageInner() {
             <button
               onClick={async () => {
                 const url = `${window.location.origin}/home/${selectedDetail.id}`
-                const title = selectedDetail.labels[locale] || selectedDetail.labels.en || 'Makaron'
+                const title = pickLocalizedValue(selectedDetail.labels, locale, 'Makaron')
                 if (navigator.share) {
                   try { await navigator.share({ url, title }) } catch {}
                 } else {
@@ -2162,10 +2152,10 @@ function HomePageInner() {
           }}>
             <div style={{ fontSize: 40, marginBottom: 16 }}>🎉</div>
             <div style={{ fontSize: 22, fontWeight: 700, color: 'rgba(255,255,255,0.95)' }}>
-              {locale === 'zh' ? '欢迎来到 Makaron!' : 'Welcome to Makaron!'}
+              {t('home.welcomeTitle')}
             </div>
             <div style={{ fontSize: 13, color: 'rgba(255,255,255,0.4)', marginTop: 8 }}>
-              {locale === 'zh' ? '我们送了你一份创作礼物' : "Here's a gift to get you started"}
+              {t('home.welcomeGift')}
             </div>
             <div style={{
               marginTop: 24, padding: '20px 0', borderRadius: 16,
@@ -2178,7 +2168,7 @@ function HomePageInner() {
                 {welcomeCredits.toLocaleString()}
               </div>
               <div style={{ fontSize: 13, color: 'rgba(255,255,255,0.35)', marginTop: 2 }}>
-                credits · ${(welcomeCredits * 0.01).toFixed(2)} {locale === 'zh' ? '价值' : 'value'}
+                credits · ${(welcomeCredits * 0.01).toFixed(2)} {t('home.value')}
               </div>
             </div>
             <button
@@ -2190,7 +2180,7 @@ function HomePageInner() {
                 boxShadow: '0 4px 20px rgba(217,70,239,0.3)',
               }}
             >
-              {locale === 'zh' ? '开始创作' : 'Start Creating'}
+              {t('home.startCreating')}
             </button>
           </div>
         </>
