@@ -2,6 +2,7 @@ import { useAuth } from './useAuth'
 import { useRouter } from 'next/navigation'
 import { useCallback, useRef } from 'react'
 import { User } from '@supabase/supabase-js'
+import { createClient } from '@/lib/supabase/client'
 
 export function useRequireAuth() {
   const { user, loading } = useAuth()
@@ -27,15 +28,11 @@ export function useRequireAuth() {
       return null
     }
 
-    const resolved = await new Promise<User | null>((resolve) => {
-      const start = Date.now()
-      const check = () => {
-        if (!loadingRef.current) { resolve(userRef.current); return }
-        if (Date.now() - start > 2000) { resolve(null); return }
-        requestAnimationFrame(check)
-      }
-      requestAnimationFrame(check)
-    })
+    // Read the browser session once instead of polling React auth state for up
+    // to two seconds. Supabase getSession is local-storage/cookie backed and is
+    // the same fast path used by AuthProvider.
+    const { data: { session } } = await createClient().auth.getSession()
+    const resolved = userRef.current ?? session?.user ?? null
 
     if (resolved) return resolved
     rememberReturnUrl()

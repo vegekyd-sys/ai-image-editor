@@ -4,7 +4,8 @@ import { useAuth } from '@/hooks/useAuth'
 import { useRouter } from 'next/navigation'
 import { Suspense, type CSSProperties } from 'react'
 import { createPortal } from 'react-dom'
-import { useEffect, useState, useRef, useCallback } from 'react'
+import dynamic from 'next/dynamic'
+import { startTransition, useEffect, useState, useRef, useCallback } from 'react'
 import { useIsDesktop } from '@/hooks/useIsDesktop'
 import Link from 'next/link'
 import { createClient } from '@/lib/supabase/client'
@@ -21,10 +22,14 @@ import TopBar from '@/components/TopBar'
 import { useCreateInput } from '@/hooks/useCreateInput'
 import CreateInputBox from '@/components/CreateInputBox'
 import { MakaronSpark, MAKARON_WORDMARK_STYLE } from '@/components/MakaronLogo'
-import ProjectEditorContainer from '@/components/ProjectEditorContainer'
 import LiquidGlassNav from '@/components/LiquidGlassNav'
 import { loadCreateAgentModelPreference, saveAgentModelPreference, saveCreateAgentModelPreference } from '@/lib/agent-model-preference'
 import type { AgentModelPreference } from '@/lib/agent-models'
+
+const ProjectEditorContainer = dynamic(() => import('@/components/ProjectEditorContainer'), {
+  ssr: false,
+  loading: () => <div className="h-dvh w-full bg-black" aria-label="Loading project" />,
+})
 
 interface ProjectWithSnapshots {
   id: string
@@ -131,37 +136,18 @@ function ProjectsPageInner() {
   const router = useRouter()
   const isDesktop = useIsDesktop()
   const userId = user?.id
-  // Phase 1: Synchronous memory cache — same-session instant render
-  const [projects, setProjects] = useState<ProjectWithSnapshots[]>(() => {
-    if (typeof window === 'undefined') return []
-    const cachedUserId = user?.id
-    if (!cachedUserId) {
-      return isMakaronIOSAppShell()
-        ? ((getLastProjectsListSync()?.projects as ProjectWithSnapshots[] | undefined) ?? [])
-        : []
-    }
-    return (getCachedProjectsListSync(cachedUserId) as ProjectWithSnapshots[]) ?? []
-  })
-  const [loadingProjects, setLoadingProjects] = useState(() => {
-    if (typeof window === 'undefined') return true
-    const cachedUserId = user?.id
-    if (!cachedUserId) {
-      return !(isMakaronIOSAppShell() && (getLastProjectsListSync()?.projects.length ?? 0) > 0)
-    }
-    return getCachedProjectsListSync(cachedUserId) === null
-  })
+  // Keep SSR and the first client render identical. Browser/native caches are
+  // restored after hydration so React never has to replace the projects tree.
+  const [projects, setProjects] = useState<ProjectWithSnapshots[]>([])
+  const [loadingProjects, setLoadingProjects] = useState(true)
   const createInput = useCreateInput()
   const [createAgentModel, setCreateAgentModel] = useState<AgentModelPreference>('auto')
   const inputBoxRef = useRef<HTMLDivElement>(null)
   const extractedMetadataRef = useRef<import('@/types').PhotoMetadata | undefined>(undefined)
   const [photoSlotWidth, setPhotoSlotWidth] = useState(80)
   const [selectedSkill, setSelectedSkill] = useState<string | null>(null)
-  const [availableSkills, setAvailableSkills] = useState<SkillItem[]>(() => (
-    readNativeJSONCache<SkillsPayload>('/api/skills')?.skills ?? []
-  ))
-  const [creditBalance, setCreditBalance] = useState<number | null>(() => (
-    readNativeJSONCache<CreditsPayload>('/api/billing/credits')?.balance ?? null
-  ))
+  const [availableSkills, setAvailableSkills] = useState<SkillItem[]>([])
+  const [creditBalance, setCreditBalance] = useState<number | null>(null)
   const [showWelcome, setShowWelcome] = useState(false)
 
   useEffect(() => {
@@ -237,7 +223,7 @@ function ProjectsPageInner() {
 
   const [actionSheet, setActionSheet] = useState<ProjectWithSnapshots | null>(null)
   const [navigating, setNavigating] = useState(false)
-  const [iosAppShell, setIosAppShell] = useState(() => isMakaronIOSAppShell())
+  const [iosAppShell, setIosAppShell] = useState(false)
   const [projectsRefreshNonce, setProjectsRefreshNonce] = useState(0)
   const shownRef = useRef(!loadingProjects) // tracks whether we've shown content
   const projectsRef = useRef(projects)
@@ -263,6 +249,28 @@ function ProjectsPageInner() {
   const iosRefreshSelfTestStartedRef = useRef(false)
   const lastProjectsRefreshRequestRef = useRef(0)
   const projectsPageInstanceIdRef = useRef(`projects-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`)
+
+  useEffect(() => {
+    const cachedProjects = userId
+      ? (getCachedProjectsListSync(userId) as ProjectWithSnapshots[] | null)
+      : isMakaronIOSAppShell()
+        ? ((getLastProjectsListSync()?.projects as ProjectWithSnapshots[] | undefined) ?? null)
+        : null
+    const cachedSkills = readNativeJSONCache<SkillsPayload>('/api/skills')?.skills
+    const cachedCredits = readNativeJSONCache<CreditsPayload>('/api/billing/credits')?.balance
+
+    startTransition(() => {
+      if (cachedProjects) {
+        projectsRef.current = cachedProjects
+        loadingProjectsRef.current = false
+        shownRef.current = true
+        setProjects(cachedProjects)
+        setLoadingProjects(false)
+      }
+      if (cachedSkills) setAvailableSkills(cachedSkills)
+      if (cachedCredits !== undefined) setCreditBalance(cachedCredits)
+    })
+  }, [userId])
 
   const clearIOSProjectCloseTimer = useCallback(() => {
     if (iosProjectCloseTimerRef.current === null) return
@@ -483,7 +491,7 @@ function ProjectsPageInner() {
     }
     setNavigating(true)
   }, [iosAppShell, openIOSProject, userId])
-  const useIOSInlineProjectNavigation = iosAppShell || isMakaronIOSAppShell()
+  const useIOSInlineProjectNavigation = iosAppShell
 
   useEffect(() => {
     if (!useIOSInlineProjectNavigation || !userId || projects.length === 0) return

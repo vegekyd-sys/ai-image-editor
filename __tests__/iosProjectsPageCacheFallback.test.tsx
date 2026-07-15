@@ -1,6 +1,8 @@
 import React from 'react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { act, fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { hydrateRoot, type Root } from 'react-dom/client';
+import { renderToString } from 'react-dom/server';
 import ProjectsPage from '@/app/projects/page';
 import { cacheProjectsList, clearUserCache } from '@/lib/imageCache';
 
@@ -171,6 +173,30 @@ describe('iOS projects page cache fallback', () => {
     expect(await screen.findByText('Cached Project')).toBeTruthy();
     expect(screen.queryByText('No projects yet')).toBeNull();
     expect(router.replace).not.toHaveBeenCalledWith('/login');
+  });
+
+  it('hydrates the real projects page without rebuilding when native cache is available', async () => {
+    document.documentElement.classList.remove('makaron-ios-app');
+    const serverHTML = renderToString(<ProjectsPage />);
+    const container = document.createElement('div');
+    container.innerHTML = serverHTML;
+    document.body.appendChild(container);
+    document.documentElement.classList.add('makaron-ios-app');
+    const recoverableErrors: unknown[] = [];
+    let root: Root | null = null;
+
+    await act(async () => {
+      root = hydrateRoot(container, <ProjectsPage />, {
+        onRecoverableError: (error) => recoverableErrors.push(error),
+      });
+      await Promise.resolve();
+    });
+
+    await waitFor(() => expect(container.textContent).toContain('Cached Project'));
+    expect(recoverableErrors).toEqual([]);
+
+    act(() => root?.unmount());
+    container.remove();
   });
 
   it('opens and closes the iOS inline editor without changing route or page freeze', async () => {

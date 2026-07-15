@@ -183,8 +183,9 @@ describe('iOS App Store readiness guardrails', () => {
     expect(nativeCache).toContain('removeNativeJSONCache');
     expect(authProvider).toContain("const AUTH_USER_CACHE_KEY = '/auth/user'");
     expect(authProvider).toContain('isMakaronIOSApp');
-    expect(authProvider).toContain('const [useNativeAuthCache] = useState(() => isMakaronIOSApp())');
-    expect(authProvider).toContain('useNativeAuthCache ? readNativeJSONCache<User>(AUTH_USER_CACHE_KEY) : null');
+    expect(authProvider).toContain('const useNativeAuthCacheRef = useRef(false)');
+    expect(authProvider).not.toContain('useState(() => isMakaronIOSApp())');
+    expect(authProvider).toContain('const cachedUser = useNativeAuthCache');
     expect(authProvider).toContain('readNativeJSONCache<User>(AUTH_USER_CACHE_KEY)');
     expect(authProvider).toContain('writeNativeJSONCache(AUTH_USER_CACHE_KEY, session.user)');
     expect(authProvider).toContain('removeNativeJSONCache(AUTH_USER_CACHE_KEY)');
@@ -549,7 +550,8 @@ describe('iOS App Store readiness guardrails', () => {
     const homePage = fs.readFileSync(path.join(root, 'src/app/home/page.tsx'), 'utf8');
     expect(homePage).toContain('isMakaronIOSApp');
     expect(homePage).toContain('usePathname');
-    expect(homePage).toContain('const [isIOSAppShell] = useState(() => isMakaronIOSApp())');
+    expect(homePage).toContain('const isIOSAppShell = hydrated && isMakaronIOSApp()');
+    expect(homePage).not.toContain('useState(() => isMakaronIOSApp())');
     expect(homePage).toContain('detailPathActiveRef');
     expect(homePage).toContain('IOS_SKILL_BACK_EDGE_PX');
     expect(homePage).toContain('IOS_SKILL_BACK_COMMIT_PX');
@@ -566,7 +568,8 @@ describe('iOS App Store readiness guardrails', () => {
     expect(homePage).toContain("const url = isIOSAppShell ? '/home' : `/home?skill=${encodeURIComponent(skillId)}`");
     expect(homePage).toContain('IOS_PENDING_HOME_SKILL_KEY');
     expect(homePage).toContain('rememberIOSSkillReturn');
-    expect(homePage).toContain("const skillId = searchParams.get('skill') || pathSkillId || pendingIOSSkillId");
+    expect(homePage).toContain("const skillId = new URLSearchParams(window.location.search).get('skill') || pathSkillId || pendingIOSSkillId");
+    expect(homePage).not.toContain('useSearchParams');
     expect(homePage).toContain('draft.homeSkillId && draft.images.length === 0');
     expect(homePage).toContain("document.documentElement.style.overflow = 'hidden'");
     expect(homePage).toContain("window.addEventListener('makaron-ios-page-stack-back', unlockIfNoDetail)");
@@ -674,7 +677,8 @@ describe('iOS App Store readiness guardrails', () => {
     expect(projectsPage).toContain('__makaronIOSProjectNavLog');
     expect(projectsPage).toContain('IOS_PROJECT_NAV_LOG_SESSION_KEY');
     expect(projectsPage).toContain('[ios-project-nav]');
-    expect(projectsPage).toContain('useState(() => isMakaronIOSAppShell())');
+    expect(projectsPage).toContain('const [iosAppShell, setIosAppShell] = useState(false)');
+    expect(projectsPage).not.toContain('useState(() => isMakaronIOSAppShell())');
     expect(projectsPage).toContain('useIOSInlineProjectNavigation');
     expect(projectsPage).not.toContain('useSearchParams');
     expect(projectsPage).not.toContain("searchParams.get('iosProject')");

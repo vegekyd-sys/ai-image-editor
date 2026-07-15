@@ -8,6 +8,7 @@ import { isMakaronIOSApp } from '@/lib/native-app'
 import { warmNativeJSONCache } from '@/lib/native-app-cache'
 import { warmHomeSkillsCache } from '@/lib/home-skills-warm'
 import { warmProjectsListCache } from '@/lib/projects-list-warm'
+import { useHydrated } from '@/hooks/useHydrated'
 
 type PrimarySurface = 'explore' | 'projects'
 export type LiquidGlassNavValue = PrimarySurface | 'human' | 'agent'
@@ -38,6 +39,7 @@ export default function LiquidGlassNav({
 }: LiquidGlassNavProps) {
   const router = useRouter()
   const { user } = useAuth()
+  const hydrated = useHydrated()
   const { locale } = useLocale()
   const [visualActive, setVisualActive] = useState(active)
 
@@ -113,7 +115,7 @@ export default function LiquidGlassNav({
     window.requestAnimationFrame(() => router.push(path))
   }, [active, onChange, pathFor, router, warmRoute])
 
-  if (requireAuth && !user) return null
+  if (requireAuth && (!hydrated || !user)) return null
 
   return (
     <nav
@@ -142,14 +144,28 @@ export default function LiquidGlassNav({
           }}
         />
         {navItems.map((item) => {
-          const isRouteItem = item.value === 'explore' || item.value === 'projects'
           const isActive = visualActive === item.value
+          if (item.value === 'explore' || item.value === 'projects') {
+            const href = pathFor(item.value)
+            return (
+              <a
+                key={item.value}
+                href={href}
+                aria-current={active === item.value ? 'page' : undefined}
+                onPointerEnter={() => warmRoute(item.value)}
+                onFocus={() => warmRoute(item.value)}
+                className="mkr-liquid-nav-button"
+                data-active={isActive ? 'true' : 'false'}
+              >
+                {item.label}
+              </a>
+            )
+          }
           return (
             <button
               key={item.value}
               type="button"
-              aria-current={isRouteItem && active === item.value ? 'page' : undefined}
-              aria-pressed={!isRouteItem ? isActive : undefined}
+              aria-pressed={isActive}
               onClick={() => navigate(item.value)}
               onPointerEnter={() => warmRoute(item.value)}
               onTouchStart={() => warmRoute(item.value)}

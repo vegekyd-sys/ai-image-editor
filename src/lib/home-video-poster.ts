@@ -1,6 +1,6 @@
 'use client'
 
-import { cacheMediaBlob, cacheMediaUrl, getCachedMediaObjectUrl, mediaCacheKeyForUrl } from '@/lib/imageCache'
+import { cacheMediaBlob, getCachedMediaObjectUrl } from '@/lib/imageCache'
 import { normalizeDomain } from '@/lib/supabase/storage'
 import { useEffect, useState } from 'react'
 
@@ -115,9 +115,9 @@ export function warmHomeVideoPoster(src: string): Promise<string | null> {
         return cachedPoster
       }
 
-      const videoKey = mediaCacheKeyForUrl(normalizedSrc)
-      const videoSrc = await cacheMediaUrl(normalizedSrc, videoKey) ?? normalizedSrc
-      const posterBlob = await capturePosterFrame(videoSrc)
+      // Let the media element issue a range/stream request. Fetching the whole
+      // MP4 into a Blob here made Safari download tens of megabytes at startup.
+      const posterBlob = await capturePosterFrame(normalizedSrc)
       const poster = posterBlob
         ? await cacheMediaBlob(posterKey, posterBlob, 'image/jpeg')
         : null

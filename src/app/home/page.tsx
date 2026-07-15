@@ -2,14 +2,15 @@
 
 import { useAuth } from '@/hooks/useAuth'
 import { useRequireAuth } from '@/hooks/useRequireAuth'
-import { usePathname, useRouter, useSearchParams } from 'next/navigation'
-import { useEffect, useState, useRef, useCallback, Suspense } from 'react'
+import { usePathname, useRouter } from 'next/navigation'
+import { startTransition, useEffect, useState, useRef, useCallback } from 'react'
 import { useIsDesktop } from '@/hooks/useIsDesktop'
+import { useHydrated } from '@/hooks/useHydrated'
 import { isHeicFile } from '@/lib/imageUtils'
 import { useLocale } from '@/lib/i18n'
 import { compressCreateImageFile, createProject, createProjectFromStagedMedia } from '@/lib/createProject'
 import { createClient } from '@/lib/supabase/client'
-import { cacheCreateDraft, cacheMediaUrl, clearCreateDraft, getCachedMediaObjectUrl, getCreateDraft, mediaCacheKeyForUrl } from '@/lib/imageCache'
+import { cacheCreateDraft, clearCreateDraft, getCreateDraft } from '@/lib/imageCache'
 import { extractPhotoMetadata } from '@/lib/image/metadata'
 import type { PhotoMetadata } from '@/types'
 import { createMetaEventId, trackMetaEvent } from '@/lib/marketing/meta-pixel'
@@ -37,6 +38,8 @@ const IOS_SKILL_BACK_COMMIT_PX = 88
 const IOS_SKILL_BACK_CLOSE_MS = 180
 const IOS_RESET_HOME_SCROLL_KEY = 'makaron:ios-reset-home-scroll'
 const IOS_PENDING_HOME_SKILL_KEY = 'makaron:ios-pending-home-skill-id'
+const INITIAL_SKILL_CARD_COUNT = 12
+const SKILL_CARD_BATCH_SIZE = 12
 
 function getHomeScrollContainer(node: HTMLElement | null): HTMLElement | null {
   if (!node) return null
@@ -52,31 +55,6 @@ function isEditableTarget(target: EventTarget | null): boolean {
   return Boolean(target.closest('input, textarea, select, button, [contenteditable="true"]'))
 }
 
-function useCachedVideoSource(src: string, enabled: boolean) {
-  const normalizedSrc = normalizeDomain(src)
-  const [resolvedSrc, setResolvedSrc] = useState(normalizedSrc)
-
-  useEffect(() => {
-    let cancelled = false
-    setResolvedSrc(normalizedSrc)
-    if (!enabled) return
-
-    const key = mediaCacheKeyForUrl(normalizedSrc)
-    getCachedMediaObjectUrl(key)
-      .then((cachedSrc) => cachedSrc ?? cacheMediaUrl(normalizedSrc, key))
-      .then((cachedSrc) => {
-        if (!cancelled && cachedSrc) setResolvedSrc(cachedSrc)
-      })
-      .catch(() => {})
-
-    return () => {
-      cancelled = true
-    }
-  }, [enabled, normalizedSrc])
-
-  return resolvedSrc
-}
-
 function LazyVideo({
   src,
   style,
@@ -88,21 +66,25 @@ function LazyVideo({
   eager?: boolean
   suspended?: boolean
 }) {
-  const ref = useRef<HTMLVideoElement>(null)
+  const observerRef = useRef<HTMLSpanElement>(null)
+  const videoRef = useRef<HTMLVideoElement>(null)
   const [isNearViewport, setIsNearViewport] = useState(eager)
   const [isVisible, setIsVisible] = useState(eager)
   const [videoReady, setVideoReady] = useState(false)
-  const resolvedSrc = useCachedVideoSource(src, isNearViewport && !suspended)
+  const resolvedSrc = normalizeDomain(src)
   const shouldAttach = isNearViewport && !suspended
-  const poster = useHomeVideoPoster(src, shouldAttach || eager)
+  // Thumbnail playback already supplies the first visible frame. Reusing an
+  // existing in-memory poster is fine, but generating one here would create a
+  // second Safari video pipeline/request for every visible card.
+  const poster = useHomeVideoPoster(src, false)
 
   useEffect(() => {
-    const el = ref.current
+    const el = observerRef.current
     if (!el) return
     const nearObserver = new IntersectionObserver(([entry]) => {
       const nearViewport = entry.isIntersecting
       setIsNearViewport(nearViewport)
-    }, { rootMargin: '240px', threshold: [0, 0.05] })
+    }, { rootMargin: '60px 0px', threshold: [0, 0.05] })
     const visibleObserver = new IntersectionObserver(([entry]) => {
       setIsVisible(entry.isIntersecting && entry.intersectionRatio > 0.15)
     }, { threshold: [0, 0.15] })
@@ -115,22 +97,10 @@ function LazyVideo({
   }, [eager])
 
   useEffect(() => {
-    const video = ref.current
+    const video = videoRef.current
     if (!video) return
     video.muted = true
     video.playsInline = true
-
-    if (!shouldAttach) {
-      setVideoReady(false)
-      video.pause()
-      video.removeAttribute('src')
-      try {
-        video.load()
-      } catch {
-        // Releasing a detached Safari media pipeline is best-effort.
-      }
-      return
-    }
 
     if (!isVisible) {
       video.pause()
@@ -140,7 +110,10 @@ function LazyVideo({
     const raf = window.requestAnimationFrame(() => {
       void video.play().catch(() => undefined)
     })
-    return () => window.cancelAnimationFrame(raf)
+    return () => {
+      window.cancelAnimationFrame(raf)
+      video.pause()
+    }
   }, [isVisible, resolvedSrc, shouldAttach, suspended])
 
   useEffect(() => {
@@ -148,27 +121,29 @@ function LazyVideo({
   }, [resolvedSrc])
 
   return (
-    <>
+    <span ref={observerRef} style={{ ...style, display: 'block', overflow: 'hidden' }}>
       {poster && !videoReady && (
         <img
           src={poster}
           alt=""
           aria-hidden="true"
-          style={{ ...style, display: 'block' }}
+          style={{ position: 'absolute', inset: 0, width: '100%', height: '100%', objectFit: 'cover', display: 'block' }}
         />
       )}
-      <video
-        ref={ref}
-        src={shouldAttach ? resolvedSrc : undefined}
-        loop
-        muted
-        playsInline
-        preload={shouldAttach ? 'metadata' : 'none'}
-        onLoadedData={() => setVideoReady(true)}
-        onCanPlay={() => setVideoReady(true)}
-        style={{ ...style, opacity: videoReady ? 1 : 0, transition: 'opacity 120ms ease-out' }}
-      />
-    </>
+      {shouldAttach && (
+        <video
+          ref={videoRef}
+          src={resolvedSrc}
+          loop
+          muted
+          playsInline
+          preload="metadata"
+          onLoadedData={() => setVideoReady(true)}
+          onCanPlay={() => setVideoReady(true)}
+          style={{ position: 'absolute', inset: 0, width: '100%', height: '100%', objectFit: 'cover', pointerEvents: 'none', opacity: videoReady ? 1 : 0, transition: 'opacity 120ms ease-out' }}
+        />
+      )}
+    </span>
   )
 }
 
@@ -185,7 +160,7 @@ function SkillVideo({
 }) {
   const ref = useRef<HTMLVideoElement>(null)
   const [videoReady, setVideoReady] = useState(false)
-  const resolvedSrc = useCachedVideoSource(src, eager || active)
+  const resolvedSrc = normalizeDomain(src)
   const shouldAttach = eager || active
   const poster = useHomeVideoPoster(src, shouldAttach)
 
@@ -252,18 +227,19 @@ function SkillVideo({
 }
 
 export default function HomePage() {
-  return <Suspense><HomePageInner /></Suspense>
+  return <HomePageInner />
 }
 
 function HomePageInner() {
   const { user, loading: authLoading } = useAuth()
+  const hydrated = useHydrated()
+  const renderUser = hydrated ? user : null
   const requireAuth = useRequireAuth()
   const { t, locale } = useLocale()
   const router = useRouter()
   const pathname = usePathname()
-  const searchParams = useSearchParams()
   const isDesktop = useIsDesktop()
-  const [isIOSAppShell] = useState(() => isMakaronIOSApp())
+  const isIOSAppShell = hydrated && isMakaronIOSApp()
 
   const [viewMode, setViewMode] = useState<'human' | 'agent'>('human')
   const createInput = useCreateInput()
@@ -276,6 +252,8 @@ function HomePageInner() {
   const [inputWrapperHeight, setInputWrapperHeight] = useState(0)
   const [slotDragOver, setSlotDragOver] = useState(-1)
   const [homeSkills, setHomeSkills] = useState<HomeSkill[]>([])
+  const [visibleSkillCount, setVisibleSkillCount] = useState(INITIAL_SKILL_CARD_COUNT)
+  const skillLoadMoreRef = useRef<HTMLDivElement>(null)
   const [selectedSkill, setSelectedSkill] = useState<string | null>(null)
   const [availableSkills, setAvailableSkills] = useState<{ name: string; label: string; icon: string; color: string; builtIn: boolean }[]>([])
   const [skillMenuOpen, setSkillMenuOpen] = useState(false)
@@ -331,9 +309,9 @@ function HomePageInner() {
   const homeSkillsRef = useRef(homeSkills)
   homeSkillsRef.current = homeSkills
   const pathSkillId = pathname?.startsWith('/home/') ? pathname.split('/')[2] : null
-  const activeSkillId = selectedDetail?.id || searchParams.get('skill') || pathSkillId || null
+  const activeSkillId = selectedDetail?.id || pathSkillId || null
   const activeSkill = selectedDetail || (activeSkillId ? homeSkills.find(s => s.id === activeSkillId) || null : null)
-  const showGuestModeToggle = !authLoading && !user
+  const showGuestModeToggle = hydrated && !authLoading && !user
   const showAgentLanding = showGuestModeToggle && viewMode === 'agent' && !hasSelectedDetail
 
   const blurHomeComposers = useCallback(() => {
@@ -561,7 +539,7 @@ function HomePageInner() {
     // Hydrate from sessionStorage first (instant, avoids skeleton flash on same-session)
     const cached = readNativeJSONCache<HomeSkill[]>('/api/home-skills') ?? getCachedHomeSkills()
     if (cached.length > 0) {
-      setHomeSkills(cached)
+      startTransition(() => setHomeSkills(cached))
       warmHomeSkillMedia(cached)
     }
 
@@ -570,22 +548,41 @@ function HomePageInner() {
       if (!Array.isArray(data) || data.length === 0) return
       writeNativeJSONCache('/api/home-skills', data)
       warmHomeSkillMedia(data)
-      setHomeSkills(prev => {
-        if (prev.length === 0) { setCachedHomeSkills(data); return data }
-        const newMap = new Map(data.map((s: HomeSkill) => [s.id, s]))
-        const merged = prev.map(s => {
-          const fresh = newMap.get(s.id)
-          if (!fresh) return null
-          newMap.delete(s.id)
-          return JSON.stringify(fresh) === JSON.stringify(s) ? s : fresh as HomeSkill
-        }).filter(Boolean) as HomeSkill[]
-        for (const s of newMap.values()) merged.push(s)
-        merged.sort((a, b) => a.sort_order - b.sort_order)
-        setCachedHomeSkills(merged)
-        return merged
+      startTransition(() => {
+        setHomeSkills(prev => {
+          if (prev.length === 0) { setCachedHomeSkills(data); return data }
+          const newMap = new Map(data.map((s: HomeSkill) => [s.id, s]))
+          const merged = prev.map(s => {
+            const fresh = newMap.get(s.id)
+            if (!fresh) return null
+            newMap.delete(s.id)
+            return JSON.stringify(fresh) === JSON.stringify(s) ? s : fresh as HomeSkill
+          }).filter(Boolean) as HomeSkill[]
+          for (const s of newMap.values()) merged.push(s)
+          merged.sort((a, b) => a.sort_order - b.sort_order)
+          setCachedHomeSkills(merged)
+          return merged
+        })
       })
     }).catch(() => {})
   }, [])
+
+  useEffect(() => {
+    const sentinel = skillLoadMoreRef.current
+    if (!sentinel || visibleSkillCount >= homeSkills.length) return
+    if (typeof IntersectionObserver === 'undefined') {
+      startTransition(() => setVisibleSkillCount(homeSkills.length))
+      return
+    }
+    const observer = new IntersectionObserver(([entry]) => {
+      if (!entry.isIntersecting) return
+      startTransition(() => {
+        setVisibleSkillCount(count => Math.min(count + SKILL_CARD_BATCH_SIZE, homeSkills.length))
+      })
+    }, { rootMargin: '200px 0px' })
+    observer.observe(sentinel)
+    return () => observer.disconnect()
+  }, [homeSkills.length, visibleSkillCount])
 
   // Preload user's installed skills
   const skillsFetchedRef = useRef(false)
@@ -827,7 +824,7 @@ function HomePageInner() {
     const pendingIOSSkillId = isIOSAppShell
       ? (sessionStorage.getItem(IOS_PENDING_HOME_SKILL_KEY) || localStorage.getItem(IOS_PENDING_HOME_SKILL_KEY))
       : null
-    const skillId = searchParams.get('skill') || pathSkillId || pendingIOSSkillId
+    const skillId = new URLSearchParams(window.location.search).get('skill') || pathSkillId || pendingIOSSkillId
     if (!skillId || homeSkills.length === 0 || selectedDetail) return
     const skill = homeSkills.find(s => s.id === skillId)
     if (!skill) return
@@ -845,7 +842,7 @@ function HomePageInner() {
     detailPathActiveRef.current = true
     writeSkillDetailPath(skillId, 'replace')
     if (pendingIOSSkillId === skillId) clearIOSSkillReturn()
-  }, [clearDetailCloseTimer, clearIOSSkillReturn, homeSkills, isIOSAppShell, pathSkillId, searchParams, selectedDetail, updateViewportInset, writeSkillDetailPath])
+  }, [clearDetailCloseTimer, clearIOSSkillReturn, homeSkills, isIOSAppShell, pathSkillId, selectedDetail, updateViewportInset, writeSkillDetailPath])
 
   // Position slide when overlay DOM mounts via ref callback (stable — no deps to avoid re-bindinging)
   const detailSnapCallbackRef = useCallback((el: HTMLDivElement | null) => {
@@ -878,7 +875,7 @@ function HomePageInner() {
     const hasSkillQuery = new URLSearchParams(window.location.search).has('skill')
     if (!hasSelectedDetail || !detailPathActiveRef.current || pathname !== '/home' || hasSkillQuery) return
     closeSkillDetail('none')
-  }, [closeSkillDetail, hasSelectedDetail, isIOSAppShell, pathname, searchParams])
+  }, [closeSkillDetail, hasSelectedDetail, isIOSAppShell, pathname])
 
   const syncFixedInputVisibility = useCallback(() => {
     if (isDesktop) return
@@ -1332,11 +1329,11 @@ function HomePageInner() {
     )
   }, [createInput, handleSlotDrop, rememberIOSSkillReturn, requireAuth, selectedDetail, slotDragOver, trackUploadIntentEvent, user])
 
-  const guestSkillCreateLabel = selectedDetail && !user
+  const guestSkillCreateLabel = selectedDetail && !renderUser
     ? createInput.files.length > 0
       ? (locale === 'zh' ? '生成免费预览' : 'Create free preview')
       : (locale === 'zh' ? '上传照片' : 'Upload photo')
-    : !user
+    : !renderUser
       ? (locale === 'zh' ? '免费试用' : 'Try free')
       : 'Create'
 
@@ -1344,8 +1341,8 @@ function HomePageInner() {
   const selectedPhotoCount = createInput.files.length
   const remainingPhotoCount = Math.max(requiredPhotoCount - selectedPhotoCount, 0)
   const hasEnoughPhotos = remainingPhotoCount === 0
-  const isGuestSkillAction = !user && !!activeSkill
-  const shouldLoginOnEmptyCreate = !user && !activeSkill
+  const isGuestSkillAction = !renderUser && !!activeSkill
+  const shouldLoginOnEmptyCreate = !renderUser && !activeSkill
   const formatPhotoCount = (count: number) => locale === 'zh'
     ? `${count} 张照片`
     : `${count} photo${count === 1 ? '' : 's'}`
@@ -1662,8 +1659,9 @@ function HomePageInner() {
               actionSelectedNote={hasEnoughPhotos
                 ? (locale === 'zh' ? '可以预览了' : 'Ready to preview')
                 : (locale === 'zh' ? `还需要 ${formatPhotoCount(remainingPhotoCount)}` : `${formatPhotoCount(remainingPhotoCount)} more needed`)}
-              showLoginIcon={!user}
+              showLoginIcon={!renderUser}
               submitWhenEmpty={shouldLoginOnEmptyCreate}
+              fallbackHref={shouldLoginOnEmptyCreate ? '/login' : undefined}
               onSubmit={handleCreateOrUpload}
               onSlotClick={handleInputSlotClick}
               onFilesSelected={(files) => trackFileSelected(files, 'file_input')}
@@ -1736,7 +1734,7 @@ function HomePageInner() {
                 </div>
               </div>
             ))}
-            {homeSkills.map((template, i) => (
+            {homeSkills.slice(0, visibleSkillCount).map((template, i) => (
               <div
                 key={template.id}
                 className="mkr-skill-card mkr-row-enter"
@@ -1748,11 +1746,13 @@ function HomePageInner() {
                   overflow: 'hidden',
                   background: 'linear-gradient(145deg, rgba(18,13,26,0.48), rgba(8,8,12,0.64))',
                   border: '0.5px solid rgba(255,255,255,0.08)',
-                  animationDelay: `${i * 0.06}s`,
+                  animationDelay: `${Math.min(i, 8) * 0.045}s`,
+                  contentVisibility: 'auto',
+                  containIntrinsicSize: '240px 320px',
                   ...(heroRect && selectedDetail?.id === template.id ? { opacity: 0 } : {}),
                 }}
               >
-                {renderCoverMedia(template.image, template.labels.en || '', 'thumb', { priority: i < 4, suspended: !!selectedDetail, extraStyle: { position: 'absolute', display: 'block' } })}
+                {renderCoverMedia(template.image, template.labels.en || '', 'thumb', { priority: i < 1, suspended: !!selectedDetail, extraStyle: { position: 'absolute', display: 'block' } })}
 
                 {/* Bottom gradient for text readability */}
                 <div style={{
@@ -1779,6 +1779,9 @@ function HomePageInner() {
               </div>
             ))}
           </div>
+          {visibleSkillCount < homeSkills.length && (
+            <div ref={skillLoadMoreRef} aria-hidden="true" style={{ height: 1, width: '100%' }} />
+          )}
 
         </div>
 
@@ -1836,8 +1839,9 @@ function HomePageInner() {
               actionSelectedNote={hasEnoughPhotos
                 ? (locale === 'zh' ? '可以预览了' : 'Ready to preview')
                 : (locale === 'zh' ? `还需要 ${formatPhotoCount(remainingPhotoCount)}` : `${formatPhotoCount(remainingPhotoCount)} more needed`)}
-              showLoginIcon={!user}
+              showLoginIcon={!renderUser}
               submitWhenEmpty={shouldLoginOnEmptyCreate}
+              fallbackHref={shouldLoginOnEmptyCreate ? '/login' : undefined}
               onSubmit={handleCreateOrUpload}
               onSlotClick={handleInputSlotClick}
               onFilesSelected={(files) => trackFileSelected(files, 'file_input')}
