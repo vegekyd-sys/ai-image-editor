@@ -10,6 +10,17 @@ interface ChangelogEntry {
 
 const CHANGELOG: ChangelogEntry[] = [
   {
+    date: '2026-07-15',
+    en: { title: 'A Faster, Smoother Home', items: [
+      'Home buttons now respond immediately, including Try Free, Create, Sign in, and the Explore / Projects switcher.',
+      'Images and videos now stay ready as you scroll or switch between Explore and Projects, without flashing back to cover frames.',
+    ]},
+    zh: { title: '首页更快、更顺滑', items: [
+      '首页按钮现在点下即可响应，包括 Try Free、Create、登录，以及探索 / 项目切换。',
+      '上下滚动或在探索与项目之间切换时，图片和视频会保持就绪，不再闪回封面图。',
+    ]},
+  },
+  {
     date: '2026-07-11',
     en: { title: 'Choose Your Agent Model', items: [
       'Makaron Agent can now use Sonnet 4.6, Sonnet 5, Opus 4.8, Grok 4.5, or DeepSeek V4 Pro — choose the right brain for each project.',
