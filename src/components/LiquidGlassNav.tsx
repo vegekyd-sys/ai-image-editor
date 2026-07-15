@@ -1,6 +1,7 @@
 'use client'
 
 import { useCallback, useEffect, useState } from 'react'
+import type { MouseEvent } from 'react'
 import { useRouter } from 'next/navigation'
 import { useAuth } from '@/hooks/useAuth'
 import { useLocale } from '@/lib/i18n'
@@ -8,6 +9,7 @@ import { isMakaronIOSApp } from '@/lib/native-app'
 import { warmNativeJSONCache } from '@/lib/native-app-cache'
 import { warmHomeSkillsCache } from '@/lib/home-skills-warm'
 import { warmProjectsListCache } from '@/lib/projects-list-warm'
+import { useHydrated } from '@/hooks/useHydrated'
 
 type PrimarySurface = 'explore' | 'projects'
 export type LiquidGlassNavValue = PrimarySurface | 'human' | 'agent'
@@ -38,6 +40,7 @@ export default function LiquidGlassNav({
 }: LiquidGlassNavProps) {
   const router = useRouter()
   const { user } = useAuth()
+  const hydrated = useHydrated()
   const { t } = useLocale()
   const [visualActive, setVisualActive] = useState(active)
 
@@ -99,14 +102,31 @@ export default function LiquidGlassNav({
     }
     warmRoute(surface)
     setVisualActive(surface)
-    if (typeof window === 'undefined') {
-      router.push(path)
-      return
-    }
-    window.requestAnimationFrame(() => router.push(path))
+    router.push(path)
   }, [active, onChange, pathFor, router, warmRoute])
 
-  if (requireAuth && !user) return null
+  const handleRouteClick = useCallback((
+    event: MouseEvent<HTMLAnchorElement>,
+    surface: PrimarySurface,
+  ) => {
+    // Keep the real href as the pre-hydration fallback. Once React is ready,
+    // preserve the in-memory media caches with client-side navigation while
+    // leaving modifier/middle clicks to the browser.
+    if (
+      !hydrated
+      || event.defaultPrevented
+      || event.button !== 0
+      || event.metaKey
+      || event.ctrlKey
+      || event.shiftKey
+      || event.altKey
+    ) return
+
+    event.preventDefault()
+    navigate(surface)
+  }, [hydrated, navigate])
+
+  if (requireAuth && (!hydrated || !user)) return null
 
   return (
     <nav
@@ -135,14 +155,31 @@ export default function LiquidGlassNav({
           }}
         />
         {navItems.map((item) => {
-          const isRouteItem = item.value === 'explore' || item.value === 'projects'
           const isActive = visualActive === item.value
+          if (item.value === 'explore' || item.value === 'projects') {
+            const surface: PrimarySurface = item.value
+            const href = pathFor(surface)
+            return (
+              <a
+                key={item.value}
+                href={href}
+                aria-current={active === item.value ? 'page' : undefined}
+                onClick={(event) => handleRouteClick(event, surface)}
+                onPointerEnter={() => warmRoute(item.value)}
+                onTouchStart={() => warmRoute(item.value)}
+                onFocus={() => warmRoute(item.value)}
+                className="mkr-liquid-nav-button"
+                data-active={isActive ? 'true' : 'false'}
+              >
+                {item.label}
+              </a>
+            )
+          }
           return (
             <button
               key={item.value}
               type="button"
-              aria-current={isRouteItem && active === item.value ? 'page' : undefined}
-              aria-pressed={!isRouteItem ? isActive : undefined}
+              aria-pressed={isActive}
               onClick={() => navigate(item.value)}
               onPointerEnter={() => warmRoute(item.value)}
               onTouchStart={() => warmRoute(item.value)}

@@ -183,8 +183,9 @@ describe('iOS App Store readiness guardrails', () => {
     expect(nativeCache).toContain('removeNativeJSONCache');
     expect(authProvider).toContain("const AUTH_USER_CACHE_KEY = '/auth/user'");
     expect(authProvider).toContain('isMakaronIOSApp');
-    expect(authProvider).toContain('const [useNativeAuthCache] = useState(() => isMakaronIOSApp())');
-    expect(authProvider).toContain('useNativeAuthCache ? readNativeJSONCache<User>(AUTH_USER_CACHE_KEY) : null');
+    expect(authProvider).toContain('const useNativeAuthCacheRef = useRef(false)');
+    expect(authProvider).not.toContain('useState(() => isMakaronIOSApp())');
+    expect(authProvider).toContain('const cachedUser = useNativeAuthCache');
     expect(authProvider).toContain('readNativeJSONCache<User>(AUTH_USER_CACHE_KEY)');
     expect(authProvider).toContain('writeNativeJSONCache(AUTH_USER_CACHE_KEY, session.user)');
     expect(authProvider).toContain('removeNativeJSONCache(AUTH_USER_CACHE_KEY)');
@@ -234,7 +235,9 @@ describe('iOS App Store readiness guardrails', () => {
     expect(liquidGlassNav).toContain("surface === 'explore' ? '/home' : '/projects'");
     expect(liquidGlassNav).toContain("sessionStorage.setItem(IOS_RESET_HOME_SCROLL_KEY, '1')");
     expect(liquidGlassNav).toContain("touchAction: 'manipulation'");
-    expect(liquidGlassNav).toContain('window.requestAnimationFrame(() => router.push(path))');
+    expect(liquidGlassNav).toContain('event.preventDefault()');
+    expect(liquidGlassNav).toContain('router.push(path)');
+    expect(liquidGlassNav).not.toContain('window.requestAnimationFrame(() => router.push(path))');
     expect(liquidGlassNav).toContain('onTouchStart={() => warmRoute(item.value)}');
     expect(topBar).toContain("requestIdleCallback(warm, { timeout: 1600 })");
     expect(topBar).toContain('window.setTimeout(warm, 240)');
@@ -547,9 +550,11 @@ describe('iOS App Store readiness guardrails', () => {
 
   it('keeps iOS home skill detail back swipe scoped to the skill overlay', () => {
     const homePage = fs.readFileSync(path.join(root, 'src/app/home/page.tsx'), 'utf8');
+    const homeSkillMedia = fs.readFileSync(path.join(root, 'src/components/HomeSkillMedia.tsx'), 'utf8');
     expect(homePage).toContain('isMakaronIOSApp');
     expect(homePage).toContain('usePathname');
-    expect(homePage).toContain('const [isIOSAppShell] = useState(() => isMakaronIOSApp())');
+    expect(homePage).toContain('const isIOSAppShell = hydrated && isMakaronIOSApp()');
+    expect(homePage).not.toContain('useState(() => isMakaronIOSApp())');
     expect(homePage).toContain('detailPathActiveRef');
     expect(homePage).toContain('IOS_SKILL_BACK_EDGE_PX');
     expect(homePage).toContain('IOS_SKILL_BACK_COMMIT_PX');
@@ -566,11 +571,12 @@ describe('iOS App Store readiness guardrails', () => {
     expect(homePage).toContain("const url = isIOSAppShell ? '/home' : `/home?skill=${encodeURIComponent(skillId)}`");
     expect(homePage).toContain('IOS_PENDING_HOME_SKILL_KEY');
     expect(homePage).toContain('rememberIOSSkillReturn');
-    expect(homePage).toContain("const skillId = searchParams.get('skill') || pathSkillId || pendingIOSSkillId");
+    expect(homePage).toContain("const skillId = new URLSearchParams(window.location.search).get('skill') || pathSkillId || pendingIOSSkillId");
+    expect(homePage).not.toContain('useSearchParams');
     expect(homePage).toContain('draft.homeSkillId && draft.images.length === 0');
     expect(homePage).toContain("document.documentElement.style.overflow = 'hidden'");
     expect(homePage).toContain("window.addEventListener('makaron-ios-page-stack-back', unlockIfNoDetail)");
-    expect(homePage).toContain('function SkillVideo');
+    expect(homeSkillMedia).toContain('function SkillVideo');
     expect(homePage).toContain("slide.getAttribute('data-skill-id') === selectedDetail.id");
     expect(homePage).not.toContain('document.body.style.transform');
     expect(homePage).not.toContain('cloneNode');
@@ -674,7 +680,8 @@ describe('iOS App Store readiness guardrails', () => {
     expect(projectsPage).toContain('__makaronIOSProjectNavLog');
     expect(projectsPage).toContain('IOS_PROJECT_NAV_LOG_SESSION_KEY');
     expect(projectsPage).toContain('[ios-project-nav]');
-    expect(projectsPage).toContain('useState(() => isMakaronIOSAppShell())');
+    expect(projectsPage).toContain('const [iosAppShell, setIosAppShell] = useState(false)');
+    expect(projectsPage).not.toContain('useState(() => isMakaronIOSAppShell())');
     expect(projectsPage).toContain('useIOSInlineProjectNavigation');
     expect(projectsPage).not.toContain('useSearchParams');
     expect(projectsPage).not.toContain("searchParams.get('iosProject')");
@@ -706,9 +713,9 @@ describe('iOS App Store readiness guardrails', () => {
     expect(projectsPage).toContain('if (useIOSInlineProjectNavigation)');
     expect(projectsPage).toContain('openIOSProject(result.projectId)');
     expect(projectsPage).toContain('useIOSSafeImageUrls={useIOSInlineProjectNavigation}');
-    expect(projectsPage).toContain('getOriginFormatThumbnailUrl(lastSnap.image_url, 400, 50, 400)');
+    expect(projectsPage).toContain('getOriginFormatThumbnailUrl(coverUrl, 400, 50, 400)');
     expect(storage).toContain("'format=origin'");
-    expect(projectsPage).toContain('useState(useIOSSafeImageUrls)');
+    expect(projectsPage).toContain('useIOSSafeImageUrls ? imageSrc ?? null : null');
     expect(projectsPage).toContain('const shouldAnimateIn = !useIOSSafeImageUrls && index < 12');
     expect(projectsPage).toContain('animationDelay: shouldAnimateIn ?');
     expect(projectsPage).toContain("className={shouldAnimateIn ? 'mkr-card mkr-row-enter' : 'mkr-card'}");

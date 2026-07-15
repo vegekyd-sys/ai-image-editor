@@ -9,6 +9,7 @@ import { isMakaronIOSApp, userAgentHasMakaronIOSToken } from '@/lib/native-app'
 import { isNativeOAuthAvailable, openNativeOAuthSession } from '@/lib/native-oauth'
 import RollingTagline from '@/components/RollingTagline'
 import { MakaronSpark, MAKARON_WORDMARK_STYLE } from '@/components/MakaronLogo'
+import { useHydrated } from '@/hooks/useHydrated'
 import { createMetaEventId, trackMetaEvent } from '@/lib/marketing/meta-pixel'
 
 type View = 'form' | 'verify-otp' | 'forgot-password' | 'reset-password'
@@ -28,9 +29,10 @@ function isAppleLoginEnabled(): boolean {
 
 export default function LoginPage() {
   const { t } = useLocale()
+  const hydrated = useHydrated()
   const [view, setView] = useState<View>('form')
-  const [inApp] = useState(isInAppBrowser)
-  const [iosApp] = useState(isMakaronIOSApp)
+  const inApp = hydrated && isInAppBrowser()
+  const iosApp = hydrated && isMakaronIOSApp()
   const [appleLoginEnabled] = useState(isAppleLoginEnabled)
   const showAppleOAuth = inApp && appleLoginEnabled
   const showGoogleOAuth = !inApp || iosApp || showAppleOAuth

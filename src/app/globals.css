@@ -736,6 +736,7 @@ textarea {
   background: transparent;
   box-shadow: none;
   color: rgba(255,255,255,0.74);
+  text-decoration: none;
   font-family: inherit;
   font-size: 12px;
   font-weight: 760;

@@ -3,14 +3,16 @@
 import { useCallback, useEffect, useState, useRef, type CSSProperties, type MouseEvent as ReactMouseEvent } from 'react'
 import { createPortal } from 'react-dom'
 import { useRouter } from 'next/navigation'
+import dynamic from 'next/dynamic'
 import { useAuth } from '@/hooks/useAuth'
 import { LocaleToggle, useLocale } from '@/lib/i18n'
-import Changelog from '@/components/Changelog'
 import { getThumbnailUrl } from '@/lib/supabase/storage'
 import { readNativeJSONCache, warmNativeJSONCache, writeNativeJSONCache } from '@/lib/native-app-cache'
 import { isMakaronIOSApp } from '@/lib/native-app'
 import { warmProjectsListCache } from '@/lib/projects-list-warm'
 import { requestNativePageStackPush } from '@/lib/native-page-stack'
+
+const Changelog = dynamic(() => import('@/components/Changelog'), { ssr: false })
 
 interface TopBarProps {
   page: 'home' | 'projects'
@@ -719,13 +721,23 @@ export default function TopBar({ authReturnPath }: TopBarProps) {
           ) : (
             <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
               <LocaleToggle />
-              <button
-                onClick={() => navigateTopBar('/login')}
+              <a
+                href="/login"
+                onClick={() => {
+                  if (!authReturnPath) return
+                  try {
+                    localStorage.setItem('mkr_return_url', authReturnPath)
+                    sessionStorage.setItem('mkr_return_url', authReturnPath)
+                  } catch {
+                    // Native navigation remains usable even if storage is blocked.
+                  }
+                }}
                 style={{
                   background: 'none', border: 'none', cursor: 'pointer',
                   fontSize: '0.65rem', letterSpacing: '0.1em', textTransform: 'uppercase',
                   color: 'rgba(255,255,255,0.45)',
                   display: 'flex', alignItems: 'center', gap: 5,
+                  textDecoration: 'none',
                   transition: 'color 0.2s',
                 }}
                 onMouseEnter={e => (e.currentTarget.style.color = 'rgba(255,255,255,0.7)')}
@@ -736,7 +748,7 @@ export default function TopBar({ authReturnPath }: TopBarProps) {
                   <circle cx="12" cy="7" r="4" />
                 </svg>
                 {t('nav.signIn')}
-              </button>
+              </a>
             </div>
           )}
         </div>

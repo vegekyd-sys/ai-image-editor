@@ -4,7 +4,8 @@ import { useAuth } from '@/hooks/useAuth'
 import { useRouter } from 'next/navigation'
 import { Suspense, type CSSProperties } from 'react'
 import { createPortal } from 'react-dom'
-import { useEffect, useState, useRef, useCallback } from 'react'
+import dynamic from 'next/dynamic'
+import { startTransition, useEffect, useState, useRef, useCallback } from 'react'
 import { useIsDesktop } from '@/hooks/useIsDesktop'
 import Link from 'next/link'
 import { createClient } from '@/lib/supabase/client'
@@ -21,10 +22,14 @@ import TopBar from '@/components/TopBar'
 import { useCreateInput } from '@/hooks/useCreateInput'
 import CreateInputBox from '@/components/CreateInputBox'
 import { MakaronSpark, MAKARON_WORDMARK_STYLE } from '@/components/MakaronLogo'
-import ProjectEditorContainer from '@/components/ProjectEditorContainer'
 import LiquidGlassNav from '@/components/LiquidGlassNav'
 import { loadCreateAgentModelPreference, saveAgentModelPreference, saveCreateAgentModelPreference } from '@/lib/agent-model-preference'
 import type { AgentModelPreference } from '@/lib/agent-models'
+
+const ProjectEditorContainer = dynamic(() => import('@/components/ProjectEditorContainer'), {
+  ssr: false,
+  loading: () => <div className="h-dvh w-full bg-black" aria-label="Loading project" />,
+})
 
 interface ProjectWithSnapshots {
   id: string
@@ -39,6 +44,34 @@ interface ProjectWithSnapshots {
 function isProjectCoverImageUrl(url?: string | null): url is string {
   if (!url) return false
   return url !== VIDEO_PLACEHOLDER_IMAGE && !url.endsWith(VIDEO_PLACEHOLDER_IMAGE)
+}
+
+function hasHydratedProjectSnapshots(project?: ProjectWithSnapshots): boolean {
+  return Boolean(
+    project?.snapshots.length
+    && project.snapshots.every((snapshot) => !snapshot.id.startsWith('cover:')),
+  )
+}
+
+function buildQuickProjectList(
+  projectRows: Array<Pick<ProjectWithSnapshots, 'id' | 'title' | 'cover_url' | 'updated_at' | 'created_at'>>,
+  currentProjects: ProjectWithSnapshots[],
+): ProjectWithSnapshots[] {
+  const currentMap = new Map(currentProjects.map((project) => [project.id, project]))
+  return projectRows.flatMap((project) => {
+    const cached = currentMap.get(project.id)
+    const cachedIsFresh = cached?.updated_at === project.updated_at && hasHydratedProjectSnapshots(cached)
+    const coverSnapshot = isProjectCoverImageUrl(project.cover_url)
+      ? [{ id: `cover:${project.id}`, image_url: project.cover_url, sort_order: 0 }]
+      : []
+    const snapshots = cachedIsFresh
+      ? cached.snapshots
+      : coverSnapshot.length > 0
+        ? coverSnapshot
+        : cached?.snapshots ?? []
+    if (snapshots.length === 0) return []
+    return [{ ...project, snapshots, hasVideo: cached?.hasVideo }]
+  })
 }
 
 // Skill type for client-side rendering
@@ -65,6 +98,8 @@ const IOS_PROJECT_OVERLAY_CLOSE_MS = 190
 const IOS_PROJECT_RETURN_REFRESH_GUARD_MS = 1200
 const IOS_PROJECT_AUTH_GRACE_MS = 1800
 const IOS_PROJECT_NAV_LOG_SESSION_KEY = 'makaron:ios-project-nav-log'
+const INITIAL_PROJECT_CARD_COUNT = 24
+const PROJECT_CARD_BATCH_SIZE = 24
 
 function isMakaronIOSAppShell() {
   if (typeof window === 'undefined' || typeof document === 'undefined' || typeof navigator === 'undefined') return false
@@ -131,37 +166,20 @@ function ProjectsPageInner() {
   const router = useRouter()
   const isDesktop = useIsDesktop()
   const userId = user?.id
-  // Phase 1: Synchronous memory cache — same-session instant render
-  const [projects, setProjects] = useState<ProjectWithSnapshots[]>(() => {
-    if (typeof window === 'undefined') return []
-    const cachedUserId = user?.id
-    if (!cachedUserId) {
-      return isMakaronIOSAppShell()
-        ? ((getLastProjectsListSync()?.projects as ProjectWithSnapshots[] | undefined) ?? [])
-        : []
-    }
-    return (getCachedProjectsListSync(cachedUserId) as ProjectWithSnapshots[]) ?? []
-  })
-  const [loadingProjects, setLoadingProjects] = useState(() => {
-    if (typeof window === 'undefined') return true
-    const cachedUserId = user?.id
-    if (!cachedUserId) {
-      return !(isMakaronIOSAppShell() && (getLastProjectsListSync()?.projects.length ?? 0) > 0)
-    }
-    return getCachedProjectsListSync(cachedUserId) === null
-  })
+  // Keep SSR and the first client render identical. Browser/native caches are
+  // restored after hydration so React never has to replace the projects tree.
+  const [projects, setProjects] = useState<ProjectWithSnapshots[]>([])
+  const [loadingProjects, setLoadingProjects] = useState(true)
+  const [visibleProjectCount, setVisibleProjectCount] = useState(INITIAL_PROJECT_CARD_COUNT)
+  const projectLoadMoreRef = useRef<HTMLDivElement | null>(null)
   const createInput = useCreateInput()
   const [createAgentModel, setCreateAgentModel] = useState<AgentModelPreference>('auto')
   const inputBoxRef = useRef<HTMLDivElement>(null)
   const extractedMetadataRef = useRef<import('@/types').PhotoMetadata | undefined>(undefined)
   const [photoSlotWidth, setPhotoSlotWidth] = useState(80)
   const [selectedSkill, setSelectedSkill] = useState<string | null>(null)
-  const [availableSkills, setAvailableSkills] = useState<SkillItem[]>(() => (
-    readNativeJSONCache<SkillsPayload>('/api/skills')?.skills ?? []
-  ))
-  const [creditBalance, setCreditBalance] = useState<number | null>(() => (
-    readNativeJSONCache<CreditsPayload>('/api/billing/credits')?.balance ?? null
-  ))
+  const [availableSkills, setAvailableSkills] = useState<SkillItem[]>([])
+  const [creditBalance, setCreditBalance] = useState<number | null>(null)
   const [showWelcome, setShowWelcome] = useState(false)
 
   useEffect(() => {
@@ -237,7 +255,7 @@ function ProjectsPageInner() {
 
   const [actionSheet, setActionSheet] = useState<ProjectWithSnapshots | null>(null)
   const [navigating, setNavigating] = useState(false)
-  const [iosAppShell, setIosAppShell] = useState(() => isMakaronIOSAppShell())
+  const [iosAppShell, setIosAppShell] = useState(false)
   const [projectsRefreshNonce, setProjectsRefreshNonce] = useState(0)
   const shownRef = useRef(!loadingProjects) // tracks whether we've shown content
   const projectsRef = useRef(projects)
@@ -263,6 +281,28 @@ function ProjectsPageInner() {
   const iosRefreshSelfTestStartedRef = useRef(false)
   const lastProjectsRefreshRequestRef = useRef(0)
   const projectsPageInstanceIdRef = useRef(`projects-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`)
+
+  useEffect(() => {
+    const cachedProjects = userId
+      ? (getCachedProjectsListSync(userId) as ProjectWithSnapshots[] | null)
+      : isMakaronIOSAppShell()
+        ? ((getLastProjectsListSync()?.projects as ProjectWithSnapshots[] | undefined) ?? null)
+        : null
+    const cachedSkills = readNativeJSONCache<SkillsPayload>('/api/skills')?.skills
+    const cachedCredits = readNativeJSONCache<CreditsPayload>('/api/billing/credits')?.balance
+
+    startTransition(() => {
+      if (cachedProjects) {
+        projectsRef.current = cachedProjects
+        loadingProjectsRef.current = false
+        shownRef.current = true
+        setProjects(cachedProjects)
+        setLoadingProjects(false)
+      }
+      if (cachedSkills) setAvailableSkills(cachedSkills)
+      if (cachedCredits !== undefined) setCreditBalance(cachedCredits)
+    })
+  }, [userId])
 
   const clearIOSProjectCloseTimer = useCallback(() => {
     if (iosProjectCloseTimerRef.current === null) return
@@ -483,7 +523,7 @@ function ProjectsPageInner() {
     }
     setNavigating(true)
   }, [iosAppShell, openIOSProject, userId])
-  const useIOSInlineProjectNavigation = iosAppShell || isMakaronIOSAppShell()
+  const useIOSInlineProjectNavigation = iosAppShell
 
   useEffect(() => {
     if (!useIOSInlineProjectNavigation || !userId || projects.length === 0) return
@@ -578,6 +618,23 @@ function ProjectsPageInner() {
   useEffect(() => {
     loadingProjectsRef.current = loadingProjects
   }, [loadingProjects])
+
+  useEffect(() => {
+    const sentinel = projectLoadMoreRef.current
+    if (!sentinel || visibleProjectCount >= projects.length) return
+    if (typeof IntersectionObserver === 'undefined') {
+      startTransition(() => setVisibleProjectCount(projects.length))
+      return
+    }
+    const observer = new IntersectionObserver(([entry]) => {
+      if (!entry.isIntersecting) return
+      startTransition(() => {
+        setVisibleProjectCount((count) => Math.min(count + PROJECT_CARD_BATCH_SIZE, projects.length))
+      })
+    }, { rootMargin: '900px 0px' })
+    observer.observe(sentinel)
+    return () => observer.disconnect()
+  }, [projects.length, visibleProjectCount])
 
   useEffect(() => () => {
     clearIOSProjectCloseTimer()
@@ -683,13 +740,21 @@ function ProjectsPageInner() {
           return
         }
 
-        // Fetch all snapshots (incremental optimization based on current displayed projects)
+        // Paint a thin cover_url-backed list immediately. Snapshot counts and
+        // video badges are enriched below without blocking the first gallery.
         const currentProjects = projectsRef.current
         const currentMap = new Map(currentProjects.map(p => [p.id, p]))
+        const quickProjects = buildQuickProjectList(projectRows, currentProjects)
+        if (quickProjects.length > 0) {
+          cacheProjectsList(userId!, quickProjects)
+          applyProjectsRefresh(quickProjects)
+        }
+
+        // Fetch all snapshots (incremental optimization based on current displayed projects)
         const staleIds = projectRows
           .filter(p => {
             const cached = currentMap.get(p.id)
-            return !cached || cached.updated_at !== p.updated_at
+            return !cached || cached.updated_at !== p.updated_at || !hasHydratedProjectSnapshots(cached)
           })
           .map(p => p.id)
 
@@ -1321,7 +1386,7 @@ function ProjectsPageInner() {
               maxWidth: isDesktop ? '1200px' : undefined,
               margin: isDesktop ? '0 auto' : undefined,
             }}>
-              {projects.map((project, i) => (
+              {projects.slice(0, visibleProjectCount).map((project, i) => (
                 <ProjectCard
                   key={project.id}
                   project={project}
@@ -1336,6 +1401,9 @@ function ProjectsPageInner() {
                 />
               ))}
             </div>
+          )}
+          {visibleProjectCount < projects.length && (
+            <div ref={projectLoadMoreRef} aria-hidden="true" style={{ height: 1, width: '100%' }} />
           )}
         </div>
         <LiquidGlassNav active="projects" hidden={Boolean(actionSheet || activeIOSProjectId)} />
@@ -1554,14 +1622,21 @@ function ProjectCard({
 }) {
   // Use last snapshot with a real display image; video placeholders are repaired asynchronously.
   const lastSnap = project.snapshots.filter(s => isProjectCoverImageUrl(s.image_url)).pop()
-  const imageSrc = lastSnap?.image_url
+  // A synthetic cover snapshot paints the thin warm cache immediately. Once
+  // real snapshots arrive, their newest image wins so a stale cover_url can
+  // never hide a completed edit whose best-effort cover update failed.
+  const coverUrl = lastSnap?.image_url
+    ?? (isProjectCoverImageUrl(project.cover_url) ? project.cover_url : undefined)
+  const imageSrc = coverUrl
     ? useIOSSafeImageUrls
-      ? getOriginFormatThumbnailUrl(lastSnap.image_url, 400, 50, 400)
-      : getThumbnailUrl(lastSnap.image_url, 400, 50, 400)
+      ? getOriginFormatThumbnailUrl(coverUrl, 400, 50, 400)
+      : getThumbnailUrl(coverUrl, 400, 50, 400)
     : undefined
-  const [loaded, setLoaded] = useState(useIOSSafeImageUrls)
+  const [loadedImageSrc, setLoadedImageSrc] = useState<string | null>(() => (
+    useIOSSafeImageUrls ? imageSrc ?? null : null
+  ))
+  const loaded = useIOSSafeImageUrls || Boolean(imageSrc && loadedImageSrc === imageSrc)
   const shouldAnimateIn = !useIOSSafeImageUrls && index < 12
-  const shouldDeferRender = !useIOSSafeImageUrls && index >= 12
 
   const cardStyle: CSSProperties = {
     display: 'block',
@@ -1576,8 +1651,6 @@ function ProjectCard({
     padding: 0,
     width: '100%',
     color: 'inherit',
-    contentVisibility: shouldDeferRender ? 'auto' : undefined,
-    containIntrinsicSize: shouldDeferRender ? '200px 200px' : undefined,
   }
 
   const cardContent = (
@@ -1607,7 +1680,7 @@ function ProjectCard({
           userSelect: 'none',
           WebkitUserSelect: 'none',
         }}
-        onLoad={() => setLoaded(true)}
+        onLoad={() => setLoadedImageSrc(imageSrc ?? null)}
       />
 
       {/* Bottom gradient overlay */}

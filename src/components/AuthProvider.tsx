@@ -24,12 +24,12 @@ export const AuthContext = createContext<AuthContextType>({
 })
 
 export default function AuthProvider({ children }: { children: React.ReactNode }) {
-  const [useNativeAuthCache] = useState(() => isMakaronIOSApp())
-  const [cachedUser] = useState<User | null>(() => (
-    useNativeAuthCache ? readNativeJSONCache<User>(AUTH_USER_CACHE_KEY) : null
-  ))
-  const [user, setUser] = useState<User | null>(cachedUser)
-  const [loading, setLoading] = useState(() => !cachedUser)
+  // Browser/native detection and storage reads must not run in a state
+  // initializer: the server cannot see either value, so doing so changes the
+  // auth tree during hydration and forces React to rebuild the whole page.
+  const useNativeAuthCacheRef = useRef(false)
+  const [user, setUser] = useState<User | null>(null)
+  const [loading, setLoading] = useState(true)
   const supabaseRef = useRef<SupabaseClient | null>(null)
   const nativeWarmUserIdRef = useRef<string | null>(null)
 
@@ -41,7 +41,7 @@ export default function AuthProvider({ children }: { children: React.ReactNode }
   }
 
   const warmNativeUserCaches = useCallback((userId: string) => {
-    if (!useNativeAuthCache || nativeWarmUserIdRef.current === userId) return
+    if (!useNativeAuthCacheRef.current || nativeWarmUserIdRef.current === userId) return
     nativeWarmUserIdRef.current = userId
     const warm = () => {
       void warmNativeJSONCache('/api/billing/credits')
@@ -55,9 +55,20 @@ export default function AuthProvider({ children }: { children: React.ReactNode }
     } else {
       window.setTimeout(warm, 600)
     }
-  }, [useNativeAuthCache])
+  }, [])
 
   useEffect(() => {
+    const useNativeAuthCache = isMakaronIOSApp()
+    useNativeAuthCacheRef.current = useNativeAuthCache
+    const cachedUser = useNativeAuthCache
+      ? readNativeJSONCache<User>(AUTH_USER_CACHE_KEY)
+      : null
+    if (cachedUser) {
+      setUser(cachedUser)
+      setLoading(false)
+      warmNativeUserCaches(cachedUser.id)
+    }
+
     const supabase = getSupabase()
 
     // Fast path: read session from cookie (no network)
@@ -90,12 +101,12 @@ export default function AuthProvider({ children }: { children: React.ReactNode }
     })
 
     return () => subscription.unsubscribe()
-  }, [useNativeAuthCache, warmNativeUserCaches])
+  }, [warmNativeUserCaches])
 
   const signOut = useCallback(async () => {
     const inIOSApp = isMakaronIOSApp()
     clearUserCache()
-    if (useNativeAuthCache) removeNativeJSONCache(AUTH_USER_CACHE_KEY)
+    if (useNativeAuthCacheRef.current) removeNativeJSONCache(AUTH_USER_CACHE_KEY)
     if (inIOSApp) {
       try {
         sessionStorage.setItem(IOS_RESET_HOME_SCROLL_KEY, '1')
@@ -116,7 +127,7 @@ export default function AuthProvider({ children }: { children: React.ReactNode }
     } else {
       window.location.href = '/login'
     }
-  }, [useNativeAuthCache])
+  }, [])
 
   return (
     <AuthContext.Provider value={{ user, loading, signOut }}>

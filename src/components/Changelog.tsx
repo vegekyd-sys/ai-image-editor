@@ -10,6 +10,17 @@ interface ChangelogEntry {
 
 const CHANGELOG: ChangelogEntry[] = [
   {
+    date: '2026-07-15',
+    en: { title: 'A Faster, Smoother Home', items: [
+      'Home buttons now respond immediately, including Try Free, Create, Sign in, and the Explore / Projects switcher.',
+      'Images and videos now stay ready as you scroll or switch between Explore and Projects, without flashing back to cover frames.',
+    ]},
+    zh: { title: '首页更快、更顺滑', items: [
+      '首页按钮现在点下即可响应，包括 Try Free、Create、登录，以及探索 / 项目切换。',
+      '上下滚动或在探索与项目之间切换时，图片和视频会保持就绪，不再闪回封面图。',
+    ]},
+  },
+  {
     date: '2026-07-14',
     en: { title: 'Japanese & Traditional Chinese', items: ['Makaron now supports Japanese and Traditional Chinese across the app.'] },
     zh: { title: '日语与繁体中文', items: ['Makaron 现已支持日语和繁体中文。'] },
