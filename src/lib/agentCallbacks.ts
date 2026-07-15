@@ -1,9 +1,10 @@
 import type { AgentStreamCallbacks } from './agentStream';
-import type { Snapshot, Tip, ProjectAnimation, VideoModel } from '@/types';
+import type { Message, Snapshot, Tip, ProjectAnimation, VideoModel } from '@/types';
 import type { DesignPayload } from '@/types';
 import { VIDEO_PLACEHOLDER_IMAGE } from '@/lib/editor/timeline-derivations';
 import { getDefaultVideoModelId } from '@/lib/video-model-capabilities';
 import { appendSnapshotDedupeVideo } from '@/lib/video-snapshot-dedupe';
+import { serializeCompletionActions } from '@/lib/artifact-actions';
 
 /**
  * Context for creating unified agent callbacks.
@@ -22,7 +23,7 @@ export interface AgentCallbackContext {
   setDesignDraftParent?: (idx: number | null) => void;
   setPendingNotification?: (n: { text: string; targetIndex: number }) => void;
   setSelectedVideoId?: (id: string) => void;
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+
   setAnimationState?: (state: any) => void;
 
   // Refs
@@ -35,7 +36,7 @@ export interface AgentCallbackContext {
   codeStreamRef: { current: { msgId: string; code: string; shown: number; pendingText?: string; pendingRaf?: number } | null };
   agentRunIdRef: { current: string | null };
   agentTimerRef: { current: { phase: string } | null };
-  autoFetchTriggered: { current: boolean };
+  autoFetchTriggered: { current: Set<string> };
   pendingAnalysisRef: { current: { id: string; image: string }[] };
   pendingTeaserRef: { current: { snapshotId: string; tips: Tip[] } | null };
   hasTriggeredNamingRef: { current: boolean };
@@ -45,8 +46,9 @@ export interface AgentCallbackContext {
 
   // Callback functions (from Editor)
   cacheImage: (key: string, data: string) => void;
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+
   fetchTipsForSnapshot: (...args: any[]) => void;
+  onSaveMessage?: (message: Message) => void;
   onSaveSnapshot?: (snap: Snapshot, sortOrder: number, onUploaded?: (url: string) => void) => void;
   onUpdateDescription?: (snapId: string, desc: string) => void;
   triggerProjectNaming?: (text: string) => void;
@@ -54,7 +56,7 @@ export interface AgentCallbackContext {
   compressBase64Image?: (img: string, maxBytes: number) => Promise<string>;
 
   // i18n
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+
   t: (...args: any[]) => string;
 
   // Music
@@ -246,7 +248,7 @@ export function makeAgentCallbacks(ctx: AgentCallbackContext) {
       ctx.cacheImage(`snap:${snapId}`, displayImage);
 
       ctx.fetchTipsForSnapshot(snapId, displayImage, 'none');
-      ctx.autoFetchTriggered.current = true;
+      ctx.autoFetchTriggered.current.add(snapId);
       setStatus(ctx.t('status.imageGenerated'));
 
       // "See" button if user is not on the new snapshot
@@ -380,6 +382,21 @@ export function makeAgentCallbacks(ctx: AgentCallbackContext) {
       };
       ctx.setSnapshots(prev => appendSnapshotDedupeVideo(prev, newSnap));
       if (ctx.pendingNavigateToVideoRef) ctx.pendingNavigateToVideoRef.current = true;
+
+      if (videoMeta.status === 'completed' && videoMeta.videoUrl) {
+        const actionLines = serializeCompletionActions(videoMeta.completionActions);
+        const videoMsg: Message = {
+          id: `video-inline-${snapshotId}`,
+          role: 'assistant',
+          content: `🎬 ${ctx.t('status.videoDone')}\n${videoMeta.videoUrl}\nsnap:${snapshotId}${actionLines ? `\n${actionLines}` : ''}`,
+          timestamp: Date.now(),
+        };
+        ctx.setMessages(prev => {
+          if (prev.some(m => m.content?.includes(videoMeta.videoUrl!) || m.content?.includes(`snap:${snapshotId}`))) return prev;
+          ctx.onSaveMessage?.(videoMsg);
+          return [...prev, videoMsg];
+        });
+      }
     },
 
     onMusicTask: (taskId) => {
@@ -417,6 +434,24 @@ export function makeAgentCallbacks(ctx: AgentCallbackContext) {
         currentMsgId = serverId;
         agentMsgIds[0] = serverId;
         ctx.setMessages(prev => prev.map(m => m.id === oldId ? { ...m, id: serverId } : m));
+        return;
+      }
+
+      // The server sends the first assistant message id in a response header
+      // before any SSE content arrives. If no local placeholder exists yet,
+      // create one so tool-only events such as preview_frame have a visible
+      // CUI container even when the model has not emitted text.
+      if (!currentMsgId) {
+        currentMsgId = serverId;
+        agentMsgIds.push(serverId);
+        ctx.setMessages(prev => prev.some(m => m.id === serverId)
+          ? prev
+          : [...prev, {
+            id: serverId,
+            role: 'assistant' as const,
+            content: '',
+            timestamp: Date.now(),
+          }]);
       }
     },
 
@@ -527,10 +562,18 @@ export function makeAgentCallbacks(ctx: AgentCallbackContext) {
       if (currentMsgId) {
         const id = currentMsgId;
         ctx.setMessages(prev => prev.map(m =>
-          m.id === id ? { ...m, content: m.content || ctx.t('editor.errorRetry') } : m,
+          m.id === id ? { ...m, content: m.content || msg || ctx.t('editor.errorRetry') } : m,
         ));
       }
       ctx.onCleanup?.();
+    },
+
+    onDisconnect: (runId) => {
+      console.warn(`[agent] SSE disconnected for run ${runId}; switching to persisted event replay`);
+      // Let useAgentRun's watcher discover this still-running DB row. Keeping
+      // the id here would make skipRunIdRef suppress the reconnect forever.
+      if (ctx.agentRunIdRef.current === runId) ctx.agentRunIdRef.current = null;
+      setStatus(ctx.t('editor.reconnecting'));
     },
 
     onInsufficientCredits: (balance) => {

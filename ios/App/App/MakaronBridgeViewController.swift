@@ -1,4 +1,5 @@
 import Capacitor
+import AuthenticationServices
 import Photos
 import PhotosUI
 import StoreKit
@@ -9,6 +10,7 @@ import WebKit
 class MakaronBridgeViewController: CAPBridgeViewController, WKScriptMessageHandler, PHPickerViewControllerDelegate {
     private var nativeBridgeInstalled = false
     private var pendingPickerID: String?
+    private var oauthSession: ASWebAuthenticationSession?
     private var transactionUpdatesTask: Task<Void, Never>?
     private var pendingPurchaseResponseIdsByProductId: [String: String] = [:]
     private var handledTransactionIds = Set<String>()
@@ -24,6 +26,11 @@ class MakaronBridgeViewController: CAPBridgeViewController, WKScriptMessageHandl
     override func viewDidAppear(_ animated: Bool) {
         super.viewDidAppear(animated)
         configureNativeWebView()
+    }
+
+    override func capacitorDidLoad() {
+        super.capacitorDidLoad()
+        bridge?.registerPluginInstance(MakaronExternalLinkPlugin())
     }
 
     deinit {
@@ -52,6 +59,8 @@ class MakaronBridgeViewController: CAPBridgeViewController, WKScriptMessageHandl
         }
 
         switch action {
+        case "openOAuth":
+            handleOpenOAuth(id: id, body: body)
         case "saveToPhotos":
             handleSaveToPhotos(id: id, body: body)
         case "pickMedia":
@@ -68,6 +77,44 @@ class MakaronBridgeViewController: CAPBridgeViewController, WKScriptMessageHandl
             handleFinishTransaction(id: id, body: body)
         default:
             sendNativeResponse(id: id, ok: false, error: "Unsupported native action")
+        }
+    }
+
+    private func handleOpenOAuth(id: String, body: [String: Any]) {
+        guard let urlString = body["url"] as? String, let url = URL(string: urlString) else {
+            sendNativeResponse(id: id, ok: false, error: "Missing OAuth URL")
+            return
+        }
+
+        let callbackURLScheme = (body["callbackURLScheme"] as? String) ?? "app.makaron.ios"
+        oauthSession?.cancel()
+
+        let session = ASWebAuthenticationSession(url: url, callbackURLScheme: callbackURLScheme) { [weak self] callbackURL, error in
+            DispatchQueue.main.async {
+                self?.oauthSession = nil
+                if let authError = error as? ASWebAuthenticationSessionError,
+                   authError.code == .canceledLogin {
+                    self?.sendNativeResponse(id: id, ok: false, error: "Google login cancelled")
+                    return
+                }
+                if let error {
+                    self?.sendNativeResponse(id: id, ok: false, error: error.localizedDescription)
+                    return
+                }
+                guard let callbackURL else {
+                    self?.sendNativeResponse(id: id, ok: false, error: "Google login did not return a callback")
+                    return
+                }
+                self?.sendNativeResponse(id: id, ok: true, error: nil, extra: ["callbackUrl": callbackURL.absoluteString])
+            }
+        }
+        session.presentationContextProvider = self
+        session.prefersEphemeralWebBrowserSession = false
+        oauthSession = session
+
+        if !session.start() {
+            oauthSession = nil
+            sendNativeResponse(id: id, ok: false, error: "Could not start Google login")
         }
     }
 
@@ -594,5 +641,11 @@ class MakaronBridgeViewController: CAPBridgeViewController, WKScriptMessageHandl
             }
             self?.webView?.evaluateJavaScript("window.dispatchEvent(new CustomEvent('makaron-native-response',{detail:\(json)}));")
         }
+    }
+}
+
+extension MakaronBridgeViewController: ASWebAuthenticationPresentationContextProviding {
+    func presentationAnchor(for session: ASWebAuthenticationSession) -> ASPresentationAnchor {
+        view.window ?? ASPresentationAnchor()
     }
 }

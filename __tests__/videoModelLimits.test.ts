@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from 'vitest'
 import { createVideo } from '@/lib/skills/create-video'
-import { estimateVideoCredits, getDefaultVideoModelId, getVideoModelCapability, normalizeVideoModelId, normalizeVideoResolution, resolveAgentVideoSelection, resolveClosestSupportedAspectRatio, resolveVideoGenerationRoute, resolveVideoProviderAspectRatio } from '@/lib/video-model-capabilities'
+import { estimateVideoCredits, getDefaultVideoModelId, getVideoModelCapability, normalizeVideoModelId, normalizeVideoResolution, resolveAgentVideoSelection, resolveClosestSupportedAspectRatio, resolveVideoGenerationRoute, resolveVideoProviderAspectRatio, resolveVideoProviderModel } from '@/lib/video-model-capabilities'
 
 describe('video model reference limits', () => {
   it('defaults video generation to SeeDance 2.0 Fast', () => {
@@ -27,6 +27,10 @@ describe('video model reference limits', () => {
     })
     expect(estimateVideoCredits({ model: 'seedance-mini', resolution: '480p', durationSec: 15, imageCount: 2 })).toBe(168)
     expect(estimateVideoCredits({ model: 'seedance-mini', resolution: '720p', durationSec: 15, imageCount: 2 })).toBe(360)
+    expect(resolveVideoProviderModel({ model: 'seedance-fast', imageReferenceCount: 0 })).toBe('seedance-2.0-fast-text-to-video')
+    expect(resolveVideoProviderModel({ model: 'seedance-mini', imageReferenceCount: 0 })).toBe('seedance-2.0-mini-text-to-video')
+    expect(resolveVideoProviderModel({ model: 'seedance', imageReferenceCount: 0 })).toBe('seedance-2.0-text-to-video')
+    expect(resolveVideoProviderModel({ model: 'seedance-fast', imageReferenceCount: 1 })).toBe('seedance-2.0-fast-reference-to-video')
   })
 
   it('maps non-standard vertical reference videos to supported Seedance aspect ratios', () => {
@@ -100,6 +104,32 @@ describe('video model reference limits', () => {
     expect(result.message).toContain('EVOLINK_API_KEY')
   })
 
+  it('requires audio refs to be explicitly referenced in the story prompt', async () => {
+    const missing = await createVideo({
+      script: 'Beat synced mascot\n\nAnimate <<<media_1>>> to the uploaded music.',
+      images: ['https://example.com/image.jpg'],
+      audioUrls: ['https://example.com/beat.mp3'],
+      duration: 15,
+      videoModel: 'seedance-mini',
+    })
+
+    expect(missing.success).toBe(false)
+    expect(missing.message).toContain('Reference audio was passed but not referenced in story_prompt')
+    expect(missing.message).toContain('<<<audio_1>>>')
+
+    const referenced = await createVideo({
+      script: 'Beat synced mascot\n\nUse <<<audio_1>>> as the soundtrack and rhythm reference. Animate <<<media_1>>> on the beat.',
+      images: ['https://example.com/image.jpg'],
+      audioUrls: ['https://example.com/beat.mp3'],
+      duration: 15,
+      videoModel: 'seedance-mini',
+    })
+
+    expect(referenced.success).toBe(false)
+    expect(referenced.message).not.toContain('Reference audio was passed')
+    expect(referenced.message).toContain('EVOLINK_API_KEY')
+  })
+
   it('keeps Seedance Mini video references on Mini guardrails', async () => {
     const tiny = await createVideo({
       script: 'Mini tiny reference\n\nRestyle <<<media_1>>>.',
@@ -160,6 +190,51 @@ describe('video model reference limits', () => {
       vi.unstubAllEnvs()
       vi.resetModules()
     }
+  })
+
+  it('submits zero-media Seedance Fast through the native text-to-video provider model', async () => {
+    vi.resetModules()
+    vi.stubEnv('EVOLINK_API_KEY', 'test-evolink-key')
+    const fetchMock = vi.fn(async (_url: string | URL | Request, init?: RequestInit) => {
+      const body = JSON.parse(String(init?.body || '{}'))
+      expect(body.model).toBe('seedance-2.0-fast-text-to-video')
+      expect(body).not.toHaveProperty('image_urls')
+      expect(body).not.toHaveProperty('video_urls')
+      return new Response(JSON.stringify({ id: 'task-test-seedance-text' }), { status: 200 })
+    })
+    vi.stubGlobal('fetch', fetchMock)
+
+    try {
+      const { createVideo: createVideoFresh } = await import('@/lib/skills/create-video')
+      const result = await createVideoFresh({
+        script: 'Neon city awakening\n\nA cinematic neon city wakes at dawn with slow aerial camera movement.',
+        images: [],
+        duration: 5,
+        videoModel: 'seedance-fast',
+        videoResolution: '720p',
+      })
+
+      expect(result.success).toBe(true)
+      expect(result.providerModel).toBe('seedance-2.0-fast-text-to-video')
+      expect(result.taskId).toBe('task-test-seedance-text')
+      expect(fetchMock).toHaveBeenCalledTimes(1)
+    } finally {
+      vi.unstubAllGlobals()
+      vi.unstubAllEnvs()
+      vi.resetModules()
+    }
+  })
+
+  it('still rejects zero-media generation for providers without text-to-video support', async () => {
+    const result = await createVideo({
+      script: 'Neon city awakening\n\nA cinematic neon city wakes at dawn.',
+      images: [],
+      duration: 5,
+      videoModel: 'grok',
+    })
+
+    expect(result.success).toBe(false)
+    expect(result.message).toContain('requires an image or video reference')
   })
 
   it('does not invent a Kling reference-video lower resolution limit', async () => {
@@ -235,6 +310,45 @@ describe('video model reference limits', () => {
     expect(estimateVideoCredits({ model: 'grok', resolution: '720p', durationSec: 1, imageCount: 1 })).toBe(30)
   })
 
+  it('models Gemini Omni as a fast 720p image and video edit provider', () => {
+    expect(normalizeVideoResolution('google-omni', 'auto')).toBe('720p')
+    expect(resolveVideoGenerationRoute({ model: 'google-omni', resolution: 'auto' })).toMatchObject({
+      model: 'google-omni',
+      resolution: '720p',
+      provider: 'google-omni',
+      providerModel: 'gemini-omni-flash-preview',
+    })
+    expect(getVideoModelCapability('google-omni')).toMatchObject({
+      minOutputDuration: 3,
+      maxOutputDuration: 10,
+      supportsVideoReference: true,
+      supportsBaseVideoEdit: true,
+      maxReferenceVideoDuration: 10.5,
+      maxImageReferences: 6,
+    })
+    expect(estimateVideoCredits({ model: 'google-omni', durationSec: 5, imageCount: 1 })).toBe(100)
+  })
+
+  it('fails fast before calling Google Omni with more than six image references', async () => {
+    const result = await createVideo({
+      script: 'Omni too many images\n\nAnimate <<<media_1>>>, <<<media_2>>>, <<<media_3>>>, <<<media_4>>>, <<<media_5>>>, <<<media_6>>>, and <<<media_7>>> together.',
+      images: [
+        'https://example.com/one.jpg',
+        'https://example.com/two.jpg',
+        'https://example.com/three.jpg',
+        'https://example.com/four.jpg',
+        'https://example.com/five.jpg',
+        'https://example.com/six.jpg',
+        'https://example.com/seven.jpg',
+      ],
+      duration: 5,
+      videoModel: 'google-omni',
+    })
+
+    expect(result.success).toBe(false)
+    expect(result.message).toContain('Gemini Omni Flash supports at most 6 reference images per request')
+  })
+
   it('locks explicit app video model and resolution over agent tool guesses', () => {
     const selection = resolveAgentVideoSelection({
       appModel: 'seedance',
@@ -293,6 +407,8 @@ describe('video model reference limits', () => {
     expect(resolveVideoProviderAspectRatio('grok', 'auto')).toBeUndefined()
     expect(resolveVideoProviderAspectRatio('grok', '3:2')).toBeUndefined()
     expect(resolveVideoProviderAspectRatio('kling', 'auto')).toBeUndefined()
+    expect(resolveVideoProviderAspectRatio('google-omni', '9:16')).toBe('9:16')
+    expect(resolveVideoProviderAspectRatio('google-omni', '1:1')).toBe('1:1')
   })
 
   it('validates model-specific video aspect ratios before provider submission', async () => {

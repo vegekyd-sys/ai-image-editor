@@ -4,8 +4,27 @@ import { authenticateRequest } from '@/lib/api-auth';
 import { getSupabaseAdmin } from '@/lib/supabase/service';
 import { isPermanentUrl } from '@/lib/supabase/storage';
 import { buildVideoFailureActions } from '@/lib/artifact-actions';
+import { normalizeLocale, translate } from '@/lib/locales';
 
 type RunProject = { is_public?: boolean } | Array<{ is_public?: boolean }>;
+
+const DEFAULT_AGENT_RUN_STALE_MS = 90_000;
+
+function getAgentRunStaleMs(): number {
+  const configured = Number(process.env.AGENT_RUN_STALE_MS || DEFAULT_AGENT_RUN_STALE_MS);
+  return Number.isFinite(configured)
+    ? Math.max(45_000, Math.min(configured, 10 * 60_000))
+    : DEFAULT_AGENT_RUN_STALE_MS;
+}
+
+function extractSavedDraftPath(output: unknown): string | undefined {
+  if (!output || typeof output !== 'object') return undefined;
+  const record = output as Record<string, unknown>;
+  const value = record.value && typeof record.value === 'object'
+    ? record.value as Record<string, unknown>
+    : record;
+  return typeof value.path === 'string' && value.path.trim() ? value.path : undefined;
+}
 
 function normalizeMediaIdentity(value?: string | null): string | null {
   if (!value) return null;
@@ -48,6 +67,7 @@ async function pollVideoProvider(taskId: string): Promise<{ taskId: string; stat
   const isSeedance = taskId.startsWith('cgt-');
   const isMotionControl = taskId.startsWith('mc-');
   const isXai = taskId.startsWith('xai-');
+  const isGoogleOmni = taskId.startsWith('google-omni-');
   const realTaskId = isMotionControl ? taskId.slice(3) : taskId;
 
   if (isEvolink) {
@@ -63,6 +83,9 @@ async function pollVideoProvider(taskId: string): Promise<{ taskId: string; stat
   } else if (isXai) {
     const { getXaiVideoTask } = await import('@/lib/xai-video');
     return getXaiVideoTask(taskId);
+  } else if (isGoogleOmni) {
+    const { getGoogleOmniVideoTask } = await import('@/lib/google-omni-video');
+    return getGoogleOmniVideoTask(taskId);
   } else {
     const { getKlingTask } = await import('@/lib/kling');
     return getKlingTask(taskId);
@@ -110,6 +133,56 @@ export async function GET(
     if (hasBearerAuth && 'error' in authResult) return authResult.error;
     const ownerUserId = run.user_id as string;
 
+    // A platform hard-kill cannot run route finally blocks. Heartbeats make
+    // that failure observable: after the lease expires, atomically close the
+    // run and preserve the latest saved write_file draft as a resume point.
+    if (run.status === 'running') {
+      const { data: lastEvent } = await admin
+        .from('agent_events')
+        .select('created_at')
+        .eq('run_id', runId)
+        .order('created_at', { ascending: false })
+        .limit(1)
+        .maybeSingle();
+      const lastActivityAt = Date.parse(lastEvent?.created_at || run.started_at || '') || 0;
+      if (lastActivityAt > 0 && Date.now() - lastActivityAt > getAgentRunStaleMs()) {
+        const { data: draftRows } = await admin
+          .from('agent_tool_history')
+          .select('output')
+          .eq('run_id', runId)
+          .eq('tool_name', 'write_file')
+          .order('created_at', { ascending: false })
+          .limit(5);
+        const draftPath = (draftRows || [])
+          .map((row: { output?: unknown }) => extractSavedDraftPath(row.output))
+          .find(Boolean);
+        const locale = normalizeLocale(
+          (run.metadata as Record<string, unknown> | null)?.locale as string | undefined,
+          'en',
+        );
+        const message = draftPath
+          ? translate(locale, 'agent.error.runtimeDraftSaved')
+          : translate(locale, 'agent.error.runtimeNoDraft');
+        const metadata = {
+          ...((run.metadata as Record<string, unknown> | null) ?? {}),
+          terminal: {
+            code: 'stale_run_lease_expired',
+            recoverable: Boolean(draftPath),
+            checkpoint: draftPath ? { draftPath, lastTool: 'write_file' } : undefined,
+            message,
+          },
+        };
+        const { data: reconciled } = await admin
+          .from('agent_runs')
+          .update({ status: 'failed', ended_at: new Date().toISOString(), metadata })
+          .eq('id', runId)
+          .eq('status', 'running')
+          .select('status, ended_at, metadata')
+          .maybeSingle();
+        if (reconciled) Object.assign(run, reconciled);
+      }
+    }
+
     const url = new URL(req.url);
     const wantEvents = url.searchParams.get('events') === 'true';
     const afterSeq = url.searchParams.has('after') ? parseInt(url.searchParams.get('after')!) : undefined;
@@ -128,7 +201,7 @@ export async function GET(
       .order('seq');
 
     // Build output[] — unified typed artifact array
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+
     const output: Record<string, any>[] = [];
     let textContent = '';
     let textSeq = 0;
@@ -211,6 +284,15 @@ export async function GET(
       }
     }
 
+    // A terminal error is also stored on the run row. Use it when an event
+    // insert was interrupted so reconnect never turns a failed run silent.
+    if (!errorMsg && run.status === 'failed') {
+      const terminal = (run.metadata as Record<string, unknown> | null)?.terminal as Record<string, unknown> | undefined;
+      if (typeof terminal?.message === 'string' && terminal.message.trim()) {
+        errorMsg = terminal.message;
+      }
+    }
+
     // Add text as first output item if present
     if (textContent.trim()) {
       output.unshift({
@@ -253,7 +335,7 @@ export async function GET(
               .eq('id', v.snapshot_id)
               .single();
             if (!snap?.video_meta) return;
-            // eslint-disable-next-line @typescript-eslint/no-explicit-any
+
             const videoMeta = snap.video_meta as any;
             if (videoMeta.status === 'completed' && videoMeta.videoUrl) {
               // Only return completed if URL is our Storage (not provider URL)
@@ -266,18 +348,69 @@ export async function GET(
                 if (Array.isArray(videoMeta.completionActions) && videoMeta.completionActions.length) {
                   v.completion_actions = videoMeta.completionActions;
                 }
+                after(async () => {
+                  const { ensureVideoPosterForSnapshot } = await import('@/lib/video-poster-repair');
+                  await ensureVideoPosterForSnapshot({
+                    admin: getSupabaseAdmin(),
+                    ownerUserId,
+                    projectId: snap.project_id,
+                    snapshotId: v.snapshot_id as string,
+                    videoUrl: videoMeta.videoUrl,
+                    currentImageUrl: snap.image_url,
+                  });
+                });
               } else {
                 // Still persisting to Storage — tell CLI to keep polling
                 v.status = 'rendering';
                 if (videoMeta.createdAt) {
                   v.elapsed_seconds = Math.round((Date.now() - new Date(videoMeta.createdAt).getTime()) / 1000);
                 }
+                const snapshotId = v.snapshot_id as string;
+                const projectId = snap.project_id;
+                const providerVideoUrl = videoMeta.videoUrl as string;
+                after(async () => {
+                  try {
+                    const { uploadVideo } = await import('@/lib/supabase/storage');
+                    const { probeMP4Dimensions } = await import('@/lib/mp4-probe');
+                    const buffer = providerVideoUrl.startsWith('https://generativelanguage.googleapis.com/') || providerVideoUrl.startsWith('data:')
+                      ? await (await import('@/lib/google-omni-video')).fetchGoogleOmniVideoBytes(providerVideoUrl)
+                      : new Uint8Array(await (await fetch(providerVideoUrl)).arrayBuffer());
+                    const dims = probeMP4Dimensions(buffer) || { width: 1080, height: 1920 };
+                    const adminClient = getSupabaseAdmin();
+                    const permanentUrl = await uploadVideo(adminClient, ownerUserId, projectId, snapshotId, buffer);
+                    if (permanentUrl) {
+                      const finalMeta = { ...videoMeta, videoUrl: permanentUrl, providerUrl: providerVideoUrl, videoPath: `${ownerUserId}/projects/${projectId}/animation/${snapshotId}.mp4`, width: dims.width, height: dims.height };
+                      await adminClient.from('snapshots')
+                        .update({ video_meta: finalMeta })
+                        .eq('id', snapshotId);
+                      const { ensureVideoPosterForSnapshot } = await import('@/lib/video-poster-repair');
+                      await ensureVideoPosterForSnapshot({
+                        admin: adminClient,
+                        ownerUserId,
+                        projectId,
+                        snapshotId,
+                        videoUrl: permanentUrl,
+                        currentImageUrl: snap.image_url,
+                        videoBuffer: buffer,
+                      });
+                    }
+                  } catch (err) {
+                    console.error('Video persist error:', err);
+                  }
+                });
               }
             } else if (videoMeta.status === 'failed') {
               v.status = 'failed';
               v.error = videoMeta.error;
               v.completion_actions = buildVideoFailureActions(videoMeta);
             } else if (videoMeta.status === 'processing' && videoMeta.taskId) {
+              if (typeof videoMeta.taskId === 'string' && videoMeta.taskId.startsWith('google-omni-job-') && !videoMeta.videoUrl && !videoMeta.providerUrl) {
+                v.status = 'rendering';
+                if (videoMeta.createdAt) {
+                  v.elapsed_seconds = Math.round((Date.now() - new Date(videoMeta.createdAt).getTime()) / 1000);
+                }
+                return;
+              }
               // Actively poll provider API
               try {
                 const taskId = videoMeta.taskId as string;
@@ -299,9 +432,9 @@ export async function GET(
                     try {
                       const { uploadVideo } = await import('@/lib/supabase/storage');
                       const { probeMP4Dimensions } = await import('@/lib/mp4-probe');
-                      const res = await fetch(pollResult.videoUrl!);
-                      if (!res.ok) return;
-                      const buffer = new Uint8Array(await res.arrayBuffer());
+                      const buffer = pollResult.videoUrl!.startsWith('https://generativelanguage.googleapis.com/') || pollResult.videoUrl!.startsWith('data:')
+                        ? await (await import('@/lib/google-omni-video')).fetchGoogleOmniVideoBytes(pollResult.videoUrl!)
+                        : new Uint8Array(await (await fetch(pollResult.videoUrl!)).arrayBuffer());
                       const dims = probeMP4Dimensions(buffer) || { width: 1080, height: 1920 };
                       const adminClient = getSupabaseAdmin();
                       const permanentUrl = await uploadVideo(adminClient, ownerUserId, projectId, snapshotId, buffer);
@@ -310,22 +443,16 @@ export async function GET(
                         await adminClient.from('snapshots')
                           .update({ video_meta: finalMeta })
                           .eq('id', snapshotId);
-                        // Extract poster from the persisted video
-                        try {
-                          const { extractVideoPoster } = await import('@/lib/video-poster');
-                          const posterBuffer = await extractVideoPoster(permanentUrl);
-                          const posterPath = `${ownerUserId}/${projectId}/posters/${snapshotId}.jpg`;
-                          const { error: posterErr } = await adminClient.storage.from('images').upload(posterPath, posterBuffer, { contentType: 'image/jpeg', upsert: true });
-                          if (!posterErr) {
-                            const { data: urlData } = adminClient.storage.from('images').getPublicUrl(posterPath);
-                            if (urlData?.publicUrl) {
-                              await adminClient.from('snapshots').update({ image_url: urlData.publicUrl }).eq('id', snapshotId);
-                              console.log(`Video poster extracted: ${snapshotId}`);
-                            }
-                          }
-                        } catch (pe) {
-                          console.warn('Video poster extraction failed (non-fatal):', pe);
-                        }
+                        const { ensureVideoPosterForSnapshot } = await import('@/lib/video-poster-repair');
+                        await ensureVideoPosterForSnapshot({
+                          admin: adminClient,
+                          ownerUserId,
+                          projectId,
+                          snapshotId,
+                          videoUrl: permanentUrl,
+                          currentImageUrl: snap.image_url,
+                          videoBuffer: buffer,
+                        });
                       }
                     } catch (err) {
                       console.error('Video snapshot persist error:', err);
@@ -379,7 +506,7 @@ export async function GET(
                     .eq('piapi_task_id', taskId);
                   v.status = 'completed';
                   v.url = result.videoUrl;
-                  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+
                   const projects = anim.projects as any;
                   const ownerUserId = Array.isArray(projects) ? projects[0]?.user_id : projects?.user_id;
                   if (anim.project_id && ownerUserId) {
@@ -474,13 +601,13 @@ export async function GET(
 
     // Determine effective status:
     // - "completed" only when agent is done AND all video/music are terminal
-    const agentDone = run.status === 'completed' || run.status === 'failed' || run.status === 'aborted';
     const hasPendingArtifacts = [...videoItems, ...musicItems].some(
       o => o.status === 'queued' || o.status === 'rendering'
     );
     const hasFailedArtifacts = [...videoItems, ...musicItems].some(
       o => o.status === 'failed'
     );
+    const agentDone = run.status === 'completed' || run.status === 'failed' || run.status === 'aborted';
     const effectiveStatus = agentDone && hasPendingArtifacts
       ? 'in_progress'
       : (agentDone && run.status === 'completed' && hasFailedArtifacts ? 'failed' : run.status);

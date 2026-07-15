@@ -18,6 +18,7 @@ const getVastApiKey = () => process.env.VAST_API_KEY?.trim() || null;
 const shouldUseVastQwen = () => process.env.QWEN_PROVIDER === 'vast';
 const CHECKPOINT = () => process.env.COMFYUI_CHECKPOINT || 'Qwen-Rapid-AIO-NSFW-v23.safetensors';
 const DEFAULT_NEGATIVE_PROMPT = 'low quality, blurry, distorted, watermark, text';
+const QWEN_MAX_INPUT_DIMENSION = 1024;
 
 /** Whether Qwen is configured and available */
 export function isQwenAvailable(): boolean {
@@ -39,7 +40,7 @@ async function resolveImageToBuffer(image: string): Promise<Buffer> {
     raw = match ? Buffer.from(match[1], 'base64') : Buffer.from(image, 'base64');
   }
   return sharp(raw)
-    .resize(2048, 2048, { fit: 'inside', withoutEnlargement: true })
+    .resize(QWEN_MAX_INPUT_DIMENSION, QWEN_MAX_INPUT_DIMENSION, { fit: 'inside', withoutEnlargement: true })
     .jpeg({ quality: 90 })
     .toBuffer();
 }

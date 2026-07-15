@@ -1,4 +1,5 @@
 import type { AgentStreamEvent } from './agent';
+import type { AgentModelPreference } from './agent-models';
 
 export type { AgentStreamEvent };
 
@@ -25,6 +26,8 @@ export interface AgentStreamCallbacks {
   onRender?: (design: { code: string; width: number; height: number; props?: Record<string, unknown>; animation?: { fps: number; durationInSeconds: number; format?: string }; editables?: import('@/types').EditableField[]; snapshotId?: string; published?: boolean; previewUrl?: string }) => void;
   onDone?: () => void;
   onError?: (message: string) => void;
+  /** SSE/network ended while the server-side run may still be alive. */
+  onDisconnect?: (runId: string) => void;
   onInsufficientCredits?: (balance: number) => void;
 }
 
@@ -40,6 +43,7 @@ export async function streamAgent(
     previewsReady?: boolean; readyTips?: object[];
     musicReady?: boolean; musicAudioUrl?: string;
     preferredModel?: string;
+    agentModel?: AgentModelPreference;
     videoModel?: string;
     videoResolution?: string;
     videoAuto?: boolean;
@@ -179,6 +183,7 @@ export async function streamAgent(
 
   // Stream ended without done/error event (e.g. Vercel timeout, network cut)
   if (!receivedDone) {
-    callbacks.onError?.('连接中断，请重试');
+    if (agentRunId) callbacks.onDisconnect?.(agentRunId);
+    else callbacks.onError?.('连接中断，请重试');
   }
 }

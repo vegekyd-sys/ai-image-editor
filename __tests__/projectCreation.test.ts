@@ -9,7 +9,7 @@
 
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { makeAgentCallbacks, type AgentCallbackContext } from '@/lib/agentCallbacks';
-import type { Message, Snapshot, DesignPayload } from '@/types';
+import type { Message, Snapshot } from '@/types';
 
 function createMockContext(overrides?: Partial<AgentCallbackContext>): AgentCallbackContext {
   return {
@@ -33,7 +33,7 @@ function createMockContext(overrides?: Partial<AgentCallbackContext>): AgentCall
     codeStreamRef: { current: null },
     agentRunIdRef: { current: null },
     agentTimerRef: { current: null },
-    autoFetchTriggered: { current: false },
+    autoFetchTriggered: { current: new Set() },
     pendingAnalysisRef: { current: [] },
     pendingTeaserRef: { current: null },
     hasTriggeredNamingRef: { current: false },

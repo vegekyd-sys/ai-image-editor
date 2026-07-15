@@ -10,6 +10,7 @@ import { containRect } from '@/lib/image/geometry';
 import { useLocale } from '@/lib/i18n';
 import { VIDEO_PLACEHOLDER_IMAGE } from '@/lib/editor/timeline-derivations';
 import { isFastVideoRenderModel } from '@/lib/video-model-capabilities';
+import { isRemotionExportTaskId } from '@/lib/remotion-export-flags';
 
 const RemotionRenderer = dynamic(() => import('@/components/RemotionRenderer'), { ssr: false });
 
@@ -39,6 +40,7 @@ interface ImageCanvasProps {
   videoUrl?: string | null;
   videoProcessing?: boolean; // true when rendering but no videoUrl yet
   videoFailed?: boolean;
+  videoTaskId?: string | null;
   videoModel?: string | null;
   videoPosterImage?: string; // last snapshot image to show while processing
   isDesktop?: boolean;
@@ -94,7 +96,7 @@ interface ImageCanvasProps {
 export default function ImageCanvas({
   timeline, currentIndex, onIndexChange, isEditing,
   isDraft, isDraftLoading, draftTimelineIndex, onDismissDraft, previousImage, onAnimate,
-  hasVideo, isVideoEntry, videoUrl, videoProcessing, videoFailed, videoModel, videoPosterImage, isDesktop,
+  isVideoEntry, videoUrl, videoProcessing, videoFailed, videoTaskId, videoModel, videoPosterImage, isDesktop,
   annotationMode, annotationTool, annotationEntries, onAddAnnotationEntry,
   onUpdateAnnotationEntry, onDeleteAnnotationEntry,
   annotationColor, annotationLineWidth, onStartTextEdit, textEditing,
@@ -118,9 +120,11 @@ export default function ImageCanvas({
   onVideoFrameCaptured,
 }: ImageCanvasProps) {
   const { t } = useLocale();
-  const videoRenderTimeHint = isFastVideoRenderModel(videoModel)
-    ? t('canvas.grokUsuallyTakes')
-    : t('canvas.usuallyTakes');
+  const videoRenderTimeHint = isRemotionExportTaskId(videoTaskId)
+    ? t('canvas.remotionExportUsuallyTakes')
+    : (isFastVideoRenderModel(videoModel)
+      ? t('canvas.grokUsuallyTakes')
+      : t('canvas.usuallyTakes'));
   const touchStartX = useRef(0);
   const touchStartY = useRef(0);
   const swiping = useRef(false);
@@ -136,7 +140,7 @@ export default function ImageCanvas({
 
   // Design overlay refs (for editable designs)
   const [designContainerEl, setDesignContainerEl] = useState<HTMLDivElement | null>(null);
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+
   const [designPlayerRef, setDesignPlayerRef] = useState<any>(null);
 
   // When an editable is selected: pause player
@@ -786,7 +790,7 @@ export default function ImageCanvas({
     remotionStartedRef.current = false;
     updateRemotionUI();
     return () => player?.pause();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+
   }, [currentIndex, currentDesign?.code]);
 
   // Pause on buffering, resume when assets ready — like a real video player
@@ -1033,7 +1037,7 @@ export default function ImageCanvas({
                 ? timeline[currentIndex]
                 : timeline.slice(0, -1).filter(t => t !== VIDEO_SENTINEL).pop();
               return posterSrc ? (
-                // eslint-disable-next-line @next/next/no-img-element
+
                 <img
                   src={posterSrc}
                   alt=""
@@ -1122,7 +1126,7 @@ export default function ImageCanvas({
                     if (videoPlaying) { videoRef.current?.pause(); }
                     else { if (videoRef.current) videoRef.current.muted = false; videoRef.current?.play().catch(() => {}); }
                   }}
-                  className="w-14 h-14 rounded-full bg-black/50 backdrop-blur-sm flex items-center justify-center active:scale-90 transition-transform"
+                  className="mkr-liquid-play-button w-14 h-14 rounded-full flex items-center justify-center active:scale-90 transition-transform"
                 >
                   {videoPlaying ? (
                     <svg width="18" height="18" viewBox="0 0 10 10" fill="white"><rect x="1" y="0.5" width="2.8" height="9" rx="0.7" /><rect x="6.2" y="0.5" width="2.8" height="9" rx="0.7" /></svg>
@@ -1140,7 +1144,7 @@ export default function ImageCanvas({
                 style={{ bottom: 14, right: 10 }}
               >
                 <span
-                  className="tabular-nums rounded-md bg-black/35 backdrop-blur-sm select-none"
+                  className="mkr-liquid-media-badge tabular-nums rounded-full select-none"
                   style={{ fontSize: '0.6rem', color: 'rgba(255,255,255,0.5)', padding: '2px 6px' }}
                 >
                   {formatTime(videoCurrentTime)}<span style={{ opacity: 0.4, margin: '0 2px' }}>/</span>{formatTime(videoDuration)}
@@ -1189,7 +1193,7 @@ export default function ImageCanvas({
         ) : isVideoEntry && !videoUrl && (videoProcessing || videoFailed) ? (
           /* Video processing/failed state: show placeholder + overlay */
           <div className="relative w-full h-full">
-            {/* eslint-disable-next-line @next/next/no-img-element */}
+            { }
             <img
               src={videoPosterImage || VIDEO_PLACEHOLDER_IMAGE}
               alt="preview"
@@ -1303,7 +1307,7 @@ export default function ImageCanvas({
               <div className="absolute z-30" style={{ bottom: 8, left: 12 }}>
                 <button
                   onClick={(e) => { e.stopPropagation(); if (!remotionBuffering && !remotionLoading) toggleRemotionPlay(); }}
-                  className="w-14 h-14 rounded-full bg-black/50 backdrop-blur-sm flex items-center justify-center active:scale-90 transition-transform"
+                  className="mkr-liquid-play-button w-14 h-14 rounded-full flex items-center justify-center active:scale-90 transition-transform"
                 >
                   {(remotionBuffering || remotionLoading) ? (
                     <svg width="20" height="20" viewBox="0 0 20 20" fill="none" className="animate-spin">
@@ -1322,7 +1326,7 @@ export default function ImageCanvas({
             {/* Time badge — updated via DOM (data-remotion-time), hidden in design editor mode */}
             {currentDesign?.animation && !selectedEditableId && (
               <div className="absolute z-20 pointer-events-none" style={{ bottom: 14, right: 10 }}>
-                <span data-remotion-time className="tabular-nums rounded-md bg-black/35 backdrop-blur-sm select-none"
+                <span data-remotion-time className="mkr-liquid-media-badge tabular-nums rounded-full select-none"
                   style={{ fontSize: '0.6rem', color: 'rgba(255,255,255,0.5)', padding: '2px 6px' }}>
                   {formatTime(0)} / {formatTime(remotionDuration)}
                 </span>
@@ -1400,7 +1404,7 @@ export default function ImageCanvas({
         ) : displayImage ? (
           isLongContent ? (
             <div ref={longScrollRef} className="w-full h-full overflow-y-auto overflow-x-hidden">
-              {/* eslint-disable-next-line @next/next/no-img-element */}
+              { }
               <img
                 ref={imgElRef}
                 src={displayImage}
@@ -1416,7 +1420,7 @@ export default function ImageCanvas({
               />
             </div>
           ) : (
-            /* eslint-disable-next-line @next/next/no-img-element */
+
             <img
               ref={imgElRef}
               src={displayImage}
@@ -1471,9 +1475,7 @@ export default function ImageCanvas({
       {/* Timeline indicators — bottom of canvas, hidden while seeking or in design editor mode */}
       {!selectedEditableId && !isSeeking && (timeline.length > 1 || onAnimate) && (
         <div className={`absolute left-1/2 -translate-x-1/2 flex items-center justify-center z-10 ${isDesktop ? 'bottom-3' : 'bottom-3'}`}>
-          <div className={`flex items-center rounded-full ${isDesktop ? 'gap-1.5 px-3 py-1.5' : 'gap-[5px] px-[10px] py-[5px]'}`}
-            style={{ background: 'rgba(0,0,0,0.35)', backdropFilter: 'blur(8px)', WebkitBackdropFilter: 'blur(8px)' }}
-          >
+          <div className={`mkr-liquid-timeline-rail flex items-center rounded-full ${isDesktop ? 'gap-1.5 px-3 py-1.5' : 'gap-[5px] px-[10px] py-[5px]'}`}>
             {timeline.map((entry, i) => {
               const isRef = referenceCount > 0 && i < referenceCount;
               const showDivider = referenceCount > 0 && i === referenceCount;
@@ -1486,8 +1488,10 @@ export default function ImageCanvas({
                     /* v1 sentinel: play triangle */
                     <button
                       onClick={() => goTo(i)}
-                      className={`flex items-center justify-center cursor-pointer transition-all ${isDesktop ? 'w-5 h-5 hover:opacity-80' : 'w-3 h-3'}`}
-                      style={{ color: i === currentIndex ? 'rgba(255,255,255,0.8)' : 'rgba(255,255,255,0.35)' }}
+                      className={`mkr-liquid-timeline-dot flex items-center justify-center cursor-pointer transition-all ${
+                        i === currentIndex ? 'mkr-liquid-timeline-dot-active' : ''
+                      } ${isDesktop ? 'w-5 h-5 hover:opacity-90' : 'w-3 h-3'}`}
+                      style={{ color: i === currentIndex ? 'rgba(14,14,18,0.95)' : 'rgba(255,255,255,0.55)' }}
                     >
                       <svg width={isDesktop ? "11" : "8"} height={isDesktop ? "11" : "8"} viewBox="0 0 8 8" fill="currentColor">
                         <polygon points="2,1 7,4 2,7" />
@@ -1497,22 +1501,22 @@ export default function ImageCanvas({
                     /* v2 video: square (unselected) → wide rect (selected) — no border-radius */
                     <button
                       onClick={() => goTo(i)}
-                      className={`cursor-pointer transition-all ${
+                      className={`mkr-liquid-timeline-dot cursor-pointer transition-all ${
                         i === currentIndex
-                          ? isDesktop ? 'w-5 h-2 rounded-[2px] bg-white/70 hover:bg-white/90' : 'w-3 h-[5px] rounded-[1px] bg-white/70'
-                          : isDesktop ? 'w-2 h-2 rounded-[2px] bg-white/25 hover:bg-white/40' : 'w-[5px] h-[5px] rounded-[1px] bg-white/25'
+                          ? `mkr-liquid-timeline-dot-active ${isDesktop ? 'w-5 h-2 rounded-[2px]' : 'w-3 h-[5px] rounded-[1px]'}`
+                          : `${isDesktop ? 'w-2 h-2 rounded-[2px] hover:opacity-90' : 'w-[5px] h-[5px] rounded-[1px]'}`
                       }`}
                     />
                   ) : (
                     /* Image: circle (unselected) → ellipse pill (selected) */
                     <button
                       onClick={() => goTo(i)}
-                      className={`transition-all cursor-pointer ${
+                      className={`mkr-liquid-timeline-dot transition-all cursor-pointer ${
                         i === currentIndex
-                          ? isDesktop ? 'w-5 h-2 rounded-full bg-white/70 hover:bg-white/90' : 'w-3 h-[5px] rounded-full bg-white/70'
+                          ? `mkr-liquid-timeline-dot-active ${isDesktop ? 'w-5 h-2 rounded-full hover:opacity-95' : 'w-3 h-[5px] rounded-full'}`
                           : isRef
-                            ? isDesktop ? 'w-2 h-2 rounded-full border border-dashed border-white/40 bg-transparent hover:border-white/60' : 'w-[5px] h-[5px] rounded-full border border-dashed border-white/40 bg-transparent'
-                            : isDesktop ? 'w-2 h-2 rounded-full bg-white/25 hover:bg-white/40' : 'w-[5px] h-[5px] rounded-full bg-white/25'
+                            ? `mkr-liquid-timeline-dot-reference ${isDesktop ? 'w-2 h-2 rounded-full hover:opacity-90' : 'w-[5px] h-[5px] rounded-full'}`
+                            : `${isDesktop ? 'w-2 h-2 rounded-full hover:opacity-90' : 'w-[5px] h-[5px] rounded-full'}`
                       }`}
                     />
                   )}

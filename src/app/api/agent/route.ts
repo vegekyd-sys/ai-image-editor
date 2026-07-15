@@ -6,6 +6,13 @@ import { AgentDualWriter } from '@/lib/agentDualWriter';
 import { requireCredits, deductByTokens } from '@/lib/billing/credits';
 import { AgentPerf } from '@/lib/agent-perf';
 import { getRequestLocale } from '@/lib/server-locale';
+import { resolvePersistedRunStatus } from '@/lib/agent-terminal';
+import { translate } from '@/lib/locales';
+import {
+  isAgentModelPreference,
+  resolveAgentModelSpec,
+  type AgentModelPreference,
+} from '@/lib/agent-models';
 
 export const maxDuration = 800;
 
@@ -26,10 +33,10 @@ export async function POST(req: NextRequest) {
 
     const endReadBody = perf.span('read_body');
     const { prompt, image, animationImageUrls, animationImages, projectId, analysisOnly, analysisContext, isVideoAnalysis,
-            tipReaction, committedTip, currentTips, tipsTeaser, tipsPayload, nameProject, description,
-            previewsReady, readyTips, preferredModel, snapshotImages, currentSnapshotIndex, isNsfw,
+            tipReaction, committedTip, tipsTeaser, tipsPayload, nameProject, description,
+            previewsReady, readyTips, preferredModel, agentModel, snapshotImages, currentSnapshotIndex, isNsfw,
             musicReady, musicAudioUrl, currentDesign, currentDesignPath, videoModel, videoResolution, videoAuto,
-            headless, hasAnnotation, isDraft, referenceImageCount, uploadedVideoCount } = await req.json();
+            headless, hasAnnotation, isDraft, referenceImageCount, uploadedVideoCount, audioAttachments } = await req.json();
     endReadBody({
       projectId: projectId || null,
       promptChars: typeof prompt === 'string' ? prompt.length : 0,
@@ -37,6 +44,15 @@ export async function POST(req: NextRequest) {
       headless: !!headless,
     });
     const locale = getRequestLocale(req);
+
+    if (agentModel !== undefined && !isAgentModelPreference(agentModel)) {
+      return new Response(
+        JSON.stringify({ error: 'Unsupported agentModel' }),
+        { status: 400, headers: { 'Content-Type': 'application/json' } },
+      );
+    }
+    const requestedAgentModel = agentModel as AgentModelPreference | undefined;
+    const resolvedAgentModel = resolveAgentModelSpec(requestedAgentModel, process.env.AGENT_MODEL);
 
     if (!projectId || (!tipsTeaser && !nameProject && !previewsReady && !uploadedVideoCount && !image && !prompt)) {
       return new Response(
@@ -46,10 +62,10 @@ export async function POST(req: NextRequest) {
     }
 
     const MOCK_TEXTS = {
-      tipsTeaser: locale === 'en' ? 'Try turning it into a miniature scene.' : '试试把它变成微缩模型？特别适合这种场景。',
-      tipReaction: locale === 'en' ? 'Nice, that edit feels natural.' : '效果很棒！新图很自然。',
-      nameProject: locale === 'en' ? 'Coffee Afternoon' : '咖啡下午茶',
-      previewsReady: locale === 'en' ? 'Your previews are ready. The playful one is worth a look.' : '预览图都好了！那个模仿猴的创意太逗了，快去试试看~',
+      tipsTeaser: translate(locale, 'agent.mock.tipsTeaser'),
+      tipReaction: translate(locale, 'agent.mock.tipReaction'),
+      nameProject: translate(locale, 'agent.mock.nameProject'),
+      previewsReady: translate(locale, 'agent.mock.previewsReady'),
     };
 
     // Only dual-write for normal agent flow (not lightweight teaser/name/reaction/analysis branches)
@@ -65,9 +81,10 @@ export async function POST(req: NextRequest) {
     let firstMessageId: string | null = null;
     if (isNormalMode) {
       const endRunCreate = perf.span('create_agent_run', { projectId, userId });
-      // Mark any stale running runs as failed before creating a new one
+      // Supersede any prior run. `aborted` is observable by the old worker;
+      // `failed` was not, so the old model could keep producing side effects.
       await supabase.from('agent_runs')
-        .update({ status: 'failed', ended_at: new Date().toISOString() })
+        .update({ status: 'aborted', ended_at: new Date().toISOString() })
         .eq('project_id', projectId)
         .eq('user_id', userId)
         .eq('status', 'running');
@@ -77,7 +94,15 @@ export async function POST(req: NextRequest) {
         user_id: userId,
         status: 'running',
         prompt: (prompt ?? '').slice(0, 500),
-        metadata: { locale, preferredModel, isNsfw, analysisOnly },
+        metadata: {
+          locale,
+          preferredModel,
+          requestedAgentModel: requestedAgentModel ?? 'auto',
+          agentModel: resolvedAgentModel.id,
+          agentProviderModel: resolvedAgentModel.providerModelId,
+          isNsfw,
+          analysisOnly,
+        },
       }).select('id').single();
       runId = run?.id ?? null;
       endRunCreate({ runId: runId || null });
@@ -92,11 +117,15 @@ export async function POST(req: NextRequest) {
         };
         enqueue({
           type: 'status',
-          text: locale === 'en' ? 'Starting...' : '开始处理...',
+          text: translate(locale, 'agent.status.starting'),
         });
         perf.mark('first_sse_sent', { eventType: 'status' });
         // Track token usage for billing
-        let usageEvent: { inputTokens: number; outputTokens: number; cacheReadTokens?: number; cacheWriteTokens?: number; model: string } | null = null;
+        let usageEvent: Extract<import('@/lib/agent').AgentStreamEvent, { type: 'usage' }> | null = null;
+        let sawDone = false;
+        let sawError = false;
+        let wasStopped = false;
+        let terminalError: Extract<import('@/lib/agent').AgentStreamEvent, { type: 'error' }> | null = null;
 
         // Helper: iterate agent stream, capture usage event
         async function iterateAgent(gen: AsyncIterable<import('@/lib/agent').AgentStreamEvent>, ctrl: ReadableStreamDefaultController) {
@@ -111,10 +140,20 @@ export async function POST(req: NextRequest) {
           ? new AgentDualWriter(runId, supabase, userId, projectId, controller, encoder)
           : null;
         if (writer) {
+          await writer.persistHeartbeat();
           firstMessageId = writer.firstMessageId;
           // Store firstMessageId in run metadata for reconnect
           supabase.from('agent_runs').update({
-            metadata: { locale, preferredModel, isNsfw, analysisOnly, firstMessageId },
+            metadata: {
+              locale,
+              preferredModel,
+              requestedAgentModel: requestedAgentModel ?? 'auto',
+              agentModel: resolvedAgentModel.id,
+              agentProviderModel: resolvedAgentModel.providerModelId,
+              isNsfw,
+              analysisOnly,
+              firstMessageId,
+            },
           }).eq('id', runId).then(() => {});
         }
 
@@ -133,7 +172,9 @@ export async function POST(req: NextRequest) {
               `Here are edit suggestions for a photo:\n${tipsSummary}\n\nPick the most interesting one. Write a single teaser sentence (under 15 words) starting with "Try...". Output only that sentence.`,
               locale,
             );
-            await iterateAgent(runMakaronAgent(teaserPrompt, '', projectId, { tipReactionOnly: true, locale }), controller);
+            await iterateAgent(runMakaronAgent(teaserPrompt, '', projectId, {
+              tipReactionOnly: true, locale, agentModel: requestedAgentModel,
+            }), controller);
             return;
           }
 
@@ -144,7 +185,9 @@ export async function POST(req: NextRequest) {
               `Based on this photo description, give a concise project name (2-4 words): ${desc}. Output only the name, no punctuation or explanation.`,
               locale,
             );
-            await iterateAgent(runMakaronAgent(namePrompt, '', projectId, { tipReactionOnly: true, locale }), controller);
+            await iterateAgent(runMakaronAgent(namePrompt, '', projectId, {
+              tipReactionOnly: true, locale, agentModel: requestedAgentModel,
+            }), controller);
             return;
           }
 
@@ -163,7 +206,9 @@ export async function POST(req: NextRequest) {
               `All ${tips.length} edit suggestion previews are ready:\n${tipsSummary}\n\nIn 1-2 sentences, tell the user previews are ready and they can scroll TipsBar. Comment on one interesting one. Friendly tone, don't start with "I".`,
               locale,
             );
-            await iterateAgent(runMakaronAgent(readyPrompt, '', projectId, { tipReactionOnly: true, locale }), controller);
+            await iterateAgent(runMakaronAgent(readyPrompt, '', projectId, {
+              tipReactionOnly: true, locale, agentModel: requestedAgentModel,
+            }), controller);
             return;
           }
 
@@ -174,7 +219,8 @@ export async function POST(req: NextRequest) {
               locale,
             );
             await iterateAgent(runMakaronAgent(musicPrompt, image || '', projectId, {
-              locale, snapshotImages, currentSnapshotIndex, supabase, userId: userId,
+              locale, agentModel: requestedAgentModel,
+              snapshotImages, currentSnapshotIndex, supabase, userId: userId,
             }), controller);
             return;
           }
@@ -191,7 +237,9 @@ export async function POST(req: NextRequest) {
               `User just committed an edit via TipsBar:\n${tip.emoji} ${tip.label} (${tip.category}): ${tip.desc}\n\nReact naturally in 1 sentence, like a friend. Then in 1 short sentence, inspire what direction they could explore next with this photo (e.g. mood, lighting, story element) — but do NOT recommend specific tips. Don't start with "I".`,
               locale,
             );
-            await iterateAgent(runMakaronAgent(reactionPrompt, image, projectId, { tipReactionOnly: true, locale }), controller);
+            await iterateAgent(runMakaronAgent(reactionPrompt, image, projectId, {
+              tipReactionOnly: true, locale, agentModel: requestedAgentModel,
+            }), controller);
             return;
           }
 
@@ -211,6 +259,7 @@ export async function POST(req: NextRequest) {
           let agentCurrentDesign = currentDesign;
           let agentCurrentDesignPath = typeof currentDesignPath === 'string' ? currentDesignPath : undefined;
           let agentHistory: ModelMessage[] = [];
+          let agentAudioAttachments = audioAttachments;
 
           if (needsPromptContext) {
             // Unified context: both frontend and headless use buildPromptContext.
@@ -225,6 +274,8 @@ export async function POST(req: NextRequest) {
               isDraft,
               referenceImageCount: referenceImageCount || undefined,
               uploadedVideoCount: uploadedVideoCount || undefined,
+              audioAttachments,
+              currentRunId: runId,
             });
             endContext({
               promptChars: ctx.fullPrompt.length,
@@ -242,6 +293,7 @@ export async function POST(req: NextRequest) {
             agentCurrentDesign = currentDesign || ctx.currentDesign;
             agentCurrentDesignPath = agentCurrentDesignPath || ctx.currentDesignPath;
             agentHistory = ctx.history;
+            agentAudioAttachments = ctx.audioAttachments;
           } else {
             perf.mark('build_prompt_context_skipped', {
               reason: 'analysisOnly_request_has_media',
@@ -263,21 +315,36 @@ export async function POST(req: NextRequest) {
           }
 
           // Normal agent request — SSE heartbeat every 10s to prevent proxy idle timeout
+          const modelAbortController = new AbortController();
           const heartbeat = setInterval(() => {
             try { controller.enqueue(encoder.encode(`: heartbeat\n\n`)); } catch { /* disconnected */ }
+            if (writer) void writer.persistHeartbeat();
+            if (runId) {
+              void supabase.from('agent_runs').select('status').eq('id', runId).single()
+                .then(({ data }) => {
+                  if (data?.status !== 'running' && !modelAbortController.signal.aborted) {
+                    modelAbortController.abort('Agent run reached a persisted terminal status');
+                  }
+                });
+            }
           }, 10_000);
           // Periodically check if run was aborted (user clicked abort in CUI)
           let abortCheckCount = 0;
-          const isAborted = async () => {
-            if (!runId || ++abortCheckCount % 10 !== 0) return false; // check every ~10 events
+          const shouldStop = async (force = false) => {
+            if (!runId || (!force && ++abortCheckCount % 10 !== 0)) return false; // check every ~10 events
             const { data } = await supabase.from('agent_runs').select('status').eq('id', runId).single();
-            return data?.status === 'aborted';
+            return data?.status !== 'running';
           };
 
           try {
             const endAgentStream = perf.span('agent_stream', { projectId, runId: runId || null });
             try {
-              for await (const event of runMakaronAgent(agentPrompt, agentImage, projectId, { analysisOnly, analysisContext, isVideoAnalysis, animationImageUrls: animationImageUrls?.length ? animationImageUrls : undefined, animationImages: animationImages?.length ? animationImages : undefined, locale, preferredModel, videoModel, videoResolution, videoAuto, snapshotImages: agentSnapshotImages, currentSnapshotIndex: agentCurrentSnapshotIndex, isNsfw, supabase, userId: userId, currentDesign: agentCurrentDesign, currentDesignPath: agentCurrentDesignPath, history: agentHistory, timelineVersion, perf })) {
+              for await (const event of runMakaronAgent(agentPrompt, agentImage, projectId, { analysisOnly, analysisContext, isVideoAnalysis, animationImageUrls: animationImageUrls?.length ? animationImageUrls : undefined, animationImages: animationImages?.length ? animationImages : undefined, locale, preferredModel, agentModel: requestedAgentModel, videoModel, videoResolution, videoAuto, audioAttachments: agentAudioAttachments, snapshotImages: agentSnapshotImages, currentSnapshotIndex: agentCurrentSnapshotIndex, isNsfw, supabase, userId: userId, currentDesign: agentCurrentDesign, currentDesignPath: agentCurrentDesignPath, history: agentHistory, timelineVersion, perf, abortSignal: modelAbortController.signal })) {
+                if (event.type === 'done') sawDone = true;
+                if (event.type === 'error') {
+                  sawError = true;
+                  terminalError = event;
+                }
                 if (event.type === 'usage') { usageEvent = event; continue; }
                 if (writer) {
                   await writer.processAndEnqueue(event);
@@ -285,10 +352,22 @@ export async function POST(req: NextRequest) {
                   controller.enqueue(encoder.encode(`data: ${JSON.stringify(event)}\n\n`));
                 }
                 // Check abort after processing event
-                if (await isAborted()) {
-                  console.log('[agent] Run aborted by user');
+                if (await shouldStop()) {
+                  console.log('[agent] Run stopped by persisted terminal status');
+                  wasStopped = true;
                   break;
                 }
+              }
+              if (!sawDone && !sawError && await shouldStop(true)) wasStopped = true;
+              if (writer && !sawDone && !sawError && !wasStopped) {
+                terminalError = {
+                  type: 'error',
+                  code: 'missing_terminal_event',
+                  recoverable: true,
+                  message: translate(locale, 'agent.error.connectionEnded'),
+                };
+                sawError = true;
+                await writer.processAndEnqueue(terminalError);
               }
             } finally {
               endAgentStream();
@@ -300,22 +379,21 @@ export async function POST(req: NextRequest) {
           const msg = err instanceof Error ? err.message : String(err);
           console.error('Agent stream error:', msg);
           const errorEvent = { type: 'error' as const, message: msg };
+          sawError = true;
+          terminalError = errorEvent;
           if (writer) {
-            await writer.processAndEnqueue(errorEvent);
+            try {
+              await writer.processAndEnqueue(errorEvent);
+            } catch (persistError) {
+              console.error('Failed to persist terminal agent error:', persistError);
+              writer.tryEnqueue(errorEvent);
+            }
           } else {
             controller.enqueue(
               encoder.encode(`data: ${JSON.stringify(errorEvent)}\n\n`),
             );
           }
-          // Mark run as failed
-          if (runId) {
-            try {
-              await supabase.from('agent_runs').update({
-                status: 'failed',
-                ended_at: new Date().toISOString(),
-              }).eq('id', runId);
-            } catch { /* best effort */ }
-          }
+          // Finalization below atomically persists failed + terminal metadata.
         } finally {
           // Deduct credits based on token usage (fire-and-forget)
           if (usageEvent) {
@@ -325,6 +403,7 @@ export async function POST(req: NextRequest) {
               usageEvent.inputTokens, usageEvent.outputTokens,
               undefined, undefined,
               { cacheRead: usageEvent.cacheReadTokens ?? 0, cacheWrite: usageEvent.cacheWriteTokens ?? 0 },
+              usageEvent.providerCostUsd,
             )
               .then(() => endBilling({ ok: true }))
               .catch(e => {
@@ -338,23 +417,40 @@ export async function POST(req: NextRequest) {
             await writer.flush();
             endWriterFlush();
           }
-          // Mark run as completed
+          // A closed transport is not completion evidence. Only an explicit
+          // validated done event may transition a running run to completed.
           if (runId) {
             try {
               const endRunComplete = perf.span('complete_agent_run', { projectId, runId });
               const { data: run } = await supabase.from('agent_runs')
-                .select('status').eq('id', runId).single();
+                .select('status, metadata').eq('id', runId).single();
               if (run?.status === 'running') {
+                const terminalStatus = resolvePersistedRunStatus({
+                  currentStatus: run.status,
+                  sawDone,
+                  sawError,
+                });
                 await supabase.from('agent_runs').update({
-                  status: 'completed',
+                  status: terminalStatus,
                   ended_at: new Date().toISOString(),
-                }).eq('id', runId);
+                  ...(terminalError ? {
+                    metadata: {
+                      ...((run.metadata as Record<string, unknown> | null) ?? {}),
+                      terminal: {
+                        code: terminalError.code,
+                        recoverable: terminalError.recoverable === true,
+                        checkpoint: terminalError.checkpoint,
+                        message: terminalError.message,
+                      },
+                    },
+                  } : {}),
+                }).eq('id', runId).eq('status', 'running');
               }
-              endRunComplete({ status: run?.status || null });
+              endRunComplete({ status: run?.status || null, sawDone, sawError });
             } catch { /* best effort */ }
           }
-          // Headless: auto-name project if still "Untitled"
-          if (headless) {
+          // Headless: auto-name project only after a validated completion.
+          if (headless && sawDone && !sawError && !wasStopped) {
             try {
               const { data: proj } = await supabase.from('projects').select('title').eq('id', projectId).single();
               if (proj?.title === 'Untitled' || !proj?.title) {

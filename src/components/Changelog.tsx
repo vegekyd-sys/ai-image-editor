@@ -4,18 +4,139 @@ import { useEffect, useState, type CSSProperties } from 'react';
 
 interface ChangelogEntry {
   date: string;
-  en: { title: string; items: string[]; link?: { label: string; href: string } };
-  zh: { title: string; items: string[]; link?: { label: string; href: string } };
+  en: { title: string; items: string[]; link?: { label: string; href: string; variant?: 'text' | 'button' } };
+  zh: { title: string; items: string[]; link?: { label: string; href: string; variant?: 'text' | 'button' } };
 }
 
 const CHANGELOG: ChangelogEntry[] = [
   {
+    date: '2026-07-15',
+    en: { title: 'A Faster, Smoother Home', items: [
+      'Home buttons now respond immediately, including Try Free, Create, Sign in, and the Explore / Projects switcher.',
+      'Images and videos now stay ready as you scroll or switch between Explore and Projects, without flashing back to cover frames.',
+    ]},
+    zh: { title: '首页更快、更顺滑', items: [
+      '首页按钮现在点下即可响应，包括 Try Free、Create、登录，以及探索 / 项目切换。',
+      '上下滚动或在探索与项目之间切换时，图片和视频会保持就绪，不再闪回封面图。',
+    ]},
+  },
+  {
+    date: '2026-07-14',
+    en: { title: 'Japanese & Traditional Chinese', items: ['Makaron now supports Japanese and Traditional Chinese across the app.'] },
+    zh: { title: '日语与繁体中文', items: ['Makaron 现已支持日语和繁体中文。'] },
+  },
+  {
+    date: '2026-07-11',
+    en: { title: 'Choose Your Agent Model', items: [
+      'Makaron Agent can now use Sonnet 4.6, Sonnet 5, Opus 4.8, Grok 4.5, or DeepSeek V4 Pro — choose the right brain for each project.',
+      'Your choice stays with the project, repeat runs benefit from prompt caching, and DeepSeek can understand images when needed.',
+    ]},
+    zh: { title: '选择你的 Agent 模型', items: [
+      'Makaron Agent 现在可以选择 Sonnet 4.6、Sonnet 5、Opus 4.8、Grok 4.5 或 DeepSeek V4 Pro，为每个项目选择更合适的大脑。',
+      '模型选择会随项目保存，重复任务可以复用缓存；DeepSeek 需要看图时也能自动理解图片。',
+    ]},
+  },
+  {
+    date: '2026-07-10',
+    en: { title: 'Native SeeDance Text-to-Video', items: ['Makaron can now generate SeeDance videos directly from text without creating an intermediate reference image first.'] },
+    zh: { title: 'SeeDance 原生文生视频', items: ['Makaron 现在可以直接用文字生成 SeeDance 视频，不再需要先生成一张中间参考图。'] },
+  },
+  {
+    date: '2026-07-07',
+    en: { title: 'Video Director for Remotion', items: [
+      'Remotion compositions now use a shared director contract for story, pacing, scenes, transitions, and review instead of web-style design references.',
+      'Agent is now on AI SDK 7 with Sonnet 5 thinking-disabled correctly applied, making first responses much faster while keeping Sonnet 4.6 rollback simple.',
+    ]},
+    zh: { title: 'Remotion Video Director', items: [
+      'Remotion composition 现在会先走共享 Director contract，关注故事、节奏、场景、转场和验收，不再依赖网页式设计参考。',
+      'Agent 已升级到 AI SDK 7，并正确关闭 Sonnet 5 thinking，首字速度明显提升，同时保留一键切回 Sonnet 4.6 的回退路径。',
+    ]},
+  },
+  {
+    date: '2026-07-04',
+    en: { title: 'Sonnet 5 Explainer Video Agent', items: [
+      'Makaron Agent now runs on Claude Sonnet 5 with the right Bedrock model handling, token pricing, tool-input normalization, and larger context management for long creative runs.',
+      'The new Explainer Video skill turns a short prompt into an editable Remotion video with voiceover, synced subtitles, background music, generated images, preview-frame self-checks, and final timeline publishing.',
+      'Voiceover is now first-class: Volcengine Doubao Seed TTS can generate narration and transcribe it for subtitle timing.',
+      'Seed Audio is available from the agent for prompt-first background music and sound effects.',
+    ]},
+    zh: { title: 'Sonnet 5 Explainer Video Agent', items: [
+      'Makaron Agent 已升级到 Claude Sonnet 5，并补齐 Bedrock 模型处理、token 定价、tool input 归一化，以及长视频创作所需的更大上下文管理。',
+      '新增 Explainer Video skill：用户只需要一句简单 prompt，就能生成可编辑 Remotion 视频，包含旁白、同步字幕、背景音乐、生图素材、关键帧自检和最终发布时间线。',
+      'TTS 旁白成为一等能力：火山 Doubao Seed TTS 可以生成口播，并转写出字幕时间轴。',
+      'Seed Audio 已接入 Agent，可用 prompt-first 方式生成背景音乐和音效。',
+    ]},
+  },
+  {
+    date: '2026-07-03',
+    en: { title: 'Liquid Glass Polish', items: [
+      'The Home, Projects, and editor surfaces now share a clearer Liquid Glass treatment across navigation, placeholders, model controls, video pills, and input areas.',
+      'Mobile account gestures are more reliable, and the Explore / Projects switcher is easier to read over bright media.',
+    ]},
+    zh: { title: 'Liquid Glass 细节打磨', items: [
+      '首页、项目页和编辑页的导航、占位符、模型选择、视频 pill 与输入框统一了更清晰的 Liquid Glass 质感。',
+      '移动端账号菜单手势更稳定，Explore / Projects 切换器在明亮图片和视频上也更容易看清。',
+    ]},
+  },
+  {
+    date: '2026-07-02',
+    en: { title: 'Nano Banana 2 Lite', items: [
+      'Tips still use the primary creative model for their text ideas, while their image previews now use Nano Banana 2 Lite for faster, lower-cost drafts.',
+      'Nano Banana 2 Lite is also available in the image model selector when you explicitly want a fast 1K draft edit.',
+    ]},
+    zh: { title: 'Nano Banana 2 Lite', items: [
+      'Tips 的文字创意继续使用原来的主模型，只有图片预览缩略图默认改用 Nano Banana 2 Lite，速度更快、成本更低。',
+      '图片模型选择器里也保留 Nano Banana 2 Lite；当你明确想要快速 1K 草稿编辑时可以手动选择。',
+    ]},
+  },
+  {
+    date: '2026-07-01',
+    en: { title: 'Gemini Omni for Fast Video Editing', items: [
+      'Gemini Omni is now available as a fast 720p video editing model in Makaron.',
+      'Use it from the model selector, CUI, or makaron-cli chat to restyle short clips, animate one image, or make quick video revisions.',
+      'Makaron also handles Omni guardrails more clearly, with safer fallback wording for prompts involving brands, known characters, or other protected IP.',
+    ]},
+    zh: { title: 'Gemini Omni 快速视频编辑', items: [
+      'Gemini Omni 已接入 Makaron，定位为快速 720p 视频编辑模型。',
+      '现在可以从模型选择器、CUI 或 makaron-cli chat 触发，用来给短视频换风格、让单张图动起来，或快速做一版视频修改。',
+      '针对品牌、知名角色和受保护 IP 等更容易触发审核的请求，Makaron 会给出更清楚的失败提示和更安全的原创替代表达。',
+    ]},
+  },
+  {
+    date: '2026-06-30',
+    en: { title: 'Makaron for iPhone is live', items: [
+      'Makaron now spans iOS, web, mobile web, and CLI.',
+      'Projects, chat history, Skills, image previews, video tools, and credits stay shared across every surface.',
+      'One more native trick is waiting in the wings. Siri is getting closer.',
+    ], link: { label: 'Download on the App Store', href: 'https://apps.apple.com/app/id6779672002', variant: 'button' }},
+    zh: { title: 'Makaron iPhone 版正式上线', items: [
+      'Makaron 现在覆盖 iOS、Web、H5 和 CLI。',
+      '项目、聊天记录、Skills、图片预览、视频工具和 credits 会在所有入口之间共享。',
+      '还有一个原生小秘密正在靠近：Siri 会很快加入这场创作。',
+    ], link: { label: '下载 iPhone App', href: 'https://apps.apple.com/app/id6779672002', variant: 'button' }},
+  },
+  {
+    date: '2026-06-30',
+    en: { title: 'Remotion MP4 Export', items: [
+      'Animated Remotion designs can now become real MP4 videos you can play, download, share, and keep editing from the timeline.',
+      'Makaron can also export MP4s from saved designs or design JSON, so agent-made motion work is easier to hand off and reuse.',
+      'Export progress now feels clearer in the app, with better status text while your video is being prepared.',
+    ]},
+    zh: { title: 'Remotion MP4 导出', items: [
+      'Remotion 做出来的动画现在可以变成真正的 MP4，在时间线里播放、下载、分享，也能继续接着改。',
+      '保存过的设计和 design JSON 也可以直接导出 MP4，Agent 做出来的动态作品更容易交付和复用。',
+      '导出过程里的状态提示更清楚了，准备视频时不会再显示不准确的等待时间。',
+    ]},
+  },
+  {
     date: '2026-06-29',
     en: { title: 'Liquid Glass UI Refresh', items: [
       'Home, Projects, Updates, account menus, and input areas now share a softer Liquid Glass style, with faster navigation and safer mobile/iOS spacing.',
+      'Makaron CLI now supports `--audio`, so agents can create videos guided by a song, beat, or voice recording directly from the terminal.',
     ]},
     zh: { title: 'Liquid Glass UI 升级', items: [
       '首页、项目页、更新、账号菜单和输入框统一为更克制的 Liquid Glass 风格，同时优化了切换速度和移动端/iOS 安全区适配。',
+      'Makaron CLI 现在支持 `--audio`，可以把音乐、节拍或录音作为参考音频传给视频生成，让视频跟着声音走。',
     ]},
   },
   {
@@ -693,6 +814,7 @@ const iOSAppTopGap = 'max(96px, calc(env(safe-area-inset-top, 0px) + 40px))';
 const iOSAppBottomGap = 'max(14px, env(safe-area-inset-bottom, 0px))';
 
 export default function Changelog({ onClose, locale }: { onClose: () => void; locale: string }) {
+  // Release notes stay bilingual: Simplified Chinese uses zh, every other locale falls back to en.
   const isZh = locale === 'zh';
   const [isIOSApp, setIsIOSApp] = useState(false);
 
@@ -814,10 +936,39 @@ export default function Changelog({ onClose, locale }: { onClose: () => void; lo
                 {loc.link && (
                   <a
                     href={loc.link.href}
-                    className="inline-block mt-2 ml-1 text-[12.5px] font-medium"
-                    style={{ color: 'rgba(232,121,249,0.88)' }}
+                    className={loc.link.variant === 'button'
+                      ? 'group inline-flex mt-3 ml-1 h-10 min-w-[128px] items-center justify-center rounded-[11px] px-2.5 text-left'
+                      : 'inline-block mt-2 ml-1 text-[12.5px] font-medium'
+                    }
+                    style={loc.link.variant === 'button' ? {
+                      color: 'rgba(255,255,255,0.96)',
+                      background:
+                        'linear-gradient(180deg, rgba(21,22,26,0.98), rgba(3,4,7,0.96))',
+                      border: '0.5px solid rgba(255,255,255,0.18)',
+                      boxShadow:
+                        '0 16px 34px rgba(0,0,0,0.34), inset 0 0.5px 0 rgba(255,255,255,0.24), inset 0 -10px 18px rgba(255,255,255,0.025)',
+                      backdropFilter: 'blur(18px) saturate(140%)',
+                      WebkitBackdropFilter: 'blur(18px) saturate(140%)',
+                    } : { color: 'rgba(232,121,249,0.88)' }}
                   >
-                    {loc.link.label}
+                    {loc.link.variant === 'button' ? (
+                      <span className="flex items-center gap-1.5">
+                        <img
+                          src="/brand/makaron-app-icon-512.png"
+                          alt=""
+                          className="h-6 w-6 rounded-[6px]"
+                          style={{ boxShadow: '0 1px 6px rgba(0,0,0,0.32)' }}
+                        />
+                        <span className="flex flex-col leading-none">
+                          <span className="text-[8.5px] font-medium tracking-[0px]" style={{ color: 'rgba(255,255,255,0.58)' }}>
+                            {isZh ? '立即前往' : 'Download on the'}
+                          </span>
+                          <span className="mt-1 text-[14px] font-semibold tracking-[0px]" style={{ color: 'rgba(255,255,255,0.96)' }}>
+                            {isZh ? 'App Store' : 'App Store'}
+                          </span>
+                        </span>
+                      </span>
+                    ) : loc.link.label}
                   </a>
                 )}
               </div>

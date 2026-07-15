@@ -27,6 +27,7 @@ const APP_URL = process.env.MAKARON_APP_URL || DEFAULT_URL;
 const NPM_PACKAGE_NAME = 'makaron-cli';
 const UPDATE_CHECK_INTERVAL_MS = 24 * 60 * 60 * 1000;
 const UPDATE_CHECK_TIMEOUT_MS = 400;
+const AGENT_MODELS = ['auto', 'sonnet-4.6', 'sonnet-5', 'opus-4.8', 'grok-4.5', 'deepseek-v4-pro'];
 
 // Public anon key (safe to embed — only enables auth, not data access)
 const SUPABASE_URL = 'https://sdyrtztrjgmmpnirswxt.supabase.co';
@@ -49,6 +50,18 @@ const SEEDANCE_MIN_VIDEO_SIDE = 300;
 const SEEDANCE_MAX_VIDEO_SIDE = 6000;
 const SEEDANCE_MIN_VIDEO_ASPECT = 0.4;
 const SEEDANCE_MAX_VIDEO_ASPECT = 2.5;
+
+function warnLegacyModelFlag(replacement) {
+  process.stderr.write(`⚠️  --model is deprecated here; use ${replacement}.\n`);
+}
+
+function validateAgentModel(value) {
+  if (!AGENT_MODELS.includes(value)) {
+    process.stderr.write(`❌ Unknown agent model: ${value}\nChoose one of: ${AGENT_MODELS.join(', ')}\n`);
+    process.exit(1);
+  }
+  return value;
+}
 
 function getCliVersion() {
   try {
@@ -142,6 +155,11 @@ function formatSeconds(seconds) {
   return Number.isInteger(seconds) ? String(seconds) : seconds.toFixed(1).replace(/\.0$/, '');
 }
 
+function readJsonInput(filePath) {
+  const raw = filePath === '-' ? fs.readFileSync(0, 'utf-8') : fs.readFileSync(filePath, 'utf-8');
+  return JSON.parse(raw);
+}
+
 // ─── Auth ────────────────────────────────────────────────────────────────────
 
 function loadAuth() {
@@ -193,15 +211,6 @@ async function login() {
   saveAuth(tokenJson);
   console.error(`✅ Logged in as ${email}`);
   console.error(`   Token saved to ${AUTH_FILE}`);
-}
-
-function getAuthCookie() {
-  const auth = loadAuth();
-  if (!auth) {
-    console.error('Not logged in. Run: npx makaron-cli login');
-    process.exit(1);
-  }
-  return { cookie: buildCookie(auth), baseUrl: process.env.MAKARON_URL || auth._baseUrl || BASE_URL };
 }
 
 function getAuth() {
@@ -279,10 +288,11 @@ Options:
   --project <id|auto>       Project to work in. Use "auto" to create one.
   --image <file|url>        Attach a reference image or screenshot. Repeatable.
   --video <file|url>        Attach a video to the project timeline. Repeatable.
-  --audio <file|url>        Attach reference audio/music for this turn. MP3/WAV, repeatable.
+  --audio <file|url>        Attach a song, beat, or voice reference. MP3/WAV, repeatable.
   --skill <id|label|name>   Use an installed skill or auto-install a matched marketplace skill.
-  --model <name>            Preferred image/model route.
-  --video-model <name>      Preferred video model: seedance-fast, seedance-mini, seedance, kling, or grok.
+  --image-model <name>      Image model: gemini, gemini-lite, qwen, openai, pony, or wai.
+  --video-model <name>      Preferred video model: seedance-fast, seedance-mini, seedance, kling, grok, or google-omni.
+  --agent-model <name>      Agent model: auto, sonnet-4.6, sonnet-5, opus-4.8, grok-4.5, or deepseek-v4-pro.
   --video-resolution <res>  Video resolution: auto, 480p, 720p, 1080p, or 4k.
   --background, -b          Submit and print a runId.
   --json                    Output structured JSON.
@@ -337,7 +347,7 @@ async function abortRun(baseUrl, headers, runId) {
   } catch { /* best effort */ }
 }
 
-async function streamAgent(baseUrl, headers, projectId, prompt) {
+async function streamAgent(baseUrl, headers, projectId, prompt, opts = {}) {
   const controller = new AbortController();
   const res = await fetch(`${baseUrl}/api/agent`, {
     method: 'POST',
@@ -349,6 +359,10 @@ async function streamAgent(baseUrl, headers, projectId, prompt) {
       projectId,
       prompt,
       headless: true,
+      ...(opts.preferredModel ? { preferredModel: opts.preferredModel } : {}),
+      ...(opts.videoModel ? { videoModel: opts.videoModel } : {}),
+      ...(opts.videoResolution ? { videoResolution: opts.videoResolution } : {}),
+      ...(opts.agentModel && opts.agentModel !== 'auto' ? { agentModel: opts.agentModel } : {}),
     }),
     signal: controller.signal,
   });
@@ -456,6 +470,7 @@ async function streamAgent(baseUrl, headers, projectId, prompt) {
 async function submitRun(baseUrl, headers, projectId, prompt, opts = {}) {
   const body = { projectId, prompt };
   if (opts.preferredModel) body.preferredModel = opts.preferredModel;
+  if (opts.agentModel && opts.agentModel !== 'auto') body.agentModel = opts.agentModel;
   if (opts.videoModel) body.videoModel = opts.videoModel;
   if (opts.videoResolution) body.videoResolution = opts.videoResolution;
   if (opts.currentSnapshotIndex != null) body.currentSnapshotIndex = opts.currentSnapshotIndex;
@@ -478,7 +493,14 @@ async function submitRun(baseUrl, headers, projectId, prompt, opts = {}) {
 }
 
 async function pollRun(baseUrl, headers, runId, opts = {}) {
-  const { json = false, waitForArtifacts = false, background = false } = opts;
+  const {
+    json = false,
+    waitForArtifacts = false,
+    background = false,
+    exportCompositions = false,
+    publishExports = false,
+    returnDataOnly = false,
+  } = opts;
   if (background) return;
 
   let lastSeq = -1;
@@ -559,11 +581,17 @@ async function pollRun(baseUrl, headers, runId, opts = {}) {
     // Check terminal status
     if (data.status === 'completed' || data.status === 'failed' || data.status === 'aborted') {
       if (printedText && !json) process.stdout.write('\n');
+      if (data.status === 'completed' && exportCompositions) {
+        data = await exportAnimatedCompositionsFromRun(baseUrl, headers, data, {
+          publish: publishExports,
+          quiet: json || returnDataOnly,
+        });
+      }
 
-      if (json) {
+      if (json && !returnDataOnly) {
         // Structured JSON output — add projectUrl
         console.log(JSON.stringify(normalizeRunResponse(data), null, 2));
-      } else {
+      } else if (!returnDataOnly) {
         process.stderr.write('\n━━━ Results ━━━\n');
         if (data.result) {
           for (const img of data.result.images || []) process.stderr.write(`🖼️  Image: ${img.imageUrl}\n`);
@@ -777,7 +805,7 @@ async function listProjectMedia(baseUrl, headers, projectId, opts = {}) {
   if (!res.ok) { console.error('Project media failed:', await res.text()); process.exit(1); }
   const data = await res.json();
   if (opts.json) {
-    console.log(JSON.stringify(data, null, 2));
+    if (!opts.silent) console.log(JSON.stringify(data, null, 2));
     return data;
   }
 
@@ -797,6 +825,158 @@ async function listProjectMedia(baseUrl, headers, projectId, opts = {}) {
     const url = item.url ? `\n      ${item.url}` : '';
     console.log(`  ${String(item.index).padStart(2)}. ${ref} [${item.type}${status}${duration}${dimensions}]${description}${url}`);
   }
+  return data;
+}
+
+async function pollRemotionExport(baseUrl, headers, jobId, opts = {}) {
+  const start = Date.now();
+  while (true) {
+    const res = await fetch(`${baseUrl}/api/remotion/export/${jobId}`, { headers });
+    if (!res.ok) { process.stderr.write(`Export status failed ${res.status}: ${await res.text()}\n`); process.exit(1); }
+    const data = await res.json();
+    if (data.status === 'completed' || data.status === 'failed') {
+      if (opts.json) {
+        console.log(JSON.stringify(data, null, 2));
+      } else if (data.status === 'completed') {
+        const duration = typeof data.duration_seconds === 'number' ? `${data.duration_seconds.toFixed(2)}s` : 'unknown';
+        const render = typeof data.render_seconds === 'number' ? `${data.render_seconds.toFixed(2)}s` : 'unknown';
+        const ratio = typeof data.realtime_ratio === 'number' ? data.realtime_ratio.toFixed(2) : 'unknown';
+        if (!opts.quiet) {
+          process.stderr.write(`✅ Export complete\n`);
+          process.stderr.write(`   Video duration: ${duration}\n`);
+          process.stderr.write(`   Export time: ${render}\n`);
+          process.stderr.write(`   Duration/export ratio: ${ratio}:1\n`);
+          console.log(data.url || data.storageUrl || '');
+        }
+      } else if (!opts.quiet) {
+        process.stderr.write(`❌ Export failed: ${data.error || 'unknown error'}\n`);
+      }
+      if (data.status === 'failed') process.exit(1);
+      return data;
+    }
+
+    const elapsed = Math.round((Date.now() - start) / 1000);
+    const pct = typeof data.progress === 'number' ? ` ${(data.progress * 100).toFixed(0)}%` : '';
+    if (!opts.quiet) process.stderr.write(`\r🎬 Export ${data.status}${pct} (${elapsed}s)`);
+    await new Promise(r => setTimeout(r, data.next_poll_after_ms || 3000));
+  }
+}
+
+async function exportComposition(baseUrl, headers, opts = {}) {
+  const body = {
+    projectId: opts.projectId,
+    snapshotId: opts.snapshotId,
+    designPath: opts.designPath,
+    design: opts.design,
+    outputType: opts.outputType || 'video',
+    renderProfile: opts.renderProfile || 'fast_720p',
+    publish: opts.publish === true,
+    name: opts.name,
+  };
+
+  if (opts.mediaIndex) {
+    if (!body.projectId) {
+      process.stderr.write('Usage: makaron materialize --project <id> --media <N> [--wait] [--publish] [--name <slug>] [--json]\n');
+      process.exit(1);
+    }
+    const mediaData = await listProjectMedia(baseUrl, headers, opts.projectId, { json: true, silent: true });
+    const item = (mediaData.media || []).find(m => Number(m.index) === Number(opts.mediaIndex));
+    if (!item) {
+      process.stderr.write(`No media item at index ${opts.mediaIndex}\n`);
+      process.exit(1);
+    }
+    if (item.type !== 'composition' && !item.codePath) {
+      process.stderr.write(`Media ${opts.mediaIndex} is ${item.type}, not a Remotion composition.\n`);
+      process.exit(1);
+    }
+    body.snapshotId = item.snapshotId || item.snapshot_id;
+    body.designPath = item.codePath || item.designPath || body.designPath;
+  }
+
+  if (!body.projectId || (!body.snapshotId && !body.designPath && !body.design)) {
+    process.stderr.write('Usage: makaron materialize --project <id> (--media <N> | --snapshot <snapshotId> | --design-path <path> | --design-json <file|->) [--wait] [--publish] [--name <slug>] [--json]\n');
+    process.exit(1);
+  }
+
+  const res = await fetch(`${baseUrl}/api/remotion/export`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...headers },
+    body: JSON.stringify(body),
+  });
+  const data = await res.json();
+  if (!res.ok) {
+    process.stderr.write(`Export failed ${res.status}: ${JSON.stringify(data)}\n`);
+    process.exit(1);
+  }
+
+  if (opts.wait) {
+    if (!opts.quiet) process.stderr.write(`🎬 Export queued: ${data.jobId || data.id}\n`);
+    return pollRemotionExport(baseUrl, headers, data.jobId || data.id, { json: opts.json, quiet: opts.quiet });
+  }
+
+  if (!opts.quiet) {
+    if (opts.json) console.log(JSON.stringify(data, null, 2));
+    else console.log(data.jobId || data.id);
+  }
+  return data;
+}
+
+function pickExportValue(data, pick) {
+  if (!pick) return undefined;
+  if (pick === 'url' || pick === 'video_url' || pick === 'first_video_url') return data.url || data.storageUrl || data.storage_url;
+  if (pick === 'job_id' || pick === 'id') return data.jobId || data.id;
+  if (pick === 'workspace_path') return data.workspacePath || data.workspace_path;
+  if (pick === 'status') return data.status;
+  if (pick === 'output') return data;
+  return data[pick];
+}
+
+async function exportAnimatedCompositionsFromRun(baseUrl, headers, data, opts = {}) {
+  const projectId = data.projectId || data.project_id;
+  if (!projectId) return data;
+  const designs = (data.output || []).filter(o => o.type === 'design' && o.animated && o.snapshot_id);
+  if (!designs.length) return data;
+
+  const exported = [];
+  for (const design of designs) {
+    if (!opts.quiet) process.stderr.write(`\n🎬 Exporting composition snapshot ${design.snapshot_id}...\n`);
+    const job = await exportComposition(baseUrl, headers, {
+      projectId,
+      snapshotId: design.snapshot_id,
+      wait: true,
+      publish: opts.publish === true,
+      name: `run-${data.id || 'composition'}-${design.snapshot_id}`,
+      quiet: opts.quiet,
+    });
+    exported.push(job);
+    if (job?.url || job?.storageUrl) {
+      data.output = data.output || [];
+      data.output.push({
+        id: `export_${job.id}`,
+        type: 'video',
+        status: 'completed',
+        url: job.url || job.storageUrl,
+        export_job_id: job.id,
+        source_snapshot_id: design.snapshot_id,
+        duration: job.duration_seconds,
+        render_seconds: job.render_seconds,
+        realtime_ratio: job.realtime_ratio,
+        width: job.width,
+        height: job.height,
+      });
+      data.result = data.result || {};
+      data.result.videos = data.result.videos || [];
+      data.result.videos.push({
+        taskId: `remotion-export-${job.id}`,
+        status: 'completed',
+        videoUrl: job.url || job.storageUrl,
+        duration: job.duration_seconds,
+        renderSeconds: job.render_seconds,
+        realtimeRatio: job.realtime_ratio,
+      });
+    }
+  }
+  data.remotion_exports = exported;
   return data;
 }
 
@@ -1366,12 +1546,19 @@ Commands:
   chat --project <id> "message"      Chat (non-blocking, polls for result)
   chat --project <id> --skill <id>   Use or auto-install a marketplace skill
   chat --project <id> --video <file> Attach video to conversation
+  chat --project <id> --audio <file> Attach song/beat/voice reference
   chat --project <id> -b "message"   Background: submit and print runId
   chat --project <id> --stream "msg" Legacy: stream SSE in real-time
   chat --project <id> --json "msg"   Output structured JSON result
 
   responses get <runId>              Get run status and results
   responses get <runId> --wait       Poll until completed
+  responses get <runId> --materialize --wait --pick first_video_url
+                                     Export and publish Remotion compositions as MP4
+  materialize --project <id> --media <N> --pick url
+                                     Convert editable composition/JSON to MP4
+  composition export --project <id> --media <N> --wait
+                                     Export editable Remotion composition to MP4
   responses list --project <id>      List runs for a project
   abort <runId>                      Abort a running Agent
   skills list|search|show|install    Browse and install marketplace skills
@@ -1383,9 +1570,26 @@ Commands:
 
   admin                              Admin commands (skills, upload, set-admin)
 
+Model selection:
+  --agent-model <name>               Reasoning/tool model: auto, sonnet-4.6, sonnet-5,
+                                     opus-4.8, grok-4.5, or deepseek-v4-pro
+  --image-model <name>               Image model: gemini, gemini-lite, qwen, openai,
+                                     pony, or wai
+  --video-model <name>               Video model: seedance-fast, seedance-mini, seedance,
+                                     kling, grok, or google-omni
+
+Examples:
+  makaron chat --project auto --agent-model deepseek-v4-pro "plan a launch poster"
+  makaron chat --project <id> --agent-model sonnet-5 --image-model qwen "make it cinematic"
+  makaron chat --project <id> --video-model seedance-fast "turn this into a short video"
+
+Run makaron <command> --help for command-specific options.
+The legacy --model flag is deprecated; use the role-specific flags above.
+
 Environment:
-  MAKARON_API_KEY  API key (mk_live_xxx) — recommended for agents
-  MAKARON_URL      API base (default: ${DEFAULT_URL})
+  MAKARON_API_KEY       API key (mk_live_xxx) — recommended for agents
+  MAKARON_URL           API base (default: ${DEFAULT_URL})
+  MAKARON_AGENT_MODEL   Default Agent model; --agent-model takes precedence
 `);
 }
 
@@ -1440,13 +1644,17 @@ function printHelp(topic, subtopic) {
   } else if (topic === 'chat') {
     printChatHelp();
   } else if (topic === 'responses' || topic === 'run') {
-    if (subtopic === 'get') console.log('Usage: makaron responses get <runId> [--wait] [--json] [--pick <field>]');
+    if (subtopic === 'get') console.log('Usage: makaron responses get <runId> [--wait] [--json] [--pick <field>] [--materialize|--export-compositions] [--publish-exports]');
     else if (subtopic === 'watch') console.log('Usage: makaron responses watch <runId> [--jsonl] [--interval <ms>]');
     else if (subtopic === 'list') console.log('Usage: makaron responses list --project <id>');
     else console.log(`Responses commands:
   responses get <runId>                  Get status and output (JSON)
   responses get <runId> --wait           Poll until completed
   responses get <runId> --pick <field>   Extract: first_image_url, first_video_url, project_url, output
+  responses get <runId> --export-compositions --wait --pick first_video_url
+                                            Export animated compositions before picking video URL
+  responses get <runId> --materialize --wait --pick first_video_url
+                                            Export and publish animated compositions as MP4
   responses watch <runId> --jsonl        Watch until done (incremental events)
   responses list --project <id>          List runs for a project
 `);
@@ -1477,18 +1685,29 @@ function printHelp(topic, subtopic) {
 Use with chat:
   makaron chat --project auto --skill <id|label> "your request"
 `);
+  } else if (topic === 'materialize') {
+    console.log(`Usage: makaron materialize --project <id> (--media <N> | --snapshot <snapshotId> | --design-path <path> | --design-json <file|->) [--wait] [--publish|--no-publish] [--profile fast_720p|source] [--pick url|job_id|status]`);
+  } else if (topic === 'composition' || topic === 'compositions') {
+    console.log(`Composition commands:
+  composition export --project <id> --media <N> --wait
+  composition export --project <id> --snapshot <snapshotId> --wait
+  composition export --project <id> --design-path <path> --wait
+  composition export --project <id> --design-json composition.json --wait
+  composition status <jobId> [--wait] [--json]
+`);
   } else if (topic === 'edit') {
-    console.log('Usage: makaron edit [--image <file|url>] [--model gemini|qwen|openai] [--skill enhance|creative|wild|captions] [--ref <file>] [--out <file>] "prompt"');
+    console.log('Usage: makaron edit [--image <file|url>] [--image-model gemini|gemini-lite|qwen|openai|pony|wai] [--skill enhance|creative|wild|captions] [--ref <file>] [--out <file>] "prompt"');
   } else if (topic === 'analyze') {
     console.log('Usage: makaron analyze --video <file|url> ["question"]');
   } else if (topic === 'video') {
     if (subtopic === 'script') console.log('Usage: makaron video script --image <file> [--image <file>] [--lang en|zh] "direction"');
-    else if (subtopic === 'create') console.log('Usage: makaron video create --script "..." (--image <url> | --video <public-url>) [--duration 10] [--aspect 9:16] [--model seedance-fast|seedance-mini|seedance|kling|grok] [--video-resolution auto|480p|720p|1080p|4k] [--keep-original-sound]');
+    else if (subtopic === 'create') console.log('Usage: makaron video create --script "..." [--image <url> | --video <public-url>] [--duration 10] [--aspect 9:16] [--video-model seedance-fast|seedance-mini|seedance|kling|grok|google-omni] [--video-resolution auto|480p|720p|1080p|4k] [--keep-original-sound]');
     else if (subtopic === 'status') console.log('Usage: makaron video status <taskId> | --snapshot <snapshotId> [--wait]');
     else console.log(`Video commands:
   video script --image <file> [--image <file>] "direction"   Write video script
+  video create --script "..." --video-model seedance-fast    Native text-to-video (no image required)
   video create --script "..." --image <url> [--duration 10]  Submit video task
-  video create --script "..." --video <public-url> [--model seedance-fast|seedance-mini|seedance|kling]  Edit a video (standalone; Grok does not support video refs)
+  video create --script "..." --video <public-url> [--video-model seedance-fast|seedance-mini|seedance|kling|google-omni]  Edit a video (standalone; Grok does not support video refs)
   video status <taskId>                                      Check video status
   video status --snapshot <snapshotId> [--wait]              Check v2 video snapshot
 `);
@@ -1574,6 +1793,7 @@ if (!command || command === '--help' || command === '-h' || command === 'help') 
   let videoModel = undefined;
   let videoResolution = undefined;
   let preferredModel = undefined;
+  let agentModel = process.env.MAKARON_AGENT_MODEL || 'auto';
   for (let i = 1; i < args.length; i++) {
     if (args[i] === '--project' && args[i + 1]) projectId = args[++i];
     else if (args[i] === '--image' && args[i + 1]) chatImages.push(args[++i]);
@@ -1586,7 +1806,12 @@ if (!command || command === '--help' || command === '-h' || command === 'help') 
     else if (args[i] === '--json') jsonOutput = true;
     else if (args[i] === '--video-model' && args[i + 1]) videoModel = args[++i];
     else if (args[i] === '--video-resolution' && args[i + 1]) videoResolution = args[++i];
-    else if (args[i] === '--model' && args[i + 1]) preferredModel = args[++i];
+    else if (args[i] === '--image-model' && args[i + 1]) preferredModel = args[++i];
+    else if (args[i] === '--agent-model' && args[i + 1]) agentModel = args[++i];
+    else if (args[i] === '--model' && args[i + 1]) {
+      warnLegacyModelFlag('--image-model');
+      preferredModel = args[++i];
+    }
     else promptParts.push(args[i]);
   }
   const prompt = promptParts.join(' ');
@@ -1595,6 +1820,7 @@ if (!command || command === '--help' || command === '-h' || command === 'help') 
     console.error('Run: makaron chat --help');
     process.exit(1);
   }
+  agentModel = validateAgentModel(agentModel);
   const { headers, baseUrl } = getAuth();
   // Split images into URLs vs local files
   const imageUrlList = chatImages.filter(p => p.startsWith('http://') || p.startsWith('https://'));
@@ -1780,7 +2006,7 @@ if (!command || command === '--help' || command === '-h' || command === 'help') 
 
   if (useStream) {
     // Legacy SSE mode
-    const { results } = await streamAgent(baseUrl, headers, projectId, finalPrompt);
+    const { results } = await streamAgent(baseUrl, headers, projectId, finalPrompt, { videoModel, videoResolution, preferredModel, agentModel });
     process.stderr.write('\n━━━ Results ━━━\n');
     for (const img of results.images) process.stderr.write(`🖼️  Image: ${img.imageUrl}\n`);
     for (const d of results.designs) process.stderr.write(`🎨  ${d.desc}\n`);
@@ -1789,7 +2015,7 @@ if (!command || command === '--help' || command === '-h' || command === 'help') 
     for (const task of results.musicTasks) await pollMusic(baseUrl, headers, task.taskId);
   } else {
     // Default: fire-and-forget + poll
-    const { runId } = await submitRun(baseUrl, headers, projectId, finalPrompt, { videoModel, videoResolution, preferredModel, audioAttachments });
+    const { runId } = await submitRun(baseUrl, headers, projectId, finalPrompt, { videoModel, videoResolution, preferredModel, agentModel, audioAttachments });
     if (background) {
       // Just print runId and exit
       if (jsonOutput) {
@@ -1808,20 +2034,41 @@ if (!command || command === '--help' || command === '-h' || command === 'help') 
 
   if (sub === 'get') {
     const runId = args[2];
-    if (!runId) { console.error('Usage: makaron responses get <runId> [--wait] [--json] [--pick <field>]'); process.exit(1); }
-    let wait = false, pick = null;
+    if (!runId) { console.error('Usage: makaron responses get <runId> [--wait] [--json] [--pick <field>] [--materialize|--export-compositions]'); process.exit(1); }
+    let wait = false, jsonOutput = false, pick = null, exportCompositions = false, publishExports = false;
     for (let i = 3; i < args.length; i++) {
       if (args[i] === '--wait') wait = true;
+      if (args[i] === '--json') jsonOutput = true;
+      if (args[i] === '--export-compositions') exportCompositions = true;
+      if (args[i] === '--materialize') {
+        exportCompositions = true;
+        publishExports = true;
+      }
+      if (args[i] === '--publish-exports') publishExports = true;
       if (args[i] === '--pick' && args[i + 1]) pick = args[++i];
     }
 
     if (wait) {
-      await pollRun(baseUrl, headers, runId, { json: true });
+      const data = await pollRun(baseUrl, headers, runId, {
+        json: true,
+        exportCompositions,
+        publishExports,
+        returnDataOnly: !!pick || !jsonOutput,
+      });
+      if (pick) {
+        const picked = applyPick(data, pick);
+        if (picked !== undefined) console.log(typeof picked === 'string' ? picked : JSON.stringify(picked));
+      } else if (!jsonOutput) {
+        console.log(JSON.stringify(data, null, 2));
+      }
     } else {
       const res = await fetch(`${baseUrl}/api/agent/run/${runId}`, { headers });
       if (!res.ok) { process.stderr.write(`Error ${res.status}: ${await res.text()}\n`); process.exit(1); }
-      const data = await res.json();
+      let data = await res.json();
       normalizeRunResponse(data);
+      if (exportCompositions && data.status === 'completed') {
+        data = await exportAnimatedCompositionsFromRun(baseUrl, headers, data, { publish: publishExports, quiet: jsonOutput || !!pick });
+      }
       if (pick) {
         const picked = applyPick(data, pick);
         if (picked !== undefined) console.log(typeof picked === 'string' ? picked : JSON.stringify(picked));
@@ -1864,6 +2111,10 @@ if (!command || command === '--help' || command === '-h' || command === 'help') 
   responses get <runId>                  Get status and output (JSON)
   responses get <runId> --wait           Poll until completed
   responses get <runId> --pick <field>   Extract: first_image_url, first_video_url, project_url, output
+  responses get <runId> --export-compositions --wait --pick first_video_url
+                                            Export animated compositions before picking video URL
+  responses get <runId> --materialize --wait --pick first_video_url
+                                            Export and publish animated compositions as MP4
   responses watch <runId> --jsonl        Watch until done (incremental events)
   responses list --project <id>          List runs for a project
 `);
@@ -1871,6 +2122,81 @@ if (!command || command === '--help' || command === '-h' || command === 'help') 
 } else if (command === 'list' || command === 'ls') {
   const { headers, baseUrl } = getAuth();
   await listProjects(baseUrl, headers);
+} else if (command === 'materialize') {
+  const { headers, baseUrl } = getAuth();
+  const opts = { wait: true, publish: true, json: false, outputType: 'video', renderProfile: 'fast_720p', pick: null, quiet: false };
+  for (let i = 1; i < args.length; i++) {
+    if (args[i] === '--project' && args[i + 1]) opts.projectId = args[++i];
+    else if (args[i] === '--media' && args[i + 1]) opts.mediaIndex = Number(args[++i]);
+    else if (args[i] === '--snapshot' && args[i + 1]) opts.snapshotId = args[++i];
+    else if (args[i] === '--design-path' && args[i + 1]) opts.designPath = args[++i];
+    else if (args[i] === '--design-json' && args[i + 1]) opts.design = readJsonInput(args[++i]);
+    else if (args[i] === '--name' && args[i + 1]) opts.name = args[++i];
+    else if (args[i] === '--type' && args[i + 1]) opts.outputType = args[++i];
+    else if (args[i] === '--profile' && args[i + 1]) opts.renderProfile = args[++i];
+    else if (args[i] === '--render-profile' && args[i + 1]) opts.renderProfile = args[++i];
+    else if (args[i] === '--no-publish') opts.publish = false;
+    else if (args[i] === '--publish') opts.publish = true;
+    else if (args[i] === '--no-wait') opts.wait = false;
+    else if (args[i] === '--wait') opts.wait = true;
+    else if (args[i] === '--json') opts.json = true;
+    else if (args[i] === '--pick' && args[i + 1]) opts.pick = args[++i];
+  }
+  if (opts.pick) opts.quiet = true;
+  const data = await exportComposition(baseUrl, headers, opts);
+  if (opts.pick) {
+    const picked = pickExportValue(data, opts.pick);
+    if (picked !== undefined) console.log(typeof picked === 'string' ? picked : JSON.stringify(picked));
+  }
+} else if (command === 'composition' || command === 'compositions') {
+  const { headers, baseUrl } = getAuth();
+  const sub = args[1];
+  if (sub === 'export') {
+    const opts = { wait: false, publish: false, json: false, outputType: 'video', renderProfile: 'fast_720p', pick: null, quiet: false };
+    for (let i = 2; i < args.length; i++) {
+      if (args[i] === '--project' && args[i + 1]) opts.projectId = args[++i];
+      else if (args[i] === '--media' && args[i + 1]) opts.mediaIndex = Number(args[++i]);
+      else if (args[i] === '--snapshot' && args[i + 1]) opts.snapshotId = args[++i];
+      else if (args[i] === '--design-path' && args[i + 1]) opts.designPath = args[++i];
+      else if (args[i] === '--design-json' && args[i + 1]) opts.design = readJsonInput(args[++i]);
+      else if (args[i] === '--name' && args[i + 1]) opts.name = args[++i];
+      else if (args[i] === '--type' && args[i + 1]) opts.outputType = args[++i];
+      else if (args[i] === '--profile' && args[i + 1]) opts.renderProfile = args[++i];
+      else if (args[i] === '--render-profile' && args[i + 1]) opts.renderProfile = args[++i];
+      else if (args[i] === '--publish') opts.publish = true;
+      else if (args[i] === '--wait') opts.wait = true;
+      else if (args[i] === '--json') opts.json = true;
+      else if (args[i] === '--pick' && args[i + 1]) opts.pick = args[++i];
+    }
+    if (opts.pick) opts.quiet = true;
+    const data = await exportComposition(baseUrl, headers, opts);
+    if (opts.pick) {
+      const picked = pickExportValue(data, opts.pick);
+      if (picked !== undefined) console.log(typeof picked === 'string' ? picked : JSON.stringify(picked));
+    }
+  } else if (sub === 'status') {
+    const jobId = args[2];
+    if (!jobId) { console.error('Usage: makaron composition status <jobId> [--wait] [--json]'); process.exit(1); }
+    const wait = args.includes('--wait');
+    const json = args.includes('--json');
+    if (wait) await pollRemotionExport(baseUrl, headers, jobId, { json });
+    else {
+      const res = await fetch(`${baseUrl}/api/remotion/export/${jobId}`, { headers });
+      if (!res.ok) { process.stderr.write(`Export status failed ${res.status}: ${await res.text()}\n`); process.exit(1); }
+      const data = await res.json();
+      if (json) console.log(JSON.stringify(data, null, 2));
+      else console.log(`${data.id}  ${data.status}  ${data.url || ''}`);
+      if (data.status === 'failed') process.exit(1);
+    }
+  } else {
+    console.log(`Composition commands:
+  composition export --project <id> --media <N> --wait
+  composition export --project <id> --snapshot <snapshotId> --wait
+  composition export --project <id> --design-path <path> --wait
+  composition export --project <id> --design-json composition.json --wait
+  composition status <jobId> [--wait] [--json]
+`);
+  }
 } else if (command === 'skills') {
   const sub = args[1] || 'list';
   const baseUrl = process.env.MAKARON_URL || DEFAULT_URL;
@@ -1956,7 +2282,11 @@ if (!command || command === '--help' || command === '-h' || command === 'help') 
   let outputPath = null;
   for (let i = 1; i < args.length; i++) {
     if (args[i] === '--image' && args[i + 1]) editArgs.image = imageToArg(args[++i]);
-    else if (args[i] === '--model' && args[i + 1]) editArgs.model = args[++i];
+    else if (args[i] === '--image-model' && args[i + 1]) editArgs.model = args[++i];
+    else if (args[i] === '--model' && args[i + 1]) {
+      warnLegacyModelFlag('--image-model');
+      editArgs.model = args[++i];
+    }
     else if (args[i] === '--skill' && args[i + 1]) editArgs.skill = args[++i];
     else if (args[i] === '--ref' && args[i + 1]) {
       editArgs.referenceImages = editArgs.referenceImages || [];
@@ -1967,7 +2297,7 @@ if (!command || command === '--help' || command === '-h' || command === 'help') 
     else promptParts.push(args[i]);
   }
   editArgs.editPrompt = promptParts.join(' ');
-  if (!editArgs.editPrompt) { console.error('Usage: makaron edit [--image <file|url>] [--model gemini|qwen|openai] [--ref <file>] [--out <file>] "prompt"'); process.exit(1); }
+  if (!editArgs.editPrompt) { console.error('Usage: makaron edit [--image <file|url>] [--image-model gemini|gemini-lite|qwen|openai|pony|wai] [--ref <file>] [--out <file>] "prompt"'); process.exit(1); }
   process.stderr.write('🎨 Generating...\n');
   const result = await callMcpTool(baseUrl, headers, 'makaron_edit_image', editArgs);
   saveMcpImage(result, outputPath);
@@ -2012,7 +2342,11 @@ if (!command || command === '--help' || command === '-h' || command === 'help') 
       else if (args[i] === '--script-file' && args[i + 1]) script = fs.readFileSync(args[++i], 'utf-8');
       else if (args[i] === '--duration' && args[i + 1]) duration = Number(args[++i]);
       else if (args[i] === '--aspect' && args[i + 1]) aspectRatio = args[++i];
-      else if (args[i] === '--model' && args[i + 1]) videoModel = args[++i];
+      else if (args[i] === '--video-model' && args[i + 1]) videoModel = args[++i];
+      else if (args[i] === '--model' && args[i + 1]) {
+        warnLegacyModelFlag('--video-model');
+        videoModel = args[++i];
+      }
       else if (args[i] === '--video-resolution' && args[i + 1]) videoResolution = args[++i];
       else if (args[i] === '--resolution' && args[i + 1]) videoResolution = args[++i];
       else if (args[i] === '--keep-original-sound') keepOriginalSound = true;
@@ -2022,8 +2356,10 @@ if (!command || command === '--help' || command === '-h' || command === 'help') 
       }
       else if (args[i] === '--wait') wait = true;
     }
-    if ((!images.length && !video) || !script) {
-      console.error('Usage: makaron video create --script "..." (--image <url> | --video <public-url>) [--duration 10] [--aspect 9:16] [--model seedance-fast|seedance-mini|seedance|kling|grok] [--video-resolution auto|480p|720p|1080p|4k] [--keep-original-sound]');
+    const selectedVideoModel = videoModel || 'seedance-fast';
+    const isSeedanceModel = selectedVideoModel === 'seedance-fast' || selectedVideoModel === 'seedance-mini' || selectedVideoModel === 'seedance';
+    if (!script || (!images.length && !video && !isSeedanceModel)) {
+      console.error('Usage: makaron video create --script "..." [--image <url> | --video <public-url>] [--duration 10] [--aspect 9:16] [--video-model seedance-fast|seedance-mini|seedance|kling|grok|google-omni] [--video-resolution auto|480p|720p|1080p|4k] [--keep-original-sound]');
       process.exit(1);
     }
 
@@ -2034,9 +2370,8 @@ if (!command || command === '--help' || command === '-h' || command === 'help') 
 
     let videoUrl = isHttpUrl(video) ? video : null;
     let inputVideoMeta = null;
-    const selectedVideoModel = videoModel || 'seedance-fast';
     if (videoUrl) {
-      process.stderr.write(`📹 Assuming public video URL already matches provider reference limits. Seedance requires ≤${MAX_VIDEO_PROVIDER_REFERENCE_DURATION}s, ≤50MB, sides 300-6000px, frame pixels 409,600-${MAX_VIDEO_FRAME_PIXELS}; Kling requires ≤200MB and ≤2K. Grok does not support video references.\n`);
+      process.stderr.write(`📹 Assuming public video URL already matches provider reference limits. Seedance requires ≤${MAX_VIDEO_PROVIDER_REFERENCE_DURATION}s, ≤50MB, sides 300-6000px, frame pixels 409,600-${MAX_VIDEO_FRAME_PIXELS}; Kling requires ≤200MB and ≤2K; Google Omni accepts one reference video in Makaron; Grok does not support video references.\n`);
     }
     if (video && !videoUrl) {
       const valid = validateVideoFile(video, {
@@ -2109,8 +2444,9 @@ if (!command || command === '--help' || command === '-h' || command === 'help') 
   } else {
     console.log(`Video commands:
   video script --image <file> [--image <file>] "direction"   Write video script
+  video create --script "..." --video-model seedance-fast    Native text-to-video (no image required)
   video create --script "..." --image <url> [--duration 10]  Submit video task
-  video create --script "..." --video <public-url> [--model seedance-fast|seedance-mini|seedance|kling]  Edit a video (standalone; Grok does not support video refs)
+  video create --script "..." --video <public-url> [--video-model seedance-fast|seedance-mini|seedance|kling|google-omni]  Edit a video (standalone; Grok does not support video refs)
   video status <taskId>                                      Check video status
   video status --snapshot <snapshotId> [--wait]              Check v2 video snapshot
 `);

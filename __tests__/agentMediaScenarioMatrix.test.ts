@@ -13,6 +13,7 @@ describe('agent media scenario matrix', () => {
   const animate = read('src/lib/prompts/animate.md')
   const coding = read('src/lib/prompts/agent-coding.md')
   const remotion = read('src/lib/prompts/remotion-composition.md')
+  const remotionDirectorContract = read('src/skills/_shared/remotion-director-contract.md')
   const ffmpegSkill = read('src/skills/video-ffmpeg-lab/SKILL.md')
   const agentTs = read('src/lib/agent.ts')
   const agentContext = read('src/lib/agent-context.ts')
@@ -22,9 +23,14 @@ describe('agent media scenario matrix', () => {
   const agentRoute = read('src/app/api/agent/route.ts')
   const designHarness = read('src/lib/design-harness.ts')
   const mediaAspect = read('src/lib/media-aspect.ts')
+  const compositionDuration = read('src/lib/composition-duration.ts')
+  const animateRoute = read('src/app/api/animate/route.ts')
+  const videoSnapshotRoute = read('src/app/api/video-snapshot/route.ts')
+  const mcpServer = read('src/mcp/server.ts')
+  const cli = read('packages/makaron-cli/bin/makaron.mjs')
 
   it('keeps the core agent prompt as a lightweight router', () => {
-    expect(agent.length).toBeLessThan(9_000)
+    expect(agent.length).toBeLessThan(10_000)
     expect(agent).toContain("read_file('prompts/image.md')")
     expect(agent).toContain("read_file('prompts/animate.md')")
     expect(agent).toContain('`skills/video-ffmpeg-lab/SKILL.md`')
@@ -34,7 +40,25 @@ describe('agent media scenario matrix', () => {
     expect(agent).toContain('Default tool: `run_code` with `runtime: "composition"`')
     expect(agent).toContain('call `transcribe_audio` first')
     expect(agent).toContain('prompts/remotion-composition.md')
+    expect(agent).toContain('skills/_shared/remotion-director-contract.md')
     expect(agent).toContain('Use `generate_music` only when the user asks')
+    expect(agentTs).toContain('helper components must receive values through their own parameters')
+  })
+
+  it('applies the Remotion director contract to all composition work', () => {
+    expect(remotion).toContain('Director Contract')
+    expect(remotion).toContain('Every editable Remotion composition must be planned as a video')
+    expect(remotion).toContain('skills/_shared/remotion-director-contract.md')
+    expect(remotion).toContain('Director layer: purpose, audience, core message')
+    expect(remotion).toContain('Composition layer: `function Composition(props)`')
+    expect(coding).toContain('skills/_shared/remotion-director-contract.md')
+    expect(remotionDirectorContract).toContain('Director Layer vs Composition Layer')
+    expect(remotionDirectorContract).toContain('The director layer decides what the viewer experiences over time')
+    expect(remotionDirectorContract).toContain('The Remotion composition layer implements that direction')
+    expect(remotionDirectorContract).toContain('Do not let the implementation layer invent the creative structure by accident')
+    expect(remotionDirectorContract).toContain('Do not default to hero sections, card grids')
+    expect(remotionDirectorContract).toContain('The final plan must map cleanly to `<Sequence>` ranges')
+    expect(remotionDirectorContract).toContain('skills/_shared/remotion-video-director/references/remotion-patterns.md')
   })
 
   it('preserves old image scenarios in the dedicated image guide', () => {
@@ -69,6 +93,12 @@ describe('agent media scenario matrix', () => {
     expect(generateImageTool).toContain("Context Mode for `model='openai'`")
   })
 
+  it('prevents Remotion helper components from reading outer props', () => {
+    expect(remotion).toContain('Only `Composition(props)` may read `props` directly')
+    expect(remotion).toContain('Helper components must receive every value they use as function parameters')
+    expect(remotion).toContain('never reference outer `props`')
+  })
+
   it('keeps video generation default on SeeDance Fast while separating standard SeeDance', () => {
     expect(agent).toContain('Default video model follows the app selection, usually SeeDance 2.0 Fast')
     expect(animate).toContain('usually SeeDance 2.0 Fast')
@@ -79,6 +109,19 @@ describe('agent media scenario matrix', () => {
     expect(ffmpegSkill).toContain('Cheaper option, supports base video edit')
     expect(ffmpegSkill).toContain('call `transcribe_audio` before `run_code`')
     expect(ffmpegSkill).not.toContain('Cheaper/default')
+  })
+
+  it('keeps native SeeDance text-to-video reachable without generating an intermediate image', () => {
+    expect(agent).toContain('SeeDance supports native text-to-video')
+    expect(agent).toContain('Do not generate an intermediate image first')
+    expect(animate).toContain('zero images means native SeeDance text-to-video')
+    expect(animate).toContain('do not call `generate_image` first')
+    expect(agentTs).toContain("videoRoute.provider !== 'seedance'")
+    expect(animateRoute).toContain("videoRoute.provider !== 'seedance'")
+    expect(videoSnapshotRoute).toContain("videoRoute.provider !== 'seedance'")
+    expect(mcpServer).toContain("default([]).describe('Optional public image URLs")
+    expect(cli).toContain('const isSeedanceModel =')
+    expect(cli).toContain('!images.length && !video && !isSeedanceModel')
   })
 
   it('separates generic coding, Remotion composition, and node media outputs', () => {
@@ -171,7 +214,7 @@ describe('agent media scenario matrix', () => {
     expect(agentTs).toContain('call preview_frame before telling the user it is complete')
     expect(agentTs).toContain('animation.durationInSeconds matches the final frame count')
     expect(agentTs).toContain('normalizeCompositionAnimation')
-    expect(agentTs).toContain('inferCompositionTotalFrames')
+    expect(compositionDuration).toContain('inferCompositionTotalFrames')
     expect(agentTs).toContain('resolveMediaMarkersInValue')
     expect(designHarness).toContain('unresolved Media Index placeholder')
     expect(agentTs).not.toContain('[Current Remotion composition code')

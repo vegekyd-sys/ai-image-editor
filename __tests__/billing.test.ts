@@ -71,6 +71,12 @@ describe('token-rates', () => {
     expect(credits).toBe(60);
   });
 
+  it('providerCostToCredits uses actual routed cost and markup', async () => {
+    const { providerCostToCredits } = await import('@/lib/billing/token-rates');
+    expect(providerCostToCredits(0.01193466, 2)).toBe(3);
+    expect(providerCostToCredits(0, 2)).toBe(0);
+  });
+
   it('tokensToCredits computes correctly for Gemini Flash (cheap)', async () => {
     const { tokensToCredits } = await import('@/lib/billing/token-rates');
     const rate = {
@@ -87,6 +93,23 @@ describe('token-rates', () => {
     // Credits = ceil(0.0007 * 2.0 / 0.01) = ceil(0.14) = 1
     const credits = tokensToCredits(rate, 3000, 1000);
     expect(credits).toBe(1);
+  });
+
+  it('tokensToCredits uses image-output pricing for Nano Banana 2 Lite images', async () => {
+    const { tokensToCredits } = await import('@/lib/billing/token-rates');
+    const rate = {
+      model_id: 'google/gemini-3.1-flash-lite-image',
+      display_name: 'OR Nano Banana 2 Lite',
+      input_per_1m: 0.25,
+      output_per_1m: 30.00,
+      markup: 2.0,
+      is_active: true,
+    };
+
+    // Similar to real tips preview logs: 1.5K input + 3K image output tokens.
+    // Cost ~= $0.0904, with 2x markup -> 19 credits.
+    const credits = tokensToCredits(rate, 1539, 3030);
+    expect(credits).toBe(19);
   });
 
   it('tokensToCredits returns minimum 1 for non-zero usage', async () => {
@@ -258,6 +281,23 @@ describe('token-rates', () => {
     expect(rate).not.toBeNull();
     expect(rate!.display_name).toBe('Opus');
   });
+
+  it('includes the exact Gemini vision-bridge rate used by DeepSeek', async () => {
+    const chain = mockQuery([]);
+    mockFrom.mockReturnValue(chain);
+    chain.order = vi.fn().mockResolvedValue({ data: [], error: null });
+
+    const { getTokenRate, invalidateTokenRateCache } = await import('@/lib/billing/token-rates');
+    invalidateTokenRateCache();
+
+    const rate = await getTokenRate('gemini-3-flash-preview');
+    expect(rate).toMatchObject({
+      input_per_1m: 0.5,
+      output_per_1m: 3,
+      cache_read_per_1m: 0.05,
+      cache_write_per_1m: 0.5,
+    });
+  });
 });
 
 // ─── credits.ts tests ───────────────────────────────────────────
@@ -409,6 +449,65 @@ describe('credits', () => {
         p_source: 'app',
       }));
     });
+
+    it('charges Seed TTS voiceover as a fixed per-task action', async () => {
+      const pricingData = [{ tool_name: 'create_voiceover', supplier_cost: 0, credits: 2, is_free: false }];
+      const pricingChain = {
+        select: vi.fn().mockResolvedValue({ data: pricingData, error: null }),
+      };
+
+      mockRpc.mockResolvedValue({ data: 123, error: null });
+
+      mockFrom.mockImplementation((table: string) => {
+        if (table === 'app_settings') return billingSettingsChain;
+        if (table === 'credit_pricing') return pricingChain;
+        return mockQuery(null);
+      });
+
+      const { invalidatePricingCache } = await import('@/lib/billing/pricing');
+      invalidatePricingCache();
+
+      const { deductCredits } = await import('@/lib/billing/credits');
+      const result = await deductCredits('user-1', null, 'create_voiceover', 'seed-tts-2.0');
+
+      expect(result.charged).toBe(2);
+      expect(result.remaining).toBe(123);
+      expect(mockRpc).toHaveBeenCalledWith('deduct_and_log', expect.objectContaining({
+        p_user_id: 'user-1',
+        p_amount: 2,
+        p_tool_name: 'create_voiceover',
+        p_model_used: 'seed-tts-2.0',
+        p_source: 'app',
+        p_api_key_id: null,
+      }));
+    });
+
+    it('uses the built-in Seed TTS voiceover price if the DB row is missing', async () => {
+      const pricingChain = {
+        select: vi.fn().mockResolvedValue({ data: [], error: null }),
+      };
+
+      mockRpc.mockResolvedValue({ data: 456, error: null });
+
+      mockFrom.mockImplementation((table: string) => {
+        if (table === 'app_settings') return billingSettingsChain;
+        if (table === 'credit_pricing') return pricingChain;
+        return mockQuery(null);
+      });
+
+      const { invalidatePricingCache } = await import('@/lib/billing/pricing');
+      invalidatePricingCache();
+
+      const { deductCredits } = await import('@/lib/billing/credits');
+      const result = await deductCredits('user-1', null, 'create_voiceover', 'seed-tts-2.0');
+
+      expect(result.charged).toBe(2);
+      expect(result.remaining).toBe(456);
+      expect(mockRpc).toHaveBeenCalledWith('deduct_and_log', expect.objectContaining({
+        p_amount: 2,
+        p_tool_name: 'create_voiceover',
+      }));
+    });
   });
 
   describe('deductByTokens with MCP source', () => {
@@ -473,6 +572,39 @@ describe('credits', () => {
 
       expect(result.charged).toBe(0);
       expect(mockRpc).not.toHaveBeenCalled();
+    });
+  });
+
+  describe('Seed Audio usage billing', () => {
+    it('converts EvoLink Seed Audio credits into Makaron credits with markup', async () => {
+      const { seedAudioMakaronCredits } = await import('@/lib/billing/seed-audio');
+
+      // 8s * 0.17 EvoLink credits/s = 1.36 provider credits.
+      // Provider cost ~= $0.02; Makaron 2x markup => $0.04 => 4 Makaron credits.
+      expect(seedAudioMakaronCredits({ providerCreditsUsed: 1.36 })).toBe(4);
+      expect(seedAudioMakaronCredits({ durationSeconds: 8 })).toBe(4);
+    });
+
+    it('deducts Seed Audio as create_seed_audio using actual generated usage', async () => {
+      mockRpc.mockResolvedValue({ data: 321, error: null });
+      mockFrom.mockImplementation((t: string) => t === 'app_settings' ? billingSettingsChain : mockQuery(null));
+
+      const { deductSeedAudioCredits } = await import('@/lib/billing/seed-audio');
+      const result = await deductSeedAudioCredits('user-1', {
+        durationSeconds: 8,
+        providerCreditsUsed: 1.36,
+        model: 'doubao-seed-audio-1-0',
+        generationSeconds: 12.4,
+      });
+
+      expect(result.charged).toBe(4);
+      expect(result.remaining).toBe(321);
+      expect(mockRpc).toHaveBeenCalledWith('deduct_and_log', expect.objectContaining({
+        p_amount: 4,
+        p_tool_name: 'create_seed_audio',
+        p_model_used: 'doubao-seed-audio-1-0',
+        p_duration_ms: 12400,
+      }));
     });
   });
 
@@ -563,14 +695,16 @@ describe('credits', () => {
     it('returns base name for non-edit tools', async () => {
       const { resolveToolName } = await import('@/lib/billing/pricing');
       expect(resolveToolName('create_music')).toBe('create_music');
+      expect(resolveToolName('makaron_create_seed_audio')).toBe('create_seed_audio');
+      expect(resolveToolName('create_voiceover')).toBe('create_voiceover');
       expect(resolveToolName('makaron_create_video')).toBe('create_video');
     });
   });
 
   describe('getTokenRate matching', () => {
-    it('strips region prefix for Bedrock models', async () => {
+    it('strips inference profile prefix for Bedrock models', async () => {
       const rates = [
-        { model_id: 'anthropic.claude-sonnet-4-6', display_name: 'Sonnet', input_per_1m: 3, output_per_1m: 15, markup: 2, is_active: true },
+        { model_id: 'anthropic.claude-sonnet-5', display_name: 'Sonnet', input_per_1m: 2, output_per_1m: 10, markup: 2, is_active: true },
       ];
       const ratesChain = mockQuery(rates);
       ratesChain.order = vi.fn().mockResolvedValue({ data: rates, error: null });
@@ -579,10 +713,13 @@ describe('credits', () => {
       const { getTokenRate, invalidateTokenRateCache } = await import('@/lib/billing/token-rates');
       invalidateTokenRateCache();
 
-      // "us.anthropic.claude-sonnet-4-6" should match "anthropic.claude-sonnet-4-6" after stripping "us."
-      const rate = await getTokenRate('us.anthropic.claude-sonnet-4-6');
-      expect(rate).not.toBeNull();
-      expect(rate!.display_name).toBe('Sonnet');
+      // Inference profiles should match the base Anthropic rate row after stripping the profile prefix.
+      const usRate = await getTokenRate('us.anthropic.claude-sonnet-5');
+      const globalRate = await getTokenRate('global.anthropic.claude-sonnet-5');
+      expect(usRate).not.toBeNull();
+      expect(globalRate).not.toBeNull();
+      expect(usRate!.display_name).toBe('Sonnet');
+      expect(globalRate!.display_name).toBe('Sonnet');
     });
 
     it('matches by prefix for versioned models', async () => {

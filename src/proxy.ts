@@ -1,8 +1,19 @@
 import { createServerClient } from '@supabase/ssr'
 import { NextResponse, type NextRequest } from 'next/server'
+import { matchSupportedLocale } from '@/lib/locales'
 
-export async function middleware(request: NextRequest) {
+export async function proxy(request: NextRequest) {
+  const requestedLocale = matchSupportedLocale(request.nextUrl.searchParams.get('locale'))
+  if (requestedLocale) request.cookies.set('locale', requestedLocale)
+
   let supabaseResponse = NextResponse.next({ request })
+  if (requestedLocale) {
+    supabaseResponse.cookies.set('locale', requestedLocale, {
+      path: '/',
+      maxAge: 365 * 24 * 60 * 60,
+      sameSite: 'lax',
+    })
+  }
 
   const supabase = createServerClient(
     process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -17,6 +28,13 @@ export async function middleware(request: NextRequest) {
             request.cookies.set(name, value)
           )
           supabaseResponse = NextResponse.next({ request })
+          if (requestedLocale) {
+            supabaseResponse.cookies.set('locale', requestedLocale, {
+              path: '/',
+              maxAge: 365 * 24 * 60 * 60,
+              sameSite: 'lax',
+            })
+          }
           cookiesToSet.forEach(({ name, value, options }) =>
             supabaseResponse.cookies.set(name, value, options)
           )

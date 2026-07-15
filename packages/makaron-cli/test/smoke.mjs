@@ -92,6 +92,18 @@ const server = http.createServer(async (req, res) => {
     return;
   }
 
+  if (req.method === 'POST' && url.pathname === '/api/mcp') {
+    assert.equal(req.headers.authorization, 'Bearer mk_test_smoke');
+    sendJson(200, {
+      jsonrpc: '2.0',
+      id: body?.id ?? 1,
+      result: {
+        content: [{ type: 'text', text: 'Video rendering task created.\n\nTask ID: task-unified-text-smoke' }],
+      },
+    });
+    return;
+  }
+
   if (req.method === 'GET' && url.pathname === '/api/agent/run/run_mock_1') {
     sendJson(200, {
       id: 'run_mock_1',
@@ -138,6 +150,25 @@ const server = http.createServer(async (req, res) => {
     return;
   }
 
+  if (req.method === 'GET' && url.pathname === '/api/agent/run/run_comp_1') {
+    sendJson(200, {
+      id: 'run_comp_1',
+      project_id: 'project-auto-1',
+      status: 'completed',
+      incomplete: false,
+      output: [{
+        id: 'design_comp_1',
+        type: 'design',
+        animated: true,
+        snapshot_id: 'snap_comp_1',
+        width: 720,
+        height: 1280,
+      }],
+      result: { designs: [{ width: 720, height: 1280 }] },
+    });
+    return;
+  }
+
   if (req.method === 'GET' && url.pathname === '/api/projects/project-auto-1/media') {
     sendJson(200, {
       projectId: 'project-auto-1',
@@ -169,7 +200,40 @@ const server = http.createServer(async (req, res) => {
           width: 720,
           height: 1280,
         },
+        {
+          id: 'media_3',
+          index: 3,
+          ref: '<<<media_3>>>',
+          type: 'composition',
+          status: 'completed',
+          snapshot_id: 'snap_comp_1',
+          snapshotId: 'snap_comp_1',
+          codePath: 'code/snap_comp_1.json',
+          description: 'Editable Remotion composition',
+        },
       ],
+    });
+    return;
+  }
+
+  if (req.method === 'POST' && url.pathname === '/api/remotion/export') {
+    sendJson(200, { jobId: 'export_job_1', id: 'export_job_1', status: 'queued', projectId: body.projectId });
+    return;
+  }
+
+  if (req.method === 'GET' && url.pathname === '/api/remotion/export/export_job_1') {
+    sendJson(200, {
+      id: 'export_job_1',
+      status: 'completed',
+      projectId: 'project-auto-1',
+      url: 'https://cdn.example/remotion-export.mp4',
+      storageUrl: 'https://cdn.example/remotion-export.mp4',
+      workspacePath: 'project-auto-1/media/remotion-export.mp4',
+      duration_seconds: 4,
+      render_seconds: 5,
+      realtime_ratio: 0.8,
+      width: 720,
+      height: 1280,
     });
     return;
   }
@@ -262,14 +326,16 @@ try {
 
   for (const [helpArgs, expectedText] of [
     [[], /Makaron CLI/],
-    [['--help'], /Makaron CLI/],
+    [['--help'], /--agent-model <name>/],
     [['login', '--help'], /Usage: makaron login/],
     [['create', '--help'], /Usage: makaron create/],
-    [['chat', '--help'], /--skill <id\|label\|name>/],
+    [['chat', '--help'], /--agent-model <name>/],
     [['responses', '--help'], /Responses commands:/],
     [['responses', 'get', '--help'], /Usage: makaron responses get/],
     [['responses', 'watch', '--help'], /Usage: makaron responses watch/],
     [['responses', 'list', '--help'], /Usage: makaron responses list/],
+    [['materialize', '--help'], /Usage: makaron materialize/],
+    [['composition', '--help'], /Composition commands:/],
     [['list', '--help'], /Usage: makaron list/],
     [['setup', '--help'], /Usage: makaron setup/],
     [['install-skill', '--help'], /Usage: makaron install-skill/],
@@ -303,6 +369,15 @@ try {
   }
 
   {
+    const result = await expectHelp(['--help'], /--agent-model <name>/);
+    assert.match(result.stdout, /--image-model <name>/);
+    assert.match(result.stdout, /--video-model <name>/);
+    assert.match(result.stdout, /deepseek-v4-pro/);
+    assert.match(result.stdout, /MAKARON_AGENT_MODEL/);
+    assert.match(result.stdout, /legacy --model flag is deprecated/);
+  }
+
+  {
     const result = await expectSuccess(['chat', '--project', 'auto', '--json', '-b', 'make a compact image']);
     const data = JSON.parse(result.stdout);
     assert.deepEqual(data, {
@@ -316,6 +391,27 @@ try {
     const runRequest = requests.find(req => req.pathname === '/api/agent/run');
     assert.equal(runRequest?.body?.projectId, 'project-auto-1');
     assert.equal(runRequest?.body?.prompt, 'make a compact image');
+  }
+
+  {
+    await expectSuccess(['chat', '--project', 'project-models-1', '--agent-model', 'deepseek-v4-pro', '--image-model', 'qwen', '--video-model', 'grok', '--json', '-b', 'use explicit models']);
+    const runRequest = requests.filter(req => req.pathname === '/api/agent/run').at(-1);
+    assert.equal(runRequest?.body?.agentModel, 'deepseek-v4-pro');
+    assert.equal(runRequest?.body?.preferredModel, 'qwen');
+    assert.equal(runRequest?.body?.videoModel, 'grok');
+  }
+
+  {
+    const result = await expectFailure(['chat', '--project', 'project-models-1', '--agent-model', 'mystery-model', 'fail clearly']);
+    assert.match(result.stderr, /Unknown agent model: mystery-model/);
+    assert.match(result.stderr, /sonnet-5/);
+  }
+
+  {
+    const result = await expectSuccess(['chat', '--project', 'project-models-1', '--model', 'qwen', '--json', '-b', 'legacy image flag']);
+    assert.match(result.stderr, /--model is deprecated here; use --image-model/);
+    const runRequest = requests.filter(req => req.pathname === '/api/agent/run').at(-1);
+    assert.equal(runRequest?.body?.preferredModel, 'qwen');
   }
 
   {
@@ -340,6 +436,16 @@ try {
     const runRequest = requests.filter(req => req.pathname === '/api/agent/run').at(-1);
     assert.equal(runRequest?.body?.projectId, 'project-existing-1');
     assert.equal(runRequest?.body?.prompt, 'use this reference');
+  }
+
+  {
+    const result = await expectSuccess(['video', 'create', '--script', 'A neon one-person studio wakes at dawn', '--duration', '5', '--video-model', 'seedance-fast']);
+    assert.match(result.stdout, /Task ID: task-unified-text-smoke/);
+    const mcpRequest = requests.filter(req => req.pathname === '/api/mcp').at(-1);
+    assert.equal(mcpRequest?.body?.params?.name, 'makaron_create_video');
+    assert.deepEqual(mcpRequest?.body?.params?.arguments?.images, []);
+    assert.equal(mcpRequest?.body?.params?.arguments?.videoModel, 'seedance-fast');
+    assert.equal(mcpRequest?.body?.params?.arguments?.duration, 5);
   }
 
   {
@@ -406,12 +512,59 @@ try {
     const result = await expectSuccess(['project', 'media', 'project-auto-1', '--json']);
     const data = JSON.parse(result.stdout);
     assert.equal(data.projectId, 'project-auto-1');
-    assert.equal(data.media.length, 2);
+    assert.equal(data.media.length, 3);
     assert.equal(data.media[0].ref, '<<<media_1>>>');
     assert.equal(data.media[1].type, 'video');
     assert.equal(data.media[1].duration, 12.4);
+    assert.equal(data.media[2].type, 'composition');
     const mediaRequest = requests.find(req => req.pathname === '/api/projects/project-auto-1/media');
     assert.equal(mediaRequest?.method, 'GET');
+  }
+
+  {
+    const result = await expectSuccess(['composition', 'export', '--project', 'project-auto-1', '--media', '3', '--wait']);
+    assert.equal(result.stdout.trim(), 'https://cdn.example/remotion-export.mp4');
+    const exportRequest = requests.filter(req => req.pathname === '/api/remotion/export').at(-1);
+    assert.equal(exportRequest?.method, 'POST');
+    assert.equal(exportRequest?.body?.snapshotId, 'snap_comp_1');
+    assert.equal(exportRequest?.body?.designPath, 'code/snap_comp_1.json');
+    assert.equal(exportRequest?.body?.renderProfile, 'fast_720p');
+    assert.equal(exportRequest?.body?.publish, false);
+  }
+
+  {
+    const designPath = path.join(tmpHome, 'composition.json');
+    writeFileSync(designPath, JSON.stringify({
+      code: 'export default function Comp(){ return null; }',
+      width: 1080,
+      height: 1920,
+      animation: { fps: 30, durationInSeconds: 1 },
+    }));
+    const result = await expectSuccess(['materialize', '--project', 'project-auto-1', '--design-json', designPath, '--pick', 'url']);
+    assert.equal(result.stdout.trim(), 'https://cdn.example/remotion-export.mp4');
+    const exportRequest = requests.filter(req => req.pathname === '/api/remotion/export').at(-1);
+    assert.equal(exportRequest?.body?.publish, true);
+    assert.equal(exportRequest?.body?.renderProfile, 'fast_720p');
+    assert.equal(exportRequest?.body?.design?.width, 1080);
+  }
+
+  {
+    const result = await expectSuccess(['responses', 'get', 'run_comp_1', '--export-compositions', '--pick', 'first_video_url']);
+    assert.equal(result.stdout.trim(), 'https://cdn.example/remotion-export.mp4');
+  }
+
+  {
+    const result = await expectSuccess(['responses', 'get', 'run_comp_1', '--materialize', '--pick', 'first_video_url']);
+    assert.equal(result.stdout.trim(), 'https://cdn.example/remotion-export.mp4');
+    const exportRequest = requests.filter(req => req.pathname === '/api/remotion/export').at(-1);
+    assert.equal(exportRequest?.body?.publish, true);
+  }
+
+  {
+    const result = await expectSuccess(['responses', 'get', 'run_comp_1', '--materialize', '--wait', '--pick', 'first_video_url']);
+    assert.equal(result.stdout.trim(), 'https://cdn.example/remotion-export.mp4');
+    const exportRequest = requests.filter(req => req.pathname === '/api/remotion/export').at(-1);
+    assert.equal(exportRequest?.body?.publish, true);
   }
 
   {

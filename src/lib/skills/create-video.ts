@@ -1,5 +1,5 @@
 import { filterAndRemapImages, parseTotalDuration } from '../kling';
-import { getVideoModelCapability, normalizeVideoModelId, resolveClosestSupportedAspectRatio, resolveVideoGenerationRoute, resolveVideoOutputDuration, resolveVideoProviderAspectRatio, validateVideoModelRequest, type VideoAspectRatioInput, type VideoReferenceMeta, type VideoResolutionInput } from '@/lib/video-model-capabilities';
+import { getVideoModelCapability, normalizeVideoModelId, resolveClosestSupportedAspectRatio, resolveVideoGenerationRoute, resolveVideoOutputDuration, resolveVideoProviderAspectRatio, resolveVideoProviderModel, supportsNativeTextToVideo, validateVideoModelRequest, type VideoAspectRatioInput, type VideoReferenceMeta, type VideoResolutionInput } from '@/lib/video-model-capabilities';
 
 const MAX_REFERENCE_VIDEO_PROBE_BYTES = 55 * 1024 * 1024;
 
@@ -28,6 +28,8 @@ export interface CreateVideoResult {
   taskId?: string;
   videoModel?: string;
   providerModel?: string;
+  videoUrl?: string;
+  status?: 'completed' | 'processing' | 'pending' | 'failed';
   message: string;
 }
 
@@ -79,6 +81,13 @@ function resolveSeedanceReferenceAspectRatio(
   return resolveVideoProviderAspectRatio(provider, aspectRatio);
 }
 
+function findAudioMarkers(prompt: string): Set<number> {
+  return new Set(
+    Array.from(prompt.matchAll(/<<<audio_(\d+)>>>/gi), match => Number(match[1]))
+      .filter(n => Number.isInteger(n) && n > 0)
+  );
+}
+
 export async function createVideo(input: CreateVideoInput): Promise<CreateVideoResult> {
   const { script, images, duration, aspectRatio, videoModel, videoResolution, videoUrl, videoReferType, videoUrls, audioUrls, referenceVideoDuration, referenceVideoMetas, keepOriginalSound, motionControl, characterOrientation } = input;
   const hasVideoReference = !!videoUrl || !!videoUrls?.length;
@@ -101,7 +110,9 @@ export async function createVideo(input: CreateVideoInput): Promise<CreateVideoR
   if (hasAudioReference && route.provider !== 'seedance') {
     return {
       success: false,
-      message: 'Reference audio is only supported by Seedance video models.',
+      message: route.provider === 'google-omni'
+        ? 'Google Omni generates native audio from the prompt, but uploaded reference audio is not enabled in the current API. Use Seedance for audio_refs, or describe the soundtrack in the prompt for Omni.'
+        : 'Reference audio is only supported by Seedance video models.',
     };
   }
   if ((audioUrls?.length || 0) > 3) {
@@ -113,12 +124,18 @@ export async function createVideo(input: CreateVideoInput): Promise<CreateVideoR
   const resolvedReferenceVideoMetas = await fillReferenceVideoMetas(seedanceVideoUrls, referenceVideoMetas);
 
   if (images.length === 0 && !hasVideoReference) {
-    return {
-      success: false,
-      message: hasAudioReference
-        ? 'Reference audio cannot be used alone. Provide an image or video reference for the video generation.'
-        : 'No images or video reference provided.',
-    };
+    if (hasAudioReference) {
+      return {
+        success: false,
+        message: 'Reference audio cannot be used alone. Provide an image or video reference for the video generation.',
+      };
+    }
+    if (!supportsNativeTextToVideo(provider)) {
+      return {
+        success: false,
+        message: `${capability.label} requires an image or video reference. Native text-to-video is currently available through SeeDance models.`,
+      };
+    }
   }
 
   try {
@@ -150,6 +167,19 @@ export async function createVideo(input: CreateVideoInput): Promise<CreateVideoR
     // Filter to only referenced images and remap indices (preserves index alignment)
     // filterAndRemapImages will enforce the 7-image limit on the filtered result
     const { filteredImages, finalPrompt } = filterAndRemapImages(script, images);
+
+    if (hasAudioReference) {
+      const audioMarkers = findAudioMarkers(finalPrompt);
+      const missing = (audioUrls || [])
+        .map((_, index) => index + 1)
+        .filter(index => !audioMarkers.has(index));
+      if (missing.length > 0) {
+        return {
+          success: false,
+          message: `Reference audio was passed but not referenced in story_prompt. Add ${missing.map(index => `<<<audio_${index}>>>`).join(', ')} to the story_prompt near the soundtrack/rhythm instruction, and keep audio_refs set.`,
+        };
+      }
+    }
 
     if (filteredImages.length === 0 && images.length > 0 && !hasVideoReference) {
       return {
@@ -210,7 +240,13 @@ export async function createVideo(input: CreateVideoInput): Promise<CreateVideoR
 
     if (route.provider === 'seedance') {
       const { createEvolinkTask } = await import('../evolink');
-      const providerModel = route.providerModel;
+      const providerModel = resolveVideoProviderModel({
+        model: provider,
+        resolution: route.resolution,
+        imageReferenceCount: filteredImages.length,
+        hasVideoReference: seedanceVideoUrls.length > 0,
+        hasAudioReference,
+      });
       taskId = await createEvolinkTask({
         prompt: finalPrompt,
         images: filteredImages,
@@ -239,6 +275,33 @@ export async function createVideo(input: CreateVideoInput): Promise<CreateVideoR
         resolution: route.resolution as '480p' | '720p',
       });
       console.log(`✅ [create_video] Grok Video task created: ${taskId}`);
+    } else if (route.provider === 'google-omni') {
+      const { createGoogleOmniVideoTask } = await import('../google-omni-video');
+      if ((videoUrls?.length || 0) > 1 || (videoUrl && (videoUrls?.length || 0) > 0)) {
+        return {
+          success: false,
+          message: 'Google Omni supports one reference video per request in Makaron. Split multi-video workflows into separate tasks.',
+        };
+      }
+      const omniResult = await createGoogleOmniVideoTask({
+        prompt: finalPrompt,
+        images: filteredImages,
+        duration: resolvedDuration != null ? resolvedDuration : undefined,
+        aspectRatio: providerAspectRatio,
+        videoUrl,
+        videoUrls,
+      });
+      taskId = omniResult.taskId;
+      console.log(`✅ [create_video] Google Omni video completed: ${taskId}`);
+      return {
+        success: true,
+        taskId,
+        videoModel: provider,
+        providerModel: route.providerModel,
+        videoUrl: omniResult.videoUrl,
+        status: omniResult.status,
+        message: `Google Omni video generated. Task ID: ${taskId}. Use makaron_get_video_status to persist and retrieve the final URL.`,
+      };
     } else if (route.provider === 'piapi') {
       const { createKlingTask: createKlingTaskPiAPI } = await import('../piapi');
       taskId = await createKlingTaskPiAPI({

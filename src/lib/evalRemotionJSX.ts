@@ -20,7 +20,7 @@ const { Sequence, useVideoConfig } = Remotion;
 // Sequence wrapper: auto-inject premountFor={fps*3} when not specified
 // 3 seconds of premount gives video elements enough time to buffer before their scene starts
 const AutoPremountSequence = React.forwardRef(function AutoPremountSequence(
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+
   props: any,
   ref: React.Ref<HTMLDivElement>,
 ) {
@@ -46,7 +46,7 @@ delete REMOTION_SCOPE['default'];
 delete REMOTION_SCOPE['__esModule'];
 
 // Babel CDN fallback (lazy-loaded only when Sucrase fails)
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
+
 let _babelTransform: ((code: string, opts: any) => { code: string }) | null = null;
 
 /** Observable loading state for UI feedback */
@@ -82,7 +82,7 @@ export async function preloadBabel(): Promise<void> {
   _notify('loading');
   try {
     await new Promise<void>((resolve, reject) => {
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+
       if ((window as any).Babel) { resolve(); return; }
       const timeout = setTimeout(() => reject(new Error('Babel CDN timeout (15s)')), 15000);
       const script = document.createElement('script');
@@ -91,7 +91,7 @@ export async function preloadBabel(): Promise<void> {
       script.onerror = () => { clearTimeout(timeout); reject(new Error('Failed to load Babel from CDN')); };
       document.head.appendChild(script);
     });
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+
     _babelTransform = (window as any).Babel.transform;
     _notify('ready');
   } catch (e) {
@@ -162,7 +162,7 @@ export function pickRemotionComponentName(code: string): string {
  * Transpile Agent JSX code → React component.
  * Tries Sucrase first (bundled, instant). Falls back to Babel CDN if Sucrase fails.
  */
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
+
 export function evalRemotionJSX(code: string): React.ComponentType<any> | null {
   try {
     const src = normalizeRemotionScopeDeclarations(code);
@@ -215,7 +215,7 @@ let _currentTransformProps: Record<string, unknown> = {};
  * - ARE correctly read by @remotion/web-renderer (via our patch)
  */
 const _origCE = React.createElement;
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
+
 const _patchedCE = function(type: any, elProps: any, ...children: any[]) {
   if (elProps && typeof elProps === 'object' && elProps['data-editable']) {
     const id = elProps['data-editable'] as string;
@@ -247,7 +247,7 @@ REMOTION_SCOPE.React = PATCHED_REACT;
  * Agent code uses PATCHED_REACT.createElement → reads _currentTransformProps
  * → injects style.translate/scale on [data-editable] elements.
  */
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
+
 function wrapWithEditableTransforms(Component: React.ComponentType<any>): React.ComponentType<any> {
   return function WrappedDesign(props: Record<string, unknown>) {
     _currentTransformProps = props;

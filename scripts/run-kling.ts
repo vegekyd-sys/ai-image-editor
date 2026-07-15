@@ -8,8 +8,6 @@
  */
 import jwt from 'jsonwebtoken'
 import * as fs from 'fs'
-import * as path from 'path'
-import * as os from 'os'
 
 const KLING_BASE = process.env.KLING_API_BASE || 'https://api-beijing.klingai.com'
 
@@ -43,7 +41,7 @@ async function pollTask(taskId: string) {
         console.log(`\n\nFailed: ${task.task_status_msg}`)
         return
       }
-    } catch (e: unknown) {
+    } catch {
       process.stdout.write(' timeout')
     }
   }
@@ -101,7 +99,7 @@ async function main() {
   }
 
   if (videoPath) {
-    let videoUrl = videoPath
+    const videoUrl = videoPath
     if (!videoPath.startsWith('http')) {
       if (!fs.existsSync(videoPath)) { console.error(`Video not found: ${videoPath}`); process.exit(1) }
       console.log(`Note: --video must be a URL. Use Supabase/S3 to host the video first.`)

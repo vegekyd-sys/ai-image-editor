@@ -40,7 +40,14 @@ with clear edges. [风格要求]. No text, no watermarks, no borders.
 - 纯蓝色键 #0000FF — 适合绿色+品红色元素
 
 ### Step 2: 去除背景 → 透明 PNG
-用 `run_code` + sharp 去除色键绿背景（色彩距离算法 + 边缘抗锯齿 + 溢色修复）
+用 `run_code({ runtime: "node" })` + sharp 去除色键绿背景（色彩距离算法 + 边缘抗锯齿 + 溢色修复）。
+
+- 必须使用 `runtime: "node"`，因为 sharp、文件下载/上传、`require`/Node APIs
+  只在 Node runtime 可用。
+- 不要用 `runtime: "composition"` 做贴纸抠图；composition runtime 只用于
+  Remotion 预览/合成，不能可靠执行 sharp 后处理。
+- 如果需要处理刚生成的图片，优先把图片的真实 `imageUrl` 传进 Node 脚本，
+  下载后输出透明 PNG 到 workspace，再把公开 storage URL 用在 Remotion `<Img>`。
 
 ### Step 3: 保存并提供下载
 保存到 workspace，返回公开 storageUrl 供 design 视频直接使用

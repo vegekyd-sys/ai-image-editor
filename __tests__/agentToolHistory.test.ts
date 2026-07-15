@@ -2,11 +2,13 @@ import { describe, expect, it } from 'vitest';
 import {
   buildModelHistoryFromRows,
   sanitizeToolHistory,
+  TOOL_HISTORY_MAX_OUTPUT_CHARS,
+  TOOL_HISTORY_MAX_ROWS_PER_RUN,
 } from '../src/lib/agentToolHistory';
 
 describe('agent tool history sanitizer', () => {
   it('keeps markdown read_file content but caps it', () => {
-    const md = `${'a'.repeat(31_000)}data:image/png;base64,abcd`;
+    const md = `${'a'.repeat(TOOL_HISTORY_MAX_OUTPUT_CHARS + 1_000)}data:image/png;base64,abcd`;
     const result = sanitizeToolHistory(
       'read_file',
       { path: 'prompts/enhance.md' },
@@ -17,7 +19,7 @@ describe('agent tool history sanitizer', () => {
     expect(result.output.type).toBe('text');
     expect(JSON.stringify(result.output)).toContain('[prompts/enhance.md]');
     expect(JSON.stringify(result.output)).not.toContain('data:image');
-    expect(result.outputChars).toBeLessThanOrEqual(30_200);
+    expect(result.outputChars).toBeLessThanOrEqual(TOOL_HISTORY_MAX_OUTPUT_CHARS + 500);
     expect(result.omitted).toContain('truncated_read_file');
     expect(result.omitted).toContain('removed_data_url_image');
   });
@@ -66,7 +68,7 @@ describe('agent tool history sanitizer', () => {
       'read_file',
       { path: 'prompts/animate.md' },
       { path: 'prompts/animate.md', type: 'text/markdown', content: 'full prompt' },
-      { rows: 20, chars: 10 },
+      { rows: TOOL_HISTORY_MAX_ROWS_PER_RUN, chars: 10 },
     );
 
     expect(result.omitted).toContain('run_budget_exceeded');
@@ -150,5 +152,60 @@ describe('agent tool history reconstruction', () => {
     expect(history.map(m => m.role)).toEqual(['user', 'assistant', 'tool', 'assistant']);
     expect((history[1].content as Array<unknown>)).toHaveLength(2);
     expect((history[2].content as Array<unknown>)).toHaveLength(2);
+  });
+
+  it('does not replay UI-truncated run_code input back to the model', () => {
+    const history = buildModelHistoryFromRows([
+      { id: 'u1', role: 'user', content: '用 remotion 做视频', created_at: '2026-06-01T00:00:00.000Z' },
+      { id: 'a1', role: 'assistant', content: '我先做结构。', created_at: '2026-06-01T00:00:03.000Z' },
+    ], [
+      {
+        created_at: '2026-06-01T00:00:01.000Z',
+        run_id: 'run-1',
+        step: 0,
+        seq: 0,
+        tool_call_id: 'call-1',
+        tool_name: 'run_code',
+        input: { runtime: 'browser', code: "const scenes = [...] ... (1329 chars)" },
+        output: { type: 'json', value: { type: 'text', content: 'Error' } },
+      },
+      {
+        created_at: '2026-06-01T00:00:02.000Z',
+        run_id: 'run-1',
+        step: 0,
+        seq: 1,
+        tool_call_id: 'call-2',
+        tool_name: 'read_file',
+        input: { path: 'code/current.json' },
+        output: { type: 'text', value: '[code/current.json]\n\n{}' },
+      },
+    ]);
+
+    const json = JSON.stringify(history);
+    expect(json).not.toContain('1329 chars');
+    expect(json).not.toContain('"toolName":"run_code"');
+    expect(json).toContain('"toolName":"read_file"');
+  });
+
+  it('still replays complete short run_code patches', () => {
+    const history = buildModelHistoryFromRows([
+      { id: 'u1', role: 'user', content: '把标题调大', created_at: '2026-06-01T00:00:00.000Z' },
+      { id: 'a1', role: 'assistant', content: '改好了。', created_at: '2026-06-01T00:00:02.000Z' },
+    ], [
+      {
+        created_at: '2026-06-01T00:00:01.000Z',
+        run_id: 'run-1',
+        step: 0,
+        seq: 0,
+        tool_call_id: 'call-1',
+        tool_name: 'run_code',
+        input: { runtime: 'browser', code: "return { type: 'patch', props: { title: '微信成长' } };" },
+        output: { type: 'json', value: { type: 'text', content: 'Patch applied' } },
+      },
+    ]);
+
+    const json = JSON.stringify(history);
+    expect(json).toContain('"toolName":"run_code"');
+    expect(json).toContain('微信成长');
   });
 });

@@ -1,6 +1,6 @@
 import { getSupabaseAdmin } from '@/lib/supabase/service'
 import { getToolPrice, resolveToolName } from './pricing'
-import { getTokenRate, tokensToCredits, tokensToCreditsBreakdown } from './token-rates'
+import { getTokenRate, providerCostToCredits, tokensToCredits, tokensToCreditsBreakdown } from './token-rates'
 
 // Billing kill switch — cached from DB app_settings
 let _billingEnabled: boolean | null = null
@@ -198,6 +198,8 @@ export async function deductByTokens(
   apiKeyId?: string | null,
   /** Optional cache-aware breakdown (Bedrock Anthropic). Omit for providers without cache reporting. */
   cacheBreakdown?: { cacheRead: number; cacheWrite: number },
+  /** Provider-reported actual cost. Prefer this for routed providers whose upstream price can vary. */
+  providerCostUsd?: number,
 ): Promise<{ charged: number; remaining: number }> {
   if (!(await isBillingEnabled())) return { charged: 0, remaining: 0 }
   let rate = await getTokenRate(modelId)
@@ -208,7 +210,9 @@ export async function deductByTokens(
     usedFallback = true
   }
 
-  const credits = cacheBreakdown
+  const credits = providerCostUsd != null
+    ? providerCostToCredits(providerCostUsd, rate.markup)
+    : cacheBreakdown
     ? tokensToCreditsBreakdown(rate, {
         noCacheInput: inputTokens,
         cacheRead: cacheBreakdown.cacheRead,

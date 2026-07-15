@@ -39,7 +39,7 @@ interface VideoResultCardProps {
 }
 
 export default function VideoResultCard({
-  animations, selectedVideoId, onSelectVideo, onCreateNew, onAbandon, onRetry, onFrameEdit, onViewDetail, currentTime = 0, currentDuration = 0, isDesktop,
+  animations, selectedVideoId, onSelectVideo, onFrameEdit, onViewDetail, currentTime = 0, currentDuration = 0, isDesktop,
 }: VideoResultCardProps) {
   const { t } = useLocale();
 
@@ -57,6 +57,13 @@ export default function VideoResultCard({
     return modelInfo ? t(modelInfo.nameKey as TranslationKey) : model;
   }
 
+  function isSourceUpload(anim: ProjectAnimation): boolean {
+    return anim.videoModel === 'upload'
+      && !anim.taskId
+      && !anim.prompt.trim()
+      && (!anim.snapshotUrls || anim.snapshotUrls.length === 0);
+  }
+
   const completed = animations.filter(a => a.status === 'completed' && a.videoUrl);
   const processing = animations.filter(a => a.status === 'processing');
   const failed = animations.filter(a => a.status === 'failed' || a.status === 'abandoned');
@@ -68,6 +75,7 @@ export default function VideoResultCard({
   const detailWidth = isDesktop ? 40 : 44;
   const frameEditWidth = cardWidth + detailWidth;
   const frameEditAnim = all.find(a => a.id === selectedVideoId && a.status === 'completed' && !!a.videoUrl);
+  const allSourceUploads = all.length > 0 && all.every(isSourceUpload);
 
   const selectedPillRef = useRef<HTMLDivElement>(null);
   useEffect(() => {
@@ -76,7 +84,7 @@ export default function VideoResultCard({
 
   const toolbar = (
     <span className={`text-white/20 tracking-wide font-medium ${isDesktop ? 'text-[10px]' : 'text-[11px]'}`}>
-      {t('video.count', all.length)}
+      {allSourceUploads ? t('video.sourceCount', all.length) : t('video.count', all.length)}
     </span>
   );
 
@@ -106,14 +114,17 @@ export default function VideoResultCard({
           const isCompleted = anim.status === 'completed' && !!anim.videoUrl;
           const isProcessing = anim.status === 'processing';
           const isFailed = anim.status === 'failed';
+          const sourceUpload = isSourceUpload(anim);
           const thumbUrl = anim.imageUrl;
-          const title = videoTitle(anim.prompt, idx);
+          const title = sourceUpload ? t('video.sourceTitle', idx + 1) : videoTitle(anim.prompt, idx);
 
           const modelLabel = videoModelLabel(anim.videoModel);
           const durationLabel = anim.duration ? `${Math.round(anim.duration)}s` : null;
           let statusText: React.ReactNode;
           if (isCompleted) {
-            statusText = durationLabel ? `${durationLabel}${modelLabel ? ` · ${modelLabel}` : ''}` : (modelLabel || t('video.completed'));
+            statusText = sourceUpload
+              ? (durationLabel ? `${durationLabel} · ${t('video.sourceUploaded')}` : t('video.sourceUploaded'))
+              : (durationLabel ? `${durationLabel}${modelLabel ? ` · ${modelLabel}` : ''}` : (modelLabel || t('video.completed')));
           } else if (isProcessing) {
             statusText = <><ElapsedTimer since={anim.createdAt} />{modelLabel ? ` · ${modelLabel}` : ''}</>;
           } else if (isFailed) {
@@ -127,12 +138,12 @@ export default function VideoResultCard({
               key={anim.id}
               ref={isSelected ? selectedPillRef : undefined}
               data-makaron-editor-tap-target="true"
-              className={`flex-shrink-0 flex items-stretch rounded-2xl overflow-hidden border transition-all animate-tip-in ${
+              className={`mkr-liquid-pill mkr-liquid-pill-strong flex-shrink-0 flex items-stretch rounded-2xl overflow-hidden border transition-all animate-tip-in ${
                 isSelected
-                  ? 'border-fuchsia-500 ring-1 ring-fuchsia-500/50'
+                  ? 'mkr-liquid-pill-selected border-fuchsia-500 ring-1 ring-fuchsia-500/50'
                   : 'border-white/10'
               }`}
-              style={{ background: isSelected ? 'rgba(217,70,239,0.12)' : 'rgba(217,70,239,0.06)' }}
+              style={{ background: isSelected ? 'linear-gradient(145deg, rgba(217,70,239,0.14), rgba(12,12,16,0.46))' : 'linear-gradient(145deg, rgba(217,70,239,0.075), rgba(12,12,16,0.42))' }}
             >
               <button
                 data-makaron-editor-tap-target="true"
@@ -147,18 +158,20 @@ export default function VideoResultCard({
               >
                 <div className="flex">
                   <div
-                    className="flex-shrink-0 bg-white/5 relative overflow-hidden"
-                    style={{ width: thumbSize, height: thumbSize }}
+                    className="flex-shrink-0 relative overflow-hidden"
+                    style={{ width: thumbSize, height: thumbSize, background: 'rgba(255,255,255,0.045)' }}
                   >
                     {thumbUrl ? (
-                      // eslint-disable-next-line @next/next/no-img-element
+
                       <img src={thumbUrl} alt="" className="w-full h-full object-cover" />
                     ) : (
-                      <div className="w-full h-full bg-zinc-800" />
+                      <div className="mkr-liquid-placeholder mkr-liquid-placeholder-passive w-full h-full" />
                     )}
                     {isCompleted && (
-                      <div className="absolute inset-0 flex items-center justify-center bg-black/30">
-                        <svg width="16" height="16" viewBox="0 0 24 24" fill="white"><path d="M8 5v14l11-7z" /></svg>
+                      <div className="absolute inset-0 flex items-center justify-center bg-black/10">
+                        <span className="mkr-liquid-inline-play w-7 h-7 rounded-full flex items-center justify-center">
+                          <svg width="11" height="11" viewBox="0 0 24 24" fill="rgba(255,255,255,0.82)"><path d="M8 5v14l11-7z" /></svg>
+                        </span>
                       </div>
                     )}
                     {isProcessing && (
@@ -170,7 +183,7 @@ export default function VideoResultCard({
                       </div>
                     )}
                     {durationLabel && (
-                      <div className="absolute bottom-0.5 right-0.5 bg-black/70 rounded text-white/85 leading-none"
+                      <div className="mkr-liquid-badge absolute bottom-0.5 right-0.5 rounded text-white/85 leading-none"
                         style={{ fontSize: '0.56rem', padding: '1px 4px' }}
                       >
                         {durationLabel}
@@ -192,26 +205,26 @@ export default function VideoResultCard({
               <button
                 data-makaron-editor-tap-target="true"
                 onClick={() => onViewDetail(anim)}
-                className="flex flex-col items-center justify-center overflow-hidden cursor-pointer active:scale-95 hover:brightness-110"
+                className="mkr-liquid-pill mkr-liquid-side-action flex flex-col items-center justify-center overflow-hidden cursor-pointer active:scale-95 hover:brightness-110"
                 style={{
                   width: detailWidth,
-                  background: 'rgba(255,255,255,0.03)',
-                  borderLeft: '1px solid rgba(255,255,255,0.06)',
+                  background: 'linear-gradient(135deg, rgba(217,70,239,0.18) 0%, rgba(192,38,211,0.30) 100%)',
+                  borderLeft: '1px solid rgba(217,70,239,0.42)',
                   transition: 'transform 0.1s',
                   border: 'none',
                   borderLeftWidth: 1,
                   borderLeftStyle: 'solid',
-                  borderLeftColor: 'rgba(255,255,255,0.06)',
+                  borderLeftColor: 'rgba(217,70,239,0.42)',
                 }}
               >
                 <svg
                   width="16" height="16" viewBox="0 0 24 24" fill="none"
                   stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"
-                  className={isSelected ? 'text-fuchsia-300' : 'text-white/40'}
+                  className={isSelected ? 'text-fuchsia-200' : 'text-fuchsia-300/70'}
                 >
                   <path d="m9 18 6-6-6-6" />
                 </svg>
-                <span className={`font-medium ${isDesktop ? 'text-[9px]' : 'text-[10px]'} ${isSelected ? 'text-fuchsia-300/60' : 'text-white/30'}`}>
+                <span className={`font-semibold ${isDesktop ? 'text-[9px]' : 'text-[10px]'} ${isSelected ? 'text-fuchsia-100/70' : 'text-fuchsia-200/70'}`}>
                   {t('video.detail')}
                 </span>
               </button>
@@ -220,7 +233,7 @@ export default function VideoResultCard({
         })}
 
         {all.length === 0 && (
-          <div className={`flex-shrink-0 rounded-2xl border border-white/5 flex items-center justify-center text-white/20 ${isDesktop ? 'w-[176px] h-[64px] text-[11px]' : 'w-[200px] h-[72px] text-[12px]'}`}
+          <div className={`mkr-liquid-placeholder mkr-liquid-placeholder-passive flex-shrink-0 rounded-2xl border border-white/5 flex items-center justify-center text-white/20 ${isDesktop ? 'w-[176px] h-[64px] text-[11px]' : 'w-[200px] h-[72px] text-[12px]'}`}
             style={{ background: 'rgba(255,255,255,0.02)' }}
           >
             {t('video.noVideos')}
@@ -230,9 +243,9 @@ export default function VideoResultCard({
         {frameEditAnim && onFrameEdit && (
           <div
             data-testid="video-frame-edit-pill"
-            className="flex-shrink-0 flex items-stretch rounded-2xl overflow-hidden border border-white/10 transition-all animate-tip-in"
+            className="mkr-liquid-pill mkr-liquid-pill-strong flex-shrink-0 flex items-stretch rounded-2xl overflow-hidden border border-white/10 transition-all animate-tip-in"
             style={{
-              background: 'rgba(217,70,239,0.06)',
+              background: 'linear-gradient(145deg, rgba(217,70,239,0.075), rgba(12,12,16,0.42))',
               width: frameEditWidth,
             }}
           >
@@ -248,13 +261,13 @@ export default function VideoResultCard({
             >
               <div className="flex">
                 <div
-                  className="flex-shrink-0 bg-white/5 relative overflow-hidden flex items-center justify-center"
-                  style={{ width: thumbSize, height: thumbSize }}
+                  className="flex-shrink-0 relative overflow-hidden flex items-center justify-center"
+                  style={{ width: thumbSize, height: thumbSize, background: 'rgba(255,255,255,0.045)' }}
                 >
                   <svg
-                    width="17" height="17" viewBox="0 0 24 24" fill="none"
-                    stroke="currentColor" strokeWidth="2.3" strokeLinecap="round" strokeLinejoin="round"
-                    className="text-white/45"
+                    width="18" height="18" viewBox="0 0 24 24" fill="none"
+                    stroke="currentColor" strokeWidth="2.1" strokeLinecap="round" strokeLinejoin="round"
+                    className="text-white/32"
                   >
                     <path d="M4 7h3l1.5-2h7L17 7h3v12H4z" />
                     <circle cx="12" cy="13" r="3.5" />

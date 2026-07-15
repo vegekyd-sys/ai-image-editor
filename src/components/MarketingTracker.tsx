@@ -19,11 +19,11 @@ export default function MarketingTracker() {
   useEffect(() => {
     const inNativeApp = isMakaronIOSApp()
     setNativeApp(inNativeApp)
-    if (!PIXEL_ID && !inNativeApp) setPixelReady(true)
+    if (inNativeApp || !PIXEL_ID) setPixelReady(true)
   }, [])
 
   useEffect(() => {
-    if (nativeApp !== false) return
+    if (nativeApp === null) return
     const params = new URLSearchParams(searchParams.toString())
     captureMarketingAttribution(pathname, params)
 
@@ -63,7 +63,7 @@ export default function MarketingTracker() {
         `}
       </Script>
       <noscript>
-        {/* eslint-disable-next-line @next/next/no-img-element */}
+        { }
         <img
           height="1"
           width="1"

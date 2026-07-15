@@ -1,13 +1,10 @@
 'use client'
 
 import { type HomeSkill, getCachedHomeSkills, setCachedHomeSkills } from '@/lib/home-skills'
-import { cacheMediaUrl } from '@/lib/imageCache'
 import { readNativeJSONCache, writeNativeJSONCache } from '@/lib/native-app-cache'
-import { getThumbnailUrl, normalizeDomain } from '@/lib/supabase/storage'
+import { getThumbnailUrl } from '@/lib/supabase/storage'
 
-const VIDEO_RETAIN_LIMIT = 8
 const warmedMedia = new Set<string>()
-const retainedVideos: HTMLVideoElement[] = []
 let inFlight: Promise<HomeSkill[] | null> | null = null
 
 function isVideoUrl(url: string): boolean {
@@ -37,21 +34,8 @@ export function warmHomeSkillMedia(skills: HomeSkill[], limit = 10): void {
       warmedMedia.add(url)
 
       if (isVideoUrl(url)) {
-        const normalizedUrl = normalizeDomain(url)
-        void cacheMediaUrl(normalizedUrl).then((cachedSrc) => {
-          const video = document.createElement('video')
-          video.muted = true
-          video.playsInline = true
-          video.preload = 'auto'
-          video.src = cachedSrc ?? normalizedUrl
-          try {
-            video.load()
-          } catch {
-            // Media warmup is best-effort.
-          }
-          retainedVideos.push(video)
-          if (retainedVideos.length > VIDEO_RETAIN_LIMIT) retainedVideos.shift()
-        })
+        // Never download complete MP4 assets during startup. Visible cards
+        // attach their stream lazily; offscreen cards stay poster/placeholder-only.
         continue
       }
 

@@ -1,18 +1,21 @@
 import { streamText, tool, stepCountIs } from 'ai';
 import type { ModelMessage } from 'ai';
-import { createAmazonBedrock } from '@ai-sdk/amazon-bedrock';
+import { after } from 'next/server';
+import { createBedrockAnthropic } from '@ai-sdk/amazon-bedrock/anthropic';
 import { z } from 'zod';
 import sharp from 'sharp';
 import { validateDesign } from './design-harness';
 import type { ModelId } from './models/types';
-import { buildCameraPrompt, snapToNearest, AZIMUTH_MAP, ELEVATION_MAP, DISTANCE_MAP, AZIMUTH_STEPS, ELEVATION_STEPS, DISTANCE_STEPS } from './camera-utils';
-import { InferenceClient } from '@huggingface/inference';
 import { editImage } from './skills/edit-image';
 import { rotateCamera } from './skills/rotate-camera';
 import { createVideo } from './skills/create-video';
 import { estimateVideoCredits, resolveAgentVideoSelection, resolveVideoGenerationRoute, resolveVideoOutputDuration, validateVideoModelRequest } from './video-model-capabilities';
-import { deductFixedCredits } from './billing/credits';
-import { createMusic } from './skills/create-music';
+import { deductCredits, deductFixedCredits } from './billing/credits';
+import { deductSeedAudioCredits } from './billing/seed-audio';
+import { createAudio } from './skills/create-audio';
+import { createVoiceover } from './skills/create-voiceover';
+import { formatAudioCapabilitiesForAgent } from './audio-model-capabilities';
+import { listVolcengineTtsVoices } from './volcengine-tts';
 import { transcribeWithVolcengineAsr, type VolcengineAsrTranscript, type TranscriptWord } from './volcengine-asr';
 import agentPrompt from './prompts/agent.md';
 import enhancePrompt from './prompts/enhance.md';
@@ -20,26 +23,175 @@ import creativePrompt from './prompts/creative.md';
 import wildPrompt from './prompts/wild.md';
 import captionsPrompt from './prompts/captions.md';
 import generateImageToolPrompt from './prompts/generate_image_tool.md';
-import animatePrompt from './prompts/animate.md';
-import type { Tip, VideoMeta, VideoModel } from '@/types';
-import { toPublicStorageUrl } from '@/lib/supabase/storage';
+import type { DesignPayload, Tip, VideoMeta, VideoModel } from '@/types';
+import { isPermanentUrl, toPublicStorageUrl, uploadAudio, uploadVideo } from '@/lib/supabase/storage';
 import type { AgentPerf } from './agent-perf';
 import { createTextDeltaState, normalizeTextDelta } from './agent-text-delta';
 import { formatAspectRatio } from './media-aspect';
 import { filterWorkspaceFilesForAgentScope } from './agent-workspace-scope';
+import { normalizeCompositionAnimation } from './composition-duration';
+import {
+  createRemotionExportJob,
+  runRemotionExportJob,
+  type RemotionRenderProfile,
+} from '@/lib/remotion-export';
+import { VIDEO_PLACEHOLDER_IMAGE } from '@/lib/editor/timeline-derivations';
+import { getAgentModelId, isClaudeSonnet5Model } from './bedrock-models';
+import { describeBedrockToolUseInputIssue } from './bedrock-tool-inputs';
+import { mergePatchProps } from './patch-props';
+import type { AgentModelPreference } from './agent-models';
+import {
+  createAgentModelRuntime,
+  getAgentProviderOptions,
+  sumOpenRouterProviderCost,
+  type AgentModelRuntime,
+} from './agent-model-runtime';
+import { classifyModelTermination } from './agent-terminal';
+import {
+  getOutputLanguageRequirement,
+  getReplyLanguageInstruction,
+  normalizeLocale,
+  translate,
+} from './locales';
 
 const MAX_VIDEO_DIMENSION_PROBE_BYTES = 220 * 1024 * 1024;
+
+function runGoogleOmniVideoSnapshotAfterResponse(options: {
+  userId: string;
+  projectId: string;
+  snapshotId: string;
+  taskId: string;
+  videoMeta: VideoMeta;
+  createVideoInput: Parameters<typeof createVideo>[0];
+}) {
+  after(async () => {
+    const { getSupabaseAdmin } = await import('@/lib/supabase/service');
+    const admin = getSupabaseAdmin();
+    try {
+      const result = await createVideo(options.createVideoInput);
+      if (!result.success || !result.videoUrl) {
+        await admin.from('snapshots').update({
+          video_meta: {
+            ...options.videoMeta,
+            status: 'failed',
+            error: result.message || 'Google Omni video generation failed',
+          },
+        }).eq('id', options.snapshotId);
+        return;
+      }
+
+      const { probeMP4Dimensions } = await import('@/lib/mp4-probe');
+      const providerVideoUrl = result.videoUrl;
+      const buffer = providerVideoUrl.startsWith('https://generativelanguage.googleapis.com/') || providerVideoUrl.startsWith('data:')
+        ? await (await import('@/lib/google-omni-video')).fetchGoogleOmniVideoBytes(providerVideoUrl)
+        : new Uint8Array(await (await fetch(providerVideoUrl)).arrayBuffer());
+      const dims = probeMP4Dimensions(buffer);
+      const permanentUrl = await uploadVideo(admin, options.userId, options.projectId, options.snapshotId, buffer);
+      const finalUrl = permanentUrl || providerVideoUrl;
+      const finalMeta: VideoMeta = {
+        ...options.videoMeta,
+        taskId: result.taskId || options.taskId,
+        status: 'completed',
+        videoUrl: finalUrl,
+        providerUrl: providerVideoUrl,
+        videoPath: permanentUrl ? `${options.userId}/${options.projectId}/videos/${options.snapshotId}.mp4` : options.videoMeta.videoPath,
+        ...(dims?.width ? { width: dims.width } : {}),
+        ...(dims?.height ? { height: dims.height } : {}),
+      };
+      await admin.from('snapshots').update({ video_meta: finalMeta }).eq('id', options.snapshotId);
+
+      if (permanentUrl) {
+        try {
+          const { extractVideoPoster } = await import('@/lib/video-poster');
+          const posterBuffer = await extractVideoPoster(permanentUrl);
+          const posterPath = `${options.userId}/${options.projectId}/posters/${options.snapshotId}.jpg`;
+          const { error: posterErr } = await admin.storage.from('images').upload(posterPath, posterBuffer, { contentType: 'image/jpeg', upsert: true });
+          if (!posterErr) {
+            const { data: urlData } = admin.storage.from('images').getPublicUrl(posterPath);
+            if (urlData?.publicUrl) {
+              await admin.from('snapshots').update({ image_url: urlData.publicUrl }).eq('id', options.snapshotId);
+            }
+          }
+        } catch (posterErr) {
+          console.warn('[google-omni] poster extraction failed:', posterErr);
+        }
+      }
+    } catch (error) {
+      await admin.from('snapshots').update({
+        video_meta: {
+          ...options.videoMeta,
+          status: 'failed',
+          error: error instanceof Error ? error.message : String(error),
+        },
+      }).eq('id', options.snapshotId);
+    }
+  });
+}
 
 // ---------------------------------------------------------------------------
 // Model
 // ---------------------------------------------------------------------------
 
-const bedrock = createAmazonBedrock({
-  region: process.env.AWS_REGION?.trim(),
-  accessKeyId: process.env.AWS_ACCESS_KEY_ID?.trim(),
-  secretAccessKey: process.env.AWS_SECRET_ACCESS_KEY?.trim(),
-});
-const MODEL = bedrock(process.env.AGENT_MODEL || 'us.anthropic.claude-sonnet-4-6');
+function getAgentModel() {
+  const bedrockAnthropic = createBedrockAnthropic({
+    region: process.env.AWS_REGION?.trim(),
+    accessKeyId: process.env.AWS_ACCESS_KEY_ID?.trim(),
+    secretAccessKey: process.env.AWS_SECRET_ACCESS_KEY?.trim(),
+  });
+  return bedrockAnthropic(getAgentModelId());
+}
+const ANTHROPIC_REASONING_EFFORTS = new Set(['low', 'medium', 'high', 'xhigh', 'max']);
+const ANTHROPIC_THINKING_MODES = new Set(['adaptive', 'disabled']);
+
+function modelFileContent(base64Data: string, mediaType: string) {
+  return {
+    type: 'file' as const,
+    data: { type: 'data' as const, data: base64Data },
+    mediaType,
+  };
+}
+
+function getAnthropicReasoningEffort() {
+  const effort = process.env.AGENT_REASONING_EFFORT?.trim().toLowerCase();
+  return effort && ANTHROPIC_REASONING_EFFORTS.has(effort) ? effort : undefined;
+}
+
+function getAnthropicThinkingMode() {
+  const mode = process.env.AGENT_THINKING_MODE?.trim().toLowerCase();
+  return mode && ANTHROPIC_THINKING_MODES.has(mode) ? mode : undefined;
+}
+
+function getAnthropicContextManagement(modelId: string) {
+  if (isClaudeSonnet5Model(modelId)) {
+    return {
+      edits: [
+        {
+          type: 'clear_tool_uses_20250919',
+          trigger: { type: 'input_tokens', value: 650000 },
+          keep: { type: 'tool_uses', value: 24 },
+        },
+        {
+          type: 'compact_20260112',
+          trigger: { type: 'input_tokens', value: 900000 },
+        },
+      ],
+    };
+  }
+
+  return {
+    edits: [
+      {
+        type: 'clear_tool_uses_20250919',
+        trigger: { type: 'input_tokens', value: 80000 },
+        keep: { type: 'tool_uses', value: 3 },
+      },
+      {
+        type: 'compact_20260112',
+        trigger: { type: 'input_tokens', value: 150000 },
+      },
+    ],
+  };
+}
 
 // ---------------------------------------------------------------------------
 // Types
@@ -49,7 +201,7 @@ interface AgentContext {
   currentImage: string;       // base64 data URL – updated after each generation
   referenceImages?: string[]; // base64 data URLs – user-uploaded references (up to 3)
   projectId: string;
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+
   supabase?: any;             // Supabase client for workspace operations
   userId?: string;            // Current user ID for workspace
   /** Images generated during this run (base64). Streamed to frontend out-of-band. */
@@ -66,7 +218,7 @@ interface AgentContext {
   videoResolution?: import('@/types').VideoResolution;
   /** True when the app video selector is in automatic mode. */
   videoAuto?: boolean;
-  /** Current-turn audio references imported through CLI/app music infrastructure. Not Media Index. */
+  /** Project-scoped audio references imported through CLI/app music infrastructure. Not Timeline Media Index. */
   audioAttachments?: AudioAttachment[];
   /** Task ID + prompt set by generate_animation tool, emitted as animation_task event (v1) */
   // Legacy v1 fields — no longer set by generate_animation, but kept for SSE event type compat
@@ -114,7 +266,7 @@ export type AgentStreamEvent =
   | { type: 'content'; text: string }
   | { type: 'new_turn' }  // signals start of a new assistant response (after tool result)
   | { type: 'image'; image: string; usedModel?: string; snapshotId?: string; imageUrl?: string; description?: string }
-  | { type: 'tool_call'; tool: string; input: Record<string, unknown>; images?: string[]; toolCallId?: string; step?: number }
+  | { type: 'tool_call'; tool: string; input: Record<string, unknown>; displayInput?: Record<string, unknown>; images?: string[]; toolCallId?: string; step?: number }
   | { type: 'tool_result'; tool: string; toolCallId?: string; step?: number; output?: unknown }
   | { type: 'animation_task'; taskId: string; prompt: string; imageUrls?: string[]; model?: string }
   | { type: 'video_snapshot'; snapshotId: string; taskId: string; videoMeta: import('@/types').VideoMeta }
@@ -129,9 +281,15 @@ export type AgentStreamEvent =
   | { type: 'render'; code: string; width: number; height: number; props?: Record<string, unknown>; animation?: { fps: number; durationInSeconds: number; format?: string }; editables?: import('@/types').EditableField[]; published?: boolean; previewUrl?: string }  // Agent React design for browser rendering
   | { type: 'design'; code: string; width: number; height: number; props?: Record<string, unknown>; animation?: { fps: number; durationInSeconds: number; format?: string }; editables?: import('@/types').EditableField[]; published?: boolean }  // @deprecated — backward compat alias for 'render'
   | { type: 'music_task'; taskId: string }  // emitted when generate_music tool creates a task — frontend polls
-  | { type: 'usage'; inputTokens: number; outputTokens: number; cacheReadTokens?: number; cacheWriteTokens?: number; model: string }  // token usage for billing (inputTokens = noCache only)
+  | { type: 'usage'; inputTokens: number; outputTokens: number; cacheReadTokens?: number; cacheWriteTokens?: number; providerCostUsd?: number; model: string }  // token usage for billing (inputTokens = noCache only)
   | { type: 'done' }
-  | { type: 'error'; message: string };
+  | {
+      type: 'error';
+      message: string;
+      code?: string;
+      recoverable?: boolean;
+      checkpoint?: { draftPath?: string; previewUrl?: string; lastTool?: string; finishReason?: string; rawFinishReason?: string };
+    };
 
 // Skill types (workspace replaces hardcoded SKILL_PROMPTS map)
 import { type ParsedSkill } from './skill-registry';
@@ -174,6 +332,171 @@ function resolveAudioRefs(audioAttachments: AudioAttachment[] | undefined, refs:
   return { audioUrls };
 }
 
+function addAudioAttachment(ctx: AgentContext, audio: AudioAttachment | null | undefined): number {
+  if (!audio?.audioUrl || !/^https?:\/\//.test(audio.audioUrl)) {
+    return ctx.audioAttachments?.length || 0;
+  }
+
+  const next = [...(ctx.audioAttachments || [])];
+  const existing = next.findIndex(item => item.audioUrl === audio.audioUrl);
+  if (existing >= 0) {
+    next[existing] = { ...next[existing], ...audio };
+    ctx.audioAttachments = next;
+    return existing + 1;
+  }
+
+  next.push(audio);
+  ctx.audioAttachments = next;
+  return next.length;
+}
+
+function cleanMusicField(value: unknown, fallback = ''): string {
+  return String(value ?? fallback).replace(/[|\n\r]/g, ' ').trim();
+}
+
+function getPlayableAudioUrl(record: Record<string, unknown>): string {
+  return typeof record.audioUrl === 'string' && /^https?:\/\//.test(record.audioUrl)
+    ? record.audioUrl
+    : typeof record.streamAudioUrl === 'string' && /^https?:\/\//.test(record.streamAudioUrl)
+      ? record.streamAudioUrl
+      : typeof record.url === 'string' && /^https?:\/\//.test(record.url)
+        ? record.url
+        : '';
+}
+
+function formatMusicLine(record: Record<string, unknown>, fallbackTrackIndex = 0): string | null {
+  const audioUrl = getPlayableAudioUrl(record);
+  if (!audioUrl) return null;
+
+  const title = cleanMusicField(record.title, 'Generated audio');
+  const duration = Number(record.duration);
+  const safeDuration = Number.isFinite(duration) && duration > 0 ? Math.round(duration) : 0;
+  const trackIndex = Number(record.trackIndex);
+  const safeTrackIndex = Number.isInteger(trackIndex) && trackIndex >= 0 ? trackIndex : fallbackTrackIndex;
+  const tags = cleanMusicField(record.tags, 'audio,generated');
+  const playUrl = typeof record.streamAudioUrl === 'string' && /^https?:\/\//.test(record.streamAudioUrl)
+    ? record.streamAudioUrl
+    : audioUrl;
+  const finalUrl = typeof record.providerAudioUrl === 'string' && /^https?:\/\//.test(record.providerAudioUrl)
+    ? record.providerAudioUrl
+    : (playUrl === audioUrl ? audioUrl : '');
+
+  return `music:${safeTrackIndex}|${title}|${safeDuration}|${tags}|${playUrl}|${finalUrl}`;
+}
+
+function formatGeneratedAudioForCui(toolName: string | undefined, output: unknown, locale = normalizeLocale('en')): string | null {
+  if (!toolName || !['generate_voiceover', 'generate_audio', 'generate_music'].includes(toolName)) return null;
+  if (!output || typeof output !== 'object') return null;
+  const record = output as Record<string, unknown>;
+  if (record.success === false) return null;
+
+  const tracks = Array.isArray(record.tracks)
+    ? record.tracks
+        .map((track, index) => track && typeof track === 'object' ? formatMusicLine(track as Record<string, unknown>, index) : null)
+        .filter((line): line is string => !!line)
+    : [];
+  if (tracks.length) {
+    return `\n\n🎵 ${translate(locale, 'agent.audio.generated')}\n${tracks.join('\n')}\n`;
+  }
+
+  const audioUrl = getPlayableAudioUrl(record);
+  if (!audioUrl) return null;
+  const title = cleanMusicField(
+    record.title,
+    toolName === 'generate_voiceover' ? 'Generated voiceover' : 'Generated audio',
+  );
+  const line = formatMusicLine({
+    ...record,
+    title,
+    tags: cleanMusicField(record.tags, toolName === 'generate_voiceover' ? 'voiceover,tts' : 'audio,generated'),
+    audioUrl,
+  });
+  if (!line) return null;
+
+  return `\n\n🎵 ${translate(locale, 'agent.audio.generatedNamed', title)}\n${line}\n`;
+}
+
+function formatGeneratedAudioForModel(toolName: string, output: unknown): string {
+  if (!output || typeof output !== 'object') return 'Audio tool completed.';
+  const record = output as Record<string, unknown>;
+  if (record.success === false) {
+    return `Audio generation failed: ${String(record.message || 'unknown error')}`;
+  }
+  if (Array.isArray(record.tracks)) {
+    const trackLines = record.tracks
+      .map((track, index) => {
+        if (!track || typeof track !== 'object') return '';
+        const item = track as Record<string, unknown>;
+        const audioUrl = getPlayableAudioUrl(item);
+        if (!audioUrl) return '';
+        const title = cleanMusicField(item.title, `Generated music ${index + 1}`);
+        const duration = typeof item.duration === 'number' && Number.isFinite(item.duration)
+          ? `${Math.round(item.duration)}s`
+          : 'unknown duration';
+        const audioIndex = typeof item.audioIndex === 'number' && Number.isFinite(item.audioIndex)
+          ? item.audioIndex
+          : index + 1;
+        const providerFinal = typeof item.providerAudioUrl === 'string' && item.providerAudioUrl !== audioUrl
+          ? `\n  Provider final URL, if already available: ${item.providerAudioUrl}`
+          : '';
+        return `- <<<audio_${audioIndex}>>> ${title} (${duration})\n  Resolved public audioUrl: ${audioUrl}${providerFinal}`;
+      })
+      .filter(Boolean);
+    if (trackLines.length) {
+      return [
+        `${trackLines.length} audio track(s) are ready.`,
+        'Choose the best track for the user request. Use the exact chosen audioUrl directly in Remotion <Audio src={...}> props/code.',
+        'Do not put <<<audio_N>>> markers inside Remotion code; markers are only labels for choosing.',
+        ...trackLines,
+      ].filter(Boolean).join('\n');
+    }
+  }
+  const title = cleanMusicField(record.title, toolName === 'generate_voiceover' ? 'Generated voiceover' : 'Generated audio');
+  const audioUrl = getPlayableAudioUrl(record);
+  const duration = typeof record.duration === 'number' && Number.isFinite(record.duration)
+    ? `${Math.round(record.duration)}s`
+    : 'unknown duration';
+  const trackIndex = typeof record.trackIndex === 'number' && Number.isFinite(record.trackIndex)
+    ? record.trackIndex
+    : undefined;
+  const marker = trackIndex != null ? `<<<audio_${trackIndex + 1}>>>` : 'Audio Index';
+  const provider = cleanMusicField(record.provider || record.model, '');
+  const resolved = audioUrl
+    ? `Resolved public audioUrl: ${audioUrl}\nUse this exact URL directly in Remotion <Audio src={...}> props/code. Do not regenerate this audio unless the duration or style is wrong.`
+    : 'No public audioUrl was returned; do not use this result as playable audio.';
+  return [
+    `${title} generated successfully (${duration}${provider ? `, ${provider}` : ''}).`,
+    `Added to Audio Index as ${marker}.`,
+    resolved,
+    typeof record.message === 'string' ? `Tool message: ${record.message}` : '',
+  ].filter(Boolean).join('\n');
+}
+
+function formatGeneratedImageForModel(output: unknown): string {
+  if (!output || typeof output !== 'object') return 'Image tool completed.';
+  const record = output as Record<string, unknown>;
+  if (record.success === false) {
+    return `Image generation failed: ${String(record.message || 'unknown error')}`;
+  }
+  const mediaIndex = typeof record.mediaIndex === 'number' && Number.isFinite(record.mediaIndex)
+    ? record.mediaIndex
+    : undefined;
+  const marker = mediaIndex ? `<<<media_${mediaIndex}>>>` : 'the new Media Index item';
+  const imageUrl = typeof record.imageUrl === 'string' && /^https?:\/\//.test(record.imageUrl)
+    ? record.imageUrl
+    : '';
+  const urlLine = imageUrl
+    ? `Resolved image URL: ${imageUrl}`
+    : `A public image URL may not be available in this same tool result yet because upload happens asynchronously.`;
+  return [
+    `Image generated successfully and added to the timeline as ${marker}.`,
+    urlLine,
+    `For Remotion composition run_code, use ${imageUrl ? 'the resolved URL' : marker} directly in props/code; run_code resolves Media Index markers before rendering.`,
+    `Do not call list_files or write_file(fromWorkspaceOutputs) to find this generated image. It is timeline media, not a workspace file output.`,
+    typeof record.message === 'string' ? `Tool message: ${record.message}` : '',
+  ].filter(Boolean).join('\n');
+}
+
 function resolveMediaMarkersInString(value: string, snapshotImages: string[]): string {
   return value.replace(/<<<media_(\d+)>>>/g, (marker, rawIndex) => {
     const media = snapshotImages[Number(rawIndex) - 1];
@@ -191,39 +514,6 @@ function resolveMediaMarkersInValue(value: unknown, snapshotImages: string[]): u
     );
   }
   return value;
-}
-
-function inferCompositionTotalFrames(code: string): number | null {
-  let maxFrame = 0;
-  let found = false;
-  const sequencePattern = /<Sequence\b([^>]*)>/g;
-  for (const match of code.matchAll(sequencePattern)) {
-    const attrs = match[1] || '';
-    const from = Number(attrs.match(/\bfrom=\{?(\d+)\}?/)?.[1] || 0);
-    const duration = Number(attrs.match(/\bdurationInFrames=\{?(\d+)\}?/)?.[1] || 0);
-    if (!Number.isFinite(from) || !Number.isFinite(duration) || duration <= 0) continue;
-    found = true;
-    maxFrame = Math.max(maxFrame, from + duration);
-  }
-  return found ? maxFrame : null;
-}
-
-function normalizeCompositionAnimation(
-  code: string,
-  animation: { fps?: number; durationInSeconds?: number; format?: string } | undefined
-): { fps: number; durationInSeconds: number; format?: string } | undefined {
-  if (!animation) return undefined;
-  const fps = Number(animation.fps) || 30;
-  const inferredFrames = inferCompositionTotalFrames(code);
-  if (!inferredFrames) {
-    return { ...animation, fps, durationInSeconds: Number(animation.durationInSeconds) || 5 };
-  }
-  const inferredSeconds = Number((inferredFrames / fps).toFixed(3));
-  const currentSeconds = Number(animation.durationInSeconds) || inferredSeconds;
-  if (Math.abs(currentSeconds - inferredSeconds) > 0.05) {
-    return { ...animation, fps, durationInSeconds: inferredSeconds };
-  }
-  return { ...animation, fps, durationInSeconds: currentSeconds };
 }
 
 function formatMs(ms: number | null | undefined): string {
@@ -471,6 +761,52 @@ async function resolveVideoUrlForMediaIndex(ctx: AgentContext, mediaIndex: numbe
   }
 
   return { idx: v.idx, error: `No real video file found at <<<media_${mediaIndex}>>>. Use preview_frame only for Remotion compositions with design_path.` };
+}
+
+async function resolveCompositionSource(ctx: AgentContext, input: {
+  media_index?: number;
+  snapshot_id?: string;
+  design_path?: string;
+}): Promise<{
+  mediaIndex?: number;
+  snapshotId?: string;
+  designPath?: string;
+  design?: DesignPayload;
+  error?: string;
+}> {
+  if (input.design_path) {
+    return { snapshotId: input.snapshot_id, designPath: input.design_path };
+  }
+  if (input.snapshot_id && !input.media_index) {
+    return { snapshotId: input.snapshot_id };
+  }
+  if (input.media_index !== undefined) {
+    if (!ctx.supabase) return { error: 'Timeline lookup requires workspace access.' };
+
+    const { data: snaps, error } = await ctx.supabase
+      .from('snapshots')
+      .select('id, type, design_path')
+      .eq('project_id', ctx.projectId)
+      .order('sort_order', { ascending: true });
+    if (error) return { error: `Snapshot lookup failed: ${error.message}` };
+
+    const idx = input.media_index - 1;
+    const available = snaps?.length || 0;
+    if (!Number.isInteger(input.media_index) || idx < 0 || idx >= available) {
+      return { error: `Invalid index ${input.media_index}. Available: 1-${available}.` };
+    }
+
+    const snap = snaps?.[idx] as { id?: string; type?: string; design_path?: string | null } | undefined;
+    if (!snap) return { error: `No snapshot found for <<<media_${input.media_index}>>>.` };
+    if (!snap.design_path) {
+      return { error: `<<<media_${input.media_index}>>> is ${snap.type || 'media'}, not an editable Remotion composition.` };
+    }
+    return { mediaIndex: input.media_index, snapshotId: snap.id, designPath: snap.design_path };
+  }
+
+  const design = (ctx as any).__lastDesignPayload as DesignPayload | undefined;
+  if (design?.code) return { design };
+  return { error: 'No composition source found. Use run_code first, or pass media_index/snapshot_id/design_path.' };
 }
 
 async function resolveImageForAnalysis(ctx: AgentContext, options: {
@@ -880,7 +1216,7 @@ function estTokens(chars: number): number {
 }
 
 /** Build system prompt with lightweight skill manifest (not full templates) */
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
+
 async function buildSystemPrompt(userSkills?: ParsedSkill[], supabase?: any, userId?: string, projectId?: string): Promise<string> {
   const base = getAgentSystemPrompt();
   const manifest = await workspace.getSkillManifest(supabase, userId);
@@ -951,7 +1287,7 @@ ${manifest}${userSkillLines}
 }
 
 function buildLightweightSystemPrompt(mode: 'analysis' | 'tipReaction', locale?: string): string {
-  const languageRule = locale === 'en' ? 'Reply in English.' : locale === 'zh' ? 'Reply in Chinese.' : 'Reply in the same language the user writes in.';
+  const languageRule = getReplyLanguageInstruction(locale);
   if (mode === 'analysis') {
     return [
       'You are Makaron, a warm and concise creative media assistant.',
@@ -973,14 +1309,14 @@ function buildLightweightSystemPrompt(mode: 'analysis' | 'tipReaction', locale?:
 // Tools (Vercel AI SDK style, closure over AgentContext)
 // ---------------------------------------------------------------------------
 
-function createTools(ctx: AgentContext) {
+function createTools(ctx: AgentContext, runtime: AgentModelRuntime, locale?: string) {
   return {
     generate_image: tool({
       description: generateImageToolPrompt,
       inputSchema: z.object({
         editPrompt: z.string().describe('The specific creative direction for this edit (English). When skill is set, you must have read and internalized that skill prompt once in this conversation; write an editPrompt that follows those rules.'),
         skill: z.string().optional().describe('Activate a skill template (e.g. enhance, creative, wild, captions). See tool description and available skills.'),
-        model: z.enum(['gemini', 'qwen', 'pony', 'wai', 'openai']).optional().describe('NEVER set this unless the user literally says a model name like "用pony" or "use qwen" or "用openai", or the active long-video-director workflow is generating director storyboard images, which MUST set "openai". For NSFW after Gemini refusal, set "qwen". Otherwise ALWAYS omit — the router handles everything automatically. Setting this without explicit user request is a bug.'),
+        model: z.enum(['gemini', 'gemini-lite', 'qwen', 'pony', 'wai', 'openai']).optional().describe('NEVER set this unless the user literally says a model name like "用pony" or "use qwen" or "用openai" or "nano banana lite", or the active long-video-director workflow is generating director storyboard images, which MUST set "openai". For NSFW after Gemini refusal, set "qwen". Otherwise ALWAYS omit — the router handles everything automatically. Setting this without explicit user request is a bug.'),
         aspectRatio: z.string().optional().describe('Target aspect ratio e.g. "4:5", "1:1", "16:9"'),
         media_index: z.number().optional().describe('1-based index of the snapshot to edit (<<<media_1>>> = 1, <<<media_2>>> = 2, ...). Omit for text-to-image (no photo sent). For most edits, pass the current snapshot index.'),
         reference_media_indices: z.array(z.number()).optional().describe('1-based indices of snapshots to use as reference images (e.g. [1, 3] to reference <<<media_1>>> and <<<media_3>>>). Use when combining elements from multiple snapshots — e.g. "use the person from media_1 and the background from media_2". The editPrompt should describe how to combine them (e.g. "Place the person from Media 2 into the scene of Media 1").'),
@@ -998,7 +1334,7 @@ function createTools(ctx: AgentContext) {
         }
 
         // Resolve reference images: user-uploaded + snapshot indices
-        let resolvedRefs = ctx.referenceImages ? [...ctx.referenceImages] : [];
+        const resolvedRefs = ctx.referenceImages ? [...ctx.referenceImages] : [];
         console.log(`🎯 [generate_image] skill="${skill || 'none'}" refs=${resolvedRefs.length} editPrompt="${editPrompt.slice(0, 80)}"`);
         if (reference_media_indices?.length) {
           for (const refIdx of reference_media_indices) {
@@ -1037,8 +1373,25 @@ function createTools(ctx: AgentContext) {
           // so base64 entries get replaced with http URLs for downstream tools
           await refreshSnapshotUrls(ctx);
         }
-        const indexInfo = skillResult.image ? ` Now <<<media_${ctx.snapshotImages.length}>>>.` : '';
-        return { success: skillResult.success as true, message: skillResult.message + indexInfo, contentBlocked: skillResult.contentBlocked };
+        const mediaIndex = skillResult.image ? ctx.snapshotImages.length : undefined;
+        const imageUrl = mediaIndex ? ctx.snapshotImages[mediaIndex - 1] : undefined;
+        const urlInfo = imageUrl?.startsWith('http')
+          ? ` Resolved image URL: ${imageUrl}. Use this URL directly in Remotion composition props/code; do not use the <<<media_${mediaIndex}>>> marker inside composition code.`
+          : '';
+        const indexInfo = mediaIndex ? ` Now <<<media_${mediaIndex}>>>.${urlInfo}` : '';
+        return {
+          success: skillResult.success as true,
+          message: skillResult.message + indexInfo,
+          ...(mediaIndex ? { mediaIndex } : {}),
+          ...(imageUrl?.startsWith('http') ? { imageUrl } : {}),
+          contentBlocked: skillResult.contentBlocked,
+        };
+      },
+      toModelOutput({ output }: { output: any }) {
+        return {
+          type: 'content' as const,
+          value: [{ type: 'text' as const, text: formatGeneratedImageForModel(output) }],
+        };
       },
     }),
 
@@ -1051,32 +1404,32 @@ Use this tool after the user has confirmed a video script that is already visibl
 
 Hard constraints:
 - First line of script = short title (2-5 words). Then script body.
-- Use \`<<<media_N>>>\` to reference images AND videos (N starts at 1). Videos in the timeline are auto-routed — just reference them like images.
+- Use \`<<<media_N>>>\` to reference images AND videos (N starts at 1). Videos in the timeline are auto-routed — just reference them like images. For native SeeDance text-to-video with no source media, use no media markers and do not generate an intermediate image first.
 - To EDIT a video: reference it with \`<<<media_N>>>\` and describe the changes. The selected model must support reference videos.
-- To use CLI/app imported reference music/audio for pacing or beat sync, pass \`audio_refs\` like ["audio_1"] from the Current Audio Attachments block. Audio refs are NOT Media Index refs. Reference audio is only supported by SeeDance/SeeDance Fast/SeeDance Mini.
+- To use CLI/app imported reference music/audio for pacing or beat sync, mention its Audio Index marker in \`story_prompt\` (for example \`<<<audio_1>>>\`) AND pass \`audio_refs\` like ["audio_1"]. Audio refs are NOT Timeline Media Index refs. Reference audio is only supported by SeeDance/SeeDance Fast/SeeDance Mini.
 - Works for Kling, SeeDance, SeeDance Mini, and Grok, but respect capability limits and tool errors.
-- Single-call total duration: SeeDance/SeeDance Mini is 4-15 seconds (4s minimum output, 5s default/common preset); Kling is 5-15 seconds; Grok 1.5 is 1-15 seconds for one starting image. If the user asks for anything shorter than the selected model's minimum, or referenced source videos total less than that minimum, write a compact script at the model minimum and set duration to that minimum. If the user wants 30s, 60s, 1-2 minutes, or anything longer than 15s, do not call this tool with one long script. Use \`skills/long-video-director/SKILL.md\` and split into self-contained segments of 15s or less.
+- Single-call total duration: SeeDance/SeeDance Mini is 4-15 seconds (4s minimum output, 5s default/common preset); Kling is 5-15 seconds; Grok 1.5 is 1-15 seconds for one starting image; Google Omni is 3-10 seconds. If the user asks for anything shorter than the selected model's minimum, or referenced source videos total less than that minimum, write a compact script at the model minimum and set duration to that minimum. If the user wants 30s, 60s, 1-2 minutes, or anything longer than the selected model's max, do not call this tool with one long script. Use \`skills/long-video-director/SKILL.md\` and split into self-contained segments within the selected model limit.
 - If a complete script totals 15 seconds or less, submit it as one video generation call. Put the whole title, every \`Shot N (Xs):\` line, and the \`Style:\` line into the same \`story_prompt\`; set \`duration\` to the total script duration when known. Do not submit only one shot, the first shot, or one line from the script.
 - If the source video may exceed model limits, call \`read_file('skills/video-ffmpeg-lab/SKILL.md')\` and split it once with \`run_code({ runtime: "node" })\` before submitting generation.
 - Total duration must fit the selected model's capability. Do not shrink a long source to 5s just to bypass a limit; split first.
 - Long source video rule: if a timeline/reference video is longer than 15 seconds, do not shrink the whole source into one 5s or 15s edit. Use \`skills/long-video-director/SKILL.md\`, analyze/split it into self-contained segments of 15s or less, and submit one script per segment after approval.
 - Reference video input limit: for one SeeDance generation, the combined source duration of all timeline/uploaded/reference videos used in the script must be 15 seconds or less. This is a single-generation input limit; do not submit videos whose combined duration is longer than 15s together in one call.
-- Reference video size limit: for one SeeDance generation, every reference video must be .mp4/.mov, <=50MB, width and height each 300-6000px, aspect ratio 0.4-2.5, and frame pixels width*height between 409,600 and 2,086,876. Tiny videos below 409,600 frame pixels must be resized/padded before submission. For Kling, use one .mp4/.mov reference video, <=200MB, resolution <=2K; no explicit Kling video resolution lower bound is documented. Grok 1.5 does not support video references or multi-image references in Makaron; use it only for single-image-to-video.
+- Reference video size limit: for one SeeDance generation, every reference video must be .mp4/.mov, <=50MB, width and height each 300-6000px, aspect ratio 0.4-2.5, and frame pixels width*height between 409,600 and 2,086,876. Tiny videos below 409,600 frame pixels must be resized/padded before submission. For Kling, use one .mp4/.mov reference video, <=200MB, resolution <=2K; no explicit Kling video resolution lower bound is documented. Grok 1.5 does not support video references or multi-image references in Makaron; use it only for single-image-to-video. Google Omni supports one uploaded/reference video in Makaron and, without a video reference, up to 6 image references for subject/reference-to-video; it is best for fast image/video edits with native generated audio. Uploaded audio_refs are not supported by Google Omni.
 - Video edit duration lock: when editing timeline videos up to 15 seconds total, output duration should match the combined source duration from Media Index, clamped to the selected model range. For SeeDance, clamp to 4-15s; if combined source duration is under 4s, set \`duration: 4\`. For long-video pipelines, duration lock applies per FFmpeg chunk.
-- Default model follows app selection, usually SeeDance 2.0 Fast (\`seedance-fast\`) at 720p. If the app selector has an explicit non-default model or explicit resolution, the backend keeps that app selection, so align the script with the selected route. Generic "HD"/"高清"/"high quality" requests still use \`seedance-fast\` 720p. Use \`seedance-mini\` only when the user asks for Seedance Mini, lower cost, draft, or multi-size testing; prefer 480p unless they ask for 720p. Use standard \`seedance\` only when the user explicitly asks for 1080p, standard/full SeeDance 2.0, or premium/highest-resolution output. If the user asks for cheaper/faster/draft/480p, set \`video_resolution: "480p"\` when supported. If the user asks for Kling Pro/HD/1080p, use model \`kling\` with \`video_resolution: "1080p"\`; if they ask for Kling 4K, use model \`kling\` with \`video_resolution: "4k"\`. If the user asks for Grok by name ("用 Grok 生成", "use grok", "用 grok 做"), fastest generation, or native audio from one image, use model \`grok\` and write a single-image-to-video script.
+- Default model follows app selection, usually SeeDance 2.0 Fast (\`seedance-fast\`) at 720p. If the app selector has an explicit non-default model or explicit resolution, the backend keeps that app selection, so align the script with the selected route. Generic "HD"/"高清"/"high quality" requests still use \`seedance-fast\` 720p. Use \`seedance-mini\` only when the user asks for Seedance Mini, lower cost, draft, or multi-size testing; prefer 480p unless they ask for 720p. Use standard \`seedance\` only when the user explicitly asks for 1080p, standard/full SeeDance 2.0, or premium/highest-resolution output. If the user asks for cheaper/faster/draft/480p, set \`video_resolution: "480p"\` when supported. If the user asks for Kling Pro/HD/1080p, use model \`kling\` with \`video_resolution: "1080p"\`; if they ask for Kling 4K, use model \`kling\` with \`video_resolution: "4k"\`. If the user asks for Grok by name ("用 Grok 生成", "use grok", "用 grok 做"), fastest generation, or native audio from one image, use model \`grok\` and write a single-image-to-video script. Use model \`google-omni\` only when the app selector is already Gemini Omni or the user explicitly asks for Omni/Gemini Omni/Google Omni; treat it as a fast short 720p video editing model with native generated audio, and do not pass audio_refs to Google Omni.
 - Grok aspect-ratio rule: for Grok single-image-to-video, do not pass \`aspect_ratio\`. xAI stretches the source image when a forced ratio differs from the image. If the user asks for a different final shape, choose Seedance/Kling or first create/pad the source image to that target shape, then generate.
 - \`video_ref_url\`: ONLY for external videos not in Media Index (e.g. from workspace/list_files). Never put video URLs in prompt text.
 - If the generated video is an intermediate artifact, pass \`completion_actions\` so CUI/CLI can show the next step after rendering finishes. These actions are user-confirmed by default; do not rely on the user remembering what to do next. For local video repair, include exact replaceStart/replaceEnd/replacementDuration and say to trim/fit the patch to that duration before merging so the final video keeps the original duration.
 - The script must have been shown to the user and confirmed before this tool is called, unless the user's current request explicitly asks for direct submission without confirmation.`,
       inputSchema: z.object({
-        story_prompt: z.string().describe('The video script. First line = short title (2-5 words), then the script body. Use <<<media_N>>> to reference images and videos. Total duration must be 15 seconds or less.'),
-        duration: z.number().optional().describe('Duration in seconds. SeeDance/SeeDance Mini accepts integer output duration 4-15s (default 5s); Kling accepts 5-15s; Grok 1.5 accepts 1-15s for one image. Never pass below the selected model minimum. For timeline video edits up to 15s total, set this to the combined source video duration from Media Index clamped to the selected model range. Do not submit multiple reference videos together if their combined source duration exceeds 15s. Omit for smart mode only when generating from photos.'),
+        story_prompt: z.string().describe('The video script. First line = short title (2-5 words), then the script body. Use <<<media_N>>> only when referencing available images/videos, and <<<audio_N>>> for Audio Index references. Native SeeDance text-to-video uses no media markers. Total duration must be 15 seconds or less.'),
+        duration: z.number().optional().describe('Duration in seconds. SeeDance/SeeDance Mini accepts integer output duration 4-15s (default 5s); Kling accepts 5-15s; Grok 1.5 accepts 1-15s for one image; Google Omni accepts 3-10s. Never pass below the selected model minimum. For timeline video edits, set this to the combined source video duration from Media Index clamped to the selected model range. Do not submit multiple reference videos together if their combined source duration exceeds the selected model limit. Omit for smart mode only when generating from photos.'),
         aspect_ratio: z.enum(['16:9', '9:16', '1:1', '4:3', '3:4', '21:9', '3:2', '2:3']).optional().describe('Output aspect ratio. Pass it only when the user asks for a specific shape and the selected model can safely honor it. For Grok single-image-to-video, omit this field because xAI stretches the source image when a forced ratio differs from the image. Seedance supports 16:9/9:16/1:1/4:3/3:4/21:9/adaptive; Makaron intentionally does not pass forced ratios to Grok image-to-video.'),
-        model: z.string().optional().describe('Video model/provider id. Default follows the app selection (usually seedance-fast) at 720p. Generic HD/高清/high quality requests should still use seedance-fast; use seedance-mini for explicit Mini/lower-cost/draft/multi-size tests; use seedance only for explicit 1080p, standard/full SeeDance, or premium/highest-resolution requests. Supported ids include seedance-fast, seedance-mini, seedance, kling, and grok.'),
-        video_resolution: z.enum(['480p', '720p', '1080p', '4k', 'auto']).optional().describe('Output resolution. Omit/auto follows the selected model default. Generic HD/高清/high quality means seedance-fast 720p, not 1080p. seedance-fast/seedance-mini support 480p/720p; seedance supports 480p/720p/1080p; kling supports 720p/1080p/4k; grok supports 480p/720p.'),
+        model: z.string().optional().describe('Video model/provider id. Default follows the app selection (usually seedance-fast) at 720p. Generic HD/高清/high quality requests should still use seedance-fast; use seedance-mini for explicit Mini/lower-cost/draft/multi-size tests; use seedance only for explicit 1080p, standard/full SeeDance, or premium/highest-resolution requests. Use google-omni only for explicit Omni/Gemini Omni/Google Omni or when the app selector is already Gemini Omni; it is a fast short 720p video editing model with native generated audio. Supported ids include seedance-fast, seedance-mini, seedance, kling, grok, and google-omni.'),
+        video_resolution: z.enum(['480p', '720p', '1080p', '4k', 'auto']).optional().describe('Output resolution. Omit/auto follows the selected model default. Generic HD/高清/high quality means seedance-fast 720p, not 1080p. seedance-fast/seedance-mini support 480p/720p; seedance supports 480p/720p/1080p; kling supports 720p/1080p/4k; grok supports 480p/720p; google-omni outputs 720p.'),
         media_refs: z.array(z.string()).optional().describe('Additional image URLs NOT already in Media Index (e.g. workspace files from list_files). Images in Media Index are auto-available — just use <<<media_N>>> in script. Passing Media Index URLs here will be rejected.'),
-        audio_refs: z.array(z.string()).optional().describe('Reference audio labels from the Current Audio Attachments block, e.g. ["audio_1"]. Use for beat sync, pacing, or music reference. These are separate from <<<media_N>>> and only supported by SeeDance models.'),
-        video_ref_url: z.string().optional().describe('External reference video URL (from workspace/skill assets via list_files). For timeline videos, just use <<<media_N>>> — they are auto-routed. Only use this for external URLs not in Media Index. SeeDance video references must be <=50MB, width/height 300-6000px, aspect ratio 0.4-2.5, frame pixels 409,600-2,086,876. Kling video references must be <=200MB and <=2K; no explicit lower resolution is documented. Grok does not support video references in Makaron yet.'),
+        audio_refs: z.array(z.string()).optional().describe('Reference audio labels from the Audio Index block, e.g. ["audio_1"]. Use for beat sync, pacing, or music reference. These are separate from <<<media_N>>> and only supported by SeeDance models.'),
+        video_ref_url: z.string().optional().describe('External reference video URL (from workspace/skill assets via list_files). For timeline videos, just use <<<media_N>>> — they are auto-routed. Only use this for external URLs not in Media Index. SeeDance video references must be <=50MB, width/height 300-6000px, aspect ratio 0.4-2.5, frame pixels 409,600-2,086,876. Kling video references must be <=200MB and <=2K; no explicit lower resolution is documented. Google Omni accepts one reference video in Makaron. Grok does not support video references in Makaron yet.'),
         video_ref_type: z.enum(['base', 'feature']).optional().describe('How to use the reference video. feature (default): reference motion/style. base: direct edit (Kling only, output duration=input). Almost always use feature.'),
         keep_original_sound: z.boolean().optional().describe('Keep audio from reference video. Default: false.'),
         motion_control: z.boolean().optional().describe('Use Kling Motion Control for precise action transfer from reference video. Requires video_ref_url. Duration = reference video length. No detailed prompt needed — just a title. Kling only.'),
@@ -1099,29 +1452,34 @@ Hard constraints:
         if (media_refs?.length) {
           imageUrls = [...(imageUrls || []), ...media_refs.filter(u => u.startsWith('http'))];
         }
-        if (!imageUrls?.length) {
-          return { success: false as const, message: 'No image URLs available yet — images may still be uploading. Please wait and try again.' };
+        const videoSelection = resolveAgentVideoSelection({
+          appModel: (ctx as any).videoModel,
+          appResolution: (ctx as any).videoResolution,
+          appAuto: (ctx as any).videoAuto,
+          toolModel: model,
+          toolResolution: video_resolution,
+        });
+        const videoModel = videoSelection.model;
+        const videoRoute = resolveVideoGenerationRoute({
+          model: videoModel,
+          resolution: videoSelection.resolution,
+        });
+        if (!imageUrls?.length && !video_ref_url && videoRoute.provider !== 'seedance') {
+          return { success: false as const, message: `${videoRoute.label} requires an image or video reference. Use a SeeDance model for native text-to-video.` };
         }
         try {
-          const videoSelection = resolveAgentVideoSelection({
-            appModel: (ctx as any).videoModel,
-            appResolution: (ctx as any).videoResolution,
-            appAuto: (ctx as any).videoAuto,
-            toolModel: model,
-            toolResolution: video_resolution,
-          });
-          const videoModel = videoSelection.model;
-          const videoRoute = resolveVideoGenerationRoute({
-            model: videoModel,
-            resolution: videoSelection.resolution,
-          });
           const selectedAspectRatio = aspect_ratio;
           const resolvedAudioRefs = resolveAudioRefs(ctx.audioAttachments, audio_refs);
           if (resolvedAudioRefs.error) {
             return { success: false as const, message: resolvedAudioRefs.error };
           }
           if (resolvedAudioRefs.audioUrls.length > 0 && videoRoute.provider !== 'seedance') {
-            return { success: false as const, message: 'Reference audio is only supported by Seedance video models. Choose seedance-fast, seedance-mini, or seedance, or remove audio_refs.' };
+            return {
+              success: false as const,
+              message: videoRoute.provider === 'google-omni'
+                ? 'Google Omni can generate native audio from the prompt, but uploaded audio_refs are not enabled in the current API. Choose seedance-fast, seedance-mini, or seedance for audio_refs, or remove audio_refs and describe the soundtrack for Omni.'
+                : 'Reference audio is only supported by Seedance video models. Choose seedance-fast, seedance-mini, or seedance, or remove audio_refs.',
+            };
           }
 
           // Video harness: validate before calling API
@@ -1209,24 +1567,57 @@ Hard constraints:
             referenceVideoDuration,
             model: videoModel,
           });
+          let providerVideoRefUrl = video_ref_url;
+          let providerAutoVideoUrls = autoVideoUrls;
+          if (allVideoUrls.length > 0 && ctx.userId && ctx.projectId) {
+            const { prepareProviderVideoReferences } = await import('@/lib/provider-video-reference');
+            const referenceSupabase = ctx.supabase || (await import('@/lib/supabase/service')).getSupabaseAdmin();
+            const prepared = await prepareProviderVideoReferences({
+              supabase: referenceSupabase,
+              userId: ctx.userId,
+              projectId: ctx.projectId,
+              urls: allVideoUrls,
+              reason: videoRoute.provider,
+            });
+            if (prepared.normalized.length > 0) {
+              console.log(`[generate_animation] normalized ${prepared.normalized.length} video reference(s) for provider input`);
+            }
+            providerVideoRefUrl = video_ref_url ? prepared.urls[0] : undefined;
+            providerAutoVideoUrls = video_ref_url ? [] : prepared.urls;
+          }
 
-          const skillResult = await createVideo({
+          const createVideoInput = {
             script: story_prompt,
             images: imageUrls,
             duration: effectiveDuration,
             aspectRatio: selectedAspectRatio,
             videoModel,
             videoResolution: videoRoute.resolution,
-            videoUrl: video_ref_url,
+            videoUrl: providerVideoRefUrl,
             videoReferType: video_ref_type,
-            videoUrls: autoVideoUrls.length ? autoVideoUrls : undefined,
+            videoUrls: providerAutoVideoUrls.length ? providerAutoVideoUrls : undefined,
             referenceVideoDuration,
             referenceVideoMetas: referenceVideoMetas.length ? referenceVideoMetas : undefined,
             keepOriginalSound: keep_original_sound,
             motionControl: motion_control,
             characterOrientation: character_orientation,
             audioUrls: resolvedAudioRefs.audioUrls.length ? resolvedAudioRefs.audioUrls : undefined,
-          });
+          };
+          const isGoogleOmniAsync = videoRoute.provider === 'google-omni';
+          if (isGoogleOmniAsync && !ctx.userId) {
+            return { success: false as const, message: 'Google Omni video jobs require an authenticated workspace so the completed video can be saved to Storage.' };
+          }
+
+          const skillResult = isGoogleOmniAsync
+            ? {
+              success: true as const,
+              taskId: `google-omni-job-${crypto.randomUUID()}`,
+              videoModel,
+              providerModel: videoRoute.providerModel,
+              status: 'processing' as const,
+              message: 'Google Omni video job queued in Makaron.',
+            }
+            : await createVideo(createVideoInput);
 
           if (!skillResult.success || !skillResult.taskId) {
             console.error('[generate_animation] createVideo failed:', skillResult.message);
@@ -1255,17 +1646,18 @@ Hard constraints:
           const { VIDEO_PLACEHOLDER_IMAGE } = await import('@/lib/editor/timeline-derivations');
           const videoMeta: import('@/types').VideoMeta = {
             taskId,
-            videoUrl: null,
+            videoUrl: skillResult.videoUrl || null,
             prompt: story_prompt,
             sourceSnapshotIds: sourceVideoSnapshotIds,
             sourceUrls: sourceUrls.length > 0 ? sourceUrls : (originalFirstUrl ? [originalFirstUrl] : []),
-            status: 'processing',
+            status: skillResult.status === 'completed' && skillResult.videoUrl ? 'completed' : 'processing',
             duration: effectiveDuration || null,
             model: actualVideoModel as import('@/types').VideoModel,
             resolution: actualVideoRoute.resolution,
             aspectRatio: selectedAspectRatio,
             providerModel: skillResult.providerModel || actualVideoRoute.providerModel,
             providerMode: actualVideoRoute.providerMode,
+            providerUrl: skillResult.videoUrl,
             createdAt: new Date().toISOString(),
             ...(completion_actions?.length ? {
               completionActions: completion_actions.slice(0, 4).map(action => ({
@@ -1307,7 +1699,38 @@ Hard constraints:
             ? videoSec * actualVideoRoute.estimatedCostPerSecondUsd + referencedImageUrls.length * (actualVideoRoute.estimatedInputCostUsdPerImage ?? 0)
             : undefined;
           if (providerCostUsd != null) videoMeta.providerCostUsd = providerCostUsd;
+
+          if (!isGoogleOmniAsync && skillResult.status === 'completed' && skillResult.videoUrl && ctx.userId && !isPermanentUrl(skillResult.videoUrl)) {
+            try {
+              const { probeMP4Dimensions } = await import('@/lib/mp4-probe');
+              const buffer = skillResult.videoUrl.startsWith('https://generativelanguage.googleapis.com/') || skillResult.videoUrl.startsWith('data:')
+                ? await (await import('@/lib/google-omni-video')).fetchGoogleOmniVideoBytes(skillResult.videoUrl)
+                : new Uint8Array(await (await fetch(skillResult.videoUrl)).arrayBuffer());
+              const permanentUrl = await uploadVideo(supabase, ctx.userId, ctx.projectId, snapshotId, buffer);
+              if (permanentUrl) {
+                const dims = probeMP4Dimensions(buffer);
+                videoMeta.videoUrl = permanentUrl;
+                videoMeta.providerUrl = skillResult.videoUrl;
+                videoMeta.videoPath = `${ctx.userId}/${ctx.projectId}/videos/${snapshotId}.mp4`;
+                if (dims?.width) videoMeta.width = dims.width;
+                if (dims?.height) videoMeta.height = dims.height;
+              }
+            } catch (persistError) {
+              console.warn('[generate_animation] provider video persistence failed:', persistError);
+            }
+          }
           await supabase.from('snapshots').update({ video_meta: videoMeta }).eq('id', snapshotId);
+
+          if (isGoogleOmniAsync && ctx.userId) {
+            runGoogleOmniVideoSnapshotAfterResponse({
+              userId: ctx.userId,
+              projectId: ctx.projectId,
+              snapshotId,
+              taskId,
+              videoMeta,
+              createVideoInput,
+            });
+          }
 
           ctx.pendingVideoSnapshot = { snapshotId, taskId, videoMeta };
 
@@ -1319,7 +1742,9 @@ Hard constraints:
 
           const renderTimeMessage = actualVideoModel === 'grok'
             ? 'Grok is usually around 30-40 seconds.'
-            : 'Rendering usually takes 3-5 minutes.';
+            : actualVideoModel === 'google-omni'
+              ? 'Google Omni is usually around 30-70 seconds, then a short Storage handoff.'
+              : 'Rendering usually takes 3-5 minutes.';
           return {
             success: true as const,
             taskId,
@@ -1350,10 +1775,29 @@ Hard constraints:
         }
 
         const buf = await fetchImageBuffer(imageSource, { maxBytes: 600_000, maxPx: 1024, quality: 75 });
+        if (!runtime.spec.supportsImageInput) {
+          const { analyzeImageContent } = await import('./gemini');
+          const analysis = await analyzeImageContent(
+            `data:image/jpeg;base64,${buf.toString('base64')}`,
+            question,
+            ctx.userId,
+          );
+          return { analysis, question };
+        }
         return { base64Data: buf.toString('base64'), mimeType: 'image/jpeg', question };
       },
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+
       toModelOutput({ output }: { output: any }) {
+        if (output.analysis) {
+          const languageRule = getReplyLanguageInstruction(locale).replace(/^Reply/, 'Answer the user');
+          return {
+            type: 'content' as const,
+            value: [{
+              type: 'text' as const,
+              text: `${output.analysis}\n\nUse the analysis above as visual evidence. ${languageRule}`,
+            }],
+          };
+        }
         // No image available — return text-only error
         if (!output.base64Data || output.error) {
           return {
@@ -1364,7 +1808,7 @@ Hard constraints:
         return {
           type: 'content' as const,
           value: [
-            { type: 'media' as const, data: output.base64Data, mediaType: output.mimeType },
+            modelFileContent(output.base64Data, output.mimeType),
             {
               type: 'text' as const,
               text: output.question
@@ -1379,7 +1823,7 @@ Hard constraints:
     analyze_video: tool({
       description: `Analyze video content using Gemini vision.
 
-Default mode describes scenes/actions/pacing/audio cues in a timeline video.
+Default mode describes scenes/actions/pacing/audio cues in a timeline video. Do not call this before clear direct video edits such as adding glasses, changing outfit, or using Omni to edit a referenced video; generate_animation already receives selected video references. Use analyze_video only for inspection, comparison, diagnosis, ambiguous targets, or frame-location workflows.
 
 Use mode="locate_frame" when the user provides a screenshot/frame and you need to find where that frame appears in a video. This is the primary locator for screenshot-based local video edits. Provide the video as media_index and the screenshot as image_url, image_media_index, or workspace_path. For checking a known timestamp visually, use preview_frame instead.`,
       inputSchema: z.object({
@@ -1496,7 +1940,7 @@ Use mode="locate_frame" when the user provides a screenshot/frame and you need t
           return { error: `Video analysis failed: ${err instanceof Error ? err.message : String(err)}` };
         }
       },
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+
       toModelOutput({ output }: { output: any }) {
         if (output.error) {
           return { type: 'content' as const, value: [{ type: 'text' as const, text: output.error }] };
@@ -1586,7 +2030,7 @@ For timeline videos, pass media_index. For external audio/video URLs, pass media
           return { error: `ASR transcription failed: ${err instanceof Error ? err.message : String(err)}` };
         }
       },
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+
       toModelOutput({ output }: { output: any }) {
         if (output.error) {
           return { type: 'content' as const, value: [{ type: 'text' as const, text: output.error }] };
@@ -1602,6 +2046,152 @@ For timeline videos, pass media_index. For external audio/video URLs, pass media
             text: `${output.cached ? 'Cached ' : ''}ASR result${output.media_index ? ` for <<<media_${output.media_index}>>>` : ''}:\n\n${formatTranscriptForModel(transcript)}`,
           }],
         };
+      },
+    }),
+
+    materialize_media: tool({
+      description: `Export an editable Remotion composition into a real MP4 video.
+Use this when the user asks to save/export/materialize/turn a composition into MP4. It accepts a timeline media_index, snapshot_id, design_path, or the current unsaved composition from run_code.
+Default profile is fast_720p (short side 720, no upscale) for speed. Default publish=true so the exported MP4 appears as a new <<<media_N>>> video. By default the tool queues a durable async export like video generation; polling/cron completes it and reports either success or failure. Set wait=true only when the user explicitly needs the final URL in this response.`,
+      inputSchema: z.object({
+        media_index: z.number().optional().describe('1-based media index, e.g. 3 for <<<media_3>>>. Must point to an editable Remotion composition.'),
+        snapshot_id: z.string().optional().describe('Snapshot ID of an editable Remotion composition.'),
+        design_path: z.string().optional().describe('Workspace design JSON path, e.g. code/<snapshotId>.json.'),
+        name: z.string().optional().describe('Short output slug/name.'),
+        profile: z.enum(['fast_720p', 'source']).optional().describe('fast_720p for speed, source for full source resolution.'),
+        publish: z.boolean().optional().describe('Default true. Publish exported MP4 into the project timeline.'),
+        wait: z.boolean().optional().describe('Default false. Queue asynchronously and let polling/cron complete. Set true only to wait for final MP4 URL before responding.'),
+      }),
+      execute: async ({ media_index, snapshot_id, design_path, name, profile, publish, wait }) => {
+        if (!ctx.supabase || !ctx.userId) {
+          return { success: false, error: 'materialize_media requires an authenticated project workspace.' };
+        }
+        const source = await resolveCompositionSource(ctx, {
+          media_index,
+          snapshot_id,
+          design_path,
+        });
+        if (source.error) return { success: false, error: source.error };
+
+        try {
+          const shouldPublish = publish !== false;
+          const shouldWait = wait === true;
+          const publishSnapshotId = shouldPublish && !shouldWait ? crypto.randomUUID() : undefined;
+          const job = await createRemotionExportJob({
+            userId: ctx.userId,
+            projectId: ctx.projectId,
+            snapshotId: source.snapshotId,
+            designPath: source.designPath,
+            design: source.design,
+            outputType: 'video',
+            renderProfile: (profile || 'fast_720p') as RemotionRenderProfile,
+            publish: shouldPublish,
+            publishSnapshotId,
+            name: name || 'materialized-composition',
+          });
+
+          if (!shouldWait) {
+            const taskId = `remotion-export-${job.id}`;
+            const videoMeta: VideoMeta = {
+              taskId,
+              videoUrl: job.storage_url || '',
+              providerUrl: job.storage_url || '',
+              videoPath: job.workspace_path || '',
+              prompt: name || 'Materialized Remotion composition',
+              sourceSnapshotIds: source.snapshotId ? [source.snapshotId] : [],
+              sourceUrls: [],
+              status: job.status === 'completed' && job.storage_url ? 'completed' : 'processing',
+              duration: job.duration_seconds || null,
+              model: 'upload',
+              createdAt: new Date().toISOString(),
+              width: job.width || undefined,
+              height: job.height || undefined,
+            };
+            if (publishSnapshotId) {
+              const pendingVideoMeta: VideoMeta = {
+                ...videoMeta,
+                taskId: `remotion-export-pending-${job.id}`,
+                videoUrl: job.storage_url || '',
+                providerUrl: job.storage_url || '',
+              };
+              if (job.status !== 'completed') {
+                const { data: sortData } = await ctx.supabase.rpc('next_sort_order', { p_project_id: ctx.projectId });
+                const { error: pendingInsertError } = await ctx.supabase.from('snapshots').upsert({
+                  id: publishSnapshotId,
+                  project_id: ctx.projectId,
+                  image_url: VIDEO_PLACEHOLDER_IMAGE,
+                  tips: [],
+                  message_id: '',
+                  sort_order: sortData ?? 0,
+                  type: 'video',
+                  video_meta: pendingVideoMeta,
+                  description: name || 'Materialized Remotion composition',
+                }, { onConflict: 'id' });
+                if (pendingInsertError) {
+                  throw new Error(`Pending export snapshot insert failed: ${pendingInsertError.message}`);
+                }
+              }
+              ctx.pendingVideoSnapshot = {
+                snapshotId: publishSnapshotId,
+                taskId,
+                videoMeta: pendingVideoMeta,
+              };
+            }
+            return {
+              success: true,
+              queued: job.status !== 'completed',
+              jobId: job.id,
+              status: job.status,
+              taskId,
+              publishSnapshotId,
+              message: shouldPublish
+                ? `Queued MP4 export. It will appear as a video in the timeline. Job: ${job.id}`
+                : `Queued MP4 export. Job: ${job.id}`,
+            };
+          }
+
+          const result = await runRemotionExportJob(job.id);
+          const completed = result.job;
+          const videoUrl = completed.storage_url || '';
+          const publishedSnapshotId = typeof completed.metadata?.publishedSnapshotId === 'string'
+            ? completed.metadata.publishedSnapshotId
+            : undefined;
+          const videoMeta: VideoMeta | null = videoUrl ? {
+            taskId: `remotion-export-${completed.id}`,
+            videoUrl,
+            providerUrl: videoUrl,
+            videoPath: completed.workspace_path || '',
+            prompt: name || 'Materialized Remotion composition',
+            sourceSnapshotIds: source.snapshotId ? [source.snapshotId] : [],
+            sourceUrls: [videoUrl],
+            status: 'completed',
+            duration: completed.duration_seconds || null,
+            model: 'upload',
+            createdAt: new Date().toISOString(),
+            width: completed.width || undefined,
+            height: completed.height || undefined,
+          } : null;
+          if (publishedSnapshotId && videoMeta) {
+            ctx.pendingVideoSnapshot = {
+              snapshotId: publishedSnapshotId,
+              taskId: videoMeta.taskId || `remotion-export-${completed.id}`,
+              videoMeta,
+            };
+          }
+          return {
+            success: completed.status === 'completed',
+            jobId: completed.id,
+            status: completed.status,
+            videoUrl,
+            workspacePath: completed.workspace_path,
+            publishedSnapshotId,
+            durationSeconds: completed.duration_seconds,
+            renderSeconds: completed.render_seconds,
+            realtimeRatio: completed.realtime_ratio,
+          };
+        } catch (err) {
+          return { success: false, error: err instanceof Error ? err.message : String(err) };
+        }
       },
     }),
 
@@ -1785,18 +2375,19 @@ Returns the rendered image so you can see it with your vision.`,
           return { error: `Failed to capture frame ${targetFrame}: ${msg}` };
         }
       },
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+
       toModelOutput({ output }: { output: any }) {
         if (output.error) {
           return { type: 'content' as const, value: [{ type: 'text' as const, text: output.error }] };
         }
         const time = (output.frame / output.fps).toFixed(1);
         const loc = output.workspacePath ? ` Saved: ${output.workspacePath}` : '';
+        const nextStep = ' Render succeeded. Treat this as a successful preview_frame result; if the attached frame is usable and there is no explicit error above, do not rewrite the composition just because the tool did not provide a natural-language visual critique. Continue with write_file when the user asked to publish.';
         return {
           type: 'content' as const,
           value: [
-            { type: 'media' as const, data: output.base64Data, mediaType: output.mimeType },
-            { type: 'text' as const, text: `Frame ${output.frame}/${output.totalFrames} (${time}s).${loc}${output.question ? ` Focus: ${output.question}` : ''}` },
+            modelFileContent(output.base64Data, output.mimeType),
+            { type: 'text' as const, text: `Frame ${output.frame}/${output.totalFrames} (${time}s).${loc}${output.question ? ` Focus: ${output.question}.` : ''}${nextStep}` },
           ],
         };
       },
@@ -1891,7 +2482,7 @@ Use this to read skill instructions (SKILL.md), reference images, or your memory
 
         return { content: result.content, type: result.contentType, path: filePath };
       },
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+
       toModelOutput({ output }: { output: any }) {
         if (output.error) {
           return { type: 'content' as const, value: [{ type: 'text' as const, text: output.error }] };
@@ -1900,7 +2491,7 @@ Use this to read skill instructions (SKILL.md), reference images, or your memory
           return {
             type: 'content' as const,
             value: [
-              { type: 'media' as const, data: output.base64Data, mediaType: output.mimeType },
+              modelFileContent(output.base64Data, output.mimeType),
               { type: 'text' as const, text: `Workspace image: ${output.path}` },
             ],
           };
@@ -1988,10 +2579,13 @@ Path is auto-generated from the current project and output type. Just provide a 
         if (!result.success) {
           return { success: false, message: `Write failed: ${result.error}` };
         }
+        if (fromLastRunCode) {
+          (ctx as any).__lastSavedDraftPath = savePath;
+        }
 
         // Publish: when fromLastRunCode and publish !== false, promote the last draft to a real Snapshot
         if (fromLastRunCode && shouldPublish !== false) {
-          // eslint-disable-next-line @typescript-eslint/no-explicit-any
+
           const drafts = (ctx as any).__runCodeDrafts || [];
           const lastDraft = drafts[drafts.length - 1];
 
@@ -2003,9 +2597,9 @@ Path is auto-generated from the current project and output type. Just provide a 
             ctx.snapshotImages.push(preview);
             ctx.currentSnapshotIndex = ctx.snapshotImages.length - 1;
 
-            // eslint-disable-next-line @typescript-eslint/no-explicit-any
+
             (ctx as any).__pendingDesign = designPayload;
-            // eslint-disable-next-line @typescript-eslint/no-explicit-any
+
             (ctx as any).__pendingDesignPublished = true;
 
             console.log(`📌 [agent] design published via write_file: <<<media_${ctx.snapshotImages.length}>>>`);
@@ -2101,16 +2695,17 @@ Runtimes:
 
 Return exactly one supported shape:
 - \`{ type: 'render', code, width, height, editables?, props?, animation? }\`
-- \`{ type: 'patch', edits, props?, code_path? }\`
+- \`{ type: 'patch', edits?, props?, code_path? }\`
 - \`{ type: 'image', data, mimeType }\`
 - \`{ type: 'video', path, contentType?, description?, duration?, width?, height? }\`
 - \`{ type: 'files', outputs: [{ path, contentType, description? }] }\`
 - \`{ type: 'text', content }\`
 - \`{ type: 'error', message }\`
 
-Composition hard rules: use Remotion \`<Img>\`, not \`<img>\`; declare editable user-facing text; use system CJK fonts; keep mobile image layers light. For timeline videos, preserve the selected Media Index video aspect ratio when all selected videos share one aspect: 9:16 sources must return a 9:16 canvas such as 1080x1920, never a 16:9 canvas. For mixed-aspect sources, choose the user/platform/current composition target and use contain/background; do not claim the runtime forced one source's aspect.
+Composition hard rules: use Remotion \`<Img>\`, not \`<img>\`; declare editable user-facing text; use system CJK fonts; keep mobile image layers light. Only \`Composition(props)\` may read \`props\` directly; helper components must receive values through their own parameters and must never reference outer \`props\` (prevents \`props is not defined\` in Lambda). For timeline videos, preserve the selected Media Index video aspect ratio when all selected videos share one aspect: 9:16 sources must return a 9:16 canvas such as 1080x1920, never a 16:9 canvas. For mixed-aspect sources, choose the user/platform/current composition target and use contain/background; do not claim the runtime forced one source's aspect.
+For first Remotion drafts, send one complete executable JavaScript body that returns the render object. Do not send a fragment like \`const code = \\\`\` without the final \`return { type: 'render', code, ... }\`. Keep long videos concise by using arrays, helper components, and interpolations instead of writing frame-by-frame code.
 
-Node media runtime provides \`require\`, \`process\`, \`ffmpegPath\`, \`inputFiles\`, \`outputDir\`, \`workDir\`, \`workspaceDir\`, \`saveOutput(localPath)\`, and \`probeVideo(path)\`. Workspace files are local to the runtime: use \`workspace_paths\` and \`inputFiles[n].inputPath\`, never download or reconstruct Storage URLs. For \`runtime: "node"\`, any referenced timeline media like \`<<<media_1>>>\` MUST be passed as \`media_refs: [1]\`; any existing workspace file from \`list_files\` MUST be passed as \`workspace_paths: ["project/media/file.mp4"]\`. The system resolves both to local workspace-backed files before your code runs. \`ffprobePath\` may be empty in deployment; prefer \`probeVideo(path)\`. Use \`type: "files"\` for chunks and \`type: "video"\` for the final MP4. If ordinary timeline splicing was routed to composition, do not switch to node just because preview needs adjustment; patch the composition or report the preview issue.`,
+Node media runtime provides \`require\`, \`process\`, \`ffmpegPath\`, \`inputFiles\`, \`outputDir\`, \`workDir\`, \`workspaceDir\`, \`saveOutput(localPath)\`, and \`probeVideo(path)\`. Most Node built-ins are available, plus media packages such as \`sharp\`, \`jszip\`, \`exifr\`, \`heic-convert\`, \`canvas\`, \`remotion\`, and Remotion media utilities. Arbitrary local/package require, env secrets, and escape/debug modules are blocked. Workspace files are local to the runtime: use \`workspace_paths\` and \`inputFiles[n].inputPath\`, never download or reconstruct Storage URLs. For \`runtime: "node"\`, any referenced timeline media like \`<<<media_1>>>\` MUST be passed as \`media_refs: [1]\`; any existing workspace file from \`list_files\` MUST be passed as \`workspace_paths: ["project/media/file.mp4"]\`. The system resolves both to local workspace-backed files before your code runs. \`ffprobePath\` may be empty in deployment; prefer \`probeVideo(path)\`. Use \`type: "files"\` for chunks and \`type: "video"\` for the final MP4. If ordinary timeline splicing was routed to composition, do not switch to node just because preview needs adjustment; patch the composition or report the preview issue.`,
       inputSchema: z.object({
         code: z.string().describe('JavaScript code to execute. Must return a result object.'),
         description: z.string().optional().describe('Brief description of what this code does. For compositions/videos, describe the content and visual style (e.g. "15s cinematic video: 4 scenes of temple visit with Ken Burns + fade transitions, Japanese text overlays"). This is stored as the snapshot description — be specific.'),
@@ -2119,10 +2714,11 @@ Node media runtime provides \`require\`, \`process\`, \`ffmpegPath\`, \`inputFil
         runtime: z.enum(['composition', 'design', 'node']).optional().describe('composition = safe Remotion/editable composition runtime. design = legacy alias for composition. node = fully open backend Node runtime with fs/child_process/ffmpeg for real MP4 editing.'),
       }),
       execute: async ({ code, description: desc, media_refs, workspace_paths, runtime }) => {
+        const executableCode = code;
         console.log(`🔧 [run_code] ${desc || 'executing code'}...`);
         const startTime = Date.now();
         // Store raw code for write_file({ fromLastRunCode: true })
-        (ctx as any).__lastRunCode = code;
+        (ctx as any).__lastRunCode = executableCode;
 
         // Refresh snapshotImages URLs from DB — ensures URLs are valid
         if (ctx.supabase && ctx.projectId) {
@@ -2144,7 +2740,7 @@ Node media runtime provides \`require\`, \`process\`, \`ffmpegPath\`, \`inputFil
             supabase: ctx.supabase,
           });
           const mediaResult = await runNodeMediaCode({
-            code,
+            code: executableCode,
             description: desc,
             mediaRefs: media_refs,
             workspacePaths: workspace_paths,
@@ -2278,7 +2874,7 @@ Node media runtime provides \`require\`, \`process\`, \`ffmpegPath\`, \`inputFil
             setTimeout, clearTimeout, Promise, // needed for async code
           });
 
-          const wrappedCode = `(async () => { 'use strict';\n${code}\n})()`;
+          const wrappedCode = `(async () => { 'use strict';\n${executableCode}\n})()`;
           const script = new vm.Script(wrappedCode);
           const result = await script.runInContext(context, { timeout: 30_000 });
 
@@ -2311,8 +2907,8 @@ Node media runtime provides \`require\`, \`process\`, \`ffmpegPath\`, \`inputFil
             }
           };
 
-          // { type: 'patch', edits: [...] } — Incremental search & replace on last composition or a specific composition via code_path
-          if (result?.type === 'patch' && Array.isArray(result.edits)) {
+          // { type: 'patch', edits?: [...], props?: {...} } — Incremental update on last composition or code_path
+          if (result?.type === 'patch' && (Array.isArray(result.edits) || result.props !== undefined)) {
             let baseDesign = (ctx as any).__lastDesignPayload;
 
             // code_path: load a different design from workspace as patch base
@@ -2332,16 +2928,18 @@ Node media runtime provides \`require\`, \`process\`, \`ffmpegPath\`, \`inputFil
               return { type: 'text' as const, content: 'Patch failed: no base composition. Provide code_path in the patch result, e.g. return { type: "patch", code_path: "code/...", edits: [...] }. Do not fall back to render unless the user asked for a new composition.' };
             }
             let code = baseDesign.code;
-            for (const edit of result.edits) {
-              if (typeof edit.old !== 'string' || typeof edit.new !== 'string') {
-                return { type: 'text' as const, content: 'Patch failed: each edit must have "old" and "new" strings.' };
+            if (Array.isArray(result.edits)) {
+              for (const edit of result.edits) {
+                if (typeof edit.old !== 'string' || typeof edit.new !== 'string') {
+                  return { type: 'text' as const, content: 'Patch failed: each edit must have "old" and "new" strings.' };
+                }
+                const count = code.split(edit.old).length - 1;
+                if (count === 0) return { type: 'text' as const, content: `Patch failed: old_string not found in current code.\n"${edit.old.slice(0, 100)}"` };
+                if (count > 1) return { type: 'text' as const, content: `Patch failed: old_string matches ${count} times. Add more surrounding context to make it unique.\n"${edit.old.slice(0, 100)}"` };
+                code = code.replace(edit.old, edit.new);
               }
-              const count = code.split(edit.old).length - 1;
-              if (count === 0) return { type: 'text' as const, content: `Patch failed: old_string not found in current code.\n"${edit.old.slice(0, 100)}"` };
-              if (count > 1) return { type: 'text' as const, content: `Patch failed: old_string matches ${count} times. Add more surrounding context to make it unique.\n"${edit.old.slice(0, 100)}"` };
-              code = code.replace(edit.old, edit.new);
             }
-            const mergedProps = result.props ? { ...(baseDesign.props || {}), ...result.props } : baseDesign.props;
+            const mergedProps = mergePatchProps(baseDesign.props, result.props);
             const patched = {
               ...baseDesign,
               code: resolveMediaMarkersInString(code, ctx.snapshotImages),
@@ -2481,13 +3079,13 @@ Node media runtime provides \`require\`, \`process\`, \`ffmpegPath\`, \`inputFil
           return { type: 'text' as const, content: `Code execution error: ${msg}` };
         }
       },
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+
       toModelOutput({ output }: { output: any }) {
         if (output.type === 'image' && output.base64Data) {
           return {
             type: 'content' as const,
             value: [
-              { type: 'media' as const, data: output.base64Data, mediaType: output.mimeType || 'image/jpeg' },
+              modelFileContent(output.base64Data, output.mimeType || 'image/jpeg'),
               { type: 'text' as const, text: output.description ? `Code output: ${output.description}` : 'Code produced an image.' },
             ],
           };
@@ -2499,40 +3097,270 @@ Node media runtime provides \`require\`, \`process\`, \`ffmpegPath\`, \`inputFil
       },
     }),
 
+    list_voiceover_voices: tool({
+      description: `Fetch the current Volcengine Doubao / Seed Speech voice catalog so you can choose the best voice for a voiceover.
+
+Call this before generate_voiceover unless the user explicitly supplied a concrete voice_id or the conversation already contains a fresh voice catalog. Use the returned language, gender, scenario, style tags, and descriptions to pick a fitting voice for the user's content. Prefer voices whose language and scenario match the script; avoid novelty, rock, character, dialect, or highly stylized voices unless the user's task asks for that style.`,
+      inputSchema: z.object({
+        query: z.string().optional().describe('Optional short description of what you need, e.g. "warm Chinese sales narration", "English energetic product demo", "古风女声". The tool returns the full catalog plus filtered suggestions when possible.'),
+        force_refresh: z.boolean().optional().describe('Set true to bypass the short server-side cache and call Volcengine ListSpeakers again. Default false.'),
+      }),
+      execute: async ({ query, force_refresh }) => {
+        const catalog = await listVolcengineTtsVoices({ forceRefresh: force_refresh, allowFallback: true });
+        const normalizedQuery = query?.trim().toLowerCase();
+        const scored = catalog.voices.map((voice) => {
+          const haystack = [
+            voice.id,
+            voice.name,
+            voice.language,
+            voice.gender,
+            voice.scenario,
+            voice.description,
+            voice.resourceId,
+            voice.model,
+            ...voice.styles,
+          ].filter(Boolean).join(' ').toLowerCase();
+          let score = 0;
+          if (normalizedQuery) {
+            for (const token of normalizedQuery.split(/[\s,，、;；/|]+/).filter(Boolean)) {
+              if (haystack.includes(token)) score += 2;
+            }
+          }
+          if (/中文|chinese|zh|普通话/.test(normalizedQuery || '') && /(^zh|中文|mandarin|普通话)/i.test(haystack)) score += 4;
+          if (/英文|english|en\b/.test(normalizedQuery || '') && /(^en|english|英文)/i.test(haystack)) score += 4;
+          if (/男|male/.test(normalizedQuery || '') && /male|男/.test(haystack)) score += 3;
+          if (/女|female/.test(normalizedQuery || '') && /female|女/.test(haystack)) score += 3;
+          if (/销售|sales|口播|旁白|解说|explainer|narration/.test(normalizedQuery || '') && /sales|口播|直播|广告|营销|general|通用|narration|旁白/.test(haystack)) score += 3;
+          return { voice, score };
+        }).sort((a, b) => b.score - a.score);
+        const suggestions = scored.filter(item => item.score > 0).slice(0, 12).map(item => item.voice);
+        return {
+          ...catalog,
+          count: catalog.voices.length,
+          suggestions: suggestions.length ? suggestions : catalog.voices.slice(0, 12),
+          query,
+        };
+      },
+      toModelOutput({ output }: { output: any }) {
+        const voices = Array.isArray(output.suggestions) ? output.suggestions : [];
+        const rows = voices.map((voice: any, index: number) => {
+          const tags = [
+            voice.language,
+            voice.gender,
+            voice.scenario,
+            ...(Array.isArray(voice.styles) ? voice.styles : []),
+          ].filter(Boolean).join(', ');
+          return `${index + 1}. ${voice.id}${voice.name ? ` — ${voice.name}` : ''}${tags ? ` (${tags})` : ''}${voice.description ? `: ${voice.description}` : ''}`;
+        }).join('\n');
+        const warning = output.warning ? `\nWarning: ${output.warning}` : '';
+        return {
+          type: 'content' as const,
+          value: [{
+            type: 'text' as const,
+            text: `Volcengine voice catalog source=${output.source}, total=${output.count || output.voices?.length || 0}.${warning}\nSuggested voices:\n${rows || 'No voices returned.'}\n\nChoose one voice_id and pass it to generate_voiceover.`,
+          }],
+        };
+      },
+    }),
+
+    generate_voiceover: tool({
+      description: `Generate a spoken narration / voiceover audio clip with Volcengine Doubao Seed TTS, upload it to the project, and add it to the Audio Index.
+
+Use this when the task needs accurate scripted speech: narration, voiceover, dialogue, spoken explainer audio, product introductions, tutorials, sales-style oral copy, or when a video/composition clearly needs a human spoken line. Do not use it for background music, ambience, sound effects, character-voice experiments, or mixed sound design; use generate_audio or generate_music for prompt-first Seed Audio assets.
+
+The generated audio becomes an Audio Index item (<<<audio_N>>>) in later turns. Use the audio marker only as a conversational/Seedance reference label. In Remotion composition code, always use the returned public audioUrl directly as the <Audio src>; never put <<<audio_N>>> in props or <Audio src>. Before calling this tool, call list_voiceover_voices and choose a concrete voice_id that fits the script, unless the user explicitly supplied one. If list_voiceover_voices returns fallback only, you may still use the best fallback voice but mention that the full voice catalog was unavailable.`,
+      inputSchema: z.object({
+        text: z.string().describe('The exact spoken text to synthesize. Keep it natural and speakable; rewrite stiff copy into oral narration first when appropriate.'),
+        title: z.string().optional().describe('Short title for the audio card/index, e.g. "Hook voiceover" or "Product narration".'),
+        voice_id: z.string().optional().describe('Optional Doubao speaker id / voice type. Omit to use the project default.'),
+        resource_id: z.enum(['seed-tts-2.0', 'seed-icl-2.0', 'seed-tts-1.0', 'seed-tts-1.0-concurr']).optional().describe('Volcengine resource id. Use seed-tts-2.0 for standard Doubao TTS voices; use seed-icl-2.0 only for authorized cloned voices.'),
+        speech_rate: z.number().min(-50).max(100).optional().describe('Speech speed. 0 is natural, 100 is 2x, -50 is 0.5x. Prefer 0 unless the user asks for faster/slower delivery.'),
+        context_prompt: z.string().optional().describe('Optional short voice direction for Seed TTS 2.0, e.g. "用轻松、真诚、有现场感的口吻".'),
+      }),
+      execute: async ({ text, title, voice_id, resource_id, speech_rate, context_prompt }) => {
+        if (!ctx.supabase || !ctx.userId) {
+          return { success: false as const, message: 'generate_voiceover requires an authenticated project workspace.' };
+        }
+
+        const result = await createVoiceover({
+          text,
+          title,
+          voiceId: voice_id,
+          resourceId: resource_id,
+          speechRate: speech_rate,
+          contextPrompt: context_prompt,
+        });
+        if (!result.success || !result.audio || !result.tts || !result.taskId) {
+          return { success: false as const, message: result.message };
+        }
+
+        const { data: latestRows } = await ctx.supabase
+          .from('project_music')
+          .select('track_index')
+          .eq('project_id', ctx.projectId)
+          .eq('user_id', ctx.userId)
+          .order('track_index', { ascending: false })
+          .limit(1);
+        const trackIndex = Number(latestRows?.[0]?.track_index ?? -1) + 1;
+        const audioUrl = await uploadAudio(ctx.supabase, ctx.userId, ctx.projectId, result.taskId, trackIndex, result.audio);
+        if (!audioUrl) {
+          return { success: false as const, message: 'Voiceover was generated but failed to upload to project storage.' };
+        }
+
+        const trackTitle = (result.title || title || 'Generated voiceover').slice(0, 120);
+        const { error: insertError } = await ctx.supabase.from('project_music').upsert({
+          suno_task_id: result.taskId,
+          track_index: trackIndex,
+          project_id: ctx.projectId,
+          user_id: ctx.userId,
+          prompt: text,
+          audio_url: audioUrl,
+          suno_audio_url: null,
+          stream_audio_url: null,
+          duration: null,
+          title: trackTitle,
+          tags: `voiceover,tts,doubao,${result.tts.resourceId}`,
+          status: 'completed',
+          selected: false,
+        }, { onConflict: 'suno_task_id,track_index' });
+        if (insertError) {
+          return { success: false as const, message: `Voiceover uploaded but DB insert failed: ${insertError.message}`, audioUrl };
+        }
+
+        const audioIndex = addAudioAttachment(ctx, { audioUrl, title: trackTitle, trackIndex });
+
+        deductCredits(ctx.userId, null, 'create_voiceover', result.tts.model)
+          .catch(e => console.error('[billing] generate_voiceover deduct error:', e));
+
+        return {
+          success: true as const,
+          message: `Voiceover generated and added to Audio Index as <<<audio_${audioIndex}>>>.\nResolved voiceover URL: ${audioUrl}\nUse this URL directly in Remotion <Audio src>; do not use the <<<audio_${audioIndex}>>> marker inside composition code or props.`,
+          audioUrl,
+          title: trackTitle,
+          trackIndex,
+          taskId: result.taskId,
+          model: result.tts.model,
+          voiceId: result.tts.voiceId,
+          resourceId: result.tts.resourceId,
+          textLength: result.tts.textLength,
+          sentenceCount: result.tts.sentences.length,
+        };
+      },
+      toModelOutput({ output }: { output: any }) {
+        return {
+          type: 'content' as const,
+          value: [{ type: 'text' as const, text: formatGeneratedAudioForModel('generate_voiceover', output) }],
+        };
+      },
+    }),
+
+    generate_audio: tool({
+      description: `Generate audio from a natural-language prompt.
+
+This is prompt-first: describe the sound directly. Do not force a rigid category. The prompt may describe background music, sound effects, ambience, character voice, or a mixed sound-design scene.
+
+Use generate_voiceover instead when exact scripted narration is required, especially for explainer videos, tutorials, and product introductions. Use generate_music for background music beds; it also uses Seed Audio.
+
+Available audio model notes:
+${formatAudioCapabilitiesForAgent()}`,
+      inputSchema: z.object({
+        prompt: z.string().describe('Natural-language description of the audio to create. Include duration, mood, instruments, sound effects, voice direction, and constraints directly in the prompt.'),
+        duration_seconds: z.number().optional().describe('Requested duration in seconds. Seed Audio supports up to 120 seconds. Also include the duration in the prompt for best results.'),
+        title: z.string().optional().describe('Short title for the generated audio asset.'),
+        model: z.enum(['auto', 'evolink-seed-audio']).optional().describe('Audio model. Omit or use auto for the default Seed Audio model.'),
+      }),
+      execute: async ({ prompt, duration_seconds, title, model }) => {
+        const result = await createAudio({
+          prompt,
+          durationSeconds: duration_seconds,
+          title,
+          model,
+          supabase: ctx.supabase,
+          userId: ctx.userId,
+          projectId: ctx.projectId,
+        });
+        if (result.success) {
+          if (result.audioUrl) {
+            const audioIndex = addAudioAttachment(ctx, {
+              audioUrl: result.audioUrl,
+              title: result.title || title || 'Generated audio',
+              duration: result.duration,
+              trackIndex: result.trackIndex,
+            });
+            result.message = `${result.message}\nAdded to Audio Index as <<<audio_${audioIndex}>>>.\nResolved audio URL: ${result.audioUrl}\nUse this URL directly in Remotion <Audio src>; do not rely on the marker inside composition code or props.`;
+          }
+          deductSeedAudioCredits(ctx.userId ?? '', {
+            durationSeconds: result.duration,
+            providerCreditsUsed: result.creditsUsed,
+            model: result.model,
+            generationSeconds: result.generationSeconds,
+          }).catch(e => console.error('[billing] generate_audio deduct error:', e));
+        }
+        return result;
+      },
+      toModelOutput({ output }: { output: any }) {
+        return {
+          type: 'content' as const,
+          value: [{ type: 'text' as const, text: formatGeneratedAudioForModel('generate_audio', output) }],
+        };
+      },
+    }),
+
     generate_music: tool({
-      // Cache point marker — cache all tools preceding this one (PR #8137 patch).
+      // Cache point marker — cache all tools preceding this one.
       // Must stay on the LAST tool in this map so the whole tools block is cached.
-      providerOptions: { bedrock: { cachePoint: { type: 'default' } } },
-      description: `Generate background music for the current composition/video. Returns 2 tracks (~30s). Focus on matching the mood and tone of the video content — genre, energy level, emotion, instruments.`,
+      ...(runtime.cachePointProviderOptions
+        ? { providerOptions: runtime.cachePointProviderOptions }
+        : {}),
+      description: `Generate background music with Seed Audio and return one persisted audio asset. Use this for short-video music beds, soundtrack, score, ambience-driven music, and polished vlog/commercial background tracks. Do not use Suno; all new music generation routes go through Seed Audio.`,
       inputSchema: z.object({
         prompt: z.string().describe('Music description: genre, mood, energy, instruments (no timing, no artist names)'),
         instrumental: z.boolean().optional().describe('No vocals (default: true)'),
         style: z.string().optional().describe('Genre/mood tags for custom mode'),
+        duration_seconds: z.number().optional().describe('Requested duration for Seed Audio music beds. Seed Audio supports up to 120 seconds.'),
+        provider: z.enum(['auto', 'evolink-seed-audio']).optional().describe('Omit or use auto for Seed Audio. Kept only for compatibility.'),
       }),
-      execute: async ({ prompt, instrumental, style }) => {
-        const result = await createMusic({ prompt, instrumental, style });
-        if (result.taskId) {
-          (ctx as any).musicTaskId = result.taskId;
-          // Bill for music generation
-          import('./billing/credits').then(({ deductCredits }) =>
-            deductCredits(ctx.userId ?? '', null, 'create_music')
-              .catch(e => console.error('[billing] generate_music deduct error:', e))
-          );
-          // Fire-and-forget: write pending rows to DB for polling resume after reload
-          if (ctx.supabase && ctx.userId) {
-            Promise.all([0, 1].map(idx =>
-              ctx.supabase.from('project_music').upsert({
-                suno_task_id: result.taskId,
-                track_index: idx,
-                project_id: ctx.projectId,
-                user_id: ctx.userId,
-                prompt,
-                status: 'pending',
-              }, { onConflict: 'suno_task_id,track_index' })
-            )).catch(() => {});
+      execute: async ({ prompt, instrumental, style, duration_seconds, provider }) => {
+        const musicPrompt = [
+          prompt,
+          style ? `Style tags: ${style}.` : '',
+          instrumental === false
+            ? 'Use subtle vocal texture only if it supports the requested music bed; avoid dominant sung lyrics unless explicitly required.'
+            : 'Instrumental background music only, no vocals or lyrics.',
+        ].filter(Boolean).join('\n');
+        const result = await createAudio({
+          prompt: musicPrompt,
+          durationSeconds: duration_seconds,
+          title: 'Generated music',
+          model: provider === 'evolink-seed-audio' ? provider : 'auto',
+          supabase: ctx.supabase,
+          userId: ctx.userId,
+          projectId: ctx.projectId,
+        });
+        if (result.success) {
+          if (result.audioUrl) {
+            const audioIndex = addAudioAttachment(ctx, {
+              audioUrl: result.audioUrl,
+              title: result.title || 'Generated music',
+              duration: result.duration,
+              trackIndex: result.trackIndex,
+            });
+            result.message = `${result.message}\nAdded to Audio Index as <<<audio_${audioIndex}>>>.\nResolved music URL: ${result.audioUrl}\nUse this URL directly in Remotion <Audio src>; do not rely on the marker inside composition code or props.`;
           }
+          deductSeedAudioCredits(ctx.userId ?? '', {
+            durationSeconds: result.duration,
+            providerCreditsUsed: result.creditsUsed,
+            model: result.model,
+            generationSeconds: result.generationSeconds,
+          }).catch(e => console.error('[billing] generate_music deduct error:', e));
         }
         return result;
+      },
+      toModelOutput({ output }: { output: any }) {
+        return {
+          type: 'content' as const,
+          value: [{ type: 'text' as const, text: formatGeneratedAudioForModel('generate_music', output) }],
+        };
       },
     }),
 
@@ -2540,7 +3368,7 @@ Node media runtime provides \`require\`, \`process\`, \`ffmpegPath\`, \`inputFil
 }
 
 /** Log tool description sizes — call after createTools. */
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
+
 function logToolSizes(tools: Record<string, any>): number {
   const entries = Object.entries(tools)
     .map(([name, t]) => ({ name, chars: (t?.description || '').length }))
@@ -2562,16 +3390,14 @@ function logToolSizes(tools: Record<string, any>): number {
 /** Append a language reply instruction to any prompt based on locale.
  *  Only appends when locale is explicitly set — undefined means no override. */
 export function withLocale(prompt: string, locale?: string): string {
-  if (locale === 'en') return `${prompt}\n\nReply in English.`;
-  if (locale === 'zh') return `${prompt}\n\nReply in Chinese.`;
-  return prompt;
+  return locale ? `${prompt}\n\n${getReplyLanguageInstruction(locale)}` : prompt;
 }
 
 // Used for initial upload analysis
-const ANALYSIS_PROMPT_INITIAL = `描述这张照片里的内容，1-2句，语气像朋友分享。直接从主体开始说（"一个..."/"画面里..."）。禁止用"我来看看"/"让我看一下"等任何铺垫语。`;
+const ANALYSIS_PROMPT_INITIAL = `Describe this photo in 1-2 sentences, in the tone of a friend sharing what they noticed. Start directly with the subject. Do not use any preamble such as "Let me take a look".`;
 
 // Used for post-edit analysis — acknowledges the edit context
-const ANALYSIS_PROMPT_POSTEDIT = `P完图了，看看效果。以"P完之后，"开头，用1句话描述一下现在这张图的整体效果和氛围。禁止用"我来看看"等铺垫语，直接说结果。`;
+const ANALYSIS_PROMPT_POSTEDIT = `The edit is complete. In one sentence, directly describe the edited image's overall effect and mood. Acknowledge that this is the result after editing, without any preamble.`;
 
 // Used for video upload auto-analysis
 const ANALYSIS_PROMPT_VIDEO_TEMPLATE = (mediaIndex: number) =>
@@ -2581,10 +3407,11 @@ export async function* runMakaronAgent(
   prompt: string,
   currentImage: string,
   projectId: string,
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  options?: { analysisOnly?: boolean; analysisContext?: 'initial' | 'post-edit'; isVideoAnalysis?: boolean; tipReactionOnly?: boolean; referenceImages?: string[]; animationImageUrls?: string[]; animationImages?: string[]; locale?: string; preferredModel?: ModelId; videoModel?: string; videoResolution?: import('@/types').VideoResolution; videoAuto?: boolean; audioAttachments?: AudioAttachment[]; snapshotImages?: string[]; currentSnapshotIndex?: number; isNsfw?: boolean; userSkills?: ParsedSkill[]; supabase?: any; userId?: string; currentDesign?: { code: string; width: number; height: number; props?: Record<string, unknown>; animation?: { fps: number; durationInSeconds: number; format?: string } }; currentDesignPath?: string; history?: ModelMessage[]; timelineVersion?: number; perf?: AgentPerf },
+
+  options?: { analysisOnly?: boolean; analysisContext?: 'initial' | 'post-edit'; isVideoAnalysis?: boolean; tipReactionOnly?: boolean; referenceImages?: string[]; animationImageUrls?: string[]; animationImages?: string[]; locale?: string; preferredModel?: ModelId; agentModel?: AgentModelPreference; videoModel?: string; videoResolution?: import('@/types').VideoResolution; videoAuto?: boolean; audioAttachments?: AudioAttachment[]; snapshotImages?: string[]; currentSnapshotIndex?: number; isNsfw?: boolean; userSkills?: ParsedSkill[]; supabase?: any; userId?: string; currentDesign?: { code: string; width: number; height: number; props?: Record<string, unknown>; animation?: { fps: number; durationInSeconds: number; format?: string } }; currentDesignPath?: string; history?: ModelMessage[]; timelineVersion?: number; perf?: AgentPerf; abortSignal?: AbortSignal },
 ): AsyncGenerator<AgentStreamEvent> {
   const perf = options?.perf;
+  const runtime = createAgentModelRuntime(options?.agentModel, projectId);
   const ctx: AgentContext = {
     currentImage,
     referenceImages: options?.referenceImages,
@@ -2605,7 +3432,7 @@ export async function* runMakaronAgent(
     timelineVersion: options?.timelineVersion,
   };
 
-  const allTools = createTools(ctx);
+  const allTools = createTools(ctx, runtime, options?.locale);
   perf?.mark('agent_tools_created', { toolCount: Object.keys(allTools).length });
   let imagesSent = 0;
   let stepCount = 0;
@@ -2635,9 +3462,9 @@ export async function* runMakaronAgent(
 
   // Build user message content — animation mode includes all snapshot images as visual content
   const animImages = options?.animationImages;
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+
   let userContent: any;
-  if (animImages?.length && !analysisOnly && !tipReactionOnly) {
+  if (animImages?.length && runtime.spec.supportsImageInput && !analysisOnly && !tipReactionOnly) {
     // Multi-image user message: text + all snapshot images
     userContent = [
       { type: 'text' as const, text: prompt },
@@ -2653,9 +3480,12 @@ export async function* runMakaronAgent(
     const promptHasCompositionPointer = typeof prompt === 'string'
       && (prompt.includes('[Current Composition]') || prompt.includes('[Current composition pointer]'));
     const designInjection = options?.currentDesignPath && !promptHasCompositionPointer
-      ? `[Current composition pointer]\npath: ${options.currentDesignPath}${options.currentDesign ? `\nwidth: ${options.currentDesign.width}\nheight: ${options.currentDesign.height}${options.currentDesign.animation ? `\nanimation: ${options.currentDesign.animation.durationInSeconds}s @ ${options.currentDesign.animation.fps}fps` : ''}` : ''}\nTo modify this existing composition, call run_code with a JS return value like { type: 'patch', code_path: '${options.currentDesignPath}', edits: [...] } and runtime: "composition". Do not render from scratch unless the user asks for a new composition.\n\n`
+      ? `[Current composition pointer]\npath: ${options.currentDesignPath}${options.currentDesign ? `\nwidth: ${options.currentDesign.width}\nheight: ${options.currentDesign.height}${options.currentDesign.animation ? `\nanimation: ${options.currentDesign.animation.durationInSeconds}s @ ${options.currentDesign.animation.fps}fps` : ''}` : ''}\nTo modify this existing composition, call run_code with a JS return value like { type: 'patch', code_path: '${options.currentDesignPath}', edits: [...] } or { type: 'patch', code_path: '${options.currentDesignPath}', props: {...} } and runtime: "composition". Use props-only patches for text/data changes. Do not render from scratch unless the user asks for a new composition.\n\n`
       : '';
-    userContent = analysisOnly ? analysisPrompt : (designInjection + prompt);
+    const textOnlyVisionNote = animImages?.length && !runtime.spec.supportsImageInput
+      ? '\n\n[Selected Agent model is text-only. Use analyze_image on the relevant Media Index entries before making image-dependent decisions.]'
+      : '';
+    userContent = analysisOnly ? analysisPrompt : (designInjection + prompt + textOnlyVisionNote);
   }
 
   // Build system prompt. Lightweight modes must stay small: they power
@@ -2666,9 +3496,13 @@ export async function* runMakaronAgent(
     userSkills: options?.userSkills?.length ?? 0,
     mode: tipReactionOnly ? 'tipReaction' : analysisOnly ? 'analysis' : 'normal',
   });
-  const systemPrompt = (analysisOnly || tipReactionOnly)
+  const baseSystemPrompt = (analysisOnly || tipReactionOnly)
     ? buildLightweightSystemPrompt(analysisOnly ? 'analysis' : 'tipReaction', options?.locale)
     : await buildSystemPrompt(options?.userSkills, options?.supabase, options?.userId, projectId);
+  const systemPrompt = runtime.spec.provider === 'deepseek' && options?.locale
+    ? `${baseSystemPrompt}\n\nCRITICAL OUTPUT LANGUAGE: ${getOutputLanguageRequirement(options.locale)}. This rule still applies after every tool result.`
+    : baseSystemPrompt;
+  const responseLocale = normalizeLocale(options?.locale, 'en');
   endSystemPrompt?.({ systemChars: systemPrompt.length });
 
   // Observability — per-request summary
@@ -2696,6 +3530,8 @@ export async function* runMakaronAgent(
     userImages: userImagesCount,
     historyTurns: history.length,
     mode: tipReactionOnly ? 'tipReaction' : analysisOnly ? 'analysis' : 'normal',
+    agentModel: runtime.spec.id,
+    provider: runtime.spec.provider,
   });
 
   // Optional full-request dump for offline diffing
@@ -2729,53 +3565,177 @@ export async function* runMakaronAgent(
   // cache point; otherwise expensive tool results sit outside cached prefix.
   // Only worth the cacheWrite cost when the conversation has real history
   // (≥ 2 prior turns including at least one model/tool response). Short sessions skip.
-  const msgs: Array<ModelMessage & { providerOptions?: Record<string, unknown> }> =
+  const msgs: Array<ModelMessage & { providerOptions?: Record<string, any> }> =
     [...history, { role: 'user', content: userContent } as ModelMessage];
-  if (history.length >= 2) {
+  if (runtime.cachePointProviderOptions && history.length >= 2) {
     for (let i = msgs.length - 2; i >= 0; i--) {
       if (msgs[i].role === 'assistant' || msgs[i].role === 'tool') {
-        msgs[i].providerOptions = { bedrock: { cachePoint: { type: 'default' } } };
+        msgs[i].providerOptions = runtime.cachePointProviderOptions;
         break;
       }
     }
   }
 
   try {
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const endStreamInit = perf?.span('model_stream_init', { projectId });
-    const result = (streamText as any)({
-      model: MODEL,
-      system: [{ role: 'system', content: systemPrompt, providerOptions: { bedrock: { cachePoint: { type: 'default' } } } }],
-      messages: msgs,
+    const agentModelId = runtime.spec.providerModelId;
+    const thinkingMode = getAnthropicThinkingMode();
+    const reasoningEffort = getAnthropicReasoningEffort();
+    const configuredStepTimeout = Number(process.env.AGENT_MODEL_STEP_TIMEOUT_MS || 150_000);
+    const stepTimeoutMs = Number.isFinite(configuredStepTimeout)
+      ? Math.max(30_000, Math.min(configuredStepTimeout, 240_000))
+      : 150_000;
+    const attemptResults: any[] = [];
+    let billedNoCacheTokens = 0;
+    let billedCacheReadTokens = 0;
+    let billedCacheWriteTokens = 0;
+    let billedOutputTokens = 0;
+    const billedStepMetadata: Array<{ providerMetadata?: Record<string, unknown> }> = [];
+    let usageEmitted = false;
+    let attemptMessages: ModelMessage[] = msgs;
+    let result: any = null;
+    let recoveryAttempt = 0;
+    let recoveryTextOnly = false;
+    const recoveryBlockedTools = new Set<string>();
+    const nonRepeatableTools = new Set([
+      'generate_image',
+      'generate_animation',
+      'transcribe_audio',
+      'materialize_media',
+      'rotate_camera',
+      'delete_file',
+      'generate_voiceover',
+      'generate_audio',
+      'generate_music',
+    ]);
+
+    const recordStepUsage = (event: any) => {
+      const usage = event?.usage as {
+        inputTokens?: number;
+        outputTokens?: number;
+        cachedInputTokens?: number;
+        inputTokenDetails?: {
+          noCacheTokens?: number;
+          cacheReadTokens?: number;
+          cacheWriteTokens?: number;
+        };
+      } | undefined;
+      if (!usage) return;
+      const details = usage.inputTokenDetails;
+      const cacheRead = details?.cacheReadTokens ?? usage.cachedInputTokens ?? 0;
+      const cacheWrite = details?.cacheWriteTokens ?? 0;
+      const noCache = details?.noCacheTokens
+        ?? Math.max(0, (usage.inputTokens ?? 0) - cacheRead - cacheWrite);
+      billedNoCacheTokens += noCache;
+      billedCacheReadTokens += cacheRead;
+      billedCacheWriteTokens += cacheWrite;
+      billedOutputTokens += usage.outputTokens ?? 0;
+      billedStepMetadata.push({ providerMetadata: event.providerMetadata });
+    };
+
+    const buildUsageEvent = (): Extract<AgentStreamEvent, { type: 'usage' }> | null => {
+      if (usageEmitted || billedStepMetadata.length === 0) return null;
+      usageEmitted = true;
+      const modelId = runtime.spec.billingModelId;
+      const totalInput = billedNoCacheTokens + billedCacheReadTokens + billedCacheWriteTokens;
+      const hitRate = totalInput > 0
+        ? ((billedCacheReadTokens / totalInput) * 100).toFixed(1)
+        : '0';
+      const providerCostUsd = sumOpenRouterProviderCost(runtime, billedStepMetadata);
+      console.log(
+        `[agent-usage] totalInput=${totalInput} (noCache=${billedNoCacheTokens} cacheRead=${billedCacheReadTokens} cacheWrite=${billedCacheWriteTokens}) output=${billedOutputTokens} hitRate=${hitRate}% model=${modelId} provider=${runtime.spec.provider}${providerCostUsd != null ? ` providerCostUsd=${providerCostUsd.toFixed(6)}` : ''}`
+      );
+      return {
+        type: 'usage',
+        inputTokens: billedNoCacheTokens,
+        outputTokens: billedOutputTokens,
+        cacheReadTokens: billedCacheReadTokens,
+        cacheWriteTokens: billedCacheWriteTokens,
+        providerCostUsd,
+        model: modelId,
+      };
+    };
+
+    while (true) {
+      let sawFinish = false;
+      let finishReason: string | undefined;
+      let rawFinishReason: string | undefined;
+      let finalStepTextChars = 0;
+      let finalStepToolCalls = 0;
+      let finalStepDeliveredArtifact = false;
+      let attemptDeliveredArtifact = false;
+      const attemptCommittedTools = new Set<string>();
+      let streamError: unknown;
+      let lastTool = '';
+
+      const endStreamInit = perf?.span('model_stream_init', { projectId, recoveryAttempt });
+      const remainingInvocationBudgetMs = Math.max(30_000, 720_000 - (Date.now() - agentStartTime));
+      const recoveryActiveTools = tools && recoveryBlockedTools.size > 0
+        ? Object.keys(tools).filter((toolName) => !recoveryBlockedTools.has(toolName))
+        : undefined;
+      result = (streamText as any)({
+      model: runtime.model,
+      system: [{
+        role: 'system',
+        content: systemPrompt,
+        ...(runtime.cachePointProviderOptions
+          ? { providerOptions: runtime.cachePointProviderOptions }
+          : {}),
+      }],
+      messages: attemptMessages,
       ...(tools ? { tools } : {}),
-      ...(analysisOnly && tools ? { activeTools: [isVideoAnalysis ? 'analyze_video' : 'analyze_image'] } : {}),
+      ...(recoveryTextOnly && tools ? { toolChoice: 'none' as const } : {}),
+      ...(analysisOnly && tools
+        ? { activeTools: [isVideoAnalysis ? 'analyze_video' : 'analyze_image'] }
+        : recoveryActiveTools
+          ? { activeTools: recoveryActiveTools }
+          : {}),
       stopWhen: stepCountIs(maxSteps),
+      prepareStep: ({ messages }: { messages: ModelMessage[] }) => ({
+        messages: runtime.normalizeMessages(messages),
+      }),
       onStepFinish: () => { stepCount++; },
-      providerOptions: {
-        anthropic: {
-          contextManagement: {
-            edits: [
-              {
-                type: 'clear_tool_uses_20250919',
-                trigger: { type: 'input_tokens', value: 80000 },
-                keep: { type: 'tool_uses', value: 3 },
-              },
-              {
-                type: 'compact_20260112',
-                trigger: { type: 'input_tokens', value: 150000 },
-              },
-            ],
-          },
-        },
-      },
-    });
-    endStreamInit?.();
+      timeout: { stepMs: stepTimeoutMs, totalMs: remainingInvocationBudgetMs },
+      ...(options?.abortSignal ? { abortSignal: options.abortSignal } : {}),
+      providerOptions: getAgentProviderOptions(runtime, {
+        anthropicThinkingMode: thinkingMode,
+        reasoningEffort,
+        anthropicContextManagement: runtime.spec.provider === 'bedrock-anthropic'
+          ? getAnthropicContextManagement(agentModelId)
+          : undefined,
+      }),
+      });
+      attemptResults.push(result);
+      endStreamInit?.();
 
     // State machine for extracting code from run_code tool-input-delta
     let codeExtractor: { buffer: string; state: 'waiting' | 'in_code' | 'done'; escaped: boolean; sent: number } | null = null;
     const textDeltaState = createTextDeltaState();
 
-    for await (const event of result.fullStream) {
+      try {
+        for await (const event of result.fullStream) {
+      if (event.type === 'start-step') {
+        finalStepTextChars = 0;
+        finalStepToolCalls = 0;
+        finalStepDeliveredArtifact = false;
+        if (stepCount > 0) yield { type: 'new_turn' };
+        continue;
+      }
+      if (event.type === 'finish-step') {
+        recordStepUsage(event);
+        finishReason = (event as any).finishReason;
+        rawFinishReason = (event as any).rawFinishReason;
+        continue;
+      }
+      if (event.type === 'finish') {
+        sawFinish = true;
+        finishReason = (event as any).finishReason;
+        rawFinishReason = (event as any).rawFinishReason;
+        continue;
+      }
+      if (event.type === 'abort') {
+        streamError = new Error((event as any).reason || 'Model stream aborted');
+        continue;
+      }
       // ── TTFB — log first stream event that indicates model is producing output ──
       if (!firstContentAt && (event.type === 'reasoning-start' || event.type === 'reasoning-delta' || event.type === 'text-delta' || event.type === 'tool-input-start')) {
         firstContentAt = Date.now();
@@ -2792,8 +3752,7 @@ export async function* runMakaronAgent(
         continue;
       }
       if (event.type === 'reasoning-end') {
-        const isEnLocale = options?.locale === 'en';
-        yield { type: 'status' as const, text: isEnLocale ? 'Planning...' : '规划中...' };
+        yield { type: 'status' as const, text: translate(responseLocale, 'agent.status.planning') };
         continue;
       }
 
@@ -2802,8 +3761,7 @@ export async function* runMakaronAgent(
         const toolName = (event as any).toolName ?? '';
         if (toolName === 'run_code') {
           codeExtractor = { buffer: '', state: 'waiting', escaped: false, sent: 0 };
-          const isEnLocale = options?.locale === 'en';
-          yield { type: 'status' as const, text: isEnLocale ? 'Generating code...' : '代码生成中...' };
+          yield { type: 'status' as const, text: translate(responseLocale, 'agent.status.generatingCode') };
         }
         continue;
       }
@@ -2861,7 +3819,10 @@ export async function* runMakaronAgent(
       // ── Text delta ──────────────────────────────────────────────────────────
       if (event.type === 'text-delta') {
         const text = normalizeTextDelta(event as { delta?: unknown; textDelta?: unknown; text?: unknown }, textDeltaState);
-        if (text) yield { type: 'content', text };
+        if (text) {
+          finalStepTextChars += text.trim().length;
+          yield { type: 'content', text };
+        }
         continue;
       }
 
@@ -2869,6 +3830,8 @@ export async function* runMakaronAgent(
       if (event.type === 'tool-call') {
         toolCallStartTime = Date.now();
         toolCallName = event.toolName;
+        lastTool = event.toolName;
+        finalStepToolCalls++;
         activeToolCallId = (event as { toolCallId?: string }).toolCallId || crypto.randomUUID();
         console.log(`⏱️ [agent] tool-call "${event.toolName}" at +${((Date.now() - agentStartTime) / 1000).toFixed(1)}s`);
         perf?.mark('tool_call', {
@@ -2876,39 +3839,40 @@ export async function* runMakaronAgent(
           step: stepCount,
           sinceAgentStartMs: Date.now() - agentStartTime,
         });
-        const isEnLocale = options?.locale === 'en';
         if (event.toolName === 'analyze_image') {
           const q = (event.input as { question?: string }).question;
-          yield { type: 'status', text: isEnLocale
-            ? (q ? `Analyzing image: ${q.slice(0, 50)}` : 'Analyzing image')
-            : (q ? `分析图片：${q.slice(0, 40)}` : '分析图片') };
+          yield { type: 'status', text: translate(responseLocale, 'agent.status.analyzingImage', q?.slice(0, 50) ?? '') };
         } else if (event.toolName === 'analyze_video') {
           const q = (event.input as { question?: string }).question;
-          yield { type: 'status', text: isEnLocale
-            ? (q ? `Analyzing video: ${q.slice(0, 50)}` : 'Analyzing video')
-            : (q ? `分析视频：${q.slice(0, 40)}` : '分析视频') };
+          yield { type: 'status', text: translate(responseLocale, 'agent.status.analyzingVideo', q?.slice(0, 50) ?? '') };
         } else if (event.toolName === 'transcribe_audio') {
-          yield { type: 'status', text: isEnLocale ? 'Transcribing audio...' : '转写音频中...' };
+          yield { type: 'status', text: translate(responseLocale, 'agent.status.transcribingAudio') };
+        } else if (event.toolName === 'list_voiceover_voices') {
+          yield { type: 'status', text: translate(responseLocale, 'agent.status.choosingVoice') };
+        } else if (event.toolName === 'generate_voiceover') {
+          yield { type: 'status', text: translate(responseLocale, 'agent.status.generatingVoiceover') };
+        } else if (event.toolName === 'generate_audio' || event.toolName === 'generate_music') {
+          yield { type: 'status', text: translate(responseLocale, 'agent.status.generatingAudio') };
         } else if (event.toolName === 'preview_frame') {
           const input = event.input as { frame?: number; timestamp?: number };
           const hint = input.frame !== undefined ? `frame ${input.frame}` : input.timestamp !== undefined ? `${input.timestamp}s` : 'frame 0';
-          yield { type: 'status', text: isEnLocale ? `Capturing ${hint}...` : `截帧 ${hint}...` };
+          yield { type: 'status', text: translate(responseLocale, 'agent.status.capturingFrame', hint) };
         } else if (event.toolName === 'generate_image') {
-          yield { type: 'status', text: isEnLocale ? 'Generating image...' : '生成图片中...' };
+          yield { type: 'status', text: translate(responseLocale, 'agent.status.generatingImage') };
         } else if (event.toolName === 'list_files') {
-          yield { type: 'status', text: isEnLocale ? 'Browsing workspace...' : '浏览工作台...' };
+          yield { type: 'status', text: translate(responseLocale, 'agent.status.browsingWorkspace') };
         } else if (event.toolName === 'read_file') {
           const p = (event.input as { path?: string }).path || '';
-          yield { type: 'status', text: isEnLocale ? `Reading ${p.split('/').pop()}...` : `读取 ${p.split('/').pop()}...` };
+          yield { type: 'status', text: translate(responseLocale, 'agent.status.readingFile', p.split('/').pop() ?? '') };
         } else if (event.toolName === 'write_file') {
-          yield { type: 'status', text: isEnLocale ? 'Saving...' : '保存中...' };
+          yield { type: 'status', text: translate(responseLocale, 'agent.status.saving') };
         } else if (event.toolName === 'delete_file') {
-          yield { type: 'status', text: isEnLocale ? 'Deleting...' : '删除中...' };
+          yield { type: 'status', text: translate(responseLocale, 'agent.status.deleting') };
         } else if (event.toolName === 'run_code') {
           const desc = (event.input as { description?: string }).description;
-          yield { type: 'status', text: isEnLocale ? `Running: ${desc || 'code'}...` : `执行: ${desc || '代码'}...` };
+          yield { type: 'status', text: translate(responseLocale, 'agent.status.runningCode', desc ?? '') };
         } else if (event.toolName === 'rotate_camera') {
-          yield { type: 'status', text: isEnLocale ? 'Rotating camera...' : '旋转相机中...' };
+          yield { type: 'status', text: translate(responseLocale, 'agent.status.rotatingCamera') };
         }
         let toolCallImages: string[] | undefined;
         if (event.toolName === 'generate_image') {
@@ -2943,17 +3907,21 @@ export async function* runMakaronAgent(
             ];
           }
         }
-        // For run_code: truncate code in tool_call event (full code already streamed via tool-input-delta)
+        // For run_code: keep the real input for persistence/model history, but send a
+        // compact display input to the client. Replaying a UI-truncated code string
+        // teaches the next model turn to copy "... (N chars)" as executable code.
         const toolInput = event.input as Record<string, unknown>;
         const isRunCode = event.toolName === 'run_code' && typeof toolInput.code === 'string';
+        const displayInput = isRunCode
+          ? { ...toolInput, code: `[code streamed separately: ${(toolInput.code as string).length} chars]` }
+          : toolInput;
         yield {
           type: 'tool_call',
           tool: event.toolName,
           toolCallId: activeToolCallId,
           step: stepCount,
-          input: isRunCode
-            ? { ...toolInput, code: ((toolInput.code as string)).slice(0, 100) + `... (${(toolInput.code as string).length} chars)` }
-            : toolInput,
+          input: toolInput,
+          ...(displayInput !== toolInput ? { displayInput } : {}),
           ...(toolCallImages ? { images: toolCallImages } : {}),
         };
         // If code wasn't streamed via delta (edge case), send it now
@@ -2971,7 +3939,7 @@ export async function* runMakaronAgent(
 
       // ── Tool result — flush generated images + animation task ───────────────
       if (event.type === 'tool-result') {
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+
         const toolName = (event as any).toolName as string | undefined;
         const toolCallId = ((event as any).toolCallId as string | undefined) || activeToolCallId;
         const toolOutput = ((event as any).output ?? (event as any).result) as unknown;
@@ -2984,16 +3952,28 @@ export async function* runMakaronAgent(
           toolDurationMs: toolCallStartTime ? Date.now() - toolCallStartTime : null,
         });
         // Reset status after tool completes so stale status doesn't linger during thinking
-        const isEnLocale = options?.locale === 'en';
-        yield { type: 'status', text: isEnLocale ? 'Thinking...' : 'Agent 正在思考...' };
+        yield { type: 'status', text: translate(responseLocale, 'agent.status.thinking') };
         if (toolName) {
           yield { type: 'tool_result', tool: toolName, toolCallId, step: stepCount, output: toolOutput };
+          const outputRecord = toolOutput && typeof toolOutput === 'object'
+            ? toolOutput as Record<string, unknown>
+            : undefined;
+          const toolSucceeded = outputRecord?.success !== false
+            && outputRecord?.status !== 'failed'
+            && !(outputRecord?.error && outputRecord?.success !== true);
+          if (toolSucceeded && nonRepeatableTools.has(toolName)) {
+            attemptCommittedTools.add(toolName);
+          }
+          const generatedAudioLine = formatGeneratedAudioForCui(toolName, toolOutput, responseLocale);
+          if (generatedAudioLine) {
+            yield { type: 'content', text: generatedAudioLine };
+          }
         }
         activeToolCallId = undefined;
 
         // Emit image_analyzed event so frontend can save the description
         if (toolName === 'analyze_image' || toolName === 'analyze_video') {
-          // eslint-disable-next-line @typescript-eslint/no-explicit-any
+
           const analyzeInput = (event as any).input as { media_index?: number } | undefined;
           const analyzedIdx = analyzeInput?.media_index ?? (ctx.currentSnapshotIndex + 1);
           yield { type: 'image_analyzed', imageIndex: analyzedIdx };
@@ -3001,7 +3981,7 @@ export async function* runMakaronAgent(
 
         // Emit preview_frame_captured so frontend shows the screenshot in CUI
         if (toolName === 'preview_frame') {
-          // eslint-disable-next-line @typescript-eslint/no-explicit-any
+
           const toolOutput = (event as any).output as { workspaceUrl?: string } | undefined;
           const wsUrl = toolOutput?.workspaceUrl;
           if (wsUrl) {
@@ -3020,6 +4000,10 @@ export async function* runMakaronAgent(
             const previewUrl = drafts?.[drafts.length - 1]?.previewUrl || undefined;
             console.log(`🎨 [agent] emitting render SSE (published=${published}): ${pendingDesign.width}x${pendingDesign.height}, code ${pendingDesign.code?.length} chars${previewUrl ? ', preview: ' + previewUrl.slice(-40) : ''}`);
             yield { type: 'render', code: pendingDesign.code, width: pendingDesign.width, height: pendingDesign.height, props: pendingDesign.props, animation: pendingDesign.animation, editables: pendingDesign.editables, published, previewUrl };
+            if (published) {
+              finalStepDeliveredArtifact = true;
+              attemptDeliveredArtifact = true;
+            }
             (ctx as any).__pendingDesign = null;
             (ctx as any).__pendingDesignPublished = undefined;
           } else if (toolName === 'run_code') {
@@ -3030,24 +4014,32 @@ export async function* runMakaronAgent(
 
         // Detect generate_image failure or NSFW content block
         if (toolName === 'generate_image') {
-          // eslint-disable-next-line @typescript-eslint/no-explicit-any
+
           const toolResult = (event as any).result as { contentBlocked?: boolean } | undefined;
           if (toolResult?.contentBlocked) {
             yield { type: 'nsfw_detected' };
           }
           if (imagesSent === ctx.generatedImages.length) {
-            const isEn = options?.locale === 'en';
-            yield { type: 'status', text: isEn ? 'Image generation failed' : '图片生成失败' };
+            yield { type: 'status', text: translate(responseLocale, 'agent.status.imageGenerationFailed') };
           }
         }
 
         while (imagesSent < ctx.generatedImages.length) {
           yield { type: 'image', image: ctx.generatedImages[imagesSent], usedModel: ctx.lastUsedModel };
+          finalStepDeliveredArtifact = true;
+          attemptDeliveredArtifact = true;
           imagesSent++;
         }
+        const hadPendingImageSnapshots = Boolean(ctx.pendingImageSnapshots?.length);
         yield* flushPendingImageSnapshots(ctx);
+        if (hadPendingImageSnapshots) {
+          finalStepDeliveredArtifact = true;
+          attemptDeliveredArtifact = true;
+        }
         if (ctx.animationTaskId) {
           yield { type: 'animation_task', taskId: ctx.animationTaskId, prompt: ctx.animationPrompt || '', imageUrls: ctx.animationImageUrls_, model: ctx.animationModel };
+          finalStepDeliveredArtifact = true;
+          attemptDeliveredArtifact = true;
           ctx.animationTaskId = undefined;
           ctx.animationPrompt = undefined;
           ctx.animationImageUrls_ = undefined;
@@ -3056,15 +4048,21 @@ export async function* runMakaronAgent(
         if (ctx.pendingVideoSnapshots?.length) {
           for (const pending of ctx.pendingVideoSnapshots) {
             yield { type: 'video_snapshot', ...pending };
+            finalStepDeliveredArtifact = true;
+            attemptDeliveredArtifact = true;
           }
           ctx.pendingVideoSnapshots = undefined;
         }
         if (ctx.pendingVideoSnapshot) {
           yield { type: 'video_snapshot', ...ctx.pendingVideoSnapshot };
+          finalStepDeliveredArtifact = true;
+          attemptDeliveredArtifact = true;
           ctx.pendingVideoSnapshot = undefined;
         }
         if ((ctx as any).musicTaskId) {
           yield { type: 'music_task', taskId: (ctx as any).musicTaskId };
+          finalStepDeliveredArtifact = true;
+          attemptDeliveredArtifact = true;
           (ctx as any).musicTaskId = undefined;
         }
         continue;
@@ -3072,17 +4070,84 @@ export async function* runMakaronAgent(
 
       // ── Error from stream ──────────────────────────────────────────────────
       if (event.type === 'error') {
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        const err = (event as any).error;
-        const errMsg = err instanceof Error ? err.message : String(err);
-        yield { type: 'error', message: errMsg };
+        streamError = (event as any).error;
+        // AI SDK emits finish-step (with usage) and finish(error) after the
+        // error part. Drain the stream so failed reasoning is still billed and
+        // the terminal classification sees the real provider finish reason.
+        continue;
+      }
+
+        }
+      } catch (err) {
+        streamError = err;
+      }
+
+      const assessment = classifyModelTermination({
+        sawFinish,
+        finishReason,
+        rawFinishReason,
+        finalStepTextChars,
+        finalStepToolCalls,
+        finalStepDeliveredArtifact,
+        streamError,
+      });
+
+      if (options?.abortSignal?.aborted) {
+        const usageEvent = buildUsageEvent();
+        if (usageEvent) yield usageEvent;
         return;
       }
 
-      // ── New step start (after tool result, model begins next turn) ──────────
-      if (event.type === 'start-step' && stepCount > 0) {
-        yield { type: 'new_turn' };
+      if (assessment.ok) break;
+
+      let attemptSteps: any[] = [];
+      try { attemptSteps = await result.steps; } catch { /* stream may have failed before a complete step */ }
+      const canRecover = assessment.retryable
+        && recoveryAttempt < 1
+        && Date.now() - agentStartTime < 600_000;
+      if (canRecover) {
+        recoveryAttempt++;
+        recoveryTextOnly = attemptDeliveredArtifact;
+        for (const toolName of attemptCommittedTools) recoveryBlockedTools.add(toolName);
+        const responseMessages = attemptSteps.flatMap((step: any) => step?.response?.messages ?? []);
+        const savedDraftPath = (ctx as any).__lastSavedDraftPath as string | undefined;
+        const recoveryInstruction = attemptDeliveredArtifact
+          ? 'A finished artifact was already delivered in the previous step. Do not call any tool, regenerate, republish, or create another task. Only provide the concise final reply for the existing delivered result.'
+          : `Continue from the existing tool results and saved draft; do not restart from the original media.${savedDraftPath ? ` The exact saved draft path is: ${savedDraftPath}.` : ''}${recoveryBlockedTools.size ? ` Do not repeat these already-completed tools: ${[...recoveryBlockedTools].join(', ')}; use their existing results.` : ''} Complete the pending modification you already planned. If the user requested a finished artifact, publish the updated artifact before your concise final reply.`;
+        attemptMessages = [
+          ...attemptMessages,
+          ...responseMessages,
+          {
+            role: 'user',
+            content: `[System recovery] The previous model step ended before it delivered a usable response (${assessment.code || 'incomplete'}). ${recoveryInstruction}`,
+          } as ModelMessage,
+        ];
+        yield { type: 'status', text: translate(responseLocale, 'agent.status.resuming') };
+        console.warn(`[agent] recovering incomplete model step code=${assessment.code} finish=${finishReason || 'missing'} raw=${rawFinishReason || ''}`);
+        continue;
       }
+
+      const drafts = (ctx as any).__runCodeDrafts as Array<{ previewUrl?: string }> | undefined;
+      const checkpoint = {
+        draftPath: (ctx as any).__lastSavedDraftPath as string | undefined,
+        previewUrl: drafts?.[drafts.length - 1]?.previewUrl,
+        lastTool: lastTool || toolCallName || undefined,
+        finishReason,
+        rawFinishReason,
+      };
+      const recoverable = assessment.retryable && Boolean(checkpoint.draftPath);
+      const usageEvent = buildUsageEvent();
+      if (usageEvent) yield usageEvent;
+      yield {
+        type: 'error',
+        code: assessment.code || 'incomplete_agent_step',
+        recoverable,
+        checkpoint,
+        message: recoverable
+          ? translate(responseLocale, 'agent.error.recoverable')
+          : translate(responseLocale, 'agent.error.fatal'),
+      };
+      return;
     }
 
     // Flush remaining images
@@ -3099,36 +4164,20 @@ export async function* runMakaronAgent(
       stepCount,
     });
 
-    // Emit token usage for billing — totalUsage aggregates across all steps (multi-turn)
-    try {
-      const usage = await result.totalUsage;
-      if (usage) {
-        const modelId = process.env.AGENT_MODEL || 'us.anthropic.claude-opus-4-6-v1';
-        // Vercel AI SDK v6 semantics (VERIFIED from official source):
-        //   - `usage.inputTokens` = TOTAL (noCache + cacheRead + cacheWrite)
-        //     See ai/src/types/usage.ts asLanguageModelUsage — `inputTokens: usage.inputTokens.total`
-        //     See @ai-sdk/amazon-bedrock/src/convert-bedrock-usage.ts — `total = input + read + write`
-        //   - To bill correctly, we MUST use inputTokenDetails.{noCacheTokens,cacheReadTokens,cacheWriteTokens}
-        //     and charge each at its own rate. Using `inputTokens` directly billed cache @ base 1× (overcharge).
-        const u = usage as { inputTokens?: number; outputTokens?: number; cachedInputTokens?: number; inputTokenDetails?: { noCacheTokens?: number; cacheReadTokens?: number; cacheWriteTokens?: number } };
-        const d = u.inputTokenDetails;
-        const cacheRead = d?.cacheReadTokens ?? u.cachedInputTokens ?? 0;
-        const cacheWrite = d?.cacheWriteTokens ?? 0;
-        // Prefer explicit noCacheTokens; fall back to (total − cache parts) for robustness.
-        const noCache = d?.noCacheTokens ?? Math.max(0, (u.inputTokens ?? 0) - cacheRead - cacheWrite);
-        const totalInput = u.inputTokens ?? (noCache + cacheRead + cacheWrite);
-        const hitRate = totalInput > 0 ? ((cacheRead / totalInput) * 100).toFixed(1) : '0';
-        console.log(
-          `[agent-usage] totalInput=${totalInput} (noCache=${noCache} cacheRead=${cacheRead} cacheWrite=${cacheWrite}) output=${u.outputTokens ?? 0} hitRate=${hitRate}% model=${modelId}`
-        );
-        // Emit noCache as `inputTokens` so consumers billing with the legacy 2-arg signature
-        // (tokensToCredits) no longer overcharge by billing cache at base rate.
-        yield { type: 'usage', inputTokens: noCache, outputTokens: u.outputTokens ?? 0, cacheReadTokens: cacheRead, cacheWriteTokens: cacheWrite, model: modelId };
-      }
-    } catch { /* best effort — don't fail the stream if usage unavailable */ }
+    // Emit token usage across the initial and automatic recovery attempts.
+    // Usage is accumulated from finish-step events so a later timeout cannot
+    // erase the tokens already consumed by completed steps.
+    const usageEvent = buildUsageEvent();
+    if (usageEvent) yield usageEvent;
 
     yield { type: 'done' };
   } catch (err) {
+    const bedrockToolInputIssue = runtime.spec.provider === 'bedrock-anthropic'
+      ? describeBedrockToolUseInputIssue(err)
+      : null;
+    if (bedrockToolInputIssue) {
+      console.error(`[agent] Bedrock toolUse input issue: ${bedrockToolInputIssue}`);
+    }
     console.log(`⏱️ [agent] ERROR at +${((Date.now() - agentStartTime) / 1000).toFixed(1)}s: ${err instanceof Error ? err.message : String(err)}`);
     yield { type: 'error', message: err instanceof Error ? err.message : String(err) };
   }
@@ -3143,6 +4192,21 @@ const TIPS_JSON_FORMAT_ZH = `\n\n以JSON数组格式输出，只输出JSON：
 
 const TIPS_JSON_FORMAT_EN = `\n\nOutput as JSON array only, no other text:
 [{"emoji":"emoji","label":"2-3 English words","desc":"English description under 20 words","editPrompt":"Detailed English editing prompt","category":"enhance|creative|wild|captions"}, ...]`;
+
+const TIPS_JSON_FORMAT_ZH_HANT = `\n\n請只輸出 JSON 陣列，不要加入其他文字：
+[{"emoji":"emoji","label":"2-4 個繁體中文字","desc":"20 字內的繁體中文簡短描述","editPrompt":"(MUST be in English) Detailed English editing instructions...","category":"enhance|creative|wild|captions"}, ...]`;
+
+const TIPS_JSON_FORMAT_JA = `\n\nJSON 配列のみを出力し、ほかの文章は含めないでください：
+[{"emoji":"emoji","label":"短い日本語ラベル","desc":"20文字以内の日本語説明","editPrompt":"(MUST be in English) Detailed English editing instructions...","category":"enhance|creative|wild|captions"}, ...]`;
+
+function getTipsJsonFormat(locale?: string): string {
+  switch (normalizeLocale(locale)) {
+    case 'en': return TIPS_JSON_FORMAT_EN;
+    case 'ja': return TIPS_JSON_FORMAT_JA;
+    case 'zh-Hant': return TIPS_JSON_FORMAT_ZH_HANT;
+    default: return TIPS_JSON_FORMAT_ZH;
+  }
+}
 
 const TIPS_PROMPTS: Record<'enhance' | 'creative' | 'wild' | 'captions', string> = {
   enhance: enhancePrompt,
@@ -3202,7 +4266,7 @@ const TIPS_CATEGORY_INFO: Record<'enhance' | 'creative' | 'wild' | 'captions', {
   },
 };
 
-function buildTipsSystemPrompt(category: 'enhance' | 'creative' | 'wild' | 'captions', locale?: string): string {
+function buildTipsSystemPrompt(category: 'enhance' | 'creative' | 'wild' | 'captions'): string {
   const info = TIPS_CATEGORY_INFO[category];
   const labelNote = category === 'captions'
     ? 'label: 2-3 words, include scene/style context.'
@@ -3259,10 +4323,10 @@ export async function* streamTipsWithClaude(
 
 基于分析，给出2条${category}编辑建议。以下是详细规范（必须遵循）：
 
-${template}${locale === 'en' ? TIPS_JSON_FORMAT_EN : TIPS_JSON_FORMAT_ZH}`;
+${template}${getTipsJsonFormat(locale)}`;
 
   const { textStream } = streamText({
-    model: MODEL,
+    model: getAgentModel(),
     system: systemPrompt,
     messages: [
       {

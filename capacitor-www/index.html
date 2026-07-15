@@ -6,94 +6,297 @@
     <meta name="theme-color" content="#000000" />
     <title>Makaron</title>
     <style>
-      html,
-      body {
-        height: 100%;
-        margin: 0;
-        background: #000;
-        color: #fff;
-        font-family: -apple-system, BlinkMacSystemFont, "SF Pro Display", "Helvetica Neue", sans-serif;
+      :root {
+        color-scheme: dark;
+        --ink: #ffffff;
+        --muted: rgba(255, 255, 255, 0.58);
+        --soft: rgba(255, 255, 255, 0.42);
+        --edge: rgba(255, 255, 255, 0.24);
+        --glass: rgba(255, 255, 255, 0.09);
+        --glass-deep: rgba(12, 9, 18, 0.52);
+        --spark: #f5b3ff;
+        --ember: #ff7aaa;
       }
 
-      body {
-        display: flex;
-        align-items: center;
-        justify-content: center;
-        padding: 28px;
+      * {
         box-sizing: border-box;
       }
 
-      .panel {
-        width: min(360px, 100%);
+      html,
+      body {
+        width: 100%;
+        min-height: 100%;
+        margin: 0;
+        background: #030306;
+        color: var(--ink);
+        font-family: -apple-system, BlinkMacSystemFont, "SF Pro Display", "SF Pro Text", "Helvetica Neue", sans-serif;
+        overflow: hidden;
+        -webkit-font-smoothing: antialiased;
+        text-rendering: geometricPrecision;
+      }
+
+      body {
+        min-height: 100dvh;
+      }
+
+      .screen {
+        position: relative;
+        min-height: 100dvh;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        padding: max(28px, env(safe-area-inset-top)) 26px max(30px, env(safe-area-inset-bottom));
+        isolation: isolate;
+        background:
+          linear-gradient(180deg, rgba(255, 255, 255, 0.045), transparent 17%, transparent 74%, rgba(255, 255, 255, 0.028)),
+          radial-gradient(120% 78% at 50% 42%, rgba(234, 120, 255, 0.17), rgba(255, 122, 170, 0.055) 35%, transparent 68%),
+          linear-gradient(145deg, #050507 0%, #09070d 52%, #030306 100%);
+      }
+
+      .screen::before,
+      .screen::after {
+        content: "";
+        position: absolute;
+        inset: auto;
+        pointer-events: none;
+        z-index: -2;
+      }
+
+      .screen::before {
+        width: 270px;
+        height: 270px;
+        left: 50%;
+        top: 43%;
+        transform: translate(-50%, -50%);
+        background:
+          radial-gradient(circle at 42% 38%, rgba(255, 255, 255, 0.22), transparent 0 7%, transparent 8%),
+          radial-gradient(circle at 50% 50%, rgba(217, 70, 239, 0.2), transparent 62%);
+        filter: blur(18px);
+      }
+
+      .screen::after {
+        inset: 0 0 auto;
+        height: 48%;
+        background:
+          linear-gradient(116deg, transparent 6%, rgba(255, 255, 255, 0.07) 32%, transparent 34%),
+          linear-gradient(151deg, transparent 54%, rgba(255, 255, 255, 0.04) 72%, transparent 74%);
+        opacity: 0.72;
+        z-index: -1;
+      }
+
+      .launch-stack {
+        position: relative;
+        width: min(282px, 100%);
+        display: flex;
+        flex-direction: column;
+        align-items: center;
         text-align: center;
+        transform: translateY(-3vh);
       }
 
-      .mark {
-        width: 56px;
-        height: 56px;
-        margin: 0 auto 18px;
-        border-radius: 18px;
-        background: radial-gradient(circle at 50% 45%, #d946ef 0%, #7c2d92 58%, #171019 100%);
-        box-shadow: 0 0 42px rgba(217, 70, 239, 0.35);
+      .glass-surface {
+        position: relative;
+        width: 132px;
+        height: 132px;
+        display: grid;
+        place-items: center;
+        margin-bottom: 18px;
       }
 
-      .brand {
-        font-size: 24px;
-        font-weight: 800;
+      .glass-surface::before {
+        content: "";
+        position: absolute;
+        inset: -34px;
+        border-radius: 50%;
+        background:
+          radial-gradient(circle at 50% 50%, rgba(217, 70, 239, 0.32), rgba(217, 70, 239, 0.12) 34%, transparent 70%);
+        filter: blur(18px);
+        opacity: 0.72;
+        pointer-events: none;
+      }
+
+      .glass-surface::after {
+        content: "";
+        position: absolute;
+        left: 20px;
+        right: 20px;
+        top: -7px;
+        height: 1px;
+        border-radius: 999px;
+        background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.2), transparent);
+        opacity: 0.62;
+      }
+
+      .app-icon {
+        position: relative;
+        z-index: 1;
+        width: 118px;
+        height: 118px;
+        display: block;
+        border-radius: 29px;
+        box-shadow:
+          0 20px 42px rgba(0, 0, 0, 0.44),
+          0 0 44px rgba(236, 72, 153, 0.2);
+      }
+
+      .wordmark {
+        font-size: 26px;
+        font-weight: 600;
+        line-height: 1;
         letter-spacing: 0;
       }
 
-      .status {
-        margin-top: 12px;
-        color: rgba(255,255,255,0.54);
-        font-size: 14px;
-        line-height: 1.55;
+      .tagline {
+        margin-top: 8px;
+        font-size: 12px;
+        line-height: 1.45;
+        color: var(--muted);
       }
 
-      .actions {
-        margin-top: 22px;
-        display: flex;
-        justify-content: center;
-        gap: 10px;
-      }
-
-      button {
-        appearance: none;
-        border: 1px solid rgba(255,255,255,0.14);
+      .progress {
+        position: relative;
+        width: 122px;
+        height: 2px;
+        margin-top: 20px;
+        overflow: hidden;
         border-radius: 999px;
-        background: rgba(255,255,255,0.08);
+        background: rgba(255, 255, 255, 0.11);
+      }
+
+      .progress::after {
+        content: "";
+        position: absolute;
+        inset: 0;
+        width: 42%;
+        border-radius: inherit;
+        background: linear-gradient(90deg, transparent, var(--spark), var(--ember));
+        filter: drop-shadow(0 0 8px rgba(217, 70, 239, 0.5));
+        animation: sweep 1.45s cubic-bezier(0.65, 0, 0.35, 1) infinite;
+      }
+
+      .status {
+        min-height: 22px;
+        max-width: 238px;
+        margin-top: 13px;
+        color: var(--soft);
+        font-size: 11.5px;
+        line-height: 1.45;
+      }
+
+      .retry {
+        appearance: none;
+        margin-top: 13px;
+        border: 1px solid rgba(255, 255, 255, 0.18);
+        border-radius: 999px;
+        background: rgba(255, 255, 255, 0.095);
         color: #fff;
         font: inherit;
-        font-size: 14px;
-        padding: 10px 16px;
+        font-size: 12px;
+        font-weight: 600;
+        padding: 9px 15px;
+        opacity: 0;
+        pointer-events: none;
+        transform: translateY(4px);
+        transition: opacity 180ms ease, transform 180ms ease, border-color 180ms ease, background 180ms ease;
+        -webkit-backdrop-filter: blur(16px) saturate(1.35);
+        backdrop-filter: blur(16px) saturate(1.35);
+      }
+
+      .retry.is-visible {
+        opacity: 1;
+        pointer-events: auto;
+        transform: translateY(0);
+      }
+
+      .retry:active {
+        transform: scale(0.97);
+        background: rgba(255, 255, 255, 0.12);
+      }
+
+      @keyframes sweep {
+        0% {
+          transform: translateX(-120%);
+        }
+        100% {
+          transform: translateX(260%);
+        }
+      }
+
+      @media (prefers-reduced-motion: reduce) {
+        .progress::after {
+          animation: none;
+        }
       }
     </style>
   </head>
   <body>
-    <div class="panel">
-      <div class="mark"></div>
-      <div class="brand">Makaron</div>
-      <div id="status" class="status">Opening Makaron...</div>
-      <div class="actions">
-        <button id="retry">Retry</button>
-      </div>
-    </div>
+    <main class="screen">
+      <section class="launch-stack" aria-label="Makaron is opening">
+        <div class="glass-surface" aria-hidden="true">
+          <img class="app-icon" src="makaron-app-icon.webp" alt="" />
+        </div>
+        <div class="wordmark">Makaron</div>
+        <div class="tagline">Preparing your creative studio</div>
+        <div class="progress" aria-hidden="true"></div>
+        <div id="status" class="status" aria-live="polite">Opening Makaron...</div>
+        <button id="retry" class="retry" type="button">Try again</button>
+      </section>
+    </main>
     <script>
       const url = 'https://www.makaron.app/home';
       const statusEl = document.getElementById('status');
-      const connect = async () => {
-        statusEl.textContent = 'Connecting to ' + url + ' ...';
+      const retryButton = document.getElementById('retry');
+      let attempt = 0;
+
+      const hideNativeSplash = () => {
+        window.Capacitor?.Plugins?.SplashScreen?.hide?.().catch?.(() => {});
+      };
+
+      const setStatus = (text, showRetry = false) => {
+        statusEl.textContent = text;
+        retryButton.classList.toggle('is-visible', showRetry);
+      };
+
+      const probeMakaron = async () => {
+        const controller = new AbortController();
+        const timer = window.setTimeout(() => controller.abort(), 12000);
         try {
-          await fetch(url, { method: 'HEAD', cache: 'no-store' });
-          window.location.replace(url);
-        } catch (error) {
-          statusEl.textContent = 'Cannot reach Makaron. Check your connection and try again.';
+          await fetch(url, {
+            method: 'GET',
+            mode: 'no-cors',
+            cache: 'no-store',
+            signal: controller.signal,
+          });
+          return true;
         } finally {
-          window.Capacitor?.Plugins?.SplashScreen?.hide?.().catch?.(() => {});
+          window.clearTimeout(timer);
         }
       };
-      document.getElementById('retry').addEventListener('click', connect);
-      connect();
+
+      const connect = async () => {
+        attempt += 1;
+        const currentAttempt = attempt;
+        setStatus(attempt > 1 ? 'Trying again...' : 'Opening Makaron...');
+        window.setTimeout(() => {
+          if (attempt === currentAttempt && !retryButton.classList.contains('is-visible')) {
+            setStatus('Warming up Makaron...');
+          }
+        }, 1800);
+
+        try {
+          await probeMakaron();
+          setStatus('Almost there...');
+          window.location.replace(url);
+        } catch (error) {
+          setStatus('Cannot reach Makaron right now. Check your connection and try again.', true);
+        }
+      };
+
+      retryButton.addEventListener('click', connect);
+      window.requestAnimationFrame(() => {
+        window.setTimeout(hideNativeSplash, 160);
+        connect();
+      });
     </script>
   </body>
 </html>

@@ -27,7 +27,83 @@ describe('agent prompt policy guards', () => {
     expect(agentTs).toContain('For raw video snapshots: use timestamp')
     expect(agentTs).toContain("source: 'video'")
     expect(agentTs).toContain("source: 'composition'")
+    expect(agentTs).toContain('Render succeeded. Treat this as a successful preview_frame result')
+    expect(agentTs).toContain('Continue with write_file when the user asked to publish')
     expect(agentTs).not.toContain('extract_video_frame: tool')
+  })
+
+  it('does not inject canned run_code narration into CUI messages', () => {
+    const agentTs = read('src/lib/agent.ts')
+    const en = read('src/lib/locales/en.ts')
+    const zh = read('src/lib/locales/zh.ts')
+
+    expect(agentTs).toContain("translate(responseLocale, 'agent.status.generatingCode')")
+    expect(en).toContain("'agent.status.generatingCode': 'Generating code...'")
+    expect(zh).toContain("'agent.status.generatingCode': '代码生成中...'")
+    expect(agentTs).not.toContain('I am writing the Remotion code now')
+    expect(agentTs).not.toContain('I am adjusting the code and checking the result')
+    expect(agentTs).not.toContain('getRunCodeIntro')
+  })
+
+  it('keeps Remotion composition code in the local runtime shape', () => {
+    const remotion = read('src/lib/prompts/remotion-composition.md')
+
+    expect(remotion).toContain('Never write')
+    expect(remotion).toContain('export default')
+    expect(remotion).toContain('function Composition(props)')
+    expect(remotion).toContain('Do not use ES module syntax')
+  })
+
+  it('returns resolved generate_image URLs for Remotion composition use', () => {
+    const agentTs = read('src/lib/agent.ts')
+
+    expect(agentTs).toContain('Resolved image URL:')
+    expect(agentTs).toContain('Use this URL directly in Remotion composition props/code')
+    expect(agentTs).toContain('do not use the <<<media_${mediaIndex}>>> marker inside composition code')
+  })
+
+  it('uses full timeline snapshots when materializing Remotion compositions', () => {
+    const agentTs = read('src/lib/agent.ts')
+
+    expect(agentTs).toContain("select('id, type, design_path')")
+    expect(agentTs).toContain('const available = snaps?.length || 0')
+    expect(agentTs).toContain('Invalid index ${input.media_index}. Available: 1-${available}.')
+    expect(agentTs).toContain('not an editable Remotion composition')
+  })
+
+  it('returns resolved voiceover URLs for Remotion audio use', () => {
+    const agentTs = read('src/lib/agent.ts')
+
+    expect(agentTs).toContain('Resolved voiceover URL:')
+    expect(agentTs).toContain('Use this URL directly in Remotion <Audio src>')
+    expect(agentTs).toContain('marker inside composition code or props')
+    expect(agentTs).toContain("deductCredits(ctx.userId, null, 'create_voiceover', result.tts.model)")
+    expect(agentTs).toContain('[billing] generate_voiceover deduct error:')
+  })
+
+  it('surfaces generated audio progress and playable cards in CUI', () => {
+    const agentTs = read('src/lib/agent.ts')
+    const reconnect = read('src/hooks/useAgentRun.ts')
+    const zh = read('src/lib/locales/zh.ts')
+
+    expect(agentTs).toContain('formatGeneratedAudioForCui')
+    expect(agentTs).toContain("translate(responseLocale, 'agent.status.generatingVoiceover')")
+    expect(agentTs).toContain("translate(responseLocale, 'agent.status.generatingAudio')")
+    expect(zh).toContain("'agent.status.generatingVoiceover': '生成配音中...'")
+    expect(zh).toContain("'agent.status.generatingAudio': '生成音频中...'")
+    expect(agentTs).toContain('formatMusicLine')
+    expect(agentTs).toContain('music:${safeTrackIndex}|${title}|${safeDuration}|${tags}|${playUrl}|${finalUrl}')
+    expect(agentTs).toContain('all new music generation routes go through Seed Audio')
+    expect(agentTs).toContain("provider: z.enum(['auto', 'evolink-seed-audio'])")
+    expect(agentTs).not.toContain('waitForPreview: true')
+    expect(agentTs).not.toContain("provider=\"suno\"")
+    expect(agentTs).not.toContain("provider: z.enum(['auto', 'evolink-seed-audio', 'suno'])")
+    expect(agentTs).toContain('deductSeedAudioCredits')
+    expect(agentTs).toContain('providerCreditsUsed: result.creditsUsed')
+    expect(agentTs).not.toContain("deductCredits(ctx.userId ?? '', null, 'create_music')")
+    expect(agentTs).toContain('const generatedAudioLine = formatGeneratedAudioForCui(toolName, toolOutput, responseLocale)')
+    expect(reconnect).toContain("case 'music_task'")
+    expect(reconnect).toContain('callbacks.onMusicTask?.')
   })
 
   it('keeps uploaded video auto-analysis in the tool-aware history path', () => {
@@ -39,6 +115,13 @@ describe('agent prompt policy guards', () => {
     expect(editor).toContain("analyze_video's result is persisted in agent_tool_history")
     expect(editor).not.toContain("handleAgentRequest('', undefined, undefined, { silent: true, uploadedVideoCount")
     expect(agentRoute).toContain('const isNormalMode = !tipsTeaser && !nameProject && !previewsReady && !tipReaction && !analysisOnly')
+  })
+
+  it('reconnects text-only CUI projects before the first snapshot exists', () => {
+    const editor = read('src/components/Editor.tsx')
+
+    expect(editor).toContain('enabled: !!projectId && !inactive')
+    expect(editor).not.toContain('enabled: !!projectId && (initialSnapshots?.length ?? 0) > 0')
   })
 
   it('keeps built-in image skill triggers visible before the image guide is read', () => {
@@ -87,7 +170,7 @@ describe('agent prompt policy guards', () => {
 
     expect(agent).toContain('Hard duration range: a single SeeDance script/call must be 4-15s; Kling is 5-15s')
     expect(agent).toContain('If requested/source duration is shorter than the model minimum, use the minimum')
-    expect(agent).toContain('If output is longer than 15s, use `skills/long-video-director/SKILL.md`')
+    expect(agent).toContain('If output is longer than the selected model max, use `skills/long-video-director/SKILL.md`')
     expect(agent).toContain('Single-script rule: if a complete approved script is <=15s')
     expect(agent).toContain('Do not submit only one shot or split just because it has multiple shot lines')
     expect(agent).toContain('Long source video rule: if an existing timeline/reference video is >15s')

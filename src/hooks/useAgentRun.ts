@@ -102,7 +102,7 @@ export function useAgentRun({ projectId, enabled, skipRunIdRef, isActiveRef }: U
     poll()
     const timer = setInterval(poll, 3000)
     return () => clearInterval(timer)
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+
   }, [enabled, projectId, activeRunId])
 
   const disconnect = useCallback(() => {
@@ -318,6 +318,9 @@ function dispatchEvent(row: AgentEventRow, callbacks: AgentStreamCallbacks) {
         (data as { taskId: string }).taskId,
         (data as { prompt: string }).prompt ?? '',
       )
+      break
+    case 'music_task':
+      callbacks.onMusicTask?.((data as { taskId: string }).taskId)
       break
     case 'video_snapshot': {
       const video = data as { snapshotId?: string; taskId?: string; videoMeta?: import('@/types').VideoMeta }

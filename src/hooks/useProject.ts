@@ -128,6 +128,7 @@ export function useProject(projectId: string, userId: string) {
       const dp = snap.designPath
       if (!dp || !resolvedUserId) return
       try {
+        let design: unknown | null = null
         const storagePath = `${resolvedUserId}/workspace/${dp}`
         const { data: urlData } = supabase.storage.from('images').getPublicUrl(storagePath)
         if (urlData?.publicUrl) {
@@ -138,10 +139,21 @@ export function useProject(projectId: string, userId: string) {
             new Promise<Response>((_, reject) => setTimeout(() => reject(new Error('timeout')), 5000)),
           ])
           if (res.ok) {
-            const design = await res.json()
-            snap.design = design
+            design = await res.json()
           }
         }
+        if (!design) {
+          const fallbackRes = await fetch(
+            `/api/workspace/read?projectId=${encodeURIComponent(projectId)}&path=${encodeURIComponent(dp)}`,
+          )
+          if (fallbackRes.ok) {
+            const payload = await fallbackRes.json()
+            if (typeof payload?.content === 'string') {
+              design = JSON.parse(payload.content)
+            }
+          }
+        }
+        if (design) snap.design = design as Snapshot['design']
       } catch (e) {
         console.warn('Failed to load design from workspace:', dp, e)
       }
@@ -266,8 +278,12 @@ export function useProject(projectId: string, userId: string) {
 
         // Upsert snapshot row (upsert handles React StrictMode double-invoke)
         // Don't overwrite message_id if DualWriter already set it (DualWriter's ID matches messages table)
-        const { data: existing } = await supabase.from('snapshots').select('message_id').eq('id', snapshot.id).maybeSingle()
+        const { data: existing } = await supabase.from('snapshots').select('message_id, video_meta').eq('id', snapshot.id).maybeSingle()
         const messageId = existing?.message_id || snapshot.messageId
+        const existingVideoMeta = existing?.video_meta as VideoMeta | null | undefined
+        const videoMeta = existingVideoMeta?.status === 'completed' && snapshot.videoMeta?.status === 'processing'
+          ? existingVideoMeta
+          : snapshot.videoMeta
 
         const { error } = await supabase.from('snapshots').upsert({
           id: snapshot.id,
@@ -279,7 +295,7 @@ export function useProject(projectId: string, userId: string) {
           ...(snapshot.description ? { description: snapshot.description } : {}),
           ...(snapshot.type ? { type: snapshot.type } : {}),
           ...(designPath ? { design_path: designPath } : {}),
-          ...(snapshot.videoMeta ? { video_meta: snapshot.videoMeta } : {}),
+          ...(videoMeta ? { video_meta: videoMeta } : {}),
           ...(snapshot.metadata ? { metadata: snapshot.metadata } : {}),
         }, { onConflict: 'id' })
 
@@ -340,7 +356,7 @@ export function useProject(projectId: string, userId: string) {
         const supabase = getSupabase()
 
         // Upload base64 preview images to Storage, replace with URLs
-        // eslint-disable-next-line @typescript-eslint/no-unused-vars
+
         const tipsForDb = await Promise.all(tips.map(async ({ previewStatus, ...rest }) => {
 
           // Already a Storage URL — keep it
@@ -358,7 +374,7 @@ export function useProject(projectId: string, userId: string) {
             // Skip if already failed too many times
             const attempts = uploadAttemptsRef.current.get(filename) ?? 0
             if (attempts >= MAX_UPLOAD_ATTEMPTS) {
-              // eslint-disable-next-line @typescript-eslint/no-unused-vars
+
               const { previewImage, ...noPreview } = rest
               return noPreview
             }
@@ -370,7 +386,7 @@ export function useProject(projectId: string, userId: string) {
               return { ...rest, previewImage: imageUrl }
             }
             // Upload failed — strip base64 (too large for jsonb)
-            // eslint-disable-next-line @typescript-eslint/no-unused-vars
+
             const { previewImage: _stripped, ...noPreview } = rest
             return noPreview
           }

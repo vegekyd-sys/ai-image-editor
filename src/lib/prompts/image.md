@@ -215,9 +215,9 @@ OpenAI takes about 2 to 3 minutes per generation. Tell the user it will take a c
 
 Other model rules:
 
-- User explicitly says a model name, for example "用pony", "use qwen", "gemini", "nano banana", "openai": use that model.
+- User explicitly says a model name, for example "用pony", "use qwen", "gemini", "nano banana", "nano banana lite", "openai": use that model.
 - Everything else: omit model. The auto-router handles it.
-- "nano banana" means Gemini.
+- "nano banana" means Gemini. "nano banana lite" means `model: 'gemini-lite'`.
 
 ## Context Mode for model='openai'
 

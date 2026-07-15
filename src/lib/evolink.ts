@@ -35,7 +35,10 @@ export async function createEvolinkTask(input: EvolinkTaskInput): Promise<string
 
   const { prompt, images, duration, aspectRatio, quality, model: requestedModel, generateAudio, videoUrls, audioUrls } = input
 
-  const model = requestedModel || 'seedance-2.0-fast-reference-to-video'
+  const hasReferenceMedia = images.length > 0 || !!videoUrls?.length || !!audioUrls?.length
+  const model = requestedModel || (hasReferenceMedia
+    ? 'seedance-2.0-fast-reference-to-video'
+    : 'seedance-2.0-fast-text-to-video')
 
   const payload: Record<string, unknown> = {
     model,

@@ -5,6 +5,12 @@
  */
 
 import type { DesignPayload } from '@/types';
+import { hasRemotionAudioSources } from '@/lib/remotion-audio';
+
+function readEnv(name: string): string | undefined {
+  const value = process.env[name]?.replace(/\\[rn]|[\r\n]/g, '').trim();
+  return value || undefined;
+}
 
 // ─── Sandbox pool (reuse across renders and requests) ─────────────────────
 
@@ -76,9 +82,10 @@ async function ensureSandbox(): Promise<SandboxInstance> {
   _sandboxPromise = (async () => {
     console.log('🖥️ [remotion-server] Creating Sandbox from snapshot...');
     const t0 = Date.now();
+    const vcpus = Number(process.env.REMOTION_SANDBOX_VCPUS || 8);
     const sandbox = await Sandbox.create({
       source: { type: 'snapshot', snapshotId },
-      resources: { vcpus: 4 },
+      resources: { vcpus },
       timeout: 5 * 60 * 1000,
     });
     _sandboxId = sandbox.sandboxId;
@@ -150,4 +157,90 @@ export async function renderDesignFrame(
     }
   }
   throw new Error('renderDesignFrame: all attempts failed');
+}
+
+export async function renderDesignVideo(
+  design: DesignPayload,
+  options: {
+    onProgress?: (progress: unknown) => void | Promise<void>;
+    scale?: number;
+  } = {},
+): Promise<Buffer> {
+  if (readEnv('REMOTION_RENDERER') === 'lambda') {
+    const { renderDesignVideoLambda } = await import('@/lib/remotion-lambda-renderer');
+    return renderDesignVideoLambda(design, options);
+  }
+
+  if (readEnv('REMOTION_RENDERER') === 'local') {
+    const { renderDesignVideoLocal } = await import('@/lib/remotion-local-renderer');
+    return renderDesignVideoLocal(design, {
+      ...options,
+      concurrency: readEnv('REMOTION_LOCAL_CONCURRENCY') || 4,
+      cacheDir: readEnv('REMOTION_LOCAL_MEDIA_CACHE_DIR'),
+      mediaServerPort: Number(readEnv('REMOTION_LOCAL_MEDIA_PORT') || 5123),
+      skipFontLoading: readEnv('REMOTION_LOCAL_SKIP_FONTS') !== 'false',
+    });
+  }
+
+  const { renderMediaOnVercel } = await import('@remotion/vercel');
+
+  const fps = design.animation?.fps || 30;
+  const dur = design.animation?.durationInSeconds || 1 / fps;
+  const durationInFrames = Math.max(1, Math.round(fps * dur));
+  const outputFile = `/tmp/remotion-export-${Date.now()}-${Math.random().toString(36).slice(2)}.mp4`;
+  const hasAudio = hasRemotionAudioSources(design.code);
+
+  for (let attempt = 0; attempt < 2; attempt++) {
+    const sandbox = await ensureSandbox();
+    const scale = Number.isFinite(options.scale) && options.scale && options.scale > 0 ? options.scale : 1;
+    const outputWidth = Math.max(2, Math.round((design.width || 1080) * scale / 2) * 2);
+    const outputHeight = Math.max(2, Math.round((design.height || 1920) * scale / 2) * 2);
+    console.log(`🎬 [remotion-server] Rendering video ${durationInFrames} frames (${design.width}x${design.height} -> ${outputWidth}x${outputHeight})${attempt > 0 ? ' [retry]' : ''}...`);
+    const t0 = Date.now();
+
+    try {
+      const result = await renderMediaOnVercel({
+        sandbox,
+        compositionId: 'dynamic-design',
+        inputProps: {
+          code: prepareRemotionCodeForSandbox(design.code),
+          designProps: design.props || {},
+          fps,
+          durationInFrames,
+          width: design.width || 1080,
+          height: design.height || 1920,
+          useNativeVideo: true,
+        },
+        outputFile,
+        codec: 'h264',
+        imageFormat: 'jpeg',
+        scale,
+        crf: 23,
+        x264Preset: 'veryfast',
+        concurrency: '100%',
+        muted: !hasAudio,
+        audioCodec: hasAudio ? 'aac' : null,
+        enforceAudioTrack: hasAudio,
+        timeoutInMilliseconds: Math.max(60_000, Math.ceil(durationInFrames / fps) * 30_000),
+        onProgress: options.onProgress,
+      });
+
+      const buffer = await sandbox.readFileToBuffer({ path: result.sandboxFilePath || outputFile });
+      if (!buffer) throw new Error('Rendered video not found in Sandbox');
+
+      console.log(`✅ [remotion-server] Video rendered in ${((Date.now() - t0) / 1000).toFixed(1)}s: ${(buffer.length / 1024 / 1024).toFixed(1)} MB`);
+      return buffer;
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err);
+      if (attempt === 0 && (msg.includes('410') || msg.includes('gone') || msg.includes('not ok'))) {
+        console.warn(`⚠️ [remotion-server] Sandbox expired, recreating...`);
+        _sandboxPromise = null;
+        _sandboxId = null;
+        continue;
+      }
+      throw err;
+    }
+  }
+
+  throw new Error('renderDesignVideo: all attempts failed');
 }

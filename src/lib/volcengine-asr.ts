@@ -11,6 +11,7 @@ const DEFAULT_ENDPOINT = 'https://openspeech.bytedance.com/api/v3/auc/bigmodel/r
 const DEFAULT_RESOURCE_ID = 'volc.bigasr.auc_turbo'
 const MAX_DOWNLOAD_BYTES = 220 * 1024 * 1024
 const MAX_AUDIO_BASE64_BYTES = 100 * 1024 * 1024
+const DEFAULT_FETCH_TIMEOUT_MS = 120_000
 
 export interface TranscriptWord {
   text: string
@@ -54,6 +55,26 @@ function env(name: string): string | undefined {
   return value || undefined
 }
 
+function fetchTimeoutMs(): number {
+  const value = Number(env('VOLCENGINE_ASR_TIMEOUT_MS'))
+  return Number.isFinite(value) && value > 0 ? value : DEFAULT_FETCH_TIMEOUT_MS
+}
+
+async function fetchWithTimeout(input: string | URL, init?: RequestInit): Promise<Response> {
+  const controller = new AbortController()
+  const timeout = setTimeout(() => controller.abort(), fetchTimeoutMs())
+  try {
+    return await fetch(input, { ...init, signal: init?.signal || controller.signal })
+  } catch (err) {
+    if (err instanceof Error && err.name === 'AbortError') {
+      throw new Error(`Volcengine ASR request timed out after ${fetchTimeoutMs()}ms.`)
+    }
+    throw err
+  } finally {
+    clearTimeout(timeout)
+  }
+}
+
 function getCredentials(): { mode: 'api-key'; apiKey: string } | { mode: 'legacy'; appKey: string; accessKey: string } {
   const apiKey = env('VOLCENGINE_ASR_API_KEY')
   if (apiKey) return { mode: 'api-key', apiKey }
@@ -81,7 +102,7 @@ function extensionFromContentType(contentType: string | null, mediaUrl: string):
 }
 
 async function downloadMedia(mediaUrl: string, dir: string): Promise<string> {
-  const res = await fetch(mediaUrl)
+  const res = await fetchWithTimeout(mediaUrl)
   if (!res.ok) throw new Error(`Failed to download media for ASR: ${res.status}`)
 
   const length = Number(res.headers.get('content-length') || 0)
@@ -213,7 +234,7 @@ export async function transcribeWithVolcengineAsr(options: VolcengineAsrOptions)
   }
   if (options.language) additions.language = options.language
 
-  const res = await fetch(endpoint, {
+  const res = await fetchWithTimeout(endpoint, {
     method: 'POST',
     headers: buildHeaders(requestId),
     body: JSON.stringify({

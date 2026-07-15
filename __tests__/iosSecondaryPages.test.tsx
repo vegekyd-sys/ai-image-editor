@@ -48,8 +48,17 @@ vi.mock('@/lib/i18n', () => ({
   useLocale: () => ({
     locale: 'zh',
     setLocale: mocks.setLocale,
-    t: (key: string) => key,
+    t: (key: string) => ({
+      'skills.back': '返回',
+      'skills.add': '+ Skill',
+      'skills.loading': '加载中...',
+      'skills.empty': '还没有任何 Skill',
+      'nav.openDashboard': '打开数据面板',
+      'nav.openAccountMenu': '打开个人菜单',
+      'nav.getApi': '获取 API',
+    }[key] ?? key),
   }),
+  LocaleToggle: () => <select aria-label="选择语言"><option>简体中文</option></select>,
 }));
 
 vi.mock('@/lib/native-app', () => ({
@@ -179,6 +188,6 @@ describe('iOS secondary pages app-like behavior', () => {
     expect(trigger.getAttribute('style')).toContain('min-height: 44px');
 
     fireEvent.click(trigger);
-    expect(screen.getByText('获取 API')).toBeTruthy();
+    expect(screen.getAllByText('获取 API').length).toBeGreaterThanOrEqual(1);
   });
 });

@@ -1,15 +1,18 @@
 'use client'
 
 import { useCallback, useEffect, useState, useRef, type CSSProperties, type MouseEvent as ReactMouseEvent } from 'react'
+import { createPortal } from 'react-dom'
 import { useRouter } from 'next/navigation'
+import dynamic from 'next/dynamic'
 import { useAuth } from '@/hooks/useAuth'
-import { useLocale } from '@/lib/i18n'
-import Changelog from '@/components/Changelog'
+import { LocaleToggle, useLocale } from '@/lib/i18n'
 import { getThumbnailUrl } from '@/lib/supabase/storage'
 import { readNativeJSONCache, warmNativeJSONCache, writeNativeJSONCache } from '@/lib/native-app-cache'
 import { isMakaronIOSApp } from '@/lib/native-app'
 import { warmProjectsListCache } from '@/lib/projects-list-warm'
 import { requestNativePageStackPush } from '@/lib/native-page-stack'
+
+const Changelog = dynamic(() => import('@/components/Changelog'), { ssr: false })
 
 interface TopBarProps {
   page: 'home' | 'projects'
@@ -81,7 +84,7 @@ const desktopAccountMenuStyle: CSSProperties = {
 const mobileAccountOverlayStyle: CSSProperties = {
   position: 'fixed',
   inset: 0,
-  zIndex: 320,
+  zIndex: 2147483200,
   display: 'none',
 }
 
@@ -134,16 +137,18 @@ function AccountGlassLayers() {
 
 export default function TopBar({ authReturnPath }: TopBarProps) {
   const { user, signOut } = useAuth()
-  const { locale, setLocale } = useLocale()
+  const { locale, t } = useLocale()
   const router = useRouter()
 
   const [userMenuOpen, setUserMenuOpen] = useState(false)
   const [hasMounted, setHasMounted] = useState(false)
   const userMenuRef = useRef<HTMLDivElement>(null)
-  const accountEdgeSwipeRef = useRef<{ tracking: boolean; startX: number; startY: number }>({
+  const mobileMenuRef = useRef<HTMLDivElement>(null)
+  const accountEdgeSwipeRef = useRef<{ tracking: boolean; startX: number; startY: number; consumed: boolean }>({
     tracking: false,
     startX: 0,
     startY: 0,
+    consumed: false,
   })
   const [creditBalance, setCreditBalance] = useState<number | null>(() => {
     const cached = readNativeJSONCache<CreditsPayload>('/api/billing/credits')
@@ -264,9 +269,11 @@ export default function TopBar({ authReturnPath }: TopBarProps) {
     if (!userMenuOpen) return
     warmTopBarMenuRoutes()
     const handler = (e: MouseEvent) => {
-      if (userMenuRef.current && !userMenuRef.current.contains(e.target as Node)) {
-        setUserMenuOpen(false)
-      }
+      const target = e.target as Node
+      if (target instanceof Element && target.closest('[data-makaron-locale-popover]')) return
+      if (userMenuRef.current?.contains(target)) return
+      if (mobileMenuRef.current?.contains(target)) return
+      setUserMenuOpen(false)
     }
     document.addEventListener('mousedown', handler)
     return () => document.removeEventListener('mousedown', handler)
@@ -307,10 +314,15 @@ export default function TopBar({ authReturnPath }: TopBarProps) {
       const touch = e.touches[0]
       if (!touch) return
       const fromRightEdge = touch.clientX >= window.innerWidth - ACCOUNT_EDGE_SWIPE_WIDTH
+      if (fromRightEdge) {
+        e.preventDefault()
+        e.stopPropagation()
+      }
       accountEdgeSwipeRef.current = {
         tracking: fromRightEdge,
         startX: touch.clientX,
         startY: touch.clientY,
+        consumed: fromRightEdge,
       }
     }
 
@@ -319,6 +331,8 @@ export default function TopBar({ authReturnPath }: TopBarProps) {
       if (!state.tracking) return
       const touch = e.touches[0]
       if (!touch) return
+      e.preventDefault()
+      e.stopPropagation()
       const deltaX = touch.clientX - state.startX
       const deltaY = touch.clientY - state.startY
       if (Math.abs(deltaY) > ACCOUNT_EDGE_SWIPE_MAX_VERTICAL_DRIFT) {
@@ -328,23 +342,30 @@ export default function TopBar({ authReturnPath }: TopBarProps) {
       if (deltaX <= -ACCOUNT_EDGE_SWIPE_OPEN_DISTANCE) {
         accountEdgeSwipeRef.current.tracking = false
         setUserMenuOpen(true)
+        window.dispatchEvent(new Event('makaron-account-menu-edge-open'))
       }
     }
 
-    const clearTracking = () => {
+    const clearTracking = (e: TouchEvent) => {
+      if (accountEdgeSwipeRef.current.consumed) {
+        e.preventDefault()
+        e.stopPropagation()
+      }
       accountEdgeSwipeRef.current.tracking = false
+      accountEdgeSwipeRef.current.consumed = false
     }
 
-    window.addEventListener('touchstart', handleTouchStart, { passive: true })
-    window.addEventListener('touchmove', handleTouchMove, { passive: true })
-    window.addEventListener('touchend', clearTracking, { passive: true })
-    window.addEventListener('touchcancel', clearTracking, { passive: true })
+    const captureOptions: AddEventListenerOptions = { passive: false, capture: true }
+    window.addEventListener('touchstart', handleTouchStart, captureOptions)
+    window.addEventListener('touchmove', handleTouchMove, captureOptions)
+    window.addEventListener('touchend', clearTracking, captureOptions)
+    window.addEventListener('touchcancel', clearTracking, captureOptions)
 
     return () => {
-      window.removeEventListener('touchstart', handleTouchStart)
-      window.removeEventListener('touchmove', handleTouchMove)
-      window.removeEventListener('touchend', clearTracking)
-      window.removeEventListener('touchcancel', clearTracking)
+      window.removeEventListener('touchstart', handleTouchStart, true)
+      window.removeEventListener('touchmove', handleTouchMove, true)
+      window.removeEventListener('touchend', clearTracking, true)
+      window.removeEventListener('touchcancel', clearTracking, true)
     }
   }, [user, userMenuOpen])
 
@@ -379,7 +400,7 @@ export default function TopBar({ authReturnPath }: TopBarProps) {
               <path d="m17.6 6.4-2.1 2.1" />
               <path d="m8.5 15.5-2.1 2.1" />
             </svg>
-            {locale === 'zh' ? '更新' : 'Updates'}
+            {t('nav.updates')}
           </button>
         </div>
 
@@ -388,7 +409,7 @@ export default function TopBar({ authReturnPath }: TopBarProps) {
           {visibleUser && creditBalance !== null && (
             <button
               type="button"
-              aria-label={locale === 'zh' ? '打开数据面板' : 'Open dashboard'}
+              aria-label={t('nav.openDashboard')}
               onClick={() => navigateTopBar('/dashboard')}
               style={{
                 display: 'flex', alignItems: 'center', gap: 5,
@@ -415,7 +436,7 @@ export default function TopBar({ authReturnPath }: TopBarProps) {
             <div ref={userMenuRef} style={{ position: 'relative' }}>
               <button
                 type="button"
-                aria-label={locale === 'zh' ? '打开个人菜单' : 'Open account menu'}
+                aria-label={t('nav.openAccountMenu')}
                 aria-expanded={userMenuOpen}
                 aria-controls="makaron-account-menu makaron-account-menu-mobile"
                 data-makaron-user-menu-trigger="true"
@@ -562,17 +583,15 @@ export default function TopBar({ authReturnPath }: TopBarProps) {
                         </button>
                         <div style={accountSeparatorStyle} />
                         <button onClick={() => navigateTopBar('/dashboard')} style={desktopMenuBtnStyle} onMouseEnter={onDesktopItemEnter} onMouseLeave={onDesktopItemLeave}>
-                          <span>{locale === 'zh' ? '数据面板' : 'Dashboard'}</span>
+                          <span>{t('nav.dashboard')}</span>
                         </button>
                         <button onClick={() => navigateTopBar('/dashboard?tab=keys')} style={desktopMenuBtnStyle} onMouseEnter={onDesktopItemEnter} onMouseLeave={onDesktopItemLeave}>
-                          <span>{locale === 'zh' ? '获取 API' : 'Get API'}</span>
+                          <span>{t('nav.getApi')}</span>
                         </button>
                         <button onClick={() => navigateTopBar('/skills')} style={desktopMenuBtnStyle} onMouseEnter={onDesktopItemEnter} onMouseLeave={onDesktopItemLeave}>
                           <span>Skills</span>
                         </button>
-                        <button onClick={() => { setLocale(locale === 'zh' ? 'en' : 'zh') }} style={desktopMenuBtnStyle} onMouseEnter={onDesktopItemEnter} onMouseLeave={onDesktopItemLeave}>
-                          <span>{locale === 'zh' ? 'English' : '中文'}</span>
-                        </button>
+                        <LocaleToggle variant="menu" style={{ ...desktopMenuBtnStyle, minHeight: 38 }} />
                         <div style={accountSeparatorStyle} />
                         <button
                           onClick={() => { setUserMenuOpen(false); signOut() }}
@@ -586,141 +605,139 @@ export default function TopBar({ authReturnPath }: TopBarProps) {
                             e.currentTarget.style.color = 'rgba(255,255,255,0.45)'
                           }}
                         >
-                          <span>{locale === 'zh' ? '退出登录' : 'Sign out'}</span>
+                          <span>{t('nav.signOut')}</span>
                         </button>
                       </div>
                     </div>
 
-                    <div className="makaron-account-menu-mobile" style={mobileAccountOverlayStyle}>
-                      <button
-                        type="button"
-                        aria-label={locale === 'zh' ? '关闭个人菜单' : 'Close account menu'}
-                        onMouseDown={() => setUserMenuOpen(false)}
-                        style={mobileAccountBackdropStyle}
-                      />
-                      <aside
-                        id="makaron-account-menu-mobile"
-                        role="dialog"
-                        aria-modal="true"
-                        aria-label={locale === 'zh' ? '个人菜单' : 'Account menu'}
-                        style={mobileAccountPanelStyle}
-                      >
-                        <AccountGlassLayers />
-                        <div style={{ position: 'relative', zIndex: 1, height: '100%', display: 'flex', flexDirection: 'column', minHeight: 0 }}>
-                          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12, marginBottom: 18 }}>
-                            <div style={{ fontSize: '0.74rem', letterSpacing: '0.12em', textTransform: 'uppercase', color: 'rgba(255,255,255,0.42)', fontWeight: 700 }}>
-                              {locale === 'zh' ? '账户' : 'Account'}
+                    {hasMounted && createPortal((
+                      <div ref={mobileMenuRef} className="makaron-account-menu-mobile" style={mobileAccountOverlayStyle}>
+                        <button
+                          type="button"
+                          aria-label={t('nav.closeAccountMenu')}
+                          onMouseDown={() => setUserMenuOpen(false)}
+                          style={mobileAccountBackdropStyle}
+                        />
+                        <aside
+                          id="makaron-account-menu-mobile"
+                          role="dialog"
+                          aria-modal="true"
+                          aria-label={t('nav.accountMenu')}
+                          style={mobileAccountPanelStyle}
+                        >
+                          <AccountGlassLayers />
+                          <div style={{ position: 'relative', zIndex: 1, height: '100%', display: 'flex', flexDirection: 'column', minHeight: 0 }}>
+                            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12, marginBottom: 18 }}>
+                              <div style={{ fontSize: '0.74rem', letterSpacing: '0.12em', textTransform: 'uppercase', color: 'rgba(255,255,255,0.42)', fontWeight: 700 }}>
+                                {t('nav.account')}
+                              </div>
+                              <button
+                                type="button"
+                                aria-label={t('nav.closeAccountMenu')}
+                                onClick={() => setUserMenuOpen(false)}
+                                style={{
+                                  width: 36,
+                                  height: 36,
+                                  borderRadius: '50%',
+                                  border: '0.5px solid rgba(255,255,255,0.08)',
+                                  background: 'rgba(255,255,255,0.04)',
+                                  color: 'rgba(255,255,255,0.66)',
+                                  display: 'inline-flex',
+                                  alignItems: 'center',
+                                  justifyContent: 'center',
+                                  cursor: 'pointer',
+                                  WebkitTapHighlightColor: 'transparent',
+                                }}
+                              >
+                                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.1" strokeLinecap="round" strokeLinejoin="round">
+                                  <path d="M18 6 6 18" />
+                                  <path d="m6 6 12 12" />
+                                </svg>
+                              </button>
                             </div>
+
                             <button
-                              type="button"
-                              aria-label={locale === 'zh' ? '关闭个人菜单' : 'Close account menu'}
-                              onClick={() => setUserMenuOpen(false)}
+                              onClick={() => navigateTopBar('/profile')}
                               style={{
-                                width: 36,
-                                height: 36,
-                                borderRadius: '50%',
-                                border: '0.5px solid rgba(255,255,255,0.08)',
-                                background: 'rgba(255,255,255,0.04)',
-                                color: 'rgba(255,255,255,0.66)',
-                                display: 'inline-flex',
+                                display: 'flex',
                                 alignItems: 'center',
-                                justifyContent: 'center',
+                                gap: 13,
+                                width: '100%',
+                                padding: 14,
+                                marginBottom: 14,
+                                borderRadius: 20,
+                                border: '0.5px solid rgba(255,255,255,0.075)',
+                                background:
+                                  'linear-gradient(180deg, rgba(255,255,255,0.055), rgba(255,255,255,0.024))',
+                                color: 'inherit',
                                 cursor: 'pointer',
+                                boxShadow: 'inset 0 0.5px 0 rgba(255,255,255,0.12)',
                                 WebkitTapHighlightColor: 'transparent',
                               }}
                             >
-                              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.1" strokeLinecap="round" strokeLinejoin="round">
-                                <path d="M18 6 6 18" />
-                                <path d="m6 6 12 12" />
-                              </svg>
-                            </button>
-                          </div>
-
-                          <button
-                            onClick={() => navigateTopBar('/profile')}
-                            style={{
-                              display: 'flex',
-                              alignItems: 'center',
-                              gap: 13,
-                              width: '100%',
-                              padding: 14,
-                              marginBottom: 14,
-                              borderRadius: 20,
-                              border: '0.5px solid rgba(255,255,255,0.075)',
-                              background:
-                                'linear-gradient(180deg, rgba(255,255,255,0.055), rgba(255,255,255,0.024))',
-                              color: 'inherit',
-                              cursor: 'pointer',
-                              boxShadow: 'inset 0 0.5px 0 rgba(255,255,255,0.12)',
-                              WebkitTapHighlightColor: 'transparent',
-                            }}
-                          >
-                            {avatarNode(48)}
-                            <div style={{ minWidth: 0, textAlign: 'left' }}>
-                              <div style={{ fontSize: '0.98rem', fontWeight: 650, color: 'rgba(255,255,255,0.92)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
-                                {displayName || (locale === 'zh' ? '个人资料' : 'Profile')}
-                              </div>
-                              <div style={{ marginTop: 3, fontSize: '0.76rem', color: 'rgba(255,255,255,0.46)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
-                                {email}
-                              </div>
-                              {creditBalance !== null && (
-                                <div style={{ marginTop: 8, display: 'inline-flex', alignItems: 'center', gap: 5, padding: '4px 8px', borderRadius: 999, background: 'rgba(255,255,255,0.045)', color: creditBalance < 20 ? '#fbbf24' : 'rgba(255,255,255,0.58)', fontSize: '0.68rem', fontWeight: 700 }}>
-                                  <span>{creditBalance.toLocaleString()}</span>
-                                  <span style={{ color: 'rgba(255,255,255,0.32)', fontWeight: 600 }}>credits</span>
+                              {avatarNode(48)}
+                              <div style={{ minWidth: 0, textAlign: 'left' }}>
+                                <div style={{ fontSize: '0.98rem', fontWeight: 650, color: 'rgba(255,255,255,0.92)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                                  {displayName || t('nav.profile')}
                                 </div>
-                              )}
+                                <div style={{ marginTop: 3, fontSize: '0.76rem', color: 'rgba(255,255,255,0.46)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                                  {email}
+                                </div>
+                                {creditBalance !== null && (
+                                  <div style={{ marginTop: 8, display: 'inline-flex', alignItems: 'center', gap: 5, padding: '4px 8px', borderRadius: 999, background: 'rgba(255,255,255,0.045)', color: creditBalance < 20 ? '#fbbf24' : 'rgba(255,255,255,0.58)', fontSize: '0.68rem', fontWeight: 700 }}>
+                                    <span>{creditBalance.toLocaleString()}</span>
+                                    <span style={{ color: 'rgba(255,255,255,0.32)', fontWeight: 600 }}>credits</span>
+                                  </div>
+                                )}
+                              </div>
+                            </button>
+
+                            <nav aria-label={t('nav.accountNavigation')} style={{ display: 'grid', gap: 10 }}>
+                              <button onClick={() => navigateTopBar('/dashboard')} style={mobileMenuBtnStyle}>
+                                <span>{t('nav.dashboard')}</span>
+                              </button>
+                              <button onClick={() => navigateTopBar('/dashboard?tab=keys')} style={mobileMenuBtnStyle}>
+                                <span>{t('nav.getApi')}</span>
+                              </button>
+                              <button onClick={() => navigateTopBar('/skills')} style={mobileMenuBtnStyle}>
+                                <span>Skills</span>
+                              </button>
+                              <LocaleToggle variant="menu" style={{ ...mobileMenuBtnStyle, minHeight: 50 }} />
+                            </nav>
+
+                            <div style={{ marginTop: 'auto', paddingTop: 18 }}>
+                              <button onClick={() => { setUserMenuOpen(false); signOut() }} style={signOutButtonStyle}>
+                                <span>{t('nav.signOut')}</span>
+                              </button>
                             </div>
-                          </button>
-
-                          <nav aria-label={locale === 'zh' ? '账户导航' : 'Account navigation'} style={{ display: 'grid', gap: 10 }}>
-                            <button onClick={() => navigateTopBar('/dashboard')} style={mobileMenuBtnStyle}>
-                              <span>{locale === 'zh' ? '数据面板' : 'Dashboard'}</span>
-                            </button>
-                            <button onClick={() => navigateTopBar('/dashboard?tab=keys')} style={mobileMenuBtnStyle}>
-                              <span>{locale === 'zh' ? '获取 API' : 'Get API'}</span>
-                            </button>
-                            <button onClick={() => navigateTopBar('/skills')} style={mobileMenuBtnStyle}>
-                              <span>Skills</span>
-                            </button>
-                            <button onClick={() => { setLocale(locale === 'zh' ? 'en' : 'zh') }} style={mobileMenuBtnStyle}>
-                              <span>{locale === 'zh' ? 'English' : '中文'}</span>
-                            </button>
-                          </nav>
-
-                          <div style={{ marginTop: 'auto', paddingTop: 18 }}>
-                            <button onClick={() => { setUserMenuOpen(false); signOut() }} style={signOutButtonStyle}>
-                              <span>{locale === 'zh' ? '退出登录' : 'Sign out'}</span>
-                            </button>
                           </div>
-                        </div>
-                      </aside>
-                    </div>
+                        </aside>
+                      </div>
+                    ), document.body)}
                   </>
                 )
               })()}
             </div>
           ) : (
             <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
-              <button
-                onClick={() => { setLocale(locale === 'zh' ? 'en' : 'zh') }}
-                style={{
-                  background: 'none', border: 'none', cursor: 'pointer',
-                  fontSize: '0.65rem', letterSpacing: '0.1em', textTransform: 'uppercase',
-                  color: 'rgba(255,255,255,0.45)',
-                  transition: 'color 0.2s',
+              <LocaleToggle />
+              <a
+                href="/login"
+                onClick={() => {
+                  if (!authReturnPath) return
+                  try {
+                    localStorage.setItem('mkr_return_url', authReturnPath)
+                    sessionStorage.setItem('mkr_return_url', authReturnPath)
+                  } catch {
+                    // Native navigation remains usable even if storage is blocked.
+                  }
                 }}
-                onMouseEnter={e => (e.currentTarget.style.color = 'rgba(255,255,255,0.7)')}
-                onMouseLeave={e => (e.currentTarget.style.color = 'rgba(255,255,255,0.45)')}
-              >
-                {locale === 'zh' ? 'EN' : '中文'}
-              </button>
-              <button
-                onClick={() => navigateTopBar('/login')}
                 style={{
                   background: 'none', border: 'none', cursor: 'pointer',
                   fontSize: '0.65rem', letterSpacing: '0.1em', textTransform: 'uppercase',
                   color: 'rgba(255,255,255,0.45)',
                   display: 'flex', alignItems: 'center', gap: 5,
+                  textDecoration: 'none',
                   transition: 'color 0.2s',
                 }}
                 onMouseEnter={e => (e.currentTarget.style.color = 'rgba(255,255,255,0.7)')}
@@ -730,8 +747,8 @@ export default function TopBar({ authReturnPath }: TopBarProps) {
                   <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2" />
                   <circle cx="12" cy="7" r="4" />
                 </svg>
-                {locale === 'zh' ? '登录' : 'Sign in'}
-              </button>
+                {t('nav.signIn')}
+              </a>
             </div>
           )}
         </div>

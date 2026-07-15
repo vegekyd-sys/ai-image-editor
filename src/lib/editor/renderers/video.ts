@@ -17,6 +17,7 @@ export const videoMatcher = {
         videoUrl: snap.videoMeta?.videoUrl ?? null,
         videoProcessing: snap.videoMeta?.status === 'processing',
         videoFailed: snap.videoMeta?.status === 'failed',
+        videoTaskId: snap.videoMeta?.taskId ?? null,
         videoPosterImage: snap.image || snap.imageUrl,
       };
     }
@@ -28,6 +29,7 @@ export const videoMatcher = {
       videoUrl: currentVideo?.videoUrl ?? null,
       videoProcessing: !currentVideo?.videoUrl && ctx.animations.some(a => a.status === 'processing'),
       videoFailed: false,
+      videoTaskId: currentVideo?.taskId ?? null,
       videoPosterImage: undefined,
     };
   },

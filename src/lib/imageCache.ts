@@ -132,6 +132,23 @@ async function writeMediaBlobToIDB(entry: MediaBlobCacheEntry): Promise<void> {
   }
 }
 
+export async function cacheMediaBlob(
+  key: string,
+  blob: Blob,
+  contentType = blob.type || 'application/octet-stream',
+): Promise<string | null> {
+  if (blob.size === 0 || blob.size > MAX_MEDIA_BLOB_BYTES) return null
+  await writeMediaBlobToIDB({
+    key,
+    blob,
+    contentType,
+    cachedAt: Date.now(),
+  })
+  const objectUrl = URL.createObjectURL(blob)
+  mediaObjectUrlCache.set(key, { url: objectUrl, cachedAt: Date.now() })
+  return objectUrl
+}
+
 export async function cacheMediaUrl(url: string, key = mediaCacheKeyForUrl(url)): Promise<string | null> {
   const cached = await getCachedMediaObjectUrl(key)
   if (cached) return cached
@@ -143,16 +160,7 @@ export async function cacheMediaUrl(url: string, key = mediaCacheKeyForUrl(url))
     .then(async (res) => {
       if (!res.ok) return null
       const blob = await res.blob()
-      if (blob.size === 0 || blob.size > MAX_MEDIA_BLOB_BYTES) return null
-      await writeMediaBlobToIDB({
-        key,
-        blob,
-        contentType: blob.type || res.headers.get('content-type') || 'application/octet-stream',
-        cachedAt: Date.now(),
-      })
-      const objectUrl = URL.createObjectURL(blob)
-      mediaObjectUrlCache.set(key, { url: objectUrl, cachedAt: Date.now() })
-      return objectUrl
+      return cacheMediaBlob(key, blob, blob.type || res.headers.get('content-type') || 'application/octet-stream')
     })
     .catch(() => null)
     .finally(() => {

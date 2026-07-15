@@ -427,7 +427,7 @@ export default function AnimateSheet({
                         onMouseEnter={e => { if (selectedThumbId !== s.id) e.currentTarget.style.borderColor = 'rgba(217,70,239,0.5)'; }}
                         onMouseLeave={e => { if (selectedThumbId !== s.id) e.currentTarget.style.borderColor = 'rgba(255,255,255,0.1)'; }}
                       >
-                        {/* eslint-disable-next-line @next/next/no-img-element */}
+                        { }
                         <img
                           src={s.imageUrl!}
                           alt={`snapshot ${activeIdx}`}
@@ -797,7 +797,7 @@ export default function AnimateSheet({
                   </span>
                 </span>
               )}
-              {/* eslint-disable-next-line @next/next/no-img-element */}
+              { }
               <img
                 src={previewUrl}
                 alt=""

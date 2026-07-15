@@ -3,6 +3,8 @@
 import { useRef, useCallback, useEffect } from 'react';
 import type { CreateInputState } from '@/hooks/useCreateInput';
 import SkillSelector, { type SkillItem } from '@/components/SkillSelector';
+import AgentModelChip from '@/components/AgentModelChip';
+import type { AgentModelPreference } from '@/lib/agent-models';
 
 function Spinner({ size = 20 }: { size?: number }) {
   return (
@@ -10,6 +12,51 @@ function Spinner({ size = 20 }: { size?: number }) {
       <circle cx="12" cy="12" r="10" stroke="rgba(217,70,239,0.12)" strokeWidth="2.5" fill="none" />
       <path fill="rgba(217,70,239,0.7)" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
     </svg>
+  );
+}
+
+function HydrationSafeAction({
+  fallbackHref,
+  className,
+  disabled = false,
+  onClick,
+  onTouchStart,
+  style,
+  children,
+}: {
+  fallbackHref?: string;
+  className?: string;
+  disabled?: boolean;
+  onClick: (event: React.MouseEvent<HTMLElement>) => void;
+  onTouchStart?: (event: React.TouchEvent<HTMLElement>) => void;
+  style: React.CSSProperties;
+  children: React.ReactNode;
+}) {
+  if (fallbackHref && !disabled) {
+    return (
+      <a
+        href={fallbackHref}
+        className={className}
+        data-testid="create-project"
+        style={{ ...style, textDecoration: 'none' }}
+      >
+        {children}
+      </a>
+    );
+  }
+
+  return (
+    <button
+      type="button"
+      className={className}
+      data-testid="create-project"
+      disabled={disabled}
+      onClick={onClick}
+      onTouchStart={onTouchStart}
+      style={style}
+    >
+      {children}
+    </button>
   );
 }
 
@@ -33,6 +80,8 @@ export interface CreateInputBoxProps {
   actionIdleNote?: string;
   actionSelectedNote?: string;
   showLoginIcon?: boolean;
+  submitWhenEmpty?: boolean;
+  fallbackHref?: string;
   onSubmit: () => void;
   onSlotClick?: () => void;
   onFilesSelected?: (files: File[]) => void;
@@ -47,6 +96,8 @@ export interface CreateInputBoxProps {
   installingSkill?: boolean;
   overrideLabel?: string | null;
   skillDirection?: 'up' | 'down';
+  agentModel?: AgentModelPreference;
+  onAgentModelChange?: (model: AgentModelPreference) => void;
   // Drag-drop
   dragOver?: boolean;
   onDragEnter?: (e: React.DragEvent) => void;
@@ -75,6 +126,8 @@ export default function CreateInputBox({
   actionIdleNote = 'No credit card',
   actionSelectedNote = 'Photo selected',
   showLoginIcon = false,
+  submitWhenEmpty = false,
+  fallbackHref,
   onSubmit,
   onSlotClick,
   onFilesSelected,
@@ -88,6 +141,8 @@ export default function CreateInputBox({
   installingSkill,
   overrideLabel,
   skillDirection,
+  agentModel = 'auto',
+  onAgentModelChange,
   dragOver = false,
   onDragEnter,
   onDragOver,
@@ -102,6 +157,7 @@ export default function CreateInputBox({
 
   const cardTouchRef = useRef<{ startX: number; startY: number; locked: 'x' | 'y' | null } | null>(null);
   const mobileSwipeElRef = useRef<HTMLDivElement | null>(null);
+  const primaryTouchHandledAtRef = useRef(0);
 
   const setMobileSwipeRef = useCallback((el: HTMLDivElement | null) => {
     mobileSwipeElRef.current = el;
@@ -139,14 +195,36 @@ export default function CreateInputBox({
   const internalTextareaRef = useRef<HTMLTextAreaElement>(null);
   const taRef = externalTextareaRef || internalTextareaRef;
   const liquidInputClassName = 'mkr-input-box mkr-input-box-liquid';
+  const openFilePicker = useCallback(() => {
+    if (onSlotClick) {
+      onSlotClick();
+    } else {
+      fileInputRef.current?.click();
+    }
+  }, [fileInputRef, onSlotClick]);
   const handlePrimaryAction = useCallback(() => {
     if (creating) return;
     if (files.length > 0 || text.trim()) {
       onSubmit();
       return;
     }
-    onSlotClick ? onSlotClick() : fileInputRef.current?.click();
-  }, [creating, fileInputRef, files.length, onSlotClick, onSubmit, text]);
+    if (submitWhenEmpty) {
+      onSubmit();
+      return;
+    }
+    openFilePicker();
+  }, [creating, files.length, onSubmit, openFilePicker, submitWhenEmpty, text]);
+  const handlePrimaryActionClick = useCallback((e?: React.MouseEvent<HTMLElement>) => {
+    e?.stopPropagation();
+    if (Date.now() - primaryTouchHandledAtRef.current < 700) return;
+    handlePrimaryAction();
+  }, [handlePrimaryAction]);
+  const handlePrimaryActionTouchStart = useCallback((e: React.TouchEvent<HTMLElement>) => {
+    e.preventDefault();
+    e.stopPropagation();
+    primaryTouchHandledAtRef.current = Date.now();
+    handlePrimaryAction();
+  }, [handlePrimaryAction]);
 
   const hiddenFileInput = (
     <input
@@ -165,6 +243,10 @@ export default function CreateInputBox({
       }}
     />
   );
+
+  const progressiveHref = fallbackHref && !creating && files.length === 0 && !text.trim()
+    ? fallbackHref
+    : undefined
 
   if (actionMode) {
     const firstPreview = previews[0];
@@ -217,7 +299,7 @@ export default function CreateInputBox({
           data-testid="photo-slot"
           onClick={(e) => {
             e.stopPropagation();
-            if (!creating) onSlotClick ? onSlotClick() : fileInputRef.current?.click();
+            if (!creating) openFilePicker();
           }}
           style={{
             position: 'relative',
@@ -247,7 +329,7 @@ export default function CreateInputBox({
             boxShadow: hasFiles ? '0 8px 20px rgba(0,0,0,0.32)' : 'none',
           }}>
             {hasFiles && firstPreview && firstPreview !== 'heic-pending' ? (
-              // eslint-disable-next-line @next/next/no-img-element
+
               <img src={firstPreview} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block' }} />
             ) : hasFiles && firstPreview === null ? (
               <Spinner size={18} />
@@ -384,7 +466,12 @@ export default function CreateInputBox({
                 {hasFiles ? actionSelectedNote : actionIdleNote}
               </span>
             </div>
-            <div style={{
+              <HydrationSafeAction
+              fallbackHref={progressiveHref || undefined}
+              onClick={handlePrimaryActionClick}
+              onTouchStart={handlePrimaryActionTouchStart}
+              disabled={creating}
+              style={{
               flexShrink: 0,
               display: 'inline-flex',
               alignItems: 'center',
@@ -398,6 +485,10 @@ export default function CreateInputBox({
               fontWeight: 750,
               letterSpacing: '0.015em',
               boxShadow: 'none',
+              appearance: 'none',
+              WebkitAppearance: 'none',
+              cursor: creating ? 'default' : 'pointer',
+              touchAction: 'manipulation',
             }}>
               {creating ? <Spinner size={13} /> : null}
               {createLabel}
@@ -407,7 +498,7 @@ export default function CreateInputBox({
                   <path d="m13 6 6 6-6 6" />
                 </svg>
               )}
-            </div>
+            </HydrationSafeAction>
           </div>
         </div>
         {hiddenFileInput}
@@ -445,7 +536,9 @@ export default function CreateInputBox({
       {/* Left: + button / photo slot */}
       <div
         data-testid="photo-slot"
-        onClick={() => { if (!creating && !collapseSlot) { onSlotClick ? onSlotClick() : fileInputRef.current?.click(); } }}
+        onClick={() => {
+          if (!creating && !collapseSlot) openFilePicker();
+        }}
         style={{
           width: collapseSlot ? 0 : slotWidth,
           flexShrink: 0, alignSelf: 'stretch',
@@ -466,7 +559,7 @@ export default function CreateInputBox({
           <>
             {previews[0] && previews[0] !== 'heic-pending' ? (
               <>
-                {/* eslint-disable-next-line @next/next/no-img-element */}
+                { }
                 <img src={previews[0]} alt="" style={{ position: 'absolute', inset: 0, width: '100%', height: '100%', objectFit: 'cover' }} />
                 {creating && files[0]?.type.startsWith('video/') && (
                   <div style={{ position: 'absolute', inset: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'rgba(0,0,0,0.5)' }}>
@@ -501,7 +594,7 @@ export default function CreateInputBox({
                   return layers.map((layer, li) => (
                     <div key={li} style={cardStyle(layer.rotate, layer.z)}>
                       {layer.preview && layer.preview !== 'heic-pending' ? (
-                        // eslint-disable-next-line @next/next/no-img-element
+
                         <img src={layer.preview} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
                       ) : layer.preview === null ? (
                         <div style={{ width: '100%', height: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center' }}><Spinner size={12} /></div>
@@ -546,7 +639,7 @@ export default function CreateInputBox({
                         transition: dragging ? 'none' : 'transform 0.25s ease, opacity 0.25s ease',
                       }}>
                         {layer.preview && layer.preview !== 'heic-pending' ? (
-                          // eslint-disable-next-line @next/next/no-img-element
+
                           <img src={layer.preview} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover', pointerEvents: 'none' }} />
                         ) : layer.preview === null ? (
                           <div style={{ width: '100%', height: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center' }}><Spinner size={12} /></div>
@@ -641,12 +734,15 @@ export default function CreateInputBox({
           />
         )}
         <div style={{ display: 'flex', alignItems: 'center', gap: 4, padding: '4px 8px 8px' }}>
+          {onAgentModelChange && (
+            <AgentModelChip value={agentModel} onChange={onAgentModelChange} disabled={creating} />
+          )}
           <div className="hide-scrollbar" onWheel={(e) => { if (e.deltaY !== 0) { e.currentTarget.scrollLeft += e.deltaY; e.preventDefault(); } }}
             style={{ display: 'flex', alignItems: 'center', gap: 4, flex: 1, minWidth: 0, overflowX: 'auto', paddingTop: 4 }}>
             {isDesktop && files.length >= 2 && previews.map((preview, i) => (
               <div key={i} style={{ position: 'relative', flexShrink: 0 }}>
                 {preview && preview !== 'heic-pending' ? (
-                  // eslint-disable-next-line @next/next/no-img-element
+
                   <img src={preview} alt="" style={{ width: 36, height: 36, borderRadius: 8, objectFit: 'cover', display: 'block', border: '1px solid rgba(255,255,255,0.12)' }} />
                 ) : (
                   <div style={{ width: 36, height: 36, borderRadius: 8, background: 'rgba(255,255,255,0.06)', border: '1px solid rgba(255,255,255,0.1)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}><Spinner size={10} /></div>
@@ -669,17 +765,10 @@ export default function CreateInputBox({
             overrideLabel={overrideLabel}
             direction={skillDirection}
           />
-          <button
+          <HydrationSafeAction
+            fallbackHref={progressiveHref || undefined}
             className="mkr-create-btn"
-            data-testid="create-project"
-            onClick={(e) => {
-              e.stopPropagation();
-              if (text.trim() || files.length > 0) {
-                onSubmit();
-              } else {
-                onSlotClick ? onSlotClick() : fileInputRef.current?.click();
-              }
-            }}
+            onClick={handlePrimaryActionClick}
             disabled={creating}
             style={{ flexShrink: 0, display: 'flex', alignItems: 'center', gap: '5px', padding: '5px 10px', borderRadius: '14px', background: 'none', border: 'none', color: 'rgba(217,70,239,0.9)', fontSize: '0.75rem', fontWeight: 500, letterSpacing: '0.03em', cursor: creating ? 'default' : 'pointer', fontFamily: 'inherit' }}
           >
@@ -691,7 +780,7 @@ export default function CreateInputBox({
               <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round"><line x1="12" y1="5" x2="12" y2="19" /><line x1="5" y1="12" x2="19" y2="12" /></svg>
             )}
             {createLabel}
-          </button>
+          </HydrationSafeAction>
         </div>
       </div>
       {/* Hidden file input for photo/video uploads */}

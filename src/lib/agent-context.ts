@@ -37,6 +37,8 @@ export interface PromptContextOptions {
   uploadedVideoCount?: number;
   /** Audio references for this turn. Not part of Timeline Media Index. */
   audioAttachments?: AudioAttachmentContext[];
+  /** Run being created for this request; excluded when locating a prior checkpoint. */
+  currentRunId?: string | null;
 }
 
 export interface PromptContextResult {
@@ -49,6 +51,8 @@ export interface PromptContextResult {
   currentSnapshotIndex: number;
   currentDesign?: DesignPayload;
   currentDesignPath?: string;
+  /** Project-scoped audio refs available as audio_1, audio_2, ... (not media_N). */
+  audioAttachments: AudioAttachmentContext[];
 }
 
 interface DbSnapshot {
@@ -68,6 +72,59 @@ interface DbMessage {
   role: 'user' | 'assistant';
   content: string;
   created_at: string;
+}
+
+interface DbProjectMusic {
+  audio_url?: string | null;
+  suno_audio_url?: string | null;
+  stream_audio_url?: string | null;
+  duration?: number | null;
+  title?: string | null;
+  track_index?: number | null;
+  status?: string | null;
+  tags?: string | null;
+}
+
+function getUsableAudioUrl(row: DbProjectMusic): string {
+  return row.audio_url || row.suno_audio_url || row.stream_audio_url || '';
+}
+
+function normalizeAudioAttachment(audio: AudioAttachmentContext): AudioAttachmentContext | null {
+  if (!audio.audioUrl || !/^https?:\/\//.test(audio.audioUrl)) return null;
+  return {
+    audioUrl: audio.audioUrl,
+    title: audio.title,
+    duration: typeof audio.duration === 'number' && Number.isFinite(audio.duration) ? audio.duration : undefined,
+    trackIndex: typeof audio.trackIndex === 'number' && Number.isFinite(audio.trackIndex) ? audio.trackIndex : undefined,
+  };
+}
+
+function mergeAudioAttachments(
+  projectAudios: AudioAttachmentContext[],
+  turnAudios: AudioAttachmentContext[] | undefined,
+): AudioAttachmentContext[] {
+  const merged: AudioAttachmentContext[] = [];
+  const seen = new Set<string>();
+  for (const audio of [...projectAudios, ...(turnAudios || [])]) {
+    const normalized = normalizeAudioAttachment(audio);
+    if (!normalized) continue;
+    const key = normalized.audioUrl.trim();
+    if (seen.has(key)) continue;
+    seen.add(key);
+    merged.push(normalized);
+  }
+  return merged;
+}
+
+export function buildAgentRecoveryContext(
+  userMessage: string,
+  metadata: Record<string, unknown> | null | undefined,
+): string {
+  const terminal = metadata?.terminal as Record<string, unknown> | undefined;
+  const checkpoint = terminal?.checkpoint as Record<string, unknown> | undefined;
+  const resumeIntent = /^(?:请)?\s*(?:(?:继续|接着|恢复|重试|续上)(?:\s|$|[，。！？,.!?]|做|改|完成|刚才)|(?:continue|resume|retry)\b)/i.test(userMessage.trim());
+  if (!resumeIntent || terminal?.recoverable !== true || !checkpoint?.draftPath) return '';
+  return `[Recoverable Agent Checkpoint]\nThe previous run stopped before completion, but its editable draft was saved. Resume from this exact checkpoint; do not recreate the work from the original media.\ndraft path: ${String(checkpoint.draftPath)}${checkpoint.previewUrl ? `\nlast preview: ${String(checkpoint.previewUrl)}` : ''}${checkpoint.lastTool ? `\nlast completed tool: ${String(checkpoint.lastTool)}` : ''}\nRead the draft path, apply the pending modification, preview it, and publish the final artifact when that was the user's original request.\n\n`;
 }
 
 function normalizeLegacyCompositionDescription(description: string | undefined, fallback: string): string {
@@ -94,8 +151,10 @@ export async function buildPromptContext(
 ): Promise<PromptContextResult> {
   const { userMessage, hasAnnotation, isDraft, referenceImageCount, uploadedVideoCount, audioAttachments } = options;
 
-  // Query snapshots, visible messages, and private tool history in parallel.
-  const [snapshotsRes, messagesRes, toolHistoryRes] = await Promise.all([
+  // Query snapshots, visible messages, private tool history, and project audio
+  // in parallel. Audio is a separate project-scoped index; it never occupies
+  // Timeline Media Index slots like <<<media_N>>>.
+  const [snapshotsRes, messagesRes, toolHistoryRes, musicRes, recoverableRunRes] = await Promise.all([
     supabase
       .from('snapshots')
       .select('id, image_url, description, type, design_path, tips, sort_order, video_meta, metadata')
@@ -112,11 +171,47 @@ export async function buildPromptContext(
       .eq('project_id', projectId)
       .eq('user_id', userId)
       .order('created_at', { ascending: true }),
+    supabase
+      .from('project_music')
+      .select('audio_url, suno_audio_url, stream_audio_url, duration, title, track_index, status, tags')
+      .eq('project_id', projectId)
+      .eq('user_id', userId)
+      .in('status', ['completed', 'streaming'])
+      .order('track_index', { ascending: true })
+      .limit(20),
+    supabase
+      .from('agent_runs')
+      .select('id, status, metadata, started_at')
+      .eq('project_id', projectId)
+      .eq('user_id', userId)
+      .order('started_at', { ascending: false })
+      .limit(3),
   ]);
 
   const snapshots: DbSnapshot[] = snapshotsRes.data ?? [];
   const messages: DbMessage[] = messagesRes.data ?? [];
   const toolHistory: DbToolHistoryRow[] = toolHistoryRes.data ?? [];
+  const projectAudios: AudioAttachmentContext[] = ((musicRes.data ?? []) as DbProjectMusic[])
+    .map((row) => {
+      const audioUrl = getUsableAudioUrl(row);
+      return {
+        audioUrl,
+        title: row.title || undefined,
+        duration: typeof row.duration === 'number' ? row.duration : undefined,
+        trackIndex: typeof row.track_index === 'number' ? row.track_index : undefined,
+      };
+    })
+    .filter((audio) => !!audio.audioUrl);
+  const resolvedAudioAttachments = mergeAudioAttachments(projectAudios, audioAttachments);
+  const priorRun = Array.isArray(recoverableRunRes.data)
+    ? recoverableRunRes.data.find((row: { id?: string }) => row.id !== options.currentRunId)
+    : undefined;
+  // Only the immediately preceding run may be resumed. This prevents an old
+  // failed checkpoint from resurfacing after a newer successful run.
+  const recoverableMetadata = priorRun?.status === 'failed'
+    ? priorRun.metadata as Record<string, unknown> | null | undefined
+    : undefined;
+  const recoveryContext = buildAgentRecoveryContext(userMessage, recoverableMetadata);
 
   const currentSnapshotIndex = options.currentSnapshotIndex ?? Math.max(0, snapshots.length - 1);
   const currentSnap = snapshots[currentSnapshotIndex];
@@ -207,7 +302,7 @@ export async function buildPromptContext(
   // Composition editable state and path contract. Keep the full code out of the
   // prompt; the agent must use code_path explicitly when patching persisted compositions.
   const designContext = currentDesignPath
-    ? `[Current Composition]\npath: ${currentDesignPath}${currentDesign ? `\nwidth: ${currentDesign.width}\nheight: ${currentDesign.height}${currentDesign.animation ? `\nanimation: ${currentDesign.animation.durationInSeconds}s @ ${currentDesign.animation.fps}fps` : ''}` : ''}\nTo modify this composition, call run_code with { type: 'patch', code_path: '${currentDesignPath}', edits: [...] } and runtime: "composition". Do not recreate it with render unless the user asks for a new composition.\n${currentDesign?.editables?.length ? `\n[Composition Editable State]\n${currentDesign.editables.map(f =>
+    ? `[Current Composition]\npath: ${currentDesignPath}${currentDesign ? `\nwidth: ${currentDesign.width}\nheight: ${currentDesign.height}${currentDesign.animation ? `\nanimation: ${currentDesign.animation.durationInSeconds}s @ ${currentDesign.animation.fps}fps` : ''}` : ''}\nTo modify this composition, call run_code with { type: 'patch', code_path: '${currentDesignPath}', edits: [...] } or { type: 'patch', code_path: '${currentDesignPath}', props: {...} } and runtime: "composition". Use props-only patches for text/data changes. Do not recreate it with render unless the user asks for a new composition.\n${currentDesign?.editables?.length ? `\n[Composition Editable State]\n${currentDesign.editables.map(f =>
         `- ${f.label} (${f.propKey}): "${(currentDesign!.props as Record<string, unknown>)?.[f.propKey] ?? ''}"`
       ).join('\n')}\nUser may have edited these values in the GUI. Preserve/merge current props when patching.\n` : ''}\n`
     : '';
@@ -238,18 +333,18 @@ export async function buildPromptContext(
       })()
     : '';
 
-  const audioAttachmentContext = audioAttachments?.length
-    ? `[Current Audio Attachments - not Timeline Media]\n${audioAttachments.map((audio, i) => {
+  const audioAttachmentContext = resolvedAudioAttachments.length
+    ? `[Audio Index - not Timeline Media]\n${resolvedAudioAttachments.map((audio, i) => {
         const label = `audio_${i + 1}`;
         const title = audio.title || `Reference audio ${i + 1}`;
         const duration = typeof audio.duration === 'number' ? `, ${formatSecondsForPrompt(audio.duration)}s` : '';
         const track = typeof audio.trackIndex === 'number' ? `, project_music track_index=${audio.trackIndex}` : '';
-        return `${label}: ${title}${duration}${track}, ${audio.audioUrl}`;
-      }).join('\n')}\nUse these as music/audio references. They are not <<<media_N>>> items and must not be referenced through the Media Index.\n\n`
+        return `<<<${label}>>> [audio] — ${title}${duration}${track}, ${audio.audioUrl}`;
+      }).join('\n')}\nUse these as music/audio references. To use one in video generation, mention its marker in story_prompt and pass audio_refs, e.g. story_prompt includes <<<audio_1>>> and audio_refs is ["audio_1"]. Audio markers are not Timeline Media Index items and must not be referenced as <<<media_N>>>.\n\n`
     : '';
 
   // Assemble
-  const fullPrompt = `${videoWarning}${designWarning}${annotationWarning}${draftWarning}${snapshotWarning}${metaContext}${descriptionContext}${snapshotIndexContext}${designContext}${tipsContext}${refContext}${frameAnchoredVideoEditContext}${videoUploadContext}${audioAttachmentContext}[User request — detect language and reply in the same language]\n${userMessage}`;
+  const fullPrompt = `${recoveryContext}${videoWarning}${designWarning}${annotationWarning}${draftWarning}${snapshotWarning}${metaContext}${descriptionContext}${snapshotIndexContext}${designContext}${tipsContext}${refContext}${frameAnchoredVideoEditContext}${videoUploadContext}${audioAttachmentContext}[User request — detect language and reply in the same language]\n${userMessage}`;
 
   const snapshotImages = snapshots.map((s) => {
     const videoMeta = s.video_meta as Record<string, unknown> | undefined;
@@ -264,6 +359,7 @@ export async function buildPromptContext(
     currentSnapshotIndex,
     currentDesign,
     currentDesignPath,
+    audioAttachments: resolvedAudioAttachments,
   };
 }
 

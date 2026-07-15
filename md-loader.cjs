@@ -3,9 +3,6 @@
 const fs = require('fs');
 const Module = require('module');
 
-const origResolveFilename = Module._resolveFilename;
-const origLoad = Module._extensions['.js'];
-
 // Register .md extension handler
 Module._extensions['.md'] = function(module, filename) {
   const content = fs.readFileSync(filename, 'utf-8');

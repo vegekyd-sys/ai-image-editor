@@ -1,6 +1,6 @@
 import { GoogleGenAI, Chat, Type } from '@google/genai';
 import { streamText } from 'ai';
-import { createAmazonBedrock } from '@ai-sdk/amazon-bedrock';
+import { createBedrockAnthropic } from '@ai-sdk/amazon-bedrock/anthropic';
 import { Tip } from '@/types';
 import enhancePrompt from './prompts/enhance.md';
 import creativePrompt from './prompts/creative.md';
@@ -8,6 +8,8 @@ import wildPrompt from './prompts/wild.md';
 import captionsPrompt from './prompts/captions.md';
 import sharp from 'sharp';
 import fs from 'fs';
+import { getTipsBedrockModelId, supportsTemperature } from './bedrock-models';
+import { getPromptLanguage, getReplyLanguageInstruction, getTipsLanguageInstruction, normalizeLocale } from './locales';
 
 const LOG_FILE = '/tmp/tips-timing.log';
 function tlog(msg: string) {
@@ -23,7 +25,7 @@ export class ContentBlockedError extends Error {
   }
 }
 
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
+
 function checkBlockReason(result: any, label: string): void {
   const blockReason = result?.promptFeedback?.blockReason;
   if (blockReason) {
@@ -41,6 +43,9 @@ const MODEL = process.env.IMAGE_MODEL || 'gemini-3-pro-image-preview';
 
 const OPENROUTER_BASE = 'https://openrouter.ai/api/v1/chat/completions';
 const OPENROUTER_MODEL = `google/${MODEL}`;
+const TIPS_OPENROUTER_MODEL = OPENROUTER_MODEL;
+// Tip text should stay on the primary creative model; only the image preview thumbnails use Lite by default.
+const TIPS_PREVIEW_IMAGE_MODEL = process.env.TIPS_PREVIEW_IMAGE_MODEL || 'google/gemini-3.1-flash-lite-image';
 
 // Tips provider config — change TIPS_PROVIDER env var for A/B testing
 // 'bedrock' = Claude Sonnet (fast, default) | 'openrouter' = gemini-3 via OR | 'google' = direct Google SDK
@@ -52,16 +57,15 @@ const TIPS_TEMPERATURE = parseFloat(process.env.TIPS_TEMPERATURE || '0.9');
 // Override with TIPS_THINKING env var to apply to ALL categories
 const TIPS_THINKING_OVERRIDE = process.env.TIPS_THINKING as 'minimal' | 'low' | 'high' | undefined;
 type TipsProvider = 'bedrock' | 'openrouter' | 'google';
+type OpenRouterReasoningEffort = 'minimal' | 'low' | 'medium' | 'high';
 
-// Bedrock instance for tips (lazy init)
-let _bedrockForTips: ReturnType<typeof createAmazonBedrock> | null = null;
 function getBedrockForTips() {
-  if (!_bedrockForTips) _bedrockForTips = createAmazonBedrock({
+  const bedrockForTips = createBedrockAnthropic({
     region: process.env.AWS_REGION?.trim(),
     accessKeyId: process.env.AWS_ACCESS_KEY_ID?.trim(),
     secretAccessKey: process.env.AWS_SECRET_ACCESS_KEY?.trim(),
   });
-  return _bedrockForTips('anthropic.claude-sonnet-4-6');
+  return bedrockForTips(getTipsBedrockModelId());
 }
 
 // ── Google SDK singleton ────────────────────────────────────────
@@ -95,17 +99,8 @@ const SYSTEM_PROMPT = `你是世界上最好的照片编辑AI。你能深入理�
 
 type TipCategory = 'enhance' | 'creative' | 'wild' | 'captions';
 
-const CATEGORY_CN: Record<TipCategory, string> = {
-  enhance: 'enhance（专业增强）',
-  creative: 'creative（趣味创意）',
-  wild: 'wild（疯狂脑洞）',
-  captions: 'captions（创意文案）',
-};
-
-function withLocale(prompt: string, locale?: string): string {
-  if (locale === 'en') return `${prompt}\n\nReply in English.`;
-  if (locale === 'zh') return `${prompt}\n\nReply in Chinese.`;
-  return prompt;
+export function withLocale(prompt: string, locale?: string): string {
+  return locale ? `${prompt}\n\n${getReplyLanguageInstruction(locale)}` : prompt;
 }
 
 function buildCategorySystemPrompt(category: TipCategory, count: number = 2): string {
@@ -175,21 +170,24 @@ function buildTipsPrompt(
 }
 
 // Google structured output schema (only used with Google provider + gemini-3)
-const TIPS_SCHEMA = {
-  type: Type.ARRAY,
-  items: {
-    type: Type.OBJECT,
-    properties: {
-      emoji: { type: Type.STRING, description: '1 emoji' },
-      label: { type: Type.STRING, description: '3-6 Chinese chars, verb-first' },
-      desc: { type: Type.STRING, description: '10-25 chars description' },
-      editPrompt: { type: Type.STRING, description: 'Detailed English editing prompt' },
-      category: { type: Type.STRING, enum: ['enhance', 'creative', 'wild', 'captions'] },
-      aspectRatio: { type: Type.STRING, description: 'Only for recomposition tips', nullable: true },
+function getTipsSchema(locale?: string) {
+  const language = getPromptLanguage(locale);
+  return {
+    type: Type.ARRAY,
+    items: {
+      type: Type.OBJECT,
+      properties: {
+        emoji: { type: Type.STRING, description: '1 emoji' },
+        label: { type: Type.STRING, description: `Short label in ${language} only, verb-first when natural` },
+        desc: { type: Type.STRING, description: `Concise description in ${language} only` },
+        editPrompt: { type: Type.STRING, description: 'Detailed English editing prompt' },
+        category: { type: Type.STRING, enum: ['enhance', 'creative', 'wild', 'captions'] },
+        aspectRatio: { type: Type.STRING, description: 'Only for recomposition tips', nullable: true },
+      },
+      required: ['emoji', 'label', 'desc', 'editPrompt', 'category'],
     },
-    required: ['emoji', 'label', 'desc', 'editPrompt', 'category'],
-  },
-};
+  };
+}
 
 const JSON_FORMAT_SUFFIX_ZH = `\n\n以JSON数组格式输出，只输出JSON。每条必须包含editPrompt字段（英文详细编辑指令）：
 [{"emoji":"emoji","label":"2-4个中文字","desc":"中文短描述20字以内","editPrompt":"(MUST be in English) FIRST: Clean up the scene... [detailed editing instructions specific to this tip]","category":"enhance|creative|wild|captions"}, ...]`;
@@ -197,8 +195,19 @@ const JSON_FORMAT_SUFFIX_ZH = `\n\n以JSON数组格式输出，只输出JSON。�
 const JSON_FORMAT_SUFFIX_EN = `\n\nOutput as JSON array only, no other text. Every tip MUST include editPrompt (detailed English instructions):
 [{"emoji":"emoji","label":"2-3 English words","desc":"English description under 20 words","editPrompt":"FIRST: Clean up the scene... [detailed English editing instructions specific to this tip]","category":"enhance|creative|wild|captions"}, ...]`;
 
+const JSON_FORMAT_SUFFIX_ZH_HANT = `\n\n請只輸出 JSON 陣列，不要加入其他文字。每一項都必須包含 editPrompt（詳細英文編輯指令）：
+[{"emoji":"emoji","label":"2-4 個繁體中文字","desc":"20 字內的繁體中文簡短描述","editPrompt":"(MUST be in English) FIRST: Clean up the scene... [detailed editing instructions specific to this tip]","category":"enhance|creative|wild|captions"}, ...]`;
+
+const JSON_FORMAT_SUFFIX_JA = `\n\nJSON 配列のみを出力し、ほかの文章は含めないでください。各項目には editPrompt（詳細な英語の編集指示）が必須です：
+[{"emoji":"emoji","label":"短い日本語ラベル","desc":"20文字以内の日本語説明","editPrompt":"(MUST be in English) FIRST: Clean up the scene... [detailed editing instructions specific to this tip]","category":"enhance|creative|wild|captions"}, ...]`;
+
 function getJsonFormatSuffix(locale?: string) {
-  return locale === 'en' ? JSON_FORMAT_SUFFIX_EN : JSON_FORMAT_SUFFIX_ZH;
+  switch (normalizeLocale(locale)) {
+    case 'en': return JSON_FORMAT_SUFFIX_EN;
+    case 'ja': return JSON_FORMAT_SUFFIX_JA;
+    case 'zh-Hant': return JSON_FORMAT_SUFFIX_ZH_HANT;
+    default: return JSON_FORMAT_SUFFIX_ZH;
+  }
 }
 
 // ── Image Format Helpers ─────────────────────────────────────────
@@ -241,6 +250,10 @@ function openrouterHeaders() {
     'Authorization': `Bearer ${process.env.OPENROUTER_API_KEY}`,
     'Content-Type': 'application/json',
   };
+}
+
+function normalizeOpenRouterModel(model: string): string {
+  return model.includes('/') ? model : `google/${model}`;
 }
 
 // ── Session Management ──────────────────────────────────────────
@@ -517,7 +530,7 @@ export async function generatePreviewImageGoogle(
 
   // Build content parts: text-only when no image, image+text otherwise
   const isTextOnly = !imageBase64;
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+
   let contentParts: any[];
   if (isTextOnly) {
     contentParts = [{ text: editPrompt }];
@@ -536,7 +549,7 @@ export async function generatePreviewImageGoogle(
   });
 
   checkBlockReason(result, 'Google');
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+
   const usageMeta = (result as any).usageMetadata;
   const usage = usageMeta ? { inputTokens: usageMeta.promptTokenCount ?? 0, outputTokens: usageMeta.candidatesTokenCount ?? 0, modelId: MODEL } : undefined;
 
@@ -572,8 +585,10 @@ export async function generatePreviewImageOpenRouter(
   imageBase64: string,
   editPrompt: string,
   aspectRatio?: string,
-  thinkingEffort?: 'minimal' | 'high',
+  thinkingEffort?: OpenRouterReasoningEffort,
+  modelOverride?: string,
 ): Promise<{ image: string | null; usage?: { inputTokens: number; outputTokens: number; modelId: string } }> {
+  const modelId = modelOverride ? normalizeOpenRouterModel(modelOverride) : OPENROUTER_MODEL;
   // Text-only generation (no input image) uses a different system prompt
   const isTextToImage = !imageBase64;
   const systemPrompt = isTextToImage
@@ -588,21 +603,22 @@ export async function generatePreviewImageOpenRouter(
       ];
 
   const body: Record<string, unknown> = {
-    model: OPENROUTER_MODEL,
+    model: modelId,
     stream: false,
     modalities: ['image', 'text'],
     temperature: 1.0,
     reasoning: { effort: thinkingEffort || 'minimal' },
     messages: [
+      { role: 'system', content: systemPrompt },
       { role: 'user', content: userContent },
     ],
   };
-  if (aspectRatio) {
+  if (aspectRatio && aspectRatio !== 'auto') {
     body.image_config = { aspect_ratio: aspectRatio };
   }
 
   const bodyJson = JSON.stringify(body);
-  console.log(`[OpenRouter] generatePreview reasoning=${thinkingEffort || 'minimal'} bodySize=${(bodyJson.length/1024).toFixed(0)}KB`);
+  console.log(`[OpenRouter] generatePreview model=${modelId} reasoning=${thinkingEffort || 'minimal'} bodySize=${(bodyJson.length/1024).toFixed(0)}KB`);
   const t0 = Date.now();
   const res = await fetch(OPENROUTER_BASE, {
     method: 'POST',
@@ -623,7 +639,7 @@ export async function generatePreviewImageOpenRouter(
   console.log(`[OpenRouter] TTFB=${ttfb}ms download=${downloadMs}ms total=${Date.now() - t0}ms`);
 
 
-  const orUsage = data.usage ? { inputTokens: data.usage.prompt_tokens ?? 0, outputTokens: data.usage.completion_tokens ?? 0, modelId: OPENROUTER_MODEL } : undefined;
+  const orUsage = data.usage ? { inputTokens: data.usage.prompt_tokens ?? 0, outputTokens: data.usage.completion_tokens ?? 0, modelId } : undefined;
 
   const choice = data.choices?.[0]?.message;
   if (!choice) {
@@ -654,6 +670,22 @@ export async function generatePreviewImageOpenRouter(
   return { image: null, usage: orUsage };
 }
 
+export async function generateTipsPreviewImageOpenRouter(
+  imageBase64: string,
+  editPrompt: string,
+  aspectRatio?: string,
+): Promise<{ image: string | null; usage?: { inputTokens: number; outputTokens: number; modelId: string } }> {
+  const modelId = normalizeOpenRouterModel(TIPS_PREVIEW_IMAGE_MODEL);
+  const thinkingEffort = (process.env.TIPS_PREVIEW_THINKING || 'low') as OpenRouterReasoningEffort;
+  return generatePreviewImageOpenRouter(
+    imageBase64,
+    editPrompt,
+    aspectRatio,
+    thinkingEffort,
+    modelId,
+  );
+}
+
 // ── Multi-Reference Image Generation ────────────────────────────
 // Used when an edit needs multiple explicit input images.
 // Each image gets a labeled role so Gemini knows what to do with each.
@@ -668,6 +700,7 @@ export async function generateImageWithReferences(
   editPrompt: string,
   aspectRatio?: string,
   thinkingEffort?: 'minimal' | 'high',
+  modelOverride?: string,
 ): Promise<string | null> {
   // Build a prompt that labels each image by its role
   const imageLabels = images
@@ -676,7 +709,7 @@ export async function generateImageWithReferences(
   const fullPrompt = `${imageLabels}\n\n${editPrompt}`;
 
   const urls = images.map(img => img.url);
-  const result = await generateWithMultipleImages(urls, fullPrompt, true, thinkingEffort);
+  const result = await generateWithMultipleImages(urls, fullPrompt, true, thinkingEffort, modelOverride);
 
   if (result.text) {
     console.log(`[generateImageWithReferences] model text: ${result.text.slice(0, 300)}`);
@@ -689,7 +722,7 @@ export async function generateImageWithReferences(
   console.warn('⚠️ [generateImageWithReferences] multi-image failed, falling back to single image');
   const base = images[0].url;
   const fallback = PROVIDER === 'openrouter'
-    ? await generatePreviewImageOpenRouter(base, editPrompt, aspectRatio, thinkingEffort)
+    ? await generatePreviewImageOpenRouter(base, editPrompt, aspectRatio, thinkingEffort, modelOverride)
     : await generatePreviewImageGoogle(base, editPrompt, aspectRatio);
   return fallback.image;
 }
@@ -701,9 +734,10 @@ export async function generateWithMultipleImages(
   prompt: string,
   wantImage: boolean,
   thinkingEffort?: 'minimal' | 'high',
+  modelOverride?: string,
 ): Promise<{ text?: string; image?: string }> {
   if (PROVIDER === 'openrouter') {
-    return generateMultiImageOpenRouter(images, prompt, wantImage, thinkingEffort);
+    return generateMultiImageOpenRouter(images, prompt, wantImage, thinkingEffort, modelOverride);
   } else {
     return generateMultiImageGoogle(images, prompt, wantImage);
   }
@@ -765,7 +799,9 @@ async function generateMultiImageOpenRouter(
   prompt: string,
   wantImage: boolean,
   thinkingEffort?: 'minimal' | 'high',
+  modelOverride?: string,
 ): Promise<{ text?: string; image?: string }> {
+  const modelId = modelOverride ? normalizeOpenRouterModel(modelOverride) : OPENROUTER_MODEL;
   const content: Array<Record<string, unknown>> = [];
 
   for (const img of images) {
@@ -774,7 +810,7 @@ async function generateMultiImageOpenRouter(
   content.push({ type: 'text', text: prompt });
 
   const body: Record<string, unknown> = {
-    model: OPENROUTER_MODEL,
+    model: modelId,
     stream: false,
     temperature: 1.0,
     reasoning: { effort: thinkingEffort || 'minimal' },
@@ -783,7 +819,7 @@ async function generateMultiImageOpenRouter(
     ],
   };
 
-  console.log(`[OpenRouter] generateMultiImage reasoning=${thinkingEffort || 'minimal'}`);
+  console.log(`[OpenRouter] generateMultiImage model=${modelId} reasoning=${thinkingEffort || 'minimal'}`);
   if (wantImage) {
     body.modalities = ['image', 'text'];
   }
@@ -887,7 +923,7 @@ export async function* streamFastTips(imageBase64: string): AsyncGenerator<Omit<
     method: 'POST',
     headers: openrouterHeaders(),
     body: JSON.stringify({
-      model: OPENROUTER_MODEL,
+      model: TIPS_OPENROUTER_MODEL,
       stream: true,
       messages: [
         { role: 'system', content: FAST_TIPS_SYSTEM },
@@ -922,7 +958,7 @@ export async function generateEditPromptForTip(
     method: 'POST',
     headers: openrouterHeaders(),
     body: JSON.stringify({
-      model: OPENROUTER_MODEL,
+      model: TIPS_OPENROUTER_MODEL,
       stream: false,
       messages: [
         { role: 'system', content: systemPrompt },
@@ -1052,20 +1088,22 @@ async function* streamTipsByCategoryGoogle(
   const { systemPrompt, userText, thinkingLevel } = buildTipsPrompt(category, metadata, count, existingLabels, skillContext);
 
   const supportsStructuredOutput = MODEL.includes('gemini-3');
+  const languageInstruction = getTipsLanguageInstruction(locale);
   // Gemini 3.x uses thinkingLevel (minimal/low/medium/high), not thinkingBudget
   const isGemini3 = MODEL.includes('gemini-3');
   const config: Record<string, unknown> = {
-    systemInstruction: systemPrompt,
+    systemInstruction: `${languageInstruction}\n\n${systemPrompt}`,
     ...(isGemini3
       ? { thinkingConfig: { thinkingLevel } }
       : { thinkingConfig: { thinkingBudget: thinkingLevel === 'high' ? -1 : thinkingLevel === 'minimal' ? 0 : 1024 } }),
   };
   if (supportsStructuredOutput) {
     config.responseMimeType = 'application/json';
-    config.responseSchema = TIPS_SCHEMA;
+    config.responseSchema = getTipsSchema(locale);
   }
 
   const promptSuffix = supportsStructuredOutput ? '' : getJsonFormatSuffix(locale);
+  const localizedUserText = `${languageInstruction}\n\n${userText}`;
   const resolved = await ensureBase64Server(imageBase64);
   const base64Data = resolved.replace(/^data:image\/\w+;base64,/, '');
   const mimeType = resolved.startsWith('data:image/png') ? 'image/png' : 'image/jpeg';
@@ -1076,7 +1114,7 @@ async function* streamTipsByCategoryGoogle(
         role: 'user',
         parts: [
           { inlineData: { mimeType, data: base64Data } },
-          { text: `${userText}${promptSuffix}` },
+          { text: `${localizedUserText}${promptSuffix}` },
         ],
       },
     ],
@@ -1117,6 +1155,8 @@ async function* streamTipsByCategoryOpenRouter(
   usageAccum?: UsageAccum,
 ): AsyncGenerator<Tip> {
   const { systemPrompt, userText, thinkingLevel } = buildTipsPrompt(category, metadata, count, existingLabels, skillContext);
+  const languageInstruction = getTipsLanguageInstruction(locale);
+  const localizedUserText = `${languageInstruction}\n\n${userText}`;
   // OpenRouter uses effort: minimal/low/medium/high
   const reasoning = { effort: thinkingLevel };
 
@@ -1126,16 +1166,16 @@ async function* streamTipsByCategoryOpenRouter(
     method: 'POST',
     headers: openrouterHeaders(),
     body: JSON.stringify({
-      model: OPENROUTER_MODEL,
+      model: TIPS_OPENROUTER_MODEL,
       stream: true,
       reasoning,
       messages: [
-        { role: 'system', content: systemPrompt },
+        { role: 'system', content: `${languageInstruction}\n\n${systemPrompt}` },
         {
           role: 'user',
           content: [
             toImageContent(imageBase64),
-            { type: 'text', text: `${userText}${getJsonFormatSuffix(locale)}` },
+            { type: 'text', text: `${localizedUserText}${getJsonFormatSuffix(locale)}` },
           ],
         },
       ],
@@ -1158,7 +1198,7 @@ async function* streamTipsByCategoryOpenRouter(
 
   // Set model for billing — Tips output is text, use :text rate suffix
   if (usageAccum) {
-    usageAccum.model = OPENROUTER_MODEL + ':text';
+    usageAccum.model = TIPS_OPENROUTER_MODEL + ':text';
   }
 
   tlog(`[tips:openrouter:${category}] stream done at +${Date.now() - t0}ms`);
@@ -1179,20 +1219,23 @@ async function* streamTipsByCategoryBedrock(
     ? new URL(imageBase64)
     : imageBase64.startsWith('data:') ? imageBase64 : `data:image/jpeg;base64,${imageBase64}`;
   const { systemPrompt, userText } = buildTipsPrompt(category, metadata, count, existingLabels, skillContext);
+  const languageInstruction = getTipsLanguageInstruction(locale);
+  const localizedUserText = `${languageInstruction}\n\n${userText}`;
+  const bedrockModelId = getTipsBedrockModelId();
 
   const t0 = Date.now();
-  tlog(`[tips:bedrock:${category}] stream start`);
+  tlog(`[tips:bedrock:${category}] stream start model=${bedrockModelId}`);
 
   const result = await streamText({
     model: getBedrockForTips(),
-    temperature: TIPS_TEMPERATURE,
-    system: systemPrompt,
+    ...(supportsTemperature(bedrockModelId) ? { temperature: TIPS_TEMPERATURE } : {}),
+    system: `${languageInstruction}\n\n${systemPrompt}`,
     messages: [
       {
         role: 'user',
         content: [
           { type: 'image', image: imageContent },
-          { type: 'text', text: `${userText}${getJsonFormatSuffix(locale)}` },
+          { type: 'text', text: `${localizedUserText}${getJsonFormatSuffix(locale)}` },
         ],
       },
     ],
@@ -1211,7 +1254,7 @@ async function* streamTipsByCategoryBedrock(
       if (usage) {
         usageAccum.inputTokens += usage.inputTokens ?? 0;
         usageAccum.outputTokens += usage.outputTokens ?? 0;
-        usageAccum.model = 'anthropic.claude-sonnet-4-6'; // Sonnet is always text output, rate is correct
+        usageAccum.model = bedrockModelId; // Sonnet is always text output, rate is correct
       }
     } catch { /* best effort */ }
   }
@@ -1222,7 +1265,7 @@ async function* streamTipsByCategoryBedrock(
 // ── Shared Incremental JSON Parser ──────────────────────────────
 
 async function* streamToTextIterator(
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+
   stream: AsyncIterable<any>,
 ): AsyncGenerator<string> {
   for await (const chunk of stream) {
@@ -1661,4 +1704,45 @@ export async function analyzeVideoContent(
     if (usage) billUsage(usage.promptTokenCount || 0, usage.candidatesTokenCount || 0);
     return result.text || '';
   }
+}
+
+/**
+ * Vision fallback for text-only Agent models (for example DeepSeek V4 Pro).
+ * The main Agent receives only the resulting text, so its provider never sees
+ * an unsupported image content block.
+ */
+export async function analyzeImageContent(
+  image: string,
+  question?: string,
+  userId?: string,
+): Promise<string> {
+  const ai = getAI();
+  const model = 'gemini-3-flash-preview';
+  const resolved = await ensureBase64Server(image);
+  const mimeType = resolved.match(/^data:(image\/[^;]+);base64,/)?.[1] || 'image/jpeg';
+  const base64 = resolved.replace(/^data:image\/[^;]+;base64,/, '');
+  const prompt = question?.trim()
+    ? `Analyze this image for an editing agent. Focus on: ${question.trim()} Respond in English only.`
+    : 'Analyze this image in detail for a photo editing agent. Describe subjects, identities and distinguishing features, composition, objects, text, lighting, mood, and any details that matter for an edit. Respond in English only.';
+
+  const result = await ai.models.generateContent({
+    model,
+    contents: [{ role: 'user', parts: [
+      { inlineData: { mimeType, data: base64 } },
+      { text: prompt },
+    ] }],
+  });
+  const usage = result.usageMetadata;
+  if (usage && userId) {
+    import('./billing/credits').then(({ deductByTokens }) =>
+      deductByTokens(
+        userId,
+        'analyze_image',
+        model,
+        usage.promptTokenCount || 0,
+        usage.candidatesTokenCount || 0,
+      ).catch(e => console.error('[billing] analyze_image deduct error:', e))
+    );
+  }
+  return result.text || '';
 }

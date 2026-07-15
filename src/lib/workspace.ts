@@ -22,7 +22,7 @@ import { Readable } from 'stream';
 import { pipeline } from 'stream/promises';
 import { parseSkillMd, type ParsedSkill } from './skill-registry';
 
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
+
 type SupabaseClient = any;
 
 // ── Types ───────────────────────────────────────────────────────────────────

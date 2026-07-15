@@ -19,6 +19,20 @@ const NATIVE_APP_WARM_API_PATHS = ['/api/home-skills', '/api/skills', '/api/bill
 
 let hasWarmedNativeAppShell = false;
 
+type WindowWithCapacitor = typeof window & {
+  Capacitor?: {
+    getPlatform?: () => string;
+    isNativePlatform?: () => boolean;
+  };
+};
+
+function canBootNativeApp(): boolean {
+  const userAgent = navigator.userAgent || '';
+  if (userAgent.includes(MAKARON_IOS_USER_AGENT_TOKEN)) return true;
+  const capacitor = (window as WindowWithCapacitor).Capacitor;
+  return Boolean(capacitor?.isNativePlatform?.() && capacitor.getPlatform?.() === 'ios');
+}
+
 function isEditableElement(target: EventTarget | null): boolean {
   if (!(target instanceof HTMLElement)) return false;
   return Boolean(target.closest('input, textarea, select, [contenteditable="true"]'));
@@ -90,14 +104,13 @@ export default function NativeAppBootstrap() {
     let cancelled = false;
 
     async function bootNativeApp() {
-      const [{ Capacitor }, keyboardModule, { SplashScreen }, statusBarModule] = await Promise.all([
+      // Web pages should not download or evaluate the native bridge modules while
+      // their visible controls are still hydrating.
+      if (!canBootNativeApp()) return;
+      const [{ Capacitor }, { SplashScreen }] = await Promise.all([
         import('@capacitor/core'),
-        import('@capacitor/keyboard'),
         import('@capacitor/splash-screen'),
-        import('@capacitor/status-bar'),
       ]);
-      const { Keyboard, KeyboardResize, KeyboardStyle } = keyboardModule;
-      const { StatusBar, Style } = statusBarModule;
 
       if (cancelled || !Capacitor.isNativePlatform() || Capacitor.getPlatform() !== 'ios') return;
 
@@ -118,6 +131,21 @@ export default function NativeAppBootstrap() {
         // Persistent diagnostics are best-effort only.
       }
       console.info('[makaron-ios-native] boot', bootLogEntry);
+
+      // The native splash intercepts every touch. Reveal the already-rendered
+      // web shell before optional StatusBar/Keyboard polish or listener setup.
+      try {
+        await SplashScreen.hide();
+      } catch {
+        // The bundled web shell remains usable if splash hide already completed.
+      }
+
+      const [keyboardModule, statusBarModule] = await Promise.all([
+        import('@capacitor/keyboard'),
+        import('@capacitor/status-bar'),
+      ]);
+      const { Keyboard, KeyboardResize, KeyboardStyle } = keyboardModule;
+      const { StatusBar, Style } = statusBarModule;
 
       const userAgent = navigator.userAgent || '';
       if (!userAgent.includes(MAKARON_IOS_USER_AGENT_TOKEN)) {
@@ -407,12 +435,6 @@ export default function NativeAppBootstrap() {
       window.visualViewport?.addEventListener('resize', updateFromViewport);
       window.visualViewport?.addEventListener('scroll', updateFromViewport);
       updateFromViewport();
-
-      try {
-        await SplashScreen.hide();
-      } catch {
-        // The bundled web shell remains usable if splash hide is already complete.
-      }
 
       cleanup = () => {
         window.removeEventListener('touchstart', onPageBackTouchStart, { capture: true });

@@ -1,12 +1,32 @@
 import { describe, expect, it } from 'vitest';
 import {
+  extractInlineMediaNavigationId,
   extractRenderableInlineVideoUrl,
   removeAllInlineVideoUrls,
+  removeInlineMediaNavigationMarkers,
   removeRenderableInlineVideoUrls,
   resolveInlineVideoCandidate,
 } from '../src/lib/cui-video-url';
 
 describe('CUI inline video URL filtering', () => {
+  it('keeps the full non-hex snapshot id and strips its complete marker', () => {
+    const id = '1783766332497gcf493r9k6';
+    const content = `🎬 视频已生成\nhttps://cdn.example.com/source.mp4\nsnap:${id}`;
+    const snapshots = [{
+      id,
+      videoMeta: { videoUrl: 'https://cdn.example.com/source.mp4' },
+    }];
+
+    expect(extractInlineMediaNavigationId(content)).toBe(id);
+    expect(resolveInlineVideoCandidate(content, snapshots)).toMatchObject({
+      navId: id,
+      videoSnap: snapshots[0],
+      source: 'snapshot',
+    });
+    expect(removeInlineMediaNavigationMarkers(content)).not.toContain('gcf493r9k6');
+    expect(removeInlineMediaNavigationMarkers(content)).not.toContain('snap:');
+  });
+
   it('does not render Evolink provider URLs as inline videos', () => {
     const text = 'submitted https://api.evolink.ai/v1/files/output.mp4?token=abc';
 
