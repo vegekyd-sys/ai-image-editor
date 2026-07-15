@@ -79,7 +79,7 @@ const ja = {
   'aiConsent.dataTitle': '送信されるデータ',
   'aiConsent.data': '選択した写真、動画、音声、プロンプト、チャットメッセージ、および追加編集に必要な生成コンテンツ。',
   'aiConsent.providersTitle': '送信先',
-  'aiConsent.providers': '選択した機能に応じて、Google、OpenAI / Microsoft Azure、Anthropic / Amazon Web Services、DeepSeek、xAI、ByteDance / Volcengine、Kuaishou / Kling、Hugging Face / fal.ai、SunoAPI.org、またはOpenRouter、PiAPI、Evolinkなどの処理サービスがコンテンツを処理する場合があります。',
+  'aiConsent.providers': '選択した機能に応じて、Google、OpenAI / Microsoft Azure、Anthropic / Amazon Web Services、DeepSeek、xAI、ByteDance / Volcengine、またはKuaishou / Klingがコンテンツを処理する場合があります。',
   'aiConsent.accountData': 'ログイン用メールアドレス、パスワード、支払い情報はAIサービスへ送信されません。',
   'aiConsent.allow': 'AI処理を許可して続ける',
   'aiConsent.notNow': '今は許可しない',
