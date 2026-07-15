@@ -38,24 +38,17 @@ export default function LiquidGlassNav({
 }: LiquidGlassNavProps) {
   const router = useRouter()
   const { user } = useAuth()
-  const { locale } = useLocale()
+  const { t } = useLocale()
   const [visualActive, setVisualActive] = useState(active)
 
   useEffect(() => {
     setVisualActive(active)
   }, [active])
 
-  const navItems = items ?? (
-    locale === 'zh'
-      ? [
-          { value: 'explore' as const, label: '探索' },
-          { value: 'projects' as const, label: '项目' },
-        ]
-      : [
-          { value: 'explore' as const, label: 'Explore' },
-          { value: 'projects' as const, label: 'Projects' },
-        ]
-  )
+  const navItems = items ?? [
+    { value: 'explore' as const, label: t('nav.explore') },
+    { value: 'projects' as const, label: t('nav.projects') },
+  ]
   const activeIndex = Math.max(0, navItems.findIndex((item) => item.value === visualActive))
 
   const pathFor = useCallback((surface: PrimarySurface) => (
@@ -117,7 +110,7 @@ export default function LiquidGlassNav({
 
   return (
     <nav
-      aria-label={ariaLabel ?? (locale === 'zh' ? '主导航' : 'Primary navigation')}
+      aria-label={ariaLabel ?? t('nav.primary')}
       className="mkr-liquid-nav"
       style={{
         opacity: hidden ? 0 : 1,

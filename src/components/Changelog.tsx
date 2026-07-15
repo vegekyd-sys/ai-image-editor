@@ -10,6 +10,11 @@ interface ChangelogEntry {
 
 const CHANGELOG: ChangelogEntry[] = [
   {
+    date: '2026-07-14',
+    en: { title: 'Japanese & Traditional Chinese', items: ['Makaron now supports Japanese and Traditional Chinese across the app.'] },
+    zh: { title: '日语与繁体中文', items: ['Makaron 现已支持日语和繁体中文。'] },
+  },
+  {
     date: '2026-07-11',
     en: { title: 'Choose Your Agent Model', items: [
       'Makaron Agent can now use Sonnet 4.6, Sonnet 5, Opus 4.8, Grok 4.5, or DeepSeek V4 Pro — choose the right brain for each project.',
@@ -798,6 +803,7 @@ const iOSAppTopGap = 'max(96px, calc(env(safe-area-inset-top, 0px) + 40px))';
 const iOSAppBottomGap = 'max(14px, env(safe-area-inset-bottom, 0px))';
 
 export default function Changelog({ onClose, locale }: { onClose: () => void; locale: string }) {
+  // Release notes stay bilingual: Simplified Chinese uses zh, every other locale falls back to en.
   const isZh = locale === 'zh';
   const [isIOSApp, setIsIOSApp] = useState(false);
 

@@ -4,7 +4,7 @@ import { useCallback, useEffect, useState, useRef, type CSSProperties, type Mous
 import { createPortal } from 'react-dom'
 import { useRouter } from 'next/navigation'
 import { useAuth } from '@/hooks/useAuth'
-import { useLocale } from '@/lib/i18n'
+import { LocaleToggle, useLocale } from '@/lib/i18n'
 import Changelog from '@/components/Changelog'
 import { getThumbnailUrl } from '@/lib/supabase/storage'
 import { readNativeJSONCache, warmNativeJSONCache, writeNativeJSONCache } from '@/lib/native-app-cache'
@@ -135,7 +135,7 @@ function AccountGlassLayers() {
 
 export default function TopBar({ authReturnPath }: TopBarProps) {
   const { user, signOut } = useAuth()
-  const { locale, setLocale } = useLocale()
+  const { locale, t } = useLocale()
   const router = useRouter()
 
   const [userMenuOpen, setUserMenuOpen] = useState(false)
@@ -268,6 +268,7 @@ export default function TopBar({ authReturnPath }: TopBarProps) {
     warmTopBarMenuRoutes()
     const handler = (e: MouseEvent) => {
       const target = e.target as Node
+      if (target instanceof Element && target.closest('[data-makaron-locale-popover]')) return
       if (userMenuRef.current?.contains(target)) return
       if (mobileMenuRef.current?.contains(target)) return
       setUserMenuOpen(false)
@@ -397,7 +398,7 @@ export default function TopBar({ authReturnPath }: TopBarProps) {
               <path d="m17.6 6.4-2.1 2.1" />
               <path d="m8.5 15.5-2.1 2.1" />
             </svg>
-            {locale === 'zh' ? '更新' : 'Updates'}
+            {t('nav.updates')}
           </button>
         </div>
 
@@ -406,7 +407,7 @@ export default function TopBar({ authReturnPath }: TopBarProps) {
           {visibleUser && creditBalance !== null && (
             <button
               type="button"
-              aria-label={locale === 'zh' ? '打开数据面板' : 'Open dashboard'}
+              aria-label={t('nav.openDashboard')}
               onClick={() => navigateTopBar('/dashboard')}
               style={{
                 display: 'flex', alignItems: 'center', gap: 5,
@@ -433,7 +434,7 @@ export default function TopBar({ authReturnPath }: TopBarProps) {
             <div ref={userMenuRef} style={{ position: 'relative' }}>
               <button
                 type="button"
-                aria-label={locale === 'zh' ? '打开个人菜单' : 'Open account menu'}
+                aria-label={t('nav.openAccountMenu')}
                 aria-expanded={userMenuOpen}
                 aria-controls="makaron-account-menu makaron-account-menu-mobile"
                 data-makaron-user-menu-trigger="true"
@@ -580,17 +581,15 @@ export default function TopBar({ authReturnPath }: TopBarProps) {
                         </button>
                         <div style={accountSeparatorStyle} />
                         <button onClick={() => navigateTopBar('/dashboard')} style={desktopMenuBtnStyle} onMouseEnter={onDesktopItemEnter} onMouseLeave={onDesktopItemLeave}>
-                          <span>{locale === 'zh' ? '数据面板' : 'Dashboard'}</span>
+                          <span>{t('nav.dashboard')}</span>
                         </button>
                         <button onClick={() => navigateTopBar('/dashboard?tab=keys')} style={desktopMenuBtnStyle} onMouseEnter={onDesktopItemEnter} onMouseLeave={onDesktopItemLeave}>
-                          <span>{locale === 'zh' ? '获取 API' : 'Get API'}</span>
+                          <span>{t('nav.getApi')}</span>
                         </button>
                         <button onClick={() => navigateTopBar('/skills')} style={desktopMenuBtnStyle} onMouseEnter={onDesktopItemEnter} onMouseLeave={onDesktopItemLeave}>
                           <span>Skills</span>
                         </button>
-                        <button onClick={() => { setLocale(locale === 'zh' ? 'en' : 'zh') }} style={desktopMenuBtnStyle} onMouseEnter={onDesktopItemEnter} onMouseLeave={onDesktopItemLeave}>
-                          <span>{locale === 'zh' ? 'English' : '中文'}</span>
-                        </button>
+                        <LocaleToggle variant="menu" style={{ ...desktopMenuBtnStyle, minHeight: 38 }} />
                         <div style={accountSeparatorStyle} />
                         <button
                           onClick={() => { setUserMenuOpen(false); signOut() }}
@@ -604,7 +603,7 @@ export default function TopBar({ authReturnPath }: TopBarProps) {
                             e.currentTarget.style.color = 'rgba(255,255,255,0.45)'
                           }}
                         >
-                          <span>{locale === 'zh' ? '退出登录' : 'Sign out'}</span>
+                          <span>{t('nav.signOut')}</span>
                         </button>
                       </div>
                     </div>
@@ -613,7 +612,7 @@ export default function TopBar({ authReturnPath }: TopBarProps) {
                       <div ref={mobileMenuRef} className="makaron-account-menu-mobile" style={mobileAccountOverlayStyle}>
                         <button
                           type="button"
-                          aria-label={locale === 'zh' ? '关闭个人菜单' : 'Close account menu'}
+                          aria-label={t('nav.closeAccountMenu')}
                           onMouseDown={() => setUserMenuOpen(false)}
                           style={mobileAccountBackdropStyle}
                         />
@@ -621,18 +620,18 @@ export default function TopBar({ authReturnPath }: TopBarProps) {
                           id="makaron-account-menu-mobile"
                           role="dialog"
                           aria-modal="true"
-                          aria-label={locale === 'zh' ? '个人菜单' : 'Account menu'}
+                          aria-label={t('nav.accountMenu')}
                           style={mobileAccountPanelStyle}
                         >
                           <AccountGlassLayers />
                           <div style={{ position: 'relative', zIndex: 1, height: '100%', display: 'flex', flexDirection: 'column', minHeight: 0 }}>
                             <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12, marginBottom: 18 }}>
                               <div style={{ fontSize: '0.74rem', letterSpacing: '0.12em', textTransform: 'uppercase', color: 'rgba(255,255,255,0.42)', fontWeight: 700 }}>
-                                {locale === 'zh' ? '账户' : 'Account'}
+                                {t('nav.account')}
                               </div>
                               <button
                                 type="button"
-                                aria-label={locale === 'zh' ? '关闭个人菜单' : 'Close account menu'}
+                                aria-label={t('nav.closeAccountMenu')}
                                 onClick={() => setUserMenuOpen(false)}
                                 style={{
                                   width: 36,
@@ -677,7 +676,7 @@ export default function TopBar({ authReturnPath }: TopBarProps) {
                               {avatarNode(48)}
                               <div style={{ minWidth: 0, textAlign: 'left' }}>
                                 <div style={{ fontSize: '0.98rem', fontWeight: 650, color: 'rgba(255,255,255,0.92)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
-                                  {displayName || (locale === 'zh' ? '个人资料' : 'Profile')}
+                                  {displayName || t('nav.profile')}
                                 </div>
                                 <div style={{ marginTop: 3, fontSize: '0.76rem', color: 'rgba(255,255,255,0.46)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
                                   {email}
@@ -691,24 +690,22 @@ export default function TopBar({ authReturnPath }: TopBarProps) {
                               </div>
                             </button>
 
-                            <nav aria-label={locale === 'zh' ? '账户导航' : 'Account navigation'} style={{ display: 'grid', gap: 10 }}>
+                            <nav aria-label={t('nav.accountNavigation')} style={{ display: 'grid', gap: 10 }}>
                               <button onClick={() => navigateTopBar('/dashboard')} style={mobileMenuBtnStyle}>
-                                <span>{locale === 'zh' ? '数据面板' : 'Dashboard'}</span>
+                                <span>{t('nav.dashboard')}</span>
                               </button>
                               <button onClick={() => navigateTopBar('/dashboard?tab=keys')} style={mobileMenuBtnStyle}>
-                                <span>{locale === 'zh' ? '获取 API' : 'Get API'}</span>
+                                <span>{t('nav.getApi')}</span>
                               </button>
                               <button onClick={() => navigateTopBar('/skills')} style={mobileMenuBtnStyle}>
                                 <span>Skills</span>
                               </button>
-                              <button onClick={() => { setLocale(locale === 'zh' ? 'en' : 'zh') }} style={mobileMenuBtnStyle}>
-                                <span>{locale === 'zh' ? 'English' : '中文'}</span>
-                              </button>
+                              <LocaleToggle variant="menu" style={{ ...mobileMenuBtnStyle, minHeight: 50 }} />
                             </nav>
 
                             <div style={{ marginTop: 'auto', paddingTop: 18 }}>
                               <button onClick={() => { setUserMenuOpen(false); signOut() }} style={signOutButtonStyle}>
-                                <span>{locale === 'zh' ? '退出登录' : 'Sign out'}</span>
+                                <span>{t('nav.signOut')}</span>
                               </button>
                             </div>
                           </div>
@@ -721,19 +718,7 @@ export default function TopBar({ authReturnPath }: TopBarProps) {
             </div>
           ) : (
             <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
-              <button
-                onClick={() => { setLocale(locale === 'zh' ? 'en' : 'zh') }}
-                style={{
-                  background: 'none', border: 'none', cursor: 'pointer',
-                  fontSize: '0.65rem', letterSpacing: '0.1em', textTransform: 'uppercase',
-                  color: 'rgba(255,255,255,0.45)',
-                  transition: 'color 0.2s',
-                }}
-                onMouseEnter={e => (e.currentTarget.style.color = 'rgba(255,255,255,0.7)')}
-                onMouseLeave={e => (e.currentTarget.style.color = 'rgba(255,255,255,0.45)')}
-              >
-                {locale === 'zh' ? 'EN' : '中文'}
-              </button>
+              <LocaleToggle />
               <button
                 onClick={() => navigateTopBar('/login')}
                 style={{
@@ -750,7 +735,7 @@ export default function TopBar({ authReturnPath }: TopBarProps) {
                   <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2" />
                   <circle cx="12" cy="7" r="4" />
                 </svg>
-                {locale === 'zh' ? '登录' : 'Sign in'}
+                {t('nav.signIn')}
               </button>
             </div>
           )}

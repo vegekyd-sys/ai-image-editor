@@ -155,12 +155,13 @@ function CompletionActionCard({ actions, disabled, onAction }: {
   disabled?: boolean;
   onAction?: (action: CompletionAction) => void;
 }) {
+  const { t } = useLocale();
   if (!actions.length) return null;
   return (
     <div className="mt-2 rounded-xl overflow-hidden" style={{ maxWidth: 308, background: 'rgba(255,255,255,0.055)', border: '1px solid rgba(255,255,255,0.08)' }}>
       <div className="px-3.5 py-3">
         <div className="text-[11px] font-medium mb-1" style={{ color: 'rgba(255,255,255,0.42)' }}>
-          下一步
+          {t('artifact.nextSteps')}
         </div>
         <div className="flex flex-col gap-2">
           {actions.map((action, idx) => (
@@ -181,7 +182,7 @@ function CompletionActionCard({ actions, disabled, onAction }: {
                 className="px-3 py-1.5 rounded-full flex-shrink-0 active:scale-95 transition-transform text-[11px] font-semibold disabled:opacity-40"
                 style={{ background: 'rgba(192,38,211,0.20)', color: '#f0abfc', border: '1px solid rgba(192,38,211,0.28)' }}
               >
-                继续
+                {t('artifact.continue')}
               </button>
             </div>
           ))}

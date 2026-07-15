@@ -47,6 +47,12 @@ import {
   type AgentModelRuntime,
 } from './agent-model-runtime';
 import { classifyModelTermination } from './agent-terminal';
+import {
+  getOutputLanguageRequirement,
+  getReplyLanguageInstruction,
+  normalizeLocale,
+  translate,
+} from './locales';
 
 const MAX_VIDEO_DIMENSION_PROBE_BYTES = 220 * 1024 * 1024;
 
@@ -378,7 +384,7 @@ function formatMusicLine(record: Record<string, unknown>, fallbackTrackIndex = 0
   return `music:${safeTrackIndex}|${title}|${safeDuration}|${tags}|${playUrl}|${finalUrl}`;
 }
 
-function formatGeneratedAudioForCui(toolName: string | undefined, output: unknown): string | null {
+function formatGeneratedAudioForCui(toolName: string | undefined, output: unknown, locale = normalizeLocale('en')): string | null {
   if (!toolName || !['generate_voiceover', 'generate_audio', 'generate_music'].includes(toolName)) return null;
   if (!output || typeof output !== 'object') return null;
   const record = output as Record<string, unknown>;
@@ -390,7 +396,7 @@ function formatGeneratedAudioForCui(toolName: string | undefined, output: unknow
         .filter((line): line is string => !!line)
     : [];
   if (tracks.length) {
-    return `\n\n🎵 音频已生成\n${tracks.join('\n')}\n`;
+    return `\n\n🎵 ${translate(locale, 'agent.audio.generated')}\n${tracks.join('\n')}\n`;
   }
 
   const audioUrl = getPlayableAudioUrl(record);
@@ -407,7 +413,7 @@ function formatGeneratedAudioForCui(toolName: string | undefined, output: unknow
   });
   if (!line) return null;
 
-  return `\n\n🎵 音频已生成: ${title}\n${line}\n`;
+  return `\n\n🎵 ${translate(locale, 'agent.audio.generatedNamed', title)}\n${line}\n`;
 }
 
 function formatGeneratedAudioForModel(toolName: string, output: unknown): string {
@@ -1281,7 +1287,7 @@ ${manifest}${userSkillLines}
 }
 
 function buildLightweightSystemPrompt(mode: 'analysis' | 'tipReaction', locale?: string): string {
-  const languageRule = locale === 'en' ? 'Reply in English.' : locale === 'zh' ? 'Reply in Chinese.' : 'Reply in the same language the user writes in.';
+  const languageRule = getReplyLanguageInstruction(locale);
   if (mode === 'analysis') {
     return [
       'You are Makaron, a warm and concise creative media assistant.',
@@ -1783,11 +1789,7 @@ Hard constraints:
 
       toModelOutput({ output }: { output: any }) {
         if (output.analysis) {
-          const languageRule = locale === 'en'
-            ? 'Answer the user in English.'
-            : locale === 'zh'
-              ? 'Answer the user in Chinese.'
-              : 'Answer in the same language as the user.';
+          const languageRule = getReplyLanguageInstruction(locale).replace(/^Reply/, 'Answer the user');
           return {
             type: 'content' as const,
             value: [{
@@ -3388,16 +3390,14 @@ function logToolSizes(tools: Record<string, any>): number {
 /** Append a language reply instruction to any prompt based on locale.
  *  Only appends when locale is explicitly set — undefined means no override. */
 export function withLocale(prompt: string, locale?: string): string {
-  if (locale === 'en') return `${prompt}\n\nReply in English.`;
-  if (locale === 'zh') return `${prompt}\n\nReply in Chinese.`;
-  return prompt;
+  return locale ? `${prompt}\n\n${getReplyLanguageInstruction(locale)}` : prompt;
 }
 
 // Used for initial upload analysis
-const ANALYSIS_PROMPT_INITIAL = `描述这张照片里的内容，1-2句，语气像朋友分享。直接从主体开始说（"一个..."/"画面里..."）。禁止用"我来看看"/"让我看一下"等任何铺垫语。`;
+const ANALYSIS_PROMPT_INITIAL = `Describe this photo in 1-2 sentences, in the tone of a friend sharing what they noticed. Start directly with the subject. Do not use any preamble such as "Let me take a look".`;
 
 // Used for post-edit analysis — acknowledges the edit context
-const ANALYSIS_PROMPT_POSTEDIT = `P完图了，看看效果。以"P完之后，"开头，用1句话描述一下现在这张图的整体效果和氛围。禁止用"我来看看"等铺垫语，直接说结果。`;
+const ANALYSIS_PROMPT_POSTEDIT = `The edit is complete. In one sentence, directly describe the edited image's overall effect and mood. Acknowledge that this is the result after editing, without any preamble.`;
 
 // Used for video upload auto-analysis
 const ANALYSIS_PROMPT_VIDEO_TEMPLATE = (mediaIndex: number) =>
@@ -3500,8 +3500,9 @@ export async function* runMakaronAgent(
     ? buildLightweightSystemPrompt(analysisOnly ? 'analysis' : 'tipReaction', options?.locale)
     : await buildSystemPrompt(options?.userSkills, options?.supabase, options?.userId, projectId);
   const systemPrompt = runtime.spec.provider === 'deepseek' && options?.locale
-    ? `${baseSystemPrompt}\n\nCRITICAL OUTPUT LANGUAGE: ${options.locale === 'en' ? 'ENGLISH ONLY' : 'CHINESE ONLY'}. This rule still applies after every tool result.`
+    ? `${baseSystemPrompt}\n\nCRITICAL OUTPUT LANGUAGE: ${getOutputLanguageRequirement(options.locale)}. This rule still applies after every tool result.`
     : baseSystemPrompt;
+  const responseLocale = normalizeLocale(options?.locale, 'en');
   endSystemPrompt?.({ systemChars: systemPrompt.length });
 
   // Observability — per-request summary
@@ -3751,8 +3752,7 @@ export async function* runMakaronAgent(
         continue;
       }
       if (event.type === 'reasoning-end') {
-        const isEnLocale = options?.locale === 'en';
-        yield { type: 'status' as const, text: isEnLocale ? 'Planning...' : '规划中...' };
+        yield { type: 'status' as const, text: translate(responseLocale, 'agent.status.planning') };
         continue;
       }
 
@@ -3761,8 +3761,7 @@ export async function* runMakaronAgent(
         const toolName = (event as any).toolName ?? '';
         if (toolName === 'run_code') {
           codeExtractor = { buffer: '', state: 'waiting', escaped: false, sent: 0 };
-          const isEnLocale = options?.locale === 'en';
-          yield { type: 'status' as const, text: isEnLocale ? 'Generating code...' : '代码生成中...' };
+          yield { type: 'status' as const, text: translate(responseLocale, 'agent.status.generatingCode') };
         }
         continue;
       }
@@ -3840,45 +3839,40 @@ export async function* runMakaronAgent(
           step: stepCount,
           sinceAgentStartMs: Date.now() - agentStartTime,
         });
-        const isEnLocale = options?.locale === 'en';
         if (event.toolName === 'analyze_image') {
           const q = (event.input as { question?: string }).question;
-          yield { type: 'status', text: isEnLocale
-            ? (q ? `Analyzing image: ${q.slice(0, 50)}` : 'Analyzing image')
-            : (q ? `分析图片：${q.slice(0, 40)}` : '分析图片') };
+          yield { type: 'status', text: translate(responseLocale, 'agent.status.analyzingImage', q?.slice(0, 50) ?? '') };
         } else if (event.toolName === 'analyze_video') {
           const q = (event.input as { question?: string }).question;
-          yield { type: 'status', text: isEnLocale
-            ? (q ? `Analyzing video: ${q.slice(0, 50)}` : 'Analyzing video')
-            : (q ? `分析视频：${q.slice(0, 40)}` : '分析视频') };
+          yield { type: 'status', text: translate(responseLocale, 'agent.status.analyzingVideo', q?.slice(0, 50) ?? '') };
         } else if (event.toolName === 'transcribe_audio') {
-          yield { type: 'status', text: isEnLocale ? 'Transcribing audio...' : '转写音频中...' };
+          yield { type: 'status', text: translate(responseLocale, 'agent.status.transcribingAudio') };
         } else if (event.toolName === 'list_voiceover_voices') {
-          yield { type: 'status', text: isEnLocale ? 'Choosing voice...' : '选择配音音色中...' };
+          yield { type: 'status', text: translate(responseLocale, 'agent.status.choosingVoice') };
         } else if (event.toolName === 'generate_voiceover') {
-          yield { type: 'status', text: isEnLocale ? 'Generating voiceover...' : '生成配音中...' };
+          yield { type: 'status', text: translate(responseLocale, 'agent.status.generatingVoiceover') };
         } else if (event.toolName === 'generate_audio' || event.toolName === 'generate_music') {
-          yield { type: 'status', text: isEnLocale ? 'Generating audio...' : '生成音频中...' };
+          yield { type: 'status', text: translate(responseLocale, 'agent.status.generatingAudio') };
         } else if (event.toolName === 'preview_frame') {
           const input = event.input as { frame?: number; timestamp?: number };
           const hint = input.frame !== undefined ? `frame ${input.frame}` : input.timestamp !== undefined ? `${input.timestamp}s` : 'frame 0';
-          yield { type: 'status', text: isEnLocale ? `Capturing ${hint}...` : `截帧 ${hint}...` };
+          yield { type: 'status', text: translate(responseLocale, 'agent.status.capturingFrame', hint) };
         } else if (event.toolName === 'generate_image') {
-          yield { type: 'status', text: isEnLocale ? 'Generating image...' : '生成图片中...' };
+          yield { type: 'status', text: translate(responseLocale, 'agent.status.generatingImage') };
         } else if (event.toolName === 'list_files') {
-          yield { type: 'status', text: isEnLocale ? 'Browsing workspace...' : '浏览工作台...' };
+          yield { type: 'status', text: translate(responseLocale, 'agent.status.browsingWorkspace') };
         } else if (event.toolName === 'read_file') {
           const p = (event.input as { path?: string }).path || '';
-          yield { type: 'status', text: isEnLocale ? `Reading ${p.split('/').pop()}...` : `读取 ${p.split('/').pop()}...` };
+          yield { type: 'status', text: translate(responseLocale, 'agent.status.readingFile', p.split('/').pop() ?? '') };
         } else if (event.toolName === 'write_file') {
-          yield { type: 'status', text: isEnLocale ? 'Saving...' : '保存中...' };
+          yield { type: 'status', text: translate(responseLocale, 'agent.status.saving') };
         } else if (event.toolName === 'delete_file') {
-          yield { type: 'status', text: isEnLocale ? 'Deleting...' : '删除中...' };
+          yield { type: 'status', text: translate(responseLocale, 'agent.status.deleting') };
         } else if (event.toolName === 'run_code') {
           const desc = (event.input as { description?: string }).description;
-          yield { type: 'status', text: isEnLocale ? `Running: ${desc || 'code'}...` : `执行: ${desc || '代码'}...` };
+          yield { type: 'status', text: translate(responseLocale, 'agent.status.runningCode', desc ?? '') };
         } else if (event.toolName === 'rotate_camera') {
-          yield { type: 'status', text: isEnLocale ? 'Rotating camera...' : '旋转相机中...' };
+          yield { type: 'status', text: translate(responseLocale, 'agent.status.rotatingCamera') };
         }
         let toolCallImages: string[] | undefined;
         if (event.toolName === 'generate_image') {
@@ -3958,8 +3952,7 @@ export async function* runMakaronAgent(
           toolDurationMs: toolCallStartTime ? Date.now() - toolCallStartTime : null,
         });
         // Reset status after tool completes so stale status doesn't linger during thinking
-        const isEnLocale = options?.locale === 'en';
-        yield { type: 'status', text: isEnLocale ? 'Thinking...' : 'Agent 正在思考...' };
+        yield { type: 'status', text: translate(responseLocale, 'agent.status.thinking') };
         if (toolName) {
           yield { type: 'tool_result', tool: toolName, toolCallId, step: stepCount, output: toolOutput };
           const outputRecord = toolOutput && typeof toolOutput === 'object'
@@ -3971,7 +3964,7 @@ export async function* runMakaronAgent(
           if (toolSucceeded && nonRepeatableTools.has(toolName)) {
             attemptCommittedTools.add(toolName);
           }
-          const generatedAudioLine = formatGeneratedAudioForCui(toolName, toolOutput);
+          const generatedAudioLine = formatGeneratedAudioForCui(toolName, toolOutput, responseLocale);
           if (generatedAudioLine) {
             yield { type: 'content', text: generatedAudioLine };
           }
@@ -4027,8 +4020,7 @@ export async function* runMakaronAgent(
             yield { type: 'nsfw_detected' };
           }
           if (imagesSent === ctx.generatedImages.length) {
-            const isEn = options?.locale === 'en';
-            yield { type: 'status', text: isEn ? 'Image generation failed' : '图片生成失败' };
+            yield { type: 'status', text: translate(responseLocale, 'agent.status.imageGenerationFailed') };
           }
         }
 
@@ -4130,8 +4122,7 @@ export async function* runMakaronAgent(
             content: `[System recovery] The previous model step ended before it delivered a usable response (${assessment.code || 'incomplete'}). ${recoveryInstruction}`,
           } as ModelMessage,
         ];
-        const isEn = options?.locale === 'en';
-        yield { type: 'status', text: isEn ? 'The last step stalled — resuming from the saved draft...' : '上一轮卡住了，正在从已保存草稿继续...' };
+        yield { type: 'status', text: translate(responseLocale, 'agent.status.resuming') };
         console.warn(`[agent] recovering incomplete model step code=${assessment.code} finish=${finishReason || 'missing'} raw=${rawFinishReason || ''}`);
         continue;
       }
@@ -4144,7 +4135,6 @@ export async function* runMakaronAgent(
         finishReason,
         rawFinishReason,
       };
-      const isEn = options?.locale === 'en';
       const recoverable = assessment.retryable && Boolean(checkpoint.draftPath);
       const usageEvent = buildUsageEvent();
       if (usageEvent) yield usageEvent;
@@ -4154,12 +4144,8 @@ export async function* runMakaronAgent(
         recoverable,
         checkpoint,
         message: recoverable
-          ? (isEn
-              ? 'The model stopped before completing the promised change. Your draft is saved; send “continue” to resume from it.'
-              : '模型在完成刚才承诺的修改前中断了。草稿已经保存，发送“继续”会从这份草稿恢复。')
-          : (isEn
-              ? 'The model stopped before completing this request and no resumable draft was saved. Please retry the request.'
-              : '模型在完成本次请求前中断，且没有可恢复的草稿。请重新发送请求。'),
+          ? translate(responseLocale, 'agent.error.recoverable')
+          : translate(responseLocale, 'agent.error.fatal'),
       };
       return;
     }
@@ -4206,6 +4192,21 @@ const TIPS_JSON_FORMAT_ZH = `\n\n以JSON数组格式输出，只输出JSON：
 
 const TIPS_JSON_FORMAT_EN = `\n\nOutput as JSON array only, no other text:
 [{"emoji":"emoji","label":"2-3 English words","desc":"English description under 20 words","editPrompt":"Detailed English editing prompt","category":"enhance|creative|wild|captions"}, ...]`;
+
+const TIPS_JSON_FORMAT_ZH_HANT = `\n\n請只輸出 JSON 陣列，不要加入其他文字：
+[{"emoji":"emoji","label":"2-4 個繁體中文字","desc":"20 字內的繁體中文簡短描述","editPrompt":"(MUST be in English) Detailed English editing instructions...","category":"enhance|creative|wild|captions"}, ...]`;
+
+const TIPS_JSON_FORMAT_JA = `\n\nJSON 配列のみを出力し、ほかの文章は含めないでください：
+[{"emoji":"emoji","label":"短い日本語ラベル","desc":"20文字以内の日本語説明","editPrompt":"(MUST be in English) Detailed English editing instructions...","category":"enhance|creative|wild|captions"}, ...]`;
+
+function getTipsJsonFormat(locale?: string): string {
+  switch (normalizeLocale(locale)) {
+    case 'en': return TIPS_JSON_FORMAT_EN;
+    case 'ja': return TIPS_JSON_FORMAT_JA;
+    case 'zh-Hant': return TIPS_JSON_FORMAT_ZH_HANT;
+    default: return TIPS_JSON_FORMAT_ZH;
+  }
+}
 
 const TIPS_PROMPTS: Record<'enhance' | 'creative' | 'wild' | 'captions', string> = {
   enhance: enhancePrompt,
@@ -4322,7 +4323,7 @@ export async function* streamTipsWithClaude(
 
 基于分析，给出2条${category}编辑建议。以下是详细规范（必须遵循）：
 
-${template}${locale === 'en' ? TIPS_JSON_FORMAT_EN : TIPS_JSON_FORMAT_ZH}`;
+${template}${getTipsJsonFormat(locale)}`;
 
   const { textStream } = streamText({
     model: getAgentModel(),

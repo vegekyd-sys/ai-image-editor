@@ -34,9 +34,12 @@ describe('agent prompt policy guards', () => {
 
   it('does not inject canned run_code narration into CUI messages', () => {
     const agentTs = read('src/lib/agent.ts')
+    const en = read('src/lib/locales/en.ts')
+    const zh = read('src/lib/locales/zh.ts')
 
-    expect(agentTs).toContain('Generating code...')
-    expect(agentTs).toContain('代码生成中...')
+    expect(agentTs).toContain("translate(responseLocale, 'agent.status.generatingCode')")
+    expect(en).toContain("'agent.status.generatingCode': 'Generating code...'")
+    expect(zh).toContain("'agent.status.generatingCode': '代码生成中...'")
     expect(agentTs).not.toContain('I am writing the Remotion code now')
     expect(agentTs).not.toContain('I am adjusting the code and checking the result')
     expect(agentTs).not.toContain('getRunCodeIntro')
@@ -81,10 +84,13 @@ describe('agent prompt policy guards', () => {
   it('surfaces generated audio progress and playable cards in CUI', () => {
     const agentTs = read('src/lib/agent.ts')
     const reconnect = read('src/hooks/useAgentRun.ts')
+    const zh = read('src/lib/locales/zh.ts')
 
     expect(agentTs).toContain('formatGeneratedAudioForCui')
-    expect(agentTs).toContain('生成配音中')
-    expect(agentTs).toContain('生成音频中')
+    expect(agentTs).toContain("translate(responseLocale, 'agent.status.generatingVoiceover')")
+    expect(agentTs).toContain("translate(responseLocale, 'agent.status.generatingAudio')")
+    expect(zh).toContain("'agent.status.generatingVoiceover': '生成配音中...'")
+    expect(zh).toContain("'agent.status.generatingAudio': '生成音频中...'")
     expect(agentTs).toContain('formatMusicLine')
     expect(agentTs).toContain('music:${safeTrackIndex}|${title}|${safeDuration}|${tags}|${playUrl}|${finalUrl}')
     expect(agentTs).toContain('all new music generation routes go through Seed Audio')
@@ -95,7 +101,7 @@ describe('agent prompt policy guards', () => {
     expect(agentTs).toContain('deductSeedAudioCredits')
     expect(agentTs).toContain('providerCreditsUsed: result.creditsUsed')
     expect(agentTs).not.toContain("deductCredits(ctx.userId ?? '', null, 'create_music')")
-    expect(agentTs).toContain('const generatedAudioLine = formatGeneratedAudioForCui(toolName, toolOutput)')
+    expect(agentTs).toContain('const generatedAudioLine = formatGeneratedAudioForCui(toolName, toolOutput, responseLocale)')
     expect(reconnect).toContain("case 'music_task'")
     expect(reconnect).toContain('callbacks.onMusicTask?.')
   })

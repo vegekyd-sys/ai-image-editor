@@ -754,6 +754,237 @@ textarea {
   transform: scale(0.97);
 }
 
+/* Shared language picker — compact in top bars, full-width inside account menus. */
+.mkr-locale-selector {
+  position: relative;
+  flex-shrink: 0;
+}
+
+.mkr-locale-selector-menu {
+  width: 100%;
+}
+
+.mkr-locale-trigger {
+  position: relative;
+  isolation: isolate;
+  display: inline-flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  border: 0.5px solid rgba(255,255,255,0.13);
+  color: rgba(255,255,255,0.76);
+  font-family: inherit;
+  cursor: pointer;
+  overflow: hidden;
+  -webkit-tap-highlight-color: transparent;
+  transition:
+    color 160ms ease,
+    border-color 160ms ease,
+    background 160ms ease,
+    box-shadow 180ms ease,
+    transform 150ms ease;
+}
+
+.mkr-locale-trigger-compact {
+  min-height: 34px;
+  padding: 0 10px;
+  border-radius: 999px;
+  background:
+    radial-gradient(ellipse at 24% -35%, rgba(255,255,255,0.22), transparent 58%),
+    radial-gradient(circle at 96% 110%, rgba(217,70,239,0.12), transparent 50%),
+    linear-gradient(145deg, rgba(35,36,44,0.66), rgba(7,7,11,0.52));
+  box-shadow:
+    inset 0 1px 0 rgba(255,255,255,0.15),
+    inset 0 -1px 0 rgba(0,0,0,0.22),
+    0 9px 24px rgba(0,0,0,0.24);
+  backdrop-filter: blur(18px) saturate(1.4) contrast(1.04);
+  -webkit-backdrop-filter: blur(18px) saturate(1.4) contrast(1.04);
+  font-size: 0.68rem;
+  font-weight: 660;
+  letter-spacing: 0.035em;
+}
+
+.mkr-locale-trigger-menu {
+  width: 100%;
+  min-height: 42px;
+  padding: 0 12px;
+  border-radius: 12px;
+  background: rgba(255,255,255,0.028);
+  font-size: 0.76rem;
+}
+
+.mkr-locale-trigger::before {
+  content: "";
+  position: absolute;
+  inset: 1px;
+  z-index: -1;
+  border-radius: inherit;
+  pointer-events: none;
+  box-shadow:
+    inset 0 0.5px 0 rgba(255,255,255,0.10),
+    inset 1px 0 0 rgba(34,211,238,0.03),
+    inset -1px 0 0 rgba(217,70,239,0.04);
+}
+
+.mkr-locale-trigger:hover,
+.mkr-locale-trigger[aria-expanded="true"] {
+  color: rgba(255,255,255,0.96);
+  border-color: rgba(255,255,255,0.21);
+  background:
+    radial-gradient(ellipse at 24% -35%, rgba(255,255,255,0.26), transparent 58%),
+    radial-gradient(circle at 96% 110%, rgba(217,70,239,0.17), transparent 52%),
+    linear-gradient(145deg, rgba(48,49,58,0.72), rgba(9,9,14,0.58));
+  box-shadow:
+    inset 0 1px 0 rgba(255,255,255,0.19),
+    0 12px 30px rgba(0,0,0,0.30);
+}
+
+.mkr-locale-trigger:active {
+  transform: scale(0.97);
+}
+
+.mkr-locale-trigger:focus-visible,
+.mkr-locale-option:focus-visible {
+  outline: 1.5px solid rgba(232,121,249,0.78);
+  outline-offset: 2px;
+}
+
+.mkr-locale-trigger-leading {
+  display: inline-flex;
+  align-items: center;
+  min-width: 0;
+  gap: 7px;
+}
+
+.mkr-locale-globe {
+  flex: 0 0 auto;
+  color: rgba(255,255,255,0.62);
+  filter: drop-shadow(0 1px 4px rgba(0,0,0,0.45));
+}
+
+.mkr-locale-trigger-label {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.mkr-locale-chevron {
+  flex: 0 0 auto;
+  color: rgba(255,255,255,0.42);
+  transition: transform 180ms cubic-bezier(0.22, 1, 0.36, 1), color 160ms ease;
+}
+
+.mkr-locale-chevron[data-open="true"] {
+  transform: rotate(180deg);
+  color: rgba(255,255,255,0.72);
+}
+
+.mkr-locale-popover {
+  position: fixed;
+  z-index: 2147483300;
+  padding: 5px;
+  border: 0.5px solid rgba(255,255,255,0.13);
+  border-radius: 18px;
+  overflow: hidden;
+  isolation: isolate;
+  background:
+    radial-gradient(ellipse at 18% -12%, rgba(255,255,255,0.18), rgba(255,255,255,0.04) 30%, transparent 60%),
+    radial-gradient(circle at 96% 108%, rgba(217,70,239,0.11), transparent 48%),
+    linear-gradient(155deg, rgba(43,44,53,0.88), rgba(13,14,20,0.86) 54%, rgba(5,6,9,0.90));
+  box-shadow:
+    0 24px 64px rgba(0,0,0,0.50),
+    inset 0 1px 0 rgba(255,255,255,0.15),
+    inset 0 -16px 30px rgba(0,0,0,0.18);
+  backdrop-filter: blur(28px) saturate(1.5) contrast(1.05);
+  -webkit-backdrop-filter: blur(28px) saturate(1.5) contrast(1.05);
+  animation: mkr-locale-popover-in 170ms cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+.mkr-locale-popover::before {
+  content: "";
+  position: absolute;
+  inset: 1px;
+  z-index: -1;
+  border-radius: inherit;
+  pointer-events: none;
+  box-shadow:
+    inset 0 0 0 0.5px rgba(255,255,255,0.055),
+    inset 0 9px 18px rgba(255,255,255,0.035),
+    inset 1px 0 0 rgba(34,211,238,0.035),
+    inset -1px 0 0 rgba(217,70,239,0.04);
+}
+
+.mkr-locale-option {
+  width: 100%;
+  min-height: 44px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 0 12px;
+  border: 0;
+  border-radius: 13px;
+  background: transparent;
+  color: rgba(255,255,255,0.72);
+  font-family: inherit;
+  font-size: 0.78rem;
+  font-weight: 590;
+  text-align: left;
+  cursor: pointer;
+  transition: color 140ms ease, background 140ms ease, box-shadow 140ms ease;
+}
+
+.mkr-locale-option:hover,
+.mkr-locale-option:focus-visible {
+  color: rgba(255,255,255,0.96);
+  background: rgba(255,255,255,0.055);
+}
+
+.mkr-locale-option[data-selected="true"] {
+  color: #f5d0fe;
+  background:
+    radial-gradient(circle at 100% 100%, rgba(217,70,239,0.14), transparent 54%),
+    linear-gradient(145deg, rgba(255,255,255,0.075), rgba(217,70,239,0.055));
+  box-shadow: inset 0 0.5px 0 rgba(255,255,255,0.09);
+}
+
+.mkr-locale-option-check {
+  width: 22px;
+  height: 22px;
+  flex: 0 0 22px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 999px;
+  color: #f0abfc;
+  background: rgba(217,70,239,0.09);
+}
+
+.mkr-locale-option:not([data-selected="true"]) .mkr-locale-option-check {
+  background: transparent;
+}
+
+@keyframes mkr-locale-popover-in {
+  from {
+    opacity: 0;
+    transform: translateY(-5px) scale(0.98);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .mkr-locale-trigger,
+  .mkr-locale-chevron,
+  .mkr-locale-option,
+  .mkr-locale-popover {
+    animation: none;
+    transition: none;
+  }
+}
+
 @media (min-width: 768px) {
   .mkr-liquid-nav {
     border-color: rgba(255,255,255,0.16);

@@ -4,6 +4,7 @@ import { authenticateRequest } from '@/lib/api-auth';
 import { getSupabaseAdmin } from '@/lib/supabase/service';
 import { isPermanentUrl } from '@/lib/supabase/storage';
 import { buildVideoFailureActions } from '@/lib/artifact-actions';
+import { normalizeLocale, translate } from '@/lib/locales';
 
 type RunProject = { is_public?: boolean } | Array<{ is_public?: boolean }>;
 
@@ -155,14 +156,13 @@ export async function GET(
         const draftPath = (draftRows || [])
           .map((row: { output?: unknown }) => extractSavedDraftPath(row.output))
           .find(Boolean);
-        const isEn = (run.metadata as Record<string, unknown> | null)?.locale === 'en';
+        const locale = normalizeLocale(
+          (run.metadata as Record<string, unknown> | null)?.locale as string | undefined,
+          'en',
+        );
         const message = draftPath
-          ? (isEn
-              ? 'The agent runtime stopped, but your draft was saved. Send “continue” to resume from it.'
-              : 'Agent 运行环境已中断，但草稿已经保存。发送“继续”会从这份草稿恢复。')
-          : (isEn
-              ? 'The agent runtime stopped and no resumable draft was saved. Please retry the request.'
-              : 'Agent 运行环境已中断，且没有可恢复的草稿。请重新发送请求。');
+          ? translate(locale, 'agent.error.runtimeDraftSaved')
+          : translate(locale, 'agent.error.runtimeNoDraft');
         const metadata = {
           ...((run.metadata as Record<string, unknown> | null) ?? {}),
           terminal: {

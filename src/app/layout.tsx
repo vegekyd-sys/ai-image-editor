@@ -1,5 +1,6 @@
 import type { Metadata, Viewport } from "next";
 import { Geist, Geist_Mono } from "next/font/google";
+import { cookies, headers } from "next/headers";
 import { Suspense } from "react";
 import AuthProvider from "@/components/AuthProvider";
 import NativeAppBootstrap from "@/components/NativeAppBootstrap";
@@ -7,7 +8,9 @@ import NativeIOSPageStack from "@/components/NativeIOSPageStack";
 import MarketingTracker from "@/components/MarketingTracker";
 import MobileAppEventsBootstrap from "@/components/MobileAppEventsBootstrap";
 import { LocaleProvider } from "@/lib/i18n";
+import { getLocaleConfig } from "@/lib/locales";
 import { DEFAULT_DESCRIPTION, DEFAULT_OG_IMAGE, SITE_NAME, SITE_URL } from "@/lib/seo";
+import { resolveRequestLocale } from "@/lib/server-locale";
 import "./globals.css";
 
 const geistSans = Geist({
@@ -61,20 +64,27 @@ export const viewport: Viewport = {
   themeColor: "#000000",
 };
 
-export default function RootLayout({
+export default async function RootLayout({
   children,
 }: Readonly<{
   children: React.ReactNode;
 }>) {
+  const [cookieStore, headerStore] = await Promise.all([cookies(), headers()]);
+  const locale = resolveRequestLocale(
+    cookieStore.get('locale')?.value,
+    headerStore.get('accept-language'),
+  );
+  const htmlLang = getLocaleConfig(locale).htmlLang;
+
   return (
-    <html lang="en" className={`${geistSans.variable} ${geistMono.variable} bg-black`}>
+    <html lang={htmlLang} className={`${geistSans.variable} ${geistMono.variable} bg-black`}>
       <head>
         <link rel="preconnect" href="https://cdn.makaron.app" />
       </head>
       <body
         className={`${geistSans.variable} ${geistMono.variable} antialiased bg-black`}
       >
-        <LocaleProvider>
+        <LocaleProvider initialLocale={locale}>
           <AuthProvider>
             <NativeAppBootstrap />
             <MobileAppEventsBootstrap />

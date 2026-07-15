@@ -127,7 +127,7 @@ export default function ProjectsPage() {
 
 function ProjectsPageInner() {
   const { user, loading: authLoading } = useAuth()
-  const { t, locale } = useLocale()
+  const { t } = useLocale()
   const router = useRouter()
   const isDesktop = useIsDesktop()
   const userId = user?.id
@@ -1253,8 +1253,8 @@ function ProjectsPageInner() {
               isInline
               isDesktop={isDesktop}
               boxRef={inputBoxRef}
-              placeholder={locale === 'zh' ? '描述你想要的创意...' : "Got a pic? Let's glow it up.\nNo pic? I'll cook one up."}
-              createLabel="Create"
+              placeholder={t('home.projectPlaceholder')}
+              createLabel={t('home.create')}
               onSubmit={handleCreate}
               skills={availableSkills}
               selectedSkill={selectedSkill}
@@ -1498,10 +1498,10 @@ function ProjectsPageInner() {
           }}>
             <div style={{ fontSize: 40, marginBottom: 16 }}>🎉</div>
             <div style={{ fontSize: 22, fontWeight: 700, color: 'rgba(255,255,255,0.95)' }}>
-              {locale === 'zh' ? '欢迎来到 Makaron!' : 'Welcome to Makaron!'}
+              {t('home.welcomeTitle')}
             </div>
             <div style={{ fontSize: 13, color: 'rgba(255,255,255,0.4)', marginTop: 8 }}>
-              {locale === 'zh' ? '我们送了你一份创作礼物' : "Here's a gift to get you started"}
+              {t('home.welcomeGift')}
             </div>
             <div style={{
               marginTop: 24, padding: '20px 0', borderRadius: 16,
@@ -1514,7 +1514,7 @@ function ProjectsPageInner() {
                 {creditBalance.toLocaleString()}
               </div>
               <div style={{ fontSize: 13, color: 'rgba(255,255,255,0.35)', marginTop: 2 }}>
-                credits · ${(creditBalance * 0.01).toFixed(2)} {locale === 'zh' ? '价值' : 'value'}
+                credits · ${(creditBalance * 0.01).toFixed(2)} {t('home.value')}
               </div>
             </div>
             <button
@@ -1526,7 +1526,7 @@ function ProjectsPageInner() {
                 boxShadow: '0 4px 20px rgba(217,70,239,0.3)',
               }}
             >
-              {locale === 'zh' ? '开始创作' : 'Start Creating'}
+              {t('home.startCreating')}
             </button>
           </div>
         </>
