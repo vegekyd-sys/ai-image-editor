@@ -32,27 +32,17 @@ function sanitizeLocalizedCopy(value: unknown): Record<string, string> {
   )
 }
 
-function sanitizeStringList(value: unknown, maxItems = 32): string[] {
-  if (!Array.isArray(value)) return []
-  return [...new Set(value
-    .filter((item): item is string => typeof item === 'string')
-    .map(item => item.trim())
-    .filter(Boolean))]
-    .slice(0, maxItems)
+function sanitizeId(value: unknown): string | null {
+  if (typeof value !== 'string') return null
+  const id = value.trim().toLowerCase()
+  if (id === 'all' || !/^[a-z0-9][a-z0-9-]{0,63}$/.test(id)) return null
+  return id
 }
 
-function sanitizeCategories(value: unknown): string[] {
-  return sanitizeStringList(value, 32).filter(id => /^[a-z0-9][a-z0-9-]{0,63}$/.test(id))
-}
-
-function asInteger(value: unknown, fallback: number, min: number, max: number): number {
+function asInteger(value: unknown, fallback: number): number {
   const parsed = typeof value === 'number' ? value : Number(value)
   if (!Number.isInteger(parsed)) return fallback
-  return Math.min(max, Math.max(min, parsed))
-}
-
-function firstLocalizedValue(value: Record<string, string>): string {
-  return value.en || value.zh || value['zh-Hant'] || value.ja || ''
+  return Math.min(100000, Math.max(-100000, parsed))
 }
 
 async function readBody(req: NextRequest): Promise<JsonObject | null> {
@@ -69,11 +59,11 @@ export async function GET(req: NextRequest) {
   }
   const admin = getSupabaseAdmin()
   const { data, error } = await admin
-    .from('home_skills')
+    .from('skill_categories')
     .select('*')
     .order('sort_order')
   if (error) return NextResponse.json({ error: error.message }, { status: 500 })
-  return NextResponse.json(data)
+  return NextResponse.json(data || [])
 }
 
 export async function POST(req: NextRequest) {
@@ -82,37 +72,30 @@ export async function POST(req: NextRequest) {
   }
   const body = await readBody(req)
   if (!body) return NextResponse.json({ error: 'Invalid JSON body' }, { status: 400 })
-
+  const id = sanitizeId(body.id)
   const labels = sanitizeLocalizedCopy(body.labels)
-  const image = typeof body.image === 'string' ? body.image.trim() : ''
-  if (Object.keys(labels).length === 0 || !image) {
-    return NextResponse.json({ error: 'At least one localized title and an image are required' }, { status: 400 })
+  if (!id || Object.keys(labels).length === 0) {
+    return NextResponse.json({ error: 'A valid id and at least one localized title are required' }, { status: 400 })
   }
-
-  const legacyInput = typeof body.prompt === 'string' ? body.prompt.trim() : ''
-  const prompts = sanitizeLocalizedCopy(body.prompts)
-  if (Object.keys(prompts).length === 0 && legacyInput) prompts.en = legacyInput
-  const legacyPrompt = prompts.en || legacyInput || firstLocalizedValue(prompts)
 
   const admin = getSupabaseAdmin()
   const { data, error } = await admin
-    .from('home_skills')
+    .from('skill_categories')
     .insert({
+      id,
       labels,
-      image,
-      prompts,
-      prompt: legacyPrompt,
-      categories: sanitizeCategories(body.categories),
-      skill_path: typeof body.skill_path === 'string' && body.skill_path.trim() ? body.skill_path.trim() : null,
-      image_count: asInteger(body.image_count, 1, 1, 10),
-      sort_order: asInteger(body.sort_order, 0, -100000, 100000),
+      descriptions: sanitizeLocalizedCopy(body.descriptions),
+      icon: typeof body.icon === 'string' && body.icon.trim() ? body.icon.trim().slice(0, 32) : null,
+      sort_order: asInteger(body.sort_order, 0),
       is_active: typeof body.is_active === 'boolean' ? body.is_active : true,
-      before_images: sanitizeStringList(body.before_images, 3),
     })
-    .select('id')
+    .select('*')
     .single()
-  if (error) return NextResponse.json({ error: error.message }, { status: 500 })
-  return NextResponse.json({ success: true, id: data.id })
+  if (error) {
+    const status = error.code === '23505' ? 409 : 500
+    return NextResponse.json({ error: error.code === '23505' ? 'Category id already exists' : error.message }, { status })
+  }
+  return NextResponse.json(data, { status: 201 })
 }
 
 export async function PUT(req: NextRequest) {
@@ -121,8 +104,8 @@ export async function PUT(req: NextRequest) {
   }
   const body = await readBody(req)
   if (!body) return NextResponse.json({ error: 'Invalid JSON body' }, { status: 400 })
-  const id = typeof body.id === 'string' ? body.id.trim() : ''
-  if (!id) return NextResponse.json({ error: 'id required' }, { status: 400 })
+  const id = sanitizeId(body.id)
+  if (!id) return NextResponse.json({ error: 'Valid id required' }, { status: 400 })
 
   const updates: JsonObject = {}
   if (hasOwn(body, 'labels')) {
@@ -132,46 +115,29 @@ export async function PUT(req: NextRequest) {
     }
     updates.labels = labels
   }
-  if (hasOwn(body, 'image')) {
-    const image = typeof body.image === 'string' ? body.image.trim() : ''
-    if (!image) return NextResponse.json({ error: 'image required' }, { status: 400 })
-    updates.image = image
+  if (hasOwn(body, 'descriptions')) updates.descriptions = sanitizeLocalizedCopy(body.descriptions)
+  if (hasOwn(body, 'icon')) {
+    updates.icon = typeof body.icon === 'string' && body.icon.trim() ? body.icon.trim().slice(0, 32) : null
   }
-  if (hasOwn(body, 'prompts')) {
-    const prompts = sanitizeLocalizedCopy(body.prompts)
-    updates.prompts = prompts
-    if (prompts.en) {
-      updates.prompt = prompts.en
-    } else if (hasOwn(body, 'prompt')) {
-      updates.prompt = typeof body.prompt === 'string' ? body.prompt.trim() : ''
-    }
-  } else if (hasOwn(body, 'prompt')) {
-    updates.prompt = typeof body.prompt === 'string' ? body.prompt.trim() : ''
-  }
-  if (hasOwn(body, 'categories')) updates.categories = sanitizeCategories(body.categories)
-  if (hasOwn(body, 'skill_path')) {
-    updates.skill_path = typeof body.skill_path === 'string' && body.skill_path.trim() ? body.skill_path.trim() : null
-  }
-  if (hasOwn(body, 'image_count')) updates.image_count = asInteger(body.image_count, 1, 1, 10)
-  if (hasOwn(body, 'sort_order')) updates.sort_order = asInteger(body.sort_order, 0, -100000, 100000)
+  if (hasOwn(body, 'sort_order')) updates.sort_order = asInteger(body.sort_order, 0)
   if (hasOwn(body, 'is_active')) {
     if (typeof body.is_active !== 'boolean') return NextResponse.json({ error: 'is_active must be boolean' }, { status: 400 })
     updates.is_active = body.is_active
   }
-  if (hasOwn(body, 'before_images')) updates.before_images = sanitizeStringList(body.before_images, 3)
-
   if (Object.keys(updates).length === 0) {
     return NextResponse.json({ error: 'No supported fields to update' }, { status: 400 })
   }
   updates.updated_at = new Date().toISOString()
 
   const admin = getSupabaseAdmin()
-  const { error } = await admin
-    .from('home_skills')
+  const { data, error } = await admin
+    .from('skill_categories')
     .update(updates)
     .eq('id', id)
+    .select('*')
+    .single()
   if (error) return NextResponse.json({ error: error.message }, { status: 500 })
-  return NextResponse.json({ success: true })
+  return NextResponse.json(data)
 }
 
 export async function DELETE(req: NextRequest) {
@@ -179,12 +145,22 @@ export async function DELETE(req: NextRequest) {
     return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
   }
   const body = await readBody(req)
-  const id = body && typeof body.id === 'string' ? body.id.trim() : ''
-  if (!id) return NextResponse.json({ error: 'id required' }, { status: 400 })
+  const id = body ? sanitizeId(body.id) : null
+  if (!id) return NextResponse.json({ error: 'Valid id required' }, { status: 400 })
 
   const admin = getSupabaseAdmin()
-  const { error } = await admin
+  const { data: assigned, error: assignedError } = await admin
     .from('home_skills')
+    .select('id')
+    .contains('categories', [id])
+    .limit(1)
+  if (assignedError) return NextResponse.json({ error: assignedError.message }, { status: 500 })
+  if (assigned && assigned.length > 0) {
+    return NextResponse.json({ error: 'Remove this category from its skills before deleting it' }, { status: 409 })
+  }
+
+  const { error } = await admin
+    .from('skill_categories')
     .delete()
     .eq('id', id)
   if (error) return NextResponse.json({ error: error.message }, { status: 500 })

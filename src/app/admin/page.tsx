@@ -3,6 +3,7 @@
 import { useState, useEffect, useCallback } from 'react'
 import { useRouter } from 'next/navigation'
 import { navigateBackInIOSApp } from '@/lib/native-navigation'
+import { LOCALE_CONFIG, type Locale } from '@/lib/locales'
 
 interface InviteCode {
   id: string
@@ -36,6 +37,54 @@ interface TokenRateEntry {
   markup: number
   is_active: boolean
   updated_at: string
+}
+
+type LocalizedCopy = Record<Locale, string>
+
+interface HomeSkillRecord {
+  id: string
+  labels?: Record<string, string>
+  image?: string
+  prompt?: string
+  prompts?: Record<string, string>
+  skill_path?: string | null
+  image_count?: number
+  sort_order?: number
+  is_active?: boolean
+  before_images?: string[]
+  categories?: string[]
+}
+
+interface SkillCategoryRecord {
+  id: string
+  labels?: Record<string, string>
+  descriptions?: Record<string, string>
+  sort_order?: number
+  icon?: string | null
+  is_active?: boolean
+}
+
+function createLocalizedCopy(value: unknown, legacyEnglish = ''): LocalizedCopy {
+  const source = value && typeof value === 'object' && !Array.isArray(value)
+    ? value as Record<string, unknown>
+    : {}
+  return Object.fromEntries(LOCALE_CONFIG.map(({ code }) => {
+    const localized = source[code]
+    return [code, typeof localized === 'string' ? localized : code === 'en' ? legacyEnglish : '']
+  })) as LocalizedCopy
+}
+
+function compactLocalizedCopy(value: LocalizedCopy): Record<string, string> {
+  return Object.fromEntries(
+    LOCALE_CONFIG
+      .map(({ code }) => [code, value[code].trim()] as const)
+      .filter(([, copy]) => copy.length > 0),
+  )
+}
+
+function adminLabel(value: Record<string, string> | undefined, fallback: string): string {
+  if (!value) return fallback
+  return value.en || value.zh || value['zh-Hant'] || value.ja || fallback
 }
 
 interface MetaInsightsSummary {
@@ -139,8 +188,10 @@ export default function AdminPage() {
   const [metaLoading, setMetaLoading] = useState(false)
   const [metaError, setMetaError] = useState('')
 
-  const [homeSkills, setHomeSkills] = useState<any[]>([])
-  const [modalSkill, setModalSkill] = useState<any | 'new' | null>(null) // null closed, 'new' new, or skill object for edit
+  const [homeSkills, setHomeSkills] = useState<HomeSkillRecord[]>([])
+  const [skillCategories, setSkillCategories] = useState<SkillCategoryRecord[]>([])
+  const [modalSkill, setModalSkill] = useState<HomeSkillRecord | 'new' | null>(null)
+  const [modalCategory, setModalCategory] = useState<SkillCategoryRecord | 'new' | null>(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
 
@@ -184,6 +235,13 @@ export default function AdminPage() {
     if (Array.isArray(data)) setHomeSkills(data)
   }, [])
 
+  const fetchSkillCategories = useCallback(async () => {
+    const res = await fetch('/api/admin/skill-categories')
+    if (res.status === 403) return
+    const data = await res.json()
+    if (Array.isArray(data)) setSkillCategories(data)
+  }, [])
+
   const fetchBillingToggle = useCallback(async () => {
     const res = await fetch('/api/admin/billing-toggle')
     if (res.status === 403) return
@@ -216,8 +274,8 @@ export default function AdminPage() {
 
   useEffect(() => {
     setLoading(true)
-    Promise.all([fetchCodes(), fetchWaitlist(), fetchPricing(), fetchTokenRates(), fetchBillingToggle(), fetchHomeSkills(), fetchMetaStatus()]).finally(() => setLoading(false))
-  }, [fetchCodes, fetchWaitlist, fetchPricing, fetchTokenRates, fetchBillingToggle, fetchHomeSkills, fetchMetaStatus])
+    Promise.all([fetchCodes(), fetchWaitlist(), fetchPricing(), fetchTokenRates(), fetchBillingToggle(), fetchHomeSkills(), fetchSkillCategories(), fetchMetaStatus()]).finally(() => setLoading(false))
+  }, [fetchCodes, fetchWaitlist, fetchPricing, fetchTokenRates, fetchBillingToggle, fetchHomeSkills, fetchSkillCategories, fetchMetaStatus])
 
   const handleCreate = async () => {
     if (!newCode.trim()) return
@@ -978,8 +1036,65 @@ export default function AdminPage() {
       {/* ══════ SKILLS TAB ══════ */}
       {tab === 'skills' && (
         <>
-          <div className="flex justify-end mb-3">
+          <div className="mb-5 rounded-xl border border-white/10 bg-white/[0.035] p-4">
+            <div className="mb-3 flex items-center justify-between gap-3">
+              <div>
+                <h3 className="text-sm font-medium text-white/80">Categories</h3>
+                <p className="mt-0.5 text-xs text-white/35">A skill can appear in more than one category.</p>
+              </div>
+              <button
+                type="button"
+                onClick={() => setModalCategory('new')}
+                className="rounded-lg border border-white/10 px-3 py-1.5 text-xs font-medium text-white/60 hover:bg-white/5 hover:text-white/80"
+              >+ Category</button>
+            </div>
+            {skillCategories.length > 0 ? (
+              <div className="flex flex-wrap gap-2">
+                {skillCategories.map(category => (
+                  <div
+                    key={category.id}
+                    className={`flex items-center gap-2 rounded-lg border px-2.5 py-2 ${category.is_active === false ? 'border-white/5 bg-black/20 text-white/30' : 'border-white/10 bg-white/[0.035] text-white/70'}`}
+                  >
+                    {category.icon && <span aria-hidden>{category.icon}</span>}
+                    <span className="text-xs font-medium">{adminLabel(category.labels, category.id)}</span>
+                    <span className="text-[10px] text-white/25">{category.id}</span>
+                    <button
+                      type="button"
+                      onClick={() => setModalCategory(category)}
+                      className="ml-1 text-[11px] text-white/35 hover:text-white/70"
+                    >Edit</button>
+                    <button
+                      type="button"
+                      onClick={async () => {
+                        if (!confirm(`Delete category “${adminLabel(category.labels, category.id)}”?`)) return
+                        const res = await fetch('/api/admin/skill-categories', {
+                          method: 'DELETE',
+                          headers: { 'Content-Type': 'application/json' },
+                          body: JSON.stringify({ id: category.id }),
+                        })
+                        const data = await res.json().catch(() => ({}))
+                        if (!res.ok) {
+                          alert(data.error || 'Failed to delete category')
+                          return
+                        }
+                        setSkillCategories(prev => prev.filter(item => item.id !== category.id))
+                      }}
+                      className="text-[11px] text-red-400/35 hover:text-red-400/80"
+                    >Delete</button>
+                  </div>
+                ))}
+              </div>
+            ) : (
+              <div className="rounded-lg border border-dashed border-white/10 px-3 py-4 text-center text-xs text-white/30">
+                No categories yet.
+              </div>
+            )}
+          </div>
+
+          <div className="mb-3 flex items-center justify-between">
+            <div className="text-xs text-white/35">{homeSkills.length} skills</div>
             <button
+              type="button"
               onClick={() => setModalSkill('new')}
               className="px-3 py-1.5 rounded-lg bg-fuchsia-600 text-white text-xs font-medium hover:bg-fuchsia-500"
             >+ Add Skill</button>
@@ -991,6 +1106,7 @@ export default function AdminPage() {
                   <th className="text-left py-2 px-2">#</th>
                   <th className="text-left py-2 px-2">Cover</th>
                   <th className="text-left py-2 px-2">Labels</th>
+                  <th className="text-left py-2 px-2">Categories</th>
                   <th className="text-left py-2 px-2">Skill</th>
                   <th className="text-center py-2 px-2">Active</th>
                   <th className="text-right py-2 px-2">Actions</th>
@@ -1009,6 +1125,18 @@ export default function AdminPage() {
                     <td className="py-2 px-2">
                       <div className="text-white">{skill.labels?.en || skill.labels?.zh || '—'}</div>
                       {skill.labels?.zh && <div className="text-white/40 text-xs">{skill.labels.zh}</div>}
+                    </td>
+                    <td className="py-2 px-2">
+                      <div className="flex max-w-48 flex-wrap gap-1">
+                        {(skill.categories || []).length > 0 ? skill.categories?.map(categoryId => {
+                          const category = skillCategories.find(item => item.id === categoryId)
+                          return (
+                            <span key={categoryId} className="rounded-md bg-white/[0.06] px-1.5 py-0.5 text-[10px] text-white/45">
+                              {adminLabel(category?.labels, categoryId)}
+                            </span>
+                          )
+                        }) : <span className="text-white/20">—</span>}
+                      </div>
                     </td>
                     <td className="py-2 px-2">
                       {skill.skill_path ? (
@@ -1061,8 +1189,16 @@ export default function AdminPage() {
         {modalSkill && (
           <SkillEditorModal
             skill={modalSkill === 'new' ? null : modalSkill}
+            categories={skillCategories}
             onClose={() => setModalSkill(null)}
             onSaved={() => { setModalSkill(null); fetchHomeSkills() }}
+          />
+        )}
+        {modalCategory && (
+          <CategoryEditorModal
+            category={modalCategory === 'new' ? null : modalCategory}
+            onClose={() => setModalCategory(null)}
+            onSaved={() => { setModalCategory(null); fetchSkillCategories() }}
           />
         )}
       </div>
@@ -1070,19 +1206,64 @@ export default function AdminPage() {
   )
 }
 
-function SkillEditorModal({ skill, onClose, onSaved }: {
-  skill: any | null
+function LocalizedFields({
+  title,
+  values,
+  onChange,
+  multiline = false,
+  placeholder,
+}: {
+  title: string
+  values: LocalizedCopy
+  onChange: (locale: Locale, value: string) => void
+  multiline?: boolean
+  placeholder: string
+}) {
+  return (
+    <div>
+      <label className="mb-1.5 block text-xs font-medium text-white/60">{title}</label>
+      <div className="space-y-2">
+        {LOCALE_CONFIG.map(locale => (
+          <div key={locale.code} className="grid grid-cols-[88px_minmax(0,1fr)] items-start gap-2">
+            <div className="pt-2">
+              <div className="text-xs font-medium text-white/55">{locale.shortLabel}</div>
+              <div className="text-[10px] text-white/25">{locale.code}</div>
+            </div>
+            {multiline ? (
+              <textarea
+                value={values[locale.code]}
+                onChange={event => onChange(locale.code, event.target.value)}
+                rows={3}
+                placeholder={`${placeholder} · ${locale.label}`}
+                className="w-full resize-y rounded-lg border border-white/10 bg-white/5 px-3 py-2 text-sm text-white placeholder-white/20 focus:border-fuchsia-500/50 focus:outline-none"
+              />
+            ) : (
+              <input
+                value={values[locale.code]}
+                onChange={event => onChange(locale.code, event.target.value)}
+                placeholder={`${placeholder} · ${locale.label}`}
+                className="w-full rounded-lg border border-white/10 bg-white/5 px-3 py-2 text-sm text-white placeholder-white/20 focus:border-fuchsia-500/50 focus:outline-none"
+              />
+            )}
+          </div>
+        ))}
+      </div>
+      <p className="mt-1.5 text-[11px] text-white/25">Empty locales use the product fallback chain.</p>
+    </div>
+  )
+}
+
+function SkillEditorModal({ skill, categories, onClose, onSaved }: {
+  skill: HomeSkillRecord | null
+  categories: SkillCategoryRecord[]
   onClose: () => void
   onSaved: () => void
 }) {
   const isNew = !skill
-  const initLabels = skill?.labels && typeof skill.labels === 'object'
-    ? Object.entries(skill.labels).map(([key, value]) => ({ key, value: String(value) }))
-    : [{ key: 'zh', value: '' }, { key: 'en', value: '' }]
-
-  const [labels, setLabels] = useState<{ key: string; value: string }[]>(initLabels)
+  const [labels, setLabels] = useState<LocalizedCopy>(() => createLocalizedCopy(skill?.labels))
+  const [prompts, setPrompts] = useState<LocalizedCopy>(() => createLocalizedCopy(skill?.prompts, skill?.prompt ?? ''))
   const [image, setImage] = useState<string>(skill?.image ?? '')
-  const [prompt, setPrompt] = useState<string>(skill?.prompt ?? '')
+  const [selectedCategories, setSelectedCategories] = useState<string[]>(skill?.categories ?? [])
   const [skillPath, setSkillPath] = useState<string>(skill?.skill_path ?? '')
   const [imageCount, setImageCount] = useState<string>(String(skill?.image_count ?? 1))
   const [sortOrder, setSortOrder] = useState<string>(String(skill?.sort_order ?? 0))
@@ -1091,32 +1272,42 @@ function SkillEditorModal({ skill, onClose, onSaved }: {
     Array.isArray(skill?.before_images) ? skill.before_images : []
   )
   const [saving, setSaving] = useState(false)
+  const [saveError, setSaveError] = useState('')
 
-  const canSave = image.trim() !== '' && labels.some(l => l.key.trim() && l.value.trim())
+  const canSave = image.trim() !== '' && Object.values(labels).some(value => value.trim())
 
   const handleSave = async () => {
     setSaving(true)
-    const labelsObj: Record<string, string> = {}
-    for (const l of labels) {
-      if (l.key.trim() && l.value.trim()) labelsObj[l.key.trim()] = l.value.trim()
+    setSaveError('')
+    try {
+      const labelsObj = compactLocalizedCopy(labels)
+      const promptsObj = compactLocalizedCopy(prompts)
+      const legacyPrompt = promptsObj.en || promptsObj.zh || promptsObj['zh-Hant'] || promptsObj.ja || ''
+      const payload = {
+        labels: labelsObj,
+        image: image.trim(),
+        prompts: promptsObj,
+        prompt: legacyPrompt,
+        categories: selectedCategories,
+        skill_path: skillPath.trim() || null,
+        image_count: parseInt(imageCount) || 1,
+        sort_order: parseInt(sortOrder) || 0,
+        is_active: isActive,
+        before_images: beforeImages.map(s => s.trim()).filter(Boolean),
+      }
+      const res = await fetch('/api/admin/home-skills', {
+        method: isNew ? 'POST' : 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(isNew ? payload : { id: skill.id, ...payload }),
+      })
+      const data = await res.json().catch(() => ({}))
+      if (res.ok) onSaved()
+      else setSaveError(data.error || 'Failed to save skill')
+    } catch {
+      setSaveError('Failed to reach the server')
+    } finally {
+      setSaving(false)
     }
-    const payload = {
-      labels: labelsObj,
-      image: image.trim(),
-      prompt,
-      skill_path: skillPath.trim() || null,
-      image_count: parseInt(imageCount) || 1,
-      sort_order: parseInt(sortOrder) || 0,
-      is_active: isActive,
-      before_images: beforeImages.map(s => s.trim()).filter(Boolean),
-    }
-    const res = await fetch('/api/admin/home-skills', {
-      method: isNew ? 'POST' : 'PUT',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(isNew ? payload : { id: skill.id, ...payload }),
-    })
-    if (res.ok) onSaved()
-    setSaving(false)
   }
 
   return (
@@ -1153,49 +1344,60 @@ function SkillEditorModal({ skill, onClose, onSaved }: {
             </div>
           </div>
 
-          {/* Labels */}
-          <div>
-            <label className="text-white/60 text-xs font-medium mb-1.5 block">Labels (per locale)</label>
-            <div className="space-y-1.5">
-              {labels.map((l, i) => (
-                <div key={i} className="flex gap-2">
-                  <input
-                    value={l.key}
-                    onChange={(e) => setLabels(prev => prev.map((p, j) => j === i ? { ...p, key: e.target.value } : p))}
-                    placeholder="locale"
-                    className="w-16 px-2 py-1.5 rounded bg-white/5 text-white text-sm placeholder-white/20 border border-white/10 focus:border-fuchsia-500/50 focus:outline-none"
-                  />
-                  <input
-                    value={l.value}
-                    onChange={(e) => setLabels(prev => prev.map((p, j) => j === i ? { ...p, value: e.target.value } : p))}
-                    placeholder="Label text"
-                    className="flex-1 px-2 py-1.5 rounded bg-white/5 text-white text-sm placeholder-white/20 border border-white/10 focus:border-fuchsia-500/50 focus:outline-none"
-                  />
-                  {labels.length > 1 && (
-                    <button
-                      onClick={() => setLabels(prev => prev.filter((_, j) => j !== i))}
-                      className="px-2 text-white/30 hover:text-red-400"
-                    >✕</button>
-                  )}
-                </div>
-              ))}
-              <button
-                onClick={() => setLabels(prev => [...prev, { key: '', value: '' }])}
-                className="text-fuchsia-400/70 text-xs hover:text-fuchsia-400"
-              >+ Add language</button>
-            </div>
-          </div>
+          <LocalizedFields
+            title="Skill title"
+            values={labels}
+            onChange={(locale, value) => setLabels(previous => ({ ...previous, [locale]: value }))}
+            placeholder="Title"
+          />
 
-          {/* Prompt */}
+          <LocalizedFields
+            title="Default prompt"
+            values={prompts}
+            onChange={(locale, value) => setPrompts(previous => ({ ...previous, [locale]: value }))}
+            placeholder="Prompt"
+            multiline
+          />
+
+          {/* Categories */}
           <div>
-            <label className="text-white/60 text-xs font-medium mb-1.5 block">Prompt</label>
-            <textarea
-              value={prompt}
-              onChange={(e) => setPrompt(e.target.value)}
-              rows={4}
-              placeholder="Default prompt text"
-              className="w-full px-3 py-2 rounded-lg bg-white/5 text-white text-sm placeholder-white/20 border border-white/10 focus:border-fuchsia-500/50 focus:outline-none resize-none"
-            />
+            <label className="mb-1.5 block text-xs font-medium text-white/60">Categories</label>
+            {categories.length > 0 ? (
+              <div className="flex flex-wrap gap-2">
+                {categories.map(category => {
+                  const checked = selectedCategories.includes(category.id)
+                  return (
+                    <label
+                      key={category.id}
+                      className={`flex cursor-pointer select-none items-center gap-2 rounded-lg border px-2.5 py-2 text-xs transition-colors ${checked ? 'border-fuchsia-400/35 bg-fuchsia-400/10 text-fuchsia-200' : 'border-white/10 bg-white/[0.025] text-white/50 hover:bg-white/5'}`}
+                    >
+                      <input
+                        type="checkbox"
+                        checked={checked}
+                        onChange={event => setSelectedCategories(previous => event.target.checked
+                          ? [...new Set([...previous, category.id])]
+                          : previous.filter(id => id !== category.id))}
+                        className="accent-fuchsia-500"
+                      />
+                      {category.icon && <span aria-hidden>{category.icon}</span>}
+                      <span>{adminLabel(category.labels, category.id)}</span>
+                    </label>
+                  )
+                })}
+              </div>
+            ) : (
+              <div className="rounded-lg border border-dashed border-white/10 px-3 py-3 text-xs text-white/30">
+                Create a category first, then assign this skill.
+              </div>
+            )}
+            {selectedCategories.filter(id => !categories.some(category => category.id === id)).map(id => (
+              <button
+                key={id}
+                type="button"
+                onClick={() => setSelectedCategories(previous => previous.filter(categoryId => categoryId !== id))}
+                className="mt-2 mr-2 rounded-md border border-amber-400/20 px-2 py-1 text-[11px] text-amber-300/60"
+              >Remove missing category: {id}</button>
+            ))}
           </div>
 
           {/* Skill zip */}
@@ -1274,13 +1476,157 @@ function SkillEditorModal({ skill, onClose, onSaved }: {
           </div>
         </div>
 
-        <div className="flex justify-end gap-2 px-6 py-4 border-t border-white/10">
-          <button onClick={onClose} className="px-4 py-2 rounded-lg text-white/60 text-sm hover:bg-white/5">Cancel</button>
-          <button
-            onClick={handleSave}
-            disabled={!canSave || saving}
-            className="px-4 py-2 rounded-lg bg-fuchsia-600 text-white text-sm font-medium hover:bg-fuchsia-500 disabled:opacity-30 disabled:cursor-not-allowed"
-          >{saving ? 'Saving...' : 'Save'}</button>
+        <div className="flex items-center justify-between gap-3 border-t border-white/10 px-6 py-4">
+          <div className="text-xs text-red-300/80">{saveError}</div>
+          <div className="flex gap-2">
+            <button type="button" onClick={onClose} className="px-4 py-2 rounded-lg text-white/60 text-sm hover:bg-white/5">Cancel</button>
+            <button
+              type="button"
+              onClick={handleSave}
+              disabled={!canSave || saving}
+              className="px-4 py-2 rounded-lg bg-fuchsia-600 text-white text-sm font-medium hover:bg-fuchsia-500 disabled:opacity-30 disabled:cursor-not-allowed"
+            >{saving ? 'Saving...' : 'Save'}</button>
+          </div>
+        </div>
+      </div>
+    </div>
+  )
+}
+
+function CategoryEditorModal({ category, onClose, onSaved }: {
+  category: SkillCategoryRecord | null
+  onClose: () => void
+  onSaved: () => void
+}) {
+  const isNew = !category
+  const [id, setId] = useState(category?.id ?? '')
+  const [labels, setLabels] = useState<LocalizedCopy>(() => createLocalizedCopy(category?.labels))
+  const [descriptions, setDescriptions] = useState<LocalizedCopy>(() => createLocalizedCopy(category?.descriptions))
+  const [icon, setIcon] = useState(category?.icon ?? '')
+  const [sortOrder, setSortOrder] = useState(String(category?.sort_order ?? 0))
+  const [isActive, setIsActive] = useState(category?.is_active ?? true)
+  const [saving, setSaving] = useState(false)
+  const [saveError, setSaveError] = useState('')
+
+  const normalizedId = id.trim().toLowerCase()
+  const idIsValid = /^[a-z0-9][a-z0-9-]{0,63}$/.test(normalizedId) && normalizedId !== 'all'
+  const canSave = idIsValid && Object.values(labels).some(value => value.trim())
+
+  const handleSave = async () => {
+    setSaving(true)
+    setSaveError('')
+    try {
+      const res = await fetch('/api/admin/skill-categories', {
+        method: isNew ? 'POST' : 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          id: normalizedId,
+          labels: compactLocalizedCopy(labels),
+          descriptions: compactLocalizedCopy(descriptions),
+          icon: icon.trim() || null,
+          sort_order: Number.parseInt(sortOrder, 10) || 0,
+          is_active: isActive,
+        }),
+      })
+      const data = await res.json().catch(() => ({}))
+      if (res.ok) onSaved()
+      else setSaveError(data.error || 'Failed to save category')
+    } catch {
+      setSaveError('Failed to reach the server')
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  return (
+    <div
+      className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 p-4 backdrop-blur-sm"
+      onClick={event => { if (event.target === event.currentTarget) onClose() }}
+    >
+      <div className="flex max-h-[90vh] w-full max-w-[620px] flex-col rounded-2xl border border-white/10 bg-[#18181c]">
+        <div className="flex items-center justify-between border-b border-white/10 px-6 py-4">
+          <div>
+            <h3 className="text-base font-semibold text-white">{isNew ? 'New Category' : 'Edit Category'}</h3>
+            <p className="mt-0.5 text-xs text-white/30">Category copy follows the same four product locales.</p>
+          </div>
+          <button type="button" onClick={onClose} className="text-white/40 hover:text-white/70">✕</button>
+        </div>
+
+        <div className="flex-1 space-y-5 overflow-y-auto px-6 py-4">
+          <div className="grid grid-cols-[minmax(0,1fr)_90px_90px] gap-3">
+            <div>
+              <label className="mb-1.5 block text-xs font-medium text-white/60">ID</label>
+              <input
+                value={id}
+                disabled={!isNew}
+                onChange={event => setId(event.target.value.toLowerCase().replace(/[^a-z0-9-]/g, '-'))}
+                placeholder="portrait"
+                className="w-full rounded-lg border border-white/10 bg-white/5 px-3 py-2 text-sm text-white placeholder-white/20 focus:border-fuchsia-500/50 focus:outline-none disabled:opacity-40"
+              />
+            </div>
+            <div>
+              <label className="mb-1.5 block text-xs font-medium text-white/60">Icon</label>
+              <input
+                value={icon}
+                onChange={event => setIcon(event.target.value)}
+                placeholder="Optional"
+                className="w-full rounded-lg border border-white/10 bg-white/5 px-3 py-2 text-sm text-white placeholder-white/20 focus:border-fuchsia-500/50 focus:outline-none"
+              />
+            </div>
+            <div>
+              <label className="mb-1.5 block text-xs font-medium text-white/60">Order</label>
+              <input
+                type="number"
+                value={sortOrder}
+                onChange={event => setSortOrder(event.target.value)}
+                className="w-full rounded-lg border border-white/10 bg-white/5 px-3 py-2 text-sm text-white focus:border-fuchsia-500/50 focus:outline-none"
+              />
+            </div>
+          </div>
+          {!idIsValid && id.length > 0 && (
+            <div className="text-xs text-amber-300/60">Use lowercase letters, numbers, and hyphens. “all” is reserved.</div>
+          )}
+
+          <LocalizedFields
+            title="Category title"
+            values={labels}
+            onChange={(locale, value) => setLabels(previous => ({ ...previous, [locale]: value }))}
+            placeholder="Title"
+          />
+
+          <LocalizedFields
+            title="Category description (optional)"
+            values={descriptions}
+            onChange={(locale, value) => setDescriptions(previous => ({ ...previous, [locale]: value }))}
+            placeholder="Short description"
+          />
+
+          <div className="flex items-center justify-between">
+            <div>
+              <div className="text-xs font-medium text-white/60">Active</div>
+              <div className="mt-0.5 text-[11px] text-white/25">Inactive categories stay editable but are hidden from the home feed.</div>
+            </div>
+            <button
+              type="button"
+              onClick={() => setIsActive(value => !value)}
+              className={`relative h-5 w-10 rounded-full transition-all ${isActive ? 'bg-fuchsia-600' : 'bg-white/20'}`}
+            >
+              <div className={`absolute top-0.5 h-4 w-4 rounded-full bg-white transition-all ${isActive ? 'left-5' : 'left-0.5'}`} />
+            </button>
+          </div>
+        </div>
+
+        <div className="flex items-center justify-between gap-3 border-t border-white/10 px-6 py-4">
+          <div className="text-xs text-red-300/80">{saveError}</div>
+          <div className="flex gap-2">
+            <button type="button" onClick={onClose} className="rounded-lg px-4 py-2 text-sm text-white/60 hover:bg-white/5">Cancel</button>
+            <button
+              type="button"
+              onClick={handleSave}
+              disabled={!canSave || saving}
+              className="rounded-lg bg-fuchsia-600 px-4 py-2 text-sm font-medium text-white hover:bg-fuchsia-500 disabled:cursor-not-allowed disabled:opacity-30"
+            >{saving ? 'Saving...' : 'Save'}</button>
+          </div>
         </div>
       </div>
     </div>

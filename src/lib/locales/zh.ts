@@ -279,6 +279,8 @@ const zh = {
   // Skills
   'skills.title': 'Skill 集市',
   'skills.subtitle': '来自全球创作者的现成魔法',
+  'skills.categoryAll': '全部',
+  'skills.categories': 'Skill 分类',
 
   'misc.toolUse': '工具调用',
   'misc.error': '错误',

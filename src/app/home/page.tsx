@@ -3,7 +3,7 @@
 import { useAuth } from '@/hooks/useAuth'
 import { useRequireAuth } from '@/hooks/useRequireAuth'
 import { usePathname, useRouter } from 'next/navigation'
-import { startTransition, useEffect, useState, useRef, useCallback } from 'react'
+import { startTransition, useEffect, useState, useRef, useCallback, useMemo } from 'react'
 import { useIsDesktop } from '@/hooks/useIsDesktop'
 import { useHydrated } from '@/hooks/useHydrated'
 import { isHeicFile } from '@/lib/imageUtils'
@@ -18,7 +18,15 @@ import RollingTagline from '@/components/RollingTagline'
 import TopBar from '@/components/TopBar'
 import ModeToggle from '@/components/ModeToggle'
 import AgentContent from '@/components/AgentContent'
-import { type HomeSkill, getCachedHomeSkills, setCachedHomeSkills } from '@/lib/home-skills'
+import {
+  type HomeSkill,
+  type HomeSkillCategory,
+  filterHomeSkillsByCategory,
+  getCachedHomeSkills,
+  getLocalizedSkillPrompt,
+  getVisibleSkillCategories,
+  setCachedHomeSkills,
+} from '@/lib/home-skills'
 import { warmHomeSkillMedia } from '@/lib/home-skills-warm'
 import { getThumbnailUrl, getOptimizedUrl, normalizeDomain } from '@/lib/supabase/storage'
 import { isMakaronIOSApp } from '@/lib/native-app'
@@ -81,8 +89,16 @@ function HomePageInner() {
   const [inputWrapperHeight, setInputWrapperHeight] = useState(0)
   const [slotDragOver, setSlotDragOver] = useState(-1)
   const [homeSkills, setHomeSkills] = useState<HomeSkill[]>([])
+  const [skillCategories, setSkillCategories] = useState<HomeSkillCategory[]>([])
+  const [skillCategoriesLoading, setSkillCategoriesLoading] = useState(true)
+  const [activeCategory, setActiveCategory] = useState('all')
+  const [categoryHasChanged, setCategoryHasChanged] = useState(false)
   const [visibleSkillCount, setVisibleSkillCount] = useState(INITIAL_SKILL_CARD_COUNT)
   const skillLoadMoreRef = useRef<HTMLDivElement>(null)
+  const skillSectionRef = useRef<HTMLDivElement>(null)
+  const skillGridRef = useRef<HTMLDivElement>(null)
+  const categoryScrollRef = useRef<HTMLDivElement>(null)
+  const categoryButtonRefs = useRef(new Map<string, HTMLButtonElement>())
   const [selectedSkill, setSelectedSkill] = useState<string | null>(null)
   const [availableSkills, setAvailableSkills] = useState<{ name: string; label: string; icon: string; color: string; builtIn: boolean }[]>([])
   const [skillMenuOpen, setSkillMenuOpen] = useState(false)
@@ -133,15 +149,76 @@ function HomePageInner() {
     startTime: number
   }>({ tracking: false, locked: false, startX: 0, startY: 0, lastX: 0, startTime: 0 })
   const lastUploadIntentRef = useRef<{ at: number; key: string } | null>(null)
+  const lastAppliedSkillPromptRef = useRef<{ skillId: string; locale: typeof locale; prompt: string } | null>(null)
   const selectedDetailRef = useRef(selectedDetail)
   selectedDetailRef.current = selectedDetail
-  const homeSkillsRef = useRef(homeSkills)
-  homeSkillsRef.current = homeSkills
+  const visibleSkillCategories = useMemo(
+    () => getVisibleSkillCategories(homeSkills, skillCategories),
+    [homeSkills, skillCategories],
+  )
+  const filteredHomeSkills = useMemo(
+    () => filterHomeSkillsByCategory(homeSkills, activeCategory),
+    [activeCategory, homeSkills],
+  )
+  const detailSkillsRef = useRef(filteredHomeSkills)
+  detailSkillsRef.current = filteredHomeSkills
   const pathSkillId = pathname?.startsWith('/home/') ? pathname.split('/')[2] : null
   const activeSkillId = selectedDetail?.id || pathSkillId || null
   const activeSkill = selectedDetail || (activeSkillId ? homeSkills.find(s => s.id === activeSkillId) || null : null)
   const showGuestModeToggle = hydrated && !authLoading && !user
   const showAgentLanding = showGuestModeToggle && viewMode === 'agent' && !hasSelectedDetail
+
+  const applyLocalizedSkillPrompt = useCallback((skill: HomeSkill, clearFirst = false) => {
+    if (clearFirst) createInput.clear()
+    const prompt = getLocalizedSkillPrompt(skill, locale)
+    createInput.setText(prompt)
+    lastAppliedSkillPromptRef.current = { skillId: skill.id, locale, prompt }
+  }, [createInput.clear, createInput.setText, locale])
+
+  useEffect(() => {
+    const skill = selectedDetailRef.current
+    const lastApplied = lastAppliedSkillPromptRef.current
+    if (!skill || !lastApplied || lastApplied.skillId !== skill.id || lastApplied.locale === locale) return
+    if (createInput.text !== lastApplied.prompt) return
+
+    const prompt = getLocalizedSkillPrompt(skill, locale)
+    createInput.setText(prompt)
+    lastAppliedSkillPromptRef.current = { skillId: skill.id, locale, prompt }
+  }, [createInput.setText, createInput.text, locale])
+
+  useEffect(() => {
+    if (activeCategory === 'all') return
+    if (visibleSkillCategories.some(category => category.id === activeCategory)) return
+    setActiveCategory('all')
+  }, [activeCategory, visibleSkillCategories])
+
+  const handleCategoryChange = useCallback((categoryId: string) => {
+    if (categoryId === activeCategory) return
+    setActiveCategory(categoryId)
+    setCategoryHasChanged(true)
+    setVisibleSkillCount(INITIAL_SKILL_CARD_COUNT)
+
+    window.requestAnimationFrame(() => {
+      const reduceMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches
+      const behavior: ScrollBehavior = reduceMotion ? 'auto' : 'smooth'
+      const button = categoryButtonRefs.current.get(categoryId)
+      const scroller = categoryScrollRef.current
+      if (button && scroller) {
+        const left = button.offsetLeft - (scroller.clientWidth - button.offsetWidth) / 2
+        scroller.scrollTo({ left: Math.max(0, left), behavior })
+      }
+
+      if (!reduceMotion) {
+        skillGridRef.current?.animate([
+          { opacity: 0.72, transform: 'translateY(3px)' },
+          { opacity: 1, transform: 'translateY(0)' },
+        ], {
+          duration: 140,
+          easing: 'cubic-bezier(0.22, 1, 0.36, 1)',
+        })
+      }
+    })
+  }, [activeCategory])
 
   const blurHomeComposers = useCallback(() => {
     textareaRef.current?.blur()
@@ -389,21 +466,47 @@ function HomePageInner() {
   }, [])
 
   useEffect(() => {
+    let active = true
+    const cached = readNativeJSONCache<HomeSkillCategory[]>('/api/skill-categories')
+    if (Array.isArray(cached) && cached.length > 0) {
+      setSkillCategories(cached)
+      setSkillCategoriesLoading(false)
+    }
+
+    const controller = new AbortController()
+    fetch('/api/skill-categories', { signal: controller.signal })
+      .then(response => response.json())
+      .then(data => {
+        if (!Array.isArray(data)) return
+        writeNativeJSONCache('/api/skill-categories', data)
+        startTransition(() => setSkillCategories(data))
+      })
+      .catch(() => {})
+      .finally(() => {
+        if (active) setSkillCategoriesLoading(false)
+      })
+    return () => {
+      active = false
+      controller.abort()
+    }
+  }, [])
+
+  useEffect(() => {
     const sentinel = skillLoadMoreRef.current
-    if (!sentinel || visibleSkillCount >= homeSkills.length) return
+    if (!sentinel || visibleSkillCount >= filteredHomeSkills.length) return
     if (typeof IntersectionObserver === 'undefined') {
-      startTransition(() => setVisibleSkillCount(homeSkills.length))
+      startTransition(() => setVisibleSkillCount(filteredHomeSkills.length))
       return
     }
     const observer = new IntersectionObserver(([entry]) => {
       if (!entry.isIntersecting) return
       startTransition(() => {
-        setVisibleSkillCount(count => Math.min(count + SKILL_CARD_BATCH_SIZE, homeSkills.length))
+        setVisibleSkillCount(count => Math.min(count + SKILL_CARD_BATCH_SIZE, filteredHomeSkills.length))
       })
     }, { rootMargin: '200px 0px' })
     observer.observe(sentinel)
     return () => observer.disconnect()
-  }, [homeSkills.length, visibleSkillCount])
+  }, [filteredHomeSkills.length, visibleSkillCount])
 
   // Preload user's installed skills
   const skillsFetchedRef = useRef(false)
@@ -658,12 +761,12 @@ function HomePageInner() {
     setViewMode('human')
     setSelectedDetail(skill)
     setSelectedSkill(skill.skill_path ? skill.id : null)
-    createInput.setText(skill.prompt)
+    applyLocalizedSkillPrompt(skill)
     setHeroExpanded(true)
     detailPathActiveRef.current = true
     writeSkillDetailPath(skillId, 'replace')
     if (pendingIOSSkillId === skillId) clearIOSSkillReturn()
-  }, [clearDetailCloseTimer, clearIOSSkillReturn, homeSkills, isIOSAppShell, pathSkillId, selectedDetail, updateViewportInset, writeSkillDetailPath])
+  }, [applyLocalizedSkillPrompt, clearDetailCloseTimer, clearIOSSkillReturn, homeSkills, isIOSAppShell, pathSkillId, selectedDetail, updateViewportInset, writeSkillDetailPath])
 
   // Position slide when overlay DOM mounts via ref callback (stable — no deps to avoid re-bindinging)
   const detailSnapCallbackRef = useCallback((el: HTMLDivElement | null) => {
@@ -672,7 +775,7 @@ function HomePageInner() {
     requestAnimationFrame(() => {
       const skill = selectedDetailRef.current
       if (!skill) return
-      const skills = homeSkillsRef.current
+      const skills = detailSkillsRef.current
       const idx = skills.findIndex(t => t.id === skill.id)
       if (detailInnerRef.current && el) {
         const slideH = el.clientHeight
@@ -1300,8 +1403,8 @@ function HomePageInner() {
     setHeroExpanded(false)
     setSelectedDetail(template)
     setSelectedSkill(template.skill_path ? template.id : null)
-    createInput.setText(template.prompt)
-    const idx = homeSkills.findIndex(t => t.id === template.id)
+    applyLocalizedSkillPrompt(template)
+    const idx = filteredHomeSkills.findIndex(t => t.id === template.id)
     requestAnimationFrame(() => {
       setHeroExpanded(true)
       // Position to the clicked slide via JS transform (no scroll-snap)
@@ -1321,6 +1424,13 @@ function HomePageInner() {
   const fixedComposerBottom = isDesktop
     ? '24px'
     : `max(env(safe-area-inset-bottom, 0px), ${fixedComposerViewportInset}px)`
+  const categoryTabs = [
+    { id: 'all', label: t('skills.categoryAll') },
+    ...visibleSkillCategories.map(category => ({
+      id: category.id,
+      label: pickLocalizedValue(category.labels, locale, category.id),
+    })),
+  ]
 
   return (
     <>
@@ -1402,6 +1512,93 @@ function HomePageInner() {
           to   { opacity: 1; }
         }
         .mkr-spin { animation: mkr-spin 0.9s linear infinite; }
+
+        @keyframes mkr-category-grid-in {
+          from { opacity: 0.72; transform: translateY(3px); }
+          to { opacity: 1; transform: translateY(0); }
+        }
+        .mkr-category-grid {
+          animation: mkr-category-grid-in 0.14s cubic-bezier(0.22, 1, 0.36, 1) both;
+        }
+        .mkr-category-rail {
+          position: sticky;
+          top: env(safe-area-inset-top, 0px);
+          z-index: 60;
+          margin: 0 -24px 16px;
+          padding: 8px 24px 10px;
+          background: linear-gradient(to bottom, rgba(0,0,0,0.9) 0%, rgba(0,0,0,0.72) 72%, transparent 100%);
+          backdrop-filter: blur(12px) saturate(1.12);
+          -webkit-backdrop-filter: blur(12px) saturate(1.12);
+        }
+        .mkr-category-scroll {
+          min-height: 44px;
+          display: flex;
+          align-items: center;
+          justify-content: safe center;
+          gap: 24px;
+          overflow-x: auto;
+          overscroll-behavior-x: contain;
+          scrollbar-width: none;
+          -ms-overflow-style: none;
+        }
+        .mkr-category-scroll::-webkit-scrollbar { display: none; }
+        .mkr-category-tab {
+          position: relative;
+          flex: 0 0 auto;
+          height: 44px;
+          padding: 0 2px;
+          border: 0;
+          background: transparent;
+          color: rgba(255,255,255,0.42);
+          font: inherit;
+          font-size: 13px;
+          font-weight: 580;
+          line-height: 1;
+          letter-spacing: 0.005em;
+          cursor: pointer;
+          touch-action: manipulation;
+          -webkit-tap-highlight-color: transparent;
+          transition: color 0.16s ease;
+        }
+        .mkr-category-tab::after {
+          content: '';
+          position: absolute;
+          left: 50%;
+          bottom: 5px;
+          width: 20px;
+          height: 2px;
+          border-radius: 999px;
+          background: linear-gradient(90deg, transparent, #d946ef 28%, #e879f9 72%, transparent);
+          box-shadow: 0 0 10px rgba(217,70,239,0.28);
+          opacity: 0;
+          transform: translateX(-50%) scaleX(0.55);
+          transition: opacity 0.18s cubic-bezier(0.22, 1, 0.36, 1), transform 0.18s cubic-bezier(0.22, 1, 0.36, 1);
+        }
+        .mkr-category-tab[aria-pressed='true'] { color: rgba(255,255,255,0.96); }
+        .mkr-category-tab[aria-pressed='true']::after { opacity: 1; transform: translateX(-50%) scaleX(1); }
+        .mkr-category-tab:focus-visible {
+          outline: 1px solid rgba(232,121,249,0.55);
+          outline-offset: -2px;
+          border-radius: 6px;
+        }
+        @media (hover: hover) {
+          .mkr-category-tab:hover { color: rgba(255,255,255,0.7); }
+        }
+        @media (max-width: 767px) {
+          .mkr-category-rail { margin: 0 -14px 12px; padding: 6px 0 9px; }
+          .mkr-category-scroll {
+            justify-content: flex-start;
+            gap: 20px;
+            padding: 2px 14px;
+            scroll-padding-inline: 14px;
+            -webkit-mask-image: linear-gradient(to right, transparent 0, #000 14px, #000 calc(100% - 14px), transparent 100%);
+            mask-image: linear-gradient(to right, transparent 0, #000 14px, #000 calc(100% - 14px), transparent 100%);
+          }
+        }
+        @media (prefers-reduced-motion: reduce) {
+          .mkr-category-grid { animation: none; }
+          .mkr-category-tab, .mkr-category-tab::after { transition: none; }
+        }
 
         .hide-scrollbar { scrollbar-width: none; -ms-overflow-style: none; }
         .hide-scrollbar::-webkit-scrollbar { display: none; }
@@ -1513,7 +1710,7 @@ function HomePageInner() {
         </div>
 
         {/* ── Skill Template Grid ── */}
-        <div style={{
+        <div ref={skillSectionRef} data-testid="skill-market" style={{
           flex: 1,
           paddingLeft: isDesktop ? '24px' : '14px',
           paddingRight: isDesktop ? '24px' : '14px',
@@ -1523,7 +1720,12 @@ function HomePageInner() {
           width: '100%',
           margin: '0 auto',
         }}>
-          <div style={{ textAlign: 'center', marginBottom: isDesktop ? 24 : 16 }}>
+          <div style={{
+            textAlign: 'center',
+            marginBottom: (skillCategoriesLoading || visibleSkillCategories.length > 0)
+              ? (isDesktop ? 8 : 6)
+              : (isDesktop ? 24 : 16),
+          }}>
             <h2 style={{
               fontSize: isDesktop ? '1.25rem' : '1.1rem',
               fontWeight: 700,
@@ -1538,7 +1740,41 @@ function HomePageInner() {
               letterSpacing: '0.01em',
             }}>{t('skills.subtitle')}</p>
           </div>
-          <div style={{
+
+          {(skillCategoriesLoading || visibleSkillCategories.length > 0) && (
+            <nav
+              className="mkr-category-rail"
+              data-testid="skill-category-rail"
+              aria-label={t('skills.categories')}
+              aria-busy={skillCategoriesLoading}
+            >
+              <div ref={categoryScrollRef} className="mkr-category-scroll">
+                {(skillCategoriesLoading ? [{ id: 'all', label: t('skills.categoryAll') }] : categoryTabs).map(category => {
+                  const isActive = activeCategory === category.id
+                  return (
+                    <button
+                      key={category.id}
+                      ref={element => {
+                        if (element) categoryButtonRefs.current.set(category.id, element)
+                        else categoryButtonRefs.current.delete(category.id)
+                      }}
+                      type="button"
+                      className="mkr-category-tab"
+                      style={skillCategoriesLoading ? { visibility: 'hidden' } : undefined}
+                      aria-pressed={isActive}
+                      aria-controls="skill-market-grid"
+                      data-testid={`skill-category-${category.id}`}
+                      onClick={() => handleCategoryChange(category.id)}
+                    >
+                      {category.label}
+                    </button>
+                  )
+                })}
+              </div>
+            </nav>
+          )}
+
+          <div ref={skillGridRef} id="skill-market-grid" className="mkr-category-grid" data-testid="skill-grid" style={{
             display: 'grid',
             gridTemplateColumns: isDesktop ? 'repeat(auto-fill, minmax(200px, 1fr))' : 'repeat(2, 1fr)',
             gap: isDesktop ? '14px' : '10px',
@@ -1553,10 +1789,12 @@ function HomePageInner() {
                 </div>
               </div>
             ))}
-            {homeSkills.slice(0, visibleSkillCount).map((template, i) => (
+            {filteredHomeSkills.slice(0, visibleSkillCount).map((template, i) => (
               <div
                 key={template.id}
-                className="mkr-skill-card mkr-row-enter"
+                data-testid="home-skill-card"
+                data-skill-id={template.id}
+                className={`mkr-skill-card${categoryHasChanged ? '' : ' mkr-row-enter'}`}
                 onClick={(e) => handleSkillCardClick(template, e)}
                 style={{
                   position: 'relative',
@@ -1565,11 +1803,11 @@ function HomePageInner() {
                   overflow: 'hidden',
                   background: 'linear-gradient(145deg, rgba(18,13,26,0.48), rgba(8,8,12,0.64))',
                   border: '0.5px solid rgba(255,255,255,0.08)',
-                  animationDelay: `${Math.min(i, 8) * 0.045}s`,
+                  animationDelay: categoryHasChanged ? undefined : `${Math.min(i, 8) * 0.045}s`,
                   ...(heroRect && selectedDetail?.id === template.id ? { opacity: 0 } : {}),
                 }}
               >
-                {renderCoverMedia(template.image, template.labels.en || '', 'thumb', {
+                {renderCoverMedia(template.image, pickLocalizedValue(template.labels, locale), 'thumb', {
                   priority: i < 1,
                   suspended: !!selectedDetail,
                   fallbackSrc: template.before_images?.[0]
@@ -1603,7 +1841,7 @@ function HomePageInner() {
               </div>
             ))}
           </div>
-          {visibleSkillCount < homeSkills.length && (
+          {visibleSkillCount < filteredHomeSkills.length && (
             <div ref={skillLoadMoreRef} aria-hidden="true" style={{ height: 1, width: '100%' }} />
           )}
 
@@ -1853,7 +2091,7 @@ function HomePageInner() {
               onTouchStart={(e) => {
                 const touch = e.touches[0]
                 if (!touch) return
-                detailSwipeRef.current = { startY: touch.clientY, startIdx: homeSkills.findIndex(s => s.id === selectedDetail?.id), swiping: false }
+                detailSwipeRef.current = { startY: touch.clientY, startIdx: filteredHomeSkills.findIndex(s => s.id === selectedDetail?.id), swiping: false }
               }}
               onTouchMove={(e) => {
                 if (!detailSwipeRef.current) return
@@ -1878,7 +2116,7 @@ function HomePageInner() {
                 const deltaY = touch.clientY - detailSwipeRef.current.startY
                 const threshold = 60
                 let newIdx = detailSwipeRef.current.startIdx
-                if (deltaY < -threshold && newIdx < homeSkills.length - 1) newIdx++
+                if (deltaY < -threshold && newIdx < filteredHomeSkills.length - 1) newIdx++
                 else if (deltaY > threshold && newIdx > 0) newIdx--
                 if (detailInnerRef.current && detailSnapRef.current) {
                   const slideH = detailSnapRef.current.clientHeight
@@ -1886,7 +2124,7 @@ function HomePageInner() {
                   detailInnerRef.current.style.transform = `translateY(${-newIdx * slideH}px)`
                 }
                 if (newIdx !== detailSwipeRef.current.startIdx) {
-                  const t = homeSkills[newIdx]
+                  const t = filteredHomeSkills[newIdx]
                   if (t) {
                     clearDetailCloseTimer()
                     setTextareaFocused(false)
@@ -1895,8 +2133,7 @@ function HomePageInner() {
                     setViewMode('human')
                     setSelectedDetail(t)
                     setSelectedSkill(t.skill_path ? t.id : null)
-                    createInput.clear()
-                    createInput.setText(t.prompt)
+                    applyLocalizedSkillPrompt(t, true)
                     detailPathActiveRef.current = true
                     writeSkillDetailPath(t.id, 'replace')
                   }
@@ -1906,9 +2143,9 @@ function HomePageInner() {
               onWheel={(e) => {
                 if (wheelCooldownRef.current) return
                 if (Math.abs(e.deltaY) < 20) return
-                const currentIdx = homeSkills.findIndex(s => s.id === selectedDetail?.id)
+                const currentIdx = filteredHomeSkills.findIndex(s => s.id === selectedDetail?.id)
                 let newIdx = currentIdx
-                if (e.deltaY > 0 && newIdx < homeSkills.length - 1) newIdx++
+                if (e.deltaY > 0 && newIdx < filteredHomeSkills.length - 1) newIdx++
                 else if (e.deltaY < 0 && newIdx > 0) newIdx--
                 if (newIdx === currentIdx) return
                 wheelCooldownRef.current = true
@@ -1918,7 +2155,7 @@ function HomePageInner() {
                   detailInnerRef.current.style.transition = 'transform 0.35s cubic-bezier(0.22, 1, 0.36, 1)'
                   detailInnerRef.current.style.transform = `translateY(${-newIdx * slideH}px)`
                 }
-                const t = homeSkills[newIdx]
+                const t = filteredHomeSkills[newIdx]
                 if (t) {
                   clearDetailCloseTimer()
                   setTextareaFocused(false)
@@ -1927,8 +2164,7 @@ function HomePageInner() {
                   setViewMode('human')
                   setSelectedDetail(t)
                   setSelectedSkill(t.skill_path ? t.id : null)
-                  createInput.clear()
-                  createInput.setText(t.prompt)
+                  applyLocalizedSkillPrompt(t, true)
                   detailPathActiveRef.current = true
                   writeSkillDetailPath(t.id, 'replace')
                 }
@@ -1941,11 +2177,11 @@ function HomePageInner() {
             >
             <div ref={detailInnerRef} style={{ position: 'relative', width: '100%', height: '100%', willChange: 'transform' }}>
             {(() => {
-              const activeIdx = Math.max(0, homeSkills.findIndex(s => s.id === selectedDetail?.id))
+              const activeIdx = Math.max(0, filteredHomeSkills.findIndex(s => s.id === selectedDetail?.id))
               // Window: 4 before + active + 5 after = 10 slides rendered at most.
               const WINDOW_BEFORE = 4
               const WINDOW_AFTER = 5
-              return homeSkills.map((template, i) => {
+              return filteredHomeSkills.map((template, i) => {
                 const inWindow = i >= activeIdx - WINDOW_BEFORE && i <= activeIdx + WINDOW_AFTER
                 return (
                   <div
