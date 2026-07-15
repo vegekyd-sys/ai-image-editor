@@ -281,8 +281,8 @@ video a plain code-only slide deck.
 - Make sticker prompts composition-friendly: centered complete subject, clean
   edges, no text, no watermark, chroma-key background as required by the sticker
   workflow, and enough padding so motion does not crop the asset.
-- Use stickers at decisive beats: hook reveal, concept transition, proof moment,
-  recap/CTA. Avoid sprinkling stickers on every scene.
+- Use stickers where they carry the visual idea: hook reveal, concept transition,
+  proof moment, recurring character performance, recap, or CTA.
 - Prefer a coherent recurring asset system over unrelated one-offs. There is no
   fixed sticker quota; each asset must pass the Visual Director's job gate.
 - Animate sticker overlays as part of the explanation: float in, orbit, point,
