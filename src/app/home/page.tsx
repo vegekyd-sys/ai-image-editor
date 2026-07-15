@@ -19,7 +19,6 @@ import TopBar from '@/components/TopBar'
 import ModeToggle from '@/components/ModeToggle'
 import AgentContent from '@/components/AgentContent'
 import { type HomeSkill, getCachedHomeSkills, setCachedHomeSkills } from '@/lib/home-skills'
-import { useHomeVideoPoster } from '@/lib/home-video-poster'
 import { warmHomeSkillMedia } from '@/lib/home-skills-warm'
 import { getThumbnailUrl, getOptimizedUrl, normalizeDomain } from '@/lib/supabase/storage'
 import { isMakaronIOSApp } from '@/lib/native-app'
@@ -30,6 +29,7 @@ import MakaronLogo from '@/components/MakaronLogo'
 import LiquidGlassNav from '@/components/LiquidGlassNav'
 import { loadCreateAgentModelPreference, saveAgentModelPreference, saveCreateAgentModelPreference } from '@/lib/agent-model-preference'
 import type { AgentModelPreference } from '@/lib/agent-models'
+import { LazyVideo, SkillVideo } from '@/components/HomeSkillMedia'
 
 const Z = { INPUT: 100, HERO_FLY: 90, OVERLAY: 80, AMBIENT: 0 } as const
 const IOS_SKILL_BACK_EDGE_PX = 36
@@ -53,177 +53,6 @@ interface SkillsPayload {
 function isEditableTarget(target: EventTarget | null): boolean {
   if (!(target instanceof HTMLElement)) return false
   return Boolean(target.closest('input, textarea, select, button, [contenteditable="true"]'))
-}
-
-function LazyVideo({
-  src,
-  style,
-  eager = false,
-  suspended = false,
-}: {
-  src: string
-  style: React.CSSProperties
-  eager?: boolean
-  suspended?: boolean
-}) {
-  const observerRef = useRef<HTMLSpanElement>(null)
-  const videoRef = useRef<HTMLVideoElement>(null)
-  const [isNearViewport, setIsNearViewport] = useState(eager)
-  const [isVisible, setIsVisible] = useState(eager)
-  const [videoReady, setVideoReady] = useState(false)
-  const resolvedSrc = normalizeDomain(src)
-  const shouldAttach = isNearViewport && !suspended
-  // Thumbnail playback already supplies the first visible frame. Reusing an
-  // existing in-memory poster is fine, but generating one here would create a
-  // second Safari video pipeline/request for every visible card.
-  const poster = useHomeVideoPoster(src, false)
-
-  useEffect(() => {
-    const el = observerRef.current
-    if (!el) return
-    const nearObserver = new IntersectionObserver(([entry]) => {
-      const nearViewport = entry.isIntersecting
-      setIsNearViewport(nearViewport)
-    }, { rootMargin: '60px 0px', threshold: [0, 0.05] })
-    const visibleObserver = new IntersectionObserver(([entry]) => {
-      setIsVisible(entry.isIntersecting && entry.intersectionRatio > 0.15)
-    }, { threshold: [0, 0.15] })
-    nearObserver.observe(el)
-    visibleObserver.observe(el)
-    return () => {
-      nearObserver.disconnect()
-      visibleObserver.disconnect()
-    }
-  }, [eager])
-
-  useEffect(() => {
-    const video = videoRef.current
-    if (!video) return
-    video.muted = true
-    video.playsInline = true
-
-    if (!isVisible) {
-      video.pause()
-      return
-    }
-
-    const raf = window.requestAnimationFrame(() => {
-      void video.play().catch(() => undefined)
-    })
-    return () => {
-      window.cancelAnimationFrame(raf)
-      video.pause()
-    }
-  }, [isVisible, resolvedSrc, shouldAttach, suspended])
-
-  useEffect(() => {
-    setVideoReady(false)
-  }, [resolvedSrc])
-
-  return (
-    <span ref={observerRef} style={{ ...style, display: 'block', overflow: 'hidden' }}>
-      {poster && !videoReady && (
-        <img
-          src={poster}
-          alt=""
-          aria-hidden="true"
-          style={{ position: 'absolute', inset: 0, width: '100%', height: '100%', objectFit: 'cover', display: 'block' }}
-        />
-      )}
-      {shouldAttach && (
-        <video
-          ref={videoRef}
-          src={resolvedSrc}
-          loop
-          muted
-          playsInline
-          preload="metadata"
-          onLoadedData={() => setVideoReady(true)}
-          onCanPlay={() => setVideoReady(true)}
-          style={{ position: 'absolute', inset: 0, width: '100%', height: '100%', objectFit: 'cover', pointerEvents: 'none', opacity: videoReady ? 1 : 0, transition: 'opacity 120ms ease-out' }}
-        />
-      )}
-    </span>
-  )
-}
-
-function SkillVideo({
-  src,
-  style,
-  eager = false,
-  active = true,
-}: {
-  src: string
-  style: React.CSSProperties
-  eager?: boolean
-  active?: boolean
-}) {
-  const ref = useRef<HTMLVideoElement>(null)
-  const [videoReady, setVideoReady] = useState(false)
-  const resolvedSrc = normalizeDomain(src)
-  const shouldAttach = eager || active
-  const poster = useHomeVideoPoster(src, shouldAttach)
-
-  useEffect(() => {
-    const video = ref.current
-    if (!video) return
-    video.muted = true
-    video.playsInline = true
-    if (!shouldAttach) {
-      setVideoReady(false)
-      video.pause()
-      video.removeAttribute('src')
-      try {
-        video.load()
-      } catch {
-        // Releasing a detached Safari media pipeline is best-effort.
-      }
-      return
-    }
-    if (!active) {
-      video.pause()
-      return
-    }
-    if (eager || video.readyState === 0) video.load()
-    const play = () => {
-      void video.play().catch(() => {
-        window.setTimeout(() => {
-          video.muted = true
-          void video.play().catch(() => undefined)
-        }, 80)
-      })
-    }
-    const raf = window.requestAnimationFrame(play)
-    return () => window.cancelAnimationFrame(raf)
-  }, [active, eager, resolvedSrc, shouldAttach])
-
-  useEffect(() => {
-    setVideoReady(false)
-  }, [resolvedSrc])
-
-  return (
-    <>
-      {poster && !videoReady && (
-        <img
-          src={poster}
-          alt=""
-          aria-hidden="true"
-          style={{ ...style, display: 'block' }}
-        />
-      )}
-      <video
-        ref={ref}
-        src={shouldAttach ? resolvedSrc : undefined}
-        loop
-        muted
-        playsInline
-        preload={shouldAttach ? (eager ? 'auto' : 'metadata') : 'none'}
-        onLoadedData={() => setVideoReady(true)}
-        onCanPlay={() => setVideoReady(true)}
-        style={{ ...style, opacity: videoReady ? 1 : 0, transition: 'opacity 120ms ease-out' }}
-      />
-    </>
-  )
 }
 
 export default function HomePage() {
@@ -1437,12 +1266,12 @@ function HomePageInner() {
     url: string,
     alt: string,
     variant: CoverVariant,
-    opts?: { priority?: boolean; active?: boolean; suspended?: boolean; extraStyle?: React.CSSProperties },
+    opts?: { priority?: boolean; active?: boolean; suspended?: boolean; fallbackSrc?: string; extraStyle?: React.CSSProperties },
   ) => {
     const style: React.CSSProperties = { position: 'absolute', inset: 0, width: '100%', height: '100%', objectFit: variant === 'detail' ? 'contain' : 'cover', ...(variant === 'detail' ? { objectPosition: 'center 30%' } : {}), pointerEvents: 'none', ...opts?.extraStyle }
     if (isVideoUrl(url)) {
       if (variant === 'thumb') {
-        return <LazyVideo src={normalizeDomain(url)} style={style} eager={opts?.priority} suspended={opts?.suspended} />
+        return <LazyVideo src={normalizeDomain(url)} style={style} fallbackSrc={opts?.fallbackSrc} eager={opts?.priority} suspended={opts?.suspended} />
       }
       return <SkillVideo src={normalizeDomain(url)} style={style} eager={opts?.priority} active={opts?.active ?? true} />
     }
@@ -1747,12 +1576,17 @@ function HomePageInner() {
                   background: 'linear-gradient(145deg, rgba(18,13,26,0.48), rgba(8,8,12,0.64))',
                   border: '0.5px solid rgba(255,255,255,0.08)',
                   animationDelay: `${Math.min(i, 8) * 0.045}s`,
-                  contentVisibility: 'auto',
-                  containIntrinsicSize: '240px 320px',
                   ...(heroRect && selectedDetail?.id === template.id ? { opacity: 0 } : {}),
                 }}
               >
-                {renderCoverMedia(template.image, template.labels.en || '', 'thumb', { priority: i < 1, suspended: !!selectedDetail, extraStyle: { position: 'absolute', display: 'block' } })}
+                {renderCoverMedia(template.image, template.labels.en || '', 'thumb', {
+                  priority: i < 1,
+                  suspended: !!selectedDetail,
+                  fallbackSrc: template.before_images?.[0]
+                    ? getThumbnailUrl(template.before_images[0], 400, 70, 533, 'cover')
+                    : undefined,
+                  extraStyle: { position: 'absolute', display: 'block' },
+                })}
 
                 {/* Bottom gradient for text readability */}
                 <div style={{

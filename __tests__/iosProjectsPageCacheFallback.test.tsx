@@ -341,6 +341,70 @@ describe('iOS projects page cache fallback', () => {
     expect(samePage?.dataset.pageInstance).toBe(pageInstance);
   });
 
+  it('appends large project batches without remounting images that already loaded', async () => {
+    class ProjectListIntersectionObserver {
+      static instances: ProjectListIntersectionObserver[] = [];
+      callback: IntersectionObserverCallback;
+      observe = vi.fn();
+      disconnect = vi.fn();
+      unobserve = vi.fn();
+      takeRecords = vi.fn(() => []);
+      root = null;
+      rootMargin = '0px';
+      thresholds = [0];
+
+      constructor(callback: IntersectionObserverCallback) {
+        this.callback = callback;
+        ProjectListIntersectionObserver.instances.push(this);
+      }
+
+      enter() {
+        this.callback([
+          { isIntersecting: true, intersectionRatio: 1 } as IntersectionObserverEntry,
+        ], this as unknown as IntersectionObserver);
+      }
+    }
+
+    document.documentElement.classList.remove('makaron-ios-app');
+    vi.stubGlobal('IntersectionObserver', ProjectListIntersectionObserver);
+    clearUserCache();
+    cacheProjectsList('user-1', Array.from({ length: 50 }, (_, index) => ({
+      id: `project-${index + 1}`,
+      title: `Project ${index + 1}`,
+      cover_url: null,
+      updated_at: '2026-05-31T00:00:00.000Z',
+      created_at: '2026-05-31T00:00:00.000Z',
+      snapshots: [{
+        id: `snap-${index + 1}`,
+        image_url: `https://cdn.makaron.app/snap-${index + 1}.jpg`,
+        sort_order: 0,
+      }],
+    })));
+    authState.current = { user: { id: 'user-1' }, loading: false };
+    supabaseState.projectRowsPromise = new Promise(() => {});
+
+    render(<ProjectsPage />);
+
+    await waitFor(() => {
+      expect(document.querySelectorAll('[data-project-id]')).toHaveLength(24);
+    });
+    const firstImage = document.querySelector('[data-project-id="project-1"] img') as HTMLImageElement;
+    expect(firstImage).toBeTruthy();
+    fireEvent.load(firstImage);
+
+    act(() => ProjectListIntersectionObserver.instances.at(-1)?.enter());
+    await waitFor(() => {
+      expect(document.querySelectorAll('[data-project-id]')).toHaveLength(48);
+    });
+    expect(document.querySelector('[data-project-id="project-1"] img')).toBe(firstImage);
+
+    act(() => ProjectListIntersectionObserver.instances.at(-1)?.enter());
+    await waitFor(() => {
+      expect(document.querySelectorAll('[data-project-id]')).toHaveLength(50);
+    });
+    expect(document.querySelector('[data-project-id="project-1"] img')).toBe(firstImage);
+  });
+
   it('keeps the cached projects page visible during a brief iOS auth gap after returning from editor', async () => {
     const { rerender } = render(<ProjectsPage />);
 

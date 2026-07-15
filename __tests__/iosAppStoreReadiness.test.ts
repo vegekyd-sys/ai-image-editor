@@ -548,6 +548,7 @@ describe('iOS App Store readiness guardrails', () => {
 
   it('keeps iOS home skill detail back swipe scoped to the skill overlay', () => {
     const homePage = fs.readFileSync(path.join(root, 'src/app/home/page.tsx'), 'utf8');
+    const homeSkillMedia = fs.readFileSync(path.join(root, 'src/components/HomeSkillMedia.tsx'), 'utf8');
     expect(homePage).toContain('isMakaronIOSApp');
     expect(homePage).toContain('usePathname');
     expect(homePage).toContain('const isIOSAppShell = hydrated && isMakaronIOSApp()');
@@ -573,7 +574,7 @@ describe('iOS App Store readiness guardrails', () => {
     expect(homePage).toContain('draft.homeSkillId && draft.images.length === 0');
     expect(homePage).toContain("document.documentElement.style.overflow = 'hidden'");
     expect(homePage).toContain("window.addEventListener('makaron-ios-page-stack-back', unlockIfNoDetail)");
-    expect(homePage).toContain('function SkillVideo');
+    expect(homeSkillMedia).toContain('function SkillVideo');
     expect(homePage).toContain("slide.getAttribute('data-skill-id') === selectedDetail.id");
     expect(homePage).not.toContain('document.body.style.transform');
     expect(homePage).not.toContain('cloneNode');
@@ -710,9 +711,9 @@ describe('iOS App Store readiness guardrails', () => {
     expect(projectsPage).toContain('if (useIOSInlineProjectNavigation)');
     expect(projectsPage).toContain('openIOSProject(result.projectId)');
     expect(projectsPage).toContain('useIOSSafeImageUrls={useIOSInlineProjectNavigation}');
-    expect(projectsPage).toContain('getOriginFormatThumbnailUrl(lastSnap.image_url, 400, 50, 400)');
+    expect(projectsPage).toContain('getOriginFormatThumbnailUrl(coverUrl, 400, 50, 400)');
     expect(storage).toContain("'format=origin'");
-    expect(projectsPage).toContain('useState(useIOSSafeImageUrls)');
+    expect(projectsPage).toContain('useIOSSafeImageUrls ? imageSrc ?? null : null');
     expect(projectsPage).toContain('const shouldAnimateIn = !useIOSSafeImageUrls && index < 12');
     expect(projectsPage).toContain('animationDelay: shouldAnimateIn ?');
     expect(projectsPage).toContain("className={shouldAnimateIn ? 'mkr-card mkr-row-enter' : 'mkr-card'}");
