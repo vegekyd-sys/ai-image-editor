@@ -787,22 +787,17 @@ textarea {
 }
 
 .mkr-locale-trigger-compact {
-  min-height: 34px;
-  padding: 0 10px;
-  border-radius: 999px;
-  background:
-    radial-gradient(ellipse at 24% -35%, rgba(255,255,255,0.22), transparent 58%),
-    radial-gradient(circle at 96% 110%, rgba(217,70,239,0.12), transparent 50%),
-    linear-gradient(145deg, rgba(35,36,44,0.66), rgba(7,7,11,0.52));
-  box-shadow:
-    inset 0 1px 0 rgba(255,255,255,0.15),
-    inset 0 -1px 0 rgba(0,0,0,0.22),
-    0 9px 24px rgba(0,0,0,0.24);
-  backdrop-filter: blur(18px) saturate(1.4) contrast(1.04);
-  -webkit-backdrop-filter: blur(18px) saturate(1.4) contrast(1.04);
+  min-height: 32px;
+  padding: 0 2px;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  box-shadow: none;
+  backdrop-filter: none;
+  -webkit-backdrop-filter: none;
   font-size: 0.68rem;
-  font-weight: 660;
-  letter-spacing: 0.035em;
+  font-weight: 600;
+  letter-spacing: 0.02em;
 }
 
 .mkr-locale-trigger-menu {
@@ -840,6 +835,18 @@ textarea {
     0 12px 30px rgba(0,0,0,0.30);
 }
 
+.mkr-locale-trigger-compact:hover,
+.mkr-locale-trigger-compact[aria-expanded="true"] {
+  color: rgba(255,255,255,0.94);
+  border-color: transparent;
+  background: transparent;
+  box-shadow: none;
+}
+
+.mkr-locale-trigger-compact::before {
+  display: none;
+}
+
 .mkr-locale-trigger:active {
   transform: scale(0.97);
 }
@@ -855,6 +862,10 @@ textarea {
   align-items: center;
   min-width: 0;
   gap: 7px;
+}
+
+.mkr-locale-trigger-compact .mkr-locale-trigger-leading {
+  gap: 0;
 }
 
 .mkr-locale-globe {
