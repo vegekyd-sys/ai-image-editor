@@ -26,7 +26,7 @@ Before paid generation or Composition code, give every substantial scene one
 ```json
 {
   "carrier": "native | plate | cutout | edge-video",
-  "subject": "the one first-read subject",
+  "subject": "the subject, ensemble, or relationship carrying attention",
   "shotScale": "extreme-close | close | medium | wide",
   "compositionIntent": "how the frame directs attention",
   "backgroundIntent": "environment, depth, material, and contrast",
@@ -46,8 +46,9 @@ Carrier meanings:
 - `edge-video`: an opaque generated clip has quiet, stable edges designed to
   match the surrounding background, so it can blend without looking pasted in.
 
-Choose one primary carrier for each scene. Supporting media may coexist, but do
-not let three media systems compete for the first read.
+Record one dominant carrier for asset routing. Supporting media and native
+layers may coexist freely when their relationship makes the scene stronger; the
+carrier field is not a composition limit.
 
 ## Frame Direction
 
@@ -57,15 +58,15 @@ not let three media systems compete for the first read.
   objects on empty backgrounds are not a finished visual direction.
 - Let the hero subject occupy enough of the frame to carry the scene. Do not
   shrink it to make room for decorative UI.
-- Add production detail only when it reinforces scale, place, causality, or
-  rhythm: traces, shadows, particles, environmental responses, readouts, or
-  secondary actions should make the world feel specific.
+- Let production detail reinforce scale, place, causality, rhythm, and character:
+  traces, shadows, particles, environmental responses, readouts, and secondary
+  actions can make the world feel specific.
 - Solve density over time. Reveal and replace supporting information instead of
   packing a dashboard into one frame.
-- Reserve one or two hero moments for the strongest visual transformation. Do
-  not apply maximum intensity to every scene.
+- Shape contrast across the sequence so transformations and quiet moments make
+  each other more effective.
 
-## Asset Decision Gate
+## Asset Decision Conversation
 
 Before generating an asset, state:
 
@@ -75,11 +76,12 @@ Before generating an asset, state:
 4. whether it should be a `plate`, `cutout`, or `edge-video`;
 5. how its edges, lighting, palette, and motion will join the composition.
 
-Generate only assets that survive this gate. There is no required asset count.
+Use these questions to improve the decision, not to reject imaginative options.
+There is no required asset count.
 
-## Completion Check
+## Completion Reflection
 
-At representative frames, verify:
+At representative frames, consider:
 
 - the theme is visible in the image, not only stated in text;
 - the focal subject and shot scale match the scene's purpose;
@@ -89,9 +91,8 @@ At representative frames, verify:
 - removing the brand name would not make the video indistinguishable from a
   generic template.
 
-Compare the rendered frame to each scene's `visualPlan`, not merely to general
-readability. A `medium` or `close` hero reduced to a small centered icon on a
-mostly empty field is underfilled and fails even when the asset is sharp and
-the text is readable. Patch scale, crop, depth planes, or supporting action,
-then preview again. Record this check in the Composition draft gate and final
-MP4 review.
+Compare the rendered frame to each scene's intent, not merely to general
+readability. If a frame feels accidental, generic, or visually unresolved,
+consider scale, crop, depth, environment, relationships, or supporting action,
+then preview the improved source. This is creative judgment, not a numeric score
+or universal density gate.

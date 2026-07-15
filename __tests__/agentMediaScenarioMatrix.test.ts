@@ -59,7 +59,8 @@ describe('agent media scenario matrix', () => {
     expect(remotionDirectorContract).toContain('Do not let the implementation layer invent the creative structure by accident')
     expect(remotionDirectorContract).toContain('Do not default to hero sections, card grids')
     expect(remotionDirectorContract).toContain('The final plan must map cleanly to `<Sequence>` ranges')
-    expect(remotionDirectorContract).toContain('skills/_shared/remotion-video-director/references/remotion-patterns.md')
+    expect(remotionDirectorContract).toContain('skills/_shared/studio-production/taste-direction.md')
+    expect(remotionDirectorContract).toContain('libraries, not universal rules')
   })
 
   it('preserves old image scenarios in the dedicated image guide', () => {

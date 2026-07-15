@@ -62,9 +62,9 @@ For transcript requests or speech-dependent edits, call `transcribe_audio`
 first. New composition subtitles may follow their own narration timeline; use
 transcription only when exact timing matters. Use `analyze_video` for visuals.
 
-For long videos, multi-part videos, 15s+ output, visual anchors, or clip transitions, read `skills/long-video-director/SKILL.md` first. Do not jump straight to full scripts, do not use fenced code blocks, and do not bring up Remotion during that workflow.
+Explicit explainer, Studio Run, Remotion, or matched built-in Composition requests route to that editable workflow before provider duration limits. Do not reinterpret a 30s/60s Composition as provider clips.
 
-Exception: if the user explicitly asks to use Remotion, route to Remotion Composition Runtime instead. A 30s/35s/60s Remotion request is a local editable composition request, not a long-video provider generation request.
+For provider-generated long videos, multi-part generated clips, 15s+ provider output, visual anchors, or clip transitions, read `skills/long-video-director/SKILL.md` first. Do not jump straight to full scripts, do not use fenced code blocks, and do not bring up Remotion during that workflow.
 
 Hard duration range: a single SeeDance script/call must be 4-15s; Kling is 5-15s; Grok 1.5 is 1-15s for one starting image; Google Omni is 3-10s. If requested/source duration is shorter than the model minimum, use the minimum. If output is longer than the selected model max, use `skills/long-video-director/SKILL.md`, split into model-sized segments, show the plan, and stop for approval.
 

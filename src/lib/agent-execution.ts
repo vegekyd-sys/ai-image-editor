@@ -85,7 +85,7 @@ export function isConfirmedExecutionLeaseLoss(input: {
 
 export function isRetryableProviderOutage(detail: unknown): boolean {
   if (typeof detail !== 'string' || !detail.trim()) return false;
-  return /(?:serviceunavailableexception|bedrock.{0,120}(?:unable to process|service unavailable)|\b503\b|econnreset|tls connection was established)/i.test(detail);
+  return /(?:serviceunavailableexception|bedrock.{0,120}(?:unable to process|service unavailable)|\b503\b|econnreset|tls connection was established|step timeout.{0,80}exceeded)/i.test(detail);
 }
 
 export function getAgentContextPolicy(_modelId: string): AgentContextPolicy {

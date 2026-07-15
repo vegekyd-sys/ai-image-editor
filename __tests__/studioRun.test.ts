@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import {
   approveStudioStage,
+  completeStudioRunFromMaterialization,
   assertCompositionSubtitleTextAuthored,
   assertSubtitleSyncEvidence,
   assertSubtitleVisualReviewEvidence,
@@ -11,6 +12,7 @@ import {
   parseStudioRun,
   putPersistedStudioArtifacts,
   putStudioArtifact,
+  startPersistedStudioRun,
   studioArtifactSchemas,
   type StudioRunStore,
   type StudioRun,
@@ -101,6 +103,48 @@ function put(run: StudioRun, stage: StudioStageId, time = now) {
 }
 
 describe('Studio Run controller', () => {
+  it('reuses a matching fresh run when the Agent corrects its approval policy', async () => {
+    const runs: StudioRun[] = [];
+    const store: StudioRunStore = {
+      async saveRun(run) {
+        const index = runs.findIndex(candidate => candidate.id === run.id);
+        if (index >= 0) runs[index] = run;
+        else runs.push(run);
+        return studioRunStatePath(run.projectId, run.id);
+      },
+      async saveArtifact() { return 'unused.json'; },
+      async loadRun(projectId, runId) {
+        return runs.find(run => run.projectId === projectId && run.id === runId) || null;
+      },
+      async listRuns(projectId) {
+        return runs.filter(run => run.projectId === projectId);
+      },
+    };
+    const deliveryPromise = makeRun().deliveryPromise;
+
+    const guided = await startPersistedStudioRun({
+      store,
+      projectId: 'project-1',
+      recipe: 'explainer-video',
+      title: 'First attempt',
+      approvalPolicy: 'guided',
+      deliveryPromise,
+    });
+    const auto = await startPersistedStudioRun({
+      store,
+      projectId: 'project-1',
+      recipe: 'explainer-video',
+      title: 'Corrected attempt',
+      approvalPolicy: 'auto',
+      deliveryPromise,
+    });
+
+    expect(auto.id).toBe(guided.id);
+    expect(auto.approvalPolicy).toBe('auto');
+    expect(auto.title).toBe('Corrected attempt');
+    expect(runs).toHaveLength(1);
+  });
+
   it('derives mechanical Delivery fields from reviewed Studio artifacts', () => {
     expect(normalizeStudioDeliveryArtifact({
       candidate: { version: '2.0', outputPath: 'wrong/media.mp4', deliveredAt: 'not-a-date' },
@@ -132,8 +176,45 @@ describe('Studio Run controller', () => {
     }
     expect(run.status).toBe('completed');
     expect(run.currentStage).toBeNull();
-    expect(run.decisions.filter(decision => decision.category === 'approval')).toHaveLength(5);
+    expect(run.decisions.filter(decision => decision.category === 'approval')).toHaveLength(4);
     expect(parseStudioRun(JSON.stringify(run))).toEqual(run);
+  });
+
+  it('projects Review and Delivery atomically from successful materialization', () => {
+    let run = makeRun('auto');
+    for (const stage of ['brief', 'proposal', 'script', 'storyboard', 'assets', 'composition'] as StudioStageId[]) {
+      run = put(run, stage).run;
+    }
+
+    const result = completeStudioRunFromMaterialization({
+      run,
+      outputPath: 'https://cdn.example.com/final.mp4',
+      compositionDesignPath: 'code/makaron.json',
+      artifactPath: 'project-1/studio-runs/run-1/artifacts/delivery.v1.json',
+      now,
+    });
+
+    expect(result.run.status).toBe('completed');
+    expect(result.run.currentStage).toBeNull();
+    expect(result.run.stages.review.status).toBe('completed');
+    expect(result.run.artifacts.review).toBeUndefined();
+    expect(result.run.stages.delivery.status).toBe('completed');
+    expect(result.run.artifacts.delivery?.path).toBe('project-1/studio-runs/run-1/artifacts/delivery.v1.json');
+    expect(result.artifact).toMatchObject({
+      outputPath: 'https://cdn.example.com/final.mp4',
+      editableSourcePath: 'code/makaron.json',
+      deliveredAt: now,
+    });
+
+    const repeated = completeStudioRunFromMaterialization({
+      run: result.run,
+      outputPath: 'https://cdn.example.com/final.mp4',
+      compositionDesignPath: 'code/makaron.json',
+      artifactPath: 'ignored.json',
+      now,
+    });
+    expect(repeated.run).toEqual(result.run);
+    expect(repeated.ref).toEqual(result.ref);
   });
 
   it('stops a guided run at approval and resumes after explicit approval', () => {

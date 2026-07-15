@@ -42,12 +42,18 @@ describe('agent reliability policy', () => {
     expect(agent).toContain("'put_artifacts'");
     expect(agent).toContain('putPersistedStudioArtifacts');
     expect(agent).toContain('stageSchemas: Object.fromEntries');
+    expect(agent).toContain('include_stage_schemas');
+    expect(agent).toContain("planningMode: 'creative-packet'");
+    expect(agent).toContain("operation === 'put_creative_packet'");
+    expect(agent).toContain('buildStudioCreativeArtifacts');
     expect(agent).toContain('output.stageSchemas');
     expect(writer).toContain('studioRunUpdates');
-    expect(contract).toContain('Reuse the complete `stageSchemas`');
+    expect(contract).toContain('Do not request all eight stage schemas');
+    expect(contract).toContain('put_creative_packet');
     expect(contract).toContain('Composition draft gate');
     expect(contract).toContain('every scene boundary');
-    expect(contract).toContain('only persists the already-reviewed paths');
+    expect(contract).toContain('automatically completes Review and Delivery');
+    expect(contract).toContain('do not author Review');
     expect(contract).toContain('`prompts/remotion-composition.md`');
     expect(contract).toContain('`skills/_shared/remotion-director-contract.md`');
     expect(contract).toContain('does not replace or');
@@ -56,8 +62,8 @@ describe('agent reliability policy', () => {
     expect(director).toContain('## Anti-Web Rules');
     expect(contract).toContain('Do not compute SHA');
     expect(contract).toContain('materialize it once');
-    expect(review).toContain('## Composition Draft Gate');
-    expect(review).toContain('generic hook/body/end sample is not enough');
+    expect(review).toContain('## Composition Review Loop');
+    expect(review).toContain('generic hook/body/end sample is insufficient');
     expect(agent).not.toContain('hydrateCaptionCueProps');
     expect(agent).not.toContain('captionCuePath');
     expect(agent).not.toContain('__lastCaptionCuePath');
@@ -76,22 +82,23 @@ describe('agent reliability policy', () => {
     expect(agent).toContain(".select('design_path')");
   });
 
-  it('keeps corrected composition exports available across recovery and out of delivery', () => {
+  it('keeps corrected composition exports available and makes Studio materialization terminal', () => {
     const agent = read('src/lib/agent.ts');
     const nonRepeatable = agent.slice(
       agent.indexOf('const nonRepeatableTools = new Set(['),
       agent.indexOf(']);', agent.indexOf('const nonRepeatableTools = new Set([')),
     );
     expect(nonRepeatable).not.toContain("'materialize_media'");
-    expect(agent).toContain("studioCheckpoint.studioRunStage === 'delivery'");
+    expect(agent).toContain('Boolean(studioCheckpoint.studioRunId) || wait === true');
+    expect(agent).toContain('studioRunId: studioCheckpoint.studioRunId');
     expect(agent).toContain('shouldPreferLatestDraft');
     expect(agent).toContain('design_path: shouldPreferLatestDraft ? latestDraftPath : design_path');
   });
 
-  it('returns the exact published video media index for final review', () => {
+  it('returns the exact published video media index and terminal Studio result', () => {
     const agent = read('src/lib/agent.ts');
     expect(agent).toContain('ctx.snapshotImages.push(videoUrl)');
     expect(agent).toContain('mediaIndex: publishedMediaIndex');
-    expect(agent).toContain('Use media_index=${publishedMediaIndex} for final video review.');
+    expect(agent).toContain('Studio Run is complete; do not start another Review or Delivery step.');
   });
 });

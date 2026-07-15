@@ -1,32 +1,23 @@
 import agentCodingPrompt from './prompts/agent-coding.md';
 import remotionCompositionPrompt from './prompts/remotion-composition.md';
 import remotionDirectorContract from '@/skills/_shared/remotion-director-contract.md';
-import remotionVideoDirector from '@/skills/_shared/remotion-video-director/SKILL.md';
-import videoArchetypes from '@/skills/_shared/remotion-video-director/references/video-archetypes.md';
-import remotionPatterns from '@/skills/_shared/remotion-video-director/references/remotion-patterns.md';
-import componentLibrary from '@/skills/_shared/remotion-video-director/references/component-library.md';
 import visualDirection from '@/skills/_shared/visual-direction/SKILL.md';
+import tasteDirection from '@/skills/_shared/studio-production/taste-direction.md';
 
 export const PRELOADED_COMPOSITION_GUIDANCE_PATHS = [
   'prompts/agent-coding.md',
   'prompts/remotion-composition.md',
   'skills/_shared/remotion-director-contract.md',
-  'skills/_shared/remotion-video-director/SKILL.md',
-  'skills/_shared/remotion-video-director/references/video-archetypes.md',
-  'skills/_shared/remotion-video-director/references/remotion-patterns.md',
-  'skills/_shared/remotion-video-director/references/component-library.md',
   'skills/_shared/visual-direction/SKILL.md',
+  'skills/_shared/studio-production/taste-direction.md',
 ] as const;
 
 const PRELOADED_COMPOSITION_GUIDANCE = [
   agentCodingPrompt,
   remotionCompositionPrompt,
   remotionDirectorContract,
-  remotionVideoDirector,
-  videoArchetypes,
-  remotionPatterns,
-  componentLibrary,
   visualDirection,
+  tasteDirection,
 ] as const;
 
 export function buildDurableCompositionGuidance(): string {
@@ -36,8 +27,8 @@ export function buildDurableCompositionGuidance(): string {
 
   return [
     '',
-    '## Preloaded original Composition and Director guidance',
-    'The following repository files are loaded verbatim for this dedicated Composition attempt. They are the original guidance, not a summary or fast-path replacement.',
+    '## Preloaded Composition, Director, and Visual Invention guidance',
+    'The following core repository files are loaded verbatim for this dedicated Composition attempt. They are complete source documents, not a summary or fast-path replacement. Large archetype and component libraries remain available for selective reading after the direction calls for them; they are not universal defaults.',
     ...documents,
     '## Composition attempt execution order',
     'The guidance above is already in this model context. Do not call read_file for any of those paths in this attempt.',

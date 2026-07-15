@@ -1,6 +1,6 @@
 import { Buffer } from 'node:buffer';
 
-export const COMPOSITION_PART_MAX_CHARS = 5_000;
+export const COMPOSITION_PART_MAX_CHARS = 12_000;
 export const COMPOSITION_PART_FILENAME_PATTERN = /^\d{2,}-[a-z0-9-]+\.js$/;
 
 export interface CompositionPartSource {

@@ -7,8 +7,10 @@ work the same across video types.
 
 ## Required Order
 
-1. Start `studio_run` before writing the brief. Set `recipe` to the active
-   skill's `metadata.makaron.studioRunRecipe` value.
+1. Start `studio_run` before writing the creative packet. Set `recipe` to the
+   active skill's `metadata.makaron.studioRunRecipe` value. Keep
+   `include_stage_schemas` false for the normal path; later schemas are loaded
+   only when their stage begins.
 2. Lock the delivery promise. Do not silently change duration, canvas, FPS,
    runtime, editability, audio, or subtitle requirements later.
    - When the user does not specify resolution and explicitly prioritizes
@@ -16,22 +18,25 @@ work the same across video types.
    - When the promise is larger than the `fast_720p` result, materialize with
      `profile: "source"` on the first and only export. Never render fast and
      then render source merely to repair a known resolution mismatch.
-3. Read only the shared director modules needed by the recipe:
+3. Read only the shared director modules needed by the recipe, once:
+   - `taste-direction.md` for every authored video.
    - `reference-analysis.md` for reference-led work.
    - `audio-direction.md` for narration, source speech, music, or dubbing.
-   - `review-contract.md` before every gated artifact and final delivery.
-4. Persist each stage before moving to the next one. For `approval_policy=auto`,
-   batch only adjacent stages whose evidence is already known. A continuous
-   narration run should persist Brief through Script, generate and transcribe
-   the narration, then author Storyboard from real speech timing before Assets.
-   Each artifact is still validated, stored, and emitted to CUI separately.
-   Guided/manual runs continue to use one `put_artifact` at a time.
+   - `review-contract.md` once before Composition review begins.
+4. For `approval_policy=auto`, make one coherent creative decision containing
+   the brief, at least two concepts, the selected direction, and timed script.
+   Submit it once with `studio_run(operation: "put_creative_packet")`. The
+   harness projects it into separately validated Brief, Proposal, and Script
+   artifacts and emits each stage to CUI without another model continuation.
+   Then generate and transcribe continuous narration before authoring Storyboard
+   from real speech timing. Guided/manual runs continue to use one
+   `put_artifact` at a time so their approval pauses remain explicit.
 5. Build editable video with `run_code({ runtime: "composition" })`, save the
    first complete draft, and pass the Composition draft gate before any publish
    or MP4 export. The gate checks exact timeline duration, every scene boundary,
    the final visible frame, resolved audio sources, and zero unresolved issue.
-   Publish the exact gated draft, materialize it once, then perform the final
-   MP4 review.
+   Fix all findings directly in the Remotion source, publish the exact gated
+   draft, and materialize it once. Successful materialization completes the run.
 
 ## Stage Meanings
 
@@ -40,7 +45,7 @@ work the same across video types.
   path, cost estimate, selected direction, and locked delivery promise.
 - `script`: the timed content spine. For source-led work this can be transcript
   selections, edit beats, or translated cues instead of new narration.
-- `storyboard`: shot/scene plan, focal point, treatment, transition, safe areas,
+- `storyboard`: shot/scene plan, visual relationships, treatment, transition, safe areas,
   asset links, and real narration timing evidence when subtitles are promised.
 - `assets`: every source, generated asset, voice, music, font, and code module
   that the composition actually uses. Persist this stage only after required
@@ -48,9 +53,10 @@ work the same across video types.
 - `composition`: the real editable Remotion design path plus draft-gate evidence
   for full timeline coverage, every scene boundary, the ending, audio sources,
   three or more preview frames, and per-section subtitle/narration/visual timing.
-- `review`: technical, visual, audio, and delivery-promise checks against the
-  materialized MP4.
-- `delivery`: final MP4, editable source, optional hash, and delivery time.
+- `review`: a system-projected completion state after the Agent's Composition
+  preview-and-patch loop and successful materialization; no Agent JSON.
+- `delivery`: a system-projected final MP4 and editable source record created by
+  successful materialization; no Agent JSON.
 
 ## Approval Policy
 
@@ -73,17 +79,21 @@ work the same across video types.
 ## Efficient Execution
 
 - Prefer existing timeline/workspace assets and local code before paid generation.
-- Reuse the complete `stageSchemas` returned by `studio_run start`; do not call
-  `schema` separately for stages already present there. Use `schema` and
-  `status` only for recovery or after validation errors.
+- Do not request all eight stage schemas at `studio_run start`. The typed
+  `creative_packet` input already covers Brief through Script. Load only the
+  current later-stage schema with `status` after a handoff, or `schema` when the
+  artifact shape is not already present in context.
 - Before the first composition `run_code`, read
   `prompts/remotion-composition.md` and follow its original director contract at
   `skills/_shared/remotion-director-contract.md`. Studio Run does not replace or
   abbreviate the composition and director guidance.
 - For complete theme-driven work, read `skills/_shared/visual-direction/SKILL.md`
-  before Storyboard. Store one primary visual carrier and shot-scale decision in
-  each substantial scene's optional `visualPlan`; old runs without this field
-  remain valid.
+  and `skills/_shared/studio-production/taste-direction.md` before Storyboard.
+  The Visual Invention Pass is included in every dedicated Studio Composition
+  attempt as well. Store the dominant technical carrier and shot-scale decision
+  in each substantial scene's optional `visualPlan`; this metadata does not
+  limit supporting layers, visual density, or scene invention. Old runs without
+  this field remain valid.
 - If a scene selects `cutout` or `edge-video`, read
   `skills/_shared/visual-asset-bridge/SKILL.md`, call `prepare_visual_asset`
   during Assets, and store the returned record in that asset's optional
@@ -116,30 +126,27 @@ work the same across video types.
   A continuous voiceover needs real timing evidence from `transcribe_audio`;
   independently placed scene clips may use their explicit Remotion start times.
   Persist one `subtitleSyncEvidence` record per narrated Script section. The
-  record must include the exact `subtitleText` authored in the Composition at
-  its representative frame. That text may preserve the spoken line or use a
+  record must include the `subtitleText` intended for its representative frame.
+  That text may preserve the spoken line or use a
   concise phrase already authored in that same Script section's
   `onScreenText`; it does not have to duplicate narration word for word. It
-  cannot introduce unrelated copy from another beat. The harness cross-checks its linked Storyboard range and
-  representative overlap, and verifies that every claimed `subtitleText`
-  exists in the saved Composition code, props, or editables, without prescribing
-  placement, typography, JSX, or animation. Retiming and visual treatment remain
-  the Agent's job.
+  cannot introduce unrelated copy from another beat. The harness cross-checks
+  its linked Storyboard range and representative overlap. It does not require a
+  duplicate copy in props or editables: the Composition gate checks the actual
+  displayed text and picture alignment in representative preview frames.
+  Retiming and visual treatment remain the Agent's job.
 - Lock `width` and `height` from the approved delivery promise before the first
   `run_code` call. The harness rejects a mismatched Studio Composition before
   autosave, preview, or publication; do not prototype in another orientation.
+- Review is the Agent's preview-and-patch loop on the Remotion source. Resolve
+  all blocking issues directly in that code before export; do not author Review
+  JSON.
 - After one clean gate, publish that exact `design_path` once and materialize it
   once. Do not export a timeline `media_index` that may point to an older
-  snapshot. If the draft changes, recheck only affected boundaries plus the
-  ending before replacing the published snapshot.
-- Final Review checks the real MP4 for renderer/container/audio drift. Delivery
-  requires an actual `.mp4` output path; editable Composition JSON belongs only
-  in `editableSourcePath`. The harness derives both paths from persisted Review
-  and Composition artifacts and stamps `deliveredAt`; the Agent must not spend
-  extra turns reconstructing those mechanical fields. Delivery only persists the already-reviewed paths; it must not call `run_code`,
-  `preview_frame`, `write_file`, or `materialize_media`. Invalidate back to
-  Composition when a revision is required.
-- Probe source/output media once. Reuse that result for review and delivery.
+  snapshot. Successful Studio Run materialization waits for the real MP4 and
+  automatically completes Review and Delivery. Do not author Delivery JSON or
+  perform more tool calls after success.
+- Probe source media once. Reuse that result throughout Composition review.
 - Do not compute SHA unless the user explicitly requests an integrity checksum.
 
 ## Test Timing
@@ -147,9 +154,9 @@ work the same across video types.
 For every Studio Run used as a sample or acceptance test, retain its Agent run
 ID and report elapsed milestones from the event log. Create a fresh project and
 fresh Studio Run for every test round; source URLs may be reused as controlled
-inputs, but do not refine an older test project. Separate Agent completion,
-MP4-ready time, and Delivery completion; asynchronous export may make them
-different. Include planning, asset/audio generation, first composition, visual
-review/revision, export, total wall time, and counts for revisions, previews,
-and exports. Do not report an aesthetic comparison without its production-time
-comparison.
+inputs, but do not refine an older test project. Record Agent completion,
+MP4-ready time, and Delivery completion; Studio Run materialization should make
+the three terminal milestones identical. Include planning, asset/audio
+generation, first composition, visual review/revision, export, total wall time,
+and counts for revisions, previews, and exports. Do not report an aesthetic
+comparison without its production-time comparison.

@@ -147,6 +147,7 @@ describe('durable Agent execution', () => {
     expect(isRetryableProviderOutage('Bedrock is unable to process your request. status=503')).toBe(true);
     expect(isRetryableProviderOutage('ServiceUnavailableException')).toBe(true);
     expect(isRetryableProviderOutage('ECONNRESET before secure TLS connection was established')).toBe(true);
+    expect(isRetryableProviderOutage('TimeoutError: Step timeout of 150000ms exceeded')).toBe(true);
     expect(isRetryableProviderOutage('The composition failed to compile')).toBe(false);
   });
 

@@ -354,12 +354,17 @@ export async function runAgentExecutionAttempt(
     terminal_code?: string | null;
     metadata?: Record<string, unknown> | null;
   }>).find(item => item.metadata?.model === requestedModel.id);
+  const failoverAgentModel: AgentModelPreference | undefined = process.env.DEEPSEEK_API_KEY?.trim()
+    ? 'deepseek-v4-pro'
+    : process.env.OPENROUTER_API_KEY?.trim()
+      ? 'grok-4.5'
+      : undefined;
   const providerFailover = requestedModel.provider === 'bedrock-anthropic'
-    && Boolean(process.env.OPENROUTER_API_KEY?.trim())
+    && Boolean(failoverAgentModel)
     && latestRequestedProviderAttempt?.terminal_code === 'stream_error'
     && isRetryableProviderOutage(latestRequestedProviderAttempt.metadata?.terminalDetail);
   const effectiveAgentModel: AgentModelPreference | undefined = providerFailover
-    ? 'grok-4.5'
+    ? failoverAgentModel || request.requestedAgentModel
     : request.requestedAgentModel;
   const resolvedModel = resolveAgentModelSpec(effectiveAgentModel, process.env.AGENT_MODEL);
   const executionStore = new AgentExecutionStore(admin, run.user_id, run.project_id);

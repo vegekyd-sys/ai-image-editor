@@ -488,7 +488,8 @@ describe('Visual Asset Bridge', () => {
     expect(sticker).not.toContain('run_code({ runtime: "node" })');
     expect(sticker).not.toContain('threshold parameter');
     expect(director).toContain('Theme Before Style');
-    expect(director).toContain('one primary carrier');
+    expect(director).toContain('one dominant carrier for asset routing');
+    expect(director).toContain('carrier field is not a composition limit');
     expect(director).toContain('There is no required asset count');
     expect(bridge).toContain('Transparent video is intentionally unsupported');
     expect(bridge).toContain('Media Index is only the turn-time selector');

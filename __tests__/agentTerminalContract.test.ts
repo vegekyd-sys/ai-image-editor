@@ -15,6 +15,7 @@ describe('agent terminal contract wiring', () => {
   it('gates done on model termination and retries one stalled step from the saved draft', () => {
     expect(agentSource).toContain('classifyModelTermination({');
     expect(agentSource).toContain('timeout: { stepMs: stepTimeoutMs, totalMs: remainingInvocationBudgetMs }');
+    expect(agentSource).toContain("options?.execution ? { maxRetries: 0 } : {}");
     expect(agentSource).toContain('invocationBudgetMs - (Date.now() - agentStartTime)');
     expect(agentSource).toContain('options?.attemptBudgetMs');
     expect(agentSource).toContain('recoveryAttempt < 1');
@@ -25,6 +26,7 @@ describe('agent terminal contract wiring', () => {
     expect(agentSource).toContain('shouldHandoffToStudioComposition({');
     expect(agentSource).toContain("code: 'studio_stage_handoff'");
     expect(agentSource).toContain('&& !durableStageHandoff');
+    expect(agentSource).toContain('&& !options?.execution');
     expect(agentSource).toContain("code: 'studio_run_incomplete'");
     expect(agentSource).toContain("run.status !== 'running'");
     expect(agentSource).toContain('recoveryBlockedTools.add(toolName)');
@@ -46,7 +48,7 @@ describe('agent terminal contract wiring', () => {
     expect(agentSource).toContain('persistStreamedCodeCheckpoint(true)');
     expect(agentSource).not.toContain('under 9000 source characters');
     expect(agentSource).toContain('never begin a monolithic run_code payload');
-    expect(agentSource).toContain('hard transport limit of 5000 source characters');
+    expect(agentSource).toContain('hard transport limit of 12000 source characters');
     expect(agentSource).toContain('no aggregate source-size or part-count limit');
     expect(agentSource).toContain('Never shorten approved narration, subtitles, scenes, animation, or visual detail');
     expect(agentSource).toContain('composition_parts.directory');
@@ -62,6 +64,7 @@ describe('agent terminal contract wiring', () => {
     expect(executionRunnerSource).toContain('runAgentExecutionAttempt');
     expect(executionRunnerSource).toContain("status: 'handed_off'");
     expect(executionRunnerSource).toContain('next_attempt_at: new Date().toISOString()');
+    expect(executionRunnerSource).toContain("? 'deepseek-v4-pro'");
   });
 
   it('requires explicit done evidence in both persisted run routes', () => {

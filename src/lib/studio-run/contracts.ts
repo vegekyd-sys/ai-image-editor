@@ -229,7 +229,6 @@ const compositionSchema = z.object({
     [value.draftGate.boundaryFramesChecked >= requiredBoundaries, ['draftGate', 'boundaryFramesChecked'], `check every scene boundary before review (${requiredBoundaries} required)`],
     [value.draftGate.endingFrameChecked, ['draftGate', 'endingFrameChecked'], 'check the final visible frame before review'],
     [value.draftGate.visualPlanChecked, ['draftGate', 'visualPlanChecked'], 'compare rendered frames against the Storyboard visual plan'],
-    [value.draftGate.underfilledSceneIds.length === 0, ['draftGate', 'underfilledSceneIds'], 'patch underfilled scenes before review'],
     [value.draftGate.unresolvedIssues.length === 0, ['draftGate', 'unresolvedIssues'], 'resolve draft issues before review'],
   ];
   for (const [valid, path, message] of checks) {
@@ -284,7 +283,6 @@ const finalReviewSchema = z.object({
   value.visual.storyArcComplete !== false &&
   value.visual.endingResolves !== false &&
   value.visual.visualPlanHonored &&
-  !value.visual.underfilledFramesDetected &&
   value.visual.subtitleNarrationVisualAligned &&
   value.visual.subtitleVisualEvidence.every(item => item.alignment === 'pass') &&
   !value.audio.unexpectedSilence &&
@@ -330,6 +328,19 @@ export function normalizeStudioDeliveryArtifact(input: {
   });
 }
 
+export function buildStudioDeliveryArtifact(input: {
+  outputPath: string;
+  compositionDesignPath: string;
+  now?: string;
+}): z.infer<typeof deliverySchema> {
+  return deliverySchema.parse({
+    version: '1.0',
+    outputPath: input.outputPath,
+    editableSourcePath: input.compositionDesignPath,
+    deliveredAt: input.now || new Date().toISOString(),
+  });
+}
+
 export const stageDefinitions: Record<StudioStageId, {
   dependencies: StudioStageId[];
   approvalRequired: boolean;
@@ -342,7 +353,7 @@ export const stageDefinitions: Record<StudioStageId, {
   assets: { dependencies: ['storyboard'], approvalRequired: true, artifactName: 'asset-manifest' },
   composition: { dependencies: ['assets', 'script'], approvalRequired: false, artifactName: 'composition' },
   review: { dependencies: ['composition'], approvalRequired: false, artifactName: 'final-review' },
-  delivery: { dependencies: ['review'], approvalRequired: true, artifactName: 'delivery' },
+  delivery: { dependencies: ['review'], approvalRequired: false, artifactName: 'delivery' },
 };
 
 export const artifactRefSchema = z.object({

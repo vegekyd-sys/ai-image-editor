@@ -1,11 +1,13 @@
 import type { StudioRunStore } from './workspace-store';
 import {
   approveStudioStage,
+  completeStudioRunFromMaterialization,
   createStudioRun,
   invalidateStudioStage,
   putStudioArtifact,
 } from './controller';
 import {
+  studioRunSchema,
   type StudioApprovalPolicy,
   type StudioDeliveryPromise,
   type StudioRun,
@@ -22,6 +24,24 @@ export async function startPersistedStudioRun(input: {
   approvalPolicy: StudioApprovalPolicy;
   deliveryPromise: StudioDeliveryPromise;
 }): Promise<StudioRun> {
+  const matchingFreshRun = (await input.store.listRuns(input.projectId)).find(run => (
+    run.status === 'running'
+    && run.currentStage === 'brief'
+    && Object.keys(run.artifacts).length === 0
+    && run.recipe === input.recipe
+    && JSON.stringify(run.deliveryPromise) === JSON.stringify(input.deliveryPromise)
+  ));
+  if (matchingFreshRun) {
+    const run = studioRunSchema.parse({
+      ...matchingFreshRun,
+      title: input.title,
+      approvalPolicy: input.approvalPolicy,
+      updatedAt: new Date().toISOString(),
+    });
+    await input.store.saveRun(run);
+    return run;
+  }
+
   const run = createStudioRun(input);
   await input.store.saveRun(run);
   return run;
@@ -115,6 +135,28 @@ export async function invalidatePersistedStudioStage(input: {
   const result = invalidateStudioStage(input);
   await input.store.saveRun(result.run);
   return result;
+}
+
+export async function completePersistedStudioRunFromMaterialization(input: {
+  store: StudioRunStore;
+  run: StudioRun;
+  outputPath: string;
+  compositionDesignPath: string;
+}): Promise<{ run: StudioRun; artifactPath: string }> {
+  if (input.run.status === 'completed' && input.run.artifacts.delivery) {
+    return { run: input.run, artifactPath: input.run.artifacts.delivery.path };
+  }
+  const nextVersion = input.run.stages.delivery.artifactVersion + 1;
+  const artifactPath = studioArtifactPath(input.run.projectId, input.run.id, 'delivery', nextVersion);
+  const result = completeStudioRunFromMaterialization({
+    run: input.run,
+    outputPath: input.outputPath,
+    compositionDesignPath: input.compositionDesignPath,
+    artifactPath,
+  });
+  await input.store.saveArtifact(result.run, 'delivery', result.ref.version, result.artifact);
+  await input.store.saveRun(result.run);
+  return { run: result.run, artifactPath };
 }
 
 export * from './contracts';

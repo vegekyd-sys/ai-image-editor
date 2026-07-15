@@ -8,6 +8,7 @@ import {
   type StudioDeliveryPromise,
   type StudioRun,
   type StudioStageId,
+  buildStudioDeliveryArtifact,
   validateStudioArtifact,
 } from './contracts';
 
@@ -203,6 +204,73 @@ export function putStudioArtifact(input: {
   }
 
   return { run: studioRunSchema.parse(updateRunStatus(run, now)), artifact, ref, invalidated };
+}
+
+export function completeStudioRunFromMaterialization(input: {
+  run: StudioRun;
+  outputPath: string;
+  compositionDesignPath: string;
+  artifactPath: string;
+  now?: Date | string;
+}): { run: StudioRun; artifact: unknown; ref: StudioArtifactRef } {
+  const now = iso(input.now);
+  const run = studioRunSchema.parse(structuredClone(input.run));
+  if (run.stages.composition.status !== 'completed' || !run.artifacts.composition) {
+    throw new Error('Studio Run materialization requires a completed Composition artifact.');
+  }
+  if (run.status === 'completed' && run.stages.delivery.status === 'completed' && run.artifacts.delivery) {
+    return {
+      run,
+      artifact: buildStudioDeliveryArtifact({
+        outputPath: input.outputPath,
+        compositionDesignPath: input.compositionDesignPath,
+        now,
+      }),
+      ref: run.artifacts.delivery,
+    };
+  }
+
+  const artifact = buildStudioDeliveryArtifact({
+    outputPath: input.outputPath,
+    compositionDesignPath: input.compositionDesignPath,
+    now,
+  });
+  const nextVersion = run.stages.delivery.artifactVersion + 1;
+  const ref: StudioArtifactRef = {
+    stage: 'delivery',
+    version: nextVersion,
+    path: input.artifactPath,
+    sha256: hashArtifact(artifact),
+    createdAt: now,
+  };
+
+  run.stages.review = {
+    status: 'completed',
+    artifactVersion: run.stages.review.artifactVersion,
+    updatedAt: now,
+  };
+  delete run.artifacts.review;
+  run.stages.delivery = {
+    status: 'completed',
+    artifactVersion: nextVersion,
+    updatedAt: now,
+    approvedAt: now,
+  };
+  run.artifacts.delivery = ref;
+  run.decisions.push({
+    id: randomUUID(),
+    category: 'approval',
+    stage: 'delivery',
+    summary: 'Completed automatically from successful materialize_media export',
+    automatic: true,
+    createdAt: now,
+  });
+
+  return {
+    run: studioRunSchema.parse(updateRunStatus(run, now)),
+    artifact,
+    ref,
+  };
 }
 
 export function approveStudioStage(input: {

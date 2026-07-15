@@ -61,6 +61,7 @@ export interface CreateRemotionExportJobInput {
   publish?: boolean
   publishSnapshotId?: string
   name?: string
+  studioRunId?: string
 }
 
 export interface RemotionExportResult {
@@ -308,6 +309,44 @@ async function addPublishSnapshotId(job: RemotionExportJob, snapshotId?: string)
   return data as RemotionExportJob
 }
 
+async function attachStudioRunId(job: RemotionExportJob, studioRunId?: string): Promise<RemotionExportJob> {
+  if (!studioRunId || job.metadata?.studioRunId === studioRunId) return job
+  const metadata = { ...(job.metadata || {}), studioRunId }
+  const admin = getSupabaseAdmin()
+  const { data, error } = await admin
+    .from('remotion_export_jobs')
+    .update({ metadata })
+    .eq('id', job.id)
+    .select('*')
+    .single()
+  if (error) throw new Error(error.message)
+  return data as RemotionExportJob
+}
+
+async function completeStudioRunForExport(job: RemotionExportJob): Promise<void> {
+  const studioRunId = typeof job.metadata?.studioRunId === 'string' ? job.metadata.studioRunId : ''
+  const outputPath = job.storage_url || job.workspace_path || ''
+  const compositionDesignPath = job.design_path
+    || (typeof job.metadata?.designPath === 'string' ? job.metadata.designPath : '')
+  if (!studioRunId || job.status !== 'completed' || job.output_type !== 'video' || !outputPath || !compositionDesignPath) return
+
+  try {
+    const { WorkspaceStudioRunStore, completePersistedStudioRunFromMaterialization } = await import('@/lib/studio-run')
+    const admin = getSupabaseAdmin()
+    const store = new WorkspaceStudioRunStore(admin, job.user_id)
+    const run = await store.loadRun(job.project_id, studioRunId)
+    if (!run) return
+    await completePersistedStudioRunFromMaterialization({
+      store,
+      run,
+      outputPath,
+      compositionDesignPath,
+    })
+  } catch (error) {
+    console.warn('[remotion-export] Could not complete Studio Run from materialization:', error)
+  }
+}
+
 async function markPublishedSnapshotsFailed(
   supabase: SupabaseClient,
   job: RemotionExportJob,
@@ -455,6 +494,7 @@ export async function createRemotionExportJob(input: CreateRemotionExportJobInpu
     || (reusableRows || [])[0]
   if (reusable) {
     let job = await addPublishSnapshotId(reusable as RemotionExportJob, input.publishSnapshotId)
+    job = await attachStudioRunId(job, input.studioRunId)
     const reusableNeedsPromotion = !job.workspace_path?.startsWith(`${job.project_id}/`)
       || !job.storage_url?.includes('/workspace/')
     if (job.status === 'completed' && input.publish && reusableNeedsPromotion && job.storage_url) {
@@ -491,6 +531,7 @@ export async function createRemotionExportJob(input: CreateRemotionExportJobInpu
       }, input.publishSnapshotId)
       job = await getRemotionExportJob(job.id) || job
     }
+    await completeStudioRunForExport(job)
     return job
   }
 
@@ -502,6 +543,7 @@ export async function createRemotionExportJob(input: CreateRemotionExportJobInpu
     metadata.publishSnapshotId = input.publishSnapshotId
     metadata.publishSnapshotIds = [input.publishSnapshotId]
   }
+  if (input.studioRunId) metadata.studioRunId = input.studioRunId
   metadata.renderProfile = renderProfile
 
   const { data, error } = await admin.from('remotion_export_jobs').insert({
@@ -1039,6 +1081,8 @@ async function executeRemotionExportJob(job: RemotionExportJob): Promise<Remotio
       .select('*')
       .single()
     if (error) throw new Error(error.message)
+
+    await completeStudioRunForExport(updated as RemotionExportJob)
 
     return { job: updated as RemotionExportJob, design: resolvedDesign }
   } catch (err) {
