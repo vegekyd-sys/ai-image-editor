@@ -2,6 +2,7 @@ import type { Metadata, Viewport } from "next";
 import { Geist, Geist_Mono } from "next/font/google";
 import { cookies, headers } from "next/headers";
 import { Suspense } from "react";
+import AIDataConsentGate from "@/components/AIDataConsentGate";
 import AuthProvider from "@/components/AuthProvider";
 import NativeAppBootstrap from "@/components/NativeAppBootstrap";
 import NativeIOSPageStack from "@/components/NativeIOSPageStack";
@@ -9,6 +10,7 @@ import MarketingTracker from "@/components/MarketingTracker";
 import MobileAppEventsBootstrap from "@/components/MobileAppEventsBootstrap";
 import { LocaleProvider } from "@/lib/i18n";
 import { getLocaleConfig } from "@/lib/locales";
+import { userAgentHasMakaronIOSToken } from "@/lib/native-app";
 import { DEFAULT_DESCRIPTION, DEFAULT_OG_IMAGE, SITE_NAME, SITE_URL } from "@/lib/seo";
 import { resolveRequestLocale } from "@/lib/server-locale";
 import "./globals.css";
@@ -75,6 +77,7 @@ export default async function RootLayout({
     headerStore.get('accept-language'),
   );
   const htmlLang = getLocaleConfig(locale).htmlLang;
+  const requiresAIDataConsent = userAgentHasMakaronIOSToken(headerStore.get('user-agent') ?? undefined);
 
   return (
     <html lang={htmlLang} className={`${geistSans.variable} ${geistMono.variable} bg-black`}>
@@ -91,9 +94,11 @@ export default async function RootLayout({
             <Suspense fallback={null}>
               <MarketingTracker />
             </Suspense>
-            <Suspense fallback={<>{children}</>}>
-              <NativeIOSPageStack>{children}</NativeIOSPageStack>
-            </Suspense>
+            <AIDataConsentGate required={requiresAIDataConsent}>
+              <Suspense fallback={<>{children}</>}>
+                <NativeIOSPageStack>{children}</NativeIOSPageStack>
+              </Suspense>
+            </AIDataConsentGate>
           </AuthProvider>
         </LocaleProvider>
       </body>

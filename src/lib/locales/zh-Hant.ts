@@ -76,6 +76,21 @@ const zhHant = {
   'nav.accountNavigation': '帳號導覽',
   'nav.primary': '主要導覽',
 
+  // AI data consent
+  'aiConsent.title': '允許 AI 處理你的內容？',
+  'aiConsent.body': 'Makaron 需要把你選擇的內容傳送給第三方 AI 服務，才能完成圖片編輯、影片、音訊和對話產生。只有你允許後，我們才會傳送。',
+  'aiConsent.dataTitle': '會傳送什麼',
+  'aiConsent.data': '你主動選擇的照片、影片、音訊、提示詞、聊天訊息，以及繼續編輯時所需的產生內容。',
+  'aiConsent.providersTitle': '傳送給誰',
+  'aiConsent.providers': '依你選擇的功能，內容可能由 Google、OpenAI / Microsoft Azure、Anthropic / Amazon Web Services、DeepSeek、xAI、字節跳動 / 火山引擎、快手 / Kling、Hugging Face / fal.ai、SunoAPI.org，以及 OpenRouter、PiAPI 或 Evolink 等處理服務處理。',
+  'aiConsent.accountData': '你的登入電子郵件、密碼和付款資訊不會傳送給 AI 服務。',
+  'aiConsent.allow': '允許 AI 處理並繼續',
+  'aiConsent.notNow': '暫不允許',
+  'aiConsent.offTitle': 'AI 處理已關閉',
+  'aiConsent.offBody': 'Makaron 不會把你的內容傳送給第三方 AI 服務。由於 AI 處理是核心功能，你需要允許後才能開始創作。',
+  'aiConsent.review': '重新查看並選擇',
+  'aiConsent.privacy': '查看隱私權政策',
+
   // Project management
   'project.untitled': '未命名',
   'project.rename': '重新命名',

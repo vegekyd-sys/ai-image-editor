@@ -46,6 +46,24 @@ describe('iOS App Store readiness guardrails', () => {
     expect(authCallback).toContain("r='/home?skill='+encodeURIComponent(skillMatch[1])");
   });
 
+  it('requires explicit AI data-sharing consent before mounting iOS creative content', () => {
+    const layout = fs.readFileSync(path.join(root, 'src/app/layout.tsx'), 'utf8');
+    const gate = fs.readFileSync(path.join(root, 'src/components/AIDataConsentGate.tsx'), 'utf8');
+    const privacy = fs.readFileSync(path.join(root, 'src/app/privacy/page.tsx'), 'utf8');
+    const migration = fs.readFileSync(path.join(root, 'supabase/migrations/20260715000000_hide_app_review_sensitive_skills.sql'), 'utf8');
+
+    expect(layout).toContain('userAgentHasMakaronIOSToken');
+    expect(layout).toContain('<AIDataConsentGate required={requiresAIDataConsent}>');
+    expect(gate).toContain("'makaron:ai-data-consent:v1'");
+    expect(gate).toContain("setState('declined')");
+    expect(gate).toContain('makaron_ai_data_consent=v1');
+    expect(privacy).toContain('Before the Makaron iOS app sends your content');
+    expect(privacy).toContain('Google (Gemini)');
+    expect(privacy).toContain('same or equivalent privacy and security protection');
+    expect(migration).toContain("'34bd54e7-8b2e-49f6-a746-d8658ab63fd5'");
+    expect(migration).toContain("'00f126ac-7451-4ee6-8025-e67dcc7b0169'");
+  });
+
   it('tracks the migration acceptance criteria in docs', () => {
     const plan = fs.readFileSync(path.join(root, 'docs/ios-migration-test-plan.md'), 'utf8');
     expect(plan).toContain('Keyboard adaptation');

@@ -347,6 +347,21 @@ const zh = {
   'nav.accountNavigation': '账户导航',
   'nav.primary': '主导航',
 
+  // AI data consent
+  'aiConsent.title': '允许 AI 处理你的内容？',
+  'aiConsent.body': 'Makaron 需要把你选择的内容发送给第三方 AI 服务，才能完成图片编辑、视频、音频和对话生成。只有你允许后，我们才会发送。',
+  'aiConsent.dataTitle': '会发送什么',
+  'aiConsent.data': '你主动选择的照片、视频、音频、提示词、聊天消息，以及继续编辑时所需的生成内容。',
+  'aiConsent.providersTitle': '发送给谁',
+  'aiConsent.providers': '根据你选择的功能，内容可能由 Google、OpenAI / Microsoft Azure、Anthropic / Amazon Web Services、DeepSeek、xAI、字节跳动 / 火山引擎、快手 / Kling、Hugging Face / fal.ai、SunoAPI.org，以及 OpenRouter、PiAPI 或 Evolink 等处理服务处理。',
+  'aiConsent.accountData': '你的登录邮箱、密码和付款信息不会发送给 AI 服务。',
+  'aiConsent.allow': '允许 AI 处理并继续',
+  'aiConsent.notNow': '暂不允许',
+  'aiConsent.offTitle': 'AI 处理已关闭',
+  'aiConsent.offBody': 'Makaron 不会把你的内容发送给第三方 AI 服务。由于 AI 处理是核心功能，你需要允许后才能开始创作。',
+  'aiConsent.review': '重新查看并选择',
+  'aiConsent.privacy': '查看隐私政策',
+
   // Home creation flow
   'home.create': '创建',
   'home.createPlaceholder': '描述你想要的创意...',

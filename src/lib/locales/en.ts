@@ -347,6 +347,21 @@ const en = {
   'nav.accountNavigation': 'Account navigation',
   'nav.primary': 'Primary navigation',
 
+  // AI data consent
+  'aiConsent.title': 'Allow AI processing of your content?',
+  'aiConsent.body': 'To edit images and generate video, audio, or chat results, Makaron must send the content you choose to third-party AI services. We send it only after you allow this.',
+  'aiConsent.dataTitle': 'What is sent',
+  'aiConsent.data': 'Photos, videos, audio, prompts, chat messages, and generated content you choose when a follow-up edit needs it.',
+  'aiConsent.providersTitle': 'Who receives it',
+  'aiConsent.providers': 'Depending on the feature you choose, content may be processed by Google, OpenAI / Microsoft Azure, Anthropic / Amazon Web Services, DeepSeek, xAI, ByteDance / Volcengine, Kuaishou / Kling, Hugging Face / fal.ai, SunoAPI.org, and processing services such as OpenRouter, PiAPI, or Evolink.',
+  'aiConsent.accountData': 'Your sign-in email, password, and payment information are not sent to AI services.',
+  'aiConsent.allow': 'Allow AI processing and continue',
+  'aiConsent.notNow': 'Not now',
+  'aiConsent.offTitle': 'AI processing is off',
+  'aiConsent.offBody': 'Makaron will not send your content to third-party AI services. Because AI processing is a core feature, you need to allow it before you can create.',
+  'aiConsent.review': 'Review and choose again',
+  'aiConsent.privacy': 'View Privacy Policy',
+
   // Home creation flow
   'home.create': 'Create',
   'home.createPlaceholder': 'Describe what you want to create...',
