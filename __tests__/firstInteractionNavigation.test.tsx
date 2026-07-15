@@ -7,6 +7,7 @@ const mocks = vi.hoisted(() => ({
   push: vi.fn(),
   prefetch: vi.fn(),
   warmProjectsListCache: vi.fn(),
+  hydrated: true,
 }))
 
 vi.mock('next/navigation', () => ({
@@ -15,6 +16,10 @@ vi.mock('next/navigation', () => ({
 
 vi.mock('@/hooks/useAuth', () => ({
   useAuth: () => ({ user: null, loading: false, signOut: vi.fn() }),
+}))
+
+vi.mock('@/hooks/useHydrated', () => ({
+  useHydrated: () => mocks.hydrated,
 }))
 
 vi.mock('@/lib/i18n', () => ({
@@ -46,9 +51,11 @@ vi.mock('@/lib/native-page-stack', () => ({
 describe('first interaction navigation', () => {
   beforeEach(() => {
     vi.clearAllMocks()
+    mocks.hydrated = true
   })
 
-  it('lets Explore and Projects use native link navigation without React interception', () => {
+  it('keeps native href navigation available before hydration', () => {
+    mocks.hydrated = false
     render(<LiquidGlassNav active="explore" requireAuth={false} />)
 
     expect(screen.getByRole('link', { name: '探索' }).getAttribute('href')).toBe('/home')
@@ -62,6 +69,39 @@ describe('first interaction navigation', () => {
     }
     document.addEventListener('click', observeDefault, { once: true })
     fireEvent.click(projects)
+
+    expect(preventedByReact).toBe(false)
+    expect(mocks.push).not.toHaveBeenCalled()
+  })
+
+  it('uses client navigation after hydration so media caches survive route switches', () => {
+    render(<LiquidGlassNav active="explore" requireAuth={false} />)
+
+    const projects = screen.getByRole('link', { name: '项目' })
+    let preventedByReact: boolean | null = null
+    document.addEventListener('click', (event) => {
+      preventedByReact = event.defaultPrevented
+    }, { once: true })
+
+    fireEvent.click(projects)
+
+    expect(preventedByReact).toBe(true)
+    expect(mocks.push).toHaveBeenCalledTimes(1)
+    expect(mocks.push).toHaveBeenCalledWith('/projects')
+  })
+
+  it('leaves modified clicks to the browser after hydration', () => {
+    render(<LiquidGlassNav active="explore" requireAuth={false} />)
+
+    const projects = screen.getByRole('link', { name: '项目' })
+    let preventedByReact: boolean | null = null
+    const observeDefault = (event: Event) => {
+      preventedByReact = event.defaultPrevented
+      event.preventDefault()
+    }
+    document.addEventListener('click', observeDefault, { once: true })
+
+    fireEvent.click(projects, { metaKey: true })
 
     expect(preventedByReact).toBe(false)
     expect(mocks.push).not.toHaveBeenCalled()

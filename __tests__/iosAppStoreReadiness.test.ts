@@ -235,7 +235,9 @@ describe('iOS App Store readiness guardrails', () => {
     expect(liquidGlassNav).toContain("surface === 'explore' ? '/home' : '/projects'");
     expect(liquidGlassNav).toContain("sessionStorage.setItem(IOS_RESET_HOME_SCROLL_KEY, '1')");
     expect(liquidGlassNav).toContain("touchAction: 'manipulation'");
-    expect(liquidGlassNav).toContain('window.requestAnimationFrame(() => router.push(path))');
+    expect(liquidGlassNav).toContain('event.preventDefault()');
+    expect(liquidGlassNav).toContain('router.push(path)');
+    expect(liquidGlassNav).not.toContain('window.requestAnimationFrame(() => router.push(path))');
     expect(liquidGlassNav).toContain('onTouchStart={() => warmRoute(item.value)}');
     expect(topBar).toContain("requestIdleCallback(warm, { timeout: 1600 })");
     expect(topBar).toContain('window.setTimeout(warm, 240)');

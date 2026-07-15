@@ -1,6 +1,7 @@
 'use client'
 
 import { useCallback, useEffect, useState } from 'react'
+import type { MouseEvent } from 'react'
 import { useRouter } from 'next/navigation'
 import { useAuth } from '@/hooks/useAuth'
 import { useLocale } from '@/lib/i18n'
@@ -108,12 +109,29 @@ export default function LiquidGlassNav({
     }
     warmRoute(surface)
     setVisualActive(surface)
-    if (typeof window === 'undefined') {
-      router.push(path)
-      return
-    }
-    window.requestAnimationFrame(() => router.push(path))
+    router.push(path)
   }, [active, onChange, pathFor, router, warmRoute])
+
+  const handleRouteClick = useCallback((
+    event: MouseEvent<HTMLAnchorElement>,
+    surface: PrimarySurface,
+  ) => {
+    // Keep the real href as the pre-hydration fallback. Once React is ready,
+    // preserve the in-memory media caches with client-side navigation while
+    // leaving modifier/middle clicks to the browser.
+    if (
+      !hydrated
+      || event.defaultPrevented
+      || event.button !== 0
+      || event.metaKey
+      || event.ctrlKey
+      || event.shiftKey
+      || event.altKey
+    ) return
+
+    event.preventDefault()
+    navigate(surface)
+  }, [hydrated, navigate])
 
   if (requireAuth && (!hydrated || !user)) return null
 
@@ -146,13 +164,16 @@ export default function LiquidGlassNav({
         {navItems.map((item) => {
           const isActive = visualActive === item.value
           if (item.value === 'explore' || item.value === 'projects') {
-            const href = pathFor(item.value)
+            const surface: PrimarySurface = item.value
+            const href = pathFor(surface)
             return (
               <a
                 key={item.value}
                 href={href}
                 aria-current={active === item.value ? 'page' : undefined}
+                onClick={(event) => handleRouteClick(event, surface)}
                 onPointerEnter={() => warmRoute(item.value)}
+                onTouchStart={() => warmRoute(item.value)}
                 onFocus={() => warmRoute(item.value)}
                 className="mkr-liquid-nav-button"
                 data-active={isActive ? 'true' : 'false'}
