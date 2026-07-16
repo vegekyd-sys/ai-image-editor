@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest'
 import {
   canStartHomeSkillCategorySwipe,
   getAdjacentHomeSkillCategoryId,
+  getHomeSkillCategorySwipePresentation,
   resolveHomeSkillCategorySwipe,
 } from '@/lib/home-skill-category-swipe'
 
@@ -36,5 +37,25 @@ describe('home skill card area category swipe', () => {
     expect(canStartHomeSkillCategorySwipe(8, 390)).toBe(false)
     expect(canStartHomeSkillCategorySwipe(382, 390)).toBe(false)
     expect(canStartHomeSkillCategorySwipe(195, 390)).toBe(true)
+  })
+
+  it('gives the card grid a restrained follow gesture and edge resistance', () => {
+    expect(getHomeSkillCategorySwipePresentation({
+      deltaX: -200,
+      regionWidth: 390,
+      atBoundary: false,
+    })).toEqual({ translateX: -36, opacity: 0.86 })
+
+    expect(getHomeSkillCategorySwipePresentation({
+      deltaX: 200,
+      regionWidth: 390,
+      atBoundary: true,
+    })).toEqual({ translateX: 14, opacity: 0.97 })
+
+    expect(getHomeSkillCategorySwipePresentation({
+      deltaX: 0,
+      regionWidth: 390,
+      atBoundary: false,
+    })).toEqual({ translateX: 0, opacity: 1 })
   })
 })

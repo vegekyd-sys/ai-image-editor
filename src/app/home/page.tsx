@@ -43,6 +43,7 @@ import {
   HOME_SKILL_CATEGORY_SWIPE_AXIS_LOCK_PX,
   canStartHomeSkillCategorySwipe,
   getAdjacentHomeSkillCategoryId,
+  getHomeSkillCategorySwipePresentation,
   resolveHomeSkillCategorySwipe,
   type HomeSkillCategorySwipeDirection,
 } from '@/lib/home-skill-category-swipe'
@@ -132,6 +133,8 @@ function HomePageInner() {
     axis: 'x' | 'y' | null
   } | null>(null)
   const skillCategorySwipeSuppressClickUntilRef = useRef(0)
+  const skillCategorySwipeAnimationRef = useRef<Animation | null>(null)
+  const skillCategorySwipeTransitioningRef = useRef(false)
   const [selectedSkill, setSelectedSkill] = useState<string | null>(null)
   const [availableSkills, setAvailableSkills] = useState<{ name: string; label: string; icon: string; color: string; builtIn: boolean }[]>([])
   const [skillMenuOpen, setSkillMenuOpen] = useState(false)
@@ -256,9 +259,9 @@ function HomePageInner() {
 
       if (!reduceMotion) {
         const entryTransform = swipeDirection === 'next'
-          ? 'translateX(12px)'
+          ? 'translateX(20px)'
           : swipeDirection === 'previous'
-            ? 'translateX(-12px)'
+            ? 'translateX(-20px)'
             : 'translateY(3px)'
         skillGridRef.current?.animate([
           { opacity: 0.68, transform: entryTransform },
@@ -398,8 +401,95 @@ function HomePageInner() {
       return null
     }
 
+    const clearGridPresentation = () => {
+      skillGrid.style.transform = ''
+      skillGrid.style.opacity = ''
+      skillGrid.style.willChange = ''
+      delete skillGrid.dataset.swipeMotion
+    }
+
+    const cancelGridAnimation = () => {
+      skillCategorySwipeAnimationRef.current?.cancel()
+      skillCategorySwipeAnimationRef.current = null
+    }
+
+    const getDragPresentation = (deltaX: number) => {
+      const dragDirection: HomeSkillCategorySwipeDirection = deltaX < 0 ? 'next' : 'previous'
+      const adjacentCategoryId = getAdjacentHomeSkillCategoryId(
+        categoryTabIdsRef.current,
+        activeCategoryRef.current,
+        dragDirection,
+      )
+      return getHomeSkillCategorySwipePresentation({
+        deltaX,
+        regionWidth: skillGrid.clientWidth,
+        atBoundary: !adjacentCategoryId,
+      })
+    }
+
+    const applyDragPresentation = (deltaX: number) => {
+      const presentation = getDragPresentation(deltaX)
+      skillGrid.style.animation = 'none'
+      skillGrid.style.willChange = 'transform, opacity'
+      skillGrid.style.transform = `translate3d(${presentation.translateX}px, 0, 0)`
+      skillGrid.style.opacity = String(presentation.opacity)
+      skillGrid.dataset.swipeMotion = 'dragging'
+      return presentation
+    }
+
+    const animateGrid = (
+      from: { translateX: number; opacity: number },
+      to: { translateX: number; opacity: number },
+      duration: number,
+      easing: string,
+      motion: 'settling' | 'switching',
+      onFinish?: () => void,
+    ) => {
+      cancelGridAnimation()
+      skillGrid.dataset.swipeMotion = motion
+      if (window.matchMedia('(prefers-reduced-motion: reduce)').matches) {
+        clearGridPresentation()
+        onFinish?.()
+        return
+      }
+
+      const animation = skillGrid.animate([
+        {
+          transform: `translate3d(${from.translateX}px, 0, 0)`,
+          opacity: from.opacity,
+        },
+        {
+          transform: `translate3d(${to.translateX}px, 0, 0)`,
+          opacity: to.opacity,
+        },
+      ], { duration, easing, fill: 'forwards' })
+      skillCategorySwipeAnimationRef.current = animation
+      animation.finished.then(() => {
+        if (skillCategorySwipeAnimationRef.current !== animation) return
+        skillCategorySwipeAnimationRef.current = null
+        animation.cancel()
+        clearGridPresentation()
+        onFinish?.()
+      }).catch(() => {})
+    }
+
+    const settleGrid = (deltaX: number) => {
+      animateGrid(
+        getDragPresentation(deltaX),
+        { translateX: 0, opacity: 1 },
+        170,
+        'cubic-bezier(0.22, 1, 0.36, 1)',
+        'settling',
+      )
+    }
+
     const onTouchStart = (event: TouchEvent) => {
-      if (event.touches.length !== 1 || selectedDetailRef.current || isEditableTarget(event.target)) {
+      if (
+        event.touches.length !== 1
+        || selectedDetailRef.current
+        || isEditableTarget(event.target)
+        || skillCategorySwipeTransitioningRef.current
+      ) {
         skillCategorySwipeRef.current = null
         return
       }
@@ -409,6 +499,8 @@ function HomePageInner() {
         return
       }
 
+      cancelGridAnimation()
+      clearGridPresentation()
       skillCategorySwipeRef.current = {
         identifier: touch.identifier,
         startX: touch.clientX,
@@ -442,6 +534,7 @@ function HomePageInner() {
 
       skillCategorySwipeSuppressClickUntilRef.current = performance.now() + 500
       if (event.cancelable) event.preventDefault()
+      applyDragPresentation(deltaX)
     }
 
     const onTouchEnd = (event: TouchEvent) => {
@@ -468,13 +561,35 @@ function HomePageInner() {
             activeCategoryRef.current,
             direction,
           )
-          if (nextCategoryId) handleCategoryChange(nextCategoryId, direction)
+          if (nextCategoryId) {
+            const from = getDragPresentation(deltaX)
+            const exitDistance = Math.min(54, Math.max(42, skillGrid.clientWidth * 0.14))
+            const exitTranslateX = direction === 'next' ? -exitDistance : exitDistance
+            skillCategorySwipeTransitioningRef.current = true
+            animateGrid(
+              from,
+              { translateX: exitTranslateX, opacity: 0.58 },
+              110,
+              'cubic-bezier(0.4, 0, 1, 1)',
+              'switching',
+              () => {
+                skillCategorySwipeTransitioningRef.current = false
+                handleCategoryChange(nextCategoryId, direction)
+              },
+            )
+          } else {
+            settleGrid(deltaX)
+          }
+        } else {
+          settleGrid(deltaX)
         }
       }
       skillCategorySwipeRef.current = null
     }
 
     const onTouchCancel = () => {
+      const gesture = skillCategorySwipeRef.current
+      if (gesture?.axis === 'x') settleGrid(gesture.lastX - gesture.startX)
       skillCategorySwipeRef.current = null
     }
 
@@ -487,6 +602,9 @@ function HomePageInner() {
       skillGrid.removeEventListener('touchmove', onTouchMove)
       skillGrid.removeEventListener('touchend', onTouchEnd)
       skillGrid.removeEventListener('touchcancel', onTouchCancel)
+      cancelGridAnimation()
+      clearGridPresentation()
+      skillCategorySwipeTransitioningRef.current = false
     }
   }, [categoryTabIds, handleCategoryChange])
 
