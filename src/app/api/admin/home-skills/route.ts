@@ -55,6 +55,31 @@ function firstLocalizedValue(value: Record<string, string>): string {
   return value.en || value.zh || value['zh-Hant'] || value.ja || ''
 }
 
+function missingLocales(value: Record<string, string>): string[] {
+  return LOCALE_CONFIG
+    .map(({ code }) => code)
+    .filter(code => !value[code])
+}
+
+async function validateCategories(
+  admin: ReturnType<typeof getSupabaseAdmin>,
+  categories: string[],
+): Promise<{ error: string; status: number } | null> {
+  if (categories.length === 0) {
+    return { error: 'At least one category is required', status: 400 }
+  }
+  const { data, error } = await admin
+    .from('skill_categories')
+    .select('id')
+    .in('id', categories)
+  if (error) return { error: error.message, status: 500 }
+  const existingIds = new Set((data || []).map(category => category.id))
+  const unknown = categories.filter(category => !existingIds.has(category))
+  return unknown.length > 0
+    ? { error: `Unknown categories: ${unknown.join(', ')}`, status: 400 }
+    : null
+}
+
 async function readBody(req: NextRequest): Promise<JsonObject | null> {
   try {
     return asObject(await req.json())
@@ -85,24 +110,32 @@ export async function POST(req: NextRequest) {
 
   const labels = sanitizeLocalizedCopy(body.labels)
   const image = typeof body.image === 'string' ? body.image.trim() : ''
-  if (Object.keys(labels).length === 0 || !image) {
-    return NextResponse.json({ error: 'At least one localized title and an image are required' }, { status: 400 })
-  }
-
-  const legacyInput = typeof body.prompt === 'string' ? body.prompt.trim() : ''
   const prompts = sanitizeLocalizedCopy(body.prompts)
-  if (Object.keys(prompts).length === 0 && legacyInput) prompts.en = legacyInput
-  const legacyPrompt = prompts.en || legacyInput || firstLocalizedValue(prompts)
+  const missingTitles = missingLocales(labels)
+  const missingPrompts = missingLocales(prompts)
+  if (missingTitles.length > 0) {
+    return NextResponse.json({ error: `Missing localized titles: ${missingTitles.join(', ')}` }, { status: 400 })
+  }
+  if (missingPrompts.length > 0) {
+    return NextResponse.json({ error: `Missing localized prompts: ${missingPrompts.join(', ')}` }, { status: 400 })
+  }
+  if (!image) return NextResponse.json({ error: 'image required' }, { status: 400 })
+
+  const categories = sanitizeCategories(body.categories)
 
   const admin = getSupabaseAdmin()
+  const categoryError = await validateCategories(admin, categories)
+  if (categoryError) {
+    return NextResponse.json({ error: categoryError.error }, { status: categoryError.status })
+  }
   const { data, error } = await admin
     .from('home_skills')
     .insert({
       labels,
       image,
       prompts,
-      prompt: legacyPrompt,
-      categories: sanitizeCategories(body.categories),
+      prompt: prompts.en || firstLocalizedValue(prompts),
+      categories,
       skill_path: typeof body.skill_path === 'string' && body.skill_path.trim() ? body.skill_path.trim() : null,
       image_count: asInteger(body.image_count, 1, 1, 10),
       sort_order: asInteger(body.sort_order, 0, -100000, 100000),
@@ -124,13 +157,25 @@ export async function PUT(req: NextRequest) {
   const id = typeof body.id === 'string' ? body.id.trim() : ''
   if (!id) return NextResponse.json({ error: 'id required' }, { status: 400 })
 
+  const admin = getSupabaseAdmin()
   const updates: JsonObject = {}
+  const updatesLocalizedCopy = hasOwn(body, 'labels') || hasOwn(body, 'prompts')
+  let existing: { labels?: unknown; prompts?: unknown; prompt?: unknown } | null = null
+  if (updatesLocalizedCopy) {
+    const { data, error } = await admin
+      .from('home_skills')
+      .select('labels,prompts,prompt')
+      .eq('id', id)
+      .single()
+    if (error) return NextResponse.json({ error: error.message }, { status: 500 })
+    existing = data
+  }
   if (hasOwn(body, 'labels')) {
     const labels = sanitizeLocalizedCopy(body.labels)
     if (Object.keys(labels).length === 0) {
       return NextResponse.json({ error: 'At least one localized title is required' }, { status: 400 })
     }
-    updates.labels = labels
+    updates.labels = { ...sanitizeLocalizedCopy(existing?.labels), ...labels }
   }
   if (hasOwn(body, 'image')) {
     const image = typeof body.image === 'string' ? body.image.trim() : ''
@@ -139,16 +184,29 @@ export async function PUT(req: NextRequest) {
   }
   if (hasOwn(body, 'prompts')) {
     const prompts = sanitizeLocalizedCopy(body.prompts)
-    updates.prompts = prompts
-    if (prompts.en) {
-      updates.prompt = prompts.en
+    const legacyPrompt = typeof existing?.prompt === 'string' ? existing.prompt.trim() : ''
+    const mergedPrompts = {
+      ...(legacyPrompt ? { en: legacyPrompt } : {}),
+      ...sanitizeLocalizedCopy(existing?.prompts),
+      ...prompts,
+    }
+    updates.prompts = mergedPrompts
+    if (mergedPrompts.en) {
+      updates.prompt = mergedPrompts.en
     } else if (hasOwn(body, 'prompt')) {
       updates.prompt = typeof body.prompt === 'string' ? body.prompt.trim() : ''
     }
   } else if (hasOwn(body, 'prompt')) {
     updates.prompt = typeof body.prompt === 'string' ? body.prompt.trim() : ''
   }
-  if (hasOwn(body, 'categories')) updates.categories = sanitizeCategories(body.categories)
+  if (hasOwn(body, 'categories')) {
+    const categories = sanitizeCategories(body.categories)
+    const categoryError = await validateCategories(admin, categories)
+    if (categoryError) {
+      return NextResponse.json({ error: categoryError.error }, { status: categoryError.status })
+    }
+    updates.categories = categories
+  }
   if (hasOwn(body, 'skill_path')) {
     updates.skill_path = typeof body.skill_path === 'string' && body.skill_path.trim() ? body.skill_path.trim() : null
   }
@@ -165,7 +223,6 @@ export async function PUT(req: NextRequest) {
   }
   updates.updated_at = new Date().toISOString()
 
-  const admin = getSupabaseAdmin()
   const { error } = await admin
     .from('home_skills')
     .update(updates)

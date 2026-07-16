@@ -451,7 +451,22 @@ Admin commands require an API key with admin privileges. Ask your admin to run `
 
 ```bash
 npx makaron-cli admin skills
+npx makaron-cli admin skills --json
 ```
+
+The human-readable list includes assigned categories plus title/prompt locale completeness.
+
+### Manage marketplace categories
+
+```bash
+npx makaron-cli admin skill-categories
+npx makaron-cli admin skill-categories --json
+npx makaron-cli admin skill-categories add '{"id":"portrait-effects","labels":{"en":"Portrait Effects","zh":"人像特效","zh-Hant":"人像特效","ja":"ポートレート効果"},"icon":"✨","sort_order":10}'
+npx makaron-cli admin skill-categories update portrait-effects '{"icon":"📸"}'
+npx makaron-cli admin skill-categories delete portrait-effects
+```
+
+Deleting a category is blocked while any marketplace skill still uses it.
 
 ### Upload assets to Storage
 
@@ -475,9 +490,10 @@ Storage paths follow this convention:
 
 ```bash
 npx makaron-cli admin skills add '{
-  "labels": {"zh": "中文名", "en": "English Name"},
+  "labels": {"en": "English Name", "zh": "中文名", "zh-Hant": "繁體名稱", "ja": "日本語名"},
   "image": "https://sdyrtztrjgmmpnirswxt.supabase.co/storage/v1/object/public/images/marketplace/covers/skill-name.jpg",
-  "prompt": "Default prompt shown to users",
+  "prompts": {"en": "Default prompt", "zh": "默认提示词", "zh-Hant": "預設提示詞", "ja": "デフォルトプロンプト"},
+  "categories": ["portrait-effects"],
   "skill_path": "https://sdyrtztrjgmmpnirswxt.supabase.co/storage/v1/object/public/images/marketplace/skills/skill-name.zip",
   "image_count": 2,
   "sort_order": 10,
@@ -485,6 +501,8 @@ npx makaron-cli admin skills add '{
   "before_images": ["https://sdyrtztrjgmmpnirswxt.supabase.co/storage/v1/object/public/images/marketplace/before/before-name.jpg"]
 }'
 ```
+
+New skills require all four localized titles, all four localized default prompts, and at least one existing category. Partial `labels` or `prompts` updates are merged with existing locales, so updating one language does not erase the others.
 
 ### Update / delete a skill
 
@@ -520,7 +538,7 @@ npx makaron-cli admin fetch-skill https://www.makaron.app/s/4c4cbd57
    ```
 6. **Add to marketplace**:
    ```bash
-   npx makaron-cli admin skills add '{"labels":{"zh":"...","en":"..."},"image":"<cover_url>","skill_path":"<zip_url>","before_images":["<before_url>"],"image_count":2,"sort_order":10,"is_active":true}'
+   npx makaron-cli admin skills add '{"labels":{"en":"...","zh":"...","zh-Hant":"...","ja":"..."},"prompts":{"en":"...","zh":"...","zh-Hant":"...","ja":"..."},"categories":["portrait-effects"],"image":"<cover_url>","skill_path":"<zip_url>","before_images":["<before_url>"],"image_count":2,"sort_order":10,"is_active":true}'
    ```
 7. **Verify** — visit https://www.makaron.app/home and confirm the skill appears, can be clicked, and works
 

@@ -107,15 +107,32 @@ export async function PUT(req: NextRequest) {
   const id = sanitizeId(body.id)
   if (!id) return NextResponse.json({ error: 'Valid id required' }, { status: 400 })
 
+  const admin = getSupabaseAdmin()
   const updates: JsonObject = {}
+  const updatesLocalizedCopy = hasOwn(body, 'labels') || hasOwn(body, 'descriptions')
+  let existing: { labels?: unknown; descriptions?: unknown } | null = null
+  if (updatesLocalizedCopy) {
+    const { data, error } = await admin
+      .from('skill_categories')
+      .select('labels,descriptions')
+      .eq('id', id)
+      .single()
+    if (error) return NextResponse.json({ error: error.message }, { status: 500 })
+    existing = data
+  }
   if (hasOwn(body, 'labels')) {
     const labels = sanitizeLocalizedCopy(body.labels)
     if (Object.keys(labels).length === 0) {
       return NextResponse.json({ error: 'At least one localized title is required' }, { status: 400 })
     }
-    updates.labels = labels
+    updates.labels = { ...sanitizeLocalizedCopy(existing?.labels), ...labels }
   }
-  if (hasOwn(body, 'descriptions')) updates.descriptions = sanitizeLocalizedCopy(body.descriptions)
+  if (hasOwn(body, 'descriptions')) {
+    updates.descriptions = {
+      ...sanitizeLocalizedCopy(existing?.descriptions),
+      ...sanitizeLocalizedCopy(body.descriptions),
+    }
+  }
   if (hasOwn(body, 'icon')) {
     updates.icon = typeof body.icon === 'string' && body.icon.trim() ? body.icon.trim().slice(0, 32) : null
   }
@@ -129,7 +146,6 @@ export async function PUT(req: NextRequest) {
   }
   updates.updated_at = new Date().toISOString()
 
-  const admin = getSupabaseAdmin()
   const { data, error } = await admin
     .from('skill_categories')
     .update(updates)

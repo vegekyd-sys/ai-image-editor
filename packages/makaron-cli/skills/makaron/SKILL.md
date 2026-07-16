@@ -126,7 +126,9 @@ npx makaron-cli chat --project auto \
   -b "make this with the selected skill"
 ```
 
-`--skill` accepts an installed skill name, a marketplace UUID, or a unique marketplace label. If a marketplace skill is matched, the CLI installs or reuses it and sends `[Active skill: <installed-skill-name>]` to Makaron Agent. Do not call admin skill commands for ordinary users. There is intentionally no user-facing CLI delete command for marketplace skills.
+`--skill` accepts an installed skill name, a marketplace UUID, or a unique marketplace label. Marketplace search matches every localized title, every localized default prompt, and category ids. If a marketplace skill is matched, the CLI installs or reuses it and sends `[Active skill: <installed-skill-name>]` to Makaron Agent. Do not call admin skill commands for ordinary users. There is intentionally no user-facing CLI delete command for marketplace skills.
+
+For an explicitly authorized marketplace administrator, `admin skills` shows category assignment and 4-locale title/prompt completeness, while `admin skill-categories` supports list/add/update/delete. New skills must include `en`, `zh`, `zh-Hant`, and `ja` in both `labels` and `prompts`, plus at least one existing `categories` id. Partial localized updates are safely merged server-side.
 
 ### With additional images (existing project)
 

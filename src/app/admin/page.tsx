@@ -1274,7 +1274,10 @@ function SkillEditorModal({ skill, categories, onClose, onSaved }: {
   const [saving, setSaving] = useState(false)
   const [saveError, setSaveError] = useState('')
 
-  const canSave = image.trim() !== '' && Object.values(labels).some(value => value.trim())
+  const hasCompleteLocalizedCopy = Object.values(labels).every(value => value.trim())
+    && Object.values(prompts).every(value => value.trim())
+  const canSave = image.trim() !== ''
+    && (isNew ? hasCompleteLocalizedCopy && selectedCategories.length > 0 : Object.values(labels).some(value => value.trim()))
 
   const handleSave = async () => {
     setSaving(true)
@@ -1359,6 +1362,12 @@ function SkillEditorModal({ skill, categories, onClose, onSaved }: {
             multiline
           />
 
+          {isNew && !hasCompleteLocalizedCopy && (
+            <div className="rounded-lg border border-amber-400/15 bg-amber-400/5 px-3 py-2 text-xs text-amber-200/65">
+              New skills require titles and default prompts in all four locales.
+            </div>
+          )}
+
           {/* Categories */}
           <div>
             <label className="mb-1.5 block text-xs font-medium text-white/60">Categories</label>
@@ -1398,6 +1407,9 @@ function SkillEditorModal({ skill, categories, onClose, onSaved }: {
                 className="mt-2 mr-2 rounded-md border border-amber-400/20 px-2 py-1 text-[11px] text-amber-300/60"
               >Remove missing category: {id}</button>
             ))}
+            {isNew && selectedCategories.length === 0 && (
+              <div className="mt-2 text-xs text-amber-200/55">Choose at least one category.</div>
+            )}
           </div>
 
           {/* Skill zip */}
