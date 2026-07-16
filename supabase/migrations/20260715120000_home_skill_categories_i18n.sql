@@ -32,8 +32,8 @@ INSERT INTO public.skill_categories AS existing (id, labels, descriptions, sort_
 VALUES
   (
     'video',
-    '{"zh":"视频","zh-Hant":"影片","ja":"動画","en":"Video"}'::jsonb,
-    '{"zh":"让照片动起来","zh-Hant":"讓照片動起來","ja":"写真を動画に","en":"Bring photos to life"}'::jsonb,
+    '{"zh":"动态影像","zh-Hant":"動態影像","ja":"動画制作","en":"Motion"}'::jsonb,
+    '{"zh":"照片动画、转场与短片叙事","zh-Hant":"照片動畫、轉場與短片敘事","ja":"写真アニメーション、トランジション、ショートストーリー","en":"Photo animation, transitions, and short-form stories"}'::jsonb,
     0
   ),
   (
@@ -50,8 +50,8 @@ VALUES
   ),
   (
     'utility',
-    '{"zh":"实用工具","zh-Hant":"實用工具","ja":"ユーティリティ","en":"Utility"}'::jsonb,
-    '{"zh":"海报、标注与日常创作","zh-Hant":"海報、標註與日常創作","ja":"ポスターや注釈、日常の制作","en":"Posters, annotations, and everyday creation"}'::jsonb,
+    '{"zh":"创意实验","zh-Hant":"創意實驗","ja":"クリエイティブ実験","en":"Creative Lab"}'::jsonb,
+    '{"zh":"奇想场景、商业视觉与分析卡片","zh-Hant":"奇想場景、商業視覺與分析卡片","ja":"空想シーン、商用ビジュアル、分析カード","en":"Imaginative scenes, commercial visuals, and analysis cards"}'::jsonb,
     3
   ),
   (

@@ -3,7 +3,7 @@
 import { useAuth } from '@/hooks/useAuth'
 import { useRequireAuth } from '@/hooks/useRequireAuth'
 import { usePathname, useRouter } from 'next/navigation'
-import { startTransition, useEffect, useState, useRef, useCallback, useMemo } from 'react'
+import { startTransition, useEffect, useState, useRef, useCallback, useMemo, type PointerEvent as ReactPointerEvent } from 'react'
 import { useIsDesktop } from '@/hooks/useIsDesktop'
 import { useHydrated } from '@/hooks/useHydrated'
 import { isHeicFile } from '@/lib/imageUtils'
@@ -38,6 +38,14 @@ import LiquidGlassNav from '@/components/LiquidGlassNav'
 import { loadCreateAgentModelPreference, saveAgentModelPreference, saveCreateAgentModelPreference } from '@/lib/agent-model-preference'
 import type { AgentModelPreference } from '@/lib/agent-models'
 import { LazyVideo, SkillVideo } from '@/components/HomeSkillMedia'
+import { getHomeComposerViewportInset } from '@/lib/home-composer-viewport'
+import {
+  HOME_SKILL_CATEGORY_SWIPE_AXIS_LOCK_PX,
+  canStartHomeSkillCategorySwipe,
+  getAdjacentHomeSkillCategoryId,
+  resolveHomeSkillCategorySwipe,
+  type HomeSkillCategorySwipeDirection,
+} from '@/lib/home-skill-category-swipe'
 
 const Z = { INPUT: 100, HERO_FLY: 90, OVERLAY: 80, AMBIENT: 0 } as const
 const IOS_SKILL_BACK_EDGE_PX = 36
@@ -99,6 +107,31 @@ function HomePageInner() {
   const skillGridRef = useRef<HTMLDivElement>(null)
   const categoryScrollRef = useRef<HTMLDivElement>(null)
   const categoryButtonRefs = useRef(new Map<string, HTMLButtonElement>())
+  const categoryDragRef = useRef<{
+    pointerId: number
+    startX: number
+    startScrollLeft: number
+    moved: boolean
+  } | null>(null)
+  const categoryTouchRef = useRef<{
+    identifier: number
+    startX: number
+    startY: number
+    startScrollLeft: number
+    axis: 'x' | 'y' | null
+    moved: boolean
+  } | null>(null)
+  const categoryClickSuppressedRef = useRef(false)
+  const skillCategorySwipeRef = useRef<{
+    identifier: number
+    startX: number
+    startY: number
+    lastX: number
+    lastY: number
+    startTime: number
+    axis: 'x' | 'y' | null
+  } | null>(null)
+  const skillCategorySwipeSuppressClickUntilRef = useRef(0)
   const [selectedSkill, setSelectedSkill] = useState<string | null>(null)
   const [availableSkills, setAvailableSkills] = useState<{ name: string; label: string; icon: string; color: string; builtIn: boolean }[]>([])
   const [skillMenuOpen, setSkillMenuOpen] = useState(false)
@@ -156,6 +189,14 @@ function HomePageInner() {
     () => getVisibleSkillCategories(homeSkills, skillCategories),
     [homeSkills, skillCategories],
   )
+  const categoryTabIds = useMemo(
+    () => ['all', ...visibleSkillCategories.map(category => category.id)],
+    [visibleSkillCategories],
+  )
+  const categoryTabIdsRef = useRef(categoryTabIds)
+  categoryTabIdsRef.current = categoryTabIds
+  const activeCategoryRef = useRef(activeCategory)
+  activeCategoryRef.current = activeCategory
   const filteredHomeSkills = useMemo(
     () => filterHomeSkillsByCategory(homeSkills, activeCategory),
     [activeCategory, homeSkills],
@@ -189,11 +230,16 @@ function HomePageInner() {
   useEffect(() => {
     if (activeCategory === 'all') return
     if (visibleSkillCategories.some(category => category.id === activeCategory)) return
+    activeCategoryRef.current = 'all'
     setActiveCategory('all')
   }, [activeCategory, visibleSkillCategories])
 
-  const handleCategoryChange = useCallback((categoryId: string) => {
-    if (categoryId === activeCategory) return
+  const handleCategoryChange = useCallback((
+    categoryId: string,
+    swipeDirection: HomeSkillCategorySwipeDirection | null = null,
+  ) => {
+    if (categoryId === activeCategoryRef.current) return
+    activeCategoryRef.current = categoryId
     setActiveCategory(categoryId)
     setCategoryHasChanged(true)
     setVisibleSkillCount(INITIAL_SKILL_CARD_COUNT)
@@ -209,16 +255,247 @@ function HomePageInner() {
       }
 
       if (!reduceMotion) {
+        const entryTransform = swipeDirection === 'next'
+          ? 'translateX(12px)'
+          : swipeDirection === 'previous'
+            ? 'translateX(-12px)'
+            : 'translateY(3px)'
         skillGridRef.current?.animate([
-          { opacity: 0.72, transform: 'translateY(3px)' },
-          { opacity: 1, transform: 'translateY(0)' },
+          { opacity: 0.68, transform: entryTransform },
+          { opacity: 1, transform: 'translate(0, 0)' },
         ], {
-          duration: 140,
+          duration: swipeDirection ? 180 : 140,
           easing: 'cubic-bezier(0.22, 1, 0.36, 1)',
         })
       }
     })
-  }, [activeCategory])
+  }, [])
+
+  const handleCategoryPointerDown = useCallback((event: ReactPointerEvent<HTMLDivElement>) => {
+    if (event.pointerType === 'touch' || event.button !== 0) return
+    const scroller = categoryScrollRef.current
+    if (!scroller) return
+
+    categoryClickSuppressedRef.current = false
+    categoryDragRef.current = {
+      pointerId: event.pointerId,
+      startX: event.clientX,
+      startScrollLeft: scroller.scrollLeft,
+      moved: false,
+    }
+  }, [])
+
+  const handleCategoryPointerMove = useCallback((event: ReactPointerEvent<HTMLDivElement>) => {
+    const drag = categoryDragRef.current
+    const scroller = categoryScrollRef.current
+    if (!drag || !scroller || drag.pointerId !== event.pointerId) return
+
+    const deltaX = event.clientX - drag.startX
+    if (!drag.moved && Math.abs(deltaX) > 4) {
+      drag.moved = true
+      scroller.setPointerCapture(event.pointerId)
+      scroller.classList.add('is-dragging')
+    }
+    if (!drag.moved) return
+
+    event.preventDefault()
+    scroller.scrollLeft = drag.startScrollLeft - deltaX
+  }, [])
+
+  const finishCategoryDrag = useCallback((event: ReactPointerEvent<HTMLDivElement>) => {
+    const drag = categoryDragRef.current
+    const scroller = categoryScrollRef.current
+    if (!drag || !scroller || drag.pointerId !== event.pointerId) return
+
+    categoryClickSuppressedRef.current = drag.moved
+    categoryDragRef.current = null
+    scroller.classList.remove('is-dragging')
+    if (scroller.hasPointerCapture(event.pointerId)) scroller.releasePointerCapture(event.pointerId)
+    window.setTimeout(() => { categoryClickSuppressedRef.current = false }, 0)
+  }, [])
+
+  useEffect(() => {
+    const scroller = categoryScrollRef.current
+    if (!scroller) return
+
+    const findTrackedTouch = (touches: TouchList, identifier: number) => {
+      for (let index = 0; index < touches.length; index++) {
+        const touch = touches.item(index)
+        if (touch?.identifier === identifier) return touch
+      }
+      return null
+    }
+
+    const onTouchStart = (event: TouchEvent) => {
+      if (event.touches.length !== 1) {
+        categoryTouchRef.current = null
+        return
+      }
+      const touch = event.touches.item(0)
+      if (!touch) return
+      categoryClickSuppressedRef.current = false
+      categoryTouchRef.current = {
+        identifier: touch.identifier,
+        startX: touch.clientX,
+        startY: touch.clientY,
+        startScrollLeft: scroller.scrollLeft,
+        axis: null,
+        moved: false,
+      }
+    }
+
+    const onTouchMove = (event: TouchEvent) => {
+      const gesture = categoryTouchRef.current
+      if (!gesture) return
+      const touch = findTrackedTouch(event.touches, gesture.identifier)
+      if (!touch) return
+
+      const deltaX = touch.clientX - gesture.startX
+      const deltaY = touch.clientY - gesture.startY
+      if (!gesture.axis) {
+        if (Math.max(Math.abs(deltaX), Math.abs(deltaY)) < 5) return
+        gesture.axis = Math.abs(deltaX) > Math.abs(deltaY) ? 'x' : 'y'
+      }
+      if (gesture.axis !== 'x') return
+
+      gesture.moved = true
+      if (event.cancelable) event.preventDefault()
+      scroller.scrollLeft = gesture.startScrollLeft - deltaX
+    }
+
+    const finishTouch = (event: TouchEvent) => {
+      const gesture = categoryTouchRef.current
+      if (!gesture) return
+      if (gesture.axis === 'x' && gesture.moved) {
+        categoryClickSuppressedRef.current = true
+        if (event.cancelable) event.preventDefault()
+        window.setTimeout(() => { categoryClickSuppressedRef.current = false }, 350)
+      }
+      categoryTouchRef.current = null
+    }
+
+    scroller.addEventListener('touchstart', onTouchStart, { passive: true })
+    scroller.addEventListener('touchmove', onTouchMove, { passive: false })
+    scroller.addEventListener('touchend', finishTouch, { passive: false })
+    scroller.addEventListener('touchcancel', finishTouch, { passive: false })
+    return () => {
+      scroller.removeEventListener('touchstart', onTouchStart)
+      scroller.removeEventListener('touchmove', onTouchMove)
+      scroller.removeEventListener('touchend', finishTouch)
+      scroller.removeEventListener('touchcancel', finishTouch)
+    }
+  }, [])
+
+  useEffect(() => {
+    const skillGrid = skillGridRef.current
+    if (!skillGrid || categoryTabIds.length < 2) return
+
+    const findTrackedTouch = (touches: TouchList, identifier: number) => {
+      for (let index = 0; index < touches.length; index++) {
+        const touch = touches.item(index)
+        if (touch?.identifier === identifier) return touch
+      }
+      return null
+    }
+
+    const onTouchStart = (event: TouchEvent) => {
+      if (event.touches.length !== 1 || selectedDetailRef.current || isEditableTarget(event.target)) {
+        skillCategorySwipeRef.current = null
+        return
+      }
+      const touch = event.touches.item(0)
+      if (!touch || !canStartHomeSkillCategorySwipe(touch.clientX, window.innerWidth)) {
+        skillCategorySwipeRef.current = null
+        return
+      }
+
+      skillCategorySwipeRef.current = {
+        identifier: touch.identifier,
+        startX: touch.clientX,
+        startY: touch.clientY,
+        lastX: touch.clientX,
+        lastY: touch.clientY,
+        startTime: event.timeStamp,
+        axis: null,
+      }
+    }
+
+    const onTouchMove = (event: TouchEvent) => {
+      const gesture = skillCategorySwipeRef.current
+      if (!gesture) return
+      const touch = findTrackedTouch(event.touches, gesture.identifier)
+      if (!touch) return
+
+      gesture.lastX = touch.clientX
+      gesture.lastY = touch.clientY
+      const deltaX = touch.clientX - gesture.startX
+      const deltaY = touch.clientY - gesture.startY
+      if (!gesture.axis) {
+        const horizontalDistance = Math.abs(deltaX)
+        const verticalDistance = Math.abs(deltaY)
+        if (Math.max(horizontalDistance, verticalDistance) < HOME_SKILL_CATEGORY_SWIPE_AXIS_LOCK_PX) return
+        if (horizontalDistance > verticalDistance * 1.2) gesture.axis = 'x'
+        else if (verticalDistance > horizontalDistance * 1.2) gesture.axis = 'y'
+        else return
+      }
+      if (gesture.axis !== 'x') return
+
+      skillCategorySwipeSuppressClickUntilRef.current = performance.now() + 500
+      if (event.cancelable) event.preventDefault()
+    }
+
+    const onTouchEnd = (event: TouchEvent) => {
+      const gesture = skillCategorySwipeRef.current
+      if (!gesture) return
+      const touch = findTrackedTouch(event.changedTouches, gesture.identifier)
+      const endX = touch?.clientX ?? gesture.lastX
+      const endY = touch?.clientY ?? gesture.lastY
+      const deltaX = endX - gesture.startX
+      const deltaY = endY - gesture.startY
+
+      if (gesture.axis === 'x') {
+        skillCategorySwipeSuppressClickUntilRef.current = performance.now() + 500
+        if (event.cancelable) event.preventDefault()
+        const direction = resolveHomeSkillCategorySwipe({
+          deltaX,
+          deltaY,
+          durationMs: Math.max(1, event.timeStamp - gesture.startTime),
+          regionWidth: skillGrid.clientWidth,
+        })
+        if (direction) {
+          const nextCategoryId = getAdjacentHomeSkillCategoryId(
+            categoryTabIdsRef.current,
+            activeCategoryRef.current,
+            direction,
+          )
+          if (nextCategoryId) handleCategoryChange(nextCategoryId, direction)
+        }
+      }
+      skillCategorySwipeRef.current = null
+    }
+
+    const onTouchCancel = () => {
+      skillCategorySwipeRef.current = null
+    }
+
+    skillGrid.addEventListener('touchstart', onTouchStart, { passive: true })
+    skillGrid.addEventListener('touchmove', onTouchMove, { passive: false })
+    skillGrid.addEventListener('touchend', onTouchEnd, { passive: false })
+    skillGrid.addEventListener('touchcancel', onTouchCancel, { passive: true })
+    return () => {
+      skillGrid.removeEventListener('touchstart', onTouchStart)
+      skillGrid.removeEventListener('touchmove', onTouchMove)
+      skillGrid.removeEventListener('touchend', onTouchEnd)
+      skillGrid.removeEventListener('touchcancel', onTouchCancel)
+    }
+  }, [categoryTabIds, handleCategoryChange])
+
+  const handleSkillGridClickCapture = useCallback((event: React.MouseEvent<HTMLDivElement>) => {
+    if (performance.now() >= skillCategorySwipeSuppressClickUntilRef.current) return
+    skillCategorySwipeSuppressClickUntilRef.current = 0
+    event.preventDefault()
+    event.stopPropagation()
+  }, [])
 
   const blurHomeComposers = useCallback(() => {
     textareaRef.current?.blur()
@@ -634,6 +911,18 @@ function HomePageInner() {
     return () => window.removeEventListener('makaron-keyboard-inset-change', onNativeInset)
   }, [isIOSAppShell])
   const effectiveKbInset = Math.max(kbInset, nativeKbInset)
+  const refreshHomeComposerViewport = useCallback(() => {
+    const composerFocused = document.activeElement === textareaRef.current
+      || document.activeElement === inlineTextareaRef.current
+    if (!composerFocused) {
+      setTextareaFocused(false)
+      setKbInset(0)
+      if (!isDesktop && selectedDetailRef.current) setShowFixedInput(true)
+      return
+    }
+    setTextareaFocused(true)
+    updateViewportInset()
+  }, [isDesktop, updateViewportInset])
 
   useEffect(() => {
     const el = inputBoxRef.current
@@ -755,9 +1044,7 @@ function HomePageInner() {
 
     openedFromUrlRef.current = true
     clearDetailCloseTimer()
-    setTextareaFocused(false)
-    setKbInset(0)
-    updateViewportInset()
+    blurHomeComposers()
     setViewMode('human')
     setSelectedDetail(skill)
     setSelectedSkill(skill.skill_path ? skill.id : null)
@@ -766,7 +1053,7 @@ function HomePageInner() {
     detailPathActiveRef.current = true
     writeSkillDetailPath(skillId, 'replace')
     if (pendingIOSSkillId === skillId) clearIOSSkillReturn()
-  }, [applyLocalizedSkillPrompt, clearDetailCloseTimer, clearIOSSkillReturn, homeSkills, isIOSAppShell, pathSkillId, selectedDetail, updateViewportInset, writeSkillDetailPath])
+  }, [applyLocalizedSkillPrompt, blurHomeComposers, clearDetailCloseTimer, clearIOSSkillReturn, homeSkills, isIOSAppShell, pathSkillId, selectedDetail, writeSkillDetailPath])
 
   // Position slide when overlay DOM mounts via ref callback (stable — no deps to avoid re-bindinging)
   const detailSnapCallbackRef = useCallback((el: HTMLDivElement | null) => {
@@ -807,8 +1094,8 @@ function HomePageInner() {
       setShowFixedInput(false)
       return
     }
-    setShowFixedInput(textareaFocused || document.activeElement === textareaRef.current)
-  }, [isDesktop, textareaFocused])
+    setShowFixedInput(true)
+  }, [isDesktop])
   const keepSkillComposerAboveKeyboard = useCallback((event?: React.FocusEvent<HTMLTextAreaElement>) => {
     const inlineTextareaFocused = event?.currentTarget === inlineTextareaRef.current
     setTextareaFocused(true)
@@ -826,6 +1113,7 @@ function HomePageInner() {
 
   useEffect(() => {
     if (isDesktop) return
+    const resumeTimers = new Set<number>()
     const scheduleSync = () => {
       if (fixedInputSyncFrameRef.current !== null) {
         window.cancelAnimationFrame(fixedInputSyncFrameRef.current)
@@ -833,7 +1121,31 @@ function HomePageInner() {
       fixedInputSyncFrameRef.current = window.requestAnimationFrame(() => {
         fixedInputSyncFrameRef.current = null
         syncFixedInputVisibility()
+        refreshHomeComposerViewport()
       })
+    }
+    const resetSuspendedSkillComposer = () => {
+      if (!selectedDetailRef.current) return
+      textareaRef.current?.blur()
+      inlineTextareaRef.current?.blur()
+      setTextareaFocused(false)
+      setKbInset(0)
+      setShowFixedInput(true)
+    }
+    const scheduleResumeSync = () => {
+      resetSuspendedSkillComposer()
+      scheduleSync()
+      for (const delay of [80, 220]) {
+        const timer = window.setTimeout(() => {
+          resumeTimers.delete(timer)
+          scheduleSync()
+        }, delay)
+        resumeTimers.add(timer)
+      }
+    }
+    const handleVisibilityChange = () => {
+      if (document.visibilityState === 'hidden') resetSuspendedSkillComposer()
+      else scheduleResumeSync()
     }
 
     scheduleSync()
@@ -849,12 +1161,15 @@ function HomePageInner() {
 
     scrollContainer?.addEventListener('scroll', scheduleSync, { passive: true })
     document.addEventListener('scroll', scheduleSync, true)
+    document.addEventListener('visibilitychange', handleVisibilityChange)
     window.addEventListener('scroll', scheduleSync, { passive: true })
     window.addEventListener('resize', scheduleSync)
-    window.addEventListener('pageshow', scheduleSync)
+    window.addEventListener('focus', scheduleResumeSync)
+    window.addEventListener('pagehide', resetSuspendedSkillComposer)
+    window.addEventListener('pageshow', scheduleResumeSync)
     window.addEventListener('popstate', scheduleSync)
-    window.addEventListener('makaron-ios-page-stack-back', scheduleSync as EventListener)
-    window.addEventListener('makaron-ios-page-stack-push', scheduleSync as EventListener)
+    window.addEventListener('makaron-ios-page-stack-back', scheduleResumeSync as EventListener)
+    window.addEventListener('makaron-ios-page-stack-push', scheduleResumeSync as EventListener)
     window.visualViewport?.addEventListener('resize', scheduleSync)
     window.visualViewport?.addEventListener('scroll', scheduleSync)
 
@@ -863,19 +1178,24 @@ function HomePageInner() {
         window.cancelAnimationFrame(fixedInputSyncFrameRef.current)
         fixedInputSyncFrameRef.current = null
       }
+      resumeTimers.forEach(timer => window.clearTimeout(timer))
+      resumeTimers.clear()
       inlineResizeObserver?.disconnect()
       scrollContainer?.removeEventListener('scroll', scheduleSync)
       document.removeEventListener('scroll', scheduleSync, true)
+      document.removeEventListener('visibilitychange', handleVisibilityChange)
       window.removeEventListener('scroll', scheduleSync)
       window.removeEventListener('resize', scheduleSync)
-      window.removeEventListener('pageshow', scheduleSync)
+      window.removeEventListener('focus', scheduleResumeSync)
+      window.removeEventListener('pagehide', resetSuspendedSkillComposer)
+      window.removeEventListener('pageshow', scheduleResumeSync)
       window.removeEventListener('popstate', scheduleSync)
-      window.removeEventListener('makaron-ios-page-stack-back', scheduleSync as EventListener)
-      window.removeEventListener('makaron-ios-page-stack-push', scheduleSync as EventListener)
+      window.removeEventListener('makaron-ios-page-stack-back', scheduleResumeSync as EventListener)
+      window.removeEventListener('makaron-ios-page-stack-push', scheduleResumeSync as EventListener)
       window.visualViewport?.removeEventListener('resize', scheduleSync)
       window.visualViewport?.removeEventListener('scroll', scheduleSync)
     }
-  }, [isDesktop, syncFixedInputVisibility])
+  }, [isDesktop, refreshHomeComposerViewport, syncFixedInputVisibility])
 
   useEffect(() => {
     if (!isIOSAppShell) return
@@ -1394,9 +1714,7 @@ function HomePageInner() {
     }
     openedFromUrlRef.current = false
     clearDetailCloseTimer()
-    setTextareaFocused(false)
-    setKbInset(0)
-    updateViewportInset()
+    blurHomeComposers()
     setViewMode('human')
     const rect = (e.currentTarget as HTMLElement).getBoundingClientRect()
     setHeroRect(rect)
@@ -1418,9 +1736,11 @@ function HomePageInner() {
     })
   }
 
-  const fixedComposerViewportInset = !isDesktop && (showFixedInput || selectedDetail || textareaFocused)
-    ? effectiveKbInset
-    : 0
+  const fixedComposerViewportInset = getHomeComposerViewportInset({
+    isDesktop,
+    textareaFocused,
+    keyboardInset: effectiveKbInset,
+  })
   const fixedComposerBottom = isDesktop
     ? '24px'
     : `max(env(safe-area-inset-bottom, 0px), ${fixedComposerViewportInset}px)`
@@ -1520,15 +1840,20 @@ function HomePageInner() {
         .mkr-category-grid {
           animation: mkr-category-grid-in 0.14s cubic-bezier(0.22, 1, 0.36, 1) both;
         }
+        .mkr-skill-category-swipe-region,
+        .mkr-skill-category-swipe-region .mkr-skill-card {
+          touch-action: pan-y pinch-zoom;
+        }
+        .mkr-skill-category-swipe-region {
+          overscroll-behavior-x: contain;
+        }
         .mkr-category-rail {
           position: sticky;
           top: env(safe-area-inset-top, 0px);
           z-index: 60;
           margin: 0 -24px 16px;
           padding: 8px 24px 10px;
-          background: linear-gradient(to bottom, rgba(0,0,0,0.9) 0%, rgba(0,0,0,0.72) 72%, transparent 100%);
-          backdrop-filter: blur(12px) saturate(1.12);
-          -webkit-backdrop-filter: blur(12px) saturate(1.12);
+          background: #000;
         }
         .mkr-category-scroll {
           min-height: 44px;
@@ -1538,9 +1863,16 @@ function HomePageInner() {
           gap: 24px;
           overflow-x: auto;
           overscroll-behavior-x: contain;
+          touch-action: pan-y pinch-zoom;
+          cursor: grab;
+          user-select: none;
+          -webkit-user-select: none;
+          -webkit-overflow-scrolling: touch;
           scrollbar-width: none;
           -ms-overflow-style: none;
         }
+        .mkr-category-scroll.is-dragging { cursor: grabbing; }
+        .mkr-category-scroll.is-dragging .mkr-category-tab { pointer-events: none; }
         .mkr-category-scroll::-webkit-scrollbar { display: none; }
         .mkr-category-tab {
           position: relative;
@@ -1556,7 +1888,7 @@ function HomePageInner() {
           line-height: 1;
           letter-spacing: 0.005em;
           cursor: pointer;
-          touch-action: manipulation;
+          touch-action: pan-y pinch-zoom;
           -webkit-tap-highlight-color: transparent;
           transition: color 0.16s ease;
         }
@@ -1585,14 +1917,19 @@ function HomePageInner() {
           .mkr-category-tab:hover { color: rgba(255,255,255,0.7); }
         }
         @media (max-width: 767px) {
-          .mkr-category-rail { margin: 0 -14px 12px; padding: 6px 0 9px; }
+          .mkr-category-rail {
+            position: relative;
+            top: auto;
+            z-index: auto;
+            margin: 0 -14px 12px;
+            padding: 6px 0 9px;
+            background: transparent;
+          }
           .mkr-category-scroll {
             justify-content: flex-start;
             gap: 20px;
             padding: 2px 14px;
             scroll-padding-inline: 14px;
-            -webkit-mask-image: linear-gradient(to right, transparent 0, #000 14px, #000 calc(100% - 14px), transparent 100%);
-            mask-image: linear-gradient(to right, transparent 0, #000 14px, #000 calc(100% - 14px), transparent 100%);
           }
         }
         @media (prefers-reduced-motion: reduce) {
@@ -1733,12 +2070,6 @@ function HomePageInner() {
               margin: 0,
               letterSpacing: '-0.01em',
             }}>{t('skills.title')}</h2>
-            <p style={{
-              fontSize: isDesktop ? '0.85rem' : '0.78rem',
-              color: 'rgba(255,255,255,0.35)',
-              margin: '6px 0 0',
-              letterSpacing: '0.01em',
-            }}>{t('skills.subtitle')}</p>
           </div>
 
           {(skillCategoriesLoading || visibleSkillCategories.length > 0) && (
@@ -1748,7 +2079,15 @@ function HomePageInner() {
               aria-label={t('skills.categories')}
               aria-busy={skillCategoriesLoading}
             >
-              <div ref={categoryScrollRef} className="mkr-category-scroll">
+              <div
+                ref={categoryScrollRef}
+                className="mkr-category-scroll"
+                data-horizontal-swipe-region="true"
+                onPointerDown={handleCategoryPointerDown}
+                onPointerMove={handleCategoryPointerMove}
+                onPointerUp={finishCategoryDrag}
+                onPointerCancel={finishCategoryDrag}
+              >
                 {(skillCategoriesLoading ? [{ id: 'all', label: t('skills.categoryAll') }] : categoryTabs).map(category => {
                   const isActive = activeCategory === category.id
                   return (
@@ -1764,7 +2103,10 @@ function HomePageInner() {
                       aria-pressed={isActive}
                       aria-controls="skill-market-grid"
                       data-testid={`skill-category-${category.id}`}
-                      onClick={() => handleCategoryChange(category.id)}
+                      onClick={() => {
+                        if (categoryClickSuppressedRef.current) return
+                        handleCategoryChange(category.id)
+                      }}
                     >
                       {category.label}
                     </button>
@@ -1774,11 +2116,19 @@ function HomePageInner() {
             </nav>
           )}
 
-          <div ref={skillGridRef} id="skill-market-grid" className="mkr-category-grid" data-testid="skill-grid" style={{
-            display: 'grid',
-            gridTemplateColumns: isDesktop ? 'repeat(auto-fill, minmax(200px, 1fr))' : 'repeat(2, 1fr)',
-            gap: isDesktop ? '14px' : '10px',
-          }}>
+          <div
+            ref={skillGridRef}
+            id="skill-market-grid"
+            className="mkr-category-grid mkr-skill-category-swipe-region"
+            data-testid="skill-grid"
+            data-skill-category-swipe-region="true"
+            onClickCapture={handleSkillGridClickCapture}
+            style={{
+              display: 'grid',
+              gridTemplateColumns: isDesktop ? 'repeat(auto-fill, minmax(200px, 1fr))' : 'repeat(2, 1fr)',
+              gap: isDesktop ? '14px' : '10px',
+            }}
+          >
             {homeSkills.length === 0 && Array.from({ length: 8 }, (_, i) => (
               <div key={`sk-${i}`} className="mkr-liquid-placeholder" style={{
                 aspectRatio: '3 / 4', borderRadius: 16,
@@ -2127,9 +2477,7 @@ function HomePageInner() {
                   const t = filteredHomeSkills[newIdx]
                   if (t) {
                     clearDetailCloseTimer()
-                    setTextareaFocused(false)
-                    setKbInset(0)
-                    updateViewportInset()
+                    blurHomeComposers()
                     setViewMode('human')
                     setSelectedDetail(t)
                     setSelectedSkill(t.skill_path ? t.id : null)
@@ -2158,9 +2506,7 @@ function HomePageInner() {
                 const t = filteredHomeSkills[newIdx]
                 if (t) {
                   clearDetailCloseTimer()
-                  setTextareaFocused(false)
-                  setKbInset(0)
-                  updateViewportInset()
+                  blurHomeComposers()
                   setViewMode('human')
                   setSelectedDetail(t)
                   setSelectedSkill(t.skill_path ? t.id : null)

@@ -311,6 +311,7 @@ export default function TopBar({ authReturnPath }: TopBarProps) {
 
     const handleTouchStart = (e: TouchEvent) => {
       if (!isMobileViewport() || isEditableTarget(e.target)) return
+      if (e.target instanceof Element && e.target.closest('[data-horizontal-swipe-region="true"]')) return
       const touch = e.touches[0]
       if (!touch) return
       const fromRightEdge = touch.clientX >= window.innerWidth - ACCOUNT_EDGE_SWIPE_WIDTH

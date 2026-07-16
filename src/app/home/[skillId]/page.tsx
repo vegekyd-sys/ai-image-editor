@@ -3,6 +3,7 @@ import { cookies, headers } from 'next/headers'
 import { getSupabaseAdmin } from '@/lib/supabase/service'
 import { matchSupportedLocale, pickLocalizedValue } from '@/lib/locales'
 import { resolveRequestLocale } from '@/lib/server-locale'
+import { mergeHomeSkillLocalization } from '@/lib/home-skill-localizations.server'
 import type { Metadata } from 'next'
 
 type Props = {
@@ -34,6 +35,7 @@ export async function generateMetadata({ params, searchParams }: Props): Promise
   }
 
   if (!data || error) return {}
+  const localizedData = mergeHomeSkillLocalization({ id: skillId, ...data })
 
   const [resolvedSearchParams, cookieStore, headerStore] = await Promise.all([
     searchParams,
@@ -47,8 +49,8 @@ export async function generateMetadata({ params, searchParams }: Props): Promise
     headerStore.get('accept-language'),
   )
 
-  const title = pickLocalizedValue(data.labels, locale, 'Makaron Skill')
-  const desc = pickLocalizedValue(data.prompts, locale, data.prompt || '').slice(0, 160)
+  const title = pickLocalizedValue(localizedData.labels, locale, 'Makaron Skill')
+  const desc = pickLocalizedValue(localizedData.prompts, locale, typeof data.prompt === 'string' ? data.prompt : '').slice(0, 160)
     || 'AI-powered creative skill'
 
   return {

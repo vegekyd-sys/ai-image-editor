@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server'
 import { getSupabaseAdmin } from '@/lib/supabase/service'
+import { mergeHomeSkillLocalization } from '@/lib/home-skill-localizations.server'
 
 const CACHE_HEADERS = {
   'Cache-Control': 'public, max-age=0, s-maxage=60, stale-while-revalidate=300',
@@ -11,13 +12,13 @@ const LOCALIZED_COLUMNS = `${LEGACY_COLUMNS}, prompts, categories`
 function normalizeRows(rows: unknown[] | null): unknown[] {
   return (rows || []).map((value) => {
     const row = value as Record<string, unknown>
-    return {
+    return mergeHomeSkillLocalization({
       ...row,
       prompts: row.prompts && typeof row.prompts === 'object' && !Array.isArray(row.prompts)
         ? row.prompts
         : {},
       categories: Array.isArray(row.categories) ? row.categories : [],
-    }
+    })
   })
 }
 
