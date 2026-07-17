@@ -78,7 +78,7 @@ npx makaron-cli chat --project auto --image img1.jpg --image img2.jpg --json -b 
 npx makaron-cli chat --project auto --agent-model deepseek-v4-pro --image-model qwen "design a product poster"
 ```
 
-Model flags are role-specific: `--agent-model` controls reasoning and tool use, `--image-model` controls image generation/editing, and `--video-model` controls video generation. `--agent-model` accepts `auto|sonnet-4.6|sonnet-5|opus-4.8|grok-4.5|deepseek-v4-pro`. `MAKARON_AGENT_MODEL` can set the default for automation; the command flag takes precedence. The legacy `--model` flag remains temporarily supported with a deprecation warning.
+Model flags are role-specific: `--agent-model` controls reasoning and tool use, `--image-model` controls image generation/editing, and `--video-model` controls video generation. `--agent-model` accepts `auto|gpt-5.6-terra|gpt-5.6-sol|gpt-5.6-luna|grok-4.5|deepseek-v4-pro`. `auto` currently uses GPT-5.6 Terra. `MAKARON_AGENT_MODEL` can set the default for automation; the command flag takes precedence. The legacy `--model` flag remains temporarily supported with a deprecation warning.
 
 Returns immediately:
 ```json

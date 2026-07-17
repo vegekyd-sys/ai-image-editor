@@ -1,15 +1,16 @@
 export const AGENT_MODEL_IDS = [
-  'sonnet-4.6',
-  'sonnet-5',
-  'opus-4.8',
+  'gpt-5.6-terra',
+  'gpt-5.6-sol',
+  'gpt-5.6-luna',
   'grok-4.5',
   'deepseek-v4-pro',
 ] as const;
 
 export type AgentModelId = (typeof AGENT_MODEL_IDS)[number];
 export type AgentModelPreference = 'auto' | AgentModelId;
-export type AgentModelProvider = 'bedrock-anthropic' | 'openrouter' | 'deepseek';
+export type AgentModelProvider = 'azure-openai' | 'openrouter' | 'deepseek';
 export type AgentCacheStrategy = 'explicit' | 'automatic';
+export type AgentReasoningEffort = 'none' | 'minimal' | 'low' | 'medium' | 'high' | 'xhigh';
 
 export interface AgentModelSpec {
   id: AgentModelId;
@@ -18,34 +19,38 @@ export interface AgentModelSpec {
   billingModelId: string;
   cacheStrategy: AgentCacheStrategy;
   supportsImageInput: boolean;
+  defaultReasoningEffort?: AgentReasoningEffort;
 }
 
-export const DEFAULT_AGENT_MODEL_ID: AgentModelId = 'sonnet-5';
+export const DEFAULT_AGENT_MODEL_ID: AgentModelId = 'gpt-5.6-terra';
 
 export const AGENT_MODEL_SPECS: Record<AgentModelId, AgentModelSpec> = {
-  'sonnet-4.6': {
-    id: 'sonnet-4.6',
-    provider: 'bedrock-anthropic',
-    providerModelId: 'us.anthropic.claude-sonnet-4-6',
-    billingModelId: 'anthropic.claude-sonnet-4-6',
-    cacheStrategy: 'explicit',
+  'gpt-5.6-terra': {
+    id: 'gpt-5.6-terra',
+    provider: 'azure-openai',
+    providerModelId: 'gpt-5.6-terra',
+    billingModelId: 'gpt-5.6-terra',
+    cacheStrategy: 'automatic',
     supportsImageInput: true,
+    defaultReasoningEffort: 'medium',
   },
-  'sonnet-5': {
-    id: 'sonnet-5',
-    provider: 'bedrock-anthropic',
-    providerModelId: 'us.anthropic.claude-sonnet-5',
-    billingModelId: 'anthropic.claude-sonnet-5',
-    cacheStrategy: 'explicit',
+  'gpt-5.6-sol': {
+    id: 'gpt-5.6-sol',
+    provider: 'azure-openai',
+    providerModelId: 'gpt-5.6-sol',
+    billingModelId: 'gpt-5.6-sol',
+    cacheStrategy: 'automatic',
     supportsImageInput: true,
+    defaultReasoningEffort: 'high',
   },
-  'opus-4.8': {
-    id: 'opus-4.8',
-    provider: 'bedrock-anthropic',
-    providerModelId: 'us.anthropic.claude-opus-4-8',
-    billingModelId: 'anthropic.claude-opus-4-8',
-    cacheStrategy: 'explicit',
+  'gpt-5.6-luna': {
+    id: 'gpt-5.6-luna',
+    provider: 'azure-openai',
+    providerModelId: 'gpt-5.6-luna',
+    billingModelId: 'gpt-5.6-luna',
+    cacheStrategy: 'automatic',
     supportsImageInput: true,
+    defaultReasoningEffort: 'low',
   },
   'grok-4.5': {
     id: 'grok-4.5',
@@ -77,6 +82,34 @@ export function isAgentModelPreference(value: unknown): value is AgentModelPrefe
 
 export function normalizeAgentModelPreference(value: unknown): AgentModelPreference {
   return isAgentModelPreference(value) ? value : 'auto';
+}
+
+const RETIRED_CLAUDE_PRODUCT_IDS = new Set([
+  'sonnet-4.6',
+  'sonnet-5',
+  'opus-4.8',
+]);
+
+function isRetiredClaudeModel(value: unknown): boolean {
+  if (typeof value !== 'string') return false;
+  const normalized = value.trim().toLowerCase();
+  return RETIRED_CLAUDE_PRODUCT_IDS.has(normalized)
+    || /^(?:(?:us|eu|ap|global)\.)?anthropic\.claude-(?:sonnet|opus)-/.test(normalized);
+}
+
+/**
+ * Normalize the public API boundary without keeping Claude as a model option.
+ * Old app/CLI clients may still submit a retired Claude id while their cached
+ * JavaScript is rolling over; those requests safely move to Auto/Terra. Truly
+ * unknown values remain invalid so the server can return 400.
+ */
+export function normalizeRequestedAgentModelPreference(
+  value: unknown,
+): AgentModelPreference | undefined | null {
+  if (value === undefined) return undefined;
+  if (isAgentModelPreference(value)) return value;
+  if (isRetiredClaudeModel(value)) return 'auto';
+  return null;
 }
 
 function matchConfiguredModel(value: string | undefined): AgentModelId | undefined {

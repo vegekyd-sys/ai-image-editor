@@ -11,6 +11,7 @@ import { readNativeJSONCache, warmNativeJSONCache, writeNativeJSONCache } from '
 import { isMakaronIOSApp } from '@/lib/native-app'
 import { warmProjectsListCache } from '@/lib/projects-list-warm'
 import { requestNativePageStackPush } from '@/lib/native-page-stack'
+import { clearCreateDraftContinuation } from '@/lib/imageCache'
 
 const Changelog = dynamic(() => import('@/components/Changelog'), { ssr: false })
 
@@ -191,6 +192,7 @@ export default function TopBar({ authReturnPath }: TopBarProps) {
     const currentPath = typeof window !== 'undefined' ? window.location.pathname : ''
     if (path === '/login' && authReturnPath) {
       try {
+        clearCreateDraftContinuation()
         localStorage.setItem('mkr_return_url', authReturnPath)
         sessionStorage.setItem('mkr_return_url', authReturnPath)
       } catch {
@@ -726,6 +728,7 @@ export default function TopBar({ authReturnPath }: TopBarProps) {
                 onClick={() => {
                   if (!authReturnPath) return
                   try {
+                    clearCreateDraftContinuation()
                     localStorage.setItem('mkr_return_url', authReturnPath)
                     sessionStorage.setItem('mkr_return_url', authReturnPath)
                   } catch {

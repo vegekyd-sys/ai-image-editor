@@ -22,9 +22,9 @@ export const MODEL_REGISTRY: ModelInfo[] = [
   { id: 'grok', nameKey: 'model.grok.name', descKey: 'model.grok.desc', category: 'video', speedLabel: '30-40s' },
   { id: 'google-omni', nameKey: 'model.googleOmni.name', descKey: 'model.googleOmni.desc', category: 'video', speedLabel: '30-70s' },
   // Agent LLM
-  { id: 'sonnet-4.6', nameKey: 'model.sonnet46.name', descKey: 'model.sonnet46.desc', category: 'agent', speedLabel: 'Fast' },
-  { id: 'sonnet-5', nameKey: 'model.sonnet5.name', descKey: 'model.sonnet5.desc', category: 'agent', speedLabel: 'Default' },
-  { id: 'opus-4.8', nameKey: 'model.opus48.name', descKey: 'model.opus48.desc', category: 'agent', speedLabel: 'Best' },
+  { id: 'gpt-5.6-terra', nameKey: 'model.gpt56Terra.name', descKey: 'model.gpt56Terra.desc', category: 'agent', speedLabel: 'Default' },
+  { id: 'gpt-5.6-sol', nameKey: 'model.gpt56Sol.name', descKey: 'model.gpt56Sol.desc', category: 'agent', speedLabel: 'Best' },
+  { id: 'gpt-5.6-luna', nameKey: 'model.gpt56Luna.name', descKey: 'model.gpt56Luna.desc', category: 'agent', speedLabel: 'Fast' },
   { id: 'grok-4.5', nameKey: 'model.grok45.name', descKey: 'model.grok45.desc', category: 'agent', speedLabel: 'Fast' },
   { id: 'deepseek-v4-pro', nameKey: 'model.deepseekV4Pro.name', descKey: 'model.deepseekV4Pro.desc', category: 'agent', speedLabel: 'Value' },
 ];

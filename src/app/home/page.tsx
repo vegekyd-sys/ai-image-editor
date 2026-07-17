@@ -8,9 +8,17 @@ import { useIsDesktop } from '@/hooks/useIsDesktop'
 import { useHydrated } from '@/hooks/useHydrated'
 import { isHeicFile } from '@/lib/imageUtils'
 import { pickLocalizedValue, useLocale } from '@/lib/i18n'
-import { compressCreateImageFile, createProject, createProjectFromStagedMedia } from '@/lib/createProject'
+import { compressCreateImageFiles, createProject, createProjectFromStagedMedia } from '@/lib/createProject'
 import { createClient } from '@/lib/supabase/client'
-import { cacheCreateDraft, clearCreateDraft, getCreateDraft } from '@/lib/imageCache'
+import {
+  beginCreateDraftContinuation,
+  cacheCreateDraft,
+  clearCreateDraft,
+  clearCreateDraftContinuation,
+  getCreateDraft,
+  getCreateDraftContinuationId,
+  shouldConsumeCreateDraft,
+} from '@/lib/imageCache'
 import { extractPhotoMetadata } from '@/lib/image/metadata'
 import type { PhotoMetadata } from '@/types'
 import { createMetaEventId, trackMetaEvent } from '@/lib/marketing/meta-pixel'
@@ -867,6 +875,7 @@ function HomePageInner() {
   }, [activeSkill, createInput.text, rememberIOSSkillReturn])
 
   const goToLoginFromEmptyCreate = useCallback(() => {
+    clearCreateDraftContinuation()
     saveContextBeforeLogin()
     const returnPath = window.location.pathname + window.location.search
     localStorage.setItem('mkr_return_url', returnPath)
@@ -878,13 +887,15 @@ function HomePageInner() {
     const homeSkill = selectedDetail || activeSkill
     const imageFiles = files.filter(file => file.type.startsWith('image/') || isHeicFile(file))
     const [images, metadata] = await Promise.all([
-      Promise.all(imageFiles.map(file => compressCreateImageFile(file))),
+      compressCreateImageFiles(imageFiles),
       imageFiles[0]
         ? extractPhotoMetadata(imageFiles[0]).catch(() => undefined)
         : Promise.resolve(undefined),
     ])
+    const continuationId = beginCreateDraftContinuation()
     cacheCreateDraft({
       images,
+      continuationId,
       metadata,
       prompt,
       selectedSkill: homeSkill?.skill_path ? undefined : (selectedSkill ?? undefined),
@@ -944,10 +955,16 @@ function HomePageInner() {
   const consumeDraftRef = useRef(false)
   useEffect(() => {
     if (!user || consumeDraftRef.current) return
+    const continuationId = getCreateDraftContinuationId()
+    if (!continuationId) return
     let cancelled = false
     const consume = async () => {
       const draft = await getCreateDraft()
       if (!draft || cancelled) return
+      if (!shouldConsumeCreateDraft(draft, continuationId)) {
+        clearCreateDraftContinuation()
+        return
+      }
       if (draft.homeSkillId && homeSkills.length === 0) return
       if (draft.homeSkillId && draft.images.length === 0) {
         await clearCreateDraft()

@@ -46,6 +46,24 @@ describe('iOS App Store readiness guardrails', () => {
     expect(authCallback).toContain("r='/home?skill='+encodeURIComponent(skillMatch[1])");
   });
 
+  it('requires explicit AI data-sharing consent before mounting iOS creative content', () => {
+    const layout = fs.readFileSync(path.join(root, 'src/app/layout.tsx'), 'utf8');
+    const gate = fs.readFileSync(path.join(root, 'src/components/AIDataConsentGate.tsx'), 'utf8');
+    const privacy = fs.readFileSync(path.join(root, 'src/app/privacy/page.tsx'), 'utf8');
+    const migration = fs.readFileSync(path.join(root, 'supabase/migrations/20260715000000_hide_app_review_sensitive_skills.sql'), 'utf8');
+
+    expect(layout).toContain('userAgentHasMakaronIOSToken');
+    expect(layout).toContain('<AIDataConsentGate required={requiresAIDataConsent}>');
+    expect(gate).toContain("'makaron:ai-data-consent:v1'");
+    expect(gate).toContain("setState('declined')");
+    expect(gate).toContain('makaron_ai_data_consent=v1');
+    expect(privacy).toContain('Before the Makaron iOS app sends your content');
+    expect(privacy).toContain('Google (Gemini)');
+    expect(privacy).toContain('same or equivalent privacy and security protection');
+    expect(migration).toContain("'34bd54e7-8b2e-49f6-a746-d8658ab63fd5'");
+    expect(migration).toContain("'00f126ac-7451-4ee6-8025-e67dcc7b0169'");
+  });
+
   it('tracks the migration acceptance criteria in docs', () => {
     const plan = fs.readFileSync(path.join(root, 'docs/ios-migration-test-plan.md'), 'utf8');
     expect(plan).toContain('Keyboard adaptation');
@@ -303,10 +321,12 @@ describe('iOS App Store readiness guardrails', () => {
     expect(projects).toContain('warmProjectEditorCaches(projects.map((project) => project.id), userId, 6)');
     expect(projects).toContain('onTouchStart={onWarm}');
     expect(projects).toContain('onPointerEnter={onWarm}');
-    expect(bootstrap).toContain('pickMediaFromNativePhotoLibrary');
+    expect(bootstrap).toContain('pickMediaItemsFromNativePhotoLibrary');
     expect(bootstrap).toContain('acceptsNativePhotoPicker');
     expect(bootstrap).toContain('acceptsNativeMediaPickerAccept(input.accept)');
     expect(bootstrap).toContain('nativePickerAllowsVideo(input.accept)');
+    expect(bootstrap).toContain('multiple: input.multiple');
+    expect(bootstrap).toContain('pickedFiles.forEach((file) => files.items.add(file))');
     expect(bootstrap).toContain('getIOSPageBackBackdropRoute');
     expect(bootstrap).toContain('document.createElement(\'iframe\')');
     expect(bootstrap).toContain('showPageBackBackdrop(true)');
@@ -492,7 +512,9 @@ describe('iOS App Store readiness guardrails', () => {
     expect(bridge).toContain('pickMedia');
     expect(bridge).toContain('configuration.preferredAssetRepresentationMode = .compatible');
     expect(bridge).toContain('normalizedPickedImagePayload');
-    expect(bridge).toContain('jpegData(compressionQuality: 0.92)');
+    expect(bridge).toContain('configuration.selectionLimit = allowsMultiple ? 0 : 1');
+    expect(bridge).toContain('resizedPickedImage(image, maxDimension: 2048)');
+    expect(bridge).toContain('jpegData(compressionQuality: 0.9)');
     expect(bridge).toContain('return (jpegData, jpegFilename(for: filename), "image/jpeg")');
     expect(bridge).toContain('PHAssetCreationRequest.forAsset()');
     expect(bridge).toContain('UIImage(data: data)');
@@ -508,6 +530,7 @@ describe('iOS App Store readiness guardrails', () => {
     expect(nativeMedia).toContain('saveBlobToNativePhotoLibrary');
     expect(nativeMedia).toContain('saveUrlToNativePhotoLibrary');
     expect(nativeMedia).toContain('pickMediaFromNativePhotoLibrary');
+    expect(nativeMedia).toContain('pickMediaItemsFromNativePhotoLibrary');
     expect(nativeMedia).toContain('makaron:native-media:last-result');
     expect(nativeMedia).toContain("phase: 'sent'");
     expect(nativeMedia).toContain("phase: 'timeout'");
@@ -596,6 +619,9 @@ describe('iOS App Store readiness guardrails', () => {
     const storyboard = fs.readFileSync(path.join(root, 'ios/App/App/Base.lproj/Main.storyboard'), 'utf8');
     const project = fs.readFileSync(path.join(root, 'ios/App/App.xcodeproj/project.pbxproj'), 'utf8');
     const projectLoading = path.join(root, 'src/app/projects/[id]/loading.tsx');
+    expect(projectContainer).toContain('getPendingProjectLaunchSync(projectId)');
+    expect(projectContainer).toContain('if (isNewProject && user)');
+    expect(projectContainer).toContain('.maybeSingle()');
     expect(editor).toContain('hasCuiHistoryState');
     expect(editor).toContain("window.addEventListener('popstate', handlePop)");
     expect(editor).toContain("viewMode === 'cui'");

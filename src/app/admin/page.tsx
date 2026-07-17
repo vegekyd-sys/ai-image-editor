@@ -533,7 +533,7 @@ export default function AdminPage() {
           </div>
 
           <h3 className="text-sm font-medium text-white/60 mb-3">Per-action tools (fixed credits)</h3>
-          <p className="text-xs text-white/30 mb-3">Video tools: credits = per second. Music/ComfyUI: per task. Token-based tools (Gemini, Claude) use Token Rates below.</p>
+          <p className="text-xs text-white/30 mb-3">Video tools: credits = per second. Music/ComfyUI: per task. Token-based tools (Gemini, GPT-5.6, Grok, DeepSeek) use Token Rates below.</p>
 
           <div className="bg-white/5 rounded-xl border border-white/10 overflow-hidden">
             <table className="w-full text-sm">

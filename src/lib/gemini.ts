@@ -1,6 +1,5 @@
 import { GoogleGenAI, Chat, Type } from '@google/genai';
 import { streamText } from 'ai';
-import { createBedrockAnthropic } from '@ai-sdk/amazon-bedrock/anthropic';
 import { Tip } from '@/types';
 import enhancePrompt from './prompts/enhance.md';
 import creativePrompt from './prompts/creative.md';
@@ -8,7 +7,6 @@ import wildPrompt from './prompts/wild.md';
 import captionsPrompt from './prompts/captions.md';
 import sharp from 'sharp';
 import fs from 'fs';
-import { getTipsBedrockModelId, supportsTemperature } from './bedrock-models';
 import { getPromptLanguage, getReplyLanguageInstruction, getTipsLanguageInstruction, normalizeLocale } from './locales';
 
 const LOG_FILE = '/tmp/tips-timing.log';
@@ -47,26 +45,18 @@ const TIPS_OPENROUTER_MODEL = OPENROUTER_MODEL;
 // Tip text should stay on the primary creative model; only the image preview thumbnails use Lite by default.
 const TIPS_PREVIEW_IMAGE_MODEL = process.env.TIPS_PREVIEW_IMAGE_MODEL || 'google/gemini-3.1-flash-lite-image';
 
-// Tips provider config — change TIPS_PROVIDER env var for A/B testing
-// 'bedrock' = Claude Sonnet (fast, default) | 'openrouter' = gemini-3 via OR | 'google' = direct Google SDK
-const TIPS_PROVIDER = (process.env.TIPS_PROVIDER || 'openrouter') as 'bedrock' | 'openrouter' | 'google';
+// Tips text stays on Gemini via OpenRouter by default, with direct Google as fallback.
+type TipsProvider = 'openrouter' | 'google';
+const TIPS_PROVIDER: TipsProvider = process.env.TIPS_PROVIDER === 'google'
+  ? 'google'
+  : 'openrouter';
 // Temperature for tips generation — higher = more creative
 const TIPS_TEMPERATURE = parseFloat(process.env.TIPS_TEMPERATURE || '0.9');
 // Thinking level for tips (Gemini 3.1 Flash): minimal | low | high
 // Default: creative/wild = high, enhance/captions = minimal
 // Override with TIPS_THINKING env var to apply to ALL categories
 const TIPS_THINKING_OVERRIDE = process.env.TIPS_THINKING as 'minimal' | 'low' | 'high' | undefined;
-type TipsProvider = 'bedrock' | 'openrouter' | 'google';
 type OpenRouterReasoningEffort = 'minimal' | 'low' | 'medium' | 'high';
-
-function getBedrockForTips() {
-  const bedrockForTips = createBedrockAnthropic({
-    region: process.env.AWS_REGION?.trim(),
-    accessKeyId: process.env.AWS_ACCESS_KEY_ID?.trim(),
-    secretAccessKey: process.env.AWS_SECRET_ACCESS_KEY?.trim(),
-  });
-  return bedrockForTips(getTipsBedrockModelId());
-}
 
 // ── Google SDK singleton ────────────────────────────────────────
 let _ai: GoogleGenAI | null = null;
@@ -1043,9 +1033,7 @@ export async function* streamTipsByCategory(
   let lastError: unknown;
   for (const [index, provider] of providers.entries()) {
     try {
-      const source = provider === 'bedrock'
-        ? streamTipsByCategoryBedrock(imageBase64, category, metadata, count, existingLabels, locale, skillContext, usageAccum)
-        : provider === 'openrouter'
+      const source = provider === 'openrouter'
           ? streamTipsByCategoryOpenRouter(imageBase64, category, metadata, count, existingLabels, locale, skillContext, usageAccum)
           : streamTipsByCategoryGoogle(imageBase64, category, metadata, count, existingLabels, locale, skillContext, usageAccum);
 
@@ -1202,64 +1190,6 @@ async function* streamTipsByCategoryOpenRouter(
   }
 
   tlog(`[tips:openrouter:${category}] stream done at +${Date.now() - t0}ms`);
-}
-
-// --- Bedrock Provider (Claude Sonnet — default for tips) ---
-async function* streamTipsByCategoryBedrock(
-  imageBase64: string,
-  category: TipCategory,
-  metadata?: { takenAt?: string; location?: string },
-  count: number = 2,
-  existingLabels?: string[],
-  locale?: string,
-  skillContext?: string,
-  usageAccum?: UsageAccum,
-): AsyncGenerator<Tip> {
-  const imageContent = imageBase64.startsWith('http')
-    ? new URL(imageBase64)
-    : imageBase64.startsWith('data:') ? imageBase64 : `data:image/jpeg;base64,${imageBase64}`;
-  const { systemPrompt, userText } = buildTipsPrompt(category, metadata, count, existingLabels, skillContext);
-  const languageInstruction = getTipsLanguageInstruction(locale);
-  const localizedUserText = `${languageInstruction}\n\n${userText}`;
-  const bedrockModelId = getTipsBedrockModelId();
-
-  const t0 = Date.now();
-  tlog(`[tips:bedrock:${category}] stream start model=${bedrockModelId}`);
-
-  const result = await streamText({
-    model: getBedrockForTips(),
-    ...(supportsTemperature(bedrockModelId) ? { temperature: TIPS_TEMPERATURE } : {}),
-    system: `${languageInstruction}\n\n${systemPrompt}`,
-    messages: [
-      {
-        role: 'user',
-        content: [
-          { type: 'image', image: imageContent },
-          { type: 'text', text: `${localizedUserText}${getJsonFormatSuffix(locale)}` },
-        ],
-      },
-    ],
-  });
-
-  tlog(`[tips:bedrock:${category}] streamText ready at +${Date.now() - t0}ms`);
-  yield* withEditPromptRetry(
-    parseIncrementalTipsFromStream(result.textStream, `bedrock:${category}`, category),
-    imageBase64, category, `bedrock:${category}`,
-  );
-
-  // Capture token usage for billing
-  if (usageAccum) {
-    try {
-      const usage = await result.usage;
-      if (usage) {
-        usageAccum.inputTokens += usage.inputTokens ?? 0;
-        usageAccum.outputTokens += usage.outputTokens ?? 0;
-        usageAccum.model = bedrockModelId; // Sonnet is always text output, rate is correct
-      }
-    } catch { /* best effort */ }
-  }
-
-  tlog(`[tips:bedrock:${category}] done at +${Date.now() - t0}ms`);
 }
 
 // ── Shared Incremental JSON Parser ──────────────────────────────

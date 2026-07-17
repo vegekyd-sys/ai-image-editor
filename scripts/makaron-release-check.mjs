@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 import { spawnSync } from 'node:child_process';
-import { existsSync, readFileSync } from 'node:fs';
+import { existsSync, lstatSync, readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
@@ -67,7 +67,15 @@ function localCheck() {
   run('npx', ['tsc', '--noEmit']);
   run('npm', ['run', 'test']);
   run('npm', ['run', 'test:cli']);
-  run('npm', ['run', 'build']);
+  const nodeModulesPath = resolve(root, 'node_modules');
+  const hasSharedNodeModules = existsSync(nodeModulesPath)
+    && lstatSync(nodeModulesPath).isSymbolicLink();
+  if (hasSharedNodeModules) {
+    console.log('\nShared worktree node_modules detected; using webpack because Turbopack rejects links outside the worktree root.');
+    run('npm', ['run', 'build', '--', '--webpack']);
+  } else {
+    run('npm', ['run', 'build']);
+  }
 }
 
 try {

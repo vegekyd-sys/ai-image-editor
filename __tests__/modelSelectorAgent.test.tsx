@@ -4,7 +4,7 @@ import ModelSelector from '@/components/ModelSelector';
 import { LocaleProvider } from '@/lib/i18n';
 
 describe('ModelSelector Agent tab', () => {
-  it('shows all five models and emits allowlisted Agent preferences', async () => {
+  it('shows the GPT-5.6 lineup with no Claude choices and emits allowlisted Agent preferences', async () => {
     const onAgentModelChange = vi.fn();
     render(
       <LocaleProvider>
@@ -35,16 +35,17 @@ describe('ModelSelector Agent tab', () => {
     expect(agentTab.getAttribute('aria-controls')).toBe(agentPanel.id);
     expect(agentPanel.getAttribute('aria-labelledby')).toBe(agentTab.id);
 
-    for (const id of ['sonnet-4.6', 'sonnet-5', 'opus-4.8', 'grok-4.5', 'deepseek-v4-pro']) {
+    for (const id of ['gpt-5.6-terra', 'gpt-5.6-sol', 'gpt-5.6-luna', 'grok-4.5', 'deepseek-v4-pro']) {
       expect(await screen.findByTestId(`agent-model-${id}`)).not.toBeNull();
     }
+    expect(screen.queryByText(/Sonnet|Opus|Claude/i)).toBeNull();
     expect(screen.getByTestId('model-auto-agent').getAttribute('aria-pressed')).toBe('true');
 
     fireEvent.click(screen.getByTestId('model-auto-agent'));
-    expect(onAgentModelChange).toHaveBeenCalledWith('sonnet-5');
+    expect(onAgentModelChange).toHaveBeenCalledWith('gpt-5.6-terra');
 
-    fireEvent.click(screen.getByTestId('agent-model-opus-4.8'));
-    expect(onAgentModelChange).toHaveBeenCalledWith('opus-4.8');
+    fireEvent.click(screen.getByTestId('agent-model-gpt-5.6-sol'));
+    expect(onAgentModelChange).toHaveBeenCalledWith('gpt-5.6-sol');
 
     fireEvent.keyDown(agentTab, { key: 'ArrowLeft' });
     expect(screen.getByTestId('model-tab-video').getAttribute('aria-selected')).toBe('true');

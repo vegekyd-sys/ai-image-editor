@@ -21,7 +21,7 @@ const SERVICE_LABELS: Record<string, string> = {
   supabase_storage: 'Supabase Storage',
   gemini: 'Google Gemini',
   openrouter: 'OpenRouter',
-  bedrock: 'AWS Bedrock',
+  azure_openai: 'Azure OpenAI · GPT-5.6',
   comfyui_qwen: 'ComfyUI Qwen',
   comfyui_pony: 'ComfyUI Pony',
   kling: 'Kling Video',

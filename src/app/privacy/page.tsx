@@ -29,10 +29,13 @@ const sections = [
     ],
   },
   {
-    title: 'Service providers',
+    title: 'AI processing, sharing, and consent',
     items: [
-      'Makaron uses infrastructure, authentication, storage, analytics, payment, app store, and AI model providers to operate the product.',
-      'Uploaded and generated content may be processed by AI providers only to complete the creative action you request, such as editing an image or rendering a video.',
+      'Before the Makaron iOS app sends your content to a third-party AI service, the app explains what will be sent, identifies the recipients, and asks for your permission. If you do not allow AI processing, Makaron does not send your content to those AI services.',
+      'The content sent for a requested creative action can include photos, videos, audio, prompts, chat messages, and generated media needed for a follow-up edit. Your sign-in password and payment card information are not sent to AI services.',
+      'Depending on the feature and model you select, recipients may include Google (Gemini), OpenAI and Microsoft (Azure OpenAI), DeepSeek, xAI, ByteDance/Volcengine (SeeDance), and Kuaishou/Kling.',
+      'These providers process the selected content to perform the edit or generation you request, provide safety and abuse prevention, and return the result. Makaron requires service providers handling personal information to provide the same or equivalent privacy and security protection described in this policy and required by applicable law.',
+      'Makaron also uses infrastructure, authentication, storage, analytics, payment, and app store providers to operate, secure, and support the product.',
       'We do not sell personal information.',
     ],
   },
@@ -56,7 +59,7 @@ export default function PrivacyPage() {
           </Link>
           <div className="space-y-4">
             <p className="text-xs font-semibold uppercase tracking-[0.2em] text-fuchsia-300/70">
-              Last updated: June 27, 2026
+              Last updated: July 15, 2026
             </p>
             <h1 className="text-4xl font-semibold tracking-tight sm:text-5xl">Privacy Policy</h1>
             <p className="max-w-2xl text-base leading-7 text-white/60">

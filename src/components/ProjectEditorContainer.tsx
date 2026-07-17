@@ -8,7 +8,18 @@ import { Snapshot, Message, Tip, PhotoMetadata, ProjectAnimation } from '@/types
 import Editor from '@/components/Editor'
 import { createClient } from '@/lib/supabase/client'
 import { createProject } from '@/lib/createProject'
-import { getCachedImages, getCachedProjectData, cacheProjectData, getCachedProjectDataSync } from '@/lib/imageCache'
+import {
+  cacheProjectData,
+  clearPendingProjectLaunch,
+  clearPendingProjectImages,
+  getCachedImages,
+  getCachedProjectData,
+  getCachedProjectDataSync,
+  getPendingProjectImages,
+  getPendingProjectImagesSync,
+  getPendingProjectLaunchSync,
+  hasPendingProjectImages,
+} from '@/lib/imageCache'
 import { buildVideoFailureActions, serializeCompletionActions } from '@/lib/artifact-actions'
 import { dedupeVideoSnapshots } from '@/lib/video-snapshot-dedupe'
 import { isCompletedGeneratedVideoSnapshot, isFailedGeneratedVideoSnapshot } from '@/lib/video-snapshot-kind'
@@ -169,34 +180,44 @@ export default function ProjectEditorContainer({
   const [initialAnimations, setInitialAnimations] = useState<ProjectAnimation[]>([])
   const [timelineVersion, setTimelineVersion] = useState(2)
   const [initialMusicTaskId, setInitialMusicTaskId] = useState<string | null>(null)
-  const [pendingImages] = useState<string[] | null>(() => {
-    if (typeof window === 'undefined') return null
+  const [pendingImageState, setPendingImageState] = useState<{ images: string[] | null; loading: boolean }>(() => {
+    if (typeof window === 'undefined') return { images: null, loading: false }
     const multi = sessionStorage.getItem('pendingImages')
     if (multi) {
       sessionStorage.removeItem('pendingImages')
-      try { return JSON.parse(multi) as string[] } catch { return null }
+      try { return { images: JSON.parse(multi) as string[], loading: false } } catch { return { images: null, loading: false } }
     }
     const single = sessionStorage.getItem('pendingImage')
     if (single) {
       sessionStorage.removeItem('pendingImage')
-      return [single]
+      return { images: [single], loading: false }
     }
-    return null
+    const cached = getPendingProjectImagesSync(projectId)
+    if (cached) {
+      clearPendingProjectImages(projectId)
+      return { images: cached, loading: false }
+    }
+    return { images: null, loading: hasPendingProjectImages(projectId) }
   })
+  const pendingImages = pendingImageState.images
+  const [pendingLaunch] = useState(() => getPendingProjectLaunchSync(projectId))
   const [pendingMetadata] = useState<PhotoMetadata | undefined>(() => {
     if (typeof window === 'undefined') return undefined
+    if (pendingLaunch?.metadata) return pendingLaunch.metadata as PhotoMetadata
     const raw = sessionStorage.getItem('pendingMetadata')
     if (raw) { sessionStorage.removeItem('pendingMetadata'); try { return JSON.parse(raw) } catch { return undefined } }
     return undefined
   })
   const [pendingPrompt] = useState<string | null>(() => {
     if (typeof window === 'undefined') return null
+    if (pendingLaunch?.prompt) return pendingLaunch.prompt
     const p = sessionStorage.getItem('pendingPrompt')
     if (p) sessionStorage.removeItem('pendingPrompt')
     return p
   })
   const [pendingSkill] = useState<string | null>(() => {
     if (typeof window === 'undefined') return null
+    if (pendingLaunch?.skill) return pendingLaunch.skill
     const s = sessionStorage.getItem('pendingSkill')
     if (s) sessionStorage.removeItem('pendingSkill')
     return s
@@ -207,9 +228,18 @@ export default function ProjectEditorContainer({
     if (raw) { sessionStorage.removeItem('pendingVideos'); try { return JSON.parse(raw) } catch { return null } }
     return null
   })
-  const isNewProject = !!(pendingImages || pendingPrompt || pendingVideos)
+  const isNewProject = !!(pendingImages || pendingImageState.loading || pendingPrompt || pendingVideos)
+
+  useEffect(() => {
+    if (!pendingLaunch) return
+    clearPendingProjectLaunch(projectId)
+    sessionStorage.removeItem('pendingPrompt')
+    sessionStorage.removeItem('pendingSkill')
+    sessionStorage.removeItem('pendingMetadata')
+  }, [pendingLaunch, projectId])
   const [loaded, setLoaded] = useState(() => {
     if (typeof window === 'undefined') return false
+    if (pendingImageState.loading) return false
     if (isNewProject) return true
     const sync = getCachedProjectDataSync(projectId)
     return sync !== null && (sync.snapshots as Snapshot[]).length > 0
@@ -217,15 +247,37 @@ export default function ProjectEditorContainer({
   const shownRef = useRef(loaded)
 
   useEffect(() => {
+    if (!pendingImageState.loading) return
+    let cancelled = false
+    getPendingProjectImages(projectId).then((images) => {
+      if (cancelled) return
+      clearPendingProjectImages(projectId)
+      setPendingImageState({ images: images ?? [], loading: false })
+      shownRef.current = true
+      setLoaded(true)
+    })
+    return () => { cancelled = true }
+  }, [pendingImageState.loading, projectId])
+
+  useEffect(() => {
     if (!isInlineActive) return
     if (authLoading) return
+    if (isNewProject && user) {
+      setProjectOwnerId(user.id)
+      setIsPublicProject(false)
+      return
+    }
     const supabase = createClient()
     supabase
       .from('projects')
       .select('user_id, is_public')
       .eq('id', projectId)
-      .single()
-      .then(({ data }) => {
+      .maybeSingle()
+      .then(({ data, error }) => {
+        if (error) {
+          console.warn('Failed to verify project access:', error)
+          return
+        }
         if (data) {
           setProjectOwnerId(data.user_id)
           setIsPublicProject(data.is_public)
@@ -236,7 +288,7 @@ export default function ProjectEditorContainer({
           leaveEditor('/projects')
         }
       })
-  }, [projectId, authLoading, user, leaveEditor, isInlineActive])
+  }, [projectId, authLoading, user, leaveEditor, isInlineActive, isNewProject])
 
   useEffect(() => {
     if (!isInlineActive) return
@@ -275,7 +327,7 @@ export default function ProjectEditorContainer({
 
   useEffect(() => {
     if (!isInlineActive) return
-    if (pendingImages || shownRef.current) return
+    if (isNewProject || shownRef.current) return
     let cancelled = false
     getCachedProjectData(projectId).then(async (cached) => {
       if (!cached || cancelled || shownRef.current) return
@@ -290,7 +342,7 @@ export default function ProjectEditorContainer({
     })
     return () => { cancelled = true }
 
-  }, [projectId, isInlineActive])
+  }, [projectId, isInlineActive, isNewProject])
 
   const userId = user?.id
   useEffect(() => {

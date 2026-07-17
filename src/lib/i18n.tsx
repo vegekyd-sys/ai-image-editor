@@ -229,12 +229,14 @@ export function LocaleToggle({
         }}
       >
         <span className="mkr-locale-trigger-leading">
-          <svg className="mkr-locale-globe" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-            <circle cx="12" cy="12" r="9" />
-            <path d="M3 12h18" />
-            <path d="M12 3a14 14 0 0 1 0 18" />
-            <path d="M12 3a14 14 0 0 0 0 18" />
-          </svg>
+          {variant === 'menu' && (
+            <svg className="mkr-locale-globe" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+              <circle cx="12" cy="12" r="9" />
+              <path d="M3 12h18" />
+              <path d="M12 3a14 14 0 0 1 0 18" />
+              <path d="M12 3a14 14 0 0 0 0 18" />
+            </svg>
+          )}
           <span className="mkr-locale-trigger-label">
             {variant === 'menu' ? current.label : current.shortLabel}
           </span>

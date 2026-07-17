@@ -1,4 +1,9 @@
 import { NextResponse } from 'next/server'
+import {
+  assertRequiredGPT56Models,
+  isRequiredServiceDown,
+  resolveAzureOpenAIModelsRequest,
+} from '@/lib/azure-openai-health'
 
 type ServiceStatus = 'healthy' | 'unhealthy' | 'unavailable'
 
@@ -102,14 +107,6 @@ async function checkOpenRouter(): Promise<ServiceResult> {
   }, 5000)
 }
 
-async function checkBedrock(): Promise<ServiceResult> {
-  const accessKey = process.env.AWS_ACCESS_KEY_ID
-  const secretKey = process.env.AWS_SECRET_ACCESS_KEY
-  if (!accessKey || !secretKey) return unavailable('AWS credentials not set')
-  // Just verify credentials exist — actual Bedrock call requires SigV4 signing
-  return { status: 'healthy', latency: 0 }
-}
-
 async function checkComfyUI(
   name: string,
   envVar: string,
@@ -209,17 +206,15 @@ async function checkPiAPI(): Promise<ServiceResult> {
 }
 
 async function checkAzureOpenAI(): Promise<ServiceResult> {
-  const key = process.env.AZURE_OPENAI_API_KEY
-  if (!key) return unavailable('AZURE_OPENAI_API_KEY not set')
-
-  const url = process.env.AZURE_OPENAI_EDITS_URL || 'https://meo-ultron.openai.azure.com/openai/deployments/gpt-image-2/images/edits?api-version=2025-04-01-preview'
-  const baseUrl = new URL(url).origin
+  const request = resolveAzureOpenAIModelsRequest()
+  if (!request) return unavailable('AZURE_OPENAI_API_KEY not set')
 
   return checkWithTimeout('azure_openai', async () => {
-    const res = await fetch(`${baseUrl}/openai/models?api-version=2024-02-01`, {
-      headers: { 'api-key': key },
+    const res = await fetch(request.url, {
+      headers: { 'api-key': request.apiKey },
     })
     if (!res.ok) throw new Error(`HTTP ${res.status}`)
+    assertRequiredGPT56Models(await res.json())
   }, 5000)
 }
 
@@ -244,7 +239,6 @@ export async function GET() {
     supabaseStorage,
     gemini,
     openrouter,
-    bedrock,
     comfyuiQwen,
     comfyuiPony,
     comfyuiWai,
@@ -258,7 +252,6 @@ export async function GET() {
     checkSupabaseStorage(),
     checkGemini(),
     checkOpenRouter(),
-    checkBedrock(),
     checkQwen(),
     checkComfyUIDiffusersModel(
       'comfyui_pony',
@@ -284,7 +277,6 @@ export async function GET() {
     supabase_storage: supabaseStorage,
     gemini,
     openrouter,
-    bedrock,
     comfyui_qwen: comfyuiQwen,
     comfyui_pony: comfyuiPony,
     comfyui_wai: comfyuiWai,
@@ -299,11 +291,12 @@ export async function GET() {
   const unhealthy = entries.filter(s => s.status === 'unhealthy').length
   const unavailableCount = entries.filter(s => s.status === 'unavailable').length
 
-  // Core services: if supabase or gemini is unhealthy → down
+  // Core services: if persistence, image generation, or the default Agent is down → down
   const coreDown =
     supabaseDb.status === 'unhealthy' ||
     supabaseAuth.status === 'unhealthy' ||
-    gemini.status === 'unhealthy'
+    gemini.status === 'unhealthy' ||
+    isRequiredServiceDown(azureOpenai.status)
 
   const overallStatus = coreDown ? 'down' : unhealthy > 0 ? 'degraded' : 'healthy'
 

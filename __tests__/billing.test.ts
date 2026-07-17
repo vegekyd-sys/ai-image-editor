@@ -298,6 +298,52 @@ describe('token-rates', () => {
       cache_write_per_1m: 0.5,
     });
   });
+
+  it('includes the exact GPT-5.6 Terra fallback rate and bills its usage', async () => {
+    const chain = mockQuery([]);
+    mockFrom.mockReturnValue(chain);
+    chain.order = vi.fn().mockResolvedValue({ data: [], error: null });
+
+    const {
+      getTokenRate,
+      invalidateTokenRateCache,
+      tokensToCreditsBreakdown,
+    } = await import('@/lib/billing/token-rates');
+    invalidateTokenRateCache();
+
+    const rate = await getTokenRate('gpt-5.6-terra');
+    expect(rate).toMatchObject({
+      input_per_1m: 2.5,
+      output_per_1m: 15,
+      cache_read_per_1m: 0.25,
+      cache_write_per_1m: 3.125,
+      markup: 2,
+    });
+    expect(tokensToCreditsBreakdown(rate!, {
+      noCacheInput: 1_000_000,
+      cacheRead: 0,
+      cacheWrite: 0,
+      output: 1_000_000,
+    })).toBe(3500);
+    expect(tokensToCreditsBreakdown(rate!, {
+      noCacheInput: 0,
+      cacheRead: 100_000,
+      cacheWrite: 0,
+      output: 0,
+    })).toBe(5);
+    expect(tokensToCreditsBreakdown(rate!, {
+      noCacheInput: 0,
+      cacheRead: 0,
+      cacheWrite: 100_000,
+      output: 0,
+    })).toBe(63);
+    expect(tokensToCreditsBreakdown(rate!, {
+      noCacheInput: 1_000_000,
+      cacheRead: 1_000_000,
+      cacheWrite: 1_000_000,
+      output: 1_000_000,
+    })).toBe(4175);
+  });
 });
 
 // ─── credits.ts tests ───────────────────────────────────────────
@@ -412,6 +458,48 @@ describe('credits', () => {
         p_cache_read_tokens: null,
         p_cache_write_tokens: null,
       });
+    });
+
+    it('keeps unreported GPT-5.6 cache writes conservative and stores telemetry as unknown', async () => {
+      const rates = [{
+        model_id: 'gpt-5.6-terra',
+        display_name: 'GPT-5.6 Terra',
+        input_per_1m: 2.5,
+        output_per_1m: 15,
+        cache_read_per_1m: 0.25,
+        cache_write_per_1m: 3.125,
+        markup: 2,
+        is_active: true,
+      }];
+      const ratesChain = mockQuery(rates);
+      ratesChain.order = vi.fn().mockResolvedValue({ data: rates, error: null });
+      mockRpc.mockResolvedValue({ data: 50, error: null });
+      mockFrom.mockImplementation((table: string) => {
+        if (table === 'app_settings') return billingSettingsChain;
+        if (table === 'token_rates') return ratesChain;
+        return mockQuery(null);
+      });
+
+      const { deductByTokens } = await import('@/lib/billing/credits');
+      const { invalidateTokenRateCache } = await import('@/lib/billing/token-rates');
+      invalidateTokenRateCache();
+
+      const result = await deductByTokens(
+        'user-1',
+        'agent',
+        'gpt-5.6-terra',
+        100_000,
+        0,
+        undefined,
+        undefined,
+        { cacheRead: 0, cacheWrite: 0, cacheWriteTelemetryComplete: false },
+      );
+
+      expect(result.charged).toBe(50);
+      expect(mockRpc).toHaveBeenCalledWith('deduct_and_log', expect.objectContaining({
+        p_cache_read_tokens: 0,
+        p_cache_write_tokens: null,
+      }));
     });
   });
 

@@ -11,6 +11,7 @@ interface NativeResponseDetail {
   filename?: string;
   mimeType?: string;
   mediaType?: NativeMediaType;
+  items?: NativePickedMedia[];
 }
 
 const LAST_NATIVE_MEDIA_RESULT_KEY = 'makaron:native-media:last-result';
@@ -28,6 +29,7 @@ type NativePayload = {
 } | {
   action: 'pickMedia';
   allowVideo?: boolean;
+  multiple?: boolean;
 });
 type NativeMessage = Omit<Extract<NativePayload, { action: 'saveToPhotos' }>, 'id'>
   | Omit<Extract<NativePayload, { action: 'pickMedia' }>, 'id'>;
@@ -180,18 +182,32 @@ export function saveUrlToNativePhotoLibrary(url: string, filename: string, media
   return sendNativeSaveMessage({ url, filename, mediaType });
 }
 
-export async function pickMediaFromNativePhotoLibrary(options?: { allowVideo?: boolean }): Promise<NativePickedMedia> {
-  const result = await sendNativeMessage<NativeResponseDetail>({
-    action: 'pickMedia',
-    allowVideo: options?.allowVideo ?? false,
-  }, 180000);
-  if (!result.dataUrl || !result.filename || !result.mimeType) {
-    throw new Error('Native picker returned incomplete media');
-  }
+function normalizePickedMedia(result: NativeResponseDetail): NativePickedMedia | null {
+  if (!result.dataUrl || !result.filename || !result.mimeType) return null;
   return {
     dataUrl: result.dataUrl,
     filename: result.filename,
     mimeType: result.mimeType,
     mediaType: result.mediaType || (result.mimeType.startsWith('video/') ? 'video' : 'image'),
   };
+}
+
+export async function pickMediaItemsFromNativePhotoLibrary(options?: { allowVideo?: boolean; multiple?: boolean }): Promise<NativePickedMedia[]> {
+  const result = await sendNativeMessage<NativeResponseDetail>({
+    action: 'pickMedia',
+    allowVideo: options?.allowVideo ?? false,
+    multiple: options?.multiple ?? false,
+  }, 180000);
+  const items = Array.isArray(result.items) && result.items.length > 0
+    ? result.items
+    : [normalizePickedMedia(result)].filter((item): item is NativePickedMedia => item !== null);
+  if (items.length === 0) {
+    throw new Error('Native picker returned incomplete media');
+  }
+  return items;
+}
+
+export async function pickMediaFromNativePhotoLibrary(options?: { allowVideo?: boolean }): Promise<NativePickedMedia> {
+  const items = await pickMediaItemsFromNativePhotoLibrary({ ...options, multiple: false });
+  return items[0];
 }

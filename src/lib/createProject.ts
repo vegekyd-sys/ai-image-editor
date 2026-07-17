@@ -3,6 +3,7 @@ import { compressImageFile } from '@/lib/image/compress'
 import { extractPhotoMetadata } from '@/lib/image/metadata'
 import { getMarketingAttribution } from '@/lib/marketing/attribution'
 import { createMetaEventId, trackMetaEvent } from '@/lib/marketing/meta-pixel'
+import { stagePendingProjectImages, stagePendingProjectLaunch } from '@/lib/imageCache'
 import type { PhotoMetadata } from '@/types'
 
 function isVideoFile(file: File): boolean {
@@ -21,6 +22,14 @@ export async function compressCreateImageFile(file: File): Promise<string> {
     const { image } = await res.json()
     return image as string
   }
+}
+
+export async function compressCreateImageFiles(files: File[]): Promise<string[]> {
+  const payloads: string[] = []
+  for (const file of files) {
+    payloads.push(await compressCreateImageFile(file))
+  }
+  return payloads
 }
 
 async function createProjectShell(
@@ -51,6 +60,21 @@ function trackProjectCreated(projectId: string, options?: { prompt?: string; ski
   }, options?.eventId || createMetaEventId('project.create'))
 }
 
+function stageProjectLaunch(
+  projectId: string,
+  options?: { prompt?: string; skill?: string },
+  metadata?: PhotoMetadata,
+): void {
+  if (options?.prompt) sessionStorage.setItem('pendingPrompt', options.prompt)
+  if (options?.skill) sessionStorage.setItem('pendingSkill', options.skill)
+  if (metadata) sessionStorage.setItem('pendingMetadata', JSON.stringify(metadata))
+  stagePendingProjectLaunch(projectId, {
+    prompt: options?.prompt,
+    skill: options?.skill,
+    metadata,
+  })
+}
+
 /**
  * Create a new project with optimistic navigation.
  * Creates the project through the backend, stores pending media in sessionStorage,
@@ -63,9 +87,6 @@ export async function createProject(
   options?: { prompt?: string; skill?: string },
   preExtractedMetadata?: PhotoMetadata,
 ): Promise<{ projectId: string; metadata?: PhotoMetadata } | null> {
-  // Store pending data for editor page
-  if (options?.prompt) sessionStorage.setItem('pendingPrompt', options.prompt);
-  if (options?.skill) sessionStorage.setItem('pendingSkill', options.skill);
   const attribution = getMarketingAttribution()
   const metaEventId = createMetaEventId('project.create')
   const marketing = {
@@ -76,6 +97,7 @@ export async function createProject(
 
   if (files.length === 0) {
     const projectId = await createProjectShell('Untitled', marketing);
+    stageProjectLaunch(projectId, options)
     trackProjectCreated(projectId, { ...options, eventId: metaEventId });
     return { projectId };
   }
@@ -91,7 +113,7 @@ export async function createProject(
       createProjectShell('Untitled', marketing),
     ]);
     if (base64) sessionStorage.setItem('pendingImages', JSON.stringify([base64]));
-    if (metadata) sessionStorage.setItem('pendingMetadata', JSON.stringify(metadata));
+    stageProjectLaunch(projectId, options, metadata)
     trackProjectCreated(projectId, { ...options, eventId: metaEventId });
     return { projectId, metadata };
   }
@@ -101,10 +123,10 @@ export async function createProject(
   const [projectId, metadata, imagePayloads] = await Promise.all([
     createProjectShell('Untitled', marketing),
     preExtractedMetadata ? Promise.resolve(preExtractedMetadata) : (!isVideoFile(firstImage) ? extractPhotoMetadata(firstImage) : Promise.resolve(undefined)),
-    Promise.all(imageFiles.map(file => compressCreateImageFile(file))),
+    compressCreateImageFiles(imageFiles),
   ]);
 
-  if (imagePayloads.length) sessionStorage.setItem('pendingImages', JSON.stringify(imagePayloads));
+  if (imagePayloads.length) await stagePendingProjectImages(projectId, imagePayloads);
 
   // Upload videos (transcode + upload via video-upload.ts)
   if (videoFiles.length) {
@@ -113,7 +135,7 @@ export async function createProject(
     sessionStorage.setItem('pendingVideos', JSON.stringify(videoData));
   }
 
-  if (metadata) sessionStorage.setItem('pendingMetadata', JSON.stringify(metadata));
+  stageProjectLaunch(projectId, options, metadata)
 
   trackProjectCreated(projectId, { ...options, eventId: metaEventId });
   return { projectId, metadata };
@@ -129,11 +151,6 @@ export async function createProjectFromStagedMedia(
     skill?: string
   },
 ): Promise<{ projectId: string; metadata?: PhotoMetadata } | null> {
-  if (staged.prompt) sessionStorage.setItem('pendingPrompt', staged.prompt)
-  if (staged.skill) sessionStorage.setItem('pendingSkill', staged.skill)
-  if (staged.images?.length) sessionStorage.setItem('pendingImages', JSON.stringify(staged.images))
-  if (staged.metadata) sessionStorage.setItem('pendingMetadata', JSON.stringify(staged.metadata))
-
   const attribution = getMarketingAttribution()
   const metaEventId = createMetaEventId('project.create')
   const marketing = {
@@ -142,6 +159,8 @@ export async function createProjectFromStagedMedia(
     hasPrompt: Boolean(staged.prompt),
   }
   const projectId = await createProjectShell('Untitled', marketing)
+  if (staged.images?.length) await stagePendingProjectImages(projectId, staged.images)
+  stageProjectLaunch(projectId, { prompt: staged.prompt, skill: staged.skill }, staged.metadata)
   trackProjectCreated(projectId, { prompt: staged.prompt, skill: staged.skill, eventId: metaEventId })
   return { projectId, metadata: staged.metadata }
 }
