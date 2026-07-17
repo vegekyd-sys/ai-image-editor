@@ -10,6 +10,11 @@ interface ChangelogEntry {
 
 const CHANGELOG: ChangelogEntry[] = [
   {
+    date: '2026-07-17',
+    en: { title: 'Skill Categories', items: ['Explore Skills by category, with localized titles and default prompts in English, Simplified Chinese, Traditional Chinese, and Japanese.'] },
+    zh: { title: 'Skill 分类上线', items: ['首页 Skill 现已支持分类浏览，并提供英文、简体中文、繁体中文和日语的标题与默认提示词。'] },
+  },
+  {
     date: '2026-07-16',
     en: { title: 'GPT-5.6 Agent Lineup', items: [
       'GPT-5.6 Terra is now the recommended default Agent model, with GPT-5.6 Sol and GPT-5.6 Luna available for maximum capability or faster lower-cost work.',
