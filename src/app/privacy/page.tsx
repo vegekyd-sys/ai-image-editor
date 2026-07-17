@@ -33,7 +33,7 @@ const sections = [
     items: [
       'Before the Makaron iOS app sends your content to a third-party AI service, the app explains what will be sent, identifies the recipients, and asks for your permission. If you do not allow AI processing, Makaron does not send your content to those AI services.',
       'The content sent for a requested creative action can include photos, videos, audio, prompts, chat messages, and generated media needed for a follow-up edit. Your sign-in password and payment card information are not sent to AI services.',
-      'Depending on the feature and model you select, recipients may include Google (Gemini), OpenAI and Microsoft (Azure OpenAI), Anthropic and Amazon Web Services (Bedrock), DeepSeek, xAI, ByteDance/Volcengine (SeeDance), and Kuaishou/Kling.',
+      'Depending on the feature and model you select, recipients may include Google (Gemini), OpenAI and Microsoft (Azure OpenAI), DeepSeek, xAI, ByteDance/Volcengine (SeeDance), and Kuaishou/Kling.',
       'These providers process the selected content to perform the edit or generation you request, provide safety and abuse prevention, and return the result. Makaron requires service providers handling personal information to provide the same or equivalent privacy and security protection described in this policy and required by applicable law.',
       'Makaron also uses infrastructure, authentication, storage, analytics, payment, and app store providers to operate, secure, and support the product.',
       'We do not sell personal information.',

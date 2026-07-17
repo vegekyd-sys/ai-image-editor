@@ -1144,7 +1144,7 @@ const isTipsFetchingRef = useRef(isTipsFetching);
     }
   }, [generatePreviewForTip, onUpdateTips]);
 
-  // Fetch tips via 3 parallel calls to Claude (fast, ~2-3s vs Gemini ~15s)
+  // Fetch tips through three parallel category calls.
   // previewMode: 'full' = all tips get preview; 'none' = no auto-previews
   // autoPreviewCategory: if set, auto-preview tips in this category (used after commit)
   const fetchTipsForSnapshot = useCallback((
@@ -1982,7 +1982,7 @@ Select the best 3-7 items for a compelling video. You do NOT need to use all or 
           image: contextImageUrl,
           projectId,
           animationImageUrls: imageUrls,
-          // Pass URLs directly — Bedrock fetches them server-side (much faster than uploading base64)
+          // Pass URLs directly so the Agent provider can fetch them server-side.
           animationImages: imageUrls,
           ...(agentModelRef.current !== 'auto' ? { agentModel: agentModelRef.current } : {}),
         },

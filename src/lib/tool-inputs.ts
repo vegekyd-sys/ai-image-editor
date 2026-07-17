@@ -23,7 +23,7 @@ function normalizeToolInput(value: unknown): Record<string, unknown> {
   return { value };
 }
 
-export function normalizeBedrockToolUseInputs(messages: ModelMessage[]): ModelMessage[] {
+export function normalizeToolCallInputs(messages: ModelMessage[]): ModelMessage[] {
   let changed = false;
   const normalized = messages.map((message) => {
     if (message.role !== 'assistant' || !Array.isArray(message.content)) return message;
@@ -43,21 +43,4 @@ export function normalizeBedrockToolUseInputs(messages: ModelMessage[]): ModelMe
   });
 
   return changed ? normalized : messages;
-}
-
-export function describeBedrockToolUseInputIssue(error: unknown): string | null {
-  const requestBodyValues = (error as { requestBodyValues?: unknown })?.requestBodyValues;
-  if (!isPlainObject(requestBodyValues)) return null;
-  const messages = requestBodyValues.messages;
-  if (!Array.isArray(messages)) return null;
-
-  const issue = String((error as { message?: string })?.message ?? '').match(/messages\.(\d+)\.content\.(\d+)\.toolUse\.input/);
-  if (!issue) return null;
-
-  const messageIndex = Number(issue[1]);
-  const contentIndex = Number(issue[2]);
-  const content = (messages[messageIndex] as { content?: unknown[] } | undefined)?.content?.[contentIndex];
-  if (!isPlainObject(content)) return `messages.${messageIndex}.content.${contentIndex} is ${typeof content}`;
-  const input = (content as { toolUse?: { input?: unknown } }).toolUse?.input;
-  return `messages.${messageIndex}.content.${contentIndex}.toolUse.input type=${Array.isArray(input) ? 'array' : typeof input} value=${JSON.stringify(input).slice(0, 300)}`;
 }

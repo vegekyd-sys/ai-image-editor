@@ -10,6 +10,17 @@ interface ChangelogEntry {
 
 const CHANGELOG: ChangelogEntry[] = [
   {
+    date: '2026-07-16',
+    en: { title: 'GPT-5.6 Agent Lineup', items: [
+      'GPT-5.6 Terra is now the recommended default Agent model, with GPT-5.6 Sol and GPT-5.6 Luna available for maximum capability or faster lower-cost work.',
+      'Claude models have been retired from Makaron; existing project selections automatically move to Auto and use Terra.',
+    ]},
+    zh: { title: 'GPT-5.6 Agent 全系上线', items: [
+      'GPT-5.6 Terra 现已成为推荐默认 Agent 模型，同时提供能力更强的 GPT-5.6 Sol 与更快、更低成本的 GPT-5.6 Luna。',
+      'Makaron 已下线 Claude 模型；旧项目中的 Claude 选择会自动回到 Auto，并使用 Terra。',
+    ]},
+  },
+  {
     date: '2026-07-15',
     en: { title: 'A Faster, Smoother Home', items: [
       'Home buttons now respond immediately, including Try Free, Create, Sign in, and the Explore / Projects switcher.',

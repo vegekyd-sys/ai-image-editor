@@ -9,9 +9,8 @@ import { getRequestLocale } from '@/lib/server-locale';
 import { translate } from '@/lib/locales';
 import { resolvePersistedRunStatus } from '@/lib/agent-terminal';
 import {
-  isAgentModelPreference,
+  normalizeRequestedAgentModelPreference,
   resolveAgentModelSpec,
-  type AgentModelPreference,
 } from '@/lib/agent-models';
 
 export const maxDuration = 800;
@@ -55,10 +54,10 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    if (agentModel !== undefined && !isAgentModelPreference(agentModel)) {
+    const requestedAgentModel = normalizeRequestedAgentModelPreference(agentModel);
+    if (requestedAgentModel === null) {
       return NextResponse.json({ error: 'Unsupported agentModel' }, { status: 400 });
     }
-    const requestedAgentModel = agentModel as AgentModelPreference | undefined;
     const resolvedAgentModel = resolveAgentModelSpec(requestedAgentModel, process.env.AGENT_MODEL);
 
     // Pre-flight credit check
@@ -169,6 +168,7 @@ export async function POST(req: NextRequest) {
       let totalOutputTokens = 0;
       let totalCacheReadTokens = 0;
       let totalCacheWriteTokens = 0;
+      let cacheWriteTelemetryComplete = true;
       let providerCostUsd: number | undefined;
       let agentModel = '';
       let sawDone = false;
@@ -206,6 +206,9 @@ export async function POST(req: NextRequest) {
             totalOutputTokens += event.outputTokens ?? 0;
             totalCacheReadTokens += event.cacheReadTokens ?? 0;
             totalCacheWriteTokens += event.cacheWriteTokens ?? 0;
+            if (event.cacheWriteTelemetryComplete === false) {
+              cacheWriteTelemetryComplete = false;
+            }
             providerCostUsd = event.providerCostUsd;
             if (event.model) agentModel = event.model;
           }
@@ -235,7 +238,11 @@ export async function POST(req: NextRequest) {
             userId, 'agent', agentModel || 'unknown',
             totalInputTokens, totalOutputTokens,
             undefined, undefined,
-            { cacheRead: totalCacheReadTokens, cacheWrite: totalCacheWriteTokens },
+            {
+              cacheRead: totalCacheReadTokens,
+              cacheWrite: totalCacheWriteTokens,
+              cacheWriteTelemetryComplete,
+            },
             providerCostUsd,
           ).catch(e => console.error('[agent/run] billing error:', e));
         }
@@ -277,7 +284,11 @@ export async function POST(req: NextRequest) {
           userId, 'agent', agentModel || 'unknown',
           totalInputTokens, totalOutputTokens,
           undefined, undefined,
-          { cacheRead: totalCacheReadTokens, cacheWrite: totalCacheWriteTokens },
+          {
+            cacheRead: totalCacheReadTokens,
+            cacheWrite: totalCacheWriteTokens,
+            cacheWriteTelemetryComplete,
+          },
           providerCostUsd,
         ).catch(e => console.error('[agent/run] billing error:', e));
       }

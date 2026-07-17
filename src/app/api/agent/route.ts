@@ -9,9 +9,8 @@ import { getRequestLocale } from '@/lib/server-locale';
 import { resolvePersistedRunStatus } from '@/lib/agent-terminal';
 import { translate } from '@/lib/locales';
 import {
-  isAgentModelPreference,
+  normalizeRequestedAgentModelPreference,
   resolveAgentModelSpec,
-  type AgentModelPreference,
 } from '@/lib/agent-models';
 
 export const maxDuration = 800;
@@ -45,13 +44,13 @@ export async function POST(req: NextRequest) {
     });
     const locale = getRequestLocale(req);
 
-    if (agentModel !== undefined && !isAgentModelPreference(agentModel)) {
+    const requestedAgentModel = normalizeRequestedAgentModelPreference(agentModel);
+    if (requestedAgentModel === null) {
       return new Response(
         JSON.stringify({ error: 'Unsupported agentModel' }),
         { status: 400, headers: { 'Content-Type': 'application/json' } },
       );
     }
-    const requestedAgentModel = agentModel as AgentModelPreference | undefined;
     const resolvedAgentModel = resolveAgentModelSpec(requestedAgentModel, process.env.AGENT_MODEL);
 
     if (!projectId || (!tipsTeaser && !nameProject && !previewsReady && !uploadedVideoCount && !image && !prompt)) {
@@ -402,7 +401,11 @@ export async function POST(req: NextRequest) {
               userId, 'agent', usageEvent.model,
               usageEvent.inputTokens, usageEvent.outputTokens,
               undefined, undefined,
-              { cacheRead: usageEvent.cacheReadTokens ?? 0, cacheWrite: usageEvent.cacheWriteTokens ?? 0 },
+              {
+                cacheRead: usageEvent.cacheReadTokens ?? 0,
+                cacheWrite: usageEvent.cacheWriteTokens ?? 0,
+                cacheWriteTelemetryComplete: usageEvent.cacheWriteTelemetryComplete,
+              },
               usageEvent.providerCostUsd,
             )
               .then(() => endBilling({ ok: true }))

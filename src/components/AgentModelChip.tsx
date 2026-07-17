@@ -41,7 +41,7 @@ export default function AgentModelChip({ value, onChange, disabled = false }: Ag
   const models = getAgentModels();
   const selected = models.find(model => model.id === value);
   const label = value === 'auto'
-    ? `Auto · ${t('model.sonnet5.name')}`
+    ? `Auto · ${t('model.gpt56Terra.name')}`
     : selected ? t(selected.nameKey as Parameters<typeof t>[0]) : value;
 
   const updatePosition = useCallback(() => {
@@ -115,7 +115,7 @@ export default function AgentModelChip({ value, onChange, disabled = false }: Ag
   const options = [
     {
       id: 'auto',
-      name: `Auto · ${t('model.sonnet5.name')}`,
+      name: `Auto · ${t('model.gpt56Terra.name')}`,
       desc: t('model.agentAutoDesc'),
     },
     ...models.map(model => ({

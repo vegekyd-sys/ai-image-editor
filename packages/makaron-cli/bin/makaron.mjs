@@ -27,7 +27,7 @@ const APP_URL = process.env.MAKARON_APP_URL || DEFAULT_URL;
 const NPM_PACKAGE_NAME = 'makaron-cli';
 const UPDATE_CHECK_INTERVAL_MS = 24 * 60 * 60 * 1000;
 const UPDATE_CHECK_TIMEOUT_MS = 400;
-const AGENT_MODELS = ['auto', 'sonnet-4.6', 'sonnet-5', 'opus-4.8', 'grok-4.5', 'deepseek-v4-pro'];
+const AGENT_MODELS = ['auto', 'gpt-5.6-terra', 'gpt-5.6-sol', 'gpt-5.6-luna', 'grok-4.5', 'deepseek-v4-pro'];
 
 // Public anon key (safe to embed — only enables auth, not data access)
 const SUPABASE_URL = 'https://sdyrtztrjgmmpnirswxt.supabase.co';
@@ -292,7 +292,7 @@ Options:
   --skill <id|label|name>   Use an installed skill or auto-install a matched marketplace skill.
   --image-model <name>      Image model: gemini, gemini-lite, qwen, openai, pony, or wai.
   --video-model <name>      Preferred video model: seedance-fast, seedance-mini, seedance, kling, grok, or google-omni.
-  --agent-model <name>      Agent model: auto, sonnet-4.6, sonnet-5, opus-4.8, grok-4.5, or deepseek-v4-pro.
+  --agent-model <name>      Agent model: auto, gpt-5.6-terra, gpt-5.6-sol, gpt-5.6-luna, grok-4.5, or deepseek-v4-pro.
   --video-resolution <res>  Video resolution: auto, 480p, 720p, 1080p, or 4k.
   --background, -b          Submit and print a runId.
   --json                    Output structured JSON.
@@ -1571,8 +1571,8 @@ Commands:
   admin                              Admin commands (skills, upload, set-admin)
 
 Model selection:
-  --agent-model <name>               Reasoning/tool model: auto, sonnet-4.6, sonnet-5,
-                                     opus-4.8, grok-4.5, or deepseek-v4-pro
+  --agent-model <name>               Reasoning/tool model: auto, gpt-5.6-terra, gpt-5.6-sol,
+                                     gpt-5.6-luna, grok-4.5, or deepseek-v4-pro
   --image-model <name>               Image model: gemini, gemini-lite, qwen, openai,
                                      pony, or wai
   --video-model <name>               Video model: seedance-fast, seedance-mini, seedance,
@@ -1580,7 +1580,7 @@ Model selection:
 
 Examples:
   makaron chat --project auto --agent-model deepseek-v4-pro "plan a launch poster"
-  makaron chat --project <id> --agent-model sonnet-5 --image-model qwen "make it cinematic"
+  makaron chat --project <id> --agent-model gpt-5.6-terra --image-model qwen "make it cinematic"
   makaron chat --project <id> --video-model seedance-fast "turn this into a short video"
 
 Run makaron <command> --help for command-specific options.

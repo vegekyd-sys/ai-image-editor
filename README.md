@@ -84,7 +84,7 @@ scripts/                 Ops, release, SEO, billing, and testing scripts
 
 - Next.js 16, React 19, TypeScript, Tailwind CSS
 - Supabase Auth, Postgres, and Storage
-- Gemini, Qwen/ComfyUI, OpenAI Image, Kling, SeeDance, Grok, Suno, and Bedrock-backed agent routes
+- Gemini, Qwen/ComfyUI, OpenAI Image, Kling, SeeDance, Grok, Suno, and Azure GPT-5.6 Agent routes
 - Remotion and browser-side rendering for motion/design outputs
 - Stripe billing, credits, usage logs, and subscription flows
 - Vitest, Playwright test assets, ESLint, and custom doc/SEO linters
@@ -115,6 +115,8 @@ For mock-only local work, set `MOCK_AI=true` in `.env.local`. For real media gen
 Core variables:
 
 ```text
+AZURE_OPENAI_API_KEY
+AZURE_OPENAI_RESPONSES_URL  # optional; production GPT-5.6 endpoint is the default
 GOOGLE_API_KEY
 AI_PROVIDER
 IMAGE_MODEL

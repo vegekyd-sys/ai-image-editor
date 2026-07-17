@@ -137,8 +137,8 @@ async function deductAndLog(
     p_duration_ms: durationMs || null,
     p_source: source || 'app',
     p_api_key_id: apiKeyId || null,
-    p_cache_read_tokens: cacheReadTokens || null,
-    p_cache_write_tokens: cacheWriteTokens || null,
+    p_cache_read_tokens: cacheReadTokens ?? null,
+    p_cache_write_tokens: cacheWriteTokens ?? null,
   })
   if (!error) return data ?? 0
 
@@ -160,7 +160,7 @@ async function deductAndLog(
     model_used: model || null, credits_charged: credits,
     input_tokens: inputTokens || null, output_tokens: outputTokens || null,
     duration_ms: durationMs || null, source: source || 'app',
-    cache_read_tokens: cacheReadTokens || null, cache_write_tokens: cacheWriteTokens || null,
+    cache_read_tokens: cacheReadTokens ?? null, cache_write_tokens: cacheWriteTokens ?? null,
   })
   return remaining
 }
@@ -185,7 +185,7 @@ export async function deductCredits(
 }
 
 /**
- * Deduct credits based on actual token usage (for OpenRouter/Bedrock/Google calls).
+ * Deduct credits based on actual token usage for routed model calls.
  * Computes credit cost from token_rates table, then deducts atomically.
  */
 export async function deductByTokens(
@@ -196,8 +196,13 @@ export async function deductByTokens(
   outputTokens: number,
   durationMs?: number,
   apiKeyId?: string | null,
-  /** Optional cache-aware breakdown (Bedrock Anthropic). Omit for providers without cache reporting. */
-  cacheBreakdown?: { cacheRead: number; cacheWrite: number },
+  /** Optional cache-aware breakdown. Omit for providers without cache reporting. */
+  cacheBreakdown?: {
+    cacheRead: number;
+    cacheWrite: number;
+    /** False means cacheWrite is only the reported lower bound. */
+    cacheWriteTelemetryComplete?: boolean;
+  },
   /** Provider-reported actual cost. Prefer this for routed providers whose upstream price can vary. */
   providerCostUsd?: number,
 ): Promise<{ charged: number; remaining: number }> {
@@ -228,7 +233,9 @@ export async function deductByTokens(
     inputTokens, outputTokens, durationMs,
     apiKeyId ? 'mcp' : 'app', apiKeyId,
     cacheBreakdown?.cacheRead ?? null,
-    cacheBreakdown?.cacheWrite ?? null,
+    cacheBreakdown?.cacheWriteTelemetryComplete === false
+      ? null
+      : cacheBreakdown?.cacheWrite ?? null,
   )
   return { charged: credits, remaining }
 }
