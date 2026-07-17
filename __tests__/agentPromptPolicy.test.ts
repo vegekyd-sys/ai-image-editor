@@ -25,6 +25,8 @@ describe('agent prompt policy guards', () => {
 
     expect(agentTs).toContain('Remotion compositions are rendered with Remotion; raw uploaded/generated videos are extracted with FFmpeg')
     expect(agentTs).toContain('For raw video snapshots: use timestamp')
+    expect(agentTs).toContain('When design_path is provided it is authoritative; media_index is ignored')
+    expect(agentTs).toContain('const targetMediaIndex = design_path')
     expect(agentTs).toContain("source: 'video'")
     expect(agentTs).toContain("source: 'composition'")
     expect(agentTs).toContain('Render succeeded. Treat this as a successful preview_frame result')

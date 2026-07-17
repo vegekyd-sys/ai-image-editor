@@ -2893,6 +2893,7 @@ For Studio Run, first preview and patch the Remotion source until it is satisfac
     preview_frame: tool({
       description: `Capture one visual frame or a 2-6 frame contact sheet.
 Use media_index to target any timeline snapshot. Remotion compositions are rendered with Remotion; raw uploaded/generated videos are extracted with FFmpeg.
+When design_path is provided it is authoritative; media_index is ignored. Do not combine them to identify the same composition.
 For raw video snapshots: use timestamp to see specific moments in the actual MP4/MOV/WebM.
 For understanding video content (what happens, scenes, pacing), use analyze_video instead.
 Omit media_index to use the current (last edited) composition.
@@ -2933,7 +2934,9 @@ Returns the rendered image so you can see it with your vision.`,
             return { error: `Could not load composition ${design_path}: ${err instanceof Error ? err.message : String(err)}` };
           }
         }
-        const targetMediaIndex = media_index ?? (!design ? ctx.currentSnapshotIndex + 1 : undefined);
+        const targetMediaIndex = design_path
+          ? undefined
+          : (media_index ?? (!design ? ctx.currentSnapshotIndex + 1 : undefined));
 
         // Load composition payload from a specific snapshot if media_index provided.
         if (targetMediaIndex !== undefined && ctx.supabase && ctx.userId) {
