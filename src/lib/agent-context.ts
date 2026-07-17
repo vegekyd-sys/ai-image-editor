@@ -48,6 +48,8 @@ export interface PromptContextOptions {
   referenceImageCount?: number;
   /** Number of just-uploaded videos (for context hint with media index) */
   uploadedVideoCount?: number;
+  /** Number of timeline items created by the user's current upload batch. */
+  turnMediaCount?: number;
   /** Audio references for this turn. Not part of Timeline Media Index. */
   audioAttachments?: AudioAttachmentContext[];
   /** Run being created for this request; excluded when locating a prior checkpoint. */
@@ -67,6 +69,8 @@ export interface PromptContextResult {
    *  multi-turn conversation — required for per-turn cachePoint (B7). */
   history: ModelMessage[];
   snapshotImages: string[];
+  /** Images from this turn's upload batch, in Media Index order. */
+  turnImageAttachments: Array<{ mediaIndex: number; url: string }>;
   currentSnapshotIndex: number;
   currentDesign?: DesignPayload;
   currentDesignPath?: string;
@@ -87,6 +91,33 @@ interface DbSnapshot {
   sort_order: number;
   video_meta?: Record<string, unknown>;
   metadata?: { takenAt?: string; location?: string };
+}
+
+export function buildTurnMediaInspectionContext(
+  snapshots: Array<Pick<DbSnapshot, 'type'>>,
+  requestedCount?: number,
+): string {
+  const turnMediaCount = Math.min(
+    snapshots.length,
+    Math.max(0, Math.floor(requestedCount || 0)),
+  );
+  if (turnMediaCount === 0) return '';
+
+  const turnMediaStart = snapshots.length - turnMediaCount;
+  let imageAttachmentNumber = 0;
+  return `[Current upload batch — inspect every item before planning]
+The user added ${turnMediaCount} new Media Index item${turnMediaCount === 1 ? '' : 's'} in this turn:
+${snapshots.slice(turnMediaStart).map((snapshot, offset) => {
+  const mediaIndex = turnMediaStart + offset + 1;
+  if (snapshot.type === 'video') {
+    return `- <<<media_${mediaIndex}>>>: video — inspect with analyze_video`;
+  }
+  imageAttachmentNumber += 1;
+  return `- <<<media_${mediaIndex}>>>: image — attached directly to this request as upload-batch image attachment ${imageAttachmentNumber}; inspect it visually`;
+}).join('\n')}
+Before creating a Brief, proposal, script, storyboard, edit, or composition, inspect every item above. The uploaded images are already attached together to the current model request, so do not spend separate tool rounds calling analyze_image for them unless the selected model cannot receive images. For videos, call analyze_video once with every required media index in media_indices so their analyses run concurrently. Base the work on returned visual evidence, not filenames, posters, neighboring media, or guesses. This requirement applies only to this new upload batch; later attempts must reuse the durable checkpoint, persisted descriptions, and agent_tool_history instead of analyzing the same media again.
+
+`;
 }
 
 interface DbMessage {
@@ -494,6 +525,8 @@ export async function buildPromptContext(
       })()
     : '';
 
+  const turnMediaInspectionContext = buildTurnMediaInspectionContext(snapshots, options.turnMediaCount);
+
   const audioAttachmentContext = resolvedAudioAttachments.length
     ? `[Audio Index - not Timeline Media]\n${resolvedAudioAttachments.map((audio, i) => {
         const label = `audio_${i + 1}`;
@@ -505,18 +538,30 @@ export async function buildPromptContext(
     : '';
 
   // Assemble
-  const fullPrompt = `${executionContext}${recoveryContext}${activeStudioRunContext}${videoWarning}${designWarning}${annotationWarning}${draftWarning}${snapshotWarning}${metaContext}${descriptionContext}${snapshotIndexContext}${designContext}${recoverableDraftContext}${tipsContext}${refContext}${frameAnchoredVideoEditContext}${videoUploadContext}${audioAttachmentContext}[User request — detect language and reply in the same language]\n${userMessage}`;
+  const fullPrompt = `${executionContext}${recoveryContext}${activeStudioRunContext}${videoWarning}${designWarning}${annotationWarning}${draftWarning}${snapshotWarning}${metaContext}${descriptionContext}${snapshotIndexContext}${turnMediaInspectionContext}${designContext}${recoverableDraftContext}${tipsContext}${refContext}${frameAnchoredVideoEditContext}${videoUploadContext}${audioAttachmentContext}[User request — detect language and reply in the same language]\n${userMessage}`;
 
   const snapshotImages = snapshots.map((s) => {
     const videoMeta = s.video_meta as Record<string, unknown> | undefined;
     const videoUrl = typeof videoMeta?.videoUrl === 'string' ? videoMeta.videoUrl : '';
     return s.type === 'video' && videoUrl ? videoUrl : (s.image_url || '');
   });
+  const turnMediaCount = Math.min(snapshots.length, Math.max(0, Math.floor(options.turnMediaCount || 0)));
+  const turnMediaStart = snapshots.length - turnMediaCount;
+  const turnImageAttachments = snapshots
+    .slice(turnMediaStart)
+    .map((snapshot, offset) => ({
+      mediaIndex: turnMediaStart + offset + 1,
+      type: snapshot.type,
+      url: snapshot.image_url || '',
+    }))
+    .filter(item => item.type !== 'video' && item.url)
+    .map(({ mediaIndex, url }) => ({ mediaIndex, url }));
 
   return {
     fullPrompt,
     history,
     snapshotImages,
+    turnImageAttachments,
     currentSnapshotIndex,
     currentDesign,
     currentDesignPath,

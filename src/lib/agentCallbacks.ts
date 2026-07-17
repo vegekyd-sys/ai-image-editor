@@ -49,7 +49,7 @@ export interface AgentCallbackContext {
 
   fetchTipsForSnapshot: (...args: any[]) => void;
   onSaveMessage?: (message: Message) => void;
-  onSaveSnapshot?: (snap: Snapshot, sortOrder: number, onUploaded?: (url: string) => void) => void;
+  onSaveSnapshot?: (snap: Snapshot, sortOrder: number, onUploaded?: (url: string) => void) => void | Promise<void>;
   onUpdateDescription?: (snapId: string, desc: string) => void;
   triggerProjectNaming?: (text: string) => void;
   triggerTipsTeaser?: (snapId: string, tips: Tip[]) => void;

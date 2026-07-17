@@ -364,6 +364,8 @@ async function streamAgent(baseUrl, headers, projectId, prompt, opts = {}) {
       ...(opts.videoModel ? { videoModel: opts.videoModel } : {}),
       ...(opts.videoResolution ? { videoResolution: opts.videoResolution } : {}),
       ...(opts.agentModel && opts.agentModel !== 'auto' ? { agentModel: opts.agentModel } : {}),
+      ...(opts.uploadedVideoCount ? { uploadedVideoCount: opts.uploadedVideoCount } : {}),
+      ...(opts.turnMediaCount ? { turnMediaCount: opts.turnMediaCount } : {}),
     }),
     signal: controller.signal,
   });
@@ -477,6 +479,8 @@ async function submitRun(baseUrl, headers, projectId, prompt, opts = {}) {
   if (opts.currentSnapshotIndex != null) body.currentSnapshotIndex = opts.currentSnapshotIndex;
   if (opts.isNsfw) body.isNsfw = opts.isNsfw;
   if (opts.audioAttachments?.length) body.audioAttachments = opts.audioAttachments;
+  if (opts.uploadedVideoCount) body.uploadedVideoCount = opts.uploadedVideoCount;
+  if (opts.turnMediaCount) body.turnMediaCount = opts.turnMediaCount;
 
   const res = await fetch(`${baseUrl}/api/agent/run`, {
     method: 'POST',
@@ -1934,6 +1938,9 @@ if (!command || command === '--help' || command === '-h' || command === 'help') 
     process.exit(1);
   }
 
+  let uploadedTurnMediaCount = 0;
+  let uploadedTurnVideoCount = 0;
+
   // --project auto: create a new project (with images/videos if provided)
   if (!projectId || projectId === 'auto') {
     // Create an empty project first, then attach media by URL. Local images use
@@ -1971,6 +1978,7 @@ if (!command || command === '--help' || command === '-h' || command === 'help') 
         process.exit(1);
       }
       process.stderr.write(`📤 Added ${addedCount} image(s) to project\n`);
+      uploadedTurnMediaCount += addedCount;
     } else {
       process.stderr.write(`❌ Failed to add images: ${await res.text()}\n`);
       process.exit(1);
@@ -2062,19 +2070,25 @@ if (!command || command === '--help' || command === '-h' || command === 'help') 
         const data = await res.json();
         const videoSnaps = (data.snapshots || []).filter(s => s.type === 'video');
         process.stderr.write(`📹 Added ${videoSnaps.length} video(s) to timeline\n`);
+        uploadedTurnVideoCount += videoSnaps.length;
+        uploadedTurnMediaCount += videoSnaps.length;
       } else {
         process.stderr.write(`⚠️ Failed to add videos: ${await res.text()}\n`);
       }
     }
 
-    // Inject hint so Agent knows videos are available
-    const hint = `[User uploaded ${chatVideos.length === 1 ? 'a video' : `${chatVideos.length} videos`}. Use analyze_video to understand the content.]`;
-    finalPrompt = `${finalPrompt}\n\n${hint}`;
   }
 
   if (useStream) {
     // Legacy SSE mode
-    const { results } = await streamAgent(baseUrl, headers, projectId, finalPrompt, { videoModel, videoResolution, preferredModel, agentModel });
+    const { results } = await streamAgent(baseUrl, headers, projectId, finalPrompt, {
+      videoModel,
+      videoResolution,
+      preferredModel,
+      agentModel,
+      uploadedVideoCount: uploadedTurnVideoCount,
+      turnMediaCount: uploadedTurnMediaCount,
+    });
     process.stderr.write('\n━━━ Results ━━━\n');
     for (const img of results.images) process.stderr.write(`🖼️  Image: ${img.imageUrl}\n`);
     for (const d of results.designs) process.stderr.write(`🎨  ${d.desc}\n`);
@@ -2083,7 +2097,15 @@ if (!command || command === '--help' || command === '-h' || command === 'help') 
     for (const task of results.musicTasks) await pollMusic(baseUrl, headers, task.taskId);
   } else {
     // Default: fire-and-forget + poll
-    const { runId } = await submitRun(baseUrl, headers, projectId, finalPrompt, { videoModel, videoResolution, preferredModel, agentModel, audioAttachments });
+    const { runId } = await submitRun(baseUrl, headers, projectId, finalPrompt, {
+      videoModel,
+      videoResolution,
+      preferredModel,
+      agentModel,
+      audioAttachments,
+      uploadedVideoCount: uploadedTurnVideoCount,
+      turnMediaCount: uploadedTurnMediaCount,
+    });
     if (background) {
       // Just print runId and exit
       if (jsonOutput) {

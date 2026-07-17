@@ -436,7 +436,7 @@ export default function ProjectEditorContainer({
   }, [userId, projectId, loadProject, isPublicProject, isNewProject, isInlineActive, t])
 
   const handleSaveSnapshot = useCallback((snapshot: Snapshot, sortOrder: number, onUploaded?: (imageUrl: string) => void) => {
-    saveSnapshot(snapshot, sortOrder, onUploaded)
+    return saveSnapshot(snapshot, sortOrder, onUploaded)
   }, [saveSnapshot])
 
   const handleSaveMessage = useCallback((message: Message) => {

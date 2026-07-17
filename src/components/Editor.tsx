@@ -91,7 +91,7 @@ interface EditorProps {
   pendingMetadata?: PhotoMetadata;
   pendingPrompt?: string;
   pendingSkill?: string;
-  onSaveSnapshot?: (snapshot: Snapshot, sortOrder: number, onUploaded?: (imageUrl: string) => void) => void;
+  onSaveSnapshot?: (snapshot: Snapshot, sortOrder: number, onUploaded?: (imageUrl: string) => void) => void | Promise<void>;
   onSaveMessage?: (message: Message) => void;
   onUpdateTips?: (snapshotId: string, tips: Tip[]) => void;
   onUpdateDescription?: (snapshotId: string, description: string) => void;
@@ -1548,7 +1548,7 @@ const isTipsFetchingRef = useRef(isTipsFetching);
   }, [projectId, onUpdateDescription, onSaveMessage, triggerTipsTeaser, initialTitle, triggerProjectNaming]);
 
   // Agent request: route user message through Makaron Agent
-  const handleAgentRequest = useCallback(async (text: string, attachedImages?: string[], overrideImage?: string, options?: { silent?: boolean; displayImages?: string[]; uploadedVideoCount?: number }) => {
+  const handleAgentRequest = useCallback(async (text: string, attachedImages?: string[], overrideImage?: string, options?: { silent?: boolean; displayImages?: string[]; uploadedVideoCount?: number; turnMediaCount?: number }) => {
     // Freeze the selected LLM at submit time. Upload waits below must not let a
     // later selector change mutate an already-submitted request.
     const agentModelForRequest = agentModelRef.current;
@@ -1567,15 +1567,19 @@ const isTipsFetchingRef = useRef(isTipsFetching);
           snapshotsRef.current = updated;
           return updated;
         });
-        // Persist + cache, tips text-only after agent finishes, NO analysis (agent already sees the images)
-        newSnaps.forEach((snap, i) => {
+        // Persist the whole attachment batch before the server builds Media Index.
+        await Promise.all(newSnaps.map(async (snap, i) => {
           const sortOrder = baseOrder + i;
-          onSaveSnapshot?.(snap, sortOrder, (url) => {
-            setSnapshots(prev => prev.map(s => s.id === snap.id ? { ...s, imageUrl: url } : s));
+          await onSaveSnapshot?.(snap, sortOrder, (url) => {
+            setSnapshots(prev => {
+              const next = prev.map(s => s.id === snap.id ? { ...s, imageUrl: url } : s);
+              snapshotsRef.current = next;
+              return next;
+            });
           });
           cacheImage(`snap:${snap.id}`, snap.image);
           onUpdateDescription?.(snap.id, snap.description!);
-        });
+        }));
         // Queue tips-only (no analysis) after agent finishes
         for (const snap of newSnaps) {
           pendingAnalysisRef.current.push({ id: snap.id, image: snap.image });
@@ -1734,7 +1738,7 @@ const isTipsFetchingRef = useRef(isTipsFetching);
 
     try {
       await streamAgent(
-        { prompt: text, image: imageForApi, projectId, durable: true, ...(preferredModelRef.current !== 'auto' ? { preferredModel: preferredModelRef.current } : {}), ...(agentModelForRequest !== 'auto' ? { agentModel: agentModelForRequest } : {}), videoModel: videoModelRef.current, videoResolution: videoResolutionRef.current, videoAuto: videoAutoRef.current, snapshotImages: snapshotImagesForApi, currentSnapshotIndex: contextSnapshotIndex, isNsfw: isNsfwRef.current || undefined, ...(snapshotsRef.current[contextSnapshotIndex]?.design && snapshotsRef.current[contextSnapshotIndex]?.type !== 'video' ? { currentDesign: snapshotsRef.current[contextSnapshotIndex].design, currentDesignPath: snapshotsRef.current[contextSnapshotIndex].designPath } : {}), hasAnnotation: !!overrideImage, isDraft: isDraftMode, referenceImageCount: attachedImages?.length || 0, uploadedVideoCount: options?.uploadedVideoCount || 0 },
+        { prompt: text, image: imageForApi, projectId, durable: true, ...(preferredModelRef.current !== 'auto' ? { preferredModel: preferredModelRef.current } : {}), ...(agentModelForRequest !== 'auto' ? { agentModel: agentModelForRequest } : {}), videoModel: videoModelRef.current, videoResolution: videoResolutionRef.current, videoAuto: videoAutoRef.current, snapshotImages: snapshotImagesForApi, currentSnapshotIndex: contextSnapshotIndex, isNsfw: isNsfwRef.current || undefined, ...(snapshotsRef.current[contextSnapshotIndex]?.design && snapshotsRef.current[contextSnapshotIndex]?.type !== 'video' ? { currentDesign: snapshotsRef.current[contextSnapshotIndex].design, currentDesignPath: snapshotsRef.current[contextSnapshotIndex].designPath } : {}), hasAnnotation: !!overrideImage, isDraft: isDraftMode, referenceImageCount: attachedImages?.length || 0, uploadedVideoCount: options?.uploadedVideoCount || 0, turnMediaCount: options?.turnMediaCount || 0 },
         agentCallbacks,
         agentAbortRef.current.signal,
       );
@@ -1887,11 +1891,15 @@ const isTipsFetchingRef = useRef(isTipsFetching);
       // Navigate to the last video snapshot so VideoResultCard shows
       pendingNavigateToVideoRef.current = true;
       // Persist each with correct sort_order + update imageUrl when upload completes
-      newVideoSnaps.forEach((snap, i) => {
-        onSaveSnapshot?.(snap, snapshotsRef.current.length - newVideoSnaps.length + i, (url) => {
-          setSnapshots(prev => prev.map(s => s.id === snap.id ? { ...s, imageUrl: url } : s));
+      await Promise.all(newVideoSnaps.map(async (snap, i) => {
+        await onSaveSnapshot?.(snap, snapshotsRef.current.length - newVideoSnaps.length + i, (url) => {
+          setSnapshots(prev => {
+            const next = prev.map(s => s.id === snap.id ? { ...s, imageUrl: url } : s);
+            snapshotsRef.current = next;
+            return next;
+          });
         });
-      });
+      }));
     }
 
     // Step 2: Pass images + video posters for user message display
@@ -1902,9 +1910,10 @@ const isTipsFetchingRef = useRef(isTipsFetching);
 
     // Step 3: Only create reference snapshots from actual images (not video posters)
     // displayAttachments shown in user message bubble (includes video posters for visual)
-    handleAgentRequest(text, imgs?.length ? imgs : undefined, undefined, {
+    await handleAgentRequest(text, imgs?.length ? imgs : undefined, undefined, {
       displayImages: displayAttachments.length > 0 ? displayAttachments : undefined,
       uploadedVideoCount: videos?.length,
+      turnMediaCount: (imgs?.length || 0) + (videos?.length || 0),
     });
   };
 
@@ -2459,12 +2468,16 @@ Select the best 3-7 items for a compelling video. You do NOT need to use all or 
       }
 
       // ── Step 3: Persist + cache + log events ──
-      workSnapshots.forEach((snap, i) => {
-        onSaveSnapshot?.(snap, i, (url) => {
-          setSnapshots(prev => prev.map(s => s.id === snap.id ? { ...s, imageUrl: url } : s));
+      await Promise.all(workSnapshots.map(async (snap, i) => {
+        await onSaveSnapshot?.(snap, i, (url) => {
+          setSnapshots(prev => {
+            const next = prev.map(s => s.id === snap.id ? { ...s, imageUrl: url } : s);
+            snapshotsRef.current = next;
+            return next;
+          });
         });
         cacheImage(`snap:${snap.id}`, snap.image);
-      });
+      }));
 
       // ── Step 5: Tips (if images exist) ──
       if (hasImages) {
@@ -2524,7 +2537,10 @@ Select the best 3-7 items for a compelling video. You do NOT need to use all or 
       if (hasPrompt) {
         const skillPrefix = pendingSkill ? `[Active skill: ${pendingSkill}]\n` : '';
         if (!isDesktop) setViewMode('cui');
-        handleAgentRequest(skillPrefix + pendingPrompt!);
+        await handleAgentRequest(skillPrefix + pendingPrompt!, undefined, undefined, {
+          uploadedVideoCount: pendingVideos?.length || 0,
+          turnMediaCount: workSnapshots.length,
+        });
       }
 
       // ── Step 8: CUI mode ──

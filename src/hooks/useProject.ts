@@ -224,10 +224,10 @@ export function useProject(projectId: string, userId: string) {
     return { snapshots, messages, title: projectRes.data?.title ?? 'Untitled', animations, timelineVersion }
   }, [projectId])
 
-  // --- Write (all fire-and-forget) ---
+  // --- Write ---
 
   const saveSnapshot = useCallback((snapshot: Snapshot, sortOrder: number, onUploaded?: (imageUrl: string) => void) => {
-    Promise.resolve().then(async () => {
+    return Promise.resolve().then(async () => {
       try {
         const supabase = getSupabase()
 

@@ -609,14 +609,14 @@ export class AgentDualWriter {
   }
 
   private async maybePersistVideoAnalysisDescription(input: Record<string, unknown>, output: unknown) {
-    const mediaIndex = typeof input.media_index === 'number' ? input.media_index : null;
-    if (!mediaIndex || mediaIndex < 1) return;
-
-    const raw = output && typeof output === 'object'
-      ? (output as Record<string, unknown>).analysis
-      : null;
-    const description = this.normalizeSnapshotDescription(raw);
-    if (!description) return;
+    const outputRecord = output && typeof output === 'object' ? output as Record<string, unknown> : {};
+    const batchAnalyses = Array.isArray(outputRecord.analyses) ? outputRecord.analyses : [];
+    const entries = batchAnalyses.length
+      ? batchAnalyses.map(item => {
+          const record = item && typeof item === 'object' ? item as Record<string, unknown> : {};
+          return { mediaIndex: record.media_index, analysis: record.analysis };
+        })
+      : [{ mediaIndex: input.media_index, analysis: outputRecord.analysis }];
 
     try {
       const { data: snaps, error } = await this.supabase
@@ -628,15 +628,19 @@ export class AgentDualWriter {
         console.error('[DualWriter] video description snapshot lookup error:', error);
         return;
       }
+      await Promise.all(entries.map(async entry => {
+        const mediaIndex = typeof entry.mediaIndex === 'number' ? entry.mediaIndex : null;
+        const description = this.normalizeSnapshotDescription(entry.analysis);
+        if (!mediaIndex || mediaIndex < 1 || !description) return;
+        const snap = snaps?.[mediaIndex - 1] as { id?: string; description?: string | null } | undefined;
+        if (!snap?.id || (typeof snap.description === 'string' && snap.description.trim())) return;
 
-      const snap = snaps?.[mediaIndex - 1] as { id?: string; description?: string | null } | undefined;
-      if (!snap?.id || (typeof snap.description === 'string' && snap.description.trim())) return;
-
-      const { error: updateError } = await this.supabase
-        .from('snapshots')
-        .update({ description })
-        .eq('id', snap.id);
-      if (updateError) console.error('[DualWriter] video description update error:', updateError);
+        const { error: updateError } = await this.supabase
+          .from('snapshots')
+          .update({ description })
+          .eq('id', snap.id);
+        if (updateError) console.error('[DualWriter] video description update error:', updateError);
+      }));
     } catch (err) {
       console.error('[DualWriter] video description persist error:', err);
     }

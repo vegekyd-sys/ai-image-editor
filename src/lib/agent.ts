@@ -1787,7 +1787,7 @@ Hard constraints:
     }),
 
     analyze_image: tool({
-      description: 'See and analyze a photo. Use only for questions, red annotations, uncertain target regions, identity/detail inspection, or ambiguous edits. Do not call this before clear direct generate_image edits; generate_image already receives the selected media. Use media_index to look at any snapshot in the timeline.',
+      description: 'See and analyze one timeline photo. Use for questions, red annotations, uncertain target regions, identity/detail inspection, ambiguous edits, or older media that was not attached to the current request. Current-upload-batch images are already attached together to the model request, so inspect them directly instead of spending one tool round per image. Do not call this before clear direct generate_image edits; generate_image already receives the selected media. Use media_index to look at any snapshot in the timeline.',
       inputSchema: z.object({
         question: z.string().optional().describe('Optional focus area for the analysis'),
         media_index: z.number().optional().describe('1-based index of the snapshot to analyze (<<<media_1>>> = 1, etc.). Omit to analyze the current image.'),
@@ -1853,47 +1853,44 @@ Hard constraints:
     analyze_video: tool({
       description: `Analyze video content using Gemini vision.
 
-Default mode describes scenes/actions/pacing/audio cues in a timeline video. Do not call this before clear direct video edits such as adding glasses, changing outfit, or using Omni to edit a referenced video; generate_animation already receives selected video references. Use analyze_video only for inspection, comparison, diagnosis, ambiguous targets, or frame-location workflows.
+Default mode describes scenes/actions/pacing/audio cues in a timeline video. For a required current-upload-batch inspection, pass every video index together in media_indices; the tool analyzes them concurrently. Otherwise do not call this before clear direct video edits such as adding glasses, changing outfit, or using Omni to edit a referenced video; generate_animation already receives selected video references. Use analyze_video only for inspection, comparison, diagnosis, ambiguous targets, or frame-location workflows.
 
 Use mode="locate_frame" when the user provides a screenshot/frame and you need to find where that frame appears in a video. This is the primary locator for screenshot-based local video edits. Provide the video as media_index and the screenshot as image_url, image_media_index, or workspace_path. For checking a known timestamp visually, use preview_frame instead.`,
       inputSchema: z.object({
-        media_index: z.number().describe('1-based snapshot index of the video to analyze (<<<media_1>>> = 1)'),
+        media_index: z.number().optional().describe('1-based snapshot index of one video to analyze (<<<media_1>>> = 1).'),
+        media_indices: z.array(z.number().int().positive()).max(20).optional().describe('For batch describe mode: all 1-based video Media Index entries to analyze concurrently in this one tool call.'),
         question: z.string().optional().describe('Specific aspect to focus on. In locate_frame mode, use this for the user note about what is wrong in the screenshot.'),
         mode: z.enum(['describe', 'locate_frame']).optional().describe('describe = normal video analysis. locate_frame = locate a screenshot inside this video. Default describe.'),
         image_url: z.string().optional().describe('For locate_frame: screenshot/frame image URL or data:image URL.'),
         image_media_index: z.number().optional().describe('For locate_frame: 1-based Media Index image snapshot to use as the screenshot/frame anchor.'),
         workspace_path: z.string().optional().describe('For locate_frame: workspace image path from preview_frame/read_file/list_files, e.g. project/drafts/frame.jpg.'),
       }),
-      execute: async ({ media_index, question, mode, image_url, image_media_index, workspace_path }) => {
-        const v = validateImageIndex(ctx.snapshotImages, media_index);
-        if (v.error) return { error: v.error };
-
-        // Get video URL: first check snapshotImages (may already contain video URL), then DB fallback
-        let videoUrl: string | undefined;
-        const mediaUrl = ctx.snapshotImages[v.idx];
-        console.log(`[analyze_video] media_index=${media_index} idx=${v.idx} mediaUrl=${mediaUrl?.substring(0, 80)} isVideo=${isVideoUrl(mediaUrl)}`);
-        if (isVideoUrl(mediaUrl)) {
-          videoUrl = mediaUrl;
-        } else if (ctx.supabase && ctx.userId) {
-          try {
-            const { data: snaps, error: snapErr } = await ctx.supabase
-              .from('snapshots')
-              .select('video_meta')
-              .eq('project_id', ctx.projectId)
-              .order('sort_order', { ascending: true });
-            if (snapErr) console.error('[analyze_video] DB query error:', snapErr.message);
-            const snap = snaps?.[v.idx];
-            const vm = snap?.video_meta as Record<string, unknown> | undefined;
-            videoUrl = vm?.videoUrl as string | undefined;
-            if (!videoUrl) console.log(`[analyze_video] media_index=${media_index} idx=${v.idx} snapsCount=${snaps?.length} hasVM=${!!vm} vmKeys=${vm ? Object.keys(vm).join(',') : 'none'}`);
-          } catch (e) { console.error('[analyze_video] exception:', e); }
-        } else {
-          console.log('[analyze_video] no supabase client available');
+      execute: async ({ media_index, media_indices, question, mode, image_url, image_media_index, workspace_path }) => {
+        const requestedIndices = [...new Set([...(media_indices || []), ...(media_index ? [media_index] : [])])];
+        if (!requestedIndices.length) return { error: 'Provide media_index or media_indices.' };
+        if (mode === 'locate_frame' && requestedIndices.length !== 1) {
+          return { error: 'locate_frame accepts exactly one video media_index.' };
         }
 
-        if (!videoUrl) {
-          return { error: `No video found at <<<media_${media_index}>>>. This snapshot may not be a video, or video is still processing. Use analyze_image to see the poster, or preview_frame for specific raw-video/composition frames.` };
+        if (mode !== 'locate_frame' && requestedIndices.length > 1) {
+          const { analyzeVideoContent } = await import('./gemini');
+          const analyses = await Promise.all(requestedIndices.map(async (index) => {
+            const resolved = await resolveVideoUrlForMediaIndex(ctx, index);
+            if (!resolved.videoUrl) return { media_index: index, error: resolved.error || 'Video not found.' };
+            try {
+              const analysis = await analyzeVideoContent(resolved.videoUrl, question, ctx.userId);
+              return { media_index: index, analysis, videoUrl: resolved.videoUrl };
+            } catch (err) {
+              return { media_index: index, error: `Video analysis failed: ${err instanceof Error ? err.message : String(err)}` };
+            }
+          }));
+          return { mode: 'batch_describe', analyses };
         }
+
+        const mediaIndex = requestedIndices[0];
+        const resolved = await resolveVideoUrlForMediaIndex(ctx, mediaIndex);
+        if (!resolved.videoUrl) return { error: resolved.error || `No video found at <<<media_${mediaIndex}>>>.` };
+        const videoUrl = resolved.videoUrl;
 
         try {
           if (mode === 'locate_frame') {
@@ -1918,7 +1915,7 @@ Use mode="locate_frame" when the user provides a screenshot/frame and you need t
                 let candidateFrameUrl = '';
                 let candidateFramePath = '';
                 if (ctx.supabase && ctx.userId) {
-                  candidateFramePath = `${ctx.projectId}/drafts/locate-verify-media${media_index}-t${location.timestamp.toFixed(2).replace('.', '-')}-${Date.now()}.jpg`;
+                  candidateFramePath = `${ctx.projectId}/drafts/locate-verify-media${mediaIndex}-t${location.timestamp.toFixed(2).replace('.', '-')}-${Date.now()}.jpg`;
                   const ws = await workspace.writeFile(candidateFramePath, frameBuffer, ctx.supabase, ctx.userId, 'image/jpeg');
                   if (ws.storageUrl) candidateFrameUrl = toPublicStorageUrl(ws.storageUrl);
                 }
@@ -1957,7 +1954,7 @@ Use mode="locate_frame" when the user provides a screenshot/frame and you need t
               mode: 'locate_frame',
               location,
               verification,
-              media_index,
+              media_index: mediaIndex,
               videoUrl,
               imageSource: image.source,
             };
@@ -1965,7 +1962,7 @@ Use mode="locate_frame" when the user provides a screenshot/frame and you need t
 
           const { analyzeVideoContent } = await import('./gemini');
           const analysis = await analyzeVideoContent(videoUrl, question, ctx.userId);
-          return { mode: 'describe', analysis, media_index, videoUrl };
+          return { mode: 'describe', analysis, media_index: mediaIndex, videoUrl };
         } catch (err) {
           return { error: `Video analysis failed: ${err instanceof Error ? err.message : String(err)}` };
         }
@@ -1981,6 +1978,18 @@ Use mode="locate_frame" when the user provides a screenshot/frame and you need t
             value: [{
               type: 'text' as const,
               text: `Frame location for <<<media_${output.media_index}>>> using ${output.imageSource || 'screenshot'}:\n\n${JSON.stringify(output.location, null, 2)}`,
+            }],
+          };
+        }
+        if (output.mode === 'batch_describe') {
+          return {
+            type: 'content' as const,
+            value: [{
+              type: 'text' as const,
+              text: output.analyses.map((item: any) => item.error
+                ? `Video Analysis (<<<media_${item.media_index}>>>): ERROR — ${item.error}`
+                : `Video Analysis (<<<media_${item.media_index}>>>):\n\n${item.analysis}`
+              ).join('\n\n'),
             }],
           };
         }
@@ -4495,6 +4504,7 @@ export interface RunMakaronAgentOptions {
   referenceImages?: string[];
   animationImageUrls?: string[];
   animationImages?: string[];
+  inspectionImages?: string[];
   locale?: string;
   preferredModel?: ModelId;
   agentModel?: AgentModelPreference;
@@ -4587,13 +4597,15 @@ export async function* runMakaronAgent(
 
   // Build user message content — animation mode includes all snapshot images as visual content
   const animImages = options?.animationImages;
+  const inspectionImages = options?.inspectionImages;
 
   let userContent: any;
-  if (animImages?.length && runtime.spec.supportsImageInput && !analysisOnly && !tipReactionOnly) {
+  const directImages = inspectionImages?.length ? inspectionImages : animImages;
+  if (directImages?.length && runtime.spec.supportsImageInput && !analysisOnly && !tipReactionOnly) {
     // Multi-image user message: text + all snapshot images
     userContent = [
       { type: 'text' as const, text: prompt },
-      ...animImages.map((img: string) =>
+      ...directImages.map((img: string) =>
         img.startsWith('data:')
           ? { type: 'image' as const, image: img }
           : { type: 'image' as const, image: new URL(img) }
@@ -4607,7 +4619,7 @@ export async function* runMakaronAgent(
     const designInjection = options?.currentDesignPath && !promptHasCompositionPointer
       ? `[Current composition pointer]\npath: ${options.currentDesignPath}${options.currentDesign ? `\nwidth: ${options.currentDesign.width}\nheight: ${options.currentDesign.height}${options.currentDesign.animation ? `\nanimation: ${options.currentDesign.animation.durationInSeconds}s @ ${options.currentDesign.animation.fps}fps` : ''}` : ''}\nTo modify this existing composition, call run_code with a JS return value like { type: 'patch', code_path: '${options.currentDesignPath}', edits: [...] } or { type: 'patch', code_path: '${options.currentDesignPath}', props: {...} } and runtime: "composition". Use props-only patches for text/data changes. Do not render from scratch unless the user asks for a new composition.\n\n`
       : '';
-    const textOnlyVisionNote = animImages?.length && !runtime.spec.supportsImageInput
+    const textOnlyVisionNote = directImages?.length && !runtime.spec.supportsImageInput
       ? '\n\n[Selected Agent model is text-only. Use analyze_image on the relevant Media Index entries before making image-dependent decisions.]'
       : '';
     userContent = analysisOnly ? analysisPrompt : (designInjection + prompt + textOnlyVisionNote);
@@ -5269,9 +5281,13 @@ export async function* runMakaronAgent(
         // Emit image_analyzed event so frontend can save the description
         if (toolName === 'analyze_image' || toolName === 'analyze_video') {
 
-          const analyzeInput = (event as any).input as { media_index?: number } | undefined;
-          const analyzedIdx = analyzeInput?.media_index ?? (ctx.currentSnapshotIndex + 1);
-          yield { type: 'image_analyzed', imageIndex: analyzedIdx };
+          const analyzeInput = (event as any).input as { media_index?: number; media_indices?: number[] } | undefined;
+          const analyzedIndices = analyzeInput?.media_indices?.length
+            ? analyzeInput.media_indices
+            : [analyzeInput?.media_index ?? (ctx.currentSnapshotIndex + 1)];
+          for (const analyzedIdx of analyzedIndices) {
+            yield { type: 'image_analyzed', imageIndex: analyzedIdx };
+          }
         }
 
         // Emit preview_frame_captured so frontend shows the screenshot in CUI
