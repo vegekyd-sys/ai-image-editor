@@ -10,6 +10,19 @@ interface ChangelogEntry {
 
 const CHANGELOG: ChangelogEntry[] = [
   {
+    date: '2026-07-17',
+    en: { title: 'Studio Run + Agent Run: From One Prompt to a Finished Film', items: [
+      'Studio Run turns a creative request into a visible production: brief, concept, script, storyboard, assets, composition, review, and delivery — all inside one Makaron project.',
+      'Agent Run is now built for serious creative sessions. It can work for longer, preserve editable code and assets, recover from an interrupted connection, and continue from the exact checkpoint instead of starting over.',
+      'For video, Makaron now thinks like a director and editor: it finds a visual language for the story, builds each scene in detail, watches the real result, improves what is actually on screen, and publishes the reviewed film to your timeline.',
+    ]},
+    zh: { title: 'Studio Run + Agent Run：从一句话到成片', items: [
+      'Studio Run 把一句创作需求变成看得见的完整制作过程：创作简报、创意提案、脚本、分镜、素材、合成、审片与交付，全部发生在同一个 Makaron 项目里。',
+      'Agent Run 现在可以真正承担长时间创作：持续工作、保留可编辑代码与素材；即使页面断开或连接中断，也能从准确的进度继续，而不是重新开始。',
+      '制作视频时，Makaron 会像导演和剪辑师一样思考：为故事寻找合适的视觉语言，细致组织每一个场景，观看真实成片效果，继续修改画面中真正存在的问题，最后把审片完成的作品发布到时间线。',
+    ]},
+  },
+  {
     date: '2026-07-16',
     en: { title: 'GPT-5.6 Agent Lineup', items: [
       'GPT-5.6 Terra is now the recommended default Agent model, with GPT-5.6 Sol and GPT-5.6 Luna available for maximum capability or faster lower-cost work.',

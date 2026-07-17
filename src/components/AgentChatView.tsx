@@ -917,7 +917,7 @@ export default function AgentChatView({
     ro.observe(el);
     update();
     return () => ro.disconnect();
-  }, [onInputBarHeight]);
+  }, [onInputBarHeight, readOnly, studioRun.run?.runId]);
 
   // On mount: keep scroll pinned to bottom until content stabilizes (images loading etc.)
   const mountRoRef = useRef<ResizeObserver | null>(null);
@@ -1321,7 +1321,7 @@ export default function AgentChatView({
               ordinal={(studioRun.run?.stages.findIndex(stage => stage.id === placement.stage.id) ?? -1) + 1}
               total={studioRun.run?.stages.length || 8}
               isPanel={isPanel}
-              onViewArtifact={setViewingFile}
+              onViewArtifact={readOnly ? undefined : setViewingFile}
             />
           ))}
           {messages.map((msg, idx) => (
@@ -1533,7 +1533,7 @@ export default function AgentChatView({
                   ordinal={(studioRun.run?.stages.findIndex(stage => stage.id === placement.stage.id) ?? -1) + 1}
                   total={studioRun.run?.stages.length || 8}
                   isPanel={isPanel}
-                  onViewArtifact={setViewingFile}
+                  onViewArtifact={readOnly ? undefined : setViewingFile}
                 />
               ))}
             </div>
@@ -1613,6 +1613,29 @@ export default function AgentChatView({
           }
         }}
       />
+
+      {readOnly && studioRun.run && <div
+        ref={inputBarRef}
+        data-testid="studio-run-readonly-dock"
+        className={isPanel ? 'flex-shrink-0 px-3 py-3' : 'fixed left-0 right-0 px-3'}
+        style={isPanel ? {
+          borderTop: '1px solid rgba(255,255,255,0.06)',
+          zIndex: 20,
+        } : {
+          bottom: 0,
+          paddingBottom: 'var(--makaron-cui-input-safe-bottom, max(0.75rem, env(safe-area-inset-bottom)))',
+          paddingTop: '24px',
+          background: 'linear-gradient(to bottom, transparent 0%, #0a0a0a 24px)',
+          zIndex: 20,
+        }}
+      >
+        <StudioRunProgress
+          studioRun={studioRun}
+          isAgentActive={isAgentActive}
+          latestUserMessageTimestamp={latestUserMessageTimestamp || undefined}
+          readOnly
+        />
+      </div>}
 
       {!readOnly && <div
         ref={inputBarRef}

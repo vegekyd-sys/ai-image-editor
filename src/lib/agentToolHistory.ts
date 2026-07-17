@@ -182,10 +182,15 @@ function compactPreviewFrameOutput(output: JsonRecord, omitted: string[]): ToolR
     type: 'json',
     value: {
       workspaceUrl: output.workspaceUrl,
+      workspacePath: output.workspacePath,
       source: output.source,
       frame: output.frame,
+      frames: output.frames,
       timestamp: output.timestamp,
       message: output.message,
+      analysis: typeof output.analysis === 'string'
+        ? truncateText(output.analysis, TOOL_HISTORY_MAX_ANALYSIS_CHARS, omitted, 'truncated_preview_analysis')
+        : undefined,
     },
   };
 }

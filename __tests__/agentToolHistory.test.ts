@@ -42,7 +42,7 @@ describe('agent tool history sanitizer', () => {
     const preview = sanitizeToolHistory(
       'preview_frame',
       { frame: 12 },
-      { workspaceUrl: 'https://example.com/frame.jpg', source: 'video', base64Data: 'data:image/jpeg;base64,' + 'a'.repeat(100_000) },
+      { workspaceUrl: 'https://example.com/frame.jpg', source: 'video', analysis: 'Subjects are fully visible.', base64Data: 'data:image/jpeg;base64,' + 'a'.repeat(100_000) },
       { rows: 0, chars: 0 },
     );
     const image = sanitizeToolHistory(
@@ -54,6 +54,7 @@ describe('agent tool history sanitizer', () => {
 
     expect(JSON.stringify(preview)).toContain('https://example.com/frame.jpg');
     expect(JSON.stringify(preview)).toContain('video');
+    expect(JSON.stringify(preview)).toContain('Subjects are fully visible.');
     expect(JSON.stringify(preview)).not.toContain('base64');
     expect(preview.omitted).toContain('removed_preview_frame_pixels');
     expect(JSON.stringify(image)).toContain('Image generated successfully.');

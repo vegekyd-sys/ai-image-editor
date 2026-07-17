@@ -55,6 +55,9 @@ describe('agent terminal contract wiring', () => {
     expect(agentSource).toContain('composition_parts.directory');
     expect(agentSource).toContain('Split the content across new numbered files');
     expect(agentSource).toContain('providerOptions: getAgentProviderOptions(runtime)');
+    expect(agentSource).toContain('Boolean(options?.execution)');
+    expect(agentSource).toContain('durableVisionBridge');
+    expect(agentSource).toContain('Visual QA for contact sheet frames');
     expect(agentModelRuntimeSource).toContain('promptCacheKey: runtime.promptCacheKey');
     expect(agentModelRuntimeSource).toContain("ttl: '30m'");
     expect(agentSource).toContain("return { designPath: input.design_path };");
@@ -96,5 +99,9 @@ describe('agent terminal contract wiring', () => {
     expect(executionDispatchSource).toContain("/api/agent/execution/${runId}");
     expect(executionRunnerSource).toContain("terminal_code: 'lease_expired'");
     expect(executionRunnerSource).toContain(".eq('id', attemptId).eq('status', 'running')");
+  });
+
+  it('gives each durable attempt enough steps to finish a composed video QA pass', () => {
+    expect(headlessRouteSource).toContain('attemptMaxSteps: 60');
   });
 });

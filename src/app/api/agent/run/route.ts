@@ -153,7 +153,7 @@ export async function POST(req: NextRequest) {
       const executionPolicy = {
         durable: true,
         attemptBudgetMs: 420_000,
-        attemptMaxSteps: 24,
+        attemptMaxSteps: 60,
         leaseSeconds: 480,
         maxAttempts: 40,
         maxTotalInputTokens: 12_000_000,

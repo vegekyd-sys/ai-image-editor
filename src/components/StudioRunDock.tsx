@@ -290,10 +290,12 @@ export function StudioRunProgress({
   studioRun,
   isAgentActive = false,
   latestUserMessageTimestamp,
+  readOnly = false,
 }: {
   studioRun: StudioRunViewModel;
   isAgentActive?: boolean;
   latestUserMessageTimestamp?: number;
+  readOnly?: boolean;
 }) {
   const { run, artifacts } = studioRun;
   const [expanded, setExpanded] = useState(false);
@@ -326,7 +328,7 @@ export function StudioRunProgress({
     && latestUserMessageTimestamp > Date.parse(run.updatedAt);
   if (hasNewerUserRequest) return null;
 
-  const canDismiss = isTerminal || !isAgentActive;
+  const canDismiss = !readOnly && (isTerminal || !isAgentActive);
 
   const dismiss = () => {
     window.sessionStorage.setItem(dismissalKey(run.runId), 'true');
@@ -497,7 +499,7 @@ export function StudioRunStageCard({
       {expanded && (
         <div className="mt-3 pl-[18px] pr-1">
           <ArtifactDetail stageId={stage.id} artifact={artifact} />
-          {stage.artifactPath && (
+          {stage.artifactPath && onViewArtifact && (
             <button
               type="button"
               onClick={() => onViewArtifact?.(stage.artifactPath!)}

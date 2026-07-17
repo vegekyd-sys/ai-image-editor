@@ -145,6 +145,13 @@ describe('Studio Run CUI surfaces', () => {
     expect(textarea).toBeGreaterThan(progress);
   });
 
+  it('renders a separate read-only progress dock for public viewers', () => {
+    const source = readFileSync(path.join(root, 'src/components/AgentChatView.tsx'), 'utf8');
+    expect(source).toContain('data-testid="studio-run-readonly-dock"');
+    expect(source).toContain('readOnly && studioRun.run');
+    expect(source).toContain('onViewArtifact={readOnly ? undefined : setViewingFile}');
+  });
+
   it('expands the bottom progress bar into the complete stage table without green accents', () => {
     render(<StudioRunProgress studioRun={{ run, artifacts: { [run.stages[0].artifactPath!]: briefArtifact } }} />);
 
@@ -189,6 +196,26 @@ describe('Studio Run CUI surfaces', () => {
     render(<StudioRunProgress studioRun={{ run, artifacts: {} }} isAgentActive />);
     expect(screen.getByTestId('studio-run-progress')).toBeTruthy();
     expect(screen.queryByTestId('studio-run-progress-dismiss')).toBeNull();
+  });
+
+  it('keeps the read-only progress visible without exposing private file actions', () => {
+    render(
+      <>
+        <StudioRunProgress studioRun={{ run, artifacts: {} }} isAgentActive={false} readOnly />
+        <StudioRunStageCard
+          stage={run.stages[0]}
+          status="completed"
+          artifact={briefArtifact}
+          ordinal={1}
+          total={8}
+          isPanel
+        />
+      </>,
+    );
+
+    expect(screen.queryByTestId('studio-run-progress-dismiss')).toBeNull();
+    expect(screen.queryByLabelText('打开创作简报原始文件')).toBeNull();
+    expect(screen.getByText('让创意从一句话走到可交付成片')).toBeTruthy();
   });
 
   it('keeps completed progress visible until a newer user request appears', () => {

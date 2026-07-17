@@ -1339,7 +1339,7 @@ function buildLightweightSystemPrompt(mode: 'analysis' | 'tipReaction', locale?:
 // Tools (Vercel AI SDK style, closure over AgentContext)
 // ---------------------------------------------------------------------------
 
-function createTools(ctx: AgentContext, runtime: AgentModelRuntime, locale?: string) {
+function createTools(ctx: AgentContext, runtime: AgentModelRuntime, locale?: string, durableVisionBridge = false) {
   return {
     generate_image: tool({
       description: generateImageToolPrompt,
@@ -2899,6 +2899,20 @@ Returns the rendered image so you can see it with your vision.`,
         question: z.string().optional().describe('What to focus on when viewing this frame.'),
       }),
       execute: async ({ media_index, design_path, frame, timestamp, frames, timestamps, question }) => {
+        const analyzeDurablePreview = async (image: Buffer, fallback: string) => {
+          if (!durableVisionBridge) return undefined;
+          try {
+            const { analyzeImageContent } = await import('./gemini');
+            return await analyzeImageContent(
+              `data:image/jpeg;base64,${image.toString('base64')}`,
+              question || 'Check visual integrity, subject cropping, text readability, composition, and whether the rendered frame is safe to publish.',
+              ctx.userId,
+            );
+          } catch (error) {
+            console.warn('[preview_frame] durable vision bridge failed:', error);
+            return fallback;
+          }
+        };
         let design = (ctx as any).__lastDesignPayload;
         let rawVideo: { url: string; duration?: number; fps?: number } | null = null;
         if (design_path) {
@@ -3035,9 +3049,14 @@ Returns the rendered image so you can see it with your vision.`,
             }
 
             console.log(`🖼️ [agent] preview_frame: contact sheet ${targetFrames.join(',')} (${(contactSheet.length / 1024).toFixed(0)} KB)`);
+            const analysis = await analyzeDurablePreview(
+              contactSheet,
+              `The contact sheet rendered successfully for frames ${targetFrames.join(', ')}. Continue using the saved preview paths; do not repeat this preview solely because visual analysis was unavailable.`,
+            );
             return {
               base64Data: contactSheet.toString('base64'),
               mimeType: 'image/jpeg',
+              analysis,
               source: 'composition-contact-sheet',
               frames: targetFrames,
               framePaths,
@@ -3089,9 +3108,14 @@ Returns the rendered image so you can see it with your vision.`,
             }
 
             console.log(`🖼️ [agent] preview_frame: raw video t=${clampedTimestamp.toFixed(2)}s, ${(jpegBuffer.length / 1024).toFixed(0)} KB (ffmpeg)`);
+            const analysis = await analyzeDurablePreview(
+              jpegBuffer,
+              `The video frame rendered successfully at ${clampedTimestamp.toFixed(2)}s. Continue using the saved preview path; do not repeat this preview solely because visual analysis was unavailable.`,
+            );
             return {
               base64Data: jpegBuffer.toString('base64'),
               mimeType: 'image/jpeg',
+              analysis,
               source: 'video',
               timestamp: clampedTimestamp,
               frame: targetFrame,
@@ -3151,9 +3175,14 @@ Returns the rendered image so you can see it with your vision.`,
           }
 
           console.log(`🖼️ [agent] preview_frame: frame ${targetFrame}/${totalFrames} (${(targetFrame / fps).toFixed(1)}s), ${(jpegBuffer.length / 1024).toFixed(0)} KB (sandbox)`);
+          const analysis = await analyzeDurablePreview(
+            jpegBuffer,
+            `Frame ${targetFrame} rendered successfully. Continue using the saved preview path; do not repeat this preview solely because visual analysis was unavailable.`,
+          );
           return {
             base64Data: jpegBuffer.toString('base64'),
             mimeType: 'image/jpeg',
+            analysis,
             source: 'composition',
             frame: targetFrame,
             totalFrames,
@@ -3175,6 +3204,15 @@ Returns the rendered image so you can see it with your vision.`,
         }
         if (Array.isArray(output.frames)) {
           const loc = output.workspacePath ? ` Saved: ${output.workspacePath}` : '';
+          if (output.analysis) {
+            return {
+              type: 'content' as const,
+              value: [{
+                type: 'text' as const,
+                text: `Visual QA for contact sheet frames ${output.frames.join(', ')} of ${output.totalFrames}:${loc}\n${output.analysis}\nUse this as visual evidence. If clean, publish without adding another preview call.`,
+              }],
+            };
+          }
           return {
             type: 'content' as const,
             value: [
@@ -3186,6 +3224,15 @@ Returns the rendered image so you can see it with your vision.`,
         const time = (output.frame / output.fps).toFixed(1);
         const loc = output.workspacePath ? ` Saved: ${output.workspacePath}` : '';
         const nextStep = ' Render succeeded. Treat this as a successful preview_frame result; if the attached frame is usable and there is no explicit error above, do not rewrite the composition just because the tool did not provide a natural-language visual critique. Continue with write_file when the user asked to publish.';
+        if (output.analysis) {
+          return {
+            type: 'content' as const,
+            value: [{
+              type: 'text' as const,
+              text: `Visual QA for frame ${output.frame}/${output.totalFrames} (${time}s).${loc}\n${output.analysis}\nUse this as visual evidence.${nextStep}`,
+            }],
+          };
+        }
         return {
           type: 'content' as const,
           value: [
@@ -4503,7 +4550,7 @@ export async function* runMakaronAgent(
     execution: options?.execution,
   };
 
-  const allTools = wrapDurableIdempotentTools(createTools(ctx, runtime, options?.locale), ctx);
+  const allTools = wrapDurableIdempotentTools(createTools(ctx, runtime, options?.locale, Boolean(options?.execution)), ctx);
   if (!options?.execution) delete (allTools as Record<string, unknown>).execution_checkpoint;
   perf?.mark('agent_tools_created', { toolCount: Object.keys(allTools).length });
   let imagesSent = 0;
