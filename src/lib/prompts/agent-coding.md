@@ -54,12 +54,12 @@ return {
 
 ## Workspace And Publish
 
-`run_code` previews or produces outputs. `write_file` persists them.
+`run_code` previews or produces outputs. Successful composition renders and patches are immediately autosaved to the workspace recovery path returned as `code_path`. `write_file` publishes them or creates a named checkpoint.
 
 Composition runtime:
-- `type: "render"` and `type: "patch"` create a draft preview.
+- `type: "render"` and `type: "patch"` create a draft preview and autosave it before returning success.
 - For timeline videos, preserve the selected Media Index video aspect ratio. Two 9:16 videos spliced together must return a 9:16 canvas such as `width: 1080, height: 1920`, not a 16:9 canvas.
-- `write_file({ fromLastRunCode: true, name: "slug", publish: false })` saves code to workspace without creating a timeline snapshot.
+- `write_file({ fromLastRunCode: true, name: "slug", publish: false })` creates an optional named workspace checkpoint without creating a timeline snapshot.
 - `write_file({ fromLastRunCode: true, name: "slug" })` saves and publishes the composition to the timeline.
 - `write_file({ fromWorkspaceOutputs: true, mediaType: "video", limit: 3 })` publishes recent exported workspace videos to the timeline. Use this immediately after direct FFmpeg requests that create user-facing MP4s, such as "split this into three videos", "cut out this part", "trim/export this clip", or "transcode this video".
 - When using a workspace output in later code, pass its exact workspace `path` via `workspace_paths`. Do not copy, download, or reconstruct Storage URLs; node runtime resolves workspace paths to local `inputFiles`.

@@ -8,8 +8,10 @@ import * as Remotion from 'remotion';
 import { Audio as MediaAudio, Video as MediaVideo } from '@remotion/media';
 import * as RemotionPaths from '@remotion/paths';
 import * as RemotionNoise from '@remotion/noise';
+import * as THREE from 'three';
 import { getAvailableFonts } from '@remotion/google-fonts';
 import { transform as sucraseTransform } from 'sucrase';
+import { normalizeRemotionScopeDeclarations } from '@/lib/remotion-code-normalization';
 
 const { Sequence, useVideoConfig, delayRender, continueRender } = Remotion;
 
@@ -25,6 +27,7 @@ function createRemotionScope(useOffthreadVideo: boolean, useNativeVideo: boolean
   const nativeVideo = Remotion.Video || MediaVideo;
   const scope: Record<string, unknown> = {
     React, useState, useEffect, useCallback, useMemo, useRef,
+    THREE,
     ...Remotion,
     ...RemotionPaths,
     ...RemotionNoise,
@@ -39,16 +42,6 @@ function createRemotionScope(useOffthreadVideo: boolean, useNativeVideo: boolean
   delete scope.default;
   delete scope.__esModule;
   return scope;
-}
-
-function normalizeRemotionScopeDeclarations(code: string): string {
-  return code
-    .trim()
-    .replace(/^\s*(?:const|let|var)\s*\{[^}]*\}\s*=\s*(?:window\.)?Remotion\s*;?\s*$/gm, '')
-    .replace(/^\s*(?:const|let|var)\s+Remotion\s*=\s*window\.Remotion\s*;?\s*$/gm, '')
-    .replace(/\bwindow\.Remotion\./g, '')
-    .replace(/\bRemotion\./g, '')
-    .trim();
 }
 
 function pickRemotionComponentName(code: string): string {

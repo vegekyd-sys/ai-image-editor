@@ -81,6 +81,9 @@ app-store-assets/**/*.mov
 !/scripts/smoke-gpt56-cache.ts
 !/scripts/backfill-annual-subscription-credits.mjs
 !/scripts/audit-liquid-glass-perf.mjs
+!/scripts/studio-run-golden.ts
+!/scripts/sticker-bridge-acceptance.ts
+!/scripts/edge-video-bridge-acceptance.ts
 
 
 # claude code local settings
@@ -102,6 +105,7 @@ test-kling.mjs
 /artifacts/
 /work/
 /.playwright-cli/
+/.remotion-bundle-local/
 
 # workspace agent runtime data
 .workspace/

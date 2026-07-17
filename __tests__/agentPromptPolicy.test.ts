@@ -216,6 +216,17 @@ describe('agent prompt policy guards', () => {
     expect(agentTs).not.toContain("The model's minimum generation duration is 5 seconds")
   })
 
+  it('keeps explicit explainer videos on editable Studio Run before provider duration routing', () => {
+    const agent = read('src/lib/prompts/agent.md')
+    const agentTs = read('src/lib/agent.ts')
+    const longVideoDirector = read('src/skills/long-video-director/SKILL.md')
+
+    expect(agent).toContain('Explicit explainer, Studio Run, Remotion, or matched built-in Composition requests')
+    expect(agent).toContain('Do not reinterpret a 30s/60s Composition as provider clips')
+    expect(agentTs).toContain('This provider limit does not reroute an explicit explainer-video')
+    expect(longVideoDirector).toContain('Do not use for explainer-video, Studio Run, Remotion')
+  })
+
   it('keeps SeeDance Fast as the default video model unless user or app selects another model', () => {
     const agent = read('src/lib/prompts/agent.md')
     const agentTs = read('src/lib/agent.ts')

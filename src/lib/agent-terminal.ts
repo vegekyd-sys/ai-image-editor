@@ -20,13 +20,94 @@ export interface ModelTerminationObservation {
 export interface ModelTerminationAssessment {
   ok: boolean;
   retryable: boolean;
-  code?: 'stream_error' | 'missing_finish' | 'empty_final_step' | 'truncated' | 'provider_error' | 'content_filter' | 'unfinished_tool_turn';
+  code?: 'stream_error' | 'missing_finish' | 'empty_final_step' | 'truncated' | 'provider_error' | 'content_filter' | 'unfinished_tool_turn' | 'studio_run_incomplete' | 'studio_stage_handoff';
   detail?: string;
 }
 
-function errorDetail(error: unknown): string {
-  if (error instanceof Error) return error.message;
-  return error == null ? '' : String(error);
+export function shouldHandoffToStudioComposition(input: {
+  durableExecution: boolean;
+  attemptWorkUnit?: string;
+  currentStage?: string;
+}): boolean {
+  return input.durableExecution
+    && input.currentStage === 'composition'
+    && input.attemptWorkUnit !== 'studio:composition';
+}
+
+export function shouldCompleteDurableStudioRun(input: {
+  durableExecution: boolean;
+  status?: string;
+  currentStage?: string | null;
+}): boolean {
+  return input.durableExecution
+    && input.status === 'completed'
+    && !input.currentStage;
+}
+
+export function shouldStopAfterStudioToolStep(input: {
+  durableExecution: boolean;
+  attemptWorkUnit?: string;
+  toolResults?: ReadonlyArray<{ toolName?: string; output?: unknown }>;
+}): boolean {
+  if (!input.durableExecution) return false;
+  return Boolean(input.toolResults?.some(result => {
+    if (result.toolName !== 'studio_run' || !result.output || typeof result.output !== 'object') return false;
+    const output = result.output as Record<string, unknown>;
+    if (output.success === false || !output.studioRun || typeof output.studioRun !== 'object') return false;
+    const studioRun = output.studioRun as Record<string, unknown>;
+    const currentStage = typeof studioRun.currentStage === 'string' ? studioRun.currentStage : undefined;
+    const status = typeof studioRun.status === 'string' ? studioRun.status : undefined;
+    return shouldHandoffToStudioComposition({
+      durableExecution: true,
+      attemptWorkUnit: input.attemptWorkUnit,
+      currentStage,
+    }) || shouldCompleteDurableStudioRun({
+      durableExecution: true,
+      status,
+      currentStage: currentStage || null,
+    });
+  }));
+}
+
+export function shouldUseTextOnlyRecovery(input: {
+  deliveredArtifact: boolean;
+  activeStudioRun: boolean;
+}): boolean {
+  return input.deliveredArtifact && !input.activeStudioRun;
+}
+
+export function shouldContinueActiveStudioRun(input: {
+  activeStudioRun: boolean;
+  studioRunTouched: boolean;
+  runCodeStarted: boolean;
+  recoveryPrompt: boolean;
+  attemptWorkUnit?: string;
+}): boolean {
+  return input.activeStudioRun && (
+    input.studioRunTouched
+    || input.runCodeStarted
+    || input.recoveryPrompt
+    || Boolean(input.attemptWorkUnit?.startsWith('studio:'))
+  );
+}
+
+export function describeModelStreamError(error: unknown, depth = 0): string {
+  if (error == null) return '';
+  if (depth > 3) return '';
+  if (typeof error !== 'object') return String(error);
+
+  const record = error as Record<string, unknown>;
+  const name = error instanceof Error ? error.name : typeof record.name === 'string' ? record.name : '';
+  const message = error instanceof Error ? error.message : typeof record.message === 'string' ? record.message : '';
+  const code = typeof record.code === 'string' ? record.code : '';
+  const statusCode = typeof record.statusCode === 'number'
+    ? String(record.statusCode)
+    : typeof (record.$metadata as Record<string, unknown> | undefined)?.httpStatusCode === 'number'
+      ? String((record.$metadata as Record<string, unknown>).httpStatusCode)
+      : '';
+  const own = [name, message, code && `code=${code}`, statusCode && `status=${statusCode}`].filter(Boolean).join(': ');
+  const cause = describeModelStreamError(record.cause, depth + 1);
+  return [own, cause && `cause=${cause}`].filter(Boolean).join(' | ') || String(error);
 }
 
 /**
@@ -43,7 +124,7 @@ export function classifyModelTermination(
       ok: false,
       retryable: true,
       code: 'stream_error',
-      detail: errorDetail(observation.streamError),
+      detail: describeModelStreamError(observation.streamError),
     };
   }
 

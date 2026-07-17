@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from 'vitest'
-import { listVolcengineTtsVoices, synthesizeWithVolcengineTts } from '@/lib/volcengine-tts'
+import { inferVolcengineTtsResourceId, listVolcengineTtsVoices, synthesizeWithVolcengineTts } from '@/lib/volcengine-tts'
 
 describe('volcengine TTS client', () => {
   afterEach(() => {
@@ -88,6 +88,85 @@ describe('volcengine TTS client', () => {
     })).rejects.toThrow('Missing Volcengine TTS credentials')
   })
 
+  it('infers the legacy Seed TTS resource for Mars voices', async () => {
+    vi.stubEnv('VOLCENGINE_ASR_API_KEY', 'speech-api-key')
+    vi.stubEnv('VOLCENGINE_TTS_RESOURCE_ID', '')
+
+    const fetchMock = vi.fn(async (url: string | URL | Request, init?: RequestInit) => {
+      const href = String(url)
+      const headers = init?.headers as Record<string, string>
+      if (href.endsWith('/submit')) {
+        expect(headers['X-Api-Resource-Id']).toBe('seed-tts-1.0')
+        return new Response(JSON.stringify({
+          code: 20000000,
+          message: 'ok',
+          data: { task_id: 'task-mars' },
+        }), { status: 200 })
+      }
+      if (href.endsWith('/query')) {
+        return new Response(JSON.stringify({
+          code: 20000000,
+          message: 'ok',
+          data: { task_status: 2, audio_url: 'https://cdn.example.com/mars.mp3' },
+        }), { status: 200 })
+      }
+      if (href === 'https://cdn.example.com/mars.mp3') {
+        return new Response(new Uint8Array([4, 5, 6]), { status: 200 })
+      }
+      throw new Error(`Unexpected fetch: ${href}`)
+    })
+    vi.stubGlobal('fetch', fetchMock)
+
+    const result = await synthesizeWithVolcengineTts({
+      text: 'Makaron，让创意开始。',
+      voiceId: 'zh_female_zhixingnvsheng_mars_bigtts',
+      requestId: 'req-mars',
+      pollIntervalMs: 1,
+    })
+
+    expect(inferVolcengineTtsResourceId(result.voiceId)).toBe('seed-tts-1.0')
+    expect(result.resourceId).toBe('seed-tts-1.0')
+  })
+
+  it('corrects an explicit Seed TTS 2.0 resource for legacy Moon voices', async () => {
+    vi.stubEnv('VOLCENGINE_ASR_API_KEY', 'speech-api-key')
+
+    const fetchMock = vi.fn(async (url: string | URL | Request, init?: RequestInit) => {
+      const href = String(url)
+      const headers = init?.headers as Record<string, string>
+      if (href.endsWith('/submit')) {
+        expect(headers['X-Api-Resource-Id']).toBe('seed-tts-1.0')
+        return new Response(JSON.stringify({
+          code: 20000000,
+          message: 'ok',
+          data: { task_id: 'task-moon' },
+        }), { status: 200 })
+      }
+      if (href.endsWith('/query')) {
+        return new Response(JSON.stringify({
+          code: 20000000,
+          message: 'ok',
+          data: { task_status: 2, audio_url: 'https://cdn.example.com/moon.mp3' },
+        }), { status: 200 })
+      }
+      if (href === 'https://cdn.example.com/moon.mp3') {
+        return new Response(new Uint8Array([7, 8, 9]), { status: 200 })
+      }
+      throw new Error(`Unexpected fetch: ${href}`)
+    })
+    vi.stubGlobal('fetch', fetchMock)
+
+    const result = await synthesizeWithVolcengineTts({
+      text: 'Meet Makaron.',
+      voiceId: 'en_male_campaign_jamal_moon_bigtts',
+      resourceId: 'seed-tts-2.0',
+      requestId: 'req-moon',
+      pollIntervalMs: 1,
+    })
+
+    expect(result.resourceId).toBe('seed-tts-1.0')
+  })
+
   it('fetches and normalizes the dynamic ListSpeakers voice catalog', async () => {
     vi.stubEnv('VOLCENGINE_ACCESS_KEY_ID', 'ak-test')
     vi.stubEnv('VOLCENGINE_SECRET_ACCESS_KEY', 'sk-test')
@@ -135,7 +214,7 @@ describe('volcengine TTS client', () => {
       language: 'zh',
       gender: 'female',
       scenario: '摇滚',
-      resourceId: 'seed-tts-2.0',
+      resourceId: 'seed-tts-1.0',
     })
     expect(catalog.voices[0].styles).toContain('rock')
     expect(catalog.voices[1]).toMatchObject({

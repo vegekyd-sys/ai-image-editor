@@ -1,11 +1,17 @@
 /**
  * Design harness — compile check + auto-fix on Agent's run_code design output.
- * Only checks syntax (Sucrase compile). Does NOT dry-run with mock scope —
- * that was blocking valid code using noise2D, paths, etc.
+ * It performs static checks only. Runtime dry-runs with a mock scope used to
+ * reject valid compositions that call injected helpers such as noise2D.
  */
 
+import { parse } from '@babel/parser';
+import traverse from '@babel/traverse';
 import { transform as sucraseTransform } from 'sucrase';
 import type { EditableField } from '@/types';
+import {
+  DYNAMIC_DESIGN_SCOPE_NAMES,
+  normalizeRemotionScopeDeclarations,
+} from './remotion-code-normalization';
 
 export interface DesignResult {
   code: string;
@@ -13,6 +19,28 @@ export interface DesignResult {
   editables?: EditableField[];
   [key: string]: unknown;
 }
+
+const SAFE_RUNTIME_GLOBALS = new Set([
+  ...DYNAMIC_DESIGN_SCOPE_NAMES,
+  'undefined', 'NaN', 'Infinity',
+  'Object', 'Function', 'Boolean', 'Symbol', 'Error', 'AggregateError',
+  'EvalError', 'RangeError', 'ReferenceError', 'SyntaxError', 'TypeError', 'URIError',
+  'Number', 'BigInt', 'Math', 'Date', 'String', 'RegExp', 'Array',
+  'Int8Array', 'Uint8Array', 'Uint8ClampedArray', 'Int16Array', 'Uint16Array',
+  'Int32Array', 'Uint32Array', 'BigInt64Array', 'BigUint64Array',
+  'Float32Array', 'Float64Array', 'ArrayBuffer', 'SharedArrayBuffer', 'DataView',
+  'Map', 'Set', 'WeakMap', 'WeakSet', 'WeakRef', 'FinalizationRegistry',
+  'JSON', 'Promise', 'Reflect', 'Proxy', 'Intl',
+  'parseFloat', 'parseInt', 'isFinite', 'isNaN', 'decodeURI', 'decodeURIComponent',
+  'encodeURI', 'encodeURIComponent', 'escape', 'unescape',
+  'console', 'globalThis', 'window', 'document', 'navigator', 'location',
+  'performance', 'crypto', 'CSS', 'URL', 'URLSearchParams', 'Blob', 'File',
+  'FileReader', 'FormData', 'Headers', 'Request', 'Response', 'TextEncoder',
+  'TextDecoder', 'AbortController', 'AbortSignal', 'Image', 'ImageData',
+  'fetch', 'atob', 'btoa', 'structuredClone', 'queueMicrotask',
+  'setTimeout', 'clearTimeout', 'setInterval', 'clearInterval',
+  'requestAnimationFrame', 'cancelAnimationFrame',
+]);
 
 /**
  * Validate a design result from run_code. Returns null if valid,
@@ -27,19 +55,50 @@ export function validateDesign(result: DesignResult): string | null {
   const compileError = checkCompile(result.code);
   if (compileError) return compileError;
 
-  // Check 2: Image references
+  // Check 2: References that would only fail once Player/export evaluates code
+  const referenceError = checkUnresolvedIdentifiers(result.code);
+  if (referenceError) return referenceError;
+
+  // Check 3: Image references
   const imageError = checkImageReferences(result.code, result.props);
   if (imageError) return imageError;
 
-  // Check 3: Image URLs valid
+  // Check 4: Image URLs valid
   const urlError = checkImageUrls(result.code);
   if (urlError) return urlError;
 
-  // Check 4: Editables validation
+  // Check 5: Editables validation
   const editablesError = validateEditables(result.editables);
   if (editablesError) return editablesError;
 
   return null;
+}
+
+/** Catch missing constants/components before a remote render discovers them. */
+function checkUnresolvedIdentifiers(code: string): string | null {
+  try {
+    const ast = parse(normalizeRemotionScopeDeclarations(code), {
+      sourceType: 'script',
+      plugins: ['jsx', 'typescript'],
+    });
+    const unresolved = new Set<string>();
+    traverse(ast, {
+      ReferencedIdentifier(path) {
+        const name = path.node.name;
+        if (!path.scope.hasBinding(name) && !SAFE_RUNTIME_GLOBALS.has(name)) {
+          unresolved.add(name);
+        }
+      },
+    });
+    if (unresolved.size === 0) return null;
+    const names = [...unresolved].sort();
+    const shown = names.slice(0, 8).join(', ');
+    const suffix = names.length > 8 ? `, +${names.length - 8} more` : '';
+    return `⚠️ Composition compile error: unresolved identifier${names.length === 1 ? '' : 's'} ${shown}${suffix}. Define every constant and component in the composition, then try again.`;
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : String(err);
+    return `⚠️ Composition compile error: ${msg}. Fix the syntax error in your code and try again.`;
+  }
 }
 
 /** Validate editable fields declaration. Returns error message or null. */
@@ -85,10 +144,20 @@ function autoFixVideoTags(code: string): string {
 /** Compile code with Sucrase — syntax check only, no runtime execution */
 function checkCompile(code: string): string | null {
   try {
-    sucraseTransform(code.trim(), {
+    if (/^\s*(?:import|export)\b/m.test(code)) {
+      return '⚠️ Composition compile error: import/export module syntax is not supported. Declare the component directly and try again.';
+    }
+    if (/\brequire\s*\(|\bmodule\.exports\b|\bexports\s*\./.test(code)) {
+      return '⚠️ Composition compile error: require/module.exports syntax is not supported in DynamicDesign. Use the injected Remotion and React names directly.';
+    }
+    const source = normalizeRemotionScopeDeclarations(code);
+    const { code: compiled } = sucraseTransform(source, {
       transforms: ['typescript', 'jsx'],
       jsxRuntime: 'classic',
     });
+    // DynamicDesign evaluates the compiled body with new Function(). Parse it
+    // the same way here so browser-incompatible syntax fails before rendering.
+    new Function(...DYNAMIC_DESIGN_SCOPE_NAMES, `"use strict";\n${compiled}\nreturn undefined;`);
     return null;
   } catch (err) {
     const msg = err instanceof Error ? err.message : String(err);
@@ -102,15 +171,15 @@ function checkImageReferences(code: string, props?: Record<string, unknown>): st
   const serialized = JSON.stringify({ code, props });
 
   if (serialized.includes('"ctx.snapshotImages') || serialized.includes("'ctx.snapshotImages")) {
-    return '⚠️ Composition rejected: ctx.snapshotImages[N] was passed as a string literal instead of being evaluated. Use template literal interpolation: `${ctx.snapshotImages[N]}` to embed the actual URL. Regenerate.';
+    return '⚠️ Composition rejected: ctx.snapshotImages[N] was passed as a string literal. Use the 1-based <<<media_N>>> marker in composition code or props; run_code resolves it before rendering. Regenerate.';
   }
 
   if (/<<<media_\d+>>>/.test(serialized)) {
-    return '⚠️ Composition rejected: unresolved Media Index placeholder found. Use actual ctx.snapshotImages[N] URLs or props resolved from Media Index. Regenerate.';
+    return '⚠️ Composition rejected: a Media Index marker could not be resolved. Check that <<<media_N>>> uses an available 1-based Media Index number, then regenerate.';
   }
 
   if (/data:image\/[^;]+;base64,[A-Za-z0-9+/=]{5120000,}/.test(serialized)) {
-    return '⚠️ Composition rejected: Base64 image data >5MB found in code/props. Use ctx.snapshotImages[N] URLs for full-size images. Regenerate.';
+    return '⚠️ Composition rejected: Base64 image data >5MB found in code/props. Use the corresponding <<<media_N>>> marker for full-size timeline images. Regenerate.';
   }
 
   return null;
@@ -134,10 +203,10 @@ function checkImageUrls(code: string): string | null {
 
   for (const src of srcValues) {
     if (!src || src === 'undefined' || src === 'null' || src === '') {
-      return '⚠️ Composition rejected: An <Img> tag has an empty or undefined src. Make sure all ctx.snapshotImages[N] have valid URLs. Regenerate.';
+      return '⚠️ Composition rejected: An <Img> tag has an empty or undefined src. Use a valid <<<media_N>>> marker or HTTPS URL. Regenerate.';
     }
     if (!src.startsWith('https://') && !src.startsWith('data:image/')) {
-      return `⚠️ Composition rejected: Image src "${src.substring(0, 60)}..." is not a valid HTTPS URL. Use ctx.snapshotImages[N]. Regenerate.`;
+      return `⚠️ Composition rejected: Image src "${src.substring(0, 60)}..." is not a valid HTTPS URL. Use a valid <<<media_N>>> marker or HTTPS URL. Regenerate.`;
     }
   }
 

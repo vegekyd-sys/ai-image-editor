@@ -29,7 +29,7 @@ When the user asks to put two existing timeline videos together, cut clips freel
 
 Do not fall back to FFmpeg/node for ordinary timeline splicing just because a preview needs adjustment or the first composition attempt is imperfect. Patch the Remotion composition, save/publish the editable composition, or report the preview issue. Use FFmpeg only when the user explicitly asks for a real file-level MP4 operation/export.
 
-For timeline media, use actual Media Index URLs in props or code. Do not leave `<<<media_N>>>` placeholders inside `props.clipA`, `<Video src>`, or saved composition code. `<<<media_N>>>` is only a conversational reference; Remotion preview/export needs a real URL.
+For timeline media, put the literal 1-based `<<<media_N>>>` marker in props or code, including `props.clipA`, `<Img src>`, and `<Video src>`. `run_code` resolves every marker to the current URL before validation, autosave, preview, and export. Never manually translate Media Index N to `ctx.snapshotImages[N]`: Media Index is 1-based while that JavaScript array is 0-based, so manual indexing shifts every image and makes the final item undefined.
 
 Generated image URLs and timeline image URLs are valid Remotion media sources. Put them in `props` or code and render them with `<Img src={...}>`; do not claim that generated images cannot be used by the Remotion sandbox. If an image overlay fails, first check syntax, quoting, URL truncation, `<Img>` usage, and prop wiring, then patch the composition.
 
@@ -75,7 +75,7 @@ return {
 }
 ```
 
-After every meaningful render or patch, save the code with `write_file({ fromLastRunCode: true, name: "slug", publish: false })`. Publish with `write_file({ fromLastRunCode: true, name: "slug" })` when the result is ready for the timeline.
+Every successful render or patch is automatically saved to the recovery `code_path` returned by `run_code`. Use `write_file({ fromLastRunCode: true, name: "slug", publish: false })` only for a named checkpoint. Publish with `write_file({ fromLastRunCode: true, name: "slug" })` when the result is ready for the timeline.
 
 If the change includes transitions, subtitles, overlays, trim timing, cropping, or other visible timeline edits, call `preview_frame` on stable middle frames before telling the user it is complete or publishing it.
 
@@ -85,7 +85,7 @@ When changing trim timing or total sequence length, update `animation.durationIn
 
 Available APIs include all exports from `remotion`, `@remotion/media`, `@remotion/paths`, and `@remotion/noise`.
 
-- Do not import Remotion packages, destructure from `window.Remotion`, or write `Remotion.AbsoluteFill`. All APIs are already in scope. Use `<AbsoluteFill>`, `<Video>`, `<Sequence>`, and hooks directly.
+- Do not import or `require()` Remotion packages, destructure from `window.Remotion`, or write `Remotion.AbsoluteFill`. All APIs are already in scope. Use `<AbsoluteFill>`, `<Video>`, `<Sequence>`, and hooks directly.
 - Name the main exported component `Composition`. Helper components are allowed, but the renderable timeline should be `function Composition(props) { ... }`.
 - Do not use ES module syntax inside the returned composition code. Never write
   `import ...` or `export default ...`. The composition code should define
@@ -93,6 +93,12 @@ Available APIs include all exports from `remotion`, `@remotion/media`, `@remotio
   that via the `{ type: 'render', code, ... }` wrapper.
 - Only `Composition(props)` may read `props` directly. Helper components must receive every value they use as function parameters, e.g. `function TitleCard({ title, subtitle }) { ... }`; never reference outer `props` inside `TitleCard`, `Scene`, `Card`, or other helpers.
 - Use Remotion `<Img>`, never HTML `<img>`.
+- Subtitles, kinetic text, and scene labels are authored directly inside this
+  composition. The harness does not generate separate caption data, require a
+  shared cue schema, or provide a universal subtitle overlay. If
+  `transcribe_audio` was used, treat its timestamps as optional editorial
+  reference and choose the wording, grouping, timing, placement, typography,
+  and motion that best serve the current frame and art direction.
 - Use Remotion `<Video>` or `<OffthreadVideo>`, never HTML `<video>`.
 - Use `<Sequence>` for every scene or clip so media mounts only when needed.
 - Use `trimBefore`, `trimAfter`, `playbackRate`, and `volume` on `<Video>` for non-destructive timeline edits.

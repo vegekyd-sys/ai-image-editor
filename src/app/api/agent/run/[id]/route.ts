@@ -4,6 +4,9 @@ import { authenticateRequest } from '@/lib/api-auth';
 import { getSupabaseAdmin } from '@/lib/supabase/service';
 import { isPermanentUrl } from '@/lib/supabase/storage';
 import { buildVideoFailureActions } from '@/lib/artifact-actions';
+import { dispatchAgentExecutionAttempt } from '@/lib/agent-execution-dispatch';
+import { extractStudioDeliveryVideo } from '@/lib/agent-run-artifacts';
+import { resolveWorkspaceFile } from '@/lib/workspace';
 import { normalizeLocale, translate } from '@/lib/locales';
 
 type RunProject = { is_public?: boolean } | Array<{ is_public?: boolean }>;
@@ -116,7 +119,7 @@ export async function GET(
     const hasBearerAuth = req.headers.get('authorization')?.startsWith('Bearer ') ?? false;
 
     const { data: run } = await admin.from('agent_runs')
-      .select('id, status, prompt, started_at, ended_at, metadata, project_id, user_id, projects(is_public)')
+      .select('id, status, prompt, started_at, ended_at, metadata, project_id, user_id, execution_policy, lease_expires_at, next_attempt_at, projects(is_public)')
       .eq('id', runId)
       .single();
 
@@ -146,6 +149,21 @@ export async function GET(
         .maybeSingle();
       const lastActivityAt = Date.parse(lastEvent?.created_at || run.started_at || '') || 0;
       if (lastActivityAt > 0 && Date.now() - lastActivityAt > getAgentRunStaleMs()) {
+        const executionPolicy = run.execution_policy as Record<string, unknown> | null;
+        const durable = executionPolicy?.durable === true;
+        const leaseExpired = !run.lease_expires_at || Date.parse(run.lease_expires_at) <= Date.now();
+        if (durable && leaseExpired) {
+          // Do not clear an expired lease here. Several CLI/CUI pollers may
+          // observe the same stale row; the runner's claim RPC is the single
+          // atomic gate and prevents a late poller from erasing a fresh lease.
+          after(async () => {
+            try {
+              await dispatchAgentExecutionAttempt(runId, req.nextUrl.origin);
+            } catch (error) {
+              console.error(`[agent/run] durable reconciliation failed for ${runId}:`, error);
+            }
+          });
+        } else if (!durable) {
         const { data: draftRows } = await admin
           .from('agent_tool_history')
           .select('output')
@@ -180,6 +198,7 @@ export async function GET(
           .select('status, ended_at, metadata')
           .maybeSingle();
         if (reconciled) Object.assign(run, reconciled);
+        }
       }
     }
 
@@ -197,7 +216,7 @@ export async function GET(
       .from('agent_events')
       .select('type, data, seq, created_at')
       .eq('run_id', runId)
-      .in('type', ['image', 'render', 'animation_task', 'video_snapshot', 'music_task', 'content', 'error'])
+      .in('type', ['image', 'render', 'animation_task', 'video_snapshot', 'music_task', 'studio_run', 'content', 'error'])
       .order('seq');
 
     // Build output[] — unified typed artifact array
@@ -279,6 +298,22 @@ export async function GET(
           created_at: e.created_at,
         });
         legacyMusic.push({ taskId: e.data.taskId });
+      } else if (e.type === 'studio_run' && e.data?.runId) {
+        output.push({
+          id: `out_${++outputSeq}`,
+          type: 'studio_run',
+          status: e.data.status || 'running',
+          run_id: e.data.runId,
+          title: e.data.title,
+          recipe: e.data.recipe,
+          current_stage: e.data.currentStage,
+          approval_policy: e.data.approvalPolicy,
+          stages: e.data.stages,
+          state_path: e.data.statePath,
+          artifact_path: e.data.artifactPath,
+          invalidated: e.data.invalidated,
+          created_at: e.created_at,
+        });
       } else if (e.type === 'error') {
         errorMsg = e.data?.message;
       }
@@ -315,6 +350,82 @@ export async function GET(
         }
         for (const d of legacyDesigns) {
           if (d.snapshotId && urlMap[d.snapshotId as string]) d.imageUrl = urlMap[d.snapshotId as string];
+        }
+      }
+    }
+
+    // A long materialize_media call can finish its durable side effect just as
+    // an execution attempt hands off. In that narrow case the video Snapshot
+    // and Studio delivery artifact are durable, but the transient
+    // video_snapshot event is absent. Recover only from this run's completed
+    // delivery record so concurrent project runs cannot leak into each other.
+    if (run.status === 'completed') {
+      const { data: studioToolRows } = await admin
+        .from('agent_tool_history')
+        .select('input, created_at')
+        .eq('run_id', runId)
+        .eq('tool_name', 'studio_run')
+        .order('created_at', { ascending: false })
+        .limit(20);
+      const deliveryVideo = extractStudioDeliveryVideo(studioToolRows);
+      if (deliveryVideo) {
+        const { data: candidateSnapshots } = await admin
+          .from('snapshots')
+          .select('id, image_url, video_meta, created_at')
+          .eq('project_id', run.project_id)
+          .eq('type', 'video')
+          .gte('created_at', run.started_at)
+          .order('created_at', { ascending: false })
+          .limit(20);
+        let deliveryUrl = /^https?:\/\//i.test(deliveryVideo.outputPath)
+          ? deliveryVideo.outputPath
+          : undefined;
+        const deliveryIdentity = normalizeMediaIdentity(deliveryUrl);
+        const snapshot = (candidateSnapshots ?? []).find(candidate => {
+          const meta = candidate.video_meta as Record<string, unknown> | null;
+          const videoPath = typeof meta?.videoPath === 'string' ? meta.videoPath : undefined;
+          const videoUrl = typeof meta?.videoUrl === 'string' ? meta.videoUrl : undefined;
+          return videoPath === deliveryVideo.outputPath
+            || (deliveryIdentity !== null && normalizeMediaIdentity(videoUrl) === deliveryIdentity);
+        });
+        const meta = snapshot?.video_meta as Record<string, unknown> | null;
+        if (!deliveryUrl && typeof meta?.videoUrl === 'string') deliveryUrl = meta.videoUrl;
+        if (!deliveryUrl && !/^https?:\/\//i.test(deliveryVideo.outputPath)) {
+          const handle = await resolveWorkspaceFile(deliveryVideo.outputPath, admin, ownerUserId);
+          if (typeof handle?.storageUrl === 'string') deliveryUrl = handle.storageUrl;
+        }
+        if (!deliveryUrl || !isPermanentUrl(deliveryUrl)) {
+          deliveryUrl = undefined;
+        }
+        const resolvedDeliveryIdentity = normalizeMediaIdentity(deliveryUrl);
+        const taskId = typeof meta?.taskId === 'string' ? meta.taskId : `studio-delivery-${runId}`;
+        const alreadyIndexed = output.some(item =>
+          item.type === 'video'
+          && ((snapshot?.id && item.snapshot_id === snapshot.id)
+            || (resolvedDeliveryIdentity !== null
+              && normalizeMediaIdentity(typeof item.url === 'string' ? item.url : undefined) === resolvedDeliveryIdentity))
+        );
+        if (deliveryUrl && !alreadyIndexed) {
+          output.push({
+            id: `out_${++outputSeq}`,
+            type: 'video',
+            status: 'completed',
+            url: deliveryUrl,
+            task_id: taskId,
+            snapshot_id: snapshot?.id,
+            poster_url: snapshot?.image_url,
+            width: typeof meta?.width === 'number' ? meta.width : undefined,
+            height: typeof meta?.height === 'number' ? meta.height : undefined,
+            duration: typeof meta?.duration === 'number' ? meta.duration : undefined,
+            created_at: snapshot?.created_at || deliveryVideo.createdAt,
+          });
+          legacyVideos.push({
+            taskId,
+            prompt: typeof meta?.prompt === 'string' ? meta.prompt : undefined,
+            status: 'completed',
+            videoUrl: deliveryUrl,
+            completionActions: meta?.completionActions,
+          });
         }
       }
     }
@@ -611,7 +722,7 @@ export async function GET(
     const effectiveStatus = agentDone && hasPendingArtifacts
       ? 'in_progress'
       : (agentDone && run.status === 'completed' && hasFailedArtifacts ? 'failed' : run.status);
-    const incomplete = effectiveStatus === 'in_progress' || effectiveStatus === 'queued';
+    const incomplete = effectiveStatus === 'running' || effectiveStatus === 'in_progress' || effectiveStatus === 'queued';
 
     // Suggest poll interval based on state
     let nextPollAfterMs: number | undefined;

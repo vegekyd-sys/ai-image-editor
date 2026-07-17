@@ -5,13 +5,16 @@ description: >
   feature, company, or process. Use Makaron's current Remotion composition
   runtime with design references, synced subtitles, voiceover, generated
   sound design, and optional generated media/sticker overlays.
-allowed-tools: read_file run_code write_file preview_frame list_voiceover_voices generate_voiceover transcribe_audio generate_audio generate_music generate_image analyze_image analyze_video
+allowed-tools: read_file studio_run prepare_visual_asset run_code write_file preview_frame materialize_media list_voiceover_voices generate_voiceover transcribe_audio generate_audio generate_music generate_image analyze_image analyze_video
 metadata:
   makaron:
     icon: "🎙️"
     color: "#8b5cf6"
     tipsEnabled: false
     builtIn: true
+    studioRunRecipe: "explainer-video"
+    studioRunProfile: "generated-explainer"
+    sourceMediaRequired: false
     tags: [video, workflow, explainer, remotion, voiceover, subtitles, audio]
 ---
 
@@ -37,17 +40,17 @@ composition.
 
 ## Shared Remotion Director Contract First
 
-Before planning the video, inspect the shared Remotion Director contract and
-its local copy of `remotion-video-director`:
+Before planning the video, inspect the shared Remotion Director and Visual
+Invention guidance:
 
 1. Read `skills/_shared/remotion-director-contract.md`.
-2. Read `skills/_shared/remotion-video-director/SKILL.md`.
-3. Read `skills/_shared/remotion-video-director/references/video-archetypes.md`.
-4. Read `skills/_shared/remotion-video-director/references/remotion-patterns.md`.
-5. Read `skills/_shared/remotion-video-director/references/component-library.md`.
-6. Choose a creative direction, scene archetype set, emotional arc, pacing model,
+2. Read `skills/_shared/visual-direction/SKILL.md`.
+3. Read `skills/_shared/studio-production/taste-direction.md`.
+4. Read an optional `remotion-video-director` archetype, pattern, or component
+   reference only when the chosen direction creates a concrete need for it.
+5. Choose a creative direction, scene archetype set, emotional arc, pacing model,
    and layout contract before writing Remotion code.
-7. Apply the contract as video direction: shot flow, frame hierarchy, timing,
+6. Apply the contract as video direction: shot flow, frame hierarchy, timing,
    transition language, typography scale, audio attitude, and review criteria.
    Do not reduce it to a color palette or website design system.
 
@@ -65,8 +68,8 @@ skip it because the topic sounds simple.
 - Voiceover is part of this skill by default. Generate spoken narration with
   TTS unless the user explicitly says no voice, no audio, silent, muted, or
   text-only.
-- Subtitles are part of this skill by default and must be visible near the
-  bottom safe area.
+- Subtitles are part of this skill by default and are authored by the Agent as
+  part of each scene's Composition direction.
 - Sound design is part of the planning pass. Use `generate_audio` when music,
   ambient texture, UI sounds, transitions, or scene-specific sound effects would
   make the explanation clearer or more memorable. Use `generate_music` for
@@ -81,49 +84,106 @@ wrong or expensive.
 
 ## Production Flow
 
-1. Read `prompts/remotion-composition.md` before the first `run_code` call.
-2. Read the shared Remotion Director contract and required video-director
-   reference files.
-3. Create a compact creative brief: purpose, audience, core message, desired
-   action, emotional arc, creative direction, audio strategy, and visual style.
-4. Plan 6-8 scenes with exact time ranges that sum to the target duration.
-5. Create a layout contract before writing code: one focal point per scene,
-   readable text zones, subtitle-safe lower area, transition pattern, and the
-   component/archetype used by each scene.
-6. Create a compact asset-and-audio cue sheet before generating media:
-   for each scene, name the narration cue, sound cue, main visual layer, and
-   whether it needs a sticker overlay, full generated image, generated video
-   insert, or no generated media.
-7. Write a speakable narration script. Keep it human and paced:
+1. Start a `studio_run` before producing the creative packet. Use the user's explicit
+   approval preference; when they preauthorize the full run, set
+   `approval_policy: "auto"`. Lock duration, resolution, FPS, runtime, editable
+   mode, narration, and subtitle promise in `delivery_promise`. Leave
+   `include_stage_schemas` false on the normal path.
+2. Read `prompts/remotion-composition.md` before the first `run_code` call.
+3. Read the shared Remotion Director contract, Visual Director, and
+   `skills/_shared/studio-production/taste-direction.md`. Use an optional
+   video-director reference only when the selected direction benefits from it.
+4. In one uninterrupted creative pass, write a compact brief, at least two
+   genuinely different concepts, select one direction, and write its complete
+   timed narration. Every narrated section must include authored
+   `onScreenText`; this is content direction, not a fixed caption renderer.
+   Persist the whole decision once with
+   `studio_run(operation: "put_creative_packet", creative_packet: ...)`.
+   The harness will project separate Brief, Proposal, and Script artifacts into
+   the eight-stage CUI. Do not recreate or resubmit those three JSON documents.
+5. Keep the narration human and paced:
    about 120-145 English words per minute or 180-230 Chinese characters per
    minute.
-8. Unless the user explicitly requested a silent/text-only video, call
+6. Unless the user explicitly requested a silent/text-only video, call
    `list_voiceover_voices`, choose a fitting voice, then call
    `generate_voiceover`.
    Keep the narration short enough for the requested duration. If the generated
    voiceover is more than 10% longer than the requested video, regenerate a
    shorter script or trim/fade it; never change the video duration to match an
    overly long narration.
-9. After `generate_voiceover`, call `transcribe_audio({ media_url: audioUrl })`
-   on the returned public audio URL. Use the real ASR utterance/word timecodes
-   for subtitle timing. Do not rely only on estimated text length timing when
-   ASR is available.
-10. Decide the audio layer:
+7. After `generate_voiceover`, call
+   `transcribe_audio({ media_url: audioUrl })` when a single continuous
+   voiceover is used. Use the returned utterance or word timing to decide scene
+   boundaries before Storyboard; planned Script ranges are not proof that
+   generated speech lands in those ranges. This is timing evidence, not a
+   caption service: the harness does not generate cue files, inject caption
+   props, choose phrase boundaries, or impose a renderer.
+8. Plan scenes with exact time ranges that sum to the target duration.
+   Each narrated section must fit inside its linked visual scene using the real
+   speech timing from step 7. Give every substantial scene a `visualPlan` with
+   one dominant technical carrier, subject relationship, shot scale,
+   depth/composition intent,
+   background, and motion intent.
+   For `cutout` and `edge-video`, set `primaryAssetId` to the exact semantic ID
+   that will be passed to `prepare_visual_asset` and stored in Assets.
+   Store one `narrationTimingEvidence` record per narrated Script section in
+   Storyboard. Studio Run rejects Storyboard before asset generation when real
+   narration starts before or ends after its linked scene.
+9. Create a layout contract before writing code: frame hierarchy, readable text
+   and subject-avoidance zones, transition pattern, and the component/archetype
+   used by each scene. Persist this as the storyboard artifact before generating
+   visual assets.
+10. Create a compact asset-and-audio cue sheet before generating remaining
+   media: for each scene, name the real narration range, sound cue, main visual
+   layer, and whether its carrier is native, a full plate, a prepared cutout,
+   or an edge-matched generated video. If cutout or edge-video is selected,
+   read the Visual Asset Bridge and call `prepare_visual_asset` during Assets.
+11. Decide the remaining audio layer:
    - Exact spoken narration -> `generate_voiceover`.
    - Prompt-first music bed, ambience, sound effects, UI blips, risers, impacts,
      or mixed sound design -> `generate_audio`.
    - Music / soundtrack / song-structure request -> `generate_music`; new music
      generation uses Seed Audio, not Suno.
-11. Generate only the sticker/image assets chosen in the cue sheet. If an asset
+12. Generate only the sticker/image assets chosen in the cue sheet. If an asset
    is an overlay, read `skills/sticker-maker/SKILL.md` first and make it a
    transparent PNG sticker instead of a hard-to-place rectangular image.
-12. Build the video with `run_code({ runtime: "composition" })`.
-13. Save the draft with `write_file({ fromLastRunCode: true, publish: false })`.
-14. Verify at least three frames with `preview_frame`: early hook, middle
-   explanation, and closing CTA/summary. Include subtitle readability in the
-   check.
-15. Patch if needed, then publish with
-   `write_file({ fromLastRunCode: true, name: "explainer-video-..." })`.
+13. Persist the asset manifest only after every referenced asset is ready.
+   When audio is promised, voiceover/music must be present in this manifest;
+   do not close Assets before generating them.
+14. Build the video with `run_code({ runtime: "composition" })`.
+15. Save the draft with `write_file({ fromLastRunCode: true, publish: false })`,
+   and run the Composition draft gate before publishing or exporting. Calculate
+   the exact expected frame count, confirm the scene timeline covers it, inspect
+   every scene boundary plus the final visible frame with batched
+   `preview_frame` calls, and confirm all required audio props contain real URLs.
+   For every narrated Script section, add exactly one `subtitleSyncEvidence`
+   record that reuses its Storyboard narration range and links the Script
+   section, Storyboard scene, real narration range,
+   visual range, representative speaking frame, timing source, and the exact
+   `subtitleText` authored in the Composition at that frame. It may preserve
+   the spoken line or use concise `onScreenText` authored for that same Script
+   section; do not force every scene to display a verbatim transcript. It must
+   not borrow unrelated copy from another beat. Patch the draft until
+   this gate has no unresolved issue, then persist the composition artifact
+   with its real design path and evidence. Studio Run cross-checks timing and
+   semantic links against the persisted Script and Storyboard. Do not duplicate
+   already-rendered subtitle strings into props or editables merely to satisfy
+   metadata inspection; actual subtitle visibility and picture alignment are
+   verified from the representative Composition preview frames before export.
+16. Review means fixing the Remotion source itself. Keep using `preview_frame`
+   and `run_code` patch mode on the exact draft until visual, timing, subtitle,
+   audio, transition, and ending issues are resolved. Do not author a separate
+   Review JSON artifact.
+17. Publish that exact gated draft once. Do not publish an older timeline
+   snapshot or use its `media_index` as the export source.
+18. Materialize the exact gated `design_path` once with
+   `materialize_media({ design_path, profile: "source", wait: true })` when the
+   locked promise is source resolution. In Studio Run this call waits for the
+   final MP4 and successful completion automatically projects both Review and
+   Delivery UI states. Do not call `studio_run` to persist Review or Delivery,
+   and do not start another preview/review loop after materialization succeeds.
+   A failed Studio Run artifact write or materialization is a blocker, not a
+   warning.
 
 ## Audio And Sound Design Contract
 
@@ -132,7 +192,9 @@ on top. Consider an audio bed in every video unless the user explicitly asks for
 silent, text-only, or voice-only output.
 
 - Keep voiceover intelligible. Music and ambience should sit under narration,
-  with lower volume and no busy vocals.
+  with lower volume and no busy vocals. Duck the music under spoken sections;
+  use absolute narration timestamps for volume changes so drift cannot
+  accumulate across scenes.
 - Use `generate_audio` for prompt-first assets: subtle background music,
   transition whooshes, notification ticks, magical sparkles, classroom ambience,
   sci-fi hums, battle-arena impacts, UI sounds, or one mixed sound-design track.
@@ -148,23 +210,49 @@ silent, text-only, or voice-only output.
   Use the returned public `audioUrl` directly in Remotion `<Audio src={...}>`
   props/code. Never put `<<<audio_N>>>` inside composition props or `<Audio>`.
 
-## Subtitle Contract
+## Subtitles As Composition
 
 Every explainer video must have subtitles unless the user explicitly declines.
 
-- Render subtitles in the lower safe area, centered, with max width around
-  78-86% of the canvas.
-- Use a refined caption container: semi-transparent dark background, subtle
-  border or shadow, comfortable horizontal padding, 1-2 lines max.
-- Subtitles should enter elegantly: fade, slight rise, or type-on. Avoid noisy
-  per-character effects that make reading harder.
-- Subtitle cue timing must come from the TTS audio timeline when possible:
-  use ASR from `transcribe_audio` after generating voiceover.
-- Scene timing and subtitle cues must share the same FPS/timebase.
-- The active subtitle should support the current visual idea. If ASR splits a
-  sentence too finely, merge adjacent short cues without breaking timing.
-- Do not let subtitles cover the primary subject, charts, timeline labels, or
-  lower-third UI. Patch after `preview_frame` if needed.
+- Write subtitle text, timing data, JSX, and animation in the same composition
+  as the scenes they support. There is no required prop name, cue shape,
+  placement, container, or shared overlay.
+- Treat subtitles as part of the visual direction. A scene may use restrained
+  dialogue captions, kinetic typography, integrated labels, or another readable
+  treatment that fits its subject and composition.
+- For ordinary spoken captions, default to the lower safe area, centered, with
+  a maximum width around 78-86% of the canvas. Depart from this baseline only
+  when an intentional kinetic or integrated treatment better serves the scene.
+- The default spoken-caption treatment should be refined and readable: a
+  semi-transparent dark background, subtle border or shadow, comfortable
+  horizontal padding, and no more than 1-2 lines. Implement it directly in the
+  scene Composition; do not introduce a shared caption renderer.
+- Bring captions in with a restrained fade, slight rise, or readable type-on.
+  Avoid noisy per-character effects that make narration harder to follow.
+- Use the narration script and, when useful, `transcribe_audio` timestamps as
+  source material. Subtitle timing should come from the TTS audio timeline when
+  ASR is available, and scene timing plus subtitle cues must share the same
+  Remotion FPS/timebase. Do not copy raw ASR output blindly; decide phrase
+  boundaries and timing as an editor. Merge adjacent short cues when ASR splits
+  a sentence too finely, without breaking the original timing.
+- The displayed phrase may be a faithful spoken caption or concise kinetic copy
+  authored in the active Script section. Keep it semantically local to that
+  picture and narration beat; visual freedom is not permission to show generic
+  or next-scene copy.
+- At representative speaking frames, require a three-way semantic match between
+  the visible subtitle or kinetic phrase, the current picture/action, and the
+  narration actually sounding at that frame. A readable phrase that describes
+  the previous or next scene is still out of sync.
+- Check representative speaking frames with `preview_frame` for readability,
+  synchronization, subject occlusion, and visual coherence before publishing.
+  Captions must not cover the primary subject, charts, timeline labels, or
+  lower-third UI; patch their placement or the scene layout when they collide.
+- In the Composition review loop, inspect every `subtitleSyncEvidence`
+  representative frame and compare its authored phrase, visible non-text
+  subject/action, and active narration beat. Patch the Remotion source when the
+  three do not align; do not create a second subtitle evidence document.
+- `subtitleSyncEvidence` records only editorial timing and cross-artifact links.
+  They do not choose subtitle text styling, placement, grouping, JSX, or motion.
 
 ## Generated Media And Sticker Inserts
 
@@ -180,8 +268,10 @@ video a plain code-only slide deck.
 - Generated images can be hero visuals, scene backgrounds, product-style
   illustrations, conceptual inserts, or visual examples. Use them when the image
   itself is the scene, not as a random decoration.
-- Generated videos can be short 4-10s insert clips when real motion matters.
-  Use them sparingly because they cost time and money.
+- Generated videos can be short 4-10s hero clips when real motion matters. For
+  an inset clip, generate quiet edges close to the intended background and use
+  `prepare_visual_asset({ mode: "edge-video" })` before Composition. Otherwise
+  use it as a full-frame plate.
 - Sticker overlays are useful for transparent decorative/explanatory elements:
   icons, mascots, arrows, labels, spark effects, props, satellites, rockets, UI
   pointers, and visual emphasis.
@@ -191,19 +281,19 @@ video a plain code-only slide deck.
 - Make sticker prompts composition-friendly: centered complete subject, clean
   edges, no text, no watermark, chroma-key background as required by the sticker
   workflow, and enough padding so motion does not crop the asset.
-- Use stickers at decisive beats: hook reveal, concept transition, proof moment,
-  recap/CTA. Avoid sprinkling stickers on every scene.
-- Keep sticker count intentionally small for a 60s explainer: usually 1-3 strong
-  recurring assets are better than many unrelated one-offs.
+- Use stickers where they carry the visual idea: hook reveal, concept transition,
+  proof moment, recurring character performance, recap, or CTA.
+- Prefer a coherent recurring asset system over unrelated one-offs. There is no
+  fixed sticker quota; each asset must pass the Visual Director's job gate.
 - Animate sticker overlays as part of the explanation: float in, orbit, point,
   stamp, connect two diagram nodes, or react to an audio hit. Do not leave them
   static unless the scene needs a calm anchor.
-- If the generated image tool returns a resolved `imageUrl`, use that URL in
-  Remotion props/code. Never put `<<<media_N>>>` markers inside composition code.
+- For generated or uploaded timeline images, use the literal 1-based
+  `<<<media_N>>>` marker in Remotion props/code. `run_code` resolves it before
+  validation and rendering; never map Media Index N to the 0-based
+  `ctx.snapshotImages[N]` array yourself.
 - Generated assets must serve one of three roles: main subject, explanatory
   support, or tasteful decoration. Skip assets that are merely filler.
-- Keep simultaneous media count low for mobile performance. Use one strong
-  generated visual per scene rather than many small competing elements.
 
 ## Scene Cue Sheet Pattern
 
@@ -233,20 +323,17 @@ The composition should feel like a real explainer, not a static slide deck.
   chart reveals, zooms, parallax, and clean scene transitions.
 - Do not default to webpage structures: hero sections, card grids, pricing-like
   panels, dense dashboard widgets, many pills, or static side-by-side blocks.
-- Let time solve layout density: reveal one strong idea at a time instead of
-  shrinking text or packing more UI into one frame.
-- Keep the first working composition compact enough to render reliably. Prefer
-  a clean 6-8 scene composition over an oversized one-shot code dump; patch
-  polish after preview checks.
+- Use time to stage, transform, and reveal the composition instead of flattening
+  every element into one static layout.
 - In `run_code`, keep JavaScript/TypeScript syntax strict. All Chinese,
   Japanese, Korean, emoji, and display copy must be inside quoted strings.
   Use ASCII variable names and object keys unless they are quoted. Never leave
   raw display words in code, because that causes parser errors such as
   `Unexpected identifier`.
-- Keep on-screen text short. Subtitles carry narration; scene text should carry
-  structure.
-- Use strong visual hierarchy: one main idea per scene, one supporting visual
-  system, no crowded panels.
+- Keep on-screen text intentional. Spoken captions may carry narration, while
+  concise kinetic or integrated text may carry the active scene beat.
+- Design the frame hierarchy and visual density for the chosen subject and
+  creative direction.
 - If user media exists, reference it with `media_refs` and place it as footage,
   screenshots, still panels, or masked inserts.
 - For factual topics, avoid pretending to have live research. Use stable,
@@ -265,7 +352,8 @@ The composition should feel like a real explainer, not a static slide deck.
 
 Before saying it is done:
 
-- The relevant `remotion-video-director` reference files were read and applied.
+- The Visual Invention Pass was available during Storyboard and Composition;
+  optional reference files were used only when relevant to the selected direction.
 - The creative brief, scene plan, layout contract, and cue sheet were internally
   created before code.
 - `animation.durationInSeconds` matches the requested duration.
@@ -276,9 +364,17 @@ Before saying it is done:
   silent/text-only video.
 - Generated audio/music/effects were considered, and used when they help the
   pacing, mood, or comprehension without masking narration.
-- Subtitles are present, bottom-aligned, elegant, readable, and timed from TTS
-  ASR when available.
+- Subtitles are present, readable, synchronized to the narration, and composed
+  by the Agent in a treatment appropriate to each scene. Ordinary spoken
+  captions use the polished lower-safe-area baseline; intentional kinetic or
+  integrated text may depart from it. No fixed cue schema or shared caption
+  renderer is required.
 - At least three `preview_frame` checks returned usable frames.
 - Generated images/videos/stickers were used only when they made the
   explanation clearer or more memorable.
 - The final reply states what was created and where to view it, concisely.
+- A Studio Run exists with schema-valid Agent-authored artifacts through
+  Composition; Review and Delivery are system-projected from materialization.
+- The Studio Run reaches `completed`; no stage remains invalidated, pending, or
+  awaiting approval.
+- The final MP4 is materialized from the exact reviewed Composition design path.

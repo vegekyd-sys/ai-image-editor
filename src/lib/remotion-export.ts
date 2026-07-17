@@ -15,6 +15,7 @@ import { resolveAudioUrlsInCode } from '@/lib/audio-url-resolver'
 import { VIDEO_PLACEHOLDER_IMAGE } from '@/lib/editor/timeline-derivations'
 import type { RemotionLambdaOutputDestination } from '@/lib/remotion-lambda-renderer'
 import { normalizeCompositionAnimation } from '@/lib/composition-duration'
+import { measureAudioLoudness } from '@/lib/ffmpeg-runtime'
 
 export type RemotionExportStatus = 'queued' | 'rendering' | 'completed' | 'failed'
 export type RemotionExportOutputType = 'video' | 'image'
@@ -60,6 +61,7 @@ export interface CreateRemotionExportJobInput {
   publish?: boolean
   publishSnapshotId?: string
   name?: string
+  studioRunId?: string
 }
 
 export interface RemotionExportResult {
@@ -249,7 +251,7 @@ function fingerprintDesign(
     ? resolveRemotionLambdaEncodingSettings()
     : null
   const payload = {
-    renderer: 'remotion-export-v3',
+    renderer: 'remotion-export-v4',
     outputType,
     renderProfile,
     outputSettings: {
@@ -305,6 +307,44 @@ async function addPublishSnapshotId(job: RemotionExportJob, snapshotId?: string)
     .single()
   if (error) throw new Error(error.message)
   return data as RemotionExportJob
+}
+
+async function attachStudioRunId(job: RemotionExportJob, studioRunId?: string): Promise<RemotionExportJob> {
+  if (!studioRunId || job.metadata?.studioRunId === studioRunId) return job
+  const metadata = { ...(job.metadata || {}), studioRunId }
+  const admin = getSupabaseAdmin()
+  const { data, error } = await admin
+    .from('remotion_export_jobs')
+    .update({ metadata })
+    .eq('id', job.id)
+    .select('*')
+    .single()
+  if (error) throw new Error(error.message)
+  return data as RemotionExportJob
+}
+
+async function completeStudioRunForExport(job: RemotionExportJob): Promise<void> {
+  const studioRunId = typeof job.metadata?.studioRunId === 'string' ? job.metadata.studioRunId : ''
+  const outputPath = job.storage_url || job.workspace_path || ''
+  const compositionDesignPath = job.design_path
+    || (typeof job.metadata?.designPath === 'string' ? job.metadata.designPath : '')
+  if (!studioRunId || job.status !== 'completed' || job.output_type !== 'video' || !outputPath || !compositionDesignPath) return
+
+  try {
+    const { WorkspaceStudioRunStore, completePersistedStudioRunFromMaterialization } = await import('@/lib/studio-run')
+    const admin = getSupabaseAdmin()
+    const store = new WorkspaceStudioRunStore(admin, job.user_id)
+    const run = await store.loadRun(job.project_id, studioRunId)
+    if (!run) return
+    await completePersistedStudioRunFromMaterialization({
+      store,
+      run,
+      outputPath,
+      compositionDesignPath,
+    })
+  } catch (error) {
+    console.warn('[remotion-export] Could not complete Studio Run from materialization:', error)
+  }
 }
 
 async function markPublishedSnapshotsFailed(
@@ -454,6 +494,36 @@ export async function createRemotionExportJob(input: CreateRemotionExportJobInpu
     || (reusableRows || [])[0]
   if (reusable) {
     let job = await addPublishSnapshotId(reusable as RemotionExportJob, input.publishSnapshotId)
+    job = await attachStudioRunId(job, input.studioRunId)
+    const reusableNeedsPromotion = !job.workspace_path?.startsWith(`${job.project_id}/`)
+      || !job.storage_url?.includes('/workspace/')
+    if (job.status === 'completed' && input.publish && reusableNeedsPromotion && job.storage_url) {
+      const extension = job.output_type === 'video' ? 'mp4' : 'jpg'
+      const contentType = job.output_type === 'video' ? 'video/mp4' : 'image/jpeg'
+      const name = slugify(typeof job.metadata?.name === 'string' ? job.metadata.name : input.name)
+      const workspacePath = `${job.project_id}/media/remotion-${name}-${job.id.slice(0, 8)}.${extension}`
+      const buffer = await fetchRemoteBuffer(job.storage_url)
+      const saved = await workspace.writeFile(workspacePath, buffer, admin, job.user_id, contentType)
+      if (!saved.success || !saved.storageUrl) {
+        throw new Error(saved.error || 'Reusable export promotion failed')
+      }
+      const { error: promotionError } = await admin.from('remotion_export_jobs').update({
+        publish: true,
+        storage_url: saved.storageUrl,
+        workspace_path: workspacePath,
+        metadata: {
+          ...(job.metadata || {}),
+          promotedReusableExport: true,
+        },
+      }).eq('id', job.id)
+      if (promotionError) throw new Error(promotionError.message)
+      job = await getRemotionExportJob(job.id) || {
+        ...job,
+        publish: true,
+        storage_url: saved.storageUrl,
+        workspace_path: workspacePath,
+      }
+    }
     if (job.status === 'completed' && input.publishSnapshotId && job.storage_url && job.output_type === 'video') {
       await publishExportedVideo(job, job.storage_url, job.workspace_path || '', fingerprintSource, {
         width: job.width || resolveRemotionRenderProfile(fingerprintSource, renderProfile).width,
@@ -461,6 +531,7 @@ export async function createRemotionExportJob(input: CreateRemotionExportJobInpu
       }, input.publishSnapshotId)
       job = await getRemotionExportJob(job.id) || job
     }
+    await completeStudioRunForExport(job)
     return job
   }
 
@@ -472,6 +543,7 @@ export async function createRemotionExportJob(input: CreateRemotionExportJobInpu
     metadata.publishSnapshotId = input.publishSnapshotId
     metadata.publishSnapshotIds = [input.publishSnapshotId]
   }
+  if (input.studioRunId) metadata.studioRunId = input.studioRunId
   metadata.renderProfile = renderProfile
 
   const { data, error } = await admin.from('remotion_export_jobs').insert({
@@ -484,6 +556,35 @@ export async function createRemotionExportJob(input: CreateRemotionExportJobInpu
     metadata,
   }).select('*').single()
 
+  if (error?.code === '23505') {
+    const { data: activeRows, error: activeError } = await admin
+      .from('remotion_export_jobs')
+      .select('*')
+      .eq('project_id', input.projectId)
+      .eq('user_id', input.userId)
+      .eq('output_type', outputType)
+      .filter('metadata->>fingerprint', 'eq', fingerprint)
+      .in('status', ['rendering', 'queued'])
+      .order('created_at', { ascending: false })
+      .limit(1)
+    if (activeError) throw new Error(activeError.message)
+    const active = (activeRows || [])[0] as RemotionExportJob | undefined
+    if (active) {
+      let job = await addPublishSnapshotId(active, input.publishSnapshotId)
+      job = await attachStudioRunId(job, input.studioRunId)
+      if (input.publish && !job.publish) {
+        const { data: published, error: publishError } = await admin
+          .from('remotion_export_jobs')
+          .update({ publish: true })
+          .eq('id', job.id)
+          .select('*')
+          .single()
+        if (publishError) throw new Error(publishError.message)
+        job = published as RemotionExportJob
+      }
+      return job
+    }
+  }
   if (error) throw new Error(error.message)
   return data as RemotionExportJob
 }
@@ -936,6 +1037,16 @@ async function executeRemotionExportJob(job: RemotionExportJob): Promise<Remotio
       publicUrl = toPublicStorageUrl(saved.storageUrl)
     }
 
+    if (job.output_type === 'video') {
+      const audioAnalysisStart = Date.now()
+      try {
+        outputMetadata.audioAnalysis = await measureAudioLoudness(publicUrl)
+      } catch (error) {
+        outputMetadata.audioAnalysisError = error instanceof Error ? error.message : String(error)
+      }
+      stageTimings.audioAnalysisMs = Date.now() - audioAnalysisStart
+    }
+
     const renderSeconds = (Date.now() - startedAt) / 1000
     const realtimeRatio = durationSeconds > 0 ? durationSeconds / renderSeconds : null
     const metadata: Record<string, unknown> = {
@@ -999,6 +1110,8 @@ async function executeRemotionExportJob(job: RemotionExportJob): Promise<Remotio
       .select('*')
       .single()
     if (error) throw new Error(error.message)
+
+    await completeStudioRunForExport(updated as RemotionExportJob)
 
     return { job: updated as RemotionExportJob, design: resolvedDesign }
   } catch (err) {

@@ -16,6 +16,7 @@ import { createVoiceover } from './skills/create-voiceover';
 import { formatAudioCapabilitiesForAgent } from './audio-model-capabilities';
 import { listVolcengineTtsVoices } from './volcengine-tts';
 import { transcribeWithVolcengineAsr, type VolcengineAsrTranscript, type TranscriptWord } from './volcengine-asr';
+import { prepareVisualAsset, resolvePreparedVisualAssetById } from './visual-assets/bridge';
 import agentPrompt from './prompts/agent.md';
 import generateImageToolPrompt from './prompts/generate_image_tool.md';
 import type { DesignPayload, Tip, VideoMeta, VideoModel } from '@/types';
@@ -31,7 +32,22 @@ import {
   type RemotionRenderProfile,
 } from '@/lib/remotion-export';
 import { VIDEO_PLACEHOLDER_IMAGE } from '@/lib/editor/timeline-derivations';
+import { normalizeAgentErrorMessage } from './agent-error';
+import {
+  findSnapshotMediaIndex,
+  pinAgentMediaUrl,
+  rebuildAgentSnapshotUrls,
+  type AgentSnapshotIndexRow,
+} from './agent-media-index';
 import { mergePatchProps } from './patch-props';
+import { persistCompositionDraft } from './composition-draft';
+import {
+  assembleCompositionParts,
+  COMPOSITION_PART_FILENAME_PATTERN,
+  COMPOSITION_PART_MAX_CHARS,
+  compositionPartsPrefix,
+} from './composition-parts';
+import { resolveMediaMarkersInString, resolveMediaMarkersInValue } from './media-markers';
 import type { AgentModelPreference } from './agent-models';
 import {
   createAgentModelRuntime,
@@ -39,7 +55,26 @@ import {
   sumOpenRouterProviderCost,
   type AgentModelRuntime,
 } from './agent-model-runtime';
-import { classifyModelTermination } from './agent-terminal';
+import {
+  classifyModelTermination,
+  describeModelStreamError,
+  shouldCompleteDurableStudioRun,
+  shouldContinueActiveStudioRun,
+  shouldHandoffToStudioComposition,
+  shouldStopAfterStudioToolStep,
+  shouldUseTextOnlyRecovery,
+} from './agent-terminal';
+import {
+  AgentExecutionStore,
+  normalizeExecutionSnapshot,
+  stableOperationKey,
+  type DurableExecutionRef,
+} from './agent-execution';
+import { buildDurableCompositionGuidance } from './studio-composition-guidance';
+import {
+  buildStudioCreativeArtifacts,
+  studioCreativePacketSchema,
+} from './studio-run/creative-packet';
 import {
   getOutputLanguageRequirement,
   getReplyLanguageInstruction,
@@ -177,6 +212,56 @@ interface AgentContext {
   userSkills?: ParsedSkill[];
   /** Timeline version: 1 = legacy (project_animations), 2 = video-in-timeline (snapshots) */
   timelineVersion?: number;
+  /** Published or autosaved composition used as the source for this turn. */
+  currentDesignPath?: string;
+  /** Export attempts for an unchanged composition during this agent turn. */
+  materializeAttempts?: Map<string, number>;
+  execution?: DurableExecutionRef;
+}
+
+interface StudioRunCheckpoint {
+  studioRunId?: string;
+  studioRunStage?: string;
+  studioRunStatePath?: string;
+  deliveryPromise?: { width: number; height: number };
+}
+
+function studioCompositionPromiseError(
+  checkpoint: StudioRunCheckpoint,
+  design: { width?: unknown; height?: unknown },
+): string | undefined {
+  if (!['composition', 'review'].includes(checkpoint.studioRunStage || '') || !checkpoint.deliveryPromise) return;
+  const width = Number(design.width);
+  const height = Number(design.height);
+  if (width === checkpoint.deliveryPromise.width && height === checkpoint.deliveryPromise.height) return;
+  return `Studio Composition must keep the locked delivery resolution ${checkpoint.deliveryPromise.width}x${checkpoint.deliveryPromise.height}; received ${width || 'missing'}x${height || 'missing'}. Reuse the Brief/Proposal delivery promise before previewing or publishing.`;
+}
+
+interface StreamedCodeCheckpoint {
+  streamedCodePath?: string;
+  streamedCodeChars?: number;
+}
+
+async function getStudioRunCheckpoint(ctx: AgentContext): Promise<StudioRunCheckpoint> {
+  if (!ctx.supabase || !ctx.userId || !ctx.projectId) return {};
+  try {
+    const studio = await import('./studio-run');
+    const store = new studio.WorkspaceStudioRunStore(ctx.supabase, ctx.userId);
+    const run = (await store.listRuns(ctx.projectId))[0];
+    if (!run || !run.currentStage || run.status !== 'running') return {};
+    return {
+      studioRunId: run.id,
+      studioRunStage: run.currentStage,
+      studioRunStatePath: studio.studioRunStatePath(run.projectId, run.id),
+      deliveryPromise: {
+        width: run.deliveryPromise.width,
+        height: run.deliveryPromise.height,
+      },
+    };
+  } catch (error) {
+    console.warn('[agent] failed to resolve Studio Run recovery checkpoint:', error);
+    return {};
+  }
 }
 
 interface AudioAttachment {
@@ -217,6 +302,7 @@ export type AgentStreamEvent =
   | { type: 'render'; code: string; width: number; height: number; props?: Record<string, unknown>; animation?: { fps: number; durationInSeconds: number; format?: string }; editables?: import('@/types').EditableField[]; published?: boolean; previewUrl?: string }  // Agent React design for browser rendering
   | { type: 'design'; code: string; width: number; height: number; props?: Record<string, unknown>; animation?: { fps: number; durationInSeconds: number; format?: string }; editables?: import('@/types').EditableField[]; published?: boolean }  // @deprecated — backward compat alias for 'render'
   | { type: 'music_task'; taskId: string }  // emitted when generate_music tool creates a task — frontend polls
+  | { type: 'context_compaction'; summary: string; appliedEdits: Array<Record<string, unknown>>; inputTokens?: number }
   | { type: 'usage'; inputTokens: number; outputTokens: number; cacheReadTokens?: number; cacheWriteTokens?: number; cacheWriteTelemetryComplete?: boolean; providerCostUsd?: number; model: string }  // token usage for billing (inputTokens = noCache only)
   | { type: 'done' }
   | {
@@ -224,7 +310,20 @@ export type AgentStreamEvent =
       message: string;
       code?: string;
       recoverable?: boolean;
-      checkpoint?: { draftPath?: string; previewUrl?: string; lastTool?: string; finishReason?: string; rawFinishReason?: string };
+      checkpoint?: {
+        draftPath?: string;
+        previewUrl?: string;
+        lastTool?: string;
+        finishReason?: string;
+        rawFinishReason?: string;
+        studioRunId?: string;
+        studioRunStage?: string;
+        studioRunStatePath?: string;
+        streamedCodePath?: string;
+        streamedCodeChars?: number;
+        compositionPartPaths?: string[];
+        errorDetail?: string;
+      };
     };
 
 // Skill types (workspace replaces hardcoded SKILL_PROMPTS map)
@@ -433,25 +532,6 @@ function formatGeneratedImageForModel(output: unknown): string {
   ].filter(Boolean).join('\n');
 }
 
-function resolveMediaMarkersInString(value: string, snapshotImages: string[]): string {
-  return value.replace(/<<<media_(\d+)>>>/g, (marker, rawIndex) => {
-    const media = snapshotImages[Number(rawIndex) - 1];
-    return media || marker;
-  });
-}
-
-function resolveMediaMarkersInValue(value: unknown, snapshotImages: string[]): unknown {
-  if (typeof value === 'string') return resolveMediaMarkersInString(value, snapshotImages);
-  if (Array.isArray(value)) return value.map(item => resolveMediaMarkersInValue(item, snapshotImages));
-  if (value && typeof value === 'object') {
-    return Object.fromEntries(
-      Object.entries(value as Record<string, unknown>)
-        .map(([key, item]) => [key, resolveMediaMarkersInValue(item, snapshotImages)])
-    );
-  }
-  return value;
-}
-
 function formatMs(ms: number | null | undefined): string {
   if (typeof ms !== 'number' || !Number.isFinite(ms)) return '?';
   return (ms / 1000).toFixed(2).replace(/\.00$/, '');
@@ -468,7 +548,7 @@ function formatTranscriptWords(words: TranscriptWord[] | undefined, maxChars: nu
   return out;
 }
 
-function formatTranscriptForModel(transcript: VolcengineAsrTranscript): string {
+function formatTranscriptForModel(transcript: VolcengineAsrTranscript, includeWordTimings = true): string {
   const lines: string[] = [
     `Transcript (${transcript.provider}/${transcript.model}, ${transcript.durationMs ? `${formatMs(transcript.durationMs)}s` : 'duration unknown'}):`,
     transcript.text || '(empty transcript)',
@@ -476,7 +556,7 @@ function formatTranscriptForModel(transcript: VolcengineAsrTranscript): string {
     'Utterance timecodes:',
   ];
 
-  let charBudget = 24_000;
+  let charBudget = includeWordTimings ? 24_000 : 8_000;
   for (const [idx, utterance] of transcript.utterances.entries()) {
     const line = `${idx + 1}. [${formatMs(utterance.startMs)}s-${formatMs(utterance.endMs)}s]${utterance.speaker ? ` speaker ${utterance.speaker}` : ''} ${utterance.text}`;
     if (charBudget - line.length < 0) {
@@ -485,7 +565,7 @@ function formatTranscriptForModel(transcript: VolcengineAsrTranscript): string {
     }
     lines.push(line);
     charBudget -= line.length;
-    const words = formatTranscriptWords(utterance.words, Math.min(1200, charBudget));
+    const words = includeWordTimings ? formatTranscriptWords(utterance.words, Math.min(1200, charBudget)) : '';
     if (words) {
       const wordLine = `   words: ${words}`;
       if (charBudget - wordLine.length < 0) {
@@ -620,31 +700,30 @@ async function fetchImageBuffer(
 }
 
 /** Refresh ctx.snapshotImages from DB — replaces base64 entries with Storage URLs, video snapshots with video URLs. */
-async function refreshSnapshotUrls(ctx: AgentContext): Promise<void> {
-  if (!ctx.supabase || !ctx.projectId) return;
-  try {
-    const { data: dbSnaps } = await ctx.supabase
-      .from('snapshots')
-      .select('image_url, sort_order, type, video_meta')
-      .eq('project_id', ctx.projectId)
-      .order('sort_order');
-    if (!dbSnaps?.length) return;
-    for (let i = 0; i < Math.min(dbSnaps.length, ctx.snapshotImages.length); i++) {
-      const snap = dbSnaps[i];
-      if (snap.type === 'video') {
-        const videoUrl = typeof snap.video_meta?.videoUrl === 'string' ? snap.video_meta.videoUrl : '';
-        if (videoUrl) {
-          ctx.snapshotImages[i] = videoUrl;
-        } else if (snap.image_url && !ctx.snapshotImages[i]?.startsWith('http')) {
-          ctx.snapshotImages[i] = snap.image_url;
-        }
-        continue;
-      }
-      if (snap.image_url && !ctx.snapshotImages[i]?.startsWith('http')) {
-        ctx.snapshotImages[i] = snap.image_url;
+async function refreshSnapshotUrls(ctx: AgentContext): Promise<AgentSnapshotIndexRow[]> {
+  if (!ctx.supabase || !ctx.projectId) return [];
+  for (let attempt = 0; attempt < 3; attempt++) {
+    try {
+      const { data: dbSnaps, error } = await ctx.supabase
+        .from('snapshots')
+        .select('id, image_url, sort_order, type, video_meta')
+        .eq('project_id', ctx.projectId)
+        .order('sort_order');
+      if (error) throw error;
+      if (!dbSnaps?.length) return [];
+      const rows = dbSnaps as AgentSnapshotIndexRow[];
+      const nextUrls = rebuildAgentSnapshotUrls(rows, ctx.snapshotImages);
+      ctx.snapshotImages.splice(0, ctx.snapshotImages.length, ...nextUrls);
+      return rows;
+    } catch (error) {
+      if (attempt === 2) {
+        console.warn('[agent] failed to refresh timeline Media Index after 3 attempts:', error);
+      } else {
+        await new Promise(resolve => setTimeout(resolve, 150 * (attempt + 1)));
       }
     }
-  } catch { /* best effort */ }
+  }
+  return [];
 }
 
 function isVideoUrl(url?: string): boolean {
@@ -711,10 +790,25 @@ async function resolveCompositionSource(ctx: AgentContext, input: {
   error?: string;
 }> {
   if (input.design_path) {
-    return { snapshotId: input.snapshot_id, designPath: input.design_path };
+    // An exact workspace design path is the strongest source identity. Models
+    // sometimes include a display index or guessed snapshot label alongside it;
+    // forwarding that weaker identity makes the exporter look up a snapshot that
+    // may not exist even though the editable composition is already available.
+    return { designPath: input.design_path };
   }
   if (input.snapshot_id && !input.media_index) {
-    return { snapshotId: input.snapshot_id };
+    if (!ctx.supabase) return { snapshotId: input.snapshot_id };
+    const { data: snapshot, error } = await ctx.supabase
+      .from('snapshots')
+      .select('design_path')
+      .eq('project_id', ctx.projectId)
+      .eq('id', input.snapshot_id)
+      .maybeSingle();
+    if (error) return { error: `Snapshot lookup failed: ${error.message}` };
+    return {
+      snapshotId: input.snapshot_id,
+      designPath: typeof snapshot?.design_path === 'string' ? snapshot.design_path : undefined,
+    };
   }
   if (input.media_index !== undefined) {
     if (!ctx.supabase) return { error: 'Timeline lookup requires workspace access.' };
@@ -1245,7 +1339,7 @@ function buildLightweightSystemPrompt(mode: 'analysis' | 'tipReaction', locale?:
 // Tools (Vercel AI SDK style, closure over AgentContext)
 // ---------------------------------------------------------------------------
 
-function createTools(ctx: AgentContext, runtime: AgentModelRuntime, locale?: string) {
+function createTools(ctx: AgentContext, runtime: AgentModelRuntime, locale?: string, durableVisionBridge = false) {
   return {
     generate_image: tool({
       description: generateImageToolPrompt,
@@ -1344,7 +1438,7 @@ Hard constraints:
 - To EDIT a video: reference it with \`<<<media_N>>>\` and describe the changes. The selected model must support reference videos.
 - To use CLI/app imported reference music/audio for pacing or beat sync, mention its Audio Index marker in \`story_prompt\` (for example \`<<<audio_1>>>\`) AND pass \`audio_refs\` like ["audio_1"]. Audio refs are NOT Timeline Media Index refs. Reference audio is only supported by SeeDance/SeeDance Fast/SeeDance Mini.
 - Works for Kling, SeeDance, SeeDance Mini, and Grok, but respect capability limits and tool errors.
-- Single-call total duration: SeeDance/SeeDance Mini is 4-15 seconds (4s minimum output, 5s default/common preset); Kling is 5-15 seconds; Grok 1.5 is 1-15 seconds for one starting image; Google Omni is 3-10 seconds. If the user asks for anything shorter than the selected model's minimum, or referenced source videos total less than that minimum, write a compact script at the model minimum and set duration to that minimum. If the user wants 30s, 60s, 1-2 minutes, or anything longer than the selected model's max, do not call this tool with one long script. Use \`skills/long-video-director/SKILL.md\` and split into self-contained segments within the selected model limit.
+- Single-call total duration: SeeDance/SeeDance Mini is 4-15 seconds (4s minimum output, 5s default/common preset); Kling is 5-15 seconds; Grok 1.5 is 1-15 seconds for one starting image; Google Omni is 3-10 seconds. If the user asks for anything shorter than the selected model's minimum, or referenced source videos total less than that minimum, write a compact script at the model minimum and set duration to that minimum. For a provider-generated 30s, 60s, 1-2 minute, or otherwise over-limit video, do not call this tool with one long script; use \`skills/long-video-director/SKILL.md\` and split into self-contained segments. This provider limit does not reroute an explicit explainer-video, Studio Run, Remotion, or other built-in Composition workflow.
 - If a complete script totals 15 seconds or less, submit it as one video generation call. Put the whole title, every \`Shot N (Xs):\` line, and the \`Style:\` line into the same \`story_prompt\`; set \`duration\` to the total script duration when known. Do not submit only one shot, the first shot, or one line from the script.
 - If the source video may exceed model limits, call \`read_file('skills/video-ffmpeg-lab/SKILL.md')\` and split it once with \`run_code({ runtime: "node" })\` before submitting generation.
 - Total duration must fit the selected model's capability. Do not shrink a long source to 5s just to bypass a limit; split first.
@@ -1911,9 +2005,9 @@ For timeline videos, pass media_index. For external audio/video URLs, pass media
       }),
       execute: async ({ media_index, media_url, language, force_refresh }) => {
         let resolvedUrl = media_url;
+        let localMediaPath: string | undefined;
         let snapshotId: string | undefined;
         let videoMeta: Record<string, unknown> | undefined;
-
         if (!resolvedUrl && media_index !== undefined) {
           const v = validateImageIndex(ctx.snapshotImages, media_index);
           if (v.error) return { error: v.error };
@@ -1938,6 +2032,15 @@ For timeline videos, pass media_index. For external audio/video URLs, pass media
               return { transcript: cached, cached: true, media_index, videoUrl: cached.sourceUrl || resolvedUrl };
             }
             resolvedUrl = resolvedUrl || (videoMeta?.videoUrl as string | undefined);
+            const videoPath = typeof videoMeta?.videoPath === 'string' ? videoMeta.videoPath : '';
+            if (videoPath) {
+              try {
+                const handle = await workspace.resolveWorkspaceFile(videoPath, ctx.supabase, ctx.userId, { hydrate: true });
+                if (handle?.localAvailable && handle.localPath) localMediaPath = handle.localPath;
+              } catch (error) {
+                console.warn('[transcribe_audio] local workspace media unavailable; falling back to URL', error);
+              }
+            }
           }
         }
 
@@ -1948,6 +2051,7 @@ For timeline videos, pass media_index. For external audio/video URLs, pass media
         try {
           const transcript = await transcribeWithVolcengineAsr({
             mediaUrl: resolvedUrl,
+            localMediaPath,
             uid: ctx.userId || 'makaron-agent',
             language,
           });
@@ -1961,7 +2065,7 @@ For timeline videos, pass media_index. For external audio/video URLs, pass media
             if (updateError) console.error('[transcribe_audio] transcript cache update failed:', updateError.message);
           }
 
-          return { transcript, cached: false, media_index, videoUrl: resolvedUrl };
+          return { transcript, cached: false, media_index, videoUrl: transcript.sourceUrl || resolvedUrl };
         } catch (err) {
           return { error: `ASR transcription failed: ${err instanceof Error ? err.message : String(err)}` };
         }
@@ -1985,10 +2089,578 @@ For timeline videos, pass media_index. For external audio/video URLs, pass media
       },
     }),
 
+    prepare_visual_asset: tool({
+      description: `Prepare generated or supplied media for visual compositing without choosing the final layout.
+
+Use mode "cutout" for a chroma-background image that should become a transparent PNG. The deterministic bridge removes border-connected chroma plus sizeable enclosed high-confidence chroma pockets, despills semi-transparent edges, preserves only tiny isolated same-color subject details, computes subject/safe boxes, and renders a five-background QA sheet.
+
+Use mode "edge-video" for an ordinary opaque clip generated with quiet edges close to the intended Remotion background. The bridge samples the clip over time, measures edge color/detail/drift, preserves a cached workspace copy, and returns target background, edge palette, feather guidance, and a QA contact sheet. It never creates transparent video or a fixed renderer.
+
+Call this during the Studio Assets stage after reading skills/_shared/visual-asset-bridge/SKILL.md. On a resumed run, call it with mode + asset_id and no media source first; the bridge resolves the latest cached prepared record by semantic id. Use the returned preparedUrl in Composition. If quality is revise/fail, inspect the contact sheet and regenerate or reprepare the source instead of hiding the problem by shrinking it.`,
+      inputSchema: z.object({
+        mode: z.enum(['cutout', 'edge-video']),
+        media_index: z.number().int().positive().optional().describe('Literal 1-based Media Index item to prepare.'),
+        source_url: z.string().optional().describe('Public media URL or data URL. Use when the source is not in Media Index.'),
+        asset_id: z.string().optional().describe('Stable semantic id used by Storyboard and Asset Manifest. With no media source, resolves the latest cached prepared asset after recovery.'),
+        role: z.enum(['hero', 'support', 'decoration']).optional(),
+        key_color: z.string().regex(/^#[0-9a-f]{6}$/i).optional().describe('Explicit chroma key color for cutout, e.g. #00ff00. Omit for border auto-detection.'),
+        target_background: z.string().regex(/^#[0-9a-f]{6}$/i).optional().describe('Intended Remotion background for edge-video analysis.'),
+        force_refresh: z.boolean().optional().describe('Ignore cached preparation and rebuild the asset.'),
+      }),
+      execute: async ({ mode, media_index, source_url, asset_id, role, key_color, target_background, force_refresh }) => {
+        if (!ctx.supabase || !ctx.userId) return { success: false, error: 'Visual Asset Bridge requires an authenticated project workspace.' };
+        let sourceUrl = source_url;
+        let sourceSnapshotId: string | undefined;
+        if (media_index !== undefined) {
+          const snapshots = await refreshSnapshotUrls(ctx);
+          const validated = validateImageIndex(ctx.snapshotImages, media_index);
+          if (validated.error) return { success: false, error: validated.error };
+          sourceUrl = ctx.snapshotImages[validated.idx];
+          sourceSnapshotId = snapshots?.[validated.idx]?.id as string | undefined;
+        }
+        try {
+          const cachedAsset = !sourceUrl && asset_id && !force_refresh
+            ? await resolvePreparedVisualAssetById({
+              projectId: ctx.projectId,
+              userId: ctx.userId,
+              supabase: ctx.supabase,
+              assetId: asset_id,
+            })
+            : null;
+          if (!sourceUrl && !asset_id) {
+            return { success: false, error: 'Provide media_index, source_url, or asset_id to recover a prepared asset.' };
+          }
+          if (!sourceUrl && !cachedAsset) {
+            return { success: false, error: `No prepared visual asset found for asset_id "${asset_id}". Provide its media_index or source_url once.` };
+          }
+          if (cachedAsset && cachedAsset.mode !== mode) {
+            return { success: false, error: `Prepared asset "${asset_id}" uses mode ${cachedAsset.mode}, not ${mode}.` };
+          }
+          const result = cachedAsset
+            ? { asset: cachedAsset, cached: true }
+            : await prepareVisualAsset({
+              projectId: ctx.projectId,
+              userId: ctx.userId,
+              supabase: ctx.supabase,
+              sourceUrl: sourceUrl!,
+              mode,
+              assetId: asset_id,
+              role,
+              sourceSnapshotId,
+              keyColor: key_color,
+              targetBackground: target_background,
+              forceRefresh: force_refresh,
+            });
+          rememberWorkspaceMediaOutputs(ctx, [
+            {
+              path: result.asset.sourceWorkspacePath,
+              storageUrl: result.asset.sourceWorkspaceUrl,
+              contentType: inferWorkspaceContentType(result.asset.sourceWorkspacePath),
+              description: `${result.asset.assetId} source`,
+            },
+            {
+              path: result.asset.workspacePath,
+              storageUrl: result.asset.preparedUrl,
+              contentType: result.asset.kind === 'image' ? 'image/png' : inferWorkspaceContentType(result.asset.workspacePath),
+              description: `${result.asset.assetId} prepared ${result.asset.mode}`,
+            },
+            ...(result.asset.quality.contactSheetPath && result.asset.quality.contactSheetUrl ? [{
+              path: result.asset.quality.contactSheetPath,
+              storageUrl: result.asset.quality.contactSheetUrl,
+              contentType: result.asset.mode === 'cutout' ? 'image/png' : 'image/jpeg',
+              description: `${result.asset.assetId} visual asset QA`,
+            }] : []),
+          ]);
+          let qaPreviewBase64: string | undefined;
+          if (runtime.spec.supportsImageInput && result.asset.quality.contactSheetPath) {
+            const qaFile = await workspace.resolveWorkspaceFile(
+              result.asset.quality.contactSheetPath,
+              ctx.supabase,
+              ctx.userId,
+              { hydrate: true },
+            );
+            if (qaFile?.localPath) {
+              const qaPreview = await sharp(qaFile.localPath)
+                .resize({ width: 640, withoutEnlargement: true })
+                .jpeg({ quality: 78 })
+                .toBuffer();
+              qaPreviewBase64 = qaPreview.toString('base64');
+            }
+          }
+          return {
+            success: true,
+            cached: result.cached,
+            ready: result.asset.status === 'ready',
+            asset: result.asset,
+            qaPreviewBase64,
+            message: result.asset.status === 'ready'
+              ? `Prepared ${result.asset.assetId} is ready for Composition.`
+              : `Prepared ${result.asset.assetId} needs revision. Inspect ${result.asset.quality.contactSheetPath}.`,
+          };
+        } catch (error) {
+          return { success: false, error: `Visual asset preparation failed: ${error instanceof Error ? error.message : String(error)}` };
+        }
+      },
+      toModelOutput({ output }: { output: any }) {
+        if (!output.success) {
+          return { type: 'content' as const, value: [{ type: 'text' as const, text: output.error || 'Visual asset preparation failed.' }] };
+        }
+        return {
+          type: 'content' as const,
+          value: [
+            ...(output.qaPreviewBase64 ? [modelFileContent(output.qaPreviewBase64, 'image/jpeg')] : []),
+            {
+              type: 'text' as const,
+              text: `${output.message}\nCached: ${output.cached ? 'yes' : 'no'}\nThe image above is the QA contact sheet. Inspect it directly before declaring pass; status metadata alone is not visual approval.\nPreparedVisualAsset:\n${JSON.stringify(output.asset, null, 2)}`,
+            },
+          ],
+        };
+      },
+    }),
+
+    execution_checkpoint: tool({
+      description: `Persist a typed handoff for a durable Agent execution. Use it after completing a meaningful work unit, after making a decision that later attempts must preserve, and before a long composition/code generation step. This is not a progress message for the user. Keep it concise and factual. Include durable workspace paths instead of copying file contents.`,
+      inputSchema: z.object({
+        objective: z.string().optional(),
+        acceptance_criteria: z.array(z.string()).max(30).optional(),
+        decisions: z.array(z.string()).max(30).optional(),
+        completed_work: z.array(z.string()).max(50).optional(),
+        artifacts: z.array(z.object({
+          kind: z.string(),
+          path: z.string().optional(),
+          url: z.string().optional(),
+          label: z.string().optional(),
+        })).max(50).optional(),
+        open_questions: z.array(z.string()).max(30).optional(),
+        current_work_unit: z.string(),
+        next_action: z.string(),
+        attempt_summary: z.string().max(12_000).optional(),
+      }),
+      execute: async (input) => {
+        if (!ctx.execution || !ctx.supabase || !ctx.userId) {
+          return { success: false, error: 'No durable execution is active.' };
+        }
+        const store = new AgentExecutionStore(ctx.supabase, ctx.userId, ctx.projectId);
+        const previous = await store.latestSnapshot(ctx.execution.runId);
+        const snapshot = normalizeExecutionSnapshot({
+          objective: input.objective || previous?.objective,
+          acceptanceCriteria: input.acceptance_criteria || previous?.acceptanceCriteria,
+          decisions: input.decisions || previous?.decisions,
+          completedWork: input.completed_work || previous?.completedWork,
+          artifacts: input.artifacts || previous?.artifacts,
+          openQuestions: input.open_questions || previous?.openQuestions,
+          currentWorkUnit: input.current_work_unit,
+          nextAction: input.next_action,
+          attemptSummary: input.attempt_summary,
+          providerCompaction: previous?.providerCompaction,
+        }, {
+          objective: previous?.objective || 'Continue the durable execution objective.',
+          currentWorkUnit: input.current_work_unit,
+          nextAction: input.next_action,
+        });
+        const snapshotId = await store.saveSnapshot({
+          runId: ctx.execution.runId,
+          attemptId: ctx.execution.attemptId,
+          projectId: ctx.projectId,
+          kind: 'model_checkpoint',
+          snapshot,
+        });
+        return {
+          success: true,
+          snapshotId,
+          workUnit: snapshot.currentWorkUnit,
+          nextAction: snapshot.nextAction,
+          message: 'Durable execution checkpoint saved.',
+        };
+      },
+    }),
+
+    studio_run: tool({
+      description: `Create and advance a durable Makaron Studio Run for multi-stage video production.
+Use this for explainer-video and other substantial directed video skills, not quick edits.
+The run persists typed artifacts in the existing project workspace and enforces dependencies, approval policy, resume state, and downstream invalidation.
+Operations:
+- start: create the run before producing the creative packet. By default it returns only run state, keeping later stage schemas out of the model context. Set include_stage_schemas=true only for legacy/manual authoring.
+- put_creative_packet: for approval_policy=auto, submit the brief, concept options, selected direction, and timed script once. The harness deterministically projects it into separate Brief, Proposal, and Script artifacts and emits one CUI event per stage.
+- put_artifact: validate and persist an Agent-authored stage artifact. Agent-authored stages end at composition: brief, proposal, script, storyboard, assets, composition.
+- put_artifacts: legacy/general batch operation for approval_policy=auto. Use put_creative_packet for new planning work; use this only when already holding complete adjacent Agent-authored stage artifacts.
+- approve: approve a guided/manual stage that is awaiting approval.
+- status: load the current run after a new turn or interrupted session. It returns the JSON Schema for the current stage.
+- schema: return the JSON Schema for a requested stage before authoring its artifact.
+- validate: validate a stage artifact without persisting it.
+- invalidate: deliberately reopen a stage and invalidate only its downstream dependents.
+Review means previewing and patching the Remotion source before export, not authoring a Review artifact. After Composition is persisted and visually satisfactory, call materialize_media once with the final design path. A successful export automatically completes the Review and Delivery UI states. Never author Review or Delivery JSON.`,
+      inputSchema: z.object({
+        operation: z.enum(['start', 'put_creative_packet', 'put_artifact', 'put_artifacts', 'approve', 'status', 'invalidate', 'schema', 'validate']),
+        run_id: z.string().optional(),
+        recipe: z.string().optional(),
+        title: z.string().optional(),
+        approval_policy: z.enum(['auto', 'guided', 'manual']).optional(),
+        delivery_promise: z.object({
+          durationSeconds: z.number().positive().max(600),
+          width: z.number().int().positive(),
+          height: z.number().int().positive(),
+          fps: z.number().positive().max(120),
+          renderRuntime: z.enum(['remotion', 'ffmpeg', 'provider-video']),
+          compositionMode: z.enum(['editable', 'atelier', 'templated']),
+          audioRequired: z.boolean(),
+          subtitlesRequired: z.boolean(),
+        }).optional(),
+        include_stage_schemas: z.boolean().optional().describe('Legacy/manual mode only. Default false to avoid loading all six Agent-authored schemas before they are needed.'),
+        creative_packet: studioCreativePacketSchema.optional().describe('One creative decision packet projected into Brief, Proposal, and Script artifacts by put_creative_packet.'),
+        stage: z.enum(['brief', 'proposal', 'script', 'storyboard', 'assets', 'composition', 'review', 'delivery']).optional(),
+        artifact: z.unknown().optional(),
+        artifacts: z.array(z.object({
+          stage: z.enum(['brief', 'proposal', 'script', 'storyboard', 'assets', 'composition', 'review', 'delivery']),
+          artifact: z.unknown(),
+        })).min(1).max(8).optional(),
+        summary: z.string().optional(),
+        reason: z.string().optional(),
+      }),
+      execute: async ({ operation, run_id, recipe, title, approval_policy, delivery_promise, include_stage_schemas, creative_packet, stage, artifact, artifacts, summary, reason }) => {
+        if (!ctx.supabase || !ctx.userId || !ctx.projectId) {
+          return { success: false, error: 'Studio Run requires an authenticated project workspace.' };
+        }
+        try {
+          const studio = await import('./studio-run');
+          const store = new studio.WorkspaceStudioRunStore(ctx.supabase, ctx.userId);
+
+          if (operation === 'start') {
+            if (!delivery_promise) return { success: false, error: 'start requires delivery_promise' };
+            const run = await studio.startPersistedStudioRun({
+              store,
+              projectId: ctx.projectId,
+              recipe: recipe || 'explainer-video',
+              title: title || 'Studio Run',
+              approvalPolicy: approval_policy || 'guided',
+              deliveryPromise: delivery_promise,
+            });
+            return {
+              success: true,
+              studioRun: studio.summarizeStudioRun(run),
+              statePath: studio.studioRunStatePath(run.projectId, run.id),
+              ...(include_stage_schemas ? {
+                stageSchemas: Object.fromEntries(([
+                  'brief',
+                  'proposal',
+                  'script',
+                  'storyboard',
+                  'assets',
+                  'composition',
+                ] as const).map(stageId => [stageId, studio.getStudioArtifactJsonSchema(stageId)])),
+              } : {
+                planningMode: 'creative-packet',
+              }),
+            };
+          }
+
+          let run = run_id ? await store.loadRun(ctx.projectId, run_id) : (await store.listRuns(ctx.projectId))[0];
+          if (!run) return { success: false, error: 'Studio Run not found. Start one first.' };
+          const runAtOperationStart = run;
+
+          const loadStudioArtifact = async (artifactStage: 'script' | 'storyboard' | 'composition'): Promise<unknown> => {
+            const ref = runAtOperationStart.artifacts[artifactStage];
+            if (!ref) throw new Error(`Composition subtitle sync requires the persisted ${artifactStage} artifact.`);
+            const file = await workspace.readFile(ref.path, ctx.supabase, ctx.userId);
+            if (!file) throw new Error(`Could not read Studio Run ${artifactStage} artifact at ${ref.path}.`);
+            return JSON.parse(file.content);
+          };
+          const assertCompositionSubtitleSync = async (
+            candidate: unknown,
+            overrides: { script?: unknown; storyboard?: unknown } = {},
+          ): Promise<void> => {
+            if (!runAtOperationStart.deliveryPromise.subtitlesRequired) return;
+            const composition = studio.validateStudioArtifact('composition', candidate) as Record<string, any>;
+            const script = studio.validateStudioArtifact(
+              'script',
+              overrides.script ?? await loadStudioArtifact('script'),
+            ) as Record<string, any>;
+            const storyboard = studio.validateStudioArtifact(
+              'storyboard',
+              overrides.storyboard ?? await loadStudioArtifact('storyboard'),
+            ) as Record<string, any>;
+            studio.assertSubtitleSyncEvidence({
+              required: true,
+              script: script as any,
+              storyboard: storyboard as any,
+              compositionSceneIds: composition.sceneIds,
+              evidence: composition.draftGate.subtitleSyncEvidence,
+            });
+            const designFile = await workspace.readFile(composition.designPath, ctx.supabase, ctx.userId);
+            if (!designFile) {
+              throw new Error(`Composition subtitle sync requires the saved design at ${composition.designPath}.`);
+            }
+            try {
+              JSON.parse(designFile.content);
+            } catch {
+              throw new Error(`Composition subtitle sync could not parse the saved design at ${composition.designPath}.`);
+            }
+          };
+          const assertStoryboardNarrationTiming = async (
+            candidate: unknown,
+            scriptOverride?: unknown,
+          ): Promise<void> => {
+            if (!runAtOperationStart.deliveryPromise.subtitlesRequired) return;
+            const storyboard = studio.validateStudioArtifact('storyboard', candidate) as Record<string, any>;
+            const script = studio.validateStudioArtifact(
+              'script',
+              scriptOverride ?? await loadStudioArtifact('script'),
+            ) as Record<string, any>;
+            studio.assertStoryboardNarrationTimingEvidence({
+              required: true,
+              script: script as any,
+              storyboard: storyboard as any,
+            });
+          };
+          const assertAssetsUseVisualBridge = async (
+            candidate: unknown,
+            storyboardOverride?: unknown,
+          ): Promise<void> => {
+            const manifest = studio.validateStudioArtifact('assets', candidate) as Record<string, any>;
+            const storyboard = studio.validateStudioArtifact(
+              'storyboard',
+              storyboardOverride ?? await loadStudioArtifact('storyboard'),
+            ) as Record<string, any>;
+            await studio.assertPersistedVisualAssetBridgeEvidence({
+              storyboard: storyboard as any,
+              manifest: manifest as any,
+              resolvePreparedAsset: assetId => resolvePreparedVisualAssetById({
+                projectId: ctx.projectId,
+                userId: ctx.userId!,
+                supabase: ctx.supabase!,
+                assetId,
+              }),
+            });
+          };
+          const isAutomaticStage = (candidate: string | null | undefined): candidate is 'review' | 'delivery' => (
+            candidate === 'review' || candidate === 'delivery'
+          );
+          const currentStageSchema = (candidate: NonNullable<typeof run>) => (
+            candidate.currentStage && !isAutomaticStage(candidate.currentStage)
+              ? studio.getStudioArtifactJsonSchema(candidate.currentStage)
+              : null
+          );
+          const materializeNextAction = (candidate: NonNullable<typeof run>) => (
+            isAutomaticStage(candidate.currentStage)
+              ? 'Review the Remotion source by previewing and patching it. When satisfied, call materialize_media once with the final design_path; successful export completes Review and Delivery automatically.'
+              : undefined
+          );
+
+          if (operation === 'status') {
+            return {
+              success: true,
+              studioRun: studio.summarizeStudioRun(run),
+              statePath: studio.studioRunStatePath(run.projectId, run.id),
+              currentStageSchema: currentStageSchema(run),
+              nextAction: materializeNextAction(run),
+            };
+          }
+          if (operation === 'schema') {
+            const schemaStage = stage || run.currentStage;
+            if (!schemaStage) return { success: false, error: 'schema requires stage when the run is complete' };
+            if (isAutomaticStage(schemaStage)) {
+              return { success: false, error: 'Review and Delivery are automatic. Preview and patch the Remotion source, then call materialize_media once.' };
+            }
+            return {
+              success: true,
+              stage: schemaStage,
+              schema: studio.getStudioArtifactJsonSchema(schemaStage),
+            };
+          }
+          if (operation === 'validate') {
+            const schemaStage = stage || run.currentStage;
+            if (!schemaStage) return { success: false, error: 'validate requires stage when the run is complete' };
+            if (artifact === undefined) return { success: false, error: 'validate requires artifact' };
+            if (isAutomaticStage(schemaStage)) {
+              return { success: false, error: 'Review and Delivery do not accept Agent-authored artifacts. Patch Remotion code, then call materialize_media once.' };
+            }
+            const validated = studio.validateStudioArtifact(schemaStage, artifact);
+            if (schemaStage === 'storyboard') await assertStoryboardNarrationTiming(validated);
+            if (schemaStage === 'composition') await assertCompositionSubtitleSync(validated);
+            if (schemaStage === 'assets') await assertAssetsUseVisualBridge(validated);
+            return { success: true, valid: true, stage: schemaStage, artifact: validated };
+          }
+          if (operation === 'put_creative_packet') {
+            if (!creative_packet) return { success: false, error: 'put_creative_packet requires creative_packet' };
+            if (run.approvalPolicy !== 'auto') {
+              return { success: false, error: 'put_creative_packet is only available for auto-approved Studio Runs' };
+            }
+            const planningArtifacts = buildStudioCreativeArtifacts({
+              packet: creative_packet,
+              deliveryPromise: run.deliveryPromise,
+            });
+            const result = await studio.putPersistedStudioArtifacts({
+              store,
+              run,
+              artifacts: planningArtifacts,
+            });
+            const updates = result.updates.map(update => ({
+              studioRun: studio.summarizeStudioRun(update.run, update.artifactPath),
+              artifactPath: update.artifactPath,
+              invalidated: update.invalidated,
+            }));
+            return {
+              success: true,
+              studioRun: studio.summarizeStudioRun(result.run),
+              studioRunUpdates: updates,
+              artifactPaths: updates.map(update => update.artifactPath),
+              projectedStages: ['brief', 'proposal', 'script'],
+              currentStageSchema: currentStageSchema(result.run),
+              nextAction: materializeNextAction(result.run),
+            };
+          }
+          if (operation === 'put_artifacts') {
+            if (!artifacts?.length) return { success: false, error: 'put_artifacts requires artifacts' };
+            if (artifacts.some(item => isAutomaticStage(item.stage))) {
+              return { success: false, error: 'Review and Delivery are automatic. put_artifacts may only persist Agent-authored stages through Composition.' };
+            }
+            const storyboardItem = artifacts.find(item => item.stage === 'storyboard');
+            if (storyboardItem) {
+              await assertStoryboardNarrationTiming(
+                storyboardItem.artifact,
+                artifacts.find(item => item.stage === 'script')?.artifact,
+              );
+            }
+            const compositionItem = artifacts.find(item => item.stage === 'composition');
+            if (compositionItem) {
+              await assertCompositionSubtitleSync(compositionItem.artifact, {
+                script: artifacts.find(item => item.stage === 'script')?.artifact,
+                storyboard: artifacts.find(item => item.stage === 'storyboard')?.artifact,
+              });
+            }
+            const assetsItem = artifacts.find(item => item.stage === 'assets');
+            if (assetsItem) {
+              await assertAssetsUseVisualBridge(
+                assetsItem.artifact,
+                artifacts.find(item => item.stage === 'storyboard')?.artifact,
+              );
+            }
+            const result = await studio.putPersistedStudioArtifacts({ store, run, artifacts });
+            const updates = result.updates.map(update => ({
+              studioRun: studio.summarizeStudioRun(update.run, update.artifactPath),
+              artifactPath: update.artifactPath,
+              invalidated: update.invalidated,
+            }));
+            return {
+              success: true,
+              studioRun: studio.summarizeStudioRun(result.run),
+              studioRunUpdates: updates,
+              artifactPaths: updates.map(update => update.artifactPath),
+              currentStageSchema: currentStageSchema(result.run),
+              nextAction: materializeNextAction(result.run),
+            };
+          }
+          if (!stage) return { success: false, error: `${operation} requires stage` };
+
+          if (operation === 'put_artifact') {
+            if (artifact === undefined) return { success: false, error: 'put_artifact requires artifact' };
+            if (isAutomaticStage(stage)) {
+              return { success: false, error: 'Review and Delivery are automatic. Patch the Remotion source during review, then call materialize_media once.' };
+            }
+            if (stage === 'storyboard') await assertStoryboardNarrationTiming(artifact);
+            if (stage === 'assets') await assertAssetsUseVisualBridge(artifact);
+            if (stage === 'composition') {
+              await assertCompositionSubtitleSync(artifact);
+              const designPath = artifact && typeof artifact === 'object'
+                ? (artifact as Record<string, unknown>).designPath
+                : undefined;
+              if (typeof designPath === 'string') {
+                const file = await workspace.readFile(designPath, ctx.supabase, ctx.userId);
+                if (file) {
+                  try {
+                    const design = JSON.parse(file.content) as Record<string, unknown>;
+                    if (design.__makaronScaffold === true) {
+                      return {
+                        success: false,
+                        error: 'Composition is still the structural scaffold. Apply the original Composition/Director guidance with run_code before persisting the composition stage.',
+                      };
+                    }
+                  } catch { /* malformed artifacts are handled by normal validation */ }
+                }
+              }
+            }
+            const result = await studio.putPersistedStudioArtifact({ store, run, stage, artifact });
+            return {
+              success: true,
+              studioRun: studio.summarizeStudioRun(result.run, result.artifactPath),
+              artifactPath: result.artifactPath,
+              invalidated: result.invalidated,
+              currentStageSchema: currentStageSchema(result.run),
+              nextAction: materializeNextAction(result.run),
+            };
+          }
+          if (operation === 'approve') {
+            run = await studio.approvePersistedStudioStage({ store, run, stage, summary });
+            return { success: true, studioRun: studio.summarizeStudioRun(run) };
+          }
+          const result = await studio.invalidatePersistedStudioStage({
+            store,
+            run,
+            stage,
+            reason: reason || `Reopened ${stage} for revision`,
+          });
+          return {
+            success: true,
+            studioRun: studio.summarizeStudioRun(result.run),
+            invalidated: result.invalidated,
+          };
+        } catch (err) {
+          return { success: false, error: err instanceof Error ? err.message : String(err) };
+        }
+      },
+      toModelOutput({ output }: { output: any }) {
+        if (output.error) {
+          return { type: 'content' as const, value: [{ type: 'text' as const, text: output.error }] };
+        }
+        if (output.schema || output.currentStageSchema || output.stageSchemas || output.nextAction) {
+          return {
+            type: 'content' as const,
+            value: [{
+              type: 'text' as const,
+              text: JSON.stringify({
+                ...(output.studioRun ? { studioRun: output.studioRun } : {}),
+                ...(output.statePath ? { statePath: output.statePath } : {}),
+                ...(output.stage ? { stage: output.stage } : {}),
+                ...(output.schema ? { schema: output.schema } : {}),
+                ...(output.currentStageSchema ? { currentStageSchema: output.currentStageSchema } : {}),
+                ...(output.stageSchemas ? { stageSchemas: output.stageSchemas } : {}),
+                ...(output.nextAction ? { nextAction: output.nextAction } : {}),
+              }),
+            }],
+          };
+        }
+        if (Array.isArray(output.studioRunUpdates)) {
+          const paths = output.studioRunUpdates
+            .map((update: any) => update?.artifactPath)
+            .filter((value: unknown): value is string => typeof value === 'string');
+          const run = output.studioRun || {};
+          return {
+            type: 'content' as const,
+            value: [{
+              type: 'text' as const,
+              text: `Studio Run persisted ${paths.length} stage artifact${paths.length === 1 ? '' : 's'}:\n${paths.map((path: string) => `- ${path}`).join('\n')}\nCurrent stage: ${run.currentStage || 'complete'}; status: ${run.status || 'unknown'}.`,
+            }],
+          };
+        }
+        if (output.valid) {
+          return { type: 'content' as const, value: [{ type: 'text' as const, text: `Studio Run ${output.stage} artifact is valid.` }] };
+        }
+        const run = output.studioRun || {};
+        return {
+          type: 'content' as const,
+          value: [{
+            type: 'text' as const,
+            text: `Studio Run ${run.runId || ''}: ${run.status || 'updated'}; current stage: ${run.currentStage || 'complete'}${output.artifactPath ? `; artifact: ${output.artifactPath}` : ''}.`,
+          }],
+        };
+      },
+    }),
+
     materialize_media: tool({
       description: `Export an editable Remotion composition into a real MP4 video.
 Use this when the user asks to save/export/materialize/turn a composition into MP4. It accepts a timeline media_index, snapshot_id, design_path, or the current unsaved composition from run_code.
-Default profile is fast_720p (short side 720, no upscale) for speed. Default publish=true so the exported MP4 appears as a new <<<media_N>>> video. By default the tool queues a durable async export like video generation; polling/cron completes it and reports either success or failure. Set wait=true only when the user explicitly needs the final URL in this response.`,
+Default profile is fast_720p (short side 720, no upscale) for speed. Default publish=true so the exported MP4 appears as a new <<<media_N>>> video. A completed synchronous export returns the exact mediaIndex for subsequent analyze_video/preview_frame calls; use that returned index instead of guessing. By default the tool queues a durable async export like video generation; polling/cron completes it and reports either success or failure. Set wait=true on the first call when the current response must include the final URL. A repeated call for the same unchanged composition reuses the fingerprint-matched queued/completed job and does not render twice. If the same unchanged composition fails twice in one turn, stop retrying and report export as blocked.
+For Studio Run, first preview and patch the Remotion source until it is satisfactory, then call materialize_media once with the exact final design_path. Studio Run automatically waits at source resolution; successful export is terminal and completes the Review and Delivery UI states. Do not author Review/Delivery artifacts or continue reviewing after success.`,
       inputSchema: z.object({
         media_index: z.number().optional().describe('1-based media index, e.g. 3 for <<<media_3>>>. Must point to an editable Remotion composition.'),
         snapshot_id: z.string().optional().describe('Snapshot ID of an editable Remotion composition.'),
@@ -1996,22 +2668,47 @@ Default profile is fast_720p (short side 720, no upscale) for speed. Default pub
         name: z.string().optional().describe('Short output slug/name.'),
         profile: z.enum(['fast_720p', 'source']).optional().describe('fast_720p for speed, source for full source resolution.'),
         publish: z.boolean().optional().describe('Default true. Publish exported MP4 into the project timeline.'),
-        wait: z.boolean().optional().describe('Default false. Queue asynchronously and let polling/cron complete. Set true only to wait for final MP4 URL before responding.'),
+        wait: z.boolean().optional().describe('Default false outside Studio Run. Studio Run always waits for the final MP4 URL so successful materialization can complete the run atomically.'),
       }),
       execute: async ({ media_index, snapshot_id, design_path, name, profile, publish, wait }) => {
         if (!ctx.supabase || !ctx.userId) {
           return { success: false, error: 'materialize_media requires an authenticated project workspace.' };
         }
+        const studioCheckpoint = await getStudioRunCheckpoint(ctx);
+        const latestDraftPath = (ctx as any).__lastSavedDraftPath as string | undefined;
+        const shouldPreferLatestDraft = Boolean(studioCheckpoint.studioRunId)
+          && Boolean(latestDraftPath)
+          && media_index !== undefined
+          && !snapshot_id
+          && !design_path;
         const source = await resolveCompositionSource(ctx, {
-          media_index,
+          media_index: shouldPreferLatestDraft ? undefined : media_index,
           snapshot_id,
-          design_path,
+          design_path: shouldPreferLatestDraft ? latestDraftPath : design_path,
         });
         if (source.error) return { success: false, error: source.error };
 
+        const sourceKey = source.designPath
+          || source.snapshotId
+          || (source.design ? JSON.stringify([source.design.code, source.design.props, source.design.animation]) : 'current-composition');
+        const attempts = ctx.materializeAttempts || new Map<string, number>();
+        ctx.materializeAttempts = attempts;
+        const attemptCount = attempts.get(sourceKey) || 0;
+        if (attemptCount >= 2) {
+          return {
+            success: false,
+            blocked: true,
+            error: 'MP4 export already failed twice for this unchanged composition in this turn. Do not call materialize_media again. Keep the editable composition and contact sheet, then report export as blocked.',
+          };
+        }
+        attempts.set(sourceKey, attemptCount + 1);
+
         try {
           const shouldPublish = publish !== false;
-          const shouldWait = wait === true;
+          const shouldWait = Boolean(studioCheckpoint.studioRunId) || wait === true;
+          const renderProfile: RemotionRenderProfile = studioCheckpoint.studioRunId
+            ? 'source'
+            : (profile || 'fast_720p');
           const publishSnapshotId = shouldPublish && !shouldWait ? crypto.randomUUID() : undefined;
           const job = await createRemotionExportJob({
             userId: ctx.userId,
@@ -2020,10 +2717,11 @@ Default profile is fast_720p (short side 720, no upscale) for speed. Default pub
             designPath: source.designPath,
             design: source.design,
             outputType: 'video',
-            renderProfile: (profile || 'fast_720p') as RemotionRenderProfile,
+            renderProfile,
             publish: shouldPublish,
             publishSnapshotId,
             name: name || 'materialized-composition',
+            studioRunId: studioCheckpoint.studioRunId,
           });
 
           if (!shouldWait) {
@@ -2089,6 +2787,31 @@ Default profile is fast_720p (short side 720, no upscale) for speed. Default pub
           const result = await runRemotionExportJob(job.id);
           const completed = result.job;
           const videoUrl = completed.storage_url || '';
+          const audioAnalysis = completed.metadata?.audioAnalysis && typeof completed.metadata.audioAnalysis === 'object'
+            ? completed.metadata.audioAnalysis
+            : undefined;
+          let studioRunCompleted = false;
+          if (studioCheckpoint.studioRunId && completed.status === 'completed') {
+            const outputPath = completed.storage_url || completed.workspace_path || '';
+            const compositionDesignPath = completed.design_path || source.designPath || '';
+            if (!outputPath || !compositionDesignPath) {
+              throw new Error('Studio Run export completed but its MP4 or editable Composition path is missing.');
+            }
+            const studio = await import('./studio-run');
+            const store = new studio.WorkspaceStudioRunStore(ctx.supabase, ctx.userId);
+            const activeRun = await store.loadRun(ctx.projectId, studioCheckpoint.studioRunId);
+            if (!activeRun) throw new Error(`Studio Run ${studioCheckpoint.studioRunId} disappeared after export.`);
+            const completion = await studio.completePersistedStudioRunFromMaterialization({
+              store,
+              run: activeRun,
+              outputPath,
+              compositionDesignPath,
+            });
+            studioRunCompleted = completion.run.status === 'completed';
+            if (!studioRunCompleted) {
+              throw new Error(`Studio Run ${studioCheckpoint.studioRunId} did not reach completed after export.`);
+            }
+          }
           const publishedSnapshotId = typeof completed.metadata?.publishedSnapshotId === 'string'
             ? completed.metadata.publishedSnapshotId
             : undefined;
@@ -2107,12 +2830,31 @@ Default profile is fast_720p (short side 720, no upscale) for speed. Default pub
             width: completed.width || undefined,
             height: completed.height || undefined,
           } : null;
+          let publishedMediaIndex: number | undefined;
           if (publishedSnapshotId && videoMeta) {
             ctx.pendingVideoSnapshot = {
               snapshotId: publishedSnapshotId,
               taskId: videoMeta.taskId || `remotion-export-${completed.id}`,
               videoMeta,
             };
+            const orderedSnapshots = await refreshSnapshotUrls(ctx);
+            const actualMediaIndex = findSnapshotMediaIndex(orderedSnapshots, publishedSnapshotId);
+            if (actualMediaIndex) {
+              const pinnedUrls = pinAgentMediaUrl(ctx.snapshotImages, actualMediaIndex, videoUrl);
+              ctx.snapshotImages.splice(0, ctx.snapshotImages.length, ...pinnedUrls);
+              ctx.currentSnapshotIndex = actualMediaIndex - 1;
+              publishedMediaIndex = actualMediaIndex;
+            } else {
+              const existingIndex = ctx.snapshotImages.indexOf(videoUrl);
+              if (existingIndex >= 0) {
+                ctx.currentSnapshotIndex = existingIndex;
+                publishedMediaIndex = existingIndex + 1;
+              } else {
+                ctx.snapshotImages.push(videoUrl);
+                ctx.currentSnapshotIndex = ctx.snapshotImages.length - 1;
+                publishedMediaIndex = ctx.snapshotImages.length;
+              }
+            }
           }
           return {
             success: completed.status === 'completed',
@@ -2121,9 +2863,17 @@ Default profile is fast_720p (short side 720, no upscale) for speed. Default pub
             videoUrl,
             workspacePath: completed.workspace_path,
             publishedSnapshotId,
+            mediaIndex: publishedMediaIndex,
             durationSeconds: completed.duration_seconds,
             renderSeconds: completed.render_seconds,
             realtimeRatio: completed.realtime_ratio,
+            audioAnalysis,
+            studioRunCompleted,
+            message: publishedMediaIndex
+              ? `Exported MP4 is available as <<<media_${publishedMediaIndex}>>>.${studioCheckpoint.studioRunId ? ' Studio Run is complete; do not start another Review or Delivery step.' : ''}`
+              : studioCheckpoint.studioRunId
+                ? 'Exported MP4 successfully. Studio Run is complete; do not start another Review or Delivery step.'
+                : undefined,
           };
         } catch (err) {
           return { success: false, error: err instanceof Error ? err.message : String(err) };
@@ -2132,21 +2882,48 @@ Default profile is fast_720p (short side 720, no upscale) for speed. Default pub
     }),
 
     preview_frame: tool({
-      description: `Capture a visual frame at a specific frame number or timestamp.
+      description: `Capture one visual frame or a 2-6 frame contact sheet.
 Use media_index to target any timeline snapshot. Remotion compositions are rendered with Remotion; raw uploaded/generated videos are extracted with FFmpeg.
 For raw video snapshots: use timestamp to see specific moments in the actual MP4/MOV/WebM.
 For understanding video content (what happens, scenes, pacing), use analyze_video instead.
 Omit media_index to use the current (last edited) composition.
+For Studio Run review, prefer one call with frames or timestamps for hook/body/end. It renders the frames concurrently and returns one labeled contact sheet plus the individual workspace paths.
 Returns the rendered image so you can see it with your vision.`,
       inputSchema: z.object({
         media_index: z.number().optional().describe('1-based snapshot index (<<<media_1>>> = 1). Target a Remotion composition or raw video. Omit to use current composition.'),
+        design_path: z.string().optional().describe('Workspace path of an autosaved or persisted Remotion composition. Use the exact path returned by run_code or shown in Recoverable Composition Draft.'),
         frame: z.number().optional().describe('0-based frame number.'),
         timestamp: z.number().optional().describe('Time in seconds (e.g. 2.5). Converted to frame using fps.'),
+        frames: z.array(z.number()).min(2).max(6).optional().describe('For a composition contact sheet: 2-6 frame numbers rendered in one call. Prefer three representative hook/body/end frames for Studio Run review.'),
+        timestamps: z.array(z.number()).min(2).max(6).optional().describe('For a composition contact sheet: 2-6 timestamps in seconds. Use instead of frames.'),
         question: z.string().optional().describe('What to focus on when viewing this frame.'),
       }),
-      execute: async ({ media_index, frame, timestamp, question }) => {
+      execute: async ({ media_index, design_path, frame, timestamp, frames, timestamps, question }) => {
+        const analyzeDurablePreview = async (image: Buffer, fallback: string) => {
+          if (!durableVisionBridge) return undefined;
+          try {
+            const { analyzeImageContent } = await import('./gemini');
+            return await analyzeImageContent(
+              `data:image/jpeg;base64,${image.toString('base64')}`,
+              question || 'Check visual integrity, subject cropping, text readability, composition, and whether the rendered frame is safe to publish.',
+              ctx.userId,
+            );
+          } catch (error) {
+            console.warn('[preview_frame] durable vision bridge failed:', error);
+            return fallback;
+          }
+        };
         let design = (ctx as any).__lastDesignPayload;
         let rawVideo: { url: string; duration?: number; fps?: number } | null = null;
+        if (design_path) {
+          try {
+            const file = await workspace.readFile(design_path, ctx.supabase, ctx.userId);
+            if (!file) return { error: `Composition not found: ${design_path}` };
+            design = JSON.parse(file.content);
+          } catch (err) {
+            return { error: `Could not load composition ${design_path}: ${err instanceof Error ? err.message : String(err)}` };
+          }
+        }
         const targetMediaIndex = media_index ?? (!design ? ctx.currentSnapshotIndex + 1 : undefined);
 
         // Load composition payload from a specific snapshot if media_index provided.
@@ -2198,6 +2975,105 @@ Returns the rendered image so you can see it with your vision.`,
           }
         }
 
+        const batchRequested = Boolean(frames?.length || timestamps?.length);
+        if (batchRequested && rawVideo) {
+          return { error: 'Batch contact sheets currently target Remotion compositions. For raw video understanding use analyze_video, or call preview_frame once per required timestamp.' };
+        }
+
+        if (batchRequested && design) {
+          const fps = design.animation?.fps || 30;
+          const dur = design.animation?.durationInSeconds || 0;
+          const totalFrames = dur > 0 ? Math.max(1, Math.round(fps * dur)) : 1;
+          const requested = frames?.length
+            ? frames
+            : (timestamps || []).map(value => Math.round(value * fps));
+          const targetFrames = [...new Set(requested.map(value => Math.max(0, Math.min(Math.round(value), totalFrames - 1))))];
+          if (targetFrames.length < 2) return { error: 'Contact sheet frames collapse to fewer than two unique in-range frames.' };
+
+          try {
+            const { renderDesignFrame } = await import('./remotion-server');
+            const { createContactSheet } = await import('./contact-sheet');
+            const rendered = await Promise.all(targetFrames.map(targetFrame => renderDesignFrame(design, targetFrame)));
+            const stamp = Date.now();
+            const framePaths = targetFrames.map(targetFrame => `${ctx.projectId}/drafts/design-contact-frame${targetFrame}-${stamp}.jpg`);
+            const frameUrls: string[] = [];
+            const userId = ctx.userId;
+
+            if (ctx.supabase && userId) {
+              const writes = await Promise.all(rendered.map((jpegBuffer, index) =>
+                workspace.writeFile(framePaths[index]!, jpegBuffer, ctx.supabase, userId, 'image/jpeg')
+              ));
+              writes.forEach((write, index) => {
+                if (!write.storageUrl) return;
+                const storageUrl = toPublicStorageUrl(write.storageUrl);
+                frameUrls[index] = storageUrl;
+                rememberWorkspaceMediaOutputs(ctx, [{
+                  path: framePaths[index],
+                  storageUrl,
+                  contentType: 'image/jpeg',
+                  description: `composition frame ${targetFrames[index]}`,
+                  updatedAt: new Date().toISOString(),
+                }]);
+              });
+            }
+
+            const contactSheet = await createContactSheet(
+              rendered.map((image, index) => ({
+                image,
+                label: `#${index + 1}  frame ${targetFrames[index]}  ${(targetFrames[index] / fps).toFixed(1)}s`,
+              })),
+              design.width || 1080,
+              design.height || 1920,
+            );
+            const contactSheetPath = `${ctx.projectId}/drafts/design-contact-sheet-${stamp}.jpg`;
+            let workspaceUrl = '';
+            if (ctx.supabase && userId) {
+              const write = await workspace.writeFile(contactSheetPath, contactSheet, ctx.supabase, userId, 'image/jpeg');
+              if (write.storageUrl) {
+                workspaceUrl = toPublicStorageUrl(write.storageUrl);
+                rememberWorkspaceMediaOutputs(ctx, [{
+                  path: contactSheetPath,
+                  storageUrl: workspaceUrl,
+                  contentType: 'image/jpeg',
+                  description: `composition contact sheet for frames ${targetFrames.join(', ')}`,
+                  updatedAt: new Date().toISOString(),
+                }]);
+              }
+            }
+
+            const drafts = (ctx as any).__runCodeDrafts || [];
+            const previewBase64 = `data:image/jpeg;base64,${contactSheet.toString('base64')}`;
+            if (drafts.length > 0) {
+              drafts[drafts.length - 1].previewBase64 = previewBase64;
+              if (workspaceUrl) drafts[drafts.length - 1].previewUrl = workspaceUrl;
+            }
+
+            console.log(`🖼️ [agent] preview_frame: contact sheet ${targetFrames.join(',')} (${(contactSheet.length / 1024).toFixed(0)} KB)`);
+            const analysis = await analyzeDurablePreview(
+              contactSheet,
+              `The contact sheet rendered successfully for frames ${targetFrames.join(', ')}. Continue using the saved preview paths; do not repeat this preview solely because visual analysis was unavailable.`,
+            );
+            return {
+              base64Data: contactSheet.toString('base64'),
+              mimeType: 'image/jpeg',
+              analysis,
+              source: 'composition-contact-sheet',
+              frames: targetFrames,
+              framePaths,
+              frameUrls,
+              totalFrames,
+              fps,
+              question,
+              workspaceUrl,
+              workspacePath: contactSheetPath,
+            };
+          } catch (err) {
+            const msg = err instanceof Error ? err.message : String(err);
+            console.error(`⚠️ [agent] preview_frame contact sheet failed: ${msg}`);
+            return { error: `Failed to capture contact sheet: ${msg}` };
+          }
+        }
+
         if (rawVideo) {
           if (!rawVideo.url) return { error: `No video URL found at <<<media_${targetMediaIndex}>>>.` };
           const videoFps = rawVideo.fps || 30;
@@ -2232,9 +3108,14 @@ Returns the rendered image so you can see it with your vision.`,
             }
 
             console.log(`🖼️ [agent] preview_frame: raw video t=${clampedTimestamp.toFixed(2)}s, ${(jpegBuffer.length / 1024).toFixed(0)} KB (ffmpeg)`);
+            const analysis = await analyzeDurablePreview(
+              jpegBuffer,
+              `The video frame rendered successfully at ${clampedTimestamp.toFixed(2)}s. Continue using the saved preview path; do not repeat this preview solely because visual analysis was unavailable.`,
+            );
             return {
               base64Data: jpegBuffer.toString('base64'),
               mimeType: 'image/jpeg',
+              analysis,
               source: 'video',
               timestamp: clampedTimestamp,
               frame: targetFrame,
@@ -2294,9 +3175,14 @@ Returns the rendered image so you can see it with your vision.`,
           }
 
           console.log(`🖼️ [agent] preview_frame: frame ${targetFrame}/${totalFrames} (${(targetFrame / fps).toFixed(1)}s), ${(jpegBuffer.length / 1024).toFixed(0)} KB (sandbox)`);
+          const analysis = await analyzeDurablePreview(
+            jpegBuffer,
+            `Frame ${targetFrame} rendered successfully. Continue using the saved preview path; do not repeat this preview solely because visual analysis was unavailable.`,
+          );
           return {
             base64Data: jpegBuffer.toString('base64'),
             mimeType: 'image/jpeg',
+            analysis,
             source: 'composition',
             frame: targetFrame,
             totalFrames,
@@ -2316,9 +3202,37 @@ Returns the rendered image so you can see it with your vision.`,
         if (output.error) {
           return { type: 'content' as const, value: [{ type: 'text' as const, text: output.error }] };
         }
+        if (Array.isArray(output.frames)) {
+          const loc = output.workspacePath ? ` Saved: ${output.workspacePath}` : '';
+          if (output.analysis) {
+            return {
+              type: 'content' as const,
+              value: [{
+                type: 'text' as const,
+                text: `Visual QA for contact sheet frames ${output.frames.join(', ')} of ${output.totalFrames}:${loc}\n${output.analysis}\nUse this as visual evidence. If clean, publish without adding another preview call.`,
+              }],
+            };
+          }
+          return {
+            type: 'content' as const,
+            value: [
+              modelFileContent(output.base64Data, output.mimeType),
+              { type: 'text' as const, text: `Contact sheet frames ${output.frames.join(', ')} of ${output.totalFrames}.${loc} Individual frame paths: ${(output.framePaths || []).join(', ')}.${output.question ? ` Focus: ${output.question}.` : ''} Compare all frames together for scene distinctness, subject specificity, meaningful motion, readability, and slideshow risk. If clean, publish without adding another preview call.` },
+            ],
+          };
+        }
         const time = (output.frame / output.fps).toFixed(1);
         const loc = output.workspacePath ? ` Saved: ${output.workspacePath}` : '';
         const nextStep = ' Render succeeded. Treat this as a successful preview_frame result; if the attached frame is usable and there is no explicit error above, do not rewrite the composition just because the tool did not provide a natural-language visual critique. Continue with write_file when the user asked to publish.';
+        if (output.analysis) {
+          return {
+            type: 'content' as const,
+            value: [{
+              type: 'text' as const,
+              text: `Visual QA for frame ${output.frame}/${output.totalFrames} (${time}s).${loc}\n${output.analysis}\nUse this as visual evidence.${nextStep}`,
+            }],
+          };
+        }
         return {
           type: 'content' as const,
           value: [
@@ -2448,6 +3362,7 @@ Use this to read skill instructions (SKILL.md), reference images, or your memory
 
     write_file: tool({
       description: `Write a file to your workspace. Use this to save memory, create skills, or organize your workspace.
+For durable Studio Composition work, write numbered source parts under \`<project-id>/drafts/composition-parts/\` one cohesive component per model step, wait for its result, then assemble them with run_code.composition_parts. Filenames MUST use a numeric prefix of at least two digits plus a slug, for example \`00-foundation.js\`, \`10-scenes-a.js\`, \`90-root.js\`, or \`120-chapter.js\`. Each part has a hard transport limit of 12000 source characters; focused parts around 3000-8000 characters are preferred, but visual detail must decide the size. There is no aggregate source-size or part-count limit. Parts share one scope: do not use import/export. Rewriting the same numbered path is retry-safe. Never shorten approved narration, subtitles, scenes, animation, or visual detail to reduce source size. If one unusually large part exceeds 12000, split that component across new numbered files; renaming unchanged oversized content will still fail. Assemble by passing either the explicit paths or the composition-parts directory; directory mode discovers and numerically orders all valid .js parts without repeating the path list.
 Set fromLastRunCode=true to save the last run_code output.
 Composition runtime: publish=false saves the draft code only; default publish=true saves and publishes a timeline Snapshot.
 Node media runtime: \`type: "files"\` outputs are already saved workspace files. If they are user-facing MP4 deliverables from split/trim/export/transcode, publish them with fromWorkspaceOutputs before final reply. \`type: "video"\` is a single final MP4 and can be published with write_file. Do not use node/FFmpeg as a fallback for ordinary editable timeline splicing of existing videos; patch or publish the Remotion composition instead.
@@ -2511,12 +3426,34 @@ Path is auto-generated from the current project and output type. Just provide a 
         if (!fileContent) {
           return { success: false, message: 'No content to write. Provide content or set fromLastRunCode=true.' };
         }
+        const partPrefix = compositionPartsPrefix(ctx.projectId);
+        if (savePath.startsWith(partPrefix)) {
+          const filename = savePath.slice(partPrefix.length);
+          if (!COMPOSITION_PART_FILENAME_PATTERN.test(filename)) {
+            return {
+              success: false,
+              message: `Composition part filename must use a numeric prefix of at least two digits plus a lowercase slug, such as 00-name.js or 120-scene.js: ${filename}`,
+            };
+          }
+          const sourceChars = fileContent.trim().length;
+          if (sourceChars > COMPOSITION_PART_MAX_CHARS) {
+            return {
+              success: false,
+              message: `Composition part is ${sourceChars} characters; hard limit is ${COMPOSITION_PART_MAX_CHARS}. Split the content across new numbered files instead of renaming the same oversized source.`,
+            };
+          }
+        }
         const result = await workspace.writeFile(savePath, fileContent, ctx.supabase, ctx.userId);
         if (!result.success) {
           return { success: false, message: `Write failed: ${result.error}` };
         }
         if (fromLastRunCode) {
           (ctx as any).__lastSavedDraftPath = savePath;
+        }
+        if (savePath.startsWith(`${ctx.projectId}/drafts/composition-parts/`)) {
+          const paths = new Set<string>((ctx as any).__compositionPartPaths || []);
+          paths.add(savePath);
+          (ctx as any).__compositionPartPaths = [...paths].sort();
         }
 
         // Publish: when fromLastRunCode and publish !== false, promote the last draft to a real Snapshot
@@ -2622,7 +3559,7 @@ Path is auto-generated from the current project and output type. Just provide a 
     run_code: tool({
       description: `Execute JavaScript.
 
-Before first use, read \`prompts/agent-coding.md\`. For Remotion/editable compositions, also read \`prompts/remotion-composition.md\`. For real file-level MP4 splitting, exact trimming/export, transcode, frames, audio muxing, long-video preparation, or final assembly of generated chunks, also read \`skills/video-ffmpeg-lab/SKILL.md\`. Do not re-read a guide already present in tool-result history.
+Before first use, read \`prompts/agent-coding.md\`, plus \`prompts/remotion-composition.md\` for Remotion/editable compositions. For new compositions or major visual/timing patches, follow \`skills/_shared/remotion-director-contract.md\` and its required references. Studio Run uses the same original Composition and Director guidance; it does not replace them with a compact creative prompt. For real file-level MP4 splitting, exact trimming/export, transcode, frames, audio muxing, long-video preparation, or final assembly of generated chunks, also read \`skills/video-ffmpeg-lab/SKILL.md\`. Do not re-read a guide already present in tool-result history.
 
 Runtimes:
 - \`runtime: "composition"\`: Remotion/editable composition draft, animated template, overlay, sharp utility.
@@ -2638,23 +3575,110 @@ Return exactly one supported shape:
 - \`{ type: 'text', content }\`
 - \`{ type: 'error', message }\`
 
-Composition hard rules: use Remotion \`<Img>\`, not \`<img>\`; declare editable user-facing text; use system CJK fonts; keep mobile image layers light. Only \`Composition(props)\` may read \`props\` directly; helper components must receive values through their own parameters and must never reference outer \`props\` (prevents \`props is not defined\` in Lambda). For timeline videos, preserve the selected Media Index video aspect ratio when all selected videos share one aspect: 9:16 sources must return a 9:16 canvas such as 1080x1920, never a 16:9 canvas. For mixed-aspect sources, choose the user/platform/current composition target and use contain/background; do not claim the runtime forced one source's aspect.
-For first Remotion drafts, send one complete executable JavaScript body that returns the render object. Do not send a fragment like \`const code = \\\`\` without the final \`return { type: 'render', code, ... }\`. Keep long videos concise by using arrays, helper components, and interpolations instead of writing frame-by-frame code.
+For a first composition draft, prefer the top-level \`composition\` input over wrapping JSX inside executable \`code\`. Pass \`composition: { code, width, height, props, editables, animation }\`; the harness validates and autosaves it directly. This avoids nested-code quoting failures and is the fastest Studio Run path. Keep executable \`code\` for patches, images, Node media work, and legacy calls.
+
+For durable Studio Composition work, use \`write_file\` to author numbered source parts and then pass \`composition_parts: { directory, width, height, props, editables, animation }\`, or use \`paths\` for an explicit subset. Every file MUST be under \`<project-id>/drafts/composition-parts/\` and use a numeric prefix of at least two digits plus a lowercase slug. Each file has a hard transport limit of 12000 source characters. There is no aggregate source-size or part-count limit. Files are concatenated by numeric prefix into one scope, so do not use import/export. Preserve approved narration, subtitles, scenes, animation, and visual detail; never trim creative content to satisfy a source-size target. The harness discovers, validates, and autosaves the parts without asking the model to repeat the complete source or a long path list in one tool call.
+
+For a 30s+ first composition, author numbered composition parts before the first \`run_code\` call, then assemble the complete draft once with \`composition_parts.directory\`. Use scene data arrays and shared components where they help, but do not impose an aggregate source-size target or trim approved creative detail.
+
+Composition hard rules: use Remotion \`<Img>\`, not \`<img>\`; declare editable user-facing text; use system CJK fonts; keep mobile image layers light. Reference timeline media in composition code and props with the literal 1-based marker \`<<<media_N>>>\`; the runtime resolves markers to current URLs before validation, autosave, preview, and export. Never translate Media Index N into \`ctx.snapshotImages[N]\` because that JavaScript array is 0-based. Only \`Composition(props)\` may read \`props\` directly; helper components must receive values through their own parameters and must never reference outer \`props\` (prevents \`props is not defined\` in Lambda). For timeline videos, preserve the selected Media Index video aspect ratio when all selected videos share one aspect: 9:16 sources must return a 9:16 canvas such as 1080x1920, never a 16:9 canvas. For mixed-aspect sources, choose the user/platform/current composition target and use contain/background; do not claim the runtime forced one source's aspect.
+For legacy first-draft calls without \`composition\`, send one complete executable JavaScript body that returns the render object. Do not send a fragment like \`const code = \\\`\` without the final \`return { type: 'render', code, ... }\`. Keep long videos concise by using arrays, helper components, and interpolations instead of writing frame-by-frame code.
 
 Node media runtime provides \`require\`, \`process\`, \`ffmpegPath\`, \`inputFiles\`, \`outputDir\`, \`workDir\`, \`workspaceDir\`, \`saveOutput(localPath)\`, and \`probeVideo(path)\`. Most Node built-ins are available, plus media packages such as \`sharp\`, \`jszip\`, \`exifr\`, \`heic-convert\`, \`canvas\`, \`remotion\`, and Remotion media utilities. Arbitrary local/package require, env secrets, and escape/debug modules are blocked. Workspace files are local to the runtime: use \`workspace_paths\` and \`inputFiles[n].inputPath\`, never download or reconstruct Storage URLs. For \`runtime: "node"\`, any referenced timeline media like \`<<<media_1>>>\` MUST be passed as \`media_refs: [1]\`; any existing workspace file from \`list_files\` MUST be passed as \`workspace_paths: ["project/media/file.mp4"]\`. The system resolves both to local workspace-backed files before your code runs. \`ffprobePath\` may be empty in deployment; prefer \`probeVideo(path)\`. Use \`type: "files"\` for chunks and \`type: "video"\` for the final MP4. If ordinary timeline splicing was routed to composition, do not switch to node just because preview needs adjustment; patch the composition or report the preview issue.`,
       inputSchema: z.object({
-        code: z.string().describe('JavaScript code to execute. Must return a result object.'),
+        code: z.string().optional().describe('JavaScript code to execute. Required for node, patch, image, and legacy calls. For a first Remotion draft prefer the direct composition input instead.'),
+        composition: z.object({
+          code: z.string().min(1).describe('Direct Remotion component source. Define function Composition(props) without import/export. This string is validated directly, not executed as nested JavaScript.'),
+          width: z.number().int().positive(),
+          height: z.number().int().positive(),
+          props: z.record(z.string(), z.unknown()).optional(),
+          editables: z.array(z.object({
+            id: z.string().min(1),
+            type: z.string().min(1),
+            label: z.string(),
+            propKey: z.string().min(1),
+          }).passthrough()).optional(),
+          animation: z.object({
+            fps: z.number().positive(),
+            durationInSeconds: z.number().positive(),
+            format: z.string().optional(),
+          }).optional(),
+        }).optional().describe('Preferred first-draft Remotion payload. Avoids wrapping composition source inside another executable code string.'),
+        composition_parts: z.object({
+          paths: z.array(z.string()).min(2).optional().describe('Optional explicit subset of numbered workspace .js files under <project-id>/drafts/composition-parts/. No part-count or aggregate-size limit. Files are assembled by numeric prefix.'),
+          directory: z.string().optional().describe('Preferred for complete or long compositions: <project-id>/drafts/composition-parts. The server discovers every valid numbered .js part in this directory, so the model does not repeat a long paths array.'),
+          width: z.number().int().positive(),
+          height: z.number().int().positive(),
+          props: z.record(z.string(), z.unknown()).optional(),
+          editables: z.array(z.object({
+            id: z.string().min(1),
+            type: z.string().min(1),
+            label: z.string(),
+            propKey: z.string().min(1),
+          }).passthrough()).optional(),
+          animation: z.object({
+            fps: z.number().positive(),
+            durationInSeconds: z.number().positive(),
+            format: z.string().optional(),
+          }).optional(),
+        }).refine(value => Boolean(value.paths?.length || value.directory), {
+          message: 'Provide composition_parts.paths or composition_parts.directory.',
+        }).optional().describe('Durable multipart Remotion payload. Write one small numbered part per model step, then assemble by directory or explicit paths without repeating the source.'),
         description: z.string().optional().describe('Brief description of what this code does. For compositions/videos, describe the content and visual style (e.g. "15s cinematic video: 4 scenes of temple visit with Ken Burns + fade transitions, Japanese text overlays"). This is stored as the snapshot description — be specific.'),
         media_refs: z.array(z.number()).optional().describe('1-based Media Index indices referenced by the user (e.g. [1] for <<<media_1>>>). REQUIRED for runtime:"node" FFmpeg work on timeline media; the system resolves them to local workspace-backed inputFiles[0], inputFiles[1], ... . Do not hardcode Media Index URLs for FFmpeg inputs. For ordinary editable splicing of two timeline videos, use runtime:"composition" instead.'),
         workspace_paths: z.array(z.string()).optional().describe('Workspace file paths from list_files/read_file, e.g. ["project-id/media/clip.mp4"]. For runtime:"node", pass these instead of downloading or copying storage URLs; they are resolved to local inputFiles after media_refs.'),
         runtime: z.enum(['composition', 'design', 'node']).optional().describe('composition = safe Remotion/editable composition runtime. design = legacy alias for composition. node = fully open backend Node runtime with fs/child_process/ffmpeg for real MP4 editing.'),
+      }).refine(value => Boolean(value.code || value.composition || value.composition_parts), {
+        message: 'Provide executable code, a direct composition payload, or durable composition parts.',
       }),
-      execute: async ({ code, description: desc, media_refs, workspace_paths, runtime }) => {
-        const executableCode = code;
+      execute: async ({ code, composition, composition_parts, description: desc, media_refs, workspace_paths, runtime }) => {
+        const executableCode = code || '';
         console.log(`🔧 [run_code] ${desc || 'executing code'}...`);
         const startTime = Date.now();
+        let resolvedComposition = composition;
+        if (composition_parts) {
+          if (runtime === 'node') {
+            return { type: 'text' as const, content: 'composition_parts is only available in the composition runtime.' };
+          }
+          if (!ctx.supabase || !ctx.userId) {
+            return { type: 'text' as const, content: 'Composition parts require workspace access.' };
+          }
+          try {
+            let partPaths = composition_parts.paths ?? [];
+            if (composition_parts.directory) {
+              const expectedDirectory = compositionPartsPrefix(ctx.projectId).replace(/\/$/, '');
+              const requestedDirectory = composition_parts.directory.replace(/\/+$/, '');
+              if (requestedDirectory !== expectedDirectory) {
+                return { type: 'text' as const, content: `Composition parts directory must be ${expectedDirectory}` };
+              }
+              const files = await workspace.listFiles(`${expectedDirectory}/*`, ctx.supabase, ctx.userId);
+              partPaths = files
+                .map(file => file.path)
+                .filter(filePath => {
+                  const filename = filePath.slice(`${expectedDirectory}/`.length);
+                  return COMPOSITION_PART_FILENAME_PATTERN.test(filename);
+                });
+            }
+            if (partPaths.length < 2) {
+              return { type: 'text' as const, content: 'At least two valid numbered composition parts are required.' };
+            }
+            const loaded: Array<{ path: string; content: string }> = [];
+            for (const partPath of partPaths) {
+              const file = await workspace.readFile(partPath, ctx.supabase, ctx.userId);
+              if (!file) return { type: 'text' as const, content: `Composition part not found: ${partPath}` };
+              loaded.push({ path: partPath, content: file.content });
+            }
+            const assembled = assembleCompositionParts({ projectId: ctx.projectId, parts: loaded });
+            const { paths: _paths, directory: _directory, ...metadata } = composition_parts;
+            resolvedComposition = { ...metadata, code: assembled.code };
+            (ctx as any).__compositionPartPaths = assembled.paths;
+            console.log(`[run_code] assembled ${assembled.paths.length} composition parts (${assembled.totalChars} chars)`);
+          } catch (error) {
+            return { type: 'text' as const, content: `Composition parts failed: ${error instanceof Error ? error.message : String(error)}` };
+          }
+        }
         // Store raw code for write_file({ fromLastRunCode: true })
-        (ctx as any).__lastRunCode = executableCode;
+        (ctx as any).__lastRunCode = resolvedComposition ? JSON.stringify(resolvedComposition, null, 2) : executableCode;
 
         // Refresh snapshotImages URLs from DB — ensures URLs are valid
         if (ctx.supabase && ctx.projectId) {
@@ -2666,6 +3690,9 @@ Node media runtime provides \`require\`, \`process\`, \`ffmpegPath\`, \`inputFil
         }
 
         if (runtime === 'node') {
+          if (!code) {
+            return { type: 'text' as const, content: 'Node media runtime requires executable code; composition is only for Remotion first drafts.' };
+          }
           if (!ctx.supabase || !ctx.userId) {
             return { type: 'text' as const, content: 'Node media runtime requires workspace access. Please try again after the project finishes loading.' };
           }
@@ -2760,6 +3787,10 @@ Node media runtime provides \`require\`, \`process\`, \`ffmpegPath\`, \`inputFil
           console.log(`  [${i}] ${img ? (img.startsWith('http') ? img : `base64:${img.length}chars`) : 'EMPTY'}`);
         });
         try {
+          let result: any;
+          if (resolvedComposition) {
+            result = { type: 'render', ...resolvedComposition };
+          } else {
           // Pre-fetch requested snapshot images as Buffers
           let preloadedImages: Buffer[] = [];
           if (media_refs?.length) {
@@ -2812,7 +3843,8 @@ Node media runtime provides \`require\`, \`process\`, \`ffmpegPath\`, \`inputFil
 
           const wrappedCode = `(async () => { 'use strict';\n${executableCode}\n})()`;
           const script = new vm.Script(wrappedCode);
-          const result = await script.runInContext(context, { timeout: 30_000 });
+          result = await script.runInContext(context, { timeout: 30_000 });
+          }
 
           const elapsed = ((Date.now() - startTime) / 1000).toFixed(1);
           console.log(`✅ [run_code] done in ${elapsed}s, result type: ${typeof result}, isBuffer: ${Buffer.isBuffer(result)}, keys: ${result && typeof result === 'object' ? Object.keys(result).join(',') : 'N/A'}, dataType: ${result?.data ? `${typeof result.data} / ${result.data.constructor?.name} / len=${result.data.length || 'N/A'}` : 'no data'}`);
@@ -2881,16 +3913,38 @@ Node media runtime provides \`require\`, \`process\`, \`ffmpegPath\`, \`inputFil
               code: resolveMediaMarkersInString(code, ctx.snapshotImages),
               props: resolveMediaMarkersInValue(mergedProps, ctx.snapshotImages) as Record<string, unknown> | undefined,
             };
+            if ((baseDesign as Record<string, unknown>).__makaronScaffold === true) {
+              delete (patched as Record<string, unknown>).__makaronScaffold;
+              (patched as Record<string, unknown>).description = desc || 'Director-refined Studio composition';
+            }
             patched.animation = normalizeCompositionAnimation(patched.code, patched.animation);
             if (result.editables) patched.editables = result.editables;
 
+            const promiseError = studioCompositionPromiseError(await getStudioRunCheckpoint(ctx), patched);
+            if (promiseError) return { type: 'text' as const, content: promiseError };
+
             const harnessError = validateDesign({ code: patched.code, props: patched.props });
             if (harnessError) return { type: 'text' as const, content: harnessError };
+
+            if (!ctx.supabase || !ctx.userId) {
+              return { type: 'text' as const, content: 'Patch passed validation but cannot be safely autosaved because workspace access is unavailable.' };
+            }
+            const autosave = await persistCompositionDraft({
+              projectId: ctx.projectId,
+              userId: ctx.userId,
+              supabase: ctx.supabase,
+              design: patched,
+              sourceDesignPath: typeof result.code_path === 'string' ? result.code_path : ctx.currentDesignPath,
+            });
+            if (!autosave.success) {
+              return { type: 'text' as const, content: `Patch passed validation but autosave failed after 3 attempts: ${autosave.error}. Retry run_code before ending the turn.` };
+            }
 
             (ctx as any).__pendingDesign = patched;
             (ctx as any).__pendingDesignPublished = false; // draft — canvas preview only, no snapshot
             (ctx as any).__lastDesignPayload = patched;
             (ctx as any).__lastRunCode = JSON.stringify(patched, null, 2);
+            (ctx as any).__lastSavedDraftPath = autosave.path;
 
             // Track draft for potential later publish via write_file
             if (!(ctx as any).__runCodeDrafts) (ctx as any).__runCodeDrafts = [];
@@ -2898,14 +3952,14 @@ Node media runtime provides \`require\`, \`process\`, \`ffmpegPath\`, \`inputFil
             // Update last draft (patch updates existing draft, doesn't create new one)
             const drafts = (ctx as any).__runCodeDrafts;
             if (drafts.length > 0) {
-              drafts[drafts.length - 1] = { type: 'design', payload: patched };
+              drafts[drafts.length - 1] = { type: 'design', payload: patched, codePath: autosave.path };
             } else {
-              drafts.push({ type: 'design', payload: patched });
+              drafts.push({ type: 'design', payload: patched, codePath: autosave.path });
             }
 
             const draftIdx = drafts.length;
             const patchSource = result.code_path ? ` from ${result.code_path}` : '';
-            return { type: 'text' as const, content: `Patched${patchSource} — draft ${draftIdx} updated. Draft is not saved yet: immediately call write_file({ fromLastRunCode: true, name: "slug", publish: false }) to save the editable workspace draft. If this changed trim timing, confirm animation.durationInSeconds matches the final frame count. If this changed transitions, subtitles, overlays, trim timing, cropping, or will be published, call preview_frame before telling the user it is complete. Publish later with write_file({ fromLastRunCode: true, name: "slug" }).` };
+            return { type: 'text' as const, code_path: autosave.path, content: `Patched${patchSource} — draft ${draftIdx} autosaved to ${autosave.path}. If this changed trim timing, confirm animation.durationInSeconds matches the final frame count. If this changed transitions, subtitles, overlays, trim timing, cropping, or will be published, call preview_frame before telling the user it is complete. Use write_file({ fromLastRunCode: true, name: "slug" }) only when publishing a timeline snapshot or creating a named checkpoint.` };
           }
 
           // { type: 'render' (or legacy 'design'), code: '...' } — Store for event loop to emit as SSE
@@ -2918,6 +3972,11 @@ Node media runtime provides \`require\`, \`process\`, \`ffmpegPath\`, \`inputFil
                 durationInSeconds: result.durationInSeconds || result.duration || 5,
               };
             }
+            const promiseError = studioCompositionPromiseError(await getStudioRunCheckpoint(ctx), {
+              width: result.width,
+              height: result.height,
+            });
+            if (promiseError) return { type: 'text' as const, content: promiseError };
             // ── Composition harness: compile + image reference checks ──
             const resolvedCode = resolveMediaMarkersInString(result.code, ctx.snapshotImages);
             const resolvedProps = resolveMediaMarkersInValue(result.props, ctx.snapshotImages) as Record<string, unknown> | undefined;
@@ -2954,20 +4013,34 @@ Node media runtime provides \`require\`, \`process\`, \`ffmpegPath\`, \`inputFil
               description: autoDesc,
               ...(result.editables ? { editables: result.editables } : {}),
             };
+            if (!ctx.supabase || !ctx.userId) {
+              return { type: 'text' as const, content: 'Composition passed validation but cannot be safely autosaved because workspace access is unavailable.' };
+            }
+            const autosave = await persistCompositionDraft({
+              projectId: ctx.projectId,
+              userId: ctx.userId,
+              supabase: ctx.supabase,
+              design: designPayload,
+              sourceDesignPath: ctx.currentDesignPath,
+            });
+            if (!autosave.success) {
+              return { type: 'text' as const, content: `Composition passed validation but autosave failed after 3 attempts: ${autosave.error}. Retry run_code before ending the turn.` };
+            }
             (ctx as any).__pendingDesign = designPayload;
             (ctx as any).__pendingDesignPublished = false; // draft — canvas preview only, no snapshot
             (ctx as any).__lastDesignPayload = designPayload;
             // Store for write_file({ fromLastRunCode: true })
             (ctx as any).__lastRunCode = JSON.stringify(designPayload, null, 2);
+            (ctx as any).__lastSavedDraftPath = autosave.path;
 
             // Track draft for potential later publish via write_file
             if (!(ctx as any).__runCodeDrafts) (ctx as any).__runCodeDrafts = [];
 
             // Push new draft (no auto-screenshot — Agent uses preview_frame tool to check)
-            (ctx as any).__runCodeDrafts.push({ type: 'design', payload: designPayload });
+            (ctx as any).__runCodeDrafts.push({ type: 'design', payload: designPayload, codePath: autosave.path });
             const draftIdx = (ctx as any).__runCodeDrafts.length;
 
-            return { type: 'text' as const, content: `Composition ready — draft ${draftIdx}. Draft is not saved yet: immediately call write_file({ fromLastRunCode: true, name: "<descriptive-slug>", publish: false }) to save the editable workspace draft. If this changed trim timing, confirm animation.durationInSeconds matches the final frame count. If this includes transitions, subtitles, overlays, trim timing, cropping, or will be published, call preview_frame before telling the user it is complete. Publish later with write_file({ fromLastRunCode: true, name: "<descriptive-slug>" }).` };
+            return { type: 'text' as const, code_path: autosave.path, content: `Composition ready — draft ${draftIdx} autosaved to ${autosave.path}. If this changed trim timing, confirm animation.durationInSeconds matches the final frame count. If this includes transitions, subtitles, overlays, trim timing, cropping, or will be published, call preview_frame with design_path if the run resumes later. Use write_file({ fromLastRunCode: true, name: "<descriptive-slug>" }) only to publish a timeline snapshot or create a named checkpoint.` };
           }
 
           // Helper: handle sharp image result — auto-sends to frontend (no draft/publish needed)
@@ -3086,14 +4159,14 @@ Call this before generate_voiceover unless the user explicitly supplied a concre
             voice.scenario,
             ...(Array.isArray(voice.styles) ? voice.styles : []),
           ].filter(Boolean).join(', ');
-          return `${index + 1}. ${voice.id}${voice.name ? ` — ${voice.name}` : ''}${tags ? ` (${tags})` : ''}${voice.description ? `: ${voice.description}` : ''}`;
+          return `${index + 1}. ${voice.id}${voice.resourceId ? ` [resource_id=${voice.resourceId}]` : ''}${voice.name ? ` — ${voice.name}` : ''}${tags ? ` (${tags})` : ''}${voice.description ? `: ${voice.description}` : ''}`;
         }).join('\n');
         const warning = output.warning ? `\nWarning: ${output.warning}` : '';
         return {
           type: 'content' as const,
           value: [{
             type: 'text' as const,
-            text: `Volcengine voice catalog source=${output.source}, total=${output.count || output.voices?.length || 0}.${warning}\nSuggested voices:\n${rows || 'No voices returned.'}\n\nChoose one voice_id and pass it to generate_voiceover.`,
+            text: `Volcengine voice catalog source=${output.source}, total=${output.count || output.voices?.length || 0}.${warning}\nSuggested voices:\n${rows || 'No voices returned.'}\n\nChoose one voice_id and pass both its voice_id and resource_id to generate_voiceover.`,
           }],
         };
       },
@@ -3109,7 +4182,7 @@ The generated audio becomes an Audio Index item (<<<audio_N>>>) in later turns. 
         text: z.string().describe('The exact spoken text to synthesize. Keep it natural and speakable; rewrite stiff copy into oral narration first when appropriate.'),
         title: z.string().optional().describe('Short title for the audio card/index, e.g. "Hook voiceover" or "Product narration".'),
         voice_id: z.string().optional().describe('Optional Doubao speaker id / voice type. Omit to use the project default.'),
-        resource_id: z.enum(['seed-tts-2.0', 'seed-icl-2.0', 'seed-tts-1.0', 'seed-tts-1.0-concurr']).optional().describe('Volcengine resource id. Use seed-tts-2.0 for standard Doubao TTS voices; use seed-icl-2.0 only for authorized cloned voices.'),
+        resource_id: z.enum(['seed-tts-2.0', 'seed-icl-2.0', 'seed-tts-1.0', 'seed-tts-1.0-concurr']).optional().describe('Volcengine resource id returned by list_voiceover_voices. Mars voices use seed-tts-1.0, Uranus voices use seed-tts-2.0, and authorized cloned voices use seed-icl-2.0.'),
         speech_rate: z.number().min(-50).max(100).optional().describe('Speech speed. 0 is natural, 100 is 2x, -50 is 0.5x. Prefer 0 unless the user asks for faster/slower delivery.'),
         context_prompt: z.string().optional().describe('Optional short voice direction for Seed TTS 2.0, e.g. "用轻松、真诚、有现场感的口吻".'),
       }),
@@ -3164,7 +4237,6 @@ The generated audio becomes an Audio Index item (<<<audio_N>>>) in later turns. 
         }
 
         const audioIndex = addAudioAttachment(ctx, { audioUrl, title: trackTitle, trackIndex });
-
         deductCredits(ctx.userId, null, 'create_voiceover', result.tts.model)
           .catch(e => console.error('[billing] generate_voiceover deduct error:', e));
 
@@ -3314,6 +4386,86 @@ function logToolSizes(tools: Record<string, any>): number {
   return total;
 }
 
+const DURABLE_IDEMPOTENT_TOOLS = new Set([
+  'generate_image',
+  'generate_animation',
+  'materialize_media',
+  'rotate_camera',
+  'generate_voiceover',
+  'generate_audio',
+  'generate_music',
+  'prepare_visual_asset',
+]);
+
+function wrapDurableIdempotentTools(
+  tools: Record<string, any>,
+  ctx: AgentContext,
+): Record<string, any> {
+  if (!ctx.execution || !ctx.supabase || !ctx.userId) return tools;
+  for (const [toolName, definition] of Object.entries(tools)) {
+    if (!DURABLE_IDEMPOTENT_TOOLS.has(toolName) || typeof definition?.execute !== 'function') continue;
+    const execute = definition.execute.bind(definition);
+    definition.execute = async (input: unknown, executionOptions?: unknown) => {
+      const operationKey = stableOperationKey(ctx.execution!.workUnitKey, toolName, input);
+      const { data, error } = await ctx.supabase.rpc('claim_agent_operation', {
+        p_run_id: ctx.execution!.runId,
+        p_attempt_id: ctx.execution!.attemptId,
+        p_user_id: ctx.userId,
+        p_work_unit_key: ctx.execution!.workUnitKey,
+        p_operation_key: operationKey,
+        p_tool_name: toolName,
+      });
+      if (error) {
+        console.warn(`[agent-execution] operation ledger unavailable for ${toolName}: ${error.message}`);
+        return execute(input, executionOptions);
+      }
+      const claim = Array.isArray(data) ? data[0] : data;
+      if (!claim?.claimed) {
+        if (claim?.operation_status === 'completed' && claim?.operation_result != null) {
+          return {
+            ...(typeof claim.operation_result === 'object' ? claim.operation_result : { result: claim.operation_result }),
+            reused: true,
+            operationKey,
+          };
+        }
+        return {
+          success: true,
+          reused: true,
+          operationKey,
+          status: claim?.operation_status || 'running',
+          message: `The identical ${toolName} operation is already ${claim?.operation_status || 'running'}. Do not submit it again; continue from its persisted project result or wait for reconciliation.`,
+        };
+      }
+
+      const operationId = claim.operation_id as string;
+      try {
+        const result = await execute(input, executionOptions);
+        const record: Record<string, unknown> = result && typeof result === 'object'
+          ? result as Record<string, unknown>
+          : { value: result };
+        const failed = record.success === false || record.status === 'failed' || Boolean(record.error);
+        await ctx.supabase.from('agent_operations').update({
+          status: failed ? 'failed' : 'completed',
+          result: record,
+          external_task_id: record.taskId || record.jobId || record.snapshotId || null,
+          completed_at: new Date().toISOString(),
+          updated_at: new Date().toISOString(),
+        }).eq('id', operationId);
+        return { ...record, operationKey };
+      } catch (error) {
+        await ctx.supabase.from('agent_operations').update({
+          status: 'failed',
+          result: { error: error instanceof Error ? error.message : String(error) },
+          completed_at: new Date().toISOString(),
+          updated_at: new Date().toISOString(),
+        }).eq('id', operationId);
+        throw error;
+      }
+    };
+  }
+  return tools;
+}
+
 // ---------------------------------------------------------------------------
 // Agent runner – async generator yielding SSE events
 // ---------------------------------------------------------------------------
@@ -3334,12 +4486,45 @@ const ANALYSIS_PROMPT_POSTEDIT = `The edit is complete. In one sentence, directl
 const ANALYSIS_PROMPT_VIDEO_TEMPLATE = (mediaIndex: number) =>
   `[System: User just uploaded a video at <<<media_${mediaIndex}>>>. Analyze it and describe the content.]\nDescribe this video in 2-3 sentences — duration, key subjects/actions, mood. Be conversational. No preamble.`;
 
+export interface RunMakaronAgentOptions {
+  analysisOnly?: boolean;
+  analysisContext?: 'initial' | 'post-edit';
+  isVideoAnalysis?: boolean;
+  tipReactionOnly?: boolean;
+  disableToolCalls?: boolean;
+  referenceImages?: string[];
+  animationImageUrls?: string[];
+  animationImages?: string[];
+  locale?: string;
+  preferredModel?: ModelId;
+  agentModel?: AgentModelPreference;
+  videoModel?: string;
+  videoResolution?: import('@/types').VideoResolution;
+  videoAuto?: boolean;
+  audioAttachments?: AudioAttachment[];
+  snapshotImages?: string[];
+  currentSnapshotIndex?: number;
+  isNsfw?: boolean;
+  userSkills?: ParsedSkill[];
+  supabase?: any;
+  userId?: string;
+  currentDesign?: { code: string; width: number; height: number; props?: Record<string, unknown>; animation?: { fps: number; durationInSeconds: number; format?: string } };
+  currentDesignPath?: string;
+  history?: ModelMessage[];
+  timelineVersion?: number;
+  perf?: AgentPerf;
+  abortSignal?: AbortSignal;
+  execution?: DurableExecutionRef;
+  attemptBudgetMs?: number;
+  maxSteps?: number;
+}
+
 export async function* runMakaronAgent(
   prompt: string,
   currentImage: string,
   projectId: string,
 
-  options?: { analysisOnly?: boolean; analysisContext?: 'initial' | 'post-edit'; isVideoAnalysis?: boolean; tipReactionOnly?: boolean; disableToolCalls?: boolean; referenceImages?: string[]; animationImageUrls?: string[]; animationImages?: string[]; locale?: string; preferredModel?: ModelId; agentModel?: AgentModelPreference; videoModel?: string; videoResolution?: import('@/types').VideoResolution; videoAuto?: boolean; audioAttachments?: AudioAttachment[]; snapshotImages?: string[]; currentSnapshotIndex?: number; isNsfw?: boolean; userSkills?: ParsedSkill[]; supabase?: any; userId?: string; currentDesign?: { code: string; width: number; height: number; props?: Record<string, unknown>; animation?: { fps: number; durationInSeconds: number; format?: string } }; currentDesignPath?: string; history?: ModelMessage[]; timelineVersion?: number; perf?: AgentPerf; abortSignal?: AbortSignal },
+  options?: RunMakaronAgentOptions,
 ): AsyncGenerator<AgentStreamEvent> {
   const perf = options?.perf;
   const runtime = createAgentModelRuntime(options?.agentModel, projectId);
@@ -3361,9 +4546,12 @@ export async function* runMakaronAgent(
     supabase: options?.supabase,
     userId: options?.userId,
     timelineVersion: options?.timelineVersion,
+    currentDesignPath: options?.currentDesignPath,
+    execution: options?.execution,
   };
 
-  const allTools = createTools(ctx, runtime, options?.locale);
+  const allTools = wrapDurableIdempotentTools(createTools(ctx, runtime, options?.locale, Boolean(options?.execution)), ctx);
+  if (!options?.execution) delete (allTools as Record<string, unknown>).execution_checkpoint;
   perf?.mark('agent_tools_created', { toolCount: Object.keys(allTools).length });
   let imagesSent = 0;
   let stepCount = 0;
@@ -3375,7 +4563,13 @@ export async function* runMakaronAgent(
   const analysisOnly = options?.analysisOnly ?? false;
   const isVideoAnalysis = options?.isVideoAnalysis ?? false;
   const tipReactionOnly = options?.tipReactionOnly ?? false;
-  const maxSteps = analysisOnly ? 2 : tipReactionOnly ? 1 : 30;
+  const configuredMaxSteps = Number.parseInt(process.env.AGENT_MAX_STEPS || '', 10);
+  const normalMaxSteps = typeof options?.maxSteps === 'number' && Number.isFinite(options.maxSteps)
+    ? Math.min(120, Math.max(1, Math.floor(options.maxSteps)))
+    : Number.isFinite(configuredMaxSteps)
+      ? Math.min(120, Math.max(30, configuredMaxSteps))
+      : 60;
+  const maxSteps = analysisOnly ? 2 : tipReactionOnly ? 1 : normalMaxSteps;
   const videoMediaIndex = isVideoAnalysis ? (options?.currentSnapshotIndex ?? 0) + 1 : 0;
   const analysisPrompt = withLocale(
     isVideoAnalysis ? ANALYSIS_PROMPT_VIDEO_TEMPLATE(videoMediaIndex)
@@ -3430,9 +4624,19 @@ export async function* runMakaronAgent(
   const baseSystemPrompt = (analysisOnly || tipReactionOnly)
     ? buildLightweightSystemPrompt(analysisOnly ? 'analysis' : 'tipReaction', options?.locale)
     : await buildSystemPrompt(options?.userSkills, options?.supabase, options?.userId, projectId);
+  const durableExecutionDirective = options?.execution
+    ? `\n\n## Durable execution contract\nThis is attempt ${options.execution.attemptNo} of execution ${options.execution.runId}, work unit ${options.execution.workUnitKey}. The execution may continue in a fresh model context. Preserve decisions and durable artifact pointers by calling execution_checkpoint after each meaningful work unit and before a long, risky generation step. Produce the first durable mutation within 90 seconds when the work unit is composition/code. If this attempt advances a Studio Run into Composition, immediately switch to numbered composition parts even when this work unit started in an earlier stage; never begin a monolithic run_code payload. Do not repeat expensive side effects whose tool result is already present. A handoff is progress, not failure.`
+    : '';
+  const durableCompositionDirective = options?.execution?.workUnitKey === 'studio:composition'
+    ? `\n\n## Durable Composition transport\nKeep the full original Composition and Director creative standard, but do not emit a monolithic run_code composition payload in this work unit. Long tool-input streams can reset before the call closes. Author the final Remotion source as numbered files under ${projectId}/drafts/composition-parts, one cohesive part per model step with write_file. Keep each part under the 12000-character transport limit, wait for its tool result, and create as many parts as the approved content needs. Parts around 3000-8000 characters are preferred, but never compress creative detail merely to hit that range. Rewriting the same numbered path is safe after recovery. Do not use import/export; the files are concatenated into one scope with no aggregate source-size or part-count limit. Never shorten approved narration, subtitles, scenes, animation, or visual detail to reduce source size. When all parts exist, call run_code once with composition_parts.directory set to ${projectId}/drafts/composition-parts, plus runtime composition, dimensions, props, editables, and animation. This changes only persistence and transport; it must not simplify the approved story, audio, visual direction, or ending.`
+    : '';
+  const durableCompositionGuidance = options?.execution?.workUnitKey === 'studio:composition'
+    ? buildDurableCompositionGuidance()
+    : '';
+  const executionSystemPrompt = `${baseSystemPrompt}${durableExecutionDirective}${durableCompositionDirective}${durableCompositionGuidance}`;
   const systemPrompt = runtime.spec.provider === 'deepseek' && options?.locale
-    ? `${baseSystemPrompt}\n\nCRITICAL OUTPUT LANGUAGE: ${getOutputLanguageRequirement(options.locale)}. This rule still applies after every tool result.`
-    : baseSystemPrompt;
+    ? `${executionSystemPrompt}\n\nCRITICAL OUTPUT LANGUAGE: ${getOutputLanguageRequirement(options.locale)}. This rule still applies after every tool result.`
+    : executionSystemPrompt;
   const responseLocale = normalizeLocale(options?.locale, 'en');
   endSystemPrompt?.({ systemChars: systemPrompt.length });
 
@@ -3509,21 +4713,28 @@ export async function* runMakaronAgent(
     let cacheWriteTelemetryComplete = true;
     const billedStepMetadata: Array<{ providerMetadata?: Record<string, unknown> }> = [];
     let usageEmitted = false;
+    const compactionBlocks = new Map<string, string>();
+    const pendingCompactionSummaries: string[] = [];
     let attemptMessages: ModelMessage[] = msgs;
     let result: any = null;
     let recoveryAttempt = 0;
     let recoveryTextOnly = false;
+    let studioRunTouchedThisTurn = false;
+    let runCodeStartedThisTurn = false;
+    const executionAttemptWorkUnit = options?.execution?.workUnitKey;
+    const studioRunRecoveryPrompt = prompt.includes('[System automatic recovery]')
+      || prompt.includes('[Recoverable Agent Checkpoint]');
     const recoveryBlockedTools = new Set<string>();
     const nonRepeatableTools = new Set([
       'generate_image',
       'generate_animation',
       'transcribe_audio',
-      'materialize_media',
       'rotate_camera',
       'delete_file',
       'generate_voiceover',
       'generate_audio',
       'generate_music',
+      'prepare_visual_asset',
     ]);
 
     const recordStepUsage = (event: any) => {
@@ -3587,11 +4798,16 @@ export async function* runMakaronAgent(
       let finalStepDeliveredArtifact = false;
       let attemptDeliveredArtifact = false;
       const attemptCommittedTools = new Set<string>();
+      let durableStageHandoff: { code: 'studio_stage_handoff'; detail: string } | undefined;
+      let durableStudioCompletion: { detail: string } | undefined;
       let streamError: unknown;
       let lastTool = '';
 
       const endStreamInit = perf?.span('model_stream_init', { projectId, recoveryAttempt });
-      const remainingInvocationBudgetMs = Math.max(30_000, 720_000 - (Date.now() - agentStartTime));
+      const invocationBudgetMs = typeof options?.attemptBudgetMs === 'number' && Number.isFinite(options.attemptBudgetMs)
+        ? Math.max(60_000, Math.min(options.attemptBudgetMs, 720_000))
+        : 720_000;
+      const remainingInvocationBudgetMs = Math.max(30_000, invocationBudgetMs - (Date.now() - agentStartTime));
       const recoveryActiveTools = tools && recoveryBlockedTools.size > 0
         ? Object.keys(tools).filter((toolName) => !recoveryBlockedTools.has(toolName))
         : undefined;
@@ -3611,11 +4827,24 @@ export async function* runMakaronAgent(
         : recoveryActiveTools
           ? { activeTools: recoveryActiveTools }
           : {}),
-      stopWhen: stepCountIs(maxSteps),
+      stopWhen: [
+        stepCountIs(maxSteps),
+        ({ steps }: { steps: Array<{ toolResults?: Array<{ toolName?: string; output?: unknown }> }> }) => (
+          shouldStopAfterStudioToolStep({
+            durableExecution: Boolean(ctx.execution),
+            attemptWorkUnit: executionAttemptWorkUnit,
+            toolResults: steps.at(-1)?.toolResults,
+          })
+        ),
+      ],
       prepareStep: ({ messages }: { messages: ModelMessage[] }) => ({
         messages: runtime.normalizeMessages(messages),
       }),
       onStepFinish: () => { stepCount++; },
+      // Durable execution owns retry, failover, and checkpoint semantics. Letting
+      // the SDK retry internally turns one timed-out model call into several
+      // invisible calls before the runner can switch providers.
+      ...(options?.execution ? { maxRetries: 0 } : {}),
       timeout: { stepMs: stepTimeoutMs, totalMs: remainingInvocationBudgetMs },
       ...(options?.abortSignal ? { abortSignal: options.abortSignal } : {}),
       providerOptions: getAgentProviderOptions(runtime),
@@ -3624,7 +4853,27 @@ export async function* runMakaronAgent(
       endStreamInit?.();
 
     // State machine for extracting code from run_code tool-input-delta
-    let codeExtractor: { buffer: string; state: 'waiting' | 'in_code' | 'done'; escaped: boolean; sent: number } | null = null;
+    let codeExtractor: { buffer: string; state: 'waiting' | 'in_code' | 'done'; escaped: boolean; sent: number; decoded: string; lastSavedChars: number } | null = null;
+    const persistStreamedCodeCheckpoint = async (force = false) => {
+      if (!codeExtractor || !ctx.supabase || !ctx.userId) return;
+      const unsavedChars = codeExtractor.decoded.length - codeExtractor.lastSavedChars;
+      if (unsavedChars <= 0 || (!force && unsavedChars < 1_000)) return;
+      const partialPath = `${ctx.projectId}/drafts/streamed-run-code.partial.js`;
+      const saved = await workspace.writeFile(
+        partialPath,
+        codeExtractor.decoded,
+        ctx.supabase,
+        ctx.userId,
+        'text/javascript',
+      );
+      if (saved.success) {
+        codeExtractor.lastSavedChars = codeExtractor.decoded.length;
+        (ctx as any).__streamedCodeCheckpoint = {
+          streamedCodePath: partialPath,
+          streamedCodeChars: codeExtractor.decoded.length,
+        } satisfies StreamedCodeCheckpoint;
+      }
+    };
     const textDeltaState = createTextDeltaState();
 
       try {
@@ -3640,6 +4889,28 @@ export async function* runMakaronAgent(
         recordStepUsage(event);
         finishReason = (event as any).finishReason;
         rawFinishReason = (event as any).rawFinishReason;
+        const usage = (event as any).usage as { inputTokens?: number } | undefined;
+        const contextManagement = (event as any).providerMetadata?.anthropic?.contextManagement as {
+          appliedEdits?: Array<Record<string, unknown>>;
+        } | undefined;
+        const appliedEdits = contextManagement?.appliedEdits ?? [];
+        if (pendingCompactionSummaries.length || appliedEdits.length) {
+          const summary = pendingCompactionSummaries.splice(0).join('\n\n');
+          if (summary) {
+            (ctx as any).__providerCompaction = {
+              summary,
+              appliedEdits,
+              inputTokens: usage?.inputTokens,
+            };
+            yield {
+              type: 'context_compaction',
+              summary,
+              appliedEdits,
+              inputTokens: usage?.inputTokens,
+            };
+          }
+        }
+        if (durableStageHandoff || durableStudioCompletion) break;
         continue;
       }
       if (event.type === 'finish') {
@@ -3672,11 +4943,31 @@ export async function* runMakaronAgent(
         continue;
       }
 
+      if (event.type === 'text-start') {
+        const anthropic = (event as any).providerMetadata?.anthropic as { type?: string } | undefined;
+        if (anthropic?.type === 'compaction') {
+          compactionBlocks.set(String((event as any).id ?? 'compaction'), '');
+        }
+        continue;
+      }
+
+      if (event.type === 'text-end') {
+        const id = String((event as any).id ?? 'compaction');
+        const summary = compactionBlocks.get(id);
+        if (summary !== undefined) {
+          if (summary.trim()) pendingCompactionSummaries.push(summary);
+          compactionBlocks.delete(id);
+        }
+        continue;
+      }
+
       // ── Tool input streaming — extract code in real-time for run_code ──
       if (event.type === 'tool-input-start') {
         const toolName = (event as any).toolName ?? '';
+        if (toolName) lastTool = toolName;
         if (toolName === 'run_code') {
-          codeExtractor = { buffer: '', state: 'waiting', escaped: false, sent: 0 };
+          runCodeStartedThisTurn = true;
+          codeExtractor = { buffer: '', state: 'waiting', escaped: false, sent: 0, decoded: '', lastSavedChars: 0 };
           yield { type: 'status' as const, text: translate(responseLocale, 'agent.status.generatingCode') };
         }
         continue;
@@ -3723,7 +5014,9 @@ export async function* runMakaronAgent(
           }
           codeExtractor.sent = i;
           if (codeChunk) {
+            codeExtractor.decoded += codeChunk;
             yield { type: 'code_stream', text: codeChunk };
+            await persistStreamedCodeCheckpoint();
           }
           if (codeExtractor.state === 'done') {
             yield { type: 'code_stream', text: '', done: true };
@@ -3735,6 +5028,11 @@ export async function* runMakaronAgent(
       // ── Text delta ──────────────────────────────────────────────────────────
       if (event.type === 'text-delta') {
         const text = normalizeTextDelta(event as { delta?: unknown; textDelta?: unknown; text?: unknown }, textDeltaState);
+        const textId = String((event as any).id ?? 'compaction');
+        if (compactionBlocks.has(textId)) {
+          compactionBlocks.set(textId, `${compactionBlocks.get(textId) || ''}${text}`);
+          continue;
+        }
         if (text) {
           finalStepTextChars += text.trim().length;
           yield { type: 'content', text };
@@ -3770,8 +5068,9 @@ export async function* runMakaronAgent(
         } else if (event.toolName === 'generate_audio' || event.toolName === 'generate_music') {
           yield { type: 'status', text: translate(responseLocale, 'agent.status.generatingAudio') };
         } else if (event.toolName === 'preview_frame') {
-          const input = event.input as { frame?: number; timestamp?: number };
-          const hint = input.frame !== undefined ? `frame ${input.frame}` : input.timestamp !== undefined ? `${input.timestamp}s` : 'frame 0';
+          const input = event.input as { frame?: number; timestamp?: number; frames?: number[]; timestamps?: number[] };
+          const batch = input.frames?.length ? input.frames.join(', ') : input.timestamps?.length ? input.timestamps.map(value => `${value}s`).join(', ') : '';
+          const hint = batch || (input.frame !== undefined ? `frame ${input.frame}` : input.timestamp !== undefined ? `${input.timestamp}s` : 'frame 0');
           yield { type: 'status', text: translate(responseLocale, 'agent.status.capturingFrame', hint) };
         } else if (event.toolName === 'generate_image') {
           yield { type: 'status', text: translate(responseLocale, 'agent.status.generatingImage') };
@@ -3827,9 +5126,19 @@ export async function* runMakaronAgent(
         // compact display input to the client. Replaying a UI-truncated code string
         // teaches the next model turn to copy "... (N chars)" as executable code.
         const toolInput = event.input as Record<string, unknown>;
-        const isRunCode = event.toolName === 'run_code' && typeof toolInput.code === 'string';
+        const directComposition = toolInput.composition && typeof toolInput.composition === 'object'
+          ? toolInput.composition as Record<string, unknown>
+          : undefined;
+        const streamedCode = typeof toolInput.code === 'string'
+          ? toolInput.code
+          : typeof directComposition?.code === 'string'
+            ? directComposition.code
+            : undefined;
+        const isRunCode = event.toolName === 'run_code' && typeof streamedCode === 'string';
         const displayInput = isRunCode
-          ? { ...toolInput, code: `[code streamed separately: ${(toolInput.code as string).length} chars]` }
+          ? directComposition
+            ? { ...toolInput, composition: { ...directComposition, code: `[code streamed separately: ${streamedCode.length} chars]` } }
+            : { ...toolInput, code: `[code streamed separately: ${streamedCode.length} chars]` }
           : toolInput;
         yield {
           type: 'tool_call',
@@ -3842,7 +5151,7 @@ export async function* runMakaronAgent(
         };
         // If code wasn't streamed via delta (edge case), send it now
         if (isRunCode && (!codeExtractor || codeExtractor.state === 'waiting')) {
-          const code = toolInput.code as string;
+          const code = streamedCode;
           const CHUNK = 500;
           for (let i = 0; i < code.length; i += CHUNK) {
             yield { type: 'code_stream', text: code.slice(i, i + CHUNK) };
@@ -3877,6 +5186,76 @@ export async function* runMakaronAgent(
           const toolSucceeded = outputRecord?.success !== false
             && outputRecord?.status !== 'failed'
             && !(outputRecord?.error && outputRecord?.success !== true);
+          if (toolSucceeded && toolName === 'studio_run') {
+            studioRunTouchedThisTurn = true;
+            const studioSummary = outputRecord?.studioRun && typeof outputRecord.studioRun === 'object'
+              ? outputRecord.studioRun as Record<string, unknown>
+              : undefined;
+            if (ctx.execution && typeof studioSummary?.currentStage === 'string') {
+              ctx.execution.workUnitKey = `studio:${studioSummary.currentStage}`;
+            }
+            if (
+              studioSummary?.currentStage === 'composition'
+              && ctx.supabase
+              && ctx.userId
+            ) {
+              try {
+                const { ensureStudioCompositionScaffold } = await import('./studio-composition-scaffold');
+                const scaffold = await ensureStudioCompositionScaffold({
+                  projectId: ctx.projectId,
+                  userId: ctx.userId,
+                  supabase: ctx.supabase,
+                });
+                if (scaffold.path) (ctx as any).__lastSavedDraftPath = scaffold.path;
+                if (ctx.execution) {
+                  await ctx.supabase.from('agent_runs').update({ current_work_unit: 'studio:composition' })
+                    .eq('id', ctx.execution.runId)
+                    .eq('status', 'running');
+                }
+                if (scaffold.created) {
+                  yield {
+                    type: 'status',
+                    text: options?.locale === 'en'
+                      ? `Composition scaffold saved in ${scaffold.elapsedMs}ms; applying Director craft...`
+                      : `Composition 结构骨架已在 ${scaffold.elapsedMs}ms 内保存，正在继续完成导演级画面...`,
+                  };
+                }
+              } catch (scaffoldError) {
+                console.error('[agent-execution] composition scaffold failed:', scaffoldError);
+              }
+            }
+            if (shouldHandoffToStudioComposition({
+              durableExecution: Boolean(ctx.execution),
+              attemptWorkUnit: executionAttemptWorkUnit,
+              currentStage: typeof studioSummary?.currentStage === 'string'
+                ? studioSummary.currentStage
+                : undefined,
+            })) {
+              durableStageHandoff = {
+                code: 'studio_stage_handoff',
+                detail: 'Composition is ready to continue in a dedicated durable attempt.',
+              };
+            }
+            if (shouldCompleteDurableStudioRun({
+              durableExecution: Boolean(ctx.execution),
+              status: typeof studioSummary?.status === 'string' ? studioSummary.status : undefined,
+              currentStage: typeof studioSummary?.currentStage === 'string'
+                ? studioSummary.currentStage
+                : null,
+            })) {
+              durableStudioCompletion = {
+                detail: 'Studio Run completed and all delivery artifacts were persisted.',
+              };
+              finalStepDeliveredArtifact = true;
+              attemptDeliveredArtifact = true;
+              yield {
+                type: 'content',
+                text: options?.locale === 'en'
+                  ? 'Studio Run complete. The final video, editable source, and review evidence are archived.'
+                  : 'Studio Run 已完成，最终视频、可编辑源和验收记录均已归档。',
+              };
+            }
+          }
           if (toolSucceeded && nonRepeatableTools.has(toolName)) {
             attemptCommittedTools.add(toolName);
           }
@@ -3987,6 +5366,7 @@ export async function* runMakaronAgent(
       // ── Error from stream ──────────────────────────────────────────────────
       if (event.type === 'error') {
         streamError = (event as any).error;
+        console.error(`[agent-stream] provider error: ${describeModelStreamError(streamError)}`);
         // AI SDK emits finish-step (with usage) and finish(error) after the
         // error part. Drain the stream so failed reasoning is still billed and
         // the terminal classification sees the real provider finish reason.
@@ -3996,17 +5376,51 @@ export async function* runMakaronAgent(
         }
       } catch (err) {
         streamError = err;
+        console.error(`[agent-stream] stream iteration failed: ${describeModelStreamError(streamError)}`);
       }
 
-      const assessment = classifyModelTermination({
-        sawFinish,
-        finishReason,
-        rawFinishReason,
-        finalStepTextChars,
-        finalStepToolCalls,
-        finalStepDeliveredArtifact,
-        streamError,
-      });
+      if (streamError) await persistStreamedCodeCheckpoint(true);
+
+      let assessment = durableStudioCompletion
+        ? {
+            ok: true,
+            retryable: false,
+            detail: durableStudioCompletion.detail,
+          }
+        : durableStageHandoff
+          ? {
+              ok: false,
+              retryable: true,
+              code: durableStageHandoff.code,
+              detail: durableStageHandoff.detail,
+            }
+          : classifyModelTermination({
+              sawFinish,
+              finishReason,
+              rawFinishReason,
+              finalStepTextChars,
+              finalStepToolCalls,
+              finalStepDeliveredArtifact,
+              streamError,
+            });
+
+      if (assessment.ok) {
+        const activeStudioCheckpoint = await getStudioRunCheckpoint(ctx);
+        if (shouldContinueActiveStudioRun({
+          activeStudioRun: Boolean(activeStudioCheckpoint.studioRunId),
+          studioRunTouched: studioRunTouchedThisTurn,
+          runCodeStarted: runCodeStartedThisTurn,
+          recoveryPrompt: studioRunRecoveryPrompt,
+          attemptWorkUnit: executionAttemptWorkUnit,
+        })) {
+          assessment = {
+            ok: false,
+            retryable: true,
+            code: 'studio_run_incomplete',
+            detail: `Studio Run ${activeStudioCheckpoint.studioRunId} is still running at ${activeStudioCheckpoint.studioRunStage}`,
+          };
+        }
+      }
 
       if (options?.abortSignal?.aborted) {
         const usageEvent = buildUsageEvent();
@@ -4019,17 +5433,31 @@ export async function* runMakaronAgent(
       let attemptSteps: any[] = [];
       try { attemptSteps = await result.steps; } catch { /* stream may have failed before a complete step */ }
       const canRecover = assessment.retryable
+        && !durableStageHandoff
+        && !options?.execution
         && recoveryAttempt < 1
         && Date.now() - agentStartTime < 600_000;
       if (canRecover) {
+        const studioCheckpoint = await getStudioRunCheckpoint(ctx);
+        const textOnlyRecovery = shouldUseTextOnlyRecovery({
+          deliveredArtifact: attemptDeliveredArtifact,
+          activeStudioRun: Boolean(studioCheckpoint.studioRunId),
+        });
         recoveryAttempt++;
-        recoveryTextOnly = attemptDeliveredArtifact;
+        recoveryTextOnly = textOnlyRecovery;
         for (const toolName of attemptCommittedTools) recoveryBlockedTools.add(toolName);
         const responseMessages = attemptSteps.flatMap((step: any) => step?.response?.messages ?? []);
         const savedDraftPath = (ctx as any).__lastSavedDraftPath as string | undefined;
-        const recoveryInstruction = attemptDeliveredArtifact
+        const streamedCheckpoint = (ctx as any).__streamedCodeCheckpoint as StreamedCodeCheckpoint | undefined;
+        const studioRecovery = studioCheckpoint.studioRunId
+          ? ` Resume Studio Run ${studioCheckpoint.studioRunId} at stage ${studioCheckpoint.studioRunStage}. Call studio_run status first, then continue that stage directly. Do not reread skill, prompt, or reference files already present in the conversation history.`
+          : '';
+        const compositionRecovery = studioCheckpoint.studioRunStage === 'composition'
+          ? ` Switch immediately to numbered source files under ${ctx.projectId}/drafts/composition-parts. Salvage complete reusable definitions from the partial stream into a numbered part, then continue with additional parts; do not stream the monolithic run_code payload again. Assemble once with composition_parts.directory after all parts are durable.`
+          : '';
+        const recoveryInstruction = textOnlyRecovery
           ? 'A finished artifact was already delivered in the previous step. Do not call any tool, regenerate, republish, or create another task. Only provide the concise final reply for the existing delivered result.'
-          : `Continue from the existing tool results and saved draft; do not restart from the original media.${savedDraftPath ? ` The exact saved draft path is: ${savedDraftPath}.` : ''}${recoveryBlockedTools.size ? ` Do not repeat these already-completed tools: ${[...recoveryBlockedTools].join(', ')}; use their existing results.` : ''} Complete the pending modification you already planned. If the user requested a finished artifact, publish the updated artifact before your concise final reply.`;
+          : `Continue from the existing tool results and saved draft; do not restart from the original media.${savedDraftPath ? ` The exact saved draft path is: ${savedDraftPath}.` : ''}${streamedCheckpoint?.streamedCodePath ? ` Partial streamed code was saved at ${streamedCheckpoint.streamedCodePath} (${streamedCheckpoint.streamedCodeChars || 0} chars); read it once and salvage useful components.` : ''}${studioRecovery}${compositionRecovery}${recoveryBlockedTools.size ? ` Do not repeat these already-completed tools: ${[...recoveryBlockedTools].join(', ')}; use their existing results.` : ''} Complete the pending modification you already planned. If the user requested a finished artifact, publish the updated artifact before your concise final reply.`;
         attemptMessages = [
           ...attemptMessages,
           ...responseMessages,
@@ -4044,14 +5472,24 @@ export async function* runMakaronAgent(
       }
 
       const drafts = (ctx as any).__runCodeDrafts as Array<{ previewUrl?: string }> | undefined;
+      const studioCheckpoint = await getStudioRunCheckpoint(ctx);
+      const streamedCodeCheckpoint = (ctx as any).__streamedCodeCheckpoint as StreamedCodeCheckpoint | undefined;
       const checkpoint = {
         draftPath: (ctx as any).__lastSavedDraftPath as string | undefined,
         previewUrl: drafts?.[drafts.length - 1]?.previewUrl,
         lastTool: lastTool || toolCallName || undefined,
         finishReason,
         rawFinishReason,
+        ...studioCheckpoint,
+        ...streamedCodeCheckpoint,
+        ...((ctx as any).__compositionPartPaths?.length
+          ? { compositionPartPaths: (ctx as any).__compositionPartPaths as string[] }
+          : {}),
+        ...(assessment.detail ? { errorDetail: assessment.detail } : {}),
       };
-      const recoverable = assessment.retryable && Boolean(checkpoint.draftPath);
+      const recoverable = assessment.retryable && Boolean(
+        checkpoint.draftPath || checkpoint.studioRunId || options?.execution,
+      );
       const usageEvent = buildUsageEvent();
       if (usageEvent) yield usageEvent;
       yield {
@@ -4088,7 +5526,8 @@ export async function* runMakaronAgent(
 
     yield { type: 'done' };
   } catch (err) {
-    console.log(`⏱️ [agent] ERROR at +${((Date.now() - agentStartTime) / 1000).toFixed(1)}s: ${err instanceof Error ? err.message : String(err)}`);
-    yield { type: 'error', message: err instanceof Error ? err.message : String(err) };
+    const errorMessage = normalizeAgentErrorMessage(err);
+    console.log(`⏱️ [agent] ERROR at +${((Date.now() - agentStartTime) / 1000).toFixed(1)}s: ${errorMessage}`);
+    yield { type: 'error', message: errorMessage };
   }
 }

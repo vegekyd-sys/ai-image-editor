@@ -28,6 +28,7 @@ const NPM_PACKAGE_NAME = 'makaron-cli';
 const UPDATE_CHECK_INTERVAL_MS = 24 * 60 * 60 * 1000;
 const UPDATE_CHECK_TIMEOUT_MS = 400;
 const AGENT_MODELS = ['auto', 'gpt-5.6-terra', 'gpt-5.6-sol', 'gpt-5.6-luna', 'grok-4.5', 'deepseek-v4-pro'];
+const AGENT_WAIT_TIMEOUT_SECONDS = Math.max(900, Number(process.env.MAKARON_AGENT_WAIT_TIMEOUT_SECONDS || 10_800));
 
 // Public anon key (safe to embed — only enables auth, not data access)
 const SUPABASE_URL = 'https://sdyrtztrjgmmpnirswxt.supabase.co';
@@ -519,7 +520,7 @@ async function pollRun(baseUrl, headers, runId, opts = {}) {
     try {
       const res = await fetch(`${baseUrl}/api/agent/run/${runId}?${params}`, { headers });
       if (!res.ok) {
-        if (elapsed > 800) { process.stderr.write(`\n❌ Timeout after ${elapsed}s\n`); process.exit(1); }
+        if (elapsed > AGENT_WAIT_TIMEOUT_SECONDS) { process.stderr.write(`\n❌ Timeout after ${elapsed}s\n`); process.exit(1); }
         continue;
       }
       data = await res.json();
@@ -569,6 +570,13 @@ async function pollRun(baseUrl, headers, runId, opts = {}) {
           case 'music_task':
             process.stderr.write(`\n🎵 Music submitted: ${ev.data?.taskId}\n`);
             break;
+          case 'studio_run': {
+            const stage = ev.data?.currentStage || ev.data?.current_stage || 'complete';
+            const recipe = ev.data?.recipe || 'studio';
+            const status = ev.data?.status || 'running';
+            process.stderr.write(`\nStudio Run: ${recipe} / ${stage} / ${status}\n`);
+            break;
+          }
           case 'error':
             process.stderr.write(`\n❌ Error: ${ev.data?.message}\n`);
             break;
@@ -580,6 +588,7 @@ async function pollRun(baseUrl, headers, runId, opts = {}) {
 
     // Check terminal status
     if (data.status === 'completed' || data.status === 'failed' || data.status === 'aborted') {
+      normalizeRunResponse(data);
       if (printedText && !json) process.stdout.write('\n');
       if (data.status === 'completed' && exportCompositions) {
         data = await exportAnimatedCompositionsFromRun(baseUrl, headers, data, {
@@ -611,7 +620,7 @@ async function pollRun(baseUrl, headers, runId, opts = {}) {
         process.stderr.write(`🔗  ${APP_URL}/projects/${data.projectId}\n`);
       }
 
-      if (data.status === 'failed') process.exit(1);
+      if (data.status === 'failed' || data.status === 'aborted') process.exit(1);
       return data;
     }
   }
@@ -620,11 +629,15 @@ async function pollRun(baseUrl, headers, runId, opts = {}) {
 // ─── Pick Helper ────────────────────────────────────────────────────────────
 
 function applyPick(data, field) {
+  const videoUrls = [...new Set([
+    ...(data.output || []).filter(o => o.type === 'video' && o.url).map(o => o.url),
+    ...(data.result?.videos || []).filter(v => v.videoUrl).map(v => v.videoUrl),
+  ])];
   switch (field) {
     case 'first_image_url': return data.output?.find(o => o.type === 'image')?.url || null;
     case 'image_urls': return (data.output || []).filter(o => o.type === 'image' && o.url).map(o => o.url);
-    case 'first_video_url': return data.output?.find(o => o.type === 'video' && o.url)?.url || null;
-    case 'video_urls': return (data.output || []).filter(o => o.type === 'video' && o.url).map(o => o.url);
+    case 'first_video_url': return videoUrls[0] || null;
+    case 'video_urls': return videoUrls;
     case 'first_design_url': return data.output?.find(o => o.type === 'design')?.url || null;
     case 'design_urls': return (data.output || []).filter(o => o.type === 'design' && o.url).map(o => o.url);
     case 'first_music_url': return data.output?.find(o => o.type === 'music' && o.url)?.url || null;
@@ -635,6 +648,8 @@ function applyPick(data, field) {
       description: action.description,
       source: action.source,
     }));
+    case 'studio_run': return [...(data.output || [])].reverse().find(o => o.type === 'studio_run') || null;
+    case 'studio_recipe': return [...(data.output || [])].reverse().find(o => o.type === 'studio_run')?.recipe || null;
     case 'project_url': return data.project_url || data.projectUrl || null;
     case 'output': return data.output || [];
     case 'text': return data.output?.find(o => o.type === 'text')?.content || null;
@@ -656,7 +671,7 @@ async function watchRun(baseUrl, headers, runId, opts = {}) {
     try {
       const res = await fetch(`${baseUrl}/api/agent/run/${runId}`, { headers });
       if (!res.ok) {
-        if (elapsed > 800) { process.stderr.write(`Timeout after ${elapsed}s\n`); process.exit(2); }
+        if (elapsed > AGENT_WAIT_TIMEOUT_SECONDS) { process.stderr.write(`Timeout after ${elapsed}s\n`); process.exit(2); }
         await new Promise(r => setTimeout(r, interval));
         continue;
       }
@@ -1040,6 +1055,33 @@ async function fetchMarketplaceSkills(baseUrl, opts = {}) {
   const data = await res.json();
   const skills = Array.isArray(data) ? data : (data.skills || []);
   return skills.map(normalizeMarketplaceSkill);
+}
+
+async function fetchBuiltInSkills(baseUrl) {
+  const res = await fetch(`${baseUrl}/api/skills?include=internal`);
+  if (!res.ok) {
+    process.stderr.write(`Error ${res.status}: ${await res.text()}\n`);
+    process.exit(1);
+  }
+  const data = await res.json();
+  return (data.skills || []).filter(skill => skill.builtIn);
+}
+
+function printBuiltInSkills(skills) {
+  if (!skills.length) {
+    console.log('No built-in skills found.');
+    return;
+  }
+  console.log(`Built-in skills: ${skills.length}\n`);
+  for (const skill of skills) {
+    const recipe = skill.studioRunRecipe ? `  [Studio Run: ${skill.studioRunRecipe}]` : '';
+    const source = skill.sourceMediaRequired ? '  [source media required]' : '';
+    const adapter = skill.sourceProject === 'openmontage'
+      ? `  [OpenMontage: ${skill.supportLevel || 'adapted'}${skill.canonicalSkill && skill.canonicalSkill !== skill.name ? ` -> ${skill.canonicalSkill}` : ''}]`
+      : '';
+    console.log(`  ${skill.name}${recipe}${source}${adapter}`);
+    if (skill.description) console.log(`    ${String(skill.description).replace(/\s+/g, ' ').trim()}`);
+  }
 }
 
 function marketplaceSearchText(skill) {
@@ -1561,7 +1603,7 @@ Commands:
   create --title "name"              Create empty project (text-to-image)
 
   chat --project <id> "message"      Chat (non-blocking, polls for result)
-  chat --project <id> --skill <id>   Use or auto-install a marketplace skill
+  chat --project <id> --skill <id>   Use a built-in or marketplace skill
   chat --project <id> --video <file> Attach video to conversation
   chat --project <id> --audio <file> Attach song/beat/voice reference
   chat --project <id> -b "message"   Background: submit and print runId
@@ -1578,7 +1620,7 @@ Commands:
                                      Export editable Remotion composition to MP4
   responses list --project <id>      List runs for a project
   abort <runId>                      Abort a running Agent
-  skills list|search|show|install    Browse and install marketplace skills
+  skills list|search|show|install    Browse built-in and marketplace skills
 
   edit [--image <file>] "prompt"     AI image edit / text-to-image
   analyze --video <file|url>         Analyze video content
@@ -1689,13 +1731,17 @@ function printHelp(topic, subtopic) {
   } else if (topic === 'install-skill') {
     console.log('Usage: makaron install-skill [--global] [--agent <agent>] [--yes]');
   } else if (topic === 'skills') {
-    if (subtopic === 'list') console.log('Usage: makaron skills list [--json]');
+    if (subtopic === 'list') console.log('Usage: makaron skills list [--built-in] [--json]');
     else if (subtopic === 'search') console.log('Usage: makaron skills search <query> [--json]');
     else if (subtopic === 'show') console.log('Usage: makaron skills show <marketplace-id|label> [--json]');
     else if (subtopic === 'install') console.log('Usage: makaron skills install <marketplace-id|label> [--json]');
-    else console.log(`Skill marketplace commands:
+    else console.log(`Skill commands:
+  skills list --built-in              List all built-in Makaron skills and Studio Run recipes
+  skills list --built-in --openmontage
+                                      List OpenMontage-native adapters only
   skills list                         List marketplace skills
   skills search <query>               Search marketplace skills
+  skills show <id|label> --built-in   Show a built-in skill
   skills show <id|label>              Show a marketplace skill
   skills install <id|label>           Install a marketplace skill to your workspace
 
@@ -2225,8 +2271,13 @@ if (!command || command === '--help' || command === '-h' || command === 'help') 
   const jsonOutput = args.includes('--json');
 
   if (sub === 'list') {
-    const skills = await fetchMarketplaceSkills(baseUrl);
+    const builtIn = args.includes('--built-in');
+    let skills = builtIn ? await fetchBuiltInSkills(baseUrl) : await fetchMarketplaceSkills(baseUrl);
+    if (builtIn && args.includes('--openmontage')) {
+      skills = skills.filter(skill => skill.sourceProject === 'openmontage');
+    }
     if (jsonOutput) console.log(JSON.stringify({ skills }, null, 2));
+    else if (builtIn) printBuiltInSkills(skills);
     else printMarketplaceSkills(skills);
   } else if (sub === 'search') {
     const query = args.filter((arg, index) => index > 1 && arg !== '--json').join(' ').trim();
@@ -2243,11 +2294,15 @@ if (!command || command === '--help' || command === '-h' || command === 'help') 
     else printMarketplaceSkills(skills);
   } else if (sub === 'show') {
     const identifier = args[2];
-    if (!identifier) { console.error('Usage: makaron skills show <marketplace-id|label> [--json]'); process.exit(1); }
-    const skills = await fetchMarketplaceSkills(baseUrl);
-    const skill = findMarketplaceSkill(skills, identifier);
+    if (!identifier) { console.error('Usage: makaron skills show <id|label> [--built-in] [--json]'); process.exit(1); }
+    const builtIn = args.includes('--built-in');
+    const skills = builtIn ? await fetchBuiltInSkills(baseUrl) : await fetchMarketplaceSkills(baseUrl);
+    const skill = builtIn
+      ? skills.find(candidate => candidate.name === identifier || candidate.label?.toLowerCase() === identifier.toLowerCase())
+      : findMarketplaceSkill(skills, identifier);
     if (!skill) { console.error(`Skill not found: ${identifier}`); process.exit(1); }
     if (jsonOutput) console.log(JSON.stringify(skill, null, 2));
+    else if (builtIn) printBuiltInSkills([skill]);
     else printMarketplaceSkill(skill);
   } else if (sub === 'install') {
     const identifier = args[2];
@@ -2260,9 +2315,13 @@ if (!command || command === '--help' || command === '-h' || command === 'help') 
     if (jsonOutput) console.log(JSON.stringify({ ...data, marketplaceId: skill.id, label: skill.label }, null, 2));
     else console.log(data.skillName);
   } else {
-    console.log(`Skill marketplace commands:
+    console.log(`Skill commands:
+  skills list --built-in              List all built-in Makaron skills and Studio Run recipes
+  skills list --built-in --openmontage
+                                      List OpenMontage-native adapters only
   skills list                         List marketplace skills
   skills search <query>               Search marketplace skills
+  skills show <id|label> --built-in   Show a built-in skill
   skills show <id|label>              Show a marketplace skill
   skills install <id|label>           Install a marketplace skill to your workspace
 `);

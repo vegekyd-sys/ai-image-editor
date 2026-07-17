@@ -26,7 +26,7 @@ If a task combines timeline images, pass `reference_media_indices`. Keep timelin
 
 Use the smallest capable workflow.
 
-If the request starts with `[Active skill: long-video-director]`, read `skills/long-video-director/SKILL.md` first and follow that workflow even if it looks like an ordinary video prompt.
+For `[Active skill: NAME]`, read `skills/NAME/SKILL.md` first and follow it. Internal adapters may be absent from the manifest. `long-video-director` remains authoritative.
 
 If the conversation history shows an active long-video-director workflow, continue that workflow even when the latest user message does not repeat `[Active skill: long-video-director]`.
 
@@ -58,11 +58,13 @@ For screenshot/frame-based local video repair, read `skills/video-segment-edit/S
 
 For async intermediate videos, include `completion_actions` so CUI/CLI can offer next steps. Default to user confirmation. For local repair, include replace start/end + duration and require trim/fit before merging.
 
-For dialogue, subtitles, transcript, or time-based editing by spoken words, call `transcribe_audio` first. Use its utterance/word timestamps to decide edit points. Use `analyze_video` for visual scenes/actions, not for exact speech timing.
+For transcript requests or speech-dependent edits, call `transcribe_audio`
+first. New composition subtitles may follow their own narration timeline; use
+transcription only when exact timing matters. Use `analyze_video` for visuals.
 
-For long videos, multi-part videos, 15s+ output, visual anchors, or clip transitions, read `skills/long-video-director/SKILL.md` first. Do not jump straight to full scripts, do not use fenced code blocks, and do not bring up Remotion during that workflow.
+Explicit explainer, Studio Run, Remotion, or matched built-in Composition requests route to that editable workflow before provider duration limits. Do not reinterpret a 30s/60s Composition as provider clips.
 
-Exception: if the user explicitly asks to use Remotion, route to Remotion Composition Runtime instead. A 30s/35s/60s Remotion request is a local editable composition request, not a long-video provider generation request.
+For provider-generated long videos, multi-part generated clips, 15s+ provider output, visual anchors, or clip transitions, read `skills/long-video-director/SKILL.md` first. Do not jump straight to full scripts, do not use fenced code blocks, and do not bring up Remotion during that workflow.
 
 Hard duration range: a single SeeDance script/call must be 4-15s; Kling is 5-15s; Grok 1.5 is 1-15s for one starting image; Google Omni is 3-10s. If requested/source duration is shorter than the model minimum, use the minimum. If output is longer than the selected model max, use `skills/long-video-director/SKILL.md`, split into model-sized segments, show the plan, and stop for approval.
 
@@ -100,11 +102,12 @@ Use for editable timelines/trims/subtitles/overlays; default for "put these two 
 
 If the user says Remotion, create/patch an editable composition with `run_code`. For broad concepts like "35秒微信成长视频", infer narrative, timeline, and placeholders unless factual accuracy or real data is required.
 
-For subtitle overlays or transcript-driven editable trims, call `transcribe_audio` first and use the returned utterance/word timestamps in the Remotion composition.
+For transcript-driven trims, call `transcribe_audio` first. New subtitles belong
+to the composition; transcription is optional timing reference.
 
 `runtime: "design"` is a legacy alias. Internal `design` names are historical and do not mean generic layout/mockup/image tasks should use Remotion.
 
-Composition outputs are drafts until `write_file({ fromLastRunCode: true, name: "..." })` publishes them.
+`run_code` autosaves composition drafts; `write_file` publishes them to the timeline.
 
 Node media outputs are workspace results. To publish exported workspace media later, call `write_file({ fromWorkspaceOutputs: true, mediaType: "video"|"image"|"all", limit: N })`; do not re-run FFmpeg.
 

@@ -14,21 +14,33 @@ function isLikelyZip(buffer: ArrayBuffer): boolean {
 }
 
 // GET — list built-in + user skills (via workspace)
-export async function GET() {
+export async function GET(req: NextRequest) {
   try {
     const supabase = await createClient();
     const { data: { session } } = await supabase.auth.getSession();
     const userId = session?.user?.id;
 
     const allSkills = await getAllSkills(supabase, userId || undefined);
+    const includeInternal = req.nextUrl.searchParams.get('include') === 'internal';
 
-    const skills = allSkills.map(s => ({
+    const skills = allSkills.filter(s => includeInternal || s.makaron?.userSelectable !== false).map(s => ({
       name: s.name,
       label: s.name.split('-').map(w => w[0].toUpperCase() + w.slice(1)).join(' '),
       icon: s.makaron?.icon || '',
       color: s.makaron?.color || '#a78bfa',
       builtIn: s.makaron?.builtIn || false,
       description: s.description || '',
+      tags: s.makaron?.tags || [],
+      studioRunRecipe: s.makaron?.studioRunRecipe,
+      studioRunProfile: s.makaron?.studioRunProfile,
+      sourceMediaRequired: s.makaron?.sourceMediaRequired || false,
+      userSelectable: s.makaron?.userSelectable !== false,
+      sourceProject: s.makaron?.sourceProject,
+      sourceSkill: s.makaron?.sourceSkill,
+      sourceKind: s.makaron?.sourceKind,
+      supportLevel: s.makaron?.supportLevel,
+      adapterFamily: s.makaron?.adapterFamily,
+      canonicalSkill: s.makaron?.canonicalSkill,
       referenceImages: s.makaron?.referenceImages || [],
     }));
 

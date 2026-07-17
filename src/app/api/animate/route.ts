@@ -5,7 +5,7 @@ import { filterAndRemapImages } from '@/lib/kling'
 import { requireCredits, deductFixedCredits } from '@/lib/billing/credits'
 import { estimateVideoCredits, normalizeVideoModelId, resolveVideoGenerationRoute } from '@/lib/video-model-capabilities'
 
-export const maxDuration = 800
+export const maxDuration = 1800
 
 export async function POST(req: NextRequest) {
   try {

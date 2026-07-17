@@ -51,7 +51,21 @@ const t0 = Date.now();
 const { bundle } = await import('@remotion/bundler');
 const entryPoint = path.resolve(ROOT, 'src/remotion/index.tsx');
 const outDir = path.resolve(ROOT, '.remotion-bundle');
-const bundleDir = await bundle({ entryPoint, outDir, onProgress: () => {} });
+const bundleDir = await bundle({
+  entryPoint,
+  outDir,
+  onProgress: () => {},
+  webpackOverride: (config) => ({
+    ...config,
+    resolve: {
+      ...config.resolve,
+      alias: {
+        ...config.resolve?.alias,
+        '@': path.resolve(ROOT, 'src'),
+      },
+    },
+  }),
+});
 const relativeBundleDir = path.relative(ROOT, bundleDir);
 console.log(`✅ Bundle: ${((Date.now() - t0) / 1000).toFixed(1)}s → ${relativeBundleDir}\n`);
 

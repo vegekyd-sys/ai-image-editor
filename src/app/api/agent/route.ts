@@ -13,7 +13,7 @@ import {
   resolveAgentModelSpec,
 } from '@/lib/agent-models';
 
-export const maxDuration = 800;
+export const maxDuration = 1800;
 
 export async function POST(req: NextRequest) {
   const perf = new AgentPerf('agent-api', { route: '/api/agent' });

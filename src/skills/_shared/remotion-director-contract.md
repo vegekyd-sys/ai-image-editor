@@ -27,15 +27,19 @@ The Remotion composition layer implements that direction. It defines:
 Do not let the implementation layer invent the creative structure by accident.
 Plan the video experience first, then write the composition.
 
-## Required References
+## Core And Optional References
 
-Before creating a new Remotion composition, or making a major visual/timing
-patch to an existing one, read:
+For a complete theme-driven video, read `skills/_shared/visual-direction/SKILL.md`
+and `skills/_shared/studio-production/taste-direction.md`. The first connects
+visual intent to media preparation; the second is a soft Visual Invention Pass
+for subject-specific relationships, transformations, keyframes, and scene
+handoffs. For a mechanical trim, splice, or tiny patch, skip them.
 
-1. `skills/_shared/remotion-video-director/SKILL.md`
-2. `skills/_shared/remotion-video-director/references/video-archetypes.md`
-3. `skills/_shared/remotion-video-director/references/remotion-patterns.md`
-4. `skills/_shared/remotion-video-director/references/component-library.md`
+The files under `skills/_shared/remotion-video-director/references/` are optional
+libraries, not universal rules. Read a relevant archetype, pattern, or component
+only after the chosen direction creates a concrete need for it. Do not inherit a
+preset's scene count, density, transition family, component set, or visual style
+merely because the example exists.
 
 For tiny text-only patches, prop changes, typo fixes, or mechanical trim
 adjustments, do not re-read the references if this contract is already present
@@ -47,9 +51,12 @@ Before writing or patching composition code, create a compact internal plan:
 
 - **Creative brief**: purpose, audience, core message, desired action.
 - **Emotional arc**: what changes from the first frame to the final frame.
-- **Scene map**: scene names, exact frame/time ranges, and the one idea in each scene.
-- **Focal subject**: the viewer's first read in every representative frame.
+- **Scene map**: scene names, exact frame/time ranges, and what develops in each scene.
+- **Frame relationships**: how subjects, environment, text, media, and depth work together.
 - **Media role**: decide whether source footage, generated images, stickers, text, or diagrams carry the scene.
+- **Visual carrier**: for substantial scenes, use the `visualPlan` to record the
+  dominant technical media path: native, plate, cutout, or edge-video. This is
+  asset routing metadata, not a limit on supporting layers or visual invention.
 - **Audio/subtitle relation**: decide whether voice, music, captions, or original sound drives timing.
 - **Verification plan**: choose stable hook, middle, and ending frames to preview before publishing.
 
@@ -65,9 +72,10 @@ for a web UI demo.
 
 - Do not default to hero sections, card grids, pricing panels, dashboard widgets,
   pill collections, dense side-by-side blocks, or tiny labels.
-- Do not solve a crowded frame by shrinking text. Solve it with time: reveal
-  ideas one after another.
-- Keep one obvious focal point per scene.
+- Do not solve a crowded frame merely by shrinking text. Use framing, depth,
+  timing, movement, and hierarchy to make the intended reading clear.
+- Allow ensembles, layered action, and multiple related points of attention when
+  the subject benefits from them.
 - Use large readable text, strong hierarchy, and generous safe areas.
 - Treat cards, badges, borders, and labels as supporting elements, not the
   composition's default structure.

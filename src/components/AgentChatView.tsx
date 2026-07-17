@@ -18,6 +18,7 @@ import SkillSelector, { type SkillItem } from '@/components/SkillSelector';
 import { splitCompletionActions } from '@/lib/artifact-actions';
 import { removeAllInlineVideoUrls, removeInlineMediaNavigationMarkers, removeRenderableInlineVideoUrls, resolveInlineVideoCandidate } from '@/lib/cui-video-url';
 import type { ArtifactCompletionAction as CompletionAction } from '@/types';
+import { buildStudioRunStagePlacements, StudioRunProgress, StudioRunStageCard, useStudioRun } from '@/components/StudioRunDock';
 
 /** Inline video in CUI — natural AR, play/pause, @N badge, tap to navigate with time sync */
 const videoArCache = new Map<string, string>();
@@ -614,6 +615,19 @@ export default function AgentChatView({
   }, [snapshots]);
 
   const [input, setInput] = useState('');
+  const studioRun = useStudioRun(projectId, isAgentActive);
+  const latestUserMessageTimestamp = useMemo(() => messages.reduce((latest, message) => (
+    message.role === 'user' ? Math.max(latest, message.timestamp) : latest
+  ), 0), [messages]);
+  const studioStagePlacements = useMemo(() => {
+    const placements = buildStudioRunStagePlacements(messages.map(message => message.timestamp), studioRun.run);
+    const byMessage = new Map<number, typeof placements>();
+    for (const placement of placements) {
+      const current = byMessage.get(placement.afterMessageIndex) || [];
+      byMessage.set(placement.afterMessageIndex, [...current, placement]);
+    }
+    return byMessage;
+  }, [messages, studioRun.run]);
   const lastDraftTextRef = useRef<string | undefined>(undefined);
   const [viewingFile, setViewingFile] = useState<string | null>(null);
   // Unified attachment system: images + videos in one array
@@ -903,7 +917,7 @@ export default function AgentChatView({
     ro.observe(el);
     update();
     return () => ro.disconnect();
-  }, [onInputBarHeight]);
+  }, [onInputBarHeight, readOnly, studioRun.run?.runId]);
 
   // On mount: keep scroll pinned to bottom until content stabilizes (images loading etc.)
   const mountRoRef = useRef<ResizeObserver | null>(null);
@@ -1298,6 +1312,18 @@ export default function AgentChatView({
 
         {/* Message list */}
         <div className={`flex flex-col ${isPanel ? 'gap-3' : 'gap-5'}`}>
+          {studioStagePlacements.get(-1)?.map(placement => (
+            <StudioRunStageCard
+              key={`studio-stage-${placement.stage.id}-v${placement.stage.artifactVersion}`}
+              stage={placement.stage}
+              status={placement.status}
+              artifact={placement.stage.artifactPath ? studioRun.artifacts[placement.stage.artifactPath] : undefined}
+              ordinal={(studioRun.run?.stages.findIndex(stage => stage.id === placement.stage.id) ?? -1) + 1}
+              total={studioRun.run?.stages.length || 8}
+              isPanel={isPanel}
+              onViewArtifact={readOnly ? undefined : setViewingFile}
+            />
+          ))}
           {messages.map((msg, idx) => (
             <div key={`${msg.id}:${idx}`}>
               {msg.role === 'user' ? (
@@ -1497,6 +1523,19 @@ export default function AgentChatView({
 
                 </div>
               )}
+
+              {studioStagePlacements.get(idx)?.map(placement => (
+                <StudioRunStageCard
+                  key={`studio-stage-${placement.stage.id}-v${placement.stage.artifactVersion}`}
+                  stage={placement.stage}
+                  status={placement.status}
+                  artifact={placement.stage.artifactPath ? studioRun.artifacts[placement.stage.artifactPath] : undefined}
+                  ordinal={(studioRun.run?.stages.findIndex(stage => stage.id === placement.stage.id) ?? -1) + 1}
+                  total={studioRun.run?.stages.length || 8}
+                  isPanel={isPanel}
+                  onViewArtifact={readOnly ? undefined : setViewingFile}
+                />
+              ))}
             </div>
           ))}
 
@@ -1509,6 +1548,7 @@ export default function AgentChatView({
               </span>
             </div>
           )}
+
         </div>
 
         <div ref={messagesEndRef} />
@@ -1574,6 +1614,29 @@ export default function AgentChatView({
         }}
       />
 
+      {readOnly && studioRun.run && <div
+        ref={inputBarRef}
+        data-testid="studio-run-readonly-dock"
+        className={isPanel ? 'flex-shrink-0 px-3 py-3' : 'fixed left-0 right-0 px-3'}
+        style={isPanel ? {
+          borderTop: '1px solid rgba(255,255,255,0.06)',
+          zIndex: 20,
+        } : {
+          bottom: 0,
+          paddingBottom: 'var(--makaron-cui-input-safe-bottom, max(0.75rem, env(safe-area-inset-bottom)))',
+          paddingTop: '24px',
+          background: 'linear-gradient(to bottom, transparent 0%, #0a0a0a 24px)',
+          zIndex: 20,
+        }}
+      >
+        <StudioRunProgress
+          studioRun={studioRun}
+          isAgentActive={isAgentActive}
+          latestUserMessageTimestamp={latestUserMessageTimestamp || undefined}
+          readOnly
+        />
+      </div>}
+
       {!readOnly && <div
         ref={inputBarRef}
         className={isPanel ? 'flex-shrink-0 px-3' : 'fixed left-0 right-0 px-3'}
@@ -1590,6 +1653,11 @@ export default function AgentChatView({
           zIndex: 20,
         }}
       >
+        <StudioRunProgress
+          studioRun={studioRun}
+          isAgentActive={isAgentActive}
+          latestUserMessageTimestamp={latestUserMessageTimestamp || undefined}
+        />
         {/* Two-row layout: textarea on top, toolbar on bottom */}
         <div
           className="mkr-input-box-liquid"

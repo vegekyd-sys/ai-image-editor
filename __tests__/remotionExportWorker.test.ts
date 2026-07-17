@@ -57,6 +57,16 @@ describe('Remotion export worker contract', () => {
     expect(migration).toContain('idx_remotion_export_jobs_status_created')
   })
 
+  it('deduplicates concurrent active exports for the same composition', () => {
+    const migration = read('supabase/migrations/20260717000000_dedupe_active_remotion_exports.sql')
+    const exporter = read('src/lib/remotion-export.ts')
+
+    expect(migration).toContain('CREATE UNIQUE INDEX IF NOT EXISTS idx_remotion_export_jobs_active_fingerprint')
+    expect(migration).toContain("WHERE status IN ('queued', 'rendering')")
+    expect(exporter).toContain("error?.code === '23505'")
+    expect(exporter).toContain(".in('status', ['rendering', 'queued'])")
+  })
+
   it('renders MP4s server-side and records workspace output', () => {
     const server = read('src/lib/remotion-server.ts')
     const exporter = read('src/lib/remotion-export.ts')
@@ -74,7 +84,14 @@ describe('Remotion export worker contract', () => {
     expect(exporter).toContain('resolveRemotionRenderProfile')
     expect(exporter).toContain('metadata.renderProfile')
     expect(exporter).toContain('fingerprintDesign')
+    expect(exporter).toContain("renderer: 'remotion-export-v4'")
     expect(exporter).toContain('publishSnapshotIds')
+    expect(exporter).toContain('completeStudioRunForExport')
+    expect(exporter).toContain('completePersistedStudioRunFromMaterialization')
+    expect(exporter).toContain('metadata.studioRunId')
+    expect(exporter).toContain('promotedReusableExport')
+    expect(exporter).toContain('reusableNeedsPromotion')
+    expect(exporter).toContain('Reusable export promotion failed')
     expect(exporter).toContain(".eq('status', 'queued')")
     expect(exporter).toContain('REMOTION_EXPORT_STALE_MS')
     expect(exporter).toContain('isStaleRenderingJob')
@@ -122,6 +139,7 @@ describe('Remotion export worker contract', () => {
     const packageJson = read('package.json')
 
     expect(postRoute).toContain('createRemotionExportJob')
+    expect(postRoute).toContain("publish && outputType === 'video' ? crypto.randomUUID()")
     expect(postRoute).toContain('runRemotionExportJob')
     expect(postRoute).toContain('REMOTION_EXPORT_INLINE_AFTER')
     expect(getRoute).toContain('duration_seconds')
@@ -133,6 +151,9 @@ describe('Remotion export worker contract', () => {
     expect(agent).toContain('runRemotionExportJob')
     expect(agent).toContain('const shouldPublish = publish !== false')
     expect(agent).toContain('wait === true')
+    expect(agent).toContain('Boolean(studioCheckpoint.studioRunId) || wait === true')
+    expect(agent).toContain('studioRunId: studioCheckpoint.studioRunId')
+    expect(agent).toContain('completion.run.status === \'completed\'')
     expect(agent).toContain('ctx.pendingVideoSnapshot')
     expect(agent).not.toContain('void runRemotionExportJob(job.id)')
     expect(agent).toContain('Pending export snapshot insert failed')

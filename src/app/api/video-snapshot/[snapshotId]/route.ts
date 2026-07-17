@@ -9,7 +9,7 @@ import type { VideoMeta } from '@/types'
 import { buildVideoFailureActions } from '@/lib/artifact-actions'
 import { getRemotionExportJob, runRemotionExportJob } from '@/lib/remotion-export'
 
-export const maxDuration = 800
+export const maxDuration = 1800
 
 type SnapshotProject = { user_id?: string; is_public?: boolean } | Array<{ user_id?: string; is_public?: boolean }>
 

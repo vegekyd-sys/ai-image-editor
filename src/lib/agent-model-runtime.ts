@@ -121,7 +121,7 @@ export function getAgentProviderOptions(
   const openRouterEffort = configuredOpenRouterEffort && allowedOpenRouterEfforts.has(configuredOpenRouterEffort)
     ? configuredOpenRouterEffort
     : runtime.spec.id === 'grok-4.5'
-      ? 'low'
+      ? 'medium'
       : undefined;
 
   return {

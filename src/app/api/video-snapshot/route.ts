@@ -7,7 +7,7 @@ import { VIDEO_PLACEHOLDER_IMAGE } from '@/lib/editor/timeline-derivations'
 import { estimateVideoCredits, normalizeVideoModelId, resolveVideoGenerationRoute } from '@/lib/video-model-capabilities'
 import type { VideoMeta } from '@/types'
 
-export const maxDuration = 800
+export const maxDuration = 1800
 
 export async function POST(req: NextRequest) {
   try {

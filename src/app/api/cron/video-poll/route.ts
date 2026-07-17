@@ -3,7 +3,7 @@ import { getSupabaseAdmin } from '@/lib/supabase/service'
 import { handleVideoFailure } from '@/lib/video-lifecycle'
 import type { VideoMeta } from '@/types'
 
-export const maxDuration = 800
+export const maxDuration = 1800
 
 type SnapshotProject = { user_id?: string } | Array<{ user_id?: string }>
 

@@ -1,3 +1,3 @@
 export function hasRemotionAudioSources(code: string): boolean {
-  return /<\s*(?:Audio|Video)\b|React\.createElement\(\s*(?:Audio|Video)\b/.test(code)
+  return /<\s*(?:Remotion\.)?(?:Audio|Video|OffthreadVideo)\b|React\.createElement\(\s*(?:Remotion\.)?(?:Audio|Video|OffthreadVideo)\b/.test(code)
 }
