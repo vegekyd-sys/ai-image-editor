@@ -77,6 +77,8 @@ app-store-assets/**/*.mov
 /scripts/*
 !/scripts/makaron-release-check.mjs
 !/scripts/makaron-worktree-fastpath.mjs
+!/scripts/smoke-gpt56-agent.ts
+!/scripts/smoke-gpt56-cache.ts
 !/scripts/backfill-annual-subscription-credits.mjs
 !/scripts/audit-liquid-glass-perf.mjs
 !/scripts/studio-run-golden.ts
@@ -101,6 +103,7 @@ test-kling.mjs
 /output/
 /outputs/
 /artifacts/
+/work/
 /.playwright-cli/
 /.remotion-bundle-local/
 

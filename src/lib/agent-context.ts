@@ -63,7 +63,7 @@ export interface PromptContextOptions {
 export interface PromptContextResult {
   fullPrompt: string;
   /** Prior user/assistant turns (excluding the current user prompt).
-   *  Passed to streamText as the messages[] prefix so Bedrock sees a real
+   *  Passed to streamText as the messages[] prefix so the model sees a real
    *  multi-turn conversation — required for per-turn cachePoint (B7). */
   history: ModelMessage[];
   snapshotImages: string[];

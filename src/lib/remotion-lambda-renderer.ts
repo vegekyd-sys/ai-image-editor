@@ -124,8 +124,7 @@ export function sanitizeRemotionAwsEnvironment(): void {
 async function withRemotionAwsCredentials<T>(fn: () => Promise<T>): Promise<T> {
   // @remotion/lambda-client reads REMOTION_AWS_* before AWS_* by itself.
   // Do not temporarily overwrite global AWS_* in the Next.js process: concurrent
-  // agent requests may initialize Bedrock with Remotion's IAM user and then fail
-  // Sonnet 5 calls with an unrelated 403.
+  // requests may initialize another AWS client with Remotion's IAM user.
   sanitizeRemotionAwsEnvironment()
   return fn()
 }

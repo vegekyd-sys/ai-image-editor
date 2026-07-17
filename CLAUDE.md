@@ -87,7 +87,7 @@ printf 'value' | npx vercel env add NAME preview --force
 
 Tips prompt 迭代到 V42，均分 7.3。V34 历史最高 8.03，V42 是 prompt 架构重构后首测（7.3）。**当前生图和 tips 均走 Google 直连** `gemini-3.1-flash-image-preview`（2026-03-25 从 OpenRouter 切换，因 OpenRouter 账号被封）。tips/preview 缩略图不走 MOCK_AI（已关闭）。
 
-**App 计费 + 订阅系统（2026-04-15，worktree-subscription-billing 分支）**：混合计费模型 — Token 类（OpenRouter/Bedrock/Google）实时按量 + 按次类（Kling/Suno/ComfyUI）查表 + 按秒（视频）。1 Credit = $0.01，markup 2x。
+**App 计费 + 订阅系统（2026-04-15，worktree-subscription-billing 分支）**：混合计费模型 — Token 类（Azure OpenAI/OpenRouter/Google）实时按量 + 按次类（Kling/Suno/ComfyUI）查表 + 按秒（视频）。1 Credit = $0.01，markup 2x。
 
 **计费架构**：
 - `token_rates` DB 表（Admin 可配）：模型 token 价格，支持精确匹配 + 前缀匹配。图片输出 vs 文本输出用 `:text` 后缀区分（Gemini Flash 图片 $60/1M vs 文本 $3/1M）
@@ -107,7 +107,7 @@ Tips prompt 迭代到 V42，均分 7.3。V34 历史最高 8.03，V42 是 prompt 
 
 **环境变量**：`STRIPE_SECRET_KEY`、`STRIPE_WEBHOOK_SECRET`、6 个 `STRIPE_PRICE_*`（月付+年付 × 3 档）。Stripe Products 用 `scripts/setup-stripe-plans.ts` 创建。
 
-**Remotion 渲染引擎（2026-04-09，worktree-workspace-agent 分支）**：Agent 的 `run_code` design 模式用 Remotion 渲染。静态图用 `renderStillOnWeb`（JPEG截图），动画用 `@remotion/player`（带控制条）+ poster 截图。Design JSON 持久化到 workspace `code/{snapId}.json`，刷新后恢复。MP4 导出用 `renderMediaOnWeb`（浏览器端 h264/mp4）。JSX 编译从 Sucrase 切换到 `@babel/standalone`（支持现代语法）。Satori 已移除（design 模式替代）。Agent 模型升级为 Opus 4.6（`us.anthropic.claude-opus-4-6-v1`）。`run_code` 新增 `image_refs` 参数让模型自选带哪些图片。所有视觉输出默认用 design 模式，sharp 只做格式转换。`video-design` skill 提供视频创作四问自检框架。
+**Remotion 渲染引擎（2026-04-09，worktree-workspace-agent 分支）**：Agent 的 `run_code` design 模式用 Remotion 渲染。静态图用 `renderStillOnWeb`（JPEG截图），动画用 `@remotion/player`（带控制条）+ poster 截图。Design JSON 持久化到 workspace `code/{snapId}.json`，刷新后恢复。MP4 导出用 `renderMediaOnWeb`（浏览器端 h264/mp4）。JSX 编译从 Sucrase 切换到 `@babel/standalone`（支持现代语法）。Satori 已移除（design 模式替代）。Agent 默认模型为 Azure Responses 上的 GPT-5.6 Terra，并可选 GPT-5.6 Sol / Luna、Grok 4.5 与 DeepSeek V4 Pro。`run_code` 新增 `image_refs` 参数让模型自选带哪些图片。所有视觉输出默认用 design 模式，sharp 只做格式转换。`video-design` skill 提供视频创作四问自检框架。
 
 **Agent 视频路由（2026-05-28）**：`generate_animation` 是视频任务默认路径；文字相关视频需求（加字幕/加花字/加标题/加文案）走 `generate_animation`，让文字作为视频内容自然生成。其他视频包装/记录/剪辑类需求仍按 `agent.md` 的内容 vs 包装规则路由，不能把所有包装需求都默认改成生成路线。
 
@@ -129,7 +129,7 @@ Tips prompt 迭代到 V42，均分 7.3。V34 历史最高 8.03，V42 是 prompt 
 
 **模型切换 gemini-3.1-flash-image-preview（2026-02-27）**：`IMAGE_MODEL` 环境变量控制生图模型（默认 `gemini-3-pro-image-preview`），tips 和生图共用同一模型。切换后 tips 速度从 20+s 首 tip 降至 ~3-5s 全部出齐（4x 提速）。新模型额外能力：输出分辨率控制（512px/1K/2K/4K）、超宽比例（1:4/4:1/1:8/8:1）、Thinking 级别（minimal/high）、图片搜索 Grounding、更多参考图（10 物品+4 人物）。
 
-**Tips 速度 vs 质量（已解决，2026-02-27）**：gemini-3.1-flash-image-preview 同时解决速度和质量——tips 全部出齐 ~5s（之前 gemini-3-pro 首 tip 20+s），质量用户确认满意。`TIPS_PROVIDER` 可切换：`openrouter`（默认）/ `bedrock`（Sonnet）/ `google`。`TIPS_TEMPERATURE=0.9`。
+**Tips 速度 vs 质量（已解决，2026-02-27）**：gemini-3.1-flash-image-preview 同时解决速度和质量——tips 全部出齐 ~5s（之前 gemini-3-pro 首 tip 20+s），质量用户确认满意。`TIPS_PROVIDER` 可切换：`openrouter`（默认）/ `google`。`TIPS_TEMPERATURE=0.9`。
 
 **Prompt 架构（V42 重构）**：`.md` 文件是唯一真相来源，gemini.ts system prompt 极简化（2行），batch-test TIPS_SYSTEM_PROMPT 极简化（3行）。enhance.md 包含 7 个方向（A-F + G 净化场景）、FIRST cleanup 第一句约束、jawline 瘦脸条件、眼睛禁改。creative.md 升级 cleanup 为第一句。wild.md 保留原版详细四问自检。V42 遗留问题：wild 眼镜禁止陷阱仍突破、enhance 方向F 人物重新生成、creative 风格化重绘、tip 数量分类不稳定。
 
@@ -141,7 +141,7 @@ Phase 1（认证）、Phase 2（数据持久化）和 Phase 3（项目列表）�
 
 **CUI 消息滚动（2026-05-05 简化）**：去掉了 lazy rendering（INITIAL_MSG_COUNT=12 + IntersectionObserver load-more + scroll restoration），所有消息直接全量渲染。之前三套 scroll 系统（mount ResizeObserver pin-to-bottom、IntersectionObserver load-more、auto-scroll effect）互相打架导致两个 bug：①新消息不滚到底部 ②向上滚历史消息不加载。现在只保留：mount ResizeObserver（5s 内 pin to bottom 等图片加载）+ auto-scroll effect（streaming 时跟踪底部，bigJump 时 instant scroll）+ userScrolledUp ref（用户手动上滚时不打断）。
 
-**v0.6 Makaron Agent（主体完成）**：Claude Sonnet 4.6（Claude Agent SDK + AWS Bedrock）作为 agent 大脑，OpenRouter Gemini 作为生图工具。GUI/CUI 双模切换已实现：GUI = 图片画布模式，CUI = 全屏对话模式（Claude App 风格，无气泡 assistant 文字 + 深色 pill user bubble）。CUI 从右侧滑入，支持 PiP 缩略图、inline 图片（持久化后重进仍显示）。`analyze_image` tool 让 Agent 用 Sonnet 原生视觉看图。AgentStatusBar 常驻底部显示打招呼文字和 Chat 按钮。上传图片不再触发 AI 分析和 CUI 弹出，直接显示 GUI + tips。Agent 消息全量持久化到 Supabase，退出重进历史对话完整恢复。Token 级流式输出（includePartialMessages: true）。多 turn 内容分气泡（analyze 前/后分开）。iOS 右滑拦截（history.pushState）。
+**Makaron Agent（当前）**：默认大脑是 Azure Responses 上的 GPT-5.6 Terra，可选 GPT-5.6 Sol / Luna；OpenRouter Gemini 作为生图工具。GUI/CUI 双模切换已实现：GUI = 图片画布模式，CUI = 全屏对话模式（Claude App 风格，无气泡 assistant 文字 + 深色 pill user bubble）。CUI 从右侧滑入，支持 PiP 缩略图、inline 图片（持久化后重进仍显示）。`analyze_image` tool 让支持视觉的主模型直接看图。AgentStatusBar 常驻底部显示打招呼文字和 Chat 按钮。上传图片不再触发 AI 分析和 CUI 弹出，直接显示 GUI + tips。Agent 消息全量持久化到 Supabase，退出重进历史对话完整恢复。Token 级流式输出，多 turn 内容分气泡（analyze 前/后分开）。iOS 右滑拦截（history.pushState）。
 
 **v0.8 PiP 边缘收起**：去掉 72px small 模式（只保留 116/200px）。拖到边角后再推 60px 才收起（两步 UX）。收起后露出 28px peek + 箭头，tap 或 swipe 均可展开。左右两边均可收起。已知：左边收起后用 iOS 右滑手势会触发 back gesture（而非展开 PiP），用户接受 tap 展开作为 workaround。
 
@@ -169,7 +169,7 @@ Phase 1（认证）、Phase 2（数据持久化）和 Phase 3（项目列表）�
 
 **AnimateSheet 交互**：底部 sheet（mobile maxHeight 66dvh，z-index 202 > VideoResultCard），支持两种 mode：`create`（创建视频）和 `detail`（查看详情，只读）。智能底部按钮：空 prompt → "✨ 生成脚本"，有 prompt → "🎬 生成视频"，generating/submitting → disabled。`detailAnimation` state 控制 detail 模式，`>` 按钮触发。时长选项：3s/5s/7s/10s/15s/智能。
 
-**脚本生成**：统一用 Agent（Claude Sonnet via Bedrock）替代 Gemini `/api/animate/prompt`。Agent 后台运行不切 CUI，脚本流式写入 `animationState.prompt`，同时存入 CUI messages。`animPromptInFlightRef` 防重复调用。图片以 URL 传给 Bedrock（不传 base64，避免 5-10MB 上传）。`agent.md` 指示 Agent 只输出脚本、不调 `generate_animation` tool。
+**脚本生成**：统一用默认 Agent（GPT-5.6 Terra via Azure Responses）替代 Gemini `/api/animate/prompt`。Agent 后台运行不切 CUI，脚本流式写入 `animationState.prompt`，同时存入 CUI messages。`animPromptInFlightRef` 防重复调用。图片优先以 URL 传给模型（不传 base64，避免 5-10MB 上传）。`agent.md` 指示 Agent 只输出脚本、不调 `generate_animation` tool。
 
 **状态持久化**：`useProject.loadProject` 查询 `project_animations` 表（completed + processing），重进项目恢复已完成视频或继续轮询进行中任务。`saveSnapshot` 上传完后通过 `onUploaded` 回调更新 `snapshot.imageUrl`（解决新 snapshot 无 URL 导致 ▶ 报错的问题）。
 
@@ -183,7 +183,7 @@ Phase 1（认证）、Phase 2（数据持久化）和 Phase 3（项目列表）�
 
 **放弃任务**：polling 状态下 AnimateSheet 显示"放弃"按钮，点击停止轮询、animationState 回到 ready（保留 prompt），DB 标记 `abandoned`。PiAPI 无 cancel API，服务端继续渲染但忽略结果。
 
-**关键限制**：images 数组限 7 张（Kling v3-omni 上限），必须用 Supabase Storage URL。Agent 写脚本约 2 分钟（Bedrock Sonnet 多图 TTFT 慢）。时长支持 3-15s + 智能模式（不传 duration，API 自行决定）。
+**关键限制**：images 数组限 7 张（Kling v3-omni 上限），必须用 Supabase Storage URL。Agent 写脚本耗时取决于输入图片数量和 Azure 模型推理。时长支持 3-15s + 智能模式（不传 duration，API 自行决定）。
 
 **项目页 badges**：每个项目卡片底部显示 `N snaps` badge（>1 时）+ ▶ 播放标志（有已完成视频时）。查询 `project_animations` 表 `status=completed`。
 
@@ -224,6 +224,9 @@ Phase 1（认证）、Phase 2（数据持久化）和 Phase 3（项目列表）�
 
 ## Environment Variables
 
+- `AZURE_OPENAI_API_KEY` (required) — Azure OpenAI key used by GPT-5.6 Agent models and GPT Image.
+- `AZURE_OPENAI_RESPONSES_URL` — GPT-5.6 Responses endpoint; defaults to the production Azure preview endpoint.
+- `AZURE_OPENAI_AGENT_REASONING_EFFORT` — Optional GPT-5.6 reasoning override: `none|minimal|low|medium|high|xhigh` (Terra defaults to `medium`).
 - `GOOGLE_API_KEY` (required) — Google Gemini API key
 - `AI_PROVIDER` — `'google'` (default) or `'openrouter'`
 - `IMAGE_MODEL` — 生图模型 ID（默认 `gemini-3-pro-image-preview`），tips 和生图共用。当前线上 `gemini-3.1-flash-image-preview`
@@ -288,12 +291,12 @@ Key components in `src/components/`:
 
 `src/lib/gemini.ts` — Tips 生成 + Chat 会话管理（保留）:
 - **Dual provider**: Google SDK / OpenRouter，`AI_PROVIDER` env var
-- **Tips provider**: `TIPS_PROVIDER`（`openrouter` 默认 / `bedrock` / `google`）
+- **Tips provider**: `TIPS_PROVIDER`（`openrouter` 默认 / `google`）
 - **`streamTips`**: 图片分析 + prompt 模板 → 逐 tip 流式输出
 - **Prompt templates**: `src/lib/prompts/*.md`（enhance, creative, wild, captions, pony_translate, wai_translate）
 
-`src/lib/agent.ts` — Makaron Agent（Claude Opus 4.6 via Bedrock）:
-- **Model**: `us.anthropic.claude-opus-4-6-v1`
+`src/lib/agent.ts` — Makaron Agent（默认 GPT-5.6 Terra via Azure Responses）:
+- **Models**: `gpt-5.6-terra`（默认）、`gpt-5.6-sol`、`gpt-5.6-luna`，以及 Grok / DeepSeek 备选
 - **Tools**: `generate_image`、`analyze_image`、`rotate_camera`、`generate_animation`、`run_code`（含 `image_refs`）、`list_files`、`read_file`、`write_file`、`delete_file`
 - **run_code design 模式**: 返回 React JSX → 浏览器渲染（still: renderStillOnWeb → JPEG, animation: Player + poster）
 - **共享工具函数**: `validateImageIndex` + `fetchImageBuffer`（所有 tool 复用）
@@ -361,9 +364,9 @@ Both tips and chat use the same SSE pattern:
 | tool description（`agent.ts` 里） | **工具层**：参数含义、图的角色、输出格式、边界条件 |
 
 ### 最佳实践
-1. **工具描述自包含**：假设 Claude 只看工具描述，应该知道如何正确调用它。不要在 agent.md 里重复工具的参数细节。
+1. **工具描述自包含**：假设主模型只看工具描述，应该知道如何正确调用它。不要在 agent.md 里重复工具的参数细节。
 2. **自检问题 > 规则清单**：`"先答：用户想 FIX 现在的，还是 START FRESH？"` 比 `"当用户说'重新做'时设 true"` 更健壮，让模型自己推理。
-3. **把意图决策变成显式参数**：让 Claude 显式传参（如 `useOriginalAsBase`），不要让工具内部猜意图，职责清晰。
+3. **把意图决策变成显式参数**：让主模型显式传参（如 `useOriginalAsBase`），不要让工具内部猜意图，职责清晰。
 4. **Context injection 优于重复说明**：`[图片分析结果]`、`[对话历史]` 等 injected context 比在 system prompt 里重复描述图片信息更高效。
 
 ---

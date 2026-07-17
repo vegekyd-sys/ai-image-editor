@@ -3,6 +3,7 @@ import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
 
 const agentSource = readFileSync(join(process.cwd(), 'src/lib/agent.ts'), 'utf8');
+const agentModelRuntimeSource = readFileSync(join(process.cwd(), 'src/lib/agent-model-runtime.ts'), 'utf8');
 const agentStreamSource = readFileSync(join(process.cwd(), 'src/lib/agentStream.ts'), 'utf8');
 const agentContextSource = readFileSync(join(process.cwd(), 'src/lib/agent-context.ts'), 'utf8');
 const sseRouteSource = readFileSync(join(process.cwd(), 'src/app/api/agent/route.ts'), 'utf8');
@@ -53,8 +54,10 @@ describe('agent terminal contract wiring', () => {
     expect(agentSource).toContain('Never shorten approved narration, subtitles, scenes, animation, or visual detail');
     expect(agentSource).toContain('composition_parts.directory');
     expect(agentSource).toContain('Split the content across new numbered files');
-    expect(agentSource).toContain("? effort : 'medium'");
-    expect(agentSource).toContain("keep: { type: 'tool_uses', value: 24 }");
+    expect(agentSource).toContain('providerOptions: getAgentProviderOptions(runtime)');
+    expect(agentModelRuntimeSource).toContain('promptCacheKey: runtime.promptCacheKey');
+    expect(agentModelRuntimeSource).toContain("ttl: '30m'");
+    expect(agentSource).toContain("return { designPath: input.design_path };");
     expect(agentSource).toContain('if (toolName) lastTool = toolName');
     expect(agentContextSource).toContain('activeStudioContinuation');
     expect(agentContextSource).toContain('[Active Studio Run]');

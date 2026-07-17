@@ -1,23 +1,30 @@
-import { createBedrockAnthropic } from '@ai-sdk/amazon-bedrock/anthropic';
+import { createHash } from 'node:crypto';
 import { createOpenAI } from '@ai-sdk/openai';
 import { createOpenRouter } from '@openrouter/ai-sdk-provider';
 import type { LanguageModel, ModelMessage } from 'ai';
 import {
   resolveAgentModelSpec,
   type AgentModelPreference,
+  type AgentReasoningEffort,
   type AgentModelSpec,
 } from './agent-models';
-import { normalizeBedrockToolUseInputs } from './bedrock-tool-inputs';
-
-const BEDROCK_CACHE_CONTROL = {
-  anthropic: { cacheControl: { type: 'ephemeral' } },
-} as const;
+import { normalizeToolCallInputs } from './tool-inputs';
+import { createAzureOpenAIResponsesModel } from './azure-openai-responses';
 
 export interface AgentModelRuntime {
   spec: AgentModelSpec;
   model: LanguageModel;
-  cachePointProviderOptions?: Record<string, any>;
+  promptCacheKey?: string;
   normalizeMessages(messages: ModelMessage[]): ModelMessage[];
+}
+
+export function createAzureAgentPromptCacheKey(
+  modelId: string,
+  projectId: string,
+): string {
+  const modelTier = modelId.replace(/^gpt-5\.6-/, '').replace(/[^a-z0-9-]/gi, '-');
+  const projectHash = createHash('sha256').update(projectId).digest('hex').slice(0, 40);
+  return `mk-${modelTier}-${projectHash}`;
 }
 
 export function createAgentModelRuntime(
@@ -26,17 +33,13 @@ export function createAgentModelRuntime(
 ): AgentModelRuntime {
   const spec = resolveAgentModelSpec(preference, process.env.AGENT_MODEL);
 
-  if (spec.provider === 'bedrock-anthropic') {
-    const bedrockAnthropic = createBedrockAnthropic({
-      region: process.env.AWS_REGION?.trim(),
-      accessKeyId: process.env.AWS_ACCESS_KEY_ID?.trim(),
-      secretAccessKey: process.env.AWS_SECRET_ACCESS_KEY?.trim(),
-    });
+  if (spec.provider === 'azure-openai') {
+    const promptCacheKey = createAzureAgentPromptCacheKey(spec.id, projectId);
     return {
       spec,
-      model: bedrockAnthropic(spec.providerModelId),
-      cachePointProviderOptions: BEDROCK_CACHE_CONTROL,
-      normalizeMessages: normalizeBedrockToolUseInputs,
+      model: createAzureOpenAIResponsesModel(spec.providerModelId),
+      promptCacheKey,
+      normalizeMessages: normalizeToolCallInputs,
     };
   }
 
@@ -53,7 +56,7 @@ export function createAgentModelRuntime(
     return {
       spec,
       model: deepseek.chat(spec.providerModelId),
-      normalizeMessages: normalizeBedrockToolUseInputs,
+      normalizeMessages: normalizeToolCallInputs,
     };
   }
 
@@ -72,36 +75,36 @@ export function createAgentModelRuntime(
         session_id: `makaron:${projectId}`,
       },
     }),
-    normalizeMessages: normalizeBedrockToolUseInputs,
+    normalizeMessages: normalizeToolCallInputs,
   };
 }
 
 export function getAgentProviderOptions(
   runtime: AgentModelRuntime,
-  options: {
-    anthropicThinkingMode?: string;
-    reasoningEffort?: string;
-    anthropicContextManagement?: Record<string, unknown>;
-  },
 ): Record<string, any> {
-  if (runtime.spec.provider === 'bedrock-anthropic') {
+  if (runtime.spec.provider === 'azure-openai') {
+    const allowedEfforts = new Set<AgentReasoningEffort>([
+      'none', 'minimal', 'low', 'medium', 'high', 'xhigh',
+    ]);
+    const configuredEffort = process.env.AZURE_OPENAI_AGENT_REASONING_EFFORT
+      ?.trim()
+      .toLowerCase() as AgentReasoningEffort | undefined;
+    const reasoningEffort = configuredEffort && allowedEfforts.has(configuredEffort)
+      ? configuredEffort
+      : runtime.spec.defaultReasoningEffort;
     return {
-      anthropic: {
-        disableParallelToolUse: true,
-        toolStreaming: false,
-        ...(options.anthropicThinkingMode
-          ? { thinking: { type: options.anthropicThinkingMode } }
-          : {}),
-        ...(options.anthropicThinkingMode !== 'disabled' && options.reasoningEffort
-          ? { effort: options.reasoningEffort }
-          : {}),
-        ...(options.anthropicContextManagement
-          ? { contextManagement: options.anthropicContextManagement }
-          : {}),
+      azure: {
+        parallelToolCalls: false,
+        store: false,
+        promptCacheKey: runtime.promptCacheKey,
+        promptCacheOptions: {
+          mode: 'implicit',
+          ttl: '30m',
+        },
+        ...(reasoningEffort ? { reasoningEffort } : {}),
       },
     };
   }
-
 
   if (runtime.spec.provider === 'deepseek') {
     return {
@@ -111,9 +114,8 @@ export function getAgentProviderOptions(
     };
   }
 
-  // Keep provider overrides independent so a temporary Sonnet high/max setting
-  // does not silently change Grok. Both providers default to the dev baseline:
-  // medium reasoning effort.
+  // Keep OpenRouter reasoning independent from Azure so one provider's tuning
+  // cannot silently add several minutes of latency to another provider.
   const configuredOpenRouterEffort = process.env.OPENROUTER_AGENT_REASONING_EFFORT?.trim().toLowerCase();
   const allowedOpenRouterEfforts = new Set(['none', 'minimal', 'low', 'medium', 'high', 'xhigh', 'max']);
   const openRouterEffort = configuredOpenRouterEffort && allowedOpenRouterEfforts.has(configuredOpenRouterEffort)

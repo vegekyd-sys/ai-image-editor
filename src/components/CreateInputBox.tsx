@@ -15,6 +15,51 @@ function Spinner({ size = 20 }: { size?: number }) {
   );
 }
 
+function HydrationSafeAction({
+  fallbackHref,
+  className,
+  disabled = false,
+  onClick,
+  onTouchStart,
+  style,
+  children,
+}: {
+  fallbackHref?: string;
+  className?: string;
+  disabled?: boolean;
+  onClick: (event: React.MouseEvent<HTMLElement>) => void;
+  onTouchStart?: (event: React.TouchEvent<HTMLElement>) => void;
+  style: React.CSSProperties;
+  children: React.ReactNode;
+}) {
+  if (fallbackHref && !disabled) {
+    return (
+      <a
+        href={fallbackHref}
+        className={className}
+        data-testid="create-project"
+        style={{ ...style, textDecoration: 'none' }}
+      >
+        {children}
+      </a>
+    );
+  }
+
+  return (
+    <button
+      type="button"
+      className={className}
+      data-testid="create-project"
+      disabled={disabled}
+      onClick={onClick}
+      onTouchStart={onTouchStart}
+      style={style}
+    >
+      {children}
+    </button>
+  );
+}
+
 export interface CreateInputBoxProps {
   input: CreateInputState;
   slotWidth: number;
@@ -36,6 +81,7 @@ export interface CreateInputBoxProps {
   actionSelectedNote?: string;
   showLoginIcon?: boolean;
   submitWhenEmpty?: boolean;
+  fallbackHref?: string;
   onSubmit: () => void;
   onSlotClick?: () => void;
   onFilesSelected?: (files: File[]) => void;
@@ -81,6 +127,7 @@ export default function CreateInputBox({
   actionSelectedNote = 'Photo selected',
   showLoginIcon = false,
   submitWhenEmpty = false,
+  fallbackHref,
   onSubmit,
   onSlotClick,
   onFilesSelected,
@@ -167,12 +214,12 @@ export default function CreateInputBox({
     }
     openFilePicker();
   }, [creating, files.length, onSubmit, openFilePicker, submitWhenEmpty, text]);
-  const handlePrimaryActionClick = useCallback((e?: React.MouseEvent) => {
+  const handlePrimaryActionClick = useCallback((e?: React.MouseEvent<HTMLElement>) => {
     e?.stopPropagation();
     if (Date.now() - primaryTouchHandledAtRef.current < 700) return;
     handlePrimaryAction();
   }, [handlePrimaryAction]);
-  const handlePrimaryActionTouchStart = useCallback((e: React.TouchEvent) => {
+  const handlePrimaryActionTouchStart = useCallback((e: React.TouchEvent<HTMLElement>) => {
     e.preventDefault();
     e.stopPropagation();
     primaryTouchHandledAtRef.current = Date.now();
@@ -196,6 +243,10 @@ export default function CreateInputBox({
       }}
     />
   );
+
+  const progressiveHref = fallbackHref && !creating && files.length === 0 && !text.trim()
+    ? fallbackHref
+    : undefined
 
   if (actionMode) {
     const firstPreview = previews[0];
@@ -415,9 +466,8 @@ export default function CreateInputBox({
                 {hasFiles ? actionSelectedNote : actionIdleNote}
               </span>
             </div>
-              <button
-              type="button"
-              data-testid="create-project"
+              <HydrationSafeAction
+              fallbackHref={progressiveHref || undefined}
               onClick={handlePrimaryActionClick}
               onTouchStart={handlePrimaryActionTouchStart}
               disabled={creating}
@@ -448,7 +498,7 @@ export default function CreateInputBox({
                   <path d="m13 6 6 6-6 6" />
                 </svg>
               )}
-            </button>
+            </HydrationSafeAction>
           </div>
         </div>
         {hiddenFileInput}
@@ -715,19 +765,10 @@ export default function CreateInputBox({
             overrideLabel={overrideLabel}
             direction={skillDirection}
           />
-          <button
+          <HydrationSafeAction
+            fallbackHref={progressiveHref || undefined}
             className="mkr-create-btn"
-            data-testid="create-project"
-            onClick={(e) => {
-              e.stopPropagation();
-              if (text.trim() || files.length > 0) {
-                onSubmit();
-              } else if (submitWhenEmpty) {
-                onSubmit();
-              } else {
-                openFilePicker();
-              }
-            }}
+            onClick={handlePrimaryActionClick}
             disabled={creating}
             style={{ flexShrink: 0, display: 'flex', alignItems: 'center', gap: '5px', padding: '5px 10px', borderRadius: '14px', background: 'none', border: 'none', color: 'rgba(217,70,239,0.9)', fontSize: '0.75rem', fontWeight: 500, letterSpacing: '0.03em', cursor: creating ? 'default' : 'pointer', fontFamily: 'inherit' }}
           >
@@ -739,7 +780,7 @@ export default function CreateInputBox({
               <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round"><line x1="12" y1="5" x2="12" y2="19" /><line x1="5" y1="12" x2="19" y2="12" /></svg>
             )}
             {createLabel}
-          </button>
+          </HydrationSafeAction>
         </div>
       </div>
       {/* Hidden file input for photo/video uploads */}

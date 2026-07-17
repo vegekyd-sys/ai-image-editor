@@ -389,7 +389,7 @@ try {
 
   for (const [helpArgs, expectedText] of [
     [[], /Makaron CLI/],
-    [['--help'], /Makaron CLI/],
+    [['--help'], /--agent-model <name>/],
     [['login', '--help'], /Usage: makaron login/],
     [['create', '--help'], /Usage: makaron create/],
     [['chat', '--help'], /--agent-model <name>/],
@@ -432,6 +432,18 @@ try {
   }
 
   {
+    const result = await expectHelp(['--help'], /--agent-model <name>/);
+    assert.match(result.stdout, /--image-model <name>/);
+    assert.match(result.stdout, /--video-model <name>/);
+    assert.match(result.stdout, /gpt-5\.6-terra/);
+    assert.match(result.stdout, /gpt-5\.6-sol/);
+    assert.match(result.stdout, /gpt-5\.6-luna/);
+    assert.match(result.stdout, /deepseek-v4-pro/);
+    assert.match(result.stdout, /MAKARON_AGENT_MODEL/);
+    assert.match(result.stdout, /legacy --model flag is deprecated/);
+  }
+
+  {
     const result = await expectSuccess(['chat', '--project', 'auto', '--json', '-b', 'make a compact image']);
     const data = JSON.parse(result.stdout);
     assert.deepEqual(data, {
@@ -458,7 +470,8 @@ try {
   {
     const result = await expectFailure(['chat', '--project', 'project-models-1', '--agent-model', 'mystery-model', 'fail clearly']);
     assert.match(result.stderr, /Unknown agent model: mystery-model/);
-    assert.match(result.stderr, /sonnet-5/);
+    assert.match(result.stderr, /gpt-5\.6-terra/);
+    assert.doesNotMatch(result.stderr, /sonnet|opus/i);
   }
 
   {

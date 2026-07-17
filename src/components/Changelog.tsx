@@ -10,6 +10,33 @@ interface ChangelogEntry {
 
 const CHANGELOG: ChangelogEntry[] = [
   {
+    date: '2026-07-16',
+    en: { title: 'GPT-5.6 Agent Lineup', items: [
+      'GPT-5.6 Terra is now the recommended default Agent model, with GPT-5.6 Sol and GPT-5.6 Luna available for maximum capability or faster lower-cost work.',
+      'Claude models have been retired from Makaron; existing project selections automatically move to Auto and use Terra.',
+    ]},
+    zh: { title: 'GPT-5.6 Agent 全系上线', items: [
+      'GPT-5.6 Terra 现已成为推荐默认 Agent 模型，同时提供能力更强的 GPT-5.6 Sol 与更快、更低成本的 GPT-5.6 Luna。',
+      'Makaron 已下线 Claude 模型；旧项目中的 Claude 选择会自动回到 Auto，并使用 Terra。',
+    ]},
+  },
+  {
+    date: '2026-07-15',
+    en: { title: 'A Faster, Smoother Home', items: [
+      'Home buttons now respond immediately, including Try Free, Create, Sign in, and the Explore / Projects switcher.',
+      'Images and videos now stay ready as you scroll or switch between Explore and Projects, without flashing back to cover frames.',
+    ]},
+    zh: { title: '首页更快、更顺滑', items: [
+      '首页按钮现在点下即可响应，包括 Try Free、Create、登录，以及探索 / 项目切换。',
+      '上下滚动或在探索与项目之间切换时，图片和视频会保持就绪，不再闪回封面图。',
+    ]},
+  },
+  {
+    date: '2026-07-14',
+    en: { title: 'Japanese & Traditional Chinese', items: ['Makaron now supports Japanese and Traditional Chinese across the app.'] },
+    zh: { title: '日语与繁体中文', items: ['Makaron 现已支持日语和繁体中文。'] },
+  },
+  {
     date: '2026-07-11',
     en: { title: 'Choose Your Agent Model', items: [
       'Makaron Agent can now use Sonnet 4.6, Sonnet 5, Opus 4.8, Grok 4.5, or DeepSeek V4 Pro — choose the right brain for each project.',
@@ -798,6 +825,7 @@ const iOSAppTopGap = 'max(96px, calc(env(safe-area-inset-top, 0px) + 40px))';
 const iOSAppBottomGap = 'max(14px, env(safe-area-inset-bottom, 0px))';
 
 export default function Changelog({ onClose, locale }: { onClose: () => void; locale: string }) {
+  // Release notes stay bilingual: Simplified Chinese uses zh, every other locale falls back to en.
   const isZh = locale === 'zh';
   const [isIOSApp, setIsIOSApp] = useState(false);
 

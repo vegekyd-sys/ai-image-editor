@@ -57,6 +57,16 @@ describe('Remotion export worker contract', () => {
     expect(migration).toContain('idx_remotion_export_jobs_status_created')
   })
 
+  it('deduplicates concurrent active exports for the same composition', () => {
+    const migration = read('supabase/migrations/20260717000000_dedupe_active_remotion_exports.sql')
+    const exporter = read('src/lib/remotion-export.ts')
+
+    expect(migration).toContain('CREATE UNIQUE INDEX IF NOT EXISTS idx_remotion_export_jobs_active_fingerprint')
+    expect(migration).toContain("WHERE status IN ('queued', 'rendering')")
+    expect(exporter).toContain("error?.code === '23505'")
+    expect(exporter).toContain(".in('status', ['rendering', 'queued'])")
+  })
+
   it('renders MP4s server-side and records workspace output', () => {
     const server = read('src/lib/remotion-server.ts')
     const exporter = read('src/lib/remotion-export.ts')

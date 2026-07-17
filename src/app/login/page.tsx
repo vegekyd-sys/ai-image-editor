@@ -6,8 +6,10 @@ import { createClient } from '@/lib/supabase/client'
 import type { SupabaseClient } from '@supabase/supabase-js'
 import { useLocale, LocaleToggle } from '@/lib/i18n'
 import { isMakaronIOSApp, userAgentHasMakaronIOSToken } from '@/lib/native-app'
+import { isNativeOAuthAvailable, openNativeOAuthSession } from '@/lib/native-oauth'
 import RollingTagline from '@/components/RollingTagline'
 import { MakaronSpark, MAKARON_WORDMARK_STYLE } from '@/components/MakaronLogo'
+import { useHydrated } from '@/hooks/useHydrated'
 import { createMetaEventId, trackMetaEvent } from '@/lib/marketing/meta-pixel'
 
 type View = 'form' | 'verify-otp' | 'forgot-password' | 'reset-password'
@@ -27,9 +29,10 @@ function isAppleLoginEnabled(): boolean {
 
 export default function LoginPage() {
   const { t } = useLocale()
+  const hydrated = useHydrated()
   const [view, setView] = useState<View>('form')
-  const [inApp] = useState(isInAppBrowser)
-  const [iosApp] = useState(isMakaronIOSApp)
+  const inApp = hydrated && isInAppBrowser()
+  const iosApp = hydrated && isMakaronIOSApp()
   const [appleLoginEnabled] = useState(isAppleLoginEnabled)
   const showAppleOAuth = inApp && appleLoginEnabled
   const showGoogleOAuth = !inApp || iosApp || showAppleOAuth
@@ -109,19 +112,82 @@ export default function LoginPage() {
     return `/home?skill=${encodeURIComponent(skillId)}`
   }
 
-  function redirectAfterAuth() {
+  function withWelcomeParam(url: string, welcome?: boolean): string {
+    if (!welcome) return url
+    try {
+      const parsed = new URL(url, window.location.origin)
+      parsed.searchParams.set('welcome', '1')
+      return parsed.pathname + parsed.search + parsed.hash
+    } catch {
+      const sep = url.includes('?') ? '&' : '?'
+      return `${url}${sep}welcome=1`
+    }
+  }
+
+  function redirectAfterAuth(options?: { fallback?: string; welcome?: boolean }) {
     let returnUrl = getReturnUrl()
     sessionStorage.removeItem('mkr_return_url')
     localStorage.removeItem('mkr_return_url')
     // mkr_return_text and mkr_return_skill are consumed by the home page on mount
     returnUrl = resolveReturnUrlForRuntime(returnUrl)
-    window.location.href = returnUrl || '/'
+    window.location.href = withWelcomeParam(returnUrl || options?.fallback || '/', options?.welcome)
+  }
+
+  async function finishNativeOAuth(callbackUrl: string) {
+    const parsed = new URL(callbackUrl)
+    const oauthError = parsed.searchParams.get('error') || parsed.hash.match(/error=([^&]+)/)?.[1]
+    if (oauthError) {
+      throw new Error(decodeURIComponent(oauthError))
+    }
+
+    const code = parsed.searchParams.get('code')
+    if (!code) {
+      throw new Error('Google login did not return an authorization code')
+    }
+
+    const supabase = getSupabase()
+    const { error: exchangeError } = await supabase.auth.exchangeCodeForSession(code)
+    if (exchangeError) {
+      throw exchangeError
+    }
+
+    const completeRes = await fetch('/api/auth/native-complete', { method: 'POST' })
+    const complete = await completeRes.json().catch(() => ({}))
+    if (!completeRes.ok) {
+      throw new Error(complete.error || 'Google login could not finish')
+    }
+
+    redirectAfterAuth({
+      fallback: complete.redirectUrl || '/projects',
+      welcome: Boolean(complete.isNewUser),
+    })
   }
 
   // ── Google OAuth ──
   const handleGoogleLogin = async () => {
     setGoogleLoading(true)
     setError('')
+    if (iosApp && isNativeOAuthAvailable()) {
+      try {
+        const { data, error } = await getSupabase().auth.signInWithOAuth({
+          provider: 'google',
+          options: {
+            redirectTo: `${window.location.origin}/api/auth/callback?native_oauth=1`,
+            skipBrowserRedirect: true,
+          },
+        })
+        if (error) throw error
+        if (!data?.url) throw new Error('Google login URL was not returned')
+        const callbackUrl = await openNativeOAuthSession(data.url)
+        await finishNativeOAuth(callbackUrl)
+      } catch (error) {
+        const message = error instanceof Error ? error.message : t('auth.networkError')
+        setError(message === 'Google login cancelled' ? '' : message)
+        setGoogleLoading(false)
+      }
+      return
+    }
+
     const { error } = await getSupabase().auth.signInWithOAuth({
       provider: 'google',
       options: {

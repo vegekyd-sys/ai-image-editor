@@ -31,7 +31,7 @@ function ModelGlyph({ size = 16 }: { size?: number }) {
 }
 
 export default function AgentModelChip({ value, onChange, disabled = false }: AgentModelChipProps) {
-  const { t, locale } = useLocale();
+  const { t } = useLocale();
   const [open, setOpen] = useState(false);
   const [position, setPosition] = useState<PanelPosition | null>(null);
   const triggerRef = useRef<HTMLButtonElement>(null);
@@ -41,7 +41,7 @@ export default function AgentModelChip({ value, onChange, disabled = false }: Ag
   const models = getAgentModels();
   const selected = models.find(model => model.id === value);
   const label = value === 'auto'
-    ? `Auto · ${t('model.sonnet5.name')}`
+    ? `Auto · ${t('model.gpt56Terra.name')}`
     : selected ? t(selected.nameKey as Parameters<typeof t>[0]) : value;
 
   const updatePosition = useCallback(() => {
@@ -115,8 +115,8 @@ export default function AgentModelChip({ value, onChange, disabled = false }: Ag
   const options = [
     {
       id: 'auto',
-      name: `Auto · ${t('model.sonnet5.name')}`,
-      desc: locale === 'zh' ? '跟随后端推荐，默认 Sonnet 5' : 'Follow the recommended default, currently Sonnet 5',
+      name: `Auto · ${t('model.gpt56Terra.name')}`,
+      desc: t('model.agentAutoDesc'),
     },
     ...models.map(model => ({
       id: model.id,
@@ -135,7 +135,7 @@ export default function AgentModelChip({ value, onChange, disabled = false }: Ag
         aria-haspopup="dialog"
         aria-expanded={open}
         aria-controls={panelId}
-        aria-label={`${locale === 'zh' ? 'Agent 模型' : 'Agent model'}: ${label}`}
+        aria-label={`${t('model.agentLabel')}: ${label}`}
         title={label}
         disabled={disabled}
         onClick={(event) => { event.stopPropagation(); setOpen(current => !current); }}
@@ -150,7 +150,7 @@ export default function AgentModelChip({ value, onChange, disabled = false }: Ag
           <button
             type="button"
             className="mkr-create-model-backdrop"
-            aria-label={locale === 'zh' ? '关闭模型选择' : 'Close model selector'}
+            aria-label={t('model.closeAgentSelector')}
             onClick={() => setOpen(false)}
             onTouchMove={(event) => event.preventDefault()}
           />
@@ -159,7 +159,7 @@ export default function AgentModelChip({ value, onChange, disabled = false }: Ag
             id={panelId}
             role="dialog"
             aria-modal={position.mobile}
-            aria-label={locale === 'zh' ? '选择 Agent 模型' : 'Choose agent model'}
+            aria-label={t('model.chooseAgent')}
             className="mkr-create-model-panel mkr-liquid-popover"
             data-mobile={position.mobile}
             style={{
@@ -171,7 +171,7 @@ export default function AgentModelChip({ value, onChange, disabled = false }: Ag
           >
             <div className="mkr-create-model-header">
               <span className="mkr-create-model-header-icon"><ModelGlyph size={15} /></span>
-              <span>{locale === 'zh' ? 'Agent 模型' : 'Agent model'}</span>
+              <span>{t('model.agentLabel')}</span>
             </div>
             <div
               ref={scrollRef}

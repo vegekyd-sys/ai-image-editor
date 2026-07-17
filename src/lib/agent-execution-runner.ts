@@ -359,7 +359,7 @@ export async function runAgentExecutionAttempt(
     : process.env.OPENROUTER_API_KEY?.trim()
       ? 'grok-4.5'
       : undefined;
-  const providerFailover = requestedModel.provider === 'bedrock-anthropic'
+  const providerFailover = requestedModel.provider === 'azure-openai'
     && Boolean(failoverAgentModel)
     && latestRequestedProviderAttempt?.terminal_code === 'stream_error'
     && isRetryableProviderOutage(latestRequestedProviderAttempt.metadata?.terminalDetail);

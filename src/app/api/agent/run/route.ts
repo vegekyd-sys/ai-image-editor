@@ -6,11 +6,11 @@ import { AgentDualWriter } from '@/lib/agentDualWriter';
 import { buildPromptContext } from '@/lib/agent-context';
 import { requireCredits, deductByTokens } from '@/lib/billing/credits';
 import { getRequestLocale } from '@/lib/server-locale';
+import { translate } from '@/lib/locales';
 import { resolvePersistedRunStatus } from '@/lib/agent-terminal';
 import {
-  isAgentModelPreference,
+  normalizeRequestedAgentModelPreference,
   resolveAgentModelSpec,
-  type AgentModelPreference,
 } from '@/lib/agent-models';
 
 export const maxDuration = 1800;
@@ -55,10 +55,10 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    if (agentModel !== undefined && !isAgentModelPreference(agentModel)) {
+    const requestedAgentModel = normalizeRequestedAgentModelPreference(agentModel);
+    if (requestedAgentModel === null) {
       return NextResponse.json({ error: 'Unsupported agentModel' }, { status: 400 });
     }
-    const requestedAgentModel = agentModel as AgentModelPreference | undefined;
     const resolvedAgentModel = resolveAgentModelSpec(requestedAgentModel, process.env.AGENT_MODEL);
 
     // Pre-flight credit check
@@ -236,6 +236,7 @@ export async function POST(req: NextRequest) {
       let totalOutputTokens = 0;
       let totalCacheReadTokens = 0;
       let totalCacheWriteTokens = 0;
+      let cacheWriteTelemetryComplete = true;
       let providerCostUsd: number | undefined;
       let agentModel = '';
       let sawDone = false;
@@ -273,6 +274,9 @@ export async function POST(req: NextRequest) {
             totalOutputTokens += event.outputTokens ?? 0;
             totalCacheReadTokens += event.cacheReadTokens ?? 0;
             totalCacheWriteTokens += event.cacheWriteTokens ?? 0;
+            if (event.cacheWriteTelemetryComplete === false) {
+              cacheWriteTelemetryComplete = false;
+            }
             providerCostUsd = event.providerCostUsd;
             if (event.model) agentModel = event.model;
           }
@@ -302,7 +306,11 @@ export async function POST(req: NextRequest) {
             userId, 'agent', agentModel || 'unknown',
             totalInputTokens, totalOutputTokens,
             undefined, undefined,
-            { cacheRead: totalCacheReadTokens, cacheWrite: totalCacheWriteTokens },
+            {
+              cacheRead: totalCacheReadTokens,
+              cacheWrite: totalCacheWriteTokens,
+              cacheWriteTelemetryComplete,
+            },
             providerCostUsd,
           ).catch(e => console.error('[agent/run] billing error:', e));
         }
@@ -331,9 +339,7 @@ export async function POST(req: NextRequest) {
           type: 'error',
           code: 'missing_terminal_event',
           recoverable: true,
-          message: locale === 'en'
-            ? 'The agent connection ended without a completed result. Your saved work is preserved; send “continue” to resume.'
-            : 'Agent 在没有完成结果时结束了。已保存的工作会保留，发送“继续”即可恢复。',
+          message: translate(locale, 'agent.error.connectionEnded'),
         };
         sawError = true;
         await writer.processAndEnqueue(terminalError);
@@ -346,7 +352,11 @@ export async function POST(req: NextRequest) {
           userId, 'agent', agentModel || 'unknown',
           totalInputTokens, totalOutputTokens,
           undefined, undefined,
-          { cacheRead: totalCacheReadTokens, cacheWrite: totalCacheWriteTokens },
+          {
+            cacheRead: totalCacheReadTokens,
+            cacheWrite: totalCacheWriteTokens,
+            cacheWriteTelemetryComplete,
+          },
           providerCostUsd,
         ).catch(e => console.error('[agent/run] billing error:', e));
       }

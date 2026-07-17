@@ -512,7 +512,7 @@ export default function ModelSelector({
       return;
     }
     if (activeTab === 'agent') {
-      onAgentModelChange?.(on ? 'auto' : 'sonnet-5');
+      onAgentModelChange?.(on ? 'auto' : 'gpt-5.6-terra');
       return;
     }
     if (on) {

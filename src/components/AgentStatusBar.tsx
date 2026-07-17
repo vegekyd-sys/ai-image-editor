@@ -1,6 +1,9 @@
 'use client';
 
-import { useLocale } from '@/lib/i18n';
+import { getTranslationVariants, useLocale } from '@/lib/i18n';
+
+const PREVIEW_STATUS_PREFIXES = getTranslationVariants('status.generatingPreviews', 0, 0)
+  .map((value) => value.replace(/\s*0\/0$/, ''));
 
 interface AgentStatusBarProps {
   statusText: string;
@@ -18,7 +21,7 @@ interface AgentStatusBarProps {
 export default function AgentStatusBar({ statusText, isActive, onOpenChat, isViewingDraft, hideChat, notification, onSeeNotification }: AgentStatusBarProps) {
   const { t } = useLocale();
   // Determine dot color and breathe speed based on state
-  const isGeneratingImages = statusText.includes('previews') || statusText.includes('预览');
+  const isGeneratingImages = PREVIEW_STATUS_PREFIXES.some((prefix) => statusText.startsWith(prefix));
   const isFetchingTips = statusText === t('status.generatingTips');
 
   let dotColor: string;

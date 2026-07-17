@@ -556,6 +556,35 @@ export async function createRemotionExportJob(input: CreateRemotionExportJobInpu
     metadata,
   }).select('*').single()
 
+  if (error?.code === '23505') {
+    const { data: activeRows, error: activeError } = await admin
+      .from('remotion_export_jobs')
+      .select('*')
+      .eq('project_id', input.projectId)
+      .eq('user_id', input.userId)
+      .eq('output_type', outputType)
+      .filter('metadata->>fingerprint', 'eq', fingerprint)
+      .in('status', ['rendering', 'queued'])
+      .order('created_at', { ascending: false })
+      .limit(1)
+    if (activeError) throw new Error(activeError.message)
+    const active = (activeRows || [])[0] as RemotionExportJob | undefined
+    if (active) {
+      let job = await addPublishSnapshotId(active, input.publishSnapshotId)
+      job = await attachStudioRunId(job, input.studioRunId)
+      if (input.publish && !job.publish) {
+        const { data: published, error: publishError } = await admin
+          .from('remotion_export_jobs')
+          .update({ publish: true })
+          .eq('id', job.id)
+          .select('*')
+          .single()
+        if (publishError) throw new Error(publishError.message)
+        job = published as RemotionExportJob
+      }
+      return job
+    }
+  }
   if (error) throw new Error(error.message)
   return data as RemotionExportJob
 }

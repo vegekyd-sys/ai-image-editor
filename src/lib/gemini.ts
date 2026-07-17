@@ -1,6 +1,5 @@
 import { GoogleGenAI, Chat, Type } from '@google/genai';
 import { streamText } from 'ai';
-import { createBedrockAnthropic } from '@ai-sdk/amazon-bedrock/anthropic';
 import { Tip } from '@/types';
 import enhancePrompt from './prompts/enhance.md';
 import creativePrompt from './prompts/creative.md';
@@ -8,7 +7,7 @@ import wildPrompt from './prompts/wild.md';
 import captionsPrompt from './prompts/captions.md';
 import sharp from 'sharp';
 import fs from 'fs';
-import { getTipsBedrockModelId, supportsTemperature } from './bedrock-models';
+import { getPromptLanguage, getReplyLanguageInstruction, getTipsLanguageInstruction, normalizeLocale } from './locales';
 
 const LOG_FILE = '/tmp/tips-timing.log';
 function tlog(msg: string) {
@@ -46,26 +45,18 @@ const TIPS_OPENROUTER_MODEL = OPENROUTER_MODEL;
 // Tip text should stay on the primary creative model; only the image preview thumbnails use Lite by default.
 const TIPS_PREVIEW_IMAGE_MODEL = process.env.TIPS_PREVIEW_IMAGE_MODEL || 'google/gemini-3.1-flash-lite-image';
 
-// Tips provider config — change TIPS_PROVIDER env var for A/B testing
-// 'bedrock' = Claude Sonnet (fast, default) | 'openrouter' = gemini-3 via OR | 'google' = direct Google SDK
-const TIPS_PROVIDER = (process.env.TIPS_PROVIDER || 'openrouter') as 'bedrock' | 'openrouter' | 'google';
+// Tips text stays on Gemini via OpenRouter by default, with direct Google as fallback.
+type TipsProvider = 'openrouter' | 'google';
+const TIPS_PROVIDER: TipsProvider = process.env.TIPS_PROVIDER === 'google'
+  ? 'google'
+  : 'openrouter';
 // Temperature for tips generation — higher = more creative
 const TIPS_TEMPERATURE = parseFloat(process.env.TIPS_TEMPERATURE || '0.9');
 // Thinking level for tips (Gemini 3.1 Flash): minimal | low | high
 // Default: creative/wild = high, enhance/captions = minimal
 // Override with TIPS_THINKING env var to apply to ALL categories
 const TIPS_THINKING_OVERRIDE = process.env.TIPS_THINKING as 'minimal' | 'low' | 'high' | undefined;
-type TipsProvider = 'bedrock' | 'openrouter' | 'google';
 type OpenRouterReasoningEffort = 'minimal' | 'low' | 'medium' | 'high';
-
-function getBedrockForTips() {
-  const bedrockForTips = createBedrockAnthropic({
-    region: process.env.AWS_REGION?.trim(),
-    accessKeyId: process.env.AWS_ACCESS_KEY_ID?.trim(),
-    secretAccessKey: process.env.AWS_SECRET_ACCESS_KEY?.trim(),
-  });
-  return bedrockForTips(getTipsBedrockModelId());
-}
 
 // ── Google SDK singleton ────────────────────────────────────────
 let _ai: GoogleGenAI | null = null;
@@ -99,9 +90,7 @@ const SYSTEM_PROMPT = `你是世界上最好的照片编辑AI。你能深入理�
 type TipCategory = 'enhance' | 'creative' | 'wild' | 'captions';
 
 export function withLocale(prompt: string, locale?: string): string {
-  if (locale === 'en') return `${prompt}\n\nReply in English.`;
-  if (locale === 'zh') return `${prompt}\n\nReply in Chinese.`;
-  return prompt;
+  return locale ? `${prompt}\n\n${getReplyLanguageInstruction(locale)}` : prompt;
 }
 
 function buildCategorySystemPrompt(category: TipCategory, count: number = 2): string {
@@ -171,21 +160,24 @@ function buildTipsPrompt(
 }
 
 // Google structured output schema (only used with Google provider + gemini-3)
-const TIPS_SCHEMA = {
-  type: Type.ARRAY,
-  items: {
-    type: Type.OBJECT,
-    properties: {
-      emoji: { type: Type.STRING, description: '1 emoji' },
-      label: { type: Type.STRING, description: '3-6 Chinese chars, verb-first' },
-      desc: { type: Type.STRING, description: '10-25 chars description' },
-      editPrompt: { type: Type.STRING, description: 'Detailed English editing prompt' },
-      category: { type: Type.STRING, enum: ['enhance', 'creative', 'wild', 'captions'] },
-      aspectRatio: { type: Type.STRING, description: 'Only for recomposition tips', nullable: true },
+function getTipsSchema(locale?: string) {
+  const language = getPromptLanguage(locale);
+  return {
+    type: Type.ARRAY,
+    items: {
+      type: Type.OBJECT,
+      properties: {
+        emoji: { type: Type.STRING, description: '1 emoji' },
+        label: { type: Type.STRING, description: `Short label in ${language} only, verb-first when natural` },
+        desc: { type: Type.STRING, description: `Concise description in ${language} only` },
+        editPrompt: { type: Type.STRING, description: 'Detailed English editing prompt' },
+        category: { type: Type.STRING, enum: ['enhance', 'creative', 'wild', 'captions'] },
+        aspectRatio: { type: Type.STRING, description: 'Only for recomposition tips', nullable: true },
+      },
+      required: ['emoji', 'label', 'desc', 'editPrompt', 'category'],
     },
-    required: ['emoji', 'label', 'desc', 'editPrompt', 'category'],
-  },
-};
+  };
+}
 
 const JSON_FORMAT_SUFFIX_ZH = `\n\n以JSON数组格式输出，只输出JSON。每条必须包含editPrompt字段（英文详细编辑指令）：
 [{"emoji":"emoji","label":"2-4个中文字","desc":"中文短描述20字以内","editPrompt":"(MUST be in English) FIRST: Clean up the scene... [detailed editing instructions specific to this tip]","category":"enhance|creative|wild|captions"}, ...]`;
@@ -193,8 +185,19 @@ const JSON_FORMAT_SUFFIX_ZH = `\n\n以JSON数组格式输出，只输出JSON。�
 const JSON_FORMAT_SUFFIX_EN = `\n\nOutput as JSON array only, no other text. Every tip MUST include editPrompt (detailed English instructions):
 [{"emoji":"emoji","label":"2-3 English words","desc":"English description under 20 words","editPrompt":"FIRST: Clean up the scene... [detailed English editing instructions specific to this tip]","category":"enhance|creative|wild|captions"}, ...]`;
 
+const JSON_FORMAT_SUFFIX_ZH_HANT = `\n\n請只輸出 JSON 陣列，不要加入其他文字。每一項都必須包含 editPrompt（詳細英文編輯指令）：
+[{"emoji":"emoji","label":"2-4 個繁體中文字","desc":"20 字內的繁體中文簡短描述","editPrompt":"(MUST be in English) FIRST: Clean up the scene... [detailed editing instructions specific to this tip]","category":"enhance|creative|wild|captions"}, ...]`;
+
+const JSON_FORMAT_SUFFIX_JA = `\n\nJSON 配列のみを出力し、ほかの文章は含めないでください。各項目には editPrompt（詳細な英語の編集指示）が必須です：
+[{"emoji":"emoji","label":"短い日本語ラベル","desc":"20文字以内の日本語説明","editPrompt":"(MUST be in English) FIRST: Clean up the scene... [detailed editing instructions specific to this tip]","category":"enhance|creative|wild|captions"}, ...]`;
+
 function getJsonFormatSuffix(locale?: string) {
-  return locale === 'en' ? JSON_FORMAT_SUFFIX_EN : JSON_FORMAT_SUFFIX_ZH;
+  switch (normalizeLocale(locale)) {
+    case 'en': return JSON_FORMAT_SUFFIX_EN;
+    case 'ja': return JSON_FORMAT_SUFFIX_JA;
+    case 'zh-Hant': return JSON_FORMAT_SUFFIX_ZH_HANT;
+    default: return JSON_FORMAT_SUFFIX_ZH;
+  }
 }
 
 // ── Image Format Helpers ─────────────────────────────────────────
@@ -1030,9 +1033,7 @@ export async function* streamTipsByCategory(
   let lastError: unknown;
   for (const [index, provider] of providers.entries()) {
     try {
-      const source = provider === 'bedrock'
-        ? streamTipsByCategoryBedrock(imageBase64, category, metadata, count, existingLabels, locale, skillContext, usageAccum)
-        : provider === 'openrouter'
+      const source = provider === 'openrouter'
           ? streamTipsByCategoryOpenRouter(imageBase64, category, metadata, count, existingLabels, locale, skillContext, usageAccum)
           : streamTipsByCategoryGoogle(imageBase64, category, metadata, count, existingLabels, locale, skillContext, usageAccum);
 
@@ -1075,20 +1076,22 @@ async function* streamTipsByCategoryGoogle(
   const { systemPrompt, userText, thinkingLevel } = buildTipsPrompt(category, metadata, count, existingLabels, skillContext);
 
   const supportsStructuredOutput = MODEL.includes('gemini-3');
+  const languageInstruction = getTipsLanguageInstruction(locale);
   // Gemini 3.x uses thinkingLevel (minimal/low/medium/high), not thinkingBudget
   const isGemini3 = MODEL.includes('gemini-3');
   const config: Record<string, unknown> = {
-    systemInstruction: systemPrompt,
+    systemInstruction: `${languageInstruction}\n\n${systemPrompt}`,
     ...(isGemini3
       ? { thinkingConfig: { thinkingLevel } }
       : { thinkingConfig: { thinkingBudget: thinkingLevel === 'high' ? -1 : thinkingLevel === 'minimal' ? 0 : 1024 } }),
   };
   if (supportsStructuredOutput) {
     config.responseMimeType = 'application/json';
-    config.responseSchema = TIPS_SCHEMA;
+    config.responseSchema = getTipsSchema(locale);
   }
 
   const promptSuffix = supportsStructuredOutput ? '' : getJsonFormatSuffix(locale);
+  const localizedUserText = `${languageInstruction}\n\n${userText}`;
   const resolved = await ensureBase64Server(imageBase64);
   const base64Data = resolved.replace(/^data:image\/\w+;base64,/, '');
   const mimeType = resolved.startsWith('data:image/png') ? 'image/png' : 'image/jpeg';
@@ -1099,7 +1102,7 @@ async function* streamTipsByCategoryGoogle(
         role: 'user',
         parts: [
           { inlineData: { mimeType, data: base64Data } },
-          { text: `${userText}${promptSuffix}` },
+          { text: `${localizedUserText}${promptSuffix}` },
         ],
       },
     ],
@@ -1140,6 +1143,8 @@ async function* streamTipsByCategoryOpenRouter(
   usageAccum?: UsageAccum,
 ): AsyncGenerator<Tip> {
   const { systemPrompt, userText, thinkingLevel } = buildTipsPrompt(category, metadata, count, existingLabels, skillContext);
+  const languageInstruction = getTipsLanguageInstruction(locale);
+  const localizedUserText = `${languageInstruction}\n\n${userText}`;
   // OpenRouter uses effort: minimal/low/medium/high
   const reasoning = { effort: thinkingLevel };
 
@@ -1153,12 +1158,12 @@ async function* streamTipsByCategoryOpenRouter(
       stream: true,
       reasoning,
       messages: [
-        { role: 'system', content: systemPrompt },
+        { role: 'system', content: `${languageInstruction}\n\n${systemPrompt}` },
         {
           role: 'user',
           content: [
             toImageContent(imageBase64),
-            { type: 'text', text: `${userText}${getJsonFormatSuffix(locale)}` },
+            { type: 'text', text: `${localizedUserText}${getJsonFormatSuffix(locale)}` },
           ],
         },
       ],
@@ -1185,62 +1190,6 @@ async function* streamTipsByCategoryOpenRouter(
   }
 
   tlog(`[tips:openrouter:${category}] stream done at +${Date.now() - t0}ms`);
-}
-
-// --- Bedrock Provider (Claude Sonnet — default for tips) ---
-async function* streamTipsByCategoryBedrock(
-  imageBase64: string,
-  category: TipCategory,
-  metadata?: { takenAt?: string; location?: string },
-  count: number = 2,
-  existingLabels?: string[],
-  locale?: string,
-  skillContext?: string,
-  usageAccum?: UsageAccum,
-): AsyncGenerator<Tip> {
-  const imageContent = imageBase64.startsWith('http')
-    ? new URL(imageBase64)
-    : imageBase64.startsWith('data:') ? imageBase64 : `data:image/jpeg;base64,${imageBase64}`;
-  const { systemPrompt, userText } = buildTipsPrompt(category, metadata, count, existingLabels, skillContext);
-  const bedrockModelId = getTipsBedrockModelId();
-
-  const t0 = Date.now();
-  tlog(`[tips:bedrock:${category}] stream start model=${bedrockModelId}`);
-
-  const result = await streamText({
-    model: getBedrockForTips(),
-    ...(supportsTemperature(bedrockModelId) ? { temperature: TIPS_TEMPERATURE } : {}),
-    system: systemPrompt,
-    messages: [
-      {
-        role: 'user',
-        content: [
-          { type: 'image', image: imageContent },
-          { type: 'text', text: `${userText}${getJsonFormatSuffix(locale)}` },
-        ],
-      },
-    ],
-  });
-
-  tlog(`[tips:bedrock:${category}] streamText ready at +${Date.now() - t0}ms`);
-  yield* withEditPromptRetry(
-    parseIncrementalTipsFromStream(result.textStream, `bedrock:${category}`, category),
-    imageBase64, category, `bedrock:${category}`,
-  );
-
-  // Capture token usage for billing
-  if (usageAccum) {
-    try {
-      const usage = await result.usage;
-      if (usage) {
-        usageAccum.inputTokens += usage.inputTokens ?? 0;
-        usageAccum.outputTokens += usage.outputTokens ?? 0;
-        usageAccum.model = bedrockModelId; // Sonnet is always text output, rate is correct
-      }
-    } catch { /* best effort */ }
-  }
-
-  tlog(`[tips:bedrock:${category}] done at +${Date.now() - t0}ms`);
 }
 
 // ── Shared Incremental JSON Parser ──────────────────────────────

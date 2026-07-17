@@ -14,6 +14,8 @@
     "acceptance:sticker-bridge": "tsx scripts/sticker-bridge-acceptance.ts",
     "test:ios": "vitest run __tests__/ios*.test.ts __tests__/ios*.test.tsx",
     "smoke:ios-final": "node scripts/ios-final-smoke.mjs",
+    "smoke:gpt56-agent": "tsx --require ./md-loader.cjs scripts/smoke-gpt56-agent.ts",
+    "smoke:gpt56-cache": "tsx scripts/smoke-gpt56-cache.ts",
     "ios:local": "node tools/ios-local-config.mjs",
     "ios:prod": "node tools/ios-local-config.mjs --reset",
     "lint": "eslint",
@@ -38,8 +40,7 @@
     "mcp:http": "npx tsx --require ./md-loader.cjs mcp-server.ts"
   },
   "dependencies": {
-    "@ai-sdk/amazon-bedrock": "^5.0.12",
-    "@ai-sdk/openai": "^4.0.8",
+    "@ai-sdk/openai": "^4.0.15",
     "@apple/app-store-server-library": "^3.1.0",
     "@aws-crypto/crc32c": "^5.2.0",
     "@aws-sdk/client-lambda": "^3.986.0",
@@ -57,6 +58,7 @@
     "@fal-ai/client": "^1.9.5",
     "@google/genai": "^1.40.0",
     "@huggingface/inference": "^4.13.14",
+    "@makaron/capacitor-meta-app-events": "file:plugins/capacitor-meta-app-events",
     "@modelcontextprotocol/sdk": "^1.27.1",
     "@openrouter/ai-sdk-provider": "^3.0.0",
     "@react-three/drei": "^10.7.7",

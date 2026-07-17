@@ -46,6 +46,24 @@ describe('iOS App Store readiness guardrails', () => {
     expect(authCallback).toContain("r='/home?skill='+encodeURIComponent(skillMatch[1])");
   });
 
+  it('requires explicit AI data-sharing consent before mounting iOS creative content', () => {
+    const layout = fs.readFileSync(path.join(root, 'src/app/layout.tsx'), 'utf8');
+    const gate = fs.readFileSync(path.join(root, 'src/components/AIDataConsentGate.tsx'), 'utf8');
+    const privacy = fs.readFileSync(path.join(root, 'src/app/privacy/page.tsx'), 'utf8');
+    const migration = fs.readFileSync(path.join(root, 'supabase/migrations/20260715000000_hide_app_review_sensitive_skills.sql'), 'utf8');
+
+    expect(layout).toContain('userAgentHasMakaronIOSToken');
+    expect(layout).toContain('<AIDataConsentGate required={requiresAIDataConsent}>');
+    expect(gate).toContain("'makaron:ai-data-consent:v1'");
+    expect(gate).toContain("setState('declined')");
+    expect(gate).toContain('makaron_ai_data_consent=v1');
+    expect(privacy).toContain('Before the Makaron iOS app sends your content');
+    expect(privacy).toContain('Google (Gemini)');
+    expect(privacy).toContain('same or equivalent privacy and security protection');
+    expect(migration).toContain("'34bd54e7-8b2e-49f6-a746-d8658ab63fd5'");
+    expect(migration).toContain("'00f126ac-7451-4ee6-8025-e67dcc7b0169'");
+  });
+
   it('tracks the migration acceptance criteria in docs', () => {
     const plan = fs.readFileSync(path.join(root, 'docs/ios-migration-test-plan.md'), 'utf8');
     expect(plan).toContain('Keyboard adaptation');
@@ -183,8 +201,9 @@ describe('iOS App Store readiness guardrails', () => {
     expect(nativeCache).toContain('removeNativeJSONCache');
     expect(authProvider).toContain("const AUTH_USER_CACHE_KEY = '/auth/user'");
     expect(authProvider).toContain('isMakaronIOSApp');
-    expect(authProvider).toContain('const [useNativeAuthCache] = useState(() => isMakaronIOSApp())');
-    expect(authProvider).toContain('useNativeAuthCache ? readNativeJSONCache<User>(AUTH_USER_CACHE_KEY) : null');
+    expect(authProvider).toContain('const useNativeAuthCacheRef = useRef(false)');
+    expect(authProvider).not.toContain('useState(() => isMakaronIOSApp())');
+    expect(authProvider).toContain('const cachedUser = useNativeAuthCache');
     expect(authProvider).toContain('readNativeJSONCache<User>(AUTH_USER_CACHE_KEY)');
     expect(authProvider).toContain('writeNativeJSONCache(AUTH_USER_CACHE_KEY, session.user)');
     expect(authProvider).toContain('removeNativeJSONCache(AUTH_USER_CACHE_KEY)');
@@ -234,7 +253,9 @@ describe('iOS App Store readiness guardrails', () => {
     expect(liquidGlassNav).toContain("surface === 'explore' ? '/home' : '/projects'");
     expect(liquidGlassNav).toContain("sessionStorage.setItem(IOS_RESET_HOME_SCROLL_KEY, '1')");
     expect(liquidGlassNav).toContain("touchAction: 'manipulation'");
-    expect(liquidGlassNav).toContain('window.requestAnimationFrame(() => router.push(path))');
+    expect(liquidGlassNav).toContain('event.preventDefault()');
+    expect(liquidGlassNav).toContain('router.push(path)');
+    expect(liquidGlassNav).not.toContain('window.requestAnimationFrame(() => router.push(path))');
     expect(liquidGlassNav).toContain('onTouchStart={() => warmRoute(item.value)}');
     expect(topBar).toContain("requestIdleCallback(warm, { timeout: 1600 })");
     expect(topBar).toContain('window.setTimeout(warm, 240)');
@@ -243,8 +264,8 @@ describe('iOS App Store readiness guardrails', () => {
     expect(topBar.indexOf('router.push(path)', navigateTopBarStart)).toBeLessThan(topBar.indexOf('scheduleTopBarWarm(path)', navigateTopBarStart));
     expect(topBar).toContain('if (!userMenuOpen) return');
     expect(topBar).toContain('warmTopBarMenuRoutes()');
-    expect(topBar).toContain("aria-label={locale === 'zh' ? '打开数据面板' : 'Open dashboard'}");
-    expect(topBar).toContain("aria-label={locale === 'zh' ? '打开个人菜单' : 'Open account menu'}");
+    expect(topBar).toContain("aria-label={t('nav.openDashboard')}");
+    expect(topBar).toContain("aria-label={t('nav.openAccountMenu')}");
     expect(topBar).toContain('data-makaron-user-menu-trigger');
     expect(topBar).toContain('minWidth: 44');
     expect(topBar).toContain('minHeight: 44');
@@ -547,9 +568,11 @@ describe('iOS App Store readiness guardrails', () => {
 
   it('keeps iOS home skill detail back swipe scoped to the skill overlay', () => {
     const homePage = fs.readFileSync(path.join(root, 'src/app/home/page.tsx'), 'utf8');
+    const homeSkillMedia = fs.readFileSync(path.join(root, 'src/components/HomeSkillMedia.tsx'), 'utf8');
     expect(homePage).toContain('isMakaronIOSApp');
     expect(homePage).toContain('usePathname');
-    expect(homePage).toContain('const [isIOSAppShell] = useState(() => isMakaronIOSApp())');
+    expect(homePage).toContain('const isIOSAppShell = hydrated && isMakaronIOSApp()');
+    expect(homePage).not.toContain('useState(() => isMakaronIOSApp())');
     expect(homePage).toContain('detailPathActiveRef');
     expect(homePage).toContain('IOS_SKILL_BACK_EDGE_PX');
     expect(homePage).toContain('IOS_SKILL_BACK_COMMIT_PX');
@@ -566,11 +589,12 @@ describe('iOS App Store readiness guardrails', () => {
     expect(homePage).toContain("const url = isIOSAppShell ? '/home' : `/home?skill=${encodeURIComponent(skillId)}`");
     expect(homePage).toContain('IOS_PENDING_HOME_SKILL_KEY');
     expect(homePage).toContain('rememberIOSSkillReturn');
-    expect(homePage).toContain("const skillId = searchParams.get('skill') || pathSkillId || pendingIOSSkillId");
+    expect(homePage).toContain("const skillId = new URLSearchParams(window.location.search).get('skill') || pathSkillId || pendingIOSSkillId");
+    expect(homePage).not.toContain('useSearchParams');
     expect(homePage).toContain('draft.homeSkillId && draft.images.length === 0');
     expect(homePage).toContain("document.documentElement.style.overflow = 'hidden'");
     expect(homePage).toContain("window.addEventListener('makaron-ios-page-stack-back', unlockIfNoDetail)");
-    expect(homePage).toContain('function SkillVideo');
+    expect(homeSkillMedia).toContain('function SkillVideo');
     expect(homePage).toContain("slide.getAttribute('data-skill-id') === selectedDetail.id");
     expect(homePage).not.toContain('document.body.style.transform');
     expect(homePage).not.toContain('cloneNode');
@@ -674,7 +698,8 @@ describe('iOS App Store readiness guardrails', () => {
     expect(projectsPage).toContain('__makaronIOSProjectNavLog');
     expect(projectsPage).toContain('IOS_PROJECT_NAV_LOG_SESSION_KEY');
     expect(projectsPage).toContain('[ios-project-nav]');
-    expect(projectsPage).toContain('useState(() => isMakaronIOSAppShell())');
+    expect(projectsPage).toContain('const [iosAppShell, setIosAppShell] = useState(false)');
+    expect(projectsPage).not.toContain('useState(() => isMakaronIOSAppShell())');
     expect(projectsPage).toContain('useIOSInlineProjectNavigation');
     expect(projectsPage).not.toContain('useSearchParams');
     expect(projectsPage).not.toContain("searchParams.get('iosProject')");
@@ -706,9 +731,9 @@ describe('iOS App Store readiness guardrails', () => {
     expect(projectsPage).toContain('if (useIOSInlineProjectNavigation)');
     expect(projectsPage).toContain('openIOSProject(result.projectId)');
     expect(projectsPage).toContain('useIOSSafeImageUrls={useIOSInlineProjectNavigation}');
-    expect(projectsPage).toContain('getOriginFormatThumbnailUrl(lastSnap.image_url, 400, 50, 400)');
+    expect(projectsPage).toContain('getOriginFormatThumbnailUrl(coverUrl, 400, 50, 400)');
     expect(storage).toContain("'format=origin'");
-    expect(projectsPage).toContain('useState(useIOSSafeImageUrls)');
+    expect(projectsPage).toContain('useIOSSafeImageUrls ? imageSrc ?? null : null');
     expect(projectsPage).toContain('const shouldAnimateIn = !useIOSSafeImageUrls && index < 12');
     expect(projectsPage).toContain('animationDelay: shouldAnimateIn ?');
     expect(projectsPage).toContain("className={shouldAnimateIn ? 'mkr-card mkr-row-enter' : 'mkr-card'}");
@@ -773,14 +798,17 @@ describe('iOS App Store readiness guardrails', () => {
     expect(project).toContain('PrivacyInfo.xcprivacy in Resources');
   });
 
-  it('suppresses Meta marketing tracking inside the iOS native app shell', () => {
+  it('routes iOS marketing events to first-party storage and native attribution without loading Pixel', () => {
     const tracker = fs.readFileSync(path.join(root, 'src/components/MarketingTracker.tsx'), 'utf8');
     const pixel = fs.readFileSync(path.join(root, 'src/lib/marketing/meta-pixel.ts'), 'utf8');
     const capi = fs.readFileSync(path.join(root, 'src/lib/marketing/meta-capi.ts'), 'utf8');
 
     expect(tracker).toContain('isMakaronIOSApp');
+    expect(tracker).toContain('nativeApp === null');
     expect(tracker).toContain('nativeApp !== false');
-    expect(pixel).toContain('if (isMakaronIOSApp()) return');
+    expect(pixel).toContain("eventSource: nativeApp ? 'ios_app' : 'browser'");
+    expect(pixel).toContain('trackMobileAppEvent');
+    expect(pixel).toContain('if (nativeApp) return');
     expect(capi).toContain('MAKARON_IOS_USER_AGENT_TOKEN');
     expect(capi).toContain('user-agent');
   });

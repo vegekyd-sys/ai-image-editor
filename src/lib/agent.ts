@@ -1,7 +1,6 @@
 import { streamText, tool, stepCountIs } from 'ai';
 import type { ModelMessage } from 'ai';
 import { after } from 'next/server';
-import { createBedrockAnthropic } from '@ai-sdk/amazon-bedrock/anthropic';
 import { z } from 'zod';
 import sharp from 'sharp';
 import { validateDesign } from './design-harness';
@@ -19,10 +18,6 @@ import { listVolcengineTtsVoices } from './volcengine-tts';
 import { transcribeWithVolcengineAsr, type VolcengineAsrTranscript, type TranscriptWord } from './volcengine-asr';
 import { prepareVisualAsset, resolvePreparedVisualAssetById } from './visual-assets/bridge';
 import agentPrompt from './prompts/agent.md';
-import enhancePrompt from './prompts/enhance.md';
-import creativePrompt from './prompts/creative.md';
-import wildPrompt from './prompts/wild.md';
-import captionsPrompt from './prompts/captions.md';
 import generateImageToolPrompt from './prompts/generate_image_tool.md';
 import type { DesignPayload, Tip, VideoMeta, VideoModel } from '@/types';
 import { isPermanentUrl, toPublicStorageUrl, uploadAudio, uploadVideo } from '@/lib/supabase/storage';
@@ -37,7 +32,6 @@ import {
   type RemotionRenderProfile,
 } from '@/lib/remotion-export';
 import { VIDEO_PLACEHOLDER_IMAGE } from '@/lib/editor/timeline-derivations';
-import { getAgentModelId } from './bedrock-models';
 import { normalizeAgentErrorMessage } from './agent-error';
 import {
   findSnapshotMediaIndex,
@@ -45,7 +39,6 @@ import {
   rebuildAgentSnapshotUrls,
   type AgentSnapshotIndexRow,
 } from './agent-media-index';
-import { describeBedrockToolUseInputIssue } from './bedrock-tool-inputs';
 import { mergePatchProps } from './patch-props';
 import { persistCompositionDraft } from './composition-draft';
 import {
@@ -73,7 +66,6 @@ import {
 } from './agent-terminal';
 import {
   AgentExecutionStore,
-  getAgentContextPolicy,
   normalizeExecutionSnapshot,
   stableOperationKey,
   type DurableExecutionRef,
@@ -83,6 +75,12 @@ import {
   buildStudioCreativeArtifacts,
   studioCreativePacketSchema,
 } from './studio-run/creative-packet';
+import {
+  getOutputLanguageRequirement,
+  getReplyLanguageInstruction,
+  normalizeLocale,
+  translate,
+} from './locales';
 
 const MAX_VIDEO_DIMENSION_PROBE_BYTES = 220 * 1024 * 1024;
 
@@ -158,53 +156,11 @@ function runGoogleOmniVideoSnapshotAfterResponse(options: {
   });
 }
 
-// ---------------------------------------------------------------------------
-// Model
-// ---------------------------------------------------------------------------
-
-function getAgentModel() {
-  const bedrockAnthropic = createBedrockAnthropic({
-    region: process.env.AWS_REGION?.trim(),
-    accessKeyId: process.env.AWS_ACCESS_KEY_ID?.trim(),
-    secretAccessKey: process.env.AWS_SECRET_ACCESS_KEY?.trim(),
-  });
-  return bedrockAnthropic(getAgentModelId());
-}
-const ANTHROPIC_REASONING_EFFORTS = new Set(['low', 'medium', 'high', 'xhigh', 'max']);
-const ANTHROPIC_THINKING_MODES = new Set(['adaptive', 'disabled']);
-
 function modelFileContent(base64Data: string, mediaType: string) {
   return {
     type: 'file' as const,
     data: { type: 'data' as const, data: base64Data },
     mediaType,
-  };
-}
-
-function getAnthropicReasoningEffort() {
-  const effort = process.env.AGENT_REASONING_EFFORT?.trim().toLowerCase();
-  return effort && ANTHROPIC_REASONING_EFFORTS.has(effort) ? effort : 'medium';
-}
-
-function getAnthropicThinkingMode() {
-  const mode = process.env.AGENT_THINKING_MODE?.trim().toLowerCase();
-  return mode && ANTHROPIC_THINKING_MODES.has(mode) ? mode : undefined;
-}
-
-function getAnthropicContextManagement(modelId: string) {
-  const policy = getAgentContextPolicy(modelId);
-  return {
-    edits: [
-      {
-        type: 'clear_tool_uses_20250919',
-        trigger: { type: 'input_tokens', value: policy.providerClearToolUsesAtTokens },
-        keep: { type: 'tool_uses', value: 24 },
-      },
-      {
-        type: 'compact_20260112',
-        trigger: { type: 'input_tokens', value: policy.providerCompactAtTokens },
-      },
-    ],
   };
 }
 
@@ -347,7 +303,7 @@ export type AgentStreamEvent =
   | { type: 'design'; code: string; width: number; height: number; props?: Record<string, unknown>; animation?: { fps: number; durationInSeconds: number; format?: string }; editables?: import('@/types').EditableField[]; published?: boolean }  // @deprecated — backward compat alias for 'render'
   | { type: 'music_task'; taskId: string }  // emitted when generate_music tool creates a task — frontend polls
   | { type: 'context_compaction'; summary: string; appliedEdits: Array<Record<string, unknown>>; inputTokens?: number }
-  | { type: 'usage'; inputTokens: number; outputTokens: number; cacheReadTokens?: number; cacheWriteTokens?: number; providerCostUsd?: number; model: string }  // token usage for billing (inputTokens = noCache only)
+  | { type: 'usage'; inputTokens: number; outputTokens: number; cacheReadTokens?: number; cacheWriteTokens?: number; cacheWriteTelemetryComplete?: boolean; providerCostUsd?: number; model: string }  // token usage for billing (inputTokens = noCache only)
   | { type: 'done' }
   | {
       type: 'error';
@@ -463,7 +419,7 @@ function formatMusicLine(record: Record<string, unknown>, fallbackTrackIndex = 0
   return `music:${safeTrackIndex}|${title}|${safeDuration}|${tags}|${playUrl}|${finalUrl}`;
 }
 
-function formatGeneratedAudioForCui(toolName: string | undefined, output: unknown): string | null {
+function formatGeneratedAudioForCui(toolName: string | undefined, output: unknown, locale = normalizeLocale('en')): string | null {
   if (!toolName || !['generate_voiceover', 'generate_audio', 'generate_music'].includes(toolName)) return null;
   if (!output || typeof output !== 'object') return null;
   const record = output as Record<string, unknown>;
@@ -475,7 +431,7 @@ function formatGeneratedAudioForCui(toolName: string | undefined, output: unknow
         .filter((line): line is string => !!line)
     : [];
   if (tracks.length) {
-    return `\n\n🎵 音频已生成\n${tracks.join('\n')}\n`;
+    return `\n\n🎵 ${translate(locale, 'agent.audio.generated')}\n${tracks.join('\n')}\n`;
   }
 
   const audioUrl = getPlayableAudioUrl(record);
@@ -492,7 +448,7 @@ function formatGeneratedAudioForCui(toolName: string | undefined, output: unknow
   });
   if (!line) return null;
 
-  return `\n\n🎵 音频已生成: ${title}\n${line}\n`;
+  return `\n\n🎵 ${translate(locale, 'agent.audio.generatedNamed', title)}\n${line}\n`;
 }
 
 function formatGeneratedAudioForModel(toolName: string, output: unknown): string {
@@ -733,7 +689,7 @@ async function fetchImageBuffer(
   } else {
     buf = Buffer.from(source.replace(/^data:image\/\w+;base64,/, ''), 'base64');
   }
-  // Always convert to JPEG — ensures consistent MIME type for Bedrock vision
+  // Always convert to JPEG so every vision-capable Agent model gets a consistent MIME type.
   const maxPx = opts?.maxPx ?? 2048;
   const quality = opts?.quality ?? 90;
   buf = Buffer.from(await sharp(buf)
@@ -834,7 +790,11 @@ async function resolveCompositionSource(ctx: AgentContext, input: {
   error?: string;
 }> {
   if (input.design_path) {
-    return { snapshotId: input.snapshot_id, designPath: input.design_path };
+    // An exact workspace design path is the strongest source identity. Models
+    // sometimes include a display index or guessed snapshot label alongside it;
+    // forwarding that weaker identity makes the exporter look up a snapshot that
+    // may not exist even though the editable composition is already available.
+    return { designPath: input.design_path };
   }
   if (input.snapshot_id && !input.media_index) {
     if (!ctx.supabase) return { snapshotId: input.snapshot_id };
@@ -1357,7 +1317,7 @@ ${manifest}${userSkillLines}
 }
 
 function buildLightweightSystemPrompt(mode: 'analysis' | 'tipReaction', locale?: string): string {
-  const languageRule = locale === 'en' ? 'Reply in English.' : locale === 'zh' ? 'Reply in Chinese.' : 'Reply in the same language the user writes in.';
+  const languageRule = getReplyLanguageInstruction(locale);
   if (mode === 'analysis') {
     return [
       'You are Makaron, a warm and concise creative media assistant.',
@@ -1859,11 +1819,7 @@ Hard constraints:
 
       toModelOutput({ output }: { output: any }) {
         if (output.analysis) {
-          const languageRule = locale === 'en'
-            ? 'Answer the user in English.'
-            : locale === 'zh'
-              ? 'Answer the user in Chinese.'
-              : 'Answer in the same language as the user.';
+          const languageRule = getReplyLanguageInstruction(locale).replace(/^Reply/, 'Answer the user');
           return {
             type: 'content' as const,
             value: [{
@@ -4312,11 +4268,6 @@ ${formatAudioCapabilitiesForAgent()}`,
     }),
 
     generate_music: tool({
-      // Cache point marker — cache all tools preceding this one.
-      // Must stay on the LAST tool in this map so the whole tools block is cached.
-      ...(runtime.cachePointProviderOptions
-        ? { providerOptions: runtime.cachePointProviderOptions }
-        : {}),
       description: `Generate background music with Seed Audio and return one persisted audio asset. Use this for short-video music beds, soundtrack, score, ambience-driven music, and polished vlog/commercial background tracks. Do not use Suno; all new music generation routes go through Seed Audio.`,
       inputSchema: z.object({
         prompt: z.string().describe('Music description: genre, mood, energy, instruments (no timing, no artist names)'),
@@ -4475,16 +4426,14 @@ function wrapDurableIdempotentTools(
 /** Append a language reply instruction to any prompt based on locale.
  *  Only appends when locale is explicitly set — undefined means no override. */
 export function withLocale(prompt: string, locale?: string): string {
-  if (locale === 'en') return `${prompt}\n\nReply in English.`;
-  if (locale === 'zh') return `${prompt}\n\nReply in Chinese.`;
-  return prompt;
+  return locale ? `${prompt}\n\n${getReplyLanguageInstruction(locale)}` : prompt;
 }
 
 // Used for initial upload analysis
-const ANALYSIS_PROMPT_INITIAL = `描述这张照片里的内容，1-2句，语气像朋友分享。直接从主体开始说（"一个..."/"画面里..."）。禁止用"我来看看"/"让我看一下"等任何铺垫语。`;
+const ANALYSIS_PROMPT_INITIAL = `Describe this photo in 1-2 sentences, in the tone of a friend sharing what they noticed. Start directly with the subject. Do not use any preamble such as "Let me take a look".`;
 
 // Used for post-edit analysis — acknowledges the edit context
-const ANALYSIS_PROMPT_POSTEDIT = `P完图了，看看效果。以"P完之后，"开头，用1句话描述一下现在这张图的整体效果和氛围。禁止用"我来看看"等铺垫语，直接说结果。`;
+const ANALYSIS_PROMPT_POSTEDIT = `The edit is complete. In one sentence, directly describe the edited image's overall effect and mood. Acknowledge that this is the result after editing, without any preamble.`;
 
 // Used for video upload auto-analysis
 const ANALYSIS_PROMPT_VIDEO_TEMPLATE = (mediaIndex: number) =>
@@ -4495,6 +4444,7 @@ export interface RunMakaronAgentOptions {
   analysisContext?: 'initial' | 'post-edit';
   isVideoAnalysis?: boolean;
   tipReactionOnly?: boolean;
+  disableToolCalls?: boolean;
   referenceImages?: string[];
   animationImageUrls?: string[];
   animationImages?: string[];
@@ -4638,8 +4588,9 @@ export async function* runMakaronAgent(
     : '';
   const executionSystemPrompt = `${baseSystemPrompt}${durableExecutionDirective}${durableCompositionDirective}${durableCompositionGuidance}`;
   const systemPrompt = runtime.spec.provider === 'deepseek' && options?.locale
-    ? `${executionSystemPrompt}\n\nCRITICAL OUTPUT LANGUAGE: ${options.locale === 'en' ? 'ENGLISH ONLY' : 'CHINESE ONLY'}. This rule still applies after every tool result.`
+    ? `${executionSystemPrompt}\n\nCRITICAL OUTPUT LANGUAGE: ${getOutputLanguageRequirement(options.locale)}. This rule still applies after every tool result.`
     : executionSystemPrompt;
+  const responseLocale = normalizeLocale(options?.locale, 'en');
   endSystemPrompt?.({ systemChars: systemPrompt.length });
 
   // Observability — per-request summary
@@ -4697,26 +4648,12 @@ export async function* runMakaronAgent(
 
   let firstContentAt = 0;
 
-  // B7: cache the conversation history up through the last non-user turn.
-  // Tool-aware history can end with a `tool` message, so include it in the
-  // cache point; otherwise expensive tool results sit outside cached prefix.
-  // Only worth the cacheWrite cost when the conversation has real history
-  // (≥ 2 prior turns including at least one model/tool response). Short sessions skip.
-  const msgs: Array<ModelMessage & { providerOptions?: Record<string, any> }> =
-    [...history, { role: 'user', content: userContent } as ModelMessage];
-  if (runtime.cachePointProviderOptions && history.length >= 2) {
-    for (let i = msgs.length - 2; i >= 0; i--) {
-      if (msgs[i].role === 'assistant' || msgs[i].role === 'tool') {
-        msgs[i].providerOptions = runtime.cachePointProviderOptions;
-        break;
-      }
-    }
-  }
+  const msgs: ModelMessage[] = [
+    ...history,
+    { role: 'user', content: userContent } as ModelMessage,
+  ];
 
   try {
-    const agentModelId = runtime.spec.providerModelId;
-    const thinkingMode = getAnthropicThinkingMode();
-    const reasoningEffort = getAnthropicReasoningEffort();
     const configuredStepTimeout = Number(process.env.AGENT_MODEL_STEP_TIMEOUT_MS || 150_000);
     const stepTimeoutMs = Number.isFinite(configuredStepTimeout)
       ? Math.max(30_000, Math.min(configuredStepTimeout, 240_000))
@@ -4726,6 +4663,7 @@ export async function* runMakaronAgent(
     let billedCacheReadTokens = 0;
     let billedCacheWriteTokens = 0;
     let billedOutputTokens = 0;
+    let cacheWriteTelemetryComplete = true;
     const billedStepMetadata: Array<{ providerMetadata?: Record<string, unknown> }> = [];
     let usageEmitted = false;
     const compactionBlocks = new Map<string, string>();
@@ -4767,6 +4705,7 @@ export async function* runMakaronAgent(
       const details = usage.inputTokenDetails;
       const cacheRead = details?.cacheReadTokens ?? usage.cachedInputTokens ?? 0;
       const cacheWrite = details?.cacheWriteTokens ?? 0;
+      if (details?.cacheWriteTokens == null) cacheWriteTelemetryComplete = false;
       const noCache = details?.noCacheTokens
         ?? Math.max(0, (usage.inputTokens ?? 0) - cacheRead - cacheWrite);
       billedNoCacheTokens += noCache;
@@ -4785,8 +4724,11 @@ export async function* runMakaronAgent(
         ? ((billedCacheReadTokens / totalInput) * 100).toFixed(1)
         : '0';
       const providerCostUsd = sumOpenRouterProviderCost(runtime, billedStepMetadata);
+      const cacheWriteLog = cacheWriteTelemetryComplete
+        ? String(billedCacheWriteTokens)
+        : 'unreported';
       console.log(
-        `[agent-usage] totalInput=${totalInput} (noCache=${billedNoCacheTokens} cacheRead=${billedCacheReadTokens} cacheWrite=${billedCacheWriteTokens}) output=${billedOutputTokens} hitRate=${hitRate}% model=${modelId} provider=${runtime.spec.provider}${providerCostUsd != null ? ` providerCostUsd=${providerCostUsd.toFixed(6)}` : ''}`
+        `[agent-usage] totalInput=${totalInput} (noCache=${billedNoCacheTokens} cacheRead=${billedCacheReadTokens} cacheWrite=${cacheWriteLog}) output=${billedOutputTokens} hitRate=${hitRate}% model=${modelId} provider=${runtime.spec.provider}${providerCostUsd != null ? ` providerCostUsd=${providerCostUsd.toFixed(6)}` : ''}`
       );
       return {
         type: 'usage',
@@ -4794,6 +4736,7 @@ export async function* runMakaronAgent(
         outputTokens: billedOutputTokens,
         cacheReadTokens: billedCacheReadTokens,
         cacheWriteTokens: billedCacheWriteTokens,
+        cacheWriteTelemetryComplete,
         providerCostUsd,
         model: modelId,
       };
@@ -4826,13 +4769,12 @@ export async function* runMakaronAgent(
       system: [{
         role: 'system',
         content: systemPrompt,
-        ...(runtime.cachePointProviderOptions
-          ? { providerOptions: runtime.cachePointProviderOptions }
-          : {}),
       }],
       messages: attemptMessages,
       ...(tools ? { tools } : {}),
-      ...(recoveryTextOnly && tools ? { toolChoice: 'none' as const } : {}),
+      ...((recoveryTextOnly || options?.disableToolCalls) && tools
+        ? { toolChoice: 'none' as const }
+        : {}),
       ...(analysisOnly && tools
         ? { activeTools: [isVideoAnalysis ? 'analyze_video' : 'analyze_image'] }
         : recoveryActiveTools
@@ -4858,13 +4800,7 @@ export async function* runMakaronAgent(
       ...(options?.execution ? { maxRetries: 0 } : {}),
       timeout: { stepMs: stepTimeoutMs, totalMs: remainingInvocationBudgetMs },
       ...(options?.abortSignal ? { abortSignal: options.abortSignal } : {}),
-      providerOptions: getAgentProviderOptions(runtime, {
-        anthropicThinkingMode: thinkingMode,
-        reasoningEffort,
-        anthropicContextManagement: runtime.spec.provider === 'bedrock-anthropic'
-          ? getAnthropicContextManagement(agentModelId)
-          : undefined,
-      }),
+      providerOptions: getAgentProviderOptions(runtime),
       });
       attemptResults.push(result);
       endStreamInit?.();
@@ -4956,8 +4892,7 @@ export async function* runMakaronAgent(
         continue;
       }
       if (event.type === 'reasoning-end') {
-        const isEnLocale = options?.locale === 'en';
-        yield { type: 'status' as const, text: isEnLocale ? 'Planning...' : '规划中...' };
+        yield { type: 'status' as const, text: translate(responseLocale, 'agent.status.planning') };
         continue;
       }
 
@@ -4986,8 +4921,7 @@ export async function* runMakaronAgent(
         if (toolName === 'run_code') {
           runCodeStartedThisTurn = true;
           codeExtractor = { buffer: '', state: 'waiting', escaped: false, sent: 0, decoded: '', lastSavedChars: 0 };
-          const isEnLocale = options?.locale === 'en';
-          yield { type: 'status' as const, text: isEnLocale ? 'Generating code...' : '代码生成中...' };
+          yield { type: 'status' as const, text: translate(responseLocale, 'agent.status.generatingCode') };
         }
         continue;
       }
@@ -5072,46 +5006,41 @@ export async function* runMakaronAgent(
           step: stepCount,
           sinceAgentStartMs: Date.now() - agentStartTime,
         });
-        const isEnLocale = options?.locale === 'en';
         if (event.toolName === 'analyze_image') {
           const q = (event.input as { question?: string }).question;
-          yield { type: 'status', text: isEnLocale
-            ? (q ? `Analyzing image: ${q.slice(0, 50)}` : 'Analyzing image')
-            : (q ? `分析图片：${q.slice(0, 40)}` : '分析图片') };
+          yield { type: 'status', text: translate(responseLocale, 'agent.status.analyzingImage', q?.slice(0, 50) ?? '') };
         } else if (event.toolName === 'analyze_video') {
           const q = (event.input as { question?: string }).question;
-          yield { type: 'status', text: isEnLocale
-            ? (q ? `Analyzing video: ${q.slice(0, 50)}` : 'Analyzing video')
-            : (q ? `分析视频：${q.slice(0, 40)}` : '分析视频') };
+          yield { type: 'status', text: translate(responseLocale, 'agent.status.analyzingVideo', q?.slice(0, 50) ?? '') };
         } else if (event.toolName === 'transcribe_audio') {
-          yield { type: 'status', text: isEnLocale ? 'Transcribing audio...' : '转写音频中...' };
+          yield { type: 'status', text: translate(responseLocale, 'agent.status.transcribingAudio') };
         } else if (event.toolName === 'list_voiceover_voices') {
-          yield { type: 'status', text: isEnLocale ? 'Choosing voice...' : '选择配音音色中...' };
+          yield { type: 'status', text: translate(responseLocale, 'agent.status.choosingVoice') };
         } else if (event.toolName === 'generate_voiceover') {
-          yield { type: 'status', text: isEnLocale ? 'Generating voiceover...' : '生成配音中...' };
+          yield { type: 'status', text: translate(responseLocale, 'agent.status.generatingVoiceover') };
         } else if (event.toolName === 'generate_audio' || event.toolName === 'generate_music') {
-          yield { type: 'status', text: isEnLocale ? 'Generating audio...' : '生成音频中...' };
+          yield { type: 'status', text: translate(responseLocale, 'agent.status.generatingAudio') };
         } else if (event.toolName === 'preview_frame') {
           const input = event.input as { frame?: number; timestamp?: number; frames?: number[]; timestamps?: number[] };
           const batch = input.frames?.length ? input.frames.join(', ') : input.timestamps?.length ? input.timestamps.map(value => `${value}s`).join(', ') : '';
           const hint = batch || (input.frame !== undefined ? `frame ${input.frame}` : input.timestamp !== undefined ? `${input.timestamp}s` : 'frame 0');
-          yield { type: 'status', text: isEnLocale ? `Capturing ${hint}...` : `截帧 ${hint}...` };
+          yield { type: 'status', text: translate(responseLocale, 'agent.status.capturingFrame', hint) };
         } else if (event.toolName === 'generate_image') {
-          yield { type: 'status', text: isEnLocale ? 'Generating image...' : '生成图片中...' };
+          yield { type: 'status', text: translate(responseLocale, 'agent.status.generatingImage') };
         } else if (event.toolName === 'list_files') {
-          yield { type: 'status', text: isEnLocale ? 'Browsing workspace...' : '浏览工作台...' };
+          yield { type: 'status', text: translate(responseLocale, 'agent.status.browsingWorkspace') };
         } else if (event.toolName === 'read_file') {
           const p = (event.input as { path?: string }).path || '';
-          yield { type: 'status', text: isEnLocale ? `Reading ${p.split('/').pop()}...` : `读取 ${p.split('/').pop()}...` };
+          yield { type: 'status', text: translate(responseLocale, 'agent.status.readingFile', p.split('/').pop() ?? '') };
         } else if (event.toolName === 'write_file') {
-          yield { type: 'status', text: isEnLocale ? 'Saving...' : '保存中...' };
+          yield { type: 'status', text: translate(responseLocale, 'agent.status.saving') };
         } else if (event.toolName === 'delete_file') {
-          yield { type: 'status', text: isEnLocale ? 'Deleting...' : '删除中...' };
+          yield { type: 'status', text: translate(responseLocale, 'agent.status.deleting') };
         } else if (event.toolName === 'run_code') {
           const desc = (event.input as { description?: string }).description;
-          yield { type: 'status', text: isEnLocale ? `Running: ${desc || 'code'}...` : `执行: ${desc || '代码'}...` };
+          yield { type: 'status', text: translate(responseLocale, 'agent.status.runningCode', desc ?? '') };
         } else if (event.toolName === 'rotate_camera') {
-          yield { type: 'status', text: isEnLocale ? 'Rotating camera...' : '旋转相机中...' };
+          yield { type: 'status', text: translate(responseLocale, 'agent.status.rotatingCamera') };
         }
         let toolCallImages: string[] | undefined;
         if (event.toolName === 'generate_image') {
@@ -5201,8 +5130,7 @@ export async function* runMakaronAgent(
           toolDurationMs: toolCallStartTime ? Date.now() - toolCallStartTime : null,
         });
         // Reset status after tool completes so stale status doesn't linger during thinking
-        const isEnLocale = options?.locale === 'en';
-        yield { type: 'status', text: isEnLocale ? 'Thinking...' : 'Agent 正在思考...' };
+        yield { type: 'status', text: translate(responseLocale, 'agent.status.thinking') };
         if (toolName) {
           yield { type: 'tool_result', tool: toolName, toolCallId, step: stepCount, output: toolOutput };
           const outputRecord = toolOutput && typeof toolOutput === 'object'
@@ -5284,7 +5212,7 @@ export async function* runMakaronAgent(
           if (toolSucceeded && nonRepeatableTools.has(toolName)) {
             attemptCommittedTools.add(toolName);
           }
-          const generatedAudioLine = formatGeneratedAudioForCui(toolName, toolOutput);
+          const generatedAudioLine = formatGeneratedAudioForCui(toolName, toolOutput, responseLocale);
           if (generatedAudioLine) {
             yield { type: 'content', text: generatedAudioLine };
           }
@@ -5340,8 +5268,7 @@ export async function* runMakaronAgent(
             yield { type: 'nsfw_detected' };
           }
           if (imagesSent === ctx.generatedImages.length) {
-            const isEn = options?.locale === 'en';
-            yield { type: 'status', text: isEn ? 'Image generation failed' : '图片生成失败' };
+            yield { type: 'status', text: translate(responseLocale, 'agent.status.imageGenerationFailed') };
           }
         }
 
@@ -5492,8 +5419,7 @@ export async function* runMakaronAgent(
             content: `[System recovery] The previous model step ended before it delivered a usable response (${assessment.code || 'incomplete'}). ${recoveryInstruction}`,
           } as ModelMessage,
         ];
-        const isEn = options?.locale === 'en';
-        yield { type: 'status', text: isEn ? 'The last step stalled — resuming from the saved draft...' : '上一轮卡住了，正在从已保存草稿继续...' };
+        yield { type: 'status', text: translate(responseLocale, 'agent.status.resuming') };
         console.warn(`[agent] recovering incomplete model step code=${assessment.code} finish=${finishReason || 'missing'} raw=${rawFinishReason || ''}`);
         continue;
       }
@@ -5514,7 +5440,6 @@ export async function* runMakaronAgent(
           : {}),
         ...(assessment.detail ? { errorDetail: assessment.detail } : {}),
       };
-      const isEn = options?.locale === 'en';
       const recoverable = assessment.retryable && Boolean(
         checkpoint.draftPath || checkpoint.studioRunId || options?.execution,
       );
@@ -5526,12 +5451,8 @@ export async function* runMakaronAgent(
         recoverable,
         checkpoint,
         message: recoverable
-          ? (isEn
-              ? 'The model stopped before completing the request. The saved checkpoint will resume automatically.'
-              : '模型在完成请求前中断，正在从已保存的检查点自动继续。')
-          : (isEn
-              ? 'The model stopped before completing this request and no resumable draft was saved. Please retry the request.'
-              : '模型在完成本次请求前中断，且没有可恢复的草稿。请重新发送请求。'),
+          ? translate(responseLocale, 'agent.error.recoverable')
+          : translate(responseLocale, 'agent.error.fatal'),
       };
       return;
     }
@@ -5558,175 +5479,8 @@ export async function* runMakaronAgent(
 
     yield { type: 'done' };
   } catch (err) {
-    const bedrockToolInputIssue = runtime.spec.provider === 'bedrock-anthropic'
-      ? describeBedrockToolUseInputIssue(err)
-      : null;
-    if (bedrockToolInputIssue) {
-      console.error(`[agent] Bedrock toolUse input issue: ${bedrockToolInputIssue}`);
-    }
     const errorMessage = normalizeAgentErrorMessage(err);
     console.log(`⏱️ [agent] ERROR at +${((Date.now() - agentStartTime) / 1000).toFixed(1)}s: ${errorMessage}`);
     yield { type: 'error', message: errorMessage };
   }
-}
-
-// ---------------------------------------------------------------------------
-// Tips Skill: generate tips text using Claude (fast, ~2-3s vs Gemini ~15s)
-// ---------------------------------------------------------------------------
-
-const TIPS_JSON_FORMAT_ZH = `\n\n以JSON数组格式输出，只输出JSON：
-[{"emoji":"emoji","label":"2-4个中文字","desc":"中文短描述20字以内","editPrompt":"(MUST be in English) Detailed English editing instructions...","category":"enhance|creative|wild|captions"}, ...]`;
-
-const TIPS_JSON_FORMAT_EN = `\n\nOutput as JSON array only, no other text:
-[{"emoji":"emoji","label":"2-3 English words","desc":"English description under 20 words","editPrompt":"Detailed English editing prompt","category":"enhance|creative|wild|captions"}, ...]`;
-
-const TIPS_PROMPTS: Record<'enhance' | 'creative' | 'wild' | 'captions', string> = {
-  enhance: enhancePrompt,
-  creative: creativePrompt,
-  wild: wildPrompt,
-  captions: captionsPrompt,
-};
-
-// Category-specific system prompts (restored from original gemini.ts structure)
-const TIPS_CATEGORY_INFO: Record<'enhance' | 'creative' | 'wild' | 'captions', { cn: string; definition: string; selfCheck: string; rules: string }> = {
-  enhance: {
-    cn: 'enhance（专业增强）',
-    definition: 'enhance = 让照片整体变好看（光影/色彩/通透感），变化必须肉眼明显',
-    selfCheck: `enhance自检：
-- 放在原图旁边，任何人都能一眼看出提升吗？（"看不出变化"=3分）
-- 风格与照片情绪匹配吗？（搞笑照片配阴沉暗调=4分）
-- 有通透感+景深分离+色调层次吗？
-- enhance可以调整构图，但必须基于原图——编辑后还能一眼认出是同一张照片（"画面变化太多了"=3分）
-- 编辑后的背景还是原图的背景吗？enhance是提升原图不是生成新图（"背景被换掉了"=3分，"人物都变了"=1分）`,
-    rules: `⚠️ enhance的editPrompt必须包含背景锚定：
-"Keep the original background scene intact — enhance lighting and colors on the existing scene, do NOT replace or regenerate the background."`,
-  },
-  creative: {
-    cn: 'creative（趣味创意）',
-    definition: 'creative = 往画面里加入一个与画面内容有因果关系的有趣新元素',
-    selfCheck: `creative自检（三问全过才输出）：
-- Q1 为什么是这个元素？能不能一句话说清"因为画面里有X所以加Y"？说不清=换一个
-- Q2 情绪对吗？让人笑/惊喜=好，让人害怕/困惑=换
-- Q3 这个创意能用在其他照片上吗？能=太通用=换一个`,
-    rules: `creative品质标准：
-- 加入的动物/角色必须是photorealistic写实风（cartoon/卡通=贴纸感）
-- 足够大且显眼，至少占画面5-10%面积
-- 必须与人物有互动/眼神交流，不能像贴纸`,
-  },
-  wild: {
-    cn: 'wild（疯狂脑洞）',
-    definition: 'wild = 让画面中已有的物品发生疯狂变化（不是加新东西！）',
-    selfCheck: `wild自检（四问全过才输出）：
-- Q1 变化的主角是画面中已有的什么东西？指不出来=不是wild
-- Q2 变化够大吗？一眼就能看到变化=好。改镜片/眼镜反射内容=太小不够大(3分"眼镜idea傻")
-- Q3 变化是基于物品本身特点还是随便套的？表面视觉类比（层状=蛋糕/抹茶、圆形=球）=换一个。"变成食物/饮品"除非厨房场景否则=万金油套路
-- Q4 这个变化会不会让人不适/恐怖？→ 换一个有趣的方向`,
-    rules: `wild额外规则：只选画面中重要/显眼的元素做变化，不要选边缘模糊的小物件`,
-  },
-  captions: {
-    cn: 'captions（创意文案）',
-    definition: 'captions = 为照片添加与内容高度相关的创意文字叠加，字体风格必须与照片情绪一致',
-    selfCheck: `captions自检（三问全过才输出）：
-- Q1 这段文字只适合这张照片吗？换到其他照片上还合适=太通用=重写
-- Q2 字体风格与画面情绪匹配吗？（童趣照配严肃字体=4分，搞笑配优雅花体=3分）
-- Q3 有metadata时自然融入了吗？有地点/时间必须结合进文案`,
-    rules: `captions品质标准：
-- 文字必须是photorealistic渲染，不是卡通贴纸
-- 明确写出要叠加的文字内容（不能让Gemini自己编）
-- 一个tip只加一句/一行文字，简洁有力
-- 两个tip风格必须不同（如一中一英，或一童趣一简洁）`,
-  },
-};
-
-function buildTipsSystemPrompt(category: 'enhance' | 'creative' | 'wild' | 'captions'): string {
-  const info = TIPS_CATEGORY_INFO[category];
-  const labelNote = category === 'captions'
-    ? 'label: 2-3 words, include scene/style context.'
-    : 'label: 2-3 words.';
-  const base = `Photo editing expert. Analyze image and generate 2 ${category} edit suggestions. ${labelNote} editPrompt in English, highly specific.
-
-${info.definition}
-
-⚠️ 第一步：判断人脸大小！
-分析图片时首先判断人脸在画面中的占比：
-- 大脸（特写/半身照，脸部占画面>10%）→ 正常处理
-- 小脸（全身照/合照/远景/广角，脸部占画面<10%）→ 触发小脸保护模式
-小脸保护模式下所有editPrompt必须包含：
-"CRITICAL: Faces in this photo are small. Leave ALL face areas completely untouched — do NOT sharpen, enhance, retouch, relight, resize, or process any face region in any way. Treat face areas as if they are masked off and invisible to you."
-小脸时人物反应只能用身体语言（身体后仰/转头/手指向变化），绝不能要求面部表情变化。
-
-自检框架（输出每个tip前先过一遍）：
-
-${info.selfCheck}
-
-${info.rules}
-
-⚠️ 人脸保真是最大扣分项！涉及人物的editPrompt必须包含：
-"Preserve each person's identity, bone structure, face shape exactly. Do not make faces wider or rounder."
-
-⚠️ 所有editPrompt都必须包含背景净化：
-"Clean up the scene like a professional photographer would before shooting: remove any object that draws attention away from the main subject but adds no compositional value. Replace cleaned areas with natural-looking continuation of the scene."
-
-2个tip必须选不同方向。结尾加"Do NOT add any text, watermarks, or borders."`;
-  // No withLocale — language of label/desc controlled by TIPS_JSON_FORMAT per locale.
-  // editPrompt must ALWAYS be English regardless of locale.
-  return base;
-}
-
-export async function* streamTipsWithClaude(
-  imageBase64: string,
-  category: 'enhance' | 'creative' | 'wild' | 'captions',
-  metadata?: { takenAt?: string; location?: string },
-  locale?: string,
-): AsyncGenerator<Tip> {
-  const dataUrl = imageBase64.startsWith('data:') ? imageBase64 : `data:image/jpeg;base64,${imageBase64}`;
-  const template = TIPS_PROMPTS[category];
-  const systemPrompt = buildTipsSystemPrompt(category);
-
-  // Build metadata context string
-  const metaLines: string[] = [];
-  if (metadata?.takenAt) metaLines.push(`Date taken: ${metadata.takenAt}`);
-  if (metadata?.location) metaLines.push(`Location: ${metadata.location}`);
-  const metaContext = metaLines.length > 0
-    ? `[Photo Metadata]\n${metaLines.join('\n')}\n(Use for creative inspiration: local landmarks, time-of-day lighting, seasonal elements, etc.)\n\n`
-    : '';
-
-  const userPrompt = `${metaContext}在生成建议之前，先分析这张图片：判断人脸大小；识别画面中的具体物品/食物/道具；判断照片情绪基调。
-
-基于分析，给出2条${category}编辑建议。以下是详细规范（必须遵循）：
-
-${template}${locale === 'en' ? TIPS_JSON_FORMAT_EN : TIPS_JSON_FORMAT_ZH}`;
-
-  const { textStream } = streamText({
-    model: getAgentModel(),
-    system: systemPrompt,
-    messages: [
-      {
-        role: 'user',
-        content: [
-          { type: 'image', image: dataUrl },
-          { type: 'text', text: userPrompt },
-        ],
-      },
-    ],
-  });
-
-  // Collect full text then parse JSON
-  let fullText = '';
-  for await (const delta of textStream) {
-    fullText += delta;
-  }
-
-  // Extract JSON array from response
-  const jsonMatch = fullText.match(/\[[\s\S]*\]/);
-  if (!jsonMatch) return;
-
-  try {
-    const tips = JSON.parse(jsonMatch[0]) as Tip[];
-    for (const tip of tips) {
-      if (tip.label && tip.editPrompt && tip.category) {
-        yield tip;
-      }
-    }
-  } catch { /* parse error, yield nothing */ }
 }
