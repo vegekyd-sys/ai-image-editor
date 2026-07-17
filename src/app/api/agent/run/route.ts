@@ -259,7 +259,6 @@ export async function POST(req: NextRequest) {
           videoAuto,
           audioAttachments: ctx.audioAttachments,
           snapshotImages: ctx.snapshotImages,
-          inspectionImages: ctx.turnImageAttachments.map(item => item.url),
           currentSnapshotIndex: ctx.currentSnapshotIndex,
           isNsfw,
           userSkills: userSkills.length ? userSkills : undefined,

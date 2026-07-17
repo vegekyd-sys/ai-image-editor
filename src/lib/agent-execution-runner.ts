@@ -372,7 +372,6 @@ export async function runAgentExecutionAttempt(
   const executionStore = new AgentExecutionStore(admin, run.user_id, run.project_id);
   const previousSnapshot = await executionStore.latestSnapshot(runId);
   const continuation = claim.attempt_no > 1;
-  const needsTurnMediaInspection = !continuation || !previousSnapshot;
   const attemptPrompt = continuation
     ? `[System durable continuation] Resume execution ${runId}, attempt ${claim.attempt_no}. ${previousSnapshot?.nextAction || 'Continue the unfinished objective from durable artifacts.'}`
     : (run.objective || claim.objective || run.prompt || 'Continue the requested task.');
@@ -383,8 +382,8 @@ export async function runAgentExecutionAttempt(
     hasAnnotation: request.hasAnnotation,
     isDraft: request.isDraft,
     referenceImageCount: request.referenceImageCount,
-    uploadedVideoCount: needsTurnMediaInspection ? request.uploadedVideoCount : undefined,
-    turnMediaCount: needsTurnMediaInspection ? request.turnMediaCount : undefined,
+    uploadedVideoCount: request.uploadedVideoCount,
+    turnMediaCount: request.turnMediaCount,
     audioAttachments: request.audioAttachments,
     currentRunId: runId,
     executionRunId: runId,
@@ -494,7 +493,6 @@ export async function runAgentExecutionAttempt(
         videoAuto: request.videoAuto,
         audioAttachments: ctx.audioAttachments,
         snapshotImages: ctx.snapshotImages,
-        inspectionImages: needsTurnMediaInspection ? ctx.turnImageAttachments.map(item => item.url) : undefined,
         currentSnapshotIndex: ctx.currentSnapshotIndex,
         isNsfw: request.isNsfw,
         userSkills: userSkills.length ? userSkills : undefined,

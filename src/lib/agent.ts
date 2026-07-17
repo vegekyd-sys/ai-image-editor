@@ -1787,7 +1787,7 @@ Hard constraints:
     }),
 
     analyze_image: tool({
-      description: 'See and analyze one timeline photo. Use for questions, red annotations, uncertain target regions, identity/detail inspection, ambiguous edits, or older media that was not attached to the current request. Current-upload-batch images are already attached together to the model request, so inspect them directly instead of spending one tool round per image. Do not call this before clear direct generate_image edits; generate_image already receives the selected media. Use media_index to look at any snapshot in the timeline.',
+      description: 'See and analyze one timeline photo. Use for questions, red annotations, uncertain target regions, identity/detail inspection, ambiguous edits, or older media without verified evidence. A current upload batch is pre-analyzed in parallel into the Verified current upload batch block; consume that evidence instead of spending one tool round per image. Call analyze_image only when evidence is missing, failed, or a deeper visual question remains. Do not call this before clear direct generate_image edits; generate_image already receives the selected media. Use media_index to look at any snapshot in the timeline.',
       inputSchema: z.object({
         question: z.string().optional().describe('Optional focus area for the analysis'),
         media_index: z.number().optional().describe('1-based index of the snapshot to analyze (<<<media_1>>> = 1, etc.). Omit to analyze the current image.'),
@@ -1853,7 +1853,7 @@ Hard constraints:
     analyze_video: tool({
       description: `Analyze video content using Gemini vision.
 
-Default mode describes scenes/actions/pacing/audio cues in a timeline video. For a required current-upload-batch inspection, pass every video index together in media_indices; the tool analyzes them concurrently. Otherwise do not call this before clear direct video edits such as adding glasses, changing outfit, or using Omni to edit a referenced video; generate_animation already receives selected video references. Use analyze_video only for inspection, comparison, diagnosis, ambiguous targets, or frame-location workflows.
+Default mode describes scenes/actions/pacing/audio cues in a timeline video. Current upload batches are pre-analyzed in parallel into the Verified current upload batch block. If any video evidence is missing or failed, pass all affected video indices together in media_indices so the tool analyzes them concurrently. Otherwise do not call this before clear direct video edits such as adding glasses, changing outfit, or using Omni to edit a referenced video; generate_animation already receives selected video references. Use analyze_video only for inspection, comparison, diagnosis, ambiguous targets, or frame-location workflows.
 
 Use mode="locate_frame" when the user provides a screenshot/frame and you need to find where that frame appears in a video. This is the primary locator for screenshot-based local video edits. Provide the video as media_index and the screenshot as image_url, image_media_index, or workspace_path. For checking a known timestamp visually, use preview_frame instead.`,
       inputSchema: z.object({
@@ -4504,7 +4504,6 @@ export interface RunMakaronAgentOptions {
   referenceImages?: string[];
   animationImageUrls?: string[];
   animationImages?: string[];
-  inspectionImages?: string[];
   locale?: string;
   preferredModel?: ModelId;
   agentModel?: AgentModelPreference;
@@ -4597,15 +4596,13 @@ export async function* runMakaronAgent(
 
   // Build user message content — animation mode includes all snapshot images as visual content
   const animImages = options?.animationImages;
-  const inspectionImages = options?.inspectionImages;
 
   let userContent: any;
-  const directImages = inspectionImages?.length ? inspectionImages : animImages;
-  if (directImages?.length && runtime.spec.supportsImageInput && !analysisOnly && !tipReactionOnly) {
+  if (animImages?.length && runtime.spec.supportsImageInput && !analysisOnly && !tipReactionOnly) {
     // Multi-image user message: text + all snapshot images
     userContent = [
       { type: 'text' as const, text: prompt },
-      ...directImages.map((img: string) =>
+      ...animImages.map((img: string) =>
         img.startsWith('data:')
           ? { type: 'image' as const, image: img }
           : { type: 'image' as const, image: new URL(img) }
@@ -4619,7 +4616,7 @@ export async function* runMakaronAgent(
     const designInjection = options?.currentDesignPath && !promptHasCompositionPointer
       ? `[Current composition pointer]\npath: ${options.currentDesignPath}${options.currentDesign ? `\nwidth: ${options.currentDesign.width}\nheight: ${options.currentDesign.height}${options.currentDesign.animation ? `\nanimation: ${options.currentDesign.animation.durationInSeconds}s @ ${options.currentDesign.animation.fps}fps` : ''}` : ''}\nTo modify this existing composition, call run_code with a JS return value like { type: 'patch', code_path: '${options.currentDesignPath}', edits: [...] } or { type: 'patch', code_path: '${options.currentDesignPath}', props: {...} } and runtime: "composition". Use props-only patches for text/data changes. Do not render from scratch unless the user asks for a new composition.\n\n`
       : '';
-    const textOnlyVisionNote = directImages?.length && !runtime.spec.supportsImageInput
+    const textOnlyVisionNote = animImages?.length && !runtime.spec.supportsImageInput
       ? '\n\n[Selected Agent model is text-only. Use analyze_image on the relevant Media Index entries before making image-dependent decisions.]'
       : '';
     userContent = analysisOnly ? analysisPrompt : (designInjection + prompt + textOnlyVisionNote);

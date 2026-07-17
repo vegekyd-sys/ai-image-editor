@@ -6,7 +6,7 @@ import { join } from 'node:path';
 const read = (path: string) => readFileSync(join(process.cwd(), path), 'utf8');
 
 describe('current upload batch inspection', () => {
-  it('maps the complete trailing upload batch to exact image and video tools', () => {
+  it('maps the complete trailing upload batch without attaching raw media to the main model', () => {
     const context = buildTurnMediaInspectionContext([
       { type: 'image' },
       { type: 'composition' },
@@ -19,12 +19,11 @@ describe('current upload batch inspection', () => {
 
     expect(context).not.toContain('<<<media_1>>>');
     expect(context).not.toContain('<<<media_2>>>');
-    expect(context).toContain('<<<media_3>>>: image — attached directly to this request as upload-batch image attachment 1');
-    expect(context).toContain('<<<media_5>>>: video — inspect with analyze_video');
-    expect(context).toContain('<<<media_7>>>: video — inspect with analyze_video');
-    expect(context).toContain('call analyze_video once with every required media index in media_indices');
-    expect(context).toContain('do not spend separate tool rounds calling analyze_image');
-    expect(context).toContain('reuse the durable checkpoint, persisted descriptions, and agent_tool_history');
+    expect(context).toContain('<<<media_3>>>: image');
+    expect(context).toContain('<<<media_5>>>: video');
+    expect(context).toContain('<<<media_7>>>: video');
+    expect(context).toContain('A verified evidence block for this exact batch follows below');
+    expect(context).not.toContain('attached directly');
   });
 
   it('does not add an inspection pass when this turn uploaded no media', () => {
@@ -43,23 +42,31 @@ describe('current upload batch inspection', () => {
     expect(context).toContain('<<<media_2>>>');
   });
 
-  it('carries the batch contract through CUI, durable creation, and only the first attempt', () => {
+  it('carries the batch contract through every entry and durable retry', () => {
     const editor = read('src/components/Editor.tsx');
     const stream = read('src/lib/agentStream.ts');
     const route = read('src/app/api/agent/run/route.ts');
     const runner = read('src/lib/agent-execution-runner.ts');
     const cli = read('packages/makaron-cli/bin/makaron.mjs');
     const agent = read('src/lib/agent.ts');
+    const context = read('src/lib/agent-context.ts');
+    const execution = read('src/lib/agent-execution.ts');
 
     expect(editor).toContain('turnMediaCount: (imgs?.length || 0) + (videos?.length || 0)');
     expect(editor).toContain('turnMediaCount: workSnapshots.length');
     expect(stream).toContain('turnMediaCount: body.turnMediaCount');
     expect(route).toContain('turnMediaCount');
-    expect(runner).toContain('const needsTurnMediaInspection = !continuation || !previousSnapshot');
-    expect(runner).toContain('turnMediaCount: needsTurnMediaInspection ? request.turnMediaCount : undefined');
+    expect(runner).toContain('turnMediaCount: request.turnMediaCount');
     expect(cli).toContain('uploadedTurnMediaCount += addedCount');
     expect(cli).toContain('turnMediaCount: uploadedTurnMediaCount');
-    expect(agent).toContain('inspectionImages?: string[]');
+    expect(context).toContain('await Promise.all(batch.map(async (snapshot, offset) =>');
+    expect(context).toContain('analyzeImageContent(');
+    expect(context).toContain('analyzeVideoContent(');
+    expect(context).toContain('[Verified current upload batch — ${count} items]');
+    expect(context).toContain('[turn-media-preflight] completed ${count} items');
+    expect(agent).not.toContain('inspectionImages?: string[]');
+    expect(agent).toContain('A current upload batch is pre-analyzed in parallel');
     expect(agent).toContain("return { mode: 'batch_describe', analyses }");
+    expect(execution).toContain(".eq('run_id', runId)");
   });
 });

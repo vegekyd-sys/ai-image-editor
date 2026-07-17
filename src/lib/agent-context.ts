@@ -69,8 +69,6 @@ export interface PromptContextResult {
    *  multi-turn conversation — required for per-turn cachePoint (B7). */
   history: ModelMessage[];
   snapshotImages: string[];
-  /** Images from this turn's upload batch, in Media Index order. */
-  turnImageAttachments: Array<{ mediaIndex: number; url: string }>;
   currentSnapshotIndex: number;
   currentDesign?: DesignPayload;
   currentDesignPath?: string;
@@ -93,6 +91,87 @@ interface DbSnapshot {
   metadata?: { takenAt?: string; location?: string };
 }
 
+const GENERIC_MEDIA_DESCRIPTIONS = new Set([
+  'video snapshot',
+  'user-uploaded reference image',
+  'original upload',
+  '原图',
+  '[video]',
+]);
+
+function hasVerifiedMediaDescription(description?: string): boolean {
+  const normalized = description?.trim().toLowerCase();
+  return Boolean(normalized && !GENERIC_MEDIA_DESCRIPTIONS.has(normalized));
+}
+
+function compactMediaEvidence(value: string, maxChars: number): string {
+  return value.replace(/\s+/g, ' ').trim().slice(0, maxChars);
+}
+
+async function buildVerifiedTurnMediaEvidence(
+  snapshots: DbSnapshot[],
+  requestedCount: number | undefined,
+  supabase: SupabaseClient,
+  userId: string,
+): Promise<string> {
+  const count = Math.min(snapshots.length, Math.max(0, Math.floor(requestedCount || 0)));
+  if (!count) return '';
+
+  const preflightStartedAt = Date.now();
+  const start = snapshots.length - count;
+  const batch = snapshots.slice(start);
+  const { analyzeImageContent, analyzeVideoContent } = await import('./gemini');
+  await Promise.all(batch.map(async (snapshot, offset) => {
+    const mediaIndex = start + offset + 1;
+    const itemStartedAt = Date.now();
+    if (hasVerifiedMediaDescription(snapshot.description)) {
+      console.info(`[turn-media-preflight] media_${mediaIndex} cached in ${Date.now() - itemStartedAt}ms`);
+      return;
+    }
+    try {
+      const isVideo = snapshot.type === 'video';
+      const videoMeta = snapshot.video_meta as Record<string, unknown> | undefined;
+      const source = isVideo
+        ? (typeof videoMeta?.videoUrl === 'string' ? videoMeta.videoUrl : snapshot.image_url)
+        : snapshot.image_url;
+      if (!source) throw new Error('media source is missing');
+
+      const analysis = isVideo
+        ? await analyzeVideoContent(
+            source,
+            'Describe the entire video chronologically for a creative editor. Cover subjects, setting, actions, scene changes, notable text, framing, mood, and the most useful moments. Be concise but specific.',
+            userId,
+          )
+        : await analyzeImageContent(
+            source,
+            'Describe subjects, setting, action, composition, visible text, mood, and distinctive details that matter when using this image in a video. Be concise but specific.',
+            userId,
+          );
+      const description = compactMediaEvidence(analysis, isVideo ? 900 : 600);
+      if (!description) throw new Error('analyzer returned an empty description');
+      snapshot.description = description;
+      const { error } = await supabase.from('snapshots').update({ description }).eq('id', snapshot.id);
+      if (error) throw error;
+      console.info(`[turn-media-preflight] media_${mediaIndex} ${isVideo ? 'video' : 'image'} analyzed in ${Date.now() - itemStartedAt}ms`);
+    } catch (error) {
+      snapshot.description = `[analysis failed: ${error instanceof Error ? error.message : String(error)}]`;
+      console.warn(`[turn-media-preflight] media_${mediaIndex} failed in ${Date.now() - itemStartedAt}ms`, error);
+    }
+  }));
+  console.info(`[turn-media-preflight] completed ${count} items in ${Date.now() - preflightStartedAt}ms`);
+
+  return `[Verified current upload batch — ${count} items]
+The Media Analyzer inspected every item below before the Agent began planning. This is visual evidence, not filenames or guesses:
+${batch.map((snapshot, offset) => {
+  const mediaIndex = start + offset + 1;
+  const type = snapshot.type === 'video' ? 'video' : 'image';
+  return `- <<<media_${mediaIndex}>>> [${type}]: ${snapshot.description || '[analysis missing]'}`;
+}).join('\n')}
+Use the whole batch as the source set for the user's request. Make an intentional role or selection decision for every item; do not silently collapse the request to the current or first image. If any line says analysis failed, call the matching analyze_image or analyze_video tool before planning.
+
+`;
+}
+
 export function buildTurnMediaInspectionContext(
   snapshots: Array<Pick<DbSnapshot, 'type'>>,
   requestedCount?: number,
@@ -104,18 +183,13 @@ export function buildTurnMediaInspectionContext(
   if (turnMediaCount === 0) return '';
 
   const turnMediaStart = snapshots.length - turnMediaCount;
-  let imageAttachmentNumber = 0;
   return `[Current upload batch — inspect every item before planning]
 The user added ${turnMediaCount} new Media Index item${turnMediaCount === 1 ? '' : 's'} in this turn:
 ${snapshots.slice(turnMediaStart).map((snapshot, offset) => {
   const mediaIndex = turnMediaStart + offset + 1;
-  if (snapshot.type === 'video') {
-    return `- <<<media_${mediaIndex}>>>: video — inspect with analyze_video`;
-  }
-  imageAttachmentNumber += 1;
-  return `- <<<media_${mediaIndex}>>>: image — attached directly to this request as upload-batch image attachment ${imageAttachmentNumber}; inspect it visually`;
+  return `- <<<media_${mediaIndex}>>>: ${snapshot.type === 'video' ? 'video' : 'image'}`;
 }).join('\n')}
-Before creating a Brief, proposal, script, storyboard, edit, or composition, inspect every item above. The uploaded images are already attached together to the current model request, so do not spend separate tool rounds calling analyze_image for them unless the selected model cannot receive images. For videos, call analyze_video once with every required media index in media_indices so their analyses run concurrently. Base the work on returned visual evidence, not filenames, posters, neighboring media, or guesses. This requirement applies only to this new upload batch; later attempts must reuse the durable checkpoint, persisted descriptions, and agent_tool_history instead of analyzing the same media again.
+Do not plan from only the current or first image. A verified evidence block for this exact batch follows below; consume every line before deciding how each item contributes.
 
 `;
 }
@@ -241,7 +315,7 @@ export async function buildPromptContext(
     ? supabase
         .from('agent_context_snapshots')
         .select('content, run_id')
-        .eq('project_id', projectId)
+        .eq('run_id', options.executionRunId)
         .order('created_at', { ascending: false })
         .limit(1)
         .maybeSingle()
@@ -300,6 +374,12 @@ export async function buildPromptContext(
   ]);
 
   const snapshots: DbSnapshot[] = snapshotsRes.data ?? [];
+  const verifiedTurnMediaEvidence = await buildVerifiedTurnMediaEvidence(
+    snapshots,
+    options.turnMediaCount,
+    supabase,
+    userId,
+  );
   const recentMessages = ([...(recentMessagesRes.data ?? [])] as DbMessage[]).reverse();
   const originMessage = (originMessageRes.data?.[0] as DbMessage | undefined);
   const messages: DbMessage[] = originMessage && !recentMessages.some(message => (
@@ -538,30 +618,17 @@ export async function buildPromptContext(
     : '';
 
   // Assemble
-  const fullPrompt = `${executionContext}${recoveryContext}${activeStudioRunContext}${videoWarning}${designWarning}${annotationWarning}${draftWarning}${snapshotWarning}${metaContext}${descriptionContext}${snapshotIndexContext}${turnMediaInspectionContext}${designContext}${recoverableDraftContext}${tipsContext}${refContext}${frameAnchoredVideoEditContext}${videoUploadContext}${audioAttachmentContext}[User request — detect language and reply in the same language]\n${userMessage}`;
+  const fullPrompt = `${executionContext}${recoveryContext}${activeStudioRunContext}${videoWarning}${designWarning}${annotationWarning}${draftWarning}${snapshotWarning}${metaContext}${descriptionContext}${snapshotIndexContext}${turnMediaInspectionContext}${verifiedTurnMediaEvidence}${designContext}${recoverableDraftContext}${tipsContext}${refContext}${frameAnchoredVideoEditContext}${videoUploadContext}${audioAttachmentContext}[User request — detect language and reply in the same language]\n${userMessage}`;
 
   const snapshotImages = snapshots.map((s) => {
     const videoMeta = s.video_meta as Record<string, unknown> | undefined;
     const videoUrl = typeof videoMeta?.videoUrl === 'string' ? videoMeta.videoUrl : '';
     return s.type === 'video' && videoUrl ? videoUrl : (s.image_url || '');
   });
-  const turnMediaCount = Math.min(snapshots.length, Math.max(0, Math.floor(options.turnMediaCount || 0)));
-  const turnMediaStart = snapshots.length - turnMediaCount;
-  const turnImageAttachments = snapshots
-    .slice(turnMediaStart)
-    .map((snapshot, offset) => ({
-      mediaIndex: turnMediaStart + offset + 1,
-      type: snapshot.type,
-      url: snapshot.image_url || '',
-    }))
-    .filter(item => item.type !== 'video' && item.url)
-    .map(({ mediaIndex, url }) => ({ mediaIndex, url }));
-
   return {
     fullPrompt,
     history,
     snapshotImages,
-    turnImageAttachments,
     currentSnapshotIndex,
     currentDesign,
     currentDesignPath,

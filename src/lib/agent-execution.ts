@@ -291,12 +291,12 @@ export class AgentExecutionStore {
   ) {}
 
   async latestSnapshot(runId: string): Promise<DurableExecutionSnapshot | null> {
-    let query = this.supabase
+    const query = this.supabase
       .from('agent_context_snapshots')
       .select('content, run_id')
+      .eq('run_id', runId)
       .order('created_at', { ascending: false })
       .limit(1);
-    query = this.projectId ? query.eq('project_id', this.projectId) : query.eq('run_id', runId);
     const { data, error } = await query.maybeSingle();
     if (error || !data?.content) return null;
     return normalizeExecutionSnapshot(data.content, {
