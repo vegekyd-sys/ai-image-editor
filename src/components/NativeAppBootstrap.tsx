@@ -5,7 +5,7 @@ import { useRouter } from 'next/navigation';
 import { calculateVisualViewportKeyboardInset } from '@/lib/ios-keyboard';
 import { MAKARON_IOS_USER_AGENT_TOKEN } from '@/lib/native-app';
 import { warmNativeJSONCache } from '@/lib/native-app-cache';
-import { isNativePhotoLibraryPickerAvailable, pickMediaFromNativePhotoLibrary } from '@/lib/native-media';
+import { isNativePhotoLibraryPickerAvailable, pickMediaItemsFromNativePhotoLibrary } from '@/lib/native-media';
 import { acceptsNativeMediaPickerAccept, nativePickerAllowsVideo } from '@/lib/native-photo-picker';
 
 const NATIVE_BOOT_LOG_SESSION_KEY = 'makaron:ios-native-boot-log';
@@ -367,10 +367,15 @@ export default function NativeAppBootstrap() {
         event.stopPropagation();
 
         try {
-          const picked = await pickMediaFromNativePhotoLibrary({ allowVideo: nativePickerAllowsVideo(input.accept) });
-          const file = await fileFromDataUrl(picked.dataUrl, picked.filename, picked.mimeType);
+          const pickedItems = await pickMediaItemsFromNativePhotoLibrary({
+            allowVideo: nativePickerAllowsVideo(input.accept),
+            multiple: input.multiple,
+          });
+          const pickedFiles = await Promise.all(pickedItems.map((picked) => (
+            fileFromDataUrl(picked.dataUrl, picked.filename, picked.mimeType)
+          )));
           const files = new DataTransfer();
-          files.items.add(file);
+          pickedFiles.forEach((file) => files.items.add(file));
           input.files = files.files;
           input.dispatchEvent(new Event('input', { bubbles: true }));
           input.dispatchEvent(new Event('change', { bubbles: true }));

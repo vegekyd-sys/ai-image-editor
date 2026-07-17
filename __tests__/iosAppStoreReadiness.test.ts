@@ -321,10 +321,12 @@ describe('iOS App Store readiness guardrails', () => {
     expect(projects).toContain('warmProjectEditorCaches(projects.map((project) => project.id), userId, 6)');
     expect(projects).toContain('onTouchStart={onWarm}');
     expect(projects).toContain('onPointerEnter={onWarm}');
-    expect(bootstrap).toContain('pickMediaFromNativePhotoLibrary');
+    expect(bootstrap).toContain('pickMediaItemsFromNativePhotoLibrary');
     expect(bootstrap).toContain('acceptsNativePhotoPicker');
     expect(bootstrap).toContain('acceptsNativeMediaPickerAccept(input.accept)');
     expect(bootstrap).toContain('nativePickerAllowsVideo(input.accept)');
+    expect(bootstrap).toContain('multiple: input.multiple');
+    expect(bootstrap).toContain('pickedFiles.forEach((file) => files.items.add(file))');
     expect(bootstrap).toContain('getIOSPageBackBackdropRoute');
     expect(bootstrap).toContain('document.createElement(\'iframe\')');
     expect(bootstrap).toContain('showPageBackBackdrop(true)');
@@ -510,7 +512,9 @@ describe('iOS App Store readiness guardrails', () => {
     expect(bridge).toContain('pickMedia');
     expect(bridge).toContain('configuration.preferredAssetRepresentationMode = .compatible');
     expect(bridge).toContain('normalizedPickedImagePayload');
-    expect(bridge).toContain('jpegData(compressionQuality: 0.92)');
+    expect(bridge).toContain('configuration.selectionLimit = allowsMultiple ? 0 : 1');
+    expect(bridge).toContain('resizedPickedImage(image, maxDimension: 2048)');
+    expect(bridge).toContain('jpegData(compressionQuality: 0.9)');
     expect(bridge).toContain('return (jpegData, jpegFilename(for: filename), "image/jpeg")');
     expect(bridge).toContain('PHAssetCreationRequest.forAsset()');
     expect(bridge).toContain('UIImage(data: data)');
@@ -526,6 +530,7 @@ describe('iOS App Store readiness guardrails', () => {
     expect(nativeMedia).toContain('saveBlobToNativePhotoLibrary');
     expect(nativeMedia).toContain('saveUrlToNativePhotoLibrary');
     expect(nativeMedia).toContain('pickMediaFromNativePhotoLibrary');
+    expect(nativeMedia).toContain('pickMediaItemsFromNativePhotoLibrary');
     expect(nativeMedia).toContain('makaron:native-media:last-result');
     expect(nativeMedia).toContain("phase: 'sent'");
     expect(nativeMedia).toContain("phase: 'timeout'");
@@ -614,6 +619,9 @@ describe('iOS App Store readiness guardrails', () => {
     const storyboard = fs.readFileSync(path.join(root, 'ios/App/App/Base.lproj/Main.storyboard'), 'utf8');
     const project = fs.readFileSync(path.join(root, 'ios/App/App.xcodeproj/project.pbxproj'), 'utf8');
     const projectLoading = path.join(root, 'src/app/projects/[id]/loading.tsx');
+    expect(projectContainer).toContain('getPendingProjectLaunchSync(projectId)');
+    expect(projectContainer).toContain('if (isNewProject && user)');
+    expect(projectContainer).toContain('.maybeSingle()');
     expect(editor).toContain('hasCuiHistoryState');
     expect(editor).toContain("window.addEventListener('popstate', handlePop)");
     expect(editor).toContain("viewMode === 'cui'");

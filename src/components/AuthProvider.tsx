@@ -3,7 +3,7 @@
 import { createContext, useEffect, useState, useCallback, useRef } from 'react'
 import { User, SupabaseClient } from '@supabase/supabase-js'
 import { createClient } from '@/lib/supabase/client'
-import { clearUserCache } from '@/lib/imageCache'
+import { clearCreateDraft, clearPendingProjectLaunches, clearUserCache } from '@/lib/imageCache'
 import { readNativeJSONCache, writeNativeJSONCache, removeNativeJSONCache, warmNativeJSONCache } from '@/lib/native-app-cache'
 import { isMakaronIOSApp } from '@/lib/native-app'
 import { warmProjectsListCache } from '@/lib/projects-list-warm'
@@ -106,6 +106,8 @@ export default function AuthProvider({ children }: { children: React.ReactNode }
   const signOut = useCallback(async () => {
     const inIOSApp = isMakaronIOSApp()
     clearUserCache()
+    clearPendingProjectLaunches()
+    await clearCreateDraft()
     if (useNativeAuthCacheRef.current) removeNativeJSONCache(AUTH_USER_CACHE_KEY)
     if (inIOSApp) {
       try {

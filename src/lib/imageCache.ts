@@ -6,6 +6,9 @@ const PROJECTS_LIST_SESSION_KEY = 'makaron:last-projects-list'
 const PROJECTS_LIST_LOCAL_KEY = 'makaron:last-projects-list:persistent'
 const CREATE_DRAFT_STORE = 'create-drafts'
 const ACTIVE_CREATE_DRAFT_KEY = 'active'
+const CREATE_DRAFT_CONTINUATION_KEY = 'makaron:create-draft-continuation'
+const PENDING_PROJECT_IMAGES_KEY = 'makaron:pending-project-images'
+const PENDING_PROJECT_LAUNCH_PREFIX = 'makaron:pending-project-launch:'
 const MEDIA_BLOB_STORE = 'media-blobs'
 const TTL_MS = 30 * 24 * 60 * 60 * 1000  // 30 days
 const MAX_MEDIA_BLOB_BYTES = 32 * 1024 * 1024
@@ -42,6 +45,7 @@ interface MediaBlobCacheEntry {
 export interface CreateDraftEntry {
   key: string
   images: string[]
+  continuationId?: string
   metadata?: unknown
   prompt?: string
   selectedSkill?: string
@@ -50,11 +54,20 @@ export interface CreateDraftEntry {
   cachedAt: number
 }
 
+export interface PendingProjectLaunch {
+  projectId: string
+  prompt?: string
+  skill?: string
+  metadata?: unknown
+  cachedAt: number
+}
+
 // In-memory layer: synchronous, survives client-side navigation within the same tab session
 const memoryCache = new Map<string, string>()
 const projectMemCache = new Map<string, ProjectCacheEntry>()
 let projectsListMemCache: ProjectsListCacheEntry | null = null
 let createDraftMemCache: CreateDraftEntry | null = null
+const pendingProjectLaunchMemCache = new Map<string, PendingProjectLaunch>()
 const mediaObjectUrlCache = new Map<string, { url: string; cachedAt: number }>()
 const mediaFetchInFlight = new Map<string, Promise<string | null>>()
 
@@ -234,6 +247,57 @@ export async function getCachedImages(keys: string[]): Promise<Map<string, strin
   }
 
   return result
+}
+
+interface PendingProjectImagesManifest {
+  projectId: string
+  keys: string[]
+}
+
+function readPendingProjectImagesManifest(projectId: string): PendingProjectImagesManifest | null {
+  if (typeof window === 'undefined') return null
+  try {
+    const raw = sessionStorage.getItem(PENDING_PROJECT_IMAGES_KEY)
+    if (!raw) return null
+    const manifest = JSON.parse(raw) as PendingProjectImagesManifest
+    if (manifest.projectId !== projectId || !Array.isArray(manifest.keys) || manifest.keys.length === 0) return null
+    return manifest
+  } catch {
+    return null
+  }
+}
+
+export async function stagePendingProjectImages(projectId: string, images: string[]): Promise<void> {
+  if (typeof window === 'undefined' || images.length === 0) return
+  const keys = images.map((_, index) => `pending-project:${projectId}:${index}`)
+  images.forEach((image, index) => memoryCache.set(keys[index], image))
+  await Promise.all(images.map((image, index) => writeToIDB(keys[index], image)))
+  sessionStorage.setItem(PENDING_PROJECT_IMAGES_KEY, JSON.stringify({ projectId, keys }))
+}
+
+export function hasPendingProjectImages(projectId: string): boolean {
+  return readPendingProjectImagesManifest(projectId) !== null
+}
+
+export function getPendingProjectImagesSync(projectId: string): string[] | null {
+  const manifest = readPendingProjectImagesManifest(projectId)
+  if (!manifest) return null
+  const images = manifest.keys.map(key => memoryCache.get(key))
+  return images.every((image): image is string => typeof image === 'string') ? images : null
+}
+
+export async function getPendingProjectImages(projectId: string): Promise<string[] | null> {
+  const manifest = readPendingProjectImagesManifest(projectId)
+  if (!manifest) return null
+  const cached = await getCachedImages(manifest.keys)
+  const images = manifest.keys.map(key => cached.get(key))
+  return images.every((image): image is string => typeof image === 'string') ? images : null
+}
+
+export function clearPendingProjectImages(projectId: string): void {
+  const manifest = readPendingProjectImagesManifest(projectId)
+  if (!manifest) return
+  sessionStorage.removeItem(PENDING_PROJECT_IMAGES_KEY)
 }
 
 // Synchronous memory-only lookup (use in useState initializer to avoid spinner flash)
@@ -421,6 +485,46 @@ export function cacheCreateDraft(
   void writeCreateDraftToIDB(entry)
 }
 
+export function beginCreateDraftContinuation(): string {
+  const continuationId = typeof globalThis.crypto?.randomUUID === 'function'
+    ? globalThis.crypto.randomUUID()
+    : `${Date.now().toString(36)}-${Math.random().toString(36).slice(2)}`
+  try {
+    sessionStorage.setItem(CREATE_DRAFT_CONTINUATION_KEY, continuationId)
+    localStorage.setItem(CREATE_DRAFT_CONTINUATION_KEY, continuationId)
+  } catch {
+    // The in-memory draft remains usable in the current page session.
+  }
+  return continuationId
+}
+
+export function getCreateDraftContinuationId(): string | null {
+  if (typeof window === 'undefined') return null
+  try {
+    return sessionStorage.getItem(CREATE_DRAFT_CONTINUATION_KEY)
+      || localStorage.getItem(CREATE_DRAFT_CONTINUATION_KEY)
+  } catch {
+    return null
+  }
+}
+
+export function shouldConsumeCreateDraft(
+  draft: CreateDraftEntry | null,
+  continuationId: string | null,
+): draft is CreateDraftEntry {
+  return Boolean(draft && continuationId && draft.continuationId === continuationId)
+}
+
+export function clearCreateDraftContinuation(): void {
+  if (typeof window === 'undefined') return
+  try {
+    sessionStorage.removeItem(CREATE_DRAFT_CONTINUATION_KEY)
+    localStorage.removeItem(CREATE_DRAFT_CONTINUATION_KEY)
+  } catch {
+    // Storage cleanup is best-effort.
+  }
+}
+
 export async function getCreateDraft(): Promise<CreateDraftEntry | null> {
   const mem = createDraftMemCache
   if (mem && Date.now() - mem.cachedAt < TTL_MS) return mem
@@ -444,6 +548,7 @@ export async function getCreateDraft(): Promise<CreateDraftEntry | null> {
 
 export async function clearCreateDraft(): Promise<void> {
   createDraftMemCache = null
+  clearCreateDraftContinuation()
   try {
     const db = await getDB()
     if (!db) return
@@ -455,6 +560,81 @@ export async function clearCreateDraft(): Promise<void> {
     })
   } catch {
     // IDB failures are non-critical
+  }
+}
+
+function pendingProjectLaunchKey(projectId: string): string {
+  return `${PENDING_PROJECT_LAUNCH_PREFIX}${projectId}`
+}
+
+export function stagePendingProjectLaunch(
+  projectId: string,
+  launch: Omit<PendingProjectLaunch, 'projectId' | 'cachedAt'>,
+): void {
+  const entry: PendingProjectLaunch = {
+    projectId,
+    cachedAt: Date.now(),
+    ...launch,
+  }
+  pendingProjectLaunchMemCache.set(projectId, entry)
+  if (typeof window === 'undefined') return
+  try {
+    const serialized = JSON.stringify(entry)
+    sessionStorage.setItem(pendingProjectLaunchKey(projectId), serialized)
+    localStorage.setItem(pendingProjectLaunchKey(projectId), serialized)
+  } catch {
+    // The in-memory handoff still covers client-side navigation.
+  }
+}
+
+export function getPendingProjectLaunchSync(projectId: string): PendingProjectLaunch | null {
+  const cached = pendingProjectLaunchMemCache.get(projectId)
+  if (cached && Date.now() - cached.cachedAt < TTL_MS) return cached
+  if (typeof window === 'undefined') return null
+
+  try {
+    const key = pendingProjectLaunchKey(projectId)
+    const raw = sessionStorage.getItem(key) || localStorage.getItem(key)
+    if (!raw) return null
+    const entry = JSON.parse(raw) as PendingProjectLaunch
+    if (entry.projectId !== projectId || Date.now() - entry.cachedAt >= TTL_MS) {
+      sessionStorage.removeItem(key)
+      localStorage.removeItem(key)
+      return null
+    }
+    pendingProjectLaunchMemCache.set(projectId, entry)
+    return entry
+  } catch {
+    return null
+  }
+}
+
+export function clearPendingProjectLaunch(projectId: string): void {
+  pendingProjectLaunchMemCache.delete(projectId)
+  if (typeof window === 'undefined') return
+  try {
+    const key = pendingProjectLaunchKey(projectId)
+    sessionStorage.removeItem(key)
+    localStorage.removeItem(key)
+  } catch {
+    // Storage cleanup is best-effort.
+  }
+}
+
+export function clearPendingProjectLaunches(): void {
+  pendingProjectLaunchMemCache.clear()
+  if (typeof window === 'undefined') return
+  try {
+    for (const storage of [sessionStorage, localStorage]) {
+      const keys: string[] = []
+      for (let index = 0; index < storage.length; index += 1) {
+        const key = storage.key(index)
+        if (key?.startsWith(PENDING_PROJECT_LAUNCH_PREFIX)) keys.push(key)
+      }
+      keys.forEach((key) => storage.removeItem(key))
+    }
+  } catch {
+    // Storage cleanup is best-effort.
   }
 }
 
