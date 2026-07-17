@@ -339,6 +339,8 @@ const zhHant = {
   // Skills
   'skills.title': 'Skill 市集',
   'skills.subtitle': '來自全球創作者、開箱即用的魔法',
+  'skills.categoryAll': '全部',
+  'skills.categories': 'Skill 分類',
   'skills.back': '返回',
   'skills.uploading': '上傳中...',
   'skills.add': '+ Skill',

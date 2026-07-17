@@ -990,6 +990,17 @@ function timeSince(date) {
 
 // ─── Skill Marketplace ──────────────────────────────────────────────────────
 
+const MARKETPLACE_LOCALES = ['en', 'zh', 'zh-Hant', 'ja'];
+
+function localizedValues(value) {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return [];
+  return Object.values(value).filter(item => typeof item === 'string' && item.trim());
+}
+
+function localizedCoverage(value) {
+  return MARKETPLACE_LOCALES.filter(locale => typeof value?.[locale] === 'string' && value[locale].trim()).length;
+}
+
 function getSkillLabel(skill) {
   return skill.labels?.en || skill.labels?.zh || skill.label || skill.name || skill.id;
 }
@@ -1032,15 +1043,15 @@ async function fetchMarketplaceSkills(baseUrl, opts = {}) {
 }
 
 function marketplaceSearchText(skill) {
+  const localized = [...localizedValues(skill.labels), ...localizedValues(skill.prompts)];
   return [
     skill.id,
     skill.label,
-    skill.labels?.en,
-    skill.labels?.zh,
+    ...localized,
     skill.prompt,
+    ...(Array.isArray(skill.categories) ? skill.categories : []),
     slugifySkill(skill.label),
-    slugifySkill(skill.labels?.en),
-    slugifySkill(skill.labels?.zh),
+    ...localized.map(slugifySkill),
   ].filter(Boolean).join(' ').toLowerCase();
 }
 
@@ -1048,9 +1059,10 @@ function marketplaceSkillTokens(skill) {
   return [
     skill.id,
     skill.label,
-    skill.labels?.en,
-    skill.labels?.zh,
+    ...localizedValues(skill.labels),
+    ...localizedValues(skill.prompts),
     skill.prompt,
+    ...(Array.isArray(skill.categories) ? skill.categories : []),
   ].filter(Boolean).map(value => String(value).toLowerCase());
 }
 
@@ -1098,8 +1110,13 @@ function printMarketplaceSkill(skill) {
   console.log(`${skill.label}`);
   console.log(`ID: ${skill.id}`);
   console.log(`Type: ${skill.hasSkill ? 'installable skill' : 'prompt template'}`);
-  if (skill.labels?.zh && skill.labels.zh !== skill.label) console.log(`ZH: ${skill.labels.zh}`);
-  if (skill.prompt) console.log(`Prompt: ${skill.prompt}`);
+  for (const locale of MARKETPLACE_LOCALES) {
+    const label = skill.labels?.[locale];
+    if (label && label !== skill.label) console.log(`${locale}: ${label}`);
+  }
+  if (Array.isArray(skill.categories) && skill.categories.length) console.log(`Categories: ${skill.categories.join(', ')}`);
+  console.log(`i18n: titles ${localizedCoverage(skill.labels)}/4 · prompts ${localizedCoverage(skill.prompts)}/4`);
+  if (skill.prompts?.en || skill.prompt) console.log(`Prompt (en): ${skill.prompts?.en || skill.prompt}`);
   if (skill.image) console.log(`Cover: ${skill.image}`);
   if (skill.hasSkill) console.log(`Install: makaron skills install ${skill.id}`);
 }
@@ -1719,7 +1736,8 @@ Use with chat:
   music status <taskId>                                      Check music status
 `);
   } else if (topic === 'admin') {
-    if (subtopic === 'skills') console.log('Usage: makaron admin skills [add|update|delete] ...');
+    if (subtopic === 'skills') console.log('Usage: makaron admin skills [--json|add|update|delete] ...');
+    else if (subtopic === 'skill-categories') console.log('Usage: makaron admin skill-categories [--json|add|update|delete] ...');
     else if (subtopic === 'upload') console.log('Usage: makaron admin upload <local-file> <storage-path>');
     else if (subtopic === 'fetch-skill') console.log('Usage: makaron admin fetch-skill <share-code|url>');
     else if (subtopic === 'set-admin') console.log('Usage: makaron admin set-admin <email>');
@@ -1728,6 +1746,10 @@ Use with chat:
   admin skills add '<json>'            Add a new skill
   admin skills update <id> '<json>'    Update a skill
   admin skills delete <id>             Delete a skill
+  admin skill-categories               List marketplace categories
+  admin skill-categories add '<json>'  Add a category
+  admin skill-categories update <id> '<json>'
+  admin skill-categories delete <id>   Delete a category
   admin upload <file> <storage-path>   Upload file to Storage
   admin fetch-skill <code|url>         Download skill from share link
   admin set-admin <email>              Grant admin access to a user
@@ -2492,18 +2514,23 @@ if (!command || command === '--help' || command === '-h' || command === 'help') 
   const sub = args[1];
 
   if (sub === 'skills') {
-    const action = args[2]; // add, update, delete, or none (list)
+    const action = args[2] === '--json' ? null : args[2]; // add, update, delete, or none (list)
     if (!action) {
       // List all skills
       const res = await fetch(`${baseUrl}/api/admin/home-skills`, { headers });
       if (!res.ok) { console.error(`Error ${res.status}:`, await res.text()); process.exit(1); }
       const skills = await res.json();
+      if (args.includes('--json')) {
+        console.log(JSON.stringify(skills, null, 2));
+        process.exit(0);
+      }
       console.log(`📋 ${skills.length} skills\n`);
       for (const s of skills) {
         const label = s.labels?.en || s.labels?.zh || '(no label)';
         const active = s.is_active ? '✅' : '❌';
         const hasZip = s.skill_path ? '📦' : '  ';
-        console.log(`  ${active} ${hasZip} ${String(s.sort_order).padStart(3)}  ${s.id}  ${label}`);
+        const categories = Array.isArray(s.categories) && s.categories.length ? s.categories.join(',') : 'uncategorized';
+        console.log(`  ${active} ${hasZip} ${String(s.sort_order).padStart(3)}  ${s.id}  ${label}  [${categories}]  title ${localizedCoverage(s.labels)}/4 · prompt ${localizedCoverage(s.prompts)}/4`);
       }
     } else if (action === 'add') {
       const json = args.slice(3).join(' ');
@@ -2536,6 +2563,59 @@ if (!command || command === '--help' || command === '-h' || command === 'help') 
       });
       if (!res.ok) { console.error(`Error ${res.status}:`, await res.text()); process.exit(1); }
       console.log(`✅ Skill ${id} deleted`);
+    } else {
+      console.error(`Unknown action: ${action}. Use: add, update, delete, or omit to list.`);
+      process.exit(1);
+    }
+
+  } else if (sub === 'skill-categories') {
+    const action = args[2] === '--json' ? null : args[2];
+    if (!action) {
+      const res = await fetch(`${baseUrl}/api/admin/skill-categories`, { headers });
+      if (!res.ok) { console.error(`Error ${res.status}:`, await res.text()); process.exit(1); }
+      const categories = await res.json();
+      if (args.includes('--json')) {
+        console.log(JSON.stringify(categories, null, 2));
+        process.exit(0);
+      }
+      console.log(`📂 ${categories.length} skill categories\n`);
+      for (const category of categories) {
+        const label = category.labels?.en || category.labels?.zh || category.id;
+        const active = category.is_active ? '✅' : '❌';
+        const icon = category.icon || ' ';
+        console.log(`  ${active} ${icon} ${String(category.sort_order).padStart(3)}  ${category.id}  ${label}  title ${localizedCoverage(category.labels)}/4`);
+      }
+    } else if (action === 'add') {
+      const json = args.slice(3).join(' ');
+      if (!json) { console.error('Usage: makaron admin skill-categories add \'{"id":"...","labels":{...}}\''); process.exit(1); }
+      let body;
+      try { body = JSON.parse(json); } catch { console.error('Invalid JSON'); process.exit(1); }
+      const res = await fetch(`${baseUrl}/api/admin/skill-categories`, {
+        method: 'POST', headers: { 'Content-Type': 'application/json', ...headers }, body: JSON.stringify(body),
+      });
+      if (!res.ok) { console.error(`Error ${res.status}:`, await res.text()); process.exit(1); }
+      const data = await res.json();
+      console.log(`✅ Skill category created: ${data.id}`);
+    } else if (action === 'update') {
+      const id = args[3];
+      const json = args.slice(4).join(' ');
+      if (!id || !json) { console.error('Usage: makaron admin skill-categories update <id> \'{"field":"value"}\''); process.exit(1); }
+      let body;
+      try { body = JSON.parse(json); } catch { console.error('Invalid JSON'); process.exit(1); }
+      body.id = id;
+      const res = await fetch(`${baseUrl}/api/admin/skill-categories`, {
+        method: 'PUT', headers: { 'Content-Type': 'application/json', ...headers }, body: JSON.stringify(body),
+      });
+      if (!res.ok) { console.error(`Error ${res.status}:`, await res.text()); process.exit(1); }
+      console.log(`✅ Skill category ${id} updated`);
+    } else if (action === 'delete') {
+      const id = args[3];
+      if (!id) { console.error('Usage: makaron admin skill-categories delete <id>'); process.exit(1); }
+      const res = await fetch(`${baseUrl}/api/admin/skill-categories`, {
+        method: 'DELETE', headers: { 'Content-Type': 'application/json', ...headers }, body: JSON.stringify({ id }),
+      });
+      if (!res.ok) { console.error(`Error ${res.status}:`, await res.text()); process.exit(1); }
+      console.log(`✅ Skill category ${id} deleted`);
     } else {
       console.error(`Unknown action: ${action}. Use: add, update, delete, or omit to list.`);
       process.exit(1);
@@ -2600,6 +2680,10 @@ if (!command || command === '--help' || command === '-h' || command === 'help') 
   admin skills add '<json>'            Add a new skill
   admin skills update <id> '<json>'    Update a skill
   admin skills delete <id>             Delete a skill
+  admin skill-categories               List marketplace categories
+  admin skill-categories add '<json>'  Add a category
+  admin skill-categories update <id> '<json>'
+  admin skill-categories delete <id>   Delete a category
   admin upload <file> <storage-path>   Upload file to Storage
   admin fetch-skill <code|url>         Download skill from share link
   admin set-admin <email>              Grant admin access to a user

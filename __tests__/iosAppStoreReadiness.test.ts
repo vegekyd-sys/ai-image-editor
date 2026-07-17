@@ -286,10 +286,15 @@ describe('iOS App Store readiness guardrails', () => {
     expect(home).toContain("writeNativeJSONCache('/api/home-skills', data)");
     expect(home).toContain('data-makaron-home-fixed-composer');
     expect(home).toContain('const syncFixedInputVisibility = useCallback');
-    expect(home).toContain("window.addEventListener('pageshow', scheduleSync)");
-    expect(home).toContain("window.addEventListener('makaron-ios-page-stack-back', scheduleSync as EventListener)");
+    expect(home).toContain("window.addEventListener('pageshow', scheduleResumeSync)");
+    expect(home).toContain("window.addEventListener('focus', scheduleResumeSync)");
+    expect(home).toContain("document.addEventListener('visibilitychange', handleVisibilityChange)");
+    expect(home).toContain("window.addEventListener('makaron-ios-page-stack-back', scheduleResumeSync as EventListener)");
     expect(home).toContain("window.visualViewport?.addEventListener('scroll', scheduleSync)");
-    expect(home).toContain('const fixedComposerViewportInset = !isDesktop && (showFixedInput || selectedDetail || textareaFocused)');
+    expect(home).toContain('const refreshHomeComposerViewport = useCallback');
+    expect(home).toContain('const fixedComposerViewportInset = getHomeComposerViewportInset({');
+    expect(home).toContain('textareaFocused,');
+    expect(home).toContain('keyboardInset: effectiveKbInset,');
     expect(home).toContain("bottom: fixedComposerBottom");
     expect(home).toContain("max(env(safe-area-inset-bottom, 0px), ${fixedComposerViewportInset}px)");
     expect(home).toContain('const updateViewportInset = useCallback');

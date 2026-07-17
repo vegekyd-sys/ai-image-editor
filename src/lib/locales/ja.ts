@@ -343,6 +343,8 @@ const ja = {
   // Skills
   'skills.title': 'Skillマーケット',
   'skills.subtitle': '世界中のクリエイターによる、すぐ使える魔法',
+  'skills.categoryAll': 'すべて',
+  'skills.categories': 'Skillカテゴリー',
   'skills.back': '戻る',
   'skills.uploading': 'アップロード中...',
   'skills.add': '+ Skill',

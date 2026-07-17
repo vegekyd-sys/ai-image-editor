@@ -1,0 +1,344 @@
+[
+  {
+    "id": "32dcbd79-c35d-459a-a609-c78c4f0566ba",
+    "en": "Acid Drift",
+    "zh": "柠檬狂飙",
+    "prompt": "Upload your photo to create a video in the style of acid desert road racing."
+  },
+  {
+    "id": "e1cca386-b71e-4aea-81c1-894782841b2f",
+    "en": "3D Screen Break",
+    "zh": "3D裸眼巨幕",
+    "prompt": "Upload a photo, generate a naked-eye 3D billboard video."
+  },
+  {
+    "id": "e7a1e2f2-e3bb-4c31-90cc-7b8a919d7c81",
+    "en": "Lens Sign",
+    "zh": "镜头签",
+    "prompt": "Upload a selfie to generate a festival-screen lens signature video"
+  },
+  {
+    "id": "50ce086d-cfa9-4dbf-9b79-204c91945fcf",
+    "en": "Airport Candid",
+    "zh": "机场巨星",
+    "prompt": "Upload a photo and become a celebrity walking through the airport."
+  },
+  {
+    "id": "c4dede02-70fd-42d5-85ea-83f6aec5e0f4",
+    "en": "Street Paparazzi",
+    "zh": "街拍狗仔",
+    "prompt": "Upload a photo, generate a street paparazzi style video."
+  },
+  {
+    "id": "5ae407d0-2b1c-4f1f-870d-8109b9a6e87c",
+    "en": "Fruit Drama",
+    "zh": "水果主角大戏",
+    "prompt": "上传照片，变成电影级水果角色剧情短片"
+  },
+  {
+    "id": "e0b60223-480d-4428-8f8e-853b71aba6e0",
+    "en": "Android Assembly",
+    "zh": "机械姬",
+    "prompt": "Upload your photo to be transformed into an android being assembled in a sci-fi lab."
+  },
+  {
+    "id": "3b405f5d-deac-428b-a8c5-2b459104012f",
+    "en": "Live In Concert",
+    "zh": "梦燃现场",
+    "prompt": "Drop a photo and headline your own stadium concert."
+  },
+  {
+    "id": "fe06677e-b112-451c-a0c1-b7a83b1cb8c2",
+    "en": "Photo Peel",
+    "zh": "撕纸人像",
+    "prompt": "Drop a photo — peel your person out like a 2D sticker."
+  },
+  {
+    "id": "4c711043-a8bc-4e46-9d2e-acc573a7e585",
+    "en": "Flash Cut Travel",
+    "zh": "10秒闪切旅拍",
+    "prompt": "Upload travel photos and generate a 10-second fast-cut travel video."
+  },
+  {
+    "id": "3efd5636-0650-4ef7-9b48-5e6dda55989a",
+    "en": "Card Summon",
+    "zh": "卡牌召唤",
+    "prompt": "Summon your idol from a glowing card — the card shatters and they appear in a burst of light"
+  },
+  {
+    "id": "1094df13-6ba9-476b-b6b5-b22e483baa96",
+    "en": "Concert Poster Tour",
+    "zh": "海报巡演",
+    "prompt": "Turn yourself into a concert poster that comes alive — lights flash, crowd roars, your tour begins"
+  },
+  {
+    "id": "159e113d-c1c4-45d9-8c6a-93ba45e73203",
+    "en": "Cyber Samurai Duel",
+    "zh": "赛博对决",
+    "prompt": "Upload two photos and watch them clash in a cinematic cyber samurai duel."
+  },
+  {
+    "id": "dada27b1-9234-4d30-9a00-0785954833f8",
+    "en": "Multiverse Fall",
+    "zh": "坠入多重宇宙",
+    "prompt": "Drop yourself through parallel dimensions — each portal reveals a different universe version of you"
+  },
+  {
+    "id": "dae88473-de10-40ca-815d-0473a8898eef",
+    "en": "Fan Meeting",
+    "zh": "爱豆签售会",
+    "prompt": "Upload a selfie to become a K-pop idol at your own fan signing event."
+  },
+  {
+    "id": "7daee2f9-afff-49d1-8d0c-c802f9bdf171",
+    "en": "Pitch to Universe",
+    "zh": "投球宇宙",
+    "prompt": "Pitch a ball that tears through reality — watch it fly into the cosmos and shatter dimensions"
+  },
+  {
+    "id": "2a47e6df-6009-4a10-b227-0fd4f774361a",
+    "en": "Forest Breach",
+    "zh": "森林破阵",
+    "prompt": "Upload a selfie. Unleash chakra strikes that break through a moonlit black-water forest."
+  },
+  {
+    "id": "d79d927c-88bc-42fa-a67b-eeb504f4d2ef",
+    "en": "Manga Panel",
+    "zh": "漫画分镜",
+    "prompt": "Upload a selfie and turn it into a dynamic manga panel sequence."
+  },
+  {
+    "id": "2ed2ae4c-13ee-49d0-a83e-d73cd51098a7",
+    "en": "Magnet Me",
+    "zh": "人像冰箱贴",
+    "prompt": "Turn your photo into a cute fridge magnet — stick yourself onto the fridge door and watch it come alive"
+  },
+  {
+    "id": "e387dc1d-22c1-493a-8521-dc3c66be96de",
+    "en": "Living Billboard",
+    "zh": "双面人生",
+    "prompt": "Step out of a billboard as your real self — the poster version watches as you come to life"
+  },
+  {
+    "id": "b1699762-5207-480a-91e2-dd5eb6909bb3",
+    "en": "Puppet Master",
+    "zh": "提线木偶",
+    "prompt": "Turn yourself into a BJD marionette — strings descend, joints lock, and the puppet master pulls you to life"
+  },
+  {
+    "id": "ce0f035f-3a3c-4106-a916-6c04720b30f1",
+    "en": "Sketch Born",
+    "zh": "草稿觉醒",
+    "prompt": "Type a description or upload a photo, and generate a game character."
+  },
+  {
+    "id": "f2ebb07b-d1b4-473a-b2f8-17a410ab5f7d",
+    "en": "Light Control",
+    "zh": "光控魔法",
+    "prompt": "Upload a photo and create a cinematic light-absorbing magic VFX video."
+  },
+  {
+    "id": "91f20e1d-04b9-4ebf-a763-5ceb009a1360",
+    "en": "Variety Show Moment",
+    "zh": "综艺名场面",
+    "prompt": "Turn your photos into a Korean variety show moment."
+  },
+  {
+    "id": "a4565b24-065b-49ee-aeca-97b53ca9452c",
+    "en": "Food Splash",
+    "zh": "食物飞溅",
+    "prompt": "Get hit by a wave of flying food — fruits, desserts, and drinks splash around you in cinematic slow-mo"
+  },
+  {
+    "id": "a634b26f-77b2-468e-ab17-3289aa5f6f03",
+    "en": "Stage Debut",
+    "zh": "变身出道",
+    "prompt": "Walk through a door as yourself, step out as a stage idol — your debut transformation in one take"
+  },
+  {
+    "id": "305a710d-ac7f-41b1-8fd8-840d091cb78b",
+    "en": "Lightsaber Dance",
+    "zh": "光剑舞",
+    "prompt": "Turn your photo into an epic lightsaber dance video with cinematic cuts and sound effects"
+  },
+  {
+    "id": "f5628b6b-0478-4b28-8ff8-01f9555a8f44",
+    "en": "Card Magic",
+    "zh": "纸牌魔术",
+    "prompt": "Upload your photo and perform a stunning card magic trick on camera."
+  },
+  {
+    "id": "f064dde3-b09d-4ee5-8366-e0a127fe8fd7",
+    "en": "Shadow Clone Burst",
+    "zh": "影分身爆发",
+    "prompt": "Unleash your shadow clones in a shonen-style smoke burst — multiple yous charge forward at once"
+  },
+  {
+    "id": "3d44d7ca-0685-4e9c-bcb6-2567acfdc970",
+    "en": "Screen Burst",
+    "zh": "打破次元壁",
+    "prompt": "Upload a photo and watch your subject burst through the screen in a dramatic 3D effect video."
+  },
+  {
+    "id": "42659a9a-9187-4c66-8d46-ea8efb8f82d5",
+    "en": "Reaper Sakuga Fight",
+    "zh": "死神作画战斗",
+    "prompt": "Generate cinematic anime fight videos powered by Grok."
+  },
+  {
+    "id": "fc61968f-5bd1-45b4-9477-7141323b2d44",
+    "en": "Drone Rush",
+    "zh": "飞越视界",
+    "prompt": "Upload a scene photo and get a cinematic FPV drone flythrough video."
+  },
+  {
+    "id": "ec0ad58c-86e4-488e-8b4b-a12836fa035b",
+    "en": "Red Carpet",
+    "zh": "红毯巨星",
+    "prompt": "Upload a portrait and step onto the awards show red carpet."
+  },
+  {
+    "id": "c27fa786-a2f5-4414-acd9-f14a87c4e040",
+    "en": "Ending Fairy",
+    "zh": "结尾精灵",
+    "prompt": "Upload a photo and step into the spotlight as a K-pop ending fairy."
+  },
+  {
+    "id": "2a02ff39-efe2-4c46-8845-2a45a20a0426",
+    "en": "Game Portal Dressup",
+    "zh": "游戏换装",
+    "prompt": "Upload a photo and watch your idol get pulled into a game for a magical outfit transformation."
+  },
+  {
+    "id": "7e66aa8e-2c0e-49a9-806e-4596835cef69",
+    "en": "Object Command",
+    "zh": "物体召唤",
+    "prompt": "Command objects to fly into formation around you — telekinetic power at your fingertips"
+  },
+  {
+    "id": "9fcb697c-3ee3-4601-906f-b130a47432b3",
+    "en": "Portal Entrance",
+    "zh": "传送门入场",
+    "prompt": "A portal rips open in the crowd — ride through on a beast and make your epic entrance"
+  },
+  {
+    "id": "82659d64-78ae-49c8-b137-3a25a5ad7175",
+    "en": "Mini Me",
+    "zh": "迷你分身",
+    "prompt": "Shrink yourself into a tiny doppelganger and interact with the full-size you"
+  },
+  {
+    "id": "1c8edce2-c6a9-468e-9014-38fb3ce4af85",
+    "en": "Hero Transform",
+    "zh": "动漫变身",
+    "prompt": "Upload your photo and transform into an anime hero with cinematic effects."
+  },
+  {
+    "id": "6b4216dc-dbb1-4490-ba00-e9b815bc61a5",
+    "en": "Dreamcore",
+    "zh": "梦核意象",
+    "prompt": "Upload your photo and drift into a surreal dreamcore world."
+  },
+  {
+    "id": "e3bdc6a9-5e50-403f-8053-89674856b64e",
+    "en": "J-Pop MV",
+    "zh": "日系MV",
+    "prompt": "Star in your own J-Pop music video — cinematic cuts, dreamy colors, and you as the main character"
+  },
+  {
+    "id": "515043b6-2897-4eb7-b27d-9f880ab2103b",
+    "en": "Fast-Cut Fashion Walk",
+    "zh": "穿搭快切走秀",
+    "prompt": "Upload a photo, generate a fast-cut street fashion walk video with 6 looks"
+  },
+  {
+    "id": "9993a6c8-17be-424a-90be-beb94d717c67",
+    "en": "Y2K Camcorder",
+    "zh": "千禧年 DV 实拍",
+    "prompt": "Upload a photo and turn it into a Y2K camcorder memory."
+  },
+  {
+    "id": "842147c7-7ba6-4aa5-913b-95eaf246261c",
+    "en": "Heart Signal",
+    "zh": "心动信号",
+    "prompt": "Upload your photo and star in a Korean dating show trailer."
+  },
+  {
+    "id": "af0a5bfb-8d8e-4a83-8081-7a152395f034",
+    "en": "Box Summon",
+    "zh": "惊喜礼盒",
+    "prompt": "Open a mystery box and summon yourself into reality — unwrap, glow, reveal."
+  },
+  {
+    "id": "4867d402-ff1a-4076-8b32-ac4da06cac2f",
+    "en": "Location Food Pop-in",
+    "zh": "地点食物弹出",
+    "prompt": "Travel across cities, catch local street food on the beat."
+  },
+  {
+    "id": "0454d0a9-7ad8-447c-8737-b9017e81ea5c",
+    "en": "Music BG Swap",
+    "zh": "听歌换背景",
+    "prompt": "戴上耳机进入音乐世界，背景变成动态图案"
+  },
+  {
+    "id": "3926abd2-6c74-475a-a735-2f933c5850f0",
+    "en": "Snap Time Freeze",
+    "zh": "响指暂停",
+    "prompt": "Upload your photo and snap your fingers to freeze time in a cinematic street scene."
+  },
+  {
+    "id": "a9d37f73-6928-4a13-b185-283bd5788ba1",
+    "en": "GTA Rush",
+    "zh": "GTA狂飙",
+    "prompt": "Upload your photo and star in a cinematic GTA-style action sequence."
+  },
+  {
+    "id": "40480414-072d-4848-a659-681ef089dfd3",
+    "en": "Cloud Surf",
+    "zh": "云端冲浪",
+    "prompt": "Upload your photo and ride the clouds on a surfboard above the sky."
+  },
+  {
+    "id": "0d8a6286-782f-465c-9135-d9d277ce568a",
+    "en": "Thunder FX",
+    "zh": "雷霆大片",
+    "prompt": "Auto-generates cinematic video from your photo + visual preset text."
+  },
+  {
+    "id": "623ce920-566d-4616-9cae-4112995deee4",
+    "en": "Dark Water Descent",
+    "zh": "鱼绕沉渊",
+    "prompt": "Sink into a dark abyss as fish swirl around you — an ethereal underwater descent"
+  },
+  {
+    "id": "29fbd6f2-c3f1-40b6-92df-f3094e0bbb33",
+    "en": "Mecha Unmask",
+    "zh": "机甲归真",
+    "prompt": "Transform your photo into a mecha pilot reveal — armor peels away to unveil the real you"
+  },
+  {
+    "id": "912fe012-0371-4401-bea2-d9bf93052d00",
+    "en": "Magic Awakening",
+    "zh": "魔法觉醒",
+    "prompt": "Awaken your hidden magic — energy surges from within and transforms you into a cinematic sorcerer"
+  },
+  {
+    "id": "4e63ccd3-30e0-4ee9-99ed-dc787bb17e2f",
+    "en": "Music Card",
+    "zh": "音乐卡片",
+    "prompt": "Transform your photo into a music video: walk, put on headphones, and floating frosted-glass music player cards fly in and orbit around you."
+  },
+  {
+    "id": "c96c9633-117d-4f62-ac0a-286fff2b531f",
+    "en": "Outfit Roulette",
+    "zh": "出道变身",
+    "prompt": "Spin the roulette and debut in a random stage outfit — a new look every time you hit play"
+  },
+  {
+    "id": "88adcd41-0546-42bb-87ab-5b409f855ab8",
+    "en": "Rain Control",
+    "zh": "控雨术",
+    "prompt": "Upload your photo and control the rain with a wave of your hand."
+  }
+]

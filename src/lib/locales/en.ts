@@ -278,6 +278,8 @@ const en = {
   // Skills
   'skills.title': 'Skill Market',
   'skills.subtitle': 'ready-made magic from creators worldwide',
+  'skills.categoryAll': 'All',
+  'skills.categories': 'Skill categories',
 
   // Misc
   'misc.toolUse': 'Tool use',

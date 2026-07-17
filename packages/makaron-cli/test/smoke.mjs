@@ -10,6 +10,41 @@ const pkg = JSON.parse(readFileSync(new URL('../package.json', import.meta.url),
 
 const requests = [];
 
+const marketplaceSkills = [
+  {
+    id: 'skill_market_1',
+    labels: { en: 'Diamond Bling', zh: '夜店钻石风', 'zh-Hant': '夜店鑽石風', ja: 'ダイヤモンドの輝き' },
+    prompts: { en: 'Nightclub diamond bling portrait', zh: '夜店钻石肖像', 'zh-Hant': '夜店鑽石肖像', ja: '夜景のきらめくポートレート' },
+    categories: ['portrait-effects'],
+    image: 'https://cdn.example/diamond.jpg',
+    prompt: 'Nightclub diamond bling portrait',
+    skill_path: 'https://cdn.example/diamond.zip',
+    image_count: 1,
+    sort_order: 1,
+    is_active: true,
+    updated_at: '2026-01-01T00:00:00.000Z',
+  },
+  {
+    id: 'prompt_market_1',
+    labels: { en: 'Prompt Only' },
+    image: 'https://cdn.example/prompt.jpg',
+    prompt: 'A prompt-only marketplace item',
+    skill_path: null,
+    image_count: 1,
+    sort_order: 2,
+    is_active: true,
+    updated_at: '2026-01-01T00:00:00.000Z',
+  },
+];
+
+const marketplaceCategories = [{
+  id: 'portrait-effects',
+  labels: { en: 'Portrait Effects', zh: '人像特效', 'zh-Hant': '人像特效', ja: 'ポートレート効果' },
+  icon: '✨',
+  sort_order: 1,
+  is_active: true,
+}];
+
 const server = http.createServer(async (req, res) => {
   const chunks = [];
   req.on('data', chunk => chunks.push(chunk));
@@ -26,28 +61,26 @@ const server = http.createServer(async (req, res) => {
   };
 
   if (req.method === 'GET' && url.pathname === '/api/home-skills') {
-    sendJson(200, [
-      {
-        id: 'skill_market_1',
-        labels: { en: 'Diamond Bling', zh: '夜店钻石风' },
-        image: 'https://cdn.example/diamond.jpg',
-        prompt: 'Nightclub diamond bling portrait',
-        skill_path: 'https://cdn.example/diamond.zip',
-        image_count: 1,
-        sort_order: 1,
-        updated_at: '2026-01-01T00:00:00.000Z',
-      },
-      {
-        id: 'prompt_market_1',
-        labels: { en: 'Prompt Only' },
-        image: 'https://cdn.example/prompt.jpg',
-        prompt: 'A prompt-only marketplace item',
-        skill_path: null,
-        image_count: 1,
-        sort_order: 2,
-        updated_at: '2026-01-01T00:00:00.000Z',
-      },
-    ]);
+    sendJson(200, marketplaceSkills);
+    return;
+  }
+
+  if (url.pathname === '/api/admin/home-skills') {
+    assert.equal(req.headers.authorization, 'Bearer mk_test_smoke');
+    if (req.method === 'GET') sendJson(200, marketplaceSkills);
+    else if (req.method === 'POST') sendJson(200, { success: true, id: 'skill_created' });
+    else if (req.method === 'PUT' || req.method === 'DELETE') sendJson(200, { success: true });
+    else sendJson(405, { error: 'Method not allowed' });
+    return;
+  }
+
+  if (url.pathname === '/api/admin/skill-categories') {
+    assert.equal(req.headers.authorization, 'Bearer mk_test_smoke');
+    if (req.method === 'GET') sendJson(200, marketplaceCategories);
+    else if (req.method === 'POST') sendJson(201, body);
+    else if (req.method === 'PUT') sendJson(200, body);
+    else if (req.method === 'DELETE') sendJson(200, { success: true });
+    else sendJson(405, { error: 'Method not allowed' });
     return;
   }
 
@@ -358,6 +391,7 @@ try {
     [['music', 'status', '--help'], /Usage: makaron music status/],
     [['admin', '--help'], /Admin commands:/],
     [['admin', 'skills', '--help'], /Usage: makaron admin skills/],
+    [['admin', 'skill-categories', '--help'], /Usage: makaron admin skill-categories/],
     [['admin', 'upload', '--help'], /Usage: makaron admin upload/],
     [['admin', 'fetch-skill', '--help'], /Usage: makaron admin fetch-skill/],
     [['admin', 'set-admin', '--help'], /Usage: makaron admin set-admin/],
@@ -473,6 +507,47 @@ try {
     const data = JSON.parse(result.stdout);
     assert.equal(data.skills.length, 1);
     assert.equal(data.skills[0].id, 'skill_market_1');
+  }
+
+  {
+    const result = await expectSuccess(['skills', 'search', '夜景のきらめくポートレート', '--json'], { apiKey: false });
+    const data = JSON.parse(result.stdout);
+    assert.equal(data.skills[0].id, 'skill_market_1');
+  }
+
+  {
+    const result = await expectSuccess(['skills', 'search', 'portrait-effects', '--json'], { apiKey: false });
+    const data = JSON.parse(result.stdout);
+    assert.equal(data.skills[0].id, 'skill_market_1');
+  }
+
+  {
+    const result = await expectSuccess(['admin', 'skills']);
+    assert.match(result.stdout, /portrait-effects/);
+    assert.match(result.stdout, /title 4\/4 · prompt 4\/4/);
+  }
+
+  {
+    const result = await expectSuccess(['admin', 'skills', '--json']);
+    const data = JSON.parse(result.stdout);
+    assert.equal(data[0].prompts.ja, '夜景のきらめくポートレート');
+  }
+
+  {
+    const result = await expectSuccess(['admin', 'skill-categories']);
+    assert.match(result.stdout, /portrait-effects/);
+    assert.match(result.stdout, /title 4\/4/);
+  }
+
+  {
+    const category = { id: 'tools', labels: { en: 'Tools', zh: '工具', 'zh-Hant': '工具', ja: 'ツール' } };
+    await expectSuccess(['admin', 'skill-categories', 'add', JSON.stringify(category)]);
+    await expectSuccess(['admin', 'skill-categories', 'update', 'tools', JSON.stringify({ icon: '🛠️' })]);
+    await expectSuccess(['admin', 'skill-categories', 'delete', 'tools']);
+    const categoryRequests = requests.filter(req => req.pathname === '/api/admin/skill-categories');
+    assert.equal(categoryRequests.at(-3)?.body?.labels?.ja, 'ツール');
+    assert.equal(categoryRequests.at(-2)?.body?.id, 'tools');
+    assert.deepEqual(categoryRequests.at(-1)?.body, { id: 'tools' });
   }
 
   {

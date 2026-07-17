@@ -32,7 +32,7 @@ describe('home skill video performance guardrails', () => {
     expect(mediaSource).toContain('preload={shouldAttach ?')
     expect(homePage).toContain('suspended: !!selectedDetail')
     expect(homePage).toContain('active: template.id === selectedDetail?.id')
-    expect(homePage).toContain('homeSkills.slice(0, visibleSkillCount)')
+    expect(homePage).toContain('filteredHomeSkills.slice(0, visibleSkillCount)')
     expect(mediaSource).toContain('{shouldAttach && (')
     expect(mediaSource).not.toContain('useCachedVideoSource')
     expect(homePage).toContain('INITIAL_SKILL_CARD_COUNT = 12')
