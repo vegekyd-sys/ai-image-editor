@@ -4,6 +4,7 @@ import { cacheProjectData } from '@/lib/imageCache'
 import { createClient } from '@/lib/supabase/client'
 import { VIDEO_PLACEHOLDER_IMAGE } from '@/lib/editor/timeline-derivations'
 import { type DbMessage, type DbSnapshot, type Message, type Snapshot, type VideoMeta } from '@/types'
+import { groupWebSearchSourcesByMessage } from '@/lib/web-citations'
 
 const warmedProjects = new Map<string, Promise<void>>()
 
@@ -27,7 +28,11 @@ function toEditorSnapshot(row: DbSnapshot): Snapshot {
   }
 }
 
-function toEditorMessage(row: DbMessage, snapshots: Snapshot[]): Message {
+function toEditorMessage(
+  row: DbMessage,
+  snapshots: Snapshot[],
+  sourcesByMessage: Map<string, import('@/types').WebSearchSource[]>,
+): Message {
   const linkedSnapshot = row.has_image
     ? snapshots.find((snapshot) => snapshot.messageId === row.id)
     : undefined
@@ -38,6 +43,7 @@ function toEditorMessage(row: DbMessage, snapshots: Snapshot[]): Message {
     timestamp: new Date(row.created_at).getTime(),
     projectId: row.project_id,
     ...(linkedSnapshot ? { image: linkedSnapshot.image } : {}),
+    ...(sourcesByMessage.has(row.id) ? { sources: sourcesByMessage.get(row.id) } : {}),
   }
 }
 
@@ -48,7 +54,7 @@ export function warmProjectEditorCache(projectId: string, userId?: string): Prom
 
   const task = Promise.resolve().then(async () => {
     const supabase = createClient()
-    const [snapshotsRes, messagesRes, projectRes] = await Promise.all([
+    const [snapshotsRes, messagesRes, projectRes, sourceEventsRes] = await Promise.all([
       supabase
         .from('snapshots')
         .select('*')
@@ -64,6 +70,12 @@ export function warmProjectEditorCache(projectId: string, userId?: string): Prom
         .select('title, user_id')
         .eq('id', projectId)
         .single(),
+      supabase
+        .from('agent_events')
+        .select('data, created_at')
+        .eq('project_id', projectId)
+        .eq('type', 'source')
+        .order('created_at', { ascending: true }),
     ])
 
     if (projectRes.error || snapshotsRes.error || messagesRes.error) return
@@ -71,7 +83,8 @@ export function warmProjectEditorCache(projectId: string, userId?: string): Prom
 
     const snapshots = ((snapshotsRes.data ?? []) as DbSnapshot[]).map(toEditorSnapshot)
     if (snapshots.length === 0) return
-    const messages = ((messagesRes.data ?? []) as DbMessage[]).map((row) => toEditorMessage(row, snapshots))
+    const sourcesByMessage = groupWebSearchSourcesByMessage(sourceEventsRes.data ?? [])
+    const messages = ((messagesRes.data ?? []) as DbMessage[]).map((row) => toEditorMessage(row, snapshots, sourcesByMessage))
     cacheProjectData(projectId, snapshots, messages, projectRes.data?.title ?? 'Untitled')
   }).catch(() => {
     warmedProjects.delete(projectId)

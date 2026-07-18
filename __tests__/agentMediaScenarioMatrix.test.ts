@@ -197,7 +197,7 @@ describe('agent media scenario matrix', () => {
     expect(agentContext).toContain("return s.type === 'video' && videoUrl ? videoUrl : (s.image_url || '')")
     expect(agentDualWriter).toContain("case 'preview_frame_captured'")
     expect(agentDualWriter).toContain('messageId: this.currentMessageId')
-    expect(useProject).toContain(".eq('type', 'preview_frame_captured')")
+    expect(useProject).toContain(".in('type', ['preview_frame_captured', 'source'])")
     expect(useProject).toContain('previewImagesByMessage')
     expect(agentContext).toContain("normalizeLegacyCompositionDescription(s.description, '[Remotion composition]')")
     expect(agentContext).not.toContain('[code: ')

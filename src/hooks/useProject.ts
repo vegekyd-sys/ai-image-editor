@@ -8,6 +8,7 @@ import { resolveAudioUrlsInCode } from '@/lib/audio-url-resolver'
 import { resolveVideoUrlsInCode } from '@/lib/video-url-resolver'
 import { Snapshot, Message, Tip, DbSnapshot, DbMessage, ProjectAnimation, VideoMeta } from '@/types'
 import { VIDEO_PLACEHOLDER_IMAGE } from '@/lib/editor/timeline-derivations'
+import { groupWebSearchSourcesByMessage } from '@/lib/web-citations'
 
 interface LoadedProject {
   snapshots: Snapshot[]
@@ -35,7 +36,7 @@ export function useProject(projectId: string, userId: string) {
   const loadProject = useCallback(async (): Promise<LoadedProject> => {
     const supabase = getSupabase()
 
-    const [snapshotsRes, messagesRes, projectRes, previewFramesRes] = await Promise.all([
+    const [snapshotsRes, messagesRes, projectRes, agentMediaEventsRes] = await Promise.all([
       supabase
         .from('snapshots')
         .select('*')
@@ -53,9 +54,9 @@ export function useProject(projectId: string, userId: string) {
         .single(),
       supabase
         .from('agent_events')
-        .select('data, created_at')
+        .select('type, data, created_at')
         .eq('project_id', projectId)
-        .eq('type', 'preview_frame_captured')
+        .in('type', ['preview_frame_captured', 'source'])
         .order('created_at', { ascending: true }),
     ])
 
@@ -75,7 +76,12 @@ export function useProject(projectId: string, userId: string) {
     const dbMessages: DbMessage[] = messagesRes.data ?? []
     const previewImagesByMessage = new Map<string, string[]>()
     const previewCaptionsByMessage = new Map<string, string[]>()
-    for (const event of previewFramesRes.data ?? []) {
+    const agentMediaEvents = agentMediaEventsRes.data ?? []
+    const sourcesByMessage = groupWebSearchSourcesByMessage(
+      agentMediaEvents.filter(event => event.type === 'source'),
+    )
+    for (const event of agentMediaEvents) {
+      if (event.type !== 'preview_frame_captured') continue
       const data = event.data as Record<string, unknown> | null
       const messageId = typeof data?.messageId === 'string' ? data.messageId : ''
       const workspaceUrl = typeof data?.workspaceUrl === 'string' ? data.workspaceUrl : ''
@@ -197,6 +203,7 @@ export function useProject(projectId: string, userId: string) {
         ...(linkedSnapshot ? { image: linkedSnapshot.image } : {}),
         ...(previewImagesByMessage.has(m.id) ? { images: previewImagesByMessage.get(m.id) } : {}),
         ...(previewCaptionsByMessage.has(m.id) ? { imageCaptions: previewCaptionsByMessage.get(m.id) } : {}),
+        ...(sourcesByMessage.has(m.id) ? { sources: sourcesByMessage.get(m.id) } : {}),
         ...(linkedSnapshot?.design ? { design: linkedSnapshot.design } : {}),
       }
     })

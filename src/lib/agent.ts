@@ -82,6 +82,7 @@ import {
   normalizeLocale,
   translate,
 } from './locales';
+import { extractWebSearchSources } from './web-citations';
 
 const MAX_VIDEO_DIMENSION_PROBE_BYTES = 220 * 1024 * 1024;
 
@@ -4729,6 +4730,9 @@ export async function* runMakaronAgent(
     const billedStepMetadata: Array<{ providerMetadata?: Record<string, unknown> }> = [];
     let usageEmitted = false;
     const webSearchToolCallIds = new Set<string>();
+    const pendingWebSources: ReturnType<typeof extractWebSearchSources> = [];
+    const emittedWebSourceIdsInStep = new Set<string>();
+    let webSearchTurn = 0;
     const compactionBlocks = new Map<string, string>();
     const pendingCompactionSummaries: string[] = [];
     let attemptMessages: ModelMessage[] = msgs;
@@ -4900,6 +4904,7 @@ export async function* runMakaronAgent(
         finalStepTextChars = 0;
         finalStepToolCalls = 0;
         finalStepDeliveredArtifact = false;
+        emittedWebSourceIdsInStep.clear();
         if (stepCount > 0) yield { type: 'new_turn' };
         continue;
       }
@@ -5052,6 +5057,14 @@ export async function* runMakaronAgent(
           continue;
         }
         if (text) {
+          // Provider web-search results arrive in the preceding tool step. Replay
+          // the accumulated sources into each following assistant turn so the
+          // final cited answer owns its clickable URLs in both live UI and DB.
+          for (const source of pendingWebSources) {
+            if (emittedWebSourceIdsInStep.has(source.id)) continue;
+            emittedWebSourceIdsInStep.add(source.id);
+            yield { type: 'source', sourceType: 'url', ...source };
+          }
           finalStepTextChars += text.trim().length;
           yield { type: 'content', text };
         }
@@ -5216,6 +5229,14 @@ export async function* runMakaronAgent(
         // Reset status after tool completes so stale status doesn't linger during thinking
         yield { type: 'status', text: translate(responseLocale, 'agent.status.thinking') };
         if (toolName) {
+          if (toolName === 'web_search') {
+            const searchSources = extractWebSearchSources(toolOutput, webSearchTurn++);
+            for (const source of searchSources) {
+              const existingIndex = pendingWebSources.findIndex(item => item.id === source.id);
+              if (existingIndex >= 0) pendingWebSources[existingIndex] = source;
+              else pendingWebSources.push(source);
+            }
+          }
           yield { type: 'tool_result', tool: toolName, toolCallId, step: stepCount, output: toolOutput };
           const outputRecord = toolOutput && typeof toolOutput === 'object'
             ? toolOutput as Record<string, unknown>

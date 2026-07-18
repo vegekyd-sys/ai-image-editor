@@ -19,6 +19,7 @@ import { splitCompletionActions } from '@/lib/artifact-actions';
 import { removeAllInlineVideoUrls, removeInlineMediaNavigationMarkers, removeRenderableInlineVideoUrls, resolveInlineVideoCandidate } from '@/lib/cui-video-url';
 import type { ArtifactCompletionAction as CompletionAction } from '@/types';
 import { buildStudioRunStagePlacements, StudioRunProgress, StudioRunStageCard, useStudioRun } from '@/components/StudioRunDock';
+import { resolveOpenAIWebCitations } from '@/lib/web-citations';
 
 /** Inline video in CUI — natural AR, play/pause, @N badge, tap to navigate with time sync */
 const videoArCache = new Map<string, string>();
@@ -405,11 +406,60 @@ function CollapsibleCode({ text, isPanel }: { text: string; isPanel: boolean }) 
 /** Shared Markdown renderer to avoid duplicating component overrides.
  *  <<<media_N>>> and <<<image_N>>> tokens are converted to `MEDIA_REF_N` inline code before parsing,
  *  then the `code` component renders ImageRefChip for matching tokens. */
-function MarkdownBlock({ text, isPanel, snapshots, onNavigateToSnapshot, onPreviewSnapshot, onViewFile }: { text: string; isPanel: boolean; snapshots?: Snapshot[]; onNavigateToSnapshot?: (index: number) => void; onPreviewSnapshot?: (index: number, triggerEl?: HTMLElement | null) => void; onViewFile?: (path: string) => void }) {
+function CitationRefChip({
+  number,
+  source,
+}: {
+  number: number;
+  source?: WebSearchSource;
+}) {
+  const className = 'mx-0.5 inline-flex h-[15px] min-w-[15px] -translate-y-[1px] items-center justify-center rounded-[5px] px-1 text-[9px] font-semibold leading-none no-underline';
+  if (!source || !/^https?:\/\//i.test(source.url)) {
+    return null;
+  }
+  return (
+    <sup>
+      <a
+        href={source.url}
+        target="_blank"
+        rel="noopener noreferrer"
+        title={source.title || source.url}
+        aria-label={`Source ${number}: ${source.title || source.url}`}
+        className={className}
+        style={{ background: 'rgba(192,38,211,0.16)', color: 'rgba(240,171,252,0.95)', border: '1px solid rgba(192,38,211,0.2)' }}
+      >
+        {number}
+      </a>
+    </sup>
+  );
+}
+
+function MarkdownBlock({ text, isPanel, snapshots, sources, onNavigateToSnapshot, onPreviewSnapshot, onViewFile }: { text: string; isPanel: boolean; snapshots?: Snapshot[]; sources?: WebSearchSource[]; onNavigateToSnapshot?: (index: number) => void; onPreviewSnapshot?: (index: number, triggerEl?: HTMLElement | null) => void; onViewFile?: (path: string) => void }) {
+  const citationView = useMemo(() => resolveOpenAIWebCitations(text, sources), [text, sources]);
+  const citationLinkByUrl = useMemo(() => {
+    const numbered = new Map<string, { number: number; source: WebSearchSource }>();
+    for (const citation of citationView.citations) {
+      if (citation.source && !numbered.has(citation.source.url)) {
+        numbered.set(citation.source.url, { number: citation.number, source: citation.source });
+      }
+    }
+    let nextNumber = numbered.size + 1;
+    for (const source of [...(sources ?? [])].sort((a, b) => text.indexOf(a.url) - text.indexOf(b.url))) {
+      if (text.includes(source.url) && !numbered.has(source.url)) {
+        numbered.set(source.url, { number: nextNumber++, source });
+      }
+    }
+    return numbered;
+  }, [citationView.citations, sources, text]);
   // Replace <<<media_N>>> and <<<image_N>>> with inline code `MEDIA_REF_N` so markdown structure stays intact
   let processed = snapshots
-    ? text.replace(/<<<(?:image|media)_(\d+)>>>/g, '`MEDIA_REF_$1`')
-    : text;
+    ? citationView.text.replace(/<<<(?:image|media)_(\d+)>>>/g, '`MEDIA_REF_$1`')
+    : citationView.text;
+  // Responses citations often arrive as parenthesized Markdown links. Once the
+  // link becomes a superscript chip, keeping those parentheses adds visual noise.
+  processed = processed.replace(/\(\[([^\]]+)\]\((https?:\/\/[^)\s]+)\)\)/g, (match, label: string, href: string) => (
+    sources?.some(source => source.url === href) ? `[${label}](${href})` : match
+  ));
   // Replace `path/to/file.md` with FILE_REF token for clickable file chips
   processed = processed.replace(/`([^`]*\.md)`/g, '`FILE_REF_$1`');
 
@@ -425,6 +475,13 @@ function MarkdownBlock({ text, isPanel, snapshots, onNavigateToSnapshot, onPrevi
     em: ({ children }: { children?: React.ReactNode }) => <em className="italic">{children}</em>,
     del: ({ children }: { children?: React.ReactNode }) => <del className="line-through opacity-50">{children}</del>,
     code: ({ inline, children }: { inline?: boolean; children?: React.ReactNode }) => {
+      const citationMatch = String(children).match(/^CITATION_REF_(turn\d+search\d+)_(\d+)$/);
+      if (citationMatch) {
+        const citationKey = citationMatch[1];
+        const number = Number.parseInt(citationMatch[2], 10);
+        const source = sources?.find(item => item.id === citationKey);
+        return <CitationRefChip number={number} source={source} />;
+      }
       // Intercept MEDIA_REF_N tokens → render ImageRefChip (check regardless of inline flag)
       if (snapshots) {
         const str = String(children);
@@ -471,7 +528,9 @@ function MarkdownBlock({ text, isPanel, snapshots, onNavigateToSnapshot, onPrevi
     ),
     hr: () => <hr className="my-3" style={{ borderColor: 'rgba(255,255,255,0.08)' }} />,
     a: ({ href, children }: { href?: string; children?: React.ReactNode }) => (
-      <a href={href} target="_blank" rel="noopener noreferrer" className="underline underline-offset-2" style={{ color: 'rgba(192,38,211,0.85)' }}>{children}</a>
+      href && citationLinkByUrl.has(href)
+        ? <CitationRefChip {...citationLinkByUrl.get(href)!} />
+        : <a href={href} target="_blank" rel="noopener noreferrer" className="underline underline-offset-2" style={{ color: 'rgba(192,38,211,0.85)' }}>{children}</a>
     ),
     table: ({ children }: { children?: React.ReactNode }) => (
       <div className="overflow-x-auto my-2">
@@ -481,7 +540,7 @@ function MarkdownBlock({ text, isPanel, snapshots, onNavigateToSnapshot, onPrevi
     th: ({ children }: { children?: React.ReactNode }) => <th className="px-3 py-1.5 text-left font-semibold" style={{ borderBottom: '1px solid rgba(255,255,255,0.12)', color: 'rgba(255,255,255,0.6)' }}>{children}</th>,
     td: ({ children }: { children?: React.ReactNode }) => <td className="px-3 py-1.5" style={{ borderBottom: '1px solid rgba(255,255,255,0.06)' }}>{children}</td>,
 
-  }), [snapshots, onNavigateToSnapshot, onPreviewSnapshot, onViewFile, isPanel]);
+  }), [snapshots, sources, citationLinkByUrl, onNavigateToSnapshot, onPreviewSnapshot, onViewFile, isPanel]);
 
   return (
     <ReactMarkdown
@@ -493,30 +552,41 @@ function MarkdownBlock({ text, isPanel, snapshots, onNavigateToSnapshot, onPrevi
   );
 }
 
-function WebSourceLinks({ sources }: { sources?: WebSearchSource[] }) {
-  const safeSources = (sources ?? []).filter(source => /^https?:\/\//i.test(source.url)).slice(0, 8);
-  if (!safeSources.length) return null;
+function WebSourceLinks({ sources, text }: { sources?: WebSearchSource[]; text: string }) {
+  const citationView = resolveOpenAIWebCitations(text, sources);
+  const citedSources = citationView.citations
+    .filter((citation): citation is typeof citation & { source: WebSearchSource } => Boolean(citation.source && /^https?:\/\//i.test(citation.source.url)))
+    .filter((citation, index, all) => all.findIndex(item => item.source.url === citation.source.url) === index)
+    .slice(0, 8);
+  const fallbackSources = citedSources.length ? [] : (sources ?? [])
+    .filter(source => /^https?:\/\//i.test(source.url) && text.includes(source.url))
+    .sort((a, b) => text.indexOf(a.url) - text.indexOf(b.url))
+    .filter((source, index, all) => all.findIndex(item => item.url === source.url) === index)
+    .slice(0, 8)
+    .map((source, index) => ({ number: index + 1, source }));
+  const displaySources = citedSources.length ? citedSources : fallbackSources;
+  if (!displaySources.length) return null;
 
   return (
-    <div className="mt-2 flex flex-wrap gap-1.5" aria-label="Web sources">
-      {safeSources.map(source => {
+    <div className="mt-3 flex flex-wrap items-center gap-1.5" aria-label="Web sources">
+      <span className="mr-0.5 text-[10px] font-medium" style={{ color: 'rgba(255,255,255,0.28)' }}>Sources</span>
+      {displaySources.map(({ number, source }) => {
         let hostname = source.url;
         try {
           hostname = new URL(source.url).hostname.replace(/^www\./, '');
         } catch { /* keep the URL as a safe fallback label */ }
-        const label = source.title?.trim() || hostname;
         return (
           <a
             key={source.url}
             href={source.url}
             target="_blank"
             rel="noopener noreferrer"
-            title={label}
-            className="inline-flex max-w-[240px] items-center gap-1 rounded-full px-2 py-1 text-[10px] transition-opacity hover:opacity-80"
-            style={{ background: 'rgba(192,38,211,0.12)', border: '1px solid rgba(192,38,211,0.2)', color: 'rgba(240,171,252,0.9)' }}
+            title={source.title?.trim() || source.url}
+            className="inline-flex max-w-[180px] items-center gap-1.5 rounded-full px-2 py-1 text-[10px] transition-opacity hover:opacity-80"
+            style={{ background: 'rgba(255,255,255,0.045)', border: '1px solid rgba(255,255,255,0.075)', color: 'rgba(255,255,255,0.52)' }}
           >
-            <span aria-hidden="true">↗</span>
-            <span className="truncate">{label}</span>
+            <span className="inline-flex h-3.5 min-w-3.5 items-center justify-center rounded-[4px] px-0.5 text-[8px] font-semibold" style={{ background: 'rgba(192,38,211,0.14)', color: 'rgba(240,171,252,0.85)' }}>{number}</span>
+            <span className="truncate">{hostname}</span>
           </a>
         );
       })}
@@ -1446,11 +1516,12 @@ export default function AgentChatView({
                             text={fixMarkdownDelimiters(removeInlineMediaNavigationMarkers(visibleWithoutVideoUrls).replace(/\n?music:\d+\|[^\n]*/g, ''))}
                             isPanel={isPanel}
                             snapshots={snapshots}
+                            sources={msg.sources}
                             onNavigateToSnapshot={onNavigateToSnapshot}
                             onPreviewSnapshot={handlePreviewSnapshot}
                             onViewFile={setViewingFile}
                           />
-                          <WebSourceLinks sources={msg.sources} />
+                          <WebSourceLinks sources={msg.sources} text={visibleText} />
                           {/* Inline video — natural aspect ratio, play button, tap to navigate */}
                           {(() => {
                             if (!inlineVideo) return null;
