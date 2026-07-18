@@ -3,7 +3,7 @@ import type { ModelMessage } from 'ai';
 import { authenticateRequest } from '@/lib/api-auth';
 import { runMakaronAgent, withLocale } from '@/lib/agent';
 import { AgentDualWriter } from '@/lib/agentDualWriter';
-import { requireCredits, deductByTokens } from '@/lib/billing/credits';
+import { requireCredits, deductByTokens, deductWebSearchCalls } from '@/lib/billing/credits';
 import { AgentPerf } from '@/lib/agent-perf';
 import { getRequestLocale } from '@/lib/server-locale';
 import { resolvePersistedRunStatus } from '@/lib/agent-terminal';
@@ -414,6 +414,10 @@ export async function POST(req: NextRequest) {
                 endBilling({ ok: false });
                 console.error('[billing] agent deduct error:', e);
               });
+            if ((usageEvent.webSearchCalls ?? 0) > 0) {
+              deductWebSearchCalls(userId, usageEvent.webSearchCalls ?? 0, usageEvent.model)
+                .catch(e => console.error('[billing] web search deduct error:', e));
+            }
           }
 
           if (writer) {

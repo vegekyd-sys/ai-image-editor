@@ -8,7 +8,9 @@ import {
 import {
   createAgentModelRuntime,
   createAzureAgentPromptCacheKey,
+  getAgentProviderTools,
   getAgentProviderOptions,
+  resolveAzureOpenAIWebSearchMaxCalls,
 } from '@/lib/agent-model-runtime';
 
 describe('agent model catalog', () => {
@@ -80,6 +82,7 @@ describe('agent model catalog', () => {
       expect(getAgentProviderOptions(runtime)).toEqual({
         azure: {
           parallelToolCalls: false,
+          maxToolCalls: 2,
           store: false,
           promptCacheKey: createAzureAgentPromptCacheKey('gpt-5.6-terra', 'project-a'),
           promptCacheOptions: {
@@ -95,6 +98,40 @@ describe('agent model catalog', () => {
       if (previousEffort === undefined) delete process.env.AZURE_OPENAI_AGENT_REASONING_EFFORT;
       else process.env.AZURE_OPENAI_AGENT_REASONING_EFFORT = previousEffort;
     }
+  });
+
+  it('exposes native web search only to Azure GPT-5.6 runtimes', () => {
+    const previousAzureKey = process.env.AZURE_OPENAI_API_KEY;
+    const previousOpenRouterKey = process.env.OPENROUTER_API_KEY;
+    const previousEnabled = process.env.AGENT_WEB_SEARCH_ENABLED;
+    process.env.AZURE_OPENAI_API_KEY = 'test-key';
+    process.env.OPENROUTER_API_KEY = 'test-key';
+    delete process.env.AGENT_WEB_SEARCH_ENABLED;
+    try {
+      expect(Object.keys(getAgentProviderTools(
+        createAgentModelRuntime('gpt-5.6-sol', 'project-a'),
+      ))).toEqual(['web_search']);
+      expect(getAgentProviderTools(
+        createAgentModelRuntime('grok-4.5', 'project-a'),
+      )).toEqual({});
+      process.env.AGENT_WEB_SEARCH_ENABLED = 'false';
+      expect(getAgentProviderTools(
+        createAgentModelRuntime('gpt-5.6-luna', 'project-a'),
+      )).toEqual({});
+    } finally {
+      if (previousAzureKey === undefined) delete process.env.AZURE_OPENAI_API_KEY;
+      else process.env.AZURE_OPENAI_API_KEY = previousAzureKey;
+      if (previousOpenRouterKey === undefined) delete process.env.OPENROUTER_API_KEY;
+      else process.env.OPENROUTER_API_KEY = previousOpenRouterKey;
+      if (previousEnabled === undefined) delete process.env.AGENT_WEB_SEARCH_ENABLED;
+      else process.env.AGENT_WEB_SEARCH_ENABLED = previousEnabled;
+    }
+  });
+
+  it('caps Azure provider-executed searches per response', () => {
+    expect(resolveAzureOpenAIWebSearchMaxCalls(undefined)).toBe(2);
+    expect(resolveAzureOpenAIWebSearchMaxCalls('0')).toBe(1);
+    expect(resolveAzureOpenAIWebSearchMaxCalls('99')).toBe(5);
   });
 
   it('uses a stable, project-scoped Azure cache key without exposing the project id', () => {

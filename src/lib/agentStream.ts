@@ -1,11 +1,13 @@
 import type { AgentStreamEvent } from './agent';
 import type { AgentModelPreference } from './agent-models';
+import type { WebSearchSource } from '@/types';
 
 export type { AgentStreamEvent };
 
 export interface AgentStreamCallbacks {
   onStatus?: (text: string) => void;
   onContent?: (text: string) => void;
+  onSource?: (source: WebSearchSource) => void;
   onNewTurn?: (messageId?: string) => void;
   onImage?: (image: string, usedModel?: string, snapshotId?: string, imageUrl?: string) => void;
   onToolCall?: (tool: string, input: Record<string, unknown>, images?: string[]) => void;
@@ -102,6 +104,11 @@ function dispatchPersistedAgentEvent(event: PersistedAgentEvent, callbacks: Agen
   switch (event.type) {
     case 'status': callbacks.onStatus?.(String(data.text || '')); break;
     case 'content': callbacks.onContent?.(String(data.text || '')); break;
+    case 'source': callbacks.onSource?.({
+      id: String(data.id || data.url || ''),
+      url: String(data.url || ''),
+      ...(typeof data.title === 'string' && data.title ? { title: data.title } : {}),
+    }); break;
     case 'new_turn': callbacks.onNewTurn?.(data.messageId); break;
     case 'tool_call': callbacks.onToolCall?.(String(data.tool || ''), data.input || {}, data.images); break;
     case 'image': callbacks.onImage?.(data.imageUrl || '', data.usedModel, data.snapshotId, data.imageUrl); break;
@@ -277,6 +284,9 @@ async function streamAgentAttempt(
             break;
           case 'content':
             callbacks.onContent?.(event.text);
+            break;
+          case 'source':
+            callbacks.onSource?.({ id: event.id, url: event.url, title: event.title });
             break;
           case 'new_turn':
             callbacks.onNewTurn?.((event as Record<string, unknown>).messageId as string | undefined);

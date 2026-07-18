@@ -1,4 +1,4 @@
-import { createOpenAI } from '@ai-sdk/openai';
+import { createOpenAI, openai } from '@ai-sdk/openai';
 import type { LanguageModel } from 'ai';
 
 export const DEFAULT_AZURE_OPENAI_RESPONSES_URL =
@@ -14,6 +14,31 @@ type FetchLike = (
   input: RequestInfo | URL,
   init?: RequestInit,
 ) => Promise<Response>;
+
+export type AzureOpenAIWebSearchContextSize = 'low' | 'medium' | 'high';
+
+export function isAzureOpenAIWebSearchEnabled(
+  value = process.env.AGENT_WEB_SEARCH_ENABLED,
+): boolean {
+  return value?.trim().toLowerCase() !== 'false';
+}
+
+export function resolveAzureOpenAIWebSearchContextSize(
+  value = process.env.AZURE_OPENAI_WEB_SEARCH_CONTEXT_SIZE,
+): AzureOpenAIWebSearchContextSize {
+  const normalized = value?.trim().toLowerCase();
+  return normalized === 'medium' || normalized === 'high' ? normalized : 'low';
+}
+
+export function createAzureOpenAIWebSearchTool(options?: {
+  contextSize?: string;
+}) {
+  // Provider-executed tools are request metadata, so the standard OpenAI tool
+  // factory can be used with the custom Azure Responses model below.
+  return openai.tools.webSearch({
+    searchContextSize: resolveAzureOpenAIWebSearchContextSize(options?.contextSize),
+  });
+}
 
 function normalizeResponsesEndpoint(value?: string): URL {
   const endpoint = new URL(value?.trim() || DEFAULT_AZURE_OPENAI_RESPONSES_URL);

@@ -52,6 +52,7 @@ import type { AgentModelPreference } from './agent-models';
 import {
   createAgentModelRuntime,
   getAgentProviderOptions,
+  getAgentProviderTools,
   sumOpenRouterProviderCost,
   type AgentModelRuntime,
 } from './agent-model-runtime';
@@ -285,6 +286,7 @@ interface WorkspaceMediaOutputDraft {
 export type AgentStreamEvent =
   | { type: 'status'; text: string }
   | { type: 'content'; text: string }
+  | { type: 'source'; sourceType: 'url'; id: string; url: string; title?: string }
   | { type: 'new_turn' }  // signals start of a new assistant response (after tool result)
   | { type: 'image'; image: string; usedModel?: string; snapshotId?: string; imageUrl?: string; description?: string }
   | { type: 'tool_call'; tool: string; input: Record<string, unknown>; displayInput?: Record<string, unknown>; images?: string[]; toolCallId?: string; step?: number }
@@ -303,7 +305,7 @@ export type AgentStreamEvent =
   | { type: 'design'; code: string; width: number; height: number; props?: Record<string, unknown>; animation?: { fps: number; durationInSeconds: number; format?: string }; editables?: import('@/types').EditableField[]; published?: boolean }  // @deprecated — backward compat alias for 'render'
   | { type: 'music_task'; taskId: string }  // emitted when generate_music tool creates a task — frontend polls
   | { type: 'context_compaction'; summary: string; appliedEdits: Array<Record<string, unknown>>; inputTokens?: number }
-  | { type: 'usage'; inputTokens: number; outputTokens: number; cacheReadTokens?: number; cacheWriteTokens?: number; cacheWriteTelemetryComplete?: boolean; providerCostUsd?: number; model: string }  // token usage for billing (inputTokens = noCache only)
+  | { type: 'usage'; inputTokens: number; outputTokens: number; cacheReadTokens?: number; cacheWriteTokens?: number; cacheWriteTelemetryComplete?: boolean; providerCostUsd?: number; webSearchCalls?: number; model: string }  // token usage for billing (inputTokens = noCache only)
   | { type: 'done' }
   | {
       type: 'error';
@@ -1341,6 +1343,7 @@ function buildLightweightSystemPrompt(mode: 'analysis' | 'tipReaction', locale?:
 
 function createTools(ctx: AgentContext, runtime: AgentModelRuntime, locale?: string, durableVisionBridge = false) {
   return {
+    ...getAgentProviderTools(runtime),
     generate_image: tool({
       description: generateImageToolPrompt,
       inputSchema: z.object({
@@ -4725,6 +4728,7 @@ export async function* runMakaronAgent(
     let cacheWriteTelemetryComplete = true;
     const billedStepMetadata: Array<{ providerMetadata?: Record<string, unknown> }> = [];
     let usageEmitted = false;
+    const webSearchToolCallIds = new Set<string>();
     const compactionBlocks = new Map<string, string>();
     const pendingCompactionSummaries: string[] = [];
     let attemptMessages: ModelMessage[] = msgs;
@@ -4738,6 +4742,7 @@ export async function* runMakaronAgent(
       || prompt.includes('[Recoverable Agent Checkpoint]');
     const recoveryBlockedTools = new Set<string>();
     const nonRepeatableTools = new Set([
+      'web_search',
       'generate_image',
       'generate_animation',
       'transcribe_audio',
@@ -4797,6 +4802,7 @@ export async function* runMakaronAgent(
         cacheWriteTokens: billedCacheWriteTokens,
         cacheWriteTelemetryComplete,
         providerCostUsd,
+        webSearchCalls: webSearchToolCallIds.size,
         model: modelId,
       };
     };
@@ -5052,6 +5058,20 @@ export async function* runMakaronAgent(
         continue;
       }
 
+      if (event.type === 'source' && (event as any).sourceType === 'url') {
+        const source = event as any;
+        if (typeof source.url === 'string' && /^https?:\/\//i.test(source.url)) {
+          yield {
+            type: 'source',
+            sourceType: 'url',
+            id: String(source.id || source.url),
+            url: source.url,
+            ...(typeof source.title === 'string' && source.title ? { title: source.title } : {}),
+          };
+        }
+        continue;
+      }
+
       // ── Tool call ───────────────────────────────────────────────────────────
       if (event.type === 'tool-call') {
         toolCallStartTime = Date.now();
@@ -5059,13 +5079,18 @@ export async function* runMakaronAgent(
         lastTool = event.toolName;
         finalStepToolCalls++;
         activeToolCallId = (event as { toolCallId?: string }).toolCallId || crypto.randomUUID();
+        if (event.toolName === 'web_search') {
+          webSearchToolCallIds.add(activeToolCallId);
+        }
         console.log(`⏱️ [agent] tool-call "${event.toolName}" at +${((Date.now() - agentStartTime) / 1000).toFixed(1)}s`);
         perf?.mark('tool_call', {
           tool: event.toolName,
           step: stepCount,
           sinceAgentStartMs: Date.now() - agentStartTime,
         });
-        if (event.toolName === 'analyze_image') {
+        if (event.toolName === 'web_search') {
+          yield { type: 'status', text: translate(responseLocale, 'agent.status.searchingWeb') };
+        } else if (event.toolName === 'analyze_image') {
           const q = (event.input as { question?: string }).question;
           yield { type: 'status', text: translate(responseLocale, 'agent.status.analyzingImage', q?.slice(0, 50) ?? '') };
         } else if (event.toolName === 'analyze_video') {

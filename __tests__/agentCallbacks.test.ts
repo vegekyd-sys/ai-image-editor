@@ -98,6 +98,20 @@ describe('makeAgentCallbacks', () => {
     });
   });
 
+  describe('onSource', () => {
+    it('attaches and deduplicates safe web sources on the current message', () => {
+      const { callbacks } = makeAgentCallbacks(ctx);
+      callbacks.onNewTurn?.('msg-1');
+      callbacks.onSource?.({ id: 'source-1', url: 'https://example.com/news', title: 'Example' });
+      callbacks.onSource?.({ id: 'source-2', url: 'https://example.com/news', title: 'Duplicate' });
+      callbacks.onSource?.({ id: 'source-3', url: 'javascript:alert(1)', title: 'Unsafe' });
+
+      expect(messages[0].sources).toEqual([
+        { id: 'source-1', url: 'https://example.com/news', title: 'Example' },
+      ]);
+    });
+  });
+
   describe('onDisconnect', () => {
     it('releases the active run id so the persistent watcher can reconnect', () => {
       ctx.agentRunIdRef.current = 'run-live';

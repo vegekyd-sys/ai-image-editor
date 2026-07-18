@@ -184,6 +184,18 @@ export async function deductCredits(
   return { charged: price.credits, remaining }
 }
 
+/** Charge each provider-executed web search transaction separately. */
+export async function deductWebSearchCalls(
+  userId: string,
+  calls: number,
+  model?: string,
+): Promise<void> {
+  const safeCalls = Number.isFinite(calls) ? Math.min(5, Math.max(0, Math.floor(calls))) : 0
+  for (let index = 0; index < safeCalls; index += 1) {
+    await deductCredits(userId, null, 'web_search', model)
+  }
+}
+
 /**
  * Deduct credits based on actual token usage for routed model calls.
  * Computes credit cost from token_rates table, then deducts atomically.

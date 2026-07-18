@@ -286,6 +286,15 @@ function dispatchEvent(row: AgentEventRow, callbacks: AgentStreamCallbacks) {
     case 'content':
       callbacks.onContent?.((data as { text: string }).text)
       break
+    case 'source': {
+      const source = data as { id?: string; url?: string; title?: string }
+      if (source.url) callbacks.onSource?.({
+        id: source.id || source.url,
+        url: source.url,
+        ...(source.title ? { title: source.title } : {}),
+      })
+      break
+    }
     case 'new_turn':
       callbacks.onNewTurn?.((data as { messageId?: string }).messageId)
       break

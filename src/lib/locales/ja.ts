@@ -382,6 +382,7 @@ const ja = {
   // Agent runtime
   'agent.status.starting': '開始しています...',
   'agent.status.planning': '計画中...',
+  'agent.status.searchingWeb': 'ウェブを検索中...',
   'agent.status.generatingCode': 'コードを生成中...',
   'agent.status.analyzingImage': (detail: string) => detail ? `画像を分析中：${detail}` : '画像を分析中',
   'agent.status.analyzingVideo': (detail: string) => detail ? `動画を分析中：${detail}` : '動画を分析中',

@@ -2,6 +2,9 @@ import { describe, expect, it, vi } from 'vitest';
 import { generateText } from 'ai';
 import {
   createAzureOpenAIResponsesModel,
+  createAzureOpenAIWebSearchTool,
+  isAzureOpenAIWebSearchEnabled,
+  resolveAzureOpenAIWebSearchContextSize,
   resolveAzureOpenAIResponsesConfig,
 } from '@/lib/azure-openai-responses';
 
@@ -81,6 +84,7 @@ describe('Azure OpenAI Responses adapter', () => {
       providerOptions: {
         azure: {
           parallelToolCalls: false,
+          maxToolCalls: 2,
           promptCacheKey: 'mk-terra-test-project-hash',
           promptCacheOptions: {
             mode: 'implicit',
@@ -105,6 +109,7 @@ describe('Azure OpenAI Responses adapter', () => {
     expect(body).toMatchObject({
       model: 'gpt-5.6-terra',
       parallel_tool_calls: false,
+      max_tool_calls: 2,
       prompt_cache_key: 'mk-terra-test-project-hash',
       prompt_cache_options: {
         mode: 'implicit',
@@ -113,5 +118,41 @@ describe('Azure OpenAI Responses adapter', () => {
       store: false,
       reasoning: { effort: 'medium' },
     });
+  });
+
+  it('serializes the formal native web_search tool for Azure Responses', async () => {
+    const calls: Array<{ init?: RequestInit }> = [];
+    const fakeFetch = vi.fn(async (_input: RequestInfo | URL, init?: RequestInit) => {
+      calls.push({ init });
+      return new Response(JSON.stringify(RESPONSE_FIXTURE), {
+        status: 200,
+        headers: { 'content-type': 'application/json' },
+      });
+    });
+    const model = createAzureOpenAIResponsesModel('gpt-5.6-terra', {
+      apiKey: 'test-secret',
+      endpoint: 'https://resource.openai.azure.com/openai/responses?api-version=2025-04-01-preview',
+      fetch: fakeFetch,
+    });
+
+    await generateText({
+      model,
+      prompt: 'Find the current official documentation.',
+      tools: { web_search: createAzureOpenAIWebSearchTool({ contextSize: 'high' }) } as any,
+    });
+
+    const body = JSON.parse(String(calls[0].init?.body));
+    expect(body.tools).toContainEqual(expect.objectContaining({
+      type: 'web_search',
+      search_context_size: 'high',
+    }));
+  });
+
+  it('defaults web search on with a low context budget', () => {
+    expect(isAzureOpenAIWebSearchEnabled(undefined)).toBe(true);
+    expect(isAzureOpenAIWebSearchEnabled('false')).toBe(false);
+    expect(resolveAzureOpenAIWebSearchContextSize(undefined)).toBe('low');
+    expect(resolveAzureOpenAIWebSearchContextSize('medium')).toBe('medium');
+    expect(resolveAzureOpenAIWebSearchContextSize('invalid')).toBe('low');
   });
 });

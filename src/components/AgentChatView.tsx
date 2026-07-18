@@ -3,7 +3,7 @@
 import { useState, useRef, useEffect, useCallback, useMemo } from 'react';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
-import { Message } from '@/types';
+import { Message, type WebSearchSource } from '@/types';
 import { compressImageFile } from '@/lib/imageUtils';
 import { useLocale } from '@/lib/i18n';
 import { getDefaultVideoModelId } from '@/lib/video-model-capabilities';
@@ -490,6 +490,37 @@ function MarkdownBlock({ text, isPanel, snapshots, onNavigateToSnapshot, onPrevi
     >
       {processed}
     </ReactMarkdown>
+  );
+}
+
+function WebSourceLinks({ sources }: { sources?: WebSearchSource[] }) {
+  const safeSources = (sources ?? []).filter(source => /^https?:\/\//i.test(source.url)).slice(0, 8);
+  if (!safeSources.length) return null;
+
+  return (
+    <div className="mt-2 flex flex-wrap gap-1.5" aria-label="Web sources">
+      {safeSources.map(source => {
+        let hostname = source.url;
+        try {
+          hostname = new URL(source.url).hostname.replace(/^www\./, '');
+        } catch { /* keep the URL as a safe fallback label */ }
+        const label = source.title?.trim() || hostname;
+        return (
+          <a
+            key={source.url}
+            href={source.url}
+            target="_blank"
+            rel="noopener noreferrer"
+            title={label}
+            className="inline-flex max-w-[240px] items-center gap-1 rounded-full px-2 py-1 text-[10px] transition-opacity hover:opacity-80"
+            style={{ background: 'rgba(192,38,211,0.12)', border: '1px solid rgba(192,38,211,0.2)', color: 'rgba(240,171,252,0.9)' }}
+          >
+            <span aria-hidden="true">↗</span>
+            <span className="truncate">{label}</span>
+          </a>
+        );
+      })}
+    </div>
   );
 }
 
@@ -1419,6 +1450,7 @@ export default function AgentChatView({
                             onPreviewSnapshot={handlePreviewSnapshot}
                             onViewFile={setViewingFile}
                           />
+                          <WebSourceLinks sources={msg.sources} />
                           {/* Inline video — natural aspect ratio, play button, tap to navigate */}
                           {(() => {
                             if (!inlineVideo) return null;

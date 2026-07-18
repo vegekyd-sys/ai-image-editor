@@ -1,242 +1,54 @@
-# Web Search Implementation Guide (Option B: Tavily Custom Tool)
+# GPT-5.6 Native Web Search
 
-This guide walks through adding web search to your Makaron Agent via Tavily.
+Makaron 的 GPT-5.6 Terra、Sol、Luna 通过 Azure OpenAI Responses API 使用正式 `web_search`。这不是 Tavily 自定义工具，也不需要额外搜索 API key。
 
-## Step 1: Tavily API Setup
+## 运行边界
 
-1. Sign up at https://tavily.com
-2. Get your API key from dashboard (free tier: 1000 searches/month)
-3. Add to Vercel environment:
-   ```bash
-   npx vercel env add TAVILY_API_KEY
-   # Paste your API key when prompted
-   # Mark as: Preview + Production
-   ```
+- 仅 Azure GPT-5.6 模型获得 `web_search`；Grok 与 DeepSeek 保持原行为。
+- 默认只在用户明确要求联网，或答案依赖新闻、价格、日程、规则等时效信息时搜索。
+- 默认向 Responses API 发送 `max_tool_calls: 2`；同时按唯一 call ID 记录实际 provider actions，避免流事件重复计费。
+- 搜索只读公开网页，不能登录、操作网页或代替完整浏览器自动化。
+- 网页内容按不可信输入处理；页面中的指令不能覆盖系统与用户要求。
 
-## Step 2: Create Web Search Tool
+## 配置
 
-Create `src/lib/agents/tools/web_search_tool.ts`:
-
-```typescript
-import { tool } from 'ai';
-import { z } from 'zod';
-
-/**
- * Tavily API search — returns LLM-optimized summaries
- */
-async function tavily_search(query: string): Promise<string> {
-  const apiKey = process.env.TAVILY_API_KEY;
-  if (!apiKey) {
-    throw new Error('TAVILY_API_KEY not configured');
-  }
-
-  try {
-    const response = await fetch('https://api.tavily.com/search', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        api_key: apiKey,
-        query,
-        max_results: 5,
-        search_depth: 'basic',
-        include_answer: true,
-        // topic: 'general', // Can be 'general' or 'news'
-      }),
-    });
-
-    if (!response.ok) {
-      throw new Error(`Tavily API error: ${response.status}`);
-    }
-
-    const data = await response.json();
-
-    // Format results for Claude
-    let formatted = '';
-    if (data.answer) {
-      formatted += `Summary: ${data.answer}\n\n`;
-    }
-
-    if (data.results && Array.isArray(data.results)) {
-      formatted += 'Sources:\n';
-      data.results.forEach((result: any, i: number) => {
-        formatted += `${i + 1}. ${result.title}\n`;
-        formatted += `   URL: ${result.url}\n`;
-        formatted += `   ${result.content}\n\n`;
-      });
-    }
-
-    return formatted || 'No results found';
-  } catch (error) {
-    console.error('[web_search] Error:', error);
-    throw error;
-  }
-}
-
-/**
- * Web search tool for Makaron Agent
- * Use when user asks about recent events, current info, or live data
- */
-export const webSearchTool = tool({
-  description:
-    'Search the internet for current information. Use this when the user asks about recent events, current prices, latest news, or any information that requires real-time data beyond your training set. The results include both a summary and detailed sources.',
-  inputSchema: z.object({
-    query: z
-      .string()
-      .min(1)
-      .describe(
-        'The search query (natural language). Examples: "latest AI models 2025", "current weather in Tokyo", "Apple iPhone 16 price"'
-      ),
-  }),
-  execute: async ({ query }) => {
-    console.log(`[web_search] Query: "${query}"`);
-    const results = await tavily_search(query);
-    return results;
-  },
-});
-```
-
-## Step 3: Add Tool to Agent
-
-In `src/lib/agent.ts`, import and add the tool:
-
-```typescript
-// At the top with other imports
-import { webSearchTool } from './agents/tools/web_search_tool';
-
-// Inside createTools() function, add it to the returned object:
-function createTools(ctx: AgentContext) {
-  return {
-    web_search: webSearchTool,
-    generate_image: tool({
-      // ... existing implementation
-    }),
-    // ... other tools
-  };
-}
-```
-
-## Step 4: Update Agent System Prompt
-
-In `src/lib/prompts/agent.md`, add web search guidance:
-
-```markdown
-## Tools
-
-- **analyze_image** — See the current photo with your own vision.
-- **web_search** — Search for current information (real-time events, prices, news). Use when the user mentions "latest", "current", "recent", or asks about time-sensitive data.
-- **preview_frame** — Capture a screenshot of your design.
-- **generate_image** — Edit the photo. See tool description for details.
-- **rotate_camera** — Rotate the virtual camera.
-
-[... rest of tools ...]
-```
-
-## Step 5: Testing
-
-### Local Test
-
-Create `src/lib/agents/test-web_search.ts`:
-
-```typescript
-import { webSearchTool } from './tools/web_search_tool';
-
-// Run: npx ts-node src/lib/agents/test-web_search.ts
-async function test() {
-  try {
-    const result = await webSearchTool.execute({ query: 'Claude 3.5 Sonnet release date' });
-    console.log('Search result:');
-    console.log(result);
-  } catch (error) {
-    console.error('Error:', error);
-  }
-}
-
-test();
-```
+功能默认开启。可通过以下环境变量调整：
 
 ```bash
-TAVILY_API_KEY=your_key_here npx ts-node src/lib/agents/test-web_search.ts
+# 设为 false 可紧急关闭
+AGENT_WEB_SEARCH_ENABLED=true
+
+# low（默认）/ medium / high
+AZURE_OPENAI_WEB_SEARCH_CONTEXT_SIZE=low
+
+# 默认 2，运行时限制在 1-5
+AZURE_OPENAI_WEB_SEARCH_MAX_CALLS=2
 ```
 
-### In Agent
+Azure 搜索使用现有 `AZURE_OPENAI_API_KEY` 与 `AZURE_OPENAI_RESPONSES_URL`。
 
-Ask agent: "What are the latest Claude model releases?" and it will search.
+## 引用与恢复
 
-## Troubleshooting
+Responses API 返回的 URL citation 会保留在正文 Markdown 中；`source` 流事件还会生成去重、可点击的来源标签。来源事件写入 `agent_events`，因此 durable execution、断线重连与历史事件回放都能恢复来源。
 
-| Issue | Solution |
-|-------|----------|
-| `TAVILY_API_KEY not configured` | Check Vercel env vars. Redeploy after adding. |
-| `401 Unauthorized` | API key is invalid — regenerate from Tavily dashboard |
-| No results | Query might be too specific; try more general terms |
-| Slow response (>2s) | Normal for web search; Tavily takes 400-600ms |
+静态 `messages` 表保存完整正文，所以项目重进后即使不回放 source 元数据，正文引用链接仍然可用。
 
-## Cost Analysis
+## 计费
 
-- **Free tier:** 1000 searches/month
-- **Paid:** $0.005 per search after free tier
-- **Your usage:** If users ask 10 searches/month on average → negligible cost
-- **Billing:** Separate from Makaron's token billing; check Tavily dashboard monthly
+模型输入输出继续按 token 计费。每次 provider 执行的 web search 事务另外记为 `web_search`：
 
-## Future: Switch to Native (When Bedrock Supports)
+- supplier cost: `$0.014`
+- Makaron 默认价格: `3 credits`
+- 按唯一 provider call ID 的实际执行次数计费；计费函数最多接受 5 次，防止异常事件放大
 
-When AWS Bedrock adds native web_search (Q2-Q3 2025):
+迁移 `20260718000000_web_search_pricing.sql` 只补缺失的 Admin 定价行，不覆盖已有人工配置。
 
-```typescript
-// Replace webSearchTool with native Anthropic tool
-function createTools(ctx: AgentContext) {
-  return {
-    web_search: tool({}), // Bedrock native, no implementation needed
-    // ... rest unchanged
-  };
-}
+## 验证
+
+```bash
+npx vitest run __tests__/azureOpenAIResponses.test.ts __tests__/agentModels.test.ts __tests__/agentCallbacks.test.ts __tests__/agentDualWriter.test.ts
+npx tsc --noEmit
+npm run build
 ```
 
-Just delete `web_search_tool.ts` — no other changes needed.
-
----
-
-## Alternative Providers (If Tavily Doesn't Work)
-
-### Brave Search (Free)
-
-```typescript
-async function brave_search(query: string): Promise<string> {
-  const response = await fetch('https://api.search.brave.com/res/v1/web/search', {
-    headers: {
-      'Accept': 'application/json',
-      'X-Subscription-Token': process.env.BRAVE_API_KEY!,
-    },
-    body: new URLSearchParams({ q: query }).toString(),
-  });
-  // ... format results
-}
-```
-
-**Setup:** Sign up https://api.search.brave.com, get key, free tier unlimited
-
-### Serper (Paid)
-
-```typescript
-async function serper_search(query: string): Promise<string> {
-  const response = await fetch('https://google.serper.dev/search', {
-    method: 'POST',
-    headers: {
-      'X-API-KEY': process.env.SERPER_API_KEY!,
-      'Content-Type': 'application/json',
-    },
-    body: JSON.stringify({ q: query }),
-  });
-  // ... format results
-}
-```
-
-**Setup:** Sign up https://serper.dev, $5 credit to start, $0.005 per query
-
-## Edge Cases & Best Practices
-
-1. **Rate limiting:** Don't let same user spam searches — add 1s debounce in agent.ts
-2. **Cost control:** Set max 5 searches per conversation
-3. **Relevance:** Tavily auto-filters to top results; you don't need post-processing
-4. **Privacy:** Tavily doesn't log search queries by default (check their privacy policy)
-
+上线前建议分别用 Terra、Sol、Luna 提问一个当天可验证的问题，确认：触发 `web_search`、正文带引用、来源标签可打开、usage log 记录搜索事务。

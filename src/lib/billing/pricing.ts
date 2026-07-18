@@ -10,6 +10,7 @@ interface ToolPricing {
 const DEFAULT_TOOL_PRICING: Record<string, { credits: number; isFree: boolean }> = {
   create_seed_audio: { credits: 10, isFree: false },
   create_voiceover: { credits: 2, isFree: false },
+  web_search: { credits: 3, isFree: false },
 }
 
 // In-memory cache with TTL

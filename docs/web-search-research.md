@@ -1,4 +1,6 @@
-# Web Search Capability for Claude Agent on AWS Bedrock — Research Summary
+# Web Search Capability for Claude Agent on AWS Bedrock — Archived Research
+
+> Historical note from the former Claude/Bedrock runtime. Makaron now uses Azure GPT-5.6 native `web_search`; see `docs/web-search-implementation.md` for the current implementation.
 
 ## Status: Q2 2025 API Landscape
 

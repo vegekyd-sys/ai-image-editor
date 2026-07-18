@@ -433,6 +433,7 @@ const en = {
   // Agent runtime
   'agent.status.starting': 'Starting...',
   'agent.status.planning': 'Planning...',
+  'agent.status.searchingWeb': 'Searching the web...',
   'agent.status.generatingCode': 'Generating code...',
   'agent.status.analyzingImage': (detail: string) => detail ? `Analyzing image: ${detail}` : 'Analyzing image',
   'agent.status.analyzingVideo': (detail: string) => detail ? `Analyzing video: ${detail}` : 'Analyzing video',

@@ -4,7 +4,7 @@ import { authenticateRequest } from '@/lib/api-auth';
 import { runMakaronAgent, withLocale } from '@/lib/agent';
 import { AgentDualWriter } from '@/lib/agentDualWriter';
 import { buildPromptContext } from '@/lib/agent-context';
-import { requireCredits, deductByTokens } from '@/lib/billing/credits';
+import { requireCredits, deductByTokens, deductWebSearchCalls } from '@/lib/billing/credits';
 import { getRequestLocale } from '@/lib/server-locale';
 import { translate } from '@/lib/locales';
 import { resolvePersistedRunStatus } from '@/lib/agent-terminal';
@@ -244,6 +244,7 @@ export async function POST(req: NextRequest) {
       let totalCacheWriteTokens = 0;
       let cacheWriteTelemetryComplete = true;
       let providerCostUsd: number | undefined;
+      let totalWebSearchCalls = 0;
       let agentModel = '';
       let sawDone = false;
       let sawError = false;
@@ -284,6 +285,7 @@ export async function POST(req: NextRequest) {
               cacheWriteTelemetryComplete = false;
             }
             providerCostUsd = event.providerCostUsd;
+            totalWebSearchCalls += event.webSearchCalls ?? 0;
             if (event.model) agentModel = event.model;
           }
           await writer.processAndEnqueue(event);
@@ -319,6 +321,10 @@ export async function POST(req: NextRequest) {
             },
             providerCostUsd,
           ).catch(e => console.error('[agent/run] billing error:', e));
+        }
+        if (totalWebSearchCalls > 0) {
+          deductWebSearchCalls(userId, totalWebSearchCalls, agentModel || undefined)
+            .catch(e => console.error('[agent/run] web search billing error:', e));
         }
         const { data: failedRun } = await supabase.from('agent_runs')
           .select('metadata').eq('id', runId).single();
@@ -365,6 +371,10 @@ export async function POST(req: NextRequest) {
           },
           providerCostUsd,
         ).catch(e => console.error('[agent/run] billing error:', e));
+      }
+      if (totalWebSearchCalls > 0) {
+        deductWebSearchCalls(userId, totalWebSearchCalls, agentModel || undefined)
+          .catch(e => console.error('[agent/run] web search billing error:', e));
       }
       const { data: finalRun } = await supabase.from('agent_runs')
         .select('status, metadata').eq('id', runId).single();

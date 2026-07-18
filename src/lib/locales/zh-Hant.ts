@@ -378,6 +378,7 @@ const zhHant = {
   // Agent runtime
   'agent.status.starting': '開始處理...',
   'agent.status.planning': '規劃中...',
+  'agent.status.searchingWeb': '正在搜尋網路...',
   'agent.status.generatingCode': '正在產生程式碼...',
   'agent.status.analyzingImage': (detail: string) => detail ? `分析圖片：${detail}` : '分析圖片',
   'agent.status.analyzingVideo': (detail: string) => detail ? `分析影片：${detail}` : '分析影片',

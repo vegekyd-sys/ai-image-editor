@@ -123,6 +123,18 @@ export class AgentDualWriter {
         return;
       }
 
+      case 'source': {
+        await this.flushContent();
+        await this.insertEvent('source', {
+          id: event.id,
+          url: event.url,
+          title: event.title,
+          messageId: this.currentMessageId,
+        });
+        this.tryEnqueue(event);
+        return;
+      }
+
       case 'image': {
         await this.flushContent();
         const prePublishedSnapshotId = event.snapshotId;

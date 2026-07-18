@@ -9,7 +9,11 @@ import {
   type AgentModelSpec,
 } from './agent-models';
 import { normalizeToolCallInputs } from './tool-inputs';
-import { createAzureOpenAIResponsesModel } from './azure-openai-responses';
+import {
+  createAzureOpenAIResponsesModel,
+  createAzureOpenAIWebSearchTool,
+  isAzureOpenAIWebSearchEnabled,
+} from './azure-openai-responses';
 
 export interface AgentModelRuntime {
   spec: AgentModelSpec;
@@ -95,6 +99,7 @@ export function getAgentProviderOptions(
     return {
       azure: {
         parallelToolCalls: false,
+        maxToolCalls: resolveAzureOpenAIWebSearchMaxCalls(),
         store: false,
         promptCacheKey: runtime.promptCacheKey,
         promptCacheOptions: {
@@ -130,6 +135,22 @@ export function getAgentProviderOptions(
         ? { reasoning: { effort: openRouterEffort } }
         : {}),
     },
+  };
+}
+
+export function resolveAzureOpenAIWebSearchMaxCalls(
+  value = process.env.AZURE_OPENAI_WEB_SEARCH_MAX_CALLS,
+): number {
+  const parsed = Number.parseInt(value || '', 10);
+  return Number.isFinite(parsed) ? Math.min(5, Math.max(1, parsed)) : 2;
+}
+
+export function getAgentProviderTools(runtime: AgentModelRuntime): Record<string, any> {
+  if (runtime.spec.provider !== 'azure-openai' || !isAzureOpenAIWebSearchEnabled()) {
+    return {};
+  }
+  return {
+    web_search: createAzureOpenAIWebSearchTool(),
   };
 }
 

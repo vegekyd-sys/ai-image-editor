@@ -14,6 +14,12 @@ export interface DesignPayload {
   editables?: EditableField[];
 }
 
+export interface WebSearchSource {
+  id: string;
+  url: string;
+  title?: string;
+}
+
 export interface Message {
   id: string;
   role: 'user' | 'assistant';
@@ -26,6 +32,7 @@ export interface Message {
   editInputImages?: string[]; // images passed to Gemini as input (1 = normal, 2 = face restoration)
   design?: DesignPayload; // Remotion design from run_code
   thinking?: string[];   // Agent's reasoning/thinking segments (one per thinking round)
+  sources?: WebSearchSource[]; // public web sources cited during this response
   timestamp: number;
   projectId?: string;
 }

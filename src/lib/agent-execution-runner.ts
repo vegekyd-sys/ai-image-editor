@@ -3,7 +3,7 @@ import { runMakaronAgent, type AgentStreamEvent } from './agent';
 import { AgentDualWriter } from './agentDualWriter';
 import { buildPromptContext } from './agent-context';
 import { getSupabaseAdmin } from './supabase/service';
-import { deductByTokens } from './billing/credits';
+import { deductByTokens, deductWebSearchCalls } from './billing/credits';
 import { resolveAgentModelSpec, type AgentModelPreference } from './agent-models';
 import {
   AgentExecutionStore,
@@ -477,6 +477,7 @@ export async function runAgentExecutionAttempt(
   let cacheReadTokens = 0;
   let cacheWriteTokens = 0;
   let providerCostUsd: number | undefined;
+  let webSearchCalls = 0;
   let billingModel = resolvedModel.billingModelId;
 
   try {
@@ -532,6 +533,7 @@ export async function runAgentExecutionAttempt(
         cacheReadTokens += event.cacheReadTokens || 0;
         cacheWriteTokens += event.cacheWriteTokens || 0;
         providerCostUsd = event.providerCostUsd;
+        webSearchCalls += event.webSearchCalls ?? 0;
         billingModel = event.model || billingModel;
         continue;
       }
@@ -563,6 +565,10 @@ export async function runAgentExecutionAttempt(
       { cacheRead: cacheReadTokens, cacheWrite: cacheWriteTokens },
       providerCostUsd,
     ).catch(error => console.error('[agent-execution] billing failed:', error));
+  }
+  if (webSearchCalls > 0) {
+    void deductWebSearchCalls(run.user_id, webSearchCalls, billingModel)
+      .catch(error => console.error('[agent-execution] web search billing failed:', error));
   }
   await admin.from('agent_runs').update({
     total_input_tokens: (run.total_input_tokens || 0) + inputTokens + cacheReadTokens + cacheWriteTokens,

@@ -206,6 +206,20 @@ export function makeAgentCallbacks(ctx: AgentCallbackContext) {
       }
     },
 
+    onSource: (source) => {
+      if (!currentMsgId || !/^https?:\/\//i.test(source.url)) return;
+      const id = currentMsgId;
+      ctx.setMessages(prev => prev.map(message => {
+        if (message.id !== id || message.sources?.some(item => item.url === source.url)) {
+          return message;
+        }
+        return {
+          ...message,
+          sources: [...(message.sources ?? []), source],
+        };
+      }));
+    },
+
     onImage: (imageData, usedModel, serverSnapshotId, serverImageUrl) => {
       const elapsed = ((performance.now() - t0) / 1000).toFixed(1);
       const genDuration = genStartTime ? ((performance.now() - genStartTime) / 1000).toFixed(1) : '?';

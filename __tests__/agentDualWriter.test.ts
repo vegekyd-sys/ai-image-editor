@@ -96,6 +96,40 @@ describe('AgentDualWriter', () => {
     });
   });
 
+  it('persists web sources for durable replay', async () => {
+    const inserts: Array<{ table: string; row: Record<string, unknown> }> = [];
+    const fakeSupabase = {
+      from: (table: string) => ({
+        insert: async (row: Record<string, unknown>) => {
+          inserts.push({ table, row });
+          return { error: null };
+        },
+      }),
+    };
+    const writer = new AgentDualWriter('run-id', fakeSupabase as never, 'user-id', 'project-id');
+
+    await writer.processAndEnqueue({
+      type: 'source',
+      sourceType: 'url',
+      id: 'source-1',
+      url: 'https://example.com/current',
+      title: 'Current source',
+    });
+
+    expect(inserts).toContainEqual({
+      table: 'agent_events',
+      row: expect.objectContaining({
+        type: 'source',
+        data: expect.objectContaining({
+          id: 'source-1',
+          url: 'https://example.com/current',
+          title: 'Current source',
+          messageId: writer.firstMessageId,
+        }),
+      }),
+    });
+  });
+
   it('persists a recoverable terminal message and its draft checkpoint', async () => {
     const inserts: Array<{ table: string; row: Record<string, unknown> }> = [];
     const upserts: Array<{ table: string; row: Record<string, unknown> }> = [];

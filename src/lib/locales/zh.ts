@@ -433,6 +433,7 @@ const zh = {
   // Agent runtime
   'agent.status.starting': '开始处理...',
   'agent.status.planning': '规划中...',
+  'agent.status.searchingWeb': '正在搜索互联网...',
   'agent.status.generatingCode': '代码生成中...',
   'agent.status.analyzingImage': (detail: string) => detail ? `分析图片：${detail}` : '分析图片',
   'agent.status.analyzingVideo': (detail: string) => detail ? `分析视频：${detail}` : '分析视频',
