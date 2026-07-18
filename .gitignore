@@ -84,6 +84,7 @@ app-store-assets/**/*.mov
 !/scripts/studio-run-golden.ts
 !/scripts/sticker-bridge-acceptance.ts
 !/scripts/edge-video-bridge-acceptance.ts
+!/scripts/agent-execution-acceptance.ts
 
 
 # claude code local settings

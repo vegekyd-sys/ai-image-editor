@@ -166,9 +166,9 @@ export function normalizeExecutionPolicy(value: unknown): ExecutionPolicy {
   const record = value && typeof value === 'object' ? value as Record<string, unknown> : {};
   return {
     durable: true,
-    attemptBudgetMs: numberInRange(record.attemptBudgetMs, DEFAULT_ATTEMPT_BUDGET_MS, 60_000, 600_000),
+    attemptBudgetMs: numberInRange(record.attemptBudgetMs, DEFAULT_ATTEMPT_BUDGET_MS, 60_000, 1_500_000),
     attemptMaxSteps: numberInRange(record.attemptMaxSteps, DEFAULT_ATTEMPT_MAX_STEPS, 1, 60),
-    leaseSeconds: numberInRange(record.leaseSeconds, DEFAULT_ATTEMPT_LEASE_SECONDS, 60, 900),
+    leaseSeconds: numberInRange(record.leaseSeconds, DEFAULT_ATTEMPT_LEASE_SECONDS, 60, 1_800),
     maxAttempts: numberInRange(record.maxAttempts, DEFAULT_MAX_ATTEMPTS, 1, 100),
     maxTotalInputTokens: numberInRange(record.maxTotalInputTokens, 12_000_000, 100_000, 50_000_000),
   };
@@ -388,6 +388,7 @@ export async function runAgentExecutionAttempt(
     currentRunId: runId,
     executionRunId: runId,
     contextPolicy: getAgentContextPolicy(resolvedModel.id),
+    agentModelId: resolvedModel.id,
     durableContinuation: continuation,
   });
   await admin.from('agent_attempts').update({
@@ -505,6 +506,10 @@ export async function runAgentExecutionAttempt(
         abortSignal: modelAbortController.signal,
         attemptBudgetMs: policy.attemptBudgetMs,
         maxSteps: policy.attemptMaxSteps,
+        contextCompactAtTokens: ctx.contextStats.compactionRequired
+          ? getAgentContextPolicy(resolvedModel.id).providerCompactAtTokens
+          : undefined,
+        historyBoundary: ctx.historyBoundary,
         execution: {
           runId,
           attemptId,
@@ -521,8 +526,12 @@ export async function runAgentExecutionAttempt(
       }
       if (event.type === 'context_compaction') {
         providerCompaction = {
+          provider: event.provider,
+          modelId: event.modelId,
+          compactedThrough: event.compactedThrough,
           summary: event.summary,
           appliedEdits: event.appliedEdits,
+          item: event.item,
           inputTokens: event.inputTokens,
         };
       }

@@ -10,7 +10,6 @@ import {
   selectModelHistoryWithinBudget,
   shouldScheduleNextAttempt,
   stableOperationKey,
-  tailModelHistoryAtomically,
   type DurableExecutionSnapshot,
 } from '../src/lib/agent-execution';
 
@@ -29,7 +28,7 @@ describe('durable Agent execution', () => {
     }
   });
 
-  it('keeps all useful history while it fits and trims atomically when it does not', () => {
+  it('reports compaction pressure without silently trimming history', () => {
     const toolCall = {
       role: 'assistant',
       content: [{ type: 'tool-call', toolCallId: 'call-1', toolName: 'read_file', input: { path: 'a.md' } }],
@@ -49,11 +48,28 @@ describe('durable Agent execution', () => {
       },
     });
 
-    expect(selected.stats.droppedMessages).toBeGreaterThan(0);
-    expect(selected.stats.estimatedTokens).toBeLessThanOrEqual(selected.stats.availableTokens);
-    const roles = selected.messages.map(item => item.role);
-    expect(roles[0]).not.toBe('tool');
-    expect(roles.includes('tool')).toBe(false);
+    expect(selected.messages).toEqual(messages);
+    expect(selected.stats.droppedMessages).toBe(0);
+    expect(selected.stats.selectedMessages).toBe(messages.length);
+    expect(selected.stats.estimatedTokens).toBeGreaterThan(selected.stats.availableTokens);
+    expect(selected.stats.compactionRequired).toBe(true);
+  });
+
+  it('uses the provider compaction threshold instead of the former trim limit', () => {
+    const messages = [message('user', 'x'.repeat(60_000)), message('assistant', 'done')];
+    const selected = selectModelHistoryWithinBudget({
+      messages,
+      policy: {
+        contextWindowTokens: 100_000,
+        historySoftLimitTokens: 5_000,
+        providerClearToolUsesAtTokens: 40_000,
+        providerCompactAtTokens: 80_000,
+      },
+    });
+
+    expect(selected.messages).toEqual(messages);
+    expect(selected.stats.estimatedTokens).toBeGreaterThan(5_000);
+    expect(selected.stats.compactionRequired).toBe(false);
   });
 
   it('preserves objective, decisions, artifacts and next action in a typed handoff', () => {
@@ -104,6 +120,57 @@ describe('durable Agent execution', () => {
     expect(JSON.stringify(message)).toContain('The compacted execution state.');
   });
 
+  it('does not replay a legacy compaction block into a different model', () => {
+    const snapshot: DurableExecutionSnapshot = {
+      version: 1,
+      objective: 'long task',
+      acceptanceCriteria: [],
+      decisions: [],
+      completedWork: [],
+      artifacts: [],
+      openQuestions: [],
+      currentWorkUnit: 'agent',
+      nextAction: 'continue',
+      providerCompaction: {
+        provider: 'anthropic',
+        modelId: 'retired-sonnet',
+        summary: 'provider-specific compacted state',
+      },
+    };
+
+    expect(buildTypedCompactionMessage(snapshot, 'gpt-5.6-sol')).toBeNull();
+  });
+
+  it('replays an OpenAI compaction item only on its originating model', () => {
+    const snapshot: DurableExecutionSnapshot = {
+      version: 1,
+      objective: 'long task',
+      acceptanceCriteria: [],
+      decisions: [],
+      completedWork: [],
+      artifacts: [],
+      openQuestions: [],
+      currentWorkUnit: 'agent',
+      nextAction: 'continue',
+      providerCompaction: {
+        provider: 'openai',
+        modelId: 'gpt-5.6-sol',
+        compactedThrough: '2026-07-18T00:00:00.000Z',
+        item: {
+          kind: 'openai.compaction',
+          providerKey: 'azure',
+          itemId: 'cmp-1',
+          encryptedContent: 'encrypted-context',
+        },
+      },
+    };
+
+    const matching = buildTypedCompactionMessage(snapshot, 'gpt-5.6-sol');
+    expect(JSON.stringify(matching)).toContain('openai.compaction');
+    expect(JSON.stringify(matching)).toContain('encrypted-context');
+    expect(buildTypedCompactionMessage(snapshot, 'gpt-5.6-terra')).toBeNull();
+  });
+
   it('makes expensive operation keys stable across attempts', () => {
     const first = stableOperationKey('assets', 'generate_image', { prompt: 'hero', width: 1280 });
     const reordered = stableOperationKey('assets', 'generate_image', { width: 1280, prompt: 'hero' });
@@ -151,28 +218,4 @@ describe('durable Agent execution', () => {
     expect(isRetryableProviderOutage('The composition failed to compile')).toBe(false);
   });
 
-  it('keeps a compact continuation tail without splitting tool call/result pairs', () => {
-    const toolCall = {
-      role: 'assistant',
-      content: [{ type: 'tool-call', toolCallId: 'call-tail', toolName: 'run_code', input: {} }],
-    } as ModelMessage;
-    const toolResult = {
-      role: 'tool',
-      content: [{ type: 'tool-result', toolCallId: 'call-tail', toolName: 'run_code', output: { type: 'text', value: 'saved' } }],
-    } as ModelMessage;
-    const history = [
-      ...Array.from({ length: 12 }, (_, index) => message(index % 2 ? 'assistant' : 'user', `old-${index}`)),
-      toolCall,
-      toolResult,
-      message('assistant', 'latest'),
-    ];
-
-    const tail = tailModelHistoryAtomically(history, 4);
-
-    expect(tail.length).toBeLessThanOrEqual(4);
-    const toolCallIndex = tail.indexOf(toolCall);
-    expect(toolCallIndex).toBeGreaterThanOrEqual(0);
-    expect(tail[toolCallIndex + 1]).toBe(toolResult);
-    expect(tail.at(-1)).toMatchObject({ role: 'assistant', content: 'latest' });
-  });
 });

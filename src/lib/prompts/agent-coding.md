@@ -12,6 +12,12 @@ Do not use this as a Remotion creative guide. For editable timelines, motion gra
 
 If the task is a static poster, infographic, e-commerce page, layout image, or marketing visual, use `generate_image` unless the user explicitly asks for editable code or animation.
 
+## Code Artifact Workflow
+
+For substantial normal Agent Run coding, use `write_code_file` first and then execute the saved source with `run_code({ code_path })`. Describe the specific artifact before the `content` field so the user can see what is being built while the real source streams. The workspace file is the durable source of truth for later execution, recovery, and patching.
+
+Use inline `run_code.code` only for small patches or short utilities. Studio Run may continue to use numbered `composition_parts` when a long composition benefits from multiple cohesive files. Do not shorten narration, scenes, animation, or visual detail to satisfy an aggregate character target.
+
 ## Return Shapes
 
 Return exactly one supported object:

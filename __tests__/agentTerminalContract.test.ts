@@ -15,7 +15,9 @@ const executionDispatchSource = readFileSync(join(process.cwd(), 'src/lib/agent-
 describe('agent terminal contract wiring', () => {
   it('gates done on model termination and retries one stalled step from the saved draft', () => {
     expect(agentSource).toContain('classifyModelTermination({');
-    expect(agentSource).toContain('timeout: { stepMs: stepTimeoutMs, totalMs: remainingInvocationBudgetMs }');
+    expect(agentSource).toContain('chunkMs: streamIdleTimeoutMs');
+    expect(agentSource).toContain('toolMs: Math.min(900_000, remainingInvocationBudgetMs)');
+    expect(agentSource).not.toContain('stepMs: stepTimeoutMs');
     expect(agentSource).toContain("options?.execution ? { maxRetries: 0 } : {}");
     expect(agentSource).toContain('invocationBudgetMs - (Date.now() - agentStartTime)');
     expect(agentSource).toContain('options?.attemptBudgetMs');
@@ -45,8 +47,12 @@ describe('agent terminal contract wiring', () => {
     expect(agentSource).toContain('checkpoint.draftPath || checkpoint.studioRunId');
     expect(agentStreamSource).toContain('MAX_STUDIO_RUN_AUTO_RESUMES = 2');
     expect(agentStreamSource).toContain('buildStudioRunAutoResumePrompt(recoveryEvent)');
-    expect(agentSource).toContain('streamed-run-code.partial.js');
+    expect(agentSource).toContain('streamed-${codeExtractor.toolName}.partial.js');
     expect(agentSource).toContain('persistStreamedCodeCheckpoint(true)');
+    expect(agentSource).toContain('write_code_file: tool({');
+    expect(agentSource).toContain("code_path: z.string().optional()");
+    expect(agentSource).toContain('workspace.readFile(code_path');
+    expect(agentSource).toContain("toolName === 'run_code' || toolName === 'write_code_file'");
     expect(agentSource).not.toContain('under 9000 source characters');
     expect(agentSource).toContain('never begin a monolithic run_code payload');
     expect(agentSource).toContain('hard transport limit of 12000 source characters');
@@ -54,7 +60,7 @@ describe('agent terminal contract wiring', () => {
     expect(agentSource).toContain('Never shorten approved narration, subtitles, scenes, animation, or visual detail');
     expect(agentSource).toContain('composition_parts.directory');
     expect(agentSource).toContain('Split the content across new numbered files');
-    expect(agentSource).toContain('providerOptions: getAgentProviderOptions(runtime)');
+    expect(agentSource).toContain('providerOptions: getAgentProviderOptions(runtime, {');
     expect(agentSource).toContain('Boolean(options?.execution)');
     expect(agentSource).toContain('durableVisionBridge');
     expect(agentSource).toContain('Visual QA for contact sheet frames');
@@ -66,6 +72,8 @@ describe('agent terminal contract wiring', () => {
     expect(agentContextSource).toContain('[Active Studio Run]');
     expect(agentContextSource).toContain('selectModelHistoryWithinBudget');
     expect(agentContextSource).toContain('buildTypedCompactionMessage');
+    expect(agentContextSource).toContain('projectCompactionPromise');
+    expect(agentContextSource).not.toContain('tailModelHistoryAtomically(rebuiltHistory, 16)');
     expect(agentSource.indexOf('if (assessment.ok) break;')).toBeLessThan(agentSource.indexOf("yield { type: 'done' }"));
     expect(executionRunnerSource).toContain('runAgentExecutionAttempt');
     expect(executionRunnerSource).toContain("status: 'handed_off'");
@@ -102,6 +110,10 @@ describe('agent terminal contract wiring', () => {
   });
 
   it('gives each durable attempt enough steps to finish a composed video QA pass', () => {
-    expect(headlessRouteSource).toContain('attemptMaxSteps: 60');
+    expect(headlessRouteSource).toContain('attemptMaxSteps: DEFAULT_ATTEMPT_MAX_STEPS');
+    expect(headlessRouteSource).toContain('attemptBudgetMs: DEFAULT_ATTEMPT_BUDGET_MS');
+    expect(headlessRouteSource).toContain('leaseSeconds: DEFAULT_ATTEMPT_LEASE_SECONDS');
+    expect(headlessRouteSource.indexOf('return NextResponse.json({\n        runId,\n        executionId: runId'))
+      .toBeLessThan(headlessRouteSource.indexOf('const ctx = await buildPromptContext'));
   });
 });

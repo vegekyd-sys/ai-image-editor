@@ -81,6 +81,7 @@ export function createAgentModelRuntime(
 
 export function getAgentProviderOptions(
   runtime: AgentModelRuntime,
+  options?: { compactAtTokens?: number },
 ): Record<string, any> {
   if (runtime.spec.provider === 'azure-openai') {
     const allowedEfforts = new Set<AgentReasoningEffort>([
@@ -102,6 +103,14 @@ export function getAgentProviderOptions(
           ttl: '30m',
         },
         ...(reasoningEffort ? { reasoningEffort } : {}),
+        ...(options?.compactAtTokens
+          ? {
+              contextManagement: [{
+                type: 'compaction',
+                compactThreshold: options.compactAtTokens,
+              }],
+            }
+          : {}),
       },
     };
   }

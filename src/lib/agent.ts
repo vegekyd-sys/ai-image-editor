@@ -302,7 +302,21 @@ export type AgentStreamEvent =
   | { type: 'render'; code: string; width: number; height: number; props?: Record<string, unknown>; animation?: { fps: number; durationInSeconds: number; format?: string }; editables?: import('@/types').EditableField[]; published?: boolean; previewUrl?: string }  // Agent React design for browser rendering
   | { type: 'design'; code: string; width: number; height: number; props?: Record<string, unknown>; animation?: { fps: number; durationInSeconds: number; format?: string }; editables?: import('@/types').EditableField[]; published?: boolean }  // @deprecated — backward compat alias for 'render'
   | { type: 'music_task'; taskId: string }  // emitted when generate_music tool creates a task — frontend polls
-  | { type: 'context_compaction'; summary: string; appliedEdits: Array<Record<string, unknown>>; inputTokens?: number }
+  | {
+      type: 'context_compaction';
+      provider: 'anthropic' | 'openai';
+      modelId?: string;
+      compactedThrough?: string;
+      summary?: string;
+      appliedEdits?: Array<Record<string, unknown>>;
+      item?: {
+        kind: 'openai.compaction';
+        providerKey: string;
+        itemId: string;
+        encryptedContent: string;
+      };
+      inputTokens?: number;
+    }
   | { type: 'usage'; inputTokens: number; outputTokens: number; cacheReadTokens?: number; cacheWriteTokens?: number; cacheWriteTelemetryComplete?: boolean; providerCostUsd?: number; model: string }  // token usage for billing (inputTokens = noCache only)
   | { type: 'done' }
   | {
@@ -1265,7 +1279,7 @@ async function buildSystemPrompt(userSkills?: ParsedSkill[], supabase?: any, use
 
 You have a persistent workspace for skills and files.
 
-Tools: \`list_files\`, \`read_file\`, \`write_file\`, \`delete_file\`, \`run_code\`
+Tools: \`list_files\`, \`read_file\`, \`write_code_file\`, \`write_file\`, \`delete_file\`, \`run_code\`
 
 ### File organization
 - **User-level** (shared across projects): \`skills/\`, \`memory/\`
@@ -1277,6 +1291,7 @@ Execute JavaScript in two modes:
 - \`runtime: "composition"\` for Remotion/editable composition drafts, animated templates, overlays, and sharp utilities. \`runtime: "design"\` is a legacy alias.
 - \`runtime: "node"\` for real file-level MP4 work with FFmpeg/FFprobe: split, exact trim/export, transcode, extract frames, mux audio, long-video preparation, and final assembly of generated chunks.
 For finished single images, posters, infographics, and marketing graphics, use \`generate_image\` instead unless the user asks for editable or animated code.
+For substantial normal Agent Run code, write the complete program with \`write_code_file\`, then execute its returned workspace path with \`run_code({ code_path })\`. The user sees the real source as it streams, and the file remains available for recovery and later edits. Inline code is for short patches and utilities; Studio Run may use numbered composition parts for long compositions.
 Always tell the user what you're about to do BEFORE calling run_code (1 sentence). After run_code completes, briefly describe the result.
 
 ### Creating skills
@@ -3372,6 +3387,58 @@ Use this to read skill instructions (SKILL.md), reference images, or your memory
       },
     }),
 
+    write_code_file: tool({
+      description: `Create or replace a first-class code file in the project workspace.
+
+Use this for substantial programmable video or media work: write the executable Remotion/Node program here, then call run_code with code_path. The source remains reusable, patchable, and recoverable across long Agent Runs instead of being trapped inside one execution call. Studio Run may continue using numbered composition parts for very long compositions; short patches and small utility scripts may still use inline run_code.`,
+      inputSchema: z.object({
+        description: z.string().optional().describe('User-facing one-sentence summary of the specific code artifact being written. Put this before content so progress is visible while source streams.'),
+        path: z.string().optional().describe('Workspace path, e.g. "project-id/code/island-packaging.js". If omitted, a path is generated from name and runtime.'),
+        name: z.string().optional().describe('Short slug used when path is omitted, e.g. "island-packaging".'),
+        runtime: z.enum(['composition', 'node']).optional().describe('composition = Remotion/editable composition executable body. node = Node/FFmpeg script. Default composition.'),
+        content: z.string().min(1).describe('Complete executable JavaScript body. Do not trim approved content to meet an aggregate source-size target.'),
+      }),
+      execute: async ({ description, path: filePath, name, runtime, content }) => {
+        if (!ctx.supabase || !ctx.userId) {
+          return { success: false, message: 'Workspace not available (no Supabase connection).' };
+        }
+        const kind = runtime || 'composition';
+        const slug = (name || description || 'composition-code')
+          .toLowerCase()
+          .replace(/[^a-z0-9]+/g, '-')
+          .replace(/^-|-$/g, '')
+          .slice(0, 48) || 'composition-code';
+        const savePath = filePath || (kind === 'node'
+          ? `${ctx.projectId}/media-code/${slug}.js`
+          : `${ctx.projectId}/code/${slug}.js`);
+        const result = await workspace.writeFile(savePath, content, ctx.supabase, ctx.userId, 'text/javascript');
+        if (!result.success) {
+          return { success: false, message: `Write failed: ${result.error}` };
+        }
+        (ctx as any).__lastCodeFilePath = savePath;
+        (ctx as any).__lastCodeFileRuntime = kind;
+        return {
+          success: true,
+          message: `Code file saved: ${savePath}. Execute it with run_code({ code_path: "${savePath}", runtime: "${kind}" }).`,
+          path: savePath,
+          runtime: kind,
+          codeChars: content.length,
+          storageUrl: toPublicStorageUrl(result.storageUrl || ''),
+        };
+      },
+      toModelOutput({ output }: { output: any }) {
+        return {
+          type: 'content' as const,
+          value: [{
+            type: 'text' as const,
+            text: output.success
+              ? `${output.message}\nCode chars: ${output.codeChars}`
+              : output.message || 'Code file write failed.',
+          }],
+        };
+      },
+    }),
+
     write_file: tool({
       description: `Write a file to your workspace. Use this to save memory, create skills, or organize your workspace.
 For durable Studio Composition work, write numbered source parts under \`<project-id>/drafts/composition-parts/\` one cohesive component per model step, wait for its result, then assemble them with run_code.composition_parts. Filenames MUST use a numeric prefix of at least two digits plus a slug, for example \`00-foundation.js\`, \`10-scenes-a.js\`, \`90-root.js\`, or \`120-chapter.js\`. Each part has a hard transport limit of 12000 source characters; focused parts around 3000-8000 characters are preferred, but visual detail must decide the size. There is no aggregate source-size or part-count limit. Parts share one scope: do not use import/export. Rewriting the same numbered path is retry-safe. Never shorten approved narration, subtitles, scenes, animation, or visual detail to reduce source size. If one unusually large part exceeds 12000, split that component across new numbered files; renaming unchanged oversized content will still fail. Assemble by passing either the explicit paths or the composition-parts directory; directory mode discovers and numerically orders all valid .js parts without repeating the path list.
@@ -3587,7 +3654,7 @@ Return exactly one supported shape:
 - \`{ type: 'text', content }\`
 - \`{ type: 'error', message }\`
 
-For a first composition draft, prefer the top-level \`composition\` input over wrapping JSX inside executable \`code\`. Pass \`composition: { code, width, height, props, editables, animation }\`; the harness validates and autosaves it directly. This avoids nested-code quoting failures and is the fastest Studio Run path. Keep executable \`code\` for patches, images, Node media work, and legacy calls.
+For substantial normal Agent Run coding, prefer \`write_code_file\` followed by \`run_code({ code_path })\`. This exposes real source progress, persists the program before execution, and keeps it patchable across turns. For a small patch or utility, inline \`code\` remains available. The top-level \`composition\` input remains available for direct first-draft payloads.
 
 For durable Studio Composition work, use \`write_file\` to author numbered source parts and then pass \`composition_parts: { directory, width, height, props, editables, animation }\`, or use \`paths\` for an explicit subset. Every file MUST be under \`<project-id>/drafts/composition-parts/\` and use a numeric prefix of at least two digits plus a lowercase slug. Each file has a hard transport limit of 12000 source characters. There is no aggregate source-size or part-count limit. Files are concatenated by numeric prefix into one scope, so do not use import/export. Preserve approved narration, subtitles, scenes, animation, and visual detail; never trim creative content to satisfy a source-size target. The harness discovers, validates, and autosaves the parts without asking the model to repeat the complete source or a long path list in one tool call.
 
@@ -3599,6 +3666,7 @@ For legacy first-draft calls without \`composition\`, send one complete executab
 Node media runtime provides \`require\`, \`process\`, \`ffmpegPath\`, \`inputFiles\`, \`outputDir\`, \`workDir\`, \`workspaceDir\`, \`saveOutput(localPath)\`, and \`probeVideo(path)\`. Most Node built-ins are available, plus media packages such as \`sharp\`, \`jszip\`, \`exifr\`, \`heic-convert\`, \`canvas\`, \`remotion\`, and Remotion media utilities. Arbitrary local/package require, env secrets, and escape/debug modules are blocked. Workspace files are local to the runtime: use \`workspace_paths\` and \`inputFiles[n].inputPath\`, never download or reconstruct Storage URLs. For \`runtime: "node"\`, any referenced timeline media like \`<<<media_1>>>\` MUST be passed as \`media_refs: [1]\`; any existing workspace file from \`list_files\` MUST be passed as \`workspace_paths: ["project/media/file.mp4"]\`. The system resolves both to local workspace-backed files before your code runs. \`ffprobePath\` may be empty in deployment; prefer \`probeVideo(path)\`. Use \`type: "files"\` for chunks and \`type: "video"\` for the final MP4. If ordinary timeline splicing was routed to composition, do not switch to node just because preview needs adjustment; patch the composition or report the preview issue.`,
       inputSchema: z.object({
         code: z.string().optional().describe('JavaScript code to execute. Required for node, patch, image, and legacy calls. For a first Remotion draft prefer the direct composition input instead.'),
+        code_path: z.string().optional().describe('Workspace code file created by write_code_file. Preferred for substantial normal Agent Run coding; run_code reads and executes the saved source without repeating it in tool history.'),
         composition: z.object({
           code: z.string().min(1).describe('Direct Remotion component source. Define function Composition(props) without import/export. This string is validated directly, not executed as nested JavaScript.'),
           width: z.number().int().positive(),
@@ -3640,11 +3708,22 @@ Node media runtime provides \`require\`, \`process\`, \`ffmpegPath\`, \`inputFil
         media_refs: z.array(z.number()).optional().describe('1-based Media Index indices referenced by the user (e.g. [1] for <<<media_1>>>). REQUIRED for runtime:"node" FFmpeg work on timeline media; the system resolves them to local workspace-backed inputFiles[0], inputFiles[1], ... . Do not hardcode Media Index URLs for FFmpeg inputs. For ordinary editable splicing of two timeline videos, use runtime:"composition" instead.'),
         workspace_paths: z.array(z.string()).optional().describe('Workspace file paths from list_files/read_file, e.g. ["project-id/media/clip.mp4"]. For runtime:"node", pass these instead of downloading or copying storage URLs; they are resolved to local inputFiles after media_refs.'),
         runtime: z.enum(['composition', 'design', 'node']).optional().describe('composition = safe Remotion/editable composition runtime. design = legacy alias for composition. node = fully open backend Node runtime with fs/child_process/ffmpeg for real MP4 editing.'),
-      }).refine(value => Boolean(value.code || value.composition || value.composition_parts), {
-        message: 'Provide executable code, a direct composition payload, or durable composition parts.',
+      }).refine(value => Boolean(value.code || value.code_path || value.composition || value.composition_parts), {
+        message: 'Provide executable code, a code_path, a direct composition payload, or durable composition parts.',
       }),
-      execute: async ({ code, composition, composition_parts, description: desc, media_refs, workspace_paths, runtime }) => {
-        const executableCode = code || '';
+      execute: async ({ code, code_path, composition, composition_parts, description: desc, media_refs, workspace_paths, runtime }) => {
+        let executableCode = code || '';
+        if (code_path) {
+          if (!ctx.supabase || !ctx.userId) {
+            return { type: 'text' as const, content: 'Workspace not available. Cannot read code_path.' };
+          }
+          const file = await workspace.readFile(code_path, ctx.supabase, ctx.userId);
+          executableCode = file?.content || '';
+          if (!executableCode.trim()) {
+            return { type: 'text' as const, content: `Code file not found or empty: ${code_path}` };
+          }
+          (ctx as any).__lastCodeFilePath = code_path;
+        }
         console.log(`🔧 [run_code] ${desc || 'executing code'}...`);
         const startTime = Date.now();
         let resolvedComposition = composition;
@@ -3702,8 +3781,8 @@ Node media runtime provides \`require\`, \`process\`, \`ffmpegPath\`, \`inputFil
         }
 
         if (runtime === 'node') {
-          if (!code) {
-            return { type: 'text' as const, content: 'Node media runtime requires executable code; composition is only for Remotion first drafts.' };
+          if (!executableCode) {
+            return { type: 'text' as const, content: 'Node media runtime requires executable code or code_path; composition is only for Remotion first drafts.' };
           }
           if (!ctx.supabase || !ctx.userId) {
             return { type: 'text' as const, content: 'Node media runtime requires workspace access. Please try again after the project finishes loading.' };
@@ -4488,6 +4567,36 @@ export function withLocale(prompt: string, locale?: string): string {
   return locale ? `${prompt}\n\n${getReplyLanguageInstruction(locale)}` : prompt;
 }
 
+function readJsonStringValueFromBuffer(buffer: string, key: string): { complete: boolean; value: string } | null {
+  const match = buffer.match(new RegExp(`"${key}"\\s*:\\s*"`));
+  if (!match || match.index === undefined) return null;
+
+  let index = match.index + match[0].length;
+  let value = '';
+  let escaped = false;
+  while (index < buffer.length) {
+    const char = buffer[index];
+    if (escaped) {
+      if (char === 'n') value += '\n';
+      else if (char === 't') value += '\t';
+      else if (char === '"') value += '"';
+      else if (char === '\\') value += '\\';
+      else if (char === '/') value += '/';
+      else value += char;
+      escaped = false;
+    } else if (char === '\\') {
+      escaped = true;
+    } else if (char === '"') {
+      return { complete: true, value };
+    } else {
+      value += char;
+    }
+    index++;
+  }
+
+  return { complete: false, value };
+}
+
 // Used for initial upload analysis
 const ANALYSIS_PROMPT_INITIAL = `Describe this photo in 1-2 sentences, in the tone of a friend sharing what they noticed. Start directly with the subject. Do not use any preamble such as "Let me take a look".`;
 
@@ -4529,6 +4638,8 @@ export interface RunMakaronAgentOptions {
   execution?: DurableExecutionRef;
   attemptBudgetMs?: number;
   maxSteps?: number;
+  contextCompactAtTokens?: number;
+  historyBoundary?: string;
 }
 
 export async function* runMakaronAgent(
@@ -4713,10 +4824,10 @@ export async function* runMakaronAgent(
   ];
 
   try {
-    const configuredStepTimeout = Number(process.env.AGENT_MODEL_STEP_TIMEOUT_MS || 150_000);
-    const stepTimeoutMs = Number.isFinite(configuredStepTimeout)
-      ? Math.max(30_000, Math.min(configuredStepTimeout, 240_000))
-      : 150_000;
+    const configuredIdleTimeout = Number(process.env.AGENT_MODEL_IDLE_TIMEOUT_MS || 300_000);
+    const streamIdleTimeoutMs = Number.isFinite(configuredIdleTimeout)
+      ? Math.max(30_000, Math.min(configuredIdleTimeout, 600_000))
+      : 300_000;
     const attemptResults: any[] = [];
     let billedNoCacheTokens = 0;
     let billedCacheReadTokens = 0;
@@ -4817,8 +4928,8 @@ export async function* runMakaronAgent(
 
       const endStreamInit = perf?.span('model_stream_init', { projectId, recoveryAttempt });
       const invocationBudgetMs = typeof options?.attemptBudgetMs === 'number' && Number.isFinite(options.attemptBudgetMs)
-        ? Math.max(60_000, Math.min(options.attemptBudgetMs, 720_000))
-        : 720_000;
+        ? Math.max(60_000, Math.min(options.attemptBudgetMs, 1_500_000))
+        : 1_500_000;
       const remainingInvocationBudgetMs = Math.max(30_000, invocationBudgetMs - (Date.now() - agentStartTime));
       const recoveryActiveTools = tools && recoveryBlockedTools.size > 0
         ? Object.keys(tools).filter((toolName) => !recoveryBlockedTools.has(toolName))
@@ -4857,20 +4968,40 @@ export async function* runMakaronAgent(
       // the SDK retry internally turns one timed-out model call into several
       // invisible calls before the runner can switch providers.
       ...(options?.execution ? { maxRetries: 0 } : {}),
-      timeout: { stepMs: stepTimeoutMs, totalMs: remainingInvocationBudgetMs },
+      // A long coding step may stream valid source for several minutes. Kill
+      // only an actually idle stream, not an active step with an arbitrary age.
+      timeout: {
+        chunkMs: streamIdleTimeoutMs,
+        toolMs: Math.min(900_000, remainingInvocationBudgetMs),
+        totalMs: remainingInvocationBudgetMs,
+      },
       ...(options?.abortSignal ? { abortSignal: options.abortSignal } : {}),
-      providerOptions: getAgentProviderOptions(runtime),
+      providerOptions: getAgentProviderOptions(runtime, {
+        compactAtTokens: options?.contextCompactAtTokens,
+      }),
       });
       attemptResults.push(result);
       endStreamInit?.();
 
-    // State machine for extracting code from run_code tool-input-delta
-    let codeExtractor: { buffer: string; state: 'waiting' | 'in_code' | 'done'; escaped: boolean; sent: number; decoded: string; lastSavedChars: number } | null = null;
+    // Stream real source from code-bearing tool inputs and checkpoint it before
+    // the tool call closes, so a transport reset cannot erase minutes of work.
+    let codeExtractor: {
+      toolName: 'run_code' | 'write_code_file';
+      valueKey: 'code' | 'content';
+      buffer: string;
+      state: 'waiting' | 'in_code' | 'done';
+      escaped: boolean;
+      sent: number;
+      decoded: string;
+      lastSavedChars: number;
+      descriptionSent: number;
+      codeStreamStarted: boolean;
+    } | null = null;
     const persistStreamedCodeCheckpoint = async (force = false) => {
       if (!codeExtractor || !ctx.supabase || !ctx.userId) return;
       const unsavedChars = codeExtractor.decoded.length - codeExtractor.lastSavedChars;
       if (unsavedChars <= 0 || (!force && unsavedChars < 1_000)) return;
-      const partialPath = `${ctx.projectId}/drafts/streamed-run-code.partial.js`;
+      const partialPath = `${ctx.projectId}/drafts/streamed-${codeExtractor.toolName}.partial.js`;
       const saved = await workspace.writeFile(
         partialPath,
         codeExtractor.decoded,
@@ -4916,6 +5047,9 @@ export async function* runMakaronAgent(
             };
             yield {
               type: 'context_compaction',
+              provider: 'anthropic',
+              modelId: runtime.spec.id,
+              compactedThrough: options?.historyBoundary,
               summary,
               appliedEdits,
               inputTokens: usage?.inputTokens,
@@ -4955,6 +5089,29 @@ export async function* runMakaronAgent(
         continue;
       }
 
+      if (event.type === 'custom' && (event as any).kind === 'openai.compaction') {
+        const providerKey = runtime.spec.provider === 'azure-openai' ? 'azure' : 'openai';
+        const metadata = (event as any).providerMetadata?.[providerKey] as {
+          itemId?: string;
+          encryptedContent?: string;
+        } | undefined;
+        if (metadata?.itemId && metadata.encryptedContent) {
+          yield {
+            type: 'context_compaction',
+            provider: 'openai',
+            modelId: runtime.spec.id,
+            compactedThrough: options?.historyBoundary,
+            item: {
+              kind: 'openai.compaction',
+              providerKey,
+              itemId: metadata.itemId,
+              encryptedContent: metadata.encryptedContent,
+            },
+          };
+        }
+        continue;
+      }
+
       if (event.type === 'text-start') {
         const anthropic = (event as any).providerMetadata?.anthropic as { type?: string } | undefined;
         if (anthropic?.type === 'compaction') {
@@ -4973,13 +5130,24 @@ export async function* runMakaronAgent(
         continue;
       }
 
-      // ── Tool input streaming — extract code in real-time for run_code ──
+      // ── Tool input streaming — expose and checkpoint real source code ──
       if (event.type === 'tool-input-start') {
         const toolName = (event as any).toolName ?? '';
         if (toolName) lastTool = toolName;
-        if (toolName === 'run_code') {
+        if (toolName === 'run_code' || toolName === 'write_code_file') {
           runCodeStartedThisTurn = true;
-          codeExtractor = { buffer: '', state: 'waiting', escaped: false, sent: 0, decoded: '', lastSavedChars: 0 };
+          codeExtractor = {
+            toolName,
+            valueKey: toolName === 'write_code_file' ? 'content' : 'code',
+            buffer: '',
+            state: 'waiting',
+            escaped: false,
+            sent: 0,
+            decoded: '',
+            lastSavedChars: 0,
+            descriptionSent: 0,
+            codeStreamStarted: false,
+          };
           yield { type: 'status' as const, text: translate(responseLocale, 'agent.status.generatingCode') };
         }
         continue;
@@ -4989,9 +5157,18 @@ export async function* runMakaronAgent(
         const delta = (event as any).delta ?? '';
         codeExtractor.buffer += delta;
 
+        if (codeExtractor.toolName === 'write_code_file' && !codeExtractor.codeStreamStarted) {
+          const description = readJsonStringValueFromBuffer(codeExtractor.buffer, 'description');
+          const nextDescriptionChunk = description?.value.slice(codeExtractor.descriptionSent) ?? '';
+          if (nextDescriptionChunk) {
+            const prefix = codeExtractor.descriptionSent === 0 ? '\n\n' : '';
+            codeExtractor.descriptionSent = description?.value.length ?? codeExtractor.descriptionSent;
+            yield { type: 'content' as const, text: `${prefix}${nextDescriptionChunk}` };
+          }
+        }
+
         if (codeExtractor.state === 'waiting') {
-          // Look for "code": " or "code":" marker (with or without space)
-          const match = codeExtractor.buffer.match(/"code"\s*:\s*"/);
+          const match = codeExtractor.buffer.match(new RegExp(`"${codeExtractor.valueKey}"\\s*:\\s*"`));
           if (!match || match.index === undefined) continue;
           // Found — switch to in_code, start after the opening quote
           codeExtractor.state = 'in_code';
@@ -5026,6 +5203,7 @@ export async function* runMakaronAgent(
           }
           codeExtractor.sent = i;
           if (codeChunk) {
+            codeExtractor.codeStreamStarted = true;
             codeExtractor.decoded += codeChunk;
             yield { type: 'code_stream', text: codeChunk };
             await persistStreamedCodeCheckpoint();
@@ -5091,6 +5269,8 @@ export async function* runMakaronAgent(
         } else if (event.toolName === 'read_file') {
           const p = (event.input as { path?: string }).path || '';
           yield { type: 'status', text: translate(responseLocale, 'agent.status.readingFile', p.split('/').pop() ?? '') };
+        } else if (event.toolName === 'write_code_file') {
+          yield { type: 'status', text: translate(responseLocale, 'agent.status.generatingCode') };
         } else if (event.toolName === 'write_file') {
           yield { type: 'status', text: translate(responseLocale, 'agent.status.saving') };
         } else if (event.toolName === 'delete_file') {
@@ -5147,10 +5327,21 @@ export async function* runMakaronAgent(
             ? directComposition.code
             : undefined;
         const isRunCode = event.toolName === 'run_code' && typeof streamedCode === 'string';
+        const isWriteCodeFile = event.toolName === 'write_code_file' && typeof toolInput.content === 'string';
+        if (
+          isWriteCodeFile
+          && (!codeExtractor || codeExtractor.descriptionSent === 0)
+          && typeof toolInput.description === 'string'
+          && toolInput.description.trim()
+        ) {
+          yield { type: 'content' as const, text: `\n\n${toolInput.description.trim()}` };
+        }
         const displayInput = isRunCode
           ? directComposition
             ? { ...toolInput, composition: { ...directComposition, code: `[code streamed separately: ${streamedCode.length} chars]` } }
             : { ...toolInput, code: `[code streamed separately: ${streamedCode.length} chars]` }
+          : isWriteCodeFile
+            ? { ...toolInput, content: `[code streamed separately: ${(toolInput.content as string).length} chars]` }
           : toolInput;
         yield {
           type: 'tool_call',
@@ -5162,8 +5353,8 @@ export async function* runMakaronAgent(
           ...(toolCallImages ? { images: toolCallImages } : {}),
         };
         // If code wasn't streamed via delta (edge case), send it now
-        if (isRunCode && (!codeExtractor || codeExtractor.state === 'waiting')) {
-          const code = streamedCode;
+        if ((isRunCode || isWriteCodeFile) && (!codeExtractor || codeExtractor.state === 'waiting')) {
+          const code = String(isWriteCodeFile ? toolInput.content : streamedCode);
           const CHUNK = 500;
           for (let i = 0; i < code.length; i += CHUNK) {
             yield { type: 'code_stream', text: code.slice(i, i + CHUNK) };

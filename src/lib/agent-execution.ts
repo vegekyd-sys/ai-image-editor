@@ -2,9 +2,9 @@ import type { ModelMessage } from 'ai';
 import type { SupabaseClient } from '@supabase/supabase-js';
 
 export const EXECUTION_SCHEMA_VERSION = 1;
-export const DEFAULT_ATTEMPT_LEASE_SECONDS = 480;
-export const DEFAULT_ATTEMPT_BUDGET_MS = 420_000;
-export const DEFAULT_ATTEMPT_MAX_STEPS = 24;
+export const DEFAULT_ATTEMPT_LEASE_SECONDS = 1_800;
+export const DEFAULT_ATTEMPT_BUDGET_MS = 1_500_000;
+export const DEFAULT_ATTEMPT_MAX_STEPS = 60;
 export const DEFAULT_MAX_ATTEMPTS = 40;
 
 export interface AgentContextPolicy {
@@ -34,8 +34,17 @@ export interface DurableExecutionSnapshot {
   attemptSummary?: string;
   checkpoint?: Record<string, unknown>;
   providerCompaction?: {
-    summary: string;
-    appliedEdits: Array<Record<string, unknown>>;
+    provider?: 'anthropic' | 'openai';
+    modelId?: string;
+    compactedThrough?: string;
+    summary?: string;
+    appliedEdits?: Array<Record<string, unknown>>;
+    item?: {
+      kind: 'openai.compaction';
+      providerKey: string;
+      itemId: string;
+      encryptedContent: string;
+    };
     inputTokens?: number;
   };
 }
@@ -53,6 +62,7 @@ export interface ContextSelectionStats {
   selectedMessages: number;
   droppedMessages: number;
   usedSnapshot: boolean;
+  compactionRequired: boolean;
 }
 
 export interface ExecutionLeaseState {
@@ -107,41 +117,6 @@ export function estimateModelMessageTokens(message: ModelMessage): number {
   return 8 + estimateTextTokens(JSON.stringify(message));
 }
 
-function isToolCallMessage(message: ModelMessage): boolean {
-  return message.role === 'assistant'
-    && Array.isArray(message.content)
-    && message.content.some((part: unknown) => (
-      !!part && typeof part === 'object' && (part as { type?: string }).type === 'tool-call'
-    ));
-}
-
-function atomicMessageGroups(messages: ModelMessage[]): ModelMessage[][] {
-  const groups: ModelMessage[][] = [];
-  for (let i = 0; i < messages.length; i++) {
-    const message = messages[i];
-    if (isToolCallMessage(message) && messages[i + 1]?.role === 'tool') {
-      groups.push([message, messages[++i]]);
-    } else {
-      groups.push([message]);
-    }
-  }
-  return groups;
-}
-
-export function tailModelHistoryAtomically(messages: ModelMessage[], maxMessages: number): ModelMessage[] {
-  const limit = Math.max(1, Math.floor(maxMessages));
-  const groups = atomicMessageGroups(messages);
-  const selected: ModelMessage[][] = [];
-  let count = 0;
-  for (let i = groups.length - 1; i >= 0; i--) {
-    const group = groups[i];
-    if (selected.length > 0 && count + group.length > limit) break;
-    selected.unshift(group);
-    count += group.length;
-  }
-  return selected.flat();
-}
-
 export function selectModelHistoryWithinBudget(input: {
   messages: ModelMessage[];
   policy: AgentContextPolicy;
@@ -151,32 +126,24 @@ export function selectModelHistoryWithinBudget(input: {
   const reservedTokens = Math.max(0, input.reservedTokens ?? 0);
   const availableTokens = Math.max(
     8_000,
-    Math.min(
-      input.policy.historySoftLimitTokens,
-      input.policy.providerCompactAtTokens - reservedTokens - 16_000,
-    ),
+    input.policy.providerCompactAtTokens - reservedTokens - 16_000,
   );
-  const groups = atomicMessageGroups(input.messages);
-  const selected: ModelMessage[][] = [];
-  let estimatedTokens = 0;
-
-  for (let i = groups.length - 1; i >= 0; i--) {
-    const groupTokens = groups[i].reduce((sum, message) => sum + estimateModelMessageTokens(message), 0);
-    if (selected.length > 0 && estimatedTokens + groupTokens > availableTokens) break;
-    if (groupTokens > availableTokens && selected.length === 0) continue;
-    selected.unshift(groups[i]);
-    estimatedTokens += groupTokens;
-  }
-
-  const selectedMessages = selected.flat();
+  const estimatedTokens = input.messages.reduce(
+    (sum, message) => sum + estimateModelMessageTokens(message),
+    0,
+  );
   return {
-    messages: selectedMessages,
+    // Context selection must never become an implicit lossy compactor. The
+    // runner consumes compactionRequired and creates a persisted compaction
+    // checkpoint before it is allowed to submit a shorter history.
+    messages: input.messages,
     stats: {
       estimatedTokens,
       availableTokens,
-      selectedMessages: selectedMessages.length,
-      droppedMessages: Math.max(0, input.messages.length - selectedMessages.length),
+      selectedMessages: input.messages.length,
+      droppedMessages: 0,
       usedSnapshot: Boolean(input.snapshot),
+      compactionRequired: estimatedTokens > availableTokens,
     },
   };
 }
@@ -239,8 +206,30 @@ export function normalizeExecutionSnapshot(
 
 export function buildTypedCompactionMessage(
   snapshot: DurableExecutionSnapshot | null | undefined,
+  modelId?: string,
 ): ModelMessage | null {
-  const summary = snapshot?.providerCompaction?.summary?.trim();
+  const compaction = snapshot?.providerCompaction;
+  if (compaction?.modelId && modelId && compaction.modelId !== modelId) return null;
+  if (compaction?.item
+    && (!compaction.modelId || !modelId || compaction.modelId === modelId)) {
+    const { providerKey, itemId, encryptedContent } = compaction.item;
+    return {
+      role: 'assistant',
+      content: [{
+        type: 'custom',
+        kind: 'openai.compaction',
+        providerOptions: {
+          [providerKey]: {
+            type: 'compaction',
+            itemId,
+            encryptedContent,
+          },
+        },
+      }],
+    } as ModelMessage;
+  }
+
+  const summary = compaction?.summary?.trim();
   if (!summary) return null;
   return {
     role: 'assistant',
