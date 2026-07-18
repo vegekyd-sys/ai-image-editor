@@ -59,6 +59,7 @@ import {
 import {
   classifyModelTermination,
   describeModelStreamError,
+  requestsMaterializedVideo,
   shouldCompleteDurableStudioRun,
   shouldContinueActiveStudioRun,
   shouldHandoffToStudioComposition,
@@ -4968,6 +4969,7 @@ export async function* runMakaronAgent(
     const executionAttemptWorkUnit = options?.execution?.workUnitKey;
     const studioRunRecoveryPrompt = prompt.includes('[System automatic recovery]')
       || prompt.includes('[Recoverable Agent Checkpoint]');
+    const requiresMaterializedVideo = requestsMaterializedVideo(prompt);
     const recoveryBlockedTools = new Set<string>();
     const nonRepeatableTools = new Set([
       'generate_image',
@@ -5081,6 +5083,7 @@ export async function* runMakaronAgent(
             toolResults: steps.at(-1)?.toolResults,
           }) || shouldStopAfterDurablePublishToolStep({
             durableExecution: Boolean(ctx.execution),
+            requiresMaterializedVideo,
             toolResults: steps.at(-1)?.toolResults,
           })
         ),
