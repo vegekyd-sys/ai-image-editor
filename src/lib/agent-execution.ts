@@ -6,6 +6,7 @@ export const DEFAULT_ATTEMPT_LEASE_SECONDS = 1_800;
 export const DEFAULT_ATTEMPT_BUDGET_MS = 1_500_000;
 export const DEFAULT_ATTEMPT_MAX_STEPS = 60;
 export const DEFAULT_MAX_ATTEMPTS = 40;
+export const MAX_SAME_PROVIDER_ATTEMPTS = 5;
 
 export interface AgentContextPolicy {
   contextWindowTokens: number;
@@ -96,6 +97,38 @@ export function isConfirmedExecutionLeaseLoss(input: {
 export function isRetryableProviderOutage(detail: unknown): boolean {
   if (typeof detail !== 'string' || !detail.trim()) return false;
   return /(?:serviceunavailableexception|bedrock.{0,120}(?:unable to process|service unavailable)|\b503\b|econnreset|tls connection was established|step timeout.{0,80}exceeded)/i.test(detail);
+}
+
+export interface ProviderAttemptObservation {
+  terminal_code?: string | null;
+  metadata?: Record<string, unknown> | null;
+}
+
+export function countConsecutiveRetryableProviderFailures(
+  attemptsNewestFirst: ProviderAttemptObservation[],
+  modelId: string,
+): number {
+  let failures = 0;
+  for (const attempt of attemptsNewestFirst) {
+    if (attempt.metadata?.model !== modelId) continue;
+    if (
+      attempt.terminal_code !== 'stream_error'
+      || !isRetryableProviderOutage(attempt.metadata?.terminalDetail)
+    ) {
+      break;
+    }
+    failures += 1;
+  }
+  return failures;
+}
+
+export function buildRecoverablePreflightInstruction(warning: unknown): string {
+  if (typeof warning !== 'string' || !warning.trim()) return '';
+  return [
+    '[System recoverable preflight warning]',
+    `A harness preflight check found a recoverable problem: ${warning.trim().slice(0, 2_000)}`,
+    'This warning did not block the model call. Diagnose and repair the persisted artifact or source, then continue the objective. Do not ignore the warning or merely describe it.',
+  ].join('\n');
 }
 
 export function getAgentContextPolicy(_modelId: string): AgentContextPolicy {

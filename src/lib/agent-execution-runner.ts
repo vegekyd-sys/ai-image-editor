@@ -7,13 +7,15 @@ import { deductByTokens } from './billing/credits';
 import { resolveAgentModelSpec, type AgentModelPreference } from './agent-models';
 import {
   AgentExecutionStore,
+  buildRecoverablePreflightInstruction,
+  countConsecutiveRetryableProviderFailures,
   DEFAULT_ATTEMPT_BUDGET_MS,
   DEFAULT_ATTEMPT_LEASE_SECONDS,
   DEFAULT_ATTEMPT_MAX_STEPS,
   DEFAULT_MAX_ATTEMPTS,
   getAgentContextPolicy,
   isConfirmedExecutionLeaseLoss,
-  isRetryableProviderOutage,
+  MAX_SAME_PROVIDER_ATTEMPTS,
   normalizeExecutionSnapshot,
   resolveExecutionHandoffWorkUnit,
   shouldScheduleNextAttempt,
@@ -357,13 +359,28 @@ export async function runAgentExecutionAttempt(
         .eq('run_id', runId)
         .lt('attempt_no', claim.attempt_no)
         .order('attempt_no', { ascending: false })
-        .limit(6)
+        .limit(40)
     : { data: [] };
-  const latestRequestedProviderAttempt = ((previousAttempts || []) as Array<{
+  const typedPreviousAttempts = (previousAttempts || []) as Array<{
     attempt_no: number;
     terminal_code?: string | null;
     metadata?: Record<string, unknown> | null;
-  }>).find(item => item.metadata?.model === requestedModel.id);
+  }>;
+  const latestRequestedProviderAttempt = typedPreviousAttempts
+    .find(item => item.metadata?.model === requestedModel.id);
+  const requestedProviderFailureCount = countConsecutiveRetryableProviderFailures(
+    typedPreviousAttempts,
+    requestedModel.id,
+  );
+  const previousProviderFailover = typedPreviousAttempts.some(item => {
+    const failover = item.metadata?.providerFailover;
+    return Boolean(
+      failover
+      && typeof failover === 'object'
+      && 'from' in failover
+      && failover.from === requestedModel.id,
+    );
+  });
   const failoverAgentModel: AgentModelPreference | undefined = process.env.DEEPSEEK_API_KEY?.trim()
     ? 'deepseek-v4-pro'
     : process.env.OPENROUTER_API_KEY?.trim()
@@ -371,8 +388,14 @@ export async function runAgentExecutionAttempt(
       : undefined;
   const providerFailover = requestedModel.provider === 'azure-openai'
     && Boolean(failoverAgentModel)
-    && latestRequestedProviderAttempt?.terminal_code === 'stream_error'
-    && isRetryableProviderOutage(latestRequestedProviderAttempt.metadata?.terminalDetail);
+    && (previousProviderFailover || requestedProviderFailureCount >= MAX_SAME_PROVIDER_ATTEMPTS);
+  const providerRetry = requestedModel.provider === 'azure-openai'
+    && !providerFailover
+    && requestedProviderFailureCount > 0;
+  const sameProviderAttempt = Math.min(
+    MAX_SAME_PROVIDER_ATTEMPTS,
+    requestedProviderFailureCount + 1,
+  );
   const effectiveAgentModel: AgentModelPreference | undefined = providerFailover
     ? failoverAgentModel || request.requestedAgentModel
     : request.requestedAgentModel;
@@ -380,9 +403,13 @@ export async function runAgentExecutionAttempt(
   const executionStore = new AgentExecutionStore(admin, run.user_id, run.project_id);
   const previousSnapshot = await executionStore.latestSnapshot(runId);
   const continuation = claim.attempt_no > 1;
-  const attemptPrompt = continuation
+  const baseAttemptPrompt = continuation
     ? `[System durable continuation] Resume execution ${runId}, attempt ${claim.attempt_no}. ${previousSnapshot?.nextAction || 'Continue the unfinished objective from durable artifacts.'}`
     : (run.objective || claim.objective || run.prompt || 'Continue the requested task.');
+  const preflightInstruction = buildRecoverablePreflightInstruction(scaffoldWarning);
+  const attemptPrompt = preflightInstruction
+    ? `${baseAttemptPrompt}\n\n${preflightInstruction}`
+    : baseAttemptPrompt;
 
   const ctx = await buildPromptContext(run.project_id, admin, run.user_id, {
     userMessage: attemptPrompt,
@@ -405,6 +432,14 @@ export async function runAgentExecutionAttempt(
       context: ctx.contextStats,
       model: resolvedModel.id,
       requestedModel: requestedModel.id,
+      ...(providerRetry ? {
+        providerRetry: {
+          model: requestedModel.id,
+          attempt: sameProviderAttempt,
+          maxAttempts: MAX_SAME_PROVIDER_ATTEMPTS,
+          reason: String(latestRequestedProviderAttempt?.metadata?.terminalDetail || 'provider unavailable'),
+        },
+      } : {}),
       ...(providerFailover ? {
         providerFailover: {
           from: requestedModel.id,
@@ -436,6 +471,22 @@ export async function runAgentExecutionAttempt(
       text: request.locale === 'en'
         ? `Composition scaffold saved in ${scaffoldResult.elapsedMs}ms; applying the original Director guidance...`
         : `Composition 结构骨架已在 ${scaffoldResult.elapsedMs}ms 内保存，正在按原始 Director 指导完成画面...`,
+    });
+  }
+  if (scaffoldWarning) {
+    await writer.processAndEnqueue({
+      type: 'status',
+      text: request.locale === 'en'
+        ? `Composition preflight found a recoverable issue and passed it to the Agent: ${scaffoldWarning.slice(0, 500)}`
+        : `Composition 预检发现可修复问题，已交给 Agent 继续处理：${scaffoldWarning.slice(0, 500)}`,
+    });
+  }
+  if (providerRetry) {
+    await writer.processAndEnqueue({
+      type: 'status',
+      text: request.locale === 'en'
+        ? `The requested model connection was interrupted; retrying ${requestedModel.id} (${sameProviderAttempt}/${MAX_SAME_PROVIDER_ATTEMPTS}) before provider failover...`
+        : `原模型连接中断，正在继续尝试 ${requestedModel.id}（第 ${sameProviderAttempt}/${MAX_SAME_PROVIDER_ATTEMPTS} 次），达到上限后才切换备用模型...`,
     });
   }
   if (providerFailover) {

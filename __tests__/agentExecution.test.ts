@@ -1,11 +1,14 @@
 import { describe, expect, it } from 'vitest';
 import type { ModelMessage } from 'ai';
 import {
+  buildRecoverablePreflightInstruction,
   buildTypedCompactionMessage,
+  countConsecutiveRetryableProviderFailures,
   formatDurableExecutionSnapshot,
   getAgentContextPolicy,
   isConfirmedExecutionLeaseLoss,
   isRetryableProviderOutage,
+  MAX_SAME_PROVIDER_ATTEMPTS,
   resolveExecutionHandoffWorkUnit,
   selectModelHistoryWithinBudget,
   shouldScheduleNextAttempt,
@@ -216,6 +219,34 @@ describe('durable Agent execution', () => {
     expect(isRetryableProviderOutage('ECONNRESET before secure TLS connection was established')).toBe(true);
     expect(isRetryableProviderOutage('TimeoutError: Step timeout of 150000ms exceeded')).toBe(true);
     expect(isRetryableProviderOutage('The composition failed to compile')).toBe(false);
+  });
+
+  it('counts consecutive retryable failures for the requested provider', () => {
+    const attempts = [
+      { terminal_code: 'stream_error', metadata: { model: 'gpt-5.6-terra', terminalDetail: 'ECONNRESET' } },
+      { terminal_code: 'stream_error', metadata: { model: 'deepseek-v4-pro', terminalDetail: '503' } },
+      { terminal_code: 'stream_error', metadata: { model: 'gpt-5.6-terra', terminalDetail: 'ECONNRESET before TLS' } },
+    ];
+    expect(countConsecutiveRetryableProviderFailures(attempts, 'gpt-5.6-terra')).toBe(2);
+
+    attempts.unshift({ terminal_code: 'studio_run_incomplete', metadata: { model: 'gpt-5.6-terra', terminalDetail: 'continue' } });
+    expect(countConsecutiveRetryableProviderFailures(attempts, 'gpt-5.6-terra')).toBe(0);
+
+    const exhausted = Array.from({ length: MAX_SAME_PROVIDER_ATTEMPTS }, () => ({
+      terminal_code: 'stream_error',
+      metadata: { model: 'gpt-5.6-terra', terminalDetail: 'ECONNRESET' },
+    }));
+    expect(countConsecutiveRetryableProviderFailures(exhausted, 'gpt-5.6-terra'))
+      .toBe(MAX_SAME_PROVIDER_ATTEMPTS);
+  });
+
+  it('passes recoverable preflight failures to the Agent instead of blocking', () => {
+    const instruction = buildRecoverablePreflightInstruction('Unresolved media marker: <<<media_1>>>');
+    expect(instruction).toContain('recoverable problem');
+    expect(instruction).toContain('did not block the model call');
+    expect(instruction).toContain('<<<media_1>>>');
+    expect(instruction).toContain('repair');
+    expect(buildRecoverablePreflightInstruction(undefined)).toBe('');
   });
 
 });
