@@ -33,8 +33,8 @@ export function buildDurableCompositionGuidance(): string {
     '## Composition attempt execution order',
     'The guidance above is already in this model context. Do not call read_file for any of those paths in this attempt.',
     'After studio_run status, read only the persisted Script, Storyboard, Asset Manifest, and any exact prepared-asset records needed by the current Composition stage.',
-    'Then make the first creative mutation with write_file under the numbered composition-parts directory. Preserve the complete approved direction and use as many parts as it needs.',
-    'Recovery rule: inspect the persisted draft named by the durable handoff. A draft with __makaronScaffold: true is only a structural checkpoint; continue and assemble its numbered composition parts. Reuse a non-scaffold draft without rebuilding only when persisted Draft Gate evidence confirms it is complete.',
+    'Then make the first creative mutation with write_file under the numbered composition-parts directory. Include compositionMetadata on the first part, preserve the complete approved direction, and use as many parts as it needs. Every successful write automatically assembles, validates, and autosaves the workspace.',
+    'Recovery rule: inspect the persisted draft named by the durable handoff. A draft with __makaronScaffold: true is only a structural checkpoint; continue its numbered composition parts until write_file reports compositionWorkspace.status="ready", then use that designPath directly. Reuse a non-scaffold draft without rebuilding only when persisted Draft Gate evidence confirms it is complete.',
     'Completion rule: a successful write_file publish does not complete the Composition stage. Before ending the attempt, call studio_run put_artifact for stage composition with the real design path and Draft Gate evidence. If the exact artifact contract is not present, call studio_run schema for composition once, then submit it.',
   ].join('\n\n');
 }

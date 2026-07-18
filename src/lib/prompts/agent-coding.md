@@ -35,7 +35,7 @@ return {
 };
 ```
 
-Use inline `run_code.code` only for small patches or short utilities. Studio Run may continue to use numbered `composition_parts` when a long composition benefits from multiple cohesive files. Do not shorten narration, scenes, animation, or visual detail to satisfy an aggregate character target.
+Use inline `run_code.code` only for small patches or short utilities. Long compositions may use numbered source files under the composition-parts workspace. Include `compositionMetadata` on the first part; `write_file` automatically assembles, validates, and autosaves after every successful write, so do not spend another model turn on an assembly-only `run_code` call. Do not shorten narration, scenes, animation, or visual detail to satisfy an aggregate character target.
 
 ## Return Shapes
 

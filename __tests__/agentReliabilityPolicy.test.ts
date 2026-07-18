@@ -24,6 +24,28 @@ describe('agent reliability policy', () => {
     expect(coding).toContain('immediately autosaved to the workspace recovery path');
   });
 
+  it('drains durable attempt budgets at completed step boundaries instead of killing active code streams', () => {
+    const agent = read('src/lib/agent.ts');
+    expect(agent).toContain('attemptBudgetReached = true');
+    expect(agent).toContain("code: 'attempt_budget_handoff'");
+    expect(agent).toContain('chunkMs: streamIdleTimeoutMs');
+    expect(agent).not.toContain('totalMs: remainingInvocationBudgetMs');
+    expect(agent).not.toContain('toolMs: Math.min(900_000, remainingInvocationBudgetMs)');
+  });
+
+  it('auto-assembles numbered composition files and exposes write_file source progress', () => {
+    const agent = read('src/lib/agent.ts');
+    const runner = read('src/lib/composition-workspace-runner.ts');
+    expect(agent).toContain('compileSavedCompositionPart');
+    expect(agent).toContain("toolName: 'run_code' | 'write_code_file' | 'write_file'");
+    expect(agent).toContain('compositionWorkspace.status="ready"');
+    expect(agent).toContain('Do not call run_code merely to assemble files');
+    expect(agent).toContain("checkpoint.streamedCodePath");
+    expect(agent).toContain("codeExtractor.toolCallId");
+    expect(runner).toContain('Persist registration before compiling');
+    expect(runner).toContain('persistCompositionDraft');
+  });
+
   it('exposes Studio Run stage schemas and validation without persisting', () => {
     const agent = read('src/lib/agent.ts');
     expect(agent).toContain("'schema', 'validate'");

@@ -47,31 +47,41 @@ const SAFE_RUNTIME_GLOBALS = new Set([
  * or an error message string if the design should be rejected.
  */
 export function validateDesign(result: DesignResult): string | null {
+  const diagnostics = validateDesignDiagnostics(result);
+  if (diagnostics.length === 0) return null;
+  if (diagnostics.length === 1) return diagnostics[0];
+  return `Composition validation found ${diagnostics.length} blocking issues:\n${diagnostics.map(item => `- ${item}`).join('\n')}`;
+}
+
+/** Return every independent static diagnostic in one model repair turn. */
+export function validateDesignDiagnostics(result: DesignResult): string[] {
   // Auto-fix: Replace <img> with Remotion <Img> for delayRender support
   result.code = autoFixImgTags(result.code);
   result.code = autoFixVideoTags(result.code);
 
   // Check 1: Syntax — Sucrase compile only (no runtime execution)
   const compileError = checkCompile(result.code);
-  if (compileError) return compileError;
+  if (compileError) return [compileError];
+
+  const diagnostics: string[] = [];
 
   // Check 2: References that would only fail once Player/export evaluates code
   const referenceError = checkUnresolvedIdentifiers(result.code);
-  if (referenceError) return referenceError;
+  if (referenceError) diagnostics.push(referenceError);
 
   // Check 3: Image references
   const imageError = checkImageReferences(result.code, result.props);
-  if (imageError) return imageError;
+  if (imageError) diagnostics.push(imageError);
 
   // Check 4: Image URLs valid
   const urlError = checkImageUrls(result.code);
-  if (urlError) return urlError;
+  if (urlError) diagnostics.push(urlError);
 
   // Check 5: Editables validation
   const editablesError = validateEditables(result.editables);
-  if (editablesError) return editablesError;
+  if (editablesError) diagnostics.push(editablesError);
 
-  return null;
+  return [...new Set(diagnostics)];
 }
 
 /** Catch missing constants/components before a remote render discovers them. */

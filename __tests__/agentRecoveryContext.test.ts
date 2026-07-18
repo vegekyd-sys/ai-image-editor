@@ -74,7 +74,8 @@ describe('agent recovery context', () => {
     expect(context).toContain('Call studio_run status first');
     expect(context).toContain('Do not reread skill, prompt, director, component-library, or reference files');
     expect(context).toContain('composition-parts');
-    expect(context).toContain('composition_parts.directory');
+    expect(context).toContain('compositionWorkspace.status="ready"');
+    expect(context).toContain('use its designPath directly');
     expect(context).toContain('Do not restart a monolithic run_code payload');
     expect(context).not.toContain('under 9000 source characters');
     expect(context).toContain('streamed-run-code.partial.js (8123 chars)');
