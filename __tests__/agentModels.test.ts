@@ -22,6 +22,23 @@ describe('agent model catalog', () => {
     ]);
   });
 
+  it('enables provider-native compaction only when a threshold is requested', () => {
+    const previousKey = process.env.AZURE_OPENAI_API_KEY;
+    process.env.AZURE_OPENAI_API_KEY = 'test-key';
+    try {
+      const runtime = createAgentModelRuntime('gpt-5.6-sol', 'project-compact');
+      expect(getAgentProviderOptions(runtime, { compactAtTokens: 650_000 }))
+        .toMatchObject({
+          azure: {
+            contextManagement: [{ type: 'compaction', compactThreshold: 650_000 }],
+          },
+        });
+    } finally {
+      if (previousKey === undefined) delete process.env.AZURE_OPENAI_API_KEY;
+      else process.env.AZURE_OPENAI_API_KEY = previousKey;
+    }
+  });
+
   it('maps explicit product ids to allowlisted provider ids', () => {
     expect(resolveAgentModelSpec('gpt-5.6-sol')).toMatchObject({
       provider: 'azure-openai',

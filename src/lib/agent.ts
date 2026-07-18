@@ -47,6 +47,7 @@ import {
   COMPOSITION_PART_MAX_CHARS,
   compositionPartsPrefix,
 } from './composition-parts';
+import { compileSavedCompositionPart } from './composition-workspace-runner';
 import { resolveMediaMarkersInString, resolveMediaMarkersInValue } from './media-markers';
 import type { AgentModelPreference } from './agent-models';
 import {
@@ -58,9 +59,11 @@ import {
 import {
   classifyModelTermination,
   describeModelStreamError,
+  requestsMaterializedVideo,
   shouldCompleteDurableStudioRun,
   shouldContinueActiveStudioRun,
   shouldHandoffToStudioComposition,
+  shouldStopAfterDurablePublishToolStep,
   shouldStopAfterStudioToolStep,
   shouldUseTextOnlyRecovery,
 } from './agent-terminal';
@@ -240,6 +243,7 @@ function studioCompositionPromiseError(
 interface StreamedCodeCheckpoint {
   streamedCodePath?: string;
   streamedCodeChars?: number;
+  streamedCodeTargetPath?: string;
 }
 
 async function getStudioRunCheckpoint(ctx: AgentContext): Promise<StudioRunCheckpoint> {
@@ -302,7 +306,21 @@ export type AgentStreamEvent =
   | { type: 'render'; code: string; width: number; height: number; props?: Record<string, unknown>; animation?: { fps: number; durationInSeconds: number; format?: string }; editables?: import('@/types').EditableField[]; published?: boolean; previewUrl?: string }  // Agent React design for browser rendering
   | { type: 'design'; code: string; width: number; height: number; props?: Record<string, unknown>; animation?: { fps: number; durationInSeconds: number; format?: string }; editables?: import('@/types').EditableField[]; published?: boolean }  // @deprecated — backward compat alias for 'render'
   | { type: 'music_task'; taskId: string }  // emitted when generate_music tool creates a task — frontend polls
-  | { type: 'context_compaction'; summary: string; appliedEdits: Array<Record<string, unknown>>; inputTokens?: number }
+  | {
+      type: 'context_compaction';
+      provider: 'anthropic' | 'openai';
+      modelId?: string;
+      compactedThrough?: string;
+      summary?: string;
+      appliedEdits?: Array<Record<string, unknown>>;
+      item?: {
+        kind: 'openai.compaction';
+        providerKey: string;
+        itemId: string;
+        encryptedContent: string;
+      };
+      inputTokens?: number;
+    }
   | { type: 'usage'; inputTokens: number; outputTokens: number; cacheReadTokens?: number; cacheWriteTokens?: number; cacheWriteTelemetryComplete?: boolean; providerCostUsd?: number; model: string }  // token usage for billing (inputTokens = noCache only)
   | { type: 'done' }
   | {
@@ -1265,7 +1283,7 @@ async function buildSystemPrompt(userSkills?: ParsedSkill[], supabase?: any, use
 
 You have a persistent workspace for skills and files.
 
-Tools: \`list_files\`, \`read_file\`, \`write_file\`, \`delete_file\`, \`run_code\`
+Tools: \`list_files\`, \`read_file\`, \`write_code_file\`, \`write_file\`, \`delete_file\`, \`run_code\`
 
 ### File organization
 - **User-level** (shared across projects): \`skills/\`, \`memory/\`
@@ -1277,6 +1295,8 @@ Execute JavaScript in two modes:
 - \`runtime: "composition"\` for Remotion/editable composition drafts, animated templates, overlays, and sharp utilities. \`runtime: "design"\` is a legacy alias.
 - \`runtime: "node"\` for real file-level MP4 work with FFmpeg/FFprobe: split, exact trim/export, transcode, extract frames, mux audio, long-video preparation, and final assembly of generated chunks.
 For finished single images, posters, infographics, and marketing graphics, use \`generate_image\` instead unless the user asks for editable or animated code.
+For substantial normal Agent Run code, write the complete program with \`write_code_file\`, then execute its returned workspace path with \`run_code({ code_path })\`. The user sees the real source as it streams, and the file remains available for recovery and later edits. Inline code is for short patches and utilities; Studio Run may use numbered composition parts for long compositions.
+For composition files, the saved source is an executable JavaScript body: place Remotion JSX inside a \`code\` string and return \`{ type: 'render', code, width, height, ... }\`. Do not place raw JSX, imports, exports, or a top-level \`function Composition\` directly in the executable file.
 Always tell the user what you're about to do BEFORE calling run_code (1 sentence). After run_code completes, briefly describe the result.
 
 ### Creating skills
@@ -2405,6 +2425,41 @@ Review means previewing and patching the Remotion source before export, not auth
               throw new Error(`Composition subtitle sync could not parse the saved design at ${composition.designPath}.`);
             }
           };
+          const assertCompositionSubmissionReady = async (
+            candidate: unknown,
+            overrides: { script?: unknown; storyboard?: unknown } = {},
+          ): Promise<void> => {
+            const diagnostics: string[] = [];
+            try {
+              await assertCompositionSubtitleSync(candidate, overrides);
+            } catch (error) {
+              diagnostics.push(error instanceof Error ? error.message : String(error));
+            }
+
+            const designPath = candidate && typeof candidate === 'object'
+              ? (candidate as Record<string, unknown>).designPath
+              : undefined;
+            if (typeof designPath === 'string') {
+              const file = await workspace.readFile(designPath, ctx.supabase, ctx.userId);
+              if (!file) {
+                diagnostics.push(`Composition design was not found at ${designPath}.`);
+              } else {
+                try {
+                  const design = JSON.parse(file.content) as Record<string, unknown>;
+                  if (design.__makaronScaffold === true) {
+                    diagnostics.push('Composition is still the structural scaffold. Continue the numbered source workspace until write_file reports compositionWorkspace.status="ready".');
+                  }
+                } catch {
+                  diagnostics.push(`Composition design at ${designPath} is not valid JSON.`);
+                }
+              }
+            }
+
+            const unique = [...new Set(diagnostics)];
+            if (unique.length) {
+              throw new Error(`Composition submission has ${unique.length} blocking issue${unique.length === 1 ? '' : 's'}:\n${unique.map(item => `- ${item}`).join('\n')}`);
+            }
+          };
           const assertStoryboardNarrationTiming = async (
             candidate: unknown,
             scriptOverride?: unknown,
@@ -2485,7 +2540,7 @@ Review means previewing and patching the Remotion source before export, not auth
             }
             const validated = studio.validateStudioArtifact(schemaStage, artifact);
             if (schemaStage === 'storyboard') await assertStoryboardNarrationTiming(validated);
-            if (schemaStage === 'composition') await assertCompositionSubtitleSync(validated);
+            if (schemaStage === 'composition') await assertCompositionSubmissionReady(validated);
             if (schemaStage === 'assets') await assertAssetsUseVisualBridge(validated);
             return { success: true, valid: true, stage: schemaStage, artifact: validated };
           }
@@ -2532,7 +2587,7 @@ Review means previewing and patching the Remotion source before export, not auth
             }
             const compositionItem = artifacts.find(item => item.stage === 'composition');
             if (compositionItem) {
-              await assertCompositionSubtitleSync(compositionItem.artifact, {
+              await assertCompositionSubmissionReady(compositionItem.artifact, {
                 script: artifacts.find(item => item.stage === 'script')?.artifact,
                 storyboard: artifacts.find(item => item.stage === 'storyboard')?.artifact,
               });
@@ -2569,24 +2624,7 @@ Review means previewing and patching the Remotion source before export, not auth
             if (stage === 'storyboard') await assertStoryboardNarrationTiming(artifact);
             if (stage === 'assets') await assertAssetsUseVisualBridge(artifact);
             if (stage === 'composition') {
-              await assertCompositionSubtitleSync(artifact);
-              const designPath = artifact && typeof artifact === 'object'
-                ? (artifact as Record<string, unknown>).designPath
-                : undefined;
-              if (typeof designPath === 'string') {
-                const file = await workspace.readFile(designPath, ctx.supabase, ctx.userId);
-                if (file) {
-                  try {
-                    const design = JSON.parse(file.content) as Record<string, unknown>;
-                    if (design.__makaronScaffold === true) {
-                      return {
-                        success: false,
-                        error: 'Composition is still the structural scaffold. Apply the original Composition/Director guidance with run_code before persisting the composition stage.',
-                      };
-                    }
-                  } catch { /* malformed artifacts are handled by normal validation */ }
-                }
-              }
+              await assertCompositionSubmissionReady(artifact);
             }
             const result = await studio.putPersistedStudioArtifact({ store, run, stage, artifact });
             return {
@@ -3372,9 +3410,61 @@ Use this to read skill instructions (SKILL.md), reference images, or your memory
       },
     }),
 
+    write_code_file: tool({
+      description: `Create or replace a first-class code file in the project workspace.
+
+Use this for substantial programmable video or media work: write the executable Remotion/Node program here, then call run_code with code_path. The source remains reusable, patchable, and recoverable across long Agent Runs instead of being trapped inside one execution call. For runtime composition, this file is an executable JavaScript body: put Remotion JSX inside a code string and return { type: 'render', code, width, height, ... } from the outer body. Do not place raw JSX, imports, exports, or a top-level function Composition directly in the executable file. Studio Run may continue using numbered composition parts for very long compositions; short patches and small utility scripts may still use inline run_code.`,
+      inputSchema: z.object({
+        description: z.string().optional().describe('User-facing one-sentence summary of the specific code artifact being written. Put this before content so progress is visible while source streams.'),
+        path: z.string().optional().describe('Workspace path, e.g. "project-id/code/island-packaging.js". If omitted, a path is generated from name and runtime.'),
+        name: z.string().optional().describe('Short slug used when path is omitted, e.g. "island-packaging".'),
+        runtime: z.enum(['composition', 'node']).optional().describe('composition = Remotion/editable composition executable body. node = Node/FFmpeg script. Default composition.'),
+        content: z.string().min(1).describe('Complete executable JavaScript body. For composition runtime, wrap Remotion component source in a code string and return the render object from this outer body; never place raw JSX at the top level. Do not trim approved content to meet an aggregate source-size target.'),
+      }),
+      execute: async ({ description, path: filePath, name, runtime, content }) => {
+        if (!ctx.supabase || !ctx.userId) {
+          return { success: false, message: 'Workspace not available (no Supabase connection).' };
+        }
+        const kind = runtime || 'composition';
+        const slug = (name || description || 'composition-code')
+          .toLowerCase()
+          .replace(/[^a-z0-9]+/g, '-')
+          .replace(/^-|-$/g, '')
+          .slice(0, 48) || 'composition-code';
+        const savePath = filePath || (kind === 'node'
+          ? `${ctx.projectId}/media-code/${slug}.js`
+          : `${ctx.projectId}/code/${slug}.js`);
+        const result = await workspace.writeFile(savePath, content, ctx.supabase, ctx.userId, 'text/javascript');
+        if (!result.success) {
+          return { success: false, message: `Write failed: ${result.error}` };
+        }
+        (ctx as any).__lastCodeFilePath = savePath;
+        (ctx as any).__lastCodeFileRuntime = kind;
+        return {
+          success: true,
+          message: `Code file saved: ${savePath}. Execute it with run_code({ code_path: "${savePath}", runtime: "${kind}" }).`,
+          path: savePath,
+          runtime: kind,
+          codeChars: content.length,
+          storageUrl: toPublicStorageUrl(result.storageUrl || ''),
+        };
+      },
+      toModelOutput({ output }: { output: any }) {
+        return {
+          type: 'content' as const,
+          value: [{
+            type: 'text' as const,
+            text: output.success
+              ? `${output.message}\nCode chars: ${output.codeChars}`
+              : output.message || 'Code file write failed.',
+          }],
+        };
+      },
+    }),
+
     write_file: tool({
       description: `Write a file to your workspace. Use this to save memory, create skills, or organize your workspace.
-For durable Studio Composition work, write numbered source parts under \`<project-id>/drafts/composition-parts/\` one cohesive component per model step, wait for its result, then assemble them with run_code.composition_parts. Filenames MUST use a numeric prefix of at least two digits plus a slug, for example \`00-foundation.js\`, \`10-scenes-a.js\`, \`90-root.js\`, or \`120-chapter.js\`. Each part has a hard transport limit of 12000 source characters; focused parts around 3000-8000 characters are preferred, but visual detail must decide the size. There is no aggregate source-size or part-count limit. Parts share one scope: do not use import/export. Rewriting the same numbered path is retry-safe. Never shorten approved narration, subtitles, scenes, animation, or visual detail to reduce source size. If one unusually large part exceeds 12000, split that component across new numbered files; renaming unchanged oversized content will still fail. Assemble by passing either the explicit paths or the composition-parts directory; directory mode discovers and numerically orders all valid .js parts without repeating the path list.
+For durable Composition work, write numbered source parts under \`<project-id>/drafts/composition-parts/\` one cohesive component per model step and wait for each result. Filenames MUST use a numeric prefix of at least two digits plus a slug, for example \`00-foundation.js\`, \`10-scenes-a.js\`, \`90-root.js\`, or \`120-chapter.js\`. Include compositionMetadata on the first part (and again only when metadata changes) so dimensions, props, editables, and animation remain durable without a final assembly call. Each part has a hard transport limit of 12000 source characters; focused parts around 3000-8000 characters are preferred, but visual detail must decide the size. There is no aggregate source-size or part-count limit. Parts share one scope: do not use import/export. Rewriting the same numbered path is retry-safe. Never shorten approved narration, subtitles, scenes, animation, or visual detail to reduce source size. If one unusually large part exceeds 12000, split that component across new numbered files; renaming unchanged oversized source will still fail. The workspace automatically assembles, validates, and autosaves the complete draft after every successful part write. compositionWorkspace.status="ready" means the current files compile mechanically; it is not permission to omit planned scenes or polish. Finish every planned part, repair any diagnostics, then preview the returned designPath. Do not call run_code merely to assemble files.
 Set fromLastRunCode=true to save the last run_code output.
 Composition runtime: publish=false saves the draft code only; default publish=true saves and publishes a timeline Snapshot.
 Node media runtime: \`type: "files"\` outputs are already saved workspace files. If they are user-facing MP4 deliverables from split/trim/export/transcode, publish them with fromWorkspaceOutputs before final reply. \`type: "video"\` is a single final MP4 and can be published with write_file. Do not use node/FFmpeg as a fallback for ordinary editable timeline splicing of existing videos; patch or publish the Remotion composition instead.
@@ -3390,8 +3480,25 @@ Path is auto-generated from the current project and output type. Just provide a 
         mediaType: z.enum(['image', 'video', 'all']).optional().describe('Filter workspace outputs when publishing. Default all.'),
         limit: z.number().int().min(1).max(20).optional().describe('Maximum recent workspace outputs to publish when workspacePaths is omitted. Use 3 for three exported clips, etc.'),
         publish: z.boolean().optional().describe('Whether to publish to timeline. Default true. Set false to save workspace output without creating a Snapshot.'),
+        compositionMetadata: z.object({
+          width: z.number().int().positive().optional(),
+          height: z.number().int().positive().optional(),
+          props: z.record(z.string(), z.unknown()).optional(),
+          editables: z.array(z.object({
+            id: z.string().min(1),
+            type: z.literal('text'),
+            label: z.string(),
+            propKey: z.string().min(1),
+          }).passthrough()).optional(),
+          animation: z.object({
+            fps: z.number().positive(),
+            durationInSeconds: z.number().positive(),
+            format: z.string().optional(),
+          }).optional(),
+          description: z.string().optional(),
+        }).optional().describe('Durable metadata for numbered composition parts. Include on the first part and only repeat when it changes; source files are auto-assembled without a final run_code call.'),
       }),
-      execute: async ({ path: filePath, name, content, fromLastRunCode, fromWorkspaceOutputs, workspacePaths, mediaType, limit, publish: shouldPublish }) => {
+      execute: async ({ path: filePath, name, content, fromLastRunCode, fromWorkspaceOutputs, workspacePaths, mediaType, limit, publish: shouldPublish, compositionMetadata }) => {
         if (!ctx.supabase || !ctx.userId) {
           return { success: false, message: 'Workspace not available (no Supabase connection).' };
         }
@@ -3439,7 +3546,8 @@ Path is auto-generated from the current project and output type. Just provide a 
           return { success: false, message: 'No content to write. Provide content or set fromLastRunCode=true.' };
         }
         const partPrefix = compositionPartsPrefix(ctx.projectId);
-        if (savePath.startsWith(partPrefix)) {
+        const isCompositionPart = savePath.startsWith(partPrefix);
+        if (isCompositionPart) {
           const filename = savePath.slice(partPrefix.length);
           if (!COMPOSITION_PART_FILENAME_PATTERN.test(filename)) {
             return {
@@ -3462,11 +3570,63 @@ Path is auto-generated from the current project and output type. Just provide a 
         if (fromLastRunCode) {
           (ctx as any).__lastSavedDraftPath = savePath;
         }
-        if (savePath.startsWith(`${ctx.projectId}/drafts/composition-parts/`)) {
+        let compositionWorkspace: Record<string, unknown> | undefined;
+        if (isCompositionPart) {
           const paths = new Set<string>((ctx as any).__compositionPartPaths || []);
           paths.add(savePath);
           (ctx as any).__compositionPartPaths = [...paths].sort();
+          try {
+            let workspaceId = (ctx as any).__compositionWorkspaceId as string | undefined;
+            if (!workspaceId) {
+              const checkpoint = await getStudioRunCheckpoint(ctx);
+              workspaceId = checkpoint.studioRunId || ctx.execution?.runId || `agent:${crypto.randomUUID()}`;
+              (ctx as any).__compositionWorkspaceId = workspaceId;
+            }
+            const compiled = await compileSavedCompositionPart({
+              projectId: ctx.projectId,
+              userId: ctx.userId,
+              supabase: ctx.supabase,
+              workspaceId,
+              partPath: savePath,
+              snapshotImages: ctx.snapshotImages,
+              metadata: compositionMetadata,
+            });
+            (ctx as any).__compositionPartPaths = compiled.partPaths;
+            compositionWorkspace = {
+              status: compiled.status,
+              partCount: compiled.partPaths.length,
+              totalChars: compiled.totalChars,
+              message: compiled.message,
+              ...(compiled.status === 'ready' ? { designPath: compiled.designPath } : {}),
+              ...(compiled.status === 'invalid' ? { diagnostics: compiled.diagnostics } : {}),
+            };
+            if (compiled.status === 'ready') {
+              (ctx as any).__pendingDesign = compiled.design;
+              (ctx as any).__pendingDesignPublished = false;
+              (ctx as any).__lastDesignPayload = compiled.design;
+              (ctx as any).__lastRunCode = JSON.stringify(compiled.design, null, 2);
+              (ctx as any).__lastSavedDraftPath = compiled.designPath;
+              const drafts = ((ctx as any).__runCodeDrafts ||= []);
+              const nextDraft = { type: 'design', payload: compiled.design, codePath: compiled.designPath };
+              if (drafts.length && drafts[drafts.length - 1]?.codePath === compiled.designPath) {
+                drafts[drafts.length - 1] = nextDraft;
+              } else {
+                drafts.push(nextDraft);
+              }
+            }
+          } catch (error) {
+            compositionWorkspace = {
+              status: 'invalid',
+              partCount: ((ctx as any).__compositionPartPaths || []).length,
+              totalChars: 0,
+              message: 'Source saved, but the automatic composition workspace could not finish compiling.',
+              diagnostics: [error instanceof Error ? error.message : String(error)],
+            };
+          }
         }
+
+        let publishedArtifact = false;
+        let publishedArtifactType: 'design' | 'image' | 'video' | undefined;
 
         // Publish: when fromLastRunCode and publish !== false, promote the last draft to a real Snapshot
         if (fromLastRunCode && shouldPublish !== false) {
@@ -3486,6 +3646,8 @@ Path is auto-generated from the current project and output type. Just provide a 
             (ctx as any).__pendingDesign = designPayload;
 
             (ctx as any).__pendingDesignPublished = true;
+            publishedArtifact = true;
+            publishedArtifactType = 'design';
 
             console.log(`📌 [agent] design published via write_file: <<<media_${ctx.snapshotImages.length}>>>`);
           } else if (lastDraft?.type === 'image') {
@@ -3494,6 +3656,8 @@ Path is auto-generated from the current project and output type. Just provide a 
             ctx.snapshotImages.push(imageData);
             ctx.currentSnapshotIndex = ctx.snapshotImages.length - 1;
             ctx.generatedImages.push(imageData);
+            publishedArtifact = true;
+            publishedArtifactType = 'image';
 
             console.log(`📌 [agent] image published via write_file: <<<media_${ctx.snapshotImages.length}>>>`);
           } else if (lastDraft?.type === 'video') {
@@ -3541,12 +3705,22 @@ Path is auto-generated from the current project and output type. Just provide a 
             ctx.snapshotImages.push(videoUrl);
             ctx.currentSnapshotIndex = ctx.snapshotImages.length - 1;
             ctx.pendingVideoSnapshot = { snapshotId, taskId, videoMeta };
+            publishedArtifact = true;
+            publishedArtifactType = 'video';
 
             console.log(`📌 [agent] video published via write_file: <<<media_${ctx.snapshotImages.length}>>>`);
           }
         }
 
-        return { success: true, message: `Saved: ${savePath}`, path: savePath, storageUrl: toPublicStorageUrl(result.storageUrl || '') };
+        return {
+          success: true,
+          message: `Saved: ${savePath}`,
+          path: savePath,
+          storageUrl: toPublicStorageUrl(result.storageUrl || ''),
+          published: publishedArtifact,
+          artifactType: publishedArtifactType,
+          ...(compositionWorkspace ? { compositionWorkspace } : {}),
+        };
       },
     }),
 
@@ -3587,11 +3761,13 @@ Return exactly one supported shape:
 - \`{ type: 'text', content }\`
 - \`{ type: 'error', message }\`
 
-For a first composition draft, prefer the top-level \`composition\` input over wrapping JSX inside executable \`code\`. Pass \`composition: { code, width, height, props, editables, animation }\`; the harness validates and autosaves it directly. This avoids nested-code quoting failures and is the fastest Studio Run path. Keep executable \`code\` for patches, images, Node media work, and legacy calls.
+For substantial normal Agent Run coding, prefer \`write_code_file\` followed by \`run_code({ code_path })\`. This exposes real source progress, persists the program before execution, and keeps it patchable across turns. For a small patch or utility, inline \`code\` remains available. The top-level \`composition\` input remains available for direct first-draft payloads.
 
-For durable Studio Composition work, use \`write_file\` to author numbered source parts and then pass \`composition_parts: { directory, width, height, props, editables, animation }\`, or use \`paths\` for an explicit subset. Every file MUST be under \`<project-id>/drafts/composition-parts/\` and use a numeric prefix of at least two digits plus a lowercase slug. Each file has a hard transport limit of 12000 source characters. There is no aggregate source-size or part-count limit. Files are concatenated by numeric prefix into one scope, so do not use import/export. Preserve approved narration, subtitles, scenes, animation, and visual detail; never trim creative content to satisfy a source-size target. The harness discovers, validates, and autosaves the parts without asking the model to repeat the complete source or a long path list in one tool call.
+When \`write_code_file\` uses \`runtime: "composition"\`, its file is the executable outer JavaScript body. Put Remotion JSX in a \`code\` string and return \`{ type: 'render', code, width, height, ... }\`; never place raw JSX, imports, exports, or a top-level \`function Composition\` directly in that file.
 
-For a 30s+ first composition, author numbered composition parts before the first \`run_code\` call, then assemble the complete draft once with \`composition_parts.directory\`. Use scene data arrays and shared components where they help, but do not impose an aggregate source-size target or trim approved creative detail.
+For durable Composition work, use \`write_file\` to author numbered source parts. Every file MUST be under \`<project-id>/drafts/composition-parts/\` and use a numeric prefix of at least two digits plus a lowercase slug. Each file has a hard transport limit of 12000 source characters. There is no aggregate source-size or part-count limit. Files are concatenated by numeric prefix into one scope, so do not use import/export. Preserve approved narration, subtitles, scenes, animation, and visual detail; never trim creative content to satisfy a source-size target. Saving a part automatically assembles, validates, and autosaves the workspace. The legacy composition_parts input remains available for recovery and explicit subsets, but do not call it merely to assemble a directory that write_file has already compiled.
+
+For a 30s+ first composition, author numbered composition parts until write_file reports compositionWorkspace.status="ready". Use scene data arrays and shared components where they help, but do not impose an aggregate source-size target or trim approved creative detail. Preview or patch the returned designPath directly; no assembly-only run_code call is needed.
 
 Composition hard rules: use Remotion \`<Img>\`, not \`<img>\`; declare editable user-facing text; use system CJK fonts; keep mobile image layers light. Reference timeline media in composition code and props with the literal 1-based marker \`<<<media_N>>>\`; the runtime resolves markers to current URLs before validation, autosave, preview, and export. Never translate Media Index N into \`ctx.snapshotImages[N]\` because that JavaScript array is 0-based. Only \`Composition(props)\` may read \`props\` directly; helper components must receive values through their own parameters and must never reference outer \`props\` (prevents \`props is not defined\` in Lambda). For timeline videos, preserve the selected Media Index video aspect ratio when all selected videos share one aspect: 9:16 sources must return a 9:16 canvas such as 1080x1920, never a 16:9 canvas. For mixed-aspect sources, choose the user/platform/current composition target and use contain/background; do not claim the runtime forced one source's aspect.
 For legacy first-draft calls without \`composition\`, send one complete executable JavaScript body that returns the render object. Do not send a fragment like \`const code = \\\`\` without the final \`return { type: 'render', code, ... }\`. Keep long videos concise by using arrays, helper components, and interpolations instead of writing frame-by-frame code.
@@ -3599,6 +3775,7 @@ For legacy first-draft calls without \`composition\`, send one complete executab
 Node media runtime provides \`require\`, \`process\`, \`ffmpegPath\`, \`inputFiles\`, \`outputDir\`, \`workDir\`, \`workspaceDir\`, \`saveOutput(localPath)\`, and \`probeVideo(path)\`. Most Node built-ins are available, plus media packages such as \`sharp\`, \`jszip\`, \`exifr\`, \`heic-convert\`, \`canvas\`, \`remotion\`, and Remotion media utilities. Arbitrary local/package require, env secrets, and escape/debug modules are blocked. Workspace files are local to the runtime: use \`workspace_paths\` and \`inputFiles[n].inputPath\`, never download or reconstruct Storage URLs. For \`runtime: "node"\`, any referenced timeline media like \`<<<media_1>>>\` MUST be passed as \`media_refs: [1]\`; any existing workspace file from \`list_files\` MUST be passed as \`workspace_paths: ["project/media/file.mp4"]\`. The system resolves both to local workspace-backed files before your code runs. \`ffprobePath\` may be empty in deployment; prefer \`probeVideo(path)\`. Use \`type: "files"\` for chunks and \`type: "video"\` for the final MP4. If ordinary timeline splicing was routed to composition, do not switch to node just because preview needs adjustment; patch the composition or report the preview issue.`,
       inputSchema: z.object({
         code: z.string().optional().describe('JavaScript code to execute. Required for node, patch, image, and legacy calls. For a first Remotion draft prefer the direct composition input instead.'),
+        code_path: z.string().optional().describe('Workspace code file created by write_code_file. Preferred for substantial normal Agent Run coding; run_code reads and executes the saved source without repeating it in tool history.'),
         composition: z.object({
           code: z.string().min(1).describe('Direct Remotion component source. Define function Composition(props) without import/export. This string is validated directly, not executed as nested JavaScript.'),
           width: z.number().int().positive(),
@@ -3640,11 +3817,22 @@ Node media runtime provides \`require\`, \`process\`, \`ffmpegPath\`, \`inputFil
         media_refs: z.array(z.number()).optional().describe('1-based Media Index indices referenced by the user (e.g. [1] for <<<media_1>>>). REQUIRED for runtime:"node" FFmpeg work on timeline media; the system resolves them to local workspace-backed inputFiles[0], inputFiles[1], ... . Do not hardcode Media Index URLs for FFmpeg inputs. For ordinary editable splicing of two timeline videos, use runtime:"composition" instead.'),
         workspace_paths: z.array(z.string()).optional().describe('Workspace file paths from list_files/read_file, e.g. ["project-id/media/clip.mp4"]. For runtime:"node", pass these instead of downloading or copying storage URLs; they are resolved to local inputFiles after media_refs.'),
         runtime: z.enum(['composition', 'design', 'node']).optional().describe('composition = safe Remotion/editable composition runtime. design = legacy alias for composition. node = fully open backend Node runtime with fs/child_process/ffmpeg for real MP4 editing.'),
-      }).refine(value => Boolean(value.code || value.composition || value.composition_parts), {
-        message: 'Provide executable code, a direct composition payload, or durable composition parts.',
+      }).refine(value => Boolean(value.code || value.code_path || value.composition || value.composition_parts), {
+        message: 'Provide executable code, a code_path, a direct composition payload, or durable composition parts.',
       }),
-      execute: async ({ code, composition, composition_parts, description: desc, media_refs, workspace_paths, runtime }) => {
-        const executableCode = code || '';
+      execute: async ({ code, code_path, composition, composition_parts, description: desc, media_refs, workspace_paths, runtime }) => {
+        let executableCode = code || '';
+        if (code_path) {
+          if (!ctx.supabase || !ctx.userId) {
+            return { type: 'text' as const, content: 'Workspace not available. Cannot read code_path.' };
+          }
+          const file = await workspace.readFile(code_path, ctx.supabase, ctx.userId);
+          executableCode = file?.content || '';
+          if (!executableCode.trim()) {
+            return { type: 'text' as const, content: `Code file not found or empty: ${code_path}` };
+          }
+          (ctx as any).__lastCodeFilePath = code_path;
+        }
         console.log(`🔧 [run_code] ${desc || 'executing code'}...`);
         const startTime = Date.now();
         let resolvedComposition = composition;
@@ -3702,8 +3890,8 @@ Node media runtime provides \`require\`, \`process\`, \`ffmpegPath\`, \`inputFil
         }
 
         if (runtime === 'node') {
-          if (!code) {
-            return { type: 'text' as const, content: 'Node media runtime requires executable code; composition is only for Remotion first drafts.' };
+          if (!executableCode) {
+            return { type: 'text' as const, content: 'Node media runtime requires executable code or code_path; composition is only for Remotion first drafts.' };
           }
           if (!ctx.supabase || !ctx.userId) {
             return { type: 'text' as const, content: 'Node media runtime requires workspace access. Please try again after the project finishes loading.' };
@@ -4488,6 +4676,49 @@ export function withLocale(prompt: string, locale?: string): string {
   return locale ? `${prompt}\n\n${getReplyLanguageInstruction(locale)}` : prompt;
 }
 
+function readJsonStringValueFromBuffer(buffer: string, key: string): { complete: boolean; value: string } | null {
+  const match = buffer.match(new RegExp(`"${key}"\\s*:\\s*"`));
+  if (!match || match.index === undefined) return null;
+
+  let index = match.index + match[0].length;
+  let value = '';
+  while (index < buffer.length) {
+    const char = buffer[index];
+    if (char === '"') {
+      return { complete: true, value };
+    }
+    if (char !== '\\') {
+      value += char;
+      index++;
+      continue;
+    }
+
+    if (index + 1 >= buffer.length) return { complete: false, value };
+    const escape = buffer[index + 1];
+    if (escape === 'u') {
+      if (index + 6 > buffer.length) return { complete: false, value };
+      const hex = buffer.slice(index + 2, index + 6);
+      value += /^[0-9a-fA-F]{4}$/.test(hex)
+        ? String.fromCharCode(Number.parseInt(hex, 16))
+        : `\\u${hex}`;
+      index += 6;
+      continue;
+    }
+    if (escape === 'n') value += '\n';
+    else if (escape === 'r') value += '\r';
+    else if (escape === 't') value += '\t';
+    else if (escape === 'b') value += '\b';
+    else if (escape === 'f') value += '\f';
+    else if (escape === '"') value += '"';
+    else if (escape === '\\') value += '\\';
+    else if (escape === '/') value += '/';
+    else value += escape;
+    index += 2;
+  }
+
+  return { complete: false, value };
+}
+
 // Used for initial upload analysis
 const ANALYSIS_PROMPT_INITIAL = `Describe this photo in 1-2 sentences, in the tone of a friend sharing what they noticed. Start directly with the subject. Do not use any preamble such as "Let me take a look".`;
 
@@ -4529,6 +4760,8 @@ export interface RunMakaronAgentOptions {
   execution?: DurableExecutionRef;
   attemptBudgetMs?: number;
   maxSteps?: number;
+  contextCompactAtTokens?: number;
+  historyBoundary?: string;
 }
 
 export async function* runMakaronAgent(
@@ -4640,7 +4873,7 @@ export async function* runMakaronAgent(
     ? `\n\n## Durable execution contract\nThis is attempt ${options.execution.attemptNo} of execution ${options.execution.runId}, work unit ${options.execution.workUnitKey}. The execution may continue in a fresh model context. Preserve decisions and durable artifact pointers by calling execution_checkpoint after each meaningful work unit and before a long, risky generation step. Produce the first durable mutation within 90 seconds when the work unit is composition/code. If this attempt advances a Studio Run into Composition, immediately switch to numbered composition parts even when this work unit started in an earlier stage; never begin a monolithic run_code payload. Do not repeat expensive side effects whose tool result is already present. A handoff is progress, not failure.`
     : '';
   const durableCompositionDirective = options?.execution?.workUnitKey === 'studio:composition'
-    ? `\n\n## Durable Composition transport\nKeep the full original Composition and Director creative standard, but do not emit a monolithic run_code composition payload in this work unit. Long tool-input streams can reset before the call closes. Author the final Remotion source as numbered files under ${projectId}/drafts/composition-parts, one cohesive part per model step with write_file. Keep each part under the 12000-character transport limit, wait for its tool result, and create as many parts as the approved content needs. Parts around 3000-8000 characters are preferred, but never compress creative detail merely to hit that range. Rewriting the same numbered path is safe after recovery. Do not use import/export; the files are concatenated into one scope with no aggregate source-size or part-count limit. Never shorten approved narration, subtitles, scenes, animation, or visual detail to reduce source size. When all parts exist, call run_code once with composition_parts.directory set to ${projectId}/drafts/composition-parts, plus runtime composition, dimensions, props, editables, and animation. This changes only persistence and transport; it must not simplify the approved story, audio, visual direction, or ending.`
+    ? `\n\n## Durable Composition workspace\nKeep the full original Composition and Director creative standard, but do not emit a monolithic run_code composition payload in this work unit. Long tool-input streams can reset before the call closes. Author the final Remotion source as numbered files under ${projectId}/drafts/composition-parts, one cohesive part per model step with write_file. Include compositionMetadata with the first part so dimensions, props, editables, and animation are durable; only repeat it when metadata changes. Keep each part under the 12000-character transport limit, wait for its tool result, and create as many parts as the approved content needs. Parts around 3000-8000 characters are preferred, but never compress creative detail merely to hit that range. Rewriting the same numbered path is safe after recovery. Do not use import/export; the files are concatenated into one scope with no aggregate source-size or part-count limit. Never shorten approved narration, subtitles, scenes, animation, or visual detail to reduce source size. Every successful write automatically assembles, validates, and autosaves the workspace. Continue until write_file reports compositionWorkspace.status="ready", then preview or patch its designPath directly. Do not spend another model turn calling run_code merely to assemble the directory. This changes only persistence and transport; it must not simplify the approved story, audio, visual direction, or ending.`
     : '';
   const durableCompositionGuidance = options?.execution?.workUnitKey === 'studio:composition'
     ? buildDurableCompositionGuidance()
@@ -4713,10 +4946,10 @@ export async function* runMakaronAgent(
   ];
 
   try {
-    const configuredStepTimeout = Number(process.env.AGENT_MODEL_STEP_TIMEOUT_MS || 150_000);
-    const stepTimeoutMs = Number.isFinite(configuredStepTimeout)
-      ? Math.max(30_000, Math.min(configuredStepTimeout, 240_000))
-      : 150_000;
+    const configuredIdleTimeout = Number(process.env.AGENT_MODEL_IDLE_TIMEOUT_MS || 300_000);
+    const streamIdleTimeoutMs = Number.isFinite(configuredIdleTimeout)
+      ? Math.max(30_000, Math.min(configuredIdleTimeout, 600_000))
+      : 300_000;
     const attemptResults: any[] = [];
     let billedNoCacheTokens = 0;
     let billedCacheReadTokens = 0;
@@ -4736,6 +4969,7 @@ export async function* runMakaronAgent(
     const executionAttemptWorkUnit = options?.execution?.workUnitKey;
     const studioRunRecoveryPrompt = prompt.includes('[System automatic recovery]')
       || prompt.includes('[Recoverable Agent Checkpoint]');
+    const requiresMaterializedVideo = requestsMaterializedVideo(prompt);
     const recoveryBlockedTools = new Set<string>();
     const nonRepeatableTools = new Set([
       'generate_image',
@@ -4817,9 +5051,10 @@ export async function* runMakaronAgent(
 
       const endStreamInit = perf?.span('model_stream_init', { projectId, recoveryAttempt });
       const invocationBudgetMs = typeof options?.attemptBudgetMs === 'number' && Number.isFinite(options.attemptBudgetMs)
-        ? Math.max(60_000, Math.min(options.attemptBudgetMs, 720_000))
-        : 720_000;
-      const remainingInvocationBudgetMs = Math.max(30_000, invocationBudgetMs - (Date.now() - agentStartTime));
+        ? Math.max(60_000, Math.min(options.attemptBudgetMs, 1_500_000))
+        : 1_500_000;
+      const invocationDeadline = agentStartTime + invocationBudgetMs;
+      let attemptBudgetReached = false;
       const recoveryActiveTools = tools && recoveryBlockedTools.size > 0
         ? Object.keys(tools).filter((toolName) => !recoveryBlockedTools.has(toolName))
         : undefined;
@@ -4846,8 +5081,20 @@ export async function* runMakaronAgent(
             durableExecution: Boolean(ctx.execution),
             attemptWorkUnit: executionAttemptWorkUnit,
             toolResults: steps.at(-1)?.toolResults,
+          }) || shouldStopAfterDurablePublishToolStep({
+            durableExecution: Boolean(ctx.execution),
+            requiresMaterializedVideo,
+            toolResults: steps.at(-1)?.toolResults,
           })
         ),
+        // The attempt budget is a handoff boundary, not a kill timer. AI SDK
+        // evaluates stop conditions only after a complete model/tool step, so
+        // active tool arguments and tool results stay paired and recoverable.
+        () => {
+          if (!options?.execution || Date.now() < invocationDeadline) return false;
+          attemptBudgetReached = true;
+          return true;
+        },
       ],
       prepareStep: ({ messages }: { messages: ModelMessage[] }) => ({
         messages: runtime.normalizeMessages(messages),
@@ -4857,20 +5104,45 @@ export async function* runMakaronAgent(
       // the SDK retry internally turns one timed-out model call into several
       // invisible calls before the runner can switch providers.
       ...(options?.execution ? { maxRetries: 0 } : {}),
-      timeout: { stepMs: stepTimeoutMs, totalMs: remainingInvocationBudgetMs },
+      // A long coding step may stream valid source for several minutes. Only
+      // an actually idle model stream is timed out. Tool implementations own
+      // their domain-specific timeouts; the attempt budget drains at a safe
+      // step boundary above instead of aborting active work.
+      timeout: {
+        chunkMs: streamIdleTimeoutMs,
+      },
       ...(options?.abortSignal ? { abortSignal: options.abortSignal } : {}),
-      providerOptions: getAgentProviderOptions(runtime),
+      providerOptions: getAgentProviderOptions(runtime, {
+        compactAtTokens: options?.contextCompactAtTokens,
+      }),
       });
       attemptResults.push(result);
       endStreamInit?.();
 
-    // State machine for extracting code from run_code tool-input-delta
-    let codeExtractor: { buffer: string; state: 'waiting' | 'in_code' | 'done'; escaped: boolean; sent: number; decoded: string; lastSavedChars: number } | null = null;
+    // Stream real source from code-bearing tool inputs and checkpoint it before
+    // the tool call closes, so a transport reset cannot erase minutes of work.
+    let codeExtractor: {
+      toolName: 'run_code' | 'write_code_file' | 'write_file';
+      valueKey: 'code' | 'content';
+      toolCallId: string;
+      targetPath?: string;
+      buffer: string;
+      state: 'waiting' | 'in_code' | 'done';
+      decoded: string;
+      lastSavedChars: number;
+      lastProgressChars: number;
+      descriptionSent: number;
+      codeStreamStarted: boolean;
+    } | null = null;
+    let completedCodeTargetPath: string | undefined;
     const persistStreamedCodeCheckpoint = async (force = false) => {
       if (!codeExtractor || !ctx.supabase || !ctx.userId) return;
       const unsavedChars = codeExtractor.decoded.length - codeExtractor.lastSavedChars;
       if (unsavedChars <= 0 || (!force && unsavedChars < 1_000)) return;
-      const partialPath = `${ctx.projectId}/drafts/streamed-run-code.partial.js`;
+      const targetSlug = `${codeExtractor.targetPath?.split('/').at(-1) || 'inline'}-${codeExtractor.toolCallId}`
+        .replace(/[^a-zA-Z0-9.-]+/g, '-')
+        .slice(0, 80);
+      const partialPath = `${ctx.projectId}/drafts/streamed-${codeExtractor.toolName}-${targetSlug}.partial.js`;
       const saved = await workspace.writeFile(
         partialPath,
         codeExtractor.decoded,
@@ -4883,6 +5155,7 @@ export async function* runMakaronAgent(
         (ctx as any).__streamedCodeCheckpoint = {
           streamedCodePath: partialPath,
           streamedCodeChars: codeExtractor.decoded.length,
+          ...(codeExtractor.targetPath ? { streamedCodeTargetPath: codeExtractor.targetPath } : {}),
         } satisfies StreamedCodeCheckpoint;
       }
     };
@@ -4916,6 +5189,9 @@ export async function* runMakaronAgent(
             };
             yield {
               type: 'context_compaction',
+              provider: 'anthropic',
+              modelId: runtime.spec.id,
+              compactedThrough: options?.historyBoundary,
               summary,
               appliedEdits,
               inputTokens: usage?.inputTokens,
@@ -4955,6 +5231,29 @@ export async function* runMakaronAgent(
         continue;
       }
 
+      if (event.type === 'custom' && (event as any).kind === 'openai.compaction') {
+        const providerKey = runtime.spec.provider === 'azure-openai' ? 'azure' : 'openai';
+        const metadata = (event as any).providerMetadata?.[providerKey] as {
+          itemId?: string;
+          encryptedContent?: string;
+        } | undefined;
+        if (metadata?.itemId && metadata.encryptedContent) {
+          yield {
+            type: 'context_compaction',
+            provider: 'openai',
+            modelId: runtime.spec.id,
+            compactedThrough: options?.historyBoundary,
+            item: {
+              kind: 'openai.compaction',
+              providerKey,
+              itemId: metadata.itemId,
+              encryptedContent: metadata.encryptedContent,
+            },
+          };
+        }
+        continue;
+      }
+
       if (event.type === 'text-start') {
         const anthropic = (event as any).providerMetadata?.anthropic as { type?: string } | undefined;
         if (anthropic?.type === 'compaction') {
@@ -4973,14 +5272,27 @@ export async function* runMakaronAgent(
         continue;
       }
 
-      // ── Tool input streaming — extract code in real-time for run_code ──
+      // ── Tool input streaming — expose and checkpoint real source code ──
       if (event.type === 'tool-input-start') {
         const toolName = (event as any).toolName ?? '';
         if (toolName) lastTool = toolName;
-        if (toolName === 'run_code') {
-          runCodeStartedThisTurn = true;
-          codeExtractor = { buffer: '', state: 'waiting', escaped: false, sent: 0, decoded: '', lastSavedChars: 0 };
-          yield { type: 'status' as const, text: translate(responseLocale, 'agent.status.generatingCode') };
+        if (toolName === 'run_code' || toolName === 'write_code_file' || toolName === 'write_file') {
+          if (toolName !== 'write_file') runCodeStartedThisTurn = true;
+          codeExtractor = {
+            toolName,
+            valueKey: toolName === 'run_code' ? 'code' : 'content',
+            toolCallId: String((event as any).toolCallId || crypto.randomUUID()),
+            buffer: '',
+            state: 'waiting',
+            decoded: '',
+            lastSavedChars: 0,
+            lastProgressChars: 0,
+            descriptionSent: 0,
+            codeStreamStarted: false,
+          };
+          if (toolName !== 'write_file') {
+            yield { type: 'status' as const, text: translate(responseLocale, 'agent.status.generatingCode') };
+          }
         }
         continue;
       }
@@ -4989,50 +5301,59 @@ export async function* runMakaronAgent(
         const delta = (event as any).delta ?? '';
         codeExtractor.buffer += delta;
 
-        if (codeExtractor.state === 'waiting') {
-          // Look for "code": " or "code":" marker (with or without space)
-          const match = codeExtractor.buffer.match(/"code"\s*:\s*"/);
-          if (!match || match.index === undefined) continue;
-          // Found — switch to in_code, start after the opening quote
-          codeExtractor.state = 'in_code';
-          codeExtractor.sent = match.index + match[0].length;
+        if (codeExtractor.toolName === 'write_file' && !codeExtractor.targetPath) {
+          const pathValue = readJsonStringValueFromBuffer(codeExtractor.buffer, 'path');
+          if (!pathValue?.complete) continue;
+          if (!pathValue.value.startsWith(compositionPartsPrefix(ctx.projectId))) {
+            codeExtractor = null;
+            continue;
+          }
+          codeExtractor.targetPath = pathValue.value;
+          runCodeStartedThisTurn = true;
+          const filename = pathValue.value.split('/').at(-1) || pathValue.value;
+          yield {
+            type: 'status' as const,
+            text: responseLocale.startsWith('zh')
+              ? `正在写 ${filename}`
+              : `Writing ${filename}`,
+          };
         }
 
-        if (codeExtractor.state === 'in_code') {
-          // Scan new characters for end of JSON string value
-          let codeChunk = '';
-          let i = codeExtractor.sent;
-          while (i < codeExtractor.buffer.length) {
-            const ch = codeExtractor.buffer[i];
-            if (codeExtractor.escaped) {
-              // Unescape JSON: \n → newline, \t → tab, \" → ", \\ → \
-              if (ch === 'n') codeChunk += '\n';
-              else if (ch === 't') codeChunk += '\t';
-              else if (ch === '"') codeChunk += '"';
-              else if (ch === '\\') codeChunk += '\\';
-              else if (ch === '/') codeChunk += '/';
-              else codeChunk += ch;  // fallback: keep as-is
-              codeExtractor.escaped = false;
-            } else if (ch === '\\') {
-              codeExtractor.escaped = true;
-            } else if (ch === '"') {
-              // End of code value
-              codeExtractor.state = 'done';
-              break;
-            } else {
-              codeChunk += ch;
-            }
-            i++;
+        if (codeExtractor.toolName === 'write_code_file' && !codeExtractor.codeStreamStarted) {
+          const description = readJsonStringValueFromBuffer(codeExtractor.buffer, 'description');
+          const nextDescriptionChunk = description?.value.slice(codeExtractor.descriptionSent) ?? '';
+          if (nextDescriptionChunk) {
+            const prefix = codeExtractor.descriptionSent === 0 ? '\n\n' : '';
+            codeExtractor.descriptionSent = description?.value.length ?? codeExtractor.descriptionSent;
+            yield { type: 'content' as const, text: `${prefix}${nextDescriptionChunk}` };
           }
-          codeExtractor.sent = i;
-          if (codeChunk) {
-            codeExtractor.decoded += codeChunk;
-            yield { type: 'code_stream', text: codeChunk };
-            await persistStreamedCodeCheckpoint();
+        }
+
+        const streamedValue = readJsonStringValueFromBuffer(codeExtractor.buffer, codeExtractor.valueKey);
+        if (!streamedValue) continue;
+        codeExtractor.state = streamedValue.complete ? 'done' : 'in_code';
+        const codeChunk = streamedValue.value.slice(codeExtractor.decoded.length);
+        if (codeChunk) {
+          codeExtractor.codeStreamStarted = true;
+          codeExtractor.decoded = streamedValue.value;
+          yield { type: 'code_stream', text: codeChunk };
+          if (
+            codeExtractor.toolName === 'write_file'
+            && codeExtractor.decoded.length - codeExtractor.lastProgressChars >= 2_000
+          ) {
+            codeExtractor.lastProgressChars = codeExtractor.decoded.length;
+            const filename = codeExtractor.targetPath?.split('/').at(-1) || 'composition source';
+            yield {
+              type: 'status' as const,
+              text: responseLocale.startsWith('zh')
+                ? `正在写 ${filename} · ${codeExtractor.decoded.length.toLocaleString()} 字符`
+                : `Writing ${filename} · ${codeExtractor.decoded.length.toLocaleString()} chars`,
+            };
           }
-          if (codeExtractor.state === 'done') {
-            yield { type: 'code_stream', text: '', done: true };
-          }
+          await persistStreamedCodeCheckpoint();
+        }
+        if (codeExtractor.state === 'done') {
+          yield { type: 'code_stream', text: '', done: true };
         }
         continue;
       }
@@ -5091,6 +5412,8 @@ export async function* runMakaronAgent(
         } else if (event.toolName === 'read_file') {
           const p = (event.input as { path?: string }).path || '';
           yield { type: 'status', text: translate(responseLocale, 'agent.status.readingFile', p.split('/').pop() ?? '') };
+        } else if (event.toolName === 'write_code_file') {
+          yield { type: 'status', text: translate(responseLocale, 'agent.status.generatingCode') };
         } else if (event.toolName === 'write_file') {
           yield { type: 'status', text: translate(responseLocale, 'agent.status.saving') };
         } else if (event.toolName === 'delete_file') {
@@ -5147,10 +5470,28 @@ export async function* runMakaronAgent(
             ? directComposition.code
             : undefined;
         const isRunCode = event.toolName === 'run_code' && typeof streamedCode === 'string';
+        const isWriteCodeFile = event.toolName === 'write_code_file' && typeof toolInput.content === 'string';
+        const isCompositionPartWrite = event.toolName === 'write_file'
+          && typeof toolInput.path === 'string'
+          && toolInput.path.startsWith(compositionPartsPrefix(ctx.projectId))
+          && typeof toolInput.content === 'string';
+        if (isCompositionPartWrite) runCodeStartedThisTurn = true;
+        if (
+          isWriteCodeFile
+          && (!codeExtractor || codeExtractor.descriptionSent === 0)
+          && typeof toolInput.description === 'string'
+          && toolInput.description.trim()
+        ) {
+          yield { type: 'content' as const, text: `\n\n${toolInput.description.trim()}` };
+        }
         const displayInput = isRunCode
           ? directComposition
             ? { ...toolInput, composition: { ...directComposition, code: `[code streamed separately: ${streamedCode.length} chars]` } }
             : { ...toolInput, code: `[code streamed separately: ${streamedCode.length} chars]` }
+          : isWriteCodeFile
+            ? { ...toolInput, content: `[code streamed separately: ${(toolInput.content as string).length} chars]` }
+          : isCompositionPartWrite
+            ? { ...toolInput, content: `[code streamed separately: ${(toolInput.content as string).length} chars]` }
           : toolInput;
         yield {
           type: 'tool_call',
@@ -5162,14 +5503,15 @@ export async function* runMakaronAgent(
           ...(toolCallImages ? { images: toolCallImages } : {}),
         };
         // If code wasn't streamed via delta (edge case), send it now
-        if (isRunCode && (!codeExtractor || codeExtractor.state === 'waiting')) {
-          const code = streamedCode;
+        if ((isRunCode || isWriteCodeFile || isCompositionPartWrite) && (!codeExtractor || codeExtractor.state === 'waiting')) {
+          const code = String(isWriteCodeFile || isCompositionPartWrite ? toolInput.content : streamedCode);
           const CHUNK = 500;
           for (let i = 0; i < code.length; i += CHUNK) {
             yield { type: 'code_stream', text: code.slice(i, i + CHUNK) };
           }
           yield { type: 'code_stream', text: '', done: true };
         }
+        completedCodeTargetPath = codeExtractor?.targetPath;
         codeExtractor = null; // reset for next tool call
         continue;
       }
@@ -5198,6 +5540,38 @@ export async function* runMakaronAgent(
           const toolSucceeded = outputRecord?.success !== false
             && outputRecord?.status !== 'failed'
             && !(outputRecord?.error && outputRecord?.success !== true);
+          if (completedCodeTargetPath && toolName === 'write_file') {
+            const savedPath = typeof outputRecord?.path === 'string' ? outputRecord.path : undefined;
+            if (toolSucceeded && (!savedPath || savedPath === completedCodeTargetPath)) {
+              (ctx as any).__streamedCodeCheckpoint = undefined;
+            }
+            completedCodeTargetPath = undefined;
+          }
+          const compositionWorkspace = outputRecord?.compositionWorkspace && typeof outputRecord.compositionWorkspace === 'object'
+            ? outputRecord.compositionWorkspace as Record<string, unknown>
+            : undefined;
+          if (toolName === 'write_file' && compositionWorkspace) {
+            const status = compositionWorkspace.status;
+            const partCount = Number(compositionWorkspace.partCount || 0);
+            const totalChars = Number(compositionWorkspace.totalChars || 0);
+            const diagnostics = Array.isArray(compositionWorkspace.diagnostics)
+              ? compositionWorkspace.diagnostics.length
+              : 0;
+            yield {
+              type: 'status',
+              text: status === 'ready'
+                ? responseLocale.startsWith('zh')
+                  ? `Composition 已自动组装并保存 · ${partCount} 个文件 · ${totalChars.toLocaleString()} 字符`
+                  : `Composition compiled and autosaved · ${partCount} files · ${totalChars.toLocaleString()} chars`
+                : status === 'invalid'
+                  ? responseLocale.startsWith('zh')
+                    ? `源码已保存，编译发现 ${diagnostics} 个待修复问题`
+                    : `Source saved; compilation found ${diagnostics} issue${diagnostics === 1 ? '' : 's'}`
+                  : responseLocale.startsWith('zh')
+                    ? `源码已保存 · 当前 ${partCount} 个文件`
+                    : `Source saved · ${partCount} file${partCount === 1 ? '' : 's'}`,
+            };
+          }
           if (toolSucceeded && toolName === 'studio_run') {
             studioRunTouchedThisTurn = true;
             const studioSummary = outputRecord?.studioRun && typeof outputRecord.studioRun === 'object'
@@ -5420,6 +5794,20 @@ export async function* runMakaronAgent(
               streamError,
             });
 
+      if (
+        attemptBudgetReached
+        && !durableStageHandoff
+        && !durableStudioCompletion
+        && !finalStepDeliveredArtifact
+      ) {
+        assessment = {
+          ok: false,
+          retryable: true,
+          code: 'attempt_budget_handoff',
+          detail: `Attempt budget reached after a complete step (${invocationBudgetMs}ms); continuing from durable workspace state`,
+        };
+      }
+
       if (assessment.ok) {
         const activeStudioCheckpoint = await getStudioRunCheckpoint(ctx);
         if (shouldContinueActiveStudioRun({
@@ -5469,7 +5857,7 @@ export async function* runMakaronAgent(
           ? ` Resume Studio Run ${studioCheckpoint.studioRunId} at stage ${studioCheckpoint.studioRunStage}. Call studio_run status first, then continue that stage directly. Do not reread skill, prompt, or reference files already present in the conversation history.`
           : '';
         const compositionRecovery = studioCheckpoint.studioRunStage === 'composition'
-          ? ` Switch immediately to numbered source files under ${ctx.projectId}/drafts/composition-parts. Salvage complete reusable definitions from the partial stream into a numbered part, then continue with additional parts; do not stream the monolithic run_code payload again. Assemble once with composition_parts.directory after all parts are durable.`
+          ? ` Switch immediately to numbered source files under ${ctx.projectId}/drafts/composition-parts. Salvage complete reusable definitions from the partial stream into a numbered part, then continue with additional parts; do not stream the monolithic run_code payload again. The workspace assembles automatically after each write, so continue until write_file reports compositionWorkspace.status="ready" and use its designPath directly.`
           : '';
         const recoveryInstruction = textOnlyRecovery
           ? 'A finished artifact was already delivered in the previous step. Do not call any tool, regenerate, republish, or create another task. Only provide the concise final reply for the existing delivered result.'
@@ -5504,7 +5892,11 @@ export async function* runMakaronAgent(
         ...(assessment.detail ? { errorDetail: assessment.detail } : {}),
       };
       const recoverable = assessment.retryable && Boolean(
-        checkpoint.draftPath || checkpoint.studioRunId || options?.execution,
+        checkpoint.draftPath
+        || checkpoint.streamedCodePath
+        || checkpoint.compositionPartPaths?.length
+        || checkpoint.studioRunId
+        || options?.execution,
       );
       const usageEvent = buildUsageEvent();
       if (usageEvent) yield usageEvent;

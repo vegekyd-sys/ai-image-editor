@@ -4,6 +4,7 @@ import {
   createAzureOpenAIResponsesModel,
   resolveAzureOpenAIResponsesConfig,
 } from '@/lib/azure-openai-responses';
+import { buildTypedCompactionMessage } from '@/lib/agent-execution';
 
 const RESPONSE_FIXTURE = {
   id: 'resp_test',
@@ -46,6 +47,19 @@ const RESPONSE_FIXTURE = {
   },
   user: null,
   metadata: {},
+};
+
+const COMPACTION_RESPONSE_FIXTURE = {
+  ...RESPONSE_FIXTURE,
+  id: 'resp_compaction',
+  output: [
+    {
+      type: 'compaction',
+      id: 'cmp_test',
+      encrypted_content: 'encrypted-compaction-state',
+    },
+    ...RESPONSE_FIXTURE.output,
+  ],
 };
 
 describe('Azure OpenAI Responses adapter', () => {
@@ -113,5 +127,112 @@ describe('Azure OpenAI Responses adapter', () => {
       store: false,
       reasoning: { effort: 'medium' },
     });
+  });
+
+  it('round-trips an encrypted compaction item through AI SDK response messages', async () => {
+    const bodies: Array<Record<string, unknown>> = [];
+    const fakeFetch = vi.fn(async (_input: RequestInfo | URL, init?: RequestInit) => {
+      bodies.push(JSON.parse(String(init?.body)));
+      return new Response(JSON.stringify(COMPACTION_RESPONSE_FIXTURE), {
+        status: 200,
+        headers: { 'content-type': 'application/json' },
+      });
+    });
+    const model = createAzureOpenAIResponsesModel('gpt-5.6-terra', {
+      apiKey: 'test-secret',
+      endpoint: 'https://resource.openai.azure.com/openai/responses?api-version=2025-04-01-preview',
+      fetch: fakeFetch,
+    });
+    const providerOptions = {
+      azure: {
+        store: false,
+        contextManagement: [{ type: 'compaction' as const, compactThreshold: 650_000 }],
+      },
+    };
+
+    const first = await generateText({
+      model,
+      prompt: 'Begin a long task',
+      providerOptions,
+    });
+    expect(JSON.stringify(first.responseMessages)).toContain('openai.compaction');
+    expect(JSON.stringify(first.responseMessages)).toContain('encrypted-compaction-state');
+
+    await generateText({
+      model,
+      messages: [
+        { role: 'user', content: 'Begin a long task' },
+        ...first.responseMessages,
+        { role: 'user', content: 'Continue' },
+      ],
+      providerOptions,
+    });
+
+    expect(bodies).toHaveLength(2);
+    expect(bodies[0]).toMatchObject({
+      context_management: [{ type: 'compaction', compact_threshold: 650_000 }],
+    });
+    expect(bodies[1].input).toEqual(expect.arrayContaining([
+      expect.objectContaining({
+        type: 'compaction',
+        id: 'cmp_test',
+        encrypted_content: 'encrypted-compaction-state',
+      }),
+    ]));
+  });
+
+  it('replays the durable snapshot compaction shape as an Azure Responses input item', async () => {
+    let body: Record<string, any> = {};
+    const fakeFetch = vi.fn(async (_input: RequestInfo | URL, init?: RequestInit) => {
+      body = JSON.parse(String(init?.body));
+      return new Response(JSON.stringify(RESPONSE_FIXTURE), {
+        status: 200,
+        headers: { 'content-type': 'application/json' },
+      });
+    });
+    const model = createAzureOpenAIResponsesModel('gpt-5.6-sol', {
+      apiKey: 'test-secret',
+      endpoint: 'https://resource.openai.azure.com/openai/responses?api-version=2025-04-01-preview',
+      fetch: fakeFetch,
+    });
+    const compacted = buildTypedCompactionMessage({
+      version: 1,
+      objective: 'Long task',
+      acceptanceCriteria: [],
+      decisions: [],
+      completedWork: [],
+      artifacts: [],
+      openQuestions: [],
+      currentWorkUnit: 'agent',
+      nextAction: 'Continue',
+      providerCompaction: {
+        provider: 'openai',
+        modelId: 'gpt-5.6-sol',
+        item: {
+          kind: 'openai.compaction',
+          providerKey: 'azure',
+          itemId: 'cmp_durable',
+          encryptedContent: 'durable-encrypted-state',
+        },
+      },
+    }, 'gpt-5.6-sol');
+    expect(compacted).not.toBeNull();
+
+    await generateText({
+      model,
+      messages: [
+        compacted!,
+        { role: 'user', content: 'Continue from the compacted state' },
+      ],
+      providerOptions: { azure: { store: false } },
+    });
+
+    expect(body.input).toEqual(expect.arrayContaining([
+      expect.objectContaining({
+        type: 'compaction',
+        id: 'cmp_durable',
+        encrypted_content: 'durable-encrypted-state',
+      }),
+    ]));
   });
 });

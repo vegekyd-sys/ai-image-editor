@@ -63,6 +63,8 @@ export class AgentDualWriter {
   private seq = 0;
   private contentBuffer = '';
   private flushTimer: ReturnType<typeof setTimeout> | null = null;
+  private codeStreamBuffer = '';
+  private codeStreamFlushTimer: ReturnType<typeof setTimeout> | null = null;
   private sseDisconnected = false;
 
   // Message accumulation
@@ -339,8 +341,17 @@ export class AgentDualWriter {
       case 'context_compaction': {
         await this.flushContent();
         await this.insertEvent('context_compaction', {
+          provider: event.provider,
+          modelId: event.modelId,
+          compactedThrough: event.compactedThrough,
           summary: event.summary,
           appliedEdits: event.appliedEdits,
+          item: event.item ? {
+            kind: event.item.kind,
+            providerKey: event.item.providerKey,
+            itemId: event.item.itemId,
+            encryptedContent: '[persisted in context snapshot]',
+          } : undefined,
           inputTokens: event.inputTokens,
         });
         // Provider compaction is model state, not visible assistant copy.
@@ -354,8 +365,17 @@ export class AgentDualWriter {
       }
 
       case 'code_stream': {
-        await this.insertEvent('code_stream', { text: event.text, done: event.done });
+        this.codeStreamBuffer += event.text;
         this.tryEnqueue(event);
+        if (event.done) {
+          await this.flushCodeStream(true);
+        } else if (this.codeStreamBuffer.length >= 1_000) {
+          await this.flushCodeStream(false);
+        } else if (!this.codeStreamFlushTimer) {
+          this.codeStreamFlushTimer = setTimeout(() => {
+            void this.flushCodeStream(false);
+          }, 300);
+        }
         return;
       }
 
@@ -403,9 +423,21 @@ export class AgentDualWriter {
     await this.insertEvent('content', { text });
   }
 
+  async flushCodeStream(done: boolean) {
+    if (this.codeStreamFlushTimer) {
+      clearTimeout(this.codeStreamFlushTimer);
+      this.codeStreamFlushTimer = null;
+    }
+    const text = this.codeStreamBuffer;
+    this.codeStreamBuffer = '';
+    if (!text && !done) return;
+    await this.insertEvent('code_stream', { text, done: done || undefined });
+  }
+
   /** Call in after() or finally block. */
   async flush() {
     await this.flushContent();
+    await this.flushCodeStream(false);
   }
 
   /** Get the current message ID (for the first message before any new_turn). */

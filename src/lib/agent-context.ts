@@ -22,7 +22,6 @@ import {
   getAgentContextPolicy,
   normalizeExecutionSnapshot,
   selectModelHistoryWithinBudget,
-  tailModelHistoryAtomically,
   type AgentContextPolicy,
   type ContextSelectionStats,
   type DurableExecutionSnapshot,
@@ -58,7 +57,9 @@ export interface PromptContextOptions {
   executionRunId?: string | null;
   /** Model-aware context policy. Defaults to the conservative 200K policy. */
   contextPolicy?: AgentContextPolicy;
-  /** Durable server attempt after attempt 1; use the typed handoff plus a compact atomic tail. */
+  /** Resolved model id used to validate provider-native compaction state. */
+  agentModelId?: string;
+  /** Durable server attempt after attempt 1. It retains the same conversation history. */
   durableContinuation?: boolean;
 }
 
@@ -77,6 +78,8 @@ export interface PromptContextResult {
   audioAttachments: AudioAttachmentContext[];
   executionSnapshot?: DurableExecutionSnapshot;
   contextStats: ContextSelectionStats;
+  /** Latest persisted input row represented by this context. */
+  historyBoundary?: string;
 }
 
 interface DbSnapshot {
@@ -201,6 +204,48 @@ interface DbMessage {
   created_at: string;
 }
 
+const CONTEXT_HISTORY_PAGE_SIZE = 1_000;
+
+async function loadAllVisibleMessages(
+  supabase: SupabaseClient,
+  projectId: string,
+): Promise<DbMessage[]> {
+  const rows: DbMessage[] = [];
+  for (let offset = 0; ; offset += CONTEXT_HISTORY_PAGE_SIZE) {
+    const { data, error } = await supabase
+      .from('messages')
+      .select('id, role, content, created_at')
+      .eq('project_id', projectId)
+      .order('created_at', { ascending: true })
+      .range(offset, offset + CONTEXT_HISTORY_PAGE_SIZE - 1);
+    if (error) throw new Error(`Failed to load Agent message history: ${error.message}`);
+    const page = (data ?? []) as DbMessage[];
+    rows.push(...page);
+    if (page.length < CONTEXT_HISTORY_PAGE_SIZE) return rows;
+  }
+}
+
+async function loadAllToolHistory(
+  supabase: SupabaseClient,
+  projectId: string,
+  userId: string,
+): Promise<DbToolHistoryRow[]> {
+  const rows: DbToolHistoryRow[] = [];
+  for (let offset = 0; ; offset += CONTEXT_HISTORY_PAGE_SIZE) {
+    const { data, error } = await supabase
+      .from('agent_tool_history')
+      .select('created_at, run_id, step, seq, tool_call_id, tool_name, input, output')
+      .eq('project_id', projectId)
+      .eq('user_id', userId)
+      .order('created_at', { ascending: true })
+      .range(offset, offset + CONTEXT_HISTORY_PAGE_SIZE - 1);
+    if (error) throw new Error(`Failed to load Agent tool history: ${error.message}`);
+    const page = (data ?? []) as DbToolHistoryRow[];
+    rows.push(...page);
+    if (page.length < CONTEXT_HISTORY_PAGE_SIZE) return rows;
+  }
+}
+
 interface DbProjectMusic {
   audio_url?: string | null;
   suno_audio_url?: string | null;
@@ -261,7 +306,7 @@ export function buildAgentRecoveryContext(
     ? `\npartial streamed code: ${String(checkpoint.streamedCodePath)} (${Number(checkpoint.streamedCodeChars) || 0} chars)`
     : '';
   const nextAction = checkpoint.studioRunId
-    ? 'Call studio_run status first, then read only the persisted script, storyboard, and assets artifacts needed for the current stage. Do not reread skill, prompt, director, component-library, or reference files. In Composition, write numbered source files under <project-id>/drafts/composition-parts, salvage complete definitions from any partial stream, and assemble once with composition_parts.directory. Do not restart a monolithic run_code payload or trim to an aggregate source-size target.'
+    ? 'Call studio_run status first, then read only the persisted script, storyboard, and assets artifacts needed for the current stage. Do not reread skill, prompt, director, component-library, or reference files. In Composition, write numbered source files under <project-id>/drafts/composition-parts and salvage complete definitions from any partial stream. The workspace automatically assembles and autosaves after each write; continue until write_file reports compositionWorkspace.status="ready", then use its designPath directly. Do not restart a monolithic run_code payload or trim to an aggregate source-size target.'
     : 'Read the draft path and apply the pending modification.';
   return `[Recoverable Agent Checkpoint]\nThe previous run stopped before completion, but durable work was saved. Resume from this exact checkpoint; do not recreate the work from the original media.${draftContext}${studioContext}${streamedCodeContext}${checkpoint.lastTool ? `\nlast completed tool: ${String(checkpoint.lastTool)}` : ''}\n${nextAction} Preview and publish the final artifact when that was the user's original request.\n\n`;
 }
@@ -327,31 +372,23 @@ export async function buildPromptContext(
         .eq('id', options.executionRunId)
         .maybeSingle()
     : Promise.resolve({ data: null, error: null });
-  const [snapshotsRes, recentMessagesRes, originMessageRes, toolHistoryRes, musicRes, recoverableDraft, recoverableRunRes, studioRuns, executionSnapshotRes, executionRunRes] = await Promise.all([
+  const projectCompactionPromise = supabase
+    .from('agent_context_snapshots')
+    .select('content, run_id, created_at')
+    .eq('project_id', projectId)
+    .eq('user_id', userId)
+    .not('provider_compaction', 'is', null)
+    .order('created_at', { ascending: false })
+    .limit(1)
+    .maybeSingle();
+  const [snapshotsRes, messages, toolHistory, musicRes, recoverableDraft, recoverableRunRes, studioRuns, executionSnapshotRes, executionRunRes, projectCompactionRes] = await Promise.all([
     supabase
       .from('snapshots')
       .select('id, image_url, description, type, design_path, tips, sort_order, video_meta, metadata')
       .eq('project_id', projectId)
       .order('sort_order', { ascending: true }),
-    supabase
-      .from('messages')
-      .select('id, role, content, created_at')
-      .eq('project_id', projectId)
-      .order('created_at', { ascending: false })
-      .limit(400),
-    supabase
-      .from('messages')
-      .select('id, role, content, created_at')
-      .eq('project_id', projectId)
-      .order('created_at', { ascending: true })
-      .limit(1),
-    supabase
-      .from('agent_tool_history')
-      .select('created_at, run_id, step, seq, tool_call_id, tool_name, input, output')
-      .eq('project_id', projectId)
-      .eq('user_id', userId)
-      .order('created_at', { ascending: false })
-      .limit(800),
+    loadAllVisibleMessages(supabase, projectId),
+    loadAllToolHistory(supabase, projectId, userId),
     supabase
       .from('project_music')
       .select('audio_url, suno_audio_url, stream_audio_url, duration, title, track_index, status, tags')
@@ -371,6 +408,7 @@ export async function buildPromptContext(
     studioRunStore.listRuns(projectId).catch(() => []),
     executionSnapshotPromise,
     executionRunPromise,
+    projectCompactionPromise,
   ]);
 
   const snapshots: DbSnapshot[] = snapshotsRes.data ?? [];
@@ -380,14 +418,7 @@ export async function buildPromptContext(
     supabase,
     userId,
   );
-  const recentMessages = ([...(recentMessagesRes.data ?? [])] as DbMessage[]).reverse();
-  const originMessage = (originMessageRes.data?.[0] as DbMessage | undefined);
-  const messages: DbMessage[] = originMessage && !recentMessages.some(message => (
-    message.id && originMessage.id ? message.id === originMessage.id : message.created_at === originMessage.created_at
-  ))
-    ? [originMessage, ...recentMessages]
-    : recentMessages;
-  const toolHistory: DbToolHistoryRow[] = ([...(toolHistoryRes.data ?? [])] as DbToolHistoryRow[]).reverse();
+  const originMessage = messages[0];
   const projectAudios: AudioAttachmentContext[] = ((musicRes.data ?? []) as DbProjectMusic[])
     .map((row) => {
       const audioUrl = getUsableAudioUrl(row);
@@ -451,6 +482,13 @@ export async function buildPromptContext(
         nextAction: 'Start the objective.',
       })
     : undefined;
+  const projectCompactionSnapshot = projectCompactionRes.data?.content
+    ? normalizeExecutionSnapshot(projectCompactionRes.data.content, {
+        objective: '',
+        currentWorkUnit: 'agent',
+        nextAction: 'Continue with the current user request.',
+      })
+    : undefined;
   const executionContext = formatDurableExecutionSnapshot(executionSnapshot);
 
   const currentSnapshotIndex = options.currentSnapshotIndex ?? Math.max(0, snapshots.length - 1);
@@ -498,16 +536,23 @@ export async function buildPromptContext(
   // Conversation history — real AI SDK ModelMessage[] turns, including private
   // sanitized tool call/results. Drop trailing user messages so the current
   // turn's prompt isn't duplicated if the caller already wrote it to DB.
-  const rebuiltHistory = buildModelHistoryFromRows(messages, toolHistory, 400);
-  const typedCompaction = buildTypedCompactionMessage(executionSnapshot);
-  // A provider compaction block summarizes everything before it. Keep it typed
-  // and add only a small local tail, rather than replaying summarized input.
-  const durableHistoryTail = tailModelHistoryAtomically(rebuiltHistory, 16);
+  const compactionSnapshot = executionSnapshot?.providerCompaction
+    ? executionSnapshot
+    : projectCompactionSnapshot;
+  const typedCompaction = buildTypedCompactionMessage(compactionSnapshot, options.agentModelId);
+  const compactedThrough = typedCompaction
+    ? compactionSnapshot?.providerCompaction?.compactedThrough
+    : undefined;
+  const historyMessages = compactedThrough
+    ? messages.filter(message => message.created_at > compactedThrough)
+    : messages;
+  const historyTools = compactedThrough
+    ? toolHistory.filter(row => row.created_at > compactedThrough)
+    : toolHistory;
+  const rebuiltHistory = buildModelHistoryFromRows(historyMessages, historyTools);
   const rawHistory = typedCompaction
-    ? [typedCompaction, ...durableHistoryTail]
-    : options.durableContinuation && executionSnapshot
-      ? durableHistoryTail
-      : rebuiltHistory;
+    ? [typedCompaction, ...rebuiltHistory]
+    : rebuiltHistory;
   const contextPolicy = options.contextPolicy ?? getAgentContextPolicy('default');
   const selectedHistory = selectModelHistoryWithinBudget({
     messages: rawHistory,
@@ -625,6 +670,11 @@ export async function buildPromptContext(
     const videoUrl = typeof videoMeta?.videoUrl === 'string' ? videoMeta.videoUrl : '';
     return s.type === 'video' && videoUrl ? videoUrl : (s.image_url || '');
   });
+  const historyBoundary = [...messages, ...toolHistory]
+    .map(row => row.created_at)
+    .filter(Boolean)
+    .sort()
+    .at(-1);
   return {
     fullPrompt,
     history,
@@ -636,6 +686,7 @@ export async function buildPromptContext(
     audioAttachments: resolvedAudioAttachments,
     executionSnapshot,
     contextStats: selectedHistory.stats,
+    historyBoundary,
   };
 }
 

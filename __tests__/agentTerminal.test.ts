@@ -6,6 +6,8 @@ import {
   shouldCompleteDurableStudioRun,
   shouldContinueActiveStudioRun,
   shouldHandoffToStudioComposition,
+  requestsMaterializedVideo,
+  shouldStopAfterDurablePublishToolStep,
   shouldStopAfterStudioToolStep,
   shouldUseTextOnlyRecovery,
 } from '@/lib/agent-terminal';
@@ -171,6 +173,41 @@ describe('agent terminal semantics', () => {
       status: 'running',
       currentStage: 'review',
     })).toBe(false);
+  });
+
+  it('stops a durable Agent Run on the same step that publishes its final artifact', () => {
+    expect(shouldStopAfterDurablePublishToolStep({
+      durableExecution: true,
+      toolResults: [{ toolName: 'write_file', output: { success: true, published: true, artifactType: 'design' } }],
+    })).toBe(true);
+    expect(shouldStopAfterDurablePublishToolStep({
+      durableExecution: true,
+      toolResults: [{ toolName: 'write_file', output: { success: true, published: [{ type: 'video' }] } }],
+    })).toBe(true);
+    expect(shouldStopAfterDurablePublishToolStep({
+      durableExecution: true,
+      toolResults: [{ toolName: 'write_file', output: { success: true, published: false } }],
+    })).toBe(false);
+    expect(shouldStopAfterDurablePublishToolStep({
+      durableExecution: false,
+      toolResults: [{ toolName: 'write_file', output: { success: true, published: true } }],
+    })).toBe(false);
+  });
+
+  it('keeps a video request running after an editable design publish until video delivery', () => {
+    expect(requestsMaterializedVideo('这6张图做个好玩的玩水vlog')).toBe(true);
+    expect(requestsMaterializedVideo('finish and export an MP4 video')).toBe(true);
+    expect(requestsMaterializedVideo('做一张夏日海报')).toBe(false);
+    expect(shouldStopAfterDurablePublishToolStep({
+      durableExecution: true,
+      requiresMaterializedVideo: true,
+      toolResults: [{ toolName: 'write_file', output: { success: true, published: true, artifactType: 'design' } }],
+    })).toBe(false);
+    expect(shouldStopAfterDurablePublishToolStep({
+      durableExecution: true,
+      requiresMaterializedVideo: true,
+      toolResults: [{ toolName: 'write_file', output: { success: true, published: [{ type: 'video' }] } }],
+    })).toBe(true);
   });
 
   it('never persists completed without explicit done evidence', () => {

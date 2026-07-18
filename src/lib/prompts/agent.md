@@ -88,7 +88,7 @@ Default video model follows the app selection, usually SeeDance 2.0 Fast (`seeda
 
 ### Real MP4 Editing and Long Video Preparation
 
-Default tool: `run_code` with `runtime: "node"`, after reading `skills/video-ffmpeg-lab/SKILL.md`.
+Read `skills/video-ffmpeg-lab/SKILL.md`. Substantial scripts: `write_code_file` -> `run_code(code_path)`; utilities inline.
 
 For long-video style transfer: probe once, split once, generate per chunk, then assemble. Do not route ordinary timeline editing to FFmpeg.
 
@@ -96,7 +96,7 @@ When the user asks to cut/remove/export based on dialogue or subtitles, call `tr
 
 ### Remotion Composition Runtime
 
-Default tool: `run_code` with `runtime: "composition"`, after reading `prompts/remotion-composition.md` plus, for new/major visuals, `skills/_shared/remotion-director-contract.md`
+Read `prompts/remotion-composition.md` and, for major visuals, `skills/_shared/remotion-director-contract.md`. Substantial code uses `write_code_file` -> `run_code(code_path)`; Studio may use numbered parts.
 
 Use for editable timelines/trims/subtitles/overlays; default for "put these two videos together" / "剪在一起".
 
@@ -119,6 +119,6 @@ Use `generate_music` only when the user asks for music, score, soundtrack, or ba
 
 ## Workflow Rules
 
-- Before `run_code`, say what you are about to do in one sentence. After it completes, briefly describe the result.
+- Describe `write_code_file.content`; before execution say what it produces, then report the result.
 - For CUI video generation, do not submit to the video provider until the user confirms the visible script, unless the same user request explicitly authorizes direct submission without confirmation.
 - Static charts, infographics, posters, and marketing images go to `generate_image` unless the user asks for an editable or animated version.

@@ -53,6 +53,55 @@ describe('AgentDualWriter', () => {
     expect(inserted.map((row) => row.data.text)).toEqual(['first chunk', 'second chunk']);
   });
 
+  it('batches durable code deltas without losing source order', async () => {
+    const inserted: Array<{ type: string; data: { text?: string; done?: boolean } }> = [];
+    const fakeSupabase = {
+      from: () => ({
+        insert: async (row: { type: string; data: { text?: string; done?: boolean } }) => {
+          inserted.push(row);
+          return { error: null };
+        },
+      }),
+    };
+    const writer = new AgentDualWriter('run-id', fakeSupabase as never, 'user-id', 'project-id');
+
+    await writer.processAndEnqueue({ type: 'code_stream', text: 'function Composition() {' });
+    await writer.processAndEnqueue({ type: 'code_stream', text: '\n  return null;\n}' });
+    expect(inserted).toHaveLength(0);
+
+    await writer.processAndEnqueue({ type: 'code_stream', text: '', done: true });
+
+    expect(inserted).toHaveLength(1);
+    expect(inserted[0]).toMatchObject({
+      type: 'code_stream',
+      data: {
+        text: 'function Composition() {\n  return null;\n}',
+        done: true,
+      },
+    });
+  });
+
+  it('persists partial code when a stream ends before the done marker', async () => {
+    const inserted: Array<{ type: string; data: { text?: string; done?: boolean } }> = [];
+    const fakeSupabase = {
+      from: () => ({
+        insert: async (row: { type: string; data: { text?: string; done?: boolean } }) => {
+          inserted.push(row);
+          return { error: null };
+        },
+      }),
+    };
+    const writer = new AgentDualWriter('run-id', fakeSupabase as never, 'user-id', 'project-id');
+
+    await writer.processAndEnqueue({ type: 'code_stream', text: 'const unfinished = true;' });
+    await writer.flush();
+
+    expect(inserted).toContainEqual(expect.objectContaining({
+      type: 'code_stream',
+      data: { text: 'const unfinished = true;', done: undefined },
+    }));
+  });
+
   it('persists preview frame captures with the current message id', async () => {
     const inserts: Array<{ table: string; row: Record<string, unknown> }> = [];
     const upserts: Array<{ table: string; row: Record<string, unknown> }> = [];

@@ -12,6 +12,12 @@ import {
   normalizeRequestedAgentModelPreference,
   resolveAgentModelSpec,
 } from '@/lib/agent-models';
+import {
+  DEFAULT_ATTEMPT_BUDGET_MS,
+  DEFAULT_ATTEMPT_LEASE_SECONDS,
+  DEFAULT_ATTEMPT_MAX_STEPS,
+  getAgentContextPolicy,
+} from '@/lib/agent-execution';
 
 export const maxDuration = 1800;
 
@@ -103,19 +109,6 @@ export async function POST(req: NextRequest) {
     }
     createdRunId = runId;
 
-    // Build context from DB (no frontend needed)
-    const ctx = await buildPromptContext(projectId, supabase, userId, {
-      userMessage: prompt,
-      currentSnapshotIndex,
-      hasAnnotation,
-      isDraft,
-      referenceImageCount,
-      uploadedVideoCount,
-      turnMediaCount,
-      audioAttachments,
-      currentRunId: runId,
-    });
-
     // Write user message to DB (frontend does this itself, headless mode must do it here)
     if (!clientPersistedUserMessage) {
       const userMessageId = crypto.randomUUID();
@@ -146,19 +139,14 @@ export async function POST(req: NextRequest) {
       },
     }).eq('id', runId);
 
-    // Load user skills
-    const { getAllSkills } = await import('@/lib/workspace');
-    const allSkills = await getAllSkills(supabase, userId);
-    const userSkills = allSkills.filter(s => !s.makaron?.builtIn);
-
     // Durable execution is the default path. Keep the legacy one-function
     // runner below as an explicit rollback switch while the new worker soaks.
     if (process.env.AGENT_DURABLE_EXECUTION !== 'false') {
       const executionPolicy = {
         durable: true,
-        attemptBudgetMs: 420_000,
-        attemptMaxSteps: 60,
-        leaseSeconds: 480,
+        attemptBudgetMs: DEFAULT_ATTEMPT_BUDGET_MS,
+        attemptMaxSteps: DEFAULT_ATTEMPT_MAX_STEPS,
+        leaseSeconds: DEFAULT_ATTEMPT_LEASE_SECONDS,
         maxAttempts: 40,
         maxTotalInputTokens: 12_000_000,
       };
@@ -218,6 +206,25 @@ export async function POST(req: NextRequest) {
       });
     }
 
+    // The legacy rollback path still runs in this request's background task.
+    // Durable workers build context and skills themselves, so keeping this below
+    // the durable return avoids doing both expensive loads twice on every run.
+    const ctx = await buildPromptContext(projectId, supabase, userId, {
+      userMessage: prompt,
+      currentSnapshotIndex,
+      hasAnnotation,
+      isDraft,
+      referenceImageCount,
+      uploadedVideoCount,
+      turnMediaCount,
+      audioAttachments,
+      currentRunId: runId,
+      agentModelId: resolvedAgentModel.id,
+    });
+    const { getAllSkills } = await import('@/lib/workspace');
+    const allSkills = await getAllSkills(supabase, userId);
+    const userSkills = allSkills.filter(s => !s.makaron?.builtIn);
+
     // Run agent after response is sent — next/server after() keeps the function alive
     after(async () => {
       const modelAbortController = new AbortController();
@@ -269,6 +276,10 @@ export async function POST(req: NextRequest) {
           history: ctx.history,
           timelineVersion,
           abortSignal: modelAbortController.signal,
+          contextCompactAtTokens: ctx.contextStats.compactionRequired
+            ? getAgentContextPolicy(resolvedAgentModel.id).providerCompactAtTokens
+            : undefined,
+          historyBoundary: ctx.historyBoundary,
         })) {
           if (event.type === 'done') sawDone = true;
           if (event.type === 'error') {

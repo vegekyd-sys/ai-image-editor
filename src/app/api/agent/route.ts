@@ -12,6 +12,7 @@ import {
   normalizeRequestedAgentModelPreference,
   resolveAgentModelSpec,
 } from '@/lib/agent-models';
+import { getAgentContextPolicy } from '@/lib/agent-execution';
 
 export const maxDuration = 1800;
 
@@ -125,6 +126,7 @@ export async function POST(req: NextRequest) {
         let sawError = false;
         let wasStopped = false;
         let terminalError: Extract<import('@/lib/agent').AgentStreamEvent, { type: 'error' }> | null = null;
+        let latestProviderCompaction: import('@/lib/agent-execution').DurableExecutionSnapshot['providerCompaction'];
 
         // Helper: iterate agent stream, capture usage event
         async function iterateAgent(gen: AsyncIterable<import('@/lib/agent').AgentStreamEvent>, ctrl: ReadableStreamDefaultController) {
@@ -259,6 +261,8 @@ export async function POST(req: NextRequest) {
           let agentCurrentDesignPath = typeof currentDesignPath === 'string' ? currentDesignPath : undefined;
           let agentHistory: ModelMessage[] = [];
           let agentAudioAttachments = audioAttachments;
+          let agentCompactionRequired = false;
+          let agentHistoryBoundary: string | undefined;
 
           if (needsPromptContext) {
             // Unified context: both frontend and headless use buildPromptContext.
@@ -276,6 +280,7 @@ export async function POST(req: NextRequest) {
               turnMediaCount: turnMediaCount || undefined,
               audioAttachments,
               currentRunId: runId,
+              agentModelId: resolvedAgentModel.id,
             });
             endContext({
               promptChars: ctx.fullPrompt.length,
@@ -294,6 +299,8 @@ export async function POST(req: NextRequest) {
             agentCurrentDesignPath = agentCurrentDesignPath || ctx.currentDesignPath;
             agentHistory = ctx.history;
             agentAudioAttachments = ctx.audioAttachments;
+            agentCompactionRequired = ctx.contextStats.compactionRequired;
+            agentHistoryBoundary = ctx.historyBoundary;
           } else {
             perf.mark('build_prompt_context_skipped', {
               reason: 'analysisOnly_request_has_media',
@@ -339,13 +346,24 @@ export async function POST(req: NextRequest) {
           try {
             const endAgentStream = perf.span('agent_stream', { projectId, runId: runId || null });
             try {
-              for await (const event of runMakaronAgent(agentPrompt, agentImage, projectId, { analysisOnly, analysisContext, isVideoAnalysis, animationImageUrls: animationImageUrls?.length ? animationImageUrls : undefined, animationImages: animationImages?.length ? animationImages : undefined, locale, preferredModel, agentModel: requestedAgentModel, videoModel, videoResolution, videoAuto, audioAttachments: agentAudioAttachments, snapshotImages: agentSnapshotImages, currentSnapshotIndex: agentCurrentSnapshotIndex, isNsfw, supabase, userId: userId, currentDesign: agentCurrentDesign, currentDesignPath: agentCurrentDesignPath, history: agentHistory, timelineVersion, perf, abortSignal: modelAbortController.signal })) {
+              for await (const event of runMakaronAgent(agentPrompt, agentImage, projectId, { analysisOnly, analysisContext, isVideoAnalysis, animationImageUrls: animationImageUrls?.length ? animationImageUrls : undefined, animationImages: animationImages?.length ? animationImages : undefined, locale, preferredModel, agentModel: requestedAgentModel, videoModel, videoResolution, videoAuto, audioAttachments: agentAudioAttachments, snapshotImages: agentSnapshotImages, currentSnapshotIndex: agentCurrentSnapshotIndex, isNsfw, supabase, userId: userId, currentDesign: agentCurrentDesign, currentDesignPath: agentCurrentDesignPath, history: agentHistory, timelineVersion, perf, abortSignal: modelAbortController.signal, contextCompactAtTokens: agentCompactionRequired ? getAgentContextPolicy(resolvedAgentModel.id).providerCompactAtTokens : undefined, historyBoundary: agentHistoryBoundary })) {
                 if (event.type === 'done') sawDone = true;
                 if (event.type === 'error') {
                   sawError = true;
                   terminalError = event;
                 }
                 if (event.type === 'usage') { usageEvent = event; continue; }
+                if (event.type === 'context_compaction') {
+                  latestProviderCompaction = {
+                    provider: event.provider,
+                    modelId: event.modelId,
+                    compactedThrough: event.compactedThrough,
+                    summary: event.summary,
+                    appliedEdits: event.appliedEdits,
+                    item: event.item,
+                    inputTokens: event.inputTokens,
+                  };
+                }
                 if (writer) {
                   await writer.processAndEnqueue(event);
                 } else {
@@ -420,6 +438,36 @@ export async function POST(req: NextRequest) {
             const endWriterFlush = perf.span('writer_flush', { projectId, runId: runId || null });
             await writer.flush();
             endWriterFlush();
+          }
+          if (runId && latestProviderCompaction) {
+            try {
+              const { AgentExecutionStore, normalizeExecutionSnapshot } = await import('@/lib/agent-execution');
+              const store = new AgentExecutionStore(supabase, userId, projectId);
+              const snapshot = normalizeExecutionSnapshot({
+                objective: prompt || 'Continue the current project conversation.',
+                acceptanceCriteria: [],
+                decisions: [],
+                completedWork: [],
+                artifacts: [],
+                openQuestions: [],
+                currentWorkUnit: 'agent',
+                nextAction: 'Continue with the next user request using the compacted project history.',
+                providerCompaction: latestProviderCompaction,
+              }, {
+                objective: prompt || 'Continue the current project conversation.',
+                currentWorkUnit: 'agent',
+                nextAction: 'Continue with the next user request.',
+              });
+              await store.saveSnapshot({
+                runId,
+                projectId,
+                kind: 'project_provider_compaction',
+                snapshot,
+                providerCompaction: latestProviderCompaction as Record<string, unknown>,
+              });
+            } catch (compactionError) {
+              console.error('[agent] Failed to persist provider compaction:', compactionError);
+            }
           }
           // A closed transport is not completion evidence. Only an explicit
           // validated done event may transition a running run to completed.

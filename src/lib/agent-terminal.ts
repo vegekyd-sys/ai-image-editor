@@ -20,7 +20,7 @@ export interface ModelTerminationObservation {
 export interface ModelTerminationAssessment {
   ok: boolean;
   retryable: boolean;
-  code?: 'stream_error' | 'missing_finish' | 'empty_final_step' | 'truncated' | 'provider_error' | 'content_filter' | 'unfinished_tool_turn' | 'studio_run_incomplete' | 'studio_stage_handoff';
+  code?: 'stream_error' | 'missing_finish' | 'empty_final_step' | 'truncated' | 'provider_error' | 'content_filter' | 'unfinished_tool_turn' | 'attempt_budget_handoff' | 'studio_run_incomplete' | 'studio_stage_handoff';
   detail?: string;
 }
 
@@ -67,6 +67,34 @@ export function shouldStopAfterStudioToolStep(input: {
       currentStage: currentStage || null,
     });
   }));
+}
+
+export function shouldStopAfterDurablePublishToolStep(input: {
+  durableExecution: boolean;
+  requiresMaterializedVideo?: boolean;
+  toolResults?: ReadonlyArray<{ toolName?: string; output?: unknown }>;
+}): boolean {
+  if (!input.durableExecution) return false;
+  return Boolean(input.toolResults?.some(result => {
+    if (result.toolName !== 'write_file' || !result.output || typeof result.output !== 'object') return false;
+    const output = result.output as Record<string, unknown>;
+    if (output.success === false) return false;
+    if (input.requiresMaterializedVideo) {
+      if (output.published === true) return output.artifactType === 'video';
+      return Array.isArray(output.published) && output.published.some(item => (
+        item && typeof item === 'object' && (item as Record<string, unknown>).type === 'video'
+      ));
+    }
+    if (output.published === true) return true;
+    return Array.isArray(output.published) && output.published.length > 0;
+  }));
+}
+
+export function requestsMaterializedVideo(prompt: string): boolean {
+  const normalized = prompt.toLowerCase();
+  return /\b(?:mp4|vlog)\b/.test(normalized)
+    || /\bexport\b.{0,24}\bvideo\b/.test(normalized)
+    || ['导出视频', '导出成片', '视频成片', '最终视频', '做个视频', '做条视频', '做一条视频', '短片'].some(term => normalized.includes(term));
 }
 
 export function shouldUseTextOnlyRecovery(input: {
