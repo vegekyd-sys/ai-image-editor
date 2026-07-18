@@ -1292,6 +1292,7 @@ Execute JavaScript in two modes:
 - \`runtime: "node"\` for real file-level MP4 work with FFmpeg/FFprobe: split, exact trim/export, transcode, extract frames, mux audio, long-video preparation, and final assembly of generated chunks.
 For finished single images, posters, infographics, and marketing graphics, use \`generate_image\` instead unless the user asks for editable or animated code.
 For substantial normal Agent Run code, write the complete program with \`write_code_file\`, then execute its returned workspace path with \`run_code({ code_path })\`. The user sees the real source as it streams, and the file remains available for recovery and later edits. Inline code is for short patches and utilities; Studio Run may use numbered composition parts for long compositions.
+For composition files, the saved source is an executable JavaScript body: place Remotion JSX inside a \`code\` string and return \`{ type: 'render', code, width, height, ... }\`. Do not place raw JSX, imports, exports, or a top-level \`function Composition\` directly in the executable file.
 Always tell the user what you're about to do BEFORE calling run_code (1 sentence). After run_code completes, briefly describe the result.
 
 ### Creating skills
@@ -3390,13 +3391,13 @@ Use this to read skill instructions (SKILL.md), reference images, or your memory
     write_code_file: tool({
       description: `Create or replace a first-class code file in the project workspace.
 
-Use this for substantial programmable video or media work: write the executable Remotion/Node program here, then call run_code with code_path. The source remains reusable, patchable, and recoverable across long Agent Runs instead of being trapped inside one execution call. Studio Run may continue using numbered composition parts for very long compositions; short patches and small utility scripts may still use inline run_code.`,
+Use this for substantial programmable video or media work: write the executable Remotion/Node program here, then call run_code with code_path. The source remains reusable, patchable, and recoverable across long Agent Runs instead of being trapped inside one execution call. For runtime composition, this file is an executable JavaScript body: put Remotion JSX inside a code string and return { type: 'render', code, width, height, ... } from the outer body. Do not place raw JSX, imports, exports, or a top-level function Composition directly in the executable file. Studio Run may continue using numbered composition parts for very long compositions; short patches and small utility scripts may still use inline run_code.`,
       inputSchema: z.object({
         description: z.string().optional().describe('User-facing one-sentence summary of the specific code artifact being written. Put this before content so progress is visible while source streams.'),
         path: z.string().optional().describe('Workspace path, e.g. "project-id/code/island-packaging.js". If omitted, a path is generated from name and runtime.'),
         name: z.string().optional().describe('Short slug used when path is omitted, e.g. "island-packaging".'),
         runtime: z.enum(['composition', 'node']).optional().describe('composition = Remotion/editable composition executable body. node = Node/FFmpeg script. Default composition.'),
-        content: z.string().min(1).describe('Complete executable JavaScript body. Do not trim approved content to meet an aggregate source-size target.'),
+        content: z.string().min(1).describe('Complete executable JavaScript body. For composition runtime, wrap Remotion component source in a code string and return the render object from this outer body; never place raw JSX at the top level. Do not trim approved content to meet an aggregate source-size target.'),
       }),
       execute: async ({ description, path: filePath, name, runtime, content }) => {
         if (!ctx.supabase || !ctx.userId) {
@@ -3655,6 +3656,8 @@ Return exactly one supported shape:
 - \`{ type: 'error', message }\`
 
 For substantial normal Agent Run coding, prefer \`write_code_file\` followed by \`run_code({ code_path })\`. This exposes real source progress, persists the program before execution, and keeps it patchable across turns. For a small patch or utility, inline \`code\` remains available. The top-level \`composition\` input remains available for direct first-draft payloads.
+
+When \`write_code_file\` uses \`runtime: "composition"\`, its file is the executable outer JavaScript body. Put Remotion JSX in a \`code\` string and return \`{ type: 'render', code, width, height, ... }\`; never place raw JSX, imports, exports, or a top-level \`function Composition\` directly in that file.
 
 For durable Studio Composition work, use \`write_file\` to author numbered source parts and then pass \`composition_parts: { directory, width, height, props, editables, animation }\`, or use \`paths\` for an explicit subset. Every file MUST be under \`<project-id>/drafts/composition-parts/\` and use a numeric prefix of at least two digits plus a lowercase slug. Each file has a hard transport limit of 12000 source characters. There is no aggregate source-size or part-count limit. Files are concatenated by numeric prefix into one scope, so do not use import/export. Preserve approved narration, subtitles, scenes, animation, and visual detail; never trim creative content to satisfy a source-size target. The harness discovers, validates, and autosaves the parts without asking the model to repeat the complete source or a long path list in one tool call.
 

@@ -16,6 +16,25 @@ If the task is a static poster, infographic, e-commerce page, layout image, or m
 
 For substantial normal Agent Run coding, use `write_code_file` first and then execute the saved source with `run_code({ code_path })`. Describe the specific artifact before the `content` field so the user can see what is being built while the real source streams. The workspace file is the durable source of truth for later execution, recovery, and patching.
 
+For `runtime: "composition"`, the saved file is an executable JavaScript body, not a raw JSX module. Put the Remotion component source inside a string and return the render object from the outer body. Do not place raw JSX, imports, exports, or a top-level `function Composition` directly in the saved executable file.
+
+```js
+const code = String.raw`
+function Composition(props) {
+  return <AbsoluteFill>{props.title}</AbsoluteFill>;
+}
+`;
+
+return {
+  type: 'render',
+  code,
+  width: 1920,
+  height: 1080,
+  props: { title: 'Hello' },
+  animation: { fps: 30, durationInSeconds: 20 },
+};
+```
+
 Use inline `run_code.code` only for small patches or short utilities. Studio Run may continue to use numbered `composition_parts` when a long composition benefits from multiple cohesive files. Do not shorten narration, scenes, animation, or visual detail to satisfy an aggregate character target.
 
 ## Return Shapes
