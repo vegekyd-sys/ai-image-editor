@@ -20,11 +20,11 @@ describe('Studio composition scaffold', () => {
       },
       storyboard: {
         scenes: [
-          { id: 'hook', startSeconds: 0, endSeconds: 8, purpose: 'Introduce Makaron', focalPoint: 'Makaron', visualTreatment: 'Bold macro type', transitionOut: 'hard cut' },
+          { id: 'hook', startSeconds: 0, endSeconds: 8, purpose: 'Introduce Makaron', focalPoint: 'Makaron', visualTreatment: 'Use <<<media_1>>> as the hero', transitionOut: 'hard cut' },
           { id: 'proof', startSeconds: 8, endSeconds: 30, purpose: 'Show the workflow', focalPoint: 'One person directing agents', visualTreatment: 'Workspace montage', transitionOut: 'resolve' },
         ],
-        artDirection: 'Bright editorial technology',
-        layoutContract: 'One focal subject per scene',
+        artDirection: 'Use <<<media_1>>> as the visual identity reference',
+        layoutContract: 'One focal subject per scene; preserve <<<media_1>>> proportions',
         subtitleSafeArea: '8% inset',
       },
       script: {
@@ -39,6 +39,7 @@ describe('Studio composition scaffold', () => {
     expect(design.code.length).toBeLessThan(9_000);
     expect(design.animation).toEqual({ fps: 30, durationInSeconds: 30 });
     expect(design.props?.scenes).toHaveLength(2);
+    expect(JSON.stringify(design.props)).not.toContain('<<<media_1>>>');
     expect(design.description).toContain('[studio-scaffold:studio-1]');
     expect(design.__makaronScaffold).toBe(true);
   });

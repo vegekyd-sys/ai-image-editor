@@ -328,15 +328,21 @@ export async function runAgentExecutionAttempt(
   const attemptId = attempt.id as string;
 
   let scaffoldResult: Awaited<ReturnType<typeof import('./studio-composition-scaffold')['ensureStudioCompositionScaffold']>> | undefined;
+  let scaffoldWarning: string | undefined;
   if (workUnit === 'studio:composition') {
-    const { ensureStudioCompositionScaffold } = await import('./studio-composition-scaffold');
-    scaffoldResult = await ensureStudioCompositionScaffold({
-      projectId: run.project_id,
-      userId: run.user_id,
-      supabase: admin,
-    });
-    if (scaffoldResult.created && scaffoldResult.elapsedMs > 90_000) {
-      throw new Error(`Composition scaffold exceeded the 90s durable-output SLA (${scaffoldResult.elapsedMs}ms)`);
+    try {
+      const { ensureStudioCompositionScaffold } = await import('./studio-composition-scaffold');
+      scaffoldResult = await ensureStudioCompositionScaffold({
+        projectId: run.project_id,
+        userId: run.user_id,
+        supabase: admin,
+      });
+      if (scaffoldResult.created && scaffoldResult.elapsedMs > 90_000) {
+        scaffoldWarning = `Composition scaffold exceeded the 90s durable-output SLA (${scaffoldResult.elapsedMs}ms)`;
+      }
+    } catch (error) {
+      scaffoldWarning = error instanceof Error ? error.message : String(error);
+      console.error('[agent-execution] composition scaffold unavailable; continuing without it:', error);
     }
   }
 
@@ -405,6 +411,7 @@ export async function runAgentExecutionAttempt(
         },
       } : {}),
       ...(scaffoldResult ? { compositionScaffold: scaffoldResult } : {}),
+      ...(scaffoldWarning ? { compositionScaffoldWarning: scaffoldWarning } : {}),
     },
   }).eq('id', attemptId);
 

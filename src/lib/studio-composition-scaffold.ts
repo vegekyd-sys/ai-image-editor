@@ -56,9 +56,6 @@ export function buildStudioCompositionScaffold(input: {
     eyebrow: `SCENE ${String(index + 1).padStart(2, '0')}`,
     title: textForScene(scene, input.script)[0] || scene.focalPoint,
     subtitle: textForScene(scene, input.script).slice(1).join('  /  ') || scene.purpose,
-    purpose: scene.purpose,
-    visualTreatment: scene.visualTreatment,
-    transitionOut: scene.transitionOut,
   }));
   const code = `
 const SCAFFOLD_COLORS = ['#111115', '#181820', '#0f171b', '#1b141b'];
@@ -84,9 +81,6 @@ function Composition(props) {
     height: deliveryPromise.height,
     props: {
       scenes,
-      artDirection: input.storyboard.artDirection || '',
-      layoutContract: input.storyboard.layoutContract || '',
-      subtitleSafeArea: input.storyboard.subtitleSafeArea || '',
     },
     animation: {
       fps,
