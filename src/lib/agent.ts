@@ -61,6 +61,7 @@ import {
   shouldCompleteDurableStudioRun,
   shouldContinueActiveStudioRun,
   shouldHandoffToStudioComposition,
+  shouldStopAfterDurablePublishToolStep,
   shouldStopAfterStudioToolStep,
   shouldUseTextOnlyRecovery,
 } from './agent-terminal';
@@ -3536,6 +3537,9 @@ Path is auto-generated from the current project and output type. Just provide a 
           (ctx as any).__compositionPartPaths = [...paths].sort();
         }
 
+        let publishedArtifact = false;
+        let publishedArtifactType: 'design' | 'image' | 'video' | undefined;
+
         // Publish: when fromLastRunCode and publish !== false, promote the last draft to a real Snapshot
         if (fromLastRunCode && shouldPublish !== false) {
 
@@ -3554,6 +3558,8 @@ Path is auto-generated from the current project and output type. Just provide a 
             (ctx as any).__pendingDesign = designPayload;
 
             (ctx as any).__pendingDesignPublished = true;
+            publishedArtifact = true;
+            publishedArtifactType = 'design';
 
             console.log(`📌 [agent] design published via write_file: <<<media_${ctx.snapshotImages.length}>>>`);
           } else if (lastDraft?.type === 'image') {
@@ -3562,6 +3568,8 @@ Path is auto-generated from the current project and output type. Just provide a 
             ctx.snapshotImages.push(imageData);
             ctx.currentSnapshotIndex = ctx.snapshotImages.length - 1;
             ctx.generatedImages.push(imageData);
+            publishedArtifact = true;
+            publishedArtifactType = 'image';
 
             console.log(`📌 [agent] image published via write_file: <<<media_${ctx.snapshotImages.length}>>>`);
           } else if (lastDraft?.type === 'video') {
@@ -3609,12 +3617,21 @@ Path is auto-generated from the current project and output type. Just provide a 
             ctx.snapshotImages.push(videoUrl);
             ctx.currentSnapshotIndex = ctx.snapshotImages.length - 1;
             ctx.pendingVideoSnapshot = { snapshotId, taskId, videoMeta };
+            publishedArtifact = true;
+            publishedArtifactType = 'video';
 
             console.log(`📌 [agent] video published via write_file: <<<media_${ctx.snapshotImages.length}>>>`);
           }
         }
 
-        return { success: true, message: `Saved: ${savePath}`, path: savePath, storageUrl: toPublicStorageUrl(result.storageUrl || '') };
+        return {
+          success: true,
+          message: `Saved: ${savePath}`,
+          path: savePath,
+          storageUrl: toPublicStorageUrl(result.storageUrl || ''),
+          published: publishedArtifact,
+          artifactType: publishedArtifactType,
+        };
       },
     }),
 
@@ -4959,6 +4976,9 @@ export async function* runMakaronAgent(
           shouldStopAfterStudioToolStep({
             durableExecution: Boolean(ctx.execution),
             attemptWorkUnit: executionAttemptWorkUnit,
+            toolResults: steps.at(-1)?.toolResults,
+          }) || shouldStopAfterDurablePublishToolStep({
+            durableExecution: Boolean(ctx.execution),
             toolResults: steps.at(-1)?.toolResults,
           })
         ),

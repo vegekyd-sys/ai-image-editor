@@ -69,6 +69,20 @@ export function shouldStopAfterStudioToolStep(input: {
   }));
 }
 
+export function shouldStopAfterDurablePublishToolStep(input: {
+  durableExecution: boolean;
+  toolResults?: ReadonlyArray<{ toolName?: string; output?: unknown }>;
+}): boolean {
+  if (!input.durableExecution) return false;
+  return Boolean(input.toolResults?.some(result => {
+    if (result.toolName !== 'write_file' || !result.output || typeof result.output !== 'object') return false;
+    const output = result.output as Record<string, unknown>;
+    if (output.success === false) return false;
+    if (output.published === true) return true;
+    return Array.isArray(output.published) && output.published.length > 0;
+  }));
+}
+
 export function shouldUseTextOnlyRecovery(input: {
   deliveredArtifact: boolean;
   activeStudioRun: boolean;

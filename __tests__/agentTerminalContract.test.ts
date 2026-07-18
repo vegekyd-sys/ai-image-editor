@@ -41,6 +41,7 @@ describe('agent terminal contract wiring', () => {
     );
     expect(finishStepBlock).not.toContain('sawFinish = true');
     expect(finishStepBlock).toContain('if (durableStageHandoff || durableStudioCompletion) break;');
+    expect(agentSource).toContain('shouldStopAfterDurablePublishToolStep({');
     expect(agentSource).toContain('The exact saved draft path is:');
     expect(agentSource).toContain('__lastSavedDraftPath = autosave.path');
     expect(agentSource).toContain('getStudioRunCheckpoint(ctx)');

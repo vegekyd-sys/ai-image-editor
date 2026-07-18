@@ -6,6 +6,7 @@ import {
   shouldCompleteDurableStudioRun,
   shouldContinueActiveStudioRun,
   shouldHandoffToStudioComposition,
+  shouldStopAfterDurablePublishToolStep,
   shouldStopAfterStudioToolStep,
   shouldUseTextOnlyRecovery,
 } from '@/lib/agent-terminal';
@@ -170,6 +171,25 @@ describe('agent terminal semantics', () => {
       durableExecution: true,
       status: 'running',
       currentStage: 'review',
+    })).toBe(false);
+  });
+
+  it('stops a durable Agent Run on the same step that publishes its final artifact', () => {
+    expect(shouldStopAfterDurablePublishToolStep({
+      durableExecution: true,
+      toolResults: [{ toolName: 'write_file', output: { success: true, published: true, artifactType: 'design' } }],
+    })).toBe(true);
+    expect(shouldStopAfterDurablePublishToolStep({
+      durableExecution: true,
+      toolResults: [{ toolName: 'write_file', output: { success: true, published: [{ type: 'video' }] } }],
+    })).toBe(true);
+    expect(shouldStopAfterDurablePublishToolStep({
+      durableExecution: true,
+      toolResults: [{ toolName: 'write_file', output: { success: true, published: false } }],
+    })).toBe(false);
+    expect(shouldStopAfterDurablePublishToolStep({
+      durableExecution: false,
+      toolResults: [{ toolName: 'write_file', output: { success: true, published: true } }],
     })).toBe(false);
   });
 
