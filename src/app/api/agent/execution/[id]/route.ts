@@ -14,7 +14,7 @@ export async function POST(
   }
   after(async () => {
     try {
-      await runAgentExecutionAttempt(runId);
+      await runAgentExecutionAttempt(runId, { origin: req.nextUrl.origin });
     } catch (error) {
       console.error(`[agent-execution] dispatched attempt failed for ${runId}:`, error);
     }

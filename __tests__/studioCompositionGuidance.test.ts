@@ -42,6 +42,9 @@ describe('durable Composition guidance preload', () => {
     expect(source).toContain('not universal defaults');
     expect(source).toContain('Do not call read_file for any of those paths');
     expect(source).toContain('first creative mutation with write_file');
+    expect(source).toContain('when the durable handoff names an existing gated draft');
+    expect(source).toContain('does not complete the Composition stage');
+    expect(source).toContain('studio_run put_artifact for stage composition');
   });
 
   it('injects the preload only for the dedicated studio:composition work unit', () => {

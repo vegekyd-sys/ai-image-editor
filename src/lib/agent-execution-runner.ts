@@ -219,8 +219,10 @@ async function buildHandoffSnapshot(input: {
   const acceptanceCriteria = Array.isArray(input.run.acceptance_criteria)
     ? input.run.acceptance_criteria.filter((item): item is string => typeof item === 'string')
     : previous?.acceptanceCriteria ?? [];
-  const nextAction = checkpoint?.studioRunStage
-    ? `Resume Studio Run at ${checkpoint.studioRunStage}; load its persisted stage artifacts and complete that stage.`
+  const nextAction = checkpoint?.studioRunStage === 'composition' && checkpoint?.draftPath
+    ? `Resume Studio Run at composition from the existing gated draft ${checkpoint.draftPath}. Do not run_code, preview_frame, or publish it again unless studio_run artifact validation rejects it. Call studio_run schema for composition if the exact contract is not already in context, then call studio_run put_artifact with this design path and the persisted Draft Gate evidence.`
+    : checkpoint?.studioRunStage
+      ? `Resume Studio Run at ${checkpoint.studioRunStage}; load its persisted stage artifacts and complete that stage.`
     : checkpoint?.draftPath
       ? `Resume from ${checkpoint.draftPath} and complete the pending modification.`
       : previous?.nextAction || 'Continue the unfinished objective from durable artifacts and avoid repeated side effects.';
@@ -272,7 +274,7 @@ async function finishAttempt(
 
 export async function runAgentExecutionAttempt(
   runId: string,
-  options: { admin?: SupabaseClient; workerId?: string } = {},
+  options: { admin?: SupabaseClient; workerId?: string; origin?: string } = {},
 ): Promise<AgentAttemptResult> {
   const admin = options.admin ?? getSupabaseAdmin();
   const { data: runData } = await admin.from('agent_runs').select('*').eq('id', runId).maybeSingle();
@@ -694,7 +696,7 @@ export async function runAgentExecutionAttempt(
         },
       },
     }).eq('id', runId).eq('status', 'running').eq('lease_token', claim.lease_token);
-    void dispatchAgentExecutionAttempt(runId, request.origin);
+    void dispatchAgentExecutionAttempt(runId, options.origin || request.origin);
     return {
       claimed: true,
       runId,
