@@ -45,7 +45,12 @@ describe('agent terminal contract wiring', () => {
     expect(finishStepBlock).not.toContain('sawFinish = true');
     expect(finishStepBlock).toContain('if (durableStageHandoff || durableStudioCompletion) break;');
     expect(agentSource).toContain('shouldStopAfterDurablePublishToolStep({');
-    expect(agentSource).toContain('shouldStopAfterAsyncVideoSubmission({');
+    expect(agentSource).not.toContain('shouldStopAfterAsyncVideoSubmission({');
+    expect(agentSource).toContain('submit them one at a time');
+    expect(agentSource).toContain("do not wait for that video's rendering to finish");
+    expect(agentSource).not.toContain('same assistant tool turn');
+    expect(agentSource).toContain('serializeVideoSubmission(async () => {');
+    expect(agentSource).toContain('await previousSubmission');
     expect(agentSource).toContain('The exact saved draft path is:');
     expect(agentSource).toContain('__lastSavedDraftPath = autosave.path');
     expect(agentSource).toContain('getStudioRunCheckpoint(ctx)');

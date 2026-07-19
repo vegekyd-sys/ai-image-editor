@@ -61,13 +61,10 @@ import {
   classifyModelTermination,
   describeModelStreamError,
   requestsMaterializedVideo,
-  requestsContinuedVideoWorkflow,
-  requestedAsyncVideoSubmissionCount,
   shouldCompleteDurableStudioRun,
   shouldContinueActiveStudioRun,
   shouldHandoffToStudioComposition,
   shouldStopAfterDurablePublishToolStep,
-  shouldStopAfterAsyncVideoSubmission,
   shouldStopAfterTerminalToolFailure,
   shouldStopAfterStudioToolStep,
   shouldUseTextOnlyRecovery,
@@ -1367,6 +1364,21 @@ function buildLightweightSystemPrompt(mode: 'analysis' | 'tipReaction', locale?:
 // ---------------------------------------------------------------------------
 
 function createTools(ctx: AgentContext, runtime: AgentModelRuntime, locale?: string, durableVisionBridge = false) {
+  let videoSubmissionTail: Promise<void> = Promise.resolve();
+  const serializeVideoSubmission = async <T>(operation: () => Promise<T>): Promise<T> => {
+    const previousSubmission = videoSubmissionTail;
+    let releaseSubmission: () => void = () => undefined;
+    videoSubmissionTail = new Promise<void>((resolve) => {
+      releaseSubmission = resolve;
+    });
+    await previousSubmission;
+    try {
+      return await operation();
+    } finally {
+      releaseSubmission();
+    }
+  };
+
   return {
     generate_image: tool({
       description: generateImageToolPrompt,
@@ -1461,7 +1473,7 @@ function createTools(ctx: AgentContext, runtime: AgentModelRuntime, locale?: str
 
 Use this tool after the user has confirmed a video script that is already visible in the conversation. You may also call it in the same turn where you first write the script when the user's current request explicitly authorizes direct submission without confirmation, for example "直接提交渲染", "不要问我确认", "不用确认", "直接生成视频", "submit now", or "do not ask for confirmation".
 
-When the user requests multiple independent video variants, prefer issuing every \`generate_animation\` call in the same assistant tool turn so provider submissions can run in parallel. If the model/provider cannot emit all calls together, continue across subsequent tool steps until every requested variant is submitted. Never reduce a multi-video request to one video merely to finish the turn. Each call still contains one complete <=15-second script.
+When the user requests multiple independent video variants, submit them one at a time. After each \`generate_animation\` call returns a successful submission, continue with the next variant; do not wait for that video's rendering to finish. Continue until every requested variant is submitted, and never reduce a multi-video request to one video merely to finish the turn. Each call still contains one complete <=15-second script.
 
 **BEFORE writing a video script**: call \`read_file('prompts/animate.md')\` to load the full video guide (modes, prompt styles, showcases, reference video usage). Do not re-read if already in this conversation's tool-result history.
 
@@ -1506,7 +1518,7 @@ Hard constraints:
           policy: z.enum(['confirm', 'auto']).optional().describe('confirm = show an action for the user to click. auto is reserved for explicitly authorized end-to-end workflows. Default confirm.'),
         })).optional().describe('Optional next-step actions to show when this async video finishes. Use this for intermediate artifacts such as a generated segment that should later be merged, or generated clips that can be assembled. Do not use it for ordinary final videos.'),
       }),
-      execute: async ({ story_prompt, duration, aspect_ratio, model, video_resolution, media_refs, audio_refs, video_ref_url, video_ref_type, keep_original_sound, motion_control, character_orientation, completion_actions }) => {
+      execute: async ({ story_prompt, duration, aspect_ratio, model, video_resolution, media_refs, audio_refs, video_ref_url, video_ref_type, keep_original_sound, motion_control, character_orientation, completion_actions }) => serializeVideoSubmission(async () => {
         // Refresh base64 → URL from DB before video submission
         await refreshSnapshotUrls(ctx);
         // GUI animation mode: use animationImageUrls; CUI mode: use full snapshotImages (no filter — preserve index alignment)
@@ -1852,7 +1864,7 @@ Hard constraints:
         } catch (e) {
           return { success: false as const, message: String(e) };
         }
-      },
+      }),
     }),
 
     analyze_image: tool({
@@ -5019,21 +5031,6 @@ export async function* runMakaronAgent(
     const studioRunRecoveryPrompt = prompt.includes('[System automatic recovery]')
       || prompt.includes('[Recoverable Agent Checkpoint]');
     const requiresMaterializedVideo = requestsMaterializedVideo(prompt);
-    const recentVideoRequestContext = history.slice(-4).map((message) => {
-      if (typeof message.content === 'string') return message.content;
-      if (!Array.isArray(message.content)) return '';
-      return message.content
-        .map((part: unknown) => {
-          if (!part || typeof part !== 'object') return '';
-          const record = part as Record<string, unknown>;
-          return record.type === 'text' && typeof record.text === 'string' ? record.text : '';
-        })
-        .filter(Boolean)
-        .join('\n');
-    }).filter(Boolean).join('\n');
-    const requestedAsyncVideoCount = requestedAsyncVideoSubmissionCount(prompt, recentVideoRequestContext);
-    const continuedVideoWorkflow = requestsContinuedVideoWorkflow(prompt);
-    let stoppedAfterAsyncVideoSubmission = false;
     const recoveryBlockedTools = new Set<string>();
     const nonRepeatableTools = new Set([
       'generate_image',
@@ -5142,13 +5139,6 @@ export async function* runMakaronAgent(
       stopWhen: [
         stepCountIs(maxSteps),
         ({ steps }: { steps: Array<{ toolResults?: Array<{ toolName?: string; output?: unknown }> }> }) => {
-          const stopAfterAsyncVideo = shouldStopAfterAsyncVideoSubmission({
-            durableExecution: Boolean(ctx.execution),
-            studioRunActive: continuedVideoWorkflow || studioRunTouchedThisTurn || Boolean(executionAttemptWorkUnit?.startsWith('studio:')),
-            requestedCount: requestedAsyncVideoCount,
-            steps,
-          });
-          if (stopAfterAsyncVideo) stoppedAfterAsyncVideoSubmission = true;
           return shouldStopAfterStudioToolStep({
             durableExecution: Boolean(ctx.execution),
             attemptWorkUnit: executionAttemptWorkUnit,
@@ -5159,7 +5149,7 @@ export async function* runMakaronAgent(
             toolResults: steps.at(-1)?.toolResults,
           }) || shouldStopAfterTerminalToolFailure({
             toolResults: steps.at(-1)?.toolResults,
-          }) || stopAfterAsyncVideo;
+          });
         },
         // The attempt budget is a handoff boundary, not a kill timer. AI SDK
         // evaluates stop conditions only after a complete model/tool step, so
@@ -6021,15 +6011,6 @@ export async function* runMakaronAgent(
       imagesSent++;
     }
     yield* flushPendingImageSnapshots(ctx);
-
-    if (stoppedAfterAsyncVideoSubmission) {
-      yield {
-        type: 'content',
-        text: responseLocale === 'en'
-          ? `${requestedAsyncVideoCount === 1 ? 'Video task' : `${requestedAsyncVideoCount ?? ''} video tasks`.trim()} submitted. You can keep chatting while rendering continues in the timeline.`
-          : `${requestedAsyncVideoCount === 1 ? '视频任务' : `${requestedAsyncVideoCount ?? ''} 个视频任务`.trim()}已提交。渲染会在时间线后台继续，你现在就可以继续聊天。`,
-      };
-    }
 
     console.log(`⏱️ [agent] DONE total ${((Date.now() - agentStartTime) / 1000).toFixed(1)}s (${imagesSent} images, ${stepCount} steps)`);
     perf?.mark('agent_done', {

@@ -7,10 +7,7 @@ import {
   shouldContinueActiveStudioRun,
   shouldHandoffToStudioComposition,
   requestsMaterializedVideo,
-  requestsContinuedVideoWorkflow,
-  requestedAsyncVideoSubmissionCount,
   shouldStopAfterDurablePublishToolStep,
-  shouldStopAfterAsyncVideoSubmission,
   shouldStopAfterTerminalToolFailure,
   shouldStopAfterStudioToolStep,
   shouldUseTextOnlyRecovery,
@@ -227,45 +224,6 @@ describe('agent terminal semantics', () => {
       requiresMaterializedVideo: true,
       toolResults: [{ toolName: 'write_file', output: { success: true, published: [{ type: 'video' }] } }],
     })).toBe(true);
-  });
-
-  it('finishes an ordinary durable Agent run as soon as all async videos are submitted', () => {
-    expect(requestedAsyncVideoSubmissionCount('再生成3个，要不一样')).toBe(3);
-    expect(requestedAsyncVideoSubmissionCount('create four video variants')).toBe(4);
-    expect(requestedAsyncVideoSubmissionCount('让这张照片动起来 5s 4种不同的动法')).toBe(4);
-    expect(requestedAsyncVideoSubmissionCount('ok', '我会生成三条不同的视频版本')).toBe(3);
-    expect(requestedAsyncVideoSubmissionCount('生成多条不同的视频')).toBeNull();
-    expect(requestedAsyncVideoSubmissionCount('生成一条视频')).toBe(1);
-    expect(requestsContinuedVideoWorkflow('做一条 30 秒 explainer video')).toBe(true);
-    expect(requestsContinuedVideoWorkflow('用 Remotion 合成视频')).toBe(true);
-    expect(requestsContinuedVideoWorkflow('用这张图生成 5 秒 Grok 视频')).toBe(false);
-    const submitted = (count: number) => Array.from({ length: count }, () => ({
-      toolResults: [{ toolName: 'generate_animation', output: { success: true, taskId: crypto.randomUUID() } }],
-    }));
-    expect(shouldStopAfterAsyncVideoSubmission({
-      durableExecution: true,
-      studioRunActive: false,
-      requestedCount: 3,
-      steps: submitted(2),
-    })).toBe(false);
-    expect(shouldStopAfterAsyncVideoSubmission({
-      durableExecution: true,
-      studioRunActive: false,
-      requestedCount: 3,
-      steps: submitted(3),
-    })).toBe(true);
-    expect(shouldStopAfterAsyncVideoSubmission({
-      durableExecution: true,
-      studioRunActive: true,
-      requestedCount: 1,
-      steps: submitted(1),
-    })).toBe(false);
-    expect(shouldStopAfterAsyncVideoSubmission({
-      durableExecution: true,
-      studioRunActive: false,
-      requestedCount: null,
-      steps: submitted(4),
-    })).toBe(false);
   });
 
   it('never persists completed without explicit done evidence', () => {
