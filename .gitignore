@@ -70,6 +70,7 @@ app-store-assets/**/*.heic
 app-store-assets/**/*.pdf
 app-store-assets/**/*.mp4
 app-store-assets/**/*.mov
+marketing/meta-ads/
 
 # dev scripts
 /scripts/
