@@ -232,6 +232,9 @@ describe('agent terminal semantics', () => {
   it('finishes an ordinary durable Agent run as soon as all async videos are submitted', () => {
     expect(requestedAsyncVideoSubmissionCount('再生成3个，要不一样')).toBe(3);
     expect(requestedAsyncVideoSubmissionCount('create four video variants')).toBe(4);
+    expect(requestedAsyncVideoSubmissionCount('让这张照片动起来 5s 4种不同的动法')).toBe(4);
+    expect(requestedAsyncVideoSubmissionCount('ok', '我会生成三条不同的视频版本')).toBe(3);
+    expect(requestedAsyncVideoSubmissionCount('生成多条不同的视频')).toBeNull();
     expect(requestedAsyncVideoSubmissionCount('生成一条视频')).toBe(1);
     expect(requestsContinuedVideoWorkflow('做一条 30 秒 explainer video')).toBe(true);
     expect(requestsContinuedVideoWorkflow('用 Remotion 合成视频')).toBe(true);
@@ -256,6 +259,12 @@ describe('agent terminal semantics', () => {
       studioRunActive: true,
       requestedCount: 1,
       steps: submitted(1),
+    })).toBe(false);
+    expect(shouldStopAfterAsyncVideoSubmission({
+      durableExecution: true,
+      studioRunActive: false,
+      requestedCount: null,
+      steps: submitted(4),
     })).toBe(false);
   });
 

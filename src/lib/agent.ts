@@ -1461,7 +1461,7 @@ function createTools(ctx: AgentContext, runtime: AgentModelRuntime, locale?: str
 
 Use this tool after the user has confirmed a video script that is already visible in the conversation. You may also call it in the same turn where you first write the script when the user's current request explicitly authorizes direct submission without confirmation, for example "直接提交渲染", "不要问我确认", "不用确认", "直接生成视频", "submit now", or "do not ask for confirmation".
 
-When the user requests multiple independent video variants, issue every \`generate_animation\` call in the same assistant tool turn so the provider submissions run in parallel. Do not wait for one task result before issuing the next call. Each call still contains one complete <=15-second script.
+When the user requests multiple independent video variants, prefer issuing every \`generate_animation\` call in the same assistant tool turn so provider submissions can run in parallel. If the model/provider cannot emit all calls together, continue across subsequent tool steps until every requested variant is submitted. Never reduce a multi-video request to one video merely to finish the turn. Each call still contains one complete <=15-second script.
 
 **BEFORE writing a video script**: call \`read_file('prompts/animate.md')\` to load the full video guide (modes, prompt styles, showcases, reference video usage). Do not re-read if already in this conversation's tool-result history.
 
@@ -5019,7 +5019,19 @@ export async function* runMakaronAgent(
     const studioRunRecoveryPrompt = prompt.includes('[System automatic recovery]')
       || prompt.includes('[Recoverable Agent Checkpoint]');
     const requiresMaterializedVideo = requestsMaterializedVideo(prompt);
-    const requestedAsyncVideoCount = requestedAsyncVideoSubmissionCount(prompt);
+    const recentVideoRequestContext = history.slice(-4).map((message) => {
+      if (typeof message.content === 'string') return message.content;
+      if (!Array.isArray(message.content)) return '';
+      return message.content
+        .map((part: unknown) => {
+          if (!part || typeof part !== 'object') return '';
+          const record = part as Record<string, unknown>;
+          return record.type === 'text' && typeof record.text === 'string' ? record.text : '';
+        })
+        .filter(Boolean)
+        .join('\n');
+    }).filter(Boolean).join('\n');
+    const requestedAsyncVideoCount = requestedAsyncVideoSubmissionCount(prompt, recentVideoRequestContext);
     const continuedVideoWorkflow = requestsContinuedVideoWorkflow(prompt);
     let stoppedAfterAsyncVideoSubmission = false;
     const recoveryBlockedTools = new Set<string>();
@@ -6014,8 +6026,8 @@ export async function* runMakaronAgent(
       yield {
         type: 'content',
         text: responseLocale === 'en'
-          ? `${requestedAsyncVideoCount === 1 ? 'Video task' : `${requestedAsyncVideoCount} video tasks`} submitted. You can keep chatting while rendering continues in the timeline.`
-          : `${requestedAsyncVideoCount === 1 ? '视频任务' : `${requestedAsyncVideoCount} 个视频任务`}已提交。渲染会在时间线后台继续，你现在就可以继续聊天。`,
+          ? `${requestedAsyncVideoCount === 1 ? 'Video task' : `${requestedAsyncVideoCount ?? ''} video tasks`.trim()} submitted. You can keep chatting while rendering continues in the timeline.`
+          : `${requestedAsyncVideoCount === 1 ? '视频任务' : `${requestedAsyncVideoCount ?? ''} 个视频任务`.trim()}已提交。渲染会在时间线后台继续，你现在就可以继续聊天。`,
       };
     }
 

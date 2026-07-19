@@ -104,23 +104,36 @@ const CHINESE_VIDEO_COUNT: Record<string, number> = {
   '十': 10,
 };
 
-export function requestedAsyncVideoSubmissionCount(prompt: string): number {
+export function requestedAsyncVideoSubmissionCount(prompt: string, priorContext = ''): number | null {
   const currentRequest = prompt.split('[User request').at(-1) || prompt;
+  const isBriefContinuation = /^(?:ok(?:ay)?|yes|go|do it|proceed|好(?:的)?|可以|确认|开始|继续|重试(?:下)?)[\s.!。！]*$/i.test(currentRequest.trim());
+  const requestContext = isBriefContinuation && priorContext.trim()
+    ? `${priorContext}\n${currentRequest}`
+    : currentRequest;
   const patterns = [
-    /(?:生成|创建|制作|做|来|再生成|再做)\s*(\d+|[一两二三四五六七八九十])\s*(?:个|条|支|段|款|版|份)/i,
-    /(?:generate|create|make|produce)\s+(\d+|one|two|three|four|five|six|seven|eight|nine|ten)\s+(?:videos?|clips?|variants?|versions?)/i,
+    /(?:生成|创建|制作|做|来|再生成|再做)\s*(\d+|[一两二三四五六七八九十])\s*(?:个|条|支|段|款|版|份|种)/gi,
+    /(?:generate|create|make|produce)\s+(\d+|one|two|three|four|five|six|seven|eight|nine|ten)\s+(?:videos?|clips?|variants?|versions?)/gi,
+    /(\d+|[一两二三四五六七八九十])\s*(?:个|条|支|段|款|版|份|种)\s*(?:不同(?:的)?\s*)?(?:视频|短片|动画|片段|版本|变体|动法|动作|方式|方案|效果|表情包)/gi,
+    /(\d+|one|two|three|four|five|six|seven|eight|nine|ten)\s+(?:different\s+)?(?:videos?|clips?|animations?|variants?|versions?|ways?)/gi,
   ];
   const englishCounts: Record<string, number> = {
     one: 1, two: 2, three: 3, four: 4, five: 5,
     six: 6, seven: 7, eight: 8, nine: 9, ten: 10,
   };
+  let resolved: { count: number; index: number } | null = null;
   for (const pattern of patterns) {
-    const match = currentRequest.match(pattern);
-    if (!match) continue;
-    const token = match[1].toLowerCase();
-    const count = Number(token) || CHINESE_VIDEO_COUNT[token] || englishCounts[token];
-    if (Number.isInteger(count) && count > 0) return Math.min(count, 10);
+    for (const match of requestContext.matchAll(pattern)) {
+      const token = match[1].toLowerCase();
+      const count = Number(token) || CHINESE_VIDEO_COUNT[token] || englishCounts[token];
+      if (Number.isInteger(count) && count > 0 && (match.index ?? -1) >= (resolved?.index ?? -1)) {
+        resolved = { count: Math.min(count, 10), index: match.index ?? 0 };
+      }
+    }
   }
+  if (resolved) return resolved.count;
+
+  const asksForOpenEndedMultiple = /(?:多个|多条|几(?:个|条|支|段|款|版|份)|若干|一批).{0,16}(?:视频|短片|动画|片段|版本|变体|动法|动作|方式|方案|效果|表情包)|(?:multiple|several|many|a few)\s+(?:videos?|clips?|animations?|variants?|versions?)/i.test(requestContext);
+  if (asksForOpenEndedMultiple) return null;
   return 1;
 }
 
@@ -134,10 +147,11 @@ export function requestsContinuedVideoWorkflow(prompt: string): boolean {
 export function shouldStopAfterAsyncVideoSubmission(input: {
   durableExecution: boolean;
   studioRunActive: boolean;
-  requestedCount: number;
+  requestedCount: number | null;
   steps: ReadonlyArray<{ toolResults?: ReadonlyArray<{ toolName?: string; output?: unknown }> }>;
 }): boolean {
   if (!input.durableExecution || input.studioRunActive) return false;
+  if (input.requestedCount == null) return false;
   let submitted = 0;
   for (const step of input.steps) {
     for (const result of step.toolResults || []) {

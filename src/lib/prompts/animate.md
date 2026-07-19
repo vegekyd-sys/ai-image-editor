@@ -187,7 +187,7 @@ Shot 2 (3s): Close-up, ...
 13. **Stability safeguard**: For shots with close-up faces or detailed character features, append a brief stability cue at the end of that shot: "人物面部稳定清晰" or "face stable, no distortion". This reduces face deformation in complex motion scenes.
 ## Model Notes
 
-When the user requests multiple independent video variants, submit all `generate_animation` calls in one assistant tool turn. The jobs are independent and should start in parallel; never wait for one render before submitting the next.
+When the user requests multiple independent video variants, prefer submitting all `generate_animation` calls in one assistant tool turn so the independent jobs start in parallel. If the model/provider cannot emit all calls together, continue across subsequent tool steps until every requested variant is submitted. Never silently stop after the first video.
 
 - **Kling**: Supports dialogue with voice synthesis, real human faces, video editing (base mode). Reference video size: one .mp4/.mov, <=200MB, resolution <=2K; no documented video resolution lower bound. Use `Shot N (Xs):` format or continuous prose.
 - **SeeDance**: Best visual quality. Supports real human faces and reference video. Reference video size: .mp4/.mov, <=50MB, width/height 300-6000px, aspect ratio 0.4-2.5, frame pixels 409,600-2,086,876.
