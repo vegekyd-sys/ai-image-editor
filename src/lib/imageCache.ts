@@ -1,3 +1,5 @@
+import type { SkillLaunchContext } from '@/lib/skill-launch-context'
+
 const DB_NAME = 'makaron-images'
 const STORE = 'images'
 const PROJECT_STORE = 'project-data'
@@ -50,6 +52,7 @@ export interface CreateDraftEntry {
   prompt?: string
   selectedSkill?: string
   homeSkillId?: string
+  skillLaunchContext?: SkillLaunchContext
   returnPath?: string
   cachedAt: number
 }
@@ -58,6 +61,7 @@ export interface PendingProjectLaunch {
   projectId: string
   prompt?: string
   skill?: string
+  skillLaunchContext?: SkillLaunchContext
   metadata?: unknown
   cachedAt: number
 }

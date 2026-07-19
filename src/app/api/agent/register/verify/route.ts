@@ -3,6 +3,7 @@ import { randomBytes } from 'crypto'
 import { getSupabaseAdmin } from '@/lib/supabase/service'
 import { generateApiKey } from '@/lib/billing/api-keys'
 import { addCredits } from '@/lib/billing/credits'
+import { getConfiguredWelcomeCredits } from '@/lib/billing/welcome-credits'
 
 export async function POST(req: NextRequest) {
   const body = await req.json().catch(() => null)
@@ -66,8 +67,7 @@ export async function POST(req: NextRequest) {
   }, { onConflict: 'id' })
 
   // Welcome credits
-  const { data: creditSetting } = await admin.from('app_settings').select('value').eq('key', 'welcome_credits').single()
-  const welcomeCredits = parseInt(creditSetting?.value || '500')
+  const welcomeCredits = await getConfiguredWelcomeCredits(admin)
 
   await addCredits(userId, welcomeCredits)
   await admin.from('credit_purchases').insert({

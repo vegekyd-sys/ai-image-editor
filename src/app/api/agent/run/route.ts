@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { after } from 'next/server';
 import { authenticateRequest } from '@/lib/api-auth';
-import { runMakaronAgent, withLocale } from '@/lib/agent';
+import { runMakaronAgent } from '@/lib/agent';
 import { AgentDualWriter } from '@/lib/agentDualWriter';
 import { buildPromptContext } from '@/lib/agent-context';
 import { requireCredits, deductByTokens } from '@/lib/billing/credits';
@@ -18,6 +18,7 @@ import {
   DEFAULT_ATTEMPT_MAX_STEPS,
   getAgentContextPolicy,
 } from '@/lib/agent-execution';
+import { verifySkillLaunchContext } from '@/lib/skill-launch-context';
 
 export const maxDuration = 1800;
 
@@ -52,9 +53,11 @@ export async function POST(req: NextRequest) {
       videoModel,
       videoResolution,
       videoAuto,
+      skillLaunchContext: rawSkillLaunchContext,
       audioAttachments,
       clientPersistedUserMessage,
     } = await req.json();
+    const skillLaunchContext = await verifySkillLaunchContext(supabase, rawSkillLaunchContext);
 
     if (!projectId || !prompt) {
       return NextResponse.json(
@@ -166,6 +169,7 @@ export async function POST(req: NextRequest) {
           videoModel,
           videoResolution,
           videoAuto,
+          skillLaunchContext,
           currentSnapshotIndex,
           hasAnnotation,
           isDraft,
@@ -264,6 +268,7 @@ export async function POST(req: NextRequest) {
           videoModel,
           videoResolution,
           videoAuto,
+          skillLaunchContext,
           audioAttachments: ctx.audioAttachments,
           snapshotImages: ctx.snapshotImages,
           currentSnapshotIndex: ctx.currentSnapshotIndex,
@@ -408,10 +413,7 @@ export async function POST(req: NextRequest) {
         if (proj && (!proj.title || proj.title === 'Untitled' || proj.title === '未命名' || proj.title === '未命名项目')) {
           const nameSource = prompt.slice(0, 200);
           if (nameSource.trim()) {
-            const namePrompt = withLocale(
-              `Based on this user request, give a concise project name (2-4 words, no quotes): "${nameSource}". Output only the name.`,
-              locale,
-            );
+            const namePrompt = `Based on this user request, give a concise project name (2-4 words, no quotes): "${nameSource}". Output only the name.`;
             let projectName = '';
             for await (const ev of runMakaronAgent(namePrompt, '', projectId, {
               tipReactionOnly: true, locale, agentModel: requestedAgentModel,
@@ -446,7 +448,8 @@ export async function POST(req: NextRequest) {
         }).eq('id', createdRunId).eq('status', 'running');
       } catch { /* best effort */ }
     }
-    return NextResponse.json({ error: msg }, { status: 500 });
+    const locale = getRequestLocale(req);
+    return NextResponse.json({ error: locale === 'zh' ? msg : translate(locale, 'agent.error.fatal') }, { status: 500 });
   }
 }
 

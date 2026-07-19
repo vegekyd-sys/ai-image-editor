@@ -1,6 +1,7 @@
 import { getSupabaseAdmin } from '@/lib/supabase/service'
 import { getToolPrice, resolveToolName } from './pricing'
 import { getTokenRate, providerCostToCredits, tokensToCredits, tokensToCreditsBreakdown } from './token-rates'
+import { getConfiguredWelcomeCredits } from './welcome-credits'
 
 // Billing kill switch — cached from DB app_settings
 let _billingEnabled: boolean | null = null
@@ -60,8 +61,7 @@ export async function requireCredits(
 
   // Auto-initialize for users without a credit_balances row (e.g. old users)
   if (!data) {
-    const { data: setting } = await admin.from('app_settings').select('value').eq('key', 'welcome_credits').single()
-    const welcomeCredits = parseInt(setting?.value || '500')
+    const welcomeCredits = await getConfiguredWelcomeCredits(admin)
     if (welcomeCredits > 0) {
       await addCredits(userId, welcomeCredits)
       try {

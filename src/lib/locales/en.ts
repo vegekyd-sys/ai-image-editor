@@ -123,7 +123,7 @@ const en = {
   'video.failed': 'Failed',
   'video.abandoned': 'Abandoned',
   'video.abandon': 'Abandon',
-  'video.confirmAbandon': 'Confirm',
+  'video.confirmAbandon': 'Cancel this video render?',
   'video.cancel': 'Cancel',
   'video.retry': 'Retry',
   'video.invalidParamsHint': 'Possible cause: reference video resolution too high (max 1080p) or duration too long (max 15s). Try re-uploading a smaller video.',

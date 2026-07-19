@@ -8,7 +8,8 @@ import { useIsDesktop } from '@/hooks/useIsDesktop'
 import { useHydrated } from '@/hooks/useHydrated'
 import { isHeicFile } from '@/lib/imageUtils'
 import { pickLocalizedValue, useLocale } from '@/lib/i18n'
-import { compressCreateImageFiles, createProject, createProjectFromStagedMedia } from '@/lib/createProject'
+import { compressCreateImageFiles, createProject, createProjectFromStagedMedia, type ProjectLaunchOptions } from '@/lib/createProject'
+import { createVideoSkillLaunchContext } from '@/lib/skill-launch-context'
 import { createClient } from '@/lib/supabase/client'
 import {
   beginCreateDraftContinuation,
@@ -1441,6 +1442,7 @@ function HomePageInner() {
       prompt,
       selectedSkill: homeSkill?.skill_path ? undefined : (selectedSkill ?? undefined),
       homeSkillId: homeSkill?.id,
+      skillLaunchContext: createVideoSkillLaunchContext(homeSkill, prompt),
       returnPath: homeSkill?.id ? `/home/${homeSkill.id}` : window.location.pathname + window.location.search,
     })
     const returnPath = homeSkill?.id ? `/home/${homeSkill.id}` : window.location.pathname + window.location.search
@@ -1474,9 +1476,11 @@ function HomePageInner() {
       } else if (selectedSkill) {
         skillName = selectedSkill
       }
-      const opts: { prompt?: string; skill?: string } = {}
+      const opts: ProjectLaunchOptions = {}
       if (prompt) opts.prompt = prompt
       if (skillName) opts.skill = skillName
+      const skillLaunchContext = createVideoSkillLaunchContext(homeSkill, prompt)
+      if (skillLaunchContext) opts.skillLaunchContext = skillLaunchContext
       const result = await createProject(supabase, authedUser.id, files, Object.keys(opts).length ? opts : undefined)
       if (!result) throw new Error('Failed to create project')
       saveAgentModelPreference(result.projectId, createAgentModel)
@@ -1532,6 +1536,7 @@ function HomePageInner() {
           metadata: draft.metadata as PhotoMetadata | undefined,
           prompt: draft.prompt,
           skill: skillName,
+          skillLaunchContext: createVideoSkillLaunchContext(homeSkill, draft.prompt),
         })
         if (!result) throw new Error('Failed to create project from draft')
         await clearCreateDraft()

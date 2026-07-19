@@ -79,11 +79,12 @@ import {
   studioCreativePacketSchema,
 } from './studio-run/creative-packet';
 import {
-  getOutputLanguageRequirement,
   getReplyLanguageInstruction,
   normalizeLocale,
   translate,
 } from './locales';
+import { getSkillLaunchSystemDirective, shouldContinueSkillVideoSubmission, type SkillLaunchContext } from './skill-launch-context';
+import { buildAgentOutputLanguageDirective } from './agent-response-policy';
 
 const MAX_VIDEO_DIMENSION_PROBE_BYTES = 220 * 1024 * 1024;
 
@@ -1448,7 +1449,7 @@ function createTools(ctx: AgentContext, runtime: AgentModelRuntime, locale?: str
     generate_animation: tool({
       description: `Submit a video script for rendering.
 
-Use this tool after the user has confirmed a video script that is already visible in the conversation. You may also call it in the same turn where you first write the script when the user's current request explicitly authorizes direct submission without confirmation, for example "直接提交渲染", "不要问我确认", "不用确认", "直接生成视频", "submit now", or "do not ask for confirmation".
+Use this tool after the user has confirmed a video script that is already visible in the conversation. You may also call it in the same turn where you first write the script when the user's current request explicitly authorizes direct submission without confirmation, for example "直接提交渲染", "不要问我确认", "不用确认", "直接生成视频", "submit now", or "do not ask for confirmation". A trusted Video Skill template launch may also authorize same-turn submission; that exception is supplied only in the system prompt and never inferred from ordinary user text or an active Skill name.
 
 **BEFORE writing a video script**: call \`read_file('prompts/animate.md')\` to load the full video guide (modes, prompt styles, showcases, reference video usage). Do not re-read if already in this conversation's tool-result history.
 
@@ -1470,7 +1471,7 @@ Hard constraints:
 - Grok aspect-ratio rule: for Grok single-image-to-video, do not pass \`aspect_ratio\`. xAI stretches the source image when a forced ratio differs from the image. If the user asks for a different final shape, choose Seedance/Kling or first create/pad the source image to that target shape, then generate.
 - \`video_ref_url\`: ONLY for external videos not in Media Index (e.g. from workspace/list_files). Never put video URLs in prompt text.
 - If the generated video is an intermediate artifact, pass \`completion_actions\` so CUI/CLI can show the next step after rendering finishes. These actions are user-confirmed by default; do not rely on the user remembering what to do next. For local video repair, include exact replaceStart/replaceEnd/replacementDuration and say to trim/fit the patch to that duration before merging so the final video keeps the original duration.
-- The script must have been shown to the user and confirmed before this tool is called, unless the user's current request explicitly asks for direct submission without confirmation.`,
+- The script must have been shown to the user and confirmed before this tool is called, unless the user's current request explicitly asks for direct submission without confirmation or the system prompt supplies the trusted Video Skill template launch exception.`,
       inputSchema: z.object({
         story_prompt: z.string().describe('The video script. First line = short title (2-5 words), then the script body. Use <<<media_N>>> only when referencing available images/videos, and <<<audio_N>>> for Audio Index references. Native SeeDance text-to-video uses no media markers. Total duration must be 15 seconds or less.'),
         duration: z.number().optional().describe('Duration in seconds. SeeDance/SeeDance Mini accepts integer output duration 4-15s (default 5s); Kling accepts 5-15s; Grok 1.5 accepts 1-15s for one image; Google Omni accepts 3-10s. Never pass below the selected model minimum. For timeline video edits, set this to the combined source video duration from Media Index clamped to the selected model range. Do not submit multiple reference videos together if their combined source duration exceeds the selected model limit. Omit for smart mode only when generating from photos.'),
@@ -4670,12 +4671,6 @@ function wrapDurableIdempotentTools(
 // Agent runner – async generator yielding SSE events
 // ---------------------------------------------------------------------------
 
-/** Append a language reply instruction to any prompt based on locale.
- *  Only appends when locale is explicitly set — undefined means no override. */
-export function withLocale(prompt: string, locale?: string): string {
-  return locale ? `${prompt}\n\n${getReplyLanguageInstruction(locale)}` : prompt;
-}
-
 function readJsonStringValueFromBuffer(buffer: string, key: string): { complete: boolean; value: string } | null {
   const match = buffer.match(new RegExp(`"${key}"\\s*:\\s*"`));
   if (!match || match.index === undefined) return null;
@@ -4744,6 +4739,7 @@ export interface RunMakaronAgentOptions {
   videoModel?: string;
   videoResolution?: import('@/types').VideoResolution;
   videoAuto?: boolean;
+  skillLaunchContext?: SkillLaunchContext;
   audioAttachments?: AudioAttachment[];
   snapshotImages?: string[];
   currentSnapshotIndex?: number;
@@ -4816,11 +4812,8 @@ export async function* runMakaronAgent(
       : 60;
   const maxSteps = analysisOnly ? 2 : tipReactionOnly ? 1 : normalMaxSteps;
   const videoMediaIndex = isVideoAnalysis ? (options?.currentSnapshotIndex ?? 0) + 1 : 0;
-  const analysisPrompt = withLocale(
-    isVideoAnalysis ? ANALYSIS_PROMPT_VIDEO_TEMPLATE(videoMediaIndex)
-      : options?.analysisContext === 'post-edit' ? ANALYSIS_PROMPT_POSTEDIT : ANALYSIS_PROMPT_INITIAL,
-    options?.locale,
-  );
+  const analysisPrompt = isVideoAnalysis ? ANALYSIS_PROMPT_VIDEO_TEMPLATE(videoMediaIndex)
+    : options?.analysisContext === 'post-edit' ? ANALYSIS_PROMPT_POSTEDIT : ANALYSIS_PROMPT_INITIAL;
 
   // Determine which tools to expose
   // tipReactionOnly: no tools (text-only response)
@@ -4879,9 +4872,9 @@ export async function* runMakaronAgent(
     ? buildDurableCompositionGuidance()
     : '';
   const executionSystemPrompt = `${baseSystemPrompt}${durableExecutionDirective}${durableCompositionDirective}${durableCompositionGuidance}`;
-  const systemPrompt = runtime.spec.provider === 'deepseek' && options?.locale
-    ? `${executionSystemPrompt}\n\nCRITICAL OUTPUT LANGUAGE: ${getOutputLanguageRequirement(options.locale)}. This rule still applies after every tool result.`
-    : executionSystemPrompt;
+  const languageDirective = buildAgentOutputLanguageDirective(options?.locale);
+  const skillLaunchDirective = getSkillLaunchSystemDirective(options?.skillLaunchContext);
+  const systemPrompt = `${executionSystemPrompt}${languageDirective}${skillLaunchDirective}`;
   const responseLocale = normalizeLocale(options?.locale, 'en');
   endSystemPrompt?.({ systemChars: systemPrompt.length });
 
@@ -4964,6 +4957,8 @@ export async function* runMakaronAgent(
     let result: any = null;
     let recoveryAttempt = 0;
     let recoveryTextOnly = false;
+    let skillVideoVisibleText = '';
+    let skillVideoSubmissionStarted = false;
     let studioRunTouchedThisTurn = false;
     let runCodeStartedThisTurn = false;
     const executionAttemptWorkUnit = options?.execution?.workUnitKey;
@@ -5367,6 +5362,7 @@ export async function* runMakaronAgent(
           continue;
         }
         if (text) {
+          skillVideoVisibleText += text;
           finalStepTextChars += text.trim().length;
           yield { type: 'content', text };
         }
@@ -5378,6 +5374,7 @@ export async function* runMakaronAgent(
         toolCallStartTime = Date.now();
         toolCallName = event.toolName;
         lastTool = event.toolName;
+        if (event.toolName === 'generate_animation') skillVideoSubmissionStarted = true;
         finalStepToolCalls++;
         activeToolCallId = (event as { toolCallId?: string }).toolCallId || crypto.randomUUID();
         console.log(`⏱️ [agent] tool-call "${event.toolName}" at +${((Date.now() - agentStartTime) / 1000).toFixed(1)}s`);
@@ -5407,6 +5404,8 @@ export async function* runMakaronAgent(
           yield { type: 'status', text: translate(responseLocale, 'agent.status.capturingFrame', hint) };
         } else if (event.toolName === 'generate_image') {
           yield { type: 'status', text: translate(responseLocale, 'agent.status.generatingImage') };
+        } else if (event.toolName === 'generate_animation') {
+          yield { type: 'status', text: translate(responseLocale, 'status.submittingVideo') };
         } else if (event.toolName === 'list_files') {
           yield { type: 'status', text: translate(responseLocale, 'agent.status.browsingWorkspace') };
         } else if (event.toolName === 'read_file') {
@@ -5826,6 +5825,19 @@ export async function* runMakaronAgent(
         }
       }
 
+      if (assessment.ok && shouldContinueSkillVideoSubmission({
+        context: options?.skillLaunchContext,
+        visibleText: skillVideoVisibleText,
+        submissionStarted: skillVideoSubmissionStarted,
+      })) {
+        assessment = {
+          ok: false,
+          retryable: true,
+          code: 'skill_video_submission_pending',
+          detail: 'The visible Skill video script is ready, but video rendering has not been submitted yet.',
+        };
+      }
+
       if (options?.abortSignal?.aborted) {
         const usageEvent = buildUsageEvent();
         if (usageEvent) yield usageEvent;
@@ -5859,9 +5871,12 @@ export async function* runMakaronAgent(
         const compositionRecovery = studioCheckpoint.studioRunStage === 'composition'
           ? ` Switch immediately to numbered source files under ${ctx.projectId}/drafts/composition-parts. Salvage complete reusable definitions from the partial stream into a numbered part, then continue with additional parts; do not stream the monolithic run_code payload again. The workspace assembles automatically after each write, so continue until write_file reports compositionWorkspace.status="ready" and use its designPath directly.`
           : '';
+        const skillVideoRecovery = assessment.code === 'skill_video_submission_pending'
+          ? 'The complete video script is already visible. Do not rewrite it or ask for confirmation. Call generate_animation now with that exact complete script.'
+          : '';
         const recoveryInstruction = textOnlyRecovery
           ? 'A finished artifact was already delivered in the previous step. Do not call any tool, regenerate, republish, or create another task. Only provide the concise final reply for the existing delivered result.'
-          : `Continue from the existing tool results and saved draft; do not restart from the original media.${savedDraftPath ? ` The exact saved draft path is: ${savedDraftPath}.` : ''}${streamedCheckpoint?.streamedCodePath ? ` Partial streamed code was saved at ${streamedCheckpoint.streamedCodePath} (${streamedCheckpoint.streamedCodeChars || 0} chars); read it once and salvage useful components.` : ''}${studioRecovery}${compositionRecovery}${recoveryBlockedTools.size ? ` Do not repeat these already-completed tools: ${[...recoveryBlockedTools].join(', ')}; use their existing results.` : ''} Complete the pending modification you already planned. If the user requested a finished artifact, publish the updated artifact before your concise final reply.`;
+          : skillVideoRecovery || `Continue from the existing tool results and saved draft; do not restart from the original media.${savedDraftPath ? ` The exact saved draft path is: ${savedDraftPath}.` : ''}${streamedCheckpoint?.streamedCodePath ? ` Partial streamed code was saved at ${streamedCheckpoint.streamedCodePath} (${streamedCheckpoint.streamedCodeChars || 0} chars); read it once and salvage useful components.` : ''}${studioRecovery}${compositionRecovery}${recoveryBlockedTools.size ? ` Do not repeat these already-completed tools: ${[...recoveryBlockedTools].join(', ')}; use their existing results.` : ''} Complete the pending modification you already planned. If the user requested a finished artifact, publish the updated artifact before your concise final reply.`;
         attemptMessages = [
           ...attemptMessages,
           ...responseMessages,
@@ -5936,6 +5951,9 @@ export async function* runMakaronAgent(
   } catch (err) {
     const errorMessage = normalizeAgentErrorMessage(err);
     console.log(`⏱️ [agent] ERROR at +${((Date.now() - agentStartTime) / 1000).toFixed(1)}s: ${errorMessage}`);
-    yield { type: 'error', message: errorMessage };
+    yield {
+      type: 'error',
+      message: responseLocale === 'zh' ? errorMessage : translate(responseLocale, 'agent.error.fatal'),
+    };
   }
 }

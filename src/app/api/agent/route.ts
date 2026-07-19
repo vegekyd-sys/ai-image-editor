@@ -1,7 +1,7 @@
 import { NextRequest } from 'next/server';
 import type { ModelMessage } from 'ai';
 import { authenticateRequest } from '@/lib/api-auth';
-import { runMakaronAgent, withLocale } from '@/lib/agent';
+import { runMakaronAgent } from '@/lib/agent';
 import { AgentDualWriter } from '@/lib/agentDualWriter';
 import { requireCredits, deductByTokens } from '@/lib/billing/credits';
 import { AgentPerf } from '@/lib/agent-perf';
@@ -13,6 +13,7 @@ import {
   resolveAgentModelSpec,
 } from '@/lib/agent-models';
 import { getAgentContextPolicy } from '@/lib/agent-execution';
+import { verifySkillLaunchContext } from '@/lib/skill-launch-context';
 
 export const maxDuration = 1800;
 
@@ -36,7 +37,8 @@ export async function POST(req: NextRequest) {
             tipReaction, committedTip, tipsTeaser, tipsPayload, nameProject, description,
             previewsReady, readyTips, preferredModel, agentModel, snapshotImages, currentSnapshotIndex, isNsfw,
             musicReady, musicAudioUrl, currentDesign, currentDesignPath, videoModel, videoResolution, videoAuto,
-            headless, hasAnnotation, isDraft, referenceImageCount, uploadedVideoCount, turnMediaCount, audioAttachments } = await req.json();
+            headless, hasAnnotation, isDraft, referenceImageCount, uploadedVideoCount, turnMediaCount, audioAttachments,
+            skillLaunchContext: rawSkillLaunchContext } = await req.json();
     endReadBody({
       projectId: projectId || null,
       promptChars: typeof prompt === 'string' ? prompt.length : 0,
@@ -44,6 +46,7 @@ export async function POST(req: NextRequest) {
       headless: !!headless,
     });
     const locale = getRequestLocale(req);
+    const skillLaunchContext = await verifySkillLaunchContext(supabase, rawSkillLaunchContext);
 
     const requestedAgentModel = normalizeRequestedAgentModelPreference(agentModel);
     if (requestedAgentModel === null) {
@@ -169,10 +172,7 @@ export async function POST(req: NextRequest) {
             const tipsSummary = (tipsPayload as { category: string; emoji: string; label: string; desc: string }[])
               .map(t => `- [${t.category}] ${t.emoji} ${t.label}：${t.desc}`)
               .join('\n');
-            const teaserPrompt = withLocale(
-              `Here are edit suggestions for a photo:\n${tipsSummary}\n\nPick the most interesting one. Write a single teaser sentence (under 15 words) starting with "Try...". Output only that sentence.`,
-              locale,
-            );
+            const teaserPrompt = `Here are edit suggestions for a photo:\n${tipsSummary}\n\nPick the most interesting one. Write a single teaser sentence (under 15 words) starting with "Try...". Output only that sentence.`;
             await iterateAgent(runMakaronAgent(teaserPrompt, '', projectId, {
               tipReactionOnly: true, locale, agentModel: requestedAgentModel,
             }), controller);
@@ -182,10 +182,7 @@ export async function POST(req: NextRequest) {
           // nameProject: generate a short project name from image description
           if (nameProject) {
             const desc = (description as string) || '';
-            const namePrompt = withLocale(
-              `Based on this photo description, give a concise project name (2-4 words): ${desc}. Output only the name, no punctuation or explanation.`,
-              locale,
-            );
+            const namePrompt = `Based on this photo description, give a concise project name (2-4 words): ${desc}. Output only the name, no punctuation or explanation.`;
             await iterateAgent(runMakaronAgent(namePrompt, '', projectId, {
               tipReactionOnly: true, locale, agentModel: requestedAgentModel,
             }), controller);
@@ -203,10 +200,7 @@ export async function POST(req: NextRequest) {
             const tipsSummary = tips
               .map(t => `- [${t.category}] ${t.emoji} ${t.label}：${t.desc}`)
               .join('\n');
-            const readyPrompt = withLocale(
-              `All ${tips.length} edit suggestion previews are ready:\n${tipsSummary}\n\nIn 1-2 sentences, tell the user previews are ready and they can scroll TipsBar. Comment on one interesting one. Friendly tone, don't start with "I".`,
-              locale,
-            );
+            const readyPrompt = `All ${tips.length} edit suggestion previews are ready:\n${tipsSummary}\n\nIn 1-2 sentences, tell the user previews are ready and they can scroll TipsBar. Comment on one interesting one. Friendly tone, don't start with "I".`;
             await iterateAgent(runMakaronAgent(readyPrompt, '', projectId, {
               tipReactionOnly: true, locale, agentModel: requestedAgentModel,
             }), controller);
@@ -215,10 +209,7 @@ export async function POST(req: NextRequest) {
 
           // musicReady: background music generation completed — agent injects <Audio> into the composition
           if (musicReady && musicAudioUrl) {
-            const musicPrompt = withLocale(
-              `Background music is ready: ${musicAudioUrl}\n\nFirst, briefly tell the user the music is ready and you're adding it to the video now (1 sentence). Then: load the latest Remotion composition code from workspace (list_files to find it, read_file to load), add <Audio src="${musicAudioUrl}" volume={0.3} /> to it, and call run_code with runtime: "composition" to render the updated version with music.`,
-              locale,
-            );
+            const musicPrompt = `Background music is ready: ${musicAudioUrl}\n\nFirst, briefly tell the user the music is ready and you're adding it to the video now (1 sentence). Then: load the latest Remotion composition code from workspace (list_files to find it, read_file to load), add <Audio src="${musicAudioUrl}" volume={0.3} /> to it, and call run_code with runtime: "composition" to render the updated version with music.`;
             await iterateAgent(runMakaronAgent(musicPrompt, image || '', projectId, {
               locale, agentModel: requestedAgentModel,
               snapshotImages, currentSnapshotIndex, supabase, userId: userId,
@@ -234,10 +225,7 @@ export async function POST(req: NextRequest) {
               return;
             }
             const tip = committedTip as { emoji: string; label: string; desc: string; category: string };
-            const reactionPrompt = withLocale(
-              `User just committed an edit via TipsBar:\n${tip.emoji} ${tip.label} (${tip.category}): ${tip.desc}\n\nReact naturally in 1 sentence, like a friend. Then in 1 short sentence, inspire what direction they could explore next with this photo (e.g. mood, lighting, story element) — but do NOT recommend specific tips. Don't start with "I".`,
-              locale,
-            );
+            const reactionPrompt = `User just committed an edit via TipsBar:\n${tip.emoji} ${tip.label} (${tip.category}): ${tip.desc}\n\nReact naturally in 1 sentence, like a friend. Then in 1 short sentence, inspire what direction they could explore next with this photo (e.g. mood, lighting, story element) — but do NOT recommend specific tips. Don't start with "I".`;
             await iterateAgent(runMakaronAgent(reactionPrompt, image, projectId, {
               tipReactionOnly: true, locale, agentModel: requestedAgentModel,
             }), controller);
@@ -346,7 +334,7 @@ export async function POST(req: NextRequest) {
           try {
             const endAgentStream = perf.span('agent_stream', { projectId, runId: runId || null });
             try {
-              for await (const event of runMakaronAgent(agentPrompt, agentImage, projectId, { analysisOnly, analysisContext, isVideoAnalysis, animationImageUrls: animationImageUrls?.length ? animationImageUrls : undefined, animationImages: animationImages?.length ? animationImages : undefined, locale, preferredModel, agentModel: requestedAgentModel, videoModel, videoResolution, videoAuto, audioAttachments: agentAudioAttachments, snapshotImages: agentSnapshotImages, currentSnapshotIndex: agentCurrentSnapshotIndex, isNsfw, supabase, userId: userId, currentDesign: agentCurrentDesign, currentDesignPath: agentCurrentDesignPath, history: agentHistory, timelineVersion, perf, abortSignal: modelAbortController.signal, contextCompactAtTokens: agentCompactionRequired ? getAgentContextPolicy(resolvedAgentModel.id).providerCompactAtTokens : undefined, historyBoundary: agentHistoryBoundary })) {
+              for await (const event of runMakaronAgent(agentPrompt, agentImage, projectId, { analysisOnly, analysisContext, isVideoAnalysis, animationImageUrls: animationImageUrls?.length ? animationImageUrls : undefined, animationImages: animationImages?.length ? animationImages : undefined, locale, preferredModel, agentModel: requestedAgentModel, videoModel, videoResolution, videoAuto, skillLaunchContext, audioAttachments: agentAudioAttachments, snapshotImages: agentSnapshotImages, currentSnapshotIndex: agentCurrentSnapshotIndex, isNsfw, supabase, userId: userId, currentDesign: agentCurrentDesign, currentDesignPath: agentCurrentDesignPath, history: agentHistory, timelineVersion, perf, abortSignal: modelAbortController.signal, contextCompactAtTokens: agentCompactionRequired ? getAgentContextPolicy(resolvedAgentModel.id).providerCompactAtTokens : undefined, historyBoundary: agentHistoryBoundary })) {
                 if (event.type === 'done') sawDone = true;
                 if (event.type === 'error') {
                   sawError = true;
@@ -396,7 +384,10 @@ export async function POST(req: NextRequest) {
         } catch (err) {
           const msg = err instanceof Error ? err.message : String(err);
           console.error('Agent stream error:', msg);
-          const errorEvent = { type: 'error' as const, message: msg };
+          const errorEvent = {
+            type: 'error' as const,
+            message: locale === 'zh' ? msg : translate(locale, 'agent.error.fatal'),
+          };
           sawError = true;
           terminalError = errorEvent;
           if (writer) {
