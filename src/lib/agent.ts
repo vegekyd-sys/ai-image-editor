@@ -28,7 +28,7 @@ import { filterWorkspaceFilesForAgentScope } from './agent-workspace-scope';
 import { normalizeCompositionAnimation } from './composition-duration';
 import {
   createRemotionExportJob,
-  runRemotionExportJob,
+  runRemotionExportJobAndWait,
   type RemotionRenderProfile,
 } from '@/lib/remotion-export';
 import { VIDEO_PLACEHOLDER_IMAGE } from '@/lib/editor/timeline-derivations';
@@ -2870,7 +2870,7 @@ For Studio Run, first preview and patch the Remotion source until it is satisfac
             };
           }
 
-          const result = await runRemotionExportJob(job.id);
+          const result = await runRemotionExportJobAndWait(job.id);
           const completed = result.job;
           const videoUrl = completed.storage_url || '';
           const audioAnalysis = completed.metadata?.audioAnalysis && typeof completed.metadata.audioAnalysis === 'object'

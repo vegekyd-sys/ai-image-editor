@@ -113,6 +113,10 @@ function nowIso() {
   return new Date().toISOString()
 }
 
+function sleep(ms: number): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, ms))
+}
+
 function readEnv(name: string): string | undefined {
   const value = process.env[name]?.replace(/\\[rn]|[\u0000-\u001F\u007F]/g, '').trim()
   return value || undefined
@@ -1137,6 +1141,42 @@ export async function runRemotionExportJob(jobId: string): Promise<RemotionExpor
     return { job: claimed, design }
   }
   return executeRemotionExportJob(claimed)
+}
+
+/**
+ * Keep a synchronous caller attached to the durable job, even if another
+ * worker reclaims and completes it while this process is stuck in a provider
+ * request. The database row is the canonical completion signal.
+ */
+export async function runRemotionExportJobAndWait(
+  jobId: string,
+  pollIntervalMs = 2_000,
+): Promise<RemotionExportResult> {
+  let localExecution: { result?: RemotionExportResult; error?: unknown } | undefined
+  void runRemotionExportJob(jobId).then(
+    (result) => { localExecution = { result } },
+    (error) => { localExecution = { error } },
+  )
+
+  while (true) {
+    if (localExecution?.result) return localExecution.result
+
+    const job = await getRemotionExportJob(jobId)
+    if (!job) throw new Error(`Export job not found: ${jobId}`)
+    if (job.status === 'completed') {
+      const admin = getSupabaseAdmin()
+      const { design } = await loadJobDesign(job, admin)
+      return { job, design }
+    }
+    if (job.status === 'failed') {
+      throw new Error(job.error || `Export job failed: ${jobId}`)
+    }
+    if (localExecution?.error && job.status === 'queued') {
+      throw localExecution.error
+    }
+
+    await sleep(Math.max(250, pollIntervalMs))
+  }
 }
 
 export async function runNextRemotionExportJob(): Promise<RemotionExportResult | null> {
