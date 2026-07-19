@@ -6,6 +6,8 @@ Default model behavior: follow the app's selected video model, usually SeeDance 
 
 Execution behavior: when the user clearly asks to create or edit a video from CUI, write the script and call `generate_animation`. Ask for confirmation only when the request is underspecified, key source media is missing, or the user explicitly asks to review the script first.
 
+Reference-image preflight: EvoLink Seedance accepts JPEG/PNG/WebP images only, with width and height each 300-6000px, aspect ratio 0.4-2.5, and at most 30MB per image. The tool returns a specific `errorReason` (`too_small`, `too_large`, `invalid_aspect_ratio`, `unsupported_format`, or `unreadable`) plus actual dimensions and limits. `retryable: false` means do not resubmit the same URL. When `repairable: true`, decide whether to create a new resized/padded/converted public image URL or ask the user for a better source, then submit only with that new URL. A second unchanged submission becomes `terminal: true` and ends the retry loop.
+
 ## Input
 - 0-7 snapshot images (zero images means native SeeDance text-to-video)
 - A Media Index describing what each snapshot contains

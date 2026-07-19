@@ -31,6 +31,15 @@ export interface CreateVideoResult {
   videoUrl?: string;
   status?: 'completed' | 'processing' | 'pending' | 'failed';
   message: string;
+  retryable?: boolean;
+  repairable?: boolean;
+  terminal?: boolean;
+  errorCode?: string;
+  errorReason?: string;
+  errorDetails?: Record<string, unknown>;
+  suggestedAction?: string;
+  userMessage?: { en: string; zh: string };
+  invalidMediaUrls?: string[];
 }
 
 async function probeReferenceVideoMeta(url: string): Promise<VideoReferenceMeta | null> {
@@ -346,6 +355,23 @@ export async function createVideo(input: CreateVideoInput): Promise<CreateVideoR
       message: `Video rendering task created. Task ID: ${taskId}. Rendering time depends on the selected model. Use makaron_get_video_status to poll.`,
     };
   } catch (e) {
+    const { EvolinkInputError } = await import('../evolink');
+    if (e instanceof EvolinkInputError) {
+      console.warn('[create_video input rejected]', e.message);
+      return {
+        success: false,
+        message: e.message,
+        retryable: false,
+        repairable: e.repairable,
+        terminal: e.terminal,
+        errorCode: e.code,
+        errorReason: e.reason,
+        errorDetails: e.details,
+        suggestedAction: e.suggestedAction,
+        userMessage: e.userMessage,
+        invalidMediaUrls: e.invalidMediaUrls,
+      };
+    }
     const msg = e instanceof Error ? e.message : String(e);
     console.error('[create_video error]', msg);
     return {

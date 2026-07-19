@@ -20,7 +20,7 @@ export interface ModelTerminationObservation {
 export interface ModelTerminationAssessment {
   ok: boolean;
   retryable: boolean;
-  code?: 'stream_error' | 'missing_finish' | 'empty_final_step' | 'truncated' | 'provider_error' | 'content_filter' | 'unfinished_tool_turn' | 'attempt_budget_handoff' | 'studio_run_incomplete' | 'studio_stage_handoff';
+  code?: 'stream_error' | 'missing_finish' | 'empty_final_step' | 'truncated' | 'provider_error' | 'content_filter' | 'unfinished_tool_turn' | 'attempt_budget_handoff' | 'studio_run_incomplete' | 'studio_stage_handoff' | 'non_retryable_tool_failure';
   detail?: string;
 }
 
@@ -87,6 +87,16 @@ export function shouldStopAfterDurablePublishToolStep(input: {
     }
     if (output.published === true) return true;
     return Array.isArray(output.published) && output.published.length > 0;
+  }));
+}
+
+export function shouldStopAfterTerminalToolFailure(input: {
+  toolResults?: ReadonlyArray<{ toolName?: string; output?: unknown }>;
+}): boolean {
+  return Boolean(input.toolResults?.some(result => {
+    if (!result.output || typeof result.output !== 'object') return false;
+    const output = result.output as Record<string, unknown>;
+    return output.success === false && output.terminal === true;
   }));
 }
 

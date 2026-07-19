@@ -165,6 +165,19 @@ describe('agent prompt policy guards', () => {
     expect(agentTs).toContain('直接提交渲染')
   })
 
+  it('treats invalid Seedance reference images as terminal input errors', () => {
+    const agent = read('src/lib/prompts/agent.md')
+    const animate = read('src/lib/prompts/animate.md')
+    const agentTs = read('src/lib/agent.ts')
+
+    expect(agent).toContain("read_file('prompts/animate.md')")
+    expect(animate).toContain('width and height each 300-6000px')
+    expect(animate).toContain('`too_small`, `too_large`')
+    expect(animate).toContain('`retryable: false` means do not resubmit the same URL')
+    expect(animate).toContain('A second unchanged submission becomes `terminal: true`')
+    expect(agentTs).toContain('If repairable=true, decide whether to prepare a new compliant image URL')
+  })
+
   it('keeps single video generation in the model duration range and routes longer requests to the director skill', () => {
     const agent = read('src/lib/prompts/agent.md')
     const animate = read('src/lib/prompts/animate.md')

@@ -102,7 +102,16 @@ export async function POST(req: NextRequest) {
     })
 
     if (!skillResult.success || !skillResult.taskId) {
-      return NextResponse.json({ error: skillResult.message }, { status: 500 })
+      return NextResponse.json({
+        error: skillResult.message,
+        ...(skillResult.errorCode ? { code: skillResult.errorCode } : {}),
+        ...(skillResult.errorReason ? { reason: skillResult.errorReason } : {}),
+        ...(skillResult.errorDetails ? { details: skillResult.errorDetails } : {}),
+        ...(skillResult.retryable === false ? { retryable: false } : {}),
+        ...(skillResult.repairable != null ? { repairable: skillResult.repairable } : {}),
+        ...(skillResult.terminal != null ? { terminal: skillResult.terminal } : {}),
+        ...(skillResult.suggestedAction ? { suggestedAction: skillResult.suggestedAction } : {}),
+      }, { status: skillResult.retryable === false ? 400 : 500 })
     }
 
     const taskId = skillResult.taskId

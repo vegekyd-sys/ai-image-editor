@@ -247,6 +247,7 @@ Tips:
 
 IMPORTANT:
 - SeeDance supports native text-to-video with no images. For image/reference generation, images must be publicly accessible URLs (not base64).
+- EvoLink Seedance reference images must be JPEG/PNG/WebP, width and height each 300-6000px, aspect ratio 0.4-2.5, and <=30MB each. Input errors distinguish too_small, too_large, invalid_aspect_ratio, unsupported_format, and unreadable. NON_RETRYABLE means the same URL must not be resubmitted; prepare a new compliant URL or replace the source first.
 - When images are provided, script should use <<<media_N>>> format (from makaron_write_video_script output). Text-to-video scripts should not invent media markers.
 - Provider-generated video rendering takes 3-5 minutes; Grok is usually around 30-40 seconds; Gemini Omni is usually around 30-70 seconds plus Storage handoff. Use makaron_get_video_status to poll.
 - Duration: omit for smart mode. SeeDance supports integer output duration 4-15s (default 5s); Kling supports 5-15s; Grok 1.5 supports 1-15s for single-image; Gemini Omni supports 3-10s in Makaron.
@@ -298,7 +299,9 @@ Style: Cinematic, warm golden light.`,
         }
         return { content: [{ type: 'text' as const, text: result.success
           ? `${result.message}\n\nTask ID: ${result.taskId}${result.videoUrl ? `\n\nProvider Video URL: ${result.videoUrl}` : ''}`
-          : result.message }] };
+          : result.retryable === false
+            ? `[NON_RETRYABLE:${result.errorCode || 'invalid_input'}] ${result.message}`
+            : result.message }] };
       } catch (e) {
         const msg = e instanceof Error ? e.message : String(e);
         console.error('[MCP create_video error]', msg);

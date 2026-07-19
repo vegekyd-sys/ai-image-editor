@@ -8,6 +8,7 @@ import {
   shouldHandoffToStudioComposition,
   requestsMaterializedVideo,
   shouldStopAfterDurablePublishToolStep,
+  shouldStopAfterTerminalToolFailure,
   shouldStopAfterStudioToolStep,
   shouldUseTextOnlyRecovery,
 } from '@/lib/agent-terminal';
@@ -155,6 +156,21 @@ describe('agent terminal semantics', () => {
         output: { success: true },
       }],
     })).toBe(false);
+  });
+
+  it('lets the agent repair a non-retryable input, but stops a terminal repeat', () => {
+    expect(shouldStopAfterTerminalToolFailure({
+      toolResults: [{
+        toolName: 'generate_animation',
+        output: { success: false, retryable: false, repairable: true, terminal: false, errorCode: 'seedance_reference_image_too_small' },
+      }],
+    })).toBe(false);
+    expect(shouldStopAfterTerminalToolFailure({
+      toolResults: [{
+        toolName: 'generate_animation',
+        output: { success: false, retryable: false, terminal: true, errorCode: 'seedance_reference_image_unchanged_retry_blocked' },
+      }],
+    })).toBe(true);
   });
 
   it('ends a durable execution as soon as Delivery completes the Studio Run', () => {

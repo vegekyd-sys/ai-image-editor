@@ -64,6 +64,7 @@ import {
   shouldContinueActiveStudioRun,
   shouldHandoffToStudioComposition,
   shouldStopAfterDurablePublishToolStep,
+  shouldStopAfterTerminalToolFailure,
   shouldStopAfterStudioToolStep,
   shouldUseTextOnlyRecovery,
 } from './agent-terminal';
@@ -219,6 +220,8 @@ interface AgentContext {
   currentDesignPath?: string;
   /** Export attempts for an unchanged composition during this agent turn. */
   materializeAttempts?: Map<string, number>;
+  /** Seedance image URLs rejected during this turn; unchanged resubmission is blocked. */
+  invalidVideoImageUrls?: Set<string>;
   execution?: DurableExecutionRef;
 }
 
@@ -1465,6 +1468,8 @@ Hard constraints:
 - Long source video rule: if a timeline/reference video is longer than 15 seconds, do not shrink the whole source into one 5s or 15s edit. Use \`skills/long-video-director/SKILL.md\`, analyze/split it into self-contained segments of 15s or less, and submit one script per segment after approval.
 - Reference video input limit: for one SeeDance generation, the combined source duration of all timeline/uploaded/reference videos used in the script must be 15 seconds or less. This is a single-generation input limit; do not submit videos whose combined duration is longer than 15s together in one call.
 - Reference video size limit: for one SeeDance generation, every reference video must be .mp4/.mov, <=50MB, width and height each 300-6000px, aspect ratio 0.4-2.5, and frame pixels width*height between 409,600 and 2,086,876. Tiny videos below 409,600 frame pixels must be resized/padded before submission. For Kling, use one .mp4/.mov reference video, <=200MB, resolution <=2K; no explicit Kling video resolution lower bound is documented. Grok 1.5 does not support video references or multi-image references in Makaron; use it only for single-image-to-video. Google Omni supports one uploaded/reference video in Makaron and, without a video reference, up to 6 image references for subject/reference-to-video; it is best for fast image/video edits with native generated audio. Uploaded audio_refs are not supported by Google Omni.
+- Reference image input limit: EvoLink Seedance requires JPEG/PNG/WebP, width and height each 300-6000px, aspect ratio 0.4-2.5, and <=30MB per image. The runtime probes referenced images before provider submission. If the tool returns retryable=false, stop and tell the user to replace/resize the source; never resubmit the same image or merely rewrite the prompt.
+- Reference image input limit: EvoLink Seedance requires JPEG/PNG/WebP, width and height each 300-6000px, aspect ratio 0.4-2.5, and <=30MB per image. The runtime returns a specific errorReason such as too_small or too_large plus actual dimensions and limits. If repairable=true, decide whether to prepare a new compliant image URL or ask the user for a better source. Never resubmit the same rejected URL or merely rewrite the prompt.
 - Video edit duration lock: when editing timeline videos up to 15 seconds total, output duration should match the combined source duration from Media Index, clamped to the selected model range. For SeeDance, clamp to 4-15s; if combined source duration is under 4s, set \`duration: 4\`. For long-video pipelines, duration lock applies per FFmpeg chunk.
 - Default model follows app selection, usually SeeDance 2.0 Fast (\`seedance-fast\`) at 720p. If the app selector has an explicit non-default model or explicit resolution, the backend keeps that app selection, so align the script with the selected route. Generic "HD"/"高清"/"high quality" requests still use \`seedance-fast\` 720p. Use \`seedance-mini\` only when the user asks for Seedance Mini, lower cost, draft, or multi-size testing; prefer 480p unless they ask for 720p. Use standard \`seedance\` only when the user explicitly asks for 1080p, standard/full SeeDance 2.0, or premium/highest-resolution output. If the user asks for cheaper/faster/draft/480p, set \`video_resolution: "480p"\` when supported. If the user asks for Kling Pro/HD/1080p, use model \`kling\` with \`video_resolution: "1080p"\`; if they ask for Kling 4K, use model \`kling\` with \`video_resolution: "4k"\`. If the user asks for Grok by name ("用 Grok 生成", "use grok", "用 grok 做"), fastest generation, or native audio from one image, use model \`grok\` and write a single-image-to-video script. Use model \`google-omni\` only when the app selector is already Gemini Omni or the user explicitly asks for Omni/Gemini Omni/Google Omni; treat it as a fast short 720p video editing model with native generated audio, and do not pass audio_refs to Google Omni.
 - Grok aspect-ratio rule: for Grok single-image-to-video, do not pass \`aspect_ratio\`. xAI stretches the source image when a forced ratio differs from the image. If the user asks for a different final shape, choose Seedance/Kling or first create/pad the source image to that target shape, then generate.
@@ -1589,6 +1594,25 @@ Hard constraints:
               }
             }
           }
+          const referencedImageUrlsForRetry = scriptRefs
+            .map(ref => imageUrls[ref - 1])
+            .filter((url): url is string => !!url && url.startsWith('http') && !url.endsWith('.mp4'));
+          const repeatedInvalidUrl = referencedImageUrlsForRetry.find(url => ctx.invalidVideoImageUrls?.has(url));
+          if (repeatedInvalidUrl) {
+            return {
+              success: false as const,
+              retryable: false as const,
+              repairable: false as const,
+              terminal: true as const,
+              errorCode: 'seedance_reference_image_unchanged_retry_blocked',
+              errorReason: 'unchanged_invalid_input',
+              message: 'The same Seedance reference image URL was already rejected in this turn. Do not submit it again. Use a newly resized/converted URL or ask the user for a better source.',
+              userMessage: {
+                en: 'The same invalid reference image was submitted again, so Makaron stopped the retry loop. Use a newly prepared image URL or replace the source.',
+                zh: '同一张不合格参考图再次被提交，Makaron 已停止重试。请先生成新的合规图片 URL，或让用户更换原图。',
+              },
+            };
+          }
           const allVideoUrls = [...(video_ref_url ? [video_ref_url] : []), ...autoVideoUrls];
           if (video_ref_url && autoVideoUrls.length > 0) {
             return {
@@ -1671,7 +1695,22 @@ Hard constraints:
 
           if (!skillResult.success || !skillResult.taskId) {
             console.error('[generate_animation] createVideo failed:', skillResult.message);
-            return { success: false as const, message: skillResult.message };
+            if (skillResult.invalidMediaUrls?.length) {
+              ctx.invalidVideoImageUrls ??= new Set<string>();
+              for (const url of skillResult.invalidMediaUrls) ctx.invalidVideoImageUrls.add(url);
+            }
+            return {
+              success: false as const,
+              message: skillResult.message,
+              ...(skillResult.retryable === false ? { retryable: false as const } : {}),
+              ...(skillResult.repairable != null ? { repairable: skillResult.repairable } : {}),
+              ...(skillResult.terminal != null ? { terminal: skillResult.terminal } : {}),
+              ...(skillResult.errorCode ? { errorCode: skillResult.errorCode } : {}),
+              ...(skillResult.errorReason ? { errorReason: skillResult.errorReason } : {}),
+              ...(skillResult.errorDetails ? { errorDetails: skillResult.errorDetails } : {}),
+              ...(skillResult.suggestedAction ? { suggestedAction: skillResult.suggestedAction } : {}),
+              ...(skillResult.userMessage ? { userMessage: skillResult.userMessage } : {}),
+            };
           }
 
           const taskId = skillResult.taskId;
@@ -5046,6 +5085,7 @@ export async function* runMakaronAgent(
       const attemptCommittedTools = new Set<string>();
       let durableStageHandoff: { code: 'studio_stage_handoff'; detail: string } | undefined;
       let durableStudioCompletion: { detail: string } | undefined;
+      let nonRetryableToolFailure: { message: string; code?: string } | undefined;
       let streamError: unknown;
       let lastTool = '';
 
@@ -5084,6 +5124,8 @@ export async function* runMakaronAgent(
           }) || shouldStopAfterDurablePublishToolStep({
             durableExecution: Boolean(ctx.execution),
             requiresMaterializedVideo,
+            toolResults: steps.at(-1)?.toolResults,
+          }) || shouldStopAfterTerminalToolFailure({
             toolResults: steps.at(-1)?.toolResults,
           })
         ),
@@ -5540,6 +5582,28 @@ export async function* runMakaronAgent(
           const toolSucceeded = outputRecord?.success !== false
             && outputRecord?.status !== 'failed'
             && !(outputRecord?.error && outputRecord?.success !== true);
+          if (!toolSucceeded && outputRecord?.terminal === true) {
+            const rawMessage = typeof outputRecord.message === 'string'
+              ? outputRecord.message
+              : typeof outputRecord.error === 'string'
+                ? outputRecord.error
+                : 'The tool rejected the current input.';
+            const localized = outputRecord.userMessage && typeof outputRecord.userMessage === 'object'
+              ? outputRecord.userMessage as Record<string, unknown>
+              : undefined;
+            const localizedMessage = responseLocale.startsWith('zh')
+              ? localized?.zh
+              : localized?.en;
+            const userFacingMessage = typeof localizedMessage === 'string' && localizedMessage.trim()
+              ? localizedMessage
+              : rawMessage;
+            nonRetryableToolFailure = {
+              message: rawMessage,
+              code: typeof outputRecord.errorCode === 'string' ? outputRecord.errorCode : undefined,
+            };
+            finalStepTextChars += userFacingMessage.trim().length;
+            yield { type: 'content', text: `\n\n${userFacingMessage}` };
+          }
           if (completedCodeTargetPath && toolName === 'write_file') {
             const savedPath = typeof outputRecord?.path === 'string' ? outputRecord.path : undefined;
             if (toolSucceeded && (!savedPath || savedPath === completedCodeTargetPath)) {
@@ -5771,7 +5835,14 @@ export async function* runMakaronAgent(
 
       if (streamError) await persistStreamedCodeCheckpoint(true);
 
-      let assessment = durableStudioCompletion
+      let assessment = nonRetryableToolFailure
+        ? {
+            ok: true,
+            retryable: false,
+            code: 'non_retryable_tool_failure' as const,
+            detail: nonRetryableToolFailure.message,
+          }
+        : durableStudioCompletion
         ? {
             ok: true,
             retryable: false,
