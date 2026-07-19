@@ -485,6 +485,11 @@ try {
   }
 
   {
+    const result = await expectHelp(['skills', '--help'], /Skill commands:/);
+    assert.doesNotMatch(result.stdout, /--openmontage/);
+  }
+
+  {
     const result = await expectHelp(['--help'], /--agent-model <name>/);
     assert.match(result.stdout, /--image-model <name>/);
     assert.match(result.stdout, /--video-model <name>/);

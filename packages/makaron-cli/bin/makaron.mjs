@@ -1744,8 +1744,6 @@ function printHelp(topic, subtopic) {
     else if (subtopic === 'install') console.log('Usage: makaron skills install <marketplace-id|label> [--json]');
     else console.log(`Skill commands:
   skills list --built-in              List all built-in Makaron skills and Studio Run recipes
-  skills list --built-in --openmontage
-                                      List OpenMontage-native adapters only
   skills list                         List marketplace skills
   skills search <query>               Search marketplace skills
   skills show <id|label> --built-in   Show a built-in skill
@@ -2320,10 +2318,7 @@ if (!command || command === '--help' || command === '-h' || command === 'help') 
 
   if (sub === 'list') {
     const builtIn = args.includes('--built-in');
-    let skills = builtIn ? await fetchBuiltInSkills(baseUrl) : await fetchMarketplaceSkills(baseUrl);
-    if (builtIn && args.includes('--openmontage')) {
-      skills = skills.filter(skill => skill.sourceProject === 'openmontage');
-    }
+    const skills = builtIn ? await fetchBuiltInSkills(baseUrl) : await fetchMarketplaceSkills(baseUrl);
     if (jsonOutput) console.log(JSON.stringify({ skills }, null, 2));
     else if (builtIn) printBuiltInSkills(skills);
     else printMarketplaceSkills(skills);
@@ -2365,8 +2360,6 @@ if (!command || command === '--help' || command === '-h' || command === 'help') 
   } else {
     console.log(`Skill commands:
   skills list --built-in              List all built-in Makaron skills and Studio Run recipes
-  skills list --built-in --openmontage
-                                      List OpenMontage-native adapters only
   skills list                         List marketplace skills
   skills search <query>               Search marketplace skills
   skills show <id|label> --built-in   Show a built-in skill
