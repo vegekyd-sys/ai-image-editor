@@ -190,6 +190,17 @@ function compactListFilesOutput(output: JsonRecord, omitted: string[]): ToolResu
 }
 
 function compactPreviewFrameOutput(output: JsonRecord, omitted: string[]): ToolResultOutput {
+  if (output.error) {
+    return {
+      type: 'error-text',
+      value: truncateText(
+        String(output.error),
+        TOOL_HISTORY_MAX_ANALYSIS_CHARS,
+        omitted,
+        'truncated_preview_error',
+      ),
+    };
+  }
   omitted.push('removed_preview_frame_pixels');
   return {
     type: 'json',

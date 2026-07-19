@@ -63,6 +63,19 @@ describe('agent tool history sanitizer', () => {
     expect(image.omitted).toContain('removed_binary_payload');
   });
 
+  it('preserves preview_frame errors instead of treating them as image pixels', () => {
+    const preview = sanitizeToolHistory(
+      'preview_frame',
+      { design_path: 'project/drafts/latest-composition.json', frames: [0, 90, 180] },
+      { error: 'Failed to capture contact sheet: Failed to compile design code' },
+      { rows: 0, chars: 0 },
+    );
+
+    expect(preview.output.type).toBe('error-text');
+    expect(JSON.stringify(preview.output)).toContain('Failed to compile design code');
+    expect(preview.omitted).not.toContain('removed_preview_frame_pixels');
+  });
+
   it('removes unlabelled large base64 strings while preserving useful data objects', () => {
     const result = sanitizeToolHistory(
       'custom_tool',

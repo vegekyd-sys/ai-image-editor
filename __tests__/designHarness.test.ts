@@ -50,4 +50,25 @@ describe('design harness compile preflight', () => {
       `,
     })).toBeNull();
   });
+
+  it('rejects Remotion hooks called while evaluating the composition source', () => {
+    expect(validateDesign({
+      code: `
+        const {width, height} = useVideoConfig();
+        function Composition() { return <AbsoluteFill>{width}x{height}</AbsoluteFill>; }
+      `,
+    })).toMatch(/useVideoConfig called outside a component or custom hook/);
+  });
+
+  it('accepts Remotion hooks inside components', () => {
+    expect(validateDesign({
+      code: `
+        function Composition() {
+          const {width, height} = useVideoConfig();
+          const frame = useCurrentFrame();
+          return <AbsoluteFill>{width}x{height} at {frame}</AbsoluteFill>;
+        }
+      `,
+    })).toBeNull();
+  });
 });

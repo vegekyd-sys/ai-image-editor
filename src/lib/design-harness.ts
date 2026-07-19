@@ -65,23 +65,63 @@ export function validateDesignDiagnostics(result: DesignResult): string[] {
 
   const diagnostics: string[] = [];
 
-  // Check 2: References that would only fail once Player/export evaluates code
+  // Check 2: Hooks evaluated while the composition module is being created.
+  const hookError = checkTopLevelHookCalls(result.code);
+  if (hookError) diagnostics.push(hookError);
+
+  // Check 3: References that would only fail once Player/export evaluates code
   const referenceError = checkUnresolvedIdentifiers(result.code);
   if (referenceError) diagnostics.push(referenceError);
 
-  // Check 3: Image references
+  // Check 4: Image references
   const imageError = checkImageReferences(result.code, result.props);
   if (imageError) diagnostics.push(imageError);
 
-  // Check 4: Image URLs valid
+  // Check 5: Image URLs valid
   const urlError = checkImageUrls(result.code);
   if (urlError) diagnostics.push(urlError);
 
-  // Check 5: Editables validation
+  // Check 6: Editables validation
   const editablesError = validateEditables(result.editables);
   if (editablesError) diagnostics.push(editablesError);
 
   return [...new Set(diagnostics)];
+}
+
+/** Hooks may run inside components/custom hooks, never while evaluating the source module. */
+function checkTopLevelHookCalls(code: string): string | null {
+  try {
+    const ast = parse(normalizeRemotionScopeDeclarations(code), {
+      sourceType: 'script',
+      plugins: ['jsx', 'typescript'],
+    });
+    const hooks = new Set<string>();
+    traverse(ast, {
+      CallExpression(path) {
+        if (path.getFunctionParent()) return;
+        const callee = path.node.callee;
+        if (callee.type === 'Identifier' && /^use[A-Z0-9]/.test(callee.name)) {
+          hooks.add(callee.name);
+          return;
+        }
+        if (
+          callee.type === 'MemberExpression'
+          && !callee.computed
+          && callee.object.type === 'Identifier'
+          && callee.object.name === 'React'
+          && callee.property.type === 'Identifier'
+          && /^use[A-Z0-9]/.test(callee.property.name)
+        ) {
+          hooks.add(`React.${callee.property.name}`);
+        }
+      },
+    });
+    if (hooks.size === 0) return null;
+    return `⚠️ Composition compile error: React/Remotion hook${hooks.size === 1 ? '' : 's'} ${[...hooks].join(', ')} called outside a component or custom hook. Move each hook call inside Composition or a helper component, then try again.`;
+  } catch {
+    // Syntax errors are already reported by checkCompile().
+    return null;
+  }
 }
 
 /** Catch missing constants/components before a remote render discovers them. */
