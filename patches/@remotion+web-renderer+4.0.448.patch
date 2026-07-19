@@ -1,8 +1,8 @@
 diff --git a/node_modules/@remotion/web-renderer/dist/esm/index.mjs b/node_modules/@remotion/web-renderer/dist/esm/index.mjs
-index 97416ce..9918eaf 100644
+index 209d2b3..1c25422 100644
 --- a/node_modules/@remotion/web-renderer/dist/esm/index.mjs
 +++ b/node_modules/@remotion/web-renderer/dist/esm/index.mjs
-@@ -1654,8 +1654,11 @@ var hasRotateCssValue = (style) => {
+@@ -1740,8 +1740,11 @@ var hasRotateCssValue = (style) => {
  var hasScaleCssValue = (style) => {
    return style.scale !== "none" && style.scale !== "";
  };
@@ -15,7 +15,7 @@ index 97416ce..9918eaf 100644
  };
  
  // src/drawing/parse-linear-gradient.ts
-@@ -1992,8 +1995,15 @@ var calculateTransforms = ({
+@@ -2089,8 +2092,15 @@ var calculateTransforms = ({
      if (hasAnyTransformCssValue(computedStyle) || parent === element) {
        const toParse = hasTransformCssValue(computedStyle) ? computedStyle.transform : undefined;
        const matrix = new DOMMatrix(toParse);
@@ -32,7 +32,7 @@ index 97416ce..9918eaf 100644
        if (rotate !== "" && rotate !== "none") {
          additionalMatrices.push(new DOMMatrix(`rotate(${rotate})`));
        }
-@@ -2002,6 +2012,7 @@ var calculateTransforms = ({
+@@ -2099,6 +2109,7 @@ var calculateTransforms = ({
        }
        additionalMatrices.push(matrix);
        parent.style.transform = "none";
@@ -40,7 +40,7 @@ index 97416ce..9918eaf 100644
        parent.style.scale = "none";
        parent.style.rotate = "none";
        transforms.push({
-@@ -2013,6 +2024,7 @@ var calculateTransforms = ({
+@@ -2110,6 +2121,7 @@ var calculateTransforms = ({
        const parentRef = parent;
        toReset.push(() => {
          parentRef.style.transform = transform;
