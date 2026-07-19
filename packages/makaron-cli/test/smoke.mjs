@@ -65,6 +65,24 @@ const server = http.createServer(async (req, res) => {
     return;
   }
 
+  if (req.method === 'GET' && url.pathname === '/api/billing/credits') {
+    assert.equal(req.headers.authorization, 'Bearer mk_test_smoke');
+    sendJson(200, {
+      balance: 321,
+      lifetimePurchased: 500,
+      lifetimeUsed: 179,
+      subscription: {
+        provider: 'stripe',
+        planId: 'pro',
+        status: 'active',
+        billingInterval: 'month',
+        currentPeriodEnd: '2026-08-19T00:00:00.000Z',
+        cancelAtPeriodEnd: false,
+      },
+    });
+    return;
+  }
+
   if (url.pathname === '/api/admin/home-skills') {
     assert.equal(req.headers.authorization, 'Bearer mk_test_smoke');
     if (req.method === 'GET') sendJson(200, marketplaceSkills);
@@ -432,6 +450,7 @@ try {
     [['responses', 'list', '--help'], /Usage: makaron responses list/],
     [['materialize', '--help'], /Usage: makaron materialize/],
     [['composition', '--help'], /Composition commands:/],
+    [['credits', '--help'], /Usage: makaron credits/],
     [['list', '--help'], /Usage: makaron list/],
     [['setup', '--help'], /Usage: makaron setup/],
     [['install-skill', '--help'], /Usage: makaron install-skill/],
@@ -475,6 +494,31 @@ try {
     assert.match(result.stdout, /deepseek-v4-pro/);
     assert.match(result.stdout, /MAKARON_AGENT_MODEL/);
     assert.match(result.stdout, /legacy --model flag is deprecated/);
+  }
+
+  {
+    const result = await expectSuccess(['credits', '--json']);
+    assert.deepEqual(JSON.parse(result.stdout), {
+      balance: 321,
+      lifetimePurchased: 500,
+      lifetimeUsed: 179,
+      subscription: {
+        provider: 'stripe',
+        planId: 'pro',
+        status: 'active',
+        billingInterval: 'month',
+        currentPeriodEnd: '2026-08-19T00:00:00.000Z',
+        cancelAtPeriodEnd: false,
+      },
+    });
+  }
+
+  {
+    const result = await expectSuccess(['credits']);
+    assert.match(result.stdout, /^Credits: 321$/m);
+    assert.match(result.stdout, /^Lifetime purchased: 500$/m);
+    assert.match(result.stdout, /^Lifetime used: 179$/m);
+    assert.match(result.stdout, /^Subscription: pro \(active\)$/m);
   }
 
   {

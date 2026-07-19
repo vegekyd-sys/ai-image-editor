@@ -1600,6 +1600,7 @@ Commands:
   register --verify --challenge-id <id> --answer <n>  Verify and save API key
   claim                              Get claim URL for human to link account
   login                              Log in to Makaron (human interactive)
+  credits                            Show current credit balance
   list (ls)                          List all projects
   project media <projectId> --json    List timeline media for a project
   create --image <file>              Create project from local image
@@ -1723,6 +1724,8 @@ function printHelp(topic, subtopic) {
 `);
   } else if (topic === 'list' || topic === 'ls') {
     console.log('Usage: makaron list');
+  } else if (topic === 'credits' || topic === 'credit' || topic === 'balance') {
+    console.log('Usage: makaron credits [--json]');
   } else if (topic === 'project' || topic === 'projects') {
     if (subtopic === 'media') console.log('Usage: makaron project media <projectId> [--json]');
     else console.log(`Project commands:
@@ -1833,6 +1836,29 @@ if (!command || command === '--help' || command === '-h' || command === 'help') 
   installAgentSkill(args.slice(1));
 } else if (command === 'login') {
   await login();
+} else if (command === 'credits' || command === 'credit' || command === 'balance') {
+  const { headers, baseUrl } = getAuth();
+  const res = await fetch(`${baseUrl}/api/billing/credits`, { headers });
+  const data = await res.json().catch(() => null);
+  if (!res.ok || !data) {
+    const message = data?.error || data?.message || (res.ok ? 'Invalid response' : `HTTP ${res.status}`);
+    process.stderr.write(`Failed to get credits: ${message}\n`);
+    process.exit(1);
+  }
+  if (args.includes('--json')) {
+    console.log(JSON.stringify(data));
+  } else {
+    console.log(`Credits: ${data.balance ?? 0}`);
+    console.log(`Lifetime purchased: ${data.lifetimePurchased ?? 0}`);
+    console.log(`Lifetime used: ${data.lifetimeUsed ?? 0}`);
+    if (data.subscription) {
+      const plan = data.subscription.planId || 'unknown';
+      const status = data.subscription.status ? ` (${data.subscription.status})` : '';
+      console.log(`Subscription: ${plan}${status}`);
+    } else {
+      console.log('Subscription: none');
+    }
+  }
 } else if (command === 'create') {
   const { headers, baseUrl } = getAuth();
   const opts = { images: [], imageUrls: [] };

@@ -44,6 +44,12 @@ export MAKARON_API_KEY=mk_live_xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx
 
 Verify: `npx makaron-cli list` should show projects.
 
+Check the current credit balance and subscription:
+```bash
+npx makaron-cli credits
+npx makaron-cli credits --json
+```
+
 ## Core Workflow
 
 ```bash

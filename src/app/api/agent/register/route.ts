@@ -26,6 +26,7 @@ export async function GET() {
       existing_project: 'npx makaron-cli chat --project <id> -b "<prompt>"',
       watch_results: 'npx makaron-cli responses watch <runId> --jsonl',
       pick_result: 'npx makaron-cli responses get <runId> --pick first_image_url',
+      check_credits: 'npx makaron-cli credits --json',
       list_projects: 'npx makaron-cli list',
     },
     capabilities: ['image editing', 'style transfer', 'text-to-image', 'video generation', 'background music', 'motion graphics'],

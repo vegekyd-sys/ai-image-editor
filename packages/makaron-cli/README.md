@@ -48,6 +48,12 @@ export MAKARON_API_KEY=mk_live_xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx
 
 Verify: `npx makaron-cli list` should show projects.
 
+Check the current credit balance and subscription:
+```bash
+npx makaron-cli credits
+npx makaron-cli credits --json
+```
+
 ### Let a human claim your account
 
 After registering, generate a link for a human to link your API key to their account:
