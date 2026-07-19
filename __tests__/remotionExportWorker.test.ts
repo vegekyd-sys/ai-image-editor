@@ -167,6 +167,8 @@ describe('Remotion export worker contract', () => {
     expect(videoSnapshotRoute).toContain("status: 'failed'")
     expect(videoPollCron).toContain('runNextRemotionExportJob')
     expect(videoPollCron).toContain('remotionProcessed')
+    expect(videoPollCron).toContain(".order('created_at', { ascending: true })")
+    expect(videoPollCron).toContain('Provider polling failed after 30 minutes')
     expect(cli).toContain('composition export --project <id> --media <N> --wait')
     expect(cli).toContain("command === 'materialize'")
     expect(cli).toContain('--design-json')

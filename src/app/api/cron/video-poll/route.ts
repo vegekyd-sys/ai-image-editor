@@ -31,16 +31,20 @@ export async function GET(req: NextRequest) {
 
   const { data: stale } = await admin
     .from('snapshots')
-    .select('id, project_id, image_url, video_meta, projects(user_id)')
+    .select('id, project_id, image_url, video_meta, created_at, projects(user_id)')
     .eq('type', 'video')
     .lt('created_at', tenMinAgo)
     .filter('video_meta->>status', 'eq', 'processing')
+    .order('created_at', { ascending: true })
     .limit(20)
 
   let processed = 0
   for (const snap of stale || []) {
     const vm = snap.video_meta as VideoMeta
     if (!vm?.taskId) continue
+    const createdAt = vm.createdAt || snap.created_at
+    const createdAtMs = new Date(createdAt).getTime()
+    const age = Number.isFinite(createdAtMs) ? Date.now() - createdAtMs : 0
 
     try {
       let result: { status: string; videoUrl?: string; error?: string }
@@ -85,13 +89,16 @@ export async function GET(req: NextRequest) {
         processed++
       }
       // still processing after 30min → mark timeout
-      const age = Date.now() - new Date(vm.createdAt || '').getTime()
       if (result.status !== 'completed' && result.status !== 'failed' && age > 30 * 60 * 1000) {
         await handleVideoFailure(snap.id, 'Timed out after 30 minutes')
         processed++
       }
     } catch (e) {
       console.error(`[cron/video-poll] Error polling ${snap.id}:`, e)
+      if (age > 30 * 60 * 1000) {
+        await handleVideoFailure(snap.id, 'Provider polling failed after 30 minutes')
+        processed++
+      }
     }
   }
 
