@@ -48,12 +48,33 @@ function normalizeStatus(status?: string): XaiVideoTaskResult['status'] {
 
 function extractError(data: Record<string, unknown>): string | undefined {
   const error = data.error
-  if (!error) return undefined
+  if (!error) {
+    return typeof data.message === 'string' ? data.message : undefined
+  }
   if (typeof error === 'string') return error
   if (typeof error === 'object' && error !== null && 'message' in error) {
     return String((error as { message?: unknown }).message)
   }
   return JSON.stringify(error)
+}
+
+function parseResponseObject(text: string): Record<string, unknown> | undefined {
+  try {
+    const data = JSON.parse(text)
+    return data && typeof data === 'object' && !Array.isArray(data)
+      ? data as Record<string, unknown>
+      : undefined
+  } catch {
+    return undefined
+  }
+}
+
+function isTerminalStatusResponse(status: number): boolean {
+  // xAI reports terminal generation failures such as content moderation as
+  // HTTP 400 responses from the task status endpoint. Missing/expired tasks
+  // are terminal too. Authentication, throttling, and 5xx errors must keep
+  // throwing so the normal retry/operations path can recover them.
+  return status === 400 || status === 404 || status === 410 || status === 422
 }
 
 function dollarsFromUsage(data: Record<string, unknown>): number | undefined {
@@ -110,6 +131,15 @@ export async function getXaiVideoTask(taskId: string): Promise<XaiVideoTaskResul
 
   if (!res.ok) {
     const text = await res.text()
+    const data = parseResponseObject(text)
+    if (isTerminalStatusResponse(res.status)) {
+      return {
+        taskId: `xai-${requestId}`,
+        status: 'failed',
+        error: (data && extractError(data)) || text.slice(0, 500) || `xAI video generation failed (${res.status})`,
+        costUsd: data ? dollarsFromUsage(data) : undefined,
+      }
+    }
     throw new Error(`xAI video status error ${res.status}: ${text}`)
   }
 

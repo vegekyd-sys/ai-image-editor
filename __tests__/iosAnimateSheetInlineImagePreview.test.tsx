@@ -68,4 +68,30 @@ describe('AnimateSheet inline image preview', () => {
     expect(preview.querySelector('img')?.getAttribute('src')).toBe('https://example.com/source.jpg?w=400');
     expect(screen.queryByTestId('image-ref-preview-1')).toBeNull();
   });
+
+  it('shows the provider error for a failed Grok video', () => {
+    render(
+      <LocaleProvider>
+        <AnimateSheet
+          snapshots={snapshots}
+          projectId="project-1"
+          onClose={() => {}}
+          animationState={animationState}
+          onStateChange={() => {}}
+          mode="detail"
+          detailAnimation={{
+            ...detailAnimation,
+            taskId: 'xai-request-1',
+            videoUrl: null,
+            status: 'failed',
+            videoModel: 'grok',
+            error: 'Generated video rejected by content moderation.',
+          }}
+        />
+      </LocaleProvider>,
+    );
+
+    expect(screen.getByText('失败')).toBeTruthy();
+    expect(screen.getByText('Generated video rejected by content moderation.')).toBeTruthy();
+  });
 });
