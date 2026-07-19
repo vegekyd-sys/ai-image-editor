@@ -772,7 +772,11 @@ export async function GET(
       created_at: run.started_at,
       completed_at: run.ended_at,
       ...(nextPollAfterMs ? { next_poll_after_ms: nextPollAfterMs } : {}),
-      ...(agentDone && hasPendingArtifacts ? { agent_status: 'completed' } : {}),
+      // Agent execution and async artifacts have separate lifecycles. The
+      // aggregate status stays in_progress while video/music renders, but CUI
+      // clients must be able to release the composer as soon as the agent
+      // itself has stopped.
+      ...(agentDone ? { agent_status: run.status } : {}),
       output: finalOutput,
       eventCount: eventCount ?? 0,
       result, // legacy

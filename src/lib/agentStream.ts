@@ -188,6 +188,7 @@ async function streamDurableAgent(
       }
       const run = await runResponse.json() as {
         status: string;
+        agent_status?: string;
         first_message_id?: string;
         events?: PersistedAgentEvent[];
         error?: { message?: string };
@@ -202,12 +203,13 @@ async function streamDurableAgent(
         lastSeq = event.seq;
         dispatchPersistedAgentEvent(event, callbacks);
       }
-      if (run.status === 'completed') {
+      const agentStatus = run.agent_status || run.status;
+      if (agentStatus === 'completed') {
         callbacks.onDone?.();
         return;
       }
-      if (run.status === 'failed' || run.status === 'aborted') {
-        callbacks.onError?.(run.error?.message || (run.status === 'aborted' ? 'Agent run aborted' : 'Agent run failed'));
+      if (agentStatus === 'failed' || agentStatus === 'aborted') {
+        callbacks.onError?.(run.error?.message || (agentStatus === 'aborted' ? 'Agent run aborted' : 'Agent run failed'));
         return;
       }
       await new Promise(resolve => setTimeout(resolve, Math.min(run.next_poll_after_ms || 1200, 3000)));

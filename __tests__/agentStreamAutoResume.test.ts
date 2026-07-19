@@ -72,4 +72,45 @@ describe('Studio Run automatic stream recovery', () => {
     expect(onDone).toHaveBeenCalledTimes(1);
     expect(onError).not.toHaveBeenCalled();
   });
+
+  it('releases durable chat when the agent is done while video keeps rendering', async () => {
+    const fetchMock = vi.fn()
+      .mockResolvedValueOnce(new Response(JSON.stringify({ runId: 'run-1' }), {
+        status: 200,
+        headers: { 'Content-Type': 'application/json' },
+      }))
+      .mockResolvedValueOnce(new Response(JSON.stringify({
+        status: 'in_progress',
+        agent_status: 'completed',
+        events: [{
+          seq: 1,
+          type: 'video_snapshot',
+          data: {
+            snapshotId: 'snapshot-1',
+            taskId: 'task-unified-1',
+            videoMeta: { status: 'processing', taskId: 'task-unified-1' },
+          },
+        }],
+        next_poll_after_ms: 10_000,
+      }), {
+        status: 200,
+        headers: { 'Content-Type': 'application/json' },
+      }));
+    vi.stubGlobal('fetch', fetchMock);
+    const onDone = vi.fn();
+    const onVideoSnapshot = vi.fn();
+
+    await streamAgent(
+      { prompt: 'render with Seedance', image: '', projectId: 'project-1', durable: true },
+      { onDone, onVideoSnapshot },
+    );
+
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+    expect(onVideoSnapshot).toHaveBeenCalledWith(
+      'snapshot-1',
+      'task-unified-1',
+      expect.objectContaining({ status: 'processing' }),
+    );
+    expect(onDone).toHaveBeenCalledTimes(1);
+  });
 });
