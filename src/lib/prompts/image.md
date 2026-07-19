@@ -24,7 +24,7 @@ Edit the current photo or generate a new image from text.
 
 `editPrompt` format depends on the mode. See Context Mode versus Edit Mode below.
 
-When no photo exists, use text-to-image mode and write the `editPrompt` describing the scene.
+When no photo exists, use text-to-image mode and write the `editPrompt` describing the scene. Omit `media_index` entirely; never pass `0`.
 
 ### Media Index for generate_image
 

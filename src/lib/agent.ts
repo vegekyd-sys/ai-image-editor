@@ -19,6 +19,7 @@ import { transcribeWithVolcengineAsr, type VolcengineAsrTranscript, type Transcr
 import { prepareVisualAsset, resolvePreparedVisualAssetById } from './visual-assets/bridge';
 import agentPrompt from './prompts/agent.md';
 import generateImageToolPrompt from './prompts/generate_image_tool.md';
+import { normalizeGenerateImageMediaIndex } from './generate-image-input';
 import type { DesignPayload, Tip, VideoMeta, VideoModel } from '@/types';
 import { isPermanentUrl, toPublicStorageUrl, uploadAudio, uploadVideo } from '@/lib/supabase/storage';
 import type { AgentPerf } from './agent-perf';
@@ -1374,14 +1375,18 @@ function createTools(ctx: AgentContext, runtime: AgentModelRuntime, locale?: str
         skill: z.string().optional().describe('Activate a skill template (e.g. enhance, creative, wild, captions). See tool description and available skills.'),
         model: z.enum(['gemini', 'gemini-lite', 'qwen', 'pony', 'wai', 'openai']).optional().describe('NEVER set this unless the user literally says a model name like "用pony" or "use qwen" or "用openai" or "nano banana lite", or the active long-video-director workflow is generating director storyboard images, which MUST set "openai". For NSFW after Gemini refusal, set "qwen". Otherwise ALWAYS omit — the router handles everything automatically. Setting this without explicit user request is a bug.'),
         aspectRatio: z.string().optional().describe('Target aspect ratio e.g. "4:5", "1:1", "16:9"'),
-        media_index: z.number().optional().describe('1-based index of the snapshot to edit (<<<media_1>>> = 1, <<<media_2>>> = 2, ...). Omit for text-to-image (no photo sent). For most edits, pass the current snapshot index.'),
+        media_index: z.number().optional().describe('1-based index of the snapshot to edit (<<<media_1>>> = 1, <<<media_2>>> = 2, ...). Omit the field entirely for text-to-image (no photo sent); never send 0. For most edits, pass the current snapshot index.'),
         reference_media_indices: z.array(z.number()).optional().describe('1-based indices of snapshots to use as reference images (e.g. [1, 3] to reference <<<media_1>>> and <<<media_3>>>). Use when combining elements from multiple snapshots — e.g. "use the person from media_1 and the background from media_2". The editPrompt should describe how to combine them (e.g. "Place the person from Media 2 into the scene of Media 1").'),
       }),
       execute: async ({ editPrompt, skill, model, aspectRatio, media_index, reference_media_indices }) => {
+        // GPT-5.6 currently fills omitted optional numeric tool fields with 0.
+        // Treat that provider sentinel exactly like omission so empty projects
+        // can still use pure text-to-image. Positive indices remain validated.
+        const resolvedMediaIndex = normalizeGenerateImageMediaIndex(media_index);
         // Resolve which image to edit — agent must pass media_index to include a photo
         let editTarget: string | undefined;
-        if (media_index !== undefined) {
-          const v = validateImageIndex(ctx.snapshotImages, media_index);
+        if (resolvedMediaIndex !== undefined) {
+          const v = validateImageIndex(ctx.snapshotImages, resolvedMediaIndex);
           if (v.error) return { success: false as const, message: v.error };
           editTarget = ctx.snapshotImages[v.idx];
         } else if (ctx.currentImage && !ctx.snapshotImages.includes(ctx.currentImage)) {
