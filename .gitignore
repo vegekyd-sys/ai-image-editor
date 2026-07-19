@@ -44,6 +44,10 @@ HANDOFF*.md
 # vercel
 .vercel
 
+# supabase local project link metadata
+supabase/.temp/*
+!supabase/.temp/cli-latest
+
 # typescript
 *.tsbuildinfo
 next-env.d.ts
