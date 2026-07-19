@@ -31,9 +31,9 @@ describe('welcome credits source of truth', () => {
     expect(eq).toHaveBeenCalledWith('key', 'welcome_credits')
   })
 
-  it('ships an unapplied config migration that never rewrites existing balances', () => {
+  it('ships a config migration that never rewrites existing balances', () => {
     const migration = readFileSync(
-      path.join(root, 'supabase/migrations/20260719041439_set_welcome_credits_500.sql'),
+      path.join(root, 'supabase/migrations/20260719064316_set_welcome_credits_500.sql'),
       'utf8',
     )
     expect(migration).toContain("VALUES ('welcome_credits', '500', NOW())")

@@ -673,6 +673,7 @@ export default function AgentChatView({
   const [kbInset, setKbInset] = useState(0);
   const [nativeKbInset, setNativeKbInset] = useState(0);
   const syncKeyboardInsetFromViewport = useCallback(() => {
+    if (typeof window === 'undefined') return;
     const vv = window.visualViewport;
     if (!vv) return;
     const inset = Math.max(0, window.innerHeight - vv.height - vv.offsetTop);
