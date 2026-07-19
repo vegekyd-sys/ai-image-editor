@@ -90,6 +90,64 @@ export function shouldStopAfterDurablePublishToolStep(input: {
   }));
 }
 
+const CHINESE_VIDEO_COUNT: Record<string, number> = {
+  '一': 1,
+  '两': 2,
+  '二': 2,
+  '三': 3,
+  '四': 4,
+  '五': 5,
+  '六': 6,
+  '七': 7,
+  '八': 8,
+  '九': 9,
+  '十': 10,
+};
+
+export function requestedAsyncVideoSubmissionCount(prompt: string): number {
+  const currentRequest = prompt.split('[User request').at(-1) || prompt;
+  const patterns = [
+    /(?:生成|创建|制作|做|来|再生成|再做)\s*(\d+|[一两二三四五六七八九十])\s*(?:个|条|支|段|款|版|份)/i,
+    /(?:generate|create|make|produce)\s+(\d+|one|two|three|four|five|six|seven|eight|nine|ten)\s+(?:videos?|clips?|variants?|versions?)/i,
+  ];
+  const englishCounts: Record<string, number> = {
+    one: 1, two: 2, three: 3, four: 4, five: 5,
+    six: 6, seven: 7, eight: 8, nine: 9, ten: 10,
+  };
+  for (const pattern of patterns) {
+    const match = currentRequest.match(pattern);
+    if (!match) continue;
+    const token = match[1].toLowerCase();
+    const count = Number(token) || CHINESE_VIDEO_COUNT[token] || englishCounts[token];
+    if (Number.isInteger(count) && count > 0) return Math.min(count, 10);
+  }
+  return 1;
+}
+
+export function requestsContinuedVideoWorkflow(prompt: string): boolean {
+  const currentRequest = (prompt.split('[User request').at(-1) || prompt).toLowerCase();
+  if (/(?:remotion|studio\s*run|explainer|vlog|composition|解说视频|介绍短片|剪辑|合成)/i.test(currentRequest)) return true;
+  const durations = Array.from(currentRequest.matchAll(/(\d+(?:\.\d+)?)\s*(?:s|sec(?:ond)?s?|秒)/gi));
+  return durations.some(match => Number(match[1]) > 15);
+}
+
+export function shouldStopAfterAsyncVideoSubmission(input: {
+  durableExecution: boolean;
+  studioRunActive: boolean;
+  requestedCount: number;
+  steps: ReadonlyArray<{ toolResults?: ReadonlyArray<{ toolName?: string; output?: unknown }> }>;
+}): boolean {
+  if (!input.durableExecution || input.studioRunActive) return false;
+  let submitted = 0;
+  for (const step of input.steps) {
+    for (const result of step.toolResults || []) {
+      if (result.toolName !== 'generate_animation' || !result.output || typeof result.output !== 'object') continue;
+      if ((result.output as Record<string, unknown>).success === true) submitted++;
+    }
+  }
+  return submitted >= Math.max(1, input.requestedCount);
+}
+
 export function shouldStopAfterTerminalToolFailure(input: {
   toolResults?: ReadonlyArray<{ toolName?: string; output?: unknown }>;
 }): boolean {

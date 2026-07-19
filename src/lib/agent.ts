@@ -60,10 +60,13 @@ import {
   classifyModelTermination,
   describeModelStreamError,
   requestsMaterializedVideo,
+  requestsContinuedVideoWorkflow,
+  requestedAsyncVideoSubmissionCount,
   shouldCompleteDurableStudioRun,
   shouldContinueActiveStudioRun,
   shouldHandoffToStudioComposition,
   shouldStopAfterDurablePublishToolStep,
+  shouldStopAfterAsyncVideoSubmission,
   shouldStopAfterTerminalToolFailure,
   shouldStopAfterStudioToolStep,
   shouldUseTextOnlyRecovery,
@@ -1452,6 +1455,8 @@ function createTools(ctx: AgentContext, runtime: AgentModelRuntime, locale?: str
       description: `Submit a video script for rendering.
 
 Use this tool after the user has confirmed a video script that is already visible in the conversation. You may also call it in the same turn where you first write the script when the user's current request explicitly authorizes direct submission without confirmation, for example "直接提交渲染", "不要问我确认", "不用确认", "直接生成视频", "submit now", or "do not ask for confirmation".
+
+When the user requests multiple independent video variants, issue every \`generate_animation\` call in the same assistant tool turn so the provider submissions run in parallel. Do not wait for one task result before issuing the next call. Each call still contains one complete <=15-second script.
 
 **BEFORE writing a video script**: call \`read_file('prompts/animate.md')\` to load the full video guide (modes, prompt styles, showcases, reference video usage). Do not re-read if already in this conversation's tool-result history.
 
@@ -5009,6 +5014,9 @@ export async function* runMakaronAgent(
     const studioRunRecoveryPrompt = prompt.includes('[System automatic recovery]')
       || prompt.includes('[Recoverable Agent Checkpoint]');
     const requiresMaterializedVideo = requestsMaterializedVideo(prompt);
+    const requestedAsyncVideoCount = requestedAsyncVideoSubmissionCount(prompt);
+    const continuedVideoWorkflow = requestsContinuedVideoWorkflow(prompt);
+    let stoppedAfterAsyncVideoSubmission = false;
     const recoveryBlockedTools = new Set<string>();
     const nonRepeatableTools = new Set([
       'generate_image',
@@ -5116,8 +5124,15 @@ export async function* runMakaronAgent(
           : {}),
       stopWhen: [
         stepCountIs(maxSteps),
-        ({ steps }: { steps: Array<{ toolResults?: Array<{ toolName?: string; output?: unknown }> }> }) => (
-          shouldStopAfterStudioToolStep({
+        ({ steps }: { steps: Array<{ toolResults?: Array<{ toolName?: string; output?: unknown }> }> }) => {
+          const stopAfterAsyncVideo = shouldStopAfterAsyncVideoSubmission({
+            durableExecution: Boolean(ctx.execution),
+            studioRunActive: continuedVideoWorkflow || studioRunTouchedThisTurn || Boolean(executionAttemptWorkUnit?.startsWith('studio:')),
+            requestedCount: requestedAsyncVideoCount,
+            steps,
+          });
+          if (stopAfterAsyncVideo) stoppedAfterAsyncVideoSubmission = true;
+          return shouldStopAfterStudioToolStep({
             durableExecution: Boolean(ctx.execution),
             attemptWorkUnit: executionAttemptWorkUnit,
             toolResults: steps.at(-1)?.toolResults,
@@ -5127,8 +5142,8 @@ export async function* runMakaronAgent(
             toolResults: steps.at(-1)?.toolResults,
           }) || shouldStopAfterTerminalToolFailure({
             toolResults: steps.at(-1)?.toolResults,
-          })
-        ),
+          }) || stopAfterAsyncVideo;
+        },
         // The attempt budget is a handoff boundary, not a kill timer. AI SDK
         // evaluates stop conditions only after a complete model/tool step, so
         // active tool arguments and tool results stay paired and recoverable.
@@ -5989,6 +6004,15 @@ export async function* runMakaronAgent(
       imagesSent++;
     }
     yield* flushPendingImageSnapshots(ctx);
+
+    if (stoppedAfterAsyncVideoSubmission) {
+      yield {
+        type: 'content',
+        text: responseLocale === 'en'
+          ? `${requestedAsyncVideoCount === 1 ? 'Video task' : `${requestedAsyncVideoCount} video tasks`} submitted. You can keep chatting while rendering continues in the timeline.`
+          : `${requestedAsyncVideoCount === 1 ? '视频任务' : `${requestedAsyncVideoCount} 个视频任务`}已提交。渲染会在时间线后台继续，你现在就可以继续聊天。`,
+      };
+    }
 
     console.log(`⏱️ [agent] DONE total ${((Date.now() - agentStartTime) / 1000).toFixed(1)}s (${imagesSent} images, ${stepCount} steps)`);
     perf?.mark('agent_done', {
