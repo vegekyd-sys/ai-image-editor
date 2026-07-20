@@ -9,17 +9,11 @@ import { Audio as MediaAudio, Video as MediaVideo } from '@remotion/media';
 import * as RemotionPaths from '@remotion/paths';
 import * as RemotionNoise from '@remotion/noise';
 import * as THREE from 'three';
+import { getAvailableFonts } from '@remotion/google-fonts';
 import { transform as sucraseTransform } from 'sucrase';
 import { normalizeRemotionScopeDeclarations } from '@/lib/remotion-code-normalization';
-import {
-  loadRemotionFontStylesheet,
-  loadRemotionGoogleFonts,
-  normalizeRemotionFontFamilies,
-  REMOTION_FONT_FALLBACK,
-  remotionFontSearchText,
-} from '@/remotion/font-runtime';
 
-const { Sequence, useVideoConfig, delayRender, continueRender, cancelRender } = Remotion;
+const { Sequence, useVideoConfig, delayRender, continueRender } = Remotion;
 
 // Sequence wrapper: auto-inject premountFor={fps} for smooth video cuts
 
@@ -89,10 +83,52 @@ function compileAndEval(code: string, scope: Record<string, unknown>): React.Com
   }
 }
 
+// ─── Font loading via @remotion/google-fonts ──────────────────────────────
+
+const ALL_FONTS = getAvailableFonts();
+
+/**
+ * Scan code + props for any Google Font family names and load them.
+ * Uses @remotion/google-fonts — no regex parsing of CSS needed.
+ * Just checks if the font name appears anywhere in the text.
+ */
+async function loadGoogleFontsFromText(text: string): Promise<void> {
+  const fontsToLoad = ALL_FONTS.filter(f => text.includes(f.fontFamily));
+  if (fontsToLoad.length === 0) return;
+
+  await Promise.all(fontsToLoad.map(async (font) => {
+    try {
+      const loaded = await font.load();
+      const { waitUntilDone } = loaded.loadFont();
+      await waitUntilDone();
+    } catch (e) {
+      console.warn(`[DynamicDesign] font load failed: ${font.fontFamily}`, e);
+    }
+  }));
+}
+
+/** Check if text contains CJK characters */
+function hasCJK(text: string): boolean {
+  return /[\u4e00-\u9fff\u3400-\u4dbf\u3000-\u303f\u3040-\u309f\u30a0-\u30ff\uac00-\ud7af]/.test(text);
+}
+
+/** Load Noto Color Emoji font */
+async function loadEmojiFont(): Promise<void> {
+  try {
+    const font = ALL_FONTS.find(f => f.fontFamily === 'Noto Color Emoji');
+    if (!font) return;
+    const loaded = await font.load();
+    const { waitUntilDone } = loaded.loadFont();
+    await waitUntilDone();
+  } catch (e) {
+    console.warn('[DynamicDesign] emoji font load failed:', e);
+  }
+}
+
 // ─── Component ────────────────────────────────────────────────────────────
 
-export const DynamicDesign: React.FC<Record<string, unknown>> = ({ code, designProps, fontStylesheetUrl, skipFontLoading, useOffthreadVideo, useNativeVideo }) => {
-  const codeStr = normalizeRemotionFontFamilies(typeof code === 'string' ? code : '');
+export const DynamicDesign: React.FC<Record<string, unknown>> = ({ code, designProps, skipFontLoading, useOffthreadVideo, useNativeVideo }) => {
+  const codeStr = typeof code === 'string' ? code : '';
   const propsObj = useMemo(
     () => (typeof designProps === 'object' && designProps !== null ? designProps : {}) as Record<string, unknown>,
     [designProps],
@@ -103,14 +139,19 @@ export const DynamicDesign: React.FC<Record<string, unknown>> = ({ code, designP
   );
   const Component = useMemo(() => compileAndEval(codeStr, remotionScope), [codeStr, remotionScope]);
 
-  const allText = useMemo(() => remotionFontSearchText(codeStr, propsObj), [codeStr, propsObj]);
-  const fontManifestUrl = typeof fontStylesheetUrl === 'string' ? fontStylesheetUrl : undefined;
+  // Combine code + props for font detection
+  const allText = useMemo(() => {
+    const propsStr = Object.values(propsObj).filter(v => typeof v === 'string').join(' ');
+    return codeStr + '\n' + propsStr;
+  }, [codeStr, propsObj]);
 
+  const [, setFontsReady] = useState(false);
   const handleRef = useRef<number | null>(null);
 
   useEffect(() => {
     if (!codeStr) return;
     if (skipFontLoading === true) {
+      setFontsReady(true);
       return;
     }
     const handle = delayRender('Loading fonts for design');
@@ -118,12 +159,20 @@ export const DynamicDesign: React.FC<Record<string, unknown>> = ({ code, designP
 
     (async () => {
       try {
-        if (fontManifestUrl) await loadRemotionFontStylesheet(fontManifestUrl, document);
-        else await loadRemotionGoogleFonts(allText, document);
-      } catch (error) {
-        cancelRender(error instanceof Error ? error : new Error(String(error)));
-        return;
-      }
+        // Load all Google Fonts referenced in code + props
+        await loadGoogleFontsFromText(allText);
+
+        // Emoji font — always load so emoji characters fallback correctly
+        await loadEmojiFont();
+
+        // If CJK text present, inject global fallback font-family
+        // so text renders even when Agent doesn't specify fontFamily
+        if (hasCJK(allText)) {
+          const style = document.createElement('style');
+          style.textContent = `*, *::before, *::after { font-family: 'Noto Sans SC', sans-serif; }`;
+          document.head.appendChild(style);
+        }
+      } catch { /* continue even if fonts fail */ }
 
       continueRender(handle);
       handleRef.current = null;
@@ -135,16 +184,12 @@ export const DynamicDesign: React.FC<Record<string, unknown>> = ({ code, designP
         handleRef.current = null;
       }
     };
-  }, [codeStr, allText, fontManifestUrl, skipFontLoading]);
+  }, [codeStr, allText]);
 
   if (!Component) {
     throw new Error('Failed to compile design code');
   }
   // Always render Component so <Img> can register its own delayRender for image loading.
   // Font delayRender runs in parallel — Remotion waits for ALL handles before capturing.
-  return (
-    <div style={{ position: 'absolute', inset: 0, fontFamily: REMOTION_FONT_FALLBACK }}>
-      <Component {...propsObj} />
-    </div>
-  );
+  return <Component {...propsObj} />;
 };

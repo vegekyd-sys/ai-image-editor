@@ -178,7 +178,7 @@ export async function renderDesignVideo(
       concurrency: readEnv('REMOTION_LOCAL_CONCURRENCY') || 4,
       cacheDir: readEnv('REMOTION_LOCAL_MEDIA_CACHE_DIR'),
       mediaServerPort: Number(readEnv('REMOTION_LOCAL_MEDIA_PORT') || 5123),
-      skipFontLoading: readEnv('REMOTION_LOCAL_SKIP_FONTS') === 'true',
+      skipFontLoading: readEnv('REMOTION_LOCAL_SKIP_FONTS') !== 'false',
     });
   }
 

@@ -260,7 +260,6 @@ function fingerprintDesign(
     renderProfile,
     outputSettings: {
       renderer,
-      fontRuntime: 'normalized-system-fonts-v2',
       ...(lambdaEncoding ? {
         lambdaVideoBitrate: lambdaEncoding.videoBitrate,
         lambdaAudioBitrate: lambdaEncoding.audioBitrate,

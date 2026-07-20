@@ -284,7 +284,7 @@ export async function renderDesignVideoLocal(
   const cacheDir = options.cacheDir || process.env.REMOTION_LOCAL_MEDIA_CACHE_DIR || '/tmp/makaron-remotion-media'
   const mediaServerPort = options.mediaServerPort || Number(process.env.REMOTION_LOCAL_MEDIA_PORT || 5123)
   const concurrency = resolveLocalConcurrency(options.concurrency ?? process.env.REMOTION_LOCAL_CONCURRENCY)
-  const skipFontLoading = options.skipFontLoading ?? process.env.REMOTION_LOCAL_SKIP_FONTS === 'true'
+  const skipFontLoading = options.skipFontLoading ?? process.env.REMOTION_LOCAL_SKIP_FONTS !== 'false'
   const browserExecutable = process.env.REMOTION_BROWSER_EXECUTABLE || undefined
   const chromeMode = resolveChromeMode(browserExecutable)
   const chromiumOptions = {

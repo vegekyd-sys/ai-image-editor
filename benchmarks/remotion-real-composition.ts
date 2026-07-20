@@ -5,7 +5,6 @@ import { bundle } from '@remotion/bundler'
 import { renderMedia, selectComposition } from '@remotion/renderer'
 import type { DesignPayload } from '@/types'
 import { prepareRemotionCodeForSandbox } from '@/lib/remotion-server'
-import { FONT_PARITY_DESIGN } from './remotion-font-fixture'
 
 dotenv.config({ path: '.env.local' })
 if (process.env.MAKARON_ENV_FILE && process.env.MAKARON_ENV_FILE !== '.env.local') {
@@ -55,7 +54,6 @@ function applyVariant(design: DesignPayload): DesignPayload {
 }
 
 async function loadDesign(): Promise<DesignPayload> {
-  if (variant === 'font-parity') return FONT_PARITY_DESIGN
   const res = await fetch(designUrl)
   if (!res.ok) throw new Error(`Failed to fetch design ${designUrl}: ${res.status}`)
   return applyVariant(await res.json() as DesignPayload)
@@ -92,16 +90,6 @@ async function main() {
   const serveUrl = await bundle({
     entryPoint,
     onProgress: () => {},
-    webpackOverride: (config) => ({
-      ...config,
-      resolve: {
-        ...config.resolve,
-        alias: {
-          ...config.resolve?.alias,
-          '@': path.resolve(process.cwd(), 'src'),
-        },
-      },
-    }),
   })
   const bundleSeconds = (Date.now() - bundleStarted) / 1000
 
