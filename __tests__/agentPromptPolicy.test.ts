@@ -119,19 +119,22 @@ describe('agent prompt policy guards', () => {
     expect(agentRoute).toContain('const isNormalMode = !tipsTeaser && !nameProject && !previewsReady && !tipReaction && !analysisOnly')
   })
 
-  it('auto-submits only a trusted Video Skill template launch', () => {
+  it('runs a trusted Skill template through the final result while preserving ordinary confirmation', () => {
     const agent = read('src/lib/prompts/agent.md')
     const animate = read('src/lib/prompts/animate.md')
     const agentTs = read('src/lib/agent.ts')
+    const executionRunner = read('src/lib/agent-execution-runner.ts')
 
     expect(agent).toContain('Only call `generate_animation` after the user confirms a visible script')
     expect(animate).toContain('in an ordinary CUI/editor request, write the complete visible script and wait for confirmation')
     expect(animate).toContain('the system prompt explicitly supplies a `Trusted Skill template launch`')
-    expect(agentTs).toContain('trusted Video Skill template launch exception')
+    expect(agentTs).toContain('trusted Skill template launch exception')
     expect(agentTs).toContain("translate(responseLocale, 'status.submittingVideo')")
     expect(agentTs).toContain("code: 'skill_video_submission_pending'")
     expect(agentTs).toContain("assessment.code === 'skill_video_submission_pending'")
     expect(agentTs).toContain('Call generate_animation now with that exact complete script')
+    expect(executionRunner).toContain("input.terminal?.code === 'skill_video_submission_pending'")
+    expect(executionRunner).toContain('Do not rewrite it or ask for confirmation. Call generate_animation now')
   })
 
   it('reconnects text-only CUI projects before the first snapshot exists', () => {

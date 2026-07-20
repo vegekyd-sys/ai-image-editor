@@ -224,7 +224,9 @@ async function buildHandoffSnapshot(input: {
   const acceptanceCriteria = Array.isArray(input.run.acceptance_criteria)
     ? input.run.acceptance_criteria.filter((item): item is string => typeof item === 'string')
     : previous?.acceptanceCriteria ?? [];
-  const nextAction = checkpoint?.studioRunStage === 'composition' && checkpoint?.draftPath
+  const nextAction = input.terminal?.code === 'skill_video_submission_pending'
+    ? 'The complete video script is already visible in the previous attempt summary. Do not rewrite it or ask for confirmation. Call generate_animation now with that exact complete script.'
+    : checkpoint?.studioRunStage === 'composition' && checkpoint?.draftPath
     ? `Resume Studio Run at composition from ${checkpoint.draftPath}. Inspect the persisted draft before deciding the next action. If it carries __makaronScaffold: true or the numbered composition workspace is not ready, continue the existing parts until write_file reports compositionWorkspace.status="ready"; use its designPath directly and never submit the structural scaffold. If it is a complete non-scaffold draft with persisted Draft Gate evidence, reuse that exact evidence and call studio_run put_artifact without repeating valid generation, preview, or publish work.`
     : checkpoint?.studioRunStage
       ? `Resume Studio Run at ${checkpoint.studioRunStage}; load its persisted stage artifacts and complete that stage.`
