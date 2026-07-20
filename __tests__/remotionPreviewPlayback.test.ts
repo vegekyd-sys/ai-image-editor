@@ -22,8 +22,7 @@ describe('Remotion preview playback contract', () => {
     expect(evalSource).toContain('pickRemotionComponentName(src)')
 
     expect(rendererSource).toContain('player?.pause()')
-    expect(rendererSource).toContain('loadRemotionGoogleFonts(remotionFontSearchText(fontSafeCode, resolvedProps))')
-    expect(rendererSource).toContain('evalRemotionJSX(fontSafeCode)')
+    expect(rendererSource).toContain('evalRemotionJSX(resolvedCode)')
     expect(rendererSource).toContain('resolveDesignImageUrls(design, videoResolved)')
     expect(uploadSource).toContain('evalRemotionJSX(code)')
   })
