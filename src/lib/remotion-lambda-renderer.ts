@@ -1,7 +1,6 @@
 import type { DesignPayload } from '@/types'
 import { hasRemotionAudioSources } from '@/lib/remotion-audio'
 import { resolveRemotionLambdaEncodingSettings } from '@/lib/remotion-encoding'
-import { cacheRemotionFontsForLambda } from '@/lib/remotion-font-cache'
 import { prepareRemotionCodeForSandbox } from '@/lib/remotion-server'
 
 type RemotionLambdaClient = typeof import('@remotion/lambda-client')
@@ -227,7 +226,7 @@ export async function renderDesignVideoLambdaToUrl(
     : undefined
   const framesPerLambda = concurrency
     ? undefined
-    : readPositiveInteger(readEnv('REMOTION_LAMBDA_FRAMES_PER_LAMBDA'), options.skipFontLoading ? 20 : 60)
+    : readPositiveInteger(readEnv('REMOTION_LAMBDA_FRAMES_PER_LAMBDA'), options.skipFontLoading ? 20 : 100)
   const pollMs = readPositiveInteger(readEnv('REMOTION_LAMBDA_POLL_MS'), 1000)
   const x264Preset = readX264Preset()
   const jpegQuality = readPositiveInteger(readEnv('REMOTION_LAMBDA_JPEG_QUALITY'), 80)
@@ -242,9 +241,11 @@ export async function renderDesignVideoLambdaToUrl(
   const audioBitrate = hasAudioSources ? encoding.audioBitrate : null
   const crf = encoding.videoBitrate ? undefined : readPositiveNumber(readEnv('REMOTION_LAMBDA_CRF'), 23)
   const t0 = Date.now()
-  const fontCache = options.skipFontLoading
-    ? { stylesheetUrl: '', assets: 0, cacheHits: 0, cacheMisses: 0, seconds: 0 }
-    : await cacheRemotionFontsForLambda(design, serveUrl, region)
+  const shouldUseS3FontCache = !options.skipFontLoading && readEnv('REMOTION_LAMBDA_S3_FONT_CACHE') !== 'false'
+  const fontCache = shouldUseS3FontCache
+    ? await import('@/lib/remotion-font-cache').then(({ cacheRemotionFontsForLambda }) =>
+      cacheRemotionFontsForLambda(design, serveUrl, region))
+    : { stylesheetUrl: '', assets: 0, cacheHits: 0, cacheMisses: 0, seconds: 0 }
   await options.onProgress?.({
     progress: 0,
     renderer: 'lambda',

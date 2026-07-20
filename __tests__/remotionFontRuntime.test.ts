@@ -33,6 +33,21 @@ describe('Remotion font runtime', () => {
     expect(text).toContain('中文字体');
   });
 
+  it('normalizes macOS Kai and Didot stacks before either renderer can use OS fonts', () => {
+    const code = `function Design() {
+      return <div>
+        <h1 style={{fontFamily: 'STKaiti, Kaiti SC, KaiTi, serif'}}>微信华章</h1>
+        <p style={{fontFamily: 'Didot, Bodoni 72, Times New Roman, serif'}}>WECHAT</p>
+      </div>;
+    }`;
+
+    const normalized = normalizeRemotionFontFamilies(code);
+    expect(normalized).toContain('Ma Shan Zheng, Noto Serif SC, serif');
+    expect(normalized).toContain('GFS Didot, Bodoni Moda, Noto Serif, Noto Serif SC, serif');
+    expect(normalized).not.toContain('STKaiti');
+    expect(normalized).not.toContain('Didot, Bodoni 72');
+  });
+
   it('selects only Unicode shards that cover the rendered text', () => {
     const info = {
       unicodeRanges: {
@@ -61,13 +76,15 @@ describe('Remotion font runtime', () => {
   it('keeps Lambda font loading enabled with a same-origin manifest and larger chunks', () => {
     const lambda = readFileSync('src/lib/remotion-lambda-renderer.ts', 'utf8');
     const composition = readFileSync('src/remotion/DynamicDesign.tsx', 'utf8');
+    const exporter = readFileSync('src/lib/remotion-export.ts', 'utf8');
     const worker = readFileSync('Dockerfile.remotion-worker', 'utf8');
 
     expect(lambda).toContain('cacheRemotionFontsForLambda');
     expect(lambda).toContain('fontStylesheetUrl: fontCache.stylesheetUrl');
     expect(lambda).toContain('skipFontLoading: options.skipFontLoading ?? false');
-    expect(lambda).toContain('options.skipFontLoading ? 20 : 60');
+    expect(lambda).toContain('options.skipFontLoading ? 20 : 100');
     expect(composition).toContain('loadRemotionFontStylesheet(fontManifestUrl, document)');
+    expect(exporter).toContain("fontRuntime: 'normalized-system-fonts-v2'");
     expect(worker).toContain('REMOTION_LOCAL_SKIP_FONTS=false');
   });
 });
