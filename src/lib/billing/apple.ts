@@ -22,6 +22,13 @@ export interface AppleApplyResult {
   purchaseType: 'subscription' | 'topup'
   credited: boolean
   credits: number
+  amountUsd: number
+  productId: string
+  transactionId: string
+  originalTransactionId: string
+  planId?: string
+  billingInterval?: 'month' | 'year'
+  tierId?: string
   balance: Awaited<ReturnType<typeof getBalance>>
 }
 
@@ -249,6 +256,11 @@ export async function applyAppleTransaction(args: {
       purchaseType: 'topup',
       credited,
       credits: credited ? topUp.credits : 0,
+      amountUsd: topUp.price / 100,
+      productId,
+      transactionId,
+      originalTransactionId,
+      tierId: topUp.tierId,
       balance,
     }
   }
@@ -287,7 +299,19 @@ export async function applyAppleTransaction(args: {
   }
 
   const balance = await getBalance(userId)
-  return { transaction, purchaseType: 'subscription', credited, credits: credited ? credits : 0, balance }
+  return {
+    transaction,
+    purchaseType: 'subscription',
+    credited,
+    credits: credited ? credits : 0,
+    amountUsd: getAmountUsdForApplePurchase(planMatch.plan.id, planMatch.interval),
+    productId,
+    transactionId,
+    originalTransactionId,
+    planId: planMatch.plan.id,
+    billingInterval: planMatch.interval,
+    balance,
+  }
 }
 
 export async function applyAppleSignedTransaction(args: {
