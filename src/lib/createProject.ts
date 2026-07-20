@@ -6,6 +6,13 @@ import { createMetaEventId, trackMetaEvent } from '@/lib/marketing/meta-pixel'
 import { stagePendingProjectImages, stagePendingProjectLaunch } from '@/lib/imageCache'
 import { uploadImage } from '@/lib/supabase/storage'
 import type { PhotoMetadata } from '@/types'
+import type { SkillLaunchContext } from '@/lib/skill-launch-context'
+
+export interface ProjectLaunchOptions {
+  prompt?: string
+  skill?: string
+  skillLaunchContext?: SkillLaunchContext
+}
 
 function isVideoFile(file: File): boolean {
   return file.type.startsWith('video/') || /\.(mp4|mov|webm)$/i.test(file.name)
@@ -78,7 +85,7 @@ function trackProjectCreated(projectId: string, options?: { prompt?: string; ski
 
 function stageProjectLaunch(
   projectId: string,
-  options?: { prompt?: string; skill?: string },
+  options?: ProjectLaunchOptions,
   metadata?: PhotoMetadata,
 ): void {
   if (options?.prompt) sessionStorage.setItem('pendingPrompt', options.prompt)
@@ -87,6 +94,7 @@ function stageProjectLaunch(
   stagePendingProjectLaunch(projectId, {
     prompt: options?.prompt,
     skill: options?.skill,
+    skillLaunchContext: options?.skillLaunchContext,
     metadata,
   })
 }
@@ -100,7 +108,7 @@ export async function createProject(
   supabase: SupabaseClient,
   userId: string,
   files: File[],
-  options?: { prompt?: string; skill?: string },
+  options?: ProjectLaunchOptions,
   preExtractedMetadata?: PhotoMetadata,
 ): Promise<{ projectId: string; metadata?: PhotoMetadata } | null> {
   const attribution = getMarketingAttribution()
@@ -171,6 +179,7 @@ export async function createProjectFromStagedMedia(
     metadata?: PhotoMetadata
     prompt?: string
     skill?: string
+    skillLaunchContext?: SkillLaunchContext
   },
 ): Promise<{ projectId: string; metadata?: PhotoMetadata } | null> {
   const attribution = getMarketingAttribution()
@@ -185,7 +194,11 @@ export async function createProjectFromStagedMedia(
     const imageUrls = await persistCreateImages(supabase, userId, projectId, staged.images)
     await stagePendingProjectImages(projectId, imageUrls)
   }
-  stageProjectLaunch(projectId, { prompt: staged.prompt, skill: staged.skill }, staged.metadata)
+  stageProjectLaunch(projectId, {
+    prompt: staged.prompt,
+    skill: staged.skill,
+    skillLaunchContext: staged.skillLaunchContext,
+  }, staged.metadata)
   trackProjectCreated(projectId, { prompt: staged.prompt, skill: staged.skill, eventId: metaEventId })
   return { projectId, metadata: staged.metadata }
 }

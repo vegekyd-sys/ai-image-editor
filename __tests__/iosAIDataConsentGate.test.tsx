@@ -1,6 +1,9 @@
 import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import AIDataConsentGate, { AI_DATA_CONSENT_STORAGE_KEY } from '@/components/AIDataConsentGate';
+import AIDataConsentGate, {
+  AI_DATA_CONSENT_STORAGE_KEY,
+  shouldLeaveRedirectRootAfterConsent,
+} from '@/components/AIDataConsentGate';
 
 const copy: Record<string, string> = {
   'aiConsent.title': 'Allow AI processing of your content?',
@@ -24,6 +27,7 @@ vi.mock('@/lib/i18n', () => ({
 
 describe('iOS AI data consent gate', () => {
   beforeEach(() => {
+    window.history.replaceState(null, '', '/home');
     localStorage.clear();
     document.cookie = 'makaron_ai_data_consent=; path=/; max-age=0';
   });
@@ -69,5 +73,22 @@ describe('iOS AI data consent gate', () => {
 
     await waitFor(() => expect(screen.getByText('Creative app')).toBeTruthy());
     expect(screen.queryByTestId('ai-data-consent-gate')).toBeNull();
+  });
+
+  it('uses the server-visible consent cookie to mount native content on the first render', () => {
+    render(
+      <AIDataConsentGate required initiallyAccepted>
+        <div>Creative app</div>
+      </AIDataConsentGate>,
+    );
+
+    expect(screen.getByText('Creative app')).toBeTruthy();
+    expect(screen.queryByTestId('ai-data-consent-gate')).toBeNull();
+  });
+
+  it('only leaves the server redirect root after consent', () => {
+    expect(shouldLeaveRedirectRootAfterConsent('/')).toBe(true);
+    expect(shouldLeaveRedirectRootAfterConsent('/home')).toBe(false);
+    expect(shouldLeaveRedirectRootAfterConsent('/projects')).toBe(false);
   });
 });

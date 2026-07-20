@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
 import { getSupabaseAdmin } from '@/lib/supabase/service'
+import { getConfiguredWelcomeCredits } from '@/lib/billing/welcome-credits'
 
 // Authenticated endpoint — validates invite code and activates user
 export async function POST(req: NextRequest) {
@@ -55,12 +56,7 @@ export async function POST(req: NextRequest) {
 
     if (!existingBalance) {
       isNewUser = true
-      const { data: setting } = await admin
-        .from('app_settings')
-        .select('value')
-        .eq('key', 'welcome_credits')
-        .single()
-      const welcomeCredits = parseInt(setting?.value || '500')
+      const welcomeCredits = await getConfiguredWelcomeCredits(admin)
       if (welcomeCredits > 0) {
         const { addCredits } = await import('@/lib/billing/credits')
         await addCredits(user.id, welcomeCredits)
@@ -137,12 +133,7 @@ export async function POST(req: NextRequest) {
 
     if (!existingBalance) {
       isNewUser = true
-      const { data: setting } = await admin
-        .from('app_settings')
-        .select('value')
-        .eq('key', 'welcome_credits')
-        .single()
-      const welcomeCredits = parseInt(setting?.value || '500')
+      const welcomeCredits = await getConfiguredWelcomeCredits(admin)
 
       if (welcomeCredits > 0) {
         const { addCredits } = await import('@/lib/billing/credits')

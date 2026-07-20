@@ -52,6 +52,8 @@ import { appendSnapshotDedupeVideo, dedupeVideoSnapshots } from '@/lib/video-sna
 import { isGeneratedVideoSnapshot } from '@/lib/video-snapshot-kind';
 import type { AgentModelPreference } from '@/lib/agent-models';
 import { loadAgentModelPreference, saveAgentModelPreference } from '@/lib/agent-model-preference';
+import type { SkillLaunchContext } from '@/lib/skill-launch-context';
+import { stripAgentInternalContextForDisplay } from '@/lib/agent-response-policy';
 
 export type { AnimationState } from '@/lib/editor/types';
 
@@ -91,6 +93,7 @@ interface EditorProps {
   pendingMetadata?: PhotoMetadata;
   pendingPrompt?: string;
   pendingSkill?: string;
+  pendingSkillLaunchContext?: SkillLaunchContext;
   onSaveSnapshot?: (snapshot: Snapshot, sortOrder: number, onUploaded?: (imageUrl: string) => void) => void | Promise<void>;
   onSaveMessage?: (message: Message) => void;
   onUpdateTips?: (snapshotId: string, tips: Tip[]) => void;
@@ -136,6 +139,7 @@ export default function Editor({
   pendingMetadata,
   pendingPrompt,
   pendingSkill,
+  pendingSkillLaunchContext,
   onSaveSnapshot,
   onSaveMessage,
   onUpdateTips,
@@ -1548,7 +1552,8 @@ const isTipsFetchingRef = useRef(isTipsFetching);
   }, [projectId, onUpdateDescription, onSaveMessage, triggerTipsTeaser, initialTitle, triggerProjectNaming]);
 
   // Agent request: route user message through Makaron Agent
-  const handleAgentRequest = useCallback(async (text: string, attachedImages?: string[], overrideImage?: string, options?: { silent?: boolean; displayImages?: string[]; uploadedVideoCount?: number; turnMediaCount?: number }) => {
+  const handleAgentRequest = useCallback(async (text: string, attachedImages?: string[], overrideImage?: string, options?: { silent?: boolean; displayText?: string; displayImages?: string[]; uploadedVideoCount?: number; turnMediaCount?: number; skillLaunchContext?: SkillLaunchContext }) => {
+    const userVisibleText = options?.displayText ?? stripAgentInternalContextForDisplay(text);
     // Freeze the selected LLM at submit time. Upload waits below must not let a
     // later selector change mutate an already-submitted request.
     const agentModelForRequest = agentModelRef.current;
@@ -1624,7 +1629,7 @@ const isTipsFetchingRef = useRef(isTipsFetching);
     // Show attached/annotated images in the user message bubble (skip for silent/system-initiated requests)
     if (!options?.silent) {
       const msgImages = options?.displayImages || (overrideImage ? [overrideImage] : (attachedImages?.length ? attachedImages : undefined));
-      addMessage('user', text, undefined, msgImages);
+      addMessage('user', userVisibleText, undefined, msgImages);
     }
     const assistantMsgId = generateId();
     setMessages((prev) => [...prev, {
@@ -1687,7 +1692,7 @@ const isTipsFetchingRef = useRef(isTipsFetching);
       cacheImage, fetchTipsForSnapshot, onSaveSnapshot, onUpdateDescription,
       onSaveMessage,
       triggerProjectNaming, triggerTipsTeaser, compressBase64Image,
-      t, initialTitle, userPromptText: text,
+      t, initialTitle, userPromptText: userVisibleText,
       onInsufficientCredits: (balance) => {
         setCreditBalance(balance);
         setCreditExhausted(true);
@@ -1738,7 +1743,7 @@ const isTipsFetchingRef = useRef(isTipsFetching);
 
     try {
       await streamAgent(
-        { prompt: text, image: imageForApi, projectId, durable: true, ...(preferredModelRef.current !== 'auto' ? { preferredModel: preferredModelRef.current } : {}), ...(agentModelForRequest !== 'auto' ? { agentModel: agentModelForRequest } : {}), videoModel: videoModelRef.current, videoResolution: videoResolutionRef.current, videoAuto: videoAutoRef.current, snapshotImages: snapshotImagesForApi, currentSnapshotIndex: contextSnapshotIndex, isNsfw: isNsfwRef.current || undefined, ...(snapshotsRef.current[contextSnapshotIndex]?.design && snapshotsRef.current[contextSnapshotIndex]?.type !== 'video' ? { currentDesign: snapshotsRef.current[contextSnapshotIndex].design, currentDesignPath: snapshotsRef.current[contextSnapshotIndex].designPath } : {}), hasAnnotation: !!overrideImage, isDraft: isDraftMode, referenceImageCount: attachedImages?.length || 0, uploadedVideoCount: options?.uploadedVideoCount || 0, turnMediaCount: options?.turnMediaCount || 0 },
+        { prompt: text, image: imageForApi, projectId, durable: true, ...(preferredModelRef.current !== 'auto' ? { preferredModel: preferredModelRef.current } : {}), ...(agentModelForRequest !== 'auto' ? { agentModel: agentModelForRequest } : {}), videoModel: videoModelRef.current, videoResolution: videoResolutionRef.current, videoAuto: videoAutoRef.current, skillLaunchContext: options?.skillLaunchContext, snapshotImages: snapshotImagesForApi, currentSnapshotIndex: contextSnapshotIndex, isNsfw: isNsfwRef.current || undefined, ...(snapshotsRef.current[contextSnapshotIndex]?.design && snapshotsRef.current[contextSnapshotIndex]?.type !== 'video' ? { currentDesign: snapshotsRef.current[contextSnapshotIndex].design, currentDesignPath: snapshotsRef.current[contextSnapshotIndex].designPath } : {}), hasAnnotation: !!overrideImage, isDraft: isDraftMode, referenceImageCount: attachedImages?.length || 0, uploadedVideoCount: options?.uploadedVideoCount || 0, turnMediaCount: options?.turnMediaCount || 0 },
         agentCallbacks,
         agentAbortRef.current.signal,
       );
@@ -2538,8 +2543,10 @@ Select the best 3-7 items for a compelling video. You do NOT need to use all or 
         const skillPrefix = pendingSkill ? `[Active skill: ${pendingSkill}]\n` : '';
         if (!isDesktop) setViewMode('cui');
         await handleAgentRequest(skillPrefix + pendingPrompt!, undefined, undefined, {
+          displayText: pendingPrompt!,
           uploadedVideoCount: pendingVideos?.length || 0,
           turnMediaCount: workSnapshots.length,
+          skillLaunchContext: pendingSkillLaunchContext,
         });
       }
 
@@ -2550,7 +2557,7 @@ Select the best 3-7 items for a compelling video. You do NOT need to use all or 
     };
 
     init();
-  }, [pendingImages, pendingMetadata, pendingPrompt, pendingSkill, fetchTipsForSnapshot, onSaveSnapshot, runAutoAnalysis, handleAgentRequest, isDesktop]);
+  }, [pendingImages, pendingMetadata, pendingPrompt, pendingSkill, pendingSkillLaunchContext, fetchTipsForSnapshot, onSaveSnapshot, runAutoAnalysis, handleAgentRequest, isDesktop]);
 
   // Existing project/current timeline item with no tips — auto-fetch once per snapshot.
   // Do not mark a snapshot attempted until it has a usable image; cached projects can

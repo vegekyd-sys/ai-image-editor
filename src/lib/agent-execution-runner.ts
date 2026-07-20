@@ -23,6 +23,8 @@ import {
   type ExecutionLeaseState,
 } from './agent-execution';
 import { dispatchAgentExecutionAttempt } from './agent-execution-dispatch';
+import type { SkillLaunchContext } from './skill-launch-context';
+import { normalizeLocale, translate } from './locales';
 
 interface ExecutionRequest {
   locale?: string;
@@ -31,6 +33,7 @@ interface ExecutionRequest {
   videoModel?: string;
   videoResolution?: import('@/types').VideoResolution;
   videoAuto?: boolean;
+  skillLaunchContext?: SkillLaunchContext;
   currentSnapshotIndex?: number;
   hasAnnotation?: boolean;
   isDraft?: boolean;
@@ -552,6 +555,7 @@ export async function runAgentExecutionAttempt(
         videoModel: request.videoModel,
         videoResolution: request.videoResolution,
         videoAuto: request.videoAuto,
+        skillLaunchContext: request.skillLaunchContext,
         audioAttachments: ctx.audioAttachments,
         snapshotImages: ctx.snapshotImages,
         currentSnapshotIndex: ctx.currentSnapshotIndex,
@@ -607,11 +611,15 @@ export async function runAgentExecutionAttempt(
       await writer.processAndEnqueue(event);
     }
   } catch (error) {
+    console.error('[agent-execution] attempt runtime error:', error);
+    const locale = normalizeLocale(request.locale, 'en');
     terminal = {
       type: 'error',
       code: 'attempt_runtime_error',
       recoverable: true,
-      message: error instanceof Error ? error.message : String(error),
+      message: locale === 'zh'
+        ? (error instanceof Error ? error.message : String(error))
+        : translate(locale, 'agent.error.connectionEnded'),
     };
   } finally {
     clearInterval(leaseHeartbeat);

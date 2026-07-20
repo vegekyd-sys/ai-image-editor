@@ -222,6 +222,7 @@ export default function ProjectEditorContainer({
     if (s) sessionStorage.removeItem('pendingSkill')
     return s
   })
+  const pendingSkillLaunchContext = pendingLaunch?.skillLaunchContext
   const [pendingVideos] = useState<Array<{ videoUrl: string; duration: number; width: number; height: number }> | null>(() => {
     if (typeof window === 'undefined') return null
     const raw = sessionStorage.getItem('pendingVideos')
@@ -492,6 +493,7 @@ export default function ProjectEditorContainer({
         pendingMetadata={!readOnly ? pendingMetadata : undefined}
         pendingPrompt={!readOnly ? (pendingPrompt ?? undefined) : undefined}
         pendingSkill={!readOnly ? (pendingSkill ?? undefined) : undefined}
+        pendingSkillLaunchContext={!readOnly ? pendingSkillLaunchContext : undefined}
         onSaveSnapshot={!readOnly ? handleSaveSnapshot : undefined}
         onSaveMessage={!readOnly ? handleSaveMessage : undefined}
         onUpdateTips={!readOnly ? handleUpdateTips : undefined}

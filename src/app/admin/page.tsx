@@ -4,6 +4,7 @@ import { useState, useEffect, useCallback } from 'react'
 import { useRouter } from 'next/navigation'
 import { navigateBackInIOSApp } from '@/lib/native-navigation'
 import { LOCALE_CONFIG, type Locale } from '@/lib/locales'
+import { DEFAULT_WELCOME_CREDITS } from '@/lib/billing/welcome-credits'
 
 interface InviteCode {
   id: string
@@ -177,9 +178,9 @@ export default function AdminPage() {
   const [newRate, setNewRate] = useState({ model_id: '', display_name: '', input_per_1m: '', output_per_1m: '', markup: '2.0' })
   const [billingEnabled, setBillingEnabled] = useState(false)
   const [billingToggling, setBillingToggling] = useState(false)
-  const [welcomeCredits, setWelcomeCredits] = useState(500)
+  const [welcomeCredits, setWelcomeCredits] = useState(DEFAULT_WELCOME_CREDITS)
   const [editingWelcome, setEditingWelcome] = useState(false)
-  const [welcomeInput, setWelcomeInput] = useState('500')
+  const [welcomeInput, setWelcomeInput] = useState(String(DEFAULT_WELCOME_CREDITS))
   const [addCreditEmail, setAddCreditEmail] = useState('')
   const [addCreditAmount, setAddCreditAmount] = useState('100')
   const [addCreditResult, setAddCreditResult] = useState<string | null>(null)
@@ -247,8 +248,8 @@ export default function AdminPage() {
     if (res.status === 403) return
     const data = await res.json()
     setBillingEnabled(data.enabled ?? false)
-    setWelcomeCredits(data.welcomeCredits ?? 500)
-    setWelcomeInput(String(data.welcomeCredits ?? 500))
+    setWelcomeCredits(data.welcomeCredits ?? DEFAULT_WELCOME_CREDITS)
+    setWelcomeInput(String(data.welcomeCredits ?? DEFAULT_WELCOME_CREDITS))
   }, [])
 
   const fetchMetaStatus = useCallback(async () => {
@@ -521,9 +522,9 @@ export default function AdminPage() {
                       await fetch('/api/admin/billing-toggle', {
                         method: 'PUT',
                         headers: { 'Content-Type': 'application/json' },
-                        body: JSON.stringify({ welcomeCredits: parseInt(welcomeInput) || 500 }),
+                        body: JSON.stringify({ welcomeCredits: parseInt(welcomeInput) || DEFAULT_WELCOME_CREDITS }),
                       })
-                      setWelcomeCredits(parseInt(welcomeInput) || 500)
+                      setWelcomeCredits(parseInt(welcomeInput) || DEFAULT_WELCOME_CREDITS)
                       setEditingWelcome(false)
                     }}
                     className="px-2 py-1 rounded bg-fuchsia-600 text-white text-xs"

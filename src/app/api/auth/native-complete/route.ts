@@ -2,6 +2,7 @@ import { createServerClient } from '@supabase/ssr'
 import { cookies } from 'next/headers'
 import { NextResponse, type NextRequest } from 'next/server'
 import { getSupabaseAdmin } from '@/lib/supabase/service'
+import { getConfiguredWelcomeCredits } from '@/lib/billing/welcome-credits'
 
 export async function POST(_request: NextRequest) {
   const cookieStore = await cookies()
@@ -54,12 +55,7 @@ export async function POST(_request: NextRequest) {
 
       if (!existingBalance) {
         isNewUser = true
-        const { data: setting } = await admin
-          .from('app_settings')
-          .select('value')
-          .eq('key', 'welcome_credits')
-          .single()
-        const welcomeCredits = parseInt(setting?.value || '500')
+        const welcomeCredits = await getConfiguredWelcomeCredits(admin)
 
         if (welcomeCredits > 0) {
           const { addCredits } = await import('@/lib/billing/credits')

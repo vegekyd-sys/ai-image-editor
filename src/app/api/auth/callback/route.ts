@@ -4,6 +4,7 @@ import { NextResponse, type NextRequest } from 'next/server'
 import { getSupabaseAdmin } from '@/lib/supabase/service'
 import { readAttributionCookie, sendMetaCapiEvent } from '@/lib/marketing/meta-capi'
 import { getPublicOrigin } from '@/lib/auth/public-origin'
+import { getConfiguredWelcomeCredits } from '@/lib/billing/welcome-credits'
 
 export async function GET(request: NextRequest) {
   const { searchParams } = new URL(request.url)
@@ -82,12 +83,7 @@ export async function GET(request: NextRequest) {
 
     if (!existingBalance) {
       isNewUser = true
-      const { data: setting } = await admin
-        .from('app_settings')
-        .select('value')
-        .eq('key', 'welcome_credits')
-        .single()
-      const welcomeCredits = parseInt(setting?.value || '500')
+      const welcomeCredits = await getConfiguredWelcomeCredits(admin)
 
       if (welcomeCredits > 0) {
         const { addCredits } = await import('@/lib/billing/credits')

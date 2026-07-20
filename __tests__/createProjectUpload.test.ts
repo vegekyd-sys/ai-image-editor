@@ -135,6 +135,11 @@ describe('createProject upload flow', () => {
     const result = await createProject({} as never, 'user-1', [], {
       prompt: 'turn this into a launch video',
       skill: 'video-maker',
+      skillLaunchContext: {
+        source: 'home-skill-template',
+        homeSkillId: 'home-video-skill',
+        intent: 'video',
+      },
     })
 
     expect(result?.projectId).toBe('text-project')
@@ -142,6 +147,11 @@ describe('createProject upload flow', () => {
       projectId: 'text-project',
       prompt: 'turn this into a launch video',
       skill: 'video-maker',
+      skillLaunchContext: {
+        source: 'home-skill-template',
+        homeSkillId: 'home-video-skill',
+        intent: 'video',
+      },
     })
   })
 
@@ -183,6 +193,11 @@ describe('createProject upload flow', () => {
       images: ['data:image/jpeg;base64,draft'],
       prompt: 'try this skill',
       homeSkillId: 'home-skill-id',
+      skillLaunchContext: {
+        source: 'home-skill-template',
+        homeSkillId: 'home-skill-id',
+        intent: 'video',
+      },
       returnPath: '/home/home-skill-id',
     })
 
@@ -190,6 +205,11 @@ describe('createProject upload flow', () => {
       images: ['data:image/jpeg;base64,draft'],
       prompt: 'try this skill',
       homeSkillId: 'home-skill-id',
+      skillLaunchContext: {
+        source: 'home-skill-template',
+        homeSkillId: 'home-skill-id',
+        intent: 'video',
+      },
       returnPath: '/home/home-skill-id',
     })
 

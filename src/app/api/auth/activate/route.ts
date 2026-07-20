@@ -3,6 +3,7 @@ import type { NextRequest } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
 import { getSupabaseAdmin } from '@/lib/supabase/service'
 import { readAttributionCookie, sendMetaCapiEvent } from '@/lib/marketing/meta-capi'
+import { getConfiguredWelcomeCredits } from '@/lib/billing/welcome-credits'
 
 /**
  * POST /api/auth/activate
@@ -42,12 +43,7 @@ export async function POST(req: NextRequest) {
     .single()
 
   if (!existingBalance) {
-    const { data: setting } = await admin
-      .from('app_settings')
-      .select('value')
-      .eq('key', 'welcome_credits')
-      .single()
-    credits = parseInt(setting?.value || '500')
+    credits = await getConfiguredWelcomeCredits(admin)
 
     if (credits > 0) {
       const { addCredits } = await import('@/lib/billing/credits')

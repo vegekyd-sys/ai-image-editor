@@ -1,5 +1,6 @@
 import type { AgentStreamEvent } from './agent';
 import type { AgentModelPreference } from './agent-models';
+import type { SkillLaunchContext } from './skill-launch-context';
 
 export type { AgentStreamEvent };
 
@@ -66,6 +67,7 @@ export async function streamAgent(
     videoModel?: string;
     videoResolution?: string;
     videoAuto?: boolean;
+    skillLaunchContext?: SkillLaunchContext;
     snapshotImages?: string[];
     currentSnapshotIndex?: number;
     isNsfw?: boolean;
@@ -134,6 +136,7 @@ async function streamDurableAgent(
       videoModel: body.videoModel,
       videoResolution: body.videoResolution,
       videoAuto: body.videoAuto,
+      skillLaunchContext: body.skillLaunchContext,
       currentSnapshotIndex: body.currentSnapshotIndex,
       hasAnnotation: body.hasAnnotation,
       isDraft: body.isDraft,
