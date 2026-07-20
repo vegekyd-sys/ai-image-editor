@@ -28,6 +28,10 @@ describe('iOS attribution release contract', () => {
     expect(plugin).toContain('#if DEBUG')
     expect(plugin).toContain('Settings.shared.loggingBehaviors.insert(.networkRequests)')
     expect(plugin).toContain('ApplicationDelegate.shared.application')
+    expect(plugin).toContain('AppLinkUtility.fetchDeferredAppLink')
+    expect(plugin).toContain('CAPPluginMethod(name: "fetchDeferredAppLink"')
+    expect(plugin).toContain('#if DEBUG')
+    expect(plugin).toContain('-MakaronDeferredAppLink')
     expect(plugin.indexOf('ApplicationDelegate.shared.application')).toBeLessThan(
       plugin.indexOf('Settings.shared.isAdvertiserIDCollectionEnabled = false'),
     )
@@ -48,6 +52,8 @@ describe('iOS attribution release contract', () => {
     )
 
     expect(info).toContain('<string>makaron</string>')
+    expect(info).toContain('<string>app.makaron.ios</string>')
+    expect(info.match(/<key>CFBundleURLTypes<\/key>/g)).toHaveLength(1)
     expect(info).toContain('<key>FacebookAppID</key>')
     expect(info).toContain('<string>1690601878920639</string>')
     expect(info).toContain('<key>FacebookClientToken</key>')
@@ -61,5 +67,6 @@ describe('iOS attribution release contract', () => {
     expect(layout).toContain('<MobileAppEventsBootstrap />')
     expect(bootstrap).toContain('initializeMobileAppEvents')
     expect(bootstrap).toContain("App.addListener('appUrlOpen'")
+    expect(bootstrap).toContain('fetchDeferredMobileAppLink')
   })
 })
