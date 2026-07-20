@@ -644,10 +644,11 @@ function HomePageInner() {
   }, [])
 
   const rememberIOSSkillReturn = useCallback((skillId: string | null | undefined) => {
-    if (!isIOSAppShell || !skillId) return
+    if (!skillId) return
     const returnPath = `/home/${skillId}`
     localStorage.setItem('mkr_return_url', returnPath)
     sessionStorage.setItem('mkr_return_url', returnPath)
+    if (!isIOSAppShell) return
     localStorage.setItem(IOS_PENDING_HOME_SKILL_KEY, skillId)
     sessionStorage.setItem(IOS_PENDING_HOME_SKILL_KEY, skillId)
   }, [isIOSAppShell])
@@ -1431,7 +1432,7 @@ function HomePageInner() {
     const [images, metadata] = await Promise.all([
       compressCreateImageFiles(imageFiles),
       imageFiles[0]
-        ? extractPhotoMetadata(imageFiles[0]).catch(() => undefined)
+        ? extractPhotoMetadata(imageFiles[0], { allowServerFallback: false }).catch(() => undefined)
         : Promise.resolve(undefined),
     ])
     const continuationId = beginCreateDraftContinuation()
