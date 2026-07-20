@@ -10,6 +10,7 @@ const mocks = vi.hoisted(() => ({
   finishNativeAppleTransaction: vi.fn(),
   restoreNativeApplePurchases: vi.fn(),
   writeNativeJSONCache: vi.fn(),
+  trackCheckoutStart: vi.fn(),
 }));
 
 vi.mock('@/lib/i18n', () => ({
@@ -52,7 +53,7 @@ vi.mock('@/lib/marketing/attribution', () => ({
 }));
 
 vi.mock('@/lib/marketing/meta-pixel', () => ({
-  trackCheckoutStart: () => 'meta-event-id',
+  trackCheckoutStart: mocks.trackCheckoutStart,
   trackCheckoutSuccessFromUrl: vi.fn(),
 }));
 
@@ -124,6 +125,7 @@ describe('CreditPopup Apple purchase flow', () => {
       signedTransactionInfo: 'signed-sub',
     });
     mocks.finishNativeAppleTransaction.mockResolvedValue(undefined);
+    mocks.trackCheckoutStart.mockReturnValue('meta-event-id');
     vi.stubGlobal('fetch', mockFetch());
   });
 
@@ -149,8 +151,15 @@ describe('CreditPopup Apple purchase flow', () => {
     ));
     expect(fetch).toHaveBeenCalledWith('/api/billing/apple/verify', expect.objectContaining({
       method: 'POST',
-      body: JSON.stringify({ signedTransactionInfo: 'signed-sub' }),
+      body: JSON.stringify({ signedTransactionInfo: 'signed-sub', metaEventId: 'meta-event-id', attribution: {} }),
     }));
+    expect(mocks.trackCheckoutStart).toHaveBeenCalledWith('subscription', {
+      content_name: 'pro',
+      content_id: 'app.makaron.ios.subscription.pro.annual',
+      billing_interval: 'year',
+      value: 189.99,
+      currency: 'USD',
+    });
     await waitFor(() => expect(mocks.finishNativeAppleTransaction).toHaveBeenCalledWith('sub-tx'));
     expect(mocks.writeNativeJSONCache).toHaveBeenCalledWith('/api/billing/credits', expect.objectContaining({ balance: 36120 }));
     expect(onBalanceUpdate).toHaveBeenCalledWith(36120, expect.objectContaining({ provider: 'apple', planId: 'pro' }));
@@ -168,8 +177,14 @@ describe('CreditPopup Apple purchase flow', () => {
     ));
     expect(fetch).toHaveBeenCalledWith('/api/billing/apple/verify', expect.objectContaining({
       method: 'POST',
-      body: JSON.stringify({ signedTransactionInfo: 'signed-topup' }),
+      body: JSON.stringify({ signedTransactionInfo: 'signed-topup', metaEventId: 'meta-event-id', attribution: {} }),
     }));
+    expect(mocks.trackCheckoutStart).toHaveBeenCalledWith('topup', {
+      content_name: 'pro',
+      content_id: 'app.makaron.ios.topup.pro',
+      value: 19.99,
+      currency: 'USD',
+    });
     await waitFor(() => expect(mocks.finishNativeAppleTransaction).toHaveBeenCalledWith('topup-tx'));
   });
 });

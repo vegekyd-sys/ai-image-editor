@@ -25,12 +25,14 @@ describe('iOS App Store readiness guardrails', () => {
   it('keeps Google available in Makaron iOS WebView with Apple as the equivalent App Store login option', () => {
     const loginPage = fs.readFileSync(path.join(root, 'src/app/login/page.tsx'), 'utf8');
     const authCallback = fs.readFileSync(path.join(root, 'src/app/api/auth/callback/route.ts'), 'utf8');
+    const authReturn = fs.readFileSync(path.join(root, 'src/lib/auth-return.ts'), 'utf8');
     expect(loginPage).toContain('userAgentHasMakaronIOSToken');
     expect(loginPage).toContain('isMakaronIOSApp');
     expect(loginPage).toContain("const IOS_PENDING_HOME_SKILL_KEY = 'makaron:ios-pending-home-skill-id'");
     expect(loginPage).toContain('resolveReturnUrlForRuntime');
     expect(loginPage).toContain('sessionStorage.setItem(IOS_PENDING_HOME_SKILL_KEY, skillId)');
-    expect(loginPage).toContain("return '/home'");
+    expect(loginPage).toContain('resolveAuthReturnPathForRuntime(returnUrl, iosAppRuntime)');
+    expect(authReturn).toContain("returnPath: isIOSApp ? '/home'");
     expect(loginPage).toContain('NEXT_PUBLIC_ENABLE_APPLE_LOGIN');
     expect(loginPage).toContain('inApp && appleLoginEnabled');
     expect(loginPage).toContain('const showGoogleOAuth = !inApp || iosApp || showAppleOAuth');

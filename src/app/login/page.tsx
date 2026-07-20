@@ -11,6 +11,10 @@ import RollingTagline from '@/components/RollingTagline'
 import { MakaronSpark, MAKARON_WORDMARK_STYLE } from '@/components/MakaronLogo'
 import { useHydrated } from '@/hooks/useHydrated'
 import { createMetaEventId, trackMetaEvent } from '@/lib/marketing/meta-pixel'
+import {
+  resolveAuthReturnPathForRuntime,
+  selectAuthReturnPath,
+} from '@/lib/auth-return'
 
 type View = 'form' | 'verify-otp' | 'forgot-password' | 'reset-password'
 type OtpPurpose = 'signup' | 'recovery'
@@ -97,19 +101,32 @@ export default function LoginPage() {
   }, [resendCooldown])
 
   function getReturnUrl(): string {
-    return sessionStorage.getItem('mkr_return_url') || localStorage.getItem('mkr_return_url') || ''
+    const queryReturn = new URLSearchParams(window.location.search).get('next')
+    return selectAuthReturnPath(
+      queryReturn,
+      sessionStorage.getItem('mkr_return_url'),
+      localStorage.getItem('mkr_return_url'),
+    )
   }
 
   function resolveReturnUrlForRuntime(returnUrl: string): string {
-    const skillMatch = returnUrl.match(/^\/home\/([^/?]+)/)
-    if (!skillMatch) return returnUrl
-    const skillId = skillMatch[1]
-    if (isMakaronIOSApp()) {
+    const iosAppRuntime = isMakaronIOSApp()
+    const resolved = resolveAuthReturnPathForRuntime(returnUrl, iosAppRuntime)
+    if (!resolved.skillId) return resolved.returnPath
+    if (iosAppRuntime) {
+      const skillId = resolved.skillId
       sessionStorage.setItem(IOS_PENDING_HOME_SKILL_KEY, skillId)
       localStorage.setItem(IOS_PENDING_HOME_SKILL_KEY, skillId)
-      return '/home'
     }
-    return `/home?skill=${encodeURIComponent(skillId)}`
+    return resolved.returnPath
+  }
+
+  function getOAuthCallbackUrl(nativeOAuth = false): string {
+    const callback = new URL('/api/auth/callback', window.location.origin)
+    if (nativeOAuth) callback.searchParams.set('native_oauth', '1')
+    const returnUrl = getReturnUrl()
+    if (returnUrl) callback.searchParams.set('next', returnUrl)
+    return callback.toString()
   }
 
   function withWelcomeParam(url: string, welcome?: boolean): string {
@@ -172,7 +189,7 @@ export default function LoginPage() {
         const { data, error } = await getSupabase().auth.signInWithOAuth({
           provider: 'google',
           options: {
-            redirectTo: `${window.location.origin}/api/auth/callback?native_oauth=1`,
+            redirectTo: getOAuthCallbackUrl(true),
             skipBrowserRedirect: true,
           },
         })
@@ -191,7 +208,7 @@ export default function LoginPage() {
     const { error } = await getSupabase().auth.signInWithOAuth({
       provider: 'google',
       options: {
-        redirectTo: `${window.location.origin}/api/auth/callback`,
+        redirectTo: getOAuthCallbackUrl(),
       },
     })
     if (error) { setError(t('auth.networkError')); setGoogleLoading(false) }
@@ -204,7 +221,7 @@ export default function LoginPage() {
     const { error } = await getSupabase().auth.signInWithOAuth({
       provider: 'apple',
       options: {
-        redirectTo: `${window.location.origin}/api/auth/callback`,
+        redirectTo: getOAuthCallbackUrl(),
       },
     })
     if (error) { setError(t('auth.networkError')); setAppleLoading(false) }
