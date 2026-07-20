@@ -138,7 +138,7 @@ describe('createProject upload flow', () => {
       skillLaunchContext: {
         source: 'home-skill-template',
         homeSkillId: 'home-video-skill',
-        intent: 'video',
+        intent: 'complete-result',
       },
     })
 
@@ -150,7 +150,7 @@ describe('createProject upload flow', () => {
       skillLaunchContext: {
         source: 'home-skill-template',
         homeSkillId: 'home-video-skill',
-        intent: 'video',
+        intent: 'complete-result',
       },
     })
   })
@@ -196,7 +196,7 @@ describe('createProject upload flow', () => {
       skillLaunchContext: {
         source: 'home-skill-template',
         homeSkillId: 'home-skill-id',
-        intent: 'video',
+        intent: 'complete-result',
       },
       returnPath: '/home/home-skill-id',
     })
@@ -208,7 +208,7 @@ describe('createProject upload flow', () => {
       skillLaunchContext: {
         source: 'home-skill-template',
         homeSkillId: 'home-skill-id',
-        intent: 'video',
+        intent: 'complete-result',
       },
       returnPath: '/home/home-skill-id',
     })

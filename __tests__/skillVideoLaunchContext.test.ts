@@ -1,43 +1,70 @@
 import { describe, expect, it } from 'vitest'
 import {
-  createVideoSkillLaunchContext,
+  createHomeSkillLaunchContext,
   getSkillLaunchSystemDirective,
   normalizeSkillLaunchContext,
   shouldContinueSkillVideoSubmission,
   verifySkillLaunchContext,
 } from '@/lib/skill-launch-context'
 
-const videoSkill = {
-  id: 'video-story',
-  skill_path: 'skills/video-story.zip',
+const skillTemplate = {
+  id: 'skill-template',
+  skill_path: 'skills/template.zip',
   categories: ['video'],
+  prompt: 'Turn my photo into a video',
+  prompts: { 'zh-Hant': '把我的照片做成影片' },
 }
 
-describe('Video Skill launch context', () => {
-  it('authorizes only a clear homepage Video Skill template launch', () => {
-    expect(createVideoSkillLaunchContext(videoSkill, 'Make a cinematic launch clip')).toEqual({
+describe('Skill template launch context', () => {
+  it('authorizes every real homepage Skill template through a final result', () => {
+    const imageSkillTemplate = {
+      ...skillTemplate,
+      categories: ['visual'],
+      prompt: 'Turn this into a poster',
+      prompts: {},
+    }
+    const crossCategoryVideoTemplate = {
+      ...skillTemplate,
+      categories: ['idol-social'],
+      prompt: 'Upload a photo, generate a street paparazzi style video.',
+    }
+    expect(createHomeSkillLaunchContext(skillTemplate, 'Make a cinematic launch clip')).toEqual({
       source: 'home-skill-template',
-      homeSkillId: 'video-story',
-      intent: 'video',
+      homeSkillId: 'skill-template',
+      intent: 'complete-result',
     })
-    expect(createVideoSkillLaunchContext({ ...videoSkill, categories: ['image'] }, 'Animate it')).toBeUndefined()
-    expect(createVideoSkillLaunchContext({ ...videoSkill, skill_path: null }, 'Animate it')).toBeUndefined()
-    expect(createVideoSkillLaunchContext(videoSkill, '   ')).toBeUndefined()
-    expect(createVideoSkillLaunchContext(videoSkill, 'Show me the script first')).toBeUndefined()
-    expect(createVideoSkillLaunchContext(videoSkill, 'Make a 30 second video')).toBeUndefined()
+    expect(createHomeSkillLaunchContext(imageSkillTemplate, 'Make it dramatic')).toEqual({
+      source: 'home-skill-template',
+      homeSkillId: 'skill-template',
+      intent: 'complete-result',
+    })
+    expect(createHomeSkillLaunchContext(crossCategoryVideoTemplate, '上傳一張照片，生成街頭狗仔風格的影片。')).toEqual({
+      source: 'home-skill-template',
+      homeSkillId: 'skill-template',
+      intent: 'complete-result',
+    })
+    expect(createHomeSkillLaunchContext({ ...skillTemplate, skill_path: null }, 'Make it')).toBeUndefined()
+    expect(createHomeSkillLaunchContext(skillTemplate, '   ')).toBeUndefined()
+    expect(createHomeSkillLaunchContext(skillTemplate, 'Show me the script first')).toBeUndefined()
+    expect(createHomeSkillLaunchContext(skillTemplate, 'Make a 30 second video')).toEqual({
+      source: 'home-skill-template',
+      homeSkillId: 'skill-template',
+      intent: 'complete-result',
+    })
   })
 
   it('normalizes transport data and rejects untrusted lookalikes', () => {
-    const context = createVideoSkillLaunchContext(videoSkill, 'Animate it')
+    const context = createHomeSkillLaunchContext(skillTemplate, 'Animate it')
     expect(normalizeSkillLaunchContext(context)).toEqual(context)
-    expect(normalizeSkillLaunchContext({ source: 'manual-cui', homeSkillId: 'video-story', intent: 'video' })).toBeUndefined()
+    expect(normalizeSkillLaunchContext({ source: 'home-skill-template', homeSkillId: 'skill-template', intent: 'video' })).toEqual(context)
+    expect(normalizeSkillLaunchContext({ source: 'manual-cui', homeSkillId: 'skill-template', intent: 'complete-result' })).toBeUndefined()
     expect(normalizeSkillLaunchContext({ source: 'home-skill-template', homeSkillId: '', intent: 'video' })).toBeUndefined()
   })
 
-  it('revalidates the Video Skill against the server-side marketplace row', async () => {
-    const context = createVideoSkillLaunchContext(videoSkill, 'Animate it')
+  it('revalidates the Skill template against the server-side marketplace row', async () => {
+    const context = createHomeSkillLaunchContext(skillTemplate, 'Animate it')
     const single = async () => ({
-      data: { id: 'video-story', skill_path: 'skills/video-story.zip', categories: ['video'], is_active: true },
+      data: { ...skillTemplate, is_active: true },
       error: null,
     })
     const admin = {
@@ -45,31 +72,57 @@ describe('Video Skill launch context', () => {
     }
     await expect(verifySkillLaunchContext(admin as never, context)).resolves.toEqual(context)
 
-    const nonVideoAdmin = {
+    const imageSkillAdmin = {
       from: () => ({
         select: () => ({
-          eq: () => ({ single: async () => ({ data: { ...videoSkill, categories: ['image'], is_active: true }, error: null }) }),
+          eq: () => ({
+            single: async () => ({
+              data: {
+                ...skillTemplate,
+                categories: ['visual'],
+                prompt: 'Turn this into a poster.',
+                is_active: true,
+              },
+              error: null,
+            }),
+          }),
         }),
       }),
     }
-    await expect(verifySkillLaunchContext(nonVideoAdmin as never, context)).resolves.toBeUndefined()
+    await expect(verifySkillLaunchContext(imageSkillAdmin as never, context)).resolves.toEqual(context)
+
+    const missingSkillAdmin = {
+      from: () => ({
+        select: () => ({
+          eq: () => ({
+            single: async () => ({
+              data: { ...skillTemplate, skill_path: null, is_active: true },
+              error: null,
+            }),
+          }),
+        }),
+      }),
+    }
+    await expect(verifySkillLaunchContext(missingSkillAdmin as never, context)).resolves.toBeUndefined()
   })
 
-  it('adds same-turn submission only for the trusted launch context', () => {
-    const context = createVideoSkillLaunchContext(videoSkill, 'Animate it')
+  it('authorizes the complete workflow only for the trusted launch context', () => {
+    const context = createHomeSkillLaunchContext(skillTemplate, 'Animate it')
     const directive = getSkillLaunchSystemDirective(context)
 
-    expect(directive).toContain('Write the complete visible script')
-    expect(directive).toContain('call generate_animation in the same turn')
-    expect(directive).toContain('must not change ordinary CUI or editor video requests')
+    expect(directive).toContain('authorizes the complete workflow through a final usable result')
+    expect(directive).toContain('do not stop for confirmation')
+    expect(directive).toContain('call generate_animation in the same run')
+    expect(directive).toContain('Do not apply this exception to ordinary CUI or editor requests')
     expect(getSkillLaunchSystemDirective(undefined)).toBe('')
   })
 
   it('continues a trusted run when a visible script exists but submission did not start', () => {
-    const context = createVideoSkillLaunchContext(videoSkill, 'Animate it')
+    const context = createHomeSkillLaunchContext(skillTemplate, 'Animate it')
     const visibleScript = 'Launch Story\nShot 1 (5s): A slow push-in reveals the subject.'
 
     expect(shouldContinueSkillVideoSubmission({ context, visibleText: visibleScript, submissionStarted: false })).toBe(true)
+    expect(shouldContinueSkillVideoSubmission({ context, visibleText: '分鏡腳本\n鏡頭 1：主角走進夜色。', submissionStarted: false })).toBe(true)
     expect(shouldContinueSkillVideoSubmission({ context, visibleText: visibleScript, submissionStarted: true })).toBe(false)
     expect(shouldContinueSkillVideoSubmission({ context: undefined, visibleText: visibleScript, submissionStarted: false })).toBe(false)
     expect(shouldContinueSkillVideoSubmission({ context, visibleText: 'Which photo should I use?', submissionStarted: false })).toBe(false)
