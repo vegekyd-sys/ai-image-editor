@@ -301,7 +301,7 @@ function dispatchEvent(row: AgentEventRow, callbacks: AgentStreamCallbacks) {
     }
     case 'design': // backward compat — fall through to 'render'
     case 'render': {
-      const d = data as { code: string; width: number; height: number; props?: Record<string, unknown>; animation?: { fps: number; durationInSeconds: number; format?: string }; snapshotId?: string }
+      const d = data as { code: string; width: number; height: number; props?: Record<string, unknown>; animation?: { fps: number; durationInSeconds: number; format?: string }; fontSubstitutions?: Record<string, string>; snapshotId?: string }
       callbacks.onRender?.(d)
       break
     }

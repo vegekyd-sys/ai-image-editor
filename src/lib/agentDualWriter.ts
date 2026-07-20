@@ -193,6 +193,7 @@ export class AgentDualWriter {
             code: event.code, width: event.width, height: event.height,
             props: event.props, animation: event.animation,
             ...((event as Record<string, unknown>).editables ? { editables: (event as Record<string, unknown>).editables } : {}),
+            ...((event as Record<string, unknown>).fontSubstitutions ? { fontSubstitutions: (event as Record<string, unknown>).fontSubstitutions } : {}),
           });
 
           // Upload design JSON to workspace + index in workspace_files for agent read_file
@@ -236,7 +237,9 @@ export class AgentDualWriter {
           // Write agent_events
           await this.insertEvent(event.type, {
             code: event.code, width: event.width, height: event.height,
-            props: event.props, animation: event.animation, snapshotId: snapId, published: true,
+            props: event.props, animation: event.animation,
+            fontSubstitutions: (event as Record<string, unknown>).fontSubstitutions,
+            snapshotId: snapId, published: true,
           });
 
           // SSE: enriched with snapshotId, normalize type to 'render'
@@ -245,7 +248,9 @@ export class AgentDualWriter {
           // Draft design — preview only, no DB snapshot
           await this.insertEvent(event.type, {
             code: event.code, width: event.width, height: event.height,
-            props: event.props, animation: event.animation, published: false,
+            props: event.props, animation: event.animation,
+            fontSubstitutions: (event as Record<string, unknown>).fontSubstitutions,
+            published: false,
           });
 
           // SSE: pass through as draft (no snapshotId)

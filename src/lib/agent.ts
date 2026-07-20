@@ -308,8 +308,8 @@ export type AgentStreamEvent =
   | { type: 'reasoning'; text: string }  // extended thinking delta
   | { type: 'coding'; text: string }  // tool-input-delta heartbeat — Agent writing code params
   | { type: 'code_stream'; text: string; done?: boolean }  // run_code code streamed in chunks (avoids large SSE events on iOS)
-  | { type: 'render'; code: string; width: number; height: number; props?: Record<string, unknown>; animation?: { fps: number; durationInSeconds: number; format?: string }; editables?: import('@/types').EditableField[]; published?: boolean; previewUrl?: string }  // Agent React design for browser rendering
-  | { type: 'design'; code: string; width: number; height: number; props?: Record<string, unknown>; animation?: { fps: number; durationInSeconds: number; format?: string }; editables?: import('@/types').EditableField[]; published?: boolean }  // @deprecated — backward compat alias for 'render'
+  | { type: 'render'; code: string; width: number; height: number; props?: Record<string, unknown>; animation?: { fps: number; durationInSeconds: number; format?: string }; editables?: import('@/types').EditableField[]; fontSubstitutions?: Record<string, string>; published?: boolean; previewUrl?: string }  // Agent React design for browser rendering
+  | { type: 'design'; code: string; width: number; height: number; props?: Record<string, unknown>; animation?: { fps: number; durationInSeconds: number; format?: string }; editables?: import('@/types').EditableField[]; fontSubstitutions?: Record<string, string>; published?: boolean }  // @deprecated — backward compat alias for 'render'
   | { type: 'music_task'; taskId: string }  // emitted when generate_music tool creates a task — frontend polls
   | {
       type: 'context_compaction';
@@ -3546,6 +3546,7 @@ Path is auto-generated from the current project and output type. Just provide a 
           width: z.number().int().positive().optional(),
           height: z.number().int().positive().optional(),
           props: z.record(z.string(), z.unknown()).optional(),
+          fontSubstitutions: z.record(z.string(), z.string()).optional().describe('Explicit persisted legacy-font migration only.'),
           editables: z.array(z.object({
             id: z.string().min(1),
             type: z.literal('text'),
@@ -3815,8 +3816,8 @@ Runtimes:
 - \`runtime: "node"\`: open backend Node with FFmpeg/FFprobe for real file-level media operations. Never use node as a fallback for ordinary editable timeline splicing of existing videos.
 
 Return exactly one supported shape:
-- \`{ type: 'render', code, width, height, editables?, props?, animation? }\`
-- \`{ type: 'patch', edits?, props?, code_path? }\`
+- \`{ type: 'render', code, width, height, editables?, props?, animation?, fontSubstitutions? }\`
+- \`{ type: 'patch', edits?, props?, fontSubstitutions?, code_path? }\`
 - \`{ type: 'image', data, mimeType }\`
 - \`{ type: 'video', path, contentType?, description?, duration?, width?, height? }\`
 - \`{ type: 'files', outputs: [{ path, contentType, description? }] }\`
@@ -3831,7 +3832,7 @@ For durable Composition work, use \`write_file\` to author numbered source parts
 
 For a 30s+ first composition, author numbered composition parts until write_file reports compositionWorkspace.status="ready". Use scene data arrays and shared components where they help, but do not impose an aggregate source-size target or trim approved creative detail. Preview or patch the returned designPath directly; no assembly-only run_code call is needed.
 
-Composition hard rules: use Remotion \`<Img>\`, not \`<img>\`; declare editable user-facing text; use system CJK fonts; keep mobile image layers light. Reference timeline media in composition code and props with the literal 1-based marker \`<<<media_N>>>\`; the runtime resolves markers to current URLs before validation, autosave, preview, and export. Never translate Media Index N into \`ctx.snapshotImages[N]\` because that JavaScript array is 0-based. Only \`Composition(props)\` may read \`props\` directly; helper components must receive values through their own parameters and must never reference outer \`props\` (prevents \`props is not defined\` in Lambda). For timeline videos, preserve the selected Media Index video aspect ratio when all selected videos share one aspect: 9:16 sources must return a 9:16 canvas such as 1080x1920, never a 16:9 canvas. For mixed-aspect sources, choose the user/platform/current composition target and use contain/background; do not claim the runtime forced one source's aspect.
+Composition hard rules: use Remotion \`<Img>\`, not \`<img>\`; declare editable user-facing text; use only the pinned font catalog in \`prompts/remotion-composition.md\`; keep mobile image layers light. Never use Apple/local/system font names. \`fontSubstitutions\` is only for an explicit persisted migration of an old composition, never for silently choosing a lookalike. Reference timeline media in composition code and props with the literal 1-based marker \`<<<media_N>>>\`; the runtime resolves markers to current URLs before validation, autosave, preview, and export. Never translate Media Index N into \`ctx.snapshotImages[N]\` because that JavaScript array is 0-based. Only \`Composition(props)\` may read \`props\` directly; helper components must receive values through their own parameters and must never reference outer \`props\` (prevents \`props is not defined\` in Lambda). For timeline videos, preserve the selected Media Index video aspect ratio when all selected videos share one aspect: 9:16 sources must return a 9:16 canvas such as 1080x1920, never a 16:9 canvas. For mixed-aspect sources, choose the user/platform/current composition target and use contain/background; do not claim the runtime forced one source's aspect.
 For legacy first-draft calls without \`composition\`, send one complete executable JavaScript body that returns the render object. Do not send a fragment like \`const code = \\\`\` without the final \`return { type: 'render', code, ... }\`. Keep long videos concise by using arrays, helper components, and interpolations instead of writing frame-by-frame code.
 
 Node media runtime provides \`require\`, \`process\`, \`ffmpegPath\`, \`inputFiles\`, \`outputDir\`, \`workDir\`, \`workspaceDir\`, \`saveOutput(localPath)\`, and \`probeVideo(path)\`. Most Node built-ins are available, plus media packages such as \`sharp\`, \`jszip\`, \`exifr\`, \`heic-convert\`, \`canvas\`, \`remotion\`, and Remotion media utilities. Arbitrary local/package require, env secrets, and escape/debug modules are blocked. Workspace files are local to the runtime: use \`workspace_paths\` and \`inputFiles[n].inputPath\`, never download or reconstruct Storage URLs. For \`runtime: "node"\`, any referenced timeline media like \`<<<media_1>>>\` MUST be passed as \`media_refs: [1]\`; any existing workspace file from \`list_files\` MUST be passed as \`workspace_paths: ["project/media/file.mp4"]\`. The system resolves both to local workspace-backed files before your code runs. \`ffprobePath\` may be empty in deployment; prefer \`probeVideo(path)\`. Use \`type: "files"\` for chunks and \`type: "video"\` for the final MP4. If ordinary timeline splicing was routed to composition, do not switch to node just because preview needs adjustment; patch the composition or report the preview issue.`,
@@ -3843,6 +3844,7 @@ Node media runtime provides \`require\`, \`process\`, \`ffmpegPath\`, \`inputFil
           width: z.number().int().positive(),
           height: z.number().int().positive(),
           props: z.record(z.string(), z.unknown()).optional(),
+          fontSubstitutions: z.record(z.string(), z.string()).optional().describe('Explicit persisted migration for legacy font names only, e.g. {"STKaiti":"Ma Shan Zheng"}. Never infer or add silently.'),
           editables: z.array(z.object({
             id: z.string().min(1),
             type: z.string().min(1),
@@ -3861,6 +3863,7 @@ Node media runtime provides \`require\`, \`process\`, \`ffmpegPath\`, \`inputFil
           width: z.number().int().positive(),
           height: z.number().int().positive(),
           props: z.record(z.string(), z.unknown()).optional(),
+          fontSubstitutions: z.record(z.string(), z.string()).optional().describe('Explicit persisted migration for legacy font names only.'),
           editables: z.array(z.object({
             id: z.string().min(1),
             type: z.string().min(1),
@@ -4138,7 +4141,7 @@ Node media runtime provides \`require\`, \`process\`, \`ffmpegPath\`, \`inputFil
           };
 
           // { type: 'patch', edits?: [...], props?: {...} } — Incremental update on last composition or code_path
-          if (result?.type === 'patch' && (Array.isArray(result.edits) || result.props !== undefined)) {
+          if (result?.type === 'patch' && (Array.isArray(result.edits) || result.props !== undefined || result.fontSubstitutions !== undefined)) {
             let baseDesign = (ctx as any).__lastDesignPayload;
 
             // code_path: load a different design from workspace as patch base
@@ -4181,6 +4184,9 @@ Node media runtime provides \`require\`, \`process\`, \`ffmpegPath\`, \`inputFil
             }
             patched.animation = normalizeCompositionAnimation(patched.code, patched.animation);
             if (result.editables) patched.editables = result.editables;
+            if (result.fontSubstitutions && typeof result.fontSubstitutions === 'object') {
+              patched.fontSubstitutions = result.fontSubstitutions;
+            }
 
             const promiseError = studioCompositionPromiseError(await getStudioRunCheckpoint(ctx), patched);
             if (promiseError) return { type: 'text' as const, content: promiseError };
@@ -4274,6 +4280,7 @@ Node media runtime provides \`require\`, \`process\`, \`ffmpegPath\`, \`inputFil
               animation,
               description: autoDesc,
               ...(result.editables ? { editables: result.editables } : {}),
+              ...(result.fontSubstitutions ? { fontSubstitutions: result.fontSubstitutions } : {}),
             };
             if (!ctx.supabase || !ctx.userId) {
               return { type: 'text' as const, content: 'Composition passed validation but cannot be safely autosaved because workspace access is unavailable.' };
@@ -5769,7 +5776,7 @@ export async function* runMakaronAgent(
             const drafts = (ctx as any).__runCodeDrafts as { previewUrl?: string }[] | undefined;
             const previewUrl = drafts?.[drafts.length - 1]?.previewUrl || undefined;
             console.log(`🎨 [agent] emitting render SSE (published=${published}): ${pendingDesign.width}x${pendingDesign.height}, code ${pendingDesign.code?.length} chars${previewUrl ? ', preview: ' + previewUrl.slice(-40) : ''}`);
-            yield { type: 'render', code: pendingDesign.code, width: pendingDesign.width, height: pendingDesign.height, props: pendingDesign.props, animation: pendingDesign.animation, editables: pendingDesign.editables, published, previewUrl };
+            yield { type: 'render', code: pendingDesign.code, width: pendingDesign.width, height: pendingDesign.height, props: pendingDesign.props, animation: pendingDesign.animation, editables: pendingDesign.editables, fontSubstitutions: pendingDesign.fontSubstitutions, published, previewUrl };
             if (published) {
               finalStepDeliveredArtifact = true;
               attemptDeliveredArtifact = true;
