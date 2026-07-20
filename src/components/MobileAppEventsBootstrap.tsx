@@ -5,6 +5,7 @@ import { useRouter } from 'next/navigation'
 import { isMakaronIOSApp } from '@/lib/native-app'
 import {
   clearPendingDeepLink,
+  fetchDeferredMobileAppLink,
   getPendingDeepLink,
   initializeMobileAppEvents,
   persistPendingDeepLink,
@@ -42,7 +43,7 @@ export default function MobileAppEventsBootstrap() {
       }
       appUrlHandle = handle
 
-      void initializeMobileAppEvents()
+      await initializeMobileAppEvents()
 
       // This is first-party funnel telemetry. Meta records the install automatically.
       try {
@@ -57,7 +58,12 @@ export default function MobileAppEventsBootstrap() {
         routeDeepLink(launchUrl.url)
       } else {
         const pending = getPendingDeepLink()
-        if (pending) routeDeepLink(pending)
+        if (pending) {
+          routeDeepLink(pending)
+        } else {
+          const deferredUrl = await fetchDeferredMobileAppLink()
+          if (deferredUrl) routeDeepLink(deferredUrl)
+        }
       }
     }
 

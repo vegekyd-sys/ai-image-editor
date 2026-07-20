@@ -30,6 +30,7 @@ public class MetaAppEventsPlugin: CAPPlugin, CAPBridgedPlugin {
     public let jsName = "MetaAppEvents"
     public let pluginMethods: [CAPPluginMethod] = [
         CAPPluginMethod(name: "initialize", returnType: CAPPluginReturnPromise),
+        CAPPluginMethod(name: "fetchDeferredAppLink", returnType: CAPPluginReturnPromise),
         CAPPluginMethod(name: "trackEvent", returnType: CAPPluginReturnPromise),
         CAPPluginMethod(name: "flush", returnType: CAPPluginReturnPromise)
     ]
@@ -52,6 +53,33 @@ public class MetaAppEventsPlugin: CAPPlugin, CAPBridgedPlugin {
             payload["appId"] = appId
         }
         call.resolve(payload)
+    }
+
+    @objc func fetchDeferredAppLink(_ call: CAPPluginCall) {
+        DispatchQueue.main.async {
+            #if DEBUG
+            let arguments = ProcessInfo.processInfo.arguments
+            if let index = arguments.firstIndex(of: "-MakaronDeferredAppLink"),
+               arguments.indices.contains(index + 1),
+               URL(string: arguments[index + 1]) != nil {
+                call.resolve(["url": arguments[index + 1]])
+                return
+            }
+            #endif
+
+            AppLinkUtility.fetchDeferredAppLink { url, error in
+                if let error {
+                    call.reject("Unable to fetch deferred app link", nil, error)
+                    return
+                }
+
+                guard let url else {
+                    call.resolve(["url": NSNull()])
+                    return
+                }
+                call.resolve(["url": url.absoluteString])
+            }
+        }
     }
 
     @objc func trackEvent(_ call: CAPPluginCall) {
