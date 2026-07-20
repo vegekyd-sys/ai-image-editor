@@ -216,9 +216,13 @@ function codePointInRange(codePoint: number, range: string): boolean {
   return false;
 }
 
-function faceMatchesText(face: RemotionFontCatalogFace, text: string): boolean {
+function uniqueCodePoints(text: string): number[] {
+  return [...new Set([...text].map((char) => char.codePointAt(0) || 0))];
+}
+
+function faceMatchesCodePoints(face: RemotionFontCatalogFace, codePoints: number[]): boolean {
   if (!face.unicodeRange) return true;
-  return [...text].some((char) => codePointInRange(char.codePointAt(0) || 0, face.unicodeRange));
+  return codePoints.some((codePoint) => codePointInRange(codePoint, face.unicodeRange));
 }
 
 function containsEmoji(text: string): boolean {
@@ -240,6 +244,7 @@ export async function loadPreparedRemotionFonts(input: {
   const usedFamilies = input.prepared.usedFamilies.filter(
     (family) => family !== REMOTION_DEFAULT_EMOJI || containsEmoji(input.text),
   );
+  const codePoints = uniqueCodePoints(input.text);
   const facesToLoad: RemotionFontCatalogFace[] = [];
   const loadedFacesByFamily = new Map<string, RemotionFontCatalogFace[]>();
   for (const family of usedFamilies) {
@@ -247,7 +252,9 @@ export async function loadPreparedRemotionFonts(input: {
     if (familyFaces.length === 0) throw new Error(`Remotion font manifest has no faces for ${family}`);
     const availableWeights = [...new Set(familyFaces.map((face) => face.weight))];
     const selectedWeights = [...new Set(requestedWeights(input.text).map((weight) => closestWeight(weight, availableWeights)))];
-    const selectedFaces = familyFaces.filter((face) => selectedWeights.includes(face.weight) && faceMatchesText(face, input.text));
+    const selectedFaces = familyFaces.filter(
+      (face) => selectedWeights.includes(face.weight) && faceMatchesCodePoints(face, codePoints),
+    );
     const faces = selectedFaces.length > 0
       ? selectedFaces
       : familyFaces.filter((face) => face.weight === selectedWeights[0]).slice(0, 1);
@@ -281,9 +288,10 @@ export async function loadPreparedRemotionFonts(input: {
       const missing = usedFamilies.filter((family) => {
         const internal = internalRemotionFontFamily(family, input.manifest.version);
         const faces = loadedFacesByFamily.get(family) || [];
-        const sample = [...input.text]
-          .filter((char) => faces.some((face) => faceMatchesText(face, char)))
+        const sample = codePoints
+          .filter((codePoint) => faces.some((face) => faceMatchesCodePoints(face, [codePoint])))
           .slice(0, 32)
+          .map((codePoint) => String.fromCodePoint(codePoint))
           .join('') || 'A';
         return !targetDocument.fonts.check(`400 16px ${JSON.stringify(internal)}`, sample);
       });

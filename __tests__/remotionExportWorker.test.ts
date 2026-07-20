@@ -127,6 +127,7 @@ describe('Remotion export worker contract', () => {
     expect(read('src/lib/remotion-lambda-renderer.ts')).toContain('videoBitrate: encoding.videoBitrate')
     expect(read('src/lib/remotion-lambda-renderer.ts')).toContain('audioBitrate')
     expect(read('src/lib/remotion-lambda-renderer.ts')).toContain("readEnv('REMOTION_LAMBDA_FRAMES_PER_LAMBDA')")
+    expect(read('src/lib/remotion-lambda-renderer.ts')).toContain("readPositiveInteger(readEnv('REMOTION_LAMBDA_FRAMES_PER_LAMBDA'), 60)")
     expect(read('src/lib/remotion-lambda-renderer.ts')).toContain('REMOTION_LAMBDA_USE_CONCURRENCY')
     expect(read('src/lib/remotion-lambda-renderer.ts')).toContain('REMOTION_LAMBDA_TIMEOUT_MS')
     expect(read('src/lib/remotion-lambda-renderer.ts')).toContain('timeoutInMilliseconds')
