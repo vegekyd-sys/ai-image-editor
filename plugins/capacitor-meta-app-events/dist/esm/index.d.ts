@@ -14,6 +14,7 @@ export interface MetaAppEventsTrackEventOptions {
 
 export interface MetaAppEventsPlugin {
   initialize(): Promise<MetaAppEventsInitializeResult>;
+  fetchDeferredAppLink(): Promise<{ url?: string | null }>;
   trackEvent(options: MetaAppEventsTrackEventOptions): Promise<{
     tracked: boolean;
     managedAutomatically?: boolean;
