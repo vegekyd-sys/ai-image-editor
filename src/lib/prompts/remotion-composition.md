@@ -100,6 +100,7 @@ Available APIs include all exports from `remotion`, `@remotion/media`, `@remotio
   reference and choose the wording, grouping, timing, placement, typography,
   and motion that best serve the current frame and art direction.
 - Use Remotion `<Video>` or `<OffthreadVideo>`, never HTML `<video>`.
+- `<Video>` is the default. Decoder selection is owned by the preview/export runtime; changing `<Video>` to `<OffthreadVideo>` is not a codec repair strategy. If `preview_frame` reports a terminal media decode error, keep the composition unchanged, do not launch FFmpeg or create a compatibility copy, and report the exact runtime failure.
 - Use `<Sequence>` for every scene or clip so media mounts only when needed.
 - Use `trimBefore`, `trimAfter`, `playbackRate`, and `volume` on `<Video>` for non-destructive timeline edits.
 - Never use `startFrom` or `endAt` for `<Video>` trimming in Makaron compositions. They are deprecated/unsafe in this runtime and can make every sequenced clip restart from the first frame. Use `trimBefore={sourceStartFrame}` and `trimAfter={sourceEndFrame}` instead.

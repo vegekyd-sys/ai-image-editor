@@ -71,4 +71,14 @@ describe('design harness compile preflight', () => {
       `,
     })).toBeNull();
   });
+
+  it('rejects native HTML video without silently rewriting the decoder', () => {
+    const result = {
+      code: 'function Composition() { return <video src="https://example.com/source.mp4" autoPlay />; }',
+    };
+
+    expect(validateDesign(result)).toMatch(/native HTML <video> is not frame-synchronized/);
+    expect(result.code).toContain('<video');
+    expect(result.code).not.toContain('<Video');
+  });
 });

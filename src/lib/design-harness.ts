@@ -57,13 +57,18 @@ export function validateDesign(result: DesignResult): string | null {
 export function validateDesignDiagnostics(result: DesignResult): string[] {
   // Auto-fix: Replace <img> with Remotion <Img> for delayRender support
   result.code = autoFixImgTags(result.code);
-  result.code = autoFixVideoTags(result.code);
 
   // Check 1: Syntax — Sucrase compile only (no runtime execution)
   const compileError = checkCompile(result.code);
   if (compileError) return [compileError];
 
   const diagnostics: string[] = [];
+
+  // Native HTML video is not frame-synchronized. Do not silently rewrite it:
+  // doing so makes an Agent believe it changed decoder strategy while the
+  // runtime actually routes it back to the same injected component.
+  const videoTagError = checkNativeVideoTags(result.code);
+  if (videoTagError) diagnostics.push(videoTagError);
 
   // Check 2: Hooks evaluated while the composition module is being created.
   const hookError = checkTopLevelHookCalls(result.code);
@@ -171,23 +176,15 @@ function autoFixImgTags(code: string): string {
   return fixed;
 }
 
-/** Replace HTML <video with Remotion <Video and strip native-only attributes */
-function autoFixVideoTags(code: string): string {
-  let fixed = code;
-  // JSX form: <video → <Video
-  fixed = fixed.replace(/<video(?=[\s/>])/g, '<Video').replace(/<\/video>/g, '</Video>');
-  // createElement form: createElement('video' → createElement(Video
-  fixed = fixed.replace(/createElement\(\s*['"]video['"]/g, 'createElement(Video');
-  // Strip attributes that don't apply to Remotion <Video> (muted is kept — Remotion supports it)
-  fixed = fixed.replace(/\s+autoPlay(?=[\s/>])/g, '');
-  fixed = fixed.replace(/\s+controls(?=[\s/>])/g, '');
-  fixed = fixed.replace(/\s+playsInline(?=[\s/>])/g, '');
-  // createElement props: autoPlay: true → remove
-  fixed = fixed.replace(/,?\s*autoPlay:\s*true\s*,?/g, (m) => m.startsWith(',') && m.endsWith(',') ? ',' : '');
-  if (fixed !== code) {
-    console.log('🔧 [design-harness] auto-fixed <video> → <Video> for Remotion Player sync');
+/** Reject native HTML video explicitly instead of silently changing semantics. */
+function checkNativeVideoTags(code: string): string | null {
+  if (
+    /<\/?video(?=[\s/>])/i.test(code)
+    || /createElement\(\s*['"]video['"]/i.test(code)
+  ) {
+    return '⚠️ Composition compile error: native HTML <video> is not frame-synchronized in the editable Remotion runtime. Use the injected <Video> component. Decoder fallback is selected by preview/export runtime; do not switch component names or transcode the source solely to repair preview decoding.';
   }
-  return fixed;
+  return null;
 }
 
 

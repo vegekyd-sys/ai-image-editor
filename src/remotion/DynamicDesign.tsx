@@ -11,7 +11,9 @@ import * as RemotionNoise from '@remotion/noise';
 import * as THREE from 'three';
 import { getAvailableFonts } from '@remotion/google-fonts';
 import { transform as sucraseTransform } from 'sucrase';
-import { normalizeRemotionScopeDeclarations } from '@/lib/remotion-code-normalization';
+// Keep the Remotion entrypoint independently bundleable. The standalone
+// Remotion bundler does not inherit Next.js' `@/` alias.
+import { normalizeRemotionScopeDeclarations } from '../lib/remotion-code-normalization';
 
 const { Sequence, useVideoConfig, delayRender, continueRender } = Remotion;
 
@@ -25,6 +27,7 @@ const AutoPremountSequence = React.forwardRef(function AutoPremountSequence(prop
 function createRemotionScope(useOffthreadVideo: boolean, useNativeVideo: boolean): Record<string, unknown> {
   const serverVideo = Remotion.OffthreadVideo || MediaVideo;
   const nativeVideo = Remotion.Video || MediaVideo;
+  const serverRendering = useOffthreadVideo || useNativeVideo;
   const scope: Record<string, unknown> = {
     React, useState, useEffect, useCallback, useMemo, useRef,
     THREE,
@@ -35,7 +38,11 @@ function createRemotionScope(useOffthreadVideo: boolean, useNativeVideo: boolean
     // Remotion-native Video so the renderer can collect source-video audio assets.
     Audio: MediaAudio,
     Video: useOffthreadVideo ? serverVideo : useNativeVideo ? nativeVideo : MediaVideo,
-    OffthreadVideo: useOffthreadVideo ? serverVideo : MediaVideo,
+    // An explicit <OffthreadVideo> must remain meaningful in server preview/export.
+    // Previously it was silently aliased back to @remotion/media whenever only
+    // useNativeVideo was set, so an Agent "compatibility" patch changed the
+    // component name without changing the decoder at all.
+    OffthreadVideo: serverRendering ? serverVideo : MediaVideo,
     // Override: Sequence with auto premountFor
     Sequence: AutoPremountSequence,
   };

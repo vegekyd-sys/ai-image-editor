@@ -3182,7 +3182,8 @@ Returns the rendered image so you can see it with your vision.`,
           } catch (err) {
             const msg = err instanceof Error ? err.message : String(err);
             console.error(`⚠️ [agent] preview_frame contact sheet failed: ${msg}`);
-            return { error: `Failed to capture contact sheet: ${msg}` };
+            const { remotionPreviewFailure } = await import('./remotion-preview-error');
+            return remotionPreviewFailure(msg, 'Failed to capture contact sheet');
           }
         }
 
@@ -3306,7 +3307,8 @@ Returns the rendered image so you can see it with your vision.`,
         } catch (err) {
           const msg = err instanceof Error ? err.message : String(err);
           console.error(`⚠️ [agent] preview_frame failed: ${msg}`);
-          return { error: `Failed to capture frame ${targetFrame}: ${msg}` };
+          const { remotionPreviewFailure } = await import('./remotion-preview-error');
+          return remotionPreviewFailure(msg, `Failed to capture frame ${targetFrame}`);
         }
       },
 
