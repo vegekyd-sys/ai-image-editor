@@ -72,7 +72,7 @@ export function validateRemotionFontManifest(value: unknown): RemotionFontCatalo
       throw new Error('Malformed Remotion font manifest face');
     }
     const fileName = new URL(face.url).pathname.split('/').pop() || '';
-    if (fileName !== `${face.sha256}.woff2`) {
+    if (fileName !== face.sha256 && fileName !== `${face.sha256}.woff2`) {
       throw new Error(`Remotion font asset is not content-addressed: ${face.url}`);
     }
   }

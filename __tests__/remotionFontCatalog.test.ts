@@ -51,6 +51,10 @@ describe('Remotion shared font catalog', () => {
     const valid = makeManifest();
     expect(validateRemotionFontManifest(valid)).toEqual(valid);
 
+    const proxied = structuredClone(valid);
+    proxied.faces[0].url = `https://app.example.test/api/remotion/fonts/${proxied.faces[0].sha256}`;
+    expect(validateRemotionFontManifest(proxied)).toEqual(proxied);
+
     const invalid = structuredClone(valid);
     invalid.faces[0].sha256 = SHA;
     expect(() => validateRemotionFontManifest(invalid)).toThrow('not content-addressed');
