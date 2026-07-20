@@ -1,6 +1,7 @@
 import type { DesignPayload } from '@/types'
 import { hasRemotionAudioSources } from '@/lib/remotion-audio'
 import { resolveRemotionLambdaEncodingSettings } from '@/lib/remotion-encoding'
+import { cacheRemotionFontsForLambda } from '@/lib/remotion-font-cache'
 import { prepareRemotionCodeForSandbox } from '@/lib/remotion-server'
 
 type RemotionLambdaClient = typeof import('@remotion/lambda-client')
@@ -21,6 +22,7 @@ export interface RemotionLambdaOutputDestination {
 
 export interface RemotionLambdaTimingSummary {
   totalSeconds: number
+  fontCacheSeconds: number
   submitSeconds: number
   pollUntilDoneSeconds: number
   pollCount: number
@@ -171,11 +173,13 @@ function buildTimingSummary(input: {
   doneMs: number
   pollDurationsMs: number[]
   progress: LambdaRenderProgress
+  fontCacheSeconds: number
 }): RemotionLambdaTimingSummary {
   const pollCount = input.pollDurationsMs.length
   const sumPollMs = input.pollDurationsMs.reduce((sum, value) => sum + value, 0)
   return {
     totalSeconds: (input.doneMs - input.startMs) / 1000,
+    fontCacheSeconds: input.fontCacheSeconds,
     submitSeconds: (input.submitEndMs - input.submitStartMs) / 1000,
     pollUntilDoneSeconds: (input.doneMs - input.submitEndMs) / 1000,
     pollCount,
@@ -206,6 +210,7 @@ export async function renderDesignVideoLambdaToUrl(
     onProgress?: (progress: unknown) => void | Promise<void>
     scale?: number
     outputDestination?: RemotionLambdaOutputDestination
+    skipFontLoading?: boolean
   } = {},
 ): Promise<RemotionLambdaUrlResult> {
   const region = readEnv('REMOTION_LAMBDA_REGION') || readEnv('AWS_REGION') || 'us-east-1'
@@ -222,7 +227,7 @@ export async function renderDesignVideoLambdaToUrl(
     : undefined
   const framesPerLambda = concurrency
     ? undefined
-    : readPositiveInteger(readEnv('REMOTION_LAMBDA_FRAMES_PER_LAMBDA'), 20)
+    : readPositiveInteger(readEnv('REMOTION_LAMBDA_FRAMES_PER_LAMBDA'), options.skipFontLoading ? 20 : 60)
   const pollMs = readPositiveInteger(readEnv('REMOTION_LAMBDA_POLL_MS'), 1000)
   const x264Preset = readX264Preset()
   const jpegQuality = readPositiveInteger(readEnv('REMOTION_LAMBDA_JPEG_QUALITY'), 80)
@@ -237,6 +242,18 @@ export async function renderDesignVideoLambdaToUrl(
   const audioBitrate = hasAudioSources ? encoding.audioBitrate : null
   const crf = encoding.videoBitrate ? undefined : readPositiveNumber(readEnv('REMOTION_LAMBDA_CRF'), 23)
   const t0 = Date.now()
+  const fontCache = options.skipFontLoading
+    ? { stylesheetUrl: '', assets: 0, cacheHits: 0, cacheMisses: 0, seconds: 0 }
+    : await cacheRemotionFontsForLambda(design, serveUrl, region)
+  await options.onProgress?.({
+    progress: 0,
+    renderer: 'lambda',
+    phase: 'fonts_cached',
+    fontCacheSeconds: fontCache.seconds,
+    fontAssets: fontCache.assets,
+    fontCacheHits: fontCache.cacheHits,
+    fontCacheMisses: fontCache.cacheMisses,
+  })
   const submitStartMs = Date.now()
 
   const started = await withRemotionAwsCredentials(async () => {
@@ -250,11 +267,12 @@ export async function renderDesignVideoLambdaToUrl(
       inputProps: {
         code: preparedCode,
         designProps: design.props || {},
+        fontStylesheetUrl: fontCache.stylesheetUrl,
         fps,
         durationInFrames,
         width: design.width || 1080,
         height: design.height || 1920,
-        skipFontLoading: true,
+        skipFontLoading: options.skipFontLoading ?? false,
         useOffthreadVideo,
         useNativeVideo: true,
       },
@@ -292,6 +310,9 @@ export async function renderDesignVideoLambdaToUrl(
         framesPerLambda: framesPerLambda ? String(framesPerLambda) : '',
         concurrency: concurrency ? String(concurrency) : '',
         chunkingMode: concurrency ? 'concurrency' : 'framesPerLambda',
+        fontAssets: String(fontCache.assets),
+        fontCacheHits: String(fontCache.cacheHits),
+        fontCacheMisses: String(fontCache.cacheMisses),
       },
     })
   })
@@ -357,6 +378,7 @@ export async function renderDesignVideoLambdaToUrl(
         doneMs,
         pollDurationsMs,
         progress,
+        fontCacheSeconds: fontCache.seconds,
       })
       return {
         url: progress.outputFile,

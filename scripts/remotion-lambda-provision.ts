@@ -35,6 +35,8 @@ async function main(): Promise<void> {
   const entryPoint = path.resolve(process.cwd(), 'src/remotion/index.tsx')
 
   const { deploySite } = await import('@remotion/lambda')
+  let lastBundlePercent = -10
+  let lastUploadPercent = -10
   const result = await deploySite({
     region: region as Parameters<typeof deploySite>[0]['region'],
     bucketName,
@@ -43,6 +45,23 @@ async function main(): Promise<void> {
     privacy: 'public',
     options: {
       rootDir: process.cwd(),
+      onBundleProgress: (progress) => {
+        const percent = Math.floor(progress / 10) * 10
+        if (percent > lastBundlePercent) {
+          lastBundlePercent = percent
+          console.log(`[remotion-site] bundle ${percent}%`)
+        }
+      },
+      onDiffingProgress: (bytes, done) => {
+        if (done) console.log(`[remotion-site] diffed ${(bytes / 1024 / 1024).toFixed(1)} MB`)
+      },
+      onUploadProgress: ({ filesUploaded, totalFiles, sizeUploaded, totalSize }) => {
+        const percent = totalSize > 0 ? Math.floor((sizeUploaded / totalSize) * 10) * 10 : 100
+        if (percent > lastUploadPercent || filesUploaded === totalFiles) {
+          lastUploadPercent = percent
+          console.log(`[remotion-site] upload ${percent}% (${filesUploaded}/${totalFiles})`)
+        }
+      },
       webpackOverride: (webpackConfig) => ({
         ...webpackConfig,
         resolve: {
