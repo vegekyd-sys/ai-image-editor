@@ -10,6 +10,7 @@ import { getThumbnailUrl } from '@/lib/supabase/storage'
 import { readNativeJSONCache, warmNativeJSONCache, writeNativeJSONCache } from '@/lib/native-app-cache'
 import { isMakaronIOSApp } from '@/lib/native-app'
 import { warmProjectsListCache } from '@/lib/projects-list-warm'
+import { buildLoginHref } from '@/lib/auth-return'
 import { requestNativePageStackPush } from '@/lib/native-page-stack'
 import { clearCreateDraftContinuation } from '@/lib/imageCache'
 
@@ -725,7 +726,7 @@ export default function TopBar({ authReturnPath }: TopBarProps) {
             <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
               <LocaleToggle />
               <a
-                href="/login"
+                href={buildLoginHref(authReturnPath)}
                 onClick={() => {
                   if (!authReturnPath) return
                   try {

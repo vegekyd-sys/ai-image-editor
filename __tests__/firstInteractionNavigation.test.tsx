@@ -62,6 +62,8 @@ describe('first interaction navigation', () => {
   beforeEach(() => {
     vi.clearAllMocks()
     mocks.hydrated = true
+    localStorage.clear()
+    sessionStorage.clear()
   })
 
   it('keeps native href navigation available before hydration', () => {
@@ -133,5 +135,19 @@ describe('first interaction navigation', () => {
 
     expect(preventedByReact).toBe(false)
     expect(mocks.push).not.toHaveBeenCalled()
+  })
+
+  it('makes a Skill-aware Sign in link durable before client navigation runs', () => {
+    render(<TopBar page="home" authReturnPath="/home/world-cup-mvp" />)
+
+    const signIn = screen.getByRole('link', { name: '登录' })
+    expect(signIn.getAttribute('href')).toBe('/login?next=%2Fhome%2Fworld-cup-mvp')
+
+    const keepJSDOMOnPage = (event: Event) => event.preventDefault()
+    document.addEventListener('click', keepJSDOMOnPage, { once: true })
+    fireEvent.click(signIn)
+
+    expect(sessionStorage.getItem('mkr_return_url')).toBe('/home/world-cup-mvp')
+    expect(localStorage.getItem('mkr_return_url')).toBe('/home/world-cup-mvp')
   })
 })

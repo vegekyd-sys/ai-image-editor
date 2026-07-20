@@ -3873,3 +3873,14 @@ duration ?? referenceVideoDuration ?? parseTotalDuration(finalPrompt)
 - 绕过本地硬拦截直传 Seedance/Evolink，`duration: 5` 输出成功：`task-unified-1780089477-psc65jfx`
 - 结论：`duration > 15` 不能直接硬拦。前端、CUI、项目页/Home 页、CLI、projects/create、Agent duration guard 统一改成目标 15s + 0.5s metadata/audio padding 容差
 - 输出/计费 duration 仍钳到 15s；16s 继续拦截；1s 不本地拦截，但 provider 错误必须正确透出并返回非 0 exit
+
+---
+
+## Skill template auth resume (2026-07-20)
+
+- 修复匿名用户从 Home Skill 模板上传素材后，用 email/password 登录却被送到 `/projects`、未继续模板的问题。
+- 根因是认证续接只依赖 `sessionStorage/localStorage`；`/login` 没有显式 `next`，且 proxy 对已登录 `/login` 固定跳 `/projects`。登录边界出现竞态或 storage 缺失时，Home 页无法消费已保存的 Skill draft continuation。
+- 新合同：安全的同源 `next` URL 为主，storage 为兼容兜底；Home、TopBar、`useRequireAuth`、email/OTP、OAuth callback 与 proxy 共用同一白名单解析，外部/协议相对/auth-loop URL 一律拒绝。
+- 匿名暂存图片只做本地 EXIF 读取，不再请求需要登录的 `/api/photo-metadata`，因此该路径不再产生预期但无意义的 401 console error。
+- 本地 Chromium 实测：匿名真实 Skill `00f126ac-7451-4ee6-8025-e67dcc7b0169` → 上传图片 → 免费预览 → `/login?next=%2Fhome%2F<skill-id>`；return URL 与 draft continuation 均保留，console 0 errors / 0 warnings。
+- 自动验证：129 test files / 767 tests、CLI smoke、TypeScript、ESLint、Next.js production build 全部通过。

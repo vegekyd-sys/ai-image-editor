@@ -1,9 +1,11 @@
 import { createServerClient } from '@supabase/ssr'
 import { NextResponse, type NextRequest } from 'next/server'
 import { matchSupportedLocale } from '@/lib/locales'
+import { appendAuthReturnParam, normalizeAuthReturnPath } from '@/lib/auth-return'
 
 export async function proxy(request: NextRequest) {
   const requestedLocale = matchSupportedLocale(request.nextUrl.searchParams.get('locale'))
+  const requestedReturnPath = normalizeAuthReturnPath(request.nextUrl.searchParams.get('next'))
   if (requestedLocale) request.cookies.set('locale', requestedLocale)
 
   let supabaseResponse = NextResponse.next({ request })
@@ -67,9 +69,14 @@ export async function proxy(request: NextRequest) {
       }
 
       const url = request.nextUrl.clone()
-      url.searchParams.delete('code')
-      url.pathname = isNewUser ? '/home' : '/projects'
-      if (isNewUser) url.searchParams.set('welcome', '1')
+      url.search = ''
+      const destination = requestedReturnPath
+        ? (isNewUser ? appendAuthReturnParam(requestedReturnPath, 'welcome', '1') : requestedReturnPath)
+        : (isNewUser ? '/home?welcome=1' : '/projects')
+      const resolvedDestination = new URL(destination, request.url)
+      url.pathname = resolvedDestination.pathname
+      url.search = resolvedDestination.search
+      url.hash = resolvedDestination.hash
       const response = NextResponse.redirect(url)
       supabaseResponse.cookies.getAll().forEach(c => {
         response.cookies.set(c.name, c.value, { path: '/' })
@@ -131,7 +138,11 @@ export async function proxy(request: NextRequest) {
   // /login → redirect based on activation status
   if (pathname === '/login') {
     const url = request.nextUrl.clone()
-    url.pathname = activated ? '/projects' : '/activate'
+    const destination = activated && requestedReturnPath ? requestedReturnPath : (activated ? '/projects' : '/activate')
+    const resolvedDestination = new URL(destination, request.url)
+    url.pathname = resolvedDestination.pathname
+    url.search = resolvedDestination.search
+    url.hash = resolvedDestination.hash
     return NextResponse.redirect(url)
   }
 
