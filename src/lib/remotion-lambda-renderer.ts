@@ -3,6 +3,7 @@ import { hasRemotionAudioSources } from '@/lib/remotion-audio'
 import { resolveRemotionLambdaEncodingSettings } from '@/lib/remotion-encoding'
 import { prepareRemotionCodeForSandbox } from '@/lib/remotion-server'
 import { resolveRemotionFontManifestUrl } from '@/lib/remotion-font-manifest'
+import { REMOTION_FONT_CATALOG_VERSION, REMOTION_FONT_RUNTIME_VERSION } from '@/remotion/font-catalog'
 
 type RemotionLambdaClient = typeof import('@remotion/lambda-client')
 type LambdaRenderProgress = Awaited<ReturnType<RemotionLambdaClient['getRenderProgress']>>
@@ -56,6 +57,39 @@ export interface RemotionLambdaUrlResult {
 function readEnv(name: string): string | undefined {
   const value = process.env[name]?.replace(/\\[rn]|[\u0000-\u001F\u007F]/g, '').trim()
   return value || undefined
+}
+
+const runtimeMarkerCache = new Map<string, Promise<void>>()
+
+async function assertPinnedRemotionRuntime(serveUrl: string): Promise<void> {
+  const markerUrl = new URL('public/remotion-runtime.json', serveUrl).href
+  let pending = runtimeMarkerCache.get(markerUrl)
+  if (!pending) {
+    pending = (async () => {
+      const response = await fetch(markerUrl, { cache: 'no-store' })
+      if (!response.ok) {
+        throw new Error(
+          `Remotion render site is not font-pinned (${response.status}): ${serveUrl}. `
+          + 'Deploy the current Remotion runtime and update REMOTION_LAMBDA_SERVE_URL.',
+        )
+      }
+      const marker = await response.json() as Record<string, unknown>
+      if (marker.runtimeVersion !== REMOTION_FONT_RUNTIME_VERSION
+        || marker.fontCatalogVersion !== REMOTION_FONT_CATALOG_VERSION) {
+        throw new Error(
+          `Remotion render site version mismatch: ${serveUrl}. `
+          + `Expected ${REMOTION_FONT_RUNTIME_VERSION}/${REMOTION_FONT_CATALOG_VERSION}.`,
+        )
+      }
+    })()
+    runtimeMarkerCache.set(markerUrl, pending)
+  }
+  try {
+    await pending
+  } catch (error) {
+    runtimeMarkerCache.delete(markerUrl)
+    throw error
+  }
 }
 
 function readPositiveNumber(value: string | undefined, fallback: number): number {
@@ -213,6 +247,7 @@ export async function renderDesignVideoLambdaToUrl(
   const functionName = lambdaEnv('REMOTION_LAMBDA_FUNCTION_NAME')
   const rendererFunctionName = readEnv('REMOTION_LAMBDA_RENDERER_FUNCTION_NAME')
   const serveUrl = lambdaEnv('REMOTION_LAMBDA_SERVE_URL')
+  await assertPinnedRemotionRuntime(serveUrl)
   const fps = design.animation?.fps || 30
   const dur = design.animation?.durationInSeconds || 1 / fps
   const durationInFrames = Math.max(1, Math.round(fps * dur))

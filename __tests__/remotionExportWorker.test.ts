@@ -87,8 +87,10 @@ describe('Remotion export worker contract', () => {
     expect(exporter).toContain('resolveRemotionRenderProfile')
     expect(exporter).toContain('metadata.renderProfile')
     expect(exporter).toContain('fingerprintDesign')
-    expect(exporter).toContain("renderer: 'remotion-export-v5-font-pinned'")
+    expect(exporter).toContain("renderer: 'remotion-export-v6-font-runtime-pinned'")
     expect(exporter).toContain('fontCatalogVersion: REMOTION_FONT_CATALOG_VERSION')
+    expect(exporter).toContain('fontRuntimeVersion: REMOTION_FONT_RUNTIME_VERSION')
+    expect(exporter).toContain("lambdaServeUrl: readEnv('REMOTION_LAMBDA_SERVE_URL') || null")
     expect(exporter).toContain('fontSubstitutions: design.fontSubstitutions || null')
     expect(exporter).toContain('publishSnapshotIds')
     expect(exporter).toContain('completeStudioRunForExport')
@@ -131,6 +133,13 @@ describe('Remotion export worker contract', () => {
     expect(read('src/lib/remotion-lambda-renderer.ts')).toContain('REMOTION_LAMBDA_USE_CONCURRENCY')
     expect(read('src/lib/remotion-lambda-renderer.ts')).toContain('REMOTION_LAMBDA_TIMEOUT_MS')
     expect(read('src/lib/remotion-lambda-renderer.ts')).toContain('timeoutInMilliseconds')
+    expect(read('src/lib/remotion-lambda-renderer.ts')).toContain("new URL('public/remotion-runtime.json', serveUrl)")
+    expect(read('src/lib/remotion-lambda-renderer.ts')).toContain('Remotion render site is not font-pinned')
+    expect(JSON.parse(read('public/remotion-runtime.json'))).toEqual({
+      runtimeVersion: 'remotion-font-runtime-r1',
+      fontCatalogVersion: 'makaron-fonts-r1',
+    })
+    expect(read('scripts/remotion-lambda-provision.ts')).toContain("publicDir: path.resolve(process.cwd(), 'public')")
   })
 
   it('exposes API and CLI entrypoints for composition export', () => {

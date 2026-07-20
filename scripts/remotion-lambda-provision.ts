@@ -54,6 +54,7 @@ async function main(): Promise<void> {
     privacy: 'public',
     options: {
       rootDir: process.cwd(),
+      publicDir: path.resolve(process.cwd(), 'public'),
       webpackOverride: (webpackConfig) => ({
         ...webpackConfig,
         resolve: {

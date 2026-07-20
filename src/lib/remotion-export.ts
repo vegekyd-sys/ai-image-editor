@@ -5,7 +5,7 @@ import { getSupabaseAdmin } from '@/lib/supabase/service'
 import { toPublicStorageUrl } from '@/lib/supabase/storage'
 import * as workspace from '@/lib/workspace'
 import { resolveRemotionLambdaEncodingSettings } from '@/lib/remotion-encoding'
-import { REMOTION_FONT_CATALOG_VERSION } from '@/remotion/font-catalog'
+import { REMOTION_FONT_CATALOG_VERSION, REMOTION_FONT_RUNTIME_VERSION } from '@/remotion/font-catalog'
 import {
   prepareRemotionCodeForSandbox,
   renderDesignFrame,
@@ -259,13 +259,15 @@ function fingerprintDesign(
     ? resolveRemotionLambdaEncodingSettings()
     : null
   const payload = {
-    renderer: 'remotion-export-v5-font-pinned',
+    renderer: 'remotion-export-v6-font-runtime-pinned',
     fontCatalogVersion: REMOTION_FONT_CATALOG_VERSION,
+    fontRuntimeVersion: REMOTION_FONT_RUNTIME_VERSION,
     outputType,
     renderProfile,
     outputSettings: {
       renderer,
       ...(lambdaEncoding ? {
+        lambdaServeUrl: readEnv('REMOTION_LAMBDA_SERVE_URL') || null,
         lambdaVideoBitrate: lambdaEncoding.videoBitrate,
         lambdaAudioBitrate: lambdaEncoding.audioBitrate,
         lambdaX264Preset: readEnv('REMOTION_LAMBDA_X264_PRESET') || 'ultrafast',
