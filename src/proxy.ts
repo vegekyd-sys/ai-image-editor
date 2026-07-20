@@ -108,10 +108,6 @@ export async function proxy(request: NextRequest) {
     pathname.startsWith('/releases/') ||
     pathname.startsWith('/use-cases')
 
-  // Local dev: skip invite-code activation gate
-  const isDev = process.env.NODE_ENV === 'development'
-  const activated = isDev || request.cookies.get('mkr_activated')?.value === '1'
-
   // Not logged in — /login, /landingpage, / are accessible; others → landing page
   if (!user) {
     // Allow /projects/[uuid] through for public project viewing (page-level checks visibility)
@@ -129,16 +125,16 @@ export async function proxy(request: NextRequest) {
   // Logged in — / → projects
   if (pathname === '/') {
     const url = request.nextUrl.clone()
-    url.pathname = activated ? '/projects' : '/activate'
+    url.pathname = '/projects'
     return NextResponse.redirect(url)
   }
 
   // Logged in below this point
 
-  // /login → redirect based on activation status
+  // /login → continue to the original safe destination.
   if (pathname === '/login') {
     const url = request.nextUrl.clone()
-    const destination = activated && requestedReturnPath ? requestedReturnPath : (activated ? '/projects' : '/activate')
+    const destination = requestedReturnPath || '/projects'
     const resolvedDestination = new URL(destination, request.url)
     url.pathname = resolvedDestination.pathname
     url.search = resolvedDestination.search
@@ -147,27 +143,20 @@ export async function proxy(request: NextRequest) {
   }
 
 
-  // /activate — accessible when logged in
+  // Retired invite-era URL: complete verified auth once, then continue.
   if (pathname === '/activate') {
-    // Already activated → skip to projects
-    if (activated) {
-      const url = request.nextUrl.clone()
-      url.pathname = '/projects'
-      return NextResponse.redirect(url)
-    }
-    return supabaseResponse
+    const url = request.nextUrl.clone()
+    const destination = requestedReturnPath || '/projects'
+    const completionPath = `/api/auth/complete?next=${encodeURIComponent(destination)}`
+    const resolvedDestination = new URL(completionPath, request.url)
+    url.pathname = resolvedDestination.pathname
+    url.search = resolvedDestination.search
+    url.hash = resolvedDestination.hash
+    return NextResponse.redirect(url)
   }
 
-  // Public routes stay accessible even when a logged-in user is not activated yet.
   if (isPublicRoute) {
     return supabaseResponse
-  }
-
-  // All other routes — require activation
-  if (!activated) {
-    const url = request.nextUrl.clone()
-    url.pathname = '/activate'
-    return NextResponse.redirect(url)
   }
 
   return supabaseResponse
