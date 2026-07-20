@@ -4,6 +4,12 @@ import React, { useRef, useState, useEffect } from 'react';
 import { Player, type PlayerRef } from '@remotion/player';
 import { renderStillOnWeb, renderMediaOnWeb, type RenderMediaOnWebProgress } from '@remotion/web-renderer';
 import { evalRemotionJSX, preloadBabel } from '@/lib/evalRemotionJSX';
+import {
+  loadRemotionGoogleFonts,
+  normalizeRemotionFontFamilies,
+  REMOTION_FONT_FALLBACK,
+  remotionFontSearchText,
+} from '@/remotion/font-runtime';
 import type { DesignPayload } from '@/types';
 
 export type { DesignPayload };
@@ -80,42 +86,16 @@ async function resolveDesignImageUrls(
   return { code: resolvedCode, props, blobUrls: [...codeBlobUrls, ...propBlobUrls] };
 }
 
-// ─── Google Fonts auto-loading from code (same approach as server DynamicDesign.tsx) ──
-
-import { getAvailableFonts } from '@remotion/google-fonts';
-
-const ALL_FONTS = getAvailableFonts();
-const loadedFontFamilies = new Set<string>();
-
-/**
- * Scan code + props text for Google Font family names and load them.
- * Uses @remotion/google-fonts — the same mechanism as server-side DynamicDesign.tsx.
- * Only fonts whose family name appears in the text are loaded (lazy).
- */
-async function loadGoogleFontsFromCode(code: string): Promise<void> {
-  const fontsToLoad = ALL_FONTS.filter(f =>
-    code.includes(f.fontFamily) && !loadedFontFamilies.has(f.fontFamily)
-  );
-
-  // Always register Noto Color Emoji so emoji characters fallback correctly
-  // (decorative fonts like Great Vibes lack emoji glyphs → browser needs a registered @font-face to fallback to)
-  if (!loadedFontFamilies.has('Noto Color Emoji')) {
-    const emojiFont = ALL_FONTS.find(f => f.fontFamily === 'Noto Color Emoji');
-    if (emojiFont) fontsToLoad.push(emojiFont);
-  }
-
-  if (fontsToLoad.length === 0) return;
-
-  await Promise.all(fontsToLoad.map(async (font) => {
-    try {
-      loadedFontFamilies.add(font.fontFamily);
-      const loaded = await font.load();
-      const { waitUntilDone } = loaded.loadFont();
-      await waitUntilDone();
-    } catch (e) {
-      console.warn(`[RemotionRenderer] font load failed: ${font.fontFamily}`, e);
-    }
-  }));
+function withRemotionFontFallback(
+  Component: React.ComponentType<Record<string, unknown>>,
+): React.ComponentType<Record<string, unknown>> {
+  return function RemotionFontFallback(props) {
+    return (
+      <div style={{ position: 'absolute', inset: 0, fontFamily: REMOTION_FONT_FALLBACK }}>
+        <Component {...props} />
+      </div>
+    );
+  };
 }
 
 // ─── Standalone poster capture (no DOM needed) ─────────────────────────────
@@ -134,8 +114,10 @@ export async function captureDesignPoster(design: DesignPayload): Promise<string
     // Then resolve image URLs in both code literals and editable props.
     const { code: resolvedCode, props: resolvedProps, blobUrls: imageBlobUrls } = await resolveDesignImageUrls(design, videoResolved);
     allBlobUrls = [...videoBlobUrls, ...imageBlobUrls];
-    await loadGoogleFontsFromCode(resolvedCode);
-    const comp = evalRemotionJSX(resolvedCode);
+    const fontSafeCode = normalizeRemotionFontFamilies(resolvedCode);
+    await loadRemotionGoogleFonts(remotionFontSearchText(fontSafeCode, resolvedProps));
+    const evaluated = evalRemotionJSX(fontSafeCode);
+    const comp = evaluated ? withRemotionFontFallback(evaluated) : null;
     if (!comp) return '';
 
     const fps = design.animation?.fps || 30;
@@ -184,8 +166,10 @@ export async function captureDesignFrame(design: DesignPayload, frame: number): 
     const { code: videoResolved, blobUrls: videoBlobUrls } = await resolveVideoUrls(design.code);
     const { code: resolvedCode, props: resolvedProps, blobUrls: imageBlobUrls } = await resolveDesignImageUrls(design, videoResolved);
     allBlobUrls = [...videoBlobUrls, ...imageBlobUrls];
-    await loadGoogleFontsFromCode(resolvedCode);
-    const comp = evalRemotionJSX(resolvedCode);
+    const fontSafeCode = normalizeRemotionFontFamilies(resolvedCode);
+    await loadRemotionGoogleFonts(remotionFontSearchText(fontSafeCode, resolvedProps));
+    const evaluated = evalRemotionJSX(fontSafeCode);
+    const comp = evaluated ? withRemotionFontFallback(evaluated) : null;
     if (!comp) return null;
 
     const fps = design.animation?.fps || 30;
@@ -277,9 +261,11 @@ export default function RemotionRenderer({ design, onError, mode = 'inline', hid
         const { code: resolvedCode, props: resolvedProps, blobUrls: imageBlobUrls } = await resolveDesignImageUrls(design, videoResolved);
         blobUrls.push(...imageBlobUrls);
         if (cancelled) { blobUrls.forEach(url => URL.revokeObjectURL(url)); return; }
-        await loadGoogleFontsFromCode(resolvedCode);
+        const fontSafeCode = normalizeRemotionFontFamilies(resolvedCode);
+        await loadRemotionGoogleFonts(remotionFontSearchText(fontSafeCode, resolvedProps));
         if (cancelled) { blobUrls.forEach(url => URL.revokeObjectURL(url)); return; }
-        const comp = evalRemotionJSX(resolvedCode);
+        const evaluated = evalRemotionJSX(fontSafeCode);
+        const comp = evaluated ? withRemotionFontFallback(evaluated) : null;
         if (!comp) {
           setCompileError('Failed to compile design code');
           onError?.('Failed to compile design code');
@@ -503,8 +489,10 @@ export async function exportDesignVideo(
   const { code: imageResolved, props: resolvedProps, blobUrls: imageBlobUrls } = await resolveDesignImageUrls(design, videoResolved);
   // Pre-fetch remote audio URLs → blob URLs (Suno CDN URLs may be stale/expired)
   const { code: resolvedCode, blobUrls: audioBlobUrls } = await resolveAudioUrls(imageResolved);
-  await loadGoogleFontsFromCode(resolvedCode);
-  const Component = evalRemotionJSX(resolvedCode);
+  const fontSafeCode = normalizeRemotionFontFamilies(resolvedCode);
+  await loadRemotionGoogleFonts(remotionFontSearchText(fontSafeCode, resolvedProps));
+  const evaluated = evalRemotionJSX(fontSafeCode);
+  const Component = evaluated ? withRemotionFontFallback(evaluated) : null;
   if (!Component) throw new Error('Failed to compile design code');
 
   const fps = design.animation?.fps || 30;
