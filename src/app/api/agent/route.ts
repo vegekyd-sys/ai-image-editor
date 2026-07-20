@@ -46,7 +46,13 @@ export async function POST(req: NextRequest) {
       headless: !!headless,
     });
     const locale = getRequestLocale(req);
-    const skillLaunchContext = await verifySkillLaunchContext(supabase, rawSkillLaunchContext);
+    const skillLaunchContext = await verifySkillLaunchContext(supabase, rawSkillLaunchContext, userId);
+    if (rawSkillLaunchContext && !skillLaunchContext) {
+      return new Response(
+        JSON.stringify({ error: 'Skill template launch could not be verified' }),
+        { status: 400, headers: { 'Content-Type': 'application/json' } },
+      );
+    }
 
     const requestedAgentModel = normalizeRequestedAgentModelPreference(agentModel);
     if (requestedAgentModel === null) {

@@ -982,14 +982,15 @@ function HomePageInner() {
         body: JSON.stringify({ skillPath: skill.skill_path, homeSkillId: skill.id }),
       })
       const installData = await installRes.json()
-      if (installData.skillName) {
-        setSelectedSkill(installData.skillName)
-        fetch('/api/skills').then(r => r.json()).then(d => {
-          writeNativeJSONCache('/api/skills', d)
-          if (d.skills) setAvailableSkills(d.skills)
-        }).catch(() => {})
-        return installData.skillName as string
+      if (!installRes.ok || !installData.skillName) {
+        throw new Error(installData.error || 'Failed to install Skill template')
       }
+      setSelectedSkill(installData.skillName)
+      fetch('/api/skills').then(r => r.json()).then(d => {
+        writeNativeJSONCache('/api/skills', d)
+        if (d.skills) setAvailableSkills(d.skills)
+      }).catch(() => {})
+      return installData.skillName as string
     } finally {
       setInstallingSkill(false)
     }
@@ -1443,7 +1444,6 @@ function HomePageInner() {
       prompt,
       selectedSkill: homeSkill?.skill_path ? undefined : (selectedSkill ?? undefined),
       homeSkillId: homeSkill?.id,
-      skillLaunchContext: createHomeSkillLaunchContext(homeSkill, prompt),
       returnPath: homeSkill?.id ? `/home/${homeSkill.id}` : window.location.pathname + window.location.search,
     })
     const returnPath = homeSkill?.id ? `/home/${homeSkill.id}` : window.location.pathname + window.location.search
@@ -1480,7 +1480,7 @@ function HomePageInner() {
       const opts: ProjectLaunchOptions = {}
       if (prompt) opts.prompt = prompt
       if (skillName) opts.skill = skillName
-      const skillLaunchContext = createHomeSkillLaunchContext(homeSkill, prompt)
+      const skillLaunchContext = createHomeSkillLaunchContext(homeSkill, prompt, skillName)
       if (skillLaunchContext) opts.skillLaunchContext = skillLaunchContext
       const result = await createProject(supabase, authedUser.id, files, Object.keys(opts).length ? opts : undefined)
       if (!result) throw new Error('Failed to create project')
@@ -1537,7 +1537,7 @@ function HomePageInner() {
           metadata: draft.metadata as PhotoMetadata | undefined,
           prompt: draft.prompt,
           skill: skillName,
-          skillLaunchContext: createHomeSkillLaunchContext(homeSkill, draft.prompt),
+          skillLaunchContext: createHomeSkillLaunchContext(homeSkill, draft.prompt, skillName),
         })
         if (!result) throw new Error('Failed to create project from draft')
         await clearCreateDraft()

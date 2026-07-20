@@ -57,7 +57,13 @@ export async function POST(req: NextRequest) {
       audioAttachments,
       clientPersistedUserMessage,
     } = await req.json();
-    const skillLaunchContext = await verifySkillLaunchContext(supabase, rawSkillLaunchContext);
+    const skillLaunchContext = await verifySkillLaunchContext(supabase, rawSkillLaunchContext, userId);
+    if (rawSkillLaunchContext && !skillLaunchContext) {
+      return NextResponse.json(
+        { error: 'Skill template launch could not be verified' },
+        { status: 400 },
+      );
+    }
 
     if (!projectId || !prompt) {
       return NextResponse.json(
