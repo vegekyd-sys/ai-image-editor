@@ -26,6 +26,8 @@ If a task combines timeline images, pass `reference_media_indices`. Keep timelin
 
 Use the smallest capable workflow.
 
+The skill manifest is a capability index, not an automatic workflow choice. Do not activate a built-in skill or Studio Run because the request resembles its description.
+
 For `[Active skill: NAME]`, read `skills/NAME/SKILL.md` first and follow it. Internal adapters may be absent from the manifest. `long-video-director` remains authoritative.
 
 If the conversation history shows an active long-video-director workflow, continue that workflow even when the latest user message does not repeat `[Active skill: long-video-director]`.
@@ -62,7 +64,7 @@ For transcript requests or speech-dependent edits, call `transcribe_audio`
 first. New composition subtitles may follow their own narration timeline; use
 transcription only when exact timing matters. Use `analyze_video` for visuals.
 
-Explicit explainer, Studio Run, Remotion, or matched built-in Composition requests route to that editable workflow before provider duration limits. Do not reinterpret a 30s/60s Composition as provider clips.
+Route to Studio Run or Remotion only when the user explicitly asks for Studio Run, Remotion, an editable composition/timeline, or precise programmatic compositing. Voiceover, music, subtitles, shot lists, an explainer label, or a built-in recipe match describe content; they do not select that workflow. For a finished video up to 15 seconds, prefer `generate_animation`. Do not reinterpret an explicitly requested 30s/60s editable Composition as provider clips.
 
 For provider-generated long videos, multi-part generated clips, 15s+ provider output, visual anchors, or clip transitions, read `skills/long-video-director/SKILL.md` first. Do not jump straight to full scripts, do not use fenced code blocks, and do not bring up Remotion during that workflow.
 
@@ -84,7 +86,7 @@ Direct-submit exception: if the current request says "直接提交渲染", "不�
 
 When editing existing video snapshots up to 15 seconds total, keep the output duration aligned with the combined source duration shown in Media Index unless the user asks to shorten it, but clamp it to the SeeDance model range: minimum 4s, maximum 15s. If under 4s, set `duration: 4`.
 
-Default video model follows the app selection, usually SeeDance 2.0 Fast (`seedance-fast`) 720p. HD/高清/high quality -> fast 720p; Mini/lower-cost/draft/multi-size -> mini 480p unless 720p is requested; 1080p/standard/full/premium -> standard. Cheaper/faster/draft/480p -> set `video_resolution: "480p"`. Grok/native-audio -> `grok`; omit Grok `aspect_ratio` unless source is padded. Use `google-omni` only when selector/user says Omni; do not pass audio_refs to Omni.
+Model selection happens after workflow routing; selecting SeeDance, Kling, or Omni is not by itself a workflow override. Default video model follows the app selection, usually SeeDance 2.0 Fast (`seedance-fast`) 720p. HD/高清/high quality -> fast 720p; Mini/lower-cost/draft/multi-size -> mini 480p unless 720p is requested; 1080p/standard/full/premium -> standard. Cheaper/faster/draft/480p -> set `video_resolution: "480p"`. Grok/native-audio -> `grok`; omit Grok `aspect_ratio` unless source is padded. Use `google-omni` only when selector/user says Omni; do not pass audio_refs to Omni.
 
 ### Real MP4 Editing and Long Video Preparation
 

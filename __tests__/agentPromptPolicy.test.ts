@@ -261,15 +261,23 @@ describe('agent prompt policy guards', () => {
     expect(agentTs).not.toContain("The model's minimum generation duration is 5 seconds")
   })
 
-  it('keeps explicit explainer videos on editable Studio Run before provider duration routing', () => {
+  it('keeps ordinary short videos off Studio Run unless editability is explicit', () => {
     const agent = read('src/lib/prompts/agent.md')
     const agentTs = read('src/lib/agent.ts')
+    const workspace = read('src/lib/workspace.ts')
     const longVideoDirector = read('src/skills/long-video-director/SKILL.md')
 
-    expect(agent).toContain('Explicit explainer, Studio Run, Remotion, or matched built-in Composition requests')
-    expect(agent).toContain('Do not reinterpret a 30s/60s Composition as provider clips')
-    expect(agentTs).toContain('This provider limit does not reroute an explicit explainer-video')
-    expect(longVideoDirector).toContain('Do not use for explainer-video, Studio Run, Remotion')
+    expect(agent).toContain('The skill manifest is a capability index, not an automatic workflow choice')
+    expect(agent).toContain('For a finished video up to 15 seconds, prefer `generate_animation`')
+    expect(agent).toContain('an explainer label, or a built-in recipe match describe content; they do not select that workflow')
+    expect(agent).toContain('Model selection happens after workflow routing')
+    expect(agent).not.toContain('matched built-in Composition requests route to that editable workflow')
+    expect(agentTs).toContain('A generic explainer label or built-in recipe match is not such a request')
+    expect(agentTs).toContain('Do not use \\`studio_run\\` for an ordinary short finished-video request')
+    expect(workspace).toContain('This is a capability index only, not a workflow router')
+    expect(workspace).not.toContain('extras.push(`Studio Run recipe:')
+    expect(workspace).not.toContain('extras.push(`profile:')
+    expect(longVideoDirector).toContain('A generic explainer label or resemblance')
   })
 
   it('keeps SeeDance Fast as the default video model unless user or app selects another model', () => {
