@@ -186,12 +186,16 @@ export function evalRemotionJSX(code: string): React.ComponentType<any> | null {
     // Prefer the primary composition function. Agent code often declares helper
     // components first (Caption, Badge, etc.) and the real composition last.
     const fnName = pickRemotionComponentName(src);
+    const remotionNamespace = { ...Remotion, ...REMOTION_SCOPE };
+    const mediaNamespace = { Audio, Video, OffthreadVideo: Video };
+    const pathsNamespace = { ...RemotionPaths };
+    const noiseNamespace = { ...RemotionNoise };
     const modules: Record<string, unknown> = {
       react: { ...React, default: React, __esModule: true },
-      remotion: { ...Remotion, ...REMOTION_SCOPE, __esModule: true },
-      '@remotion/media': { Audio, Video, OffthreadVideo: Video, __esModule: true },
-      '@remotion/paths': { ...RemotionPaths, __esModule: true },
-      '@remotion/noise': { ...RemotionNoise, __esModule: true },
+      remotion: { ...remotionNamespace, default: remotionNamespace, __esModule: true },
+      '@remotion/media': { ...mediaNamespace, default: mediaNamespace, __esModule: true },
+      '@remotion/paths': { ...pathsNamespace, default: pathsNamespace, __esModule: true },
+      '@remotion/noise': { ...noiseNamespace, default: noiseNamespace, __esModule: true },
       three: { ...THREE, default: THREE, __esModule: true },
     };
     const localRequire = (id: string) => {

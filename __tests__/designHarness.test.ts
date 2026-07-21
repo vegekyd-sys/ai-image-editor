@@ -93,7 +93,23 @@ describe('design harness compile preflight', () => {
 
     expect(validateDesign(result)).toBeNull();
     expect(result.code).toContain('React.createElement(Video');
-    expect(result.code).not.toContain('autoPlay');
+    expect(result.code).toContain('autoPlay');
+  });
+
+  it('does not strip autoPlay from unrelated components or objects', () => {
+    const result = {
+      code: 'const settings = {autoPlay: true}; const Player = () => <div />; function Composition() { return <Player autoPlay />; }',
+    };
+
+    expect(validateDesign(result)).toBeNull();
+    expect(result.code).toContain('{autoPlay: true}');
+    expect(result.code).toContain('<Player autoPlay');
+  });
+
+  it('does not validate video and audio src values as image URLs', () => {
+    expect(validateDesign({
+      code: 'function Composition() { return <><Video src="data:video/mp4;base64,AAAA" /><Audio src="/audio.mp3" /></>; }',
+    })).toBeNull();
   });
 });
 

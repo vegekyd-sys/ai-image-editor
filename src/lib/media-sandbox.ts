@@ -142,7 +142,7 @@ export interface MediaSandboxResult {
   workDir: string
 }
 
-interface RunNodeMediaCodeOptions {
+export interface RunNodeMediaCodeOptions {
   code: string
   codePath?: string
   description?: string
@@ -510,7 +510,7 @@ function createNodeMediaRequire(cwd: string, safeProcess: ReturnType<typeof crea
   }) as NodeRequire
 }
 
-function compileNodeMediaCode(code: string, codePath?: string): string {
+export function compileNodeMediaCode(code: string, codePath?: string): string {
   try {
     return sucraseTransform(code, {
       transforms: ['typescript', 'jsx', 'imports'],
@@ -663,98 +663,138 @@ export async function runNodeMediaCode(options: RunNodeMediaCodeOptions): Promis
       ffprobePath,
     }
 
-    const safeProcess = createSafeProcess(workDir)
-    const localRequire = createNodeMediaRequire(workDir, safeProcess)
     const compiledCode = compileNodeMediaCode(options.code, options.codePath)
-    const mediaModule = { exports: {} as unknown }
-    const AsyncFunction = Object.getPrototypeOf(async function () {}).constructor
-    const runner = new AsyncFunction(
-      'require',
-      'process',
-      'console',
-      'fetch',
-      'ctx',
-      'context',
-      'inputFiles',
-      'outputDir',
-      'inputDir',
-      'workDir',
-      'workspaceDir',
-      'ffmpegPath',
-      'ffprobePath',
-      'downloadFile',
-      'saveToWorkspace',
-      'saveOutput',
-      'probeVideo',
-      '__filename',
-      '__dirname',
-      'module',
-      'exports',
-      compiledCode,
-    )
+    const timeoutMs = options.timeoutMs || 180_000
+    let result: unknown
+    let usedIsolatedExecutor = false
 
-    let result = await withTimeout(
-      runner(
-        localRequire,
-        safeProcess,
-        console,
-        fetch,
-        context,
-        context,
-        inputFiles,
-        outputDir,
-        inputDir,
-        workDir,
-        workspaceDir,
-        ffmpegPath,
-        ffprobePath,
-        downloadFile,
-        saveToWorkspace,
-        saveOutput,
-        probeVideoFile,
-        path.join(workDir, options.codePath ? path.basename(options.codePath) : 'agent-media-code.js'),
-        workDir,
-        mediaModule,
-        mediaModule.exports,
-      ),
-      options.timeoutMs || 180_000,
-      'Node media runtime',
-    )
+    const {
+      runNodeMediaCodeInVercelSandbox,
+      shouldUseVercelMediaSandbox,
+      VercelMediaSandboxExecutionError,
+    } = await import('./media-sandbox-vercel')
+    if (shouldUseVercelMediaSandbox()) {
+      try {
+        const isolated = await runNodeMediaCodeInVercelSandbox({
+          code: options.code,
+          compiledCode,
+          codePath: options.codePath,
+          description: options.description,
+          inputFiles,
+          mediaItems: options.mediaItems,
+          mediaRefs: selectedRefs,
+          workspacePaths: selectedWorkspacePaths,
+          localOutputDir: outputDir,
+          projectId: options.projectId,
+          userId: options.userId,
+          timeoutMs,
+        })
+        result = isolated.result
+        usedIsolatedExecutor = true
+        console.log(`[media-sandbox] Agent code completed in isolated Sandbox ${isolated.sandboxId}`)
+      } catch (error) {
+        if (error instanceof VercelMediaSandboxExecutionError) throw error
+        // Availability/bootstrap failures must not strand the user. Preserve the
+        // open local executor as a compatibility fallback so the Agent can keep
+        // repairing its program. Production should normally stay on the true
+        // Sandbox path; this warning is intentionally visible for later triage.
+        console.warn('[media-sandbox] isolated executor unavailable; continuing with local compatibility executor:', error)
+      }
+    }
 
-    // Natural ESM/CommonJS files may export their program instead of using a
-    // top-level return. Invoke the conventional exported function with the
-    // same open runtime API, or accept an exported result object directly.
-    if (result === undefined) {
-      const exported = mediaModule.exports as any
-      const entry = exported?.default ?? exported?.main ?? exported?.run ?? exported?.handler
-      if (typeof entry === 'function') {
-        result = await withTimeout(
-          Promise.resolve(entry({
-            require: localRequire,
-            process: safeProcess,
-            console,
-            fetch,
-            ctx: context,
-            context,
-            inputFiles,
-            outputDir,
-            inputDir,
-            workDir,
-            workspaceDir,
-            ffmpegPath,
-            ffprobePath,
-            downloadFile,
-            saveToWorkspace,
-            saveOutput,
-            probeVideo: probeVideoFile,
-          })),
-          options.timeoutMs || 180_000,
-          'Node media exported entry',
-        )
-      } else if (entry !== undefined) {
-        result = entry
-      } else if (exported && (typeof exported !== 'object' || Object.keys(exported).length > 0)) {
-        result = exported
+    if (!usedIsolatedExecutor) {
+      const safeProcess = createSafeProcess(workDir)
+      const localRequire = createNodeMediaRequire(workDir, safeProcess)
+      const mediaModule = { exports: {} as unknown }
+      const AsyncFunction = Object.getPrototypeOf(async function () {}).constructor
+      const runner = new AsyncFunction(
+        'require',
+        'process',
+        'console',
+        'fetch',
+        'ctx',
+        'context',
+        'inputFiles',
+        'outputDir',
+        'inputDir',
+        'workDir',
+        'workspaceDir',
+        'ffmpegPath',
+        'ffprobePath',
+        'downloadFile',
+        'saveToWorkspace',
+        'saveOutput',
+        'probeVideo',
+        '__filename',
+        '__dirname',
+        'module',
+        'exports',
+        compiledCode,
+      )
+
+      result = await withTimeout(
+        runner(
+          localRequire,
+          safeProcess,
+          console,
+          fetch,
+          context,
+          context,
+          inputFiles,
+          outputDir,
+          inputDir,
+          workDir,
+          workspaceDir,
+          ffmpegPath,
+          ffprobePath,
+          downloadFile,
+          saveToWorkspace,
+          saveOutput,
+          probeVideoFile,
+          path.join(workDir, options.codePath ? path.basename(options.codePath) : 'agent-media-code.js'),
+          workDir,
+          mediaModule,
+          mediaModule.exports,
+        ),
+        timeoutMs,
+        'Node media runtime',
+      )
+
+      // Natural ESM/CommonJS files may export their program instead of using a
+      // top-level return. Invoke the conventional exported function with the
+      // same open runtime API, or accept an exported result object directly.
+      if (result === undefined) {
+        const exported = mediaModule.exports as any
+        const entry = exported?.default ?? exported?.main ?? exported?.run ?? exported?.handler
+        if (typeof entry === 'function') {
+          result = await withTimeout(
+            Promise.resolve(entry({
+              require: localRequire,
+              process: safeProcess,
+              console,
+              fetch,
+              ctx: context,
+              context,
+              inputFiles,
+              outputDir,
+              inputDir,
+              workDir,
+              workspaceDir,
+              ffmpegPath,
+              ffprobePath,
+              downloadFile,
+              saveToWorkspace,
+              saveOutput,
+              probeVideo: probeVideoFile,
+            })),
+            timeoutMs,
+            'Node media exported entry',
+          )
+        } else if (entry !== undefined) {
+          result = entry
+        } else if (exported && (typeof exported !== 'object' || Object.keys(exported).length > 0)) {
+          result = exported
+        }
       }
     }
 

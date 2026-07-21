@@ -178,12 +178,12 @@ function autoFixVideoTags(code: string): string {
   let fixed = code;
   fixed = fixed.replace(/<video(?=[\s/>])/g, '<Video').replace(/<\/video>/g, '</Video>');
   fixed = fixed.replace(/createElement\(\s*['"]video['"]/g, 'createElement(Video');
-  fixed = fixed.replace(/\s+autoPlay(?=[\s/>])/g, '');
-  fixed = fixed.replace(/\s+controls(?=[\s/>])/g, '');
-  fixed = fixed.replace(/\s+playsInline(?=[\s/>])/g, '');
-  fixed = fixed.replace(/,?\s*autoPlay:\s*true\s*,?/g, (match) => (
-    match.startsWith(',') && match.endsWith(',') ? ',' : ''
-  ));
+  // Only remove browser playback props from actual Video JSX tags. The old
+  // global regex also mutated unrelated components and configuration objects.
+  fixed = fixed.replace(/<Video\b[^>]*>/g, tag => tag
+    .replace(/\s+autoPlay(?=[\s/>])/g, '')
+    .replace(/\s+controls(?=[\s/>])/g, '')
+    .replace(/\s+playsInline(?=[\s/>])/g, ''));
   if (fixed !== code) {
     console.log('🔧 [design-harness] auto-fixed <video> → <Video> for Remotion Player sync');
   }
@@ -233,16 +233,14 @@ function checkImageReferences(code: string, props?: Record<string, unknown>): st
 function checkImageUrls(code: string): string | null {
   const srcValues: string[] = [];
 
-  const staticMatches = code.match(/src=["'`]([^"'`]*)["'`]/g) || [];
-  for (const m of staticMatches) {
-    const match = m.match(/src=["'`]([^"'`]*)["'`]/);
-    if (match) srcValues.push(match[1]);
-  }
-
-  const exprMatches = code.match(/src=\{["'`]([^"'`]*)["'`]\}/g) || [];
-  for (const m of exprMatches) {
-    const match = m.match(/src=\{["'`]([^"'`]*)["'`]\}/);
-    if (match) srcValues.push(match[1]);
+  // Validate only Remotion Img tags. Scanning every `src=` treated Video,
+  // Audio and IFrame sources as images and rejected valid media URLs/data.
+  const imgTags = code.match(/<Img\b[^>]*>/g) || [];
+  for (const tag of imgTags) {
+    const staticMatch = tag.match(/\bsrc=["'`]([^"'`]*)["'`]/);
+    if (staticMatch) srcValues.push(staticMatch[1]);
+    const expressionMatch = tag.match(/\bsrc=\{["'`]([^"'`]*)["'`]\}/);
+    if (expressionMatch) srcValues.push(expressionMatch[1]);
   }
 
   for (const src of srcValues) {

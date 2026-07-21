@@ -83,19 +83,26 @@ function compileAndEval(code: string, scope: Record<string, unknown>): React.Com
     });
     const fnName = pickRemotionComponentName(src);
     const reactModule = { ...React, default: React, __esModule: true };
-    const remotionModule = { ...Remotion, ...scope, __esModule: true };
-    const mediaModule = {
+    const remotionNamespace = { ...Remotion, ...scope };
+    const remotionModule = { ...remotionNamespace, default: remotionNamespace, __esModule: true };
+    const mediaNamespace = {
       Audio: scope.Audio,
       Video: scope.Video,
       OffthreadVideo: scope.OffthreadVideo,
+    };
+    const mediaModule = {
+      ...mediaNamespace,
+      default: mediaNamespace,
       __esModule: true,
     };
+    const pathsNamespace = { ...RemotionPaths };
+    const noiseNamespace = { ...RemotionNoise };
     const modules: Record<string, unknown> = {
       react: reactModule,
       remotion: remotionModule,
       '@remotion/media': mediaModule,
-      '@remotion/paths': { ...RemotionPaths, __esModule: true },
-      '@remotion/noise': { ...RemotionNoise, __esModule: true },
+      '@remotion/paths': { ...pathsNamespace, default: pathsNamespace, __esModule: true },
+      '@remotion/noise': { ...noiseNamespace, default: noiseNamespace, __esModule: true },
       three: { ...THREE, default: THREE, __esModule: true },
     };
     const localRequire = (id: string) => {
