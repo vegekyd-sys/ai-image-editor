@@ -10,6 +10,15 @@ interface ChangelogEntry {
 
 const CHANGELOG: ChangelogEntry[] = [
   {
+    date: '2026-07-21',
+    en: { title: 'Smarter Video Creation', items: [
+      'Short videos now choose direct generation instead of unnecessary editing workflows, while dialogue, sound, and music stay with the video model for better sync and fewer redundant tool calls.',
+    ]},
+    zh: { title: '视频生成更懂你的意图', items: [
+      '短视频现在会优先直接生成，不再误入复杂剪辑流程；对白、音效和配乐也会交给视频模型随画面一次完成，减少重复工具调用带来的效果损失。',
+    ]},
+  },
+  {
     date: '2026-07-19',
     en: { title: 'Studio Run + Agent Run: Long Tasks, Uninterrupted', items: [
       'Studio Run gives you a visible production process, while Agent Run stays fast and direct. Both now share the same durable engine.',
