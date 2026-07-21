@@ -42,7 +42,7 @@ describe('agent media scenario matrix', () => {
     expect(agent).toContain('transcription only when exact timing matters')
     expect(agent).toContain('prompts/remotion-composition.md')
     expect(agent).toContain('skills/_shared/remotion-director-contract.md')
-    expect(agent).toContain('Use `generate_music` only when the user asks')
+    expect(agent).toContain('Use `generate_music` only when the user asks for music, score, soundtrack, or background audio')
     expect(agentTs).toContain('helper components must receive values through their own parameters')
   })
 

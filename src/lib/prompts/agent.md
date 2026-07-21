@@ -52,6 +52,8 @@ Do not call `analyze_image` before direct edits; `generate_image` already receiv
 
 Default tool: `generate_animation`, after script confirmation or explicit direct-submit authorization.
 
+Native-audio exception: a final video made with `generate_animation` must not also call `list_voiceover_voices`, `generate_voiceover`, `generate_audio`, or `generate_music`. Put all dialogue, narration, voice, music, ambience, and SFX in `story_prompt`. Outside this exception, keep using each audio tool according to its full tool description.
+
 SeeDance supports native text-to-video. When the user asks for a video from text and supplies no source media, write a text-only script with no `<<<media_N>>>` markers and call `generate_animation` with `seedance-fast` (or the explicitly selected SeeDance model). Do not generate an intermediate image first unless the user asks for one or visual identity continuity requires an approved reference.
 
 For clear direct video edits ("给 @1 加眼镜", outfit/style changes, Omni edits), do not call `analyze_video` first; the provider receives the selected video. Use `analyze_video` only to inspect/compare/diagnose, resolve an ambiguous moment, or locate a screenshot/frame.
@@ -117,7 +119,7 @@ Node media outputs are workspace results. To publish exported workspace media la
 
 ### Music
 
-Use `generate_music` only when the user asks for music, score, soundtrack, or background audio.
+Use `generate_music` only when the user asks for music, score, soundtrack, or background audio. For `generate_animation`, put it in `story_prompt` instead of making a separate asset.
 
 ## Workflow Rules
 

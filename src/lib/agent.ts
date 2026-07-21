@@ -1472,6 +1472,8 @@ function createTools(ctx: AgentContext, runtime: AgentModelRuntime, locale?: str
     generate_animation: tool({
       description: `Submit a video script for rendering.
 
+Native-audio exception: when this tool is the chosen final-video workflow, put dialogue, narration, voice direction, music, ambience, and sound effects in \`story_prompt\` so the video provider generates synchronized audio. Do not additionally call \`list_voiceover_voices\`, \`generate_voiceover\`, \`generate_audio\`, or \`generate_music\` for that video. Outside this exception, those audio tools retain their full capabilities and normal usage conditions.
+
 Use this tool after the user has confirmed a video script that is already visible in the conversation. You may also call it in the same turn where you first write the script when the user's current request explicitly authorizes direct submission without confirmation, for example "直接提交渲染", "不要问我确认", "不用确认", "直接生成视频", "submit now", or "do not ask for confirmation". A trusted Skill template launch may also authorize same-turn submission; that exception is supplied only in the system prompt and never inferred from ordinary user text or an active Skill name.
 
 When the user requests multiple independent video variants, submit them one at a time. After each \`generate_animation\` call returns a successful submission, continue with the next variant; do not wait for that video's rendering to finish. Continue until every requested variant is submitted, and never reduce a multi-video request to one video merely to finish the turn. Each call still contains one complete <=15-second script.
@@ -4371,7 +4373,9 @@ Node media runtime provides \`require\`, \`process\`, \`ffmpegPath\`, \`inputFil
     list_voiceover_voices: tool({
       description: `Fetch the current Volcengine Doubao / Seed Speech voice catalog so you can choose the best voice for a voiceover.
 
-Call this before generate_voiceover unless the user explicitly supplied a concrete voice_id or the conversation already contains a fresh voice catalog. Use the returned language, gender, scenario, style tags, and descriptions to pick a fitting voice for the user's content. Prefer voices whose language and scenario match the script; avoid novelty, rock, character, dialect, or highly stylized voices unless the user's task asks for that style.`,
+Call this before generate_voiceover unless the user explicitly supplied a concrete voice_id or the conversation already contains a fresh voice catalog. Use the returned language, gender, scenario, style tags, and descriptions to pick a fitting voice for the user's content. Prefer voices whose language and scenario match the script; avoid novelty, rock, character, dialect, or highly stylized voices unless the user's task asks for that style.
+
+Exception: do not call this when the chosen final-video workflow is generate_animation; voice direction for that video belongs in story_prompt and does not need a separate TTS asset.`,
       inputSchema: z.object({
         query: z.string().optional().describe('Optional short description of what you need, e.g. "warm Chinese sales narration", "English energetic product demo", "古风女声". The tool returns the full catalog plus filtered suggestions when possible.'),
         force_refresh: z.boolean().optional().describe('Set true to bypass the short server-side cache and call Volcengine ListSpeakers again. Default false.'),
@@ -4438,6 +4442,8 @@ Call this before generate_voiceover unless the user explicitly supplied a concre
       description: `Generate a spoken narration / voiceover audio clip with Volcengine Doubao Seed TTS, upload it to the project, and add it to the Audio Index.
 
 Use this when the task needs accurate scripted speech: narration, voiceover, dialogue, spoken explainer audio, product introductions, tutorials, sales-style oral copy, or when a video/composition clearly needs a human spoken line. Do not use it for background music, ambience, sound effects, character-voice experiments, or mixed sound design; use generate_audio or generate_music for prompt-first Seed Audio assets.
+
+Exception: if the chosen final-video workflow is generate_animation, do not generate a separate voiceover. Put the exact dialogue, narration, and voice direction in story_prompt so the video model generates it with the picture.
 
 The generated audio becomes an Audio Index item (<<<audio_N>>>) in later turns. Use the audio marker only as a conversational/Seedance reference label. In Remotion composition code, always use the returned public audioUrl directly as the <Audio src>; never put <<<audio_N>>> in props or <Audio src>. Before calling this tool, call list_voiceover_voices and choose a concrete voice_id that fits the script, unless the user explicitly supplied one. If list_voiceover_voices returns fallback only, you may still use the best fallback voice but mention that the full voice catalog was unavailable.`,
       inputSchema: z.object({
@@ -4531,6 +4537,8 @@ This is prompt-first: describe the sound directly. Do not force a rigid category
 
 Use generate_voiceover instead when exact scripted narration is required, especially for explainer videos, tutorials, and product introductions. Use generate_music for background music beds; it also uses Seed Audio.
 
+Exception: if the chosen final-video workflow is generate_animation, do not generate a separate audio asset. Put the requested sound design in story_prompt so the video model generates it with the picture.
+
 Available audio model notes:
 ${formatAudioCapabilitiesForAgent()}`,
       inputSchema: z.object({
@@ -4577,7 +4585,9 @@ ${formatAudioCapabilitiesForAgent()}`,
     }),
 
     generate_music: tool({
-      description: `Generate background music with Seed Audio and return one persisted audio asset. Use this for short-video music beds, soundtrack, score, ambience-driven music, and polished vlog/commercial background tracks. Do not use Suno; all new music generation routes go through Seed Audio.`,
+      description: `Generate background music with Seed Audio and return one persisted audio asset. Use this for short-video music beds, soundtrack, score, ambience-driven music, and polished vlog/commercial background tracks. Do not use Suno; all new music generation routes go through Seed Audio.
+
+Exception: if the chosen final-video workflow is generate_animation, do not generate a separate music asset. Put the music direction in story_prompt so the video model generates it in sync with the picture.`,
       inputSchema: z.object({
         prompt: z.string().describe('Music description: genre, mood, energy, instruments (no timing, no artist names)'),
         instrumental: z.boolean().optional().describe('No vocals (default: true)'),

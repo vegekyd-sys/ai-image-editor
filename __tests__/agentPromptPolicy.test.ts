@@ -280,6 +280,24 @@ describe('agent prompt policy guards', () => {
     expect(longVideoDirector).toContain('A generic explainer label or resemblance')
   })
 
+  it('preserves full audio tool capabilities with a native-audio exception for direct video', () => {
+    const agent = read('src/lib/prompts/agent.md')
+    const animate = read('src/lib/prompts/animate.md')
+    const agentTs = read('src/lib/agent.ts')
+
+    expect(agent).toContain('Native-audio exception')
+    expect(agent).toContain('Outside this exception, keep using each audio tool according to its full tool description')
+    expect(agent).toContain('Put all dialogue, narration, voice, music, ambience, and SFX in `story_prompt`')
+    expect(animate).toContain('this script is the complete audio direction for `generate_animation`')
+    expect(animate).toContain('Never prepare this workflow with `list_voiceover_voices`, `generate_voiceover`, `generate_audio`, or `generate_music`')
+    expect(agentTs).not.toContain('directVideoGenerationStarted')
+    expect(agentTs).not.toContain('blockIndependentAudioAfterDirectVideo')
+    expect(agentTs).toContain('when a video/composition clearly needs a human spoken line')
+    expect(agentTs).toContain('Use this for short-video music beds')
+    expect(agentTs).toContain('Use generate_voiceover instead when exact scripted narration is required')
+    expect(agentTs).toContain('Outside this exception, those audio tools retain their full capabilities')
+  })
+
   it('keeps SeeDance Fast as the default video model unless user or app selects another model', () => {
     const agent = read('src/lib/prompts/agent.md')
     const agentTs = read('src/lib/agent.ts')
