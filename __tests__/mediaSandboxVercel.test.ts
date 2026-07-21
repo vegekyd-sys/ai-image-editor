@@ -8,6 +8,7 @@ import {
   MEDIA_SANDBOX_RUNNER_SOURCE,
   runNodeMediaCodeInVercelSandbox,
   shouldUseVercelMediaSandbox,
+  VercelMediaSandboxExecutionError,
 } from '@/lib/media-sandbox-vercel'
 
 vi.mock('@vercel/sandbox', () => ({
@@ -91,6 +92,50 @@ describe('isolated Agent Node runtime', () => {
     expect(execution.result).toMatchObject({ type: 'video', path: localPath })
     expect(existsSync(localPath)).toBe(true)
     expect(await readFile(localPath)).toEqual(outputBody)
+    expect(fakeSandbox.stop).toHaveBeenCalled()
+  })
+
+  it('returns process stderr so the Agent can repair dependency and FFmpeg failures', async () => {
+    const localOutputDir = await mkdtemp(path.join(tmpdir(), 'media-sandbox-vercel-error-test-'))
+    tempDirs.push(localOutputDir)
+    const fakeSandbox = {
+      sandboxId: 'sb_error',
+      mkDir: vi.fn(async () => {}),
+      writeFiles: vi.fn(async () => {}),
+      runCommand: vi.fn(async () => ({
+        exitCode: 1,
+        stderr: async () => 'npm ERR! package unavailable\nffmpeg: invalid filter graph',
+      })),
+      readFileToBuffer: vi.fn(async ({ path: filePath }: { path: string }) => {
+        if (filePath === '/vercel/sandbox/agent-result.json') {
+          return Buffer.from(JSON.stringify({
+            error: 'Error: Agent program failed',
+            result: null,
+            outputs: [],
+          }))
+        }
+        return null
+      }),
+      stop: vi.fn(async () => {}),
+    }
+    vi.mocked(Sandbox.create).mockResolvedValue(fakeSandbox as never)
+
+    await expect(runNodeMediaCodeInVercelSandbox({
+      code: 'throw new Error("Agent program failed")',
+      compiledCode: 'throw new Error("Agent program failed")',
+      inputFiles: [],
+      mediaItems: [],
+      mediaRefs: [],
+      workspacePaths: [],
+      localOutputDir,
+      projectId: 'project-test',
+      userId: 'user-test',
+      timeoutMs: 10_000,
+    })).rejects.toEqual(expect.objectContaining<VercelMediaSandboxExecutionError>({
+      name: 'VercelMediaSandboxExecutionError',
+      message: expect.stringContaining('ffmpeg: invalid filter graph'),
+    }))
+
     expect(fakeSandbox.stop).toHaveBeenCalled()
   })
 })

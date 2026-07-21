@@ -422,8 +422,12 @@ export async function runNodeMediaCodeInVercelSandbox(
     }
     const manifest = JSON.parse(manifestBuffer.toString('utf8')) as SandboxExecutionManifest & { error?: string }
     if (command.exitCode !== 0 || manifest.error) {
+      const executionError = manifest.error || `Vercel media Sandbox exited ${command.exitCode}`
+      const processOutput = stderr.trim()
       throw new VercelMediaSandboxExecutionError(
-        manifest.error || `Vercel media Sandbox exited ${command.exitCode}: ${stderr.slice(-8000)}`,
+        processOutput && !executionError.includes(processOutput)
+          ? `${executionError}\n\nSandbox process stderr:\n${processOutput.slice(-8000)}`
+          : executionError,
       )
     }
 
