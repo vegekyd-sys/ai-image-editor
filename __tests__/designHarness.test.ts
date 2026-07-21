@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { validateDesign } from '@/lib/design-harness';
+import { isDirectRemotionCompositionSource } from '@/lib/remotion-code-normalization';
 
 describe('design harness compile preflight', () => {
   it('accepts DynamicDesign function-body code', () => {
@@ -8,22 +9,22 @@ describe('design harness compile preflight', () => {
     })).toBeNull();
   });
 
-  it('rejects module syntax before remote frame rendering', () => {
+  it('accepts natural ESM composition modules', () => {
     expect(validateDesign({
-      code: 'export function Composition() { return <AbsoluteFill />; }',
-    })).toMatch(/import\/export module syntax is not supported/);
+      code: "import React from 'react'; import { AbsoluteFill } from 'remotion'; export default function Composition() { return <AbsoluteFill />; }",
+    })).toBeNull();
   });
 
-  it('rejects declarations that collide with the injected Remotion scope', () => {
+  it('accepts lexical declarations that shadow injected Remotion names', () => {
     expect(validateDesign({
       code: 'const Composition = () => <AbsoluteFill />;',
-    })).toMatch(/Identifier 'Composition' has already been declared/);
+    })).toBeNull();
   });
 
-  it('rejects CommonJS calls that would fail in the browser runtime', () => {
+  it('accepts CommonJS for browser-provided composition modules', () => {
     expect(validateDesign({
-      code: "const { AbsoluteFill } = require('remotion'); function Draft() { return <AbsoluteFill />; }",
-    })).toMatch(/require\/module\.exports syntax is not supported/);
+      code: "const { AbsoluteFill } = require('remotion'); const Draft = () => <AbsoluteFill />; module.exports = Draft;",
+    })).toBeNull();
   });
 
   it('accepts the injected THREE namespace without an import', () => {
@@ -72,13 +73,42 @@ describe('design harness compile preflight', () => {
     })).toBeNull();
   });
 
-  it('rejects native HTML video without silently rewriting the decoder', () => {
+  it('keeps the lowercase video compatibility rewrite', () => {
     const result = {
-      code: 'function Composition() { return <video src="https://example.com/source.mp4" autoPlay />; }',
+      code: 'function Composition() { return <video src="https://example.com/source.mp4" autoPlay controls playsInline />; }',
     };
 
-    expect(validateDesign(result)).toMatch(/native HTML <video> is not frame-synchronized/);
-    expect(result.code).toContain('<video');
-    expect(result.code).not.toContain('<Video');
+    expect(validateDesign(result)).toBeNull();
+    expect(result.code).toContain('<Video');
+    expect(result.code).not.toContain('<video');
+    expect(result.code).not.toContain('autoPlay');
+    expect(result.code).not.toContain('controls');
+    expect(result.code).not.toContain('playsInline');
+  });
+
+  it('rewrites React.createElement lowercase video calls too', () => {
+    const result = {
+      code: "function Composition() { return React.createElement('video', {src: 'https://example.com/source.mp4', autoPlay: true}); }",
+    };
+
+    expect(validateDesign(result)).toBeNull();
+    expect(result.code).toContain('React.createElement(Video');
+    expect(result.code).not.toContain('autoPlay');
+  });
+});
+
+describe('natural Remotion source detection', () => {
+  it('recognizes JSX modules saved directly through code_path', () => {
+    expect(isDirectRemotionCompositionSource(`
+      import {AbsoluteFill} from 'remotion';
+      export const Composition = () => <AbsoluteFill />;
+    `)).toBe(true);
+  });
+
+  it('does not confuse the legacy outer render body with direct JSX source', () => {
+    expect(isDirectRemotionCompositionSource(`
+      const code = \`function Composition() { return <AbsoluteFill />; }\`;
+      return {type: 'render', code, width: 1080, height: 1920};
+    `)).toBe(false);
   });
 });

@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { remotionPreviewFailure } from '@/lib/remotion-preview-error';
 
 describe('Remotion preview decoder failures', () => {
-  it('marks deterministic video decode errors terminal and blocks component churn', () => {
+  it('classifies deterministic video decode errors without constraining repair', () => {
     const failure = remotionPreviewFailure(
       'Cannot decode https://cdn.example.com/source.mp4.',
       'Failed to capture frame 60',
@@ -10,12 +10,10 @@ describe('Remotion preview decoder failures', () => {
 
     expect(failure).toMatchObject({
       code: 'composition_video_decode',
-      retryable: false,
-      terminal: true,
     });
-    expect(failure.error).toContain('not a composition-code failure');
-    expect(failure.error).toContain('Do not rewrite <Video>/<OffthreadVideo>');
-    expect(failure.error).toContain('do not create a compatibility copy');
+    expect(failure).not.toHaveProperty('retryable');
+    expect(failure).not.toHaveProperty('terminal');
+    expect(failure.error).toBe('Failed to capture frame 60: Cannot decode https://cdn.example.com/source.mp4.');
   });
 
   it('keeps unrelated render errors unclassified', () => {

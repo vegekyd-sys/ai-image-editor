@@ -13,7 +13,10 @@ import { getAvailableFonts } from '@remotion/google-fonts';
 import { transform as sucraseTransform } from 'sucrase';
 // Keep the Remotion entrypoint independently bundleable. The standalone
 // Remotion bundler does not inherit Next.js' `@/` alias.
-import { normalizeRemotionScopeDeclarations } from '../lib/remotion-code-normalization';
+import {
+  buildRemotionEvaluatorBody,
+  normalizeRemotionScopeDeclarations,
+} from '../lib/remotion-code-normalization';
 
 const { Sequence, useVideoConfig, delayRender, continueRender } = Remotion;
 
@@ -75,15 +78,39 @@ function compileAndEval(code: string, scope: Record<string, unknown>): React.Com
   try {
     const src = normalizeRemotionScopeDeclarations(code);
     const { code: compiled } = sucraseTransform(src, {
-      transforms: ['typescript', 'jsx'],
+      transforms: ['typescript', 'jsx', 'imports'],
       jsxRuntime: 'classic',
     });
     const fnName = pickRemotionComponentName(src);
-    const execCode = `${compiled}\nreturn ${fnName};`;
-    const scopeKeys = Object.keys(scope);
-    const scopeValues = Object.values(scope);
-    const factory = new Function(...scopeKeys, execCode);
-    return factory(...scopeValues);
+    const reactModule = { ...React, default: React, __esModule: true };
+    const remotionModule = { ...Remotion, ...scope, __esModule: true };
+    const mediaModule = {
+      Audio: scope.Audio,
+      Video: scope.Video,
+      OffthreadVideo: scope.OffthreadVideo,
+      __esModule: true,
+    };
+    const modules: Record<string, unknown> = {
+      react: reactModule,
+      remotion: remotionModule,
+      '@remotion/media': mediaModule,
+      '@remotion/paths': { ...RemotionPaths, __esModule: true },
+      '@remotion/noise': { ...RemotionNoise, __esModule: true },
+      three: { ...THREE, default: THREE, __esModule: true },
+    };
+    const localRequire = (id: string) => {
+      if (id in modules) return modules[id];
+      throw new Error(`Composition module "${id}" is not available in the browser Remotion runtime.`);
+    };
+    const authoredModule = { exports: {} as Record<string, unknown> };
+    const factory = new Function(
+      '__scope',
+      'module',
+      'exports',
+      'require',
+      buildRemotionEvaluatorBody(compiled, fnName),
+    );
+    return factory(scope, authoredModule, authoredModule.exports, localRequire);
   } catch (err) {
     console.error('[DynamicDesign] compile error:', err);
     return null;

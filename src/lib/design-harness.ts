@@ -9,6 +9,7 @@ import traverse from '@babel/traverse';
 import { transform as sucraseTransform } from 'sucrase';
 import type { EditableField } from '@/types';
 import {
+  buildRemotionEvaluatorBody,
   DYNAMIC_DESIGN_SCOPE_NAMES,
   normalizeRemotionScopeDeclarations,
 } from './remotion-code-normalization';
@@ -38,6 +39,7 @@ const SAFE_RUNTIME_GLOBALS = new Set([
   'FileReader', 'FormData', 'Headers', 'Request', 'Response', 'TextEncoder',
   'TextDecoder', 'AbortController', 'AbortSignal', 'Image', 'ImageData',
   'fetch', 'atob', 'btoa', 'structuredClone', 'queueMicrotask',
+  'require', 'module', 'exports',
   'setTimeout', 'clearTimeout', 'setInterval', 'clearInterval',
   'requestAnimationFrame', 'cancelAnimationFrame',
 ]);
@@ -57,18 +59,13 @@ export function validateDesign(result: DesignResult): string | null {
 export function validateDesignDiagnostics(result: DesignResult): string[] {
   // Auto-fix: Replace <img> with Remotion <Img> for delayRender support
   result.code = autoFixImgTags(result.code);
+  result.code = autoFixVideoTags(result.code);
 
   // Check 1: Syntax — Sucrase compile only (no runtime execution)
   const compileError = checkCompile(result.code);
   if (compileError) return [compileError];
 
   const diagnostics: string[] = [];
-
-  // Native HTML video is not frame-synchronized. Do not silently rewrite it:
-  // doing so makes an Agent believe it changed decoder strategy while the
-  // runtime actually routes it back to the same injected component.
-  const videoTagError = checkNativeVideoTags(result.code);
-  if (videoTagError) diagnostics.push(videoTagError);
 
   // Check 2: Hooks evaluated while the composition module is being created.
   const hookError = checkTopLevelHookCalls(result.code);
@@ -97,7 +94,7 @@ export function validateDesignDiagnostics(result: DesignResult): string[] {
 function checkTopLevelHookCalls(code: string): string | null {
   try {
     const ast = parse(normalizeRemotionScopeDeclarations(code), {
-      sourceType: 'script',
+      sourceType: 'unambiguous',
       plugins: ['jsx', 'typescript'],
     });
     const hooks = new Set<string>();
@@ -133,7 +130,7 @@ function checkTopLevelHookCalls(code: string): string | null {
 function checkUnresolvedIdentifiers(code: string): string | null {
   try {
     const ast = parse(normalizeRemotionScopeDeclarations(code), {
-      sourceType: 'script',
+      sourceType: 'unambiguous',
       plugins: ['jsx', 'typescript'],
     });
     const unresolved = new Set<string>();
@@ -176,35 +173,35 @@ function autoFixImgTags(code: string): string {
   return fixed;
 }
 
-/** Reject native HTML video explicitly instead of silently changing semantics. */
-function checkNativeVideoTags(code: string): string | null {
-  if (
-    /<\/?video(?=[\s/>])/i.test(code)
-    || /createElement\(\s*['"]video['"]/i.test(code)
-  ) {
-    return '⚠️ Composition compile error: native HTML <video> is not frame-synchronized in the editable Remotion runtime. Use the injected <Video> component. Decoder fallback is selected by preview/export runtime; do not switch component names or transcode the source solely to repair preview decoding.';
+/** Replace HTML <video> with the injected frame-synchronized runtime Video. */
+function autoFixVideoTags(code: string): string {
+  let fixed = code;
+  fixed = fixed.replace(/<video(?=[\s/>])/g, '<Video').replace(/<\/video>/g, '</Video>');
+  fixed = fixed.replace(/createElement\(\s*['"]video['"]/g, 'createElement(Video');
+  fixed = fixed.replace(/\s+autoPlay(?=[\s/>])/g, '');
+  fixed = fixed.replace(/\s+controls(?=[\s/>])/g, '');
+  fixed = fixed.replace(/\s+playsInline(?=[\s/>])/g, '');
+  fixed = fixed.replace(/,?\s*autoPlay:\s*true\s*,?/g, (match) => (
+    match.startsWith(',') && match.endsWith(',') ? ',' : ''
+  ));
+  if (fixed !== code) {
+    console.log('🔧 [design-harness] auto-fixed <video> → <Video> for Remotion Player sync');
   }
-  return null;
+  return fixed;
 }
 
 
 /** Compile code with Sucrase — syntax check only, no runtime execution */
 function checkCompile(code: string): string | null {
   try {
-    if (/^\s*(?:import|export)\b/m.test(code)) {
-      return '⚠️ Composition compile error: import/export module syntax is not supported. Declare the component directly and try again.';
-    }
-    if (/\brequire\s*\(|\bmodule\.exports\b|\bexports\s*\./.test(code)) {
-      return '⚠️ Composition compile error: require/module.exports syntax is not supported in DynamicDesign. Use the injected Remotion and React names directly.';
-    }
     const source = normalizeRemotionScopeDeclarations(code);
     const { code: compiled } = sucraseTransform(source, {
-      transforms: ['typescript', 'jsx'],
+      transforms: ['typescript', 'jsx', 'imports'],
       jsxRuntime: 'classic',
     });
-    // DynamicDesign evaluates the compiled body with new Function(). Parse it
-    // the same way here so browser-incompatible syntax fails before rendering.
-    new Function(...DYNAMIC_DESIGN_SCOPE_NAMES, `"use strict";\n${compiled}\nreturn undefined;`);
+    // Parse the exact open-scope module wrapper used by DynamicDesign. This
+    // validates syntax without rejecting normal module/CommonJS authoring.
+    new Function('__scope', 'module', 'exports', 'require', buildRemotionEvaluatorBody(compiled, 'Design'));
     return null;
   } catch (err) {
     const msg = err instanceof Error ? err.message : String(err);

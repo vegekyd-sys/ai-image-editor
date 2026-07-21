@@ -289,7 +289,7 @@ describe('local-first workspace runtime', () => {
       timeoutMs: 10_000,
     })
 
-    expect(result.type).toBe('text')
+    expect(result.type, result.content).toBe('text')
     const payload = JSON.parse(result.content || '{}')
     expect(payload).toMatchObject({
       payload: 'aGVsbG8=',
@@ -297,6 +297,42 @@ describe('local-first workspace runtime', () => {
       hasSharp: true,
     })
     expect(payload.gzipBytes).toBeGreaterThan(0)
+  })
+
+  it('compiles TypeScript/ESM code_path files and invokes their default entry', async () => {
+    const result = await runNodeMediaCode({
+      codePath: 'project-1/media-code/probe.ts',
+      code: `
+        import { promisify } from 'node:util';
+        import { execFile } from 'node:child_process';
+
+        type RuntimeApi = {
+          ffmpegPath: string;
+          outputDir: string;
+        };
+
+        export default async function main(api: RuntimeApi) {
+          const exec = promisify(execFile);
+          const { stdout } = await exec(api.ffmpegPath, ['-version']);
+          return {
+            type: 'text',
+            content: JSON.stringify({
+              hasFfmpeg: stdout.includes('ffmpeg version'),
+              outputDir: api.outputDir,
+            }),
+          };
+        }
+      `,
+      mediaItems: [],
+      projectId: 'project-1',
+      userId: 'user-1',
+      timeoutMs: 10_000,
+    })
+
+    expect(result.type, result.content).toBe('text')
+    expect(JSON.parse(result.content || '{}')).toMatchObject({
+      hasFfmpeg: true,
+    })
   })
 
   it('blocks require escapes and filters secret env in node media code', async () => {
@@ -309,10 +345,12 @@ describe('local-first workspace runtime', () => {
           let vmBlocked = false;
           try { require('module'); } catch { moduleBlocked = true; }
           try { require('vm'); } catch { vmBlocked = true; }
+          const requiredProcess = require('node:process');
           return { type: 'text', content: JSON.stringify({
             moduleBlocked,
             vmBlocked,
-            leakedSecret: Boolean(process.env.SUPABASE_SERVICE_ROLE_KEY)
+            leakedSecret: Boolean(process.env.SUPABASE_SERVICE_ROLE_KEY),
+            requiredProcessLeakedSecret: Boolean(requiredProcess.env.SUPABASE_SERVICE_ROLE_KEY)
           }) };
         `,
         mediaItems: [],
@@ -326,6 +364,7 @@ describe('local-first workspace runtime', () => {
         moduleBlocked: true,
         vmBlocked: true,
         leakedSecret: false,
+        requiredProcessLeakedSecret: false,
       })
     } finally {
       if (previousSecret == null) delete process.env.SUPABASE_SERVICE_ROLE_KEY

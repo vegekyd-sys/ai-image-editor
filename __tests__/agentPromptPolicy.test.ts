@@ -285,7 +285,7 @@ describe('agent prompt policy guards', () => {
     expect(agentTs).not.toContain('__lastDesignPayload = options.currentDesign')
 
     expect(coding).toContain('include that exact path as `code_path`')
-    expect(coding).toContain('the saved file is an executable JavaScript body, not a raw JSX module')
+    expect(coding).toContain('natural JS/TS/JSX/TSX Remotion module')
     expect(coding).toContain("return {\n  type: 'render'")
     expect(coding).toContain('Do not rely on implicit remembered composition code across turns')
     expect(context).toContain('[Current Composition]')

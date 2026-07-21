@@ -10,13 +10,11 @@ const VIDEO_DECODE_PATTERNS = [
 export type RemotionPreviewFailure = {
   error: string;
   code?: 'composition_video_decode';
-  retryable?: false;
-  terminal?: true;
 };
 
 /**
- * Convert deterministic video-decoder failures into a terminal tool result.
- * Composition code cannot repair these failures by swapping Video aliases.
+ * Classify decoder failures for observability without deciding how the Agent
+ * must repair them. The runtime owns its fallback, but authoring remains open.
  */
 export function remotionPreviewFailure(message: string, prefix: string): RemotionPreviewFailure {
   const error = `${prefix}: ${message}`;
@@ -25,9 +23,7 @@ export function remotionPreviewFailure(message: string, prefix: string): Remotio
   }
 
   return {
-    error: `${error}\nThis is a preview-runtime media decode failure, not a composition-code failure. Do not rewrite <Video>/<OffthreadVideo>, do not create a compatibility copy, and do not retry the same preview in this turn. Keep the existing composition and report the exact runtime error.`,
+    error,
     code: 'composition_video_decode',
-    retryable: false,
-    terminal: true,
   };
 }

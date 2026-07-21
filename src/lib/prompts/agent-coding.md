@@ -16,7 +16,7 @@ If the task is a static poster, infographic, e-commerce page, layout image, or m
 
 For substantial normal Agent Run coding, use `write_code_file` first and then execute the saved source with `run_code({ code_path })`. Describe the specific artifact before the `content` field so the user can see what is being built while the real source streams. The workspace file is the durable source of truth for later execution, recovery, and patching.
 
-For `runtime: "composition"`, the saved file is an executable JavaScript body, not a raw JSX module. Put the Remotion component source inside a string and return the render object from the outer body. Do not place raw JSX, imports, exports, or a top-level `function Composition` directly in the saved executable file.
+For `runtime: "composition"`, the saved file may be a natural JS/TS/JSX/TSX Remotion module with imports/exports and a top-level `Composition`, or the legacy executable body that returns a render object. For a new natural module, pass width/height/animation as `run_code.composition` metadata while `code_path` supplies the source; do not repeat the source.
 
 ```js
 const code = String.raw`

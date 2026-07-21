@@ -50,6 +50,7 @@ import {
 } from './composition-parts';
 import { compileSavedCompositionPart } from './composition-workspace-runner';
 import { resolveMediaMarkersInString, resolveMediaMarkersInValue } from './media-markers';
+import { isDirectRemotionCompositionSource } from './remotion-code-normalization';
 import type { AgentModelPreference } from './agent-models';
 import {
   createAgentModelRuntime,
@@ -1301,7 +1302,7 @@ Execute JavaScript in two modes:
 - \`runtime: "node"\` for real file-level MP4 work with FFmpeg/FFprobe: split, exact trim/export, transcode, extract frames, mux audio, long-video preparation, and final assembly of generated chunks.
 For finished single images, posters, infographics, and marketing graphics, use \`generate_image\` instead unless the user asks for editable or animated code.
 For substantial normal Agent Run code, write the complete program with \`write_code_file\`, then execute its returned workspace path with \`run_code({ code_path })\`. The user sees the real source as it streams, and the file remains available for recovery and later edits. Inline code is for short patches and utilities; Studio Run may use numbered composition parts for long compositions.
-For composition files, the saved source is an executable JavaScript body: place Remotion JSX inside a \`code\` string and return \`{ type: 'render', code, width, height, ... }\`. Do not place raw JSX, imports, exports, or a top-level \`function Composition\` directly in the executable file.
+For composition files, either save a natural JS/TS/JSX/TSX Remotion module (imports/exports and a top-level Composition are accepted) or the legacy executable body that returns \`{ type: 'render', code, width, height, ... }\`. When a natural module is new and has no existing composition dimensions to inherit, pass its width/height/animation as \`run_code.composition\` metadata without repeating the source.
 Always tell the user what you're about to do BEFORE calling run_code (1 sentence). After run_code completes, briefly describe the result.
 
 ### Creating skills
@@ -3477,13 +3478,13 @@ Use this to read skill instructions (SKILL.md), reference images, or your memory
     write_code_file: tool({
       description: `Create or replace a first-class code file in the project workspace.
 
-Use this for substantial programmable video or media work: write the executable Remotion/Node program here, then call run_code with code_path. The source remains reusable, patchable, and recoverable across long Agent Runs instead of being trapped inside one execution call. For runtime composition, this file is an executable JavaScript body: put Remotion JSX inside a code string and return { type: 'render', code, width, height, ... } from the outer body. Do not place raw JSX, imports, exports, or a top-level function Composition directly in the executable file. Studio Run may continue using numbered composition parts for very long compositions; short patches and small utility scripts may still use inline run_code.`,
+Use this for substantial programmable video or media work: write the Remotion/Node source here, then call run_code with code_path. The source remains reusable, patchable, and recoverable across long Agent Runs instead of being trapped inside one execution call. Composition files may be natural JS/TS/JSX/TSX modules with imports/exports and a top-level Composition, or the legacy executable body that returns { type: 'render', code, width, height, ... }. Studio Run may continue using numbered composition parts for very long compositions; short patches and small utility scripts may still use inline run_code.`,
       inputSchema: z.object({
         description: z.string().optional().describe('User-facing one-sentence summary of the specific code artifact being written. Put this before content so progress is visible while source streams.'),
         path: z.string().optional().describe('Workspace path, e.g. "project-id/code/island-packaging.js". If omitted, a path is generated from name and runtime.'),
         name: z.string().optional().describe('Short slug used when path is omitted, e.g. "island-packaging".'),
         runtime: z.enum(['composition', 'node']).optional().describe('composition = Remotion/editable composition executable body. node = Node/FFmpeg script. Default composition.'),
-        content: z.string().min(1).describe('Complete executable JavaScript body. For composition runtime, wrap Remotion component source in a code string and return the render object from this outer body; never place raw JSX at the top level. Do not trim approved content to meet an aggregate source-size target.'),
+        content: z.string().min(1).describe('Complete JS/TS/JSX/TSX source. Composition files may be natural Remotion modules or legacy executable bodies. Do not trim approved content to meet an aggregate source-size target.'),
       }),
       execute: async ({ description, path: filePath, name, runtime, content }) => {
         if (!ctx.supabase || !ctx.userId) {
@@ -3827,7 +3828,7 @@ Return exactly one supported shape:
 
 For substantial normal Agent Run coding, prefer \`write_code_file\` followed by \`run_code({ code_path })\`. This exposes real source progress, persists the program before execution, and keeps it patchable across turns. For a small patch or utility, inline \`code\` remains available. The top-level \`composition\` input remains available for direct first-draft payloads.
 
-When \`write_code_file\` uses \`runtime: "composition"\`, its file is the executable outer JavaScript body. Put Remotion JSX in a \`code\` string and return \`{ type: 'render', code, width, height, ... }\`; never place raw JSX, imports, exports, or a top-level \`function Composition\` directly in that file.
+When \`write_code_file\` uses \`runtime: "composition"\`, it may contain a natural JS/TS/JSX/TSX Remotion module with imports/exports and a top-level Composition, or the legacy outer JavaScript body. For a new natural module, provide width/height/animation through the optional \`composition\` metadata on run_code; code_path supplies the source, so do not repeat it.
 
 For durable Composition work, use \`write_file\` to author numbered source parts. Every file MUST be under \`<project-id>/drafts/composition-parts/\` and use a numeric prefix of at least two digits plus a lowercase slug. Each file has a hard transport limit of 12000 source characters. There is no aggregate source-size or part-count limit. Files are concatenated by numeric prefix into one scope, so do not use import/export. Preserve approved narration, subtitles, scenes, animation, and visual detail; never trim creative content to satisfy a source-size target. Saving a part automatically assembles, validates, and autosaves the workspace. The legacy composition_parts input remains available for recovery and explicit subsets, but do not call it merely to assemble a directory that write_file has already compiled.
 
@@ -3841,7 +3842,7 @@ Node media runtime provides \`require\`, \`process\`, \`ffmpegPath\`, \`inputFil
         code: z.string().optional().describe('JavaScript code to execute. Required for node, patch, image, and legacy calls. For a first Remotion draft prefer the direct composition input instead.'),
         code_path: z.string().optional().describe('Workspace code file created by write_code_file. Preferred for substantial normal Agent Run coding; run_code reads and executes the saved source without repeating it in tool history.'),
         composition: z.object({
-          code: z.string().min(1).describe('Direct Remotion component source. Define function Composition(props) without import/export. This string is validated directly, not executed as nested JavaScript.'),
+          code: z.string().min(1).optional().describe('Direct Remotion component source. Natural imports/exports are accepted. Omit when code_path supplies the source and this object only supplies metadata.'),
           width: z.number().int().positive(),
           height: z.number().int().positive(),
           props: z.record(z.string(), z.unknown()).optional(),
@@ -3856,7 +3857,7 @@ Node media runtime provides \`require\`, \`process\`, \`ffmpegPath\`, \`inputFil
             durationInSeconds: z.number().positive(),
             format: z.string().optional(),
           }).optional(),
-        }).optional().describe('Preferred first-draft Remotion payload. Avoids wrapping composition source inside another executable code string.'),
+        }).optional().describe('Preferred first-draft Remotion payload or metadata for a natural module supplied by code_path.'),
         composition_parts: z.object({
           paths: z.array(z.string()).min(2).optional().describe('Optional explicit subset of numbered workspace .js files under <project-id>/drafts/composition-parts/. No part-count or aggregate-size limit. Files are assembled by numeric prefix.'),
           directory: z.string().optional().describe('Preferred for complete or long compositions: <project-id>/drafts/composition-parts. The server discovers every valid numbered .js part in this directory, so the model does not repeat a long paths array.'),
@@ -3881,7 +3882,7 @@ Node media runtime provides \`require\`, \`process\`, \`ffmpegPath\`, \`inputFil
         media_refs: z.array(z.number()).optional().describe('1-based Media Index indices referenced by the user (e.g. [1] for <<<media_1>>>). REQUIRED for runtime:"node" FFmpeg work on timeline media; the system resolves them to local workspace-backed inputFiles[0], inputFiles[1], ... . Do not hardcode Media Index URLs for FFmpeg inputs. For ordinary editable splicing of two timeline videos, use runtime:"composition" instead.'),
         workspace_paths: z.array(z.string()).optional().describe('Workspace file paths from list_files/read_file, e.g. ["project-id/media/clip.mp4"]. For runtime:"node", pass these instead of downloading or copying storage URLs; they are resolved to local inputFiles after media_refs.'),
         runtime: z.enum(['composition', 'design', 'node']).optional().describe('composition = safe Remotion/editable composition runtime. design = legacy alias for composition. node = fully open backend Node runtime with fs/child_process/ffmpeg for real MP4 editing.'),
-      }).refine(value => Boolean(value.code || value.code_path || value.composition || value.composition_parts), {
+      }).refine(value => Boolean(value.code || value.code_path || value.composition?.code || value.composition_parts), {
         message: 'Provide executable code, a code_path, a direct composition payload, or durable composition parts.',
       }),
       execute: async ({ code, code_path, composition, composition_parts, description: desc, media_refs, workspace_paths, runtime }) => {
@@ -3900,6 +3901,24 @@ Node media runtime provides \`require\`, \`process\`, \`ffmpegPath\`, \`inputFil
         console.log(`🔧 [run_code] ${desc || 'executing code'}...`);
         const startTime = Date.now();
         let resolvedComposition = composition;
+        if (resolvedComposition && !resolvedComposition.code && code_path) {
+          resolvedComposition = { ...resolvedComposition, code: executableCode };
+        }
+        if (
+          !resolvedComposition
+          && runtime !== 'node'
+          && code_path
+          && isDirectRemotionCompositionSource(executableCode)
+        ) {
+          const previous = (ctx as any).__lastDesignPayload as Record<string, any> | undefined;
+          resolvedComposition = {
+            code: executableCode,
+            width: previous?.width || 1080,
+            height: previous?.height || 1920,
+            props: previous?.props,
+            animation: previous?.animation,
+          };
+        }
         if (composition_parts) {
           if (runtime === 'node') {
             return { type: 'text' as const, content: 'composition_parts is only available in the composition runtime.' };
@@ -3968,6 +3987,7 @@ Node media runtime provides \`require\`, \`process\`, \`ffmpegPath\`, \`inputFil
           });
           const mediaResult = await runNodeMediaCode({
             code: executableCode,
+            codePath: code_path,
             description: desc,
             mediaRefs: media_refs,
             workspacePaths: workspace_paths,
@@ -4853,6 +4873,9 @@ export async function* runMakaronAgent(
     currentDesignPath: options?.currentDesignPath,
     execution: options?.execution,
   };
+  if (options?.currentDesign) {
+    (ctx as any).__lastDesignPayload = { ...options.currentDesign };
+  }
 
   const allTools = wrapDurableIdempotentTools(createTools(ctx, runtime, options?.locale, Boolean(options?.execution)), ctx);
   if (!options?.execution) delete (allTools as Record<string, unknown>).execution_checkpoint;

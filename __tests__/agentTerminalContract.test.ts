@@ -61,8 +61,8 @@ describe('agent terminal contract wiring', () => {
     expect(agentSource).toContain('streamed-${codeExtractor.toolName}-${targetSlug}.partial.js');
     expect(agentSource).toContain('persistStreamedCodeCheckpoint(true)');
     expect(agentSource).toContain('write_code_file: tool({');
-    expect(agentSource).toContain('never place raw JSX at the top level');
-    expect(agentSource).toContain('Do not place raw JSX, imports, exports');
+    expect(agentSource).toContain('Composition files may be natural Remotion modules');
+    expect(agentSource).toContain('natural JS/TS/JSX/TSX Remotion module');
     expect(agentSource).toContain("code_path: z.string().optional()");
     expect(agentSource).toContain('workspace.readFile(code_path');
     expect(agentSource).toContain("toolName === 'run_code' || toolName === 'write_code_file' || toolName === 'write_file'");
