@@ -46,7 +46,6 @@ export function shouldUseVercelMediaSandbox(env: NodeJS.ProcessEnv = process.env
   if (configured === 'vercel') return true
   return Boolean(
     env.MEDIA_SANDBOX_SNAPSHOT_ID
-    || env.REMOTION_SNAPSHOT_ID
     || env.VERCEL_OIDC_TOKEN
     || env.VERCEL,
   )
@@ -133,6 +132,10 @@ async function findFfmpeg() {
 }
 
 function findFfprobe() {
+  try {
+    const pkg = openRequire('ffprobe-static');
+    if (pkg && typeof pkg.path === 'string') return pkg.path;
+  } catch {}
   try {
     return execFileSync('which', ['ffprobe'], {encoding: 'utf8'}).trim();
   } catch {
@@ -326,7 +329,7 @@ export async function runNodeMediaCodeInVercelSandbox(
   options: VercelMediaSandboxOptions,
 ): Promise<{ result: unknown; sandboxId: string }> {
   const { Sandbox } = await import('@vercel/sandbox')
-  const snapshotId = process.env.MEDIA_SANDBOX_SNAPSHOT_ID || process.env.REMOTION_SNAPSHOT_ID
+  const snapshotId = process.env.MEDIA_SANDBOX_SNAPSHOT_ID
   const createOptions = {
     ...(snapshotId
       ? { source: { type: 'snapshot' as const, snapshotId } }
@@ -398,7 +401,7 @@ export async function runNodeMediaCodeInVercelSandbox(
             LC_ALL: 'C.UTF-8',
             NODE_ENV: 'production',
             NPM_CONFIG_CACHE: `${SANDBOX_ROOT}/.npm`,
-            PATH: '/vercel/runtimes/node24/bin:/usr/local/bin:/usr/bin:/bin',
+            PATH: '/vercel/sandbox/bin:/vercel/sandbox/node_modules/.bin:/vercel/runtimes/node24/bin:/usr/local/bin:/usr/bin:/bin',
             TZ: process.env.TZ || 'UTC',
           },
           signal: controller.signal,

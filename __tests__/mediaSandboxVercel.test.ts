@@ -23,11 +23,11 @@ afterEach(async () => {
 })
 
 describe('isolated Agent Node runtime', () => {
-  it('uses Vercel Sandbox automatically in Vercel and when a snapshot is configured', () => {
+  it('uses Vercel Sandbox automatically in Vercel and when a dedicated media snapshot is configured', () => {
     expect(shouldUseVercelMediaSandbox({ VERCEL: '1' })).toBe(true)
     expect(shouldUseVercelMediaSandbox({ VERCEL_OIDC_TOKEN: 'token' })).toBe(true)
     expect(shouldUseVercelMediaSandbox({ MEDIA_SANDBOX_SNAPSHOT_ID: 'snap_media' })).toBe(true)
-    expect(shouldUseVercelMediaSandbox({ REMOTION_SNAPSHOT_ID: 'snap_remotion' })).toBe(true)
+    expect(shouldUseVercelMediaSandbox({ REMOTION_SNAPSHOT_ID: 'snap_remotion' })).toBe(false)
   })
 
   it('keeps an explicit local escape hatch for development and tests', () => {
@@ -45,6 +45,7 @@ describe('isolated Agent Node runtime', () => {
     expect(MEDIA_SANDBOX_RUNNER_SOURCE).toContain('return entryRequire(id)')
     expect(MEDIA_SANDBOX_RUNNER_SOURCE).not.toContain('ALLOWED_MEDIA_PACKAGES')
     expect(MEDIA_SANDBOX_RUNNER_SOURCE).not.toContain('BLOCKED_NODE_MODULES')
+    expect(MEDIA_SANDBOX_RUNNER_SOURCE).toContain("openRequire('ffprobe-static')")
   })
 
   it('materializes isolated outputs back into the server workspace', async () => {

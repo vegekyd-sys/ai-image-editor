@@ -21,6 +21,7 @@
     "lint": "eslint",
     "release:check": "node scripts/makaron-release-check.mjs",
     "worktree:fastpath": "node scripts/makaron-worktree-fastpath.mjs",
+    "snapshot:media": "node scripts/create-media-sandbox-snapshot.mjs",
     "audit:run": "node tools/makaron-audit-run.mjs",
     "audit:glass": "node scripts/audit-liquid-glass-perf.mjs",
     "check:seo": "node scripts/check-seo.mjs",
