@@ -13,7 +13,11 @@ export function normalizeAuthReturnPath(value: string | null | undefined): strin
   try {
     const parsed = new URL(trimmed, AUTH_RETURN_BASE)
     if (parsed.origin !== AUTH_RETURN_BASE) return ''
-    if (parsed.pathname === '/login' || parsed.pathname.startsWith('/api/auth/')) return ''
+    if (
+      parsed.pathname === '/login' ||
+      parsed.pathname === '/activate' ||
+      parsed.pathname.startsWith('/api/auth/')
+    ) return ''
     return `${parsed.pathname}${parsed.search}${parsed.hash}`
   } catch {
     return ''
@@ -72,4 +76,14 @@ export function appendAuthReturnParam(
   const parsed = new URL(normalized, AUTH_RETURN_BASE)
   parsed.searchParams.set(key, value)
   return `${parsed.pathname}${parsed.search}${parsed.hash}`
+}
+
+export function resolveAuthCompletionDestination(
+  returnPath: string | null | undefined,
+  welcome: boolean,
+): string {
+  const destination = normalizeAuthReturnPath(returnPath) || '/projects'
+  return welcome
+    ? appendAuthReturnParam(destination, 'welcome', '1')
+    : destination
 }
