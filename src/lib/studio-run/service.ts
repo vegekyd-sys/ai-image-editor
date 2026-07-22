@@ -18,6 +18,7 @@ import { studioArtifactPath } from './workspace-store';
 export async function startPersistedStudioRun(input: {
   id?: string;
   store: StudioRunStore;
+  agentRunId: string;
   projectId: string;
   recipe: string;
   title: string;
@@ -25,7 +26,8 @@ export async function startPersistedStudioRun(input: {
   deliveryPromise: StudioDeliveryPromise;
 }): Promise<StudioRun> {
   const matchingFreshRun = (await input.store.listRuns(input.projectId)).find(run => (
-    run.status === 'running'
+    run.agentRunId === input.agentRunId
+    && run.status === 'running'
     && run.currentStage === 'brief'
     && Object.keys(run.artifacts).length === 0
     && run.recipe === input.recipe

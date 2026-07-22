@@ -82,8 +82,9 @@ describe('agent terminal contract wiring', () => {
     expect(agentModelRuntimeSource).toContain("ttl: '30m'");
     expect(agentSource).toContain("return { designPath: input.design_path };");
     expect(agentSource).toContain('if (toolName) lastTool = toolName');
-    expect(agentContextSource).toContain('activeStudioContinuation');
-    expect(agentContextSource).toContain('[Active Studio Run]');
+    expect(agentContextSource).not.toContain('activeStudioContinuation');
+    expect(agentContextSource).toContain('run.agentRunId === activeAgentRunId');
+    expect(agentContextSource).toContain('[Active Studio workflow in this Agent Run]');
     expect(agentContextSource).toContain('selectModelHistoryWithinBudget');
     expect(agentContextSource).toContain('buildTypedCompactionMessage');
     expect(agentContextSource).toContain('projectCompactionPromise');
@@ -105,7 +106,7 @@ describe('agent terminal contract wiring', () => {
     }
   });
 
-  it('uses durable heartbeats and an abort signal for superseded runs', () => {
+  it('uses durable heartbeats and an abort signal for terminal runs', () => {
     expect(agentSource).toContain('abortSignal: options.abortSignal');
     for (const source of [sseRouteSource, headlessRouteSource]) {
       expect(source).toContain('persistHeartbeat()');
@@ -121,6 +122,17 @@ describe('agent terminal contract wiring', () => {
     expect(executionDispatchSource).toContain("/api/agent/execution/${runId}");
     expect(executionRunnerSource).toContain("terminal_code: 'lease_expired'");
     expect(executionRunnerSource).toContain(".eq('id', attemptId).eq('status', 'running')");
+  });
+
+  it('appends mid-run instructions instead of superseding the Agent Run', () => {
+    for (const source of [sseRouteSource, headlessRouteSource]) {
+      expect(source).toContain('decideAgentRunAdmission');
+      expect(source).toContain('appendAgentRunInput');
+      expect(source).not.toContain('Supersede any prior run');
+    }
+    expect(executionRunnerSource).toContain('loadPendingAgentInputs');
+    expect(executionRunnerSource).toContain("code: 'agent_input_received'");
+    expect(executionRunnerSource).toContain(".eq('input_version', inputVersionAtAttemptStart)");
   });
 
   it('gives each durable attempt enough steps to finish a composed video QA pass', () => {

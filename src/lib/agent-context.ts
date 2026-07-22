@@ -322,12 +322,6 @@ export function selectPriorTerminalRun<T extends { id?: string; status?: string 
   ));
 }
 
-export function isStudioRunContinuationRequest(userMessage: string): boolean {
-  const message = userMessage.trim();
-  return /(?:继续|接着|恢复|续上|跑完|完成|continue|resume).{0,48}studio\s*run/i.test(message)
-    || /studio\s*run.{0,48}(?:继续|接着|恢复|续上|跑完|完成|continue|resume)/i.test(message);
-}
-
 function normalizeLegacyCompositionDescription(description: string | undefined, fallback: string): string {
   if (!description) return fallback;
   const trimmed = description.trim();
@@ -438,12 +432,16 @@ export async function buildPromptContext(
     ? priorRun.metadata as Record<string, unknown> | null | undefined
     : undefined;
   const recoveryContext = buildAgentRecoveryContext(userMessage, recoverableMetadata);
-  const activeStudioRun = studioRuns.find(run => run.status === 'running' && run.currentStage);
-  const activeStudioContinuation = Boolean(
-    activeStudioRun && isStudioRunContinuationRequest(userMessage),
-  );
-  const activeStudioRunContext = activeStudioContinuation && activeStudioRun
-    ? `[Active Studio Run]\nstudio run id: ${activeStudioRun.id}\ncurrent studio stage: ${activeStudioRun.currentStage}\nstudio state path: ${activeStudioRun.projectId}/studio-runs/${activeStudioRun.id}/run.json\nCall studio_run status first, then read only the persisted artifacts required by the current stage. Do not reread skill, prompt, director, component-library, or reference files.\n\n`
+  const activeAgentRunId = options.executionRunId || options.currentRunId;
+  const activeStudioRun = activeAgentRunId
+    ? studioRuns.find(run => (
+        run.agentRunId === activeAgentRunId
+        && run.status === 'running'
+        && run.currentStage
+      ))
+    : undefined;
+  const activeStudioRunContext = activeStudioRun
+    ? `[Active Studio workflow in this Agent Run]\nworkflow invocation id: ${activeStudioRun.id}\ncurrent workflow stage: ${activeStudioRun.currentStage}\nworkflow state path: ${activeStudioRun.projectId}/studio-runs/${activeStudioRun.id}/run.json\nCall studio_run status first, then read only the persisted artifacts required by the current stage. This workflow belongs to Agent Run ${activeAgentRunId}; never search for or adopt another project's active Studio state. Do not reread skill, prompt, director, component-library, or reference files.\n\n`
     : '';
   const executionRow = executionRunRes.data as {
     objective?: string | null;

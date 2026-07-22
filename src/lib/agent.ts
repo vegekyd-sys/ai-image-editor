@@ -225,6 +225,8 @@ interface AgentContext {
   /** Seedance image URLs rejected during this turn; unchanged resubmission is blocked. */
   invalidVideoImageUrls?: Set<string>;
   execution?: DurableExecutionRef;
+  /** The sole model-facing Agent Run that owns nested workflow invocations. */
+  agentRunId?: string;
 }
 
 interface StudioRunCheckpoint {
@@ -252,11 +254,13 @@ interface StreamedCodeCheckpoint {
 }
 
 async function getStudioRunCheckpoint(ctx: AgentContext): Promise<StudioRunCheckpoint> {
-  if (!ctx.supabase || !ctx.userId || !ctx.projectId) return {};
+  if (!ctx.supabase || !ctx.userId || !ctx.projectId || !ctx.agentRunId) return {};
   try {
     const studio = await import('./studio-run');
     const store = new studio.WorkspaceStudioRunStore(ctx.supabase, ctx.userId);
-    const run = (await store.listRuns(ctx.projectId))[0];
+    const run = (await store.listRuns(ctx.projectId)).find(candidate => (
+      candidate.agentRunId === ctx.agentRunId
+    ));
     if (!run || !run.currentStage || run.status !== 'running') return {};
     return {
       studioRunId: run.id,
@@ -2369,9 +2373,9 @@ Call this during the Studio Assets stage after reading skills/_shared/visual-ass
     }),
 
     studio_run: tool({
-      description: `Create and advance a durable Makaron Studio Run for multi-stage video production.
-Use this only when an active skill requires Studio Run or the user explicitly requests Studio Run, Remotion, an editable composition/timeline, or precise programmatic compositing. Do not use \`studio_run\` for an ordinary short finished-video request, even when its brief includes an explainer, multiple scenes, voiceover, music, or subtitles.
-The run persists typed artifacts in the existing project workspace and enforces dependencies, approval policy, resume state, and downstream invalidation.
+      description: `Create and advance a Studio workflow invocation inside the current Agent Run for multi-stage video production.
+Use this only when an active skill requires the Studio workflow or the user explicitly requests Studio, Remotion, an editable composition/timeline, or precise programmatic compositing. Do not use \`studio_run\` for an ordinary short finished-video request, even when its brief includes an explainer, multiple scenes, voiceover, music, or subtitles.
+The workflow persists typed artifacts in the existing project workspace and enforces dependencies, approval policy, resume state, and downstream invalidation. It is not a separate model-facing run and cannot be adopted by another Agent Run.
 Operations:
 - start: create the run before producing the creative packet. By default it returns only run state, keeping later stage schemas out of the model context. Set include_stage_schemas=true only for legacy/manual authoring.
 - put_creative_packet: for approval_policy=auto, submit the brief, concept options, selected direction, and timed script once. The harness deterministically projects it into separate Brief, Proposal, and Script artifacts and emits one CUI event per stage.
@@ -2411,8 +2415,8 @@ Review means previewing and patching the Remotion source before export, not auth
         reason: z.string().optional(),
       }),
       execute: async ({ operation, run_id, recipe, title, approval_policy, delivery_promise, include_stage_schemas, creative_packet, stage, artifact, artifacts, summary, reason }) => {
-        if (!ctx.supabase || !ctx.userId || !ctx.projectId) {
-          return { success: false, error: 'Studio Run requires an authenticated project workspace.' };
+        if (!ctx.supabase || !ctx.userId || !ctx.projectId || !ctx.agentRunId) {
+          return { success: false, error: 'Studio workflow requires an active Agent Run and authenticated project workspace.' };
         }
         try {
           const studio = await import('./studio-run');
@@ -2422,6 +2426,7 @@ Review means previewing and patching the Remotion source before export, not auth
             if (!delivery_promise) return { success: false, error: 'start requires delivery_promise' };
             const run = await studio.startPersistedStudioRun({
               store,
+              agentRunId: ctx.agentRunId,
               projectId: ctx.projectId,
               recipe: recipe || 'explainer-video',
               title: title || 'Studio Run',
@@ -2447,8 +2452,13 @@ Review means previewing and patching the Remotion source before export, not auth
             };
           }
 
-          let run = run_id ? await store.loadRun(ctx.projectId, run_id) : (await store.listRuns(ctx.projectId))[0];
-          if (!run) return { success: false, error: 'Studio Run not found. Start one first.' };
+          let run = run_id
+            ? await store.loadRun(ctx.projectId, run_id)
+            : (await store.listRuns(ctx.projectId)).find(candidate => candidate.agentRunId === ctx.agentRunId);
+          if (!run) return { success: false, error: 'Studio workflow not found in the current Agent Run. Start one first.' };
+          if (run.agentRunId !== ctx.agentRunId) {
+            return { success: false, error: 'Studio workflow belongs to a different Agent Run and cannot be adopted.' };
+          }
           const runAtOperationStart = run;
 
           const loadStudioArtifact = async (artifactStage: 'script' | 'storyboard' | 'composition'): Promise<unknown> => {
@@ -4825,6 +4835,7 @@ export interface RunMakaronAgentOptions {
   perf?: AgentPerf;
   abortSignal?: AbortSignal;
   execution?: DurableExecutionRef;
+  agentRunId?: string;
   attemptBudgetMs?: number;
   maxSteps?: number;
   contextCompactAtTokens?: number;
@@ -4860,6 +4871,7 @@ export async function* runMakaronAgent(
     timelineVersion: options?.timelineVersion,
     currentDesignPath: options?.currentDesignPath,
     execution: options?.execution,
+    agentRunId: options?.agentRunId || options?.execution?.runId,
   };
 
   const allTools = wrapDurableIdempotentTools(createTools(ctx, runtime, options?.locale, Boolean(options?.execution)), ctx);
@@ -5686,6 +5698,7 @@ export async function* runMakaronAgent(
                   projectId: ctx.projectId,
                   userId: ctx.userId,
                   supabase: ctx.supabase,
+                  agentRunId: ctx.agentRunId!,
                 });
                 if (scaffold.path) (ctx as any).__lastSavedDraftPath = scaffold.path;
                 if (ctx.execution) {
