@@ -6,6 +6,7 @@
 
 import type { DesignPayload } from '@/types';
 import { hasRemotionAudioSources } from '@/lib/remotion-audio';
+import { resolveRemotionFontManifestUrl } from '@/lib/remotion-font-manifest';
 
 function readEnv(name: string): string | undefined {
   const value = process.env[name]?.replace(/\\[rn]|[\r\n]/g, '').trim();
@@ -112,6 +113,7 @@ export async function renderDesignFrame(
   const fps = design.animation?.fps || 30;
   const dur = design.animation?.durationInSeconds || 0;
   const durationInFrames = dur > 0 ? Math.max(1, Math.round(fps * dur)) : 1;
+  const fontManifestUrl = resolveRemotionFontManifestUrl();
   // Unique output file per render — prevents concurrent renders from overwriting each other
   const outputFile = `/tmp/still-${frame}-${Date.now()}.jpeg`;
 
@@ -132,9 +134,11 @@ export async function renderDesignFrame(
           durationInFrames,
           width: design.width || 1080,
           height: design.height || 1350,
+          fontManifestUrl,
         },
         imageFormat: 'jpeg',
         jpegQuality: 90,
+        chromiumOptions: { disableWebSecurity: true, gl: null },
         frame: Math.min(frame, durationInFrames - 1),
         outputFile,
         timeoutInMilliseconds: 30000,
@@ -189,6 +193,7 @@ export async function renderDesignVideo(
   const durationInFrames = Math.max(1, Math.round(fps * dur));
   const outputFile = `/tmp/remotion-export-${Date.now()}-${Math.random().toString(36).slice(2)}.mp4`;
   const hasAudio = hasRemotionAudioSources(design.code);
+  const fontManifestUrl = resolveRemotionFontManifestUrl();
 
   for (let attempt = 0; attempt < 2; attempt++) {
     const sandbox = await ensureSandbox();
@@ -209,11 +214,13 @@ export async function renderDesignVideo(
           durationInFrames,
           width: design.width || 1080,
           height: design.height || 1920,
+          fontManifestUrl,
           useNativeVideo: true,
         },
         outputFile,
         codec: 'h264',
         imageFormat: 'jpeg',
+        chromiumOptions: { disableWebSecurity: true, gl: null },
         scale,
         crf: 23,
         x264Preset: 'veryfast',
