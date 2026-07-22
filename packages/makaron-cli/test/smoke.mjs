@@ -169,6 +169,15 @@ const server = http.createServer(async (req, res) => {
     return;
   }
 
+  if (req.method === 'POST' && url.pathname === '/api/agent') {
+    res.writeHead(200, {
+      'Content-Type': 'text/event-stream',
+      'X-Agent-Run-Id': 'run_stream_mock_1',
+    });
+    res.end('data: {"type":"done"}\n\n');
+    return;
+  }
+
   if (req.method === 'POST' && url.pathname === '/api/mcp') {
     assert.equal(req.headers.authorization, 'Bearer mk_test_smoke');
     sendJson(200, {
@@ -440,10 +449,10 @@ try {
 
   for (const [helpArgs, expectedText] of [
     [[], /Makaron CLI/],
-    [['--help'], /--agent-model <name>/],
+    [['--help'], /Chat chooses agent, image, and video models automatically/],
     [['login', '--help'], /Usage: makaron login/],
     [['create', '--help'], /Usage: makaron create/],
-    [['chat', '--help'], /--agent-model <name>/],
+    [['chat', '--help'], /Model routing is automatic in chat/],
     [['responses', '--help'], /Responses commands:/],
     [['responses', 'get', '--help'], /Usage: makaron responses get/],
     [['responses', 'watch', '--help'], /Usage: makaron responses watch/],
@@ -490,15 +499,26 @@ try {
   }
 
   {
-    const result = await expectHelp(['--help'], /--agent-model <name>/);
-    assert.match(result.stdout, /--image-model <name>/);
-    assert.match(result.stdout, /--video-model <name>/);
-    assert.match(result.stdout, /gpt-5\.6-terra/);
-    assert.match(result.stdout, /gpt-5\.6-sol/);
-    assert.match(result.stdout, /gpt-5\.6-luna/);
-    assert.match(result.stdout, /deepseek-v4-pro/);
-    assert.match(result.stdout, /MAKARON_AGENT_MODEL/);
-    assert.match(result.stdout, /legacy --model flag is deprecated/);
+    const result = await expectHelp(['--help'], /Chat chooses agent, image, and video models automatically/);
+    assert.doesNotMatch(result.stdout, /--agent-model/);
+    assert.doesNotMatch(result.stdout, /--image-model/);
+    assert.doesNotMatch(result.stdout, /--video-model/);
+    assert.doesNotMatch(result.stdout, /MAKARON_AGENT_MODEL/);
+  }
+
+  {
+    const result = await expectHelp(['chat', '--help'], /Model routing is automatic in chat/);
+    assert.doesNotMatch(result.stdout, /^\s+--agent-model/m);
+    assert.doesNotMatch(result.stdout, /^\s+--image-model/m);
+    assert.doesNotMatch(result.stdout, /^\s+--video-model/m);
+    assert.match(result.stdout, /Do not pass --agent-model, --image-model,/);
+  }
+
+  {
+    const result = await expectHelp(['edit', '--help'], /--image-model/);
+    assert.match(result.stdout, /--image-model/);
+    const videoResult = await expectHelp(['video', 'create', '--help'], /--video-model/);
+    assert.match(videoResult.stdout, /--video-model/);
   }
 
   {
@@ -540,28 +560,32 @@ try {
     const runRequest = requests.find(req => req.pathname === '/api/agent/run');
     assert.equal(runRequest?.body?.projectId, 'project-auto-1');
     assert.equal(runRequest?.body?.prompt, 'make a compact image');
+    assert.equal(runRequest?.body?.agentModel, undefined);
+    assert.equal(runRequest?.body?.preferredModel, undefined);
+    assert.equal(runRequest?.body?.videoModel, undefined);
+  }
+
+  for (const args of [
+    ['--agent-model', 'deepseek-v4-pro'],
+    ['--image-model', 'qwen'],
+    ['--video-model', 'seedance pro'],
+    ['--video-model=seedance-pro'],
+    ['--model', 'qwen'],
+  ]) {
+    const requestCount = requests.length;
+    const result = await expectFailure(['chat', '--project', 'project-models-1', ...args, 'must fail fast']);
+    assert.match(result.stderr, /chat chooses agent, image, and video models automatically/);
+    assert.match(result.stderr, new RegExp(`Remove ${args[0].split('=')[0]}`));
+    assert.equal(requests.length, requestCount, `${args[0]} should fail before making HTTP requests`);
   }
 
   {
-    await expectSuccess(['chat', '--project', 'project-models-1', '--agent-model', 'deepseek-v4-pro', '--image-model', 'qwen', '--video-model', 'grok', '--json', '-b', 'use explicit models']);
-    const runRequest = requests.filter(req => req.pathname === '/api/agent/run').at(-1);
-    assert.equal(runRequest?.body?.agentModel, 'deepseek-v4-pro');
-    assert.equal(runRequest?.body?.preferredModel, 'qwen');
-    assert.equal(runRequest?.body?.videoModel, 'grok');
-  }
-
-  {
-    const result = await expectFailure(['chat', '--project', 'project-models-1', '--agent-model', 'mystery-model', 'fail clearly']);
-    assert.match(result.stderr, /Unknown agent model: mystery-model/);
-    assert.match(result.stderr, /gpt-5\.6-terra/);
-    assert.doesNotMatch(result.stderr, /sonnet|opus/i);
-  }
-
-  {
-    const result = await expectSuccess(['chat', '--project', 'project-models-1', '--model', 'qwen', '--json', '-b', 'legacy image flag']);
-    assert.match(result.stderr, /--model is deprecated here; use --image-model/);
-    const runRequest = requests.filter(req => req.pathname === '/api/agent/run').at(-1);
-    assert.equal(runRequest?.body?.preferredModel, 'qwen');
+    await expectSuccess(['chat', '--project', 'project-stream-1', '--stream', '--video-resolution', '720p', 'stream with automatic routing']);
+    const streamRequest = requests.filter(req => req.pathname === '/api/agent').at(-1);
+    assert.equal(streamRequest?.body?.videoResolution, '720p');
+    assert.equal(streamRequest?.body?.agentModel, undefined);
+    assert.equal(streamRequest?.body?.preferredModel, undefined);
+    assert.equal(streamRequest?.body?.videoModel, undefined);
   }
 
   {
