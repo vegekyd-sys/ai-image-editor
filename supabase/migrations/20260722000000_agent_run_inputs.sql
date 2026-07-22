@@ -24,12 +24,62 @@ CREATE INDEX IF NOT EXISTS idx_agent_run_inputs_pending
 
 ALTER TABLE agent_run_inputs ENABLE ROW LEVEL SECURITY;
 
-CREATE POLICY "Users manage own Agent Run inputs"
-  ON agent_run_inputs FOR ALL
-  USING (user_id = auth.uid())
-  WITH CHECK (user_id = auth.uid());
+CREATE POLICY "Users read own Agent Run inputs"
+  ON agent_run_inputs FOR SELECT
+  TO authenticated
+  USING (
+    user_id = (SELECT auth.uid())
+    AND EXISTS (
+      SELECT 1
+      FROM agent_runs run
+      WHERE run.id = agent_run_inputs.run_id
+        AND run.project_id = agent_run_inputs.project_id
+        AND run.user_id = (SELECT auth.uid())
+    )
+  );
 
-CREATE OR REPLACE FUNCTION append_agent_run_input(
+CREATE POLICY "Users insert own Agent Run inputs"
+  ON agent_run_inputs FOR INSERT
+  TO authenticated
+  WITH CHECK (
+    user_id = (SELECT auth.uid())
+    AND EXISTS (
+      SELECT 1
+      FROM agent_runs run
+      WHERE run.id = agent_run_inputs.run_id
+        AND run.project_id = agent_run_inputs.project_id
+        AND run.user_id = (SELECT auth.uid())
+    )
+  );
+
+CREATE POLICY "Users update own Agent Run inputs"
+  ON agent_run_inputs FOR UPDATE
+  TO authenticated
+  USING (
+    user_id = (SELECT auth.uid())
+    AND EXISTS (
+      SELECT 1
+      FROM agent_runs run
+      WHERE run.id = agent_run_inputs.run_id
+        AND run.project_id = agent_run_inputs.project_id
+        AND run.user_id = (SELECT auth.uid())
+    )
+  )
+  WITH CHECK (
+    user_id = (SELECT auth.uid())
+    AND EXISTS (
+      SELECT 1
+      FROM agent_runs run
+      WHERE run.id = agent_run_inputs.run_id
+        AND run.project_id = agent_run_inputs.project_id
+        AND run.user_id = (SELECT auth.uid())
+    )
+  );
+
+GRANT SELECT, INSERT, UPDATE ON TABLE agent_run_inputs TO authenticated;
+GRANT ALL ON TABLE agent_run_inputs TO service_role;
+
+CREATE OR REPLACE FUNCTION public.append_agent_run_input(
   p_run_id uuid,
   p_project_id uuid,
   p_user_id uuid,
@@ -38,6 +88,7 @@ CREATE OR REPLACE FUNCTION append_agent_run_input(
 )
 RETURNS uuid
 LANGUAGE plpgsql
+SECURITY INVOKER
 AS $$
 DECLARE
   v_input_id uuid := gen_random_uuid();
@@ -46,7 +97,7 @@ BEGIN
     RAISE EXCEPTION 'Agent Run input cannot be empty';
   END IF;
 
-  UPDATE agent_runs
+  UPDATE public.agent_runs
   SET input_version = input_version + 1,
       next_attempt_at = COALESCE(next_attempt_at, now())
   WHERE id = p_run_id
@@ -59,11 +110,14 @@ BEGIN
     RAISE EXCEPTION 'Agent Run is not active and appendable';
   END IF;
 
-  INSERT INTO agent_run_inputs (id, run_id, project_id, user_id, content, source)
+  INSERT INTO public.agent_run_inputs (id, run_id, project_id, user_id, content, source)
   VALUES (v_input_id, p_run_id, p_project_id, p_user_id, p_content, p_source);
 
   RETURN v_input_id;
 END;
 $$;
 
-ALTER PUBLICATION supabase_realtime ADD TABLE agent_run_inputs;
+REVOKE ALL ON FUNCTION public.append_agent_run_input(uuid, uuid, uuid, text, text) FROM PUBLIC;
+REVOKE ALL ON FUNCTION public.append_agent_run_input(uuid, uuid, uuid, text, text) FROM anon;
+GRANT EXECUTE ON FUNCTION public.append_agent_run_input(uuid, uuid, uuid, text, text)
+  TO authenticated, service_role;
