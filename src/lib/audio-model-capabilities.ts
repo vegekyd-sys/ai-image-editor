@@ -4,7 +4,11 @@ export interface AudioModelCapability {
   provider: 'evolink' | 'tts'
   providerModel?: string
   maxDurationSeconds: number
-  defaultFormat: 'mp3' | 'wav'
+  defaultFormat: 'mp3' | 'wav' | 'pcm' | 'ogg_opus'
+  defaultSampleRate: 8000 | 16000 | 24000 | 48000
+  maxPromptChars?: number
+  maxAudioReferences?: number
+  maxImageReferences?: number
   estimatedLatencySeconds?: [number, number]
   recommendedConcurrency?: number
   notes: string[]
@@ -19,12 +23,18 @@ const AUDIO_MODEL_CAPABILITIES: Record<string, AudioModelCapability> = {
     provider: 'evolink',
     providerModel: 'doubao-seed-audio-1-0',
     maxDurationSeconds: 120,
-    defaultFormat: 'mp3',
+    defaultFormat: 'wav',
+    defaultSampleRate: 48000,
+    maxPromptChars: 1500,
+    maxAudioReferences: 3,
+    maxImageReferences: 1,
     estimatedLatencySeconds: [20, 45],
     recommendedConcurrency: 1,
     notes: [
-      'Prompt can describe music, sound effects, ambience, character voice, or mixed sound design.',
-      'Use as the default prompt-driven audio generation model for short-video sound design.',
+      'Use as the default unified model for narration, dialogue, music, sound effects, ambience, and complete mixed sound scenes.',
+      'The 2026-07-20 capability position includes fine-grained timeline direction, long-form voice consistency, reference conditioning, and natural generation across 20+ languages.',
+      'Current EvoLink gateway accepts up to 3 audio references or 1 image reference, but not both, with a 1,500-character prompt limit.',
+      'Use WAV at 48 kHz as the production-master default; request a delivery codec only when needed.',
       'Returned provider URLs are temporary and should be persisted immediately.',
     ],
   },
@@ -34,11 +44,12 @@ const AUDIO_MODEL_CAPABILITIES: Record<string, AudioModelCapability> = {
     provider: 'tts',
     maxDurationSeconds: 600,
     defaultFormat: 'mp3',
+    defaultSampleRate: 24000,
     estimatedLatencySeconds: [5, 30],
     recommendedConcurrency: 2,
     notes: [
-      'Use the dedicated generate_voiceover tool when exact scripted narration is required.',
-      'Best for explainer video narration, tutorial voiceover, and stable selectable voices.',
+      'Use the dedicated generate_voiceover tool for a dry isolated speech stem, deterministic word-for-word delivery, subtitle-grade timing, or Seed Audio precision fallback.',
+      'Best for workflows that require stable selectable voices without music, ambience, or sound effects in the same generation.',
     ],
   },
 }
@@ -73,6 +84,7 @@ export function getAudioModelCapability(model?: string | null): AudioModelCapabi
     provider: 'evolink',
     maxDurationSeconds: 120,
     defaultFormat: 'mp3',
+    defaultSampleRate: 24000,
     notes: ['Unknown audio model. The provider adapter must be registered before use.'],
   }
 }
@@ -99,7 +111,7 @@ export function validateAudioRequest(options: {
 export function formatAudioCapabilitiesForAgent(): string {
   return listAudioModelCapabilities()
     .map(capability => [
-      `- ${capability.id} (${capability.label}): provider=${capability.provider}${capability.providerModel ? `, model=${capability.providerModel}` : ''}, max=${capability.maxDurationSeconds}s.`,
+      `- ${capability.id} (${capability.label}): provider=${capability.provider}${capability.providerModel ? `, model=${capability.providerModel}` : ''}, max=${capability.maxDurationSeconds}s, default=${capability.defaultFormat}/${capability.defaultSampleRate}Hz.`,
       `  Notes: ${capability.notes.join(' ')}`,
     ].join('\n'))
     .join('\n')

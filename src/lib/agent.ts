@@ -395,6 +395,42 @@ function resolveAudioRefs(audioAttachments: AudioAttachment[] | undefined, refs:
   return { audioUrls };
 }
 
+function resolveSeedAudioReferences(
+  audioAttachments: AudioAttachment[] | undefined,
+  refs: string[] | undefined,
+): { references: string[]; error?: string } {
+  if (!refs?.length) return { references: [] };
+  const attachments = audioAttachments || [];
+  const references: string[] = [];
+  const invalid: string[] = [];
+  for (const rawRef of refs) {
+    const ref = String(rawRef).trim();
+    const match = ref.match(/^audio_(\d+)$/i);
+    if (match) {
+      const audio = attachments[Number(match[1]) - 1];
+      if (!audio?.audioUrl) {
+        invalid.push(ref);
+      } else {
+        references.push(audio.audioUrl);
+      }
+      continue;
+    }
+    if (/^https:\/\//i.test(ref) || /^[a-z0-9][a-z0-9._:/-]{2,}$/i.test(ref)) {
+      references.push(ref);
+    } else {
+      invalid.push(ref);
+    }
+  }
+  if (invalid.length) {
+    const available = attachments.map((audio, i) => `audio_${i + 1}${audio.title ? ` (${audio.title})` : ''}`).join(', ') || 'none';
+    return {
+      references,
+      error: `Invalid reference_voices: ${invalid.join(', ')}. Use Audio Index labels (${available}) or a provider preset voice ID.`,
+    };
+  }
+  return { references };
+}
+
 function addAudioAttachment(ctx: AgentContext, audio: AudioAttachment | null | undefined): number {
   if (!audio?.audioUrl || !/^https?:\/\//.test(audio.audioUrl)) {
     return ctx.audioAttachments?.length || 0;
@@ -2092,7 +2128,7 @@ Use mode="locate_frame" when the user provides a screenshot/frame and you need t
     transcribe_audio: tool({
       description: `Transcribe audio or a timeline video with Volcengine ASR and return dialogue/subtitle timecodes.
 
-Use this when the user asks for transcript, subtitles, dialogue, spoken words, lyrics-like speech timing, or time-based editing such as "cut the part where they say X", "remove this sentence", "剪掉这句话", "按逐字稿剪", or "find the timestamp for ...".
+Use this when the user asks for transcript, subtitles, dialogue, spoken words, lyrics-like speech timing, time-based editing such as "cut the part where they say X", or when \`prompts/audio.md\` requires verification of Seed Audio exact speech, brand names, numbers, multilingual lines, duration, or cue timing.
 
 For timeline videos, pass media_index. For external audio/video URLs, pass media_url. Results are cached into the video snapshot's video_meta.transcript when media_index is used. Use analyze_video instead for visual scene/action understanding.`,
       inputSchema: z.object({
@@ -4452,7 +4488,7 @@ Exception: do not call this when the chosen final-video workflow is generate_ani
     generate_voiceover: tool({
       description: `Generate a spoken narration / voiceover audio clip with Volcengine Doubao Seed TTS, upload it to the project, and add it to the Audio Index.
 
-Use this when the task needs accurate scripted speech: narration, voiceover, dialogue, spoken explainer audio, product introductions, tutorials, sales-style oral copy, or when a video/composition clearly needs a human spoken line. Do not use it for background music, ambience, sound effects, character-voice experiments, or mixed sound design; use generate_audio or generate_music for prompt-first Seed Audio assets.
+Use this precision fallback when the task specifically needs a dry isolated speech stem, deterministic word-for-word delivery, subtitle-grade timing, a stable selectable TTS voice, or Seed Audio failed speech verification. For normal narration, dialogue, multilingual character speech, music, ambience, sound effects, and complete mixed sound scenes, use generate_audio so Seed Audio can render them together.
 
 Exception: if the chosen final-video workflow is generate_animation, do not generate a separate voiceover. Put the exact dialogue, narration, and voice direction in story_prompt so the video model generates it with the picture.
 
@@ -4544,9 +4580,9 @@ The generated audio becomes an Audio Index item (<<<audio_N>>>) in later turns. 
     generate_audio: tool({
       description: `Generate audio from a natural-language prompt.
 
-This is prompt-first: describe the sound directly. Do not force a rigid category. The prompt may describe background music, sound effects, ambience, character voice, or a mixed sound-design scene.
+This is the default standalone audio tool for narration, dialogue, multilingual character speech, music, ambience, sound effects, and complete mixed sound scenes. Before its first use in a conversation, read \`prompts/audio.md\` and write one compact production brief with an audible timeline. It may replace a separate TTS + music + SFX pipeline when verification passes.
 
-Use generate_voiceover instead when exact scripted narration is required, especially for explainer videos, tutorials, and product introductions. Use generate_music for background music beds; it also uses Seed Audio.
+Use generate_voiceover only for a dry isolated speech stem, deterministic word-for-word delivery, subtitle-grade timing, a stable selectable TTS voice, or as a precision fallback. generate_music is a compatibility alias for music-only callers.
 
 Exception: if the chosen final-video workflow is generate_animation, do not generate a separate audio asset. Put the requested sound design in story_prompt so the video model generates it with the picture.
 
@@ -4555,13 +4591,59 @@ ${formatAudioCapabilitiesForAgent()}`,
       inputSchema: z.object({
         prompt: z.string().describe('Natural-language description of the audio to create. Include duration, mood, instruments, sound effects, voice direction, and constraints directly in the prompt.'),
         duration_seconds: z.number().optional().describe('Requested duration in seconds. Seed Audio supports up to 120 seconds. Also include the duration in the prompt for best results.'),
+        reference_voices: z.array(z.string()).max(3).optional().describe('Up to 3 Audio Index labels such as audio_1, or provider preset voice IDs. The prompt must bind them in order as @audio1, @audio2, and @audio3. Cannot be combined with image_ref.'),
+        image_ref: z.number().int().positive().optional().describe('Optional 1-based Timeline Media image index for image-conditioned audio. The image must have a public HTTPS URL. Cannot be combined with reference_voices.'),
+        speech_rate: z.number().min(0.5).max(2).optional().describe('Global speech speed multiplier from 0.5 to 2.0. Default 1.0.'),
+        loudness_rate: z.number().min(0.5).max(2).optional().describe('Global loudness multiplier from 0.5 to 2.0. Default 1.0; still direct mix priority in the prompt.'),
+        pitch_rate: z.number().int().min(-12).max(12).optional().describe('Global pitch shift in integer semitones from -12 to 12. Default 0; avoid extremes.'),
+        format: z.enum(['wav', 'mp3', 'ogg_opus', 'pcm']).optional().describe('Output format. Default wav for a production master.'),
+        sample_rate: z.union([z.literal(8000), z.literal(16000), z.literal(24000), z.literal(48000)]).optional().describe('Output sample rate. Default 48000 for production masters.'),
         title: z.string().optional().describe('Short title for the generated audio asset.'),
         model: z.enum(['auto', 'evolink-seed-audio']).optional().describe('Audio model. Omit or use auto for the default Seed Audio model.'),
       }),
-      execute: async ({ prompt, duration_seconds, title, model }) => {
+      execute: async ({
+        prompt,
+        duration_seconds,
+        reference_voices,
+        image_ref,
+        speech_rate,
+        loudness_rate,
+        pitch_rate,
+        format,
+        sample_rate,
+        title,
+        model,
+      }) => {
+        if (reference_voices?.length && image_ref != null) {
+          return { success: false as const, message: 'Seed Audio reference_voices and image_ref are mutually exclusive.' };
+        }
+        const resolvedReferences = resolveSeedAudioReferences(ctx.audioAttachments, reference_voices);
+        if (resolvedReferences.error) {
+          return { success: false as const, message: resolvedReferences.error };
+        }
+        let imageUrls: string[] | undefined;
+        if (image_ref != null) {
+          const validated = validateImageIndex(ctx.snapshotImages, image_ref);
+          if (validated.error) return { success: false as const, message: validated.error };
+          const imageUrl = toPublicStorageUrl(ctx.snapshotImages[validated.idx]);
+          if (!/^https:\/\//i.test(imageUrl) || isVideoUrl(imageUrl)) {
+            return {
+              success: false as const,
+              message: `<<<media_${image_ref}>>> must be a still image with a public HTTPS URL before it can be used by Seed Audio.`,
+            };
+          }
+          imageUrls = [imageUrl];
+        }
         const result = await createAudio({
           prompt,
           durationSeconds: duration_seconds,
+          audioReferences: resolvedReferences.references,
+          imageUrls,
+          speechRate: speech_rate,
+          loudnessRate: loudness_rate,
+          pitchRate: pitch_rate,
+          format,
+          sampleRate: sample_rate,
           title,
           model,
           supabase: ctx.supabase,
@@ -4596,17 +4678,33 @@ ${formatAudioCapabilitiesForAgent()}`,
     }),
 
     generate_music: tool({
-      description: `Generate background music with Seed Audio and return one persisted audio asset. Use this for short-video music beds, soundtrack, score, ambience-driven music, and polished vlog/commercial background tracks. Do not use Suno; all new music generation routes go through Seed Audio.
+      description: `Compatibility alias for music-only callers. Before its first use in a conversation, read \`prompts/audio.md\`. Generate a timeline-directed music bed with Seed Audio and return one persisted audio asset. New agent decisions should normally use generate_audio, including music mixed with narration or SFX. Do not use Suno; all new music generation routes go through Seed Audio.
 
 Exception: if the chosen final-video workflow is generate_animation, do not generate a separate music asset. Put the music direction in story_prompt so the video model generates it in sync with the picture.`,
       inputSchema: z.object({
-        prompt: z.string().describe('Music description: genre, mood, energy, instruments (no timing, no artist names)'),
+        prompt: z.string().describe('Timeline-directed music description: genre, mood, energy arc, instruments, mix role, and ending. Avoid artist names.'),
         instrumental: z.boolean().optional().describe('No vocals (default: true)'),
         style: z.string().optional().describe('Genre/mood tags for custom mode'),
         duration_seconds: z.number().optional().describe('Requested duration for Seed Audio music beds. Seed Audio supports up to 120 seconds.'),
+        speech_rate: z.number().min(0.5).max(2).optional().describe('Global speech speed multiplier if the music prompt intentionally includes spoken or sung voice.'),
+        loudness_rate: z.number().min(0.5).max(2).optional().describe('Global loudness multiplier from 0.5 to 2.0.'),
+        pitch_rate: z.number().int().min(-12).max(12).optional().describe('Global pitch shift in integer semitones from -12 to 12.'),
+        format: z.enum(['wav', 'mp3', 'ogg_opus', 'pcm']).optional().describe('Output format. Default wav.'),
+        sample_rate: z.union([z.literal(8000), z.literal(16000), z.literal(24000), z.literal(48000)]).optional().describe('Output sample rate. Default 48000.'),
         provider: z.enum(['auto', 'evolink-seed-audio']).optional().describe('Omit or use auto for Seed Audio. Kept only for compatibility.'),
       }),
-      execute: async ({ prompt, instrumental, style, duration_seconds, provider }) => {
+      execute: async ({
+        prompt,
+        instrumental,
+        style,
+        duration_seconds,
+        speech_rate,
+        loudness_rate,
+        pitch_rate,
+        format,
+        sample_rate,
+        provider,
+      }) => {
         const musicPrompt = [
           prompt,
           style ? `Style tags: ${style}.` : '',
@@ -4617,6 +4715,11 @@ Exception: if the chosen final-video workflow is generate_animation, do not gene
         const result = await createAudio({
           prompt: musicPrompt,
           durationSeconds: duration_seconds,
+          speechRate: speech_rate,
+          loudnessRate: loudness_rate,
+          pitchRate: pitch_rate,
+          format,
+          sampleRate: sample_rate,
           title: 'Generated music',
           model: provider === 'evolink-seed-audio' ? provider : 'auto',
           supabase: ctx.supabase,

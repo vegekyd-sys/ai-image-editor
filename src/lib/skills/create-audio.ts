@@ -1,11 +1,23 @@
 import type { SupabaseClient } from '@supabase/supabase-js'
 import { getAudioModelCapability, normalizeAudioModelId, validateAudioRequest } from '../audio-model-capabilities'
-import { generateWithEvolinkSeedAudio, type EvolinkSeedAudioResult } from '../evolink-seed-audio'
+import {
+  generateWithEvolinkSeedAudio,
+  type EvolinkSeedAudioResult,
+  type SeedAudioFormat,
+} from '../evolink-seed-audio'
 import { uploadAudio } from '../supabase/storage'
 
 export interface CreateAudioInput {
   prompt: string
   durationSeconds?: number
+  audioReferences?: string[]
+  imageUrls?: string[]
+  speechRate?: number
+  loudnessRate?: number
+  pitchRate?: number
+  format?: SeedAudioFormat
+  sampleRate?: number
+  callbackUrl?: string
   model?: string
   title?: string
   supabase?: SupabaseClient
@@ -26,6 +38,8 @@ export interface CreateAudioResult {
   generationSeconds?: number
   creditsUsed?: number
   trackIndex?: number
+  format?: string
+  sampleRate?: number
 }
 
 async function nextTrackIndex(supabase: SupabaseClient, projectId: string): Promise<number> {
@@ -55,7 +69,18 @@ async function persistAudioAsset(input: {
     const res = await fetch(result.audioUrl)
     if (res.ok) {
       const buffer = new Uint8Array(await res.arrayBuffer())
-      const uploaded = await uploadAudio(supabase, userId, projectId, result.taskId, trackIndex, buffer)
+      const storageFormat: SeedAudioFormat = ['mp3', 'wav', 'pcm', 'ogg_opus'].includes(result.format)
+        ? result.format as SeedAudioFormat
+        : 'wav'
+      const uploaded = await uploadAudio(
+        supabase,
+        userId,
+        projectId,
+        result.taskId,
+        trackIndex,
+        buffer,
+        storageFormat,
+      )
       if (uploaded) permanentUrl = uploaded
     }
   } catch (err) {
@@ -78,6 +103,7 @@ async function persistAudioAsset(input: {
       'seed-audio',
       result.provider,
       result.model,
+      `format:${result.format}`,
       `generation:${result.generationSeconds.toFixed(1)}s`,
     ].join(','),
     status: 'completed',
@@ -111,7 +137,14 @@ export async function createAudio(input: CreateAudioInput): Promise<CreateAudioR
     const result = await generateWithEvolinkSeedAudio({
       prompt,
       durationSeconds: input.durationSeconds,
-      format: capability.defaultFormat,
+      audioReferences: input.audioReferences,
+      imageUrls: input.imageUrls,
+      speechRate: input.speechRate,
+      loudnessRate: input.loudnessRate,
+      pitchRate: input.pitchRate,
+      format: input.format || capability.defaultFormat,
+      sampleRate: input.sampleRate || capability.defaultSampleRate,
+      callbackUrl: input.callbackUrl,
     })
 
     const title = input.title?.trim() || 'Generated audio'
@@ -144,6 +177,8 @@ export async function createAudio(input: CreateAudioInput): Promise<CreateAudioR
       generationSeconds: result.generationSeconds,
       creditsUsed: result.creditsUsed,
       trackIndex,
+      format: result.format,
+      sampleRate: input.sampleRate || capability.defaultSampleRate,
     }
   } catch (e) {
     const msg = e instanceof Error ? e.message : String(e)
