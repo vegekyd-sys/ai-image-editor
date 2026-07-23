@@ -120,10 +120,13 @@ wrong or expensive.
    approved Script narration verbatim, the speaker/listener relationship,
    dramatic intent, emotional starting point, turning point, ending state,
    pace, pauses, breaths, emphasis, restraint, and behaviors to avoid.
-   For `mixed`, keep speech foreground, keep the score clearly audible under
-   speech, and direct music ducking, ambience, meaningful effects, and the
-   ending inside the same one-pass performance score. Avoid attenuation-heavy
-   wording such as faint, sparse, or barely underneath. Never generate
+   For `mixed`, keep speech intelligible while treating the score as a
+   co-leading layer: its melody, rhythm, bass, and harmonic changes must remain
+   identifiable under every spoken line, with no more than 1-2 dB of ducking
+   and immediate recovery between lines. Direct ambience, meaningful effects,
+   and the ending inside the same one-pass performance score. Avoid
+   attenuation-heavy wording such as background, faint, sparse, or barely
+   underneath. Never generate
    narration and supporting audio as separate Seed Audio assets.
    Keep the narration short enough for the requested duration. If the generated
    voiceover is more than 10% longer than the requested video, regenerate a
@@ -223,6 +226,9 @@ silent, text-only, or voice-only output.
 - Use the V3 performance-score shape from `audio.md`: `[MUSIC]`, `[VOICE]`,
   `[SFX]`, and `[MIX]`. Give each spoken line its own emotional direction,
   rather than one generic mood for the narrator.
+- When music is requested, make it a co-leading score rather than background
+  filler. Keep its motif, beat, bass, and harmony perceptible under every line;
+  duck no more than 1-2 dB and shorten narration before sacrificing music.
 - Prefer one cohesive 30-90s unified soundtrack. Do not create separate
   voiceover/music/effect generations for one final audio track.
 - When an intro, interlude, or outro matters, shorten the narration enough to

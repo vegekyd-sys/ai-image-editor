@@ -63,6 +63,8 @@ describe('Explainer Video built-in skill', () => {
     expect(rawSkill).toContain('`[SFX]`')
     expect(rawSkill).toContain('`[MIX]`')
     expect(rawSkill).toContain('every spoken line')
+    expect(rawSkill).toContain('co-leading layer')
+    expect(rawSkill).toContain('no more than 1-2 dB of ducking')
     expect(rawSkill).toContain('Do not add a second generated audio layer after step 6')
     expect(rawSkill).toContain('Subtitles are part of this skill by default')
     expect(rawSkill).toContain('Sound design is part of the planning pass')

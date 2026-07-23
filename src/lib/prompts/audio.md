@@ -55,8 +55,11 @@ perform together; return no stems.
 
 [MUSIC — continuous backbone]
 BPM, instrument palette, memorable motif, entry, development, lift, and ending.
-State that melody and rhythm remain clearly audible under speech. If an outro
-matters, reserve at least 3 real seconds with no speech and forbid an early fade.
+Treat the score as a co-leading layer, not background filler. State that its
+melody, rhythm, bass, and harmonic changes remain easy to identify under every
+spoken line. Duck by no more than 1-2 dB during speech and restore immediately
+between lines. If an outro matters, reserve at least 3 real seconds with no
+speech and forbid an early fade.
 
 [VOICE — line-level performance]
 Speaker identity, listener, distance, and overall delivery.
@@ -129,7 +132,7 @@ Omit empty sections. For a simple music or SFX request, use the same playback-or
 7. Describe audible behavior instead of abstract adjectives: "a quiet inhale, slower pace, restrained smile, then firmer emphasis" is stronger than "premium, cinematic".
 8. Direct pauses, breaths, emphasis, energy, restraint, and pace only where they change meaning. Avoid announcer tone, uniform pacing, and exaggerated acting unless requested.
 9. State mixing priority explicitly: dialogue foreground, music under speech, ambience lower and spatial.
-10. Give music a job and an arc: entry, development, lift, and intentional ending. Define it as the continuous backbone when it must remain audible; avoid attenuation-heavy wording such as "faint", "sparse", or "barely underneath". Avoid dominant vocals unless explicitly requested.
+10. Give music a job and an arc: entry, development, lift, and intentional ending. When music matters, define it as a co-leading continuous backbone whose melody, rhythm, bass, and harmonic changes remain identifiable under speech; duck no more than 1-2 dB. Avoid attenuation-heavy wording such as "background", "faint", "sparse", or "barely underneath". If duration is tight, shorten narration rather than sacrificing the score. Avoid dominant vocals unless explicitly requested.
 11. For SFX, specify order, count, intensity, distance, and duration when they matter.
 12. Do not overload emotion or stack contradictory performance directions.
 13. Prefer a clean reference voice over extreme pitch/speed controls. Keep provider controls near neutral unless the request needs a clear change.
@@ -183,7 +186,7 @@ After generation, verify target duration and exact speech when they are acceptan
 开头清亮启动音；第一句后左右错位click；第二句后碎片吸合加确认音；第三句后三个由近到远的UI blip；尾奏末尾温暖final button。每个音效短促、独立可辨、不盖字。
 
 [MIX]
-旁白居中前景；说话时音乐只轻降3 dB，句间立即恢复。音乐要像真正配乐，不能退化为近乎静音的氛围、单一低频或偶发脉冲。最后一句必须在尾奏开始前结束。
+旁白居中清晰，但音乐是共同主角，不是填充背景。说话时音乐最多只降1–2 dB，句间立即恢复；每句话下面都必须清楚听见主题旋律、节奏、贝斯和和声变化。音乐不能退化为近乎静音的氛围、单一低频或偶发脉冲；如果时长紧张，缩短旁白，不要牺牲音乐。最后一句必须在尾奏开始前结束。
 ```
 
 ## Voiceover master example

@@ -92,6 +92,8 @@ describe('agent prompt policy guards', () => {
     expect(audio).toContain('[MIX]')
     expect(audio).toContain('Every spoken line gets its own local performance direction')
     expect(audio).toContain('validated V3 baseline')
+    expect(audio).toContain('Duck by no more than 1-2 dB')
+    expect(audio).toContain('shorten narration rather than sacrificing the score')
   })
 
   it('surfaces generated audio progress and playable cards in CUI', () => {
