@@ -65,15 +65,17 @@ skip it because the topic sounds simple.
   because generated voiceover or music is longer. Rewrite, regenerate, trim, or
   fade audio to fit the requested duration.
 - Aspect ratio: default 16:9 unless the user specifies mobile/social.
-- Voiceover is part of this skill by default. Generate spoken narration with
-  Seed Audio unless the user explicitly says no voice, no audio, silent, muted,
-  or text-only. When the explainer also has music, ambience, or SFX, generate
-  the complete soundtrack once with `kind: "mixed"`.
+- Voiceover and an instrumental score are part of this skill by default.
+  Unless the user explicitly requests no audio, silent, muted, or text-only
+  output, generate narration, continuous music, ambience, and meaningful SFX
+  together once with Seed Audio `kind: "mixed"`. If the user requests no voice,
+  keep music and sound design but omit narration. Use isolated `voiceover` only
+  when the user explicitly requests voice-only or no music/supporting sound.
 - Subtitles are part of this skill by default and are authored by the Agent as
   part of each scene's Composition direction.
-- Sound design is part of the planning pass. Use `generate_audio` when music,
-  ambient texture, UI sounds, transitions, or scene-specific sound effects would
-  make the explanation clearer or more memorable.
+- Sound design is part of the default planning pass. Give the score a narrative
+  arc and include only ambience, UI sounds, transitions, and scene-specific
+  effects that clarify or strengthen the explanation.
 
 ## Direct Execution Rule
 
@@ -104,10 +106,11 @@ wrong or expensive.
 5. Keep the narration human and paced:
    about 120-145 English words per minute or 180-230 Chinese characters per
    minute.
-6. Unless the user explicitly requested a silent/text-only video, read
+6. Unless the user explicitly requested no audio, silent, muted, or text-only
+   output, read
    `prompts/audio.md`, write a complete Voice Performance Brief, and lock the
-   final audio architecture before generation. If the explainer contains any
-   music, ambience, transition sound, or SFX alongside narration, call
+   final audio architecture before generation. A narrated explainer includes
+   continuous instrumental music and meaningful sound design by default: call
    `generate_audio({ kind: "mixed", ... })` exactly once and direct the entire
    synchronized soundtrack in that prompt. The mixed prompt must use the
    canonical performance-score blocks from `audio.md`: `[MUSIC]` defines a
@@ -115,8 +118,9 @@ wrong or expensive.
    its own emotional action, turn, emphasis, breath, pause, or restraint;
    `[SFX]` places concrete effects in narrative order; `[MIX]` locks layer
    priority and ending behavior. Call
-   `generate_audio({ kind: "voiceover", ... })` only when the intended result is
-   an isolated voice master. The prompt must include the
+   `generate_audio({ kind: "voiceover", ... })` only when the user explicitly
+   requests an isolated voice master with no music or supporting sound. The
+   prompt must include the
    approved Script narration verbatim, the speaker/listener relationship,
    dramatic intent, emotional starting point, turning point, ending state,
    pace, pauses, breaths, emphasis, restraint, and behaviors to avoid.
@@ -173,8 +177,8 @@ wrong or expensive.
    is an overlay, read `skills/sticker-maker/SKILL.md` first and make it a
    transparent PNG sticker instead of a hard-to-place rectangular image.
 13. Persist the asset manifest only after every referenced asset is ready.
-   When audio is promised, voiceover/music must be present in this manifest;
-   do not close Assets before generating them.
+   Unless the user explicitly opted out of audio, voiceover and music must be
+   present in this manifest; do not close Assets before generating them.
 14. Build the video with `run_code({ runtime: "composition" })`.
 15. Use the durable autosaved `design_path` returned by `run_code` or the
    numbered composition workspace, and run the Composition draft gate before
@@ -215,22 +219,24 @@ wrong or expensive.
 ## Audio And Sound Design Contract
 
 Explainers should feel authored, not silent slide decks with narration pasted
-on top. Consider an audio bed in every video unless the user explicitly asks for
-silent, text-only, or voice-only output.
+on top. Use a unified audio bed in every narrated video unless the user
+explicitly asks for silent, text-only, or voice-only output.
 
-- Keep voiceover intelligible. Music and ambience should sit under narration,
-  with lower volume and no busy vocals. Duck the music under spoken sections;
-  use absolute narration timestamps for volume changes so drift cannot
-  accumulate across scenes.
-- Put subtle background music, transition whooshes, notification ticks,
-  ambience, and other supporting sounds into the same one-pass `mixed` prompt
-  whenever narration is present.
+- Keep voiceover intelligible while the instrumental score remains clearly
+  audible as a co-leading layer. Keep ambience lower and avoid busy vocals.
+  Duck music by no more than 1-2 dB under spoken sections; use absolute
+  narration timestamps for volume changes so drift cannot accumulate across
+  scenes.
+- For every narrated explainer, put continuous instrumental music, transition
+  whooshes, notification ticks, ambience, and other meaningful supporting
+  sounds into the same one-pass `mixed` prompt unless the user explicitly opts
+  out of music or supporting sound.
 - Use the V3 performance-score shape from `audio.md`: `[MUSIC]`, `[VOICE]`,
   `[SFX]`, and `[MIX]`. Give each spoken line its own emotional direction,
   rather than one generic mood for the narrator.
-- When music is requested, make it a co-leading score rather than background
-  filler. Keep its motif, beat, bass, and harmony perceptible under every line;
-  duck no more than 1-2 dB and shorten narration before sacrificing music.
+- Make music a co-leading score rather than background filler. Keep its motif,
+  beat, bass, and harmony perceptible under every line; duck no more than
+  1-2 dB and shorten narration before sacrificing music.
 - Prefer one cohesive 30-90s unified soundtrack. Do not create separate
   voiceover/music/effect generations for one final audio track.
 - When an intro, interlude, or outro matters, shorten the narration enough to
@@ -394,10 +400,9 @@ Before saying it is done:
 - Voiceover and generated audio fit within that duration, or are trimmed/faded
   to fit.
 - The composition is saved and published to the timeline.
-- Voiceover is attached by default, unless the user explicitly requested a
-  silent/text-only video.
-- Generated audio/music/effects were considered, and used when they help the
-  pacing, mood, or comprehension without masking narration.
+- Unless the user explicitly opted out, the explainer contains one generated
+  unified soundtrack with voiceover, continuous instrumental music, ambience,
+  and meaningful effects.
 - Subtitles are present, readable, synchronized to the narration, and composed
   by the Agent in a treatment appropriate to each scene. Ordinary spoken
   captions use the polished lower-safe-area baseline; intentional kinetic or
