@@ -10,6 +10,21 @@ interface ChangelogEntry {
 
 const CHANGELOG: ChangelogEntry[] = [
   {
+    date: '2026-07-23',
+    en: { title: 'Seed Audio: One Prompt, One Complete Soundtrack', items: [
+      'Voiceover, music, and sound effects are now composed together in a single Seed Audio generation, so the whole soundtrack feels like one performance instead of separate layers stitched together.',
+      'Every spoken line can carry its own emotion, pacing, and delivery direction, with expressive narration available across 20+ languages.',
+      'After generation, Makaron recovers the real spoken timing from the finished audio and uses it to synchronize Remotion scenes and subtitles with the performance.',
+      'Music now plays a more present, co-leading role in the mix and helps drive the story forward.',
+    ]},
+    zh: { title: 'Seed Audio：一个 Prompt，一条完整声轨', items: [
+      '旁白、音乐和音效现在会在一次 Seed Audio 生成中共同完成，让整条声轨像一次完整表演，而不是把多个独立音轨事后拼在一起。',
+      '每一句旁白都可以拥有自己的情绪、节奏和演绎方式，并支持 20 多种语言的情感表达。',
+      '生成完成后，Makaron 会从最终音频中还原真实口播时间点，让 Remotion 画面、场景切换和字幕跟随实际表演精准同步。',
+      '配乐现在会更有存在感，与旁白共同推进叙事。',
+    ]},
+  },
+  {
     date: '2026-07-21',
     en: { title: 'Smarter Video Creation', items: [
       'Short videos now choose direct generation instead of unnecessary editing workflows, while dialogue, sound, and music stay with the video model for better sync and fewer redundant tool calls.',
