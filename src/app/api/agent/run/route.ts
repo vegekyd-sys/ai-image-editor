@@ -307,6 +307,7 @@ export async function POST(req: NextRequest) {
           skillLaunchContext,
           audioAttachments: ctx.audioAttachments,
           snapshotImages: ctx.snapshotImages,
+          explicitMediaIndices: ctx.explicitMediaIndices,
           currentSnapshotIndex: ctx.currentSnapshotIndex,
           isNsfw,
           userSkills: userSkills.length ? userSkills : undefined,

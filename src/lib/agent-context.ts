@@ -15,6 +15,7 @@ import * as workspace from './workspace';
 import { buildModelHistoryFromRows, type DbToolHistoryRow } from './agentToolHistory';
 import { formatVideoMediaSpec } from './media-aspect';
 import { loadCompositionDraft } from './composition-draft';
+import { resolveExplicitTurnMediaIndices } from './media-provenance';
 import { WorkspaceStudioRunStore } from './studio-run';
 import {
   buildTypedCompactionMessage,
@@ -76,6 +77,8 @@ export interface PromptContextResult {
   recoverableDesignPath?: string;
   /** Project-scoped audio refs available as audio_1, audio_2, ... (not media_N). */
   audioAttachments: AudioAttachmentContext[];
+  /** Timeline media explicitly introduced or referenced by the current user turn. */
+  explicitMediaIndices: number[];
   executionSnapshot?: DurableExecutionSnapshot;
   contextStats: ContextSelectionStats;
   /** Latest persisted input row represented by this context. */
@@ -668,6 +671,15 @@ export async function buildPromptContext(
     const videoUrl = typeof videoMeta?.videoUrl === 'string' ? videoMeta.videoUrl : '';
     return s.type === 'video' && videoUrl ? videoUrl : (s.image_url || '');
   });
+  const explicitMediaIndices = resolveExplicitTurnMediaIndices({
+    totalMediaCount: snapshots.length,
+    userMessage: options.executionRunId
+      ? `${executionObjective}\n${userMessage}`
+      : userMessage,
+    turnMediaCount: options.turnMediaCount,
+    referenceImageCount,
+    uploadedVideoCount,
+  });
   const historyBoundary = [...messages, ...toolHistory]
     .map(row => row.created_at)
     .filter(Boolean)
@@ -682,6 +694,7 @@ export async function buildPromptContext(
     currentDesignPath,
     recoverableDesignPath: recoverableDraft?.path,
     audioAttachments: resolvedAudioAttachments,
+    explicitMediaIndices,
     executionSnapshot,
     contextStats: selectedHistory.stats,
     historyBoundary,

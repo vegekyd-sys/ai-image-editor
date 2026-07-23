@@ -13,10 +13,6 @@ import { deductFixedCredits } from './billing/credits';
 import { deductSeedAudioCredits } from './billing/seed-audio';
 import { createAudio, SEED_AUDIO_AGENT_PROMPT_MAX_CHARS } from './skills/create-audio';
 import { formatAudioCapabilitiesForAgent } from './audio-model-capabilities';
-import {
-  requestsImageConditionedAudio,
-  validateAudioKindForRequest,
-} from './audio-generation-policy';
 import { transcribeWithVolcengineAsr, type VolcengineAsrTranscript, type TranscriptWord } from './volcengine-asr';
 import { buildNarrationCueSheet, type ExpectedNarrationSection } from './narration-cues';
 import { prepareVisualAsset, resolvePreparedVisualAssetById } from './visual-assets/bridge';
@@ -215,6 +211,8 @@ interface AgentContext {
   pendingImageSnapshots?: { snapshotId: string; imageUrl: string; description?: string }[];
   /** All snapshot images (URL preferred, base64 fallback). index 0 = <<<media_1>>> */
   snapshotImages: string[];
+  /** Media Index entries explicitly introduced or referenced by the current user turn. */
+  explicitMediaIndices: number[];
   /** 0-based index of the snapshot the user is currently viewing */
   currentSnapshotIndex: number;
   /** NSFW flag — set when Gemini refuses content. All subsequent calls skip Gemini. */
@@ -232,8 +230,6 @@ interface AgentContext {
   execution?: DurableExecutionRef;
   /** The sole model-facing Agent Run that owns nested workflow invocations. */
   agentRunId?: string;
-  /** Original request used to enforce one-pass mixed audio before provider generation. */
-  userRequest?: string;
 }
 
 interface StudioRunCheckpoint {
@@ -4611,8 +4607,14 @@ ${formatAudioCapabilitiesForAgent()}`,
         kind: z.enum(['voiceover', 'dialogue', 'music', 'sound_design', 'mixed']).describe('Required audio intent. Use mixed whenever one deliverable contains voice plus music/ambience/SFX; this produces every layer in one Seed Audio model generation. Use voiceover only for an intentionally isolated voice-only master.'),
         prompt: z.string().max(SEED_AUDIO_AGENT_PROMPT_MAX_CHARS).describe(`Natural-language description of the audio to create, maximum ${SEED_AUDIO_AGENT_PROMPT_MAX_CHARS} characters before the internal mode wrapper. Include duration, exact speech, mood, instruments, sound effects, voice direction, and constraints directly in this one compact prompt.`),
         duration_seconds: z.number().optional().describe('Requested duration in seconds. Seed Audio supports up to 120 seconds. Also include the duration in the prompt for best results.'),
-        reference_voices: z.array(z.string()).max(3).optional().describe('Up to 3 Audio Index labels such as audio_1, or provider preset voice IDs. The prompt must bind them in order as @audio1, @audio2, and @audio3. Cannot be combined with image_ref.'),
-        image_ref: z.number().int().positive().optional().describe('Optional 1-based Timeline Media image index for image-conditioned audio. Set this only when the user explicitly asks to condition audio on a still image. Never inherit the current or selected media automatically, and never pass a video snapshot. The image must have a public HTTPS URL. Cannot be combined with reference_voices.'),
+        reference_voices: z.array(z.string()).max(3).optional().describe('Up to 3 Audio Index labels such as audio_1, or provider preset voice IDs. The prompt must bind them in order as @audio1, @audio2, and @audio3. Cannot be combined with image conditioning.'),
+        conditioning: z.discriminatedUnion('type', [
+          z.object({ type: z.literal('none') }),
+          z.object({
+            type: z.literal('image'),
+            media_index: z.number().int().positive().describe('1-based Timeline Media image index explicitly introduced or referenced by the current user turn.'),
+          }),
+        ]).optional().describe('Optional structured conditioning. Omit or use {type:"none"} for ordinary audio. Use {type:"image",media_index:N} only for a still image in the current upload batch or explicitly named by the user as @N / <<<media_N>>>. The runtime validates media provenance and never inherits selected Timeline state.'),
         speech_rate: z.number().min(0.5).max(2).optional().describe('Global speech speed multiplier from 0.5 to 2.0. Default 1.0.'),
         loudness_rate: z.number().min(0.5).max(2).optional().describe('Global loudness multiplier from 0.5 to 2.0. Default 1.0; still direct mix priority in the prompt.'),
         pitch_rate: z.number().int().min(-12).max(12).optional().describe('Global pitch shift in integer semitones from -12 to 12. Default 0; avoid extremes.'),
@@ -4626,7 +4628,7 @@ ${formatAudioCapabilitiesForAgent()}`,
         prompt,
         duration_seconds,
         reference_voices,
-        image_ref,
+        conditioning,
         speech_rate,
         loudness_rate,
         pitch_rate,
@@ -4635,32 +4637,31 @@ ${formatAudioCapabilitiesForAgent()}`,
         title,
         model,
       }) => {
-        const audioKindError = validateAudioKindForRequest(ctx.userRequest || '', kind);
-        if (audioKindError) {
-          return { success: false as const, message: audioKindError };
-        }
-        const useExplicitImageConditioning = image_ref != null
-          && requestsImageConditionedAudio(ctx.userRequest || '');
-        if (reference_voices?.length && useExplicitImageConditioning) {
-          return { success: false as const, message: 'Seed Audio reference_voices and image_ref are mutually exclusive.' };
+        const imageMediaIndex = conditioning?.type === 'image'
+          ? conditioning.media_index
+          : undefined;
+        if (reference_voices?.length && imageMediaIndex != null) {
+          return { success: false as const, message: 'Seed Audio reference_voices and image conditioning are mutually exclusive.' };
         }
         const resolvedReferences = resolveSeedAudioReferences(ctx.audioAttachments, reference_voices);
         if (resolvedReferences.error) {
           return { success: false as const, message: resolvedReferences.error };
         }
         let imageUrls: string[] | undefined;
-        // image_ref is optional user-requested conditioning, never selected
-        // Timeline state. Some models populate optional indices from the
-        // current media even for text-only audio revisions; ignore that
-        // accidental value instead of trapping the Agent in a retry loop.
-        if (useExplicitImageConditioning && ctx.snapshotImages.length > 0) {
-          const validated = validateImageIndex(ctx.snapshotImages, image_ref);
+        if (imageMediaIndex != null) {
+          if (!ctx.explicitMediaIndices.includes(imageMediaIndex)) {
+            return {
+              success: false as const,
+              message: `Image conditioning only accepts media introduced or explicitly referenced in the current user turn. Ask the user to attach the still image or name it as @${imageMediaIndex} / <<<media_${imageMediaIndex}>>>; selected Timeline state is never inherited.`,
+            };
+          }
+          const validated = validateImageIndex(ctx.snapshotImages, imageMediaIndex);
           if (validated.error) return { success: false as const, message: validated.error };
           const imageUrl = toPublicStorageUrl(ctx.snapshotImages[validated.idx]);
           if (!/^https:\/\//i.test(imageUrl) || isVideoUrl(imageUrl)) {
             return {
               success: false as const,
-              message: `<<<media_${image_ref}>>> must be a still image with a public HTTPS URL before it can be used by Seed Audio.`,
+              message: `<<<media_${imageMediaIndex}>>> must be a still image with a public HTTPS URL before it can be used by Seed Audio.`,
             };
           }
           imageUrls = [imageUrl];
@@ -4942,6 +4943,7 @@ export interface RunMakaronAgentOptions {
   skillLaunchContext?: SkillLaunchContext;
   audioAttachments?: AudioAttachment[];
   snapshotImages?: string[];
+  explicitMediaIndices?: number[];
   currentSnapshotIndex?: number;
   isNsfw?: boolean;
   userSkills?: ParsedSkill[];
@@ -4970,10 +4972,6 @@ export async function* runMakaronAgent(
 ): AsyncGenerator<AgentStreamEvent> {
   const perf = options?.perf;
   const runtime = createAgentModelRuntime(options?.agentModel, projectId);
-  const userRequestMarker = '[User request — detect language and reply in the same language]\n';
-  const userRequest = prompt.includes(userRequestMarker)
-    ? prompt.slice(prompt.lastIndexOf(userRequestMarker) + userRequestMarker.length)
-    : prompt;
   const ctx: AgentContext = {
     currentImage,
     referenceImages: options?.referenceImages,
@@ -4986,6 +4984,7 @@ export async function* runMakaronAgent(
     audioAttachments: options?.audioAttachments,
     preferredModel: options?.preferredModel,
     snapshotImages: (options?.snapshotImages ?? [currentImage]).filter(img => img.length > 0),
+    explicitMediaIndices: options?.explicitMediaIndices ?? [],
     currentSnapshotIndex: options?.currentSnapshotIndex ?? 0,
     isNsfw: options?.isNsfw,
     userSkills: options?.userSkills,
@@ -4995,7 +4994,6 @@ export async function* runMakaronAgent(
     currentDesignPath: options?.currentDesignPath,
     execution: options?.execution,
     agentRunId: options?.agentRunId || options?.execution?.runId,
-    userRequest,
   };
 
   const allTools = wrapDurableInputAwareTools(

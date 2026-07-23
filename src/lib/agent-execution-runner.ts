@@ -572,6 +572,7 @@ export async function runAgentExecutionAttempt(
         skillLaunchContext: request.skillLaunchContext,
         audioAttachments: ctx.audioAttachments,
         snapshotImages: ctx.snapshotImages,
+        explicitMediaIndices: ctx.explicitMediaIndices,
         currentSnapshotIndex: ctx.currentSnapshotIndex,
         isNsfw: request.isNsfw,
         userSkills: userSkills.length ? userSkills : undefined,
