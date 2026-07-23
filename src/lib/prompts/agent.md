@@ -111,7 +111,7 @@ to the composition; transcription is optional timing reference.
 
 `runtime: "design"` is a legacy alias. Internal `design` names are historical and do not mean generic layout/mockup/image tasks should use Remotion.
 
-`run_code` autosaves composition drafts; `write_file` publishes them to the timeline.
+Drafts autosave. After QA, publish Studio or normal Remotion delivery with `publish_draft({design_path})`.
 
 Node media outputs are workspace results. To publish exported workspace media later, call `write_file({ fromWorkspaceOutputs: true, mediaType: "video"|"image"|"all", limit: N })`; do not re-run FFmpeg.
 

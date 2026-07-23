@@ -5,7 +5,7 @@ description: >
   feature, company, or process. Use Makaron's current Remotion composition
   runtime with design references, synced subtitles, voiceover, generated
   sound design, and optional generated media/sticker overlays.
-allowed-tools: read_file studio_run prepare_visual_asset run_code write_file preview_frame materialize_media list_voiceover_voices generate_voiceover transcribe_audio generate_audio generate_music generate_image analyze_image analyze_video
+allowed-tools: read_file studio_run prepare_visual_asset run_code write_file publish_draft preview_frame materialize_media list_voiceover_voices generate_voiceover transcribe_audio generate_audio generate_music generate_image analyze_image analyze_video
 metadata:
   makaron:
     icon: "🎙️"
@@ -151,8 +151,9 @@ wrong or expensive.
    When audio is promised, voiceover/music must be present in this manifest;
    do not close Assets before generating them.
 14. Build the video with `run_code({ runtime: "composition" })`.
-15. Save the draft with `write_file({ fromLastRunCode: true, publish: false })`,
-   and run the Composition draft gate before publishing or exporting. Calculate
+15. Use the durable autosaved `design_path` returned by `run_code` or the
+   numbered composition workspace, and run the Composition draft gate before
+   publishing or exporting. Calculate
    the exact expected frame count, confirm the scene timeline covers it, inspect
    every scene boundary plus the final visible frame with batched
    `preview_frame` calls, and confirm all required audio props contain real URLs.
@@ -174,8 +175,9 @@ wrong or expensive.
    and `run_code` patch mode on the exact draft until visual, timing, subtitle,
    audio, transition, and ending issues are resolved. Do not author a separate
    Review JSON artifact.
-17. Publish that exact gated draft once. Do not publish an older timeline
-   snapshot or use its `media_index` as the export source.
+17. Publish that exact gated draft once with
+   `publish_draft({ design_path: "<exact-gated-path>" })`. Do not publish an
+   older timeline snapshot or use its `media_index` as the export source.
 18. Materialize the exact gated `design_path` once with
    `materialize_media({ design_path, profile: "source", wait: true })` when the
    locked promise is source resolution. In Studio Run this call waits for the

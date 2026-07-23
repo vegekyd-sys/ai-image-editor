@@ -241,6 +241,10 @@ describe('agent terminal semantics', () => {
     })).toBe(true);
     expect(shouldStopAfterDurablePublishToolStep({
       durableExecution: true,
+      toolResults: [{ toolName: 'publish_draft', output: { success: true, published: true, artifactType: 'design' } }],
+    })).toBe(true);
+    expect(shouldStopAfterDurablePublishToolStep({
+      durableExecution: true,
       toolResults: [{ toolName: 'write_file', output: { success: true, published: [{ type: 'video' }] } }],
     })).toBe(true);
     expect(shouldStopAfterDurablePublishToolStep({
@@ -262,6 +266,11 @@ describe('agent terminal semantics', () => {
       durableExecution: true,
       requiresMaterializedVideo: true,
       toolResults: [{ toolName: 'write_file', output: { success: true, published: true, artifactType: 'design' } }],
+    })).toBe(false);
+    expect(shouldStopAfterDurablePublishToolStep({
+      durableExecution: true,
+      requiresMaterializedVideo: true,
+      toolResults: [{ toolName: 'publish_draft', output: { success: true, published: true, artifactType: 'design' } }],
     })).toBe(false);
     expect(shouldStopAfterDurablePublishToolStep({
       durableExecution: true,

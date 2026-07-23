@@ -27,7 +27,7 @@ an executable Makaron timeline.
 
 When the user asks to put two existing timeline videos together, cut clips freely, add transitions, add subtitles, or make a sequence that can be edited later, this is the default runtime. Use Remotion `<Sequence>` and `<Video>` rather than FFmpeg.
 
-Do not fall back to FFmpeg/node for ordinary timeline splicing just because a preview needs adjustment or the first composition attempt is imperfect. Patch the Remotion composition, save/publish the editable composition, or report the preview issue. Use FFmpeg only when the user explicitly asks for a real file-level MP4 operation/export.
+Do not fall back to FFmpeg/node for ordinary timeline splicing just because a preview needs adjustment or the first composition attempt is imperfect. Patch the Remotion composition, promote the reviewed editable composition with `publish_draft({ design_path })`, or report the preview issue. Use FFmpeg only when the user explicitly asks for a real file-level MP4 operation/export.
 
 For timeline media, put the literal 1-based `<<<media_N>>>` marker in props or code, including `props.clipA`, `<Img src>`, and `<Video src>`. `run_code` resolves every marker to the current URL before validation, autosave, preview, and export. Never manually translate Media Index N to `ctx.snapshotImages[N]`: Media Index is 1-based while that JavaScript array is 0-based, so manual indexing shifts every image and makes the final item undefined.
 
@@ -206,3 +206,4 @@ After render or patch:
 - For trim edits, verify the final `animation.durationInSeconds` matches the actual total frame count before saving or publishing.
 - Capture stable middle frames for each scene, not transition starts.
 - Check subject cropping, text readability, overlay placement, and final frame content.
+- When the user should receive an editable composition, call `publish_draft` with the exact persisted `design_path` after QA. A draft preview is not a published timeline Snapshot. `materialize_media({ publish: true })` publishes the MP4 only and does not replace this step.

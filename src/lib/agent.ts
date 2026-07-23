@@ -88,6 +88,7 @@ import {
 } from './locales';
 import { getSkillLaunchSystemDirective, shouldContinueSkillVideoSubmission, type SkillLaunchContext } from './skill-launch-context';
 import { buildAgentOutputLanguageDirective } from './agent-response-policy';
+import { stableDraftPromotionSnapshotId } from './draft-promotion';
 
 const MAX_VIDEO_DIMENSION_PROBE_BYTES = 220 * 1024 * 1024;
 
@@ -313,7 +314,7 @@ export type AgentStreamEvent =
   | { type: 'reasoning'; text: string }  // extended thinking delta
   | { type: 'coding'; text: string }  // tool-input-delta heartbeat — Agent writing code params
   | { type: 'code_stream'; text: string; done?: boolean }  // run_code code streamed in chunks (avoids large SSE events on iOS)
-  | { type: 'render'; code: string; width: number; height: number; props?: Record<string, unknown>; animation?: { fps: number; durationInSeconds: number; format?: string }; editables?: import('@/types').EditableField[]; published?: boolean; previewUrl?: string }  // Agent React design for browser rendering
+  | { type: 'render'; code: string; width: number; height: number; props?: Record<string, unknown>; animation?: { fps: number; durationInSeconds: number; format?: string }; editables?: import('@/types').EditableField[]; description?: string; snapshotId?: string; sourceDesignPath?: string; published?: boolean; previewUrl?: string }  // Agent React design for browser rendering
   | { type: 'design'; code: string; width: number; height: number; props?: Record<string, unknown>; animation?: { fps: number; durationInSeconds: number; format?: string }; editables?: import('@/types').EditableField[]; published?: boolean }  // @deprecated — backward compat alias for 'render'
   | { type: 'music_task'; taskId: string }  // emitted when generate_music tool creates a task — frontend polls
   | {
@@ -1293,7 +1294,7 @@ async function buildSystemPrompt(userSkills?: ParsedSkill[], supabase?: any, use
 
 You have a persistent workspace for skills and files.
 
-Tools: \`list_files\`, \`read_file\`, \`write_code_file\`, \`write_file\`, \`delete_file\`, \`run_code\`
+Tools: \`list_files\`, \`read_file\`, \`write_code_file\`, \`write_file\`, \`delete_file\`, \`run_code\`, \`publish_draft\`
 
 ### File organization
 - **User-level** (shared across projects): \`skills/\`, \`memory/\`
@@ -2387,7 +2388,7 @@ Operations:
 - schema: return the JSON Schema for a requested stage before authoring its artifact.
 - validate: validate a stage artifact without persisting it.
 - invalidate: deliberately reopen a stage and invalidate only its downstream dependents.
-Review means previewing and patching the Remotion source before export, not authoring a Review artifact. After Composition is persisted and visually satisfactory, call materialize_media once with the final design path. A successful export automatically completes the Review and Delivery UI states. Never author Review or Delivery JSON.`,
+Review means previewing and patching the Remotion source before export, not authoring a Review artifact. After Composition is persisted and visually satisfactory, call publish_draft once with the final design path so the editable result is durable. Then call materialize_media with the same path only when MP4 Delivery is requested. A successful export automatically completes the Review and Delivery UI states. Never author Review or Delivery JSON.`,
       inputSchema: z.object({
         operation: z.enum(['start', 'put_creative_packet', 'put_artifact', 'put_artifacts', 'approve', 'status', 'invalidate', 'schema', 'validate']),
         run_id: z.string().optional(),
@@ -2581,7 +2582,7 @@ Review means previewing and patching the Remotion source before export, not auth
           );
           const materializeNextAction = (candidate: NonNullable<typeof run>) => (
             isAutomaticStage(candidate.currentStage)
-              ? 'Review the Remotion source by previewing and patching it. When satisfied, call materialize_media once with the final design_path; successful export completes Review and Delivery automatically.'
+              ? 'Review the Remotion source by previewing and patching it. When satisfied, call publish_draft once with the exact final design_path so the editable composition is durable in the timeline. Then call materialize_media once with that same design_path only when MP4 Delivery is requested; successful export completes Review and Delivery automatically.'
               : undefined
           );
 
@@ -2611,7 +2612,7 @@ Review means previewing and patching the Remotion source before export, not auth
             if (!schemaStage) return { success: false, error: 'validate requires stage when the run is complete' };
             if (artifact === undefined) return { success: false, error: 'validate requires artifact' };
             if (isAutomaticStage(schemaStage)) {
-              return { success: false, error: 'Review and Delivery do not accept Agent-authored artifacts. Patch Remotion code, then call materialize_media once.' };
+              return { success: false, error: 'Review and Delivery do not accept Agent-authored artifacts. Patch Remotion code, publish the gated design_path with publish_draft, then call materialize_media once when MP4 Delivery is requested.' };
             }
             const validated = studio.validateStudioArtifact(schemaStage, artifact);
             if (schemaStage === 'storyboard') await assertStoryboardNarrationTiming(validated);
@@ -2694,7 +2695,7 @@ Review means previewing and patching the Remotion source before export, not auth
           if (operation === 'put_artifact') {
             if (artifact === undefined) return { success: false, error: 'put_artifact requires artifact' };
             if (isAutomaticStage(stage)) {
-              return { success: false, error: 'Review and Delivery are automatic. Patch the Remotion source during review, then call materialize_media once.' };
+              return { success: false, error: 'Review and Delivery are automatic. Patch the Remotion source during review, publish the gated design_path with publish_draft, then call materialize_media once when MP4 Delivery is requested.' };
             }
             if (stage === 'storyboard') await assertStoryboardNarrationTiming(artifact);
             if (stage === 'assets') await assertAssetsUseVisualBridge(artifact);
@@ -2778,11 +2779,110 @@ Review means previewing and patching the Remotion source before export, not auth
       },
     }),
 
+    publish_draft: tool({
+      description: `Publish one durable editable Remotion composition draft into the project timeline.
+This is the current promotion path for both Studio and non-Studio compositions. Pass the exact persisted design_path returned by composition autosave, the numbered composition workspace, or Studio Composition. The tool reloads that path from workspace, validates the design, and publishes a real editable design Snapshot without exporting MP4.
+Call this explicitly after visual QA when the user should receive an editable composition. In Studio Run, publish the exact gated Composition once before waiting at Review or starting MP4 Delivery. Outside Studio Run, use it before claiming an editable Remotion result is delivered. Do not use legacy write_file({fromLastRunCode:true}) for durable or resumed runs.
+The same Agent Run and design_path resolve to the same Snapshot ID, so a retry or revision updates the same promoted draft instead of creating duplicates. This tool never runs automatically; omit it only when the user explicitly asks to keep the draft private/unpublished.`,
+      inputSchema: z.object({
+        design_path: z.string().min(1).describe('Exact persisted workspace design JSON path returned by composition autosave or Studio Composition.'),
+        name: z.string().optional().describe('Short user-facing description for the editable draft.'),
+      }),
+      execute: async ({ design_path, name }) => {
+        if (!ctx.supabase || !ctx.userId) {
+          return { success: false, error: 'publish_draft requires an authenticated project workspace.' };
+        }
+        try {
+          const file = await workspace.readFile(design_path, ctx.supabase, ctx.userId);
+          if (!file) {
+            return { success: false, error: `Editable composition was not found at ${design_path}.` };
+          }
+          let rawDesign: Record<string, unknown>;
+          try {
+            rawDesign = JSON.parse(file.content) as Record<string, unknown>;
+          } catch {
+            return { success: false, error: `Editable composition at ${design_path} is not valid JSON.` };
+          }
+          const design = rawDesign as unknown as DesignPayload;
+          if (
+            !design
+            || typeof design.code !== 'string'
+            || !design.code.trim()
+            || !Number.isFinite(design.width)
+            || !Number.isFinite(design.height)
+          ) {
+            return { success: false, error: `Editable composition at ${design_path} is missing code or dimensions.` };
+          }
+          if (rawDesign.__makaronScaffold === true) {
+            return { success: false, error: 'Structural composition scaffolds cannot be published. Finish the numbered composition workspace first.' };
+          }
+          const harnessError = validateDesign({ code: design.code, props: design.props });
+          if (harnessError) {
+            return { success: false, error: `Editable composition cannot be published: ${harnessError}` };
+          }
+
+          const studioCheckpoint = await getStudioRunCheckpoint(ctx);
+          if (studioCheckpoint.studioRunId) {
+            const studio = await import('./studio-run');
+            const store = new studio.WorkspaceStudioRunStore(ctx.supabase, ctx.userId);
+            const activeRun = await store.loadRun(ctx.projectId, studioCheckpoint.studioRunId);
+            if (!activeRun || activeRun.agentRunId !== ctx.agentRunId) {
+              return { success: false, error: 'The active Studio workflow could not be verified for this Agent Run.' };
+            }
+            const compositionRef = activeRun.artifacts.composition;
+            if (activeRun.stages.composition.status !== 'completed' || !compositionRef) {
+              return {
+                success: false,
+                error: `Studio draft promotion requires a completed Composition artifact. Persist the gated composition first with studio_run({ operation: "put_artifact", stage: "composition", artifact: { ... , designPath: "${design_path}" } }), then call publish_draft again with this exact path.`,
+              };
+            }
+            const compositionFile = await workspace.readFile(compositionRef.path, ctx.supabase, ctx.userId);
+            if (!compositionFile) {
+              return { success: false, error: `Studio Composition artifact was not found at ${compositionRef.path}.` };
+            }
+            const compositionArtifact = JSON.parse(compositionFile.content) as Record<string, unknown>;
+            if (compositionArtifact.designPath !== design_path) {
+              return {
+                success: false,
+                error: `publish_draft design_path must match the persisted Studio Composition. Expected ${String(compositionArtifact.designPath || '')}, received ${design_path}.`,
+              };
+            }
+          }
+
+          const snapshotId = stableDraftPromotionSnapshotId({
+            projectId: ctx.projectId,
+            agentRunId: ctx.agentRunId || ctx.execution?.runId,
+            designPath: design_path,
+          });
+          const promotedDesign = {
+            ...design,
+            description: name || (typeof rawDesign.description === 'string' ? rawDesign.description : '') || 'Editable Remotion composition',
+          };
+          (ctx as any).__pendingDesign = promotedDesign;
+          (ctx as any).__pendingDesignPublished = true;
+          (ctx as any).__pendingDesignSnapshotId = snapshotId;
+          (ctx as any).__pendingDesignSourcePath = design_path;
+          (ctx as any).__lastDesignPayload = promotedDesign;
+          (ctx as any).__lastSavedDraftPath = design_path;
+          return {
+            success: true,
+            published: true,
+            artifactType: 'design',
+            snapshotId,
+            designPath: design_path,
+            message: `Published editable composition draft from ${design_path}.`,
+          };
+        } catch (error) {
+          return { success: false, error: error instanceof Error ? error.message : String(error) };
+        }
+      },
+    }),
+
     materialize_media: tool({
       description: `Export an editable Remotion composition into a real MP4 video.
 Use this when the user asks to save/export/materialize/turn a composition into MP4. It accepts a timeline media_index, snapshot_id, design_path, or the current unsaved composition from run_code.
 Default profile is fast_720p (short side 720, no upscale) for speed. Default publish=true so the exported MP4 appears as a new <<<media_N>>> video. A completed synchronous export returns the exact mediaIndex for subsequent analyze_video/preview_frame calls; use that returned index instead of guessing. By default the tool queues a durable async export like video generation; polling/cron completes it and reports either success or failure. Set wait=true on the first call when the current response must include the final URL. A repeated call for the same unchanged composition reuses the fingerprint-matched queued/completed job and does not render twice. If the same unchanged composition fails twice in one turn, stop retrying and report export as blocked.
-For Studio Run, first preview and patch the Remotion source until it is satisfactory, then call materialize_media once with the exact final design_path. Studio Run automatically waits at source resolution; successful export is terminal and completes the Review and Delivery UI states. Do not author Review/Delivery artifacts or continue reviewing after success.`,
+For Studio Run, first preview and patch the Remotion source until it is satisfactory, call publish_draft once with the exact final design_path, then call materialize_media once with that same path when MP4 Delivery is requested. Studio Run automatically waits at source resolution; successful export is terminal and completes the Review and Delivery UI states. materialize_media publishes the MP4, not the editable draft. Do not author Review/Delivery artifacts or continue reviewing after success.`,
       inputSchema: z.object({
         media_index: z.number().optional().describe('1-based media index, e.g. 3 for <<<media_3>>>. Must point to an editable Remotion composition.'),
         snapshot_id: z.string().optional().describe('Snapshot ID of an editable Remotion composition.'),
@@ -3540,8 +3640,8 @@ Use this for substantial programmable video or media work: write the executable 
     write_file: tool({
       description: `Write a file to your workspace. Use this to save memory, create skills, or organize your workspace.
 For durable Composition work, write numbered source parts under \`<project-id>/drafts/composition-parts/\` one cohesive component per model step and wait for each result. Filenames MUST use a numeric prefix of at least two digits plus a slug, for example \`00-foundation.js\`, \`10-scenes-a.js\`, \`90-root.js\`, or \`120-chapter.js\`. Include compositionMetadata on the first part (and again only when metadata changes) so dimensions, props, editables, and animation remain durable without a final assembly call. Each part has a hard transport limit of 12000 source characters; focused parts around 3000-8000 characters are preferred, but visual detail must decide the size. There is no aggregate source-size or part-count limit. Parts share one scope: do not use import/export. Rewriting the same numbered path is retry-safe. Never shorten approved narration, subtitles, scenes, animation, or visual detail to reduce source size. If one unusually large part exceeds 12000, split that component across new numbered files; renaming unchanged oversized source will still fail. The workspace automatically assembles, validates, and autosaves the complete draft after every successful part write. compositionWorkspace.status="ready" means the current files compile mechanically; it is not permission to omit planned scenes or polish. Finish every planned part, repair any diagnostics, then preview the returned designPath. Do not call run_code merely to assemble files.
-Set fromLastRunCode=true to save the last run_code output.
-Composition runtime: publish=false saves the draft code only; default publish=true saves and publishes a timeline Snapshot.
+Legacy compatibility only: fromLastRunCode=true can save an in-memory run_code output within the same attempt. Do not use it to publish durable or resumed Composition drafts; use publish_draft with the exact persisted design_path.
+Composition source writes and numbered parts autosave a private draft. publish_draft is the explicit timeline promotion action.
 Node media runtime: \`type: "files"\` outputs are already saved workspace files. If they are user-facing MP4 deliverables from split/trim/export/transcode, publish them with fromWorkspaceOutputs before final reply. \`type: "video"\` is a single final MP4 and can be published with write_file. Do not use node/FFmpeg as a fallback for ordinary editable timeline splicing of existing videos; patch or publish the Remotion composition instead.
 Set fromWorkspaceOutputs=true to publish recent workspace image/video outputs to the timeline. Use this immediately after direct FFmpeg deliverables, or later when the user says "publish the videos/images you just exported"; do not re-run FFmpeg.
 Path is auto-generated from the current project and output type. Just provide a short name.`,
@@ -3549,7 +3649,7 @@ Path is auto-generated from the current project and output type. Just provide a 
         path: z.string().optional().describe('File path. Auto-generated when fromLastRunCode=true (just pass name for the slug).'),
         name: z.string().optional().describe('Short descriptive name for the saved code (e.g. "sunset-poster"). Used with fromLastRunCode.'),
         content: z.string().optional().describe('File content. Not needed if fromLastRunCode=true.'),
-        fromLastRunCode: z.boolean().optional().describe('Save the last run_code output. Composition drafts can publish to timeline; node media chunks should usually be save-only until the final MP4.'),
+        fromLastRunCode: z.boolean().optional().describe('Legacy same-attempt compatibility only. For durable Composition promotion use publish_draft({design_path}).'),
         fromWorkspaceOutputs: z.boolean().optional().describe('Publish recent workspace image/video outputs to the timeline instead of writing text/code. Use immediately for user-facing FFmpeg split/trim/export MP4 outputs, and for previously exported outputs across turns. Prefer exact workspace paths returned by run_code/list_files; never guess a workspace URL from a file name.'),
         workspacePaths: z.array(z.string()).optional().describe('Specific workspace file paths to publish. If omitted with fromWorkspaceOutputs=true, publishes the most recent project media outputs.'),
         mediaType: z.enum(['image', 'video', 'all']).optional().describe('Filter workspace outputs when publishing. Default all.'),
@@ -4137,7 +4237,7 @@ Node media runtime provides \`require\`, \`process\`, \`ffmpegPath\`, \`inputFil
             return null;
           };
 
-          // Helper: store image — sharp images auto-send, design drafts need write_file to publish
+          // Helper: store image — sharp images auto-send; durable design drafts use publish_draft.
           const pushImage = (b64: string, mime: string, isDraft = false) => {
             const dataUrl = `data:${mime};base64,${b64}`;
             ctx.currentImage = dataUrl;
@@ -4221,7 +4321,7 @@ Node media runtime provides \`require\`, \`process\`, \`ffmpegPath\`, \`inputFil
             (ctx as any).__lastRunCode = JSON.stringify(patched, null, 2);
             (ctx as any).__lastSavedDraftPath = autosave.path;
 
-            // Track draft for potential later publish via write_file
+            // Track draft for local preview; durable promotion uses its autosaved design path.
             if (!(ctx as any).__runCodeDrafts) (ctx as any).__runCodeDrafts = [];
 
             // Update last draft (patch updates existing draft, doesn't create new one)
@@ -4234,7 +4334,7 @@ Node media runtime provides \`require\`, \`process\`, \`ffmpegPath\`, \`inputFil
 
             const draftIdx = drafts.length;
             const patchSource = result.code_path ? ` from ${result.code_path}` : '';
-            return { type: 'text' as const, code_path: autosave.path, content: `Patched${patchSource} — draft ${draftIdx} autosaved to ${autosave.path}. If this changed trim timing, confirm animation.durationInSeconds matches the final frame count. If this changed transitions, subtitles, overlays, trim timing, cropping, or will be published, call preview_frame before telling the user it is complete. Use write_file({ fromLastRunCode: true, name: "slug" }) only when publishing a timeline snapshot or creating a named checkpoint.` };
+            return { type: 'text' as const, code_path: autosave.path, content: `Patched${patchSource} — draft ${draftIdx} autosaved to ${autosave.path}. If this changed trim timing, confirm animation.durationInSeconds matches the final frame count. If this changed transitions, subtitles, overlays, trim timing, cropping, or will be published, call preview_frame before telling the user it is complete. After QA, use publish_draft({ design_path: "${autosave.path}" }) when the editable composition should appear in the timeline.` };
           }
 
           // { type: 'render' (or legacy 'design'), code: '...' } — Store for event loop to emit as SSE
@@ -4308,14 +4408,14 @@ Node media runtime provides \`require\`, \`process\`, \`ffmpegPath\`, \`inputFil
             (ctx as any).__lastRunCode = JSON.stringify(designPayload, null, 2);
             (ctx as any).__lastSavedDraftPath = autosave.path;
 
-            // Track draft for potential later publish via write_file
+            // Track draft for local preview; durable promotion uses its autosaved design path.
             if (!(ctx as any).__runCodeDrafts) (ctx as any).__runCodeDrafts = [];
 
             // Push new draft (no auto-screenshot — Agent uses preview_frame tool to check)
             (ctx as any).__runCodeDrafts.push({ type: 'design', payload: designPayload, codePath: autosave.path });
             const draftIdx = (ctx as any).__runCodeDrafts.length;
 
-            return { type: 'text' as const, code_path: autosave.path, content: `Composition ready — draft ${draftIdx} autosaved to ${autosave.path}. If this changed trim timing, confirm animation.durationInSeconds matches the final frame count. If this includes transitions, subtitles, overlays, trim timing, cropping, or will be published, call preview_frame with design_path if the run resumes later. Use write_file({ fromLastRunCode: true, name: "<descriptive-slug>" }) only to publish a timeline snapshot or create a named checkpoint.` };
+            return { type: 'text' as const, code_path: autosave.path, content: `Composition ready — draft ${draftIdx} autosaved to ${autosave.path}. If this changed trim timing, confirm animation.durationInSeconds matches the final frame count. If this includes transitions, subtitles, overlays, trim timing, cropping, or will be published, call preview_frame with design_path if the run resumes later. After QA, use publish_draft({ design_path: "${autosave.path}" }) when the editable composition should appear in the timeline.` };
           }
 
           // Helper: handle sharp image result — auto-sends to frontend (no draft/publish needed)
@@ -4683,6 +4783,7 @@ const DURABLE_IDEMPOTENT_TOOLS = new Set([
 const DURABLE_INPUT_GUARDED_TOOLS = new Set([
   ...DURABLE_IDEMPOTENT_TOOLS,
   'studio_run',
+  'publish_draft',
   'write_file',
   'write_code_file',
   'run_code',
@@ -5850,23 +5951,40 @@ export async function* runMakaronAgent(
           }
         }
 
-        // run_code / write_file output handling — emit design SSE with published flag
-        if (toolName === 'run_code' || toolName === 'write_file') {
+        // Composition output handling — emit design SSE with published flag.
+        if (toolName === 'run_code' || toolName === 'write_file' || toolName === 'publish_draft') {
           // Design output stored in ctx.__pendingDesign → emit as SSE event
           const pendingDesign = (ctx as any).__pendingDesign;
           if (pendingDesign) {
             const published = (ctx as any).__pendingDesignPublished ?? false;
+            const snapshotId = (ctx as any).__pendingDesignSnapshotId as string | undefined;
+            const sourceDesignPath = (ctx as any).__pendingDesignSourcePath as string | undefined;
             // Get preview URL from latest draft (if available)
             const drafts = (ctx as any).__runCodeDrafts as { previewUrl?: string }[] | undefined;
             const previewUrl = drafts?.[drafts.length - 1]?.previewUrl || undefined;
             console.log(`🎨 [agent] emitting render SSE (published=${published}): ${pendingDesign.width}x${pendingDesign.height}, code ${pendingDesign.code?.length} chars${previewUrl ? ', preview: ' + previewUrl.slice(-40) : ''}`);
-            yield { type: 'render', code: pendingDesign.code, width: pendingDesign.width, height: pendingDesign.height, props: pendingDesign.props, animation: pendingDesign.animation, editables: pendingDesign.editables, published, previewUrl };
+            yield {
+              type: 'render',
+              code: pendingDesign.code,
+              width: pendingDesign.width,
+              height: pendingDesign.height,
+              props: pendingDesign.props,
+              animation: pendingDesign.animation,
+              editables: pendingDesign.editables,
+              description: pendingDesign.description,
+              snapshotId,
+              sourceDesignPath,
+              published,
+              previewUrl,
+            };
             if (published) {
               finalStepDeliveredArtifact = true;
               attemptDeliveredArtifact = true;
             }
             (ctx as any).__pendingDesign = null;
             (ctx as any).__pendingDesignPublished = undefined;
+            (ctx as any).__pendingDesignSnapshotId = undefined;
+            (ctx as any).__pendingDesignSourcePath = undefined;
           } else if (toolName === 'run_code') {
             console.log(`🔍 [agent] run_code result: no __pendingDesign found`);
           }
@@ -6061,7 +6179,7 @@ export async function* runMakaronAgent(
           : '';
         const recoveryInstruction = textOnlyRecovery
           ? 'A finished artifact was already delivered in the previous step. Do not call any tool, regenerate, republish, or create another task. Only provide the concise final reply for the existing delivered result.'
-          : skillVideoRecovery || `Continue from the existing tool results and saved draft; do not restart from the original media.${savedDraftPath ? ` The exact saved draft path is: ${savedDraftPath}.` : ''}${streamedCheckpoint?.streamedCodePath ? ` Partial streamed code was saved at ${streamedCheckpoint.streamedCodePath} (${streamedCheckpoint.streamedCodeChars || 0} chars); read it once and salvage useful components.` : ''}${studioRecovery}${compositionRecovery}${recoveryBlockedTools.size ? ` Do not repeat these already-completed tools: ${[...recoveryBlockedTools].join(', ')}; use their existing results.` : ''} Complete the pending modification you already planned. If the user requested a finished artifact, publish the updated artifact before your concise final reply.`;
+          : skillVideoRecovery || `Continue from the existing tool results and saved draft; do not restart from the original media.${savedDraftPath ? ` The exact saved draft path is: ${savedDraftPath}. If the user should receive an editable composition, call publish_draft with this exact design_path after QA; do not use fromLastRunCode.` : ''}${streamedCheckpoint?.streamedCodePath ? ` Partial streamed code was saved at ${streamedCheckpoint.streamedCodePath} (${streamedCheckpoint.streamedCodeChars || 0} chars); read it once and salvage useful components.` : ''}${studioRecovery}${compositionRecovery}${recoveryBlockedTools.size ? ` Do not repeat these already-completed tools: ${[...recoveryBlockedTools].join(', ')}; use their existing results.` : ''} Complete the pending modification you already planned. If the user requested a finished artifact, publish the updated artifact before your concise final reply.`;
         attemptMessages = [
           ...attemptMessages,
           ...responseMessages,
