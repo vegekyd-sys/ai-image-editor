@@ -5,6 +5,7 @@ const SUPPORTING_AUDIO_PATTERN = /\b(?:music|soundtrack|score|bgm|ambience|ambie
 const ISOLATED_VOICE_PATTERN = /\b(?:voice[\s-]?only|dry voice|isolated voice|no music|without music|no soundtrack|without soundtrack|no sfx|without sfx)\b|纯旁白|仅旁白|只要旁白|只生成人声|干声|不要音乐|不需要音乐|无配乐|不要音效/i
 const NO_VOICE_PATTERN = /\b(?:music[\s-]?only|instrumental only|no voice|without voice|no narration|without narration|no dialogue|without dialogue)\b|纯音乐|仅音乐|不要旁白|无需旁白|无人声|不要人声|无对白/i
 const IMAGE_CONDITIONING_PATTERN = /\b(?:image[-\s]?(?:conditioned|guided)|reference image|image_ref|use (?:this|that|the) image)\b|看图|根据.{0,12}(?:图片|图像)|参考.{0,12}(?:图片|图像)|用.{0,12}(?:图片|图像).{0,12}(?:生成|制作|配音|声音|音频)/i
+const NO_IMAGE_CONDITIONING_PATTERN = /\b(?:no|without|do not use|don't use)\s+(?:image[-\s]?conditioning|image_ref|reference image)\b|(?:不要|无需|不使用).{0,8}(?:image_ref|图片条件|图片参考|图像条件|图像参考)/i
 
 /**
  * Detects when one requested soundtrack contains both speech and supporting
@@ -23,7 +24,9 @@ export function requiresUnifiedMixedAudio(request: string): boolean {
  * currently selected Timeline media or a model-defaulted index.
  */
 export function requestsImageConditionedAudio(request: string): boolean {
-  return IMAGE_CONDITIONING_PATTERN.test(request.trim())
+  const normalized = request.trim()
+  if (NO_IMAGE_CONDITIONING_PATTERN.test(normalized)) return false
+  return IMAGE_CONDITIONING_PATTERN.test(normalized)
 }
 
 export function validateAudioKindForRequest(

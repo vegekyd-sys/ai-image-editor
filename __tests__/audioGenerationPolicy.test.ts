@@ -26,5 +26,7 @@ describe('unified Seed Audio generation policy', () => {
     expect(requestsImageConditionedAudio('Use this image to guide the soundtrack')).toBe(true)
     expect(requestsImageConditionedAudio('只把当前统一音轨的音乐调大一点')).toBe(false)
     expect(requestsImageConditionedAudio('Keep the existing video and regenerate its audio mix')).toBe(false)
+    expect(requestsImageConditionedAudio('不要使用 image_ref，只重做统一音轨')).toBe(false)
+    expect(requestsImageConditionedAudio('Regenerate without image conditioning')).toBe(false)
   })
 })
