@@ -30,6 +30,10 @@ describe('agent terminal contract wiring', () => {
     expect(agentSource).toContain('shouldContinueActiveStudioRun({');
     expect(agentSource).toContain('completionRequested: studioCompletionRequested');
     expect(agentSource).toContain('options?.execution?.objective');
+    expect(agentSource).toContain('options?.execution?.latestInput');
+    expect(agentSource).toContain('wrapDurableInputAwareTools(');
+    expect(agentSource).toContain("currentInputVersion > ctx.execution!.inputVersion");
+    expect(agentSource).toContain("errorCode: 'agent_input_received'");
     expect(agentSource).toContain('requestsMaterializedVideo(durableObjective)');
     expect(agentSource).toContain('An active Studio Run is persisted workflow state');
     expect(agentSource).toContain('shouldCompleteDurableStudioRun({');
@@ -95,7 +99,9 @@ describe('agent terminal contract wiring', () => {
     expect(agentContextSource).not.toContain('tailModelHistoryAtomically(rebuiltHistory, 16)');
     expect(agentSource.indexOf('if (assessment.ok) break;')).toBeLessThan(agentSource.indexOf("yield { type: 'done' }"));
     expect(executionRunnerSource).toContain('runAgentExecutionAttempt');
-    expect(executionRunnerSource).toContain('objective: run.objective || claim.objective || run.prompt || undefined');
+    expect(executionRunnerSource).toContain('objective: previousSnapshot?.objective || run.objective || claim.objective || run.prompt || undefined');
+    expect(executionRunnerSource).toContain('latestInput: pendingInputs[pendingInputs.length - 1]?.content');
+    expect(executionRunnerSource).toContain('inputVersion: inputVersionAtAttemptStart');
     expect(executionRunnerSource).toContain("status: 'handed_off'");
     expect(executionRunnerSource).toContain('next_attempt_at: new Date().toISOString()');
     expect(executionRunnerSource).toContain("? 'deepseek-v4-pro'");

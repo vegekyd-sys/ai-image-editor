@@ -35,6 +35,13 @@ Agent Run
    instruction arrived while the model was working.
 6. Legacy Studio records without `agentRunId` remain readable for project UI,
    but a new Agent Run must never adopt or mutate them.
+7. Before every durable Studio mutation, preview, publish, or media
+   materialization, the attempt compares its claimed `input_version` with the
+   Agent Run. A newer instruction forces a handoff before the old target can
+   produce another side effect.
+8. A running Studio workflow does not itself keep an Agent Run alive. When the
+   newest instruction pauses export or waits for review, the Agent Run may
+   complete while the Studio workflow remains durably at Review.
 
 ## Runtime admission
 
@@ -64,3 +71,8 @@ that path does not define an independent execution lifecycle.
 4. Restarting the worker resumes Agent Run A and its bound Studio stage.
 5. A legacy unbound Studio record is never automatically selected by a new
    Agent Run.
+6. If A originally targets an MP4 and a queued instruction changes the target
+   to "leave the editable draft at Review", no materialization or Delivery
+   mutation occurs after that input version is observed.
+7. The Agent Run completes after reporting the reviewable draft, while the
+   nested Studio workflow remains resumable at Review.

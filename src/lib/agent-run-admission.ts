@@ -32,7 +32,7 @@ export function formatPendingAgentInputs(inputs: PendingAgentInput[]): string {
   return [
     '[New instructions received during this Agent Run]',
     ...inputs.map((input, index) => `${index + 1}. ${input.content.trim()}`),
-    'Treat these as new inputs to the same objective and workflow invocation. Preserve completed work and artifacts; do not start or adopt another Studio workflow.',
+    'Treat these as new inputs to the same objective and workflow invocation. The newest instruction has precedence when it changes or pauses an earlier delivery target. Preserve completed work and artifacts; do not start or adopt another Studio workflow.',
   ].join('\n');
 }
 

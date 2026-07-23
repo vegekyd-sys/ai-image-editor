@@ -55,8 +55,12 @@ export interface DurableExecutionRef {
   attemptId: string;
   attemptNo: number;
   workUnitKey: string;
-  /** Original user objective for this Agent Run, stable across durable attempts. */
+  /** Latest durable objective checkpoint, falling back to the original request. */
   objective?: string;
+  /** Newest queued user instruction; it has precedence over an older delivery target. */
+  latestInput?: string;
+  /** Agent Run input version claimed when this attempt started. */
+  inputVersion: number;
 }
 
 export interface ContextSelectionStats {

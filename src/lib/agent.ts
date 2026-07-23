@@ -4680,6 +4680,60 @@ const DURABLE_IDEMPOTENT_TOOLS = new Set([
   'prepare_visual_asset',
 ]);
 
+const DURABLE_INPUT_GUARDED_TOOLS = new Set([
+  ...DURABLE_IDEMPOTENT_TOOLS,
+  'studio_run',
+  'write_file',
+  'write_code_file',
+  'run_code',
+  'preview_frame',
+  'delete_file',
+  'execution_checkpoint',
+]);
+
+function wrapDurableInputAwareTools(
+  tools: Record<string, any>,
+  ctx: AgentContext,
+): Record<string, any> {
+  if (!ctx.execution || !ctx.supabase || !ctx.userId) return tools;
+  for (const [toolName, definition] of Object.entries(tools)) {
+    if (!DURABLE_INPUT_GUARDED_TOOLS.has(toolName) || typeof definition?.execute !== 'function') continue;
+    const execute = definition.execute.bind(definition);
+    definition.execute = async (input: unknown, executionOptions?: unknown) => {
+      const { data: runState, error } = await ctx.supabase
+        .from('agent_runs')
+        .select('status, input_version')
+        .eq('id', ctx.execution!.runId)
+        .eq('user_id', ctx.userId)
+        .maybeSingle();
+      const currentInputVersion = Number(runState?.input_version || 0);
+      if (
+        error
+        || runState?.status !== 'running'
+        || currentInputVersion > ctx.execution!.inputVersion
+      ) {
+        if (error) {
+          console.warn(`[agent-execution] input-version guard failed before ${toolName}: ${error.message}`);
+        }
+        return {
+          success: false,
+          terminal: true,
+          errorCode: 'agent_input_received',
+          message: error
+            ? 'Could not verify the latest Agent Run input before a durable mutation. Hand off and retry safely.'
+            : 'A newer instruction arrived in this Agent Run. Stop this attempt before further Studio mutations and hand off to the next work unit.',
+          userMessage: {
+            zh: '已收到更新指令，正在从当前进度切换，不会继续执行旧目标。',
+            en: 'A newer instruction was received. Switching from the current progress without continuing the old target.',
+          },
+        };
+      }
+      return execute(input, executionOptions);
+    };
+  }
+  return tools;
+}
+
 function wrapDurableIdempotentTools(
   tools: Record<string, any>,
   ctx: AgentContext,
@@ -4875,7 +4929,13 @@ export async function* runMakaronAgent(
     agentRunId: options?.agentRunId || options?.execution?.runId,
   };
 
-  const allTools = wrapDurableIdempotentTools(createTools(ctx, runtime, options?.locale, Boolean(options?.execution)), ctx);
+  const allTools = wrapDurableInputAwareTools(
+    wrapDurableIdempotentTools(
+      createTools(ctx, runtime, options?.locale, Boolean(options?.execution)),
+      ctx,
+    ),
+    ctx,
+  );
   if (!options?.execution) delete (allTools as Record<string, unknown>).execution_checkpoint;
   perf?.mark('agent_tools_created', { toolCount: Object.keys(allTools).length });
   let imagesSent = 0;
@@ -4947,7 +5007,7 @@ export async function* runMakaronAgent(
     ? buildLightweightSystemPrompt(analysisOnly ? 'analysis' : 'tipReaction', options?.locale)
     : await buildSystemPrompt(options?.userSkills, options?.supabase, options?.userId, projectId);
   const durableExecutionDirective = options?.execution
-    ? `\n\n## Durable execution contract\nThis is attempt ${options.execution.attemptNo} of execution ${options.execution.runId}, work unit ${options.execution.workUnitKey}. The execution may continue in a fresh model context. Preserve decisions and durable artifact pointers by calling execution_checkpoint after each meaningful work unit and before a long, risky generation step. Produce the first durable mutation within 90 seconds when the work unit is composition/code. If this attempt advances a Studio Run into Composition, immediately switch to numbered composition parts even when this work unit started in an earlier stage; never begin a monolithic run_code payload. Do not repeat expensive side effects whose tool result is already present. A handoff is progress, not failure. An active Studio Run is persisted workflow state, not by itself a reason to keep this Agent Run alive. If the current objective explicitly pauses export or asks to wait for review or user feedback, finish the user-facing turn and leave Studio at its current stage.`
+    ? `\n\n## Durable execution contract\nThis is attempt ${options.execution.attemptNo} of execution ${options.execution.runId}, work unit ${options.execution.workUnitKey}. The execution may continue in a fresh model context. Preserve decisions and durable artifact pointers by calling execution_checkpoint after each meaningful work unit and before a long, risky generation step. Produce the first durable mutation within 90 seconds when the work unit is composition/code. If this attempt advances a Studio Run into Composition, immediately switch to numbered composition parts even when this work unit started in an earlier stage; never begin a monolithic run_code payload. Do not repeat expensive side effects whose tool result is already present. A handoff is progress, not failure. An active Studio Run is persisted workflow state, not by itself a reason to keep this Agent Run alive. A new queued user instruction has precedence over an older delivery target. If it pauses export or asks to wait for review or user feedback, finish the user-facing turn and leave Studio at its current stage.`
     : '';
   const durableCompositionDirective = options?.execution?.workUnitKey === 'studio:composition'
     ? `\n\n## Durable Composition workspace\nKeep the full original Composition and Director creative standard, but do not emit a monolithic run_code composition payload in this work unit. Long tool-input streams can reset before the call closes. Author the final Remotion source as numbered files under ${projectId}/drafts/composition-parts, one cohesive part per model step with write_file. Include compositionMetadata with the first part so dimensions, props, editables, and animation are durable; only repeat it when metadata changes. Keep each part under the 12000-character transport limit, wait for its tool result, and create as many parts as the approved content needs. Parts around 3000-8000 characters are preferred, but never compress creative detail merely to hit that range. Rewriting the same numbered path is safe after recovery. Do not use import/export; the files are concatenated into one scope with no aggregate source-size or part-count limit. Never shorten approved narration, subtitles, scenes, animation, or visual detail to reduce source size. Every successful write automatically assembles, validates, and autosaves the workspace. Continue until write_file reports compositionWorkspace.status="ready", then preview or patch its designPath directly. Do not spend another model turn calling run_code merely to assemble the directory. This changes only persistence and transport; it must not simplify the approved story, audio, visual direction, or ending.`
@@ -5049,8 +5109,9 @@ export async function* runMakaronAgent(
     const studioRunRecoveryPrompt = prompt.includes('[System automatic recovery]')
       || prompt.includes('[Recoverable Agent Checkpoint]');
     const durableObjective = options?.execution?.objective?.trim() || prompt;
+    const effectiveInstruction = options?.execution?.latestInput?.trim() || prompt;
     const studioCompletionRequested = resolveStudioCompletionRequested(
-      prompt,
+      effectiveInstruction,
       durableObjective,
     );
     const requiresMaterializedVideo = studioCompletionRequested
