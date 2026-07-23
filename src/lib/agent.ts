@@ -61,6 +61,7 @@ import {
   classifyModelTermination,
   describeModelStreamError,
   requestsMaterializedVideo,
+  resolveStudioCompletionRequested,
   shouldCompleteDurableStudioRun,
   shouldContinueActiveStudioRun,
   shouldHandoffToStudioComposition,
@@ -4934,7 +4935,7 @@ export async function* runMakaronAgent(
     ? buildLightweightSystemPrompt(analysisOnly ? 'analysis' : 'tipReaction', options?.locale)
     : await buildSystemPrompt(options?.userSkills, options?.supabase, options?.userId, projectId);
   const durableExecutionDirective = options?.execution
-    ? `\n\n## Durable execution contract\nThis is attempt ${options.execution.attemptNo} of execution ${options.execution.runId}, work unit ${options.execution.workUnitKey}. The execution may continue in a fresh model context. Preserve decisions and durable artifact pointers by calling execution_checkpoint after each meaningful work unit and before a long, risky generation step. Produce the first durable mutation within 90 seconds when the work unit is composition/code. If this attempt advances a Studio Run into Composition, immediately switch to numbered composition parts even when this work unit started in an earlier stage; never begin a monolithic run_code payload. Do not repeat expensive side effects whose tool result is already present. A handoff is progress, not failure.`
+    ? `\n\n## Durable execution contract\nThis is attempt ${options.execution.attemptNo} of execution ${options.execution.runId}, work unit ${options.execution.workUnitKey}. The execution may continue in a fresh model context. Preserve decisions and durable artifact pointers by calling execution_checkpoint after each meaningful work unit and before a long, risky generation step. Produce the first durable mutation within 90 seconds when the work unit is composition/code. If this attempt advances a Studio Run into Composition, immediately switch to numbered composition parts even when this work unit started in an earlier stage; never begin a monolithic run_code payload. Do not repeat expensive side effects whose tool result is already present. A handoff is progress, not failure. An active Studio Run is persisted workflow state, not by itself a reason to keep this Agent Run alive. If the current objective explicitly pauses export or asks to wait for review or user feedback, finish the user-facing turn and leave Studio at its current stage.`
     : '';
   const durableCompositionDirective = options?.execution?.workUnitKey === 'studio:composition'
     ? `\n\n## Durable Composition workspace\nKeep the full original Composition and Director creative standard, but do not emit a monolithic run_code composition payload in this work unit. Long tool-input streams can reset before the call closes. Author the final Remotion source as numbered files under ${projectId}/drafts/composition-parts, one cohesive part per model step with write_file. Include compositionMetadata with the first part so dimensions, props, editables, and animation are durable; only repeat it when metadata changes. Keep each part under the 12000-character transport limit, wait for its tool result, and create as many parts as the approved content needs. Parts around 3000-8000 characters are preferred, but never compress creative detail merely to hit that range. Rewriting the same numbered path is safe after recovery. Do not use import/export; the files are concatenated into one scope with no aggregate source-size or part-count limit. Never shorten approved narration, subtitles, scenes, animation, or visual detail to reduce source size. Every successful write automatically assembles, validates, and autosaves the workspace. Continue until write_file reports compositionWorkspace.status="ready", then preview or patch its designPath directly. Do not spend another model turn calling run_code merely to assemble the directory. This changes only persistence and transport; it must not simplify the approved story, audio, visual direction, or ending.`
@@ -5035,7 +5036,13 @@ export async function* runMakaronAgent(
     const executionAttemptWorkUnit = options?.execution?.workUnitKey;
     const studioRunRecoveryPrompt = prompt.includes('[System automatic recovery]')
       || prompt.includes('[Recoverable Agent Checkpoint]');
-    const requiresMaterializedVideo = requestsMaterializedVideo(prompt);
+    const durableObjective = options?.execution?.objective?.trim() || prompt;
+    const studioCompletionRequested = resolveStudioCompletionRequested(
+      prompt,
+      durableObjective,
+    );
+    const requiresMaterializedVideo = studioCompletionRequested
+      && requestsMaterializedVideo(durableObjective);
     const recoveryBlockedTools = new Set<string>();
     const nonRepeatableTools = new Set([
       'generate_image',
@@ -5918,6 +5925,7 @@ export async function* runMakaronAgent(
           runCodeStarted: runCodeStartedThisTurn,
           recoveryPrompt: studioRunRecoveryPrompt,
           attemptWorkUnit: executionAttemptWorkUnit,
+          completionRequested: studioCompletionRequested,
         })) {
           assessment = {
             ok: false,

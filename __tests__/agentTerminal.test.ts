@@ -3,6 +3,8 @@ import {
   classifyModelTermination,
   describeModelStreamError,
   resolvePersistedRunStatus,
+  requestsStudioRunCompletion,
+  resolveStudioCompletionRequested,
   shouldCompleteDurableStudioRun,
   shouldContinueActiveStudioRun,
   shouldHandoffToStudioComposition,
@@ -87,13 +89,38 @@ describe('agent terminal semantics', () => {
       studioRunTouched: true,
       runCodeStarted: false,
       recoveryPrompt: false,
+      completionRequested: true,
     })).toBe(true);
     expect(shouldContinueActiveStudioRun({
       activeStudioRun: false,
       studioRunTouched: true,
       runCodeStarted: true,
       recoveryPrompt: true,
+      completionRequested: true,
     })).toBe(false);
+  });
+
+  it('lets an Agent Run finish while its Studio workflow intentionally waits for the next user turn', () => {
+    expect(shouldContinueActiveStudioRun({
+      activeStudioRun: true,
+      studioRunTouched: true,
+      runCodeStarted: false,
+      recoveryPrompt: false,
+      attemptWorkUnit: 'studio:review',
+      completionRequested: false,
+    })).toBe(false);
+    expect(requestsStudioRunCompletion('你不用导出，现在草稿不对，等我继续反馈')).toBe(false);
+    expect(requestsStudioRunCompletion('Studio Run 先不要导出视频，等我看完草稿')).toBe(false);
+    expect(requestsStudioRunCompletion("Don't export the Studio Run yet; wait for my review.")).toBe(false);
+    expect(requestsStudioRunCompletion('不要只给预览，要导出最终视频')).toBe(true);
+    expect(resolveStudioCompletionRequested(
+      '你不用导出，现在草稿不对，等我继续反馈',
+      '给这个角色做个有意思的介绍视频，用 Studio Run',
+    )).toBe(false);
+    expect(resolveStudioCompletionRequested(
+      '[System durable continuation] Resume attempt 3 at review.',
+      '你不用导出，现在草稿不对，等我继续反馈',
+    )).toBe(false);
   });
 
   it('keeps a durable Studio work unit alive while an async asset finishes', () => {
@@ -103,6 +130,7 @@ describe('agent terminal semantics', () => {
       runCodeStarted: false,
       recoveryPrompt: false,
       attemptWorkUnit: 'studio:assets',
+      completionRequested: true,
     })).toBe(true);
     expect(shouldContinueActiveStudioRun({
       activeStudioRun: true,
@@ -110,7 +138,22 @@ describe('agent terminal semantics', () => {
       runCodeStarted: false,
       recoveryPrompt: false,
       attemptWorkUnit: 'agent',
+      completionRequested: true,
     })).toBe(false);
+  });
+
+  it('keeps explicit video delivery and explicit Studio completion requests durable', () => {
+    expect(requestsStudioRunCompletion('给这个角色做个有意思的介绍视频，用 Studio Run')).toBe(true);
+    expect(requestsStudioRunCompletion('继续完成当前 Studio Run')).toBe(true);
+    expect(requestsStudioRunCompletion('resume the current Studio Run')).toBe(true);
+    expect(resolveStudioCompletionRequested(
+      '[System durable continuation] Resume attempt 2 at review.',
+      '给这个角色做个有意思的介绍视频，用 Studio Run',
+    )).toBe(true);
+    expect(resolveStudioCompletionRequested(
+      '继续完成当前 Studio Run',
+      'Studio Run 先不要导出视频，等我看完草稿',
+    )).toBe(true);
   });
 
   it('hands Composition to a dedicated durable attempt before code generation starts', () => {
@@ -213,6 +256,7 @@ describe('agent terminal semantics', () => {
   it('keeps a video request running after an editable design publish until video delivery', () => {
     expect(requestsMaterializedVideo('这6张图做个好玩的玩水vlog')).toBe(true);
     expect(requestsMaterializedVideo('finish and export an MP4 video')).toBe(true);
+    expect(requestsMaterializedVideo('给这个角色做个有意思的介绍视频，用 Studio Run')).toBe(true);
     expect(requestsMaterializedVideo('做一张夏日海报')).toBe(false);
     expect(shouldStopAfterDurablePublishToolStep({
       durableExecution: true,

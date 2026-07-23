@@ -104,7 +104,38 @@ export function requestsMaterializedVideo(prompt: string): boolean {
   const normalized = prompt.toLowerCase();
   return /\b(?:mp4|vlog)\b/.test(normalized)
     || /\bexport\b.{0,24}\bvideo\b/.test(normalized)
+    || /\b(?:make|create|produce|finish)\b.{0,32}\bvideo\b/.test(normalized)
+    || /(?:做|制作|生成|创建|剪辑|编辑|导出).{0,20}视频/.test(normalized)
+    || /视频.{0,20}(?:制作|生成|导出|成片)/.test(normalized)
     || ['导出视频', '导出成片', '视频成片', '最终视频', '做个视频', '做条视频', '做一条视频', '短片'].some(term => normalized.includes(term));
+}
+
+function explicitlyPausesStudioRunCompletion(prompt: string): boolean {
+  return /(?:不用|不要|别|无需|暂不|先不)\s*(?:再\s*)?(?:自动\s*)?(?:继续\s*)?(?:导出|完成|跑完|继续|materialize|export|complete|continue)/i.test(prompt)
+    || /\b(?:do not|don't|dont|no need to)\b.{0,24}\b(?:export|complete|continue|materialize)\b/i.test(prompt);
+}
+
+export function requestsStudioRunCompletion(prompt: string): boolean {
+  if (explicitlyPausesStudioRunCompletion(prompt)) return false;
+  const namesStudioRun = /studio\s*run/i.test(prompt);
+  return requestsMaterializedVideo(prompt)
+    || (namesStudioRun && /(?:视频|成片|video|export)/i.test(prompt))
+    || /(?:继续|接着|恢复|续上|跑完|完成|continue|resume).{0,48}studio\s*run/i.test(prompt)
+    || /studio\s*run.{0,48}(?:继续|接着|恢复|续上|跑完|完成|continue|resume)/i.test(prompt);
+}
+
+export function resolveStudioCompletionRequested(
+  prompt: string,
+  durableObjective?: string,
+): boolean {
+  const isAutomaticContinuation = prompt.includes('[System durable continuation]')
+    || prompt.includes('[System automatic recovery]')
+    || prompt.includes('[Recoverable Agent Checkpoint]');
+  if (!isAutomaticContinuation) {
+    if (explicitlyPausesStudioRunCompletion(prompt)) return false;
+    if (requestsStudioRunCompletion(prompt)) return true;
+  }
+  return requestsStudioRunCompletion(durableObjective?.trim() || prompt);
 }
 
 export function shouldUseTextOnlyRecovery(input: {
@@ -120,8 +151,9 @@ export function shouldContinueActiveStudioRun(input: {
   runCodeStarted: boolean;
   recoveryPrompt: boolean;
   attemptWorkUnit?: string;
+  completionRequested: boolean;
 }): boolean {
-  return input.activeStudioRun && (
+  return input.activeStudioRun && input.completionRequested && (
     input.studioRunTouched
     || input.runCodeStarted
     || input.recoveryPrompt

@@ -581,6 +581,7 @@ export async function runAgentExecutionAttempt(
           attemptId,
           attemptNo: claim.attempt_no,
           workUnitKey: workUnit,
+          objective: run.objective || claim.objective || run.prompt || undefined,
         },
       },
     )) {

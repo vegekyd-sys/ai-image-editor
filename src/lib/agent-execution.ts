@@ -55,6 +55,8 @@ export interface DurableExecutionRef {
   attemptId: string;
   attemptNo: number;
   workUnitKey: string;
+  /** Original user objective for this Agent Run, stable across durable attempts. */
+  objective?: string;
 }
 
 export interface ContextSelectionStats {

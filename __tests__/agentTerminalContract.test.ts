@@ -28,6 +28,10 @@ describe('agent terminal contract wiring', () => {
     expect(agentSource).toContain("toolChoice: 'none' as const");
     expect(agentSource).toContain('shouldUseTextOnlyRecovery({');
     expect(agentSource).toContain('shouldContinueActiveStudioRun({');
+    expect(agentSource).toContain('completionRequested: studioCompletionRequested');
+    expect(agentSource).toContain('options?.execution?.objective');
+    expect(agentSource).toContain('requestsMaterializedVideo(durableObjective)');
+    expect(agentSource).toContain('An active Studio Run is persisted workflow state');
     expect(agentSource).toContain('shouldCompleteDurableStudioRun({');
     expect(agentSource).toContain('shouldHandoffToStudioComposition({');
     expect(agentSource).toContain("code: 'studio_stage_handoff'");
@@ -90,6 +94,7 @@ describe('agent terminal contract wiring', () => {
     expect(agentContextSource).not.toContain('tailModelHistoryAtomically(rebuiltHistory, 16)');
     expect(agentSource.indexOf('if (assessment.ok) break;')).toBeLessThan(agentSource.indexOf("yield { type: 'done' }"));
     expect(executionRunnerSource).toContain('runAgentExecutionAttempt');
+    expect(executionRunnerSource).toContain('objective: run.objective || claim.objective || run.prompt || undefined');
     expect(executionRunnerSource).toContain("status: 'handed_off'");
     expect(executionRunnerSource).toContain('next_attempt_at: new Date().toISOString()');
     expect(executionRunnerSource).toContain("? 'deepseek-v4-pro'");
