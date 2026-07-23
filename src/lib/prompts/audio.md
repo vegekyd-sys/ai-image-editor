@@ -141,7 +141,7 @@ Omit empty sections. For a simple music or SFX request, use the same playback-or
 ## Parameter policy
 
 - `reference_voices`: highest-impact voice-consistency control. Items are Audio Index labels such as `audio_1` or provider preset voice IDs. Maximum 3.
-- `image_ref`: use one Timeline Media image to inspire voice/scene tone only when no reference voice is used.
+- `conditioning: { type: "image", media_index: N }`: use one still image only when it belongs to the current upload batch or the user explicitly names it as `@N` / `<<<media_N>>>`. Omit conditioning for ordinary audio. Never inherit the currently selected Timeline item, and never combine image conditioning with a reference voice.
 - `speech_rate`: 0.5-2.0. Default 1.0; change only for delivery or duration pressure.
 - `loudness_rate`: 0.5-2.0. Default 1.0; prompt-level mix direction still matters.
 - `pitch_rate`: integer semitones from -12 to 12. Default 0; avoid extreme shifts.
