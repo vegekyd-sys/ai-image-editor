@@ -353,7 +353,7 @@ send_message "All done!"
 ## Important Notes
 
 - One project = one conversation thread. All history is preserved.
-- One run at a time per project. New message interrupts previous run.
+- One active Agent Run at a time per project. A new message received while it is active is appended to that same Agent Run and processed at a durable work-unit boundary; it does not interrupt the execution or create a second owner for an in-progress Studio workflow.
 - Multi-image: `create --image a.jpg --image b.jpg` or `chat --image ref.jpg`.
 - Provider-generated videos can take 2-5 minutes; Grok is usually shorter. Remotion compositions should be converted with `materialize` / `responses get --materialize`, and timing should be read from `duration_seconds`, `render_seconds`, and `realtime_ratio`.
 - Music takes ~60 seconds. Appears in output when done.

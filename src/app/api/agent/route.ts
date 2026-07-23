@@ -14,6 +14,11 @@ import {
 } from '@/lib/agent-models';
 import { getAgentContextPolicy } from '@/lib/agent-execution';
 import { verifySkillLaunchContext } from '@/lib/skill-launch-context';
+import {
+  appendAgentRunInput,
+  decideAgentRunAdmission,
+  findActiveAgentRun,
+} from '@/lib/agent-run-admission';
 
 export const maxDuration = 1800;
 
@@ -90,13 +95,49 @@ export async function POST(req: NextRequest) {
     let firstMessageId: string | null = null;
     if (isNormalMode) {
       const endRunCreate = perf.span('create_agent_run', { projectId, userId });
-      // Supersede any prior run. `aborted` is observable by the old worker;
-      // `failed` was not, so the old model could keep producing side effects.
-      await supabase.from('agent_runs')
-        .update({ status: 'aborted', ended_at: new Date().toISOString() })
-        .eq('project_id', projectId)
-        .eq('user_id', userId)
-        .eq('status', 'running');
+      const admission = decideAgentRunAdmission(
+        await findActiveAgentRun(supabase, projectId, userId),
+      );
+      if (admission.kind === 'append') {
+        if (headless) {
+          await supabase.from('messages').insert({
+            id: crypto.randomUUID(),
+            project_id: projectId,
+            role: 'user',
+            content: prompt || '',
+            has_image: false,
+          });
+        }
+        await appendAgentRunInput({
+          supabase,
+          runId: admission.runId,
+          projectId,
+          userId,
+          content: prompt || 'Continue the current request.',
+          source: headless ? 'cli' : 'cui',
+        });
+        const body = [
+          `data: ${JSON.stringify({ type: 'status', text: locale === 'zh' ? '新指令已加入当前 Agent Run' : 'Instruction added to the active Agent Run' })}`,
+          `data: ${JSON.stringify({ type: 'done' })}`,
+          '',
+        ].join('\n');
+        return new Response(body, {
+          status: 202,
+          headers: {
+            'Content-Type': 'text/event-stream; charset=utf-8',
+            'Cache-Control': 'no-cache, no-transform',
+            'X-Agent-Run-Id': admission.runId,
+            'X-Agent-Input-Appended': 'true',
+          },
+        });
+      }
+      if (admission.kind === 'conflict') {
+        return new Response(JSON.stringify({
+          error: 'active_agent_run_conflict',
+          message: 'The project has an active legacy Agent Run that cannot safely accept another instruction.',
+          runId: admission.runId,
+        }), { status: 409, headers: { 'Content-Type': 'application/json' } });
+      }
 
       const { data: run } = await supabase.from('agent_runs').insert({
         project_id: projectId,
@@ -340,7 +381,7 @@ export async function POST(req: NextRequest) {
           try {
             const endAgentStream = perf.span('agent_stream', { projectId, runId: runId || null });
             try {
-              for await (const event of runMakaronAgent(agentPrompt, agentImage, projectId, { analysisOnly, analysisContext, isVideoAnalysis, animationImageUrls: animationImageUrls?.length ? animationImageUrls : undefined, animationImages: animationImages?.length ? animationImages : undefined, locale, preferredModel, agentModel: requestedAgentModel, videoModel, videoResolution, videoAuto, skillLaunchContext, audioAttachments: agentAudioAttachments, snapshotImages: agentSnapshotImages, currentSnapshotIndex: agentCurrentSnapshotIndex, isNsfw, supabase, userId: userId, currentDesign: agentCurrentDesign, currentDesignPath: agentCurrentDesignPath, history: agentHistory, timelineVersion, perf, abortSignal: modelAbortController.signal, contextCompactAtTokens: agentCompactionRequired ? getAgentContextPolicy(resolvedAgentModel.id).providerCompactAtTokens : undefined, historyBoundary: agentHistoryBoundary })) {
+              for await (const event of runMakaronAgent(agentPrompt, agentImage, projectId, { analysisOnly, analysisContext, isVideoAnalysis, animationImageUrls: animationImageUrls?.length ? animationImageUrls : undefined, animationImages: animationImages?.length ? animationImages : undefined, locale, preferredModel, agentModel: requestedAgentModel, videoModel, videoResolution, videoAuto, skillLaunchContext, audioAttachments: agentAudioAttachments, snapshotImages: agentSnapshotImages, currentSnapshotIndex: agentCurrentSnapshotIndex, isNsfw, supabase, userId: userId, currentDesign: agentCurrentDesign, currentDesignPath: agentCurrentDesignPath, history: agentHistory, timelineVersion, perf, abortSignal: modelAbortController.signal, contextCompactAtTokens: agentCompactionRequired ? getAgentContextPolicy(resolvedAgentModel.id).providerCompactAtTokens : undefined, historyBoundary: agentHistoryBoundary, agentRunId: runId || undefined })) {
                 if (event.type === 'done') sawDone = true;
                 if (event.type === 'error') {
                   sawError = true;

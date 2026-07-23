@@ -25,6 +25,11 @@ import {
 import { dispatchAgentExecutionAttempt } from './agent-execution-dispatch';
 import type { SkillLaunchContext } from './skill-launch-context';
 import { normalizeLocale, translate } from './locales';
+import {
+  formatPendingAgentInputs,
+  loadPendingAgentInputs,
+  markAgentRunInputsApplied,
+} from './agent-run-admission';
 
 interface ExecutionRequest {
   locale?: string;
@@ -67,6 +72,7 @@ interface AgentRunRecord {
   attempt_count?: number;
   total_input_tokens?: number;
   total_output_tokens?: number;
+  input_version?: number;
   metadata?: Record<string, unknown> | null;
 }
 
@@ -183,7 +189,9 @@ async function resolveWorkUnit(admin: SupabaseClient, run: AgentRunRecord): Prom
   try {
     const { WorkspaceStudioRunStore } = await import('./studio-run');
     const store = new WorkspaceStudioRunStore(admin, run.user_id);
-    const studioRun = (await store.listRuns(run.project_id)).find(item => item.status === 'running');
+    const studioRun = (await store.listRuns(run.project_id)).find(item => (
+      item.agentRunId === run.id && item.status === 'running'
+    ));
     if (studioRun?.currentStage) return `studio:${studioRun.currentStage}`;
   } catch { /* generic executions do not need Studio state */ }
   return run.current_work_unit || 'agent';
@@ -287,6 +295,7 @@ export async function runAgentExecutionAttempt(
   const { data: runData } = await admin.from('agent_runs').select('*').eq('id', runId).maybeSingle();
   const run = runData as AgentRunRecord | null;
   if (!run || run.status !== 'running') return { claimed: false, runId };
+  const inputVersionAtAttemptStart = run.input_version || 0;
 
   const policy = normalizeExecutionPolicy(run.execution_policy);
   if ((run.total_input_tokens || 0) >= policy.maxTotalInputTokens) {
@@ -335,6 +344,7 @@ export async function runAgentExecutionAttempt(
   }).select('id').single();
   if (attemptError || !attempt?.id) throw new Error(`Failed to create Agent attempt: ${attemptError?.message || 'missing id'}`);
   const attemptId = attempt.id as string;
+  const pendingInputs = await loadPendingAgentInputs(admin, runId);
 
   let scaffoldResult: Awaited<ReturnType<typeof import('./studio-composition-scaffold')['ensureStudioCompositionScaffold']>> | undefined;
   let scaffoldWarning: string | undefined;
@@ -345,6 +355,7 @@ export async function runAgentExecutionAttempt(
         projectId: run.project_id,
         userId: run.user_id,
         supabase: admin,
+        agentRunId: run.id,
       });
       if (scaffoldResult.created && scaffoldResult.elapsedMs > 90_000) {
         scaffoldWarning = `Composition scaffold exceeded the 90s durable-output SLA (${scaffoldResult.elapsedMs}ms)`;
@@ -412,9 +423,10 @@ export async function runAgentExecutionAttempt(
     ? `[System durable continuation] Resume execution ${runId}, attempt ${claim.attempt_no}. ${previousSnapshot?.nextAction || 'Continue the unfinished objective from durable artifacts.'}`
     : (run.objective || claim.objective || run.prompt || 'Continue the requested task.');
   const preflightInstruction = buildRecoverablePreflightInstruction(scaffoldWarning);
-  const attemptPrompt = preflightInstruction
-    ? `${baseAttemptPrompt}\n\n${preflightInstruction}`
-    : baseAttemptPrompt;
+  const pendingInputInstruction = formatPendingAgentInputs(pendingInputs);
+  const attemptPrompt = [baseAttemptPrompt, preflightInstruction, pendingInputInstruction]
+    .filter(Boolean)
+    .join('\n\n');
 
   const ctx = await buildPromptContext(run.project_id, admin, run.user_id, {
     userMessage: attemptPrompt,
@@ -583,6 +595,7 @@ export async function runAgentExecutionAttempt(
           workUnitKey: workUnit,
           objective: run.objective || claim.objective || run.prompt || undefined,
         },
+        agentRunId: runId,
       },
     )) {
       if (event.type === 'content') attemptText += event.text;
@@ -665,6 +678,12 @@ export async function runAgentExecutionAttempt(
   }
 
   if (sawDone && !terminal) {
+    await markAgentRunInputsApplied({
+      supabase: admin,
+      runId,
+      inputIds: pendingInputs.map(input => input.id),
+      attemptId,
+    });
     const previous = await executionStore.latestSnapshot(runId);
     const completedSnapshot = normalizeExecutionSnapshot({
       objective: run.objective || claim.objective || run.prompt || previous?.objective,
@@ -690,8 +709,7 @@ export async function runAgentExecutionAttempt(
       snapshot: completedSnapshot,
       providerCompaction: providerCompaction as Record<string, unknown> | undefined,
     });
-    await finishAttempt(admin, attemptId, 'completed', { input_tokens: inputTokens, output_tokens: outputTokens });
-    await admin.from('agent_runs').update({
+    const { data: completedRun, error: completionError } = await admin.from('agent_runs').update({
       status: 'completed',
       current_work_unit: 'completed',
       ended_at: new Date().toISOString(),
@@ -699,8 +717,26 @@ export async function runAgentExecutionAttempt(
       lease_owner: null,
       lease_expires_at: null,
       next_attempt_at: null,
-    }).eq('id', runId).eq('status', 'running').eq('lease_token', claim.lease_token);
-    return { claimed: true, runId, attemptId, attemptNo: claim.attempt_no, status: 'completed' };
+    })
+      .eq('id', runId)
+      .eq('status', 'running')
+      .eq('lease_token', claim.lease_token)
+      .eq('input_version', inputVersionAtAttemptStart)
+      .select('id')
+      .maybeSingle();
+    if (completionError) throw new Error(`Failed to finalize Agent execution: ${completionError.message}`);
+    if (completedRun) {
+      await finishAttempt(admin, attemptId, 'completed', { input_tokens: inputTokens, output_tokens: outputTokens });
+      return { claimed: true, runId, attemptId, attemptNo: claim.attempt_no, status: 'completed' };
+    }
+
+    terminal = {
+      type: 'error',
+      code: 'agent_input_received',
+      recoverable: true,
+      message: 'A new instruction arrived during this Agent Run and will be handled by the next work unit.',
+    };
+    sawDone = false;
   }
 
   const canContinue = shouldScheduleNextAttempt({

@@ -19,6 +19,11 @@ import {
   getAgentContextPolicy,
 } from '@/lib/agent-execution';
 import { verifySkillLaunchContext } from '@/lib/skill-launch-context';
+import {
+  appendAgentRunInput,
+  decideAgentRunAdmission,
+  findActiveAgentRun,
+} from '@/lib/agent-run-admission';
 
 export const maxDuration = 1800;
 
@@ -88,12 +93,46 @@ export async function POST(req: NextRequest) {
     const { data: projectRow } = await supabase.from('projects').select('timeline_version').eq('id', projectId).single();
     const timelineVersion: number = (projectRow as Record<string, unknown>)?.timeline_version as number ?? 1;
 
-    // Supersede any prior run and let its worker observe cancellation.
-    await supabase.from('agent_runs')
-      .update({ status: 'aborted', ended_at: new Date().toISOString() })
-      .eq('project_id', projectId)
-      .eq('user_id', userId)
-      .eq('status', 'running');
+    const persistHeadlessUserMessage = async () => {
+      if (clientPersistedUserMessage) return;
+      await supabase.from('messages').insert({
+        id: crypto.randomUUID(),
+        project_id: projectId,
+        role: 'user',
+        content: prompt,
+        has_image: false,
+      });
+    };
+
+    const admission = decideAgentRunAdmission(
+      await findActiveAgentRun(supabase, projectId, userId),
+    );
+    if (admission.kind === 'append') {
+      await persistHeadlessUserMessage();
+      const inputId = await appendAgentRunInput({
+        supabase,
+        runId: admission.runId,
+        projectId,
+        userId,
+        content: prompt,
+        source: 'cli',
+      });
+      return NextResponse.json({
+        runId: admission.runId,
+        executionId: admission.runId,
+        inputId,
+        status: 'running',
+        durable: true,
+        appended: true,
+      }, { status: 202 });
+    }
+    if (admission.kind === 'conflict') {
+      return NextResponse.json({
+        error: 'active_agent_run_conflict',
+        message: 'The project has an active legacy Agent Run that cannot safely accept another instruction.',
+        runId: admission.runId,
+      }, { status: 409 });
+    }
 
     // Create run
     const { data: run } = await supabase.from('agent_runs').insert({
@@ -119,16 +158,7 @@ export async function POST(req: NextRequest) {
     createdRunId = runId;
 
     // Write user message to DB (frontend does this itself, headless mode must do it here)
-    if (!clientPersistedUserMessage) {
-      const userMessageId = crypto.randomUUID();
-      await supabase.from('messages').insert({
-        id: userMessageId,
-        project_id: projectId,
-        role: 'user',
-        content: prompt,
-        has_image: false,
-      });
-    }
+    await persistHeadlessUserMessage();
 
     // DualWriter in headless mode (no SSE controller)
     const writer = new AgentDualWriter(runId, supabase, userId, projectId);
@@ -291,6 +321,7 @@ export async function POST(req: NextRequest) {
             ? getAgentContextPolicy(resolvedAgentModel.id).providerCompactAtTokens
             : undefined,
           historyBoundary: ctx.historyBoundary,
+          agentRunId: runId,
         })) {
           if (event.type === 'done') sawDone = true;
           if (event.type === 'error') {
