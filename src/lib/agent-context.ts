@@ -77,6 +77,8 @@ export interface PromptContextResult {
   /** Project-scoped audio refs available as audio_1, audio_2, ... (not media_N). */
   audioAttachments: AudioAttachmentContext[];
   executionSnapshot?: DurableExecutionSnapshot;
+  /** Persisted Studio workflow context for model guidance only. */
+  activeStudioWorkflowStage?: string;
   contextStats: ContextSelectionStats;
   /** Latest persisted input row represented by this context. */
   historyBoundary?: string;
@@ -360,9 +362,9 @@ export async function buildPromptContext(
         .maybeSingle()
     : Promise.resolve({ data: null, error: null });
   const executionRunPromise = options.executionRunId
-    ? supabase
+      ? supabase
         .from('agent_runs')
-        .select('objective, prompt, acceptance_criteria, current_work_unit')
+        .select('objective, prompt, acceptance_criteria')
         .eq('id', options.executionRunId)
         .maybeSingle()
     : Promise.resolve({ data: null, error: null });
@@ -447,13 +449,12 @@ export async function buildPromptContext(
     objective?: string | null;
     prompt?: string | null;
     acceptance_criteria?: unknown;
-    current_work_unit?: string | null;
   } | null;
   const executionObjective = executionRow?.objective || executionRow?.prompt || originMessage?.content || userMessage;
   const priorSnapshot = executionSnapshotRes.data?.content
     ? normalizeExecutionSnapshot(executionSnapshotRes.data.content, {
         objective: executionObjective,
-        currentWorkUnit: executionRow?.current_work_unit || activeStudioRun?.currentStage || 'agent',
+        currentWorkUnit: 'agent',
         nextAction: 'Continue the unfinished objective from durable project artifacts.',
       })
     : undefined;
@@ -464,7 +465,7 @@ export async function buildPromptContext(
         acceptanceCriteria: Array.isArray(executionRow?.acceptance_criteria)
           ? executionRow.acceptance_criteria.filter((item): item is string => typeof item === 'string')
           : priorSnapshot.acceptanceCriteria,
-        currentWorkUnit: executionRow?.current_work_unit || activeStudioRun?.currentStage || 'agent',
+        currentWorkUnit: 'agent',
         nextAction: 'Start the current request while preserving relevant prior decisions and durable artifacts.',
       }
     : priorSnapshot;
@@ -472,7 +473,7 @@ export async function buildPromptContext(
     ? persistedSnapshot ?? normalizeExecutionSnapshot({
         objective: executionObjective,
         acceptanceCriteria: Array.isArray(executionRow?.acceptance_criteria) ? executionRow?.acceptance_criteria : [],
-        currentWorkUnit: executionRow?.current_work_unit || activeStudioRun?.currentStage || 'agent',
+        currentWorkUnit: 'agent',
         nextAction: 'Start the objective and create the first durable artifact before broad exploration.',
       }, {
         objective: executionObjective,
@@ -683,6 +684,7 @@ export async function buildPromptContext(
     recoverableDesignPath: recoverableDraft?.path,
     audioAttachments: resolvedAudioAttachments,
     executionSnapshot,
+    activeStudioWorkflowStage: activeStudioRun?.currentStage || undefined,
     contextStats: selectedHistory.stats,
     historyBoundary,
   };

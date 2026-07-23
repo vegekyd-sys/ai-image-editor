@@ -321,6 +321,7 @@ export async function POST(req: NextRequest) {
             ? getAgentContextPolicy(resolvedAgentModel.id).providerCompactAtTokens
             : undefined,
           historyBoundary: ctx.historyBoundary,
+          studioWorkflowStage: ctx.activeStudioWorkflowStage,
           agentRunId: runId,
         })) {
           if (event.type === 'done') sawDone = true;

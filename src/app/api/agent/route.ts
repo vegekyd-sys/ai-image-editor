@@ -298,6 +298,7 @@ export async function POST(req: NextRequest) {
           let agentAudioAttachments = audioAttachments;
           let agentCompactionRequired = false;
           let agentHistoryBoundary: string | undefined;
+          let agentStudioWorkflowStage: string | undefined;
 
           if (needsPromptContext) {
             // Unified context: both frontend and headless use buildPromptContext.
@@ -336,6 +337,7 @@ export async function POST(req: NextRequest) {
             agentAudioAttachments = ctx.audioAttachments;
             agentCompactionRequired = ctx.contextStats.compactionRequired;
             agentHistoryBoundary = ctx.historyBoundary;
+            agentStudioWorkflowStage = ctx.activeStudioWorkflowStage;
           } else {
             perf.mark('build_prompt_context_skipped', {
               reason: 'analysisOnly_request_has_media',
@@ -381,7 +383,7 @@ export async function POST(req: NextRequest) {
           try {
             const endAgentStream = perf.span('agent_stream', { projectId, runId: runId || null });
             try {
-              for await (const event of runMakaronAgent(agentPrompt, agentImage, projectId, { analysisOnly, analysisContext, isVideoAnalysis, animationImageUrls: animationImageUrls?.length ? animationImageUrls : undefined, animationImages: animationImages?.length ? animationImages : undefined, locale, preferredModel, agentModel: requestedAgentModel, videoModel, videoResolution, videoAuto, skillLaunchContext, audioAttachments: agentAudioAttachments, snapshotImages: agentSnapshotImages, currentSnapshotIndex: agentCurrentSnapshotIndex, isNsfw, supabase, userId: userId, currentDesign: agentCurrentDesign, currentDesignPath: agentCurrentDesignPath, history: agentHistory, timelineVersion, perf, abortSignal: modelAbortController.signal, contextCompactAtTokens: agentCompactionRequired ? getAgentContextPolicy(resolvedAgentModel.id).providerCompactAtTokens : undefined, historyBoundary: agentHistoryBoundary, agentRunId: runId || undefined })) {
+              for await (const event of runMakaronAgent(agentPrompt, agentImage, projectId, { analysisOnly, analysisContext, isVideoAnalysis, animationImageUrls: animationImageUrls?.length ? animationImageUrls : undefined, animationImages: animationImages?.length ? animationImages : undefined, locale, preferredModel, agentModel: requestedAgentModel, videoModel, videoResolution, videoAuto, skillLaunchContext, audioAttachments: agentAudioAttachments, snapshotImages: agentSnapshotImages, currentSnapshotIndex: agentCurrentSnapshotIndex, isNsfw, supabase, userId: userId, currentDesign: agentCurrentDesign, currentDesignPath: agentCurrentDesignPath, history: agentHistory, timelineVersion, perf, abortSignal: modelAbortController.signal, contextCompactAtTokens: agentCompactionRequired ? getAgentContextPolicy(resolvedAgentModel.id).providerCompactAtTokens : undefined, historyBoundary: agentHistoryBoundary, studioWorkflowStage: agentStudioWorkflowStage, agentRunId: runId || undefined })) {
                 if (event.type === 'done') sawDone = true;
                 if (event.type === 'error') {
                   sawError = true;

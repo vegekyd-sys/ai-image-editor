@@ -13,7 +13,7 @@ const executionRunnerSource = readFileSync(join(process.cwd(), 'src/lib/agent-ex
 const executionDispatchSource = readFileSync(join(process.cwd(), 'src/lib/agent-execution-dispatch.ts'), 'utf8');
 
 describe('agent terminal contract wiring', () => {
-  it('gates done on model termination and retries one stalled step from the saved draft', () => {
+  it('gates done only on model termination and technical handoff boundaries', () => {
     expect(agentSource).toContain('classifyModelTermination({');
     expect(agentSource).toContain('chunkMs: streamIdleTimeoutMs');
     expect(agentSource).not.toContain('toolMs: Math.min(900_000, remainingInvocationBudgetMs)');
@@ -26,11 +26,6 @@ describe('agent terminal contract wiring', () => {
     expect(agentSource).toContain('options?.attemptBudgetMs');
     expect(agentSource).toContain('recoveryAttempt < 1');
     expect(agentSource).toContain("toolChoice: 'none' as const");
-    expect(agentSource).toContain('shouldUseTextOnlyRecovery({');
-    expect(agentSource).toContain('shouldContinueActiveStudioRun({');
-    expect(agentSource).toContain('completionRequested: studioCompletionRequested');
-    expect(agentSource).toContain('options?.execution?.objective');
-    expect(agentSource).toContain('options?.execution?.latestInput');
     expect(agentSource).toContain('wrapDurableInputAwareTools(');
     expect(agentSource).toContain('publish_draft: tool({');
     expect(agentSource).toContain('workspace.readFile(design_path');
@@ -38,16 +33,18 @@ describe('agent terminal contract wiring', () => {
     expect(agentSource).toContain('compositionArtifact.designPath !== design_path');
     expect(agentSource).toContain("'publish_draft',");
     expect(agentSource).toContain('sourceDesignPath');
-    expect(agentSource).toContain("currentInputVersion > ctx.execution!.inputVersion");
+    expect(agentSource).toContain("currentInputVersion > ctx.execution!.inputEpoch");
     expect(agentSource).toContain("errorCode: 'agent_input_received'");
-    expect(agentSource).toContain('requestsMaterializedVideo(durableObjective)');
-    expect(agentSource).toContain('An active Studio Run is persisted workflow state');
-    expect(agentSource).toContain('shouldCompleteDurableStudioRun({');
-    expect(agentSource).toContain('shouldHandoffToStudioComposition({');
-    expect(agentSource).toContain("code: 'studio_stage_handoff'");
-    expect(agentSource).toContain('&& !durableStageHandoff');
+    expect(agentSource).toContain('A Studio Run is only a persisted workflow');
+    expect(agentSource).not.toContain('requestsMaterializedVideo');
+    expect(agentSource).not.toContain('requestsStudioRunCompletion');
+    expect(agentSource).not.toContain('shouldContinueActiveStudioRun');
+    expect(agentSource).not.toContain('shouldCompleteDurableStudioRun');
+    expect(agentSource).not.toContain('shouldHandoffToStudioComposition');
+    expect(agentSource).not.toContain("code: 'studio_stage_handoff'");
     expect(agentSource).toContain('&& !options?.execution');
-    expect(agentSource).toContain("code: 'studio_run_incomplete'");
+    expect(agentSource).not.toContain("code: 'studio_run_incomplete'");
+    expect(agentSource).not.toContain("code: 'skill_video_submission_pending'");
     expect(agentSource).toContain("run.status !== 'running'");
     expect(agentSource).toContain('recoveryBlockedTools.add(toolName)');
     expect(agentSource).toContain("if (event.type === 'finish')");
@@ -57,8 +54,9 @@ describe('agent terminal contract wiring', () => {
       agentSource.indexOf("if (event.type === 'finish')"),
     );
     expect(finishStepBlock).not.toContain('sawFinish = true');
-    expect(finishStepBlock).toContain('if (durableStageHandoff || durableStudioCompletion) break;');
-    expect(agentSource).toContain('shouldStopAfterDurablePublishToolStep({');
+    expect(finishStepBlock).not.toContain('durableStageHandoff');
+    expect(agentSource).not.toContain('shouldStopAfterDurablePublishToolStep({');
+    expect(agentSource).not.toContain('shouldStopAfterStudioToolStep({');
     expect(agentSource).not.toContain('shouldStopAfterAsyncVideoSubmission({');
     expect(agentSource).toContain('submit them one at a time');
     expect(agentSource).toContain("do not wait for that video's rendering to finish");
@@ -70,8 +68,8 @@ describe('agent terminal contract wiring', () => {
     expect(agentSource).toContain('getStudioRunCheckpoint(ctx)');
     expect(agentSource).toContain('checkpoint.streamedCodePath');
     expect(agentSource).toContain('checkpoint.compositionPartPaths?.length');
-    expect(agentStreamSource).toContain('MAX_STUDIO_RUN_AUTO_RESUMES = 2');
-    expect(agentStreamSource).toContain('buildStudioRunAutoResumePrompt(recoveryEvent)');
+    expect(agentStreamSource).not.toContain('MAX_STUDIO_RUN_AUTO_RESUMES');
+    expect(agentStreamSource).not.toContain('buildStudioRunAutoResumePrompt');
     expect(agentSource).toContain('streamed-${codeExtractor.toolName}-${targetSlug}.partial.js');
     expect(agentSource).toContain('persistStreamedCodeCheckpoint(true)');
     expect(agentSource).toContain('write_code_file: tool({');
@@ -105,9 +103,10 @@ describe('agent terminal contract wiring', () => {
     expect(agentContextSource).not.toContain('tailModelHistoryAtomically(rebuiltHistory, 16)');
     expect(agentSource.indexOf('if (assessment.ok) break;')).toBeLessThan(agentSource.indexOf("yield { type: 'done' }"));
     expect(executionRunnerSource).toContain('runAgentExecutionAttempt');
-    expect(executionRunnerSource).toContain('objective: previousSnapshot?.objective || run.objective || claim.objective || run.prompt || undefined');
-    expect(executionRunnerSource).toContain('latestInput: pendingInputs[pendingInputs.length - 1]?.content');
-    expect(executionRunnerSource).toContain('inputVersion: inputVersionAtAttemptStart');
+    expect(executionRunnerSource).toContain("const workUnit = 'agent'");
+    expect(executionRunnerSource).toContain('studioWorkflowStage: activeStudioWorkflowStage');
+    expect(executionRunnerSource).not.toContain('return `studio:${studioRun.currentStage}`');
+    expect(executionRunnerSource).toContain('inputEpoch: inputVersionAtAttemptStart');
     expect(executionRunnerSource).toContain("status: 'handed_off'");
     expect(executionRunnerSource).toContain('next_attempt_at: new Date().toISOString()');
     expect(executionRunnerSource).toContain("? 'deepseek-v4-pro'");

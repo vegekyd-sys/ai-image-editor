@@ -154,11 +154,8 @@ describe('agent prompt policy guards', () => {
     expect(read('src/app/api/agent/route.ts')).toContain('Skill template launch could not be verified')
     expect(read('src/app/api/agent/run/route.ts')).toContain('Skill template launch could not be verified')
     expect(agentTs).toContain("translate(responseLocale, 'status.submittingVideo')")
-    expect(agentTs).toContain("code: 'skill_video_submission_pending'")
-    expect(agentTs).toContain("assessment.code === 'skill_video_submission_pending'")
-    expect(agentTs).toContain('Call generate_animation now with that exact complete script')
-    expect(executionRunner).toContain("input.terminal?.code === 'skill_video_submission_pending'")
-    expect(executionRunner).toContain('Do not rewrite it or ask for confirmation. Call generate_animation now')
+    expect(agentTs).not.toContain("code: 'skill_video_submission_pending'")
+    expect(executionRunner).not.toContain("input.terminal?.code === 'skill_video_submission_pending'")
   })
 
   it('reconnects text-only CUI projects before the first snapshot exists', () => {

@@ -1,4 +1,4 @@
-import { streamText, tool, stepCountIs } from 'ai';
+import { streamText, tool } from 'ai';
 import type { ModelMessage } from 'ai';
 import { after } from 'next/server';
 import { z } from 'zod';
@@ -63,15 +63,7 @@ import {
 import {
   classifyModelTermination,
   describeModelStreamError,
-  requestsMaterializedVideo,
-  resolveStudioCompletionRequested,
-  shouldCompleteDurableStudioRun,
-  shouldContinueActiveStudioRun,
-  shouldHandoffToStudioComposition,
-  shouldStopAfterDurablePublishToolStep,
   shouldStopAfterTerminalToolFailure,
-  shouldStopAfterStudioToolStep,
-  shouldUseTextOnlyRecovery,
 } from './agent-terminal';
 import {
   AgentExecutionStore,
@@ -89,7 +81,7 @@ import {
   normalizeLocale,
   translate,
 } from './locales';
-import { getSkillLaunchSystemDirective, shouldContinueSkillVideoSubmission, type SkillLaunchContext } from './skill-launch-context';
+import { getSkillLaunchSystemDirective, type SkillLaunchContext } from './skill-launch-context';
 import { buildAgentOutputLanguageDirective } from './agent-response-policy';
 import { stableDraftPromotionSnapshotId } from './draft-promotion';
 
@@ -2433,7 +2425,7 @@ Call this during the Studio Assets stage after reading skills/_shared/visual-ass
     }),
 
     execution_checkpoint: tool({
-      description: `Persist a typed handoff for a durable Agent execution. Use it after completing a meaningful work unit, after making a decision that later attempts must preserve, and before a long composition/code generation step. This is not a progress message for the user. Keep it concise and factual. Include durable workspace paths instead of copying file contents.`,
+      description: `Persist concise continuation context for a durable Agent Run. Use it after meaningful progress, after a decision later attempts must preserve, and before a long or risky generation step. This is not a progress message for the user. Record durable workspace paths instead of copying file contents. Studio workflow stages belong in artifacts or next_action, not in Agent lifecycle state.`,
       inputSchema: z.object({
         objective: z.string().optional(),
         acceptance_criteria: z.array(z.string()).max(30).optional(),
@@ -2446,7 +2438,6 @@ Call this during the Studio Assets stage after reading skills/_shared/visual-ass
           label: z.string().optional(),
         })).max(50).optional(),
         open_questions: z.array(z.string()).max(30).optional(),
-        current_work_unit: z.string(),
         next_action: z.string(),
         attempt_summary: z.string().max(12_000).optional(),
       }),
@@ -2463,13 +2454,13 @@ Call this during the Studio Assets stage after reading skills/_shared/visual-ass
           completedWork: input.completed_work || previous?.completedWork,
           artifacts: input.artifacts || previous?.artifacts,
           openQuestions: input.open_questions || previous?.openQuestions,
-          currentWorkUnit: input.current_work_unit,
+          currentWorkUnit: 'agent',
           nextAction: input.next_action,
           attemptSummary: input.attempt_summary,
           providerCompaction: previous?.providerCompaction,
         }, {
           objective: previous?.objective || 'Continue the durable execution objective.',
-          currentWorkUnit: input.current_work_unit,
+          currentWorkUnit: 'agent',
           nextAction: input.next_action,
         });
         const snapshotId = await store.saveSnapshot({
@@ -2482,7 +2473,6 @@ Call this during the Studio Assets stage after reading skills/_shared/visual-ass
         return {
           success: true,
           snapshotId,
-          workUnit: snapshot.currentWorkUnit,
           nextAction: snapshot.nextAction,
           message: 'Durable execution checkpoint saved.',
         };
@@ -4774,7 +4764,7 @@ function wrapDurableInputAwareTools(
       if (
         error
         || runState?.status !== 'running'
-        || currentInputVersion > ctx.execution!.inputVersion
+        || currentInputVersion > ctx.execution!.inputEpoch
       ) {
         if (error) {
           console.warn(`[agent-execution] input-version guard failed before ${toolName}: ${error.message}`);
@@ -4785,7 +4775,7 @@ function wrapDurableInputAwareTools(
           errorCode: 'agent_input_received',
           message: error
             ? 'Could not verify the latest Agent Run input before a durable mutation. Hand off and retry safely.'
-            : 'A newer instruction arrived in this Agent Run. Stop this attempt before further Studio mutations and hand off to the next work unit.',
+            : 'A newer instruction arrived in this Agent Run. Stop this attempt before further durable mutations so the next attempt can continue with the new context.',
           userMessage: {
             zh: '已收到更新指令，正在从当前进度切换，不会继续执行旧目标。',
             en: 'A newer instruction was received. Switching from the current progress without continuing the old target.',
@@ -4807,12 +4797,12 @@ function wrapDurableIdempotentTools(
     if (!DURABLE_IDEMPOTENT_TOOLS.has(toolName) || typeof definition?.execute !== 'function') continue;
     const execute = definition.execute.bind(definition);
     definition.execute = async (input: unknown, executionOptions?: unknown) => {
-      const operationKey = stableOperationKey(ctx.execution!.workUnitKey, toolName, input);
+      const operationKey = stableOperationKey(toolName, input, ctx.execution!.inputEpoch);
       const { data, error } = await ctx.supabase.rpc('claim_agent_operation', {
         p_run_id: ctx.execution!.runId,
         p_attempt_id: ctx.execution!.attemptId,
         p_user_id: ctx.userId,
-        p_work_unit_key: ctx.execution!.workUnitKey,
+        p_work_unit_key: 'agent',
         p_operation_key: operationKey,
         p_tool_name: toolName,
       });
@@ -4954,6 +4944,8 @@ export interface RunMakaronAgentOptions {
   perf?: AgentPerf;
   abortSignal?: AbortSignal;
   execution?: DurableExecutionRef;
+  /** Workflow context for model guidance only. It never controls Agent termination or retries. */
+  studioWorkflowStage?: string;
   agentRunId?: string;
   attemptBudgetMs?: number;
   maxSteps?: number;
@@ -5076,12 +5068,12 @@ export async function* runMakaronAgent(
     ? buildLightweightSystemPrompt(analysisOnly ? 'analysis' : 'tipReaction', options?.locale)
     : await buildSystemPrompt(options?.userSkills, options?.supabase, options?.userId, projectId);
   const durableExecutionDirective = options?.execution
-    ? `\n\n## Durable execution contract\nThis is attempt ${options.execution.attemptNo} of execution ${options.execution.runId}, work unit ${options.execution.workUnitKey}. The execution may continue in a fresh model context. Preserve decisions and durable artifact pointers by calling execution_checkpoint after each meaningful work unit and before a long, risky generation step. Produce the first durable mutation within 90 seconds when the work unit is composition/code. If this attempt advances a Studio Run into Composition, immediately switch to numbered composition parts even when this work unit started in an earlier stage; never begin a monolithic run_code payload. Do not repeat expensive side effects whose tool result is already present. A handoff is progress, not failure. An active Studio Run is persisted workflow state, not by itself a reason to keep this Agent Run alive. A new queued user instruction has precedence over an older delivery target. If it pauses export or asks to wait for review or user feedback, finish the user-facing turn and leave Studio at its current stage.`
+    ? `\n\n## Durable execution contract\nThis is attempt ${options.execution.attemptNo} of Agent Run ${options.execution.runId}. A later attempt may continue in a fresh model context only after a technical interruption, provider failure, context handoff, or newer user input. Preserve decisions and durable artifact pointers with execution_checkpoint after meaningful progress and before a long, risky generation step. Do not repeat expensive side effects whose tool result is already present. A Studio Run is only a persisted workflow that you follow with studio_run; its stage never decides whether this Agent Run ends or retries. Finish normally when you have completed the current user-facing turn, even if the workflow remains at Review or another stage. If this attempt advances the workflow into Composition, switch to numbered composition parts immediately and never begin a monolithic run_code payload. A newer queued user instruction has precedence over an older delivery target.`
     : '';
-  const durableCompositionDirective = options?.execution?.workUnitKey === 'studio:composition'
-    ? `\n\n## Durable Composition workspace\nKeep the full original Composition and Director creative standard, but do not emit a monolithic run_code composition payload in this work unit. Long tool-input streams can reset before the call closes. Author the final Remotion source as numbered files under ${projectId}/drafts/composition-parts, one cohesive part per model step with write_file. Include compositionMetadata with the first part so dimensions, props, editables, and animation are durable; only repeat it when metadata changes. Keep each part under the 12000-character transport limit, wait for its tool result, and create as many parts as the approved content needs. Parts around 3000-8000 characters are preferred, but never compress creative detail merely to hit that range. Rewriting the same numbered path is safe after recovery. Do not use import/export; the files are concatenated into one scope with no aggregate source-size or part-count limit. Never shorten approved narration, subtitles, scenes, animation, or visual detail to reduce source size. Every successful write automatically assembles, validates, and autosaves the workspace. Continue until write_file reports compositionWorkspace.status="ready", then preview or patch its designPath directly. Do not spend another model turn calling run_code merely to assemble the directory. This changes only persistence and transport; it must not simplify the approved story, audio, visual direction, or ending.`
+  const durableCompositionDirective = options?.execution && options.studioWorkflowStage === 'composition'
+    ? `\n\n## Durable Composition workspace\nKeep the full original Composition and Director creative standard, but do not emit a monolithic run_code composition payload. Long tool-input streams can reset before the call closes. Author the final Remotion source as numbered files under ${projectId}/drafts/composition-parts, one cohesive part per model step with write_file. Include compositionMetadata with the first part so dimensions, props, editables, and animation are durable; only repeat it when metadata changes. Keep each part under the 12000-character transport limit, wait for its tool result, and create as many parts as the approved content needs. Parts around 3000-8000 characters are preferred, but never compress creative detail merely to hit that range. Rewriting the same numbered path is safe after recovery. Do not use import/export; the files are concatenated into one scope with no aggregate source-size or part-count limit. Never shorten approved narration, subtitles, scenes, animation, or visual detail to reduce source size. Every successful write automatically assembles, validates, and autosaves the workspace. Continue until write_file reports compositionWorkspace.status="ready", then preview or patch its designPath directly. Do not spend another model turn calling run_code merely to assemble the directory. This changes only persistence and transport; it must not simplify the approved story, audio, visual direction, or ending.`
     : '';
-  const durableCompositionGuidance = options?.execution?.workUnitKey === 'studio:composition'
+  const durableCompositionGuidance = options?.execution && options.studioWorkflowStage === 'composition'
     ? buildDurableCompositionGuidance()
     : '';
   const executionSystemPrompt = `${baseSystemPrompt}${durableExecutionDirective}${durableCompositionDirective}${durableCompositionGuidance}`;
@@ -5170,21 +5162,6 @@ export async function* runMakaronAgent(
     let result: any = null;
     let recoveryAttempt = 0;
     let recoveryTextOnly = false;
-    let skillVideoVisibleText = '';
-    let skillVideoSubmissionStarted = false;
-    let studioRunTouchedThisTurn = false;
-    let runCodeStartedThisTurn = false;
-    const executionAttemptWorkUnit = options?.execution?.workUnitKey;
-    const studioRunRecoveryPrompt = prompt.includes('[System automatic recovery]')
-      || prompt.includes('[Recoverable Agent Checkpoint]');
-    const durableObjective = options?.execution?.objective?.trim() || prompt;
-    const effectiveInstruction = options?.execution?.latestInput?.trim() || prompt;
-    const studioCompletionRequested = resolveStudioCompletionRequested(
-      effectiveInstruction,
-      durableObjective,
-    );
-    const requiresMaterializedVideo = studioCompletionRequested
-      && requestsMaterializedVideo(durableObjective);
     const recoveryBlockedTools = new Set<string>();
     const nonRepeatableTools = new Set([
       'generate_image',
@@ -5257,8 +5234,6 @@ export async function* runMakaronAgent(
       let finalStepDeliveredArtifact = false;
       let attemptDeliveredArtifact = false;
       const attemptCommittedTools = new Set<string>();
-      let durableStageHandoff: { code: 'studio_stage_handoff'; detail: string } | undefined;
-      let durableStudioCompletion: { detail: string } | undefined;
       let nonRetryableToolFailure: { message: string; code?: string } | undefined;
       let streamError: unknown;
       let lastTool = '';
@@ -5269,6 +5244,7 @@ export async function* runMakaronAgent(
         : 1_500_000;
       const invocationDeadline = agentStartTime + invocationBudgetMs;
       let attemptBudgetReached = false;
+      let stepBudgetReached = false;
       const recoveryActiveTools = tools && recoveryBlockedTools.size > 0
         ? Object.keys(tools).filter((toolName) => !recoveryBlockedTools.has(toolName))
         : undefined;
@@ -5289,17 +5265,13 @@ export async function* runMakaronAgent(
           ? { activeTools: recoveryActiveTools }
           : {}),
       stopWhen: [
-        stepCountIs(maxSteps),
+        ({ steps }: { steps: unknown[] }) => {
+          if (steps.length < maxSteps) return false;
+          stepBudgetReached = true;
+          return true;
+        },
         ({ steps }: { steps: Array<{ toolResults?: Array<{ toolName?: string; output?: unknown }> }> }) => {
-          return shouldStopAfterStudioToolStep({
-            durableExecution: Boolean(ctx.execution),
-            attemptWorkUnit: executionAttemptWorkUnit,
-            toolResults: steps.at(-1)?.toolResults,
-          }) || shouldStopAfterDurablePublishToolStep({
-            durableExecution: Boolean(ctx.execution),
-            requiresMaterializedVideo,
-            toolResults: steps.at(-1)?.toolResults,
-          }) || shouldStopAfterTerminalToolFailure({
+          return shouldStopAfterTerminalToolFailure({
             toolResults: steps.at(-1)?.toolResults,
           });
         },
@@ -5414,7 +5386,6 @@ export async function* runMakaronAgent(
             };
           }
         }
-        if (durableStageHandoff || durableStudioCompletion) break;
         continue;
       }
       if (event.type === 'finish') {
@@ -5493,7 +5464,6 @@ export async function* runMakaronAgent(
         const toolName = (event as any).toolName ?? '';
         if (toolName) lastTool = toolName;
         if (toolName === 'run_code' || toolName === 'write_code_file' || toolName === 'write_file') {
-          if (toolName !== 'write_file') runCodeStartedThisTurn = true;
           codeExtractor = {
             toolName,
             valueKey: toolName === 'run_code' ? 'code' : 'content',
@@ -5525,7 +5495,6 @@ export async function* runMakaronAgent(
             continue;
           }
           codeExtractor.targetPath = pathValue.value;
-          runCodeStartedThisTurn = true;
           const filename = pathValue.value.split('/').at(-1) || pathValue.value;
           yield {
             type: 'status' as const,
@@ -5583,7 +5552,6 @@ export async function* runMakaronAgent(
           continue;
         }
         if (text) {
-          skillVideoVisibleText += text;
           finalStepTextChars += text.trim().length;
           yield { type: 'content', text };
         }
@@ -5595,7 +5563,6 @@ export async function* runMakaronAgent(
         toolCallStartTime = Date.now();
         toolCallName = event.toolName;
         lastTool = event.toolName;
-        if (event.toolName === 'generate_animation') skillVideoSubmissionStarted = true;
         finalStepToolCalls++;
         activeToolCallId = (event as { toolCallId?: string }).toolCallId || crypto.randomUUID();
         console.log(`⏱️ [agent] tool-call "${event.toolName}" at +${((Date.now() - agentStartTime) / 1000).toFixed(1)}s`);
@@ -5702,7 +5669,6 @@ export async function* runMakaronAgent(
           && typeof toolInput.path === 'string'
           && toolInput.path.startsWith(compositionPartsPrefix(ctx.projectId))
           && typeof toolInput.content === 'string';
-        if (isCompositionPartWrite) runCodeStartedThisTurn = true;
         if (
           isWriteCodeFile
           && (!codeExtractor || codeExtractor.descriptionSent === 0)
@@ -5822,13 +5788,9 @@ export async function* runMakaronAgent(
             };
           }
           if (toolSucceeded && toolName === 'studio_run') {
-            studioRunTouchedThisTurn = true;
             const studioSummary = outputRecord?.studioRun && typeof outputRecord.studioRun === 'object'
               ? outputRecord.studioRun as Record<string, unknown>
               : undefined;
-            if (ctx.execution && typeof studioSummary?.currentStage === 'string') {
-              ctx.execution.workUnitKey = `studio:${studioSummary.currentStage}`;
-            }
             if (
               studioSummary?.currentStage === 'composition'
               && ctx.supabase
@@ -5843,11 +5805,6 @@ export async function* runMakaronAgent(
                   agentRunId: ctx.agentRunId!,
                 });
                 if (scaffold.path) (ctx as any).__lastSavedDraftPath = scaffold.path;
-                if (ctx.execution) {
-                  await ctx.supabase.from('agent_runs').update({ current_work_unit: 'studio:composition' })
-                    .eq('id', ctx.execution.runId)
-                    .eq('status', 'running');
-                }
                 if (scaffold.created) {
                   yield {
                     type: 'status',
@@ -5859,37 +5816,6 @@ export async function* runMakaronAgent(
               } catch (scaffoldError) {
                 console.error('[agent-execution] composition scaffold failed:', scaffoldError);
               }
-            }
-            if (shouldHandoffToStudioComposition({
-              durableExecution: Boolean(ctx.execution),
-              attemptWorkUnit: executionAttemptWorkUnit,
-              currentStage: typeof studioSummary?.currentStage === 'string'
-                ? studioSummary.currentStage
-                : undefined,
-            })) {
-              durableStageHandoff = {
-                code: 'studio_stage_handoff',
-                detail: 'Composition is ready to continue in a dedicated durable attempt.',
-              };
-            }
-            if (shouldCompleteDurableStudioRun({
-              durableExecution: Boolean(ctx.execution),
-              status: typeof studioSummary?.status === 'string' ? studioSummary.status : undefined,
-              currentStage: typeof studioSummary?.currentStage === 'string'
-                ? studioSummary.currentStage
-                : null,
-            })) {
-              durableStudioCompletion = {
-                detail: 'Studio Run completed and all delivery artifacts were persisted.',
-              };
-              finalStepDeliveredArtifact = true;
-              attemptDeliveredArtifact = true;
-              yield {
-                type: 'content',
-                text: options?.locale === 'en'
-                  ? 'Studio Run complete. The final video, editable source, and review evidence are archived.'
-                  : 'Studio Run 已完成，最终视频、可编辑源和验收记录均已归档。',
-              };
             }
           }
           if (toolSucceeded && nonRepeatableTools.has(toolName)) {
@@ -6045,20 +5971,7 @@ export async function* runMakaronAgent(
             code: 'non_retryable_tool_failure' as const,
             detail: nonRetryableToolFailure.message,
           }
-        : durableStudioCompletion
-        ? {
-            ok: true,
-            retryable: false,
-            detail: durableStudioCompletion.detail,
-          }
-        : durableStageHandoff
-          ? {
-              ok: false,
-              retryable: true,
-              code: durableStageHandoff.code,
-              detail: durableStageHandoff.detail,
-            }
-          : classifyModelTermination({
+        : classifyModelTermination({
               sawFinish,
               finishReason,
               rawFinishReason,
@@ -6069,48 +5982,16 @@ export async function* runMakaronAgent(
             });
 
       if (
-        attemptBudgetReached
-        && !durableStageHandoff
-        && !durableStudioCompletion
-        && !finalStepDeliveredArtifact
+        !nonRetryableToolFailure
+        && (attemptBudgetReached || stepBudgetReached)
       ) {
         assessment = {
           ok: false,
           retryable: true,
           code: 'attempt_budget_handoff',
-          detail: `Attempt budget reached after a complete step (${invocationBudgetMs}ms); continuing from durable workspace state`,
-        };
-      }
-
-      if (assessment.ok) {
-        const activeStudioCheckpoint = await getStudioRunCheckpoint(ctx);
-        if (shouldContinueActiveStudioRun({
-          activeStudioRun: Boolean(activeStudioCheckpoint.studioRunId),
-          studioRunTouched: studioRunTouchedThisTurn,
-          runCodeStarted: runCodeStartedThisTurn,
-          recoveryPrompt: studioRunRecoveryPrompt,
-          attemptWorkUnit: executionAttemptWorkUnit,
-          completionRequested: studioCompletionRequested,
-        })) {
-          assessment = {
-            ok: false,
-            retryable: true,
-            code: 'studio_run_incomplete',
-            detail: `Studio Run ${activeStudioCheckpoint.studioRunId} is still running at ${activeStudioCheckpoint.studioRunStage}`,
-          };
-        }
-      }
-
-      if (assessment.ok && shouldContinueSkillVideoSubmission({
-        context: options?.skillLaunchContext,
-        visibleText: skillVideoVisibleText,
-        submissionStarted: skillVideoSubmissionStarted,
-      })) {
-        assessment = {
-          ok: false,
-          retryable: true,
-          code: 'skill_video_submission_pending',
-          detail: 'The visible Skill video script is ready, but video rendering has not been submitted yet.',
+          detail: attemptBudgetReached
+            ? `Attempt time budget reached after a complete step (${invocationBudgetMs}ms); continuing from durable workspace state`
+            : `Attempt step budget reached after ${maxSteps} complete steps; continuing from durable workspace state`,
         };
       }
 
@@ -6125,16 +6006,12 @@ export async function* runMakaronAgent(
       let attemptSteps: any[] = [];
       try { attemptSteps = await result.steps; } catch { /* stream may have failed before a complete step */ }
       const canRecover = assessment.retryable
-        && !durableStageHandoff
         && !options?.execution
         && recoveryAttempt < 1
         && Date.now() - agentStartTime < 600_000;
       if (canRecover) {
         const studioCheckpoint = await getStudioRunCheckpoint(ctx);
-        const textOnlyRecovery = shouldUseTextOnlyRecovery({
-          deliveredArtifact: attemptDeliveredArtifact,
-          activeStudioRun: Boolean(studioCheckpoint.studioRunId),
-        });
+        const textOnlyRecovery = attemptDeliveredArtifact;
         recoveryAttempt++;
         recoveryTextOnly = textOnlyRecovery;
         for (const toolName of attemptCommittedTools) recoveryBlockedTools.add(toolName);
@@ -6147,12 +6024,9 @@ export async function* runMakaronAgent(
         const compositionRecovery = studioCheckpoint.studioRunStage === 'composition'
           ? ` Switch immediately to numbered source files under ${ctx.projectId}/drafts/composition-parts. Salvage complete reusable definitions from the partial stream into a numbered part, then continue with additional parts; do not stream the monolithic run_code payload again. The workspace assembles automatically after each write, so continue until write_file reports compositionWorkspace.status="ready" and use its designPath directly.`
           : '';
-        const skillVideoRecovery = assessment.code === 'skill_video_submission_pending'
-          ? 'The complete video script is already visible. Do not rewrite it or ask for confirmation. Call generate_animation now with that exact complete script.'
-          : '';
         const recoveryInstruction = textOnlyRecovery
           ? 'A finished artifact was already delivered in the previous step. Do not call any tool, regenerate, republish, or create another task. Only provide the concise final reply for the existing delivered result.'
-          : skillVideoRecovery || `Continue from the existing tool results and saved draft; do not restart from the original media.${savedDraftPath ? ` The exact saved draft path is: ${savedDraftPath}. If the user should receive an editable composition, call publish_draft with this exact design_path after QA; do not use fromLastRunCode.` : ''}${streamedCheckpoint?.streamedCodePath ? ` Partial streamed code was saved at ${streamedCheckpoint.streamedCodePath} (${streamedCheckpoint.streamedCodeChars || 0} chars); read it once and salvage useful components.` : ''}${studioRecovery}${compositionRecovery}${recoveryBlockedTools.size ? ` Do not repeat these already-completed tools: ${[...recoveryBlockedTools].join(', ')}; use their existing results.` : ''} Complete the pending modification you already planned. If the user requested a finished artifact, publish the updated artifact before your concise final reply.`;
+          : `Continue from the existing tool results and saved draft; do not restart from the original media.${savedDraftPath ? ` The exact saved draft path is: ${savedDraftPath}. If the user should receive an editable composition, call publish_draft with this exact design_path after QA; do not use fromLastRunCode.` : ''}${streamedCheckpoint?.streamedCodePath ? ` Partial streamed code was saved at ${streamedCheckpoint.streamedCodePath} (${streamedCheckpoint.streamedCodeChars || 0} chars); read it once and salvage useful components.` : ''}${studioRecovery}${compositionRecovery}${recoveryBlockedTools.size ? ` Do not repeat these already-completed tools: ${[...recoveryBlockedTools].join(', ')}; use their existing results.` : ''} Complete the pending modification you already planned. If the user requested a finished artifact, publish the updated artifact before your concise final reply.`;
         attemptMessages = [
           ...attemptMessages,
           ...responseMessages,
