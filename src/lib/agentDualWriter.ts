@@ -185,8 +185,11 @@ export class AgentDualWriter {
 
         if (published) {
           // Published design — create real Snapshot in DB
-          const snapId = crypto.randomUUID();
+          const snapId = typeof (event as any).snapshotId === 'string' && (event as any).snapshotId
+            ? (event as any).snapshotId
+            : crypto.randomUUID();
           const designPath = `code/${snapId}.json`;
+          const sourceDesignPath = (event as any).sourceDesignPath as string | undefined;
 
           const designDesc = (event as any).description as string | undefined;
           const designJson = JSON.stringify({
@@ -236,7 +239,9 @@ export class AgentDualWriter {
           // Write agent_events
           await this.insertEvent(event.type, {
             code: event.code, width: event.width, height: event.height,
-            props: event.props, animation: event.animation, snapshotId: snapId, published: true,
+            props: event.props, animation: event.animation, snapshotId: snapId,
+            ...(sourceDesignPath ? { sourceDesignPath } : {}),
+            published: true,
           });
 
           // SSE: enriched with snapshotId, normalize type to 'render'

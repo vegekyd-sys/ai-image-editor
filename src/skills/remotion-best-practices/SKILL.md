@@ -3,7 +3,7 @@ name: remotion-best-practices
 description: >
   Makaron adapter with native support for OpenMontage's remotion-best-practices
   craft skill, using existing Makaron tools and durable project outputs.
-allowed-tools: read_file studio_run prepare_visual_asset analyze_image analyze_video generate_image generate_audio transcribe_audio run_code write_file preview_frame materialize_media
+allowed-tools: read_file studio_run prepare_visual_asset analyze_image analyze_video generate_image generate_audio transcribe_audio run_code write_file publish_draft preview_frame materialize_media
 metadata:
   makaron:
     icon: "✦"

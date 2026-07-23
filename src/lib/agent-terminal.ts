@@ -76,7 +76,7 @@ export function shouldStopAfterDurablePublishToolStep(input: {
 }): boolean {
   if (!input.durableExecution) return false;
   return Boolean(input.toolResults?.some(result => {
-    if (result.toolName !== 'write_file' || !result.output || typeof result.output !== 'object') return false;
+    if (!['write_file', 'publish_draft'].includes(result.toolName || '') || !result.output || typeof result.output !== 'object') return false;
     const output = result.output as Record<string, unknown>;
     if (output.success === false) return false;
     if (input.requiresMaterializedVideo) {

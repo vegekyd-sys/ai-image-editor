@@ -144,8 +144,9 @@ work the same across video types.
 - Review is the Agent's preview-and-patch loop on the Remotion source. Resolve
   all blocking issues directly in that code before export; do not author Review
   JSON.
-- After one clean gate, publish that exact `design_path` once and materialize it
-  once. Do not export a timeline `media_index` that may point to an older
+- After one clean gate, call `publish_draft` with that exact `design_path` once,
+  then materialize it once when MP4 Delivery is requested. Do not export a
+  timeline `media_index` that may point to an older
   snapshot. Successful Studio Run materialization waits for the real MP4 and
   automatically completes Review and Delivery. Do not author Delivery JSON or
   perform more tool calls after success.

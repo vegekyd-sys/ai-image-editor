@@ -55,7 +55,7 @@ or materializing an MP4.
 
 ## Materialization Boundary
 
-- Publish the exact reviewed `design_path` once.
+- Publish the exact reviewed `design_path` once with `publish_draft`.
 - Call `materialize_media` once. In Studio Run it waits for the real MP4 at the
   locked source resolution.
 - Successful materialization automatically completes the Review and Delivery UI

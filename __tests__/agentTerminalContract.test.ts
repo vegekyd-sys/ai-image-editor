@@ -32,6 +32,12 @@ describe('agent terminal contract wiring', () => {
     expect(agentSource).toContain('options?.execution?.objective');
     expect(agentSource).toContain('options?.execution?.latestInput');
     expect(agentSource).toContain('wrapDurableInputAwareTools(');
+    expect(agentSource).toContain('publish_draft: tool({');
+    expect(agentSource).toContain('workspace.readFile(design_path');
+    expect(agentSource).toContain('Studio draft promotion requires a completed Composition artifact');
+    expect(agentSource).toContain('compositionArtifact.designPath !== design_path');
+    expect(agentSource).toContain("'publish_draft',");
+    expect(agentSource).toContain('sourceDesignPath');
     expect(agentSource).toContain("currentInputVersion > ctx.execution!.inputVersion");
     expect(agentSource).toContain("errorCode: 'agent_input_received'");
     expect(agentSource).toContain('requestsMaterializedVideo(durableObjective)');
