@@ -9,19 +9,19 @@ import { editImage } from './skills/edit-image';
 import { rotateCamera } from './skills/rotate-camera';
 import { createVideo } from './skills/create-video';
 import { estimateVideoCredits, resolveAgentVideoSelection, resolveVideoGenerationRoute, resolveVideoOutputDuration, validateVideoModelRequest } from './video-model-capabilities';
-import { deductCredits, deductFixedCredits } from './billing/credits';
+import { deductFixedCredits } from './billing/credits';
 import { deductSeedAudioCredits } from './billing/seed-audio';
-import { createAudio } from './skills/create-audio';
-import { createVoiceover } from './skills/create-voiceover';
+import { createAudio, SEED_AUDIO_AGENT_PROMPT_MAX_CHARS } from './skills/create-audio';
 import { formatAudioCapabilitiesForAgent } from './audio-model-capabilities';
-import { listVolcengineTtsVoices } from './volcengine-tts';
+import { validateAudioKindForRequest } from './audio-generation-policy';
 import { transcribeWithVolcengineAsr, type VolcengineAsrTranscript, type TranscriptWord } from './volcengine-asr';
+import { buildNarrationCueSheet, type ExpectedNarrationSection } from './narration-cues';
 import { prepareVisualAsset, resolvePreparedVisualAssetById } from './visual-assets/bridge';
 import agentPrompt from './prompts/agent.md';
 import generateImageToolPrompt from './prompts/generate_image_tool.md';
 import { normalizeGenerateImageMediaIndex } from './generate-image-input';
-import type { DesignPayload, Tip, VideoMeta, VideoModel } from '@/types';
-import { isPermanentUrl, toPublicStorageUrl, uploadAudio, uploadVideo } from '@/lib/supabase/storage';
+import type { DesignPayload, VideoMeta, VideoModel } from '@/types';
+import { isPermanentUrl, toPublicStorageUrl, uploadVideo } from '@/lib/supabase/storage';
 import type { AgentPerf } from './agent-perf';
 import { createTextDeltaState, normalizeTextDelta } from './agent-text-delta';
 import { formatAspectRatio } from './media-aspect';
@@ -228,6 +228,8 @@ interface AgentContext {
   execution?: DurableExecutionRef;
   /** The sole model-facing Agent Run that owns nested workflow invocations. */
   agentRunId?: string;
+  /** Original request used to enforce one-pass mixed audio before provider generation. */
+  userRequest?: string;
 }
 
 interface StudioRunCheckpoint {
@@ -642,6 +644,36 @@ function formatTranscriptForModel(transcript: VolcengineAsrTranscript, includeWo
   }
 
   return lines.join('\n');
+}
+
+async function createNarrationCueArtifact(input: {
+  ctx: AgentContext;
+  transcript: VolcengineAsrTranscript;
+  expectedSections?: ExpectedNarrationSection[];
+  fps?: number;
+}): Promise<{
+  narrationCueSheet?: ReturnType<typeof buildNarrationCueSheet>;
+  narrationCuePath?: string;
+}> {
+  if (!input.expectedSections?.length) return {};
+  const narrationCueSheet = buildNarrationCueSheet({
+    transcript: input.transcript,
+    sections: input.expectedSections,
+    fps: input.fps,
+  });
+  if (!input.ctx.supabase || !input.ctx.userId) return { narrationCueSheet };
+  const narrationCuePath = `${input.ctx.projectId}/audio/narration-cues-${input.transcript.requestId}.json`;
+  const saved = await workspace.writeFile(
+    narrationCuePath,
+    JSON.stringify(narrationCueSheet, null, 2),
+    input.ctx.supabase,
+    input.ctx.userId,
+    'application/json',
+  );
+  if (!saved.success) {
+    throw new Error(saved.error || 'Failed to persist narration cue sheet.')
+  }
+  return { narrationCueSheet, narrationCuePath };
 }
 
 async function validateCompositionMediaAspect(
@@ -1513,7 +1545,7 @@ function createTools(ctx: AgentContext, runtime: AgentModelRuntime, locale?: str
     generate_animation: tool({
       description: `Submit a video script for rendering.
 
-Native-audio exception: when this tool is the chosen final-video workflow, put dialogue, narration, voice direction, music, ambience, and sound effects in \`story_prompt\` so the video provider generates synchronized audio. Do not additionally call \`list_voiceover_voices\`, \`generate_voiceover\`, \`generate_audio\`, or \`generate_music\` for that video. Outside this exception, those audio tools retain their full capabilities and normal usage conditions.
+Native-audio exception: when this tool is the chosen final-video workflow, put dialogue, narration, voice direction, music, ambience, and sound effects in \`story_prompt\` so the video provider generates synchronized audio. Do not additionally call \`generate_audio\` for that video. Outside this exception, \`generate_audio\` retains its full standalone scope.
 
 Use this tool after the user has confirmed a video script that is already visible in the conversation. You may also call it in the same turn where you first write the script when the user's current request explicitly authorizes direct submission without confirmation, for example "直接提交渲染", "不要问我确认", "不用确认", "直接生成视频", "submit now", or "do not ask for confirmation". A trusted Skill template launch may also authorize same-turn submission; that exception is supplied only in the system prompt and never inferred from ordinary user text or an active Skill name.
 
@@ -2130,14 +2162,21 @@ Use mode="locate_frame" when the user provides a screenshot/frame and you need t
 
 Use this when the user asks for transcript, subtitles, dialogue, spoken words, lyrics-like speech timing, time-based editing such as "cut the part where they say X", or when \`prompts/audio.md\` requires verification of Seed Audio exact speech, brand names, numbers, multilingual lines, duration, or cue timing.
 
+For narrated Remotion/Explainer work, pass expected_sections from the approved Script plus the Composition fps. The tool will align the measured speech to those section IDs, convert the same timebase to frames, and persist a narration cue sheet. That cue sheet is authoritative for Storyboard ranges, Remotion Sequences, subtitles, visual beats, and music ducking.
+
 For timeline videos, pass media_index. For external audio/video URLs, pass media_url. Results are cached into the video snapshot's video_meta.transcript when media_index is used. Use analyze_video instead for visual scene/action understanding.`,
       inputSchema: z.object({
         media_index: z.number().optional().describe('1-based Media Index index of the video to transcribe (<<<media_1>>> = 1). Preferred for timeline videos.'),
         media_url: z.string().optional().describe('External public audio/video URL to transcribe. Use only when the media is not in Media Index.'),
         language: z.string().optional().describe('Optional ASR language code such as zh-CN, en-US, ja-JP, ko-KR, id-ID. Omit for auto/default.'),
         force_refresh: z.boolean().optional().describe('Set true to ignore cached transcript and call ASR again. Default false.'),
+        expected_sections: z.array(z.object({
+          id: z.string().min(1).describe('Stable Script section ID.'),
+          text: z.string().min(1).describe('Exact approved narration text for this Script section.'),
+        })).min(1).max(100).optional().describe('Narrated Script sections in playback order. Pass these for Remotion/Explainer synchronization.'),
+        fps: z.number().positive().max(120).optional().describe('Composition FPS used to convert measured speech seconds to frame ranges. Default 30.'),
       }),
-      execute: async ({ media_index, media_url, language, force_refresh }) => {
+      execute: async ({ media_index, media_url, language, force_refresh, expected_sections, fps }) => {
         let resolvedUrl = media_url;
         let localMediaPath: string | undefined;
         let snapshotId: string | undefined;
@@ -2163,7 +2202,23 @@ For timeline videos, pass media_index. For external audio/video URLs, pass media
             videoMeta = snap?.video_meta as Record<string, unknown> | undefined;
             const cached = videoMeta?.transcript as VolcengineAsrTranscript | undefined;
             if (cached?.text && !force_refresh) {
-              return { transcript: cached, cached: true, media_index, videoUrl: cached.sourceUrl || resolvedUrl };
+              try {
+                const cueArtifact = await createNarrationCueArtifact({
+                  ctx,
+                  transcript: cached,
+                  expectedSections: expected_sections,
+                  fps,
+                });
+                return {
+                  transcript: cached,
+                  ...cueArtifact,
+                  cached: true,
+                  media_index,
+                  videoUrl: cached.sourceUrl || resolvedUrl,
+                };
+              } catch (error) {
+                return { error: `Narration alignment failed: ${error instanceof Error ? error.message : String(error)}` };
+              }
             }
             resolvedUrl = resolvedUrl || (videoMeta?.videoUrl as string | undefined);
             const videoPath = typeof videoMeta?.videoPath === 'string' ? videoMeta.videoPath : '';
@@ -2189,6 +2244,12 @@ For timeline videos, pass media_index. For external audio/video URLs, pass media
             uid: ctx.userId || 'makaron-agent',
             language,
           });
+          const cueArtifact = await createNarrationCueArtifact({
+            ctx,
+            transcript,
+            expectedSections: expected_sections,
+            fps,
+          });
 
           if (ctx.supabase && snapshotId && videoMeta) {
             const nextMeta = { ...videoMeta, transcript };
@@ -2199,7 +2260,13 @@ For timeline videos, pass media_index. For external audio/video URLs, pass media
             if (updateError) console.error('[transcribe_audio] transcript cache update failed:', updateError.message);
           }
 
-          return { transcript, cached: false, media_index, videoUrl: transcript.sourceUrl || resolvedUrl };
+          return {
+            transcript,
+            ...cueArtifact,
+            cached: false,
+            media_index,
+            videoUrl: transcript.sourceUrl || resolvedUrl,
+          };
         } catch (err) {
           return { error: `ASR transcription failed: ${err instanceof Error ? err.message : String(err)}` };
         }
@@ -2213,11 +2280,20 @@ For timeline videos, pass media_index. For external audio/video URLs, pass media
         if (!transcript) {
           return { type: 'content' as const, value: [{ type: 'text' as const, text: 'No transcript returned.' }] };
         }
+        const cueText = output.narrationCueSheet
+          ? [
+              '',
+              `Authoritative narration cue sheet${output.narrationCuePath ? `: ${output.narrationCuePath}` : ''}:`,
+              JSON.stringify(output.narrationCueSheet, null, 2),
+              '',
+              'Use these measured cue ranges and frame ranges for Storyboard, Remotion Sequences, subtitles, visual beats, and music ducking. Do not revert to planned Script timing.',
+            ].join('\n')
+          : '';
         return {
           type: 'content' as const,
           value: [{
             type: 'text' as const,
-            text: `${output.cached ? 'Cached ' : ''}ASR result${output.media_index ? ` for <<<media_${output.media_index}>>>` : ''}:\n\n${formatTranscriptForModel(transcript)}`,
+            text: `${output.cached ? 'Cached ' : ''}ASR result${output.media_index ? ` for <<<media_${output.media_index}>>>` : ''}:\n\n${formatTranscriptForModel(transcript)}${cueText}`,
           }],
         };
       },
@@ -4417,179 +4493,20 @@ Node media runtime provides \`require\`, \`process\`, \`ffmpegPath\`, \`inputFil
       },
     }),
 
-    list_voiceover_voices: tool({
-      description: `Fetch the current Volcengine Doubao / Seed Speech voice catalog so you can choose the best voice for a voiceover.
-
-Call this before generate_voiceover unless the user explicitly supplied a concrete voice_id or the conversation already contains a fresh voice catalog. Use the returned language, gender, scenario, style tags, and descriptions to pick a fitting voice for the user's content. Prefer voices whose language and scenario match the script; avoid novelty, rock, character, dialect, or highly stylized voices unless the user's task asks for that style.
-
-Exception: do not call this when the chosen final-video workflow is generate_animation; voice direction for that video belongs in story_prompt and does not need a separate TTS asset.`,
-      inputSchema: z.object({
-        query: z.string().optional().describe('Optional short description of what you need, e.g. "warm Chinese sales narration", "English energetic product demo", "古风女声". The tool returns the full catalog plus filtered suggestions when possible.'),
-        force_refresh: z.boolean().optional().describe('Set true to bypass the short server-side cache and call Volcengine ListSpeakers again. Default false.'),
-      }),
-      execute: async ({ query, force_refresh }) => {
-        const catalog = await listVolcengineTtsVoices({ forceRefresh: force_refresh, allowFallback: true });
-        const normalizedQuery = query?.trim().toLowerCase();
-        const scored = catalog.voices.map((voice) => {
-          const haystack = [
-            voice.id,
-            voice.name,
-            voice.language,
-            voice.gender,
-            voice.scenario,
-            voice.description,
-            voice.resourceId,
-            voice.model,
-            ...voice.styles,
-          ].filter(Boolean).join(' ').toLowerCase();
-          let score = 0;
-          if (normalizedQuery) {
-            for (const token of normalizedQuery.split(/[\s,，、;；/|]+/).filter(Boolean)) {
-              if (haystack.includes(token)) score += 2;
-            }
-          }
-          if (/中文|chinese|zh|普通话/.test(normalizedQuery || '') && /(^zh|中文|mandarin|普通话)/i.test(haystack)) score += 4;
-          if (/英文|english|en\b/.test(normalizedQuery || '') && /(^en|english|英文)/i.test(haystack)) score += 4;
-          if (/男|male/.test(normalizedQuery || '') && /male|男/.test(haystack)) score += 3;
-          if (/女|female/.test(normalizedQuery || '') && /female|女/.test(haystack)) score += 3;
-          if (/销售|sales|口播|旁白|解说|explainer|narration/.test(normalizedQuery || '') && /sales|口播|直播|广告|营销|general|通用|narration|旁白/.test(haystack)) score += 3;
-          return { voice, score };
-        }).sort((a, b) => b.score - a.score);
-        const suggestions = scored.filter(item => item.score > 0).slice(0, 12).map(item => item.voice);
-        return {
-          ...catalog,
-          count: catalog.voices.length,
-          suggestions: suggestions.length ? suggestions : catalog.voices.slice(0, 12),
-          query,
-        };
-      },
-      toModelOutput({ output }: { output: any }) {
-        const voices = Array.isArray(output.suggestions) ? output.suggestions : [];
-        const rows = voices.map((voice: any, index: number) => {
-          const tags = [
-            voice.language,
-            voice.gender,
-            voice.scenario,
-            ...(Array.isArray(voice.styles) ? voice.styles : []),
-          ].filter(Boolean).join(', ');
-          return `${index + 1}. ${voice.id}${voice.resourceId ? ` [resource_id=${voice.resourceId}]` : ''}${voice.name ? ` — ${voice.name}` : ''}${tags ? ` (${tags})` : ''}${voice.description ? `: ${voice.description}` : ''}`;
-        }).join('\n');
-        const warning = output.warning ? `\nWarning: ${output.warning}` : '';
-        return {
-          type: 'content' as const,
-          value: [{
-            type: 'text' as const,
-            text: `Volcengine voice catalog source=${output.source}, total=${output.count || output.voices?.length || 0}.${warning}\nSuggested voices:\n${rows || 'No voices returned.'}\n\nChoose one voice_id and pass both its voice_id and resource_id to generate_voiceover.`,
-          }],
-        };
-      },
-    }),
-
-    generate_voiceover: tool({
-      description: `Generate a spoken narration / voiceover audio clip with Volcengine Doubao Seed TTS, upload it to the project, and add it to the Audio Index.
-
-Use this precision fallback when the task specifically needs a dry isolated speech stem, deterministic word-for-word delivery, subtitle-grade timing, a stable selectable TTS voice, or Seed Audio failed speech verification. For normal narration, dialogue, multilingual character speech, music, ambience, sound effects, and complete mixed sound scenes, use generate_audio so Seed Audio can render them together.
-
-Exception: if the chosen final-video workflow is generate_animation, do not generate a separate voiceover. Put the exact dialogue, narration, and voice direction in story_prompt so the video model generates it with the picture.
-
-The generated audio becomes an Audio Index item (<<<audio_N>>>) in later turns. Use the audio marker only as a conversational/Seedance reference label. In Remotion composition code, always use the returned public audioUrl directly as the <Audio src>; never put <<<audio_N>>> in props or <Audio src>. Before calling this tool, call list_voiceover_voices and choose a concrete voice_id that fits the script, unless the user explicitly supplied one. If list_voiceover_voices returns fallback only, you may still use the best fallback voice but mention that the full voice catalog was unavailable.`,
-      inputSchema: z.object({
-        text: z.string().describe('The exact spoken text to synthesize. Keep it natural and speakable; rewrite stiff copy into oral narration first when appropriate.'),
-        title: z.string().optional().describe('Short title for the audio card/index, e.g. "Hook voiceover" or "Product narration".'),
-        voice_id: z.string().optional().describe('Optional Doubao speaker id / voice type. Omit to use the project default.'),
-        resource_id: z.enum(['seed-tts-2.0', 'seed-icl-2.0', 'seed-tts-1.0', 'seed-tts-1.0-concurr']).optional().describe('Volcengine resource id returned by list_voiceover_voices. Mars voices use seed-tts-1.0, Uranus voices use seed-tts-2.0, and authorized cloned voices use seed-icl-2.0.'),
-        speech_rate: z.number().min(-50).max(100).optional().describe('Speech speed. 0 is natural, 100 is 2x, -50 is 0.5x. Prefer 0 unless the user asks for faster/slower delivery.'),
-        context_prompt: z.string().optional().describe('Optional short voice direction for Seed TTS 2.0, e.g. "用轻松、真诚、有现场感的口吻".'),
-      }),
-      execute: async ({ text, title, voice_id, resource_id, speech_rate, context_prompt }) => {
-        if (!ctx.supabase || !ctx.userId) {
-          return { success: false as const, message: 'generate_voiceover requires an authenticated project workspace.' };
-        }
-
-        const result = await createVoiceover({
-          text,
-          title,
-          voiceId: voice_id,
-          resourceId: resource_id,
-          speechRate: speech_rate,
-          contextPrompt: context_prompt,
-        });
-        if (!result.success || !result.audio || !result.tts || !result.taskId) {
-          return { success: false as const, message: result.message };
-        }
-
-        const { data: latestRows } = await ctx.supabase
-          .from('project_music')
-          .select('track_index')
-          .eq('project_id', ctx.projectId)
-          .eq('user_id', ctx.userId)
-          .order('track_index', { ascending: false })
-          .limit(1);
-        const trackIndex = Number(latestRows?.[0]?.track_index ?? -1) + 1;
-        const audioUrl = await uploadAudio(ctx.supabase, ctx.userId, ctx.projectId, result.taskId, trackIndex, result.audio);
-        if (!audioUrl) {
-          return { success: false as const, message: 'Voiceover was generated but failed to upload to project storage.' };
-        }
-
-        const trackTitle = (result.title || title || 'Generated voiceover').slice(0, 120);
-        const { error: insertError } = await ctx.supabase.from('project_music').upsert({
-          suno_task_id: result.taskId,
-          track_index: trackIndex,
-          project_id: ctx.projectId,
-          user_id: ctx.userId,
-          prompt: text,
-          audio_url: audioUrl,
-          suno_audio_url: null,
-          stream_audio_url: null,
-          duration: null,
-          title: trackTitle,
-          tags: `voiceover,tts,doubao,${result.tts.resourceId}`,
-          status: 'completed',
-          selected: false,
-        }, { onConflict: 'suno_task_id,track_index' });
-        if (insertError) {
-          return { success: false as const, message: `Voiceover uploaded but DB insert failed: ${insertError.message}`, audioUrl };
-        }
-
-        const audioIndex = addAudioAttachment(ctx, { audioUrl, title: trackTitle, trackIndex });
-        deductCredits(ctx.userId, null, 'create_voiceover', result.tts.model)
-          .catch(e => console.error('[billing] generate_voiceover deduct error:', e));
-
-        return {
-          success: true as const,
-          message: `Voiceover generated and added to Audio Index as <<<audio_${audioIndex}>>>.\nResolved voiceover URL: ${audioUrl}\nUse this URL directly in Remotion <Audio src>; do not use the <<<audio_${audioIndex}>>> marker inside composition code or props.`,
-          audioUrl,
-          title: trackTitle,
-          trackIndex,
-          taskId: result.taskId,
-          model: result.tts.model,
-          voiceId: result.tts.voiceId,
-          resourceId: result.tts.resourceId,
-          textLength: result.tts.textLength,
-          sentenceCount: result.tts.sentences.length,
-        };
-      },
-      toModelOutput({ output }: { output: any }) {
-        return {
-          type: 'content' as const,
-          value: [{ type: 'text' as const, text: formatGeneratedAudioForModel('generate_voiceover', output) }],
-        };
-      },
-    }),
-
     generate_audio: tool({
       description: `Generate audio from a natural-language prompt.
 
-This is the default standalone audio tool for narration, dialogue, multilingual character speech, music, ambience, sound effects, and complete mixed sound scenes. Before its first use in a conversation, read \`prompts/audio.md\` and write one compact production brief with an audible timeline. It may replace a separate TTS + music + SFX pipeline when verification passes.
+This is the single Agent-facing audio-generation tool. Use it for every standalone voiceover, narration, dialogue, multilingual character performance, music bed, ambience, sound effect, and mixed sound scene. All voiceover content is generated by Seed Audio; there is no separate Agent voiceover or voice-catalog tool.
 
-Use generate_voiceover only for a dry isolated speech stem, deterministic word-for-word delivery, subtitle-grade timing, a stable selectable TTS voice, or as a precision fallback. generate_music is a compatibility alias for music-only callers.
+Before its first use in a conversation, read \`prompts/audio.md\` and write one compact production brief with an audible timeline. If the final soundtrack contains voice plus music, ambience, or SFX, make exactly one model generation with kind="mixed"; never generate voiceover and supporting audio separately. Use kind="voiceover" only for an intentionally isolated voice master. Include the exact spoken script plus a Voice Performance Brief, then call transcribe_audio with expected_sections and fps before Storyboard or Remotion composition work.
 
 Exception: if the chosen final-video workflow is generate_animation, do not generate a separate audio asset. Put the requested sound design in story_prompt so the video model generates it with the picture.
 
 Available audio model notes:
 ${formatAudioCapabilitiesForAgent()}`,
       inputSchema: z.object({
-        prompt: z.string().describe('Natural-language description of the audio to create. Include duration, mood, instruments, sound effects, voice direction, and constraints directly in the prompt.'),
+        kind: z.enum(['voiceover', 'dialogue', 'music', 'sound_design', 'mixed']).describe('Required audio intent. Use mixed whenever one deliverable contains voice plus music/ambience/SFX; this produces every layer in one Seed Audio model generation. Use voiceover only for an intentionally isolated voice-only master.'),
+        prompt: z.string().max(SEED_AUDIO_AGENT_PROMPT_MAX_CHARS).describe(`Natural-language description of the audio to create, maximum ${SEED_AUDIO_AGENT_PROMPT_MAX_CHARS} characters before the internal mode wrapper. Include duration, exact speech, mood, instruments, sound effects, voice direction, and constraints directly in this one compact prompt.`),
         duration_seconds: z.number().optional().describe('Requested duration in seconds. Seed Audio supports up to 120 seconds. Also include the duration in the prompt for best results.'),
         reference_voices: z.array(z.string()).max(3).optional().describe('Up to 3 Audio Index labels such as audio_1, or provider preset voice IDs. The prompt must bind them in order as @audio1, @audio2, and @audio3. Cannot be combined with image_ref.'),
         image_ref: z.number().int().positive().optional().describe('Optional 1-based Timeline Media image index for image-conditioned audio. The image must have a public HTTPS URL. Cannot be combined with reference_voices.'),
@@ -4602,6 +4519,7 @@ ${formatAudioCapabilitiesForAgent()}`,
         model: z.enum(['auto', 'evolink-seed-audio']).optional().describe('Audio model. Omit or use auto for the default Seed Audio model.'),
       }),
       execute: async ({
+        kind,
         prompt,
         duration_seconds,
         reference_voices,
@@ -4614,6 +4532,10 @@ ${formatAudioCapabilitiesForAgent()}`,
         title,
         model,
       }) => {
+        const audioKindError = validateAudioKindForRequest(ctx.userRequest || '', kind);
+        if (audioKindError) {
+          return { success: false as const, message: audioKindError };
+        }
         if (reference_voices?.length && image_ref != null) {
           return { success: false as const, message: 'Seed Audio reference_voices and image_ref are mutually exclusive.' };
         }
@@ -4622,7 +4544,11 @@ ${formatAudioCapabilitiesForAgent()}`,
           return { success: false as const, message: resolvedReferences.error };
         }
         let imageUrls: string[] | undefined;
-        if (image_ref != null) {
+        // image_ref is optional conditioning, not a required generation input.
+        // Some models default optional 1-based indices to 1 even in text-only
+        // projects. Ignore that impossible default instead of trapping the
+        // Agent in a validation retry loop before Seed Audio can run.
+        if (image_ref != null && ctx.snapshotImages.length > 0) {
           const validated = validateImageIndex(ctx.snapshotImages, image_ref);
           if (validated.error) return { success: false as const, message: validated.error };
           const imageUrl = toPublicStorageUrl(ctx.snapshotImages[validated.idx]);
@@ -4635,6 +4561,7 @@ ${formatAudioCapabilitiesForAgent()}`,
           imageUrls = [imageUrl];
         }
         const result = await createAudio({
+          kind,
           prompt,
           durationSeconds: duration_seconds,
           audioReferences: resolvedReferences.references,
@@ -4654,11 +4581,17 @@ ${formatAudioCapabilitiesForAgent()}`,
           if (result.audioUrl) {
             const audioIndex = addAudioAttachment(ctx, {
               audioUrl: result.audioUrl,
-              title: result.title || title || 'Generated audio',
+              title: result.title || title || (
+                kind === 'voiceover'
+                  ? 'Generated voiceover'
+                  : kind === 'mixed'
+                    ? 'Generated unified soundtrack'
+                    : 'Generated audio'
+              ),
               duration: result.duration,
               trackIndex: result.trackIndex,
             });
-            result.message = `${result.message}\nAdded to Audio Index as <<<audio_${audioIndex}>>>.\nResolved audio URL: ${result.audioUrl}\nUse this URL directly in Remotion <Audio src>; do not rely on the marker inside composition code or props.`;
+            result.message = `${result.message}\nAdded to Audio Index as <<<audio_${audioIndex}>>>.\nResolved ${kind === 'voiceover' ? 'voiceover master' : kind === 'mixed' ? 'unified soundtrack' : 'audio'} URL: ${result.audioUrl}\nUse this URL directly in Remotion <Audio src>; do not rely on the marker inside composition code or props.${kind === 'voiceover' || kind === 'mixed' ? '\nIf this asset contains speech, call transcribe_audio with expected_sections and the Composition fps before Storyboard or run_code.' : ''}`;
           }
           deductSeedAudioCredits(ctx.userId ?? '', {
             durationSeconds: result.duration,
@@ -4673,82 +4606,6 @@ ${formatAudioCapabilitiesForAgent()}`,
         return {
           type: 'content' as const,
           value: [{ type: 'text' as const, text: formatGeneratedAudioForModel('generate_audio', output) }],
-        };
-      },
-    }),
-
-    generate_music: tool({
-      description: `Compatibility alias for music-only callers. Before its first use in a conversation, read \`prompts/audio.md\`. Generate a timeline-directed music bed with Seed Audio and return one persisted audio asset. New agent decisions should normally use generate_audio, including music mixed with narration or SFX. Do not use Suno; all new music generation routes go through Seed Audio.
-
-Exception: if the chosen final-video workflow is generate_animation, do not generate a separate music asset. Put the music direction in story_prompt so the video model generates it in sync with the picture.`,
-      inputSchema: z.object({
-        prompt: z.string().describe('Timeline-directed music description: genre, mood, energy arc, instruments, mix role, and ending. Avoid artist names.'),
-        instrumental: z.boolean().optional().describe('No vocals (default: true)'),
-        style: z.string().optional().describe('Genre/mood tags for custom mode'),
-        duration_seconds: z.number().optional().describe('Requested duration for Seed Audio music beds. Seed Audio supports up to 120 seconds.'),
-        speech_rate: z.number().min(0.5).max(2).optional().describe('Global speech speed multiplier if the music prompt intentionally includes spoken or sung voice.'),
-        loudness_rate: z.number().min(0.5).max(2).optional().describe('Global loudness multiplier from 0.5 to 2.0.'),
-        pitch_rate: z.number().int().min(-12).max(12).optional().describe('Global pitch shift in integer semitones from -12 to 12.'),
-        format: z.enum(['wav', 'mp3', 'ogg_opus', 'pcm']).optional().describe('Output format. Default wav.'),
-        sample_rate: z.union([z.literal(8000), z.literal(16000), z.literal(24000), z.literal(48000)]).optional().describe('Output sample rate. Default 48000.'),
-        provider: z.enum(['auto', 'evolink-seed-audio']).optional().describe('Omit or use auto for Seed Audio. Kept only for compatibility.'),
-      }),
-      execute: async ({
-        prompt,
-        instrumental,
-        style,
-        duration_seconds,
-        speech_rate,
-        loudness_rate,
-        pitch_rate,
-        format,
-        sample_rate,
-        provider,
-      }) => {
-        const musicPrompt = [
-          prompt,
-          style ? `Style tags: ${style}.` : '',
-          instrumental === false
-            ? 'Use subtle vocal texture only if it supports the requested music bed; avoid dominant sung lyrics unless explicitly required.'
-            : 'Instrumental background music only, no vocals or lyrics.',
-        ].filter(Boolean).join('\n');
-        const result = await createAudio({
-          prompt: musicPrompt,
-          durationSeconds: duration_seconds,
-          speechRate: speech_rate,
-          loudnessRate: loudness_rate,
-          pitchRate: pitch_rate,
-          format,
-          sampleRate: sample_rate,
-          title: 'Generated music',
-          model: provider === 'evolink-seed-audio' ? provider : 'auto',
-          supabase: ctx.supabase,
-          userId: ctx.userId,
-          projectId: ctx.projectId,
-        });
-        if (result.success) {
-          if (result.audioUrl) {
-            const audioIndex = addAudioAttachment(ctx, {
-              audioUrl: result.audioUrl,
-              title: result.title || 'Generated music',
-              duration: result.duration,
-              trackIndex: result.trackIndex,
-            });
-            result.message = `${result.message}\nAdded to Audio Index as <<<audio_${audioIndex}>>>.\nResolved music URL: ${result.audioUrl}\nUse this URL directly in Remotion <Audio src>; do not rely on the marker inside composition code or props.`;
-          }
-          deductSeedAudioCredits(ctx.userId ?? '', {
-            durationSeconds: result.duration,
-            providerCreditsUsed: result.creditsUsed,
-            model: result.model,
-            generationSeconds: result.generationSeconds,
-          }).catch(e => console.error('[billing] generate_music deduct error:', e));
-        }
-        return result;
-      },
-      toModelOutput({ output }: { output: any }) {
-        return {
-          type: 'content' as const,
-          value: [{ type: 'text' as const, text: formatGeneratedAudioForModel('generate_music', output) }],
         };
       },
     }),
@@ -4777,9 +4634,7 @@ const DURABLE_IDEMPOTENT_TOOLS = new Set([
   'generate_animation',
   'materialize_media',
   'rotate_camera',
-  'generate_voiceover',
   'generate_audio',
-  'generate_music',
   'prepare_visual_asset',
 ]);
 
@@ -5009,6 +4864,10 @@ export async function* runMakaronAgent(
 ): AsyncGenerator<AgentStreamEvent> {
   const perf = options?.perf;
   const runtime = createAgentModelRuntime(options?.agentModel, projectId);
+  const userRequestMarker = '[User request — detect language and reply in the same language]\n';
+  const userRequest = prompt.includes(userRequestMarker)
+    ? prompt.slice(prompt.lastIndexOf(userRequestMarker) + userRequestMarker.length)
+    : prompt;
   const ctx: AgentContext = {
     currentImage,
     referenceImages: options?.referenceImages,
@@ -5030,6 +4889,7 @@ export async function* runMakaronAgent(
     currentDesignPath: options?.currentDesignPath,
     execution: options?.execution,
     agentRunId: options?.agentRunId || options?.execution?.runId,
+    userRequest,
   };
 
   const allTools = wrapDurableInputAwareTools(
@@ -5226,9 +5086,7 @@ export async function* runMakaronAgent(
       'transcribe_audio',
       'rotate_camera',
       'delete_file',
-      'generate_voiceover',
       'generate_audio',
-      'generate_music',
       'prepare_visual_asset',
     ]);
 
@@ -5652,8 +5510,15 @@ export async function* runMakaronAgent(
           yield { type: 'status', text: translate(responseLocale, 'agent.status.choosingVoice') };
         } else if (event.toolName === 'generate_voiceover') {
           yield { type: 'status', text: translate(responseLocale, 'agent.status.generatingVoiceover') };
-        } else if (event.toolName === 'generate_audio' || event.toolName === 'generate_music') {
-          yield { type: 'status', text: translate(responseLocale, 'agent.status.generatingAudio') };
+        } else if (event.toolName === 'generate_audio') {
+          const kind = (event.input as { kind?: string }).kind;
+          yield {
+            type: 'status',
+            text: translate(
+              responseLocale,
+              kind === 'voiceover' ? 'agent.status.generatingVoiceover' : 'agent.status.generatingAudio',
+            ),
+          };
         } else if (event.toolName === 'preview_frame') {
           const input = event.input as { frame?: number; timestamp?: number; frames?: number[]; timestamps?: number[] };
           const batch = input.frames?.length ? input.frames.join(', ') : input.timestamps?.length ? input.timestamps.map(value => `${value}s`).join(', ') : '';

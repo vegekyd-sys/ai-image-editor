@@ -12,6 +12,8 @@ describe('audio model capabilities', () => {
     expect(normalizeAudioModelId('auto')).toBe('evolink-seed-audio')
     expect(normalizeAudioModelId('doubao-seed-audio-1-0')).toBe('evolink-seed-audio')
     expect(normalizeAudioModelId('suno')).toBe('evolink-seed-audio')
+    expect(normalizeAudioModelId('tts')).toBe('evolink-seed-audio')
+    expect(normalizeAudioModelId('voiceover')).toBe('evolink-seed-audio')
 
     expect(getAudioModelCapability()).toMatchObject({
       id: 'evolink-seed-audio',
@@ -38,8 +40,7 @@ describe('audio model capabilities', () => {
   it('formats a compact capability card for the agent', () => {
     const text = formatAudioCapabilitiesForAgent()
     expect(text).toContain('evolink-seed-audio')
-    expect(text).toContain('volcengine-seed-tts')
-    expect(text).toContain('dry isolated speech stem')
+    expect(text).not.toContain('volcengine-seed-tts')
     expect(text).toContain('default=wav/48000Hz')
     expect(text).not.toContain('Suno')
   })

@@ -1,7 +1,7 @@
 export interface AudioModelCapability {
   id: string
   label: string
-  provider: 'evolink' | 'tts'
+  provider: 'evolink'
   providerModel?: string
   maxDurationSeconds: number
   defaultFormat: 'mp3' | 'wav' | 'pcm' | 'ogg_opus'
@@ -38,20 +38,6 @@ const AUDIO_MODEL_CAPABILITIES: Record<string, AudioModelCapability> = {
       'Returned provider URLs are temporary and should be persisted immediately.',
     ],
   },
-  'volcengine-seed-tts': {
-    id: 'volcengine-seed-tts',
-    label: 'Seed TTS 2.0',
-    provider: 'tts',
-    maxDurationSeconds: 600,
-    defaultFormat: 'mp3',
-    defaultSampleRate: 24000,
-    estimatedLatencySeconds: [5, 30],
-    recommendedConcurrency: 2,
-    notes: [
-      'Use the dedicated generate_voiceover tool for a dry isolated speech stem, deterministic word-for-word delivery, subtitle-grade timing, or Seed Audio precision fallback.',
-      'Best for workflows that require stable selectable voices without music, ambience, or sound effects in the same generation.',
-    ],
-  },
 }
 
 const AUDIO_MODEL_ALIASES: Record<string, string> = {
@@ -62,8 +48,8 @@ const AUDIO_MODEL_ALIASES: Record<string, string> = {
   evolink: 'evolink-seed-audio',
   'evolink-seed': 'evolink-seed-audio',
   suno: 'evolink-seed-audio',
-  tts: 'volcengine-seed-tts',
-  voiceover: 'volcengine-seed-tts',
+  tts: 'evolink-seed-audio',
+  voiceover: 'evolink-seed-audio',
 }
 
 export function normalizeAudioModelId(model?: string | null): string {

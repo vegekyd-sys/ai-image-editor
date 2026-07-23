@@ -133,6 +133,9 @@ function automatedGate(testCase: EvalCase, result: CaseResult): NonNullable<Case
 
   const manualSemanticCases = new Set([
     'full-scene-zh',
+    'unified-performance-mix-v1',
+    'unified-performance-mix-v2',
+    'unified-performance-mix-v3',
     'music-bed',
     'image-guided',
     'cross-language-reference',
@@ -194,6 +197,132 @@ async function inspectAudio(target: string): Promise<CaseResult['technical']> {
 }
 
 const cases: EvalCase[] = [
+  {
+    id: 'unified-performance-mix-v3',
+    claim: 'Compact one-pass performance score with audible music, line-level emotion, SFX, and real outro budget',
+    input: {
+      durationSeconds: 30,
+      speechRate: 1.02,
+      loudnessRate: 1.12,
+      pitchRate: 0,
+      format: 'wav',
+      sampleRate: 48000,
+      prompt: `成品目标：一次生成30秒可直接发布的中文完整混音。音乐、旁白、音效必须在同一次生成里共同表演，缺一不可；不要输出分轨。
+
+[MUSIC — 全程骨架]
+88 BPM温暖极简电子乐：玻璃合成器两小节主题、圆润贝斯、闷音底鼓、细碎电子打击、宽阔柔和pad。音乐从开头持续到最后，旁白时也要明显听得见旋律与节奏。开头完整演奏主题；中段逐步汇合、和声打开；最后至少3秒没有旁白，让音乐正常音量重奏主题并完整结束。无歌声，禁止提前淡出。
+
+[VOICE — 逐句表演]
+30岁左右女性，贴近麦克风，自然、有呼吸，不是播音腔。必须按下列情绪演，不要用同一种语气念完：
+1｜好奇靠近，前半明亮肯定，后半转为困惑和轻微失望：“你发现了吗？每个声音都对，合起来却不像一个世界。”
+2｜克制失望，列举时略分拍，重读“从没真正”，不控诉：“因为人声、音乐和音效，从没真正听见彼此。”
+3｜句前轻吸气，像突然想通；“共享”放慢变暖，结尾有希望：“统一生成，让它们共享停顿、空间，也共享情绪。”
+4｜平静笃定；“自然”后停顿，结尾温柔确信，不喊口号：“自然，不是轨道更多；是同一个世界，正在发生。”
+
+[SFX — 按顺序穿插]
+开头清亮启动音；第一句后左右错位click；第二句后碎片吸合加确认音；第三句后三个由近到远的UI blip；尾奏末尾温暖final button。每个音效短促、独立可辨、不盖字。
+
+[MIX]
+旁白居中前景；说话时音乐只轻降3 dB，句间立即恢复。音乐要像真正配乐，不能退化为近乎静音的氛围、单一低频或偶发脉冲。最后一句必须在尾奏开始前结束。`,
+    },
+    expectedSpeech: [
+      '你发现了吗每个声音都对合起来却不像一个世界',
+      '因为人声音乐和音效从没真正听见彼此',
+      '统一生成让它们共享停顿空间也共享情绪',
+      '自然不是轨道更多是同一个世界正在发生',
+    ],
+    asrLanguage: 'zh-CN',
+  },
+  {
+    id: 'unified-performance-mix-v2',
+    claim: 'One-pass mix with music treated as the continuous backbone, expressive narration, and timed SFX',
+    input: {
+      durationSeconds: 30,
+      speechRate: 0.96,
+      loudnessRate: 1.12,
+      pitchRate: 0,
+      format: 'wav',
+      sampleRate: 48000,
+      prompt: `标题：同一个世界正在发生
+模式：一次生成可直接发布的完整混音，不要分轨，不要二次生成
+语言：普通话
+时长：30秒
+
+音乐是全片骨架，绝不是可省略的背景：88 BPM温暖极简电子乐，玻璃合成器两小节主题、圆润合成贝斯、闷音底鼓、细碎电子打击、宽阔柔和pad。0-30秒持续清晰可闻；旁白时只降低3 dB，旋律和节奏仍能听清；句间恢复到与旁白相当的存在感。26.8秒后必须保持正常音量完成主题，禁止提前淡出或静音；29.2秒落final button，保留自然尾音到30秒。无歌声。
+
+旁白：30岁左右女性，贴近麦克风，自然、有呼吸，不是播音腔。四句是四段不同表演：
+1. 好奇地靠近听者；“声音都对”明亮肯定，到“却总像”转为困惑和轻微失望。
+2. 克制失望；“人声、音乐和音效”略分拍，重读“从没真正”，不控诉。
+3. 句前轻吸气，像突然想通；“共享”放慢变暖，“情绪的转折”带希望。
+4. 平静笃定；“自然”后停顿，结尾温柔确信，不喊口号。
+
+音效必须独立可辨且不盖字：0.7秒清亮启动音；7.3秒左右各一个左右错位click；14.5秒碎片吸合加确认音；21.4秒三个由近到远的UI blip；29.2秒温暖final button。
+
+时间线：
+[00:00-02.2] 仅音乐，完整主题和启动音。
+[02.2-07.0] 旁白1：“你有没有发现？声音都对，合在一起，却总像拼出来的。”
+[07.0-08.2] 仅音乐和左右click。
+[08.2-13.3] 旁白2：“因为人声、音乐和音效，从没真正听见彼此。”
+[13.3-15.2] 仅音乐；碎片吸合，确认音。
+[15.2-20.8] 旁白3：“统一生成，让它们共享停顿、空间，也共享情绪的转折。”
+[20.8-22.0] 仅音乐抬升，三个UI blip。
+[22.0-26.8] 旁白4：“所以自然，不是轨道更多，而是同一个世界正在发生。”
+[26.8-30.0] 仅音乐，正常音量完整收束，final button后留尾音。`,
+    },
+    expectedSpeech: [
+      '你有没有发现声音都对合在一起却总像拼出来的',
+      '因为人声音乐和音效从没真正听见彼此',
+      '统一生成让它们共享停顿空间也共享情绪的转折',
+      '所以自然不是轨道更多而是同一个世界正在发生',
+    ],
+    asrLanguage: 'zh-CN',
+  },
+  {
+    id: 'unified-performance-mix-v1',
+    claim: 'One prompt with clearly audible music, per-line emotional narration, and timed SFX',
+    input: {
+      durationSeconds: 30,
+      speechRate: 0.96,
+      loudnessRate: 1.12,
+      pitchRate: 0,
+      format: 'wav',
+      sampleRate: 48000,
+      prompt: `标题：同一个世界正在发生
+模式：旁白、音乐、氛围和音效一次生成的完整成品
+语言：普通话
+目标时长：30秒
+
+音乐（必须存在）：88 BPM温暖极简电子乐。玻璃质感合成器演奏两小节主题动机，圆润合成贝斯、闷音底鼓、细碎电子打击和宽阔柔和的pad。音乐从0秒连续到30秒，必须清晰可闻，不能退化成近乎静音的氛围或单一脉冲。前半段节奏略碎；14.5秒所有声部合流；21.5秒和声打开；27.8秒后音乐独立完成结尾。
+
+旁白：30岁左右女性，贴近麦克风，自然、有呼吸感，不是播音腔。每句必须有不同表演：
+1. 贴近听者、带好奇；“声音都对”先肯定，“却总像”转为困惑和轻微失望，尾句下沉。
+2. 克制的失望；列举“人声、音乐和音效”时略分拍，重读“从没真正”，不控诉。
+3. 像突然想明白，句前轻吸气；“共享”放慢并变暖，到“情绪的转折”出现希望。
+4. 平静笃定；“自然”后停顿，结尾不是口号，而是温柔确信。
+
+音效：0.7秒一次清亮启动音；6.8秒左右各一次左右错位click；14.5秒一次碎片吸合声加确认音；21.5秒三个由近到远的UI blip；29.4秒一次温暖final button。每个音效清楚、短促、不盖字。
+
+混音：旁白居中前景。说话时音乐只轻降3-4 dB，主题动机、节奏与和声仍明显可听；句间音乐立即抬升。音乐、旁白、音效三者缺一不可，无歌声。
+
+时间线：
+[00:00-02.0] 仅音乐开场，完整展示一次主题动机和启动音。
+[02.0-07.2] 旁白1：“你有没有发现？声音都对，合在一起，却总像拼出来的。”
+[07.2-08.3] 仅音乐和左右错位click。
+[08.3-13.4] 旁白2：“因为人声、音乐和音效，从没真正听见彼此。”
+[13.4-15.0] 仅音乐转场；碎片吸合，确认音落下。
+[15.0-20.8] 旁白3：“统一生成，让它们共享停顿、空间，也共享情绪的转折。”
+[20.8-22.0] 仅音乐抬升，三个UI blip出现。
+[22.0-27.8] 旁白4：“所以自然，不是轨道更多，而是同一个世界正在发生。”
+[27.8-30.0] 仅音乐结尾，完整主题动机和final button收束。`,
+    },
+    expectedSpeech: [
+      '你有没有发现声音都对合在一起却总像拼出来的',
+      '因为人声音乐和音效从没真正听见彼此',
+      '统一生成让它们共享停顿空间也共享情绪的转折',
+      '所以自然不是轨道更多而是同一个世界正在发生',
+    ],
+    asrLanguage: 'zh-CN',
+  },
   {
     id: 'full-scene-zh',
     claim: 'Unified narration + music + ambience + SFX in one pass',
@@ -396,13 +525,23 @@ Constraints: no skipped language; no translation; no extra speech.`,
 
 function manualReviewFor(testCase: EvalCase): string[] {
   const common = ['Listen for clipping, artifacts, naturalness, and whether the result is production-usable.']
+  if (
+    testCase.id === 'unified-performance-mix-v1'
+    || testCase.id === 'unified-performance-mix-v2'
+    || testCase.id === 'unified-performance-mix-v3'
+  ) return [
+    ...common,
+    'Confirm the electronic motif remains clearly audible under every spoken line and becomes stronger in all four voice-free windows.',
+    'Judge whether each of the four lines has the specified emotional turn instead of one uniform narrator delivery.',
+    'Confirm the startup chime, offset clicks, convergence/confirmation, three UI blips, and final button are distinct and correctly ordered.',
+  ]
   if (testCase.id === 'full-scene-zh') return [...common, 'Confirm narration, electronic music, startup chime, shutter, and final hit are all present and correctly mixed.']
   if (testCase.id === 'timeline-precision') return [...common, 'Compare the three spoken cues/effects against 1.0s, 5.0s, and 9.0s.']
   if (testCase.id === 'music-bed') return [...common, 'Confirm coherent motif, lift, no vocals, and a clean button ending; flag omitted or generic music.']
   if (testCase.id === 'image-guided') return [...common, 'Judge whether the voice and sound palette plausibly reflect the mascot image without becoming childish.']
   if (testCase.id === 'cross-language-reference') return [...common, 'A/B against exact-speech and judge speaker identity consistency across Japanese and French.']
   if (testCase.id === 'twenty-language-stress') return [...common, 'Count omitted languages and judge pronunciation/naturalness per language; Vietnamese is a known harder public benchmark case.']
-  return [...common, 'Verify every required word, number, letter, and brand name; use TTS fallback if any are wrong.']
+  return [...common, 'Verify every required word, number, letter, and brand name; retry with a shorter Seed Audio voice-first prompt if any are wrong.']
 }
 
 async function runCase(testCase: EvalCase, outDir: string, results: CaseResult[]): Promise<CaseResult> {
@@ -489,7 +628,7 @@ function markdownReport(results: CaseResult[]): string {
     '- `passed` means the provider accepted the case and returned a downloadable audio artifact; it is not a subjective MOS pass.',
     '- ASR coverage is exact normalized phrase containment and is intentionally strict. Review transcript errors before blaming generation.',
     '- Voice identity, mix completeness, music quality, pronunciation, and production usability still require listening.',
-    '- Keep `generate_voiceover` as the precision fallback when exact speech verification fails.',
+    '- All voiceover generation stays on Seed Audio; failed speech verification requires a clearer Seed Audio retry.',
     '',
     ...results.flatMap(result => [
       `## ${result.id}`,

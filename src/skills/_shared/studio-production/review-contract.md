@@ -40,8 +40,9 @@ or materializing an MP4.
    recorded in `subtitleSyncEvidence`. The displayed phrase must describe the
    same beat as both the current picture and the narration actually sounding
    then. Planned Script ranges alone are not timing evidence for a continuous
-   TTS file. Use ASR timing, retime mismatches, and keep evidence linked to the
-   persisted Storyboard scene. Do not standardize wording, placement,
+   voiceover master. Use the persisted narration cue sheet, retime mismatches,
+   and keep evidence linked to the persisted Storyboard scene. Do not
+   standardize wording, placement,
    typography, JSX, or animation merely to pass this check.
 5. Confirm required audio props are resolved public URLs, not undefined values
    or `<<<audio_N>>>` markers. Check unexpected silence, intelligible speech,

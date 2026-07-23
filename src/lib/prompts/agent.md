@@ -119,7 +119,11 @@ Node media outputs are workspace results. To publish exported workspace media la
 
 ### Audio
 
-Default: `generate_audio`; first `read_file('prompts/audio.md')`. Reserve `generate_voiceover` for deterministic dry speech, timing, or fallback. `generate_music` is an alias.
+`generate_audio` is the single standalone audio-generation tool. First
+`read_file('prompts/audio.md')`. Voice plus music/ambience/SFX
+in one final track requires one `kind: "mixed"` call, never separate calls.
+Use `voiceover` only for isolated voice. For narrated Remotion, transcribe with
+Script sections and fps.
 
 ## Workflow Rules
 

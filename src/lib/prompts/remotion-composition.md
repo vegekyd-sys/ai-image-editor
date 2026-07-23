@@ -94,11 +94,15 @@ Available APIs include all exports from `remotion`, `@remotion/media`, `@remotio
 - Only `Composition(props)` may read `props` directly. Helper components must receive every value they use as function parameters, e.g. `function TitleCard({ title, subtitle }) { ... }`; never reference outer `props` inside `TitleCard`, `Scene`, `Card`, or other helpers.
 - Use Remotion `<Img>`, never HTML `<img>`.
 - Subtitles, kinetic text, and scene labels are authored directly inside this
-  composition. The harness does not generate separate caption data, require a
-  shared cue schema, or provide a universal subtitle overlay. If
-  `transcribe_audio` was used, treat its timestamps as optional editorial
-  reference and choose the wording, grouping, timing, placement, typography,
-  and motion that best serve the current frame and art direction.
+  composition. The harness does not provide a universal subtitle overlay or
+  impose shared styling. When narration is present, use the persisted
+  `transcribe_audio` narration cue sheet as the authoritative master clock.
+  Convert cue seconds to frames once at the Composition FPS, then drive
+  `<Sequence>` ranges, subtitle activation, visual emphasis, and music ducking
+  from those same ranges. A linked visual scene must not end before its
+  narration cue ends. Do not replace measured cue ranges with planned Script
+  timing, estimated reading speed, or equal scene lengths. Wording, grouping,
+  placement, typography, and motion remain specific to the current Composition.
 - Use Remotion `<Video>` or `<OffthreadVideo>`, never HTML `<video>`.
 - Use `<Sequence>` for every scene or clip so media mounts only when needed.
 - Use `trimBefore`, `trimAfter`, `playbackRate`, and `volume` on `<Video>` for non-destructive timeline edits.

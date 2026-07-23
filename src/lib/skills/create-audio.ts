@@ -7,8 +7,12 @@ import {
 } from '../evolink-seed-audio'
 import { uploadAudio } from '../supabase/storage'
 
+export type AudioGenerationKind = 'voiceover' | 'dialogue' | 'music' | 'sound_design' | 'mixed'
+export const SEED_AUDIO_AGENT_PROMPT_MAX_CHARS = 1250
+
 export interface CreateAudioInput {
   prompt: string
+  kind?: AudioGenerationKind
   durationSeconds?: number
   audioReferences?: string[]
   imageUrls?: string[]
@@ -40,6 +44,7 @@ export interface CreateAudioResult {
   trackIndex?: number
   format?: string
   sampleRate?: number
+  kind?: AudioGenerationKind
 }
 
 async function nextTrackIndex(supabase: SupabaseClient, projectId: string): Promise<number> {
@@ -58,10 +63,11 @@ async function persistAudioAsset(input: {
   userId: string
   projectId: string
   prompt: string
+  kind: AudioGenerationKind
   title: string
   result: EvolinkSeedAudioResult
 }): Promise<{ audioUrl: string; trackIndex: number }> {
-  const { supabase, userId, projectId, prompt, title, result } = input
+  const { supabase, userId, projectId, prompt, kind, title, result } = input
   const trackIndex = await nextTrackIndex(supabase, projectId)
   let permanentUrl = result.audioUrl
 
@@ -101,6 +107,7 @@ async function persistAudioAsset(input: {
     tags: [
       'audio',
       'seed-audio',
+      `kind:${kind}`,
       result.provider,
       result.model,
       `format:${result.format}`,
@@ -114,23 +121,35 @@ async function persistAudioAsset(input: {
 }
 
 export async function createAudio(input: CreateAudioInput): Promise<CreateAudioResult> {
-  const prompt = input.prompt.trim()
-  if (!prompt) {
+  const kind = input.kind || 'mixed'
+  const rawPrompt = input.prompt.trim()
+  if (!rawPrompt) {
     return { success: false, message: 'Audio prompt is required.' }
   }
-
+  if (rawPrompt.length > SEED_AUDIO_AGENT_PROMPT_MAX_CHARS) {
+    return {
+      success: false,
+      message: `Audio prompt must be ${SEED_AUDIO_AGENT_PROMPT_MAX_CHARS} characters or less before the Seed Audio mode wrapper is added.`,
+    }
+  }
+  const prompt = kind === 'voiceover'
+    ? [
+        'Mode: isolated voiceover master.',
+        'Generate spoken voice only. No music, ambience, sound effects, or sung vocals.',
+        rawPrompt,
+      ].join('\n')
+    : kind === 'mixed'
+      ? [
+          'Mode: one-pass unified finished soundtrack.',
+          'Generate all requested speech, music, ambience, and SFX together in this single synchronized asset and model pass. Preserve exact speech, keep it foreground, and return no stems.',
+          rawPrompt,
+        ].join('\n')
+      : rawPrompt
   const model = normalizeAudioModelId(input.model)
   const capability = getAudioModelCapability(model)
   const validationError = validateAudioRequest({ model, durationSeconds: input.durationSeconds })
   if (validationError) {
     return { success: false, message: validationError }
-  }
-
-  if (capability.provider !== 'evolink') {
-    return {
-      success: false,
-      message: `${capability.label} is not available through generate_audio. Use the dedicated ${capability.provider === 'tts' ? 'generate_voiceover' : 'generate_music'} tool.`,
-    }
   }
 
   try {
@@ -147,7 +166,13 @@ export async function createAudio(input: CreateAudioInput): Promise<CreateAudioR
       callbackUrl: input.callbackUrl,
     })
 
-    const title = input.title?.trim() || 'Generated audio'
+    const title = input.title?.trim() || (
+      kind === 'voiceover'
+        ? 'Generated voiceover'
+        : kind === 'mixed'
+          ? 'Generated unified soundtrack'
+          : 'Generated audio'
+    )
     let audioUrl = result.audioUrl
     let trackIndex: number | undefined
 
@@ -157,6 +182,7 @@ export async function createAudio(input: CreateAudioInput): Promise<CreateAudioR
         userId: input.userId,
         projectId: input.projectId,
         prompt,
+        kind,
         title,
         result,
       })
@@ -179,6 +205,7 @@ export async function createAudio(input: CreateAudioInput): Promise<CreateAudioR
       trackIndex,
       format: result.format,
       sampleRate: input.sampleRate || capability.defaultSampleRate,
+      kind,
     }
   } catch (e) {
     const msg = e instanceof Error ? e.message : String(e)

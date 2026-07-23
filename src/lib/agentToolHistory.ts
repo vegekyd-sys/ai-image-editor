@@ -423,6 +423,28 @@ function sanitizePersistedToolRow(row: DbToolHistoryRow): DbToolHistoryRow {
   };
 }
 
+function normalizeLegacyAudioToolRow(row: DbToolHistoryRow): DbToolHistoryRow | null {
+  if (row.tool_name === 'list_voiceover_voices') return null;
+  if (row.tool_name !== 'generate_voiceover' && row.tool_name !== 'generate_music') return row;
+  const input = row.input && typeof row.input === 'object' ? row.input as JsonRecord : {};
+  const kind = row.tool_name === 'generate_voiceover' ? 'voiceover' : 'music';
+  const prompt = typeof input.prompt === 'string'
+    ? input.prompt
+    : typeof input.text === 'string'
+      ? input.text
+      : 'Legacy generated audio';
+  return {
+    ...row,
+    tool_name: 'generate_audio',
+    input: {
+      kind,
+      prompt,
+      ...(typeof input.title === 'string' ? { title: input.title } : {}),
+      ...(typeof input.duration_seconds === 'number' ? { duration_seconds: input.duration_seconds } : {}),
+    },
+  };
+}
+
 function isReplayableToolRow(row: DbToolHistoryRow): boolean {
   if (row.tool_name !== 'run_code') return true;
   const input = row.input && typeof row.input === 'object' ? row.input as JsonRecord : {};
@@ -443,6 +465,10 @@ function isReplayableToolRow(row: DbToolHistoryRow): boolean {
 export function buildToolHistoryMessages(rows: DbToolHistoryRow[]): ModelMessage[] {
   const messages: ModelMessage[] = [];
   const validRows = rows
+    // The current Agent has one canonical audio tool. Normalize old sessions so
+    // stale aliases cannot teach the model to call tools that no longer exist.
+    .map(normalizeLegacyAudioToolRow)
+    .filter((row): row is DbToolHistoryRow => row !== null)
     // Old rows may predate write-time sanitization. Treat the database as an
     // untrusted transport and strip binary payloads again before model replay.
     .map(sanitizePersistedToolRow)
