@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import {
+  requestsImageConditionedAudio,
   requiresUnifiedMixedAudio,
   validateAudioKindForRequest,
 } from '../src/lib/audio-generation-policy'
@@ -18,5 +19,12 @@ describe('unified Seed Audio generation policy', () => {
     expect(requiresUnifiedMixedAudio('voice-only narration without music')).toBe(false)
     expect(requiresUnifiedMixedAudio('instrumental only, no voiceover')).toBe(false)
     expect(validateAudioKindForRequest('纯旁白', 'voiceover')).toBeUndefined()
+  })
+
+  it('only opts into image-conditioned audio when the user explicitly asks', () => {
+    expect(requestsImageConditionedAudio('根据这张图片生成一段配乐和旁白')).toBe(true)
+    expect(requestsImageConditionedAudio('Use this image to guide the soundtrack')).toBe(true)
+    expect(requestsImageConditionedAudio('只把当前统一音轨的音乐调大一点')).toBe(false)
+    expect(requestsImageConditionedAudio('Keep the existing video and regenerate its audio mix')).toBe(false)
   })
 })

@@ -13,7 +13,10 @@ import { deductFixedCredits } from './billing/credits';
 import { deductSeedAudioCredits } from './billing/seed-audio';
 import { createAudio, SEED_AUDIO_AGENT_PROMPT_MAX_CHARS } from './skills/create-audio';
 import { formatAudioCapabilitiesForAgent } from './audio-model-capabilities';
-import { validateAudioKindForRequest } from './audio-generation-policy';
+import {
+  requestsImageConditionedAudio,
+  validateAudioKindForRequest,
+} from './audio-generation-policy';
 import { transcribeWithVolcengineAsr, type VolcengineAsrTranscript, type TranscriptWord } from './volcengine-asr';
 import { buildNarrationCueSheet, type ExpectedNarrationSection } from './narration-cues';
 import { prepareVisualAsset, resolvePreparedVisualAssetById } from './visual-assets/bridge';
@@ -4509,7 +4512,7 @@ ${formatAudioCapabilitiesForAgent()}`,
         prompt: z.string().max(SEED_AUDIO_AGENT_PROMPT_MAX_CHARS).describe(`Natural-language description of the audio to create, maximum ${SEED_AUDIO_AGENT_PROMPT_MAX_CHARS} characters before the internal mode wrapper. Include duration, exact speech, mood, instruments, sound effects, voice direction, and constraints directly in this one compact prompt.`),
         duration_seconds: z.number().optional().describe('Requested duration in seconds. Seed Audio supports up to 120 seconds. Also include the duration in the prompt for best results.'),
         reference_voices: z.array(z.string()).max(3).optional().describe('Up to 3 Audio Index labels such as audio_1, or provider preset voice IDs. The prompt must bind them in order as @audio1, @audio2, and @audio3. Cannot be combined with image_ref.'),
-        image_ref: z.number().int().positive().optional().describe('Optional 1-based Timeline Media image index for image-conditioned audio. The image must have a public HTTPS URL. Cannot be combined with reference_voices.'),
+        image_ref: z.number().int().positive().optional().describe('Optional 1-based Timeline Media image index for image-conditioned audio. Set this only when the user explicitly asks to condition audio on a still image. Never inherit the current or selected media automatically, and never pass a video snapshot. The image must have a public HTTPS URL. Cannot be combined with reference_voices.'),
         speech_rate: z.number().min(0.5).max(2).optional().describe('Global speech speed multiplier from 0.5 to 2.0. Default 1.0.'),
         loudness_rate: z.number().min(0.5).max(2).optional().describe('Global loudness multiplier from 0.5 to 2.0. Default 1.0; still direct mix priority in the prompt.'),
         pitch_rate: z.number().int().min(-12).max(12).optional().describe('Global pitch shift in integer semitones from -12 to 12. Default 0; avoid extremes.'),
@@ -4536,7 +4539,9 @@ ${formatAudioCapabilitiesForAgent()}`,
         if (audioKindError) {
           return { success: false as const, message: audioKindError };
         }
-        if (reference_voices?.length && image_ref != null) {
+        const useExplicitImageConditioning = image_ref != null
+          && requestsImageConditionedAudio(ctx.userRequest || '');
+        if (reference_voices?.length && useExplicitImageConditioning) {
           return { success: false as const, message: 'Seed Audio reference_voices and image_ref are mutually exclusive.' };
         }
         const resolvedReferences = resolveSeedAudioReferences(ctx.audioAttachments, reference_voices);
@@ -4544,11 +4549,11 @@ ${formatAudioCapabilitiesForAgent()}`,
           return { success: false as const, message: resolvedReferences.error };
         }
         let imageUrls: string[] | undefined;
-        // image_ref is optional conditioning, not a required generation input.
-        // Some models default optional 1-based indices to 1 even in text-only
-        // projects. Ignore that impossible default instead of trapping the
-        // Agent in a validation retry loop before Seed Audio can run.
-        if (image_ref != null && ctx.snapshotImages.length > 0) {
+        // image_ref is optional user-requested conditioning, never selected
+        // Timeline state. Some models populate optional indices from the
+        // current media even for text-only audio revisions; ignore that
+        // accidental value instead of trapping the Agent in a retry loop.
+        if (useExplicitImageConditioning && ctx.snapshotImages.length > 0) {
           const validated = validateImageIndex(ctx.snapshotImages, image_ref);
           if (validated.error) return { success: false as const, message: validated.error };
           const imageUrl = toPublicStorageUrl(ctx.snapshotImages[validated.idx]);
