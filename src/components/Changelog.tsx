@@ -10,6 +10,17 @@ interface ChangelogEntry {
 
 const CHANGELOG: ChangelogEntry[] = [
   {
+    date: '2026-07-24',
+    en: { title: 'Agent Coding, Without Dead Ends', items: [
+      'Makaron now gives Agent-written Node and FFmpeg programs a dedicated isolated Sandbox with real process feedback, standard Node capabilities, and npm packages installed on demand.',
+      'Editable Remotion compositions and file-level MP4 work now use separate runtimes, so the Agent can repair its own code and finish more video tasks without compatibility loops.',
+    ]},
+    zh: { title: 'Agent 编程，不再卡在死胡同', items: [
+      'Makaron 现在为 Agent 编写的 Node 与 FFmpeg 程序提供独立隔离 Sandbox，支持真实进程反馈、标准 Node 能力和按需安装 npm 包。',
+      '可编辑 Remotion composition 与文件级 MP4 处理现在使用独立运行时，让 Agent 能持续修复自己的代码并完成更多视频任务，不再反复陷入兼容性循环。',
+    ]},
+  },
+  {
     date: '2026-07-23',
     en: { title: 'Seed Audio: One Prompt, One Complete Soundtrack', items: [
       'Voiceover, music, and sound effects are now composed together in a single Seed Audio generation, so the whole soundtrack feels like one performance instead of separate layers stitched together.',

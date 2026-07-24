@@ -32,3 +32,20 @@ compatible executor, then give control back to the Agent.
   test first, patch the runtime, run unit/build/real-media smoke, and request
   human approval. Do not auto-merge or auto-deploy until explicit standards are
   accepted.
+
+## Deferred: Agent-run-scoped Node Sandbox reuse
+
+- Reuse one Node media Sandbox only within the same `userId`, `projectId`, and
+  Agent execution so code repairs, downloaded inputs, npm packages, and
+  intermediate files remain warm during that run.
+- Stop the Sandbox when the Agent execution completes, aborts, fails, or is
+  cancelled; also enforce a short idle TTL (initial target: 90 seconds) and a
+  hard maximum lifetime (initial target: 5 minutes).
+- Never share a warm Node Sandbox across users, projects, or unrelated Agent
+  executions, and never promote dynamically installed packages into the shared
+  base Snapshot automatically.
+- Upgrade `@vercel/sandbox` deliberately before implementation and make
+  persistence/snapshot behavior explicit rather than relying on SDK defaults.
+- Measure cold-start latency, repeated npm-install time, input-transfer time,
+  active CPU, provisioned-memory minutes, repair attempts, and time to final
+  artifact before deciding whether the idle TTL should change.
