@@ -814,11 +814,6 @@ function HomePageInner() {
               )
             }
             if (d.credits > 0) {
-              trackMetaEvent(
-                'StartTrial',
-                { credits: d.credits },
-                d.metaEvents?.StartTrial || createMetaEventId('starttrial'),
-              )
               setWelcomeCredits(d.credits); setShowWelcome(true)
               window.dispatchEvent(new Event('credits-updated'))
             } else if (d.isNew === false) {

@@ -162,13 +162,6 @@ export default function LoginPage() {
         {},
         complete.metaEvents?.CompleteRegistration || createMetaEventId('registration'),
       )
-      if (complete.credits > 0) {
-        trackMetaEvent(
-          'StartTrial',
-          { credits: complete.credits },
-          complete.metaEvents?.StartTrial || createMetaEventId('starttrial'),
-        )
-      }
     }
     redirectAfterAuth({
       fallback: options?.fallback || complete.redirectUrl || '/projects',

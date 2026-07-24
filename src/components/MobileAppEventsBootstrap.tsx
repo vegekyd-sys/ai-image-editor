@@ -4,6 +4,7 @@ import { useEffect } from 'react'
 import { useRouter } from 'next/navigation'
 import { isMakaronIOSApp } from '@/lib/native-app'
 import {
+  captureMobileDeepLinkAttribution,
   clearPendingDeepLink,
   fetchDeferredMobileAppLink,
   getPendingDeepLink,
@@ -28,8 +29,18 @@ export default function MobileAppEventsBootstrap() {
       persistPendingDeepLink(value)
       const route = routeForMakaronDeepLink(value)
       if (!route || cancelled) return
+      captureMobileDeepLinkAttribution(value)
       clearPendingDeepLink()
       router.replace(route)
+    }
+
+    const recordFirstOpen = () => {
+      try {
+        if (!localStorage.getItem(FIRST_OPEN_KEY)) {
+          localStorage.setItem(FIRST_OPEN_KEY, '1')
+          trackMetaEvent('AppFirstOpen')
+        }
+      } catch {}
     }
 
     async function start() {
@@ -45,14 +56,6 @@ export default function MobileAppEventsBootstrap() {
 
       await initializeMobileAppEvents()
 
-      // This is first-party funnel telemetry. Meta records the install automatically.
-      try {
-        if (!localStorage.getItem(FIRST_OPEN_KEY)) {
-          localStorage.setItem(FIRST_OPEN_KEY, '1')
-          trackMetaEvent('AppFirstOpen')
-        }
-      } catch {}
-
       const launchUrl = await App.getLaunchUrl()
       if (launchUrl?.url) {
         routeDeepLink(launchUrl.url)
@@ -65,6 +68,10 @@ export default function MobileAppEventsBootstrap() {
           if (deferredUrl) routeDeepLink(deferredUrl)
         }
       }
+
+      // Resolve and persist deferred attribution before recording first open.
+      // Meta records the install automatically; this event is our first-party truth.
+      recordFirstOpen()
     }
 
     void start().catch((error) => {

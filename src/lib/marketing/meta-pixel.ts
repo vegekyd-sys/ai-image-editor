@@ -58,6 +58,10 @@ function attributionParams(attribution?: MarketingAttribution): MetaEventParams 
     utm_campaign: a.utm_campaign,
     utm_content: a.utm_content,
     utm_term: a.utm_term,
+    campaign_id: a.campaign_id,
+    adset_id: a.adset_id,
+    ad_id: a.ad_id,
+    creative_id: a.creative_id,
     skill_id: a.skill_id,
   }
 }

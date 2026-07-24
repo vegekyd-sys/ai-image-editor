@@ -80,7 +80,10 @@ describe('verified authentication completion route', () => {
     expect(upsert).toHaveBeenCalledWith(expect.objectContaining({ id: 'new-user', activated: true }), { onConflict: 'id' })
     expect(mocks.addCredits).toHaveBeenCalledWith('new-user', 500)
     expect(insert).toHaveBeenCalledWith(expect.objectContaining({ credits: 500, source: 'welcome' }))
-    expect(mocks.sendMetaCapiEvent).toHaveBeenCalledTimes(2)
+    expect(mocks.sendMetaCapiEvent).toHaveBeenCalledTimes(1)
+    expect(mocks.sendMetaCapiEvent).toHaveBeenCalledWith(
+      expect.objectContaining({ eventName: 'CompleteRegistration' }),
+    )
   })
 
   it('keeps completion idempotent for an already activated user', async () => {

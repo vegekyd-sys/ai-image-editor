@@ -3,6 +3,7 @@
 import { MetaAppEvents } from '@makaron/capacitor-meta-app-events'
 import type { MetaEventName } from './meta-pixel'
 import { isMakaronIOSApp } from '@/lib/native-app'
+import { captureMarketingAttribution, type MarketingAttribution } from './attribution'
 
 type MobileEventParams = Record<string, string | number | boolean | undefined>
 
@@ -23,6 +24,18 @@ const AUTOMATIC_META_EVENTS = new Set<MetaEventName>([
   'Subscribe',
   'Purchase',
 ])
+const DEEP_LINK_ATTRIBUTION_KEYS = [
+  'utm_source',
+  'utm_medium',
+  'utm_campaign',
+  'utm_content',
+  'utm_term',
+  'campaign_id',
+  'adset_id',
+  'ad_id',
+  'creative_id',
+  'fbclid',
+] as const
 
 let context: MobileAppEventsContext = { provider: 'meta_app_events' }
 let initializationPromise: Promise<boolean> | null = null
@@ -100,6 +113,40 @@ export function clearPendingDeepLink(): void {
   } catch {}
 }
 
+function mobileSkillId(url: URL): string | undefined {
+  if (url.protocol === 'makaron:' && url.hostname === 'skill') {
+    return url.pathname.split('/').filter(Boolean)[0]
+  }
+  if (url.protocol !== 'https:' || !['makaron.app', 'www.makaron.app'].includes(url.hostname)) {
+    return undefined
+  }
+  const segments = url.pathname.split('/').filter(Boolean)
+  return url.searchParams.get('skill')
+    || (segments[0] === 'home' && segments.length > 1 ? segments[1] : undefined)
+    || undefined
+}
+
+function routeParamsForDeepLink(url: URL, skillId: string): URLSearchParams {
+  const params = new URLSearchParams()
+  params.set('skill', skillId)
+  for (const key of DEEP_LINK_ATTRIBUTION_KEYS) {
+    const value = url.searchParams.get(key)
+    if (value) params.set(key, value)
+  }
+  return params
+}
+
+export function captureMobileDeepLinkAttribution(value: string): MarketingAttribution | undefined {
+  try {
+    const url = new URL(value)
+    const skillId = mobileSkillId(url)
+    if (!skillId) return undefined
+    return captureMarketingAttribution('/home', routeParamsForDeepLink(url, skillId))
+  } catch {
+    return undefined
+  }
+}
+
 export async function fetchDeferredMobileAppLink(): Promise<string | undefined> {
   if (!isMakaronIOSApp() || typeof window === 'undefined') return undefined
   try {
@@ -119,19 +166,8 @@ export async function fetchDeferredMobileAppLink(): Promise<string | undefined> 
 export function routeForMakaronDeepLink(value: string): string | undefined {
   try {
     const url = new URL(value)
-    if (url.protocol === 'makaron:' && url.hostname === 'skill') {
-      const skillId = url.pathname.split('/').filter(Boolean)[0]
-      return skillId ? `/home?skill=${encodeURIComponent(skillId)}` : undefined
-    }
-
-    if (url.protocol !== 'https:' || !['makaron.app', 'www.makaron.app'].includes(url.hostname)) {
-      return undefined
-    }
-    const skillFromQuery = url.searchParams.get('skill')
-    const segments = url.pathname.split('/').filter(Boolean)
-    const skillFromPath = segments[0] === 'home' && segments.length > 1 ? segments[1] : undefined
-    const skillId = skillFromQuery || skillFromPath
-    return skillId ? `/home?skill=${encodeURIComponent(skillId)}` : undefined
+    const skillId = mobileSkillId(url)
+    return skillId ? `/home?${routeParamsForDeepLink(url, skillId)}` : undefined
   } catch {
     return undefined
   }

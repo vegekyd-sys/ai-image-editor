@@ -10,7 +10,7 @@ type CompletionResult = {
   isNewUser: boolean
   credits: number
   redirectUrl: string
-  metaEvents: { CompleteRegistration?: string; StartTrial?: string }
+  metaEvents: { CompleteRegistration?: string }
   cookiesToSet: { name: string; value: string; options: Record<string, unknown> }[]
 }
 
@@ -88,7 +88,6 @@ async function completeVerifiedSession(request: NextRequest): Promise<Completion
   const metaEvents: CompletionResult['metaEvents'] = isNewUser
     ? {
       CompleteRegistration: `registration.${user.id}`,
-      ...(credits > 0 ? { StartTrial: `starttrial.${user.id}` } : {}),
     }
     : {}
 
@@ -110,17 +109,6 @@ async function completeVerifiedSession(request: NextRequest): Promise<Completion
         eventSourceUrl,
         customData: attribution,
       })
-      if (credits > 0) {
-        await sendMetaCapiEvent({
-          eventName: 'StartTrial',
-          eventId: metaEvents.StartTrial!,
-          userId: user.id,
-          email: user.email,
-          request,
-          eventSourceUrl,
-          customData: { credits, ...attribution },
-        })
-      }
     } catch (trackingError) {
       console.error('[auth/complete] Registration tracking failed (non-blocking):', trackingError)
     }

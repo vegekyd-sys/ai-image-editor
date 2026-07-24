@@ -60,14 +60,12 @@ export async function POST(req: NextRequest) {
   }
 
   const registrationEventId = `registration.${user.id}`
-  const startTrialEventId = `starttrial.${user.id}`
   const response = NextResponse.json({
     activated: true,
     isNew: true,
     credits,
     metaEvents: {
       CompleteRegistration: registrationEventId,
-      ...(credits > 0 ? { StartTrial: startTrialEventId } : {}),
     },
   })
   const attribution = readAttributionCookie(req.cookies.get('mkr_attribution')?.value)
@@ -86,17 +84,6 @@ export async function POST(req: NextRequest) {
     eventSourceUrl,
     customData: attribution,
   })
-  if (credits > 0) {
-    await sendMetaCapiEvent({
-      eventName: 'StartTrial',
-      eventId: startTrialEventId,
-      userId: user.id,
-      email: user.email,
-      request: req,
-      eventSourceUrl,
-      customData: { credits, ...attribution },
-    })
-  }
   response.cookies.set('mkr_activated', '1', {
     path: '/',
     maxAge: 365 * 24 * 60 * 60,
