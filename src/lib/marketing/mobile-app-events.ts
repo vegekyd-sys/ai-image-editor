@@ -13,6 +13,10 @@ export interface MobileAppEventsContext {
 }
 
 const PENDING_DEEP_LINK_KEY = 'makaron:pending-deep-link'
+const DEFERRED_DEEP_LINK_CHECKED_KEY = 'makaron:meta-deferred-deep-link-checked'
+type DeferredLinkCapableMetaAppEvents = typeof MetaAppEvents & {
+  fetchDeferredAppLink?: () => Promise<{ url?: string | null }>
+}
 const AUTOMATIC_META_EVENTS = new Set<MetaEventName>([
   'AppFirstOpen',
   'StartTrial',
@@ -94,6 +98,22 @@ export function clearPendingDeepLink(): void {
   try {
     localStorage.removeItem(PENDING_DEEP_LINK_KEY)
   } catch {}
+}
+
+export async function fetchDeferredMobileAppLink(): Promise<string | undefined> {
+  if (!isMakaronIOSApp() || typeof window === 'undefined') return undefined
+  try {
+    if (localStorage.getItem(DEFERRED_DEEP_LINK_CHECKED_KEY)) return undefined
+    if (!await initializeMobileAppEvents()) return undefined
+    const fetchDeferredAppLink = (MetaAppEvents as DeferredLinkCapableMetaAppEvents).fetchDeferredAppLink
+    if (typeof fetchDeferredAppLink !== 'function') return undefined
+    const result = await fetchDeferredAppLink.call(MetaAppEvents)
+    localStorage.setItem(DEFERRED_DEEP_LINK_CHECKED_KEY, '1')
+    return typeof result.url === 'string' && result.url ? result.url : undefined
+  } catch (error) {
+    console.warn('[MetaAppEvents] deferred app link lookup failed:', error)
+    return undefined
+  }
 }
 
 export function routeForMakaronDeepLink(value: string): string | undefined {

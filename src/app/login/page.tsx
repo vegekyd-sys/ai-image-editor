@@ -11,6 +11,10 @@ import RollingTagline from '@/components/RollingTagline'
 import { MakaronSpark, MAKARON_WORDMARK_STYLE } from '@/components/MakaronLogo'
 import { useHydrated } from '@/hooks/useHydrated'
 import { createMetaEventId, trackMetaEvent } from '@/lib/marketing/meta-pixel'
+import {
+  resolveAuthReturnPathForRuntime,
+  selectAuthReturnPath,
+} from '@/lib/auth-return'
 
 type View = 'form' | 'verify-otp' | 'forgot-password' | 'reset-password'
 type OtpPurpose = 'signup' | 'recovery'
@@ -97,19 +101,32 @@ export default function LoginPage() {
   }, [resendCooldown])
 
   function getReturnUrl(): string {
-    return sessionStorage.getItem('mkr_return_url') || localStorage.getItem('mkr_return_url') || ''
+    const queryReturn = new URLSearchParams(window.location.search).get('next')
+    return selectAuthReturnPath(
+      queryReturn,
+      sessionStorage.getItem('mkr_return_url'),
+      localStorage.getItem('mkr_return_url'),
+    )
   }
 
   function resolveReturnUrlForRuntime(returnUrl: string): string {
-    const skillMatch = returnUrl.match(/^\/home\/([^/?]+)/)
-    if (!skillMatch) return returnUrl
-    const skillId = skillMatch[1]
-    if (isMakaronIOSApp()) {
+    const iosAppRuntime = isMakaronIOSApp()
+    const resolved = resolveAuthReturnPathForRuntime(returnUrl, iosAppRuntime)
+    if (!resolved.skillId) return resolved.returnPath
+    if (iosAppRuntime) {
+      const skillId = resolved.skillId
       sessionStorage.setItem(IOS_PENDING_HOME_SKILL_KEY, skillId)
       localStorage.setItem(IOS_PENDING_HOME_SKILL_KEY, skillId)
-      return '/home'
     }
-    return `/home?skill=${encodeURIComponent(skillId)}`
+    return resolved.returnPath
+  }
+
+  function getOAuthCallbackUrl(nativeOAuth = false): string {
+    const callback = new URL('/api/auth/callback', window.location.origin)
+    if (nativeOAuth) callback.searchParams.set('native_oauth', '1')
+    const returnUrl = getReturnUrl()
+    if (returnUrl) callback.searchParams.set('next', returnUrl)
+    return callback.toString()
   }
 
   function withWelcomeParam(url: string, welcome?: boolean): string {
@@ -133,6 +150,32 @@ export default function LoginPage() {
     window.location.href = withWelcomeParam(returnUrl || options?.fallback || '/', options?.welcome)
   }
 
+  async function completeAuthAndRedirect(options?: { fallback?: string }) {
+    const completeRes = await fetch('/api/auth/complete', { method: 'POST' })
+    const complete = await completeRes.json().catch(() => ({}))
+    if (!completeRes.ok) {
+      throw new Error(complete.error || 'Login could not finish')
+    }
+    if (complete.isNewUser) {
+      trackMetaEvent(
+        'CompleteRegistration',
+        {},
+        complete.metaEvents?.CompleteRegistration || createMetaEventId('registration'),
+      )
+      if (complete.credits > 0) {
+        trackMetaEvent(
+          'StartTrial',
+          { credits: complete.credits },
+          complete.metaEvents?.StartTrial || createMetaEventId('starttrial'),
+        )
+      }
+    }
+    redirectAfterAuth({
+      fallback: options?.fallback || complete.redirectUrl || '/projects',
+      welcome: Boolean(complete.isNewUser),
+    })
+  }
+
   async function finishNativeOAuth(callbackUrl: string) {
     const parsed = new URL(callbackUrl)
     const oauthError = parsed.searchParams.get('error') || parsed.hash.match(/error=([^&]+)/)?.[1]
@@ -151,16 +194,7 @@ export default function LoginPage() {
       throw exchangeError
     }
 
-    const completeRes = await fetch('/api/auth/native-complete', { method: 'POST' })
-    const complete = await completeRes.json().catch(() => ({}))
-    if (!completeRes.ok) {
-      throw new Error(complete.error || 'Google login could not finish')
-    }
-
-    redirectAfterAuth({
-      fallback: complete.redirectUrl || '/projects',
-      welcome: Boolean(complete.isNewUser),
-    })
+    await completeAuthAndRedirect()
   }
 
   // ── Google OAuth ──
@@ -172,7 +206,7 @@ export default function LoginPage() {
         const { data, error } = await getSupabase().auth.signInWithOAuth({
           provider: 'google',
           options: {
-            redirectTo: `${window.location.origin}/api/auth/callback?native_oauth=1`,
+            redirectTo: getOAuthCallbackUrl(true),
             skipBrowserRedirect: true,
           },
         })
@@ -191,7 +225,7 @@ export default function LoginPage() {
     const { error } = await getSupabase().auth.signInWithOAuth({
       provider: 'google',
       options: {
-        redirectTo: `${window.location.origin}/api/auth/callback`,
+        redirectTo: getOAuthCallbackUrl(),
       },
     })
     if (error) { setError(t('auth.networkError')); setGoogleLoading(false) }
@@ -204,7 +238,7 @@ export default function LoginPage() {
     const { error } = await getSupabase().auth.signInWithOAuth({
       provider: 'apple',
       options: {
-        redirectTo: `${window.location.origin}/api/auth/callback`,
+        redirectTo: getOAuthCallbackUrl(),
       },
     })
     if (error) { setError(t('auth.networkError')); setAppleLoading(false) }
@@ -239,7 +273,7 @@ export default function LoginPage() {
 
       if (check.action === 'login') {
         const { error: signInError } = await supabase.auth.signInWithPassword({ email, password })
-        if (!signInError) { redirectAfterAuth(); return }
+        if (!signInError) { await completeAuthAndRedirect(); return }
         if (signInError.message === 'Email not confirmed') {
           // Edge case: user exists but unconfirmed — send OTP
           await supabase.auth.signInWithOtp({ email })
@@ -320,19 +354,9 @@ export default function LoginPage() {
 
       // Signup verified — redirect (new user goes to home with welcome)
       if (otpPurpose === 'signup') {
-        trackMetaEvent('CompleteRegistration', {}, createMetaEventId('registration'))
-        let returnUrl = getReturnUrl()
-        sessionStorage.removeItem('mkr_return_url')
-        localStorage.removeItem('mkr_return_url')
-        // H5 can use ?skill=, while the iOS native shell keeps /home and reopens
-        // the detail from a pending key so the native page stack stays stable.
-        returnUrl = resolveReturnUrlForRuntime(returnUrl)
-        const target = returnUrl || '/home'
-        const sep = target.includes('?') ? '&' : '?'
-        // Small delay to ensure Supabase SDK writes session cookie before redirect
-        setTimeout(() => { window.location.href = target + sep + 'welcome=1' }, 100)
+        await completeAuthAndRedirect({ fallback: '/home' })
       } else {
-        redirectAfterAuth()
+        await completeAuthAndRedirect()
       }
     } catch {
       setOtpError(t('auth.networkError'))
@@ -393,7 +417,12 @@ export default function LoginPage() {
       const { error } = await supabase.auth.updateUser({ password: newPassword })
       if (error) { setError(mapError(error.message)); setResetLoading(false); return }
       setResetSuccess(true)
-      setTimeout(() => { redirectAfterAuth() }, 1500)
+      setTimeout(() => {
+        void completeAuthAndRedirect().catch(() => {
+          setError(t('auth.networkError'))
+          setResetLoading(false)
+        })
+      }, 1500)
     } catch {
       setError(t('auth.networkError'))
       setResetLoading(false)

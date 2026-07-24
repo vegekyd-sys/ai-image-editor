@@ -9,7 +9,6 @@ import {
   isConfirmedExecutionLeaseLoss,
   isRetryableProviderOutage,
   MAX_SAME_PROVIDER_ATTEMPTS,
-  resolveExecutionHandoffWorkUnit,
   selectModelHistoryWithinBudget,
   shouldScheduleNextAttempt,
   stableOperationKey,
@@ -94,13 +93,6 @@ describe('durable Agent execution', () => {
     expect(handoff).toContain('先写可编译 scaffold');
   });
 
-  it('records the persisted Studio stage as the next durable work unit', () => {
-    expect(resolveExecutionHandoffWorkUnit('studio:assets', {
-      studioRunStage: 'composition',
-    })).toBe('studio:composition');
-    expect(resolveExecutionHandoffWorkUnit('agent', {})).toBe('agent');
-  });
-
   it('round-trips provider compaction as an Anthropic typed block', () => {
     const snapshot: DurableExecutionSnapshot = {
       version: 1,
@@ -175,11 +167,13 @@ describe('durable Agent execution', () => {
   });
 
   it('makes expensive operation keys stable across attempts', () => {
-    const first = stableOperationKey('assets', 'generate_image', { prompt: 'hero', width: 1280 });
-    const reordered = stableOperationKey('assets', 'generate_image', { width: 1280, prompt: 'hero' });
-    const differentUnit = stableOperationKey('review', 'generate_image', { prompt: 'hero', width: 1280 });
+    const first = stableOperationKey('generate_image', { prompt: 'hero', width: 1280 }, 0);
+    const reordered = stableOperationKey('generate_image', { width: 1280, prompt: 'hero' }, 0);
+    const resumedAttempt = stableOperationKey('generate_image', { prompt: 'hero', width: 1280 }, 0);
+    const newerUserInput = stableOperationKey('generate_image', { prompt: 'hero', width: 1280 }, 1);
     expect(first).toBe(reordered);
-    expect(first).not.toBe(differentUnit);
+    expect(first).toBe(resumedAttempt);
+    expect(first).not.toBe(newerUserInput);
   });
 
   it('continues retryable and killed attempts but respects terminal and attempt budget', () => {
@@ -229,7 +223,7 @@ describe('durable Agent execution', () => {
     ];
     expect(countConsecutiveRetryableProviderFailures(attempts, 'gpt-5.6-terra')).toBe(2);
 
-    attempts.unshift({ terminal_code: 'studio_run_incomplete', metadata: { model: 'gpt-5.6-terra', terminalDetail: 'continue' } });
+    attempts.unshift({ terminal_code: 'unfinished_tool_turn', metadata: { model: 'gpt-5.6-terra', terminalDetail: 'continue' } });
     expect(countConsecutiveRetryableProviderFailures(attempts, 'gpt-5.6-terra')).toBe(0);
 
     const exhausted = Array.from({ length: MAX_SAME_PROVIDER_ATTEMPTS }, () => ({

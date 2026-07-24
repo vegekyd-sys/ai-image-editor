@@ -5,7 +5,7 @@ description: >
   feature, company, or process. Use Makaron's current Remotion composition
   runtime with design references, synced subtitles, voiceover, generated
   sound design, and optional generated media/sticker overlays.
-allowed-tools: read_file studio_run prepare_visual_asset run_code write_file preview_frame materialize_media list_voiceover_voices generate_voiceover transcribe_audio generate_audio generate_music generate_image analyze_image analyze_video
+allowed-tools: read_file studio_run prepare_visual_asset run_code write_file publish_draft preview_frame materialize_media transcribe_audio generate_audio generate_image analyze_image analyze_video
 metadata:
   makaron:
     icon: "🎙️"
@@ -65,15 +65,17 @@ skip it because the topic sounds simple.
   because generated voiceover or music is longer. Rewrite, regenerate, trim, or
   fade audio to fit the requested duration.
 - Aspect ratio: default 16:9 unless the user specifies mobile/social.
-- Voiceover is part of this skill by default. Generate spoken narration with
-  TTS unless the user explicitly says no voice, no audio, silent, muted, or
-  text-only.
+- Voiceover and an instrumental score are part of this skill by default.
+  Unless the user explicitly requests no audio, silent, muted, or text-only
+  output, generate narration, continuous music, ambience, and meaningful SFX
+  together once with Seed Audio `kind: "mixed"`. If the user requests no voice,
+  keep music and sound design but omit narration. Use isolated `voiceover` only
+  when the user explicitly requests voice-only or no music/supporting sound.
 - Subtitles are part of this skill by default and are authored by the Agent as
   part of each scene's Composition direction.
-- Sound design is part of the planning pass. Use `generate_audio` when music,
-  ambient texture, UI sounds, transitions, or scene-specific sound effects would
-  make the explanation clearer or more memorable. Use `generate_music` for
-  background music beds or soundtrack-style requests; it uses Seed Audio.
+- Sound design is part of the default planning pass. Give the score a narrative
+  arc and include only ambience, UI sounds, transitions, and scene-specific
+  effects that clarify or strengthen the explanation.
 
 ## Direct Execution Rule
 
@@ -104,20 +106,46 @@ wrong or expensive.
 5. Keep the narration human and paced:
    about 120-145 English words per minute or 180-230 Chinese characters per
    minute.
-6. Unless the user explicitly requested a silent/text-only video, call
-   `list_voiceover_voices`, choose a fitting voice, then call
-   `generate_voiceover`.
+6. Unless the user explicitly requested no audio, silent, muted, or text-only
+   output, read
+   `prompts/audio.md`, write a complete Voice Performance Brief, and lock the
+   final audio architecture before generation. A narrated explainer includes
+   continuous instrumental music and meaningful sound design by default: call
+   `generate_audio({ kind: "mixed", ... })` exactly once and direct the entire
+   synchronized soundtrack in that prompt. The mixed prompt must use the
+   canonical performance-score blocks from `audio.md`: `[MUSIC]` defines a
+   continuous audible backbone and its arc; `[VOICE]` gives every spoken line
+   its own emotional action, turn, emphasis, breath, pause, or restraint;
+   `[SFX]` places concrete effects in narrative order; `[MIX]` locks layer
+   priority and ending behavior. Call
+   `generate_audio({ kind: "voiceover", ... })` only when the user explicitly
+   requests an isolated voice master with no music or supporting sound. The
+   prompt must include the
+   approved Script narration verbatim, the speaker/listener relationship,
+   dramatic intent, emotional starting point, turning point, ending state,
+   pace, pauses, breaths, emphasis, restraint, and behaviors to avoid.
+   For `mixed`, keep speech intelligible while treating the score as a
+   co-leading layer: its melody, rhythm, bass, and harmonic changes must remain
+   identifiable under every spoken line, with no more than 1-2 dB of ducking
+   and immediate recovery between lines. Direct ambience, meaningful effects,
+   and the ending inside the same one-pass performance score. Avoid
+   attenuation-heavy wording such as background, faint, sparse, or barely
+   underneath. Never generate
+   narration and supporting audio as separate Seed Audio assets.
    Keep the narration short enough for the requested duration. If the generated
    voiceover is more than 10% longer than the requested video, regenerate a
    shorter script or trim/fade it; never change the video duration to match an
    overly long narration.
-7. After `generate_voiceover`, call
-   `transcribe_audio({ media_url: audioUrl })` when a single continuous
-   voiceover is used. Use the returned utterance or word timing to decide scene
-   boundaries before Storyboard; planned Script ranges are not proof that
-   generated speech lands in those ranges. This is timing evidence, not a
-   caption service: the harness does not generate cue files, inject caption
-   props, choose phrase boundaries, or impose a renderer.
+7. After `generate_audio`, call
+   `transcribe_audio({ media_url: audioUrl, expected_sections:
+   Script.sections.filter(({ narration }) => narration.trim()).map(
+   ({ id, narration }) => ({ id, text: narration })), fps })`
+   when a single continuous voiceover is used. This returns and persists an
+   authoritative narration cue sheet with measured section seconds and frame
+   ranges. Use it to decide scene boundaries before Storyboard; planned Script
+   ranges are not proof that generated speech lands in those ranges. This is
+   timing data, not a caption renderer: subtitle wording, grouping, placement,
+   typography, and motion remain inside the Composition.
 8. Plan scenes with exact time ranges that sum to the target duration.
    Each narrated section must fit inside its linked visual scene using the real
    speech timing from step 7. Give every substantial scene a `visualPlan` with
@@ -138,21 +166,23 @@ wrong or expensive.
    layer, and whether its carrier is native, a full plate, a prepared cutout,
    or an edge-matched generated video. If cutout or edge-video is selected,
    read the Visual Asset Bridge and call `prepare_visual_asset` during Assets.
-11. Decide the remaining audio layer:
-   - Exact spoken narration -> `generate_voiceover`.
-   - Prompt-first music bed, ambience, sound effects, UI blips, risers, impacts,
-     or mixed sound design -> `generate_audio`.
-   - Music / soundtrack / song-structure request -> `generate_music`; new music
-     generation uses Seed Audio, not Suno.
+11. Do not add a second generated audio layer after step 6. The audio decision
+   is already locked:
+   - Isolated standalone narration -> one `voiceover` generation.
+   - Voice/dialogue plus any music, soundtrack, ambience, UI blip, riser,
+     impact, or SFX -> one `mixed` generation.
+   - A truly separate non-speech asset requested by the user -> the matching
+     `music` or `sound_design` generation.
 12. Generate only the sticker/image assets chosen in the cue sheet. If an asset
    is an overlay, read `skills/sticker-maker/SKILL.md` first and make it a
    transparent PNG sticker instead of a hard-to-place rectangular image.
 13. Persist the asset manifest only after every referenced asset is ready.
-   When audio is promised, voiceover/music must be present in this manifest;
-   do not close Assets before generating them.
+   Unless the user explicitly opted out of audio, voiceover and music must be
+   present in this manifest; do not close Assets before generating them.
 14. Build the video with `run_code({ runtime: "composition" })`.
-15. Save the draft with `write_file({ fromLastRunCode: true, publish: false })`,
-   and run the Composition draft gate before publishing or exporting. Calculate
+15. Use the durable autosaved `design_path` returned by `run_code` or the
+   numbered composition workspace, and run the Composition draft gate before
+   publishing or exporting. Calculate
    the exact expected frame count, confirm the scene timeline covers it, inspect
    every scene boundary plus the final visible frame with batched
    `preview_frame` calls, and confirm all required audio props contain real URLs.
@@ -174,8 +204,9 @@ wrong or expensive.
    and `run_code` patch mode on the exact draft until visual, timing, subtitle,
    audio, transition, and ending issues are resolved. Do not author a separate
    Review JSON artifact.
-17. Publish that exact gated draft once. Do not publish an older timeline
-   snapshot or use its `media_index` as the export source.
+17. Publish that exact gated draft once with
+   `publish_draft({ design_path: "<exact-gated-path>" })`. Do not publish an
+   older timeline snapshot or use its `media_index` as the export source.
 18. Materialize the exact gated `design_path` once with
    `materialize_media({ design_path, profile: "source", wait: true })` when the
    locked promise is source resolution. In Studio Run this call waits for the
@@ -188,24 +219,33 @@ wrong or expensive.
 ## Audio And Sound Design Contract
 
 Explainers should feel authored, not silent slide decks with narration pasted
-on top. Consider an audio bed in every video unless the user explicitly asks for
-silent, text-only, or voice-only output.
+on top. Use a unified audio bed in every narrated video unless the user
+explicitly asks for silent, text-only, or voice-only output.
 
-- Keep voiceover intelligible. Music and ambience should sit under narration,
-  with lower volume and no busy vocals. Duck the music under spoken sections;
-  use absolute narration timestamps for volume changes so drift cannot
-  accumulate across scenes.
-- Use `generate_audio` for prompt-first assets: subtle background music,
-  transition whooshes, notification ticks, magical sparkles, classroom ambience,
-  sci-fi hums, battle-arena impacts, UI sounds, or one mixed sound-design track.
-- Prefer one cohesive 30-90s sound bed over many separate effects unless the
-  story clearly benefits from timed spot effects.
-- If the composition uses multiple audio tracks, keep them aligned to the same
-  Remotion FPS/timebase as scenes and subtitles.
+- Keep voiceover intelligible while the instrumental score remains clearly
+  audible as a co-leading layer. Keep ambience lower and avoid busy vocals.
+  Duck music by no more than 1-2 dB under spoken sections; use absolute
+  narration timestamps for volume changes so drift cannot accumulate across
+  scenes.
+- For every narrated explainer, put continuous instrumental music, transition
+  whooshes, notification ticks, ambience, and other meaningful supporting
+  sounds into the same one-pass `mixed` prompt unless the user explicitly opts
+  out of music or supporting sound.
+- Use the V3 performance-score shape from `audio.md`: `[MUSIC]`, `[VOICE]`,
+  `[SFX]`, and `[MIX]`. Give each spoken line its own emotional direction,
+  rather than one generic mood for the narrator.
+- Make music a co-leading score rather than background filler. Keep its motif,
+  beat, bass, and harmony perceptible under every line; duck no more than
+  1-2 dB and shorten narration before sacrificing music.
+- Prefer one cohesive 30-90s unified soundtrack. Do not create separate
+  voiceover/music/effect generations for one final audio track.
+- When an intro, interlude, or outro matters, shorten the narration enough to
+  reserve real speech-free time. Prompt timestamps express order and intent,
+  not frame-accurate truth; only the measured ASR cue sheet may drive Remotion.
 - Audio duration must fit the video duration. Fade or trim music/effects at the
   ending rather than extending the video.
-- Do not use `generate_voiceover` for music or effects. Do not use Suno for new
-  music generation.
+- Use the `kind` field rather than searching for separate voiceover or music
+  tools. All new standalone audio generation uses Seed Audio.
 - Audio Index markers such as `<<<audio_N>>>` are labels, not playable URLs.
   Use the returned public `audioUrl` directly in Remotion `<Audio src={...}>`
   props/code. Never put `<<<audio_N>>>` inside composition props or `<Audio>`.
@@ -229,9 +269,9 @@ Every explainer video must have subtitles unless the user explicitly declines.
   scene Composition; do not introduce a shared caption renderer.
 - Bring captions in with a restrained fade, slight rise, or readable type-on.
   Avoid noisy per-character effects that make narration harder to follow.
-- Use the narration script and, when useful, `transcribe_audio` timestamps as
-  source material. Subtitle timing should come from the TTS audio timeline when
-  ASR is available, and scene timing plus subtitle cues must share the same
+- Use the narration script and the persisted `transcribe_audio` narration cue
+  sheet as source material. For narrated work, its measured ranges are
+  authoritative, and scene timing plus subtitle cues must share the same
   Remotion FPS/timebase. Do not copy raw ASR output blindly; decide phrase
   boundaries and timing as an editor. Merge adjacent short cues when ASR splits
   a sentence too finely, without breaking the original timing.
@@ -360,10 +400,9 @@ Before saying it is done:
 - Voiceover and generated audio fit within that duration, or are trimmed/faded
   to fit.
 - The composition is saved and published to the timeline.
-- Voiceover is attached by default, unless the user explicitly requested a
-  silent/text-only video.
-- Generated audio/music/effects were considered, and used when they help the
-  pacing, mood, or comprehension without masking narration.
+- Unless the user explicitly opted out, the explainer contains one generated
+  unified soundtrack with voiceover, continuous instrumental music, ambience,
+  and meaningful effects.
 - Subtitles are present, readable, synchronized to the narration, and composed
   by the Agent in a treatment appropriate to each scene. Ordinary spoken
   captions use the polished lower-safe-area baseline; intentional kinetic or

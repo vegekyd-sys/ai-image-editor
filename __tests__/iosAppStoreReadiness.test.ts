@@ -25,12 +25,14 @@ describe('iOS App Store readiness guardrails', () => {
   it('keeps Google available in Makaron iOS WebView with Apple as the equivalent App Store login option', () => {
     const loginPage = fs.readFileSync(path.join(root, 'src/app/login/page.tsx'), 'utf8');
     const authCallback = fs.readFileSync(path.join(root, 'src/app/api/auth/callback/route.ts'), 'utf8');
+    const authReturn = fs.readFileSync(path.join(root, 'src/lib/auth-return.ts'), 'utf8');
     expect(loginPage).toContain('userAgentHasMakaronIOSToken');
     expect(loginPage).toContain('isMakaronIOSApp');
     expect(loginPage).toContain("const IOS_PENDING_HOME_SKILL_KEY = 'makaron:ios-pending-home-skill-id'");
     expect(loginPage).toContain('resolveReturnUrlForRuntime');
     expect(loginPage).toContain('sessionStorage.setItem(IOS_PENDING_HOME_SKILL_KEY, skillId)');
-    expect(loginPage).toContain("return '/home'");
+    expect(loginPage).toContain('resolveAuthReturnPathForRuntime(returnUrl, iosAppRuntime)');
+    expect(authReturn).toContain("returnPath: isIOSApp ? '/home'");
     expect(loginPage).toContain('NEXT_PUBLIC_ENABLE_APPLE_LOGIN');
     expect(loginPage).toContain('inApp && appleLoginEnabled');
     expect(loginPage).toContain('const showGoogleOAuth = !inApp || iosApp || showAppleOAuth');
@@ -156,7 +158,6 @@ describe('iOS App Store readiness guardrails', () => {
     const mcp = fs.readFileSync(path.join(root, 'src/app/mcp/page.tsx'), 'utf8');
     const skillShare = fs.readFileSync(path.join(root, 'src/app/s/[code]/page.tsx'), 'utf8');
     const login = fs.readFileSync(path.join(root, 'src/app/login/page.tsx'), 'utf8');
-    const activate = fs.readFileSync(path.join(root, 'src/app/activate/page.tsx'), 'utf8');
     const projects = fs.readFileSync(path.join(root, 'src/app/projects/page.tsx'), 'utf8');
     const home = fs.readFileSync(path.join(root, 'src/app/home/page.tsx'), 'utf8');
     const editor = fs.readFileSync(path.join(root, 'src/components/Editor.tsx'), 'utf8');
@@ -386,7 +387,6 @@ describe('iOS App Store readiness guardrails', () => {
     expect(mcp).toContain('makaron-ios-page');
     expect(skillShare).toContain('makaron-ios-page');
     expect(login).toContain('makaron-ios-page');
-    expect(activate).toContain('makaron-ios-page');
   });
 
   it('keeps the iOS in-app route surface covered by app-shell guardrails', () => {
@@ -402,7 +402,6 @@ describe('iOS App Store readiness guardrails', () => {
       { route: '/mcp', file: 'src/app/mcp/page.tsx', required: ['makaron-ios-page'] },
       { route: '/s/[code]', file: 'src/app/s/[code]/page.tsx', required: ['makaron-ios-page'] },
       { route: '/login', file: 'src/app/login/page.tsx', required: ['makaron-ios-page', 'userAgentHasMakaronIOSToken'] },
-      { route: '/activate', file: 'src/app/activate/page.tsx', required: ['makaron-ios-page'] },
       { route: '/landingpage', file: 'src/app/landingpage/page.tsx', required: ['makaron-ios-page'] },
       { route: '/moveable-test', file: 'src/app/moveable-test/page.tsx', required: ['makaron-ios-page'] },
     ];
@@ -445,7 +444,6 @@ describe('iOS App Store readiness guardrails', () => {
     walk(appDir);
 
     const shellCovered = new Set([
-      'src/app/activate/page.tsx',
       'src/app/admin/page.tsx',
       'src/app/admin/status/page.tsx',
       'src/app/claim/page.tsx',

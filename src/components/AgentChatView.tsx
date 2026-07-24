@@ -264,7 +264,8 @@ function MusicCard({ track, onSelect }: {
   const handleDownload = () => {
     const a = document.createElement('a');
     a.href = bestUrl;
-    a.download = `${track.title || 'music'}.mp3`;
+    const urlExtension = bestUrl.match(/\.(mp3|wav|pcm|ogg)(?:\?|$)/i)?.[1]?.toLowerCase();
+    a.download = `${track.title || 'audio'}.${urlExtension || 'wav'}`;
     a.click();
   };
 

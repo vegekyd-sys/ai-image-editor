@@ -135,6 +135,10 @@ export async function GET(
     }
     if (hasBearerAuth && 'error' in authResult) return authResult.error;
     const ownerUserId = run.user_id as string;
+    const locale = normalizeLocale(
+      (run.metadata as Record<string, unknown> | null)?.locale as string | undefined,
+      'en',
+    );
 
     // A platform hard-kill cannot run route finally blocks. Heartbeats make
     // that failure observable: after the lease expires, atomically close the
@@ -174,10 +178,6 @@ export async function GET(
         const draftPath = (draftRows || [])
           .map((row: { output?: unknown }) => extractSavedDraftPath(row.output))
           .find(Boolean);
-        const locale = normalizeLocale(
-          (run.metadata as Record<string, unknown> | null)?.locale as string | undefined,
-          'en',
-        );
         const message = draftPath
           ? translate(locale, 'agent.error.runtimeDraftSaved')
           : translate(locale, 'agent.error.runtimeNoDraft');
@@ -513,7 +513,7 @@ export async function GET(
             } else if (videoMeta.status === 'failed') {
               v.status = 'failed';
               v.error = videoMeta.error;
-              v.completion_actions = buildVideoFailureActions(videoMeta);
+              v.completion_actions = buildVideoFailureActions(videoMeta, locale);
             } else if (videoMeta.status === 'processing' && videoMeta.taskId) {
               if (typeof videoMeta.taskId === 'string' && videoMeta.taskId.startsWith('google-omni-job-') && !videoMeta.videoUrl && !videoMeta.providerUrl) {
                 v.status = 'rendering';
@@ -574,7 +574,7 @@ export async function GET(
                   await handleVideoFailure(v.snapshot_id, pollResult.error);
                   v.status = 'failed';
                   v.error = pollResult.error;
-                  v.completion_actions = buildVideoFailureActions({ ...videoMeta, status: 'failed', error: pollResult.error });
+                  v.completion_actions = buildVideoFailureActions({ ...videoMeta, status: 'failed', error: pollResult.error }, locale);
                 } else {
                   v.status = 'rendering';
                   if (videoMeta.createdAt) {
@@ -593,7 +593,7 @@ export async function GET(
                 v.completion_actions = videoMeta.completionActions;
               }
               if (videoMeta.status === 'failed') {
-                v.completion_actions = buildVideoFailureActions(videoMeta);
+                v.completion_actions = buildVideoFailureActions(videoMeta, locale);
               }
             }
             return;

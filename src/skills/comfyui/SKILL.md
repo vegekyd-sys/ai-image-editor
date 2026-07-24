@@ -3,7 +3,7 @@ name: comfyui
 description: >
   Makaron adapter with native support for OpenMontage's comfyui
   craft skill, using existing Makaron tools and durable project outputs.
-allowed-tools: read_file analyze_image generate_image list_voiceover_voices generate_voiceover transcribe_audio run_code write_file
+allowed-tools: read_file analyze_image generate_image transcribe_audio generate_audio run_code write_file
 metadata:
   makaron:
     icon: "▧"

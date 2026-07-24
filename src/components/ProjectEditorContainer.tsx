@@ -143,7 +143,7 @@ export default function ProjectEditorContainer({
   isInlineActive = true,
 }: ProjectEditorContainerProps) {
   const { user, loading: authLoading } = useAuth()
-  const { t } = useLocale()
+  const { locale, t } = useLocale()
   const router = useRouter()
   const navigatingRef = useRef(false)
   const leaveEditor = useCallback((path: '/projects' | '/login') => {
@@ -403,7 +403,7 @@ export default function ProjectEditorContainer({
       const failedVideos = restoredSnapshots.filter(isFailedGeneratedVideoSnapshot)
       for (const snap of failedVideos) {
         if (messages.some(m => m.content?.includes(`snap:${snap.id}`))) continue
-        const actionLines = serializeCompletionActions(buildVideoFailureActions(snap.videoMeta))
+        const actionLines = serializeCompletionActions(buildVideoFailureActions(snap.videoMeta, locale))
         const reason = snap.videoMeta?.error ? `\n${snap.videoMeta.error}` : ''
         messages.push({
           id: `video-failed-${snap.id}`,

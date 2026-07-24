@@ -167,13 +167,20 @@ export async function uploadAudio(
   taskId: string,
   trackIndex: number,
   buffer: Uint8Array,
+  format: 'mp3' | 'wav' | 'pcm' | 'ogg_opus' = 'mp3',
 ): Promise<string | null> {
   try {
-    const path = `${userId}/${projectId}/audio/${taskId}-${trackIndex}.mp3`
+    const audioType = {
+      mp3: { extension: 'mp3', contentType: 'audio/mpeg' },
+      wav: { extension: 'wav', contentType: 'audio/wav' },
+      pcm: { extension: 'pcm', contentType: 'audio/L16' },
+      ogg_opus: { extension: 'ogg', contentType: 'audio/ogg; codecs=opus' },
+    }[format]
+    const path = `${userId}/${projectId}/audio/${taskId}-${trackIndex}.${audioType.extension}`
     const { error } = await supabase.storage
       .from(BUCKET)
       .upload(path, buffer, {
-        contentType: 'audio/mpeg',
+        contentType: audioType.contentType,
         upsert: true,
       })
     if (error) {

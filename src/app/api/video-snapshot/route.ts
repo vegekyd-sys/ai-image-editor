@@ -2,7 +2,12 @@ import { NextRequest, NextResponse } from 'next/server'
 import { authenticateRequest } from '@/lib/api-auth'
 import { createVideo } from '@/lib/skills/create-video'
 import { filterAndRemapImages } from '@/lib/kling'
-import { requireCredits, deductFixedCredits } from '@/lib/billing/credits'
+import {
+  deductFixedCredits,
+  isInsufficientCreditsError,
+  refundCredits,
+  requireCredits,
+} from '@/lib/billing/credits'
 import { VIDEO_PLACEHOLDER_IMAGE } from '@/lib/editor/timeline-derivations'
 import { estimateVideoCredits, normalizeVideoModelId, resolveVideoGenerationRoute } from '@/lib/video-model-capabilities'
 import type { VideoMeta } from '@/types'
@@ -45,9 +50,6 @@ export async function POST(req: NextRequest) {
 
     if (!project) return NextResponse.json({ error: 'Project not found' }, { status: 404 })
     if (project.user_id !== userId) return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
-
-    const creditCheck = await requireCredits(userId, 50)
-    if (!creditCheck.ok) return creditCheck.response
 
     // Save original imageUrls before mutation (for detail view display)
     const originalImageUrlsByIndex = [...inputImageUrls]
@@ -112,106 +114,129 @@ export async function POST(req: NextRequest) {
       providerAutoVideoUrls = inputVideoUrl ? [] : prepared.urls
     }
 
-    const skillResult = await createVideo({
-      script: prompt,
-      images: inputImageUrls,
-      duration: effectiveDuration,
-      aspectRatio,
-      videoModel: selectedVideoModel,
-      videoResolution: videoRoute.resolution,
-      videoUrl: providerInputVideoUrl,
-      videoReferType,
-      videoUrls: providerAutoVideoUrls.length ? providerAutoVideoUrls : undefined,
-      referenceVideoDuration,
-      referenceVideoMetas: referenceVideoMetas.length ? referenceVideoMetas : undefined,
-      keepOriginalSound,
-    })
-
-    if (!skillResult.success || !skillResult.taskId) {
-      return NextResponse.json({
-        error: skillResult.message,
-        ...(skillResult.errorCode ? { code: skillResult.errorCode } : {}),
-        ...(skillResult.errorReason ? { reason: skillResult.errorReason } : {}),
-        ...(skillResult.errorDetails ? { details: skillResult.errorDetails } : {}),
-        ...(skillResult.retryable === false ? { retryable: false } : {}),
-        ...(skillResult.repairable != null ? { repairable: skillResult.repairable } : {}),
-        ...(skillResult.terminal != null ? { terminal: skillResult.terminal } : {}),
-        ...(skillResult.suggestedAction ? { suggestedAction: skillResult.suggestedAction } : {}),
-      }, { status: skillResult.retryable === false ? 400 : 500 })
-    }
-
-    const taskId = skillResult.taskId
-    const actualVideoModel = skillResult.videoModel || selectedVideoModel
-    const actualVideoRoute = resolveVideoGenerationRoute({ model: actualVideoModel, resolution: videoRoute.resolution })
-
-    const snapshotId = crypto.randomUUID()
-    const referencedImageUrls = scriptRefs
-      .filter(ref => !videoRefIndices.has(ref))
-      .map(ref => originalImageUrlsByIndex[ref - 1])
-      .filter((u): u is string => !!u && u.startsWith('http') && !u.endsWith('.mp4'))
-    const sourceUrls = [...referencedImageUrls, ...(inputVideoUrl ? [inputVideoUrl] : []), ...autoVideoUrls].filter(Boolean)
-
-    const videoMeta: VideoMeta = {
-      taskId,
-      videoUrl: skillResult.videoUrl || null,
-      prompt,
-      sourceSnapshotIds: [...(Array.isArray(sourceSnapshotIds) ? sourceSnapshotIds : []), ...autoVideoSnapshotIds],
-      sourceUrls: sourceUrls.length > 0
-        ? sourceUrls
-        : (originalFirstUrl ? [originalFirstUrl] : []),
-      status: skillResult.status === 'completed' && skillResult.videoUrl ? 'completed' : 'processing',
-      duration: effectiveDuration || null,
-      model: actualVideoModel,
-      resolution: actualVideoRoute.resolution,
-      aspectRatio,
-      providerModel: skillResult.providerModel || actualVideoRoute.providerModel,
-      providerUrl: skillResult.videoUrl,
-      providerMode: actualVideoRoute.providerMode,
-      createdAt: new Date().toISOString(),
-    }
-
-    // Atomic sort_order allocation
-    const { data: sortData } = await supabase.rpc('next_sort_order', { p_project_id: projectId })
-    const sortOrder = sortData ?? 0
-
-    const { error } = await supabase.from('snapshots').insert({
-      id: snapshotId,
-      project_id: projectId,
-      image_url: VIDEO_PLACEHOLDER_IMAGE,
-      tips: [],
-      message_id: '',
-      sort_order: sortOrder,
-      type: 'video',
-      video_meta: videoMeta,
-    })
-
-    if (error) throw error
-
-    // Deduct credits — store amount in videoMeta for refund on failure
     const videoSec = effectiveDuration || 10
     const { filteredImages } = filterAndRemapImages(prompt, inputImageUrls)
-    const estimatedCredits = estimateVideoCredits({
-      model: actualVideoModel,
-      resolution: actualVideoRoute.resolution,
+    const creditsRequired = estimateVideoCredits({
+      model: selectedVideoModel,
+      resolution: videoRoute.resolution,
       durationSec: videoSec,
       imageCount: filteredImages.length,
-    })
-    const creditsCharged = estimatedCredits ?? Math.ceil(videoSec * 22)
-    videoMeta.creditsCharged = creditsCharged
-    const providerCostUsd = actualVideoRoute.estimatedCostPerSecondUsd != null
-      ? videoSec * actualVideoRoute.estimatedCostPerSecondUsd + filteredImages.length * (actualVideoRoute.estimatedInputCostUsdPerImage ?? 0)
-      : undefined
-    if (providerCostUsd != null) videoMeta.providerCostUsd = providerCostUsd
-    supabase.from('snapshots').update({ video_meta: videoMeta }).eq('id', snapshotId).then(() => {})
+    }) ?? Math.ceil(videoSec * 22)
+    const toolName = selectedVideoModel === 'grok' ? 'create_video_grok' : 'create_video'
+    const creditCheck = await requireCredits(userId, creditsRequired)
+    if (!creditCheck.ok) return creditCheck.response
 
-    const toolName = actualVideoModel === 'grok' ? 'create_video_grok' : 'create_video'
+    let reservedCredits = 0
     try {
-      await deductFixedCredits(userId, creditsCharged, toolName, actualVideoModel, undefined)
-    } catch (e) {
-      console.error('[billing] video-snapshot deduct error:', e)
+      const reservation = await deductFixedCredits(
+        userId,
+        creditsRequired,
+        toolName,
+        selectedVideoModel,
+        undefined,
+      )
+      reservedCredits = reservation.charged
+    } catch (error) {
+      if (isInsufficientCreditsError(error)) {
+        return NextResponse.json({
+          error: 'insufficient_credits',
+          balance: error.balance,
+          needed: error.required,
+          action: 'topup',
+        }, { status: 402 })
+      }
+      throw error
     }
 
-    return NextResponse.json({ snapshotId, taskId, videoMeta })
+    try {
+      const skillResult = await createVideo({
+        script: prompt,
+        images: inputImageUrls,
+        duration: effectiveDuration,
+        aspectRatio,
+        videoModel: selectedVideoModel,
+        videoResolution: videoRoute.resolution,
+        videoUrl: providerInputVideoUrl,
+        videoReferType,
+        videoUrls: providerAutoVideoUrls.length ? providerAutoVideoUrls : undefined,
+        referenceVideoDuration,
+        referenceVideoMetas: referenceVideoMetas.length ? referenceVideoMetas : undefined,
+        keepOriginalSound,
+      })
+
+      if (!skillResult.success || !skillResult.taskId) {
+        if (reservedCredits > 0) {
+          await refundCredits(userId, reservedCredits, toolName)
+          reservedCredits = 0
+        }
+        return NextResponse.json({
+          error: skillResult.message,
+          ...(skillResult.errorCode ? { code: skillResult.errorCode } : {}),
+          ...(skillResult.errorReason ? { reason: skillResult.errorReason } : {}),
+          ...(skillResult.errorDetails ? { details: skillResult.errorDetails } : {}),
+          ...(skillResult.retryable === false ? { retryable: false } : {}),
+          ...(skillResult.repairable != null ? { repairable: skillResult.repairable } : {}),
+          ...(skillResult.terminal != null ? { terminal: skillResult.terminal } : {}),
+          ...(skillResult.suggestedAction ? { suggestedAction: skillResult.suggestedAction } : {}),
+        }, { status: skillResult.retryable === false ? 400 : 500 })
+      }
+
+      const taskId = skillResult.taskId
+      const actualVideoModel = skillResult.videoModel || selectedVideoModel
+      const actualVideoRoute = resolveVideoGenerationRoute({ model: actualVideoModel, resolution: videoRoute.resolution })
+      const snapshotId = crypto.randomUUID()
+      const referencedImageUrls = scriptRefs
+        .filter(ref => !videoRefIndices.has(ref))
+        .map(ref => originalImageUrlsByIndex[ref - 1])
+        .filter((u): u is string => !!u && u.startsWith('http') && !u.endsWith('.mp4'))
+      const sourceUrls = [...referencedImageUrls, ...(inputVideoUrl ? [inputVideoUrl] : []), ...autoVideoUrls].filter(Boolean)
+      const providerCostUsd = videoRoute.estimatedCostPerSecondUsd != null
+        ? videoSec * videoRoute.estimatedCostPerSecondUsd + filteredImages.length * (videoRoute.estimatedInputCostUsdPerImage ?? 0)
+        : undefined
+
+      const videoMeta: VideoMeta = {
+        taskId,
+        videoUrl: skillResult.videoUrl || null,
+        prompt,
+        sourceSnapshotIds: [...(Array.isArray(sourceSnapshotIds) ? sourceSnapshotIds : []), ...autoVideoSnapshotIds],
+        sourceUrls: sourceUrls.length > 0
+          ? sourceUrls
+          : (originalFirstUrl ? [originalFirstUrl] : []),
+        status: skillResult.status === 'completed' && skillResult.videoUrl ? 'completed' : 'processing',
+        duration: effectiveDuration || null,
+        model: actualVideoModel,
+        resolution: actualVideoRoute.resolution,
+        aspectRatio,
+        providerModel: skillResult.providerModel || actualVideoRoute.providerModel,
+        providerUrl: skillResult.videoUrl,
+        providerMode: actualVideoRoute.providerMode,
+        createdAt: new Date().toISOString(),
+        creditsCharged: reservedCredits,
+        ...(providerCostUsd != null ? { providerCostUsd } : {}),
+      }
+
+      const { data: sortData } = await supabase.rpc('next_sort_order', { p_project_id: projectId })
+      const sortOrder = sortData ?? 0
+      const { error } = await supabase.from('snapshots').insert({
+        id: snapshotId,
+        project_id: projectId,
+        image_url: VIDEO_PLACEHOLDER_IMAGE,
+        tips: [],
+        message_id: '',
+        sort_order: sortOrder,
+        type: 'video',
+        video_meta: videoMeta,
+      })
+
+      if (error) throw error
+      reservedCredits = 0
+      return NextResponse.json({ snapshotId, taskId, videoMeta })
+    } catch (error) {
+      if (reservedCredits > 0) {
+        await refundCredits(userId, reservedCredits, toolName)
+      }
+      throw error
+    }
   } catch (err) {
     console.error('video-snapshot POST error:', err)
     return NextResponse.json({ error: String(err) }, { status: 500 })

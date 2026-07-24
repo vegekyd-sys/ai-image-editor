@@ -4,7 +4,8 @@ import { createAudio } from '@/lib/skills/create-audio'
 import { requireCredits } from '@/lib/billing/credits'
 import { deductSeedAudioCredits, seedAudioMakaronCredits } from '@/lib/billing/seed-audio'
 
-export const maxDuration = 120
+// A 120-second output can take longer than 120 seconds to render and persist.
+export const maxDuration = 300
 
 export async function POST(req: NextRequest) {
   try {
@@ -13,7 +14,31 @@ export async function POST(req: NextRequest) {
     const user = session?.user
     if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
 
-    const { prompt, durationSeconds, duration_seconds, title, projectId, model } = await req.json()
+    const body = await req.json()
+    const {
+      prompt,
+      durationSeconds,
+      duration_seconds,
+      audioReferences,
+      audio_references,
+      imageUrls,
+      image_urls,
+      speechRate,
+      speech_rate,
+      loudnessRate,
+      loudness_rate,
+      pitchRate,
+      pitch_rate,
+      format,
+      sampleRate,
+      sample_rate,
+      callbackUrl,
+      callback_url,
+      title,
+      projectId,
+      project_id,
+      model,
+    } = body
     if (!prompt) {
       return NextResponse.json({ error: 'prompt is required' }, { status: 400 })
     }
@@ -25,11 +50,19 @@ export async function POST(req: NextRequest) {
     const result = await createAudio({
       prompt,
       durationSeconds: durationSeconds ?? duration_seconds,
+      audioReferences: audioReferences ?? audio_references,
+      imageUrls: imageUrls ?? image_urls,
+      speechRate: speechRate ?? speech_rate,
+      loudnessRate: loudnessRate ?? loudness_rate,
+      pitchRate: pitchRate ?? pitch_rate,
+      format,
+      sampleRate: sampleRate ?? sample_rate,
+      callbackUrl: callbackUrl ?? callback_url,
       title,
       model,
       supabase,
       userId: user.id,
-      projectId,
+      projectId: projectId ?? project_id,
     })
 
     if (!result.success) {

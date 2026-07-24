@@ -2,7 +2,12 @@ import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
 import { createVideo } from '@/lib/skills/create-video'
 import { filterAndRemapImages } from '@/lib/kling'
-import { requireCredits, deductFixedCredits } from '@/lib/billing/credits'
+import {
+  deductFixedCredits,
+  isInsufficientCreditsError,
+  refundCredits,
+  requireCredits,
+} from '@/lib/billing/credits'
 import { estimateVideoCredits, normalizeVideoModelId, resolveVideoGenerationRoute } from '@/lib/video-model-capabilities'
 
 export const maxDuration = 1800
@@ -32,10 +37,6 @@ export async function POST(req: NextRequest) {
       .single()
 
     if (!project) return NextResponse.json({ error: 'Project not found' }, { status: 404 })
-
-    // Pre-flight credit check
-    const creditCheck = await requireCredits(user.id, 50)
-    if (!creditCheck.ok) return creditCheck.response
 
     // Auto-route video references: detect video snapshots in imageUrls
     const { data: dbSnaps } = await supabase
@@ -88,68 +89,94 @@ export async function POST(req: NextRequest) {
       providerAutoVideoUrls = prepared.urls
     }
 
-    // Call skill layer (stateless, no DB)
-    const skillResult = await createVideo({
-      script: prompt,
-      images: inputImageUrls,
-      duration: effectiveDuration,
-      aspectRatio,
-      videoModel: selectedVideoModel,
-      videoResolution: videoRoute.resolution,
-      videoUrls: providerAutoVideoUrls.length ? providerAutoVideoUrls : undefined,
-      referenceVideoDuration,
-      referenceVideoMetas: referenceVideoMetas.length ? referenceVideoMetas : undefined,
-    })
-
-    if (!skillResult.success || !skillResult.taskId) {
-      return NextResponse.json({
-        error: skillResult.message,
-        ...(skillResult.errorCode ? { code: skillResult.errorCode } : {}),
-        ...(skillResult.errorReason ? { reason: skillResult.errorReason } : {}),
-        ...(skillResult.errorDetails ? { details: skillResult.errorDetails } : {}),
-        ...(skillResult.retryable === false ? { retryable: false } : {}),
-        ...(skillResult.repairable != null ? { repairable: skillResult.repairable } : {}),
-        ...(skillResult.terminal != null ? { terminal: skillResult.terminal } : {}),
-        ...(skillResult.suggestedAction ? { suggestedAction: skillResult.suggestedAction } : {}),
-      }, { status: skillResult.retryable === false ? 400 : 500 })
-    }
-
-    const taskId = skillResult.taskId
-
-    // Persist to DB (API route responsibility)
     const { filteredImages, finalPrompt } = filterAndRemapImages(prompt, inputImageUrls)
-    const { data: animation, error } = await supabase
-      .from('project_animations')
-      .insert({
-        project_id: projectId,
-        piapi_task_id: taskId,
-        status: skillResult.status === 'completed' && skillResult.videoUrl ? 'completed' : 'processing',
-        prompt: finalPrompt,
-        snapshot_urls: filteredImages,
-        video_url: skillResult.videoUrl || null,
-      })
-      .select('id')
-      .single()
-
-    if (error) throw error
-
-    // Deduct credits for video generation (fire-and-forget)
-    // Per-second billing: 22 credits/s ($0.11/s × 2x markup), default 10s if smart mode
     const videoSec = effectiveDuration || 10
-    const toolName = selectedVideoModel === 'grok'
-        ? 'create_video_grok'
-        : 'create_video'
-    const estimatedCredits = estimateVideoCredits({
+    const creditsRequired = estimateVideoCredits({
       model: selectedVideoModel,
       resolution: videoRoute.resolution,
       durationSec: videoSec,
       imageCount: filteredImages.length,
-    })
-    const credits = estimatedCredits ?? Math.ceil(videoSec * 22)
-    deductFixedCredits(user.id, credits, toolName, selectedVideoModel, undefined)
-      .catch(e => console.error('[billing] animate deduct error:', e))
+    }) ?? Math.ceil(videoSec * 22)
+    const toolName = selectedVideoModel === 'grok' ? 'create_video_grok' : 'create_video'
+    const creditCheck = await requireCredits(user.id, creditsRequired)
+    if (!creditCheck.ok) return creditCheck.response
 
-    return NextResponse.json({ animationId: animation.id, taskId })
+    let reservedCredits = 0
+    try {
+      const reservation = await deductFixedCredits(
+        user.id,
+        creditsRequired,
+        toolName,
+        selectedVideoModel,
+        undefined,
+      )
+      reservedCredits = reservation.charged
+    } catch (error) {
+      if (isInsufficientCreditsError(error)) {
+        return NextResponse.json({
+          error: 'insufficient_credits',
+          balance: error.balance,
+          needed: error.required,
+          action: 'topup',
+        }, { status: 402 })
+      }
+      throw error
+    }
+
+    try {
+      const skillResult = await createVideo({
+        script: prompt,
+        images: inputImageUrls,
+        duration: effectiveDuration,
+        aspectRatio,
+        videoModel: selectedVideoModel,
+        videoResolution: videoRoute.resolution,
+        videoUrls: providerAutoVideoUrls.length ? providerAutoVideoUrls : undefined,
+        referenceVideoDuration,
+        referenceVideoMetas: referenceVideoMetas.length ? referenceVideoMetas : undefined,
+      })
+
+      if (!skillResult.success || !skillResult.taskId) {
+        if (reservedCredits > 0) {
+          await refundCredits(user.id, reservedCredits, toolName)
+          reservedCredits = 0
+        }
+        return NextResponse.json({
+          error: skillResult.message,
+          ...(skillResult.errorCode ? { code: skillResult.errorCode } : {}),
+          ...(skillResult.errorReason ? { reason: skillResult.errorReason } : {}),
+          ...(skillResult.errorDetails ? { details: skillResult.errorDetails } : {}),
+          ...(skillResult.retryable === false ? { retryable: false } : {}),
+          ...(skillResult.repairable != null ? { repairable: skillResult.repairable } : {}),
+          ...(skillResult.terminal != null ? { terminal: skillResult.terminal } : {}),
+          ...(skillResult.suggestedAction ? { suggestedAction: skillResult.suggestedAction } : {}),
+        }, { status: skillResult.retryable === false ? 400 : 500 })
+      }
+
+      const taskId = skillResult.taskId
+      const { data: animation, error } = await supabase
+        .from('project_animations')
+        .insert({
+          project_id: projectId,
+          piapi_task_id: taskId,
+          status: skillResult.status === 'completed' && skillResult.videoUrl ? 'completed' : 'processing',
+          prompt: finalPrompt,
+          snapshot_urls: filteredImages,
+          video_url: skillResult.videoUrl || null,
+        })
+        .select('id')
+        .single()
+
+      if (error) throw error
+
+      reservedCredits = 0
+      return NextResponse.json({ animationId: animation.id, taskId })
+    } catch (error) {
+      if (reservedCredits > 0) {
+        await refundCredits(user.id, reservedCredits, toolName)
+      }
+      throw error
+    }
   } catch (err) {
     console.error('animate POST error:', err)
     return NextResponse.json({ error: String(err) }, { status: 500 })

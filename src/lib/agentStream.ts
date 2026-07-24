@@ -33,23 +33,6 @@ export interface AgentStreamCallbacks {
 }
 
 type AgentRequestBody = Parameters<typeof streamAgent>[0];
-type AgentErrorEvent = Extract<AgentStreamEvent, { type: 'error' }>;
-
-export const MAX_STUDIO_RUN_AUTO_RESUMES = 2;
-
-export function shouldAutoResumeStudioRun(event: AgentErrorEvent, attempt: number): boolean {
-  return event.recoverable === true
-    && Boolean(event.checkpoint?.studioRunId)
-    && attempt < MAX_STUDIO_RUN_AUTO_RESUMES;
-}
-
-export function buildStudioRunAutoResumePrompt(event: AgentErrorEvent): string {
-  const checkpoint = event.checkpoint;
-  const partial = checkpoint?.streamedCodePath
-    ? ` A partial streamed code checkpoint exists at ${checkpoint.streamedCodePath} (${checkpoint.streamedCodeChars || 0} chars); read it once for useful components and continue from it instead of inventing the same code again.`
-    : '';
-  return `[System automatic recovery] Continue Studio Run ${checkpoint?.studioRunId || ''}${checkpoint?.studioRunStage ? ` from stage ${checkpoint.studioRunStage}` : ''}. Call studio_run status first, then read only the persisted script, storyboard, and assets artifacts needed for the current stage.${partial} Do not reread skill, prompt, director, component-library, or reference files. In Composition, immediately write numbered source files under <project-id>/drafts/composition-parts, salvaging complete definitions from any partial stream; do not restart a monolithic run_code payload. The workspace automatically assembles and autosaves after each source write. Continue until write_file reports compositionWorkspace.status="ready", then use its designPath directly, with no aggregate source-size target and no creative trimming. Reuse all persisted stage artifacts and existing media. Preview and patch the Remotion source until satisfactory, then call materialize_media once; successful materialization completes Review and Delivery automatically. Do not author Review or Delivery artifacts, and do not ask the user to send “continue”.`;
-}
 
 export async function streamAgent(
   body: {
@@ -90,7 +73,7 @@ export async function streamAgent(
     && !body.previewsReady
     && !body.musicReady;
   if (durableNormalRequest) return streamDurableAgent(body, callbacks, signal);
-  return streamAgentAttempt(body, callbacks, signal, 0);
+  return streamAgentAttempt(body, callbacks, signal);
 }
 
 interface PersistedAgentEvent {
@@ -226,7 +209,6 @@ async function streamAgentAttempt(
   body: AgentRequestBody,
   callbacks: AgentStreamCallbacks,
   signal: AbortSignal | undefined,
-  autoResumeAttempt: number,
 ): Promise<void> {
   const res = await fetch('/api/agent', {
     method: 'POST',
@@ -261,7 +243,6 @@ async function streamAgentAttempt(
   const decoder = new TextDecoder();
   let buffer = '';
   let receivedDone = false;
-  let recoveryEvent: AgentErrorEvent | null = null;
 
   while (true) {
     const { done, value } = await reader.read();
@@ -343,28 +324,13 @@ async function streamAgentAttempt(
             break;
           case 'error':
             receivedDone = true;
-            if (shouldAutoResumeStudioRun(event, autoResumeAttempt)) {
-              recoveryEvent = event;
-            } else {
-              callbacks.onError?.(event.message);
-            }
+            callbacks.onError?.(event.message);
             break;
         }
       } catch (e) {
         console.warn('[agentStream] failed to parse SSE event:', (e as Error)?.message, 'line length:', line.length, 'preview:', line.slice(0, 200));
       }
     }
-  }
-
-  if (recoveryEvent && !signal?.aborted) {
-    callbacks.onStatus?.(`Studio Run 中断，正在自动恢复（${autoResumeAttempt + 1}/${MAX_STUDIO_RUN_AUTO_RESUMES}）...`);
-    await streamAgentAttempt(
-      { ...body, prompt: buildStudioRunAutoResumePrompt(recoveryEvent) },
-      callbacks,
-      signal,
-      autoResumeAttempt + 1,
-    );
-    return;
   }
 
   // Stream ended without done/error event (e.g. Vercel timeout, network cut)

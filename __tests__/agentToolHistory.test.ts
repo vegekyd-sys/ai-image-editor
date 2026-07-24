@@ -152,6 +152,49 @@ describe('agent tool history sanitizer', () => {
 });
 
 describe('agent tool history reconstruction', () => {
+  it('normalizes legacy audio tool names before model replay', () => {
+    const history = buildModelHistoryFromRows([], [
+      {
+        created_at: '2026-06-01T00:00:00.000Z',
+        run_id: 'legacy-audio',
+        step: 0,
+        seq: 0,
+        tool_call_id: 'voice-call',
+        tool_name: 'generate_voiceover',
+        input: { text: '旧旁白', voice_id: 'legacy-voice' },
+        output: { type: 'json', value: { success: true, audioUrl: 'https://example.com/voice.wav' } },
+      },
+      {
+        created_at: '2026-06-01T00:00:01.000Z',
+        run_id: 'legacy-audio',
+        step: 0,
+        seq: 1,
+        tool_call_id: 'catalog-call',
+        tool_name: 'list_voiceover_voices',
+        input: {},
+        output: { type: 'json', value: { voices: [] } },
+      },
+      {
+        created_at: '2026-06-01T00:00:02.000Z',
+        run_id: 'legacy-audio',
+        step: 0,
+        seq: 2,
+        tool_call_id: 'music-call',
+        tool_name: 'generate_music',
+        input: { prompt: '轻快音乐', duration_seconds: 12 },
+        output: { type: 'json', value: { success: true, audioUrl: 'https://example.com/music.wav' } },
+      },
+    ]);
+
+    const json = JSON.stringify(history);
+    expect(json).not.toContain('generate_voiceover');
+    expect(json).not.toContain('list_voiceover_voices');
+    expect(json).not.toContain('generate_music');
+    expect(json).toContain('"toolName":"generate_audio"');
+    expect(json).toContain('"kind":"voiceover"');
+    expect(json).toContain('"kind":"music"');
+  });
+
   it('reconstructs 200 complete chat rounds with tool evidence without truncation', () => {
     const visible = Array.from({ length: 200 }, (_, round) => {
       const base = round * 3;

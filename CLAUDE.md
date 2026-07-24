@@ -11,6 +11,27 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 两个环境共享同一个 Supabase 数据库。Vercel 环境变量已配 Production + Preview 双份，preview 部署可正常登录。
 
+### Shared Preview Sandbox isolation
+
+Vercel 的项目级 Preview 环境变量会被所有 worktree、thread 和 Preview
+deployment 共享。实验性的 Sandbox Snapshot 不得覆盖共享环境：
+
+- 禁止在普通功能开发或单一 worktree 验收时运行
+  `vercel env add REMOTION_SNAPSHOT_ID preview --force`。新的 Remotion
+  Snapshot 可能要求旧应用代码没有提供的 props、bundle 或 font manifest，
+  会同时堵塞其他 thread 的 `run_code` / `preview_frame`。
+- Remotion Snapshot 实验必须用单次部署变量隔离：
+  `npx vercel -e REMOTION_SNAPSHOT_ID='snap_...' --yes`。不要把该 deployment
+  设为共享 `git-dev` alias，直到兼容性验收完成。
+- `MEDIA_SANDBOX_SNAPSHOT_ID` 与 `REMOTION_SNAPSHOT_ID` 是独立合同，禁止互相
+  复用。修改其中一个不能要求另一个 runtime 同步升级。
+- 晋升共享 Preview 前，必须同时用候选 Snapshot 验证当前分支和一个未包含
+  新 runtime 合同的旧应用 deployment；两边都要通过真实
+  `makaron chat` -> `run_code` -> `preview_frame`。不能把“成功保存 editable
+  JSON、但 Preview 失败”算通过。
+- Production Snapshot 的更新仍需用户明确批准，并在 Production 变更前完成
+  Preview 兼容性 smoke。
+
 **Vercel 环境变量设置必须用 `printf`，禁止用 `echo`**（echo 会在值末尾加 `\n`，导致值不匹配、API 请求失败等隐蔽 bug）：
 ```bash
 printf 'value' | npx vercel env add NAME production --force

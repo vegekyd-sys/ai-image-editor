@@ -236,6 +236,61 @@ describe('AgentDualWriter', () => {
       .rejects.toThrow('Refusing empty agent completion');
   });
 
+  it('honors the stable Snapshot ID supplied by explicit draft promotion', async () => {
+    const inserts: Array<{ table: string; row: Record<string, unknown> }> = [];
+    const upserts: Array<{ table: string; row: Record<string, unknown> }> = [];
+    const fakeSupabase = {
+      storage: {
+        from: () => ({
+          upload: async () => ({ error: null }),
+          getPublicUrl: () => ({ data: { publicUrl: 'https://storage.example.com/design.json' } }),
+        }),
+      },
+      rpc: async () => ({ data: 7 }),
+      from: (table: string) => ({
+        insert: async (row: Record<string, unknown>) => {
+          inserts.push({ table, row });
+          return { error: null };
+        },
+        upsert: async (row: Record<string, unknown>) => {
+          upserts.push({ table, row });
+          return { error: null };
+        },
+      }),
+    };
+    const writer = new AgentDualWriter('run-id', fakeSupabase as never, 'user-id', 'project-id');
+    const snapshotId = '2b592fcc-2bc6-5f2b-b3f1-eaff0f202bdb';
+
+    await writer.processAndEnqueue({
+      type: 'render',
+      code: 'function Composition() { return null }',
+      width: 1920,
+      height: 1080,
+      snapshotId,
+      sourceDesignPath: 'project-id/drafts/latest-composition.json',
+      published: true,
+    });
+
+    expect(upserts).toContainEqual({
+      table: 'snapshots',
+      row: expect.objectContaining({
+        id: snapshotId,
+        design_path: `code/${snapshotId}.json`,
+      }),
+    });
+    expect(inserts).toContainEqual({
+      table: 'agent_events',
+      row: expect.objectContaining({
+        type: 'render',
+        data: expect.objectContaining({
+          snapshotId,
+          sourceDesignPath: 'project-id/drafts/latest-composition.json',
+          published: true,
+        }),
+      }),
+    });
+  });
+
   it('backfills video snapshot description from analyze_video tool results', async () => {
     const updates: Array<{ table: string; row: Record<string, unknown>; id?: string }> = [];
     const snapshots = [

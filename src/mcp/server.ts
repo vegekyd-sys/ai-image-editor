@@ -8,6 +8,7 @@ import { writeVideoScript } from '../lib/skills/write-video-script';
 import { createVideo } from '../lib/skills/create-video';
 import { getVideoStatus } from '../lib/skills/get-video-status';
 import { analyzeVideo } from '../lib/skills/analyze-video';
+import { createAudio } from '../lib/skills/create-audio';
 import { createMusic } from '../lib/skills/create-music';
 import { getMusicStatus } from '../lib/skills/get-music-status';
 
@@ -453,11 +454,69 @@ Poll every 10-15 seconds. Do NOT poll in a tight loop.`,
     },
   );
 
-  // ── Music generation ─────────────────────────────────────────────────────
+  // ── Unified audio generation ─────────────────────────────────────────────
+
+  server.tool(
+    'makaron_create_audio',
+    `Generate one complete standalone soundtrack with Seed Audio 1.0.
+
+Use a compact playback-order timeline for narration, dialogue, multilingual speech, music, ambience, and sound effects. The current gateway accepts prompts up to 1,500 characters and outputs up to 120 seconds. You may provide up to 3 audio references or 1 image reference, but never both. Bind audio references in prompt order as @audio1, @audio2, and @audio3. WAV/48 kHz is the production-master default.`,
+    {
+      prompt: z.string().max(1500).describe('Complete timeline-directed Seed Audio production brief.'),
+      duration_seconds: z.number().positive().max(120).optional().describe('Target duration in seconds.'),
+      audio_references: z.array(z.string()).max(3).optional().describe('Public HTTPS audio URLs or provider preset voice IDs, bound as @audio1..@audio3 in the prompt.'),
+      image_urls: z.array(z.string().url()).max(1).optional().describe('At most one public HTTPS image URL; mutually exclusive with audio_references.'),
+      speech_rate: z.number().min(0.5).max(2).optional(),
+      loudness_rate: z.number().min(0.5).max(2).optional(),
+      pitch_rate: z.number().int().min(-12).max(12).optional(),
+      format: z.enum(['wav', 'mp3', 'ogg_opus', 'pcm']).optional(),
+      sample_rate: z.union([z.literal(8000), z.literal(16000), z.literal(24000), z.literal(48000)]).optional(),
+      callback_url: z.string().url().optional().describe('Optional HTTPS callback URL.'),
+      title: z.string().optional(),
+    },
+    async (params) => {
+      try {
+        if (options?.onToolStart) {
+          const check = await options.onToolStart('makaron_create_seed_audio');
+          if (!check.allowed) return { content: [{ type: 'text' as const, text: check.message || 'Insufficient credits' }] };
+        }
+        const t0 = Date.now();
+        const result = await createAudio({
+          prompt: params.prompt,
+          durationSeconds: params.duration_seconds,
+          audioReferences: params.audio_references,
+          imageUrls: params.image_urls,
+          speechRate: params.speech_rate,
+          loudnessRate: params.loudness_rate,
+          pitchRate: params.pitch_rate,
+          format: params.format,
+          sampleRate: params.sample_rate,
+          callbackUrl: params.callback_url,
+          title: params.title,
+        });
+        if (result.success) {
+          await options?.onToolComplete?.('makaron_create_seed_audio', result.model, Date.now() - t0, undefined, {
+            seedAudioDurationSec: result.duration,
+            seedAudioProviderCredits: result.creditsUsed,
+            seedAudioGenerationSec: result.generationSeconds,
+          });
+        }
+        return { content: [{ type: 'text' as const, text: result.success
+          ? `${result.message}\n\nAudio URL: ${result.audioUrl || 'not returned'}\nTask ID: ${result.taskId || 'n/a'}\nFormat: ${result.format || 'n/a'} / ${result.sampleRate || 'n/a'} Hz`
+          : result.message }] };
+      } catch (e) {
+        const msg = e instanceof Error ? e.message : String(e);
+        console.error('[MCP create_audio error]', msg);
+        return { content: [{ type: 'text' as const, text: `Error: ${msg}` }] };
+      }
+    },
+  );
+
+  // ── Music generation (compatibility alias) ───────────────────────────────
 
   server.tool(
     'makaron_create_music',
-    `Generate background music using Seed Audio. Returns a completed audio URL when generation succeeds.
+    `Compatibility alias for music-only Seed Audio requests. Returns a completed audio URL when generation succeeds.
 
 - Music generation waits for the provider result and returns one persisted audio asset when project persistence is available.
 - Default: instrumental background music, no vocals.
@@ -465,9 +524,14 @@ Poll every 10-15 seconds. Do NOT poll in a tight loop.`,
 - Style: optional genre/mood tags for custom mode (e.g. "lo-fi, ambient, chill").
 - New music generation no longer uses Suno.`,
     {
-      prompt: z.string().describe('Music description: genre, mood, instruments (max 500 chars)'),
+      prompt: z.string().max(1500).describe('Timeline-directed music description: genre, mood, energy arc, instruments, mix role, and ending.'),
       instrumental: z.boolean().optional().describe('Instrumental only, no vocals (default: true)'),
       style: z.string().optional().describe('Genre/mood tags for custom mode (e.g. "lo-fi, ambient")'),
+      duration_seconds: z.number().positive().max(120).optional(),
+      loudness_rate: z.number().min(0.5).max(2).optional(),
+      pitch_rate: z.number().int().min(-12).max(12).optional(),
+      format: z.enum(['wav', 'mp3', 'ogg_opus', 'pcm']).optional(),
+      sample_rate: z.union([z.literal(8000), z.literal(16000), z.literal(24000), z.literal(48000)]).optional(),
     },
     async (params) => {
       try {
@@ -480,6 +544,11 @@ Poll every 10-15 seconds. Do NOT poll in a tight loop.`,
           prompt: params.prompt,
           instrumental: params.instrumental,
           style: params.style,
+          durationSeconds: params.duration_seconds,
+          loudnessRate: params.loudness_rate,
+          pitchRate: params.pitch_rate,
+          format: params.format,
+          sampleRate: params.sample_rate,
         });
 
         if (result.success) {

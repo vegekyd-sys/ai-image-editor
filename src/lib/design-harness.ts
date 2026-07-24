@@ -9,6 +9,7 @@ import traverse from '@babel/traverse';
 import { transform as sucraseTransform } from 'sucrase';
 import type { EditableField } from '@/types';
 import {
+  buildRemotionEvaluatorBody,
   DYNAMIC_DESIGN_SCOPE_NAMES,
   normalizeRemotionScopeDeclarations,
 } from './remotion-code-normalization';
@@ -38,6 +39,7 @@ const SAFE_RUNTIME_GLOBALS = new Set([
   'FileReader', 'FormData', 'Headers', 'Request', 'Response', 'TextEncoder',
   'TextDecoder', 'AbortController', 'AbortSignal', 'Image', 'ImageData',
   'fetch', 'atob', 'btoa', 'structuredClone', 'queueMicrotask',
+  'require', 'module', 'exports',
   'setTimeout', 'clearTimeout', 'setInterval', 'clearInterval',
   'requestAnimationFrame', 'cancelAnimationFrame',
 ]);
@@ -92,7 +94,7 @@ export function validateDesignDiagnostics(result: DesignResult): string[] {
 function checkTopLevelHookCalls(code: string): string | null {
   try {
     const ast = parse(normalizeRemotionScopeDeclarations(code), {
-      sourceType: 'script',
+      sourceType: 'unambiguous',
       plugins: ['jsx', 'typescript'],
     });
     const hooks = new Set<string>();
@@ -128,7 +130,7 @@ function checkTopLevelHookCalls(code: string): string | null {
 function checkUnresolvedIdentifiers(code: string): string | null {
   try {
     const ast = parse(normalizeRemotionScopeDeclarations(code), {
-      sourceType: 'script',
+      sourceType: 'unambiguous',
       plugins: ['jsx', 'typescript'],
     });
     const unresolved = new Set<string>();
@@ -171,19 +173,17 @@ function autoFixImgTags(code: string): string {
   return fixed;
 }
 
-/** Replace HTML <video with Remotion <Video and strip native-only attributes */
+/** Replace HTML <video> with the injected frame-synchronized runtime Video. */
 function autoFixVideoTags(code: string): string {
   let fixed = code;
-  // JSX form: <video → <Video
   fixed = fixed.replace(/<video(?=[\s/>])/g, '<Video').replace(/<\/video>/g, '</Video>');
-  // createElement form: createElement('video' → createElement(Video
   fixed = fixed.replace(/createElement\(\s*['"]video['"]/g, 'createElement(Video');
-  // Strip attributes that don't apply to Remotion <Video> (muted is kept — Remotion supports it)
-  fixed = fixed.replace(/\s+autoPlay(?=[\s/>])/g, '');
-  fixed = fixed.replace(/\s+controls(?=[\s/>])/g, '');
-  fixed = fixed.replace(/\s+playsInline(?=[\s/>])/g, '');
-  // createElement props: autoPlay: true → remove
-  fixed = fixed.replace(/,?\s*autoPlay:\s*true\s*,?/g, (m) => m.startsWith(',') && m.endsWith(',') ? ',' : '');
+  // Only remove browser playback props from actual Video JSX tags. The old
+  // global regex also mutated unrelated components and configuration objects.
+  fixed = fixed.replace(/<Video\b[^>]*>/g, tag => tag
+    .replace(/\s+autoPlay(?=[\s/>])/g, '')
+    .replace(/\s+controls(?=[\s/>])/g, '')
+    .replace(/\s+playsInline(?=[\s/>])/g, ''));
   if (fixed !== code) {
     console.log('🔧 [design-harness] auto-fixed <video> → <Video> for Remotion Player sync');
   }
@@ -194,20 +194,14 @@ function autoFixVideoTags(code: string): string {
 /** Compile code with Sucrase — syntax check only, no runtime execution */
 function checkCompile(code: string): string | null {
   try {
-    if (/^\s*(?:import|export)\b/m.test(code)) {
-      return '⚠️ Composition compile error: import/export module syntax is not supported. Declare the component directly and try again.';
-    }
-    if (/\brequire\s*\(|\bmodule\.exports\b|\bexports\s*\./.test(code)) {
-      return '⚠️ Composition compile error: require/module.exports syntax is not supported in DynamicDesign. Use the injected Remotion and React names directly.';
-    }
     const source = normalizeRemotionScopeDeclarations(code);
     const { code: compiled } = sucraseTransform(source, {
-      transforms: ['typescript', 'jsx'],
+      transforms: ['typescript', 'jsx', 'imports'],
       jsxRuntime: 'classic',
     });
-    // DynamicDesign evaluates the compiled body with new Function(). Parse it
-    // the same way here so browser-incompatible syntax fails before rendering.
-    new Function(...DYNAMIC_DESIGN_SCOPE_NAMES, `"use strict";\n${compiled}\nreturn undefined;`);
+    // Parse the exact open-scope module wrapper used by DynamicDesign. This
+    // validates syntax without rejecting normal module/CommonJS authoring.
+    new Function('__scope', 'module', 'exports', 'require', buildRemotionEvaluatorBody(compiled, 'Design'));
     return null;
   } catch (err) {
     const msg = err instanceof Error ? err.message : String(err);
@@ -239,16 +233,14 @@ function checkImageReferences(code: string, props?: Record<string, unknown>): st
 function checkImageUrls(code: string): string | null {
   const srcValues: string[] = [];
 
-  const staticMatches = code.match(/src=["'`]([^"'`]*)["'`]/g) || [];
-  for (const m of staticMatches) {
-    const match = m.match(/src=["'`]([^"'`]*)["'`]/);
-    if (match) srcValues.push(match[1]);
-  }
-
-  const exprMatches = code.match(/src=\{["'`]([^"'`]*)["'`]\}/g) || [];
-  for (const m of exprMatches) {
-    const match = m.match(/src=\{["'`]([^"'`]*)["'`]\}/);
-    if (match) srcValues.push(match[1]);
+  // Validate only Remotion Img tags. Scanning every `src=` treated Video,
+  // Audio and IFrame sources as images and rejected valid media URLs/data.
+  const imgTags = code.match(/<Img\b[^>]*>/g) || [];
+  for (const tag of imgTags) {
+    const staticMatch = tag.match(/\bsrc=["'`]([^"'`]*)["'`]/);
+    if (staticMatch) srcValues.push(staticMatch[1]);
+    const expressionMatch = tag.match(/\bsrc=\{["'`]([^"'`]*)["'`]\}/);
+    if (expressionMatch) srcValues.push(expressionMatch[1]);
   }
 
   for (const src of srcValues) {

@@ -45,6 +45,59 @@ export interface ParsedSkill {
   template: string; // markdown body (the actual instructions)
 }
 
+export interface MarketplaceSkillFallback {
+  name: string;
+  description: string;
+}
+
+/**
+ * Marketplace templates predate the strict AgentSkills frontmatter contract.
+ * Normalize only server-verified marketplace packages; ordinary user uploads
+ * still go through parseSkillMd unchanged and remain strict.
+ */
+export function normalizeMarketplaceSkillMd(
+  content: string,
+  fallback: MarketplaceSkillFallback,
+): string {
+  const trimmed = content.trim();
+  const safeName = fallback.name.trim();
+  const safeDescription = fallback.description.replace(/\s+/g, ' ').trim();
+  if (!trimmed || !safeName || !safeDescription) return content;
+
+  const fmMatch = trimmed.match(/^---\n([\s\S]*?)\n---\n?([\s\S]*)$/);
+  if (!fmMatch) {
+    return `---\nname: ${safeName}\ndescription: ${safeDescription}\n---\n\n${trimmed}\n`;
+  }
+
+  let frontmatter = fmMatch[1];
+  if (!/^name:\s*.+$/m.test(frontmatter)) {
+    frontmatter = `name: ${safeName}\n${frontmatter}`;
+  }
+  if (!/^description:\s*.+$/m.test(frontmatter)) {
+    const nameLine = frontmatter.match(/^name:\s*.+$/m)?.[0];
+    frontmatter = nameLine
+      ? frontmatter.replace(nameLine, `${nameLine}\ndescription: ${safeDescription}`)
+      : `description: ${safeDescription}\n${frontmatter}`;
+  }
+  return `---\n${frontmatter}\n---\n${fmMatch[2]}`;
+}
+
+export function deriveMarketplaceSkillName(skillPath: string, homeSkillId: string): string {
+  let basename = '';
+  try {
+    basename = new URL(skillPath).pathname.split('/').pop() || '';
+  } catch {
+    basename = skillPath.split('/').pop() || '';
+  }
+  const normalized = decodeURIComponent(basename)
+    .replace(/\.zip$/i, '')
+    .toLowerCase()
+    .replace(/[^a-z0-9_-]+/g, '-')
+    .replace(/^-+|-+$/g, '')
+    .slice(0, 96);
+  return normalized || `home-skill-${homeSkillId.slice(0, 8)}`;
+}
+
 /** Parse a SKILL.md string into structured data */
 export function parseSkillMd(content: string): ParsedSkill | null {
   const fmMatch = content.match(/^---\n([\s\S]*?)\n---\n([\s\S]*)$/);

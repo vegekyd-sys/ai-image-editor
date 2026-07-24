@@ -134,6 +134,12 @@ export async function renderDesignFrame(
           durationInFrames,
           width: design.width || 1080,
           height: design.height || 1350,
+          // preview_frame is a deterministic server capture, not interactive
+          // playback. Always use Remotion's real OffthreadVideo decoder here so
+          // MP4s with cover-art/auxiliary tracks do not get stuck in the
+          // browser media-parser path. This applies to both <Video> and an
+          // explicit <OffthreadVideo> without requiring the Agent to rewrite.
+          useOffthreadVideo: true,
           fontManifestUrl,
           fontSubstitutions: design.fontSubstitutions || {},
         },

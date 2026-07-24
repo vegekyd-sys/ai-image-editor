@@ -3,7 +3,7 @@ name: avatar-spokesperson
 description: >
   Makaron adapter with adapted support for OpenMontage's avatar-spokesperson
   production pipeline, using existing Makaron tools and durable project outputs.
-allowed-tools: read_file studio_run prepare_visual_asset analyze_video analyze_image transcribe_audio generate_image generate_animation generate_audio generate_music list_voiceover_voices generate_voiceover run_code write_file preview_frame materialize_media
+allowed-tools: read_file studio_run prepare_visual_asset analyze_video analyze_image transcribe_audio generate_image generate_animation generate_audio run_code write_file preview_frame materialize_media
 metadata:
   makaron:
     icon: "◫"

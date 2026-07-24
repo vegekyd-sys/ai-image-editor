@@ -105,10 +105,15 @@ export async function ensureStudioCompositionScaffold(input: {
   projectId: string;
   userId: string;
   supabase: SupabaseClient;
+  agentRunId: string;
 }): Promise<{ created: boolean; path?: string; studioRunId?: string; codeChars?: number; elapsedMs: number }> {
   const startedAt = Date.now();
   const store = new WorkspaceStudioRunStore(input.supabase, input.userId);
-  const run = (await store.listRuns(input.projectId)).find(item => item.status === 'running' && item.currentStage === 'composition');
+  const run = (await store.listRuns(input.projectId)).find(item => (
+    item.agentRunId === input.agentRunId
+    && item.status === 'running'
+    && item.currentStage === 'composition'
+  ));
   if (!run) return { created: false, elapsedMs: Date.now() - startedAt };
 
   const existing = await loadCompositionDraft(input);

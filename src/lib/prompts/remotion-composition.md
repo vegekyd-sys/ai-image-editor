@@ -27,7 +27,7 @@ an executable Makaron timeline.
 
 When the user asks to put two existing timeline videos together, cut clips freely, add transitions, add subtitles, or make a sequence that can be edited later, this is the default runtime. Use Remotion `<Sequence>` and `<Video>` rather than FFmpeg.
 
-Do not fall back to FFmpeg/node for ordinary timeline splicing just because a preview needs adjustment or the first composition attempt is imperfect. Patch the Remotion composition, save/publish the editable composition, or report the preview issue. Use FFmpeg only when the user explicitly asks for a real file-level MP4 operation/export.
+Do not fall back to FFmpeg/node for ordinary timeline splicing just because a preview needs adjustment or the first composition attempt is imperfect. Patch the Remotion composition, promote the reviewed editable composition with `publish_draft({ design_path })`, or report the preview issue. Use FFmpeg only when the user explicitly asks for a real file-level MP4 operation/export.
 
 For timeline media, put the literal 1-based `<<<media_N>>>` marker in props or code, including `props.clipA`, `<Img src>`, and `<Video src>`. `run_code` resolves every marker to the current URL before validation, autosave, preview, and export. Never manually translate Media Index N to `ctx.snapshotImages[N]`: Media Index is 1-based while that JavaScript array is 0-based, so manual indexing shifts every image and makes the final item undefined.
 
@@ -94,12 +94,20 @@ Available APIs include all exports from `remotion`, `@remotion/media`, `@remotio
 - Only `Composition(props)` may read `props` directly. Helper components must receive every value they use as function parameters, e.g. `function TitleCard({ title, subtitle }) { ... }`; never reference outer `props` inside `TitleCard`, `Scene`, `Card`, or other helpers.
 - Use Remotion `<Img>`, never HTML `<img>`.
 - Subtitles, kinetic text, and scene labels are authored directly inside this
-  composition. The harness does not generate separate caption data, require a
-  shared cue schema, or provide a universal subtitle overlay. If
-  `transcribe_audio` was used, treat its timestamps as optional editorial
-  reference and choose the wording, grouping, timing, placement, typography,
-  and motion that best serve the current frame and art direction.
-- Use Remotion `<Video>` or `<OffthreadVideo>`, never HTML `<video>`.
+  composition. The harness does not provide a universal subtitle overlay or
+  impose shared styling. When narration is present, use the persisted
+  `transcribe_audio` narration cue sheet as the authoritative master clock.
+  Convert cue seconds to frames once at the Composition FPS, then drive
+  `<Sequence>` ranges, subtitle activation, visual emphasis, and music ducking
+  from those same ranges. A linked visual scene must not end before its
+  narration cue ends. Do not replace measured cue ranges with planned Script
+  timing, estimated reading speed, or equal scene lengths. Wording, grouping,
+  placement, typography, and motion remain specific to the current Composition.
+- Prefer Remotion `<Video>` or `<OffthreadVideo>`. Lowercase HTML `<video>` is
+  also accepted and normalized by the harness to the injected,
+  frame-synchronized `<Video>` component.
+- Decoder selection is owned by the preview/export runtime, independent of
+  whether the source used `<Video>` or `<OffthreadVideo>`.
 - Use `<Sequence>` for every scene or clip so media mounts only when needed.
 - Use `trimBefore`, `trimAfter`, `playbackRate`, and `volume` on `<Video>` for non-destructive timeline edits.
 - Never use `startFrom` or `endAt` for `<Video>` trimming in Makaron compositions. They are deprecated/unsafe in this runtime and can make every sequenced clip restart from the first frame. Use `trimBefore={sourceStartFrame}` and `trimAfter={sourceEndFrame}` instead.
@@ -212,3 +220,4 @@ After render or patch:
 - For trim edits, verify the final `animation.durationInSeconds` matches the actual total frame count before saving or publishing.
 - Capture stable middle frames for each scene, not transition starts.
 - Check subject cropping, text readability, overlay placement, and final frame content.
+- When the user should receive an editable composition, call `publish_draft` with the exact persisted `design_path` after QA. A draft preview is not a published timeline Snapshot. `materialize_media({ publish: true })` publishes the MP4 only and does not replace this step.

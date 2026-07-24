@@ -10,14 +10,19 @@ import * as RemotionPaths from '@remotion/paths';
 import * as RemotionNoise from '@remotion/noise';
 import * as THREE from 'three';
 import { transform as sucraseTransform } from 'sucrase';
-import { normalizeRemotionScopeDeclarations } from '@/lib/remotion-code-normalization';
+// Keep the Remotion entrypoint independently bundleable. The standalone
+// Remotion bundler does not inherit Next.js' `@/` alias.
+import {
+  buildRemotionEvaluatorBody,
+  normalizeRemotionScopeDeclarations,
+} from '../lib/remotion-code-normalization';
 import {
   fetchRemotionFontManifestWithTiming,
   loadPreparedRemotionFonts,
   prepareRemotionFontCode,
   type PreparedRemotionFonts,
   type RemotionFontTiming,
-} from '@/remotion/font-catalog';
+} from './font-catalog';
 
 const { Artifact, Sequence, useCurrentFrame, useVideoConfig, delayRender, continueRender, cancelRender } = Remotion;
 
@@ -31,6 +36,7 @@ const AutoPremountSequence = React.forwardRef(function AutoPremountSequence(prop
 function createRemotionScope(useOffthreadVideo: boolean, useNativeVideo: boolean): Record<string, unknown> {
   const serverVideo = Remotion.OffthreadVideo || MediaVideo;
   const nativeVideo = Remotion.Video || MediaVideo;
+  const serverRendering = useOffthreadVideo || useNativeVideo;
   const scope: Record<string, unknown> = {
     React, useState, useEffect, useCallback, useMemo, useRef,
     THREE,
@@ -41,7 +47,11 @@ function createRemotionScope(useOffthreadVideo: boolean, useNativeVideo: boolean
     // Remotion-native Video so the renderer can collect source-video audio assets.
     Audio: MediaAudio,
     Video: useOffthreadVideo ? serverVideo : useNativeVideo ? nativeVideo : MediaVideo,
-    OffthreadVideo: useOffthreadVideo ? serverVideo : MediaVideo,
+    // An explicit <OffthreadVideo> must remain meaningful in server preview/export.
+    // Previously it was silently aliased back to @remotion/media whenever only
+    // useNativeVideo was set, so an Agent "compatibility" patch changed the
+    // component name without changing the decoder at all.
+    OffthreadVideo: serverRendering ? serverVideo : MediaVideo,
     // Override: Sequence with auto premountFor
     Sequence: AutoPremountSequence,
   };
@@ -74,15 +84,46 @@ function compileAndEval(code: string, scope: Record<string, unknown>): React.Com
   try {
     const src = normalizeRemotionScopeDeclarations(code);
     const { code: compiled } = sucraseTransform(src, {
-      transforms: ['typescript', 'jsx'],
+      transforms: ['typescript', 'jsx', 'imports'],
       jsxRuntime: 'classic',
     });
     const fnName = pickRemotionComponentName(src);
-    const execCode = `${compiled}\nreturn ${fnName};`;
-    const scopeKeys = Object.keys(scope);
-    const scopeValues = Object.values(scope);
-    const factory = new Function(...scopeKeys, execCode);
-    return factory(...scopeValues);
+    const reactModule = { ...React, default: React, __esModule: true };
+    const remotionNamespace = { ...Remotion, ...scope };
+    const remotionModule = { ...remotionNamespace, default: remotionNamespace, __esModule: true };
+    const mediaNamespace = {
+      Audio: scope.Audio,
+      Video: scope.Video,
+      OffthreadVideo: scope.OffthreadVideo,
+    };
+    const mediaModule = {
+      ...mediaNamespace,
+      default: mediaNamespace,
+      __esModule: true,
+    };
+    const pathsNamespace = { ...RemotionPaths };
+    const noiseNamespace = { ...RemotionNoise };
+    const modules: Record<string, unknown> = {
+      react: reactModule,
+      remotion: remotionModule,
+      '@remotion/media': mediaModule,
+      '@remotion/paths': { ...pathsNamespace, default: pathsNamespace, __esModule: true },
+      '@remotion/noise': { ...noiseNamespace, default: noiseNamespace, __esModule: true },
+      three: { ...THREE, default: THREE, __esModule: true },
+    };
+    const localRequire = (id: string) => {
+      if (id in modules) return modules[id];
+      throw new Error(`Composition module "${id}" is not available in the browser Remotion runtime.`);
+    };
+    const authoredModule = { exports: {} as Record<string, unknown> };
+    const factory = new Function(
+      '__scope',
+      'module',
+      'exports',
+      'require',
+      buildRemotionEvaluatorBody(compiled, fnName),
+    );
+    return factory(scope, authoredModule, authoredModule.exports, localRequire);
   } catch (err) {
     console.error('[DynamicDesign] compile error:', err);
     return null;

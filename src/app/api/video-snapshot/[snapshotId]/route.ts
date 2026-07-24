@@ -8,6 +8,7 @@ import { uploadVideo, isPermanentUrl } from '@/lib/supabase/storage'
 import type { VideoMeta } from '@/types'
 import { buildVideoFailureActions } from '@/lib/artifact-actions'
 import { getRemotionExportJob, runRemotionExportJob } from '@/lib/remotion-export'
+import { getRequestLocale } from '@/lib/server-locale'
 
 export const maxDuration = 1800
 
@@ -111,6 +112,7 @@ export async function GET(
 ) {
   try {
     const { snapshotId } = await params
+    const locale = getRequestLocale(req)
     const admin = getSupabaseAdmin()
     const authResult = await authenticateRequest(req)
     const authUserId = 'auth' in authResult ? authResult.auth.userId : null
@@ -171,7 +173,7 @@ export async function GET(
         snapshotId,
         imageUrl: snap.image_url || undefined,
         error: videoMeta.error,
-        completionActions: buildVideoFailureActions(videoMeta),
+        completionActions: buildVideoFailureActions(videoMeta, locale),
       })
     }
 
@@ -222,7 +224,7 @@ export async function GET(
           snapshotId,
           imageUrl: snap.image_url || undefined,
           error: updatedMeta.error,
-          completionActions: buildVideoFailureActions(updatedMeta),
+          completionActions: buildVideoFailureActions(updatedMeta, locale),
         })
       }
       runRemotionExportAfterResponse(job.id)
@@ -296,7 +298,7 @@ export async function GET(
         snapshotId,
         imageUrl: snap.image_url || undefined,
         error: result.error,
-        completionActions: buildVideoFailureActions({ ...videoMeta, status: 'failed', error: result.error }),
+        completionActions: buildVideoFailureActions({ ...videoMeta, status: 'failed', error: result.error }, locale),
       })
     }
 

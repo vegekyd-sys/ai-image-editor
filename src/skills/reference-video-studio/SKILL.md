@@ -4,7 +4,7 @@ description: >
   Analyze a reference video, extract its transferable structure and pacing,
   propose original directions, and produce a new editable video without copying
   the reference's surface design.
-allowed-tools: read_file studio_run prepare_visual_asset analyze_video transcribe_audio run_code write_file preview_frame materialize_media list_voiceover_voices generate_voiceover generate_audio generate_music generate_image generate_animation analyze_image
+allowed-tools: read_file studio_run prepare_visual_asset analyze_video transcribe_audio run_code write_file preview_frame materialize_media generate_audio generate_image generate_animation analyze_image
 metadata:
   makaron:
     icon: "🎬"

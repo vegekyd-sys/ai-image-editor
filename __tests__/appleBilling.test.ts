@@ -99,7 +99,15 @@ describe('Apple billing integration', () => {
       amount_usd: 19.99,
     }));
     expect(mockAddCredits).toHaveBeenCalledWith('11111111-1111-4111-8111-111111111111', 2200);
-    expect(result).toMatchObject({ purchaseType: 'topup', credited: true, credits: 2200 });
+    expect(result).toMatchObject({
+      purchaseType: 'topup',
+      credited: true,
+      credits: 2200,
+      amountUsd: 19.99,
+      productId: 'app.makaron.ios.topup.pro',
+      transactionId: '200000000000001',
+      tierId: 'pro',
+    });
   });
 
   it('does not double-credit duplicate Apple transactions', async () => {
@@ -148,7 +156,16 @@ describe('Apple billing integration', () => {
       amount_usd: 189.99,
     }));
     expect(mockAddCredits).toHaveBeenCalledWith('11111111-1111-4111-8111-111111111111', 36000);
-    expect(result).toMatchObject({ purchaseType: 'subscription', credited: true, credits: 36000 });
+    expect(result).toMatchObject({
+      purchaseType: 'subscription',
+      credited: true,
+      credits: 36000,
+      amountUsd: 189.99,
+      productId: 'app.makaron.ios.subscription.pro.annual',
+      transactionId: '200000000000002',
+      planId: 'pro',
+      billingInterval: 'year',
+    });
   });
 
   it('rejects a transaction whose appAccountToken belongs to a different user', async () => {
