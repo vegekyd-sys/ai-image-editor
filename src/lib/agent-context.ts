@@ -15,6 +15,7 @@ import * as workspace from './workspace';
 import { buildModelHistoryFromRows, type DbToolHistoryRow } from './agentToolHistory';
 import { formatVideoMediaSpec } from './media-aspect';
 import { loadCompositionDraft } from './composition-draft';
+import { resolveExplicitTurnMediaIndices } from './media-provenance';
 import { WorkspaceStudioRunStore } from './studio-run';
 import {
   buildTypedCompactionMessage,
@@ -76,7 +77,11 @@ export interface PromptContextResult {
   recoverableDesignPath?: string;
   /** Project-scoped audio refs available as audio_1, audio_2, ... (not media_N). */
   audioAttachments: AudioAttachmentContext[];
+  /** Timeline media explicitly introduced or referenced by the current user turn. */
+  explicitMediaIndices: number[];
   executionSnapshot?: DurableExecutionSnapshot;
+  /** Persisted Studio workflow context for model guidance only. */
+  activeStudioWorkflowStage?: string;
   contextStats: ContextSelectionStats;
   /** Latest persisted input row represented by this context. */
   historyBoundary?: string;
@@ -322,12 +327,6 @@ export function selectPriorTerminalRun<T extends { id?: string; status?: string 
   ));
 }
 
-export function isStudioRunContinuationRequest(userMessage: string): boolean {
-  const message = userMessage.trim();
-  return /(?:继续|接着|恢复|续上|跑完|完成|continue|resume).{0,48}studio\s*run/i.test(message)
-    || /studio\s*run.{0,48}(?:继续|接着|恢复|续上|跑完|完成|continue|resume)/i.test(message);
-}
-
 function normalizeLegacyCompositionDescription(description: string | undefined, fallback: string): string {
   if (!description) return fallback;
   const trimmed = description.trim();
@@ -366,9 +365,9 @@ export async function buildPromptContext(
         .maybeSingle()
     : Promise.resolve({ data: null, error: null });
   const executionRunPromise = options.executionRunId
-    ? supabase
+      ? supabase
         .from('agent_runs')
-        .select('objective, prompt, acceptance_criteria, current_work_unit')
+        .select('objective, prompt, acceptance_criteria')
         .eq('id', options.executionRunId)
         .maybeSingle()
     : Promise.resolve({ data: null, error: null });
@@ -438,24 +437,27 @@ export async function buildPromptContext(
     ? priorRun.metadata as Record<string, unknown> | null | undefined
     : undefined;
   const recoveryContext = buildAgentRecoveryContext(userMessage, recoverableMetadata);
-  const activeStudioRun = studioRuns.find(run => run.status === 'running' && run.currentStage);
-  const activeStudioContinuation = Boolean(
-    activeStudioRun && isStudioRunContinuationRequest(userMessage),
-  );
-  const activeStudioRunContext = activeStudioContinuation && activeStudioRun
-    ? `[Active Studio Run]\nstudio run id: ${activeStudioRun.id}\ncurrent studio stage: ${activeStudioRun.currentStage}\nstudio state path: ${activeStudioRun.projectId}/studio-runs/${activeStudioRun.id}/run.json\nCall studio_run status first, then read only the persisted artifacts required by the current stage. Do not reread skill, prompt, director, component-library, or reference files.\n\n`
+  const activeAgentRunId = options.executionRunId || options.currentRunId;
+  const activeStudioRun = activeAgentRunId
+    ? studioRuns.find(run => (
+        run.agentRunId === activeAgentRunId
+        && run.status === 'running'
+        && run.currentStage
+      ))
+    : undefined;
+  const activeStudioRunContext = activeStudioRun
+    ? `[Active Studio workflow in this Agent Run]\nworkflow invocation id: ${activeStudioRun.id}\ncurrent workflow stage: ${activeStudioRun.currentStage}\nworkflow state path: ${activeStudioRun.projectId}/studio-runs/${activeStudioRun.id}/run.json\nCall studio_run status first, then read only the persisted artifacts required by the current stage. This workflow belongs to Agent Run ${activeAgentRunId}; never search for or adopt another project's active Studio state. Do not reread skill, prompt, director, component-library, or reference files.\n\n`
     : '';
   const executionRow = executionRunRes.data as {
     objective?: string | null;
     prompt?: string | null;
     acceptance_criteria?: unknown;
-    current_work_unit?: string | null;
   } | null;
   const executionObjective = executionRow?.objective || executionRow?.prompt || originMessage?.content || userMessage;
   const priorSnapshot = executionSnapshotRes.data?.content
     ? normalizeExecutionSnapshot(executionSnapshotRes.data.content, {
         objective: executionObjective,
-        currentWorkUnit: executionRow?.current_work_unit || activeStudioRun?.currentStage || 'agent',
+        currentWorkUnit: 'agent',
         nextAction: 'Continue the unfinished objective from durable project artifacts.',
       })
     : undefined;
@@ -466,7 +468,7 @@ export async function buildPromptContext(
         acceptanceCriteria: Array.isArray(executionRow?.acceptance_criteria)
           ? executionRow.acceptance_criteria.filter((item): item is string => typeof item === 'string')
           : priorSnapshot.acceptanceCriteria,
-        currentWorkUnit: executionRow?.current_work_unit || activeStudioRun?.currentStage || 'agent',
+        currentWorkUnit: 'agent',
         nextAction: 'Start the current request while preserving relevant prior decisions and durable artifacts.',
       }
     : priorSnapshot;
@@ -474,7 +476,7 @@ export async function buildPromptContext(
     ? persistedSnapshot ?? normalizeExecutionSnapshot({
         objective: executionObjective,
         acceptanceCriteria: Array.isArray(executionRow?.acceptance_criteria) ? executionRow?.acceptance_criteria : [],
-        currentWorkUnit: executionRow?.current_work_unit || activeStudioRun?.currentStage || 'agent',
+        currentWorkUnit: 'agent',
         nextAction: 'Start the objective and create the first durable artifact before broad exploration.',
       }, {
         objective: executionObjective,
@@ -670,6 +672,15 @@ export async function buildPromptContext(
     const videoUrl = typeof videoMeta?.videoUrl === 'string' ? videoMeta.videoUrl : '';
     return s.type === 'video' && videoUrl ? videoUrl : (s.image_url || '');
   });
+  const explicitMediaIndices = resolveExplicitTurnMediaIndices({
+    totalMediaCount: snapshots.length,
+    userMessage: options.executionRunId
+      ? `${executionObjective}\n${userMessage}`
+      : userMessage,
+    turnMediaCount: options.turnMediaCount,
+    referenceImageCount,
+    uploadedVideoCount,
+  });
   const historyBoundary = [...messages, ...toolHistory]
     .map(row => row.created_at)
     .filter(Boolean)
@@ -684,7 +695,9 @@ export async function buildPromptContext(
     currentDesignPath,
     recoverableDesignPath: recoverableDraft?.path,
     audioAttachments: resolvedAudioAttachments,
+    explicitMediaIndices,
     executionSnapshot,
+    activeStudioWorkflowStage: activeStudioRun?.currentStage || undefined,
     contextStats: selectedHistory.stats,
     historyBoundary,
   };

@@ -52,4 +52,58 @@ describe('authenticated login return routing', () => {
     expect(response.status).toBe(307)
     expect(response.headers.get('location')).toBe('http://localhost:3001/projects')
   })
+
+  it('returns a verified session to the Skill without requiring the legacy activation cookie', async () => {
+    vi.stubEnv('NODE_ENV', 'production')
+    const request = new NextRequest(
+      'http://localhost:3001/login?next=%2Fhome%2F00f126ac-7451-4ee6-8025-e67dcc7b0169',
+    )
+
+    const response = await proxy(request)
+
+    expect(response.status).toBe(307)
+    expect(response.headers.get('location')).toBe(
+      'http://localhost:3001/home/00f126ac-7451-4ee6-8025-e67dcc7b0169',
+    )
+  })
+
+  it('does not gate a verified session from its newly created Skill project', async () => {
+    vi.stubEnv('NODE_ENV', 'production')
+    const projectId = '763c1dcf-f399-43a6-96e5-66aad8f955b8'
+    const request = new NextRequest(
+      `http://localhost:3001/projects/${projectId}?from=skill`,
+    )
+
+    const response = await proxy(request)
+
+    expect(response.status).toBe(200)
+    expect(response.headers.get('location')).toBeNull()
+  })
+
+  it('retires the legacy activation page through the unified completion endpoint', async () => {
+    vi.stubEnv('NODE_ENV', 'production')
+    const projectId = '763c1dcf-f399-43a6-96e5-66aad8f955b8'
+    const request = new NextRequest(
+      `http://localhost:3001/activate?next=${encodeURIComponent(`/projects/${projectId}`)}`,
+    )
+    const response = await proxy(request)
+
+    expect(response.status).toBe(307)
+    expect(response.headers.get('location')).toBe(
+      `http://localhost:3001/api/auth/complete?next=${encodeURIComponent(`/projects/${projectId}`)}`,
+    )
+  })
+
+  it('does not allow an activation loop as the return target', async () => {
+    vi.stubEnv('NODE_ENV', 'production')
+    const request = new NextRequest(
+      'http://localhost:3001/activate?next=%2Factivate%3Fnext%3D%252Fprojects',
+    )
+    const response = await proxy(request)
+
+    expect(response.status).toBe(307)
+    expect(response.headers.get('location')).toBe(
+      `http://localhost:3001/api/auth/complete?next=${encodeURIComponent('/projects')}`,
+    )
+  })
 })

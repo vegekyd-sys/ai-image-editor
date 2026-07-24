@@ -45,7 +45,7 @@ describe('welcome credits source of truth', () => {
       'src/lib/billing/credits.ts',
       'src/app/api/auth/callback/route.ts',
       'src/app/api/auth/activate/route.ts',
-      'src/app/api/auth/native-complete/route.ts',
+      'src/app/api/auth/complete/route.ts',
       'src/app/api/auth/validate-invite/route.ts',
       'src/app/api/agent/register/verify/route.ts',
       'src/app/api/admin/billing-toggle/route.ts',

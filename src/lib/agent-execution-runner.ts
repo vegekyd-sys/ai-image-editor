@@ -17,7 +17,6 @@ import {
   isConfirmedExecutionLeaseLoss,
   MAX_SAME_PROVIDER_ATTEMPTS,
   normalizeExecutionSnapshot,
-  resolveExecutionHandoffWorkUnit,
   shouldScheduleNextAttempt,
   type DurableExecutionSnapshot,
   type ExecutionLeaseState,
@@ -25,6 +24,11 @@ import {
 import { dispatchAgentExecutionAttempt } from './agent-execution-dispatch';
 import type { SkillLaunchContext } from './skill-launch-context';
 import { normalizeLocale, translate } from './locales';
+import {
+  formatPendingAgentInputs,
+  loadPendingAgentInputs,
+  markAgentRunInputsApplied,
+} from './agent-run-admission';
 
 interface ExecutionRequest {
   locale?: string;
@@ -63,10 +67,10 @@ interface AgentRunRecord {
   prompt?: string | null;
   acceptance_criteria?: unknown;
   execution_policy?: unknown;
-  current_work_unit?: string | null;
   attempt_count?: number;
   total_input_tokens?: number;
   total_output_tokens?: number;
+  input_version?: number;
   metadata?: Record<string, unknown> | null;
 }
 
@@ -179,14 +183,19 @@ export function normalizeExecutionPolicy(value: unknown): ExecutionPolicy {
   };
 }
 
-async function resolveWorkUnit(admin: SupabaseClient, run: AgentRunRecord): Promise<string> {
+async function resolveActiveStudioWorkflowStage(
+  admin: SupabaseClient,
+  run: AgentRunRecord,
+): Promise<string | undefined> {
   try {
     const { WorkspaceStudioRunStore } = await import('./studio-run');
     const store = new WorkspaceStudioRunStore(admin, run.user_id);
-    const studioRun = (await store.listRuns(run.project_id)).find(item => item.status === 'running');
-    if (studioRun?.currentStage) return `studio:${studioRun.currentStage}`;
+    const studioRun = (await store.listRuns(run.project_id)).find(item => (
+      item.agentRunId === run.id && item.status === 'running'
+    ));
+    return studioRun?.currentStage || undefined;
   } catch { /* generic executions do not need Studio state */ }
-  return run.current_work_unit || 'agent';
+  return undefined;
 }
 
 function artifactPointers(checkpoint: Record<string, unknown> | undefined) {
@@ -213,20 +222,16 @@ async function buildHandoffSnapshot(input: {
   store: AgentExecutionStore;
   run: AgentRunRecord;
   claim: ClaimedExecution;
-  workUnit: string;
   terminal?: Extract<AgentStreamEvent, { type: 'error' }> | null;
   attemptText: string;
   providerCompaction?: DurableExecutionSnapshot['providerCompaction'];
 }): Promise<DurableExecutionSnapshot> {
   const previous = await input.store.latestSnapshot(input.run.id);
   const checkpoint = input.terminal?.checkpoint as Record<string, unknown> | undefined;
-  const handoffWorkUnit = resolveExecutionHandoffWorkUnit(input.workUnit, checkpoint);
   const acceptanceCriteria = Array.isArray(input.run.acceptance_criteria)
     ? input.run.acceptance_criteria.filter((item): item is string => typeof item === 'string')
     : previous?.acceptanceCriteria ?? [];
-  const nextAction = input.terminal?.code === 'skill_video_submission_pending'
-    ? 'The complete video script is already visible in the previous attempt summary. Do not rewrite it or ask for confirmation. Call generate_animation now with that exact complete script.'
-    : checkpoint?.studioRunStage === 'composition' && checkpoint?.draftPath
+  const nextAction = checkpoint?.studioRunStage === 'composition' && checkpoint?.draftPath
     ? `Resume Studio Run at composition from ${checkpoint.draftPath}. Inspect the persisted draft before deciding the next action. If it carries __makaronScaffold: true or the numbered composition workspace is not ready, continue the existing parts until write_file reports compositionWorkspace.status="ready"; use its designPath directly and never submit the structural scaffold. If it is a complete non-scaffold draft with persisted Draft Gate evidence, reuse that exact evidence and call studio_run put_artifact without repeating valid generation, preview, or publish work.`
     : checkpoint?.studioRunStage
       ? `Resume Studio Run at ${checkpoint.studioRunStage}; load its persisted stage artifacts and complete that stage.`
@@ -244,14 +249,14 @@ async function buildHandoffSnapshot(input: {
       ...artifactPointers(checkpoint),
     ],
     openQuestions: previous?.openQuestions,
-    currentWorkUnit: handoffWorkUnit,
+    currentWorkUnit: 'agent',
     nextAction,
     attemptSummary: attemptSummary || previous?.attemptSummary,
     checkpoint,
     providerCompaction: input.providerCompaction || previous?.providerCompaction,
   }, {
     objective: input.run.objective || input.claim.objective || input.run.prompt || 'Complete the requested Agent task.',
-    currentWorkUnit: handoffWorkUnit,
+    currentWorkUnit: 'agent',
     nextAction,
   });
 }
@@ -287,6 +292,7 @@ export async function runAgentExecutionAttempt(
   const { data: runData } = await admin.from('agent_runs').select('*').eq('id', runId).maybeSingle();
   const run = runData as AgentRunRecord | null;
   if (!run || run.status !== 'running') return { claimed: false, runId };
+  const inputVersionAtAttemptStart = run.input_version || 0;
 
   const policy = normalizeExecutionPolicy(run.execution_policy);
   if ((run.total_input_tokens || 0) >= policy.maxTotalInputTokens) {
@@ -323,7 +329,8 @@ export async function runAgentExecutionAttempt(
     terminal_code: 'lease_expired',
   }).eq('run_id', runId).eq('status', 'running');
 
-  const workUnit = await resolveWorkUnit(admin, run);
+  const activeStudioWorkflowStage = await resolveActiveStudioWorkflowStage(admin, run);
+  const workUnit = 'agent';
   await admin.from('agent_runs').update({ current_work_unit: workUnit }).eq('id', runId).eq('lease_token', claim.lease_token);
   const { data: attempt, error: attemptError } = await admin.from('agent_attempts').insert({
     run_id: runId,
@@ -335,16 +342,18 @@ export async function runAgentExecutionAttempt(
   }).select('id').single();
   if (attemptError || !attempt?.id) throw new Error(`Failed to create Agent attempt: ${attemptError?.message || 'missing id'}`);
   const attemptId = attempt.id as string;
+  const pendingInputs = await loadPendingAgentInputs(admin, runId);
 
   let scaffoldResult: Awaited<ReturnType<typeof import('./studio-composition-scaffold')['ensureStudioCompositionScaffold']>> | undefined;
   let scaffoldWarning: string | undefined;
-  if (workUnit === 'studio:composition') {
+  if (activeStudioWorkflowStage === 'composition') {
     try {
       const { ensureStudioCompositionScaffold } = await import('./studio-composition-scaffold');
       scaffoldResult = await ensureStudioCompositionScaffold({
         projectId: run.project_id,
         userId: run.user_id,
         supabase: admin,
+        agentRunId: run.id,
       });
       if (scaffoldResult.created && scaffoldResult.elapsedMs > 90_000) {
         scaffoldWarning = `Composition scaffold exceeded the 90s durable-output SLA (${scaffoldResult.elapsedMs}ms)`;
@@ -412,9 +421,10 @@ export async function runAgentExecutionAttempt(
     ? `[System durable continuation] Resume execution ${runId}, attempt ${claim.attempt_no}. ${previousSnapshot?.nextAction || 'Continue the unfinished objective from durable artifacts.'}`
     : (run.objective || claim.objective || run.prompt || 'Continue the requested task.');
   const preflightInstruction = buildRecoverablePreflightInstruction(scaffoldWarning);
-  const attemptPrompt = preflightInstruction
-    ? `${baseAttemptPrompt}\n\n${preflightInstruction}`
-    : baseAttemptPrompt;
+  const pendingInputInstruction = formatPendingAgentInputs(pendingInputs);
+  const attemptPrompt = [baseAttemptPrompt, preflightInstruction, pendingInputInstruction]
+    .filter(Boolean)
+    .join('\n\n');
 
   const ctx = await buildPromptContext(run.project_id, admin, run.user_id, {
     userMessage: attemptPrompt,
@@ -560,6 +570,7 @@ export async function runAgentExecutionAttempt(
         skillLaunchContext: request.skillLaunchContext,
         audioAttachments: ctx.audioAttachments,
         snapshotImages: ctx.snapshotImages,
+        explicitMediaIndices: ctx.explicitMediaIndices,
         currentSnapshotIndex: ctx.currentSnapshotIndex,
         isNsfw: request.isNsfw,
         userSkills: userSkills.length ? userSkills : undefined,
@@ -580,8 +591,10 @@ export async function runAgentExecutionAttempt(
           runId,
           attemptId,
           attemptNo: claim.attempt_no,
-          workUnitKey: workUnit,
+          inputEpoch: inputVersionAtAttemptStart,
         },
+        studioWorkflowStage: activeStudioWorkflowStage,
+        agentRunId: runId,
       },
     )) {
       if (event.type === 'content') attemptText += event.text;
@@ -664,6 +677,12 @@ export async function runAgentExecutionAttempt(
   }
 
   if (sawDone && !terminal) {
+    await markAgentRunInputsApplied({
+      supabase: admin,
+      runId,
+      inputIds: pendingInputs.map(input => input.id),
+      attemptId,
+    });
     const previous = await executionStore.latestSnapshot(runId);
     const completedSnapshot = normalizeExecutionSnapshot({
       objective: run.objective || claim.objective || run.prompt || previous?.objective,
@@ -689,8 +708,7 @@ export async function runAgentExecutionAttempt(
       snapshot: completedSnapshot,
       providerCompaction: providerCompaction as Record<string, unknown> | undefined,
     });
-    await finishAttempt(admin, attemptId, 'completed', { input_tokens: inputTokens, output_tokens: outputTokens });
-    await admin.from('agent_runs').update({
+    const { data: completedRun, error: completionError } = await admin.from('agent_runs').update({
       status: 'completed',
       current_work_unit: 'completed',
       ended_at: new Date().toISOString(),
@@ -698,8 +716,26 @@ export async function runAgentExecutionAttempt(
       lease_owner: null,
       lease_expires_at: null,
       next_attempt_at: null,
-    }).eq('id', runId).eq('status', 'running').eq('lease_token', claim.lease_token);
-    return { claimed: true, runId, attemptId, attemptNo: claim.attempt_no, status: 'completed' };
+    })
+      .eq('id', runId)
+      .eq('status', 'running')
+      .eq('lease_token', claim.lease_token)
+      .eq('input_version', inputVersionAtAttemptStart)
+      .select('id')
+      .maybeSingle();
+    if (completionError) throw new Error(`Failed to finalize Agent execution: ${completionError.message}`);
+    if (completedRun) {
+      await finishAttempt(admin, attemptId, 'completed', { input_tokens: inputTokens, output_tokens: outputTokens });
+      return { claimed: true, runId, attemptId, attemptNo: claim.attempt_no, status: 'completed' };
+    }
+
+    terminal = {
+      type: 'error',
+      code: 'agent_input_received',
+      recoverable: true,
+      message: 'A new instruction arrived during this Agent Run and will be handled by the next attempt.',
+    };
+    sawDone = false;
   }
 
   const canContinue = shouldScheduleNextAttempt({
@@ -713,7 +749,6 @@ export async function runAgentExecutionAttempt(
       store: executionStore,
       run,
       claim,
-      workUnit,
       terminal,
       attemptText,
       providerCompaction,
@@ -742,7 +777,7 @@ export async function runAgentExecutionAttempt(
         : {}),
     });
     await admin.from('agent_runs').update({
-      current_work_unit: snapshot.currentWorkUnit,
+      current_work_unit: 'agent',
       next_attempt_at: new Date().toISOString(),
       lease_token: null,
       lease_owner: null,

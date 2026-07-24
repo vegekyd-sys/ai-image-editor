@@ -57,7 +57,14 @@ Before writing or patching composition code, create a compact internal plan:
 - **Visual carrier**: for substantial scenes, use the `visualPlan` to record the
   dominant technical media path: native, plate, cutout, or edge-video. This is
   asset routing metadata, not a limit on supporting layers or visual invention.
-- **Audio/subtitle relation**: decide whether voice, music, captions, or original sound drives timing.
+- **Audio/subtitle relation**: when narration exists, the isolated voiceover
+  master is the clock. Generate it after Script, align it with
+  `transcribe_audio(expected_sections, fps)`, and lock the measured narration
+  cue sheet before Storyboard or Composition. Storyboard scenes, Remotion
+  Sequences, subtitles, visual emphasis, and music ducking must all derive from
+  that same seconds/frame timebase. Never replace measured cues with estimated
+  reading speed or equal scene lengths. When there is no narration, decide
+  whether music, captions, or original sound drives timing.
 - **Verification plan**: choose stable hook, middle, and ending frames to preview before publishing.
 
 If a requested edit is purely mechanical, such as "trim the first two seconds"

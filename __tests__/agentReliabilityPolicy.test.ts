@@ -91,9 +91,10 @@ describe('agent reliability policy', () => {
     expect(agent).not.toContain('__lastCaptionCuePath');
     expect(agent).not.toContain("`${ctx.projectId}/captions/*.json`");
     expect(contract).toContain('author them as part of the Composition');
-    expect(contract).toContain('does not create a separate caption artifact');
+    expect(contract).toContain('narration cue sheet standardizes measured timing only');
+    expect(contract).toContain('does not inject caption JSX');
     expect(composition).toContain('authored directly inside this');
-    expect(composition).toContain('does not generate separate caption data');
+    expect(composition).toContain('does not provide a universal subtitle overlay');
   });
 
   it('stops repeated MP4 export attempts for an unchanged composition', () => {

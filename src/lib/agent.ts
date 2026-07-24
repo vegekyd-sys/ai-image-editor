@@ -1,4 +1,4 @@
-import { streamText, tool, stepCountIs } from 'ai';
+import { streamText, tool } from 'ai';
 import type { ModelMessage } from 'ai';
 import { after } from 'next/server';
 import { z } from 'zod';
@@ -9,19 +9,18 @@ import { editImage } from './skills/edit-image';
 import { rotateCamera } from './skills/rotate-camera';
 import { createVideo } from './skills/create-video';
 import { estimateVideoCredits, resolveAgentVideoSelection, resolveVideoGenerationRoute, resolveVideoOutputDuration, validateVideoModelRequest } from './video-model-capabilities';
-import { deductCredits, deductFixedCredits } from './billing/credits';
+import { deductFixedCredits } from './billing/credits';
 import { deductSeedAudioCredits } from './billing/seed-audio';
-import { createAudio } from './skills/create-audio';
-import { createVoiceover } from './skills/create-voiceover';
+import { createAudio, SEED_AUDIO_AGENT_PROMPT_MAX_CHARS } from './skills/create-audio';
 import { formatAudioCapabilitiesForAgent } from './audio-model-capabilities';
-import { listVolcengineTtsVoices } from './volcengine-tts';
 import { transcribeWithVolcengineAsr, type VolcengineAsrTranscript, type TranscriptWord } from './volcengine-asr';
+import { buildNarrationCueSheet, type ExpectedNarrationSection } from './narration-cues';
 import { prepareVisualAsset, resolvePreparedVisualAssetById } from './visual-assets/bridge';
 import agentPrompt from './prompts/agent.md';
 import generateImageToolPrompt from './prompts/generate_image_tool.md';
 import { normalizeGenerateImageMediaIndex } from './generate-image-input';
-import type { DesignPayload, Tip, VideoMeta, VideoModel } from '@/types';
-import { isPermanentUrl, toPublicStorageUrl, uploadAudio, uploadVideo } from '@/lib/supabase/storage';
+import type { DesignPayload, VideoMeta, VideoModel } from '@/types';
+import { isPermanentUrl, toPublicStorageUrl, uploadVideo } from '@/lib/supabase/storage';
 import type { AgentPerf } from './agent-perf';
 import { createTextDeltaState, normalizeTextDelta } from './agent-text-delta';
 import { formatAspectRatio } from './media-aspect';
@@ -61,14 +60,7 @@ import {
 import {
   classifyModelTermination,
   describeModelStreamError,
-  requestsMaterializedVideo,
-  shouldCompleteDurableStudioRun,
-  shouldContinueActiveStudioRun,
-  shouldHandoffToStudioComposition,
-  shouldStopAfterDurablePublishToolStep,
   shouldStopAfterTerminalToolFailure,
-  shouldStopAfterStudioToolStep,
-  shouldUseTextOnlyRecovery,
 } from './agent-terminal';
 import {
   AgentExecutionStore,
@@ -86,8 +78,9 @@ import {
   normalizeLocale,
   translate,
 } from './locales';
-import { getSkillLaunchSystemDirective, shouldContinueSkillVideoSubmission, type SkillLaunchContext } from './skill-launch-context';
+import { getSkillLaunchSystemDirective, type SkillLaunchContext } from './skill-launch-context';
 import { buildAgentOutputLanguageDirective } from './agent-response-policy';
+import { stableDraftPromotionSnapshotId } from './draft-promotion';
 
 const MAX_VIDEO_DIMENSION_PROBE_BYTES = 220 * 1024 * 1024;
 
@@ -211,6 +204,8 @@ interface AgentContext {
   pendingImageSnapshots?: { snapshotId: string; imageUrl: string; description?: string }[];
   /** All snapshot images (URL preferred, base64 fallback). index 0 = <<<media_1>>> */
   snapshotImages: string[];
+  /** Media Index entries explicitly introduced or referenced by the current user turn. */
+  explicitMediaIndices: number[];
   /** 0-based index of the snapshot the user is currently viewing */
   currentSnapshotIndex: number;
   /** NSFW flag — set when Gemini refuses content. All subsequent calls skip Gemini. */
@@ -226,6 +221,8 @@ interface AgentContext {
   /** Seedance image URLs rejected during this turn; unchanged resubmission is blocked. */
   invalidVideoImageUrls?: Set<string>;
   execution?: DurableExecutionRef;
+  /** The sole model-facing Agent Run that owns nested workflow invocations. */
+  agentRunId?: string;
 }
 
 interface StudioRunCheckpoint {
@@ -253,11 +250,13 @@ interface StreamedCodeCheckpoint {
 }
 
 async function getStudioRunCheckpoint(ctx: AgentContext): Promise<StudioRunCheckpoint> {
-  if (!ctx.supabase || !ctx.userId || !ctx.projectId) return {};
+  if (!ctx.supabase || !ctx.userId || !ctx.projectId || !ctx.agentRunId) return {};
   try {
     const studio = await import('./studio-run');
     const store = new studio.WorkspaceStudioRunStore(ctx.supabase, ctx.userId);
-    const run = (await store.listRuns(ctx.projectId))[0];
+    const run = (await store.listRuns(ctx.projectId)).find(candidate => (
+      candidate.agentRunId === ctx.agentRunId
+    ));
     if (!run || !run.currentStage || run.status !== 'running') return {};
     return {
       studioRunId: run.id,
@@ -309,7 +308,7 @@ export type AgentStreamEvent =
   | { type: 'reasoning'; text: string }  // extended thinking delta
   | { type: 'coding'; text: string }  // tool-input-delta heartbeat — Agent writing code params
   | { type: 'code_stream'; text: string; done?: boolean }  // run_code code streamed in chunks (avoids large SSE events on iOS)
-  | { type: 'render'; code: string; width: number; height: number; props?: Record<string, unknown>; animation?: { fps: number; durationInSeconds: number; format?: string }; editables?: import('@/types').EditableField[]; published?: boolean; previewUrl?: string }  // Agent React design for browser rendering
+  | { type: 'render'; code: string; width: number; height: number; props?: Record<string, unknown>; animation?: { fps: number; durationInSeconds: number; format?: string }; editables?: import('@/types').EditableField[]; description?: string; snapshotId?: string; sourceDesignPath?: string; published?: boolean; previewUrl?: string }  // Agent React design for browser rendering
   | { type: 'design'; code: string; width: number; height: number; props?: Record<string, unknown>; animation?: { fps: number; durationInSeconds: number; format?: string }; editables?: import('@/types').EditableField[]; published?: boolean }  // @deprecated — backward compat alias for 'render'
   | { type: 'music_task'; taskId: string }  // emitted when generate_music tool creates a task — frontend polls
   | {
@@ -389,6 +388,42 @@ function resolveAudioRefs(audioAttachments: AudioAttachment[] | undefined, refs:
     return { audioUrls, error: `Invalid audio_refs: ${invalid.join(', ')}. Available audio refs: ${available}. Audio refs are separate from <<<media_N>>>.` };
   }
   return { audioUrls };
+}
+
+function resolveSeedAudioReferences(
+  audioAttachments: AudioAttachment[] | undefined,
+  refs: string[] | undefined,
+): { references: string[]; error?: string } {
+  if (!refs?.length) return { references: [] };
+  const attachments = audioAttachments || [];
+  const references: string[] = [];
+  const invalid: string[] = [];
+  for (const rawRef of refs) {
+    const ref = String(rawRef).trim();
+    const match = ref.match(/^audio_(\d+)$/i);
+    if (match) {
+      const audio = attachments[Number(match[1]) - 1];
+      if (!audio?.audioUrl) {
+        invalid.push(ref);
+      } else {
+        references.push(audio.audioUrl);
+      }
+      continue;
+    }
+    if (/^https:\/\//i.test(ref) || /^[a-z0-9][a-z0-9._:/-]{2,}$/i.test(ref)) {
+      references.push(ref);
+    } else {
+      invalid.push(ref);
+    }
+  }
+  if (invalid.length) {
+    const available = attachments.map((audio, i) => `audio_${i + 1}${audio.title ? ` (${audio.title})` : ''}`).join(', ') || 'none';
+    return {
+      references,
+      error: `Invalid reference_voices: ${invalid.join(', ')}. Use Audio Index labels (${available}) or a provider preset voice ID.`,
+    };
+  }
+  return { references };
 }
 
 function addAudioAttachment(ctx: AgentContext, audio: AudioAttachment | null | undefined): number {
@@ -602,6 +637,36 @@ function formatTranscriptForModel(transcript: VolcengineAsrTranscript, includeWo
   }
 
   return lines.join('\n');
+}
+
+async function createNarrationCueArtifact(input: {
+  ctx: AgentContext;
+  transcript: VolcengineAsrTranscript;
+  expectedSections?: ExpectedNarrationSection[];
+  fps?: number;
+}): Promise<{
+  narrationCueSheet?: ReturnType<typeof buildNarrationCueSheet>;
+  narrationCuePath?: string;
+}> {
+  if (!input.expectedSections?.length) return {};
+  const narrationCueSheet = buildNarrationCueSheet({
+    transcript: input.transcript,
+    sections: input.expectedSections,
+    fps: input.fps,
+  });
+  if (!input.ctx.supabase || !input.ctx.userId) return { narrationCueSheet };
+  const narrationCuePath = `${input.ctx.projectId}/audio/narration-cues-${input.transcript.requestId}.json`;
+  const saved = await workspace.writeFile(
+    narrationCuePath,
+    JSON.stringify(narrationCueSheet, null, 2),
+    input.ctx.supabase,
+    input.ctx.userId,
+    'application/json',
+  );
+  if (!saved.success) {
+    throw new Error(saved.error || 'Failed to persist narration cue sheet.')
+  }
+  return { narrationCueSheet, narrationCuePath };
 }
 
 async function validateCompositionMediaAspect(
@@ -1289,7 +1354,7 @@ async function buildSystemPrompt(userSkills?: ParsedSkill[], supabase?: any, use
 
 You have a persistent workspace for skills and files.
 
-Tools: \`list_files\`, \`read_file\`, \`write_code_file\`, \`write_file\`, \`delete_file\`, \`run_code\`
+Tools: \`list_files\`, \`read_file\`, \`write_code_file\`, \`write_file\`, \`delete_file\`, \`run_code\`, \`publish_draft\`
 
 ### File organization
 - **User-level** (shared across projects): \`skills/\`, \`memory/\`
@@ -1473,6 +1538,8 @@ function createTools(ctx: AgentContext, runtime: AgentModelRuntime, locale?: str
     generate_animation: tool({
       description: `Submit a video script for rendering.
 
+Native-audio exception: when this tool is the chosen final-video workflow, put dialogue, narration, voice direction, music, ambience, and sound effects in \`story_prompt\` so the video provider generates synchronized audio. Do not additionally call \`generate_audio\` for that video. Outside this exception, \`generate_audio\` retains its full standalone scope.
+
 Use this tool after the user has confirmed a video script that is already visible in the conversation. You may also call it in the same turn where you first write the script when the user's current request explicitly authorizes direct submission without confirmation, for example "直接提交渲染", "不要问我确认", "不用确认", "直接生成视频", "submit now", or "do not ask for confirmation". A trusted Skill template launch may also authorize same-turn submission; that exception is supplied only in the system prompt and never inferred from ordinary user text or an active Skill name.
 
 When the user requests multiple independent video variants, submit them one at a time. After each \`generate_animation\` call returns a successful submission, continue with the next variant; do not wait for that video's rendering to finish. Continue until every requested variant is submitted, and never reduce a multi-video request to one video merely to finish the turn. Each call still contains one complete <=15-second script.
@@ -1485,7 +1552,7 @@ Hard constraints:
 - To EDIT a video: reference it with \`<<<media_N>>>\` and describe the changes. The selected model must support reference videos.
 - To use CLI/app imported reference music/audio for pacing or beat sync, mention its Audio Index marker in \`story_prompt\` (for example \`<<<audio_1>>>\`) AND pass \`audio_refs\` like ["audio_1"]. Audio refs are NOT Timeline Media Index refs. Reference audio is only supported by SeeDance/SeeDance Fast/SeeDance Mini.
 - Works for Kling, SeeDance, SeeDance Mini, and Grok, but respect capability limits and tool errors.
-- Single-call total duration: SeeDance/SeeDance Mini is 4-15 seconds (4s minimum output, 5s default/common preset); Kling is 5-15 seconds; Grok 1.5 is 1-15 seconds for one starting image; Google Omni is 3-10 seconds. If the user asks for anything shorter than the selected model's minimum, or referenced source videos total less than that minimum, write a compact script at the model minimum and set duration to that minimum. For a provider-generated 30s, 60s, 1-2 minute, or otherwise over-limit video, do not call this tool with one long script; use \`skills/long-video-director/SKILL.md\` and split into self-contained segments. This provider limit does not reroute an explicit explainer-video, Studio Run, Remotion, or other built-in Composition workflow.
+- Single-call total duration: SeeDance/SeeDance Mini is 4-15 seconds (4s minimum output, 5s default/common preset); Kling is 5-15 seconds; Grok 1.5 is 1-15 seconds for one starting image; Google Omni is 3-10 seconds. If the user asks for anything shorter than the selected model's minimum, or referenced source videos total less than that minimum, write a compact script at the model minimum and set duration to that minimum. For a provider-generated 30s, 60s, 1-2 minute, or otherwise over-limit video, do not call this tool with one long script; use \`skills/long-video-director/SKILL.md\` and split into self-contained segments. This provider limit does not override an explicitly requested Studio Run, Remotion, or editable Composition. A generic explainer label or built-in recipe match is not such a request.
 - If a complete script totals 15 seconds or less, submit it as one video generation call. Put the whole title, every \`Shot N (Xs):\` line, and the \`Style:\` line into the same \`story_prompt\`; set \`duration\` to the total script duration when known. Do not submit only one shot, the first shot, or one line from the script.
 - If the source video may exceed model limits, call \`read_file('skills/video-ffmpeg-lab/SKILL.md')\` and split it once with \`run_code({ runtime: "node" })\` before submitting generation.
 - Total duration must fit the selected model's capability. Do not shrink a long source to 5s just to bypass a limit; split first.
@@ -2086,7 +2153,9 @@ Use mode="locate_frame" when the user provides a screenshot/frame and you need t
     transcribe_audio: tool({
       description: `Transcribe audio or a timeline video with Volcengine ASR and return dialogue/subtitle timecodes.
 
-Use this when the user asks for transcript, subtitles, dialogue, spoken words, lyrics-like speech timing, or time-based editing such as "cut the part where they say X", "remove this sentence", "剪掉这句话", "按逐字稿剪", or "find the timestamp for ...".
+Use this when the user asks for transcript, subtitles, dialogue, spoken words, lyrics-like speech timing, time-based editing such as "cut the part where they say X", or when \`prompts/audio.md\` requires verification of Seed Audio exact speech, brand names, numbers, multilingual lines, duration, or cue timing.
+
+For narrated Remotion/Explainer work, pass expected_sections from the approved Script plus the Composition fps. The tool will align the measured speech to those section IDs, convert the same timebase to frames, and persist a narration cue sheet. That cue sheet is authoritative for Storyboard ranges, Remotion Sequences, subtitles, visual beats, and music ducking.
 
 For timeline videos, pass media_index. For external audio/video URLs, pass media_url. Results are cached into the video snapshot's video_meta.transcript when media_index is used. Use analyze_video instead for visual scene/action understanding.`,
       inputSchema: z.object({
@@ -2094,8 +2163,13 @@ For timeline videos, pass media_index. For external audio/video URLs, pass media
         media_url: z.string().optional().describe('External public audio/video URL to transcribe. Use only when the media is not in Media Index.'),
         language: z.string().optional().describe('Optional ASR language code such as zh-CN, en-US, ja-JP, ko-KR, id-ID. Omit for auto/default.'),
         force_refresh: z.boolean().optional().describe('Set true to ignore cached transcript and call ASR again. Default false.'),
+        expected_sections: z.array(z.object({
+          id: z.string().min(1).describe('Stable Script section ID.'),
+          text: z.string().min(1).describe('Exact approved narration text for this Script section.'),
+        })).min(1).max(100).optional().describe('Narrated Script sections in playback order. Pass these for Remotion/Explainer synchronization.'),
+        fps: z.number().positive().max(120).optional().describe('Composition FPS used to convert measured speech seconds to frame ranges. Default 30.'),
       }),
-      execute: async ({ media_index, media_url, language, force_refresh }) => {
+      execute: async ({ media_index, media_url, language, force_refresh, expected_sections, fps }) => {
         let resolvedUrl = media_url;
         let localMediaPath: string | undefined;
         let snapshotId: string | undefined;
@@ -2121,7 +2195,23 @@ For timeline videos, pass media_index. For external audio/video URLs, pass media
             videoMeta = snap?.video_meta as Record<string, unknown> | undefined;
             const cached = videoMeta?.transcript as VolcengineAsrTranscript | undefined;
             if (cached?.text && !force_refresh) {
-              return { transcript: cached, cached: true, media_index, videoUrl: cached.sourceUrl || resolvedUrl };
+              try {
+                const cueArtifact = await createNarrationCueArtifact({
+                  ctx,
+                  transcript: cached,
+                  expectedSections: expected_sections,
+                  fps,
+                });
+                return {
+                  transcript: cached,
+                  ...cueArtifact,
+                  cached: true,
+                  media_index,
+                  videoUrl: cached.sourceUrl || resolvedUrl,
+                };
+              } catch (error) {
+                return { error: `Narration alignment failed: ${error instanceof Error ? error.message : String(error)}` };
+              }
             }
             resolvedUrl = resolvedUrl || (videoMeta?.videoUrl as string | undefined);
             const videoPath = typeof videoMeta?.videoPath === 'string' ? videoMeta.videoPath : '';
@@ -2147,6 +2237,12 @@ For timeline videos, pass media_index. For external audio/video URLs, pass media
             uid: ctx.userId || 'makaron-agent',
             language,
           });
+          const cueArtifact = await createNarrationCueArtifact({
+            ctx,
+            transcript,
+            expectedSections: expected_sections,
+            fps,
+          });
 
           if (ctx.supabase && snapshotId && videoMeta) {
             const nextMeta = { ...videoMeta, transcript };
@@ -2157,7 +2253,13 @@ For timeline videos, pass media_index. For external audio/video URLs, pass media
             if (updateError) console.error('[transcribe_audio] transcript cache update failed:', updateError.message);
           }
 
-          return { transcript, cached: false, media_index, videoUrl: transcript.sourceUrl || resolvedUrl };
+          return {
+            transcript,
+            ...cueArtifact,
+            cached: false,
+            media_index,
+            videoUrl: transcript.sourceUrl || resolvedUrl,
+          };
         } catch (err) {
           return { error: `ASR transcription failed: ${err instanceof Error ? err.message : String(err)}` };
         }
@@ -2171,11 +2273,20 @@ For timeline videos, pass media_index. For external audio/video URLs, pass media
         if (!transcript) {
           return { type: 'content' as const, value: [{ type: 'text' as const, text: 'No transcript returned.' }] };
         }
+        const cueText = output.narrationCueSheet
+          ? [
+              '',
+              `Authoritative narration cue sheet${output.narrationCuePath ? `: ${output.narrationCuePath}` : ''}:`,
+              JSON.stringify(output.narrationCueSheet, null, 2),
+              '',
+              'Use these measured cue ranges and frame ranges for Storyboard, Remotion Sequences, subtitles, visual beats, and music ducking. Do not revert to planned Script timing.',
+            ].join('\n')
+          : '';
         return {
           type: 'content' as const,
           value: [{
             type: 'text' as const,
-            text: `${output.cached ? 'Cached ' : ''}ASR result${output.media_index ? ` for <<<media_${output.media_index}>>>` : ''}:\n\n${formatTranscriptForModel(transcript)}`,
+            text: `${output.cached ? 'Cached ' : ''}ASR result${output.media_index ? ` for <<<media_${output.media_index}>>>` : ''}:\n\n${formatTranscriptForModel(transcript)}${cueText}`,
           }],
         };
       },
@@ -2311,7 +2422,7 @@ Call this during the Studio Assets stage after reading skills/_shared/visual-ass
     }),
 
     execution_checkpoint: tool({
-      description: `Persist a typed handoff for a durable Agent execution. Use it after completing a meaningful work unit, after making a decision that later attempts must preserve, and before a long composition/code generation step. This is not a progress message for the user. Keep it concise and factual. Include durable workspace paths instead of copying file contents.`,
+      description: `Persist concise continuation context for a durable Agent Run. Use it after meaningful progress, after a decision later attempts must preserve, and before a long or risky generation step. This is not a progress message for the user. Record durable workspace paths instead of copying file contents. Studio workflow stages belong in artifacts or next_action, not in Agent lifecycle state.`,
       inputSchema: z.object({
         objective: z.string().optional(),
         acceptance_criteria: z.array(z.string()).max(30).optional(),
@@ -2324,7 +2435,6 @@ Call this during the Studio Assets stage after reading skills/_shared/visual-ass
           label: z.string().optional(),
         })).max(50).optional(),
         open_questions: z.array(z.string()).max(30).optional(),
-        current_work_unit: z.string(),
         next_action: z.string(),
         attempt_summary: z.string().max(12_000).optional(),
       }),
@@ -2341,13 +2451,13 @@ Call this during the Studio Assets stage after reading skills/_shared/visual-ass
           completedWork: input.completed_work || previous?.completedWork,
           artifacts: input.artifacts || previous?.artifacts,
           openQuestions: input.open_questions || previous?.openQuestions,
-          currentWorkUnit: input.current_work_unit,
+          currentWorkUnit: 'agent',
           nextAction: input.next_action,
           attemptSummary: input.attempt_summary,
           providerCompaction: previous?.providerCompaction,
         }, {
           objective: previous?.objective || 'Continue the durable execution objective.',
-          currentWorkUnit: input.current_work_unit,
+          currentWorkUnit: 'agent',
           nextAction: input.next_action,
         });
         const snapshotId = await store.saveSnapshot({
@@ -2360,7 +2470,6 @@ Call this during the Studio Assets stage after reading skills/_shared/visual-ass
         return {
           success: true,
           snapshotId,
-          workUnit: snapshot.currentWorkUnit,
           nextAction: snapshot.nextAction,
           message: 'Durable execution checkpoint saved.',
         };
@@ -2368,9 +2477,9 @@ Call this during the Studio Assets stage after reading skills/_shared/visual-ass
     }),
 
     studio_run: tool({
-      description: `Create and advance a durable Makaron Studio Run for multi-stage video production.
-Use this for explainer-video and other substantial directed video skills, not quick edits.
-The run persists typed artifacts in the existing project workspace and enforces dependencies, approval policy, resume state, and downstream invalidation.
+      description: `Create and advance a Studio workflow invocation inside the current Agent Run for multi-stage video production.
+Use this only when an active skill requires the Studio workflow or the user explicitly requests Studio, Remotion, an editable composition/timeline, or precise programmatic compositing. Do not use \`studio_run\` for an ordinary short finished-video request, even when its brief includes an explainer, multiple scenes, voiceover, music, or subtitles.
+The workflow persists typed artifacts in the existing project workspace and enforces dependencies, approval policy, resume state, and downstream invalidation. It is not a separate model-facing run and cannot be adopted by another Agent Run.
 Operations:
 - start: create the run before producing the creative packet. By default it returns only run state, keeping later stage schemas out of the model context. Set include_stage_schemas=true only for legacy/manual authoring.
 - put_creative_packet: for approval_policy=auto, submit the brief, concept options, selected direction, and timed script once. The harness deterministically projects it into separate Brief, Proposal, and Script artifacts and emits one CUI event per stage.
@@ -2381,7 +2490,7 @@ Operations:
 - schema: return the JSON Schema for a requested stage before authoring its artifact.
 - validate: validate a stage artifact without persisting it.
 - invalidate: deliberately reopen a stage and invalidate only its downstream dependents.
-Review means previewing and patching the Remotion source before export, not authoring a Review artifact. After Composition is persisted and visually satisfactory, call materialize_media once with the final design path. A successful export automatically completes the Review and Delivery UI states. Never author Review or Delivery JSON.`,
+Review means previewing and patching the Remotion source before export, not authoring a Review artifact. After Composition is persisted and visually satisfactory, call publish_draft once with the final design path so the editable result is durable. Then call materialize_media with the same path only when MP4 Delivery is requested. A successful export automatically completes the Review and Delivery UI states. Never author Review or Delivery JSON.`,
       inputSchema: z.object({
         operation: z.enum(['start', 'put_creative_packet', 'put_artifact', 'put_artifacts', 'approve', 'status', 'invalidate', 'schema', 'validate']),
         run_id: z.string().optional(),
@@ -2410,8 +2519,8 @@ Review means previewing and patching the Remotion source before export, not auth
         reason: z.string().optional(),
       }),
       execute: async ({ operation, run_id, recipe, title, approval_policy, delivery_promise, include_stage_schemas, creative_packet, stage, artifact, artifacts, summary, reason }) => {
-        if (!ctx.supabase || !ctx.userId || !ctx.projectId) {
-          return { success: false, error: 'Studio Run requires an authenticated project workspace.' };
+        if (!ctx.supabase || !ctx.userId || !ctx.projectId || !ctx.agentRunId) {
+          return { success: false, error: 'Studio workflow requires an active Agent Run and authenticated project workspace.' };
         }
         try {
           const studio = await import('./studio-run');
@@ -2421,6 +2530,7 @@ Review means previewing and patching the Remotion source before export, not auth
             if (!delivery_promise) return { success: false, error: 'start requires delivery_promise' };
             const run = await studio.startPersistedStudioRun({
               store,
+              agentRunId: ctx.agentRunId,
               projectId: ctx.projectId,
               recipe: recipe || 'explainer-video',
               title: title || 'Studio Run',
@@ -2446,8 +2556,13 @@ Review means previewing and patching the Remotion source before export, not auth
             };
           }
 
-          let run = run_id ? await store.loadRun(ctx.projectId, run_id) : (await store.listRuns(ctx.projectId))[0];
-          if (!run) return { success: false, error: 'Studio Run not found. Start one first.' };
+          let run = run_id
+            ? await store.loadRun(ctx.projectId, run_id)
+            : (await store.listRuns(ctx.projectId)).find(candidate => candidate.agentRunId === ctx.agentRunId);
+          if (!run) return { success: false, error: 'Studio workflow not found in the current Agent Run. Start one first.' };
+          if (run.agentRunId !== ctx.agentRunId) {
+            return { success: false, error: 'Studio workflow belongs to a different Agent Run and cannot be adopted.' };
+          }
           const runAtOperationStart = run;
 
           const loadStudioArtifact = async (artifactStage: 'script' | 'storyboard' | 'composition'): Promise<unknown> => {
@@ -2569,7 +2684,7 @@ Review means previewing and patching the Remotion source before export, not auth
           );
           const materializeNextAction = (candidate: NonNullable<typeof run>) => (
             isAutomaticStage(candidate.currentStage)
-              ? 'Review the Remotion source by previewing and patching it. When satisfied, call materialize_media once with the final design_path; successful export completes Review and Delivery automatically.'
+              ? 'Review the Remotion source by previewing and patching it. When satisfied, call publish_draft once with the exact final design_path so the editable composition is durable in the timeline. Then call materialize_media once with that same design_path only when MP4 Delivery is requested; successful export completes Review and Delivery automatically.'
               : undefined
           );
 
@@ -2599,7 +2714,7 @@ Review means previewing and patching the Remotion source before export, not auth
             if (!schemaStage) return { success: false, error: 'validate requires stage when the run is complete' };
             if (artifact === undefined) return { success: false, error: 'validate requires artifact' };
             if (isAutomaticStage(schemaStage)) {
-              return { success: false, error: 'Review and Delivery do not accept Agent-authored artifacts. Patch Remotion code, then call materialize_media once.' };
+              return { success: false, error: 'Review and Delivery do not accept Agent-authored artifacts. Patch Remotion code, publish the gated design_path with publish_draft, then call materialize_media once when MP4 Delivery is requested.' };
             }
             const validated = studio.validateStudioArtifact(schemaStage, artifact);
             if (schemaStage === 'storyboard') await assertStoryboardNarrationTiming(validated);
@@ -2682,7 +2797,7 @@ Review means previewing and patching the Remotion source before export, not auth
           if (operation === 'put_artifact') {
             if (artifact === undefined) return { success: false, error: 'put_artifact requires artifact' };
             if (isAutomaticStage(stage)) {
-              return { success: false, error: 'Review and Delivery are automatic. Patch the Remotion source during review, then call materialize_media once.' };
+              return { success: false, error: 'Review and Delivery are automatic. Patch the Remotion source during review, publish the gated design_path with publish_draft, then call materialize_media once when MP4 Delivery is requested.' };
             }
             if (stage === 'storyboard') await assertStoryboardNarrationTiming(artifact);
             if (stage === 'assets') await assertAssetsUseVisualBridge(artifact);
@@ -2766,11 +2881,110 @@ Review means previewing and patching the Remotion source before export, not auth
       },
     }),
 
+    publish_draft: tool({
+      description: `Publish one durable editable Remotion composition draft into the project timeline.
+This is the current promotion path for both Studio and non-Studio compositions. Pass the exact persisted design_path returned by composition autosave, the numbered composition workspace, or Studio Composition. The tool reloads that path from workspace, validates the design, and publishes a real editable design Snapshot without exporting MP4.
+Call this explicitly after visual QA when the user should receive an editable composition. In Studio Run, publish the exact gated Composition once before waiting at Review or starting MP4 Delivery. Outside Studio Run, use it before claiming an editable Remotion result is delivered. Do not use legacy write_file({fromLastRunCode:true}) for durable or resumed runs.
+The same Agent Run and design_path resolve to the same Snapshot ID, so a retry or revision updates the same promoted draft instead of creating duplicates. This tool never runs automatically; omit it only when the user explicitly asks to keep the draft private/unpublished.`,
+      inputSchema: z.object({
+        design_path: z.string().min(1).describe('Exact persisted workspace design JSON path returned by composition autosave or Studio Composition.'),
+        name: z.string().optional().describe('Short user-facing description for the editable draft.'),
+      }),
+      execute: async ({ design_path, name }) => {
+        if (!ctx.supabase || !ctx.userId) {
+          return { success: false, error: 'publish_draft requires an authenticated project workspace.' };
+        }
+        try {
+          const file = await workspace.readFile(design_path, ctx.supabase, ctx.userId);
+          if (!file) {
+            return { success: false, error: `Editable composition was not found at ${design_path}.` };
+          }
+          let rawDesign: Record<string, unknown>;
+          try {
+            rawDesign = JSON.parse(file.content) as Record<string, unknown>;
+          } catch {
+            return { success: false, error: `Editable composition at ${design_path} is not valid JSON.` };
+          }
+          const design = rawDesign as unknown as DesignPayload;
+          if (
+            !design
+            || typeof design.code !== 'string'
+            || !design.code.trim()
+            || !Number.isFinite(design.width)
+            || !Number.isFinite(design.height)
+          ) {
+            return { success: false, error: `Editable composition at ${design_path} is missing code or dimensions.` };
+          }
+          if (rawDesign.__makaronScaffold === true) {
+            return { success: false, error: 'Structural composition scaffolds cannot be published. Finish the numbered composition workspace first.' };
+          }
+          const harnessError = validateDesign({ code: design.code, props: design.props });
+          if (harnessError) {
+            return { success: false, error: `Editable composition cannot be published: ${harnessError}` };
+          }
+
+          const studioCheckpoint = await getStudioRunCheckpoint(ctx);
+          if (studioCheckpoint.studioRunId) {
+            const studio = await import('./studio-run');
+            const store = new studio.WorkspaceStudioRunStore(ctx.supabase, ctx.userId);
+            const activeRun = await store.loadRun(ctx.projectId, studioCheckpoint.studioRunId);
+            if (!activeRun || activeRun.agentRunId !== ctx.agentRunId) {
+              return { success: false, error: 'The active Studio workflow could not be verified for this Agent Run.' };
+            }
+            const compositionRef = activeRun.artifacts.composition;
+            if (activeRun.stages.composition.status !== 'completed' || !compositionRef) {
+              return {
+                success: false,
+                error: `Studio draft promotion requires a completed Composition artifact. Persist the gated composition first with studio_run({ operation: "put_artifact", stage: "composition", artifact: { ... , designPath: "${design_path}" } }), then call publish_draft again with this exact path.`,
+              };
+            }
+            const compositionFile = await workspace.readFile(compositionRef.path, ctx.supabase, ctx.userId);
+            if (!compositionFile) {
+              return { success: false, error: `Studio Composition artifact was not found at ${compositionRef.path}.` };
+            }
+            const compositionArtifact = JSON.parse(compositionFile.content) as Record<string, unknown>;
+            if (compositionArtifact.designPath !== design_path) {
+              return {
+                success: false,
+                error: `publish_draft design_path must match the persisted Studio Composition. Expected ${String(compositionArtifact.designPath || '')}, received ${design_path}.`,
+              };
+            }
+          }
+
+          const snapshotId = stableDraftPromotionSnapshotId({
+            projectId: ctx.projectId,
+            agentRunId: ctx.agentRunId || ctx.execution?.runId,
+            designPath: design_path,
+          });
+          const promotedDesign = {
+            ...design,
+            description: name || (typeof rawDesign.description === 'string' ? rawDesign.description : '') || 'Editable Remotion composition',
+          };
+          (ctx as any).__pendingDesign = promotedDesign;
+          (ctx as any).__pendingDesignPublished = true;
+          (ctx as any).__pendingDesignSnapshotId = snapshotId;
+          (ctx as any).__pendingDesignSourcePath = design_path;
+          (ctx as any).__lastDesignPayload = promotedDesign;
+          (ctx as any).__lastSavedDraftPath = design_path;
+          return {
+            success: true,
+            published: true,
+            artifactType: 'design',
+            snapshotId,
+            designPath: design_path,
+            message: `Published editable composition draft from ${design_path}.`,
+          };
+        } catch (error) {
+          return { success: false, error: error instanceof Error ? error.message : String(error) };
+        }
+      },
+    }),
+
     materialize_media: tool({
       description: `Export an editable Remotion composition into a real MP4 video.
 Use this when the user asks to save/export/materialize/turn a composition into MP4. It accepts a timeline media_index, snapshot_id, design_path, or the current unsaved composition from run_code.
 Default profile is fast_720p (short side 720, no upscale) for speed. Default publish=true so the exported MP4 appears as a new <<<media_N>>> video. A completed synchronous export returns the exact mediaIndex for subsequent analyze_video/preview_frame calls; use that returned index instead of guessing. By default the tool queues a durable async export like video generation; polling/cron completes it and reports either success or failure. Set wait=true on the first call when the current response must include the final URL. A repeated call for the same unchanged composition reuses the fingerprint-matched queued/completed job and does not render twice. If the same unchanged composition fails twice in one turn, stop retrying and report export as blocked.
-For Studio Run, first preview and patch the Remotion source until it is satisfactory, then call materialize_media once with the exact final design_path. Studio Run automatically waits at source resolution; successful export is terminal and completes the Review and Delivery UI states. Do not author Review/Delivery artifacts or continue reviewing after success.`,
+For Studio Run, first preview and patch the Remotion source until it is satisfactory, call publish_draft once with the exact final design_path, then call materialize_media once with that same path when MP4 Delivery is requested. Studio Run automatically waits at source resolution; successful export is terminal and completes the Review and Delivery UI states. materialize_media publishes the MP4, not the editable draft. Do not author Review/Delivery artifacts or continue reviewing after success.`,
       inputSchema: z.object({
         media_index: z.number().optional().describe('1-based media index, e.g. 3 for <<<media_3>>>. Must point to an editable Remotion composition.'),
         snapshot_id: z.string().optional().describe('Snapshot ID of an editable Remotion composition.'),
@@ -3530,8 +3744,8 @@ Use this for substantial programmable video or media work: write the Remotion/No
     write_file: tool({
       description: `Write a file to your workspace. Use this to save memory, create skills, or organize your workspace.
 For durable Composition work, write numbered source parts under \`<project-id>/drafts/composition-parts/\` one cohesive component per model step and wait for each result. Filenames MUST use a numeric prefix of at least two digits plus a slug, for example \`00-foundation.js\`, \`10-scenes-a.js\`, \`90-root.js\`, or \`120-chapter.js\`. Include compositionMetadata on the first part (and again only when metadata changes) so dimensions, props, editables, and animation remain durable without a final assembly call. Each part has a hard transport limit of 12000 source characters; focused parts around 3000-8000 characters are preferred, but visual detail must decide the size. There is no aggregate source-size or part-count limit. Parts share one scope: do not use import/export. Rewriting the same numbered path is retry-safe. Never shorten approved narration, subtitles, scenes, animation, or visual detail to reduce source size. If one unusually large part exceeds 12000, split that component across new numbered files; renaming unchanged oversized source will still fail. The workspace automatically assembles, validates, and autosaves the complete draft after every successful part write. compositionWorkspace.status="ready" means the current files compile mechanically; it is not permission to omit planned scenes or polish. Finish every planned part, repair any diagnostics, then preview the returned designPath. Do not call run_code merely to assemble files.
-Set fromLastRunCode=true to save the last run_code output.
-Composition runtime: publish=false saves the draft code only; default publish=true saves and publishes a timeline Snapshot.
+Legacy compatibility only: fromLastRunCode=true can save an in-memory run_code output within the same attempt. Do not use it to publish durable or resumed Composition drafts; use publish_draft with the exact persisted design_path.
+Composition source writes and numbered parts autosave a private draft. publish_draft is the explicit timeline promotion action.
 Node media runtime: \`type: "files"\` outputs are already saved workspace files. If they are user-facing MP4 deliverables from split/trim/export/transcode, publish them with fromWorkspaceOutputs before final reply. \`type: "video"\` is a single final MP4 and can be published with write_file. Do not use node/FFmpeg as a fallback for ordinary editable timeline splicing of existing videos; patch or publish the Remotion composition instead.
 Set fromWorkspaceOutputs=true to publish recent workspace image/video outputs to the timeline. Use this immediately after direct FFmpeg deliverables, or later when the user says "publish the videos/images you just exported"; do not re-run FFmpeg.
 Path is auto-generated from the current project and output type. Just provide a short name.`,
@@ -3539,7 +3753,7 @@ Path is auto-generated from the current project and output type. Just provide a 
         path: z.string().optional().describe('File path. Auto-generated when fromLastRunCode=true (just pass name for the slug).'),
         name: z.string().optional().describe('Short descriptive name for the saved code (e.g. "sunset-poster"). Used with fromLastRunCode.'),
         content: z.string().optional().describe('File content. Not needed if fromLastRunCode=true.'),
-        fromLastRunCode: z.boolean().optional().describe('Save the last run_code output. Composition drafts can publish to timeline; node media chunks should usually be save-only until the final MP4.'),
+        fromLastRunCode: z.boolean().optional().describe('Legacy same-attempt compatibility only. For durable Composition promotion use publish_draft({design_path}).'),
         fromWorkspaceOutputs: z.boolean().optional().describe('Publish recent workspace image/video outputs to the timeline instead of writing text/code. Use immediately for user-facing FFmpeg split/trim/export MP4 outputs, and for previously exported outputs across turns. Prefer exact workspace paths returned by run_code/list_files; never guess a workspace URL from a file name.'),
         workspacePaths: z.array(z.string()).optional().describe('Specific workspace file paths to publish. If omitted with fromWorkspaceOutputs=true, publishes the most recent project media outputs.'),
         mediaType: z.enum(['image', 'video', 'all']).optional().describe('Filter workspace outputs when publishing. Default all.'),
@@ -4146,7 +4360,7 @@ Node media runtime provides a standard isolated Node environment with \`require\
             return null;
           };
 
-          // Helper: store image — sharp images auto-send, design drafts need write_file to publish
+          // Helper: store image — sharp images auto-send; durable design drafts use publish_draft.
           const pushImage = (b64: string, mime: string, isDraft = false) => {
             const dataUrl = `data:${mime};base64,${b64}`;
             ctx.currentImage = dataUrl;
@@ -4230,7 +4444,7 @@ Node media runtime provides a standard isolated Node environment with \`require\
             (ctx as any).__lastRunCode = JSON.stringify(patched, null, 2);
             (ctx as any).__lastSavedDraftPath = autosave.path;
 
-            // Track draft for potential later publish via write_file
+            // Track draft for local preview; durable promotion uses its autosaved design path.
             if (!(ctx as any).__runCodeDrafts) (ctx as any).__runCodeDrafts = [];
 
             // Update last draft (patch updates existing draft, doesn't create new one)
@@ -4243,7 +4457,7 @@ Node media runtime provides a standard isolated Node environment with \`require\
 
             const draftIdx = drafts.length;
             const patchSource = result.code_path ? ` from ${result.code_path}` : '';
-            return { type: 'text' as const, code_path: autosave.path, content: `Patched${patchSource} — draft ${draftIdx} autosaved to ${autosave.path}. If this changed trim timing, confirm animation.durationInSeconds matches the final frame count. If this changed transitions, subtitles, overlays, trim timing, cropping, or will be published, call preview_frame before telling the user it is complete. Use write_file({ fromLastRunCode: true, name: "slug" }) only when publishing a timeline snapshot or creating a named checkpoint.` };
+            return { type: 'text' as const, code_path: autosave.path, content: `Patched${patchSource} — draft ${draftIdx} autosaved to ${autosave.path}. If this changed trim timing, confirm animation.durationInSeconds matches the final frame count. If this changed transitions, subtitles, overlays, trim timing, cropping, or will be published, call preview_frame before telling the user it is complete. After QA, use publish_draft({ design_path: "${autosave.path}" }) when the editable composition should appear in the timeline.` };
           }
 
           // { type: 'render' (or legacy 'design'), code: '...' } — Store for event loop to emit as SSE
@@ -4317,14 +4531,14 @@ Node media runtime provides a standard isolated Node environment with \`require\
             (ctx as any).__lastRunCode = JSON.stringify(designPayload, null, 2);
             (ctx as any).__lastSavedDraftPath = autosave.path;
 
-            // Track draft for potential later publish via write_file
+            // Track draft for local preview; durable promotion uses its autosaved design path.
             if (!(ctx as any).__runCodeDrafts) (ctx as any).__runCodeDrafts = [];
 
             // Push new draft (no auto-screenshot — Agent uses preview_frame tool to check)
             (ctx as any).__runCodeDrafts.push({ type: 'design', payload: designPayload, codePath: autosave.path });
             const draftIdx = (ctx as any).__runCodeDrafts.length;
 
-            return { type: 'text' as const, code_path: autosave.path, content: `Composition ready — draft ${draftIdx} autosaved to ${autosave.path}. If this changed trim timing, confirm animation.durationInSeconds matches the final frame count. If this includes transitions, subtitles, overlays, trim timing, cropping, or will be published, call preview_frame with design_path if the run resumes later. Use write_file({ fromLastRunCode: true, name: "<descriptive-slug>" }) only to publish a timeline snapshot or create a named checkpoint.` };
+            return { type: 'text' as const, code_path: autosave.path, content: `Composition ready — draft ${draftIdx} autosaved to ${autosave.path}. If this changed trim timing, confirm animation.durationInSeconds matches the final frame count. If this includes transitions, subtitles, overlays, trim timing, cropping, or will be published, call preview_frame with design_path if the run resumes later. After QA, use publish_draft({ design_path: "${autosave.path}" }) when the editable composition should appear in the timeline.` };
           }
 
           // Helper: handle sharp image result — auto-sends to frontend (no draft/publish needed)
@@ -4390,181 +4604,91 @@ Node media runtime provides a standard isolated Node environment with \`require\
       },
     }),
 
-    list_voiceover_voices: tool({
-      description: `Fetch the current Volcengine Doubao / Seed Speech voice catalog so you can choose the best voice for a voiceover.
-
-Call this before generate_voiceover unless the user explicitly supplied a concrete voice_id or the conversation already contains a fresh voice catalog. Use the returned language, gender, scenario, style tags, and descriptions to pick a fitting voice for the user's content. Prefer voices whose language and scenario match the script; avoid novelty, rock, character, dialect, or highly stylized voices unless the user's task asks for that style.`,
-      inputSchema: z.object({
-        query: z.string().optional().describe('Optional short description of what you need, e.g. "warm Chinese sales narration", "English energetic product demo", "古风女声". The tool returns the full catalog plus filtered suggestions when possible.'),
-        force_refresh: z.boolean().optional().describe('Set true to bypass the short server-side cache and call Volcengine ListSpeakers again. Default false.'),
-      }),
-      execute: async ({ query, force_refresh }) => {
-        const catalog = await listVolcengineTtsVoices({ forceRefresh: force_refresh, allowFallback: true });
-        const normalizedQuery = query?.trim().toLowerCase();
-        const scored = catalog.voices.map((voice) => {
-          const haystack = [
-            voice.id,
-            voice.name,
-            voice.language,
-            voice.gender,
-            voice.scenario,
-            voice.description,
-            voice.resourceId,
-            voice.model,
-            ...voice.styles,
-          ].filter(Boolean).join(' ').toLowerCase();
-          let score = 0;
-          if (normalizedQuery) {
-            for (const token of normalizedQuery.split(/[\s,，、;；/|]+/).filter(Boolean)) {
-              if (haystack.includes(token)) score += 2;
-            }
-          }
-          if (/中文|chinese|zh|普通话/.test(normalizedQuery || '') && /(^zh|中文|mandarin|普通话)/i.test(haystack)) score += 4;
-          if (/英文|english|en\b/.test(normalizedQuery || '') && /(^en|english|英文)/i.test(haystack)) score += 4;
-          if (/男|male/.test(normalizedQuery || '') && /male|男/.test(haystack)) score += 3;
-          if (/女|female/.test(normalizedQuery || '') && /female|女/.test(haystack)) score += 3;
-          if (/销售|sales|口播|旁白|解说|explainer|narration/.test(normalizedQuery || '') && /sales|口播|直播|广告|营销|general|通用|narration|旁白/.test(haystack)) score += 3;
-          return { voice, score };
-        }).sort((a, b) => b.score - a.score);
-        const suggestions = scored.filter(item => item.score > 0).slice(0, 12).map(item => item.voice);
-        return {
-          ...catalog,
-          count: catalog.voices.length,
-          suggestions: suggestions.length ? suggestions : catalog.voices.slice(0, 12),
-          query,
-        };
-      },
-      toModelOutput({ output }: { output: any }) {
-        const voices = Array.isArray(output.suggestions) ? output.suggestions : [];
-        const rows = voices.map((voice: any, index: number) => {
-          const tags = [
-            voice.language,
-            voice.gender,
-            voice.scenario,
-            ...(Array.isArray(voice.styles) ? voice.styles : []),
-          ].filter(Boolean).join(', ');
-          return `${index + 1}. ${voice.id}${voice.resourceId ? ` [resource_id=${voice.resourceId}]` : ''}${voice.name ? ` — ${voice.name}` : ''}${tags ? ` (${tags})` : ''}${voice.description ? `: ${voice.description}` : ''}`;
-        }).join('\n');
-        const warning = output.warning ? `\nWarning: ${output.warning}` : '';
-        return {
-          type: 'content' as const,
-          value: [{
-            type: 'text' as const,
-            text: `Volcengine voice catalog source=${output.source}, total=${output.count || output.voices?.length || 0}.${warning}\nSuggested voices:\n${rows || 'No voices returned.'}\n\nChoose one voice_id and pass both its voice_id and resource_id to generate_voiceover.`,
-          }],
-        };
-      },
-    }),
-
-    generate_voiceover: tool({
-      description: `Generate a spoken narration / voiceover audio clip with Volcengine Doubao Seed TTS, upload it to the project, and add it to the Audio Index.
-
-Use this when the task needs accurate scripted speech: narration, voiceover, dialogue, spoken explainer audio, product introductions, tutorials, sales-style oral copy, or when a video/composition clearly needs a human spoken line. Do not use it for background music, ambience, sound effects, character-voice experiments, or mixed sound design; use generate_audio or generate_music for prompt-first Seed Audio assets.
-
-The generated audio becomes an Audio Index item (<<<audio_N>>>) in later turns. Use the audio marker only as a conversational/Seedance reference label. In Remotion composition code, always use the returned public audioUrl directly as the <Audio src>; never put <<<audio_N>>> in props or <Audio src>. Before calling this tool, call list_voiceover_voices and choose a concrete voice_id that fits the script, unless the user explicitly supplied one. If list_voiceover_voices returns fallback only, you may still use the best fallback voice but mention that the full voice catalog was unavailable.`,
-      inputSchema: z.object({
-        text: z.string().describe('The exact spoken text to synthesize. Keep it natural and speakable; rewrite stiff copy into oral narration first when appropriate.'),
-        title: z.string().optional().describe('Short title for the audio card/index, e.g. "Hook voiceover" or "Product narration".'),
-        voice_id: z.string().optional().describe('Optional Doubao speaker id / voice type. Omit to use the project default.'),
-        resource_id: z.enum(['seed-tts-2.0', 'seed-icl-2.0', 'seed-tts-1.0', 'seed-tts-1.0-concurr']).optional().describe('Volcengine resource id returned by list_voiceover_voices. Mars voices use seed-tts-1.0, Uranus voices use seed-tts-2.0, and authorized cloned voices use seed-icl-2.0.'),
-        speech_rate: z.number().min(-50).max(100).optional().describe('Speech speed. 0 is natural, 100 is 2x, -50 is 0.5x. Prefer 0 unless the user asks for faster/slower delivery.'),
-        context_prompt: z.string().optional().describe('Optional short voice direction for Seed TTS 2.0, e.g. "用轻松、真诚、有现场感的口吻".'),
-      }),
-      execute: async ({ text, title, voice_id, resource_id, speech_rate, context_prompt }) => {
-        if (!ctx.supabase || !ctx.userId) {
-          return { success: false as const, message: 'generate_voiceover requires an authenticated project workspace.' };
-        }
-
-        const result = await createVoiceover({
-          text,
-          title,
-          voiceId: voice_id,
-          resourceId: resource_id,
-          speechRate: speech_rate,
-          contextPrompt: context_prompt,
-        });
-        if (!result.success || !result.audio || !result.tts || !result.taskId) {
-          return { success: false as const, message: result.message };
-        }
-
-        const { data: latestRows } = await ctx.supabase
-          .from('project_music')
-          .select('track_index')
-          .eq('project_id', ctx.projectId)
-          .eq('user_id', ctx.userId)
-          .order('track_index', { ascending: false })
-          .limit(1);
-        const trackIndex = Number(latestRows?.[0]?.track_index ?? -1) + 1;
-        const audioUrl = await uploadAudio(ctx.supabase, ctx.userId, ctx.projectId, result.taskId, trackIndex, result.audio);
-        if (!audioUrl) {
-          return { success: false as const, message: 'Voiceover was generated but failed to upload to project storage.' };
-        }
-
-        const trackTitle = (result.title || title || 'Generated voiceover').slice(0, 120);
-        const { error: insertError } = await ctx.supabase.from('project_music').upsert({
-          suno_task_id: result.taskId,
-          track_index: trackIndex,
-          project_id: ctx.projectId,
-          user_id: ctx.userId,
-          prompt: text,
-          audio_url: audioUrl,
-          suno_audio_url: null,
-          stream_audio_url: null,
-          duration: null,
-          title: trackTitle,
-          tags: `voiceover,tts,doubao,${result.tts.resourceId}`,
-          status: 'completed',
-          selected: false,
-        }, { onConflict: 'suno_task_id,track_index' });
-        if (insertError) {
-          return { success: false as const, message: `Voiceover uploaded but DB insert failed: ${insertError.message}`, audioUrl };
-        }
-
-        const audioIndex = addAudioAttachment(ctx, { audioUrl, title: trackTitle, trackIndex });
-        deductCredits(ctx.userId, null, 'create_voiceover', result.tts.model)
-          .catch(e => console.error('[billing] generate_voiceover deduct error:', e));
-
-        return {
-          success: true as const,
-          message: `Voiceover generated and added to Audio Index as <<<audio_${audioIndex}>>>.\nResolved voiceover URL: ${audioUrl}\nUse this URL directly in Remotion <Audio src>; do not use the <<<audio_${audioIndex}>>> marker inside composition code or props.`,
-          audioUrl,
-          title: trackTitle,
-          trackIndex,
-          taskId: result.taskId,
-          model: result.tts.model,
-          voiceId: result.tts.voiceId,
-          resourceId: result.tts.resourceId,
-          textLength: result.tts.textLength,
-          sentenceCount: result.tts.sentences.length,
-        };
-      },
-      toModelOutput({ output }: { output: any }) {
-        return {
-          type: 'content' as const,
-          value: [{ type: 'text' as const, text: formatGeneratedAudioForModel('generate_voiceover', output) }],
-        };
-      },
-    }),
-
     generate_audio: tool({
       description: `Generate audio from a natural-language prompt.
 
-This is prompt-first: describe the sound directly. Do not force a rigid category. The prompt may describe background music, sound effects, ambience, character voice, or a mixed sound-design scene.
+This is the single Agent-facing audio-generation tool. Use it for every standalone voiceover, narration, dialogue, multilingual character performance, music bed, ambience, sound effect, and mixed sound scene. All voiceover content is generated by Seed Audio; there is no separate Agent voiceover or voice-catalog tool.
 
-Use generate_voiceover instead when exact scripted narration is required, especially for explainer videos, tutorials, and product introductions. Use generate_music for background music beds; it also uses Seed Audio.
+Before its first use in a conversation, read \`prompts/audio.md\` and write one compact production brief with an audible timeline. If the final soundtrack contains voice plus music, ambience, or SFX, make exactly one model generation with kind="mixed"; never generate voiceover and supporting audio separately. Use kind="voiceover" only for an intentionally isolated voice master. Include the exact spoken script plus a Voice Performance Brief, then call transcribe_audio with expected_sections and fps before Storyboard or Remotion composition work.
+
+Exception: if the chosen final-video workflow is generate_animation, do not generate a separate audio asset. Put the requested sound design in story_prompt so the video model generates it with the picture.
 
 Available audio model notes:
 ${formatAudioCapabilitiesForAgent()}`,
       inputSchema: z.object({
-        prompt: z.string().describe('Natural-language description of the audio to create. Include duration, mood, instruments, sound effects, voice direction, and constraints directly in the prompt.'),
+        kind: z.enum(['voiceover', 'dialogue', 'music', 'sound_design', 'mixed']).describe('Required audio intent. Use mixed whenever one deliverable contains voice plus music/ambience/SFX; this produces every layer in one Seed Audio model generation. Use voiceover only for an intentionally isolated voice-only master.'),
+        prompt: z.string().max(SEED_AUDIO_AGENT_PROMPT_MAX_CHARS).describe(`Natural-language description of the audio to create, maximum ${SEED_AUDIO_AGENT_PROMPT_MAX_CHARS} characters before the internal mode wrapper. Include duration, exact speech, mood, instruments, sound effects, voice direction, and constraints directly in this one compact prompt.`),
         duration_seconds: z.number().optional().describe('Requested duration in seconds. Seed Audio supports up to 120 seconds. Also include the duration in the prompt for best results.'),
+        reference_voices: z.array(z.string()).max(3).optional().describe('Up to 3 Audio Index labels such as audio_1, or provider preset voice IDs. The prompt must bind them in order as @audio1, @audio2, and @audio3. Cannot be combined with image conditioning.'),
+        conditioning: z.discriminatedUnion('type', [
+          z.object({ type: z.literal('none') }),
+          z.object({
+            type: z.literal('image'),
+            media_index: z.number().int().positive().describe('1-based Timeline Media image index explicitly introduced or referenced by the current user turn.'),
+          }),
+        ]).optional().describe('Optional structured conditioning. Omit or use {type:"none"} for ordinary audio. Use {type:"image",media_index:N} only for a still image in the current upload batch or explicitly named by the user as @N / <<<media_N>>>. The runtime validates media provenance and never inherits selected Timeline state.'),
+        speech_rate: z.number().min(0.5).max(2).optional().describe('Global speech speed multiplier from 0.5 to 2.0. Default 1.0.'),
+        loudness_rate: z.number().min(0.5).max(2).optional().describe('Global loudness multiplier from 0.5 to 2.0. Default 1.0; still direct mix priority in the prompt.'),
+        pitch_rate: z.number().int().min(-12).max(12).optional().describe('Global pitch shift in integer semitones from -12 to 12. Default 0; avoid extremes.'),
+        format: z.enum(['wav', 'mp3', 'ogg_opus', 'pcm']).optional().describe('Output format. Default wav for a production master.'),
+        sample_rate: z.union([z.literal(8000), z.literal(16000), z.literal(24000), z.literal(48000)]).optional().describe('Output sample rate. Default 48000 for production masters.'),
         title: z.string().optional().describe('Short title for the generated audio asset.'),
         model: z.enum(['auto', 'evolink-seed-audio']).optional().describe('Audio model. Omit or use auto for the default Seed Audio model.'),
       }),
-      execute: async ({ prompt, duration_seconds, title, model }) => {
+      execute: async ({
+        kind,
+        prompt,
+        duration_seconds,
+        reference_voices,
+        conditioning,
+        speech_rate,
+        loudness_rate,
+        pitch_rate,
+        format,
+        sample_rate,
+        title,
+        model,
+      }) => {
+        const imageMediaIndex = conditioning?.type === 'image'
+          ? conditioning.media_index
+          : undefined;
+        if (reference_voices?.length && imageMediaIndex != null) {
+          return { success: false as const, message: 'Seed Audio reference_voices and image conditioning are mutually exclusive.' };
+        }
+        const resolvedReferences = resolveSeedAudioReferences(ctx.audioAttachments, reference_voices);
+        if (resolvedReferences.error) {
+          return { success: false as const, message: resolvedReferences.error };
+        }
+        let imageUrls: string[] | undefined;
+        if (imageMediaIndex != null) {
+          if (!ctx.explicitMediaIndices.includes(imageMediaIndex)) {
+            return {
+              success: false as const,
+              message: `Image conditioning only accepts media introduced or explicitly referenced in the current user turn. Ask the user to attach the still image or name it as @${imageMediaIndex} / <<<media_${imageMediaIndex}>>>; selected Timeline state is never inherited.`,
+            };
+          }
+          const validated = validateImageIndex(ctx.snapshotImages, imageMediaIndex);
+          if (validated.error) return { success: false as const, message: validated.error };
+          const imageUrl = toPublicStorageUrl(ctx.snapshotImages[validated.idx]);
+          if (!/^https:\/\//i.test(imageUrl) || isVideoUrl(imageUrl)) {
+            return {
+              success: false as const,
+              message: `<<<media_${imageMediaIndex}>>> must be a still image with a public HTTPS URL before it can be used by Seed Audio.`,
+            };
+          }
+          imageUrls = [imageUrl];
+        }
         const result = await createAudio({
+          kind,
           prompt,
           durationSeconds: duration_seconds,
+          audioReferences: resolvedReferences.references,
+          imageUrls,
+          speechRate: speech_rate,
+          loudnessRate: loudness_rate,
+          pitchRate: pitch_rate,
+          format,
+          sampleRate: sample_rate,
           title,
           model,
           supabase: ctx.supabase,
@@ -4575,11 +4699,17 @@ ${formatAudioCapabilitiesForAgent()}`,
           if (result.audioUrl) {
             const audioIndex = addAudioAttachment(ctx, {
               audioUrl: result.audioUrl,
-              title: result.title || title || 'Generated audio',
+              title: result.title || title || (
+                kind === 'voiceover'
+                  ? 'Generated voiceover'
+                  : kind === 'mixed'
+                    ? 'Generated unified soundtrack'
+                    : 'Generated audio'
+              ),
               duration: result.duration,
               trackIndex: result.trackIndex,
             });
-            result.message = `${result.message}\nAdded to Audio Index as <<<audio_${audioIndex}>>>.\nResolved audio URL: ${result.audioUrl}\nUse this URL directly in Remotion <Audio src>; do not rely on the marker inside composition code or props.`;
+            result.message = `${result.message}\nAdded to Audio Index as <<<audio_${audioIndex}>>>.\nResolved ${kind === 'voiceover' ? 'voiceover master' : kind === 'mixed' ? 'unified soundtrack' : 'audio'} URL: ${result.audioUrl}\nUse this URL directly in Remotion <Audio src>; do not rely on the marker inside composition code or props.${kind === 'voiceover' || kind === 'mixed' ? '\nIf this asset contains speech, call transcribe_audio with expected_sections and the Composition fps before Storyboard or run_code.' : ''}`;
           }
           deductSeedAudioCredits(ctx.userId ?? '', {
             durationSeconds: result.duration,
@@ -4594,59 +4724,6 @@ ${formatAudioCapabilitiesForAgent()}`,
         return {
           type: 'content' as const,
           value: [{ type: 'text' as const, text: formatGeneratedAudioForModel('generate_audio', output) }],
-        };
-      },
-    }),
-
-    generate_music: tool({
-      description: `Generate background music with Seed Audio and return one persisted audio asset. Use this for short-video music beds, soundtrack, score, ambience-driven music, and polished vlog/commercial background tracks. Do not use Suno; all new music generation routes go through Seed Audio.`,
-      inputSchema: z.object({
-        prompt: z.string().describe('Music description: genre, mood, energy, instruments (no timing, no artist names)'),
-        instrumental: z.boolean().optional().describe('No vocals (default: true)'),
-        style: z.string().optional().describe('Genre/mood tags for custom mode'),
-        duration_seconds: z.number().optional().describe('Requested duration for Seed Audio music beds. Seed Audio supports up to 120 seconds.'),
-        provider: z.enum(['auto', 'evolink-seed-audio']).optional().describe('Omit or use auto for Seed Audio. Kept only for compatibility.'),
-      }),
-      execute: async ({ prompt, instrumental, style, duration_seconds, provider }) => {
-        const musicPrompt = [
-          prompt,
-          style ? `Style tags: ${style}.` : '',
-          instrumental === false
-            ? 'Use subtle vocal texture only if it supports the requested music bed; avoid dominant sung lyrics unless explicitly required.'
-            : 'Instrumental background music only, no vocals or lyrics.',
-        ].filter(Boolean).join('\n');
-        const result = await createAudio({
-          prompt: musicPrompt,
-          durationSeconds: duration_seconds,
-          title: 'Generated music',
-          model: provider === 'evolink-seed-audio' ? provider : 'auto',
-          supabase: ctx.supabase,
-          userId: ctx.userId,
-          projectId: ctx.projectId,
-        });
-        if (result.success) {
-          if (result.audioUrl) {
-            const audioIndex = addAudioAttachment(ctx, {
-              audioUrl: result.audioUrl,
-              title: result.title || 'Generated music',
-              duration: result.duration,
-              trackIndex: result.trackIndex,
-            });
-            result.message = `${result.message}\nAdded to Audio Index as <<<audio_${audioIndex}>>>.\nResolved music URL: ${result.audioUrl}\nUse this URL directly in Remotion <Audio src>; do not rely on the marker inside composition code or props.`;
-          }
-          deductSeedAudioCredits(ctx.userId ?? '', {
-            durationSeconds: result.duration,
-            providerCreditsUsed: result.creditsUsed,
-            model: result.model,
-            generationSeconds: result.generationSeconds,
-          }).catch(e => console.error('[billing] generate_music deduct error:', e));
-        }
-        return result;
-      },
-      toModelOutput({ output }: { output: any }) {
-        return {
-          type: 'content' as const,
-          value: [{ type: 'text' as const, text: formatGeneratedAudioForModel('generate_music', output) }],
         };
       },
     }),
@@ -4675,11 +4752,64 @@ const DURABLE_IDEMPOTENT_TOOLS = new Set([
   'generate_animation',
   'materialize_media',
   'rotate_camera',
-  'generate_voiceover',
   'generate_audio',
-  'generate_music',
   'prepare_visual_asset',
 ]);
+
+const DURABLE_INPUT_GUARDED_TOOLS = new Set([
+  ...DURABLE_IDEMPOTENT_TOOLS,
+  'studio_run',
+  'publish_draft',
+  'write_file',
+  'write_code_file',
+  'run_code',
+  'preview_frame',
+  'delete_file',
+  'execution_checkpoint',
+]);
+
+function wrapDurableInputAwareTools(
+  tools: Record<string, any>,
+  ctx: AgentContext,
+): Record<string, any> {
+  if (!ctx.execution || !ctx.supabase || !ctx.userId) return tools;
+  for (const [toolName, definition] of Object.entries(tools)) {
+    if (!DURABLE_INPUT_GUARDED_TOOLS.has(toolName) || typeof definition?.execute !== 'function') continue;
+    const execute = definition.execute.bind(definition);
+    definition.execute = async (input: unknown, executionOptions?: unknown) => {
+      const { data: runState, error } = await ctx.supabase
+        .from('agent_runs')
+        .select('status, input_version')
+        .eq('id', ctx.execution!.runId)
+        .eq('user_id', ctx.userId)
+        .maybeSingle();
+      const currentInputVersion = Number(runState?.input_version || 0);
+      if (
+        error
+        || runState?.status !== 'running'
+        || currentInputVersion > ctx.execution!.inputEpoch
+      ) {
+        if (error) {
+          console.warn(`[agent-execution] input-version guard failed before ${toolName}: ${error.message}`);
+        }
+        return {
+          success: false,
+          terminal: true,
+          errorCode: 'agent_input_received',
+          message: error
+            ? 'Could not verify the latest Agent Run input before a durable mutation. Hand off and retry safely.'
+            : 'A newer instruction arrived in this Agent Run. Stop this attempt before further durable mutations so the next attempt can continue with the new context.',
+          userMessage: {
+            zh: '已收到更新指令，正在从当前进度切换，不会继续执行旧目标。',
+            en: 'A newer instruction was received. Switching from the current progress without continuing the old target.',
+          },
+        };
+      }
+      return execute(input, executionOptions);
+    };
+  }
+  return tools;
+}
 
 function wrapDurableIdempotentTools(
   tools: Record<string, any>,
@@ -4690,12 +4820,12 @@ function wrapDurableIdempotentTools(
     if (!DURABLE_IDEMPOTENT_TOOLS.has(toolName) || typeof definition?.execute !== 'function') continue;
     const execute = definition.execute.bind(definition);
     definition.execute = async (input: unknown, executionOptions?: unknown) => {
-      const operationKey = stableOperationKey(ctx.execution!.workUnitKey, toolName, input);
+      const operationKey = stableOperationKey(toolName, input, ctx.execution!.inputEpoch);
       const { data, error } = await ctx.supabase.rpc('claim_agent_operation', {
         p_run_id: ctx.execution!.runId,
         p_attempt_id: ctx.execution!.attemptId,
         p_user_id: ctx.userId,
-        p_work_unit_key: ctx.execution!.workUnitKey,
+        p_work_unit_key: 'agent',
         p_operation_key: operationKey,
         p_tool_name: toolName,
       });
@@ -4825,6 +4955,7 @@ export interface RunMakaronAgentOptions {
   skillLaunchContext?: SkillLaunchContext;
   audioAttachments?: AudioAttachment[];
   snapshotImages?: string[];
+  explicitMediaIndices?: number[];
   currentSnapshotIndex?: number;
   isNsfw?: boolean;
   userSkills?: ParsedSkill[];
@@ -4837,6 +4968,9 @@ export interface RunMakaronAgentOptions {
   perf?: AgentPerf;
   abortSignal?: AbortSignal;
   execution?: DurableExecutionRef;
+  /** Workflow context for model guidance only. It never controls Agent termination or retries. */
+  studioWorkflowStage?: string;
+  agentRunId?: string;
   attemptBudgetMs?: number;
   maxSteps?: number;
   contextCompactAtTokens?: number;
@@ -4864,6 +4998,7 @@ export async function* runMakaronAgent(
     audioAttachments: options?.audioAttachments,
     preferredModel: options?.preferredModel,
     snapshotImages: (options?.snapshotImages ?? [currentImage]).filter(img => img.length > 0),
+    explicitMediaIndices: options?.explicitMediaIndices ?? [],
     currentSnapshotIndex: options?.currentSnapshotIndex ?? 0,
     isNsfw: options?.isNsfw,
     userSkills: options?.userSkills,
@@ -4872,12 +5007,19 @@ export async function* runMakaronAgent(
     timelineVersion: options?.timelineVersion,
     currentDesignPath: options?.currentDesignPath,
     execution: options?.execution,
+    agentRunId: options?.agentRunId || options?.execution?.runId,
   };
   if (options?.currentDesign) {
     (ctx as any).__lastDesignPayload = { ...options.currentDesign };
   }
 
-  const allTools = wrapDurableIdempotentTools(createTools(ctx, runtime, options?.locale, Boolean(options?.execution)), ctx);
+  const allTools = wrapDurableInputAwareTools(
+    wrapDurableIdempotentTools(
+      createTools(ctx, runtime, options?.locale, Boolean(options?.execution)),
+      ctx,
+    ),
+    ctx,
+  );
   if (!options?.execution) delete (allTools as Record<string, unknown>).execution_checkpoint;
   perf?.mark('agent_tools_created', { toolCount: Object.keys(allTools).length });
   let imagesSent = 0;
@@ -4949,12 +5091,12 @@ export async function* runMakaronAgent(
     ? buildLightweightSystemPrompt(analysisOnly ? 'analysis' : 'tipReaction', options?.locale)
     : await buildSystemPrompt(options?.userSkills, options?.supabase, options?.userId, projectId);
   const durableExecutionDirective = options?.execution
-    ? `\n\n## Durable execution contract\nThis is attempt ${options.execution.attemptNo} of execution ${options.execution.runId}, work unit ${options.execution.workUnitKey}. The execution may continue in a fresh model context. Preserve decisions and durable artifact pointers by calling execution_checkpoint after each meaningful work unit and before a long, risky generation step. Produce the first durable mutation within 90 seconds when the work unit is composition/code. If this attempt advances a Studio Run into Composition, immediately switch to numbered composition parts even when this work unit started in an earlier stage; never begin a monolithic run_code payload. Do not repeat expensive side effects whose tool result is already present. A handoff is progress, not failure.`
+    ? `\n\n## Durable execution contract\nThis is attempt ${options.execution.attemptNo} of Agent Run ${options.execution.runId}. A later attempt may continue in a fresh model context only after a technical interruption, provider failure, context handoff, or newer user input. Preserve decisions and durable artifact pointers with execution_checkpoint after meaningful progress and before a long, risky generation step. Do not repeat expensive side effects whose tool result is already present. A Studio Run is only a persisted workflow that you follow with studio_run; its stage never decides whether this Agent Run ends or retries. Finish normally when you have completed the current user-facing turn, even if the workflow remains at Review or another stage. If this attempt advances the workflow into Composition, switch to numbered composition parts immediately and never begin a monolithic run_code payload. A newer queued user instruction has precedence over an older delivery target.`
     : '';
-  const durableCompositionDirective = options?.execution?.workUnitKey === 'studio:composition'
-    ? `\n\n## Durable Composition workspace\nKeep the full original Composition and Director creative standard, but do not emit a monolithic run_code composition payload in this work unit. Long tool-input streams can reset before the call closes. Author the final Remotion source as numbered files under ${projectId}/drafts/composition-parts, one cohesive part per model step with write_file. Include compositionMetadata with the first part so dimensions, props, editables, and animation are durable; only repeat it when metadata changes. Keep each part under the 12000-character transport limit, wait for its tool result, and create as many parts as the approved content needs. Parts around 3000-8000 characters are preferred, but never compress creative detail merely to hit that range. Rewriting the same numbered path is safe after recovery. Do not use import/export; the files are concatenated into one scope with no aggregate source-size or part-count limit. Never shorten approved narration, subtitles, scenes, animation, or visual detail to reduce source size. Every successful write automatically assembles, validates, and autosaves the workspace. Continue until write_file reports compositionWorkspace.status="ready", then preview or patch its designPath directly. Do not spend another model turn calling run_code merely to assemble the directory. This changes only persistence and transport; it must not simplify the approved story, audio, visual direction, or ending.`
+  const durableCompositionDirective = options?.execution && options.studioWorkflowStage === 'composition'
+    ? `\n\n## Durable Composition workspace\nKeep the full original Composition and Director creative standard, but do not emit a monolithic run_code composition payload. Long tool-input streams can reset before the call closes. Author the final Remotion source as numbered files under ${projectId}/drafts/composition-parts, one cohesive part per model step with write_file. Include compositionMetadata with the first part so dimensions, props, editables, and animation are durable; only repeat it when metadata changes. Keep each part under the 12000-character transport limit, wait for its tool result, and create as many parts as the approved content needs. Parts around 3000-8000 characters are preferred, but never compress creative detail merely to hit that range. Rewriting the same numbered path is safe after recovery. Do not use import/export; the files are concatenated into one scope with no aggregate source-size or part-count limit. Never shorten approved narration, subtitles, scenes, animation, or visual detail to reduce source size. Every successful write automatically assembles, validates, and autosaves the workspace. Continue until write_file reports compositionWorkspace.status="ready", then preview or patch its designPath directly. Do not spend another model turn calling run_code merely to assemble the directory. This changes only persistence and transport; it must not simplify the approved story, audio, visual direction, or ending.`
     : '';
-  const durableCompositionGuidance = options?.execution?.workUnitKey === 'studio:composition'
+  const durableCompositionGuidance = options?.execution && options.studioWorkflowStage === 'composition'
     ? buildDurableCompositionGuidance()
     : '';
   const executionSystemPrompt = `${baseSystemPrompt}${durableExecutionDirective}${durableCompositionDirective}${durableCompositionGuidance}`;
@@ -5043,14 +5185,6 @@ export async function* runMakaronAgent(
     let result: any = null;
     let recoveryAttempt = 0;
     let recoveryTextOnly = false;
-    let skillVideoVisibleText = '';
-    let skillVideoSubmissionStarted = false;
-    let studioRunTouchedThisTurn = false;
-    let runCodeStartedThisTurn = false;
-    const executionAttemptWorkUnit = options?.execution?.workUnitKey;
-    const studioRunRecoveryPrompt = prompt.includes('[System automatic recovery]')
-      || prompt.includes('[Recoverable Agent Checkpoint]');
-    const requiresMaterializedVideo = requestsMaterializedVideo(prompt);
     const recoveryBlockedTools = new Set<string>();
     const nonRepeatableTools = new Set([
       'generate_image',
@@ -5058,9 +5192,7 @@ export async function* runMakaronAgent(
       'transcribe_audio',
       'rotate_camera',
       'delete_file',
-      'generate_voiceover',
       'generate_audio',
-      'generate_music',
       'prepare_visual_asset',
     ]);
 
@@ -5125,8 +5257,6 @@ export async function* runMakaronAgent(
       let finalStepDeliveredArtifact = false;
       let attemptDeliveredArtifact = false;
       const attemptCommittedTools = new Set<string>();
-      let durableStageHandoff: { code: 'studio_stage_handoff'; detail: string } | undefined;
-      let durableStudioCompletion: { detail: string } | undefined;
       let nonRetryableToolFailure: { message: string; code?: string } | undefined;
       let streamError: unknown;
       let lastTool = '';
@@ -5137,6 +5267,7 @@ export async function* runMakaronAgent(
         : 1_500_000;
       const invocationDeadline = agentStartTime + invocationBudgetMs;
       let attemptBudgetReached = false;
+      let stepBudgetReached = false;
       const recoveryActiveTools = tools && recoveryBlockedTools.size > 0
         ? Object.keys(tools).filter((toolName) => !recoveryBlockedTools.has(toolName))
         : undefined;
@@ -5157,17 +5288,13 @@ export async function* runMakaronAgent(
           ? { activeTools: recoveryActiveTools }
           : {}),
       stopWhen: [
-        stepCountIs(maxSteps),
+        ({ steps }: { steps: unknown[] }) => {
+          if (steps.length < maxSteps) return false;
+          stepBudgetReached = true;
+          return true;
+        },
         ({ steps }: { steps: Array<{ toolResults?: Array<{ toolName?: string; output?: unknown }> }> }) => {
-          return shouldStopAfterStudioToolStep({
-            durableExecution: Boolean(ctx.execution),
-            attemptWorkUnit: executionAttemptWorkUnit,
-            toolResults: steps.at(-1)?.toolResults,
-          }) || shouldStopAfterDurablePublishToolStep({
-            durableExecution: Boolean(ctx.execution),
-            requiresMaterializedVideo,
-            toolResults: steps.at(-1)?.toolResults,
-          }) || shouldStopAfterTerminalToolFailure({
+          return shouldStopAfterTerminalToolFailure({
             toolResults: steps.at(-1)?.toolResults,
           });
         },
@@ -5282,7 +5409,6 @@ export async function* runMakaronAgent(
             };
           }
         }
-        if (durableStageHandoff || durableStudioCompletion) break;
         continue;
       }
       if (event.type === 'finish') {
@@ -5361,7 +5487,6 @@ export async function* runMakaronAgent(
         const toolName = (event as any).toolName ?? '';
         if (toolName) lastTool = toolName;
         if (toolName === 'run_code' || toolName === 'write_code_file' || toolName === 'write_file') {
-          if (toolName !== 'write_file') runCodeStartedThisTurn = true;
           codeExtractor = {
             toolName,
             valueKey: toolName === 'run_code' ? 'code' : 'content',
@@ -5393,7 +5518,6 @@ export async function* runMakaronAgent(
             continue;
           }
           codeExtractor.targetPath = pathValue.value;
-          runCodeStartedThisTurn = true;
           const filename = pathValue.value.split('/').at(-1) || pathValue.value;
           yield {
             type: 'status' as const,
@@ -5451,7 +5575,6 @@ export async function* runMakaronAgent(
           continue;
         }
         if (text) {
-          skillVideoVisibleText += text;
           finalStepTextChars += text.trim().length;
           yield { type: 'content', text };
         }
@@ -5463,7 +5586,6 @@ export async function* runMakaronAgent(
         toolCallStartTime = Date.now();
         toolCallName = event.toolName;
         lastTool = event.toolName;
-        if (event.toolName === 'generate_animation') skillVideoSubmissionStarted = true;
         finalStepToolCalls++;
         activeToolCallId = (event as { toolCallId?: string }).toolCallId || crypto.randomUUID();
         console.log(`⏱️ [agent] tool-call "${event.toolName}" at +${((Date.now() - agentStartTime) / 1000).toFixed(1)}s`);
@@ -5484,8 +5606,15 @@ export async function* runMakaronAgent(
           yield { type: 'status', text: translate(responseLocale, 'agent.status.choosingVoice') };
         } else if (event.toolName === 'generate_voiceover') {
           yield { type: 'status', text: translate(responseLocale, 'agent.status.generatingVoiceover') };
-        } else if (event.toolName === 'generate_audio' || event.toolName === 'generate_music') {
-          yield { type: 'status', text: translate(responseLocale, 'agent.status.generatingAudio') };
+        } else if (event.toolName === 'generate_audio') {
+          const kind = (event.input as { kind?: string }).kind;
+          yield {
+            type: 'status',
+            text: translate(
+              responseLocale,
+              kind === 'voiceover' ? 'agent.status.generatingVoiceover' : 'agent.status.generatingAudio',
+            ),
+          };
         } else if (event.toolName === 'preview_frame') {
           const input = event.input as { frame?: number; timestamp?: number; frames?: number[]; timestamps?: number[] };
           const batch = input.frames?.length ? input.frames.join(', ') : input.timestamps?.length ? input.timestamps.map(value => `${value}s`).join(', ') : '';
@@ -5563,7 +5692,6 @@ export async function* runMakaronAgent(
           && typeof toolInput.path === 'string'
           && toolInput.path.startsWith(compositionPartsPrefix(ctx.projectId))
           && typeof toolInput.content === 'string';
-        if (isCompositionPartWrite) runCodeStartedThisTurn = true;
         if (
           isWriteCodeFile
           && (!codeExtractor || codeExtractor.descriptionSent === 0)
@@ -5683,13 +5811,9 @@ export async function* runMakaronAgent(
             };
           }
           if (toolSucceeded && toolName === 'studio_run') {
-            studioRunTouchedThisTurn = true;
             const studioSummary = outputRecord?.studioRun && typeof outputRecord.studioRun === 'object'
               ? outputRecord.studioRun as Record<string, unknown>
               : undefined;
-            if (ctx.execution && typeof studioSummary?.currentStage === 'string') {
-              ctx.execution.workUnitKey = `studio:${studioSummary.currentStage}`;
-            }
             if (
               studioSummary?.currentStage === 'composition'
               && ctx.supabase
@@ -5701,13 +5825,9 @@ export async function* runMakaronAgent(
                   projectId: ctx.projectId,
                   userId: ctx.userId,
                   supabase: ctx.supabase,
+                  agentRunId: ctx.agentRunId!,
                 });
                 if (scaffold.path) (ctx as any).__lastSavedDraftPath = scaffold.path;
-                if (ctx.execution) {
-                  await ctx.supabase.from('agent_runs').update({ current_work_unit: 'studio:composition' })
-                    .eq('id', ctx.execution.runId)
-                    .eq('status', 'running');
-                }
                 if (scaffold.created) {
                   yield {
                     type: 'status',
@@ -5719,37 +5839,6 @@ export async function* runMakaronAgent(
               } catch (scaffoldError) {
                 console.error('[agent-execution] composition scaffold failed:', scaffoldError);
               }
-            }
-            if (shouldHandoffToStudioComposition({
-              durableExecution: Boolean(ctx.execution),
-              attemptWorkUnit: executionAttemptWorkUnit,
-              currentStage: typeof studioSummary?.currentStage === 'string'
-                ? studioSummary.currentStage
-                : undefined,
-            })) {
-              durableStageHandoff = {
-                code: 'studio_stage_handoff',
-                detail: 'Composition is ready to continue in a dedicated durable attempt.',
-              };
-            }
-            if (shouldCompleteDurableStudioRun({
-              durableExecution: Boolean(ctx.execution),
-              status: typeof studioSummary?.status === 'string' ? studioSummary.status : undefined,
-              currentStage: typeof studioSummary?.currentStage === 'string'
-                ? studioSummary.currentStage
-                : null,
-            })) {
-              durableStudioCompletion = {
-                detail: 'Studio Run completed and all delivery artifacts were persisted.',
-              };
-              finalStepDeliveredArtifact = true;
-              attemptDeliveredArtifact = true;
-              yield {
-                type: 'content',
-                text: options?.locale === 'en'
-                  ? 'Studio Run complete. The final video, editable source, and review evidence are archived.'
-                  : 'Studio Run 已完成，最终视频、可编辑源和验收记录均已归档。',
-              };
             }
           }
           if (toolSucceeded && nonRepeatableTools.has(toolName)) {
@@ -5784,23 +5873,40 @@ export async function* runMakaronAgent(
           }
         }
 
-        // run_code / write_file output handling — emit design SSE with published flag
-        if (toolName === 'run_code' || toolName === 'write_file') {
+        // Composition output handling — emit design SSE with published flag.
+        if (toolName === 'run_code' || toolName === 'write_file' || toolName === 'publish_draft') {
           // Design output stored in ctx.__pendingDesign → emit as SSE event
           const pendingDesign = (ctx as any).__pendingDesign;
           if (pendingDesign) {
             const published = (ctx as any).__pendingDesignPublished ?? false;
+            const snapshotId = (ctx as any).__pendingDesignSnapshotId as string | undefined;
+            const sourceDesignPath = (ctx as any).__pendingDesignSourcePath as string | undefined;
             // Get preview URL from latest draft (if available)
             const drafts = (ctx as any).__runCodeDrafts as { previewUrl?: string }[] | undefined;
             const previewUrl = drafts?.[drafts.length - 1]?.previewUrl || undefined;
             console.log(`🎨 [agent] emitting render SSE (published=${published}): ${pendingDesign.width}x${pendingDesign.height}, code ${pendingDesign.code?.length} chars${previewUrl ? ', preview: ' + previewUrl.slice(-40) : ''}`);
-            yield { type: 'render', code: pendingDesign.code, width: pendingDesign.width, height: pendingDesign.height, props: pendingDesign.props, animation: pendingDesign.animation, editables: pendingDesign.editables, published, previewUrl };
+            yield {
+              type: 'render',
+              code: pendingDesign.code,
+              width: pendingDesign.width,
+              height: pendingDesign.height,
+              props: pendingDesign.props,
+              animation: pendingDesign.animation,
+              editables: pendingDesign.editables,
+              description: pendingDesign.description,
+              snapshotId,
+              sourceDesignPath,
+              published,
+              previewUrl,
+            };
             if (published) {
               finalStepDeliveredArtifact = true;
               attemptDeliveredArtifact = true;
             }
             (ctx as any).__pendingDesign = null;
             (ctx as any).__pendingDesignPublished = undefined;
+            (ctx as any).__pendingDesignSnapshotId = undefined;
+            (ctx as any).__pendingDesignSourcePath = undefined;
           } else if (toolName === 'run_code') {
             console.log(`🔍 [agent] run_code result: no __pendingDesign found`);
           }
@@ -5888,20 +5994,7 @@ export async function* runMakaronAgent(
             code: 'non_retryable_tool_failure' as const,
             detail: nonRetryableToolFailure.message,
           }
-        : durableStudioCompletion
-        ? {
-            ok: true,
-            retryable: false,
-            detail: durableStudioCompletion.detail,
-          }
-        : durableStageHandoff
-          ? {
-              ok: false,
-              retryable: true,
-              code: durableStageHandoff.code,
-              detail: durableStageHandoff.detail,
-            }
-          : classifyModelTermination({
+        : classifyModelTermination({
               sawFinish,
               finishReason,
               rawFinishReason,
@@ -5912,47 +6005,16 @@ export async function* runMakaronAgent(
             });
 
       if (
-        attemptBudgetReached
-        && !durableStageHandoff
-        && !durableStudioCompletion
-        && !finalStepDeliveredArtifact
+        !nonRetryableToolFailure
+        && (attemptBudgetReached || stepBudgetReached)
       ) {
         assessment = {
           ok: false,
           retryable: true,
           code: 'attempt_budget_handoff',
-          detail: `Attempt budget reached after a complete step (${invocationBudgetMs}ms); continuing from durable workspace state`,
-        };
-      }
-
-      if (assessment.ok) {
-        const activeStudioCheckpoint = await getStudioRunCheckpoint(ctx);
-        if (shouldContinueActiveStudioRun({
-          activeStudioRun: Boolean(activeStudioCheckpoint.studioRunId),
-          studioRunTouched: studioRunTouchedThisTurn,
-          runCodeStarted: runCodeStartedThisTurn,
-          recoveryPrompt: studioRunRecoveryPrompt,
-          attemptWorkUnit: executionAttemptWorkUnit,
-        })) {
-          assessment = {
-            ok: false,
-            retryable: true,
-            code: 'studio_run_incomplete',
-            detail: `Studio Run ${activeStudioCheckpoint.studioRunId} is still running at ${activeStudioCheckpoint.studioRunStage}`,
-          };
-        }
-      }
-
-      if (assessment.ok && shouldContinueSkillVideoSubmission({
-        context: options?.skillLaunchContext,
-        visibleText: skillVideoVisibleText,
-        submissionStarted: skillVideoSubmissionStarted,
-      })) {
-        assessment = {
-          ok: false,
-          retryable: true,
-          code: 'skill_video_submission_pending',
-          detail: 'The visible Skill video script is ready, but video rendering has not been submitted yet.',
+          detail: attemptBudgetReached
+            ? `Attempt time budget reached after a complete step (${invocationBudgetMs}ms); continuing from durable workspace state`
+            : `Attempt step budget reached after ${maxSteps} complete steps; continuing from durable workspace state`,
         };
       }
 
@@ -5967,16 +6029,12 @@ export async function* runMakaronAgent(
       let attemptSteps: any[] = [];
       try { attemptSteps = await result.steps; } catch { /* stream may have failed before a complete step */ }
       const canRecover = assessment.retryable
-        && !durableStageHandoff
         && !options?.execution
         && recoveryAttempt < 1
         && Date.now() - agentStartTime < 600_000;
       if (canRecover) {
         const studioCheckpoint = await getStudioRunCheckpoint(ctx);
-        const textOnlyRecovery = shouldUseTextOnlyRecovery({
-          deliveredArtifact: attemptDeliveredArtifact,
-          activeStudioRun: Boolean(studioCheckpoint.studioRunId),
-        });
+        const textOnlyRecovery = attemptDeliveredArtifact;
         recoveryAttempt++;
         recoveryTextOnly = textOnlyRecovery;
         for (const toolName of attemptCommittedTools) recoveryBlockedTools.add(toolName);
@@ -5989,12 +6047,9 @@ export async function* runMakaronAgent(
         const compositionRecovery = studioCheckpoint.studioRunStage === 'composition'
           ? ` Switch immediately to numbered source files under ${ctx.projectId}/drafts/composition-parts. Salvage complete reusable definitions from the partial stream into a numbered part, then continue with additional parts; do not stream the monolithic run_code payload again. The workspace assembles automatically after each write, so continue until write_file reports compositionWorkspace.status="ready" and use its designPath directly.`
           : '';
-        const skillVideoRecovery = assessment.code === 'skill_video_submission_pending'
-          ? 'The complete video script is already visible. Do not rewrite it or ask for confirmation. Call generate_animation now with that exact complete script.'
-          : '';
         const recoveryInstruction = textOnlyRecovery
           ? 'A finished artifact was already delivered in the previous step. Do not call any tool, regenerate, republish, or create another task. Only provide the concise final reply for the existing delivered result.'
-          : skillVideoRecovery || `Continue from the existing tool results and saved draft; do not restart from the original media.${savedDraftPath ? ` The exact saved draft path is: ${savedDraftPath}.` : ''}${streamedCheckpoint?.streamedCodePath ? ` Partial streamed code was saved at ${streamedCheckpoint.streamedCodePath} (${streamedCheckpoint.streamedCodeChars || 0} chars); read it once and salvage useful components.` : ''}${studioRecovery}${compositionRecovery}${recoveryBlockedTools.size ? ` Do not repeat these already-completed tools: ${[...recoveryBlockedTools].join(', ')}; use their existing results.` : ''} Complete the pending modification you already planned. If the user requested a finished artifact, publish the updated artifact before your concise final reply.`;
+          : `Continue from the existing tool results and saved draft; do not restart from the original media.${savedDraftPath ? ` The exact saved draft path is: ${savedDraftPath}. If the user should receive an editable composition, call publish_draft with this exact design_path after QA; do not use fromLastRunCode.` : ''}${streamedCheckpoint?.streamedCodePath ? ` Partial streamed code was saved at ${streamedCheckpoint.streamedCodePath} (${streamedCheckpoint.streamedCodeChars || 0} chars); read it once and salvage useful components.` : ''}${studioRecovery}${compositionRecovery}${recoveryBlockedTools.size ? ` Do not repeat these already-completed tools: ${[...recoveryBlockedTools].join(', ')}; use their existing results.` : ''} Complete the pending modification you already planned. If the user requested a finished artifact, publish the updated artifact before your concise final reply.`;
         attemptMessages = [
           ...attemptMessages,
           ...responseMessages,

@@ -718,8 +718,6 @@ export async function getSkillManifest(supabase?: SupabaseClient, userId?: strin
     const extras: string[] = [];
     if (s.makaron?.referenceImages?.length) extras.push('has reference images');
     if (s.makaron?.modelPreference?.length) extras.push(`prefers: ${s.makaron.modelPreference.join('/')}`);
-    if (s.makaron?.studioRunRecipe) extras.push(`Studio Run recipe: ${s.makaron.studioRunRecipe}`);
-    if (s.makaron?.studioRunProfile) extras.push(`profile: ${s.makaron.studioRunProfile}`);
     if (s.makaron?.sourceMediaRequired) extras.push('requires source media');
     const suffix = extras.length ? ` [${extras.join(', ')}]` : '';
     return `- **${s.name}**: ${s.description.trim().split('\n')[0]}${suffix}`;
@@ -741,7 +739,7 @@ export async function getSkillManifest(supabase?: SupabaseClient, userId?: strin
     return '';
   }
 
-  const manifest = `\n## Available Skills\n\nThis is an index only. Do not assume user skill details from the manifest; read \`skills/{name}/SKILL.md\` before using a user skill.\n\n${lines.join('\n')}\n`;
+  const manifest = `\n## Available Skills\n\nThis is a capability index only, not a workflow router. Description similarity does not activate a skill or Studio Run. Do not assume user skill details from the manifest; read \`skills/{name}/SKILL.md\` after the router or an explicit \`[Active skill: NAME]\` selects it.\n\n${lines.join('\n')}\n`;
   setCache(cacheKey, manifest);
   return manifest;
 }

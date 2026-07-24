@@ -4,8 +4,8 @@ description: >
   Orchestrate and review provider-generated long-video workflows. Use for
   multi-part generated clips, over-15s provider output, consistent anchors
   across clips, per-segment storyboards, or transitions between generated
-  clips. Do not use for explainer-video, Studio Run, Remotion, or another
-  matched editable Composition workflow.
+  clips. Do not use when the user explicitly requests Studio Run, Remotion,
+  or an editable Composition workflow.
 allowed-tools: analyze_video analyze_image generate_image generate_animation
 metadata:
   makaron:
@@ -22,9 +22,9 @@ You are the orchestrator and reviewer for long-video work. You do not act as a
 single mega-prompt that performs every craft task. Route production work to the
 narrow skills:
 
-Do not use this workflow when the request explicitly matches `explainer-video`,
-Studio Run, Remotion, or another editable Composition skill. Those workflows
-own their full requested duration and may use generated clips only as assets.
+Do not use this workflow when the user explicitly requests Studio Run,
+Remotion, or an editable Composition. A generic explainer label or resemblance
+to a built-in skill is not an editable-workflow request.
 
 - `skills/long-video-anchor/SKILL.md` for character, scene, and prop anchors.
 - `skills/long-video-storyboard/SKILL.md` for one 6+ panel storyboard image per segment.

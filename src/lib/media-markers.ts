@@ -1,4 +1,14 @@
 const MEDIA_MARKER_PATTERN = /<<<media_(\d+)>>>/g;
+const USER_MEDIA_REFERENCE_PATTERN = /<<<media_(\d+)>>>|(^|\s)@(\d+)\b/g;
+
+export function extractUserReferencedMediaIndices(value: string): number[] {
+  const indices = new Set<number>();
+  for (const match of value.matchAll(USER_MEDIA_REFERENCE_PATTERN)) {
+    const index = Number(match[1] || match[3]);
+    if (Number.isInteger(index) && index > 0) indices.add(index);
+  }
+  return [...indices].sort((a, b) => a - b);
+}
 
 export function resolveMediaMarkersInString(value: string, mediaUrls: string[]): string {
   return value.replace(MEDIA_MARKER_PATTERN, (marker, rawIndex) => {

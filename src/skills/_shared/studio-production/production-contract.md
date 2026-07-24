@@ -110,13 +110,16 @@ work the same across video types.
   scenes, and subtitle/narration/visual alignment pass the Composition draft
   gate.
 - When subtitles are promised, author them as part of the Composition's own
-  scene design. `transcribe_audio` may provide editorial timing reference, but
-  the harness does not create a separate caption artifact, inject caption props,
-  impose a cue schema, or select a visual renderer.
+  scene design. The narration cue sheet standardizes measured timing only; the
+  harness does not inject caption JSX, impose a visual style, or select a
+  renderer.
 - Resolve continuous narration timing before final Storyboard. Generate or load
-  the voice track after Script, call `transcribe_audio`, and set Storyboard scene
-  boundaries so every narrated section fits its linked visual beat. Do not keep
-  convenient equal-length scenes when the real speech has already drifted.
+  the isolated Seed Audio voice master after Script, call `transcribe_audio`
+  with every narrated Script section plus the locked FPS, and persist the
+  returned narration cue sheet. Set Storyboard scene boundaries from those
+  measured seconds and frames so every narrated section fits its linked visual
+  beat. Do not keep convenient equal-length scenes when the real speech has
+  already drifted.
   Persist one `narrationTimingEvidence` record per narrated Script section;
   Studio Run blocks Storyboard before Assets when these ranges do not fit.
 - Before the Composition gate passes, inspect representative speaking frames
@@ -141,8 +144,9 @@ work the same across video types.
 - Review is the Agent's preview-and-patch loop on the Remotion source. Resolve
   all blocking issues directly in that code before export; do not author Review
   JSON.
-- After one clean gate, publish that exact `design_path` once and materialize it
-  once. Do not export a timeline `media_index` that may point to an older
+- After one clean gate, call `publish_draft` with that exact `design_path` once,
+  then materialize it once when MP4 Delivery is requested. Do not export a
+  timeline `media_index` that may point to an older
   snapshot. Successful Studio Run materialization waits for the real MP4 and
   automatically completes Review and Delivery. Do not author Delivery JSON or
   perform more tool calls after success.

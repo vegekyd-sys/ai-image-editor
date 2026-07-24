@@ -150,6 +150,32 @@ export default function LoginPage() {
     window.location.href = withWelcomeParam(returnUrl || options?.fallback || '/', options?.welcome)
   }
 
+  async function completeAuthAndRedirect(options?: { fallback?: string }) {
+    const completeRes = await fetch('/api/auth/complete', { method: 'POST' })
+    const complete = await completeRes.json().catch(() => ({}))
+    if (!completeRes.ok) {
+      throw new Error(complete.error || 'Login could not finish')
+    }
+    if (complete.isNewUser) {
+      trackMetaEvent(
+        'CompleteRegistration',
+        {},
+        complete.metaEvents?.CompleteRegistration || createMetaEventId('registration'),
+      )
+      if (complete.credits > 0) {
+        trackMetaEvent(
+          'StartTrial',
+          { credits: complete.credits },
+          complete.metaEvents?.StartTrial || createMetaEventId('starttrial'),
+        )
+      }
+    }
+    redirectAfterAuth({
+      fallback: options?.fallback || complete.redirectUrl || '/projects',
+      welcome: Boolean(complete.isNewUser),
+    })
+  }
+
   async function finishNativeOAuth(callbackUrl: string) {
     const parsed = new URL(callbackUrl)
     const oauthError = parsed.searchParams.get('error') || parsed.hash.match(/error=([^&]+)/)?.[1]
@@ -168,16 +194,7 @@ export default function LoginPage() {
       throw exchangeError
     }
 
-    const completeRes = await fetch('/api/auth/native-complete', { method: 'POST' })
-    const complete = await completeRes.json().catch(() => ({}))
-    if (!completeRes.ok) {
-      throw new Error(complete.error || 'Google login could not finish')
-    }
-
-    redirectAfterAuth({
-      fallback: complete.redirectUrl || '/projects',
-      welcome: Boolean(complete.isNewUser),
-    })
+    await completeAuthAndRedirect()
   }
 
   // ── Google OAuth ──
@@ -256,7 +273,7 @@ export default function LoginPage() {
 
       if (check.action === 'login') {
         const { error: signInError } = await supabase.auth.signInWithPassword({ email, password })
-        if (!signInError) { redirectAfterAuth(); return }
+        if (!signInError) { await completeAuthAndRedirect(); return }
         if (signInError.message === 'Email not confirmed') {
           // Edge case: user exists but unconfirmed — send OTP
           await supabase.auth.signInWithOtp({ email })
@@ -337,19 +354,9 @@ export default function LoginPage() {
 
       // Signup verified — redirect (new user goes to home with welcome)
       if (otpPurpose === 'signup') {
-        trackMetaEvent('CompleteRegistration', {}, createMetaEventId('registration'))
-        let returnUrl = getReturnUrl()
-        sessionStorage.removeItem('mkr_return_url')
-        localStorage.removeItem('mkr_return_url')
-        // H5 can use ?skill=, while the iOS native shell keeps /home and reopens
-        // the detail from a pending key so the native page stack stays stable.
-        returnUrl = resolveReturnUrlForRuntime(returnUrl)
-        const target = returnUrl || '/home'
-        const sep = target.includes('?') ? '&' : '?'
-        // Small delay to ensure Supabase SDK writes session cookie before redirect
-        setTimeout(() => { window.location.href = target + sep + 'welcome=1' }, 100)
+        await completeAuthAndRedirect({ fallback: '/home' })
       } else {
-        redirectAfterAuth()
+        await completeAuthAndRedirect()
       }
     } catch {
       setOtpError(t('auth.networkError'))
@@ -410,7 +417,12 @@ export default function LoginPage() {
       const { error } = await supabase.auth.updateUser({ password: newPassword })
       if (error) { setError(mapError(error.message)); setResetLoading(false); return }
       setResetSuccess(true)
-      setTimeout(() => { redirectAfterAuth() }, 1500)
+      setTimeout(() => {
+        void completeAuthAndRedirect().catch(() => {
+          setError(t('auth.networkError'))
+          setResetLoading(false)
+        })
+      }, 1500)
     } catch {
       setError(t('auth.networkError'))
       setResetLoading(false)

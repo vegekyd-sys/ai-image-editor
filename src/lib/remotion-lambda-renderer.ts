@@ -2,6 +2,7 @@ import type { DesignPayload } from '@/types'
 import { hasRemotionAudioSources } from '@/lib/remotion-audio'
 import { resolveRemotionLambdaEncodingSettings } from '@/lib/remotion-encoding'
 import { prepareRemotionCodeForSandbox } from '@/lib/remotion-server'
+import { resolveRemotionFontManifestUrl } from '@/lib/remotion-font-manifest'
 
 type RemotionLambdaClient = typeof import('@remotion/lambda-client')
 type LambdaRenderProgress = Awaited<ReturnType<RemotionLambdaClient['getRenderProgress']>>
@@ -232,6 +233,7 @@ export async function renderDesignVideoLambdaToUrl(
   const timeoutInMilliseconds = readPositiveInteger(readEnv('REMOTION_LAMBDA_TIMEOUT_MS'), 120000)
   const progressRetryAttempts = readPositiveInteger(readEnv('REMOTION_LAMBDA_PROGRESS_RETRIES'), 3)
   const preparedCode = prepareRemotionCodeForSandbox(design.code)
+  const fontManifestUrl = resolveRemotionFontManifestUrl(serveUrl)
   const hasAudioSources = hasRemotionAudioSources(design.code)
   const encoding = resolveRemotionLambdaEncodingSettings()
   const audioBitrate = hasAudioSources ? encoding.audioBitrate : null
@@ -254,6 +256,7 @@ export async function renderDesignVideoLambdaToUrl(
         durationInFrames,
         width: design.width || 1080,
         height: design.height || 1920,
+        fontManifestUrl,
         skipFontLoading: true,
         useOffthreadVideo,
         useNativeVideo: true,

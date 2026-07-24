@@ -11,6 +11,7 @@ describe('agent media scenario matrix', () => {
   const image = read('src/lib/prompts/image.md')
   const generateImageTool = read('src/lib/prompts/generate_image_tool.md')
   const animate = read('src/lib/prompts/animate.md')
+  const audio = read('src/lib/prompts/audio.md')
   const coding = read('src/lib/prompts/agent-coding.md')
   const remotion = read('src/lib/prompts/remotion-composition.md')
   const remotionDirectorContract = read('src/skills/_shared/remotion-director-contract.md')
@@ -30,7 +31,7 @@ describe('agent media scenario matrix', () => {
   const cli = read('packages/makaron-cli/bin/makaron.mjs')
 
   it('keeps the core agent prompt as a lightweight router', () => {
-    expect(agent.length).toBeLessThan(10_000)
+    expect(agent.length).toBeLessThan(11_000)
     expect(agent).toContain("read_file('prompts/image.md')")
     expect(agent).toContain("read_file('prompts/animate.md')")
     expect(agent).toContain('`skills/video-ffmpeg-lab/SKILL.md`')
@@ -42,7 +43,10 @@ describe('agent media scenario matrix', () => {
     expect(agent).toContain('transcription only when exact timing matters')
     expect(agent).toContain('prompts/remotion-composition.md')
     expect(agent).toContain('skills/_shared/remotion-director-contract.md')
-    expect(agent).toContain('Use `generate_music` only when the user asks')
+    expect(agent).toContain("read_file('prompts/audio.md')")
+    expect(audio).toContain('2026-07-20')
+    expect(audio).toContain('20+ languages')
+    expect(audio).toContain('reference_voices')
     expect(agentTs).toContain('helper components must receive values through their own parameters')
   })
 

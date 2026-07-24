@@ -79,12 +79,9 @@ npx makaron-cli chat --project <id> --json -b "<prompt>"
 # Auto-create project (with or without images)
 npx makaron-cli chat --project auto --image photo.jpg --json -b "make it cinematic"
 npx makaron-cli chat --project auto --image img1.jpg --image img2.jpg --json -b "combine these"
-
-# Choose each model role explicitly
-npx makaron-cli chat --project auto --agent-model deepseek-v4-pro --image-model qwen "design a product poster"
 ```
 
-Model flags are role-specific: `--agent-model` controls reasoning and tool use, `--image-model` controls image generation/editing, and `--video-model` controls video generation. `--agent-model` accepts `auto|gpt-5.6-terra|gpt-5.6-sol|gpt-5.6-luna|grok-4.5|deepseek-v4-pro`. `auto` currently uses GPT-5.6 Terra. `MAKARON_AGENT_MODEL` can set the default for automation; the command flag takes precedence. The legacy `--model` flag remains temporarily supported with a deprecation warning.
+`chat` always routes agent, image, and video models automatically. Never pass `--agent-model`, `--image-model`, `--video-model`, or the legacy `--model` flag to `chat`; the CLI rejects them before starting a run. Model flags remain available only on explicit low-level commands such as `edit` and `video create`.
 
 Returns immediately:
 ```json
@@ -356,7 +353,7 @@ send_message "All done!"
 ## Important Notes
 
 - One project = one conversation thread. All history is preserved.
-- One run at a time per project. New message interrupts previous run.
+- One active Agent Run at a time per project. A new message received while it is active is appended to that same Agent Run and processed at a durable work-unit boundary; it does not interrupt the execution or create a second owner for an in-progress Studio workflow.
 - Multi-image: `create --image a.jpg --image b.jpg` or `chat --image ref.jpg`.
 - Provider-generated videos can take 2-5 minutes; Grok is usually shorter. Remotion compositions should be converted with `materialize` / `responses get --materialize`, and timing should be read from `duration_seconds`, `render_seconds`, and `realtime_ratio`.
 - Music takes ~60 seconds. Appears in output when done.

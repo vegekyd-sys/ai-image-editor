@@ -71,6 +71,10 @@ describe('Studio production skills', () => {
     expect(production).toContain('`prepared` field');
     expect(production).not.toContain('creative-direction/SKILL.md');
     expect(audio).toContain('Treat audio as part of the edit');
+    expect(audio).toContain('Voice Performance Brief');
+    expect(audio).toContain('intentionally\n  isolated narration/VO master');
+    expect(audio).toContain('`generate_audio({ kind: "mixed", ... })` exactly once');
+    expect(audio).toContain('master clock');
     expect(review).toContain('Call `materialize_media` once');
     expect(review).toContain('Semantic completeness');
     expect(review).toContain('subtitleSyncEvidence');
@@ -92,6 +96,7 @@ describe('Studio production skills', () => {
     expect(production).toContain('Generate or load');
     expect(production).toContain('linked Storyboard range and representative overlap');
     expect(production).toContain('narrationTimingEvidence');
+    expect(production).toContain('returned narration cue sheet');
     expect(agent).toContain('const renderProfile: RemotionRenderProfile = studioCheckpoint.studioRunId');
     expect(agent).toContain("? 'source'");
     expect(agent).toContain('Studio Composition must keep the locked delivery resolution');
