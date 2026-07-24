@@ -60,6 +60,8 @@ If the change includes transitions, subtitles, overlays, trim timing, cropping, 
 
 When changing trim timing or total sequence length, update `animation.durationInSeconds` to match the final timeline exactly (`totalFrames / fps`). Do not tell the user a clip is 18s while returning a 20s animation.
 
+If the user asks for a duration such as 30 seconds, set `animation.durationInSeconds` to that requested duration and build scene `from` / `durationInFrames` values inside that total. Never leave `durationInSeconds: 1` on a multi-scene timeline.
+
 ## Remotion APIs
 
 Available APIs include all exports from `remotion`, `@remotion/media`, `@remotion/paths`, and `@remotion/noise`.
@@ -111,7 +113,18 @@ return (
 
 ## Editable Composition Contract
 
-Every user-facing text field should be editable. Primary image and video layers that the user may select, move, resize, or trim should also be editable. Do not mark tiny decorative icons, static copyright text, gradients, glows, borders, or structural-only wrappers as editable.
+This section is the canonical editable contract for Remotion compositions. Do not wait for the user to say "editable"; if you are returning `runtime: "composition"` / legacy `runtime: "design"`, the composition should be editable by default.
+
+Every user-facing text field should be editable. That includes scene years, titles, subtitles, captions, badges, counters, stats, brand names, CTA text, outro lines, timeline labels, and small corner labels such as `01 / 05`. Primary image and video layers that the user may select, move, resize, replace, or trim should also be editable. Do not mark tiny decorative icons, emoji accents, static copyright text, gradients, glows, borders, or structural-only wrappers as editable.
+
+Before returning, do an editable coverage check:
+- Count every visible user-facing text string in the JSX and rendered data arrays. Each one must come from `props` and have a matching `{ type: 'text', propKey }` editable.
+- Count every primary image/video card, background media layer, or generated/timeline visual asset that a user would expect to move or resize. Each one should have a matching `image` or `video` editable.
+- If a scene array contains user-facing text, store prop keys in the array, not the text itself. Render `props[key]` inside the `data-editable` wrapper.
+- If generated or timeline images are used as real visuals, put HTTPS URLs in `props`, render them with `<Img>`, and wrap them in measurable `data-editable` boxes. Never inline data URLs or SVG image bytes.
+- Never use an empty editable id such as `data-editable=""`, `imgId: ""`, or optional image ids. If only two source images are available but five scenes need image cards, create five non-empty image prop keys (`imageCard0` ... `imageCard4`) and reuse the same two URL values across those props.
+- Every visible image card/layer should have its own stable editable id, even when two layers reuse the same image URL. Reusing the URL is fine; reusing or omitting the layer id is not.
+- Decorative overlays above image/video editables must use `pointerEvents: 'none'`.
 
 Required connections:
 - `props`: stores the editable value or media URL.
@@ -121,7 +134,55 @@ Required connections:
 - `editables`: maps each field id to `{ id, type: 'text' | 'image' | 'video', label, propKey }`.
 - If a patch adds or removes visible editable text/image/video layers, return the complete updated `editables` array alongside the patch.
 
-Text pattern:
+Low-burden text pattern for multi-scene compositions:
+
+```jsx
+const textDefaults = {
+  year0: '2011',
+  title0: '产品起点',
+  subtitle0: '第一批用户开始使用',
+  stat0: '10K early users',
+  badge0: '01 / 05',
+};
+
+const props = { ...textDefaults, image0: 'https://example.com/scene.jpg' };
+const editables = [
+  ...Object.keys(textDefaults).map((key) => ({
+    id: key,
+    type: 'text',
+    label: key,
+    propKey: key,
+  })),
+  { id: 'image0', type: 'image', label: 'Scene image 1', propKey: 'image0' },
+];
+
+const scenes = [
+  { yearKey: 'year0', titleKey: 'title0', subtitleKey: 'subtitle0', statKey: 'stat0', badgeKey: 'badge0', imageKey: 'image0' },
+];
+
+function EditableText({ id, props, style }) {
+  return (
+    <div data-editable={id} style={{ display: 'block', ...style }}>
+      {props[id]}
+    </div>
+  );
+}
+```
+
+Then render scene text inside `function Composition(props)` with `<EditableText id={scene.titleKey} props={props} ... />`. This avoids repeated JSX while keeping every visible string editable.
+
+For image cards in scene arrays, use the same non-empty id as `data-editable` and `propKey`:
+
+```jsx
+<div
+  data-editable={scene.imageKey}
+  style={{ position: 'absolute', left: 80, top: 520, width: 520, height: 360, display: 'block' }}
+>
+  <Img src={props[scene.imageKey]} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+</div>
+```
+
+Direct text pattern:
 
 ```jsx
 return {

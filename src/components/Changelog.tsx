@@ -10,6 +10,21 @@ interface ChangelogEntry {
 
 const CHANGELOG: ChangelogEntry[] = [
   {
+    date: '2026-07-01',
+    en: { title: 'Editable Image & Video Layers', items: [
+      'AI-made visual results are no longer flat previews: text, photos, and video clips can stay editable after they are created.',
+      'Click a layer on the canvas, then move or resize it directly — no need to ask Agent to regenerate the whole result.',
+      'Video clips now have a trim strip with playback, scrubber, start/end handles, and range dragging.',
+      'Tall poster-style projects are easier to refine: selection boxes stay aligned while you scroll.',
+    ]},
+    zh: { title: '图片和视频图层可编辑', items: [
+      'AI 生成的视觉结果不再只是扁平预览图：文字、照片和视频片段都可以继续编辑。',
+      '在画布上点选图层，就能直接移动和缩放，不用为了小调整重新让 Agent 生成整张图。',
+      '视频片段新增 trim 条：支持播放、拖动时间戳、拖起止把手，以及整体移动裁剪区间。',
+      '长海报类项目更好改了：上下滚动时，选中框会持续跟住内容。',
+    ]},
+  },
+  {
     date: '2026-06-30',
     en: { title: 'Makaron for iPhone is live', items: [
       'Makaron now spans iOS, web, mobile web, and CLI.',
@@ -96,21 +111,6 @@ const CHANGELOG: ChangelogEntry[] = [
       '像平时说话一样描述就行："这帧换成巴黎"、"这里手有点怪"、"大概这一秒不对"；Makaron 会聚焦这个画面附近，只重做这一小段。',
       'Makaron 会根据截图找到对应片段，准备局部修复方案，并等你确认后再渲染。',
       '新的工作区会复用源视频、截帧、裁剪片段和生成结果，后续继续修改不用来回找文件。',
-    ]},
-  },
-  {
-    date: '2026-06-12',
-    en: { title: 'Editable Image & Video Layers', items: [
-      'AI-made visual results are no longer flat previews: text, photos, and video clips can stay editable after they are created.',
-      'Click a layer on the canvas, then move or resize it directly — no need to ask Agent to regenerate the whole result.',
-      'Video clips now have a trim strip with playback, scrubber, start/end handles, and range dragging.',
-      'Tall poster-style projects are easier to refine: selection boxes stay aligned while you scroll.',
-    ]},
-    zh: { title: '图片和视频图层可编辑', items: [
-      'AI 生成的视觉结果不再只是扁平预览图：文字、照片和视频片段都可以继续编辑。',
-      '在画布上点选图层，就能直接移动和缩放，不用为了小调整重新让 Agent 生成整张图。',
-      '视频片段新增 trim 条：支持播放、拖动时间戳、拖起止把手，以及整体移动裁剪区间。',
-      '长海报类项目更好改了：上下滚动时，选中框会持续跟住内容。',
     ]},
   },
   {

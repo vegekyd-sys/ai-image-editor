@@ -43,6 +43,15 @@ function getNearestScrollParent(containerEl: HTMLElement): HTMLElement | null {
   return null;
 }
 
+function readCssPair(value: string): { x: number; y: number } | null {
+  const parts = value.trim().split(/\s+/);
+  if (!parts[0]) return null;
+  const x = parseFloat(parts[0]);
+  const y = parseFloat(parts[1] ?? parts[0]);
+  if (!Number.isFinite(x) || !Number.isFinite(y)) return null;
+  return { x, y };
+}
+
 export default function DesignOverlay({
   containerEl,
   editables,
@@ -111,6 +120,12 @@ export default function DesignOverlay({
       if (!editables.some(f => f.id === id)) return;
       // Fix inline elements — Moveable needs a box model to work correctly
       const htmlEl = el as HTMLElement;
+      htmlEl.querySelectorAll('img, video').forEach((media) => {
+        const mediaEl = media as HTMLElement;
+        mediaEl.setAttribute('draggable', 'false');
+        mediaEl.style.pointerEvents = 'none';
+        mediaEl.style.userSelect = 'none';
+      });
       if (getComputedStyle(htmlEl).display === 'inline') {
         htmlEl.style.display = 'inline-block';
       }
@@ -223,6 +238,15 @@ export default function DesignOverlay({
     let lastTapId = '';
     let activeTouches = 0;
 
+    const disableNativeMediaDrag = (editableEl: Element) => {
+      editableEl.querySelectorAll('img, video').forEach((media) => {
+        const mediaEl = media as HTMLElement;
+        mediaEl.setAttribute('draggable', 'false');
+        mediaEl.style.pointerEvents = 'none';
+        mediaEl.style.userSelect = 'none';
+      });
+    };
+
     const handlePointerDown = (e: PointerEvent) => {
       const target = (e.target as HTMLElement).closest?.('[data-editable]');
       let id = target?.getAttribute('data-editable') ?? null;
@@ -235,6 +259,7 @@ export default function DesignOverlay({
         );
       }
       if (!id || !editables.some(f => f.id === id)) return;
+      if (target) disableNativeMediaDrag(target);
 
       if (e.pointerType === 'touch') activeTouches++;
       const now = Date.now();
@@ -253,14 +278,139 @@ export default function DesignOverlay({
     const handlePointerUp = (e: PointerEvent) => {
       if (e.pointerType === 'touch') activeTouches = Math.max(0, activeTouches - 1);
     };
+    const handleDragStart = (e: DragEvent) => {
+      if ((e.target as HTMLElement).closest?.('[data-editable] img, [data-editable] video')) {
+        e.preventDefault();
+      }
+    };
 
     containerEl.addEventListener('pointerdown', handlePointerDown);
     containerEl.addEventListener('pointerup', handlePointerUp);
+    containerEl.addEventListener('dragstart', handleDragStart);
     return () => {
       containerEl.removeEventListener('pointerdown', handlePointerDown);
       containerEl.removeEventListener('pointerup', handlePointerUp);
+      containerEl.removeEventListener('dragstart', handleDragStart);
     };
   }, [containerEl, editables]);
+
+  // Touch-only fallback drag. Desktop/moveable-area drags must stay on Moveable
+  // so snap guidelines render during movement.
+  useEffect(() => {
+    const overlayEl = overlayRef.current;
+    if (!overlayEl || !containerEl) return;
+
+    let dragState: {
+      fieldId: string;
+      target: HTMLElement;
+      startX: number;
+      startY: number;
+      baseX: number;
+      baseY: number;
+      sourcePerViewportPx: number;
+    } | null = null;
+
+    const readCurrentOffset = (target: HTMLElement, fieldId: string) => {
+      const stored = props[`_pos_${fieldId}`] as { x: number; y: number } | undefined;
+      if (stored) return stored;
+      return readCssPair(target.style.translate) ?? { x: 0, y: 0 };
+    };
+
+    const getSourcePerViewportPx = (target: HTMLElement) => {
+      const rect = target.getBoundingClientRect();
+      const style = getComputedStyle(target);
+      const sourceWidth = parseFloat(style.width) || rect.width || 1;
+      const scalePair = readCssPair(target.style.scale || style.scale || '1') ?? { x: 1, y: 1 };
+      const renderedUntranslatedWidth = rect.width || 1;
+      return (sourceWidth * (scalePair.x || 1)) / renderedUntranslatedWidth;
+    };
+
+    const startDrag = (targetEl: HTMLElement | null, clientX: number, clientY: number, pointerType?: string) => {
+      if (dragState) return false;
+      const fieldId = selectedFieldIdRef.current;
+      if (!fieldId) return false;
+      if (!targetEl || targetEl.closest('.moveable-control')) return false;
+      if (targetEl.closest('.moveable-area')) return false;
+      if (pointerType !== 'touch') return false;
+
+      const editableTarget = targetEl.closest('[data-editable]') as HTMLElement | null;
+      const isSelectedEditable = editableTarget?.getAttribute('data-editable') === fieldId;
+      let isSelectedHit = false;
+      if (!isSelectedEditable && overlayRef.current) {
+        const baseRect = overlayRef.current.getBoundingClientRect();
+        const hitId = findEditableAtPoint(
+          rectsRef.current,
+          clientX - baseRect.left,
+          clientY - baseRect.top,
+        );
+        isSelectedHit = hitId === fieldId;
+      }
+      if (!isSelectedEditable && !isSelectedHit) return false;
+
+      const target = containerEl.querySelector(`[data-editable="${fieldId}"]`) as HTMLElement | null;
+      if (!target) return false;
+      const offset = readCurrentOffset(target, fieldId);
+      dragState = {
+        fieldId,
+        target,
+        startX: clientX,
+        startY: clientY,
+        baseX: offset.x,
+        baseY: offset.y,
+        sourcePerViewportPx: getSourcePerViewportPx(target),
+      };
+      isDraggingRef.current = true;
+      setIsDragging(true);
+      return true;
+    };
+
+    const onPointerDown = (e: PointerEvent) => {
+      const targetEl = e.target as HTMLElement | null;
+      if (!startDrag(targetEl, e.clientX, e.clientY, e.pointerType)) return;
+      try { targetEl?.setPointerCapture?.(e.pointerId); } catch { /* best effort */ }
+      e.preventDefault();
+    };
+
+    const updateDrag = (clientX: number, clientY: number) => {
+      if (!dragState) return;
+      const dx = (clientX - dragState.startX) * dragState.sourcePerViewportPx;
+      const dy = (clientY - dragState.startY) * dragState.sourcePerViewportPx;
+      dragState.target.style.translate = `${dragState.baseX + dx}px ${dragState.baseY + dy}px`;
+      moveableRef.current?.updateRect();
+    };
+
+    const onPointerMove = (e: PointerEvent) => {
+      if (!dragState) return;
+      updateDrag(e.clientX, e.clientY);
+      e.preventDefault();
+    };
+
+    const finishDrag = () => {
+      if (!dragState) return;
+      const finalOffset = readCssPair(dragState.target.style.translate);
+      if (finalOffset) onUpdateProp(`_pos_${dragState.fieldId}`, finalOffset);
+      dragState = null;
+      isDraggingRef.current = false;
+      setIsDragging(false);
+      requestAnimationFrame(() => {
+        measure();
+        moveableRef.current?.updateRect();
+      });
+    };
+
+    containerEl.addEventListener('pointerdown', onPointerDown, { capture: true });
+    overlayEl.addEventListener('pointerdown', onPointerDown);
+    window.addEventListener('pointermove', onPointerMove, { passive: false });
+    window.addEventListener('pointerup', finishDrag);
+    window.addEventListener('pointercancel', finishDrag);
+    return () => {
+      containerEl.removeEventListener('pointerdown', onPointerDown, { capture: true });
+      overlayEl.removeEventListener('pointerdown', onPointerDown);
+      window.removeEventListener('pointermove', onPointerMove);
+      window.removeEventListener('pointerup', finishDrag);
+      window.removeEventListener('pointercancel', finishDrag);
+    };
+  }, [containerEl, measure, onUpdateProp, props]);
 
   // ── Container-level pinch-to-scale ──
   // Single implementation: works regardless of where fingers land.

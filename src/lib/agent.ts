@@ -129,7 +129,7 @@ export type AgentStreamEvent =
   | { type: 'reasoning'; text: string }  // extended thinking delta
   | { type: 'coding'; text: string }  // tool-input-delta heartbeat — Agent writing code params
   | { type: 'code_stream'; text: string; done?: boolean }  // run_code code streamed in chunks (avoids large SSE events on iOS)
-  | { type: 'render'; code: string; width: number; height: number; props?: Record<string, unknown>; animation?: { fps: number; durationInSeconds: number; format?: string }; editables?: import('@/types').EditableField[]; published?: boolean; previewUrl?: string }  // Agent React design for browser rendering
+  | { type: 'render' | 'composition'; code: string; width: number; height: number; props?: Record<string, unknown>; animation?: { fps: number; durationInSeconds: number; format?: string }; editables?: import('@/types').EditableField[]; published?: boolean; previewUrl?: string }  // Agent React composition for browser rendering
   | { type: 'design'; code: string; width: number; height: number; props?: Record<string, unknown>; animation?: { fps: number; durationInSeconds: number; format?: string }; editables?: import('@/types').EditableField[]; published?: boolean }  // @deprecated — backward compat alias for 'render'
   | { type: 'music_task'; taskId: string }  // emitted when generate_music tool creates a task — frontend polls
   | { type: 'usage'; inputTokens: number; outputTokens: number; cacheReadTokens?: number; cacheWriteTokens?: number; model: string }  // token usage for billing (inputTokens = noCache only)
@@ -2114,6 +2114,7 @@ Use this to read skill instructions (SKILL.md), reference images, or your memory
       description: `Write a file to your workspace. Use this to save memory, create skills, or organize your workspace.
 Set fromLastRunCode=true to save the last run_code output.
 Composition runtime: publish=false saves the draft code only; default publish=true saves and publishes a timeline Snapshot.
+Never save raw Remotion composition source via content/path. If run_code returned a render/composition draft, save/publish it with fromLastRunCode=true so the validated design JSON, props, animation, and editables are preserved.
 Node media runtime: \`type: "files"\` outputs are already saved workspace files. If they are user-facing MP4 deliverables from split/trim/export/transcode, publish them with fromWorkspaceOutputs before final reply. \`type: "video"\` is a single final MP4 and can be published with write_file. Do not use node/FFmpeg as a fallback for ordinary editable timeline splicing of existing videos; patch or publish the Remotion composition instead.
 Set fromWorkspaceOutputs=true to publish recent workspace image/video outputs to the timeline. Use this immediately after direct FFmpeg deliverables, or later when the user says "publish the videos/images you just exported"; do not re-run FFmpeg.
 Path is auto-generated from the current project and output type. Just provide a short name.`,
@@ -2166,7 +2167,7 @@ Path is auto-generated from the current project and output type. Just provide a 
             const isVideoCode = lastDraftForPath?.type === 'video';
             savePath = isVideoCode
               ? `${ctx.projectId}/media-code/snapshot-${snapshotIdx}-${slug}.js`
-              : `${ctx.projectId}/code/snapshot-${snapshotIdx}-${slug}.json`;
+              : `code/snapshot-${snapshotIdx}-${slug}.json`;
           }
         }
         if (!savePath) {
@@ -2174,6 +2175,12 @@ Path is auto-generated from the current project and output type. Just provide a 
         }
         if (!fileContent) {
           return { success: false, message: 'No content to write. Provide content or set fromLastRunCode=true.' };
+        }
+        if (/\.json$/i.test(savePath) && /(^|\n)\s*(const|let|function)\s|type\s*:\s*['"`](render|composition|design)['"`]/.test(fileContent)) {
+          return {
+            success: false,
+            message: 'Refusing to save raw Remotion source as JSON. Return the composition from run_code, fix any harness errors, then call write_file({ fromLastRunCode: true, name: "slug" }).',
+          };
         }
         const result = await workspace.writeFile(savePath, fileContent, ctx.supabase, ctx.userId);
         if (!result.success) {
@@ -2292,6 +2299,7 @@ Runtimes:
 
 Return exactly one supported shape:
 - \`{ type: 'render', code, width, height, editables?, props?, animation? }\`
+- \`{ type: 'composition', code, width, height, editables?, props?, animation? }\` — alias for \`render\`
 - \`{ type: 'patch', edits, props?, editables?, code_path? }\` — if a patch adds/removes visible text/image/video editable layers, return the complete updated \`editables\` array.
 - \`{ type: 'image', data, mimeType }\`
 - \`{ type: 'video', path, contentType?, description?, duration?, width?, height? }\`
@@ -2474,7 +2482,10 @@ Node media runtime provides \`require\`, \`process\`, \`ffmpegPath\`, \`inputFil
           const result = await script.runInContext(context, { timeout: 30_000 });
 
           const elapsed = ((Date.now() - startTime) / 1000).toFixed(1);
-          console.log(`✅ [run_code] done in ${elapsed}s, result type: ${typeof result}, isBuffer: ${Buffer.isBuffer(result)}, keys: ${result && typeof result === 'object' ? Object.keys(result).join(',') : 'N/A'}, dataType: ${result?.data ? `${typeof result.data} / ${result.data.constructor?.name} / len=${result.data.length || 'N/A'}` : 'no data'}`);
+          const resultKind = typeof result?.type === 'string'
+            ? result.type.trim().toLowerCase()
+            : result?.type;
+          console.log(`✅ [run_code] done in ${elapsed}s, result type: ${typeof result}, kind: ${String(resultKind ?? 'N/A')}, isBuffer: ${Buffer.isBuffer(result)}, keys: ${result && typeof result === 'object' ? Object.keys(result).join(',') : 'N/A'}, dataType: ${result?.data ? `${typeof result.data} / ${result.data.constructor?.name} / len=${result.data.length || 'N/A'}` : 'no data'}`);
 
           // Handle result types — be flexible about what Agent returns
           if (!result) {
@@ -2503,7 +2514,7 @@ Node media runtime provides \`require\`, \`process\`, \`ffmpegPath\`, \`inputFil
           };
 
           // { type: 'patch', edits: [...] } — Incremental search & replace on last composition or a specific composition via code_path
-          if (result?.type === 'patch' && Array.isArray(result.edits)) {
+          if (resultKind === 'patch' && Array.isArray(result.edits)) {
             let baseDesign = (ctx as any).__lastDesignPayload;
 
             // code_path: load a different design from workspace as patch base
@@ -2562,11 +2573,11 @@ Node media runtime provides \`require\`, \`process\`, \`ffmpegPath\`, \`inputFil
 
             const draftIdx = drafts.length;
             const patchSource = result.code_path ? ` from ${result.code_path}` : '';
-            return { type: 'text' as const, content: `Patched${patchSource} — draft ${draftIdx} updated. Draft is not saved yet: immediately call write_file({ fromLastRunCode: true, name: "slug", publish: false }) to save the editable workspace draft. If this changed trim timing, confirm animation.durationInSeconds matches the final frame count. If this changed transitions, subtitles, overlays, trim timing, cropping, or will be published, call preview_frame before telling the user it is complete. Publish later with write_file({ fromLastRunCode: true, name: "slug" }).` };
+            return { type: 'text' as const, content: `Patched${patchSource} — draft ${draftIdx} updated but not published. If this changed trim timing, confirm animation.durationInSeconds matches the final frame count. If this changed transitions, subtitles, overlays, trim timing, cropping, or will be published, call preview_frame first. If the user asked to publish or put it on the timeline, immediately call write_file({ fromLastRunCode: true, name: "slug" }) and do not tell the user it is published until write_file succeeds and the next render event has published=true. Use publish:false only when the user explicitly asked to save a draft without publishing.` };
           }
 
-          // { type: 'render' (or legacy 'design'), code: '...' } — Store for event loop to emit as SSE
-          if ((result?.type === 'render' || result?.type === 'design') && typeof result.code === 'string') {
+          // { type: 'render' (or aliases 'composition' / legacy 'design'), code: '...' } — Store for event loop to emit as SSE
+          if ((resultKind === 'render' || resultKind === 'composition' || resultKind === 'design') && typeof result.code === 'string') {
             // Normalize animation struct — agent may return { fps, duration } or { animation: { fps, durationInSeconds } }
             let animation = result.animation;
             if (!animation && (result.fps || result.duration || result.durationInSeconds)) {
@@ -2624,7 +2635,7 @@ Node media runtime provides \`require\`, \`process\`, \`ffmpegPath\`, \`inputFil
             (ctx as any).__runCodeDrafts.push({ type: 'design', payload: designPayload });
             const draftIdx = (ctx as any).__runCodeDrafts.length;
 
-            return { type: 'text' as const, content: `Composition ready — draft ${draftIdx}. Draft is not saved yet: immediately call write_file({ fromLastRunCode: true, name: "<descriptive-slug>", publish: false }) to save the editable workspace draft. If this changed trim timing, confirm animation.durationInSeconds matches the final frame count. If this includes transitions, subtitles, overlays, trim timing, cropping, or will be published, call preview_frame before telling the user it is complete. Publish later with write_file({ fromLastRunCode: true, name: "<descriptive-slug>" }).` };
+            return { type: 'text' as const, content: `Composition ready — draft ${draftIdx}, not published. If this changed trim timing, confirm animation.durationInSeconds matches the final frame count. If this includes transitions, subtitles, overlays, trim timing, cropping, or will be published, call preview_frame before telling the user it is complete. If the user asked to publish or put it on the timeline, immediately call write_file({ fromLastRunCode: true, name: "<descriptive-slug>" }) and do not tell the user it is published until write_file succeeds and the next render event has published=true. Use publish:false only when the user explicitly asked to save a draft without publishing.` };
           }
 
           // Helper: handle sharp image result — auto-sends to frontend (no draft/publish needed)
@@ -2640,7 +2651,7 @@ Node media runtime provides \`require\`, \`process\`, \`ffmpegPath\`, \`inputFil
           }
 
           // { type: 'image', data: ... } — standard format
-          if (result.type === 'image' && result.data) {
+          if (resultKind === 'image' && result.data) {
             const b64 = toBase64(result.data) || String(result.data);
             return handleImageResult(b64, result.mimeType || 'image/jpeg');
           }
@@ -2654,12 +2665,12 @@ Node media runtime provides \`require\`, \`process\`, \`ffmpegPath\`, \`inputFil
           }
 
           // Error result
-          if (result.type === 'error') {
+          if (resultKind === 'error') {
             return { type: 'text' as const, content: `Error: ${result.message}` };
           }
 
           // Text result
-          if (result.type === 'text') {
+          if (resultKind === 'text') {
             return { type: 'text' as const, content: String(result.content) };
           }
 
