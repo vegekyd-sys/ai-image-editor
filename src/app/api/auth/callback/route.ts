@@ -3,11 +3,19 @@ import { cookies } from 'next/headers'
 import { NextResponse, type NextRequest } from 'next/server'
 import { getSupabaseAdmin } from '@/lib/supabase/service'
 import { readAttributionCookie, sendMetaCapiEvent } from '@/lib/marketing/meta-capi'
+import { getPublicOrigin } from '@/lib/auth/public-origin'
+import { getConfiguredWelcomeCredits } from '@/lib/billing/welcome-credits'
+import { appendAuthReturnParam, normalizeAuthReturnPath } from '@/lib/auth-return'
 
 export async function GET(request: NextRequest) {
   const { searchParams } = new URL(request.url)
   const origin = getPublicOrigin(request)
   const code = searchParams.get('code')
+  const requestedReturnPath = normalizeAuthReturnPath(searchParams.get('next'))
+
+  if (searchParams.get('native_oauth') === '1') {
+    return buildNativeOAuthCallbackPage(request)
+  }
 
   if (!code) {
     return NextResponse.redirect(`${origin}/login`)
@@ -56,7 +64,8 @@ export async function GET(request: NextRequest) {
     .single()
 
   if (profile?.activated) {
-    return buildRedirectPage(`${origin}/projects`, cookiesToSetOnResponse)
+    const redirectUrl = requestedReturnPath ? new URL(requestedReturnPath, origin).toString() : `${origin}/projects`
+    return buildRedirectPage(redirectUrl, cookiesToSetOnResponse)
   }
 
   // Auto-activate: all users who reach callback are verified
@@ -77,12 +86,7 @@ export async function GET(request: NextRequest) {
 
     if (!existingBalance) {
       isNewUser = true
-      const { data: setting } = await admin
-        .from('app_settings')
-        .select('value')
-        .eq('key', 'welcome_credits')
-        .single()
-      const welcomeCredits = parseInt(setting?.value || '500')
+      const welcomeCredits = await getConfiguredWelcomeCredits(admin)
 
       if (welcomeCredits > 0) {
         const { addCredits } = await import('@/lib/billing/credits')
@@ -102,7 +106,12 @@ export async function GET(request: NextRequest) {
     console.error('[auth/callback] Welcome credits failed (non-blocking):', e)
   }
 
-  const redirectUrl = isNewUser ? `${origin}/home?welcome=1` : `${origin}/projects`
+  const requestedDestination = requestedReturnPath
+    ? (isNewUser ? appendAuthReturnParam(requestedReturnPath, 'welcome', '1') : requestedReturnPath)
+    : ''
+  const redirectUrl = requestedDestination
+    ? new URL(requestedDestination, origin).toString()
+    : (isNewUser ? `${origin}/home?welcome=1` : `${origin}/projects`)
   if (isNewUser) {
     const attribution = readAttributionCookie(request.cookies.get('mkr_attribution')?.value)
     let eventSourceUrl = `${origin}/home`
@@ -124,14 +133,17 @@ export async function GET(request: NextRequest) {
   return buildRedirectPage(redirectUrl, cookiesToSetOnResponse)
 }
 
-export function getPublicOrigin(request: NextRequest) {
-  const url = new URL(request.url)
-  const forwardedProto = request.headers.get('x-forwarded-proto')?.split(',')[0]?.trim()
-  const forwardedHost = request.headers.get('x-forwarded-host')?.split(',')[0]?.trim()
-  const proto = forwardedProto || url.protocol.replace(':', '') || 'http'
-  const host = forwardedHost || request.headers.get('host') || url.host
-  const normalizedHost = host.replace(/^0\.0\.0\.0(?::|$)/, (match) => match.replace('0.0.0.0', '127.0.0.1'))
-  return `${proto}://${normalizedHost}`
+function buildNativeOAuthCallbackPage(request: NextRequest) {
+  const callbackUrl = new URL('app.makaron.ios://auth/callback')
+  request.nextUrl.searchParams.forEach((value, key) => {
+    callbackUrl.searchParams.append(key, value)
+  })
+  const target = callbackUrl.toString()
+
+  return new NextResponse(
+    `<!DOCTYPE html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width"><title>Returning to Makaron...</title></head><body style="background:#000;color:#fff;display:flex;align-items:center;justify-content:center;height:100vh;font-family:-apple-system,BlinkMacSystemFont,sans-serif"><script>window.location.replace(${JSON.stringify(target)});</script><a style="color:#d946ef" href=${JSON.stringify(target)}>Return to Makaron</a></body></html>`,
+    { status: 200, headers: { 'Content-Type': 'text/html' } }
+  )
 }
 
 /**
@@ -145,6 +157,7 @@ function buildRedirectPage(
 ) {
   // The HTML page reads sessionStorage for returnUrl (saved by home page before login redirect)
   // and uses it if available, otherwise falls back to the server-determined redirectUrl.
+  const serializedRedirectUrl = JSON.stringify(redirectUrl)
   const response = new NextResponse(
     `<!DOCTYPE html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width"><title>Redirecting...</title></head><body style="background:#000;display:flex;align-items:center;justify-content:center;height:100vh"><script>
 var r=sessionStorage.getItem('mkr_return_url')||localStorage.getItem('mkr_return_url');
@@ -160,9 +173,10 @@ if(skillMatch){
     r='/home?skill='+encodeURIComponent(skillMatch[1]);
   }
 }
-var welcome="${redirectUrl}".includes('welcome=1');
+var fallback=${serializedRedirectUrl};
+var welcome=fallback.includes('welcome=1');
 if(r){var sep=r.includes('?')?'&':'?';window.location.href=r+(welcome?sep+'welcome=1':'');}
-else{window.location.href="${redirectUrl}";}
+else{window.location.href=fallback;}
 </script></body></html>`,
     { status: 200, headers: { 'Content-Type': 'text/html' } }
   )

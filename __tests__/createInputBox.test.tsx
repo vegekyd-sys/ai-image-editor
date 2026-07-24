@@ -48,10 +48,12 @@ function EmptyCreateInputHarness({
   onSubmit,
   submitWhenEmpty = false,
   actionMode = false,
+  fallbackHref,
 }: {
   onSubmit: () => void
   submitWhenEmpty?: boolean
   actionMode?: boolean
+  fallbackHref?: string
 }) {
   const input = useCreateInput()
 
@@ -62,6 +64,7 @@ function EmptyCreateInputHarness({
       isDesktop={false}
       actionMode={actionMode}
       submitWhenEmpty={submitWhenEmpty}
+      fallbackHref={fallbackHref}
       onSubmit={onSubmit}
       skills={[]}
       selectedSkill={null}
@@ -109,6 +112,25 @@ describe('CreateInputBox', () => {
     fireEvent.click(screen.getByTestId('create-project'))
 
     expect(onSubmit).toHaveBeenCalledTimes(1)
+  })
+
+  it('keeps an empty guest CTA on native navigation without a hydrated touch/click interception', () => {
+    const onSubmit = vi.fn()
+    render(<EmptyCreateInputHarness onSubmit={onSubmit} submitWhenEmpty fallbackHref="/login" />)
+
+    const cta = screen.getByRole('link')
+    expect(cta.getAttribute('href')).toBe('/login')
+
+    let preventedByReact: boolean | null = null
+    const observeDefault = (event: Event) => {
+      preventedByReact = event.defaultPrevented
+      event.preventDefault()
+    }
+    document.addEventListener('click', observeDefault, { once: true })
+    fireEvent.click(cta)
+
+    expect(preventedByReact).toBe(false)
+    expect(onSubmit).not.toHaveBeenCalled()
   })
 
   it('submits action-mode primary CTA on the first touch without a duplicate click', () => {

@@ -88,9 +88,9 @@ export default function ChatBubble({ messages, isLoading, isOpen, onClose, onSen
               Upload a photo to start chatting
             </div>
           )}
-          {messages.map((msg) => (
+          {messages.map((msg, idx) => (
             <div
-              key={msg.id}
+              key={`${msg.id}:${idx}`}
               data-message-id={msg.id}
               className={`flex ${msg.role === 'user' ? 'justify-end' : 'justify-start'}`}
             >

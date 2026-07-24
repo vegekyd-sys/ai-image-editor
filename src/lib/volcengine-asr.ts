@@ -1,5 +1,5 @@
 import { execFile } from 'child_process'
-import { mkdir, mkdtemp, readFile, rm, writeFile } from 'fs/promises'
+import { mkdir, mkdtemp, readFile, rm, stat, writeFile } from 'fs/promises'
 import { tmpdir } from 'os'
 import path from 'path'
 import { promisify } from 'util'
@@ -11,6 +11,7 @@ const DEFAULT_ENDPOINT = 'https://openspeech.bytedance.com/api/v3/auc/bigmodel/r
 const DEFAULT_RESOURCE_ID = 'volc.bigasr.auc_turbo'
 const MAX_DOWNLOAD_BYTES = 220 * 1024 * 1024
 const MAX_AUDIO_BASE64_BYTES = 100 * 1024 * 1024
+const DEFAULT_FETCH_TIMEOUT_MS = 120_000
 
 export interface TranscriptWord {
   text: string
@@ -42,6 +43,7 @@ export interface VolcengineAsrTranscript {
 
 interface VolcengineAsrOptions {
   mediaUrl: string
+  localMediaPath?: string
   uid?: string
   language?: string
   requestId?: string
@@ -52,6 +54,26 @@ type JsonRecord = Record<string, unknown>
 function env(name: string): string | undefined {
   const value = process.env[name]?.trim()
   return value || undefined
+}
+
+function fetchTimeoutMs(): number {
+  const value = Number(env('VOLCENGINE_ASR_TIMEOUT_MS'))
+  return Number.isFinite(value) && value > 0 ? value : DEFAULT_FETCH_TIMEOUT_MS
+}
+
+async function fetchWithTimeout(input: string | URL, init?: RequestInit): Promise<Response> {
+  const controller = new AbortController()
+  const timeout = setTimeout(() => controller.abort(), fetchTimeoutMs())
+  try {
+    return await fetch(input, { ...init, signal: init?.signal || controller.signal })
+  } catch (err) {
+    if (err instanceof Error && err.name === 'AbortError') {
+      throw new Error(`Volcengine ASR request timed out after ${fetchTimeoutMs()}ms.`)
+    }
+    throw err
+  } finally {
+    clearTimeout(timeout)
+  }
 }
 
 function getCredentials(): { mode: 'api-key'; apiKey: string } | { mode: 'legacy'; appKey: string; accessKey: string } {
@@ -81,7 +103,7 @@ function extensionFromContentType(contentType: string | null, mediaUrl: string):
 }
 
 async function downloadMedia(mediaUrl: string, dir: string): Promise<string> {
-  const res = await fetch(mediaUrl)
+  const res = await fetchWithTimeout(mediaUrl)
   if (!res.ok) throw new Error(`Failed to download media for ASR: ${res.status}`)
 
   const length = Number(res.headers.get('content-length') || 0)
@@ -99,11 +121,21 @@ async function downloadMedia(mediaUrl: string, dir: string): Promise<string> {
   return inputPath
 }
 
-async function extractAudioBase64(mediaUrl: string): Promise<{ data: string; extractedAudio: boolean }> {
+async function extractAudioBase64(mediaUrl: string, localMediaPath?: string): Promise<{ data: string; extractedAudio: boolean }> {
   const workDir = await mkdtemp(path.join(tmpdir(), 'makaron-asr-'))
   try {
     await mkdir(workDir, { recursive: true })
-    const inputPath = await downloadMedia(mediaUrl, workDir)
+    let inputPath: string
+    if (localMediaPath) {
+      const localStat = await stat(localMediaPath)
+      if (!localStat.isFile()) throw new Error('Local ASR media path is not a file.')
+      if (localStat.size > MAX_DOWNLOAD_BYTES) {
+        throw new Error(`Local media is too large for ASR preprocessing (${Math.round(localStat.size / 1024 / 1024)}MB).`)
+      }
+      inputPath = localMediaPath
+    } else {
+      inputPath = await downloadMedia(mediaUrl, workDir)
+    }
     const outputPath = path.join(workDir, 'audio.mp3')
     const ffmpegPath = await findFfmpeg()
 
@@ -199,10 +231,10 @@ export async function transcribeWithVolcengineAsr(options: VolcengineAsrOptions)
 
   let audio: { url: string } | { data: string }
   let extractedAudio = false
-  if (isAudioUrl(options.mediaUrl)) {
+  if (isAudioUrl(options.mediaUrl) && !options.localMediaPath) {
     audio = { url: options.mediaUrl }
   } else {
-    const extracted = await extractAudioBase64(options.mediaUrl)
+    const extracted = await extractAudioBase64(options.mediaUrl, options.localMediaPath)
     audio = { data: extracted.data }
     extractedAudio = extracted.extractedAudio
   }
@@ -213,7 +245,7 @@ export async function transcribeWithVolcengineAsr(options: VolcengineAsrOptions)
   }
   if (options.language) additions.language = options.language
 
-  const res = await fetch(endpoint, {
+  const res = await fetchWithTimeout(endpoint, {
     method: 'POST',
     headers: buildHeaders(requestId),
     body: JSON.stringify({

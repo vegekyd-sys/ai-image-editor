@@ -27,6 +27,19 @@ describe('Remotion preview playback contract', () => {
     expect(uploadSource).toContain('evalRemotionJSX(code)')
   })
 
+  it('uses the real off-thread decoder for deterministic server previews', () => {
+    const sandboxSource = read('src/remotion/DynamicDesign.tsx')
+    const serverSource = read('src/lib/remotion-server.ts')
+    const localRendererSource = read('src/lib/remotion-local-renderer.ts')
+
+    expect(sandboxSource).toContain('OffthreadVideo: serverRendering ? serverVideo : MediaVideo')
+    expect(serverSource).toContain('useOffthreadVideo: true')
+    expect(sandboxSource).toContain("from '../lib/remotion-code-normalization'")
+    expect(sandboxSource).not.toContain("from '@/lib/remotion-code-normalization'")
+    expect(localRendererSource).toContain("process.env.TMPDIR || '/tmp'")
+    expect(localRendererSource).not.toContain("path.join(process.cwd(), '.remotion-bundle-local')")
+  })
+
   it('does not auto-play Remotion compositions when code generation publishes a draft', () => {
     const source = read('src/components/ImageCanvas.tsx')
 
@@ -38,14 +51,16 @@ describe('Remotion preview playback contract', () => {
   it('normalizes common agent Remotion scope declarations before evaluating code', () => {
     const evalSource = read('src/lib/evalRemotionJSX.ts')
     const sandboxSource = read('src/remotion/DynamicDesign.tsx')
+    const normalizationSource = read('src/lib/remotion-code-normalization.ts')
 
     expect(evalSource).toContain('(?:window\\.)?Remotion')
     expect(evalSource).toContain('window\\.Remotion\\.')
     expect(evalSource).toContain('Remotion\\.')
 
-    expect(sandboxSource).toContain('(?:window\\.)?Remotion')
-    expect(sandboxSource).toContain('window\\.Remotion\\.')
-    expect(sandboxSource).toContain('Remotion\\.')
+    expect(sandboxSource).toContain('normalizeRemotionScopeDeclarations')
+    expect(normalizationSource).toContain('(?:window\\.)?Remotion')
+    expect(normalizationSource).toContain('window\\.Remotion\\.')
+    expect(normalizationSource).toContain('Remotion\\.')
   })
 
   it('prefers the primary composition instead of the first helper function', () => {

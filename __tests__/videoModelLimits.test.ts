@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from 'vitest'
 import { createVideo } from '@/lib/skills/create-video'
-import { estimateVideoCredits, getDefaultVideoModelId, getVideoModelCapability, normalizeVideoModelId, normalizeVideoResolution, resolveAgentVideoSelection, resolveClosestSupportedAspectRatio, resolveVideoGenerationRoute, resolveVideoProviderAspectRatio } from '@/lib/video-model-capabilities'
+import { estimateVideoCredits, getDefaultVideoModelId, getVideoModelCapability, normalizeVideoModelId, normalizeVideoResolution, resolveAgentVideoSelection, resolveClosestSupportedAspectRatio, resolveVideoGenerationRoute, resolveVideoProviderAspectRatio, resolveVideoProviderModel } from '@/lib/video-model-capabilities'
 
 describe('video model reference limits', () => {
   it('defaults video generation to SeeDance 2.0 Fast', () => {
@@ -27,6 +27,10 @@ describe('video model reference limits', () => {
     })
     expect(estimateVideoCredits({ model: 'seedance-mini', resolution: '480p', durationSec: 15, imageCount: 2 })).toBe(168)
     expect(estimateVideoCredits({ model: 'seedance-mini', resolution: '720p', durationSec: 15, imageCount: 2 })).toBe(360)
+    expect(resolveVideoProviderModel({ model: 'seedance-fast', imageReferenceCount: 0 })).toBe('seedance-2.0-fast-text-to-video')
+    expect(resolveVideoProviderModel({ model: 'seedance-mini', imageReferenceCount: 0 })).toBe('seedance-2.0-mini-text-to-video')
+    expect(resolveVideoProviderModel({ model: 'seedance', imageReferenceCount: 0 })).toBe('seedance-2.0-text-to-video')
+    expect(resolveVideoProviderModel({ model: 'seedance-fast', imageReferenceCount: 1 })).toBe('seedance-2.0-fast-reference-to-video')
   })
 
   it('maps non-standard vertical reference videos to supported Seedance aspect ratios', () => {
@@ -159,7 +163,19 @@ describe('video model reference limits', () => {
   it('submits single-image Seedance Fast through the reference-to-video provider model', async () => {
     vi.resetModules()
     vi.stubEnv('EVOLINK_API_KEY', 'test-evolink-key')
+    const sharp = (await import('sharp')).default
+    const validImage = await sharp({
+      create: { width: 512, height: 512, channels: 4, background: '#ff00ff' },
+    }).png().toBuffer()
+    const validImageBody = new Uint8Array(validImage.length)
+    validImageBody.set(validImage)
     const fetchMock = vi.fn(async (_url: string | URL | Request, init?: RequestInit) => {
+      if (init?.method !== 'POST') {
+        return new Response(validImageBody, {
+          status: 200,
+          headers: { 'content-type': 'image/png', 'content-length': String(validImage.length) },
+        })
+      }
       const body = JSON.parse(String(init?.body || '{}'))
       expect(body.model).toBe('seedance-2.0-fast-reference-to-video')
       expect(body.image_urls).toEqual(['https://example.com/image.jpg'])
@@ -180,12 +196,156 @@ describe('video model reference limits', () => {
       expect(result.success).toBe(true)
       expect(result.providerModel).toBe('seedance-2.0-fast-reference-to-video')
       expect(result.taskId).toBe('task-test-seedance-reference')
+      expect(fetchMock).toHaveBeenCalledTimes(2)
+    } finally {
+      vi.unstubAllGlobals()
+      vi.unstubAllEnvs()
+      vi.resetModules()
+    }
+  })
+
+  it('rejects a tiny Seedance image before provider submission and marks it non-retryable', async () => {
+    vi.resetModules()
+    vi.stubEnv('EVOLINK_API_KEY', 'test-evolink-key')
+    const sharp = (await import('sharp')).default
+    const tinyImage = await sharp({
+      create: { width: 91, height: 91, channels: 4, background: '#ffffff' },
+    }).png().toBuffer()
+    const tinyImageBody = new Uint8Array(tinyImage.length)
+    tinyImageBody.set(tinyImage)
+    const fetchMock = vi.fn(async (_url: string | URL | Request, init?: RequestInit) => {
+      expect(init?.method).not.toBe('POST')
+      return new Response(tinyImageBody, {
+        status: 200,
+        headers: { 'content-type': 'image/png', 'content-length': String(tinyImage.length) },
+      })
+    })
+    vi.stubGlobal('fetch', fetchMock)
+
+    try {
+      const { createVideo: createVideoFresh } = await import('@/lib/skills/create-video')
+      const result = await createVideoFresh({
+        script: 'Tiny mascot\n\nAnimate <<<media_1>>> waving to camera.',
+        images: ['https://example.com/tiny.png'],
+        duration: 5,
+        videoModel: 'seedance-fast',
+        videoResolution: '480p',
+      })
+
+      expect(result).toMatchObject({
+        success: false,
+        retryable: false,
+        repairable: true,
+        terminal: false,
+        errorCode: 'seedance_reference_image_too_small',
+        errorReason: 'too_small',
+      })
+      expect(result.message).toContain('91x91px')
+      expect(result.errorDetails).toMatchObject({
+        imageIndex: 1,
+        actual: { width: 91, height: 91 },
+        limits: { minSide: 300, maxSide: 6000 },
+      })
+      expect(result.userMessage?.zh).toContain('参考图过小')
       expect(fetchMock).toHaveBeenCalledTimes(1)
     } finally {
       vi.unstubAllGlobals()
       vi.unstubAllEnvs()
       vi.resetModules()
     }
+  })
+
+  it('distinguishes oversized Seedance images from undersized images', async () => {
+    vi.resetModules()
+    vi.stubEnv('EVOLINK_API_KEY', 'test-evolink-key')
+    const sharp = (await import('sharp')).default
+    const oversizedImage = await sharp({
+      create: { width: 6001, height: 600, channels: 3, background: '#ffffff' },
+    }).jpeg().toBuffer()
+    const oversizedImageBody = new Uint8Array(oversizedImage.length)
+    oversizedImageBody.set(oversizedImage)
+    const fetchMock = vi.fn(async (_url: string | URL | Request, init?: RequestInit) => {
+      expect(init?.method).not.toBe('POST')
+      return new Response(oversizedImageBody, {
+        status: 200,
+        headers: { 'content-type': 'image/jpeg', 'content-length': String(oversizedImage.length) },
+      })
+    })
+    vi.stubGlobal('fetch', fetchMock)
+
+    try {
+      const { createVideo: createVideoFresh } = await import('@/lib/skills/create-video')
+      const result = await createVideoFresh({
+        script: 'Oversized reference\n\nAnimate <<<media_1>>>.',
+        images: ['https://example.com/oversized.jpg'],
+        duration: 5,
+        videoModel: 'seedance-fast',
+      })
+
+      expect(result).toMatchObject({
+        success: false,
+        retryable: false,
+        repairable: true,
+        terminal: false,
+        errorCode: 'seedance_reference_image_too_large',
+        errorReason: 'too_large',
+        errorDetails: {
+          imageIndex: 1,
+          actual: { width: 6001, height: 600 },
+        },
+      })
+      expect(result.userMessage?.zh).toContain('参考图过大')
+      expect(fetchMock).toHaveBeenCalledTimes(1)
+    } finally {
+      vi.unstubAllGlobals()
+      vi.unstubAllEnvs()
+      vi.resetModules()
+    }
+  })
+
+  it('submits zero-media Seedance Fast through the native text-to-video provider model', async () => {
+    vi.resetModules()
+    vi.stubEnv('EVOLINK_API_KEY', 'test-evolink-key')
+    const fetchMock = vi.fn(async (_url: string | URL | Request, init?: RequestInit) => {
+      const body = JSON.parse(String(init?.body || '{}'))
+      expect(body.model).toBe('seedance-2.0-fast-text-to-video')
+      expect(body).not.toHaveProperty('image_urls')
+      expect(body).not.toHaveProperty('video_urls')
+      return new Response(JSON.stringify({ id: 'task-test-seedance-text' }), { status: 200 })
+    })
+    vi.stubGlobal('fetch', fetchMock)
+
+    try {
+      const { createVideo: createVideoFresh } = await import('@/lib/skills/create-video')
+      const result = await createVideoFresh({
+        script: 'Neon city awakening\n\nA cinematic neon city wakes at dawn with slow aerial camera movement.',
+        images: [],
+        duration: 5,
+        videoModel: 'seedance-fast',
+        videoResolution: '720p',
+      })
+
+      expect(result.success).toBe(true)
+      expect(result.providerModel).toBe('seedance-2.0-fast-text-to-video')
+      expect(result.taskId).toBe('task-test-seedance-text')
+      expect(fetchMock).toHaveBeenCalledTimes(1)
+    } finally {
+      vi.unstubAllGlobals()
+      vi.unstubAllEnvs()
+      vi.resetModules()
+    }
+  })
+
+  it('still rejects zero-media generation for providers without text-to-video support', async () => {
+    const result = await createVideo({
+      script: 'Neon city awakening\n\nA cinematic neon city wakes at dawn.',
+      images: [],
+      duration: 5,
+      videoModel: 'grok',
+    })
+
+    expect(result.success).toBe(false)
+    expect(result.message).toContain('requires an image or video reference')
   })
 
   it('does not invent a Kling reference-video lower resolution limit', async () => {
@@ -261,6 +421,45 @@ describe('video model reference limits', () => {
     expect(estimateVideoCredits({ model: 'grok', resolution: '720p', durationSec: 1, imageCount: 1 })).toBe(30)
   })
 
+  it('models Gemini Omni as a fast 720p image and video edit provider', () => {
+    expect(normalizeVideoResolution('google-omni', 'auto')).toBe('720p')
+    expect(resolveVideoGenerationRoute({ model: 'google-omni', resolution: 'auto' })).toMatchObject({
+      model: 'google-omni',
+      resolution: '720p',
+      provider: 'google-omni',
+      providerModel: 'gemini-omni-flash-preview',
+    })
+    expect(getVideoModelCapability('google-omni')).toMatchObject({
+      minOutputDuration: 3,
+      maxOutputDuration: 10,
+      supportsVideoReference: true,
+      supportsBaseVideoEdit: true,
+      maxReferenceVideoDuration: 10.5,
+      maxImageReferences: 6,
+    })
+    expect(estimateVideoCredits({ model: 'google-omni', durationSec: 5, imageCount: 1 })).toBe(100)
+  })
+
+  it('fails fast before calling Google Omni with more than six image references', async () => {
+    const result = await createVideo({
+      script: 'Omni too many images\n\nAnimate <<<media_1>>>, <<<media_2>>>, <<<media_3>>>, <<<media_4>>>, <<<media_5>>>, <<<media_6>>>, and <<<media_7>>> together.',
+      images: [
+        'https://example.com/one.jpg',
+        'https://example.com/two.jpg',
+        'https://example.com/three.jpg',
+        'https://example.com/four.jpg',
+        'https://example.com/five.jpg',
+        'https://example.com/six.jpg',
+        'https://example.com/seven.jpg',
+      ],
+      duration: 5,
+      videoModel: 'google-omni',
+    })
+
+    expect(result.success).toBe(false)
+    expect(result.message).toContain('Gemini Omni Flash supports at most 6 reference images per request')
+  })
+
   it('locks explicit app video model and resolution over agent tool guesses', () => {
     const selection = resolveAgentVideoSelection({
       appModel: 'seedance',
@@ -319,6 +518,8 @@ describe('video model reference limits', () => {
     expect(resolveVideoProviderAspectRatio('grok', 'auto')).toBeUndefined()
     expect(resolveVideoProviderAspectRatio('grok', '3:2')).toBeUndefined()
     expect(resolveVideoProviderAspectRatio('kling', 'auto')).toBeUndefined()
+    expect(resolveVideoProviderAspectRatio('google-omni', '9:16')).toBe('9:16')
+    expect(resolveVideoProviderAspectRatio('google-omni', '1:1')).toBe('1:1')
   })
 
   it('validates model-specific video aspect ratios before provider submission', async () => {

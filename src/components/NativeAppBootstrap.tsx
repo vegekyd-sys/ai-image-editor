@@ -5,7 +5,7 @@ import { useRouter } from 'next/navigation';
 import { calculateVisualViewportKeyboardInset } from '@/lib/ios-keyboard';
 import { MAKARON_IOS_USER_AGENT_TOKEN } from '@/lib/native-app';
 import { warmNativeJSONCache } from '@/lib/native-app-cache';
-import { isNativePhotoLibraryPickerAvailable, pickMediaFromNativePhotoLibrary } from '@/lib/native-media';
+import { isNativePhotoLibraryPickerAvailable, pickMediaItemsFromNativePhotoLibrary } from '@/lib/native-media';
 import { acceptsNativeMediaPickerAccept, nativePickerAllowsVideo } from '@/lib/native-photo-picker';
 
 const NATIVE_BOOT_LOG_SESSION_KEY = 'makaron:ios-native-boot-log';
@@ -18,6 +18,20 @@ const NATIVE_APP_PREFETCH_ROUTES = ['/home', '/projects', '/dashboard', '/profil
 const NATIVE_APP_WARM_API_PATHS = ['/api/home-skills', '/api/skills', '/api/billing/credits', '/api/billing/dashboard'];
 
 let hasWarmedNativeAppShell = false;
+
+type WindowWithCapacitor = typeof window & {
+  Capacitor?: {
+    getPlatform?: () => string;
+    isNativePlatform?: () => boolean;
+  };
+};
+
+function canBootNativeApp(): boolean {
+  const userAgent = navigator.userAgent || '';
+  if (userAgent.includes(MAKARON_IOS_USER_AGENT_TOKEN)) return true;
+  const capacitor = (window as WindowWithCapacitor).Capacitor;
+  return Boolean(capacitor?.isNativePlatform?.() && capacitor.getPlatform?.() === 'ios');
+}
 
 function isEditableElement(target: EventTarget | null): boolean {
   if (!(target instanceof HTMLElement)) return false;
@@ -90,14 +104,13 @@ export default function NativeAppBootstrap() {
     let cancelled = false;
 
     async function bootNativeApp() {
-      const [{ Capacitor }, keyboardModule, { SplashScreen }, statusBarModule] = await Promise.all([
+      // Web pages should not download or evaluate the native bridge modules while
+      // their visible controls are still hydrating.
+      if (!canBootNativeApp()) return;
+      const [{ Capacitor }, { SplashScreen }] = await Promise.all([
         import('@capacitor/core'),
-        import('@capacitor/keyboard'),
         import('@capacitor/splash-screen'),
-        import('@capacitor/status-bar'),
       ]);
-      const { Keyboard, KeyboardResize, KeyboardStyle } = keyboardModule;
-      const { StatusBar, Style } = statusBarModule;
 
       if (cancelled || !Capacitor.isNativePlatform() || Capacitor.getPlatform() !== 'ios') return;
 
@@ -118,6 +131,21 @@ export default function NativeAppBootstrap() {
         // Persistent diagnostics are best-effort only.
       }
       console.info('[makaron-ios-native] boot', bootLogEntry);
+
+      // The native splash intercepts every touch. Reveal the already-rendered
+      // web shell before optional StatusBar/Keyboard polish or listener setup.
+      try {
+        await SplashScreen.hide();
+      } catch {
+        // The bundled web shell remains usable if splash hide already completed.
+      }
+
+      const [keyboardModule, statusBarModule] = await Promise.all([
+        import('@capacitor/keyboard'),
+        import('@capacitor/status-bar'),
+      ]);
+      const { Keyboard, KeyboardResize, KeyboardStyle } = keyboardModule;
+      const { StatusBar, Style } = statusBarModule;
 
       const userAgent = navigator.userAgent || '';
       if (!userAgent.includes(MAKARON_IOS_USER_AGENT_TOKEN)) {
@@ -339,10 +367,15 @@ export default function NativeAppBootstrap() {
         event.stopPropagation();
 
         try {
-          const picked = await pickMediaFromNativePhotoLibrary({ allowVideo: nativePickerAllowsVideo(input.accept) });
-          const file = await fileFromDataUrl(picked.dataUrl, picked.filename, picked.mimeType);
+          const pickedItems = await pickMediaItemsFromNativePhotoLibrary({
+            allowVideo: nativePickerAllowsVideo(input.accept),
+            multiple: input.multiple,
+          });
+          const pickedFiles = await Promise.all(pickedItems.map((picked) => (
+            fileFromDataUrl(picked.dataUrl, picked.filename, picked.mimeType)
+          )));
           const files = new DataTransfer();
-          files.items.add(file);
+          pickedFiles.forEach((file) => files.items.add(file));
           input.files = files.files;
           input.dispatchEvent(new Event('input', { bubbles: true }));
           input.dispatchEvent(new Event('change', { bubbles: true }));
@@ -407,12 +440,6 @@ export default function NativeAppBootstrap() {
       window.visualViewport?.addEventListener('resize', updateFromViewport);
       window.visualViewport?.addEventListener('scroll', updateFromViewport);
       updateFromViewport();
-
-      try {
-        await SplashScreen.hide();
-      } catch {
-        // The bundled web shell remains usable if splash hide is already complete.
-      }
 
       cleanup = () => {
         window.removeEventListener('touchstart', onPageBackTouchStart, { capture: true });

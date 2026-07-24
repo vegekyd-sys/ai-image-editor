@@ -1,4 +1,5 @@
 import Capacitor
+import AuthenticationServices
 import Photos
 import PhotosUI
 import StoreKit
@@ -9,6 +10,7 @@ import WebKit
 class MakaronBridgeViewController: CAPBridgeViewController, WKScriptMessageHandler, PHPickerViewControllerDelegate {
     private var nativeBridgeInstalled = false
     private var pendingPickerID: String?
+    private var oauthSession: ASWebAuthenticationSession?
     private var transactionUpdatesTask: Task<Void, Never>?
     private var pendingPurchaseResponseIdsByProductId: [String: String] = [:]
     private var handledTransactionIds = Set<String>()
@@ -24,6 +26,11 @@ class MakaronBridgeViewController: CAPBridgeViewController, WKScriptMessageHandl
     override func viewDidAppear(_ animated: Bool) {
         super.viewDidAppear(animated)
         configureNativeWebView()
+    }
+
+    override func capacitorDidLoad() {
+        super.capacitorDidLoad()
+        bridge?.registerPluginInstance(MakaronExternalLinkPlugin())
     }
 
     deinit {
@@ -52,6 +59,8 @@ class MakaronBridgeViewController: CAPBridgeViewController, WKScriptMessageHandl
         }
 
         switch action {
+        case "openOAuth":
+            handleOpenOAuth(id: id, body: body)
         case "saveToPhotos":
             handleSaveToPhotos(id: id, body: body)
         case "pickMedia":
@@ -68,6 +77,44 @@ class MakaronBridgeViewController: CAPBridgeViewController, WKScriptMessageHandl
             handleFinishTransaction(id: id, body: body)
         default:
             sendNativeResponse(id: id, ok: false, error: "Unsupported native action")
+        }
+    }
+
+    private func handleOpenOAuth(id: String, body: [String: Any]) {
+        guard let urlString = body["url"] as? String, let url = URL(string: urlString) else {
+            sendNativeResponse(id: id, ok: false, error: "Missing OAuth URL")
+            return
+        }
+
+        let callbackURLScheme = (body["callbackURLScheme"] as? String) ?? "app.makaron.ios"
+        oauthSession?.cancel()
+
+        let session = ASWebAuthenticationSession(url: url, callbackURLScheme: callbackURLScheme) { [weak self] callbackURL, error in
+            DispatchQueue.main.async {
+                self?.oauthSession = nil
+                if let authError = error as? ASWebAuthenticationSessionError,
+                   authError.code == .canceledLogin {
+                    self?.sendNativeResponse(id: id, ok: false, error: "Google login cancelled")
+                    return
+                }
+                if let error {
+                    self?.sendNativeResponse(id: id, ok: false, error: error.localizedDescription)
+                    return
+                }
+                guard let callbackURL else {
+                    self?.sendNativeResponse(id: id, ok: false, error: "Google login did not return a callback")
+                    return
+                }
+                self?.sendNativeResponse(id: id, ok: true, error: nil, extra: ["callbackUrl": callbackURL.absoluteString])
+            }
+        }
+        session.presentationContextProvider = self
+        session.prefersEphemeralWebBrowserSession = false
+        oauthSession = session
+
+        if !session.start() {
+            oauthSession = nil
+            sendNativeResponse(id: id, ok: false, error: "Could not start Google login")
         }
     }
 
@@ -315,8 +362,9 @@ class MakaronBridgeViewController: CAPBridgeViewController, WKScriptMessageHandl
             }
 
             let allowVideo = body["allowVideo"] as? Bool ?? false
+            let allowsMultiple = body["multiple"] as? Bool ?? false
             var configuration = PHPickerConfiguration(photoLibrary: .shared())
-            configuration.selectionLimit = 1
+            configuration.selectionLimit = allowsMultiple ? 0 : 1
             configuration.filter = allowVideo ? .any(of: [.images, .videos]) : .images
             configuration.preferredAssetRepresentationMode = .compatible
 
@@ -333,15 +381,46 @@ class MakaronBridgeViewController: CAPBridgeViewController, WKScriptMessageHandl
 
         picker.dismiss(animated: true) { [weak self] in
             guard let self, let id else { return }
-            guard let result = results.first else {
+            guard !results.isEmpty else {
                 self.sendNativeResponse(id: id, ok: false, error: "Photo picker cancelled")
                 return
             }
-            self.loadPickedMedia(result, id: id)
+            self.loadPickedMediaItems(results, id: id)
         }
     }
 
-    private func loadPickedMedia(_ result: PHPickerResult, id: String) {
+    private func loadPickedMediaItems(
+        _ results: [PHPickerResult],
+        id: String,
+        index: Int = 0,
+        items: [[String: Any]] = []
+    ) {
+        guard index < results.count else {
+            guard let first = items.first else {
+                sendNativeResponse(id: id, ok: false, error: "Could not load selected media")
+                return
+            }
+            var payload: [String: Any] = ["items": items]
+            first.forEach { payload[$0.key] = $0.value }
+            sendNativeResponse(id: id, ok: true, error: nil, extra: payload)
+            return
+        }
+
+        loadPickedMedia(results[index]) { [weak self] result in
+            guard let self else { return }
+            switch result {
+            case .success(let item):
+                self.loadPickedMediaItems(results, id: id, index: index + 1, items: items + [item])
+            case .failure(let error):
+                self.sendNativeResponse(id: id, ok: false, error: error.localizedDescription)
+            }
+        }
+    }
+
+    private func loadPickedMedia(
+        _ result: PHPickerResult,
+        completion: @escaping (Result<[String: Any], Error>) -> Void
+    ) {
         let provider = result.itemProvider
         let typeIds = provider.registeredTypeIdentifiers
 
@@ -349,44 +428,44 @@ class MakaronBridgeViewController: CAPBridgeViewController, WKScriptMessageHandl
             provider.loadFileRepresentation(forTypeIdentifier: movieType) { [weak self] fileURL, error in
                 guard let self else { return }
                 if let error {
-                    self.sendNativeResponse(id: id, ok: false, error: error.localizedDescription)
+                    completion(.failure(error))
                     return
                 }
                 guard let fileURL else {
-                    self.sendNativeResponse(id: id, ok: false, error: "Could not load selected video")
+                    completion(.failure(NSError(domain: "MakaronNativePicker", code: 1, userInfo: [NSLocalizedDescriptionKey: "Could not load selected video"])))
                     return
                 }
                 do {
                     let data = try Data(contentsOf: fileURL)
                     let filename = self.filename(for: provider, typeIdentifier: movieType, fallback: "makaron-video.mov")
                     let mimeType = self.mimeType(for: movieType, fallback: "video/quicktime")
-                    self.sendPickedMediaResponse(id: id, data: data, filename: filename, mimeType: mimeType, mediaType: "video")
+                    completion(.success(self.pickedMediaPayload(data: data, filename: filename, mimeType: mimeType, mediaType: "video")))
                 } catch {
-                    self.sendNativeResponse(id: id, ok: false, error: error.localizedDescription)
+                    completion(.failure(error))
                 }
             }
             return
         }
 
         guard let imageType = typeIds.first(where: { UTType($0)?.conforms(to: .image) == true }) else {
-            sendNativeResponse(id: id, ok: false, error: "Selected item is not supported")
+            completion(.failure(NSError(domain: "MakaronNativePicker", code: 2, userInfo: [NSLocalizedDescriptionKey: "Selected item is not supported"])))
             return
         }
 
         provider.loadDataRepresentation(forTypeIdentifier: imageType) { [weak self] data, error in
             guard let self else { return }
             if let error {
-                self.sendNativeResponse(id: id, ok: false, error: error.localizedDescription)
+                completion(.failure(error))
                 return
             }
             guard let data else {
-                self.sendNativeResponse(id: id, ok: false, error: "Could not load selected image")
+                completion(.failure(NSError(domain: "MakaronNativePicker", code: 3, userInfo: [NSLocalizedDescriptionKey: "Could not load selected image"])))
                 return
             }
             let filename = self.filename(for: provider, typeIdentifier: imageType, fallback: "makaron-photo.jpg")
             let mimeType = self.mimeType(for: imageType, fallback: "image/jpeg")
             let normalized = self.normalizedPickedImagePayload(data: data, filename: filename, mimeType: mimeType, typeIdentifier: imageType)
-            self.sendPickedMediaResponse(id: id, data: normalized.data, filename: normalized.filename, mimeType: normalized.mimeType, mediaType: "image")
+            completion(.success(self.pickedMediaPayload(data: normalized.data, filename: normalized.filename, mimeType: normalized.mimeType, mediaType: "image")))
         }
     }
 
@@ -394,21 +473,38 @@ class MakaronBridgeViewController: CAPBridgeViewController, WKScriptMessageHandl
         if UTType(typeIdentifier)?.conforms(to: .gif) == true {
             return (data, filename, mimeType)
         }
-        guard let image = UIImage(data: data),
-              let jpegData = image.jpegData(compressionQuality: 0.92) else {
+        guard let image = UIImage(data: data) else {
+            return (data, filename, mimeType)
+        }
+        let normalizedImage = resizedPickedImage(image, maxDimension: 2048)
+        guard let jpegData = normalizedImage.jpegData(compressionQuality: 0.9) else {
             return (data, filename, mimeType)
         }
         return (jpegData, jpegFilename(for: filename), "image/jpeg")
     }
 
-    private func sendPickedMediaResponse(id: String, data: Data, filename: String, mimeType: String, mediaType: String) {
-        let dataUrl = "data:\(mimeType);base64,\(data.base64EncodedString())"
-        sendNativeResponse(id: id, ok: true, error: nil, extra: [
-            "dataUrl": dataUrl,
+    private func resizedPickedImage(_ image: UIImage, maxDimension: CGFloat) -> UIImage {
+        let longestSide = max(image.size.width, image.size.height)
+        guard longestSide > maxDimension else { return image }
+        let scale = maxDimension / longestSide
+        let targetSize = CGSize(
+            width: max(1, round(image.size.width * scale)),
+            height: max(1, round(image.size.height * scale))
+        )
+        let format = UIGraphicsImageRendererFormat.default()
+        format.scale = 1
+        return UIGraphicsImageRenderer(size: targetSize, format: format).image { _ in
+            image.draw(in: CGRect(origin: .zero, size: targetSize))
+        }
+    }
+
+    private func pickedMediaPayload(data: Data, filename: String, mimeType: String, mediaType: String) -> [String: Any] {
+        [
+            "dataUrl": "data:\(mimeType);base64,\(data.base64EncodedString())",
             "filename": filename,
             "mimeType": mimeType,
             "mediaType": mediaType
-        ])
+        ]
     }
 
     private func handleSaveToPhotos(id: String, body: [String: Any]) {
@@ -594,5 +690,11 @@ class MakaronBridgeViewController: CAPBridgeViewController, WKScriptMessageHandl
             }
             self?.webView?.evaluateJavaScript("window.dispatchEvent(new CustomEvent('makaron-native-response',{detail:\(json)}));")
         }
+    }
+}
+
+extension MakaronBridgeViewController: ASWebAuthenticationPresentationContextProviding {
+    func presentationAnchor(for session: ASWebAuthenticationSession) -> ASPresentationAnchor {
+        view.window ?? ASPresentationAnchor()
     }
 }

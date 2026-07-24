@@ -8,6 +8,32 @@
 	<string>en</string>
 	<key>CFBundleDisplayName</key>
         <string>Makaron</string>
+	<key>FacebookAppID</key>
+	<string>1690601878920639</string>
+	<key>FacebookClientToken</key>
+	<string>3aec175e7355013cc4a5a88ed8397499</string>
+	<key>FacebookDisplayName</key>
+	<string>Makaron</string>
+	<key>FacebookAutoLogAppEventsEnabled</key>
+	<true/>
+	<key>FacebookAdvertiserIDCollectionEnabled</key>
+	<false/>
+	<key>FacebookSKAdNetworkReportEnabled</key>
+	<true/>
+	<key>CFBundleURLTypes</key>
+	<array>
+		<dict>
+			<key>CFBundleTypeRole</key>
+			<string>Editor</string>
+			<key>CFBundleURLName</key>
+			<string>app.makaron.ios</string>
+			<key>CFBundleURLSchemes</key>
+			<array>
+				<string>makaron</string>
+				<string>app.makaron.ios</string>
+			</array>
+		</dict>
+	</array>
 	<key>CFBundleExecutable</key>
 	<string>$(EXECUTABLE_NAME)</string>
 	<key>CFBundleIdentifier</key>
@@ -39,6 +65,17 @@
 	<string>Makaron lets you pick photos and videos from your library to edit, animate, and save in your projects.</string>
 	<key>NSPhotoLibraryAddUsageDescription</key>
 	<string>Makaron can save finished images and videos to your photo library when you choose to export them.</string>
+	<key>SKAdNetworkItems</key>
+	<array>
+		<dict>
+			<key>SKAdNetworkIdentifier</key>
+			<string>v9wttpbfk9.skadnetwork</string>
+		</dict>
+		<dict>
+			<key>SKAdNetworkIdentifier</key>
+			<string>n38lu8286q.skadnetwork</string>
+		</dict>
+	</array>
 	<key>UILaunchStoryboardName</key>
 	<string>LaunchScreen</string>
 	<key>UIMainStoryboardFile</key>

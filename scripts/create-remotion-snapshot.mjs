@@ -4,7 +4,11 @@
  * Snapshot includes cached fonts → subsequent renders skip font download.
  *
  * Run: node scripts/create-remotion-snapshot.mjs
- * Output: Snapshot ID to set as REMOTION_SNAPSHOT_ID env var.
+ * Output: Snapshot ID for an isolated compatibility deployment.
+ *
+ * Do not assign an experimental snapshot to the project-wide Preview or
+ * Production REMOTION_SNAPSHOT_ID. Vercel Preview env is shared by every
+ * worktree/thread and older application deployments must remain compatible.
  *
  * Re-run when:
  * - Remotion version is bumped
@@ -51,7 +55,21 @@ const t0 = Date.now();
 const { bundle } = await import('@remotion/bundler');
 const entryPoint = path.resolve(ROOT, 'src/remotion/index.tsx');
 const outDir = path.resolve(ROOT, '.remotion-bundle');
-const bundleDir = await bundle({ entryPoint, outDir, onProgress: () => {} });
+const bundleDir = await bundle({
+  entryPoint,
+  outDir,
+  onProgress: () => {},
+  webpackOverride: (config) => ({
+    ...config,
+    resolve: {
+      ...config.resolve,
+      alias: {
+        ...config.resolve?.alias,
+        '@': path.resolve(ROOT, 'src'),
+      },
+    },
+  }),
+});
 const relativeBundleDir = path.relative(ROOT, bundleDir);
 console.log(`✅ Bundle: ${((Date.now() - t0) / 1000).toFixed(1)}s → ${relativeBundleDir}\n`);
 
@@ -165,7 +183,8 @@ console.log('='.repeat(50));
 console.log(`Snapshot ID: ${snapshot.snapshotId}`);
 console.log(`Fonts cached: ${PRELOAD_FONTS.length}`);
 console.log('='.repeat(50));
-console.log(`\nSet this as environment variable:`);
-console.log(`  printf '${snapshot.snapshotId}' | npx vercel env add REMOTION_SNAPSHOT_ID preview --force`);
-console.log(`  printf '${snapshot.snapshotId}' | npx vercel env add REMOTION_SNAPSHOT_ID production --force`);
+console.log(`\nTest this snapshot in an isolated Preview deployment:`);
+console.log(`  npx vercel -e REMOTION_SNAPSHOT_ID='${snapshot.snapshotId}' --yes`);
+console.log(`\nDo not overwrite the project-wide Preview or Production REMOTION_SNAPSHOT_ID.`);
+console.log(`Promote only after legacy and candidate application builds both pass real run_code + preview_frame smokes.`);
 console.log(`\nTotal time: ${((Date.now() - t0) / 1000).toFixed(1)}s`);

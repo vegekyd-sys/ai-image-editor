@@ -1,6 +1,5 @@
 import { GoogleGenAI, Chat, Type } from '@google/genai';
 import { streamText } from 'ai';
-import { createAmazonBedrock } from '@ai-sdk/amazon-bedrock';
 import { Tip } from '@/types';
 import enhancePrompt from './prompts/enhance.md';
 import creativePrompt from './prompts/creative.md';
@@ -8,6 +7,9 @@ import wildPrompt from './prompts/wild.md';
 import captionsPrompt from './prompts/captions.md';
 import sharp from 'sharp';
 import fs from 'fs';
+import { getPromptLanguage, getTipsLanguageInstruction, normalizeLocale } from './locales';
+import { DEFAULT_IMAGE_EDIT_SYSTEM_PROMPT, getChatSystemPrompt } from './chat-response-policy';
+import { getTipsPromptTemplate } from './tips-response-policy';
 
 const LOG_FILE = '/tmp/tips-timing.log';
 function tlog(msg: string) {
@@ -41,28 +43,22 @@ const MODEL = process.env.IMAGE_MODEL || 'gemini-3-pro-image-preview';
 
 const OPENROUTER_BASE = 'https://openrouter.ai/api/v1/chat/completions';
 const OPENROUTER_MODEL = `google/${MODEL}`;
+const TIPS_OPENROUTER_MODEL = OPENROUTER_MODEL;
+// Tip text should stay on the primary creative model; only the image preview thumbnails use Lite by default.
+const TIPS_PREVIEW_IMAGE_MODEL = process.env.TIPS_PREVIEW_IMAGE_MODEL || 'google/gemini-3.1-flash-lite-image';
 
-// Tips provider config — change TIPS_PROVIDER env var for A/B testing
-// 'bedrock' = Claude Sonnet (fast, default) | 'openrouter' = gemini-3 via OR | 'google' = direct Google SDK
-const TIPS_PROVIDER = (process.env.TIPS_PROVIDER || 'openrouter') as 'bedrock' | 'openrouter' | 'google';
+// Tips text stays on Gemini via OpenRouter by default, with direct Google as fallback.
+type TipsProvider = 'openrouter' | 'google';
+const TIPS_PROVIDER: TipsProvider = process.env.TIPS_PROVIDER === 'google'
+  ? 'google'
+  : 'openrouter';
 // Temperature for tips generation — higher = more creative
 const TIPS_TEMPERATURE = parseFloat(process.env.TIPS_TEMPERATURE || '0.9');
 // Thinking level for tips (Gemini 3.1 Flash): minimal | low | high
 // Default: creative/wild = high, enhance/captions = minimal
 // Override with TIPS_THINKING env var to apply to ALL categories
 const TIPS_THINKING_OVERRIDE = process.env.TIPS_THINKING as 'minimal' | 'low' | 'high' | undefined;
-type TipsProvider = 'bedrock' | 'openrouter' | 'google';
-
-// Bedrock instance for tips (lazy init)
-let _bedrockForTips: ReturnType<typeof createAmazonBedrock> | null = null;
-function getBedrockForTips() {
-  if (!_bedrockForTips) _bedrockForTips = createAmazonBedrock({
-    region: process.env.AWS_REGION?.trim(),
-    accessKeyId: process.env.AWS_ACCESS_KEY_ID?.trim(),
-    secretAccessKey: process.env.AWS_SECRET_ACCESS_KEY?.trim(),
-  });
-  return _bedrockForTips('anthropic.claude-sonnet-4-6');
-}
+type OpenRouterReasoningEffort = 'minimal' | 'low' | 'medium' | 'high';
 
 // ── Google SDK singleton ────────────────────────────────────────
 let _ai: GoogleGenAI | null = null;
@@ -73,33 +69,13 @@ function getAI() {
 
 // ── Shared Prompts ──────────────────────────────────────────────
 
-const SYSTEM_PROMPT = `你是世界上最好的照片编辑AI。你能深入理解图片的每个细节——主体、情绪、光线、构图、环境、色彩、纹理、瑕疵和故事。
-
-收到图片时，用中文简短点评（2-3句话，展示你真的看懂了这张图）。
-
-当用户要求编辑图片时，你直接生成编辑后的图片。不要只是描述要做什么——直接生成图片！生成图片后用中文简短描述你做了什么（1-2句话）。
-
-人脸保持规则：
-- 每个人的身份必须保持：相同的脸型、眼睛、鼻子、嘴巴、面部结构
-- 皮肤可以优化，但骨骼结构不能变
-- 发型发色保持不变（除非编辑要求改变）
-- 表情姿势保持不变（除非编辑要求改变）
-
-小脸保护规则（全身照/合照/远景/广角等人脸占比小的图片）：
-- 小脸图片中每个人的面部必须与原图完全一致——不做任何面部修改、补光、美颜
-- 编辑时如果需要人物有反应，只用身体语言（转身、倾斜、手势），不改变面部表情`;
+const SYSTEM_PROMPT = DEFAULT_IMAGE_EDIT_SYSTEM_PROMPT;
 
 // ── Per-Category Tips Prompts ────────────────────────────────────
 // Tips are generated in 3 parallel calls (one per category) for faster loading.
 // All rules live in the .md files — this is just role + format framing.
 
 type TipCategory = 'enhance' | 'creative' | 'wild' | 'captions';
-
-export function withLocale(prompt: string, locale?: string): string {
-  if (locale === 'en') return `${prompt}\n\nReply in English.`;
-  if (locale === 'zh') return `${prompt}\n\nReply in Chinese.`;
-  return prompt;
-}
 
 function buildCategorySystemPrompt(category: TipCategory, count: number = 2): string {
   const labelNote = category === 'captions'
@@ -120,19 +96,20 @@ const PROMPT_TEMPLATES: Record<TipCategory, string> = {
   captions: captionsPrompt,
 };
 
-function getPromptTemplate(category: TipCategory): string {
-  return PROMPT_TEMPLATES[category];
+function getPromptTemplate(category: TipCategory, locale?: string): string {
+  return getTipsPromptTemplate(category, locale, PROMPT_TEMPLATES[category]);
 }
 
 // ── Shared Tips Prompt Builder ───────────────────────────────────
-function buildTipsPrompt(
+export function buildTipsPrompt(
   category: TipCategory,
   metadata?: { takenAt?: string; location?: string; raw?: { lat?: number; lng?: number } },
   count: number = 2,
   existingLabels?: string[],
   skillContext?: string,
+  locale?: string,
 ) {
-  const template = getPromptTemplate(category);
+  const template = getPromptTemplate(category, locale);
   const systemPrompt = buildCategorySystemPrompt(category, count);
   const metaLines: string[] = [];
   if (metadata?.takenAt) metaLines.push(`Time: ${metadata.takenAt}`);
@@ -145,9 +122,12 @@ function buildTipsPrompt(
     ? `[DEDUP — CRITICAL] The following tips already exist. You MUST NOT repeat these directions or produce similar variations:\n${existingLabels.map(l => `- ❌ "${l}"`).join('\n')}\nChoose completely different directions from the list above.\n\n`
     : '';
   // enhance: skip image analysis — universal technical improvements don't need content analysis
+  const useEnglishControlPrompt = normalizeLocale(locale) === 'en';
   const analysisStep = category === 'enhance'
     ? ''
-    : `在生成建议之前，先分析这张图片：判断人脸大小（大脸>10% / 小脸<10%）；识别画面中的具体物品/食物/道具；判断照片情绪基调。\n\n基于分析，`;
+    : useEnglishControlPrompt
+      ? 'Before generating suggestions, analyze the photo for face scale, specific objects or props, and its emotional tone. Based on that analysis, '
+      : `在生成建议之前，先分析这张图片：判断人脸大小（大脸>10% / 小脸<10%）；识别画面中的具体物品/食物/道具；判断照片情绪基调。\n\n基于分析，`;
   // When a skill is active, use ONLY the skill template — no category .md templates.
   // A/B tested: skill-only mode produces better, more creative results than skill+category fusion.
   // But each parallel request only sees one category name, so add a one-line definition.
@@ -157,9 +137,19 @@ function buildTipsPrompt(
     wild: 'wild（疯狂脑洞：夸张变形、超现实场景）',
     captions: 'captions（创意文案：在画面上加文字标题）',
   };
+  const EN_CATEGORY_HINT: Record<string, string> = {
+    enhance: 'enhance suggestions (professional lighting, tone, texture, and depth improvements)',
+    creative: 'creative suggestions (story-rich elements and character interactions)',
+    wild: 'wild suggestions (bold transformations and surreal scenes)',
+    captions: 'caption suggestions (creative text and titles placed in the image)',
+  };
   const userText = skillContext
-    ? `${metaContext}${dedupeNote}[Active Skill]\n${skillContext}\n\n根据上面 skill 的 Tips Directions，为这张照片生成 ${count} 条 ${CATEGORY_HINT[category] || category} 编辑建议。`
-    : `${metaContext}${dedupeNote}${analysisStep}严格遵循以下所有规则，给出${count}条${category}编辑建议：\n\n${template}`;
+    ? useEnglishControlPrompt
+      ? `${metaContext}${dedupeNote}[Active Skill]\n${skillContext}\n\nFollow the Skill's Tips Directions above and generate ${count} ${EN_CATEGORY_HINT[category] || category} for this photo.`
+      : `${metaContext}${dedupeNote}[Active Skill]\n${skillContext}\n\n根据上面 skill 的 Tips Directions，为这张照片生成 ${count} 条 ${CATEGORY_HINT[category] || category} 编辑建议。`
+    : useEnglishControlPrompt
+      ? `${metaContext}${dedupeNote}${analysisStep}follow every rule below and generate ${count} ${category} edit suggestions:\n\n${template}`
+      : `${metaContext}${dedupeNote}${analysisStep}严格遵循以下所有规则，给出${count}条${category}编辑建议：\n\n${template}`;
   // Thinking level: env override > per-category default
   // Default: creative/wild = high, enhance/captions = minimal
   const defaultLevel = (category === 'creative' || category === 'wild') ? 'high' : 'minimal';
@@ -168,21 +158,24 @@ function buildTipsPrompt(
 }
 
 // Google structured output schema (only used with Google provider + gemini-3)
-const TIPS_SCHEMA = {
-  type: Type.ARRAY,
-  items: {
-    type: Type.OBJECT,
-    properties: {
-      emoji: { type: Type.STRING, description: '1 emoji' },
-      label: { type: Type.STRING, description: '3-6 Chinese chars, verb-first' },
-      desc: { type: Type.STRING, description: '10-25 chars description' },
-      editPrompt: { type: Type.STRING, description: 'Detailed English editing prompt' },
-      category: { type: Type.STRING, enum: ['enhance', 'creative', 'wild', 'captions'] },
-      aspectRatio: { type: Type.STRING, description: 'Only for recomposition tips', nullable: true },
+function getTipsSchema(locale?: string) {
+  const language = getPromptLanguage(locale);
+  return {
+    type: Type.ARRAY,
+    items: {
+      type: Type.OBJECT,
+      properties: {
+        emoji: { type: Type.STRING, description: '1 emoji' },
+        label: { type: Type.STRING, description: `Short label in ${language} only, verb-first when natural` },
+        desc: { type: Type.STRING, description: `Concise description in ${language} only` },
+        editPrompt: { type: Type.STRING, description: 'Detailed English editing prompt' },
+        category: { type: Type.STRING, enum: ['enhance', 'creative', 'wild', 'captions'] },
+        aspectRatio: { type: Type.STRING, description: 'Only for recomposition tips', nullable: true },
+      },
+      required: ['emoji', 'label', 'desc', 'editPrompt', 'category'],
     },
-    required: ['emoji', 'label', 'desc', 'editPrompt', 'category'],
-  },
-};
+  };
+}
 
 const JSON_FORMAT_SUFFIX_ZH = `\n\n以JSON数组格式输出，只输出JSON。每条必须包含editPrompt字段（英文详细编辑指令）：
 [{"emoji":"emoji","label":"2-4个中文字","desc":"中文短描述20字以内","editPrompt":"(MUST be in English) FIRST: Clean up the scene... [detailed editing instructions specific to this tip]","category":"enhance|creative|wild|captions"}, ...]`;
@@ -190,8 +183,19 @@ const JSON_FORMAT_SUFFIX_ZH = `\n\n以JSON数组格式输出，只输出JSON。�
 const JSON_FORMAT_SUFFIX_EN = `\n\nOutput as JSON array only, no other text. Every tip MUST include editPrompt (detailed English instructions):
 [{"emoji":"emoji","label":"2-3 English words","desc":"English description under 20 words","editPrompt":"FIRST: Clean up the scene... [detailed English editing instructions specific to this tip]","category":"enhance|creative|wild|captions"}, ...]`;
 
+const JSON_FORMAT_SUFFIX_ZH_HANT = `\n\n請只輸出 JSON 陣列，不要加入其他文字。每一項都必須包含 editPrompt（詳細英文編輯指令）：
+[{"emoji":"emoji","label":"2-4 個繁體中文字","desc":"20 字內的繁體中文簡短描述","editPrompt":"(MUST be in English) FIRST: Clean up the scene... [detailed editing instructions specific to this tip]","category":"enhance|creative|wild|captions"}, ...]`;
+
+const JSON_FORMAT_SUFFIX_JA = `\n\nJSON 配列のみを出力し、ほかの文章は含めないでください。各項目には editPrompt（詳細な英語の編集指示）が必須です：
+[{"emoji":"emoji","label":"短い日本語ラベル","desc":"20文字以内の日本語説明","editPrompt":"(MUST be in English) FIRST: Clean up the scene... [detailed editing instructions specific to this tip]","category":"enhance|creative|wild|captions"}, ...]`;
+
 function getJsonFormatSuffix(locale?: string) {
-  return locale === 'en' ? JSON_FORMAT_SUFFIX_EN : JSON_FORMAT_SUFFIX_ZH;
+  switch (normalizeLocale(locale)) {
+    case 'en': return JSON_FORMAT_SUFFIX_EN;
+    case 'ja': return JSON_FORMAT_SUFFIX_JA;
+    case 'zh-Hant': return JSON_FORMAT_SUFFIX_ZH_HANT;
+    default: return JSON_FORMAT_SUFFIX_ZH;
+  }
 }
 
 // ── Image Format Helpers ─────────────────────────────────────────
@@ -236,6 +240,10 @@ function openrouterHeaders() {
   };
 }
 
+function normalizeOpenRouterModel(model: string): string {
+  return model.includes('/') ? model : `google/${model}`;
+}
+
 // ── Session Management ──────────────────────────────────────────
 
 // Google sessions use SDK Chat objects; OpenRouter sessions use message arrays
@@ -259,8 +267,13 @@ setInterval(() => {
   }
 }, 5 * 60 * 1000);
 
-function getOrCreateGoogleSession(projectId: string): Chat {
-  const existing = sessions.get(projectId);
+function chatSessionKey(projectId: string, locale?: string): string {
+  return `${projectId}:${normalizeLocale(locale)}`;
+}
+
+function getOrCreateGoogleSession(projectId: string, locale?: string): Chat {
+  const sessionKey = chatSessionKey(projectId, locale);
+  const existing = sessions.get(sessionKey);
   if (existing && existing.type === 'google') {
     existing.lastUsed = Date.now();
     return existing.chat;
@@ -269,17 +282,18 @@ function getOrCreateGoogleSession(projectId: string): Chat {
   const chat = getAI().chats.create({
     model: MODEL,
     config: {
-      systemInstruction: SYSTEM_PROMPT,
+      systemInstruction: getChatSystemPrompt(locale),
       responseModalities: ['TEXT'],
     },
   });
 
-  sessions.set(projectId, { type: 'google', chat, lastUsed: Date.now() });
+  sessions.set(sessionKey, { type: 'google', chat, lastUsed: Date.now() });
   return chat;
 }
 
-function getOrCreateOpenRouterSession(projectId: string): OpenRouterSession {
-  const existing = sessions.get(projectId);
+function getOrCreateOpenRouterSession(projectId: string, locale?: string): OpenRouterSession {
+  const sessionKey = chatSessionKey(projectId, locale);
+  const existing = sessions.get(sessionKey);
   if (existing && existing.type === 'openrouter') {
     existing.lastUsed = Date.now();
     return existing;
@@ -287,15 +301,18 @@ function getOrCreateOpenRouterSession(projectId: string): OpenRouterSession {
 
   const session: OpenRouterSession = {
     type: 'openrouter',
-    messages: [{ role: 'system', content: SYSTEM_PROMPT }],
+    messages: [{ role: 'system', content: getChatSystemPrompt(locale) }],
     lastUsed: Date.now(),
   };
-  sessions.set(projectId, session);
+  sessions.set(sessionKey, session);
   return session;
 }
 
 export function resetSession(projectId: string): void {
   sessions.delete(projectId);
+  for (const key of sessions.keys()) {
+    if (key.startsWith(`${projectId}:`)) sessions.delete(key);
+  }
 }
 
 // ── Streaming Chat ──────────────────────────────────────────────
@@ -311,11 +328,16 @@ export async function* chatStreamWithModel(
   imageBase64?: string,
   wantImage?: boolean,
   aspectRatio?: string,
+  locale?: string,
 ): AsyncGenerator<ChatStreamEvent> {
   if (process.env.MOCK_AI === 'true') {
-    const mockText = imageBase64
-      ? '这是一张很棒的照片！构图自然，色彩和谐。我为你准备了几组编辑建议，可以从下方卡片中选择预览效果。'
-      : '好的，我来帮你处理。';
+    const mockText = normalizeLocale(locale) === 'en'
+      ? imageBase64
+        ? 'This is a strong photo with natural composition and balanced color. I prepared several editing ideas for you to preview below.'
+        : 'Sure, I can help with that.'
+      : imageBase64
+        ? '这是一张很棒的照片！构图自然，色彩和谐。我为你准备了几组编辑建议，可以从下方卡片中选择预览效果。'
+        : '好的，我来帮你处理。';
     for (let i = 0; i < mockText.length; i += 3) {
       await new Promise(r => setTimeout(r, 30));
       yield { type: 'content', text: mockText.slice(i, i + 3) };
@@ -325,9 +347,9 @@ export async function* chatStreamWithModel(
   }
 
   if (PROVIDER === 'openrouter') {
-    yield* chatStreamOpenRouter(projectId, message, imageBase64, wantImage, aspectRatio);
+    yield* chatStreamOpenRouter(projectId, message, imageBase64, wantImage, aspectRatio, locale);
   } else {
-    yield* chatStreamGoogle(projectId, message, imageBase64, wantImage, aspectRatio);
+    yield* chatStreamGoogle(projectId, message, imageBase64, wantImage, aspectRatio, locale);
   }
 }
 
@@ -338,8 +360,9 @@ async function* chatStreamGoogle(
   imageBase64?: string,
   wantImage?: boolean,
   aspectRatio?: string,
+  locale?: string,
 ): AsyncGenerator<ChatStreamEvent> {
-  const chat = getOrCreateGoogleSession(projectId);
+  const chat = getOrCreateGoogleSession(projectId, locale);
 
   const parts: Array<{ text?: string; inlineData?: { mimeType: string; data: string } }> = [];
   if (imageBase64) {
@@ -385,8 +408,9 @@ async function* chatStreamOpenRouter(
   imageBase64?: string,
   wantImage?: boolean,
   aspectRatio?: string,
+  locale?: string,
 ): AsyncGenerator<ChatStreamEvent> {
-  const session = getOrCreateOpenRouterSession(projectId);
+  const session = getOrCreateOpenRouterSession(projectId, locale);
 
   // Build user message
   let userContent: string | Array<Record<string, unknown>>;
@@ -565,8 +589,10 @@ export async function generatePreviewImageOpenRouter(
   imageBase64: string,
   editPrompt: string,
   aspectRatio?: string,
-  thinkingEffort?: 'minimal' | 'high',
+  thinkingEffort?: OpenRouterReasoningEffort,
+  modelOverride?: string,
 ): Promise<{ image: string | null; usage?: { inputTokens: number; outputTokens: number; modelId: string } }> {
+  const modelId = modelOverride ? normalizeOpenRouterModel(modelOverride) : OPENROUTER_MODEL;
   // Text-only generation (no input image) uses a different system prompt
   const isTextToImage = !imageBase64;
   const systemPrompt = isTextToImage
@@ -581,7 +607,7 @@ export async function generatePreviewImageOpenRouter(
       ];
 
   const body: Record<string, unknown> = {
-    model: OPENROUTER_MODEL,
+    model: modelId,
     stream: false,
     modalities: ['image', 'text'],
     temperature: 1.0,
@@ -591,12 +617,12 @@ export async function generatePreviewImageOpenRouter(
       { role: 'user', content: userContent },
     ],
   };
-  if (aspectRatio) {
+  if (aspectRatio && aspectRatio !== 'auto') {
     body.image_config = { aspect_ratio: aspectRatio };
   }
 
   const bodyJson = JSON.stringify(body);
-  console.log(`[OpenRouter] generatePreview reasoning=${thinkingEffort || 'minimal'} bodySize=${(bodyJson.length/1024).toFixed(0)}KB`);
+  console.log(`[OpenRouter] generatePreview model=${modelId} reasoning=${thinkingEffort || 'minimal'} bodySize=${(bodyJson.length/1024).toFixed(0)}KB`);
   const t0 = Date.now();
   const res = await fetch(OPENROUTER_BASE, {
     method: 'POST',
@@ -617,7 +643,7 @@ export async function generatePreviewImageOpenRouter(
   console.log(`[OpenRouter] TTFB=${ttfb}ms download=${downloadMs}ms total=${Date.now() - t0}ms`);
 
 
-  const orUsage = data.usage ? { inputTokens: data.usage.prompt_tokens ?? 0, outputTokens: data.usage.completion_tokens ?? 0, modelId: OPENROUTER_MODEL } : undefined;
+  const orUsage = data.usage ? { inputTokens: data.usage.prompt_tokens ?? 0, outputTokens: data.usage.completion_tokens ?? 0, modelId } : undefined;
 
   const choice = data.choices?.[0]?.message;
   if (!choice) {
@@ -648,6 +674,22 @@ export async function generatePreviewImageOpenRouter(
   return { image: null, usage: orUsage };
 }
 
+export async function generateTipsPreviewImageOpenRouter(
+  imageBase64: string,
+  editPrompt: string,
+  aspectRatio?: string,
+): Promise<{ image: string | null; usage?: { inputTokens: number; outputTokens: number; modelId: string } }> {
+  const modelId = normalizeOpenRouterModel(TIPS_PREVIEW_IMAGE_MODEL);
+  const thinkingEffort = (process.env.TIPS_PREVIEW_THINKING || 'low') as OpenRouterReasoningEffort;
+  return generatePreviewImageOpenRouter(
+    imageBase64,
+    editPrompt,
+    aspectRatio,
+    thinkingEffort,
+    modelId,
+  );
+}
+
 // ── Multi-Reference Image Generation ────────────────────────────
 // Used when an edit needs multiple explicit input images.
 // Each image gets a labeled role so Gemini knows what to do with each.
@@ -662,6 +704,7 @@ export async function generateImageWithReferences(
   editPrompt: string,
   aspectRatio?: string,
   thinkingEffort?: 'minimal' | 'high',
+  modelOverride?: string,
 ): Promise<string | null> {
   // Build a prompt that labels each image by its role
   const imageLabels = images
@@ -670,7 +713,7 @@ export async function generateImageWithReferences(
   const fullPrompt = `${imageLabels}\n\n${editPrompt}`;
 
   const urls = images.map(img => img.url);
-  const result = await generateWithMultipleImages(urls, fullPrompt, true, thinkingEffort);
+  const result = await generateWithMultipleImages(urls, fullPrompt, true, thinkingEffort, modelOverride);
 
   if (result.text) {
     console.log(`[generateImageWithReferences] model text: ${result.text.slice(0, 300)}`);
@@ -683,7 +726,7 @@ export async function generateImageWithReferences(
   console.warn('⚠️ [generateImageWithReferences] multi-image failed, falling back to single image');
   const base = images[0].url;
   const fallback = PROVIDER === 'openrouter'
-    ? await generatePreviewImageOpenRouter(base, editPrompt, aspectRatio, thinkingEffort)
+    ? await generatePreviewImageOpenRouter(base, editPrompt, aspectRatio, thinkingEffort, modelOverride)
     : await generatePreviewImageGoogle(base, editPrompt, aspectRatio);
   return fallback.image;
 }
@@ -695,9 +738,10 @@ export async function generateWithMultipleImages(
   prompt: string,
   wantImage: boolean,
   thinkingEffort?: 'minimal' | 'high',
+  modelOverride?: string,
 ): Promise<{ text?: string; image?: string }> {
   if (PROVIDER === 'openrouter') {
-    return generateMultiImageOpenRouter(images, prompt, wantImage, thinkingEffort);
+    return generateMultiImageOpenRouter(images, prompt, wantImage, thinkingEffort, modelOverride);
   } else {
     return generateMultiImageGoogle(images, prompt, wantImage);
   }
@@ -759,7 +803,9 @@ async function generateMultiImageOpenRouter(
   prompt: string,
   wantImage: boolean,
   thinkingEffort?: 'minimal' | 'high',
+  modelOverride?: string,
 ): Promise<{ text?: string; image?: string }> {
+  const modelId = modelOverride ? normalizeOpenRouterModel(modelOverride) : OPENROUTER_MODEL;
   const content: Array<Record<string, unknown>> = [];
 
   for (const img of images) {
@@ -768,7 +814,7 @@ async function generateMultiImageOpenRouter(
   content.push({ type: 'text', text: prompt });
 
   const body: Record<string, unknown> = {
-    model: OPENROUTER_MODEL,
+    model: modelId,
     stream: false,
     temperature: 1.0,
     reasoning: { effort: thinkingEffort || 'minimal' },
@@ -777,7 +823,7 @@ async function generateMultiImageOpenRouter(
     ],
   };
 
-  console.log(`[OpenRouter] generateMultiImage reasoning=${thinkingEffort || 'minimal'}`);
+  console.log(`[OpenRouter] generateMultiImage model=${modelId} reasoning=${thinkingEffort || 'minimal'}`);
   if (wantImage) {
     body.modalities = ['image', 'text'];
   }
@@ -827,6 +873,7 @@ async function* withEditPromptRetry(
   imageBase64: string,
   category: TipCategory,
   label: string,
+  locale?: string,
 ): AsyncGenerator<Tip> {
   const completedLabels = new Set<string>();
   const partialTips = new Map<string, Tip>(); // label → most recent partial tip
@@ -846,7 +893,7 @@ async function* withEditPromptRetry(
     tlog(`[tips:${label}] ⚠️ ${partialTips.size} tips missing editPrompt, generating separately...`);
     const entries = [...partialTips.values()];
     const results = await Promise.allSettled(
-      entries.map(t => generateEditPromptForTip(imageBase64, t))
+      entries.map(t => generateEditPromptForTip(imageBase64, t, locale))
     );
     for (let i = 0; i < entries.length; i++) {
       const result = results[i];
@@ -870,10 +917,15 @@ label中文3-6字动词开头。desc中文10-20字。不需要editPrompt。`;
 const FAST_TIPS_FORMAT = `\n\n请以JSON数组输出，只输出JSON：
 [{"emoji":"1个emoji","label":"中文3-6字","desc":"中文10-20字描述","category":"enhance|creative|wild"}, ...]`;
 
-export async function* streamFastTips(imageBase64: string): AsyncGenerator<Omit<Tip, 'editPrompt'> & { editPrompt?: string }> {
+const FAST_TIPS_SYSTEM_EN = `You are a photo-editing ideas expert. Analyze the image quickly and provide six directions: two enhance, two creative, and two wild. Use a short verb-first label and a concise description. Do not include editPrompt.`;
+
+const FAST_TIPS_FORMAT_EN = `\n\nOutput only a JSON array:
+[{"emoji":"one emoji","label":"2-3 English words","desc":"English description under 20 words","category":"enhance|creative|wild"}, ...]`;
+
+export async function* streamFastTips(imageBase64: string, locale?: string): AsyncGenerator<Omit<Tip, 'editPrompt'> & { editPrompt?: string }> {
   if (process.env.MOCK_AI === 'true') {
     for (const cat of ['enhance', 'creative', 'wild'] as const) {
-      yield* streamTipsByCategory(imageBase64, cat);
+      yield* streamTipsByCategory(imageBase64, cat, undefined, 2, undefined, locale);
     }
     return;
   }
@@ -881,15 +933,23 @@ export async function* streamFastTips(imageBase64: string): AsyncGenerator<Omit<
     method: 'POST',
     headers: openrouterHeaders(),
     body: JSON.stringify({
-      model: OPENROUTER_MODEL,
+      model: TIPS_OPENROUTER_MODEL,
       stream: true,
       messages: [
-        { role: 'system', content: FAST_TIPS_SYSTEM },
+        {
+          role: 'system',
+          content: `${getTipsLanguageInstruction(locale)}\n\n${normalizeLocale(locale) === 'en' ? FAST_TIPS_SYSTEM_EN : FAST_TIPS_SYSTEM}`,
+        },
         {
           role: 'user',
           content: [
             toImageContent(imageBase64),
-            { type: 'text', text: `分析图片（判断人脸大小、具体物品、情绪基调），给出6条建议（2 enhance + 2 creative + 2 wild）。只输出emoji+label+desc+category。${FAST_TIPS_FORMAT}` },
+            {
+              type: 'text',
+              text: normalizeLocale(locale) === 'en'
+                ? `Analyze the image for face scale, specific objects, and emotional tone. Give six suggestions: two enhance, two creative, and two wild. Output emoji, label, desc, and category only.${FAST_TIPS_FORMAT_EN}`
+                : `分析图片（判断人脸大小、具体物品、情绪基调），给出6条建议（2 enhance + 2 creative + 2 wild）。只输出emoji+label+desc+category。${FAST_TIPS_FORMAT}`,
+            },
           ],
         },
       ],
@@ -907,16 +967,17 @@ export async function* streamFastTips(imageBase64: string): AsyncGenerator<Omit<
 export async function generateEditPromptForTip(
   imageBase64: string,
   tip: { emoji: string; label: string; desc: string; category: string },
+  locale?: string,
 ): Promise<string | null> {
   const cat = tip.category as 'enhance' | 'creative' | 'wild';
-  const template = PROMPT_TEMPLATES[cat] ?? '';
+  const template = getPromptTemplate(cat, locale) ?? '';
   const systemPrompt = buildCategorySystemPrompt(cat);
 
   const res = await fetch(OPENROUTER_BASE, {
     method: 'POST',
     headers: openrouterHeaders(),
     body: JSON.stringify({
-      model: OPENROUTER_MODEL,
+      model: TIPS_OPENROUTER_MODEL,
       stream: false,
       messages: [
         { role: 'system', content: systemPrompt },
@@ -926,7 +987,9 @@ export async function generateEditPromptForTip(
             toImageContent(imageBase64),
             {
               type: 'text',
-              text: `这张图片有一条编辑建议：${tip.emoji} ${tip.label}（${tip.desc}）\n\n严格遵循以下规范，为这条建议生成详细的 editPrompt（英文，200词以内）。只输出 editPrompt 字符串本身，不要 JSON，不要解释。\n\n${template}`,
+              text: normalizeLocale(locale) === 'en'
+                ? `This photo has one editing suggestion: ${tip.emoji} ${tip.label} (${tip.desc}).\n\nFollow the rules below and generate a detailed English editPrompt under 200 words. Output only the editPrompt string, with no JSON or explanation.\n\n${template}`
+                : `这张图片有一条编辑建议：${tip.emoji} ${tip.label}（${tip.desc}）\n\n严格遵循以下规范，为这条建议生成详细的 editPrompt（英文，200词以内）。只输出 editPrompt 字符串本身，不要 JSON，不要解释。\n\n${template}`,
             },
           ],
         },
@@ -940,9 +1003,9 @@ export async function generateEditPromptForTip(
   return typeof text === 'string' ? text.trim() : null;
 }
 
-export async function* streamAllTips(imageBase64: string): AsyncGenerator<Tip> {
+export async function* streamAllTips(imageBase64: string, locale?: string): AsyncGenerator<Tip> {
   for (const cat of ['enhance', 'creative', 'wild'] as const) {
-    yield* streamTipsByCategory(imageBase64, cat);
+    yield* streamTipsByCategory(imageBase64, cat, undefined, 2, undefined, locale);
   }
 }
 
@@ -962,7 +1025,7 @@ export async function* streamTipsByCategory(
   usageAccum?: UsageAccum,
 ): AsyncGenerator<Tip> {
   if (process.env.MOCK_AI === 'true') {
-    const mockTips: Record<string, Tip[]> = {
+    const mockTipsZh: Record<string, Tip[]> = {
       enhance: [
         { emoji: '🌅', label: '电影感光影', desc: '增强光影对比，营造电影级氛围。', editPrompt: 'Enhance with cinematic lighting, add warm golden hour glow, increase contrast between highlights and shadows.', category: 'enhance' },
         { emoji: '📷', label: '胶片质感', desc: '添加柔和颗粒和复古色调。', editPrompt: 'Apply analog film look with soft grain, slightly faded blacks, and warm vintage color grading.', category: 'enhance' },
@@ -980,6 +1043,25 @@ export async function* streamTipsByCategory(
         { emoji: '📝', label: '加诗意标题', desc: '用诗意语言为画面命名。', editPrompt: 'Add a photorealistic text overlay with a poetic title for this image. Use clean minimal sans-serif font in soft white color, centered at the bottom of the image with a semi-transparent overlay behind the text. Preserve the exact composition and all people\'s faces exactly.', category: 'captions' },
       ],
     };
+    const mockTipsEn: Record<string, Tip[]> = {
+      enhance: [
+        { emoji: '🌅', label: 'Cinematic Light', desc: 'Shape contrast and warmth for a cinematic atmosphere.', editPrompt: 'Enhance with cinematic lighting, add warm golden hour glow, increase contrast between highlights and shadows.', category: 'enhance' },
+        { emoji: '📷', label: 'Film Texture', desc: 'Add gentle grain and a refined vintage grade.', editPrompt: 'Apply analog film look with soft grain, slightly faded blacks, and warm vintage color grading.', category: 'enhance' },
+      ],
+      creative: [
+        { emoji: '🦋', label: 'Butterfly Visit', desc: 'Place a blue butterfly naturally on the shoulder.', editPrompt: 'Add a photorealistic blue morpho butterfly perched on the shoulder, with natural shadow and lighting matching the scene.', category: 'creative' },
+        { emoji: '🌸', label: 'Falling Blossoms', desc: 'Let a few pink petals drift through the scene.', editPrompt: 'Add several photorealistic pink cherry blossom petals gently falling through the scene with natural depth of field blur.', category: 'creative' },
+      ],
+      wild: [
+        { emoji: '🔮', label: 'Miniature World', desc: 'Turn the scene into a detailed miniature set.', editPrompt: 'Transform the entire scene into a tilt-shift miniature model with exaggerated depth of field and saturated colors.', category: 'wild' },
+        { emoji: '🌊', label: 'Underwater Dream', desc: 'Submerge the whole scene in a luminous underwater world.', editPrompt: 'Transform the scene to appear submerged underwater with light rays filtering from above, floating bubbles, and caustic light patterns.', category: 'wild' },
+      ],
+      captions: [
+        { emoji: '✍️', label: 'Creative Caption', desc: 'Add a scene-specific line with expressive typography.', editPrompt: 'Add a photorealistic text overlay with a creative caption specific to this image. Use elegant cursive script in warm cream color at the bottom-third of the image with a subtle drop shadow for readability. Preserve the exact composition and all people\'s faces exactly.', category: 'captions' },
+        { emoji: '📝', label: 'Poetic Title', desc: 'Give the image a concise poetic title.', editPrompt: 'Add a photorealistic text overlay with a poetic title for this image. Use clean minimal sans-serif font in soft white color, centered at the bottom of the image with a semi-transparent overlay behind the text. Preserve the exact composition and all people\'s faces exactly.', category: 'captions' },
+      ],
+    };
+    const mockTips = normalizeLocale(locale) === 'en' ? mockTipsEn : mockTipsZh;
     const tips = mockTips[category] || mockTips.enhance;
     for (const tip of tips) {
       await new Promise(r => setTimeout(r, 200));
@@ -1001,9 +1083,7 @@ export async function* streamTipsByCategory(
   let lastError: unknown;
   for (const [index, provider] of providers.entries()) {
     try {
-      const source = provider === 'bedrock'
-        ? streamTipsByCategoryBedrock(imageBase64, category, metadata, count, existingLabels, locale, skillContext, usageAccum)
-        : provider === 'openrouter'
+      const source = provider === 'openrouter'
           ? streamTipsByCategoryOpenRouter(imageBase64, category, metadata, count, existingLabels, locale, skillContext, usageAccum)
           : streamTipsByCategoryGoogle(imageBase64, category, metadata, count, existingLabels, locale, skillContext, usageAccum);
 
@@ -1043,20 +1123,21 @@ async function* streamTipsByCategoryGoogle(
   skillContext?: string,
   usageAccum?: UsageAccum,
 ): AsyncGenerator<Tip> {
-  const { systemPrompt, userText, thinkingLevel } = buildTipsPrompt(category, metadata, count, existingLabels, skillContext);
+  const { systemPrompt, userText, thinkingLevel } = buildTipsPrompt(category, metadata, count, existingLabels, skillContext, locale);
 
   const supportsStructuredOutput = MODEL.includes('gemini-3');
+  const languageInstruction = getTipsLanguageInstruction(locale);
   // Gemini 3.x uses thinkingLevel (minimal/low/medium/high), not thinkingBudget
   const isGemini3 = MODEL.includes('gemini-3');
   const config: Record<string, unknown> = {
-    systemInstruction: systemPrompt,
+    systemInstruction: `${languageInstruction}\n\n${systemPrompt}`,
     ...(isGemini3
       ? { thinkingConfig: { thinkingLevel } }
       : { thinkingConfig: { thinkingBudget: thinkingLevel === 'high' ? -1 : thinkingLevel === 'minimal' ? 0 : 1024 } }),
   };
   if (supportsStructuredOutput) {
     config.responseMimeType = 'application/json';
-    config.responseSchema = TIPS_SCHEMA;
+    config.responseSchema = getTipsSchema(locale);
   }
 
   const promptSuffix = supportsStructuredOutput ? '' : getJsonFormatSuffix(locale);
@@ -1088,7 +1169,7 @@ async function* streamTipsByCategoryGoogle(
 
   yield* withEditPromptRetry(
     parseIncrementalTipsFromStream(streamToTextIterator(streamWithUsageCapture()), `google:${category}`, category),
-    imageBase64, category, `google:${category}`,
+    imageBase64, category, `google:${category}`, locale,
   );
 
   // Capture token usage for billing
@@ -1110,7 +1191,8 @@ async function* streamTipsByCategoryOpenRouter(
   skillContext?: string,
   usageAccum?: UsageAccum,
 ): AsyncGenerator<Tip> {
-  const { systemPrompt, userText, thinkingLevel } = buildTipsPrompt(category, metadata, count, existingLabels, skillContext);
+  const { systemPrompt, userText, thinkingLevel } = buildTipsPrompt(category, metadata, count, existingLabels, skillContext, locale);
+  const languageInstruction = getTipsLanguageInstruction(locale);
   // OpenRouter uses effort: minimal/low/medium/high
   const reasoning = { effort: thinkingLevel };
 
@@ -1120,11 +1202,11 @@ async function* streamTipsByCategoryOpenRouter(
     method: 'POST',
     headers: openrouterHeaders(),
     body: JSON.stringify({
-      model: OPENROUTER_MODEL,
+      model: TIPS_OPENROUTER_MODEL,
       stream: true,
       reasoning,
       messages: [
-        { role: 'system', content: systemPrompt },
+        { role: 'system', content: `${languageInstruction}\n\n${systemPrompt}` },
         {
           role: 'user',
           content: [
@@ -1147,70 +1229,15 @@ async function* streamTipsByCategoryOpenRouter(
   tlog(`[tips:openrouter:${category}] headers received at +${Date.now() - t0}ms`);
   yield* withEditPromptRetry(
     parseIncrementalTipsFromStream(sseToTextIterator(res, `or:${category}`, usageAccum), `or:${category}`, category),
-    imageBase64, category, `or:${category}`,
+    imageBase64, category, `or:${category}`, locale,
   );
 
   // Set model for billing — Tips output is text, use :text rate suffix
   if (usageAccum) {
-    usageAccum.model = OPENROUTER_MODEL + ':text';
+    usageAccum.model = TIPS_OPENROUTER_MODEL + ':text';
   }
 
   tlog(`[tips:openrouter:${category}] stream done at +${Date.now() - t0}ms`);
-}
-
-// --- Bedrock Provider (Claude Sonnet — default for tips) ---
-async function* streamTipsByCategoryBedrock(
-  imageBase64: string,
-  category: TipCategory,
-  metadata?: { takenAt?: string; location?: string },
-  count: number = 2,
-  existingLabels?: string[],
-  locale?: string,
-  skillContext?: string,
-  usageAccum?: UsageAccum,
-): AsyncGenerator<Tip> {
-  const imageContent = imageBase64.startsWith('http')
-    ? new URL(imageBase64)
-    : imageBase64.startsWith('data:') ? imageBase64 : `data:image/jpeg;base64,${imageBase64}`;
-  const { systemPrompt, userText } = buildTipsPrompt(category, metadata, count, existingLabels, skillContext);
-
-  const t0 = Date.now();
-  tlog(`[tips:bedrock:${category}] stream start`);
-
-  const result = await streamText({
-    model: getBedrockForTips(),
-    temperature: TIPS_TEMPERATURE,
-    system: systemPrompt,
-    messages: [
-      {
-        role: 'user',
-        content: [
-          { type: 'image', image: imageContent },
-          { type: 'text', text: `${userText}${getJsonFormatSuffix(locale)}` },
-        ],
-      },
-    ],
-  });
-
-  tlog(`[tips:bedrock:${category}] streamText ready at +${Date.now() - t0}ms`);
-  yield* withEditPromptRetry(
-    parseIncrementalTipsFromStream(result.textStream, `bedrock:${category}`, category),
-    imageBase64, category, `bedrock:${category}`,
-  );
-
-  // Capture token usage for billing
-  if (usageAccum) {
-    try {
-      const usage = await result.usage;
-      if (usage) {
-        usageAccum.inputTokens += usage.inputTokens ?? 0;
-        usageAccum.outputTokens += usage.outputTokens ?? 0;
-        usageAccum.model = 'anthropic.claude-sonnet-4-6'; // Sonnet is always text output, rate is correct
-      }
-    } catch { /* best effort */ }
-  }
-
-  tlog(`[tips:bedrock:${category}] done at +${Date.now() - t0}ms`);
 }
 
 // ── Shared Incremental JSON Parser ──────────────────────────────
@@ -1655,4 +1682,45 @@ export async function analyzeVideoContent(
     if (usage) billUsage(usage.promptTokenCount || 0, usage.candidatesTokenCount || 0);
     return result.text || '';
   }
+}
+
+/**
+ * Vision fallback for text-only Agent models (for example DeepSeek V4 Pro).
+ * The main Agent receives only the resulting text, so its provider never sees
+ * an unsupported image content block.
+ */
+export async function analyzeImageContent(
+  image: string,
+  question?: string,
+  userId?: string,
+): Promise<string> {
+  const ai = getAI();
+  const model = 'gemini-3-flash-preview';
+  const resolved = await ensureBase64Server(image);
+  const mimeType = resolved.match(/^data:(image\/[^;]+);base64,/)?.[1] || 'image/jpeg';
+  const base64 = resolved.replace(/^data:image\/[^;]+;base64,/, '');
+  const prompt = question?.trim()
+    ? `Analyze this image for an editing agent. Focus on: ${question.trim()} Respond in English only.`
+    : 'Analyze this image in detail for a photo editing agent. Describe subjects, identities and distinguishing features, composition, objects, text, lighting, mood, and any details that matter for an edit. Respond in English only.';
+
+  const result = await ai.models.generateContent({
+    model,
+    contents: [{ role: 'user', parts: [
+      { inlineData: { mimeType, data: base64 } },
+      { text: prompt },
+    ] }],
+  });
+  const usage = result.usageMetadata;
+  if (usage && userId) {
+    import('./billing/credits').then(({ deductByTokens }) =>
+      deductByTokens(
+        userId,
+        'analyze_image',
+        model,
+        usage.promptTokenCount || 0,
+        usage.candidatesTokenCount || 0,
+      ).catch(e => console.error('[billing] analyze_image deduct error:', e))
+    );
+  }
+  return result.text || '';
 }

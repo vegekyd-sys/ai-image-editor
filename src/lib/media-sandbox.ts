@@ -2,11 +2,12 @@ import * as childProcess from 'child_process'
 import * as crypto from 'crypto'
 import * as fs from 'fs'
 import * as fsPromises from 'fs/promises'
+import { createRequire } from 'module'
 import * as os from 'os'
 import path from 'path'
-import * as stream from 'stream'
-import * as url from 'url'
 import * as util from 'util'
+import sharp from 'sharp'
+import { transform as sucraseTransform } from 'sucrase'
 import { findFfmpeg, findFfprobe, probeVideoFile, type VideoProbe } from './ffmpeg-runtime'
 import * as workspace from './workspace'
 import { toPublicStorageUrl } from '@/lib/supabase/storage'
@@ -14,9 +15,89 @@ import { toPublicStorageUrl } from '@/lib/supabase/storage'
 const { mkdir, mkdtemp, readFile, readdir, rm, stat, writeFile } = fsPromises
 const { existsSync } = fs
 const { tmpdir } = os
-const { pathToFileURL } = url
 const INPUT_DOWNLOAD_CONCURRENCY = 2
 const INPUT_DOWNLOAD_TIMEOUT_MS = 180_000
+const serverRequire = createRequire(import.meta.url)
+const BLOCKED_NODE_MODULES = new Set([
+  'cluster',
+  'inspector',
+  'inspector/promises',
+  'module',
+  'repl',
+  'vm',
+  'worker_threads',
+])
+// Keep every runtime dependency statically discoverable by Next/Webpack.
+// `serverRequire(id)` with a variable passes Vitest but produces an incomplete
+// production bundle ("request of a dependency is an expression").
+const NODE_BUILTIN_LOADERS: Record<string, () => unknown> = {
+  assert: () => serverRequire('assert'),
+  'assert/strict': () => serverRequire('assert/strict'),
+  async_hooks: () => serverRequire('async_hooks'),
+  buffer: () => serverRequire('buffer'),
+  console: () => serverRequire('console'),
+  constants: () => serverRequire('constants'),
+  crypto: () => serverRequire('crypto'),
+  dgram: () => serverRequire('dgram'),
+  diagnostics_channel: () => serverRequire('diagnostics_channel'),
+  dns: () => serverRequire('dns'),
+  'dns/promises': () => serverRequire('dns/promises'),
+  domain: () => serverRequire('domain'),
+  events: () => serverRequire('events'),
+  http: () => serverRequire('http'),
+  http2: () => serverRequire('http2'),
+  https: () => serverRequire('https'),
+  net: () => serverRequire('net'),
+  os: () => serverRequire('os'),
+  perf_hooks: () => serverRequire('perf_hooks'),
+  punycode: () => serverRequire('punycode'),
+  querystring: () => serverRequire('querystring'),
+  readline: () => serverRequire('readline'),
+  'readline/promises': () => serverRequire('node:readline/promises'),
+  stream: () => serverRequire('stream'),
+  'stream/consumers': () => serverRequire('node:stream/consumers'),
+  'stream/promises': () => serverRequire('stream/promises'),
+  'stream/web': () => serverRequire('stream/web'),
+  string_decoder: () => serverRequire('string_decoder'),
+  sys: () => serverRequire('sys'),
+  timers: () => serverRequire('timers'),
+  'timers/promises': () => serverRequire('timers/promises'),
+  tls: () => serverRequire('tls'),
+  trace_events: () => serverRequire('trace_events'),
+  tty: () => serverRequire('tty'),
+  url: () => serverRequire('url'),
+  util: () => serverRequire('util'),
+  'util/types': () => serverRequire('util/types'),
+  v8: () => serverRequire('v8'),
+  wasi: () => serverRequire('wasi'),
+  zlib: () => serverRequire('zlib'),
+}
+
+const MEDIA_PACKAGE_LOADERS: Record<string, () => unknown> = {
+  '@remotion/media': () => serverRequire('@remotion/media'),
+  '@remotion/media-utils': () => serverRequire('@remotion/media-utils'),
+  '@remotion/renderer': () => serverRequire('@remotion/renderer'),
+  canvas: () => serverRequire('canvas'),
+  exifr: () => serverRequire('exifr'),
+  'heic-convert': () => serverRequire('heic-convert'),
+  jszip: () => serverRequire('jszip'),
+  remotion: () => serverRequire('remotion'),
+  sharp: () => sharp,
+}
+const SAFE_ENV_KEYS = new Set([
+  'CI',
+  'FFMPEG_PATH',
+  'FFPROBE_PATH',
+  'LANG',
+  'LC_ALL',
+  'NODE_ENV',
+  'PATH',
+  'TMP',
+  'TMPDIR',
+  'TEMP',
+  'TZ',
+])
+const SENSITIVE_ENV_RE = /(api|auth|credential|database|key|password|private|secret|session|signing|supabase|token|webhook)/i
 
 type SupabaseClient = any
 
@@ -61,8 +142,9 @@ export interface MediaSandboxResult {
   workDir: string
 }
 
-interface RunNodeMediaCodeOptions {
+export interface RunNodeMediaCodeOptions {
   code: string
+  codePath?: string
   description?: string
   mediaRefs?: number[]
   workspacePaths?: string[]
@@ -272,32 +354,173 @@ function normalizeOutputs(raw: unknown, outputDir: string): MediaSandboxOutput[]
     }))
 }
 
-function createNodeMediaRequire(): NodeRequire {
+function normalizeModuleId(id: string): string {
+  return id.startsWith('node:') ? id.slice(5) : id
+}
+
+function sanitizeProcessEnv(extra?: NodeJS.ProcessEnv): NodeJS.ProcessEnv {
+  const env: Record<string, string> = {}
+  for (const key of SAFE_ENV_KEYS) {
+    const value = process.env[key]
+    if (value !== undefined) env[key] = value
+  }
+  if (extra) {
+    for (const [key, value] of Object.entries(extra)) {
+      if (value === undefined || SENSITIVE_ENV_RE.test(key)) continue
+      env[key] = value
+    }
+  }
+  return env as NodeJS.ProcessEnv
+}
+
+function withSafeChildOptions(options: unknown, cwd: string): unknown {
+  if (!options || typeof options === 'function') return { cwd, env: sanitizeProcessEnv() }
+  if (typeof options !== 'object') return options
+  const record = options as Record<string, unknown>
+  return {
+    ...record,
+    cwd: typeof record.cwd === 'string' ? record.cwd : cwd,
+    env: sanitizeProcessEnv(record.env as NodeJS.ProcessEnv | undefined),
+  }
+}
+
+function createSafeChildProcess(cwd: string): typeof childProcess {
+  const safeExec = ((command: string, optionsOrCallback?: unknown, callback?: unknown) => {
+    if (typeof optionsOrCallback === 'function') {
+      return (childProcess.exec as any)(command, withSafeChildOptions(undefined, cwd), optionsOrCallback)
+    }
+    return (childProcess.exec as any)(command, withSafeChildOptions(optionsOrCallback, cwd), callback)
+  }) as typeof childProcess.exec
+  ;(safeExec as any)[util.promisify.custom] = async (command: string, options?: unknown) => {
+    const execAsync = util.promisify(childProcess.exec) as any
+    return execAsync(command, withSafeChildOptions(options, cwd))
+  }
+
+  const safeExecFile = ((file: string, argsOrOptionsOrCallback?: unknown, optionsOrCallback?: unknown, callback?: unknown) => {
+    if (Array.isArray(argsOrOptionsOrCallback)) {
+      if (typeof optionsOrCallback === 'function') {
+        return (childProcess.execFile as any)(file, argsOrOptionsOrCallback, withSafeChildOptions(undefined, cwd), optionsOrCallback)
+      }
+      return (childProcess.execFile as any)(file, argsOrOptionsOrCallback, withSafeChildOptions(optionsOrCallback, cwd), callback)
+    }
+    if (typeof argsOrOptionsOrCallback === 'function') {
+      return (childProcess.execFile as any)(file, [], withSafeChildOptions(undefined, cwd), argsOrOptionsOrCallback)
+    }
+    return (childProcess.execFile as any)(file, [], withSafeChildOptions(argsOrOptionsOrCallback, cwd), optionsOrCallback)
+  }) as typeof childProcess.execFile
+  ;(safeExecFile as any)[util.promisify.custom] = async (
+    file: string,
+    argsOrOptions?: unknown,
+    options?: unknown,
+  ) => {
+    const execFileAsync = util.promisify(childProcess.execFile) as any
+    if (Array.isArray(argsOrOptions)) {
+      return execFileAsync(file, argsOrOptions, withSafeChildOptions(options, cwd))
+    }
+    return execFileAsync(file, [], withSafeChildOptions(argsOrOptions, cwd))
+  }
+
+  return {
+    ...childProcess,
+    exec: safeExec,
+    execFile: safeExecFile,
+    spawn: ((command: string, argsOrOptions?: unknown, options?: unknown) => {
+      if (Array.isArray(argsOrOptions)) {
+        return childProcess.spawn(command, argsOrOptions, withSafeChildOptions(options, cwd) as childProcess.SpawnOptions)
+      }
+      return childProcess.spawn(command, [], withSafeChildOptions(argsOrOptions, cwd) as childProcess.SpawnOptions)
+    }) as typeof childProcess.spawn,
+    execSync: ((command: string, options?: unknown) => {
+      return childProcess.execSync(command, withSafeChildOptions(options, cwd) as childProcess.ExecSyncOptions)
+    }) as typeof childProcess.execSync,
+    execFileSync: ((file: string, argsOrOptions?: unknown, options?: unknown) => {
+      if (Array.isArray(argsOrOptions)) {
+        return childProcess.execFileSync(file, argsOrOptions, withSafeChildOptions(options, cwd) as childProcess.ExecFileSyncOptions)
+      }
+      return childProcess.execFileSync(file, [], withSafeChildOptions(argsOrOptions, cwd) as childProcess.ExecFileSyncOptions)
+    }) as typeof childProcess.execFileSync,
+    spawnSync: ((command: string, argsOrOptions?: unknown, options?: unknown) => {
+      if (Array.isArray(argsOrOptions)) {
+        return childProcess.spawnSync(command, argsOrOptions, withSafeChildOptions(options, cwd) as childProcess.SpawnSyncOptions)
+      }
+      return childProcess.spawnSync(command, [], withSafeChildOptions(argsOrOptions, cwd) as childProcess.SpawnSyncOptions)
+    }) as typeof childProcess.spawnSync,
+  }
+}
+
+function createSafeProcess(cwd: string) {
+  return {
+    arch: process.arch,
+    argv: ['node', path.join(cwd, 'agent-media-code.js')],
+    cwd: () => cwd,
+    env: sanitizeProcessEnv(),
+    hrtime: process.hrtime.bind(process),
+    memoryUsage: process.memoryUsage.bind(process),
+    nextTick: process.nextTick.bind(process),
+    pid: process.pid,
+    platform: process.platform,
+    release: process.release,
+    stderr: process.stderr,
+    stdin: process.stdin,
+    stdout: process.stdout,
+    title: 'makaron-media-runtime',
+    uptime: process.uptime.bind(process),
+    version: process.version,
+    versions: process.versions,
+    chdir: () => {
+      throw new Error('process.chdir is not available in the Node media runtime. Use absolute paths from workDir/outputDir/inputFiles instead.')
+    },
+    exit: () => {
+      throw new Error('process.exit is not available in the Node media runtime. Return a result object instead.')
+    },
+    kill: () => {
+      throw new Error('process.kill is not available in the Node media runtime.')
+    },
+  }
+}
+
+function createNodeMediaRequire(cwd: string, safeProcess: ReturnType<typeof createSafeProcess>): NodeRequire {
   const builtins: Record<string, unknown> = {
+    child_process: createSafeChildProcess(cwd),
+    'node:child_process': createSafeChildProcess(cwd),
     fs,
     'node:fs': fs,
     'fs/promises': fsPromises,
     'node:fs/promises': fsPromises,
     path,
     'node:path': path,
-    os,
-    'node:os': os,
-    child_process: childProcess,
-    'node:child_process': childProcess,
+    process: safeProcess,
+    'node:process': safeProcess,
     util,
     'node:util': util,
-    stream,
-    'node:stream': stream,
-    url,
-    'node:url': url,
-    crypto,
-    'node:crypto': crypto,
+    sharp,
   }
 
   return ((id: string) => {
+    const normalized = normalizeModuleId(id)
+    if (BLOCKED_NODE_MODULES.has(normalized)) {
+      throw new Error(`Module "${id}" is not available in the Node media runtime for safety.`)
+    }
     if (id in builtins) return builtins[id]
-    throw new Error(`Module "${id}" is not available in the Node media runtime. Use Node built-ins such as fs, path, child_process, util, os, stream, url, and crypto.`)
+    const builtinLoader = NODE_BUILTIN_LOADERS[normalized]
+    if (builtinLoader) return builtinLoader()
+    const packageLoader = MEDIA_PACKAGE_LOADERS[id]
+    if (packageLoader) return packageLoader()
+    throw new Error(`Module "${id}" is not available in the Node media runtime. Node built-ins and media packages are available; arbitrary local files or npm packages are blocked for safety.`)
   }) as NodeRequire
+}
+
+export function compileNodeMediaCode(code: string, codePath?: string): string {
+  try {
+    return sucraseTransform(code, {
+      transforms: ['typescript', 'jsx', 'imports'],
+      jsxRuntime: 'classic',
+      filePath: codePath || 'agent-media-code.tsx',
+    }).code
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error)
+    throw new Error(`Node media compile failed${codePath ? ` for ${codePath}` : ''}: ${message}`)
+  }
 }
 
 async function withTimeout<T>(promise: Promise<T>, timeoutMs: number, label: string): Promise<T> {
@@ -408,13 +631,22 @@ export async function runNodeMediaCode(options: RunNodeMediaCodeOptions): Promis
       return { ...result, storageUrl: result.storageUrl ? toPublicStorageUrl(result.storageUrl) : undefined }
     }
 
+    const savedOutputsByLocalPath = new Map<string, {
+      workspacePath: string;
+      storageUrl?: string;
+      contentType: string;
+      size: number;
+    }>()
+
     const saveOutput = async (localPath: string, workspacePath?: string, contentType?: string) => {
       const fullPath = normalizeLocalPath(localPath, outputDir)
       const body = await readFile(fullPath)
       const ct = contentType || guessContentType(fullPath)
       const outPath = workspacePath || `${options.projectId}/media/${Date.now()}-${path.basename(fullPath)}`
       const saved = await saveToWorkspace(outPath, body, ct)
-      return { ...saved, workspacePath: outPath, contentType: ct, size: body.length }
+      const output = { ...saved, workspacePath: outPath, contentType: ct, size: body.length }
+      savedOutputsByLocalPath.set(path.resolve(fullPath), output)
+      return output
     }
 
     const context = {
@@ -431,58 +663,140 @@ export async function runNodeMediaCode(options: RunNodeMediaCodeOptions): Promis
       ffprobePath,
     }
 
-    const localRequire = createNodeMediaRequire()
-    const AsyncFunction = Object.getPrototypeOf(async function () {}).constructor
-    const runner = new AsyncFunction(
-      'require',
-      'process',
-      'console',
-      'Buffer',
-      'fetch',
-      'ctx',
-      'context',
-      'inputFiles',
-      'outputDir',
-      'inputDir',
-      'workDir',
-      'workspaceDir',
-      'ffmpegPath',
-      'ffprobePath',
-      'downloadFile',
-      'saveToWorkspace',
-      'saveOutput',
-      'probeVideo',
-      '__filename',
-      '__dirname',
-      options.code,
-    )
+    const compiledCode = compileNodeMediaCode(options.code, options.codePath)
+    const timeoutMs = options.timeoutMs || 180_000
+    let result: unknown
+    let usedIsolatedExecutor = false
 
-    const result = await withTimeout(
-      runner(
-        localRequire,
-        process,
-        console,
-        Buffer,
-        fetch,
-        context,
-        context,
-        inputFiles,
-        outputDir,
-        inputDir,
-        workDir,
-        workspaceDir,
-        ffmpegPath,
-        ffprobePath,
-        downloadFile,
-        saveToWorkspace,
-        saveOutput,
-        probeVideoFile,
-        pathToFileURL(path.join(workDir, 'agent-media-code.js')).toString(),
-        workDir,
-      ),
-      options.timeoutMs || 180_000,
-      'Node media runtime',
-    )
+    const {
+      runNodeMediaCodeInVercelSandbox,
+      shouldUseVercelMediaSandbox,
+      VercelMediaSandboxExecutionError,
+    } = await import('./media-sandbox-vercel')
+    if (shouldUseVercelMediaSandbox()) {
+      try {
+        const isolated = await runNodeMediaCodeInVercelSandbox({
+          code: options.code,
+          compiledCode,
+          codePath: options.codePath,
+          description: options.description,
+          inputFiles,
+          mediaItems: options.mediaItems,
+          mediaRefs: selectedRefs,
+          workspacePaths: selectedWorkspacePaths,
+          localOutputDir: outputDir,
+          projectId: options.projectId,
+          userId: options.userId,
+          timeoutMs,
+        })
+        result = isolated.result
+        usedIsolatedExecutor = true
+        console.log(`[media-sandbox] Agent code completed in isolated Sandbox ${isolated.sandboxId}`)
+      } catch (error) {
+        if (error instanceof VercelMediaSandboxExecutionError) throw error
+        // Availability/bootstrap failures must not strand the user. Preserve the
+        // open local executor as a compatibility fallback so the Agent can keep
+        // repairing its program. Production should normally stay on the true
+        // Sandbox path; this warning is intentionally visible for later triage.
+        console.warn('[media-sandbox] isolated executor unavailable; continuing with local compatibility executor:', error)
+      }
+    }
+
+    if (!usedIsolatedExecutor) {
+      const safeProcess = createSafeProcess(workDir)
+      const localRequire = createNodeMediaRequire(workDir, safeProcess)
+      const mediaModule = { exports: {} as unknown }
+      const AsyncFunction = Object.getPrototypeOf(async function () {}).constructor
+      const runner = new AsyncFunction(
+        'require',
+        'process',
+        'console',
+        'fetch',
+        'ctx',
+        'context',
+        'inputFiles',
+        'outputDir',
+        'inputDir',
+        'workDir',
+        'workspaceDir',
+        'ffmpegPath',
+        'ffprobePath',
+        'downloadFile',
+        'saveToWorkspace',
+        'saveOutput',
+        'probeVideo',
+        '__filename',
+        '__dirname',
+        'module',
+        'exports',
+        compiledCode,
+      )
+
+      result = await withTimeout(
+        runner(
+          localRequire,
+          safeProcess,
+          console,
+          fetch,
+          context,
+          context,
+          inputFiles,
+          outputDir,
+          inputDir,
+          workDir,
+          workspaceDir,
+          ffmpegPath,
+          ffprobePath,
+          downloadFile,
+          saveToWorkspace,
+          saveOutput,
+          probeVideoFile,
+          path.join(workDir, options.codePath ? path.basename(options.codePath) : 'agent-media-code.js'),
+          workDir,
+          mediaModule,
+          mediaModule.exports,
+        ),
+        timeoutMs,
+        'Node media runtime',
+      )
+
+      // Natural ESM/CommonJS files may export their program instead of using a
+      // top-level return. Invoke the conventional exported function with the
+      // same open runtime API, or accept an exported result object directly.
+      if (result === undefined) {
+        const exported = mediaModule.exports as any
+        const entry = exported?.default ?? exported?.main ?? exported?.run ?? exported?.handler
+        if (typeof entry === 'function') {
+          result = await withTimeout(
+            Promise.resolve(entry({
+              require: localRequire,
+              process: safeProcess,
+              console,
+              fetch,
+              ctx: context,
+              context,
+              inputFiles,
+              outputDir,
+              inputDir,
+              workDir,
+              workspaceDir,
+              ffmpegPath,
+              ffprobePath,
+              downloadFile,
+              saveToWorkspace,
+              saveOutput,
+              probeVideo: probeVideoFile,
+            })),
+            timeoutMs,
+            'Node media exported entry',
+          )
+        } else if (entry !== undefined) {
+          result = entry
+        } else if (exported && (typeof exported !== 'object' || Object.keys(exported).length > 0)) {
+          result = exported
+        }
+      }
+    }
 
     let outputs = normalizeOutputs(result, outputDir)
     if (outputs.length === 0) {
@@ -491,6 +805,15 @@ export async function runNodeMediaCode(options: RunNodeMediaCodeOptions): Promis
     }
 
     for (const output of outputs) {
+      const previouslySaved = output.path
+        ? savedOutputsByLocalPath.get(path.resolve(output.path))
+        : undefined
+      if (previouslySaved && !output.storageUrl) {
+        output.workspacePath = previouslySaved.workspacePath
+        output.storageUrl = previouslySaved.storageUrl
+        output.contentType = output.contentType || previouslySaved.contentType
+      }
+
       if (!output.storageUrl && output.path && existsSync(output.path)) {
         const body = await readFile(output.path)
         const ct = output.contentType || guessContentType(output.path)

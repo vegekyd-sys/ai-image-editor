@@ -249,7 +249,12 @@ async function localizeVideos(design: DesignPayload, cacheDir: string, port: num
 async function getBundleUrl(): Promise<string> {
   if (!bundlePromise) {
     const entryPoint = path.resolve(process.cwd(), 'src/remotion/index.tsx')
-    const outDir = process.env.REMOTION_LOCAL_BUNDLE_DIR || path.join(process.cwd(), '.remotion-bundle-local')
+    const repoKey = createHash('sha256').update(process.cwd()).digest('hex').slice(0, 12)
+    // Keep generated webpack chunks outside the repository. Leaving them under
+    // process.cwd() makes eslint/build treat thousands of bundle files as
+    // application source after the first local render.
+    const outDir = process.env.REMOTION_LOCAL_BUNDLE_DIR
+      || path.join(process.env.TMPDIR || '/tmp', `makaron-remotion-bundle-${repoKey}`)
     const t0 = Date.now()
     bundlePromise = bundle({
       entryPoint,

@@ -179,7 +179,7 @@ Upload a photo, and the AI understands its content, mood, and atmosphere, proact
 **AnimateSheet (Bottom Sheet)**
 - Two modes: `create` (new video) and `detail` (view existing, read-only)
 - Snapshot thumbnails with delete/reorder (@1 @2 @3...)
-- AI script generation: Agent (Claude Sonnet) writes motion script from snapshots
+- AI script generation: default Agent (GPT-5.6 Terra) writes motion script from snapshots
 - Manual script editing in textarea
 - Duration options: 3s / 5s / 7s / 10s / 15s / smart (API decides)
 - Smart bottom button: empty → "Generate Script", has script → "Generate Video"
@@ -312,23 +312,23 @@ Reopen makaron.app
 
 ### Agent (Makaron Agent)
 
-- **Model**: Claude Sonnet 4.6 (AWS Bedrock, Claude Agent SDK)
+- **Model**: GPT-5.6 Terra by default (Azure Responses); GPT-5.6 Sol and Luna are selectable
 - **Tools**:
   - `generate_image`: Calls Gemini for image generation/editing
-  - `analyze_image`: Returns image content block for Sonnet's native vision
+  - `analyze_image`: Returns image content for the selected model's native vision
   - `rotate_camera`: Calls HuggingFace/fal.ai for 3D camera rotation
 - **Multi-turn context**: Recent messages prepended to prompt
 - **Original image reference**: `snapshots[0]` passed as face reference on each generation
-- **Token-level streaming**: `includePartialMessages: true`
+- **Token-level streaming**: AI SDK text stream over Azure Responses
 - **System prompt**: `agent.md` — route layer (workflow, intent, when to call which tool)
 - **Tool descriptions**: Self-contained (parameter meaning, image role, output format, edge cases)
 
 ### Video Script Generation
 
-- **Model**: Claude Sonnet 4.6 (AWS Bedrock) — same Agent, background execution
+- **Model**: GPT-5.6 Terra (Azure Responses) — same default Agent, background execution
 - **Input**: Snapshot images (as URLs) + project context
 - **Output**: Motion script streamed into AnimateSheet textarea + CUI messages
-- **Duration**: ~2 minutes (Bedrock Sonnet multi-image TTFT is slow)
+- **Duration**: Depends on image count and Azure model reasoning
 
 ---
 
@@ -348,7 +348,7 @@ Reopen makaron.app
 | Route | Function | Max Duration |
 |-------|----------|-------------|
 | `POST /api/tips` | SSE stream of 6 Tips (Gemini Flash) | 60s |
-| `POST /api/agent` | SSE stream agent conversation (Claude + Gemini) | 120s |
+| `POST /api/agent` | SSE stream agent conversation (GPT-5.6 + Gemini tools) | 120s |
 | `POST /api/preview` | Stateless single-shot image edit (Gemini) | 120s |
 | `POST /api/rotate` | Camera angle rotation (HuggingFace/fal.ai) | 300s |
 | `POST /api/upload` | HEIC→JPEG fallback (Sharp compression) | 30s |
@@ -372,9 +372,9 @@ Gemini 3.1 Flash (OpenRouter) ← Image generation / editing
     v
 Edited Image (JPEG, Sharp quality 95)
 
-Claude Sonnet 4.6 (Bedrock) ← Agent brain + video script generation
+GPT-5.6 Terra (Azure Responses) ← Default Agent brain + video script generation
     |-- generate_image tool → Gemini
-    |-- analyze_image tool → Sonnet native vision
+    |-- analyze_image tool → GPT-5.6 native vision
     |-- rotate_camera tool → HuggingFace/fal.ai
 ```
 
@@ -394,7 +394,7 @@ Claude Sonnet 4.6 (Bedrock) ← Agent brain + video script generation
 - **Platform**: Vercel, Function Region `hnd1` (Tokyo)
 - **Domain**: `makaron.app` (custom)
 - **Environments**: Production (`--prod`) + Preview (auto-generated URLs, login works)
-- **Key Env Vars**: `OPENROUTER_API_KEY`, `AWS_*` (Bedrock), `SUPABASE_*`, `HF_TOKEN`, `IMAGE_MODEL`, `ANIMATE_PROVIDER`
+- **Key Env Vars**: `AZURE_OPENAI_API_KEY`, `AZURE_OPENAI_RESPONSES_URL`, `OPENROUTER_API_KEY`, `SUPABASE_*`, `HF_TOKEN`, `IMAGE_MODEL`, `ANIMATE_PROVIDER`
 
 ### Performance Optimizations
 
@@ -444,7 +444,7 @@ Claude Sonnet 4.6 (Bedrock) ← Agent brain + video script generation
 | Wild: glasses-related ideas still break through | Medium | Documented |
 | Enhance direction F (weather) sometimes regenerates people | Medium | Documented |
 | Camera rotation speed varies (cold start 150s) | Medium | Accepted |
-| Video script generation slow (~2 min, Bedrock TTFT) | Medium | Accepted |
+| Video script generation latency varies with image count and model reasoning | Medium | Monitored |
 
 ---
 

@@ -27,6 +27,7 @@ const APP_URL = process.env.MAKARON_APP_URL || DEFAULT_URL;
 const NPM_PACKAGE_NAME = 'makaron-cli';
 const UPDATE_CHECK_INTERVAL_MS = 24 * 60 * 60 * 1000;
 const UPDATE_CHECK_TIMEOUT_MS = 400;
+const AGENT_WAIT_TIMEOUT_SECONDS = Math.max(900, Number(process.env.MAKARON_AGENT_WAIT_TIMEOUT_SECONDS || 10_800));
 
 // Public anon key (safe to embed — only enables auth, not data access)
 const SUPABASE_URL = 'https://sdyrtztrjgmmpnirswxt.supabase.co';
@@ -49,6 +50,10 @@ const SEEDANCE_MIN_VIDEO_SIDE = 300;
 const SEEDANCE_MAX_VIDEO_SIDE = 6000;
 const SEEDANCE_MIN_VIDEO_ASPECT = 0.4;
 const SEEDANCE_MAX_VIDEO_ASPECT = 2.5;
+
+function warnLegacyModelFlag(replacement) {
+  process.stderr.write(`⚠️  --model is deprecated here; use ${replacement}.\n`);
+}
 
 function getCliVersion() {
   try {
@@ -277,13 +282,14 @@ Options:
   --video <file|url>        Attach a video to the project timeline. Repeatable.
   --audio <file|url>        Attach a song, beat, or voice reference. MP3/WAV, repeatable.
   --skill <id|label|name>   Use an installed skill or auto-install a matched marketplace skill.
-  --model <name>            Preferred image/model route.
-  --video-model <name>      Preferred video model: seedance-fast, seedance-mini, seedance, kling, or grok.
   --video-resolution <res>  Video resolution: auto, 480p, 720p, 1080p, or 4k.
   --background, -b          Submit and print a runId.
   --json                    Output structured JSON.
   --stream                  Legacy live SSE stream.
   --help, -h                Show this help.
+
+Model routing is automatic in chat. Do not pass --agent-model, --image-model,
+--video-model, or the legacy --model flag.
 
 What you can ask:
   Image edit
@@ -308,7 +314,7 @@ What you can ask:
     makaron chat --project <id> "add calm piano background music"
 
   Reference audio / beat sync
-    makaron chat --project auto --audio beat.mp3 --video-model seedance-fast --video-resolution 480p "用这个音乐做卡点视频"
+    makaron chat --project auto --audio beat.mp3 --video-resolution 480p "用这个音乐做卡点视频"
     makaron chat --project <id> --audio https://example.com/beat.mp3 "add this as the soundtrack"
 
   Motion design
@@ -333,7 +339,7 @@ async function abortRun(baseUrl, headers, runId) {
   } catch { /* best effort */ }
 }
 
-async function streamAgent(baseUrl, headers, projectId, prompt) {
+async function streamAgent(baseUrl, headers, projectId, prompt, opts = {}) {
   const controller = new AbortController();
   const res = await fetch(`${baseUrl}/api/agent`, {
     method: 'POST',
@@ -345,6 +351,9 @@ async function streamAgent(baseUrl, headers, projectId, prompt) {
       projectId,
       prompt,
       headless: true,
+      ...(opts.videoResolution ? { videoResolution: opts.videoResolution } : {}),
+      ...(opts.uploadedVideoCount ? { uploadedVideoCount: opts.uploadedVideoCount } : {}),
+      ...(opts.turnMediaCount ? { turnMediaCount: opts.turnMediaCount } : {}),
     }),
     signal: controller.signal,
   });
@@ -451,12 +460,12 @@ async function streamAgent(baseUrl, headers, projectId, prompt) {
 
 async function submitRun(baseUrl, headers, projectId, prompt, opts = {}) {
   const body = { projectId, prompt };
-  if (opts.preferredModel) body.preferredModel = opts.preferredModel;
-  if (opts.videoModel) body.videoModel = opts.videoModel;
   if (opts.videoResolution) body.videoResolution = opts.videoResolution;
   if (opts.currentSnapshotIndex != null) body.currentSnapshotIndex = opts.currentSnapshotIndex;
   if (opts.isNsfw) body.isNsfw = opts.isNsfw;
   if (opts.audioAttachments?.length) body.audioAttachments = opts.audioAttachments;
+  if (opts.uploadedVideoCount) body.uploadedVideoCount = opts.uploadedVideoCount;
+  if (opts.turnMediaCount) body.turnMediaCount = opts.turnMediaCount;
 
   const res = await fetch(`${baseUrl}/api/agent/run`, {
     method: 'POST',
@@ -500,7 +509,7 @@ async function pollRun(baseUrl, headers, runId, opts = {}) {
     try {
       const res = await fetch(`${baseUrl}/api/agent/run/${runId}?${params}`, { headers });
       if (!res.ok) {
-        if (elapsed > 800) { process.stderr.write(`\n❌ Timeout after ${elapsed}s\n`); process.exit(1); }
+        if (elapsed > AGENT_WAIT_TIMEOUT_SECONDS) { process.stderr.write(`\n❌ Timeout after ${elapsed}s\n`); process.exit(1); }
         continue;
       }
       data = await res.json();
@@ -550,6 +559,13 @@ async function pollRun(baseUrl, headers, runId, opts = {}) {
           case 'music_task':
             process.stderr.write(`\n🎵 Music submitted: ${ev.data?.taskId}\n`);
             break;
+          case 'studio_run': {
+            const stage = ev.data?.currentStage || ev.data?.current_stage || 'complete';
+            const recipe = ev.data?.recipe || 'studio';
+            const status = ev.data?.status || 'running';
+            process.stderr.write(`\nStudio Run: ${recipe} / ${stage} / ${status}\n`);
+            break;
+          }
           case 'error':
             process.stderr.write(`\n❌ Error: ${ev.data?.message}\n`);
             break;
@@ -561,6 +577,7 @@ async function pollRun(baseUrl, headers, runId, opts = {}) {
 
     // Check terminal status
     if (data.status === 'completed' || data.status === 'failed' || data.status === 'aborted') {
+      normalizeRunResponse(data);
       if (printedText && !json) process.stdout.write('\n');
       if (data.status === 'completed' && exportCompositions) {
         data = await exportAnimatedCompositionsFromRun(baseUrl, headers, data, {
@@ -592,7 +609,7 @@ async function pollRun(baseUrl, headers, runId, opts = {}) {
         process.stderr.write(`🔗  ${APP_URL}/projects/${data.projectId}\n`);
       }
 
-      if (data.status === 'failed') process.exit(1);
+      if (data.status === 'failed' || data.status === 'aborted') process.exit(1);
       return data;
     }
   }
@@ -601,11 +618,15 @@ async function pollRun(baseUrl, headers, runId, opts = {}) {
 // ─── Pick Helper ────────────────────────────────────────────────────────────
 
 function applyPick(data, field) {
+  const videoUrls = [...new Set([
+    ...(data.output || []).filter(o => o.type === 'video' && o.url).map(o => o.url),
+    ...(data.result?.videos || []).filter(v => v.videoUrl).map(v => v.videoUrl),
+  ])];
   switch (field) {
     case 'first_image_url': return data.output?.find(o => o.type === 'image')?.url || null;
     case 'image_urls': return (data.output || []).filter(o => o.type === 'image' && o.url).map(o => o.url);
-    case 'first_video_url': return data.output?.find(o => o.type === 'video' && o.url)?.url || null;
-    case 'video_urls': return (data.output || []).filter(o => o.type === 'video' && o.url).map(o => o.url);
+    case 'first_video_url': return videoUrls[0] || null;
+    case 'video_urls': return videoUrls;
     case 'first_design_url': return data.output?.find(o => o.type === 'design')?.url || null;
     case 'design_urls': return (data.output || []).filter(o => o.type === 'design' && o.url).map(o => o.url);
     case 'first_music_url': return data.output?.find(o => o.type === 'music' && o.url)?.url || null;
@@ -616,6 +637,8 @@ function applyPick(data, field) {
       description: action.description,
       source: action.source,
     }));
+    case 'studio_run': return [...(data.output || [])].reverse().find(o => o.type === 'studio_run') || null;
+    case 'studio_recipe': return [...(data.output || [])].reverse().find(o => o.type === 'studio_run')?.recipe || null;
     case 'project_url': return data.project_url || data.projectUrl || null;
     case 'output': return data.output || [];
     case 'text': return data.output?.find(o => o.type === 'text')?.content || null;
@@ -637,7 +660,7 @@ async function watchRun(baseUrl, headers, runId, opts = {}) {
     try {
       const res = await fetch(`${baseUrl}/api/agent/run/${runId}`, { headers });
       if (!res.ok) {
-        if (elapsed > 800) { process.stderr.write(`Timeout after ${elapsed}s\n`); process.exit(2); }
+        if (elapsed > AGENT_WAIT_TIMEOUT_SECONDS) { process.stderr.write(`Timeout after ${elapsed}s\n`); process.exit(2); }
         await new Promise(r => setTimeout(r, interval));
         continue;
       }
@@ -971,6 +994,17 @@ function timeSince(date) {
 
 // ─── Skill Marketplace ──────────────────────────────────────────────────────
 
+const MARKETPLACE_LOCALES = ['en', 'zh', 'zh-Hant', 'ja'];
+
+function localizedValues(value) {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return [];
+  return Object.values(value).filter(item => typeof item === 'string' && item.trim());
+}
+
+function localizedCoverage(value) {
+  return MARKETPLACE_LOCALES.filter(locale => typeof value?.[locale] === 'string' && value[locale].trim()).length;
+}
+
 function getSkillLabel(skill) {
   return skill.labels?.en || skill.labels?.zh || skill.label || skill.name || skill.id;
 }
@@ -1012,16 +1046,43 @@ async function fetchMarketplaceSkills(baseUrl, opts = {}) {
   return skills.map(normalizeMarketplaceSkill);
 }
 
+async function fetchBuiltInSkills(baseUrl) {
+  const res = await fetch(`${baseUrl}/api/skills?include=internal`);
+  if (!res.ok) {
+    process.stderr.write(`Error ${res.status}: ${await res.text()}\n`);
+    process.exit(1);
+  }
+  const data = await res.json();
+  return (data.skills || []).filter(skill => skill.builtIn);
+}
+
+function printBuiltInSkills(skills) {
+  if (!skills.length) {
+    console.log('No built-in skills found.');
+    return;
+  }
+  console.log(`Built-in skills: ${skills.length}\n`);
+  for (const skill of skills) {
+    const recipe = skill.studioRunRecipe ? `  [Studio Run: ${skill.studioRunRecipe}]` : '';
+    const source = skill.sourceMediaRequired ? '  [source media required]' : '';
+    const adapter = skill.sourceProject === 'openmontage'
+      ? `  [OpenMontage: ${skill.supportLevel || 'adapted'}${skill.canonicalSkill && skill.canonicalSkill !== skill.name ? ` -> ${skill.canonicalSkill}` : ''}]`
+      : '';
+    console.log(`  ${skill.name}${recipe}${source}${adapter}`);
+    if (skill.description) console.log(`    ${String(skill.description).replace(/\s+/g, ' ').trim()}`);
+  }
+}
+
 function marketplaceSearchText(skill) {
+  const localized = [...localizedValues(skill.labels), ...localizedValues(skill.prompts)];
   return [
     skill.id,
     skill.label,
-    skill.labels?.en,
-    skill.labels?.zh,
+    ...localized,
     skill.prompt,
+    ...(Array.isArray(skill.categories) ? skill.categories : []),
     slugifySkill(skill.label),
-    slugifySkill(skill.labels?.en),
-    slugifySkill(skill.labels?.zh),
+    ...localized.map(slugifySkill),
   ].filter(Boolean).join(' ').toLowerCase();
 }
 
@@ -1029,9 +1090,10 @@ function marketplaceSkillTokens(skill) {
   return [
     skill.id,
     skill.label,
-    skill.labels?.en,
-    skill.labels?.zh,
+    ...localizedValues(skill.labels),
+    ...localizedValues(skill.prompts),
     skill.prompt,
+    ...(Array.isArray(skill.categories) ? skill.categories : []),
   ].filter(Boolean).map(value => String(value).toLowerCase());
 }
 
@@ -1079,8 +1141,13 @@ function printMarketplaceSkill(skill) {
   console.log(`${skill.label}`);
   console.log(`ID: ${skill.id}`);
   console.log(`Type: ${skill.hasSkill ? 'installable skill' : 'prompt template'}`);
-  if (skill.labels?.zh && skill.labels.zh !== skill.label) console.log(`ZH: ${skill.labels.zh}`);
-  if (skill.prompt) console.log(`Prompt: ${skill.prompt}`);
+  for (const locale of MARKETPLACE_LOCALES) {
+    const label = skill.labels?.[locale];
+    if (label && label !== skill.label) console.log(`${locale}: ${label}`);
+  }
+  if (Array.isArray(skill.categories) && skill.categories.length) console.log(`Categories: ${skill.categories.join(', ')}`);
+  console.log(`i18n: titles ${localizedCoverage(skill.labels)}/4 · prompts ${localizedCoverage(skill.prompts)}/4`);
+  if (skill.prompts?.en || skill.prompt) console.log(`Prompt (en): ${skill.prompts?.en || skill.prompt}`);
   if (skill.image) console.log(`Cover: ${skill.image}`);
   if (skill.hasSkill) console.log(`Install: makaron skills install ${skill.id}`);
 }
@@ -1518,6 +1585,7 @@ Commands:
   register --verify --challenge-id <id> --answer <n>  Verify and save API key
   claim                              Get claim URL for human to link account
   login                              Log in to Makaron (human interactive)
+  credits                            Show current credit balance
   list (ls)                          List all projects
   project media <projectId> --json    List timeline media for a project
   create --image <file>              Create project from local image
@@ -1525,7 +1593,7 @@ Commands:
   create --title "name"              Create empty project (text-to-image)
 
   chat --project <id> "message"      Chat (non-blocking, polls for result)
-  chat --project <id> --skill <id>   Use or auto-install a marketplace skill
+  chat --project <id> --skill <id>   Use a built-in or marketplace skill
   chat --project <id> --video <file> Attach video to conversation
   chat --project <id> --audio <file> Attach song/beat/voice reference
   chat --project <id> -b "message"   Background: submit and print runId
@@ -1542,7 +1610,7 @@ Commands:
                                      Export editable Remotion composition to MP4
   responses list --project <id>      List runs for a project
   abort <runId>                      Abort a running Agent
-  skills list|search|show|install    Browse and install marketplace skills
+  skills list|search|show|install    Browse built-in and marketplace skills
 
   edit [--image <file>] "prompt"     AI image edit / text-to-image
   analyze --video <file|url>         Analyze video content
@@ -1551,9 +1619,17 @@ Commands:
 
   admin                              Admin commands (skills, upload, set-admin)
 
+Examples:
+  makaron chat --project auto "plan a launch poster"
+  makaron chat --project <id> "make it cinematic"
+  makaron chat --project <id> "turn this into a short video"
+
+Run makaron <command> --help for command-specific options.
+Chat chooses agent, image, and video models automatically.
+
 Environment:
-  MAKARON_API_KEY  API key (mk_live_xxx) — recommended for agents
-  MAKARON_URL      API base (default: ${DEFAULT_URL})
+  MAKARON_API_KEY       API key (mk_live_xxx) — recommended for agents
+  MAKARON_URL           API base (default: ${DEFAULT_URL})
 `);
 }
 
@@ -1624,6 +1700,8 @@ function printHelp(topic, subtopic) {
 `);
   } else if (topic === 'list' || topic === 'ls') {
     console.log('Usage: makaron list');
+  } else if (topic === 'credits' || topic === 'credit' || topic === 'balance') {
+    console.log('Usage: makaron credits [--json]');
   } else if (topic === 'project' || topic === 'projects') {
     if (subtopic === 'media') console.log('Usage: makaron project media <projectId> [--json]');
     else console.log(`Project commands:
@@ -1636,13 +1714,15 @@ function printHelp(topic, subtopic) {
   } else if (topic === 'install-skill') {
     console.log('Usage: makaron install-skill [--global] [--agent <agent>] [--yes]');
   } else if (topic === 'skills') {
-    if (subtopic === 'list') console.log('Usage: makaron skills list [--json]');
+    if (subtopic === 'list') console.log('Usage: makaron skills list [--built-in] [--json]');
     else if (subtopic === 'search') console.log('Usage: makaron skills search <query> [--json]');
     else if (subtopic === 'show') console.log('Usage: makaron skills show <marketplace-id|label> [--json]');
     else if (subtopic === 'install') console.log('Usage: makaron skills install <marketplace-id|label> [--json]');
-    else console.log(`Skill marketplace commands:
+    else console.log(`Skill commands:
+  skills list --built-in              List all built-in Makaron skills and Studio Run recipes
   skills list                         List marketplace skills
   skills search <query>               Search marketplace skills
+  skills show <id|label> --built-in   Show a built-in skill
   skills show <id|label>              Show a marketplace skill
   skills install <id|label>           Install a marketplace skill to your workspace
 
@@ -1660,17 +1740,18 @@ Use with chat:
   composition status <jobId> [--wait] [--json]
 `);
   } else if (topic === 'edit') {
-    console.log('Usage: makaron edit [--image <file|url>] [--model gemini|qwen|openai] [--skill enhance|creative|wild|captions] [--ref <file>] [--out <file>] "prompt"');
+    console.log('Usage: makaron edit [--image <file|url>] [--image-model gemini|gemini-lite|qwen|openai|pony|wai] [--skill enhance|creative|wild|captions] [--ref <file>] [--out <file>] "prompt"');
   } else if (topic === 'analyze') {
     console.log('Usage: makaron analyze --video <file|url> ["question"]');
   } else if (topic === 'video') {
     if (subtopic === 'script') console.log('Usage: makaron video script --image <file> [--image <file>] [--lang en|zh] "direction"');
-    else if (subtopic === 'create') console.log('Usage: makaron video create --script "..." (--image <url> | --video <public-url>) [--duration 10] [--aspect 9:16] [--model seedance-fast|seedance-mini|seedance|kling|grok] [--video-resolution auto|480p|720p|1080p|4k] [--keep-original-sound]');
+    else if (subtopic === 'create') console.log('Usage: makaron video create --script "..." [--image <url> | --video <public-url>] [--duration 10] [--aspect 9:16] [--video-model seedance-fast|seedance-mini|seedance|kling|grok|google-omni] [--video-resolution auto|480p|720p|1080p|4k] [--keep-original-sound]');
     else if (subtopic === 'status') console.log('Usage: makaron video status <taskId> | --snapshot <snapshotId> [--wait]');
     else console.log(`Video commands:
   video script --image <file> [--image <file>] "direction"   Write video script
+  video create --script "..." --video-model seedance-fast    Native text-to-video (no image required)
   video create --script "..." --image <url> [--duration 10]  Submit video task
-  video create --script "..." --video <public-url> [--model seedance-fast|seedance-mini|seedance|kling]  Edit a video (standalone; Grok does not support video refs)
+  video create --script "..." --video <public-url> [--video-model seedance-fast|seedance-mini|seedance|kling|google-omni]  Edit a video (standalone; Grok does not support video refs)
   video status <taskId>                                      Check video status
   video status --snapshot <snapshotId> [--wait]              Check v2 video snapshot
 `);
@@ -1682,7 +1763,8 @@ Use with chat:
   music status <taskId>                                      Check music status
 `);
   } else if (topic === 'admin') {
-    if (subtopic === 'skills') console.log('Usage: makaron admin skills [add|update|delete] ...');
+    if (subtopic === 'skills') console.log('Usage: makaron admin skills [--json|add|update|delete] ...');
+    else if (subtopic === 'skill-categories') console.log('Usage: makaron admin skill-categories [--json|add|update|delete] ...');
     else if (subtopic === 'upload') console.log('Usage: makaron admin upload <local-file> <storage-path>');
     else if (subtopic === 'fetch-skill') console.log('Usage: makaron admin fetch-skill <share-code|url>');
     else if (subtopic === 'set-admin') console.log('Usage: makaron admin set-admin <email>');
@@ -1691,6 +1773,10 @@ Use with chat:
   admin skills add '<json>'            Add a new skill
   admin skills update <id> '<json>'    Update a skill
   admin skills delete <id>             Delete a skill
+  admin skill-categories               List marketplace categories
+  admin skill-categories add '<json>'  Add a category
+  admin skill-categories update <id> '<json>'
+  admin skill-categories delete <id>   Delete a category
   admin upload <file> <storage-path>   Upload file to Storage
   admin fetch-skill <code|url>         Download skill from share link
   admin set-admin <email>              Grant admin access to a user
@@ -1724,6 +1810,29 @@ if (!command || command === '--help' || command === '-h' || command === 'help') 
   installAgentSkill(args.slice(1));
 } else if (command === 'login') {
   await login();
+} else if (command === 'credits' || command === 'credit' || command === 'balance') {
+  const { headers, baseUrl } = getAuth();
+  const res = await fetch(`${baseUrl}/api/billing/credits`, { headers });
+  const data = await res.json().catch(() => null);
+  if (!res.ok || !data) {
+    const message = data?.error || data?.message || (res.ok ? 'Invalid response' : `HTTP ${res.status}`);
+    process.stderr.write(`Failed to get credits: ${message}\n`);
+    process.exit(1);
+  }
+  if (args.includes('--json')) {
+    console.log(JSON.stringify(data));
+  } else {
+    console.log(`Credits: ${data.balance ?? 0}`);
+    console.log(`Lifetime purchased: ${data.lifetimePurchased ?? 0}`);
+    console.log(`Lifetime used: ${data.lifetimeUsed ?? 0}`);
+    if (data.subscription) {
+      const plan = data.subscription.planId || 'unknown';
+      const status = data.subscription.status ? ` (${data.subscription.status})` : '';
+      console.log(`Subscription: ${plan}${status}`);
+    } else {
+      console.log('Subscription: none');
+    }
+  }
 } else if (command === 'create') {
   const { headers, baseUrl } = getAuth();
   const opts = { images: [], imageUrls: [] };
@@ -1753,9 +1862,7 @@ if (!command || command === '--help' || command === '-h' || command === 'help') 
   let background = false;
   let jsonOutput = false;
   let activeSkill = undefined;
-  let videoModel = undefined;
   let videoResolution = undefined;
-  let preferredModel = undefined;
   for (let i = 1; i < args.length; i++) {
     if (args[i] === '--project' && args[i + 1]) projectId = args[++i];
     else if (args[i] === '--image' && args[i + 1]) chatImages.push(args[++i]);
@@ -1766,9 +1873,15 @@ if (!command || command === '--help' || command === '-h' || command === 'help') 
     else if (args[i] === '--stream') useStream = true;
     else if (args[i] === '--background' || args[i] === '-b') background = true;
     else if (args[i] === '--json') jsonOutput = true;
-    else if (args[i] === '--video-model' && args[i + 1]) videoModel = args[++i];
     else if (args[i] === '--video-resolution' && args[i + 1]) videoResolution = args[++i];
-    else if (args[i] === '--model' && args[i + 1]) preferredModel = args[++i];
+    else if (
+      ['--agent-model', '--image-model', '--video-model', '--model'].includes(args[i])
+      || ['--agent-model=', '--image-model=', '--video-model=', '--model='].some(prefix => args[i].startsWith(prefix))
+    ) {
+      const flag = args[i].split('=')[0];
+      process.stderr.write(`❌ makaron chat chooses agent, image, and video models automatically. Remove ${flag} and retry.\n`);
+      process.exit(1);
+    }
     else promptParts.push(args[i]);
   }
   const prompt = promptParts.join(' ');
@@ -1822,6 +1935,9 @@ if (!command || command === '--help' || command === '-h' || command === 'help') 
     process.exit(1);
   }
 
+  let uploadedTurnMediaCount = 0;
+  let uploadedTurnVideoCount = 0;
+
   // --project auto: create a new project (with images/videos if provided)
   if (!projectId || projectId === 'auto') {
     // Create an empty project first, then attach media by URL. Local images use
@@ -1859,6 +1975,7 @@ if (!command || command === '--help' || command === '-h' || command === 'help') 
         process.exit(1);
       }
       process.stderr.write(`📤 Added ${addedCount} image(s) to project\n`);
+      uploadedTurnMediaCount += addedCount;
     } else {
       process.stderr.write(`❌ Failed to add images: ${await res.text()}\n`);
       process.exit(1);
@@ -1950,19 +2067,22 @@ if (!command || command === '--help' || command === '-h' || command === 'help') 
         const data = await res.json();
         const videoSnaps = (data.snapshots || []).filter(s => s.type === 'video');
         process.stderr.write(`📹 Added ${videoSnaps.length} video(s) to timeline\n`);
+        uploadedTurnVideoCount += videoSnaps.length;
+        uploadedTurnMediaCount += videoSnaps.length;
       } else {
         process.stderr.write(`⚠️ Failed to add videos: ${await res.text()}\n`);
       }
     }
 
-    // Inject hint so Agent knows videos are available
-    const hint = `[User uploaded ${chatVideos.length === 1 ? 'a video' : `${chatVideos.length} videos`}. Use analyze_video to understand the content.]`;
-    finalPrompt = `${finalPrompt}\n\n${hint}`;
   }
 
   if (useStream) {
     // Legacy SSE mode
-    const { results } = await streamAgent(baseUrl, headers, projectId, finalPrompt);
+    const { results } = await streamAgent(baseUrl, headers, projectId, finalPrompt, {
+      videoResolution,
+      uploadedVideoCount: uploadedTurnVideoCount,
+      turnMediaCount: uploadedTurnMediaCount,
+    });
     process.stderr.write('\n━━━ Results ━━━\n');
     for (const img of results.images) process.stderr.write(`🖼️  Image: ${img.imageUrl}\n`);
     for (const d of results.designs) process.stderr.write(`🎨  ${d.desc}\n`);
@@ -1971,7 +2091,12 @@ if (!command || command === '--help' || command === '-h' || command === 'help') 
     for (const task of results.musicTasks) await pollMusic(baseUrl, headers, task.taskId);
   } else {
     // Default: fire-and-forget + poll
-    const { runId } = await submitRun(baseUrl, headers, projectId, finalPrompt, { videoModel, videoResolution, preferredModel, audioAttachments });
+    const { runId } = await submitRun(baseUrl, headers, projectId, finalPrompt, {
+      videoResolution,
+      audioAttachments,
+      uploadedVideoCount: uploadedTurnVideoCount,
+      turnMediaCount: uploadedTurnMediaCount,
+    });
     if (background) {
       // Just print runId and exit
       if (jsonOutput) {
@@ -2159,8 +2284,10 @@ if (!command || command === '--help' || command === '-h' || command === 'help') 
   const jsonOutput = args.includes('--json');
 
   if (sub === 'list') {
-    const skills = await fetchMarketplaceSkills(baseUrl);
+    const builtIn = args.includes('--built-in');
+    const skills = builtIn ? await fetchBuiltInSkills(baseUrl) : await fetchMarketplaceSkills(baseUrl);
     if (jsonOutput) console.log(JSON.stringify({ skills }, null, 2));
+    else if (builtIn) printBuiltInSkills(skills);
     else printMarketplaceSkills(skills);
   } else if (sub === 'search') {
     const query = args.filter((arg, index) => index > 1 && arg !== '--json').join(' ').trim();
@@ -2177,11 +2304,15 @@ if (!command || command === '--help' || command === '-h' || command === 'help') 
     else printMarketplaceSkills(skills);
   } else if (sub === 'show') {
     const identifier = args[2];
-    if (!identifier) { console.error('Usage: makaron skills show <marketplace-id|label> [--json]'); process.exit(1); }
-    const skills = await fetchMarketplaceSkills(baseUrl);
-    const skill = findMarketplaceSkill(skills, identifier);
+    if (!identifier) { console.error('Usage: makaron skills show <id|label> [--built-in] [--json]'); process.exit(1); }
+    const builtIn = args.includes('--built-in');
+    const skills = builtIn ? await fetchBuiltInSkills(baseUrl) : await fetchMarketplaceSkills(baseUrl);
+    const skill = builtIn
+      ? skills.find(candidate => candidate.name === identifier || candidate.label?.toLowerCase() === identifier.toLowerCase())
+      : findMarketplaceSkill(skills, identifier);
     if (!skill) { console.error(`Skill not found: ${identifier}`); process.exit(1); }
     if (jsonOutput) console.log(JSON.stringify(skill, null, 2));
+    else if (builtIn) printBuiltInSkills([skill]);
     else printMarketplaceSkill(skill);
   } else if (sub === 'install') {
     const identifier = args[2];
@@ -2194,9 +2325,11 @@ if (!command || command === '--help' || command === '-h' || command === 'help') 
     if (jsonOutput) console.log(JSON.stringify({ ...data, marketplaceId: skill.id, label: skill.label }, null, 2));
     else console.log(data.skillName);
   } else {
-    console.log(`Skill marketplace commands:
+    console.log(`Skill commands:
+  skills list --built-in              List all built-in Makaron skills and Studio Run recipes
   skills list                         List marketplace skills
   skills search <query>               Search marketplace skills
+  skills show <id|label> --built-in   Show a built-in skill
   skills show <id|label>              Show a marketplace skill
   skills install <id|label>           Install a marketplace skill to your workspace
 `);
@@ -2238,7 +2371,11 @@ if (!command || command === '--help' || command === '-h' || command === 'help') 
   let outputPath = null;
   for (let i = 1; i < args.length; i++) {
     if (args[i] === '--image' && args[i + 1]) editArgs.image = imageToArg(args[++i]);
-    else if (args[i] === '--model' && args[i + 1]) editArgs.model = args[++i];
+    else if (args[i] === '--image-model' && args[i + 1]) editArgs.model = args[++i];
+    else if (args[i] === '--model' && args[i + 1]) {
+      warnLegacyModelFlag('--image-model');
+      editArgs.model = args[++i];
+    }
     else if (args[i] === '--skill' && args[i + 1]) editArgs.skill = args[++i];
     else if (args[i] === '--ref' && args[i + 1]) {
       editArgs.referenceImages = editArgs.referenceImages || [];
@@ -2249,7 +2386,7 @@ if (!command || command === '--help' || command === '-h' || command === 'help') 
     else promptParts.push(args[i]);
   }
   editArgs.editPrompt = promptParts.join(' ');
-  if (!editArgs.editPrompt) { console.error('Usage: makaron edit [--image <file|url>] [--model gemini|qwen|openai] [--ref <file>] [--out <file>] "prompt"'); process.exit(1); }
+  if (!editArgs.editPrompt) { console.error('Usage: makaron edit [--image <file|url>] [--image-model gemini|gemini-lite|qwen|openai|pony|wai] [--ref <file>] [--out <file>] "prompt"'); process.exit(1); }
   process.stderr.write('🎨 Generating...\n');
   const result = await callMcpTool(baseUrl, headers, 'makaron_edit_image', editArgs);
   saveMcpImage(result, outputPath);
@@ -2294,7 +2431,11 @@ if (!command || command === '--help' || command === '-h' || command === 'help') 
       else if (args[i] === '--script-file' && args[i + 1]) script = fs.readFileSync(args[++i], 'utf-8');
       else if (args[i] === '--duration' && args[i + 1]) duration = Number(args[++i]);
       else if (args[i] === '--aspect' && args[i + 1]) aspectRatio = args[++i];
-      else if (args[i] === '--model' && args[i + 1]) videoModel = args[++i];
+      else if (args[i] === '--video-model' && args[i + 1]) videoModel = args[++i];
+      else if (args[i] === '--model' && args[i + 1]) {
+        warnLegacyModelFlag('--video-model');
+        videoModel = args[++i];
+      }
       else if (args[i] === '--video-resolution' && args[i + 1]) videoResolution = args[++i];
       else if (args[i] === '--resolution' && args[i + 1]) videoResolution = args[++i];
       else if (args[i] === '--keep-original-sound') keepOriginalSound = true;
@@ -2304,8 +2445,10 @@ if (!command || command === '--help' || command === '-h' || command === 'help') 
       }
       else if (args[i] === '--wait') wait = true;
     }
-    if ((!images.length && !video) || !script) {
-      console.error('Usage: makaron video create --script "..." (--image <url> | --video <public-url>) [--duration 10] [--aspect 9:16] [--model seedance-fast|seedance-mini|seedance|kling|grok] [--video-resolution auto|480p|720p|1080p|4k] [--keep-original-sound]');
+    const selectedVideoModel = videoModel || 'seedance-fast';
+    const isSeedanceModel = selectedVideoModel === 'seedance-fast' || selectedVideoModel === 'seedance-mini' || selectedVideoModel === 'seedance';
+    if (!script || (!images.length && !video && !isSeedanceModel)) {
+      console.error('Usage: makaron video create --script "..." [--image <url> | --video <public-url>] [--duration 10] [--aspect 9:16] [--video-model seedance-fast|seedance-mini|seedance|kling|grok|google-omni] [--video-resolution auto|480p|720p|1080p|4k] [--keep-original-sound]');
       process.exit(1);
     }
 
@@ -2316,9 +2459,8 @@ if (!command || command === '--help' || command === '-h' || command === 'help') 
 
     let videoUrl = isHttpUrl(video) ? video : null;
     let inputVideoMeta = null;
-    const selectedVideoModel = videoModel || 'seedance-fast';
     if (videoUrl) {
-      process.stderr.write(`📹 Assuming public video URL already matches provider reference limits. Seedance requires ≤${MAX_VIDEO_PROVIDER_REFERENCE_DURATION}s, ≤50MB, sides 300-6000px, frame pixels 409,600-${MAX_VIDEO_FRAME_PIXELS}; Kling requires ≤200MB and ≤2K. Grok does not support video references.\n`);
+      process.stderr.write(`📹 Assuming public video URL already matches provider reference limits. Seedance requires ≤${MAX_VIDEO_PROVIDER_REFERENCE_DURATION}s, ≤50MB, sides 300-6000px, frame pixels 409,600-${MAX_VIDEO_FRAME_PIXELS}; Kling requires ≤200MB and ≤2K; Google Omni accepts one reference video in Makaron; Grok does not support video references.\n`);
     }
     if (video && !videoUrl) {
       const valid = validateVideoFile(video, {
@@ -2391,8 +2533,9 @@ if (!command || command === '--help' || command === '-h' || command === 'help') 
   } else {
     console.log(`Video commands:
   video script --image <file> [--image <file>] "direction"   Write video script
+  video create --script "..." --video-model seedance-fast    Native text-to-video (no image required)
   video create --script "..." --image <url> [--duration 10]  Submit video task
-  video create --script "..." --video <public-url> [--model seedance-fast|seedance-mini|seedance|kling]  Edit a video (standalone; Grok does not support video refs)
+  video create --script "..." --video <public-url> [--video-model seedance-fast|seedance-mini|seedance|kling|google-omni]  Edit a video (standalone; Grok does not support video refs)
   video status <taskId>                                      Check video status
   video status --snapshot <snapshotId> [--wait]              Check v2 video snapshot
 `);
@@ -2438,18 +2581,23 @@ if (!command || command === '--help' || command === '-h' || command === 'help') 
   const sub = args[1];
 
   if (sub === 'skills') {
-    const action = args[2]; // add, update, delete, or none (list)
+    const action = args[2] === '--json' ? null : args[2]; // add, update, delete, or none (list)
     if (!action) {
       // List all skills
       const res = await fetch(`${baseUrl}/api/admin/home-skills`, { headers });
       if (!res.ok) { console.error(`Error ${res.status}:`, await res.text()); process.exit(1); }
       const skills = await res.json();
+      if (args.includes('--json')) {
+        console.log(JSON.stringify(skills, null, 2));
+        process.exit(0);
+      }
       console.log(`📋 ${skills.length} skills\n`);
       for (const s of skills) {
         const label = s.labels?.en || s.labels?.zh || '(no label)';
         const active = s.is_active ? '✅' : '❌';
         const hasZip = s.skill_path ? '📦' : '  ';
-        console.log(`  ${active} ${hasZip} ${String(s.sort_order).padStart(3)}  ${s.id}  ${label}`);
+        const categories = Array.isArray(s.categories) && s.categories.length ? s.categories.join(',') : 'uncategorized';
+        console.log(`  ${active} ${hasZip} ${String(s.sort_order).padStart(3)}  ${s.id}  ${label}  [${categories}]  title ${localizedCoverage(s.labels)}/4 · prompt ${localizedCoverage(s.prompts)}/4`);
       }
     } else if (action === 'add') {
       const json = args.slice(3).join(' ');
@@ -2482,6 +2630,59 @@ if (!command || command === '--help' || command === '-h' || command === 'help') 
       });
       if (!res.ok) { console.error(`Error ${res.status}:`, await res.text()); process.exit(1); }
       console.log(`✅ Skill ${id} deleted`);
+    } else {
+      console.error(`Unknown action: ${action}. Use: add, update, delete, or omit to list.`);
+      process.exit(1);
+    }
+
+  } else if (sub === 'skill-categories') {
+    const action = args[2] === '--json' ? null : args[2];
+    if (!action) {
+      const res = await fetch(`${baseUrl}/api/admin/skill-categories`, { headers });
+      if (!res.ok) { console.error(`Error ${res.status}:`, await res.text()); process.exit(1); }
+      const categories = await res.json();
+      if (args.includes('--json')) {
+        console.log(JSON.stringify(categories, null, 2));
+        process.exit(0);
+      }
+      console.log(`📂 ${categories.length} skill categories\n`);
+      for (const category of categories) {
+        const label = category.labels?.en || category.labels?.zh || category.id;
+        const active = category.is_active ? '✅' : '❌';
+        const icon = category.icon || ' ';
+        console.log(`  ${active} ${icon} ${String(category.sort_order).padStart(3)}  ${category.id}  ${label}  title ${localizedCoverage(category.labels)}/4`);
+      }
+    } else if (action === 'add') {
+      const json = args.slice(3).join(' ');
+      if (!json) { console.error('Usage: makaron admin skill-categories add \'{"id":"...","labels":{...}}\''); process.exit(1); }
+      let body;
+      try { body = JSON.parse(json); } catch { console.error('Invalid JSON'); process.exit(1); }
+      const res = await fetch(`${baseUrl}/api/admin/skill-categories`, {
+        method: 'POST', headers: { 'Content-Type': 'application/json', ...headers }, body: JSON.stringify(body),
+      });
+      if (!res.ok) { console.error(`Error ${res.status}:`, await res.text()); process.exit(1); }
+      const data = await res.json();
+      console.log(`✅ Skill category created: ${data.id}`);
+    } else if (action === 'update') {
+      const id = args[3];
+      const json = args.slice(4).join(' ');
+      if (!id || !json) { console.error('Usage: makaron admin skill-categories update <id> \'{"field":"value"}\''); process.exit(1); }
+      let body;
+      try { body = JSON.parse(json); } catch { console.error('Invalid JSON'); process.exit(1); }
+      body.id = id;
+      const res = await fetch(`${baseUrl}/api/admin/skill-categories`, {
+        method: 'PUT', headers: { 'Content-Type': 'application/json', ...headers }, body: JSON.stringify(body),
+      });
+      if (!res.ok) { console.error(`Error ${res.status}:`, await res.text()); process.exit(1); }
+      console.log(`✅ Skill category ${id} updated`);
+    } else if (action === 'delete') {
+      const id = args[3];
+      if (!id) { console.error('Usage: makaron admin skill-categories delete <id>'); process.exit(1); }
+      const res = await fetch(`${baseUrl}/api/admin/skill-categories`, {
+        method: 'DELETE', headers: { 'Content-Type': 'application/json', ...headers }, body: JSON.stringify({ id }),
+      });
+      if (!res.ok) { console.error(`Error ${res.status}:`, await res.text()); process.exit(1); }
+      console.log(`✅ Skill category ${id} deleted`);
     } else {
       console.error(`Unknown action: ${action}. Use: add, update, delete, or omit to list.`);
       process.exit(1);
@@ -2546,6 +2747,10 @@ if (!command || command === '--help' || command === '-h' || command === 'help') 
   admin skills add '<json>'            Add a new skill
   admin skills update <id> '<json>'    Update a skill
   admin skills delete <id>             Delete a skill
+  admin skill-categories               List marketplace categories
+  admin skill-categories add '<json>'  Add a category
+  admin skill-categories update <id> '<json>'
+  admin skill-categories delete <id>   Delete a category
   admin upload <file> <storage-path>   Upload file to Storage
   admin fetch-skill <code|url>         Download skill from share link
   admin set-admin <email>              Grant admin access to a user

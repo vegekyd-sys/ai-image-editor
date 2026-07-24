@@ -14,6 +14,8 @@ import * as Remotion from 'remotion';
 import { Audio, Video } from '@remotion/media';
 import * as RemotionPaths from '@remotion/paths';
 import * as RemotionNoise from '@remotion/noise';
+import * as THREE from 'three';
+import { buildRemotionEvaluatorBody } from './remotion-code-normalization';
 
 const { Sequence, useVideoConfig } = Remotion;
 
@@ -104,7 +106,7 @@ export async function preloadBabel(): Promise<void> {
 function compileSucrase(src: string): string | null {
   try {
     const { code } = sucraseTransform(src, {
-      transforms: ['typescript', 'jsx'],
+      transforms: ['typescript', 'jsx', 'imports'],
       jsxRuntime: 'classic',
     });
     return code;
@@ -184,12 +186,31 @@ export function evalRemotionJSX(code: string): React.ComponentType<any> | null {
     // Prefer the primary composition function. Agent code often declares helper
     // components first (Caption, Badge, etc.) and the real composition last.
     const fnName = pickRemotionComponentName(src);
-    const execCode = `${compiled}\nreturn ${fnName};`;
-
-    const scopeKeys = Object.keys(REMOTION_SCOPE);
-    const scopeValues = Object.values(REMOTION_SCOPE);
-    const factory = new Function(...scopeKeys, execCode);
-    const comp = factory(...scopeValues);
+    const remotionNamespace = { ...Remotion, ...REMOTION_SCOPE };
+    const mediaNamespace = { Audio, Video, OffthreadVideo: Video };
+    const pathsNamespace = { ...RemotionPaths };
+    const noiseNamespace = { ...RemotionNoise };
+    const modules: Record<string, unknown> = {
+      react: { ...React, default: React, __esModule: true },
+      remotion: { ...remotionNamespace, default: remotionNamespace, __esModule: true },
+      '@remotion/media': { ...mediaNamespace, default: mediaNamespace, __esModule: true },
+      '@remotion/paths': { ...pathsNamespace, default: pathsNamespace, __esModule: true },
+      '@remotion/noise': { ...noiseNamespace, default: noiseNamespace, __esModule: true },
+      three: { ...THREE, default: THREE, __esModule: true },
+    };
+    const localRequire = (id: string) => {
+      if (id in modules) return modules[id];
+      throw new Error(`Composition module "${id}" is not available in the browser Remotion runtime.`);
+    };
+    const authoredModule = { exports: {} as Record<string, unknown> };
+    const factory = new Function(
+      '__scope',
+      'module',
+      'exports',
+      'require',
+      buildRemotionEvaluatorBody(compiled, fnName),
+    );
+    const comp = factory(REMOTION_SCOPE, authoredModule, authoredModule.exports, localRequire);
     return comp ? wrapWithEditableTransforms(comp) : null;
   } catch (err) {
     console.error('[evalRemotionJSX] compile error:', err);

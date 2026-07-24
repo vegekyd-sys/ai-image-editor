@@ -1,10 +1,8 @@
 'use client'
 
 import { type HomeSkill, getCachedHomeSkills, setCachedHomeSkills } from '@/lib/home-skills'
-import { cacheMediaUrl } from '@/lib/imageCache'
-import { warmHomeVideoPoster } from '@/lib/home-video-poster'
 import { readNativeJSONCache, writeNativeJSONCache } from '@/lib/native-app-cache'
-import { getThumbnailUrl, normalizeDomain } from '@/lib/supabase/storage'
+import { getThumbnailUrl } from '@/lib/supabase/storage'
 
 const warmedMedia = new Set<string>()
 let inFlight: Promise<HomeSkill[] | null> | null = null
@@ -36,9 +34,8 @@ export function warmHomeSkillMedia(skills: HomeSkill[], limit = 10): void {
       warmedMedia.add(url)
 
       if (isVideoUrl(url)) {
-        const normalizedUrl = normalizeDomain(url)
-        void cacheMediaUrl(normalizedUrl)
-        void warmHomeVideoPoster(normalizedUrl)
+        // Never download complete MP4 assets during startup. Visible cards
+        // attach their stream lazily; offscreen cards stay poster/placeholder-only.
         continue
       }
 

@@ -13,10 +13,12 @@ import ImageRefChip from '@/components/ImageRefChip';
 import FileRefChip from '@/components/FileRefChip';
 import FileViewer from '@/components/FileViewer';
 import ModelSelector from '@/components/ModelSelector';
+import type { AgentModelPreference } from '@/lib/agent-models';
 import SkillSelector, { type SkillItem } from '@/components/SkillSelector';
 import { splitCompletionActions } from '@/lib/artifact-actions';
-import { removeAllInlineVideoUrls, removeRenderableInlineVideoUrls, resolveInlineVideoCandidate } from '@/lib/cui-video-url';
+import { removeAllInlineVideoUrls, removeInlineMediaNavigationMarkers, removeRenderableInlineVideoUrls, resolveInlineVideoCandidate } from '@/lib/cui-video-url';
 import type { ArtifactCompletionAction as CompletionAction } from '@/types';
+import { buildStudioRunStagePlacements, StudioRunProgress, StudioRunStageCard, useStudioRun } from '@/components/StudioRunDock';
 
 /** Inline video in CUI — natural AR, play/pause, @N badge, tap to navigate with time sync */
 const videoArCache = new Map<string, string>();
@@ -85,7 +87,7 @@ function EditPromptCard({ prompt, inputImages, editModel }: { prompt: string; in
   const { t } = useLocale();
   const [open, setOpen] = useState(false);
   const inputImageLabels = [t('chat.currentImage'), t('chat.referenceImage')];
-  const modelLabels: Record<string, string> = { gemini: 'nano banana 2', qwen: 'qwen edit', pony: 'pony anime', wai: 'wai illustrious', openai: 'OpenAI Image 2' };
+  const modelLabels: Record<string, string> = { gemini: 'nano banana 2', 'gemini-lite': 'nano banana 2 lite', qwen: 'qwen edit', pony: 'pony anime', wai: 'wai illustrious', openai: 'OpenAI Image 2' };
   const modelLabel = modelLabels[editModel || ''] || editModel || 'model';
   return (
     <div className="mt-2 rounded-xl overflow-hidden" style={{ border: '1px solid rgba(255,255,255,0.08)', background: 'rgba(255,255,255,0.04)', maxWidth: 308 }}>
@@ -154,12 +156,13 @@ function CompletionActionCard({ actions, disabled, onAction }: {
   disabled?: boolean;
   onAction?: (action: CompletionAction) => void;
 }) {
+  const { t } = useLocale();
   if (!actions.length) return null;
   return (
     <div className="mt-2 rounded-xl overflow-hidden" style={{ maxWidth: 308, background: 'rgba(255,255,255,0.055)', border: '1px solid rgba(255,255,255,0.08)' }}>
       <div className="px-3.5 py-3">
         <div className="text-[11px] font-medium mb-1" style={{ color: 'rgba(255,255,255,0.42)' }}>
-          下一步
+          {t('artifact.nextSteps')}
         </div>
         <div className="flex flex-col gap-2">
           {actions.map((action, idx) => (
@@ -180,7 +183,7 @@ function CompletionActionCard({ actions, disabled, onAction }: {
                 className="px-3 py-1.5 rounded-full flex-shrink-0 active:scale-95 transition-transform text-[11px] font-semibold disabled:opacity-40"
                 style={{ background: 'rgba(192,38,211,0.20)', color: '#f0abfc', border: '1px solid rgba(192,38,211,0.28)' }}
               >
-                继续
+                {t('artifact.continue')}
               </button>
             </div>
           ))}
@@ -261,7 +264,8 @@ function MusicCard({ track, onSelect }: {
   const handleDownload = () => {
     const a = document.createElement('a');
     a.href = bestUrl;
-    a.download = `${track.title || 'music'}.mp3`;
+    const urlExtension = bestUrl.match(/\.(mp3|wav|pcm|ogg)(?:\?|$)/i)?.[1]?.toLowerCase();
+    a.download = `${track.title || 'audio'}.${urlExtension || 'wav'}`;
     a.click();
   };
 
@@ -490,7 +494,7 @@ function MarkdownBlock({ text, isPanel, snapshots, onNavigateToSnapshot, onPrevi
   );
 }
 
-export type PreferredModel = 'auto' | 'gemini' | 'qwen' | 'pony' | 'wai' | 'openai';
+export type PreferredModel = 'auto' | 'gemini' | 'gemini-lite' | 'qwen' | 'pony' | 'wai' | 'openai';
 
 export interface ComposerDraftAttachment {
   id: string;
@@ -526,6 +530,8 @@ interface AgentChatViewProps {
   onVideoModelChange?: (model: import('@/types').VideoModel) => void;
   videoResolution?: import('@/types').VideoResolution;
   onVideoResolutionChange?: (resolution: import('@/types').VideoResolution) => void;
+  agentModel?: AgentModelPreference;
+  onAgentModelChange?: (model: AgentModelPreference) => void;
   /** Navigate GUI canvas to snapshot by 0-based index */
   onNavigateToSnapshot?: (index: number) => void;
   /** Tap video in CUI → jump to GUI video entry */
@@ -581,6 +587,8 @@ export default function AgentChatView({
   onVideoModelChange,
   videoResolution = 'auto',
   onVideoResolutionChange,
+  agentModel = 'auto',
+  onAgentModelChange,
   onNavigateToSnapshot,
   onVideoTap,
   onMusicSelect,
@@ -608,6 +616,19 @@ export default function AgentChatView({
   }, [snapshots]);
 
   const [input, setInput] = useState('');
+  const studioRun = useStudioRun(projectId, isAgentActive);
+  const latestUserMessageTimestamp = useMemo(() => messages.reduce((latest, message) => (
+    message.role === 'user' ? Math.max(latest, message.timestamp) : latest
+  ), 0), [messages]);
+  const studioStagePlacements = useMemo(() => {
+    const placements = buildStudioRunStagePlacements(messages.map(message => message.timestamp), studioRun.run);
+    const byMessage = new Map<number, typeof placements>();
+    for (const placement of placements) {
+      const current = byMessage.get(placement.afterMessageIndex) || [];
+      byMessage.set(placement.afterMessageIndex, [...current, placement]);
+    }
+    return byMessage;
+  }, [messages, studioRun.run]);
   const lastDraftTextRef = useRef<string | undefined>(undefined);
   const [viewingFile, setViewingFile] = useState<string | null>(null);
   // Unified attachment system: images + videos in one array
@@ -653,6 +674,7 @@ export default function AgentChatView({
   const [kbInset, setKbInset] = useState(0);
   const [nativeKbInset, setNativeKbInset] = useState(0);
   const syncKeyboardInsetFromViewport = useCallback(() => {
+    if (typeof window === 'undefined') return;
     const vv = window.visualViewport;
     if (!vv) return;
     const inset = Math.max(0, window.innerHeight - vv.height - vv.offsetTop);
@@ -897,7 +919,7 @@ export default function AgentChatView({
     ro.observe(el);
     update();
     return () => ro.disconnect();
-  }, [onInputBarHeight]);
+  }, [onInputBarHeight, readOnly, studioRun.run?.runId]);
 
   // On mount: keep scroll pinned to bottom until content stabilizes (images loading etc.)
   const mountRoRef = useRef<ResizeObserver | null>(null);
@@ -1292,13 +1314,25 @@ export default function AgentChatView({
 
         {/* Message list */}
         <div className={`flex flex-col ${isPanel ? 'gap-3' : 'gap-5'}`}>
+          {studioStagePlacements.get(-1)?.map(placement => (
+            <StudioRunStageCard
+              key={`studio-stage-${placement.stage.id}-v${placement.stage.artifactVersion}`}
+              stage={placement.stage}
+              status={placement.status}
+              artifact={placement.stage.artifactPath ? studioRun.artifacts[placement.stage.artifactPath] : undefined}
+              ordinal={(studioRun.run?.stages.findIndex(stage => stage.id === placement.stage.id) ?? -1) + 1}
+              total={studioRun.run?.stages.length || 8}
+              isPanel={isPanel}
+              onViewArtifact={readOnly ? undefined : setViewingFile}
+            />
+          ))}
           {messages.map((msg, idx) => (
-            <div key={msg.id}>
+            <div key={`${msg.id}:${idx}`}>
               {msg.role === 'user' ? (
                 /* User bubble — right-aligned pill */
-                <div className="flex justify-end">
+                <div className="flex min-w-0 justify-end overflow-hidden">
                   <div
-                    className={`text-white/90 leading-relaxed max-w-[82%] ${isPanel ? 'text-[17px]' : 'text-[21px]'}`}
+                    className={`min-w-0 overflow-hidden text-white/90 leading-relaxed max-w-[82%] ${isPanel ? 'text-[17px]' : 'text-[21px]'}`}
                     style={{
                       background: '#222222',
                       borderRadius: isPanel ? '14px 14px 4px 14px' : '18px 18px 5px 18px',
@@ -1307,7 +1341,10 @@ export default function AgentChatView({
                   >
                     {/* Attached reference images — square thumbnails */}
                     {msg.editInputImages && msg.editInputImages.length > 0 && (
-                      <div className={`flex gap-1.5 p-2 ${msg.content ? 'pb-1' : ''}`}>
+                      <div
+                        className={`hide-scrollbar flex max-w-full gap-1.5 overflow-x-auto overscroll-x-contain p-2 ${msg.content ? 'pb-1' : ''}`}
+                        style={{ WebkitOverflowScrolling: 'touch', touchAction: 'pan-x' }}
+                      >
                         {msg.editInputImages.map((img, i) => (
 
                           <img key={i} src={img} alt="" className="w-20 h-20 rounded-xl object-cover flex-shrink-0" />
@@ -1376,8 +1413,8 @@ export default function AgentChatView({
                       return (
                         <div className="markdown-body">
                           <MarkdownBlock
-                            key={msg.id}
-                            text={fixMarkdownDelimiters(visibleWithoutVideoUrls.replace(/\nanim:[a-f0-9-]+/g, '').replace(/\nsnap:[a-f0-9-]+/g, '').replace(/\n?music:\d+\|[^\n]*/g, ''))}
+                            key={`${msg.id}:${idx}:markdown`}
+                            text={fixMarkdownDelimiters(removeInlineMediaNavigationMarkers(visibleWithoutVideoUrls).replace(/\n?music:\d+\|[^\n]*/g, ''))}
                             isPanel={isPanel}
                             snapshots={snapshots}
                             onNavigateToSnapshot={onNavigateToSnapshot}
@@ -1488,6 +1525,19 @@ export default function AgentChatView({
 
                 </div>
               )}
+
+              {studioStagePlacements.get(idx)?.map(placement => (
+                <StudioRunStageCard
+                  key={`studio-stage-${placement.stage.id}-v${placement.stage.artifactVersion}`}
+                  stage={placement.stage}
+                  status={placement.status}
+                  artifact={placement.stage.artifactPath ? studioRun.artifacts[placement.stage.artifactPath] : undefined}
+                  ordinal={(studioRun.run?.stages.findIndex(stage => stage.id === placement.stage.id) ?? -1) + 1}
+                  total={studioRun.run?.stages.length || 8}
+                  isPanel={isPanel}
+                  onViewArtifact={readOnly ? undefined : setViewingFile}
+                />
+              ))}
             </div>
           ))}
 
@@ -1500,6 +1550,7 @@ export default function AgentChatView({
               </span>
             </div>
           )}
+
         </div>
 
         <div ref={messagesEndRef} />
@@ -1565,6 +1616,29 @@ export default function AgentChatView({
         }}
       />
 
+      {readOnly && studioRun.run && <div
+        ref={inputBarRef}
+        data-testid="studio-run-readonly-dock"
+        className={isPanel ? 'flex-shrink-0 px-3 py-3' : 'fixed left-0 right-0 px-3'}
+        style={isPanel ? {
+          borderTop: '1px solid rgba(255,255,255,0.06)',
+          zIndex: 20,
+        } : {
+          bottom: 0,
+          paddingBottom: 'var(--makaron-cui-input-safe-bottom, max(0.75rem, env(safe-area-inset-bottom)))',
+          paddingTop: '24px',
+          background: 'linear-gradient(to bottom, transparent 0%, #0a0a0a 24px)',
+          zIndex: 20,
+        }}
+      >
+        <StudioRunProgress
+          studioRun={studioRun}
+          isAgentActive={isAgentActive}
+          latestUserMessageTimestamp={latestUserMessageTimestamp || undefined}
+          readOnly
+        />
+      </div>}
+
       {!readOnly && <div
         ref={inputBarRef}
         className={isPanel ? 'flex-shrink-0 px-3' : 'fixed left-0 right-0 px-3'}
@@ -1581,12 +1655,21 @@ export default function AgentChatView({
           zIndex: 20,
         }}
       >
+        <StudioRunProgress
+          studioRun={studioRun}
+          isAgentActive={isAgentActive}
+          latestUserMessageTimestamp={latestUserMessageTimestamp || undefined}
+        />
         {/* Two-row layout: textarea on top, toolbar on bottom */}
         <div
+          className="mkr-input-box-liquid"
           style={{
-            background: '#161616',
+            background: 'linear-gradient(145deg, rgba(24,24,30,0.72), rgba(8,8,12,0.58))',
             borderRadius: '20px',
-            border: '1px solid rgba(255,255,255,0.07)',
+            border: '0.5px solid rgba(255,255,255,0.11)',
+            boxShadow: '0 18px 48px rgba(0,0,0,0.28), inset 0 1px 0 rgba(255,255,255,0.09)',
+            backdropFilter: 'blur(20px) saturate(1.35)',
+            WebkitBackdropFilter: 'blur(20px) saturate(1.35)',
           }}
         >
           {/* Row 1: Textarea */}
@@ -1627,10 +1710,11 @@ export default function AgentChatView({
             <button
               onClick={() => imageInputRef.current?.click()}
               disabled={isAgentActive || attachments.length >= 10}
-              className="w-8 h-8 flex-shrink-0 flex items-center justify-center rounded-full transition-all active:scale-90"
+              className="mkr-liquid-icon-button w-8 h-8 flex-shrink-0 flex items-center justify-center rounded-full transition-all active:scale-90"
               style={{
-                background: attachments.length > 0 ? 'rgba(192,38,211,0.22)' : 'rgba(255,255,255,0.08)',
+                background: attachments.length > 0 ? 'linear-gradient(145deg, rgba(192,38,211,0.24), rgba(10,10,14,0.38))' : 'linear-gradient(145deg, rgba(255,255,255,0.08), rgba(10,10,14,0.34))',
                 color: attachments.length > 0 ? 'rgba(217,70,239,0.9)' : 'rgba(255,255,255,0.35)',
+                border: '0.5px solid rgba(255,255,255,0.10)',
               }}
             >
               <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
@@ -1650,13 +1734,15 @@ export default function AgentChatView({
                 onVideoModelChange={onVideoModelChange}
                 videoResolution={videoResolution}
                 onVideoResolutionChange={onVideoResolutionChange}
-                onOpenChange={(isOpen) => setModelSelectorOpen(isOpen)}
+                agentModel={agentModel}
+                onAgentModelChange={onAgentModelChange}
+                onOpenChange={setModelSelectorOpen}
               />
             )}
 
             {/* Unified attachments — scrollable thumbnails */}
             {attachments.length > 0 && (
-              <div className="hide-scrollbar" style={{ display: 'flex', alignItems: 'center', gap: 8, flex: 1, minWidth: 0, overflowX: 'auto', paddingTop: 2 }}>
+              <div className="hide-scrollbar" style={{ display: 'flex', alignItems: 'center', gap: 8, flex: 1, minWidth: 0, overflowX: 'auto', padding: '6px 6px 2px 0' }}>
                 {attachments.map((att) => (
                   <div
                     key={att.id}
@@ -1685,8 +1771,9 @@ export default function AgentChatView({
                     {/* Remove button */}
                     <button
                       onClick={() => setAttachments(prev => prev.filter(a => a.id !== att.id))}
-                      className="absolute -top-1 -right-1 w-3.5 h-3.5 rounded-full flex items-center justify-center"
-                      style={{ background: 'rgba(20,20,20,0.9)', border: '1px solid rgba(255,255,255,0.18)' }}
+                      aria-label="Remove attachment"
+                      className="w-3.5 h-3.5 rounded-full flex items-center justify-center"
+                      style={{ position: 'absolute', top: -4, right: -4, zIndex: 2, background: 'rgba(20,20,24,0.88)', border: '0.5px solid rgba(255,255,255,0.22)', boxShadow: '0 2px 8px rgba(0,0,0,0.35)' }}
                     >
                       <svg width="6" height="6" viewBox="0 0 24 24" fill="none" stroke="rgba(255,255,255,0.85)" strokeWidth="3.5" strokeLinecap="round">
                         <line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/>
@@ -1719,8 +1806,8 @@ export default function AgentChatView({
                 data-testid="chat-stop"
                 aria-label="Stop agent"
                 onClick={onAbort}
-                className="w-8 h-8 flex-shrink-0 flex items-center justify-center rounded-full transition-all active:scale-90 cursor-pointer"
-                style={{ background: 'rgba(239,68,68,0.2)', color: '#ef4444' }}
+                className="mkr-liquid-icon-button w-8 h-8 flex-shrink-0 flex items-center justify-center rounded-full transition-all active:scale-90 cursor-pointer"
+                style={{ background: 'linear-gradient(145deg, rgba(239,68,68,0.22), rgba(10,10,14,0.36))', color: '#ef4444', border: '0.5px solid rgba(239,68,68,0.26)' }}
 >
                 <svg width="12" height="12" viewBox="0 0 12 12" fill="currentColor">
                   <rect x="1" y="1" width="10" height="10" rx="2" />
@@ -1732,10 +1819,11 @@ export default function AgentChatView({
                 aria-label="Send message"
                 onClick={handleSubmit}
                 disabled={!allReady && attachments.length > 0 ? true : (!input.trim() && attachments.length === 0)}
-                className="w-8 h-8 flex-shrink-0 flex items-center justify-center rounded-full transition-all active:scale-90"
+                className="mkr-liquid-icon-button w-8 h-8 flex-shrink-0 flex items-center justify-center rounded-full transition-all active:scale-90"
                 style={{
-                  background: (input.trim() || (attachments.length > 0 && allReady)) ? '#c026d3' : 'rgba(255,255,255,0.08)',
+                  background: (input.trim() || (attachments.length > 0 && allReady)) ? 'linear-gradient(145deg, rgba(192,38,211,0.92), rgba(145,18,178,0.74))' : 'linear-gradient(145deg, rgba(255,255,255,0.08), rgba(10,10,14,0.34))',
                   color: (input.trim() || (attachments.length > 0 && allReady)) ? '#fff' : 'rgba(255,255,255,0.25)',
+                  border: (input.trim() || (attachments.length > 0 && allReady)) ? '0.5px solid rgba(232,121,249,0.40)' : '0.5px solid rgba(255,255,255,0.10)',
                 }}
               >
                 <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">

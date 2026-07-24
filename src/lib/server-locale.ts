@@ -1,14 +1,23 @@
 import type { NextRequest } from 'next/server'
+import { detectPreferredLocale, matchSupportedLocale, parseAcceptLanguage, type Locale } from '@/lib/locales'
 
-export type AppLocale = 'zh' | 'en'
+export type AppLocale = Locale
+
+export function resolveRequestLocale(
+  cookieLocale: string | null | undefined,
+  acceptLanguage: string | null | undefined,
+  fallback: AppLocale = 'en',
+): AppLocale {
+  const matchedCookie = matchSupportedLocale(cookieLocale)
+  if (matchedCookie) return matchedCookie
+
+  return detectPreferredLocale(parseAcceptLanguage(acceptLanguage), fallback)
+}
 
 export function getRequestLocale(req: NextRequest, fallback: AppLocale = 'en'): AppLocale {
-  const cookieLocale = req.cookies.get('locale')?.value
-  if (cookieLocale === 'zh' || cookieLocale === 'en') return cookieLocale
-
-  const acceptLanguage = req.headers.get('accept-language') || ''
-  const first = acceptLanguage.split(',')[0]?.trim().toLowerCase() || ''
-  if (first.startsWith('zh')) return 'zh'
-  if (first) return 'en'
-  return fallback
+  return resolveRequestLocale(
+    req.cookies.get('locale')?.value,
+    req.headers.get('accept-language'),
+    fallback,
+  )
 }

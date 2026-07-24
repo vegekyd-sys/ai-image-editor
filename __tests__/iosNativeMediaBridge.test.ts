@@ -2,6 +2,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import {
   isNativePhotoLibraryPickerAvailable,
   isNativePhotoLibrarySaveAvailable,
+  pickMediaItemsFromNativePhotoLibrary,
   pickMediaFromNativePhotoLibrary,
   saveUrlToNativePhotoLibrary,
 } from '@/lib/native-media';
@@ -87,5 +88,28 @@ describe('native media bridge', () => {
       mimeType: 'image/jpeg',
       mediaType: 'image',
     });
+  });
+
+  it('requests and preserves every item from a native multi-select picker response', async () => {
+    const messages = installNativeBridgeMock();
+
+    const pickPromise = pickMediaItemsFromNativePhotoLibrary({ allowVideo: false, multiple: true });
+    expect(messages[0]).toMatchObject({
+      action: 'pickMedia',
+      allowVideo: false,
+      multiple: true,
+    });
+
+    respond(messages[0], {
+      items: [
+        { dataUrl: 'data:image/jpeg;base64,AA==', filename: 'IMG_0001.jpg', mimeType: 'image/jpeg', mediaType: 'image' },
+        { dataUrl: 'data:image/jpeg;base64,BB==', filename: 'IMG_0002.jpg', mimeType: 'image/jpeg', mediaType: 'image' },
+      ],
+    });
+
+    await expect(pickPromise).resolves.toEqual([
+      { dataUrl: 'data:image/jpeg;base64,AA==', filename: 'IMG_0001.jpg', mimeType: 'image/jpeg', mediaType: 'image' },
+      { dataUrl: 'data:image/jpeg;base64,BB==', filename: 'IMG_0002.jpg', mimeType: 'image/jpeg', mediaType: 'image' },
+    ]);
   });
 });

@@ -76,7 +76,7 @@ AI 图片编辑/生成。支持 4 种 skill 模板。
 
 ### `makaron_write_video_script`
 
-根据 1-7 张图片生成视频脚本。调用 Claude Sonnet 分析图片并写出 Shot-by-shot 格式的视频脚本，可直接用于 `makaron_create_video`。
+根据 1-7 张图片生成视频脚本。调用 GPT-5.6 Terra 分析图片并写出 Shot-by-shot 格式的视频脚本，可直接用于 `makaron_create_video`。
 
 **参数：**
 
@@ -417,7 +417,7 @@ stdio 模式额外支持本地文件路径作为 image 输入，结果保存到 
 - 图片建议 < 2MB，过大会影响速度
 
 **视频生成：**
-- `write_video_script` 耗时 ~1-2 分钟（Claude Sonnet 多图分析）
+- `write_video_script` 耗时取决于图片数量与 GPT-5.6 Terra 推理时长
 - `create_video` 提交任务 ~1-2 秒（返回 Task ID）
 - `get_video_status` 查询状态 ~1 秒
 - **视频渲染耗时 3-5 分钟**（Kling/Foldin 后台处理）

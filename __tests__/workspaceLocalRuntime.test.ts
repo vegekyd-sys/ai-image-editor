@@ -1,4 +1,4 @@
-import { describe, expect, it } from 'vitest'
+import { afterEach, describe, expect, it, vi } from 'vitest'
 import { existsSync } from 'fs'
 import { mkdtemp, rm } from 'fs/promises'
 import { tmpdir } from 'os'
@@ -62,6 +62,11 @@ function createFakeSupabase() {
 }
 
 describe('local-first workspace runtime', () => {
+  afterEach(() => {
+    vi.unstubAllGlobals()
+    workspace.clearWorkspaceCache()
+  })
+
   it('scopes default file listing to the current project while preserving explicit pattern searches', () => {
     const files = [
       { path: 'project-1/media/source.mp4' },
@@ -137,6 +142,79 @@ describe('local-first workspace runtime', () => {
     }
   })
 
+  it('skips remote duplicates of built-in skills and reads user skills from the local mirror', async () => {
+    const cacheDir = await mkdtemp(join(tmpdir(), 'makaron-workspace-skills-test-'))
+    const previousCacheDir = process.env.MAKARON_WORKSPACE_CACHE_DIR
+    process.env.MAKARON_WORKSPACE_CACHE_DIR = cacheDir
+    const supabase = createFakeSupabase()
+    supabase.rows.push({
+      user_id: null,
+      path: 'skills/explainer-video/SKILL.md',
+      content_type: 'text/markdown',
+      size_bytes: 100,
+      storage_url: 'https://cdn.example.com/duplicate-built-in.md',
+    })
+
+    try {
+      await workspace.writeFile(
+        'skills/local-test-skill/SKILL.md',
+        '---\nname: local-test-skill\ndescription: Local test skill\n---\nUse the local mirror.',
+        supabase,
+        'user-1',
+        'text/markdown',
+      )
+      workspace.clearWorkspaceCache()
+      const fetchMock = vi.fn(() => {
+        throw new Error('getAllSkills should not need the network')
+      })
+      vi.stubGlobal('fetch', fetchMock)
+
+      const skills = await workspace.getAllSkills(supabase, 'user-1')
+
+      expect(skills.some(skill => skill.name === 'explainer-video')).toBe(true)
+      expect(skills.some(skill => skill.name === 'local-test-skill')).toBe(true)
+      expect(fetchMock).not.toHaveBeenCalled()
+    } finally {
+      if (previousCacheDir == null) delete process.env.MAKARON_WORKSPACE_CACHE_DIR
+      else process.env.MAKARON_WORKSPACE_CACHE_DIR = previousCacheDir
+      await rm(cacheDir, { recursive: true, force: true })
+    }
+  })
+
+  it('does not upload a returned output twice after saveOutput already persisted it', async () => {
+    const cacheDir = await mkdtemp(join(tmpdir(), 'makaron-workspace-output-dedupe-test-'))
+    const previousCacheDir = process.env.MAKARON_WORKSPACE_CACHE_DIR
+    process.env.MAKARON_WORKSPACE_CACHE_DIR = cacheDir
+    const supabase = createFakeSupabase()
+
+    try {
+      const result = await runNodeMediaCode({
+        code: `
+          const fs = require('fs');
+          const path = require('path');
+          const output = path.join(outputDir, 'sprite.png');
+          fs.writeFileSync(output, Buffer.from('one upload'));
+          await saveOutput(output);
+          return { type: 'files', outputs: [{ path: output, contentType: 'image/png' }] };
+        `,
+        mediaItems: [],
+        projectId: 'project-1',
+        userId: 'user-1',
+        supabase,
+        timeoutMs: 10_000,
+      })
+
+      expect(result.type).toBe('files')
+      expect(supabase.uploads).toHaveLength(1)
+      expect(result.outputs[0]?.workspacePath).toContain('project-1/media/')
+      expect(result.outputs[0]?.storageUrl).toContain('example.supabase.co')
+    } finally {
+      if (previousCacheDir == null) delete process.env.MAKARON_WORKSPACE_CACHE_DIR
+      else process.env.MAKARON_WORKSPACE_CACHE_DIR = previousCacheDir
+      await rm(cacheDir, { recursive: true, force: true })
+    }
+  })
+
   it('resolves workspace_paths into local inputFiles for node media code', async () => {
     const cacheDir = await mkdtemp(join(tmpdir(), 'makaron-workspace-runtime-test-'))
     const previousCacheDir = process.env.MAKARON_WORKSPACE_CACHE_DIR
@@ -184,6 +262,113 @@ describe('local-first workspace runtime', () => {
       if (previousCacheDir == null) delete process.env.MAKARON_WORKSPACE_CACHE_DIR
       else process.env.MAKARON_WORKSPACE_CACHE_DIR = previousCacheDir
       await rm(cacheDir, { recursive: true, force: true })
+    }
+  })
+
+  it('allows broad Node built-ins and media packages in node media code', async () => {
+    const result = await runNodeMediaCode({
+      code: `
+        const { Buffer } = require('buffer');
+        const { once } = require('events');
+        const timers = require('timers/promises');
+        const zlib = require('zlib');
+        const sharp = require('sharp');
+        const payload = Buffer.from('hello').toString('base64');
+        const zipped = zlib.gzipSync('ok');
+        await timers.setTimeout(1);
+        return { type: 'text', content: JSON.stringify({
+          payload,
+          hasOnce: typeof once === 'function',
+          gzipBytes: zipped.length,
+          hasSharp: typeof sharp === 'function'
+        }) };
+      `,
+      mediaItems: [],
+      projectId: 'project-1',
+      userId: 'user-1',
+      timeoutMs: 10_000,
+    })
+
+    expect(result.type, result.content).toBe('text')
+    const payload = JSON.parse(result.content || '{}')
+    expect(payload).toMatchObject({
+      payload: 'aGVsbG8=',
+      hasOnce: true,
+      hasSharp: true,
+    })
+    expect(payload.gzipBytes).toBeGreaterThan(0)
+  })
+
+  it('compiles TypeScript/ESM code_path files and invokes their default entry', async () => {
+    const result = await runNodeMediaCode({
+      codePath: 'project-1/media-code/probe.ts',
+      code: `
+        import { promisify } from 'node:util';
+        import { execFile } from 'node:child_process';
+
+        type RuntimeApi = {
+          ffmpegPath: string;
+          outputDir: string;
+        };
+
+        export default async function main(api: RuntimeApi) {
+          const exec = promisify(execFile);
+          const { stdout } = await exec(api.ffmpegPath, ['-version']);
+          return {
+            type: 'text',
+            content: JSON.stringify({
+              hasFfmpeg: stdout.includes('ffmpeg version'),
+              outputDir: api.outputDir,
+            }),
+          };
+        }
+      `,
+      mediaItems: [],
+      projectId: 'project-1',
+      userId: 'user-1',
+      timeoutMs: 10_000,
+    })
+
+    expect(result.type, result.content).toBe('text')
+    expect(JSON.parse(result.content || '{}')).toMatchObject({
+      hasFfmpeg: true,
+    })
+  })
+
+  it('blocks require escapes and filters secret env in node media code', async () => {
+    const previousSecret = process.env.SUPABASE_SERVICE_ROLE_KEY
+    process.env.SUPABASE_SERVICE_ROLE_KEY = 'secret-for-test'
+    try {
+      const result = await runNodeMediaCode({
+        code: `
+          let moduleBlocked = false;
+          let vmBlocked = false;
+          try { require('module'); } catch { moduleBlocked = true; }
+          try { require('vm'); } catch { vmBlocked = true; }
+          const requiredProcess = require('node:process');
+          return { type: 'text', content: JSON.stringify({
+            moduleBlocked,
+            vmBlocked,
+            leakedSecret: Boolean(process.env.SUPABASE_SERVICE_ROLE_KEY),
+            requiredProcessLeakedSecret: Boolean(requiredProcess.env.SUPABASE_SERVICE_ROLE_KEY)
+          }) };
+        `,
+        mediaItems: [],
+        projectId: 'project-1',
+        userId: 'user-1',
+        timeoutMs: 10_000,
+      })
+
+      expect(result.type).toBe('text')
+      expect(JSON.parse(result.content || '{}')).toEqual({
+        moduleBlocked: true,
+        vmBlocked: true,
+        leakedSecret: false,
+        requiredProcessLeakedSecret: false,
+      })
+    } finally {
+      if (previousSecret == null) delete process.env.SUPABASE_SERVICE_ROLE_KEY
+      else process.env.SUPABASE_SERVICE_ROLE_KEY = previousSecret
     }
   })
 })

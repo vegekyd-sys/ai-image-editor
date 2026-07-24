@@ -249,6 +249,54 @@ describe('editable media contract', () => {
     expect(result).toEqual(expect.stringMatching(/title/));
   });
 
+  it('rejects data-editable wrappers that are missing from editable metadata', () => {
+    const result = validateDesign({
+      code: `function Composition(props) {
+        return (
+          <AbsoluteFill>
+            <div data-editable="title" style={{ display: 'block' }}>{props.title}</div>
+          </AbsoluteFill>
+        );
+      }`,
+      props: { title: 'Launch day' },
+      editables: [],
+    });
+
+    expect(result).toEqual(expect.stringMatching(/data-editable layer|matching editables|title/i));
+  });
+
+  it('rejects visible text props that have no editable metadata', () => {
+    const result = validateDesign({
+      code: `function Composition(props) {
+        return (
+          <AbsoluteFill>
+            <h1>{props.title}</h1>
+          </AbsoluteFill>
+        );
+      }`,
+      props: { title: 'Launch day' },
+      editables: [],
+    });
+
+    expect(result).toEqual(expect.stringMatching(/visible composition prop|editable metadata|title/i));
+  });
+
+  it('rejects visible image props that have no image editable metadata', () => {
+    const result = validateDesign({
+      code: `function Composition(props) {
+        return (
+          <AbsoluteFill>
+            <Img src={props.coverImage} style={{ width: '100%', height: '100%' }} />
+          </AbsoluteFill>
+        );
+      }`,
+      props: { coverImage: 'https://example.com/cover.jpg' },
+      editables: [],
+    });
+
+    expect(result).toEqual(expect.stringMatching(/visible composition prop|image\/video editable|coverImage/i));
+  });
+
   it('rejects text editables that do not read from their prop key', () => {
     const result = validateDesign({
       code: `function Design(props) {

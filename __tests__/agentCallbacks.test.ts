@@ -24,7 +24,7 @@ function createMockContext(overrides?: Partial<AgentCallbackContext>): AgentCall
     codeStreamRef: { current: null },
     agentRunIdRef: { current: null },
     agentTimerRef: { current: null },
-    autoFetchTriggered: { current: false },
+    autoFetchTriggered: { current: new Set() },
     pendingAnalysisRef: { current: [] },
     pendingTeaserRef: { current: null },
     hasTriggeredNamingRef: { current: false },
@@ -95,6 +95,18 @@ describe('makeAgentCallbacks', () => {
       const { callbacks } = makeAgentCallbacks(ctx);
       callbacks.onContent?.('orphan text');
       expect(messages).toHaveLength(0);
+    });
+  });
+
+  describe('onDisconnect', () => {
+    it('releases the active run id so the persistent watcher can reconnect', () => {
+      ctx.agentRunIdRef.current = 'run-live';
+      const { callbacks } = makeAgentCallbacks(ctx);
+
+      callbacks.onDisconnect?.('run-live');
+
+      expect(ctx.agentRunIdRef.current).toBeNull();
+      expect(ctx.setAgentStatus).toHaveBeenCalledWith('editor.reconnecting');
     });
   });
 
@@ -330,7 +342,7 @@ describe('makeAgentCallbacks', () => {
       callbacks.onNewTurn?.('msg-1');
       callbacks.onError?.('Something went wrong');
 
-      expect(messages[0].content).toBe('editor.errorRetry');
+      expect(messages[0].content).toBe('Something went wrong');
     });
 
     it('calls onCleanup if provided', () => {

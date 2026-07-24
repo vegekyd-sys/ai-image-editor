@@ -18,7 +18,7 @@ describe('agent prompt policy guards', () => {
     expect(agentTs).toContain('\\`runtime: "composition"\\`: Remotion/editable composition draft')
     expect(agentTs).toContain('\\`runtime: "design"\\` or omitted: legacy alias for \\`runtime: "composition"\\`')
     expect(agentTs).toContain('\\`runtime: "node"\\`: open backend Node with FFmpeg/FFprobe')
-    expect(agentTs).toContain('editable text/image/video/trim rules live in \\`prompts/remotion-composition.md\\`')
+    expect(agentTs).toContain('complete editable text/image/video/trim contract lives in \\`prompts/remotion-composition.md\\`')
     expect(agentTs).toContain('Do not add editables to \\`runtime:"node"\\` media exports')
     expect(agentTs).not.toContain('text editables must read from \\`props[propKey]\\`')
     expect(agentTs).not.toContain('video trim editables must declare \\`trimBeforePropKey/trimAfterPropKey\\`')
@@ -29,9 +29,99 @@ describe('agent prompt policy guards', () => {
 
     expect(agentTs).toContain('Remotion compositions are rendered with Remotion; raw uploaded/generated videos are extracted with FFmpeg')
     expect(agentTs).toContain('For raw video snapshots: use timestamp')
+    expect(agentTs).toContain('When design_path is provided it is authoritative; media_index is ignored')
+    expect(agentTs).toContain('const targetMediaIndex = design_path')
     expect(agentTs).toContain("source: 'video'")
     expect(agentTs).toContain("source: 'composition'")
+    expect(agentTs).toContain('Render succeeded. Treat this as a successful preview_frame result')
+    expect(agentTs).toContain('Continue with write_file when the user asked to publish')
     expect(agentTs).not.toContain('extract_video_frame: tool')
+  })
+
+  it('does not inject canned run_code narration into CUI messages', () => {
+    const agentTs = read('src/lib/agent.ts')
+    const en = read('src/lib/locales/en.ts')
+    const zh = read('src/lib/locales/zh.ts')
+
+    expect(agentTs).toContain("translate(responseLocale, 'agent.status.generatingCode')")
+    expect(en).toContain("'agent.status.generatingCode': 'Generating code...'")
+    expect(zh).toContain("'agent.status.generatingCode': '代码生成中...'")
+    expect(agentTs).not.toContain('I am writing the Remotion code now')
+    expect(agentTs).not.toContain('I am adjusting the code and checking the result')
+    expect(agentTs).not.toContain('getRunCodeIntro')
+  })
+
+  it('keeps Remotion composition code in the local runtime shape', () => {
+    const remotion = read('src/lib/prompts/remotion-composition.md')
+
+    expect(remotion).toContain('Never write')
+    expect(remotion).toContain('export default')
+    expect(remotion).toContain('function Composition(props)')
+    expect(remotion).toContain('Do not use ES module syntax')
+  })
+
+  it('returns resolved generate_image URLs for Remotion composition use', () => {
+    const agentTs = read('src/lib/agent.ts')
+
+    expect(agentTs).toContain('Resolved image URL:')
+    expect(agentTs).toContain('Use this URL directly in Remotion composition props/code')
+    expect(agentTs).toContain('do not use the <<<media_${mediaIndex}>>> marker inside composition code')
+  })
+
+  it('uses full timeline snapshots when materializing Remotion compositions', () => {
+    const agentTs = read('src/lib/agent.ts')
+
+    expect(agentTs).toContain("select('id, type, design_path')")
+    expect(agentTs).toContain('const available = snaps?.length || 0')
+    expect(agentTs).toContain('Invalid index ${input.media_index}. Available: 1-${available}.')
+    expect(agentTs).toContain('not an editable Remotion composition')
+  })
+
+  it('routes voiceover through the single Seed Audio tool', () => {
+    const agentTs = read('src/lib/agent.ts')
+    const audio = read('src/lib/prompts/audio.md')
+
+    expect(agentTs).toContain('generate_audio: tool({')
+    expect(agentTs).toContain('kind: z.enum([\'voiceover\', \'dialogue\', \'music\', \'sound_design\', \'mixed\'])')
+    expect(agentTs).not.toContain('generate_voiceover: tool({')
+    expect(agentTs).not.toContain('list_voiceover_voices: tool({')
+    expect(agentTs).not.toContain('generate_music: tool({')
+    expect(audio).toContain('Use `kind: "voiceover"` only when')
+    expect(audio).toContain('Voice Performance Brief')
+    expect(audio).toContain('do not switch providers')
+    expect(audio).toContain('Canonical mixed performance score')
+    expect(audio).toContain('[MUSIC — continuous backbone]')
+    expect(audio).toContain('[VOICE — line-level performance]')
+    expect(audio).toContain('[SFX — in narrative order]')
+    expect(audio).toContain('[MIX]')
+    expect(audio).toContain('Every spoken line gets its own local performance direction')
+    expect(audio).toContain('validated V3 baseline')
+    expect(audio).toContain('Duck by no more than 1-2 dB')
+    expect(audio).toContain('shorten narration rather than sacrificing the score')
+  })
+
+  it('surfaces generated audio progress and playable cards in CUI', () => {
+    const agentTs = read('src/lib/agent.ts')
+    const reconnect = read('src/hooks/useAgentRun.ts')
+    const zh = read('src/lib/locales/zh.ts')
+
+    expect(agentTs).toContain('formatGeneratedAudioForCui')
+    expect(agentTs).toContain("kind === 'voiceover' ? 'agent.status.generatingVoiceover' : 'agent.status.generatingAudio'")
+    expect(zh).toContain("'agent.status.generatingVoiceover': '生成配音中...'")
+    expect(zh).toContain("'agent.status.generatingAudio': '生成音频中...'")
+    expect(agentTs).toContain('formatMusicLine')
+    expect(agentTs).toContain('music:${safeTrackIndex}|${title}|${safeDuration}|${tags}|${playUrl}|${finalUrl}')
+    expect(agentTs).toContain('All voiceover content is generated by Seed Audio')
+    expect(agentTs).toContain("kind: z.enum(['voiceover', 'dialogue', 'music', 'sound_design', 'mixed'])")
+    expect(agentTs).not.toContain('waitForPreview: true')
+    expect(agentTs).not.toContain("provider=\"suno\"")
+    expect(agentTs).not.toContain("provider: z.enum(['auto', 'evolink-seed-audio', 'suno'])")
+    expect(agentTs).toContain('deductSeedAudioCredits')
+    expect(agentTs).toContain('providerCreditsUsed: result.creditsUsed')
+    expect(agentTs).not.toContain("deductCredits(ctx.userId ?? '', null, 'create_music')")
+    expect(agentTs).toContain('const generatedAudioLine = formatGeneratedAudioForCui(toolName, toolOutput, responseLocale)')
+    expect(reconnect).toContain("case 'music_task'")
+    expect(reconnect).toContain('callbacks.onMusicTask?.')
   })
 
   it('keeps uploaded video auto-analysis in the tool-aware history path', () => {
@@ -43,6 +133,40 @@ describe('agent prompt policy guards', () => {
     expect(editor).toContain("analyze_video's result is persisted in agent_tool_history")
     expect(editor).not.toContain("handleAgentRequest('', undefined, undefined, { silent: true, uploadedVideoCount")
     expect(agentRoute).toContain('const isNormalMode = !tipsTeaser && !nameProject && !previewsReady && !tipReaction && !analysisOnly')
+  })
+
+  it('runs a trusted Skill template through the final result while preserving ordinary confirmation', () => {
+    const agent = read('src/lib/prompts/agent.md')
+    const animate = read('src/lib/prompts/animate.md')
+    const agentTs = read('src/lib/agent.ts')
+    const skillLaunchContext = read('src/lib/skill-launch-context.ts')
+    const editor = read('src/components/Editor.tsx')
+    const home = read('src/app/home/page.tsx')
+    const executionRunner = read('src/lib/agent-execution-runner.ts')
+
+    expect(agent).toContain('Only call `generate_animation` after the user confirms a visible script')
+    expect(animate).toContain('in an ordinary CUI/editor request, write the complete visible script and wait for confirmation')
+    expect(animate).toContain('the system prompt explicitly supplies a `Trusted Skill template launch`')
+    expect(agentTs).toContain('trusted Skill template launch exception')
+    expect(skillLaunchContext).toContain('Active Skill: ${context.skillName}')
+    expect(skillLaunchContext).toContain('skills/${context.skillName}/SKILL.md')
+    expect(editor).toContain('pendingSkill && !pendingSkillLaunchContext')
+    expect(home).toContain('createHomeSkillLaunchContext(homeSkill, prompt, skillName)')
+    expect(home).toContain('createHomeSkillLaunchContext(homeSkill, draft.prompt, skillName)')
+    expect(home).toContain("throw new Error(installData.error || 'Failed to install Skill template')")
+    expect(agentTs).toContain('getSkillLaunchSystemDirective(options?.skillLaunchContext)')
+    expect(read('src/app/api/agent/route.ts')).toContain('Skill template launch could not be verified')
+    expect(read('src/app/api/agent/run/route.ts')).toContain('Skill template launch could not be verified')
+    expect(agentTs).toContain("translate(responseLocale, 'status.submittingVideo')")
+    expect(agentTs).not.toContain("code: 'skill_video_submission_pending'")
+    expect(executionRunner).not.toContain("input.terminal?.code === 'skill_video_submission_pending'")
+  })
+
+  it('reconnects text-only CUI projects before the first snapshot exists', () => {
+    const editor = read('src/components/Editor.tsx')
+
+    expect(editor).toContain('enabled: !!projectId && !inactive')
+    expect(editor).not.toContain('enabled: !!projectId && (initialSnapshots?.length ?? 0) > 0')
   })
 
   it('keeps built-in image skill triggers visible before the image guide is read', () => {
@@ -84,6 +208,19 @@ describe('agent prompt policy guards', () => {
     expect(agentTs).toContain('直接提交渲染')
   })
 
+  it('treats invalid Seedance reference images as terminal input errors', () => {
+    const agent = read('src/lib/prompts/agent.md')
+    const animate = read('src/lib/prompts/animate.md')
+    const agentTs = read('src/lib/agent.ts')
+
+    expect(agent).toContain("read_file('prompts/animate.md')")
+    expect(animate).toContain('width and height each 300-6000px')
+    expect(animate).toContain('`too_small`, `too_large`')
+    expect(animate).toContain('`retryable: false` means do not resubmit the same URL')
+    expect(animate).toContain('A second unchanged submission becomes `terminal: true`')
+    expect(agentTs).toContain('If repairable=true, decide whether to prepare a new compliant image URL')
+  })
+
   it('keeps single video generation in the model duration range and routes longer requests to the director skill', () => {
     const agent = read('src/lib/prompts/agent.md')
     const animate = read('src/lib/prompts/animate.md')
@@ -91,7 +228,7 @@ describe('agent prompt policy guards', () => {
 
     expect(agent).toContain('Hard duration range: a single SeeDance script/call must be 4-15s; Kling is 5-15s')
     expect(agent).toContain('If requested/source duration is shorter than the model minimum, use the minimum')
-    expect(agent).toContain('If output is longer than 15s, use `skills/long-video-director/SKILL.md`')
+    expect(agent).toContain('If output is longer than the selected model max, use `skills/long-video-director/SKILL.md`')
     expect(agent).toContain('Single-script rule: if a complete approved script is <=15s')
     expect(agent).toContain('Do not submit only one shot or split just because it has multiple shot lines')
     expect(agent).toContain('Long source video rule: if an existing timeline/reference video is >15s')
@@ -137,6 +274,56 @@ describe('agent prompt policy guards', () => {
     expect(agentTs).not.toContain("The model's minimum generation duration is 5 seconds")
   })
 
+  it('keeps ordinary short videos off Studio Run unless editability is explicit', () => {
+    const agent = read('src/lib/prompts/agent.md')
+    const agentTs = read('src/lib/agent.ts')
+    const workspace = read('src/lib/workspace.ts')
+    const longVideoDirector = read('src/skills/long-video-director/SKILL.md')
+
+    expect(agent).toContain('The skill manifest is a capability index, not an automatic workflow choice')
+    expect(agent).toContain('For a finished video up to 15 seconds, prefer `generate_animation`')
+    expect(agent).toContain('an explainer label, or a built-in recipe match describe content; they do not select that workflow')
+    expect(agent).toContain('Model selection happens after workflow routing')
+    expect(agent).not.toContain('matched built-in Composition requests route to that editable workflow')
+    expect(agentTs).toContain('A generic explainer label or built-in recipe match is not such a request')
+    expect(agentTs).toContain('Do not use \\`studio_run\\` for an ordinary short finished-video request')
+    expect(workspace).toContain('This is a capability index only, not a workflow router')
+    expect(workspace).not.toContain('extras.push(`Studio Run recipe:')
+    expect(workspace).not.toContain('extras.push(`profile:')
+    expect(longVideoDirector).toContain('A generic explainer label or resemblance')
+  })
+
+  it('preserves full audio tool capabilities with a native-audio exception for direct video', () => {
+    const agent = read('src/lib/prompts/agent.md')
+    const animate = read('src/lib/prompts/animate.md')
+    const agentTs = read('src/lib/agent.ts')
+
+    expect(agent).toContain('Native-audio exception')
+    expect(agent).toContain('single standalone audio-generation tool')
+    expect(agent).toContain('put dialogue, narration, music, ambience, and SFX in `story_prompt`')
+    expect(animate).toContain('this script is the complete audio direction for `generate_animation`')
+    expect(animate).toContain('Never prepare this workflow with `generate_audio`')
+    expect(agentTs).not.toContain('directVideoGenerationStarted')
+    expect(agentTs).not.toContain('blockIndependentAudioAfterDirectVideo')
+    expect(agentTs).toContain('single Agent-facing audio-generation tool')
+    expect(agentTs).toContain('make exactly one model generation with kind="mixed"')
+    expect(agentTs).not.toContain('ctx.userRequest')
+    expect(agentTs).not.toContain('requestsImageConditionedAudio')
+    expect(agentTs).not.toContain('validateAudioKindForRequest')
+    expect(agentTs).toContain("conditioning: z.discriminatedUnion('type'")
+    expect(agentTs).toContain('ctx.explicitMediaIndices.includes(imageMediaIndex)')
+    expect(agentTs).toContain('selected Timeline state is never inherited')
+    expect(agentTs).toContain('z.string().max(SEED_AUDIO_AGENT_PROMPT_MAX_CHARS)')
+    expect(read('src/lib/prompts/audio.md')).toContain('Agent-authored `prompt` <= 1,250 characters')
+    expect(agentTs).toContain('prompts/audio.md')
+    expect(agentTs).toContain('reference_voices')
+    expect(agentTs).toContain('sample_rate')
+    expect(agentTs).toContain('requires verification of Seed Audio exact speech')
+    expect(read('src/lib/prompts/audio.md')).toContain('call `transcribe_audio` on the returned public audio URL')
+    expect(read('src/lib/prompts/audio.md')).toContain('call `generate_audio` exactly once with `kind: "mixed"`')
+    expect(agentTs).toContain('Outside this exception, \\`generate_audio\\` retains its full standalone scope')
+  })
+
   it('keeps SeeDance Fast as the default video model unless user or app selects another model', () => {
     const agent = read('src/lib/prompts/agent.md')
     const agentTs = read('src/lib/agent.ts')
@@ -162,6 +349,8 @@ describe('agent prompt policy guards', () => {
     expect(agentTs).not.toContain('__lastDesignPayload = options.currentDesign')
 
     expect(coding).toContain('include that exact path as `code_path`')
+    expect(coding).toContain('natural JS/TS/JSX/TSX Remotion module')
+    expect(coding).toContain("return {\n  type: 'render'")
     expect(coding).toContain('Do not rely on implicit remembered composition code across turns')
     expect(context).toContain('[Current Composition]')
     expect(context).toContain('code_path')

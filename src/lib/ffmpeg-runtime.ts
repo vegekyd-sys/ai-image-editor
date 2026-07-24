@@ -59,6 +59,45 @@ export interface VideoProbe {
   streams?: unknown[]
 }
 
+export interface AudioLoudnessMeasurement {
+  integratedLufs: number
+  truePeakDbfs: number
+}
+
+export function parseEbur128Summary(output: string): AudioLoudnessMeasurement | null {
+  const integrated = output.match(/Integrated loudness:\s*[\r\n]+\s*I:\s*(-?\d+(?:\.\d+)?)\s+LUFS/i)
+  const truePeak = output.match(/True peak:\s*[\r\n]+\s*Peak:\s*(-?\d+(?:\.\d+)?)\s+dBFS/i)
+  if (!integrated || !truePeak) return null
+  return {
+    integratedLufs: Number(integrated[1]),
+    truePeakDbfs: Number(truePeak[1]),
+  }
+}
+
+export async function measureAudioLoudness(input: string): Promise<AudioLoudnessMeasurement> {
+  const ffmpegPath = await findFfmpeg()
+  let stderr = ''
+  try {
+    const result = await execFileAsync(ffmpegPath, [
+      '-hide_banner',
+      '-nostats',
+      '-i', input,
+      '-map', '0:a:0',
+      '-af', 'ebur128=peak=true',
+      '-f', 'null',
+      '-',
+    ], { timeout: 120_000, maxBuffer: 12 * 1024 * 1024 })
+    stderr = result.stderr
+  } catch (error) {
+    stderr = typeof (error as { stderr?: unknown }).stderr === 'string'
+      ? (error as { stderr: string }).stderr
+      : ''
+  }
+  const measurement = parseEbur128Summary(stderr)
+  if (!measurement) throw new Error('FFmpeg did not return an EBU R128 loudness summary')
+  return measurement
+}
+
 function parseFps(value?: string): number | undefined {
   if (!value || value === '0/0') return undefined
   const [num, den] = value.split('/').map(Number)

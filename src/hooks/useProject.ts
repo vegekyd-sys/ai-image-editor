@@ -128,6 +128,7 @@ export function useProject(projectId: string, userId: string) {
       const dp = snap.designPath
       if (!dp || !resolvedUserId) return
       try {
+        let design: unknown | null = null
         const storagePath = `${resolvedUserId}/workspace/${dp}`
         const { data: urlData } = supabase.storage.from('images').getPublicUrl(storagePath)
         if (urlData?.publicUrl) {
@@ -138,10 +139,21 @@ export function useProject(projectId: string, userId: string) {
             new Promise<Response>((_, reject) => setTimeout(() => reject(new Error('timeout')), 5000)),
           ])
           if (res.ok) {
-            const design = await res.json()
-            snap.design = design
+            design = await res.json()
           }
         }
+        if (!design) {
+          const fallbackRes = await fetch(
+            `/api/workspace/read?projectId=${encodeURIComponent(projectId)}&path=${encodeURIComponent(dp)}`,
+          )
+          if (fallbackRes.ok) {
+            const payload = await fallbackRes.json()
+            if (typeof payload?.content === 'string') {
+              design = JSON.parse(payload.content)
+            }
+          }
+        }
+        if (design) snap.design = design as Snapshot['design']
       } catch (e) {
         console.warn('Failed to load design from workspace:', dp, e)
       }
@@ -212,10 +224,10 @@ export function useProject(projectId: string, userId: string) {
     return { snapshots, messages, title: projectRes.data?.title ?? 'Untitled', animations, timelineVersion }
   }, [projectId])
 
-  // --- Write (all fire-and-forget) ---
+  // --- Write ---
 
   const saveSnapshot = useCallback((snapshot: Snapshot, sortOrder: number, onUploaded?: (imageUrl: string) => void) => {
-    Promise.resolve().then(async () => {
+    return Promise.resolve().then(async () => {
       try {
         const supabase = getSupabase()
 

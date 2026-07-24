@@ -1,7 +1,9 @@
 'use client';
 
-import { cacheProjectsList } from '@/lib/imageCache';
+import { cacheProjectsList, getCachedProjectsListSync } from '@/lib/imageCache';
 import { createClient } from '@/lib/supabase/client';
+
+const VIDEO_PLACEHOLDER_IMAGE = '/video-placeholder.png';
 
 type ProjectRow = {
   id: string;
@@ -11,12 +13,14 @@ type ProjectRow = {
   created_at: string;
 };
 
-type SnapshotRow = {
-  id: string;
-  project_id: string;
-  image_url: string;
-  sort_order: number;
+type CachedProject = ProjectRow & {
+  snapshots?: Array<{ id: string; image_url: string; sort_order: number }>;
+  hasVideo?: boolean;
 };
+
+function isDisplayCover(url: string | null): url is string {
+  return Boolean(url && url !== VIDEO_PLACEHOLDER_IMAGE && !url.endsWith(VIDEO_PLACEHOLDER_IMAGE));
+}
 
 const inFlight = new Map<string, Promise<void>>();
 
@@ -38,51 +42,24 @@ export function warmProjectsListCache(userId: string): Promise<void> {
       return;
     }
 
-    const projectIds = (projectRows as ProjectRow[]).map((project) => project.id);
-    const snapshotMap = new Map<string, SnapshotRow[]>();
-    const batches: string[][] = [];
-    for (let i = 0; i < projectIds.length; i += 30) batches.push(projectIds.slice(i, i + 30));
-
-    const [snapshotResults, animResult, videoSnapResult] = await Promise.all([
-      Promise.all(batches.map((batch) =>
-        supabase
-          .from('snapshots')
-          .select('id, project_id, image_url, sort_order')
-          .in('project_id', batch)
-          .order('sort_order', { ascending: true })
-          .limit(3000)
-      )),
-      supabase
-        .from('project_animations')
-        .select('project_id')
-        .in('project_id', projectIds)
-        .eq('status', 'completed'),
-      supabase
-        .from('snapshots')
-        .select('project_id')
-        .in('project_id', projectIds)
-        .eq('type', 'video'),
-    ]);
-
-    for (const { data } of snapshotResults) {
-      for (const snapshot of (data ?? []) as SnapshotRow[]) {
-        const list = snapshotMap.get(snapshot.project_id) ?? [];
-        list.push(snapshot);
-        snapshotMap.set(snapshot.project_id, list);
-      }
-    }
-
-    const videoProjectIds = new Set<string>();
-    for (const row of animResult.data ?? []) videoProjectIds.add(row.project_id);
-    for (const row of videoSnapResult.data ?? []) videoProjectIds.add(row.project_id);
-
-    const projects = (projectRows as ProjectRow[])
-      .map((project) => ({
-        ...project,
-        snapshots: snapshotMap.get(project.id) ?? [],
-        hasVideo: videoProjectIds.has(project.id),
-      }))
-      .filter((project) => project.snapshots.length > 0);
+    // Navigation warmup stays intentionally thin: one projects query gives us
+    // stable cover_url thumbnails without competing with homepage interaction
+    // or downloading every snapshot/video badge up front.
+    const cachedProjects = (getCachedProjectsListSync(userId) ?? []) as CachedProject[];
+    const cachedMap = new Map(cachedProjects.map((project) => [project.id, project]));
+    const projects = (projectRows as ProjectRow[]).flatMap((project) => {
+      const cached = cachedMap.get(project.id);
+      const cachedIsFresh = cached?.updated_at === project.updated_at
+        && Boolean(cached.snapshots?.length)
+        && cached.snapshots!.every((snapshot) => !snapshot.id.startsWith('cover:'));
+      const snapshots = cachedIsFresh
+        ? cached!.snapshots!
+        : isDisplayCover(project.cover_url)
+          ? [{ id: `cover:${project.id}`, image_url: project.cover_url, sort_order: 0 }]
+          : cached?.snapshots ?? [];
+      if (snapshots.length === 0) return [];
+      return [{ ...project, snapshots, hasVideo: cached?.hasVideo }];
+    });
 
     cacheProjectsList(userId, projects);
   }).catch(() => {

@@ -1,6 +1,6 @@
 'use client'
 
-import { cacheMediaBlob, cacheMediaUrl, getCachedMediaObjectUrl, mediaCacheKeyForUrl } from '@/lib/imageCache'
+import { cacheMediaBlob, getCachedMediaObjectUrl } from '@/lib/imageCache'
 import { normalizeDomain } from '@/lib/supabase/storage'
 import { useEffect, useState } from 'react'
 
@@ -31,6 +31,25 @@ function canvasToJpegBlob(canvas: HTMLCanvasElement): Promise<Blob | null> {
   })
 }
 
+async function posterBlobFromVideo(video: HTMLVideoElement): Promise<Blob | null> {
+  const width = video.videoWidth
+  const height = video.videoHeight
+  if (!width || !height) return null
+
+  try {
+    const scale = Math.min(1, POSTER_MAX_WIDTH / width)
+    const canvas = document.createElement('canvas')
+    canvas.width = Math.max(1, Math.round(width * scale))
+    canvas.height = Math.max(1, Math.round(height * scale))
+    const ctx = canvas.getContext('2d')
+    if (!ctx) return null
+    ctx.drawImage(video, 0, 0, canvas.width, canvas.height)
+    return canvasToJpegBlob(canvas)
+  } catch {
+    return null
+  }
+}
+
 function capturePosterFrame(videoSrc: string): Promise<Blob | null> {
   if (typeof document === 'undefined') return Promise.resolve(null)
 
@@ -51,30 +70,7 @@ function capturePosterFrame(videoSrc: string): Promise<Blob | null> {
       resolve(poster)
     }
 
-    const draw = async () => {
-      const width = video.videoWidth
-      const height = video.videoHeight
-      if (!width || !height) {
-        finish(null)
-        return
-      }
-
-      try {
-        const scale = Math.min(1, POSTER_MAX_WIDTH / width)
-        const canvas = document.createElement('canvas')
-        canvas.width = Math.max(1, Math.round(width * scale))
-        canvas.height = Math.max(1, Math.round(height * scale))
-        const ctx = canvas.getContext('2d')
-        if (!ctx) {
-          finish(null)
-          return
-        }
-        ctx.drawImage(video, 0, 0, canvas.width, canvas.height)
-        finish(await canvasToJpegBlob(canvas))
-      } catch {
-        finish(null)
-      }
-    }
+    const draw = async () => finish(await posterBlobFromVideo(video))
 
     timeoutId = window.setTimeout(() => finish(null), POSTER_TIMEOUT_MS)
     video.muted = true
@@ -97,6 +93,35 @@ export function getCachedHomeVideoPoster(src: string): string | null {
   return readMemoryPoster(normalizedSrc) ?? null
 }
 
+export async function restoreCachedHomeVideoPoster(src: string): Promise<string | null> {
+  const normalizedSrc = normalizeDomain(src)
+  const memoryPoster = readMemoryPoster(normalizedSrc)
+  if (memoryPoster) return memoryPoster
+
+  const cachedPoster = await getCachedMediaObjectUrl(posterStorageKey(normalizedSrc))
+  if (cachedPoster) storeMemoryPoster(normalizedSrc, cachedPoster)
+  return cachedPoster
+}
+
+export async function cacheHomeVideoPosterFromElement(
+  src: string,
+  video: HTMLVideoElement,
+): Promise<string | null> {
+  const normalizedSrc = normalizeDomain(src)
+  const cachedPoster = readMemoryPoster(normalizedSrc)
+  if (cachedPoster) return cachedPoster
+
+  const posterBlob = await posterBlobFromVideo(video)
+  if (!posterBlob) return null
+  const poster = await cacheMediaBlob(
+    posterStorageKey(normalizedSrc),
+    posterBlob,
+    'image/jpeg',
+  )
+  if (poster) storeMemoryPoster(normalizedSrc, poster)
+  return poster
+}
+
 export function warmHomeVideoPoster(src: string): Promise<string | null> {
   const normalizedSrc = normalizeDomain(src)
   const cached = readMemoryPoster(normalizedSrc)
@@ -115,9 +140,9 @@ export function warmHomeVideoPoster(src: string): Promise<string | null> {
         return cachedPoster
       }
 
-      const videoKey = mediaCacheKeyForUrl(normalizedSrc)
-      const videoSrc = await cacheMediaUrl(normalizedSrc, videoKey) ?? normalizedSrc
-      const posterBlob = await capturePosterFrame(videoSrc)
+      // Let the media element issue a range/stream request. Fetching the whole
+      // MP4 into a Blob here made Safari download tens of megabytes at startup.
+      const posterBlob = await capturePosterFrame(normalizedSrc)
       const poster = posterBlob
         ? await cacheMediaBlob(posterKey, posterBlob, 'image/jpeg')
         : null
@@ -133,7 +158,11 @@ export function warmHomeVideoPoster(src: string): Promise<string | null> {
   return task
 }
 
-export function useHomeVideoPoster(src: string, enabled: boolean): string | null {
+export function useHomeVideoPoster(
+  src: string,
+  enabled: boolean,
+  generateIfMissing = true,
+): string | null {
   const normalizedSrc = normalizeDomain(src)
   const [poster, setPoster] = useState<string | null>(() => getCachedHomeVideoPoster(normalizedSrc))
 
@@ -142,14 +171,17 @@ export function useHomeVideoPoster(src: string, enabled: boolean): string | null
     setPoster(getCachedHomeVideoPoster(normalizedSrc))
     if (!enabled) return
 
-    warmHomeVideoPoster(normalizedSrc).then((nextPoster) => {
+    const loadPoster = generateIfMissing
+      ? warmHomeVideoPoster(normalizedSrc)
+      : restoreCachedHomeVideoPoster(normalizedSrc)
+    loadPoster.then((nextPoster) => {
       if (!cancelled && nextPoster) setPoster(nextPoster)
     }).catch(() => {})
 
     return () => {
       cancelled = true
     }
-  }, [enabled, normalizedSrc])
+  }, [enabled, generateIfMissing, normalizedSrc])
 
   return poster
 }

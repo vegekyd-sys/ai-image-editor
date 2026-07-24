@@ -1,6 +1,9 @@
 'use client';
 
-import { useLocale } from '@/lib/i18n';
+import { getTranslationVariants, useLocale } from '@/lib/i18n';
+
+const PREVIEW_STATUS_PREFIXES = getTranslationVariants('status.generatingPreviews', 0, 0)
+  .map((value) => value.replace(/\s*0\/0$/, ''));
 
 interface AgentStatusBarProps {
   statusText: string;
@@ -18,7 +21,7 @@ interface AgentStatusBarProps {
 export default function AgentStatusBar({ statusText, isActive, onOpenChat, isViewingDraft, hideChat, notification, onSeeNotification }: AgentStatusBarProps) {
   const { t } = useLocale();
   // Determine dot color and breathe speed based on state
-  const isGeneratingImages = statusText.includes('previews') || statusText.includes('预览');
+  const isGeneratingImages = PREVIEW_STATUS_PREFIXES.some((prefix) => statusText.startsWith(prefix));
   const isFetchingTips = statusText === t('status.generatingTips');
 
   let dotColor: string;
@@ -75,11 +78,11 @@ export default function AgentStatusBar({ statusText, isActive, onOpenChat, isVie
         {notification && onSeeNotification && (
           <button
             onClick={e => { e.stopPropagation(); onSeeNotification(); }}
-            className="px-3 py-1.5 rounded-full text-[12px] font-medium active:scale-95 transition-all flex-shrink-0 cursor-pointer"
+            className="mkr-liquid-pill px-3 py-1.5 rounded-full text-[12px] font-medium active:scale-95 transition-all flex-shrink-0 cursor-pointer"
             style={{
-              background: 'rgba(192,38,211,0.25)',
+              background: 'linear-gradient(145deg, rgba(192,38,211,0.24), rgba(10,10,14,0.38))',
               color: '#e879f9',
-              border: '1px solid rgba(192,38,211,0.4)',
+              border: '0.5px solid rgba(232,121,249,0.32)',
             }}
           >
             {notification.text.includes('Top up') ? 'Top Up' : 'See'}
@@ -90,14 +93,15 @@ export default function AgentStatusBar({ statusText, isActive, onOpenChat, isVie
         {!hideChat && (
           <button
             onClick={e => { e.stopPropagation(); onOpenChat(); }}
-            className="px-3 py-1.5 rounded-full text-[12px] font-medium active:scale-95 transition-all flex-shrink-0 cursor-pointer"
+            className="mkr-liquid-pill px-3 py-1.5 rounded-full text-[12px] font-medium active:scale-95 transition-all flex-shrink-0 cursor-pointer"
             style={isViewingDraft && !notification ? {
-              background: 'rgba(192,38,211,0.25)',
+              background: 'linear-gradient(145deg, rgba(192,38,211,0.24), rgba(10,10,14,0.38))',
               color: '#e879f9',
-              border: '1px solid rgba(192,38,211,0.4)',
+              border: '0.5px solid rgba(232,121,249,0.32)',
             } : {
-              background: 'rgba(255,255,255,0.08)',
+              background: 'linear-gradient(145deg, rgba(255,255,255,0.075), rgba(10,10,14,0.36))',
               color: 'rgba(255,255,255,0.7)',
+              border: '0.5px solid rgba(255,255,255,0.10)',
             }}
           >
             Chat

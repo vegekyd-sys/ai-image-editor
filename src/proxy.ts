@@ -1,8 +1,21 @@
 import { createServerClient } from '@supabase/ssr'
 import { NextResponse, type NextRequest } from 'next/server'
+import { matchSupportedLocale } from '@/lib/locales'
+import { appendAuthReturnParam, normalizeAuthReturnPath } from '@/lib/auth-return'
 
 export async function proxy(request: NextRequest) {
+  const requestedLocale = matchSupportedLocale(request.nextUrl.searchParams.get('locale'))
+  const requestedReturnPath = normalizeAuthReturnPath(request.nextUrl.searchParams.get('next'))
+  if (requestedLocale) request.cookies.set('locale', requestedLocale)
+
   let supabaseResponse = NextResponse.next({ request })
+  if (requestedLocale) {
+    supabaseResponse.cookies.set('locale', requestedLocale, {
+      path: '/',
+      maxAge: 365 * 24 * 60 * 60,
+      sameSite: 'lax',
+    })
+  }
 
   const supabase = createServerClient(
     process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -17,6 +30,13 @@ export async function proxy(request: NextRequest) {
             request.cookies.set(name, value)
           )
           supabaseResponse = NextResponse.next({ request })
+          if (requestedLocale) {
+            supabaseResponse.cookies.set('locale', requestedLocale, {
+              path: '/',
+              maxAge: 365 * 24 * 60 * 60,
+              sameSite: 'lax',
+            })
+          }
           cookiesToSet.forEach(({ name, value, options }) =>
             supabaseResponse.cookies.set(name, value, options)
           )
@@ -49,9 +69,14 @@ export async function proxy(request: NextRequest) {
       }
 
       const url = request.nextUrl.clone()
-      url.searchParams.delete('code')
-      url.pathname = isNewUser ? '/home' : '/projects'
-      if (isNewUser) url.searchParams.set('welcome', '1')
+      url.search = ''
+      const destination = requestedReturnPath
+        ? (isNewUser ? appendAuthReturnParam(requestedReturnPath, 'welcome', '1') : requestedReturnPath)
+        : (isNewUser ? '/home?welcome=1' : '/projects')
+      const resolvedDestination = new URL(destination, request.url)
+      url.pathname = resolvedDestination.pathname
+      url.search = resolvedDestination.search
+      url.hash = resolvedDestination.hash
       const response = NextResponse.redirect(url)
       supabaseResponse.cookies.getAll().forEach(c => {
         response.cookies.set(c.name, c.value, { path: '/' })
@@ -83,10 +108,6 @@ export async function proxy(request: NextRequest) {
     pathname.startsWith('/releases/') ||
     pathname.startsWith('/use-cases')
 
-  // Local dev: skip invite-code activation gate
-  const isDev = process.env.NODE_ENV === 'development'
-  const activated = isDev || request.cookies.get('mkr_activated')?.value === '1'
-
   // Not logged in — /login, /landingpage, / are accessible; others → landing page
   if (!user) {
     // Allow /projects/[uuid] through for public project viewing (page-level checks visibility)
@@ -104,41 +125,38 @@ export async function proxy(request: NextRequest) {
   // Logged in — / → projects
   if (pathname === '/') {
     const url = request.nextUrl.clone()
-    url.pathname = activated ? '/projects' : '/activate'
+    url.pathname = '/projects'
     return NextResponse.redirect(url)
   }
 
   // Logged in below this point
 
-  // /login → redirect based on activation status
+  // /login → continue to the original safe destination.
   if (pathname === '/login') {
     const url = request.nextUrl.clone()
-    url.pathname = activated ? '/projects' : '/activate'
+    const destination = requestedReturnPath || '/projects'
+    const resolvedDestination = new URL(destination, request.url)
+    url.pathname = resolvedDestination.pathname
+    url.search = resolvedDestination.search
+    url.hash = resolvedDestination.hash
     return NextResponse.redirect(url)
   }
 
 
-  // /activate — accessible when logged in
+  // Retired invite-era URL: complete verified auth once, then continue.
   if (pathname === '/activate') {
-    // Already activated → skip to projects
-    if (activated) {
-      const url = request.nextUrl.clone()
-      url.pathname = '/projects'
-      return NextResponse.redirect(url)
-    }
-    return supabaseResponse
+    const url = request.nextUrl.clone()
+    const destination = requestedReturnPath || '/projects'
+    const completionPath = `/api/auth/complete?next=${encodeURIComponent(destination)}`
+    const resolvedDestination = new URL(completionPath, request.url)
+    url.pathname = resolvedDestination.pathname
+    url.search = resolvedDestination.search
+    url.hash = resolvedDestination.hash
+    return NextResponse.redirect(url)
   }
 
-  // Public routes stay accessible even when a logged-in user is not activated yet.
   if (isPublicRoute) {
     return supabaseResponse
-  }
-
-  // All other routes — require activation
-  if (!activated) {
-    const url = request.nextUrl.clone()
-    url.pathname = '/activate'
-    return NextResponse.redirect(url)
   }
 
   return supabaseResponse

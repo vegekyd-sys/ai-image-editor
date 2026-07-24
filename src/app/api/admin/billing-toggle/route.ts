@@ -3,6 +3,7 @@ import { authenticateRequest } from '@/lib/api-auth'
 import { isAdmin } from '@/lib/admin'
 import { getSupabaseAdmin } from '@/lib/supabase/service'
 import { invalidateBillingCache } from '@/lib/billing/credits'
+import { getConfiguredWelcomeCredits } from '@/lib/billing/welcome-credits'
 
 async function checkAdmin(req: Request): Promise<string | null> {
   const authResult = await authenticateRequest(req)
@@ -16,10 +17,9 @@ export async function GET(req: NextRequest) {
   if (!(await checkAdmin(req))) return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
   const admin = getSupabaseAdmin()
   const { data: billing } = await admin.from('app_settings').select('value').eq('key', 'billing_enabled').single()
-  const { data: welcome } = await admin.from('app_settings').select('value').eq('key', 'welcome_credits').single()
   return NextResponse.json({
     enabled: billing?.value === 'true',
-    welcomeCredits: parseInt(welcome?.value || '500'),
+    welcomeCredits: await getConfiguredWelcomeCredits(admin),
   })
 }
 

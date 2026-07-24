@@ -163,6 +163,8 @@ async function hydrateLocalMirror(file: WorkspaceFile, userId: string): Promise<
 function extToContentType(ext: string): string {
   const map: Record<string, string> = {
     '.md': 'text/markdown', '.txt': 'text/plain', '.json': 'application/json',
+    '.js': 'text/javascript', '.jsx': 'text/javascript',
+    '.ts': 'text/typescript', '.tsx': 'text/typescript', '.css': 'text/css',
     '.jpg': 'image/jpeg', '.jpeg': 'image/jpeg', '.png': 'image/png',
     '.gif': 'image/gif', '.webp': 'image/webp', '.pdf': 'application/pdf',
     '.zip': 'application/zip',
@@ -675,10 +677,21 @@ export async function getAllSkills(supabase?: SupabaseClient, userId?: string): 
   if (supabase && userId) {
     const userFiles = await dbListFiles(supabase, userId, 'skills/%/SKILL.md');
     const parsedUserSkills = await Promise.all(userFiles.map(async (file) => {
-      if (!file.storageUrl) return null;
-      const result = await fetchFileContent(file.storageUrl, file.contentType);
-      if (!result) return null;
-      const parsed = parseSkillMd(result.content);
+      const pathName = file.path.match(/^skills\/([^/]+)\/SKILL\.md$/)?.[1];
+      if (!pathName || builtIn.has(pathName)) return null;
+
+      let content: string | null = null;
+      if (file.localAvailable && file.localPath) {
+        try {
+          content = await readLocalFile(file.localPath, 'utf-8');
+        } catch { /* fall back to the provider URL below */ }
+      }
+      if (!content && file.storageUrl) {
+        const result = await fetchFileContent(file.storageUrl, file.contentType);
+        content = result?.content || null;
+      }
+      if (!content) return null;
+      const parsed = parseSkillMd(content);
       return parsed && !builtIn.has(parsed.name) ? parsed : null;
     }));
     for (const parsed of parsedUserSkills) {
@@ -698,11 +711,14 @@ export async function getSkillManifest(supabase?: SupabaseClient, userId?: strin
   const cached = getCached<string>(cacheKey);
   if (cached !== undefined) return cached;
 
-  const builtIn = [...loadBuiltInSkills().values()].filter(s => !LEGACY_PROMPTS.has(s.name));
+  const builtIn = [...loadBuiltInSkills().values()].filter(s => (
+    !LEGACY_PROMPTS.has(s.name) && s.makaron?.manifestVisible !== false
+  ));
   const lines: string[] = builtIn.map(s => {
     const extras: string[] = [];
     if (s.makaron?.referenceImages?.length) extras.push('has reference images');
     if (s.makaron?.modelPreference?.length) extras.push(`prefers: ${s.makaron.modelPreference.join('/')}`);
+    if (s.makaron?.sourceMediaRequired) extras.push('requires source media');
     const suffix = extras.length ? ` [${extras.join(', ')}]` : '';
     return `- **${s.name}**: ${s.description.trim().split('\n')[0]}${suffix}`;
   });
@@ -723,7 +739,7 @@ export async function getSkillManifest(supabase?: SupabaseClient, userId?: strin
     return '';
   }
 
-  const manifest = `\n## Available Skills\n\nThis is an index only. Do not assume user skill details from the manifest; read \`skills/{name}/SKILL.md\` before using a user skill.\n\n${lines.join('\n')}\n`;
+  const manifest = `\n## Available Skills\n\nThis is a capability index only, not a workflow router. Description similarity does not activate a skill or Studio Run. Do not assume user skill details from the manifest; read \`skills/{name}/SKILL.md\` after the router or an explicit \`[Active skill: NAME]\` selects it.\n\n${lines.join('\n')}\n`;
   setCache(cacheKey, manifest);
   return manifest;
 }

@@ -5,11 +5,14 @@ import { buildPhotoMetadata, extractPhotoMetadataCore } from '@/lib/image/metada
 /** Extract EXIF metadata (location + time) from a photo file.
  *  Returns takenAt + GPS coords immediately (non-blocking).
  *  Location name requires a separate reverseGeocode call — see enrichMetadataLocation. */
-export async function extractPhotoMetadata(file: File): Promise<PhotoMetadata | undefined> {
+export async function extractPhotoMetadata(
+  file: File,
+  options?: { allowServerFallback?: boolean },
+): Promise<PhotoMetadata | undefined> {
   const local = await extractPhotoMetadataLocally(file);
 
   const needsServerFallback = isHeicFile(file) || !local?.takenAt;
-  if (!needsServerFallback) return local;
+  if (!needsServerFallback || options?.allowServerFallback === false) return local;
 
   const server = await extractPhotoMetadataOnServer(file);
   return mergePhotoMetadata(local, server);

@@ -1,45 +1,97 @@
-import { createSunoTask } from '../sunoapi'
+import type { SupabaseClient } from '@supabase/supabase-js'
+import { createAudio } from './create-audio'
+import type { SeedAudioFormat } from '../evolink-seed-audio'
 
 export interface CreateMusicInput {
   prompt: string
   instrumental?: boolean
   model?: string
   style?: string
+  durationSeconds?: number
+  audioReferences?: string[]
+  imageUrls?: string[]
+  speechRate?: number
+  loudnessRate?: number
+  pitchRate?: number
+  format?: SeedAudioFormat
+  sampleRate?: number
+  supabase?: SupabaseClient
+  userId?: string
+  projectId?: string
 }
 
 export interface CreateMusicResult {
   success: boolean
   taskId?: string
+  status?: 'completed' | 'failed'
+  audioUrl?: string
+  providerAudioUrl?: string
+  title?: string
+  duration?: number
+  creditsUsed?: number
+  generationSeconds?: number
+  provider?: string
+  model?: string
+  tags?: string
+  trackIndex?: number
   message: string
 }
 
+function buildSeedAudioPrompt(input: CreateMusicInput): string {
+  const parts = [input.prompt.trim()]
+  if (input.style?.trim()) parts.push(`Style tags: ${input.style.trim()}.`)
+  if (input.instrumental !== false) {
+    parts.push('Instrumental background music only, no vocals or lyrics.')
+  } else {
+    parts.push('Use subtle vocal texture only if it supports the requested music bed; avoid dominant sung lyrics unless explicitly required.')
+  }
+  return parts.join('\n')
+}
+
 export async function createMusic(input: CreateMusicInput): Promise<CreateMusicResult> {
-  const { prompt, instrumental, model, style } = input
-
-  if (!prompt) {
-    return { success: false, message: 'Music prompt is required.' }
+  if (!input.prompt?.trim()) {
+    return { success: false, status: 'failed', message: 'Music prompt is required.' }
   }
 
-  if (!process.env.SUNOAPI_KEY) {
-    return { success: false, message: 'SUNOAPI_KEY is not configured.' }
-  }
+  const result = await createAudio({
+    prompt: buildSeedAudioPrompt(input),
+    durationSeconds: input.durationSeconds,
+    audioReferences: input.audioReferences,
+    imageUrls: input.imageUrls,
+    speechRate: input.speechRate,
+    loudnessRate: input.loudnessRate,
+    pitchRate: input.pitchRate,
+    format: input.format,
+    sampleRate: input.sampleRate,
+    title: 'Generated music',
+    model: 'evolink-seed-audio',
+    supabase: input.supabase,
+    userId: input.userId,
+    projectId: input.projectId,
+  })
 
-  try {
-    const taskId = await createSunoTask({
-      prompt,
-      instrumental: instrumental ?? true,
-      model,
-      style,
-    })
-
+  if (!result.success) {
     return {
-      success: true,
-      taskId,
-      message: 'Music generation started. Preview available in ~30s.',
+      success: false,
+      status: 'failed',
+      message: result.message,
     }
-  } catch (e) {
-    const msg = e instanceof Error ? e.message : String(e)
-    console.error('[create_music error]', msg)
-    return { success: false, message: `Failed to create music task: ${msg}` }
+  }
+
+  return {
+    success: true,
+    taskId: result.taskId,
+    status: 'completed',
+    audioUrl: result.audioUrl,
+    providerAudioUrl: result.providerAudioUrl,
+    title: result.title || 'Generated music',
+    duration: result.duration,
+    creditsUsed: result.creditsUsed,
+    generationSeconds: result.generationSeconds,
+    provider: result.provider,
+    model: result.model,
+    tags: ['audio', 'music', 'seed-audio', result.provider, result.model].filter(Boolean).join(','),
+    trackIndex: result.trackIndex,
+    message: `${result.message} Music is ready with Seed Audio.`,
   }
 }

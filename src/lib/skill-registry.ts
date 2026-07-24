@@ -21,6 +21,17 @@ export interface MakaronSkillMeta {
   modelPreference?: string[];
   faceProtection?: 'strict' | 'default' | 'none';
   defaultAspectRatio?: string;
+  studioRunRecipe?: string;
+  studioRunProfile?: string;
+  sourceMediaRequired?: boolean;
+  userSelectable?: boolean;
+  manifestVisible?: boolean;
+  sourceProject?: string;
+  sourceSkill?: string;
+  sourceKind?: string;
+  supportLevel?: string;
+  adapterFamily?: string;
+  canonicalSkill?: string;
   referenceImages?: string[];
   referenceVideos?: string[];
   tags?: string[];
@@ -32,6 +43,59 @@ export interface ParsedSkill {
   allowedTools?: string[];
   makaron: MakaronSkillMeta;
   template: string; // markdown body (the actual instructions)
+}
+
+export interface MarketplaceSkillFallback {
+  name: string;
+  description: string;
+}
+
+/**
+ * Marketplace templates predate the strict AgentSkills frontmatter contract.
+ * Normalize only server-verified marketplace packages; ordinary user uploads
+ * still go through parseSkillMd unchanged and remain strict.
+ */
+export function normalizeMarketplaceSkillMd(
+  content: string,
+  fallback: MarketplaceSkillFallback,
+): string {
+  const trimmed = content.trim();
+  const safeName = fallback.name.trim();
+  const safeDescription = fallback.description.replace(/\s+/g, ' ').trim();
+  if (!trimmed || !safeName || !safeDescription) return content;
+
+  const fmMatch = trimmed.match(/^---\n([\s\S]*?)\n---\n?([\s\S]*)$/);
+  if (!fmMatch) {
+    return `---\nname: ${safeName}\ndescription: ${safeDescription}\n---\n\n${trimmed}\n`;
+  }
+
+  let frontmatter = fmMatch[1];
+  if (!/^name:\s*.+$/m.test(frontmatter)) {
+    frontmatter = `name: ${safeName}\n${frontmatter}`;
+  }
+  if (!/^description:\s*.+$/m.test(frontmatter)) {
+    const nameLine = frontmatter.match(/^name:\s*.+$/m)?.[0];
+    frontmatter = nameLine
+      ? frontmatter.replace(nameLine, `${nameLine}\ndescription: ${safeDescription}`)
+      : `description: ${safeDescription}\n${frontmatter}`;
+  }
+  return `---\n${frontmatter}\n---\n${fmMatch[2]}`;
+}
+
+export function deriveMarketplaceSkillName(skillPath: string, homeSkillId: string): string {
+  let basename = '';
+  try {
+    basename = new URL(skillPath).pathname.split('/').pop() || '';
+  } catch {
+    basename = skillPath.split('/').pop() || '';
+  }
+  const normalized = decodeURIComponent(basename)
+    .replace(/\.zip$/i, '')
+    .toLowerCase()
+    .replace(/[^a-z0-9_-]+/g, '-')
+    .replace(/^-+|-+$/g, '')
+    .slice(0, 96);
+  return normalized || `home-skill-${homeSkillId.slice(0, 8)}`;
 }
 
 /** Parse a SKILL.md string into structured data */
@@ -98,6 +162,17 @@ export function parseSkillMd(content: string): ParsedSkill | null {
       else if (k === 'builtIn') makaron.builtIn = clean === 'true';
       else if (k === 'faceProtection') makaron.faceProtection = clean as 'strict' | 'default' | 'none';
       else if (k === 'defaultAspectRatio') makaron.defaultAspectRatio = clean;
+      else if (k === 'studioRunRecipe') makaron.studioRunRecipe = clean;
+      else if (k === 'studioRunProfile') makaron.studioRunProfile = clean;
+      else if (k === 'sourceMediaRequired') makaron.sourceMediaRequired = clean === 'true';
+      else if (k === 'userSelectable') makaron.userSelectable = clean !== 'false';
+      else if (k === 'manifestVisible') makaron.manifestVisible = clean !== 'false';
+      else if (k === 'sourceProject') makaron.sourceProject = clean;
+      else if (k === 'sourceSkill') makaron.sourceSkill = clean;
+      else if (k === 'sourceKind') makaron.sourceKind = clean;
+      else if (k === 'supportLevel') makaron.supportLevel = clean;
+      else if (k === 'adapterFamily') makaron.adapterFamily = clean;
+      else if (k === 'canonicalSkill') makaron.canonicalSkill = clean;
       else if (k === 'modelPreference' || k === 'tags' || k === 'referenceImages' || k === 'referenceVideos') {
         if (clean.startsWith('[')) {
           (makaron as Record<string, unknown>)[k] = clean.slice(1, -1).split(',').map(s => s.trim());

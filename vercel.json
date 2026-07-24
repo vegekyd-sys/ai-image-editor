@@ -1,6 +1,10 @@
 {
   "crons": [
     {
+      "path": "/api/cron/agent-executions",
+      "schedule": "* * * * *"
+    },
+    {
       "path": "/api/cron/video-poll",
       "schedule": "*/5 * * * *"
     },

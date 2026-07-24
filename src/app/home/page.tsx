@@ -2,14 +2,24 @@
 
 import { useAuth } from '@/hooks/useAuth'
 import { useRequireAuth } from '@/hooks/useRequireAuth'
-import { usePathname, useRouter, useSearchParams } from 'next/navigation'
-import { useEffect, useState, useRef, useCallback, Suspense } from 'react'
+import { usePathname, useRouter } from 'next/navigation'
+import { startTransition, useEffect, useState, useRef, useCallback, useMemo, type PointerEvent as ReactPointerEvent } from 'react'
 import { useIsDesktop } from '@/hooks/useIsDesktop'
+import { useHydrated } from '@/hooks/useHydrated'
 import { isHeicFile } from '@/lib/imageUtils'
-import { useLocale } from '@/lib/i18n'
-import { compressCreateImageFile, createProject, createProjectFromStagedMedia } from '@/lib/createProject'
+import { pickLocalizedValue, useLocale } from '@/lib/i18n'
+import { compressCreateImageFiles, createProject, createProjectFromStagedMedia, type ProjectLaunchOptions } from '@/lib/createProject'
+import { createHomeSkillLaunchContext } from '@/lib/skill-launch-context'
 import { createClient } from '@/lib/supabase/client'
-import { cacheCreateDraft, cacheMediaUrl, clearCreateDraft, getCachedMediaObjectUrl, getCreateDraft, mediaCacheKeyForUrl } from '@/lib/imageCache'
+import {
+  beginCreateDraftContinuation,
+  cacheCreateDraft,
+  clearCreateDraft,
+  clearCreateDraftContinuation,
+  getCreateDraft,
+  getCreateDraftContinuationId,
+  shouldConsumeCreateDraft,
+} from '@/lib/imageCache'
 import { extractPhotoMetadata } from '@/lib/image/metadata'
 import type { PhotoMetadata } from '@/types'
 import { createMetaEventId, trackMetaEvent } from '@/lib/marketing/meta-pixel'
@@ -17,8 +27,15 @@ import RollingTagline from '@/components/RollingTagline'
 import TopBar from '@/components/TopBar'
 import ModeToggle from '@/components/ModeToggle'
 import AgentContent from '@/components/AgentContent'
-import { type HomeSkill, getCachedHomeSkills, setCachedHomeSkills } from '@/lib/home-skills'
-import { useHomeVideoPoster } from '@/lib/home-video-poster'
+import {
+  type HomeSkill,
+  type HomeSkillCategory,
+  filterHomeSkillsByCategory,
+  getCachedHomeSkills,
+  getLocalizedSkillPrompt,
+  getVisibleSkillCategories,
+  setCachedHomeSkills,
+} from '@/lib/home-skills'
 import { warmHomeSkillMedia } from '@/lib/home-skills-warm'
 import { getThumbnailUrl, getOptimizedUrl, normalizeDomain } from '@/lib/supabase/storage'
 import { isMakaronIOSApp } from '@/lib/native-app'
@@ -27,6 +44,18 @@ import { useCreateInput } from '@/hooks/useCreateInput'
 import CreateInputBox from '@/components/CreateInputBox'
 import MakaronLogo from '@/components/MakaronLogo'
 import LiquidGlassNav from '@/components/LiquidGlassNav'
+import { loadCreateAgentModelPreference, saveAgentModelPreference, saveCreateAgentModelPreference } from '@/lib/agent-model-preference'
+import type { AgentModelPreference } from '@/lib/agent-models'
+import { LazyVideo, SkillVideo } from '@/components/HomeSkillMedia'
+import { getHomeComposerViewportInset } from '@/lib/home-composer-viewport'
+import {
+  HOME_SKILL_CATEGORY_SWIPE_AXIS_LOCK_PX,
+  canStartHomeSkillCategorySwipe,
+  getAdjacentHomeSkillCategoryId,
+  getHomeSkillCategorySwipePresentation,
+  resolveHomeSkillCategorySwipe,
+  type HomeSkillCategorySwipeDirection,
+} from '@/lib/home-skill-category-swipe'
 
 const Z = { INPUT: 100, HERO_FLY: 90, OVERLAY: 80, AMBIENT: 0 } as const
 const IOS_SKILL_BACK_EDGE_PX = 36
@@ -35,6 +64,8 @@ const IOS_SKILL_BACK_COMMIT_PX = 88
 const IOS_SKILL_BACK_CLOSE_MS = 180
 const IOS_RESET_HOME_SCROLL_KEY = 'makaron:ios-reset-home-scroll'
 const IOS_PENDING_HOME_SKILL_KEY = 'makaron:ios-pending-home-skill-id'
+const INITIAL_SKILL_CARD_COUNT = 12
+const SKILL_CARD_BATCH_SIZE = 12
 
 function getHomeScrollContainer(node: HTMLElement | null): HTMLElement | null {
   if (!node) return null
@@ -50,221 +81,24 @@ function isEditableTarget(target: EventTarget | null): boolean {
   return Boolean(target.closest('input, textarea, select, button, [contenteditable="true"]'))
 }
 
-function useCachedVideoSource(src: string, enabled: boolean) {
-  const normalizedSrc = normalizeDomain(src)
-  const [resolvedSrc, setResolvedSrc] = useState(normalizedSrc)
-
-  useEffect(() => {
-    let cancelled = false
-    setResolvedSrc(normalizedSrc)
-    if (!enabled) return
-
-    const key = mediaCacheKeyForUrl(normalizedSrc)
-    getCachedMediaObjectUrl(key)
-      .then((cachedSrc) => cachedSrc ?? cacheMediaUrl(normalizedSrc, key))
-      .then((cachedSrc) => {
-        if (!cancelled && cachedSrc) setResolvedSrc(cachedSrc)
-      })
-      .catch(() => {})
-
-    return () => {
-      cancelled = true
-    }
-  }, [enabled, normalizedSrc])
-
-  return resolvedSrc
-}
-
-function LazyVideo({
-  src,
-  style,
-  eager = false,
-  suspended = false,
-}: {
-  src: string
-  style: React.CSSProperties
-  eager?: boolean
-  suspended?: boolean
-}) {
-  const ref = useRef<HTMLVideoElement>(null)
-  const [isNearViewport, setIsNearViewport] = useState(eager)
-  const [isVisible, setIsVisible] = useState(eager)
-  const [videoReady, setVideoReady] = useState(false)
-  const resolvedSrc = useCachedVideoSource(src, isNearViewport && !suspended)
-  const shouldAttach = isNearViewport && !suspended
-  const poster = useHomeVideoPoster(src, shouldAttach || eager)
-
-  useEffect(() => {
-    const el = ref.current
-    if (!el) return
-    const nearObserver = new IntersectionObserver(([entry]) => {
-      const nearViewport = entry.isIntersecting
-      setIsNearViewport(nearViewport)
-    }, { rootMargin: '240px', threshold: [0, 0.05] })
-    const visibleObserver = new IntersectionObserver(([entry]) => {
-      setIsVisible(entry.isIntersecting && entry.intersectionRatio > 0.15)
-    }, { threshold: [0, 0.15] })
-    nearObserver.observe(el)
-    visibleObserver.observe(el)
-    return () => {
-      nearObserver.disconnect()
-      visibleObserver.disconnect()
-    }
-  }, [eager])
-
-  useEffect(() => {
-    const video = ref.current
-    if (!video) return
-    video.muted = true
-    video.playsInline = true
-
-    if (!shouldAttach) {
-      setVideoReady(false)
-      video.pause()
-      video.removeAttribute('src')
-      try {
-        video.load()
-      } catch {
-        // Releasing a detached Safari media pipeline is best-effort.
-      }
-      return
-    }
-
-    if (!isVisible) {
-      video.pause()
-      return
-    }
-
-    const raf = window.requestAnimationFrame(() => {
-      void video.play().catch(() => undefined)
-    })
-    return () => window.cancelAnimationFrame(raf)
-  }, [isVisible, resolvedSrc, shouldAttach, suspended])
-
-  useEffect(() => {
-    setVideoReady(false)
-  }, [resolvedSrc])
-
-  return (
-    <>
-      {poster && !videoReady && (
-        <img
-          src={poster}
-          alt=""
-          aria-hidden="true"
-          style={{ ...style, display: 'block' }}
-        />
-      )}
-      <video
-        ref={ref}
-        src={shouldAttach ? resolvedSrc : undefined}
-        loop
-        muted
-        playsInline
-        preload={shouldAttach ? 'metadata' : 'none'}
-        onLoadedData={() => setVideoReady(true)}
-        onCanPlay={() => setVideoReady(true)}
-        style={{ ...style, opacity: videoReady ? 1 : 0, transition: 'opacity 120ms ease-out' }}
-      />
-    </>
-  )
-}
-
-function SkillVideo({
-  src,
-  style,
-  eager = false,
-  active = true,
-}: {
-  src: string
-  style: React.CSSProperties
-  eager?: boolean
-  active?: boolean
-}) {
-  const ref = useRef<HTMLVideoElement>(null)
-  const [videoReady, setVideoReady] = useState(false)
-  const resolvedSrc = useCachedVideoSource(src, eager || active)
-  const shouldAttach = eager || active
-  const poster = useHomeVideoPoster(src, shouldAttach)
-
-  useEffect(() => {
-    const video = ref.current
-    if (!video) return
-    video.muted = true
-    video.playsInline = true
-    if (!shouldAttach) {
-      setVideoReady(false)
-      video.pause()
-      video.removeAttribute('src')
-      try {
-        video.load()
-      } catch {
-        // Releasing a detached Safari media pipeline is best-effort.
-      }
-      return
-    }
-    if (!active) {
-      video.pause()
-      return
-    }
-    if (eager || video.readyState === 0) video.load()
-    const play = () => {
-      void video.play().catch(() => {
-        window.setTimeout(() => {
-          video.muted = true
-          void video.play().catch(() => undefined)
-        }, 80)
-      })
-    }
-    const raf = window.requestAnimationFrame(play)
-    return () => window.cancelAnimationFrame(raf)
-  }, [active, eager, resolvedSrc, shouldAttach])
-
-  useEffect(() => {
-    setVideoReady(false)
-  }, [resolvedSrc])
-
-  return (
-    <>
-      {poster && !videoReady && (
-        <img
-          src={poster}
-          alt=""
-          aria-hidden="true"
-          style={{ ...style, display: 'block' }}
-        />
-      )}
-      <video
-        ref={ref}
-        src={shouldAttach ? resolvedSrc : undefined}
-        loop
-        muted
-        playsInline
-        preload={shouldAttach ? (eager ? 'auto' : 'metadata') : 'none'}
-        onLoadedData={() => setVideoReady(true)}
-        onCanPlay={() => setVideoReady(true)}
-        style={{ ...style, opacity: videoReady ? 1 : 0, transition: 'opacity 120ms ease-out' }}
-      />
-    </>
-  )
-}
-
 export default function HomePage() {
-  return <Suspense><HomePageInner /></Suspense>
+  return <HomePageInner />
 }
 
 function HomePageInner() {
   const { user, loading: authLoading } = useAuth()
+  const hydrated = useHydrated()
+  const renderUser = hydrated ? user : null
   const requireAuth = useRequireAuth()
   const { t, locale } = useLocale()
   const router = useRouter()
   const pathname = usePathname()
-  const searchParams = useSearchParams()
   const isDesktop = useIsDesktop()
-  const [isIOSAppShell] = useState(() => isMakaronIOSApp())
+  const isIOSAppShell = hydrated && isMakaronIOSApp()
 
   const [viewMode, setViewMode] = useState<'human' | 'agent'>('human')
   const createInput = useCreateInput()
+  const [createAgentModel, setCreateAgentModel] = useState<AgentModelPreference>('auto')
   const inputBoxRef = useRef<HTMLDivElement>(null)
   const textareaRef = useRef<HTMLTextAreaElement>(null)
   const [photoSlotWidth, setPhotoSlotWidth] = useState(80)
@@ -273,6 +107,43 @@ function HomePageInner() {
   const [inputWrapperHeight, setInputWrapperHeight] = useState(0)
   const [slotDragOver, setSlotDragOver] = useState(-1)
   const [homeSkills, setHomeSkills] = useState<HomeSkill[]>([])
+  const [skillCategories, setSkillCategories] = useState<HomeSkillCategory[]>([])
+  const [skillCategoriesLoading, setSkillCategoriesLoading] = useState(true)
+  const [activeCategory, setActiveCategory] = useState('all')
+  const [categoryHasChanged, setCategoryHasChanged] = useState(false)
+  const [visibleSkillCount, setVisibleSkillCount] = useState(INITIAL_SKILL_CARD_COUNT)
+  const skillLoadMoreRef = useRef<HTMLDivElement>(null)
+  const skillSectionRef = useRef<HTMLDivElement>(null)
+  const skillGridRef = useRef<HTMLDivElement>(null)
+  const categoryScrollRef = useRef<HTMLDivElement>(null)
+  const categoryButtonRefs = useRef(new Map<string, HTMLButtonElement>())
+  const categoryDragRef = useRef<{
+    pointerId: number
+    startX: number
+    startScrollLeft: number
+    moved: boolean
+  } | null>(null)
+  const categoryTouchRef = useRef<{
+    identifier: number
+    startX: number
+    startY: number
+    startScrollLeft: number
+    axis: 'x' | 'y' | null
+    moved: boolean
+  } | null>(null)
+  const categoryClickSuppressedRef = useRef(false)
+  const skillCategorySwipeRef = useRef<{
+    identifier: number
+    startX: number
+    startY: number
+    lastX: number
+    lastY: number
+    startTime: number
+    axis: 'x' | 'y' | null
+  } | null>(null)
+  const skillCategorySwipeSuppressClickUntilRef = useRef(0)
+  const skillCategorySwipeAnimationRef = useRef<Animation | null>(null)
+  const skillCategorySwipeTransitioningRef = useRef(false)
   const [selectedSkill, setSelectedSkill] = useState<string | null>(null)
   const [availableSkills, setAvailableSkills] = useState<{ name: string; label: string; icon: string; color: string; builtIn: boolean }[]>([])
   const [skillMenuOpen, setSkillMenuOpen] = useState(false)
@@ -283,6 +154,15 @@ function HomePageInner() {
   const [selectedDetail, setSelectedDetail] = useState<HomeSkill | null>(null)
   const [heroRect, setHeroRect] = useState<DOMRect | null>(null)
   const [heroExpanded, setHeroExpanded] = useState(false)
+
+  useEffect(() => {
+    setCreateAgentModel(loadCreateAgentModelPreference())
+  }, [])
+
+  const handleCreateAgentModelChange = useCallback((model: AgentModelPreference) => {
+    setCreateAgentModel(model)
+    saveCreateAgentModelPreference(model)
+  }, [])
   const detailSnapRef = useRef<HTMLDivElement>(null)
   const detailInnerRef = useRef<HTMLDivElement>(null)
   const detailSwipeRef = useRef<{ startY: number; startIdx: number; swiping: boolean } | null>(null)
@@ -314,15 +194,435 @@ function HomePageInner() {
     startTime: number
   }>({ tracking: false, locked: false, startX: 0, startY: 0, lastX: 0, startTime: 0 })
   const lastUploadIntentRef = useRef<{ at: number; key: string } | null>(null)
+  const lastAppliedSkillPromptRef = useRef<{ skillId: string; locale: typeof locale; prompt: string } | null>(null)
   const selectedDetailRef = useRef(selectedDetail)
   selectedDetailRef.current = selectedDetail
-  const homeSkillsRef = useRef(homeSkills)
-  homeSkillsRef.current = homeSkills
+  const visibleSkillCategories = useMemo(
+    () => getVisibleSkillCategories(homeSkills, skillCategories),
+    [homeSkills, skillCategories],
+  )
+  const categoryTabIds = useMemo(
+    () => ['all', ...visibleSkillCategories.map(category => category.id)],
+    [visibleSkillCategories],
+  )
+  const categoryTabIdsRef = useRef(categoryTabIds)
+  categoryTabIdsRef.current = categoryTabIds
+  const activeCategoryRef = useRef(activeCategory)
+  activeCategoryRef.current = activeCategory
+  const filteredHomeSkills = useMemo(
+    () => filterHomeSkillsByCategory(homeSkills, activeCategory),
+    [activeCategory, homeSkills],
+  )
+  const detailSkillsRef = useRef(filteredHomeSkills)
+  detailSkillsRef.current = filteredHomeSkills
   const pathSkillId = pathname?.startsWith('/home/') ? pathname.split('/')[2] : null
-  const activeSkillId = selectedDetail?.id || searchParams.get('skill') || pathSkillId || null
+  const activeSkillId = selectedDetail?.id || pathSkillId || null
   const activeSkill = selectedDetail || (activeSkillId ? homeSkills.find(s => s.id === activeSkillId) || null : null)
-  const showGuestModeToggle = !authLoading && !user
+  const showGuestModeToggle = hydrated && !authLoading && !user
   const showAgentLanding = showGuestModeToggle && viewMode === 'agent' && !hasSelectedDetail
+
+  const applyLocalizedSkillPrompt = useCallback((skill: HomeSkill, clearFirst = false) => {
+    if (clearFirst) createInput.clear()
+    const prompt = getLocalizedSkillPrompt(skill, locale)
+    createInput.setText(prompt)
+    lastAppliedSkillPromptRef.current = { skillId: skill.id, locale, prompt }
+  }, [createInput.clear, createInput.setText, locale])
+
+  useEffect(() => {
+    const skill = selectedDetailRef.current
+    const lastApplied = lastAppliedSkillPromptRef.current
+    if (!skill || !lastApplied || lastApplied.skillId !== skill.id || lastApplied.locale === locale) return
+    if (createInput.text !== lastApplied.prompt) return
+
+    const prompt = getLocalizedSkillPrompt(skill, locale)
+    createInput.setText(prompt)
+    lastAppliedSkillPromptRef.current = { skillId: skill.id, locale, prompt }
+  }, [createInput.setText, createInput.text, locale])
+
+  useEffect(() => {
+    if (activeCategory === 'all') return
+    if (visibleSkillCategories.some(category => category.id === activeCategory)) return
+    activeCategoryRef.current = 'all'
+    setActiveCategory('all')
+  }, [activeCategory, visibleSkillCategories])
+
+  const handleCategoryChange = useCallback((
+    categoryId: string,
+    swipeDirection: HomeSkillCategorySwipeDirection | null = null,
+  ) => {
+    if (categoryId === activeCategoryRef.current) return
+    activeCategoryRef.current = categoryId
+    setActiveCategory(categoryId)
+    setCategoryHasChanged(true)
+    setVisibleSkillCount(INITIAL_SKILL_CARD_COUNT)
+
+    window.requestAnimationFrame(() => {
+      const reduceMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches
+      const behavior: ScrollBehavior = reduceMotion ? 'auto' : 'smooth'
+      const button = categoryButtonRefs.current.get(categoryId)
+      const scroller = categoryScrollRef.current
+      if (button && scroller) {
+        const left = button.offsetLeft - (scroller.clientWidth - button.offsetWidth) / 2
+        scroller.scrollTo({ left: Math.max(0, left), behavior })
+      }
+
+      if (!reduceMotion) {
+        const entryTransform = swipeDirection === 'next'
+          ? 'translateX(20px)'
+          : swipeDirection === 'previous'
+            ? 'translateX(-20px)'
+            : 'translateY(3px)'
+        skillGridRef.current?.animate([
+          { opacity: 0.68, transform: entryTransform },
+          { opacity: 1, transform: 'translate(0, 0)' },
+        ], {
+          duration: swipeDirection ? 180 : 140,
+          easing: 'cubic-bezier(0.22, 1, 0.36, 1)',
+        })
+      }
+    })
+  }, [])
+
+  const handleCategoryPointerDown = useCallback((event: ReactPointerEvent<HTMLDivElement>) => {
+    if (event.pointerType === 'touch' || event.button !== 0) return
+    const scroller = categoryScrollRef.current
+    if (!scroller) return
+
+    categoryClickSuppressedRef.current = false
+    categoryDragRef.current = {
+      pointerId: event.pointerId,
+      startX: event.clientX,
+      startScrollLeft: scroller.scrollLeft,
+      moved: false,
+    }
+  }, [])
+
+  const handleCategoryPointerMove = useCallback((event: ReactPointerEvent<HTMLDivElement>) => {
+    const drag = categoryDragRef.current
+    const scroller = categoryScrollRef.current
+    if (!drag || !scroller || drag.pointerId !== event.pointerId) return
+
+    const deltaX = event.clientX - drag.startX
+    if (!drag.moved && Math.abs(deltaX) > 4) {
+      drag.moved = true
+      scroller.setPointerCapture(event.pointerId)
+      scroller.classList.add('is-dragging')
+    }
+    if (!drag.moved) return
+
+    event.preventDefault()
+    scroller.scrollLeft = drag.startScrollLeft - deltaX
+  }, [])
+
+  const finishCategoryDrag = useCallback((event: ReactPointerEvent<HTMLDivElement>) => {
+    const drag = categoryDragRef.current
+    const scroller = categoryScrollRef.current
+    if (!drag || !scroller || drag.pointerId !== event.pointerId) return
+
+    categoryClickSuppressedRef.current = drag.moved
+    categoryDragRef.current = null
+    scroller.classList.remove('is-dragging')
+    if (scroller.hasPointerCapture(event.pointerId)) scroller.releasePointerCapture(event.pointerId)
+    window.setTimeout(() => { categoryClickSuppressedRef.current = false }, 0)
+  }, [])
+
+  useEffect(() => {
+    const scroller = categoryScrollRef.current
+    if (!scroller) return
+
+    const findTrackedTouch = (touches: TouchList, identifier: number) => {
+      for (let index = 0; index < touches.length; index++) {
+        const touch = touches.item(index)
+        if (touch?.identifier === identifier) return touch
+      }
+      return null
+    }
+
+    const onTouchStart = (event: TouchEvent) => {
+      if (event.touches.length !== 1) {
+        categoryTouchRef.current = null
+        return
+      }
+      const touch = event.touches.item(0)
+      if (!touch) return
+      categoryClickSuppressedRef.current = false
+      categoryTouchRef.current = {
+        identifier: touch.identifier,
+        startX: touch.clientX,
+        startY: touch.clientY,
+        startScrollLeft: scroller.scrollLeft,
+        axis: null,
+        moved: false,
+      }
+    }
+
+    const onTouchMove = (event: TouchEvent) => {
+      const gesture = categoryTouchRef.current
+      if (!gesture) return
+      const touch = findTrackedTouch(event.touches, gesture.identifier)
+      if (!touch) return
+
+      const deltaX = touch.clientX - gesture.startX
+      const deltaY = touch.clientY - gesture.startY
+      if (!gesture.axis) {
+        if (Math.max(Math.abs(deltaX), Math.abs(deltaY)) < 5) return
+        gesture.axis = Math.abs(deltaX) > Math.abs(deltaY) ? 'x' : 'y'
+      }
+      if (gesture.axis !== 'x') return
+
+      gesture.moved = true
+      if (event.cancelable) event.preventDefault()
+      scroller.scrollLeft = gesture.startScrollLeft - deltaX
+    }
+
+    const finishTouch = (event: TouchEvent) => {
+      const gesture = categoryTouchRef.current
+      if (!gesture) return
+      if (gesture.axis === 'x' && gesture.moved) {
+        categoryClickSuppressedRef.current = true
+        if (event.cancelable) event.preventDefault()
+        window.setTimeout(() => { categoryClickSuppressedRef.current = false }, 350)
+      }
+      categoryTouchRef.current = null
+    }
+
+    scroller.addEventListener('touchstart', onTouchStart, { passive: true })
+    scroller.addEventListener('touchmove', onTouchMove, { passive: false })
+    scroller.addEventListener('touchend', finishTouch, { passive: false })
+    scroller.addEventListener('touchcancel', finishTouch, { passive: false })
+    return () => {
+      scroller.removeEventListener('touchstart', onTouchStart)
+      scroller.removeEventListener('touchmove', onTouchMove)
+      scroller.removeEventListener('touchend', finishTouch)
+      scroller.removeEventListener('touchcancel', finishTouch)
+    }
+  }, [])
+
+  useEffect(() => {
+    const skillGrid = skillGridRef.current
+    if (!skillGrid || categoryTabIds.length < 2) return
+
+    const findTrackedTouch = (touches: TouchList, identifier: number) => {
+      for (let index = 0; index < touches.length; index++) {
+        const touch = touches.item(index)
+        if (touch?.identifier === identifier) return touch
+      }
+      return null
+    }
+
+    const clearGridPresentation = () => {
+      skillGrid.style.transform = ''
+      skillGrid.style.opacity = ''
+      skillGrid.style.willChange = ''
+      delete skillGrid.dataset.swipeMotion
+    }
+
+    const cancelGridAnimation = () => {
+      skillCategorySwipeAnimationRef.current?.cancel()
+      skillCategorySwipeAnimationRef.current = null
+    }
+
+    const getDragPresentation = (deltaX: number) => {
+      const dragDirection: HomeSkillCategorySwipeDirection = deltaX < 0 ? 'next' : 'previous'
+      const adjacentCategoryId = getAdjacentHomeSkillCategoryId(
+        categoryTabIdsRef.current,
+        activeCategoryRef.current,
+        dragDirection,
+      )
+      return getHomeSkillCategorySwipePresentation({
+        deltaX,
+        regionWidth: skillGrid.clientWidth,
+        atBoundary: !adjacentCategoryId,
+      })
+    }
+
+    const applyDragPresentation = (deltaX: number) => {
+      const presentation = getDragPresentation(deltaX)
+      skillGrid.style.animation = 'none'
+      skillGrid.style.willChange = 'transform, opacity'
+      skillGrid.style.transform = `translate3d(${presentation.translateX}px, 0, 0)`
+      skillGrid.style.opacity = String(presentation.opacity)
+      skillGrid.dataset.swipeMotion = 'dragging'
+      return presentation
+    }
+
+    const animateGrid = (
+      from: { translateX: number; opacity: number },
+      to: { translateX: number; opacity: number },
+      duration: number,
+      easing: string,
+      motion: 'settling' | 'switching',
+      onFinish?: () => void,
+    ) => {
+      cancelGridAnimation()
+      skillGrid.dataset.swipeMotion = motion
+      if (window.matchMedia('(prefers-reduced-motion: reduce)').matches) {
+        clearGridPresentation()
+        onFinish?.()
+        return
+      }
+
+      const animation = skillGrid.animate([
+        {
+          transform: `translate3d(${from.translateX}px, 0, 0)`,
+          opacity: from.opacity,
+        },
+        {
+          transform: `translate3d(${to.translateX}px, 0, 0)`,
+          opacity: to.opacity,
+        },
+      ], { duration, easing, fill: 'forwards' })
+      skillCategorySwipeAnimationRef.current = animation
+      animation.finished.then(() => {
+        if (skillCategorySwipeAnimationRef.current !== animation) return
+        skillCategorySwipeAnimationRef.current = null
+        animation.cancel()
+        clearGridPresentation()
+        onFinish?.()
+      }).catch(() => {})
+    }
+
+    const settleGrid = (deltaX: number) => {
+      animateGrid(
+        getDragPresentation(deltaX),
+        { translateX: 0, opacity: 1 },
+        170,
+        'cubic-bezier(0.22, 1, 0.36, 1)',
+        'settling',
+      )
+    }
+
+    const onTouchStart = (event: TouchEvent) => {
+      if (
+        event.touches.length !== 1
+        || selectedDetailRef.current
+        || isEditableTarget(event.target)
+        || skillCategorySwipeTransitioningRef.current
+      ) {
+        skillCategorySwipeRef.current = null
+        return
+      }
+      const touch = event.touches.item(0)
+      if (!touch || !canStartHomeSkillCategorySwipe(touch.clientX, window.innerWidth)) {
+        skillCategorySwipeRef.current = null
+        return
+      }
+
+      cancelGridAnimation()
+      clearGridPresentation()
+      skillCategorySwipeRef.current = {
+        identifier: touch.identifier,
+        startX: touch.clientX,
+        startY: touch.clientY,
+        lastX: touch.clientX,
+        lastY: touch.clientY,
+        startTime: event.timeStamp,
+        axis: null,
+      }
+    }
+
+    const onTouchMove = (event: TouchEvent) => {
+      const gesture = skillCategorySwipeRef.current
+      if (!gesture) return
+      const touch = findTrackedTouch(event.touches, gesture.identifier)
+      if (!touch) return
+
+      gesture.lastX = touch.clientX
+      gesture.lastY = touch.clientY
+      const deltaX = touch.clientX - gesture.startX
+      const deltaY = touch.clientY - gesture.startY
+      if (!gesture.axis) {
+        const horizontalDistance = Math.abs(deltaX)
+        const verticalDistance = Math.abs(deltaY)
+        if (Math.max(horizontalDistance, verticalDistance) < HOME_SKILL_CATEGORY_SWIPE_AXIS_LOCK_PX) return
+        if (horizontalDistance > verticalDistance * 1.2) gesture.axis = 'x'
+        else if (verticalDistance > horizontalDistance * 1.2) gesture.axis = 'y'
+        else return
+      }
+      if (gesture.axis !== 'x') return
+
+      skillCategorySwipeSuppressClickUntilRef.current = performance.now() + 500
+      if (event.cancelable) event.preventDefault()
+      applyDragPresentation(deltaX)
+    }
+
+    const onTouchEnd = (event: TouchEvent) => {
+      const gesture = skillCategorySwipeRef.current
+      if (!gesture) return
+      const touch = findTrackedTouch(event.changedTouches, gesture.identifier)
+      const endX = touch?.clientX ?? gesture.lastX
+      const endY = touch?.clientY ?? gesture.lastY
+      const deltaX = endX - gesture.startX
+      const deltaY = endY - gesture.startY
+
+      if (gesture.axis === 'x') {
+        skillCategorySwipeSuppressClickUntilRef.current = performance.now() + 500
+        if (event.cancelable) event.preventDefault()
+        const direction = resolveHomeSkillCategorySwipe({
+          deltaX,
+          deltaY,
+          durationMs: Math.max(1, event.timeStamp - gesture.startTime),
+          regionWidth: skillGrid.clientWidth,
+        })
+        if (direction) {
+          const nextCategoryId = getAdjacentHomeSkillCategoryId(
+            categoryTabIdsRef.current,
+            activeCategoryRef.current,
+            direction,
+          )
+          if (nextCategoryId) {
+            const from = getDragPresentation(deltaX)
+            const exitDistance = Math.min(54, Math.max(42, skillGrid.clientWidth * 0.14))
+            const exitTranslateX = direction === 'next' ? -exitDistance : exitDistance
+            skillCategorySwipeTransitioningRef.current = true
+            animateGrid(
+              from,
+              { translateX: exitTranslateX, opacity: 0.58 },
+              110,
+              'cubic-bezier(0.4, 0, 1, 1)',
+              'switching',
+              () => {
+                skillCategorySwipeTransitioningRef.current = false
+                handleCategoryChange(nextCategoryId, direction)
+              },
+            )
+          } else {
+            settleGrid(deltaX)
+          }
+        } else {
+          settleGrid(deltaX)
+        }
+      }
+      skillCategorySwipeRef.current = null
+    }
+
+    const onTouchCancel = () => {
+      const gesture = skillCategorySwipeRef.current
+      if (gesture?.axis === 'x') settleGrid(gesture.lastX - gesture.startX)
+      skillCategorySwipeRef.current = null
+    }
+
+    skillGrid.addEventListener('touchstart', onTouchStart, { passive: true })
+    skillGrid.addEventListener('touchmove', onTouchMove, { passive: false })
+    skillGrid.addEventListener('touchend', onTouchEnd, { passive: false })
+    skillGrid.addEventListener('touchcancel', onTouchCancel, { passive: true })
+    return () => {
+      skillGrid.removeEventListener('touchstart', onTouchStart)
+      skillGrid.removeEventListener('touchmove', onTouchMove)
+      skillGrid.removeEventListener('touchend', onTouchEnd)
+      skillGrid.removeEventListener('touchcancel', onTouchCancel)
+      cancelGridAnimation()
+      clearGridPresentation()
+      skillCategorySwipeTransitioningRef.current = false
+    }
+  }, [categoryTabIds, handleCategoryChange])
+
+  const handleSkillGridClickCapture = useCallback((event: React.MouseEvent<HTMLDivElement>) => {
+    if (performance.now() >= skillCategorySwipeSuppressClickUntilRef.current) return
+    skillCategorySwipeSuppressClickUntilRef.current = 0
+    event.preventDefault()
+    event.stopPropagation()
+  }, [])
 
   const blurHomeComposers = useCallback(() => {
     textareaRef.current?.blur()
@@ -344,10 +644,11 @@ function HomePageInner() {
   }, [])
 
   const rememberIOSSkillReturn = useCallback((skillId: string | null | undefined) => {
-    if (!isIOSAppShell || !skillId) return
+    if (!skillId) return
     const returnPath = `/home/${skillId}`
     localStorage.setItem('mkr_return_url', returnPath)
     sessionStorage.setItem('mkr_return_url', returnPath)
+    if (!isIOSAppShell) return
     localStorage.setItem(IOS_PENDING_HOME_SKILL_KEY, skillId)
     sessionStorage.setItem(IOS_PENDING_HOME_SKILL_KEY, skillId)
   }, [isIOSAppShell])
@@ -475,22 +776,14 @@ function HomePageInner() {
     }
   }, [closeSkillDetail, resetSkillBackPan])
 
-  const placeholders = locale === 'zh' ? [
-    '把这些图片做个 vlog',
-    '用这张产品图帮我做一套小红书素材',
-    '把我P的美一点',
-    '给我的猫拍一组表情包',
-    '把这张图片变成个电商海报',
-    '把这几张照片做成一个故事板，加上配乐',
-    '一张照片，帮我探索 6 个完全不同的方向',
-  ] : [
-    'Turn these photos into a vlog',
-    'Make a set of social media content from this product shot',
-    'Make me look better',
-    "Create an emoji pack from my cat's photo",
-    'Turn this photo into an e-commerce poster',
-    'Storyboard these photos and add a soundtrack',
-    'One photo, show me 6 completely different directions',
+  const placeholders = [
+    t('home.placeholder.1'),
+    t('home.placeholder.2'),
+    t('home.placeholder.3'),
+    t('home.placeholder.4'),
+    t('home.placeholder.5'),
+    t('home.placeholder.6'),
+    t('home.placeholder.7'),
   ]
   const [placeholderIdx, setPlaceholderIdx] = useState(0)
   const [showWelcome, setShowWelcome] = useState(false)
@@ -521,11 +814,6 @@ function HomePageInner() {
               )
             }
             if (d.credits > 0) {
-              trackMetaEvent(
-                'StartTrial',
-                { credits: d.credits },
-                d.metaEvents?.StartTrial || createMetaEventId('starttrial'),
-              )
               setWelcomeCredits(d.credits); setShowWelcome(true)
               window.dispatchEvent(new Event('credits-updated'))
             } else if (d.isNew === false) {
@@ -549,7 +837,7 @@ function HomePageInner() {
     // Hydrate from sessionStorage first (instant, avoids skeleton flash on same-session)
     const cached = readNativeJSONCache<HomeSkill[]>('/api/home-skills') ?? getCachedHomeSkills()
     if (cached.length > 0) {
-      setHomeSkills(cached)
+      startTransition(() => setHomeSkills(cached))
       warmHomeSkillMedia(cached)
     }
 
@@ -558,22 +846,67 @@ function HomePageInner() {
       if (!Array.isArray(data) || data.length === 0) return
       writeNativeJSONCache('/api/home-skills', data)
       warmHomeSkillMedia(data)
-      setHomeSkills(prev => {
-        if (prev.length === 0) { setCachedHomeSkills(data); return data }
-        const newMap = new Map(data.map((s: HomeSkill) => [s.id, s]))
-        const merged = prev.map(s => {
-          const fresh = newMap.get(s.id)
-          if (!fresh) return null
-          newMap.delete(s.id)
-          return JSON.stringify(fresh) === JSON.stringify(s) ? s : fresh as HomeSkill
-        }).filter(Boolean) as HomeSkill[]
-        for (const s of newMap.values()) merged.push(s)
-        merged.sort((a, b) => a.sort_order - b.sort_order)
-        setCachedHomeSkills(merged)
-        return merged
+      startTransition(() => {
+        setHomeSkills(prev => {
+          if (prev.length === 0) { setCachedHomeSkills(data); return data }
+          const newMap = new Map(data.map((s: HomeSkill) => [s.id, s]))
+          const merged = prev.map(s => {
+            const fresh = newMap.get(s.id)
+            if (!fresh) return null
+            newMap.delete(s.id)
+            return JSON.stringify(fresh) === JSON.stringify(s) ? s : fresh as HomeSkill
+          }).filter(Boolean) as HomeSkill[]
+          for (const s of newMap.values()) merged.push(s)
+          merged.sort((a, b) => a.sort_order - b.sort_order)
+          setCachedHomeSkills(merged)
+          return merged
+        })
       })
     }).catch(() => {})
   }, [])
+
+  useEffect(() => {
+    let active = true
+    const cached = readNativeJSONCache<HomeSkillCategory[]>('/api/skill-categories')
+    if (Array.isArray(cached) && cached.length > 0) {
+      setSkillCategories(cached)
+      setSkillCategoriesLoading(false)
+    }
+
+    const controller = new AbortController()
+    fetch('/api/skill-categories', { signal: controller.signal })
+      .then(response => response.json())
+      .then(data => {
+        if (!Array.isArray(data)) return
+        writeNativeJSONCache('/api/skill-categories', data)
+        startTransition(() => setSkillCategories(data))
+      })
+      .catch(() => {})
+      .finally(() => {
+        if (active) setSkillCategoriesLoading(false)
+      })
+    return () => {
+      active = false
+      controller.abort()
+    }
+  }, [])
+
+  useEffect(() => {
+    const sentinel = skillLoadMoreRef.current
+    if (!sentinel || visibleSkillCount >= filteredHomeSkills.length) return
+    if (typeof IntersectionObserver === 'undefined') {
+      startTransition(() => setVisibleSkillCount(filteredHomeSkills.length))
+      return
+    }
+    const observer = new IntersectionObserver(([entry]) => {
+      if (!entry.isIntersecting) return
+      startTransition(() => {
+        setVisibleSkillCount(count => Math.min(count + SKILL_CARD_BATCH_SIZE, filteredHomeSkills.length))
+      })
+    }, { rootMargin: '200px 0px' })
+    observer.observe(sentinel)
+    return () => observer.disconnect()
+  }, [filteredHomeSkills.length, visibleSkillCount])
 
   // Preload user's installed skills
   const skillsFetchedRef = useRef(false)
@@ -644,14 +977,15 @@ function HomePageInner() {
         body: JSON.stringify({ skillPath: skill.skill_path, homeSkillId: skill.id }),
       })
       const installData = await installRes.json()
-      if (installData.skillName) {
-        setSelectedSkill(installData.skillName)
-        fetch('/api/skills').then(r => r.json()).then(d => {
-          writeNativeJSONCache('/api/skills', d)
-          if (d.skills) setAvailableSkills(d.skills)
-        }).catch(() => {})
-        return installData.skillName as string
+      if (!installRes.ok || !installData.skillName) {
+        throw new Error(installData.error || 'Failed to install Skill template')
       }
+      setSelectedSkill(installData.skillName)
+      fetch('/api/skills').then(r => r.json()).then(d => {
+        writeNativeJSONCache('/api/skills', d)
+        if (d.skills) setAvailableSkills(d.skills)
+      }).catch(() => {})
+      return installData.skillName as string
     } finally {
       setInstallingSkill(false)
     }
@@ -701,6 +1035,18 @@ function HomePageInner() {
     return () => window.removeEventListener('makaron-keyboard-inset-change', onNativeInset)
   }, [isIOSAppShell])
   const effectiveKbInset = Math.max(kbInset, nativeKbInset)
+  const refreshHomeComposerViewport = useCallback(() => {
+    const composerFocused = document.activeElement === textareaRef.current
+      || document.activeElement === inlineTextareaRef.current
+    if (!composerFocused) {
+      setTextareaFocused(false)
+      setKbInset(0)
+      if (!isDesktop && selectedDetailRef.current) setShowFixedInput(true)
+      return
+    }
+    setTextareaFocused(true)
+    updateViewportInset()
+  }, [isDesktop, updateViewportInset])
 
   useEffect(() => {
     const el = inputBoxRef.current
@@ -815,25 +1161,23 @@ function HomePageInner() {
     const pendingIOSSkillId = isIOSAppShell
       ? (sessionStorage.getItem(IOS_PENDING_HOME_SKILL_KEY) || localStorage.getItem(IOS_PENDING_HOME_SKILL_KEY))
       : null
-    const skillId = searchParams.get('skill') || pathSkillId || pendingIOSSkillId
+    const skillId = new URLSearchParams(window.location.search).get('skill') || pathSkillId || pendingIOSSkillId
     if (!skillId || homeSkills.length === 0 || selectedDetail) return
     const skill = homeSkills.find(s => s.id === skillId)
     if (!skill) return
 
     openedFromUrlRef.current = true
     clearDetailCloseTimer()
-    setTextareaFocused(false)
-    setKbInset(0)
-    updateViewportInset()
+    blurHomeComposers()
     setViewMode('human')
     setSelectedDetail(skill)
     setSelectedSkill(skill.skill_path ? skill.id : null)
-    createInput.setText(skill.prompt)
+    applyLocalizedSkillPrompt(skill)
     setHeroExpanded(true)
     detailPathActiveRef.current = true
     writeSkillDetailPath(skillId, 'replace')
     if (pendingIOSSkillId === skillId) clearIOSSkillReturn()
-  }, [clearDetailCloseTimer, clearIOSSkillReturn, homeSkills, isIOSAppShell, pathSkillId, searchParams, selectedDetail, updateViewportInset, writeSkillDetailPath])
+  }, [applyLocalizedSkillPrompt, blurHomeComposers, clearDetailCloseTimer, clearIOSSkillReturn, homeSkills, isIOSAppShell, pathSkillId, selectedDetail, writeSkillDetailPath])
 
   // Position slide when overlay DOM mounts via ref callback (stable — no deps to avoid re-bindinging)
   const detailSnapCallbackRef = useCallback((el: HTMLDivElement | null) => {
@@ -842,7 +1186,7 @@ function HomePageInner() {
     requestAnimationFrame(() => {
       const skill = selectedDetailRef.current
       if (!skill) return
-      const skills = homeSkillsRef.current
+      const skills = detailSkillsRef.current
       const idx = skills.findIndex(t => t.id === skill.id)
       if (detailInnerRef.current && el) {
         const slideH = el.clientHeight
@@ -866,7 +1210,7 @@ function HomePageInner() {
     const hasSkillQuery = new URLSearchParams(window.location.search).has('skill')
     if (!hasSelectedDetail || !detailPathActiveRef.current || pathname !== '/home' || hasSkillQuery) return
     closeSkillDetail('none')
-  }, [closeSkillDetail, hasSelectedDetail, isIOSAppShell, pathname, searchParams])
+  }, [closeSkillDetail, hasSelectedDetail, isIOSAppShell, pathname])
 
   const syncFixedInputVisibility = useCallback(() => {
     if (isDesktop) return
@@ -874,8 +1218,8 @@ function HomePageInner() {
       setShowFixedInput(false)
       return
     }
-    setShowFixedInput(textareaFocused || document.activeElement === textareaRef.current)
-  }, [isDesktop, textareaFocused])
+    setShowFixedInput(true)
+  }, [isDesktop])
   const keepSkillComposerAboveKeyboard = useCallback((event?: React.FocusEvent<HTMLTextAreaElement>) => {
     const inlineTextareaFocused = event?.currentTarget === inlineTextareaRef.current
     setTextareaFocused(true)
@@ -893,6 +1237,7 @@ function HomePageInner() {
 
   useEffect(() => {
     if (isDesktop) return
+    const resumeTimers = new Set<number>()
     const scheduleSync = () => {
       if (fixedInputSyncFrameRef.current !== null) {
         window.cancelAnimationFrame(fixedInputSyncFrameRef.current)
@@ -900,7 +1245,31 @@ function HomePageInner() {
       fixedInputSyncFrameRef.current = window.requestAnimationFrame(() => {
         fixedInputSyncFrameRef.current = null
         syncFixedInputVisibility()
+        refreshHomeComposerViewport()
       })
+    }
+    const resetSuspendedSkillComposer = () => {
+      if (!selectedDetailRef.current) return
+      textareaRef.current?.blur()
+      inlineTextareaRef.current?.blur()
+      setTextareaFocused(false)
+      setKbInset(0)
+      setShowFixedInput(true)
+    }
+    const scheduleResumeSync = () => {
+      resetSuspendedSkillComposer()
+      scheduleSync()
+      for (const delay of [80, 220]) {
+        const timer = window.setTimeout(() => {
+          resumeTimers.delete(timer)
+          scheduleSync()
+        }, delay)
+        resumeTimers.add(timer)
+      }
+    }
+    const handleVisibilityChange = () => {
+      if (document.visibilityState === 'hidden') resetSuspendedSkillComposer()
+      else scheduleResumeSync()
     }
 
     scheduleSync()
@@ -916,12 +1285,15 @@ function HomePageInner() {
 
     scrollContainer?.addEventListener('scroll', scheduleSync, { passive: true })
     document.addEventListener('scroll', scheduleSync, true)
+    document.addEventListener('visibilitychange', handleVisibilityChange)
     window.addEventListener('scroll', scheduleSync, { passive: true })
     window.addEventListener('resize', scheduleSync)
-    window.addEventListener('pageshow', scheduleSync)
+    window.addEventListener('focus', scheduleResumeSync)
+    window.addEventListener('pagehide', resetSuspendedSkillComposer)
+    window.addEventListener('pageshow', scheduleResumeSync)
     window.addEventListener('popstate', scheduleSync)
-    window.addEventListener('makaron-ios-page-stack-back', scheduleSync as EventListener)
-    window.addEventListener('makaron-ios-page-stack-push', scheduleSync as EventListener)
+    window.addEventListener('makaron-ios-page-stack-back', scheduleResumeSync as EventListener)
+    window.addEventListener('makaron-ios-page-stack-push', scheduleResumeSync as EventListener)
     window.visualViewport?.addEventListener('resize', scheduleSync)
     window.visualViewport?.addEventListener('scroll', scheduleSync)
 
@@ -930,19 +1302,24 @@ function HomePageInner() {
         window.cancelAnimationFrame(fixedInputSyncFrameRef.current)
         fixedInputSyncFrameRef.current = null
       }
+      resumeTimers.forEach(timer => window.clearTimeout(timer))
+      resumeTimers.clear()
       inlineResizeObserver?.disconnect()
       scrollContainer?.removeEventListener('scroll', scheduleSync)
       document.removeEventListener('scroll', scheduleSync, true)
+      document.removeEventListener('visibilitychange', handleVisibilityChange)
       window.removeEventListener('scroll', scheduleSync)
       window.removeEventListener('resize', scheduleSync)
-      window.removeEventListener('pageshow', scheduleSync)
+      window.removeEventListener('focus', scheduleResumeSync)
+      window.removeEventListener('pagehide', resetSuspendedSkillComposer)
+      window.removeEventListener('pageshow', scheduleResumeSync)
       window.removeEventListener('popstate', scheduleSync)
-      window.removeEventListener('makaron-ios-page-stack-back', scheduleSync as EventListener)
-      window.removeEventListener('makaron-ios-page-stack-push', scheduleSync as EventListener)
+      window.removeEventListener('makaron-ios-page-stack-back', scheduleResumeSync as EventListener)
+      window.removeEventListener('makaron-ios-page-stack-push', scheduleResumeSync as EventListener)
       window.visualViewport?.removeEventListener('resize', scheduleSync)
       window.visualViewport?.removeEventListener('scroll', scheduleSync)
     }
-  }, [isDesktop, syncFixedInputVisibility])
+  }, [isDesktop, refreshHomeComposerViewport, syncFixedInputVisibility])
 
   useEffect(() => {
     if (!isIOSAppShell) return
@@ -1037,6 +1414,7 @@ function HomePageInner() {
   }, [activeSkill, createInput.text, rememberIOSSkillReturn])
 
   const goToLoginFromEmptyCreate = useCallback(() => {
+    clearCreateDraftContinuation()
     saveContextBeforeLogin()
     const returnPath = window.location.pathname + window.location.search
     localStorage.setItem('mkr_return_url', returnPath)
@@ -1048,13 +1426,15 @@ function HomePageInner() {
     const homeSkill = selectedDetail || activeSkill
     const imageFiles = files.filter(file => file.type.startsWith('image/') || isHeicFile(file))
     const [images, metadata] = await Promise.all([
-      Promise.all(imageFiles.map(file => compressCreateImageFile(file))),
+      compressCreateImageFiles(imageFiles),
       imageFiles[0]
-        ? extractPhotoMetadata(imageFiles[0]).catch(() => undefined)
+        ? extractPhotoMetadata(imageFiles[0], { allowServerFallback: false }).catch(() => undefined)
         : Promise.resolve(undefined),
     ])
+    const continuationId = beginCreateDraftContinuation()
     cacheCreateDraft({
       images,
+      continuationId,
       metadata,
       prompt,
       selectedSkill: homeSkill?.skill_path ? undefined : (selectedSkill ?? undefined),
@@ -1092,11 +1472,14 @@ function HomePageInner() {
       } else if (selectedSkill) {
         skillName = selectedSkill
       }
-      const opts: { prompt?: string; skill?: string } = {}
+      const opts: ProjectLaunchOptions = {}
       if (prompt) opts.prompt = prompt
       if (skillName) opts.skill = skillName
+      const skillLaunchContext = createHomeSkillLaunchContext(homeSkill, prompt, skillName)
+      if (skillLaunchContext) opts.skillLaunchContext = skillLaunchContext
       const result = await createProject(supabase, authedUser.id, files, Object.keys(opts).length ? opts : undefined)
       if (!result) throw new Error('Failed to create project')
+      saveAgentModelPreference(result.projectId, createAgentModel)
       void clearCreateDraft()
       router.push(`/projects/${result.projectId}`)
     } catch (err) {
@@ -1108,15 +1491,21 @@ function HomePageInner() {
       }
       createInput.setCreating(false)
     }
-  }, [activeSkill, createInput, installHomeSkill, requireAuth, router, saveContextBeforeLogin, saveCreateDraftBeforeLogin, selectedDetail, selectedSkill, t, user])
+  }, [activeSkill, createAgentModel, createInput, installHomeSkill, requireAuth, router, saveContextBeforeLogin, saveCreateDraftBeforeLogin, selectedDetail, selectedSkill, t, user])
 
   const consumeDraftRef = useRef(false)
   useEffect(() => {
     if (!user || consumeDraftRef.current) return
+    const continuationId = getCreateDraftContinuationId()
+    if (!continuationId) return
     let cancelled = false
     const consume = async () => {
       const draft = await getCreateDraft()
       if (!draft || cancelled) return
+      if (!shouldConsumeCreateDraft(draft, continuationId)) {
+        clearCreateDraftContinuation()
+        return
+      }
       if (draft.homeSkillId && homeSkills.length === 0) return
       if (draft.homeSkillId && draft.images.length === 0) {
         await clearCreateDraft()
@@ -1143,6 +1532,7 @@ function HomePageInner() {
           metadata: draft.metadata as PhotoMetadata | undefined,
           prompt: draft.prompt,
           skill: skillName,
+          skillLaunchContext: createHomeSkillLaunchContext(homeSkill, draft.prompt, skillName),
         })
         if (!result) throw new Error('Failed to create project from draft')
         await clearCreateDraft()
@@ -1203,7 +1593,7 @@ function HomePageInner() {
     const now = Date.now()
     if (lastUploadIntentRef.current?.key === dedupeKey && now - lastUploadIntentRef.current.at < 700) return
     lastUploadIntentRef.current = { at: now, key: dedupeKey }
-    const skillLabel = activeSkill.labels[locale] || activeSkill.labels.en || activeSkill.id
+    const skillLabel = pickLocalizedValue(activeSkill.labels, locale, activeSkill.id)
     trackMetaEvent('UploadIntent', {
       content_type: 'skill',
       content_name: skillLabel,
@@ -1319,48 +1709,46 @@ function HomePageInner() {
     )
   }, [createInput, handleSlotDrop, rememberIOSSkillReturn, requireAuth, selectedDetail, slotDragOver, trackUploadIntentEvent, user])
 
-  const guestSkillCreateLabel = selectedDetail && !user
+  const guestSkillCreateLabel = selectedDetail && !renderUser
     ? createInput.files.length > 0
-      ? (locale === 'zh' ? '生成免费预览' : 'Create free preview')
-      : (locale === 'zh' ? '上传照片' : 'Upload photo')
-    : !user
-      ? (locale === 'zh' ? '免费试用' : 'Try free')
-      : 'Create'
+      ? t('home.createFreePreview')
+      : t('home.uploadPhoto')
+    : !renderUser
+      ? t('home.tryFree')
+      : t('home.create')
 
   const requiredPhotoCount = Math.max(1, activeSkill?.image_count ?? 1)
   const selectedPhotoCount = createInput.files.length
   const remainingPhotoCount = Math.max(requiredPhotoCount - selectedPhotoCount, 0)
   const hasEnoughPhotos = remainingPhotoCount === 0
-  const isGuestSkillAction = !user && !!activeSkill
-  const shouldLoginOnEmptyCreate = !user && !activeSkill
-  const formatPhotoCount = (count: number) => locale === 'zh'
-    ? `${count} 张照片`
-    : `${count} photo${count === 1 ? '' : 's'}`
+  const isGuestSkillAction = !renderUser && !!activeSkill
+  const shouldLoginOnEmptyCreate = !renderUser && !activeSkill
+  const formatPhotoCount = (count: number) => t('home.photoCount', count)
 
   const skillActionCreateLabel = isGuestSkillAction
     ? hasEnoughPhotos
-      ? (locale === 'zh' ? '免费预览' : 'Preview free')
-      : (locale === 'zh' ? '上传照片' : 'Upload photo')
+      ? t('home.previewFree')
+      : t('home.uploadPhoto')
     : guestSkillCreateLabel
 
   const skillActionTitle = isGuestSkillAction
     ? hasEnoughPhotos
-      ? (locale === 'zh' ? '看看你的版本' : 'See your version')
+      ? t('home.seeYourVersion')
       : selectedPhotoCount > 0
-        ? (locale === 'zh' ? '快好了' : 'Almost ready')
-        : (locale === 'zh' ? '上传一张照片' : 'Upload one photo')
+        ? t('home.almostReady')
+        : t('home.uploadOnePhoto')
     : undefined
 
   const skillActionSubtitle = isGuestSkillAction
     ? hasEnoughPhotos
-      ? (locale === 'zh' ? '一键生成预览，无需信用卡。' : 'Generate a preview. No credit card.')
+      ? t('home.previewNoCard')
       : selectedPhotoCount > 0
-        ? (locale === 'zh' ? `再补 ${formatPhotoCount(remainingPhotoCount)}，即可免费预览。` : `Add ${formatPhotoCount(remainingPhotoCount)} to preview free.`)
-        : (locale === 'zh' ? '免费生成预览，无需信用卡。' : 'Get a free preview. No credit card.')
+        ? t('home.addPhotosToPreview', formatPhotoCount(remainingPhotoCount))
+        : t('home.freePreviewNoCard')
     : undefined
 
   const skillActionMeta = isGuestSkillAction && activeSkill
-    ? (activeSkill.labels[locale] || activeSkill.labels.en || null)
+    ? (pickLocalizedValue(activeSkill.labels, locale) || null)
     : null
 
   const trackUploadIntent = useCallback((source: string) => {
@@ -1427,12 +1815,12 @@ function HomePageInner() {
     url: string,
     alt: string,
     variant: CoverVariant,
-    opts?: { priority?: boolean; active?: boolean; suspended?: boolean; extraStyle?: React.CSSProperties },
+    opts?: { priority?: boolean; active?: boolean; suspended?: boolean; fallbackSrc?: string; extraStyle?: React.CSSProperties },
   ) => {
     const style: React.CSSProperties = { position: 'absolute', inset: 0, width: '100%', height: '100%', objectFit: variant === 'detail' ? 'contain' : 'cover', ...(variant === 'detail' ? { objectPosition: 'center 30%' } : {}), pointerEvents: 'none', ...opts?.extraStyle }
     if (isVideoUrl(url)) {
       if (variant === 'thumb') {
-        return <LazyVideo src={normalizeDomain(url)} style={style} eager={opts?.priority} suspended={opts?.suspended} />
+        return <LazyVideo src={normalizeDomain(url)} style={style} fallbackSrc={opts?.fallbackSrc} eager={opts?.priority} suspended={opts?.suspended} />
       }
       return <SkillVideo src={normalizeDomain(url)} style={style} eager={opts?.priority} active={opts?.active ?? true} />
     }
@@ -1451,7 +1839,7 @@ function HomePageInner() {
 
   const renderTemplateLabel = (template: { labels: Record<string, string> }) => (
     <div style={{ fontSize: '1.2rem', fontWeight: 700, color: '#fff' }}>
-      {template.labels[locale] || template.labels.en || ''}
+      {pickLocalizedValue(template.labels, locale)}
     </div>
   )
 
@@ -1462,17 +1850,15 @@ function HomePageInner() {
     }
     openedFromUrlRef.current = false
     clearDetailCloseTimer()
-    setTextareaFocused(false)
-    setKbInset(0)
-    updateViewportInset()
+    blurHomeComposers()
     setViewMode('human')
     const rect = (e.currentTarget as HTMLElement).getBoundingClientRect()
     setHeroRect(rect)
     setHeroExpanded(false)
     setSelectedDetail(template)
     setSelectedSkill(template.skill_path ? template.id : null)
-    createInput.setText(template.prompt)
-    const idx = homeSkills.findIndex(t => t.id === template.id)
+    applyLocalizedSkillPrompt(template)
+    const idx = filteredHomeSkills.findIndex(t => t.id === template.id)
     requestAnimationFrame(() => {
       setHeroExpanded(true)
       // Position to the clicked slide via JS transform (no scroll-snap)
@@ -1486,12 +1872,21 @@ function HomePageInner() {
     })
   }
 
-  const fixedComposerViewportInset = !isDesktop && (showFixedInput || selectedDetail || textareaFocused)
-    ? effectiveKbInset
-    : 0
+  const fixedComposerViewportInset = getHomeComposerViewportInset({
+    isDesktop,
+    textareaFocused,
+    keyboardInset: effectiveKbInset,
+  })
   const fixedComposerBottom = isDesktop
     ? '24px'
     : `max(env(safe-area-inset-bottom, 0px), ${fixedComposerViewportInset}px)`
+  const categoryTabs = [
+    { id: 'all', label: t('skills.categoryAll') },
+    ...visibleSkillCategories.map(category => ({
+      id: category.id,
+      label: pickLocalizedValue(category.labels, locale, category.id),
+    })),
+  ]
 
   return (
     <>
@@ -1574,6 +1969,110 @@ function HomePageInner() {
         }
         .mkr-spin { animation: mkr-spin 0.9s linear infinite; }
 
+        @keyframes mkr-category-grid-in {
+          from { opacity: 0.72; transform: translateY(3px); }
+          to { opacity: 1; transform: translateY(0); }
+        }
+        .mkr-category-grid {
+          animation: mkr-category-grid-in 0.14s cubic-bezier(0.22, 1, 0.36, 1) both;
+        }
+        .mkr-skill-category-swipe-region,
+        .mkr-skill-category-swipe-region .mkr-skill-card {
+          touch-action: pan-y pinch-zoom;
+        }
+        .mkr-skill-category-swipe-region {
+          overscroll-behavior-x: contain;
+        }
+        .mkr-category-rail {
+          position: sticky;
+          top: env(safe-area-inset-top, 0px);
+          z-index: 60;
+          margin: 0 -24px 16px;
+          padding: 8px 24px 10px;
+          background: #000;
+        }
+        .mkr-category-scroll {
+          min-height: 44px;
+          display: flex;
+          align-items: center;
+          justify-content: safe center;
+          gap: 24px;
+          overflow-x: auto;
+          overscroll-behavior-x: contain;
+          touch-action: pan-y pinch-zoom;
+          cursor: grab;
+          user-select: none;
+          -webkit-user-select: none;
+          -webkit-overflow-scrolling: touch;
+          scrollbar-width: none;
+          -ms-overflow-style: none;
+        }
+        .mkr-category-scroll.is-dragging { cursor: grabbing; }
+        .mkr-category-scroll.is-dragging .mkr-category-tab { pointer-events: none; }
+        .mkr-category-scroll::-webkit-scrollbar { display: none; }
+        .mkr-category-tab {
+          position: relative;
+          flex: 0 0 auto;
+          height: 44px;
+          padding: 0 2px;
+          border: 0;
+          background: transparent;
+          color: rgba(255,255,255,0.42);
+          font: inherit;
+          font-size: 13px;
+          font-weight: 580;
+          line-height: 1;
+          letter-spacing: 0.005em;
+          cursor: pointer;
+          touch-action: pan-y pinch-zoom;
+          -webkit-tap-highlight-color: transparent;
+          transition: color 0.16s ease;
+        }
+        .mkr-category-tab::after {
+          content: '';
+          position: absolute;
+          left: 50%;
+          bottom: 5px;
+          width: 20px;
+          height: 2px;
+          border-radius: 999px;
+          background: linear-gradient(90deg, transparent, #d946ef 28%, #e879f9 72%, transparent);
+          box-shadow: 0 0 10px rgba(217,70,239,0.28);
+          opacity: 0;
+          transform: translateX(-50%) scaleX(0.55);
+          transition: opacity 0.18s cubic-bezier(0.22, 1, 0.36, 1), transform 0.18s cubic-bezier(0.22, 1, 0.36, 1);
+        }
+        .mkr-category-tab[aria-pressed='true'] { color: rgba(255,255,255,0.96); }
+        .mkr-category-tab[aria-pressed='true']::after { opacity: 1; transform: translateX(-50%) scaleX(1); }
+        .mkr-category-tab:focus-visible {
+          outline: 1px solid rgba(232,121,249,0.55);
+          outline-offset: -2px;
+          border-radius: 6px;
+        }
+        @media (hover: hover) {
+          .mkr-category-tab:hover { color: rgba(255,255,255,0.7); }
+        }
+        @media (max-width: 767px) {
+          .mkr-category-rail {
+            position: relative;
+            top: auto;
+            z-index: auto;
+            margin: 0 -14px 12px;
+            padding: 6px 0 9px;
+            background: transparent;
+          }
+          .mkr-category-scroll {
+            justify-content: flex-start;
+            gap: 20px;
+            padding: 2px 14px;
+            scroll-padding-inline: 14px;
+          }
+        }
+        @media (prefers-reduced-motion: reduce) {
+          .mkr-category-grid { animation: none; }
+          .mkr-category-tab, .mkr-category-tab::after { transition: none; }
+        }
+
         .hide-scrollbar { scrollbar-width: none; -ms-overflow-style: none; }
         .hide-scrollbar::-webkit-scrollbar { display: none; }
       `}</style>
@@ -1641,16 +2140,17 @@ function HomePageInner() {
               placeholder={placeholders[placeholderIdx]}
               createLabel={skillActionCreateLabel}
               actionMode={isGuestSkillAction}
-              actionEyebrow={isGuestSkillAction ? (locale === 'zh' ? '免费预览' : 'Free preview') : undefined}
+              actionEyebrow={isGuestSkillAction ? t('home.previewFree') : undefined}
               actionTitle={skillActionTitle}
               actionSubtitle={skillActionSubtitle}
               actionMeta={skillActionMeta || undefined}
-              actionIdleNote={locale === 'zh' ? `需要 ${formatPhotoCount(requiredPhotoCount)}` : `${formatPhotoCount(requiredPhotoCount)} needed`}
+              actionIdleNote={t('home.photosNeeded', formatPhotoCount(requiredPhotoCount))}
               actionSelectedNote={hasEnoughPhotos
-                ? (locale === 'zh' ? '可以预览了' : 'Ready to preview')
-                : (locale === 'zh' ? `还需要 ${formatPhotoCount(remainingPhotoCount)}` : `${formatPhotoCount(remainingPhotoCount)} more needed`)}
-              showLoginIcon={!user}
+                ? t('home.previewReady')
+                : t('home.morePhotosNeeded', formatPhotoCount(remainingPhotoCount))}
+              showLoginIcon={!renderUser}
               submitWhenEmpty={shouldLoginOnEmptyCreate}
+              fallbackHref={shouldLoginOnEmptyCreate ? '/login' : undefined}
               onSubmit={handleCreateOrUpload}
               onSlotClick={handleInputSlotClick}
               onFilesSelected={(files) => trackFileSelected(files, 'file_input')}
@@ -1659,6 +2159,8 @@ function HomePageInner() {
               skills={availableSkills}
               selectedSkill={selectedSkill}
               onSkillChange={setSelectedSkill}
+              agentModel={createAgentModel}
+              onAgentModelChange={handleCreateAgentModelChange}
               onDeleteSkill={(name) => {
                 setAvailableSkills(prev => {
                   const next = prev.filter(s => s.name !== name)
@@ -1669,7 +2171,7 @@ function HomePageInner() {
               }}
               onUploadSkill={() => skillFileRef.current?.click()}
               installingSkill={installingSkill}
-              overrideLabel={selectedSkill ? (availableSkills.find(s => s.name === selectedSkill)?.label || homeSkills.find(s => s.id === selectedSkill)?.labels[locale] || null) : null}
+              overrideLabel={selectedSkill ? (availableSkills.find(s => s.name === selectedSkill)?.label || pickLocalizedValue(homeSkills.find(s => s.id === selectedSkill)?.labels, locale) || null) : null}
               skillDirection="down"
               dragOver={dragOver}
               onDragEnter={(e) => { e.preventDefault(); dragCounterRef.current++; setDragOver(true) }}
@@ -1681,7 +2183,7 @@ function HomePageInner() {
         </div>
 
         {/* ── Skill Template Grid ── */}
-        <div style={{
+        <div ref={skillSectionRef} data-testid="skill-market" style={{
           flex: 1,
           paddingLeft: isDesktop ? '24px' : '14px',
           paddingRight: isDesktop ? '24px' : '14px',
@@ -1691,7 +2193,12 @@ function HomePageInner() {
           width: '100%',
           margin: '0 auto',
         }}>
-          <div style={{ textAlign: 'center', marginBottom: isDesktop ? 24 : 16 }}>
+          <div style={{
+            textAlign: 'center',
+            marginBottom: (skillCategoriesLoading || visibleSkillCategories.length > 0)
+              ? (isDesktop ? 8 : 6)
+              : (isDesktop ? 24 : 16),
+          }}>
             <h2 style={{
               fontSize: isDesktop ? '1.25rem' : '1.1rem',
               fontWeight: 700,
@@ -1699,45 +2206,101 @@ function HomePageInner() {
               margin: 0,
               letterSpacing: '-0.01em',
             }}>{t('skills.title')}</h2>
-            <p style={{
-              fontSize: isDesktop ? '0.85rem' : '0.78rem',
-              color: 'rgba(255,255,255,0.35)',
-              margin: '6px 0 0',
-              letterSpacing: '0.01em',
-            }}>{t('skills.subtitle')}</p>
           </div>
-          <div style={{
-            display: 'grid',
-            gridTemplateColumns: isDesktop ? 'repeat(auto-fill, minmax(200px, 1fr))' : 'repeat(2, 1fr)',
-            gap: isDesktop ? '14px' : '10px',
-          }}>
+
+          {(skillCategoriesLoading || visibleSkillCategories.length > 0) && (
+            <nav
+              className="mkr-category-rail"
+              data-testid="skill-category-rail"
+              aria-label={t('skills.categories')}
+              aria-busy={skillCategoriesLoading}
+            >
+              <div
+                ref={categoryScrollRef}
+                className="mkr-category-scroll"
+                data-horizontal-swipe-region="true"
+                onPointerDown={handleCategoryPointerDown}
+                onPointerMove={handleCategoryPointerMove}
+                onPointerUp={finishCategoryDrag}
+                onPointerCancel={finishCategoryDrag}
+              >
+                {(skillCategoriesLoading ? [{ id: 'all', label: t('skills.categoryAll') }] : categoryTabs).map(category => {
+                  const isActive = activeCategory === category.id
+                  return (
+                    <button
+                      key={category.id}
+                      ref={element => {
+                        if (element) categoryButtonRefs.current.set(category.id, element)
+                        else categoryButtonRefs.current.delete(category.id)
+                      }}
+                      type="button"
+                      className="mkr-category-tab"
+                      style={skillCategoriesLoading ? { visibility: 'hidden' } : undefined}
+                      aria-pressed={isActive}
+                      aria-controls="skill-market-grid"
+                      data-testid={`skill-category-${category.id}`}
+                      onClick={() => {
+                        if (categoryClickSuppressedRef.current) return
+                        handleCategoryChange(category.id)
+                      }}
+                    >
+                      {category.label}
+                    </button>
+                  )
+                })}
+              </div>
+            </nav>
+          )}
+
+          <div
+            ref={skillGridRef}
+            id="skill-market-grid"
+            className="mkr-category-grid mkr-skill-category-swipe-region"
+            data-testid="skill-grid"
+            data-skill-category-swipe-region="true"
+            onClickCapture={handleSkillGridClickCapture}
+            style={{
+              display: 'grid',
+              gridTemplateColumns: isDesktop ? 'repeat(auto-fill, minmax(200px, 1fr))' : 'repeat(2, 1fr)',
+              gap: isDesktop ? '14px' : '10px',
+            }}
+          >
             {homeSkills.length === 0 && Array.from({ length: 8 }, (_, i) => (
-              <div key={`sk-${i}`} className="mkr-skeleton" style={{
+              <div key={`sk-${i}`} className="mkr-liquid-placeholder" style={{
                 aspectRatio: '3 / 4', borderRadius: 16,
                 animationDelay: `${i * 0.1}s`,
               }}>
                 <div style={{ position: 'absolute', bottom: 14, left: 14, right: 14 }}>
-                  <div className="mkr-skeleton" style={{ width: '60%', height: 14, borderRadius: 6 }} />
+                  <div className="mkr-liquid-placeholder-line" style={{ width: '60%', height: 14, borderRadius: 6 }} />
                 </div>
               </div>
             ))}
-            {homeSkills.map((template, i) => (
+            {filteredHomeSkills.slice(0, visibleSkillCount).map((template, i) => (
               <div
                 key={template.id}
-                className="mkr-skill-card mkr-row-enter"
+                data-testid="home-skill-card"
+                data-skill-id={template.id}
+                className={`mkr-skill-card${categoryHasChanged ? '' : ' mkr-row-enter'}`}
                 onClick={(e) => handleSkillCardClick(template, e)}
                 style={{
                   position: 'relative',
                   aspectRatio: '3 / 4',
                   borderRadius: '16px',
                   overflow: 'hidden',
-                  background: '#120d1a',
-                  border: '1px solid rgba(255,255,255,0.06)',
-                  animationDelay: `${i * 0.06}s`,
+                  background: 'linear-gradient(145deg, rgba(18,13,26,0.48), rgba(8,8,12,0.64))',
+                  border: '0.5px solid rgba(255,255,255,0.08)',
+                  animationDelay: categoryHasChanged ? undefined : `${Math.min(i, 8) * 0.045}s`,
                   ...(heroRect && selectedDetail?.id === template.id ? { opacity: 0 } : {}),
                 }}
               >
-                {renderCoverMedia(template.image, template.labels.en || '', 'thumb', { priority: i < 4, suspended: !!selectedDetail, extraStyle: { position: 'absolute', display: 'block' } })}
+                {renderCoverMedia(template.image, pickLocalizedValue(template.labels, locale), 'thumb', {
+                  priority: i < 1,
+                  suspended: !!selectedDetail,
+                  fallbackSrc: template.before_images?.[0]
+                    ? getThumbnailUrl(template.before_images[0], 400, 70, 533, 'cover')
+                    : undefined,
+                  extraStyle: { position: 'absolute', display: 'block' },
+                })}
 
                 {/* Bottom gradient for text readability */}
                 <div style={{
@@ -1757,13 +2320,16 @@ function HomePageInner() {
                     color: '#fff',
                     lineHeight: 1.3,
                   }}>
-                    {template.labels[locale] || template.labels.en || ''}
+                    {pickLocalizedValue(template.labels, locale)}
                   </div>
                 </div>
 
               </div>
             ))}
           </div>
+          {visibleSkillCount < filteredHomeSkills.length && (
+            <div ref={skillLoadMoreRef} aria-hidden="true" style={{ height: 1, width: '100%' }} />
+          )}
 
         </div>
 
@@ -1813,16 +2379,17 @@ function HomePageInner() {
               placeholder={placeholders[placeholderIdx]}
               createLabel={skillActionCreateLabel}
               actionMode={isGuestSkillAction}
-              actionEyebrow={isGuestSkillAction ? (locale === 'zh' ? '免费预览' : 'Free preview') : undefined}
+              actionEyebrow={isGuestSkillAction ? t('home.previewFree') : undefined}
               actionTitle={skillActionTitle}
               actionSubtitle={skillActionSubtitle}
               actionMeta={skillActionMeta || undefined}
-              actionIdleNote={locale === 'zh' ? `需要 ${formatPhotoCount(requiredPhotoCount)}` : `${formatPhotoCount(requiredPhotoCount)} needed`}
+              actionIdleNote={t('home.photosNeeded', formatPhotoCount(requiredPhotoCount))}
               actionSelectedNote={hasEnoughPhotos
-                ? (locale === 'zh' ? '可以预览了' : 'Ready to preview')
-                : (locale === 'zh' ? `还需要 ${formatPhotoCount(remainingPhotoCount)}` : `${formatPhotoCount(remainingPhotoCount)} more needed`)}
-              showLoginIcon={!user}
+                ? t('home.previewReady')
+                : t('home.morePhotosNeeded', formatPhotoCount(remainingPhotoCount))}
+              showLoginIcon={!renderUser}
               submitWhenEmpty={shouldLoginOnEmptyCreate}
+              fallbackHref={shouldLoginOnEmptyCreate ? '/login' : undefined}
               onSubmit={handleCreateOrUpload}
               onSlotClick={handleInputSlotClick}
               onFilesSelected={(files) => trackFileSelected(files, 'file_input')}
@@ -1831,6 +2398,8 @@ function HomePageInner() {
               skills={availableSkills}
               selectedSkill={selectedSkill}
               onSkillChange={setSelectedSkill}
+              agentModel={createAgentModel}
+              onAgentModelChange={handleCreateAgentModelChange}
               onDeleteSkill={(name) => {
                 setAvailableSkills(prev => {
                   const next = prev.filter(s => s.name !== name)
@@ -1841,7 +2410,7 @@ function HomePageInner() {
               }}
               onUploadSkill={() => skillFileRef.current?.click()}
               installingSkill={installingSkill}
-              overrideLabel={selectedSkill ? (availableSkills.find(s => s.name === selectedSkill)?.label || homeSkills.find(s => s.id === selectedSkill)?.labels[locale] || null) : null}
+              overrideLabel={selectedSkill ? (availableSkills.find(s => s.name === selectedSkill)?.label || pickLocalizedValue(homeSkills.find(s => s.id === selectedSkill)?.labels, locale) || null) : null}
               skillDirection="up"
               dragOver={dragOver}
               onDragEnter={(e) => { e.preventDefault(); dragCounterRef.current++; setDragOver(true) }}
@@ -1945,7 +2514,7 @@ function HomePageInner() {
             <button
               onClick={async () => {
                 const url = `${window.location.origin}/home/${selectedDetail.id}`
-                const title = selectedDetail.labels[locale] || selectedDetail.labels.en || 'Makaron'
+                const title = pickLocalizedValue(selectedDetail.labels, locale, 'Makaron')
                 if (navigator.share) {
                   try { await navigator.share({ url, title }) } catch {}
                 } else {
@@ -2008,7 +2577,7 @@ function HomePageInner() {
               onTouchStart={(e) => {
                 const touch = e.touches[0]
                 if (!touch) return
-                detailSwipeRef.current = { startY: touch.clientY, startIdx: homeSkills.findIndex(s => s.id === selectedDetail?.id), swiping: false }
+                detailSwipeRef.current = { startY: touch.clientY, startIdx: filteredHomeSkills.findIndex(s => s.id === selectedDetail?.id), swiping: false }
               }}
               onTouchMove={(e) => {
                 if (!detailSwipeRef.current) return
@@ -2033,7 +2602,7 @@ function HomePageInner() {
                 const deltaY = touch.clientY - detailSwipeRef.current.startY
                 const threshold = 60
                 let newIdx = detailSwipeRef.current.startIdx
-                if (deltaY < -threshold && newIdx < homeSkills.length - 1) newIdx++
+                if (deltaY < -threshold && newIdx < filteredHomeSkills.length - 1) newIdx++
                 else if (deltaY > threshold && newIdx > 0) newIdx--
                 if (detailInnerRef.current && detailSnapRef.current) {
                   const slideH = detailSnapRef.current.clientHeight
@@ -2041,17 +2610,14 @@ function HomePageInner() {
                   detailInnerRef.current.style.transform = `translateY(${-newIdx * slideH}px)`
                 }
                 if (newIdx !== detailSwipeRef.current.startIdx) {
-                  const t = homeSkills[newIdx]
+                  const t = filteredHomeSkills[newIdx]
                   if (t) {
                     clearDetailCloseTimer()
-                    setTextareaFocused(false)
-                    setKbInset(0)
-                    updateViewportInset()
+                    blurHomeComposers()
                     setViewMode('human')
                     setSelectedDetail(t)
                     setSelectedSkill(t.skill_path ? t.id : null)
-                    createInput.clear()
-                    createInput.setText(t.prompt)
+                    applyLocalizedSkillPrompt(t, true)
                     detailPathActiveRef.current = true
                     writeSkillDetailPath(t.id, 'replace')
                   }
@@ -2061,9 +2627,9 @@ function HomePageInner() {
               onWheel={(e) => {
                 if (wheelCooldownRef.current) return
                 if (Math.abs(e.deltaY) < 20) return
-                const currentIdx = homeSkills.findIndex(s => s.id === selectedDetail?.id)
+                const currentIdx = filteredHomeSkills.findIndex(s => s.id === selectedDetail?.id)
                 let newIdx = currentIdx
-                if (e.deltaY > 0 && newIdx < homeSkills.length - 1) newIdx++
+                if (e.deltaY > 0 && newIdx < filteredHomeSkills.length - 1) newIdx++
                 else if (e.deltaY < 0 && newIdx > 0) newIdx--
                 if (newIdx === currentIdx) return
                 wheelCooldownRef.current = true
@@ -2073,17 +2639,14 @@ function HomePageInner() {
                   detailInnerRef.current.style.transition = 'transform 0.35s cubic-bezier(0.22, 1, 0.36, 1)'
                   detailInnerRef.current.style.transform = `translateY(${-newIdx * slideH}px)`
                 }
-                const t = homeSkills[newIdx]
+                const t = filteredHomeSkills[newIdx]
                 if (t) {
                   clearDetailCloseTimer()
-                  setTextareaFocused(false)
-                  setKbInset(0)
-                  updateViewportInset()
+                  blurHomeComposers()
                   setViewMode('human')
                   setSelectedDetail(t)
                   setSelectedSkill(t.skill_path ? t.id : null)
-                  createInput.clear()
-                  createInput.setText(t.prompt)
+                  applyLocalizedSkillPrompt(t, true)
                   detailPathActiveRef.current = true
                   writeSkillDetailPath(t.id, 'replace')
                 }
@@ -2096,11 +2659,11 @@ function HomePageInner() {
             >
             <div ref={detailInnerRef} style={{ position: 'relative', width: '100%', height: '100%', willChange: 'transform' }}>
             {(() => {
-              const activeIdx = Math.max(0, homeSkills.findIndex(s => s.id === selectedDetail?.id))
+              const activeIdx = Math.max(0, filteredHomeSkills.findIndex(s => s.id === selectedDetail?.id))
               // Window: 4 before + active + 5 after = 10 slides rendered at most.
               const WINDOW_BEFORE = 4
               const WINDOW_AFTER = 5
-              return homeSkills.map((template, i) => {
+              return filteredHomeSkills.map((template, i) => {
                 const inWindow = i >= activeIdx - WINDOW_BEFORE && i <= activeIdx + WINDOW_AFTER
                 return (
                   <div
@@ -2145,10 +2708,10 @@ function HomePageInner() {
           }}>
             <div style={{ fontSize: 40, marginBottom: 16 }}>🎉</div>
             <div style={{ fontSize: 22, fontWeight: 700, color: 'rgba(255,255,255,0.95)' }}>
-              {locale === 'zh' ? '欢迎来到 Makaron!' : 'Welcome to Makaron!'}
+              {t('home.welcomeTitle')}
             </div>
             <div style={{ fontSize: 13, color: 'rgba(255,255,255,0.4)', marginTop: 8 }}>
-              {locale === 'zh' ? '我们送了你一份创作礼物' : "Here's a gift to get you started"}
+              {t('home.welcomeGift')}
             </div>
             <div style={{
               marginTop: 24, padding: '20px 0', borderRadius: 16,
@@ -2161,7 +2724,7 @@ function HomePageInner() {
                 {welcomeCredits.toLocaleString()}
               </div>
               <div style={{ fontSize: 13, color: 'rgba(255,255,255,0.35)', marginTop: 2 }}>
-                credits · ${(welcomeCredits * 0.01).toFixed(2)} {locale === 'zh' ? '价值' : 'value'}
+                credits · ${(welcomeCredits * 0.01).toFixed(2)} {t('home.value')}
               </div>
             </div>
             <button
@@ -2173,7 +2736,7 @@ function HomePageInner() {
                 boxShadow: '0 4px 20px rgba(217,70,239,0.3)',
               }}
             >
-              {locale === 'zh' ? '开始创作' : 'Start Creating'}
+              {t('home.startCreating')}
             </button>
           </div>
         </>

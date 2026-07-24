@@ -78,10 +78,9 @@ export default function MoveableTestPage() {
           defaultProps: { title: '' },
         },
         frame: 0,
-        imageFormat: 'png',
         inputProps: props,
       });
-      setExportUrl(URL.createObjectURL(result.blob));
+      setExportUrl(URL.createObjectURL(await result.blob({ format: 'png' })));
       setStatus('Exported! Compare preview vs export image below.');
     } catch (e) {
       setStatus('Error: ' + (e instanceof Error ? e.message : String(e)));

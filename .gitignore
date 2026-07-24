@@ -44,6 +44,10 @@ HANDOFF*.md
 # vercel
 .vercel
 
+# supabase local project link metadata
+supabase/.temp/*
+!supabase/.temp/cli-latest
+
 # typescript
 *.tsbuildinfo
 next-env.d.ts
@@ -70,14 +74,24 @@ app-store-assets/**/*.heic
 app-store-assets/**/*.pdf
 app-store-assets/**/*.mp4
 app-store-assets/**/*.mov
+marketing/meta-ads/
 
 # dev scripts
 /scripts/
 !/scripts/
 /scripts/*
 !/scripts/makaron-release-check.mjs
+!/scripts/makaron-release-prod.mjs
+!/scripts/makaron-runner.mjs
 !/scripts/makaron-worktree-fastpath.mjs
+!/scripts/smoke-gpt56-agent.ts
+!/scripts/smoke-gpt56-cache.ts
 !/scripts/backfill-annual-subscription-credits.mjs
+!/scripts/audit-liquid-glass-perf.mjs
+!/scripts/studio-run-golden.ts
+!/scripts/sticker-bridge-acceptance.ts
+!/scripts/edge-video-bridge-acceptance.ts
+!/scripts/agent-execution-acceptance.ts
 
 
 # claude code local settings
@@ -93,9 +107,13 @@ test-kling.mjs
 
 # local generated artifacts
 /tmp/
+/.tmp/
 /output/
 /outputs/
+/artifacts/
+/work/
 /.playwright-cli/
+/.remotion-bundle-local/
 
 # workspace agent runtime data
 .workspace/

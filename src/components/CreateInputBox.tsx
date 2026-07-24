@@ -3,6 +3,8 @@
 import { useRef, useCallback, useEffect } from 'react';
 import type { CreateInputState } from '@/hooks/useCreateInput';
 import SkillSelector, { type SkillItem } from '@/components/SkillSelector';
+import AgentModelChip from '@/components/AgentModelChip';
+import type { AgentModelPreference } from '@/lib/agent-models';
 
 function Spinner({ size = 20 }: { size?: number }) {
   return (
@@ -10,6 +12,51 @@ function Spinner({ size = 20 }: { size?: number }) {
       <circle cx="12" cy="12" r="10" stroke="rgba(217,70,239,0.12)" strokeWidth="2.5" fill="none" />
       <path fill="rgba(217,70,239,0.7)" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
     </svg>
+  );
+}
+
+function HydrationSafeAction({
+  fallbackHref,
+  className,
+  disabled = false,
+  onClick,
+  onTouchStart,
+  style,
+  children,
+}: {
+  fallbackHref?: string;
+  className?: string;
+  disabled?: boolean;
+  onClick: (event: React.MouseEvent<HTMLElement>) => void;
+  onTouchStart?: (event: React.TouchEvent<HTMLElement>) => void;
+  style: React.CSSProperties;
+  children: React.ReactNode;
+}) {
+  if (fallbackHref && !disabled) {
+    return (
+      <a
+        href={fallbackHref}
+        className={className}
+        data-testid="create-project"
+        style={{ ...style, textDecoration: 'none' }}
+      >
+        {children}
+      </a>
+    );
+  }
+
+  return (
+    <button
+      type="button"
+      className={className}
+      data-testid="create-project"
+      disabled={disabled}
+      onClick={onClick}
+      onTouchStart={onTouchStart}
+      style={style}
+    >
+      {children}
+    </button>
   );
 }
 
@@ -34,6 +81,7 @@ export interface CreateInputBoxProps {
   actionSelectedNote?: string;
   showLoginIcon?: boolean;
   submitWhenEmpty?: boolean;
+  fallbackHref?: string;
   onSubmit: () => void;
   onSlotClick?: () => void;
   onFilesSelected?: (files: File[]) => void;
@@ -48,6 +96,8 @@ export interface CreateInputBoxProps {
   installingSkill?: boolean;
   overrideLabel?: string | null;
   skillDirection?: 'up' | 'down';
+  agentModel?: AgentModelPreference;
+  onAgentModelChange?: (model: AgentModelPreference) => void;
   // Drag-drop
   dragOver?: boolean;
   onDragEnter?: (e: React.DragEvent) => void;
@@ -77,6 +127,7 @@ export default function CreateInputBox({
   actionSelectedNote = 'Photo selected',
   showLoginIcon = false,
   submitWhenEmpty = false,
+  fallbackHref,
   onSubmit,
   onSlotClick,
   onFilesSelected,
@@ -90,6 +141,8 @@ export default function CreateInputBox({
   installingSkill,
   overrideLabel,
   skillDirection,
+  agentModel = 'auto',
+  onAgentModelChange,
   dragOver = false,
   onDragEnter,
   onDragOver,
@@ -161,12 +214,12 @@ export default function CreateInputBox({
     }
     openFilePicker();
   }, [creating, files.length, onSubmit, openFilePicker, submitWhenEmpty, text]);
-  const handlePrimaryActionClick = useCallback((e?: React.MouseEvent) => {
+  const handlePrimaryActionClick = useCallback((e?: React.MouseEvent<HTMLElement>) => {
     e?.stopPropagation();
     if (Date.now() - primaryTouchHandledAtRef.current < 700) return;
     handlePrimaryAction();
   }, [handlePrimaryAction]);
-  const handlePrimaryActionTouchStart = useCallback((e: React.TouchEvent) => {
+  const handlePrimaryActionTouchStart = useCallback((e: React.TouchEvent<HTMLElement>) => {
     e.preventDefault();
     e.stopPropagation();
     primaryTouchHandledAtRef.current = Date.now();
@@ -190,6 +243,10 @@ export default function CreateInputBox({
       }}
     />
   );
+
+  const progressiveHref = fallbackHref && !creating && files.length === 0 && !text.trim()
+    ? fallbackHref
+    : undefined
 
   if (actionMode) {
     const firstPreview = previews[0];
@@ -409,9 +466,8 @@ export default function CreateInputBox({
                 {hasFiles ? actionSelectedNote : actionIdleNote}
               </span>
             </div>
-              <button
-              type="button"
-              data-testid="create-project"
+              <HydrationSafeAction
+              fallbackHref={progressiveHref || undefined}
               onClick={handlePrimaryActionClick}
               onTouchStart={handlePrimaryActionTouchStart}
               disabled={creating}
@@ -442,7 +498,7 @@ export default function CreateInputBox({
                   <path d="m13 6 6 6-6 6" />
                 </svg>
               )}
-            </button>
+            </HydrationSafeAction>
           </div>
         </div>
         {hiddenFileInput}
@@ -678,6 +734,9 @@ export default function CreateInputBox({
           />
         )}
         <div style={{ display: 'flex', alignItems: 'center', gap: 4, padding: '4px 8px 8px' }}>
+          {onAgentModelChange && (
+            <AgentModelChip value={agentModel} onChange={onAgentModelChange} disabled={creating} />
+          )}
           <div className="hide-scrollbar" onWheel={(e) => { if (e.deltaY !== 0) { e.currentTarget.scrollLeft += e.deltaY; e.preventDefault(); } }}
             style={{ display: 'flex', alignItems: 'center', gap: 4, flex: 1, minWidth: 0, overflowX: 'auto', paddingTop: 4 }}>
             {isDesktop && files.length >= 2 && previews.map((preview, i) => (
@@ -706,19 +765,10 @@ export default function CreateInputBox({
             overrideLabel={overrideLabel}
             direction={skillDirection}
           />
-          <button
+          <HydrationSafeAction
+            fallbackHref={progressiveHref || undefined}
             className="mkr-create-btn"
-            data-testid="create-project"
-            onClick={(e) => {
-              e.stopPropagation();
-              if (text.trim() || files.length > 0) {
-                onSubmit();
-              } else if (submitWhenEmpty) {
-                onSubmit();
-              } else {
-                openFilePicker();
-              }
-            }}
+            onClick={handlePrimaryActionClick}
             disabled={creating}
             style={{ flexShrink: 0, display: 'flex', alignItems: 'center', gap: '5px', padding: '5px 10px', borderRadius: '14px', background: 'none', border: 'none', color: 'rgba(217,70,239,0.9)', fontSize: '0.75rem', fontWeight: 500, letterSpacing: '0.03em', cursor: creating ? 'default' : 'pointer', fontFamily: 'inherit' }}
           >
@@ -730,7 +780,7 @@ export default function CreateInputBox({
               <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round"><line x1="12" y1="5" x2="12" y2="19" /><line x1="5" y1="12" x2="19" y2="12" /></svg>
             )}
             {createLabel}
-          </button>
+          </HydrationSafeAction>
         </div>
       </div>
       {/* Hidden file input for photo/video uploads */}

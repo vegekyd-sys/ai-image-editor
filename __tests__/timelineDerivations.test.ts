@@ -3,6 +3,7 @@ import {
   VIDEO_TIMELINE_SENTINEL,
   buildDesignsMap,
   buildImageTimeline,
+  getInitialEditorViewMode,
   getNearbyOptimizedPreloadUrls,
   getPreviousImageForCompare,
   getSnapshotTimelineImage,
@@ -24,6 +25,12 @@ const snap = (id: string, image: string, extra: Partial<Snapshot> = {}): Snapsho
 const design = (code: string): DesignPayload => ({ code, width: 1080, height: 1350 });
 
 describe('editor timeline derivations', () => {
+  it('opens an empty mobile editor in CUI without changing populated or desktop entry', () => {
+    expect(getInitialEditorViewMode({ isDesktop: false, hasGuiContent: false })).toBe('cui');
+    expect(getInitialEditorViewMode({ isDesktop: false, hasGuiContent: true })).toBe('gui');
+    expect(getInitialEditorViewMode({ isDesktop: true, hasGuiContent: false })).toBe('gui');
+  });
+
   it('prefers cached/base64 image for timeline entries', () => {
     expect(getSnapshotTimelineImage(snap('a', 'data:image/png;base64,abc'), 0, 5))
       .toBe('data:image/png;base64,abc');

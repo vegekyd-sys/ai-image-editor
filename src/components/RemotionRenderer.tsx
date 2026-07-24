@@ -153,15 +153,15 @@ export async function captureDesignPoster(design: DesignPayload): Promise<string
         calculateMetadata: null, defaultProps: {},
       },
       frame: Math.min(30, durationInFrames - 1),
-      imageFormat: 'jpeg',
       inputProps: resolvedProps,
       delayRenderTimeoutInMilliseconds: 30000,
     });
+    const posterBlob = await result.blob({ format: 'jpeg' });
 
     const dataUrl = await new Promise<string>((r) => {
       const reader = new FileReader();
       reader.onloadend = () => r(reader.result as string);
-      reader.readAsDataURL(result.blob);
+      reader.readAsDataURL(posterBlob);
     });
     console.log('🎨 [design] poster captured');
     return dataUrl;
@@ -202,12 +202,11 @@ export async function captureDesignFrame(design: DesignPayload, frame: number): 
         calculateMetadata: null, defaultProps: {},
       },
       frame: Math.min(frame, durationInFrames - 1),
-      imageFormat: 'jpeg',
       inputProps: resolvedProps,
       delayRenderTimeoutInMilliseconds: 30000,
     });
 
-    return result.blob;
+    return result.blob({ format: 'jpeg' });
   } catch (e) {
     console.warn('🎨 [design] frame capture failed:', e);
     return null;

@@ -6,9 +6,15 @@ import { createClient } from '@/lib/supabase/client'
 import type { SupabaseClient } from '@supabase/supabase-js'
 import { useLocale, LocaleToggle } from '@/lib/i18n'
 import { isMakaronIOSApp, userAgentHasMakaronIOSToken } from '@/lib/native-app'
+import { isNativeOAuthAvailable, openNativeOAuthSession } from '@/lib/native-oauth'
 import RollingTagline from '@/components/RollingTagline'
 import { MakaronSpark, MAKARON_WORDMARK_STYLE } from '@/components/MakaronLogo'
+import { useHydrated } from '@/hooks/useHydrated'
 import { createMetaEventId, trackMetaEvent } from '@/lib/marketing/meta-pixel'
+import {
+  resolveAuthReturnPathForRuntime,
+  selectAuthReturnPath,
+} from '@/lib/auth-return'
 
 type View = 'form' | 'verify-otp' | 'forgot-password' | 'reset-password'
 type OtpPurpose = 'signup' | 'recovery'
@@ -27,9 +33,13 @@ function isAppleLoginEnabled(): boolean {
 
 export default function LoginPage() {
   const { t } = useLocale()
+  const hydrated = useHydrated()
   const [view, setView] = useState<View>('form')
-  const [inApp] = useState(isInAppBrowser)
+  const inApp = hydrated && isInAppBrowser()
+  const iosApp = hydrated && isMakaronIOSApp()
   const [appleLoginEnabled] = useState(isAppleLoginEnabled)
+  const showAppleOAuth = inApp && appleLoginEnabled
+  const showGoogleOAuth = !inApp || iosApp || showAppleOAuth
 
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
@@ -91,38 +101,124 @@ export default function LoginPage() {
   }, [resendCooldown])
 
   function getReturnUrl(): string {
-    return sessionStorage.getItem('mkr_return_url') || localStorage.getItem('mkr_return_url') || ''
+    const queryReturn = new URLSearchParams(window.location.search).get('next')
+    return selectAuthReturnPath(
+      queryReturn,
+      sessionStorage.getItem('mkr_return_url'),
+      localStorage.getItem('mkr_return_url'),
+    )
   }
 
   function resolveReturnUrlForRuntime(returnUrl: string): string {
-    const skillMatch = returnUrl.match(/^\/home\/([^/?]+)/)
-    if (!skillMatch) return returnUrl
-    const skillId = skillMatch[1]
-    if (isMakaronIOSApp()) {
+    const iosAppRuntime = isMakaronIOSApp()
+    const resolved = resolveAuthReturnPathForRuntime(returnUrl, iosAppRuntime)
+    if (!resolved.skillId) return resolved.returnPath
+    if (iosAppRuntime) {
+      const skillId = resolved.skillId
       sessionStorage.setItem(IOS_PENDING_HOME_SKILL_KEY, skillId)
       localStorage.setItem(IOS_PENDING_HOME_SKILL_KEY, skillId)
-      return '/home'
     }
-    return `/home?skill=${encodeURIComponent(skillId)}`
+    return resolved.returnPath
   }
 
-  function redirectAfterAuth() {
+  function getOAuthCallbackUrl(nativeOAuth = false): string {
+    const callback = new URL('/api/auth/callback', window.location.origin)
+    if (nativeOAuth) callback.searchParams.set('native_oauth', '1')
+    const returnUrl = getReturnUrl()
+    if (returnUrl) callback.searchParams.set('next', returnUrl)
+    return callback.toString()
+  }
+
+  function withWelcomeParam(url: string, welcome?: boolean): string {
+    if (!welcome) return url
+    try {
+      const parsed = new URL(url, window.location.origin)
+      parsed.searchParams.set('welcome', '1')
+      return parsed.pathname + parsed.search + parsed.hash
+    } catch {
+      const sep = url.includes('?') ? '&' : '?'
+      return `${url}${sep}welcome=1`
+    }
+  }
+
+  function redirectAfterAuth(options?: { fallback?: string; welcome?: boolean }) {
     let returnUrl = getReturnUrl()
     sessionStorage.removeItem('mkr_return_url')
     localStorage.removeItem('mkr_return_url')
     // mkr_return_text and mkr_return_skill are consumed by the home page on mount
     returnUrl = resolveReturnUrlForRuntime(returnUrl)
-    window.location.href = returnUrl || '/'
+    window.location.href = withWelcomeParam(returnUrl || options?.fallback || '/', options?.welcome)
+  }
+
+  async function completeAuthAndRedirect(options?: { fallback?: string }) {
+    const completeRes = await fetch('/api/auth/complete', { method: 'POST' })
+    const complete = await completeRes.json().catch(() => ({}))
+    if (!completeRes.ok) {
+      throw new Error(complete.error || 'Login could not finish')
+    }
+    if (complete.isNewUser) {
+      trackMetaEvent(
+        'CompleteRegistration',
+        {},
+        complete.metaEvents?.CompleteRegistration || createMetaEventId('registration'),
+      )
+    }
+    redirectAfterAuth({
+      fallback: options?.fallback || complete.redirectUrl || '/projects',
+      welcome: Boolean(complete.isNewUser),
+    })
+  }
+
+  async function finishNativeOAuth(callbackUrl: string) {
+    const parsed = new URL(callbackUrl)
+    const oauthError = parsed.searchParams.get('error') || parsed.hash.match(/error=([^&]+)/)?.[1]
+    if (oauthError) {
+      throw new Error(decodeURIComponent(oauthError))
+    }
+
+    const code = parsed.searchParams.get('code')
+    if (!code) {
+      throw new Error('Google login did not return an authorization code')
+    }
+
+    const supabase = getSupabase()
+    const { error: exchangeError } = await supabase.auth.exchangeCodeForSession(code)
+    if (exchangeError) {
+      throw exchangeError
+    }
+
+    await completeAuthAndRedirect()
   }
 
   // ── Google OAuth ──
   const handleGoogleLogin = async () => {
     setGoogleLoading(true)
     setError('')
+    if (iosApp && isNativeOAuthAvailable()) {
+      try {
+        const { data, error } = await getSupabase().auth.signInWithOAuth({
+          provider: 'google',
+          options: {
+            redirectTo: getOAuthCallbackUrl(true),
+            skipBrowserRedirect: true,
+          },
+        })
+        if (error) throw error
+        if (!data?.url) throw new Error('Google login URL was not returned')
+        const callbackUrl = await openNativeOAuthSession(data.url)
+        await finishNativeOAuth(callbackUrl)
+      } catch (error) {
+        const message = error instanceof Error ? error.message : t('auth.networkError')
+        setError(message === 'Google login cancelled' ? '' : message)
+        setGoogleLoading(false)
+      }
+      return
+    }
+
     const { error } = await getSupabase().auth.signInWithOAuth({
       provider: 'google',
       options: {
-        redirectTo: `${window.location.origin}/api/auth/callback`,
+        redirectTo: getOAuthCallbackUrl(),
       },
     })
     if (error) { setError(t('auth.networkError')); setGoogleLoading(false) }
@@ -135,7 +231,7 @@ export default function LoginPage() {
     const { error } = await getSupabase().auth.signInWithOAuth({
       provider: 'apple',
       options: {
-        redirectTo: `${window.location.origin}/api/auth/callback`,
+        redirectTo: getOAuthCallbackUrl(),
       },
     })
     if (error) { setError(t('auth.networkError')); setAppleLoading(false) }
@@ -170,7 +266,7 @@ export default function LoginPage() {
 
       if (check.action === 'login') {
         const { error: signInError } = await supabase.auth.signInWithPassword({ email, password })
-        if (!signInError) { redirectAfterAuth(); return }
+        if (!signInError) { await completeAuthAndRedirect(); return }
         if (signInError.message === 'Email not confirmed') {
           // Edge case: user exists but unconfirmed — send OTP
           await supabase.auth.signInWithOtp({ email })
@@ -251,19 +347,9 @@ export default function LoginPage() {
 
       // Signup verified — redirect (new user goes to home with welcome)
       if (otpPurpose === 'signup') {
-        trackMetaEvent('CompleteRegistration', {}, createMetaEventId('registration'))
-        let returnUrl = getReturnUrl()
-        sessionStorage.removeItem('mkr_return_url')
-        localStorage.removeItem('mkr_return_url')
-        // H5 can use ?skill=, while the iOS native shell keeps /home and reopens
-        // the detail from a pending key so the native page stack stays stable.
-        returnUrl = resolveReturnUrlForRuntime(returnUrl)
-        const target = returnUrl || '/home'
-        const sep = target.includes('?') ? '&' : '?'
-        // Small delay to ensure Supabase SDK writes session cookie before redirect
-        setTimeout(() => { window.location.href = target + sep + 'welcome=1' }, 100)
+        await completeAuthAndRedirect({ fallback: '/home' })
       } else {
-        redirectAfterAuth()
+        await completeAuthAndRedirect()
       }
     } catch {
       setOtpError(t('auth.networkError'))
@@ -324,7 +410,12 @@ export default function LoginPage() {
       const { error } = await supabase.auth.updateUser({ password: newPassword })
       if (error) { setError(mapError(error.message)); setResetLoading(false); return }
       setResetSuccess(true)
-      setTimeout(() => { redirectAfterAuth() }, 1500)
+      setTimeout(() => {
+        void completeAuthAndRedirect().catch(() => {
+          setError(t('auth.networkError'))
+          setResetLoading(false)
+        })
+      }, 1500)
     } catch {
       setError(t('auth.networkError'))
       setResetLoading(false)
@@ -421,46 +512,50 @@ export default function LoginPage() {
         {/* ══════ FORM VIEW ══════ */}
         {view === 'form' && (
           <>
-            {inApp && appleLoginEnabled ? (
+            {(showAppleOAuth || showGoogleOAuth) && (
               <>
-                <button
-                  onClick={handleAppleLogin}
-                  disabled={appleLoading}
-                  className="w-full py-3 rounded-xl font-semibold transition-all disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-3"
-                  style={{ background: '#fff', border: '1px solid rgba(255,255,255,0.2)', color: '#050505' }}
-                >
-                  {appleLoading ? (
-                    <svg className="animate-spin h-5 w-5" viewBox="0 0 24 24"><circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" fill="none" /><path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" /></svg>
-                  ) : (
-                    <>
-                      <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
-                        <path d="M16.37 1.51c0 1.08-.43 2.1-1.15 2.88-.78.85-2.06 1.5-3.08 1.42-.13-1.04.38-2.16 1.1-2.96.8-.89 2.18-1.52 3.13-1.34Zm3.96 16.02c-.59 1.35-.87 1.96-1.62 3.15-1.05 1.67-2.53 3.75-4.36 3.77-1.63.02-2.05-1.09-4.26-1.08-2.22.01-2.68 1.1-4.31 1.08-1.83-.02-3.22-1.89-4.27-3.56-2.94-4.69-3.25-10.2-1.44-13.13C1.36 5.71 3.4 4.51 5.31 4.51c1.95 0 3.18 1.07 4.79 1.07 1.57 0 2.52-1.07 4.78-1.07 1.71 0 3.52.93 4.8 2.55-4.22 2.31-3.54 8.34.65 10.47Z" />
-                      </svg>
-                      {t('auth.continueWithApple')}
-                    </>
-                  )}
-                </button>
+                {showAppleOAuth && (
+                  <button
+                    onClick={handleAppleLogin}
+                    disabled={appleLoading}
+                    className="w-full py-3 rounded-xl font-semibold transition-all disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-3"
+                    style={{ background: '#fff', border: '1px solid rgba(255,255,255,0.2)', color: '#050505' }}
+                  >
+                    {appleLoading ? (
+                      <svg className="animate-spin h-5 w-5" viewBox="0 0 24 24"><circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" fill="none" /><path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" /></svg>
+                    ) : (
+                      <>
+                        <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
+                          <path d="M16.37 1.51c0 1.08-.43 2.1-1.15 2.88-.78.85-2.06 1.5-3.08 1.42-.13-1.04.38-2.16 1.1-2.96.8-.89 2.18-1.52 3.13-1.34Zm3.96 16.02c-.59 1.35-.87 1.96-1.62 3.15-1.05 1.67-2.53 3.75-4.36 3.77-1.63.02-2.05-1.09-4.26-1.08-2.22.01-2.68 1.1-4.31 1.08-1.83-.02-3.22-1.89-4.27-3.56-2.94-4.69-3.25-10.2-1.44-13.13C1.36 5.71 3.4 4.51 5.31 4.51c1.95 0 3.18 1.07 4.79 1.07 1.57 0 2.52-1.07 4.78-1.07 1.71 0 3.52.93 4.8 2.55-4.22 2.31-3.54 8.34.65 10.47Z" />
+                        </svg>
+                        {t('auth.continueWithApple')}
+                      </>
+                    )}
+                  </button>
+                )}
 
-                <button
-                  onClick={handleGoogleLogin}
-                  disabled={googleLoading}
-                  className="w-full mt-3 py-3 rounded-xl font-medium transition-all disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-3"
-                  style={{ background: 'rgba(255,255,255,0.07)', border: '1px solid rgba(255,255,255,0.15)', color: '#fff' }}
-                >
-                  {googleLoading ? (
-                    <svg className="animate-spin h-5 w-5" viewBox="0 0 24 24"><circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" fill="none" /><path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" /></svg>
-                  ) : (
-                    <>
-                      <svg width="18" height="18" viewBox="0 0 24 24">
-                        <path d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z" fill="#4285F4"/>
-                        <path d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z" fill="#34A853"/>
-                        <path d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l2.85-2.22.81-.62z" fill="#FBBC05"/>
-                        <path d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z" fill="#EA4335"/>
-                      </svg>
-                      {t('auth.continueWithGoogle')}
-                    </>
-                  )}
-                </button>
+                {showGoogleOAuth && (
+                  <button
+                    onClick={handleGoogleLogin}
+                    disabled={googleLoading}
+                    className={`w-full ${showAppleOAuth ? 'mt-3' : ''} py-3 rounded-xl font-medium transition-all disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-3`}
+                    style={{ background: 'rgba(255,255,255,0.07)', border: '1px solid rgba(255,255,255,0.15)', color: '#fff' }}
+                  >
+                    {googleLoading ? (
+                      <svg className="animate-spin h-5 w-5" viewBox="0 0 24 24"><circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" fill="none" /><path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" /></svg>
+                    ) : (
+                      <>
+                        <svg width="18" height="18" viewBox="0 0 24 24">
+                          <path d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z" fill="#4285F4"/>
+                          <path d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z" fill="#34A853"/>
+                          <path d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l2.85-2.22.81-.62z" fill="#FBBC05"/>
+                          <path d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z" fill="#EA4335"/>
+                        </svg>
+                        {t('auth.continueWithGoogle')}
+                      </>
+                    )}
+                  </button>
+                )}
 
                 <div className="flex items-center gap-3 my-6">
                   <div className="flex-1 h-px bg-white/10" />
@@ -468,36 +563,7 @@ export default function LoginPage() {
                   <div className="flex-1 h-px bg-white/10" />
                 </div>
               </>
-            ) : !inApp ? (
-              <>
-                <button
-                  onClick={handleGoogleLogin}
-                  disabled={googleLoading}
-                  className="w-full py-3 rounded-xl font-medium transition-all disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-3"
-                  style={{ background: 'rgba(255,255,255,0.07)', border: '1px solid rgba(255,255,255,0.15)', color: '#fff' }}
-                >
-                  {googleLoading ? (
-                    <svg className="animate-spin h-5 w-5" viewBox="0 0 24 24"><circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" fill="none" /><path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" /></svg>
-                  ) : (
-                    <>
-                      <svg width="18" height="18" viewBox="0 0 24 24">
-                        <path d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z" fill="#4285F4"/>
-                        <path d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z" fill="#34A853"/>
-                        <path d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l2.85-2.22.81-.62z" fill="#FBBC05"/>
-                        <path d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z" fill="#EA4335"/>
-                      </svg>
-                      {t('auth.continueWithGoogle')}
-                    </>
-                  )}
-                </button>
-
-                <div className="flex items-center gap-3 my-6">
-                  <div className="flex-1 h-px bg-white/10" />
-                  <span className="text-white/25 text-xs">{t('auth.orDivider')}</span>
-                  <div className="flex-1 h-px bg-white/10" />
-                </div>
-              </>
-            ) : null}
+            )}
 
 
             <form onSubmit={handleContinue} className="space-y-4">

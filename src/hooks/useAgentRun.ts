@@ -93,8 +93,6 @@ export function useAgentRun({ projectId, enabled, skipRunIdRef, isActiveRef }: U
         const run = await res.json() as { id: string; started_at: string } | null
         if (!run) return
         if (run.id === skipRunIdRef?.current) return
-        if (Date.now() - new Date(run.started_at).getTime() > 800_000) return
-
         setActiveRunId(run.id)
       } catch { /* polling is best-effort */ }
     }
@@ -318,6 +316,9 @@ function dispatchEvent(row: AgentEventRow, callbacks: AgentStreamCallbacks) {
         (data as { taskId: string }).taskId,
         (data as { prompt: string }).prompt ?? '',
       )
+      break
+    case 'music_task':
+      callbacks.onMusicTask?.((data as { taskId: string }).taskId)
       break
     case 'video_snapshot': {
       const video = data as { snapshotId?: string; taskId?: string; videoMeta?: import('@/types').VideoMeta }

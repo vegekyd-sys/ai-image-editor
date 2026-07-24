@@ -170,6 +170,8 @@ export interface ArtifactCompletionAction {
 }
 
 export interface VideoMeta {
+  /** Explicit provenance for source uploads vs agent/provider outputs. */
+  origin?: 'source-upload' | 'generated';
   taskId: string | null;
   videoUrl: string | null;
   providerUrl?: string;

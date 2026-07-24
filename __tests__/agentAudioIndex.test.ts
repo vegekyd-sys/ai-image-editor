@@ -5,9 +5,12 @@ class FakeQuery {
   constructor(private readonly data: unknown[]) {}
   select() { return this }
   eq() { return this }
+  not() { return this }
   in() { return this }
   order() { return this }
   limit() { return this }
+  range() { return this }
+  maybeSingle() { return Promise.resolve({ data: this.data[0] || null, error: null }) }
   then(resolve: (value: { data: unknown[]; error: null }) => unknown, reject?: (reason: unknown) => unknown) {
     return Promise.resolve({ data: this.data, error: null }).then(resolve, reject)
   }

@@ -1,17 +1,11 @@
 import { generateText } from 'ai';
-import { createAmazonBedrock } from '@ai-sdk/amazon-bedrock';
 import sharp from 'sharp';
 import { readFileSync } from 'fs';
 import { join } from 'path';
 import { parseTotalDuration } from '../kling';
 import animatePrompt from '../prompts/animate.md';
-
-const bedrock = createAmazonBedrock({
-  region: process.env.AWS_REGION?.trim(),
-  accessKeyId: process.env.AWS_ACCESS_KEY_ID?.trim(),
-  secretAccessKey: process.env.AWS_SECRET_ACCESS_KEY?.trim(),
-});
-const MODEL = bedrock('us.anthropic.claude-sonnet-4-6');
+import { DEFAULT_AGENT_MODEL_ID } from '../agent-models';
+import { createAgentModelRuntime, getAgentProviderOptions } from '../agent-model-runtime';
 
 // Lazy-loaded animate.md from disk (for standalone MCP server / non-webpack environments)
 let _diskAnimatePrompt: string | null = null;
@@ -48,7 +42,7 @@ export async function writeVideoScript(input: WriteVideoScriptInput): Promise<Wr
   }
 
   try {
-    // Compress images for Bedrock Sonnet (same logic as agent.ts analyze_image)
+    // Compress images before sending them to the vision-capable Agent model.
     const compressedImages = await Promise.all(
       images.map(async (img, i) => {
         let buf: Buffer;
@@ -88,9 +82,9 @@ export async function writeVideoScript(input: WriteVideoScriptInput): Promise<Wr
     console.log(`\n🎬 [write_video_script] ${images.length} images, language=${language}, userRequest=${userRequest?.slice(0, 50) || 'none'}`);
     const t0 = Date.now();
 
-    // Call Bedrock Sonnet (non-streaming)
+    const runtime = createAgentModelRuntime(DEFAULT_AGENT_MODEL_ID, 'mcp:write-video-script');
     const result = await generateText({
-      model: MODEL,
+      model: runtime.model,
       system: prompt,
       messages: [
         {
@@ -101,14 +95,15 @@ export async function writeVideoScript(input: WriteVideoScriptInput): Promise<Wr
           ],
         },
       ],
+      providerOptions: getAgentProviderOptions(runtime),
     });
 
     const script = result.text.trim();
     if (!script) {
-      console.error(`❌ [write_video_script] Bedrock returned empty text after ${((Date.now() - t0) / 1000).toFixed(1)}s`);
+      console.error(`❌ [write_video_script] Agent model returned empty text after ${((Date.now() - t0) / 1000).toFixed(1)}s`);
       return {
         success: false,
-        message: 'Script generation failed: Bedrock returned empty result.',
+        message: 'Script generation failed: Agent model returned empty result.',
       };
     }
 

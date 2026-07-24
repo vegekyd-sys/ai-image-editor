@@ -3,6 +3,51 @@ import type { AgentStreamEvent } from './agent';
 import { uploadImage } from './supabase/storage';
 import { sanitizeToolHistory, type ToolHistoryBudget } from './agentToolHistory';
 
+const EVENT_WRITE_RETRY_DELAYS_MS = [0, 75, 250, 750] as const;
+
+function errorChain(error: unknown): unknown[] {
+  const chain: unknown[] = [];
+  const seen = new Set<unknown>();
+  let current = error;
+  while (current && chain.length < 6 && !seen.has(current)) {
+    chain.push(current);
+    seen.add(current);
+    current = typeof current === 'object' && 'cause' in current
+      ? (current as { cause?: unknown }).cause
+      : undefined;
+  }
+  return chain;
+}
+
+function errorCode(error: unknown): string {
+  return typeof error === 'object' && error && 'code' in error
+    ? String((error as { code?: unknown }).code || '')
+    : '';
+}
+
+function errorMessage(error: unknown): string {
+  if (error instanceof Error) return error.message;
+  return typeof error === 'object' && error && 'message' in error
+    ? String((error as { message?: unknown }).message || '')
+    : String(error || '');
+}
+
+function isDuplicateWrite(error: unknown): boolean {
+  return errorChain(error).some(item => errorCode(item) === '23505');
+}
+
+function isTransientWriteError(error: unknown): boolean {
+  const values = errorChain(error);
+  const codes = values.map(errorCode).join(' ');
+  const messages = values.map(errorMessage).join(' ');
+  return /ECONNRESET|ETIMEDOUT|ECONNREFUSED|ENETUNREACH|EHOSTUNREACH|EAI_AGAIN|UND_ERR|ABORT_ERR/i.test(codes)
+    || /fetch failed|network|socket|timed?\s*out|timeout|connection reset|\b(?:429|502|503|504)\b/i.test(messages);
+}
+
+function sleep(ms: number): Promise<void> {
+  return new Promise(resolve => setTimeout(resolve, ms));
+}
+
 /**
  * Server-side persistence for agent events. Handles:
  * 1. agent_events table (always — for replay/audit)
@@ -18,12 +63,15 @@ export class AgentDualWriter {
   private seq = 0;
   private contentBuffer = '';
   private flushTimer: ReturnType<typeof setTimeout> | null = null;
+  private codeStreamBuffer = '';
+  private codeStreamFlushTimer: ReturnType<typeof setTimeout> | null = null;
   private sseDisconnected = false;
 
   // Message accumulation
   private messageText = '';
   private currentMessageId = crypto.randomUUID();
   private currentMessageHasImage = false;
+  private currentTurnHasDelivery = false;
   private pendingToolCalls = new Map<string, {
     tool: string;
     input: Record<string, unknown>;
@@ -39,7 +87,10 @@ export class AgentDualWriter {
     private projectId: string,
     private controller?: ReadableStreamDefaultController | null,
     private encoder?: TextEncoder | null,
-  ) {}
+    initialMessageId?: string | null,
+  ) {
+    if (initialMessageId) this.currentMessageId = initialMessageId;
+  }
 
   /** Write enriched event to SSE stream. No-op in headless mode (no controller). */
   tryEnqueue(event: Record<string, unknown>) {
@@ -91,19 +142,20 @@ export class AgentDualWriter {
         // Write snapshots table
         if (imageUrl && !prePublishedSnapshotId) {
           const sortOrder = await this.nextSortOrder();
-          await this.supabase.from('snapshots').upsert({
+          const { error } = await this.supabase.from('snapshots').upsert({
             id: snapshotId,
             project_id: this.projectId,
             image_url: imageUrl,
             tips: [],
             message_id: this.currentMessageId,
             sort_order: sortOrder,
-          }, { onConflict: 'id' }).then(({ error }) => {
-            if (error) console.error('[DualWriter] snapshot upsert error:', error);
-          });
+          }, { onConflict: 'id' });
+          if (error) throw new Error(`Failed to persist generated image snapshot: ${error.message}`);
           this.currentMessageHasImage = true;
+          this.currentTurnHasDelivery = true;
         } else if (imageUrl) {
           this.currentMessageHasImage = true;
+          this.currentTurnHasDelivery = true;
         }
 
         // Write agent_events
@@ -133,8 +185,11 @@ export class AgentDualWriter {
 
         if (published) {
           // Published design — create real Snapshot in DB
-          const snapId = crypto.randomUUID();
+          const snapId = typeof (event as any).snapshotId === 'string' && (event as any).snapshotId
+            ? (event as any).snapshotId
+            : crypto.randomUUID();
           const designPath = `code/${snapId}.json`;
+          const sourceDesignPath = (event as any).sourceDesignPath as string | undefined;
 
           const designDesc = (event as any).description as string | undefined;
           const designJson = JSON.stringify({
@@ -144,26 +199,28 @@ export class AgentDualWriter {
           });
 
           // Upload design JSON to workspace + index in workspace_files for agent read_file
-          try {
-            const storagePath = `${this.userId}/workspace/${designPath}`;
-            await this.supabase.storage.from('images')
-              .upload(storagePath, new Blob([designJson], { type: 'application/json' }), { upsert: true });
-            const { data: urlData } = this.supabase.storage.from('images').getPublicUrl(storagePath);
-            await this.supabase.from('workspace_files').upsert({
-              user_id: this.userId,
-              path: designPath,
-              content_type: 'application/json',
-              size_bytes: designJson.length,
-              storage_url: urlData?.publicUrl || '',
-              updated_at: new Date().toISOString(),
-            }, { onConflict: 'user_id,path' });
-          } catch (err) {
-            console.error('[DualWriter] design upload error:', err);
+          const storagePath = `${this.userId}/workspace/${designPath}`;
+          const { error: designUploadError } = await this.supabase.storage.from('images')
+            .upload(storagePath, new Blob([designJson], { type: 'application/json' }), { upsert: true });
+          if (designUploadError) {
+            throw new Error(`Failed to persist published design: ${designUploadError.message}`);
+          }
+          const { data: urlData } = this.supabase.storage.from('images').getPublicUrl(storagePath);
+          const { error: workspaceIndexError } = await this.supabase.from('workspace_files').upsert({
+            user_id: this.userId,
+            path: designPath,
+            content_type: 'application/json',
+            size_bytes: designJson.length,
+            storage_url: urlData?.publicUrl || '',
+            updated_at: new Date().toISOString(),
+          }, { onConflict: 'user_id,path' });
+          if (workspaceIndexError) {
+            throw new Error(`Failed to index published design: ${workspaceIndexError.message}`);
           }
 
           // Write snapshots table
           const sortOrder = await this.nextSortOrder();
-          await this.supabase.from('snapshots').upsert({
+          const { error: snapshotError } = await this.supabase.from('snapshots').upsert({
             id: snapId,
             project_id: this.projectId,
             image_url: '',
@@ -172,15 +229,19 @@ export class AgentDualWriter {
             sort_order: sortOrder,
             description: designDesc || '[composition]',
             design_path: designPath,
-          }, { onConflict: 'id' }).then(({ error }) => {
-            if (error) console.error('[DualWriter] design snapshot upsert error:', error);
-          });
+          }, { onConflict: 'id' });
+          if (snapshotError) {
+            throw new Error(`Failed to persist published design snapshot: ${snapshotError.message}`);
+          }
           this.currentMessageHasImage = true;
+          this.currentTurnHasDelivery = true;
 
           // Write agent_events
           await this.insertEvent(event.type, {
             code: event.code, width: event.width, height: event.height,
-            props: event.props, animation: event.animation, snapshotId: snapId, published: true,
+            props: event.props, animation: event.animation, snapshotId: snapId,
+            ...(sourceDesignPath ? { sourceDesignPath } : {}),
+            published: true,
           });
 
           // SSE: enriched with snapshotId, normalize type to 'render'
@@ -205,6 +266,7 @@ export class AgentDualWriter {
         this.messageText = '';
         this.currentMessageId = crypto.randomUUID();
         this.currentMessageHasImage = false;
+        this.currentTurnHasDelivery = false;
         await this.insertEvent('new_turn', { messageId: this.currentMessageId });
         // SSE: include new messageId
         this.tryEnqueue({ type: 'new_turn', messageId: this.currentMessageId });
@@ -212,19 +274,27 @@ export class AgentDualWriter {
       }
 
       case 'done': {
+        if (!this.messageText.trim() && !this.currentTurnHasDelivery) {
+          throw new Error('Refusing empty agent completion without final text or a delivered artifact');
+        }
         await this.flushContent();
-        await this.saveCurrentMessage();
-        await this.insertEvent('done', {});
+        await this.saveCurrentMessage(true);
+        await this.insertEvent('done', {}, true);
         this.tryEnqueue(event);
         return;
       }
 
       case 'error': {
         await this.flushContent();
-        await this.saveCurrentMessage();
+        if (event.message && !this.messageText.includes(event.message)) {
+          this.messageText = this.messageText.trim()
+            ? `${this.messageText.trimEnd()}\n\n${event.message}`
+            : event.message;
+        }
+        await this.saveCurrentMessage(true);
 
         const { type, ...data } = event as Record<string, unknown>;
-        await this.insertEvent('error', data);
+        await this.insertEvent('error', data, true);
         this.tryEnqueue(event);
         return;
       }
@@ -232,12 +302,10 @@ export class AgentDualWriter {
       case 'tool_call': {
         await this.flushContent();
         await this.saveCurrentMessage();
-        const input = { ...event.input };
-        if (typeof input.code === 'string' && input.code.length > 2000) {
-          input.code = input.code.slice(0, 2000) + '...(truncated)';
-        }
-        delete input.image;
-        delete input.images;
+        const input = this.sanitizeToolInputForHistory(event.input);
+        const displayInput = event.displayInput
+          ? this.sanitizeToolInputForDisplay(event.displayInput)
+          : this.sanitizeToolInputForDisplay(input);
         if (event.toolCallId) {
           this.pendingToolCalls.set(event.toolCallId, {
             tool: event.tool,
@@ -245,8 +313,8 @@ export class AgentDualWriter {
             step: event.step ?? 0,
           });
         }
-        await this.insertEvent('tool_call', { tool: event.tool, input });
-        this.tryEnqueue(event);
+        await this.insertEvent('tool_call', { tool: event.tool, input: displayInput });
+        this.tryEnqueue({ ...event, input: displayInput });
         return;
       }
 
@@ -275,12 +343,66 @@ export class AgentDualWriter {
         return;
       }
 
+      case 'context_compaction': {
+        await this.flushContent();
+        await this.insertEvent('context_compaction', {
+          provider: event.provider,
+          modelId: event.modelId,
+          compactedThrough: event.compactedThrough,
+          summary: event.summary,
+          appliedEdits: event.appliedEdits,
+          item: event.item ? {
+            kind: event.item.kind,
+            providerKey: event.item.providerKey,
+            itemId: event.item.itemId,
+            encryptedContent: '[persisted in context snapshot]',
+          } : undefined,
+          inputTokens: event.inputTokens,
+        });
+        // Provider compaction is model state, not visible assistant copy.
+        return;
+      }
+
+      case 'coding': {
+        await this.insertEvent('coding', {});
+        this.tryEnqueue(event);
+        return;
+      }
+
+      case 'code_stream': {
+        this.codeStreamBuffer += event.text;
+        this.tryEnqueue(event);
+        if (event.done) {
+          await this.flushCodeStream(true);
+        } else if (this.codeStreamBuffer.length >= 1_000) {
+          await this.flushCodeStream(false);
+        } else if (!this.codeStreamFlushTimer) {
+          this.codeStreamFlushTimer = setTimeout(() => {
+            void this.flushCodeStream(false);
+          }, 300);
+        }
+        return;
+      }
+
       case 'animation_task':
       case 'video_snapshot':
       case 'image_analyzed':
       case 'nsfw_detected': {
         await this.flushContent();
 
+        if (event.type === 'animation_task' || event.type === 'video_snapshot') {
+          this.currentTurnHasDelivery = true;
+        }
+
+        const { type: _t, ...rest } = event as Record<string, unknown>;
+        await this.insertEvent(event.type, rest);
+        this.tryEnqueue(event);
+        return;
+      }
+
+      case 'music_task': {
+        await this.flushContent();
+        this.currentTurnHasDelivery = true;
         const { type: _t, ...rest } = event as Record<string, unknown>;
         await this.insertEvent(event.type, rest);
         this.tryEnqueue(event);
@@ -306,27 +428,64 @@ export class AgentDualWriter {
     await this.insertEvent('content', { text });
   }
 
+  async flushCodeStream(done: boolean) {
+    if (this.codeStreamFlushTimer) {
+      clearTimeout(this.codeStreamFlushTimer);
+      this.codeStreamFlushTimer = null;
+    }
+    const text = this.codeStreamBuffer;
+    this.codeStreamBuffer = '';
+    if (!text && !done) return;
+    await this.insertEvent('code_stream', { text, done: done || undefined });
+  }
+
   /** Call in after() or finally block. */
   async flush() {
     await this.flushContent();
+    await this.flushCodeStream(false);
   }
 
   /** Get the current message ID (for the first message before any new_turn). */
   get firstMessageId() { return this.currentMessageId; }
 
+  /** Continue one execution's append-only event sequence across worker attempts. */
+  async initializeSequence() {
+    const { data, error } = await this.supabase
+      .from('agent_events')
+      .select('seq')
+      .eq('run_id', this.runId)
+      .order('seq', { ascending: false })
+      .limit(1)
+      .maybeSingle();
+    if (error) throw new Error(`Failed to initialize Agent event sequence: ${error.message}`);
+    this.seq = typeof data?.seq === 'number' ? data.seq + 1 : 0;
+  }
+
+  async beginContinuationTurn() {
+    await this.insertEvent('new_turn', { messageId: this.currentMessageId });
+    this.tryEnqueue({ type: 'new_turn', messageId: this.currentMessageId });
+  }
+
+  /** Durable liveness lease used to reconcile platform-killed runs. */
+  async persistHeartbeat() {
+    await this.insertEvent('heartbeat', { at: new Date().toISOString() });
+  }
+
   /** Save accumulated message text to messages table. */
-  private async saveCurrentMessage() {
-    if (!this.messageText.trim()) return;
+  private async saveCurrentMessage(required = false) {
+    if (!this.messageText.trim() && !this.currentMessageHasImage) return;
     try {
-      await this.supabase.from('messages').upsert({
+      const { error } = await this.supabase.from('messages').upsert({
         id: this.currentMessageId,
         project_id: this.projectId,
         role: 'assistant',
         content: this.messageText,
         has_image: this.currentMessageHasImage,
       }, { onConflict: 'id' });
+      if (error) throw error;
     } catch (err) {
       console.error('[DualWriter] message upsert error:', err);
+      if (required) throw err;
     }
   }
 
@@ -340,18 +499,50 @@ export class AgentDualWriter {
     }
   }
 
-  private async insertEvent(type: string, data: Record<string, unknown>) {
-    try {
-      await this.supabase.from('agent_events').insert({
-        run_id: this.runId,
-        project_id: this.projectId,
-        type,
-        data,
-        seq: this.seq++,
-      });
-    } catch (err) {
-      console.error('[DualWriter] Failed to insert event:', type, err);
+  private async insertEvent(type: string, data: Record<string, unknown>, required = false) {
+    const row = {
+      id: crypto.randomUUID(),
+      run_id: this.runId,
+      project_id: this.projectId,
+      type,
+      data,
+      seq: this.seq++,
+    };
+    let lastError: unknown;
+    for (let attempt = 0; attempt < EVENT_WRITE_RETRY_DELAYS_MS.length; attempt += 1) {
+      const delayMs = EVENT_WRITE_RETRY_DELAYS_MS[attempt];
+      if (delayMs) await sleep(delayMs);
+      try {
+        const { error } = await this.supabase.from('agent_events').insert(row);
+        if (error) throw error;
+        return;
+      } catch (err) {
+        if (isDuplicateWrite(err)) return;
+        lastError = err;
+        const canRetry = isTransientWriteError(err) && attempt < EVENT_WRITE_RETRY_DELAYS_MS.length - 1;
+        if (!canRetry) break;
+        console.warn(`[DualWriter] transient event write failure (${type}, retry ${attempt + 1})`, err);
+      }
     }
+    console.error('[DualWriter] Failed to insert event:', type, lastError);
+    if (required) throw lastError;
+  }
+
+  private sanitizeToolInputForHistory(input: Record<string, unknown>) {
+    const safe = { ...input };
+    delete safe.image;
+    delete safe.images;
+    return safe;
+  }
+
+  private sanitizeToolInputForDisplay(input: Record<string, unknown>) {
+    const safe = { ...input };
+    delete safe.image;
+    delete safe.images;
+    if (typeof safe.code === 'string' && safe.code.length > 2000) {
+      safe.code = `[code streamed separately: ${safe.code.length} chars]`;
+    }
+    return safe;
   }
 
   private async persistToolResult(event: Extract<AgentStreamEvent, { type: 'tool_result' }>) {
@@ -384,6 +575,9 @@ export class AgentDualWriter {
     this.pendingToolCalls.delete(event.toolCallId);
     if (pending.tool === 'analyze_video') {
       await this.maybePersistVideoAnalysisDescription(pending.input, event.output);
+    }
+    if (pending.tool === 'studio_run') {
+      await this.maybePersistStudioRunEvent(event.output);
     }
 
     try {
@@ -418,6 +612,32 @@ export class AgentDualWriter {
     }
   }
 
+  private async maybePersistStudioRunEvent(output: unknown) {
+    if (!output || typeof output !== 'object') return;
+    const result = output as Record<string, unknown>;
+    if (Array.isArray(result.studioRunUpdates)) {
+      for (const update of result.studioRunUpdates) {
+        if (!update || typeof update !== 'object') continue;
+        const item = update as Record<string, unknown>;
+        if (!item.studioRun || typeof item.studioRun !== 'object') continue;
+        await this.insertEvent('studio_run', {
+          ...(item.studioRun as Record<string, unknown>),
+          ...(typeof item.artifactPath === 'string' ? { artifactPath: item.artifactPath } : {}),
+          ...(Array.isArray(item.invalidated) ? { invalidated: item.invalidated } : {}),
+        });
+      }
+      return;
+    }
+    const studioRun = result.studioRun;
+    if (!studioRun || typeof studioRun !== 'object') return;
+    await this.insertEvent('studio_run', {
+      ...(studioRun as Record<string, unknown>),
+      ...(typeof result.statePath === 'string' ? { statePath: result.statePath } : {}),
+      ...(typeof result.artifactPath === 'string' ? { artifactPath: result.artifactPath } : {}),
+      ...(Array.isArray(result.invalidated) ? { invalidated: result.invalidated } : {}),
+    });
+  }
+
   private normalizeSnapshotDescription(value: unknown): string | null {
     if (typeof value !== 'string') return null;
     const text = value.replace(/\s+/g, ' ').trim();
@@ -426,14 +646,14 @@ export class AgentDualWriter {
   }
 
   private async maybePersistVideoAnalysisDescription(input: Record<string, unknown>, output: unknown) {
-    const mediaIndex = typeof input.media_index === 'number' ? input.media_index : null;
-    if (!mediaIndex || mediaIndex < 1) return;
-
-    const raw = output && typeof output === 'object'
-      ? (output as Record<string, unknown>).analysis
-      : null;
-    const description = this.normalizeSnapshotDescription(raw);
-    if (!description) return;
+    const outputRecord = output && typeof output === 'object' ? output as Record<string, unknown> : {};
+    const batchAnalyses = Array.isArray(outputRecord.analyses) ? outputRecord.analyses : [];
+    const entries = batchAnalyses.length
+      ? batchAnalyses.map(item => {
+          const record = item && typeof item === 'object' ? item as Record<string, unknown> : {};
+          return { mediaIndex: record.media_index, analysis: record.analysis };
+        })
+      : [{ mediaIndex: input.media_index, analysis: outputRecord.analysis }];
 
     try {
       const { data: snaps, error } = await this.supabase
@@ -445,15 +665,19 @@ export class AgentDualWriter {
         console.error('[DualWriter] video description snapshot lookup error:', error);
         return;
       }
+      await Promise.all(entries.map(async entry => {
+        const mediaIndex = typeof entry.mediaIndex === 'number' ? entry.mediaIndex : null;
+        const description = this.normalizeSnapshotDescription(entry.analysis);
+        if (!mediaIndex || mediaIndex < 1 || !description) return;
+        const snap = snaps?.[mediaIndex - 1] as { id?: string; description?: string | null } | undefined;
+        if (!snap?.id || (typeof snap.description === 'string' && snap.description.trim())) return;
 
-      const snap = snaps?.[mediaIndex - 1] as { id?: string; description?: string | null } | undefined;
-      if (!snap?.id || (typeof snap.description === 'string' && snap.description.trim())) return;
-
-      const { error: updateError } = await this.supabase
-        .from('snapshots')
-        .update({ description })
-        .eq('id', snap.id);
-      if (updateError) console.error('[DualWriter] video description update error:', updateError);
+        const { error: updateError } = await this.supabase
+          .from('snapshots')
+          .update({ description })
+          .eq('id', snap.id);
+        if (updateError) console.error('[DualWriter] video description update error:', updateError);
+      }));
     } catch (err) {
       console.error('[DualWriter] video description persist error:', err);
     }

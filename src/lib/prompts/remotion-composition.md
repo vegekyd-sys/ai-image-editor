@@ -4,11 +4,32 @@ Use this prompt only for editable Remotion compositions: motion graphics, video 
 
 Use `runtime: "composition"` for new work. `runtime: "design"` is a legacy alias that maps to the same implementation.
 
+If the user explicitly asks to use Remotion, make reasonable creative assumptions and build the composition instead of asking a clarifying question. For broad themes such as "35秒微信成长视频", create an editable placeholder narrative with plausible scene labels, dates, counters, and captions; the user can refine the copy after seeing a draft.
+
+## Director Contract
+
+Every editable Remotion composition must be planned as a video, not as a web
+layout. Before creating a new composition, or making a major visual/timing
+patch to an existing composition, read
+`skills/_shared/remotion-director-contract.md`.
+
+Relationship:
+- Director layer: purpose, audience, core message, emotional arc, scene order,
+  pacing, focal subject, transition language, audio/subtitle relation, and
+  review criteria.
+- Composition layer: `function Composition(props)`, `width`, `height`, `fps`,
+  `animation.durationInSeconds`, `<Sequence>` timing, media components, editable
+  props, and frame-driven animation.
+
+Do not let Remotion implementation details invent a webpage-like structure. The
+director contract comes first; this composition prompt turns that direction into
+an executable Makaron timeline.
+
 When the user asks to put two existing timeline videos together, cut clips freely, add transitions, add subtitles, or make a sequence that can be edited later, this is the default runtime. Use Remotion `<Sequence>` and `<Video>` rather than FFmpeg.
 
-Do not fall back to FFmpeg/node for ordinary timeline splicing just because a preview needs adjustment or the first composition attempt is imperfect. Patch the Remotion composition, save/publish the editable composition, or report the preview issue. Use FFmpeg only when the user explicitly asks for a real file-level MP4 operation/export.
+Do not fall back to FFmpeg/node for ordinary timeline splicing just because a preview needs adjustment or the first composition attempt is imperfect. Patch the Remotion composition, promote the reviewed editable composition with `publish_draft({ design_path })`, or report the preview issue. Use FFmpeg only when the user explicitly asks for a real file-level MP4 operation/export.
 
-For timeline media, use actual Media Index URLs in props or code. Do not leave `<<<media_N>>>` placeholders inside `props.clipA`, `<Video src>`, or saved composition code. `<<<media_N>>>` is only a conversational reference; Remotion preview/export needs a real URL.
+For timeline media, put the literal 1-based `<<<media_N>>>` marker in props or code, including `props.clipA`, `<Img src>`, and `<Video src>`. `run_code` resolves every marker to the current URL before validation, autosave, preview, and export. Never manually translate Media Index N to `ctx.snapshotImages[N]`: Media Index is 1-based while that JavaScript array is 0-based, so manual indexing shifts every image and makes the final item undefined.
 
 Generated image URLs and timeline image URLs are valid Remotion media sources. Put them in `props` or code and render them with `<Img src={...}>`; do not claim that generated images cannot be used by the Remotion sandbox. If an image overlay fails, first check syntax, quoting, URL truncation, `<Img>` usage, and prop wiring, then patch the composition.
 
@@ -49,12 +70,12 @@ Subsequent edits:
 ```js
 return {
   type: 'patch',
-  edits: [{ old: 'exact existing string', new: 'replacement string' }],
-  props
+  edits: [{ old: 'exact existing string', new: 'replacement string' }], // optional
+  props // optional, can be the only patch body for text/data edits
 }
 ```
 
-After every meaningful render or patch, save the code with `write_file({ fromLastRunCode: true, name: "slug", publish: false })`. Publish with `write_file({ fromLastRunCode: true, name: "slug" })` when the result is ready for the timeline.
+Every successful render or patch is automatically saved to the recovery `code_path` returned by `run_code`. After visual QA, publish the editable composition with `publish_draft({ design_path: code_path })`. Do not use legacy `write_file({ fromLastRunCode: true })` for durable or resumed composition publishing.
 
 If the change includes transitions, subtitles, overlays, trim timing, cropping, or other visible timeline edits, call `preview_frame` on stable middle frames before telling the user it is complete or publishing it.
 
@@ -66,10 +87,29 @@ If the user asks for a duration such as 30 seconds, set `animation.durationInSec
 
 Available APIs include all exports from `remotion`, `@remotion/media`, `@remotion/paths`, and `@remotion/noise`.
 
-- Do not import Remotion packages, destructure from `window.Remotion`, or write `Remotion.AbsoluteFill`. All APIs are already in scope. Use `<AbsoluteFill>`, `<Video>`, `<Sequence>`, and hooks directly.
+- Do not import or `require()` Remotion packages, destructure from `window.Remotion`, or write `Remotion.AbsoluteFill`. All APIs are already in scope. Use `<AbsoluteFill>`, `<Video>`, `<Sequence>`, and hooks directly.
 - Name the main exported component `Composition`. Helper components are allowed, but the renderable timeline should be `function Composition(props) { ... }`.
+- Do not use ES module syntax inside the returned composition code. Never write
+  `import ...` or `export default ...`. The composition code should define
+  `function Composition(props) { ... }` in the shared runtime scope and return
+  that via the `{ type: 'render', code, ... }` wrapper.
+- Only `Composition(props)` may read `props` directly. Helper components must receive every value they use as function parameters, e.g. `function TitleCard({ title, subtitle }) { ... }`; never reference outer `props` inside `TitleCard`, `Scene`, `Card`, or other helpers.
 - Use Remotion `<Img>`, never HTML `<img>`.
-- Use Remotion `<Video>` or `<OffthreadVideo>`, never HTML `<video>`.
+- Subtitles, kinetic text, and scene labels are authored directly inside this
+  composition. The harness does not provide a universal subtitle overlay or
+  impose shared styling. When narration is present, use the persisted
+  `transcribe_audio` narration cue sheet as the authoritative master clock.
+  Convert cue seconds to frames once at the Composition FPS, then drive
+  `<Sequence>` ranges, subtitle activation, visual emphasis, and music ducking
+  from those same ranges. A linked visual scene must not end before its
+  narration cue ends. Do not replace measured cue ranges with planned Script
+  timing, estimated reading speed, or equal scene lengths. Wording, grouping,
+  placement, typography, and motion remain specific to the current Composition.
+- Prefer Remotion `<Video>` or `<OffthreadVideo>`. Lowercase HTML `<video>` is
+  also accepted and normalized by the harness to the injected,
+  frame-synchronized `<Video>` component.
+- Decoder selection is owned by the preview/export runtime, independent of
+  whether the source used `<Video>` or `<OffthreadVideo>`.
 - Use `<Sequence>` for every scene or clip so media mounts only when needed.
 - Use `trimBefore`, `trimAfter`, `playbackRate`, and `volume` on `<Video>` for non-destructive timeline edits.
 - Never use `startFrom` or `endAt` for `<Video>` trimming in Makaron compositions. They are deprecated/unsafe in this runtime and can make every sequenced clip restart from the first frame. Use `trimBefore={sourceStartFrame}` and `trimAfter={sourceEndFrame}` instead.
@@ -125,6 +165,7 @@ Before returning, do an editable coverage check:
 - Never use an empty editable id such as `data-editable=""`, `imgId: ""`, or optional image ids. If only two source images are available but five scenes need image cards, create five non-empty image prop keys (`imageCard0` ... `imageCard4`) and reuse the same two URL values across those props.
 - Every visible image card/layer should have its own stable editable id, even when two layers reuse the same image URL. Reusing the URL is fine; reusing or omitting the layer id is not.
 - Decorative overlays above image/video editables must use `pointerEvents: 'none'`.
+- For numbered composition parts, include the complete `props` and `editables` arrays in the first part's `compositionMetadata`. The metadata schema accepts `text`, `image`, and `video`, including video `trimBeforePropKey` / `trimAfterPropKey`; do not leave editable metadata behind when moving source into durable parts.
 
 Required connections:
 - `props`: stores the editable value or media URL.
@@ -305,3 +346,4 @@ After render or patch:
 - For trim edits, verify the final `animation.durationInSeconds` matches the actual total frame count before saving or publishing.
 - Capture stable middle frames for each scene, not transition starts.
 - Check subject cropping, text readability, overlay placement, and final frame content.
+- When the user should receive an editable composition, call `publish_draft` with the exact persisted `design_path` after QA. A draft preview is not a published timeline Snapshot. `materialize_media({ publish: true })` publishes the MP4 only and does not replace this step.

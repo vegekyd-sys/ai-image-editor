@@ -59,6 +59,7 @@ function dispatchTouch(type: string, touches: Array<{ clientX: number; clientY: 
 
 describe('NativeAppBootstrap iOS runtime behavior', () => {
   let appendChildSpy: ReturnType<typeof vi.spyOn> | null = null;
+  let userAgentSpy: ReturnType<typeof vi.spyOn> | null = null;
 
   beforeEach(() => {
     vi.clearAllMocks();
@@ -68,6 +69,7 @@ describe('NativeAppBootstrap iOS runtime behavior', () => {
     document.documentElement.className = '';
     document.documentElement.removeAttribute('data-native-platform');
     document.documentElement.style.removeProperty('--makaron-native-keyboard-inset');
+    userAgentSpy = vi.spyOn(window.navigator, 'userAgent', 'get').mockReturnValue('MakaronTests MakaronIOS');
     window.history.replaceState({}, '', '/dashboard');
     vi.stubGlobal('fetch', vi.fn(async () => new Response('<!doctype html><title>cached</title>', {
       status: 200,
@@ -88,10 +90,38 @@ describe('NativeAppBootstrap iOS runtime behavior', () => {
   });
 
   afterEach(() => {
+    userAgentSpy?.mockRestore();
+    userAgentSpy = null;
     appendChildSpy?.mockRestore();
     appendChildSpy = null;
     cleanup();
     vi.unstubAllGlobals();
+  });
+
+  it('does not load native bridge behavior on the web', async () => {
+    userAgentSpy?.mockReturnValue('MakaronWebTests');
+
+    render(<NativeAppBootstrap />);
+    await new Promise((resolve) => window.setTimeout(resolve, 0));
+
+    expect(mocks.keyboard.addListener).not.toHaveBeenCalled();
+    expect(document.documentElement.classList.contains('makaron-ios-app')).toBe(false);
+  });
+
+  it('hides the touch-blocking splash before optional native chrome setup finishes', async () => {
+    const statusBarResolvers: Array<() => void> = [];
+    mocks.statusBar.setOverlaysWebView.mockImplementationOnce(() => new Promise<void>((resolve) => {
+      statusBarResolvers.push(resolve);
+    }));
+
+    render(<NativeAppBootstrap />);
+
+    await waitFor(() => {
+      expect(mocks.splash.hide).toHaveBeenCalledTimes(1);
+      expect(mocks.statusBar.setOverlaysWebView).toHaveBeenCalledTimes(1);
+    });
+
+    statusBarResolvers[0]?.();
   });
 
   it('routes Capacitor keyboard show and hide events into the native keyboard inset CSS variable', async () => {

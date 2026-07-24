@@ -1,4 +1,5 @@
-export type ModelId = 'gemini' | 'qwen' | 'pony' | 'wai' | 'openai';
+export type ModelId = 'gemini' | 'gemini-lite' | 'qwen' | 'pony' | 'wai' | 'openai';
+export type ReasoningEffort = 'minimal' | 'low' | 'medium' | 'high';
 
 export interface GenerateImageRequest {
   image?: string;           // input image (URL/base64). Missing = text-to-image
@@ -6,7 +7,7 @@ export interface GenerateImageRequest {
   model?: ModelId;          // explicit model choice (agent tool param or UI selector)
   category?: string;        // tip category (for auto-routing)
   aspectRatio?: string;
-  thinkingEffort?: 'minimal' | 'high';
+  thinkingEffort?: ReasoningEffort;
   references?: { url: string; role: string }[];  // multi-image references (Gemini + Qwen)
   fallbackPrompt?: string;  // clean prompt without skill template — used when falling back to a model that can't digest .md templates
   isNsfw?: boolean;         // project-level NSFW flag — skip Gemini entirely when true

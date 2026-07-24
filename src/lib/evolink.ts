@@ -27,6 +27,37 @@ export interface EvolinkTaskResult {
   error?: string
 }
 
+export class EvolinkInputError extends Error {
+  readonly code: string
+  readonly retryable = false
+  readonly repairable = true
+  readonly terminal = false
+  readonly reason: string
+  readonly suggestedAction: string
+  readonly userMessage: { en: string; zh: string }
+  readonly invalidMediaUrls: string[]
+  readonly details: Record<string, unknown>
+
+  constructor(failure: {
+    code: string
+    reason: string
+    message: string
+    suggestedAction: string
+    userMessage: { en: string; zh: string }
+    invalidMediaUrls: string[]
+    details: Record<string, unknown>
+  }) {
+    super(failure.message)
+    this.name = 'EvolinkInputError'
+    this.code = failure.code
+    this.reason = failure.reason
+    this.suggestedAction = failure.suggestedAction
+    this.userMessage = failure.userMessage
+    this.invalidMediaUrls = failure.invalidMediaUrls
+    this.details = failure.details
+  }
+}
+
 /** Create a SeeDance video generation task via Evolink. Returns taskId. */
 export async function createEvolinkTask(input: EvolinkTaskInput): Promise<string> {
   if (!API_KEY) {
@@ -35,7 +66,16 @@ export async function createEvolinkTask(input: EvolinkTaskInput): Promise<string
 
   const { prompt, images, duration, aspectRatio, quality, model: requestedModel, generateAudio, videoUrls, audioUrls } = input
 
-  const model = requestedModel || 'seedance-2.0-fast-reference-to-video'
+  const hasReferenceMedia = images.length > 0 || !!videoUrls?.length || !!audioUrls?.length
+  const model = requestedModel || (hasReferenceMedia
+    ? 'seedance-2.0-fast-reference-to-video'
+    : 'seedance-2.0-fast-text-to-video')
+
+  if (images.length > 0) {
+    const { validateSeedanceImageReferences } = await import('./provider-image-reference')
+    const failure = await validateSeedanceImageReferences(images)
+    if (failure) throw new EvolinkInputError(failure)
+  }
 
   const payload: Record<string, unknown> = {
     model,

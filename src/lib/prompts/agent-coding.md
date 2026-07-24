@@ -2,7 +2,7 @@
 
 Use this prompt for the `run_code` execution contract: return shapes, patching, workspace files, verification, and runtime routing.
 
-Do not use this as a Remotion creative guide. For editable timelines, motion graphics, subtitles, overlays, trims, or Remotion Player work, read `prompts/remotion-composition.md`.
+Do not use this as a Remotion creative guide. For editable timelines, motion graphics, subtitles, overlays, trims, or Remotion Player work, read `prompts/remotion-composition.md`; for new compositions or major visual/timing patches, also read `skills/_shared/remotion-director-contract.md`.
 
 ## Runtime Chooser
 
@@ -12,13 +12,38 @@ Do not use this as a Remotion creative guide. For editable timelines, motion gra
 
 If the task is a static poster, infographic, e-commerce page, layout image, or marketing visual, use `generate_image` unless the user explicitly asks for editable code or animation.
 
+## Code Artifact Workflow
+
+For substantial normal Agent Run coding, use `write_code_file` first and then execute the saved source with `run_code({ code_path })`. Describe the specific artifact before the `content` field so the user can see what is being built while the real source streams. The workspace file is the durable source of truth for later execution, recovery, and patching.
+
+For `runtime: "composition"`, the saved file may be a natural JS/TS/JSX/TSX Remotion module with imports/exports and a top-level `Composition`, or the legacy executable body that returns a render object. For a new natural module, pass width/height/animation as `run_code.composition` metadata while `code_path` supplies the source; do not repeat the source.
+
+```js
+const code = String.raw`
+function Composition(props) {
+  return <AbsoluteFill>{props.title}</AbsoluteFill>;
+}
+`;
+
+return {
+  type: 'render',
+  code,
+  width: 1920,
+  height: 1080,
+  props: { title: 'Hello' },
+  animation: { fps: 30, durationInSeconds: 20 },
+};
+```
+
+Use inline `run_code.code` only for small patches or short utilities. Long compositions may use numbered source files under the composition-parts workspace. Include `compositionMetadata` on the first part; `write_file` automatically assembles, validates, and autosaves after every successful write, so do not spend another model turn on an assembly-only `run_code` call. Do not shorten narration, scenes, animation, or visual detail to satisfy an aggregate character target.
+
 ## Return Shapes
 
 Return exactly one supported object:
 
 ```js
 { type: 'render', code, width, height, editables?, props?, animation? }
-{ type: 'patch', edits, props?, editables?, code_path? }
+{ type: 'patch', edits?, props?, editables?, code_path? }
 { type: 'image', data, mimeType }
 { type: 'video', path, contentType?, description?, duration?, width?, height? }
 { type: 'files', outputs: [{ path, contentType, description? }] }
@@ -42,12 +67,14 @@ return {
   code_path: 'code/snapshot-id.json', // required when editing a persisted workspace composition
   edits: [
     { old: 'exact string in current code', new: 'replacement string' }
-  ]
+  ],
+  props: { /* optional text/data edits */ }
 }
 ```
 
 - Each `old` string must match exactly once. If it is ambiguous, include more surrounding context.
 - Use patch for modify, add, or delete operations.
+- Use props-only patches for text/data changes: `{ type: 'patch', code_path, props: {...} }`.
 - Include `props` when changing editable values alongside code.
 - If the current context includes `[Current Composition]`, `[Current composition pointer]`, or `[composition code: ...]`, include that exact path as `code_path`.
 - If you need exact strings for a persisted composition, call `read_file(code_path)` once, then still return `type: "patch"` with the same `code_path`.
@@ -56,12 +83,12 @@ return {
 
 ## Workspace And Publish
 
-`run_code` previews or produces outputs. `write_file` persists them.
+`run_code` previews or produces outputs. Successful composition renders and patches are immediately autosaved to the workspace recovery path returned as `code_path`. `write_file` publishes them or creates a named checkpoint.
 
 Composition runtime:
-- `type: "render"` and `type: "patch"` create a draft preview.
+- `type: "render"` and `type: "patch"` create a draft preview and autosave it before returning success.
 - For timeline videos, preserve the selected Media Index video aspect ratio. Two 9:16 videos spliced together must return a 9:16 canvas such as `width: 1080, height: 1920`, not a 16:9 canvas.
-- `write_file({ fromLastRunCode: true, name: "slug", publish: false })` saves code to workspace without creating a timeline snapshot.
+- `write_file({ fromLastRunCode: true, name: "slug", publish: false })` creates an optional named workspace checkpoint without creating a timeline snapshot.
 - `write_file({ fromLastRunCode: true, name: "slug" })` saves and publishes the composition to the timeline.
 - `write_file({ fromWorkspaceOutputs: true, mediaType: "video", limit: 3 })` publishes recent exported workspace videos to the timeline. Use this immediately after direct FFmpeg requests that create user-facing MP4s, such as "split this into three videos", "cut out this part", "trim/export this clip", or "transcode this video".
 - When using a workspace output in later code, pass its exact workspace `path` via `workspace_paths`. Do not copy, download, or reconstruct Storage URLs; node runtime resolves workspace paths to local `inputFiles`.
@@ -83,13 +110,16 @@ Node media runtime:
 Read `skills/video-ffmpeg-lab/SKILL.md` before real MP4 work.
 
 Available in `runtime: "node"`:
-- `require`, `process`, `Buffer`, `fetch`, and normal Node built-ins.
+- Standard Node `require`, ESM/CommonJS, JS/TS/JSX/TSX, `process`, `Buffer`, `fetch`, filesystem, child processes, and normal Node built-ins inside a disposable Vercel Sandbox.
+- Bare npm packages may be imported or required directly. Missing packages are installed inside the isolated Sandbox on first use, so keep valid application code instead of rewriting it around a Makaron package whitelist.
 - `ffmpegPath`, `workDir`, `inputDir`, `outputDir`, `workspaceDir`.
 - `ffprobePath` may be empty in deployment. Prefer `probeVideo(path)` instead of calling ffprobe directly.
 - `inputFiles`: local files resolved from `media_refs` and `workspace_paths`, with `{ index, kind, inputPath, contentType, source, workspacePath, duration, width, height }`.
 - `ctx.media`: full Media Index.
 - `saveOutput(localPath, workspacePath?, contentType?)`.
 - `probeVideo(path)`.
+
+When execution returns a real compile, dependency, or runtime error, inspect the exact error and continue repairing the same saved program until it produces the requested artifact. Platform fallback must not become an excuse to stop before the user-visible result exists.
 
 Prefer H.264/AAC/yuv420p with `-movflags +faststart` for mobile-compatible final MP4s.
 

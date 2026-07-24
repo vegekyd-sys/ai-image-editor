@@ -226,21 +226,25 @@ function DashboardInner() {
     setCheckingOut(tier)
     setBillingActionError(null)
     try {
-      const tierConfig = CREDIT_TIERS.find(t => t.id === tier)
-      const metaEventId = trackCheckoutStart('topup', {
-        content_name: tier,
-        value: tierConfig ? tierConfig.price / 100 : undefined,
-        currency: 'USD',
-      })
       if (appleBillingAvailable) {
         const appleProduct = appleBilling.findTopup(tier)
         if (!appleProduct) throw new Error('Apple top-up product is not configured.')
         if (!appleBilling.nativeProductFor(appleProduct)) throw new Error('Apple top-up product is still loading.')
+        const metaEventId = trackCheckoutStart('topup', {
+          content_name: tier,
+          content_id: appleProduct.productId,
+          value: appleProduct.price / 100,
+          currency: 'USD',
+        })
         const transaction = await purchaseNativeAppleProduct(appleProduct.productId, appleBilling.appAccountToken)
         const res = await fetch('/api/billing/apple/verify', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ signedTransactionInfo: transaction.signedTransactionInfo }),
+          body: JSON.stringify({
+            signedTransactionInfo: transaction.signedTransactionInfo,
+            metaEventId,
+            attribution: getAttributionForRequest(),
+          }),
         })
         const data = await res.json()
         if (!res.ok) throw new Error(data.error || 'Apple top-up verification failed.')
@@ -250,6 +254,12 @@ function DashboardInner() {
         return
       }
 
+      const tierConfig = CREDIT_TIERS.find(t => t.id === tier)
+      const metaEventId = trackCheckoutStart('topup', {
+        content_name: tier,
+        value: tierConfig ? tierConfig.price / 100 : undefined,
+        currency: 'USD',
+      })
       const res = await fetch('/api/billing/checkout', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -271,15 +281,27 @@ function DashboardInner() {
     setSubscribing(planId)
     setBillingActionError(null)
     try {
+      const plan = PLANS.find(p => p.id === planId)
       if (appleBillingAvailable) {
         const appleProduct = appleBilling.findSubscription(planId, billingInterval)
         if (!appleProduct) throw new Error('Apple subscription product is not configured.')
         if (!appleBilling.nativeProductFor(appleProduct)) throw new Error('Apple subscription product is still loading.')
+        const metaEventId = trackCheckoutStart('subscription', {
+          content_name: planId,
+          content_id: appleProduct.productId,
+          billing_interval: billingInterval,
+          value: appleProduct.price / 100,
+          currency: 'USD',
+        })
         const transaction = await purchaseNativeAppleSubscription(appleProduct.productId, appleBilling.appAccountToken)
         const res = await fetch('/api/billing/apple/verify', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ signedTransactionInfo: transaction.signedTransactionInfo }),
+          body: JSON.stringify({
+            signedTransactionInfo: transaction.signedTransactionInfo,
+            metaEventId,
+            attribution: getAttributionForRequest(),
+          }),
         })
         const data = await res.json()
         if (!res.ok) throw new Error(data.error || 'Apple purchase verification failed.')
@@ -288,7 +310,6 @@ function DashboardInner() {
         return
       }
 
-      const plan = PLANS.find(p => p.id === planId)
       const metaEventId = trackCheckoutStart('subscription', {
         content_name: planId,
         value: plan ? (billingInterval === 'month' ? plan.monthlyPrice : plan.annualPrice) / 100 : undefined,

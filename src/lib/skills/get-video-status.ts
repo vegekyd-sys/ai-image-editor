@@ -22,10 +22,11 @@ export async function getVideoStatus(input: GetVideoStatusInput): Promise<GetVid
   }
 
   try {
-    // Route by taskId prefix: task-unified-* = Evolink, cgt-* = SeeDance Volcengine, xai-* = Grok
+    // Route by taskId prefix: task-unified-* = Evolink, cgt-* = SeeDance Volcengine, xai-* = Grok, google-omni-* = Gemini Omni
     const isEvolink = taskId.startsWith('task-unified-');
     const isSeedance = isEvolink || taskId.startsWith('cgt-');
     const isXai = taskId.startsWith('xai-');
+    const isGoogleOmni = taskId.startsWith('google-omni-');
 
     if (isXai) {
       const { getXaiVideoTask } = await import('../xai-video');
@@ -45,6 +46,20 @@ export async function getVideoStatus(input: GetVideoStatusInput): Promise<GetVid
         videoUrl: result.videoUrl,
         error: result.error,
         message,
+      };
+    }
+
+    if (isGoogleOmni) {
+      const { getGoogleOmniVideoTask } = await import('../google-omni-video');
+      const result = await getGoogleOmniVideoTask(taskId);
+      return {
+        success: result.status !== 'failed',
+        status: result.status,
+        videoUrl: result.videoUrl,
+        error: result.error,
+        message: result.status === 'completed'
+          ? 'Gemini Omni video completed.'
+          : `Gemini Omni standalone task cannot be re-fetched from taskId alone: ${result.error || 'missing provider URL'}`,
       };
     }
 

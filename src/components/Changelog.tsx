@@ -10,6 +10,163 @@ interface ChangelogEntry {
 
 const CHANGELOG: ChangelogEntry[] = [
   {
+    date: '2026-07-24',
+    en: { title: 'Agent Coding, Without Dead Ends', items: [
+      'Makaron now gives Agent-written Node and FFmpeg programs a dedicated isolated Sandbox with real process feedback, standard Node capabilities, and npm packages installed on demand.',
+      'Editable Remotion compositions and file-level MP4 work now use separate runtimes, so the Agent can repair its own code and finish more video tasks without compatibility loops.',
+    ]},
+    zh: { title: 'Agent 编程，不再卡在死胡同', items: [
+      'Makaron 现在为 Agent 编写的 Node 与 FFmpeg 程序提供独立隔离 Sandbox，支持真实进程反馈、标准 Node 能力和按需安装 npm 包。',
+      '可编辑 Remotion composition 与文件级 MP4 处理现在使用独立运行时，让 Agent 能持续修复自己的代码并完成更多视频任务，不再反复陷入兼容性循环。',
+    ]},
+  },
+  {
+    date: '2026-07-23',
+    en: { title: 'Seed Audio: One Prompt, One Complete Soundtrack', items: [
+      'Voiceover, music, and sound effects are now composed together in a single Seed Audio generation, so the whole soundtrack feels like one performance instead of separate layers stitched together.',
+      'Every spoken line can carry its own emotion, pacing, and delivery direction, with expressive narration available across 20+ languages.',
+      'After generation, Makaron recovers the real spoken timing from the finished audio and uses it to synchronize Remotion scenes and subtitles with the performance.',
+      'Music now plays a more present, co-leading role in the mix and helps drive the story forward.',
+    ]},
+    zh: { title: 'Seed Audio：一个 Prompt，一条完整声轨', items: [
+      '旁白、音乐和音效现在会在一次 Seed Audio 生成中共同完成，让整条声轨像一次完整表演，而不是把多个独立音轨事后拼在一起。',
+      '每一句旁白都可以拥有自己的情绪、节奏和演绎方式，并支持 20 多种语言的情感表达。',
+      '生成完成后，Makaron 会从最终音频中还原真实口播时间点，让 Remotion 画面、场景切换和字幕跟随实际表演精准同步。',
+      '配乐现在会更有存在感，与旁白共同推进叙事。',
+    ]},
+  },
+  {
+    date: '2026-07-21',
+    en: { title: 'Smarter Video Creation', items: [
+      'Short videos now choose direct generation instead of unnecessary editing workflows, while dialogue, sound, and music stay with the video model for better sync and fewer redundant tool calls.',
+    ]},
+    zh: { title: '视频生成更懂你的意图', items: [
+      '短视频现在会优先直接生成，不再误入复杂剪辑流程；对白、音效和配乐也会交给视频模型随画面一次完成，减少重复工具调用带来的效果损失。',
+    ]},
+  },
+  {
+    date: '2026-07-19',
+    en: { title: 'Studio Run + Agent Run: Long Tasks, Uninterrupted', items: [
+      'Studio Run gives you a visible production process, while Agent Run stays fast and direct. Both now share the same durable engine.',
+      'Refresh, disconnect, or return later: Makaron continues from the last checkpoint with your assets and editable work intact.',
+      'Video code is written and saved in parts, with no total-size cap or forced trimming. You can watch it progress, and finished-video requests continue through timeline publishing and MP4 delivery.',
+    ]},
+    zh: { title: 'Studio Run + Agent Run：长任务不中断', items: [
+      'Studio Run 提供看得见的完整制作流程，普通 Agent Run 保持直接快速。两者现在共用同一套可靠底座。',
+      '刷新、断网或稍后回来，Makaron 都会从上次进度继续，素材和可编辑内容不会丢失。',
+      '视频代码会分段编写并持续保存，不限制总大小，也不强制裁剪。过程可见，明确要成片时会继续发布到时间线并交付 MP4。',
+    ]},
+  },
+  {
+    date: '2026-07-17',
+    en: { title: 'Skill Categories', items: ['Explore Skills by category, with localized titles and default prompts in English, Simplified Chinese, Traditional Chinese, and Japanese.'] },
+    zh: { title: 'Skill 分类上线', items: ['首页 Skill 现已支持分类浏览，并提供英文、简体中文、繁体中文和日语的标题与默认提示词。'] },
+  },
+  {
+    date: '2026-07-16',
+    en: { title: 'GPT-5.6 Agent Lineup', items: [
+      'GPT-5.6 Terra is now the recommended default Agent model, with GPT-5.6 Sol and GPT-5.6 Luna available for maximum capability or faster lower-cost work.',
+      'Claude models have been retired from Makaron; existing project selections automatically move to Auto and use Terra.',
+    ]},
+    zh: { title: 'GPT-5.6 Agent 全系上线', items: [
+      'GPT-5.6 Terra 现已成为推荐默认 Agent 模型，同时提供能力更强的 GPT-5.6 Sol 与更快、更低成本的 GPT-5.6 Luna。',
+      'Makaron 已下线 Claude 模型；旧项目中的 Claude 选择会自动回到 Auto，并使用 Terra。',
+    ]},
+  },
+  {
+    date: '2026-07-15',
+    en: { title: 'A Faster, Smoother Home', items: [
+      'Home buttons now respond immediately, including Try Free, Create, Sign in, and the Explore / Projects switcher.',
+      'Images and videos now stay ready as you scroll or switch between Explore and Projects, without flashing back to cover frames.',
+    ]},
+    zh: { title: '首页更快、更顺滑', items: [
+      '首页按钮现在点下即可响应，包括 Try Free、Create、登录，以及探索 / 项目切换。',
+      '上下滚动或在探索与项目之间切换时，图片和视频会保持就绪，不再闪回封面图。',
+    ]},
+  },
+  {
+    date: '2026-07-14',
+    en: { title: 'Japanese & Traditional Chinese', items: ['Makaron now supports Japanese and Traditional Chinese across the app.'] },
+    zh: { title: '日语与繁体中文', items: ['Makaron 现已支持日语和繁体中文。'] },
+  },
+  {
+    date: '2026-07-11',
+    en: { title: 'Choose Your Agent Model', items: [
+      'Makaron Agent can now use Sonnet 4.6, Sonnet 5, Opus 4.8, Grok 4.5, or DeepSeek V4 Pro — choose the right brain for each project.',
+      'Your choice stays with the project, repeat runs benefit from prompt caching, and DeepSeek can understand images when needed.',
+    ]},
+    zh: { title: '选择你的 Agent 模型', items: [
+      'Makaron Agent 现在可以选择 Sonnet 4.6、Sonnet 5、Opus 4.8、Grok 4.5 或 DeepSeek V4 Pro，为每个项目选择更合适的大脑。',
+      '模型选择会随项目保存，重复任务可以复用缓存；DeepSeek 需要看图时也能自动理解图片。',
+    ]},
+  },
+  {
+    date: '2026-07-10',
+    en: { title: 'Native SeeDance Text-to-Video', items: ['Makaron can now generate SeeDance videos directly from text without creating an intermediate reference image first.'] },
+    zh: { title: 'SeeDance 原生文生视频', items: ['Makaron 现在可以直接用文字生成 SeeDance 视频，不再需要先生成一张中间参考图。'] },
+  },
+  {
+    date: '2026-07-07',
+    en: { title: 'Video Director for Remotion', items: [
+      'Remotion compositions now use a shared director contract for story, pacing, scenes, transitions, and review instead of web-style design references.',
+      'Agent is now on AI SDK 7 with Sonnet 5 thinking-disabled correctly applied, making first responses much faster while keeping Sonnet 4.6 rollback simple.',
+    ]},
+    zh: { title: 'Remotion Video Director', items: [
+      'Remotion composition 现在会先走共享 Director contract，关注故事、节奏、场景、转场和验收，不再依赖网页式设计参考。',
+      'Agent 已升级到 AI SDK 7，并正确关闭 Sonnet 5 thinking，首字速度明显提升，同时保留一键切回 Sonnet 4.6 的回退路径。',
+    ]},
+  },
+  {
+    date: '2026-07-04',
+    en: { title: 'Sonnet 5 Explainer Video Agent', items: [
+      'Makaron Agent now runs on Claude Sonnet 5 with the right Bedrock model handling, token pricing, tool-input normalization, and larger context management for long creative runs.',
+      'The new Explainer Video skill turns a short prompt into an editable Remotion video with voiceover, synced subtitles, background music, generated images, preview-frame self-checks, and final timeline publishing.',
+      'Voiceover is now first-class: Volcengine Doubao Seed TTS can generate narration and transcribe it for subtitle timing.',
+      'Seed Audio is available from the agent for prompt-first background music and sound effects.',
+    ]},
+    zh: { title: 'Sonnet 5 Explainer Video Agent', items: [
+      'Makaron Agent 已升级到 Claude Sonnet 5，并补齐 Bedrock 模型处理、token 定价、tool input 归一化，以及长视频创作所需的更大上下文管理。',
+      '新增 Explainer Video skill：用户只需要一句简单 prompt，就能生成可编辑 Remotion 视频，包含旁白、同步字幕、背景音乐、生图素材、关键帧自检和最终发布时间线。',
+      'TTS 旁白成为一等能力：火山 Doubao Seed TTS 可以生成口播，并转写出字幕时间轴。',
+      'Seed Audio 已接入 Agent，可用 prompt-first 方式生成背景音乐和音效。',
+    ]},
+  },
+  {
+    date: '2026-07-03',
+    en: { title: 'Liquid Glass Polish', items: [
+      'The Home, Projects, and editor surfaces now share a clearer Liquid Glass treatment across navigation, placeholders, model controls, video pills, and input areas.',
+      'Mobile account gestures are more reliable, and the Explore / Projects switcher is easier to read over bright media.',
+    ]},
+    zh: { title: 'Liquid Glass 细节打磨', items: [
+      '首页、项目页和编辑页的导航、占位符、模型选择、视频 pill 与输入框统一了更清晰的 Liquid Glass 质感。',
+      '移动端账号菜单手势更稳定，Explore / Projects 切换器在明亮图片和视频上也更容易看清。',
+    ]},
+  },
+  {
+    date: '2026-07-02',
+    en: { title: 'Nano Banana 2 Lite', items: [
+      'Tips still use the primary creative model for their text ideas, while their image previews now use Nano Banana 2 Lite for faster, lower-cost drafts.',
+      'Nano Banana 2 Lite is also available in the image model selector when you explicitly want a fast 1K draft edit.',
+    ]},
+    zh: { title: 'Nano Banana 2 Lite', items: [
+      'Tips 的文字创意继续使用原来的主模型，只有图片预览缩略图默认改用 Nano Banana 2 Lite，速度更快、成本更低。',
+      '图片模型选择器里也保留 Nano Banana 2 Lite；当你明确想要快速 1K 草稿编辑时可以手动选择。',
+    ]},
+  },
+  {
+    date: '2026-07-01',
+    en: { title: 'Gemini Omni for Fast Video Editing', items: [
+      'Gemini Omni is now available as a fast 720p video editing model in Makaron.',
+      'Use it from the model selector, CUI, or makaron-cli chat to restyle short clips, animate one image, or make quick video revisions.',
+      'Makaron also handles Omni guardrails more clearly, with safer fallback wording for prompts involving brands, known characters, or other protected IP.',
+    ]},
+    zh: { title: 'Gemini Omni 快速视频编辑', items: [
+      'Gemini Omni 已接入 Makaron，定位为快速 720p 视频编辑模型。',
+      '现在可以从模型选择器、CUI 或 makaron-cli chat 触发，用来给短视频换风格、让单张图动起来，或快速做一版视频修改。',
+      '针对品牌、知名角色和受保护 IP 等更容易触发审核的请求，Makaron 会给出更清楚的失败提示和更安全的原创替代表达。',
+    ]},
+  },
+  {
     date: '2026-07-01',
     en: { title: 'Editable Image & Video Layers', items: [
       'AI-made visual results are no longer flat previews: text, photos, and video clips can stay editable after they are created.',
@@ -736,6 +893,7 @@ const iOSAppTopGap = 'max(96px, calc(env(safe-area-inset-top, 0px) + 40px))';
 const iOSAppBottomGap = 'max(14px, env(safe-area-inset-bottom, 0px))';
 
 export default function Changelog({ onClose, locale }: { onClose: () => void; locale: string }) {
+  // Release notes stay bilingual: Simplified Chinese uses zh, every other locale falls back to en.
   const isZh = locale === 'zh';
   const [isIOSApp, setIsIOSApp] = useState(false);
 
@@ -837,7 +995,7 @@ export default function Changelog({ onClose, locale }: { onClose: () => void; lo
           {CHANGELOG.map((entry, i) => {
             const loc = isZh ? entry.zh : entry.en;
             return (
-              <div key={entry.date} className={i > 0 ? 'mt-5' : 'mt-3'}>
+              <div key={`${entry.date}-${entry.en.title}`} className={i > 0 ? 'mt-5' : 'mt-3'}>
                 <div className="flex items-center gap-2.5 mb-1.5">
                   <span className="text-[11px] font-mono tabular-nums" style={{ color: 'rgba(232,121,249,0.76)' }}>
                     {entry.date}

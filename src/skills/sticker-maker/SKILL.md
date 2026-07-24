@@ -1,59 +1,133 @@
 ---
 name: sticker-maker
 description: >
-  Generate sticker/overlay assets from AI-generated images. Uses generate_image to create elements
-  (characters, objects, effects) on clean backgrounds, then removes the background with sharp
-  to produce transparent PNG files. Ready to use as overlays in design videos or compositions.
-  Activate when user mentions: 贴纸, 素材, 透明底, sticker, overlay, 去背景, 抠图, PNG素材, design素材.
-allowed-tools: generate_image analyze_image run_code
+  Generate and prepare transparent image assets for video composition. Creates a subject on a
+  controlled chroma background, runs deterministic chroma keying and despill, and
+  verifies the result on five backgrounds before handing the PNG to Remotion.
+allowed-tools: generate_image analyze_image prepare_visual_asset
 metadata:
   makaron:
     icon: "🩹"
     color: "#E040FB"
     tipsEnabled: false
-    tags: [sticker, overlay, transparent, png, asset, workflow]
+    tags: [sticker, overlay, transparent, png, asset, workflow, visual-asset-bridge]
 ---
 
-# Sticker Maker — 透明底素材生成器
+# Sticker Maker
 
-将 AI 生成的图片转换为透明底 PNG 贴纸/素材，可直接用于 design 视频叠加。
+Use this skill when a character, product, object, icon, or effect should become
+a transparent foreground or midground asset in a video or editable
+composition. Read `skills/_shared/visual-asset-bridge/SKILL.md` first.
 
-## 核心工作流
+The Agent decides what to generate and how it will be staged. The deterministic
+Visual Asset Bridge owns chroma removal, despill, caching, metadata, and QA.
+Do not write an ad hoc Sharp script and do not remove backgrounds inside the
+Composition runtime.
+When a Studio Storyboard selects `carrier: "cutout"`, set
+`visualPlan.primaryAssetId` to the semantic `asset_id` used below. Assets cannot
+advance without the matching PreparedVisualAsset record.
 
-### Step 1: 生成素材图
-用 `generate_image` 生成目标元素。**关键 prompt 要求**：
-- 必须指定 **色键绿背景**（"on a solid bright green chroma key background, #00FF00"）
-- 绿幕比白底优势：不会误伤素材本身的白色/浅色部分（如高光、白衣服、浅色皮肤），去背景更精准
-- 元素要完整、居中、不裁切
-- 描述清楚元素的姿势、表情、风格
-- 如果有角色参考图，通过 reference_image_indices 传入
+## 1. Decide The Asset Job
 
-**Prompt 模板**：
+Before generation, state:
+
+- scene and visual purpose;
+- role: `hero`, `support`, or `decoration`;
+- intended shot scale and pose;
+- how it enters, moves, and relates to the Remotion background;
+- why a transparent cutout is better than a full-frame plate or native graphic.
+
+If these answers are weak, do not generate the asset.
+
+## 2. Generate A Clean Chroma Source
+
+Default to a solid bright green background `#00ff00`. If the subject contains
+important green material, choose solid magenta `#ff00ff`; if it contains both
+green and magenta, choose solid blue `#0000ff`.
+
+Generation prompt pattern:
+
+```text
+Create [specific subject, pose, expression, material, and camera angle] as one
+complete isolated asset on a perfectly flat solid chroma background [HEX].
+Keep the full silhouette inside the canvas with generous clear margin on every
+side. No floor, horizon, cast shadow, vignette, gradient, scenery, text,
+watermark, border, or additional object. Keep edge lighting controlled and do
+not color the subject outline with the chroma color.
 ```
-Generate [描述元素] on a solid bright green chroma key background (#00FF00).
-The character/object should be centered, complete (no cropping),
-with clear edges. [风格要求]. No text, no watermarks, no borders.
+
+Requirements:
+
+- one complete subject, clearly separated from all four edges;
+- no crop, floor contact, environmental shadow, or background texture;
+- no chroma-colored floor ellipse, drop shadow, reflected glow, or particles;
+- no chroma-colored rim light;
+- preserve reference identity, pose intent, and material detail;
+- use the relevant reference image indices when identity matters.
+
+If the generated source visibly violates these requirements, regenerate before
+keying. Preparation cannot repair a cropped limb or a textured background.
+
+## 3. Prepare The Cutout
+
+Call:
+
+```text
+prepare_visual_asset({
+  mode: "cutout",
+  media_index: N,
+  asset_id: "semantic-scene-asset-id",
+  role: "hero | support | decoration",
+  key_color: "#00ff00"
+})
 ```
 
-**备选背景色**（当素材本身含大量绿色时）：
-- 品红色键 #FF00FF — 适合绿色/自然元素
-- 纯蓝色键 #0000FF — 适合绿色+品红色元素
+`key_color` may be omitted when the canvas border is unambiguous. The tool:
 
-### Step 2: 去除背景 → 透明 PNG
-用 `run_code` + sharp 去除色键绿背景（色彩距离算法 + 边缘抗锯齿 + 溢色修复）
+- removes key-like pixels connected to the canvas border plus enclosed high-confidence chroma pockets large enough to be background;
+- preserves only tiny isolated same-color details; choose a different key color whenever the subject contains meaningful key-colored material;
+- reconstructs and despills semi-transparent antialiased edges;
+- emits a transparent PNG without overwriting the source;
+- crops the PNG to the subject's transparent safety margin so Composition size
+  describes the visible sticker rather than an empty chroma canvas;
+- retains workspace URLs for the source, transparent result, and QA sheet;
+- computes `subjectBox` and `safeArea`;
+- caches by source bytes and preparation settings;
+- produces a five-background QA sheet.
 
-### Step 3: 保存并提供下载
-保存到 workspace，返回公开 storageUrl 供 design 视频直接使用
+## 4. Sticker Acceptance Gate
 
-## 使用场景
+Inspect the QA image returned directly by `prepare_visual_asset`; do not approve
+from `quality.status` alone. The contact sheet composites the PNG over black,
+white, gray, Makaron-brand purple, and high-contrast cyan.
 
-### A. 为 design 视频生成贴纸素材
-### B. 批量生成系列贴纸  
-### C. 从现有图片抠图
+The asset passes only when all are true:
 
-## 注意事项
+- the complete silhouette is present with visible margin on every side;
+- hair, fingers, thin lines, glow edges, and antialiasing remain coherent;
+- no green, magenta, or blue fringe is visible on any QA background;
+- white and pale subject details were not accidentally removed;
+- meaningful subject details do not share the selected key color;
+- `residualChromaRatio` stays below the QA threshold, including inside loops made by props, limbs, strokes, or glow effects;
+- transparent areas contain no opaque islands or environmental shadow;
+- `quality.status` is `pass` and `status` is `ready`.
 
-- 生成时首选色键绿背景，素材本身有绿色时改用品红/蓝色键
-- threshold 参数：绿幕用 50-70，白底用 35-45
-- 检查边缘质量：去背景后发布到 timeline 验证
-- 在 design 中使用时直接用 storageUrl 作为 Img 的 src
+If it fails:
+
+- cropped or cluttered source -> regenerate with stronger isolation language;
+- wrong key color -> prepare again with the explicit correct `key_color`;
+- chroma-colored subject rim -> regenerate without chroma rim lighting;
+- remaining spill -> regenerate a flatter, cleaner chroma source rather than
+  hiding the asset at a tiny size.
+
+## 5. Composition Handoff
+
+Use the returned `preparedUrl` with Remotion `<Img>`. Use `subjectBox` and
+`safeArea` as evidence when choosing scale and placement, not as a fixed layout.
+The Composition remains free to choose background, lighting, motion,
+typography, depth, and interaction. Store the full PreparedVisualAsset record in
+the Studio Assets manifest, set that manifest asset's `path` to `preparedUrl`,
+and keep its ID equal to `visualPlan.primaryAssetId` so later edits reuse the
+same PNG.
+After recovery, resolve it first with the same `asset_id` and no media source;
+regenerate only when that lookup misses or QA requires a new source.

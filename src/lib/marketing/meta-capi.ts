@@ -11,7 +11,7 @@ export type MetaCapiEventName =
   | 'Subscribe'
   | 'Purchase'
 
-interface MetaCapiInput {
+export interface MetaCapiInput {
   eventName: MetaCapiEventName
   eventId: string
   eventSourceUrl?: string
@@ -98,6 +98,15 @@ async function recordServerMarketingEvent(input: MetaCapiInput, customData: Reco
   } catch (error) {
     console.warn(`[marketing-events] server ${input.eventName} failed:`, error)
   }
+}
+
+export async function recordFirstPartyMarketingEvent(input: MetaCapiInput): Promise<void> {
+  const customData: Record<string, unknown> = {
+    ...input.customData,
+    ...(input.value !== undefined ? { value: input.value } : {}),
+    ...(input.currency ? { currency: input.currency } : {}),
+  }
+  await recordServerMarketingEvent(input, customData)
 }
 
 export async function sendMetaCapiEvent(input: MetaCapiInput): Promise<void> {

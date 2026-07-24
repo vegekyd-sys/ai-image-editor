@@ -1,4 +1,5 @@
 const VIDEO_URL_RE = /https?:\/\/\S+\.(?:mp4|mov|webm)(?:[^\s<)]*)?/gi;
+const INLINE_MEDIA_NAV_MARKER_RE = /(?:^|\n)(?:anim|snap):([A-Za-z0-9_-]+)(?=\n|$)/g;
 
 interface InlineVideoSnapshot {
   id: string;
@@ -45,13 +46,20 @@ export function removeAllInlineVideoUrls(text: string): string {
   });
 }
 
+export function removeInlineMediaNavigationMarkers(text: string): string {
+  return text.replace(INLINE_MEDIA_NAV_MARKER_RE, '').replace(/\n{3,}/g, '\n\n');
+}
+
+export function extractInlineMediaNavigationId(text: string): string | undefined {
+  INLINE_MEDIA_NAV_MARKER_RE.lastIndex = 0;
+  return INLINE_MEDIA_NAV_MARKER_RE.exec(text)?.[1];
+}
+
 export function resolveInlineVideoCandidate<T extends InlineVideoSnapshot>(
   content: string,
   snapshots: T[],
 ): { url: string; navId?: string; videoSnap?: T | null; source: 'snapshot' | 'text' } | null {
-  const animIdMatch = content.match(/anim:([a-f0-9-]+)/);
-  const snapIdMatch = content.match(/snap:([a-f0-9-]+)/);
-  const navId = snapIdMatch?.[1] || animIdMatch?.[1];
+  const navId = extractInlineMediaNavigationId(content);
   const videoSnap = navId ? snapshots.find(s => s.id === navId) : null;
   const snapshotVideoUrl = videoSnap?.videoMeta?.videoUrl || undefined;
 

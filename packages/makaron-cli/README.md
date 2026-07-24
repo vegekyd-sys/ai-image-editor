@@ -48,6 +48,12 @@ export MAKARON_API_KEY=mk_live_xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx
 
 Verify: `npx makaron-cli list` should show projects.
 
+Check the current credit balance and subscription:
+```bash
+npx makaron-cli credits
+npx makaron-cli credits --json
+```
+
 ### Let a human claim your account
 
 After registering, generate a link for a human to link your API key to their account:
@@ -92,6 +98,8 @@ npx makaron-cli chat --project auto --image photo.jpg --json -b "make it cinemat
 npx makaron-cli chat --project auto --image img1.jpg --image img2.jpg --json -b "combine these"
 ```
 
+`chat` always routes agent, image, and video models automatically. Never pass `--agent-model`, `--image-model`, `--video-model`, or the legacy `--model` flag to `chat`; the CLI rejects them before starting a run. Model flags remain available only on explicit low-level commands such as `edit` and `video create`.
+
 Returns immediately:
 ```json
 {"runId": "xxx", "projectId": "...", "projectUrl": "https://www.makaron.app/projects/...", "status": "running"}
@@ -107,7 +115,7 @@ Returns immediately:
 | Fix one moment in a video from a screenshot | `npx makaron-cli chat --project <id> --image screenshot.png "@4 this frame should be Paris; only fix this moment"` |
 | Cut or assemble video | `npx makaron-cli chat --project <id> --video clip.mp4 "cut out the dead air and keep the best 20 seconds"` |
 | Add music | `npx makaron-cli chat --project <id> "add calm piano background music"` |
-| Beat-sync video from audio | `npx makaron-cli chat --project auto --audio beat.mp3 --video-model seedance-fast --video-resolution 480p "make a beat-synced video"` |
+| Beat-sync video from audio | `npx makaron-cli chat --project auto --audio beat.mp3 --video-resolution 480p "make a beat-synced video"` |
 | Create motion design | `npx makaron-cli chat --project <id> "make an animated Instagram story with this image"` |
 
 ### Marketplace skills
@@ -208,7 +216,6 @@ Attach a short song, beat, or voice recording when the video should follow audio
 ```bash
 npx makaron-cli chat --project auto \
   --audio beat.mp3 \
-  --video-model seedance-fast \
   --video-resolution 480p \
   -b "make a 15s beat-synced video"
 ```
@@ -280,7 +287,7 @@ npx makaron-cli edit --image photo.jpg --ref style.jpg "match this style"
 npx makaron-cli edit --image photo.jpg --out result.jpg "make it dramatic"
 ```
 
-Options: `--image`, `--model gemini|qwen|openai|pony|wai`, `--ref <file>` (up to 3), `--aspect <ratio>`, `--out <path>`
+Options: `--image`, `--image-model gemini|gemini-lite|qwen|openai|pony|wai`, `--ref <file>` (up to 3), `--aspect <ratio>`, `--out <path>`
 
 ### `video` — Standalone video tools (no project timeline)
 
@@ -292,13 +299,16 @@ npx makaron-cli video script --image img1.jpg "cinematic story"
 npx makaron-cli analyze --video input.mp4 "describe the key actions and pacing"
 
 # 3a. Submit image-to-video rendering (images must be public URLs from step 1 or uploaded)
-npx makaron-cli video create --script "Shot 1 (5s): <<<image_1>>> ..." --image https://...jpg --duration 5 --model kling
-npx makaron-cli video create --script "Shot 1 (5s): <<<image_1>>> slow cinematic push-in with native ambience" --image https://...jpg --duration 5 --model grok
-npx makaron-cli video create --script "Shot 1 (15s): <<<image_1>>> and <<<image_2>>> build a neon one-person studio" --image https://...jpg --image https://...webp --duration 15 --model seedance-mini --video-resolution 480p --aspect 9:16
+npx makaron-cli video create --script "Shot 1 (5s): <<<image_1>>> ..." --image https://...jpg --duration 5 --video-model kling
+npx makaron-cli video create --script "Shot 1 (5s): <<<image_1>>> slow cinematic push-in with native ambience" --image https://...jpg --duration 5 --video-model grok
+npx makaron-cli video create --script "Shot 1 (15s): <<<image_1>>> and <<<image_2>>> build a neon one-person studio" --image https://...jpg --image https://...webp --duration 15 --video-model seedance-mini --video-resolution 480p --aspect 9:16
 
-# 3b. Edit a video from a local file or public URL
-npx makaron-cli video create --script "make it funny" --video input.mp4 --duration 5 --model seedance-fast
-npx makaron-cli video create --script "make it warmer and cinematic" --video https://example.com/input.mp4 --duration 5 --model seedance --video-resolution 1080p
+# 3b. Native SeeDance text-to-video (no image required)
+npx makaron-cli video create --script "Shot 1 (5s): A neon one-person studio wakes at dawn" --duration 5 --video-model seedance-fast --aspect 16:9
+
+# 3c. Edit a video from a local file or public URL
+npx makaron-cli video create --script "make it funny" --video input.mp4 --duration 5 --video-model seedance-fast
+npx makaron-cli video create --script "make it warmer and cinematic" --video https://example.com/input.mp4 --duration 5 --video-model seedance --video-resolution 1080p
 
 # 4. Check status
 npx makaron-cli video status <taskId>
@@ -310,9 +320,9 @@ For project/timeline video editing, use:
 npx makaron-cli chat --project <id|auto> --video input.mp4 -b "make it funny"
 ```
 
-Options for `video create`: `--script "..."`, `--script-file <path>`, `--image <url>` (repeatable, up to 7), `--video <file|url>`, `--duration <seconds>`, `--aspect 9:16|16:9|1:1`, `--model seedance-fast|seedance-mini|seedance|kling|grok`, `--video-resolution auto|480p|720p|1080p|4k`. Default model is `seedance-fast`. SeeDance accepts integer output duration 4-15s (default 5s); `seedance-mini` supports 480p/720p and is best for cheaper drafts/multi-size tests; Kling supports 5-15s; Grok 1.5 supports 1-15s single-image-to-video only. For `--model grok`, forced `--aspect` is ignored to avoid xAI stretching the source image; pad/create the image at the target shape first or use another model.
+Options for `video create`: `--script "..."`, `--script-file <path>`, `--image <url>` (repeatable, up to 7), `--video <file|url>`, `--duration <seconds>`, `--aspect 9:16|16:9|1:1`, `--video-model seedance-fast|seedance-mini|seedance|kling|grok|google-omni`, `--video-resolution auto|480p|720p|1080p|4k`. Default model is `seedance-fast`. SeeDance accepts native text-to-video with no image and integer output duration 4-15s (default 5s); `seedance-mini` supports 480p/720p and is best for cheaper drafts/multi-size tests; Kling supports 5-15s; Grok 1.5 supports 1-15s single-image-to-video only; Gemini Omni supports 3-10s fast 720p image/video generation and editing with native generated audio, including up to 6 image references when no video reference is provided. For `--video-model grok`, forced `--aspect` is ignored to avoid xAI stretching the source image; pad/create the image at the target shape first or use another model.
 
-Video edit model behavior: `--model kling --video` uses Kling base/direct edit internally; `--model seedance-fast --video`, `--model seedance-mini --video`, or `--model seedance --video` uses the SeeDance video-reference path and requires target <=15s, <=50MB, width/height 300-6000px, aspect ratio 0.4-2.5, and frame pixels 409,600-2,086,876. Tiny metadata padding up to 15.5s is accepted and output duration is clamped to 15s. Grok does not support video references.
+Video edit model behavior: `--video-model kling --video` uses Kling base/direct edit internally; `--video-model seedance-fast --video`, `--video-model seedance-mini --video`, or `--video-model seedance --video` uses the SeeDance video-reference path and requires target <=15s, <=50MB, width/height 300-6000px, aspect ratio 0.4-2.5, and frame pixels 409,600-2,086,876. `--video-model google-omni --video` uses Gemini Omni direct video editing and accepts one reference video in Makaron. Output duration is clamped to 3-10s. Grok does not support video references.
 
 ### `music` — Music generation
 
@@ -425,9 +435,9 @@ send_message "All done!"
 ## Important Notes
 
 - One project = one conversation thread. All history is preserved.
-- One run at a time per project. New message interrupts previous run.
+- One active Agent Run at a time per project. A new message received while it is active is appended to that same Agent Run and processed at a durable work-unit boundary; it does not interrupt the execution or create a second owner for an in-progress Studio workflow.
 - Multi-image: `create --image a.jpg --image b.jpg` or `chat --image ref.jpg`.
-- Provider-generated videos can take 3-5 minutes; Grok is usually around 30-40 seconds. Remotion compositions should be converted with `materialize` / `responses get --materialize`, and timing should be read from `duration_seconds`, `render_seconds`, and `realtime_ratio`.
+- Provider-generated videos can take 3-5 minutes; Grok is usually around 30-40 seconds; Gemini Omni is usually around 30-70 seconds plus Storage handoff. Remotion compositions should be converted with `materialize` / `responses get --materialize`, and timing should be read from `duration_seconds`, `render_seconds`, and `realtime_ratio`.
 - Music takes ~60 seconds. Appears in output when done.
 - Images are typically ready in 15-30 seconds.
 - stdout is always machine-readable JSON/text. Human-friendly logs go to stderr.
@@ -443,7 +453,22 @@ Admin commands require an API key with admin privileges. Ask your admin to run `
 
 ```bash
 npx makaron-cli admin skills
+npx makaron-cli admin skills --json
 ```
+
+The human-readable list includes assigned categories plus title/prompt locale completeness.
+
+### Manage marketplace categories
+
+```bash
+npx makaron-cli admin skill-categories
+npx makaron-cli admin skill-categories --json
+npx makaron-cli admin skill-categories add '{"id":"portrait-effects","labels":{"en":"Portrait Effects","zh":"人像特效","zh-Hant":"人像特效","ja":"ポートレート効果"},"icon":"✨","sort_order":10}'
+npx makaron-cli admin skill-categories update portrait-effects '{"icon":"📸"}'
+npx makaron-cli admin skill-categories delete portrait-effects
+```
+
+Deleting a category is blocked while any marketplace skill still uses it.
 
 ### Upload assets to Storage
 
@@ -467,9 +492,10 @@ Storage paths follow this convention:
 
 ```bash
 npx makaron-cli admin skills add '{
-  "labels": {"zh": "中文名", "en": "English Name"},
+  "labels": {"en": "English Name", "zh": "中文名", "zh-Hant": "繁體名稱", "ja": "日本語名"},
   "image": "https://sdyrtztrjgmmpnirswxt.supabase.co/storage/v1/object/public/images/marketplace/covers/skill-name.jpg",
-  "prompt": "Default prompt shown to users",
+  "prompts": {"en": "Default prompt", "zh": "默认提示词", "zh-Hant": "預設提示詞", "ja": "デフォルトプロンプト"},
+  "categories": ["portrait-effects"],
   "skill_path": "https://sdyrtztrjgmmpnirswxt.supabase.co/storage/v1/object/public/images/marketplace/skills/skill-name.zip",
   "image_count": 2,
   "sort_order": 10,
@@ -477,6 +503,8 @@ npx makaron-cli admin skills add '{
   "before_images": ["https://sdyrtztrjgmmpnirswxt.supabase.co/storage/v1/object/public/images/marketplace/before/before-name.jpg"]
 }'
 ```
+
+New skills require all four localized titles, all four localized default prompts, and at least one existing category. Partial `labels` or `prompts` updates are merged with existing locales, so updating one language does not erase the others.
 
 ### Update / delete a skill
 
@@ -512,7 +540,7 @@ npx makaron-cli admin fetch-skill https://www.makaron.app/s/4c4cbd57
    ```
 6. **Add to marketplace**:
    ```bash
-   npx makaron-cli admin skills add '{"labels":{"zh":"...","en":"..."},"image":"<cover_url>","skill_path":"<zip_url>","before_images":["<before_url>"],"image_count":2,"sort_order":10,"is_active":true}'
+   npx makaron-cli admin skills add '{"labels":{"en":"...","zh":"...","zh-Hant":"...","ja":"..."},"prompts":{"en":"...","zh":"...","zh-Hant":"...","ja":"..."},"categories":["portrait-effects"],"image":"<cover_url>","skill_path":"<zip_url>","before_images":["<before_url>"],"image_count":2,"sort_order":10,"is_active":true}'
    ```
 7. **Verify** — visit https://www.makaron.app/home and confirm the skill appears, can be clicked, and works
 

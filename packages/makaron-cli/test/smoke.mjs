@@ -10,6 +10,41 @@ const pkg = JSON.parse(readFileSync(new URL('../package.json', import.meta.url),
 
 const requests = [];
 
+const marketplaceSkills = [
+  {
+    id: 'skill_market_1',
+    labels: { en: 'Diamond Bling', zh: '夜店钻石风', 'zh-Hant': '夜店鑽石風', ja: 'ダイヤモンドの輝き' },
+    prompts: { en: 'Nightclub diamond bling portrait', zh: '夜店钻石肖像', 'zh-Hant': '夜店鑽石肖像', ja: '夜景のきらめくポートレート' },
+    categories: ['portrait-effects'],
+    image: 'https://cdn.example/diamond.jpg',
+    prompt: 'Nightclub diamond bling portrait',
+    skill_path: 'https://cdn.example/diamond.zip',
+    image_count: 1,
+    sort_order: 1,
+    is_active: true,
+    updated_at: '2026-01-01T00:00:00.000Z',
+  },
+  {
+    id: 'prompt_market_1',
+    labels: { en: 'Prompt Only' },
+    image: 'https://cdn.example/prompt.jpg',
+    prompt: 'A prompt-only marketplace item',
+    skill_path: null,
+    image_count: 1,
+    sort_order: 2,
+    is_active: true,
+    updated_at: '2026-01-01T00:00:00.000Z',
+  },
+];
+
+const marketplaceCategories = [{
+  id: 'portrait-effects',
+  labels: { en: 'Portrait Effects', zh: '人像特效', 'zh-Hant': '人像特效', ja: 'ポートレート効果' },
+  icon: '✨',
+  sort_order: 1,
+  is_active: true,
+}];
+
 const server = http.createServer(async (req, res) => {
   const chunks = [];
   req.on('data', chunk => chunks.push(chunk));
@@ -26,28 +61,70 @@ const server = http.createServer(async (req, res) => {
   };
 
   if (req.method === 'GET' && url.pathname === '/api/home-skills') {
-    sendJson(200, [
-      {
-        id: 'skill_market_1',
-        labels: { en: 'Diamond Bling', zh: '夜店钻石风' },
-        image: 'https://cdn.example/diamond.jpg',
-        prompt: 'Nightclub diamond bling portrait',
-        skill_path: 'https://cdn.example/diamond.zip',
-        image_count: 1,
-        sort_order: 1,
-        updated_at: '2026-01-01T00:00:00.000Z',
+    sendJson(200, marketplaceSkills);
+    return;
+  }
+
+  if (req.method === 'GET' && url.pathname === '/api/billing/credits') {
+    assert.equal(req.headers.authorization, 'Bearer mk_test_smoke');
+    sendJson(200, {
+      balance: 321,
+      lifetimePurchased: 500,
+      lifetimeUsed: 179,
+      subscription: {
+        provider: 'stripe',
+        planId: 'pro',
+        status: 'active',
+        billingInterval: 'month',
+        currentPeriodEnd: '2026-08-19T00:00:00.000Z',
+        cancelAtPeriodEnd: false,
       },
-      {
-        id: 'prompt_market_1',
-        labels: { en: 'Prompt Only' },
-        image: 'https://cdn.example/prompt.jpg',
-        prompt: 'A prompt-only marketplace item',
-        skill_path: null,
-        image_count: 1,
-        sort_order: 2,
-        updated_at: '2026-01-01T00:00:00.000Z',
-      },
-    ]);
+    });
+    return;
+  }
+
+  if (url.pathname === '/api/admin/home-skills') {
+    assert.equal(req.headers.authorization, 'Bearer mk_test_smoke');
+    if (req.method === 'GET') sendJson(200, marketplaceSkills);
+    else if (req.method === 'POST') sendJson(200, { success: true, id: 'skill_created' });
+    else if (req.method === 'PUT' || req.method === 'DELETE') sendJson(200, { success: true });
+    else sendJson(405, { error: 'Method not allowed' });
+    return;
+  }
+
+  if (url.pathname === '/api/admin/skill-categories') {
+    assert.equal(req.headers.authorization, 'Bearer mk_test_smoke');
+    if (req.method === 'GET') sendJson(200, marketplaceCategories);
+    else if (req.method === 'POST') sendJson(201, body);
+    else if (req.method === 'PUT') sendJson(200, body);
+    else if (req.method === 'DELETE') sendJson(200, { success: true });
+    else sendJson(405, { error: 'Method not allowed' });
+    return;
+  }
+
+  if (req.method === 'GET' && url.pathname === '/api/skills') {
+    sendJson(200, {
+      skills: [
+        {
+          name: 'cinematic-video',
+          label: 'Cinematic Video',
+          builtIn: true,
+          description: 'Produce an authored cinematic short.',
+          studioRunRecipe: 'cinematic-video',
+          studioRunProfile: 'generated-or-hybrid',
+          sourceMediaRequired: false,
+        },
+        {
+          name: 'source-video-studio',
+          label: 'Source Video Studio',
+          builtIn: true,
+          description: 'Edit real uploaded footage.',
+          studioRunRecipe: 'source-video-studio',
+          studioRunProfile: 'source-led',
+          sourceMediaRequired: true,
+        },
+      ],
+    });
     return;
   }
 
@@ -92,6 +169,27 @@ const server = http.createServer(async (req, res) => {
     return;
   }
 
+  if (req.method === 'POST' && url.pathname === '/api/agent') {
+    res.writeHead(200, {
+      'Content-Type': 'text/event-stream',
+      'X-Agent-Run-Id': 'run_stream_mock_1',
+    });
+    res.end('data: {"type":"done"}\n\n');
+    return;
+  }
+
+  if (req.method === 'POST' && url.pathname === '/api/mcp') {
+    assert.equal(req.headers.authorization, 'Bearer mk_test_smoke');
+    sendJson(200, {
+      jsonrpc: '2.0',
+      id: body?.id ?? 1,
+      result: {
+        content: [{ type: 'text', text: 'Video rendering task created.\n\nTask ID: task-unified-text-smoke' }],
+      },
+    });
+    return;
+  }
+
   if (req.method === 'GET' && url.pathname === '/api/agent/run/run_mock_1') {
     sendJson(200, {
       id: 'run_mock_1',
@@ -100,6 +198,43 @@ const server = http.createServer(async (req, res) => {
       incomplete: false,
       output: [{ id: 'out_1', type: 'image', url: 'https://cdn.example/image.png' }],
       result: { images: [{ imageUrl: 'https://cdn.example/image.png' }] },
+    });
+    return;
+  }
+
+  if (req.method === 'GET' && url.pathname === '/api/agent/run/run_studio_1') {
+    sendJson(200, {
+      id: 'run_studio_1',
+      project_id: 'project-auto-1',
+      status: 'completed',
+      incomplete: false,
+      output: [{
+        id: 'out_studio_1',
+        type: 'studio_run',
+        status: 'awaiting_approval',
+        run_id: 'studio_1',
+        recipe: 'cinematic-video',
+        current_stage: 'proposal',
+      }],
+      result: {},
+    });
+    return;
+  }
+
+  if (req.method === 'GET' && url.pathname === '/api/agent/run/run_legacy_video') {
+    sendJson(200, {
+      id: 'run_legacy_video',
+      project_id: 'project-auto-1',
+      status: 'completed',
+      incomplete: false,
+      output: [],
+      result: {
+        videos: [{
+          taskId: 'studio-delivery-run_legacy_video',
+          status: 'completed',
+          videoUrl: 'https://cdn.example/legacy-delivery.mp4',
+        }],
+      },
     });
     return;
   }
@@ -314,23 +449,24 @@ try {
 
   for (const [helpArgs, expectedText] of [
     [[], /Makaron CLI/],
-    [['--help'], /Makaron CLI/],
+    [['--help'], /Chat chooses agent, image, and video models automatically/],
     [['login', '--help'], /Usage: makaron login/],
     [['create', '--help'], /Usage: makaron create/],
-    [['chat', '--help'], /--skill <id\|label\|name>/],
+    [['chat', '--help'], /Model routing is automatic in chat/],
     [['responses', '--help'], /Responses commands:/],
     [['responses', 'get', '--help'], /Usage: makaron responses get/],
     [['responses', 'watch', '--help'], /Usage: makaron responses watch/],
     [['responses', 'list', '--help'], /Usage: makaron responses list/],
     [['materialize', '--help'], /Usage: makaron materialize/],
     [['composition', '--help'], /Composition commands:/],
+    [['credits', '--help'], /Usage: makaron credits/],
     [['list', '--help'], /Usage: makaron list/],
     [['setup', '--help'], /Usage: makaron setup/],
     [['install-skill', '--help'], /Usage: makaron install-skill/],
     [['project', '--help'], /Project commands:/],
     [['project', 'media', '--help'], /Usage: makaron project media/],
     [['abort', '--help'], /Usage: makaron abort/],
-    [['skills', '--help'], /Skill marketplace commands:/],
+    [['skills', '--help'], /Skill commands:/],
     [['skills', 'list', '--help'], /Usage: makaron skills list/],
     [['skills', 'search', '--help'], /Usage: makaron skills search/],
     [['skills', 'show', '--help'], /Usage: makaron skills show/],
@@ -346,6 +482,7 @@ try {
     [['music', 'status', '--help'], /Usage: makaron music status/],
     [['admin', '--help'], /Admin commands:/],
     [['admin', 'skills', '--help'], /Usage: makaron admin skills/],
+    [['admin', 'skill-categories', '--help'], /Usage: makaron admin skill-categories/],
     [['admin', 'upload', '--help'], /Usage: makaron admin upload/],
     [['admin', 'fetch-skill', '--help'], /Usage: makaron admin fetch-skill/],
     [['admin', 'set-admin', '--help'], /Usage: makaron admin set-admin/],
@@ -354,6 +491,59 @@ try {
     [['claim', '--help'], /Usage: makaron claim/],
   ]) {
     await expectHelp(helpArgs, expectedText);
+  }
+
+  {
+    const result = await expectHelp(['skills', '--help'], /Skill commands:/);
+    assert.doesNotMatch(result.stdout, /--openmontage/);
+  }
+
+  {
+    const result = await expectHelp(['--help'], /Chat chooses agent, image, and video models automatically/);
+    assert.doesNotMatch(result.stdout, /--agent-model/);
+    assert.doesNotMatch(result.stdout, /--image-model/);
+    assert.doesNotMatch(result.stdout, /--video-model/);
+    assert.doesNotMatch(result.stdout, /MAKARON_AGENT_MODEL/);
+  }
+
+  {
+    const result = await expectHelp(['chat', '--help'], /Model routing is automatic in chat/);
+    assert.doesNotMatch(result.stdout, /^\s+--agent-model/m);
+    assert.doesNotMatch(result.stdout, /^\s+--image-model/m);
+    assert.doesNotMatch(result.stdout, /^\s+--video-model/m);
+    assert.match(result.stdout, /Do not pass --agent-model, --image-model,/);
+  }
+
+  {
+    const result = await expectHelp(['edit', '--help'], /--image-model/);
+    assert.match(result.stdout, /--image-model/);
+    const videoResult = await expectHelp(['video', 'create', '--help'], /--video-model/);
+    assert.match(videoResult.stdout, /--video-model/);
+  }
+
+  {
+    const result = await expectSuccess(['credits', '--json']);
+    assert.deepEqual(JSON.parse(result.stdout), {
+      balance: 321,
+      lifetimePurchased: 500,
+      lifetimeUsed: 179,
+      subscription: {
+        provider: 'stripe',
+        planId: 'pro',
+        status: 'active',
+        billingInterval: 'month',
+        currentPeriodEnd: '2026-08-19T00:00:00.000Z',
+        cancelAtPeriodEnd: false,
+      },
+    });
+  }
+
+  {
+    const result = await expectSuccess(['credits']);
+    assert.match(result.stdout, /^Credits: 321$/m);
+    assert.match(result.stdout, /^Lifetime purchased: 500$/m);
+    assert.match(result.stdout, /^Lifetime used: 179$/m);
+    assert.match(result.stdout, /^Subscription: pro \(active\)$/m);
   }
 
   {
@@ -370,6 +560,32 @@ try {
     const runRequest = requests.find(req => req.pathname === '/api/agent/run');
     assert.equal(runRequest?.body?.projectId, 'project-auto-1');
     assert.equal(runRequest?.body?.prompt, 'make a compact image');
+    assert.equal(runRequest?.body?.agentModel, undefined);
+    assert.equal(runRequest?.body?.preferredModel, undefined);
+    assert.equal(runRequest?.body?.videoModel, undefined);
+  }
+
+  for (const args of [
+    ['--agent-model', 'deepseek-v4-pro'],
+    ['--image-model', 'qwen'],
+    ['--video-model', 'seedance pro'],
+    ['--video-model=seedance-pro'],
+    ['--model', 'qwen'],
+  ]) {
+    const requestCount = requests.length;
+    const result = await expectFailure(['chat', '--project', 'project-models-1', ...args, 'must fail fast']);
+    assert.match(result.stderr, /chat chooses agent, image, and video models automatically/);
+    assert.match(result.stderr, new RegExp(`Remove ${args[0].split('=')[0]}`));
+    assert.equal(requests.length, requestCount, `${args[0]} should fail before making HTTP requests`);
+  }
+
+  {
+    await expectSuccess(['chat', '--project', 'project-stream-1', '--stream', '--video-resolution', '720p', 'stream with automatic routing']);
+    const streamRequest = requests.filter(req => req.pathname === '/api/agent').at(-1);
+    assert.equal(streamRequest?.body?.videoResolution, '720p');
+    assert.equal(streamRequest?.body?.agentModel, undefined);
+    assert.equal(streamRequest?.body?.preferredModel, undefined);
+    assert.equal(streamRequest?.body?.videoModel, undefined);
   }
 
   {
@@ -397,6 +613,16 @@ try {
   }
 
   {
+    const result = await expectSuccess(['video', 'create', '--script', 'A neon one-person studio wakes at dawn', '--duration', '5', '--video-model', 'seedance-fast']);
+    assert.match(result.stdout, /Task ID: task-unified-text-smoke/);
+    const mcpRequest = requests.filter(req => req.pathname === '/api/mcp').at(-1);
+    assert.equal(mcpRequest?.body?.params?.name, 'makaron_create_video');
+    assert.deepEqual(mcpRequest?.body?.params?.arguments?.images, []);
+    assert.equal(mcpRequest?.body?.params?.arguments?.videoModel, 'seedance-fast');
+    assert.equal(mcpRequest?.body?.params?.arguments?.duration, 5);
+  }
+
+  {
     const result = await expectSuccess(['skills', 'list', '--json'], { apiKey: false });
     const data = JSON.parse(result.stdout);
     assert.equal(data.skills.length, 2);
@@ -420,6 +646,47 @@ try {
   }
 
   {
+    const result = await expectSuccess(['skills', 'search', '夜景のきらめくポートレート', '--json'], { apiKey: false });
+    const data = JSON.parse(result.stdout);
+    assert.equal(data.skills[0].id, 'skill_market_1');
+  }
+
+  {
+    const result = await expectSuccess(['skills', 'search', 'portrait-effects', '--json'], { apiKey: false });
+    const data = JSON.parse(result.stdout);
+    assert.equal(data.skills[0].id, 'skill_market_1');
+  }
+
+  {
+    const result = await expectSuccess(['admin', 'skills']);
+    assert.match(result.stdout, /portrait-effects/);
+    assert.match(result.stdout, /title 4\/4 · prompt 4\/4/);
+  }
+
+  {
+    const result = await expectSuccess(['admin', 'skills', '--json']);
+    const data = JSON.parse(result.stdout);
+    assert.equal(data[0].prompts.ja, '夜景のきらめくポートレート');
+  }
+
+  {
+    const result = await expectSuccess(['admin', 'skill-categories']);
+    assert.match(result.stdout, /portrait-effects/);
+    assert.match(result.stdout, /title 4\/4/);
+  }
+
+  {
+    const category = { id: 'tools', labels: { en: 'Tools', zh: '工具', 'zh-Hant': '工具', ja: 'ツール' } };
+    await expectSuccess(['admin', 'skill-categories', 'add', JSON.stringify(category)]);
+    await expectSuccess(['admin', 'skill-categories', 'update', 'tools', JSON.stringify({ icon: '🛠️' })]);
+    await expectSuccess(['admin', 'skill-categories', 'delete', 'tools']);
+    const categoryRequests = requests.filter(req => req.pathname === '/api/admin/skill-categories');
+    assert.equal(categoryRequests.at(-3)?.body?.labels?.ja, 'ツール');
+    assert.equal(categoryRequests.at(-2)?.body?.id, 'tools');
+    assert.deepEqual(categoryRequests.at(-1)?.body, { id: 'tools' });
+  }
+
+  {
     const result = await expectSuccess(['skills', 'show', 'Diamond Bling', '--json'], { apiKey: false });
     const data = JSON.parse(result.stdout);
     assert.equal(data.id, 'skill_market_1');
@@ -432,6 +699,20 @@ try {
     assert.equal(data.success, true);
     assert.equal(data.skillName, 'diamond-bling');
     assert.equal(data.marketplaceId, 'skill_market_1');
+  }
+
+  {
+    const result = await expectSuccess(['skills', 'list', '--built-in', '--json']);
+    const data = JSON.parse(result.stdout);
+    assert.equal(data.skills.length, 2);
+    assert.equal(data.skills[0].studioRunRecipe, 'cinematic-video');
+  }
+
+  {
+    const result = await expectSuccess(['skills', 'show', 'source-video-studio', '--built-in', '--json']);
+    const data = JSON.parse(result.stdout);
+    assert.equal(data.sourceMediaRequired, true);
+    assert.equal(data.studioRunProfile, 'source-led');
   }
 
   {
@@ -454,6 +735,28 @@ try {
   {
     const result = await expectSuccess(['responses', 'get', 'run_mock_1', '--pick', 'project_url']);
     assert.equal(result.stdout.trim(), 'https://app.example/projects/project-auto-1');
+  }
+
+  {
+    const result = await expectSuccess(['responses', 'get', 'run_studio_1', '--pick', 'studio_recipe']);
+    assert.equal(result.stdout.trim(), 'cinematic-video');
+  }
+
+  {
+    const result = await expectSuccess(['responses', 'get', 'run_studio_1', '--pick', 'studio_run']);
+    const studioRun = JSON.parse(result.stdout);
+    assert.equal(studioRun.current_stage, 'proposal');
+    assert.equal(studioRun.status, 'awaiting_approval');
+  }
+
+  {
+    const result = await expectSuccess(['responses', 'get', 'run_legacy_video', '--pick', 'first_video_url']);
+    assert.equal(result.stdout.trim(), 'https://cdn.example/legacy-delivery.mp4');
+  }
+
+  {
+    const result = await expectSuccess(['responses', 'get', 'run_legacy_video', '--pick', 'video_urls']);
+    assert.deepEqual(JSON.parse(result.stdout), ['https://cdn.example/legacy-delivery.mp4']);
   }
 
   {

@@ -11,6 +11,7 @@ export type { ModelId, GenerateImageRequest, GenerateImageResult } from './model
 function getFallbacks(model: ModelId): ModelId[] {
   switch (model) {
     case 'gemini': return ['qwen'];
+    case 'gemini-lite': return ['gemini', 'qwen'];
     case 'qwen':   return ['gemini'];
     case 'pony':   return ['wai', 'gemini'];
     case 'wai':    return ['pony', 'gemini'];

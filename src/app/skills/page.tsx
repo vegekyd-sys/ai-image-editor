@@ -21,7 +21,7 @@ interface SkillsPayload {
 
 export default function SkillsPage() {
   const router = useRouter();
-  const { locale } = useLocale();
+  const { t } = useLocale();
   const [cachedSkills] = useState<SkillsPayload | null>(() => readNativeJSONCache<SkillsPayload>('/api/skills'));
   const [skills, setSkills] = useState<SkillItem[]>(() => cachedSkills?.skills || []);
   const [loading, setLoading] = useState(() => !cachedSkills);
@@ -54,7 +54,7 @@ export default function SkillsPage() {
       });
       const data = await res.json();
       if (!res.ok) {
-        setShareToast(data.error || 'Failed to create share link');
+        setShareToast(data.error || t('skills.shareError'));
         setTimeout(() => setShareToast(null), 3000);
         return;
       }
@@ -62,7 +62,7 @@ export default function SkillsPage() {
       setShareUrl(data.url);
       setShareCopied(false);
     } catch {
-      setShareToast('Failed');
+      setShareToast(t('skills.failed'));
       setTimeout(() => setShareToast(null), 3000);
     } finally {
       setSharing(null);
@@ -119,7 +119,7 @@ export default function SkillsPage() {
           <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
             <polyline points="15 18 9 12 15 6" />
           </svg>
-          {locale === 'zh' ? '返回' : 'Back'}
+          {t('skills.back')}
         </button>
         <button
           onClick={() => fileInputRef.current?.click()}
@@ -133,7 +133,7 @@ export default function SkillsPage() {
           onMouseEnter={e => (e.currentTarget.style.background = 'rgba(255,255,255,0.1)')}
           onMouseLeave={e => (e.currentTarget.style.background = 'rgba(255,255,255,0.06)')}
         >
-          {uploading ? (locale === 'zh' ? '上传中...' : 'Uploading...') : '+ Skill'}
+          {uploading ? t('skills.uploading') : t('skills.add')}
         </button>
         <input
           ref={fileInputRef}
@@ -154,14 +154,14 @@ export default function SkillsPage() {
       </h1>
 
       {loading && (
-        <p style={{ color: 'rgba(255,255,255,0.4)', fontSize: 14 }}>Loading...</p>
+        <p style={{ color: 'rgba(255,255,255,0.4)', fontSize: 14 }}>{t('skills.loading')}</p>
       )}
 
       {/* User Skills */}
       {userSkills.length > 0 && (
         <div style={{ marginBottom: 32 }}>
           <h2 style={{ fontSize: 13, fontWeight: 600, color: 'rgba(255,255,255,0.4)', textTransform: 'uppercase', letterSpacing: '0.08em', margin: '0 0 12px' }}>
-            {locale === 'zh' ? '我的 Skills' : 'My Skills'}
+            {t('skills.my')}
           </h2>
           <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
             {userSkills.map(skill => (
@@ -181,7 +181,7 @@ export default function SkillsPage() {
       {builtInSkills.length > 0 && (
         <div>
           <h2 style={{ fontSize: 13, fontWeight: 600, color: 'rgba(255,255,255,0.4)', textTransform: 'uppercase', letterSpacing: '0.08em', margin: '0 0 12px' }}>
-            {locale === 'zh' ? '内置 Skills' : 'Built-in'}
+            {t('skills.builtIn')}
           </h2>
           <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
             {builtInSkills.map(skill => (
@@ -193,7 +193,7 @@ export default function SkillsPage() {
 
       {!loading && skills.length === 0 && (
         <p style={{ color: 'rgba(255,255,255,0.35)', fontSize: 14, textAlign: 'center', marginTop: 60 }}>
-          {locale === 'zh' ? '还没有任何 Skill' : 'No skills yet'}
+          {t('skills.empty')}
         </p>
       )}
 
@@ -217,12 +217,10 @@ export default function SkillsPage() {
             onClick={e => e.stopPropagation()}
           >
             <h3 style={{ color: '#fff', fontSize: 18, fontWeight: 700, margin: '0 0 8px' }}>
-              {locale === 'zh' ? '分享 Skill' : 'Share Skill'}
+              {t('skills.share')}
             </h3>
             <p style={{ color: 'rgba(255,255,255,0.45)', fontSize: 13, margin: '0 0 20px', lineHeight: 1.5 }}>
-              {locale === 'zh'
-                ? '把这个链接发给朋友，他们就可以把这个 Skill 添加到自己的账号。'
-                : 'Send this link to a friend — they can add this Skill to their account.'}
+              {t('skills.shareDescription')}
             </p>
             <div style={{
               display: 'flex', gap: 8, alignItems: 'center',
@@ -255,7 +253,7 @@ export default function SkillsPage() {
                   transition: 'all 0.2s',
                 }}
               >
-                {shareCopied ? (locale === 'zh' ? '已复制' : 'Copied!') : (locale === 'zh' ? '复制' : 'Copy')}
+                {shareCopied ? t('skills.copied') : t('skills.copy')}
               </button>
             </div>
             <button
@@ -269,7 +267,7 @@ export default function SkillsPage() {
               onMouseEnter={e => (e.currentTarget.style.background = 'rgba(255,255,255,0.04)')}
               onMouseLeave={e => (e.currentTarget.style.background = 'none')}
             >
-              {locale === 'zh' ? '关闭' : 'Done'}
+              {t('skills.done')}
             </button>
           </div>
         </div>
@@ -297,6 +295,7 @@ function SkillRow({ skill, onShare, onDelete, sharing }: {
   onDelete?: () => void;
   sharing?: boolean;
 }) {
+  const { t } = useLocale();
   return (
     <div style={{
       display: 'flex', alignItems: 'center', gap: 12,
@@ -342,7 +341,7 @@ function SkillRow({ skill, onShare, onDelete, sharing }: {
           }}
           onMouseEnter={e => (e.currentTarget.style.color = 'rgba(255,255,255,0.7)')}
           onMouseLeave={e => (e.currentTarget.style.color = 'rgba(255,255,255,0.35)')}
-          title="Share"
+          title={t('skills.share')}
         >
           {sharing ? (
             <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" style={{ animation: 'spin 0.8s linear infinite' }}>
@@ -367,7 +366,7 @@ function SkillRow({ skill, onShare, onDelete, sharing }: {
           }}
           onMouseEnter={e => (e.currentTarget.style.color = 'rgba(239,68,68,0.7)')}
           onMouseLeave={e => (e.currentTarget.style.color = 'rgba(255,255,255,0.25)')}
-          title="Delete"
+          title={t('project.delete')}
         >
           <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
             <polyline points="3 6 5 6 21 6" />

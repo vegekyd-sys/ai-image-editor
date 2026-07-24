@@ -3,6 +3,7 @@ import { WebStandardStreamableHTTPServerTransport } from '@modelcontextprotocol/
 import { validateApiKey } from '@/lib/billing/api-keys';
 import { checkBalance, deductCredits, deductByTokens } from '@/lib/billing/credits';
 import { resolveToolName } from '@/lib/billing/pricing';
+import { deductSeedAudioCredits } from '@/lib/billing/seed-audio';
 import { estimateVideoCredits, normalizeVideoModelId } from '@/lib/video-model-capabilities';
 
 export const maxDuration = 180;
@@ -77,6 +78,14 @@ async function handleMcp(req: Request): Promise<Response> {
         }) ?? Math.ceil(meta.videoDurationSec * 22);
         const { deductFixedCredits } = await import('@/lib/billing/credits');
         await deductFixedCredits(auth.userId!, videoCredits, toolName, videoModel, durationMs, auth.keyId);
+      } else if (meta?.seedAudioDurationSec || meta?.seedAudioProviderCredits) {
+        await deductSeedAudioCredits(auth.userId!, {
+          durationSeconds: meta.seedAudioDurationSec,
+          providerCreditsUsed: meta.seedAudioProviderCredits,
+          model,
+          generationSeconds: meta.seedAudioGenerationSec ?? (durationMs ? durationMs / 1000 : undefined),
+          apiKeyId: auth.keyId,
+        });
       } else {
         // Per-action billing — ComfyUI, Suno etc.
         await deductCredits(auth.userId!, auth.keyId!, toolName, model, durationMs);

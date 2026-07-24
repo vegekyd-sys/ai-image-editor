@@ -1,4 +1,6 @@
 import type { AgentStreamEvent } from './agent';
+import type { AgentModelPreference } from './agent-models';
+import type { SkillLaunchContext } from './skill-launch-context';
 
 export type { AgentStreamEvent };
 
@@ -25,8 +27,12 @@ export interface AgentStreamCallbacks {
   onRender?: (design: { code: string; width: number; height: number; props?: Record<string, unknown>; animation?: { fps: number; durationInSeconds: number; format?: string }; editables?: import('@/types').EditableField[]; snapshotId?: string; published?: boolean; previewUrl?: string }) => void;
   onDone?: () => void;
   onError?: (message: string) => void;
+  /** SSE/network ended while the server-side run may still be alive. */
+  onDisconnect?: (runId: string) => void;
   onInsufficientCredits?: (balance: number) => void;
 }
+
+type AgentRequestBody = Parameters<typeof streamAgent>[0];
 
 export async function streamAgent(
   body: {
@@ -40,9 +46,11 @@ export async function streamAgent(
     previewsReady?: boolean; readyTips?: object[];
     musicReady?: boolean; musicAudioUrl?: string;
     preferredModel?: string;
+    agentModel?: AgentModelPreference;
     videoModel?: string;
     videoResolution?: string;
     videoAuto?: boolean;
+    skillLaunchContext?: SkillLaunchContext;
     snapshotImages?: string[];
     currentSnapshotIndex?: number;
     isNsfw?: boolean;
@@ -50,9 +58,157 @@ export async function streamAgent(
     isDraft?: boolean;
     referenceImageCount?: number;
     uploadedVideoCount?: number;
+    turnMediaCount?: number;
+    audioAttachments?: Array<{ audioUrl: string; title?: string; duration?: number; trackIndex?: number }>;
+    durable?: boolean;
   },
   callbacks: AgentStreamCallbacks,
   signal?: AbortSignal,
+): Promise<void> {
+  const durableNormalRequest = body.durable === true
+    && !body.analysisOnly
+    && !body.tipReaction
+    && !body.tipsTeaser
+    && !body.nameProject
+    && !body.previewsReady
+    && !body.musicReady;
+  if (durableNormalRequest) return streamDurableAgent(body, callbacks, signal);
+  return streamAgentAttempt(body, callbacks, signal);
+}
+
+interface PersistedAgentEvent {
+  type: string;
+  data?: Record<string, any>;
+  seq: number;
+}
+
+function dispatchPersistedAgentEvent(event: PersistedAgentEvent, callbacks: AgentStreamCallbacks) {
+  const data = event.data || {};
+  switch (event.type) {
+    case 'status': callbacks.onStatus?.(String(data.text || '')); break;
+    case 'content': callbacks.onContent?.(String(data.text || '')); break;
+    case 'new_turn': callbacks.onNewTurn?.(data.messageId); break;
+    case 'tool_call': callbacks.onToolCall?.(String(data.tool || ''), data.input || {}, data.images); break;
+    case 'image': callbacks.onImage?.(data.imageUrl || '', data.usedModel, data.snapshotId, data.imageUrl); break;
+    case 'render':
+    case 'design': callbacks.onRender?.(data as Parameters<NonNullable<AgentStreamCallbacks['onRender']>>[0]); break;
+    case 'animation_task': callbacks.onAnimationTask?.(data.taskId, data.prompt || '', data.imageUrls, data.model); break;
+    case 'video_snapshot': callbacks.onVideoSnapshot?.(data.snapshotId, data.taskId, data.videoMeta); break;
+    case 'music_task': callbacks.onMusicTask?.(data.taskId); break;
+    case 'image_analyzed': callbacks.onImageAnalyzed?.(data.imageIndex); break;
+    case 'preview_frame_captured': callbacks.onPreviewFrame?.(data.workspaceUrl); break;
+    case 'nsfw_detected': callbacks.onNsfwDetected?.(); break;
+    case 'coding': callbacks.onCoding?.(); break;
+    case 'code_stream': callbacks.onCodeStream?.(data.text || '', Boolean(data.done)); break;
+  }
+}
+
+async function streamDurableAgent(
+  body: AgentRequestBody,
+  callbacks: AgentStreamCallbacks,
+  signal?: AbortSignal,
+): Promise<void> {
+  const response = await fetch('/api/agent/run', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      projectId: body.projectId,
+      prompt: body.prompt,
+      preferredModel: body.preferredModel,
+      agentModel: body.agentModel,
+      videoModel: body.videoModel,
+      videoResolution: body.videoResolution,
+      videoAuto: body.videoAuto,
+      skillLaunchContext: body.skillLaunchContext,
+      currentSnapshotIndex: body.currentSnapshotIndex,
+      hasAnnotation: body.hasAnnotation,
+      isDraft: body.isDraft,
+      referenceImageCount: body.referenceImageCount,
+      uploadedVideoCount: body.uploadedVideoCount,
+      turnMediaCount: body.turnMediaCount,
+      isNsfw: body.isNsfw,
+      audioAttachments: body.audioAttachments,
+      clientPersistedUserMessage: true,
+    }),
+    signal,
+  });
+  if (!response.ok) {
+    if (response.status === 402) {
+      const data = await response.json().catch(() => ({}));
+      callbacks.onInsufficientCredits?.(data.balance ?? 0);
+      return;
+    }
+    callbacks.onError?.(await response.text().catch(() => 'Failed to start Agent execution'));
+    return;
+  }
+  const started = await response.json() as { runId: string; firstMessageId?: string };
+  callbacks.onRunId?.(started.runId);
+  if (started.firstMessageId) callbacks.onMessageId?.(started.firstMessageId);
+
+  const abortRun = () => {
+    void fetch('/api/agent/abort', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ runId: started.runId }),
+    });
+  };
+  signal?.addEventListener('abort', abortRun, { once: true });
+
+  let lastSeq = -1;
+  let firstMessageSeen = false;
+  try {
+    while (!signal?.aborted) {
+      const params = new URLSearchParams({ events: 'true' });
+      if (lastSeq >= 0) params.set('after', String(lastSeq));
+      let runResponse: Response;
+      try {
+        runResponse = await fetch(`/api/agent/run/${started.runId}?${params.toString()}`, { signal });
+      } catch {
+        if (signal?.aborted) return;
+        await new Promise(resolve => setTimeout(resolve, 1200));
+        continue;
+      }
+      if (!runResponse.ok) {
+        await new Promise(resolve => setTimeout(resolve, 1200));
+        continue;
+      }
+      const run = await runResponse.json() as {
+        status: string;
+        agent_status?: string;
+        first_message_id?: string;
+        events?: PersistedAgentEvent[];
+        error?: { message?: string };
+        next_poll_after_ms?: number;
+      };
+      if (!firstMessageSeen && run.first_message_id) {
+        firstMessageSeen = true;
+        callbacks.onMessageId?.(run.first_message_id);
+      }
+      for (const event of run.events || []) {
+        if (event.seq <= lastSeq) continue;
+        lastSeq = event.seq;
+        dispatchPersistedAgentEvent(event, callbacks);
+      }
+      const agentStatus = run.agent_status || run.status;
+      if (agentStatus === 'completed') {
+        callbacks.onDone?.();
+        return;
+      }
+      if (agentStatus === 'failed' || agentStatus === 'aborted') {
+        callbacks.onError?.(run.error?.message || (agentStatus === 'aborted' ? 'Agent run aborted' : 'Agent run failed'));
+        return;
+      }
+      await new Promise(resolve => setTimeout(resolve, Math.min(run.next_poll_after_ms || 1200, 3000)));
+    }
+  } finally {
+    signal?.removeEventListener('abort', abortRun);
+  }
+}
+
+async function streamAgentAttempt(
+  body: AgentRequestBody,
+  callbacks: AgentStreamCallbacks,
+  signal: AbortSignal | undefined,
 ): Promise<void> {
   const res = await fetch('/api/agent', {
     method: 'POST',
@@ -179,6 +335,7 @@ export async function streamAgent(
 
   // Stream ended without done/error event (e.g. Vercel timeout, network cut)
   if (!receivedDone) {
-    callbacks.onError?.('连接中断，请重试');
+    if (agentRunId) callbacks.onDisconnect?.(agentRunId);
+    else callbacks.onError?.('连接中断，请重试');
   }
 }

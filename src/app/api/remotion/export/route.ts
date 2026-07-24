@@ -9,7 +9,7 @@ import {
   type RemotionRenderProfile,
 } from '@/lib/remotion-export'
 
-export const maxDuration = 800
+export const maxDuration = 1800
 
 function appUrl(req: NextRequest): string {
   return process.env.MAKARON_APP_URL || new URL(req.url).origin
@@ -33,6 +33,7 @@ export async function POST(req: NextRequest) {
     const renderProfile = (body.renderProfile || body.render_profile || 'fast_720p') as RemotionRenderProfile
     const publish = body.publish === true
     const publishSnapshotId = body.publishSnapshotId || body.publish_snapshot_id
+      || (publish && outputType === 'video' ? crypto.randomUUID() : undefined)
     const name = typeof body.name === 'string' ? body.name : undefined
 
     if (!projectId) {

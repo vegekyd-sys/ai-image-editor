@@ -3,6 +3,7 @@ import type { NextRequest } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
 import { getSupabaseAdmin } from '@/lib/supabase/service'
 import { readAttributionCookie, sendMetaCapiEvent } from '@/lib/marketing/meta-capi'
+import { getConfiguredWelcomeCredits } from '@/lib/billing/welcome-credits'
 
 /**
  * POST /api/auth/activate
@@ -42,12 +43,7 @@ export async function POST(req: NextRequest) {
     .single()
 
   if (!existingBalance) {
-    const { data: setting } = await admin
-      .from('app_settings')
-      .select('value')
-      .eq('key', 'welcome_credits')
-      .single()
-    credits = parseInt(setting?.value || '500')
+    credits = await getConfiguredWelcomeCredits(admin)
 
     if (credits > 0) {
       const { addCredits } = await import('@/lib/billing/credits')
@@ -64,14 +60,12 @@ export async function POST(req: NextRequest) {
   }
 
   const registrationEventId = `registration.${user.id}`
-  const startTrialEventId = `starttrial.${user.id}`
   const response = NextResponse.json({
     activated: true,
     isNew: true,
     credits,
     metaEvents: {
       CompleteRegistration: registrationEventId,
-      ...(credits > 0 ? { StartTrial: startTrialEventId } : {}),
     },
   })
   const attribution = readAttributionCookie(req.cookies.get('mkr_attribution')?.value)
@@ -90,17 +84,6 @@ export async function POST(req: NextRequest) {
     eventSourceUrl,
     customData: attribution,
   })
-  if (credits > 0) {
-    await sendMetaCapiEvent({
-      eventName: 'StartTrial',
-      eventId: startTrialEventId,
-      userId: user.id,
-      email: user.email,
-      request: req,
-      eventSourceUrl,
-      customData: { credits, ...attribution },
-    })
-  }
   response.cookies.set('mkr_activated', '1', {
     path: '/',
     maxAge: 365 * 24 * 60 * 60,

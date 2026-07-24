@@ -8,9 +8,22 @@ import { Snapshot, Message, Tip, PhotoMetadata, ProjectAnimation } from '@/types
 import Editor from '@/components/Editor'
 import { createClient } from '@/lib/supabase/client'
 import { createProject } from '@/lib/createProject'
-import { getCachedImages, getCachedProjectData, cacheProjectData, getCachedProjectDataSync } from '@/lib/imageCache'
+import {
+  cacheProjectData,
+  clearPendingProjectLaunch,
+  clearPendingProjectImages,
+  getCachedImages,
+  getCachedProjectData,
+  getCachedProjectDataSync,
+  getPendingProjectImages,
+  getPendingProjectImagesSync,
+  getPendingProjectLaunchSync,
+  hasPendingProjectImages,
+} from '@/lib/imageCache'
 import { buildVideoFailureActions, serializeCompletionActions } from '@/lib/artifact-actions'
 import { dedupeVideoSnapshots } from '@/lib/video-snapshot-dedupe'
+import { isCompletedGeneratedVideoSnapshot, isFailedGeneratedVideoSnapshot } from '@/lib/video-snapshot-kind'
+import { useLocale } from '@/lib/i18n'
 
 interface ProjectEditorContainerProps {
   projectId: string
@@ -21,6 +34,102 @@ interface ProjectEditorContainerProps {
   disableAgentLiveReload?: boolean
   disableBodyScrollLock?: boolean
   isInlineActive?: boolean
+}
+
+function dedupeMessagesById(messages: Message[]): Message[] {
+  const byId = new Map<string, Message>()
+  for (const message of messages) {
+    const existing = byId.get(message.id)
+    if (!existing || (!existing.content && message.content)) {
+      byId.set(message.id, message)
+    }
+  }
+  return Array.from(byId.values()).sort((a, b) => (a.timestamp || 0) - (b.timestamp || 0))
+}
+
+export function EditorLoadingShell() {
+  return (
+    <div className="makaron-editor-shell h-dvh w-full bg-black text-white relative overflow-hidden">
+      <style>{`
+        @keyframes makaron-editor-loading-shimmer {
+          0% { background-position: 180% 0; }
+          100% { background-position: -80% 0; }
+        }
+        .makaron-editor-loading-shimmer {
+          background: linear-gradient(105deg, rgba(255,255,255,0.035) 0%, rgba(255,255,255,0.055) 38%, rgba(255,255,255,0.14) 50%, rgba(255,255,255,0.055) 62%, rgba(255,255,255,0.035) 100%);
+          background-size: 260% 100%;
+          animation: makaron-editor-loading-shimmer 1.65s ease-in-out infinite;
+        }
+      `}</style>
+      <div className="absolute inset-x-0 top-0 bottom-[164px] bg-black">
+        <div className="absolute inset-0 makaron-editor-loading-shimmer opacity-70" />
+        <div className="absolute inset-0 bg-gradient-to-b from-black/12 via-transparent to-black/18" />
+      </div>
+      <div className="makaron-editor-topbar absolute top-0 left-0 right-0 z-10 flex items-center justify-between px-4 py-3 bg-gradient-to-b from-black/60 to-transparent">
+        <div className="flex items-center gap-1">
+          <div className="p-2 text-white/70">
+            <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+              <path d="M19 12H5M12 19l-7-7 7-7" />
+            </svg>
+          </div>
+          <div className="p-2 text-white/55">
+            <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+              <path d="M12 5v14M5 12h14" />
+            </svg>
+          </div>
+          <div className="p-2 text-white/45">
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+              <path d="m9.06 11.9 8.07-8.06a2.85 2.85 0 1 1 4.03 4.03l-8.06 8.08" />
+              <path d="M7.07 14.94c-1.66 0-3 1.35-3 3.02 0 1.33-2.5 1.52-2 2.02 1.08 1.1 2.49 2.02 4 2.02 2.2 0 4-1.8 4-4.04a3.01 3.01 0 0 0-3-3.02z" />
+            </svg>
+          </div>
+          <div className="p-2 text-white/40">
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+              <path d="M15 16H9a2 2 0 0 1-2-2V9a2 2 0 0 1 2-2h6a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2z" />
+              <circle cx="12" cy="11.5" r="1.5" />
+              <path d="M20 8a8.5 8.5 0 0 0-3-3.5" />
+              <path d="M20 8l-2.5-.5L18 10" />
+            </svg>
+          </div>
+        </div>
+        <div className="flex items-center gap-2">
+          <div className="h-8 w-8 rounded-full makaron-editor-loading-shimmer opacity-65" />
+          <div className="h-8 w-16 rounded-full makaron-editor-loading-shimmer opacity-80" />
+        </div>
+      </div>
+      <div className="makaron-editor-bottom-bar absolute left-0 right-0 bottom-0 z-10 flex-shrink-0 bg-gradient-to-t from-black from-70% via-black/95 to-transparent">
+        <div className="flex items-center gap-3 px-4 py-2 min-h-[44px]">
+          <div className="w-1.5 h-1.5 rounded-full bg-fuchsia-400/80 flex-shrink-0" />
+          <div className="flex-1 flex flex-col gap-1.5">
+            <div className="h-3 w-[54%] rounded-full makaron-editor-loading-shimmer opacity-70" />
+          </div>
+          <div className="h-8 w-16 rounded-full makaron-editor-loading-shimmer opacity-65" />
+        </div>
+        <div className="flex items-end gap-2 px-3 pt-2 pb-1.5 overflow-hidden min-h-[78px]">
+          {[0, 1, 2].map((i) => (
+            <div
+              key={i}
+              className="w-[200px] flex-shrink-0 overflow-hidden rounded-2xl border border-white/10 bg-white/[0.035]"
+            >
+              <div className="flex">
+                <div className="h-[72px] w-[72px] flex-shrink-0 makaron-editor-loading-shimmer opacity-75" />
+                <div className="flex-1 px-2.5 py-2 flex flex-col justify-center gap-2">
+                  <div className="h-3.5 w-[72%] rounded-full makaron-editor-loading-shimmer opacity-75" />
+                  <div className="h-2.5 w-[94%] rounded-full makaron-editor-loading-shimmer opacity-55" />
+                  <div className="h-2.5 w-[58%] rounded-full makaron-editor-loading-shimmer opacity-45" />
+                </div>
+              </div>
+            </div>
+          ))}
+        </div>
+        <div className="flex items-center justify-center gap-10 h-[34px] text-white/35">
+          <div className="h-3 w-16 rounded-full makaron-editor-loading-shimmer opacity-75" />
+          <div className="h-3 w-14 rounded-full makaron-editor-loading-shimmer opacity-45" />
+          <div className="h-3 w-12 rounded-full makaron-editor-loading-shimmer opacity-35" />
+        </div>
+      </div>
+    </div>
+  )
 }
 
 export default function ProjectEditorContainer({
@@ -34,6 +143,7 @@ export default function ProjectEditorContainer({
   isInlineActive = true,
 }: ProjectEditorContainerProps) {
   const { user, loading: authLoading } = useAuth()
+  const { locale, t } = useLocale()
   const router = useRouter()
   const navigatingRef = useRef(false)
   const leaveEditor = useCallback((path: '/projects' | '/login') => {
@@ -50,13 +160,18 @@ export default function ProjectEditorContainer({
   const [projectOwnerId, setProjectOwnerId] = useState<string | null>(null)
   const [isPublicProject, setIsPublicProject] = useState<boolean | null>(null)
 
+  useEffect(() => {
+    setProjectOwnerId(null)
+    setIsPublicProject(null)
+  }, [projectId])
+
   const [initialSnapshots, setInitialSnapshots] = useState<Snapshot[] | null>(() => {
     const sync = getCachedProjectDataSync(projectId)
     return sync ? dedupeVideoSnapshots(sync.snapshots as Snapshot[]) : null
   })
   const [initialMessages, setInitialMessages] = useState<Message[] | null>(() => {
     const sync = getCachedProjectDataSync(projectId)
-    return sync ? sync.messages as Message[] : null
+    return sync ? dedupeMessagesById(sync.messages as Message[]) : null
   })
   const [initialTitle, setInitialTitle] = useState<string>(() => {
     const sync = getCachedProjectDataSync(projectId)
@@ -65,47 +180,67 @@ export default function ProjectEditorContainer({
   const [initialAnimations, setInitialAnimations] = useState<ProjectAnimation[]>([])
   const [timelineVersion, setTimelineVersion] = useState(2)
   const [initialMusicTaskId, setInitialMusicTaskId] = useState<string | null>(null)
-  const [pendingImages] = useState<string[] | null>(() => {
-    if (typeof window === 'undefined') return null
+  const [pendingImageState, setPendingImageState] = useState<{ images: string[] | null; loading: boolean }>(() => {
+    if (typeof window === 'undefined') return { images: null, loading: false }
     const multi = sessionStorage.getItem('pendingImages')
     if (multi) {
       sessionStorage.removeItem('pendingImages')
-      try { return JSON.parse(multi) as string[] } catch { return null }
+      try { return { images: JSON.parse(multi) as string[], loading: false } } catch { return { images: null, loading: false } }
     }
     const single = sessionStorage.getItem('pendingImage')
     if (single) {
       sessionStorage.removeItem('pendingImage')
-      return [single]
+      return { images: [single], loading: false }
     }
-    return null
+    const cached = getPendingProjectImagesSync(projectId)
+    if (cached) {
+      clearPendingProjectImages(projectId)
+      return { images: cached, loading: false }
+    }
+    return { images: null, loading: hasPendingProjectImages(projectId) }
   })
+  const pendingImages = pendingImageState.images
+  const [pendingLaunch] = useState(() => getPendingProjectLaunchSync(projectId))
   const [pendingMetadata] = useState<PhotoMetadata | undefined>(() => {
     if (typeof window === 'undefined') return undefined
+    if (pendingLaunch?.metadata) return pendingLaunch.metadata as PhotoMetadata
     const raw = sessionStorage.getItem('pendingMetadata')
     if (raw) { sessionStorage.removeItem('pendingMetadata'); try { return JSON.parse(raw) } catch { return undefined } }
     return undefined
   })
   const [pendingPrompt] = useState<string | null>(() => {
     if (typeof window === 'undefined') return null
+    if (pendingLaunch?.prompt) return pendingLaunch.prompt
     const p = sessionStorage.getItem('pendingPrompt')
     if (p) sessionStorage.removeItem('pendingPrompt')
     return p
   })
   const [pendingSkill] = useState<string | null>(() => {
     if (typeof window === 'undefined') return null
+    if (pendingLaunch?.skill) return pendingLaunch.skill
     const s = sessionStorage.getItem('pendingSkill')
     if (s) sessionStorage.removeItem('pendingSkill')
     return s
   })
+  const pendingSkillLaunchContext = pendingLaunch?.skillLaunchContext
   const [pendingVideos] = useState<Array<{ videoUrl: string; duration: number; width: number; height: number }> | null>(() => {
     if (typeof window === 'undefined') return null
     const raw = sessionStorage.getItem('pendingVideos')
     if (raw) { sessionStorage.removeItem('pendingVideos'); try { return JSON.parse(raw) } catch { return null } }
     return null
   })
-  const isNewProject = !!(pendingImages || pendingPrompt || pendingVideos)
+  const isNewProject = !!(pendingImages || pendingImageState.loading || pendingPrompt || pendingVideos)
+
+  useEffect(() => {
+    if (!pendingLaunch) return
+    clearPendingProjectLaunch(projectId)
+    sessionStorage.removeItem('pendingPrompt')
+    sessionStorage.removeItem('pendingSkill')
+    sessionStorage.removeItem('pendingMetadata')
+  }, [pendingLaunch, projectId])
   const [loaded, setLoaded] = useState(() => {
     if (typeof window === 'undefined') return false
+    if (pendingImageState.loading) return false
     if (isNewProject) return true
     const sync = getCachedProjectDataSync(projectId)
     return sync !== null && (sync.snapshots as Snapshot[]).length > 0
@@ -113,15 +248,37 @@ export default function ProjectEditorContainer({
   const shownRef = useRef(loaded)
 
   useEffect(() => {
+    if (!pendingImageState.loading) return
+    let cancelled = false
+    getPendingProjectImages(projectId).then((images) => {
+      if (cancelled) return
+      clearPendingProjectImages(projectId)
+      setPendingImageState({ images: images ?? [], loading: false })
+      shownRef.current = true
+      setLoaded(true)
+    })
+    return () => { cancelled = true }
+  }, [pendingImageState.loading, projectId])
+
+  useEffect(() => {
     if (!isInlineActive) return
     if (authLoading) return
+    if (isNewProject && user) {
+      setProjectOwnerId(user.id)
+      setIsPublicProject(false)
+      return
+    }
     const supabase = createClient()
     supabase
       .from('projects')
       .select('user_id, is_public')
       .eq('id', projectId)
-      .single()
-      .then(({ data }) => {
+      .maybeSingle()
+      .then(({ data, error }) => {
+        if (error) {
+          console.warn('Failed to verify project access:', error)
+          return
+        }
         if (data) {
           setProjectOwnerId(data.user_id)
           setIsPublicProject(data.is_public)
@@ -132,11 +289,12 @@ export default function ProjectEditorContainer({
           leaveEditor('/projects')
         }
       })
-  }, [projectId, authLoading, user, leaveEditor, isInlineActive])
+  }, [projectId, authLoading, user, leaveEditor, isInlineActive, isNewProject])
 
   useEffect(() => {
     if (!isInlineActive) return
     if (authLoading || isPublicProject === null) return
+    if (!isPublicProject && projectOwnerId === null) return
     if (!isPublicProject && (!user || user.id !== projectOwnerId)) {
       if (!user) sessionStorage.setItem('mkr_return_url', `/projects/${projectId}`)
       leaveEditor(user ? '/projects' : '/login')
@@ -170,7 +328,7 @@ export default function ProjectEditorContainer({
 
   useEffect(() => {
     if (!isInlineActive) return
-    if (pendingImages || shownRef.current) return
+    if (isNewProject || shownRef.current) return
     let cancelled = false
     getCachedProjectData(projectId).then(async (cached) => {
       if (!cached || cancelled || shownRef.current) return
@@ -179,13 +337,13 @@ export default function ProjectEditorContainer({
       if (cancelled || shownRef.current) return
       shownRef.current = true
       setInitialSnapshots(dedupeVideoSnapshots(patched))
-      setInitialMessages(cached.messages as Message[])
+      setInitialMessages(dedupeMessagesById(cached.messages as Message[]))
       setInitialTitle(cached.title)
       setLoaded(true)
     })
     return () => { cancelled = true }
 
-  }, [projectId, isInlineActive])
+  }, [projectId, isInlineActive, isNewProject])
 
   const userId = user?.id
   useEffect(() => {
@@ -202,6 +360,7 @@ export default function ProjectEditorContainer({
       if (cancelled) return
       if (userId) cacheProjectData(projectId, snapshots, messages, title)
       setTimelineVersion(tv)
+      const restoredSnapshots = dedupeVideoSnapshots(snapshots)
 
       if (animations.length > 0) {
         setInitialAnimations(animations)
@@ -229,47 +388,38 @@ export default function ProjectEditorContainer({
         }
       }
 
-      const completedActionVideos = snapshots.filter(s =>
-        s.type === 'video' &&
-        s.videoMeta?.status === 'completed' &&
-        s.videoMeta.videoUrl &&
-        s.videoMeta.completionActions?.length
-      )
-      for (const snap of completedActionVideos) {
+      const completedVideos = restoredSnapshots.filter(isCompletedGeneratedVideoSnapshot)
+      for (const snap of completedVideos) {
         if (messages.some(m => m.content?.includes(`snap:${snap.id}`))) continue
         const actionLines = serializeCompletionActions(snap.videoMeta?.completionActions)
-        if (!actionLines) continue
         messages.push({
           id: `video-action-${snap.id}`,
           role: 'assistant',
-          content: `🎬 视频已生成\n${snap.videoMeta!.videoUrl}\nsnap:${snap.id}\n${actionLines}`,
+          content: `🎬 ${t('status.videoDone')}\n${snap.videoMeta!.videoUrl}\nsnap:${snap.id}${actionLines ? `\n${actionLines}` : ''}`,
           timestamp: Date.now(),
         })
       }
 
-      const failedVideos = snapshots.filter(s =>
-        s.type === 'video' &&
-        s.videoMeta?.status === 'failed'
-      )
+      const failedVideos = restoredSnapshots.filter(isFailedGeneratedVideoSnapshot)
       for (const snap of failedVideos) {
         if (messages.some(m => m.content?.includes(`snap:${snap.id}`))) continue
-        const actionLines = serializeCompletionActions(buildVideoFailureActions(snap.videoMeta))
+        const actionLines = serializeCompletionActions(buildVideoFailureActions(snap.videoMeta, locale))
         const reason = snap.videoMeta?.error ? `\n${snap.videoMeta.error}` : ''
         messages.push({
           id: `video-failed-${snap.id}`,
           role: 'assistant',
-          content: `⚠️ 视频生成失败${reason}\nsnap:${snap.id}${actionLines ? `\n${actionLines}` : ''}`,
+          content: `⚠️ ${t('status.videoFailed')}${reason}\nsnap:${snap.id}${actionLines ? `\n${actionLines}` : ''}`,
           timestamp: Date.now(),
         })
       }
 
       console.log(`⏱️ [page] music/video restore done: ${(performance.now() - pageT0).toFixed(0)}ms`)
-      const patched = await patchFromImageCache(snapshots)
+      const patched = await patchFromImageCache(restoredSnapshots)
       console.log(`⏱️ [page] patchFromImageCache done: ${(performance.now() - pageT0).toFixed(0)}ms`)
       if (cancelled) return
       shownRef.current = true
-      setInitialSnapshots(dedupeVideoSnapshots(patched))
-      setInitialMessages(messages)
+      setInitialSnapshots(patched)
+      setInitialMessages(dedupeMessagesById(messages))
       setInitialTitle(title)
       setLoaded(true)
     }).catch((err: unknown) => {
@@ -284,10 +434,10 @@ export default function ProjectEditorContainer({
     })
 
     return () => { cancelled = true }
-  }, [userId, projectId, loadProject, isPublicProject, isNewProject, isInlineActive])
+  }, [userId, projectId, loadProject, isPublicProject, isNewProject, isInlineActive, t])
 
   const handleSaveSnapshot = useCallback((snapshot: Snapshot, sortOrder: number, onUploaded?: (imageUrl: string) => void) => {
-    saveSnapshot(snapshot, sortOrder, onUploaded)
+    return saveSnapshot(snapshot, sortOrder, onUploaded)
   }, [saveSnapshot])
 
   const handleSaveMessage = useCallback((message: Message) => {
@@ -327,86 +477,7 @@ export default function ProjectEditorContainer({
   if (!loaded) {
     return (
       <div className={loadingClassName}>
-        <div className="makaron-editor-shell h-dvh w-full bg-black text-white relative overflow-hidden">
-          <style>{`
-            @keyframes makaron-editor-loading-shimmer {
-              0% { background-position: 180% 0; }
-              100% { background-position: -80% 0; }
-            }
-            .makaron-editor-loading-shimmer {
-              background: linear-gradient(105deg, rgba(255,255,255,0.035) 0%, rgba(255,255,255,0.055) 38%, rgba(255,255,255,0.14) 50%, rgba(255,255,255,0.055) 62%, rgba(255,255,255,0.035) 100%);
-              background-size: 260% 100%;
-              animation: makaron-editor-loading-shimmer 1.65s ease-in-out infinite;
-            }
-          `}</style>
-          <div className="absolute inset-x-0 top-0 bottom-[164px] bg-black">
-            <div className="absolute inset-0 makaron-editor-loading-shimmer opacity-70" />
-            <div className="absolute inset-0 bg-gradient-to-b from-black/12 via-transparent to-black/18" />
-          </div>
-          <div className="makaron-editor-topbar absolute top-0 left-0 right-0 z-10 flex items-center justify-between px-4 py-3 bg-gradient-to-b from-black/60 to-transparent">
-            <div className="flex items-center gap-1">
-              <div className="p-2 text-white/70">
-                <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                  <path d="M19 12H5M12 19l-7-7 7-7" />
-                </svg>
-              </div>
-              <div className="p-2 text-white/55">
-                <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                  <path d="M12 5v14M5 12h14" />
-                </svg>
-              </div>
-              <div className="p-2 text-white/45">
-                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                  <path d="m9.06 11.9 8.07-8.06a2.85 2.85 0 1 1 4.03 4.03l-8.06 8.08" />
-                  <path d="M7.07 14.94c-1.66 0-3 1.35-3 3.02 0 1.33-2.5 1.52-2 2.02 1.08 1.1 2.49 2.02 4 2.02 2.2 0 4-1.8 4-4.04a3.01 3.01 0 0 0-3-3.02z" />
-                </svg>
-              </div>
-              <div className="p-2 text-white/40">
-                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                  <path d="M15 16H9a2 2 0 0 1-2-2V9a2 2 0 0 1 2-2h6a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2z" />
-                  <circle cx="12" cy="11.5" r="1.5" />
-                  <path d="M20 8a8.5 8.5 0 0 0-3-3.5" />
-                  <path d="M20 8l-2.5-.5L18 10" />
-                </svg>
-              </div>
-            </div>
-            <div className="flex items-center gap-2">
-              <div className="h-8 w-8 rounded-full makaron-editor-loading-shimmer opacity-65" />
-              <div className="h-8 w-16 rounded-full makaron-editor-loading-shimmer opacity-80" />
-            </div>
-          </div>
-          <div className="makaron-editor-bottom-bar absolute left-0 right-0 bottom-0 z-10 flex-shrink-0 bg-gradient-to-t from-black from-70% via-black/95 to-transparent">
-            <div className="flex items-center gap-3 px-4 py-2 min-h-[44px]">
-              <div className="w-1.5 h-1.5 rounded-full bg-fuchsia-400/80 flex-shrink-0" />
-              <div className="flex-1 flex flex-col gap-1.5">
-                <div className="h-3 w-[54%] rounded-full makaron-editor-loading-shimmer opacity-70" />
-              </div>
-              <div className="h-8 w-16 rounded-full makaron-editor-loading-shimmer opacity-65" />
-            </div>
-            <div className="flex items-end gap-2 px-3 pt-2 pb-1.5 overflow-hidden min-h-[78px]">
-              {[0, 1, 2].map((i) => (
-                <div
-                  key={i}
-                  className="w-[200px] flex-shrink-0 overflow-hidden rounded-2xl border border-white/10 bg-white/[0.035]"
-                >
-                  <div className="flex">
-                    <div className="h-[72px] w-[72px] flex-shrink-0 makaron-editor-loading-shimmer opacity-75" />
-                    <div className="flex-1 px-2.5 py-2 flex flex-col justify-center gap-2">
-                      <div className="h-3.5 w-[72%] rounded-full makaron-editor-loading-shimmer opacity-75" />
-                      <div className="h-2.5 w-[94%] rounded-full makaron-editor-loading-shimmer opacity-55" />
-                      <div className="h-2.5 w-[58%] rounded-full makaron-editor-loading-shimmer opacity-45" />
-                    </div>
-                  </div>
-                </div>
-              ))}
-            </div>
-            <div className="flex items-center justify-center gap-10 h-[34px] text-white/35">
-              <div className="h-3 w-16 rounded-full makaron-editor-loading-shimmer opacity-75" />
-              <div className="h-3 w-14 rounded-full makaron-editor-loading-shimmer opacity-45" />
-              <div className="h-3 w-12 rounded-full makaron-editor-loading-shimmer opacity-35" />
-            </div>
-          </div>
-        </div>
+        <EditorLoadingShell />
       </div>
     )
   }
@@ -422,6 +493,7 @@ export default function ProjectEditorContainer({
         pendingMetadata={!readOnly ? pendingMetadata : undefined}
         pendingPrompt={!readOnly ? (pendingPrompt ?? undefined) : undefined}
         pendingSkill={!readOnly ? (pendingSkill ?? undefined) : undefined}
+        pendingSkillLaunchContext={!readOnly ? pendingSkillLaunchContext : undefined}
         onSaveSnapshot={!readOnly ? handleSaveSnapshot : undefined}
         onSaveMessage={!readOnly ? handleSaveMessage : undefined}
         onUpdateTips={!readOnly ? handleUpdateTips : undefined}

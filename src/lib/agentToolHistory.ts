@@ -1,10 +1,8 @@
 import type { ModelMessage } from 'ai';
 
-export const TOOL_HISTORY_MAX_ROWS_PER_RUN = 20;
-export const TOOL_HISTORY_MAX_CHARS_PER_RUN = 120_000;
-export const TOOL_HISTORY_MAX_INPUT_CHARS = 6_000;
-export const TOOL_HISTORY_MAX_OUTPUT_CHARS = 30_000;
-export const TOOL_HISTORY_MAX_ANALYSIS_CHARS = 6_000;
+export const TOOL_HISTORY_MAX_INPUT_CHARS = 20_000;
+export const TOOL_HISTORY_MAX_OUTPUT_CHARS = 80_000;
+export const TOOL_HISTORY_MAX_ANALYSIS_CHARS = 18_000;
 export const TOOL_HISTORY_MAX_LIST_FILES = 500;
 
 type JsonRecord = Record<string, unknown>;
@@ -49,6 +47,12 @@ export interface DbVisibleMessage {
 const DATA_URL_RE = /^data:(image|video|audio)\//i;
 const BASE64ISH_RE = /^[A-Za-z0-9+/=\r\n]+$/;
 const DANGEROUS_KEYS = new Set(['image', 'images', 'base64Data', 'data', 'buffer']);
+const TRUNCATED_RUN_CODE_MARKERS = [
+  /\.\.\. \(\d+ chars\)/,
+  /\.\.\.\(truncated\)/,
+  /\[truncated: \d+ chars omitted\]/,
+  /\[code streamed separately: \d+ chars\]/,
+];
 
 function jsonChars(value: unknown): number {
   try {
@@ -67,6 +71,14 @@ function scrubDataUrls(text: string, omitted: string[]): string {
   });
 }
 
+function looksLikeLargeBase64(text: string): boolean {
+  if (text.length < 4_096) return false;
+  const compact = text.replace(/[\r\n]/g, '');
+  return compact.length >= 4_096
+    && compact.length % 4 === 0
+    && BASE64ISH_RE.test(compact);
+}
+
 function truncateText(text: string, maxChars: number, omitted: string[], reason: string): string {
   const scrubbed = scrubDataUrls(text, omitted);
   if (scrubbed.length <= maxChars) return scrubbed;
@@ -80,6 +92,10 @@ function sanitizeUnknown(value: unknown, omitted: string[], maxStringChars = TOO
     if (DATA_URL_RE.test(value)) {
       omitted.push('removed_data_url');
       return `[omitted data url: ${value.length} chars]`;
+    }
+    if (looksLikeLargeBase64(value)) {
+      omitted.push('removed_base64_payload');
+      return `[omitted base64 payload: ${value.length} chars]`;
     }
     if (value.length > maxStringChars) {
       return truncateText(value, maxStringChars, omitted, 'truncated_string');
@@ -104,11 +120,14 @@ function sanitizeUnknown(value: unknown, omitted: string[], maxStringChars = TOO
           out.__omitted_payload = true;
           continue;
         }
-        if (typeof inner === 'string' && !DATA_URL_RE.test(inner) && inner.length < 200 && !BASE64ISH_RE.test(inner)) {
-          out[key] = inner;
-        } else {
+        if (Buffer.isBuffer(inner)
+          || (typeof inner === 'string' && (DATA_URL_RE.test(inner) || looksLikeLargeBase64(inner)))) {
           omitted.push(key === 'image' || key === 'images' ? `removed_${key}` : 'removed_binary_payload');
           out.__omitted_payload = true;
+        } else {
+          // Keys such as `data` and `images` also carry useful JSON metadata or
+          // stable URLs. Preserve those values and only remove actual bytes.
+          out[key] = sanitizeUnknown(inner, omitted, maxStringChars);
         }
         continue;
       }
@@ -171,15 +190,31 @@ function compactListFilesOutput(output: JsonRecord, omitted: string[]): ToolResu
 }
 
 function compactPreviewFrameOutput(output: JsonRecord, omitted: string[]): ToolResultOutput {
+  if (output.error) {
+    return {
+      type: 'error-text',
+      value: truncateText(
+        String(output.error),
+        TOOL_HISTORY_MAX_ANALYSIS_CHARS,
+        omitted,
+        'truncated_preview_error',
+      ),
+    };
+  }
   omitted.push('removed_preview_frame_pixels');
   return {
     type: 'json',
     value: {
       workspaceUrl: output.workspaceUrl,
+      workspacePath: output.workspacePath,
       source: output.source,
       frame: output.frame,
+      frames: output.frames,
       timestamp: output.timestamp,
       message: output.message,
+      analysis: typeof output.analysis === 'string'
+        ? truncateText(output.analysis, TOOL_HISTORY_MAX_ANALYSIS_CHARS, omitted, 'truncated_preview_analysis')
+        : undefined,
     },
   };
 }
@@ -214,7 +249,21 @@ function compactSmallStatusOutput(output: JsonRecord, omitted: string[]): ToolRe
       contentBlocked: safe.contentBlocked,
       taskId: safe.taskId,
       model: safe.model ?? safe.usedModel,
+      mediaIndex: safe.mediaIndex,
+      imageUrl: safe.imageUrl,
+      snapshotId: safe.snapshotId,
+      provider: safe.provider,
+      title: safe.title,
+      audioUrl: safe.audioUrl,
+      providerAudioUrl: safe.providerAudioUrl,
+      streamAudioUrl: safe.streamAudioUrl,
+      trackIndex: safe.trackIndex,
       duration: safe.duration,
+      generationSeconds: safe.generationSeconds,
+      tags: safe.tags,
+      voiceId: safe.voiceId,
+      resourceId: safe.resourceId,
+      textLength: safe.textLength,
     },
   };
 }
@@ -278,11 +327,15 @@ function sanitizeOutput(toolName: string, rawOutput: unknown, omitted: string[])
     case 'preview_frame':
       return compactPreviewFrameOutput(output, omitted);
     case 'run_code':
+    case 'write_code_file':
     case 'write_file':
       return compactRunCodeOutput(output, omitted);
     case 'generate_image':
     case 'generate_animation':
     case 'rotate_camera':
+    case 'list_voiceover_voices':
+    case 'generate_voiceover':
+    case 'generate_audio':
     case 'generate_music':
       return compactSmallStatusOutput(output, omitted);
     case 'analyze_image':
@@ -295,30 +348,27 @@ function sanitizeOutput(toolName: string, rawOutput: unknown, omitted: string[])
   }
 }
 
+function sanitizeInput(toolName: string, rawInput: unknown, omitted: string[]): unknown {
+  if (toolName === 'write_code_file' && rawInput && typeof rawInput === 'object') {
+    const input = rawInput as JsonRecord;
+    const contentChars = typeof input.content === 'string' ? input.content.length : 0;
+    if (contentChars) omitted.push('code_file_content_replaced_by_pointer');
+    return sanitizeUnknown({
+      ...input,
+      ...(contentChars ? { content: `[source persisted in workspace: ${contentChars} chars]` } : {}),
+    }, omitted);
+  }
+  return sanitizeUnknown(rawInput, omitted);
+}
+
 export function sanitizeToolHistory(
   toolName: string,
   rawInput: unknown,
   rawOutput: unknown,
-  budget: ToolHistoryBudget,
+  _budget: ToolHistoryBudget,
 ): SanitizedToolHistory {
   const omitted: string[] = [];
-  if (budget.rows >= TOOL_HISTORY_MAX_ROWS_PER_RUN || budget.chars >= TOOL_HISTORY_MAX_CHARS_PER_RUN) {
-    omitted.push('run_budget_exceeded');
-    const input = sanitizeUnknown(rawInput, omitted);
-    const output: ToolResultOutput = {
-      type: 'json',
-      value: { omitted: true, reason: 'tool history run budget exceeded', toolName },
-    };
-    return {
-      input,
-      output,
-      omitted,
-      inputChars: jsonChars(input),
-      outputChars: jsonChars(output),
-    };
-  }
-
-  let input = sanitizeUnknown(rawInput, omitted);
+  let input = sanitizeInput(toolName, rawInput, omitted);
   if (jsonChars(input) > TOOL_HISTORY_MAX_INPUT_CHARS) {
     omitted.push('truncated_input_json');
     input = {
@@ -353,10 +403,77 @@ function normalizeToolResultOutput(output: unknown): ToolResultOutput {
   return { type: 'json', value: output ?? {} };
 }
 
+function sanitizePersistedToolRow(row: DbToolHistoryRow): DbToolHistoryRow {
+  const omitted: string[] = [];
+  const input = sanitizeInput(row.tool_name, row.input, omitted);
+  const normalizedOutput = normalizeToolResultOutput(row.output);
+  const sanitizedValue = sanitizeUnknown(
+    normalizedOutput.value,
+    omitted,
+    TOOL_HISTORY_MAX_OUTPUT_CHARS,
+  );
+  const output: ToolResultOutput = normalizedOutput.type === 'text'
+    || normalizedOutput.type === 'error-text'
+    ? { type: normalizedOutput.type, value: String(sanitizedValue ?? '') }
+    : { type: normalizedOutput.type, value: sanitizedValue };
+  return {
+    ...row,
+    input,
+    output,
+  };
+}
+
+function normalizeLegacyAudioToolRow(row: DbToolHistoryRow): DbToolHistoryRow | null {
+  if (row.tool_name === 'list_voiceover_voices') return null;
+  if (row.tool_name !== 'generate_voiceover' && row.tool_name !== 'generate_music') return row;
+  const input = row.input && typeof row.input === 'object' ? row.input as JsonRecord : {};
+  const kind = row.tool_name === 'generate_voiceover' ? 'voiceover' : 'music';
+  const prompt = typeof input.prompt === 'string'
+    ? input.prompt
+    : typeof input.text === 'string'
+      ? input.text
+      : 'Legacy generated audio';
+  return {
+    ...row,
+    tool_name: 'generate_audio',
+    input: {
+      kind,
+      prompt,
+      ...(typeof input.title === 'string' ? { title: input.title } : {}),
+      ...(typeof input.duration_seconds === 'number' ? { duration_seconds: input.duration_seconds } : {}),
+    },
+  };
+}
+
+function isReplayableToolRow(row: DbToolHistoryRow): boolean {
+  if (row.tool_name !== 'run_code') return true;
+  const input = row.input && typeof row.input === 'object' ? row.input as JsonRecord : {};
+  if (typeof input.code_path === 'string' && input.code_path.trim()) return true;
+  if (input.composition_parts && typeof input.composition_parts === 'object') return true;
+  if (input.composition && typeof input.composition === 'object') {
+    const composition = input.composition as JsonRecord;
+    const compositionCode = composition.code;
+    return typeof compositionCode === 'string'
+      && compositionCode.trim().length > 0
+      && !TRUNCATED_RUN_CODE_MARKERS.some(marker => marker.test(compositionCode));
+  }
+  const code = input.code;
+  if (typeof code !== 'string' || !code.trim()) return false;
+  return !TRUNCATED_RUN_CODE_MARKERS.some(marker => marker.test(code));
+}
+
 export function buildToolHistoryMessages(rows: DbToolHistoryRow[]): ModelMessage[] {
   const messages: ModelMessage[] = [];
   const validRows = rows
+    // The current Agent has one canonical audio tool. Normalize old sessions so
+    // stale aliases cannot teach the model to call tools that no longer exist.
+    .map(normalizeLegacyAudioToolRow)
+    .filter((row): row is DbToolHistoryRow => row !== null)
+    // Old rows may predate write-time sanitization. Treat the database as an
+    // untrusted transport and strip binary payloads again before model replay.
+    .map(sanitizePersistedToolRow)
     .filter(row => row.tool_call_id && row.tool_name)
+    .filter(isReplayableToolRow)
     .sort((a, b) => a.seq - b.seq);
   if (!validRows.length) return messages;
 
@@ -407,19 +524,17 @@ function groupToolRows(rows: DbToolHistoryRow[]) {
 export function buildModelHistoryFromRows(
   visibleMessages: DbVisibleMessage[],
   toolRows: DbToolHistoryRow[],
-  maxVisibleTurns = 50,
 ): ModelMessage[] {
   const visible = visibleMessages
     .filter(m => m.content && (m.role === 'user' || m.role === 'assistant'))
     .map(m => ({ ...m }));
-  while (visible.length && visible[visible.length - 1].role === 'user') visible.pop();
-  const selectedVisible = visible.slice(-maxVisibleTurns);
-  const startAt = selectedVisible[0]?.created_at;
-  const selectedTools = startAt ? toolRows.filter(row => row.created_at >= startAt) : [];
+  // The current request is normally persisted before context construction.
+  // Remove only that final duplicate, never a whole sequence of user turns.
+  if (visible[visible.length - 1]?.role === 'user') visible.pop();
 
   const items = [
-    ...selectedVisible.map(m => ({ kind: 'message' as const, created_at: m.created_at, value: m })),
-    ...groupToolRows(selectedTools).map(group => ({ kind: 'tool' as const, created_at: group.created_at, value: group.rows })),
+    ...visible.map(m => ({ kind: 'message' as const, created_at: m.created_at, value: m })),
+    ...groupToolRows(toolRows).map(group => ({ kind: 'tool' as const, created_at: group.created_at, value: group.rows })),
   ].sort((a, b) => {
     const t = new Date(a.created_at).getTime() - new Date(b.created_at).getTime();
     if (t !== 0) return t;

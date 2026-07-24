@@ -3,7 +3,16 @@ import { compressImageFile } from '@/lib/image/compress'
 import { extractPhotoMetadata } from '@/lib/image/metadata'
 import { getMarketingAttribution } from '@/lib/marketing/attribution'
 import { createMetaEventId, trackMetaEvent } from '@/lib/marketing/meta-pixel'
+import { stagePendingProjectImages, stagePendingProjectLaunch } from '@/lib/imageCache'
+import { uploadImage } from '@/lib/supabase/storage'
 import type { PhotoMetadata } from '@/types'
+import type { SkillLaunchContext } from '@/lib/skill-launch-context'
+
+export interface ProjectLaunchOptions {
+  prompt?: string
+  skill?: string
+  skillLaunchContext?: SkillLaunchContext
+}
 
 function isVideoFile(file: File): boolean {
   return file.type.startsWith('video/') || /\.(mp4|mov|webm)$/i.test(file.name)
@@ -23,6 +32,14 @@ export async function compressCreateImageFile(file: File): Promise<string> {
   }
 }
 
+export async function compressCreateImageFiles(files: File[]): Promise<string[]> {
+  const payloads: string[] = []
+  for (const file of files) {
+    payloads.push(await compressCreateImageFile(file))
+  }
+  return payloads
+}
+
 async function createProjectShell(
   title = 'Untitled',
   marketing?: { metaEventId?: string; skillId?: string; hasPrompt?: boolean },
@@ -39,6 +56,21 @@ async function createProjectShell(
   return data.projectId as string
 }
 
+async function persistCreateImages(
+  supabase: SupabaseClient,
+  userId: string,
+  projectId: string,
+  payloads: string[],
+): Promise<string[]> {
+  return Promise.all(payloads.map(async (payload) => {
+    if (payload.startsWith('http')) return payload
+    const filename = `snapshot-${crypto.randomUUID()}.jpg`
+    const url = await uploadImage(supabase, userId, projectId, filename, payload)
+    if (!url) throw new Error('Failed to upload image')
+    return url
+  }))
+}
+
 function trackProjectCreated(projectId: string, options?: { prompt?: string; skill?: string; eventId?: string }) {
   const attribution = getMarketingAttribution()
   const skillId = options?.skill || attribution.skill_id
@@ -51,21 +83,34 @@ function trackProjectCreated(projectId: string, options?: { prompt?: string; ski
   }, options?.eventId || createMetaEventId('project.create'))
 }
 
+function stageProjectLaunch(
+  projectId: string,
+  options?: ProjectLaunchOptions,
+  metadata?: PhotoMetadata,
+): void {
+  if (options?.prompt) sessionStorage.setItem('pendingPrompt', options.prompt)
+  if (options?.skill) sessionStorage.setItem('pendingSkill', options.skill)
+  if (metadata) sessionStorage.setItem('pendingMetadata', JSON.stringify(metadata))
+  stagePendingProjectLaunch(projectId, {
+    prompt: options?.prompt,
+    skill: options?.skill,
+    skillLaunchContext: options?.skillLaunchContext,
+    metadata,
+  })
+}
+
 /**
- * Create a new project with optimistic navigation.
- * Creates the project through the backend, stores pending media in sessionStorage,
- * then lets the editor page render and persist the initial timeline.
+ * Create a new project and stage its initial media.
+ * Images are uploaded before navigation so sessionStorage only carries compact
+ * permanent URLs, never large base64 payloads.
  */
 export async function createProject(
-  _supabase: SupabaseClient,
-  _userId: string,
+  supabase: SupabaseClient,
+  userId: string,
   files: File[],
-  options?: { prompt?: string; skill?: string },
+  options?: ProjectLaunchOptions,
   preExtractedMetadata?: PhotoMetadata,
 ): Promise<{ projectId: string; metadata?: PhotoMetadata } | null> {
-  // Store pending data for editor page
-  if (options?.prompt) sessionStorage.setItem('pendingPrompt', options.prompt);
-  if (options?.skill) sessionStorage.setItem('pendingSkill', options.skill);
   const attribution = getMarketingAttribution()
   const metaEventId = createMetaEventId('project.create')
   const marketing = {
@@ -76,6 +121,7 @@ export async function createProject(
 
   if (files.length === 0) {
     const projectId = await createProjectShell('Untitled', marketing);
+    stageProjectLaunch(projectId, options)
     trackProjectCreated(projectId, { ...options, eventId: metaEventId });
     return { projectId };
   }
@@ -90,21 +136,27 @@ export async function createProject(
       preExtractedMetadata ? Promise.resolve(preExtractedMetadata) : extractPhotoMetadata(imageFiles[0]),
       createProjectShell('Untitled', marketing),
     ]);
-    if (base64) sessionStorage.setItem('pendingImages', JSON.stringify([base64]));
-    if (metadata) sessionStorage.setItem('pendingMetadata', JSON.stringify(metadata));
+    if (base64) {
+      const imageUrls = await persistCreateImages(supabase, userId, projectId, [base64])
+      await stagePendingProjectImages(projectId, imageUrls)
+    }
+    stageProjectLaunch(projectId, options, metadata)
     trackProjectCreated(projectId, { ...options, eventId: metaEventId });
     return { projectId, metadata };
   }
 
   // Multi file (images + videos): create the project server-side, then stage media locally.
   const firstImage = imageFiles[0] || files[0];
-  const [projectId, metadata, imagePayloads] = await Promise.all([
+  const [projectId, metadata] = await Promise.all([
     createProjectShell('Untitled', marketing),
     preExtractedMetadata ? Promise.resolve(preExtractedMetadata) : (!isVideoFile(firstImage) ? extractPhotoMetadata(firstImage) : Promise.resolve(undefined)),
-    Promise.all(imageFiles.map(file => compressCreateImageFile(file))),
   ]);
 
-  if (imagePayloads.length) sessionStorage.setItem('pendingImages', JSON.stringify(imagePayloads));
+  const imageUrls = await Promise.all(imageFiles.map(async file => {
+    const payload = await compressCreateImageFile(file)
+    return (await persistCreateImages(supabase, userId, projectId, [payload]))[0]
+  }))
+  if (imageUrls.length) await stagePendingProjectImages(projectId, imageUrls)
 
   // Upload videos (transcode + upload via video-upload.ts)
   if (videoFiles.length) {
@@ -113,27 +165,23 @@ export async function createProject(
     sessionStorage.setItem('pendingVideos', JSON.stringify(videoData));
   }
 
-  if (metadata) sessionStorage.setItem('pendingMetadata', JSON.stringify(metadata));
+  stageProjectLaunch(projectId, options, metadata)
 
   trackProjectCreated(projectId, { ...options, eventId: metaEventId });
   return { projectId, metadata };
 }
 
 export async function createProjectFromStagedMedia(
-  _supabase: SupabaseClient,
-  _userId: string,
+  supabase: SupabaseClient,
+  userId: string,
   staged: {
     images?: string[]
     metadata?: PhotoMetadata
     prompt?: string
     skill?: string
+    skillLaunchContext?: SkillLaunchContext
   },
 ): Promise<{ projectId: string; metadata?: PhotoMetadata } | null> {
-  if (staged.prompt) sessionStorage.setItem('pendingPrompt', staged.prompt)
-  if (staged.skill) sessionStorage.setItem('pendingSkill', staged.skill)
-  if (staged.images?.length) sessionStorage.setItem('pendingImages', JSON.stringify(staged.images))
-  if (staged.metadata) sessionStorage.setItem('pendingMetadata', JSON.stringify(staged.metadata))
-
   const attribution = getMarketingAttribution()
   const metaEventId = createMetaEventId('project.create')
   const marketing = {
@@ -142,6 +190,15 @@ export async function createProjectFromStagedMedia(
     hasPrompt: Boolean(staged.prompt),
   }
   const projectId = await createProjectShell('Untitled', marketing)
+  if (staged.images?.length) {
+    const imageUrls = await persistCreateImages(supabase, userId, projectId, staged.images)
+    await stagePendingProjectImages(projectId, imageUrls)
+  }
+  stageProjectLaunch(projectId, {
+    prompt: staged.prompt,
+    skill: staged.skill,
+    skillLaunchContext: staged.skillLaunchContext,
+  }, staged.metadata)
   trackProjectCreated(projectId, { prompt: staged.prompt, skill: staged.skill, eventId: metaEventId })
   return { projectId, metadata: staged.metadata }
 }
