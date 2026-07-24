@@ -40,7 +40,9 @@ export class VercelMediaSandboxExecutionError extends Error {
   }
 }
 
-export function shouldUseVercelMediaSandbox(env: NodeJS.ProcessEnv = process.env): boolean {
+export function shouldUseVercelMediaSandbox(
+  env: Record<string, string | undefined> = process.env,
+): boolean {
   const configured = env.MEDIA_SANDBOX_EXECUTOR?.trim().toLowerCase()
   if (configured === 'local') return false
   if (configured === 'vercel') return true
