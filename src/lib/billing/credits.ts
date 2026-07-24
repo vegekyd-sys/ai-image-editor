@@ -8,6 +8,20 @@ let _billingEnabled: boolean | null = null
 let _billingCheckedAt = 0
 const BILLING_CACHE_TTL = 60_000 // 1 minute
 
+export class InsufficientCreditsError extends Error {
+  constructor(
+    public readonly balance: number,
+    public readonly required: number,
+  ) {
+    super(`Insufficient credits: balance=${balance}, required=${required}`)
+    this.name = 'InsufficientCreditsError'
+  }
+}
+
+export function isInsufficientCreditsError(error: unknown): error is InsufficientCreditsError {
+  return error instanceof InsufficientCreditsError
+}
+
 export async function isBillingEnabled(): Promise<boolean> {
   if (_billingEnabled !== null && Date.now() - _billingCheckedAt < BILLING_CACHE_TTL) return _billingEnabled
   try {
@@ -142,27 +156,15 @@ async function deductAndLog(
   })
   if (!error) return data ?? 0
 
-  // Fallback if RPC not yet deployed: separate deduct + log (temporary)
-  console.warn('[billing] deduct_and_log RPC not available, using fallback:', error.message)
-  const { data: bal } = await admin
-    .from('credit_balances')
-    .select('balance, lifetime_used')
-    .eq('user_id', userId)
-    .single()
-  if (!bal) return 0
-  const remaining = Math.max(0, bal.balance - credits)
-  await admin
-    .from('credit_balances')
-    .update({ balance: remaining, lifetime_used: (bal.lifetime_used || 0) + credits, updated_at: new Date().toISOString() })
-    .eq('user_id', userId)
-  await admin.from('usage_logs').insert({
-    user_id: userId, api_key_id: apiKeyId || null, tool_name: toolName,
-    model_used: model || null, credits_charged: credits,
-    input_tokens: inputTokens || null, output_tokens: outputTokens || null,
-    duration_ms: durationMs || null, source: source || 'app',
-    cache_read_tokens: cacheReadTokens ?? null, cache_write_tokens: cacheWriteTokens ?? null,
-  })
-  return remaining
+  if (error.code === 'P0001' || error.message?.includes('insufficient_credits')) {
+    const match = error.message?.match(/balance=(\d+), required=(\d+)/)
+    throw new InsufficientCreditsError(
+      Number(match?.[1] ?? 0),
+      Number(match?.[2] ?? credits),
+    )
+  }
+
+  throw new Error(`Credit deduction failed: ${error.message}`)
 }
 
 /**
@@ -331,25 +333,18 @@ export async function grantCreditsAndRecordPurchase(params: {
 }
 
 export async function refundCredits(userId: string, credits: number, toolName: string): Promise<number> {
+  if (credits <= 0) return 0
   const admin = getSupabaseAdmin()
-  const { data } = await admin
-    .from('credit_balances')
-    .select('balance, lifetime_used')
-    .eq('user_id', userId)
-    .single()
-
-  const newBalance = (data?.balance ?? 0) + credits
-  const newUsed = Math.max(0, (data?.lifetime_used ?? 0) - credits)
-
-  await admin
-    .from('credit_balances')
-    .update({ balance: newBalance, lifetime_used: newUsed, updated_at: new Date().toISOString() })
-    .eq('user_id', userId)
-
-  await admin.from('usage_logs').insert({
-    user_id: userId, tool_name: `refund:${toolName}`,
-    credits_charged: -credits, source: 'app',
+  const { data, error } = await admin.rpc('refund_credits_and_log', {
+    p_user_id: userId,
+    p_amount: credits,
+    p_tool_name: toolName,
+    p_source: 'app',
   })
 
-  return newBalance
+  if (error) {
+    throw new Error(`Credit refund failed: ${error.message}`)
+  }
+
+  return Number(data ?? 0)
 }

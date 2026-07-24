@@ -9,7 +9,12 @@ import { editImage } from './skills/edit-image';
 import { rotateCamera } from './skills/rotate-camera';
 import { createVideo } from './skills/create-video';
 import { estimateVideoCredits, resolveAgentVideoSelection, resolveVideoGenerationRoute, resolveVideoOutputDuration, validateVideoModelRequest } from './video-model-capabilities';
-import { deductFixedCredits } from './billing/credits';
+import {
+  deductFixedCredits,
+  isInsufficientCreditsError,
+  refundCredits,
+  requireCredits,
+} from './billing/credits';
 import { deductSeedAudioCredits } from './billing/seed-audio';
 import { createAudio, SEED_AUDIO_AGENT_PROMPT_MAX_CHARS } from './skills/create-audio';
 import { formatAudioCapabilitiesForAgent } from './audio-model-capabilities';
@@ -98,13 +103,11 @@ function runGoogleOmniVideoSnapshotAfterResponse(options: {
     try {
       const result = await createVideo(options.createVideoInput);
       if (!result.success || !result.videoUrl) {
-        await admin.from('snapshots').update({
-          video_meta: {
-            ...options.videoMeta,
-            status: 'failed',
-            error: result.message || 'Google Omni video generation failed',
-          },
-        }).eq('id', options.snapshotId);
+        const { handleVideoFailure } = await import('@/lib/video-lifecycle');
+        await handleVideoFailure(
+          options.snapshotId,
+          result.message || 'Google Omni video generation failed',
+        );
         return;
       }
 
@@ -145,13 +148,11 @@ function runGoogleOmniVideoSnapshotAfterResponse(options: {
         }
       }
     } catch (error) {
-      await admin.from('snapshots').update({
-        video_meta: {
-          ...options.videoMeta,
-          status: 'failed',
-          error: error instanceof Error ? error.message : String(error),
-        },
-      }).eq('id', options.snapshotId);
+      const { handleVideoFailure } = await import('@/lib/video-lifecycle');
+      await handleVideoFailure(
+        options.snapshotId,
+        error instanceof Error ? error.message : String(error),
+      );
     }
   });
 }
@@ -1613,6 +1614,8 @@ Hard constraints:
         if (!imageUrls?.length && !video_ref_url && videoRoute.provider !== 'seedance') {
           return { success: false as const, message: `${videoRoute.label} requires an image or video reference. Use a SeeDance model for native text-to-video.` };
         }
+        let reservedVideoCredits = 0;
+        const reservationToolName = videoModel === 'grok' ? 'create_video_grok' : 'create_video';
         try {
           const selectedAspectRatio = aspect_ratio;
           const resolvedAudioRefs = resolveAudioRefs(ctx.audioAttachments, audio_refs);
@@ -1773,6 +1776,46 @@ Hard constraints:
             return { success: false as const, message: 'Google Omni video jobs require an authenticated workspace so the completed video can be saved to Storage.' };
           }
 
+          const referencedImageUrls = scriptRefs
+            .filter(ref => !videoRefIndices.has(ref))
+            .map(ref => originalImageUrlsByIndex[ref - 1])
+            .filter((u): u is string => !!u && u.startsWith('http') && !u.endsWith('.mp4'));
+          const videoSec = effectiveDuration || 10;
+          const creditsRequired = estimateVideoCredits({
+            model: videoModel,
+            resolution: videoRoute.resolution,
+            durationSec: videoSec,
+            imageCount: referencedImageUrls.length,
+          }) ?? Math.ceil(videoSec * 22);
+
+          if (ctx.userId) {
+            const creditCheck = await requireCredits(ctx.userId, creditsRequired);
+            if (!creditCheck.ok) {
+              return {
+                success: false as const,
+                message: `Insufficient credits. This video needs ${creditsRequired} credits, but the current balance is ${creditCheck.balance}.`,
+              };
+            }
+            try {
+              const reservation = await deductFixedCredits(
+                ctx.userId,
+                creditsRequired,
+                reservationToolName,
+                videoModel,
+                undefined,
+              );
+              reservedVideoCredits = reservation.charged;
+            } catch (error) {
+              if (isInsufficientCreditsError(error)) {
+                return {
+                  success: false as const,
+                  message: `Insufficient credits. This video needs ${error.required} credits, but the current balance is ${error.balance}.`,
+                };
+              }
+              throw error;
+            }
+          }
+
           const skillResult = isGoogleOmniAsync
             ? {
               success: true as const,
@@ -1786,6 +1829,10 @@ Hard constraints:
 
           if (!skillResult.success || !skillResult.taskId) {
             console.error('[generate_animation] createVideo failed:', skillResult.message);
+            if (reservedVideoCredits > 0 && ctx.userId) {
+              await refundCredits(ctx.userId, reservedVideoCredits, reservationToolName);
+              reservedVideoCredits = 0;
+            }
             if (skillResult.invalidMediaUrls?.length) {
               ctx.invalidVideoImageUrls ??= new Set<string>();
               for (const url of skillResult.invalidMediaUrls) ctx.invalidVideoImageUrls.add(url);
@@ -1816,10 +1863,6 @@ Hard constraints:
           // (createVideo already handles filterAndRemapImages internally for the model)
           const { getSupabaseAdmin } = await import('@/lib/supabase/service');
           const supabase = getSupabaseAdmin();
-          const referencedImageUrls = scriptRefs
-            .filter(ref => !videoRefIndices.has(ref))
-            .map(ref => originalImageUrlsByIndex[ref - 1])
-            .filter((u): u is string => !!u && u.startsWith('http') && !u.endsWith('.mp4'));
           const sourceUrls = [...referencedImageUrls, ...allVideoUrls].filter((u): u is string => !!u);
 
           const snapshotId = crypto.randomUUID();
@@ -1839,6 +1882,7 @@ Hard constraints:
             providerMode: actualVideoRoute.providerMode,
             providerUrl: skillResult.videoUrl,
             createdAt: new Date().toISOString(),
+            creditsCharged: reservedVideoCredits,
             ...(completion_actions?.length ? {
               completionActions: completion_actions.slice(0, 4).map(action => ({
                 label: action.label,
@@ -1865,16 +1909,8 @@ Hard constraints:
             console.error('[generate_animation] snapshot insert failed:', insertError.message);
             throw new Error(`DB insert failed: ${insertError.message}`);
           }
+          reservedVideoCredits = 0;
 
-          // Bill for video generation (per-second) — store amount in videoMeta for refund on failure
-          const videoSec = effectiveDuration || 10;
-          const creditsCharged = estimateVideoCredits({
-            model: actualVideoModel,
-            resolution: actualVideoRoute.resolution,
-            durationSec: videoSec,
-            imageCount: referencedImageUrls.length,
-          }) ?? Math.ceil(videoSec * 22);
-          videoMeta.creditsCharged = creditsCharged;
           const providerCostUsd = actualVideoRoute.estimatedCostPerSecondUsd != null
             ? videoSec * actualVideoRoute.estimatedCostPerSecondUsd + referencedImageUrls.length * (actualVideoRoute.estimatedInputCostUsdPerImage ?? 0)
             : undefined;
@@ -1914,12 +1950,6 @@ Hard constraints:
 
           ctx.pendingVideoSnapshot = { snapshotId, taskId, videoMeta };
 
-          try {
-            await deductFixedCredits(ctx.userId ?? '', creditsCharged, actualVideoModel === 'grok' ? 'create_video_grok' : 'create_video', actualVideoModel, undefined);
-          } catch (e) {
-            console.error('[billing] generate_animation deduct error:', e);
-          }
-
           const renderTimeMessage = actualVideoModel === 'grok'
             ? 'Grok is usually around 30-40 seconds.'
             : actualVideoModel === 'google-omni'
@@ -1931,6 +1961,13 @@ Hard constraints:
             message: `Video generation task created with ${actualVideoRoute.label} ${actualVideoRoute.resolution.toUpperCase()}. ${renderTimeMessage} The result will appear here when done.`,
           };
         } catch (e) {
+          if (reservedVideoCredits > 0 && ctx.userId) {
+            try {
+              await refundCredits(ctx.userId, reservedVideoCredits, reservationToolName);
+            } catch (refundError) {
+              console.error('[billing] generate_animation reservation refund failed:', refundError);
+            }
+          }
           return { success: false as const, message: String(e) };
         }
       }),
