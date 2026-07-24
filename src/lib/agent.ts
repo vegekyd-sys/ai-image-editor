@@ -83,6 +83,20 @@ import { stableDraftPromotionSnapshotId } from './draft-promotion';
 
 const MAX_VIDEO_DIMENSION_PROBE_BYTES = 220 * 1024 * 1024;
 
+function runRemotionExportAfterResponse(jobId: string) {
+  after(async () => {
+    try {
+      const { runRemotionExportJob } = await import('@/lib/remotion-export');
+      await runRemotionExportJob(jobId);
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      if (!message.includes('already rendering')) {
+        console.error(`[agent] Remotion export worker failed for ${jobId}:`, error);
+      }
+    }
+  });
+}
+
 function runGoogleOmniVideoSnapshotAfterResponse(options: {
   userId: string;
   projectId: string;
@@ -3121,6 +3135,9 @@ For Studio Run, first preview and patch the Remotion source until it is satisfac
               taskId,
               videoMeta: pendingVideoMeta,
             };
+          }
+          if (job.status === 'queued') {
+            runRemotionExportAfterResponse(job.id);
           }
           return {
             success: true,

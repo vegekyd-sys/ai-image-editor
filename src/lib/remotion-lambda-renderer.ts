@@ -148,6 +148,10 @@ function readPositiveInteger(value: string | undefined, fallback: number): numbe
   return Math.max(1, Math.round(readPositiveNumber(value, fallback)))
 }
 
+// Cross-composition benchmark default. Keep experiments behind the env override
+// instead of retuning the product default from a single composition.
+const DEFAULT_FRAMES_PER_LAMBDA = 20
+
 function readBooleanEnv(name: string): boolean {
   const value = readEnv(name)
   return value === '1' || value === 'true'
@@ -415,7 +419,7 @@ export async function renderDesignVideoLambdaToUrl(
     : undefined
   const framesPerLambda = concurrency
     ? undefined
-    : readPositiveInteger(readEnv('REMOTION_LAMBDA_FRAMES_PER_LAMBDA'), 10)
+    : readPositiveInteger(readEnv('REMOTION_LAMBDA_FRAMES_PER_LAMBDA'), DEFAULT_FRAMES_PER_LAMBDA)
   const pollMs = readPositiveInteger(readEnv('REMOTION_LAMBDA_POLL_MS'), 1000)
   const x264Preset = readX264Preset()
   const jpegQuality = readPositiveInteger(readEnv('REMOTION_LAMBDA_JPEG_QUALITY'), 80)
