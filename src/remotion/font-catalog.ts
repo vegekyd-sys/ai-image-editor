@@ -30,8 +30,41 @@ export interface PreparedRemotionFonts {
   usedFamilies: string[];
 }
 
+export interface RemotionFontFaceTiming {
+  family: string;
+  weight: number;
+  subset: string;
+  sha256: string;
+  loadMs: number;
+  resourceDurationMs: number | null;
+  transferSize: number | null;
+  encodedBodySize: number | null;
+}
+
+export interface RemotionFontLoadTiming {
+  requestCacheHit: boolean;
+  waitMs: number;
+  selectionMs: number;
+  fontFacesMs: number;
+  fontsReadyMs: number;
+  fontsCheckMs: number;
+  faceCount: number;
+  uniqueResourceCount: number;
+  faces: RemotionFontFaceTiming[];
+}
+
+export interface RemotionFontTiming {
+  version: 1;
+  totalMs: number;
+  manifestMs: number;
+  manifestCacheHit: boolean;
+  prepareMs: number;
+  usedFamilies: string[];
+  load: RemotionFontLoadTiming;
+}
+
 export const REMOTION_FONT_CATALOG_VERSION = catalogData.version;
-export const REMOTION_FONT_RUNTIME_VERSION = 'remotion-font-runtime-r1';
+export const REMOTION_FONT_RUNTIME_VERSION = 'remotion-font-runtime-r2-font-timing';
 export const REMOTION_FONT_CATALOG = catalogData.families as RemotionFontCatalogDefinition[];
 export const REMOTION_DEFAULT_SANS = 'Inter';
 export const REMOTION_DEFAULT_CJK_SANS = 'Noto Sans SC';
@@ -40,7 +73,21 @@ export const REMOTION_DEFAULT_EMOJI = 'Noto Color Emoji';
 
 const GENERIC_FAMILIES = new Set(['sans-serif', 'serif', 'monospace', 'cursive']);
 const manifestCache = new Map<string, Promise<RemotionFontCatalogManifest>>();
-const documentLoadCache = new WeakMap<Document, Map<string, Promise<void>>>();
+type RemotionFontLoadExecution = Omit<
+  RemotionFontLoadTiming,
+  'requestCacheHit' | 'waitMs' | 'selectionMs'
+>;
+const documentLoadCache = new WeakMap<Document, Map<string, Promise<RemotionFontLoadExecution>>>();
+
+function nowMs(): number {
+  return typeof performance !== 'undefined' && typeof performance.now === 'function'
+    ? performance.now()
+    : Date.now();
+}
+
+function roundedMs(value: number): number {
+  return Math.round(value * 100) / 100;
+}
 
 function cleanFamily(value: string): string {
   return value.trim().replace(/^['"]|['"]$/g, '').trim();
@@ -80,7 +127,13 @@ export function validateRemotionFontManifest(value: unknown): RemotionFontCatalo
   return manifest as RemotionFontCatalogManifest;
 }
 
-export async function fetchRemotionFontManifest(url: string): Promise<RemotionFontCatalogManifest> {
+export async function fetchRemotionFontManifestWithTiming(url: string): Promise<{
+  manifest: RemotionFontCatalogManifest;
+  durationMs: number;
+  cacheHit: boolean;
+}> {
+  const startedAt = nowMs();
+  const cacheHit = manifestCache.has(url);
   let pending = manifestCache.get(url);
   if (!pending) {
     pending = fetch(url, { cache: 'force-cache' }).then(async (response) => {
@@ -90,11 +143,19 @@ export async function fetchRemotionFontManifest(url: string): Promise<RemotionFo
     manifestCache.set(url, pending);
   }
   try {
-    return await pending;
+    return {
+      manifest: await pending,
+      durationMs: roundedMs(nowMs() - startedAt),
+      cacheHit,
+    };
   } catch (error) {
     manifestCache.delete(url);
     throw error;
   }
+}
+
+export async function fetchRemotionFontManifest(url: string): Promise<RemotionFontCatalogManifest> {
+  return (await fetchRemotionFontManifestWithTiming(url)).manifest;
 }
 
 function manifestFamilies(manifest: RemotionFontCatalogManifest): Map<string, string> {
@@ -235,12 +296,32 @@ function closestWeight(requested: number, available: number[]): number {
     Math.abs(candidate - requested) < Math.abs(best - requested) ? candidate : best, available[0]);
 }
 
+function resourceTimingFor(url: string): {
+  durationMs: number | null;
+  transferSize: number | null;
+  encodedBodySize: number | null;
+} {
+  if (typeof performance === 'undefined' || typeof performance.getEntriesByName !== 'function') {
+    return { durationMs: null, transferSize: null, encodedBodySize: null };
+  }
+  const entries = performance.getEntriesByName(url, 'resource');
+  const entry = entries[entries.length - 1] as PerformanceResourceTiming | undefined;
+  if (!entry) return { durationMs: null, transferSize: null, encodedBodySize: null };
+  return {
+    durationMs: Number.isFinite(entry.duration) ? roundedMs(entry.duration) : null,
+    transferSize: Number.isFinite(entry.transferSize) ? entry.transferSize : null,
+    encodedBodySize: Number.isFinite(entry.encodedBodySize) ? entry.encodedBodySize : null,
+  };
+}
+
 export async function loadPreparedRemotionFonts(input: {
   manifest: RemotionFontCatalogManifest;
   prepared: PreparedRemotionFonts;
   text: string;
   targetDocument?: Document;
-}): Promise<void> {
+}): Promise<RemotionFontLoadTiming> {
+  const waitStartedAt = nowMs();
+  const selectionStartedAt = nowMs();
   const targetDocument = input.targetDocument || document;
   const usedFamilies = input.prepared.usedFamilies.filter(
     (family) => family !== REMOTION_DEFAULT_EMOJI || containsEmoji(input.text),
@@ -266,15 +347,19 @@ export async function loadPreparedRemotionFonts(input: {
     .map((face) => `${face.internalFamily}:${face.weight}:${face.subset}:${face.sha256}`)
     .sort()
     .join('|')}`;
+  const selectionMs = roundedMs(nowMs() - selectionStartedAt);
   let requests = documentLoadCache.get(targetDocument);
   if (!requests) {
     requests = new Map();
     documentLoadCache.set(targetDocument, requests);
   }
+  const requestCacheHit = requests.has(requestKey);
   let pending = requests.get(requestKey);
   if (!pending) {
     pending = (async () => {
-      await Promise.all(facesToLoad.map(async (face) => {
+      const fontFacesStartedAt = nowMs();
+      const faces = await Promise.all(facesToLoad.map(async (face): Promise<RemotionFontFaceTiming> => {
+        const faceStartedAt = nowMs();
         const fontFace = new FontFace(face.internalFamily, `url(${JSON.stringify(face.url)}) format('woff2')`, {
           style: face.style,
           weight: String(face.weight),
@@ -283,9 +368,25 @@ export async function loadPreparedRemotionFonts(input: {
         });
         await fontFace.load();
         targetDocument.fonts.add(fontFace);
+        const resource = resourceTimingFor(face.url);
+        return {
+          family: face.family,
+          weight: face.weight,
+          subset: face.subset,
+          sha256: face.sha256,
+          loadMs: roundedMs(nowMs() - faceStartedAt),
+          resourceDurationMs: resource.durationMs,
+          transferSize: resource.transferSize,
+          encodedBodySize: resource.encodedBodySize,
+        };
       }));
-      await targetDocument.fonts.ready;
+      const fontFacesMs = roundedMs(nowMs() - fontFacesStartedAt);
 
+      const fontsReadyStartedAt = nowMs();
+      await targetDocument.fonts.ready;
+      const fontsReadyMs = roundedMs(nowMs() - fontsReadyStartedAt);
+
+      const fontsCheckStartedAt = nowMs();
       const missing = usedFamilies.filter((family) => {
         const internal = internalRemotionFontFamily(family, input.manifest.version);
         const faces = loadedFacesByFamily.get(family) || [];
@@ -296,16 +397,67 @@ export async function loadPreparedRemotionFonts(input: {
           .join('') || 'A';
         return !targetDocument.fonts.check(`400 16px ${JSON.stringify(internal)}`, sample);
       });
+      const fontsCheckMs = roundedMs(nowMs() - fontsCheckStartedAt);
       if (missing.length > 0) throw new Error(`Remotion fonts failed to load: ${missing.join(', ')}`);
+      return {
+        fontFacesMs,
+        fontsReadyMs,
+        fontsCheckMs,
+        faceCount: faces.length,
+        uniqueResourceCount: new Set(facesToLoad.map((face) => face.url)).size,
+        faces,
+      };
     })();
     requests.set(requestKey, pending);
   }
   try {
-    await pending;
+    const execution = await pending;
+    return {
+      ...execution,
+      requestCacheHit,
+      waitMs: roundedMs(nowMs() - waitStartedAt),
+      selectionMs,
+    };
   } catch (error) {
     requests.delete(requestKey);
     throw error;
   }
+}
+
+export async function prepareAndLoadRemotionFontsWithTiming(input: {
+  code: string;
+  props?: Record<string, unknown>;
+  manifestUrl: string;
+  substitutions?: Record<string, string>;
+  targetDocument?: Document;
+}): Promise<{ prepared: PreparedRemotionFonts; timing: RemotionFontTiming }> {
+  const totalStartedAt = nowMs();
+  const manifestResult = await fetchRemotionFontManifestWithTiming(input.manifestUrl);
+  const prepareStartedAt = nowMs();
+  const prepared = prepareRemotionFontCode({
+    code: input.code,
+    manifest: manifestResult.manifest,
+    substitutions: input.substitutions,
+  });
+  const prepareMs = roundedMs(nowMs() - prepareStartedAt);
+  const load = await loadPreparedRemotionFonts({
+    manifest: manifestResult.manifest,
+    prepared,
+    text: `${input.code}\n${JSON.stringify(input.props || {})}`,
+    targetDocument: input.targetDocument,
+  });
+  return {
+    prepared,
+    timing: {
+      version: 1,
+      totalMs: roundedMs(nowMs() - totalStartedAt),
+      manifestMs: manifestResult.durationMs,
+      manifestCacheHit: manifestResult.cacheHit,
+      prepareMs,
+      usedFamilies: prepared.usedFamilies,
+      load,
+    },
+  };
 }
 
 export async function prepareAndLoadRemotionFonts(input: {
@@ -315,13 +467,5 @@ export async function prepareAndLoadRemotionFonts(input: {
   substitutions?: Record<string, string>;
   targetDocument?: Document;
 }): Promise<PreparedRemotionFonts> {
-  const manifest = await fetchRemotionFontManifest(input.manifestUrl);
-  const prepared = prepareRemotionFontCode({ code: input.code, manifest, substitutions: input.substitutions });
-  await loadPreparedRemotionFonts({
-    manifest,
-    prepared,
-    text: `${input.code}\n${JSON.stringify(input.props || {})}`,
-    targetDocument: input.targetDocument,
-  });
-  return prepared;
+  return (await prepareAndLoadRemotionFontsWithTiming(input)).prepared;
 }

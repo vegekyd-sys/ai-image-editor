@@ -1,7 +1,8 @@
-import { describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import {
   REMOTION_FONT_CATALOG_VERSION,
   internalRemotionFontFamily,
+  loadPreparedRemotionFonts,
   prepareRemotionFontCode,
   remotionFontManifestUrlFromServeUrl,
   validateRemotionFontManifest,
@@ -41,6 +42,10 @@ function makeManifest(): RemotionFontCatalogManifest {
 }
 
 describe('Remotion shared font catalog', () => {
+  afterEach(() => {
+    vi.unstubAllGlobals();
+  });
+
   it('derives the stable manifest URL from the deployed Remotion site', () => {
     expect(remotionFontManifestUrlFromServeUrl('https://example.test/sites/site-id/index.html')).toBe(
       `https://example.test/sites/_font-catalog/${REMOTION_FONT_CATALOG_VERSION}/manifest.json`,
@@ -105,5 +110,49 @@ describe('Remotion shared font catalog', () => {
       code: 'const title = <div style={{fontFamily: `Inter, ${fallback}`}}>Title</div>;',
       manifest: makeManifest(),
     })).toThrow('Dynamic template fontFamily values are not supported');
+  });
+
+  it('records cold and document-cache font loading timings', async () => {
+    class MockFontFace {
+      constructor(
+        readonly family: string,
+        readonly source: string,
+        readonly descriptors: FontFaceDescriptors,
+      ) {}
+
+      async load() {
+        return this;
+      }
+    }
+    vi.stubGlobal('FontFace', MockFontFace);
+    const fonts = {
+      ready: Promise.resolve(),
+      add: vi.fn(),
+      check: vi.fn(() => true),
+    };
+    const targetDocument = { fonts } as unknown as Document;
+    const manifest = makeManifest();
+    const code = `const title = <div style={{fontFamily: 'Inter, sans-serif'}}>中文 Title</div>;`;
+    const prepared = prepareRemotionFontCode({ code, manifest });
+
+    const cold = await loadPreparedRemotionFonts({
+      manifest,
+      prepared,
+      text: code,
+      targetDocument,
+    });
+    const warm = await loadPreparedRemotionFonts({
+      manifest,
+      prepared,
+      text: code,
+      targetDocument,
+    });
+
+    expect(cold.requestCacheHit).toBe(false);
+    expect(cold.faceCount).toBeGreaterThanOrEqual(2);
+    expect(cold.faces.every((face) => face.loadMs >= 0)).toBe(true);
+    expect(warm.requestCacheHit).toBe(true);
+    expect(warm.faceCount).toBe(cold.faceCount);
+    expect(fonts.add).toHaveBeenCalledTimes(cold.faceCount);
   });
 });

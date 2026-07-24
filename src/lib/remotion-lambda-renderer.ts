@@ -1,9 +1,13 @@
+import { randomUUID } from 'node:crypto'
 import type { DesignPayload } from '@/types'
 import { hasRemotionAudioSources } from '@/lib/remotion-audio'
 import { resolveRemotionLambdaEncodingSettings } from '@/lib/remotion-encoding'
 import { prepareRemotionCodeForSandbox } from '@/lib/remotion-server'
 import { resolveRemotionFontManifestUrl } from '@/lib/remotion-font-manifest'
-import { REMOTION_FONT_CATALOG_VERSION, REMOTION_FONT_RUNTIME_VERSION } from '@/remotion/font-catalog'
+import {
+  REMOTION_FONT_CATALOG_VERSION,
+  REMOTION_FONT_RUNTIME_VERSION,
+} from '@/remotion/font-catalog'
 
 type RemotionLambdaClient = typeof import('@remotion/lambda-client')
 type LambdaRenderProgress = Awaited<ReturnType<RemotionLambdaClient['getRenderProgress']>>
@@ -38,6 +42,49 @@ export interface RemotionLambdaTimingSummary {
   functionLaunchedAt?: number | null
   compositionValidatedAt?: number | null
   serveUrlOpenedAt?: number | null
+  fontTelemetry?: RemotionLambdaFontTimingSummary
+}
+
+export interface RemotionLambdaFontTimingShard {
+  initialFrame: number
+  artifactBytes: number
+  artifactUrl: string
+  cacheHit: boolean
+  totalMs: number
+  manifestMs: number
+  selectionMs: number
+  fontFacesMs: number
+  fontsReadyMs: number
+  fontsCheckMs: number
+  faceCount: number
+  uniqueResourceCount: number
+}
+
+export interface RemotionLambdaFontTimingSummary {
+  available: boolean
+  telemetryId: string
+  collectionMs: number
+  artifactCount: number
+  shardCount: number
+  coldShardCount: number
+  warmShardCount: number
+  maxTotalMs: number | null
+  avgTotalMs: number | null
+  maxManifestMs: number | null
+  avgManifestMs: number | null
+  maxSelectionMs: number | null
+  avgSelectionMs: number | null
+  maxFontFacesMs: number | null
+  avgFontFacesMs: number | null
+  maxFontsReadyMs: number | null
+  avgFontsReadyMs: number | null
+  maxFontsCheckMs: number | null
+  avgFontsCheckMs: number | null
+  faceRequestCount: number
+  uniqueResourceRequestCount: number
+  observedTransferBytes: number
+  errors: string[]
+  shards: RemotionLambdaFontTimingShard[]
 }
 
 export interface RemotionLambdaUrlResult {
@@ -195,6 +242,116 @@ function numberOrNull(value: unknown): number | null {
   return typeof value === 'number' && Number.isFinite(value) ? value : null
 }
 
+function roundedMs(value: number): number {
+  return Math.round(value * 100) / 100
+}
+
+function maxOrNull(values: number[]): number | null {
+  return values.length > 0 ? Math.max(...values) : null
+}
+
+function averageOrNull(values: number[]): number | null {
+  return values.length > 0
+    ? roundedMs(values.reduce((sum, value) => sum + value, 0) / values.length)
+    : null
+}
+
+export function summarizeRemotionFontTiming(input: {
+  telemetryId: string
+  collectionMs: number
+  artifactCount: number
+  shards: RemotionLambdaFontTimingShard[]
+  errors?: string[]
+}): RemotionLambdaFontTimingSummary {
+  const shards = [...input.shards].sort((a, b) => a.initialFrame - b.initialFrame)
+  const totalMs = shards.map((shard) => shard.totalMs)
+  const manifestMs = shards.map((shard) => shard.manifestMs)
+  const selectionMs = shards.map((shard) => shard.selectionMs)
+  const fontFacesMs = shards.map((shard) => shard.fontFacesMs)
+  const fontsReadyMs = shards.map((shard) => shard.fontsReadyMs)
+  const fontsCheckMs = shards.map((shard) => shard.fontsCheckMs)
+
+  return {
+    available: shards.length > 0,
+    telemetryId: input.telemetryId,
+    collectionMs: roundedMs(input.collectionMs),
+    artifactCount: input.artifactCount,
+    shardCount: shards.length,
+    coldShardCount: shards.filter((shard) => !shard.cacheHit).length,
+    warmShardCount: shards.filter((shard) => shard.cacheHit).length,
+    maxTotalMs: maxOrNull(totalMs),
+    avgTotalMs: averageOrNull(totalMs),
+    maxManifestMs: maxOrNull(manifestMs),
+    avgManifestMs: averageOrNull(manifestMs),
+    maxSelectionMs: maxOrNull(selectionMs),
+    avgSelectionMs: averageOrNull(selectionMs),
+    maxFontFacesMs: maxOrNull(fontFacesMs),
+    avgFontFacesMs: averageOrNull(fontFacesMs),
+    maxFontsReadyMs: maxOrNull(fontsReadyMs),
+    avgFontsReadyMs: averageOrNull(fontsReadyMs),
+    maxFontsCheckMs: maxOrNull(fontsCheckMs),
+    avgFontsCheckMs: averageOrNull(fontsCheckMs),
+    faceRequestCount: shards.reduce((sum, shard) => sum + shard.faceCount, 0),
+    uniqueResourceRequestCount: shards.reduce(
+      (sum, shard) => sum + shard.uniqueResourceCount,
+      0,
+    ),
+    observedTransferBytes: 0,
+    errors: input.errors || [],
+    shards,
+  }
+}
+
+function collectFontTimingArtifacts(input: {
+  progress: LambdaRenderProgress
+  telemetryId: string
+}): RemotionLambdaFontTimingSummary {
+  const startedAt = Date.now()
+  const prefix = `makaron-font-timing-${input.telemetryId}-`
+  const artifacts = input.progress.artifacts.filter((artifact) =>
+    artifact.filename.startsWith(prefix) && artifact.filename.endsWith('.json'))
+  const uniqueArtifacts = [...new Map(artifacts.map((artifact) => [artifact.filename, artifact])).values()]
+  const errors: string[] = []
+  const shards: RemotionLambdaFontTimingShard[] = []
+  const timingPattern = new RegExp(
+    `^${input.telemetryId}-(\\d+)-[a-z0-9]+-t(\\d+)-m(\\d+)-s(\\d+)-f(\\d+)-r(\\d+)-c(\\d+)-n(\\d+)-u(\\d+)-w([01])\\.json$`,
+  )
+  for (const artifact of uniqueArtifacts) {
+    const suffix = artifact.filename.slice('makaron-font-timing-'.length)
+    const match = timingPattern.exec(suffix)
+    if (!match) {
+      errors.push(`${artifact.filename}: invalid font timing filename`)
+      continue
+    }
+    const fromToken = (value: string) => Number(value) / 100
+    shards.push({
+      initialFrame: Number(match[1]),
+      artifactBytes: artifact.sizeInBytes,
+      artifactUrl: artifact.s3Url,
+      totalMs: fromToken(match[2]),
+      manifestMs: fromToken(match[3]),
+      selectionMs: fromToken(match[4]),
+      fontFacesMs: fromToken(match[5]),
+      fontsReadyMs: fromToken(match[6]),
+      fontsCheckMs: fromToken(match[7]),
+      faceCount: Number(match[8]),
+      uniqueResourceCount: Number(match[9]),
+      cacheHit: match[10] === '1',
+    })
+  }
+  if (uniqueArtifacts.length === 0) {
+    errors.push('No font timing artifacts were returned by the Remotion runtime')
+  }
+
+  return summarizeRemotionFontTiming({
+    telemetryId: input.telemetryId,
+    collectionMs: roundedMs(Date.now() - startedAt),
+    artifactCount: uniqueArtifacts.length,
+    shards,
+    errors,
+  })
+}
+
 function readProgressTiming(progress: LambdaRenderProgress, key: string): number | null {
   return numberOrNull((progress as unknown as Record<string, unknown>)[key])
 }
@@ -267,6 +424,7 @@ export async function renderDesignVideoLambdaToUrl(
   const logLevel = readEnv('REMOTION_LAMBDA_LOG_LEVEL') || 'warn'
   const timeoutInMilliseconds = readPositiveInteger(readEnv('REMOTION_LAMBDA_TIMEOUT_MS'), 120000)
   const progressRetryAttempts = readPositiveInteger(readEnv('REMOTION_LAMBDA_PROGRESS_RETRIES'), 3)
+  const fontTelemetryId = randomUUID()
   const preparedCode = prepareRemotionCodeForSandbox(design.code)
   const fontManifestUrl = resolveRemotionFontManifestUrl(serveUrl)
   const hasAudioSources = hasRemotionAudioSources(design.code)
@@ -293,6 +451,7 @@ export async function renderDesignVideoLambdaToUrl(
         height: design.height || 1920,
         fontManifestUrl,
         fontSubstitutions: design.fontSubstitutions || {},
+        fontTelemetryId,
         useOffthreadVideo,
         useNativeVideo: true,
       },
@@ -388,6 +547,10 @@ export async function renderDesignVideoLambdaToUrl(
     if (progress.done) {
       if (!progress.outputFile) throw new Error('Remotion Lambda completed without an outputFile')
       const doneMs = Date.now()
+      const fontTelemetry = collectFontTimingArtifacts({
+        progress,
+        telemetryId: fontTelemetryId,
+      })
       const timings = buildTimingSummary({
         startMs: t0,
         submitStartMs,
@@ -396,6 +559,7 @@ export async function renderDesignVideoLambdaToUrl(
         pollDurationsMs,
         progress,
       })
+      timings.fontTelemetry = fontTelemetry
       return {
         url: progress.outputFile,
         renderId: started.renderId,

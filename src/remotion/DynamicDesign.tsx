@@ -12,13 +12,14 @@ import * as THREE from 'three';
 import { transform as sucraseTransform } from 'sucrase';
 import { normalizeRemotionScopeDeclarations } from '@/lib/remotion-code-normalization';
 import {
-  fetchRemotionFontManifest,
+  fetchRemotionFontManifestWithTiming,
   loadPreparedRemotionFonts,
   prepareRemotionFontCode,
   type PreparedRemotionFonts,
+  type RemotionFontTiming,
 } from '@/remotion/font-catalog';
 
-const { Sequence, useVideoConfig, delayRender, continueRender, cancelRender } = Remotion;
+const { Artifact, Sequence, useCurrentFrame, useVideoConfig, delayRender, continueRender, cancelRender } = Remotion;
 
 // Sequence wrapper: auto-inject premountFor={fps} for smooth video cuts
 
@@ -95,11 +96,16 @@ export const DynamicDesign: React.FC<Record<string, unknown>> = ({
   designProps,
   fontManifestUrl,
   fontSubstitutions,
+  fontTelemetryId,
   useOffthreadVideo,
   useNativeVideo,
 }) => {
+  const currentFrame = useCurrentFrame();
+  const initialFrameRef = useRef(currentFrame);
+  const telemetryShardIdRef = useRef(Math.random().toString(36).slice(2, 10));
   const codeStr = typeof code === 'string' ? code : '';
   const manifestUrl = typeof fontManifestUrl === 'string' ? fontManifestUrl : '';
+  const telemetryId = typeof fontTelemetryId === 'string' ? fontTelemetryId : '';
   const propsObj = useMemo(
     () => (typeof designProps === 'object' && designProps !== null ? designProps : {}) as Record<string, unknown>,
     [designProps],
@@ -116,6 +122,7 @@ export const DynamicDesign: React.FC<Record<string, unknown>> = ({
   );
   const [prepared, setPrepared] = useState<PreparedRemotionFonts | null>(null);
   const [fontError, setFontError] = useState<Error | null>(null);
+  const [fontTiming, setFontTiming] = useState<RemotionFontTiming | null>(null);
   const Component = useMemo(
     () => prepared ? compileAndEval(prepared.code, remotionScope) : null,
     [prepared, remotionScope],
@@ -140,19 +147,38 @@ export const DynamicDesign: React.FC<Record<string, unknown>> = ({
     let cancelled = false;
     setPrepared(null);
     setFontError(null);
+    setFontTiming(null);
     const handle = delayRender('Loading fonts for design');
     handleRef.current = handle;
 
     (async () => {
       try {
-        const manifest = await fetchRemotionFontManifest(manifestUrl);
-        const nextPrepared = prepareRemotionFontCode({ code: codeStr, manifest, substitutions });
+        const totalStartedAt = performance.now();
+        const manifestResult = await fetchRemotionFontManifestWithTiming(manifestUrl);
+        const prepareStartedAt = performance.now();
+        const nextPrepared = prepareRemotionFontCode({
+          code: codeStr,
+          manifest: manifestResult.manifest,
+          substitutions,
+        });
+        const prepareMs = Math.round((performance.now() - prepareStartedAt) * 100) / 100;
         if (cancelled) return;
         setPrepared(nextPrepared);
-        await loadPreparedRemotionFonts({ manifest, prepared: nextPrepared, text: allText });
+        const load = await loadPreparedRemotionFonts({
+          manifest: manifestResult.manifest,
+          prepared: nextPrepared,
+          text: allText,
+        });
         if (cancelled) return;
-        continueRender(handle);
-        handleRef.current = null;
+        setFontTiming({
+          version: 1,
+          totalMs: Math.round((performance.now() - totalStartedAt) * 100) / 100,
+          manifestMs: manifestResult.durationMs,
+          manifestCacheHit: manifestResult.cacheHit,
+          prepareMs,
+          usedFamilies: nextPrepared.usedFamilies,
+          load,
+        });
       } catch (error) {
         if (cancelled) return;
         const fontLoadError = error instanceof Error ? error : new Error(String(error));
@@ -171,14 +197,54 @@ export const DynamicDesign: React.FC<Record<string, unknown>> = ({
     };
   }, [allText, codeStr, manifestUrl, substitutions]);
 
+  // Continue only after the timing Artifact has committed. This makes the
+  // per-shard metrics part of the same render instead of racing the first frame.
+  useEffect(() => {
+    if (!fontTiming || handleRef.current === null) return;
+    const handle = handleRef.current;
+    handleRef.current = null;
+    continueRender(handle);
+  }, [fontTiming]);
+
   if (fontError) throw fontError;
   if (!prepared) return null;
 
   if (!Component) {
     throw new Error('Failed to compile design code');
   }
+  const timingToken = (value: number) => Math.max(0, Math.round(value * 100));
+  const timingFilename = fontTiming && telemetryId
+    ? [
+      `makaron-font-timing-${telemetryId}`,
+      initialFrameRef.current,
+      telemetryShardIdRef.current,
+      `t${timingToken(fontTiming.totalMs)}`,
+      `m${timingToken(fontTiming.manifestMs)}`,
+      `s${timingToken(fontTiming.load.selectionMs)}`,
+      `f${timingToken(fontTiming.load.fontFacesMs)}`,
+      `r${timingToken(fontTiming.load.fontsReadyMs)}`,
+      `c${timingToken(fontTiming.load.fontsCheckMs)}`,
+      `n${fontTiming.load.faceCount}`,
+      `u${fontTiming.load.uniqueResourceCount}`,
+      `w${fontTiming.manifestCacheHit || fontTiming.load.requestCacheHit ? 1 : 0}.json`,
+    ].join('-')
+    : '';
+  const artifact = fontTiming && telemetryId && currentFrame === initialFrameRef.current
+    ? JSON.stringify({
+      type: 'makaron-remotion-font-timing',
+      telemetryId,
+      initialFrame: initialFrameRef.current,
+      timing: fontTiming,
+    })
+    : null;
   return (
     <div style={{ width: '100%', height: '100%', fontFamily: prepared.defaultFontFamily }}>
+      {artifact ? (
+        <Artifact
+          filename={timingFilename}
+          content={artifact}
+        />
+      ) : null}
       <Component {...propsObj} />
     </div>
   );

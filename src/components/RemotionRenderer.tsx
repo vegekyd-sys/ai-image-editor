@@ -5,7 +5,10 @@ import { Player, type PlayerRef } from '@remotion/player';
 import { renderStillOnWeb, renderMediaOnWeb, type RenderMediaOnWebProgress } from '@remotion/web-renderer';
 import { evalRemotionJSX, preloadBabel } from '@/lib/evalRemotionJSX';
 import type { DesignPayload } from '@/types';
-import { prepareAndLoadRemotionFonts } from '@/remotion/font-catalog';
+import {
+  prepareAndLoadRemotionFontsWithTiming,
+  type RemotionFontTiming,
+} from '@/remotion/font-catalog';
 
 export type { DesignPayload };
 export type { RenderMediaOnWebProgress };
@@ -83,17 +86,34 @@ async function resolveDesignImageUrls(
 
 const BROWSER_FONT_MANIFEST_URL = '/api/remotion/fonts';
 
+export interface BrowserRemotionFontTiming {
+  source: 'player' | 'poster' | 'preview-frame' | 'web-export';
+  recordedAt: string;
+  timing: RemotionFontTiming;
+}
+
+function recordBrowserFontTiming(entry: BrowserRemotionFontTiming): void {
+  const target = window as typeof window & {
+    __MAKARON_REMOTION_FONT_TIMINGS__?: BrowserRemotionFontTiming[];
+  };
+  const existing = target.__MAKARON_REMOTION_FONT_TIMINGS__ || [];
+  target.__MAKARON_REMOTION_FONT_TIMINGS__ = [...existing.slice(-19), entry];
+  window.dispatchEvent(new CustomEvent('makaron:remotion-font-timing', { detail: entry }));
+}
+
 async function compileBrowserDesign(
   design: DesignPayload,
   code: string,
   props: Record<string, unknown>,
+  source: BrowserRemotionFontTiming['source'],
 ): Promise<React.ComponentType<Record<string, unknown>>> {
-  const prepared = await prepareAndLoadRemotionFonts({
+  const { prepared, timing } = await prepareAndLoadRemotionFontsWithTiming({
     code,
     props,
     manifestUrl: BROWSER_FONT_MANIFEST_URL,
     substitutions: design.fontSubstitutions,
   });
+  recordBrowserFontTiming({ source, recordedAt: new Date().toISOString(), timing });
   const Component = evalRemotionJSX(prepared.code);
   if (!Component) throw new Error('Failed to compile design code');
 
@@ -122,7 +142,7 @@ export async function captureDesignPoster(design: DesignPayload): Promise<string
     // Then resolve image URLs in both code literals and editable props.
     const { code: resolvedCode, props: resolvedProps, blobUrls: imageBlobUrls } = await resolveDesignImageUrls(design, videoResolved);
     allBlobUrls = [...videoBlobUrls, ...imageBlobUrls];
-    const comp = await compileBrowserDesign(design, resolvedCode, resolvedProps);
+    const comp = await compileBrowserDesign(design, resolvedCode, resolvedProps, 'poster');
 
     const fps = design.animation?.fps || 30;
     const durationInFrames = design.animation
@@ -170,7 +190,7 @@ export async function captureDesignFrame(design: DesignPayload, frame: number): 
     const { code: videoResolved, blobUrls: videoBlobUrls } = await resolveVideoUrls(design.code);
     const { code: resolvedCode, props: resolvedProps, blobUrls: imageBlobUrls } = await resolveDesignImageUrls(design, videoResolved);
     allBlobUrls = [...videoBlobUrls, ...imageBlobUrls];
-    const comp = await compileBrowserDesign(design, resolvedCode, resolvedProps);
+    const comp = await compileBrowserDesign(design, resolvedCode, resolvedProps, 'preview-frame');
 
     const fps = design.animation?.fps || 30;
     const durationInFrames = design.animation
@@ -261,7 +281,7 @@ export default function RemotionRenderer({ design, onError, mode = 'inline', hid
         const { code: resolvedCode, props: resolvedProps, blobUrls: imageBlobUrls } = await resolveDesignImageUrls(design, videoResolved);
         blobUrls.push(...imageBlobUrls);
         if (cancelled) { blobUrls.forEach(url => URL.revokeObjectURL(url)); return; }
-        const comp = await compileBrowserDesign(design, resolvedCode, resolvedProps);
+        const comp = await compileBrowserDesign(design, resolvedCode, resolvedProps, 'player');
         if (cancelled) { blobUrls.forEach(url => URL.revokeObjectURL(url)); return; }
         setCompileError(null);
         setComponent(() => comp);
@@ -480,7 +500,7 @@ export async function exportDesignVideo(
   const { code: imageResolved, props: resolvedProps, blobUrls: imageBlobUrls } = await resolveDesignImageUrls(design, videoResolved);
   // Pre-fetch remote audio URLs → blob URLs (Suno CDN URLs may be stale/expired)
   const { code: resolvedCode, blobUrls: audioBlobUrls } = await resolveAudioUrls(imageResolved);
-  const Component = await compileBrowserDesign(design, resolvedCode, resolvedProps);
+  const Component = await compileBrowserDesign(design, resolvedCode, resolvedProps, 'web-export');
 
   const fps = design.animation?.fps || 30;
   const durationInFrames = design.animation
