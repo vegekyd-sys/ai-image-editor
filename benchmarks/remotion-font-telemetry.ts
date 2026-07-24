@@ -3,6 +3,7 @@ import path from 'node:path'
 import { config as loadEnv } from 'dotenv'
 
 import { renderDesignVideoLambdaToUrl } from '@/lib/remotion-lambda-renderer'
+import { resolveRemotionRenderProfile, type RemotionRenderProfile } from '@/lib/remotion-export'
 import type { DesignPayload } from '@/types'
 
 loadEnv({ path: path.resolve(process.cwd(), '.env.local'), quiet: true })
@@ -39,12 +40,20 @@ async function loadDesign(): Promise<{ design: DesignPayload; source: string }> 
 
 async function main() {
   const { design, source } = await loadDesign()
-  const result = await renderDesignVideoLambdaToUrl(design)
+  const profile: RemotionRenderProfile = process.env.REMOTION_FONT_BENCHMARK_PROFILE === 'source'
+    ? 'source'
+    : 'fast_720p'
+  const renderTarget = resolveRemotionRenderProfile(design, profile)
+  const result = await renderDesignVideoLambdaToUrl(design, { scale: renderTarget.scale })
   console.log(JSON.stringify({
     source,
     durationInSeconds: design.animation?.durationInSeconds || null,
-    width: design.width,
-    height: design.height,
+    sourceWidth: design.width,
+    sourceHeight: design.height,
+    profile,
+    width: renderTarget.width,
+    height: renderTarget.height,
+    scale: renderTarget.scale,
     renderId: result.renderId,
     outputUrl: result.url,
     renderSeconds: result.renderSeconds,

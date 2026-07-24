@@ -208,11 +208,11 @@ wrong or expensive.
    `publish_draft({ design_path: "<exact-gated-path>" })`. Do not publish an
    older timeline snapshot or use its `media_index` as the export source.
 18. Materialize the exact gated `design_path` once with
-   `materialize_media({ design_path, profile: "source", wait: true })` when the
-   locked promise is source resolution. In Studio Run this call waits for the
-   final MP4 and successful completion automatically projects both Review and
-   Delivery UI states. Do not call `studio_run` to persist Review or Delivery,
-   and do not start another preview/review loop after materialization succeeds.
+   `materialize_media({ design_path })`. Studio Run selects the locked source
+   resolution automatically and returns after durable queue submission. When
+   the final MP4 is ready, the worker projects both Review and Delivery UI
+   states. Do not call `studio_run` to persist Review or Delivery, and do not
+   start another preview/review loop after materialization is queued.
    A failed Studio Run artifact write or materialization is a blocker, not a
    warning.
 

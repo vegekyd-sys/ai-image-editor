@@ -31,16 +31,10 @@ import { createTextDeltaState, normalizeTextDelta } from './agent-text-delta';
 import { formatAspectRatio } from './media-aspect';
 import { filterWorkspaceFilesForAgentScope } from './agent-workspace-scope';
 import { normalizeCompositionAnimation } from './composition-duration';
-import {
-  createRemotionExportJob,
-  runRemotionExportJobAndWait,
-  type RemotionRenderProfile,
-} from '@/lib/remotion-export';
+import { createRemotionExportJob } from '@/lib/remotion-export';
 import { VIDEO_PLACEHOLDER_IMAGE } from '@/lib/editor/timeline-derivations';
 import { normalizeAgentErrorMessage } from './agent-error';
 import {
-  findSnapshotMediaIndex,
-  pinAgentMediaUrl,
   rebuildAgentSnapshotUrls,
   type AgentSnapshotIndexRow,
 } from './agent-media-index';
@@ -3020,18 +3014,16 @@ The same Agent Run and design_path resolve to the same Snapshot ID, so a retry o
     materialize_media: tool({
       description: `Export an editable Remotion composition into a real MP4 video.
 Use this when the user asks to save/export/materialize/turn a composition into MP4. It accepts a timeline media_index, snapshot_id, design_path, or the current unsaved composition from run_code.
-Default profile is fast_720p (short side 720, no upscale) for speed. Default publish=true so the exported MP4 appears as a new <<<media_N>>> video. A completed synchronous export returns the exact mediaIndex for subsequent analyze_video/preview_frame calls; use that returned index instead of guessing. By default the tool queues a durable async export like video generation; polling/cron completes it and reports either success or failure. Set wait=true on the first call when the current response must include the final URL. A repeated call for the same unchanged composition reuses the fingerprint-matched queued/completed job and does not render twice. If the same unchanged composition fails twice in one turn, stop retrying and report export as blocked.
-For Studio Run, first preview and patch the Remotion source until it is satisfactory, call publish_draft once with the exact final design_path, then call materialize_media once with that same path when MP4 Delivery is requested. Studio Run automatically waits at source resolution; successful export is terminal and completes the Review and Delivery UI states. materialize_media publishes the MP4, not the editable draft. Do not author Review/Delivery artifacts or continue reviewing after success.`,
+The tool always queues a durable async export like video generation and returns immediately, so the user can keep chatting while polling/cron finishes the MP4. Ordinary CUI exports use fast_720p (short side 720, no upscale) for speed. Default publish=true so a processing video appears immediately and is replaced by the finished MP4. A repeated call for the same unchanged composition reuses the fingerprint-matched queued/completed job and does not render twice. If the same unchanged composition fails twice in one turn, stop retrying and report export as blocked.
+For Studio Run, first preview and patch the Remotion source until it is satisfactory, call publish_draft once with the exact final design_path, then call materialize_media once with that same path when MP4 Delivery is requested. The runtime selects locked source resolution from typed Studio Run state. The queued export automatically completes Review and Delivery after the real MP4 is ready. After a successful queue submission, do not author Review/Delivery artifacts or continue reviewing. materialize_media publishes the MP4, not the editable draft.`,
       inputSchema: z.object({
         media_index: z.number().optional().describe('1-based media index, e.g. 3 for <<<media_3>>>. Must point to an editable Remotion composition.'),
         snapshot_id: z.string().optional().describe('Snapshot ID of an editable Remotion composition.'),
         design_path: z.string().optional().describe('Workspace design JSON path, e.g. code/<snapshotId>.json.'),
         name: z.string().optional().describe('Short output slug/name.'),
-        profile: z.enum(['fast_720p', 'source']).optional().describe('fast_720p for speed, source for full source resolution.'),
         publish: z.boolean().optional().describe('Default true. Publish exported MP4 into the project timeline.'),
-        wait: z.boolean().optional().describe('Default false outside Studio Run. Studio Run always waits for the final MP4 URL so successful materialization can complete the run atomically.'),
       }),
-      execute: async ({ media_index, snapshot_id, design_path, name, profile, publish, wait }) => {
+      execute: async ({ media_index, snapshot_id, design_path, name, publish }) => {
         if (!ctx.supabase || !ctx.userId) {
           return { success: false, error: 'materialize_media requires an authenticated project workspace.' };
         }
@@ -3066,11 +3058,10 @@ For Studio Run, first preview and patch the Remotion source until it is satisfac
 
         try {
           const shouldPublish = publish !== false;
-          const shouldWait = Boolean(studioCheckpoint.studioRunId) || wait === true;
-          const renderProfile: RemotionRenderProfile = studioCheckpoint.studioRunId
+          const renderProfile = studioCheckpoint.studioRunId
             ? 'source'
-            : (profile || 'fast_720p');
-          const publishSnapshotId = shouldPublish && !shouldWait ? crypto.randomUUID() : undefined;
+            : 'fast_720p';
+          const publishSnapshotId = shouldPublish ? crypto.randomUUID() : undefined;
           const job = await createRemotionExportJob({
             userId: ctx.userId,
             projectId: ctx.projectId,
@@ -3085,156 +3076,64 @@ For Studio Run, first preview and patch the Remotion source until it is satisfac
             studioRunId: studioCheckpoint.studioRunId,
           });
 
-          if (!shouldWait) {
-            const taskId = `remotion-export-${job.id}`;
-            const videoMeta: VideoMeta = {
-              taskId,
-              videoUrl: job.storage_url || '',
-              providerUrl: job.storage_url || '',
-              videoPath: job.workspace_path || '',
-              prompt: name || 'Materialized Remotion composition',
-              sourceSnapshotIds: source.snapshotId ? [source.snapshotId] : [],
-              sourceUrls: [],
-              status: job.status === 'completed' && job.storage_url ? 'completed' : 'processing',
-              duration: job.duration_seconds || null,
-              model: 'upload',
-              createdAt: new Date().toISOString(),
-              width: job.width || undefined,
-              height: job.height || undefined,
-            };
-            if (publishSnapshotId) {
-              const pendingVideoMeta: VideoMeta = {
-                ...videoMeta,
-                taskId: `remotion-export-pending-${job.id}`,
-                videoUrl: job.storage_url || '',
-                providerUrl: job.storage_url || '',
-              };
-              if (job.status !== 'completed') {
-                const { data: sortData } = await ctx.supabase.rpc('next_sort_order', { p_project_id: ctx.projectId });
-                const { error: pendingInsertError } = await ctx.supabase.from('snapshots').upsert({
-                  id: publishSnapshotId,
-                  project_id: ctx.projectId,
-                  image_url: VIDEO_PLACEHOLDER_IMAGE,
-                  tips: [],
-                  message_id: '',
-                  sort_order: sortData ?? 0,
-                  type: 'video',
-                  video_meta: pendingVideoMeta,
-                  description: name || 'Materialized Remotion composition',
-                }, { onConflict: 'id' });
-                if (pendingInsertError) {
-                  throw new Error(`Pending export snapshot insert failed: ${pendingInsertError.message}`);
-                }
-              }
-              ctx.pendingVideoSnapshot = {
-                snapshotId: publishSnapshotId,
-                taskId,
-                videoMeta: pendingVideoMeta,
-              };
-            }
-            return {
-              success: true,
-              queued: job.status !== 'completed',
-              jobId: job.id,
-              status: job.status,
-              taskId,
-              publishSnapshotId,
-              message: shouldPublish
-                ? `Queued MP4 export. It will appear as a video in the timeline. Job: ${job.id}`
-                : `Queued MP4 export. Job: ${job.id}`,
-            };
-          }
-
-          const result = await runRemotionExportJobAndWait(job.id);
-          const completed = result.job;
-          const videoUrl = completed.storage_url || '';
-          const audioAnalysis = completed.metadata?.audioAnalysis && typeof completed.metadata.audioAnalysis === 'object'
-            ? completed.metadata.audioAnalysis
-            : undefined;
-          let studioRunCompleted = false;
-          if (studioCheckpoint.studioRunId && completed.status === 'completed') {
-            const outputPath = completed.storage_url || completed.workspace_path || '';
-            const compositionDesignPath = completed.design_path || source.designPath || '';
-            if (!outputPath || !compositionDesignPath) {
-              throw new Error('Studio Run export completed but its MP4 or editable Composition path is missing.');
-            }
-            const studio = await import('./studio-run');
-            const store = new studio.WorkspaceStudioRunStore(ctx.supabase, ctx.userId);
-            const activeRun = await store.loadRun(ctx.projectId, studioCheckpoint.studioRunId);
-            if (!activeRun) throw new Error(`Studio Run ${studioCheckpoint.studioRunId} disappeared after export.`);
-            const completion = await studio.completePersistedStudioRunFromMaterialization({
-              store,
-              run: activeRun,
-              outputPath,
-              compositionDesignPath,
-            });
-            studioRunCompleted = completion.run.status === 'completed';
-            if (!studioRunCompleted) {
-              throw new Error(`Studio Run ${studioCheckpoint.studioRunId} did not reach completed after export.`);
-            }
-          }
-          const publishedSnapshotId = typeof completed.metadata?.publishedSnapshotId === 'string'
-            ? completed.metadata.publishedSnapshotId
-            : undefined;
-          const videoMeta: VideoMeta | null = videoUrl ? {
-            taskId: `remotion-export-${completed.id}`,
-            videoUrl,
-            providerUrl: videoUrl,
-            videoPath: completed.workspace_path || '',
+          const taskId = `remotion-export-${job.id}`;
+          const videoMeta: VideoMeta = {
+            taskId,
+            videoUrl: job.storage_url || '',
+            providerUrl: job.storage_url || '',
+            videoPath: job.workspace_path || '',
             prompt: name || 'Materialized Remotion composition',
             sourceSnapshotIds: source.snapshotId ? [source.snapshotId] : [],
-            sourceUrls: [videoUrl],
-            status: 'completed',
-            duration: completed.duration_seconds || null,
+            sourceUrls: [],
+            status: job.status === 'completed' && job.storage_url ? 'completed' : 'processing',
+            duration: job.duration_seconds || null,
             model: 'upload',
             createdAt: new Date().toISOString(),
-            width: completed.width || undefined,
-            height: completed.height || undefined,
-          } : null;
-          let publishedMediaIndex: number | undefined;
-          if (publishedSnapshotId && videoMeta) {
-            ctx.pendingVideoSnapshot = {
-              snapshotId: publishedSnapshotId,
-              taskId: videoMeta.taskId || `remotion-export-${completed.id}`,
-              videoMeta,
+            width: job.width || undefined,
+            height: job.height || undefined,
+          };
+          if (publishSnapshotId) {
+            const pendingVideoMeta: VideoMeta = {
+              ...videoMeta,
+              taskId: `remotion-export-pending-${job.id}`,
+              videoUrl: job.storage_url || '',
+              providerUrl: job.storage_url || '',
             };
-            const orderedSnapshots = await refreshSnapshotUrls(ctx);
-            const actualMediaIndex = findSnapshotMediaIndex(orderedSnapshots, publishedSnapshotId);
-            if (actualMediaIndex) {
-              const pinnedUrls = pinAgentMediaUrl(ctx.snapshotImages, actualMediaIndex, videoUrl);
-              ctx.snapshotImages.splice(0, ctx.snapshotImages.length, ...pinnedUrls);
-              ctx.currentSnapshotIndex = actualMediaIndex - 1;
-              publishedMediaIndex = actualMediaIndex;
-            } else {
-              const existingIndex = ctx.snapshotImages.indexOf(videoUrl);
-              if (existingIndex >= 0) {
-                ctx.currentSnapshotIndex = existingIndex;
-                publishedMediaIndex = existingIndex + 1;
-              } else {
-                ctx.snapshotImages.push(videoUrl);
-                ctx.currentSnapshotIndex = ctx.snapshotImages.length - 1;
-                publishedMediaIndex = ctx.snapshotImages.length;
+            if (job.status !== 'completed') {
+              const { data: sortData } = await ctx.supabase.rpc('next_sort_order', { p_project_id: ctx.projectId });
+              const { error: pendingInsertError } = await ctx.supabase.from('snapshots').upsert({
+                id: publishSnapshotId,
+                project_id: ctx.projectId,
+                image_url: VIDEO_PLACEHOLDER_IMAGE,
+                tips: [],
+                message_id: '',
+                sort_order: sortData ?? 0,
+                type: 'video',
+                video_meta: pendingVideoMeta,
+                description: name || 'Materialized Remotion composition',
+              }, { onConflict: 'id' });
+              if (pendingInsertError) {
+                throw new Error(`Pending export snapshot insert failed: ${pendingInsertError.message}`);
               }
             }
+            ctx.pendingVideoSnapshot = {
+              snapshotId: publishSnapshotId,
+              taskId,
+              videoMeta: pendingVideoMeta,
+            };
           }
           return {
-            success: completed.status === 'completed',
-            jobId: completed.id,
-            status: completed.status,
-            videoUrl,
-            workspacePath: completed.workspace_path,
-            publishedSnapshotId,
-            mediaIndex: publishedMediaIndex,
-            durationSeconds: completed.duration_seconds,
-            renderSeconds: completed.render_seconds,
-            realtimeRatio: completed.realtime_ratio,
-            audioAnalysis,
-            studioRunCompleted,
-            message: publishedMediaIndex
-              ? `Exported MP4 is available as <<<media_${publishedMediaIndex}>>>.${studioCheckpoint.studioRunId ? ' Studio Run is complete; do not start another Review or Delivery step.' : ''}`
-              : studioCheckpoint.studioRunId
-                ? 'Exported MP4 successfully. Studio Run is complete; do not start another Review or Delivery step.'
-                : undefined,
+            success: true,
+            queued: job.status !== 'completed',
+            jobId: job.id,
+            status: job.status,
+            taskId,
+            publishSnapshotId,
+            renderProfile,
+            studioRunPending: Boolean(studioCheckpoint.studioRunId) && job.status !== 'completed',
+            message: shouldPublish
+              ? `MP4 export submitted. A processing video is in the timeline and will update automatically. Job: ${job.id}`
+              : `MP4 export submitted. Job: ${job.id}`,
           };
         } catch (err) {
           return { success: false, error: err instanceof Error ? err.message : String(err) };

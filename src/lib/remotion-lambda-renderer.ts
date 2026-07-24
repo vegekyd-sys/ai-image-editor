@@ -415,7 +415,7 @@ export async function renderDesignVideoLambdaToUrl(
     : undefined
   const framesPerLambda = concurrency
     ? undefined
-    : readPositiveInteger(readEnv('REMOTION_LAMBDA_FRAMES_PER_LAMBDA'), 60)
+    : readPositiveInteger(readEnv('REMOTION_LAMBDA_FRAMES_PER_LAMBDA'), 10)
   const pollMs = readPositiveInteger(readEnv('REMOTION_LAMBDA_POLL_MS'), 1000)
   const x264Preset = readX264Preset()
   const jpegQuality = readPositiveInteger(readEnv('REMOTION_LAMBDA_JPEG_QUALITY'), 80)
