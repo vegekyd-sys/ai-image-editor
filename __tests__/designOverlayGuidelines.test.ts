@@ -18,6 +18,11 @@ describe('DesignOverlay moveable guideline regression guards', () => {
     expect(source).toContain('elementGuidelines={rects.filter(r => r.id !== selectedFieldId).map(r => r.domEl)}');
   });
 
+  it('measures Moveable in the scaled Remotion canvas coordinate space', () => {
+    expect(source).toContain('rootContainer={containerEl ?? undefined}');
+    expect(source).not.toContain('rootContainer={overlayRef.current ?? undefined}');
+  });
+
   it('keeps fallback drag from stealing desktop Moveable drag events', () => {
     expect(source).toContain('if (targetEl.closest(\'.moveable-area\')) return false;');
     expect(source).toContain("if (pointerType !== 'touch') return false;");
