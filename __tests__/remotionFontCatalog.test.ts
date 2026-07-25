@@ -112,6 +112,52 @@ describe('Remotion shared font catalog', () => {
     })).toThrow('Dynamic template fontFamily values are not supported');
   });
 
+  it('pins catalog fonts passed through helper props under their public family names', async () => {
+    class MockFontFace {
+      constructor(
+        readonly family: string,
+        readonly source: string,
+        readonly descriptors: FontFaceDescriptors,
+      ) {}
+
+      async load() {
+        return this;
+      }
+    }
+    vi.stubGlobal('FontFace', MockFontFace);
+    const fonts = {
+      ready: Promise.resolve(),
+      add: vi.fn(),
+      check: vi.fn(() => true),
+    };
+    const targetDocument = { fonts } as unknown as Document;
+    const manifest = makeManifest();
+    const code = `
+      function Title({ chineseFont }) {
+        return <div style={{fontFamily: chineseFont + ', Noto Sans SC'}}>风起字生光</div>;
+      }
+      const title = <Title chineseFont="Ma Shan Zheng" />;
+    `;
+    const prepared = prepareRemotionFontCode({ code, manifest });
+
+    expect(prepared.dynamicFamilyAliases).toContainEqual({
+      alias: 'Ma Shan Zheng',
+      family: 'Ma Shan Zheng',
+    });
+    expect(prepared.usedFamilies).toContain('Ma Shan Zheng');
+
+    const timing = await loadPreparedRemotionFonts({
+      manifest,
+      prepared,
+      text: code,
+      targetDocument,
+    });
+    const registeredFamilies = fonts.add.mock.calls.map(([face]) => face.family);
+    expect(registeredFamilies).toContain('Ma Shan Zheng');
+    expect(registeredFamilies).toContain(internalRemotionFontFamily('Ma Shan Zheng'));
+    expect(timing.faceCount).toBe(registeredFamilies.length);
+  });
+
   it('records cold and document-cache font loading timings', async () => {
     class MockFontFace {
       constructor(

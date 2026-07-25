@@ -28,6 +28,10 @@ export interface PreparedRemotionFonts {
   code: string;
   defaultFontFamily: string;
   usedFamilies: string[];
+  dynamicFamilyAliases: Array<{
+    alias: string;
+    family: string;
+  }>;
 }
 
 export interface RemotionFontFaceTiming {
@@ -64,7 +68,7 @@ export interface RemotionFontTiming {
 }
 
 export const REMOTION_FONT_CATALOG_VERSION = catalogData.version;
-export const REMOTION_FONT_RUNTIME_VERSION = 'remotion-font-runtime-r2-font-timing';
+export const REMOTION_FONT_RUNTIME_VERSION = 'remotion-font-runtime-r3-dynamic-alias';
 export const REMOTION_FONT_CATALOG = catalogData.families as RemotionFontCatalogDefinition[];
 export const REMOTION_DEFAULT_SANS = 'Inter';
 export const REMOTION_DEFAULT_CJK_SANS = 'Noto Sans SC';
@@ -244,12 +248,38 @@ export function prepareRemotionFontCode(input: {
     },
   );
 
+  // Agent compositions commonly pass a catalog font through a helper prop:
+  //   <Title chineseFont="Ma Shan Zheng" />
+  //   style={{fontFamily: chineseFont}}
+  // Those runtime values cannot be rewritten statically. Detect the remaining
+  // explicit string literals and register the same pinned face under that
+  // public family name as well as the versioned internal name.
+  const remainingStringLiterals = new Set(
+    Array.from(code.matchAll(/(['"`])([\s\S]*?)\1/g), match => match[2]),
+  );
+  const dynamicFamilyAliases: PreparedRemotionFonts['dynamicFamilyAliases'] = [];
+  const addDynamicAlias = (alias: string, family: string) => {
+    if (!dynamicFamilyAliases.some(entry => entry.alias === alias && entry.family === family)) {
+      dynamicFamilyAliases.push({ alias, family });
+    }
+    if (!usedFamilies.includes(family)) usedFamilies.push(family);
+  };
+  for (const family of manifestFamilies(input.manifest).values()) {
+    if (remainingStringLiterals.has(family)) addDynamicAlias(family, family);
+  }
+  for (const [source, target] of Object.entries(substitutions)) {
+    if (!remainingStringLiterals.has(source)) continue;
+    const canonical = manifestFamilies(input.manifest).get(target.toLowerCase());
+    if (canonical) addDynamicAlias(source, canonical);
+  }
+
   const defaultFamilies = [REMOTION_DEFAULT_SANS, REMOTION_DEFAULT_CJK_SANS, REMOTION_DEFAULT_EMOJI];
   for (const family of defaultFamilies) if (!usedFamilies.includes(family)) usedFamilies.push(family);
   return {
     code,
     defaultFontFamily: internalStack(REMOTION_DEFAULT_SANS, 'sans-serif', input.manifest),
     usedFamilies,
+    dynamicFamilyAliases,
   };
 }
 
@@ -329,6 +359,12 @@ export async function loadPreparedRemotionFonts(input: {
   const codePoints = uniqueCodePoints(input.text);
   const facesToLoad: RemotionFontCatalogFace[] = [];
   const loadedFacesByFamily = new Map<string, RemotionFontCatalogFace[]>();
+  const aliasesByFamily = new Map<string, string[]>();
+  for (const { alias, family } of input.prepared.dynamicFamilyAliases) {
+    const aliases = aliasesByFamily.get(family) || [];
+    if (!aliases.includes(alias)) aliases.push(alias);
+    aliasesByFamily.set(family, aliases);
+  }
   for (const family of usedFamilies) {
     const familyFaces = input.manifest.faces.filter((face) => face.family === family && face.style === 'normal');
     if (familyFaces.length === 0) throw new Error(`Remotion font manifest has no faces for ${family}`);
@@ -344,7 +380,10 @@ export async function loadPreparedRemotionFonts(input: {
     loadedFacesByFamily.set(family, faces);
   }
   const requestKey = `${input.manifest.version}:${facesToLoad
-    .map((face) => `${face.internalFamily}:${face.weight}:${face.subset}:${face.sha256}`)
+    .map((face) => {
+      const aliases = (aliasesByFamily.get(face.family) || []).sort().join(',');
+      return `${face.internalFamily}:${aliases}:${face.weight}:${face.subset}:${face.sha256}`;
+    })
     .sort()
     .join('|')}`;
   const selectionMs = roundedMs(nowMs() - selectionStartedAt);
@@ -358,28 +397,44 @@ export async function loadPreparedRemotionFonts(input: {
   if (!pending) {
     pending = (async () => {
       const fontFacesStartedAt = nowMs();
-      const faces = await Promise.all(facesToLoad.map(async (face): Promise<RemotionFontFaceTiming> => {
+      const loadedFaces = await Promise.all(facesToLoad.map(async (face): Promise<{
+        timing: RemotionFontFaceTiming;
+        registrationCount: number;
+      }> => {
         const faceStartedAt = nowMs();
-        const fontFace = new FontFace(face.internalFamily, `url(${JSON.stringify(face.url)}) format('woff2')`, {
-          style: face.style,
-          weight: String(face.weight),
-          unicodeRange: face.unicodeRange,
-          display: 'block',
-        });
-        await fontFace.load();
-        targetDocument.fonts.add(fontFace);
+        const registeredFamilies = [
+          face.internalFamily,
+          ...(aliasesByFamily.get(face.family) || []),
+        ];
+        const fontFaces = registeredFamilies.map(family => new FontFace(
+          family,
+          `url(${JSON.stringify(face.url)}) format('woff2')`,
+          {
+            style: face.style,
+            weight: String(face.weight),
+            unicodeRange: face.unicodeRange,
+            display: 'block',
+          },
+        ));
+        await Promise.all(fontFaces.map(fontFace => fontFace.load()));
+        for (const fontFace of fontFaces) targetDocument.fonts.add(fontFace);
         const resource = resourceTimingFor(face.url);
         return {
-          family: face.family,
-          weight: face.weight,
-          subset: face.subset,
-          sha256: face.sha256,
-          loadMs: roundedMs(nowMs() - faceStartedAt),
-          resourceDurationMs: resource.durationMs,
-          transferSize: resource.transferSize,
-          encodedBodySize: resource.encodedBodySize,
+          timing: {
+            family: face.family,
+            weight: face.weight,
+            subset: face.subset,
+            sha256: face.sha256,
+            loadMs: roundedMs(nowMs() - faceStartedAt),
+            resourceDurationMs: resource.durationMs,
+            transferSize: resource.transferSize,
+            encodedBodySize: resource.encodedBodySize,
+          },
+          registrationCount: fontFaces.length,
         };
       }));
+      const faces = loadedFaces.map(face => face.timing);
+      const faceCount = loadedFaces.reduce((count, face) => count + face.registrationCount, 0);
       const fontFacesMs = roundedMs(nowMs() - fontFacesStartedAt);
 
       const fontsReadyStartedAt = nowMs();
@@ -397,13 +452,25 @@ export async function loadPreparedRemotionFonts(input: {
           .join('') || 'A';
         return !targetDocument.fonts.check(`400 16px ${JSON.stringify(internal)}`, sample);
       });
+      const missingAliases = input.prepared.dynamicFamilyAliases.filter(({ alias, family }) => {
+        const faces = loadedFacesByFamily.get(family) || [];
+        const sample = codePoints
+          .filter((codePoint) => faces.some((face) => faceMatchesCodePoints(face, [codePoint])))
+          .slice(0, 32)
+          .map((codePoint) => String.fromCodePoint(codePoint))
+          .join('') || 'A';
+        return !targetDocument.fonts.check(`400 16px ${JSON.stringify(alias)}`, sample);
+      });
       const fontsCheckMs = roundedMs(nowMs() - fontsCheckStartedAt);
       if (missing.length > 0) throw new Error(`Remotion fonts failed to load: ${missing.join(', ')}`);
+      if (missingAliases.length > 0) {
+        throw new Error(`Remotion dynamic font aliases failed to load: ${missingAliases.map(entry => entry.alias).join(', ')}`);
+      }
       return {
         fontFacesMs,
         fontsReadyMs,
         fontsCheckMs,
-        faceCount: faces.length,
+        faceCount,
         uniqueResourceCount: new Set(facesToLoad.map((face) => face.url)).size,
         faces,
       };
