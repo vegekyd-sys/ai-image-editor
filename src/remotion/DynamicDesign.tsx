@@ -199,6 +199,7 @@ export const DynamicDesign: React.FC<Record<string, unknown>> = ({
         const prepareStartedAt = performance.now();
         const nextPrepared = prepareRemotionFontCode({
           code: codeStr,
+          props: propsObj,
           manifest: manifestResult.manifest,
           substitutions,
         });
@@ -236,7 +237,7 @@ export const DynamicDesign: React.FC<Record<string, unknown>> = ({
         handleRef.current = null;
       }
     };
-  }, [allText, codeStr, manifestUrl, substitutions]);
+  }, [allText, codeStr, manifestUrl, propsObj, substitutions]);
 
   // Continue only after the timing Artifact has committed. This makes the
   // per-shard metrics part of the same render instead of racing the first frame.
