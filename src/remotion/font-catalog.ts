@@ -1,4 +1,4 @@
-import catalogData from '@/remotion/font-catalog.json';
+import catalogData from './font-catalog.json';
 
 export type RemotionFontStyle = 'normal' | 'italic';
 
