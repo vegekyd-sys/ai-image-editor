@@ -1496,7 +1496,10 @@ div[class*="moveable-control-box"] div.moveable-control.moveable-se.moveable-sca
 
 /* Keep tiny photo cards resizable without requiring pixel-perfect fingers. */
 @media (pointer: coarse) {
-  div[class*="moveable-control-box"] div.moveable-control.moveable-direction.moveable-scalable {
+  div[class*="moveable-control-box"] div.moveable-control.moveable-direction.moveable-nw.moveable-scalable,
+  div[class*="moveable-control-box"] div.moveable-control.moveable-direction.moveable-ne.moveable-scalable,
+  div[class*="moveable-control-box"] div.moveable-control.moveable-direction.moveable-sw.moveable-scalable,
+  div[class*="moveable-control-box"] div.moveable-control.moveable-direction.moveable-se.moveable-scalable {
     min-width: 44px !important;
     min-height: 44px !important;
     width: 44px !important;
