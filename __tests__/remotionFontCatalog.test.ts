@@ -158,6 +158,27 @@ describe('Remotion shared font catalog', () => {
     expect(timing.faceCount).toBe(registeredFamilies.length);
   });
 
+  it('pins catalog fonts supplied through persisted composition props', () => {
+    const prepared = prepareRemotionFontCode({
+      code: `
+        function Title({ chineseFont }) {
+          return <div style={{fontFamily: chineseFont}}>云影落长安</div>;
+        }
+        const title = <Title chineseFont={props.fontOne} />;
+      `,
+      props: {
+        fontOne: 'Ma Shan Zheng',
+      },
+      manifest: makeManifest(),
+    });
+
+    expect(prepared.dynamicFamilyAliases).toContainEqual({
+      alias: 'Ma Shan Zheng',
+      family: 'Ma Shan Zheng',
+    });
+    expect(prepared.usedFamilies).toContain('Ma Shan Zheng');
+  });
+
   it('records cold and document-cache font loading timings', async () => {
     class MockFontFace {
       constructor(
