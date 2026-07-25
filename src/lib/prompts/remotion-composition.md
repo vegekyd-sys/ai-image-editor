@@ -333,7 +333,13 @@ For static visuals, use `generate_image` instead of Remotion unless editability 
 - Prefer CSS gradients for atmosphere instead of a second blurred media layer.
 - Animate `transform` and opacity, not layout properties.
 - Keep filter stacks and shadows modest for iOS Safari.
-- Use system CJK fonts for Chinese text; avoid large Chinese web fonts.
+- Fonts are pinned assets shared by Player, Sandbox preview, and Lambda export. If you specify `fontFamily`, use only these catalog names:
+  - Chinese/CJK sans: `Noto Sans SC`, `Noto Sans TC`, `Noto Sans JP`, `Noto Sans KR`
+  - Chinese/CJK serif: `Noto Serif SC`, `Noto Serif TC`, `Noto Serif JP`, `Noto Serif KR`
+  - Chinese display/handwriting: `Ma Shan Zheng`, `ZCOOL KuaiLe`, `ZCOOL XiaoWei`, `ZCOOL QingKe HuangYou`, `Liu Jian Mao Cao`, `Long Cang`, `Zhi Mang Xing`, `LXGW WenKai TC`
+  - Latin: `Inter`, `Playfair Display`, `Montserrat`, `Oswald`, `Poppins`, `Lato`, `Roboto`, `Bebas Neue`, `Dancing Script`, `Pacifico`, `Lobster`, `Anton`, `Caveat`, `Raleway`, `JetBrains Mono`, `GFS Didot`, `Bodoni Moda`
+- Never use `Arial`, `Helvetica`, `Times New Roman`, `PingFang SC`, `Microsoft YaHei`, `STKaiti`, `Kaiti SC`, `KaiTi`, `Didot`, `Bodoni 72`, or another local/system font name. Local fonts differ between macOS and Linux and will be rejected instead of silently falling back.
+- For an old composition only, migrate a legacy family by persisting an explicit top-level `fontSubstitutions` map in the design payload (for example `{ "STKaiti": "Ma Shan Zheng", "Didot": "GFS Didot", "Arial": "Inter" }`). This is a product/design decision, not a runtime alias. New compositions must use the catalog family directly.
 
 ## Verification
 

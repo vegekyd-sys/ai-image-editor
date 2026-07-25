@@ -205,6 +205,7 @@ export class AgentDualWriter {
             }
           }
           const eventEditables = (event as Record<string, unknown>).editables;
+          const eventFontSubstitutions = (event as Record<string, unknown>).fontSubstitutions;
           const persistedDesign = {
             ...(sourceDesign || {}),
             code: typeof sourceDesign?.code === 'string' ? sourceDesign.code : event.code,
@@ -220,6 +221,11 @@ export class AgentDualWriter {
               ? { editables: sourceDesign.editables }
               : Array.isArray(eventEditables)
                 ? { editables: eventEditables }
+                : {}),
+            ...(sourceDesign?.fontSubstitutions && typeof sourceDesign.fontSubstitutions === 'object'
+              ? { fontSubstitutions: sourceDesign.fontSubstitutions }
+              : eventFontSubstitutions && typeof eventFontSubstitutions === 'object'
+                ? { fontSubstitutions: eventFontSubstitutions }
                 : {}),
           };
           const designJson = JSON.stringify(persistedDesign);
@@ -267,6 +273,9 @@ export class AgentDualWriter {
             code: event.code, width: event.width, height: event.height,
             props: event.props, animation: event.animation, snapshotId: snapId,
             ...(Array.isArray(persistedDesign.editables) ? { editables: persistedDesign.editables } : {}),
+            ...(persistedDesign.fontSubstitutions && typeof persistedDesign.fontSubstitutions === 'object'
+              ? { fontSubstitutions: persistedDesign.fontSubstitutions }
+              : {}),
             ...(sourceDesignPath ? { sourceDesignPath } : {}),
             published: true,
           });
@@ -280,6 +289,9 @@ export class AgentDualWriter {
             props: event.props, animation: event.animation,
             ...(Array.isArray((event as Record<string, unknown>).editables)
               ? { editables: (event as Record<string, unknown>).editables }
+              : {}),
+            ...((event as Record<string, unknown>).fontSubstitutions
+              ? { fontSubstitutions: (event as Record<string, unknown>).fontSubstitutions }
               : {}),
             published: false,
           });

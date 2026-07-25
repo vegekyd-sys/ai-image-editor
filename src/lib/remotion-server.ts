@@ -141,6 +141,7 @@ export async function renderDesignFrame(
           // explicit <OffthreadVideo> without requiring the Agent to rewrite.
           useOffthreadVideo: true,
           fontManifestUrl,
+          fontSubstitutions: design.fontSubstitutions || {},
         },
         imageFormat: 'jpeg',
         jpegQuality: 90,
@@ -188,7 +189,6 @@ export async function renderDesignVideo(
       concurrency: readEnv('REMOTION_LOCAL_CONCURRENCY') || 4,
       cacheDir: readEnv('REMOTION_LOCAL_MEDIA_CACHE_DIR'),
       mediaServerPort: Number(readEnv('REMOTION_LOCAL_MEDIA_PORT') || 5123),
-      skipFontLoading: readEnv('REMOTION_LOCAL_SKIP_FONTS') !== 'false',
     });
   }
 
@@ -221,6 +221,7 @@ export async function renderDesignVideo(
           width: design.width || 1080,
           height: design.height || 1920,
           fontManifestUrl,
+          fontSubstitutions: design.fontSubstitutions || {},
           useNativeVideo: true,
         },
         outputFile,

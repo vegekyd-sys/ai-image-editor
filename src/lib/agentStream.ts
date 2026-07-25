@@ -24,7 +24,7 @@ export interface AgentStreamCallbacks {
   onReasoning?: (text: string) => void;
   onCoding?: () => void;
   onCodeStream?: (text: string, done: boolean) => void;
-  onRender?: (design: { code: string; width: number; height: number; props?: Record<string, unknown>; animation?: { fps: number; durationInSeconds: number; format?: string }; editables?: import('@/types').EditableField[]; snapshotId?: string; published?: boolean; previewUrl?: string }) => void;
+  onRender?: (design: { code: string; width: number; height: number; props?: Record<string, unknown>; animation?: { fps: number; durationInSeconds: number; format?: string }; editables?: import('@/types').EditableField[]; fontSubstitutions?: Record<string, string>; snapshotId?: string; published?: boolean; previewUrl?: string }) => void;
   onDone?: () => void;
   onError?: (message: string) => void;
   /** SSE/network ended while the server-side run may still be alive. */
@@ -316,7 +316,7 @@ async function streamAgentAttempt(
             break;
           case 'design': // backward compat — fall through to 'render'
           case 'render':
-            callbacks.onRender?.(event as { code: string; width: number; height: number; props?: Record<string, unknown>; animation?: { fps: number; durationInSeconds: number; format?: string }; editables?: import('@/types').EditableField[]; snapshotId?: string; published?: boolean });
+            callbacks.onRender?.(event as { code: string; width: number; height: number; props?: Record<string, unknown>; animation?: { fps: number; durationInSeconds: number; format?: string }; editables?: import('@/types').EditableField[]; fontSubstitutions?: Record<string, string>; snapshotId?: string; published?: boolean });
             break;
           case 'done':
             receivedDone = true;

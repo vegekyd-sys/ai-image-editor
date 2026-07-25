@@ -197,7 +197,7 @@ describe('agent media scenario matrix', () => {
     expect(agentTs).toContain("type: 'render' | 'composition'")
     expect(agentTs).toContain("result.type.trim().toLowerCase()")
     expect(agentTs).toContain("resultKind === 'composition'")
-    expect(agentTs).toContain("\\`{ type: 'composition', code, width, height, editables?, props?, animation? }\\`")
+    expect(agentTs).toContain("\\`{ type: 'composition', code, width, height, editables?, props?, animation?, fontSubstitutions? }\\`")
     expect(agentTs).toContain('Refusing to save raw Remotion source as JSON')
     expect(agentTs).toContain("type: z.enum(['text', 'image', 'video'])")
     expect(agentTs).toContain('editables: design.editables')

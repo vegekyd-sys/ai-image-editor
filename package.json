@@ -41,6 +41,7 @@
     "worker:remotion-export:check": "npx tsx workers/remotion-export-worker.ts --check",
     "worker:remotion-export:once": "npx tsx workers/remotion-export-worker.ts --once",
     "benchmark:remotion-export": "npx tsx benchmarks/remotion-export.ts",
+    "benchmark:remotion-fonts": "npx tsx benchmarks/remotion-font-telemetry.ts",
     "e2e:remotion-materialize": "npx tsx e2e/remotion-materialize.ts",
     "e2e:remotion-frontend-agent": "npx tsx e2e/frontend-agent-remotion.ts",
     "ops:remotion-lambda-provision": "npx tsx scripts/remotion-lambda-provision.ts",

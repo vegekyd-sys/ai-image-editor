@@ -8,6 +8,7 @@ import { bundle } from '@remotion/bundler'
 import { renderMedia, selectComposition } from '@remotion/renderer'
 import type { DesignPayload } from '@/types'
 import { hasRemotionAudioSources } from '@/lib/remotion-audio'
+import { resolveRemotionFontManifestUrl } from '@/lib/remotion-font-manifest'
 
 let bundlePromise: Promise<string> | null = null
 let mediaServer: http.Server | null = null
@@ -279,7 +280,6 @@ export async function renderDesignVideoLocal(
     concurrency?: number | string
     cacheDir?: string
     mediaServerPort?: number
-    skipFontLoading?: boolean
   } = {},
 ): Promise<Buffer> {
   const fps = design.animation?.fps || 30
@@ -289,7 +289,6 @@ export async function renderDesignVideoLocal(
   const cacheDir = options.cacheDir || process.env.REMOTION_LOCAL_MEDIA_CACHE_DIR || '/tmp/makaron-remotion-media'
   const mediaServerPort = options.mediaServerPort || Number(process.env.REMOTION_LOCAL_MEDIA_PORT || 5123)
   const concurrency = resolveLocalConcurrency(options.concurrency ?? process.env.REMOTION_LOCAL_CONCURRENCY)
-  const skipFontLoading = options.skipFontLoading ?? process.env.REMOTION_LOCAL_SKIP_FONTS !== 'false'
   const browserExecutable = process.env.REMOTION_BROWSER_EXECUTABLE || undefined
   const chromeMode = resolveChromeMode(browserExecutable)
   const chromiumOptions = {
@@ -312,7 +311,8 @@ export async function renderDesignVideoLocal(
     durationInFrames,
     width: resolvedDesign.width || 1080,
     height: resolvedDesign.height || 1920,
-    skipFontLoading,
+    fontManifestUrl: resolveRemotionFontManifestUrl(),
+    fontSubstitutions: resolvedDesign.fontSubstitutions || {},
     useNativeVideo: true,
   }
   const hasAudioSources = hasRemotionAudioSources(resolvedDesign.code)
@@ -334,7 +334,6 @@ export async function renderDesignVideoLocal(
     height: resolvedDesign.height || 1920,
     scale,
     concurrency,
-    skipFontLoading,
     browser: browserExecutable ? 'custom-executable' : 'remotion-managed',
     chromeMode,
   }))

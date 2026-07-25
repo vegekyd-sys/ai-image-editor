@@ -1,16 +1,17 @@
+import { remotionFontManifestUrlFromServeUrl } from '@/remotion/font-catalog';
+
 function cleanEnv(value: string | undefined): string | undefined {
-  const clean = value?.replace(/\\[rn]|[\u0000-\u001F\u007F]/g, '').trim()
-  return clean || undefined
+  const clean = value?.replace(/\\[rn]|[\u0000-\u001F\u007F]/g, '').trim();
+  return clean || undefined;
 }
 
 export function resolveRemotionFontManifestUrl(serveUrl?: string): string {
-  const explicit = cleanEnv(process.env.REMOTION_FONT_MANIFEST_URL)
-  if (explicit) return explicit
+  const explicit = cleanEnv(process.env.REMOTION_FONT_MANIFEST_URL);
+  if (explicit) return explicit;
 
-  const resolvedServeUrl = cleanEnv(serveUrl) || cleanEnv(process.env.REMOTION_LAMBDA_SERVE_URL)
+  const resolvedServeUrl = cleanEnv(serveUrl) || cleanEnv(process.env.REMOTION_LAMBDA_SERVE_URL);
   if (!resolvedServeUrl) {
-    throw new Error('REMOTION_FONT_MANIFEST_URL or REMOTION_LAMBDA_SERVE_URL is required')
+    throw new Error('REMOTION_FONT_MANIFEST_URL or REMOTION_LAMBDA_SERVE_URL is required');
   }
-
-  return `${new URL(resolvedServeUrl).origin}/sites/_font-catalog/makaron-fonts-r1/manifest.json`
+  return remotionFontManifestUrlFromServeUrl(resolvedServeUrl);
 }

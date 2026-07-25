@@ -10,6 +10,11 @@ interface ChangelogEntry {
 
 const CHANGELOG: ChangelogEntry[] = [
   {
+    date: '2026-07-25',
+    en: { title: 'Consistent Remotion Fonts', items: ['Remotion previews and Lambda MP4 exports now use the same pinned Chinese and English fonts, so typography stays consistent from editing to delivery.'] },
+    zh: { title: 'Remotion 字体一致性修复', items: ['Remotion 预览与 Lambda MP4 导出现在使用同一套固定的中英文字体，从编辑到成片不再出现字体变化。'] },
+  },
+  {
     date: '2026-07-24',
     en: { title: 'Agent Coding, Without Dead Ends', items: [
       'Makaron now gives Agent-written Node and FFmpeg programs a dedicated isolated Sandbox with real process feedback, standard Node capabilities, and npm packages installed on demand.',

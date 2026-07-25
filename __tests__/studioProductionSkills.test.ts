@@ -63,7 +63,7 @@ describe('Studio production skills', () => {
     expect(motion).toContain('does not mean "no audio"');
     expect(motion).toContain('Visual execution does not replace storytelling');
     expect(production).toContain('fresh project and');
-    expect(production).toContain('Record Agent completion');
+    expect(production).toContain('Record Agent queue-submission');
     expect(production).toContain('skills/_shared/visual-direction/SKILL.md');
     expect(production).toContain('skills/_shared/studio-production/taste-direction.md');
     expect(production).toContain('skills/_shared/visual-asset-bridge/SKILL.md');
@@ -97,7 +97,7 @@ describe('Studio production skills', () => {
     expect(production).toContain('linked Storyboard range and representative overlap');
     expect(production).toContain('narrationTimingEvidence');
     expect(production).toContain('returned narration cue sheet');
-    expect(agent).toContain('const renderProfile: RemotionRenderProfile = studioCheckpoint.studioRunId');
+    expect(agent).toContain('const renderProfile = studioCheckpoint.studioRunId');
     expect(agent).toContain("? 'source'");
     expect(agent).toContain('Studio Composition must keep the locked delivery resolution');
   });

@@ -31,16 +31,10 @@ import { createTextDeltaState, normalizeTextDelta } from './agent-text-delta';
 import { formatAspectRatio } from './media-aspect';
 import { filterWorkspaceFilesForAgentScope } from './agent-workspace-scope';
 import { normalizeCompositionAnimation } from './composition-duration';
-import {
-  createRemotionExportJob,
-  runRemotionExportJobAndWait,
-  type RemotionRenderProfile,
-} from '@/lib/remotion-export';
+import { createRemotionExportJob } from '@/lib/remotion-export';
 import { VIDEO_PLACEHOLDER_IMAGE } from '@/lib/editor/timeline-derivations';
 import { normalizeAgentErrorMessage } from './agent-error';
 import {
-  findSnapshotMediaIndex,
-  pinAgentMediaUrl,
   rebuildAgentSnapshotUrls,
   type AgentSnapshotIndexRow,
 } from './agent-media-index';
@@ -88,6 +82,20 @@ import { buildAgentOutputLanguageDirective } from './agent-response-policy';
 import { stableDraftPromotionSnapshotId } from './draft-promotion';
 
 const MAX_VIDEO_DIMENSION_PROBE_BYTES = 220 * 1024 * 1024;
+
+function runRemotionExportAfterResponse(jobId: string) {
+  after(async () => {
+    try {
+      const { runRemotionExportJob } = await import('@/lib/remotion-export');
+      await runRemotionExportJob(jobId);
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      if (!message.includes('already rendering')) {
+        console.error(`[agent] Remotion export worker failed for ${jobId}:`, error);
+      }
+    }
+  });
+}
 
 function runGoogleOmniVideoSnapshotAfterResponse(options: {
   userId: string;
@@ -309,8 +317,8 @@ export type AgentStreamEvent =
   | { type: 'reasoning'; text: string }  // extended thinking delta
   | { type: 'coding'; text: string }  // tool-input-delta heartbeat — Agent writing code params
   | { type: 'code_stream'; text: string; done?: boolean }  // run_code code streamed in chunks (avoids large SSE events on iOS)
-  | { type: 'render' | 'composition'; code: string; width: number; height: number; props?: Record<string, unknown>; animation?: { fps: number; durationInSeconds: number; format?: string }; editables?: import('@/types').EditableField[]; description?: string; snapshotId?: string; sourceDesignPath?: string; published?: boolean; previewUrl?: string }  // Agent React composition for browser rendering
-  | { type: 'design'; code: string; width: number; height: number; props?: Record<string, unknown>; animation?: { fps: number; durationInSeconds: number; format?: string }; editables?: import('@/types').EditableField[]; published?: boolean }  // @deprecated — backward compat alias for 'render'
+  | { type: 'render' | 'composition'; code: string; width: number; height: number; props?: Record<string, unknown>; animation?: { fps: number; durationInSeconds: number; format?: string }; editables?: import('@/types').EditableField[]; fontSubstitutions?: Record<string, string>; description?: string; snapshotId?: string; sourceDesignPath?: string; published?: boolean; previewUrl?: string }  // Agent React composition for browser rendering
+  | { type: 'design'; code: string; width: number; height: number; props?: Record<string, unknown>; animation?: { fps: number; durationInSeconds: number; format?: string }; editables?: import('@/types').EditableField[]; fontSubstitutions?: Record<string, string>; published?: boolean }  // @deprecated — backward compat alias for 'render'
   | { type: 'music_task'; taskId: string }  // emitted when generate_music tool creates a task — frontend polls
   | {
       type: 'context_compaction';
@@ -3025,18 +3033,16 @@ The same Agent Run and design_path resolve to the same Snapshot ID, so a retry o
     materialize_media: tool({
       description: `Export an editable Remotion composition into a real MP4 video.
 Use this when the user asks to save/export/materialize/turn a composition into MP4. It accepts a timeline media_index, snapshot_id, design_path, or the current unsaved composition from run_code.
-Default profile is fast_720p (short side 720, no upscale) for speed. Default publish=true so the exported MP4 appears as a new <<<media_N>>> video. A completed synchronous export returns the exact mediaIndex for subsequent analyze_video/preview_frame calls; use that returned index instead of guessing. By default the tool queues a durable async export like video generation; polling/cron completes it and reports either success or failure. Set wait=true on the first call when the current response must include the final URL. A repeated call for the same unchanged composition reuses the fingerprint-matched queued/completed job and does not render twice. If the same unchanged composition fails twice in one turn, stop retrying and report export as blocked.
-For Studio Run, first preview and patch the Remotion source until it is satisfactory, call publish_draft once with the exact final design_path, then call materialize_media once with that same path when MP4 Delivery is requested. Studio Run automatically waits at source resolution; successful export is terminal and completes the Review and Delivery UI states. materialize_media publishes the MP4, not the editable draft. Do not author Review/Delivery artifacts or continue reviewing after success.`,
+The tool always queues a durable async export like video generation and returns immediately, so the user can keep chatting while polling/cron finishes the MP4. Ordinary CUI exports use fast_720p (short side 720, no upscale) for speed. Default publish=true so a processing video appears immediately and is replaced by the finished MP4. A repeated call for the same unchanged composition reuses the fingerprint-matched queued/completed job and does not render twice. If the same unchanged composition fails twice in one turn, stop retrying and report export as blocked.
+For Studio Run, first preview and patch the Remotion source until it is satisfactory, call publish_draft once with the exact final design_path, then call materialize_media once with that same path when MP4 Delivery is requested. The runtime selects locked source resolution from typed Studio Run state. The queued export automatically completes Review and Delivery after the real MP4 is ready. After a successful queue submission, do not author Review/Delivery artifacts or continue reviewing. materialize_media publishes the MP4, not the editable draft.`,
       inputSchema: z.object({
         media_index: z.number().optional().describe('1-based media index, e.g. 3 for <<<media_3>>>. Must point to an editable Remotion composition.'),
         snapshot_id: z.string().optional().describe('Snapshot ID of an editable Remotion composition.'),
         design_path: z.string().optional().describe('Workspace design JSON path, e.g. code/<snapshotId>.json.'),
         name: z.string().optional().describe('Short output slug/name.'),
-        profile: z.enum(['fast_720p', 'source']).optional().describe('fast_720p for speed, source for full source resolution.'),
         publish: z.boolean().optional().describe('Default true. Publish exported MP4 into the project timeline.'),
-        wait: z.boolean().optional().describe('Default false outside Studio Run. Studio Run always waits for the final MP4 URL so successful materialization can complete the run atomically.'),
       }),
-      execute: async ({ media_index, snapshot_id, design_path, name, profile, publish, wait }) => {
+      execute: async ({ media_index, snapshot_id, design_path, name, publish }) => {
         if (!ctx.supabase || !ctx.userId) {
           return { success: false, error: 'materialize_media requires an authenticated project workspace.' };
         }
@@ -3071,11 +3077,10 @@ For Studio Run, first preview and patch the Remotion source until it is satisfac
 
         try {
           const shouldPublish = publish !== false;
-          const shouldWait = Boolean(studioCheckpoint.studioRunId) || wait === true;
-          const renderProfile: RemotionRenderProfile = studioCheckpoint.studioRunId
+          const renderProfile = studioCheckpoint.studioRunId
             ? 'source'
-            : (profile || 'fast_720p');
-          const publishSnapshotId = shouldPublish && !shouldWait ? crypto.randomUUID() : undefined;
+            : 'fast_720p';
+          const publishSnapshotId = shouldPublish ? crypto.randomUUID() : undefined;
           const job = await createRemotionExportJob({
             userId: ctx.userId,
             projectId: ctx.projectId,
@@ -3090,156 +3095,67 @@ For Studio Run, first preview and patch the Remotion source until it is satisfac
             studioRunId: studioCheckpoint.studioRunId,
           });
 
-          if (!shouldWait) {
-            const taskId = `remotion-export-${job.id}`;
-            const videoMeta: VideoMeta = {
-              taskId,
-              videoUrl: job.storage_url || '',
-              providerUrl: job.storage_url || '',
-              videoPath: job.workspace_path || '',
-              prompt: name || 'Materialized Remotion composition',
-              sourceSnapshotIds: source.snapshotId ? [source.snapshotId] : [],
-              sourceUrls: [],
-              status: job.status === 'completed' && job.storage_url ? 'completed' : 'processing',
-              duration: job.duration_seconds || null,
-              model: 'upload',
-              createdAt: new Date().toISOString(),
-              width: job.width || undefined,
-              height: job.height || undefined,
-            };
-            if (publishSnapshotId) {
-              const pendingVideoMeta: VideoMeta = {
-                ...videoMeta,
-                taskId: `remotion-export-pending-${job.id}`,
-                videoUrl: job.storage_url || '',
-                providerUrl: job.storage_url || '',
-              };
-              if (job.status !== 'completed') {
-                const { data: sortData } = await ctx.supabase.rpc('next_sort_order', { p_project_id: ctx.projectId });
-                const { error: pendingInsertError } = await ctx.supabase.from('snapshots').upsert({
-                  id: publishSnapshotId,
-                  project_id: ctx.projectId,
-                  image_url: VIDEO_PLACEHOLDER_IMAGE,
-                  tips: [],
-                  message_id: '',
-                  sort_order: sortData ?? 0,
-                  type: 'video',
-                  video_meta: pendingVideoMeta,
-                  description: name || 'Materialized Remotion composition',
-                }, { onConflict: 'id' });
-                if (pendingInsertError) {
-                  throw new Error(`Pending export snapshot insert failed: ${pendingInsertError.message}`);
-                }
-              }
-              ctx.pendingVideoSnapshot = {
-                snapshotId: publishSnapshotId,
-                taskId,
-                videoMeta: pendingVideoMeta,
-              };
-            }
-            return {
-              success: true,
-              queued: job.status !== 'completed',
-              jobId: job.id,
-              status: job.status,
-              taskId,
-              publishSnapshotId,
-              message: shouldPublish
-                ? `Queued MP4 export. It will appear as a video in the timeline. Job: ${job.id}`
-                : `Queued MP4 export. Job: ${job.id}`,
-            };
-          }
-
-          const result = await runRemotionExportJobAndWait(job.id);
-          const completed = result.job;
-          const videoUrl = completed.storage_url || '';
-          const audioAnalysis = completed.metadata?.audioAnalysis && typeof completed.metadata.audioAnalysis === 'object'
-            ? completed.metadata.audioAnalysis
-            : undefined;
-          let studioRunCompleted = false;
-          if (studioCheckpoint.studioRunId && completed.status === 'completed') {
-            const outputPath = completed.storage_url || completed.workspace_path || '';
-            const compositionDesignPath = completed.design_path || source.designPath || '';
-            if (!outputPath || !compositionDesignPath) {
-              throw new Error('Studio Run export completed but its MP4 or editable Composition path is missing.');
-            }
-            const studio = await import('./studio-run');
-            const store = new studio.WorkspaceStudioRunStore(ctx.supabase, ctx.userId);
-            const activeRun = await store.loadRun(ctx.projectId, studioCheckpoint.studioRunId);
-            if (!activeRun) throw new Error(`Studio Run ${studioCheckpoint.studioRunId} disappeared after export.`);
-            const completion = await studio.completePersistedStudioRunFromMaterialization({
-              store,
-              run: activeRun,
-              outputPath,
-              compositionDesignPath,
-            });
-            studioRunCompleted = completion.run.status === 'completed';
-            if (!studioRunCompleted) {
-              throw new Error(`Studio Run ${studioCheckpoint.studioRunId} did not reach completed after export.`);
-            }
-          }
-          const publishedSnapshotId = typeof completed.metadata?.publishedSnapshotId === 'string'
-            ? completed.metadata.publishedSnapshotId
-            : undefined;
-          const videoMeta: VideoMeta | null = videoUrl ? {
-            taskId: `remotion-export-${completed.id}`,
-            videoUrl,
-            providerUrl: videoUrl,
-            videoPath: completed.workspace_path || '',
+          const taskId = `remotion-export-${job.id}`;
+          const videoMeta: VideoMeta = {
+            taskId,
+            videoUrl: job.storage_url || '',
+            providerUrl: job.storage_url || '',
+            videoPath: job.workspace_path || '',
             prompt: name || 'Materialized Remotion composition',
             sourceSnapshotIds: source.snapshotId ? [source.snapshotId] : [],
-            sourceUrls: [videoUrl],
-            status: 'completed',
-            duration: completed.duration_seconds || null,
+            sourceUrls: [],
+            status: job.status === 'completed' && job.storage_url ? 'completed' : 'processing',
+            duration: job.duration_seconds || null,
             model: 'upload',
             createdAt: new Date().toISOString(),
-            width: completed.width || undefined,
-            height: completed.height || undefined,
-          } : null;
-          let publishedMediaIndex: number | undefined;
-          if (publishedSnapshotId && videoMeta) {
-            ctx.pendingVideoSnapshot = {
-              snapshotId: publishedSnapshotId,
-              taskId: videoMeta.taskId || `remotion-export-${completed.id}`,
-              videoMeta,
+            width: job.width || undefined,
+            height: job.height || undefined,
+          };
+          if (publishSnapshotId) {
+            const pendingVideoMeta: VideoMeta = {
+              ...videoMeta,
+              taskId: `remotion-export-pending-${job.id}`,
+              videoUrl: job.storage_url || '',
+              providerUrl: job.storage_url || '',
             };
-            const orderedSnapshots = await refreshSnapshotUrls(ctx);
-            const actualMediaIndex = findSnapshotMediaIndex(orderedSnapshots, publishedSnapshotId);
-            if (actualMediaIndex) {
-              const pinnedUrls = pinAgentMediaUrl(ctx.snapshotImages, actualMediaIndex, videoUrl);
-              ctx.snapshotImages.splice(0, ctx.snapshotImages.length, ...pinnedUrls);
-              ctx.currentSnapshotIndex = actualMediaIndex - 1;
-              publishedMediaIndex = actualMediaIndex;
-            } else {
-              const existingIndex = ctx.snapshotImages.indexOf(videoUrl);
-              if (existingIndex >= 0) {
-                ctx.currentSnapshotIndex = existingIndex;
-                publishedMediaIndex = existingIndex + 1;
-              } else {
-                ctx.snapshotImages.push(videoUrl);
-                ctx.currentSnapshotIndex = ctx.snapshotImages.length - 1;
-                publishedMediaIndex = ctx.snapshotImages.length;
+            if (job.status !== 'completed') {
+              const { data: sortData } = await ctx.supabase.rpc('next_sort_order', { p_project_id: ctx.projectId });
+              const { error: pendingInsertError } = await ctx.supabase.from('snapshots').upsert({
+                id: publishSnapshotId,
+                project_id: ctx.projectId,
+                image_url: VIDEO_PLACEHOLDER_IMAGE,
+                tips: [],
+                message_id: '',
+                sort_order: sortData ?? 0,
+                type: 'video',
+                video_meta: pendingVideoMeta,
+                description: name || 'Materialized Remotion composition',
+              }, { onConflict: 'id' });
+              if (pendingInsertError) {
+                throw new Error(`Pending export snapshot insert failed: ${pendingInsertError.message}`);
               }
             }
+            ctx.pendingVideoSnapshot = {
+              snapshotId: publishSnapshotId,
+              taskId,
+              videoMeta: pendingVideoMeta,
+            };
+          }
+          if (job.status === 'queued') {
+            runRemotionExportAfterResponse(job.id);
           }
           return {
-            success: completed.status === 'completed',
-            jobId: completed.id,
-            status: completed.status,
-            videoUrl,
-            workspacePath: completed.workspace_path,
-            publishedSnapshotId,
-            mediaIndex: publishedMediaIndex,
-            durationSeconds: completed.duration_seconds,
-            renderSeconds: completed.render_seconds,
-            realtimeRatio: completed.realtime_ratio,
-            audioAnalysis,
-            studioRunCompleted,
-            message: publishedMediaIndex
-              ? `Exported MP4 is available as <<<media_${publishedMediaIndex}>>>.${studioCheckpoint.studioRunId ? ' Studio Run is complete; do not start another Review or Delivery step.' : ''}`
-              : studioCheckpoint.studioRunId
-                ? 'Exported MP4 successfully. Studio Run is complete; do not start another Review or Delivery step.'
-                : undefined,
+            success: true,
+            queued: job.status !== 'completed',
+            jobId: job.id,
+            status: job.status,
+            taskId,
+            publishSnapshotId,
+            renderProfile,
+            studioRunPending: Boolean(studioCheckpoint.studioRunId) && job.status !== 'completed',
+            message: shouldPublish
+              ? `MP4 export submitted. A processing video is in the timeline and will update automatically. Job: ${job.id}`
+              : `MP4 export submitted. Job: ${job.id}`,
           };
         } catch (err) {
           return { success: false, error: err instanceof Error ? err.message : String(err) };
@@ -3805,6 +3721,7 @@ Path is auto-generated from the current project and output type. Just provide a 
           width: z.number().int().positive().optional(),
           height: z.number().int().positive().optional(),
           props: z.record(z.string(), z.unknown()).optional(),
+          fontSubstitutions: z.record(z.string(), z.string()).optional().describe('Explicit persisted legacy-font migration only.'),
           editables: z.array(z.object({
             id: z.string().min(1),
             type: z.enum(['text', 'image', 'video']),
@@ -4082,9 +3999,9 @@ Runtimes:
 - \`runtime: "node"\`: open backend Node with FFmpeg/FFprobe for real file-level media operations. Never use node as a fallback for ordinary editable timeline splicing of existing videos.
 
 Return exactly one supported shape:
-- \`{ type: 'render', code, width, height, editables?, props?, animation? }\`
-- \`{ type: 'composition', code, width, height, editables?, props?, animation? }\` — alias for \`render\`
-- \`{ type: 'patch', edits?, props?, editables?, code_path? }\` — if a patch adds/removes visible text/image/video editable layers, return the complete updated \`editables\` array.
+- \`{ type: 'render', code, width, height, editables?, props?, animation?, fontSubstitutions? }\`
+- \`{ type: 'composition', code, width, height, editables?, props?, animation?, fontSubstitutions? }\` — alias for \`render\`
+- \`{ type: 'patch', edits?, props?, editables?, fontSubstitutions?, code_path? }\` — if a patch adds/removes visible text/image/video editable layers, return the complete updated \`editables\` array.
 - \`{ type: 'image', data, mimeType }\`
 - \`{ type: 'video', path, contentType?, description?, duration?, width?, height? }\`
 - \`{ type: 'files', outputs: [{ path, contentType, description? }] }\`
@@ -4099,7 +4016,7 @@ For durable Composition work, use \`write_file\` to author numbered source parts
 
 For a 30s+ first composition, author numbered composition parts until write_file reports compositionWorkspace.status="ready". Use scene data arrays and shared components where they help, but do not impose an aggregate source-size target or trim approved creative detail. Preview or patch the returned designPath directly; no assembly-only run_code call is needed.
 
-Composition hard rules: use Remotion \`<Img>\`, not \`<img>\`; the complete editable text/image/video/trim contract lives in \`prompts/remotion-composition.md\` and applies by default to composition render/patch outputs. Do not add editables to \`runtime:"node"\` media exports or external image/video tool outputs. Use system CJK fonts; keep mobile image layers light. Reference timeline media in composition code and props with the literal 1-based marker \`<<<media_N>>>\`; the runtime resolves markers to current URLs before validation, autosave, preview, and export. Never translate Media Index N into \`ctx.snapshotImages[N]\` because that JavaScript array is 0-based. Only \`Composition(props)\` may read \`props\` directly; helper components must receive values through their own parameters and must never reference outer \`props\` (prevents \`props is not defined\` in Lambda). For timeline videos, preserve the selected Media Index video aspect ratio when all selected videos share one aspect: 9:16 sources must return a 9:16 canvas such as 1080x1920, never a 16:9 canvas. For mixed-aspect sources, choose the user/platform/current composition target and use contain/background; do not claim the runtime forced one source's aspect.
+Composition hard rules: use Remotion \`<Img>\`, not \`<img>\`; the complete editable text/image/video/trim contract lives in \`prompts/remotion-composition.md\` and applies by default to composition render/patch outputs. Do not add editables to \`runtime:"node"\` media exports or external image/video tool outputs. Use only the pinned font catalog in \`prompts/remotion-composition.md\`; never use Apple/local/system font names. \`fontSubstitutions\` is only for an explicit persisted migration of an old composition, never for silently choosing a lookalike. Keep mobile image layers light. Reference timeline media in composition code and props with the literal 1-based marker \`<<<media_N>>>\`; the runtime resolves markers to current URLs before validation, autosave, preview, and export. Never translate Media Index N into \`ctx.snapshotImages[N]\` because that JavaScript array is 0-based. Only \`Composition(props)\` may read \`props\` directly; helper components must receive values through their own parameters and must never reference outer \`props\` (prevents \`props is not defined\` in Lambda). For timeline videos, preserve the selected Media Index video aspect ratio when all selected videos share one aspect: 9:16 sources must return a 9:16 canvas such as 1080x1920, never a 16:9 canvas. For mixed-aspect sources, choose the user/platform/current composition target and use contain/background; do not claim the runtime forced one source's aspect.
 For legacy first-draft calls without \`composition\`, send one complete executable JavaScript body that returns the render object. Do not send a fragment like \`const code = \\\`\` without the final \`return { type: 'render', code, ... }\`. Keep long videos concise by using arrays, helper components, and interpolations instead of writing frame-by-frame code.
 
 Node media runtime provides a standard isolated Node environment with \`require\`, ESM/CommonJS, JS/TS/JSX/TSX compilation, \`process\`, \`ffmpegPath\`, \`inputFiles\`, \`outputDir\`, \`workDir\`, \`workspaceDir\`, \`saveOutput(localPath)\`, and \`probeVideo(path)\`. Normal Node built-ins are available. Bare npm packages may be required directly; a missing package is installed inside the disposable Sandbox on first use. Workspace files are local to the runtime: use \`workspace_paths\` and \`inputFiles[n].inputPath\`, never download or reconstruct Storage URLs. For \`runtime: "node"\`, any referenced timeline media like \`<<<media_1>>>\` MUST be passed as \`media_refs: [1]\`; any existing workspace file from \`list_files\` MUST be passed as \`workspace_paths: ["project/media/file.mp4"]\`. The system resolves both to local workspace-backed files before your code runs. \`ffprobePath\` may be empty in deployment; prefer \`probeVideo(path)\`. Use \`type: "files"\` for chunks and \`type: "video"\` for the final MP4. If execution reports a real code or dependency error, inspect it and keep repairing the same saved program until it succeeds; do not abandon the user-visible result. If ordinary timeline splicing was routed to composition, do not switch to node just because preview needs adjustment; patch the composition and continue.`,
@@ -4111,6 +4028,7 @@ Node media runtime provides a standard isolated Node environment with \`require\
           width: z.number().int().positive(),
           height: z.number().int().positive(),
           props: z.record(z.string(), z.unknown()).optional(),
+          fontSubstitutions: z.record(z.string(), z.string()).optional().describe('Explicit persisted migration for legacy font names only, e.g. {"STKaiti":"Ma Shan Zheng"}. Never infer or add silently.'),
           editables: z.array(z.object({
             id: z.string().min(1),
             type: z.enum(['text', 'image', 'video']),
@@ -4131,6 +4049,7 @@ Node media runtime provides a standard isolated Node environment with \`require\
           width: z.number().int().positive(),
           height: z.number().int().positive(),
           props: z.record(z.string(), z.unknown()).optional(),
+          fontSubstitutions: z.record(z.string(), z.string()).optional().describe('Explicit persisted migration for legacy font names only.'),
           editables: z.array(z.object({
             id: z.string().min(1),
             type: z.enum(['text', 'image', 'video']),
@@ -4432,8 +4351,13 @@ Node media runtime provides a standard isolated Node environment with \`require\
             }
           };
 
-          // { type: 'patch', edits?, props?, editables? } — Incremental update on last composition or code_path
-          if (resultKind === 'patch' && (Array.isArray(result.edits) || result.props !== undefined || result.editables !== undefined)) {
+          // Incremental update on the last composition or code_path.
+          if (resultKind === 'patch' && (
+            Array.isArray(result.edits)
+            || result.props !== undefined
+            || result.editables !== undefined
+            || result.fontSubstitutions !== undefined
+          )) {
             let baseDesign = (ctx as any).__lastDesignPayload;
 
             // code_path: load a different design from workspace as patch base
@@ -4476,6 +4400,9 @@ Node media runtime provides a standard isolated Node environment with \`require\
             }
             patched.animation = normalizeCompositionAnimation(patched.code, patched.animation);
             if (result.editables) patched.editables = result.editables;
+            if (result.fontSubstitutions && typeof result.fontSubstitutions === 'object') {
+              patched.fontSubstitutions = result.fontSubstitutions;
+            }
 
             const promiseError = studioCompositionPromiseError(await getStudioRunCheckpoint(ctx), patched);
             if (promiseError) return { type: 'text' as const, content: promiseError };
@@ -4569,6 +4496,7 @@ Node media runtime provides a standard isolated Node environment with \`require\
               animation,
               description: autoDesc,
               ...(result.editables ? { editables: result.editables } : {}),
+              ...(result.fontSubstitutions ? { fontSubstitutions: result.fontSubstitutions } : {}),
             };
             if (!ctx.supabase || !ctx.userId) {
               return { type: 'text' as const, content: 'Composition passed validation but cannot be safely autosaved because workspace access is unavailable.' };
@@ -5952,6 +5880,7 @@ export async function* runMakaronAgent(
               props: pendingDesign.props,
               animation: pendingDesign.animation,
               editables: pendingDesign.editables,
+              fontSubstitutions: pendingDesign.fontSubstitutions,
               description: pendingDesign.description,
               snapshotId,
               sourceDesignPath,
