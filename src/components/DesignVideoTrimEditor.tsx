@@ -5,6 +5,7 @@ import type { PointerEvent as ReactPointerEvent } from 'react';
 import type { EditableField } from '@/types';
 import FloatingPanel from '@/components/FloatingPanel';
 import { getVideoTrimPropKeys } from '@/lib/editor/video-trim';
+import { getSourceDurationInFrames } from '@/lib/editor/video-trim-timeline';
 
 interface DesignVideoTrimEditorProps {
   field: EditableField;
@@ -39,12 +40,18 @@ function pct(frame: number, maxFrame: number): number {
   return maxFrame > 0 ? (frame / maxFrame) * 100 : 0;
 }
 
-function dispatchTrimPreview(sourceFrame: number, startFrame: number, play = false, endFrame?: number) {
+function dispatchTrimPreview(
+  fieldId: string,
+  sourceFrame: number,
+  startFrame: number,
+  play = false,
+  endFrame?: number,
+) {
   window.dispatchEvent(new CustomEvent('makaron:design-trim-preview', {
     detail: {
+      fieldId,
       sourceFrame,
       startFrame,
-      compositionFrame: Math.max(0, sourceFrame - startFrame),
       play,
       endFrame,
     },
@@ -62,7 +69,15 @@ export default function DesignVideoTrimEditor({
   isDesktop,
 }: DesignVideoTrimEditorProps) {
   const { startKey, endKey } = getVideoTrimPropKeys(field);
-  const maxFrame = Math.max(1, durationInFrames);
+  const sourceUrl = typeof props[field.propKey] === 'string' ? props[field.propKey] as string : '';
+  const rawDeclaredEnd = endKey ? Number(props[endKey]) : NaN;
+  const declaredEndFrame = Number.isFinite(rawDeclaredEnd) && rawDeclaredEnd > 0
+    ? Math.round(rawDeclaredEnd)
+    : 1;
+  const [sourceDurationSeconds, setSourceDurationSeconds] = useState<number>();
+  const maxFrame = sourceDurationSeconds
+    ? getSourceDurationInFrames(sourceDurationSeconds, fps, declaredEndFrame)
+    : Math.max(1, durationInFrames, declaredEndFrame);
   const trackRef = useRef<HTMLDivElement>(null);
   const dragRef = useRef<{
     mode: DragMode;
@@ -81,6 +96,40 @@ export default function DesignVideoTrimEditor({
   const [draftEnd, setDraftEnd] = useState(safeEndFromProps);
   const [playhead, setPlayhead] = useState(safeStartFromProps);
   const [isPlaying, setIsPlaying] = useState(false);
+
+  useEffect(() => {
+    if (!sourceUrl) return;
+    const video = document.createElement('video');
+    const onMetadata = () => {
+      if (Number.isFinite(video.duration) && video.duration > 0) {
+        setSourceDurationSeconds(video.duration);
+      }
+    };
+    video.preload = 'metadata';
+    video.muted = true;
+    video.addEventListener('loadedmetadata', onMetadata);
+    video.src = sourceUrl;
+    return () => {
+      video.removeEventListener('loadedmetadata', onMetadata);
+      video.removeAttribute('src');
+      video.load();
+    };
+  }, [sourceUrl]);
+
+  useEffect(() => {
+    const onSourceMetadata = (event: Event) => {
+      const detail = (event as CustomEvent<{
+        fieldId?: string;
+        durationSeconds?: number;
+      }>).detail || {};
+      if (detail.fieldId !== field.id) return;
+      if (detail.durationSeconds && Number.isFinite(detail.durationSeconds)) {
+        setSourceDurationSeconds(detail.durationSeconds);
+      }
+    };
+    window.addEventListener('makaron:design-trim-source-metadata', onSourceMetadata);
+    return () => window.removeEventListener('makaron:design-trim-source-metadata', onSourceMetadata);
+  }, [field.id]);
 
   useEffect(() => {
     setDraftStart(safeStartFromProps);
@@ -103,8 +152,8 @@ export default function DesignVideoTrimEditor({
     setPlayhead(boundedPlayhead);
     if (startKey) onUpdateProp(startKey, boundedStart);
     if (endKey) onUpdateProp(endKey, boundedEnd);
-    dispatchTrimPreview(boundedPlayhead, boundedStart);
-  }, [endKey, maxFrame, onUpdateProp, playheadFrame, startKey]);
+    dispatchTrimPreview(field.id, boundedPlayhead, boundedStart);
+  }, [endKey, field.id, maxFrame, onUpdateProp, playheadFrame, startKey]);
 
   const frameFromClientX = useCallback((clientX: number) => {
     const track = trackRef.current;
@@ -162,16 +211,16 @@ export default function DesignVideoTrimEditor({
       const deltaFrames = Math.round(((clientX - drag.startX) / rect.width) * maxFrame);
       const boundedOffsetPlayhead = Math.max(draftStart, Math.min(draftEnd, drag.playheadFrame + deltaFrames));
       setPlayhead(boundedOffsetPlayhead);
-      dispatchTrimPreview(boundedOffsetPlayhead, draftStart);
+      dispatchTrimPreview(field.id, boundedOffsetPlayhead, draftStart);
       if (outside && releaseWhenOutside) dragRef.current = null;
       return;
     }
 
     const boundedPlayhead = Math.max(draftStart, Math.min(draftEnd, nextFrame));
     setPlayhead(boundedPlayhead);
-    dispatchTrimPreview(boundedPlayhead, draftStart);
+    dispatchTrimPreview(field.id, boundedPlayhead, draftStart);
     if (outside && releaseWhenOutside) dragRef.current = null;
-  }, [draftEnd, draftStart, frameFromClientX, maxFrame, playheadFrame, updateTrim]);
+  }, [draftEnd, draftStart, field.id, frameFromClientX, maxFrame, playheadFrame, updateTrim]);
 
   useEffect(() => {
     const onMove = (event: PointerEvent) => updateDrag(event.clientX, event.clientY, true);
@@ -191,7 +240,7 @@ export default function DesignVideoTrimEditor({
     event.stopPropagation();
     const next = Math.max(draftStart, Math.min(draftEnd, frameFromClientX(event.clientX)));
     setPlayhead(next);
-    dispatchTrimPreview(next, draftStart);
+    dispatchTrimPreview(field.id, next, draftStart);
     startDrag('scrub', event.clientX);
   };
 
@@ -217,14 +266,14 @@ export default function DesignVideoTrimEditor({
 
   const togglePlayback = () => {
     if (isPlaying) {
-      dispatchTrimPreview(playheadFrame, draftStart, false);
+      dispatchTrimPreview(field.id, playheadFrame, draftStart, false);
       setIsPlaying(false);
       return;
     }
     const frame = playheadFrame >= draftEnd - 1 ? draftStart : playheadFrame;
     setPlayhead(frame);
     setIsPlaying(true);
-    dispatchTrimPreview(frame, draftStart, true, draftEnd);
+    dispatchTrimPreview(field.id, frame, draftStart, true, draftEnd);
   };
 
   return (
@@ -280,9 +329,26 @@ export default function DesignVideoTrimEditor({
               {thumbnails.map((_, i) => (
                 <div
                   key={i}
-                  className="h-full flex-1 border-r border-black/30 bg-cover bg-center last:border-r-0"
-                  style={posterImage ? { backgroundImage: `url(${posterImage})` } : { background: 'rgba(255,255,255,0.08)' }}
-                />
+                  className="relative h-full flex-1 overflow-hidden border-r border-black/30 last:border-r-0"
+                  style={!sourceUrl && posterImage
+                    ? { backgroundImage: `url(${posterImage})`, backgroundSize: 'cover', backgroundPosition: 'center' }
+                    : { background: 'rgba(255,255,255,0.08)' }}
+                >
+                  {sourceUrl && (
+                    <video
+                      src={sourceUrl}
+                      muted
+                      playsInline
+                      preload="metadata"
+                      className="absolute inset-0 h-full w-full object-cover pointer-events-none"
+                      onLoadedMetadata={(event) => {
+                        const video = event.currentTarget;
+                        if (!Number.isFinite(video.duration) || video.duration <= 0) return;
+                        video.currentTime = video.duration * ((i + 0.5) / thumbnails.length);
+                      }}
+                    />
+                  )}
+                </div>
               ))}
             </div>
 
@@ -342,7 +408,7 @@ export default function DesignVideoTrimEditor({
                 event.stopPropagation();
                 const next = Math.max(draftStart, Math.min(draftEnd, frameFromClientX(event.clientX)));
                 setPlayhead(next);
-                dispatchTrimPreview(next, draftStart);
+                dispatchTrimPreview(field.id, next, draftStart);
                 startDrag('scrub', event.clientX);
               }}
             />

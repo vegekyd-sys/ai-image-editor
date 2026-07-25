@@ -32,8 +32,7 @@ import VideoResultCard from '@/components/VideoResultCard';
 import AnimateSheet from '@/components/AnimateSheet';
 import DesignEditPanel from '@/components/DesignEditPanel';
 import DesignEditorFrame from '@/components/DesignEditorFrame';
-import DesignTextEditor from '@/components/DesignTextEditor';
-import DesignVideoTrimEditor from '@/components/DesignVideoTrimEditor';
+import DesignFieldEditor from '@/components/DesignFieldEditor';
 import CameraPanel from '@/components/CameraPanel';
 import { useIsDesktop } from '@/hooks/useIsDesktop';
 import { useVisualViewportInset } from '@/hooks/useVisualViewportInset';
@@ -3909,38 +3908,20 @@ Select the best 3-7 items for a compelling video. You do NOT need to use all or 
 
           {/* Hidden proxy input — iOS keyboard focus anchor (must be in DOM before edit starts) */}
           {/* Design text/video editor — floating panel (like AnnotationToolbar) */}
-          {editingDesignField && currentDesignSnap?.design && editingDesignField.type !== 'image' && (
+          {isDesktop && editingDesignField && currentDesignSnap?.design && editingDesignField.type !== 'image' && (
             <DesignEditorFrame
               isDesktop={isDesktop}
               keyboardInset={editorKbInset}
               desktopWidth={editingDesignField.type === 'video' ? 420 : 340}
             >
-              {editingDesignField.type === 'video' ? (() => {
-                const fps = currentDesignSnap.design.animation?.fps || 30;
-                const durationInFrames = currentDesignSnap.design.animation
-                  ? Math.max(1, Math.round(fps * currentDesignSnap.design.animation.durationInSeconds))
-                  : 1;
-                return (
-                  <DesignVideoTrimEditor
-                    field={editingDesignField}
-                    props={(currentDesignSnap.design.props || {}) as Record<string, unknown>}
-                    fps={fps}
-                    durationInFrames={durationInFrames}
-                    posterImage={currentDesignSnap.image || currentDesignSnap.imageUrl || currentDisplayImage}
-                    onUpdateProp={(key, value) => handleDesignPropUpdate(key, value)}
-                    onClose={() => setEditingDesignFieldId(null)}
-                    isDesktop={isDesktop}
-                  />
-                );
-              })() : (
-                <DesignTextEditor
-                  field={editingDesignField}
-                  value={String(currentDesignSnap.design.props?.[editingDesignField.propKey] ?? '')}
-                  onChangeValue={(v) => handleDesignPropUpdate(editingDesignField.propKey, v)}
-                  onClose={() => setEditingDesignFieldId(null)}
-                  isDesktop={isDesktop}
-                />
-              )}
+              <DesignFieldEditor
+                field={editingDesignField}
+                design={currentDesignSnap.design}
+                posterImage={currentDesignSnap.image || currentDesignSnap.imageUrl || currentDisplayImage}
+                onUpdateProp={handleDesignPropUpdate}
+                onClose={() => setEditingDesignFieldId(null)}
+                isDesktop={isDesktop}
+              />
             </DesignEditorFrame>
           )}
 
@@ -4065,6 +4046,23 @@ Select the best 3-7 items for a compelling video. You do NOT need to use all or 
                     currentDuration={videoGuiDuration}
                     isDesktop={isDesktop}
                   />
+                ) : !isDesktop && editingDesignField && currentDesignSnap?.design ? (
+                  <div data-design-editor-slot="mobile-inline">
+                    <DesignEditorFrame
+                      isDesktop={false}
+                      keyboardInset={editorKbInset}
+                      desktopWidth={editingDesignField.type === 'video' ? 420 : 340}
+                    >
+                      <DesignFieldEditor
+                        field={editingDesignField}
+                        design={currentDesignSnap.design}
+                        posterImage={currentDesignSnap.image || currentDesignSnap.imageUrl || currentDisplayImage}
+                        onUpdateProp={handleDesignPropUpdate}
+                        onClose={() => setEditingDesignFieldId(null)}
+                        isDesktop={false}
+                      />
+                    </DesignEditorFrame>
+                  </div>
                 ) : isViewingDesign && currentDesignEditables.length > 0 ? (
                   <DesignEditPanel
                     editables={visibleEditableIds.length > 0

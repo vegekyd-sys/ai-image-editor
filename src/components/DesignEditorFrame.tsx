@@ -24,16 +24,19 @@ export default function DesignEditorFrame({
         width: desktopWidth,
       }
     : {
-        position: 'fixed',
-        bottom: keyboardInset,
-        left: 0,
-        right: 0,
-        zIndex: 201,
+        width: '100%',
         maxWidth: 480,
         margin: '0 auto',
-        transition: keyboardInset > 0 ? 'bottom 0.1s ease-out' : undefined,
+        paddingBottom: keyboardInset,
+        transition: keyboardInset > 0 ? 'padding-bottom 0.1s ease-out' : undefined,
       };
 
-  return <div style={style}>{children}</div>;
+  return (
+    <div
+      data-design-editor-layout={isDesktop ? 'floating' : 'inline'}
+      style={style}
+    >
+      {children}
+    </div>
+  );
 }
-

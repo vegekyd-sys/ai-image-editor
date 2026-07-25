@@ -3,6 +3,7 @@ import { join } from 'path';
 import { describe, expect, it } from 'vitest';
 
 const source = readFileSync(join(process.cwd(), 'src/components/DesignOverlay.tsx'), 'utf8');
+const css = readFileSync(join(process.cwd(), 'src/app/globals.css'), 'utf8');
 
 describe('DesignOverlay moveable guideline regression guards', () => {
   it('keeps Moveable snap guidelines enabled for editable drag alignment', () => {
@@ -23,5 +24,11 @@ describe('DesignOverlay moveable guideline regression guards', () => {
     expect(source).not.toContain("addEventListener('mousedown'");
     expect(source).not.toContain("addEventListener('mousemove'");
     expect(source).not.toContain("addEventListener('mouseup'");
+  });
+
+  it('keeps corner resize controls usable for small editable images on touch screens', () => {
+    expect(css).toContain('min-width: 44px !important;');
+    expect(css).toContain('min-height: 44px !important;');
+    expect(css).toContain('touch-action: none !important;');
   });
 });

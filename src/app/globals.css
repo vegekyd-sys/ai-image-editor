@@ -1467,6 +1467,7 @@ div[class*="moveable-control-box"] div.moveable-control.moveable-direction.movea
   position: absolute !important;
   inset: -10px !important;
 }
+
 /* Each corner: solid L at same thickness as dashed frame (1px), positioned to overlap frame corners */
 div[class*="moveable-control-box"] div.moveable-control.moveable-nw.moveable-scalable { cursor: nwse-resize !important; }
 div[class*="moveable-control-box"] div.moveable-control.moveable-nw.moveable-scalable::before {
@@ -1491,6 +1492,43 @@ div[class*="moveable-control-box"] div.moveable-control.moveable-se.moveable-sca
   bottom: 9px !important; right: 9px !important;
   border-right: 3px solid var(--primary) !important;
   border-bottom: 3px solid var(--primary) !important;
+}
+
+/* Keep tiny photo cards resizable without requiring pixel-perfect fingers. */
+@media (pointer: coarse) {
+  div[class*="moveable-control-box"] div.moveable-control.moveable-direction.moveable-scalable {
+    min-width: 44px !important;
+    min-height: 44px !important;
+    width: 44px !important;
+    height: 44px !important;
+    margin-top: -22px !important;
+    margin-left: -22px !important;
+    touch-action: none !important;
+  }
+
+  div[class*="moveable-control-box"] div.moveable-control.moveable-direction.moveable-scalable::after {
+    inset: 0 !important;
+  }
+
+  div[class*="moveable-control-box"] div.moveable-control.moveable-nw.moveable-scalable::before {
+    top: 21px !important;
+    left: 21px !important;
+  }
+
+  div[class*="moveable-control-box"] div.moveable-control.moveable-ne.moveable-scalable::before {
+    top: 21px !important;
+    right: 21px !important;
+  }
+
+  div[class*="moveable-control-box"] div.moveable-control.moveable-sw.moveable-scalable::before {
+    bottom: 21px !important;
+    left: 21px !important;
+  }
+
+  div[class*="moveable-control-box"] div.moveable-control.moveable-se.moveable-scalable::before {
+    bottom: 21px !important;
+    right: 21px !important;
+  }
 }
 
 /* Selection frame — dashed via gradient */
