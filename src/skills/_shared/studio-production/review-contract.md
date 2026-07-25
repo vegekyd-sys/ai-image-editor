@@ -56,12 +56,12 @@ or materializing an MP4.
 ## Materialization Boundary
 
 - Publish the exact reviewed `design_path` once with `publish_draft`.
-- Call `materialize_media` once. In Studio Run it waits for the real MP4 at the
-  locked source resolution.
-- Successful materialization automatically completes the Review and Delivery UI
-  stages and records the MP4 plus editable source paths.
+- Call `materialize_media` once. It queues the real MP4 at the locked source
+  resolution and returns immediately.
+- The durable worker automatically completes the Review and Delivery UI stages
+  when the MP4 is ready, and records the MP4 plus editable source paths.
 - Do not author Review or Delivery JSON, and do not start another review,
-  preview, publish, or render loop after materialization succeeds.
+  preview, publish, or render loop after queue submission succeeds.
 - If export fails, keep the editable Composition and report the export failure.
   If the source itself needs revision, patch Composition before retrying.
 

@@ -15,9 +15,9 @@ work the same across video types.
    runtime, editability, audio, or subtitle requirements later.
    - When the user does not specify resolution and explicitly prioritizes
      speed, lock `1280x720` for 16:9 or an equivalent 720-short-side canvas.
-   - When the promise is larger than the `fast_720p` result, materialize with
-     `profile: "source"` on the first and only export. Never render fast and
-     then render source merely to repair a known resolution mismatch.
+   - Studio Run materialization automatically uses the locked source
+     resolution. Do not pass renderer profile controls or render a fast copy
+     first merely to repair a known resolution mismatch.
 3. Read only the shared director modules needed by the recipe, once:
    - `taste-direction.md` for every authored video.
    - `reference-analysis.md` for reference-led work.
@@ -147,9 +147,10 @@ work the same across video types.
 - After one clean gate, call `publish_draft` with that exact `design_path` once,
   then materialize it once when MP4 Delivery is requested. Do not export a
   timeline `media_index` that may point to an older
-  snapshot. Successful Studio Run materialization waits for the real MP4 and
-  automatically completes Review and Delivery. Do not author Delivery JSON or
-  perform more tool calls after success.
+  snapshot. Studio Run materialization queues the locked source-resolution MP4
+  and returns immediately; the durable worker automatically completes Review
+  and Delivery when the real MP4 is ready. Do not author Delivery JSON or
+  perform more tool calls after successful queue submission.
 - Probe source media once. Reuse that result throughout Composition review.
 - Do not compute SHA unless the user explicitly requests an integrity checksum.
 
@@ -158,9 +159,10 @@ work the same across video types.
 For every Studio Run used as a sample or acceptance test, retain its Agent run
 ID and report elapsed milestones from the event log. Create a fresh project and
 fresh Studio Run for every test round; source URLs may be reused as controlled
-inputs, but do not refine an older test project. Record Agent completion,
-MP4-ready time, and Delivery completion; Studio Run materialization should make
-the three terminal milestones identical. Include planning, asset/audio
+inputs, but do not refine an older test project. Record Agent queue-submission
+completion, MP4-ready time, and Delivery completion. Agent completion should
+precede MP4 readiness; MP4 readiness and Delivery completion should remain
+identical. Include planning, asset/audio
 generation, first composition, visual review/revision, export, total wall time,
 and counts for revisions, previews, and exports. Do not report an aesthetic
 comparison without its production-time comparison.

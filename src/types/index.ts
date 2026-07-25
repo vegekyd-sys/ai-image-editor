@@ -12,6 +12,8 @@ export interface DesignPayload {
   props?: Record<string, unknown>;
   animation?: { fps: number; durationInSeconds: number; format?: string };
   editables?: EditableField[];
+  /** Explicit, persisted legacy font migrations. Never inferred at render time. */
+  fontSubstitutions?: Record<string, string>;
 }
 
 export interface Message {

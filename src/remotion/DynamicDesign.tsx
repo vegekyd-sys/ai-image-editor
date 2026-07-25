@@ -9,7 +9,6 @@ import { Audio as MediaAudio, Video as MediaVideo } from '@remotion/media';
 import * as RemotionPaths from '@remotion/paths';
 import * as RemotionNoise from '@remotion/noise';
 import * as THREE from 'three';
-import { getAvailableFonts } from '@remotion/google-fonts';
 import { transform as sucraseTransform } from 'sucrase';
 // Keep the Remotion entrypoint independently bundleable. The standalone
 // Remotion bundler does not inherit Next.js' `@/` alias.
@@ -17,8 +16,15 @@ import {
   buildRemotionEvaluatorBody,
   normalizeRemotionScopeDeclarations,
 } from '../lib/remotion-code-normalization';
+import {
+  fetchRemotionFontManifestWithTiming,
+  loadPreparedRemotionFonts,
+  prepareRemotionFontCode,
+  type PreparedRemotionFonts,
+  type RemotionFontTiming,
+} from './font-catalog';
 
-const { Sequence, useVideoConfig, delayRender, continueRender } = Remotion;
+const { Artifact, Sequence, useCurrentFrame, useVideoConfig, delayRender, continueRender, cancelRender } = Remotion;
 
 // Sequence wrapper: auto-inject premountFor={fps} for smooth video cuts
 
@@ -124,52 +130,23 @@ function compileAndEval(code: string, scope: Record<string, unknown>): React.Com
   }
 }
 
-// ─── Font loading via @remotion/google-fonts ──────────────────────────────
-
-const ALL_FONTS = getAvailableFonts();
-
-/**
- * Scan code + props for any Google Font family names and load them.
- * Uses @remotion/google-fonts — no regex parsing of CSS needed.
- * Just checks if the font name appears anywhere in the text.
- */
-async function loadGoogleFontsFromText(text: string): Promise<void> {
-  const fontsToLoad = ALL_FONTS.filter(f => text.includes(f.fontFamily));
-  if (fontsToLoad.length === 0) return;
-
-  await Promise.all(fontsToLoad.map(async (font) => {
-    try {
-      const loaded = await font.load();
-      const { waitUntilDone } = loaded.loadFont();
-      await waitUntilDone();
-    } catch (e) {
-      console.warn(`[DynamicDesign] font load failed: ${font.fontFamily}`, e);
-    }
-  }));
-}
-
-/** Check if text contains CJK characters */
-function hasCJK(text: string): boolean {
-  return /[\u4e00-\u9fff\u3400-\u4dbf\u3000-\u303f\u3040-\u309f\u30a0-\u30ff\uac00-\ud7af]/.test(text);
-}
-
-/** Load Noto Color Emoji font */
-async function loadEmojiFont(): Promise<void> {
-  try {
-    const font = ALL_FONTS.find(f => f.fontFamily === 'Noto Color Emoji');
-    if (!font) return;
-    const loaded = await font.load();
-    const { waitUntilDone } = loaded.loadFont();
-    await waitUntilDone();
-  } catch (e) {
-    console.warn('[DynamicDesign] emoji font load failed:', e);
-  }
-}
-
 // ─── Component ────────────────────────────────────────────────────────────
 
-export const DynamicDesign: React.FC<Record<string, unknown>> = ({ code, designProps, skipFontLoading, useOffthreadVideo, useNativeVideo }) => {
+export const DynamicDesign: React.FC<Record<string, unknown>> = ({
+  code,
+  designProps,
+  fontManifestUrl,
+  fontSubstitutions,
+  fontTelemetryId,
+  useOffthreadVideo,
+  useNativeVideo,
+}) => {
+  const currentFrame = useCurrentFrame();
+  const initialFrameRef = useRef(currentFrame);
+  const telemetryShardIdRef = useRef(Math.random().toString(36).slice(2, 10));
   const codeStr = typeof code === 'string' ? code : '';
+  const manifestUrl = typeof fontManifestUrl === 'string' ? fontManifestUrl : '';
+  const telemetryId = typeof fontTelemetryId === 'string' ? fontTelemetryId : '';
   const propsObj = useMemo(
     () => (typeof designProps === 'object' && designProps !== null ? designProps : {}) as Record<string, unknown>,
     [designProps],
@@ -178,7 +155,19 @@ export const DynamicDesign: React.FC<Record<string, unknown>> = ({ code, designP
     () => createRemotionScope(useOffthreadVideo === true, useNativeVideo === true),
     [useNativeVideo, useOffthreadVideo],
   );
-  const Component = useMemo(() => compileAndEval(codeStr, remotionScope), [codeStr, remotionScope]);
+  const substitutions = useMemo(
+    () => (typeof fontSubstitutions === 'object' && fontSubstitutions !== null
+      ? fontSubstitutions
+      : {}) as Record<string, string>,
+    [fontSubstitutions],
+  );
+  const [prepared, setPrepared] = useState<PreparedRemotionFonts | null>(null);
+  const [fontError, setFontError] = useState<Error | null>(null);
+  const [fontTiming, setFontTiming] = useState<RemotionFontTiming | null>(null);
+  const Component = useMemo(
+    () => prepared ? compileAndEval(prepared.code, remotionScope) : null,
+    [prepared, remotionScope],
+  );
 
   // Combine code + props for font detection
   const allText = useMemo(() => {
@@ -186,51 +175,118 @@ export const DynamicDesign: React.FC<Record<string, unknown>> = ({ code, designP
     return codeStr + '\n' + propsStr;
   }, [codeStr, propsObj]);
 
-  const [, setFontsReady] = useState(false);
   const handleRef = useRef<number | null>(null);
 
   useEffect(() => {
     if (!codeStr) return;
-    if (skipFontLoading === true) {
-      setFontsReady(true);
+    if (!manifestUrl) {
+      const error = new Error('fontManifestUrl is required for Remotion rendering');
+      setFontError(error);
+      cancelRender(error);
       return;
     }
+    let cancelled = false;
+    setPrepared(null);
+    setFontError(null);
+    setFontTiming(null);
     const handle = delayRender('Loading fonts for design');
     handleRef.current = handle;
 
     (async () => {
       try {
-        // Load all Google Fonts referenced in code + props
-        await loadGoogleFontsFromText(allText);
-
-        // Emoji font — always load so emoji characters fallback correctly
-        await loadEmojiFont();
-
-        // If CJK text present, inject global fallback font-family
-        // so text renders even when Agent doesn't specify fontFamily
-        if (hasCJK(allText)) {
-          const style = document.createElement('style');
-          style.textContent = `*, *::before, *::after { font-family: 'Noto Sans SC', sans-serif; }`;
-          document.head.appendChild(style);
-        }
-      } catch { /* continue even if fonts fail */ }
-
-      continueRender(handle);
-      handleRef.current = null;
+        const totalStartedAt = performance.now();
+        const manifestResult = await fetchRemotionFontManifestWithTiming(manifestUrl);
+        const prepareStartedAt = performance.now();
+        const nextPrepared = prepareRemotionFontCode({
+          code: codeStr,
+          manifest: manifestResult.manifest,
+          substitutions,
+        });
+        const prepareMs = Math.round((performance.now() - prepareStartedAt) * 100) / 100;
+        if (cancelled) return;
+        setPrepared(nextPrepared);
+        const load = await loadPreparedRemotionFonts({
+          manifest: manifestResult.manifest,
+          prepared: nextPrepared,
+          text: allText,
+        });
+        if (cancelled) return;
+        setFontTiming({
+          version: 1,
+          totalMs: Math.round((performance.now() - totalStartedAt) * 100) / 100,
+          manifestMs: manifestResult.durationMs,
+          manifestCacheHit: manifestResult.cacheHit,
+          prepareMs,
+          usedFamilies: nextPrepared.usedFamilies,
+          load,
+        });
+      } catch (error) {
+        if (cancelled) return;
+        const fontLoadError = error instanceof Error ? error : new Error(String(error));
+        setFontError(fontLoadError);
+        handleRef.current = null;
+        cancelRender(fontLoadError);
+      }
     })();
 
     return () => {
+      cancelled = true;
       if (handleRef.current !== null) {
         continueRender(handleRef.current);
         handleRef.current = null;
       }
     };
-  }, [codeStr, allText]);
+  }, [allText, codeStr, manifestUrl, substitutions]);
+
+  // Continue only after the timing Artifact has committed. This makes the
+  // per-shard metrics part of the same render instead of racing the first frame.
+  useEffect(() => {
+    if (!fontTiming || handleRef.current === null) return;
+    const handle = handleRef.current;
+    handleRef.current = null;
+    continueRender(handle);
+  }, [fontTiming]);
+
+  if (fontError) throw fontError;
+  if (!prepared) return null;
 
   if (!Component) {
     throw new Error('Failed to compile design code');
   }
-  // Always render Component so <Img> can register its own delayRender for image loading.
-  // Font delayRender runs in parallel — Remotion waits for ALL handles before capturing.
-  return <Component {...propsObj} />;
+  const timingToken = (value: number) => Math.max(0, Math.round(value * 100));
+  const timingFilename = fontTiming && telemetryId
+    ? [
+      `makaron-font-timing-${telemetryId}`,
+      initialFrameRef.current,
+      telemetryShardIdRef.current,
+      `t${timingToken(fontTiming.totalMs)}`,
+      `m${timingToken(fontTiming.manifestMs)}`,
+      `s${timingToken(fontTiming.load.selectionMs)}`,
+      `f${timingToken(fontTiming.load.fontFacesMs)}`,
+      `r${timingToken(fontTiming.load.fontsReadyMs)}`,
+      `c${timingToken(fontTiming.load.fontsCheckMs)}`,
+      `n${fontTiming.load.faceCount}`,
+      `u${fontTiming.load.uniqueResourceCount}`,
+      `w${fontTiming.manifestCacheHit || fontTiming.load.requestCacheHit ? 1 : 0}.json`,
+    ].join('-')
+    : '';
+  const artifact = fontTiming && telemetryId && currentFrame === initialFrameRef.current
+    ? JSON.stringify({
+      type: 'makaron-remotion-font-timing',
+      telemetryId,
+      initialFrame: initialFrameRef.current,
+      timing: fontTiming,
+    })
+    : null;
+  return (
+    <div style={{ width: '100%', height: '100%', fontFamily: prepared.defaultFontFamily }}>
+      {artifact ? (
+        <Artifact
+          filename={timingFilename}
+          content={artifact}
+        />
+      ) : null}
+      <Component {...propsObj} />
+    </div>
+  );
 };

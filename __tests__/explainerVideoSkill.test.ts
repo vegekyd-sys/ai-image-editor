@@ -122,7 +122,7 @@ describe('Explainer Video built-in skill', () => {
     expect(rawSkill).toContain('actual subtitle visibility and picture alignment are')
     expect(rawSkill).toContain('verified from the representative Composition preview frames before export')
     expect(rawSkill).toContain('Do not author a separate')
-    expect(rawSkill).toContain('automatically projects both Review and')
+    expect(rawSkill).toContain('worker projects both Review and Delivery')
     expect(rawSkill).toContain('primaryAssetId')
     expect(rawSkill).toContain('read and follow')
     expect(rawSkill).toContain('skills/sticker-maker/SKILL.md')

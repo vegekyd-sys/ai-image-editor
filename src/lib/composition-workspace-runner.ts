@@ -39,6 +39,7 @@ export interface CompositionWorkspaceMetadata {
   props?: Record<string, unknown>;
   editables?: DesignPayload['editables'];
   animation?: DesignPayload['animation'];
+  fontSubstitutions?: DesignPayload['fontSubstitutions'];
   description?: string;
 }
 
@@ -162,6 +163,9 @@ function buildWorkspaceDesign(input: {
     ),
     ...((input.metadata?.editables ?? input.base?.editables)
       ? { editables: input.metadata?.editables ?? input.base?.editables }
+      : {}),
+    ...((input.metadata?.fontSubstitutions ?? input.base?.fontSubstitutions)
+      ? { fontSubstitutions: input.metadata?.fontSubstitutions ?? input.base?.fontSubstitutions }
       : {}),
     description: input.metadata?.description || (baseRecord?.__makaronScaffold === true
       ? 'Composition workspace draft assembled from durable source files'

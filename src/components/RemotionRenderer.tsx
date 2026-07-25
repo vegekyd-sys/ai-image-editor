@@ -5,6 +5,10 @@ import { Player, type PlayerRef } from '@remotion/player';
 import { renderStillOnWeb, renderMediaOnWeb, type RenderMediaOnWebProgress } from '@remotion/web-renderer';
 import { evalRemotionJSX, preloadBabel } from '@/lib/evalRemotionJSX';
 import type { DesignPayload } from '@/types';
+import {
+  prepareAndLoadRemotionFontsWithTiming,
+  type RemotionFontTiming,
+} from '@/remotion/font-catalog';
 
 export type { DesignPayload };
 export type { RenderMediaOnWebProgress };
@@ -80,42 +84,46 @@ async function resolveDesignImageUrls(
   return { code: resolvedCode, props, blobUrls: [...codeBlobUrls, ...propBlobUrls] };
 }
 
-// ─── Google Fonts auto-loading from code (same approach as server DynamicDesign.tsx) ──
+const BROWSER_FONT_MANIFEST_URL = '/api/remotion/fonts';
 
-import { getAvailableFonts } from '@remotion/google-fonts';
+export interface BrowserRemotionFontTiming {
+  source: 'player' | 'poster' | 'preview-frame' | 'web-export';
+  recordedAt: string;
+  timing: RemotionFontTiming;
+}
 
-const ALL_FONTS = getAvailableFonts();
-const loadedFontFamilies = new Set<string>();
+function recordBrowserFontTiming(entry: BrowserRemotionFontTiming): void {
+  const target = window as typeof window & {
+    __MAKARON_REMOTION_FONT_TIMINGS__?: BrowserRemotionFontTiming[];
+  };
+  const existing = target.__MAKARON_REMOTION_FONT_TIMINGS__ || [];
+  target.__MAKARON_REMOTION_FONT_TIMINGS__ = [...existing.slice(-19), entry];
+  window.dispatchEvent(new CustomEvent('makaron:remotion-font-timing', { detail: entry }));
+}
 
-/**
- * Scan code + props text for Google Font family names and load them.
- * Uses @remotion/google-fonts — the same mechanism as server-side DynamicDesign.tsx.
- * Only fonts whose family name appears in the text are loaded (lazy).
- */
-async function loadGoogleFontsFromCode(code: string): Promise<void> {
-  const fontsToLoad = ALL_FONTS.filter(f =>
-    code.includes(f.fontFamily) && !loadedFontFamilies.has(f.fontFamily)
-  );
+async function compileBrowserDesign(
+  design: DesignPayload,
+  code: string,
+  props: Record<string, unknown>,
+  source: BrowserRemotionFontTiming['source'],
+): Promise<React.ComponentType<Record<string, unknown>>> {
+  const { prepared, timing } = await prepareAndLoadRemotionFontsWithTiming({
+    code,
+    props,
+    manifestUrl: BROWSER_FONT_MANIFEST_URL,
+    substitutions: design.fontSubstitutions,
+  });
+  recordBrowserFontTiming({ source, recordedAt: new Date().toISOString(), timing });
+  const Component = evalRemotionJSX(prepared.code);
+  if (!Component) throw new Error('Failed to compile design code');
 
-  // Always register Noto Color Emoji so emoji characters fallback correctly
-  // (decorative fonts like Great Vibes lack emoji glyphs → browser needs a registered @font-face to fallback to)
-  if (!loadedFontFamilies.has('Noto Color Emoji')) {
-    const emojiFont = ALL_FONTS.find(f => f.fontFamily === 'Noto Color Emoji');
-    if (emojiFont) fontsToLoad.push(emojiFont);
-  }
-
-  if (fontsToLoad.length === 0) return;
-
-  await Promise.all(fontsToLoad.map(async (font) => {
-    try {
-      loadedFontFamilies.add(font.fontFamily);
-      const loaded = await font.load();
-      const { waitUntilDone } = loaded.loadFont();
-      await waitUntilDone();
-    } catch (e) {
-      console.warn(`[RemotionRenderer] font load failed: ${font.fontFamily}`, e);
-    }
-  }));
+  return function FontPinnedDesign(componentProps: Record<string, unknown>) {
+    return React.createElement(
+      'div',
+      { style: { width: '100%', height: '100%', fontFamily: prepared.defaultFontFamily } },
+      React.createElement(Component, componentProps),
+    );
+  };
 }
 
 // ─── Standalone poster capture (no DOM needed) ─────────────────────────────
@@ -134,9 +142,7 @@ export async function captureDesignPoster(design: DesignPayload): Promise<string
     // Then resolve image URLs in both code literals and editable props.
     const { code: resolvedCode, props: resolvedProps, blobUrls: imageBlobUrls } = await resolveDesignImageUrls(design, videoResolved);
     allBlobUrls = [...videoBlobUrls, ...imageBlobUrls];
-    await loadGoogleFontsFromCode(resolvedCode);
-    const comp = evalRemotionJSX(resolvedCode);
-    if (!comp) return '';
+    const comp = await compileBrowserDesign(design, resolvedCode, resolvedProps, 'poster');
 
     const fps = design.animation?.fps || 30;
     const durationInFrames = design.animation
@@ -184,9 +190,7 @@ export async function captureDesignFrame(design: DesignPayload, frame: number): 
     const { code: videoResolved, blobUrls: videoBlobUrls } = await resolveVideoUrls(design.code);
     const { code: resolvedCode, props: resolvedProps, blobUrls: imageBlobUrls } = await resolveDesignImageUrls(design, videoResolved);
     allBlobUrls = [...videoBlobUrls, ...imageBlobUrls];
-    await loadGoogleFontsFromCode(resolvedCode);
-    const comp = evalRemotionJSX(resolvedCode);
-    if (!comp) return null;
+    const comp = await compileBrowserDesign(design, resolvedCode, resolvedProps, 'preview-frame');
 
     const fps = design.animation?.fps || 30;
     const durationInFrames = design.animation
@@ -277,15 +281,8 @@ export default function RemotionRenderer({ design, onError, mode = 'inline', hid
         const { code: resolvedCode, props: resolvedProps, blobUrls: imageBlobUrls } = await resolveDesignImageUrls(design, videoResolved);
         blobUrls.push(...imageBlobUrls);
         if (cancelled) { blobUrls.forEach(url => URL.revokeObjectURL(url)); return; }
-        await loadGoogleFontsFromCode(resolvedCode);
+        const comp = await compileBrowserDesign(design, resolvedCode, resolvedProps, 'player');
         if (cancelled) { blobUrls.forEach(url => URL.revokeObjectURL(url)); return; }
-        const comp = evalRemotionJSX(resolvedCode);
-        if (!comp) {
-          setCompileError('Failed to compile design code');
-          onError?.('Failed to compile design code');
-          onLoading?.(false);
-          return;
-        }
         setCompileError(null);
         setComponent(() => comp);
         setInputProps(resolvedProps);
@@ -304,7 +301,7 @@ export default function RemotionRenderer({ design, onError, mode = 'inline', hid
       blobUrls.forEach(url => URL.revokeObjectURL(url));
     };
 
-  }, [design.code, design.props]);
+  }, [design.code, design.fontSubstitutions, design.props]);
 
   // Expose container and player refs to parent
   useEffect(() => {
@@ -503,9 +500,7 @@ export async function exportDesignVideo(
   const { code: imageResolved, props: resolvedProps, blobUrls: imageBlobUrls } = await resolveDesignImageUrls(design, videoResolved);
   // Pre-fetch remote audio URLs → blob URLs (Suno CDN URLs may be stale/expired)
   const { code: resolvedCode, blobUrls: audioBlobUrls } = await resolveAudioUrls(imageResolved);
-  await loadGoogleFontsFromCode(resolvedCode);
-  const Component = evalRemotionJSX(resolvedCode);
-  if (!Component) throw new Error('Failed to compile design code');
+  const Component = await compileBrowserDesign(design, resolvedCode, resolvedProps, 'web-export');
 
   const fps = design.animation?.fps || 30;
   const durationInFrames = design.animation
