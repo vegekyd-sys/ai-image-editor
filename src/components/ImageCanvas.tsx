@@ -1505,7 +1505,7 @@ export default function ImageCanvas({
             />
 
             {/* Poster fallback while RemotionRenderer is loading (fetching images/fonts/audio) */}
-            {remotionLoading && displayImage && (
+            {remotionLoading && displayImage && !selectedEditableId && (
               <img
                 src={displayImage}
                 alt="poster"
