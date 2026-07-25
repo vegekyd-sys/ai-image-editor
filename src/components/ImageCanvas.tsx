@@ -152,6 +152,7 @@ export default function ImageCanvas({
 
   // Design overlay refs (for editable designs)
   const [designContainerEl, setDesignContainerEl] = useState<HTMLDivElement | null>(null);
+  const [designInteractionEl, setDesignInteractionEl] = useState<HTMLDivElement | null>(null);
 
   const [designPlayerRef, setDesignPlayerRef] = useState<any>(null);
 
@@ -159,6 +160,7 @@ export default function ImageCanvas({
   useEffect(() => {
     if (!selectedEditableId || !designPlayerRef) return;
     try { designPlayerRef.pause(); } catch { /* ignore */ }
+    setRemotionPlaying(false);
   }, [selectedEditableId, designPlayerRef]);
 
   // Long press compare
@@ -189,6 +191,10 @@ export default function ImageCanvas({
     return false;
   })();
   const longScrollRef = useRef<HTMLDivElement>(null);
+  const handleDesignInteractionRef = useCallback((el: HTMLDivElement | null) => {
+    longScrollRef.current = el;
+    setDesignInteractionEl(el);
+  }, []);
 
   // Video playback state
   const videoRef = useRef<HTMLVideoElement>(null);
@@ -224,8 +230,6 @@ export default function ImageCanvas({
 
   // Prevent click after handled touch gestures
   const skipClick = useRef(false);
-  // Debounce: ignore deselection within 300ms of selection (blocks Remotion's ghost pointerup)
-  const lastSelectTimeRef = useRef(0);
 
   // Update imageRect when image loads or container resizes
   const updateImageRect = useCallback(() => {
@@ -930,7 +934,7 @@ export default function ImageCanvas({
       resumeTimerRef.current = setTimeout(() => {
         resumeTimerRef.current = null;
         setRemotionBuffering(false);
-        if (wasPlayingBeforeBufferRef.current || remotionStartedRef.current) {
+        if (!selectedEditableId && (wasPlayingBeforeBufferRef.current || remotionStartedRef.current)) {
           wasPlayingBeforeBufferRef.current = false;
           player.play();
           setRemotionPlaying(true);
@@ -973,6 +977,11 @@ export default function ImageCanvas({
       dispatchActiveTrimPlayhead(true);
     }
   }, [activeTrimFieldId, dispatchActiveTrimPlayhead, remotionPlaying, remotionTotalFrames, selectedEditableId, onSelectEditable]);
+
+  const handleDesignCanvasTap = useCallback(() => {
+    if (selectedEditableId) onSelectEditable?.(null);
+    if (currentDesign?.animation) toggleRemotionPlay();
+  }, [currentDesign?.animation, onSelectEditable, selectedEditableId, toggleRemotionPlay]);
 
   const seekRemotion = useCallback((clientX: number) => {
     const bar = document.querySelector('[data-remotion-seek]') as HTMLElement;
@@ -1472,33 +1481,17 @@ export default function ImageCanvas({
           (() => {
             const isLongDesign = currentDesign.height / currentDesign.width > 2;
             return (
-          <div ref={isLongDesign ? longScrollRef : undefined} className={`relative w-full h-full ${isLongDesign ? 'overflow-y-auto overflow-x-hidden' : ''} transition-all duration-150 ${
+          <div ref={handleDesignInteractionRef} className={`relative w-full h-full ${isLongDesign ? 'overflow-y-auto overflow-x-hidden' : ''} transition-all duration-150 ${
             pullDownActive ? 'opacity-[0.15] grayscale' :
             animDir === 'left' ? 'opacity-0 -translate-x-8' :
             animDir === 'right' ? 'opacity-0 translate-x-8' : 'opacity-100 translate-x-0'
           }`}
-            onClick={(e) => {
-              if (isComparing) return;
-              // In Design Editor mode: editable elements handle their own click,
-              // clicking blank area deselects
-              if ((e.target as HTMLElement).closest('[data-editable]')) return;
-              if (selectedEditableId) {
-                // Ignore ghost deselection from Remotion Player's 200ms click delay
-                if (Date.now() - lastSelectTimeRef.current < 300) return;
-                onSelectEditable?.(null);
-                lastSelectTimeRef.current = Date.now(); // also debounce the follow-up toggle
-              } else {
-                // Don't toggle play right after deselecting (ghost double-click)
-                if (Date.now() - lastSelectTimeRef.current < 300) return;
-                toggleRemotionPlay();
-              }
-            }}
           >
             <RemotionRenderer
               design={currentDesign!}
               mode={isLongDesign ? 'inline' : 'fill'}
               hideControls
-              posterImage={currentDesign?.animation ? displayImage : undefined}
+              posterImage={currentDesign?.animation && !selectedEditableId ? displayImage : undefined}
               onLoading={setRemotionLoading}
               onError={(err) => console.error('[canvas design]', err)}
               onContainerRef={setDesignContainerEl}
@@ -1592,21 +1585,16 @@ export default function ImageCanvas({
             {editableFields && editableFields.length > 0 && designProps && onSelectEditable && onUpdateProp && (
               <DesignOverlay
                 containerEl={designContainerEl}
+                interactionEl={designInteractionEl}
                 editables={editableFields}
                 props={designProps}
                 selectedFieldId={selectedEditableId ?? null}
+                onCanvasTap={handleDesignCanvasTap}
                 onSelectField={(id) => {
                   // Pause playback when selecting an editable field
-                  if (remotionPlaying && remotionRef.current) {
+                  if (id && remotionRef.current) {
                     remotionRef.current.pause();
                     setRemotionPlaying(false);
-                  }
-                  if (id) {
-                    lastSelectTimeRef.current = Date.now();
-                    // Trigger a no-op prop update to force React re-render.
-                    // This resets Remotion Player's ghost pointerup listener,
-                    // preventing the ghost double-click that causes deselection.
-                    onUpdateProp?.(`_sel_${id}`, Date.now());
                   }
                   onSelectEditable(id);
                 }}

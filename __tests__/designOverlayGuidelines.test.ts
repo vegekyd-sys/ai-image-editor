@@ -3,6 +3,7 @@ import { join } from 'path';
 import { describe, expect, it } from 'vitest';
 
 const source = readFileSync(join(process.cwd(), 'src/components/DesignOverlay.tsx'), 'utf8');
+const canvasSource = readFileSync(join(process.cwd(), 'src/components/ImageCanvas.tsx'), 'utf8');
 const css = readFileSync(join(process.cwd(), 'src/app/globals.css'), 'utf8');
 
 describe('DesignOverlay moveable guideline regression guards', () => {
@@ -32,8 +33,17 @@ describe('DesignOverlay moveable guideline regression guards', () => {
   });
 
   it('keeps corner resize controls usable for small editable images on touch screens', () => {
+    const coarseRuleStart = css.indexOf('@media (pointer: coarse)');
+    const coarseHandleRule = css.slice(coarseRuleStart, coarseRuleStart + 900);
+
+    expect(coarseHandleRule).toContain('.moveable-nw.moveable-scalable');
+    expect(coarseHandleRule).toContain('.moveable-ne.moveable-scalable');
+    expect(coarseHandleRule).toContain('.moveable-sw.moveable-scalable');
+    expect(coarseHandleRule).toContain('.moveable-se.moveable-scalable');
     expect(css).toContain('min-width: 44px !important;');
     expect(css).toContain('min-height: 44px !important;');
+    expect(css).toContain('margin-top: -22px !important;');
+    expect(css).toContain('margin-left: -22px !important;');
     expect(css).toContain('touch-action: none !important;');
   });
 
@@ -42,5 +52,17 @@ describe('DesignOverlay moveable guideline regression guards', () => {
     expect(source).toContain('dragRaf = requestAnimationFrame(flushDrag);');
     expect(source).toContain('flushDrag();');
     expect(source).toContain('cancelAnimationFrame(dragRaf);');
+  });
+
+  it('uses one pointer arbiter for editable selection and canvas playback', () => {
+    expect(source).toContain("interactionEl.addEventListener('pointerdown', handlePointerDown, { capture: true });");
+    expect(source).toContain("interactionEl.addEventListener('pointerup', handlePointerUp, { capture: true });");
+    expect(source).toContain("'data-editable-canvas-cover'");
+    expect(source).toContain("if (intent === 'canvas-tap') onCanvasTapRef.current?.();");
+    expect(canvasSource).toContain('posterImage={currentDesign?.animation && !selectedEditableId ? displayImage : undefined}');
+    expect(canvasSource).toContain('onCanvasTap={handleDesignCanvasTap}');
+    expect(canvasSource).toContain('if (!selectedEditableId && (wasPlayingBeforeBufferRef.current || remotionStartedRef.current))');
+    expect(canvasSource).toContain('if (id && remotionRef.current)');
+    expect(canvasSource).not.toContain('`_sel_${id}`');
   });
 });

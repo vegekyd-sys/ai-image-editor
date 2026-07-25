@@ -3,14 +3,21 @@
 import { useRef, useState, useCallback, useEffect } from 'react';
 import Moveable from 'react-moveable';
 import type { EditableField } from '@/types';
-import { findEditableAtPoint } from '@/lib/editor/editable-hit-test';
+import {
+  EDITABLE_POINTER_MOVE_THRESHOLD,
+  findEditableAtPoint,
+  isEditableCanvasCover,
+  resolveEditablePointerIntent,
+} from '@/lib/editor/editable-hit-test';
 
 interface DesignOverlayProps {
   containerEl: HTMLDivElement | null;
+  interactionEl: HTMLDivElement | null;
   editables: EditableField[];
   props: Record<string, unknown>;
   selectedFieldId: string | null;
   onSelectField: (id: string | null) => void;
+  onCanvasTap?: () => void;
   onUpdateProp: (key: string, value: unknown) => void;
   onStartEdit?: (fieldId: string) => void;
   onVisibleFieldsChange?: (visibleIds: string[]) => void;
@@ -53,10 +60,12 @@ function readCssPair(value: string): { x: number; y: number } | null {
 
 export default function DesignOverlay({
   containerEl,
+  interactionEl,
   editables,
   props,
   selectedFieldId,
   onSelectField,
+  onCanvasTap,
   onUpdateProp,
   onStartEdit,
   onVisibleFieldsChange,
@@ -109,6 +118,9 @@ export default function DesignOverlay({
     applyStoredOffsets(elements);
 
     const baseRect = overlayRef.current.getBoundingClientRect();
+    const canvasRect = (
+      containerEl.querySelector('.__remotion-player') as HTMLElement | null
+    )?.getBoundingClientRect() ?? containerEl.getBoundingClientRect();
     const viewportRect = getScrollViewportRect(containerEl, baseRect);
     const newRects: MeasuredRect[] = [];
     const visibleIds: string[] = [];
@@ -129,6 +141,10 @@ export default function DesignOverlay({
         htmlEl.style.display = 'inline-block';
       }
       const elRect = el.getBoundingClientRect();
+      htmlEl.toggleAttribute(
+        'data-editable-canvas-cover',
+        isEditableCanvasCover(elRect, canvasRect),
+      );
       const storedPos = props[`_pos_${id}`] as { x: number; y: number } | undefined;
 
       let rectLeft = Math.round(elRect.left - baseRect.left);
@@ -229,13 +245,24 @@ export default function DesignOverlay({
   onStartEditRef.current = onStartEdit;
   const selectedFieldIdRef = useRef(selectedFieldId);
   selectedFieldIdRef.current = selectedFieldId;
+  const onCanvasTapRef = useRef(onCanvasTap);
+  onCanvasTapRef.current = onCanvasTap;
 
-  // Event delegation: single listener on container, works for any DOM element regardless of remount
+  // One surface-level pointer arbiter keeps poster, editable selection, and
+  // canvas playback from competing with one another.
   useEffect(() => {
-    if (!containerEl) return;
+    if (!interactionEl) return;
     let lastTapTime = 0;
     let lastTapId = '';
     let activeTouches = 0;
+    let gesture: {
+      pointerId: number;
+      startX: number;
+      startY: number;
+      hitFieldId: string | null;
+      hitIsCanvasCover: boolean;
+      moved: boolean;
+    } | null = null;
 
     const disableNativeMediaDrag = (editableEl: Element) => {
       editableEl.querySelectorAll('img, video').forEach((media) => {
@@ -247,9 +274,16 @@ export default function DesignOverlay({
     };
 
     const handlePointerDown = (e: PointerEvent) => {
-      const target = (e.target as HTMLElement).closest?.('[data-editable]');
-      let id = target?.getAttribute('data-editable') ?? null;
-      if (!id && overlayRef.current) {
+      if (e.button !== 0) return;
+      const eventTarget = e.target as HTMLElement;
+      if (eventTarget.closest?.('button, [data-remotion-seek], .moveable-control, .moveable-area')) {
+        gesture = null;
+        return;
+      }
+
+      const directTarget = eventTarget.closest?.('[data-editable]') as HTMLElement | null;
+      let id: string | null = null;
+      if (overlayRef.current) {
         const baseRect = overlayRef.current.getBoundingClientRect();
         id = findEditableAtPoint(
           rectsRef.current,
@@ -257,10 +291,38 @@ export default function DesignOverlay({
           e.clientY - baseRect.top,
         );
       }
-      if (!id || !editables.some(f => f.id === id)) return;
-      if (target) disableNativeMediaDrag(target);
+      id ??= directTarget?.getAttribute('data-editable') ?? null;
+      if (id && !editables.some(f => f.id === id)) id = null;
+      const hitRect = id ? rectsRef.current.find(rect => rect.id === id) : null;
+      const hitTarget = hitRect?.domEl ?? directTarget;
+      const hitIsCanvasCover = Boolean(hitTarget?.hasAttribute('data-editable-canvas-cover'));
 
-      if (e.pointerType === 'touch') activeTouches++;
+      if (e.pointerType === 'touch') {
+        activeTouches++;
+        if (activeTouches > 1) {
+          gesture = null;
+          return;
+        }
+      }
+      gesture = {
+        pointerId: e.pointerId,
+        startX: e.clientX,
+        startY: e.clientY,
+        hitFieldId: id,
+        hitIsCanvasCover,
+        moved: false,
+      };
+
+      if (!id || !hitTarget) return;
+      disableNativeMediaDrag(hitTarget);
+      const intent = resolveEditablePointerIntent({
+        hitFieldId: id,
+        hitIsCanvasCover,
+        selectedFieldId: selectedFieldIdRef.current,
+        moved: false,
+      });
+      if (intent !== 'select') return;
+
       const now = Date.now();
       if (activeTouches <= 1 && selectedFieldIdRef.current === id && lastTapId === id && now - lastTapTime < 400) {
         onStartEditRef.current?.(id);
@@ -274,8 +336,27 @@ export default function DesignOverlay({
         onSelectFieldRef.current(id);
       }
     };
+    const handlePointerMove = (e: PointerEvent) => {
+      if (!gesture || gesture.pointerId !== e.pointerId || gesture.moved) return;
+      const distance = Math.hypot(e.clientX - gesture.startX, e.clientY - gesture.startY);
+      if (distance > EDITABLE_POINTER_MOVE_THRESHOLD) gesture.moved = true;
+    };
     const handlePointerUp = (e: PointerEvent) => {
       if (e.pointerType === 'touch') activeTouches = Math.max(0, activeTouches - 1);
+      if (!gesture || gesture.pointerId !== e.pointerId) return;
+      const completedGesture = gesture;
+      gesture = null;
+      const intent = resolveEditablePointerIntent({
+        hitFieldId: completedGesture.hitFieldId,
+        hitIsCanvasCover: completedGesture.hitIsCanvasCover,
+        selectedFieldId: selectedFieldIdRef.current,
+        moved: completedGesture.moved,
+      });
+      if (intent === 'canvas-tap') onCanvasTapRef.current?.();
+    };
+    const handlePointerCancel = (e: PointerEvent) => {
+      if (e.pointerType === 'touch') activeTouches = Math.max(0, activeTouches - 1);
+      if (gesture?.pointerId === e.pointerId) gesture = null;
     };
     const handleDragStart = (e: DragEvent) => {
       if ((e.target as HTMLElement).closest?.('[data-editable] img, [data-editable] video')) {
@@ -283,15 +364,19 @@ export default function DesignOverlay({
       }
     };
 
-    containerEl.addEventListener('pointerdown', handlePointerDown);
-    containerEl.addEventListener('pointerup', handlePointerUp);
-    containerEl.addEventListener('dragstart', handleDragStart);
+    interactionEl.addEventListener('pointerdown', handlePointerDown, { capture: true });
+    interactionEl.addEventListener('pointermove', handlePointerMove, { capture: true });
+    interactionEl.addEventListener('pointerup', handlePointerUp, { capture: true });
+    interactionEl.addEventListener('pointercancel', handlePointerCancel, { capture: true });
+    interactionEl.addEventListener('dragstart', handleDragStart);
     return () => {
-      containerEl.removeEventListener('pointerdown', handlePointerDown);
-      containerEl.removeEventListener('pointerup', handlePointerUp);
-      containerEl.removeEventListener('dragstart', handleDragStart);
+      interactionEl.removeEventListener('pointerdown', handlePointerDown, { capture: true });
+      interactionEl.removeEventListener('pointermove', handlePointerMove, { capture: true });
+      interactionEl.removeEventListener('pointerup', handlePointerUp, { capture: true });
+      interactionEl.removeEventListener('pointercancel', handlePointerCancel, { capture: true });
+      interactionEl.removeEventListener('dragstart', handleDragStart);
     };
-  }, [containerEl, editables]);
+  }, [interactionEl, editables]);
 
   // Touch-only fallback drag. Desktop/moveable-area drags must stay on Moveable
   // so snap guidelines render during movement.
