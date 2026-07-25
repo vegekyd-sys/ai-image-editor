@@ -68,7 +68,7 @@ export interface RemotionFontTiming {
 }
 
 export const REMOTION_FONT_CATALOG_VERSION = catalogData.version;
-export const REMOTION_FONT_RUNTIME_VERSION = 'remotion-font-runtime-r4-prop-alias';
+export const REMOTION_FONT_RUNTIME_VERSION = 'remotion-font-runtime-r5-prop-alias';
 export const REMOTION_FONT_CATALOG = catalogData.families as RemotionFontCatalogDefinition[];
 export const REMOTION_DEFAULT_SANS = 'Inter';
 export const REMOTION_DEFAULT_CJK_SANS = 'Noto Sans SC';

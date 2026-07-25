@@ -137,10 +137,11 @@ describe('Remotion export worker contract', () => {
     expect(read('src/lib/remotion-lambda-renderer.ts')).toContain("new URL('public/remotion-runtime.json', serveUrl)")
     expect(read('src/lib/remotion-lambda-renderer.ts')).toContain('Remotion render site is not font-pinned')
     expect(JSON.parse(read('public/remotion-runtime.json'))).toEqual({
-      runtimeVersion: 'remotion-font-runtime-r4-prop-alias',
+      runtimeVersion: 'remotion-font-runtime-r5-prop-alias',
       fontCatalogVersion: 'makaron-fonts-r1',
     })
     expect(read('src/remotion/DynamicDesign.tsx')).toContain('makaron-remotion-font-timing')
+    expect(read('src/remotion/DynamicDesign.tsx')).toContain('props: propsObj')
     expect(read('src/lib/remotion-lambda-renderer.ts')).toContain('fontTelemetry')
     expect(read('scripts/remotion-lambda-provision.ts')).toContain("publicDir: path.resolve(process.cwd(), 'public')")
   })
