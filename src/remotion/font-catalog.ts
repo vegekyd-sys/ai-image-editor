@@ -68,7 +68,7 @@ export interface RemotionFontTiming {
 }
 
 export const REMOTION_FONT_CATALOG_VERSION = catalogData.version;
-export const REMOTION_FONT_RUNTIME_VERSION = 'remotion-font-runtime-r3-dynamic-alias';
+export const REMOTION_FONT_RUNTIME_VERSION = 'remotion-font-runtime-r4-prop-alias';
 export const REMOTION_FONT_CATALOG = catalogData.families as RemotionFontCatalogDefinition[];
 export const REMOTION_DEFAULT_SANS = 'Inter';
 export const REMOTION_DEFAULT_CJK_SANS = 'Noto Sans SC';
@@ -231,6 +231,7 @@ function internalStack(
 
 export function prepareRemotionFontCode(input: {
   code: string;
+  props?: Record<string, unknown>;
   manifest: RemotionFontCatalogManifest;
   substitutions?: Record<string, string>;
 }): PreparedRemotionFonts {
@@ -257,6 +258,20 @@ export function prepareRemotionFontCode(input: {
   const remainingStringLiterals = new Set(
     Array.from(code.matchAll(/(['"`])([\s\S]*?)\1/g), match => match[2]),
   );
+  const collectPropStrings = (value: unknown): void => {
+    if (typeof value === 'string') {
+      remainingStringLiterals.add(value);
+      return;
+    }
+    if (Array.isArray(value)) {
+      for (const item of value) collectPropStrings(item);
+      return;
+    }
+    if (value && typeof value === 'object') {
+      for (const item of Object.values(value)) collectPropStrings(item);
+    }
+  };
+  collectPropStrings(input.props);
   const dynamicFamilyAliases: PreparedRemotionFonts['dynamicFamilyAliases'] = [];
   const addDynamicAlias = (alias: string, family: string) => {
     if (!dynamicFamilyAliases.some(entry => entry.alias === alias && entry.family === family)) {
@@ -503,6 +518,7 @@ export async function prepareAndLoadRemotionFontsWithTiming(input: {
   const prepareStartedAt = nowMs();
   const prepared = prepareRemotionFontCode({
     code: input.code,
+    props: input.props,
     manifest: manifestResult.manifest,
     substitutions: input.substitutions,
   });
