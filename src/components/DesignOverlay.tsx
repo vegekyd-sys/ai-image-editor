@@ -15,7 +15,6 @@ interface DesignOverlayProps {
   onStartEdit?: (fieldId: string) => void;
   onVisibleFieldsChange?: (visibleIds: string[]) => void;
   filterVisibleFields?: boolean;
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   playerRef?: any;
 }
 
@@ -309,6 +308,8 @@ export default function DesignOverlay({
       baseY: number;
       sourcePerViewportPx: number;
     } | null = null;
+    let pendingDragPoint: { x: number; y: number } | null = null;
+    let dragRaf = 0;
 
     const readCurrentOffset = (target: HTMLElement, fieldId: string) => {
       const stored = props[`_pos_${fieldId}`] as { x: number; y: number } | undefined;
@@ -376,17 +377,31 @@ export default function DesignOverlay({
       const dx = (clientX - dragState.startX) * dragState.sourcePerViewportPx;
       const dy = (clientY - dragState.startY) * dragState.sourcePerViewportPx;
       dragState.target.style.translate = `${dragState.baseX + dx}px ${dragState.baseY + dy}px`;
+    };
+
+    const flushDrag = () => {
+      dragRaf = 0;
+      const point = pendingDragPoint;
+      pendingDragPoint = null;
+      if (!point) return;
+      updateDrag(point.x, point.y);
       moveableRef.current?.updateRect();
     };
 
     const onPointerMove = (e: PointerEvent) => {
       if (!dragState) return;
-      updateDrag(e.clientX, e.clientY);
+      pendingDragPoint = { x: e.clientX, y: e.clientY };
+      if (!dragRaf) dragRaf = requestAnimationFrame(flushDrag);
       e.preventDefault();
     };
 
     const finishDrag = () => {
       if (!dragState) return;
+      if (dragRaf) {
+        cancelAnimationFrame(dragRaf);
+        dragRaf = 0;
+      }
+      flushDrag();
       const finalOffset = readCssPair(dragState.target.style.translate);
       if (finalOffset) onUpdateProp(`_pos_${dragState.fieldId}`, finalOffset);
       dragState = null;
@@ -409,6 +424,7 @@ export default function DesignOverlay({
       window.removeEventListener('pointermove', onPointerMove);
       window.removeEventListener('pointerup', finishDrag);
       window.removeEventListener('pointercancel', finishDrag);
+      if (dragRaf) cancelAnimationFrame(dragRaf);
     };
   }, [containerEl, measure, onUpdateProp, props]);
 

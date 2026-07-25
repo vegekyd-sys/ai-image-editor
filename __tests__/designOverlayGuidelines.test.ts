@@ -31,4 +31,11 @@ describe('DesignOverlay moveable guideline regression guards', () => {
     expect(css).toContain('min-height: 44px !important;');
     expect(css).toContain('touch-action: none !important;');
   });
+
+  it('coalesces touch drag layout work to one update per animation frame', () => {
+    expect(source).toContain('let pendingDragPoint: { x: number; y: number } | null = null;');
+    expect(source).toContain('dragRaf = requestAnimationFrame(flushDrag);');
+    expect(source).toContain('flushDrag();');
+    expect(source).toContain('cancelAnimationFrame(dragRaf);');
+  });
 });
