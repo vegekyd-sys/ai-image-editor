@@ -5,6 +5,36 @@ import {
   type EditableCanvasRect,
 } from './editable-hit-test';
 
+export const EDITABLE_RUNTIME_CLASS = 'makaron-editable-node';
+export const EDITABLE_RUNTIME_ID_PREFIX = 'makaron-editable-id-';
+export const EDITABLE_RUNTIME_SELECTOR =
+  `[data-editable], .${EDITABLE_RUNTIME_CLASS}`;
+
+export function editableRuntimeClassName(id: string): string {
+  return `${EDITABLE_RUNTIME_CLASS} ${EDITABLE_RUNTIME_ID_PREFIX}${encodeURIComponent(id)}`;
+}
+
+export function readEditableRuntimeId(element: Element): string | null {
+  const dataId = element.getAttribute('data-editable');
+  if (dataId) return dataId;
+
+  const idClass = Array.from(element.classList)
+    .find(className => className.startsWith(EDITABLE_RUNTIME_ID_PREFIX));
+  if (!idClass) return null;
+
+  try {
+    return decodeURIComponent(idClass.slice(EDITABLE_RUNTIME_ID_PREFIX.length));
+  } catch {
+    return null;
+  }
+}
+
+export function closestEditableRuntimeElement(
+  element: Element | null,
+): HTMLElement | null {
+  return element?.closest<HTMLElement>(EDITABLE_RUNTIME_SELECTOR) ?? null;
+}
+
 export interface SceneNodeInstance {
   id: string;
   type: EditableType;
@@ -65,8 +95,8 @@ function getElementDepth(element: Element, container: Element): number {
 }
 
 function containsSameIdDescendant(element: Element, id: string): boolean {
-  return Array.from(element.querySelectorAll('[data-editable]'))
-    .some(descendant => descendant.getAttribute('data-editable') === id);
+  return Array.from(element.querySelectorAll(EDITABLE_RUNTIME_SELECTOR))
+    .some(descendant => readEditableRuntimeId(descendant) === id);
 }
 
 function hasDirectText(element: Element): boolean {
@@ -150,9 +180,9 @@ export function buildLegacySceneRegistry({
     ]),
   );
 
-  Array.from(container.querySelectorAll<HTMLElement>('[data-editable]'))
+  Array.from(container.querySelectorAll<HTMLElement>(EDITABLE_RUNTIME_SELECTOR))
     .forEach((element, domOrder) => {
-      const id = element.getAttribute('data-editable');
+      const id = readEditableRuntimeId(element);
       const field = id ? fieldsById.get(id) : undefined;
       if (!id || !field || !isRenderedCandidate(element)) return;
 

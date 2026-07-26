@@ -114,5 +114,7 @@ describe('editable transform ownership', () => {
 
     expect(renderedElement.props.trimBefore).toBe(30);
     expect(renderedElement.props.trimAfter).toBe(180);
+    expect(renderedElement.props.className).toContain('makaron-editable-node');
+    expect(renderedElement.props.className).toContain('makaron-editable-id-clip');
   });
 });

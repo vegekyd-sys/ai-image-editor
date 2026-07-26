@@ -16,6 +16,7 @@ import * as RemotionPaths from '@remotion/paths';
 import * as RemotionNoise from '@remotion/noise';
 import * as THREE from 'three';
 import { buildRemotionEvaluatorBody } from './remotion-code-normalization';
+import { editableRuntimeClassName } from './editor/scene-registry';
 
 const { Sequence, useVideoConfig } = Remotion;
 
@@ -243,10 +244,9 @@ function injectLegacyVideoTrim(node: React.ReactNode, trim: { trimBefore?: numbe
   if (!React.isValidElement(node)) return node;
 
   if (node.type === Video) {
-    const currentProps = node.props as { trimBefore?: unknown; trimAfter?: unknown };
     return React.cloneElement(node, {
-      ...(trim.trimBefore !== undefined && currentProps.trimBefore === undefined ? { trimBefore: trim.trimBefore } : {}),
-      ...(trim.trimAfter !== undefined && currentProps.trimAfter === undefined ? { trimAfter: trim.trimAfter } : {}),
+      ...(trim.trimBefore !== undefined ? { trimBefore: trim.trimBefore } : {}),
+      ...(trim.trimAfter !== undefined ? { trimAfter: trim.trimAfter } : {}),
     });
   }
 
@@ -328,6 +328,17 @@ const _patchedCE = function(type: any, elProps: any, ...children: any[]) {
         children = children.map(child => injectLegacyVideoTrim(child, { trimBefore, trimAfter }));
       }
     }
+    if (type === Video) {
+      const existingClassName = typeof elProps.className === 'string'
+        ? elProps.className.trim()
+        : '';
+      elProps = {
+        ...elProps,
+        className: [existingClassName, editableRuntimeClassName(id)]
+          .filter(Boolean)
+          .join(' '),
+      };
+    }
   }
   return _origCE.call(React, type, elProps, ...children);
 };
@@ -344,7 +355,7 @@ REMOTION_SCOPE.React = PATCHED_REACT;
 /**
  * HOC: sets _currentTransformProps before Component renders (synchronous).
  * Agent code uses PATCHED_REACT.createElement → reads _currentTransformProps
- * → injects style.translate/scale on [data-editable] elements.
+ * → injects style.translate/scale on logical editable elements.
  */
 
 function wrapWithEditableOverrides(

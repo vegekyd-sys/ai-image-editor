@@ -1563,5 +1563,6 @@ div[class*="moveable-control-box"] div.moveable-control.moveable-se.moveable-sca
 }
 
 /* Editable element — clickable + hover hint */
-[data-editable] { cursor: pointer; pointer-events: auto; }
-[data-editable]:hover:not([data-editable-selected]) { outline: 1.5px dashed rgba(255,255,255,0.7); outline-offset: -1px; }
+[data-editable], .makaron-editable-node { cursor: pointer; pointer-events: auto; }
+[data-editable]:hover:not([data-editable-selected]),
+.makaron-editable-node:hover:not([data-editable-selected]) { outline: 1.5px dashed rgba(255,255,255,0.7); outline-offset: -1px; }

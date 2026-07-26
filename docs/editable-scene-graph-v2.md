@@ -1,6 +1,7 @@
 # Editable Scene Graph V2
 
-Status: in progress on `codex/editable-scene-graph-v2`.
+Status: implemented with local engineering acceptance complete on
+`codex/editable-scene-graph-v2`. The branch remains isolated from `dev`.
 
 This document is the implementation contract and acceptance gate for the
 Editable V2 refactor. The branch must not be merged into `dev` until every
@@ -59,7 +60,9 @@ supported without migration.
 ## Ownership Model
 
 - `Editable Manifest compiler`: maps composition props to logical editable
-  nodes and instruments ordinary JSX.
+  nodes and instruments ordinary JSX. Remotion media components are owned by
+  their nearest single-media DOM box because `<Video>` does not forward
+  arbitrary data attributes to its rendered DOM.
 - `SceneRegistry`: maps each logical node to the active rendered DOM instance
   for the current frame.
 - `Editable override store`: owns user text/media/position/scale/trim changes.
@@ -85,8 +88,8 @@ supported without migration.
 ### Agent burden
 
 - Run three new composition prompts that never mention Editable.
-- Cover text plus image, generated images plus Remotion, and text plus image
-  plus video trim.
+- Cover natural text, generated image plus text, and uploaded video plus text
+  and trim.
 - Every visible user-facing text and primary media layer is discovered.
 - New generated source does not need an explicit `editables` array.
 - Harness repair count is zero per run, with one repair allowed only when it is
@@ -141,3 +144,46 @@ supported without migration.
 Any missing editable, required prompt hint, preview/export mismatch, selected
 video trim affecting another node, or recurring Agent repair means the refactor
 is not complete.
+
+## Blind E2E Evidence
+
+The prompts below did not mention Editable, Manifest, Harness, `data-editable`,
+or metadata arrays.
+
+1. Text helper composition:
+   `http://localhost:3002/projects/044debdc-89a3-4c94-adbe-baeafcdb697c`
+   inferred 11 text fields. Canvas drag, corner alignment, double-click edit,
+   keyboard entry, reload persistence, and export were verified.
+2. Generated image composition:
+   `http://localhost:3002/projects/4c43f922-dddc-4c4e-8f61-1fe0136681c0`
+   inferred three text fields, one image field, and one scene label. Pill
+   selection, move, resize, reload persistence, and a 150-frame MP4 export were
+   verified.
+3. Uploaded video composition:
+   `http://localhost:3002/projects/eea720ca-bc4d-4e76-bdf5-03e4818b2077`
+   inferred six text fields and one video field through an ordinary mixed
+   helper. Move, resize, selected-node trim, timestamp scrub, range drag,
+   out-of-bounds release, reload persistence, synchronized trim playback, and a
+   180-frame MP4 export were verified.
+
+The video run exposed and now permanently covers two runtime/compiler failures:
+
+- Compiler-owned media markers on `<Video>` were invisible because the Remotion
+  component consumes unknown props. Existing internal markers migrate
+  idempotently to the nearest single-media DOM owner; a direct `<Video>` also
+  receives a forwarded runtime class marker. Explicit user markers are
+  untouched.
+- Authored numeric trim values seed `_trimBefore_<id>` and
+  `_trimAfter_<id>`. Once the GUI changes them, those values override the
+  authored defaults in preview and export.
+
+## Final Gates
+
+- Focused Editable contracts: 35 tests passed in the final changed surface.
+- Full Vitest suite: 164 files and 958 tests passed.
+- TypeScript: `npx tsc --noEmit --pretty false` passed.
+- Production build: `npx next build --webpack` passed. The existing
+  `libheif-js` dynamic-require warning remains unchanged.
+- Patch hygiene: `git diff --check` passed.
+- The physical Mobile Safari smoke remains the final user sign-off before any
+  future merge; this branch is intentionally not merged or deployed.

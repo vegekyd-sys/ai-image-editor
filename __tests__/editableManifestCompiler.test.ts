@@ -318,6 +318,135 @@ describe('Editable Manifest compiler', () => {
     expect(result.code).toContain('data-editable={__makaronEditable_clip}');
   });
 
+  it('infers a video leaf inside a mixed text and media layout helper', () => {
+    const props = {
+      title: 'WeChat growth moments',
+      subtitle: 'From connection to intelligence',
+      heroVideo: 'https://example.com/hero.mp4',
+      momentLabel: 'MOMENT / 01',
+      platformLabel: 'WECHAT',
+    };
+    const result = compileEditableManifest({
+      code: `
+        function IntroLayout({
+          title,
+          subtitle,
+          videoUrl,
+          momentLabel,
+          platformLabel,
+        }) {
+          return (
+            <AbsoluteFill>
+              <div>
+                <span>{momentLabel}</span>
+                <h1>{title}</h1>
+                <p>{subtitle}</p>
+              </div>
+              <div style={{ position: 'absolute', left: 68, top: 590, width: 944, height: 795 }}>
+                <Video
+                  src={videoUrl}
+                  trimBefore={20}
+                  trimAfter={200}
+                  style={{ width: '100%', height: '100%', objectFit: 'contain' }}
+                />
+                <div>{platformLabel}</div>
+              </div>
+            </AbsoluteFill>
+          );
+        }
+        function Composition(props) {
+          return (
+            <IntroLayout
+              title={props.title}
+              subtitle={props.subtitle}
+              videoUrl={props.heroVideo}
+              momentLabel={props.momentLabel}
+              platformLabel={props.platformLabel}
+            />
+          );
+        }
+      `,
+      props,
+    });
+
+    expect(result.diagnostics).toEqual([]);
+    expect(result.editables).toContainEqual({
+      id: 'heroVideo',
+      type: 'video',
+      label: 'Hero video',
+      propKey: 'heroVideo',
+    });
+    expect(result.code).toContain('data-editable={__makaronEditable_videoUrl}');
+    expect(result.code).toContain('__makaronEditable_videoUrl="heroVideo"');
+    expect(result.code).not.toMatch(/<Video[^>]+data-editable/);
+    expect(result.editables).toHaveLength(5);
+    expect(props).toMatchObject({
+      _trimBefore_heroVideo: 20,
+      _trimAfter_heroVideo: 200,
+    });
+  });
+
+  it('migrates an old compiler marker from Video to its DOM owner box', () => {
+    const props: Record<string, unknown> = {
+      title: 'WeChat growth moments',
+      heroVideo: 'https://example.com/hero.mp4',
+    };
+    const result = compileEditableManifest({
+      code: `
+        function IntroLayout({
+          title,
+          videoUrl,
+          __makaronEditable_title,
+          __makaronEditable_videoUrl,
+        }) {
+          return (
+            <AbsoluteFill>
+              <h1 data-editable={__makaronEditable_title}>{title}</h1>
+              <div style={{ position: 'absolute', left: 68, top: 590, width: 944, height: 795 }}>
+                <Video
+                  src={videoUrl}
+                  trimBefore={20}
+                  trimAfter={200}
+                  data-editable={__makaronEditable_videoUrl}
+                />
+              </div>
+            </AbsoluteFill>
+          );
+        }
+        function Composition(props) {
+          return (
+            <IntroLayout
+              title={props.title}
+              videoUrl={props.heroVideo}
+              __makaronEditable_title="title"
+              __makaronEditable_videoUrl="heroVideo"
+            />
+          );
+        }
+      `,
+      props,
+      editables: [
+        { id: 'title', type: 'text', label: 'Title', propKey: 'title' },
+        { id: 'heroVideo', type: 'video', label: 'Hero video', propKey: 'heroVideo' },
+      ],
+    });
+
+    expect(result.diagnostics).toEqual([]);
+    expect(result.code).not.toMatch(/<Video[^>]+data-editable/);
+    expect(result.code).toMatch(/<div[^>]+data-editable=\{__makaronEditable_videoUrl\}/);
+    expect(result.editables.map(field => field.id)).toEqual(['title', 'heroVideo']);
+    expect(props).toMatchObject({
+      _trimBefore_heroVideo: 20,
+      _trimAfter_heroVideo: 200,
+    });
+
+    expect(compileEditableManifest({
+      code: result.code,
+      props,
+      editables: result.editables,
+    })).toEqual(result);
+  });
+
   it('expands dynamic helper calls from scene keys', () => {
     const result = compileEditableManifest({
       code: `

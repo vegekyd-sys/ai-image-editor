@@ -2,7 +2,10 @@ import { beforeEach, describe, expect, it } from 'vitest';
 import type { EditableField } from '@/types';
 import {
   buildLegacySceneRegistry,
+  closestEditableRuntimeElement,
+  editableRuntimeClassName,
   findSceneMediaElement,
+  readEditableRuntimeId,
 } from '@/lib/editor/scene-registry';
 
 const canvasRect = {
@@ -121,6 +124,25 @@ describe('legacy editable scene registry', () => {
 
     expect(findSceneMediaElement(directVideo, 'video')).toBe(directVideo);
     expect(findSceneMediaElement(wrapper, 'video')).toBe(nestedVideo);
+  });
+
+  it('resolves a direct Remotion Video through its forwarded runtime class', () => {
+    const container = document.createElement('div');
+    const directVideo = document.createElement('video');
+    directVideo.className = `agent-class ${editableRuntimeClassName('hero video')}`;
+    container.appendChild(directVideo);
+    document.body.appendChild(container);
+    setRect(directVideo, { left: 120, top: 80, width: 960, height: 720 });
+
+    const registry = buildLegacySceneRegistry({
+      container,
+      fields: [field('hero video', 'video')],
+      canvasRect,
+    });
+
+    expect(registry.get('hero video')?.activeInstance?.element).toBe(directVideo);
+    expect(readEditableRuntimeId(directVideo)).toBe('hero video');
+    expect(closestEditableRuntimeElement(directVideo)).toBe(directVideo);
   });
 
   it('keeps separate logical nodes while preserving DOM order for hit-testing', () => {

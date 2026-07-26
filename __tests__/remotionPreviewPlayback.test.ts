@@ -31,6 +31,19 @@ describe('Remotion preview playback contract', () => {
     expect(uploadSource).toContain('evalRemotionJSX(code)')
   })
 
+  it('lets a GUI trim override the authored initial video trim', () => {
+    const evalSource = read('src/lib/evalRemotionJSX.ts')
+
+    expect(evalSource).toContain(
+      "trim.trimBefore !== undefined ? { trimBefore: trim.trimBefore } : {}",
+    )
+    expect(evalSource).toContain(
+      "trim.trimAfter !== undefined ? { trimAfter: trim.trimAfter } : {}",
+    )
+    expect(evalSource).not.toContain('currentProps.trimBefore === undefined')
+    expect(evalSource).not.toContain('currentProps.trimAfter === undefined')
+  })
+
   it('uses the real off-thread decoder for deterministic server previews', () => {
     const sandboxSource = read('src/remotion/DynamicDesign.tsx')
     const serverSource = read('src/lib/remotion-server.ts')

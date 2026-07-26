@@ -4,6 +4,7 @@ import React, { useRef, useState, useEffect } from 'react';
 import { Player, type PlayerRef } from '@remotion/player';
 import { renderStillOnWeb, renderMediaOnWeb, type RenderMediaOnWebProgress } from '@remotion/web-renderer';
 import { evalRemotionJSX, preloadBabel } from '@/lib/evalRemotionJSX';
+import { EDITABLE_RUNTIME_SELECTOR } from '@/lib/editor/scene-registry';
 import type { DesignPayload } from '@/types';
 import {
   prepareAndLoadRemotionFontsWithTiming,
@@ -387,7 +388,7 @@ export default function RemotionRenderer({ design, onError, mode = 'inline', hid
 
       let maxBottom = 0;
       let maxRight = 0;
-      const editables = wrapper.querySelectorAll<HTMLElement>('[data-editable]');
+      const editables = wrapper.querySelectorAll<HTMLElement>(EDITABLE_RUNTIME_SELECTOR);
       editables.forEach((el) => {
         const rect = el.getBoundingClientRect();
         if (rect.width <= 0 && rect.height <= 0) return;

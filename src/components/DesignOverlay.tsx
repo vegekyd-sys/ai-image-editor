@@ -12,7 +12,11 @@ import {
   resolveEditablePointerIntent,
   type EditableTapCandidate,
 } from '@/lib/editor/editable-hit-test';
-import { buildLegacySceneRegistry } from '@/lib/editor/scene-registry';
+import {
+  buildLegacySceneRegistry,
+  closestEditableRuntimeElement,
+  readEditableRuntimeId,
+} from '@/lib/editor/scene-registry';
 
 interface DesignOverlayProps {
   containerEl: HTMLDivElement | null;
@@ -258,7 +262,7 @@ export default function DesignOverlay({
         return;
       }
 
-      const directTarget = eventTarget.closest?.('[data-editable]') as HTMLElement | null;
+      const directTarget = closestEditableRuntimeElement(eventTarget);
       let id: string | null = null;
       if (overlayRef.current) {
         const baseRect = overlayRef.current.getBoundingClientRect();
@@ -268,7 +272,7 @@ export default function DesignOverlay({
           e.clientY - baseRect.top,
         );
       }
-      id ??= directTarget?.getAttribute('data-editable') ?? null;
+      id ??= directTarget ? readEditableRuntimeId(directTarget) : null;
       if (id && !editables.some(f => f.id === id)) id = null;
       const hitRect = id ? rectsRef.current.find(rect => rect.id === id) : null;
       const hitTarget = hitRect?.domEl ?? directTarget;
@@ -342,7 +346,8 @@ export default function DesignOverlay({
       if (gesture?.pointerId === e.pointerId) gesture = null;
     };
     const handleDragStart = (e: DragEvent) => {
-      if ((e.target as HTMLElement).closest?.('[data-editable] img, [data-editable] video')) {
+      const target = e.target as HTMLElement;
+      if (target.closest?.('img, video') && closestEditableRuntimeElement(target)) {
         e.preventDefault();
       }
     };
@@ -402,8 +407,11 @@ export default function DesignOverlay({
       if (targetEl.closest('.moveable-area')) return false;
       if (pointerType !== 'touch') return false;
 
-      const editableTarget = targetEl.closest('[data-editable]') as HTMLElement | null;
-      const isSelectedEditable = editableTarget?.getAttribute('data-editable') === fieldId;
+      const editableTarget = closestEditableRuntimeElement(targetEl);
+      const isSelectedEditable = (
+        editableTarget
+        && readEditableRuntimeId(editableTarget) === fieldId
+      );
       let isSelectedHit = false;
       if (!isSelectedEditable && overlayRef.current) {
         const baseRect = overlayRef.current.getBoundingClientRect();

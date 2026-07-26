@@ -34,6 +34,7 @@ interface Candidate {
 
 interface SourceInsertion {
   offset: number;
+  end?: number;
   text: string;
 }
 
@@ -48,9 +49,11 @@ interface NaturalComponentHost {
   componentName: string;
   objectPattern: ObjectPattern;
   opening: JSXOpeningElement;
+  mediaOpening?: JSXOpeningElement;
   valueParam: string;
   markerParam: string;
   type: EditableType;
+  staleMediaMarker?: JSXAttribute;
 }
 
 const STRUCTURAL_TEXT_HOSTS = new Set([
@@ -192,6 +195,58 @@ function mediaTypeFromName(name: string): EditableType | null {
   return null;
 }
 
+function mediaCount(path: NodePath<JSXElement>): number {
+  let count = mediaTypeFromName(jsxName(path.node.openingElement)) ? 1 : 0;
+  path.traverse({
+    JSXOpeningElement(innerPath) {
+      if (mediaTypeFromName(jsxName(innerPath.node))) count += 1;
+    },
+  });
+  return count;
+}
+
+/**
+ * Remotion media components do not consistently forward arbitrary data
+ * attributes to their final DOM node. Own the nearest ordinary React box that
+ * contains only this media leaf so selection, transforms, and trim can share
+ * one measurable scene node without extra authoring conventions.
+ */
+function naturalMediaOwnerOpening(path: NodePath<JSXElement>): JSXOpeningElement {
+  const functionPath = path.findParent(parent =>
+    parent.isFunctionDeclaration()
+    || parent.isFunctionExpression()
+    || parent.isArrowFunctionExpression()
+  );
+  let current: NodePath<Node> | null = path.parentPath;
+  while (current && current !== functionPath) {
+    if (current.isJSXElement()) {
+      const name = jsxName(current.node.openingElement);
+      const isIntrinsicBox = /^[a-z]/.test(name) && !mediaTypeFromName(name);
+      if (isIntrinsicBox && mediaCount(current) === 1) {
+        return current.node.openingElement;
+      }
+    }
+    current = current.parentPath;
+  }
+  return path.node.openingElement;
+}
+
+function numericAttribute(
+  opening: JSXOpeningElement,
+  name: string,
+): number | undefined {
+  const expression = expressionFromAttribute(namedAttribute(opening, name));
+  if (expression?.type === 'NumericLiteral') return expression.value;
+  if (
+    expression?.type === 'UnaryExpression'
+    && expression.operator === '-'
+    && expression.argument.type === 'NumericLiteral'
+  ) {
+    return -expression.argument.value;
+  }
+  return undefined;
+}
+
 function descendantMediaType(path: NodePath<JSXElement>): EditableType | null {
   let result: EditableType | null = mediaTypeFromName(jsxName(path.node.openingElement));
   if (result) return result;
@@ -295,7 +350,19 @@ function naturalComponentHost(
   path: NodePath<JSXElement>,
 ): NaturalComponentHost | null {
   const opening = path.node.openingElement;
-  if (dataEditableAttribute(opening)) return null;
+  const editableAttribute = dataEditableAttribute(opening);
+  const editableExpression = editableAttribute
+    ? expressionFromAttribute(editableAttribute)
+    : null;
+  const staleMediaMarker = (
+    editableAttribute
+    && editableExpression?.type === 'Identifier'
+    && editableExpression.name.startsWith('__makaronEditable_')
+    && mediaTypeFromName(jsxName(opening))
+  )
+    ? editableAttribute
+    : undefined;
+  if (editableAttribute && !staleMediaMarker) return null;
   const componentName = componentFunctionName(path);
   const objectPattern = componentObjectPattern(path);
   if (!componentName || componentName === 'Composition' || !objectPattern) {
@@ -321,10 +388,12 @@ function naturalComponentHost(
   return {
     componentName,
     objectPattern,
-    opening,
+    opening: ownMediaType ? naturalMediaOwnerOpening(path) : opening,
+    mediaOpening: ownMediaType ? opening : undefined,
     valueParam,
     markerParam: `__makaronEditable_${valueParam.replace(/[^\w$]/g, '_')}`,
     type: ownMediaType ?? 'text',
+    staleMediaMarker,
   };
 }
 
@@ -529,7 +598,7 @@ function applyInsertions(code: string, insertions: SourceInsertion[]): string {
     .sort((a, b) => b.offset - a.offset)
     .reduce(
       (current, insertion) =>
-        `${current.slice(0, insertion.offset)}${insertion.text}${current.slice(insertion.offset)}`,
+        `${current.slice(0, insertion.offset)}${insertion.text}${current.slice(insertion.end ?? insertion.offset)}`,
       code,
     );
 }
@@ -624,23 +693,43 @@ export function compileEditableManifest({
 
   const patternMarkers = new Map<ObjectPattern, Set<string>>();
   const instrumentedNaturalUsages = new Set<string>();
+  const migratedNaturalOpenings = new Set<JSXOpeningElement>();
   for (const host of naturalHosts) {
     const usages = naturalUsageByHost.get(host) ?? [];
     if (usages.length === 0) continue;
-    const markerInsertion = expressionInsertionFor(
-      host.opening,
-      'data-editable',
-      host.markerParam,
-    );
-    if (markerInsertion) insertions.push(markerInsertion);
+    if (!dataEditableAttribute(host.opening)) {
+      const markerInsertion = expressionInsertionFor(
+        host.opening,
+        'data-editable',
+        host.markerParam,
+      );
+      if (markerInsertion) insertions.push(markerInsertion);
+    }
+    if (
+      host.staleMediaMarker?.start != null
+      && host.staleMediaMarker.end != null
+      && host.mediaOpening
+    ) {
+      insertions.push({
+        offset: host.staleMediaMarker.start,
+        end: host.staleMediaMarker.end,
+        text: '',
+      });
+      migratedNaturalOpenings.add(host.mediaOpening);
+    }
 
     const markers = patternMarkers.get(host.objectPattern) ?? new Set<string>();
-    markers.add(host.markerParam);
+    if (!objectPatternParamNames(host.objectPattern).has(host.markerParam)) {
+      markers.add(host.markerParam);
+    }
     patternMarkers.set(host.objectPattern, markers);
 
     for (const usage of usages) {
       const usageKey = `${usage.opening.start}:${host.markerParam}`;
-      if (!instrumentedNaturalUsages.has(usageKey)) {
+      if (
+        !instrumentedNaturalUsages.has(usageKey)
+        && !namedAttribute(usage.opening, host.markerParam)
+      ) {
         const insertion = stringAttributeInsertionFor(
           usage.opening,
           host.markerParam,
@@ -648,6 +737,18 @@ export function compileEditableManifest({
         );
         if (insertion) insertions.push(insertion);
         instrumentedNaturalUsages.add(usageKey);
+      }
+      if (host.type === 'video' && host.mediaOpening && props) {
+        const authoredStart = numericAttribute(host.mediaOpening, 'trimBefore');
+        const authoredEnd = numericAttribute(host.mediaOpening, 'trimAfter');
+        const startKey = `_trimBefore_${usage.propKey}`;
+        const endKey = `_trimAfter_${usage.propKey}`;
+        if (authoredStart !== undefined && props[startKey] === undefined) {
+          props[startKey] = authoredStart;
+        }
+        if (authoredEnd !== undefined && props[endKey] === undefined) {
+          props[endKey] = authoredEnd;
+        }
       }
     }
     const ids = usages.map(usage => usage.propKey);
@@ -659,7 +760,7 @@ export function compileEditableManifest({
     });
   }
   for (const [pattern, markers] of patternMarkers) {
-    if (pattern.end == null) continue;
+    if (pattern.end == null || markers.size === 0) continue;
     insertions.push({
       offset: pattern.end - 1,
       text: `, ${[...markers].join(', ')}`,
@@ -669,6 +770,7 @@ export function compileEditableManifest({
   traverse(ast, {
     JSXElement(path) {
       if (!dataEditableAttribute(path.node.openingElement)) return;
+      if (migratedNaturalOpenings.has(path.node.openingElement)) return;
       const host = componentEditableHost(path);
       if (host) {
         const hosts = componentHosts.get(host.componentName) ?? [];
@@ -684,6 +786,7 @@ export function compileEditableManifest({
       const element = path.node;
       const opening = element.openingElement;
       const name = jsxName(opening);
+      if (migratedNaturalOpenings.has(opening)) return;
       if (componentHostOpenings.has(opening)) return;
       const matchingComponentHosts = componentHosts.get(name);
       if (matchingComponentHosts) {
@@ -799,6 +902,18 @@ export function compileEditableManifest({
         propKeyById: new Map([[sourceKey, sourceKey]]),
         instrumentId: sourceKey,
       });
+      if (ownMediaType === 'video' && props) {
+        const authoredStart = numericAttribute(opening, 'trimBefore');
+        const authoredEnd = numericAttribute(opening, 'trimAfter');
+        const startKey = `_trimBefore_${sourceKey}`;
+        const endKey = `_trimAfter_${sourceKey}`;
+        if (authoredStart !== undefined && props[startKey] === undefined) {
+          props[startKey] = authoredStart;
+        }
+        if (authoredEnd !== undefined && props[endKey] === undefined) {
+          props[endKey] = authoredEnd;
+        }
+      }
     },
   });
 
