@@ -50,6 +50,59 @@ describe('Editable Manifest harness integration', () => {
     expect(result.editables?.map(field => field.id)).toEqual(['title0', 'title1']);
   });
 
+  it('persists editables from reusable scene components without agent metadata', () => {
+    const result: DesignResult = {
+      code: `
+        function Chapter({ year, title, description }) {
+          return (
+            <section>
+              <div>{year}</div>
+              <h1>{title}</h1>
+              <p>{description}</p>
+            </section>
+          );
+        }
+        function Composition(props) {
+          return (
+            <AbsoluteFill>
+              <Chapter
+                year={props.yearOne}
+                title={props.titleOne}
+                description={props.descriptionOne}
+              />
+              <Chapter
+                year={props.yearTwo}
+                title={props.titleTwo}
+                description={props.descriptionTwo}
+              />
+            </AbsoluteFill>
+          );
+        }
+      `,
+      props: {
+        yearOne: '2011',
+        titleOne: 'Connect',
+        descriptionOne: 'Every message arrives.',
+        yearTwo: '2017',
+        titleTwo: 'Mini Programs',
+        descriptionTwo: 'Services within reach.',
+      },
+      animation: { fps: 30, durationInSeconds: 6 },
+    };
+
+    expect(validateDesign(result)).toBeNull();
+    expect(result.editables?.map(field => field.id)).toEqual([
+      'yearOne',
+      'yearTwo',
+      'titleOne',
+      'titleTwo',
+      'descriptionOne',
+      'descriptionTwo',
+    ]);
+    expect(result.code).toContain('data-editable={__makaronEditable_title}');
+    expect(result.code).toContain('__makaronEditable_title="titleTwo"');
+  });
+
   it('still rejects visible hardcoded text with no prop ownership', () => {
     const result: DesignResult = {
       code: `

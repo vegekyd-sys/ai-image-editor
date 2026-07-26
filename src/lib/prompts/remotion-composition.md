@@ -206,23 +206,32 @@ return (
 );
 ```
 
-Reusable helper components follow the same rule without metadata duplication:
+Ordinary reusable React components work without editor-specific parameters:
 
 ```jsx
-function EditableText({ id, value }) {
-  return <h1 data-editable={id}>{value}</h1>;
-}
-function EditableImage({ id, src }) {
-  return <Img data-editable={id} src={src} />;
+function Chapter({ year, title, description, image }) {
+  return (
+    <section>
+      <div>{year}</div>
+      <h1>{title}</h1>
+      <p>{description}</p>
+      <Img src={image} />
+    </section>
+  );
 }
 
-<EditableText id={scene.titleKey} value={props[scene.titleKey]} />
-<EditableImage id={scene.imageKey} src={props[scene.imageKey]} />
+<Chapter
+  year={props.yearOne}
+  title={props.titleOne}
+  description={props.descriptionOne}
+  image={props.imageOne}
+/>
 ```
 
-The compiler follows `id + value/src` through these helpers and expands the
-scene keys from `props`. Do not repeat the same information in an `editables`
-array.
+The compiler follows top-level prop values through helper parameters to their
+real text and media leaves. Name components for the composition, not for the
+editor; do not add `id`, `editableId`, or an `editables` array to ordinary
+helpers.
 
 Use `data-editable` only for custom/dynamic ownership that the compiler cannot
 infer from a direct prop read. Put it on the real visual host, never on a

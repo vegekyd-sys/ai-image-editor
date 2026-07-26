@@ -8,6 +8,7 @@ import type {
   JSXOpeningElement,
   MemberExpression,
   Node,
+  ObjectPattern,
 } from '@babel/types';
 import type { EditableField, EditableType } from '@/types';
 
@@ -40,6 +41,15 @@ interface ComponentEditableHost {
   componentName: string;
   idParam: string;
   valueParam: string;
+  type: EditableType;
+}
+
+interface NaturalComponentHost {
+  componentName: string;
+  objectPattern: ObjectPattern;
+  opening: JSXOpeningElement;
+  valueParam: string;
+  markerParam: string;
   type: EditableType;
 }
 
@@ -102,8 +112,8 @@ function dynamicPropExpression(
   return code.slice(property.start, property.end).replace(/\s+/g, '');
 }
 
-function expressionFromAttribute(attribute: JSXAttribute): Expression | null {
-  if (!attribute.value || attribute.value.type !== 'JSXExpressionContainer') return null;
+function expressionFromAttribute(attribute: JSXAttribute | null): Expression | null {
+  if (!attribute?.value || attribute.value.type !== 'JSXExpressionContainer') return null;
   return attribute.value.expression.type === 'JSXEmptyExpression'
     ? null
     : attribute.value.expression;
@@ -230,6 +240,92 @@ function componentFunctionName(path: NodePath<JSXElement>): string | null {
     return variable.node.id.name;
   }
   return null;
+}
+
+function componentObjectPattern(path: NodePath<JSXElement>): ObjectPattern | null {
+  const functionPath = path.findParent(parent =>
+    parent.isFunctionDeclaration()
+    || parent.isFunctionExpression()
+    || parent.isArrowFunctionExpression()
+  );
+  if (
+    !functionPath
+    || (
+      !functionPath.isFunctionDeclaration()
+      && !functionPath.isFunctionExpression()
+      && !functionPath.isArrowFunctionExpression()
+    )
+  ) {
+    return null;
+  }
+  const firstParam = functionPath?.node.params[0];
+  return firstParam?.type === 'ObjectPattern' ? firstParam : null;
+}
+
+function objectPatternParamNames(pattern: ObjectPattern): Set<string> {
+  const names = new Set<string>();
+  for (const property of pattern.properties) {
+    if (property.type !== 'ObjectProperty') continue;
+    const value = property.value;
+    if (value.type === 'Identifier') {
+      names.add(value.name);
+    } else if (
+      value.type === 'AssignmentPattern'
+      && value.left.type === 'Identifier'
+    ) {
+      names.add(value.left.name);
+    }
+  }
+  return names;
+}
+
+function directTextParamReads(element: JSXElement): string[] {
+  return element.children.flatMap(child => {
+    if (
+      child.type !== 'JSXExpressionContainer'
+      || child.expression.type !== 'Identifier'
+    ) {
+      return [];
+    }
+    return [child.expression.name];
+  });
+}
+
+function naturalComponentHost(
+  path: NodePath<JSXElement>,
+): NaturalComponentHost | null {
+  const opening = path.node.openingElement;
+  if (dataEditableAttribute(opening)) return null;
+  const componentName = componentFunctionName(path);
+  const objectPattern = componentObjectPattern(path);
+  if (!componentName || componentName === 'Composition' || !objectPattern) {
+    return null;
+  }
+  const params = objectPatternParamNames(objectPattern);
+  const ownMediaType = mediaTypeFromName(jsxName(opening));
+  let valueParam: string | null = null;
+  if (ownMediaType) {
+    const sourceExpression = expressionFromAttribute(namedAttribute(opening, 'src'));
+    if (sourceExpression?.type === 'Identifier' && params.has(sourceExpression.name)) {
+      valueParam = sourceExpression.name;
+    }
+  } else {
+    const directParams = [...new Set(
+      directTextParamReads(path.node).filter(param => params.has(param)),
+    )];
+    if (directParams.length === 1 && !STRUCTURAL_TEXT_HOSTS.has(jsxName(opening))) {
+      valueParam = directParams[0];
+    }
+  }
+  if (!valueParam) return null;
+  return {
+    componentName,
+    objectPattern,
+    opening,
+    valueParam,
+    markerParam: `__makaronEditable_${valueParam.replace(/[^\w$]/g, '_')}`,
+    type: ownMediaType ?? 'text',
+  };
 }
 
 function componentEditableHost(
@@ -402,6 +498,32 @@ function insertionFor(opening: JSXOpeningElement, id: string): SourceInsertion |
   };
 }
 
+function expressionInsertionFor(
+  opening: JSXOpeningElement,
+  attributeName: string,
+  expression: string,
+): SourceInsertion | null {
+  if (opening.end == null) return null;
+  const closeLength = opening.selfClosing ? 2 : 1;
+  return {
+    offset: opening.end - closeLength,
+    text: ` ${attributeName}={${expression}}`,
+  };
+}
+
+function stringAttributeInsertionFor(
+  opening: JSXOpeningElement,
+  attributeName: string,
+  value: string,
+): SourceInsertion | null {
+  if (opening.end == null) return null;
+  const closeLength = opening.selfClosing ? 2 : 1;
+  return {
+    offset: opening.end - closeLength,
+    text: ` ${attributeName}=${JSON.stringify(value)}`,
+  };
+}
+
 function applyInsertions(code: string, insertions: SourceInsertion[]): string {
   return [...insertions]
     .sort((a, b) => b.offset - a.offset)
@@ -456,15 +578,102 @@ export function compileEditableManifest({
   const candidates: Candidate[] = [];
   const insertions: SourceInsertion[] = [];
   const insertedOpenings = new Set<JSXOpeningElement>();
-  const componentHosts = new Map<string, ComponentEditableHost>();
+  const componentHosts = new Map<string, ComponentEditableHost[]>();
   const componentHostOpenings = new Set<JSXOpeningElement>();
+  const naturalHosts: NaturalComponentHost[] = [];
+
+  traverse(ast, {
+    JSXElement(path) {
+      const host = naturalComponentHost(path);
+      if (host) naturalHosts.push(host);
+    },
+  });
+
+  const naturalHostsByComponent = new Map<string, NaturalComponentHost[]>();
+  for (const host of naturalHosts) {
+    const hosts = naturalHostsByComponent.get(host.componentName) ?? [];
+    hosts.push(host);
+    naturalHostsByComponent.set(host.componentName, hosts);
+  }
+
+  const naturalUsageByHost = new Map<
+    NaturalComponentHost,
+    Array<{ opening: JSXOpeningElement; propKey: string }>
+  >();
+  traverse(ast, {
+    JSXOpeningElement(path) {
+      const hosts = naturalHostsByComponent.get(jsxName(path.node));
+      if (!hosts) return;
+      for (const host of hosts) {
+        const valueExpression = expressionFromAttribute(
+          namedAttribute(path.node, host.valueParam),
+        );
+        const propKey = staticPropKey(valueExpression);
+        if (
+          !propKey
+          || (props && !Object.prototype.hasOwnProperty.call(props, propKey))
+        ) {
+          continue;
+        }
+        const usages = naturalUsageByHost.get(host) ?? [];
+        usages.push({ opening: path.node, propKey });
+        naturalUsageByHost.set(host, usages);
+      }
+    },
+  });
+
+  const patternMarkers = new Map<ObjectPattern, Set<string>>();
+  const instrumentedNaturalUsages = new Set<string>();
+  for (const host of naturalHosts) {
+    const usages = naturalUsageByHost.get(host) ?? [];
+    if (usages.length === 0) continue;
+    const markerInsertion = expressionInsertionFor(
+      host.opening,
+      'data-editable',
+      host.markerParam,
+    );
+    if (markerInsertion) insertions.push(markerInsertion);
+
+    const markers = patternMarkers.get(host.objectPattern) ?? new Set<string>();
+    markers.add(host.markerParam);
+    patternMarkers.set(host.objectPattern, markers);
+
+    for (const usage of usages) {
+      const usageKey = `${usage.opening.start}:${host.markerParam}`;
+      if (!instrumentedNaturalUsages.has(usageKey)) {
+        const insertion = stringAttributeInsertionFor(
+          usage.opening,
+          host.markerParam,
+          usage.propKey,
+        );
+        if (insertion) insertions.push(insertion);
+        instrumentedNaturalUsages.add(usageKey);
+      }
+    }
+    const ids = usages.map(usage => usage.propKey);
+    candidates.push({
+      opening: host.opening,
+      type: host.type,
+      staticIds: ids,
+      propKeyById: new Map(ids.map(id => [id, id])),
+    });
+  }
+  for (const [pattern, markers] of patternMarkers) {
+    if (pattern.end == null) continue;
+    insertions.push({
+      offset: pattern.end - 1,
+      text: `, ${[...markers].join(', ')}`,
+    });
+  }
 
   traverse(ast, {
     JSXElement(path) {
       if (!dataEditableAttribute(path.node.openingElement)) return;
       const host = componentEditableHost(path);
       if (host) {
-        componentHosts.set(host.componentName, host);
+        const hosts = componentHosts.get(host.componentName) ?? [];
+        hosts.push(host);
+        componentHosts.set(host.componentName, hosts);
         componentHostOpenings.add(path.node.openingElement);
       }
     },
@@ -476,15 +685,17 @@ export function compileEditableManifest({
       const opening = element.openingElement;
       const name = jsxName(opening);
       if (componentHostOpenings.has(opening)) return;
-      const componentHost = componentHosts.get(name);
-      if (componentHost) {
-        const candidate = usageCandidate(opening, componentHost, ast, code, props);
-        if (candidate) {
-          candidates.push(candidate);
-        } else {
-          diagnostics.push(
-            `Editable helper <${name}> must receive ${componentHost.idParam} and ${componentHost.valueParam} from the same top-level props key.`,
-          );
+      const matchingComponentHosts = componentHosts.get(name);
+      if (matchingComponentHosts) {
+        for (const componentHost of matchingComponentHosts) {
+          const candidate = usageCandidate(opening, componentHost, ast, code, props);
+          if (candidate) {
+            candidates.push(candidate);
+          } else {
+            diagnostics.push(
+              `Editable helper <${name}> must receive ${componentHost.idParam} and ${componentHost.valueParam} from the same top-level props key.`,
+            );
+          }
         }
         return;
       }
@@ -593,15 +804,19 @@ export function compileEditableManifest({
 
   candidates.sort((a, b) => (a.opening.start ?? 0) - (b.opening.start ?? 0));
   const explicitById = new Map((editables ?? []).map(field => [field.id, field]));
-  const fields: EditableField[] = [];
+  const inferredFields: EditableField[] = [];
   const seen = new Set<string>();
   for (const candidate of candidates) {
-    addCandidateFields(fields, seen, candidate, explicitById);
+    addCandidateFields(inferredFields, seen, candidate, explicitById);
   }
-  for (const field of editables ?? []) {
-    if (!seen.has(field.id)) {
-      fields.push(field);
-      seen.add(field.id);
+  const fields = editables?.length ? [...editables] : inferredFields;
+  if (editables?.length) {
+    const explicitIds = new Set(editables.map(field => field.id));
+    for (const field of inferredFields) {
+      if (!explicitIds.has(field.id)) {
+        fields.push(field);
+        explicitIds.add(field.id);
+      }
     }
   }
 

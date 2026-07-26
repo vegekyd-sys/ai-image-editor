@@ -338,6 +338,27 @@ function collectDynamicEditableBindingsById(
     };
     visit(props);
   }
+
+  const compilerBindingPattern = new RegExp(
+    `<[A-Za-z][\\w.:-]*(?:\\s|\\n|\\r)[^>]*data-editable\\s*=\\s*\\{\\s*(__makaronEditable_[A-Za-z_$][\\w$]*)\\s*\\}[^>]*>`,
+    'gm',
+  );
+  for (const match of code.matchAll(compilerBindingPattern)) {
+    const markerParam = match[1];
+    const markerValuePattern = new RegExp(
+      `\\b${escapeRegExp(markerParam)}\\s*=\\s*["'\`]([^"'\`]+)["'\`]`,
+      'g',
+    );
+    for (const markerValue of code.matchAll(markerValuePattern)) {
+      const fieldId = markerValue[1];
+      if (!props || Object.prototype.hasOwnProperty.call(props, fieldId)) {
+        bindingsById.set(fieldId, {
+          expression: markerParam,
+          openingTag: match[0],
+        });
+      }
+    }
+  }
   return bindingsById;
 }
 

@@ -185,6 +185,117 @@ describe('Editable Manifest compiler', () => {
     ]);
   });
 
+  it('infers editable leaves through an ordinary reusable React component', () => {
+    const result = compileEditableManifest({
+      code: `
+        function Chapter({ year, title, description, accent }) {
+          return (
+            <section style={{ color: accent }}>
+              <div className="year">{year}</div>
+              <h1>{title}</h1>
+              <p>{description}</p>
+            </section>
+          );
+        }
+        function Composition(props) {
+          return (
+            <AbsoluteFill>
+              <Chapter
+                year={props.yearOne}
+                title={props.titleOne}
+                description={props.descriptionOne}
+                accent="#54D28D"
+              />
+              <Chapter
+                year={props.yearTwo}
+                title={props.titleTwo}
+                description={props.descriptionTwo}
+                accent="#79E0B0"
+              />
+            </AbsoluteFill>
+          );
+        }
+      `,
+      props: {
+        yearOne: '2011',
+        titleOne: 'Connect',
+        descriptionOne: 'Every message arrives.',
+        yearTwo: '2017',
+        titleTwo: 'Mini Programs',
+        descriptionTwo: 'Services within reach.',
+      },
+    });
+
+    expect(result.diagnostics).toEqual([]);
+    expect(result.editables).toEqual([
+      { id: 'yearOne', type: 'text', label: 'Year one', propKey: 'yearOne' },
+      { id: 'yearTwo', type: 'text', label: 'Year two', propKey: 'yearTwo' },
+      { id: 'titleOne', type: 'text', label: 'Title one', propKey: 'titleOne' },
+      { id: 'titleTwo', type: 'text', label: 'Title two', propKey: 'titleTwo' },
+      {
+        id: 'descriptionOne',
+        type: 'text',
+        label: 'Description one',
+        propKey: 'descriptionOne',
+      },
+      {
+        id: 'descriptionTwo',
+        type: 'text',
+        label: 'Description two',
+        propKey: 'descriptionTwo',
+      },
+    ]);
+    expect(result.code).toContain('data-editable={__makaronEditable_year}');
+    expect(result.code).toContain('data-editable={__makaronEditable_title}');
+    expect(result.code).toContain('data-editable={__makaronEditable_description}');
+    expect(result.code).toContain('__makaronEditable_year="yearOne"');
+    expect(result.code).toContain('__makaronEditable_title="titleTwo"');
+
+    const second = compileEditableManifest({
+      code: result.code,
+      props: {
+        yearOne: '2011',
+        titleOne: 'Connect',
+        descriptionOne: 'Every message arrives.',
+        yearTwo: '2017',
+        titleTwo: 'Mini Programs',
+        descriptionTwo: 'Services within reach.',
+      },
+      editables: result.editables,
+    });
+    expect(second).toEqual(result);
+  });
+
+  it('infers media leaves through an ordinary reusable React component', () => {
+    const result = compileEditableManifest({
+      code: `
+        function Scene({ image, clip }) {
+          return (
+            <div>
+              <Img src={image} />
+              <Video src={clip} />
+            </div>
+          );
+        }
+        function Composition(props) {
+          return <Scene image={props.heroImage} clip={props.heroVideo} />;
+        }
+      `,
+      props: {
+        heroImage: 'https://example.com/hero.jpg',
+        heroVideo: 'https://example.com/hero.mp4',
+      },
+    });
+
+    expect(result.diagnostics).toEqual([]);
+    expect(result.editables).toEqual([
+      { id: 'heroImage', type: 'image', label: 'Hero image', propKey: 'heroImage' },
+      { id: 'heroVideo', type: 'video', label: 'Hero video', propKey: 'heroVideo' },
+    ]);
+    expect(result.code).toContain('data-editable={__makaronEditable_image}');
+    expect(result.code).toContain('data-editable={__makaronEditable_clip}');
+  });
+
   it('expands dynamic helper calls from scene keys', () => {
     const result = compileEditableManifest({
       code: `

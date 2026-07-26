@@ -167,6 +167,8 @@ describe('agent media scenario matrix', () => {
     expect(remotion).toContain('Do not write an `editables` array for new work')
     expect(remotion).toContain('Put every user-facing title, subtitle, caption, badge, counter, stat')
     expect(remotion).toContain('Put every primary image/video URL in its own top-level prop')
+    expect(remotion).toContain('Ordinary reusable React components work without editor-specific parameters')
+    expect(remotion).toContain('do not add `id`, `editableId`, or an `editables` array')
     expect(remotion).toContain('dynamic scene abstraction')
     expect(remotion).toContain('one explicit runtime-id escape hatch')
     expect(remotion).toContain('Legacy explicit `editables` metadata remains')
