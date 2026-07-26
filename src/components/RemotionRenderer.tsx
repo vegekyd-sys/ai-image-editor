@@ -620,8 +620,6 @@ export async function exportDesignVideo(
       inputProps: resolvedProps,
       videoCodec: 'h264', container: 'mp4',
       scale: 2,
-      // Skip first/last 3 frames (~100ms each) to avoid black frames from fade-in/out animations
-      frameRange: durationInFrames > 6 ? [3, durationInFrames - 3] : null,
       onProgress: onProgress || null,
       delayRenderTimeoutInMilliseconds: 30000,
     });

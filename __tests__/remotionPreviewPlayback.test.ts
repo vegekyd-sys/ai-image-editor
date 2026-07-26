@@ -26,6 +26,8 @@ describe('Remotion preview playback contract', () => {
     expect(rendererSource).toContain("editableTransformMode: 'proxy'")
     expect(rendererSource).not.toContain('EditableSceneBoundary')
     expect(rendererSource).toContain('resolveDesignImageUrls(design, videoResolved)')
+    expect(rendererSource).not.toContain('frameRange: durationInFrames')
+    expect(rendererSource).not.toContain('Skip first/last 3 frames')
     expect(uploadSource).toContain('evalRemotionJSX(code)')
   })
 
