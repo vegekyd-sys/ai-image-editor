@@ -56,6 +56,26 @@ interface NaturalComponentHost {
   staleMediaMarker?: JSXAttribute;
 }
 
+interface NaturalComponentCall {
+  opening: JSXOpeningElement;
+  parentComponentName: string | null;
+  parentObjectPattern: ObjectPattern | null;
+}
+
+interface NaturalPropagationEdge {
+  opening: JSXOpeningElement;
+  childMarkerParam: string;
+  parentMarkerParam: string;
+  parentObjectPattern: ObjectPattern;
+}
+
+interface NaturalResolvedUsage {
+  opening: JSXOpeningElement;
+  markerParam: string;
+  propKey: string;
+  edges: NaturalPropagationEdge[];
+}
+
 const STRUCTURAL_TEXT_HOSTS = new Set([
   'AbsoluteFill',
   'Sequence',
@@ -354,15 +374,17 @@ function naturalComponentHost(
   const editableExpression = editableAttribute
     ? expressionFromAttribute(editableAttribute)
     : null;
-  const staleMediaMarker = (
+  const compilerMarker = (
     editableAttribute
     && editableExpression?.type === 'Identifier'
     && editableExpression.name.startsWith('__makaronEditable_')
-    && mediaTypeFromName(jsxName(opening))
   )
-    ? editableAttribute
+    ? editableExpression
     : undefined;
-  if (editableAttribute && !staleMediaMarker) return null;
+  const staleMediaMarker = compilerMarker && mediaTypeFromName(jsxName(opening))
+    ? editableAttribute ?? undefined
+    : undefined;
+  if (editableAttribute && !compilerMarker) return null;
   const componentName = componentFunctionName(path);
   const objectPattern = componentObjectPattern(path);
   if (!componentName || componentName === 'Composition' || !objectPattern) {
@@ -391,7 +413,8 @@ function naturalComponentHost(
     opening: ownMediaType ? naturalMediaOwnerOpening(path) : opening,
     mediaOpening: ownMediaType ? opening : undefined,
     valueParam,
-    markerParam: `__makaronEditable_${valueParam.replace(/[^\w$]/g, '_')}`,
+    markerParam: compilerMarker?.name
+      ?? `__makaronEditable_${valueParam.replace(/[^\w$]/g, '_')}`,
     type: ownMediaType ?? 'text',
     staleMediaMarker,
   };
@@ -657,45 +680,119 @@ export function compileEditableManifest({
       if (host) naturalHosts.push(host);
     },
   });
+  const naturalHostOpenings = new Set(naturalHosts.map(host => host.opening));
 
-  const naturalHostsByComponent = new Map<string, NaturalComponentHost[]>();
-  for (const host of naturalHosts) {
-    const hosts = naturalHostsByComponent.get(host.componentName) ?? [];
-    hosts.push(host);
-    naturalHostsByComponent.set(host.componentName, hosts);
-  }
-
-  const naturalUsageByHost = new Map<
-    NaturalComponentHost,
-    Array<{ opening: JSXOpeningElement; propKey: string }>
-  >();
+  const naturalCallsByComponent = new Map<string, NaturalComponentCall[]>();
   traverse(ast, {
     JSXOpeningElement(path) {
-      const hosts = naturalHostsByComponent.get(jsxName(path.node));
-      if (!hosts) return;
-      for (const host of hosts) {
+      const componentName = jsxName(path.node);
+      if (!componentName || /^[a-z]/.test(componentName)) return;
+      const elementPath = path.parentPath;
+      const parentComponentName = elementPath?.isJSXElement()
+        ? componentFunctionName(elementPath)
+        : null;
+      const parentObjectPattern = elementPath?.isJSXElement()
+        ? componentObjectPattern(elementPath)
+        : null;
+      const calls = naturalCallsByComponent.get(componentName) ?? [];
+      calls.push({
+        opening: path.node,
+        parentComponentName,
+        parentObjectPattern,
+      });
+      naturalCallsByComponent.set(componentName, calls);
+    },
+  });
+
+  const resolveNaturalUsages = (
+    host: NaturalComponentHost,
+  ): NaturalResolvedUsage[] => {
+    const resolved: NaturalResolvedUsage[] = [];
+    const queue: Array<{
+      componentName: string;
+      valueParam: string;
+      markerParam: string;
+      edges: NaturalPropagationEdge[];
+      seen: Set<string>;
+    }> = [{
+      componentName: host.componentName,
+      valueParam: host.valueParam,
+      markerParam: host.markerParam,
+      edges: [],
+      seen: new Set([`${host.componentName}:${host.valueParam}`]),
+    }];
+
+    while (queue.length > 0) {
+      const state = queue.shift();
+      if (!state) break;
+      for (const call of naturalCallsByComponent.get(state.componentName) ?? []) {
         const valueExpression = expressionFromAttribute(
-          namedAttribute(path.node, host.valueParam),
+          namedAttribute(call.opening, state.valueParam),
         );
         const propKey = staticPropKey(valueExpression);
         if (
-          !propKey
-          || (props && !Object.prototype.hasOwnProperty.call(props, propKey))
+          propKey
+          && (!props || Object.prototype.hasOwnProperty.call(props, propKey))
+        ) {
+          resolved.push({
+            opening: call.opening,
+            markerParam: state.markerParam,
+            propKey,
+            edges: state.edges,
+          });
+          continue;
+        }
+        if (valueExpression?.type !== 'Identifier') continue;
+        if (
+          call.parentComponentName === 'Composition'
+          && (!props || Object.prototype.hasOwnProperty.call(props, valueExpression.name))
+        ) {
+          resolved.push({
+            opening: call.opening,
+            markerParam: state.markerParam,
+            propKey: valueExpression.name,
+            edges: state.edges,
+          });
+          continue;
+        }
+        if (
+          !call.parentComponentName
+          || !call.parentObjectPattern
+          || !objectPatternParamNames(call.parentObjectPattern).has(valueExpression.name)
         ) {
           continue;
         }
-        const usages = naturalUsageByHost.get(host) ?? [];
-        usages.push({ opening: path.node, propKey });
-        naturalUsageByHost.set(host, usages);
+
+        const parentMarkerParam =
+          `__makaronEditable_${valueExpression.name.replace(/[^\w$]/g, '_')}`;
+        const stateKey = `${call.parentComponentName}:${valueExpression.name}`;
+        if (state.seen.has(stateKey)) continue;
+        queue.push({
+          componentName: call.parentComponentName,
+          valueParam: valueExpression.name,
+          markerParam: parentMarkerParam,
+          edges: [
+            ...state.edges,
+            {
+              opening: call.opening,
+              childMarkerParam: state.markerParam,
+              parentMarkerParam,
+              parentObjectPattern: call.parentObjectPattern,
+            },
+          ],
+          seen: new Set([...state.seen, stateKey]),
+        });
       }
-    },
-  });
+    }
+
+    return resolved;
+  };
 
   const patternMarkers = new Map<ObjectPattern, Set<string>>();
   const instrumentedNaturalUsages = new Set<string>();
   const migratedNaturalOpenings = new Set<JSXOpeningElement>();
   for (const host of naturalHosts) {
-    const usages = naturalUsageByHost.get(host) ?? [];
+    const usages = resolveNaturalUsages(host);
     if (usages.length === 0) continue;
     if (!dataEditableAttribute(host.opening)) {
       const markerInsertion = expressionInsertionFor(
@@ -725,14 +822,37 @@ export function compileEditableManifest({
     patternMarkers.set(host.objectPattern, markers);
 
     for (const usage of usages) {
-      const usageKey = `${usage.opening.start}:${host.markerParam}`;
+      for (const edge of usage.edges) {
+        const edgeMarkers = patternMarkers.get(edge.parentObjectPattern)
+          ?? new Set<string>();
+        if (!objectPatternParamNames(edge.parentObjectPattern).has(edge.parentMarkerParam)) {
+          edgeMarkers.add(edge.parentMarkerParam);
+        }
+        patternMarkers.set(edge.parentObjectPattern, edgeMarkers);
+
+        const edgeKey = `${edge.opening.start}:${edge.childMarkerParam}`;
+        if (
+          !instrumentedNaturalUsages.has(edgeKey)
+          && !namedAttribute(edge.opening, edge.childMarkerParam)
+        ) {
+          const insertion = expressionInsertionFor(
+            edge.opening,
+            edge.childMarkerParam,
+            edge.parentMarkerParam,
+          );
+          if (insertion) insertions.push(insertion);
+          instrumentedNaturalUsages.add(edgeKey);
+        }
+      }
+
+      const usageKey = `${usage.opening.start}:${usage.markerParam}`;
       if (
         !instrumentedNaturalUsages.has(usageKey)
-        && !namedAttribute(usage.opening, host.markerParam)
+        && !namedAttribute(usage.opening, usage.markerParam)
       ) {
         const insertion = stringAttributeInsertionFor(
           usage.opening,
-          host.markerParam,
+          usage.markerParam,
           usage.propKey,
         );
         if (insertion) insertions.push(insertion);
@@ -770,6 +890,7 @@ export function compileEditableManifest({
   traverse(ast, {
     JSXElement(path) {
       if (!dataEditableAttribute(path.node.openingElement)) return;
+      if (naturalHostOpenings.has(path.node.openingElement)) return;
       if (migratedNaturalOpenings.has(path.node.openingElement)) return;
       const host = componentEditableHost(path);
       if (host) {

@@ -99,6 +99,9 @@ supported without migration.
 
 - Direct `props.title`, `props["title"]`, image `src`, and video `src` are
   inferred through AST analysis.
+- Prop ownership follows ordinary nested helper chains such as
+  `props.title -> IntroScene.title -> BrushTitle.text -> DOM`; component depth
+  must not force the Agent to add Editable metadata.
 - Supported dynamic `props[scene.titleKey]` authoring remains valid through the
   explicit runtime id escape hatch.
 - Valid natural React is not rejected for missing wrapper geometry or repeated
@@ -165,6 +168,12 @@ or metadata arrays.
    helper. Move, resize, selected-node trim, timestamp scrub, range drag,
    out-of-bounds release, reload persistence, synchronized trim playback, and a
    180-frame MP4 export were verified.
+4. Nested calligraphy title composition:
+   `http://localhost:3002/projects/95c5270d-e0d1-47e8-baa2-84dd934d35ee`
+   originally exposed only four direct helper leaves. Transitive prop inference
+   restored 13 text fields, including title, opening, five chapter titles,
+   ending, and brand. Persisted compositions are upgraded in memory when opened
+   so the fix applies without rewriting production workspace data.
 
 The video run exposed and now permanently covers two runtime/compiler failures:
 

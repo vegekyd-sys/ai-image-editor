@@ -318,6 +318,75 @@ describe('Editable Manifest compiler', () => {
     expect(result.code).toContain('data-editable={__makaronEditable_clip}');
   });
 
+  it('infers text through multiple ordinary React helper layers', () => {
+    const result = compileEditableManifest({
+      code: `
+        function BrushTitle({ text, sub }) {
+          return (
+            <div>
+              <div>{text}</div>
+              {sub && <div>{sub}</div>}
+            </div>
+          );
+        }
+        function IntroScene({ title, opening }) {
+          return (
+            <AbsoluteFill>
+              <BrushTitle text={title} sub={opening} />
+            </AbsoluteFill>
+          );
+        }
+        function ChapterScene({ title }) {
+          return <BrushTitle text={title} sub="A hardcoded caption" />;
+        }
+        function Composition(props) {
+          return (
+            <AbsoluteFill>
+              <Sequence>
+                <IntroScene title={props.title} opening={props.opening} />
+              </Sequence>
+              <Sequence>
+                <ChapterScene title={props.chapter1} />
+              </Sequence>
+            </AbsoluteFill>
+          );
+        }
+      `,
+      props: {
+        title: 'Chang’an',
+        opening: 'An eternal capital',
+        chapter1: 'The rivers embrace Chang’an',
+      },
+    });
+
+    expect(result.diagnostics).toEqual([]);
+    expect(result.editables).toEqual([
+      { id: 'title', type: 'text', label: 'Title', propKey: 'title' },
+      { id: 'chapter1', type: 'text', label: 'Chapter 1', propKey: 'chapter1' },
+      { id: 'opening', type: 'text', label: 'Opening', propKey: 'opening' },
+    ]);
+    expect(result.code).toContain('data-editable={__makaronEditable_text}');
+    expect(result.code).toContain(
+      '__makaronEditable_text={__makaronEditable_title}',
+    );
+    expect(result.code).toContain('__makaronEditable_title="title"');
+    expect(result.code).toContain('__makaronEditable_title="chapter1"');
+    expect(result.code).toContain(
+      '__makaronEditable_sub={__makaronEditable_opening}',
+    );
+    expect(result.code).toContain('__makaronEditable_opening="opening"');
+
+    expect(compileEditableManifest({
+      code: result.code,
+      props: {
+        title: 'Chang’an',
+        opening: 'An eternal capital',
+        chapter1: 'The rivers embrace Chang’an',
+      },
+      editables: result.editables,
+    })).toEqual(result);
+  });
+
   it('infers a video leaf inside a mixed text and media layout helper', () => {
     const props = {
       title: 'WeChat growth moments',

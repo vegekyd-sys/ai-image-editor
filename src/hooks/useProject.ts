@@ -153,7 +153,14 @@ export function useProject(projectId: string, userId: string) {
             }
           }
         }
-        if (design) snap.design = design as Snapshot['design']
+        if (design) {
+          // Lazy import keeps the AST compiler out of the initial editor
+          // bundle. Existing compositions upgrade in memory when opened.
+          const { normalizeLoadedDesignManifest } = await import(
+            '@/lib/editor/loaded-design-manifest'
+          )
+          snap.design = await normalizeLoadedDesignManifest(design)
+        }
       } catch (e) {
         console.warn('Failed to load design from workspace:', dp, e)
       }
