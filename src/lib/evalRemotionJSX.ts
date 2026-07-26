@@ -165,7 +165,12 @@ export function pickRemotionComponentName(code: string): string {
  * Tries Sucrase first (bundled, instant). Falls back to Babel CDN if Sucrase fails.
  */
 
-export function evalRemotionJSX(code: string): React.ComponentType<any> | null {
+export type EditableTransformMode = 'proxy' | 'registry';
+
+export function evalRemotionJSX(
+  code: string,
+  options: { editableTransformMode?: EditableTransformMode } = {},
+): React.ComponentType<any> | null {
   try {
     const src = normalizeRemotionScopeDeclarations(code);
 
@@ -211,7 +216,9 @@ export function evalRemotionJSX(code: string): React.ComponentType<any> | null {
       buildRemotionEvaluatorBody(compiled, fnName),
     );
     const comp = factory(REMOTION_SCOPE, authoredModule, authoredModule.exports, localRequire);
-    return comp ? wrapWithEditableTransforms(comp) : null;
+    return comp
+      ? wrapWithEditableTransforms(comp, options.editableTransformMode ?? 'proxy')
+      : null;
   } catch (err) {
     console.error('[evalRemotionJSX] compile error:', err);
     return null;
@@ -224,6 +231,7 @@ export function evalRemotionJSX(code: string): React.ComponentType<any> | null {
  * Updated by the HOC's render, read by the Proxy createElement.
  */
 let _currentTransformProps: Record<string, unknown> = {};
+let _currentTransformMode: EditableTransformMode = 'proxy';
 
 function readFrameProp(key: string): number | undefined {
   const value = _currentTransformProps[key];
@@ -271,7 +279,7 @@ const _patchedCE = function(type: any, elProps: any, ...children: any[]) {
     const sc = _currentTransformProps[`_scale_${id}`] as { w: number; h: number } | undefined;
     const trimBefore = readFrameProp(`_trimBefore_${id}`);
     const trimAfter = readFrameProp(`_trimAfter_${id}`);
-    if (pos || sc) {
+    if (_currentTransformMode === 'proxy' && (pos || sc)) {
       const existingStyle = (elProps.style || {}) as Record<string, unknown>;
       elProps = { ...elProps, style: {
         ...existingStyle,
@@ -301,9 +309,13 @@ REMOTION_SCOPE.React = PATCHED_REACT;
  * → injects style.translate/scale on [data-editable] elements.
  */
 
-function wrapWithEditableTransforms(Component: React.ComponentType<any>): React.ComponentType<any> {
+function wrapWithEditableTransforms(
+  Component: React.ComponentType<any>,
+  transformMode: EditableTransformMode,
+): React.ComponentType<any> {
   return function WrappedDesign(props: Record<string, unknown>) {
     _currentTransformProps = props;
+    _currentTransformMode = transformMode;
     return _origCE.call(React, Component, props);
   };
 }

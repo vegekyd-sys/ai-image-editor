@@ -12,6 +12,7 @@ import {
   resolveEditablePointerIntent,
   type EditableTapCandidate,
 } from '@/lib/editor/editable-hit-test';
+import { buildLegacySceneRegistry } from '@/lib/editor/scene-registry';
 
 interface DesignOverlayProps {
   containerEl: HTMLDivElement | null;
@@ -98,16 +99,24 @@ export default function DesignOverlay({
   // Apply stored position + scale to Remotion DOM elements using CSS independent properties.
   // style.translate / style.scale don't interfere with Moveable or hit-testing,
   // and are read by @remotion/web-renderer's canvas drawing (via our patch).
-  const applyStoredOffsets = useCallback((elements: NodeListOf<Element>) => {
-    elements.forEach((el) => {
+  const applyStoredOffsets = useCallback((
+    elements: Iterable<Element>,
+    activeElements?: ReadonlySet<Element>,
+  ) => {
+    for (const el of elements) {
       const id = el.getAttribute('data-editable');
-      if (!id) return;
+      if (!id) continue;
       const htmlEl = el as HTMLElement;
+      if (activeElements && !activeElements.has(el)) {
+        htmlEl.style.translate = '';
+        htmlEl.style.scale = '';
+        continue;
+      }
       const pos = props[`_pos_${id}`] as { x: number; y: number } | undefined;
       const sc = props[`_scale_${id}`] as { w: number; h: number } | undefined;
       htmlEl.style.translate = pos ? `${pos.x}px ${pos.y}px` : '';
       htmlEl.style.scale = sc ? `${+sc.w.toFixed(4)} ${+sc.h.toFixed(4)}` : '';
-    });
+    }
   }, [props]);
 
   // Measure editable elements
@@ -117,23 +126,30 @@ export default function DesignOverlay({
 
     isMeasuringRef.current = true;
 
-    const elements = containerEl.querySelectorAll('[data-editable]');
-    applyStoredOffsets(elements);
-
     const baseRect = overlayRef.current.getBoundingClientRect();
     const canvasRect = (
       containerEl.querySelector('.__remotion-player') as HTMLElement | null
     )?.getBoundingClientRect() ?? containerEl.getBoundingClientRect();
     const viewportRect = getScrollViewportRect(containerEl, baseRect);
+    const registry = buildLegacySceneRegistry({
+      container: containerEl,
+      fields: editables,
+      canvasRect,
+      viewportRect,
+    });
+    const activeInstances = registry.activeInstances();
+    const activeElements = new Set(activeInstances.map(instance => instance.element));
+    applyStoredOffsets(
+      containerEl.querySelectorAll('[data-editable]'),
+      activeElements,
+    );
+
     const newRects: MeasuredRect[] = [];
     const visibleIds: string[] = [];
-    const seen = new Set<string>();
-    elements.forEach((el) => {
-      const id = el.getAttribute('data-editable');
-      if (!id || seen.has(id)) return;
-      if (!editables.some(f => f.id === id)) return;
+    activeInstances.forEach((instance) => {
+      const { id, element: el } = instance;
       // Fix inline elements — Moveable needs a box model to work correctly
-      const htmlEl = el as HTMLElement;
+      const htmlEl = el;
       htmlEl.querySelectorAll('img, video').forEach((media) => {
         const mediaEl = media as HTMLElement;
         mediaEl.setAttribute('draggable', 'false');
@@ -144,9 +160,6 @@ export default function DesignOverlay({
         htmlEl.style.display = 'inline-block';
       }
       const elRect = el.getBoundingClientRect();
-      // Remotion may retain a collapsed duplicate with the same data-editable
-      // in its sizing tree. Persisted offsets must never promote that hidden
-      // copy into Moveable's live target.
       if (!isEditableRectMeasurable(elRect)) return;
       htmlEl.toggleAttribute(
         'data-editable-canvas-cover',
@@ -157,8 +170,7 @@ export default function DesignOverlay({
       const rectTop = Math.round(elRect.top - baseRect.top);
       const rectWidth = Math.round(elRect.width);
       const rectHeight = Math.round(elRect.height);
-      seen.add(id);
-      newRects.push({ id, left: rectLeft, top: rectTop, width: rectWidth, height: rectHeight, domEl: el as HTMLElement });
+      newRects.push({ id, left: rectLeft, top: rectTop, width: rectWidth, height: rectHeight, domEl: el });
       if (!filterVisibleFields || (
         elRect.right > viewportRect.left + 1 &&
         elRect.left < viewportRect.right - 1 &&
@@ -432,7 +444,7 @@ export default function DesignOverlay({
       }
       if (!isSelectedEditable && !isSelectedHit) return false;
 
-      const target = containerEl.querySelector(`[data-editable="${fieldId}"]`) as HTMLElement | null;
+      const target = rectsRef.current.find(rect => rect.id === fieldId)?.domEl ?? null;
       if (!target) return false;
       const offset = readCurrentOffset(target, fieldId);
       dragState = {
@@ -545,9 +557,9 @@ export default function DesignOverlay({
       const newH = p.baseH * ratio;
 
       // Apply scale via transform (renderMediaOnWeb only reads style.transform)
-      const el = containerEl.querySelector(
-        `[data-editable="${selectedFieldIdRef.current}"]`
-      ) as HTMLElement | null;
+      const el = rectsRef.current.find(
+        rect => rect.id === selectedFieldIdRef.current,
+      )?.domEl ?? null;
       if (el) {
         el.style.scale = `${+newW.toFixed(4)} ${+newH.toFixed(4)}`;
       }
@@ -565,9 +577,7 @@ export default function DesignOverlay({
 
       if (!fieldId) return;
       // Persist the pinched scale (read from pinch state, not DOM)
-      const el = containerEl.querySelector(
-        `[data-editable="${fieldId}"]`
-      ) as HTMLElement | null;
+      const el = rectsRef.current.find(rect => rect.id === fieldId)?.domEl ?? null;
       if (el && el.style.scale) {
         const parts = el.style.scale.split(' ');
         const w = parseFloat(parts[0]) || 1;

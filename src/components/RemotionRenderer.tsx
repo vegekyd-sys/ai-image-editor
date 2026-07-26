@@ -121,7 +121,12 @@ async function compileBrowserDesign(
     substitutions: design.fontSubstitutions,
   });
   recordBrowserFontTiming({ source, recordedAt: new Date().toISOString(), timing });
-  const Component = evalRemotionJSX(prepared.code);
+  const Component = evalRemotionJSX(prepared.code, {
+    // The live player resolves one active DOM instance per logical editable.
+    // Standalone renders have no overlay yet, so they keep the legacy proxy
+    // until the export path moves onto the same scene registry contract.
+    editableTransformMode: source === 'player' ? 'registry' : 'proxy',
+  });
   if (!Component) throw new Error('Failed to compile design code');
 
   return function FontPinnedDesign(componentProps: Record<string, unknown>) {
