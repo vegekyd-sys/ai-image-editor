@@ -103,7 +103,7 @@ describe('Editable Manifest harness integration', () => {
     expect(result.code).toContain('__makaronEditable_title="titleTwo"');
   });
 
-  it('still rejects visible hardcoded text with no prop ownership', () => {
+  it('auto-lifts visible hardcoded text with no authored prop ownership', () => {
     const result: DesignResult = {
       code: `
         function Composition() {
@@ -113,7 +113,16 @@ describe('Editable Manifest harness integration', () => {
       props: {},
     };
 
-    expect(validateDesign(result)).toContain('Visible JSX text');
-    expect(result.editables).toEqual([]);
+    expect(validateDesign(result)).toBeNull();
+    expect(result.editables).toEqual([
+      {
+        id: 'compositionTitle',
+        type: 'text',
+        label: 'Composition title',
+        propKey: 'compositionTitle',
+        source: 'literal',
+      },
+    ]);
+    expect(result.props?.compositionTitle).toBe('Hardcoded headline');
   });
 });

@@ -98,7 +98,11 @@ export function validateDesignDiagnostics(result: DesignResult): string[] {
   const editablesError = validateEditables(result.editables, result.code, result.props);
   if (editablesError) diagnostics.push(editablesError);
 
-  const hardcodedTextError = validateHardcodedEditableText(result.editables, result.code);
+  const hardcodedTextError = validateHardcodedEditableText(
+    result.editables,
+    result.code,
+    result.props,
+  );
   if (hardcodedTextError) diagnostics.push(hardcodedTextError);
 
   return [...new Set(diagnostics)];
@@ -186,12 +190,19 @@ export function validateEditables(
     const dynamicBinding = field.id === field.propKey
       ? dynamicBindings.get(field.id) ?? null
       : null;
-    const openingTag = findEditableOpeningTag(code, field.id) ?? dynamicBinding?.openingTag ?? null;
+    const openingTag = findEditableOpeningTag(code, field.id)
+      ?? dynamicBinding?.openingTag
+      ?? (field.source === 'literal'
+        ? findConditionalLiteralOpeningTag(code, field.id)
+        : null);
     if (!openingTag) {
       return `⚠️ Editable field "${field.id}" is declared but no JSX element has data-editable="${field.id}". Add data-editable to the visible editable wrapper.`;
     }
 
-    if (!codeReadsProp(code, field.propKey) && !dynamicBinding) {
+    const compilerLiteral = field.source === 'literal'
+      && props
+      && Object.prototype.hasOwnProperty.call(props, field.propKey);
+    if (!codeReadsProp(code, field.propKey) && !dynamicBinding && !compilerLiteral) {
       return `⚠️ Editable field "${field.id}" declares prop key "${field.propKey}", but the design code does not read props.${field.propKey}. Avoid hardcoded content; wire the editable element to props.${field.propKey}.`;
     }
 
@@ -259,6 +270,15 @@ function findEditableOpeningTag(code: string, id: string): string | null {
     if (match) return match[0];
   }
   return null;
+}
+
+function findConditionalLiteralOpeningTag(code: string, id: string): string | null {
+  const escaped = escapeRegExp(id);
+  const pattern = new RegExp(
+    `<[A-Za-z][\\w.:-]*(?:\\s|\\n|\\r)[^>]*data-editable\\s*=\\s*\\{[^}]*["'\`]${escaped}["'\`][^}]*\\}[^>]*>`,
+    'm',
+  );
+  return code.match(pattern)?.[0] ?? null;
 }
 
 interface DynamicEditableBinding {
@@ -339,6 +359,50 @@ function collectDynamicEditableBindingsById(
     visit(props);
   }
 
+  const compilerMemberPattern = new RegExp(
+    `<[A-Za-z][\\w.:-]*(?:\\s|\\n|\\r)[^>]*data-editable\\s*=\\s*\\{\\s*(${DYNAMIC_MEMBER_EXPRESSION}\\.__makaronEditable_[A-Za-z_$][\\w$]*)\\s*\\}[^>]*>`,
+    'gm',
+  );
+  for (const match of code.matchAll(compilerMemberPattern)) {
+    const expression = normalizeDynamicExpression(match[1]);
+    const propertyName = expression.match(/\.([A-Za-z_$][\w$]*)$/)?.[1];
+    if (!propertyName) continue;
+    const propertyPattern = new RegExp(
+      `\\b${escapeRegExp(propertyName)}\\s*:\\s*["'\`]([^"'\`]+)["'\`]`,
+      'g',
+    );
+    for (const propertyValue of code.matchAll(propertyPattern)) {
+      const fieldId = propertyValue[1];
+      if (!props || Object.prototype.hasOwnProperty.call(props, fieldId)) {
+        bindingsById.set(fieldId, {
+          expression,
+          openingTag: match[0],
+        });
+      }
+    }
+    const visitCompilerMarkers = (value: unknown) => {
+      if (Array.isArray(value)) {
+        value.forEach(visitCompilerMarkers);
+        return;
+      }
+      if (!value || typeof value !== 'object') return;
+      for (const [key, child] of Object.entries(value as Record<string, unknown>)) {
+        if (
+          key === propertyName
+          && typeof child === 'string'
+          && (!props || Object.prototype.hasOwnProperty.call(props, child))
+        ) {
+          bindingsById.set(child, {
+            expression,
+            openingTag: match[0],
+          });
+        }
+        visitCompilerMarkers(child);
+      }
+    };
+    visitCompilerMarkers(props);
+  }
+
   const compilerBindingPattern = new RegExp(
     `<[A-Za-z][\\w.:-]*(?:\\s|\\n|\\r)[^>]*data-editable\\s*=\\s*\\{\\s*(__makaronEditable_[A-Za-z_$][\\w$]*)\\s*\\}[^>]*>`,
     'gm',
@@ -372,8 +436,18 @@ function codeReadsProp(code: string, propKey: string): boolean {
   return hasQuotedToken(code, propKey) && /\bprops\s*\[\s*[A-Za-z_$][\w$]*(?:\.[A-Za-z_$][\w$]*|\[[^\]]+\])?\s*\]/.test(code);
 }
 
-function validateHardcodedEditableText(editables: EditableField[] | undefined, code: string): string | null {
-  const editableTokens = (editables ?? []).flatMap(field => [field.id, field.propKey]);
+function validateHardcodedEditableText(
+  editables: EditableField[] | undefined,
+  code: string,
+  props?: Record<string, unknown>,
+): string | null {
+  const editableTokens = (editables ?? []).flatMap(field => [
+    field.id,
+    field.propKey,
+    ...(field.source === 'literal' && typeof props?.[field.propKey] === 'string'
+      ? [props[field.propKey] as string]
+      : []),
+  ]);
   const hardcoded = findHardcodedVisibleTextArray(code, editableTokens);
   if (hardcoded) {
     const kind = hardcoded.kind === 'object' ? 'text data array' : 'text array';
@@ -382,7 +456,7 @@ function validateHardcodedEditableText(editables: EditableField[] | undefined, c
       : 'Move each user-facing label into a top-level prop and render that prop in its own semantic text host.';
     return `⚠️ Visible ${kind} "${hardcoded.name}" is hardcoded (${hardcoded.literals.slice(0, 3).join(', ')}). ${fix}`;
   }
-  const hardcodedTextNode = findHardcodedVisibleTextNode(code);
+  const hardcodedTextNode = findHardcodedVisibleTextNode(code, editableTokens);
   if (hardcodedTextNode) {
     return `⚠️ Visible JSX text is hardcoded (${hardcodedTextNode.literals.slice(0, 3).join(', ')}). User-facing labels, badges, stats, captions, and brand text must come from top-level props; the Editable Manifest is inferred automatically.`;
   }
@@ -430,10 +504,15 @@ function isRenderedLocalArray(code: string, name: string): boolean {
   return patterns.some(pattern => pattern.test(code));
 }
 
-function findHardcodedVisibleTextNode(code: string): { literals: string[] } | null {
+function findHardcodedVisibleTextNode(
+  code: string,
+  allowedTokens: string[] = [],
+): { literals: string[] } | null {
+  const allowed = new Set(allowedTokens);
   const withoutJsxComments = code.replace(/\{\/\*[\s\S]*?\*\/\}/g, '');
   const literals = [...withoutJsxComments.matchAll(/>\s*([^<>{}\n][^<>{}]*)\s*</g)]
     .map(m => m[1].replace(/\s+/g, ' ').trim())
+    .filter(value => !allowed.has(value))
     .filter(value => value.length >= 2)
     .filter(value => !/\b(?:return|function|const|let|var)\b|[;{}]/.test(value))
     .filter(value => !/(?:=>|&&|\|\||===|!==|>=|<=|\?\.)/.test(value))

@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { validateDesign } from '@/lib/design-harness';
+import { validateDesign, type DesignResult } from '@/lib/design-harness';
 
 describe('editable media contract', () => {
   it('accepts a generated Remotion composition with text, image, and trim-ready video editables', () => {
@@ -184,7 +184,7 @@ describe('editable media contract', () => {
   });
 
   it('infers active-scene fields omitted from legacy editable metadata', () => {
-    const payload = {
+    const payload: DesignResult = {
       code: `function Composition(props) {
         const scene = props.sceneData[0];
         return (
@@ -457,8 +457,8 @@ describe('editable media contract', () => {
     expect(result).toEqual(expect.stringMatching(/props\.title|prop key|hardcoded/i));
   });
 
-  it('rejects hardcoded rendered text arrays when a design has editables', () => {
-    const result = validateDesign({
+  it('auto-lifts hardcoded rendered text arrays alongside media editables', () => {
+    const payload: DesignResult = {
       code: `function Design(props) {
         const names = ['Alice', 'Bob'];
         return (
@@ -479,13 +479,24 @@ describe('editable media contract', () => {
         { id: 'photo1', type: 'image', label: 'Photo 1', propKey: 'photo1' },
         { id: 'photo2', type: 'image', label: 'Photo 2', propKey: 'photo2' },
       ],
-    });
+    };
+    const result = validateDesign(payload);
 
-    expect(result).toEqual(expect.stringMatching(/hardcoded|text editables|names/i));
+    expect(result).toBeNull();
+    expect(payload.editables?.map(field => field.id)).toEqual([
+      'photo1',
+      'photo2',
+      'name1Text',
+      'name2Text',
+    ]);
+    expect(payload.props).toMatchObject({
+      name1Text: 'Alice',
+      name2Text: 'Bob',
+    });
   });
 
-  it('rejects hardcoded rendered timeline object arrays when only a token editable is declared', () => {
-    const result = validateDesign({
+  it('auto-lifts rendered timeline object arrays alongside authored editables', () => {
+    const payload: DesignResult = {
       code: `function Design(props) {
         const milestones = [
           { year: '2016', title: '短视频工具起步', desc: '人人都能拍一段生活' },
@@ -513,13 +524,23 @@ describe('editable media contract', () => {
       editables: [
         { id: 'tagline', type: 'text', label: 'Tagline', propKey: 'tagline' },
       ],
-    });
+    };
+    const result = validateDesign(payload);
 
-    expect(result).toEqual(expect.stringMatching(/milestones|year\/title\/description|hardcoded/i));
+    expect(result).toBeNull();
+    expect(payload.editables?.map(field => field.id)).toEqual([
+      'tagline',
+      'milestone1Year',
+      'milestone2Year',
+      'milestone1Title',
+      'milestone2Title',
+      'milestone1Description',
+      'milestone2Description',
+    ]);
   });
 
-  it('rejects Remotion compositions that hardcode visible timeline text with no editables', () => {
-    const result = validateDesign({
+  it('auto-lifts selected scene object text with no authored editables', () => {
+    const payload: DesignResult = {
       code: `const SCENES = [
         { id: 'intro', year: '', title: '小红书', subtitle: '一个关于生活的故事', bg: ['#FF2442', '#FF6B81'] },
         { id: 'y2013', year: '2013', title: '生活分享社区', subtitle: '用户自发分享真实生活', bg: ['#1A1A2E', '#16213E'] },
@@ -535,13 +556,20 @@ describe('editable media contract', () => {
       }`,
       props: {},
       editables: [],
-    });
+    };
+    const result = validateDesign(payload);
 
-    expect(result).toEqual(expect.stringMatching(/no editables|SCENES|GUI can edit/i));
+    expect(result).toBeNull();
+    expect(payload.editables?.map(field => field.id)).toEqual([
+      'introTitle',
+      'y2013Title',
+      'introSubtitle',
+      'y2013Subtitle',
+    ]);
   });
 
-  it('rejects hardcoded JSX badges or stats even when primary title editables exist', () => {
-    const result = validateDesign({
+  it('auto-lifts hardcoded JSX badges or stats alongside primary editables', () => {
+    const payload: DesignResult = {
       code: `function Design(props) {
         return (
           <AbsoluteFill>
@@ -561,9 +589,21 @@ describe('editable media contract', () => {
       editables: [
         { id: 'title', type: 'text', label: 'Title', propKey: 'title' },
       ],
-    });
+    };
+    const result = validateDesign(payload);
 
-    expect(result).toEqual(expect.stringMatching(/JSX text|badges|stats|MEITUAN/i));
+    expect(result).toBeNull();
+    expect(payload.editables?.map(field => field.id)).toEqual([
+      'title',
+      'designText',
+      'designText2',
+      'designParagraph',
+    ]);
+    expect(payload.props).toMatchObject({
+      designText: 'MEITUAN',
+      designText2: '01 / 05',
+      designParagraph: '市占超60%',
+    });
   });
 
   it('does not treat tiny lowercase code-like tokens as visible hardcoded text', () => {

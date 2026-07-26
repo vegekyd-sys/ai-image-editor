@@ -319,6 +319,11 @@ describe('Editable Manifest compiler', () => {
   });
 
   it('infers text through multiple ordinary React helper layers', () => {
+    const props: Record<string, unknown> = {
+      title: 'Chang’an',
+      opening: 'An eternal capital',
+      chapter1: 'The rivers embrace Chang’an',
+    };
     const result = compileEditableManifest({
       code: `
         function BrushTitle({ text, sub }) {
@@ -352,19 +357,23 @@ describe('Editable Manifest compiler', () => {
           );
         }
       `,
-      props: {
-        title: 'Chang’an',
-        opening: 'An eternal capital',
-        chapter1: 'The rivers embrace Chang’an',
-      },
+      props,
     });
 
     expect(result.diagnostics).toEqual([]);
     expect(result.editables).toEqual([
       { id: 'title', type: 'text', label: 'Title', propKey: 'title' },
       { id: 'chapter1', type: 'text', label: 'Chapter 1', propKey: 'chapter1' },
+      {
+        id: 'chapterSceneSubtitle',
+        type: 'text',
+        label: 'Chapter scene subtitle',
+        propKey: 'chapterSceneSubtitle',
+        source: 'literal',
+      },
       { id: 'opening', type: 'text', label: 'Opening', propKey: 'opening' },
     ]);
+    expect(props.chapterSceneSubtitle).toBe('A hardcoded caption');
     expect(result.code).toContain('data-editable={__makaronEditable_text}');
     expect(result.code).toContain(
       '__makaronEditable_text={__makaronEditable_title}',
@@ -375,14 +384,13 @@ describe('Editable Manifest compiler', () => {
       '__makaronEditable_sub={__makaronEditable_opening}',
     );
     expect(result.code).toContain('__makaronEditable_opening="opening"');
+    expect(result.code).toContain(
+      '__makaronEditable_sub="chapterSceneSubtitle"',
+    );
 
     expect(compileEditableManifest({
       code: result.code,
-      props: {
-        title: 'Chang’an',
-        opening: 'An eternal capital',
-        chapter1: 'The rivers embrace Chang’an',
-      },
+      props,
       editables: result.editables,
     })).toEqual(result);
   });
@@ -558,5 +566,332 @@ describe('Editable Manifest compiler', () => {
     expect(result.diagnostics).toEqual([
       'JSX host <h1> renders multiple editable props (first, last). Wrap each value in its own element or add an explicit data-editable host.',
     ]);
+  });
+
+  it('auto-lifts direct JSX literals and const strings into editable props', () => {
+    const props: Record<string, unknown> = {};
+    const result = compileEditableManifest({
+      code: `
+        const EYEBROW = 'HISTORY / 01';
+        function Composition(props) {
+          return (
+            <div>
+              <h1>Chang'an</h1>
+              <p>{EYEBROW}</p>
+            </div>
+          );
+        }
+      `,
+      props,
+    });
+
+    expect(result.diagnostics).toEqual([]);
+    expect(result.editables).toEqual([
+      {
+        id: 'compositionTitle',
+        type: 'text',
+        label: 'Composition title',
+        propKey: 'compositionTitle',
+        source: 'literal',
+      },
+      {
+        id: 'compositionParagraph',
+        type: 'text',
+        label: 'Composition paragraph',
+        propKey: 'compositionParagraph',
+        source: 'literal',
+      },
+    ]);
+    expect(props).toMatchObject({
+      compositionTitle: "Chang'an",
+      compositionParagraph: 'HISTORY / 01',
+    });
+    expect(result.coverage).toEqual({
+      visibleSinks: 2,
+      editable: 2,
+      ignored: 0,
+      unsupported: [],
+    });
+  });
+
+  it('auto-lifts hardcoded text from rendered scene data arrays', () => {
+    const props: Record<string, unknown> = {};
+    const result = compileEditableManifest({
+      code: `
+        const scenes = [
+          { id: 'opening', title: 'The rivers embrace Chang’an' },
+          { id: 'silk-road', title: 'The world meets here' },
+        ];
+        function Composition(props) {
+          return (
+            <div>
+              {scenes.map(scene => <h2 key={scene.id}>{scene.title}</h2>)}
+            </div>
+          );
+        }
+      `,
+      props,
+    });
+
+    expect(result.diagnostics).toEqual([]);
+    expect(result.editables).toEqual([
+      {
+        id: 'openingTitle',
+        type: 'text',
+        label: 'Opening title',
+        propKey: 'openingTitle',
+        source: 'literal',
+      },
+      {
+        id: 'silkRoadTitle',
+        type: 'text',
+        label: 'Silk road title',
+        propKey: 'silkRoadTitle',
+        source: 'literal',
+      },
+    ]);
+    expect(props).toMatchObject({
+      openingTitle: 'The rivers embrace Chang’an',
+      silkRoadTitle: 'The world meets here',
+    });
+    expect(result.code).toContain(
+      'data-editable={scene.__makaronEditable_title}',
+    );
+    expect(result.code).toContain(
+      '__makaronEditable_title: "openingTitle"',
+    );
+    expect(result.code).toContain(
+      '__makaronEditable_title: "silkRoadTitle"',
+    );
+  });
+
+  it('supports an explicit ignore for intentionally fixed UI chrome', () => {
+    const props: Record<string, unknown> = {};
+    const result = compileEditableManifest({
+      code: `
+        function Composition(props) {
+          return <small data-editable-ignore>00:30</small>;
+        }
+      `,
+      props,
+    });
+
+    expect(result.diagnostics).toEqual([]);
+    expect(result.editables).toEqual([]);
+    expect(props).toEqual({});
+    expect(result.coverage).toEqual({
+      visibleSinks: 1,
+      editable: 0,
+      ignored: 1,
+      unsupported: [],
+    });
+  });
+
+  it('auto-lifts literal branches from runtime conditional text', () => {
+    const props: Record<string, unknown> = {};
+    const first = compileEditableManifest({
+      code: `
+        function Scene({ phase }) {
+          return <span>{phase === 0 ? 'DAWN' : phase === 1 ? 'NOON' : 'NIGHT'}</span>;
+        }
+        function Composition(props) {
+          return <Scene phase={1} />;
+        }
+      `,
+      props,
+    });
+
+    expect(first.diagnostics).toEqual([]);
+    expect(first.editables).toEqual([
+      {
+        id: 'sceneText',
+        type: 'text',
+        label: 'Scene text',
+        propKey: 'sceneText',
+        source: 'literal',
+      },
+      {
+        id: 'sceneText2',
+        type: 'text',
+        label: 'Scene text 2',
+        propKey: 'sceneText2',
+        source: 'literal',
+      },
+      {
+        id: 'sceneText3',
+        type: 'text',
+        label: 'Scene text 3',
+        propKey: 'sceneText3',
+        source: 'literal',
+      },
+    ]);
+    expect(props).toMatchObject({
+      sceneText: 'DAWN',
+      sceneText2: 'NOON',
+      sceneText3: 'NIGHT',
+    });
+    expect(first.code).toContain(
+      'data-editable={phase === 0 ? "sceneText" : phase === 1 ? "sceneText2" : "sceneText3"}',
+    );
+    expect(compileEditableManifest({
+      code: first.code,
+      props,
+      editables: first.editables,
+    })).toEqual(first);
+  });
+
+  it('auto-lifts primitive labels rendered through map', () => {
+    const props: Record<string, unknown> = {};
+    const first = compileEditableManifest({
+      code: `
+        const featureLabels = ['Fast', 'Editable', 'Exportable'];
+        function Composition(props) {
+          return (
+            <div>
+              {featureLabels.map((label, index) => <span key={label}>{label}</span>)}
+            </div>
+          );
+        }
+      `,
+      props,
+    });
+
+    expect(first.diagnostics).toEqual([]);
+    expect(first.editables.map(field => field.id)).toEqual([
+      'featureLabel1',
+      'featureLabel2',
+      'featureLabel3',
+    ]);
+    expect(props).toMatchObject({
+      featureLabel1: 'Fast',
+      featureLabel2: 'Editable',
+      featureLabel3: 'Exportable',
+    });
+    expect(first.code).toContain(
+      'data-editable={index === 0 ? "featureLabel1" : index === 1 ? "featureLabel2" : "featureLabel3"}',
+    );
+    expect(compileEditableManifest({
+      code: first.code,
+      props,
+      editables: first.editables,
+    })).toEqual(first);
+  });
+
+  it('auto-lifts primitive labels from a props collection', () => {
+    const props: Record<string, unknown> = {
+      labels: ['One', 'Two'],
+    };
+    const result = compileEditableManifest({
+      code: `
+        function Composition(props) {
+          return (
+            <div>
+              {props.labels.map((label, index) => <small>{label}</small>)}
+            </div>
+          );
+        }
+      `,
+      props,
+    });
+
+    expect(result.diagnostics).toEqual([]);
+    expect(result.editables.map(field => field.id)).toEqual([
+      'label1',
+      'label2',
+    ]);
+    expect(props).toMatchObject({
+      label1: 'One',
+      label2: 'Two',
+    });
+  });
+
+  it('does not count children layout wrappers as visible text sinks', () => {
+    const props: Record<string, unknown> = {
+      title: 'Visible title',
+    };
+    const result = compileEditableManifest({
+      code: `
+        function SceneShell({ children }) {
+          return <div style={{ position: 'absolute' }}>{children}</div>;
+        }
+        function Composition(props) {
+          return <SceneShell><h1>{props.title}</h1></SceneShell>;
+        }
+      `,
+      props,
+    });
+
+    expect(result.diagnostics).toEqual([]);
+    expect(result.editables.map(field => field.id)).toEqual(['title']);
+    expect(result.coverage).toEqual({
+      visibleSinks: 1,
+      editable: 1,
+      ignored: 0,
+      unsupported: [],
+    });
+  });
+
+  it('does not count visible leaves inside an unused helper', () => {
+    const props: Record<string, unknown> = {
+      title: 'Visible title',
+    };
+    const result = compileEditableManifest({
+      code: `
+        function UnusedLabel({ text }) {
+          return <div>{text}</div>;
+        }
+        function Composition(props) {
+          return <h1>{props.title}</h1>;
+        }
+      `,
+      props,
+    });
+
+    expect(result.diagnostics).toEqual([]);
+    expect(result.editables.map(field => field.id)).toEqual(['title']);
+    expect(result.coverage).toEqual({
+      visibleSinks: 1,
+      editable: 1,
+      ignored: 0,
+      unsupported: [],
+    });
+  });
+
+  it('keeps a complete legacy manifest without forcing helper rewrites', () => {
+    const props: Record<string, unknown> = {
+      title: 'Legacy title',
+    };
+    const editables = [{
+      id: 'title',
+      type: 'text' as const,
+      label: 'Title',
+      propKey: 'title',
+    }];
+    const result = compileEditableManifest({
+      code: `
+        function BigText({ id, value }) {
+          return <div data-editable={id}>{value}</div>;
+        }
+        function Scene({ p, alternate }) {
+          const id = alternate ? 'otherTitle' : 'title';
+          const value = alternate ? p.otherTitle : p.title;
+          return <BigText id={id} value={value} />;
+        }
+        function Composition(props) {
+          return (
+            <>
+              <BigText id="title" value={props.title} />
+              <Scene p={props} alternate={false} />
+            </>
+          );
+        }
+      `,
+      props,
+      editables,
+    });
+
+    expect(result.diagnostics).toEqual([]);
+    expect(result.editables).toEqual(editables);
+    expect(result.coverage.unsupported).toEqual([]);
   });
 });

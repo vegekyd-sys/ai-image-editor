@@ -22,6 +22,14 @@ export interface EditableManifestResult {
   code: string;
   editables: EditableField[];
   diagnostics: string[];
+  coverage: EditableCoverage;
+}
+
+export interface EditableCoverage {
+  visibleSinks: number;
+  editable: number;
+  ignored: number;
+  unsupported: string[];
 }
 
 interface Candidate {
@@ -29,6 +37,7 @@ interface Candidate {
   type: EditableType;
   staticIds: string[];
   propKeyById: Map<string, string>;
+  sourceById?: Map<string, EditableField['source']>;
   instrumentId?: string;
 }
 
@@ -73,6 +82,8 @@ interface NaturalResolvedUsage {
   opening: JSXOpeningElement;
   markerParam: string;
   propKey: string;
+  source?: EditableField['source'];
+  literalValue?: string;
   edges: NaturalPropagationEdge[];
 }
 
@@ -105,6 +116,179 @@ function humanizeId(id: string): string {
     .replace(/([A-Za-z])(\d+)$/g, '$1 $2')
     .trim();
   return spaced ? spaced[0].toUpperCase() + spaced.slice(1) : id;
+}
+
+function staticStringAttributeValue(attribute: JSXAttribute | null): string | null {
+  if (!attribute?.value) return null;
+  if (attribute.value.type === 'StringLiteral') return attribute.value.value;
+  const expression = expressionFromAttribute(attribute);
+  if (expression?.type === 'StringLiteral') return expression.value;
+  if (
+    expression?.type === 'TemplateLiteral'
+    && expression.expressions.length === 0
+  ) {
+    return expression.quasis[0]?.value.cooked ?? null;
+  }
+  return null;
+}
+
+function staticTextExpressionValue(
+  path: NodePath,
+  expression: Node | null | undefined,
+): string | null {
+  if (!expression) return null;
+  if (expression.type === 'StringLiteral') return expression.value;
+  if (
+    expression.type === 'TemplateLiteral'
+    && expression.expressions.length === 0
+  ) {
+    return expression.quasis[0]?.value.cooked ?? null;
+  }
+  if (expression.type !== 'Identifier') return null;
+  const binding = path.scope.getBinding(expression.name);
+  if (
+    !binding
+    || !binding.constant
+    || !binding.path.isVariableDeclarator()
+  ) {
+    return null;
+  }
+  const initializer = binding.path.node.init;
+  if (initializer?.type === 'StringLiteral') return initializer.value;
+  if (
+    initializer?.type === 'TemplateLiteral'
+    && initializer.expressions.length === 0
+  ) {
+    return initializer.quasis[0]?.value.cooked ?? null;
+  }
+  return null;
+}
+
+function directStaticTextValue(path: NodePath<JSXElement>): string | null {
+  const parts: string[] = [];
+  for (const child of path.node.children) {
+    if (child.type === 'JSXText') {
+      const value = child.value.replace(/\s+/g, ' ').trim();
+      if (value) parts.push(value);
+      continue;
+    }
+    if (child.type === 'JSXExpressionContainer') {
+      const value = staticTextExpressionValue(path, child.expression);
+      if (value?.trim()) {
+        parts.push(value.trim());
+        continue;
+      }
+      if (child.expression.type === 'JSXEmptyExpression') continue;
+    }
+    return null;
+  }
+  return parts.length > 0 ? parts.join(' ') : null;
+}
+
+function conditionalLiteralLeaves(
+  node: Node | null | undefined,
+): Array<{ node: Node; value: string }> | null {
+  if (!node) return null;
+  if (node.type === 'StringLiteral') return [{ node, value: node.value }];
+  if (
+    node.type === 'TemplateLiteral'
+    && node.expressions.length === 0
+  ) {
+    return [{
+      node,
+      value: node.quasis[0]?.value.cooked ?? '',
+    }];
+  }
+  if (node.type !== 'ConditionalExpression') return null;
+  const consequent = conditionalLiteralLeaves(node.consequent);
+  const alternate = conditionalLiteralLeaves(node.alternate);
+  return consequent && alternate ? [...consequent, ...alternate] : null;
+}
+
+function staticEditableIdsFromExpression(node: Node | null | undefined): string[] {
+  if (!node) return [];
+  if (node.type === 'StringLiteral') return [node.value];
+  if (
+    node.type === 'TemplateLiteral'
+    && node.expressions.length === 0
+  ) {
+    const value = node.quasis[0]?.value.cooked;
+    return value ? [value] : [];
+  }
+  if (node.type === 'ConditionalExpression') {
+    return [
+      ...staticEditableIdsFromExpression(node.consequent),
+      ...staticEditableIdsFromExpression(node.alternate),
+    ];
+  }
+  return [];
+}
+
+function hasDirectTextLikeChild(element: JSXElement): boolean {
+  return element.children.some(child => {
+    if (child.type === 'JSXText') return Boolean(child.value.trim());
+    if (child.type !== 'JSXExpressionContainer') return false;
+    return [
+      'Identifier',
+      'MemberExpression',
+      'StringLiteral',
+      'TemplateLiteral',
+      'NumericLiteral',
+      'BinaryExpression',
+      'ConditionalExpression',
+    ].includes(child.expression.type);
+  });
+}
+
+function isChildrenPassThrough(path: NodePath<JSXElement>): boolean {
+  const meaningful = path.node.children.filter(child =>
+    child.type !== 'JSXText' || Boolean(child.value.trim())
+  );
+  if (
+    meaningful.length !== 1
+    || meaningful[0].type !== 'JSXExpressionContainer'
+    || meaningful[0].expression.type !== 'Identifier'
+    || meaningful[0].expression.name !== 'children'
+  ) {
+    return false;
+  }
+  return path.scope.getBinding('children')?.kind === 'param';
+}
+
+function generatedTextStem(name: string): string {
+  if (/^h[1-6]$/.test(name)) return name === 'h1' ? 'Title' : 'Heading';
+  if (name === 'p') return 'Paragraph';
+  if (name === 'label') return 'Label';
+  if (name === 'small') return 'Caption';
+  if (name === 'blockquote') return 'Quote';
+  return 'Text';
+}
+
+function lowerCamel(value: string): string {
+  return value.length > 0
+    ? `${value[0].toLowerCase()}${value.slice(1)}`
+    : value;
+}
+
+function semanticParamName(value: string): string {
+  if (value === 'sub') return 'Subtitle';
+  if (value === 'desc') return 'Description';
+  return `${value[0]?.toUpperCase() ?? ''}${value.slice(1)}`;
+}
+
+function identifierFragment(value: string): string {
+  const words = value
+    .normalize('NFKD')
+    .replace(/[^\w$]+/g, ' ')
+    .trim()
+    .split(/\s+/)
+    .filter(Boolean);
+  if (words.length === 0) return '';
+  return lowerCamel(
+    words
+      .map(word => `${word[0]?.toUpperCase() ?? ''}${word.slice(1)}`)
+      .join(''),
+  );
 }
 
 function staticPropKey(node: Node | null | undefined): string | null {
@@ -370,6 +554,7 @@ function naturalComponentHost(
   path: NodePath<JSXElement>,
 ): NaturalComponentHost | null {
   const opening = path.node.openingElement;
+  if (namedAttribute(opening, 'data-editable-ignore')) return null;
   const editableAttribute = dataEditableAttribute(opening);
   const editableExpression = editableAttribute
     ? expressionFromAttribute(editableAttribute)
@@ -640,6 +825,9 @@ function addCandidateFields(
       type: candidate.type,
       label: humanizeId(id),
       propKey: candidate.propKeyById.get(id) ?? id,
+      ...(candidate.sourceById?.get(id)
+        ? { source: candidate.sourceById.get(id) }
+        : {}),
     });
     seen.add(id);
   }
@@ -663,6 +851,12 @@ export function compileEditableManifest({
       diagnostics: [
         `Editable Manifest compile failed: ${error instanceof Error ? error.message : String(error)}`,
       ],
+      coverage: {
+        visibleSinks: 0,
+        editable: editables?.length ?? 0,
+        ignored: 0,
+        unsupported: ['Composition syntax could not be analyzed.'],
+      },
     };
   }
 
@@ -703,6 +897,522 @@ export function compileEditableManifest({
       naturalCallsByComponent.set(componentName, calls);
     },
   });
+  const isUnrenderedHelper = (path: NodePath<JSXElement>): boolean => {
+    const componentName = componentFunctionName(path);
+    return Boolean(
+      componentName
+      && componentName !== 'Composition'
+      && componentName !== 'Design'
+      && !naturalCallsByComponent.has(componentName),
+    );
+  };
+
+  const reservedIds = new Set([
+    ...Object.keys(props ?? {}),
+    ...(editables ?? []).map(field => field.id),
+  ]);
+  const literalIdsByUsage = new Map<string, string>();
+  const generatedStemCounts = new Map<string, number>();
+  const claimGeneratedTextId = (
+    path: NodePath<JSXElement>,
+    name: string,
+  ): string => {
+    const owner = lowerCamel(componentFunctionName(path) ?? 'composition');
+    const stem = `${owner}${generatedTextStem(name)}`;
+    const nextCount = (generatedStemCounts.get(stem) ?? 0) + 1;
+    generatedStemCounts.set(stem, nextCount);
+    const rawBase = nextCount === 1 ? stem : `${stem}${nextCount}`;
+    let id = rawBase;
+    let suffix = 2;
+    while (reservedIds.has(id)) {
+      id = `${rawBase}${suffix}`;
+      suffix++;
+    }
+    reservedIds.add(id);
+    return id;
+  };
+  const claimReservedId = (rawBase: string): string => {
+    const base = identifierFragment(rawBase) || 'editableText';
+    let id = base;
+    let suffix = 2;
+    while (reservedIds.has(id)) {
+      id = `${base}${suffix}`;
+      suffix++;
+    }
+    reservedIds.add(id);
+    return id;
+  };
+  const resolveStaticCollectionText = (
+    path: NodePath<JSXElement>,
+    expression: MemberExpression,
+  ): Candidate | null => {
+    if (
+      expression.object.type !== 'Identifier'
+      || expression.computed
+      || expression.property.type !== 'Identifier'
+      || !props
+    ) {
+      return null;
+    }
+    let arrayName = 'items';
+    let arrayExpression: Node | null = null;
+    const resolveArrayBinding = (name: string): Node | null => {
+      const binding = path.scope.getBinding(name);
+      if (
+        binding?.constant
+        && binding.path.isVariableDeclarator()
+        && binding.path.node.init?.type === 'ArrayExpression'
+      ) {
+        arrayName = name;
+        return binding.path.node.init;
+      }
+      return null;
+    };
+    const sourceCollectionName = (node: Node | null | undefined): string | null => {
+      if (!node) return null;
+      if (
+        node.type === 'CallExpression'
+        && node.callee.type === 'MemberExpression'
+        && node.callee.object.type === 'Identifier'
+        && node.callee.property.type === 'Identifier'
+        && ['find', 'filter', 'at'].includes(node.callee.property.name)
+      ) {
+        return node.callee.object.name;
+      }
+      if (node.type === 'MemberExpression' && node.object.type === 'Identifier') {
+        return node.object.name;
+      }
+      if (node.type === 'LogicalExpression') {
+        return sourceCollectionName(node.left) ?? sourceCollectionName(node.right);
+      }
+      if (node.type === 'ConditionalExpression') {
+        return sourceCollectionName(node.consequent)
+          ?? sourceCollectionName(node.alternate);
+      }
+      return null;
+    };
+
+    const functionPath = path.getFunctionParent();
+    const isMapItem = (
+      functionPath?.isArrowFunctionExpression()
+      && functionPath.node.params[0]?.type === 'Identifier'
+      && functionPath.node.params[0].name === expression.object.name
+      && functionPath.parentPath?.isCallExpression()
+    );
+    if (isMapItem && functionPath?.parentPath?.isCallExpression()) {
+      const callee = functionPath.parentPath.node.callee;
+      if (
+        callee.type === 'MemberExpression'
+        && !callee.computed
+        && callee.property.type === 'Identifier'
+        && callee.property.name === 'map'
+      ) {
+        if (callee.object.type === 'ArrayExpression') {
+          arrayExpression = callee.object;
+        } else if (callee.object.type === 'Identifier') {
+          arrayExpression = resolveArrayBinding(callee.object.name);
+        }
+      }
+    }
+    if (!arrayExpression) {
+      const itemBinding = path.scope.getBinding(expression.object.name);
+      const initializer = itemBinding?.constant
+        && itemBinding.path.isVariableDeclarator()
+        ? itemBinding.path.node.init
+        : null;
+      const sourceName = sourceCollectionName(initializer);
+      if (sourceName) arrayExpression = resolveArrayBinding(sourceName);
+    }
+    if (!arrayExpression || arrayExpression.type !== 'ArrayExpression') return null;
+
+    const valueProperty = expression.property.name;
+    const markerProperty = `__makaronEditable_${valueProperty.replace(/[^\w$]/g, '_')}`;
+    const ids: string[] = [];
+    for (const [index, item] of arrayExpression.elements.entries()) {
+      if (!item || item.type !== 'ObjectExpression') return null;
+      const propertyByName = (name: string) => item.properties.find(property => {
+        if (property.type !== 'ObjectProperty' || property.computed) return false;
+        return (
+          (property.key.type === 'Identifier' && property.key.name === name)
+          || (property.key.type === 'StringLiteral' && property.key.value === name)
+        );
+      });
+      const valueNode = propertyByName(valueProperty);
+      if (!valueNode || valueNode.type !== 'ObjectProperty') return null;
+      const literalValue = staticTextExpressionValue(path, valueNode.value);
+      if (!literalValue?.trim()) return null;
+
+      const existingMarker = propertyByName(markerProperty);
+      const existingId = existingMarker?.type === 'ObjectProperty'
+        && existingMarker.value.type === 'StringLiteral'
+        ? existingMarker.value.value
+        : null;
+      const stableKeyNode = propertyByName('id') ?? propertyByName('key');
+      const stableKey = stableKeyNode?.type === 'ObjectProperty'
+        ? staticTextExpressionValue(path, stableKeyNode.value)
+        : null;
+      const singular = arrayName.replace(/(?:ies|s)$/i, match =>
+        match.toLowerCase() === 'ies' ? 'y' : ''
+      ) || 'item';
+      const owner = stableKey
+        ? identifierFragment(stableKey)
+        : `${identifierFragment(singular) || 'item'}${index + 1}`;
+      const generatedId = existingId ?? claimReservedId(
+        `${owner}${semanticParamName(valueProperty)}`,
+      );
+      reservedIds.add(generatedId);
+      ids.push(generatedId);
+      if (props[generatedId] === undefined) props[generatedId] = literalValue;
+      if (!existingMarker && item.end != null) {
+        insertions.push({
+          offset: item.end - 1,
+          text: `${item.properties.length > 0 ? ', ' : ''}${markerProperty}: ${JSON.stringify(generatedId)}`,
+        });
+      }
+    }
+    if (ids.length === 0) return null;
+    const markerExpression = `${expression.object.name}.${markerProperty}`;
+    const markerInsertion = expressionInsertionFor(
+      path.node.openingElement,
+      'data-editable',
+      markerExpression,
+    );
+    if (markerInsertion) insertions.push(markerInsertion);
+    return {
+      opening: path.node.openingElement,
+      type: 'text',
+      staticIds: ids,
+      propKeyById: new Map(ids.map(id => [id, id])),
+      sourceById: new Map(ids.map(id => [id, 'literal'])),
+    };
+  };
+  const resolveRuntimeCollectionText = (
+    path: NodePath<JSXElement>,
+    expression: MemberExpression,
+  ): Candidate | null => {
+    if (
+      expression.object.type !== 'Identifier'
+      || expression.computed
+      || expression.property.type !== 'Identifier'
+      || !props
+    ) {
+      return null;
+    }
+    const itemParamName = expression.object.name;
+    const collectionKeyFromMap = (
+      functionPath: NodePath | null,
+      itemName: string,
+    ): string | null => {
+      if (
+        !functionPath?.isArrowFunctionExpression()
+        || functionPath.node.params[0]?.type !== 'Identifier'
+        || functionPath.node.params[0].name !== itemName
+        || !functionPath.parentPath?.isCallExpression()
+      ) {
+        return null;
+      }
+      const callee = functionPath.parentPath.node.callee;
+      if (
+        callee.type !== 'MemberExpression'
+        || callee.computed
+        || callee.property.type !== 'Identifier'
+        || callee.property.name !== 'map'
+      ) {
+        return null;
+      }
+      return staticPropKey(callee.object);
+    };
+
+    let collectionKey = collectionKeyFromMap(
+      path.getFunctionParent(),
+      itemParamName,
+    );
+    if (!collectionKey) {
+      const helperName = componentFunctionName(path);
+      if (helperName) {
+        traverse(ast, {
+          JSXOpeningElement(callPath) {
+            if (collectionKey || jsxName(callPath.node) !== helperName) return;
+            const itemAttribute = namedAttribute(
+              callPath.node,
+              itemParamName,
+            );
+            const itemExpression = expressionFromAttribute(itemAttribute);
+            if (itemExpression?.type !== 'Identifier') return;
+            collectionKey = collectionKeyFromMap(
+              callPath.getFunctionParent(),
+              itemExpression.name,
+            );
+          },
+        });
+      }
+    }
+    const originalItems = collectionKey ? props[collectionKey] : null;
+    if (
+      !collectionKey
+      || !Array.isArray(originalItems)
+      || !originalItems.every(item => item && typeof item === 'object' && !Array.isArray(item))
+    ) {
+      return null;
+    }
+    const resolvedCollectionKey = collectionKey;
+    const valueProperty = expression.property.name;
+    const markerProperty = `__makaronEditable_${valueProperty.replace(/[^\w$]/g, '_')}`;
+    const ids: string[] = [];
+    const nextItems = originalItems.map((item, index) => {
+      const record = item as Record<string, unknown>;
+      const literalValue = record[valueProperty];
+      if (typeof literalValue !== 'string' && typeof literalValue !== 'number') {
+        return null;
+      }
+      const stableKey = typeof record.id === 'string'
+        ? record.id
+        : typeof record.key === 'string'
+          ? record.key
+          : null;
+      const singular = resolvedCollectionKey.replace(/(?:ies|s)$/i, match =>
+        match.toLowerCase() === 'ies' ? 'y' : ''
+      ) || 'item';
+      const owner = stableKey
+        ? identifierFragment(stableKey)
+        : `${identifierFragment(singular) || 'item'}${index + 1}`;
+      const existingId = typeof record[markerProperty] === 'string'
+        ? record[markerProperty] as string
+        : null;
+      const id = existingId ?? claimReservedId(
+        `${owner}${semanticParamName(valueProperty)}`,
+      );
+      reservedIds.add(id);
+      ids.push(id);
+      if (props[id] === undefined) props[id] = literalValue;
+      return { ...record, [markerProperty]: id };
+    });
+    if (nextItems.some(item => item === null) || ids.length === 0) return null;
+    props[resolvedCollectionKey] = nextItems;
+    const markerExpression = `${expression.object.name}.${markerProperty}`;
+    const markerInsertion = expressionInsertionFor(
+      path.node.openingElement,
+      'data-editable',
+      markerExpression,
+    );
+    if (markerInsertion) insertions.push(markerInsertion);
+    return {
+      opening: path.node.openingElement,
+      type: 'text',
+      staticIds: ids,
+      propKeyById: new Map(ids.map(id => [id, id])),
+      sourceById: new Map(ids.map(id => [id, 'literal'])),
+    };
+  };
+  const resolveStaticIndexedText = (
+    path: NodePath<JSXElement>,
+    expression: MemberExpression,
+  ): Candidate | null => {
+    if (
+      expression.object.type !== 'Identifier'
+      || !expression.computed
+      || expression.property.type !== 'NumericLiteral'
+      || !Number.isInteger(expression.property.value)
+      || !props
+    ) {
+      return null;
+    }
+    const binding = path.scope.getBinding(expression.object.name);
+    if (
+      !binding?.constant
+      || !binding.path.isVariableDeclarator()
+      || binding.path.node.init?.type !== 'ArrayExpression'
+    ) {
+      return null;
+    }
+    const index = expression.property.value;
+    const element = binding.path.node.init.elements[index];
+    const value = staticTextExpressionValue(path, element);
+    if (!value?.trim()) return null;
+    const singular = expression.object.name.replace(/(?:ies|s)$/i, match =>
+      match.toLowerCase() === 'ies' ? 'y' : ''
+    ) || 'item';
+    const id = claimReservedId(`${singular}${index + 1}Text`);
+    if (props[id] === undefined) props[id] = value;
+    const insertion = insertionFor(path.node.openingElement, id);
+    if (insertion) insertions.push(insertion);
+    return {
+      opening: path.node.openingElement,
+      type: 'text',
+      staticIds: [id],
+      propKeyById: new Map([[id, id]]),
+      sourceById: new Map([[id, 'literal']]),
+    };
+  };
+  const resolvePrimitiveMapText = (
+    path: NodePath<JSXElement>,
+    expression: Node,
+  ): Candidate | null => {
+    if (expression.type !== 'Identifier' || !props) return null;
+    const functionPath = path.getFunctionParent();
+    if (
+      !functionPath?.isArrowFunctionExpression()
+      || functionPath.node.params[0]?.type !== 'Identifier'
+      || functionPath.node.params[0].name !== expression.name
+      || functionPath.node.params[1]?.type !== 'Identifier'
+      || !functionPath.parentPath?.isCallExpression()
+    ) {
+      return null;
+    }
+    const indexName = functionPath.node.params[1].name;
+    const callee = functionPath.parentPath.node.callee;
+    if (
+      callee.type !== 'MemberExpression'
+      || callee.computed
+      || callee.property.type !== 'Identifier'
+      || callee.property.name !== 'map'
+    ) {
+      return null;
+    }
+
+    let collectionName = 'items';
+    let values: unknown[] | null = null;
+    if (callee.object.type === 'ArrayExpression') {
+      values = callee.object.elements.map(element =>
+        staticTextExpressionValue(path, element)
+      );
+    } else if (callee.object.type === 'Identifier') {
+      collectionName = callee.object.name;
+      const binding = path.scope.getBinding(collectionName);
+      if (
+        binding?.constant
+        && binding.path.isVariableDeclarator()
+        && binding.path.node.init?.type === 'ArrayExpression'
+      ) {
+        values = binding.path.node.init.elements.map(element =>
+          staticTextExpressionValue(path, element)
+        );
+      }
+    } else {
+      const propKey = staticPropKey(callee.object);
+      const propValues = propKey ? props[propKey] : null;
+      if (propKey && Array.isArray(propValues)) {
+        collectionName = propKey;
+        values = propValues;
+      }
+    }
+    if (
+      !values
+      || values.length === 0
+      || !values.every(value =>
+        (typeof value === 'string' && value.trim().length > 0)
+        || typeof value === 'number'
+      )
+    ) {
+      return null;
+    }
+
+    const singular = collectionName.replace(/(?:ies|s)$/i, match =>
+      match.toLowerCase() === 'ies' ? 'y' : ''
+    ) || expression.name || 'item';
+    const ids = values.map((value, index) => {
+      const id = claimReservedId(`${singular}${index + 1}`);
+      if (props[id] === undefined) props[id] = value;
+      return id;
+    });
+    const markerExpression = ids.reduceRight(
+      (alternate, id, index) =>
+        index === ids.length - 1
+          ? JSON.stringify(id)
+          : `${indexName} === ${index} ? ${JSON.stringify(id)} : ${alternate}`,
+      JSON.stringify(ids[ids.length - 1]),
+    );
+    const insertion = expressionInsertionFor(
+      path.node.openingElement,
+      'data-editable',
+      markerExpression,
+    );
+    if (insertion) insertions.push(insertion);
+    return {
+      opening: path.node.openingElement,
+      type: 'text',
+      staticIds: ids,
+      propKeyById: new Map(ids.map(id => [id, id])),
+      sourceById: new Map(ids.map(id => [id, 'literal'])),
+    };
+  };
+  const resolveConditionalLiteralText = (
+    path: NodePath<JSXElement>,
+    expression: Node,
+  ): Candidate | null => {
+    if (expression.type !== 'ConditionalExpression' || !props) return null;
+    const leaves = conditionalLiteralLeaves(expression);
+    if (!leaves?.length || leaves.some(leaf => !leaf.value.trim())) return null;
+    const ids = leaves.map(() =>
+      claimGeneratedTextId(path, jsxName(path.node.openingElement))
+    );
+    leaves.forEach((leaf, index) => {
+      if (props[ids[index]] === undefined) props[ids[index]] = leaf.value;
+    });
+    const idByNode = new Map(leaves.map((leaf, index) => [leaf.node, ids[index]]));
+    const markerSource = (node: Node): string | null => {
+      const id = idByNode.get(node);
+      if (id) return JSON.stringify(id);
+      if (
+        node.type !== 'ConditionalExpression'
+        || node.test.start == null
+        || node.test.end == null
+      ) {
+        return null;
+      }
+      const consequent = markerSource(node.consequent);
+      const alternate = markerSource(node.alternate);
+      if (!consequent || !alternate) return null;
+      const condition = code.slice(node.test.start, node.test.end);
+      return `${condition} ? ${consequent} : ${alternate}`;
+    };
+    const markerExpression = markerSource(expression);
+    if (!markerExpression) return null;
+    const insertion = expressionInsertionFor(
+      path.node.openingElement,
+      'data-editable',
+      markerExpression,
+    );
+    if (insertion) insertions.push(insertion);
+    return {
+      opening: path.node.openingElement,
+      type: 'text',
+      staticIds: ids,
+      propKeyById: new Map(ids.map(id => [id, id])),
+      sourceById: new Map(ids.map(id => [id, 'literal'])),
+    };
+  };
+  const claimLiteralId = (
+    call: NaturalComponentCall,
+    valueParam: string,
+    markerParam: string,
+  ): string => {
+    const existingId = staticEditableId(namedAttribute(call.opening, markerParam));
+    if (existingId) {
+      reservedIds.add(existingId);
+      return existingId;
+    }
+    const usageKey = `${call.opening.start}:${valueParam}`;
+    const claimed = literalIdsByUsage.get(usageKey);
+    if (claimed) return claimed;
+
+    const ownerName = call.parentComponentName === 'Composition'
+      ? valueParam
+      : lowerCamel(call.parentComponentName ?? valueParam);
+    const rawBase = call.parentComponentName === 'Composition'
+      ? lowerCamel(valueParam)
+      : `${ownerName}${semanticParamName(valueParam)}`;
+    const base = rawBase || 'editableText';
+    let id = base;
+    let suffix = 2;
+    while (reservedIds.has(id)) {
+      id = `${base}${suffix}`;
+      suffix++;
+    }
+    reservedIds.add(id);
+    literalIdsByUsage.set(usageKey, id);
+    return id;
+  };
 
   const resolveNaturalUsages = (
     host: NaturalComponentHost,
@@ -726,9 +1436,8 @@ export function compileEditableManifest({
       const state = queue.shift();
       if (!state) break;
       for (const call of naturalCallsByComponent.get(state.componentName) ?? []) {
-        const valueExpression = expressionFromAttribute(
-          namedAttribute(call.opening, state.valueParam),
-        );
+        const valueAttribute = namedAttribute(call.opening, state.valueParam);
+        const valueExpression = expressionFromAttribute(valueAttribute);
         const propKey = staticPropKey(valueExpression);
         if (
           propKey
@@ -738,6 +1447,24 @@ export function compileEditableManifest({
             opening: call.opening,
             markerParam: state.markerParam,
             propKey,
+            edges: state.edges,
+          });
+          continue;
+        }
+        const literalValue = staticStringAttributeValue(valueAttribute);
+        if (literalValue?.trim() && props) {
+          const literalId = claimLiteralId(
+            call,
+            state.valueParam,
+            state.markerParam,
+          );
+          if (props[literalId] === undefined) props[literalId] = literalValue;
+          resolved.push({
+            opening: call.opening,
+            markerParam: state.markerParam,
+            propKey: literalId,
+            source: 'literal',
+            literalValue,
             edges: state.edges,
           });
           continue;
@@ -877,6 +1604,11 @@ export function compileEditableManifest({
       type: host.type,
       staticIds: ids,
       propKeyById: new Map(ids.map(id => [id, id])),
+      sourceById: new Map(
+        usages
+          .filter(usage => usage.source)
+          .map(usage => [usage.propKey, usage.source]),
+      ),
     });
   }
   for (const [pattern, markers] of patternMarkers) {
@@ -904,18 +1636,20 @@ export function compileEditableManifest({
 
   traverse(ast, {
     JSXElement(path) {
+      if (isUnrenderedHelper(path)) return;
       const element = path.node;
       const opening = element.openingElement;
       const name = jsxName(opening);
       if (migratedNaturalOpenings.has(opening)) return;
       if (componentHostOpenings.has(opening)) return;
+      if (namedAttribute(opening, 'data-editable-ignore')) return;
       const matchingComponentHosts = componentHosts.get(name);
       if (matchingComponentHosts) {
         for (const componentHost of matchingComponentHosts) {
           const candidate = usageCandidate(opening, componentHost, ast, code, props);
           if (candidate) {
             candidates.push(candidate);
-          } else {
+          } else if (!editables?.length) {
             diagnostics.push(
               `Editable helper <${name}> must receive ${componentHost.idParam} and ${componentHost.valueParam} from the same top-level props key.`,
             );
@@ -925,6 +1659,7 @@ export function compileEditableManifest({
       }
       const explicitAttribute = dataEditableAttribute(opening);
       const explicitStaticId = staticEditableId(explicitAttribute);
+      const explicitExpressionNode = expressionFromAttribute(explicitAttribute);
       const explicitExpression = attributeExpressionSource(explicitAttribute, code);
       const mediaType = descendantMediaType(path);
       const directReads = directTextPropReads(element);
@@ -947,6 +1682,12 @@ export function compileEditableManifest({
               ?? explicitStaticId,
           );
         } else if (explicitExpression) {
+          for (const id of staticEditableIdsFromExpression(explicitExpressionNode)) {
+            if (!ids.includes(id)) {
+              ids.push(id);
+              propKeyById.set(id, id);
+            }
+          }
           const propertyName = dynamicPropertyName(explicitExpression);
           if (propertyName) {
             for (const id of collectDynamicIds(ast, propertyName, props)) {
@@ -1007,6 +1748,74 @@ export function compileEditableManifest({
         return;
       }
 
+      const directMember = element.children
+        .filter(child => child.type === 'JSXExpressionContainer')
+        .map(child => child.expression)
+        .find((expression): expression is MemberExpression =>
+          expression.type === 'MemberExpression'
+        );
+      if (directMember) {
+        const collectionCandidate = resolveRuntimeCollectionText(path, directMember)
+          ?? resolveStaticCollectionText(path, directMember)
+          ?? resolveStaticIndexedText(path, directMember);
+        if (collectionCandidate) {
+          candidates.push(collectionCandidate);
+          return;
+        }
+      }
+
+      const directIdentifier = element.children
+        .filter(child => child.type === 'JSXExpressionContainer')
+        .map(child => child.expression)
+        .find(expression => expression.type === 'Identifier');
+      if (directIdentifier) {
+        const primitiveMapCandidate = resolvePrimitiveMapText(path, directIdentifier);
+        if (primitiveMapCandidate) {
+          candidates.push(primitiveMapCandidate);
+          return;
+        }
+      }
+
+      const directConditional = element.children
+        .filter(child => child.type === 'JSXExpressionContainer')
+        .map(child => child.expression)
+        .find(expression => expression.type === 'ConditionalExpression');
+      if (directConditional) {
+        const conditionalCandidate = resolveConditionalLiteralText(
+          path,
+          directConditional,
+        );
+        if (conditionalCandidate) {
+          candidates.push(conditionalCandidate);
+          return;
+        }
+      }
+
+      const directLiteral = directStaticTextValue(path);
+      if (
+        directLiteral?.trim()
+        && props
+        && /^[a-z]/.test(name)
+        && !STRUCTURAL_TEXT_HOSTS.has(name)
+      ) {
+        const generatedId = claimGeneratedTextId(path, name);
+        if (props[generatedId] === undefined) props[generatedId] = directLiteral;
+        const insertion = insertionFor(opening, generatedId);
+        if (insertion) {
+          insertions.push(insertion);
+          insertedOpenings.add(opening);
+        }
+        candidates.push({
+          opening,
+          type: 'text',
+          staticIds: [generatedId],
+          propKeyById: new Map([[generatedId, generatedId]]),
+          sourceById: new Map([[generatedId, 'literal']]),
+          instrumentId: generatedId,
+        });
+        return;
+      }
+
       const ownMediaType = mediaTypeFromName(name);
       if (!ownMediaType) return;
       const sourceRead = mediaPropRead(opening);
@@ -1056,9 +1865,48 @@ export function compileEditableManifest({
       return aOrder - bOrder;
     });
   }
+  const ownedOpenings = new Set(candidates.map(candidate => candidate.opening));
+  const unsupported: string[] = [];
+  let ignored = 0;
+  traverse(ast, {
+    JSXElement(path) {
+      if (isUnrenderedHelper(path) || isChildrenPassThrough(path)) return;
+      const opening = path.node.openingElement;
+      const name = jsxName(opening);
+      if (!/^[a-z]/.test(name) || !hasDirectTextLikeChild(path.node)) return;
+      if (namedAttribute(opening, 'data-editable-ignore')) {
+        ignored++;
+        return;
+      }
+      if (ownedOpenings.has(opening) || dataEditableAttribute(opening)) return;
+      const editableAncestor = path.findParent(parent =>
+        parent.isJSXElement()
+        && (
+          Boolean(dataEditableAttribute(parent.node.openingElement))
+          || ownedOpenings.has(parent.node.openingElement)
+        )
+      );
+      if (editableAncestor) return;
+      const line = opening.loc?.start.line;
+      unsupported.push(
+        `<${name}>${line ? ` at line ${line}` : ''} has visible text that could not be assigned a stable editable id.`,
+      );
+    },
+  });
+  if (unsupported.length > 0 && diagnostics.length === 0) {
+    diagnostics.push(
+      `Editable coverage incomplete: ${unsupported.join(' ')}`,
+    );
+  }
   return {
     code: applyInsertions(code, insertions),
     editables: inferredFields,
     diagnostics: [...new Set(diagnostics)],
+    coverage: {
+      visibleSinks: inferredFields.length + ignored + unsupported.length,
+      editable: inferredFields.length,
+      ignored,
+      unsupported,
+    },
   };
 }

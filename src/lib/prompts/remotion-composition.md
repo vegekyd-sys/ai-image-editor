@@ -152,9 +152,10 @@ return (
 
 ## Editable Composition Contract
 
-Editable is the default for every composition. Keep user-facing values in
-`props`; the runtime infers the Editable Manifest and instruments ordinary JSX.
-Do not write an `editables` array for new work.
+Editable is the default for every composition. Write natural React; the runtime
+discovers visible text/media sinks, infers the Editable Manifest, and
+instruments ordinary JSX. Do not write an `editables` array or editor-specific
+IDs for new work.
 
 The common path is normal React:
 
@@ -171,11 +172,14 @@ function Composition(props) {
 ```
 
 Rules:
-- Put every user-facing title, subtitle, caption, badge, counter, stat, brand
-  line, CTA, and outro line in a top-level prop and render that prop in its own
-  semantic host element.
-- Put every primary image/video URL in its own top-level prop and render it
-  through `<Img src={props.imageKey}>` or `<Video src={props.videoKey}>`.
+- Prefer top-level props for intentional content/data APIs, primary media URLs,
+  and values that a later props-only patch should update.
+- Ordinary JSX literals, local const strings, static scene arrays,
+  primitive label arrays rendered with `.map`, `props.scenes` collections, and
+  values passed through reusable helper components are accepted. The compiler
+  promotes their visible leaves into stable editable props automatically.
+- Render each primary image/video through `<Img>` or `<Video>` with a real,
+  measurable visual box. Media prop reads are inferred automatically.
 - One host represents one logical text field. Do not render two different text
   props directly inside the same host.
 - Do not put visible text directly inside `<AbsoluteFill>` or `<Sequence>`; use
@@ -183,28 +187,13 @@ Rules:
 - Reusing a media URL is fine, but each independently movable layer needs its
   own prop key.
 - Keep decorative overlays non-interactive with `pointerEvents: 'none'`.
-- Keep hardcoded structural tokens and decorative marks out of props; keep all
-  user-facing copy in props.
-
-For a dynamic scene abstraction, use one explicit runtime-id escape hatch. The
-same key expression must select the prop and identify its visible host:
-
-```jsx
-const scenes = [
-  { titleKey: 'title0', imageKey: 'image0' },
-  { titleKey: 'title1', imageKey: 'image1' },
-];
-const scene = scenes[activeSceneIndex];
-
-return (
-  <AbsoluteFill>
-    <h1 data-editable={scene.titleKey}>{props[scene.titleKey]}</h1>
-    <div data-editable={scene.imageKey} style={{ width: 720, height: 900 }}>
-      <Img src={props[scene.imageKey]} style={{ width: '100%', height: '100%' }} />
-    </div>
-  </AbsoluteFill>
-);
-```
+- For intentionally non-editable visible UI chrome, use
+  `data-editable-ignore` on its semantic host. Do not use it to hide normal
+  titles, subtitles, captions, labels, stats, or brand copy from the editor.
+- If coverage reports a genuinely runtime-computed text sink it cannot
+  identify, move only that value to a prop or add one explicit
+  `data-editable` on its real visual host. Do not redesign the whole
+  composition around editor metadata.
 
 Ordinary reusable React components work without editor-specific parameters:
 
@@ -228,15 +217,15 @@ function Chapter({ year, title, description, image }) {
 />
 ```
 
-The compiler follows top-level prop values through helper parameters to their
-real text and media leaves. Name components for the composition, not for the
-editor; do not add `id`, `editableId`, or an `editables` array to ordinary
-helpers.
+The compiler follows prop values, literal values, and scene-record fields
+through helper parameters to their real text and media leaves. Name components
+for the composition, not for the editor; do not add `id`, `editableId`, marker
+props, or an `editables` array to ordinary helpers.
 
-Use `data-editable` only for custom/dynamic ownership that the compiler cannot
-infer from a direct prop read. Put it on the real visual host, never on a
-full-canvas structural ancestor. Legacy explicit `editables` metadata remains
-accepted when patching an old composition, but new output should omit it.
+Use `data-editable` only for custom runtime ownership that coverage explicitly
+cannot infer. Put it on the real visual host, never on a full-canvas structural
+ancestor. Legacy explicit `editables` metadata remains accepted when patching
+an old composition, but new output should omit it.
 
 Video trim is non-destructive and belongs to the selected video node:
 

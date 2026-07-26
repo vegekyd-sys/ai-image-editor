@@ -302,6 +302,28 @@ const _patchedCE = function(type: any, elProps: any, ...children: any[]) {
       ? children
       : React.Children.toArray(elProps.children);
     const ownsTransform = !hasSameIdEditableDescendant(renderedChildren, id);
+    const textOverride = _currentTransformProps[id];
+    const ownsTextLeaf = (
+      ownsTransform
+      && typeof type === 'string'
+      && renderedChildren.length > 0
+      && renderedChildren.every(child =>
+        child == null
+        || child === false
+        || typeof child === 'string'
+        || typeof child === 'number'
+      )
+    );
+    if (
+      ownsTextLeaf
+      && (typeof textOverride === 'string' || typeof textOverride === 'number')
+    ) {
+      if (children.length > 0) {
+        children = [textOverride];
+      } else {
+        elProps = { ...elProps, children: textOverride };
+      }
+    }
     const pos = _currentTransformProps[`_pos_${id}`] as { x: number; y: number } | undefined;
     const sc = _currentTransformProps[`_scale_${id}`] as { w: number; h: number } | undefined;
     const trimBefore = readFrameProp(`_trimBefore_${id}`);
