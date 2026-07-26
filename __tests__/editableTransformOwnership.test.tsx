@@ -16,21 +16,7 @@ const compositionCode = `
 `;
 
 describe('editable transform ownership', () => {
-  it('leaves live-player transforms to the scene registry', () => {
-    const Component = evalRemotionJSX(compositionCode, {
-      editableTransformMode: 'registry',
-    });
-    expect(Component).not.toBeNull();
-    if (!Component) throw new Error('Expected composition to compile');
-
-    const html = renderToStaticMarkup(
-      <Component title="Hello" _pos_title={{ x: 100, y: 50 }} />,
-    );
-
-    expect(html).not.toContain('translate:100px 50px');
-  });
-
-  it('does not apply transforms through the legacy React proxy', () => {
+  it('applies live-player transforms through the shared leaf owner', () => {
     const Component = evalRemotionJSX(compositionCode, {
       editableTransformMode: 'proxy',
     });
@@ -41,7 +27,44 @@ describe('editable transform ownership', () => {
       <Component title="Hello" _pos_title={{ x: 100, y: 50 }} />,
     );
 
-    expect(html).not.toContain('translate:100px 50px');
+    expect(html).toContain('translate:100px 50px');
+  });
+
+  it('keeps standalone export transforms on the same leaf owner', () => {
+    const Component = evalRemotionJSX(compositionCode, {
+      editableTransformMode: 'proxy',
+    });
+    expect(Component).not.toBeNull();
+    if (!Component) throw new Error('Expected composition to compile');
+
+    const html = renderToStaticMarkup(
+      <Component title="Hello" _pos_title={{ x: 100, y: 50 }} />,
+    );
+
+    expect(html).toContain('translate:100px 50px');
+  });
+
+  it('never transforms a same-id ancestor around the real helper leaf', () => {
+    const Component = evalRemotionJSX(`
+      function EditableText({ id, value }) {
+        return <span data-editable={id}>{value}</span>;
+      }
+      function Composition(props) {
+        return (
+          <div data-editable="title">
+            <EditableText id="title" value={props.title} />
+          </div>
+        );
+      }
+    `);
+    if (!Component) throw new Error('Expected composition to compile');
+
+    const html = renderToStaticMarkup(
+      <Component title="Hello" _pos_title={{ x: 100, y: 50 }} />,
+    );
+
+    expect(html.match(/translate:100px 50px/g)).toHaveLength(1);
+    expect(html).toContain('<div data-editable="title"><span data-editable="title" style="translate:100px 50px">');
   });
 
   it('applies inferred trim overrides directly to a video host', () => {

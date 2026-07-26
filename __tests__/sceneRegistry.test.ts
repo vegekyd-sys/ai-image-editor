@@ -1,7 +1,6 @@
 import { beforeEach, describe, expect, it } from 'vitest';
 import type { EditableField } from '@/types';
 import {
-  applySceneNodeTransforms,
   buildLegacySceneRegistry,
   findSceneMediaElement,
 } from '@/lib/editor/scene-registry';
@@ -199,42 +198,4 @@ describe('legacy editable scene registry', () => {
     expect(registry.get('title0')?.activeInstance?.element).toBe(titleLeaf);
   });
 
-  it('applies stored transforms only to the active leaf and restores stale owners', () => {
-    const container = document.createElement('div');
-    const shell = document.createElement('div');
-    const leaf = document.createElement('div');
-    shell.dataset.editable = 'title0';
-    leaf.dataset.editable = 'title0';
-    leaf.textContent = 'Hello';
-    shell.appendChild(leaf);
-    container.appendChild(shell);
-    document.body.appendChild(container);
-
-    setRect(container, { left: 0, top: 0, width: 1920, height: 1080 });
-    setRect(shell, { left: 0, top: 0, width: 1920, height: 1080 });
-    setRect(leaf, { left: 100, top: 100, width: 400, height: 80 });
-
-    applySceneNodeTransforms({
-      container,
-      fields: [field('title0', 'text')],
-      props: {
-        _pos_title0: { x: 40, y: 20 },
-        _scale_title0: { w: 1.2, h: 0.8 },
-      },
-    });
-
-    expect(shell.style.translate || '').toBe('');
-    expect(shell.style.scale || '').toBe('');
-    expect(leaf.style.translate).toBe('40px 20px');
-    expect(leaf.style.scale).toBe('1.2 0.8');
-
-    applySceneNodeTransforms({
-      container,
-      fields: [field('title0', 'text')],
-      props: {},
-    });
-
-    expect(leaf.style.translate || '').toBe('');
-    expect(leaf.style.scale || '').toBe('');
-  });
 });

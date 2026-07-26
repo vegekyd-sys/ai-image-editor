@@ -216,10 +216,9 @@ export function evalRemotionJSX(
       buildRemotionEvaluatorBody(compiled, fnName),
     );
     const comp = factory(REMOTION_SCOPE, authoredModule, authoredModule.exports, localRequire);
-    // Geometry ownership now lives in EditableSceneBoundary after the real DOM
-    // instances exist. Keep accepting the option while older callers migrate.
-    void options.editableTransformMode;
-    return comp ? wrapWithEditableOverrides(comp) : null;
+    return comp
+      ? wrapWithEditableOverrides(comp, options.editableTransformMode ?? 'proxy')
+      : null;
   } catch (err) {
     console.error('[evalRemotionJSX] compile error:', err);
     return null;
@@ -232,6 +231,7 @@ export function evalRemotionJSX(
  * Updated by the HOC's render, read by the Proxy createElement.
  */
 let _currentTransformProps: Record<string, unknown> = {};
+let _currentTransformMode: EditableTransformMode = 'proxy';
 
 function readFrameProp(key: string): number | undefined {
   const value = _currentTransformProps[key];
@@ -261,17 +261,61 @@ function injectLegacyVideoTrim(node: React.ReactNode, trim: { trimBefore?: numbe
 }
 
 /**
- * Patched createElement only injects selected-video trim overrides.
- * Position and scale are applied by EditableSceneBoundary to the active leaf.
+ * A logical editable may be repeated on old ancestor shells. Both Player and
+ * export transform only the deepest same-id React owner, matching the DOM
+ * Scene Registry leaf rule.
  */
 const _origCE = React.createElement;
+
+function hasSameIdEditableDescendant(
+  children: React.ReactNode[],
+  id: string,
+): boolean {
+  return children.some(child => {
+    if (!React.isValidElement(child)) return false;
+    const childProps = child.props as {
+      children?: React.ReactNode;
+      id?: unknown;
+      editableId?: unknown;
+      'data-editable'?: unknown;
+    };
+    if (childProps['data-editable'] === id) return true;
+    if (
+      typeof child.type !== 'string'
+      && (childProps.id === id || childProps.editableId === id)
+    ) {
+      return true;
+    }
+    return hasSameIdEditableDescendant(
+      React.Children.toArray(childProps.children),
+      id,
+    );
+  });
+}
 
 const _patchedCE = function(type: any, elProps: any, ...children: any[]) {
   if (elProps && typeof elProps === 'object' && elProps['data-editable']) {
     const id = elProps['data-editable'] as string;
+    const renderedChildren = children.length > 0
+      ? children
+      : React.Children.toArray(elProps.children);
+    const ownsTransform = !hasSameIdEditableDescendant(renderedChildren, id);
+    const pos = _currentTransformProps[`_pos_${id}`] as { x: number; y: number } | undefined;
+    const sc = _currentTransformProps[`_scale_${id}`] as { w: number; h: number } | undefined;
     const trimBefore = readFrameProp(`_trimBefore_${id}`);
     const trimAfter = readFrameProp(`_trimAfter_${id}`);
-    if (trimBefore !== undefined || trimAfter !== undefined) {
+    if (_currentTransformMode === 'proxy' && ownsTransform && (pos || sc)) {
+      const existingStyle = (elProps.style || {}) as Record<string, unknown>;
+      elProps = {
+        ...elProps,
+        style: {
+          ...existingStyle,
+          ...(pos ? { translate: `${pos.x}px ${pos.y}px` } : {}),
+          ...(sc ? { scale: `${+sc.w.toFixed(4)} ${+sc.h.toFixed(4)}` } : {}),
+        },
+      };
+    }
+    if (ownsTransform && (trimBefore !== undefined || trimAfter !== undefined)) {
       if (type === Video) {
         elProps = {
           ...elProps,
@@ -303,9 +347,11 @@ REMOTION_SCOPE.React = PATCHED_REACT;
 
 function wrapWithEditableOverrides(
   Component: React.ComponentType<any>,
+  transformMode: EditableTransformMode,
 ): React.ComponentType<any> {
   return function WrappedDesign(props: Record<string, unknown>) {
     _currentTransformProps = props;
+    _currentTransformMode = transformMode;
     return _origCE.call(React, Component, props);
   };
 }

@@ -9,7 +9,6 @@ import {
   prepareAndLoadRemotionFontsWithTiming,
   type RemotionFontTiming,
 } from '@/remotion/font-catalog';
-import EditableSceneBoundary from '@/components/EditableSceneBoundary';
 
 export type { DesignPayload };
 export type { RenderMediaOnWebProgress };
@@ -123,18 +122,14 @@ async function compileBrowserDesign(
   });
   recordBrowserFontTiming({ source, recordedAt: new Date().toISOString(), timing });
   const Component = evalRemotionJSX(prepared.code, {
-    editableTransformMode: 'registry',
+    editableTransformMode: 'proxy',
   });
   if (!Component) throw new Error('Failed to compile design code');
 
   return function FontPinnedDesign(componentProps: Record<string, unknown>) {
     return React.createElement(
-      EditableSceneBoundary,
-      {
-        fields: design.editables,
-        inputProps: componentProps,
-        fontFamily: prepared.defaultFontFamily,
-      },
+      'div',
+      { style: { width: '100%', height: '100%', fontFamily: prepared.defaultFontFamily } },
       React.createElement(Component, componentProps),
     );
   };
