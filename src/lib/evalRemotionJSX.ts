@@ -282,7 +282,9 @@ function hasSameIdEditableDescendant(
     if (childProps['data-editable'] === id) return true;
     if (
       typeof child.type !== 'string'
-      && (childProps.id === id || childProps.editableId === id)
+      && Object.entries(childProps).some(([key, value]) =>
+        value === id && (key === 'id' || key === 'editableId' || key.endsWith('Id'))
+      )
     ) {
       return true;
     }
