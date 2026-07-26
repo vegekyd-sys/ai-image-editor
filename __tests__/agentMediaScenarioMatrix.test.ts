@@ -60,6 +60,8 @@ describe('agent media scenario matrix', () => {
     expect(remotionDirectorContract).toContain('Director Layer vs Composition Layer')
     expect(remotionDirectorContract).toContain('The director layer decides what the viewer experiences over time')
     expect(remotionDirectorContract).toContain('The Remotion composition layer implements that direction')
+    expect(remotionDirectorContract).toContain('Editable ownership instrumentation is runtime-owned')
+    expect(remotionDirectorContract).not.toContain('editable `props`, `data-editable`, and `editables`')
     expect(remotionDirectorContract).toContain('Do not let the implementation layer invent the creative structure by accident')
     expect(remotionDirectorContract).toContain('Do not default to hero sections, card grids')
     expect(remotionDirectorContract).toContain('The final plan must map cleanly to `<Sequence>` ranges')

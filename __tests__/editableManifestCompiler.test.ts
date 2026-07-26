@@ -106,6 +106,28 @@ describe('Editable Manifest compiler', () => {
     expect(result.code.match(/data-editable/g)).toHaveLength(1);
   });
 
+  it('drops stale explicit metadata that has no real JSX ownership', () => {
+    const result = compileEditableManifest({
+      code: `
+        function TechText({ text, editableId }) {
+          return <div data-editable={editableId}>{text}</div>;
+        }
+        function Composition(props) {
+          return <TechText text={props.kicker} editableId="topLabel" />;
+        }
+      `,
+      props: { kicker: 'FUTURE / 01' },
+      editables: [
+        { id: 'kicker', type: 'text', label: 'Kicker', propKey: 'kicker' },
+      ],
+    });
+
+    expect(result.diagnostics).toEqual([]);
+    expect(result.editables).toEqual([
+      { id: 'topLabel', type: 'text', label: 'Top label', propKey: 'kicker' },
+    ]);
+  });
+
   it('maps an explicitly named media wrapper to the nested source prop', () => {
     const result = compileEditableManifest({
       code: `

@@ -809,20 +809,20 @@ export function compileEditableManifest({
   for (const candidate of candidates) {
     addCandidateFields(inferredFields, seen, candidate, explicitById);
   }
-  const fields = editables?.length ? [...editables] : inferredFields;
   if (editables?.length) {
-    const explicitIds = new Set(editables.map(field => field.id));
-    for (const field of inferredFields) {
-      if (!explicitIds.has(field.id)) {
-        fields.push(field);
-        explicitIds.add(field.id);
-      }
-    }
+    const explicitOrder = new Map(editables.map((field, index) => [field.id, index]));
+    inferredFields.sort((a, b) => {
+      const aOrder = explicitOrder.get(a.id);
+      const bOrder = explicitOrder.get(b.id);
+      if (aOrder == null && bOrder == null) return 0;
+      if (aOrder == null) return 1;
+      if (bOrder == null) return -1;
+      return aOrder - bOrder;
+    });
   }
-
   return {
     code: applyInsertions(code, insertions),
-    editables: fields,
+    editables: inferredFields,
     diagnostics: [...new Set(diagnostics)],
   };
 }

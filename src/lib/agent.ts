@@ -3724,7 +3724,7 @@ Path is auto-generated from the current project and output type. Just provide a 
             propKey: z.string().min(1),
             trimBeforePropKey: z.string().min(1).optional(),
             trimAfterPropKey: z.string().min(1).optional(),
-          }).passthrough()).optional(),
+          }).passthrough()).optional().describe('Legacy composition migration only. Omit for all new work; the runtime infers ownership from natural props and JSX.'),
           animation: z.object({
             fps: z.number().positive(),
             durationInSeconds: z.number().positive(),
@@ -4031,7 +4031,7 @@ Node media runtime provides a standard isolated Node environment with \`require\
             propKey: z.string().min(1),
             trimBeforePropKey: z.string().min(1).optional(),
             trimAfterPropKey: z.string().min(1).optional(),
-          }).passthrough()).optional(),
+          }).passthrough()).optional().describe('Legacy composition migration only. Omit for all new work; the runtime infers ownership from natural props and JSX.'),
           animation: z.object({
             fps: z.number().positive(),
             durationInSeconds: z.number().positive(),
@@ -4052,7 +4052,7 @@ Node media runtime provides a standard isolated Node environment with \`require\
             propKey: z.string().min(1),
             trimBeforePropKey: z.string().min(1).optional(),
             trimAfterPropKey: z.string().min(1).optional(),
-          }).passthrough()).optional(),
+          }).passthrough()).optional().describe('Legacy composition migration only. Omit for all new work; the runtime infers ownership from natural props and JSX.'),
           animation: z.object({
             fps: z.number().positive(),
             durationInSeconds: z.number().positive(),
