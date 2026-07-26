@@ -1,11 +1,18 @@
 import { describe, expect, it } from 'vitest';
 import {
   findEditableAtPoint,
+  isEditableRectMeasurable,
   isEditableCanvasCover,
+  resolveEditableEditActivation,
   resolveEditablePointerIntent,
 } from '@/lib/editor/editable-hit-test';
 
 describe('editable hit-test fallback', () => {
+  it('rejects collapsed Remotion duplicates as Moveable targets', () => {
+    expect(isEditableRectMeasurable({ width: 0.52, height: 248 })).toBe(false);
+    expect(isEditableRectMeasurable({ width: 485, height: 66 })).toBe(true);
+  });
+
   it('returns the editable containing a point', () => {
     expect(findEditableAtPoint([
       { id: 'video1', left: 100, top: 50, width: 300, height: 180 },
@@ -74,5 +81,72 @@ describe('editable hit-test fallback', () => {
       selectedFieldId: null,
       moved: true,
     })).toBe('ignore');
+  });
+});
+
+describe('editable edit activation', () => {
+  it('opens text editing after two completed stationary taps on the selected field', () => {
+    const first = resolveEditableEditActivation({
+      fieldId: 'title',
+      fieldType: 'text',
+      selectedFieldId: null,
+      moved: false,
+      now: 1_000,
+      previousTap: null,
+    });
+    const second = resolveEditableEditActivation({
+      fieldId: 'title',
+      fieldType: 'text',
+      selectedFieldId: 'title',
+      moved: false,
+      now: 1_280,
+      previousTap: first.nextTap,
+    });
+
+    expect(first.shouldEdit).toBe(false);
+    expect(second.shouldEdit).toBe(true);
+    expect(second.nextTap).toBeNull();
+  });
+
+  it('never opens editing when the second gesture becomes a drag', () => {
+    const result = resolveEditableEditActivation({
+      fieldId: 'title',
+      fieldType: 'text',
+      selectedFieldId: 'title',
+      moved: true,
+      now: 1_200,
+      previousTap: { fieldId: 'title', completedAt: 1_000 },
+    });
+
+    expect(result).toEqual({ shouldEdit: false, nextTap: null });
+  });
+
+  it('does not open non-text fields, stale taps, or a different field', () => {
+    const previousTap = { fieldId: 'title', completedAt: 1_000 };
+
+    expect(resolveEditableEditActivation({
+      fieldId: 'image',
+      fieldType: 'image',
+      selectedFieldId: 'image',
+      moved: false,
+      now: 1_200,
+      previousTap,
+    }).shouldEdit).toBe(false);
+    expect(resolveEditableEditActivation({
+      fieldId: 'title',
+      fieldType: 'text',
+      selectedFieldId: 'title',
+      moved: false,
+      now: 1_500,
+      previousTap,
+    }).shouldEdit).toBe(false);
+    expect(resolveEditableEditActivation({
+      fieldId: 'subtitle',
+      fieldType: 'text',
+      selectedFieldId: 'subtitle',
+      moved: false,
+      now: 1_200,
+      previousTap,
+    }).shouldEdit).toBe(false);
   });
 });

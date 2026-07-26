@@ -46,27 +46,34 @@ function isImageUrl(value: unknown): value is string {
     );
 }
 
-async function resolveImageUrlsInValue(value: unknown, blobUrls: string[]): Promise<unknown> {
+async function resolveImageUrlsInValue(
+  value: unknown,
+  blobUrls: string[],
+  cache?: Map<string, string>,
+): Promise<unknown> {
   if (isImageUrl(value)) {
     try {
+      const cached = cache?.get(value);
+      if (cached) return cached;
       const res = await fetch(value);
       if (!res.ok) throw new Error(`Image fetch failed: ${res.status}`);
       const blob = await res.blob();
       const blobUrl = URL.createObjectURL(blob);
       blobUrls.push(blobUrl);
+      cache?.set(value, blobUrl);
       return blobUrl;
     } catch {
       return value;
     }
   }
   if (Array.isArray(value)) {
-    return Promise.all(value.map(item => resolveImageUrlsInValue(item, blobUrls)));
+    return Promise.all(value.map(item => resolveImageUrlsInValue(item, blobUrls, cache)));
   }
   if (value && typeof value === 'object') {
     const entries = await Promise.all(
       Object.entries(value as Record<string, unknown>).map(async ([key, child]) => [
         key,
-        await resolveImageUrlsInValue(child, blobUrls),
+        await resolveImageUrlsInValue(child, blobUrls, cache),
       ] as const),
     );
     return Object.fromEntries(entries);
@@ -261,9 +268,12 @@ export default function RemotionRenderer({ design, onError, mode = 'inline', hid
   const playerRef = useRef<PlayerRef>(null);
   const wrapperRef = useRef<HTMLDivElement>(null);
   const onPlayerRefRef = useRef(onPlayerRef);
+  const designPropsRef = useRef(design.props || {});
+  const inputPropImageCacheRef = useRef(new Map<string, string>());
+  designPropsRef.current = design.props || {};
 
   const [Component, setComponent] = useState<React.ComponentType<any> | null>(null);
-  const [inputProps, setInputProps] = useState<Record<string, unknown>>({});
+  const [inputProps, setInputProps] = useState<Record<string, unknown>>(design.props || {});
   const [compileError, setCompileError] = useState<string | null>(null);
 
   const isStill = !design.animation;
@@ -279,14 +289,13 @@ export default function RemotionRenderer({ design, onError, mode = 'inline', hid
       try {
         await preloadBabel().catch(() => {});
         const videoResolved = resolvePreviewVideoUrls(design.code);
-        const { code: resolvedCode, props: resolvedProps, blobUrls: imageBlobUrls } = await resolveDesignImageUrls(design, videoResolved);
+        const { code: resolvedCode, blobUrls: imageBlobUrls } = await resolveCodeUrls(videoResolved);
         blobUrls.push(...imageBlobUrls);
         if (cancelled) { blobUrls.forEach(url => URL.revokeObjectURL(url)); return; }
-        const comp = await compileBrowserDesign(design, resolvedCode, resolvedProps, 'player');
+        const comp = await compileBrowserDesign(design, resolvedCode, designPropsRef.current, 'player');
         if (cancelled) { blobUrls.forEach(url => URL.revokeObjectURL(url)); return; }
         setCompileError(null);
         setComponent(() => comp);
-        setInputProps(resolvedProps);
         onLoading?.(false);
       } catch (e) {
         if (cancelled) return;
@@ -302,7 +311,41 @@ export default function RemotionRenderer({ design, onError, mode = 'inline', hid
       blobUrls.forEach(url => URL.revokeObjectURL(url));
     };
 
-  }, [design.code, design.fontSubstitutions, design.props]);
+  }, [design.code, design.fontSubstitutions]);
+
+  // Editable text/media/transform changes should update Player input props
+  // without recompiling the composition, fonts, and code.
+  useEffect(() => {
+    let cancelled = false;
+    const newBlobUrls: string[] = [];
+    const discardNewBlobUrls = () => {
+      const discarded = new Set(newBlobUrls);
+      inputPropImageCacheRef.current.forEach((blobUrl, sourceUrl) => {
+        if (discarded.has(blobUrl)) inputPropImageCacheRef.current.delete(sourceUrl);
+      });
+      newBlobUrls.forEach(url => URL.revokeObjectURL(url));
+    };
+    (async () => {
+      const resolved = await resolveImageUrlsInValue(
+        design.props || {},
+        newBlobUrls,
+        inputPropImageCacheRef.current,
+      ) as Record<string, unknown>;
+      if (cancelled) {
+        discardNewBlobUrls();
+        return;
+      }
+      setInputProps(resolved);
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [design.props]);
+
+  useEffect(() => () => {
+    inputPropImageCacheRef.current.forEach(url => URL.revokeObjectURL(url));
+    inputPropImageCacheRef.current.clear();
+  }, []);
 
   // Expose container and player refs to parent
   useEffect(() => {

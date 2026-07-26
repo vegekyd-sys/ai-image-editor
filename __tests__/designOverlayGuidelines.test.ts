@@ -24,6 +24,12 @@ describe('DesignOverlay moveable guideline regression guards', () => {
     expect(source).not.toContain('rootContainer={overlayRef.current ?? undefined}');
   });
 
+  it('never promotes a collapsed Remotion duplicate after an editable is moved', () => {
+    expect(source).toContain('if (!isEditableRectMeasurable(elRect)) return;');
+    expect(source).not.toContain('if (!storedPos) return;');
+    expect(source).toContain('r.id === selectedFieldId && r.domEl.isConnected');
+  });
+
   it('keeps fallback drag from stealing desktop Moveable drag events', () => {
     expect(source).toContain('if (targetEl.closest(\'.moveable-area\')) return false;');
     expect(source).toContain("if (pointerType !== 'touch') return false;");
@@ -57,12 +63,18 @@ describe('DesignOverlay moveable guideline regression guards', () => {
   it('uses one pointer arbiter for editable selection and canvas playback', () => {
     expect(source).toContain("interactionEl.addEventListener('pointerdown', handlePointerDown, { capture: true });");
     expect(source).toContain("interactionEl.addEventListener('pointerup', handlePointerUp, { capture: true });");
+    expect(source).toContain("eventTarget.closest?.('button, [data-remotion-seek], .moveable-control')");
+    expect(source).not.toContain("eventTarget.closest?.('button, [data-remotion-seek], .moveable-control, .moveable-area')");
+    expect(source).toContain('const editActivation = resolveEditableEditActivation({');
+    expect(source.indexOf('const editActivation = resolveEditableEditActivation({')).toBeGreaterThan(
+      source.indexOf('const handlePointerUp = (e: PointerEvent) => {'),
+    );
     expect(source).toContain("'data-editable-canvas-cover'");
     expect(source).toContain("if (intent === 'canvas-tap') onCanvasTapRef.current?.();");
     expect(canvasSource).toContain('posterImage={currentDesign?.animation && !selectedEditableId ? displayImage : undefined}');
     expect(canvasSource).toContain('remotionLoading && displayImage && !selectedEditableId');
     expect(canvasSource).toContain('onCanvasTap={handleDesignCanvasTap}');
-    expect(canvasSource).toContain('if (!selectedEditableId && (wasPlayingBeforeBufferRef.current || remotionStartedRef.current))');
+    expect(canvasSource).not.toContain('wasPlayingBeforeBufferRef');
     expect(canvasSource).toContain('if (id && remotionRef.current)');
     expect(canvasSource).not.toContain('`_sel_${id}`');
   });

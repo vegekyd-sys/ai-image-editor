@@ -89,10 +89,10 @@ export function validateDesignDiagnostics(result: DesignResult): string[] {
   const missingEditablesError = validateMissingEditables(result.editables, result.code);
   if (missingEditablesError) diagnostics.push(missingEditablesError);
 
-  const editableCoverageError = validateEditableCoverage(result.editables, result.code);
+  const editableCoverageError = validateEditableCoverage(result.editables, result.code, result.props);
   if (editableCoverageError) diagnostics.push(editableCoverageError);
 
-  const editablesError = validateEditables(result.editables, result.code);
+  const editablesError = validateEditables(result.editables, result.code, result.props);
   if (editablesError) diagnostics.push(editablesError);
 
   const hardcodedTextError = validateHardcodedEditableText(result.editables, result.code);
@@ -165,8 +165,13 @@ function checkUnresolvedIdentifiers(code: string): string | null {
 }
 
 /** Validate editable fields declaration. Returns error message or null. */
-export function validateEditables(editables?: EditableField[], code = ''): string | null {
+export function validateEditables(
+  editables?: EditableField[],
+  code = '',
+  props?: Record<string, unknown>,
+): string | null {
   if (!editables || editables.length === 0) return null;
+  const dynamicBindings = collectDynamicEditableBindingsById(code, props);
   for (const field of editables) {
     if (!field.id || !field.type || !field.propKey) {
       return '⚠️ Editable field missing required properties (id, type, propKey). Each editable must have { id, type, label, propKey }.';
@@ -175,13 +180,15 @@ export function validateEditables(editables?: EditableField[], code = ''): strin
       return `⚠️ Editable field "${field.id}" has unsupported type "${field.type}". Supported types: text, image, video.`;
     }
 
-    const openingTag = findEditableOpeningTag(code, field.id);
-    const hasDynamicTextWrapper = field.type === 'text' && hasDynamicEditableReference(code, field.id);
-    if (!openingTag && !hasDynamicTextWrapper) {
+    const dynamicBinding = field.id === field.propKey
+      ? dynamicBindings.get(field.id) ?? null
+      : null;
+    const openingTag = findEditableOpeningTag(code, field.id) ?? dynamicBinding?.openingTag ?? null;
+    if (!openingTag) {
       return `⚠️ Editable field "${field.id}" is declared but no JSX element has data-editable="${field.id}". Add data-editable to the visible editable wrapper.`;
     }
 
-    if (!codeReadsProp(code, field.propKey)) {
+    if (!codeReadsProp(code, field.propKey) && !dynamicBinding) {
       return `⚠️ Editable field "${field.id}" declares prop key "${field.propKey}", but the design code does not read props.${field.propKey}. Avoid hardcoded content; wire the editable element to props.${field.propKey}.`;
     }
 
@@ -219,11 +226,6 @@ function hasQuotedToken(code: string, token: string): boolean {
   return new RegExp(`["'\`]${escapeRegExp(token)}["'\`]`).test(code);
 }
 
-function hasDynamicEditableReference(code: string, id: string): boolean {
-  if (!hasQuotedToken(code, id)) return false;
-  return /\bdata-editable\s*=\s*\{\s*[A-Za-z_$][\w$]*(?:\.[A-Za-z_$][\w$]*|\[[^\]]+\])?\s*\}/.test(code);
-}
-
 function findEditableOpeningTag(code: string, id: string): string | null {
   const escaped = escapeRegExp(id);
   const patterns = [
@@ -244,13 +246,87 @@ function findEditableOpeningTag(code: string, id: string): string | null {
     const match = code.match(dynamicPattern);
     if (match) return match[0];
   }
-  if (hasQuotedToken(code, id)) {
-    const dynamicIdPattern = /<[A-Za-z][\w.:-]*(?:\s|\n|\r)[^>]*data-editable\s*=\s*\{\s*[A-Za-z_$][\w$]*(?:\.[A-Za-z_$][\w$]*|\[[^\]]+\])?\s*\}[^>]*>/gm;
-    for (const match of code.matchAll(dynamicIdPattern)) {
-      return match[0];
-    }
-  }
   return null;
+}
+
+interface DynamicEditableBinding {
+  expression: string;
+  openingTag: string;
+}
+
+const DYNAMIC_MEMBER_EXPRESSION = '[A-Za-z_$][\\w$]*(?:(?:\\.[A-Za-z_$][\\w$]*)|(?:\\[[^\\]\\n]+\\]))*';
+
+function normalizeDynamicExpression(expression: string): string {
+  return expression.replace(/\s+/g, '');
+}
+
+function findDynamicEditableBindings(code: string): DynamicEditableBinding[] {
+  const openingTagPattern = new RegExp(
+    `<[A-Za-z][\\w.:-]*(?:\\s|\\n|\\r)[^>]*data-editable\\s*=\\s*\\{\\s*(${DYNAMIC_MEMBER_EXPRESSION})\\s*\\}[^>]*>`,
+    'gm',
+  );
+  const propReadPattern = new RegExp(`\\bprops\\s*\\[\\s*(${DYNAMIC_MEMBER_EXPRESSION})\\s*\\]`, 'gm');
+  const propReadExpressions = new Set(
+    [...code.matchAll(propReadPattern)].map(match => normalizeDynamicExpression(match[1])),
+  );
+
+  return [...code.matchAll(openingTagPattern)]
+    .map(match => ({
+      expression: normalizeDynamicExpression(match[1]),
+      openingTag: match[0],
+    }))
+    .filter(binding => propReadExpressions.has(binding.expression));
+}
+
+function collectDynamicEditableBindingsById(
+  code: string,
+  props?: Record<string, unknown>,
+): Map<string, DynamicEditableBinding> {
+  const bindingsById = new Map<string, DynamicEditableBinding>();
+  const bindings = findDynamicEditableBindings(code);
+  const propKeys = Object.keys(props ?? {});
+
+  for (const binding of bindings) {
+    const propertyName = binding.expression.match(/\.([A-Za-z_$][\w$]*)$/)?.[1];
+    if (!propertyName) {
+      for (const fieldId of propKeys) {
+        if (hasQuotedToken(code, fieldId)) bindingsById.set(fieldId, binding);
+      }
+      continue;
+    }
+
+    const propertyPattern = new RegExp(
+      `\\b${escapeRegExp(propertyName)}\\s*:\\s*["'\`]([^"'\`]+)["'\`]`,
+      'g',
+    );
+    for (const match of code.matchAll(propertyPattern)) {
+      const fieldId = match[1];
+      if (props && Object.prototype.hasOwnProperty.call(props, fieldId)) {
+        bindingsById.set(fieldId, binding);
+      }
+    }
+
+    const visit = (value: unknown) => {
+      if (Array.isArray(value)) {
+        value.forEach(visit);
+        return;
+      }
+      if (!value || typeof value !== 'object') return;
+      for (const [key, child] of Object.entries(value as Record<string, unknown>)) {
+        if (
+          key === propertyName
+          && typeof child === 'string'
+          && props
+          && Object.prototype.hasOwnProperty.call(props, child)
+        ) {
+          bindingsById.set(child, binding);
+        }
+        visit(child);
+      }
+    };
+    visit(props);
+  }
+  return bindingsById;
 }
 
 function codeReadsProp(code: string, propKey: string): boolean {
@@ -294,7 +370,11 @@ function validateMissingEditables(editables: EditableField[] | undefined, code: 
   return null;
 }
 
-function validateEditableCoverage(editables: EditableField[] | undefined, code: string): string | null {
+function validateEditableCoverage(
+  editables: EditableField[] | undefined,
+  code: string,
+  props?: Record<string, unknown>,
+): string | null {
   const declaredIds = new Set((editables ?? []).map(field => field.id));
   const declaredPropKeys = new Set((editables ?? []).map(field => field.propKey));
   const staticIds = new Set<string>();
@@ -312,6 +392,12 @@ function validateEditableCoverage(editables: EditableField[] | undefined, code: 
   const hasDynamicEditable = /\bdata-editable\s*=\s*\{\s*(?!["'`])/.test(code);
   if (hasDynamicEditable && (!editables || editables.length === 0)) {
     return '⚠️ Composition renders dynamic data-editable layers but declares no editables. Include the complete editable metadata array, including every dynamic scene key.';
+  }
+
+  const dynamicIds = collectDynamicEditableBindingsById(code, props).keys();
+  const undeclaredDynamicIds = [...dynamicIds].filter(id => !declaredIds.has(id));
+  if (undeclaredDynamicIds.length > 0) {
+    return `⚠️ Composition renders dynamic editable layer${undeclaredDynamicIds.length === 1 ? '' : 's'} ${undeclaredDynamicIds.slice(0, 8).join(', ')} but does not declare matching editable metadata. Include every scene key in the complete editables array.`;
   }
 
   const visiblePropKeys = new Set<string>();
@@ -347,6 +433,10 @@ function findHardcodedVisibleTextArray(code: string, allowedTokens: string[] = [
     if (objectTextLiterals.length > 0) {
       return { name, literals: objectTextLiterals, kind: 'object' };
     }
+    // Object arrays commonly carry structural selectors such as
+    // kind: 'hook' and titleKey: 'title0'. Only semantic text properties
+    // above are user-facing; the generic literal fallback is for string arrays.
+    if (/\{/.test(values)) continue;
 
     const literals = [...values.matchAll(/["'`]([^"'`{}]{2,})["'`]/g)]
       .map(m => m[1].trim())
@@ -375,6 +465,8 @@ function findHardcodedVisibleTextNode(code: string): { literals: string[] } | nu
     .map(m => m[1].replace(/\s+/g, ' ').trim())
     .filter(value => value.length >= 2)
     .filter(value => !/\b(?:return|function|const|let|var)\b|[;{}]/.test(value))
+    .filter(value => !/(?:=>|&&|\|\||===|!==|>=|<=|\?\.)/.test(value))
+    .filter(value => !value.startsWith('='))
     .filter(isVisibleTextLiteral);
   return literals.length > 0 ? { literals } : null;
 }

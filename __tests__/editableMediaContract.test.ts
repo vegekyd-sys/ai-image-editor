@@ -110,6 +110,135 @@ describe('editable media contract', () => {
     expect(result).toBeNull();
   });
 
+  it('accepts active-scene editable keys declared in props without expanding every scene', () => {
+    const result = validateDesign({
+      code: `function Composition(props) {
+        const scene = props.sceneData[Math.min(props.sceneData.length - 1, 0)];
+        return (
+          <AbsoluteFill>
+            <div
+              data-editable={scene.titleKey}
+              style={{ position: 'absolute', left: 40, top: 80, width: 420, height: 90 }}
+            >
+              {props[scene.titleKey]}
+            </div>
+            <img
+              data-editable={scene.imageKey}
+              src={props[scene.imageKey]}
+              style={{ position: 'absolute', left: 40, top: 200, width: 420, height: 260 }}
+            />
+          </AbsoluteFill>
+        );
+      }`,
+      props: {
+        sceneData: [
+          { kind: 'hook', titleKey: 'title0', imageKey: 'image0' },
+          { kind: 'festival', titleKey: 'title1', imageKey: 'image1' },
+        ],
+        title0: 'A visible title',
+        image0: 'https://example.com/0.jpg',
+        title1: 'Another visible title',
+        image1: 'https://example.com/1.jpg',
+      },
+      editables: [
+        { id: 'title0', type: 'text', label: 'Title 1', propKey: 'title0' },
+        { id: 'image0', type: 'image', label: 'Image 1', propKey: 'image0' },
+        { id: 'title1', type: 'text', label: 'Title 2', propKey: 'title1' },
+        { id: 'image1', type: 'image', label: 'Image 2', propKey: 'image1' },
+      ],
+    });
+
+    expect(result).toBeNull();
+  });
+
+  it('validates each active-scene media field against its own dynamic wrapper', () => {
+    const result = validateDesign({
+      code: `function Composition(props) {
+        const scene = props.sceneData[0];
+        return (
+          <AbsoluteFill>
+            <div
+              data-editable={scene.titleKey}
+              style={{ position: 'absolute', left: 40, top: 80, width: 420, height: 90 }}
+            >
+              {props[scene.titleKey]}
+            </div>
+            <div data-editable={scene.imageKey}>
+              <Img src={props[scene.imageKey]} />
+            </div>
+          </AbsoluteFill>
+        );
+      }`,
+      props: {
+        sceneData: [{ titleKey: 'title0', imageKey: 'image0' }],
+        title0: 'A visible title',
+        image0: 'https://example.com/0.jpg',
+      },
+      editables: [
+        { id: 'title0', type: 'text', label: 'Title', propKey: 'title0' },
+        { id: 'image0', type: 'image', label: 'Image', propKey: 'image0' },
+      ],
+    });
+
+    expect(result).toEqual(expect.stringMatching(/image0|measurable wrapper/i));
+  });
+
+  it('still rejects active-scene fields omitted from editable metadata', () => {
+    const result = validateDesign({
+      code: `function Composition(props) {
+        const scene = props.sceneData[0];
+        return (
+          <div
+            data-editable={scene.titleKey}
+            style={{ position: 'absolute', left: 40, top: 80, width: 420, height: 90 }}
+          >
+            {props[scene.titleKey]}
+          </div>
+        );
+      }`,
+      props: {
+        sceneData: [{ titleKey: 'title0' }, { titleKey: 'title1' }],
+        title0: 'A visible title',
+        title1: 'Another visible title',
+      },
+      editables: [
+        { id: 'title0', type: 'text', label: 'Title 1', propKey: 'title0' },
+      ],
+    });
+
+    expect(result).toEqual(expect.stringMatching(/title1|editable metadata/i));
+  });
+
+  it('ignores structural control tokens in rendered scene objects', () => {
+    const result = validateDesign({
+      code: `function Composition(props) {
+        const scenes = [
+          { kind: 'hook', titleKey: 'title0' },
+          { kind: 'glasto', titleKey: 'title1' },
+          { kind: 'coachella', titleKey: 'title2' },
+        ];
+        const scene = scenes[0];
+        return (
+          <div data-editable={scene.titleKey}>
+            {props[scene.titleKey]}
+          </div>
+        );
+      }`,
+      props: {
+        title0: 'Hook title',
+        title1: 'Glastonbury title',
+        title2: 'Coachella title',
+      },
+      editables: [
+        { id: 'title0', type: 'text', label: 'Title 1', propKey: 'title0' },
+        { id: 'title1', type: 'text', label: 'Title 2', propKey: 'title1' },
+        { id: 'title2', type: 'text', label: 'Title 3', propKey: 'title2' },
+      ],
+    });
+
+    expect(result).toBeNull();
+  });
+
   it('accepts dynamic image editables when the shared wrapper has a measurable box', () => {
     const result = validateDesign({
       code: `function Composition(props) {

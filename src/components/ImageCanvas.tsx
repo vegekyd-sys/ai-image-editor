@@ -91,6 +91,8 @@ interface ImageCanvasProps {
   onDesignContentSize?: (size: { width: number; height: number; source: 'editables' | 'scroll' }) => void;
   /** Video editable currently opened in the trim editor. */
   activeTrimFieldId?: string | null;
+  /** Hide canvas playback controls while a text/trim editor covers the canvas edge. */
+  hidePlaybackControls?: boolean;
   /** Timeline indices that are video snapshots (v2) — show play icon instead of dot */
   videoTimelineIndices?: Set<number>;
   /** Called once when the video element loads data — captures a poster frame at 0.5s */
@@ -125,6 +127,7 @@ export default function ImageCanvas({
   onVisibleEditableFields,
   onDesignContentSize,
   activeTrimFieldId,
+  hidePlaybackControls = false,
   videoTimelineIndices,
   onVideoPosterCapture,
   onVideoTimeUpdate,
@@ -896,12 +899,16 @@ export default function ImageCanvas({
     return () => cancelAnimationFrame(raf);
   }, [dispatchActiveTrimPlayhead, remotionPlaying, remotionTotalFrames, updateRemotionUI]);
 
+  const [remotionBuffering, setRemotionBuffering] = useState(false);
+  const remotionBufferingRef = useRef(false);
+
   // Reset when switching to a design snapshot. Remotion compositions should only
   // start from an explicit user click; auto-play during code generation is noisy.
   useEffect(() => {
     const player = remotionRef.current;
     player?.pause();
     setRemotionPlaying(false);
+    remotionBufferingRef.current = false;
     setRemotionBuffering(false);
     setRemotionLoading(!!currentDesign?.animation);
     remotionFrameRef.current = 0;
@@ -911,44 +918,45 @@ export default function ImageCanvas({
 
   }, [currentIndex, currentDesign?.code]);
 
-  // Pause on buffering, resume when assets ready — like a real video player
-  // Debounce resume to avoid flicker when multiple images load in quick succession
+  // Mirror buffering so the custom play button can show progress.
+  // Remotion owns pause/resume internally. We only mirror its buffering state;
+  // explicitly pausing here prevents Remotion from resuming after assets recover.
   // Skip for designs containing <Video> — video elements handle their own buffering,
   // and scene cuts trigger spurious waiting events that shouldn't pause the Player.
   const hasVideoElement = !!(currentDesign?.code?.includes('<Video') || currentDesign?.code?.includes('Video,'));
-  const wasPlayingBeforeBufferRef = useRef(false);
-  const [remotionBuffering, setRemotionBuffering] = useState(false);
   const resumeTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   useEffect(() => {
-    const player = remotionRef.current;
+    const player = remotionPlayer;
     if (!player || hasVideoElement) return;
     const onWaiting = () => {
       if (resumeTimerRef.current) { clearTimeout(resumeTimerRef.current); resumeTimerRef.current = null; }
-      wasPlayingBeforeBufferRef.current = wasPlayingBeforeBufferRef.current || remotionPlaying;
+      remotionBufferingRef.current = true;
       setRemotionBuffering(true);
-      player.pause();
-      setRemotionPlaying(false);
     };
     const onResume = () => {
       if (resumeTimerRef.current) clearTimeout(resumeTimerRef.current);
       resumeTimerRef.current = setTimeout(() => {
         resumeTimerRef.current = null;
+        remotionBufferingRef.current = false;
         setRemotionBuffering(false);
-        if (!selectedEditableId && (wasPlayingBeforeBufferRef.current || remotionStartedRef.current)) {
-          wasPlayingBeforeBufferRef.current = false;
-          player.play();
-          setRemotionPlaying(true);
-        }
       }, 150);
+    };
+    const onFrameUpdate = () => {
+      if (!remotionBufferingRef.current) return;
+      if (resumeTimerRef.current) { clearTimeout(resumeTimerRef.current); resumeTimerRef.current = null; }
+      remotionBufferingRef.current = false;
+      setRemotionBuffering(false);
     };
     player.addEventListener('waiting', onWaiting);
     player.addEventListener('resume', onResume);
+    player.addEventListener('frameupdate', onFrameUpdate);
     return () => {
       player.removeEventListener('waiting', onWaiting);
       player.removeEventListener('resume', onResume);
+      player.removeEventListener('frameupdate', onFrameUpdate);
       if (resumeTimerRef.current) clearTimeout(resumeTimerRef.current);
     };
-  });
+  }, [hasVideoElement, remotionPlayer]);
 
   const toggleRemotionPlay = useCallback(() => {
     const p = remotionRef.current;
@@ -992,7 +1000,8 @@ export default function ImageCanvas({
     // Pause on seek — prevent resume handler from auto-playing
     remotionRef.current.pause();
     setRemotionPlaying(false);
-    wasPlayingBeforeBufferRef.current = false;
+    remotionBufferingRef.current = false;
+    setRemotionBuffering(false);
     remotionRef.current.seekTo(frame);
     remotionFrameRef.current = frame;
     updateRemotionUI();
@@ -1344,7 +1353,7 @@ export default function ImageCanvas({
             )}
 
             {/* Play/pause button — bottom-left, hidden while seeking */}
-            {!videoError && showControls && !isSeeking && (
+            {!videoError && showControls && !hidePlaybackControls && !isSeeking && (
               <div className="absolute z-30" style={{ bottom: 8, left: 12 }}>
                 <button
                   onClick={(e) => {
@@ -1514,7 +1523,7 @@ export default function ImageCanvas({
             )}
 
             {/* Play/pause button — bottom-left, hidden while seeking */}
-            {currentDesign?.animation && !isSeeking && (
+            {currentDesign?.animation && !hidePlaybackControls && !isSeeking && (
               <div className="absolute z-30" style={{ bottom: 8, left: 12 }}>
                 <button
                   onClick={(e) => { e.stopPropagation(); if (!remotionBuffering && !remotionLoading) toggleRemotionPlay(); }}

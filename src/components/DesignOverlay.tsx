@@ -6,8 +6,11 @@ import type { EditableField } from '@/types';
 import {
   EDITABLE_POINTER_MOVE_THRESHOLD,
   findEditableAtPoint,
+  isEditableRectMeasurable,
   isEditableCanvasCover,
+  resolveEditableEditActivation,
   resolveEditablePointerIntent,
+  type EditableTapCandidate,
 } from '@/lib/editor/editable-hit-test';
 
 interface DesignOverlayProps {
@@ -141,29 +144,19 @@ export default function DesignOverlay({
         htmlEl.style.display = 'inline-block';
       }
       const elRect = el.getBoundingClientRect();
+      // Remotion may retain a collapsed duplicate with the same data-editable
+      // in its sizing tree. Persisted offsets must never promote that hidden
+      // copy into Moveable's live target.
+      if (!isEditableRectMeasurable(elRect)) return;
       htmlEl.toggleAttribute(
         'data-editable-canvas-cover',
         isEditableCanvasCover(elRect, canvasRect),
       );
-      const storedPos = props[`_pos_${id}`] as { x: number; y: number } | undefined;
 
-      let rectLeft = Math.round(elRect.left - baseRect.left);
-      let rectTop = Math.round(elRect.top - baseRect.top);
-      let rectWidth = Math.round(elRect.width);
-      let rectHeight = Math.round(elRect.height);
-
-      if (elRect.width < 1 || elRect.height < 1) {
-        if (!storedPos) return;
-        const prevRect = rects.find(r => r.id === id);
-        if (prevRect) {
-          rectLeft = prevRect.left;
-          rectTop = prevRect.top;
-          rectWidth = prevRect.width;
-          rectHeight = prevRect.height;
-        } else {
-          return;
-        }
-      }
+      const rectLeft = Math.round(elRect.left - baseRect.left);
+      const rectTop = Math.round(elRect.top - baseRect.top);
+      const rectWidth = Math.round(elRect.width);
+      const rectHeight = Math.round(elRect.height);
       seen.add(id);
       newRects.push({ id, left: rectLeft, top: rectTop, width: rectWidth, height: rectHeight, domEl: el as HTMLElement });
       if (!filterVisibleFields || (
@@ -252,8 +245,7 @@ export default function DesignOverlay({
   // canvas playback from competing with one another.
   useEffect(() => {
     if (!interactionEl) return;
-    let lastTapTime = 0;
-    let lastTapId = '';
+    let lastCompletedTap: EditableTapCandidate | null = null;
     let activeTouches = 0;
     let gesture: {
       pointerId: number;
@@ -276,7 +268,8 @@ export default function DesignOverlay({
     const handlePointerDown = (e: PointerEvent) => {
       if (e.button !== 0) return;
       const eventTarget = e.target as HTMLElement;
-      if (eventTarget.closest?.('button, [data-remotion-seek], .moveable-control, .moveable-area')) {
+      if (eventTarget.closest?.('button, [data-remotion-seek], .moveable-control')) {
+        lastCompletedTap = null;
         gesture = null;
         return;
       }
@@ -322,16 +315,6 @@ export default function DesignOverlay({
         moved: false,
       });
       if (intent !== 'select') return;
-
-      const now = Date.now();
-      if (activeTouches <= 1 && selectedFieldIdRef.current === id && lastTapId === id && now - lastTapTime < 400) {
-        onStartEditRef.current?.(id);
-        lastTapTime = 0;
-        lastTapId = '';
-        return;
-      }
-      lastTapTime = now;
-      lastTapId = id;
       if (selectedFieldIdRef.current !== id) {
         onSelectFieldRef.current(id);
       }
@@ -352,6 +335,22 @@ export default function DesignOverlay({
         selectedFieldId: selectedFieldIdRef.current,
         moved: completedGesture.moved,
       });
+      const field = completedGesture.hitFieldId
+        ? editables.find(item => item.id === completedGesture.hitFieldId)
+        : null;
+      const editActivation = resolveEditableEditActivation({
+        fieldId: completedGesture.hitFieldId,
+        fieldType: field?.type ?? null,
+        selectedFieldId: selectedFieldIdRef.current,
+        moved: completedGesture.moved,
+        now: Date.now(),
+        previousTap: lastCompletedTap,
+      });
+      lastCompletedTap = editActivation.nextTap;
+      if (activeTouches <= 1 && editActivation.shouldEdit && completedGesture.hitFieldId) {
+        onStartEditRef.current?.(completedGesture.hitFieldId);
+        return;
+      }
       if (intent === 'canvas-tap') onCanvasTapRef.current?.();
     };
     const handlePointerCancel = (e: PointerEvent) => {
@@ -589,7 +588,7 @@ export default function DesignOverlay({
     };
   }, [containerEl, props, onUpdateProp]);
 
-  const selectedRect = rects.find(r => r.id === selectedFieldId);
+  const selectedRect = rects.find(r => r.id === selectedFieldId && r.domEl.isConnected);
 
   return (
     <div

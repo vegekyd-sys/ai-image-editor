@@ -48,6 +48,28 @@ describe('Remotion preview playback contract', () => {
     expect(source).not.toContain('Mark for auto-play')
   })
 
+  it('lets Remotion own buffering without explicitly pausing the player', () => {
+    const source = read('src/components/ImageCanvas.tsx')
+    const waitingStart = source.indexOf('const onWaiting = () => {')
+    const resumeStart = source.indexOf('const onResume = () => {', waitingStart)
+    const waitingHandler = source.slice(waitingStart, resumeStart)
+
+    expect(waitingStart).toBeGreaterThan(-1)
+    expect(waitingHandler).toContain('setRemotionBuffering(true)')
+    expect(waitingHandler).not.toContain('player.pause()')
+    expect(source).toContain("player.addEventListener('resume', onResume)")
+  })
+
+  it('updates interactive input props without recompiling the composition', () => {
+    const rendererSource = read('src/components/RemotionRenderer.tsx')
+
+    expect(rendererSource).toContain('const designPropsRef = useRef(design.props || {})')
+    expect(rendererSource).toContain('designPropsRef.current = design.props || {}')
+    expect(rendererSource).toContain('}, [design.code, design.fontSubstitutions])')
+    expect(rendererSource).toContain('}, [design.props])')
+    expect(rendererSource).not.toContain('}, [design.code, design.fontSubstitutions, design.props])')
+  })
+
   it('normalizes common agent Remotion scope declarations before evaluating code', () => {
     const evalSource = read('src/lib/evalRemotionJSX.ts')
     const sandboxSource = read('src/remotion/DynamicDesign.tsx')

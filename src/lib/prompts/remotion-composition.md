@@ -212,6 +212,15 @@ function EditableText({ id, props, style }) {
 
 Then render scene text inside `function Composition(props)` with `<EditableText id={scene.titleKey} props={props} ... />`. This avoids repeated JSX while keeping every visible string editable.
 
+For an active-scene composition, the scene-key table may live in `props`:
+
+```jsx
+const scene = props.sceneData[activeSceneIndex];
+return <div data-editable={scene.titleKey}>{props[scene.titleKey]}</div>;
+```
+
+Return the complete `editables` metadata for every key in `props.sceneData`. This controlled dynamic-key pattern is supported by the validator; do not expand every scene into repeated `<Sequence>` blocks just to make editable ids literal. Keep each dynamic editable `id === propKey`, and use the exact same key expression in `data-editable={...}` and `props[...]`.
+
 For image cards in scene arrays, use the same non-empty id as `data-editable` and `propKey`:
 
 ```jsx

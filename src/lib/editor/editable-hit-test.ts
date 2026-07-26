@@ -15,8 +15,20 @@ export interface EditableCanvasRect {
 
 export type EditablePointerIntent = 'select' | 'canvas-tap' | 'manipulate' | 'ignore';
 
+export interface EditableTapCandidate {
+  fieldId: string;
+  completedAt: number;
+}
+
 export const EDITABLE_CANVAS_COVERAGE_THRESHOLD = 0.9;
 export const EDITABLE_POINTER_MOVE_THRESHOLD = 6;
+
+export function isEditableRectMeasurable(rect: { width: number; height: number }): boolean {
+  return Number.isFinite(rect.width)
+    && Number.isFinite(rect.height)
+    && rect.width >= 1
+    && rect.height >= 1;
+}
 
 export function findEditableAtPoint(
   rects: EditableHitRect[],
@@ -82,4 +94,42 @@ export function resolveEditablePointerIntent({
     return selectedFieldId === hitFieldId ? 'manipulate' : 'canvas-tap';
   }
   return 'select';
+}
+
+export function resolveEditableEditActivation({
+  fieldId,
+  fieldType,
+  selectedFieldId,
+  moved,
+  now,
+  previousTap,
+  maxDelay = 400,
+}: {
+  fieldId: string | null;
+  fieldType: 'text' | 'image' | 'video' | null;
+  selectedFieldId: string | null;
+  moved: boolean;
+  now: number;
+  previousTap: EditableTapCandidate | null;
+  maxDelay?: number;
+}): {
+  shouldEdit: boolean;
+  nextTap: EditableTapCandidate | null;
+} {
+  if (moved || !fieldId || fieldType !== 'text') {
+    return { shouldEdit: false, nextTap: null };
+  }
+
+  const isRepeatedSelectedTap =
+    selectedFieldId === fieldId
+    && previousTap?.fieldId === fieldId
+    && now - previousTap.completedAt <= maxDelay;
+
+  if (isRepeatedSelectedTap) {
+    return { shouldEdit: true, nextTap: null };
+  }
+  return {
+    shouldEdit: false,
+    nextTap: { fieldId, completedAt: now },
+  };
 }

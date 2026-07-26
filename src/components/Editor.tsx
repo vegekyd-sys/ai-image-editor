@@ -3616,6 +3616,7 @@ Select the best 3-7 items for a compelling video. You do NOT need to use all or 
                 })()}
                 onStartTextEdit={(cx, cy) => { setTextEditPos({ x: cx, y: cy }); setTextEditValue(''); }}
                 textEditing={textEditPos ? { x: textEditPos.x, y: textEditPos.y, text: textEditValue, textColor, bgColor: textBgEnabled ? '#000' : '' } : null}
+                hidePlaybackControls={Boolean(editingDesignFieldId)}
                 onAnimate={undefined}
 
 
