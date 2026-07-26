@@ -52,7 +52,9 @@ printf 'value' | npx vercel env add NAME preview --force
 
 ## i18n（多语言，2026-03-04）
 
-**架构**：自定义 i18n，无第三方库。`src/lib/i18n.tsx`（LocaleProvider + useLocale + LocaleToggle）+ `src/lib/locales/zh.ts` + `src/lib/locales/en.ts`（~90 keys）。
+**架构**：自定义 i18n，无第三方库。`src/lib/i18n.tsx`（LocaleProvider + useLocale + LocaleToggle）+ `src/lib/locales/` 下的简中、繁中、日语、英语四套 typed dictionary。
+
+**新功能交付门禁**：任何新增/修改的产品 UI 必须在同一变更中补齐 `zh`、`zh-Hant`、`ja`、`en`，覆盖可见文字、状态、单位、空/加载/错误态、按钮、tooltip、placeholder、`title`、`alt`、`aria-label`。`npm run lint` 已串联 `npm run check:i18n-ui`；`scripts/ui-i18n-baseline.json` 只冻结历史债务，新功能禁止新增 baseline 条目。仅品牌名或技术 token 可在相邻位置用 `// i18n-ignore`。Agent 生成的脚本/提案等正文保留用户要求的语言，外层产品 UI 跟随 locale。
 
 **语言切换**：localStorage + cookie 双写。客户端用 `useLocale().t(key)` 读翻译；服务端 API 路由用 `req.cookies.get('locale')` 读语言（无需前端透传）。切换按钮在登录页右上角和项目列表页 Sign out 旁。
 
@@ -60,7 +62,7 @@ printf 'value' | npx vercel env add NAME preview --force
 
 **CUI 回复语言**：`agent.md` 改为 `Reply in the same language the user writes in.`（原来是 `Speak Chinese to the user.`）。这利用 LLM 自然语言跟随能力，用户说中文回中文，说英文回英文。AI-initiated 消息（teaser/reaction/analysis）通过 `api/agent/route.ts` 的 `isEn` 显式控制（中英文两套 prompt）。
 
-**已翻译组件**：layout, login, projects, projects/[id], Editor, AgentStatusBar, AgentChatView, TipsBar, ImageCanvas, AnimateSheet, VideoResultCard。
+**已翻译组件**：layout, login, projects, projects/[id], Editor, AgentStatusBar, AgentChatView, TipsBar, ImageCanvas, AnimateSheet, VideoResultCard, StudioRunDock。
 
 ### Prompt 层 i18n 改动（2026-03-04）
 

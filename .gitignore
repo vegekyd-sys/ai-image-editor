@@ -88,6 +88,8 @@ marketing/meta-ads/
 !/scripts/smoke-gpt56-cache.ts
 !/scripts/backfill-annual-subscription-credits.mjs
 !/scripts/audit-liquid-glass-perf.mjs
+!/scripts/check-ui-i18n.mjs
+!/scripts/ui-i18n-baseline.json
 !/scripts/studio-run-golden.ts
 !/scripts/sticker-bridge-acceptance.ts
 !/scripts/edge-video-bridge-acceptance.ts
