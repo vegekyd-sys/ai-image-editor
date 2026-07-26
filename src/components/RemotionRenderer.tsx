@@ -9,6 +9,7 @@ import {
   prepareAndLoadRemotionFontsWithTiming,
   type RemotionFontTiming,
 } from '@/remotion/font-catalog';
+import EditableSceneBoundary from '@/components/EditableSceneBoundary';
 
 export type { DesignPayload };
 export type { RenderMediaOnWebProgress };
@@ -122,17 +123,18 @@ async function compileBrowserDesign(
   });
   recordBrowserFontTiming({ source, recordedAt: new Date().toISOString(), timing });
   const Component = evalRemotionJSX(prepared.code, {
-    // The live player resolves one active DOM instance per logical editable.
-    // Standalone renders have no overlay yet, so they keep the legacy proxy
-    // until the export path moves onto the same scene registry contract.
-    editableTransformMode: source === 'player' ? 'registry' : 'proxy',
+    editableTransformMode: 'registry',
   });
   if (!Component) throw new Error('Failed to compile design code');
 
   return function FontPinnedDesign(componentProps: Record<string, unknown>) {
     return React.createElement(
-      'div',
-      { style: { width: '100%', height: '100%', fontFamily: prepared.defaultFontFamily } },
+      EditableSceneBoundary,
+      {
+        fields: design.editables,
+        inputProps: componentProps,
+        fontFamily: prepared.defaultFontFamily,
+      },
       React.createElement(Component, componentProps),
     );
   };

@@ -52,8 +52,8 @@ describe('editable video trim timeline', () => {
   });
 
   it('reads timing from the selected editable video element and scopes preview events by field', () => {
-    expect(canvasSource).toContain("querySelectorAll<HTMLElement>('[data-editable]')");
-    expect(canvasSource).toContain("const video = editableEl?.querySelector('video') ?? null");
+    expect(canvasSource).toContain('buildLegacySceneRegistry({')
+    expect(canvasSource).toContain("findSceneMediaElement(editableEl, 'video')")
     expect(canvasSource).toContain('detail.fieldId !== activeTrimFieldId');
     expect(canvasSource).toContain('sourceFrameToCompositionFrame({');
     expect(canvasSource).toContain('compositionFrameToSourceFrame({');

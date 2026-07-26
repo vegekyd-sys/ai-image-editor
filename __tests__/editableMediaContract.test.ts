@@ -183,8 +183,8 @@ describe('editable media contract', () => {
     expect(result).toEqual(expect.stringMatching(/image0|measurable wrapper/i));
   });
 
-  it('still rejects active-scene fields omitted from editable metadata', () => {
-    const result = validateDesign({
+  it('infers active-scene fields omitted from legacy editable metadata', () => {
+    const payload = {
       code: `function Composition(props) {
         const scene = props.sceneData[0];
         return (
@@ -204,9 +204,11 @@ describe('editable media contract', () => {
       editables: [
         { id: 'title0', type: 'text', label: 'Title 1', propKey: 'title0' },
       ],
-    });
+    } as Parameters<typeof validateDesign>[0];
+    const result = validateDesign(payload);
 
-    expect(result).toEqual(expect.stringMatching(/title1|editable metadata/i));
+    expect(result).toBeNull();
+    expect(payload.editables?.map(field => field.id)).toEqual(['title0', 'title1']);
   });
 
   it('ignores structural control tokens in rendered scene objects', () => {
@@ -359,8 +361,8 @@ describe('editable media contract', () => {
     expect(result).toBeNull();
   });
 
-  it('rejects editables that are declared but missing data-editable in JSX', () => {
-    const result = validateDesign({
+  it('instruments editables that are declared but missing data-editable in JSX', () => {
+    const payload = {
       code: `function Design(props) {
         return (
           <AbsoluteFill>
@@ -372,14 +374,15 @@ describe('editable media contract', () => {
       editables: [
         { id: 'title', type: 'text', label: 'Title', propKey: 'title' },
       ],
-    });
+    } as Parameters<typeof validateDesign>[0];
+    const result = validateDesign(payload);
 
-    expect(result).toEqual(expect.stringMatching(/data-editable/i));
-    expect(result).toEqual(expect.stringMatching(/title/));
+    expect(result).toBeNull();
+    expect(payload.code).toContain('data-editable="title"');
   });
 
-  it('rejects data-editable wrappers that are missing from editable metadata', () => {
-    const result = validateDesign({
+  it('infers metadata for explicit data-editable wrappers', () => {
+    const payload = {
       code: `function Composition(props) {
         return (
           <AbsoluteFill>
@@ -389,13 +392,15 @@ describe('editable media contract', () => {
       }`,
       props: { title: 'Launch day' },
       editables: [],
-    });
+    } as Parameters<typeof validateDesign>[0];
+    const result = validateDesign(payload);
 
-    expect(result).toEqual(expect.stringMatching(/data-editable layer|matching editables|title/i));
+    expect(result).toBeNull();
+    expect(payload.editables?.map(field => field.id)).toEqual(['title']);
   });
 
-  it('rejects visible text props that have no editable metadata', () => {
-    const result = validateDesign({
+  it('infers metadata for visible text props', () => {
+    const payload = {
       code: `function Composition(props) {
         return (
           <AbsoluteFill>
@@ -405,13 +410,16 @@ describe('editable media contract', () => {
       }`,
       props: { title: 'Launch day' },
       editables: [],
-    });
+    } as Parameters<typeof validateDesign>[0];
+    const result = validateDesign(payload);
 
-    expect(result).toEqual(expect.stringMatching(/visible composition prop|editable metadata|title/i));
+    expect(result).toBeNull();
+    expect(payload.code).toContain('data-editable="title"');
+    expect(payload.editables?.map(field => field.id)).toEqual(['title']);
   });
 
-  it('rejects visible image props that have no image editable metadata', () => {
-    const result = validateDesign({
+  it('infers image metadata for visible image props', () => {
+    const payload = {
       code: `function Composition(props) {
         return (
           <AbsoluteFill>
@@ -421,9 +429,14 @@ describe('editable media contract', () => {
       }`,
       props: { coverImage: 'https://example.com/cover.jpg' },
       editables: [],
-    });
+    } as Parameters<typeof validateDesign>[0];
+    const result = validateDesign(payload);
 
-    expect(result).toEqual(expect.stringMatching(/visible composition prop|image\/video editable|coverImage/i));
+    expect(result).toBeNull();
+    expect(payload.code).toContain('data-editable="coverImage"');
+    expect(payload.editables).toEqual([
+      { id: 'coverImage', type: 'image', label: 'Cover image', propKey: 'coverImage' },
+    ]);
   });
 
   it('rejects text editables that do not read from their prop key', () => {

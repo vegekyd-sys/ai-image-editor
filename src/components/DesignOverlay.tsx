@@ -96,29 +96,6 @@ export default function DesignOverlay({
   const dragDomElRef = useRef<HTMLElement | null>(null);
   const dragScaleRef = useRef(1);
 
-  // Apply stored position + scale to Remotion DOM elements using CSS independent properties.
-  // style.translate / style.scale don't interfere with Moveable or hit-testing,
-  // and are read by @remotion/web-renderer's canvas drawing (via our patch).
-  const applyStoredOffsets = useCallback((
-    elements: Iterable<Element>,
-    activeElements?: ReadonlySet<Element>,
-  ) => {
-    for (const el of elements) {
-      const id = el.getAttribute('data-editable');
-      if (!id) continue;
-      const htmlEl = el as HTMLElement;
-      if (activeElements && !activeElements.has(el)) {
-        htmlEl.style.translate = '';
-        htmlEl.style.scale = '';
-        continue;
-      }
-      const pos = props[`_pos_${id}`] as { x: number; y: number } | undefined;
-      const sc = props[`_scale_${id}`] as { w: number; h: number } | undefined;
-      htmlEl.style.translate = pos ? `${pos.x}px ${pos.y}px` : '';
-      htmlEl.style.scale = sc ? `${+sc.w.toFixed(4)} ${+sc.h.toFixed(4)}` : '';
-    }
-  }, [props]);
-
   // Measure editable elements
   const measure = useCallback(() => {
     if (isDraggingRef.current || isMeasuringRef.current) return;
@@ -138,11 +115,6 @@ export default function DesignOverlay({
       viewportRect,
     });
     const activeInstances = registry.activeInstances();
-    const activeElements = new Set(activeInstances.map(instance => instance.element));
-    applyStoredOffsets(
-      containerEl.querySelectorAll('[data-editable]'),
-      activeElements,
-    );
 
     const newRects: MeasuredRect[] = [];
     const visibleIds: string[] = [];
@@ -184,7 +156,7 @@ export default function DesignOverlay({
     setRects(newRects);
     onVisibleFieldsChangeRef.current?.(visibleIds);
     isMeasuringRef.current = false;
-  }, [containerEl, editables, applyStoredOffsets, filterVisibleFields, props]);
+  }, [containerEl, editables, filterVisibleFields, props]);
 
   // Mark selected element (CSS hides hover outline when Moveable frame shows)
   useEffect(() => {
@@ -556,7 +528,7 @@ export default function DesignOverlay({
       const newW = p.baseW * ratio;
       const newH = p.baseH * ratio;
 
-      // Apply scale via transform (renderMediaOnWeb only reads style.transform)
+      // Apply the same independent CSS scale used by EditableSceneBoundary.
       const el = rectsRef.current.find(
         rect => rect.id === selectedFieldIdRef.current,
       )?.domEl ?? null;

@@ -8,6 +8,7 @@ import { parse } from '@babel/parser';
 import traverse from '@babel/traverse';
 import { transform as sucraseTransform } from 'sucrase';
 import type { EditableField } from '@/types';
+import { compileEditableManifest } from './editor/editable-manifest';
 import {
   buildRemotionEvaluatorBody,
   DYNAMIC_DESIGN_SCOPE_NAMES,
@@ -18,7 +19,7 @@ export interface DesignResult {
   code: string;
   props?: Record<string, unknown>;
   editables?: EditableField[];
-  [key: string]: unknown;
+  animation?: { fps?: number; durationInSeconds?: number; format?: string };
 }
 
 const SAFE_RUNTIME_GLOBALS = new Set([
@@ -61,12 +62,20 @@ export function validateDesignDiagnostics(result: DesignResult): string[] {
   result.code = autoFixImgTags(result.code);
   result.code = autoFixVideoTags(result.code);
 
+  const manifest = compileEditableManifest({
+    code: result.code,
+    props: result.props,
+    editables: result.editables,
+  });
+  result.code = manifest.code;
+  result.editables = manifest.editables;
+
   // Check 1: Syntax — Sucrase compile only (no runtime execution)
   const compileError = checkCompile(result.code);
   if (compileError) return [compileError];
 
   const timelineDurationError = validateTimelineDuration(result);
-  const diagnostics: string[] = [];
+  const diagnostics: string[] = [...manifest.diagnostics];
   if (timelineDurationError) diagnostics.push(timelineDurationError);
 
   // Check 2: Hooks evaluated while the composition module is being created.
@@ -86,12 +95,6 @@ export function validateDesignDiagnostics(result: DesignResult): string[] {
   if (urlError) diagnostics.push(urlError);
 
   // Check 6: Editables validation
-  const missingEditablesError = validateMissingEditables(result.editables, result.code);
-  if (missingEditablesError) diagnostics.push(missingEditablesError);
-
-  const editableCoverageError = validateEditableCoverage(result.editables, result.code, result.props);
-  if (editableCoverageError) diagnostics.push(editableCoverageError);
-
   const editablesError = validateEditables(result.editables, result.code, result.props);
   if (editablesError) diagnostics.push(editablesError);
 
@@ -192,7 +195,16 @@ export function validateEditables(
       return `⚠️ Editable field "${field.id}" declares prop key "${field.propKey}", but the design code does not read props.${field.propKey}. Avoid hardcoded content; wire the editable element to props.${field.propKey}.`;
     }
 
-    if ((field.type === 'image' || field.type === 'video') && (!openingTag || !editableWrapperHasMeasurableBox(openingTag))) {
+    if (
+      (field.type === 'image' || field.type === 'video')
+      && (
+        !openingTag
+        || (
+          !editableWrapperHasMeasurableBox(openingTag)
+          && !/^<(?:Img|Video|OffthreadVideo)\b/.test(openingTag)
+        )
+      )
+    ) {
       return `⚠️ Editable ${field.type} field "${field.id}" must put data-editable on a measurable wrapper with an explicit box (width+height or inset). Moveable cannot resize/move a zero-size wrapper.`;
     }
 
@@ -340,81 +352,19 @@ function codeReadsProp(code: string, propKey: string): boolean {
 }
 
 function validateHardcodedEditableText(editables: EditableField[] | undefined, code: string): string | null {
-  if (!editables || editables.length === 0) return null;
-  const editableTokens = editables.flatMap(field => [field.id, field.propKey]);
+  const editableTokens = (editables ?? []).flatMap(field => [field.id, field.propKey]);
   const hardcoded = findHardcodedVisibleTextArray(code, editableTokens);
   if (hardcoded) {
     const kind = hardcoded.kind === 'object' ? 'text data array' : 'text array';
     const fix = hardcoded.kind === 'object'
-      ? 'Move every user-facing year/title/description into props, render props.* inside data-editable wrappers, and include matching text editables.'
-      : 'User-facing text must be text editables: move each label into props, render props.labelKey, and include matching { type: \'text\', propKey } entries in editables.';
+      ? 'Move every user-facing year/title/description into top-level props and render those props in semantic text hosts.'
+      : 'Move each user-facing label into a top-level prop and render that prop in its own semantic text host.';
     return `⚠️ Visible ${kind} "${hardcoded.name}" is hardcoded (${hardcoded.literals.slice(0, 3).join(', ')}). ${fix}`;
   }
   const hardcodedTextNode = findHardcodedVisibleTextNode(code);
   if (hardcodedTextNode) {
-    return `⚠️ Visible JSX text is hardcoded (${hardcodedTextNode.literals.slice(0, 3).join(', ')}). User-facing labels, badges, stats, captions, and brand text must come from props and have matching text editables.`;
+    return `⚠️ Visible JSX text is hardcoded (${hardcodedTextNode.literals.slice(0, 3).join(', ')}). User-facing labels, badges, stats, captions, and brand text must come from top-level props; the Editable Manifest is inferred automatically.`;
   }
-  return null;
-}
-
-function validateMissingEditables(editables: EditableField[] | undefined, code: string): string | null {
-  if (editables && editables.length > 0) return null;
-  const hardcoded = findHardcodedVisibleTextArray(code);
-  if (hardcoded) {
-    return `⚠️ Composition declares no editables, but visible text data "${hardcoded.name}" is hardcoded (${hardcoded.literals.slice(0, 3).join(', ')}). Put user-facing text in props, render it inside data-editable wrappers, and return matching editables so the GUI can edit it.`;
-  }
-  const hardcodedTextNode = findHardcodedVisibleTextNode(code);
-  if (hardcodedTextNode) {
-    return `⚠️ Composition declares no editables, but visible JSX text is hardcoded (${hardcodedTextNode.literals.slice(0, 3).join(', ')}). Put user-facing text in props, render it inside data-editable wrappers, and return matching editables so the GUI can edit it.`;
-  }
-  return null;
-}
-
-function validateEditableCoverage(
-  editables: EditableField[] | undefined,
-  code: string,
-  props?: Record<string, unknown>,
-): string | null {
-  const declaredIds = new Set((editables ?? []).map(field => field.id));
-  const declaredPropKeys = new Set((editables ?? []).map(field => field.propKey));
-  const staticIds = new Set<string>();
-  const staticIdPattern = /\bdata-editable\s*=\s*(?:"([^"]+)"|'([^']+)'|\{\s*["'`]([^"'`]+)["'`]\s*\})/g;
-  for (const match of code.matchAll(staticIdPattern)) {
-    const id = match[1] || match[2] || match[3];
-    if (id) staticIds.add(id);
-  }
-
-  const undeclaredIds = [...staticIds].filter(id => !declaredIds.has(id));
-  if (undeclaredIds.length > 0) {
-    return `⚠️ Composition renders data-editable layer${undeclaredIds.length === 1 ? '' : 's'} ${undeclaredIds.slice(0, 8).join(', ')} but does not declare matching editables. Add complete { id, type, label, propKey } entries so the GUI can find every layer.`;
-  }
-
-  const hasDynamicEditable = /\bdata-editable\s*=\s*\{\s*(?!["'`])/.test(code);
-  if (hasDynamicEditable && (!editables || editables.length === 0)) {
-    return '⚠️ Composition renders dynamic data-editable layers but declares no editables. Include the complete editable metadata array, including every dynamic scene key.';
-  }
-
-  const dynamicIds = collectDynamicEditableBindingsById(code, props).keys();
-  const undeclaredDynamicIds = [...dynamicIds].filter(id => !declaredIds.has(id));
-  if (undeclaredDynamicIds.length > 0) {
-    return `⚠️ Composition renders dynamic editable layer${undeclaredDynamicIds.length === 1 ? '' : 's'} ${undeclaredDynamicIds.slice(0, 8).join(', ')} but does not declare matching editable metadata. Include every scene key in the complete editables array.`;
-  }
-
-  const visiblePropKeys = new Set<string>();
-  const childPropPattern = />\s*\{\s*props(?:\.([A-Za-z_$][\w$]*)|\[\s*["'`]([^"'`]+)["'`]\s*\])\s*\}\s*</g;
-  for (const match of code.matchAll(childPropPattern)) {
-    visiblePropKeys.add(match[1] || match[2]);
-  }
-  const mediaPropPattern = /<(?:Img|Video|OffthreadVideo)\b[^>]*\bsrc\s*=\s*\{\s*props(?:\.([A-Za-z_$][\w$]*)|\[\s*["'`]([^"'`]+)["'`]\s*\])/g;
-  for (const match of code.matchAll(mediaPropPattern)) {
-    visiblePropKeys.add(match[1] || match[2]);
-  }
-
-  const missingPropKeys = [...visiblePropKeys].filter(propKey => !declaredPropKeys.has(propKey));
-  if (missingPropKeys.length > 0) {
-    return `⚠️ Visible composition prop${missingPropKeys.length === 1 ? '' : 's'} ${missingPropKeys.slice(0, 8).join(', ')} ${missingPropKeys.length === 1 ? 'is' : 'are'} rendered without matching editable metadata. Add data-editable wrappers and complete text/image/video editable entries.`;
-  }
-
   return null;
 }
 

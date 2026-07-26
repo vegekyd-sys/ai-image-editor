@@ -60,7 +60,6 @@ return {
   width: 1080,
   height: 1920,
   props,
-  editables,
   animation: { fps: 30, durationInSeconds: 12 }
 }
 ```
@@ -153,176 +152,101 @@ return (
 
 ## Editable Composition Contract
 
-This section is the canonical editable contract for Remotion compositions. Do not wait for the user to say "editable"; if you are returning `runtime: "composition"` / legacy `runtime: "design"`, the composition should be editable by default.
+Editable is the default for every composition. Keep user-facing values in
+`props`; the runtime infers the Editable Manifest and instruments ordinary JSX.
+Do not write an `editables` array for new work.
 
-Every user-facing text field should be editable. That includes scene years, titles, subtitles, captions, badges, counters, stats, brand names, CTA text, outro lines, timeline labels, and small corner labels such as `01 / 05`. Primary image and video layers that the user may select, move, resize, replace, or trim should also be editable. Do not mark tiny decorative icons, emoji accents, static copyright text, gradients, glows, borders, or structural-only wrappers as editable.
-
-Before returning, do an editable coverage check:
-- Count every visible user-facing text string in the JSX and rendered data arrays. Each one must come from `props` and have a matching `{ type: 'text', propKey }` editable.
-- Count every primary image/video card, background media layer, or generated/timeline visual asset that a user would expect to move or resize. Each one should have a matching `image` or `video` editable.
-- If a scene array contains user-facing text, store prop keys in the array, not the text itself. Render `props[key]` inside the `data-editable` wrapper.
-- If generated or timeline images are used as real visuals, put HTTPS URLs in `props`, render them with `<Img>`, and wrap them in measurable `data-editable` boxes. Never inline data URLs or SVG image bytes.
-- Never use an empty editable id such as `data-editable=""`, `imgId: ""`, or optional image ids. If only two source images are available but five scenes need image cards, create five non-empty image prop keys (`imageCard0` ... `imageCard4`) and reuse the same two URL values across those props.
-- Every visible image card/layer should have its own stable editable id, even when two layers reuse the same image URL. Reusing the URL is fine; reusing or omitting the layer id is not.
-- Decorative overlays above image/video editables must use `pointerEvents: 'none'`.
-- For numbered composition parts, include the complete `props` and `editables` arrays in the first part's `compositionMetadata`. The metadata schema accepts `text`, `image`, and `video`, including video `trimBeforePropKey` / `trimAfterPropKey`; do not leave editable metadata behind when moving source into durable parts.
-
-Required connections:
-- `props`: stores the editable value or media URL.
-- JSX reads from props: `{props.title}`, `props.coverImage`, `props.clipUrl`, etc.
-- `data-editable="fieldId"` sits on the visible measurable wrapper, not on a decorative parent.
-- The editable wrapper has an explicit box: `width`+`height`, four edges/inset, or another stable measurable box, and renders as `block` or `inline-block`.
-- `editables`: maps each field id to `{ id, type: 'text' | 'image' | 'video', label, propKey }`.
-- If a patch adds or removes visible editable text/image/video layers, return the complete updated `editables` array alongside the patch.
-
-Low-burden text pattern for multi-scene compositions:
+The common path is normal React:
 
 ```jsx
-const textDefaults = {
-  year0: '2011',
-  title0: '产品起点',
-  subtitle0: '第一批用户开始使用',
-  stat0: '10K early users',
-  badge0: '01 / 05',
-};
-
-const props = { ...textDefaults, image0: 'https://example.com/scene.jpg' };
-const editables = [
-  ...Object.keys(textDefaults).map((key) => ({
-    id: key,
-    type: 'text',
-    label: key,
-    propKey: key,
-  })),
-  { id: 'image0', type: 'image', label: 'Scene image 1', propKey: 'image0' },
-];
-
-const scenes = [
-  { yearKey: 'year0', titleKey: 'title0', subtitleKey: 'subtitle0', statKey: 'stat0', badgeKey: 'badge0', imageKey: 'image0' },
-];
-
-function EditableText({ id, props, style }) {
+function Composition(props) {
   return (
-    <div data-editable={id} style={{ display: 'block', ...style }}>
-      {props[id]}
-    </div>
+    <AbsoluteFill>
+      <h1>{props.title}</h1>
+      <Img src={props.heroImage} style={{ width: 720, height: 900 }} />
+      <Video src={props.clip} style={{ width: 1080, height: 1920 }} />
+    </AbsoluteFill>
   );
 }
 ```
 
-Then render scene text inside `function Composition(props)` with `<EditableText id={scene.titleKey} props={props} ... />`. This avoids repeated JSX while keeping every visible string editable.
+Rules:
+- Put every user-facing title, subtitle, caption, badge, counter, stat, brand
+  line, CTA, and outro line in a top-level prop and render that prop in its own
+  semantic host element.
+- Put every primary image/video URL in its own top-level prop and render it
+  through `<Img src={props.imageKey}>` or `<Video src={props.videoKey}>`.
+- One host represents one logical text field. Do not render two different text
+  props directly inside the same host.
+- Do not put visible text directly inside `<AbsoluteFill>` or `<Sequence>`; use
+  a real text element so the editor gets its actual box.
+- Reusing a media URL is fine, but each independently movable layer needs its
+  own prop key.
+- Keep decorative overlays non-interactive with `pointerEvents: 'none'`.
+- Keep hardcoded structural tokens and decorative marks out of props; keep all
+  user-facing copy in props.
 
-For an active-scene composition, the scene-key table may live in `props`:
+For a dynamic scene abstraction, use one explicit runtime-id escape hatch. The
+same key expression must select the prop and identify its visible host:
 
 ```jsx
-const scene = props.sceneData[activeSceneIndex];
-return <div data-editable={scene.titleKey}>{props[scene.titleKey]}</div>;
+const scenes = [
+  { titleKey: 'title0', imageKey: 'image0' },
+  { titleKey: 'title1', imageKey: 'image1' },
+];
+const scene = scenes[activeSceneIndex];
+
+return (
+  <AbsoluteFill>
+    <h1 data-editable={scene.titleKey}>{props[scene.titleKey]}</h1>
+    <div data-editable={scene.imageKey} style={{ width: 720, height: 900 }}>
+      <Img src={props[scene.imageKey]} style={{ width: '100%', height: '100%' }} />
+    </div>
+  </AbsoluteFill>
+);
 ```
 
-Return the complete `editables` metadata for every key in `props.sceneData`. This controlled dynamic-key pattern is supported by the validator; do not expand every scene into repeated `<Sequence>` blocks just to make editable ids literal. Keep each dynamic editable `id === propKey`, and use the exact same key expression in `data-editable={...}` and `props[...]`.
-
-For image cards in scene arrays, use the same non-empty id as `data-editable` and `propKey`:
+Reusable helper components follow the same rule without metadata duplication:
 
 ```jsx
-<div
-  data-editable={scene.imageKey}
-  style={{ position: 'absolute', left: 80, top: 520, width: 520, height: 360, display: 'block' }}
->
-  <Img src={props[scene.imageKey]} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
-</div>
-```
-
-Direct text pattern:
-
-```jsx
-return {
-  type: 'render',
-  code: `function Composition(props) {
-    return (
-      <AbsoluteFill>
-        <div data-editable="title" style={{ display: 'block' }}>
-          {props.title}
-        </div>
-      </AbsoluteFill>
-    );
-  }`,
-  props: { title: 'Scene Title' },
-  editables: [{ id: 'title', type: 'text', label: 'Title', propKey: 'title' }],
-  width: 1080,
-  height: 1920,
-  animation: { fps: 30, durationInSeconds: 10 }
+function EditableText({ id, value }) {
+  return <h1 data-editable={id}>{value}</h1>;
 }
+function EditableImage({ id, src }) {
+  return <Img data-editable={id} src={src} />;
+}
+
+<EditableText id={scene.titleKey} value={props[scene.titleKey]} />
+<EditableImage id={scene.imageKey} src={props[scene.imageKey]} />
 ```
 
-Do not hardcode user-visible text in JSX after declaring it in props. For per-character kinetic text, put `data-editable` on the parent and split `props.title`.
+The compiler follows `id + value/src` through these helpers and expands the
+scene keys from `props`. Do not repeat the same information in an `editables`
+array.
 
-Image pattern:
+Use `data-editable` only for custom/dynamic ownership that the compiler cannot
+infer from a direct prop read. Put it on the real visual host, never on a
+full-canvas structural ancestor. Legacy explicit `editables` metadata remains
+accepted when patching an old composition, but new output should omit it.
+
+Video trim is non-destructive and belongs to the selected video node:
 
 ```jsx
-return {
-  type: 'render',
-  code: `function Composition(props) {
-    return (
-      <AbsoluteFill>
-        <div
-          data-editable="cover"
-          style={{ position: 'absolute', left: 80, top: 120, width: 420, height: 520, display: 'block' }}
-        >
-          <Img src={props.coverImage} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
-        </div>
-      </AbsoluteFill>
-    );
-  }`,
-  props: { coverImage: 'https://example.com/cover.jpg' },
-  editables: [{ id: 'cover', type: 'image', label: 'Cover image', propKey: 'coverImage' }],
-  width: 1080,
-  height: 1920
-}
+<Video
+  src={props.heroVideo}
+  trimBefore={30}
+  trimAfter={180}
+  style={{ width: '100%', height: '100%', objectFit: 'cover' }}
+/>
 ```
 
-Video trim pattern:
+The editor persists later trim changes by the inferred video node id. Do not
+create composition-wide trim fields or wrap the whole timeline as one video
+editable.
 
-```jsx
-return {
-  type: 'render',
-  code: `function Composition(props) {
-    return (
-      <AbsoluteFill>
-        <div
-          data-editable="heroVideo"
-          style={{ position: 'absolute', left: 0, top: 0, width: 1080, height: 1920, display: 'block' }}
-        >
-          <Video
-            src={props.heroVideo}
-            trimBefore={props.heroStartFrame}
-            trimAfter={props.heroEndFrame}
-            style={{ width: '100%', height: '100%', objectFit: 'cover' }}
-          />
-        </div>
-        <div style={{ pointerEvents: 'none', position: 'absolute', inset: 0, background: 'linear-gradient(transparent, rgba(0,0,0,.45))' }} />
-      </AbsoluteFill>
-    );
-  }`,
-  props: {
-    heroVideo: 'https://example.com/clip.mp4',
-    heroStartFrame: 30,
-    heroEndFrame: 180
-  },
-  editables: [{
-    id: 'heroVideo',
-    type: 'video',
-    label: 'Hero video',
-    propKey: 'heroVideo',
-    trimBeforePropKey: 'heroStartFrame',
-    trimAfterPropKey: 'heroEndFrame'
-  }],
-  width: 1080,
-  height: 1920,
-  animation: { fps: 30, durationInSeconds: 5 }
-}
-```
-
-Decorative layers above image/video editables must use `pointerEvents: 'none'` so canvas selection, drag, resize, and trim handle interactions still reach the editable wrapper.
+For numbered source parts, the first `compositionMetadata` needs dimensions,
+`props`, and animation. Omit `editables`; the assembled composition infers and
+persists its Manifest automatically.
 
 ## Composition Quality
 

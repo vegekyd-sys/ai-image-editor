@@ -1,0 +1,613 @@
+import { parse } from '@babel/parser';
+import traverse, { type NodePath } from '@babel/traverse';
+import type {
+  Expression,
+  JSXAttribute,
+  JSXElement,
+  JSXExpressionContainer,
+  JSXOpeningElement,
+  MemberExpression,
+  Node,
+} from '@babel/types';
+import type { EditableField, EditableType } from '@/types';
+
+export interface EditableManifestInput {
+  code: string;
+  props?: Record<string, unknown>;
+  editables?: EditableField[];
+}
+
+export interface EditableManifestResult {
+  code: string;
+  editables: EditableField[];
+  diagnostics: string[];
+}
+
+interface Candidate {
+  opening: JSXOpeningElement;
+  type: EditableType;
+  staticIds: string[];
+  propKeyById: Map<string, string>;
+  instrumentId?: string;
+}
+
+interface SourceInsertion {
+  offset: number;
+  text: string;
+}
+
+interface ComponentEditableHost {
+  componentName: string;
+  idParam: string;
+  valueParam: string;
+  type: EditableType;
+}
+
+const STRUCTURAL_TEXT_HOSTS = new Set([
+  'AbsoluteFill',
+  'Sequence',
+  'Fragment',
+  'React.Fragment',
+]);
+
+function jsxName(opening: JSXOpeningElement): string {
+  const name = opening.name;
+  if (name.type === 'JSXIdentifier') return name.name;
+  if (
+    name.type === 'JSXMemberExpression'
+    && name.object.type === 'JSXIdentifier'
+    && name.property.type === 'JSXIdentifier'
+  ) {
+    return `${name.object.name}.${name.property.name}`;
+  }
+  return '';
+}
+
+function humanizeId(id: string): string {
+  const spaced = id
+    .replace(/([a-z0-9])([A-Z])/g, (_, before: string, upper: string) =>
+      `${before} ${upper.toLowerCase()}`
+    )
+    .replace(/[_-]+/g, ' ')
+    .replace(/([A-Za-z])(\d+)$/g, '$1 $2')
+    .trim();
+  return spaced ? spaced[0].toUpperCase() + spaced.slice(1) : id;
+}
+
+function staticPropKey(node: Node | null | undefined): string | null {
+  if (!node || node.type !== 'MemberExpression') return null;
+  if (node.object.type !== 'Identifier' || node.object.name !== 'props') return null;
+  if (!node.computed && node.property.type === 'Identifier') return node.property.name;
+  if (node.computed && node.property.type === 'StringLiteral') return node.property.value;
+  if (
+    node.computed
+    && node.property.type === 'TemplateLiteral'
+    && node.property.expressions.length === 0
+  ) {
+    return node.property.quasis[0]?.value.cooked ?? null;
+  }
+  return null;
+}
+
+function dynamicPropExpression(
+  node: Node | null | undefined,
+  code: string,
+): string | null {
+  if (!node || node.type !== 'MemberExpression') return null;
+  if (node.object.type !== 'Identifier' || node.object.name !== 'props' || !node.computed) {
+    return null;
+  }
+  const property = node.property;
+  if (property.start == null || property.end == null) return null;
+  return code.slice(property.start, property.end).replace(/\s+/g, '');
+}
+
+function expressionFromAttribute(attribute: JSXAttribute): Expression | null {
+  if (!attribute.value || attribute.value.type !== 'JSXExpressionContainer') return null;
+  return attribute.value.expression.type === 'JSXEmptyExpression'
+    ? null
+    : attribute.value.expression;
+}
+
+function namedAttribute(
+  opening: JSXOpeningElement,
+  name: string,
+): JSXAttribute | null {
+  return opening.attributes.find((attribute): attribute is JSXAttribute =>
+    attribute.type === 'JSXAttribute'
+    && attribute.name.type === 'JSXIdentifier'
+    && attribute.name.name === name
+  ) ?? null;
+}
+
+function dataEditableAttribute(opening: JSXOpeningElement): JSXAttribute | null {
+  return namedAttribute(opening, 'data-editable');
+}
+
+function staticEditableId(attribute: JSXAttribute | null): string | null {
+  if (!attribute?.value) return null;
+  if (attribute.value.type === 'StringLiteral') return attribute.value.value;
+  const expression = expressionFromAttribute(attribute);
+  return staticPropKey(expression)
+    ?? (expression?.type === 'StringLiteral' ? expression.value : null);
+}
+
+function attributeExpressionSource(
+  attribute: JSXAttribute | null,
+  code: string,
+): string | null {
+  const expression = attribute ? expressionFromAttribute(attribute) : null;
+  if (!expression || expression.start == null || expression.end == null) return null;
+  return code.slice(expression.start, expression.end).replace(/\s+/g, '');
+}
+
+function directTextPropReads(element: JSXElement): MemberExpression[] {
+  return element.children.flatMap(child => {
+    if (child.type !== 'JSXExpressionContainer') return [];
+    const expression = (child as JSXExpressionContainer).expression;
+    return expression.type === 'MemberExpression' ? [expression] : [];
+  });
+}
+
+function descendantTextPropKeys(path: NodePath<JSXElement>): string[] {
+  const keys = new Set(
+    directTextPropReads(path.node)
+      .map(read => staticPropKey(read))
+      .filter((key): key is string => Boolean(key)),
+  );
+  path.traverse({
+    JSXElement(innerPath) {
+      for (const read of directTextPropReads(innerPath.node)) {
+        const key = staticPropKey(read);
+        if (key) keys.add(key);
+      }
+    },
+  });
+  return [...keys];
+}
+
+function mediaPropRead(opening: JSXOpeningElement): MemberExpression | null {
+  const source = opening.attributes.find((attribute): attribute is JSXAttribute =>
+    attribute.type === 'JSXAttribute'
+    && attribute.name.type === 'JSXIdentifier'
+    && attribute.name.name === 'src'
+  );
+  const expression = source ? expressionFromAttribute(source) : null;
+  return expression?.type === 'MemberExpression' ? expression : null;
+}
+
+function mediaTypeFromName(name: string): EditableType | null {
+  if (name === 'Video' || name === 'OffthreadVideo' || name === 'video') return 'video';
+  if (name === 'Img' || name === 'img') return 'image';
+  return null;
+}
+
+function descendantMediaType(path: NodePath<JSXElement>): EditableType | null {
+  let result: EditableType | null = mediaTypeFromName(jsxName(path.node.openingElement));
+  if (result) return result;
+  path.traverse({
+    JSXOpeningElement(innerPath) {
+      if (result) {
+        innerPath.stop();
+        return;
+      }
+      result = mediaTypeFromName(jsxName(innerPath.node));
+    },
+  });
+  return result;
+}
+
+function descendantMediaPropKey(path: NodePath<JSXElement>): string | null {
+  const ownRead = mediaPropRead(path.node.openingElement);
+  const ownKey = staticPropKey(ownRead);
+  if (ownKey) return ownKey;
+
+  let result: string | null = null;
+  path.traverse({
+    JSXOpeningElement(innerPath) {
+      if (result || !mediaTypeFromName(jsxName(innerPath.node))) return;
+      result = staticPropKey(mediaPropRead(innerPath.node));
+    },
+  });
+  return result;
+}
+
+function componentFunctionName(path: NodePath<JSXElement>): string | null {
+  const functionPath = path.findParent(parent =>
+    parent.isFunctionDeclaration()
+    || parent.isFunctionExpression()
+    || parent.isArrowFunctionExpression()
+  );
+  if (!functionPath) return null;
+  if (functionPath.isFunctionDeclaration() && functionPath.node.id) {
+    return functionPath.node.id.name;
+  }
+  const variable = functionPath.parentPath;
+  if (
+    variable?.isVariableDeclarator()
+    && variable.node.id.type === 'Identifier'
+  ) {
+    return variable.node.id.name;
+  }
+  return null;
+}
+
+function componentEditableHost(
+  path: NodePath<JSXElement>,
+): ComponentEditableHost | null {
+  const opening = path.node.openingElement;
+  const editableAttribute = dataEditableAttribute(opening);
+  const editableExpression = editableAttribute
+    ? expressionFromAttribute(editableAttribute)
+    : null;
+  if (editableExpression?.type !== 'Identifier') return null;
+
+  const componentName = componentFunctionName(path);
+  if (!componentName || componentName === 'Composition') return null;
+  const mediaType = descendantMediaType(path);
+  if (mediaType) {
+    let mediaOpening = mediaTypeFromName(jsxName(opening)) ? opening : null;
+    if (!mediaOpening) {
+      path.traverse({
+        JSXOpeningElement(innerPath) {
+          if (!mediaOpening && mediaTypeFromName(jsxName(innerPath.node))) {
+            mediaOpening = innerPath.node;
+          }
+        },
+      });
+    }
+    const sourceAttribute = mediaOpening
+      ? namedAttribute(mediaOpening, 'src')
+      : null;
+    const sourceExpression = sourceAttribute
+      ? expressionFromAttribute(sourceAttribute)
+      : null;
+    if (sourceExpression?.type !== 'Identifier') return null;
+    return {
+      componentName,
+      idParam: editableExpression.name,
+      valueParam: sourceExpression.name,
+      type: mediaType,
+    };
+  }
+
+  let valueParam: string | null = null;
+  const inspectChildren = (element: JSXElement) => {
+    for (const child of element.children) {
+      if (
+        child.type === 'JSXExpressionContainer'
+        && child.expression.type === 'Identifier'
+        && child.expression.name !== editableExpression.name
+      ) {
+        valueParam = child.expression.name;
+        return;
+      }
+    }
+  };
+  inspectChildren(path.node);
+  if (!valueParam) {
+    path.traverse({
+      JSXElement(innerPath) {
+        if (!valueParam) inspectChildren(innerPath.node);
+      },
+    });
+  }
+  return valueParam
+    ? {
+        componentName,
+        idParam: editableExpression.name,
+        valueParam,
+        type: 'text',
+      }
+    : null;
+}
+
+function usageCandidate(
+  opening: JSXOpeningElement,
+  host: ComponentEditableHost,
+  ast: ReturnType<typeof parse>,
+  code: string,
+  props: Record<string, unknown> | undefined,
+): Candidate | null {
+  const idAttribute = namedAttribute(opening, host.idParam);
+  const valueAttribute = namedAttribute(opening, host.valueParam);
+  if (!idAttribute || !valueAttribute) return null;
+
+  const staticId = staticEditableId(idAttribute);
+  const valueExpression = expressionFromAttribute(valueAttribute);
+  const staticKey = staticPropKey(valueExpression);
+  if (staticId && staticKey) {
+    return {
+      opening,
+      type: host.type,
+      staticIds: [staticId],
+      propKeyById: new Map([[staticId, staticKey]]),
+    };
+  }
+
+  const idExpression = attributeExpressionSource(idAttribute, code);
+  const valuePropExpression = dynamicPropExpression(valueExpression, code);
+  if (!idExpression || !valuePropExpression) return null;
+  const propertyName = dynamicPropertyName(idExpression);
+  if (!propertyName || valuePropExpression !== idExpression) return null;
+  const ids = collectDynamicIds(ast, propertyName, props);
+  return {
+    opening,
+    type: host.type,
+    staticIds: ids,
+    propKeyById: new Map(ids.map(id => [id, id])),
+  };
+}
+
+function dynamicPropertyName(expression: string): string | null {
+  return expression.match(/\.([A-Za-z_$][\w$]*)$/)?.[1]
+    ?? expression.match(/\[['"]([A-Za-z_$][\w$]*)['"]\]$/)?.[1]
+    ?? null;
+}
+
+function collectDynamicIds(
+  ast: ReturnType<typeof parse>,
+  propertyName: string,
+  props: Record<string, unknown> | undefined,
+): string[] {
+  const ids: string[] = [];
+  const seen = new Set<string>();
+  traverse(ast, {
+    ObjectProperty(path) {
+      const key = path.node.key;
+      const name = !path.node.computed && key.type === 'Identifier'
+        ? key.name
+        : key.type === 'StringLiteral'
+          ? key.value
+          : null;
+      const value = path.node.value;
+      if (name !== propertyName || value.type !== 'StringLiteral') return;
+      if (props && !Object.prototype.hasOwnProperty.call(props, value.value)) return;
+      if (!seen.has(value.value)) {
+        seen.add(value.value);
+        ids.push(value.value);
+      }
+    },
+  });
+
+  const visit = (value: unknown) => {
+    if (Array.isArray(value)) {
+      value.forEach(visit);
+      return;
+    }
+    if (!value || typeof value !== 'object') return;
+    for (const [key, child] of Object.entries(value as Record<string, unknown>)) {
+      if (
+        key === propertyName
+        && typeof child === 'string'
+        && (!props || Object.prototype.hasOwnProperty.call(props, child))
+        && !seen.has(child)
+      ) {
+        seen.add(child);
+        ids.push(child);
+      }
+      visit(child);
+    }
+  };
+  visit(props);
+  return ids;
+}
+
+function insertionFor(opening: JSXOpeningElement, id: string): SourceInsertion | null {
+  if (opening.end == null) return null;
+  const closeLength = opening.selfClosing ? 2 : 1;
+  return {
+    offset: opening.end - closeLength,
+    text: ` data-editable="${id}"`,
+  };
+}
+
+function applyInsertions(code: string, insertions: SourceInsertion[]): string {
+  return [...insertions]
+    .sort((a, b) => b.offset - a.offset)
+    .reduce(
+      (current, insertion) =>
+        `${current.slice(0, insertion.offset)}${insertion.text}${current.slice(insertion.offset)}`,
+      code,
+    );
+}
+
+function addCandidateFields(
+  fields: EditableField[],
+  seen: Set<string>,
+  candidate: Candidate,
+  explicitById: Map<string, EditableField>,
+) {
+  for (const id of candidate.staticIds) {
+    if (!id || seen.has(id)) continue;
+    const explicit = explicitById.get(id);
+    fields.push(explicit ?? {
+      id,
+      type: candidate.type,
+      label: humanizeId(id),
+      propKey: candidate.propKeyById.get(id) ?? id,
+    });
+    seen.add(id);
+  }
+}
+
+export function compileEditableManifest({
+  code,
+  props,
+  editables,
+}: EditableManifestInput): EditableManifestResult {
+  let ast: ReturnType<typeof parse>;
+  try {
+    ast = parse(code, {
+      sourceType: 'unambiguous',
+      plugins: ['jsx', 'typescript'],
+    });
+  } catch (error) {
+    return {
+      code,
+      editables: editables ?? [],
+      diagnostics: [
+        `Editable Manifest compile failed: ${error instanceof Error ? error.message : String(error)}`,
+      ],
+    };
+  }
+
+  const diagnostics: string[] = [];
+  const candidates: Candidate[] = [];
+  const insertions: SourceInsertion[] = [];
+  const insertedOpenings = new Set<JSXOpeningElement>();
+  const componentHosts = new Map<string, ComponentEditableHost>();
+  const componentHostOpenings = new Set<JSXOpeningElement>();
+
+  traverse(ast, {
+    JSXElement(path) {
+      if (!dataEditableAttribute(path.node.openingElement)) return;
+      const host = componentEditableHost(path);
+      if (host) {
+        componentHosts.set(host.componentName, host);
+        componentHostOpenings.add(path.node.openingElement);
+      }
+    },
+  });
+
+  traverse(ast, {
+    JSXElement(path) {
+      const element = path.node;
+      const opening = element.openingElement;
+      const name = jsxName(opening);
+      if (componentHostOpenings.has(opening)) return;
+      const componentHost = componentHosts.get(name);
+      if (componentHost) {
+        const candidate = usageCandidate(opening, componentHost, ast, code, props);
+        if (candidate) {
+          candidates.push(candidate);
+        } else {
+          diagnostics.push(
+            `Editable helper <${name}> must receive ${componentHost.idParam} and ${componentHost.valueParam} from the same top-level props key.`,
+          );
+        }
+        return;
+      }
+      const explicitAttribute = dataEditableAttribute(opening);
+      const explicitStaticId = staticEditableId(explicitAttribute);
+      const explicitExpression = attributeExpressionSource(explicitAttribute, code);
+      const mediaType = descendantMediaType(path);
+      const directReads = directTextPropReads(element);
+      const directStaticKeys = directReads
+        .map(read => staticPropKey(read))
+        .filter((key): key is string => Boolean(key));
+
+      if (explicitAttribute) {
+        const type = mediaType ?? 'text';
+        const ids: string[] = [];
+        const propKeyById = new Map<string, string>();
+        if (explicitStaticId) {
+          ids.push(explicitStaticId);
+          const nestedTextKeys = descendantTextPropKeys(path);
+          propKeyById.set(
+            explicitStaticId,
+            directStaticKeys[0]
+              ?? descendantMediaPropKey(path)
+              ?? (nestedTextKeys.length === 1 ? nestedTextKeys[0] : undefined)
+              ?? explicitStaticId,
+          );
+        } else if (explicitExpression) {
+          const propertyName = dynamicPropertyName(explicitExpression);
+          if (propertyName) {
+            for (const id of collectDynamicIds(ast, propertyName, props)) {
+              ids.push(id);
+              propKeyById.set(id, id);
+            }
+          }
+        }
+        if (ids.length > 0) {
+          candidates.push({
+            opening,
+            type,
+            staticIds: ids,
+            propKeyById,
+          });
+        } else if (!editables?.length) {
+          diagnostics.push(
+            `Could not infer editable ids for <${name}>. Use a static id or pair data-editable={scene.key} with props[scene.key].`,
+          );
+        }
+        return;
+      }
+
+      const editableAncestor = path.findParent(parent =>
+        parent.isJSXElement()
+        && Boolean(dataEditableAttribute(parent.node.openingElement))
+      );
+      if (editableAncestor) return;
+
+      const directUniqueKeys = [...new Set(directStaticKeys)];
+      if (directUniqueKeys.length > 1) {
+        diagnostics.push(
+          `JSX host <${name}> renders multiple editable props (${directUniqueKeys.join(', ')}). Wrap each value in its own element or add an explicit data-editable host.`,
+        );
+        return;
+      }
+
+      const directKey = directUniqueKeys[0];
+      if (directKey) {
+        if (STRUCTURAL_TEXT_HOSTS.has(name)) {
+          diagnostics.push(
+            `Structural host <${name}> renders editable prop ${directKey} directly. Wrap it in a semantic text element so it has its own selectable box.`,
+          );
+          return;
+        }
+        const insertion = insertionFor(opening, directKey);
+        if (insertion) {
+          insertions.push(insertion);
+          insertedOpenings.add(opening);
+        }
+        candidates.push({
+          opening,
+          type: 'text',
+          staticIds: [directKey],
+          propKeyById: new Map([[directKey, directKey]]),
+          instrumentId: directKey,
+        });
+        return;
+      }
+
+      const ownMediaType = mediaTypeFromName(name);
+      if (!ownMediaType) return;
+      const sourceRead = mediaPropRead(opening);
+      const sourceKey = staticPropKey(sourceRead);
+      if (!sourceKey) return;
+      if (!insertedOpenings.has(opening)) {
+        const insertion = insertionFor(opening, sourceKey);
+        if (insertion) insertions.push(insertion);
+      }
+      candidates.push({
+        opening,
+        type: ownMediaType,
+        staticIds: [sourceKey],
+        propKeyById: new Map([[sourceKey, sourceKey]]),
+        instrumentId: sourceKey,
+      });
+    },
+  });
+
+  candidates.sort((a, b) => (a.opening.start ?? 0) - (b.opening.start ?? 0));
+  const explicitById = new Map((editables ?? []).map(field => [field.id, field]));
+  const fields: EditableField[] = [];
+  const seen = new Set<string>();
+  for (const candidate of candidates) {
+    addCandidateFields(fields, seen, candidate, explicitById);
+  }
+  for (const field of editables ?? []) {
+    if (!seen.has(field.id)) {
+      fields.push(field);
+      seen.add(field.id);
+    }
+  }
+
+  return {
+    code: applyInsertions(code, insertions),
+    editables: fields,
+    diagnostics: [...new Set(diagnostics)],
+  };
+}

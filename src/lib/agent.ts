@@ -2963,12 +2963,7 @@ The same Agent Run and design_path resolve to the same Snapshot ID, so a retry o
           if (rawDesign.__makaronScaffold === true) {
             return { success: false, error: 'Structural composition scaffolds cannot be published. Finish the numbered composition workspace first.' };
           }
-          const harnessError = validateDesign({
-            code: design.code,
-            props: design.props,
-            editables: design.editables,
-            animation: design.animation,
-          });
+          const harnessError = validateDesign(design);
           if (harnessError) {
             return { success: false, error: `Editable composition cannot be published: ${harnessError}` };
           }
@@ -3701,7 +3696,7 @@ Use this for substantial programmable video or media work: write the Remotion/No
 
     write_file: tool({
       description: `Write a file to your workspace. Use this to save memory, create skills, or organize your workspace.
-For durable Composition work, write numbered source parts under \`<project-id>/drafts/composition-parts/\` one cohesive component per model step and wait for each result. Filenames MUST use a numeric prefix of at least two digits plus a slug, for example \`00-foundation.js\`, \`10-scenes-a.js\`, \`90-root.js\`, or \`120-chapter.js\`. Include compositionMetadata on the first part (and again only when metadata changes) so dimensions, props, editables, and animation remain durable without a final assembly call. Each part has a hard transport limit of 12000 source characters; focused parts around 3000-8000 characters are preferred, but visual detail must decide the size. There is no aggregate source-size or part-count limit. Parts share one scope: do not use import/export. Rewriting the same numbered path is retry-safe. Never shorten approved narration, subtitles, scenes, animation, or visual detail to reduce source size. If one unusually large part exceeds 12000, split that component across new numbered files; renaming unchanged oversized source will still fail. The workspace automatically assembles, validates, and autosaves the complete draft after every successful part write. compositionWorkspace.status="ready" means the current files compile mechanically; it is not permission to omit planned scenes or polish. Finish every planned part, repair any diagnostics, then preview the returned designPath. Do not call run_code merely to assemble files.
+For durable Composition work, write numbered source parts under \`<project-id>/drafts/composition-parts/\` one cohesive component per model step and wait for each result. Filenames MUST use a numeric prefix of at least two digits plus a slug, for example \`00-foundation.js\`, \`10-scenes-a.js\`, \`90-root.js\`, or \`120-chapter.js\`. Include compositionMetadata on the first part (and again only when metadata changes) so dimensions, props, and animation remain durable without a final assembly call. New compositions infer Editable metadata automatically; omit compositionMetadata.editables unless preserving an old composition's explicit metadata. Each part has a hard transport limit of 12000 source characters; focused parts around 3000-8000 characters are preferred, but visual detail must decide the size. There is no aggregate source-size or part-count limit. Parts share one scope: do not use import/export. Rewriting the same numbered path is retry-safe. Never shorten approved narration, subtitles, scenes, animation, or visual detail to reduce source size. If one unusually large part exceeds 12000, split that component across new numbered files; renaming unchanged oversized source will still fail. The workspace automatically assembles, validates, and autosaves the complete draft after every successful part write. compositionWorkspace.status="ready" means the current files compile mechanically; it is not permission to omit planned scenes or polish. Finish every planned part, repair any diagnostics, then preview the returned designPath. Do not call run_code merely to assemble files.
 Legacy compatibility only: fromLastRunCode=true can save an in-memory run_code output within the same attempt. Do not use it to publish durable or resumed Composition drafts; use publish_draft with the exact persisted design_path.
 Composition source writes and numbered parts autosave a private draft. publish_draft is the explicit timeline promotion action.
 Node media runtime: \`type: "files"\` outputs are already saved workspace files. If they are user-facing MP4 deliverables from split/trim/export/transcode, publish them with fromWorkspaceOutputs before final reply. \`type: "video"\` is a single final MP4 and can be published with write_file. Do not use node/FFmpeg as a fallback for ordinary editable timeline splicing of existing videos; patch or publish the Remotion composition instead.
@@ -3999,9 +3994,9 @@ Runtimes:
 - \`runtime: "node"\`: open backend Node with FFmpeg/FFprobe for real file-level media operations. Never use node as a fallback for ordinary editable timeline splicing of existing videos.
 
 Return exactly one supported shape:
-- \`{ type: 'render', code, width, height, editables?, props?, animation?, fontSubstitutions? }\`
-- \`{ type: 'composition', code, width, height, editables?, props?, animation?, fontSubstitutions? }\` — alias for \`render\`
-- \`{ type: 'patch', edits?, props?, editables?, fontSubstitutions?, code_path? }\` — if a patch adds/removes visible text/image/video editable layers, return the complete updated \`editables\` array.
+- \`{ type: 'render', code, width, height, props?, animation?, fontSubstitutions? }\`
+- \`{ type: 'composition', code, width, height, props?, animation?, fontSubstitutions? }\` — alias for \`render\`
+- \`{ type: 'patch', edits?, props?, fontSubstitutions?, code_path? }\`
 - \`{ type: 'image', data, mimeType }\`
 - \`{ type: 'video', path, contentType?, description?, duration?, width?, height? }\`
 - \`{ type: 'files', outputs: [{ path, contentType, description? }] }\`
@@ -4016,7 +4011,7 @@ For durable Composition work, use \`write_file\` to author numbered source parts
 
 For a 30s+ first composition, author numbered composition parts until write_file reports compositionWorkspace.status="ready". Use scene data arrays and shared components where they help, but do not impose an aggregate source-size target or trim approved creative detail. Preview or patch the returned designPath directly; no assembly-only run_code call is needed.
 
-Composition hard rules: use Remotion \`<Img>\`, not \`<img>\`; the complete editable text/image/video/trim contract lives in \`prompts/remotion-composition.md\` and applies by default to composition render/patch outputs. Do not add editables to \`runtime:"node"\` media exports or external image/video tool outputs. Use only the pinned font catalog in \`prompts/remotion-composition.md\`; never use Apple/local/system font names. \`fontSubstitutions\` is only for an explicit persisted migration of an old composition, never for silently choosing a lookalike. Keep mobile image layers light. Reference timeline media in composition code and props with the literal 1-based marker \`<<<media_N>>>\`; the runtime resolves markers to current URLs before validation, autosave, preview, and export. Never translate Media Index N into \`ctx.snapshotImages[N]\` because that JavaScript array is 0-based. Only \`Composition(props)\` may read \`props\` directly; helper components must receive values through their own parameters and must never reference outer \`props\` (prevents \`props is not defined\` in Lambda). For timeline videos, preserve the selected Media Index video aspect ratio when all selected videos share one aspect: 9:16 sources must return a 9:16 canvas such as 1080x1920, never a 16:9 canvas. For mixed-aspect sources, choose the user/platform/current composition target and use contain/background; do not claim the runtime forced one source's aspect.
+Composition hard rules: use Remotion \`<Img>\`, not \`<img>\`; the props-first editable text/image/video/trim contract lives in \`prompts/remotion-composition.md\` and applies by default to composition render/patch outputs. New composition output should omit explicit editables metadata; the runtime infers and persists it from natural prop reads. Do not add editables to \`runtime:"node"\` media exports or external image/video tool outputs. Use only the pinned font catalog in \`prompts/remotion-composition.md\`; never use Apple/local/system font names. \`fontSubstitutions\` is only for an explicit persisted migration of an old composition, never for silently choosing a lookalike. Keep mobile image layers light. Reference timeline media in composition code and props with the literal 1-based marker \`<<<media_N>>>\`; the runtime resolves markers to current URLs before validation, autosave, preview, and export. Never translate Media Index N into \`ctx.snapshotImages[N]\` because that JavaScript array is 0-based. Only \`Composition(props)\` may read \`props\` directly; helper components must receive values through their own parameters and must never reference outer \`props\` (prevents \`props is not defined\` in Lambda). For timeline videos, preserve the selected Media Index video aspect ratio when all selected videos share one aspect: 9:16 sources must return a 9:16 canvas such as 1080x1920, never a 16:9 canvas. For mixed-aspect sources, choose the user/platform/current composition target and use contain/background; do not claim the runtime forced one source's aspect.
 For legacy first-draft calls without \`composition\`, send one complete executable JavaScript body that returns the render object. Do not send a fragment like \`const code = \\\`\` without the final \`return { type: 'render', code, ... }\`. Keep long videos concise by using arrays, helper components, and interpolations instead of writing frame-by-frame code.
 
 Node media runtime provides a standard isolated Node environment with \`require\`, ESM/CommonJS, JS/TS/JSX/TSX compilation, \`process\`, \`ffmpegPath\`, \`inputFiles\`, \`outputDir\`, \`workDir\`, \`workspaceDir\`, \`saveOutput(localPath)\`, and \`probeVideo(path)\`. Normal Node built-ins are available. Bare npm packages may be required directly; a missing package is installed inside the disposable Sandbox on first use. Workspace files are local to the runtime: use \`workspace_paths\` and \`inputFiles[n].inputPath\`, never download or reconstruct Storage URLs. For \`runtime: "node"\`, any referenced timeline media like \`<<<media_1>>>\` MUST be passed as \`media_refs: [1]\`; any existing workspace file from \`list_files\` MUST be passed as \`workspace_paths: ["project/media/file.mp4"]\`. The system resolves both to local workspace-backed files before your code runs. \`ffprobePath\` may be empty in deployment; prefer \`probeVideo(path)\`. Use \`type: "files"\` for chunks and \`type: "video"\` for the final MP4. If execution reports a real code or dependency error, inspect it and keep repairing the same saved program until it succeeds; do not abandon the user-visible result. If ordinary timeline splicing was routed to composition, do not switch to node just because preview needs adjustment; patch the composition and continue.`,
@@ -4407,7 +4402,7 @@ Node media runtime provides a standard isolated Node environment with \`require\
             const promiseError = studioCompositionPromiseError(await getStudioRunCheckpoint(ctx), patched);
             if (promiseError) return { type: 'text' as const, content: promiseError };
 
-            const harnessError = validateDesign({ code: patched.code, props: patched.props, editables: patched.editables });
+            const harnessError = validateDesign(patched);
             if (harnessError) return { type: 'text' as const, content: harnessError };
 
             if (!ctx.supabase || !ctx.userId) {
@@ -4464,12 +4459,18 @@ Node media runtime provides a standard isolated Node environment with \`require\
             // ── Composition harness: compile + image reference checks ──
             const resolvedCode = resolveMediaMarkersInString(result.code, ctx.snapshotImages);
             const resolvedProps = resolveMediaMarkersInValue(result.props, ctx.snapshotImages) as Record<string, unknown> | undefined;
-            const harnessError = validateDesign({ code: resolvedCode, props: resolvedProps, editables: result.editables });
+            const normalizedComposition = {
+              code: resolvedCode,
+              props: resolvedProps,
+              editables: result.editables,
+              animation,
+            };
+            const harnessError = validateDesign(normalizedComposition);
             if (harnessError) {
               return { type: 'text' as const, content: harnessError };
             }
             const aspectError = await validateCompositionMediaAspect(ctx, {
-              code: resolvedCode,
+              code: normalizedComposition.code,
               props: resolvedProps,
               width: result.width,
               height: result.height,
@@ -4477,6 +4478,7 @@ Node media runtime provides a standard isolated Node environment with \`require\
             if (aspectError) {
               return { type: 'text' as const, content: aspectError };
             }
+            const normalizedEditables = normalizedComposition.editables ?? [];
 
             // ── Harness passed — store composition ──
             // Auto-generate description if Agent didn't provide one
@@ -4487,15 +4489,17 @@ Node media runtime provides a standard isolated Node environment with \`require\
               const textHint = textMatches?.length ? `: "${textMatches.slice(0, 3).join('", "')}"` : '';
               return `${type} (${result.width || 1080}x${result.height || 1350})${textHint}`;
             })();
-            animation = normalizeCompositionAnimation(resolvedCode, animation);
+            animation = normalizeCompositionAnimation(normalizedComposition.code, animation);
             const designPayload = {
-              code: resolvedCode,
+              code: normalizedComposition.code,
               width: result.width || 1080,
               height: result.height || 1350,
               props: resolvedProps,
               animation,
               description: autoDesc,
-              ...(result.editables ? { editables: result.editables } : {}),
+              ...(normalizedEditables.length > 0
+                ? { editables: normalizedEditables }
+                : {}),
               ...(result.fontSubstitutions ? { fontSubstitutions: result.fontSubstitutions } : {}),
             };
             if (!ctx.supabase || !ctx.userId) {
@@ -5081,7 +5085,7 @@ export async function* runMakaronAgent(
     ? `\n\n## Durable execution contract\nThis is attempt ${options.execution.attemptNo} of Agent Run ${options.execution.runId}. A later attempt may continue in a fresh model context only after a technical interruption, provider failure, context handoff, or newer user input. Preserve decisions and durable artifact pointers with execution_checkpoint after meaningful progress and before a long, risky generation step. Do not repeat expensive side effects whose tool result is already present. A Studio Run is only a persisted workflow that you follow with studio_run; its stage never decides whether this Agent Run ends or retries. Finish normally when you have completed the current user-facing turn, even if the workflow remains at Review or another stage. If this attempt advances the workflow into Composition, switch to numbered composition parts immediately and never begin a monolithic run_code payload. A newer queued user instruction has precedence over an older delivery target.`
     : '';
   const durableCompositionDirective = options?.execution && options.studioWorkflowStage === 'composition'
-    ? `\n\n## Durable Composition workspace\nKeep the full original Composition and Director creative standard, but do not emit a monolithic run_code composition payload. Long tool-input streams can reset before the call closes. Author the final Remotion source as numbered files under ${projectId}/drafts/composition-parts, one cohesive part per model step with write_file. Include compositionMetadata with the first part so dimensions, props, editables, and animation are durable; only repeat it when metadata changes. Keep each part under the 12000-character transport limit, wait for its tool result, and create as many parts as the approved content needs. Parts around 3000-8000 characters are preferred, but never compress creative detail merely to hit that range. Rewriting the same numbered path is safe after recovery. Do not use import/export; the files are concatenated into one scope with no aggregate source-size or part-count limit. Never shorten approved narration, subtitles, scenes, animation, or visual detail to reduce source size. Every successful write automatically assembles, validates, and autosaves the workspace. Continue until write_file reports compositionWorkspace.status="ready", then preview or patch its designPath directly. Do not spend another model turn calling run_code merely to assemble the directory. This changes only persistence and transport; it must not simplify the approved story, audio, visual direction, or ending.`
+    ? `\n\n## Durable Composition workspace\nKeep the full original Composition and Director creative standard, but do not emit a monolithic run_code composition payload. Long tool-input streams can reset before the call closes. Author the final Remotion source as numbered files under ${projectId}/drafts/composition-parts, one cohesive part per model step with write_file. Include compositionMetadata with the first part so dimensions, props, and animation are durable; omit editables because the assembled composition infers its Manifest automatically. Only repeat metadata when it changes. Keep each part under the 12000-character transport limit, wait for its tool result, and create as many parts as the approved content needs. Parts around 3000-8000 characters are preferred, but never compress creative detail merely to hit that range. Rewriting the same numbered path is safe after recovery. Do not use import/export; the files are concatenated into one scope with no aggregate source-size or part-count limit. Never shorten approved narration, subtitles, scenes, animation, or visual detail to reduce source size. Every successful write automatically assembles, validates, and autosaves the workspace. Continue until write_file reports compositionWorkspace.status="ready", then preview or patch its designPath directly. Do not spend another model turn calling run_code merely to assemble the directory. This changes only persistence and transport; it must not simplify the approved story, audio, visual direction, or ending.`
     : '';
   const durableCompositionGuidance = options?.execution && options.studioWorkflowStage === 'composition'
     ? buildDurableCompositionGuidance()

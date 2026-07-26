@@ -43,6 +43,118 @@ export class SceneRegistry {
   }
 }
 
+const authoredTransforms = new WeakMap<HTMLElement, {
+  translate: string;
+  scale: string;
+}>();
+
+function restoreAuthoredTransform(element: HTMLElement) {
+  if (!element.hasAttribute('data-makaron-edit-transform')) return;
+  const authored = authoredTransforms.get(element);
+  const translate = authored?.translate ?? '';
+  const scale = authored?.scale ?? '';
+  if (element.style.translate !== translate) element.style.translate = translate;
+  if (element.style.scale !== scale) element.style.scale = scale;
+  element.removeAttribute('data-makaron-edit-transform');
+  authoredTransforms.delete(element);
+}
+
+function editableOffset(
+  props: Record<string, unknown>,
+  id: string,
+): { x: number; y: number } | null {
+  const value = props[`_pos_${id}`];
+  if (!value || typeof value !== 'object') return null;
+  const { x, y } = value as { x?: unknown; y?: unknown };
+  const parsedX = Number(x);
+  const parsedY = Number(y);
+  return Number.isFinite(parsedX) && Number.isFinite(parsedY)
+    ? { x: parsedX, y: parsedY }
+    : null;
+}
+
+function editableScale(
+  props: Record<string, unknown>,
+  id: string,
+): { w: number; h: number } | null {
+  const value = props[`_scale_${id}`];
+  if (!value || typeof value !== 'object') return null;
+  const { w, h } = value as { w?: unknown; h?: unknown };
+  const parsedW = Number(w);
+  const parsedH = Number(h);
+  return Number.isFinite(parsedW) && Number.isFinite(parsedH)
+    ? { w: parsedW, h: parsedH }
+    : null;
+}
+
+export function applySceneNodeTransforms({
+  container,
+  fields,
+  props,
+  canvasRect = container.getBoundingClientRect(),
+  viewportRect = canvasRect,
+}: {
+  container: HTMLElement;
+  fields: EditableField[];
+  props: Record<string, unknown>;
+  canvasRect?: EditableCanvasRect;
+  viewportRect?: EditableCanvasRect;
+}): SceneRegistry {
+  const registry = buildLegacySceneRegistry({
+    container,
+    fields,
+    canvasRect,
+    viewportRect,
+  });
+  const activeInstances = registry.activeInstances();
+  const activeElements = new Set(activeInstances.map(instance => instance.element));
+
+  container
+    .querySelectorAll<HTMLElement>('[data-makaron-edit-transform]')
+    .forEach(element => {
+      if (!activeElements.has(element)) restoreAuthoredTransform(element);
+    });
+
+  for (const instance of activeInstances) {
+    const element = instance.element;
+    const offset = editableOffset(props, instance.id);
+    const scale = editableScale(props, instance.id);
+    if (!offset && !scale) {
+      restoreAuthoredTransform(element);
+      continue;
+    }
+    if (!element.hasAttribute('data-makaron-edit-transform')) {
+      authoredTransforms.set(element, {
+        translate: element.style.translate,
+        scale: element.style.scale,
+      });
+      element.setAttribute('data-makaron-edit-transform', '');
+    }
+    const authored = authoredTransforms.get(element);
+    const translate = offset
+      ? `${offset.x}px ${offset.y}px`
+      : authored?.translate ?? '';
+    const scaleValue = scale
+      ? `${+scale.w.toFixed(4)} ${+scale.h.toFixed(4)}`
+      : authored?.scale ?? '';
+    if (element.style.translate !== translate) element.style.translate = translate;
+    if (element.style.scale !== scaleValue) element.style.scale = scaleValue;
+  }
+
+  return registry;
+}
+
+export function findSceneMediaElement(
+  element: HTMLElement,
+  type: Extract<EditableType, 'image' | 'video'>,
+): HTMLImageElement | HTMLVideoElement | null {
+  const selector = type === 'video' ? 'video' : 'img';
+  if (element.matches(selector)) {
+    return element as HTMLImageElement | HTMLVideoElement;
+  }
+  return element.querySelector<HTMLImageElement | HTMLVideoElement>(selector);
+}
+
 function getElementDepth(element: Element, container: Element): number {
   let depth = 0;
   let current: Element | null = element;

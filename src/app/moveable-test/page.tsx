@@ -5,6 +5,7 @@ import { renderStillOnWeb } from '@remotion/web-renderer';
 import { Player } from '@remotion/player';
 import Moveable from 'react-moveable';
 import { evalRemotionJSX } from '@/lib/evalRemotionJSX';
+import EditableSceneBoundary from '@/components/EditableSceneBoundary';
 
 // Design code with a data-editable element — same pattern as Agent-generated designs
 const DESIGN_CODE = `
@@ -39,9 +40,17 @@ export default function MoveableTestPage() {
 
   // Compile design (with HOC)
   useEffect(() => {
-    const comp = evalRemotionJSX(DESIGN_CODE);
-    if (comp) {
-      setComponent(() => comp);
+    const BaseComponent = evalRemotionJSX(DESIGN_CODE);
+    if (BaseComponent) {
+      const SceneOwnedComponent = (componentProps: Record<string, unknown>) => (
+        <EditableSceneBoundary
+          fields={[{ id: 'box', type: 'text', label: 'Box', propKey: 'title' }]}
+          inputProps={componentProps}
+        >
+          <BaseComponent {...componentProps} />
+        </EditableSceneBoundary>
+      );
+      setComponent(() => SceneOwnedComponent);
       setStatus('Ready — drag the purple box, then click Export');
     } else {
       setStatus('Failed to compile design');

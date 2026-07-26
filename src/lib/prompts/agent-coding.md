@@ -42,8 +42,8 @@ Use inline `run_code.code` only for small patches or short utilities. Long compo
 Return exactly one supported object:
 
 ```js
-{ type: 'render', code, width, height, editables?, props?, animation? }
-{ type: 'patch', edits?, props?, editables?, code_path? }
+{ type: 'render', code, width, height, props?, animation? }
+{ type: 'patch', edits?, props?, code_path? }
 { type: 'image', data, mimeType }
 { type: 'video', path, contentType?, description?, duration?, width?, height? }
 { type: 'files', outputs: [{ path, contentType, description? }] }
@@ -55,7 +55,7 @@ Use `type: "render"` for a new composition draft, `type: "patch"` for subsequent
 
 ## Editable Boundary
 
-Editable fields belong only to the Remotion composition path: `runtime: "composition"` / legacy `runtime: "design"` with `type: "render"` or `type: "patch"`. `render` and `patch` may return `editables`; if a patch adds or removes editable layers, include the complete updated `editables` array. Do not add editable burden to `generate_image`, external video generation, node/FFmpeg exports, or sharp image outputs. For the full text/image/video/trim rules, read `prompts/remotion-composition.md`.
+Editable behavior belongs only to the Remotion composition path: `runtime: "composition"` / legacy `runtime: "design"` with `type: "render"` or `type: "patch"`. New compositions keep user-facing values in props and omit explicit `editables`; the runtime infers the Manifest. Do not add editable burden to `generate_image`, external video generation, node/FFmpeg exports, or sharp image outputs. For the full props-first text/image/video/trim rules, read `prompts/remotion-composition.md`.
 
 ## Patch Rules
 

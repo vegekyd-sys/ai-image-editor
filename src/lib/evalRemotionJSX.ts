@@ -216,9 +216,10 @@ export function evalRemotionJSX(
       buildRemotionEvaluatorBody(compiled, fnName),
     );
     const comp = factory(REMOTION_SCOPE, authoredModule, authoredModule.exports, localRequire);
-    return comp
-      ? wrapWithEditableTransforms(comp, options.editableTransformMode ?? 'proxy')
-      : null;
+    // Geometry ownership now lives in EditableSceneBoundary after the real DOM
+    // instances exist. Keep accepting the option while older callers migrate.
+    void options.editableTransformMode;
+    return comp ? wrapWithEditableOverrides(comp) : null;
   } catch (err) {
     console.error('[evalRemotionJSX] compile error:', err);
     return null;
@@ -231,7 +232,6 @@ export function evalRemotionJSX(
  * Updated by the HOC's render, read by the Proxy createElement.
  */
 let _currentTransformProps: Record<string, unknown> = {};
-let _currentTransformMode: EditableTransformMode = 'proxy';
 
 function readFrameProp(key: string): number | undefined {
   const value = _currentTransformProps[key];
@@ -261,34 +261,26 @@ function injectLegacyVideoTrim(node: React.ReactNode, trim: { trimBefore?: numbe
 }
 
 /**
- * Patched createElement: intercepts [data-editable] elements and injects
- * CSS independent properties (style.translate / style.scale).
- *
- * Unlike style.transform, these independent properties:
- * - Do NOT appear in getComputedStyle().transform (verified: returns "none")
- * - Do NOT interfere with Moveable coordinate calculation
- * - Do NOT affect browser hit-testing (no ghost pointerdown)
- * - ARE correctly read by @remotion/web-renderer (via our patch)
+ * Patched createElement only injects selected-video trim overrides.
+ * Position and scale are applied by EditableSceneBoundary to the active leaf.
  */
 const _origCE = React.createElement;
 
 const _patchedCE = function(type: any, elProps: any, ...children: any[]) {
   if (elProps && typeof elProps === 'object' && elProps['data-editable']) {
     const id = elProps['data-editable'] as string;
-    const pos = _currentTransformProps[`_pos_${id}`] as { x: number; y: number } | undefined;
-    const sc = _currentTransformProps[`_scale_${id}`] as { w: number; h: number } | undefined;
     const trimBefore = readFrameProp(`_trimBefore_${id}`);
     const trimAfter = readFrameProp(`_trimAfter_${id}`);
-    if (_currentTransformMode === 'proxy' && (pos || sc)) {
-      const existingStyle = (elProps.style || {}) as Record<string, unknown>;
-      elProps = { ...elProps, style: {
-        ...existingStyle,
-        ...(pos ? { translate: `${pos.x}px ${pos.y}px` } : {}),
-        ...(sc ? { scale: `${+sc.w.toFixed(4)} ${+sc.h.toFixed(4)}` } : {}),
-      }};
-    }
     if (trimBefore !== undefined || trimAfter !== undefined) {
-      children = children.map(child => injectLegacyVideoTrim(child, { trimBefore, trimAfter }));
+      if (type === Video) {
+        elProps = {
+          ...elProps,
+          ...(trimBefore !== undefined ? { trimBefore } : {}),
+          ...(trimAfter !== undefined ? { trimAfter } : {}),
+        };
+      } else {
+        children = children.map(child => injectLegacyVideoTrim(child, { trimBefore, trimAfter }));
+      }
     }
   }
   return _origCE.call(React, type, elProps, ...children);
@@ -309,13 +301,11 @@ REMOTION_SCOPE.React = PATCHED_REACT;
  * → injects style.translate/scale on [data-editable] elements.
  */
 
-function wrapWithEditableTransforms(
+function wrapWithEditableOverrides(
   Component: React.ComponentType<any>,
-  transformMode: EditableTransformMode,
 ): React.ComponentType<any> {
   return function WrappedDesign(props: Record<string, unknown>) {
     _currentTransformProps = props;
-    _currentTransformMode = transformMode;
     return _origCE.call(React, Component, props);
   };
 }

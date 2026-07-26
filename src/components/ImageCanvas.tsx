@@ -17,6 +17,10 @@ import {
 } from '@/lib/editor/video-trim-timeline';
 import { isFastVideoRenderModel } from '@/lib/video-model-capabilities';
 import { isRemotionExportTaskId } from '@/lib/remotion-export-flags';
+import {
+  buildLegacySceneRegistry,
+  findSceneMediaElement,
+} from '@/lib/editor/scene-registry';
 
 const RemotionRenderer = dynamic(() => import('@/components/RemotionRenderer'), { ssr: false });
 
@@ -763,10 +767,22 @@ export default function ImageCanvas({
     let observedVideo: HTMLVideoElement | null = null;
 
     const resolveContext = () => {
-      const editableEl = Array.from(
-        designContainerEl.querySelectorAll<HTMLElement>('[data-editable]'),
-      ).find(el => el.getAttribute('data-editable') === activeTrimFieldId);
-      const video = editableEl?.querySelector('video') ?? null;
+      const activeField = editableFields?.find(
+        field => field.id === activeTrimFieldId && field.type === 'video',
+      );
+      if (!activeField) return false;
+      const canvasElement = designContainerEl.querySelector<HTMLElement>('.__remotion-player');
+      const canvasRect = (
+        canvasElement ?? designContainerEl
+      ).getBoundingClientRect();
+      const editableEl = buildLegacySceneRegistry({
+        container: designContainerEl,
+        fields: editableFields ?? [],
+        canvasRect,
+      }).get(activeTrimFieldId)?.activeInstance?.element;
+      const video = editableEl
+        ? findSceneMediaElement(editableEl, 'video') as HTMLVideoElement | null
+        : null;
       if (!video) return false;
       observedVideo = video;
 
@@ -811,6 +827,7 @@ export default function ImageCanvas({
   }, [
     activeTrimFieldId,
     designContainerEl,
+    editableFields,
     getActiveTrimStartFrame,
     remotionFps,
     currentDesign?.code,
