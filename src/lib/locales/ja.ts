@@ -102,6 +102,25 @@ const ja = {
   'editor.videoReady': '動画の準備ができました — 共有をタップして保存',
   'editor.share': '共有',
   'editor.count': (n: number) => `${n}件`,
+  'editor.closePanel': 'エディターを閉じる',
+  'editor.trim.playPreview': 'トリムプレビューを再生',
+  'editor.trim.pausePreview': 'トリムプレビューを一時停止',
+  'editor.trim.start': 'トリム開始位置',
+  'editor.trim.end': 'トリム終了位置',
+  'editor.trim.playhead': 'トリム再生ヘッド',
+
+  // Changelog
+  'changelog.heading': '更新情報',
+  'changelog.close': '更新情報を閉じる',
+  'changelog.editableRemotion.title': 'Remotion編集をエンドツーエンドで実現',
+  'changelog.editableRemotion.item1': 'テキスト、画像、動画を編集可能なレイヤーとして自動検出し、デスクトップでもモバイルでも選択・移動・サイズ変更が映像に正確に追従するようになりました。',
+  'changelog.editableRemotion.item2': '編集内容は再読み込みや別の端末でも保持され、MP4書き出しにも反映されます。動画のトリムはコンポジション全体ではなく、選択したクリップだけを編集します。',
+  'changelog.editableRemotion.item3': 'テキストのダブルクリック編集、整列ガイド、レイヤー切り替えが安定し、連続して編集しても選択枠が内容に正確に追従します。',
+  'changelog.editableLayers.title': '編集可能な画像・動画レイヤー',
+  'changelog.editableLayers.item1': 'AIが生成したビジュアルは、単なるフラットなプレビューではありません。テキスト、写真、動画クリップを生成後も編集できます。',
+  'changelog.editableLayers.item2': 'キャンバス上でレイヤーを選択して、そのまま移動やサイズ変更ができます。小さな調整のためにAgentへ全体の再生成を依頼する必要はありません。',
+  'changelog.editableLayers.item3': '動画クリップにトリムバーを追加しました。再生、スクラブ、開始・終了ハンドル、範囲全体の移動に対応します。',
+  'changelog.editableLayers.item4': '縦長ポスターの編集も快適になり、上下にスクロールしても選択枠が内容に追従します。',
 
   // AI status
   'status.thinking': '可能性を探しています...',

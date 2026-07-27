@@ -65,6 +65,25 @@ const zh = {
   'editor.videoReady': '视频已就绪 — 点击分享保存',
   'editor.share': '分享',
   'editor.count': (n: number) => `${n} 个`,
+  'editor.closePanel': '关闭编辑器',
+  'editor.trim.playPreview': '播放裁剪预览',
+  'editor.trim.pausePreview': '暂停裁剪预览',
+  'editor.trim.start': '裁剪起点',
+  'editor.trim.end': '裁剪终点',
+  'editor.trim.playhead': '裁剪播放头',
+
+  // Changelog
+  'changelog.heading': '更新',
+  'changelog.close': '关闭更新',
+  'changelog.editableRemotion.title': 'Remotion 可编辑，完整打通',
+  'changelog.editableRemotion.item1': '文字、图片和视频现在会自动成为可编辑图层，桌面端和手机端的选中、移动与缩放都能准确跟随画面。',
+  'changelog.editableRemotion.item2': '修改后刷新或换设备仍会保留，并能正确导出到 MP4；视频裁剪现在只编辑选中的片段，不再影响整个合成。',
+  'changelog.editableRemotion.item3': '双击文字编辑、辅助线和图层切换更加稳定，连续修改后选择框仍能准确跟随内容。',
+  'changelog.editableLayers.title': '图片和视频图层可编辑',
+  'changelog.editableLayers.item1': 'AI 生成的视觉结果不再只是扁平预览图：文字、照片和视频片段都可以继续编辑。',
+  'changelog.editableLayers.item2': '在画布上点选图层，就能直接移动和缩放，不用为了小调整重新让 Agent 生成整张图。',
+  'changelog.editableLayers.item3': '视频片段新增裁剪条：支持播放、拖动时间戳、拖动起止把手，以及整体移动裁剪区间。',
+  'changelog.editableLayers.item4': '长海报类项目更好改了：上下滚动时，选中框会持续跟随内容。',
 
   // AI status
   'status.thinking': '正在发现有趣的可能...',

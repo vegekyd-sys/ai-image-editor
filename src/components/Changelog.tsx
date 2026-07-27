@@ -1,26 +1,31 @@
 'use client';
 
 import { useEffect, useState, type CSSProperties } from 'react';
+import { normalizeLocale, translate, type TranslationKey } from '@/lib/locales';
 
-interface ChangelogEntry {
-  date: string;
-  en: { title: string; items: string[]; link?: { label: string; href: string; variant?: 'text' | 'button' } };
-  zh: { title: string; items: string[]; link?: { label: string; href: string; variant?: 'text' | 'button' } };
+interface ChangelogContent {
+  title: string;
+  items: string[];
+  link?: { label: string; href: string; variant?: 'text' | 'button' };
 }
+
+interface LegacyChangelogEntry {
+  date: string;
+  en: ChangelogContent;
+  zh: ChangelogContent;
+}
+
+type LocalizedChangelogEntry = {
+  date: string;
+  localeKey: 'editableRemotion' | 'editableLayers';
+};
+
+type ChangelogEntry = LegacyChangelogEntry | LocalizedChangelogEntry;
 
 const CHANGELOG: ChangelogEntry[] = [
   {
     date: '2026-07-28',
-    en: { title: 'Editable Remotion, End to End', items: [
-      'Text, images, and video are now discovered as editable layers automatically, with selection, moving, and resizing staying aligned across desktop and mobile.',
-      'Edits persist across refreshes and devices and carry into MP4 exports; video trim now edits the selected clip instead of the whole composition.',
-      'Double-click text editing, alignment guides, and layer switching are more reliable, with selection frames staying stable through repeated edits.',
-    ]},
-    zh: { title: 'Remotion 可编辑，完整打通', items: [
-      '文字、图片和视频现在会自动成为可编辑图层，桌面端和手机端的选中、移动与缩放都能准确跟随画面。',
-      '修改后刷新或换设备仍会保留，并能正确导出到 MP4；视频 trim 现在只编辑选中的片段，不再影响整个 composition。',
-      '双击文字编辑、辅助线和图层切换更加稳定，连续修改后选择框仍能准确跟随内容。',
-    ]},
+    localeKey: 'editableRemotion',
   },
   {
     date: '2026-07-25',
@@ -186,18 +191,7 @@ const CHANGELOG: ChangelogEntry[] = [
   },
   {
     date: '2026-07-01',
-    en: { title: 'Editable Image & Video Layers', items: [
-      'AI-made visual results are no longer flat previews: text, photos, and video clips can stay editable after they are created.',
-      'Click a layer on the canvas, then move or resize it directly — no need to ask Agent to regenerate the whole result.',
-      'Video clips now have a trim strip with playback, scrubber, start/end handles, and range dragging.',
-      'Tall poster-style projects are easier to refine: selection boxes stay aligned while you scroll.',
-    ]},
-    zh: { title: '图片和视频图层可编辑', items: [
-      'AI 生成的视觉结果不再只是扁平预览图：文字、照片和视频片段都可以继续编辑。',
-      '在画布上点选图层，就能直接移动和缩放，不用为了小调整重新让 Agent 生成整张图。',
-      '视频片段新增 trim 条：支持播放、拖动时间戳、拖起止把手，以及整体移动裁剪区间。',
-      '长海报类项目更好改了：上下滚动时，选中框会持续跟住内容。',
-    ]},
+    localeKey: 'editableLayers',
   },
   {
     date: '2026-06-30',
@@ -910,9 +904,35 @@ const changelogGlassEdgeStyle: CSSProperties = {
 const iOSAppTopGap = 'max(96px, calc(env(safe-area-inset-top, 0px) + 40px))';
 const iOSAppBottomGap = 'max(14px, env(safe-area-inset-bottom, 0px))';
 
+const LOCALIZED_CHANGELOG_KEYS = {
+  editableRemotion: {
+    title: 'changelog.editableRemotion.title',
+    items: [
+      'changelog.editableRemotion.item1',
+      'changelog.editableRemotion.item2',
+      'changelog.editableRemotion.item3',
+    ],
+  },
+  editableLayers: {
+    title: 'changelog.editableLayers.title',
+    items: [
+      'changelog.editableLayers.item1',
+      'changelog.editableLayers.item2',
+      'changelog.editableLayers.item3',
+      'changelog.editableLayers.item4',
+    ],
+  },
+} as const satisfies Record<LocalizedChangelogEntry['localeKey'], {
+  title: TranslationKey;
+  items: readonly TranslationKey[];
+}>;
+
 export default function Changelog({ onClose, locale }: { onClose: () => void; locale: string }) {
-  // Release notes stay bilingual: Simplified Chinese uses zh, every other locale falls back to en.
-  const isZh = locale === 'zh';
+  const normalizedLocale = normalizeLocale(locale, 'en');
+  // Historical release notes stay bilingual. Newly added entries use all four product locales.
+  const isZh = normalizedLocale === 'zh';
+  const heading = translate(normalizedLocale, 'changelog.heading');
+  const closeLabel = translate(normalizedLocale, 'changelog.close');
   const [isIOSApp, setIsIOSApp] = useState(false);
 
   useEffect(() => {
@@ -948,7 +968,7 @@ export default function Changelog({ onClose, locale }: { onClose: () => void; lo
         }
         role="dialog"
         aria-modal="true"
-        aria-label={isZh ? '更新' : 'Updates'}
+        aria-label={heading}
         style={{
           ...changelogGlassStyle,
           maxHeight: isIOSApp ? `calc(100dvh - ${iOSAppTopGap} - ${iOSAppBottomGap})` : undefined,
@@ -989,12 +1009,12 @@ export default function Changelog({ onClose, locale }: { onClose: () => void; lo
               </svg>
             </span>
             <h2 className="text-base font-semibold" style={{ color: 'rgba(255,255,255,0.88)' }}>
-              {isZh ? '更新' : 'Updates'}
+              {heading}
             </h2>
           </div>
           <button
             onClick={onClose}
-            aria-label={isZh ? '关闭更新' : 'Close updates'}
+            aria-label={closeLabel}
             className="w-7 h-7 flex items-center justify-center rounded-full"
             style={{
               background: 'rgba(255,255,255,0.045)',
@@ -1011,9 +1031,16 @@ export default function Changelog({ onClose, locale }: { onClose: () => void; lo
         {/* Scrollable entries */}
         <div className="relative z-[1] flex-1 overflow-y-auto overscroll-contain px-5 pb-6" style={{ WebkitOverflowScrolling: 'touch' }}>
           {CHANGELOG.map((entry, i) => {
-            const loc = isZh ? entry.zh : entry.en;
+            const loc: ChangelogContent = 'localeKey' in entry
+              ? {
+                  title: translate(normalizedLocale, LOCALIZED_CHANGELOG_KEYS[entry.localeKey].title),
+                  items: LOCALIZED_CHANGELOG_KEYS[entry.localeKey].items.map((key) => (
+                    translate(normalizedLocale, key)
+                  )),
+                }
+              : (isZh ? entry.zh : entry.en);
             return (
-              <div key={`${entry.date}-${entry.en.title}`} className={i > 0 ? 'mt-5' : 'mt-3'}>
+              <div key={`${entry.date}-${loc.title}`} className={i > 0 ? 'mt-5' : 'mt-3'}>
                 <div className="flex items-center gap-2.5 mb-1.5">
                   <span className="text-[11px] font-mono tabular-nums" style={{ color: 'rgba(232,121,249,0.76)' }}>
                     {entry.date}

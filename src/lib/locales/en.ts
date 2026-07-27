@@ -65,6 +65,25 @@ const en = {
   'editor.videoReady': 'Video ready — tap Share to save',
   'editor.share': 'Share',
   'editor.count': (n: number) => `${n}`,
+  'editor.closePanel': 'Close editor',
+  'editor.trim.playPreview': 'Play trim preview',
+  'editor.trim.pausePreview': 'Pause trim preview',
+  'editor.trim.start': 'Trim start',
+  'editor.trim.end': 'Trim end',
+  'editor.trim.playhead': 'Trim playhead',
+
+  // Changelog
+  'changelog.heading': 'Updates',
+  'changelog.close': 'Close updates',
+  'changelog.editableRemotion.title': 'Editable Remotion, End to End',
+  'changelog.editableRemotion.item1': 'Text, images, and video are now discovered as editable layers automatically, with selection, moving, and resizing staying aligned across desktop and mobile.',
+  'changelog.editableRemotion.item2': 'Edits persist across refreshes and devices and carry into MP4 exports; video trim now edits the selected clip instead of the whole composition.',
+  'changelog.editableRemotion.item3': 'Double-click text editing, alignment guides, and layer switching are more reliable, with selection frames staying stable through repeated edits.',
+  'changelog.editableLayers.title': 'Editable Image & Video Layers',
+  'changelog.editableLayers.item1': 'AI-made visual results are no longer flat previews: text, photos, and video clips can stay editable after they are created.',
+  'changelog.editableLayers.item2': 'Click a layer on the canvas, then move or resize it directly — no need to ask Agent to regenerate the whole result.',
+  'changelog.editableLayers.item3': 'Video clips now have a trim strip with playback, scrubber, start/end handles, and range dragging.',
+  'changelog.editableLayers.item4': 'Tall poster-style projects are easier to refine: selection boxes stay aligned while you scroll.',
 
   // AI status
   'status.thinking': 'Discovering possibilities...',

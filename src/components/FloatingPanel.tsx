@@ -1,6 +1,7 @@
 'use client';
 
 import React, { useState, useRef, useCallback, useEffect } from 'react';
+import { useLocale } from '@/lib/i18n';
 
 interface FloatingPanelProps {
   onClose: () => void;
@@ -18,6 +19,7 @@ const NO_DRAG_TAGS = new Set(['BUTTON', 'INPUT', 'TEXTAREA', 'A', 'SELECT']);
  * Provides: close button, drag behavior, container styling.
  */
 export default function FloatingPanel({ onClose, isDesktop, children }: FloatingPanelProps) {
+  const { t } = useLocale();
   const [dragOffset, setDragOffset] = useState({ x: 0, y: 0 });
   const dragRef = useRef<{ startX: number; startY: number; origX: number; origY: number; active: boolean } | null>(null);
   const [isDragging, setIsDragging] = useState(false);
@@ -74,7 +76,7 @@ export default function FloatingPanel({ onClose, isDesktop, children }: Floating
         background: 'linear-gradient(145deg, rgba(26,26,31,0.72), rgba(8,8,12,0.50))',
         border: '0.5px solid rgba(255,255,255,0.11)',
       }}
-      aria-label="Close editor"
+      aria-label={t('editor.closePanel')}
     >
       <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="rgba(255,255,255,0.6)" strokeWidth="3" strokeLinecap="round">
         <line x1="18" y1="6" x2="6" y2="18" /><line x1="6" y1="6" x2="18" y2="18" />
