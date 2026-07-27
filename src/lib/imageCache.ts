@@ -47,6 +47,7 @@ interface MediaBlobCacheEntry {
 export interface CreateDraftEntry {
   key: string
   images: string[]
+  projectId?: string
   continuationId?: string
   metadata?: unknown
   prompt?: string
@@ -77,6 +78,24 @@ const mediaFetchInFlight = new Map<string, Promise<string | null>>()
 
 // IDB layer: persistent across tab close/reopen
 let dbPromise: Promise<IDBDatabase | null> | null = null
+
+function createDraftProjectId(): string {
+  if (typeof globalThis.crypto?.randomUUID === 'function') {
+    return globalThis.crypto.randomUUID()
+  }
+  const bytes = new Uint8Array(16)
+  if (typeof globalThis.crypto?.getRandomValues === 'function') {
+    globalThis.crypto.getRandomValues(bytes)
+  } else {
+    for (let index = 0; index < bytes.length; index += 1) {
+      bytes[index] = Math.floor(Math.random() * 256)
+    }
+  }
+  bytes[6] = (bytes[6] & 0x0f) | 0x40
+  bytes[8] = (bytes[8] & 0x3f) | 0x80
+  const hex = Array.from(bytes, byte => byte.toString(16).padStart(2, '0')).join('')
+  return `${hex.slice(0, 8)}-${hex.slice(8, 12)}-${hex.slice(12, 16)}-${hex.slice(16, 20)}-${hex.slice(20)}`
+}
 
 function getDB(): Promise<IDBDatabase | null> {
   if (typeof window === 'undefined') return Promise.resolve(null)
@@ -484,6 +503,7 @@ export function cacheCreateDraft(
     key: ACTIVE_CREATE_DRAFT_KEY,
     cachedAt: Date.now(),
     ...draft,
+    projectId: draft.projectId || createDraftProjectId(),
   }
   createDraftMemCache = entry
   void writeCreateDraftToIDB(entry)
@@ -531,7 +551,13 @@ export function clearCreateDraftContinuation(): void {
 
 export async function getCreateDraft(): Promise<CreateDraftEntry | null> {
   const mem = createDraftMemCache
-  if (mem && Date.now() - mem.cachedAt < TTL_MS) return mem
+  if (mem && Date.now() - mem.cachedAt < TTL_MS) {
+    if (!mem.projectId) {
+      mem.projectId = createDraftProjectId()
+      void writeCreateDraftToIDB(mem)
+    }
+    return mem
+  }
 
   try {
     const db = await getDB()
@@ -543,6 +569,10 @@ export async function getCreateDraft(): Promise<CreateDraftEntry | null> {
       req.onerror = () => resolve(null)
     })
     if (!entry || Date.now() - entry.cachedAt > TTL_MS) return null
+    if (!entry.projectId) {
+      entry.projectId = createDraftProjectId()
+      void writeCreateDraftToIDB(entry)
+    }
     createDraftMemCache = entry
     return entry
   } catch {

@@ -2,6 +2,10 @@ export interface MetaAppEventsInitializeResult {
   initialized: boolean;
   appId?: string;
   anonymousId?: string;
+  appVersion?: string;
+  appBuild?: string;
+  advertiserTrackingStatus?: string;
+  advertiserIDCollectionEnabled?: boolean;
 }
 
 export interface MetaAppEventsTrackEventOptions {

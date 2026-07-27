@@ -22,7 +22,7 @@ export type MetaCustomEvent =
 
 export type MetaEventName = MetaStandardEvent | MetaCustomEvent
 
-type MetaEventParams = Record<string, string | number | boolean | undefined>
+export type MetaEventParams = Record<string, string | number | boolean | undefined>
 const STANDARD_EVENTS = new Set<MetaEventName>([
   'PageView',
   'ViewContent',
@@ -66,8 +66,8 @@ function attributionParams(attribution?: MarketingAttribution): MetaEventParams 
   }
 }
 
-function logFirstPartyMarketingEvent(
-  event: MetaEventName,
+export function recordFirstPartyMarketingEvent(
+  event: string,
   params: MetaEventParams,
   eventId: string,
 ) {
@@ -118,7 +118,7 @@ export function trackMetaEvent(
   const finalEventId = eventId || createMetaEventId(event.toLowerCase())
   const merged = { ...attributionParams(), ...params }
   if (attempt === 0) {
-    logFirstPartyMarketingEvent(event, merged, finalEventId)
+    recordFirstPartyMarketingEvent(event, merged, finalEventId)
     if (nativeApp) void trackMobileAppEvent(event, merged, finalEventId)
   }
   if (nativeApp) return

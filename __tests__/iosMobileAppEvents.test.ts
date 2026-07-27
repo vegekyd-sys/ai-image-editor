@@ -5,6 +5,10 @@ const meta = vi.hoisted(() => ({
     initialized: true,
     appId: '1690601878920639',
     anonymousId: 'meta-anonymous-id',
+    appVersion: '1.0.6',
+    appBuild: '16',
+    advertiserTrackingStatus: 'notDetermined',
+    advertiserIDCollectionEnabled: false,
   }),
   fetchDeferredAppLink: vi.fn().mockResolvedValue({ url: null }),
   trackEvent: vi.fn().mockResolvedValue({ tracked: true }),
@@ -17,6 +21,7 @@ vi.mock('@/lib/native-app', () => ({ isMakaronIOSApp: () => true }))
 import {
   getMobileAppEventsContext,
   fetchDeferredMobileAppLink,
+  fetchDeferredMobileAppLinkResult,
   initializeMobileAppEvents,
   trackMobileAppEvent,
 } from '@/lib/marketing/mobile-app-events'
@@ -24,6 +29,17 @@ import {
 describe('Meta mobile app events bridge', () => {
   beforeEach(() => {
     vi.clearAllMocks()
+    localStorage.clear()
+    meta.initialize.mockResolvedValue({
+      initialized: true,
+      appId: '1690601878920639',
+      anonymousId: 'meta-anonymous-id',
+      appVersion: '1.0.6',
+      appBuild: '16',
+      advertiserTrackingStatus: 'notDetermined',
+      advertiserIDCollectionEnabled: false,
+    })
+    meta.fetchDeferredAppLink.mockResolvedValue({ url: null })
   })
 
   it('initializes the official SDK and forwards registration events', async () => {
@@ -32,6 +48,10 @@ describe('Meta mobile app events bridge', () => {
       provider: 'meta_app_events',
       appId: '1690601878920639',
       anonymousId: 'meta-anonymous-id',
+      appVersion: '1.0.6',
+      appBuild: '16',
+      advertiserTrackingStatus: 'notDetermined',
+      advertiserIDCollectionEnabled: false,
     })
 
     expect(await trackMobileAppEvent('CompleteRegistration', {}, 'registration.1')).toBe(true)
@@ -41,6 +61,39 @@ describe('Meta mobile app events bridge', () => {
       params: {},
       value: undefined,
       currency: undefined,
+    })
+  })
+
+  it('distinguishes resolved, empty, error, and already-checked deferred lookups', async () => {
+    meta.fetchDeferredAppLink.mockResolvedValueOnce({
+      url: 'makaron://skill/7ef2c391-a7e4-4519-ac06-62ec3acff2ac?utm_source=meta&utm_campaign=asian-culture',
+    })
+    await expect(fetchDeferredMobileAppLinkResult()).resolves.toMatchObject({
+      status: 'resolved',
+      url: expect.stringContaining('utm_campaign=asian-culture'),
+      context: {
+        appVersion: '1.0.6',
+        appBuild: '16',
+        advertiserTrackingStatus: 'notDetermined',
+        advertiserIDCollectionEnabled: false,
+      },
+    })
+    await expect(fetchDeferredMobileAppLinkResult()).resolves.toMatchObject({
+      status: 'already_checked',
+    })
+
+    localStorage.clear()
+    meta.fetchDeferredAppLink.mockResolvedValueOnce({ url: null })
+    await expect(fetchDeferredMobileAppLinkResult()).resolves.toMatchObject({ status: 'empty' })
+
+    localStorage.clear()
+    meta.fetchDeferredAppLink.mockRejectedValueOnce(new Error('network unavailable'))
+    await expect(fetchDeferredMobileAppLinkResult()).resolves.toMatchObject({
+      status: 'error',
+      error: 'network unavailable',
+    })
+    await expect(fetchDeferredMobileAppLinkResult()).resolves.toMatchObject({
+      status: 'already_checked',
     })
   })
 

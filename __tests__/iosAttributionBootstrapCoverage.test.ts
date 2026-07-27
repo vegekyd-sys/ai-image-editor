@@ -11,9 +11,9 @@ describe('iOS attribution bootstrap coverage', () => {
       'utf8',
     )
     const launchLookup = source.indexOf('const launchUrl = await App.getLaunchUrl()')
-    const deferredLookup = source.indexOf('const deferredUrl = await fetchDeferredMobileAppLink()')
+    const deferredLookup = source.indexOf('const deferred = await fetchDeferredMobileAppLinkResult(')
     const captureCall = source.indexOf('captureMobileDeepLinkAttribution(value)')
-    const firstOpenCall = source.lastIndexOf('recordFirstOpen()')
+    const firstOpenCall = source.lastIndexOf('recordFirstOpen(launchSource, deferredStatus)')
 
     expect(launchLookup).toBeGreaterThan(-1)
     expect(deferredLookup).toBeGreaterThan(launchLookup)
