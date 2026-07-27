@@ -11,6 +11,26 @@ export interface MobileAppEventsContext {
   provider: 'meta_app_events'
   appId?: string
   anonymousId?: string
+  appVersion?: string
+  appBuild?: string
+  advertiserTrackingStatus?: string
+  advertiserIDCollectionEnabled?: boolean
+}
+
+export type DeferredMobileAppLinkStatus =
+  | 'not_ios'
+  | 'already_checked'
+  | 'initialization_failed'
+  | 'sdk_unavailable'
+  | 'resolved'
+  | 'empty'
+  | 'error'
+
+export interface DeferredMobileAppLinkResult {
+  status: DeferredMobileAppLinkStatus
+  url?: string
+  error?: string
+  context: MobileAppEventsContext
 }
 
 const PENDING_DEEP_LINK_KEY = 'makaron:pending-deep-link'
@@ -53,6 +73,10 @@ export function initializeMobileAppEvents(): Promise<boolean> {
           provider: 'meta_app_events',
           appId: result.appId,
           anonymousId: result.anonymousId,
+          appVersion: result.appVersion,
+          appBuild: result.appBuild,
+          advertiserTrackingStatus: result.advertiserTrackingStatus,
+          advertiserIDCollectionEnabled: result.advertiserIDCollectionEnabled,
         }
         return result.initialized
       })
@@ -147,20 +171,51 @@ export function captureMobileDeepLinkAttribution(value: string): MarketingAttrib
   }
 }
 
-export async function fetchDeferredMobileAppLink(): Promise<string | undefined> {
-  if (!isMakaronIOSApp() || typeof window === 'undefined') return undefined
+export async function fetchDeferredMobileAppLinkResult(
+  onStart?: () => void,
+): Promise<DeferredMobileAppLinkResult> {
+  if (!isMakaronIOSApp() || typeof window === 'undefined') {
+    return { status: 'not_ios', context }
+  }
   try {
-    if (localStorage.getItem(DEFERRED_DEEP_LINK_CHECKED_KEY)) return undefined
-    if (!await initializeMobileAppEvents()) return undefined
+    if (localStorage.getItem(DEFERRED_DEEP_LINK_CHECKED_KEY)) {
+      return { status: 'already_checked', context }
+    }
+    if (!await initializeMobileAppEvents()) {
+      return { status: 'initialization_failed', context }
+    }
     const fetchDeferredAppLink = (MetaAppEvents as DeferredLinkCapableMetaAppEvents).fetchDeferredAppLink
-    if (typeof fetchDeferredAppLink !== 'function') return undefined
+    if (typeof fetchDeferredAppLink !== 'function') {
+      localStorage.setItem(DEFERRED_DEEP_LINK_CHECKED_KEY, 'sdk_unavailable')
+      return { status: 'sdk_unavailable', context }
+    }
+    // Meta's native API is first-launch only. Persist the attempt before calling it
+    // so a rejected promise cannot be mistaken for an untried install on next boot.
+    localStorage.setItem(DEFERRED_DEEP_LINK_CHECKED_KEY, 'started')
+    onStart?.()
     const result = await fetchDeferredAppLink.call(MetaAppEvents)
-    localStorage.setItem(DEFERRED_DEEP_LINK_CHECKED_KEY, '1')
-    return typeof result.url === 'string' && result.url ? result.url : undefined
+    if (typeof result.url === 'string' && result.url) {
+      localStorage.setItem(DEFERRED_DEEP_LINK_CHECKED_KEY, 'resolved')
+      return { status: 'resolved', url: result.url, context }
+    }
+    localStorage.setItem(DEFERRED_DEEP_LINK_CHECKED_KEY, 'empty')
+    return { status: 'empty', context }
   } catch (error) {
     console.warn('[MetaAppEvents] deferred app link lookup failed:', error)
-    return undefined
+    try {
+      localStorage.setItem(DEFERRED_DEEP_LINK_CHECKED_KEY, 'error')
+    } catch {}
+    return {
+      status: 'error',
+      error: error instanceof Error ? error.message : String(error),
+      context,
+    }
   }
+}
+
+export async function fetchDeferredMobileAppLink(): Promise<string | undefined> {
+  const result = await fetchDeferredMobileAppLinkResult()
+  return result.url
 }
 
 export function routeForMakaronDeepLink(value: string): string | undefined {

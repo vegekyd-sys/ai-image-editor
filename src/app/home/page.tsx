@@ -1498,15 +1498,22 @@ function HomePageInner() {
     if (!user || consumeDraftRef.current) return
     const continuationId = getCreateDraftContinuationId()
     if (!continuationId) return
+    consumeDraftRef.current = true
     let cancelled = false
     const consume = async () => {
       const draft = await getCreateDraft()
-      if (!draft || cancelled) return
+      if (!draft || cancelled) {
+        consumeDraftRef.current = false
+        return
+      }
       if (!shouldConsumeCreateDraft(draft, continuationId)) {
         clearCreateDraftContinuation()
         return
       }
-      if (draft.homeSkillId && homeSkills.length === 0) return
+      if (draft.homeSkillId && homeSkills.length === 0) {
+        consumeDraftRef.current = false
+        return
+      }
       if (draft.homeSkillId && draft.images.length === 0) {
         await clearCreateDraft()
         return
@@ -1516,7 +1523,6 @@ function HomePageInner() {
         return
       }
 
-      consumeDraftRef.current = true
       createInput.restoreDraftImages(draft.images)
       if (draft.prompt) createInput.setText(draft.prompt)
       createInput.setCreating(true)
@@ -1529,6 +1535,8 @@ function HomePageInner() {
         }
         const result = await createProjectFromStagedMedia(supabase, user.id, {
           images: draft.images,
+          projectId: draft.projectId,
+          continuationId: draft.continuationId,
           metadata: draft.metadata as PhotoMetadata | undefined,
           prompt: draft.prompt,
           skill: skillName,

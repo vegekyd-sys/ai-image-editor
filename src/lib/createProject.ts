@@ -43,11 +43,12 @@ export async function compressCreateImageFiles(files: File[]): Promise<string[]>
 async function createProjectShell(
   title = 'Untitled',
   marketing?: { metaEventId?: string; skillId?: string; hasPrompt?: boolean },
+  idempotency?: { clientProjectId?: string; idempotencyKey?: string },
 ): Promise<string> {
   const res = await fetch('/api/projects/create', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ title, ...marketing }),
+    body: JSON.stringify({ title, ...marketing, ...idempotency }),
   })
   const data = await res.json().catch(() => ({}))
   if (!res.ok || !data.projectId) {
@@ -61,10 +62,13 @@ async function persistCreateImages(
   userId: string,
   projectId: string,
   payloads: string[],
+  stablePrefix?: string,
 ): Promise<string[]> {
-  return Promise.all(payloads.map(async (payload) => {
+  return Promise.all(payloads.map(async (payload, index) => {
     if (payload.startsWith('http')) return payload
-    const filename = `snapshot-${crypto.randomUUID()}.jpg`
+    const filename = stablePrefix
+      ? `${stablePrefix}-${index}.jpg`
+      : `snapshot-${crypto.randomUUID()}.jpg`
     const url = await uploadImage(supabase, userId, projectId, filename, payload)
     if (!url) throw new Error('Failed to upload image')
     return url
@@ -180,25 +184,37 @@ export async function createProjectFromStagedMedia(
     prompt?: string
     skill?: string
     skillLaunchContext?: SkillLaunchContext
+    projectId?: string
+    continuationId?: string
   },
 ): Promise<{ projectId: string; metadata?: PhotoMetadata } | null> {
   const attribution = getMarketingAttribution()
-  const metaEventId = createMetaEventId('project.create')
+  const projectId = staged.projectId || crypto.randomUUID()
+  const metaEventId = staged.continuationId
+    ? `project.create.continuation.${staged.continuationId}`
+    : createMetaEventId('project.create')
   const marketing = {
     metaEventId,
     skillId: staged.skill || attribution.skill_id,
     hasPrompt: Boolean(staged.prompt),
   }
-  const projectId = await createProjectShell('Untitled', marketing)
+  let imageUrls: string[] = []
   if (staged.images?.length) {
-    const imageUrls = await persistCreateImages(supabase, userId, projectId, staged.images)
+    imageUrls = await persistCreateImages(supabase, userId, projectId, staged.images, 'anonymous-source')
     await stagePendingProjectImages(projectId, imageUrls)
   }
-  stageProjectLaunch(projectId, {
+  const createdProjectId = await createProjectShell('Untitled', marketing, {
+    clientProjectId: projectId,
+    idempotencyKey: staged.continuationId,
+  })
+  if (createdProjectId !== projectId && imageUrls.length) {
+    await stagePendingProjectImages(createdProjectId, imageUrls)
+  }
+  stageProjectLaunch(createdProjectId, {
     prompt: staged.prompt,
     skill: staged.skill,
     skillLaunchContext: staged.skillLaunchContext,
   }, staged.metadata)
-  trackProjectCreated(projectId, { prompt: staged.prompt, skill: staged.skill, eventId: metaEventId })
-  return { projectId, metadata: staged.metadata }
+  trackProjectCreated(createdProjectId, { prompt: staged.prompt, skill: staged.skill, eventId: metaEventId })
+  return { projectId: createdProjectId, metadata: staged.metadata }
 }

@@ -1,4 +1,5 @@
 import Capacitor
+import AppTrackingTransparency
 import FacebookCore
 import Foundation
 import UIKit
@@ -47,12 +48,31 @@ public class MetaAppEventsPlugin: CAPPlugin, CAPBridgedPlugin {
         AppEvents.shared.flush()
         var payload: JSObject = [
             "initialized": true,
-            "anonymousId": AppEvents.shared.anonymousID
+            "anonymousId": AppEvents.shared.anonymousID,
+            "appVersion": Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? "",
+            "appBuild": Bundle.main.object(forInfoDictionaryKey: "CFBundleVersion") as? String ?? "",
+            "advertiserTrackingStatus": advertiserTrackingStatus(),
+            "advertiserIDCollectionEnabled": Settings.shared.isAdvertiserIDCollectionEnabled
         ]
         if let appId = Settings.shared.appID {
             payload["appId"] = appId
         }
         call.resolve(payload)
+    }
+
+    private func advertiserTrackingStatus() -> String {
+        switch ATTrackingManager.trackingAuthorizationStatus {
+        case .authorized:
+            return "authorized"
+        case .denied:
+            return "denied"
+        case .restricted:
+            return "restricted"
+        case .notDetermined:
+            return "notDetermined"
+        @unknown default:
+            return "unknown"
+        }
     }
 
     @objc func fetchDeferredAppLink(_ call: CAPPluginCall) {

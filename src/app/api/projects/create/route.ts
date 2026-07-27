@@ -10,6 +10,30 @@ const MAX_VIDEO_DURATION = 120;
 const MAX_VIDEO_DURATION_TOLERANCE = 1;
 const MAX_VIDEO_FRAME_PIXELS = 2_086_876;
 const MAX_VIDEO_DIMENSION_PROBE_BYTES = 220 * 1024 * 1024;
+const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+
+function validClientProjectId(value: unknown): value is string {
+  return typeof value === 'string' && UUID_PATTERN.test(value);
+}
+
+function validIdempotencyKey(value: unknown): value is string | undefined {
+  return value === undefined || (typeof value === 'string' && value.length > 0 && value.length <= 200);
+}
+
+async function findOwnedProject(
+  supabase: SupabaseClient,
+  userId: string,
+  projectId: string,
+): Promise<{ id: string } | null> {
+  const { data, error } = await supabase
+    .from('projects')
+    .select('id')
+    .eq('id', projectId)
+    .eq('user_id', userId)
+    .maybeSingle();
+  if (error) throw error;
+  return data;
+}
 
 function formatSeconds(seconds: number): string {
   return Number.isInteger(seconds) ? String(seconds) : seconds.toFixed(1).replace(/\.0$/, '');
@@ -147,7 +171,16 @@ export async function POST(req: NextRequest) {
       metaEventId,
       skillId: marketingSkillId,
       hasPrompt: marketingHasPrompt,
+      clientProjectId,
+      idempotencyKey,
     } = await req.json();
+
+    if (clientProjectId !== undefined && !validClientProjectId(clientProjectId)) {
+      return NextResponse.json({ error: 'clientProjectId must be a valid UUID' }, { status: 400 });
+    }
+    if (!validIdempotencyKey(idempotencyKey)) {
+      return NextResponse.json({ error: 'Invalid idempotencyKey' }, { status: 400 });
+    }
 
     // Support single or multiple images
     const urls: (string | undefined)[] = imageUrls || (imageUrl ? [imageUrl] : []);
@@ -249,9 +282,32 @@ export async function POST(req: NextRequest) {
 
     // Text-to-image: no images/videos, just create empty project (agent will generate)
     if (imageCount === 0 && videos.length === 0) {
-      const projectId = crypto.randomUUID();
+      const projectId = clientProjectId || crypto.randomUUID();
+      if (clientProjectId) {
+        const existing = await findOwnedProject(supabase, userId, projectId);
+        if (existing) {
+          return NextResponse.json({
+            projectId,
+            snapshots: [],
+            projectUrl: `https://www.makaron.app/projects/${projectId}`,
+            idempotent: true,
+          });
+        }
+      }
       const { error: projectError } = await supabase.from('projects').insert({ id: projectId, user_id: userId, title: title || 'Untitled', timeline_version: 2 });
       if (projectError) {
+        if (clientProjectId && projectError.code === '23505') {
+          const existing = await findOwnedProject(supabase, userId, projectId);
+          if (existing) {
+            return NextResponse.json({
+              projectId,
+              snapshots: [],
+              projectUrl: `https://www.makaron.app/projects/${projectId}`,
+              idempotent: true,
+            });
+          }
+          return NextResponse.json({ error: 'Project ID already exists' }, { status: 409 });
+        }
         return NextResponse.json({ error: projectError.message }, { status: 500 });
       }
       sendCustomizeProductCapiAfter(req, {
@@ -265,11 +321,12 @@ export async function POST(req: NextRequest) {
         projectId,
         snapshots: [],
         projectUrl: `https://www.makaron.app/projects/${projectId}`,
+        idempotent: false,
       });
     }
 
     // Create project
-    const projectId = crypto.randomUUID();
+    const projectId = clientProjectId || crypto.randomUUID();
     const { error: projectError } = await supabase.from('projects').insert({
       id: projectId,
       user_id: userId,
