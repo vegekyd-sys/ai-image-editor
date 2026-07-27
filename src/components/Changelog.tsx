@@ -10,6 +10,19 @@ interface ChangelogEntry {
 
 const CHANGELOG: ChangelogEntry[] = [
   {
+    date: '2026-07-28',
+    en: { title: 'Editable Remotion, End to End', items: [
+      'Text, images, and video are now discovered as editable layers automatically, with selection, moving, and resizing staying aligned across desktop and mobile.',
+      'Edits persist across refreshes and devices and carry into MP4 exports; video trim now edits the selected clip instead of the whole composition.',
+      'Double-click text editing, alignment guides, and layer switching are more reliable, with selection frames staying stable through repeated edits.',
+    ]},
+    zh: { title: 'Remotion 可编辑，完整打通', items: [
+      '文字、图片和视频现在会自动成为可编辑图层，桌面端和手机端的选中、移动与缩放都能准确跟随画面。',
+      '修改后刷新或换设备仍会保留，并能正确导出到 MP4；视频 trim 现在只编辑选中的片段，不再影响整个 composition。',
+      '双击文字编辑、辅助线和图层切换更加稳定，连续修改后选择框仍能准确跟随内容。',
+    ]},
+  },
+  {
     date: '2026-07-25',
     en: { title: 'Consistent Remotion Fonts', items: ['Remotion previews and Lambda MP4 exports now use the same pinned Chinese and English fonts, so typography stays consistent from editing to delivery.'] },
     zh: { title: 'Remotion 字体一致性修复', items: ['Remotion 预览与 Lambda MP4 导出现在使用同一套固定的中英文字体，从编辑到成片不再出现字体变化。'] },
