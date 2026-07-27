@@ -1,6 +1,7 @@
 import { act, fireEvent, render, screen } from '@testing-library/react';
 import { describe, expect, it, vi } from 'vitest';
 import DesignVideoTrimEditor from '@/components/DesignVideoTrimEditor';
+import { LocaleProvider } from '@/lib/i18n';
 
 const field = {
   id: 'growthVideo',
@@ -14,19 +15,21 @@ const field = {
 describe('DesignVideoTrimEditor source clip behavior', () => {
   it('lays out trim handles against the selected source duration', () => {
     render(
-      <DesignVideoTrimEditor
-        field={field}
-        props={{
-          growthVideoUrl: '',
-          videoTrimBefore: 165,
-          videoTrimAfter: 285,
-        }}
-        fps={30}
-        durationInFrames={360}
-        onUpdateProp={vi.fn()}
-        onClose={vi.fn()}
-        isDesktop={false}
-      />,
+      <LocaleProvider initialLocale="en">
+        <DesignVideoTrimEditor
+          field={field}
+          props={{
+            growthVideoUrl: '',
+            videoTrimBefore: 165,
+            videoTrimAfter: 285,
+          }}
+          fps={30}
+          durationInFrames={360}
+          onUpdateProp={vi.fn()}
+          onClose={vi.fn()}
+          isDesktop={false}
+        />
+      </LocaleProvider>,
     );
 
     const startHandle = screen.getByRole('button', { name: 'Trim start' });
@@ -49,19 +52,21 @@ describe('DesignVideoTrimEditor source clip behavior', () => {
     window.addEventListener('makaron:design-trim-preview', onPreview);
 
     render(
-      <DesignVideoTrimEditor
-        field={field}
-        props={{
-          growthVideoUrl: '',
-          videoTrimBefore: 165,
-          videoTrimAfter: 285,
-        }}
-        fps={30}
-        durationInFrames={360}
-        onUpdateProp={vi.fn()}
-        onClose={vi.fn()}
-        isDesktop={false}
-      />,
+      <LocaleProvider initialLocale="en">
+        <DesignVideoTrimEditor
+          field={field}
+          props={{
+            growthVideoUrl: '',
+            videoTrimBefore: 165,
+            videoTrimAfter: 285,
+          }}
+          fps={30}
+          durationInFrames={360}
+          onUpdateProp={vi.fn()}
+          onClose={vi.fn()}
+          isDesktop={false}
+        />
+      </LocaleProvider>,
     );
 
     fireEvent.click(screen.getByRole('button', { name: 'Play trim preview' }));

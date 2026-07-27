@@ -6,6 +6,7 @@ import type { EditableField } from '@/types';
 import FloatingPanel from '@/components/FloatingPanel';
 import { getVideoTrimPropKeys } from '@/lib/editor/video-trim';
 import { getSourceDurationInFrames } from '@/lib/editor/video-trim-timeline';
+import { useLocale } from '@/lib/i18n';
 
 interface DesignVideoTrimEditorProps {
   field: EditableField;
@@ -68,6 +69,7 @@ export default function DesignVideoTrimEditor({
   onClose,
   isDesktop,
 }: DesignVideoTrimEditorProps) {
+  const { t } = useLocale();
   const { startKey, endKey } = getVideoTrimPropKeys(field);
   const sourceUrl = typeof props[field.propKey] === 'string' ? props[field.propKey] as string : '';
   const rawDeclaredEnd = endKey ? Number(props[endKey]) : NaN;
@@ -303,7 +305,7 @@ export default function DesignVideoTrimEditor({
           <button
             type="button"
             onClick={togglePlayback}
-            aria-label={isPlaying ? 'Pause trim preview' : 'Play trim preview'}
+            aria-label={isPlaying ? t('editor.trim.pausePreview') : t('editor.trim.playPreview')}
             className="flex-shrink-0 flex items-center justify-center w-8 h-8 rounded-full cursor-pointer active:scale-90 transition-all border border-white/10"
             style={{ background: 'rgba(255,255,255,0.06)', color: '#fff' }}
           >
@@ -370,7 +372,7 @@ export default function DesignVideoTrimEditor({
             >
               <button
                 type="button"
-                aria-label="Trim start"
+                aria-label={t('editor.trim.start')}
                 className="absolute left-0 top-0 bottom-0 z-30 w-[18px] rounded-l-[4px] bg-fuchsia-500 active:scale-95"
                 onPointerDown={(event) => {
                   event.preventDefault();
@@ -382,7 +384,7 @@ export default function DesignVideoTrimEditor({
               </button>
               <button
                 type="button"
-                aria-label="Trim end"
+                aria-label={t('editor.trim.end')}
                 className="absolute right-0 top-0 bottom-0 z-30 w-[18px] rounded-r-[4px] bg-fuchsia-500 active:scale-95"
                 onPointerDown={(event) => {
                   event.preventDefault();
@@ -400,7 +402,7 @@ export default function DesignVideoTrimEditor({
             />
             <button
               type="button"
-              aria-label="Trim playhead"
+              aria-label={t('editor.trim.playhead')}
               className="absolute bottom-0 top-[-12px] z-20 w-7 -translate-x-1/2 cursor-ew-resize"
               style={{ left: `${playheadPercent}%`, background: 'transparent' }}
               onPointerDown={(event) => {
