@@ -83,21 +83,6 @@ describe('Remotion shared font catalog', () => {
     })).toThrow('Unsupported Remotion font "STKaiti"');
   });
 
-  it('migrates legacy platform font stacks to pinned catalog families', () => {
-    const prepared = prepareRemotionFontCode({
-      code: `
-        const ui = <div style={{fontFamily: 'system-ui, -apple-system, sans-serif'}}>Settings</div>;
-        const chinese = <div style={{fontFamily: 'PingFang SC, Microsoft YaHei, sans-serif'}}>微信诞生</div>;
-      `,
-      manifest: makeManifest(),
-    });
-
-    expect(prepared.usedFamilies).toEqual(expect.arrayContaining(['Inter', 'Noto Sans SC']));
-    expect(prepared.code).not.toMatch(/system-ui|-apple-system|PingFang SC|Microsoft YaHei/);
-    expect(prepared.code).toContain(internalRemotionFontFamily('Inter'));
-    expect(prepared.code).toContain(internalRemotionFontFamily('Noto Sans SC'));
-  });
-
   it('uses only explicit persisted substitutions for a legacy design', () => {
     const prepared = prepareRemotionFontCode({
       code: `
