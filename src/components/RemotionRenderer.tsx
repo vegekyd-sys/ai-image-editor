@@ -10,13 +10,34 @@ import {
   prepareAndLoadRemotionFontsWithTiming,
   type RemotionFontTiming,
 } from '@/remotion/font-catalog';
+import { useLocale } from '@/lib/i18n';
+import {
+  isRecoverableRemotionPreviewError,
+  reportRemotionPreviewError,
+  type RemotionPreviewErrorPhase,
+} from '@/lib/remotion-preview-errors';
 
 export type { DesignPayload };
 export type { RenderMediaOnWebProgress };
 
 /** Resolve HTTP image URLs in code to blob URLs (same-origin, no base64 overhead).
  *  Caller must revoke blobUrls after use. */
-async function resolveCodeUrls(code: string): Promise<{ code: string; blobUrls: string[] }> {
+type ResourceFailureReporter = (url: string, error: unknown) => void;
+
+async function fetchImageBlob(url: string): Promise<Blob> {
+  const response = await fetch(url);
+  if (!response.ok) throw new Error(`Image fetch failed: ${response.status}`);
+  const contentType = response.headers.get('content-type') || '';
+  if (!contentType.toLowerCase().startsWith('image/')) {
+    throw new Error(`Image fetch returned ${contentType || 'an unknown content type'}`);
+  }
+  return response.blob();
+}
+
+async function resolveCodeUrls(
+  code: string,
+  onFailure?: ResourceFailureReporter,
+): Promise<{ code: string; blobUrls: string[] }> {
   const urlPattern = /https?:\/\/[^\s"'`<>)}\]]+\.(jpg|jpeg|png|webp|gif)([^\s"'`<>)}\]]*)/gi;
   // Match Supabase storage URLs but exclude audio files (.mp3/.wav etc) — those are handled by resolveAudioUrls
   const storagePattern = /https?:\/\/[^\s"'`<>)}\]]*\/storage\/v1\/object\/public\/(?![^\s"'`<>)}\]]*\.(?:mp3|wav|m4a|aac|ogg|mp4|webm|mov))[^\s"'`<>)}\]]*/gi;
@@ -28,12 +49,13 @@ async function resolveCodeUrls(code: string): Promise<{ code: string; blobUrls: 
   const blobUrls: string[] = [];
   await Promise.all([...urls].map(async (url) => {
     try {
-      const res = await fetch(url);
-      const blob = await res.blob();
+      const blob = await fetchImageBlob(url);
       const blobUrl = URL.createObjectURL(blob);
       blobUrls.push(blobUrl);
       while (resolved.includes(url)) resolved = resolved.replace(url, blobUrl);
-    } catch { /* skip */ }
+    } catch (error) {
+      onFailure?.(url, error);
+    }
   }));
   return { code: resolved, blobUrls };
 }
@@ -51,30 +73,30 @@ async function resolveImageUrlsInValue(
   value: unknown,
   blobUrls: string[],
   cache?: Map<string, string>,
+  onFailure?: ResourceFailureReporter,
 ): Promise<unknown> {
   if (isImageUrl(value)) {
     try {
       const cached = cache?.get(value);
       if (cached) return cached;
-      const res = await fetch(value);
-      if (!res.ok) throw new Error(`Image fetch failed: ${res.status}`);
-      const blob = await res.blob();
+      const blob = await fetchImageBlob(value);
       const blobUrl = URL.createObjectURL(blob);
       blobUrls.push(blobUrl);
       cache?.set(value, blobUrl);
       return blobUrl;
-    } catch {
+    } catch (error) {
+      onFailure?.(value, error);
       return value;
     }
   }
   if (Array.isArray(value)) {
-    return Promise.all(value.map(item => resolveImageUrlsInValue(item, blobUrls, cache)));
+    return Promise.all(value.map(item => resolveImageUrlsInValue(item, blobUrls, cache, onFailure)));
   }
   if (value && typeof value === 'object') {
     const entries = await Promise.all(
       Object.entries(value as Record<string, unknown>).map(async ([key, child]) => [
         key,
-        await resolveImageUrlsInValue(child, blobUrls, cache),
+        await resolveImageUrlsInValue(child, blobUrls, cache, onFailure),
       ] as const),
     );
     return Object.fromEntries(entries);
@@ -92,7 +114,9 @@ async function resolveDesignImageUrls(
   return { code: resolvedCode, props, blobUrls: [...codeBlobUrls, ...propBlobUrls] };
 }
 
-const BROWSER_FONT_MANIFEST_URL = '/api/remotion/fonts';
+// The query revision prevents previously cached host-bound manifests from
+// sending LAN clients back to localhost.
+const BROWSER_FONT_MANIFEST_URL = '/api/remotion/fonts?browser-manifest=relative-v1';
 
 export interface BrowserRemotionFontTiming {
   source: 'player' | 'poster' | 'preview-frame' | 'web-export';
@@ -127,13 +151,30 @@ async function compileBrowserDesign(
   });
   if (!Component) throw new Error('Failed to compile design code');
 
-  return function FontPinnedDesign(componentProps: Record<string, unknown>) {
+  return wrapBrowserDesign(Component, prepared.defaultFontFamily);
+}
+
+function wrapBrowserDesign(
+  Component: React.ComponentType<Record<string, unknown>>,
+  fontFamily: string,
+): React.ComponentType<Record<string, unknown>> {
+  return function BrowserDesign(componentProps: Record<string, unknown>) {
     return React.createElement(
       'div',
-      { style: { width: '100%', height: '100%', fontFamily: prepared.defaultFontFamily } },
+      { style: { width: '100%', height: '100%', fontFamily } },
       React.createElement(Component, componentProps),
     );
   };
+}
+
+function compileBrowserDesignWithoutPinnedFonts(
+  code: string,
+): React.ComponentType<Record<string, unknown>> {
+  const Component = evalRemotionJSX(code, {
+    editableTransformMode: 'proxy',
+  });
+  if (!Component) throw new Error('Failed to compile design code');
+  return wrapBrowserDesign(Component, 'system-ui, sans-serif');
 }
 
 // ─── Standalone poster capture (no DOM needed) ─────────────────────────────
@@ -231,8 +272,25 @@ export async function captureDesignFrame(design: DesignPayload, frame: number): 
 
 // ─── Error Boundary (prevents design crash from taking down the whole page) ──
 
+function PreviewPlayerErrorFallback({
+  error,
+  fallback,
+  onError,
+}: {
+  error: Error;
+  fallback: React.ReactNode;
+  onError: (error: Error) => void;
+}) {
+  const onErrorRef = useRef(onError);
+  onErrorRef.current = onError;
+  useEffect(() => {
+    onErrorRef.current(error);
+  }, [error]);
+  return fallback;
+}
+
 class DesignErrorBoundary extends React.Component<
-  { children: React.ReactNode; onError?: (msg: string) => void },
+  { children: React.ReactNode; fallback: React.ReactNode; onError?: (msg: string) => void },
   { error: Error | null }
 > {
   state: { error: Error | null } = { error: null };
@@ -242,13 +300,7 @@ class DesignErrorBoundary extends React.Component<
     this.props.onError?.(error.message);
   }
   render() {
-    if (this.state.error) {
-      return (
-        <div style={{ padding: 16, color: '#f87171', fontFamily: 'monospace', fontSize: 12, background: 'rgba(248,113,113,0.1)', borderRadius: 12 }}>
-          Design crashed: {this.state.error.message}
-        </div>
-      );
-    }
+    if (this.state.error) return this.props.fallback;
     return this.props.children;
   }
 }
@@ -265,19 +317,55 @@ interface RemotionRendererProps {
   onContainerRef?: (el: HTMLDivElement | null) => void;
   onPlayerRef?: (ref: PlayerRef | null) => void;
   onContentSize?: (size: { width: number; height: number; source: 'editables' | 'scroll' }) => void;
+  projectId?: string;
+  snapshotId?: string;
 }
 
-export default function RemotionRenderer({ design, onError, mode = 'inline', hideControls, posterImage, onLoading, onContainerRef, onPlayerRef, onContentSize }: RemotionRendererProps) {
+export default function RemotionRenderer({
+  design,
+  onError,
+  mode = 'inline',
+  hideControls,
+  posterImage,
+  onLoading,
+  onContainerRef,
+  onPlayerRef,
+  onContentSize,
+  projectId,
+  snapshotId,
+}: RemotionRendererProps) {
+  const { t } = useLocale();
   const playerRef = useRef<PlayerRef>(null);
   const wrapperRef = useRef<HTMLDivElement>(null);
   const onPlayerRefRef = useRef(onPlayerRef);
+  const onErrorRef = useRef(onError);
+  const reportContextRef = useRef({ projectId, snapshotId });
   const designPropsRef = useRef(design.props || {});
   const inputPropImageCacheRef = useRef(new Map<string, string>());
+  onErrorRef.current = onError;
+  reportContextRef.current = { projectId, snapshotId };
   designPropsRef.current = design.props || {};
 
   const [Component, setComponent] = useState<React.ComponentType<any> | null>(null);
   const [inputProps, setInputProps] = useState<Record<string, unknown>>(design.props || {});
   const [compileError, setCompileError] = useState<string | null>(null);
+  const [retryToken, setRetryToken] = useState(0);
+
+  const reportPreviewFailureRef = useRef((
+    phase: RemotionPreviewErrorPhase,
+    error: unknown,
+    options: { recovered: boolean; resourceUrl?: string },
+  ) => {
+    const message = error instanceof Error ? error.message : String(error);
+    onErrorRef.current?.(message);
+    reportRemotionPreviewError({
+      ...reportContextRef.current,
+      phase,
+      error,
+      recovered: options.recovered,
+      resourceUrl: options.resourceUrl,
+    });
+  });
 
   const isStill = !design.animation;
   const fps = design.animation?.fps || 30;
@@ -292,10 +380,24 @@ export default function RemotionRenderer({ design, onError, mode = 'inline', hid
       try {
         await preloadBabel().catch(() => {});
         const videoResolved = resolvePreviewVideoUrls(design.code);
-        const { code: resolvedCode, blobUrls: imageBlobUrls } = await resolveCodeUrls(videoResolved);
+        const { code: resolvedCode, blobUrls: imageBlobUrls } = await resolveCodeUrls(
+          videoResolved,
+          (resourceUrl, error) => reportPreviewFailureRef.current(
+            'image-fetch',
+            error,
+            { recovered: true, resourceUrl },
+          ),
+        );
         blobUrls.push(...imageBlobUrls);
         if (cancelled) { blobUrls.forEach(url => URL.revokeObjectURL(url)); return; }
-        const comp = await compileBrowserDesign(design, resolvedCode, designPropsRef.current, 'player');
+        let comp: React.ComponentType<Record<string, unknown>>;
+        try {
+          comp = await compileBrowserDesign(design, resolvedCode, designPropsRef.current, 'player');
+        } catch (error) {
+          if (!isRecoverableRemotionPreviewError(error)) throw error;
+          reportPreviewFailureRef.current('font-load', error, { recovered: true });
+          comp = compileBrowserDesignWithoutPinnedFonts(resolvedCode);
+        }
         if (cancelled) { blobUrls.forEach(url => URL.revokeObjectURL(url)); return; }
         setCompileError(null);
         setComponent(() => comp);
@@ -305,7 +407,7 @@ export default function RemotionRenderer({ design, onError, mode = 'inline', hid
         const msg = e instanceof Error ? e.message : String(e);
         console.error('[RemotionRenderer] init failed:', msg);
         setCompileError(msg);
-        onError?.(msg);
+        reportPreviewFailureRef.current('player-init', e, { recovered: false });
         onLoading?.(false);
       }
     })();
@@ -314,7 +416,7 @@ export default function RemotionRenderer({ design, onError, mode = 'inline', hid
       blobUrls.forEach(url => URL.revokeObjectURL(url));
     };
 
-  }, [design.code, design.fontSubstitutions]);
+  }, [design.code, design.fontSubstitutions, retryToken]);
 
   // Editable text/media/transform changes should update Player input props
   // without recompiling the composition, fonts, and code.
@@ -333,6 +435,11 @@ export default function RemotionRenderer({ design, onError, mode = 'inline', hid
         design.props || {},
         newBlobUrls,
         inputPropImageCacheRef.current,
+        (resourceUrl, error) => reportPreviewFailureRef.current(
+          'image-fetch',
+          error,
+          { recovered: true, resourceUrl },
+        ),
       ) as Record<string, unknown>;
       if (cancelled) {
         discardNewBlobUrls();
@@ -431,12 +538,37 @@ export default function RemotionRenderer({ design, onError, mode = 'inline', hid
     return () => document.removeEventListener('music-play', handler);
   }, []);
 
-  if (compileError) {
-    return (
-      <div style={{ padding: 16, color: '#f87171', fontFamily: 'monospace', fontSize: 12, background: 'rgba(248,113,113,0.1)', borderRadius: 12 }}>
-        Design error: {compileError}
+  const previewFallback = (
+    <div className="relative flex h-full min-h-[180px] w-full items-center justify-center overflow-hidden bg-black">
+      {posterImage && (
+        <img
+          src={posterImage}
+          alt=""
+          className="absolute inset-0 h-full w-full object-contain"
+        />
+      )}
+      <div className="absolute inset-x-0 bottom-0 flex items-center justify-between gap-3 bg-black/80 px-4 py-3 backdrop-blur-sm">
+        <div className="min-w-0">
+          <div className="text-sm font-medium text-white">{t('canvas.previewUnavailable')}</div>
+          <div className="mt-0.5 text-xs text-white/50">{t('canvas.previewUsingPoster')}</div>
+        </div>
+        <button
+          type="button"
+          onClick={() => {
+            setCompileError(null);
+            setComponent(null);
+            setRetryToken(token => token + 1);
+          }}
+          className="shrink-0 rounded-lg border border-white/15 bg-white/10 px-3 py-2 text-xs font-medium text-white transition-colors hover:bg-white/15"
+        >
+          {t('canvas.previewRetry')}
+        </button>
       </div>
-    );
+    </div>
+  );
+
+  if (compileError) {
+    return previewFallback;
   }
 
   if (!Component) return null;
@@ -444,7 +576,13 @@ export default function RemotionRenderer({ design, onError, mode = 'inline', hid
   const isFill = mode === 'fill';
 
   return (
-    <DesignErrorBoundary onError={onError}>
+    <DesignErrorBoundary
+      key={retryToken}
+      fallback={previewFallback}
+      onError={(message) => {
+        reportPreviewFailureRef.current('player-runtime', message, { recovered: false });
+      }}
+    >
       <div ref={wrapperRef} style={isFill ? { width: '100%', height: '100%' } : {
         borderRadius: 12, overflow: 'hidden', margin: '8px 0',
       }}>
@@ -473,9 +611,13 @@ export default function RemotionRenderer({ design, onError, mode = 'inline', hid
           posterFillMode="player-size"
           bufferStateDelayInMilliseconds={0}
           errorFallback={({ error }) => (
-            <div style={{ padding: 16, color: '#f87171', fontFamily: 'monospace', fontSize: 12, background: 'rgba(248,113,113,0.1)', borderRadius: 12 }}>
-              Render error: {error.message}
-            </div>
+            <PreviewPlayerErrorFallback
+              error={error}
+              fallback={previewFallback}
+              onError={(playerError) => {
+                reportPreviewFailureRef.current('player-runtime', playerError, { recovered: false });
+              }}
+            />
           )}
         />
       </div>

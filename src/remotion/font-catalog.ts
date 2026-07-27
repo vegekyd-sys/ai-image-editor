@@ -123,7 +123,7 @@ export function validateRemotionFontManifest(value: unknown): RemotionFontCatalo
       || typeof face.url !== 'string' || !/^[a-f0-9]{64}$/.test(face.sha256 || '')) {
       throw new Error('Malformed Remotion font manifest face');
     }
-    const fileName = new URL(face.url).pathname.split('/').pop() || '';
+    const fileName = new URL(face.url, 'https://makaron.invalid').pathname.split('/').pop() || '';
     if (fileName !== face.sha256 && fileName !== `${face.sha256}.woff2`) {
       throw new Error(`Remotion font asset is not content-addressed: ${face.url}`);
     }
@@ -431,7 +431,16 @@ export async function loadPreparedRemotionFonts(input: {
             display: 'block',
           },
         ));
-        await Promise.all(fontFaces.map(fontFace => fontFace.load()));
+        try {
+          await Promise.all(fontFaces.map(fontFace => fontFace.load()));
+        } catch (error) {
+          const message = error instanceof Error ? error.message : String(error);
+          throw new Error(
+            `Remotion font failed to load: ${face.family} ${face.weight} ${face.subset} `
+            + `from ${face.url}. ${message}`,
+            { cause: error },
+          );
+        }
         for (const fontFace of fontFaces) targetDocument.fonts.add(fontFace);
         const resource = resourceTimingFor(face.url);
         return {

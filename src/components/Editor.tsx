@@ -99,7 +99,11 @@ interface EditorProps {
   onSaveMessage?: (message: Message) => void;
   onUpdateTips?: (snapshotId: string, tips: Tip[]) => void;
   onUpdateDescription?: (snapshotId: string, description: string) => void;
-  onSaveDesignProps?: (snapshotId: string, design: DesignPayload) => void;
+  onSaveDesignProps?: (
+    snapshotId: string,
+    design: DesignPayload,
+    options?: { propsOnly?: boolean; revision?: number },
+  ) => void | Promise<void>;
   initialTitle?: string;
   onRenameProject?: (title: string) => void;
   onBack?: () => void;
@@ -3131,32 +3135,67 @@ Select the best 3-7 items for a compelling video. You do NOT need to use all or 
     }
   }, [onSaveSnapshot, fetchTipsForSnapshot]);
 
-  // Update a design prop (text edit or drag position) — immediate re-render via Remotion
+  // Update a design prop (text, media, trim, move, or scale) and persist it.
   const designPropsSaveTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const handleDesignPropUpdate = useCallback((key: string, value: unknown) => {
-    setSnapshots(prev => {
-      const snapIdx = snapFromTimeline(viewIndex, draftParentIndex);
-      const updated = prev.map((s, i) => {
-        if (i === snapIdx && s.design) {
-          return { ...s, design: { ...s.design, props: { ...s.design.props, [key]: value } } };
-        }
-        return s;
-      });
-      // Debounced persist to workspace (500ms)
-      if (snapIdx != null) {
-        if (designPropsSaveTimer.current) clearTimeout(designPropsSaveTimer.current);
-        const capturedIdx = snapIdx;
-        designPropsSaveTimer.current = setTimeout(() => {
-          const snap = updated[capturedIdx];
-          if (snap?.design && onSaveDesignProps) {
-            console.log('[design] saving props for', snap.id);
-            onSaveDesignProps(snap.id, snap.design);
-          }
-        }, 500);
-      }
-      return updated;
+  const pendingDesignSaveRef = useRef<{
+    snapshotId: string;
+    design: DesignPayload;
+    revision: number;
+  } | null>(null);
+  const designSaveRevisionRef = useRef(0);
+  const flushPendingDesignSave = useCallback(() => {
+    if (designPropsSaveTimer.current) {
+      clearTimeout(designPropsSaveTimer.current);
+      designPropsSaveTimer.current = null;
+    }
+    const pending = pendingDesignSaveRef.current;
+    pendingDesignSaveRef.current = null;
+    if (!pending || !onSaveDesignProps) return;
+    void Promise.resolve(onSaveDesignProps(
+      pending.snapshotId,
+      pending.design,
+      { propsOnly: true, revision: pending.revision },
+    )).catch((error) => {
+      console.error('[design] prop persistence failed', error);
     });
-  }, [viewIndex, draftParentIndex, onSaveDesignProps]);
+  }, [onSaveDesignProps]);
+
+  useEffect(() => {
+    window.addEventListener('pagehide', flushPendingDesignSave);
+    return () => {
+      window.removeEventListener('pagehide', flushPendingDesignSave);
+      flushPendingDesignSave();
+    };
+  }, [flushPendingDesignSave]);
+
+  const handleDesignPropUpdate = useCallback((key: string, value: unknown) => {
+    const snapIdx = snapFromTimeline(viewIndex, draftParentIndex);
+    if (snapIdx == null) return;
+    const current = snapshotsRef.current[snapIdx];
+    if (!current?.design) return;
+
+    const design = {
+      ...current.design,
+      props: { ...current.design.props, [key]: value },
+    };
+    const updated = snapshotsRef.current.map((snapshot, index) => (
+      index === snapIdx ? { ...snapshot, design } : snapshot
+    ));
+    snapshotsRef.current = updated;
+    setSnapshots(updated);
+
+    designSaveRevisionRef.current = Math.max(
+      Date.now(),
+      designSaveRevisionRef.current + 1,
+    );
+    pendingDesignSaveRef.current = {
+      snapshotId: current.id,
+      design,
+      revision: designSaveRevisionRef.current,
+    };
+    if (designPropsSaveTimer.current) clearTimeout(designPropsSaveTimer.current);
+    designPropsSaveTimer.current = setTimeout(flushPendingDesignSave, 500);
+  }, [viewIndex, draftParentIndex, flushPendingDesignSave]);
 
   const designSizeSaveTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const handleDesignContentSize = useCallback((size: { width: number; height: number; source: 'editables' | 'scroll' }) => {
@@ -3586,6 +3625,8 @@ Select the best 3-7 items for a compelling video. You do NOT need to use all or 
             ) : (
               <ImageCanvas
                 data-testid="canvas"
+                projectId={projectId ?? undefined}
+                designSnapshotId={currentSnap?.id}
                 key={`${viewIndex}:${timeline[viewIndex] ?? ''}:${currentVideo?.videoUrl ?? ''}:${currentSnap?.videoMeta?.videoUrl ?? ''}:${annotationMode ? 'annotate' : 'browse'}`}
                 timeline={timeline}
                 currentIndex={viewIndex}

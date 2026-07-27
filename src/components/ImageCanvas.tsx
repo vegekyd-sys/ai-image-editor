@@ -35,6 +35,8 @@ function isSimpleVideoWrapper(code: string): boolean {
 }
 
 interface ImageCanvasProps {
+  projectId?: string;
+  designSnapshotId?: string;
   timeline: string[];
   currentIndex: number;
   onIndexChange: (index: number) => void;
@@ -110,6 +112,8 @@ interface ImageCanvasProps {
 }
 
 export default function ImageCanvas({
+  projectId,
+  designSnapshotId,
   timeline, currentIndex, onIndexChange, isEditing,
   isDraft, isDraftLoading, draftTimelineIndex, onDismissDraft, previousImage, onAnimate,
   isVideoEntry, videoUrl, videoProcessing, videoFailed, videoTaskId, videoModel, videoPosterImage, isDesktop,
@@ -1515,6 +1519,8 @@ export default function ImageCanvas({
           >
             <RemotionRenderer
               design={currentDesign!}
+              projectId={projectId}
+              snapshotId={designSnapshotId}
               mode={isLongDesign ? 'inline' : 'fill'}
               hideControls
               posterImage={currentDesign?.animation && !selectedEditableId ? displayImage : undefined}

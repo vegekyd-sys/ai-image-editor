@@ -82,9 +82,19 @@ describe('Remotion preview playback contract', () => {
 
     expect(rendererSource).toContain('const designPropsRef = useRef(design.props || {})')
     expect(rendererSource).toContain('designPropsRef.current = design.props || {}')
-    expect(rendererSource).toContain('}, [design.code, design.fontSubstitutions])')
+    expect(rendererSource).toContain('design.fontSubstitutions, retryToken]')
     expect(rendererSource).toContain('}, [design.props])')
     expect(rendererSource).not.toContain('}, [design.code, design.fontSubstitutions, design.props])')
+  })
+
+  it('degrades only browser preview fonts when a resource load fails', () => {
+    const rendererSource = read('src/components/RemotionRenderer.tsx')
+
+    expect(rendererSource).toContain('compileBrowserDesignWithoutPinnedFonts')
+    expect(rendererSource).toContain('isRecoverableRemotionPreviewError')
+    expect(rendererSource).toContain("reportPreviewFailureRef.current('font-load'")
+    expect(rendererSource).toContain('recovered: true')
+    expect(rendererSource).not.toContain('Render error: {error.message}')
   })
 
   it('normalizes common agent Remotion scope declarations before evaluating code', () => {

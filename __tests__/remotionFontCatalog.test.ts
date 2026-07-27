@@ -57,7 +57,7 @@ describe('Remotion shared font catalog', () => {
     expect(validateRemotionFontManifest(valid)).toEqual(valid);
 
     const proxied = structuredClone(valid);
-    proxied.faces[0].url = `https://app.example.test/api/remotion/fonts/${proxied.faces[0].sha256}`;
+    proxied.faces[0].url = `/api/remotion/fonts/${proxied.faces[0].sha256}`;
     expect(validateRemotionFontManifest(proxied)).toEqual(proxied);
 
     const invalid = structuredClone(valid);
@@ -221,5 +221,40 @@ describe('Remotion shared font catalog', () => {
     expect(warm.requestCacheHit).toBe(true);
     expect(warm.faceCount).toBe(cold.faceCount);
     expect(fonts.add).toHaveBeenCalledTimes(cold.faceCount);
+  });
+
+  it('identifies the exact font resource when browser loading fails', async () => {
+    class FailingFontFace {
+      constructor(
+        readonly family: string,
+        readonly source: string,
+        readonly descriptors: FontFaceDescriptors,
+      ) {}
+
+      async load() {
+        throw new Error('A network error occurred.');
+      }
+    }
+    vi.stubGlobal('FontFace', FailingFontFace);
+    const targetDocument = {
+      fonts: {
+        ready: Promise.resolve(),
+        add: vi.fn(),
+        check: vi.fn(() => true),
+      },
+    } as unknown as Document;
+    const manifest = makeManifest();
+    const code = `const title = <div style={{fontFamily: 'Inter, sans-serif'}}>Title</div>;`;
+    const prepared = prepareRemotionFontCode({ code, manifest });
+
+    await expect(loadPreparedRemotionFonts({
+      manifest,
+      prepared,
+      text: code,
+      targetDocument,
+    })).rejects.toThrow(
+      `Remotion font failed to load: Inter 400 latin from ${manifest.faces[0].url}. `
+      + 'A network error occurred.',
+    );
   });
 });
