@@ -612,6 +612,7 @@ export default function DesignOverlay({
             ref={moveableRef}
             target={selectedRect.domEl}
             rootContainer={containerEl ?? undefined}
+            useAccuratePosition={true}
             draggable={true}
             dragArea={true}
             passDragArea={false}

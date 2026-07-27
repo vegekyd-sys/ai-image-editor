@@ -22,6 +22,7 @@ describe('DesignOverlay moveable guideline regression guards', () => {
   it('measures Moveable in the scaled Remotion canvas coordinate space', () => {
     expect(source).toContain('rootContainer={containerEl ?? undefined}');
     expect(source).not.toContain('rootContainer={overlayRef.current ?? undefined}');
+    expect(source).toContain('useAccuratePosition={true}');
   });
 
   it('never promotes a collapsed Remotion duplicate after an editable is moved', () => {

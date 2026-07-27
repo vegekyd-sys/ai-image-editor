@@ -66,6 +66,7 @@ interface NaturalComponentHost {
 }
 
 interface NaturalComponentCall {
+  path: NodePath<JSXOpeningElement>;
   opening: JSXOpeningElement;
   parentComponentName: string | null;
   parentObjectPattern: ObjectPattern | null;
@@ -81,6 +82,7 @@ interface NaturalPropagationEdge {
 interface NaturalResolvedUsage {
   opening: JSXOpeningElement;
   markerParam: string;
+  markerExpression?: string;
   propKey: string;
   source?: EditableField['source'];
   literalValue?: string;
@@ -566,9 +568,6 @@ function naturalComponentHost(
   )
     ? editableExpression
     : undefined;
-  const staleMediaMarker = compilerMarker && mediaTypeFromName(jsxName(opening))
-    ? editableAttribute ?? undefined
-    : undefined;
   if (editableAttribute && !compilerMarker) return null;
   const componentName = componentFunctionName(path);
   const objectPattern = componentObjectPattern(path);
@@ -577,6 +576,14 @@ function naturalComponentHost(
   }
   const params = objectPatternParamNames(objectPattern);
   const ownMediaType = mediaTypeFromName(jsxName(opening));
+  const mediaOwnerOpening = ownMediaType
+    ? naturalMediaOwnerOpening(path)
+    : opening;
+  const staleMediaMarker = compilerMarker
+    && ownMediaType
+    && mediaOwnerOpening !== opening
+    ? editableAttribute ?? undefined
+    : undefined;
   let valueParam: string | null = null;
   if (ownMediaType) {
     const sourceExpression = expressionFromAttribute(namedAttribute(opening, 'src'));
@@ -595,7 +602,7 @@ function naturalComponentHost(
   return {
     componentName,
     objectPattern,
-    opening: ownMediaType ? naturalMediaOwnerOpening(path) : opening,
+    opening: mediaOwnerOpening,
     mediaOpening: ownMediaType ? opening : undefined,
     valueParam,
     markerParam: compilerMarker?.name
@@ -890,6 +897,7 @@ export function compileEditableManifest({
         : null;
       const calls = naturalCallsByComponent.get(componentName) ?? [];
       calls.push({
+        path,
         opening: path.node,
         parentComponentName,
         parentObjectPattern,
@@ -941,6 +949,42 @@ export function compileEditableManifest({
     }
     reservedIds.add(id);
     return id;
+  };
+  const staticArrayFromMapItem = (
+    callPath: NodePath<JSXOpeningElement>,
+    itemName: string,
+  ): { name: string; expression: Node } | null => {
+    const functionPath = callPath.getFunctionParent();
+    if (
+      !functionPath?.isArrowFunctionExpression()
+      || functionPath.node.params[0]?.type !== 'Identifier'
+      || functionPath.node.params[0].name !== itemName
+      || !functionPath.parentPath?.isCallExpression()
+    ) {
+      return null;
+    }
+    const callee = functionPath.parentPath.node.callee;
+    if (
+      callee.type !== 'MemberExpression'
+      || callee.computed
+      || callee.property.type !== 'Identifier'
+      || callee.property.name !== 'map'
+      || callee.object.type !== 'Identifier'
+    ) {
+      return null;
+    }
+    const binding = callPath.scope.getBinding(callee.object.name);
+    if (
+      !binding?.constant
+      || !binding.path.isVariableDeclarator()
+      || binding.path.node.init?.type !== 'ArrayExpression'
+    ) {
+      return null;
+    }
+    return {
+      name: callee.object.name,
+      expression: binding.path.node.init,
+    };
   };
   const resolveStaticCollectionText = (
     path: NodePath<JSXElement>,
@@ -1023,6 +1067,22 @@ export function compileEditableManifest({
       const sourceName = sourceCollectionName(initializer);
       if (sourceName) arrayExpression = resolveArrayBinding(sourceName);
     }
+    if (!arrayExpression) {
+      const helperName = componentFunctionName(path);
+      for (const call of helperName
+        ? naturalCallsByComponent.get(helperName) ?? []
+        : []) {
+        const itemExpression = expressionFromAttribute(
+          namedAttribute(call.opening, expression.object.name),
+        );
+        if (itemExpression?.type !== 'Identifier') continue;
+        const source = staticArrayFromMapItem(call.path, itemExpression.name);
+        if (!source) continue;
+        arrayName = source.name;
+        arrayExpression = source.expression;
+        break;
+      }
+    }
     if (!arrayExpression || arrayExpression.type !== 'ArrayExpression') return null;
 
     const valueProperty = expression.property.name;
@@ -1051,7 +1111,10 @@ export function compileEditableManifest({
       const stableKey = stableKeyNode?.type === 'ObjectProperty'
         ? staticTextExpressionValue(path, stableKeyNode.value)
         : null;
-      const singular = arrayName.replace(/(?:ies|s)$/i, match =>
+      const normalizedArrayName = /^[A-Z0-9_]+$/.test(arrayName)
+        ? arrayName.toLowerCase()
+        : arrayName;
+      const singular = normalizedArrayName.replace(/(?:ies|s)$/i, match =>
         match.toLowerCase() === 'ies' ? 'y' : ''
       ) || 'item';
       const owner = stableKey
@@ -1432,6 +1495,55 @@ export function compileEditableManifest({
       seen: new Set([`${host.componentName}:${host.valueParam}`]),
     }];
 
+    const resolveComputedPropMap = (
+      call: NaturalComponentCall,
+      expression: MemberExpression,
+    ): { propKeys: string[]; markerExpression: string } | null => {
+      if (
+        !expression.computed
+        || expression.object.type !== 'Identifier'
+        || expression.property.start == null
+        || expression.property.end == null
+      ) {
+        return null;
+      }
+      const binding = call.path.scope.getBinding(expression.object.name);
+      if (
+        !binding?.constant
+        || !binding.path.isVariableDeclarator()
+        || binding.path.node.init?.type !== 'ObjectExpression'
+      ) {
+        return null;
+      }
+      const propKeys: string[] = [];
+      for (const property of binding.path.node.init.properties) {
+        if (property.type !== 'ObjectProperty' || property.computed) return null;
+        const key = property.key.type === 'Identifier'
+          ? property.key.name
+          : property.key.type === 'StringLiteral'
+            ? property.key.value
+            : null;
+        const propKey = staticPropKey(property.value);
+        if (
+          !key
+          || !propKey
+          || key !== propKey
+          || (props && !Object.prototype.hasOwnProperty.call(props, propKey))
+        ) {
+          return null;
+        }
+        propKeys.push(propKey);
+      }
+      if (propKeys.length === 0) return null;
+      return {
+        propKeys: [...new Set(propKeys)],
+        markerExpression: code.slice(
+          expression.property.start,
+          expression.property.end,
+        ),
+      };
+    };
+
     while (queue.length > 0) {
       const state = queue.shift();
       if (!state) break;
@@ -1450,6 +1562,23 @@ export function compileEditableManifest({
             edges: state.edges,
           });
           continue;
+        }
+        if (valueExpression?.type === 'MemberExpression') {
+          const computed = resolveComputedPropMap(call, valueExpression);
+          if (computed) {
+            computed.propKeys.forEach((computedPropKey, index) => {
+              resolved.push({
+                opening: call.opening,
+                markerParam: state.markerParam,
+                markerExpression: index === 0
+                  ? computed.markerExpression
+                  : undefined,
+                propKey: computedPropKey,
+                edges: state.edges,
+              });
+            });
+            continue;
+          }
         }
         const literalValue = staticStringAttributeValue(valueAttribute);
         if (literalValue?.trim() && props) {
@@ -1577,11 +1706,17 @@ export function compileEditableManifest({
         !instrumentedNaturalUsages.has(usageKey)
         && !namedAttribute(usage.opening, usage.markerParam)
       ) {
-        const insertion = stringAttributeInsertionFor(
-          usage.opening,
-          usage.markerParam,
-          usage.propKey,
-        );
+        const insertion = usage.markerExpression
+          ? expressionInsertionFor(
+              usage.opening,
+              usage.markerParam,
+              usage.markerExpression,
+            )
+          : stringAttributeInsertionFor(
+              usage.opening,
+              usage.markerParam,
+              usage.propKey,
+            );
         if (insertion) insertions.push(insertion);
         instrumentedNaturalUsages.add(usageKey);
       }

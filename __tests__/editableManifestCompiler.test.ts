@@ -665,6 +665,73 @@ describe('Editable Manifest compiler', () => {
     );
   });
 
+  it('auto-lifts scene objects and computed media maps passed through a helper', () => {
+    const props: Record<string, unknown> = {
+      laptopImage: 'https://example.com/laptop.jpg',
+      desktopImage: 'https://example.com/desktop.jpg',
+    };
+    const result = compileEditableManifest({
+      code: `
+        const SCENES = [
+          { image: 'laptopImage', eyebrow: 'BUILT TO PLAY', title: 'ROG' },
+          { image: 'desktopImage', eyebrow: 'FULL POWER', title: 'DESKTOP' },
+        ];
+        function Scene({ scene, src }) {
+          return (
+            <AbsoluteFill>
+              <Img src={src} />
+              <small>{scene.eyebrow}</small>
+              <h1>{scene.title}</h1>
+            </AbsoluteFill>
+          );
+        }
+        function Composition(props) {
+          const images = {
+            laptopImage: props.laptopImage,
+            desktopImage: props.desktopImage,
+          };
+          return (
+            <AbsoluteFill>
+              {SCENES.map(scene => (
+                <Scene
+                  key={scene.image}
+                  scene={scene}
+                  src={images[scene.image]}
+                />
+              ))}
+            </AbsoluteFill>
+          );
+        }
+      `,
+      props,
+    });
+
+    expect(result.diagnostics).toEqual([]);
+    expect(result.editables.map(field => [field.id, field.type])).toEqual([
+      ['laptopImage', 'image'],
+      ['desktopImage', 'image'],
+      ['scene1Eyebrow', 'text'],
+      ['scene2Eyebrow', 'text'],
+      ['scene1Title', 'text'],
+      ['scene2Title', 'text'],
+    ]);
+    expect(result.code).toContain('__makaronEditable_src={scene.image}');
+    expect(result.code).toContain('data-editable={__makaronEditable_src}');
+    expect(result.code).toContain('data-editable={scene.__makaronEditable_eyebrow}');
+    expect(result.code).toContain('__makaronEditable_title: "scene1Title"');
+    expect(props).toMatchObject({
+      scene1Eyebrow: 'BUILT TO PLAY',
+      scene2Eyebrow: 'FULL POWER',
+      scene1Title: 'ROG',
+      scene2Title: 'DESKTOP',
+    });
+    expect(compileEditableManifest({
+      code: result.code,
+      props,
+      editables: result.editables,
+    })).toEqual(result);
+  });
+
   it('supports an explicit ignore for intentionally fixed UI chrome', () => {
     const props: Record<string, unknown> = {};
     const result = compileEditableManifest({

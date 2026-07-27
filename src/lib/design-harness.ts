@@ -62,6 +62,7 @@ export function validateDesignDiagnostics(result: DesignResult): string[] {
   result.code = autoFixImgTags(result.code);
   result.code = autoFixVideoTags(result.code);
 
+  const authoredEditables = result.editables;
   const manifest = compileEditableManifest({
     code: result.code,
     props: result.props,
@@ -95,7 +96,9 @@ export function validateDesignDiagnostics(result: DesignResult): string[] {
   if (urlError) diagnostics.push(urlError);
 
   // Check 6: Editables validation
-  const editablesError = validateEditables(result.editables, result.code, result.props);
+  // The compiler owns inferred fields and has already validated their graph.
+  // Keep the legacy validator for authored metadata only.
+  const editablesError = validateEditables(authoredEditables, result.code, result.props);
   if (editablesError) diagnostics.push(editablesError);
 
   const hardcodedTextError = validateHardcodedEditableText(
@@ -441,13 +444,22 @@ function validateHardcodedEditableText(
   code: string,
   props?: Record<string, unknown>,
 ): string | null {
-  const editableTokens = (editables ?? []).flatMap(field => [
-    field.id,
-    field.propKey,
-    ...(field.source === 'literal' && typeof props?.[field.propKey] === 'string'
-      ? [props[field.propKey] as string]
-      : []),
-  ]);
+  const editableTokens = (editables ?? []).flatMap(field => {
+    const value = field.source === 'literal'
+      && typeof props?.[field.propKey] === 'string'
+      ? props[field.propKey] as string
+      : null;
+    return [
+      field.id,
+      field.propKey,
+      ...(value === null
+        ? []
+        : [
+            value,
+            JSON.stringify(value).slice(1, -1),
+          ]),
+    ];
+  });
   const hardcoded = findHardcodedVisibleTextArray(code, editableTokens);
   if (hardcoded) {
     const kind = hardcoded.kind === 'object' ? 'text data array' : 'text array';

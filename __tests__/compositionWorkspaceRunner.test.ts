@@ -283,6 +283,114 @@ describe('Composition workspace runner', () => {
     ]);
   });
 
+  it('keeps generated media when natural scene objects compile through a helper', async () => {
+    workspaceFiles.set(compositionDraftPath(projectId), {
+      content: JSON.stringify(createPersistedCompositionDraft({
+        code: 'function Composition(props) { return <div data-editable="scenes">{props.scenes}</div>; }',
+        width: 1920,
+        height: 1080,
+        props: { scenes: 'stale procedural fallback' },
+        editables: [{ id: 'scenes', type: 'text', label: 'Scenes', propKey: 'scenes' }],
+        animation: { fps: 30, durationInSeconds: 6 },
+      })),
+      contentType: 'application/json',
+      storageUrl: 'https://workspace.test/stale-composition.json',
+    });
+    workspaceFiles.set(foundationPath, {
+      content: `const SCENES = [
+        { image: 'laptopImage', eyebrow: 'BUILT TO PLAY', title: 'POWER\\nWITHOUT APOLOGY' },
+        { image: 'desktopImage', eyebrow: 'FULL POWER', title: 'DESKTOP' },
+      ];
+      function Scene({ scene, src }) {
+        return (
+          <AbsoluteFill>
+            <Img src={src} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+            <small>{scene.eyebrow}</small>
+            <h1>{scene.title}</h1>
+          </AbsoluteFill>
+        );
+      }`,
+      contentType: 'text/javascript',
+      storageUrl: `https://workspace.test/${foundationPath}`,
+    });
+    const snapshotImages = [
+      'https://example.com/laptop.jpg',
+      'https://example.com/desktop.jpg',
+    ];
+    await compileSavedCompositionPart({
+      projectId,
+      userId,
+      supabase,
+      workspaceId: 'generated-scene-media',
+      partPath: foundationPath,
+      snapshotImages,
+      metadata: {
+        width: 1920,
+        height: 1080,
+        props: {
+          laptopImage: '<<<media_1>>>',
+          desktopImage: '<<<media_2>>>',
+        },
+        animation: { fps: 30, durationInSeconds: 6 },
+      },
+    });
+    workspaceFiles.set(rootPath, {
+      content: `function Composition(props) {
+        const images = {
+          laptopImage: props.laptopImage,
+          desktopImage: props.desktopImage,
+        };
+        return (
+          <AbsoluteFill>
+            {SCENES.map(scene => (
+              <Scene
+                key={scene.image}
+                scene={scene}
+                src={images[scene.image]}
+              />
+            ))}
+          </AbsoluteFill>
+        );
+      }`,
+      contentType: 'text/javascript',
+      storageUrl: `https://workspace.test/${rootPath}`,
+    });
+
+    const result = await compileSavedCompositionPart({
+      projectId,
+      userId,
+      supabase,
+      workspaceId: 'generated-scene-media',
+      partPath: rootPath,
+      snapshotImages,
+    });
+
+    expect(
+      result.status,
+      result.status === 'invalid' ? result.diagnostics.join('\n') : undefined,
+    ).toBe('ready');
+    if (result.status !== 'ready') throw new Error('expected ready workspace');
+    expect(result.design.props).toMatchObject({
+      laptopImage: snapshotImages[0],
+      desktopImage: snapshotImages[1],
+      scene1Eyebrow: 'BUILT TO PLAY',
+      scene2Eyebrow: 'FULL POWER',
+      scene1Title: 'POWER\nWITHOUT APOLOGY',
+      scene2Title: 'DESKTOP',
+    });
+    expect(result.design.editables?.map(field => [field.id, field.type])).toEqual([
+      ['laptopImage', 'image'],
+      ['desktopImage', 'image'],
+      ['scene1Eyebrow', 'text'],
+      ['scene2Eyebrow', 'text'],
+      ['scene1Title', 'text'],
+      ['scene2Title', 'text'],
+    ]);
+    expect(result.design.code).toContain('__makaronEditable_src={scene.image}');
+    expect(result.design.code).toContain('data-editable={__makaronEditable_src}');
+    expect(JSON.stringify(result.design)).not.toContain('<<<media_');
+  });
+
   it('returns independent compile diagnostics together without overwriting the recoverable draft', async () => {
     workspaceFiles.set(foundationPath, {
       content: 'const image = "<<<media_9>>>";',
