@@ -10,6 +10,19 @@ interface ChangelogEntry {
 
 const CHANGELOG: ChangelogEntry[] = [
   {
+    date: '2026-07-28',
+    en: { title: 'Editable Remotion, End to End', items: [
+      'Text, images, and video are now discovered as editable layers automatically, with selection, moving, and resizing staying aligned across desktop and mobile.',
+      'Edits persist across refreshes and devices and carry into MP4 exports; video trim now edits the selected clip instead of the whole composition.',
+      'Double-click text editing, alignment guides, and layer switching are more reliable, with selection frames staying stable through repeated edits.',
+    ]},
+    zh: { title: 'Remotion 可编辑，完整打通', items: [
+      '文字、图片和视频现在会自动成为可编辑图层，桌面端和手机端的选中、移动与缩放都能准确跟随画面。',
+      '修改后刷新或换设备仍会保留，并能正确导出到 MP4；视频 trim 现在只编辑选中的片段，不再影响整个 composition。',
+      '双击文字编辑、辅助线和图层切换更加稳定，连续修改后选择框仍能准确跟随内容。',
+    ]},
+  },
+  {
     date: '2026-07-25',
     en: { title: 'Consistent Remotion Fonts', items: ['Remotion previews and Lambda MP4 exports now use the same pinned Chinese and English fonts, so typography stays consistent from editing to delivery.'] },
     zh: { title: 'Remotion 字体一致性修复', items: ['Remotion 预览与 Lambda MP4 导出现在使用同一套固定的中英文字体，从编辑到成片不再出现字体变化。'] },
@@ -169,6 +182,21 @@ const CHANGELOG: ChangelogEntry[] = [
       'Gemini Omni 已接入 Makaron，定位为快速 720p 视频编辑模型。',
       '现在可以从模型选择器、CUI 或 makaron-cli chat 触发，用来给短视频换风格、让单张图动起来，或快速做一版视频修改。',
       '针对品牌、知名角色和受保护 IP 等更容易触发审核的请求，Makaron 会给出更清楚的失败提示和更安全的原创替代表达。',
+    ]},
+  },
+  {
+    date: '2026-07-01',
+    en: { title: 'Editable Image & Video Layers', items: [
+      'AI-made visual results are no longer flat previews: text, photos, and video clips can stay editable after they are created.',
+      'Click a layer on the canvas, then move or resize it directly — no need to ask Agent to regenerate the whole result.',
+      'Video clips now have a trim strip with playback, scrubber, start/end handles, and range dragging.',
+      'Tall poster-style projects are easier to refine: selection boxes stay aligned while you scroll.',
+    ]},
+    zh: { title: '图片和视频图层可编辑', items: [
+      'AI 生成的视觉结果不再只是扁平预览图：文字、照片和视频片段都可以继续编辑。',
+      '在画布上点选图层，就能直接移动和缩放，不用为了小调整重新让 Agent 生成整张图。',
+      '视频片段新增 trim 条：支持播放、拖动时间戳、拖起止把手，以及整体移动裁剪区间。',
+      '长海报类项目更好改了：上下滚动时，选中框会持续跟住内容。',
     ]},
   },
   {

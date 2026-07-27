@@ -40,6 +40,8 @@ describe('Studio composition scaffold', () => {
     expect(design.animation).toEqual({ fps: 30, durationInSeconds: 30 });
     expect(design.props?.scenes).toHaveLength(2);
     expect(JSON.stringify(design.props)).not.toContain('<<<media_1>>>');
+    expect(design.code).toContain('fontFamily: \'"Noto Sans SC", sans-serif\'');
+    expect(design.code).not.toMatch(/-apple-system|BlinkMacSystemFont|PingFang SC/);
     expect(design.description).toContain('[studio-scaffold:studio-1]');
     expect(design.__makaronScaffold).toBe(true);
   });

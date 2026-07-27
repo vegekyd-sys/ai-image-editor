@@ -22,9 +22,30 @@ describe('Remotion preview playback contract', () => {
     expect(evalSource).toContain('pickRemotionComponentName(src)')
 
     expect(rendererSource).toContain('player?.pause()')
-    expect(rendererSource).toContain('evalRemotionJSX(prepared.code)')
+    expect(rendererSource).toContain('evalRemotionJSX(prepared.code, {')
+    expect(rendererSource).toContain("editableTransformMode: 'proxy'")
+    expect(rendererSource).not.toContain('EditableSceneBoundary')
     expect(rendererSource).toContain('resolveDesignImageUrls(design, videoResolved)')
+    expect(rendererSource).not.toContain('frameRange: durationInFrames')
+    expect(rendererSource).not.toContain('Skip first/last 3 frames')
     expect(uploadSource).toContain('evalRemotionJSX(code)')
+  })
+
+  it('lets a GUI trim override the authored initial video trim', () => {
+    const evalSource = read('src/lib/evalRemotionJSX.ts')
+    const runtimeSource = read('src/lib/editor/editable-react-runtime.ts')
+    const dynamicDesignSource = read('src/remotion/DynamicDesign.tsx')
+
+    expect(runtimeSource).toContain(
+      "trim.trimBefore !== undefined ? { trimBefore: trim.trimBefore } : {}",
+    )
+    expect(runtimeSource).toContain(
+      "trim.trimAfter !== undefined ? { trimAfter: trim.trimAfter } : {}",
+    )
+    expect(runtimeSource).not.toContain('currentProps.trimBefore === undefined')
+    expect(runtimeSource).not.toContain('currentProps.trimAfter === undefined')
+    expect(evalSource).toContain('createEditableReactRuntime(React, Video)')
+    expect(dynamicDesignSource).toContain('createEditableReactRuntime(')
   })
 
   it('uses the real off-thread decoder for deterministic server previews', () => {
@@ -46,6 +67,38 @@ describe('Remotion preview playback contract', () => {
     expect(source).toContain('start from an explicit user click')
     expect(source).not.toContain('remotionAutoPlayRef')
     expect(source).not.toContain('Mark for auto-play')
+  })
+
+  it('lets Remotion own buffering without explicitly pausing the player', () => {
+    const source = read('src/components/ImageCanvas.tsx')
+    const waitingStart = source.indexOf('const onWaiting = () => {')
+    const resumeStart = source.indexOf('const onResume = () => {', waitingStart)
+    const waitingHandler = source.slice(waitingStart, resumeStart)
+
+    expect(waitingStart).toBeGreaterThan(-1)
+    expect(waitingHandler).toContain('setRemotionBuffering(true)')
+    expect(waitingHandler).not.toContain('player.pause()')
+    expect(source).toContain("player.addEventListener('resume', onResume)")
+  })
+
+  it('updates interactive input props without recompiling the composition', () => {
+    const rendererSource = read('src/components/RemotionRenderer.tsx')
+
+    expect(rendererSource).toContain('const designPropsRef = useRef(design.props || {})')
+    expect(rendererSource).toContain('designPropsRef.current = design.props || {}')
+    expect(rendererSource).toContain('design.fontSubstitutions, retryToken]')
+    expect(rendererSource).toContain('}, [design.props])')
+    expect(rendererSource).not.toContain('}, [design.code, design.fontSubstitutions, design.props])')
+  })
+
+  it('degrades only browser preview fonts when a resource load fails', () => {
+    const rendererSource = read('src/components/RemotionRenderer.tsx')
+
+    expect(rendererSource).toContain('compileBrowserDesignWithoutPinnedFonts')
+    expect(rendererSource).toContain('isRecoverableRemotionPreviewError')
+    expect(rendererSource).toContain("reportPreviewFailureRef.current('font-load'")
+    expect(rendererSource).toContain('recovered: true')
+    expect(rendererSource).not.toContain('Render error: {error.message}')
   })
 
   it('normalizes common agent Remotion scope declarations before evaluating code', () => {

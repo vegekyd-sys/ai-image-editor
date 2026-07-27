@@ -9,8 +9,18 @@ import DesignOverlay from '@/components/DesignOverlay';
 import { containRect } from '@/lib/image/geometry';
 import { useLocale } from '@/lib/i18n';
 import { VIDEO_PLACEHOLDER_IMAGE } from '@/lib/editor/timeline-derivations';
+import { getVideoTrimPropKeys } from '@/lib/editor/video-trim';
+import {
+  compositionFrameToSourceFrame,
+  deriveSequenceStartFrame,
+  sourceFrameToCompositionFrame,
+} from '@/lib/editor/video-trim-timeline';
 import { isFastVideoRenderModel } from '@/lib/video-model-capabilities';
 import { isRemotionExportTaskId } from '@/lib/remotion-export-flags';
+import {
+  buildLegacySceneRegistry,
+  findSceneMediaElement,
+} from '@/lib/editor/scene-registry';
 
 const RemotionRenderer = dynamic(() => import('@/components/RemotionRenderer'), { ssr: false });
 
@@ -25,6 +35,8 @@ function isSimpleVideoWrapper(code: string): boolean {
 }
 
 interface ImageCanvasProps {
+  projectId?: string;
+  designSnapshotId?: string;
   timeline: string[];
   currentIndex: number;
   onIndexChange: (index: number) => void;
@@ -81,6 +93,12 @@ interface ImageCanvasProps {
   onStartEditEditable?: (fieldId: string) => void;
   /** Callback with list of editable field IDs visible at the current frame */
   onVisibleEditableFields?: (visibleIds: string[]) => void;
+  /** Browser-measured rendered design size, used to expand under-sized static designs */
+  onDesignContentSize?: (size: { width: number; height: number; source: 'editables' | 'scroll' }) => void;
+  /** Video editable currently opened in the trim editor. */
+  activeTrimFieldId?: string | null;
+  /** Hide canvas playback controls while a text/trim editor covers the canvas edge. */
+  hidePlaybackControls?: boolean;
   /** Timeline indices that are video snapshots (v2) — show play icon instead of dot */
   videoTimelineIndices?: Set<number>;
   /** Called once when the video element loads data — captures a poster frame at 0.5s */
@@ -94,6 +112,8 @@ interface ImageCanvasProps {
 }
 
 export default function ImageCanvas({
+  projectId,
+  designSnapshotId,
   timeline, currentIndex, onIndexChange, isEditing,
   isDraft, isDraftLoading, draftTimelineIndex, onDismissDraft, previousImage, onAnimate,
   isVideoEntry, videoUrl, videoProcessing, videoFailed, videoTaskId, videoModel, videoPosterImage, isDesktop,
@@ -113,6 +133,9 @@ export default function ImageCanvas({
   onUpdateProp,
   onStartEditEditable,
   onVisibleEditableFields,
+  onDesignContentSize,
+  activeTrimFieldId,
+  hidePlaybackControls = false,
   videoTimelineIndices,
   onVideoPosterCapture,
   onVideoTimeUpdate,
@@ -140,6 +163,7 @@ export default function ImageCanvas({
 
   // Design overlay refs (for editable designs)
   const [designContainerEl, setDesignContainerEl] = useState<HTMLDivElement | null>(null);
+  const [designInteractionEl, setDesignInteractionEl] = useState<HTMLDivElement | null>(null);
 
   const [designPlayerRef, setDesignPlayerRef] = useState<any>(null);
 
@@ -147,6 +171,7 @@ export default function ImageCanvas({
   useEffect(() => {
     if (!selectedEditableId || !designPlayerRef) return;
     try { designPlayerRef.pause(); } catch { /* ignore */ }
+    setRemotionPlaying(false);
   }, [selectedEditableId, designPlayerRef]);
 
   // Long press compare
@@ -177,6 +202,10 @@ export default function ImageCanvas({
     return false;
   })();
   const longScrollRef = useRef<HTMLDivElement>(null);
+  const handleDesignInteractionRef = useCallback((el: HTMLDivElement | null) => {
+    longScrollRef.current = el;
+    setDesignInteractionEl(el);
+  }, []);
 
   // Video playback state
   const videoRef = useRef<HTMLVideoElement>(null);
@@ -212,8 +241,6 @@ export default function ImageCanvas({
 
   // Prevent click after handled touch gestures
   const skipClick = useRef(false);
-  // Debounce: ignore deselection within 300ms of selection (blocks Remotion's ghost pointerup)
-  const lastSelectTimeRef = useRef(0);
 
   // Update imageRect when image loads or container resizes
   const updateImageRect = useCallback(() => {
@@ -717,6 +744,119 @@ export default function ImageCanvas({
   const remotionFps = currentDesign?.animation?.fps || 30;
   const remotionDuration = currentDesign?.animation?.durationInSeconds || 0;
   const remotionTotalFrames = Math.max(1, Math.round(remotionFps * remotionDuration));
+  const activeTrimStartFrameRef = useRef(0);
+  if (!activeTrimFieldId || !editableFields || !designProps) {
+    activeTrimStartFrameRef.current = 0;
+  } else {
+    const activeField = editableFields.find(f => f.id === activeTrimFieldId && f.type === 'video');
+    const { startKey } = activeField ? getVideoTrimPropKeys(activeField) : { startKey: undefined };
+    const raw = startKey ? designProps[startKey] : 0;
+    const parsed = typeof raw === 'number' ? raw : Number(raw);
+    activeTrimStartFrameRef.current = Number.isFinite(parsed) ? Math.max(0, Math.round(parsed)) : 0;
+  }
+  const getActiveTrimStartFrame = useCallback(() => {
+    return activeTrimStartFrameRef.current;
+  }, []);
+  const activeTrimContextRef = useRef<{
+    fieldId: string;
+    sequenceStartFrame: number;
+  } | null>(null);
+
+  useEffect(() => {
+    activeTrimContextRef.current = null;
+    if (!activeTrimFieldId || !designContainerEl) return;
+
+    let raf = 0;
+    let retryTimer: ReturnType<typeof setTimeout> | null = null;
+    let observedVideo: HTMLVideoElement | null = null;
+
+    const resolveContext = () => {
+      const activeField = editableFields?.find(
+        field => field.id === activeTrimFieldId && field.type === 'video',
+      );
+      if (!activeField) return false;
+      const canvasElement = designContainerEl.querySelector<HTMLElement>('.__remotion-player');
+      const canvasRect = (
+        canvasElement ?? designContainerEl
+      ).getBoundingClientRect();
+      const editableEl = buildLegacySceneRegistry({
+        container: designContainerEl,
+        fields: editableFields ?? [],
+        canvasRect,
+      }).get(activeTrimFieldId)?.activeInstance?.element;
+      const video = editableEl
+        ? findSceneMediaElement(editableEl, 'video') as HTMLVideoElement | null
+        : null;
+      if (!video) return false;
+      observedVideo = video;
+
+      if (Number.isFinite(video.duration) && video.duration > 0) {
+        window.dispatchEvent(new CustomEvent('makaron:design-trim-source-metadata', {
+          detail: {
+            fieldId: activeTrimFieldId,
+            durationSeconds: video.duration,
+          },
+        }));
+      }
+
+      if (!Number.isFinite(video.currentTime)) return false;
+      const compositionFrame = remotionRef.current?.getCurrentFrame() ?? remotionFrameRef.current;
+      const trimStartFrame = getActiveTrimStartFrame();
+      activeTrimContextRef.current = {
+        fieldId: activeTrimFieldId,
+        sequenceStartFrame: deriveSequenceStartFrame({
+          compositionFrame,
+          sourceTimeSeconds: video.currentTime,
+          trimStartFrame,
+          fps: remotionFps,
+        }),
+      };
+      return true;
+    };
+
+    const onMetadata = () => resolveContext();
+    raf = requestAnimationFrame(() => {
+      if (!resolveContext()) {
+        retryTimer = setTimeout(resolveContext, 250);
+      }
+      observedVideo?.addEventListener('loadedmetadata', onMetadata);
+    });
+
+    return () => {
+      cancelAnimationFrame(raf);
+      if (retryTimer) clearTimeout(retryTimer);
+      observedVideo?.removeEventListener('loadedmetadata', onMetadata);
+      activeTrimContextRef.current = null;
+    };
+  }, [
+    activeTrimFieldId,
+    designContainerEl,
+    editableFields,
+    getActiveTrimStartFrame,
+    remotionFps,
+    currentDesign?.code,
+  ]);
+
+  const dispatchActiveTrimPlayhead = useCallback((playing?: boolean) => {
+    if (!activeTrimFieldId) return;
+    const compositionFrame = remotionRef.current?.getCurrentFrame() ?? remotionFrameRef.current;
+    const context = activeTrimContextRef.current;
+    const sourceFrame = context?.fieldId === activeTrimFieldId
+      ? compositionFrameToSourceFrame({
+          compositionFrame,
+          trimStartFrame: getActiveTrimStartFrame(),
+          sequenceStartFrame: context.sequenceStartFrame,
+        })
+      : compositionFrame + getActiveTrimStartFrame();
+    window.dispatchEvent(new CustomEvent('makaron:design-trim-playhead', {
+      detail: { sourceFrame },
+    }));
+    if (playing !== undefined) {
+      window.dispatchEvent(new CustomEvent('makaron:design-trim-playback', {
+        detail: { playing },
+      }));
+    }
+  }, [activeTrimFieldId, getActiveTrimStartFrame]);
 
   // Update seek bar + time badge via DOM (no React re-render during playback)
   const updateRemotionUI = useCallback(() => {
@@ -766,17 +906,22 @@ export default function ImageCanvas({
     let raf = 0;
     const tick = () => {
       updateRemotionUI();
+      dispatchActiveTrimPlayhead(true);
       // Detect end
       if (remotionFrameRef.current >= remotionTotalFrames - 1) {
         setRemotionPlaying(false);
         remotionRef.current?.pause();
+        dispatchActiveTrimPlayhead(false);
         return;
       }
       raf = requestAnimationFrame(tick);
     };
     raf = requestAnimationFrame(tick);
     return () => cancelAnimationFrame(raf);
-  }, [remotionPlaying, remotionTotalFrames, updateRemotionUI]);
+  }, [dispatchActiveTrimPlayhead, remotionPlaying, remotionTotalFrames, updateRemotionUI]);
+
+  const [remotionBuffering, setRemotionBuffering] = useState(false);
+  const remotionBufferingRef = useRef(false);
 
   // Reset when switching to a design snapshot. Remotion compositions should only
   // start from an explicit user click; auto-play during code generation is noisy.
@@ -784,6 +929,7 @@ export default function ImageCanvas({
     const player = remotionRef.current;
     player?.pause();
     setRemotionPlaying(false);
+    remotionBufferingRef.current = false;
     setRemotionBuffering(false);
     setRemotionLoading(!!currentDesign?.animation);
     remotionFrameRef.current = 0;
@@ -793,44 +939,45 @@ export default function ImageCanvas({
 
   }, [currentIndex, currentDesign?.code]);
 
-  // Pause on buffering, resume when assets ready — like a real video player
-  // Debounce resume to avoid flicker when multiple images load in quick succession
+  // Mirror buffering so the custom play button can show progress.
+  // Remotion owns pause/resume internally. We only mirror its buffering state;
+  // explicitly pausing here prevents Remotion from resuming after assets recover.
   // Skip for designs containing <Video> — video elements handle their own buffering,
   // and scene cuts trigger spurious waiting events that shouldn't pause the Player.
   const hasVideoElement = !!(currentDesign?.code?.includes('<Video') || currentDesign?.code?.includes('Video,'));
-  const wasPlayingBeforeBufferRef = useRef(false);
-  const [remotionBuffering, setRemotionBuffering] = useState(false);
   const resumeTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   useEffect(() => {
-    const player = remotionRef.current;
+    const player = remotionPlayer;
     if (!player || hasVideoElement) return;
     const onWaiting = () => {
       if (resumeTimerRef.current) { clearTimeout(resumeTimerRef.current); resumeTimerRef.current = null; }
-      wasPlayingBeforeBufferRef.current = wasPlayingBeforeBufferRef.current || remotionPlaying;
+      remotionBufferingRef.current = true;
       setRemotionBuffering(true);
-      player.pause();
-      setRemotionPlaying(false);
     };
     const onResume = () => {
       if (resumeTimerRef.current) clearTimeout(resumeTimerRef.current);
       resumeTimerRef.current = setTimeout(() => {
         resumeTimerRef.current = null;
+        remotionBufferingRef.current = false;
         setRemotionBuffering(false);
-        if (wasPlayingBeforeBufferRef.current || remotionStartedRef.current) {
-          wasPlayingBeforeBufferRef.current = false;
-          player.play();
-          setRemotionPlaying(true);
-        }
       }, 150);
+    };
+    const onFrameUpdate = () => {
+      if (!remotionBufferingRef.current) return;
+      if (resumeTimerRef.current) { clearTimeout(resumeTimerRef.current); resumeTimerRef.current = null; }
+      remotionBufferingRef.current = false;
+      setRemotionBuffering(false);
     };
     player.addEventListener('waiting', onWaiting);
     player.addEventListener('resume', onResume);
+    player.addEventListener('frameupdate', onFrameUpdate);
     return () => {
       player.removeEventListener('waiting', onWaiting);
       player.removeEventListener('resume', onResume);
+      player.removeEventListener('frameupdate', onFrameUpdate);
       if (resumeTimerRef.current) clearTimeout(resumeTimerRef.current);
     };
-  });
+  }, [hasVideoElement, remotionPlayer]);
 
   const toggleRemotionPlay = useCallback(() => {
     const p = remotionRef.current;
@@ -838,8 +985,9 @@ export default function ImageCanvas({
     if (remotionPlaying) {
       p.pause();
       setRemotionPlaying(false);
+      dispatchActiveTrimPlayhead(false);
     } else {
-      if (selectedEditableId) onSelectEditable?.(null);
+      if (selectedEditableId && !activeTrimFieldId) onSelectEditable?.(null);
       // Always seek to start if at or near the end (video designs may not report exact last frame)
       if (remotionFrameRef.current >= remotionTotalFrames - 2) {
         p.seekTo(0);
@@ -848,14 +996,21 @@ export default function ImageCanvas({
           p.play();
           remotionStartedRef.current = true;
           setRemotionPlaying(true);
+          dispatchActiveTrimPlayhead(true);
         });
         return;
       }
       p.play();
       remotionStartedRef.current = true;
       setRemotionPlaying(true);
+      dispatchActiveTrimPlayhead(true);
     }
-  }, [remotionPlaying, remotionTotalFrames, selectedEditableId, onSelectEditable]);
+  }, [activeTrimFieldId, dispatchActiveTrimPlayhead, remotionPlaying, remotionTotalFrames, selectedEditableId, onSelectEditable]);
+
+  const handleDesignCanvasTap = useCallback(() => {
+    if (selectedEditableId) onSelectEditable?.(null);
+    if (currentDesign?.animation) toggleRemotionPlay();
+  }, [currentDesign?.animation, onSelectEditable, selectedEditableId, toggleRemotionPlay]);
 
   const seekRemotion = useCallback((clientX: number) => {
     const bar = document.querySelector('[data-remotion-seek]') as HTMLElement;
@@ -866,11 +1021,112 @@ export default function ImageCanvas({
     // Pause on seek — prevent resume handler from auto-playing
     remotionRef.current.pause();
     setRemotionPlaying(false);
-    wasPlayingBeforeBufferRef.current = false;
+    remotionBufferingRef.current = false;
+    setRemotionBuffering(false);
     remotionRef.current.seekTo(frame);
     remotionFrameRef.current = frame;
     updateRemotionUI();
-  }, [remotionTotalFrames, updateRemotionUI]);
+    dispatchActiveTrimPlayhead(false);
+  }, [dispatchActiveTrimPlayhead, remotionTotalFrames, updateRemotionUI]);
+
+  useEffect(() => {
+    if (!currentDesign?.animation) return;
+    let raf = 0;
+    let stopAtFrame: number | null = null;
+    const stopPlayback = () => {
+      if (raf) cancelAnimationFrame(raf);
+      raf = 0;
+      stopAtFrame = null;
+      remotionRef.current?.pause();
+      setRemotionPlaying(false);
+      window.dispatchEvent(new CustomEvent('makaron:design-trim-playback', { detail: { playing: false } }));
+      updateRemotionUI();
+    };
+
+    const tickRange = () => {
+      updateRemotionUI();
+      const context = activeTrimContextRef.current;
+      const sourceFrame = context
+        ? compositionFrameToSourceFrame({
+            compositionFrame: remotionFrameRef.current,
+            trimStartFrame: getActiveTrimStartFrame(),
+            sequenceStartFrame: context.sequenceStartFrame,
+          })
+        : remotionFrameRef.current + getActiveTrimStartFrame();
+      window.dispatchEvent(new CustomEvent('makaron:design-trim-playhead', {
+        detail: { sourceFrame },
+      }));
+      if (stopAtFrame !== null && remotionFrameRef.current >= stopAtFrame) {
+        stopPlayback();
+        return;
+      }
+      raf = requestAnimationFrame(tickRange);
+    };
+
+    const onTrimPreview = (event: Event) => {
+      const detail = (event as CustomEvent<{
+        fieldId?: string;
+        sourceFrame?: number;
+        compositionFrame?: number;
+        play?: boolean;
+        startFrame?: number;
+        endFrame?: number;
+      }>).detail || {};
+      const player = remotionRef.current;
+      if (!player || !activeTrimFieldId || detail.fieldId !== activeTrimFieldId) return;
+      const trimStartFrame = Math.max(0, Math.round(detail.startFrame ?? getActiveTrimStartFrame()));
+      const context = activeTrimContextRef.current;
+      const mappedFrame = context && detail.sourceFrame !== undefined
+        ? sourceFrameToCompositionFrame({
+            sourceFrame: detail.sourceFrame,
+            trimStartFrame,
+            sequenceStartFrame: context.sequenceStartFrame,
+          })
+        : detail.compositionFrame ?? 0;
+      const frame = Math.max(0, Math.min(remotionTotalFrames - 1, Math.round(mappedFrame)));
+      if (raf) cancelAnimationFrame(raf);
+      raf = 0;
+      player.pause();
+      player.seekTo(frame);
+      remotionFrameRef.current = frame;
+      updateRemotionUI();
+
+      if (detail.play) {
+        const sourceEndFrame = Math.max(
+          (detail.sourceFrame ?? trimStartFrame) + 1,
+          Math.round(detail.endFrame ?? detail.sourceFrame ?? trimStartFrame),
+        );
+        const mappedEndFrame = context
+          ? sourceFrameToCompositionFrame({
+              sourceFrame: sourceEndFrame,
+              trimStartFrame,
+              sequenceStartFrame: context.sequenceStartFrame,
+            })
+          : frame + (sourceEndFrame - (detail.sourceFrame ?? trimStartFrame));
+        stopAtFrame = Math.min(remotionTotalFrames - 1, Math.max(frame + 1, mappedEndFrame));
+        player.play();
+        setRemotionPlaying(true);
+        window.dispatchEvent(new CustomEvent('makaron:design-trim-playback', { detail: { playing: true } }));
+        raf = requestAnimationFrame(tickRange);
+      } else {
+        stopAtFrame = null;
+        setRemotionPlaying(false);
+        window.dispatchEvent(new CustomEvent('makaron:design-trim-playback', { detail: { playing: false } }));
+      }
+    };
+
+    window.addEventListener('makaron:design-trim-preview', onTrimPreview);
+    return () => {
+      window.removeEventListener('makaron:design-trim-preview', onTrimPreview);
+      if (raf) cancelAnimationFrame(raf);
+    };
+  }, [
+    currentDesign?.animation,
+    activeTrimFieldId,
+    getActiveTrimStartFrame,
+    remotionTotalFrames,
+    updateRemotionUI,
+  ]);
 
   // Only proxy third-party CDN URLs (Kling etc.) — Supabase URLs play directly (better audio on iOS)
   const effectiveVideoUrl = videoUrl && !videoUrl.includes('cdn.makaron.app') && !videoUrl.includes('supabase.co')
@@ -1118,7 +1374,7 @@ export default function ImageCanvas({
             )}
 
             {/* Play/pause button — bottom-left, hidden while seeking */}
-            {!videoError && showControls && !isSeeking && (
+            {!videoError && showControls && !hidePlaybackControls && !isSeeking && (
               <div className="absolute z-30" style={{ bottom: 8, left: 12 }}>
                 <button
                   onClick={(e) => {
@@ -1255,36 +1511,23 @@ export default function ImageCanvas({
           (() => {
             const isLongDesign = currentDesign.height / currentDesign.width > 2;
             return (
-          <div ref={isLongDesign ? longScrollRef : undefined} className={`relative w-full h-full ${isLongDesign ? 'overflow-y-auto overflow-x-hidden' : ''} transition-all duration-150 ${
+          <div ref={handleDesignInteractionRef} className={`relative w-full h-full ${isLongDesign ? 'overflow-y-auto overflow-x-hidden' : ''} transition-all duration-150 ${
             pullDownActive ? 'opacity-[0.15] grayscale' :
             animDir === 'left' ? 'opacity-0 -translate-x-8' :
             animDir === 'right' ? 'opacity-0 translate-x-8' : 'opacity-100 translate-x-0'
           }`}
-            onClick={(e) => {
-              if (isComparing) return;
-              // In Design Editor mode: editable elements handle their own click,
-              // clicking blank area deselects
-              if ((e.target as HTMLElement).closest('[data-editable]')) return;
-              if (selectedEditableId) {
-                // Ignore ghost deselection from Remotion Player's 200ms click delay
-                if (Date.now() - lastSelectTimeRef.current < 300) return;
-                onSelectEditable?.(null);
-                lastSelectTimeRef.current = Date.now(); // also debounce the follow-up toggle
-              } else {
-                // Don't toggle play right after deselecting (ghost double-click)
-                if (Date.now() - lastSelectTimeRef.current < 300) return;
-                toggleRemotionPlay();
-              }
-            }}
           >
             <RemotionRenderer
               design={currentDesign!}
+              projectId={projectId}
+              snapshotId={designSnapshotId}
               mode={isLongDesign ? 'inline' : 'fill'}
               hideControls
-              posterImage={currentDesign?.animation ? displayImage : undefined}
+              posterImage={currentDesign?.animation && !selectedEditableId ? displayImage : undefined}
               onLoading={setRemotionLoading}
               onError={(err) => console.error('[canvas design]', err)}
               onContainerRef={setDesignContainerEl}
+              onContentSize={onDesignContentSize}
               onPlayerRef={(ref) => {
                 remotionRef.current = ref;
                 setRemotionPlayer(ref);
@@ -1294,7 +1537,7 @@ export default function ImageCanvas({
             />
 
             {/* Poster fallback while RemotionRenderer is loading (fetching images/fonts/audio) */}
-            {remotionLoading && displayImage && (
+            {remotionLoading && displayImage && !selectedEditableId && (
               <img
                 src={displayImage}
                 alt="poster"
@@ -1303,7 +1546,7 @@ export default function ImageCanvas({
             )}
 
             {/* Play/pause button — bottom-left, hidden while seeking */}
-            {currentDesign?.animation && !isSeeking && (
+            {currentDesign?.animation && !hidePlaybackControls && !isSeeking && (
               <div className="absolute z-30" style={{ bottom: 8, left: 12 }}>
                 <button
                   onClick={(e) => { e.stopPropagation(); if (!remotionBuffering && !remotionLoading) toggleRemotionPlay(); }}
@@ -1345,7 +1588,7 @@ export default function ImageCanvas({
                 onPointerDown={(e) => {
                   e.preventDefault();
                   e.stopPropagation();
-                  if (selectedEditableId) onSelectEditable?.(null);
+                  if (selectedEditableId && !activeTrimFieldId) onSelectEditable?.(null);
                   if (remotionPlaying) {
                     remotionRef.current?.pause();
                     setRemotionPlaying(false);
@@ -1374,27 +1617,23 @@ export default function ImageCanvas({
             {editableFields && editableFields.length > 0 && designProps && onSelectEditable && onUpdateProp && (
               <DesignOverlay
                 containerEl={designContainerEl}
+                interactionEl={designInteractionEl}
                 editables={editableFields}
                 props={designProps}
                 selectedFieldId={selectedEditableId ?? null}
+                onCanvasTap={handleDesignCanvasTap}
                 onSelectField={(id) => {
                   // Pause playback when selecting an editable field
-                  if (remotionPlaying && remotionRef.current) {
+                  if (id && remotionRef.current) {
                     remotionRef.current.pause();
                     setRemotionPlaying(false);
-                  }
-                  if (id) {
-                    lastSelectTimeRef.current = Date.now();
-                    // Trigger a no-op prop update to force React re-render.
-                    // This resets Remotion Player's ghost pointerup listener,
-                    // preventing the ghost double-click that causes deselection.
-                    onUpdateProp?.(`_sel_${id}`, Date.now());
                   }
                   onSelectEditable(id);
                 }}
                 onUpdateProp={onUpdateProp}
                 onStartEdit={onStartEditEditable}
                 onVisibleFieldsChange={onVisibleEditableFields}
+                filterVisibleFields={Boolean(currentDesign?.animation)}
                 playerRef={designPlayerRef}
               />
             )}

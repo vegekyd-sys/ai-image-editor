@@ -60,7 +60,6 @@ return {
   width: 1080,
   height: 1920,
   props,
-  editables,
   animation: { fps: 30, durationInSeconds: 12 }
 }
 ```
@@ -75,11 +74,13 @@ return {
 }
 ```
 
-Every successful render or patch is automatically saved to the recovery `code_path` returned by `run_code`. Use `write_file({ fromLastRunCode: true, name: "slug", publish: false })` only for a named checkpoint. Publish with `write_file({ fromLastRunCode: true, name: "slug" })` when the result is ready for the timeline.
+Every successful render or patch is automatically saved to the recovery `code_path` returned by `run_code`. After visual QA, publish the editable composition with `publish_draft({ design_path: code_path })`. Do not use legacy `write_file({ fromLastRunCode: true })` for durable or resumed composition publishing.
 
 If the change includes transitions, subtitles, overlays, trim timing, cropping, or other visible timeline edits, call `preview_frame` on stable middle frames before telling the user it is complete or publishing it.
 
 When changing trim timing or total sequence length, update `animation.durationInSeconds` to match the final timeline exactly (`totalFrames / fps`). Do not tell the user a clip is 18s while returning a 20s animation.
+
+If the user asks for a duration such as 30 seconds, set `animation.durationInSeconds` to that requested duration and build scene `from` / `durationInFrames` values inside that total. Never leave `durationInSeconds: 1` on a multi-scene timeline.
 
 ## Remotion APIs
 
@@ -149,39 +150,101 @@ return (
 );
 ```
 
-## Editable Fields
+## Editable Composition Contract
 
-Every user-facing text field should be editable.
+Editable is the default for every composition. Write natural React; the runtime
+discovers visible text/media sinks, infers the Editable Manifest, and
+instruments ordinary JSX. Do not write an `editables` array or editor-specific
+IDs for new work.
 
-Required connections:
-- `props`: stores the editable value.
-- JSX reads from props: `{props.title}`.
-- `data-editable="title"` is on a block or inline-block wrapper.
-- `editables`: maps the field id to `propKey`.
-
-Correct pattern:
+The common path is normal React:
 
 ```jsx
-return {
-  type: 'render',
-  code: `function Composition(props) {
-    return (
-      <AbsoluteFill>
-        <div data-editable="title" style={{ display: 'block' }}>
-          {props.title}
-        </div>
-      </AbsoluteFill>
-    );
-  }`,
-  props: { title: 'Scene Title' },
-  editables: [{ id: 'title', type: 'text', label: 'Title', propKey: 'title' }],
-  width: 1080,
-  height: 1920,
-  animation: { fps: 30, durationInSeconds: 10 }
+function Composition(props) {
+  return (
+    <AbsoluteFill>
+      <h1>{props.title}</h1>
+      <Img src={props.heroImage} style={{ width: 720, height: 900 }} />
+      <Video src={props.clip} style={{ width: 1080, height: 1920 }} />
+    </AbsoluteFill>
+  );
 }
 ```
 
-Do not hardcode user-visible text in JSX after declaring it in props. For per-character kinetic text, put `data-editable` on the parent and split `props.title`.
+Rules:
+- Prefer top-level props for intentional content/data APIs, primary media URLs,
+  and values that a later props-only patch should update.
+- Ordinary JSX literals, local const strings, static scene arrays,
+  primitive label arrays rendered with `.map`, `props.scenes` collections, and
+  values passed through reusable helper components are accepted. The compiler
+  promotes their visible leaves into stable editable props automatically.
+- Render each primary image/video through `<Img>` or `<Video>` with a real,
+  measurable visual box. Media prop reads are inferred automatically.
+- One host represents one logical text field. Do not render two different text
+  props directly inside the same host.
+- Do not put visible text directly inside `<AbsoluteFill>` or `<Sequence>`; use
+  a real text element so the editor gets its actual box.
+- Reusing a media URL is fine, but each independently movable layer needs its
+  own prop key.
+- Keep decorative overlays non-interactive with `pointerEvents: 'none'`.
+- For intentionally non-editable visible UI chrome, use
+  `data-editable-ignore` on its semantic host. Do not use it to hide normal
+  titles, subtitles, captions, labels, stats, or brand copy from the editor.
+- If coverage reports a genuinely runtime-computed text sink it cannot
+  identify, move only that value to a prop or add one explicit
+  `data-editable` on its real visual host. Do not redesign the whole
+  composition around editor metadata.
+
+Ordinary reusable React components work without editor-specific parameters:
+
+```jsx
+function Chapter({ year, title, description, image }) {
+  return (
+    <section>
+      <div>{year}</div>
+      <h1>{title}</h1>
+      <p>{description}</p>
+      <Img src={image} />
+    </section>
+  );
+}
+
+<Chapter
+  year={props.yearOne}
+  title={props.titleOne}
+  description={props.descriptionOne}
+  image={props.imageOne}
+/>
+```
+
+The compiler follows prop values, literal values, and scene-record fields
+through helper parameters to their real text and media leaves. Name components
+for the composition, not for the editor; do not add `id`, `editableId`, marker
+props, or an `editables` array to ordinary helpers.
+
+Use `data-editable` only for custom runtime ownership that coverage explicitly
+cannot infer. Put it on the real visual host, never on a full-canvas structural
+ancestor. Legacy explicit `editables` metadata remains accepted when patching
+an old composition, but new output should omit it.
+
+Video trim is non-destructive and belongs to the selected video node:
+
+```jsx
+<Video
+  src={props.heroVideo}
+  trimBefore={30}
+  trimAfter={180}
+  style={{ width: '100%', height: '100%', objectFit: 'cover' }}
+/>
+```
+
+The editor persists later trim changes by the inferred video node id. Do not
+create composition-wide trim fields or wrap the whole timeline as one video
+editable.
+
+For numbered source parts, the first `compositionMetadata` needs dimensions,
+`props`, and animation. Omit `editables`; the assembled composition infers and
+persists its Manifest automatically.
 
 ## Composition Quality
 

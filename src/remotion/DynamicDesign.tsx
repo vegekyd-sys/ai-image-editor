@@ -16,6 +16,7 @@ import {
   buildRemotionEvaluatorBody,
   normalizeRemotionScopeDeclarations,
 } from '../lib/remotion-code-normalization';
+import { createEditableReactRuntime } from '../lib/editor/editable-react-runtime';
 import {
   fetchRemotionFontManifestWithTiming,
   loadPreparedRemotionFonts,
@@ -80,7 +81,10 @@ function pickRemotionComponentName(code: string): string {
   return names[names.length - 1] || 'Design';
 }
 
-function compileAndEval(code: string, scope: Record<string, unknown>): React.ComponentType<Record<string, unknown>> | null {
+export function compileDynamicDesignComponent(
+  code: string,
+  scope: Record<string, unknown>,
+): React.ComponentType<Record<string, unknown>> | null {
   try {
     const src = normalizeRemotionScopeDeclarations(code);
     const { code: compiled } = sucraseTransform(src, {
@@ -88,8 +92,20 @@ function compileAndEval(code: string, scope: Record<string, unknown>): React.Com
       jsxRuntime: 'classic',
     });
     const fnName = pickRemotionComponentName(src);
-    const reactModule = { ...React, default: React, __esModule: true };
-    const remotionNamespace = { ...Remotion, ...scope };
+    const editableRuntime = createEditableReactRuntime(
+      React,
+      scope.Video as React.ElementType,
+    );
+    const authoredScope = {
+      ...scope,
+      React: editableRuntime.React,
+    };
+    const reactModule = {
+      ...editableRuntime.React,
+      default: editableRuntime.React,
+      __esModule: true,
+    };
+    const remotionNamespace = { ...Remotion, ...authoredScope };
     const remotionModule = { ...remotionNamespace, default: remotionNamespace, __esModule: true };
     const mediaNamespace = {
       Audio: scope.Audio,
@@ -123,7 +139,13 @@ function compileAndEval(code: string, scope: Record<string, unknown>): React.Com
       'require',
       buildRemotionEvaluatorBody(compiled, fnName),
     );
-    return factory(scope, authoredModule, authoredModule.exports, localRequire);
+    const component = factory(
+      authoredScope,
+      authoredModule,
+      authoredModule.exports,
+      localRequire,
+    );
+    return component ? editableRuntime.wrap(component, 'proxy') : null;
   } catch (err) {
     console.error('[DynamicDesign] compile error:', err);
     return null;
@@ -165,7 +187,9 @@ export const DynamicDesign: React.FC<Record<string, unknown>> = ({
   const [fontError, setFontError] = useState<Error | null>(null);
   const [fontTiming, setFontTiming] = useState<RemotionFontTiming | null>(null);
   const Component = useMemo(
-    () => prepared ? compileAndEval(prepared.code, remotionScope) : null,
+    () => prepared
+      ? compileDynamicDesignComponent(prepared.code, remotionScope)
+      : null,
     [prepared, remotionScope],
   );
 

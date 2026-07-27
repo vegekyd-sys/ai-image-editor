@@ -5,7 +5,9 @@ import { isDirectRemotionCompositionSource } from '@/lib/remotion-code-normaliza
 describe('design harness compile preflight', () => {
   it('accepts DynamicDesign function-body code', () => {
     expect(validateDesign({
-      code: 'function Composition() { return <AbsoluteFill><div>Ready</div></AbsoluteFill>; }',
+      code: 'function Composition(props) { return <AbsoluteFill><div data-editable="status">{props.status}</div></AbsoluteFill>; }',
+      props: { status: 'Ready' },
+      editables: [{ id: 'status', type: 'text', label: 'Status', propKey: 'status' }],
     })).toBeNull();
   });
 

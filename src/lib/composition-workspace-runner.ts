@@ -148,6 +148,9 @@ function buildWorkspaceDesign(input: {
   const baseRecord = input.base as (PersistedCompositionDraft & Record<string, unknown>) | undefined;
   const width = input.metadata?.width ?? input.base?.width;
   const height = input.metadata?.height ?? input.base?.height;
+  const effectiveEditables = input.metadata
+    ? input.metadata.editables
+    : input.base?.editables;
   if (!width || !height) {
     throw new Error('Composition metadata must provide positive width and height on the first numbered source file.');
   }
@@ -161,8 +164,8 @@ function buildWorkspaceDesign(input: {
       resolvedCode,
       input.metadata?.animation ?? input.base?.animation,
     ),
-    ...((input.metadata?.editables ?? input.base?.editables)
-      ? { editables: input.metadata?.editables ?? input.base?.editables }
+    ...(effectiveEditables?.length
+      ? { editables: effectiveEditables }
       : {}),
     ...((input.metadata?.fontSubstitutions ?? input.base?.fontSubstitutions)
       ? { fontSubstitutions: input.metadata?.fontSubstitutions ?? input.base?.fontSubstitutions }
@@ -171,6 +174,7 @@ function buildWorkspaceDesign(input: {
       ? 'Composition workspace draft assembled from durable source files'
       : input.base?.description),
   };
+  if (!effectiveEditables?.length) delete design.editables;
   delete design.__makaronDraft;
   delete design.__makaronScaffold;
   return design as DesignPayload & { description?: string };

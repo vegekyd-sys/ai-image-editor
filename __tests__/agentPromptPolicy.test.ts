@@ -18,6 +18,11 @@ describe('agent prompt policy guards', () => {
     expect(agentTs).toContain('\\`runtime: "composition"\\`: Remotion/editable composition draft')
     expect(agentTs).toContain('\\`runtime: "design"\\` or omitted: legacy alias for \\`runtime: "composition"\\`')
     expect(agentTs).toContain('\\`runtime: "node"\\`: open backend Node with FFmpeg/FFprobe')
+    expect(agentTs).toContain('props-first editable text/image/video/trim contract lives in \\`prompts/remotion-composition.md\\`')
+    expect(agentTs).toContain('runtime infers and persists it from natural prop reads')
+    expect(agentTs).toContain('Do not add editables to \\`runtime:"node"\\` media exports')
+    expect(agentTs).not.toContain('text editables must read from \\`props[propKey]\\`')
+    expect(agentTs).not.toContain('video trim editables must declare \\`trimBeforePropKey/trimAfterPropKey\\`')
   })
 
   it('keeps preview_frame as one public tool with Remotion and FFmpeg engines', () => {
@@ -270,23 +275,27 @@ describe('agent prompt policy guards', () => {
     expect(agentTs).not.toContain("The model's minimum generation duration is 5 seconds")
   })
 
-  it('keeps ordinary short videos off Studio Run unless editability is explicit', () => {
+  it('routes clear skill intents before choosing the smallest execution workflow', () => {
     const agent = read('src/lib/prompts/agent.md')
     const agentTs = read('src/lib/agent.ts')
     const workspace = read('src/lib/workspace.ts')
     const longVideoDirector = read('src/skills/long-video-director/SKILL.md')
 
-    expect(agent).toContain('The skill manifest is a capability index, not an automatic workflow choice')
-    expect(agent).toContain('For a finished video up to 15 seconds, prefer `generate_animation`')
-    expect(agent).toContain('an explainer label, or a built-in recipe match describe content; they do not select that workflow')
+    expect(agent).toContain('The skill manifest is the semantic routing index')
+    expect(agent).toContain('A clear built-in skill match activates that Skill')
+    expect(agent).toContain('read `skills/NAME/SKILL.md` before planning')
+    expect(agent).toContain('An explicit "explainer video" request activates `explainer-video`')
+    expect(agent).toContain('The selected Skill owns its workflow')
+    expect(agent).toContain('For an unmatched ordinary finished video up to 15 seconds, prefer `generate_animation`')
     expect(agent).toContain('Model selection happens after workflow routing')
     expect(agent).not.toContain('matched built-in Composition requests route to that editable workflow')
-    expect(agentTs).toContain('A generic explainer label or built-in recipe match is not such a request')
-    expect(agentTs).toContain('Do not use \\`studio_run\\` for an ordinary short finished-video request')
-    expect(workspace).toContain('This is a capability index only, not a workflow router')
-    expect(workspace).not.toContain('extras.push(`Studio Run recipe:')
-    expect(workspace).not.toContain('extras.push(`profile:')
-    expect(longVideoDirector).toContain('A generic explainer label or resemblance')
+    expect(agentTs).toContain('or an active built-in skill whose contract requires Composition')
+    expect(agentTs).toContain('Do not use \\`studio_run\\` for an unmatched ordinary short finished-video request')
+    expect(workspace).toContain('This is the semantic routing index')
+    expect(workspace).toContain('extras.push(`Studio Run recipe:')
+    expect(workspace).toContain('extras.push(`profile:')
+    expect(longVideoDirector).toContain('Do not use this workflow when the selected built-in skill requires Studio Run')
+    expect(agent).not.toContain('Do not activate a built-in skill or Studio Run because the request resembles its description')
   })
 
   it('preserves full audio tool capabilities with a native-audio exception for direct video', () => {

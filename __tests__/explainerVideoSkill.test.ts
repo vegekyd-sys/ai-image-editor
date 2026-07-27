@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest'
 import { readFileSync } from 'fs'
 import path from 'path'
 import { parseSkillMd } from '../src/lib/skill-registry'
+import { getSkillManifest } from '../src/lib/workspace'
 
 const root = path.resolve(__dirname, '..')
 
@@ -10,6 +11,15 @@ function read(rel: string) {
 }
 
 describe('Explainer Video built-in skill', () => {
+  it('is exposed as a semantic route with its Studio workflow metadata', async () => {
+    const manifest = await getSkillManifest()
+
+    expect(manifest).toContain('This is the semantic routing index')
+    expect(manifest).toContain('**explainer-video**')
+    expect(manifest).toContain('Studio Run recipe: explainer-video')
+    expect(manifest).toContain('profile: generated-explainer')
+  })
+
   it('uses the current Remotion composition architecture', () => {
     const agent = read('src/lib/prompts/agent.md')
     const compositionPrompt = read('src/lib/prompts/remotion-composition.md')
@@ -141,7 +151,9 @@ describe('Explainer Video built-in skill', () => {
     expect(rawSkill).toContain('"Explainer Video"')
     expect(rawSkill).toContain('"解释视频"')
     expect(rawSkill).toContain('"讲解视频"')
-    expect(agent).not.toContain('skills/explainer-video/SKILL.md')
+    expect(agent).toContain('An explicit "explainer video" request activates `explainer-video`')
+    expect(agent).toContain("read `skills/explainer-video/SKILL.md`")
+    expect(agent).toContain('follow its default voiceover, score, subtitle, and Studio workflow')
   })
 
   it('uses the first-class Visual Asset Bridge for sticker preparation', () => {

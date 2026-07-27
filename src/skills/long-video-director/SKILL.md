@@ -22,9 +22,10 @@ You are the orchestrator and reviewer for long-video work. You do not act as a
 single mega-prompt that performs every craft task. Route production work to the
 narrow skills:
 
-Do not use this workflow when the user explicitly requests Studio Run,
-Remotion, or an editable Composition. A generic explainer label or resemblance
-to a built-in skill is not an editable-workflow request.
+Do not use this workflow when the selected built-in skill requires Studio Run,
+or when the user explicitly requests Studio Run, Remotion, or an editable
+Composition. Skill routing happens first: a clear `explainer-video` match follows
+that Skill, while an unmatched ordinary long provider video uses this workflow.
 
 - `skills/long-video-anchor/SKILL.md` for character, scene, and prop anchors.
 - `skills/long-video-storyboard/SKILL.md` for one 6+ panel storyboard image per segment.
