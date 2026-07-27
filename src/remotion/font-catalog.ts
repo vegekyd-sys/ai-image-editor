@@ -68,7 +68,7 @@ export interface RemotionFontTiming {
 }
 
 export const REMOTION_FONT_CATALOG_VERSION = catalogData.version;
-export const REMOTION_FONT_RUNTIME_VERSION = 'remotion-font-runtime-r6-editable-overrides';
+export const REMOTION_FONT_RUNTIME_VERSION = 'remotion-font-runtime-r7-legacy-platform-fonts';
 export const REMOTION_FONT_CATALOG = catalogData.families as RemotionFontCatalogDefinition[];
 export const REMOTION_DEFAULT_SANS = 'Inter';
 export const REMOTION_DEFAULT_CJK_SANS = 'Noto Sans SC';
@@ -76,6 +76,15 @@ export const REMOTION_DEFAULT_CJK_SERIF = 'Noto Serif SC';
 export const REMOTION_DEFAULT_EMOJI = 'Noto Color Emoji';
 
 const GENERIC_FAMILIES = new Set(['sans-serif', 'serif', 'monospace', 'cursive']);
+const LEGACY_PLATFORM_FONT_SUBSTITUTIONS: Record<string, string> = {
+  'system-ui': REMOTION_DEFAULT_SANS,
+  '-apple-system': REMOTION_DEFAULT_SANS,
+  BlinkMacSystemFont: REMOTION_DEFAULT_SANS,
+  'SF Pro Display': REMOTION_DEFAULT_SANS,
+  'SF Pro Text': REMOTION_DEFAULT_SANS,
+  'PingFang SC': REMOTION_DEFAULT_CJK_SANS,
+  'Microsoft YaHei': REMOTION_DEFAULT_CJK_SANS,
+};
 const manifestCache = new Map<string, Promise<RemotionFontCatalogManifest>>();
 type RemotionFontLoadExecution = Omit<
   RemotionFontLoadTiming,
@@ -236,7 +245,13 @@ export function prepareRemotionFontCode(input: {
   substitutions?: Record<string, string>;
 }): PreparedRemotionFonts {
   const usedFamilies: string[] = [];
-  const substitutions = input.substitutions || {};
+  // Old compositions commonly used browser platform stacks before Makaron
+  // introduced its pinned font catalog. Keep this compatibility set narrow;
+  // stylistic legacy fonts still require an explicit persisted substitution.
+  const substitutions = {
+    ...LEGACY_PLATFORM_FONT_SUBSTITUTIONS,
+    ...(input.substitutions || {}),
+  };
   const code = input.code.replace(
     /(fontFamily\s*:\s*)(['"`])([\s\S]*?)\2/g,
     (match, prefix: string, quote: string, stack: string) => {
