@@ -16,7 +16,12 @@ import * as RemotionPaths from '@remotion/paths';
 import * as RemotionNoise from '@remotion/noise';
 import * as THREE from 'three';
 import { buildRemotionEvaluatorBody } from './remotion-code-normalization';
-import { editableRuntimeClassName } from './editor/scene-registry';
+import {
+  createEditableReactRuntime,
+  type EditableTransformMode,
+} from './editor/editable-react-runtime';
+
+export type { EditableTransformMode } from './editor/editable-react-runtime';
 
 const { Sequence, useVideoConfig } = Remotion;
 
@@ -166,8 +171,6 @@ export function pickRemotionComponentName(code: string): string {
  * Tries Sucrase first (bundled, instant). Falls back to Babel CDN if Sucrase fails.
  */
 
-export type EditableTransformMode = 'proxy' | 'registry';
-
 export function evalRemotionJSX(
   code: string,
   options: { editableTransformMode?: EditableTransformMode } = {},
@@ -192,12 +195,21 @@ export function evalRemotionJSX(
     // Prefer the primary composition function. Agent code often declares helper
     // components first (Caption, Badge, etc.) and the real composition last.
     const fnName = pickRemotionComponentName(src);
-    const remotionNamespace = { ...Remotion, ...REMOTION_SCOPE };
+    const editableRuntime = createEditableReactRuntime(React, Video);
+    const authoredScope = {
+      ...REMOTION_SCOPE,
+      React: editableRuntime.React,
+    };
+    const remotionNamespace = { ...Remotion, ...authoredScope };
     const mediaNamespace = { Audio, Video, OffthreadVideo: Video };
     const pathsNamespace = { ...RemotionPaths };
     const noiseNamespace = { ...RemotionNoise };
     const modules: Record<string, unknown> = {
-      react: { ...React, default: React, __esModule: true },
+      react: {
+        ...editableRuntime.React,
+        default: editableRuntime.React,
+        __esModule: true,
+      },
       remotion: { ...remotionNamespace, default: remotionNamespace, __esModule: true },
       '@remotion/media': { ...mediaNamespace, default: mediaNamespace, __esModule: true },
       '@remotion/paths': { ...pathsNamespace, default: pathsNamespace, __esModule: true },
@@ -216,177 +228,12 @@ export function evalRemotionJSX(
       'require',
       buildRemotionEvaluatorBody(compiled, fnName),
     );
-    const comp = factory(REMOTION_SCOPE, authoredModule, authoredModule.exports, localRequire);
+    const comp = factory(authoredScope, authoredModule, authoredModule.exports, localRequire);
     return comp
-      ? wrapWithEditableOverrides(comp, options.editableTransformMode ?? 'proxy')
+      ? editableRuntime.wrap(comp, options.editableTransformMode ?? 'proxy')
       : null;
   } catch (err) {
     console.error('[evalRemotionJSX] compile error:', err);
     return null;
   }
-}
-
-
-/**
- * Module-level ref for current transform props.
- * Updated by the HOC's render, read by the Proxy createElement.
- */
-let _currentTransformProps: Record<string, unknown> = {};
-let _currentTransformMode: EditableTransformMode = 'proxy';
-
-function readFrameProp(key: string): number | undefined {
-  const value = _currentTransformProps[key];
-  const n = typeof value === 'number' ? value : Number(value);
-  return Number.isFinite(n) ? Math.max(0, Math.round(n)) : undefined;
-}
-
-function injectLegacyVideoTrim(node: React.ReactNode, trim: { trimBefore?: number; trimAfter?: number }): React.ReactNode {
-  if (!React.isValidElement(node)) return node;
-
-  if (node.type === Video) {
-    return React.cloneElement(node, {
-      ...(trim.trimBefore !== undefined ? { trimBefore: trim.trimBefore } : {}),
-      ...(trim.trimAfter !== undefined ? { trimAfter: trim.trimAfter } : {}),
-    });
-  }
-
-  const props = node.props as { children?: React.ReactNode };
-  if (!props.children) return node;
-
-  return React.cloneElement(
-    node,
-    undefined,
-    React.Children.map(props.children, child => injectLegacyVideoTrim(child, trim)),
-  );
-}
-
-/**
- * A logical editable may be repeated on old ancestor shells. Both Player and
- * export transform only the deepest same-id React owner, matching the DOM
- * Scene Registry leaf rule.
- */
-const _origCE = React.createElement;
-
-function hasSameIdEditableDescendant(
-  children: React.ReactNode[],
-  id: string,
-): boolean {
-  return children.some(child => {
-    if (!React.isValidElement(child)) return false;
-    const childProps = child.props as {
-      children?: React.ReactNode;
-      id?: unknown;
-      editableId?: unknown;
-      'data-editable'?: unknown;
-    };
-    if (childProps['data-editable'] === id) return true;
-    if (
-      typeof child.type !== 'string'
-      && Object.entries(childProps).some(([key, value]) =>
-        value === id && (key === 'id' || key === 'editableId' || key.endsWith('Id'))
-      )
-    ) {
-      return true;
-    }
-    return hasSameIdEditableDescendant(
-      React.Children.toArray(childProps.children),
-      id,
-    );
-  });
-}
-
-const _patchedCE = function(type: any, elProps: any, ...children: any[]) {
-  if (elProps && typeof elProps === 'object' && elProps['data-editable']) {
-    const id = elProps['data-editable'] as string;
-    const renderedChildren = children.length > 0
-      ? children
-      : React.Children.toArray(elProps.children);
-    const ownsTransform = !hasSameIdEditableDescendant(renderedChildren, id);
-    const textOverride = _currentTransformProps[id];
-    const ownsTextLeaf = (
-      ownsTransform
-      && typeof type === 'string'
-      && renderedChildren.length > 0
-      && renderedChildren.every(child =>
-        child == null
-        || child === false
-        || typeof child === 'string'
-        || typeof child === 'number'
-      )
-    );
-    if (
-      ownsTextLeaf
-      && (typeof textOverride === 'string' || typeof textOverride === 'number')
-    ) {
-      if (children.length > 0) {
-        children = [textOverride];
-      } else {
-        elProps = { ...elProps, children: textOverride };
-      }
-    }
-    const pos = _currentTransformProps[`_pos_${id}`] as { x: number; y: number } | undefined;
-    const sc = _currentTransformProps[`_scale_${id}`] as { w: number; h: number } | undefined;
-    const trimBefore = readFrameProp(`_trimBefore_${id}`);
-    const trimAfter = readFrameProp(`_trimAfter_${id}`);
-    if (_currentTransformMode === 'proxy' && ownsTransform && (pos || sc)) {
-      const existingStyle = (elProps.style || {}) as Record<string, unknown>;
-      elProps = {
-        ...elProps,
-        style: {
-          ...existingStyle,
-          ...(pos ? { translate: `${pos.x}px ${pos.y}px` } : {}),
-          ...(sc ? { scale: `${+sc.w.toFixed(4)} ${+sc.h.toFixed(4)}` } : {}),
-        },
-      };
-    }
-    if (ownsTransform && (trimBefore !== undefined || trimAfter !== undefined)) {
-      if (type === Video) {
-        elProps = {
-          ...elProps,
-          ...(trimBefore !== undefined ? { trimBefore } : {}),
-          ...(trimAfter !== undefined ? { trimAfter } : {}),
-        };
-      } else {
-        children = children.map(child => injectLegacyVideoTrim(child, { trimBefore, trimAfter }));
-      }
-    }
-    if (type === Video) {
-      const existingClassName = typeof elProps.className === 'string'
-        ? elProps.className.trim()
-        : '';
-      elProps = {
-        ...elProps,
-        className: [existingClassName, editableRuntimeClassName(id)]
-          .filter(Boolean)
-          .join(' '),
-      };
-    }
-  }
-  return _origCE.call(React, type, elProps, ...children);
-};
-
-const PATCHED_REACT = new Proxy(React, {
-  get(target, prop) {
-    if (prop === 'createElement') return _patchedCE;
-    return Reflect.get(target, prop);
-  }
-});
-
-REMOTION_SCOPE.React = PATCHED_REACT;
-
-/**
- * HOC: sets _currentTransformProps before Component renders (synchronous).
- * Agent code uses PATCHED_REACT.createElement → reads _currentTransformProps
- * → injects style.translate/scale on logical editable elements.
- */
-
-function wrapWithEditableOverrides(
-  Component: React.ComponentType<any>,
-  transformMode: EditableTransformMode,
-): React.ComponentType<any> {
-  return function WrappedDesign(props: Record<string, unknown>) {
-    _currentTransformProps = props;
-    _currentTransformMode = transformMode;
-    return _origCE.call(React, Component, props);
-  };
 }

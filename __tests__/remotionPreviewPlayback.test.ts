@@ -33,15 +33,19 @@ describe('Remotion preview playback contract', () => {
 
   it('lets a GUI trim override the authored initial video trim', () => {
     const evalSource = read('src/lib/evalRemotionJSX.ts')
+    const runtimeSource = read('src/lib/editor/editable-react-runtime.ts')
+    const dynamicDesignSource = read('src/remotion/DynamicDesign.tsx')
 
-    expect(evalSource).toContain(
+    expect(runtimeSource).toContain(
       "trim.trimBefore !== undefined ? { trimBefore: trim.trimBefore } : {}",
     )
-    expect(evalSource).toContain(
+    expect(runtimeSource).toContain(
       "trim.trimAfter !== undefined ? { trimAfter: trim.trimAfter } : {}",
     )
-    expect(evalSource).not.toContain('currentProps.trimBefore === undefined')
-    expect(evalSource).not.toContain('currentProps.trimAfter === undefined')
+    expect(runtimeSource).not.toContain('currentProps.trimBefore === undefined')
+    expect(runtimeSource).not.toContain('currentProps.trimAfter === undefined')
+    expect(evalSource).toContain('createEditableReactRuntime(React, Video)')
+    expect(dynamicDesignSource).toContain('createEditableReactRuntime(')
   })
 
   it('uses the real off-thread decoder for deterministic server previews', () => {
