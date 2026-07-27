@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect, useState, type CSSProperties } from 'react';
-import { normalizeLocale, translate, type TranslationKey } from '@/lib/locales';
+import { normalizeLocale, translate } from '@/lib/locales';
 
 interface ChangelogContent {
   title: string;
@@ -9,24 +9,13 @@ interface ChangelogContent {
   link?: { label: string; href: string; variant?: 'text' | 'button' };
 }
 
-interface LegacyChangelogEntry {
+interface ChangelogEntry {
   date: string;
   en: ChangelogContent;
   zh: ChangelogContent;
 }
 
-type LocalizedChangelogEntry = {
-  date: string;
-  localeKey: 'editableRemotion' | 'editableLayers';
-};
-
-type ChangelogEntry = LegacyChangelogEntry | LocalizedChangelogEntry;
-
 const CHANGELOG: ChangelogEntry[] = [
-  {
-    date: '2026-07-28',
-    localeKey: 'editableRemotion',
-  },
   {
     date: '2026-07-25',
     en: { title: 'Consistent Remotion Fonts', items: ['Remotion previews and Lambda MP4 exports now use the same pinned Chinese and English fonts, so typography stays consistent from editing to delivery.'] },
@@ -188,10 +177,6 @@ const CHANGELOG: ChangelogEntry[] = [
       '现在可以从模型选择器、CUI 或 makaron-cli chat 触发，用来给短视频换风格、让单张图动起来，或快速做一版视频修改。',
       '针对品牌、知名角色和受保护 IP 等更容易触发审核的请求，Makaron 会给出更清楚的失败提示和更安全的原创替代表达。',
     ]},
-  },
-  {
-    date: '2026-07-01',
-    localeKey: 'editableLayers',
   },
   {
     date: '2026-06-30',
@@ -904,29 +889,6 @@ const changelogGlassEdgeStyle: CSSProperties = {
 const iOSAppTopGap = 'max(96px, calc(env(safe-area-inset-top, 0px) + 40px))';
 const iOSAppBottomGap = 'max(14px, env(safe-area-inset-bottom, 0px))';
 
-const LOCALIZED_CHANGELOG_KEYS = {
-  editableRemotion: {
-    title: 'changelog.editableRemotion.title',
-    items: [
-      'changelog.editableRemotion.item1',
-      'changelog.editableRemotion.item2',
-      'changelog.editableRemotion.item3',
-    ],
-  },
-  editableLayers: {
-    title: 'changelog.editableLayers.title',
-    items: [
-      'changelog.editableLayers.item1',
-      'changelog.editableLayers.item2',
-      'changelog.editableLayers.item3',
-      'changelog.editableLayers.item4',
-    ],
-  },
-} as const satisfies Record<LocalizedChangelogEntry['localeKey'], {
-  title: TranslationKey;
-  items: readonly TranslationKey[];
-}>;
-
 export default function Changelog({ onClose, locale }: { onClose: () => void; locale: string }) {
   const normalizedLocale = normalizeLocale(locale, 'en');
   // Historical release notes stay bilingual. Newly added entries use all four product locales.
@@ -1031,14 +993,7 @@ export default function Changelog({ onClose, locale }: { onClose: () => void; lo
         {/* Scrollable entries */}
         <div className="relative z-[1] flex-1 overflow-y-auto overscroll-contain px-5 pb-6" style={{ WebkitOverflowScrolling: 'touch' }}>
           {CHANGELOG.map((entry, i) => {
-            const loc: ChangelogContent = 'localeKey' in entry
-              ? {
-                  title: translate(normalizedLocale, LOCALIZED_CHANGELOG_KEYS[entry.localeKey].title),
-                  items: LOCALIZED_CHANGELOG_KEYS[entry.localeKey].items.map((key) => (
-                    translate(normalizedLocale, key)
-                  )),
-                }
-              : (isZh ? entry.zh : entry.en);
+            const loc = isZh ? entry.zh : entry.en;
             return (
               <div key={`${entry.date}-${loc.title}`} className={i > 0 ? 'mt-5' : 'mt-3'}>
                 <div className="flex items-center gap-2.5 mb-1.5">

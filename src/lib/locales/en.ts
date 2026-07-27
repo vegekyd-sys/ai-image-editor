@@ -205,9 +205,6 @@ const en = {
   'canvas.layerEmpty': 'No layers available',
   'canvas.layerDelete': 'Delete layer',
   'canvas.layerResize': 'Drag to resize',
-  'canvas.previewUnavailable': 'Preview temporarily unavailable',
-  'canvas.previewUsingPoster': 'Your poster is preserved. You can reload the preview.',
-  'canvas.previewRetry': 'Retry',
 
   // Annotation toolbar
   'annotation.placeholder': 'How should I edit the marked area?',

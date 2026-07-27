@@ -42,7 +42,7 @@ Use inline `run_code.code` only for small patches or short utilities. Long compo
 Return exactly one supported object:
 
 ```js
-{ type: 'render', code, width, height, props?, animation? }
+{ type: 'render', code, width, height, editables?, props?, animation? }
 { type: 'patch', edits?, props?, code_path? }
 { type: 'image', data, mimeType }
 { type: 'video', path, contentType?, description?, duration?, width?, height? }
@@ -52,10 +52,6 @@ Return exactly one supported object:
 ```
 
 Use `type: "render"` for a new composition draft, `type: "patch"` for subsequent composition edits, `type: "files"` for file batches or intermediate media, and `type: "video"` for one final MP4.
-
-## Editable Boundary
-
-Editable behavior belongs only to the Remotion composition path: `runtime: "composition"` / legacy `runtime: "design"` with `type: "render"` or `type: "patch"`. New compositions keep user-facing values in props and omit explicit `editables`; the runtime infers the Manifest. Do not add editable burden to `generate_image`, external video generation, node/FFmpeg exports, or sharp image outputs. For the full props-first text/image/video/trim rules, read `prompts/remotion-composition.md`.
 
 ## Patch Rules
 

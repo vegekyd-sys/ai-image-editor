@@ -1,6 +1,5 @@
-import { describe, expect, it, vi } from 'vitest';
+import { describe, expect, it } from 'vitest';
 import { AgentDualWriter } from '../src/lib/agentDualWriter';
-import * as workspace from '../src/lib/workspace';
 
 describe('AgentDualWriter', () => {
   it('retries transient event writes with one stable id and sequence', async () => {
@@ -290,75 +289,6 @@ describe('AgentDualWriter', () => {
         }),
       }),
     });
-  });
-
-  it('copies editable metadata from the authoritative promoted draft', async () => {
-    const uploads: Array<{ path: string; body: Blob }> = [];
-    const inserts: Array<{ table: string; row: Record<string, unknown> }> = [];
-    const sourceDesignPath = 'project-id/drafts/latest-composition.json';
-    const readFile = vi.spyOn(workspace, 'readFile').mockResolvedValue({
-      path: sourceDesignPath,
-      contentType: 'application/json',
-      content: JSON.stringify({
-        code: 'function Composition(props) { return <div data-editable="title">{props.title}</div> }',
-        width: 1080,
-        height: 1920,
-        props: { title: 'Hello' },
-        animation: { fps: 30, durationInSeconds: 5 },
-        editables: [
-          { id: 'title', type: 'text', label: 'Title', propKey: 'title' },
-          { id: 'photo', type: 'image', label: 'Photo', propKey: 'photo' },
-        ],
-      }),
-    });
-    const fakeSupabase = {
-      storage: {
-        from: () => ({
-          upload: async (path: string, body: Blob) => {
-            uploads.push({ path, body });
-            return { error: null };
-          },
-          getPublicUrl: () => ({ data: { publicUrl: 'https://storage.example.com/design.json' } }),
-        }),
-      },
-      rpc: async () => ({ data: 3 }),
-      from: (table: string) => ({
-        insert: async (row: Record<string, unknown>) => {
-          inserts.push({ table, row });
-          return { error: null };
-        },
-        upsert: async () => ({ error: null }),
-      }),
-    };
-    const writer = new AgentDualWriter('run-id', fakeSupabase as never, 'user-id', 'project-id');
-
-    await writer.processAndEnqueue({
-      type: 'render',
-      code: 'function Composition() { return null }',
-      width: 1080,
-      height: 1920,
-      snapshotId: 'promoted-snapshot',
-      sourceDesignPath,
-      published: true,
-    });
-
-    const persisted = JSON.parse(await uploads[0].body.text());
-    expect(persisted.editables).toHaveLength(2);
-    expect(persisted.editables.map((editable: { type: string }) => editable.type))
-      .toEqual(['text', 'image']);
-    expect(inserts).toContainEqual({
-      table: 'agent_events',
-      row: expect.objectContaining({
-        type: 'render',
-        data: expect.objectContaining({
-          editables: persisted.editables,
-          sourceDesignPath,
-          published: true,
-        }),
-      }),
-    });
-
-    readFile.mockRestore();
   });
 
   it('backfills video snapshot description from analyze_video tool results', async () => {

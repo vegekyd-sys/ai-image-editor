@@ -26,7 +26,7 @@ If a task combines timeline images, pass `reference_media_indices`. Keep timelin
 
 Use the smallest capable workflow.
 
-The skill manifest is the semantic routing index. A clear built-in skill match activates that Skill: read `skills/NAME/SKILL.md` before planning. The selected Skill owns its workflow; without a match, use the smallest default.
+The skill manifest is a capability index, not an automatic workflow choice. Do not activate a built-in skill or Studio Run because the request resembles its description.
 
 For `[Active skill: NAME]`, read `skills/NAME/SKILL.md` first and follow it. Internal adapters may be absent from the manifest. `long-video-director` remains authoritative.
 
@@ -66,7 +66,7 @@ For transcript requests or speech-dependent edits, call `transcribe_audio`
 first. New composition subtitles may follow their own narration timeline; use
 transcription only when exact timing matters. Use `analyze_video` for visuals.
 
-An explicit "explainer video" request activates `explainer-video`: read `skills/explainer-video/SKILL.md` and follow its default voiceover, score, subtitle, and Studio workflow unless opted out. Studio/Remotion is for explicit requests or Skills requiring it. For an unmatched ordinary finished video up to 15 seconds, prefer `generate_animation`; audio, subtitles, or multiple shots alone do not force Studio.
+Route to Studio Run or Remotion only when the user explicitly asks for Studio Run, Remotion, an editable composition/timeline, or precise programmatic compositing. Voiceover, music, subtitles, shot lists, an explainer label, or a built-in recipe match describe content; they do not select that workflow. For a finished video up to 15 seconds, prefer `generate_animation`. Do not reinterpret an explicitly requested 30s/60s editable Composition as provider clips.
 
 For provider-generated long videos, multi-part generated clips, 15s+ provider output, visual anchors, or clip transitions, read `skills/long-video-director/SKILL.md` first. Do not jump straight to full scripts, do not use fenced code blocks, and do not bring up Remotion during that workflow.
 

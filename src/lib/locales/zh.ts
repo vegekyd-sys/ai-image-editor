@@ -205,9 +205,6 @@ const zh = {
   'canvas.layerEmpty': '没有可用图层',
   'canvas.layerDelete': '删除图层',
   'canvas.layerResize': '拖动缩放',
-  'canvas.previewUnavailable': '预览暂时不可用',
-  'canvas.previewUsingPoster': '已保留封面，稍后可以重新加载',
-  'canvas.previewRetry': '重试',
 
   // Annotation toolbar
   'annotation.placeholder': '你想对标记的地方怎么改...',

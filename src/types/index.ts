@@ -1,13 +1,8 @@
-export type EditableType = 'text' | 'image' | 'video';
-
 export interface EditableField {
   id: string;           // data-editable value, e.g. "title"
-  type: EditableType;
+  type: 'text';         // only text for now
   label: string;        // UI label, e.g. "标题"
   propKey: string;      // prop key for text content, e.g. "title"
-  source?: 'literal';   // compiler-promoted visible literal
-  trimBeforePropKey?: string; // video trim start, in frames
-  trimAfterPropKey?: string;  // video trim end, in frames
 }
 
 export interface DesignPayload {

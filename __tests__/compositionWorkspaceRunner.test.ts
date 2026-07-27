@@ -66,7 +66,6 @@ describe('Composition workspace runner', () => {
         width: 1920,
         height: 1080,
         props: { title: 'Makaron' },
-        editables: [{ id: 'title', type: 'text', label: 'Title', propKey: 'title' }],
         animation: { fps: 30, durationInSeconds: 30 },
       },
     });
@@ -77,7 +76,7 @@ describe('Composition workspace runner', () => {
     });
 
     workspaceFiles.set(rootPath, {
-      content: 'function Composition(props) { return <AbsoluteFill style={{backgroundColor: COLOR}}><div data-editable="title">{props.title}</div></AbsoluteFill>; }',
+      content: 'function Composition(props) { return <AbsoluteFill style={{backgroundColor: COLOR}}><div>{props.title}</div></AbsoluteFill>; }',
       contentType: 'text/javascript',
       storageUrl: `https://workspace.test/${rootPath}`,
     });
@@ -129,12 +128,11 @@ describe('Composition workspace runner', () => {
         width: 1280,
         height: 720,
         props: { title: 'Normal Agent' },
-        editables: [{ id: 'title', type: 'text', label: 'Title', propKey: 'title' }],
         animation: { fps: 30, durationInSeconds: 12 },
       },
     });
     workspaceFiles.set(rootPath, {
-      content: 'function Composition(props) { return <AbsoluteFill style={{backgroundColor: COLOR}}><div data-editable="title">{props.title}</div></AbsoluteFill>; }',
+      content: 'function Composition(props) { return <AbsoluteFill style={{backgroundColor: COLOR}}>{props.title}</AbsoluteFill>; }',
       contentType: 'text/javascript',
       storageUrl: `https://workspace.test/${rootPath}`,
     });
@@ -174,12 +172,11 @@ describe('Composition workspace runner', () => {
         width: 1920,
         height: 1080,
         props: { title: 'Makaron' },
-        editables: [{ id: 'title', type: 'text', label: 'Title', propKey: 'title' }],
         animation: { fps: 30, durationInSeconds: 30 },
       },
     });
     workspaceFiles.set(rootPath, {
-      content: 'function Composition(props) { return <AbsoluteFill style={{backgroundColor: COLOR}}><div data-editable="title">{props.title}</div></AbsoluteFill>; }',
+      content: 'function Composition(props) { return <AbsoluteFill style={{backgroundColor: COLOR}}>{props.title}</AbsoluteFill>; }',
       contentType: 'text/javascript',
       storageUrl: `https://workspace.test/${rootPath}`,
     });
@@ -201,194 +198,6 @@ describe('Composition workspace runner', () => {
       props: { title: 'Makaron' },
       description: 'Updated description',
     });
-  });
-
-  it('preserves image and video editable metadata through durable composition parts', async () => {
-    workspaceFiles.set(foundationPath, {
-      content: "const BG = '#000';",
-      contentType: 'text/javascript',
-      storageUrl: `https://workspace.test/${foundationPath}`,
-    });
-    await compileSavedCompositionPart({
-      projectId,
-      userId,
-      supabase,
-      workspaceId: 'media-editables',
-      partPath: foundationPath,
-      snapshotImages: [],
-      metadata: {
-        width: 1080,
-        height: 1920,
-        props: {
-          coverImage: 'https://example.com/cover.jpg',
-          heroVideo: 'https://example.com/clip.mp4',
-          heroVideoStart: 12,
-          heroVideoEnd: 132,
-        },
-        editables: [
-          { id: 'cover', type: 'image', label: 'Cover', propKey: 'coverImage' },
-          {
-            id: 'heroVideo',
-            type: 'video',
-            label: 'Hero video',
-            propKey: 'heroVideo',
-            trimBeforePropKey: 'heroVideoStart',
-            trimAfterPropKey: 'heroVideoEnd',
-          },
-        ],
-        animation: { fps: 30, durationInSeconds: 5 },
-      },
-    });
-    workspaceFiles.set(rootPath, {
-      content: `function Composition(props) {
-        return <AbsoluteFill style={{background: BG}}>
-          <div data-editable="cover" style={{position: 'absolute', left: 40, top: 40, width: 400, height: 400}}>
-            <Img src={props.coverImage} style={{width: '100%', height: '100%'}} />
-          </div>
-          <div data-editable="heroVideo" style={{position: 'absolute', left: 40, top: 520, width: 900, height: 1200}}>
-            <Video
-              src={props.heroVideo}
-              trimBefore={props.heroVideoStart}
-              trimAfter={props.heroVideoEnd}
-              style={{width: '100%', height: '100%'}}
-            />
-          </div>
-        </AbsoluteFill>;
-      }`,
-      contentType: 'text/javascript',
-      storageUrl: `https://workspace.test/${rootPath}`,
-    });
-
-    const result = await compileSavedCompositionPart({
-      projectId,
-      userId,
-      supabase,
-      workspaceId: 'media-editables',
-      partPath: rootPath,
-      snapshotImages: [],
-    });
-
-    expect(result.status).toBe('ready');
-    if (result.status !== 'ready') throw new Error('expected ready workspace');
-    expect(result.design.editables).toEqual([
-      { id: 'cover', type: 'image', label: 'Cover', propKey: 'coverImage' },
-      {
-        id: 'heroVideo',
-        type: 'video',
-        label: 'Hero video',
-        propKey: 'heroVideo',
-        trimBeforePropKey: 'heroVideoStart',
-        trimAfterPropKey: 'heroVideoEnd',
-      },
-    ]);
-  });
-
-  it('keeps generated media when natural scene objects compile through a helper', async () => {
-    workspaceFiles.set(compositionDraftPath(projectId), {
-      content: JSON.stringify(createPersistedCompositionDraft({
-        code: 'function Composition(props) { return <div data-editable="scenes">{props.scenes}</div>; }',
-        width: 1920,
-        height: 1080,
-        props: { scenes: 'stale procedural fallback' },
-        editables: [{ id: 'scenes', type: 'text', label: 'Scenes', propKey: 'scenes' }],
-        animation: { fps: 30, durationInSeconds: 6 },
-      })),
-      contentType: 'application/json',
-      storageUrl: 'https://workspace.test/stale-composition.json',
-    });
-    workspaceFiles.set(foundationPath, {
-      content: `const SCENES = [
-        { image: 'laptopImage', eyebrow: 'BUILT TO PLAY', title: 'POWER\\nWITHOUT APOLOGY' },
-        { image: 'desktopImage', eyebrow: 'FULL POWER', title: 'DESKTOP' },
-      ];
-      function Scene({ scene, src }) {
-        return (
-          <AbsoluteFill>
-            <Img src={src} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
-            <small>{scene.eyebrow}</small>
-            <h1>{scene.title}</h1>
-          </AbsoluteFill>
-        );
-      }`,
-      contentType: 'text/javascript',
-      storageUrl: `https://workspace.test/${foundationPath}`,
-    });
-    const snapshotImages = [
-      'https://example.com/laptop.jpg',
-      'https://example.com/desktop.jpg',
-    ];
-    await compileSavedCompositionPart({
-      projectId,
-      userId,
-      supabase,
-      workspaceId: 'generated-scene-media',
-      partPath: foundationPath,
-      snapshotImages,
-      metadata: {
-        width: 1920,
-        height: 1080,
-        props: {
-          laptopImage: '<<<media_1>>>',
-          desktopImage: '<<<media_2>>>',
-        },
-        animation: { fps: 30, durationInSeconds: 6 },
-      },
-    });
-    workspaceFiles.set(rootPath, {
-      content: `function Composition(props) {
-        const images = {
-          laptopImage: props.laptopImage,
-          desktopImage: props.desktopImage,
-        };
-        return (
-          <AbsoluteFill>
-            {SCENES.map(scene => (
-              <Scene
-                key={scene.image}
-                scene={scene}
-                src={images[scene.image]}
-              />
-            ))}
-          </AbsoluteFill>
-        );
-      }`,
-      contentType: 'text/javascript',
-      storageUrl: `https://workspace.test/${rootPath}`,
-    });
-
-    const result = await compileSavedCompositionPart({
-      projectId,
-      userId,
-      supabase,
-      workspaceId: 'generated-scene-media',
-      partPath: rootPath,
-      snapshotImages,
-    });
-
-    expect(
-      result.status,
-      result.status === 'invalid' ? result.diagnostics.join('\n') : undefined,
-    ).toBe('ready');
-    if (result.status !== 'ready') throw new Error('expected ready workspace');
-    expect(result.design.props).toMatchObject({
-      laptopImage: snapshotImages[0],
-      desktopImage: snapshotImages[1],
-      scene1Eyebrow: 'BUILT TO PLAY',
-      scene2Eyebrow: 'FULL POWER',
-      scene1Title: 'POWER\nWITHOUT APOLOGY',
-      scene2Title: 'DESKTOP',
-    });
-    expect(result.design.editables?.map(field => [field.id, field.type])).toEqual([
-      ['laptopImage', 'image'],
-      ['desktopImage', 'image'],
-      ['scene1Eyebrow', 'text'],
-      ['scene2Eyebrow', 'text'],
-      ['scene1Title', 'text'],
-      ['scene2Title', 'text'],
-    ]);
-    expect(result.design.code).toContain('__makaronEditable_src={scene.image}');
-    expect(result.design.code).toContain('data-editable={__makaronEditable_src}');
-    expect(JSON.stringify(result.design)).not.toContain('<<<media_');
   });
 
   it('returns independent compile diagnostics together without overwriting the recoverable draft', async () => {

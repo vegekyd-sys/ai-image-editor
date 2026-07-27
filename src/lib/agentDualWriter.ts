@@ -2,7 +2,6 @@ import type { SupabaseClient } from '@supabase/supabase-js';
 import type { AgentStreamEvent } from './agent';
 import { uploadImage } from './supabase/storage';
 import { sanitizeToolHistory, type ToolHistoryBudget } from './agentToolHistory';
-import * as workspace from './workspace';
 
 const EVENT_WRITE_RETRY_DELAYS_MS = [0, 75, 250, 750] as const;
 
@@ -193,42 +192,12 @@ export class AgentDualWriter {
           const sourceDesignPath = (event as any).sourceDesignPath as string | undefined;
 
           const designDesc = (event as any).description as string | undefined;
-          let sourceDesign: Record<string, unknown> | null = null;
-          if (sourceDesignPath) {
-            try {
-              const sourceFile = await workspace.readFile(sourceDesignPath, this.supabase, this.userId);
-              if (sourceFile?.content) {
-                sourceDesign = JSON.parse(sourceFile.content) as Record<string, unknown>;
-              }
-            } catch (error) {
-              console.warn('[agentDualWriter] Could not reload promoted design source:', sourceDesignPath, error);
-            }
-          }
-          const eventEditables = (event as Record<string, unknown>).editables;
-          const eventFontSubstitutions = (event as Record<string, unknown>).fontSubstitutions;
-          const persistedDesign = {
-            ...(sourceDesign || {}),
-            code: typeof sourceDesign?.code === 'string' ? sourceDesign.code : event.code,
-            width: typeof sourceDesign?.width === 'number' && Number.isFinite(sourceDesign.width)
-              ? sourceDesign.width
-              : event.width,
-            height: typeof sourceDesign?.height === 'number' && Number.isFinite(sourceDesign.height)
-              ? sourceDesign.height
-              : event.height,
-            props: sourceDesign?.props ?? event.props,
-            animation: sourceDesign?.animation ?? event.animation,
-            ...(Array.isArray(sourceDesign?.editables)
-              ? { editables: sourceDesign.editables }
-              : Array.isArray(eventEditables)
-                ? { editables: eventEditables }
-                : {}),
-            ...(sourceDesign?.fontSubstitutions && typeof sourceDesign.fontSubstitutions === 'object'
-              ? { fontSubstitutions: sourceDesign.fontSubstitutions }
-              : eventFontSubstitutions && typeof eventFontSubstitutions === 'object'
-                ? { fontSubstitutions: eventFontSubstitutions }
-                : {}),
-          };
-          const designJson = JSON.stringify(persistedDesign);
+          const designJson = JSON.stringify({
+            code: event.code, width: event.width, height: event.height,
+            props: event.props, animation: event.animation,
+            ...((event as Record<string, unknown>).editables ? { editables: (event as Record<string, unknown>).editables } : {}),
+            ...((event as Record<string, unknown>).fontSubstitutions ? { fontSubstitutions: (event as Record<string, unknown>).fontSubstitutions } : {}),
+          });
 
           // Upload design JSON to workspace + index in workspace_files for agent read_file
           const storagePath = `${this.userId}/workspace/${designPath}`;
@@ -271,11 +240,9 @@ export class AgentDualWriter {
           // Write agent_events
           await this.insertEvent(event.type, {
             code: event.code, width: event.width, height: event.height,
-            props: event.props, animation: event.animation, snapshotId: snapId,
-            ...(Array.isArray(persistedDesign.editables) ? { editables: persistedDesign.editables } : {}),
-            ...(persistedDesign.fontSubstitutions && typeof persistedDesign.fontSubstitutions === 'object'
-              ? { fontSubstitutions: persistedDesign.fontSubstitutions }
-              : {}),
+            props: event.props, animation: event.animation,
+            fontSubstitutions: (event as Record<string, unknown>).fontSubstitutions,
+            snapshotId: snapId,
             ...(sourceDesignPath ? { sourceDesignPath } : {}),
             published: true,
           });
@@ -287,12 +254,7 @@ export class AgentDualWriter {
           await this.insertEvent(event.type, {
             code: event.code, width: event.width, height: event.height,
             props: event.props, animation: event.animation,
-            ...(Array.isArray((event as Record<string, unknown>).editables)
-              ? { editables: (event as Record<string, unknown>).editables }
-              : {}),
-            ...((event as Record<string, unknown>).fontSubstitutions
-              ? { fontSubstitutions: (event as Record<string, unknown>).fontSubstitutions }
-              : {}),
+            fontSubstitutions: (event as Record<string, unknown>).fontSubstitutions,
             published: false,
           });
 

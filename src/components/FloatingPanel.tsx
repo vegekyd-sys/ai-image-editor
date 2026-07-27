@@ -14,8 +14,7 @@ const NO_DRAG_TAGS = new Set(['BUTTON', 'INPUT', 'TEXTAREA', 'A', 'SELECT']);
 
 /**
  * Shared floating panel shell — used by AnnotationToolbar and DesignTextEditor.
- * Desktop: draggable with an external close control. Mobile: inline with a
- * floating close control that does not participate in the panel's layout.
+ * Desktop: draggable, absolute positioned. Mobile: fixed at bottom.
  * Provides: close button, drag behavior, container styling.
  */
 export default function FloatingPanel({ onClose, isDesktop, children }: FloatingPanelProps) {
@@ -61,44 +60,33 @@ export default function FloatingPanel({ onClose, isDesktop, children }: Floating
     };
   }, [isDesktop, isDragging]);
 
-  const closeButton = (
-    <button
-      data-floating-panel-close={isDesktop ? 'external' : 'internal'}
-      onClick={onClose}
-      className={`mkr-liquid-icon-button w-7 h-7 flex items-center justify-center rounded-full cursor-pointer ${
-        isDesktop ? 'mb-1.5' : 'absolute left-5 z-20'
-      }`}
-      style={{
-        position: isDesktop ? undefined : 'absolute',
-        top: isDesktop ? undefined : -18,
-        left: isDesktop ? undefined : 20,
-        zIndex: isDesktop ? undefined : 20,
-        background: 'linear-gradient(145deg, rgba(26,26,31,0.72), rgba(8,8,12,0.50))',
-        border: '0.5px solid rgba(255,255,255,0.11)',
-      }}
-      aria-label={t('editor.closePanel')}
-    >
-      <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="rgba(255,255,255,0.6)" strokeWidth="3" strokeLinecap="round">
-        <line x1="18" y1="6" x2="6" y2="18" /><line x1="6" y1="6" x2="18" y2="18" />
-      </svg>
-    </button>
-  );
-
   return (
     <div
-      className="relative px-3 pb-3 pt-1 animate-pop-in"
+      className="px-3 pb-3 pt-1 animate-pop-in"
       style={isDesktop ? {
         transform: `translate(${dragOffset.x}px, ${dragOffset.y}px)`,
         cursor: isDragging ? 'grabbing' : undefined,
       } : undefined}
       onMouseDown={handleMouseDown}
     >
-      {isDesktop && closeButton}
-      {!isDesktop && closeButton}
+      {/* × close — outside box, top-left */}
+      <button
+        onClick={onClose}
+        className="mkr-liquid-icon-button w-7 h-7 flex items-center justify-center rounded-full cursor-pointer mb-1.5"
+        style={{
+          background: 'linear-gradient(145deg, rgba(26,26,31,0.72), rgba(8,8,12,0.50))',
+          border: '0.5px solid rgba(255,255,255,0.11)',
+        }}
+        aria-label={t('editor.closePanel')}
+      >
+        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="rgba(255,255,255,0.6)" strokeWidth="3" strokeLinecap="round">
+          <line x1="18" y1="6" x2="6" y2="18" /><line x1="6" y1="6" x2="18" y2="18" />
+        </svg>
+      </button>
 
       {/* Content container */}
       <div
-        className="mkr-liquid-surface rounded-2xl relative"
+        className="mkr-liquid-surface rounded-2xl"
         style={{
           background: 'linear-gradient(145deg, rgba(26,26,31,0.72), rgba(8,8,12,0.50))',
           border: '0.5px solid rgba(255,255,255,0.11)',

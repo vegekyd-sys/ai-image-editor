@@ -31,8 +31,7 @@ import { newAnnotationId } from '@/features/annotation/annotationIds';
 import VideoResultCard from '@/components/VideoResultCard';
 import AnimateSheet from '@/components/AnimateSheet';
 import DesignEditPanel from '@/components/DesignEditPanel';
-import DesignEditorFrame from '@/components/DesignEditorFrame';
-import DesignFieldEditor from '@/components/DesignFieldEditor';
+import DesignTextEditor from '@/components/DesignTextEditor';
 import CameraPanel from '@/components/CameraPanel';
 import { useIsDesktop } from '@/hooks/useIsDesktop';
 import { useVisualViewportInset } from '@/hooks/useVisualViewportInset';
@@ -99,11 +98,7 @@ interface EditorProps {
   onSaveMessage?: (message: Message) => void;
   onUpdateTips?: (snapshotId: string, tips: Tip[]) => void;
   onUpdateDescription?: (snapshotId: string, description: string) => void;
-  onSaveDesignProps?: (
-    snapshotId: string,
-    design: DesignPayload,
-    options?: { propsOnly?: boolean; revision?: number },
-  ) => void | Promise<void>;
+  onSaveDesignProps?: (snapshotId: string, design: DesignPayload) => void;
   initialTitle?: string;
   onRenameProject?: (title: string) => void;
   onBack?: () => void;
@@ -3135,105 +3130,27 @@ Select the best 3-7 items for a compelling video. You do NOT need to use all or 
     }
   }, [onSaveSnapshot, fetchTipsForSnapshot]);
 
-  // Update a design prop (text, media, trim, move, or scale) and persist it.
+  // Update a design prop (text edit or drag position) — immediate re-render via Remotion
   const designPropsSaveTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const pendingDesignSaveRef = useRef<{
-    snapshotId: string;
-    design: DesignPayload;
-    revision: number;
-  } | null>(null);
-  const designSaveRevisionRef = useRef(0);
-  const flushPendingDesignSave = useCallback(() => {
-    if (designPropsSaveTimer.current) {
-      clearTimeout(designPropsSaveTimer.current);
-      designPropsSaveTimer.current = null;
-    }
-    const pending = pendingDesignSaveRef.current;
-    pendingDesignSaveRef.current = null;
-    if (!pending || !onSaveDesignProps) return;
-    void Promise.resolve(onSaveDesignProps(
-      pending.snapshotId,
-      pending.design,
-      { propsOnly: true, revision: pending.revision },
-    )).catch((error) => {
-      console.error('[design] prop persistence failed', error);
-    });
-  }, [onSaveDesignProps]);
-
-  useEffect(() => {
-    window.addEventListener('pagehide', flushPendingDesignSave);
-    return () => {
-      window.removeEventListener('pagehide', flushPendingDesignSave);
-      flushPendingDesignSave();
-    };
-  }, [flushPendingDesignSave]);
-
   const handleDesignPropUpdate = useCallback((key: string, value: unknown) => {
-    const snapIdx = snapFromTimeline(viewIndex, draftParentIndex);
-    if (snapIdx == null) return;
-    const current = snapshotsRef.current[snapIdx];
-    if (!current?.design) return;
-
-    const design = {
-      ...current.design,
-      props: { ...current.design.props, [key]: value },
-    };
-    const updated = snapshotsRef.current.map((snapshot, index) => (
-      index === snapIdx ? { ...snapshot, design } : snapshot
-    ));
-    snapshotsRef.current = updated;
-    setSnapshots(updated);
-
-    designSaveRevisionRef.current = Math.max(
-      Date.now(),
-      designSaveRevisionRef.current + 1,
-    );
-    pendingDesignSaveRef.current = {
-      snapshotId: current.id,
-      design,
-      revision: designSaveRevisionRef.current,
-    };
-    if (designPropsSaveTimer.current) clearTimeout(designPropsSaveTimer.current);
-    designPropsSaveTimer.current = setTimeout(flushPendingDesignSave, 500);
-  }, [viewIndex, draftParentIndex, flushPendingDesignSave]);
-
-  const designSizeSaveTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const handleDesignContentSize = useCallback((size: { width: number; height: number; source: 'editables' | 'scroll' }) => {
-    const measuredHeight = Math.ceil(size.height);
-    if (!Number.isFinite(measuredHeight) || measuredHeight <= 0) return;
-
-    const expandHeight = (design: DesignPayload): DesignPayload | null => {
-      if (design.animation) return null;
-      const nextHeight = Math.min(measuredHeight, 20000);
-      if (nextHeight <= design.height + 12) return null;
-      return { ...design, height: nextHeight };
-    };
-
-    const viewingDraftDesign = draftParentIndex !== null && viewIndex === draftParentIndex + 1;
-    if (viewingDraftDesign) {
-      setDraftDesign(prev => {
-        if (!prev) return prev;
-        const expanded = expandHeight(prev);
-        return expanded || prev;
-      });
-      return;
-    }
-
     setSnapshots(prev => {
       const snapIdx = snapFromTimeline(viewIndex, draftParentIndex);
-      if (snapIdx == null) return prev;
-      const snap = prev[snapIdx];
-      if (!snap?.design) return prev;
-      const expanded = expandHeight(snap.design);
-      if (!expanded) return prev;
-
-      const updated = prev.map((s, i) => i === snapIdx ? { ...s, design: expanded } : s);
-      if (onSaveDesignProps) {
-        if (designSizeSaveTimer.current) clearTimeout(designSizeSaveTimer.current);
-        const snapId = snap.id;
-        designSizeSaveTimer.current = setTimeout(() => {
-          console.log('[design] auto-expanded height', snap.design?.height, '→', expanded.height, `(${size.source})`);
-          onSaveDesignProps(snapId, expanded);
+      const updated = prev.map((s, i) => {
+        if (i === snapIdx && s.design) {
+          return { ...s, design: { ...s.design, props: { ...s.design.props, [key]: value } } };
+        }
+        return s;
+      });
+      // Debounced persist to workspace (500ms)
+      if (snapIdx != null) {
+        if (designPropsSaveTimer.current) clearTimeout(designPropsSaveTimer.current);
+        const capturedIdx = snapIdx;
+        designPropsSaveTimer.current = setTimeout(() => {
+          const snap = updated[capturedIdx];
+          if (snap?.design && onSaveDesignProps) {
+            console.log('[design] saving props for', snap.id);
+            onSaveDesignProps(snap.id, snap.design);
+          }
         }, 500);
       }
       return updated;
@@ -3625,8 +3542,6 @@ Select the best 3-7 items for a compelling video. You do NOT need to use all or 
             ) : (
               <ImageCanvas
                 data-testid="canvas"
-                projectId={projectId ?? undefined}
-                designSnapshotId={currentSnap?.id}
                 key={`${viewIndex}:${timeline[viewIndex] ?? ''}:${currentVideo?.videoUrl ?? ''}:${currentSnap?.videoMeta?.videoUrl ?? ''}:${annotationMode ? 'annotate' : 'browse'}`}
                 timeline={timeline}
                 currentIndex={viewIndex}
@@ -3657,7 +3572,6 @@ Select the best 3-7 items for a compelling video. You do NOT need to use all or 
                 })()}
                 onStartTextEdit={(cx, cy) => { setTextEditPos({ x: cx, y: cy }); setTextEditValue(''); }}
                 textEditing={textEditPos ? { x: textEditPos.x, y: textEditPos.y, text: textEditValue, textColor, bgColor: textBgEnabled ? '#000' : '' } : null}
-                hidePlaybackControls={Boolean(editingDesignFieldId)}
                 onAnimate={undefined}
 
 
@@ -3740,8 +3654,6 @@ Select the best 3-7 items for a compelling video. You do NOT need to use all or 
                 onUpdateProp={handleDesignPropUpdate}
                 onStartEditEditable={setEditingDesignFieldId}
                 onVisibleEditableFields={handleVisibleEditableFields}
-                onDesignContentSize={handleDesignContentSize}
-                activeTrimFieldId={editingDesignField?.type === 'video' ? editingDesignField.id : null}
               />
             )}
 
@@ -3949,22 +3861,29 @@ Select the best 3-7 items for a compelling video. You do NOT need to use all or 
           )}
 
           {/* Hidden proxy input — iOS keyboard focus anchor (must be in DOM before edit starts) */}
-          {/* Design text/video editor — floating panel (like AnnotationToolbar) */}
-          {isDesktop && editingDesignField && currentDesignSnap?.design && editingDesignField.type !== 'image' && (
-            <DesignEditorFrame
-              isDesktop={isDesktop}
-              keyboardInset={editorKbInset}
-              desktopWidth={editingDesignField.type === 'video' ? 420 : 340}
-            >
-              <DesignFieldEditor
+          {/* Design text editor — floating panel (like AnnotationToolbar) */}
+          {editingDesignField && currentDesignSnap?.design && (
+            <div style={isDesktop ? {
+              position: 'absolute',
+              bottom: 160, left: 12,
+              zIndex: 201,
+              width: 340,
+            } : {
+              position: 'fixed',
+              bottom: editorKbInset, left: 0, right: 0,
+              zIndex: 201,
+              maxWidth: 480,
+              margin: '0 auto',
+              transition: editorKbInset > 0 ? 'bottom 0.1s ease-out' : undefined,
+            }}>
+              <DesignTextEditor
                 field={editingDesignField}
-                design={currentDesignSnap.design}
-                posterImage={currentDesignSnap.image || currentDesignSnap.imageUrl || currentDisplayImage}
-                onUpdateProp={handleDesignPropUpdate}
+                value={String(currentDesignSnap.design.props?.[editingDesignField.propKey] ?? '')}
+                onChangeValue={(v) => handleDesignPropUpdate(editingDesignField.propKey, v)}
                 onClose={() => setEditingDesignFieldId(null)}
                 isDesktop={isDesktop}
               />
-            </DesignEditorFrame>
+            </div>
           )}
 
           {/* Camera rotation panel — centered in GUI area */}
@@ -4088,23 +4007,6 @@ Select the best 3-7 items for a compelling video. You do NOT need to use all or 
                     currentDuration={videoGuiDuration}
                     isDesktop={isDesktop}
                   />
-                ) : !isDesktop && editingDesignField && currentDesignSnap?.design ? (
-                  <div data-design-editor-slot="mobile-inline">
-                    <DesignEditorFrame
-                      isDesktop={false}
-                      keyboardInset={editorKbInset}
-                      desktopWidth={editingDesignField.type === 'video' ? 420 : 340}
-                    >
-                      <DesignFieldEditor
-                        field={editingDesignField}
-                        design={currentDesignSnap.design}
-                        posterImage={currentDesignSnap.image || currentDesignSnap.imageUrl || currentDisplayImage}
-                        onUpdateProp={handleDesignPropUpdate}
-                        onClose={() => setEditingDesignFieldId(null)}
-                        isDesktop={false}
-                      />
-                    </DesignEditorFrame>
-                  </div>
                 ) : isViewingDesign && currentDesignEditables.length > 0 ? (
                   <DesignEditPanel
                     editables={visibleEditableIds.length > 0
@@ -4114,7 +4016,7 @@ Select the best 3-7 items for a compelling video. You do NOT need to use all or 
                     onUpdateProp={(key, value) => handleDesignPropUpdate(key, value)}
                     selectedFieldId={selectedEditableFieldId}
                     onSelectField={setSelectedEditableFieldId}
-                    onStartEdit={(fieldId) => setEditingDesignFieldId(prev => prev === fieldId ? null : fieldId)}
+                    onStartEdit={setEditingDesignFieldId}
                     isDesktop={isDesktop}
                   />
                 ) : (

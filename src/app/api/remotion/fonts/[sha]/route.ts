@@ -15,14 +15,12 @@ export async function GET(
     const manifestUrl = resolveRemotionFontManifestUrl();
     const assetUrl = new URL(`assets/${sha}.woff2`, manifestUrl).toString();
     const response = await fetch(assetUrl, { next: { revalidate: 31536000 } });
-    if (!response.ok) {
+    if (!response.ok || !response.body) {
       return new Response('Font asset not found', { status: response.status || 404 });
     }
-    const body = await response.arrayBuffer();
-    return new Response(body, {
+    return new Response(response.body, {
       headers: {
         'Content-Type': 'font/woff2',
-        'Content-Length': String(body.byteLength),
         'Cache-Control': 'public, max-age=31536000, s-maxage=31536000, immutable',
       },
     });

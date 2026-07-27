@@ -16,12 +16,6 @@ import * as RemotionPaths from '@remotion/paths';
 import * as RemotionNoise from '@remotion/noise';
 import * as THREE from 'three';
 import { buildRemotionEvaluatorBody } from './remotion-code-normalization';
-import {
-  createEditableReactRuntime,
-  type EditableTransformMode,
-} from './editor/editable-react-runtime';
-
-export type { EditableTransformMode } from './editor/editable-react-runtime';
 
 const { Sequence, useVideoConfig } = Remotion;
 
@@ -171,10 +165,7 @@ export function pickRemotionComponentName(code: string): string {
  * Tries Sucrase first (bundled, instant). Falls back to Babel CDN if Sucrase fails.
  */
 
-export function evalRemotionJSX(
-  code: string,
-  options: { editableTransformMode?: EditableTransformMode } = {},
-): React.ComponentType<any> | null {
+export function evalRemotionJSX(code: string): React.ComponentType<any> | null {
   try {
     const src = normalizeRemotionScopeDeclarations(code);
 
@@ -195,21 +186,12 @@ export function evalRemotionJSX(
     // Prefer the primary composition function. Agent code often declares helper
     // components first (Caption, Badge, etc.) and the real composition last.
     const fnName = pickRemotionComponentName(src);
-    const editableRuntime = createEditableReactRuntime(React, Video);
-    const authoredScope = {
-      ...REMOTION_SCOPE,
-      React: editableRuntime.React,
-    };
-    const remotionNamespace = { ...Remotion, ...authoredScope };
+    const remotionNamespace = { ...Remotion, ...REMOTION_SCOPE };
     const mediaNamespace = { Audio, Video, OffthreadVideo: Video };
     const pathsNamespace = { ...RemotionPaths };
     const noiseNamespace = { ...RemotionNoise };
     const modules: Record<string, unknown> = {
-      react: {
-        ...editableRuntime.React,
-        default: editableRuntime.React,
-        __esModule: true,
-      },
+      react: { ...React, default: React, __esModule: true },
       remotion: { ...remotionNamespace, default: remotionNamespace, __esModule: true },
       '@remotion/media': { ...mediaNamespace, default: mediaNamespace, __esModule: true },
       '@remotion/paths': { ...pathsNamespace, default: pathsNamespace, __esModule: true },
@@ -228,12 +210,68 @@ export function evalRemotionJSX(
       'require',
       buildRemotionEvaluatorBody(compiled, fnName),
     );
-    const comp = factory(authoredScope, authoredModule, authoredModule.exports, localRequire);
-    return comp
-      ? editableRuntime.wrap(comp, options.editableTransformMode ?? 'proxy')
-      : null;
+    const comp = factory(REMOTION_SCOPE, authoredModule, authoredModule.exports, localRequire);
+    return comp ? wrapWithEditableTransforms(comp) : null;
   } catch (err) {
     console.error('[evalRemotionJSX] compile error:', err);
     return null;
   }
+}
+
+
+/**
+ * Module-level ref for current transform props.
+ * Updated by the HOC's render, read by the Proxy createElement.
+ */
+let _currentTransformProps: Record<string, unknown> = {};
+
+/**
+ * Patched createElement: intercepts [data-editable] elements and injects
+ * CSS independent properties (style.translate / style.scale).
+ *
+ * Unlike style.transform, these independent properties:
+ * - Do NOT appear in getComputedStyle().transform (verified: returns "none")
+ * - Do NOT interfere with Moveable coordinate calculation
+ * - Do NOT affect browser hit-testing (no ghost pointerdown)
+ * - ARE correctly read by @remotion/web-renderer (via our patch)
+ */
+const _origCE = React.createElement;
+
+const _patchedCE = function(type: any, elProps: any, ...children: any[]) {
+  if (elProps && typeof elProps === 'object' && elProps['data-editable']) {
+    const id = elProps['data-editable'] as string;
+    const pos = _currentTransformProps[`_pos_${id}`] as { x: number; y: number } | undefined;
+    const sc = _currentTransformProps[`_scale_${id}`] as { w: number; h: number } | undefined;
+    if (pos || sc) {
+      const existingStyle = (elProps.style || {}) as Record<string, unknown>;
+      elProps = { ...elProps, style: {
+        ...existingStyle,
+        ...(pos ? { translate: `${pos.x}px ${pos.y}px` } : {}),
+        ...(sc ? { scale: `${+sc.w.toFixed(4)} ${+sc.h.toFixed(4)}` } : {}),
+      }};
+    }
+  }
+  return _origCE.call(React, type, elProps, ...children);
+};
+
+const PATCHED_REACT = new Proxy(React, {
+  get(target, prop) {
+    if (prop === 'createElement') return _patchedCE;
+    return Reflect.get(target, prop);
+  }
+});
+
+REMOTION_SCOPE.React = PATCHED_REACT;
+
+/**
+ * HOC: sets _currentTransformProps before Component renders (synchronous).
+ * Agent code uses PATCHED_REACT.createElement → reads _currentTransformProps
+ * → injects style.translate/scale on [data-editable] elements.
+ */
+
+function wrapWithEditableTransforms(Component: React.ComponentType<any>): React.ComponentType<any> {
+  return function WrappedDesign(props: Record<string, unknown>) {
+    _currentTransformProps = props;
+    return _origCE.call(React, Component, props);
+  };
 }

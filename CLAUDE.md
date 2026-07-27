@@ -132,8 +132,6 @@ Tips prompt 迭代到 V42，均分 7.3。V34 历史最高 8.03，V42 是 prompt 
 
 **Remotion 渲染引擎（2026-04-09，worktree-workspace-agent 分支）**：Agent 的 `run_code` design 模式用 Remotion 渲染。静态图用 `renderStillOnWeb`（JPEG截图），动画用 `@remotion/player`（带控制条）+ poster 截图。Design JSON 持久化到 workspace `code/{snapId}.json`，刷新后恢复。MP4 导出用 `renderMediaOnWeb`（浏览器端 h264/mp4）。JSX 编译从 Sucrase 切换到 `@babel/standalone`（支持现代语法）。Satori 已移除（design 模式替代）。Agent 默认模型为 Azure Responses 上的 GPT-5.6 Terra，并可选 GPT-5.6 Sol / Luna、Grok 4.5 与 DeepSeek V4 Pro。`run_code` 新增 `image_refs` 参数让模型自选带哪些图片。所有视觉输出默认用 design 模式，sharp 只做格式转换。`video-design` skill 提供视频创作四问自检框架。
 
-**Remotion editable contract（2026-05-26）**：editable 只属于 `run_code` design 链路（`render` / `design` / 修改已有 design 的 `patch`）。普通 `generate_image`、外部 `generate_animation`、`run_code` 的 sharp/image 输出都不承担 editable 负担。长期方向是让 Agent 使用 `EditableText/Image/Video` 这类高层 primitive，由系统生成 `data-editable`、props 映射和 editables manifest；当前阶段通过 `run_code` tool description + `design-harness` 校验保证 user-facing text、primary image/video、video trim 正确声明。
-
 **Agent 视频路由（2026-05-28）**：`generate_animation` 是视频任务默认路径；文字相关视频需求（加字幕/加花字/加标题/加文案）走 `generate_animation`，让文字作为视频内容自然生成。其他视频包装/记录/剪辑类需求仍按 `agent.md` 的内容 vs 包装规则路由，不能把所有包装需求都默认改成生成路线。
 
 **Preview = Export 一致性（2026-04-19）**：用户 drag/scale editable 元素后，预览和导出必须位置一致。架构：Proxy 拦截 `React.createElement` 注入 CSS 独立属性 `style.translate`/`style.scale`（不用 `style.transform`，会干扰 Moveable）+ `@remotion/web-renderer` patch 加 `style.translate` 支持。详见 `docs/preview-export-consistency.md`。patch 通过 `patch-package` 持久化在 `patches/` 目录。**添加新的可视化编辑属性时必须同步更新 Proxy 和 DesignOverlay.applyStoredOffsets，并确认 web-renderer 兼容。**

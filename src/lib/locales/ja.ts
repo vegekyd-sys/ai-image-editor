@@ -242,9 +242,6 @@ const ja = {
   'canvas.layerEmpty': '利用できるレイヤーがありません',
   'canvas.layerDelete': 'レイヤーを削除',
   'canvas.layerResize': 'ドラッグしてサイズ変更',
-  'canvas.previewUnavailable': 'プレビューを一時的に表示できません',
-  'canvas.previewUsingPoster': 'カバー画像を表示しています。後でもう一度読み込めます',
-  'canvas.previewRetry': '再試行',
 
   // Annotation toolbar
   'annotation.placeholder': 'マークした部分をどのように編集しますか？',

@@ -4,40 +4,18 @@ import React, { useRef, useState, useEffect } from 'react';
 import { Player, type PlayerRef } from '@remotion/player';
 import { renderStillOnWeb, renderMediaOnWeb, type RenderMediaOnWebProgress } from '@remotion/web-renderer';
 import { evalRemotionJSX, preloadBabel } from '@/lib/evalRemotionJSX';
-import { EDITABLE_RUNTIME_SELECTOR } from '@/lib/editor/scene-registry';
 import type { DesignPayload } from '@/types';
 import {
   prepareAndLoadRemotionFontsWithTiming,
   type RemotionFontTiming,
 } from '@/remotion/font-catalog';
-import { useLocale } from '@/lib/i18n';
-import {
-  isRecoverableRemotionPreviewError,
-  reportRemotionPreviewError,
-  type RemotionPreviewErrorPhase,
-} from '@/lib/remotion-preview-errors';
 
 export type { DesignPayload };
 export type { RenderMediaOnWebProgress };
 
 /** Resolve HTTP image URLs in code to blob URLs (same-origin, no base64 overhead).
  *  Caller must revoke blobUrls after use. */
-type ResourceFailureReporter = (url: string, error: unknown) => void;
-
-async function fetchImageBlob(url: string): Promise<Blob> {
-  const response = await fetch(url);
-  if (!response.ok) throw new Error(`Image fetch failed: ${response.status}`);
-  const contentType = response.headers.get('content-type') || '';
-  if (!contentType.toLowerCase().startsWith('image/')) {
-    throw new Error(`Image fetch returned ${contentType || 'an unknown content type'}`);
-  }
-  return response.blob();
-}
-
-async function resolveCodeUrls(
-  code: string,
-  onFailure?: ResourceFailureReporter,
-): Promise<{ code: string; blobUrls: string[] }> {
+async function resolveCodeUrls(code: string): Promise<{ code: string; blobUrls: string[] }> {
   const urlPattern = /https?:\/\/[^\s"'`<>)}\]]+\.(jpg|jpeg|png|webp|gif)([^\s"'`<>)}\]]*)/gi;
   // Match Supabase storage URLs but exclude audio files (.mp3/.wav etc) — those are handled by resolveAudioUrls
   const storagePattern = /https?:\/\/[^\s"'`<>)}\]]*\/storage\/v1\/object\/public\/(?![^\s"'`<>)}\]]*\.(?:mp3|wav|m4a|aac|ogg|mp4|webm|mov))[^\s"'`<>)}\]]*/gi;
@@ -49,13 +27,12 @@ async function resolveCodeUrls(
   const blobUrls: string[] = [];
   await Promise.all([...urls].map(async (url) => {
     try {
-      const blob = await fetchImageBlob(url);
+      const res = await fetch(url);
+      const blob = await res.blob();
       const blobUrl = URL.createObjectURL(blob);
       blobUrls.push(blobUrl);
       while (resolved.includes(url)) resolved = resolved.replace(url, blobUrl);
-    } catch (error) {
-      onFailure?.(url, error);
-    }
+    } catch { /* skip */ }
   }));
   return { code: resolved, blobUrls };
 }
@@ -69,34 +46,27 @@ function isImageUrl(value: unknown): value is string {
     );
 }
 
-async function resolveImageUrlsInValue(
-  value: unknown,
-  blobUrls: string[],
-  cache?: Map<string, string>,
-  onFailure?: ResourceFailureReporter,
-): Promise<unknown> {
+async function resolveImageUrlsInValue(value: unknown, blobUrls: string[]): Promise<unknown> {
   if (isImageUrl(value)) {
     try {
-      const cached = cache?.get(value);
-      if (cached) return cached;
-      const blob = await fetchImageBlob(value);
+      const res = await fetch(value);
+      if (!res.ok) throw new Error(`Image fetch failed: ${res.status}`);
+      const blob = await res.blob();
       const blobUrl = URL.createObjectURL(blob);
       blobUrls.push(blobUrl);
-      cache?.set(value, blobUrl);
       return blobUrl;
-    } catch (error) {
-      onFailure?.(value, error);
+    } catch {
       return value;
     }
   }
   if (Array.isArray(value)) {
-    return Promise.all(value.map(item => resolveImageUrlsInValue(item, blobUrls, cache, onFailure)));
+    return Promise.all(value.map(item => resolveImageUrlsInValue(item, blobUrls)));
   }
   if (value && typeof value === 'object') {
     const entries = await Promise.all(
       Object.entries(value as Record<string, unknown>).map(async ([key, child]) => [
         key,
-        await resolveImageUrlsInValue(child, blobUrls, cache, onFailure),
+        await resolveImageUrlsInValue(child, blobUrls),
       ] as const),
     );
     return Object.fromEntries(entries);
@@ -114,9 +84,7 @@ async function resolveDesignImageUrls(
   return { code: resolvedCode, props, blobUrls: [...codeBlobUrls, ...propBlobUrls] };
 }
 
-// The query revision prevents previously cached host-bound manifests from
-// sending LAN clients back to localhost.
-const BROWSER_FONT_MANIFEST_URL = '/api/remotion/fonts?browser-manifest=relative-v1';
+const BROWSER_FONT_MANIFEST_URL = '/api/remotion/fonts';
 
 export interface BrowserRemotionFontTiming {
   source: 'player' | 'poster' | 'preview-frame' | 'web-export';
@@ -146,35 +114,16 @@ async function compileBrowserDesign(
     substitutions: design.fontSubstitutions,
   });
   recordBrowserFontTiming({ source, recordedAt: new Date().toISOString(), timing });
-  const Component = evalRemotionJSX(prepared.code, {
-    editableTransformMode: 'proxy',
-  });
+  const Component = evalRemotionJSX(prepared.code);
   if (!Component) throw new Error('Failed to compile design code');
 
-  return wrapBrowserDesign(Component, prepared.defaultFontFamily);
-}
-
-function wrapBrowserDesign(
-  Component: React.ComponentType<Record<string, unknown>>,
-  fontFamily: string,
-): React.ComponentType<Record<string, unknown>> {
-  return function BrowserDesign(componentProps: Record<string, unknown>) {
+  return function FontPinnedDesign(componentProps: Record<string, unknown>) {
     return React.createElement(
       'div',
-      { style: { width: '100%', height: '100%', fontFamily } },
+      { style: { width: '100%', height: '100%', fontFamily: prepared.defaultFontFamily } },
       React.createElement(Component, componentProps),
     );
   };
-}
-
-function compileBrowserDesignWithoutPinnedFonts(
-  code: string,
-): React.ComponentType<Record<string, unknown>> {
-  const Component = evalRemotionJSX(code, {
-    editableTransformMode: 'proxy',
-  });
-  if (!Component) throw new Error('Failed to compile design code');
-  return wrapBrowserDesign(Component, 'system-ui, sans-serif');
 }
 
 // ─── Standalone poster capture (no DOM needed) ─────────────────────────────
@@ -272,25 +221,8 @@ export async function captureDesignFrame(design: DesignPayload, frame: number): 
 
 // ─── Error Boundary (prevents design crash from taking down the whole page) ──
 
-function PreviewPlayerErrorFallback({
-  error,
-  fallback,
-  onError,
-}: {
-  error: Error;
-  fallback: React.ReactNode;
-  onError: (error: Error) => void;
-}) {
-  const onErrorRef = useRef(onError);
-  onErrorRef.current = onError;
-  useEffect(() => {
-    onErrorRef.current(error);
-  }, [error]);
-  return fallback;
-}
-
 class DesignErrorBoundary extends React.Component<
-  { children: React.ReactNode; fallback: React.ReactNode; onError?: (msg: string) => void },
+  { children: React.ReactNode; onError?: (msg: string) => void },
   { error: Error | null }
 > {
   state: { error: Error | null } = { error: null };
@@ -300,7 +232,13 @@ class DesignErrorBoundary extends React.Component<
     this.props.onError?.(error.message);
   }
   render() {
-    if (this.state.error) return this.props.fallback;
+    if (this.state.error) {
+      return (
+        <div style={{ padding: 16, color: '#f87171', fontFamily: 'monospace', fontSize: 12, background: 'rgba(248,113,113,0.1)', borderRadius: 12 }}>
+          Design crashed: {this.state.error.message}
+        </div>
+      );
+    }
     return this.props.children;
   }
 }
@@ -316,56 +254,16 @@ interface RemotionRendererProps {
   onLoading?: (loading: boolean) => void;
   onContainerRef?: (el: HTMLDivElement | null) => void;
   onPlayerRef?: (ref: PlayerRef | null) => void;
-  onContentSize?: (size: { width: number; height: number; source: 'editables' | 'scroll' }) => void;
-  projectId?: string;
-  snapshotId?: string;
 }
 
-export default function RemotionRenderer({
-  design,
-  onError,
-  mode = 'inline',
-  hideControls,
-  posterImage,
-  onLoading,
-  onContainerRef,
-  onPlayerRef,
-  onContentSize,
-  projectId,
-  snapshotId,
-}: RemotionRendererProps) {
-  const { t } = useLocale();
+export default function RemotionRenderer({ design, onError, mode = 'inline', hideControls, posterImage, onLoading, onContainerRef, onPlayerRef }: RemotionRendererProps) {
   const playerRef = useRef<PlayerRef>(null);
   const wrapperRef = useRef<HTMLDivElement>(null);
   const onPlayerRefRef = useRef(onPlayerRef);
-  const onErrorRef = useRef(onError);
-  const reportContextRef = useRef({ projectId, snapshotId });
-  const designPropsRef = useRef(design.props || {});
-  const inputPropImageCacheRef = useRef(new Map<string, string>());
-  onErrorRef.current = onError;
-  reportContextRef.current = { projectId, snapshotId };
-  designPropsRef.current = design.props || {};
 
   const [Component, setComponent] = useState<React.ComponentType<any> | null>(null);
-  const [inputProps, setInputProps] = useState<Record<string, unknown>>(design.props || {});
+  const [inputProps, setInputProps] = useState<Record<string, unknown>>({});
   const [compileError, setCompileError] = useState<string | null>(null);
-  const [retryToken, setRetryToken] = useState(0);
-
-  const reportPreviewFailureRef = useRef((
-    phase: RemotionPreviewErrorPhase,
-    error: unknown,
-    options: { recovered: boolean; resourceUrl?: string },
-  ) => {
-    const message = error instanceof Error ? error.message : String(error);
-    onErrorRef.current?.(message);
-    reportRemotionPreviewError({
-      ...reportContextRef.current,
-      phase,
-      error,
-      recovered: options.recovered,
-      resourceUrl: options.resourceUrl,
-    });
-  });
 
   const isStill = !design.animation;
   const fps = design.animation?.fps || 30;
@@ -380,34 +278,21 @@ export default function RemotionRenderer({
       try {
         await preloadBabel().catch(() => {});
         const videoResolved = resolvePreviewVideoUrls(design.code);
-        const { code: resolvedCode, blobUrls: imageBlobUrls } = await resolveCodeUrls(
-          videoResolved,
-          (resourceUrl, error) => reportPreviewFailureRef.current(
-            'image-fetch',
-            error,
-            { recovered: true, resourceUrl },
-          ),
-        );
+        const { code: resolvedCode, props: resolvedProps, blobUrls: imageBlobUrls } = await resolveDesignImageUrls(design, videoResolved);
         blobUrls.push(...imageBlobUrls);
         if (cancelled) { blobUrls.forEach(url => URL.revokeObjectURL(url)); return; }
-        let comp: React.ComponentType<Record<string, unknown>>;
-        try {
-          comp = await compileBrowserDesign(design, resolvedCode, designPropsRef.current, 'player');
-        } catch (error) {
-          if (!isRecoverableRemotionPreviewError(error)) throw error;
-          reportPreviewFailureRef.current('font-load', error, { recovered: true });
-          comp = compileBrowserDesignWithoutPinnedFonts(resolvedCode);
-        }
+        const comp = await compileBrowserDesign(design, resolvedCode, resolvedProps, 'player');
         if (cancelled) { blobUrls.forEach(url => URL.revokeObjectURL(url)); return; }
         setCompileError(null);
         setComponent(() => comp);
+        setInputProps(resolvedProps);
         onLoading?.(false);
       } catch (e) {
         if (cancelled) return;
         const msg = e instanceof Error ? e.message : String(e);
         console.error('[RemotionRenderer] init failed:', msg);
         setCompileError(msg);
-        reportPreviewFailureRef.current('player-init', e, { recovered: false });
+        onError?.(msg);
         onLoading?.(false);
       }
     })();
@@ -416,46 +301,7 @@ export default function RemotionRenderer({
       blobUrls.forEach(url => URL.revokeObjectURL(url));
     };
 
-  }, [design.code, design.fontSubstitutions, retryToken]);
-
-  // Editable text/media/transform changes should update Player input props
-  // without recompiling the composition, fonts, and code.
-  useEffect(() => {
-    let cancelled = false;
-    const newBlobUrls: string[] = [];
-    const discardNewBlobUrls = () => {
-      const discarded = new Set(newBlobUrls);
-      inputPropImageCacheRef.current.forEach((blobUrl, sourceUrl) => {
-        if (discarded.has(blobUrl)) inputPropImageCacheRef.current.delete(sourceUrl);
-      });
-      newBlobUrls.forEach(url => URL.revokeObjectURL(url));
-    };
-    (async () => {
-      const resolved = await resolveImageUrlsInValue(
-        design.props || {},
-        newBlobUrls,
-        inputPropImageCacheRef.current,
-        (resourceUrl, error) => reportPreviewFailureRef.current(
-          'image-fetch',
-          error,
-          { recovered: true, resourceUrl },
-        ),
-      ) as Record<string, unknown>;
-      if (cancelled) {
-        discardNewBlobUrls();
-        return;
-      }
-      setInputProps(resolved);
-    })();
-    return () => {
-      cancelled = true;
-    };
-  }, [design.props]);
-
-  useEffect(() => () => {
-    inputPropImageCacheRef.current.forEach(url => URL.revokeObjectURL(url));
-    inputPropImageCacheRef.current.clear();
-  }, []);
+  }, [design.code, design.fontSubstitutions, design.props]);
 
   // Expose container and player refs to parent
   useEffect(() => {
@@ -476,61 +322,6 @@ export default function RemotionRenderer({
     };
   }, [Component]);
 
-  // Static long designs are easy for the Agent to under-size. Measure the
-  // rendered editable layer in the browser and let the parent expand height.
-  useEffect(() => {
-    if (!Component || design.animation || !onContentSize) return;
-    let cancelled = false;
-    let timeoutId: ReturnType<typeof setTimeout> | null = null;
-    let raf1 = 0;
-    let raf2 = 0;
-
-    const measure = () => {
-      if (cancelled) return;
-      const wrapper = wrapperRef.current;
-      if (!wrapper) return;
-      const wrapperRect = wrapper.getBoundingClientRect();
-      const scale = wrapperRect.width > 0 ? wrapperRect.width / design.width : 1;
-      if (!Number.isFinite(scale) || scale <= 0) return;
-
-      let maxBottom = 0;
-      let maxRight = 0;
-      const editables = wrapper.querySelectorAll<HTMLElement>(EDITABLE_RUNTIME_SELECTOR);
-      editables.forEach((el) => {
-        const rect = el.getBoundingClientRect();
-        if (rect.width <= 0 && rect.height <= 0) return;
-        maxBottom = Math.max(maxBottom, (rect.bottom - wrapperRect.top) / scale);
-        maxRight = Math.max(maxRight, (rect.right - wrapperRect.left) / scale);
-      });
-
-      const scrollHeight = wrapper.scrollHeight / scale;
-      const scrollWidth = wrapper.scrollWidth / scale;
-      const measuredHeight = Math.ceil(Math.max(maxBottom, scrollHeight, design.height));
-      const measuredWidth = Math.ceil(Math.max(maxRight, scrollWidth, design.width));
-      const source = maxBottom > scrollHeight ? 'editables' : 'scroll';
-      onContentSize({ width: measuredWidth, height: measuredHeight, source });
-    };
-
-    raf1 = requestAnimationFrame(() => {
-      raf2 = requestAnimationFrame(measure);
-    });
-    timeoutId = setTimeout(measure, 300);
-
-    let observer: ResizeObserver | null = null;
-    if (typeof ResizeObserver !== 'undefined' && wrapperRef.current) {
-      observer = new ResizeObserver(measure);
-      observer.observe(wrapperRef.current);
-    }
-
-    return () => {
-      cancelled = true;
-      cancelAnimationFrame(raf1);
-      cancelAnimationFrame(raf2);
-      if (timeoutId) clearTimeout(timeoutId);
-      observer?.disconnect();
-    };
-  }, [Component, design.animation, design.code, design.height, design.props, design.width, onContentSize]);
-
   // Pause Remotion Player when a MusicCard starts playing
   useEffect(() => {
     const handler = () => { playerRef.current?.pause(); };
@@ -538,37 +329,12 @@ export default function RemotionRenderer({
     return () => document.removeEventListener('music-play', handler);
   }, []);
 
-  const previewFallback = (
-    <div className="relative flex h-full min-h-[180px] w-full items-center justify-center overflow-hidden bg-black">
-      {posterImage && (
-        <img
-          src={posterImage}
-          alt=""
-          className="absolute inset-0 h-full w-full object-contain"
-        />
-      )}
-      <div className="absolute inset-x-0 bottom-0 flex items-center justify-between gap-3 bg-black/80 px-4 py-3 backdrop-blur-sm">
-        <div className="min-w-0">
-          <div className="text-sm font-medium text-white">{t('canvas.previewUnavailable')}</div>
-          <div className="mt-0.5 text-xs text-white/50">{t('canvas.previewUsingPoster')}</div>
-        </div>
-        <button
-          type="button"
-          onClick={() => {
-            setCompileError(null);
-            setComponent(null);
-            setRetryToken(token => token + 1);
-          }}
-          className="shrink-0 rounded-lg border border-white/15 bg-white/10 px-3 py-2 text-xs font-medium text-white transition-colors hover:bg-white/15"
-        >
-          {t('canvas.previewRetry')}
-        </button>
-      </div>
-    </div>
-  );
-
   if (compileError) {
-    return previewFallback;
+    return (
+      <div style={{ padding: 16, color: '#f87171', fontFamily: 'monospace', fontSize: 12, background: 'rgba(248,113,113,0.1)', borderRadius: 12 }}>
+        Design error: {compileError}
+      </div>
+    );
   }
 
   if (!Component) return null;
@@ -576,13 +342,7 @@ export default function RemotionRenderer({
   const isFill = mode === 'fill';
 
   return (
-    <DesignErrorBoundary
-      key={retryToken}
-      fallback={previewFallback}
-      onError={(message) => {
-        reportPreviewFailureRef.current('player-runtime', message, { recovered: false });
-      }}
-    >
+    <DesignErrorBoundary onError={onError}>
       <div ref={wrapperRef} style={isFill ? { width: '100%', height: '100%' } : {
         borderRadius: 12, overflow: 'hidden', margin: '8px 0',
       }}>
@@ -611,13 +371,9 @@ export default function RemotionRenderer({
           posterFillMode="player-size"
           bufferStateDelayInMilliseconds={0}
           errorFallback={({ error }) => (
-            <PreviewPlayerErrorFallback
-              error={error}
-              fallback={previewFallback}
-              onError={(playerError) => {
-                reportPreviewFailureRef.current('player-runtime', playerError, { recovered: false });
-              }}
-            />
+            <div style={{ padding: 16, color: '#f87171', fontFamily: 'monospace', fontSize: 12, background: 'rgba(248,113,113,0.1)', borderRadius: 12 }}>
+              Render error: {error.message}
+            </div>
           )}
         />
       </div>
@@ -763,6 +519,8 @@ export async function exportDesignVideo(
       inputProps: resolvedProps,
       videoCodec: 'h264', container: 'mp4',
       scale: 2,
+      // Skip first/last 3 frames (~100ms each) to avoid black frames from fade-in/out animations
+      frameRange: durationInFrames > 6 ? [3, durationInFrames - 3] : null,
       onProgress: onProgress || null,
       delayRenderTimeoutInMilliseconds: 30000,
     });
