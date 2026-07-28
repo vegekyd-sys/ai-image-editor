@@ -17,7 +17,7 @@ export interface AgentStreamCallbacks {
   onCaptureFrame?: (frame: number, uploadPath: string, captureId: string) => void;
   onPreviewFrame?: (workspaceUrl: string) => void;
   onNsfwDetected?: () => void;
-  onRunId?: (runId: string) => void;
+  onRunId?: (runId: string | null) => void;
   onMessageId?: (messageId: string) => void;
   onClearRunMessages?: (messageIds: string[]) => void;
   onReasoningStart?: () => void;
@@ -130,7 +130,6 @@ async function streamDurableAgent(
       audioAttachments: body.audioAttachments,
       clientPersistedUserMessage: true,
     }),
-    signal,
   });
   if (!response.ok) {
     if (response.status === 402) {
@@ -145,14 +144,25 @@ async function streamDurableAgent(
   callbacks.onRunId?.(started.runId);
   if (started.firstMessageId) callbacks.onMessageId?.(started.firstMessageId);
 
-  const abortRun = () => {
-    void fetch('/api/agent/abort', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ runId: started.runId }),
-    });
+  const abortRun = async () => {
+    try {
+      await fetch('/api/agent/abort', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ runId: started.runId }),
+      });
+    } finally {
+      callbacks.onRunId?.(null);
+    }
   };
-  signal?.addEventListener('abort', abortRun, { once: true });
+  const handleAbort = () => {
+    void abortRun();
+  };
+  if (signal?.aborted) {
+    await abortRun();
+    return;
+  }
+  signal?.addEventListener('abort', handleAbort, { once: true });
 
   let lastSeq = -1;
   let firstMessageSeen = false;
@@ -201,7 +211,7 @@ async function streamDurableAgent(
       await new Promise(resolve => setTimeout(resolve, Math.min(run.next_poll_after_ms || 1200, 3000)));
     }
   } finally {
-    signal?.removeEventListener('abort', abortRun);
+    signal?.removeEventListener('abort', handleAbort);
   }
 }
 

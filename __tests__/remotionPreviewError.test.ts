@@ -21,4 +21,30 @@ describe('Remotion preview decoder failures', () => {
       error: 'Failed to capture frame 30: Font load timeout',
     });
   });
+
+  it('classifies Sandbox deployment failures without blaming generated media', () => {
+    const failure = remotionPreviewFailure(
+      'Status code 403 is not ok',
+      'Failed to capture contact sheet',
+    );
+
+    expect(failure).toMatchObject({
+      code: 'remotion_preview_infrastructure',
+    });
+    expect(failure.error).toContain('Preview service is temporarily unavailable');
+    expect(failure.error).toContain('Preserve the current composition and generated assets');
+    expect(failure.error).not.toContain('image URL');
+    expect(failure.diagnostic).toBe('Failed to capture contact sheet: Status code 403 is not ok');
+  });
+
+  it('classifies a missing Remotion snapshot as deployment infrastructure', () => {
+    expect(
+      remotionPreviewFailure(
+        'Snapshot not found.',
+        'Failed to capture frame 0',
+      ),
+    ).toMatchObject({
+      code: 'remotion_preview_infrastructure',
+    });
+  });
 });

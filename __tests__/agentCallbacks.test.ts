@@ -110,6 +110,26 @@ describe('makeAgentCallbacks', () => {
     });
   });
 
+  describe('terminal run cleanup', () => {
+    it('clears the active run id when the run completes', () => {
+      ctx.agentRunIdRef.current = 'run-complete';
+      const { callbacks } = makeAgentCallbacks(ctx);
+
+      callbacks.onDone?.();
+
+      expect(ctx.agentRunIdRef.current).toBeNull();
+    });
+
+    it('clears the active run id when the run fails or is aborted', () => {
+      ctx.agentRunIdRef.current = 'run-failed';
+      const { callbacks } = makeAgentCallbacks(ctx);
+
+      callbacks.onError?.('Agent run aborted');
+
+      expect(ctx.agentRunIdRef.current).toBeNull();
+    });
+  });
+
   describe('onImage', () => {
     it('creates snapshot with server IDs', () => {
       let snapshots: { id: string; image: string; messageId: string }[] = [];

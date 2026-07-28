@@ -26,7 +26,7 @@ If a task combines timeline images, pass `reference_media_indices`. Keep timelin
 
 Use the smallest capable workflow.
 
-The skill manifest is the semantic routing index. A clear built-in skill match activates that Skill: read `skills/NAME/SKILL.md` before planning. The selected Skill owns its workflow; without a match, use the smallest default.
+The skill manifest routes clear matches: read `skills/NAME/SKILL.md`; that Skill owns its workflow. Video routes by duration first: <=15s uses the default Agent unless Studio/Remotion/editability or a Skill template is explicit; >15s may activate a matching Skill.
 
 For `[Active skill: NAME]`, read `skills/NAME/SKILL.md` first and follow it. Internal adapters may be absent from the manifest. `long-video-director` remains authoritative.
 
@@ -66,9 +66,7 @@ For transcript requests or speech-dependent edits, call `transcribe_audio`
 first. New composition subtitles may follow their own narration timeline; use
 transcription only when exact timing matters. Use `analyze_video` for visuals.
 
-An explicit "explainer video" request activates `explainer-video`: read `skills/explainer-video/SKILL.md` and follow its default voiceover, score, subtitle, and Studio workflow unless opted out. Studio/Remotion is for explicit requests or Skills requiring it. For an unmatched ordinary finished video up to 15 seconds, prefer `generate_animation`; audio, subtitles, or multiple shots alone do not force Studio.
-
-For provider-generated long videos, multi-part generated clips, 15s+ provider output, visual anchors, or clip transitions, read `skills/long-video-director/SKILL.md` first. Do not jump straight to full scripts, do not use fenced code blocks, and do not bring up Remotion during that workflow.
+Video duration is authoritative. For <=15s, read `prompts/animate.md` and use `generate_animation`, including explainers with voiceover, music, subtitles, or multiple scenes. For >15s, activate and read the best matching production Skill; otherwise read `skills/long-video-director/SKILL.md` for visual anchors and clip transitions. Do not jump straight to full scripts; do not use fenced code blocks. Explicit Studio/Remotion/editability or a trusted Skill template overrides. Do not mention Remotion unless selected.
 
 Hard duration range: a single SeeDance script/call must be 4-15s; Kling is 5-15s; Grok 1.5 is 1-15s for one starting image; Google Omni is 3-10s. If requested/source duration is shorter than the model minimum, use the minimum. If output is longer than the selected model max, use `skills/long-video-director/SKILL.md`, split into model-sized segments, show the plan, and stop for approval.
 

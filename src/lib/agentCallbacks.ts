@@ -554,6 +554,7 @@ export function makeAgentCallbacks(ctx: AgentCallbackContext) {
         }
       }
 
+      ctx.agentRunIdRef.current = null;
       ctx.onCleanup?.();
     },
 
@@ -565,6 +566,7 @@ export function makeAgentCallbacks(ctx: AgentCallbackContext) {
           m.id === id ? { ...m, content: m.content || msg || ctx.t('editor.errorRetry') } : m,
         ));
       }
+      ctx.agentRunIdRef.current = null;
       ctx.onCleanup?.();
     },
 

@@ -1561,7 +1561,7 @@ Hard constraints:
 - To EDIT a video: reference it with \`<<<media_N>>>\` and describe the changes. The selected model must support reference videos.
 - To use CLI/app imported reference music/audio for pacing or beat sync, mention its Audio Index marker in \`story_prompt\` (for example \`<<<audio_1>>>\`) AND pass \`audio_refs\` like ["audio_1"]. Audio refs are NOT Timeline Media Index refs. Reference audio is only supported by SeeDance/SeeDance Fast/SeeDance Mini.
 - Works for Kling, SeeDance, SeeDance Mini, and Grok, but respect capability limits and tool errors.
-- Single-call total duration: SeeDance/SeeDance Mini is 4-15 seconds (4s minimum output, 5s default/common preset); Kling is 5-15 seconds; Grok 1.5 is 1-15 seconds for one starting image; Google Omni is 3-10 seconds. If the user asks for anything shorter than the selected model's minimum, or referenced source videos total less than that minimum, write a compact script at the model minimum and set duration to that minimum. For a provider-generated 30s, 60s, 1-2 minute, or otherwise over-limit video, do not call this tool with one long script; use \`skills/long-video-director/SKILL.md\` and split into self-contained segments. This provider limit does not override an explicitly requested Studio Run, Remotion, editable Composition, or an active built-in skill whose contract requires Composition.
+- Single-call total duration: SeeDance/SeeDance Mini is 4-15 seconds (4s minimum output, 5s default/common preset); Kling is 5-15 seconds; Grok 1.5 is 1-15 seconds for one starting image; Google Omni is 3-10 seconds. If the user asks for anything shorter than the selected model's minimum, or referenced source videos total less than that minimum, write a compact script at the model minimum and set duration to that minimum. For a provider-generated 30s, 60s, 1-2 minute, or otherwise over-limit video, do not call this tool with one long script; use the selected long-video Skill and split into self-contained segments. This provider limit does not override an explicitly requested Studio Run, Remotion, editable Composition, a trusted Skill template launch, or a video longer than 15 seconds whose selected Skill requires Composition.
 - If a complete script totals 15 seconds or less, submit it as one video generation call. Put the whole title, every \`Shot N (Xs):\` line, and the \`Style:\` line into the same \`story_prompt\`; set \`duration\` to the total script duration when known. Do not submit only one shot, the first shot, or one line from the script.
 - If the source video may exceed model limits, call \`read_file('skills/video-ffmpeg-lab/SKILL.md')\` and split it once with \`run_code({ runtime: "node" })\` before submitting generation.
 - Total duration must fit the selected model's capability. Do not shrink a long source to 5s just to bypass a limit; split first.
@@ -2523,7 +2523,7 @@ Call this during the Studio Assets stage after reading skills/_shared/visual-ass
 
     studio_run: tool({
       description: `Create and advance a Studio workflow invocation inside the current Agent Run for multi-stage video production.
-Use this only when an active skill requires the Studio workflow or the user explicitly requests Studio, Remotion, an editable composition/timeline, or precise programmatic compositing. Do not use \`studio_run\` for an unmatched ordinary short finished-video request merely because it includes multiple scenes, voiceover, music, or subtitles.
+Use this only when the user explicitly requests Studio, Remotion, an editable composition/timeline, precise programmatic compositing, launches a trusted Skill template, or requests a video longer than 15 seconds whose selected Skill requires Studio. A video up to and including 15 seconds stays on direct \`generate_animation\` even when it is an explainer or includes multiple scenes, voiceover, music, or subtitles.
 The workflow persists typed artifacts in the existing project workspace and enforces dependencies, approval policy, resume state, and downstream invalidation. It is not a separate model-facing run and cannot be adopted by another Agent Run.
 Operations:
 - start: create the run before producing the creative packet. By default it returns only run state, keeping later stage schemas out of the model context. Set include_stage_schemas=true only for legacy/manual authoring.
@@ -2610,7 +2610,7 @@ Review means previewing and patching the Remotion source before export, not auth
           }
           const runAtOperationStart = run;
 
-          const loadStudioArtifact = async (artifactStage: 'script' | 'storyboard' | 'composition'): Promise<unknown> => {
+          const loadStudioArtifact = async (artifactStage: 'script' | 'storyboard' | 'assets' | 'composition'): Promise<unknown> => {
             const ref = runAtOperationStart.artifacts[artifactStage];
             if (!ref) throw new Error(`Composition subtitle sync requires the persisted ${artifactStage} artifact.`);
             const file = await workspace.readFile(ref.path, ctx.supabase, ctx.userId);
@@ -2650,7 +2650,7 @@ Review means previewing and patching the Remotion source before export, not auth
           };
           const assertCompositionSubmissionReady = async (
             candidate: unknown,
-            overrides: { script?: unknown; storyboard?: unknown } = {},
+            overrides: { script?: unknown; storyboard?: unknown; assets?: unknown } = {},
           ): Promise<void> => {
             const diagnostics: string[] = [];
             try {
@@ -2671,9 +2671,32 @@ Review means previewing and patching the Remotion source before export, not auth
                   const design = JSON.parse(file.content) as Record<string, unknown>;
                   if (design.__makaronScaffold === true) {
                     diagnostics.push('Composition is still the structural scaffold. Continue the numbered source workspace until write_file reports compositionWorkspace.status="ready".');
+                  } else {
+                    const composition = studio.validateStudioArtifact('composition', candidate) as Record<string, any>;
+                    const storyboard = studio.validateStudioArtifact(
+                      'storyboard',
+                      overrides.storyboard ?? await loadStudioArtifact('storyboard'),
+                    ) as Record<string, any>;
+                    const assets = studio.validateStudioArtifact(
+                      'assets',
+                      overrides.assets ?? await loadStudioArtifact('assets'),
+                    ) as Record<string, any>;
+                    studio.assertCompositionConsumesVisualAssets({
+                      storyboard: storyboard as any,
+                      manifest: assets as any,
+                      composition: composition as any,
+                      design,
+                      mediaUrls: ctx.snapshotImages,
+                    });
                   }
-                } catch {
-                  diagnostics.push(`Composition design at ${designPath} is not valid JSON.`);
+                } catch (error) {
+                  diagnostics.push(
+                    error instanceof SyntaxError
+                      ? `Composition design at ${designPath} is not valid JSON.`
+                      : error instanceof Error
+                        ? error.message
+                        : String(error),
+                  );
                 }
               }
             }
@@ -2813,6 +2836,7 @@ Review means previewing and patching the Remotion source before export, not auth
               await assertCompositionSubmissionReady(compositionItem.artifact, {
                 script: artifacts.find(item => item.stage === 'script')?.artifact,
                 storyboard: artifacts.find(item => item.stage === 'storyboard')?.artifact,
+                assets: artifacts.find(item => item.stage === 'assets')?.artifact,
               });
             }
             const assetsItem = artifacts.find(item => item.stage === 'assets');
@@ -2994,6 +3018,28 @@ The same Agent Run and design_path resolve to the same Snapshot ID, so a retry o
                 error: `publish_draft design_path must match the persisted Studio Composition. Expected ${String(compositionArtifact.designPath || '')}, received ${design_path}.`,
               };
             }
+            const storyboardRef = activeRun.artifacts.storyboard;
+            const assetsRef = activeRun.artifacts.assets;
+            if (!storyboardRef || !assetsRef) {
+              return { success: false, error: 'Studio draft promotion requires persisted Storyboard and Assets artifacts.' };
+            }
+            const [storyboardFile, assetsFile] = await Promise.all([
+              workspace.readFile(storyboardRef.path, ctx.supabase, ctx.userId),
+              workspace.readFile(assetsRef.path, ctx.supabase, ctx.userId),
+            ]);
+            if (!storyboardFile || !assetsFile) {
+              return { success: false, error: 'Studio draft promotion could not read the persisted Storyboard or Assets artifact.' };
+            }
+            const storyboard = studio.validateStudioArtifact('storyboard', JSON.parse(storyboardFile.content));
+            const assets = studio.validateStudioArtifact('assets', JSON.parse(assetsFile.content));
+            const composition = studio.validateStudioArtifact('composition', compositionArtifact);
+            studio.assertCompositionConsumesVisualAssets({
+              storyboard: storyboard as any,
+              manifest: assets as any,
+              composition: composition as any,
+              design: rawDesign,
+              mediaUrls: ctx.snapshotImages,
+            });
           }
 
           const snapshotId = stableDraftPromotionSnapshotId({

@@ -70,6 +70,7 @@ describe('Remotion export worker contract', () => {
   it('renders MP4s server-side and records workspace output', () => {
     const server = read('src/lib/remotion-server.ts')
     const exporter = read('src/lib/remotion-export.ts')
+    const nextConfig = read('next.config.ts')
 
     expect(server).toContain('renderMediaOnVercel')
     expect(server).toContain('export async function renderDesignVideo')
@@ -144,6 +145,7 @@ describe('Remotion export worker contract', () => {
     expect(read('src/remotion/DynamicDesign.tsx')).toContain('props: propsObj')
     expect(read('src/lib/remotion-lambda-renderer.ts')).toContain('fontTelemetry')
     expect(read('scripts/remotion-lambda-provision.ts')).toContain("publicDir: path.resolve(process.cwd(), 'public')")
+    expect(nextConfig).toContain("'@remotion/lambda-client'")
   })
 
   it('exposes API and CLI entrypoints for composition export', () => {

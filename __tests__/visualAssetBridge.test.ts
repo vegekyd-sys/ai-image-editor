@@ -4,6 +4,7 @@ import sharp from 'sharp';
 import { describe, expect, it, vi } from 'vitest';
 import { studioArtifactSchemas } from '../src/lib/studio-run/contracts';
 import {
+  assertCompositionConsumesVisualAssets,
   assertPersistedVisualAssetBridgeEvidence,
   assertVisualAssetBridgeEvidence,
 } from '../src/lib/studio-run/visual-asset-evidence';
@@ -118,6 +119,76 @@ async function detailedMatchingEdgeFrame(edgeColor: string): Promise<Buffer> {
 }
 
 describe('Visual Asset Bridge', () => {
+  it('blocks a Studio Composition that drops ready hero plates from the Storyboard', () => {
+    const storyboard = {
+      scenes: [
+        { id: 'scene-input', assetIds: ['chip'], visualPlan: { carrier: 'plate' as const } },
+        { id: 'scene-compute', assetIds: ['network'], visualPlan: { carrier: 'plate' as const } },
+        { id: 'scene-output', assetIds: ['output'], visualPlan: { carrier: 'plate' as const } },
+      ],
+    };
+    const manifest = {
+      assets: [
+        { id: 'chip', type: 'image' as const, path: '<<<media_1>>>', sceneIds: ['scene-input'], status: 'ready' as const, role: 'hero' as const },
+        { id: 'network', type: 'image' as const, path: '<<<media_2>>>', sceneIds: ['scene-compute'], status: 'ready' as const, role: 'hero' as const },
+        { id: 'output', type: 'image' as const, path: '<<<media_3>>>', sceneIds: ['scene-output'], status: 'ready' as const, role: 'hero' as const },
+        { id: 'score', type: 'audio' as const, path: 'score.wav', sceneIds: ['scene-input'], status: 'ready' as const, role: 'support' as const },
+      ],
+    };
+
+    expect(() => assertCompositionConsumesVisualAssets({
+      storyboard,
+      manifest,
+      composition: { mode: 'editable', sceneIds: ['scene-input', 'scene-compute', 'scene-output'] },
+      design: {
+        code: 'function Composition(props){return <AbsoluteFill><Audio src={props.score}/></AbsoluteFill>}',
+        props: { score: 'score.wav', title: 'AI inference' },
+        editables: [{ id: 'title', type: 'text', propKey: 'title' }],
+      },
+      mediaUrls: ['https://cdn.test/chip.jpg', 'https://cdn.test/network.jpg', 'https://cdn.test/output.jpg'],
+    })).toThrow(/chip.*absent[\s\S]*network.*absent[\s\S]*output.*absent[\s\S]*do not regenerate/);
+  });
+
+  it('accepts rendered hero plates only when editable mode exposes each media prop', () => {
+    const storyboard = {
+      scenes: [{ id: 'scene-input', assetIds: ['chip'], visualPlan: { carrier: 'plate' as const } }],
+    };
+    const manifest = {
+      assets: [{
+        id: 'chip',
+        type: 'image' as const,
+        path: '<<<media_1>>>',
+        sceneIds: ['scene-input'],
+        status: 'ready' as const,
+        role: 'hero' as const,
+      }],
+    };
+    const base = {
+      storyboard,
+      manifest,
+      composition: { mode: 'editable' as const, sceneIds: ['scene-input'] },
+      mediaUrls: ['https://cdn.test/chip.jpg'],
+    };
+
+    expect(() => assertCompositionConsumesVisualAssets({
+      ...base,
+      design: {
+        code: 'function Composition(props){return <Img src={props.chip}/>}',
+        props: { chip: 'https://cdn.test/chip.jpg' },
+        editables: [],
+      },
+    })).toThrow(/not exposed as an editable image/);
+
+    expect(() => assertCompositionConsumesVisualAssets({
+      ...base,
+      design: {
+        code: 'function Composition(props){return <Img src={props.chip}/>}',
+        props: { chip: 'https://cdn.test/chip.jpg' },
+        editables: [{ id: 'chip', type: 'image', propKey: 'chip' }],
+      },
+    })).not.toThrow();
+  });
+
   it('keys the border background, despills edges, and preserves only tiny isolated key-colored details', async () => {
     const result = await prepareChromaKeyCutout(await chromaFixture());
     expect(result.keyColor).toBe('#00ff00');

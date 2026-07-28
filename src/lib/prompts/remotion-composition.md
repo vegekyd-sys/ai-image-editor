@@ -33,6 +33,8 @@ For timeline media, put the literal 1-based `<<<media_N>>>` marker in props or c
 
 Generated image URLs and timeline image URLs are valid Remotion media sources. Put them in `props` or code and render them with `<Img src={...}>`; do not claim that generated images cannot be used by the Remotion sandbox. If an image overlay fails, first check syntax, quoting, URL truncation, `<Img>` usage, and prop wiring, then patch the composition.
 
+In a Studio Run, the persisted Storyboard and Assets manifest are an execution contract, not optional inspiration. Every ready hero image/video assigned to a Composition scene must be rendered in that scene with `<Img>` or `<Video>`. Reuse its existing manifest path or `<<<media_N>>>` marker; do not regenerate it, silently replace it with CSS/SVG/procedural graphics, or mark `visualPlanChecked` while omitting it. In editable mode, expose each consumed hero image/video through a natural prop read so the runtime infers its image/video editable. The Composition submission gate verifies this against the saved source.
+
 Remote image/video URLs in `props` are preferred and do not make the payload meaningfully large. Do not move URL arrays from `props` into code to work around `413`; never inline image bytes or data URLs in composition code/props.
 
 Do not use this prompt for static posters, infographics, e-commerce pages, or ordinary layout images unless the user explicitly asks for editable code or animation.

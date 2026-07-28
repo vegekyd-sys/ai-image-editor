@@ -73,4 +73,42 @@ describe('Agent stream ownership', () => {
     );
     expect(onDone).toHaveBeenCalledTimes(1);
   });
+
+  it('aborts a durable run even when cancellation happens before the start response returns', async () => {
+    let resolveStart!: (response: Response) => void;
+    const startResponse = new Promise<Response>((resolve) => {
+      resolveStart = resolve;
+    });
+    const fetchMock = vi.fn()
+      .mockReturnValueOnce(startResponse)
+      .mockResolvedValueOnce(new Response(JSON.stringify({ ok: true }), {
+        status: 200,
+        headers: { 'Content-Type': 'application/json' },
+      }));
+    vi.stubGlobal('fetch', fetchMock);
+    const controller = new AbortController();
+    const onRunId = vi.fn();
+
+    const stream = streamAgent(
+      { prompt: 'start then stop', image: '', projectId: 'project-1', durable: true },
+      { onRunId },
+      controller.signal,
+    );
+
+    controller.abort();
+    resolveStart(new Response(JSON.stringify({ runId: 'run-race' }), {
+      status: 200,
+      headers: { 'Content-Type': 'application/json' },
+    }));
+    await stream;
+
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+    expect(fetchMock.mock.calls[0]?.[1]).not.toHaveProperty('signal');
+    expect(fetchMock.mock.calls[1]?.[0]).toBe('/api/agent/abort');
+    expect(JSON.parse(String(fetchMock.mock.calls[1]?.[1]?.body))).toEqual({
+      runId: 'run-race',
+    });
+    expect(onRunId).toHaveBeenNthCalledWith(1, 'run-race');
+    expect(onRunId).toHaveBeenLastCalledWith(null);
+  });
 });

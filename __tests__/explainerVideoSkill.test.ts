@@ -147,13 +147,17 @@ describe('Explainer Video built-in skill', () => {
     expect(rawSkill).not.toContain('generate_music')
 
     expect(skill?.description).toContain('explainer video')
+    expect(skill?.description).toContain('longer than 15s')
     expect(rawSkill).toContain('"explainer video"')
     expect(rawSkill).toContain('"Explainer Video"')
     expect(rawSkill).toContain('"解释视频"')
     expect(rawSkill).toContain('"讲解视频"')
-    expect(agent).toContain('An explicit "explainer video" request activates `explainer-video`')
-    expect(agent).toContain("read `skills/explainer-video/SKILL.md`")
-    expect(agent).toContain('follow its default voiceover, score, subtitle, and Studio workflow')
+    expect(agent).toContain('Video duration is authoritative')
+    expect(agent).toContain('For <=15s')
+    expect(agent).toContain('including explainers with voiceover, music, subtitles, or multiple scenes')
+    expect(agent).toContain('For >15s, activate and read the best matching production Skill')
+    expect(rawSkill).toContain('For a video up to and including 15 seconds')
+    expect(rawSkill).toContain('the explainer label alone does not justify this')
   })
 
   it('uses the first-class Visual Asset Bridge for sticker preparation', () => {

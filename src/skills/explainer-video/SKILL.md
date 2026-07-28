@@ -1,10 +1,10 @@
 ---
 name: explainer-video
 description: >
-  Create a concise 30-90s narrated explainer video about a topic, product,
-  feature, company, or process. Use Makaron's current Remotion composition
-  runtime with design references, synced subtitles, voiceover, generated
-  sound design, and optional generated media/sticker overlays.
+  Create a narrated explainer video longer than 15s, typically 30-90s, about a
+  topic, product, feature, company, or process. Use Makaron's current Remotion
+  composition runtime with design references, synced subtitles, voiceover,
+  generated sound design, and optional generated media/sticker overlays.
 allowed-tools: read_file studio_run prepare_visual_asset run_code write_file publish_draft preview_frame materialize_media transcribe_audio generate_audio generate_image analyze_image analyze_video
 metadata:
   makaron:
@@ -26,13 +26,18 @@ long-video generation workflow and not the Open Montage workflow runtime.
 
 ## When To Use
 
-Use this skill when the user asks for:
+Use this skill when the requested video is longer than 15 seconds and the user
+asks for:
 
 - "explainer video", "Explainer Video", "解释视频", "讲解视频"
 - a 30-90 second topic, product, feature, company, or process explainer
 - a narrated animated presentation with subtitles, diagrams, timelines, product
   screenshots, generated visual inserts, sticker overlays, music beds, sound
   effects, ambience, or mixed sound design
+
+For a video up to and including 15 seconds, return to the normal Agent video
+path in `prompts/animate.md`; the explainer label alone does not justify this
+Studio workflow.
 
 If the user explicitly asks for a provider-rendered cinematic video instead,
 route to the video generation flow. Otherwise, build an editable Remotion
