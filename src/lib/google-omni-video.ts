@@ -3,6 +3,8 @@ import { transcodeVideoBufferToSdrMp4 } from '@/lib/provider-video-reference'
 const GOOGLE_OMNI_MODEL = 'gemini-omni-flash-preview'
 const GOOGLE_OMNI_ENDPOINT = 'https://generativelanguage.googleapis.com/v1beta/interactions'
 const MAX_FETCH_BYTES = 55 * 1024 * 1024
+export const GOOGLE_OMNI_REQUEST_TIMEOUT_MS = 10 * 60 * 1000
+export const GOOGLE_OMNI_TIMEOUT_ERROR = 'Google Omni video generation timed out after 10 minutes. Please regenerate the video.'
 
 export interface GoogleOmniVideoTaskInput {
   prompt: string
@@ -19,6 +21,23 @@ export interface GoogleOmniVideoTaskResult {
   videoUrl?: string
   error?: string
   duration?: number
+}
+
+export function isGoogleOmniPlaceholderExpired(createdAt?: string | null, now = Date.now()): boolean {
+  if (!createdAt) return false
+  const createdAtMs = Date.parse(createdAt)
+  if (!Number.isFinite(createdAtMs)) return false
+  return now - createdAtMs >= GOOGLE_OMNI_REQUEST_TIMEOUT_MS
+}
+
+function normalizeGoogleOmniFetchError(error: unknown): Error {
+  const name = error && typeof error === 'object' && 'name' in error
+    ? String((error as { name?: unknown }).name)
+    : ''
+  if (name === 'TimeoutError' || name === 'AbortError') {
+    return new Error(GOOGLE_OMNI_TIMEOUT_ERROR)
+  }
+  return error instanceof Error ? error : new Error(String(error))
 }
 
 function getGoogleApiKey(): string {
@@ -47,8 +66,17 @@ function extensionMime(url: string): string {
   return 'image/jpeg'
 }
 
-async function fetchAsBase64(url: string, fallbackMime?: string): Promise<{ data: string; mimeType: string; bytes: number }> {
-  const res = await fetch(url)
+async function fetchAsBase64(
+  url: string,
+  fallbackMime?: string,
+  signal?: AbortSignal,
+): Promise<{ data: string; mimeType: string; bytes: number }> {
+  let res: Response
+  try {
+    res = await fetch(url, { signal })
+  } catch (error) {
+    throw normalizeGoogleOmniFetchError(error)
+  }
   if (!res.ok) throw new Error(`Failed to fetch reference media ${res.status}: ${url}`)
 
   const contentLength = Number(res.headers.get('content-length') || 0)
@@ -118,6 +146,7 @@ function normalizeAspectRatio(aspectRatio?: string): '9:16' | '16:9' | undefined
 
 export async function createGoogleOmniVideoTask(input: GoogleOmniVideoTaskInput): Promise<GoogleOmniVideoTaskResult> {
   const key = getGoogleApiKey()
+  const requestSignal = AbortSignal.timeout(GOOGLE_OMNI_REQUEST_TIMEOUT_MS)
   const videoRefs = [...(input.videoUrl ? [input.videoUrl] : []), ...(input.videoUrls || [])].filter(Boolean)
   if (videoRefs.length > 1) {
     throw new Error('Google Omni supports one reference video per Makaron request. Split multi-video workflows into separate tasks.')
@@ -126,7 +155,7 @@ export async function createGoogleOmniVideoTask(input: GoogleOmniVideoTaskInput)
   const imageParts = []
   for (const imageUrl of input.images.filter(Boolean)) {
     if (!imageUrl.startsWith('http')) continue
-    const image = await fetchAsBase64(imageUrl)
+    const image = await fetchAsBase64(imageUrl, undefined, requestSignal)
     imageParts.push({ type: 'image', data: image.data, mime_type: image.mimeType })
   }
 
@@ -142,7 +171,7 @@ export async function createGoogleOmniVideoTask(input: GoogleOmniVideoTaskInput)
 
   let requestInput: unknown
   if (videoRef) {
-    const video = await fetchAsBase64(videoRef, 'video/mp4')
+    const video = await fetchAsBase64(videoRef, 'video/mp4', requestSignal)
     requestInput = [{
       type: 'user_input',
       content: [
@@ -158,23 +187,29 @@ export async function createGoogleOmniVideoTask(input: GoogleOmniVideoTaskInput)
     ]
   }
 
-  const res = await fetch(GOOGLE_OMNI_ENDPOINT, {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      'x-goog-api-key': key,
-    },
-    body: JSON.stringify({
-      model: GOOGLE_OMNI_MODEL,
-      input: requestInput,
-      response_format: responseFormat,
-      generation_config: {
-        video_config: { task },
+  let res: Response
+  try {
+    res = await fetch(GOOGLE_OMNI_ENDPOINT, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'x-goog-api-key': key,
       },
-      store: true,
-      stream: false,
-    }),
-  })
+      body: JSON.stringify({
+        model: GOOGLE_OMNI_MODEL,
+        input: requestInput,
+        response_format: responseFormat,
+        generation_config: {
+          video_config: { task },
+        },
+        store: true,
+        stream: false,
+      }),
+      signal: requestSignal,
+    })
+  } catch (error) {
+    throw normalizeGoogleOmniFetchError(error)
+  }
 
   const text = await res.text()
   let data: Record<string, unknown>

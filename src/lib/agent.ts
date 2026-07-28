@@ -108,10 +108,12 @@ function runGoogleOmniVideoSnapshotAfterResponse(options: {
   after(async () => {
     const { getSupabaseAdmin } = await import('@/lib/supabase/service');
     const admin = getSupabaseAdmin();
+    console.log(`[google-omni] snapshot job started: ${options.snapshotId} (${options.taskId})`);
     try {
       const result = await createVideo(options.createVideoInput);
       if (!result.success || !result.videoUrl) {
         const { handleVideoFailure } = await import('@/lib/video-lifecycle');
+        console.error(`[google-omni] snapshot job failed before output: ${options.snapshotId}: ${result.message || 'missing video URL'}`);
         await handleVideoFailure(
           options.snapshotId,
           result.message || 'Google Omni video generation failed',
@@ -138,6 +140,7 @@ function runGoogleOmniVideoSnapshotAfterResponse(options: {
         ...(dims?.height ? { height: dims.height } : {}),
       };
       await admin.from('snapshots').update({ video_meta: finalMeta }).eq('id', options.snapshotId);
+      console.log(`[google-omni] snapshot job completed: ${options.snapshotId} (${result.taskId || options.taskId})`);
 
       if (permanentUrl) {
         try {
@@ -156,11 +159,17 @@ function runGoogleOmniVideoSnapshotAfterResponse(options: {
         }
       }
     } catch (error) {
+      console.error(`[google-omni] snapshot job crashed: ${options.snapshotId}:`, error);
       const { handleVideoFailure } = await import('@/lib/video-lifecycle');
-      await handleVideoFailure(
-        options.snapshotId,
-        error instanceof Error ? error.message : String(error),
-      );
+      try {
+        await handleVideoFailure(
+          options.snapshotId,
+          error instanceof Error ? error.message : String(error),
+        );
+      } catch (lifecycleError) {
+        console.error(`[google-omni] failed to persist terminal state: ${options.snapshotId}:`, lifecycleError);
+        throw lifecycleError;
+      }
     }
   });
 }

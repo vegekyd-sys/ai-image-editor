@@ -39,6 +39,7 @@ describe('video credit reservation contract', () => {
 
   it('uses atomic no-overdraft debit and idempotent snapshot failure refund SQL', () => {
     const migration = read('supabase/migrations/20260724123316_prevent_video_credit_overrefund.sql')
+    const repairMigration = read('supabase/migrations/20260728140000_fix_video_failure_lifecycle.sql')
 
     expect(migration).toContain('AND balance >= p_amount')
     expect(migration).toContain("RAISE EXCEPTION 'insufficient_credits:")
@@ -47,6 +48,23 @@ describe('video credit reservation contract', () => {
     expect(migration).toContain("<> 'processing'")
     expect(migration).toContain('GRANT EXECUTE ON FUNCTION fail_video_snapshot_and_refund')
     expect(migration).toContain('TO service_role')
+    expect(repairMigration).toContain('DROP FUNCTION IF EXISTS fail_video_snapshot_and_refund(UUID, TEXT)')
+    expect(repairMigration).toContain('p_snapshot_id TEXT')
+    expect(repairMigration).toContain('GRANT EXECUTE ON FUNCTION fail_video_snapshot_and_refund(TEXT, TEXT)')
+  })
+
+  it('keeps stale Google Omni placeholders terminal and cron polling isolated', () => {
+    const snapshotRoute = read('src/app/api/video-snapshot/[snapshotId]/route.ts')
+    const videoPollCron = read('src/app/api/cron/video-poll/route.ts')
+    const googleOmni = read('src/lib/google-omni-video.ts')
+
+    expect(googleOmni).toContain('GOOGLE_OMNI_REQUEST_TIMEOUT_MS')
+    expect(googleOmni).toContain('AbortSignal.timeout(GOOGLE_OMNI_REQUEST_TIMEOUT_MS)')
+    expect(snapshotRoute).toContain('isGoogleOmniPlaceholderExpired')
+    expect(snapshotRoute).toContain('GOOGLE_OMNI_TIMEOUT_ERROR')
+    expect(videoPollCron).toContain("vm.taskId.startsWith('google-omni-')")
+    expect(videoPollCron).toContain('tryHandleVideoFailure')
+    expect(read('src/lib/agent.ts')).toContain('[google-omni] snapshot job crashed:')
   })
 })
 

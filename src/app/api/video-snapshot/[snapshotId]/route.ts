@@ -257,6 +257,26 @@ export async function GET(
       result = await getXaiVideoTask(videoMeta.taskId)
     } else if (isGoogleOmni) {
       if (videoMeta.taskId.startsWith('google-omni-job-') && !videoMeta.videoUrl && !videoMeta.providerUrl) {
+        const {
+          GOOGLE_OMNI_TIMEOUT_ERROR,
+          isGoogleOmniPlaceholderExpired,
+        } = await import('@/lib/google-omni-video')
+        if (isGoogleOmniPlaceholderExpired(videoMeta.createdAt)) {
+          const { handleVideoFailure } = await import('@/lib/video-lifecycle')
+          await handleVideoFailure(snapshotId, GOOGLE_OMNI_TIMEOUT_ERROR)
+          const failedMeta: VideoMeta = {
+            ...videoMeta,
+            status: 'failed',
+            error: GOOGLE_OMNI_TIMEOUT_ERROR,
+          }
+          return NextResponse.json({
+            status: 'failed',
+            snapshotId,
+            imageUrl: snap.image_url || undefined,
+            error: GOOGLE_OMNI_TIMEOUT_ERROR,
+            completionActions: buildVideoFailureActions(failedMeta, locale),
+          })
+        }
         return NextResponse.json({ status: 'processing', snapshotId, imageUrl: snap.image_url || undefined })
       }
       const { getGoogleOmniVideoTask } = await import('@/lib/google-omni-video')
