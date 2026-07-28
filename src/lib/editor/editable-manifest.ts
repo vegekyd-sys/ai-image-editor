@@ -227,9 +227,11 @@ function staticEditableIdsFromExpression(node: Node | null | undefined): string[
 }
 
 function hasDirectTextLikeChild(element: JSXElement): boolean {
-  return element.children.some(child => {
-    if (child.type === 'JSXText') return Boolean(child.value.trim());
-    if (child.type !== 'JSXExpressionContainer') return false;
+  const isTextLikeExpression = (expression: Node): boolean => {
+    if (expression.type === 'ConditionalExpression') {
+      return isTextLikeExpression(expression.consequent)
+        || isTextLikeExpression(expression.alternate);
+    }
     return [
       'Identifier',
       'MemberExpression',
@@ -237,8 +239,12 @@ function hasDirectTextLikeChild(element: JSXElement): boolean {
       'TemplateLiteral',
       'NumericLiteral',
       'BinaryExpression',
-      'ConditionalExpression',
-    ].includes(child.expression.type);
+    ].includes(expression.type);
+  };
+  return element.children.some(child => {
+    if (child.type === 'JSXText') return Boolean(child.value.trim());
+    if (child.type !== 'JSXExpressionContainer') return false;
+    return isTextLikeExpression(child.expression);
   });
 }
 
@@ -484,43 +490,46 @@ function descendantMediaPropKey(path: NodePath<JSXElement>): string | null {
 }
 
 function componentFunctionName(path: NodePath<JSXElement>): string | null {
-  const functionPath = path.findParent(parent =>
-    parent.isFunctionDeclaration()
-    || parent.isFunctionExpression()
-    || parent.isArrowFunctionExpression()
-  );
-  if (!functionPath) return null;
-  if (functionPath.isFunctionDeclaration() && functionPath.node.id) {
-    return functionPath.node.id.name;
-  }
-  const variable = functionPath.parentPath;
-  if (
-    variable?.isVariableDeclarator()
-    && variable.node.id.type === 'Identifier'
-  ) {
-    return variable.node.id.name;
+  let current: NodePath | null = path.parentPath;
+  while (current) {
+    if (current.isFunctionDeclaration() && current.node.id) {
+      return current.node.id.name;
+    }
+    if (
+      (current.isFunctionExpression() || current.isArrowFunctionExpression())
+      && current.parentPath?.isVariableDeclarator()
+      && current.parentPath.node.id.type === 'Identifier'
+    ) {
+      return current.parentPath.node.id.name;
+    }
+    current = current.parentPath;
   }
   return null;
 }
 
 function componentObjectPattern(path: NodePath<JSXElement>): ObjectPattern | null {
-  const functionPath = path.findParent(parent =>
-    parent.isFunctionDeclaration()
-    || parent.isFunctionExpression()
-    || parent.isArrowFunctionExpression()
-  );
-  if (
-    !functionPath
-    || (
-      !functionPath.isFunctionDeclaration()
-      && !functionPath.isFunctionExpression()
-      && !functionPath.isArrowFunctionExpression()
-    )
-  ) {
-    return null;
+  let current: NodePath | null = path.parentPath;
+  while (current) {
+    const isNamedFunctionDeclaration = (
+      current.isFunctionDeclaration()
+      && Boolean(current.node.id)
+    );
+    const isNamedVariableFunction = (
+      (current.isFunctionExpression() || current.isArrowFunctionExpression())
+      && current.parentPath?.isVariableDeclarator()
+      && current.parentPath.node.id.type === 'Identifier'
+    );
+    if (isNamedFunctionDeclaration || isNamedVariableFunction) {
+      const firstParam = current.isFunctionDeclaration()
+        || current.isFunctionExpression()
+        || current.isArrowFunctionExpression()
+        ? current.node.params[0]
+        : null;
+      return firstParam?.type === 'ObjectPattern' ? firstParam : null;
+    }
+    current = current.parentPath;
   }
-  const firstParam = functionPath?.node.params[0];
-  return firstParam?.type === 'ObjectPattern' ? firstParam : null;
+  return null;
 }
 
 function objectPatternParamNames(pattern: ObjectPattern): Set<string> {
@@ -774,6 +783,20 @@ function collectDynamicIds(
 }
 
 function insertionFor(opening: JSXOpeningElement, id: string): SourceInsertion | null {
+  const existing = dataEditableAttribute(opening);
+  if (
+    existing
+    && existing.value == null
+    && existing.start != null
+    && existing.end != null
+  ) {
+    return {
+      offset: existing.start,
+      end: existing.end,
+      text: `data-editable="${id}"`,
+    };
+  }
+  if (existing) return null;
   if (opening.end == null) return null;
   const closeLength = opening.selfClosing ? 2 : 1;
   return {
@@ -787,6 +810,22 @@ function expressionInsertionFor(
   attributeName: string,
   expression: string,
 ): SourceInsertion | null {
+  const existing = attributeName === 'data-editable'
+    ? dataEditableAttribute(opening)
+    : namedAttribute(opening, attributeName);
+  if (
+    existing
+    && existing.value == null
+    && existing.start != null
+    && existing.end != null
+  ) {
+    return {
+      offset: existing.start,
+      end: existing.end,
+      text: `${attributeName}={${expression}}`,
+    };
+  }
+  if (existing) return null;
   if (opening.end == null) return null;
   const closeLength = opening.selfClosing ? 2 : 1;
   return {
@@ -950,6 +989,26 @@ export function compileEditableManifest({
     reservedIds.add(id);
     return id;
   };
+  const resolveTopLevelPropKey = (
+    path: NodePath<JSXElement>,
+    localName: string,
+  ): string | null => {
+    if (props && Object.prototype.hasOwnProperty.call(props, localName)) {
+      return localName;
+    }
+    const componentName = componentFunctionName(path);
+    if (!componentName) return null;
+    const keys = new Set<string>();
+    for (const call of naturalCallsByComponent.get(componentName) ?? []) {
+      const key = staticPropKey(
+        expressionFromAttribute(namedAttribute(call.opening, localName)),
+      );
+      if (key && (!props || Object.prototype.hasOwnProperty.call(props, key))) {
+        keys.add(key);
+      }
+    }
+    return keys.size === 1 ? [...keys][0] : null;
+  };
   const staticArrayFromMapItem = (
     callPath: NodePath<JSXOpeningElement>,
     itemName: string,
@@ -984,6 +1043,169 @@ export function compileEditableManifest({
     return {
       name: callee.object.name,
       expression: binding.path.node.init,
+    };
+  };
+  const indexedCollectionKey = (
+    path: NodePath,
+    expression: Node | null | undefined,
+  ): string | null => {
+    if (!expression) return null;
+    const initializer = expression.type === 'Identifier'
+      ? (() => {
+          const binding = path.scope.getBinding(expression.name);
+          return binding?.constant && binding.path.isVariableDeclarator()
+            ? binding.path.node.init
+            : null;
+        })()
+      : expression;
+    if (
+      initializer?.type !== 'MemberExpression'
+      || initializer.object.type !== 'MemberExpression'
+    ) {
+      return null;
+    }
+    const key = staticPropKey(initializer.object);
+    return key && props && Array.isArray(props[key]) ? key : null;
+  };
+  const sceneCollectionKey = (
+    path: NodePath,
+    localName: string,
+    seen = new Set<string>(),
+  ): string | null => {
+    const direct = indexedCollectionKey(path, {
+      type: 'Identifier',
+      name: localName,
+    } as Node);
+    if (direct) return direct;
+    const elementPath = path.isJSXElement()
+      ? path
+      : path.parentPath?.isJSXElement()
+        ? path.parentPath
+        : null;
+    if (!elementPath) return null;
+    const componentName = componentFunctionName(elementPath);
+    if (!componentName) return null;
+    const state = `${componentName}:${localName}`;
+    if (seen.has(state)) return null;
+    seen.add(state);
+    const keys = new Set<string>();
+    for (const call of naturalCallsByComponent.get(componentName) ?? []) {
+      const value = expressionFromAttribute(
+        namedAttribute(call.opening, localName),
+      );
+      const key = indexedCollectionKey(call.path, value);
+      if (key) {
+        keys.add(key);
+        continue;
+      }
+      if (
+        value?.type === 'Identifier'
+        && call.parentComponentName
+        && call.parentObjectPattern
+        && objectPatternParamNames(call.parentObjectPattern).has(value.name)
+      ) {
+        const nested = sceneCollectionKey(
+          call.path,
+          value.name,
+          new Set(seen),
+        );
+        if (nested) keys.add(nested);
+      }
+    }
+    return keys.size === 1 ? [...keys][0] : null;
+  };
+  const liftNestedSceneArray = (
+    path: NodePath,
+    sceneName: string,
+    fieldName: string,
+  ): { ids: string[]; markerProperty: string } | null => {
+    if (!props) return null;
+    const collectionKey = sceneCollectionKey(path, sceneName);
+    const originalScenes = collectionKey ? props[collectionKey] : null;
+    if (
+      !collectionKey
+      || !Array.isArray(originalScenes)
+      || !originalScenes.every(scene => (
+        scene && typeof scene === 'object' && !Array.isArray(scene)
+      ))
+    ) {
+      return null;
+    }
+    const markerProperty = `__makaronEditable_${fieldName.replace(/[^\w$]/g, '_')}`;
+    const singularField = fieldName.replace(/(?:ies|s)$/i, match =>
+      match.toLowerCase() === 'ies' ? 'y' : ''
+    ) || 'item';
+    const ids: string[] = [];
+    const nextScenes = originalScenes.map((scene, sceneIndex) => {
+      const record = scene as Record<string, unknown>;
+      const values = record[fieldName];
+      if (!Array.isArray(values)) return record;
+      if (!values.every(value => (
+        (typeof value === 'string' && value.trim().length > 0)
+        || typeof value === 'number'
+      ))) {
+        return record;
+      }
+      const existingMarkers = Array.isArray(record[markerProperty])
+        ? record[markerProperty] as unknown[]
+        : [];
+      const stableKey = typeof record.id === 'string'
+        ? record.id
+        : typeof record.key === 'string'
+          ? record.key
+          : `scene${sceneIndex + 1}`;
+      const markers = values.map((value, valueIndex) => {
+        const existing = typeof existingMarkers[valueIndex] === 'string'
+          ? existingMarkers[valueIndex] as string
+          : null;
+        const id = existing ?? claimReservedId(
+          `${identifierFragment(stableKey)}${semanticParamName(singularField)}${valueIndex + 1}`,
+        );
+        if (!ids.includes(id)) ids.push(id);
+        if (props[id] === undefined) props[id] = value;
+        return id;
+      });
+      return { ...record, [markerProperty]: markers };
+    });
+    if (ids.length === 0) return null;
+    props[collectionKey] = nextScenes;
+    return { ids, markerProperty };
+  };
+  const resolveNestedSceneIndexedText = (
+    path: NodePath<JSXElement>,
+    expression: MemberExpression,
+  ): Candidate | null => {
+    if (
+      !expression.computed
+      || expression.object.type !== 'MemberExpression'
+      || expression.object.computed
+      || expression.object.object.type !== 'Identifier'
+      || expression.object.property.type !== 'Identifier'
+      || expression.property.start == null
+      || expression.property.end == null
+    ) {
+      return null;
+    }
+    const sceneName = expression.object.object.name;
+    const lifted = liftNestedSceneArray(
+      path,
+      sceneName,
+      expression.object.property.name,
+    );
+    if (!lifted) return null;
+    const selector = code.slice(expression.property.start, expression.property.end);
+    const insertion = expressionInsertionFor(
+      path.node.openingElement,
+      'data-editable',
+      `${sceneName}.${lifted.markerProperty}[${selector}]`,
+    );
+    if (insertion) insertions.push(insertion);
+    return {
+      opening: path.node.openingElement,
+      type: 'text',
+      staticIds: lifted.ids,
+      propKeyById: new Map(lifted.ids.map(id => [id, id])),
+      sourceById: new Map(lifted.ids.map(id => [id, 'literal'])),
     };
   };
   const resolveStaticCollectionText = (
@@ -1183,7 +1405,11 @@ export function compileEditableManifest({
       ) {
         return null;
       }
-      return staticPropKey(callee.object);
+      const directKey = staticPropKey(callee.object);
+      if (directKey) return directKey;
+      return callee.object.type === 'Identifier'
+        ? resolveTopLevelPropKey(path, callee.object.name)
+        : null;
     };
 
     let collectionKey = collectionKeyFromMap(
@@ -1280,22 +1506,36 @@ export function compileEditableManifest({
     ) {
       return null;
     }
+    const index = expression.property.value;
     const binding = path.scope.getBinding(expression.object.name);
-    if (
+    const localArray = (
       !binding?.constant
       || !binding.path.isVariableDeclarator()
       || binding.path.node.init?.type !== 'ArrayExpression'
+    )
+      ? null
+      : binding.path.node.init;
+    const collectionKey = localArray
+      ? expression.object.name
+      : resolveTopLevelPropKey(path, expression.object.name);
+    const collectionValues = collectionKey ? props[collectionKey] : null;
+    const value = localArray
+      ? staticTextExpressionValue(path, localArray.elements[index])
+      : Array.isArray(collectionValues)
+        ? collectionValues[index]
+        : null;
+    if (
+      (typeof value !== 'string' || value.trim().length === 0)
+      && typeof value !== 'number'
     ) {
       return null;
     }
-    const index = expression.property.value;
-    const element = binding.path.node.init.elements[index];
-    const value = staticTextExpressionValue(path, element);
-    if (!value?.trim()) return null;
-    const singular = expression.object.name.replace(/(?:ies|s)$/i, match =>
+    const singular = (collectionKey ?? expression.object.name).replace(/(?:ies|s)$/i, match =>
       match.toLowerCase() === 'ies' ? 'y' : ''
     ) || 'item';
-    const id = claimReservedId(`${singular}${index + 1}Text`);
+    const id = claimReservedId(
+      `${singular}${index + 1}${localArray ? 'Text' : ''}`,
+    );
     if (props[id] === undefined) props[id] = value;
     const insertion = insertionFor(path.node.openingElement, id);
     if (insertion) insertions.push(insertion);
@@ -1305,6 +1545,161 @@ export function compileEditableManifest({
       staticIds: [id],
       propKeyById: new Map([[id, id]]),
       sourceById: new Map([[id, 'literal']]),
+    };
+  };
+  const resolveDynamicIndexedText = (
+    path: NodePath<JSXElement>,
+    expression: MemberExpression,
+  ): Candidate | null => {
+    if (
+      !expression.computed
+      || expression.property.start == null
+      || expression.property.end == null
+      || !props
+    ) {
+      return null;
+    }
+
+    let ids: string[] = [];
+    let sourceById: Map<string, EditableField['source']> | undefined;
+    const collectionKey = staticPropKey(expression.object)
+      ?? (expression.object.type === 'Identifier'
+        ? resolveTopLevelPropKey(path, expression.object.name)
+        : null);
+    const collectionValues = collectionKey ? props[collectionKey] : null;
+    if (
+      collectionKey
+      && Array.isArray(collectionValues)
+      && collectionValues.length > 0
+      && collectionValues.every(value => (
+        (typeof value === 'string' && value.trim().length > 0)
+        || typeof value === 'number'
+      ))
+    ) {
+      const singular = collectionKey.replace(/(?:ies|s)$/i, match =>
+        match.toLowerCase() === 'ies' ? 'y' : ''
+      ) || 'item';
+      ids = collectionValues.map((value, index) => {
+        const id = claimReservedId(`${singular}${index + 1}`);
+        if (props[id] === undefined) props[id] = value;
+        return id;
+      });
+      sourceById = new Map(ids.map(id => [id, 'literal']));
+    } else if (expression.object.type === 'Identifier') {
+      const binding = path.scope.getBinding(expression.object.name);
+      const initializer = binding?.constant
+        && binding.path.isVariableDeclarator()
+        ? binding.path.node.init
+        : null;
+      if (initializer?.type !== 'ArrayExpression') return null;
+      const propKeys = initializer.elements.map(element => staticPropKey(element));
+      if (
+        propKeys.length === 0
+        || propKeys.some(key => !key || !Object.prototype.hasOwnProperty.call(props, key))
+      ) {
+        return null;
+      }
+      ids = propKeys as string[];
+      ids.forEach(id => reservedIds.add(id));
+    }
+    if (ids.length === 0) return null;
+
+    const selector = code.slice(expression.property.start, expression.property.end);
+    const markerExpression = `[${ids.map(id => JSON.stringify(id)).join(', ')}][${selector}]`;
+    const insertion = expressionInsertionFor(
+      path.node.openingElement,
+      'data-editable',
+      markerExpression,
+    );
+    if (insertion) insertions.push(insertion);
+    return {
+      opening: path.node.openingElement,
+      type: 'text',
+      staticIds: ids,
+      propKeyById: new Map(ids.map(id => [id, id])),
+      ...(sourceById ? { sourceById } : {}),
+    };
+  };
+  const resolveRuntimeFindText = (
+    path: NodePath<JSXElement>,
+    expression: MemberExpression,
+  ): Candidate | null => {
+    if (
+      expression.computed
+      || expression.object.type !== 'Identifier'
+      || expression.property.type !== 'Identifier'
+      || !props
+    ) {
+      return null;
+    }
+    const binding = path.scope.getBinding(expression.object.name);
+    const initializer = binding?.constant
+      && binding.path.isVariableDeclarator()
+      ? binding.path.node.init
+      : null;
+    if (
+      initializer?.type !== 'CallExpression'
+      || initializer.callee.type !== 'MemberExpression'
+      || initializer.callee.computed
+      || initializer.callee.property.type !== 'Identifier'
+      || !['find', 'filter', 'at'].includes(initializer.callee.property.name)
+    ) {
+      return null;
+    }
+    const collectionKey = staticPropKey(initializer.callee.object)
+      ?? (initializer.callee.object.type === 'Identifier'
+        ? resolveTopLevelPropKey(path, initializer.callee.object.name)
+        : null);
+    const originalItems = collectionKey ? props[collectionKey] : null;
+    if (
+      !collectionKey
+      || !Array.isArray(originalItems)
+      || originalItems.length === 0
+      || !originalItems.every(item => item && typeof item === 'object' && !Array.isArray(item))
+    ) {
+      return null;
+    }
+
+    const valueProperty = expression.property.name;
+    const markerProperty = `__makaronEditable_${valueProperty.replace(/[^\w$]/g, '_')}`;
+    const singular = collectionKey.replace(/(?:ies|s)$/i, match =>
+      match.toLowerCase() === 'ies' ? 'y' : ''
+    ) || expression.object.name || 'item';
+    const ids: string[] = [];
+    const nextItems = originalItems.map((item, index) => {
+      const record = item as Record<string, unknown>;
+      const value = record[valueProperty];
+      if (
+        (typeof value !== 'string' || value.trim().length === 0)
+        && typeof value !== 'number'
+      ) {
+        return null;
+      }
+      const existingId = typeof record[markerProperty] === 'string'
+        ? record[markerProperty] as string
+        : null;
+      const id = existingId ?? claimReservedId(
+        `${singular}${index + 1}${semanticParamName(valueProperty)}`,
+      );
+      reservedIds.add(id);
+      ids.push(id);
+      if (props[id] === undefined) props[id] = value;
+      return { ...record, [markerProperty]: id };
+    });
+    if (nextItems.some(item => item == null) || ids.length === 0) return null;
+    props[collectionKey] = nextItems;
+    const insertion = expressionInsertionFor(
+      path.node.openingElement,
+      'data-editable',
+      `${expression.object.name}.${markerProperty}`,
+    );
+    if (insertion) insertions.push(insertion);
+    return {
+      opening: path.node.openingElement,
+      type: 'text',
+      staticIds: ids,
+      propKeyById: new Map(ids.map(id => [id, id])),
+      sourceById: new Map(ids.map(id => [id, 'literal'])),
     };
   };
   const resolvePrimitiveMapText = (
@@ -1317,12 +1712,13 @@ export function compileEditableManifest({
       !functionPath?.isArrowFunctionExpression()
       || functionPath.node.params[0]?.type !== 'Identifier'
       || functionPath.node.params[0].name !== expression.name
-      || functionPath.node.params[1]?.type !== 'Identifier'
       || !functionPath.parentPath?.isCallExpression()
     ) {
       return null;
     }
-    const indexName = functionPath.node.params[1].name;
+    const indexName = functionPath.node.params[1]?.type === 'Identifier'
+      ? functionPath.node.params[1].name
+      : null;
     const callee = functionPath.parentPath.node.callee;
     if (
       callee.type !== 'MemberExpression'
@@ -1350,6 +1746,13 @@ export function compileEditableManifest({
         values = binding.path.node.init.elements.map(element =>
           staticTextExpressionValue(path, element)
         );
+      } else {
+        const propKey = resolveTopLevelPropKey(path, collectionName);
+        const propValues = propKey ? props[propKey] : null;
+        if (propKey && Array.isArray(propValues)) {
+          collectionName = propKey;
+          values = propValues;
+        }
       }
     } else {
       const propKey = staticPropKey(callee.object);
@@ -1378,13 +1781,21 @@ export function compileEditableManifest({
       if (props[id] === undefined) props[id] = value;
       return id;
     });
-    const markerExpression = ids.reduceRight(
-      (alternate, id, index) =>
-        index === ids.length - 1
-          ? JSON.stringify(id)
-          : `${indexName} === ${index} ? ${JSON.stringify(id)} : ${alternate}`,
-      JSON.stringify(ids[ids.length - 1]),
-    );
+    const markerExpression = indexName
+      ? ids.reduceRight(
+        (alternate, id, index) =>
+          index === ids.length - 1
+            ? JSON.stringify(id)
+            : `${indexName} === ${index} ? ${JSON.stringify(id)} : ${alternate}`,
+        JSON.stringify(ids[ids.length - 1]),
+      )
+      : (
+        callee.object.start != null
+        && callee.object.end != null
+      )
+        ? `[${ids.map(id => JSON.stringify(id)).join(', ')}][${code.slice(callee.object.start, callee.object.end)}.indexOf(${expression.name})]`
+        : null;
+    if (!markerExpression) return null;
     const insertion = expressionInsertionFor(
       path.node.openingElement,
       'data-editable',
@@ -1435,6 +1846,164 @@ export function compileEditableManifest({
       path.node.openingElement,
       'data-editable',
       markerExpression,
+    );
+    if (insertion) insertions.push(insertion);
+    return {
+      opening: path.node.openingElement,
+      type: 'text',
+      staticIds: ids,
+      propKeyById: new Map(ids.map(id => [id, id])),
+      sourceById: new Map(ids.map(id => [id, 'literal'])),
+    };
+  };
+  const resolveConditionalPropText = (
+    path: NodePath<JSXElement>,
+    expression: Node,
+  ): Candidate | null => {
+    if (expression.type !== 'ConditionalExpression' || !props) return null;
+    const keysByNode = new Map<Node, string>();
+    const collect = (node: Node): boolean => {
+      if (node.type === 'ConditionalExpression') {
+        return collect(node.consequent) && collect(node.alternate);
+      }
+      const key = staticPropKey(node);
+      if (!key || !Object.prototype.hasOwnProperty.call(props, key)) return false;
+      keysByNode.set(node, key);
+      reservedIds.add(key);
+      return true;
+    };
+    if (!collect(expression) || keysByNode.size === 0) return null;
+    const markerSource = (node: Node): string | null => {
+      const key = keysByNode.get(node);
+      if (key) return JSON.stringify(key);
+      if (
+        node.type !== 'ConditionalExpression'
+        || node.test.start == null
+        || node.test.end == null
+      ) {
+        return null;
+      }
+      const consequent = markerSource(node.consequent);
+      const alternate = markerSource(node.alternate);
+      if (!consequent || !alternate) return null;
+      return `${code.slice(node.test.start, node.test.end)} ? ${consequent} : ${alternate}`;
+    };
+    const markerExpression = markerSource(expression);
+    if (!markerExpression) return null;
+    const insertion = expressionInsertionFor(
+      path.node.openingElement,
+      'data-editable',
+      markerExpression,
+    );
+    if (insertion) insertions.push(insertion);
+    const ids = [...new Set(keysByNode.values())];
+    return {
+      opening: path.node.openingElement,
+      type: 'text',
+      staticIds: ids,
+      propKeyById: new Map(ids.map(id => [id, id])),
+    };
+  };
+  const resolveMappedCounterText = (
+    path: NodePath<JSXElement>,
+  ): Candidate | null => {
+    if (!props || STRUCTURAL_TEXT_HOSTS.has(jsxName(path.node.openingElement))) {
+      return null;
+    }
+    let prefix = '';
+    let counterExpression: Node | null = null;
+    for (const child of path.node.children) {
+      if (child.type === 'JSXText') {
+        prefix += child.value.replace(/\s+/g, ' ');
+        continue;
+      }
+      if (
+        child.type === 'JSXExpressionContainer'
+        && child.expression.type !== 'JSXEmptyExpression'
+      ) {
+        if (counterExpression) return null;
+        counterExpression = child.expression;
+        continue;
+      }
+      return null;
+    }
+    prefix = prefix.trim();
+    if (
+      !prefix
+      || counterExpression?.type !== 'BinaryExpression'
+      || counterExpression.operator !== '+'
+      || counterExpression.left.type !== 'CallExpression'
+      || counterExpression.left.callee.type !== 'MemberExpression'
+      || counterExpression.left.callee.computed
+      || counterExpression.left.callee.object.type !== 'Identifier'
+      || counterExpression.left.callee.property.type !== 'Identifier'
+      || counterExpression.left.callee.property.name !== 'indexOf'
+      || counterExpression.left.arguments.length !== 1
+      || counterExpression.left.arguments[0]?.type !== 'Identifier'
+      || counterExpression.right.type !== 'NumericLiteral'
+    ) {
+      return null;
+    }
+    const itemName = counterExpression.left.arguments[0].name;
+    const componentName = componentFunctionName(path);
+    if (!componentName) return null;
+    const markerProperty = '__makaronEditable_counterLabel';
+    const ids: string[] = [];
+    let expectedItems = -1;
+    for (const call of naturalCallsByComponent.get(componentName) ?? []) {
+      const itemExpression = expressionFromAttribute(
+        namedAttribute(call.opening, itemName),
+      );
+      if (itemExpression?.type !== 'Identifier') continue;
+      const source = staticArrayFromMapItem(call.path, itemExpression.name);
+      if (!source || source.expression.type !== 'ArrayExpression') continue;
+      if (expectedItems >= 0 && expectedItems !== source.expression.elements.length) {
+        return null;
+      }
+      expectedItems = source.expression.elements.length;
+      for (const [index, item] of source.expression.elements.entries()) {
+        if (!item || item.type !== 'ObjectExpression') return null;
+        const propertyByName = (name: string) => item.properties.find(property => (
+          property.type === 'ObjectProperty'
+          && !property.computed
+          && (
+            (property.key.type === 'Identifier' && property.key.name === name)
+            || (property.key.type === 'StringLiteral' && property.key.value === name)
+          )
+        ));
+        const existingMarker = propertyByName(markerProperty);
+        const existingId = existingMarker?.type === 'ObjectProperty'
+          && existingMarker.value.type === 'StringLiteral'
+          ? existingMarker.value.value
+          : null;
+        const stableKeyProperty = propertyByName('id') ?? propertyByName('key');
+        const stableKey = stableKeyProperty?.type === 'ObjectProperty'
+          && stableKeyProperty.value.type === 'StringLiteral'
+          ? stableKeyProperty.value.value
+          : `scene${index + 1}`;
+        const id = existingId ?? claimReservedId(
+          `${identifierFragment(stableKey)}CounterLabel`,
+        );
+        if (!ids.includes(id)) ids.push(id);
+        if (props[id] === undefined) {
+          props[id] = `${prefix}${index + counterExpression.right.value}`;
+        }
+        if (
+          !existingMarker
+          && item.end != null
+        ) {
+          insertions.push({
+            offset: item.end - 1,
+            text: `, ${markerProperty}: ${JSON.stringify(id)}`,
+          });
+        }
+      }
+    }
+    if (ids.length === 0) return null;
+    const insertion = expressionInsertionFor(
+      path.node.openingElement,
+      'data-editable',
+      `${itemName}.${markerProperty}`,
     );
     if (insertion) insertions.push(insertion);
     return {
@@ -1544,12 +2113,318 @@ export function compileEditableManifest({
       };
     };
 
+    const callChildExpression = (
+      call: NaturalComponentCall,
+      paramName: string,
+    ): Node | null => {
+      if (paramName !== 'children' || !call.path.parentPath?.isJSXElement()) {
+        return null;
+      }
+      const meaningful = call.path.parentPath.node.children.filter(child => (
+        child.type !== 'JSXText' || child.value.trim().length > 0
+      ));
+      if (
+        meaningful.length === 1
+        && meaningful[0]?.type === 'JSXExpressionContainer'
+        && meaningful[0].expression.type !== 'JSXEmptyExpression'
+      ) {
+        return meaningful[0].expression;
+      }
+      return null;
+    };
+
+    const collectionKeyFromIndexedAlias = (
+      call: NaturalComponentCall,
+      expression: Node | null | undefined,
+    ): string | null => {
+      if (!expression) return null;
+      const initializer = expression.type === 'Identifier'
+        ? (() => {
+            const binding = call.path.scope.getBinding(expression.name);
+            return binding?.constant && binding.path.isVariableDeclarator()
+              ? binding.path.node.init
+              : null;
+          })()
+        : expression;
+      if (
+        initializer?.type !== 'MemberExpression'
+        || initializer.object.type !== 'MemberExpression'
+      ) {
+        return null;
+      }
+      const key = staticPropKey(initializer.object);
+      return (
+        key
+        && props
+        && Array.isArray(props[key])
+      ) ? key : null;
+    };
+
+    const resolveCollectionKeyThroughHelpers = (
+      componentName: string,
+      paramName: string,
+      seen = new Set<string>(),
+    ): string | null => {
+      const state = `${componentName}:${paramName}`;
+      if (seen.has(state)) return null;
+      seen.add(state);
+      const keys = new Set<string>();
+      for (const parentCall of naturalCallsByComponent.get(componentName) ?? []) {
+        const attribute = namedAttribute(parentCall.opening, paramName);
+        const valueExpression = attribute
+          ? expressionFromAttribute(attribute)
+          : callChildExpression(parentCall, paramName);
+        const direct = collectionKeyFromIndexedAlias(parentCall, valueExpression);
+        if (direct) {
+          keys.add(direct);
+          continue;
+        }
+        if (
+          valueExpression?.type === 'Identifier'
+          && parentCall.parentComponentName
+          && parentCall.parentObjectPattern
+          && objectPatternParamNames(parentCall.parentObjectPattern).has(valueExpression.name)
+        ) {
+          const nested = resolveCollectionKeyThroughHelpers(
+            parentCall.parentComponentName,
+            valueExpression.name,
+            new Set(seen),
+          );
+          if (nested) keys.add(nested);
+        }
+      }
+      return keys.size === 1 ? [...keys][0] : null;
+    };
+
+    const resolveMappedPropLookup = (
+      call: NaturalComponentCall,
+      expression: MemberExpression,
+    ): { propKeys: string[]; markerExpression: string } | null => {
+      if (
+        !expression.computed
+        || expression.object.type !== 'Identifier'
+        || expression.property.type !== 'MemberExpression'
+        || expression.property.computed
+        || expression.property.object.type !== 'Identifier'
+        || expression.property.property.type !== 'Identifier'
+        || expression.property.start == null
+        || expression.property.end == null
+        || !props
+      ) {
+        return null;
+      }
+      const source = staticArrayFromMapItem(
+        call.path,
+        expression.property.object.name,
+      );
+      if (!source || source.expression.type !== 'ArrayExpression') return null;
+      const fieldName = expression.property.property.name;
+      const propKeys: string[] = [];
+      for (const item of source.expression.elements) {
+        if (!item || item.type !== 'ObjectExpression') return null;
+        const property = item.properties.find(candidate => (
+          candidate.type === 'ObjectProperty'
+          && !candidate.computed
+          && (
+            (candidate.key.type === 'Identifier' && candidate.key.name === fieldName)
+            || (candidate.key.type === 'StringLiteral' && candidate.key.value === fieldName)
+          )
+        ));
+        if (
+          !property
+          || property.type !== 'ObjectProperty'
+          || property.value.type !== 'StringLiteral'
+          || !Object.prototype.hasOwnProperty.call(props, property.value.value)
+        ) {
+          return null;
+        }
+        propKeys.push(property.value.value);
+      }
+      if (propKeys.length === 0) return null;
+      return {
+        propKeys: [...new Set(propKeys)],
+        markerExpression: code.slice(
+          expression.property.start,
+          expression.property.end,
+        ),
+      };
+    };
+
+    const resolveNestedPrimitiveMap = (
+      call: NaturalComponentCall,
+      expression: Node,
+    ): { propKeys: string[]; markerExpression: string } | null => {
+      if (expression.type !== 'Identifier') return null;
+      const functionPath = call.path.getFunctionParent();
+      if (
+        !functionPath?.isArrowFunctionExpression()
+        || functionPath.node.params[0]?.type !== 'Identifier'
+        || functionPath.node.params[0].name !== expression.name
+        || functionPath.node.params[1]?.type !== 'Identifier'
+        || !functionPath.parentPath?.isCallExpression()
+      ) {
+        return null;
+      }
+      const callee = functionPath.parentPath.node.callee;
+      if (
+        callee.type !== 'MemberExpression'
+        || callee.computed
+        || callee.property.type !== 'Identifier'
+        || callee.property.name !== 'map'
+        || callee.object.type !== 'MemberExpression'
+        || callee.object.computed
+        || callee.object.object.type !== 'Identifier'
+        || callee.object.property.type !== 'Identifier'
+      ) {
+        return null;
+      }
+      const sceneName = callee.object.object.name;
+      const lifted = liftNestedSceneArray(
+        call.path,
+        sceneName,
+        callee.object.property.name,
+      );
+      if (!lifted) return null;
+      return {
+        propKeys: lifted.ids,
+        markerExpression:
+          `${sceneName}.${lifted.markerProperty}[${functionPath.node.params[1].name}]`,
+      };
+    };
+
+    const resolveObjectCollectionMember = (
+      call: NaturalComponentCall,
+      expression: MemberExpression,
+    ): { propKeys: string[]; markerExpression: string } | null => {
+      if (
+        expression.computed
+        || expression.object.type !== 'Identifier'
+        || expression.property.type !== 'Identifier'
+        || !props
+      ) {
+        return null;
+      }
+
+      const isObjectParam = Boolean(
+        call.parentObjectPattern
+        && objectPatternParamNames(call.parentObjectPattern).has(expression.object.name)
+      );
+      let collectionKey = collectionKeyFromIndexedAlias(
+        call,
+        expression.object,
+      );
+      if (!isObjectParam && !collectionKey) return null;
+      for (const parentCall of naturalCallsByComponent.get(call.parentComponentName ?? '') ?? []) {
+        const objectAttribute = namedAttribute(
+          parentCall.opening,
+          expression.object.name,
+        );
+        const objectExpression = expressionFromAttribute(objectAttribute);
+        if (objectExpression?.type !== 'Identifier') continue;
+        const indexedKey = collectionKeyFromIndexedAlias(
+          parentCall,
+          objectExpression,
+        );
+        if (indexedKey) {
+          if (collectionKey && collectionKey !== indexedKey) return null;
+          collectionKey = indexedKey;
+          continue;
+        }
+        const functionPath = parentCall.path.getFunctionParent();
+        if (
+          !functionPath?.isArrowFunctionExpression()
+          || functionPath.node.params[0]?.type !== 'Identifier'
+          || functionPath.node.params[0].name !== objectExpression.name
+          || !functionPath.parentPath?.isCallExpression()
+        ) {
+          continue;
+        }
+        const callee = functionPath.parentPath.node.callee;
+        if (
+          callee.type !== 'MemberExpression'
+          || callee.computed
+          || callee.property.type !== 'Identifier'
+          || callee.property.name !== 'map'
+        ) {
+          continue;
+        }
+        const key = staticPropKey(callee.object);
+        if (
+          key
+          && Object.prototype.hasOwnProperty.call(props, key)
+        ) {
+          if (collectionKey && collectionKey !== key) return null;
+          collectionKey = key;
+        }
+      }
+      collectionKey ??= call.parentComponentName
+        ? resolveCollectionKeyThroughHelpers(
+            call.parentComponentName,
+            expression.object.name,
+          )
+        : null;
+      const originalItems = collectionKey ? props[collectionKey] : null;
+      if (
+        !collectionKey
+        || !Array.isArray(originalItems)
+        || originalItems.length === 0
+        || !originalItems.every(item => item && typeof item === 'object' && !Array.isArray(item))
+      ) {
+        return null;
+      }
+
+      const valueProperty = expression.property.name;
+      const markerProperty =
+        `__makaronEditable_${valueProperty.replace(/[^\w$]/g, '_')}`;
+      const singular = collectionKey.replace(/(?:ies|s)$/i, match =>
+        match.toLowerCase() === 'ies' ? 'y' : ''
+      ) || 'item';
+      const propKeys: string[] = [];
+      const nextItems = originalItems.map((item, index) => {
+        const record = item as Record<string, unknown>;
+        const value = record[valueProperty];
+        if (
+          (typeof value !== 'string' || value.trim().length === 0)
+          && typeof value !== 'number'
+        ) {
+          return record;
+        }
+        const existingId = typeof record[markerProperty] === 'string'
+          ? record[markerProperty] as string
+          : null;
+        const stableKey = typeof record.id === 'string'
+          ? record.id
+          : typeof record.key === 'string'
+            ? record.key
+            : null;
+        const owner = stableKey
+          ? identifierFragment(stableKey)
+          : `${identifierFragment(singular) || 'item'}${index + 1}`;
+        const id = existingId ?? claimReservedId(
+          `${owner}${semanticParamName(valueProperty)}`,
+        );
+        propKeys.push(id);
+        if (props[id] === undefined) props[id] = value;
+        return { ...record, [markerProperty]: id };
+      });
+      if (propKeys.length === 0) {
+        return null;
+      }
+      props[collectionKey] = nextItems;
+      return {
+        propKeys,
+        markerExpression: `${expression.object.name}.${markerProperty}`,
+      };
+    };
+
     while (queue.length > 0) {
       const state = queue.shift();
       if (!state) break;
       for (const call of naturalCallsByComponent.get(state.componentName) ?? []) {
         const valueAttribute = namedAttribute(call.opening, state.valueParam);
-        const valueExpression = expressionFromAttribute(valueAttribute);
+        const valueExpression = valueAttribute
+          ? expressionFromAttribute(valueAttribute)
+          : callChildExpression(call, state.valueParam);
         const propKey = staticPropKey(valueExpression);
         if (
           propKey
@@ -1564,7 +2439,8 @@ export function compileEditableManifest({
           continue;
         }
         if (valueExpression?.type === 'MemberExpression') {
-          const computed = resolveComputedPropMap(call, valueExpression);
+          const computed = resolveComputedPropMap(call, valueExpression)
+            ?? resolveMappedPropLookup(call, valueExpression);
           if (computed) {
             computed.propKeys.forEach((computedPropKey, index) => {
               resolved.push({
@@ -1574,6 +2450,25 @@ export function compileEditableManifest({
                   ? computed.markerExpression
                   : undefined,
                 propKey: computedPropKey,
+                edges: state.edges,
+              });
+            });
+            continue;
+          }
+          const objectMember = resolveObjectCollectionMember(
+            call,
+            valueExpression,
+          );
+          if (objectMember) {
+            objectMember.propKeys.forEach((objectPropKey, index) => {
+              resolved.push({
+                opening: call.opening,
+                markerParam: state.markerParam,
+                markerExpression: index === 0
+                  ? objectMember.markerExpression
+                  : undefined,
+                propKey: objectPropKey,
+                source: 'literal',
                 edges: state.edges,
               });
             });
@@ -1595,6 +2490,24 @@ export function compileEditableManifest({
             source: 'literal',
             literalValue,
             edges: state.edges,
+          });
+          continue;
+        }
+        const nestedPrimitive = valueExpression
+          ? resolveNestedPrimitiveMap(call, valueExpression)
+          : null;
+        if (nestedPrimitive) {
+          nestedPrimitive.propKeys.forEach((nestedPropKey, index) => {
+            resolved.push({
+              opening: call.opening,
+              markerParam: state.markerParam,
+              markerExpression: index === 0
+                ? nestedPrimitive.markerExpression
+                : undefined,
+              propKey: nestedPropKey,
+              source: 'literal',
+              edges: state.edges,
+            });
           });
           continue;
         }
@@ -1793,6 +2706,7 @@ export function compileEditableManifest({
         return;
       }
       const explicitAttribute = dataEditableAttribute(opening);
+      const hasExplicitEditableValue = Boolean(explicitAttribute?.value);
       const explicitStaticId = staticEditableId(explicitAttribute);
       const explicitExpressionNode = expressionFromAttribute(explicitAttribute);
       const explicitExpression = attributeExpressionSource(explicitAttribute, code);
@@ -1802,7 +2716,7 @@ export function compileEditableManifest({
         .map(read => staticPropKey(read))
         .filter((key): key is string => Boolean(key));
 
-      if (explicitAttribute) {
+      if (explicitAttribute && hasExplicitEditableValue) {
         const type = mediaType ?? 'text';
         const ids: string[] = [];
         const propKeyById = new Map<string, string>();
@@ -1890,9 +2804,12 @@ export function compileEditableManifest({
           expression.type === 'MemberExpression'
         );
       if (directMember) {
-        const collectionCandidate = resolveRuntimeCollectionText(path, directMember)
-          ?? resolveStaticCollectionText(path, directMember)
-          ?? resolveStaticIndexedText(path, directMember);
+        const collectionCandidate = resolveStaticIndexedText(path, directMember)
+          ?? resolveDynamicIndexedText(path, directMember)
+          ?? resolveNestedSceneIndexedText(path, directMember)
+          ?? resolveRuntimeFindText(path, directMember)
+          ?? resolveRuntimeCollectionText(path, directMember)
+          ?? resolveStaticCollectionText(path, directMember);
         if (collectionCandidate) {
           candidates.push(collectionCandidate);
           return;
@@ -1916,7 +2833,10 @@ export function compileEditableManifest({
         .map(child => child.expression)
         .find(expression => expression.type === 'ConditionalExpression');
       if (directConditional) {
-        const conditionalCandidate = resolveConditionalLiteralText(
+        const conditionalCandidate = resolveConditionalPropText(
+          path,
+          directConditional,
+        ) ?? resolveConditionalLiteralText(
           path,
           directConditional,
         );
@@ -1948,6 +2868,12 @@ export function compileEditableManifest({
           sourceById: new Map([[generatedId, 'literal']]),
           instrumentId: generatedId,
         });
+        return;
+      }
+
+      const mappedCounter = resolveMappedCounterText(path);
+      if (mappedCounter) {
+        candidates.push(mappedCounter);
         return;
       }
 
@@ -1988,6 +2914,15 @@ export function compileEditableManifest({
   const seen = new Set<string>();
   for (const candidate of candidates) {
     addCandidateFields(inferredFields, seen, candidate, explicitById);
+  }
+  // Literal fields are compiler-owned. A normalized composition can route
+  // their generated ids through dynamic scene arrays, where a second static
+  // pass cannot expand every runtime index again. Preserve those fields so
+  // loading or publishing an already-normalized design is idempotent.
+  for (const field of editables ?? []) {
+    if (field.source !== 'literal' || seen.has(field.id)) continue;
+    inferredFields.push(field);
+    seen.add(field.id);
   }
   if (editables?.length) {
     const explicitOrder = new Map(editables.map((field, index) => [field.id, index]));

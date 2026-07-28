@@ -84,6 +84,7 @@ describe('agent terminal contract wiring', () => {
     expect(agentSource).toContain('no aggregate source-size or part-count limit');
     expect(agentSource).toContain('Never shorten approved narration, subtitles, scenes, animation, or visual detail');
     expect(agentSource).toContain('compositionWorkspace.status="ready"');
+    expect(agentSource).toContain('Non-blocking editable advisories do not invalidate a ready draft');
     expect(agentSource).toContain('Do not call run_code merely to assemble files');
     expect(agentSource).toContain('Split the content across new numbered files');
     expect(agentSource).toContain('providerOptions: getAgentProviderOptions(runtime, {');

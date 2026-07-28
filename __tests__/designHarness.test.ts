@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { validateDesign } from '@/lib/design-harness';
+import { validateDesign, validateDesignReport } from '@/lib/design-harness';
 import { isDirectRemotionCompositionSource } from '@/lib/remotion-code-normalization';
 
 describe('design harness compile preflight', () => {
@@ -112,6 +112,150 @@ describe('design harness compile preflight', () => {
     expect(validateDesign({
       code: 'function Composition() { return <><Video src="data:video/mp4;base64,AAAA" /><Audio src="/audio.mp3" /></>; }',
     })).toBeNull();
+  });
+
+  it('keeps mechanically valid compositions publishable when editable inference is partial', () => {
+    const design = {
+      code: `
+        function Composition(props) {
+          return <AbsoluteFill><h1>{props.brand} {props.tagline}</h1></AbsoluteFill>;
+        }
+      `,
+      props: { brand: 'ROG', tagline: 'For those who dare' },
+    };
+
+    const report = validateDesignReport(design);
+
+    expect(report.blocking).toEqual([]);
+    expect(report.advisories.join('\n')).toContain('renders multiple editable props');
+    expect(validateDesign(design)).toBeNull();
+  });
+
+  it('keeps compiler-owned image and literal fields valid on repeated validation', () => {
+    const design = {
+      code: `
+        function Composition(props) {
+          return (
+            <AbsoluteFill>
+              <Img src={props.image} style={{width: '100%', height: '100%', objectFit: 'cover'}} />
+              <h1>Inference ready</h1>
+            </AbsoluteFill>
+          );
+        }
+      `,
+      props: {
+        image: 'https://example.com/input.jpg',
+      },
+      editables: undefined as import('@/types').EditableField[] | undefined,
+    };
+
+    expect(validateDesign(design)).toBeNull();
+    const firstEditables = design.editables;
+    expect(firstEditables).toEqual(expect.arrayContaining([
+      expect.objectContaining({ id: 'image', type: 'image' }),
+      expect.objectContaining({ type: 'text', source: 'literal' }),
+    ]));
+
+    expect(validateDesign(design)).toBeNull();
+    expect(design.editables).toEqual(firstEditables);
+  });
+
+  it('keeps compiler-owned scene-selected media valid on repeated validation', () => {
+    const design = {
+      code: `
+        const scenes = [
+          {id: 'input', img: 'input'},
+          {id: 'output', img: 'output'},
+        ];
+        function Scene({scene, src}) {
+          return <Img src={src} style={{width: '100%', height: '100%', objectFit: 'cover'}} />;
+        }
+        function Composition(props) {
+          return (
+            <AbsoluteFill>
+              {scenes.map(scene => <Scene key={scene.id} scene={scene} src={props[scene.img]} />)}
+            </AbsoluteFill>
+          );
+        }
+      `,
+      props: {
+        input: 'https://example.com/input.jpg',
+        output: 'https://example.com/output.jpg',
+      },
+      editables: undefined as import('@/types').EditableField[] | undefined,
+    };
+
+    expect(validateDesign(design)).toBeNull();
+    const firstEditables = design.editables;
+    expect(firstEditables).toEqual(expect.arrayContaining([
+      expect.objectContaining({ id: 'input', type: 'image' }),
+      expect.objectContaining({ id: 'output', type: 'image' }),
+    ]));
+
+    expect(validateDesign(design)).toBeNull();
+    expect(design.editables).toEqual(firstEditables);
+  });
+
+  it('still blocks mechanical failures when editable inference is partial', () => {
+    const design = {
+      code: `
+        function Composition(props) {
+          return <AbsoluteFill><MissingLayer /><h1>{props.brand} {props.tagline}</h1></AbsoluteFill>;
+        }
+      `,
+      props: { brand: 'ROG', tagline: 'For those who dare' },
+    };
+
+    const report = validateDesignReport(design);
+
+    expect(report.blocking.join('\n')).toContain('MissingLayer');
+    expect(validateDesign(design)).toContain('MissingLayer');
+  });
+
+  it('accepts persisted compiler manifests with dynamic conditional ownership', () => {
+    const design = {
+      code: `
+        function ProductLines({ lines }) {
+          return lines.map((line, index) => (
+            <div
+              key={line}
+              data-editable={index === 0 ? 'productLine1' : index === 1 ? 'productLine2' : 'productLine3'}
+            >
+              {line}
+            </div>
+          ));
+        }
+        function Composition(props) {
+          return <AbsoluteFill><ProductLines lines={props.productLines} /></AbsoluteFill>;
+        }
+      `,
+      props: {
+        productLines: ['STRIX', 'ZEPHYRUS', 'FLOW'],
+        productLine1: 'STRIX',
+        productLine2: 'ZEPHYRUS',
+        productLine3: 'FLOW',
+      },
+      editables: [
+        { id: 'productLine1', type: 'text' as const, label: 'Product line 1', propKey: 'productLine1' },
+        { id: 'productLine2', type: 'text' as const, label: 'Product line 2', propKey: 'productLine2' },
+        { id: 'productLine3', type: 'text' as const, label: 'Product line 3', propKey: 'productLine3' },
+      ],
+    };
+
+    expect(validateDesignReport(design).blocking).toEqual([]);
+    expect(validateDesign(design)).toBeNull();
+  });
+
+  it('still blocks legacy editable metadata with no visible owner', () => {
+    const design = {
+      code: 'function Composition() { return <AbsoluteFill />; }',
+      props: { orphanTitle: 'Invisible title' },
+      editables: [
+        { id: 'orphanTitle', type: 'text' as const, label: 'Orphan title', propKey: 'orphanTitle' },
+      ],
+    };
+
+    expect(validateDesign(design)).toContain('no JSX element has data-editable="orphanTitle"');
   });
 });
 

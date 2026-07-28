@@ -208,24 +208,23 @@ export class AgentDualWriter {
           const eventFontSubstitutions = (event as Record<string, unknown>).fontSubstitutions;
           const persistedDesign = {
             ...(sourceDesign || {}),
-            code: typeof sourceDesign?.code === 'string' ? sourceDesign.code : event.code,
-            width: typeof sourceDesign?.width === 'number' && Number.isFinite(sourceDesign.width)
-              ? sourceDesign.width
-              : event.width,
-            height: typeof sourceDesign?.height === 'number' && Number.isFinite(sourceDesign.height)
-              ? sourceDesign.height
-              : event.height,
-            props: sourceDesign?.props ?? event.props,
-            animation: sourceDesign?.animation ?? event.animation,
-            ...(Array.isArray(sourceDesign?.editables)
-              ? { editables: sourceDesign.editables }
-              : Array.isArray(eventEditables)
+            // publish_draft emits the normalized, validated composition. Keep
+            // source-only metadata, but never replace the compiled manifest
+            // with the stale pre-validation workspace JSON.
+            code: event.code,
+            width: event.width,
+            height: event.height,
+            props: event.props ?? sourceDesign?.props,
+            animation: event.animation ?? sourceDesign?.animation,
+            ...(Array.isArray(eventEditables)
                 ? { editables: eventEditables }
+                : Array.isArray(sourceDesign?.editables)
+                  ? { editables: sourceDesign.editables }
                 : {}),
-            ...(sourceDesign?.fontSubstitutions && typeof sourceDesign.fontSubstitutions === 'object'
-              ? { fontSubstitutions: sourceDesign.fontSubstitutions }
-              : eventFontSubstitutions && typeof eventFontSubstitutions === 'object'
+            ...(eventFontSubstitutions && typeof eventFontSubstitutions === 'object'
                 ? { fontSubstitutions: eventFontSubstitutions }
+                : sourceDesign?.fontSubstitutions && typeof sourceDesign.fontSubstitutions === 'object'
+                  ? { fontSubstitutions: sourceDesign.fontSubstitutions }
                 : {}),
           };
           const designJson = JSON.stringify(persistedDesign);

@@ -59,6 +59,8 @@ describe('agent prompt policy guards', () => {
     expect(remotion).toContain('export default')
     expect(remotion).toContain('function Composition(props)')
     expect(remotion).toContain('Do not use ES module syntax')
+    expect(remotion).toContain('remains previewable/publishable even if the tool also returns non-blocking')
+    expect(remotion).toContain('Do not rewrite scenes merely to clear advisories')
   })
 
   it('returns resolved generate_image URLs for Remotion composition use', () => {

@@ -414,6 +414,53 @@ describe('Composition workspace runner', () => {
     expect(persisted.__makaronScaffold).toBe(true);
   });
 
+  it('autosaves a playable draft when only editable coverage remains incomplete', async () => {
+    workspaceFiles.set(foundationPath, {
+      content: "const COLOR = '#d946ef';",
+      contentType: 'text/javascript',
+      storageUrl: `https://workspace.test/${foundationPath}`,
+    });
+    workspaceFiles.set(rootPath, {
+      content: 'function Composition(props) { return <AbsoluteFill style={{backgroundColor: COLOR}}><h1>{props.brand} {props.tagline}</h1></AbsoluteFill>; }',
+      contentType: 'text/javascript',
+      storageUrl: `https://workspace.test/${rootPath}`,
+    });
+    await compileSavedCompositionPart({
+      projectId,
+      userId,
+      supabase,
+      workspaceId: 'advisory-only',
+      partPath: foundationPath,
+      snapshotImages: [],
+      metadata: {
+        width: 1920,
+        height: 1080,
+        props: { brand: 'ROG', tagline: 'For those who dare' },
+        animation: { fps: 30, durationInSeconds: 60 },
+      },
+    });
+
+    const result = await compileSavedCompositionPart({
+      projectId,
+      userId,
+      supabase,
+      workspaceId: 'advisory-only',
+      partPath: rootPath,
+      snapshotImages: [],
+    });
+
+    expect(result.status).toBe('ready');
+    if (result.status !== 'ready') throw new Error('expected ready workspace');
+    expect(result.advisories.join('\n')).toContain('renders multiple editable props');
+    expect(result.designPath).toBe(compositionDraftPath(projectId));
+    const state = JSON.parse(workspaceFiles.get(compositionWorkspaceStatePath(projectId))!.content);
+    expect(state.lastCompile).toMatchObject({
+      status: 'ready',
+      designPath: compositionDraftPath(projectId),
+    });
+    expect(state.lastCompile.advisories.join('\n')).toContain('renders multiple editable props');
+  });
+
   it('keeps helper-only source invalid until a root entry component is saved', async () => {
     const scenesPath = `${projectId}/drafts/composition-parts/10-scenes.js`;
     workspaceFiles.set(foundationPath, {

@@ -8,7 +8,10 @@ import { parse } from '@babel/parser';
 import traverse from '@babel/traverse';
 import { transform as sucraseTransform } from 'sucrase';
 import type { EditableField } from '@/types';
-import { compileEditableManifest } from './editor/editable-manifest';
+import {
+  compileEditableManifest,
+  type EditableCoverage,
+} from './editor/editable-manifest';
 import {
   buildRemotionEvaluatorBody,
   DYNAMIC_DESIGN_SCOPE_NAMES,
@@ -20,6 +23,12 @@ export interface DesignResult {
   props?: Record<string, unknown>;
   editables?: EditableField[];
   animation?: { fps?: number; durationInSeconds?: number; format?: string };
+}
+
+export interface DesignValidationReport {
+  blocking: string[];
+  advisories: string[];
+  editableCoverage: EditableCoverage;
 }
 
 const SAFE_RUNTIME_GLOBALS = new Set([
@@ -50,7 +59,7 @@ const SAFE_RUNTIME_GLOBALS = new Set([
  * or an error message string if the design should be rejected.
  */
 export function validateDesign(result: DesignResult): string | null {
-  const diagnostics = validateDesignDiagnostics(result);
+  const diagnostics = validateDesignReport(result).blocking;
   if (diagnostics.length === 0) return null;
   if (diagnostics.length === 1) return diagnostics[0];
   return `Composition validation found ${diagnostics.length} blocking issues:\n${diagnostics.map(item => `- ${item}`).join('\n')}`;
@@ -58,6 +67,15 @@ export function validateDesign(result: DesignResult): string | null {
 
 /** Return every independent static diagnostic in one model repair turn. */
 export function validateDesignDiagnostics(result: DesignResult): string[] {
+  return validateDesignReport(result).blocking;
+}
+
+/**
+ * Compile and validate a composition while keeping editable inference separate
+ * from renderability. Incomplete editable coverage must not discard a playable
+ * draft or force the Agent to rewrite otherwise valid Remotion source.
+ */
+export function validateDesignReport(result: DesignResult): DesignValidationReport {
   // Auto-fix: Replace <img> with Remotion <Img> for delayRender support
   result.code = autoFixImgTags(result.code);
   result.code = autoFixVideoTags(result.code);
@@ -66,49 +84,83 @@ export function validateDesignDiagnostics(result: DesignResult): string[] {
   const manifest = compileEditableManifest({
     code: result.code,
     props: result.props,
-    editables: result.editables,
+    editables: authoredEditables,
   });
   result.code = manifest.code;
-  result.editables = manifest.editables;
+  const authoredById = new Map(
+    (authoredEditables ?? []).map(field => [field.id, field]),
+  );
+  const inferredById = new Map(
+    manifest.editables.map(field => [field.id, field]),
+  );
+  const compilerOwnedIds = new Set(manifest.editables.map(field => field.id));
+  result.editables = [
+    ...(authoredEditables ?? []).map(authored => {
+      const inferred = inferredById.get(authored.id);
+      if (!inferred) return authored;
+      return {
+        ...inferred,
+        ...authored,
+        source: authored.source ?? inferred.source,
+      };
+    }),
+    ...manifest.editables.filter(field => !authoredById.has(field.id)),
+  ];
 
   // Check 1: Syntax — Sucrase compile only (no runtime execution)
   const compileError = checkCompile(result.code);
-  if (compileError) return [compileError];
+  if (compileError) {
+    return {
+      blocking: [compileError],
+      advisories: [...new Set(manifest.diagnostics)],
+      editableCoverage: manifest.coverage,
+    };
+  }
 
   const timelineDurationError = validateTimelineDuration(result);
-  const diagnostics: string[] = [...manifest.diagnostics];
-  if (timelineDurationError) diagnostics.push(timelineDurationError);
+  const blocking: string[] = [];
+  const advisories: string[] = [...manifest.diagnostics];
+  if (timelineDurationError) blocking.push(timelineDurationError);
 
   // Check 2: Hooks evaluated while the composition module is being created.
   const hookError = checkTopLevelHookCalls(result.code);
-  if (hookError) diagnostics.push(hookError);
+  if (hookError) blocking.push(hookError);
 
   // Check 3: References that would only fail once Player/export evaluates code
   const referenceError = checkUnresolvedIdentifiers(result.code);
-  if (referenceError) diagnostics.push(referenceError);
+  if (referenceError) blocking.push(referenceError);
 
   // Check 4: Image references
   const imageError = checkImageReferences(result.code, result.props);
-  if (imageError) diagnostics.push(imageError);
+  if (imageError) blocking.push(imageError);
 
   // Check 5: Image URLs valid
   const urlError = checkImageUrls(result.code);
-  if (urlError) diagnostics.push(urlError);
+  if (urlError) blocking.push(urlError);
 
   // Check 6: Editables validation
   // The compiler owns inferred fields and has already validated their graph.
   // Keep the legacy validator for authored metadata only.
-  const editablesError = validateEditables(authoredEditables, result.code, result.props);
-  if (editablesError) diagnostics.push(editablesError);
+  const editablesError = validateEditables(
+    authoredEditables,
+    result.code,
+    result.props,
+    compilerOwnedIds,
+  );
+  if (editablesError) blocking.push(editablesError);
 
   const hardcodedTextError = validateHardcodedEditableText(
     result.editables,
     result.code,
     result.props,
   );
-  if (hardcodedTextError) diagnostics.push(hardcodedTextError);
+  if (hardcodedTextError) blocking.push(hardcodedTextError);
 
-  return [...new Set(diagnostics)];
+  return {
+    blocking: [...new Set(blocking)],
+    advisories: [...new Set(advisories)],
+    editableCoverage: manifest.coverage,
+  };
 }
 
 /** Hooks may run inside components/custom hooks, never while evaluating the source module. */
@@ -179,6 +231,7 @@ export function validateEditables(
   editables?: EditableField[],
   code = '',
   props?: Record<string, unknown>,
+  compilerOwnedIds = new Set<string>(),
 ): string | null {
   if (!editables || editables.length === 0) return null;
   const dynamicBindings = collectDynamicEditableBindingsById(code, props);
@@ -193,23 +246,37 @@ export function validateEditables(
     const dynamicBinding = field.id === field.propKey
       ? dynamicBindings.get(field.id) ?? null
       : null;
-    const openingTag = findEditableOpeningTag(code, field.id)
+    const directOpeningTag = findEditableOpeningTag(code, field.id);
+    const openingTag = directOpeningTag
       ?? dynamicBinding?.openingTag
       ?? (field.source === 'literal'
         ? findConditionalLiteralOpeningTag(code, field.id)
         : null);
-    if (!openingTag) {
+    const compilerOwned = compilerOwnedIds.has(field.id);
+    const compilerOwnsMediaBox = compilerOwned && (
+      field.source === 'literal'
+      || Boolean(dynamicBinding?.openingTag.includes('__makaronEditable_'))
+      || Boolean(!directOpeningTag && code.includes('__makaronEditable_'))
+    );
+    if (!openingTag && !compilerOwned) {
       return `⚠️ Editable field "${field.id}" is declared but no JSX element has data-editable="${field.id}". Add data-editable to the visible editable wrapper.`;
     }
 
     const compilerLiteral = field.source === 'literal'
       && props
       && Object.prototype.hasOwnProperty.call(props, field.propKey);
-    if (!codeReadsProp(code, field.propKey) && !dynamicBinding && !compilerLiteral) {
+    if (
+      !compilerOwned
+      && !codeReadsProp(code, field.propKey)
+      && !dynamicBinding
+      && !compilerLiteral
+    ) {
       return `⚠️ Editable field "${field.id}" declares prop key "${field.propKey}", but the design code does not read props.${field.propKey}. Avoid hardcoded content; wire the editable element to props.${field.propKey}.`;
     }
 
     if (
+      !compilerOwnsMediaBox
+      &&
       (field.type === 'image' || field.type === 'video')
       && (
         !openingTag

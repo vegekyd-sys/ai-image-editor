@@ -732,6 +732,84 @@ describe('Editable Manifest compiler', () => {
     })).toEqual(result);
   });
 
+  it('traces computed top-level media props selected by a scene field', () => {
+    const props: Record<string, unknown> = {
+      input: 'https://example.com/input.jpg',
+      output: 'https://example.com/output.jpg',
+    };
+    const result = compileEditableManifest({
+      code: `
+        const scenes = [
+          { id: 'input', img: 'input' },
+          { id: 'output', img: 'output' },
+        ];
+        function Scene({ scene, src }) {
+          return <AbsoluteFill><Img src={src} /></AbsoluteFill>;
+        }
+        function Composition(props) {
+          return scenes.map(scene => (
+            <Scene key={scene.id} scene={scene} src={props[scene.img]} />
+          ));
+        }
+      `,
+      props,
+    });
+
+    expect(result.diagnostics).toEqual([]);
+    expect(result.coverage).toMatchObject({
+      visibleSinks: 2,
+      editable: 2,
+      ignored: 0,
+      unsupported: [],
+    });
+    expect(result.editables.map(field => [field.id, field.type])).toEqual([
+      ['input', 'image'],
+      ['output', 'image'],
+    ]);
+    expect(result.code).toContain('__makaronEditable_src={scene.img}');
+    expect(result.code).toContain('data-editable={__makaronEditable_src}');
+  });
+
+  it('lifts a mapped scene counter label into per-scene editable props', () => {
+    const props: Record<string, unknown> = {};
+    const result = compileEditableManifest({
+      code: `
+        const scenes = [
+          { id: 'input', title: 'Input' },
+          { id: 'output', title: 'Output' },
+        ];
+        function Scene({ scene }) {
+          return (
+            <AbsoluteFill>
+              <div>AI INFERENCE / 0{scenes.indexOf(scene) + 1}</div>
+              <h1>{scene.title}</h1>
+            </AbsoluteFill>
+          );
+        }
+        function Composition() {
+          return scenes.map(scene => <Scene key={scene.id} scene={scene} />);
+        }
+      `,
+      props,
+    });
+
+    expect(result.diagnostics).toEqual([]);
+    expect(result.coverage.unsupported).toEqual([]);
+    expect(result.editables.map(field => field.id)).toEqual(expect.arrayContaining([
+      'inputCounterLabel',
+      'outputCounterLabel',
+      'inputTitle',
+      'outputTitle',
+    ]));
+    expect(props).toMatchObject({
+      inputCounterLabel: 'AI INFERENCE / 01',
+      outputCounterLabel: 'AI INFERENCE / 02',
+    });
+    expect(result.code).toContain(
+      'data-editable={scene.__makaronEditable_counterLabel}',
+    );
+  });
+
   it('supports an explicit ignore for intentionally fixed UI chrome', () => {
     const props: Record<string, unknown> = {};
     const result = compileEditableManifest({
@@ -960,5 +1038,294 @@ describe('Editable Manifest compiler', () => {
     expect(result.diagnostics).toEqual([]);
     expect(result.editables).toEqual(editables);
     expect(result.coverage.unsupported).toEqual([]);
+  });
+
+  it('infers frame-selected text from props arrays, local prop arrays, conditionals, and find results', () => {
+    const props: Record<string, unknown> = {
+      hook: 'For those who dare',
+      identity: 'Republic of Gamers',
+      ecosystemSub: 'Performance first',
+      brandLong: 'REPUBLIC OF GAMERS',
+      sectionLabels: ['SCENE 01', 'SCENE 02'],
+      subtitles: [
+        { a: 0, b: 29, t: 'First subtitle' },
+        { a: 30, b: 59, t: 'Second subtitle' },
+      ],
+    };
+    const result = compileEditableManifest({
+      code: `
+        function Composition(props) {
+          const frame = useCurrentFrame();
+          const scene = Math.floor(frame / 30);
+          const subtitle = props.subtitles.find(item => frame >= item.a && frame <= item.b);
+          const labels = [props.hook, props.identity];
+          return (
+            <AbsoluteFill>
+              <div id="scene-label" data-editable>{props.sectionLabels[scene]}</div>
+              <h1 id="main-label" data-editable>{labels[scene]}</h1>
+              <p id="support-label" data-editable>{scene === 0 ? props.ecosystemSub : props.brandLong}</p>
+              {subtitle && <small id="subtitle" data-editable>{subtitle.t}</small>}
+            </AbsoluteFill>
+          );
+        }
+      `,
+      props,
+    });
+
+    expect(result.diagnostics).toEqual([]);
+    expect(result.coverage.unsupported).toEqual([]);
+    expect(result.editables.map(field => field.propKey)).toEqual(expect.arrayContaining([
+      'sectionLabel1',
+      'sectionLabel2',
+      'hook',
+      'identity',
+      'ecosystemSub',
+      'brandLong',
+      'subtitle1T',
+      'subtitle2T',
+    ]));
+    expect(result.code).toContain('data-editable={["sectionLabel1", "sectionLabel2"][scene]}');
+    expect(result.code).toContain('data-editable={["hook", "identity"][scene]}');
+    expect(result.code).toContain('data-editable={scene === 0 ? "ecosystemSub" : "brandLong"}');
+    expect(result.code).toContain('data-editable={subtitle.__makaronEditable_t}');
+    expect(result.code).not.toMatch(/\sdata-editable(?=[\s>])/);
+  });
+
+  it('traces dynamic collection text through ordinary helper component props', () => {
+    const props: Record<string, unknown> = {
+      productItems: [
+        { symbol: '01', name: 'Laptop' },
+        { symbol: '02', name: 'Desktop' },
+      ],
+      valueLabels: ['Performance', 'Innovation'],
+      performanceMetrics: ['240 HZ', '3 MS'],
+      subtitles: [
+        { start: 0, end: 29, text: 'First subtitle' },
+        { start: 30, end: 59, text: 'Second subtitle' },
+      ],
+    };
+    const result = compileEditableManifest({
+      code: `
+        function ProductScene({ items, labels, metrics }) {
+          return (
+            <AbsoluteFill>
+              {items.map(item => (
+                <div key={item.symbol}>
+                  <strong>{item.symbol}</strong>
+                  <span>{item.name}</span>
+                </div>
+              ))}
+              {labels.map(label => <div key={label}>{label}</div>)}
+              <b>{metrics[0]}</b>
+            </AbsoluteFill>
+          );
+        }
+        function Subtitle({ entries }) {
+          const frame = useCurrentFrame();
+          const current = entries.find(entry => frame >= entry.start && frame <= entry.end);
+          return current ? <small>{current.text}</small> : null;
+        }
+        function Composition(props) {
+          return (
+            <>
+              <ProductScene
+                items={props.productItems}
+                labels={props.valueLabels}
+                metrics={props.performanceMetrics}
+              />
+              <Subtitle entries={props.subtitles} />
+            </>
+          );
+        }
+      `,
+      props,
+    });
+
+    expect(result.diagnostics).toEqual([]);
+    expect(result.coverage).toMatchObject({
+      visibleSinks: 9,
+      editable: 9,
+      ignored: 0,
+      unsupported: [],
+    });
+    expect(result.editables.map(field => field.propKey)).toEqual(expect.arrayContaining([
+      'productItem1Symbol',
+      'productItem2Symbol',
+      'productItem1Name',
+      'productItem2Name',
+      'valueLabel1',
+      'valueLabel2',
+      'performanceMetric1',
+      'subtitle1Text',
+      'subtitle2Text',
+    ]));
+  });
+
+  it('traces scene object fields through nested helper component props', () => {
+    const props: Record<string, unknown> = {
+      scenes: [
+        { id: 'launch', from: 0, year: '2011', title: 'Launch', tag: 'Chat begins', cap: 'First subtitle' },
+        { id: 'pay', from: 120, year: '2013', title: 'Payments', tag: 'Chat meets commerce', cap: 'Second subtitle' },
+      ],
+    };
+    const result = compileEditableManifest({
+      code: `
+        function Header({ year, title, tag }) {
+          return <header><b>{year}</b><h1>{title}</h1><p>{tag}</p></header>;
+        }
+        function Caption({ text }) {
+          return <div>{text}</div>;
+        }
+        function Scene({ data }) {
+          return (
+            <AbsoluteFill>
+              <Header year={data.year} title={data.title} tag={data.tag} />
+              <Caption text={data.cap} />
+            </AbsoluteFill>
+          );
+        }
+        function Composition(props) {
+          return props.scenes.map(scene => (
+            <Sequence key={scene.id} from={scene.from}>
+              <Scene data={scene} />
+            </Sequence>
+          ));
+        }
+      `,
+      props,
+    });
+
+    expect(result.diagnostics).toEqual([]);
+    expect(result.coverage).toMatchObject({
+      visibleSinks: 8,
+      editable: 8,
+      ignored: 0,
+      unsupported: [],
+    });
+    expect(result.editables.map(field => field.propKey)).toEqual(expect.arrayContaining([
+      'launchYear',
+      'payYear',
+      'launchTitle',
+      'payTitle',
+      'launchTag',
+      'payTag',
+      'launchCap',
+      'payCap',
+    ]));
+  });
+
+  it('traces indexed scene fields through ordinary children helpers', () => {
+    const props: Record<string, unknown> = {
+      scenes: [
+        { id: 'hook', kicker: 'Coffee pricing', heading: 'Where does it go?', subtitle: 'First subtitle' },
+        { id: 'beans', kicker: 'The first journey', heading: 'Coffee beans', subtitle: 'Second subtitle', detail: 'Farm to roast' },
+      ],
+    };
+    const result = compileEditableManifest({
+      code: `
+        function Txt({ children }) {
+          return <div>{children}</div>;
+        }
+        function Header({ data }) {
+          return <header><Txt>{data.kicker}</Txt><Txt>{data.heading}</Txt></header>;
+        }
+        function Scene({ data }) {
+          return <AbsoluteFill><Header data={data} />{data.detail && <Txt>{data.detail}</Txt>}</AbsoluteFill>;
+        }
+        function Subtitle({ text }) {
+          return <Txt>{text}</Txt>;
+        }
+        function Composition(props) {
+          const frame = useCurrentFrame();
+          const index = frame < 90 ? 0 : 1;
+          const data = props.scenes[index];
+          return <AbsoluteFill><Scene data={data} /><Subtitle text={data.subtitle} /></AbsoluteFill>;
+        }
+      `,
+      props,
+    });
+
+    expect(result.diagnostics).toEqual([]);
+    expect(result.coverage.unsupported).toEqual([]);
+    expect(result.editables.map(field => field.id)).toEqual(expect.arrayContaining([
+      'hookKicker',
+      'beansKicker',
+      'hookHeading',
+      'beansHeading',
+      'hookSubtitle',
+      'beansSubtitle',
+      'beansDetail',
+    ]));
+    expect(result.code).toContain(
+      '<Txt __makaronEditable_children={data.__makaronEditable_kicker}>{data.kicker}</Txt>',
+    );
+    expect(props.scenes).toEqual(expect.arrayContaining([
+      expect.objectContaining({ __makaronEditable_kicker: 'hookKicker' }),
+      expect.objectContaining({ __makaronEditable_heading: 'beansHeading' }),
+    ]));
+  });
+
+  it('lifts nested scene label and icon arrays rendered by map', () => {
+    const props: Record<string, unknown> = {
+      scenes: [
+        { id: 'hook', title: 'Hook' },
+        {
+          id: 'beans',
+          title: 'Beans',
+          nodes: ['Grow', 'Process'],
+          icons: ['A', 'B'],
+        },
+      ],
+    };
+    const result = compileEditableManifest({
+      code: `
+        function Txt({ children }) {
+          return <div>{children}</div>;
+        }
+        function Scene({ data }) {
+          return (
+            <AbsoluteFill>
+              {data.nodes.map((node, index) => (
+                <div key={node}>
+                  <div>{data.icons[index]}</div>
+                  <Txt>{node}</Txt>
+                </div>
+              ))}
+            </AbsoluteFill>
+          );
+        }
+        function Composition(props) {
+          const index = useCurrentFrame() < 90 ? 0 : 1;
+          const data = props.scenes[index];
+          return <Scene data={data} />;
+        }
+      `,
+      props,
+    });
+
+    expect(result.diagnostics).toEqual([]);
+    expect(result.coverage.unsupported).toEqual([]);
+    expect(result.editables.map(field => field.id)).toEqual(expect.arrayContaining([
+      'beansNode1',
+      'beansNode2',
+      'beansIcon1',
+      'beansIcon2',
+    ]));
+    expect(result.code).toContain(
+      'data-editable={data.__makaronEditable_icons[index]}',
+    );
+    expect(result.code).toContain(
+      '__makaronEditable_children={data.__makaronEditable_nodes[index]}',
+    );
+
+    const recompiled = compileEditableManifest({
+      code: result.code,
+      props,
+      editables: result.editables,
+    });
+
+    expect(recompiled.diagnostics).toEqual([]);
+    expect(recompiled.coverage).toEqual(result.coverage);
+    expect(recompiled.editables).toEqual(result.editables);
   });
 });

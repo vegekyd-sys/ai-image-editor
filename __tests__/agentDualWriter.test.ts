@@ -292,7 +292,7 @@ describe('AgentDualWriter', () => {
     });
   });
 
-  it('copies editable metadata from the authoritative promoted draft', async () => {
+  it('persists the validated render manifest instead of stale source metadata', async () => {
     const uploads: Array<{ path: string; body: Blob }> = [];
     const inserts: Array<{ table: string; row: Record<string, unknown> }> = [];
     const sourceDesignPath = 'project-id/drafts/latest-composition.json';
@@ -334,18 +334,31 @@ describe('AgentDualWriter', () => {
 
     await writer.processAndEnqueue({
       type: 'render',
-      code: 'function Composition() { return null }',
+      code: 'function Composition(props) { return <div data-editable={props.__makaronEditable_title}>{props.title}</div> }',
       width: 1080,
       height: 1920,
+      props: {
+        title: 'Hello',
+        __makaronEditable_title: 'title',
+        subtitle: 'World',
+        __makaronEditable_subtitle: 'subtitle',
+      },
+      editables: [
+        { id: 'title', type: 'text', label: 'Title', propKey: 'title' },
+        { id: 'photo', type: 'image', label: 'Photo', propKey: 'photo' },
+        { id: 'subtitle', type: 'text', label: 'Subtitle', propKey: 'subtitle' },
+      ],
       snapshotId: 'promoted-snapshot',
       sourceDesignPath,
       published: true,
     });
 
     const persisted = JSON.parse(await uploads[0].body.text());
-    expect(persisted.editables).toHaveLength(2);
+    expect(persisted.code).toContain('__makaronEditable_title');
+    expect(persisted.props.__makaronEditable_subtitle).toBe('subtitle');
+    expect(persisted.editables).toHaveLength(3);
     expect(persisted.editables.map((editable: { type: string }) => editable.type))
-      .toEqual(['text', 'image']);
+      .toEqual(['text', 'image', 'text']);
     expect(inserts).toContainEqual({
       table: 'agent_events',
       row: expect.objectContaining({

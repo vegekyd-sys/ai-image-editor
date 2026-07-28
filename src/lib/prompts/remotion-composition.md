@@ -194,6 +194,11 @@ Rules:
   identify, move only that value to a prop or add one explicit
   `data-editable` on its real visual host. Do not redesign the whole
   composition around editor metadata.
+- `compositionWorkspace.status="ready"` means the draft is mechanically valid
+  and remains previewable/publishable even if the tool also returns non-blocking
+  editable advisories. Do not rewrite scenes merely to clear advisories. Make a
+  local adjustment only when preview or coverage shows an intentional visible
+  field is actually missing.
 
 Ordinary reusable React components work without editor-specific parameters:
 
