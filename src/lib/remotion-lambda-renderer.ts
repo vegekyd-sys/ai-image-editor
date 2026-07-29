@@ -106,6 +106,45 @@ function readEnv(name: string): string | undefined {
   return value || undefined
 }
 
+export type RemotionLambdaVideoMode = 'media' | 'offthread' | 'native'
+
+export interface RemotionLambdaVideoFlags {
+  useOffthreadVideo: boolean
+  useNativeVideo: boolean
+  mode: RemotionLambdaVideoMode
+}
+
+/**
+ * Keep Lambda on the same @remotion/media decoder semantics as web export.
+ * The legacy native Html5Video path can stall when a Sequence reaches the
+ * exact end of a source file, while @remotion/media handles EOF
+ * deterministically and continues. Explicit overrides remain available for
+ * rollback.
+ */
+export function resolveRemotionLambdaVideoFlags(
+  env: Record<string, string | undefined>,
+): RemotionLambdaVideoFlags {
+  if (env.REMOTION_LAMBDA_USE_OFFTHREAD_VIDEO === 'true') {
+    return {
+      useOffthreadVideo: true,
+      useNativeVideo: false,
+      mode: 'offthread',
+    }
+  }
+  if (env.REMOTION_LAMBDA_USE_NATIVE_VIDEO === 'true') {
+    return {
+      useOffthreadVideo: false,
+      useNativeVideo: true,
+      mode: 'native',
+    }
+  }
+  return {
+    useOffthreadVideo: false,
+    useNativeVideo: false,
+    mode: 'media',
+  }
+}
+
 const runtimeMarkerCache = new Map<string, Promise<void>>()
 
 async function assertPinnedRemotionRuntime(serveUrl: string): Promise<void> {
@@ -424,7 +463,7 @@ export async function renderDesignVideoLambdaToUrl(
   const x264Preset = readX264Preset()
   const jpegQuality = readPositiveInteger(readEnv('REMOTION_LAMBDA_JPEG_QUALITY'), 80)
   const deleteAfter = readEnv('REMOTION_LAMBDA_DELETE_AFTER') || null
-  const useOffthreadVideo = readEnv('REMOTION_LAMBDA_USE_OFFTHREAD_VIDEO') === 'true'
+  const videoFlags = resolveRemotionLambdaVideoFlags(process.env)
   const logLevel = readEnv('REMOTION_LAMBDA_LOG_LEVEL') || 'warn'
   const timeoutInMilliseconds = readPositiveInteger(readEnv('REMOTION_LAMBDA_TIMEOUT_MS'), 120000)
   const progressRetryAttempts = readPositiveInteger(readEnv('REMOTION_LAMBDA_PROGRESS_RETRIES'), 3)
@@ -456,8 +495,8 @@ export async function renderDesignVideoLambdaToUrl(
         fontManifestUrl,
         fontSubstitutions: design.fontSubstitutions || {},
         fontTelemetryId,
-        useOffthreadVideo,
-        useNativeVideo: true,
+        useOffthreadVideo: videoFlags.useOffthreadVideo,
+        useNativeVideo: videoFlags.useNativeVideo,
       },
       codec: 'h264',
       imageFormat: 'jpeg',
@@ -493,6 +532,7 @@ export async function renderDesignVideoLambdaToUrl(
         framesPerLambda: framesPerLambda ? String(framesPerLambda) : '',
         concurrency: concurrency ? String(concurrency) : '',
         chunkingMode: concurrency ? 'concurrency' : 'framesPerLambda',
+        videoMode: videoFlags.mode,
       },
     })
   })
