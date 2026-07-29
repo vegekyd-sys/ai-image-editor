@@ -26,6 +26,12 @@ export interface NarrationCueSheet {
   fps: number
   durationSeconds: number
   transcriptText: string
+  verification: {
+    passed: true
+    overallMatchScore: number
+    averageSectionMatchScore: number
+    matchedSectionRatio: number
+  }
   cues: NarrationCue[]
 }
 
@@ -90,6 +96,10 @@ function similarity(left: string, right: string): number {
   if (!left || !right) return 0
   return Math.max(0, 1 - editDistance(left, right) / Math.max(left.length, right.length))
 }
+
+const MIN_OVERALL_MATCH_SCORE = 0.5
+const MIN_SECTION_MATCH_SCORE = 0.35
+const MIN_MATCHED_SECTION_RATIO = 0.6
 
 function chooseSectionEnd(input: {
   units: TimedTextUnit[]
@@ -204,6 +214,23 @@ export function buildNarrationCueSheet(input: {
     remainingExpectedChars -= normalizeText(section.text).length
   })
 
+  const overallMatchScore = similarity(
+    normalizeText(sections.map(section => section.text).join('')),
+    normalizeText(input.transcript.text || units.map(unit => unit.text).join('')),
+  )
+  const averageSectionMatchScore = cues.reduce((sum, cue) => sum + cue.matchScore, 0) / cues.length
+  const matchedSectionRatio = cues.filter(cue => cue.matchScore >= MIN_SECTION_MATCH_SCORE).length / cues.length
+  if (
+    overallMatchScore < MIN_OVERALL_MATCH_SCORE
+    || matchedSectionRatio < MIN_MATCHED_SECTION_RATIO
+  ) {
+    throw new Error(
+      'Narration verification failed: transcript does not sufficiently match the approved script '
+      + `(overall=${overallMatchScore.toFixed(4)}, averageSection=${averageSectionMatchScore.toFixed(4)}, `
+      + `matchedSections=${Math.round(matchedSectionRatio * 100)}%).`,
+    )
+  }
+
   const measuredDurationSeconds = (input.transcript.durationMs ?? units[units.length - 1].endMs) / 1000
   return {
     version: '1.0',
@@ -211,6 +238,12 @@ export function buildNarrationCueSheet(input: {
     fps,
     durationSeconds: measuredDurationSeconds,
     transcriptText: input.transcript.text,
+    verification: {
+      passed: true,
+      overallMatchScore: Number(overallMatchScore.toFixed(4)),
+      averageSectionMatchScore: Number(averageSectionMatchScore.toFixed(4)),
+      matchedSectionRatio: Number(matchedSectionRatio.toFixed(4)),
+    },
     cues,
   }
 }

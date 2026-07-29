@@ -86,6 +86,7 @@ marketing/meta-ads/
 !/scripts/makaron-worktree-fastpath.mjs
 !/scripts/smoke-gpt56-agent.ts
 !/scripts/smoke-gpt56-cache.ts
+!/scripts/smoke-volcengine-asr-project.ts
 !/scripts/backfill-annual-subscription-credits.mjs
 !/scripts/audit-liquid-glass-perf.mjs
 !/scripts/check-ui-i18n.mjs

@@ -18,7 +18,12 @@ import {
 import { deductSeedAudioCredits } from './billing/seed-audio';
 import { createAudio, SEED_AUDIO_AGENT_PROMPT_MAX_CHARS } from './skills/create-audio';
 import { formatAudioCapabilitiesForAgent } from './audio-model-capabilities';
-import { transcribeWithVolcengineAsr, type VolcengineAsrTranscript, type TranscriptWord } from './volcengine-asr';
+import {
+  isAsrTranscriptCacheCompatible,
+  transcribeWithVolcengineAsr,
+  type VolcengineAsrTranscript,
+  type TranscriptWord,
+} from './volcengine-asr';
 import { buildNarrationCueSheet, type ExpectedNarrationSection } from './narration-cues';
 import { prepareVisualAsset, resolvePreparedVisualAssetById } from './visual-assets/bridge';
 import agentPrompt from './prompts/agent.md';
@@ -2248,7 +2253,11 @@ For timeline videos, pass media_index. For external audio/video URLs, pass media
             snapshotId = snap?.id as string | undefined;
             videoMeta = snap?.video_meta as Record<string, unknown> | undefined;
             const cached = videoMeta?.transcript as VolcengineAsrTranscript | undefined;
-            if (cached?.text && !force_refresh) {
+            if (
+              cached?.text
+              && !force_refresh
+              && isAsrTranscriptCacheCompatible(cached, language)
+            ) {
               try {
                 const cueArtifact = await createNarrationCueArtifact({
                   ctx,

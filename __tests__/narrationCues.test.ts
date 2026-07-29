@@ -89,6 +89,34 @@ describe('buildNarrationCueSheet', () => {
     ])
   })
 
+  it('rejects a Japanese script when ASR returns unrelated romanized fragments', () => {
+    const input = transcript()
+    input.text = 'Chotto matte. Yorugohan mo, yoshokumo, tabeyo.'
+    input.utterances = [
+      {
+        text: input.text,
+        startMs: 0,
+        endMs: 5200,
+        words: [
+          { text: 'Chotto', startMs: 0, endMs: 600 },
+          { text: 'matte', startMs: 650, endMs: 1100 },
+          { text: 'Yorugohan', startMs: 1200, endMs: 2200 },
+          { text: 'mo', startMs: 2250, endMs: 2500 },
+          { text: 'yoshokumo', startMs: 2600, endMs: 3700 },
+          { text: 'tabeyo', startMs: 3800, endMs: 5000 },
+        ],
+      },
+    ]
+
+    expect(() => buildNarrationCueSheet({
+      transcript: input,
+      sections: [
+        { id: 'hook', text: 'ちょっと待って。' },
+        { id: 'action', text: '夜ごはんも、洋食も、食べよう。' },
+      ],
+    })).toThrow(/Narration verification failed/)
+  })
+
   it('feeds the same measured cue ranges into Storyboard and Composition gates', () => {
     const sheet = buildNarrationCueSheet({
       transcript: transcript(),
