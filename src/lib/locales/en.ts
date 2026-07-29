@@ -75,6 +75,8 @@ const en = {
   // Changelog
   'changelog.heading': 'Updates',
   'changelog.close': 'Close updates',
+  'changelog.multilingualAsr.title': 'Multilingual Speech Recognition',
+  'changelog.multilingualAsr.item1': 'Makaron ASR can now transcribe speech in multiple languages, including Japanese, for accurate subtitles and Remotion timing.',
   'changelog.editableRemotion.title': 'Editable Remotion, End to End',
   'changelog.editableRemotion.item1': 'Text, images, and video are now discovered as editable layers automatically, with selection, moving, and resizing staying aligned across desktop and mobile.',
   'changelog.editableRemotion.item2': 'Edits persist across refreshes and devices and carry into MP4 exports; video trim now edits the selected clip instead of the whole composition.',

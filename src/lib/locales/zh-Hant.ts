@@ -115,6 +115,8 @@ const zhHant = {
   // Changelog
   'changelog.heading': '更新',
   'changelog.close': '關閉更新',
+  'changelog.multilingualAsr.title': 'ASR 支援多國語言',
+  'changelog.multilingualAsr.item1': 'Makaron ASR 現在可以辨識包含日語在內的多國語言，為字幕與 Remotion 時間軸提供準確轉寫。',
   'changelog.editableRemotion.title': 'Remotion 可編輯，完整打通',
   'changelog.editableRemotion.item1': '文字、圖片和影片現在會自動成為可編輯圖層，桌面端和手機端的選取、移動與縮放都能準確跟隨畫面。',
   'changelog.editableRemotion.item2': '修改後重新整理或更換裝置仍會保留，並能正確匯出到 MP4；影片裁剪現在只編輯選取的片段，不再影響整個合成。',

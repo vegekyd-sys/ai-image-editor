@@ -112,6 +112,8 @@ const ja = {
   // Changelog
   'changelog.heading': '更新情報',
   'changelog.close': '更新情報を閉じる',
+  'changelog.multilingualAsr.title': '多言語音声認識',
+  'changelog.multilingualAsr.item1': 'Makaron ASRは日本語を含む複数の言語を文字起こしできるようになり、字幕とRemotionのタイミングを正確に合わせられます。',
   'changelog.editableRemotion.title': 'Remotion編集をエンドツーエンドで実現',
   'changelog.editableRemotion.item1': 'テキスト、画像、動画を編集可能なレイヤーとして自動検出し、デスクトップでもモバイルでも選択・移動・サイズ変更が映像に正確に追従するようになりました。',
   'changelog.editableRemotion.item2': '編集内容は再読み込みや別の端末でも保持され、MP4書き出しにも反映されます。動画のトリムはコンポジション全体ではなく、選択したクリップだけを編集します。',
