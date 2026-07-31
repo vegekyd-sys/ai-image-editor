@@ -602,7 +602,7 @@ describe('iOS App Store readiness guardrails', () => {
     expect(homePage).toContain('rememberIOSSkillReturn');
     expect(homePage).toContain("const skillId = new URLSearchParams(window.location.search).get('skill') || pathSkillId || pendingIOSSkillId");
     expect(homePage).not.toContain('useSearchParams');
-    expect(homePage).toContain('draft.homeSkillId && draft.images.length === 0');
+    expect(homePage).toContain('draft.images.length < getRequiredHomeSkillImageCount(homeSkill)');
     expect(homePage).toContain("document.documentElement.style.overflow = 'hidden'");
     expect(homePage).toContain("window.addEventListener('makaron-ios-page-stack-back', unlockIfNoDetail)");
     expect(homeSkillMedia).toContain('function SkillVideo');

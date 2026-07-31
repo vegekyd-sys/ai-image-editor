@@ -30,9 +30,12 @@ import AgentContent from '@/components/AgentContent'
 import {
   type HomeSkill,
   type HomeSkillCategory,
+  countHomeSkillImageFiles,
   filterHomeSkillsByCategory,
   getCachedHomeSkills,
   getLocalizedSkillPrompt,
+  getRequiredHomeSkillImageCount,
+  hasRequiredHomeSkillImages,
   getVisibleSkillCategories,
   setCachedHomeSkills,
 } from '@/lib/home-skills'
@@ -1446,8 +1449,13 @@ function HomePageInner() {
     sessionStorage.setItem('mkr_return_url', returnPath)
   }, [activeSkill, selectedDetail, selectedSkill])
 
-  const handleCreateProject = useCallback(async (files: File[], prompt?: string) => {
-    if (createInput.creating || (files.length === 0 && !prompt)) return
+  const handleCreateProject = useCallback(async (files: File[], prompt?: string): Promise<boolean> => {
+    const homeSkill = selectedDetail || activeSkill
+    if (
+      createInput.creating
+      || (files.length === 0 && !prompt)
+      || !hasRequiredHomeSkillImages(homeSkill, files)
+    ) return false
     saveContextBeforeLogin()
     let authedUser = user
     if (!authedUser) {
@@ -1457,16 +1465,15 @@ function HomePageInner() {
       } catch (err) {
         console.error('Save create draft error:', err)
         createInput.setCreating(false)
-        return
+        return false
       }
       authedUser = await requireAuth()
-      if (!authedUser) return
+      if (!authedUser) return false
     }
     createInput.setCreating(true)
     try {
       const supabase = createClient()
       let skillName: string | undefined
-      const homeSkill = selectedDetail || activeSkill
       if (homeSkill?.skill_path) {
         skillName = await installHomeSkill(homeSkill)
       } else if (selectedSkill) {
@@ -1482,6 +1489,7 @@ function HomePageInner() {
       saveAgentModelPreference(result.projectId, createAgentModel)
       void clearCreateDraft()
       router.push(`/projects/${result.projectId}`)
+      return true
     } catch (err) {
       console.error('Create project error:', err)
       const msg = err instanceof Error ? err.message : String(err)
@@ -1490,6 +1498,7 @@ function HomePageInner() {
         alert(t('video.tooLong').replace('{duration}', msg.match(/\((\d+(?:\.\d+)?)s\)/)?.[1] || '?').replace('{max}', String(MAX_DURATION)))
       }
       createInput.setCreating(false)
+      return false
     }
   }, [activeSkill, createAgentModel, createInput, installHomeSkill, requireAuth, router, saveContextBeforeLogin, saveCreateDraftBeforeLogin, selectedDetail, selectedSkill, t, user])
 
@@ -1514,7 +1523,8 @@ function HomePageInner() {
         consumeDraftRef.current = false
         return
       }
-      if (draft.homeSkillId && draft.images.length === 0) {
+      const homeSkill = draft.homeSkillId ? homeSkills.find(skill => skill.id === draft.homeSkillId) : null
+      if (draft.homeSkillId && (!homeSkill || draft.images.length < getRequiredHomeSkillImageCount(homeSkill))) {
         await clearCreateDraft()
         return
       }
@@ -1529,7 +1539,6 @@ function HomePageInner() {
       try {
         const supabase = createClient()
         let skillName = draft.selectedSkill
-        const homeSkill = draft.homeSkillId ? homeSkills.find(skill => skill.id === draft.homeSkillId) : null
         if (homeSkill?.skill_path) {
           skillName = await installHomeSkill(homeSkill)
         }
@@ -1562,8 +1571,8 @@ function HomePageInner() {
     const hasText = createInput.text.trim()
     const hasFiles = createInput.files.length > 0
     if (!hasText && !hasFiles) return
-    await handleCreateProject(hasFiles ? createInput.files : [], hasText || undefined)
-    createInput.clear()
+    const created = await handleCreateProject(hasFiles ? createInput.files : [], hasText || undefined)
+    if (created) createInput.clear()
   }, [createInput, handleCreateProject])
 
   const handleDrop = useCallback(async (e: React.DragEvent) => {
@@ -1606,14 +1615,14 @@ function HomePageInner() {
       content_type: 'skill',
       content_name: skillLabel,
       skill_id: activeSkill.id,
-      required_photo_count: Math.max(1, activeSkill.image_count ?? 1),
-      selected_photo_count: createInput.files.length,
+      required_photo_count: getRequiredHomeSkillImageCount(activeSkill),
+      selected_photo_count: countHomeSkillImageFiles(createInput.files),
       source,
     }, createMetaEventId('upload.intent'))
   }, [activeSkill, createInput.files.length, locale, user])
 
   const renderUploadSlots = useCallback((template: { image_count?: number; before_images?: string[] }, isActive: boolean) => {
-    const minSlots = template.image_count ?? 1
+    const minSlots = Math.max(0, template.image_count ?? 1)
     const count = Math.max(minSlots, createInput.files.length + 1)
     const befores = (template.before_images || []).slice(0, 3)
     const showBefores = befores.length > 0 && createInput.files.length === 0
@@ -1725,17 +1734,18 @@ function HomePageInner() {
       ? t('home.tryFree')
       : t('home.create')
 
-  const requiredPhotoCount = Math.max(1, activeSkill?.image_count ?? 1)
-  const selectedPhotoCount = createInput.files.length
+  const requiredPhotoCount = getRequiredHomeSkillImageCount(activeSkill)
+  const selectedPhotoCount = countHomeSkillImageFiles(createInput.files)
   const remainingPhotoCount = Math.max(requiredPhotoCount - selectedPhotoCount, 0)
   const hasEnoughPhotos = remainingPhotoCount === 0
+  const isSkillAction = !!activeSkill
   const isGuestSkillAction = !renderUser && !!activeSkill
   const shouldLoginOnEmptyCreate = !renderUser && !activeSkill
   const formatPhotoCount = (count: number) => t('home.photoCount', count)
 
-  const skillActionCreateLabel = isGuestSkillAction
+  const skillActionCreateLabel = isSkillAction
     ? hasEnoughPhotos
-      ? t('home.previewFree')
+      ? isGuestSkillAction ? t('home.previewFree') : t('home.create')
       : t('home.uploadPhoto')
     : guestSkillCreateLabel
 
@@ -1770,10 +1780,10 @@ function HomePageInner() {
       content_name: skillActionMeta || activeSkill?.id || 'skill',
       skill_id: activeSkill?.id,
       required_photo_count: requiredPhotoCount,
-      selected_photo_count: createInput.files.length,
+      selected_photo_count: selectedPhotoCount,
       source,
     }, createMetaEventId('upload.intent'))
-  }, [activeSkill?.id, createInput.files.length, isGuestSkillAction, requiredPhotoCount, skillActionMeta])
+  }, [activeSkill?.id, createInput.files.length, isGuestSkillAction, requiredPhotoCount, selectedPhotoCount, skillActionMeta])
 
   const trackFileSelected = useCallback((files: File[], source: string) => {
     if (!isGuestSkillAction || files.length === 0) return
@@ -1793,14 +1803,14 @@ function HomePageInner() {
       goToLoginFromEmptyCreate()
       return
     }
-    if (isGuestSkillAction && createInput.files.length < requiredPhotoCount) {
+    if (activeSkill && !hasEnoughPhotos) {
       rememberIOSSkillReturn(activeSkill?.id)
       trackUploadIntent('primary_action')
       createInput.fileInputRef.current?.click()
       return
     }
     handleCreate()
-  }, [activeSkill?.id, createInput.fileInputRef, createInput.files.length, createInput.text, goToLoginFromEmptyCreate, handleCreate, isGuestSkillAction, rememberIOSSkillReturn, requiredPhotoCount, shouldLoginOnEmptyCreate, trackUploadIntent])
+  }, [activeSkill, createInput.fileInputRef, createInput.files.length, createInput.text, goToLoginFromEmptyCreate, handleCreate, hasEnoughPhotos, rememberIOSSkillReturn, shouldLoginOnEmptyCreate, trackUploadIntent])
 
   const handleInputSlotClick = useCallback(async () => {
     if (!user && selectedDetail) {
