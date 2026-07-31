@@ -264,8 +264,7 @@ describe('agent prompt policy guards', () => {
     expect(animate).toContain('Kling docs do not state a video resolution lower bound')
     expect(animate).toContain('Never write or submit a SeeDance generated video duration below 4s')
 
-    expect(agentTs).toContain('SeeDance/SeeDance Mini is 4-15 seconds')
-    expect(agentTs).toContain('4s minimum output, 5s default/common preset')
+    expect(agentTs).toContain('SeeDance/SeeDance Mini and MiniMax H3 are 4-15 seconds')
     expect(agentTs).toContain('Kling is 5-15 seconds')
     expect(agentTs).toContain('set \\`duration: 4\\`')
     expect(agentTs).toContain('If a complete script totals 15 seconds or less, submit it as one video generation call')

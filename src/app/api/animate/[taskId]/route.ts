@@ -37,6 +37,7 @@ export async function GET(
     const isMotionControl = taskId.startsWith('mc-')
     const isXai = taskId.startsWith('xai-')
     const isGoogleOmni = taskId.startsWith('google-omni-')
+    const isMinimax = taskId.startsWith('minimax-h3-')
     const provider = process.env.ANIMATE_PROVIDER || 'kling'
     let result: { taskId: string; status: string; videoUrl?: string; error?: string }
     const realTaskId = isMotionControl ? taskId.slice(3) : taskId
@@ -63,6 +64,9 @@ export async function GET(
         .maybeSingle()
       const { getGoogleOmniVideoTask } = await import('@/lib/google-omni-video')
       result = await getGoogleOmniVideoTask(taskId, anim?.video_url || undefined)
+    } else if (isMinimax) {
+      const { getMinimaxVideoTask } = await import('@/lib/minimax-video')
+      result = await getMinimaxVideoTask(taskId)
     } else if (provider === 'piapi') {
       result = await getKlingTaskPiAPI(taskId)
     } else {

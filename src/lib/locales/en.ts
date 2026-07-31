@@ -338,6 +338,8 @@ const en = {
   'model.grok.desc': 'Rapid preview, around 30–40s, native audio, single starting image.',
   'model.googleOmni.name': 'Gemini Omni',
   'model.googleOmni.desc': 'Fast 720p video editing with native audio.',
+  'model.minimaxH3.name': 'MiniMax H3',
+  'model.minimaxH3.desc': 'Open multimodal video model with 15-second, native 2K, and multi-reference generation.',
   'model.gpt56Terra.name': 'GPT-5.6 Terra',
   'model.gpt56Terra.desc': 'Recommended default balancing intelligence, speed, and cost.',
   'model.gpt56Sol.name': 'GPT-5.6 Sol',

@@ -15,11 +15,11 @@ export interface VideoModelCapability {
   defaultResolution?: VideoResolution
   supportedAspectRatios?: VideoAspectRatio[]
   estimatedCostPerSecondUsdByResolution?: Partial<Record<VideoResolution, number>>
-  provider?: 'kling' | 'seedance' | 'grok' | 'google-omni' | 'piapi'
+  provider?: 'kling' | 'seedance' | 'grok' | 'google-omni' | 'minimax' | 'piapi'
   providerModel?: string
 }
 
-export type VideoResolution = '480p' | '720p' | '1080p' | '4k'
+export type VideoResolution = '480p' | '720p' | '768p' | '1080p' | '2k' | '4k'
 export type VideoResolutionInput = VideoResolution | 'auto' | null | undefined
 export type VideoAspectRatio = '16:9' | '9:16' | '1:1' | '4:3' | '3:4' | '21:9' | '3:2' | '2:3'
 export type VideoAspectRatioInput = VideoAspectRatio | 'auto' | null | undefined
@@ -27,7 +27,7 @@ export type VideoAspectRatioInput = VideoAspectRatio | 'auto' | null | undefined
 export interface VideoGenerationRoute {
   model: string
   label: string
-  provider: 'kling' | 'seedance' | 'grok' | 'google-omni' | 'piapi' | string
+  provider: 'kling' | 'seedance' | 'grok' | 'google-omni' | 'minimax' | 'piapi' | string
   providerModel?: string
   providerMode?: 'std' | 'pro' | '4k'
   resolution: VideoResolution
@@ -223,6 +223,40 @@ const MODEL_CAPABILITIES: Record<string, VideoModelCapability> = {
     provider: 'google-omni',
     providerModel: 'gemini-omni-flash-preview',
   },
+  'minimax-h3': {
+    id: 'minimax-h3',
+    label: 'MiniMax H3',
+    minOutputDuration: 4,
+    maxOutputDuration: 15,
+    maxReferenceVideoDuration: 15,
+    referenceVideoSize: {
+      maxFileSizeMb: 50,
+      minWidth: 256,
+      maxWidth: 5760,
+      minHeight: 256,
+      maxHeight: 5760,
+      minAspectRatio: 0.4,
+      maxAspectRatio: 2.5,
+      description: '<=50MB, width/height 256-5760px, aspect 0.4-2.5',
+    },
+    supportsVideoReference: true,
+    supportsBaseVideoEdit: false,
+    longVideoChunkSeconds: 15,
+    estimatedCostPerSecondUsd: 0.112,
+    estimatedCostPerSecondUsdByResolution: {
+      '768p': 0.07,
+      '2k': 0.112,
+    },
+    maxImageReferences: 9,
+    // The public H3 API currently exposes 2K only. The adapter understands
+    // 768P for accounts enrolled in MiniMax's gated preview, but the product
+    // selector must not advertise a resolution that ordinary keys reject.
+    supportedResolutions: ['2k'],
+    defaultResolution: '2k',
+    supportedAspectRatios: ['16:9', '9:16', '1:1', '4:3', '3:4', '21:9'],
+    provider: 'minimax',
+    providerModel: 'MiniMax-H3',
+  },
   piapi: {
     id: 'piapi',
     label: 'PiAPI Kling',
@@ -274,6 +308,9 @@ export function normalizeVideoModelId(model?: string | null): string {
   }
   if (normalized === 'seedance2' || normalized === 'seedance-2.0' || normalized === 'seedance-standard') {
     return 'seedance'
+  }
+  if (normalized === 'minimax' || normalized === 'h3' || normalized === 'hailuo-h3' || normalized === 'minimax-h3') {
+    return 'minimax-h3'
   }
   return normalized
 }
@@ -358,7 +395,8 @@ function getSeedanceProviderBase(model?: string | null): string | undefined {
 }
 
 export function supportsNativeTextToVideo(model?: string | null): boolean {
-  return getSeedanceProviderBase(model) != null
+  const id = normalizeVideoModelId(model)
+  return getSeedanceProviderBase(id) != null || id === 'minimax-h3'
 }
 
 export function resolveVideoProviderModel(options: {

@@ -216,6 +216,10 @@ export function useProject(projectId: string, userId: string) {
         ? 'seedance'
         : taskId?.startsWith('xai-')
           ? 'grok'
+          : taskId?.startsWith('google-omni-')
+            ? 'google-omni'
+            : taskId?.startsWith('minimax-h3-')
+              ? 'minimax-h3'
           : 'kling';
       return {
         id: row.id as string,

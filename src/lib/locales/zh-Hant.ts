@@ -536,6 +536,7 @@ const zhHant = {
   'model.seedance.desc': '高畫質標準路徑，適合最終成片，成本較高。',
   'model.grok.desc': '極速預覽，約 30–40 秒，支援原生音訊與單張起始圖片。',
   'model.googleOmni.desc': '快速 720p 影片編輯，支援原生音訊。',
+  'model.minimaxH3.desc': '開放多模態影片模型，支援 15 秒、2K 直出與多參考素材。',
   'model.gpt56Terra.desc': '建議預設，兼顧智能、速度與成本。',
   'model.gpt56Sol.desc': '能力最強，適合複雜 Agent 任務與創作。',
   'model.gpt56Luna.desc': '速度快、成本低，適合高頻日常任務。',

@@ -124,12 +124,12 @@ describe('agent media scenario matrix', () => {
     expect(agent).toContain('Do not generate an intermediate image first')
     expect(animate).toContain('zero images means native SeeDance text-to-video')
     expect(animate).toContain('do not call `generate_image` first')
-    expect(agentTs).toContain("videoRoute.provider !== 'seedance'")
-    expect(animateRoute).toContain("videoRoute.provider !== 'seedance'")
-    expect(videoSnapshotRoute).toContain("videoRoute.provider !== 'seedance'")
+    expect(agentTs).toContain('!supportsNativeTextToVideo(videoModel)')
+    expect(animateRoute).toContain('!supportsNativeTextToVideo(selectedVideoModel)')
+    expect(videoSnapshotRoute).toContain('!supportsNativeTextToVideo(selectedVideoModel)')
     expect(mcpServer).toContain("default([]).describe('Optional public image URLs")
-    expect(cli).toContain('const isSeedanceModel =')
-    expect(cli).toContain('!images.length && !video && !isSeedanceModel')
+    expect(cli).toContain('const supportsNativeTextToVideo =')
+    expect(cli).toContain('!images.length && !video && !supportsNativeTextToVideo')
   })
 
   it('separates generic coding, Remotion composition, and node media outputs', () => {

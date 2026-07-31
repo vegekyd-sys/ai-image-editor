@@ -33,6 +33,22 @@ describe('video model reference limits', () => {
     expect(resolveVideoProviderModel({ model: 'seedance-fast', imageReferenceCount: 1 })).toBe('seedance-2.0-fast-reference-to-video')
   })
 
+  it('registers MiniMax H3 with the public 2K production route', () => {
+    expect(normalizeVideoModelId('minimax')).toBe('minimax-h3')
+    expect(normalizeVideoModelId('MiniMax-H3')).toBe('minimax-h3')
+    expect(normalizeVideoResolution('minimax-h3', 'auto')).toBe('2k')
+    expect(resolveVideoGenerationRoute({ model: 'minimax-h3', resolution: '768p' })).toMatchObject({
+      model: 'minimax-h3',
+      label: 'MiniMax H3',
+      provider: 'minimax',
+      providerModel: 'MiniMax-H3',
+      resolution: '768p',
+    })
+    expect(getVideoModelCapability('minimax-h3').supportedResolutions).toEqual(['2k'])
+    expect(estimateVideoCredits({ model: 'minimax-h3', resolution: '768p', durationSec: 15 })).toBe(210)
+    expect(estimateVideoCredits({ model: 'minimax-h3', resolution: '2k', durationSec: 15 })).toBe(336)
+  })
+
   it('maps non-standard vertical reference videos to supported Seedance aspect ratios', () => {
     expect(resolveClosestSupportedAspectRatio('seedance-mini', 496, 864)).toBe('9:16')
     expect(resolveClosestSupportedAspectRatio('seedance-fast', 1920, 1080)).toBe('16:9')

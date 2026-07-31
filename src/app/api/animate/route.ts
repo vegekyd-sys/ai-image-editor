@@ -8,7 +8,7 @@ import {
   refundCredits,
   requireCredits,
 } from '@/lib/billing/credits'
-import { estimateVideoCredits, normalizeVideoModelId, resolveVideoGenerationRoute } from '@/lib/video-model-capabilities'
+import { estimateVideoCredits, getVideoModelCapability, normalizeVideoModelId, resolveVideoGenerationRoute, supportsNativeTextToVideo } from '@/lib/video-model-capabilities'
 
 export const maxDuration = 1800
 
@@ -24,7 +24,7 @@ export async function POST(req: NextRequest) {
     const videoRoute = resolveVideoGenerationRoute({ model: selectedVideoModel, resolution: videoResolution })
     const inputImageUrls: string[] = Array.isArray(imageUrls) ? [...imageUrls] : []
 
-    if (!projectId || !prompt || (inputImageUrls.length === 0 && videoRoute.provider !== 'seedance')) {
+    if (!projectId || !prompt || (inputImageUrls.length === 0 && !supportsNativeTextToVideo(selectedVideoModel))) {
       return NextResponse.json({ error: 'Missing required fields' }, { status: 400 })
     }
 
@@ -89,7 +89,7 @@ export async function POST(req: NextRequest) {
       providerAutoVideoUrls = prepared.urls
     }
 
-    const { filteredImages, finalPrompt } = filterAndRemapImages(prompt, inputImageUrls)
+    const { filteredImages, finalPrompt } = filterAndRemapImages(prompt, inputImageUrls, Math.max(7, getVideoModelCapability(selectedVideoModel).maxImageReferences ?? 7))
     const videoSec = effectiveDuration || 10
     const creditsRequired = estimateVideoCredits({
       model: selectedVideoModel,
