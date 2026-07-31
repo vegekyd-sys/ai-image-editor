@@ -8,7 +8,7 @@ import {
   refundCredits,
   requireCredits,
 } from '@/lib/billing/credits'
-import { estimateVideoCredits, getVideoModelCapability, normalizeVideoModelId, resolveVideoGenerationRoute, supportsNativeTextToVideo } from '@/lib/video-model-capabilities'
+import { estimateVideoCredits, normalizeVideoModelId, resolveVideoGenerationRoute } from '@/lib/video-model-capabilities'
 
 export const maxDuration = 1800
 
@@ -24,7 +24,7 @@ export async function POST(req: NextRequest) {
     const videoRoute = resolveVideoGenerationRoute({ model: selectedVideoModel, resolution: videoResolution })
     const inputImageUrls: string[] = Array.isArray(imageUrls) ? [...imageUrls] : []
 
-    if (!projectId || !prompt || (inputImageUrls.length === 0 && !supportsNativeTextToVideo(selectedVideoModel))) {
+    if (!projectId || !prompt || (inputImageUrls.length === 0 && videoRoute.provider !== 'seedance')) {
       return NextResponse.json({ error: 'Missing required fields' }, { status: 400 })
     }
 
@@ -89,14 +89,13 @@ export async function POST(req: NextRequest) {
       providerAutoVideoUrls = prepared.urls
     }
 
-    const { filteredImages, finalPrompt } = filterAndRemapImages(prompt, inputImageUrls, Math.max(7, getVideoModelCapability(selectedVideoModel).maxImageReferences ?? 7))
+    const { filteredImages, finalPrompt } = filterAndRemapImages(prompt, inputImageUrls)
     const videoSec = effectiveDuration || 10
     const creditsRequired = estimateVideoCredits({
       model: selectedVideoModel,
       resolution: videoRoute.resolution,
       durationSec: videoSec,
       imageCount: filteredImages.length,
-      referenceVideoDurationSec: referenceVideoDuration,
     }) ?? Math.ceil(videoSec * 22)
     const toolName = selectedVideoModel === 'grok' ? 'create_video_grok' : 'create_video'
     const creditCheck = await requireCredits(user.id, creditsRequired)

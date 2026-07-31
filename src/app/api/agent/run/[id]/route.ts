@@ -71,7 +71,6 @@ async function pollVideoProvider(taskId: string): Promise<{ taskId: string; stat
   const isMotionControl = taskId.startsWith('mc-');
   const isXai = taskId.startsWith('xai-');
   const isGoogleOmni = taskId.startsWith('google-omni-');
-  const isMinimax = taskId.startsWith('minimax-h3-');
   const realTaskId = isMotionControl ? taskId.slice(3) : taskId;
 
   if (isEvolink) {
@@ -90,9 +89,6 @@ async function pollVideoProvider(taskId: string): Promise<{ taskId: string; stat
   } else if (isGoogleOmni) {
     const { getGoogleOmniVideoTask } = await import('@/lib/google-omni-video');
     return getGoogleOmniVideoTask(taskId);
-  } else if (isMinimax) {
-    const { getMinimaxVideoTask } = await import('@/lib/minimax-video');
-    return getMinimaxVideoTask(taskId);
   } else {
     const { getKlingTask } = await import('@/lib/kling');
     return getKlingTask(taskId);

@@ -134,7 +134,7 @@ export interface DbMessage {
 }
 
 export type VideoModel = string
-export type VideoResolution = '480p' | '720p' | '768p' | '1080p' | '2k' | '4k' | 'auto'
+export type VideoResolution = '480p' | '720p' | '1080p' | '4k' | 'auto'
 export type VideoAspectRatio = 'auto' | '16:9' | '9:16' | '1:1' | '4:3' | '3:4' | '21:9' | '3:2' | '2:3'
 
 export interface TranscriptWord {

@@ -10,19 +10,16 @@ export interface VideoModelCapability {
   longVideoChunkSeconds: number
   estimatedCostPerSecondUsd?: number
   estimatedInputCostUsdPerImage?: number
-  freeImageReferences?: number
-  estimatedInputCostUsdPerVideoSecond?: number
-  estimatedInputCostUsdPerVideoSecondByResolution?: Partial<Record<VideoResolution, number>>
   maxImageReferences?: number
   supportedResolutions?: VideoResolution[]
   defaultResolution?: VideoResolution
   supportedAspectRatios?: VideoAspectRatio[]
   estimatedCostPerSecondUsdByResolution?: Partial<Record<VideoResolution, number>>
-  provider?: 'kling' | 'seedance' | 'grok' | 'google-omni' | 'minimax' | 'piapi'
+  provider?: 'kling' | 'seedance' | 'grok' | 'google-omni' | 'piapi'
   providerModel?: string
 }
 
-export type VideoResolution = '480p' | '720p' | '768p' | '1080p' | '2k' | '4k'
+export type VideoResolution = '480p' | '720p' | '1080p' | '4k'
 export type VideoResolutionInput = VideoResolution | 'auto' | null | undefined
 export type VideoAspectRatio = '16:9' | '9:16' | '1:1' | '4:3' | '3:4' | '21:9' | '3:2' | '2:3'
 export type VideoAspectRatioInput = VideoAspectRatio | 'auto' | null | undefined
@@ -30,7 +27,7 @@ export type VideoAspectRatioInput = VideoAspectRatio | 'auto' | null | undefined
 export interface VideoGenerationRoute {
   model: string
   label: string
-  provider: 'kling' | 'seedance' | 'grok' | 'google-omni' | 'minimax' | 'piapi' | string
+  provider: 'kling' | 'seedance' | 'grok' | 'google-omni' | 'piapi' | string
   providerModel?: string
   providerMode?: 'std' | 'pro' | '4k'
   resolution: VideoResolution
@@ -226,49 +223,6 @@ const MODEL_CAPABILITIES: Record<string, VideoModelCapability> = {
     provider: 'google-omni',
     providerModel: 'gemini-omni-flash-preview',
   },
-  'minimax-h3': {
-    id: 'minimax-h3',
-    label: 'MiniMax H3',
-    minOutputDuration: 4,
-    maxOutputDuration: 15,
-    maxReferenceVideoDuration: 15,
-    referenceVideoSize: {
-      maxFileSizeMb: 50,
-      minWidth: 256,
-      maxWidth: 5760,
-      minHeight: 256,
-      maxHeight: 5760,
-      minAspectRatio: 0.4,
-      maxAspectRatio: 2.5,
-      description: '<=50MB, width/height 256-5760px, aspect 0.4-2.5',
-    },
-    supportsVideoReference: true,
-    supportsBaseVideoEdit: false,
-    longVideoChunkSeconds: 15,
-    estimatedCostPerSecondUsd: 0.112,
-    estimatedCostPerSecondUsdByResolution: {
-      '768p': 0.07,
-      '2k': 0.112,
-    },
-    // MiniMax bills the first five input images at no charge, then RMB 0.20
-    // per image. Reference video is billed per input second at the selected
-    // resolution's output rate; reference audio is free.
-    estimatedInputCostUsdPerImage: 0.028,
-    freeImageReferences: 5,
-    estimatedInputCostUsdPerVideoSecondByResolution: {
-      '768p': 0.07,
-      '2k': 0.112,
-    },
-    maxImageReferences: 9,
-    // The public H3 API currently exposes 2K only. The adapter understands
-    // 768P for accounts enrolled in MiniMax's gated preview, but the product
-    // selector must not advertise a resolution that ordinary keys reject.
-    supportedResolutions: ['2k'],
-    defaultResolution: '2k',
-    supportedAspectRatios: ['16:9', '9:16', '1:1', '4:3', '3:4', '21:9'],
-    provider: 'minimax',
-    providerModel: 'MiniMax-H3',
-  },
   piapi: {
     id: 'piapi',
     label: 'PiAPI Kling',
@@ -320,9 +274,6 @@ export function normalizeVideoModelId(model?: string | null): string {
   }
   if (normalized === 'seedance2' || normalized === 'seedance-2.0' || normalized === 'seedance-standard') {
     return 'seedance'
-  }
-  if (normalized === 'minimax' || normalized === 'h3' || normalized === 'hailuo-h3' || normalized === 'minimax-h3') {
-    return 'minimax-h3'
   }
   return normalized
 }
@@ -407,8 +358,7 @@ function getSeedanceProviderBase(model?: string | null): string | undefined {
 }
 
 export function supportsNativeTextToVideo(model?: string | null): boolean {
-  const id = normalizeVideoModelId(model)
-  return getSeedanceProviderBase(id) != null || id === 'minimax-h3'
+  return getSeedanceProviderBase(model) != null
 }
 
 export function resolveVideoProviderModel(options: {
@@ -440,13 +390,6 @@ export function validateVideoResolutionRequest(options: {
 }): string | null {
   const capability = getVideoModelCapability(options.model)
   const resolution = normalizeVideoResolution(options.model, options.resolution)
-  if (
-    normalizeVideoModelId(options.model) === 'minimax-h3' &&
-    resolution === '768p' &&
-    process.env.MINIMAX_H3_ENABLE_768P === 'true'
-  ) {
-    return null
-  }
   if (capability.supportedResolutions?.length && !capability.supportedResolutions.includes(resolution)) {
     return `${capability.label} does not support ${resolution}. Supported resolutions: ${capability.supportedResolutions.join(', ')}.`
   }
@@ -521,33 +464,24 @@ export function estimateVideoProviderCostUsd(options: {
   model?: string | null
   durationSec: number
   imageCount?: number
-  referenceVideoDurationSec?: number
   resolution?: VideoResolutionInput
 }): number | undefined {
   const capability = getVideoModelCapability(options.model)
-  const route = resolveVideoGenerationRoute({
+  const perSecond = resolveVideoGenerationRoute({
     model: options.model,
     resolution: options.resolution,
-  })
-  const perSecond = route.estimatedCostPerSecondUsd
+  }).estimatedCostPerSecondUsd
   if (perSecond == null) return undefined
-  const acceptedImages = capability.maxImageReferences != null
+  const billableImages = capability.maxImageReferences != null
     ? Math.min(options.imageCount ?? 0, capability.maxImageReferences)
     : (options.imageCount ?? 0)
-  const billableImages = Math.max(0, acceptedImages - (capability.freeImageReferences ?? 0))
-  const inputVideoPerSecond = capability.estimatedInputCostUsdPerVideoSecondByResolution?.[route.resolution]
-    ?? capability.estimatedInputCostUsdPerVideoSecond
-    ?? 0
-  return options.durationSec * perSecond
-    + billableImages * (capability.estimatedInputCostUsdPerImage ?? 0)
-    + Math.max(0, options.referenceVideoDurationSec ?? 0) * inputVideoPerSecond
+  return options.durationSec * perSecond + billableImages * (capability.estimatedInputCostUsdPerImage ?? 0)
 }
 
 export function estimateVideoCredits(options: {
   model?: string | null
   durationSec: number
   imageCount?: number
-  referenceVideoDurationSec?: number
   resolution?: VideoResolutionInput
   markup?: number
 }): number | undefined {

@@ -21,7 +21,6 @@ export const MODEL_REGISTRY: ModelInfo[] = [
   { id: 'kling', nameKey: 'model.kling.name', descKey: 'model.kling.desc', category: 'video', speedLabel: '4K' },
   { id: 'grok', nameKey: 'model.grok.name', descKey: 'model.grok.desc', category: 'video', speedLabel: '30-40s' },
   { id: 'google-omni', nameKey: 'model.googleOmni.name', descKey: 'model.googleOmni.desc', category: 'video', speedLabel: '30-70s' },
-  { id: 'minimax-h3', nameKey: 'model.minimaxH3.name', descKey: 'model.minimaxH3.desc', category: 'video', speedLabel: '2K' },
   // Agent LLM
   { id: 'gpt-5.6-terra', nameKey: 'model.gpt56Terra.name', descKey: 'model.gpt56Terra.desc', category: 'agent', speedLabel: 'Default' },
   { id: 'gpt-5.6-sol', nameKey: 'model.gpt56Sol.name', descKey: 'model.gpt56Sol.desc', category: 'agent', speedLabel: 'Best' },

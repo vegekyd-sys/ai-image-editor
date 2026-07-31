@@ -232,13 +232,12 @@ export async function GET(
     }
 
     // Poll provider — route by taskId prefix
-    // task-unified-* = Evolink SeeDance, cgt-* = SeeDance (Volcengine), mc-* = Motion Control, xai-* = Grok, google-omni-* = Gemini Omni, minimax-h3-* = MiniMax H3, else = Kling
+    // task-unified-* = Evolink SeeDance, cgt-* = SeeDance (Volcengine), mc-* = Motion Control, xai-* = Grok, google-omni-* = Gemini Omni, else = Kling
     const isEvolink = videoMeta.taskId.startsWith('task-unified-')
     const isSeedance = videoMeta.taskId.startsWith('cgt-')
     const isMotionControl = videoMeta.taskId.startsWith('mc-')
     const isXai = videoMeta.taskId.startsWith('xai-')
     const isGoogleOmni = videoMeta.taskId.startsWith('google-omni-')
-    const isMinimax = videoMeta.taskId.startsWith('minimax-h3-')
     const provider = process.env.ANIMATE_PROVIDER || 'kling'
     let result: { taskId: string; status: string; videoUrl?: string; error?: string }
     const realTaskId = isMotionControl ? videoMeta.taskId.slice(3) : videoMeta.taskId
@@ -282,9 +281,6 @@ export async function GET(
       }
       const { getGoogleOmniVideoTask } = await import('@/lib/google-omni-video')
       result = await getGoogleOmniVideoTask(videoMeta.taskId, videoMeta.videoUrl || videoMeta.providerUrl)
-    } else if (isMinimax) {
-      const { getMinimaxVideoTask } = await import('@/lib/minimax-video')
-      result = await getMinimaxVideoTask(videoMeta.taskId)
     } else if (provider === 'piapi') {
       result = await getKlingTaskPiAPI(videoMeta.taskId)
     } else {

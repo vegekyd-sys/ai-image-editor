@@ -22,12 +22,11 @@ export async function getVideoStatus(input: GetVideoStatusInput): Promise<GetVid
   }
 
   try {
-    // Route by taskId prefix: task-unified-* = Evolink, cgt-* = SeeDance Volcengine, xai-* = Grok, google-omni-* = Gemini Omni, minimax-h3-* = MiniMax H3
+    // Route by taskId prefix: task-unified-* = Evolink, cgt-* = SeeDance Volcengine, xai-* = Grok, google-omni-* = Gemini Omni
     const isEvolink = taskId.startsWith('task-unified-');
     const isSeedance = isEvolink || taskId.startsWith('cgt-');
     const isXai = taskId.startsWith('xai-');
     const isGoogleOmni = taskId.startsWith('google-omni-');
-    const isMinimax = taskId.startsWith('minimax-h3-');
 
     if (isXai) {
       const { getXaiVideoTask } = await import('../xai-video');
@@ -61,22 +60,6 @@ export async function getVideoStatus(input: GetVideoStatusInput): Promise<GetVid
         message: result.status === 'completed'
           ? 'Gemini Omni video completed.'
           : `Gemini Omni standalone task cannot be re-fetched from taskId alone: ${result.error || 'missing provider URL'}`,
-      };
-    }
-
-    if (isMinimax) {
-      const { getMinimaxVideoTask } = await import('../minimax-video');
-      const result = await getMinimaxVideoTask(taskId);
-      return {
-        success: result.status !== 'failed',
-        status: result.status,
-        videoUrl: result.videoUrl,
-        error: result.error,
-        message: result.status === 'completed'
-          ? 'MiniMax H3 video rendering completed!'
-          : result.status === 'failed'
-            ? `MiniMax H3 video rendering failed: ${result.error || 'Unknown error'}`
-            : 'MiniMax H3 video is rendering.',
       };
     }
 

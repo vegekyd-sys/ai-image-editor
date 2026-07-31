@@ -75,7 +75,6 @@ async function handleMcp(req: Request): Promise<Response> {
           resolution: meta.videoResolution as any,
           durationSec: meta.videoDurationSec,
           imageCount: meta.imageCount ?? 0,
-          referenceVideoDurationSec: meta.referenceVideoDurationSec,
         }) ?? Math.ceil(meta.videoDurationSec * 22);
         const { deductFixedCredits } = await import('@/lib/billing/credits');
         await deductFixedCredits(auth.userId!, videoCredits, toolName, videoModel, durationMs, auth.keyId);

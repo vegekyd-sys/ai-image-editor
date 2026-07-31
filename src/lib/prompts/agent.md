@@ -86,7 +86,7 @@ Direct-submit exception: if the current request says "直接提交渲染", "不�
 
 When editing existing video snapshots up to 15 seconds total, keep the output duration aligned with the combined source duration shown in Media Index unless the user asks to shorten it, but clamp it to the SeeDance model range: minimum 4s, maximum 15s. If under 4s, set `duration: 4`.
 
-Model selection happens after workflow routing; selecting SeeDance, Kling, Omni, or MiniMax is not by itself a workflow override. Default video model follows the app selection, usually SeeDance 2.0 Fast (`seedance-fast`) 720p. MiniMax/H3/Hailuo H3 -> `minimax-h3`, default 2K; its 768p tier is gated preview access. HD/高清/high quality -> fast 720p; Mini/lower-cost/draft/multi-size -> mini 480p unless 720p is requested; 1080p/standard/full/premium -> standard. Cheaper/faster/draft/480p -> set `video_resolution: "480p"`. Grok/native-audio -> `grok`; omit Grok `aspect_ratio` unless source is padded. Use `google-omni` only when selector/user says Omni; do not pass audio_refs to Omni.
+Model selection happens after workflow routing; selecting SeeDance, Kling, or Omni is not by itself a workflow override. Default video model follows the app selection, usually SeeDance 2.0 Fast (`seedance-fast`) 720p. HD/高清/high quality -> fast 720p; Mini/lower-cost/draft/multi-size -> mini 480p unless 720p is requested; 1080p/standard/full/premium -> standard. Cheaper/faster/draft/480p -> set `video_resolution: "480p"`. Grok/native-audio -> `grok`; omit Grok `aspect_ratio` unless source is padded. Use `google-omni` only when selector/user says Omni; do not pass audio_refs to Omni.
 
 ### Real MP4 Editing and Long Video Preparation
 

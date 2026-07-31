@@ -511,7 +511,6 @@ try {
     assert.doesNotMatch(result.stdout, /^\s+--agent-model/m);
     assert.doesNotMatch(result.stdout, /^\s+--image-model/m);
     assert.doesNotMatch(result.stdout, /^\s+--video-model/m);
-    assert.doesNotMatch(result.stdout, /^\s+--video-resolution/m);
     assert.match(result.stdout, /Do not pass --agent-model, --image-model,/);
   }
 
@@ -520,9 +519,6 @@ try {
     assert.match(result.stdout, /--image-model/);
     const videoResult = await expectHelp(['video', 'create', '--help'], /--video-model/);
     assert.match(videoResult.stdout, /--video-model/);
-    assert.match(videoResult.stdout, /--video-resolution/);
-    assert.match(videoResult.stdout, /minimax-h3/);
-    assert.match(videoResult.stdout, /2k/);
   }
 
   {
@@ -583,15 +579,13 @@ try {
     assert.equal(requests.length, requestCount, `${args[0]} should fail before making HTTP requests`);
   }
 
-  for (const resolutionArgs of [
-    ['--video-resolution', '2k'],
-    ['--video-resolution=2k'],
-  ]) {
-    const requestCount = requests.length;
-    const result = await expectFailure(['chat', '--project', 'project-stream-1', ...resolutionArgs, 'use MiniMax H3 at 2K']);
-    assert.match(result.stderr, /chat chooses video model and resolution together/);
-    assert.match(result.stderr, /Put the requested resolution in your chat message/);
-    assert.equal(requests.length, requestCount, `${resolutionArgs[0]} should fail before making HTTP requests`);
+  {
+    await expectSuccess(['chat', '--project', 'project-stream-1', '--stream', '--video-resolution', '720p', 'stream with automatic routing']);
+    const streamRequest = requests.filter(req => req.pathname === '/api/agent').at(-1);
+    assert.equal(streamRequest?.body?.videoResolution, '720p');
+    assert.equal(streamRequest?.body?.agentModel, undefined);
+    assert.equal(streamRequest?.body?.preferredModel, undefined);
+    assert.equal(streamRequest?.body?.videoModel, undefined);
   }
 
   {
