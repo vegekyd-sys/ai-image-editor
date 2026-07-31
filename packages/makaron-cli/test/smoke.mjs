@@ -519,6 +519,8 @@ try {
     assert.match(result.stdout, /--image-model/);
     const videoResult = await expectHelp(['video', 'create', '--help'], /--video-model/);
     assert.match(videoResult.stdout, /--video-model/);
+    assert.match(videoResult.stdout, /minimax-h3/);
+    assert.match(videoResult.stdout, /2k/);
   }
 
   {

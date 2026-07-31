@@ -68,6 +68,30 @@ describe('MiniMax H3 video adapter', () => {
     })).resolves.toBe('minimax-h3-768-task')
   })
 
+  it('allows each documented multimodal reference maximum in one request', async () => {
+    const images = Array.from({ length: 9 }, (_, index) => `https://example.com/image-${index + 1}.png`)
+    const videoUrls = Array.from({ length: 3 }, (_, index) => `https://example.com/video-${index + 1}.mp4`)
+    const audioUrls = Array.from({ length: 3 }, (_, index) => `https://example.com/audio-${index + 1}.mp3`)
+    vi.stubGlobal('fetch', vi.fn(async (_url: string | URL | Request, init?: RequestInit) => {
+      const body = JSON.parse(String(init?.body))
+      expect(body.content).toHaveLength(16)
+      expect(body.content.filter((item: { type: string }) => item.type === 'image_url')).toHaveLength(9)
+      expect(body.content.filter((item: { type: string }) => item.type === 'video_url')).toHaveLength(3)
+      expect(body.content.filter((item: { type: string }) => item.type === 'audio_url')).toHaveLength(3)
+      return new Response(JSON.stringify({ task_id: 'max-multimodal-task' }), { status: 200 })
+    }))
+
+    const { createMinimaxVideoTask } = await import('@/lib/minimax-video')
+    await expect(createMinimaxVideoTask({
+      prompt: 'Use every supplied reference.',
+      images,
+      videoUrls,
+      audioUrls,
+      duration: 15,
+      resolution: '2k',
+    })).resolves.toBe('minimax-h3-max-multimodal-task')
+  })
+
   it('routes native text-to-video through createVideo without requiring source media', async () => {
     const fetchMock = vi.fn(async (_url: string | URL | Request, init?: RequestInit) => {
       const body = JSON.parse(String(init?.body))

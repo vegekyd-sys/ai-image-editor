@@ -22,7 +22,7 @@ export async function getVideoStatus(input: GetVideoStatusInput): Promise<GetVid
   }
 
   try {
-    // Route by taskId prefix: task-unified-* = Evolink, cgt-* = SeeDance Volcengine, xai-* = Grok, google-omni-* = Gemini Omni
+    // Route by taskId prefix: task-unified-* = Evolink, cgt-* = SeeDance Volcengine, xai-* = Grok, google-omni-* = Gemini Omni, minimax-h3-* = MiniMax H3
     const isEvolink = taskId.startsWith('task-unified-');
     const isSeedance = isEvolink || taskId.startsWith('cgt-');
     const isXai = taskId.startsWith('xai-');

@@ -96,6 +96,7 @@ export async function POST(req: NextRequest) {
       resolution: videoRoute.resolution,
       durationSec: videoSec,
       imageCount: filteredImages.length,
+      referenceVideoDurationSec: referenceVideoDuration,
     }) ?? Math.ceil(videoSec * 22)
     const toolName = selectedVideoModel === 'grok' ? 'create_video_grok' : 'create_video'
     const creditCheck = await requireCredits(user.id, creditsRequired)

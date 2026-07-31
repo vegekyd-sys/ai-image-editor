@@ -50,6 +50,8 @@ const SEEDANCE_MIN_VIDEO_SIDE = 300;
 const SEEDANCE_MAX_VIDEO_SIDE = 6000;
 const SEEDANCE_MIN_VIDEO_ASPECT = 0.4;
 const SEEDANCE_MAX_VIDEO_ASPECT = 2.5;
+const MINIMAX_H3_MIN_VIDEO_SIDE = 256;
+const MINIMAX_H3_MAX_VIDEO_SIDE = 5760;
 
 function warnLegacyModelFlag(replacement) {
   process.stderr.write(`⚠️  --model is deprecated here; use ${replacement}.\n`);
@@ -1474,6 +1476,7 @@ function validateVideoFile(videoPath, options = {}) {
   const maxSide = options.maxSide ?? Infinity;
   const minAspect = options.minAspect ?? 0;
   const maxAspect = options.maxAspect ?? Infinity;
+  const allowedExtensions = options.allowedExtensions ?? ['mp4', 'mov', 'webm'];
   if (!fs.existsSync(videoPath)) {
     return { ok: false, error: `Video file not found: ${videoPath}` };
   }
@@ -1482,8 +1485,8 @@ function validateVideoFile(videoPath, options = {}) {
     return { ok: false, error: `Video too large: ${(stat.size / 1024 / 1024).toFixed(1)}MB (max ${MAX_VIDEO_UPLOAD_FILE_SIZE_MB}MB). The CLI uploads directly to Storage; use the frontend to transcode larger videos first.` };
   }
   const ext = path.extname(videoPath).slice(1).toLowerCase();
-  if (!['mp4', 'mov', 'webm'].includes(ext)) {
-    return { ok: false, error: `Unsupported video format: .${ext}. Use MP4, MOV, or WebM.` };
+  if (!allowedExtensions.includes(ext)) {
+    return { ok: false, error: `Unsupported video format: .${ext}. Use ${allowedExtensions.map(value => value.toUpperCase()).join(' or ')}.` };
   }
   const meta = probeLocalVideo(videoPath);
   if (!meta) {
@@ -2461,13 +2464,19 @@ if (!command || command === '--help' || command === '-h' || command === 'help') 
     let videoUrl = isHttpUrl(video) ? video : null;
     let inputVideoMeta = null;
     if (videoUrl) {
-      process.stderr.write(`📹 Assuming public video URL already matches provider reference limits. Seedance requires ≤${MAX_VIDEO_PROVIDER_REFERENCE_DURATION}s, ≤50MB, sides 300-6000px, frame pixels 409,600-${MAX_VIDEO_FRAME_PIXELS}; Kling requires ≤200MB and ≤2K; Google Omni accepts one reference video in Makaron; Grok does not support video references.\n`);
+      process.stderr.write(`📹 Assuming public video URL already matches provider reference limits. Seedance requires ≤${MAX_VIDEO_PROVIDER_REFERENCE_DURATION}s, ≤50MB, sides 300-6000px, frame pixels 409,600-${MAX_VIDEO_FRAME_PIXELS}; MiniMax H3 accepts up to 3 videos totaling ≤15s, each ≤50MB with sides 256-5760px and aspect 0.4-2.5; Kling requires ≤200MB and ≤2K; Google Omni accepts one reference video in Makaron; Grok does not support video references.\n`);
     }
     if (video && !videoUrl) {
       const valid = validateVideoFile(video, {
         maxDuration: MAX_VIDEO_PROVIDER_REFERENCE_DURATION,
         durationTolerance: MAX_VIDEO_PROVIDER_REFERENCE_DURATION_TOLERANCE,
-        ...(selectedVideoModel === 'seedance' || selectedVideoModel === 'seedance-fast' || selectedVideoModel === 'seedance-mini' || selectedVideoModel === 'minimax-h3' ? {
+        ...(selectedVideoModel === 'minimax-h3' ? {
+          allowedExtensions: ['mp4', 'mov'],
+          minSide: MINIMAX_H3_MIN_VIDEO_SIDE,
+          maxSide: MINIMAX_H3_MAX_VIDEO_SIDE,
+          minAspect: SEEDANCE_MIN_VIDEO_ASPECT,
+          maxAspect: SEEDANCE_MAX_VIDEO_ASPECT,
+        } : selectedVideoModel === 'seedance' || selectedVideoModel === 'seedance-fast' || selectedVideoModel === 'seedance-mini' ? {
           minFramePixels: SEEDANCE_MIN_VIDEO_FRAME_PIXELS,
           minSide: SEEDANCE_MIN_VIDEO_SIDE,
           maxSide: SEEDANCE_MAX_VIDEO_SIDE,

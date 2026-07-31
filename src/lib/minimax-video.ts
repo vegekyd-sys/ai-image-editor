@@ -95,10 +95,6 @@ export async function createMinimaxVideoTask(input: MinimaxVideoTaskInput): Prom
   if (audioUrls.length > 0 && images.length === 0 && videoUrls.length === 0) {
     throw new Error('MiniMax H3 reference audio requires at least one reference image or video.')
   }
-  if (images.length + videoUrls.length + audioUrls.length > 12) {
-    throw new Error('MiniMax H3 supports at most 12 reference files per request.')
-  }
-
   const hasReferenceMedia = images.length > 0 || videoUrls.length > 0 || audioUrls.length > 0
   const content: Array<Record<string, unknown>> = [
     { type: 'text', text: normalizePrompt(input.prompt) },

@@ -381,7 +381,7 @@ const en = {
   'aiConsent.dataTitle': 'What is sent',
   'aiConsent.data': 'Photos, videos, audio, prompts, chat messages, and generated content you choose when a follow-up edit needs it.',
   'aiConsent.providersTitle': 'Who receives it',
-  'aiConsent.providers': 'Depending on the feature you choose, content may be processed by Google, OpenAI / Microsoft Azure, DeepSeek, xAI, ByteDance / Volcengine, or Kuaishou / Kling.',
+  'aiConsent.providers': 'Depending on the feature you choose, content may be processed by Google, OpenAI / Microsoft Azure, DeepSeek, xAI, ByteDance / Volcengine, Kuaishou / Kling, or MiniMax.',
   'aiConsent.accountData': 'Your sign-in email, password, and payment information are not sent to AI services.',
   'aiConsent.allow': 'Allow AI processing and continue',
   'aiConsent.notNow': 'Not now',

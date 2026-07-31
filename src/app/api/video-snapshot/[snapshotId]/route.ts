@@ -232,7 +232,7 @@ export async function GET(
     }
 
     // Poll provider — route by taskId prefix
-    // task-unified-* = Evolink SeeDance, cgt-* = SeeDance (Volcengine), mc-* = Motion Control, xai-* = Grok, google-omni-* = Gemini Omni, else = Kling
+    // task-unified-* = Evolink SeeDance, cgt-* = SeeDance (Volcengine), mc-* = Motion Control, xai-* = Grok, google-omni-* = Gemini Omni, minimax-h3-* = MiniMax H3, else = Kling
     const isEvolink = videoMeta.taskId.startsWith('task-unified-')
     const isSeedance = videoMeta.taskId.startsWith('cgt-')
     const isMotionControl = videoMeta.taskId.startsWith('mc-')

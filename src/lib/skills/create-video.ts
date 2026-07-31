@@ -142,7 +142,7 @@ export async function createVideo(input: CreateVideoInput): Promise<CreateVideoR
     if (!supportsNativeTextToVideo(provider)) {
       return {
         success: false,
-        message: `${capability.label} requires an image or video reference. Native text-to-video is currently available through SeeDance models.`,
+        message: `${capability.label} requires an image or video reference. Native text-to-video is currently available through SeeDance models and MiniMax H3.`,
       };
     }
   }

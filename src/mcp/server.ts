@@ -66,6 +66,7 @@ export interface McpServerOptions {
       imageCount?: number
       videoModel?: string
       videoResolution?: string
+      referenceVideoDurationSec?: number
       seedAudioDurationSec?: number
       seedAudioProviderCredits?: number
       seedAudioGenerationSec?: number
@@ -367,6 +368,7 @@ Example: Edit a video to add cinematic color grading:
             imageCount: params.images?.length ?? 0,
             videoModel: resolvedModel,
             videoResolution: params.videoResolution,
+            referenceVideoDurationSec: resolvedModel === 'minimax-h3' ? (params.duration ?? 10) : undefined,
           });
         }
         return { content: [{ type: 'text' as const, text: result.success

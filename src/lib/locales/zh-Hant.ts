@@ -82,7 +82,7 @@ const zhHant = {
   'aiConsent.dataTitle': '會傳送什麼',
   'aiConsent.data': '你主動選擇的照片、影片、音訊、提示詞、聊天訊息，以及繼續編輯時所需的產生內容。',
   'aiConsent.providersTitle': '傳送給誰',
-  'aiConsent.providers': '依你選擇的功能，內容可能由 Google、OpenAI / Microsoft Azure、DeepSeek、xAI、字節跳動 / 火山引擎或快手 / Kling 處理。',
+  'aiConsent.providers': '依你選擇的功能，內容可能由 Google、OpenAI / Microsoft Azure、DeepSeek、xAI、字節跳動 / 火山引擎、快手 / Kling 或 MiniMax 處理。',
   'aiConsent.accountData': '你的登入電子郵件、密碼和付款資訊不會傳送給 AI 服務。',
   'aiConsent.allow': '允許 AI 處理並繼續',
   'aiConsent.notNow': '暫不允許',

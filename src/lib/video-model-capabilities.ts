@@ -10,6 +10,9 @@ export interface VideoModelCapability {
   longVideoChunkSeconds: number
   estimatedCostPerSecondUsd?: number
   estimatedInputCostUsdPerImage?: number
+  freeImageReferences?: number
+  estimatedInputCostUsdPerVideoSecond?: number
+  estimatedInputCostUsdPerVideoSecondByResolution?: Partial<Record<VideoResolution, number>>
   maxImageReferences?: number
   supportedResolutions?: VideoResolution[]
   defaultResolution?: VideoResolution
@@ -247,6 +250,15 @@ const MODEL_CAPABILITIES: Record<string, VideoModelCapability> = {
       '768p': 0.07,
       '2k': 0.112,
     },
+    // MiniMax bills the first five input images at no charge, then RMB 0.20
+    // per image. Reference video is billed per input second at the selected
+    // resolution's output rate; reference audio is free.
+    estimatedInputCostUsdPerImage: 0.028,
+    freeImageReferences: 5,
+    estimatedInputCostUsdPerVideoSecondByResolution: {
+      '768p': 0.07,
+      '2k': 0.112,
+    },
     maxImageReferences: 9,
     // The public H3 API currently exposes 2K only. The adapter understands
     // 768P for accounts enrolled in MiniMax's gated preview, but the product
@@ -428,6 +440,13 @@ export function validateVideoResolutionRequest(options: {
 }): string | null {
   const capability = getVideoModelCapability(options.model)
   const resolution = normalizeVideoResolution(options.model, options.resolution)
+  if (
+    normalizeVideoModelId(options.model) === 'minimax-h3' &&
+    resolution === '768p' &&
+    process.env.MINIMAX_H3_ENABLE_768P === 'true'
+  ) {
+    return null
+  }
   if (capability.supportedResolutions?.length && !capability.supportedResolutions.includes(resolution)) {
     return `${capability.label} does not support ${resolution}. Supported resolutions: ${capability.supportedResolutions.join(', ')}.`
   }
@@ -502,24 +521,33 @@ export function estimateVideoProviderCostUsd(options: {
   model?: string | null
   durationSec: number
   imageCount?: number
+  referenceVideoDurationSec?: number
   resolution?: VideoResolutionInput
 }): number | undefined {
   const capability = getVideoModelCapability(options.model)
-  const perSecond = resolveVideoGenerationRoute({
+  const route = resolveVideoGenerationRoute({
     model: options.model,
     resolution: options.resolution,
-  }).estimatedCostPerSecondUsd
+  })
+  const perSecond = route.estimatedCostPerSecondUsd
   if (perSecond == null) return undefined
-  const billableImages = capability.maxImageReferences != null
+  const acceptedImages = capability.maxImageReferences != null
     ? Math.min(options.imageCount ?? 0, capability.maxImageReferences)
     : (options.imageCount ?? 0)
-  return options.durationSec * perSecond + billableImages * (capability.estimatedInputCostUsdPerImage ?? 0)
+  const billableImages = Math.max(0, acceptedImages - (capability.freeImageReferences ?? 0))
+  const inputVideoPerSecond = capability.estimatedInputCostUsdPerVideoSecondByResolution?.[route.resolution]
+    ?? capability.estimatedInputCostUsdPerVideoSecond
+    ?? 0
+  return options.durationSec * perSecond
+    + billableImages * (capability.estimatedInputCostUsdPerImage ?? 0)
+    + Math.max(0, options.referenceVideoDurationSec ?? 0) * inputVideoPerSecond
 }
 
 export function estimateVideoCredits(options: {
   model?: string | null
   durationSec: number
   imageCount?: number
+  referenceVideoDurationSec?: number
   resolution?: VideoResolutionInput
   markup?: number
 }): number | undefined {

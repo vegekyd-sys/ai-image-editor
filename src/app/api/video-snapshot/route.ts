@@ -9,7 +9,7 @@ import {
   requireCredits,
 } from '@/lib/billing/credits'
 import { VIDEO_PLACEHOLDER_IMAGE } from '@/lib/editor/timeline-derivations'
-import { estimateVideoCredits, getVideoModelCapability, normalizeVideoModelId, resolveVideoGenerationRoute, supportsNativeTextToVideo } from '@/lib/video-model-capabilities'
+import { estimateVideoCredits, estimateVideoProviderCostUsd, getVideoModelCapability, normalizeVideoModelId, resolveVideoGenerationRoute, supportsNativeTextToVideo } from '@/lib/video-model-capabilities'
 import type { VideoMeta } from '@/types'
 
 export const maxDuration = 1800
@@ -121,6 +121,7 @@ export async function POST(req: NextRequest) {
       resolution: videoRoute.resolution,
       durationSec: videoSec,
       imageCount: filteredImages.length,
+      referenceVideoDurationSec: referenceVideoDuration,
     }) ?? Math.ceil(videoSec * 22)
     const toolName = selectedVideoModel === 'grok' ? 'create_video_grok' : 'create_video'
     const creditCheck = await requireCredits(userId, creditsRequired)
@@ -190,9 +191,13 @@ export async function POST(req: NextRequest) {
         .map(ref => originalImageUrlsByIndex[ref - 1])
         .filter((u): u is string => !!u && u.startsWith('http') && !u.endsWith('.mp4'))
       const sourceUrls = [...referencedImageUrls, ...(inputVideoUrl ? [inputVideoUrl] : []), ...autoVideoUrls].filter(Boolean)
-      const providerCostUsd = videoRoute.estimatedCostPerSecondUsd != null
-        ? videoSec * videoRoute.estimatedCostPerSecondUsd + filteredImages.length * (videoRoute.estimatedInputCostUsdPerImage ?? 0)
-        : undefined
+      const providerCostUsd = estimateVideoProviderCostUsd({
+        model: actualVideoModel,
+        resolution: actualVideoRoute.resolution,
+        durationSec: videoSec,
+        imageCount: filteredImages.length,
+        referenceVideoDurationSec: referenceVideoDuration,
+      })
 
       const videoMeta: VideoMeta = {
         taskId,
