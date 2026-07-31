@@ -102,7 +102,7 @@ Returns immediately:
 | Fix one moment in a video from a screenshot | `npx makaron-cli chat --project <id> --image screenshot.png "@4 this frame should be Paris; only fix this moment"` |
 | Cut or assemble video | `npx makaron-cli chat --project <id> --video clip.mp4 "cut out the dead air and keep the best 20 seconds"` |
 | Add music | `npx makaron-cli chat --project <id> "add calm piano background music"` |
-| Beat-sync video from audio | `npx makaron-cli chat --project auto --audio beat.mp3 --video-resolution 480p "make a beat-synced video"` |
+| Beat-sync video from audio | `npx makaron-cli chat --project auto --audio beat.mp3 "use Seedance Mini at 480p to make a beat-synced video"` |
 | Create motion design | `npx makaron-cli chat --project <id> "make an animated Instagram story with this image"` |
 
 ### Marketplace skills
@@ -176,11 +176,12 @@ Attach a short song, beat, or voice recording when the video should follow audio
 ```bash
 npx makaron-cli chat --project auto \
   --audio beat.mp3 \
-  --video-resolution 480p \
-  -b "make a 15s beat-synced video"
+  -b "use Seedance Mini at 480p to make a 15s beat-synced video"
 ```
 
 `--audio` accepts repeatable local files or public URLs. Local MP3/WAV files must be 2-15s and <=15MB; reference audio currently works with Seedance video generation.
+
+`chat` intentionally has no video model or resolution flags. State both in the chat message so the Agent selects a compatible provider and resolution together. Use `video create` only when you explicitly need direct provider controls.
 
 ### Fix one video moment from a screenshot
 

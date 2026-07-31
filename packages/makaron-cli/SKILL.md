@@ -251,6 +251,8 @@ npx makaron-cli video status <taskId>
 npx makaron-cli chat --project <id|auto> --video input.mp4 -b "make it funny"
 ```
 
+`chat` intentionally has no video model or resolution flags. State both in the chat message so the Agent selects a compatible provider and resolution together. Use `video create` only when you explicitly need direct provider controls.
+
 Options for `video create`: `--script "..."`, `--script-file <path>`, `--image <url>` (repeatable, up to the selected model limit), `--video <file|url>`, `--duration <seconds>`, `--aspect 9:16|16:9|1:1`, `--video-model seedance-fast|seedance-mini|seedance|kling|grok|google-omni|minimax-h3`, `--video-resolution auto|480p|720p|768p|1080p|2k|4k`. SeeDance accepts native text-to-video with no image and integer output duration 4-15s (default 5s); MiniMax H3 accepts native text-to-video, 4-15s output, and up to 9 image, up to 3 video, and up to 3 audio references through Makaron Agent/chat. H3 defaults to public 2k output; 768p requires provider preview access plus `MINIMAX_H3_ENABLE_768P=true` on the Makaron server. Kling supports 5-15s.
 
 Video edit model behavior: `--video-model kling --video` uses Kling base/direct edit internally; `--video-model seedance-fast --video`, `--video-model seedance-mini --video`, or `--video-model seedance --video` uses the Seedance video-reference path and requires target <=15s, <=50MB, width/height 300-6000px, aspect ratio 0.4-2.5, and frame pixels 409,600-2,086,876. Tiny metadata padding up to 15.5s is accepted and output duration is clamped to 15s. `--video-model minimax-h3 --video` uses H3 feature/reference mode: up to 3 video references totaling <=15s, each <=50MB with width/height 256-5760px and aspect ratio 0.4-2.5.

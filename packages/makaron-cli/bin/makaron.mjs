@@ -284,7 +284,6 @@ Options:
   --video <file|url>        Attach a video to the project timeline. Repeatable.
   --audio <file|url>        Attach a song, beat, or voice reference. MP3/WAV, repeatable.
   --skill <id|label|name>   Use an installed skill or auto-install a matched marketplace skill.
-  --video-resolution <res>  Video resolution: auto, 480p, 720p, 768p, 1080p, 2k, or 4k.
   --background, -b          Submit and print a runId.
   --json                    Output structured JSON.
   --stream                  Legacy live SSE stream.
@@ -316,7 +315,7 @@ What you can ask:
     makaron chat --project <id> "add calm piano background music"
 
   Reference audio / beat sync
-    makaron chat --project auto --audio beat.mp3 --video-resolution 480p "用这个音乐做卡点视频"
+    makaron chat --project auto --audio beat.mp3 "用 Seedance Mini 480p 做卡点视频"
     makaron chat --project <id> --audio https://example.com/beat.mp3 "add this as the soundtrack"
 
   Motion design
@@ -353,7 +352,6 @@ async function streamAgent(baseUrl, headers, projectId, prompt, opts = {}) {
       projectId,
       prompt,
       headless: true,
-      ...(opts.videoResolution ? { videoResolution: opts.videoResolution } : {}),
       ...(opts.uploadedVideoCount ? { uploadedVideoCount: opts.uploadedVideoCount } : {}),
       ...(opts.turnMediaCount ? { turnMediaCount: opts.turnMediaCount } : {}),
     }),
@@ -462,7 +460,6 @@ async function streamAgent(baseUrl, headers, projectId, prompt, opts = {}) {
 
 async function submitRun(baseUrl, headers, projectId, prompt, opts = {}) {
   const body = { projectId, prompt };
-  if (opts.videoResolution) body.videoResolution = opts.videoResolution;
   if (opts.currentSnapshotIndex != null) body.currentSnapshotIndex = opts.currentSnapshotIndex;
   if (opts.isNsfw) body.isNsfw = opts.isNsfw;
   if (opts.audioAttachments?.length) body.audioAttachments = opts.audioAttachments;
@@ -1866,7 +1863,6 @@ if (!command || command === '--help' || command === '-h' || command === 'help') 
   let background = false;
   let jsonOutput = false;
   let activeSkill = undefined;
-  let videoResolution = undefined;
   for (let i = 1; i < args.length; i++) {
     if (args[i] === '--project' && args[i + 1]) projectId = args[++i];
     else if (args[i] === '--image' && args[i + 1]) chatImages.push(args[++i]);
@@ -1877,7 +1873,10 @@ if (!command || command === '--help' || command === '-h' || command === 'help') 
     else if (args[i] === '--stream') useStream = true;
     else if (args[i] === '--background' || args[i] === '-b') background = true;
     else if (args[i] === '--json') jsonOutput = true;
-    else if (args[i] === '--video-resolution' && args[i + 1]) videoResolution = args[++i];
+    else if (args[i] === '--video-resolution' || args[i].startsWith('--video-resolution=')) {
+      process.stderr.write('❌ makaron chat chooses video model and resolution together. Put the requested resolution in your chat message, for example: "use MiniMax H3 at 2K".\n');
+      process.exit(1);
+    }
     else if (
       ['--agent-model', '--image-model', '--video-model', '--model'].includes(args[i])
       || ['--agent-model=', '--image-model=', '--video-model=', '--model='].some(prefix => args[i].startsWith(prefix))
@@ -1992,7 +1991,7 @@ if (!command || command === '--help' || command === '-h' || command === 'help') 
   const resolvedSkill = await resolveChatSkill(baseUrl, headers, activeSkill);
 
   // Upload videos to project timeline (via /api/projects/create with videoUrls)
-  let finalPrompt = resolvedSkill ? `[Active skill: ${resolvedSkill}]\n${prompt}` : prompt;
+  const finalPrompt = resolvedSkill ? `[Active skill: ${resolvedSkill}]\n${prompt}` : prompt;
   let audioAttachments = [];
   if (chatAudios.length > 0) {
     const audioImports = [];
@@ -2083,7 +2082,6 @@ if (!command || command === '--help' || command === '-h' || command === 'help') 
   if (useStream) {
     // Legacy SSE mode
     const { results } = await streamAgent(baseUrl, headers, projectId, finalPrompt, {
-      videoResolution,
       uploadedVideoCount: uploadedTurnVideoCount,
       turnMediaCount: uploadedTurnMediaCount,
     });
@@ -2096,7 +2094,6 @@ if (!command || command === '--help' || command === '-h' || command === 'help') 
   } else {
     // Default: fire-and-forget + poll
     const { runId } = await submitRun(baseUrl, headers, projectId, finalPrompt, {
-      videoResolution,
       audioAttachments,
       uploadedVideoCount: uploadedTurnVideoCount,
       turnMediaCount: uploadedTurnMediaCount,
