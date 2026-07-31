@@ -1294,7 +1294,9 @@ function SkillEditorModal({ skill, categories, onClose, onSaved }: {
         prompt: legacyPrompt,
         categories: selectedCategories,
         skill_path: skillPath.trim() || null,
-        image_count: parseInt(imageCount) || 1,
+        image_count: Number.isFinite(Number.parseInt(imageCount, 10))
+          ? Math.max(0, Number.parseInt(imageCount, 10))
+          : 1,
         sort_order: parseInt(sortOrder) || 0,
         is_active: isActive,
         before_images: beforeImages.map(s => s.trim()).filter(Boolean),
@@ -1460,7 +1462,7 @@ function SkillEditorModal({ skill, categories, onClose, onSaved }: {
             <div className="flex-1">
               <label className="text-white/60 text-xs font-medium mb-1.5 block">Image slots</label>
               <input
-                type="number" min={1} max={10}
+                type="number" min={0} max={10}
                 value={imageCount}
                 onChange={(e) => setImageCount(e.target.value)}
                 className="w-full px-3 py-2 rounded-lg bg-white/5 text-white text-sm border border-white/10 focus:border-fuchsia-500/50 focus:outline-none"
