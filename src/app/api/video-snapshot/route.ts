@@ -9,7 +9,7 @@ import {
   requireCredits,
 } from '@/lib/billing/credits'
 import { VIDEO_PLACEHOLDER_IMAGE } from '@/lib/editor/timeline-derivations'
-import { estimateVideoCredits, normalizeVideoModelId, resolveVideoGenerationRoute } from '@/lib/video-model-capabilities'
+import { estimateVideoCredits, estimateVideoProviderCostUsd, getVideoModelCapability, normalizeVideoModelId, resolveVideoGenerationRoute, supportsNativeTextToVideo } from '@/lib/video-model-capabilities'
 import type { VideoMeta } from '@/types'
 
 export const maxDuration = 1800
@@ -38,7 +38,7 @@ export async function POST(req: NextRequest) {
     const inputImageUrls: string[] = Array.isArray(imageUrls) ? [...imageUrls] : []
     const inputVideoUrl = typeof videoUrl === 'string' && videoUrl.startsWith('http') ? videoUrl : undefined
 
-    if (!projectId || !prompt || (inputImageUrls.length === 0 && !inputVideoUrl && videoRoute.provider !== 'seedance')) {
+    if (!projectId || !prompt || (inputImageUrls.length === 0 && !inputVideoUrl && !supportsNativeTextToVideo(selectedVideoModel))) {
       return NextResponse.json({ error: 'Missing required fields' }, { status: 400 })
     }
 
@@ -115,12 +115,13 @@ export async function POST(req: NextRequest) {
     }
 
     const videoSec = effectiveDuration || 10
-    const { filteredImages } = filterAndRemapImages(prompt, inputImageUrls)
+    const { filteredImages } = filterAndRemapImages(prompt, inputImageUrls, Math.max(7, getVideoModelCapability(selectedVideoModel).maxImageReferences ?? 7))
     const creditsRequired = estimateVideoCredits({
       model: selectedVideoModel,
       resolution: videoRoute.resolution,
       durationSec: videoSec,
       imageCount: filteredImages.length,
+      referenceVideoDurationSec: referenceVideoDuration,
     }) ?? Math.ceil(videoSec * 22)
     const toolName = selectedVideoModel === 'grok' ? 'create_video_grok' : 'create_video'
     const creditCheck = await requireCredits(userId, creditsRequired)
@@ -190,9 +191,13 @@ export async function POST(req: NextRequest) {
         .map(ref => originalImageUrlsByIndex[ref - 1])
         .filter((u): u is string => !!u && u.startsWith('http') && !u.endsWith('.mp4'))
       const sourceUrls = [...referencedImageUrls, ...(inputVideoUrl ? [inputVideoUrl] : []), ...autoVideoUrls].filter(Boolean)
-      const providerCostUsd = videoRoute.estimatedCostPerSecondUsd != null
-        ? videoSec * videoRoute.estimatedCostPerSecondUsd + filteredImages.length * (videoRoute.estimatedInputCostUsdPerImage ?? 0)
-        : undefined
+      const providerCostUsd = estimateVideoProviderCostUsd({
+        model: actualVideoModel,
+        resolution: actualVideoRoute.resolution,
+        durationSec: videoSec,
+        imageCount: filteredImages.length,
+        referenceVideoDurationSec: referenceVideoDuration,
+      })
 
       const videoMeta: VideoMeta = {
         taskId,

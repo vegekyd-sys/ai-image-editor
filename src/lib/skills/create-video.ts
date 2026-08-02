@@ -75,7 +75,7 @@ async function fillReferenceVideoMetas(urls: string[], metas?: VideoReferenceMet
   return next.length ? next : undefined;
 }
 
-function resolveSeedanceReferenceAspectRatio(
+function resolveReferenceAspectRatio(
   provider: string,
   aspectRatio: VideoAspectRatioInput,
   hasVideoReference: boolean,
@@ -104,7 +104,7 @@ export async function createVideo(input: CreateVideoInput): Promise<CreateVideoR
   const provider = normalizeVideoModelId(videoModel);
   const route = resolveVideoGenerationRoute({ model: provider, resolution: videoResolution });
   const capability = getVideoModelCapability(provider);
-  const seedanceVideoUrls = [...(videoUrl ? [videoUrl] : []), ...(videoUrls || [])].filter(Boolean);
+  const providerVideoUrls = [...(videoUrl ? [videoUrl] : []), ...(videoUrls || [])].filter(Boolean);
   const modelError = validateVideoModelRequest({
     model: provider,
     resolution: route.resolution,
@@ -116,7 +116,7 @@ export async function createVideo(input: CreateVideoInput): Promise<CreateVideoR
   });
 
   if (modelError) return { success: false, message: modelError };
-  if (hasAudioReference && route.provider !== 'seedance') {
+  if (hasAudioReference && route.provider !== 'seedance' && route.provider !== 'minimax') {
     return {
       success: false,
       message: route.provider === 'google-omni'
@@ -127,10 +127,10 @@ export async function createVideo(input: CreateVideoInput): Promise<CreateVideoR
   if ((audioUrls?.length || 0) > 3) {
     return {
       success: false,
-      message: 'Seedance supports at most 3 reference audio files per generation.',
+      message: `${capability.label} supports at most 3 reference audio files per generation.`,
     };
   }
-  const resolvedReferenceVideoMetas = await fillReferenceVideoMetas(seedanceVideoUrls, referenceVideoMetas);
+  const resolvedReferenceVideoMetas = await fillReferenceVideoMetas(providerVideoUrls, referenceVideoMetas);
 
   if (images.length === 0 && !hasVideoReference) {
     if (hasAudioReference) {
@@ -142,7 +142,7 @@ export async function createVideo(input: CreateVideoInput): Promise<CreateVideoR
     if (!supportsNativeTextToVideo(provider)) {
       return {
         success: false,
-        message: `${capability.label} requires an image or video reference. Native text-to-video is currently available through SeeDance models.`,
+        message: `${capability.label} requires an image or video reference. Native text-to-video is currently available through SeeDance models and MiniMax H3.`,
       };
     }
   }
@@ -174,8 +174,9 @@ export async function createVideo(input: CreateVideoInput): Promise<CreateVideoR
     }
 
     // Filter to only referenced images and remap indices (preserves index alignment)
-    // filterAndRemapImages will enforce the 7-image limit on the filtered result
-    const { filteredImages, finalPrompt } = filterAndRemapImages(script, images);
+    // Preserve the historical seven-image baseline while allowing providers
+    // such as MiniMax H3 to expose a larger documented reference limit.
+    const { filteredImages, finalPrompt } = filterAndRemapImages(script, images, Math.max(7, capability.maxImageReferences ?? 7));
 
     if (hasAudioReference) {
       const audioMarkers = findAudioMarkers(finalPrompt);
@@ -228,7 +229,7 @@ export async function createVideo(input: CreateVideoInput): Promise<CreateVideoR
     if (filteredModelError) return { success: false, message: filteredModelError };
 
     const loggedVideoRefType = videoUrl ? (videoReferType ?? 'base') : (videoUrls?.length ? 'feature' : undefined);
-    const providerAspectRatio = resolveSeedanceReferenceAspectRatio(provider, aspectRatio, seedanceVideoUrls.length > 0, resolvedReferenceVideoMetas);
+    const providerAspectRatio = resolveReferenceAspectRatio(provider, aspectRatio, providerVideoUrls.length > 0, resolvedReferenceVideoMetas);
     console.log(`\n🎬 [create_video] provider=${provider}, resolution=${route.resolution}, ${filteredImages.length}/${images.length} images, duration=${resolvedDuration ?? 'smart'}, aspectRatio=${providerAspectRatio ?? 'auto'}${hasVideoReference ? `, video=${loggedVideoRefType}` : ''}${hasAudioReference ? `, audio=${audioUrls?.length}` : ''}`);
     console.log(`Script (${finalPrompt.length} chars): ${finalPrompt.slice(0, 150)}...`);
 
@@ -253,7 +254,7 @@ export async function createVideo(input: CreateVideoInput): Promise<CreateVideoR
         model: provider,
         resolution: route.resolution,
         imageReferenceCount: filteredImages.length,
-        hasVideoReference: seedanceVideoUrls.length > 0,
+        hasVideoReference: providerVideoUrls.length > 0,
         hasAudioReference,
       });
       taskId = await createEvolinkTask({
@@ -263,7 +264,7 @@ export async function createVideo(input: CreateVideoInput): Promise<CreateVideoR
         aspectRatio: providerAspectRatio,
         quality: route.resolution,
         model: providerModel,
-        videoUrls: seedanceVideoUrls.length ? seedanceVideoUrls : undefined,
+        videoUrls: providerVideoUrls.length ? providerVideoUrls : undefined,
         audioUrls: audioUrls?.length ? audioUrls : undefined,
       });
       console.log(`✅ [create_video] SeeDance (Evolink) task created: ${taskId}`);
@@ -273,6 +274,25 @@ export async function createVideo(input: CreateVideoInput): Promise<CreateVideoR
         videoModel: provider,
         providerModel,
         message: `Video rendering task created. Task ID: ${taskId}. Rendering time depends on the selected model. Use makaron_get_video_status to poll.`,
+      };
+    } else if (route.provider === 'minimax') {
+      const { createMinimaxVideoTask } = await import('../minimax-video');
+      taskId = await createMinimaxVideoTask({
+        prompt: finalPrompt,
+        images: filteredImages,
+        videoUrls: providerVideoUrls.length ? providerVideoUrls : undefined,
+        audioUrls: audioUrls?.length ? audioUrls : undefined,
+        duration: resolvedDuration ?? 5,
+        aspectRatio: providerAspectRatio,
+        resolution: route.resolution as '768p' | '2k',
+      });
+      console.log(`✅ [create_video] MiniMax H3 task created: ${taskId}`);
+      return {
+        success: true,
+        taskId,
+        videoModel: provider,
+        providerModel: route.providerModel,
+        message: `MiniMax H3 video task created. Task ID: ${taskId}. Use makaron_get_video_status to poll.`,
       };
     } else if (route.provider === 'grok') {
       const { createXaiVideoTask } = await import('../xai-video');

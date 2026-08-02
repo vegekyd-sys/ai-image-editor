@@ -73,6 +73,9 @@ export async function GET(req: NextRequest) {
       } else if (vm.taskId.startsWith('google-omni-')) {
         const { getGoogleOmniVideoTask } = await import('@/lib/google-omni-video')
         result = await getGoogleOmniVideoTask(vm.taskId, vm.videoUrl || vm.providerUrl)
+      } else if (vm.taskId.startsWith('minimax-h3-')) {
+        const { getMinimaxVideoTask } = await import('@/lib/minimax-video')
+        result = await getMinimaxVideoTask(vm.taskId)
       } else {
         const { getKlingTask } = await import('@/lib/kling')
         result = await getKlingTask(vm.taskId)
