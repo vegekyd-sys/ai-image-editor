@@ -17,7 +17,7 @@ interface LegacyChangelogEntry {
 
 type LocalizedChangelogEntry = {
   date: string;
-  localeKey: 'minimaxH3' | 'multilingualAsr' | 'editableRemotion' | 'editableLayers';
+  localeKey: 'multilingualAsr' | 'editableRemotion' | 'editableLayers';
 };
 
 type ChangelogEntry = LegacyChangelogEntry | LocalizedChangelogEntry;
@@ -25,7 +25,22 @@ type ChangelogEntry = LegacyChangelogEntry | LocalizedChangelogEntry;
 const CHANGELOG: ChangelogEntry[] = [
   {
     date: '2026-08-02',
-    localeKey: 'minimaxH3',
+    en: {
+      title: 'MiniMax H3 Video',
+      items: [
+        'MiniMax H3 is now available in Makaron for native 2K video generation from text, images, and multimodal references.',
+        'Create 4–15 second videos in six aspect ratios with native stereo sound, using up to nine reference images, three reference videos, and three reference audio tracks.',
+        'Choose H3 in the video model selector or ask Agent in chat; makaron-cli chat now keeps model and resolution selection together to avoid incompatible routes.',
+      ],
+    },
+    zh: {
+      title: 'MiniMax H3 视频模型',
+      items: [
+        'MiniMax H3 已接入 Makaron，支持从文字、图片及多模态参考直接生成原生 2K 视频。',
+        '可生成 4–15 秒、六种画幅的视频，支持原生立体声，以及最多 9 张参考图、3 段参考视频和 3 条参考音频。',
+        '可在视频模型选择器中选择 H3，或直接在对话中告诉 Agent；makaron-cli chat 现在会联动选择模型与分辨率，避免不兼容路由。',
+      ],
+    },
   },
   {
     date: '2026-07-29',
@@ -913,14 +928,6 @@ const iOSAppTopGap = 'max(96px, calc(env(safe-area-inset-top, 0px) + 40px))';
 const iOSAppBottomGap = 'max(14px, env(safe-area-inset-bottom, 0px))';
 
 const LOCALIZED_CHANGELOG_KEYS = {
-  minimaxH3: {
-    title: 'changelog.minimaxH3.title',
-    items: [
-      'changelog.minimaxH3.item1',
-      'changelog.minimaxH3.item2',
-      'changelog.minimaxH3.item3',
-    ],
-  },
   multilingualAsr: {
     title: 'changelog.multilingualAsr.title',
     items: [

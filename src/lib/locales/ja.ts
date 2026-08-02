@@ -112,10 +112,6 @@ const ja = {
   // Changelog
   'changelog.heading': '更新情報',
   'changelog.close': '更新情報を閉じる',
-  'changelog.minimaxH3.title': 'MiniMax H3 動画モデル',
-  'changelog.minimaxH3.item1': 'MiniMax H3をMakaronに追加し、テキスト、画像、マルチモーダル参照からネイティブ2K動画を直接生成できるようになりました。',
-  'changelog.minimaxH3.item2': '4〜15秒、6種類のアスペクト比、ネイティブステレオ音声に対応し、最大9枚の参照画像、3本の参照動画、3つの参照音声を利用できます。',
-  'changelog.minimaxH3.item3': '動画モデルセレクターでH3を選ぶか、チャットでAgentに指定できます。makaron-cli chatはモデルと解像度を一緒に選択し、非対応の組み合わせを防ぎます。',
   'changelog.multilingualAsr.title': '多言語音声認識',
   'changelog.multilingualAsr.item1': 'Makaron ASRは日本語を含む複数の言語を文字起こしできるようになり、字幕とRemotionのタイミングを正確に合わせられます。',
   'changelog.editableRemotion.title': 'Remotion編集をエンドツーエンドで実現',

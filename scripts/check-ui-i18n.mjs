@@ -87,9 +87,35 @@ function scanFile(filePath, violations) {
     return lines[line]?.includes('i18n-ignore') || lines[line - 1]?.includes('i18n-ignore');
   };
 
+  const isBilingualChangelogData = (node) => {
+    if (relativePath !== 'src/components/Changelog.tsx') return false;
+
+    let current = node;
+    while (current) {
+      if (
+        ts.isVariableDeclaration(current)
+        && ts.isIdentifier(current.name)
+        && current.name.text === 'CHANGELOG'
+      ) {
+        return true;
+      }
+      current = current.parent;
+    }
+
+    return false;
+  };
+
   const record = (kind, rawText, node) => {
     const text = normalizeText(rawText);
-    if (!text || !humanTextPattern.test(text) || translationKeyPattern.test(text) || isIgnored(node)) return;
+    // Release notes intentionally keep their historical English/Chinese pair;
+    // Japanese and Traditional Chinese locales use the English fallback.
+    if (
+      !text
+      || !humanTextPattern.test(text)
+      || translationKeyPattern.test(text)
+      || isIgnored(node)
+      || isBilingualChangelogData(node)
+    ) return;
     const nodeKey = `${node.pos}:${node.end}:${kind}`;
     if (seenNodes.has(nodeKey)) return;
     seenNodes.add(nodeKey);
