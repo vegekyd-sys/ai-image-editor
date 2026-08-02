@@ -75,6 +75,10 @@ const en = {
   // Changelog
   'changelog.heading': 'Updates',
   'changelog.close': 'Close updates',
+  'changelog.minimaxH3.title': 'MiniMax H3 Video',
+  'changelog.minimaxH3.item1': 'MiniMax H3 is now available in Makaron for native 2K video generation from text, images, and multimodal references.',
+  'changelog.minimaxH3.item2': 'Create 4–15 second videos in six aspect ratios with native stereo sound, using up to nine reference images, three reference videos, and three reference audio tracks.',
+  'changelog.minimaxH3.item3': 'Choose H3 in the video model selector or ask Agent in chat; makaron-cli chat now keeps model and resolution selection together to avoid incompatible routes.',
   'changelog.multilingualAsr.title': 'Multilingual Speech Recognition',
   'changelog.multilingualAsr.item1': 'Makaron ASR can now transcribe speech in multiple languages, including Japanese, for accurate subtitles and Remotion timing.',
   'changelog.editableRemotion.title': 'Editable Remotion, End to End',

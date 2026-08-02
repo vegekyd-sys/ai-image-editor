@@ -75,6 +75,10 @@ const zh = {
   // Changelog
   'changelog.heading': '更新',
   'changelog.close': '关闭更新',
+  'changelog.minimaxH3.title': 'MiniMax H3 视频模型',
+  'changelog.minimaxH3.item1': 'MiniMax H3 已接入 Makaron，支持从文字、图片及多模态参考直接生成原生 2K 视频。',
+  'changelog.minimaxH3.item2': '可生成 4–15 秒、六种画幅的视频，支持原生立体声，以及最多 9 张参考图、3 段参考视频和 3 条参考音频。',
+  'changelog.minimaxH3.item3': '可在视频模型选择器中选择 H3，或直接在对话中告诉 Agent；makaron-cli chat 现在会联动选择模型与分辨率，避免不兼容路由。',
   'changelog.multilingualAsr.title': 'ASR 支持多国语言',
   'changelog.multilingualAsr.item1': 'Makaron ASR 现在可以识别包括日语在内的多国语言，为字幕和 Remotion 时间轴提供准确转写。',
   'changelog.editableRemotion.title': 'Remotion 可编辑，完整打通',
