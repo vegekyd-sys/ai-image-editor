@@ -251,13 +251,14 @@ IMPORTANT:
 - EvoLink Seedance reference images must be JPEG/PNG/WebP, width and height each 300-6000px, aspect ratio 0.4-2.5, and <=30MB each. Input errors distinguish too_small, too_large, invalid_aspect_ratio, unsupported_format, and unreadable. NON_RETRYABLE means the same URL must not be resubmitted; prepare a new compliant URL or replace the source first.
 - When images are provided, script should use <<<media_N>>> format (from makaron_write_video_script output). Text-to-video scripts should not invent media markers.
 - Provider-generated video rendering takes 3-5 minutes; Grok is usually around 30-40 seconds; Gemini Omni is usually around 30-70 seconds plus Storage handoff. Use makaron_get_video_status to poll.
-- Duration: omit for smart mode. SeeDance supports integer output duration 4-15s (default 5s); Kling supports 5-15s; Grok 1.5 supports 1-15s for single-image; Gemini Omni supports 3-10s in Makaron.
-- Resolution: omit or use "auto" for the selected model default. seedance-fast/seedance-mini/grok support 480p/720p; seedance supports 480p/720p/1080p; kling supports 720p/1080p/4k; google-omni outputs 720p.
+- Duration: omit for smart mode. Seedance 2.5 supports 4-30s; SeeDance 2.0 supports 4-15s; Kling supports 5-15s; Grok 1.5 supports 1-15s; Gemini Omni supports 3-10s.
+- Seedance 2.5 accepts up to 30 image, 10 video, and 10 audio references (50 total), plus dedicated edit/extend modes. Evolink output is 480p or 720p.
 
 Models:
 - seedance-fast (default) — SeeDance 2.0 Fast via Evolink, 480p/720p, default 720p
 - seedance-mini — SeeDance 2.0 Mini via Evolink, lower-cost 480p/720p route for drafts and multi-size tests
 - seedance — SeeDance 2.0 standard via Evolink, supports 480p/720p/1080p
+- seedance-2.5 — Seedance 2.5 via Evolink, 4-30s, multimodal references, native audio, edit and extend
 - kling — Kling v3-omni, supports 720p/1080p/4k
 - grok — Grok Video 1.5 via xAI, fastest single-image-to-video, native audio, defaults to 480p at $0.08/s + $0.01/input image
 - google-omni — Gemini Omni Flash via Google, fast image/video generation and editing, up to 6 image references without a video reference, one video reference for direct edits, native generated audio, no uploaded audio references
@@ -268,11 +269,19 @@ Shot 2 (3s): Close-up, <<<media_2>>> ...
 Style: Cinematic, warm golden light.`,
     {
       script: z.string().describe('Video script with <<<media_N>>> references'),
-      images: z.array(z.string().url()).max(7).default([]).describe('Optional public image URLs. Omit or pass [] for native SeeDance text-to-video.'),
-      duration: z.number().optional().describe('Duration in seconds. SeeDance accepts integer output duration 4-15s (default 5s); Kling supports 5-15s; Grok 1.5 supports 1-15s; Gemini Omni supports 3-10s. Omit for smart mode.'),
+      images: z.array(z.string().url()).max(30).default([]).describe('Optional public image URLs. Seedance 2.5 accepts up to 30; older routes may accept fewer.'),
+      videoUrls: z.array(z.string().url()).max(10).optional().describe('Seedance 2.5 public reference video URLs, up to 10 with 30 seconds combined.'),
+      audioUrls: z.array(z.string().url()).max(10).optional().describe('Seedance 2.5 public reference audio URLs, up to 10 with 30 seconds combined.'),
+      duration: z.number().optional().describe('Duration in seconds. Seedance 2.5 accepts 4-30s; SeeDance 2.0 accepts 4-15s. Omit for smart mode.'),
       aspectRatio: z.enum(['auto', '16:9', '9:16', '1:1', '4:3', '3:4', '21:9', '3:2', '2:3']).optional().describe('Aspect ratio. Use auto/adaptive or a provider-supported ratio. Seedance supports 21:9. Grok image-to-video ignores forced ratios to avoid stretching the source image; pad the source or choose another model for a fixed final shape.'),
-      videoModel: z.enum(['seedance-fast', 'seedance-mini', 'seedance', 'kling', 'grok', 'google-omni']).optional().describe('Video model: seedance-fast (default), seedance-mini (lower-cost drafts), seedance (standard/1080p), kling (1080p/4k), grok (fastest single-image-to-video with native audio), or google-omni (fast Gemini Omni image/video generation and editing with native generated audio)'),
+      videoModel: z.enum(['seedance-fast', 'seedance-mini', 'seedance', 'seedance-2.5', 'kling', 'grok', 'google-omni']).optional().describe('Video model. seedance-2.5 supports 30s multimodal generation, edit, and extend.'),
       videoResolution: z.enum(['auto', '480p', '720p', '1080p', '4k']).optional().describe('Output resolution. Use auto to follow the selected model default.'),
+      operation: z.enum(['generate', 'edit', 'extend']).optional().describe('Seedance 2.5 operation. edit and extend require videoUrls.'),
+      extendDirection: z.enum(['forward', 'backward']).optional().describe('Seedance 2.5 extension direction.'),
+      generateAudio: z.boolean().optional().describe('Generate synchronized native audio. Default true for Seedance 2.5.'),
+      contentFilter: z.boolean().optional().describe('Provider content filter. Default true.'),
+      outputFormat: z.enum(['mp4', 'mov']).optional().describe('MP4/H264 for playback or MOV for grading.'),
+      webSearch: z.boolean().optional().describe('Enable Seedance 2.5 text-to-video web search grounding.'),
     },
     async (params) => {
       try {
@@ -284,10 +293,18 @@ Style: Cinematic, warm golden light.`,
         const result = await createVideo({
           script: params.script,
           images: params.images,
+          videoUrls: params.videoUrls,
+          audioUrls: params.audioUrls,
           duration: params.duration,
           aspectRatio: params.aspectRatio,
           videoModel: params.videoModel,
           videoResolution: params.videoResolution,
+          videoOperation: params.operation,
+          videoExtendDirection: params.extendDirection,
+          generateAudio: params.generateAudio,
+          contentFilter: params.contentFilter,
+          outputFormat: params.outputFormat,
+          webSearch: params.webSearch,
         });
 
         if (result.success) {
@@ -334,7 +351,7 @@ Example: Edit a video to add cinematic color grading:
       images: z.array(z.string().url()).max(7).optional().describe('Optional reference images (public URLs)'),
       duration: z.number().optional().describe('Output duration in seconds. SeeDance accepts integer output duration 4-15s (default 5s); Kling supports 5-15s; Grok 1.5 supports 1-15s for one image but does not edit/reference videos; Gemini Omni supports 3-10s video editing in Makaron. Omit for smart mode.'),
       aspectRatio: z.enum(['auto', '16:9', '9:16', '1:1', '4:3', '3:4', '21:9', '3:2', '2:3']).optional().describe('Aspect ratio. Use auto/adaptive or a provider-supported ratio.'),
-      videoModel: z.enum(['seedance-fast', 'seedance-mini', 'seedance', 'kling', 'grok', 'google-omni']).optional().describe('Video model: seedance-fast (default reference-video edit), seedance-mini (lower-cost drafts), seedance (standard/1080p), kling (base/direct edit), grok (single-image only; no video edit), or google-omni (fast direct video edit with native generated audio)'),
+      videoModel: z.enum(['seedance-fast', 'seedance-mini', 'seedance', 'seedance-2.5', 'kling', 'grok', 'google-omni']).optional().describe('Video model. Seedance 2.5 uses its dedicated typed video-edit route.'),
       videoResolution: z.enum(['auto', '480p', '720p', '1080p', '4k']).optional().describe('Output resolution. Use auto to follow the selected model default.'),
       referType: z.enum(['base', 'feature']).optional().describe('Video role: "base" (edit this video, default) or "feature" (use as style/motion reference)'),
       keepOriginalSound: z.boolean().optional().describe('Keep original video sound (default: false)'),
@@ -358,6 +375,7 @@ Example: Edit a video to add cinematic color grading:
           videoUrl: params.videoUrl,
           videoReferType: resolvedReferType,
           keepOriginalSound: params.keepOriginalSound ?? false,
+          videoOperation: resolvedModel === 'seedance-2.5' ? 'edit' : 'generate',
         });
 
         if (result.success) {

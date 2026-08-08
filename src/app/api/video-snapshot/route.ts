@@ -9,7 +9,7 @@ import {
   requireCredits,
 } from '@/lib/billing/credits'
 import { VIDEO_PLACEHOLDER_IMAGE } from '@/lib/editor/timeline-derivations'
-import { estimateVideoCredits, normalizeVideoModelId, resolveVideoGenerationRoute } from '@/lib/video-model-capabilities'
+import { estimateVideoCredits, getVideoModelCapability, normalizeVideoModelId, resolveVideoGenerationRoute } from '@/lib/video-model-capabilities'
 import type { VideoMeta } from '@/types'
 
 export const maxDuration = 1800
@@ -32,8 +32,15 @@ export async function POST(req: NextRequest) {
       videoUrl,
       videoReferType,
       keepOriginalSound,
+      videoOperation,
+      videoExtendDirection,
+      generateAudio,
+      contentFilter,
+      outputFormat,
+      webSearch,
     } = await req.json()
     const selectedVideoModel = normalizeVideoModelId(videoModel)
+    const videoCapability = getVideoModelCapability(selectedVideoModel)
     const videoRoute = resolveVideoGenerationRoute({ model: selectedVideoModel, resolution: videoResolution })
     const inputImageUrls: string[] = Array.isArray(imageUrls) ? [...imageUrls] : []
     const inputVideoUrl = typeof videoUrl === 'string' && videoUrl.startsWith('http') ? videoUrl : undefined
@@ -91,10 +98,10 @@ export async function POST(req: NextRequest) {
         }
       }
     }
-    if (referenceVideoDuration != null && referenceVideoDuration > 15.5) {
-      return NextResponse.json({ error: `Reference video duration too long (${referenceVideoDuration.toFixed(1).replace(/\.0$/, '')}s). Maximum 15s with small metadata tolerance.` }, { status: 400 })
+    if (referenceVideoDuration != null && referenceVideoDuration > videoCapability.maxReferenceVideoDuration + 0.5) {
+      return NextResponse.json({ error: `Reference video duration too long (${referenceVideoDuration.toFixed(1).replace(/\.0$/, '')}s). Maximum ${videoCapability.maxReferenceVideoDuration}s with small metadata tolerance.` }, { status: 400 })
     }
-    const effectiveDuration = duration ?? (referenceVideoDuration != null ? Math.min(15, Math.round(referenceVideoDuration)) : undefined)
+    const effectiveDuration = duration ?? (referenceVideoDuration != null ? Math.min(videoCapability.maxOutputDuration, Math.round(referenceVideoDuration)) : undefined)
     const originalVideoUrls = [...(inputVideoUrl ? [inputVideoUrl] : []), ...autoVideoUrls]
     let providerInputVideoUrl = inputVideoUrl
     let providerAutoVideoUrls = autoVideoUrls
@@ -111,11 +118,11 @@ export async function POST(req: NextRequest) {
         console.log(`[video-snapshot] normalized ${prepared.normalized.length} video reference(s) for provider input`)
       }
       providerInputVideoUrl = inputVideoUrl ? prepared.urls[0] : undefined
-      providerAutoVideoUrls = inputVideoUrl ? [] : prepared.urls
+      providerAutoVideoUrls = inputVideoUrl ? prepared.urls.slice(1) : prepared.urls
     }
 
     const videoSec = effectiveDuration || 10
-    const { filteredImages } = filterAndRemapImages(prompt, inputImageUrls)
+    const { filteredImages } = filterAndRemapImages(prompt, inputImageUrls, videoCapability.maxImageReferences ?? 7)
     const creditsRequired = estimateVideoCredits({
       model: selectedVideoModel,
       resolution: videoRoute.resolution,
@@ -162,6 +169,12 @@ export async function POST(req: NextRequest) {
         referenceVideoDuration,
         referenceVideoMetas: referenceVideoMetas.length ? referenceVideoMetas : undefined,
         keepOriginalSound,
+        videoOperation,
+        videoExtendDirection,
+        generateAudio,
+        contentFilter,
+        outputFormat,
+        webSearch,
       })
 
       if (!skillResult.success || !skillResult.taskId) {

@@ -6,7 +6,6 @@
 import { getVideoModelCapability, validateVideoAspectRatioRequest, validateVideoResolutionRequest, type VideoAspectRatioInput, type VideoResolutionInput } from '@/lib/video-model-capabilities';
 import { parseTotalDuration } from './kling';
 
-const MAX_VIDEO_DURATION = 15;
 function urlMatch(a: string, b: string): boolean {
   try {
     const ua = new URL(a);
@@ -49,8 +48,8 @@ export function validateVideoScript(opts: {
   if (parsedDuration != null && parsedDuration < capability.minOutputDuration) {
     return `A single ${capability.label} video generation script must be at least ${capability.minOutputDuration} seconds, but this script totals ${parsedDuration}s. Extend it to a compact ${capability.minOutputDuration}s script and set duration=${capability.minOutputDuration}; the video model cannot generate shorter clips.`
   }
-  if (parsedDuration != null && parsedDuration > MAX_VIDEO_DURATION) {
-    return `A single video generation script can be at most ${MAX_VIDEO_DURATION} seconds, but this script totals ${parsedDuration}s. Use long-video-director to split it into self-contained segments of ${MAX_VIDEO_DURATION}s or less, and do not submit one long script.`
+  if (parsedDuration != null && parsedDuration > capability.maxOutputDuration) {
+    return `A single video generation script can be at most ${capability.maxOutputDuration} seconds, but this script totals ${parsedDuration}s. Use long-video-director to split it into self-contained segments of ${capability.longVideoChunkSeconds}s or less, and do not submit one long script.`
   }
   if (duration != null && duration < capability.minOutputDuration) {
     return `${capability.label} video generation duration must be at least ${capability.minOutputDuration} seconds, but duration=${duration}. Use duration=${capability.minOutputDuration}; the video model cannot generate shorter clips.`

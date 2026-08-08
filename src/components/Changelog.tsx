@@ -17,12 +17,16 @@ interface LegacyChangelogEntry {
 
 type LocalizedChangelogEntry = {
   date: string;
-  localeKey: 'multilingualAsr' | 'editableRemotion' | 'editableLayers';
+  localeKey: 'seedance25' | 'multilingualAsr' | 'editableRemotion' | 'editableLayers';
 };
 
 type ChangelogEntry = LegacyChangelogEntry | LocalizedChangelogEntry;
 
 const CHANGELOG: ChangelogEntry[] = [
+  {
+    date: '2026-08-08',
+    localeKey: 'seedance25',
+  },
   {
     date: '2026-07-29',
     localeKey: 'multilingualAsr',
@@ -909,6 +913,14 @@ const iOSAppTopGap = 'max(96px, calc(env(safe-area-inset-top, 0px) + 40px))';
 const iOSAppBottomGap = 'max(14px, env(safe-area-inset-bottom, 0px))';
 
 const LOCALIZED_CHANGELOG_KEYS = {
+  seedance25: {
+    title: 'changelog.seedance25.title',
+    items: [
+      'changelog.seedance25.item1',
+      'changelog.seedance25.item2',
+      'changelog.seedance25.item3',
+    ],
+  },
   multilingualAsr: {
     title: 'changelog.multilingualAsr.title',
     items: [

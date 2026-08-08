@@ -1,5 +1,5 @@
 import { filterAndRemapImages, parseTotalDuration } from '../kling';
-import { getVideoModelCapability, normalizeVideoModelId, resolveClosestSupportedAspectRatio, resolveVideoGenerationRoute, resolveVideoOutputDuration, resolveVideoProviderAspectRatio, resolveVideoProviderModel, supportsNativeTextToVideo, validateVideoModelRequest, type VideoAspectRatioInput, type VideoReferenceMeta, type VideoResolutionInput } from '@/lib/video-model-capabilities';
+import { getVideoModelCapability, normalizeVideoModelId, resolveClosestSupportedAspectRatio, resolveVideoGenerationRoute, resolveVideoOutputDuration, resolveVideoProviderAspectRatio, resolveVideoProviderModel, supportsNativeTextToVideo, validateVideoModelRequest, type VideoAspectRatioInput, type VideoGenerationOperation, type VideoReferenceMeta, type VideoResolutionInput } from '@/lib/video-model-capabilities';
 
 const MAX_REFERENCE_VIDEO_PROBE_BYTES = 55 * 1024 * 1024;
 
@@ -21,6 +21,12 @@ export interface CreateVideoInput {
   // Motion Control (Kling only)
   motionControl?: boolean;              // Use /v1/videos/motion-control endpoint
   characterOrientation?: 'image' | 'video';  // default: 'image'
+  videoOperation?: VideoGenerationOperation; // Seedance 2.5: generate/edit/extend
+  videoExtendDirection?: 'forward' | 'backward';
+  generateAudio?: boolean;
+  contentFilter?: boolean;
+  outputFormat?: 'mp4' | 'mov';
+  webSearch?: boolean;
 }
 
 export interface CreateVideoResult {
@@ -97,8 +103,54 @@ function findAudioMarkers(prompt: string): Set<number> {
   );
 }
 
+function prepareSeedance25References(options: {
+  prompt: string;
+  images: string[];
+  videoUrls: string[];
+  audioUrls: string[];
+  operation: VideoGenerationOperation;
+  extendDirection?: 'forward' | 'backward';
+}): { prompt: string; images: string[] } {
+  const refs = [...new Set(
+    Array.from(options.prompt.matchAll(/<<<(?:image|media)_(\d+)>>>/g), match => Number(match[1]))
+  )];
+  const mediaTags = new Map<number, string>();
+  const referencedImages: string[] = [];
+  let videoIndex = 0;
+
+  for (const ref of refs) {
+    const image = options.images[ref - 1];
+    if (image?.startsWith('http')) {
+      referencedImages.push(image);
+      mediaTags.set(ref, `@image${referencedImages.length}`);
+    } else if (videoIndex < options.videoUrls.length) {
+      videoIndex += 1;
+      mediaTags.set(ref, `@video${videoIndex}`);
+    }
+  }
+
+  let prompt = options.prompt.replace(/<<<(?:image|media)_(\d+)>>>/g, (marker, rawIndex) => {
+    return mediaTags.get(Number(rawIndex)) || marker;
+  });
+  prompt = prompt.replace(/<<<audio_(\d+)>>>/gi, (_marker, rawIndex) => `@audio${Number(rawIndex)}`);
+
+  if (options.operation === 'edit') {
+    prompt = `Edit @video1: ${prompt}`;
+  } else if (options.operation === 'extend') {
+    prompt = `Extend @video1 ${options.extendDirection || 'forward'}: ${prompt}`;
+  } else if (videoIndex < options.videoUrls.length) {
+    const remaining = options.videoUrls
+      .slice(videoIndex)
+      .map((_, index) => `@video${videoIndex + index + 1}`)
+      .join(', ');
+    prompt = `${prompt}\nUse ${remaining} as motion, camera, and visual-style references.`;
+  }
+
+  return { prompt, images: referencedImages };
+}
+
 export async function createVideo(input: CreateVideoInput): Promise<CreateVideoResult> {
-  const { script, images, duration, aspectRatio, videoModel, videoResolution, videoUrl, videoReferType, videoUrls, audioUrls, referenceVideoDuration, referenceVideoMetas, keepOriginalSound, motionControl, characterOrientation } = input;
+  const { script, images, duration, aspectRatio, videoModel, videoResolution, videoUrl, videoReferType, videoUrls, audioUrls, referenceVideoDuration, referenceVideoMetas, keepOriginalSound, motionControl, characterOrientation, videoOperation = 'generate', videoExtendDirection, generateAudio, contentFilter, outputFormat, webSearch } = input;
   const hasVideoReference = !!videoUrl || !!videoUrls?.length;
   const hasAudioReference = !!audioUrls?.length;
   const provider = normalizeVideoModelId(videoModel);
@@ -109,13 +161,22 @@ export async function createVideo(input: CreateVideoInput): Promise<CreateVideoR
     model: provider,
     resolution: route.resolution,
     aspectRatio,
-    outputDuration: duration,
+    outputDuration: provider === 'seedance-2.5' && videoOperation === 'edit' ? -1 : duration,
     referenceVideoDuration,
     referenceVideoMetas,
     hasVideoReference,
+    videoReferenceCount: seedanceVideoUrls.length,
+    audioReferenceCount: audioUrls?.length || 0,
+    operation: videoOperation,
   });
 
   if (modelError) return { success: false, message: modelError };
+  if (provider === 'seedance-2.5' && (videoOperation === 'edit' || videoOperation === 'extend') && !hasVideoReference) {
+    return {
+      success: false,
+      message: `SeeDance 2.5 ${videoOperation} requires at least one video reference.`,
+    };
+  }
   if (hasAudioReference && route.provider !== 'seedance') {
     return {
       success: false,
@@ -124,16 +185,16 @@ export async function createVideo(input: CreateVideoInput): Promise<CreateVideoR
         : 'Reference audio is only supported by Seedance video models.',
     };
   }
-  if ((audioUrls?.length || 0) > 3) {
+  if ((audioUrls?.length || 0) > (capability.maxAudioReferences ?? 3)) {
     return {
       success: false,
-      message: 'Seedance supports at most 3 reference audio files per generation.',
+      message: `${capability.label} supports at most ${capability.maxAudioReferences ?? 3} reference audio files per generation.`,
     };
   }
   const resolvedReferenceVideoMetas = await fillReferenceVideoMetas(seedanceVideoUrls, referenceVideoMetas);
 
   if (images.length === 0 && !hasVideoReference) {
-    if (hasAudioReference) {
+    if (hasAudioReference && provider !== 'seedance-2.5') {
       return {
         success: false,
         message: 'Reference audio cannot be used alone. Provide an image or video reference for the video generation.',
@@ -175,10 +236,24 @@ export async function createVideo(input: CreateVideoInput): Promise<CreateVideoR
 
     // Filter to only referenced images and remap indices (preserves index alignment)
     // filterAndRemapImages will enforce the 7-image limit on the filtered result
-    const { filteredImages, finalPrompt } = filterAndRemapImages(script, images);
+    const initialFiltered = filterAndRemapImages(script, images, provider === 'seedance-2.5' ? 30 : 7);
+    let filteredImages = initialFiltered.filteredImages;
+    let finalPrompt = initialFiltered.finalPrompt;
+    if (provider === 'seedance-2.5') {
+      const prepared = prepareSeedance25References({
+        prompt: script,
+        images,
+        videoUrls: seedanceVideoUrls,
+        audioUrls: audioUrls || [],
+        operation: videoOperation,
+        extendDirection: videoExtendDirection,
+      });
+      filteredImages = prepared.images;
+      finalPrompt = prepared.prompt;
+    }
 
     if (hasAudioReference) {
-      const audioMarkers = findAudioMarkers(finalPrompt);
+      const audioMarkers = findAudioMarkers(script);
       const missing = (audioUrls || [])
         .map((_, index) => index + 1)
         .filter(index => !audioMarkers.has(index));
@@ -219,16 +294,20 @@ export async function createVideo(input: CreateVideoInput): Promise<CreateVideoR
       model: provider,
       resolution: route.resolution,
       aspectRatio,
-      outputDuration: resolvedDuration,
+      outputDuration: provider === 'seedance-2.5' && videoOperation === 'edit' ? -1 : resolvedDuration,
       referenceVideoDuration,
       referenceVideoMetas: resolvedReferenceVideoMetas,
       hasVideoReference,
       imageReferenceCount: filteredImages.length,
+      videoReferenceCount: seedanceVideoUrls.length,
+      audioReferenceCount: audioUrls?.length || 0,
+      operation: videoOperation,
     });
     if (filteredModelError) return { success: false, message: filteredModelError };
 
     const loggedVideoRefType = videoUrl ? (videoReferType ?? 'base') : (videoUrls?.length ? 'feature' : undefined);
-    const providerAspectRatio = resolveSeedanceReferenceAspectRatio(provider, aspectRatio, seedanceVideoUrls.length > 0, resolvedReferenceVideoMetas);
+    let providerAspectRatio = resolveSeedanceReferenceAspectRatio(provider, aspectRatio, seedanceVideoUrls.length > 0, resolvedReferenceVideoMetas);
+    if (provider === 'seedance-2.5' && videoOperation !== 'generate') providerAspectRatio = 'adaptive';
     console.log(`\n🎬 [create_video] provider=${provider}, resolution=${route.resolution}, ${filteredImages.length}/${images.length} images, duration=${resolvedDuration ?? 'smart'}, aspectRatio=${providerAspectRatio ?? 'auto'}${hasVideoReference ? `, video=${loggedVideoRefType}` : ''}${hasAudioReference ? `, audio=${audioUrls?.length}` : ''}`);
     console.log(`Script (${finalPrompt.length} chars): ${finalPrompt.slice(0, 150)}...`);
 
@@ -255,16 +334,27 @@ export async function createVideo(input: CreateVideoInput): Promise<CreateVideoR
         imageReferenceCount: filteredImages.length,
         hasVideoReference: seedanceVideoUrls.length > 0,
         hasAudioReference,
+        operation: videoOperation,
       });
+      if (provider === 'seedance-2.5' && providerModel === 'seedance-2.5-image-to-video') {
+        providerAspectRatio = 'adaptive';
+      }
+      const providerDuration = provider === 'seedance-2.5' && videoOperation === 'edit'
+        ? -1
+        : resolvedDuration != null ? resolvedDuration : undefined;
       taskId = await createEvolinkTask({
         prompt: finalPrompt,
         images: filteredImages,
-        duration: resolvedDuration != null ? resolvedDuration : undefined,
+        duration: providerDuration,
         aspectRatio: providerAspectRatio,
         quality: route.resolution,
         model: providerModel,
         videoUrls: seedanceVideoUrls.length ? seedanceVideoUrls : undefined,
         audioUrls: audioUrls?.length ? audioUrls : undefined,
+        generateAudio,
+        contentFilter,
+        outputFormat,
+        webSearch,
       });
       console.log(`✅ [create_video] SeeDance (Evolink) task created: ${taskId}`);
       return {

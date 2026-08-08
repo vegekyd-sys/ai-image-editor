@@ -252,6 +252,8 @@ npx makaron-cli chat --project <id|auto> --video input.mp4 -b "make it funny"
 
 Options for `video create`: `--script "..."`, `--script-file <path>`, `--image <url>` (repeatable, up to 7), `--video <file|url>`, `--duration <seconds>`, `--aspect 9:16|16:9|1:1`, `--video-model seedance-fast|seedance-mini|seedance|kling|grok|google-omni`. SeeDance accepts native text-to-video with no image and integer output duration 4-15s (default 5s); Kling supports 5-15s.
 
+For Seedance 2.5, use `--video-model seedance-2.5`; it supports 4-30s, 480p/720p, up to 30 image + 10 video + 10 audio references, and repeatable local-file/URL flags. Typed modes use `--video-operation generate|edit|extend`, with `--extend-direction`, `--output-format mp4|mov`, and optional `--web-search`. Evolink does not expose 4K for this route.
+
 Video edit model behavior: `--video-model kling --video` uses Kling base/direct edit internally; `--video-model seedance --video` uses the Seedance video-reference path and requires target <=15s, <=50MB, width/height 300-6000px, aspect ratio 0.4-2.5, and frame pixels 409,600-2,086,876. Tiny metadata padding up to 15.5s is accepted and output duration is clamped to 15s.
 
 ### `music` — Music generation

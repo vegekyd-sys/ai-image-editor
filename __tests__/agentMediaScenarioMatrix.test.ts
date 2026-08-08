@@ -31,7 +31,7 @@ describe('agent media scenario matrix', () => {
   const cli = read('packages/makaron-cli/bin/makaron.mjs')
 
   it('keeps the core agent prompt as a lightweight router', () => {
-    expect(agent.length).toBeLessThan(11_000)
+    expect(agent.length).toBeLessThan(11_500)
     expect(agent).toContain("read_file('prompts/image.md')")
     expect(agent).toContain("read_file('prompts/animate.md')")
     expect(agent).toContain('`skills/video-ffmpeg-lab/SKILL.md`')
@@ -122,14 +122,14 @@ describe('agent media scenario matrix', () => {
   it('keeps native SeeDance text-to-video reachable without generating an intermediate image', () => {
     expect(agent).toContain('SeeDance supports native text-to-video')
     expect(agent).toContain('Do not generate an intermediate image first')
-    expect(animate).toContain('zero images means native SeeDance text-to-video')
+    expect(animate).toContain('Zero images means native SeeDance text-to-video')
     expect(animate).toContain('do not call `generate_image` first')
     expect(agentTs).toContain("videoRoute.provider !== 'seedance'")
     expect(animateRoute).toContain("videoRoute.provider !== 'seedance'")
     expect(videoSnapshotRoute).toContain("videoRoute.provider !== 'seedance'")
     expect(mcpServer).toContain("default([]).describe('Optional public image URLs")
     expect(cli).toContain('const isSeedanceModel =')
-    expect(cli).toContain('!images.length && !video && !isSeedanceModel')
+    expect(cli).toContain('!images.length && !videos.length && !audios.length && !isSeedanceModel')
   })
 
   it('separates generic coding, Remotion composition, and node media outputs', () => {

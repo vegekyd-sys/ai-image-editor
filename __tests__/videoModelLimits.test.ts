@@ -33,6 +33,42 @@ describe('video model reference limits', () => {
     expect(resolveVideoProviderModel({ model: 'seedance-fast', imageReferenceCount: 1 })).toBe('seedance-2.0-fast-reference-to-video')
   })
 
+  it('models Seedance 2.5 as an explicit 30-second Evolink route', () => {
+    expect(normalizeVideoModelId('seedance-2.5')).toBe('seedance-2.5')
+    expect(normalizeVideoModelId('seedance25')).toBe('seedance-2.5')
+    expect(normalizeVideoResolution('seedance-2.5', 'auto')).toBe('720p')
+    expect(resolveVideoGenerationRoute({ model: 'seedance-2.5', resolution: '480p' })).toMatchObject({
+      model: 'seedance-2.5',
+      label: 'Seedance 2.5',
+      provider: 'seedance',
+      providerModel: 'seedance-2.5-reference-to-video',
+      resolution: '480p',
+    })
+    expect(getVideoModelCapability('seedance-2.5')).toMatchObject({
+      minOutputDuration: 4,
+      maxOutputDuration: 30,
+      maxReferenceVideoDuration: 30,
+      maxImageReferences: 30,
+      maxVideoReferences: 10,
+      maxAudioReferences: 10,
+      maxTotalReferences: 50,
+      supportsVideoReference: true,
+      supportsBaseVideoEdit: true,
+      supportsVideoExtend: true,
+      supportedResolutions: ['480p', '720p'],
+    })
+  })
+
+  it('selects the right Seedance 2.5 provider mode from typed operation and references', () => {
+    expect(resolveVideoProviderModel({ model: 'seedance-2.5', imageReferenceCount: 0 })).toBe('seedance-2.5-text-to-video')
+    expect(resolveVideoProviderModel({ model: 'seedance-2.5', imageReferenceCount: 1 })).toBe('seedance-2.5-image-to-video')
+    expect(resolveVideoProviderModel({ model: 'seedance-2.5', imageReferenceCount: 2 })).toBe('seedance-2.5-image-to-video')
+    expect(resolveVideoProviderModel({ model: 'seedance-2.5', imageReferenceCount: 3 })).toBe('seedance-2.5-reference-to-video')
+    expect(resolveVideoProviderModel({ model: 'seedance-2.5', imageReferenceCount: 1, hasVideoReference: true })).toBe('seedance-2.5-reference-to-video')
+    expect(resolveVideoProviderModel({ model: 'seedance-2.5', hasVideoReference: true, operation: 'edit' })).toBe('seedance-2.5-video-edit')
+    expect(resolveVideoProviderModel({ model: 'seedance-2.5', hasVideoReference: true, operation: 'extend' })).toBe('seedance-2.5-video-extend')
+  })
+
   it('maps non-standard vertical reference videos to supported Seedance aspect ratios', () => {
     expect(resolveClosestSupportedAspectRatio('seedance-mini', 496, 864)).toBe('9:16')
     expect(resolveClosestSupportedAspectRatio('seedance-fast', 1920, 1080)).toBe('16:9')
