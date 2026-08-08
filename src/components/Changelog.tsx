@@ -17,7 +17,7 @@ interface LegacyChangelogEntry {
 
 type LocalizedChangelogEntry = {
   date: string;
-  localeKey: 'seedance25' | 'multilingualAsr' | 'editableRemotion' | 'editableLayers';
+  localeKey: 'seedance25' | 'minimaxH3' | 'multilingualAsr' | 'editableRemotion' | 'editableLayers';
 };
 
 type ChangelogEntry = LegacyChangelogEntry | LocalizedChangelogEntry;
@@ -26,6 +26,10 @@ const CHANGELOG: ChangelogEntry[] = [
   {
     date: '2026-08-08',
     localeKey: 'seedance25',
+  },
+  {
+    date: '2026-08-02',
+    localeKey: 'minimaxH3',
   },
   {
     date: '2026-07-29',
@@ -919,6 +923,14 @@ const LOCALIZED_CHANGELOG_KEYS = {
       'changelog.seedance25.item1',
       'changelog.seedance25.item2',
       'changelog.seedance25.item3',
+    ],
+  },
+  minimaxH3: {
+    title: 'changelog.minimaxH3.title',
+    items: [
+      'changelog.minimaxH3.item1',
+      'changelog.minimaxH3.item2',
+      'changelog.minimaxH3.item3',
     ],
   },
   multilingualAsr: {
