@@ -75,10 +75,8 @@ const zh = {
   // Changelog
   'changelog.heading': '更新',
   'changelog.close': '关闭更新',
-  'changelog.seedance25.title': 'Seedance 2.5：30 秒多模态视频',
-  'changelog.seedance25.item1': '单次生成最长 30 秒，并支持画面与原生音频同步生成。',
-  'changelog.seedance25.item2': '最多可组合 30 张图片、10 段视频和 10 段音频作为参考素材。',
-  'changelog.seedance25.item3': '新增专用视频编辑与续写模式，支持 MP4 或用于调色的 MOV 输出。',
+  'changelog.seedance25.title': 'Seedance 2.5 视频模型',
+  'changelog.seedance25.item1': 'Seedance 2.5 已接入 Makaron，支持最长 30 秒、原生同步音频、多模态参考，以及专用视频编辑与续写。',
   'changelog.multilingualAsr.title': 'ASR 支持多国语言',
   'changelog.multilingualAsr.item1': 'Makaron ASR 现在可以识别包括日语在内的多国语言，为字幕和 Remotion 时间轴提供准确转写。',
   'changelog.editableRemotion.title': 'Remotion 可编辑，完整打通',

@@ -917,8 +917,6 @@ const LOCALIZED_CHANGELOG_KEYS = {
     title: 'changelog.seedance25.title',
     items: [
       'changelog.seedance25.item1',
-      'changelog.seedance25.item2',
-      'changelog.seedance25.item3',
     ],
   },
   multilingualAsr: {

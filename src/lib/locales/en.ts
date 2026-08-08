@@ -75,10 +75,8 @@ const en = {
   // Changelog
   'changelog.heading': 'Updates',
   'changelog.close': 'Close updates',
-  'changelog.seedance25.title': 'Seedance 2.5: 30-Second Multimodal Video',
-  'changelog.seedance25.item1': 'Generate up to 30 seconds in one pass with native synchronized audio.',
-  'changelog.seedance25.item2': 'Combine up to 30 images, 10 videos, and 10 audio clips as references.',
-  'changelog.seedance25.item3': 'Use dedicated video edit and extend modes, with MP4 or grading-ready MOV output.',
+  'changelog.seedance25.title': 'Seedance 2.5 Video',
+  'changelog.seedance25.item1': 'Seedance 2.5 is now available in Makaron with up to 30-second generation, native synchronized audio, multimodal references, and dedicated video edit and extend modes.',
   'changelog.multilingualAsr.title': 'Multilingual Speech Recognition',
   'changelog.multilingualAsr.item1': 'Makaron ASR can now transcribe speech in multiple languages, including Japanese, for accurate subtitles and Remotion timing.',
   'changelog.editableRemotion.title': 'Editable Remotion, End to End',

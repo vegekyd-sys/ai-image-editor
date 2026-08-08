@@ -112,10 +112,8 @@ const ja = {
   // Changelog
   'changelog.heading': '更新情報',
   'changelog.close': '更新情報を閉じる',
-  'changelog.seedance25.title': 'Seedance 2.5：30秒のマルチモーダル動画',
-  'changelog.seedance25.item1': '映像とネイティブ音声を同期し、1回で最長30秒まで生成できます。',
-  'changelog.seedance25.item2': '最大30枚の画像、10本の動画、10本の音声を参照素材として組み合わせられます。',
-  'changelog.seedance25.item3': '専用の動画編集・延長モードと、MP4またはカラーグレーディング向けMOV出力に対応しました。',
+  'changelog.seedance25.title': 'Seedance 2.5 動画モデル',
+  'changelog.seedance25.item1': 'Seedance 2.5 が Makaron に登場。最長30秒、ネイティブ同期音声、マルチモーダル参照、専用の動画編集・延長に対応します。',
   'changelog.multilingualAsr.title': '多言語音声認識',
   'changelog.multilingualAsr.item1': 'Makaron ASRは日本語を含む複数の言語を文字起こしできるようになり、字幕とRemotionのタイミングを正確に合わせられます。',
   'changelog.editableRemotion.title': 'Remotion編集をエンドツーエンドで実現',
