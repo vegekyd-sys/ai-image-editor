@@ -67,7 +67,17 @@ async function handleMcp(req: Request): Promise<Response> {
     onToolComplete: auth.type === 'user' ? async (toolName, model, durationMs, usage, meta) => {
       if (usage) {
         // Token-based billing — Gemini/OpenRouter tools that return usage
-        await deductByTokens(auth.userId!, toolName, usage.modelId, usage.inputTokens, usage.outputTokens, durationMs, auth.keyId);
+        await deductByTokens(
+          auth.userId!,
+          toolName,
+          usage.modelId,
+          usage.inputTokens,
+          usage.outputTokens,
+          durationMs,
+          auth.keyId,
+          undefined,
+          usage.providerCostUsd,
+        );
       } else if (meta?.videoDurationSec) {
         const videoModel = normalizeVideoModelId(meta.videoModel || model);
         const videoCredits = estimateVideoCredits({

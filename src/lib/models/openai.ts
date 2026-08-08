@@ -7,9 +7,14 @@
  */
 import type { ModelBackend, GenerateImageRequest, TokenUsage } from './types';
 import { ensureJpeg } from '../gemini';
+import {
+  OPENROUTER_GPT_IMAGE_2_MODEL,
+  readOpenRouterProviderCost,
+  resolveOpenAIImageProvider,
+} from './openai-image-provider';
 
 // ── Provider selection ───────────────────────────────────────────
-const PROVIDER = (process.env.OPENAI_IMAGE_PROVIDER || (process.env.AZURE_OPENAI_API_KEY ? 'azure' : process.env.PIAPI_API_KEY ? 'piapi' : 'openrouter')) as 'azure' | 'piapi' | 'openrouter';
+const PROVIDER = resolveOpenAIImageProvider();
 
 // ── Azure constants ─────────────────────────────────────────────
 const AZURE_EDITS_URL = process.env.AZURE_OPENAI_EDITS_URL || 'https://meo-ultron.openai.azure.com/openai/deployments/gpt-image-2/images/edits?api-version=2025-04-01-preview';
@@ -21,7 +26,7 @@ const PIAPI_MODEL = 'gpt-image-2-preview';
 
 // ── OpenRouter constants ─────────────────────────────────────────
 const OPENROUTER_BASE = 'https://openrouter.ai/api/v1/chat/completions';
-const OPENROUTER_MODEL = 'openai/gpt-5.4-image-2';
+const OPENROUTER_MODEL = OPENROUTER_GPT_IMAGE_2_MODEL;
 
 // ── Shared helpers ───────────────────────────────────────────────
 
@@ -306,6 +311,7 @@ async function generateOpenRouter(
     inputTokens: data.usage.prompt_tokens ?? 0,
     outputTokens: data.usage.completion_tokens ?? 0,
     modelId: OPENROUTER_MODEL,
+    providerCostUsd: readOpenRouterProviderCost(data.usage),
   } : undefined;
   if (usage) console.log(`[openai/openrouter] usage: in=${usage.inputTokens} out=${usage.outputTokens}`);
 

@@ -29,6 +29,7 @@ const CHANGELOG: ChangelogEntry[] = [
       title: 'A More Reliable GPT-5.6 Agent Route',
       items: [
         'GPT-5.6 Terra, Sol, and Luna now run through OpenRouter by default while keeping the existing Azure provider available for an explicit rollback.',
+        'GPT Image 2 now uses the same reliable OpenRouter route by default for image generation and editing, while its Azure route remains available for an explicit rollback.',
         'The Agent keeps the same streaming, tools, vision, reasoning, project history, and usage-based billing behavior across providers.',
       ],
     },
@@ -36,6 +37,7 @@ const CHANGELOG: ChangelogEntry[] = [
       title: 'GPT-5.6 Agent 路由更可靠',
       items: [
         'GPT-5.6 Terra、Sol 与 Luna 现在默认通过 OpenRouter 运行，同时保留现有 Azure Provider，随时可以显式回切。',
+        'GPT Image 2 的生图与编辑也默认切换到同一条 OpenRouter 路由，并保留 Azure 路由供显式回切。',
         '切换 Provider 后，Agent 的流式输出、工具调用、视觉理解、推理、项目历史和按量计费保持一致。',
       ],
     },

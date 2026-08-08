@@ -7,7 +7,7 @@ import {
 import { resolveGPT56AgentProvider } from '@/lib/agent-models'
 import {
   assertOpenRouterGPT56ModelEndpoint,
-  REQUIRED_OPENROUTER_GPT56_MODEL_IDS,
+  REQUIRED_OPENROUTER_MODEL_IDS,
   resolveOpenRouterAgentHealthRequest,
 } from '@/lib/openrouter-agent-health'
 
@@ -113,7 +113,7 @@ async function checkOpenRouter(): Promise<ServiceResult> {
     ])
     if (!authResponse.ok) throw new Error(`auth HTTP ${authResponse.status}`)
     for (const [index, modelResponse] of modelResponses.entries()) {
-      const requiredModelId = REQUIRED_OPENROUTER_GPT56_MODEL_IDS[index]
+      const requiredModelId = REQUIRED_OPENROUTER_MODEL_IDS[index]
       if (!modelResponse.ok) {
         throw new Error(`${requiredModelId} HTTP ${modelResponse.status}`)
       }

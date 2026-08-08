@@ -60,7 +60,7 @@ export interface McpServerOptions {
     toolName: string,
     model?: string,
     durationMs?: number,
-    usage?: { inputTokens: number; outputTokens: number; modelId: string },
+    usage?: { inputTokens: number; outputTokens: number; modelId: string; providerCostUsd?: number },
     meta?: {
       videoDurationSec?: number
       imageCount?: number

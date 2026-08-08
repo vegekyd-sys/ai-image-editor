@@ -17,6 +17,8 @@ export interface TokenUsage {
   inputTokens: number;
   outputTokens: number;
   modelId: string;          // full model ID for billing (e.g. 'gemini-3.1-flash-image-preview')
+  /** Provider-reported exact routed cost when available (for example OpenRouter). */
+  providerCostUsd?: number;
 }
 
 export interface GenerateImageResult {

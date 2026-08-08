@@ -122,6 +122,7 @@ AI_PROVIDER
 IMAGE_MODEL
 OPENROUTER_API_KEY
 GPT56_AGENT_PROVIDER        # openrouter (default) or azure-openai
+OPENAI_IMAGE_PROVIDER       # openrouter (default), azure, or piapi
 DEEPSEEK_API_KEY
 AGENT_MODEL
 COMFYUI_QWEN_URL

@@ -51,7 +51,17 @@ export async function POST(req: NextRequest) {
 
     // Deduct credits regardless of success (API tokens already consumed)
     if (result.usage) {
-      deductByTokens(user.id, 'preview', result.usage.modelId, result.usage.inputTokens, result.usage.outputTokens)
+      deductByTokens(
+        user.id,
+        'preview',
+        result.usage.modelId,
+        result.usage.inputTokens,
+        result.usage.outputTokens,
+        undefined,
+        undefined,
+        undefined,
+        'providerCostUsd' in result.usage ? result.usage.providerCostUsd : undefined,
+      )
         .catch(e => console.error('[billing] preview deduct error:', e));
     } else if (result.image) {
       // Only charge per-action if image was actually generated (ComfyUI or no-usage Gemini)

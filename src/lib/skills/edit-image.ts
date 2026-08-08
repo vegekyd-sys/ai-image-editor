@@ -1,5 +1,5 @@
 import { generateImage } from '../model-router';
-import type { ModelId } from '../models/types';
+import type { ModelId, TokenUsage } from '../models/types';
 import type { SkillContext, SkillResult } from './index';
 
 export interface EditImageInput {
@@ -49,7 +49,7 @@ export async function editImage(
   let usedModel: ModelId = 'gemini';
   let lastFailedModels: ModelId[] | undefined;
   let contentBlocked = false;
-  let lastUsage: { inputTokens: number; outputTokens: number; modelId: string } | undefined;
+  let lastUsage: TokenUsage | undefined;
   const MAX_ATTEMPTS = 2;
 
   for (let attempt = 1; attempt <= MAX_ATTEMPTS; attempt++) {

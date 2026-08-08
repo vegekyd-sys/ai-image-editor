@@ -1515,7 +1515,17 @@ function createTools(ctx: AgentContext, runtime: AgentModelRuntime, locale?: str
         // Bill for image generation (separate from Agent LLM tokens)
         if (skillResult.usage) {
           import('./billing/credits').then(({ deductByTokens }) =>
-            deductByTokens(ctx.userId ?? '', 'generate_image', skillResult.usage!.modelId, skillResult.usage!.inputTokens, skillResult.usage!.outputTokens)
+            deductByTokens(
+              ctx.userId ?? '',
+              'generate_image',
+              skillResult.usage!.modelId,
+              skillResult.usage!.inputTokens,
+              skillResult.usage!.outputTokens,
+              undefined,
+              undefined,
+              undefined,
+              skillResult.usage!.providerCostUsd,
+            )
               .catch(e => console.error('[billing] generate_image deduct error:', e))
           );
         } else if (skillResult.usedModel && skillResult.usedModel !== 'gemini') {
