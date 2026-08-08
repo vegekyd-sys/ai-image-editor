@@ -40,6 +40,7 @@ describe('video credit reservation contract', () => {
   it('uses atomic no-overdraft debit and idempotent snapshot failure refund SQL', () => {
     const migration = read('supabase/migrations/20260724123316_prevent_video_credit_overrefund.sql')
     const repairMigration = read('supabase/migrations/20260728140000_fix_video_failure_lifecycle.sql')
+    const overloadCleanupMigration = read('supabase/migrations/20260808155126_drop_obsolete_video_failure_rpc_overload.sql')
 
     expect(migration).toContain('AND balance >= p_amount')
     expect(migration).toContain("RAISE EXCEPTION 'insufficient_credits:")
@@ -51,6 +52,12 @@ describe('video credit reservation contract', () => {
     expect(repairMigration).toContain('DROP FUNCTION IF EXISTS fail_video_snapshot_and_refund(UUID, TEXT)')
     expect(repairMigration).toContain('p_snapshot_id TEXT')
     expect(repairMigration).toContain('GRANT EXECUTE ON FUNCTION fail_video_snapshot_and_refund(TEXT, TEXT)')
+    expect(overloadCleanupMigration).toContain(
+      'DROP FUNCTION IF EXISTS public.fail_video_snapshot_and_refund(UUID, TEXT)',
+    )
+    expect(overloadCleanupMigration).toContain(
+      "to_regprocedure('public.fail_video_snapshot_and_refund(text,text)')",
+    )
   })
 
   it('keeps stale Google Omni placeholders terminal and cron polling isolated', () => {
