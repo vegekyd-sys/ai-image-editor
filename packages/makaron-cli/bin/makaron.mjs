@@ -45,6 +45,8 @@ const MAX_AUDIO_REFERENCE_DURATION_TOLERANCE = 0.5;
 const MAX_AUDIO_REFERENCE_FILE_SIZE_MB = 15;
 const MAX_AUDIO_REFERENCE_FILE_SIZE = MAX_AUDIO_REFERENCE_FILE_SIZE_MB * 1024 * 1024;
 const MAX_VIDEO_FRAME_PIXELS = 2_086_876;
+const SEEDANCE25_MAX_VIDEO_REFERENCE_DURATION = 30;
+const SEEDANCE25_MAX_VIDEO_FRAME_PIXELS = 8_295_044;
 const SEEDANCE_MIN_VIDEO_FRAME_PIXELS = 409_600;
 const SEEDANCE_MIN_VIDEO_SIDE = 300;
 const SEEDANCE_MAX_VIDEO_SIDE = 6000;
@@ -1367,7 +1369,8 @@ function getAudioMimeFromExt(ext) {
   return null;
 }
 
-function validateAudioReferenceFile(audioPath) {
+function validateAudioReferenceFile(audioPath, options = {}) {
+  const maxDuration = options.maxDuration ?? MAX_AUDIO_REFERENCE_DURATION;
   if (!fs.existsSync(audioPath)) {
     return { ok: false, error: `Audio file not found: ${audioPath}` };
   }
@@ -1390,8 +1393,8 @@ function validateAudioReferenceFile(audioPath) {
   if (duration < MIN_AUDIO_REFERENCE_DURATION) {
     return { ok: false, error: `Audio too short: ${formatSeconds(duration)}s (min ${MIN_AUDIO_REFERENCE_DURATION}s).` };
   }
-  if (duration > MAX_AUDIO_REFERENCE_DURATION + MAX_AUDIO_REFERENCE_DURATION_TOLERANCE) {
-    return { ok: false, error: `Audio too long: ${formatSeconds(duration)}s (max ${MAX_AUDIO_REFERENCE_DURATION}s, with ${MAX_AUDIO_REFERENCE_DURATION_TOLERANCE}s metadata tolerance).` };
+  if (duration > maxDuration + MAX_AUDIO_REFERENCE_DURATION_TOLERANCE) {
+    return { ok: false, error: `Audio too long: ${formatSeconds(duration)}s (max ${maxDuration}s, with ${MAX_AUDIO_REFERENCE_DURATION_TOLERANCE}s metadata tolerance).` };
   }
   return { ok: true, mime, meta: { duration, fileSizeBytes: stat.size } };
 }
@@ -1474,12 +1477,14 @@ function validateVideoFile(videoPath, options = {}) {
   const minAspect = options.minAspect ?? 0;
   const maxAspect = options.maxAspect ?? Infinity;
   const allowedExtensions = options.allowedExtensions ?? ['mp4', 'mov', 'webm'];
+  const maxFramePixels = options.maxFramePixels ?? MAX_VIDEO_FRAME_PIXELS;
+  const maxFileSize = options.maxFileSize ?? MAX_VIDEO_UPLOAD_FILE_SIZE;
   if (!fs.existsSync(videoPath)) {
     return { ok: false, error: `Video file not found: ${videoPath}` };
   }
   const stat = fs.statSync(videoPath);
-  if (stat.size > MAX_VIDEO_UPLOAD_FILE_SIZE) {
-    return { ok: false, error: `Video too large: ${(stat.size / 1024 / 1024).toFixed(1)}MB (max ${MAX_VIDEO_UPLOAD_FILE_SIZE_MB}MB). The CLI uploads directly to Storage; use the frontend to transcode larger videos first.` };
+  if (stat.size > maxFileSize) {
+    return { ok: false, error: `Video too large: ${(stat.size / 1024 / 1024).toFixed(1)}MB (max ${(maxFileSize / 1024 / 1024).toFixed(0)}MB).` };
   }
   const ext = path.extname(videoPath).slice(1).toLowerCase();
   if (!allowedExtensions.includes(ext)) {
@@ -1492,8 +1497,8 @@ function validateVideoFile(videoPath, options = {}) {
   if (meta.duration > maxDuration + durationTolerance) {
     return { ok: false, error: `Video too long: ${formatSeconds(meta.duration)}s (max ${maxDuration}s, with ${durationTolerance}s metadata tolerance)` };
   }
-  if (meta.width * meta.height > MAX_VIDEO_FRAME_PIXELS) {
-    return { ok: false, error: `Video resolution too high: ${meta.width}x${meta.height} (${meta.width * meta.height} px). Max is <=1080p (${MAX_VIDEO_FRAME_PIXELS} px). Re-upload through the frontend to transcode, or export a smaller video.` };
+  if (meta.width * meta.height > maxFramePixels) {
+    return { ok: false, error: `Video resolution too high: ${meta.width}x${meta.height} (${meta.width * meta.height} px). Max is ${maxFramePixels} pixels.` };
   }
   const framePixels = meta.width * meta.height;
   const aspect = meta.width / meta.height;
@@ -1745,14 +1750,14 @@ Use with chat:
     console.log('Usage: makaron analyze --video <file|url> ["question"]');
   } else if (topic === 'video') {
     if (subtopic === 'script') console.log('Usage: makaron video script --image <file> [--image <file>] [--lang en|zh] "direction"');
-    else if (subtopic === 'create') console.log('Usage: makaron video create --script "..." [--image <url> | --video <public-url>] [--duration 10] [--aspect 9:16] [--video-model seedance-fast|seedance-mini|seedance|kling|grok|google-omni|minimax-h3] [--video-resolution auto|480p|720p|768p|1080p|2k|4k] [--keep-original-sound]');
+    else if (subtopic === 'create') console.log('Usage: makaron video create --script "..." [--image <url> ...] [--video <url> ...] [--audio <url> ...] [--duration 10] [--aspect 9:16] [--video-model seedance-fast|seedance-mini|seedance|seedance-2.5|kling|grok|google-omni|minimax-h3] [--operation generate|edit|extend] [--video-resolution auto|480p|720p|768p|1080p|2k|4k] [--keep-original-sound]');
     else if (subtopic === 'status') console.log('Usage: makaron video status <taskId> | --snapshot <snapshotId> [--wait]');
     else console.log(`Video commands:
   video script --image <file> [--image <file>] "direction"   Write video script
   video create --script "..." --video-model seedance-fast    Native text-to-video (no image required)
   video create --script "..." --video-model minimax-h3 --video-resolution 2k    MiniMax H3 native 2K text-to-video
   video create --script "..." --image <url> [--duration 10]  Submit video task
-  video create --script "..." --video <public-url> [--video-model seedance-fast|seedance-mini|seedance|kling|google-omni|minimax-h3]  Edit/reference a video (Grok does not support video refs)
+  video create --script "..." --video <public-url> [--video-model seedance-fast|seedance-mini|seedance|seedance-2.5|kling|google-omni|minimax-h3]  Edit/reference a video (Grok does not support video refs)
   video status <taskId>                                      Check video status
   video status --snapshot <snapshotId> [--wait]              Check v2 video snapshot
 `);
@@ -2423,11 +2428,15 @@ if (!command || command === '--help' || command === '-h' || command === 'help') 
 
   } else if (sub === 'create') {
     const images = [];
+    const videos = [];
+    const audios = [];
     let script = '', duration = undefined, aspectRatio = undefined, videoModel = undefined, videoResolution = undefined, wait = false;
-    let video = null, keepOriginalSound = false;
+    let keepOriginalSound = false, videoOperation = undefined, extendDirection = undefined, outputFormat = undefined;
+    let generateAudio = undefined, contentFilter = undefined, webSearch = false;
     for (let i = 2; i < args.length; i++) {
       if (args[i] === '--image' && args[i + 1]) images.push(args[++i]);
-      else if (args[i] === '--video' && args[i + 1]) video = args[++i];
+      else if (args[i] === '--video' && args[i + 1]) videos.push(args[++i]);
+      else if (args[i] === '--audio' && args[i + 1]) audios.push(args[++i]);
       else if (args[i] === '--script' && args[i + 1]) script = args[++i];
       else if (args[i] === '--script-file' && args[i + 1]) script = fs.readFileSync(args[++i], 'utf-8');
       else if (args[i] === '--duration' && args[i + 1]) duration = Number(args[++i]);
@@ -2440,6 +2449,13 @@ if (!command || command === '--help' || command === '-h' || command === 'help') 
       else if (args[i] === '--video-resolution' && args[i + 1]) videoResolution = args[++i];
       else if (args[i] === '--resolution' && args[i + 1]) videoResolution = args[++i];
       else if (args[i] === '--keep-original-sound') keepOriginalSound = true;
+      else if (args[i] === '--video-operation' && args[i + 1]) videoOperation = args[++i];
+      else if (args[i] === '--extend-direction' && args[i + 1]) extendDirection = args[++i];
+      else if (args[i] === '--output-format' && args[i + 1]) outputFormat = args[++i];
+      else if (args[i] === '--no-generated-audio') generateAudio = false;
+      else if (args[i] === '--generated-audio') generateAudio = true;
+      else if (args[i] === '--relaxed-content-filter') contentFilter = false;
+      else if (args[i] === '--web-search') webSearch = true;
       else if (args[i] === '--project') {
         console.error('Usage: video create no longer supports --project. Use: makaron chat --project <id> --video <file|url> "your request"');
         process.exit(1);
@@ -2447,33 +2463,53 @@ if (!command || command === '--help' || command === '-h' || command === 'help') 
       else if (args[i] === '--wait') wait = true;
     }
     const selectedVideoModel = videoModel || 'seedance-fast';
-    const supportsNativeTextToVideo = selectedVideoModel === 'seedance-fast' || selectedVideoModel === 'seedance-mini' || selectedVideoModel === 'seedance' || selectedVideoModel === 'minimax-h3';
-    if (!script || (!images.length && !video && !supportsNativeTextToVideo)) {
-      console.error('Usage: makaron video create --script "..." [--image <url> | --video <public-url>] [--duration 10] [--aspect 9:16] [--video-model seedance-fast|seedance-mini|seedance|kling|grok|google-omni|minimax-h3] [--video-resolution auto|480p|720p|768p|1080p|2k|4k] [--keep-original-sound]');
+    const isSeedance25 = selectedVideoModel === 'seedance-2.5';
+    const isSeedanceModel = selectedVideoModel === 'seedance-fast' || selectedVideoModel === 'seedance-mini' || selectedVideoModel === 'seedance' || isSeedance25;
+    const isMinimaxH3 = selectedVideoModel === 'minimax-h3';
+    const supportsNativeTextToVideo = isSeedanceModel || isMinimaxH3;
+    if (!script || (!images.length && !videos.length && !audios.length && !supportsNativeTextToVideo)) {
+      console.error('Usage: makaron video create --script "..." [--image <url>] [--video <file|url>] [--audio <file|url>] [--duration 30] [--video-model seedance-2.5|minimax-h3]');
       process.exit(1);
     }
+    if (isSeedance25 && images.length > 30) { console.error('Seedance 2.5 supports at most 30 image references.'); process.exit(1); }
+    if (isSeedance25 && videos.length > 10) { console.error('Seedance 2.5 supports at most 10 video references.'); process.exit(1); }
+    if (isSeedance25 && audios.length > 10) { console.error('Seedance 2.5 supports at most 10 audio references.'); process.exit(1); }
+    if (isMinimaxH3 && images.length > 9) { console.error('MiniMax H3 supports at most 9 image references.'); process.exit(1); }
+    if (isMinimaxH3 && videos.length > 3) { console.error('MiniMax H3 supports at most 3 video references.'); process.exit(1); }
+    if (isMinimaxH3 && audios.length > 3) { console.error('MiniMax H3 supports at most 3 audio references.'); process.exit(1); }
+    if (videoOperation && !['generate', 'edit', 'extend'].includes(videoOperation)) { console.error('--video-operation must be generate, edit, or extend.'); process.exit(1); }
+    if (extendDirection && !['forward', 'backward'].includes(extendDirection)) { console.error('--extend-direction must be forward or backward.'); process.exit(1); }
+    if (outputFormat && !['mp4', 'mov'].includes(outputFormat)) { console.error('--output-format must be mp4 or mov.'); process.exit(1); }
 
     if (wait) {
       console.error('Usage: --wait is only supported for project timeline tasks. Use chat --project for project video generation, or poll the returned taskId with video status.');
       process.exit(1);
     }
 
-    let videoUrl = isHttpUrl(video) ? video : null;
-    let inputVideoMeta = null;
-    if (videoUrl) {
-      process.stderr.write(`📹 Assuming public video URL already matches provider reference limits. Seedance requires ≤${MAX_VIDEO_PROVIDER_REFERENCE_DURATION}s, ≤50MB, sides 300-6000px, frame pixels 409,600-${MAX_VIDEO_FRAME_PIXELS}; MiniMax H3 accepts up to 3 videos totaling ≤15s, each ≤50MB with sides 256-5760px and aspect 0.4-2.5; Kling requires ≤200MB and ≤2K; Google Omni accepts one reference video in Makaron; Grok does not support video references.\n`);
+    const providerMaxDuration = isSeedance25 ? SEEDANCE25_MAX_VIDEO_REFERENCE_DURATION : MAX_VIDEO_PROVIDER_REFERENCE_DURATION;
+    const providerMaxPixels = isMinimaxH3 ? Infinity : isSeedance25 ? SEEDANCE25_MAX_VIDEO_FRAME_PIXELS : MAX_VIDEO_FRAME_PIXELS;
+    const localImages = images.filter(image => !isHttpUrl(image));
+    if (localImages.length) {
+      const uploadedImages = await uploadImageFilesViaSignedUrl(baseUrl, headers, undefined, localImages);
+      const uploadedByPath = new Map(localImages.map((image, index) => [image, uploadedImages[index]]));
+      images = images.map(image => isHttpUrl(image) ? image : uploadedByPath.get(image)).filter(Boolean);
     }
-    if (video && !videoUrl) {
+    const videoUrls = [];
+    let inputVideoMeta = null;
+    for (const video of videos) {
+      if (isHttpUrl(video)) { videoUrls.push(video); continue; }
       const valid = validateVideoFile(video, {
-        maxDuration: MAX_VIDEO_PROVIDER_REFERENCE_DURATION,
+        maxDuration: providerMaxDuration,
         durationTolerance: MAX_VIDEO_PROVIDER_REFERENCE_DURATION_TOLERANCE,
+        maxFramePixels: providerMaxPixels,
+        maxFileSize: isSeedance25 ? 200 * 1024 * 1024 : MAX_VIDEO_UPLOAD_FILE_SIZE,
         ...(selectedVideoModel === 'minimax-h3' ? {
           allowedExtensions: ['mp4', 'mov'],
           minSide: MINIMAX_H3_MIN_VIDEO_SIDE,
           maxSide: MINIMAX_H3_MAX_VIDEO_SIDE,
           minAspect: SEEDANCE_MIN_VIDEO_ASPECT,
           maxAspect: SEEDANCE_MAX_VIDEO_ASPECT,
-        } : selectedVideoModel === 'seedance' || selectedVideoModel === 'seedance-fast' || selectedVideoModel === 'seedance-mini' ? {
+        } : isSeedanceModel ? {
           minFramePixels: SEEDANCE_MIN_VIDEO_FRAME_PIXELS,
           minSide: SEEDANCE_MIN_VIDEO_SIDE,
           maxSide: SEEDANCE_MAX_VIDEO_SIDE,
@@ -2482,22 +2518,38 @@ if (!command || command === '--help' || command === '-h' || command === 'help') 
         } : {}),
       });
       if (!valid.ok) { console.error(`❌ ${valid.error}`); process.exit(1); }
-      inputVideoMeta = valid.meta;
+      inputVideoMeta ||= valid.meta;
       process.stderr.write(`📹 Uploading ${path.basename(video)} (${(fs.statSync(video).size/1024/1024).toFixed(1)}MB)...\n`);
-      videoUrl = await uploadFileViaSignedUrl(baseUrl, headers, undefined, video, valid.mime);
-      if (!videoUrl) process.exit(1);
+      const uploaded = await uploadFileViaSignedUrl(baseUrl, headers, undefined, video, valid.mime);
+      if (!uploaded) process.exit(1);
+      videoUrls.push(uploaded);
       process.stderr.write(`📹 Uploaded: ${path.basename(video)}\n`);
+    }
+    const audioUrls = [];
+    for (const audio of audios) {
+      if (isHttpUrl(audio)) { audioUrls.push(audio); continue; }
+      const valid = validateAudioReferenceFile(audio, { maxDuration: isSeedance25 ? 30 : MAX_AUDIO_REFERENCE_DURATION });
+      if (!valid.ok) { console.error(`❌ ${valid.error}`); process.exit(1); }
+      process.stderr.write(`🎵 Uploading ${path.basename(audio)}...\n`);
+      const uploaded = await uploadFileViaSignedUrl(baseUrl, headers, undefined, audio, valid.mime, { uploadKind: 'audio' });
+      if (!uploaded) process.exit(1);
+      audioUrls.push(uploaded);
     }
     // Standalone MCP tool (no project timeline write)
     process.stderr.write('🎬 Submitting video...\n');
-    const vArgs = videoUrl
-      ? { videoUrl, editPrompt: script, images, videoModel: selectedVideoModel, videoResolution, referType: (selectedVideoModel === 'seedance' || selectedVideoModel === 'seedance-fast' || selectedVideoModel === 'seedance-mini' || selectedVideoModel === 'minimax-h3') ? 'feature' : 'base' }
-      : { script, images, videoModel: selectedVideoModel, videoResolution };
-    const effectiveDuration = duration || (inputVideoMeta?.duration ? Math.min(MAX_VIDEO_PROVIDER_REFERENCE_DURATION, Math.round(inputVideoMeta.duration)) : undefined);
+    const resolvedOperation = videoOperation || (isSeedance25 && videoUrls.length ? 'edit' : 'generate');
+    const vArgs = isSeedance25
+      ? { script, images, videoUrls, audioUrls, videoModel: selectedVideoModel, videoResolution, operation: resolvedOperation, extendDirection, outputFormat, generateAudio, contentFilter, webSearch }
+      : isMinimaxH3
+        ? { script, images, videoUrls, audioUrls, videoModel: selectedVideoModel, videoResolution }
+      : videoUrls[0]
+        ? { videoUrl: videoUrls[0], editPrompt: script, images, videoModel: selectedVideoModel, videoResolution, referType: isSeedanceModel ? 'feature' : 'base' }
+        : { script, images, videoModel: selectedVideoModel, videoResolution };
+    const effectiveDuration = resolvedOperation === 'edit' ? undefined : duration || (inputVideoMeta?.duration ? Math.min(providerMaxDuration, Math.round(inputVideoMeta.duration)) : undefined);
     if (effectiveDuration) vArgs.duration = effectiveDuration;
     if (aspectRatio) vArgs.aspectRatio = aspectRatio;
-    if (keepOriginalSound && videoUrl) vArgs.keepOriginalSound = true;
-    const result = await callMcpTool(baseUrl, headers, videoUrl ? 'makaron_edit_video' : 'makaron_create_video', vArgs);
+    if (keepOriginalSound && videoUrls.length && !isSeedance25) vArgs.keepOriginalSound = true;
+    const result = await callMcpTool(baseUrl, headers, videoUrls.length && !isSeedance25 && !isMinimaxH3 ? 'makaron_edit_video' : 'makaron_create_video', vArgs);
     const text = result?.content?.find(c => c.type === 'text')?.text;
     if (text) {
       console.log(text);
@@ -2543,7 +2595,7 @@ if (!command || command === '--help' || command === '-h' || command === 'help') 
   video create --script "..." --video-model seedance-fast    Native text-to-video (no image required)
   video create --script "..." --video-model minimax-h3 --video-resolution 2k    MiniMax H3 native 2K text-to-video
   video create --script "..." --image <url> [--duration 10]  Submit video task
-  video create --script "..." --video <public-url> [--video-model seedance-fast|seedance-mini|seedance|kling|google-omni|minimax-h3]  Edit/reference a video (Grok does not support video refs)
+  video create --script "..." --video <public-url> [--video-model seedance-fast|seedance-mini|seedance|seedance-2.5|kling|google-omni|minimax-h3]  Edit/reference a video (Grok does not support video refs)
   video status <taskId>                                      Check video status
   video status --snapshot <snapshotId> [--wait]              Check v2 video snapshot
 `);

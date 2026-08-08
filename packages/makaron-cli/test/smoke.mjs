@@ -629,6 +629,17 @@ try {
   }
 
   {
+    const result = await expectSuccess(['video', 'create', '--script', 'Makaron Launch\nShot 1 (30s): <<<media_1>>> becomes a living studio', '--image', 'https://cdn.example/home.png', '--duration', '30', '--video-model', 'seedance-2.5', '--video-resolution', '720p', '--output-format', 'mp4', '--web-search']);
+    assert.match(result.stdout, /Task ID: task-unified-text-smoke/);
+    const mcpRequest = requests.filter(req => req.pathname === '/api/mcp').at(-1);
+    assert.equal(mcpRequest?.body?.params?.name, 'makaron_create_video');
+    assert.equal(mcpRequest?.body?.params?.arguments?.videoModel, 'seedance-2.5');
+    assert.equal(mcpRequest?.body?.params?.arguments?.duration, 30);
+    assert.equal(mcpRequest?.body?.params?.arguments?.outputFormat, 'mp4');
+    assert.equal(mcpRequest?.body?.params?.arguments?.webSearch, true);
+  }
+
+  {
     const result = await expectSuccess(['skills', 'list', '--json'], { apiKey: false });
     const data = JSON.parse(result.stdout);
     assert.equal(data.skills.length, 2);

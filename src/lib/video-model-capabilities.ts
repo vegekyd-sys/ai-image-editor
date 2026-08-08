@@ -14,6 +14,10 @@ export interface VideoModelCapability {
   estimatedInputCostUsdPerVideoSecond?: number
   estimatedInputCostUsdPerVideoSecondByResolution?: Partial<Record<VideoResolution, number>>
   maxImageReferences?: number
+  maxVideoReferences?: number
+  maxAudioReferences?: number
+  maxTotalReferences?: number
+  supportsVideoExtend?: boolean
   supportedResolutions?: VideoResolution[]
   defaultResolution?: VideoResolution
   supportedAspectRatios?: VideoAspectRatio[]
@@ -24,6 +28,7 @@ export interface VideoModelCapability {
 
 export type VideoResolution = '480p' | '720p' | '768p' | '1080p' | '2k' | '4k'
 export type VideoResolutionInput = VideoResolution | 'auto' | null | undefined
+export type VideoGenerationOperation = 'generate' | 'edit' | 'extend'
 export type VideoAspectRatio = '16:9' | '9:16' | '1:1' | '4:3' | '3:4' | '21:9' | '3:2' | '2:3'
 export type VideoAspectRatioInput = VideoAspectRatio | 'auto' | null | undefined
 
@@ -183,6 +188,46 @@ const MODEL_CAPABILITIES: Record<string, VideoModelCapability> = {
     provider: 'seedance',
     providerModel: 'seedance-2.0-reference-to-video',
   },
+  'seedance-2.5': {
+    id: 'seedance-2.5',
+    label: 'Seedance 2.5',
+    minOutputDuration: 4,
+    maxOutputDuration: 30,
+    maxReferenceVideoDuration: 30,
+    referenceVideoSize: {
+      maxFileSizeMb: 200,
+      minWidth: 300,
+      maxWidth: 6000,
+      minHeight: 300,
+      maxHeight: 6000,
+      minAspectRatio: 0.4,
+      maxAspectRatio: 2.5,
+      minFramePixels: 409_600,
+      maxFramePixels: 8_295_044,
+      description: '<=200MB, width/height 300-6000px, aspect 0.4-2.5, frame pixels 409,600-8,295,044, 24-60fps',
+    },
+    supportsVideoReference: true,
+    supportsBaseVideoEdit: true,
+    supportsVideoExtend: true,
+    longVideoChunkSeconds: 30,
+    maxImageReferences: 30,
+    maxVideoReferences: 10,
+    maxAudioReferences: 10,
+    maxTotalReferences: 50,
+    // EvoLink's public rate card still says pricing is unverified. Use the
+    // conservative reference-route rates measured from successful live tasks
+    // on 2026-08-08; revisit when EvoLink publishes the final rate card.
+    estimatedCostPerSecondUsd: 0.325,
+    estimatedCostPerSecondUsdByResolution: {
+      '480p': 0.275,
+      '720p': 0.325,
+    },
+    supportedResolutions: ['480p', '720p'],
+    defaultResolution: '720p',
+    supportedAspectRatios: ['16:9', '9:16', '1:1', '4:3', '3:4', '21:9'],
+    provider: 'seedance',
+    providerModel: 'seedance-2.5-reference-to-video',
+  },
   grok: {
     id: 'grok',
     label: 'Grok Video 1.5',
@@ -324,6 +369,9 @@ export function normalizeVideoModelId(model?: string | null): string {
   if (normalized === 'minimax' || normalized === 'h3' || normalized === 'hailuo-h3' || normalized === 'minimax-h3') {
     return 'minimax-h3'
   }
+  if (normalized === 'seedance25' || normalized === 'seedance_2_5' || normalized === 'seedance-2-5') {
+    return 'seedance-2.5'
+  }
   return normalized
 }
 
@@ -403,6 +451,7 @@ function getSeedanceProviderBase(model?: string | null): string | undefined {
   if (id === 'seedance-fast') return 'seedance-2.0-fast'
   if (id === 'seedance-mini') return 'seedance-2.0-mini'
   if (id === 'seedance') return 'seedance-2.0'
+  if (id === 'seedance-2.5') return 'seedance-2.5'
   return undefined
 }
 
@@ -417,6 +466,7 @@ export function resolveVideoProviderModel(options: {
   imageReferenceCount?: number
   hasVideoReference?: boolean
   hasAudioReference?: boolean
+  operation?: VideoGenerationOperation
 }): string | undefined {
   const route = resolveVideoGenerationRoute({
     model: options.model,
@@ -426,6 +476,21 @@ export function resolveVideoProviderModel(options: {
     (options.imageReferenceCount ?? 0) > 0 ||
     options.hasVideoReference === true ||
     options.hasAudioReference === true
+
+  if (route.model === 'seedance-2.5') {
+    if (options.operation === 'edit') return 'seedance-2.5-video-edit'
+    if (options.operation === 'extend') return 'seedance-2.5-video-extend'
+    if (!hasReferenceMedia) return 'seedance-2.5-text-to-video'
+    if (
+      (options.imageReferenceCount ?? 0) >= 1 &&
+      (options.imageReferenceCount ?? 0) <= 2 &&
+      !options.hasVideoReference &&
+      !options.hasAudioReference
+    ) {
+      return 'seedance-2.5-image-to-video'
+    }
+    return 'seedance-2.5-reference-to-video'
+  }
 
   if (supportsNativeTextToVideo(route.model) && !hasReferenceMedia) {
     return `${getSeedanceProviderBase(route.model)}-text-to-video`
@@ -583,6 +648,9 @@ export function validateVideoModelRequest(options: {
   referenceVideoMetas?: VideoReferenceMeta[]
   hasVideoReference?: boolean
   imageReferenceCount?: number
+  videoReferenceCount?: number
+  audioReferenceCount?: number
+  operation?: VideoGenerationOperation
 }): string | null {
   const capability = getVideoModelCapability(options.model)
   const resolutionError = validateVideoResolutionRequest({
@@ -596,11 +664,15 @@ export function validateVideoModelRequest(options: {
   })
   if (aspectRatioError) return aspectRatioError
 
-  if (options.outputDuration != null && options.outputDuration < capability.minOutputDuration) {
+  if (options.operation === 'edit' && normalizeVideoModelId(options.model) === 'seedance-2.5' && options.outputDuration !== -1) {
+    return 'Seedance 2.5 video edit requires duration=-1 so the output follows the input video.'
+  }
+
+  if (options.operation !== 'edit' && options.outputDuration != null && options.outputDuration !== -1 && options.outputDuration < capability.minOutputDuration) {
     return `${capability.label} duration must be ${capability.minOutputDuration} seconds or more.`
   }
 
-  if (options.outputDuration != null && options.outputDuration > capability.maxOutputDuration) {
+  if (options.operation !== 'edit' && options.outputDuration != null && options.outputDuration > capability.maxOutputDuration) {
     return `${capability.label} duration must be ${capability.maxOutputDuration} seconds or less.`
   }
 
@@ -614,6 +686,38 @@ export function validateVideoModelRequest(options: {
     options.imageReferenceCount > capability.maxImageReferences
   ) {
     return `${capability.label} supports at most ${capability.maxImageReferences} reference images per request.`
+  }
+
+  if (
+    options.videoReferenceCount != null &&
+    capability.maxVideoReferences != null &&
+    options.videoReferenceCount > capability.maxVideoReferences
+  ) {
+    return `${capability.label} supports at most ${capability.maxVideoReferences} reference videos per request.`
+  }
+
+  if (
+    options.audioReferenceCount != null &&
+    capability.maxAudioReferences != null &&
+    options.audioReferenceCount > capability.maxAudioReferences
+  ) {
+    return `${capability.label} supports at most ${capability.maxAudioReferences} reference audio files per request.`
+  }
+
+  const totalReferences =
+    (options.imageReferenceCount ?? 0) +
+    (options.videoReferenceCount ?? 0) +
+    (options.audioReferenceCount ?? 0)
+  if (capability.maxTotalReferences != null && totalReferences > capability.maxTotalReferences) {
+    return `${capability.label} supports at most ${capability.maxTotalReferences} total reference assets per request.`
+  }
+
+  if (options.operation === 'edit' && !capability.supportsBaseVideoEdit) {
+    return `${capability.label} does not support typed video editing.`
+  }
+
+  if (options.operation === 'extend' && !capability.supportsVideoExtend) {
+    return `${capability.label} does not support video extension.`
   }
 
   if (options.referenceVideoDuration != null && options.referenceVideoDuration > capability.maxReferenceVideoDuration) {

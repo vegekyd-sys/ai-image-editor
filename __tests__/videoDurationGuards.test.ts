@@ -97,6 +97,43 @@ describe('video duration guards', () => {
     expect(error).toContain('long-video-director')
   })
 
+  it('allows a native 30 second Seedance 2.5 script', () => {
+    const error = validateVideoScript({
+      prompt: [
+        'Makaron 一人工作室',
+        '',
+        '主角是 <<<media_1>>>（Makaron mascot）。',
+        'Shot 1 (6s): Mascot opens the Makaron home page.',
+        'Shot 2 (6s): The editor turns one photo into several directions.',
+        'Shot 3 (6s): Images, video, and music flow through one workspace.',
+        'Shot 4 (6s): The mascot directs a cinematic video in chat.',
+        'Shot 5 (6s): Makaron logo resolves on a clean fuchsia background.',
+        'Style: Premium product film with synchronized sound.',
+      ].join('\n'),
+      imageCount: 1,
+      model: 'seedance-2.5',
+      duration: 30,
+    })
+
+    expect(error).toBeNull()
+  })
+
+  it('still rejects Seedance 2.5 scripts longer than 30 seconds', () => {
+    const error = validateVideoScript({
+      prompt: [
+        'Too Long',
+        'Shot 1 (16s): First half.',
+        'Shot 2 (15s): Second half.',
+      ].join('\n'),
+      imageCount: 0,
+      model: 'seedance-2.5',
+      duration: 31,
+    })
+
+    expect(error).toContain('at most 30 seconds')
+    expect(error).toContain('totals 31s')
+  })
+
   it('allows a normal short script', () => {
     const error = validateVideoScript({
       prompt: [

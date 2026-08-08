@@ -21,6 +21,7 @@ export async function POST(req: NextRequest) {
 
     const { projectId, imageUrls, prompt, duration, aspectRatio, videoModel, videoResolution } = await req.json()
     const selectedVideoModel = normalizeVideoModelId(videoModel)
+    const videoCapability = getVideoModelCapability(selectedVideoModel)
     const videoRoute = resolveVideoGenerationRoute({ model: selectedVideoModel, resolution: videoResolution })
     const inputImageUrls: string[] = Array.isArray(imageUrls) ? [...imageUrls] : []
 
@@ -69,10 +70,10 @@ export async function POST(req: NextRequest) {
         }
       }
     }
-    if (referenceVideoDuration != null && referenceVideoDuration > 15.5) {
-      return NextResponse.json({ error: `Reference video duration too long (${referenceVideoDuration.toFixed(1).replace(/\.0$/, '')}s). Maximum 15s with small metadata tolerance.` }, { status: 400 })
+    if (referenceVideoDuration != null && referenceVideoDuration > videoCapability.maxReferenceVideoDuration + 0.5) {
+      return NextResponse.json({ error: `Reference video duration too long (${referenceVideoDuration.toFixed(1).replace(/\.0$/, '')}s). Maximum ${videoCapability.maxReferenceVideoDuration}s with small metadata tolerance.` }, { status: 400 })
     }
-    const effectiveDuration = duration ?? (referenceVideoDuration != null ? Math.min(15, Math.round(referenceVideoDuration)) : undefined)
+    const effectiveDuration = duration ?? (referenceVideoDuration != null ? Math.min(videoCapability.maxOutputDuration, Math.round(referenceVideoDuration)) : undefined)
     let providerAutoVideoUrls = autoVideoUrls
     if (autoVideoUrls.length > 0) {
       const { prepareProviderVideoReferences } = await import('@/lib/provider-video-reference')
@@ -89,7 +90,7 @@ export async function POST(req: NextRequest) {
       providerAutoVideoUrls = prepared.urls
     }
 
-    const { filteredImages, finalPrompt } = filterAndRemapImages(prompt, inputImageUrls, Math.max(7, getVideoModelCapability(selectedVideoModel).maxImageReferences ?? 7))
+    const { filteredImages, finalPrompt } = filterAndRemapImages(prompt, inputImageUrls, videoCapability.maxImageReferences ?? 7)
     const videoSec = effectiveDuration || 10
     const creditsRequired = estimateVideoCredits({
       model: selectedVideoModel,
