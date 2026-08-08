@@ -129,6 +129,7 @@ export async function POST(req: NextRequest) {
       durationSec: videoSec,
       imageCount: filteredImages.length,
       referenceVideoDurationSec: referenceVideoDuration,
+      contentFilter,
     }) ?? Math.ceil(videoSec * 22)
     const toolName = selectedVideoModel === 'grok' ? 'create_video_grok' : 'create_video'
     const creditCheck = await requireCredits(userId, creditsRequired)
@@ -210,6 +211,7 @@ export async function POST(req: NextRequest) {
         durationSec: videoSec,
         imageCount: filteredImages.length,
         referenceVideoDurationSec: referenceVideoDuration,
+        contentFilter,
       })
 
       const videoMeta: VideoMeta = {
@@ -228,6 +230,7 @@ export async function POST(req: NextRequest) {
         providerModel: skillResult.providerModel || actualVideoRoute.providerModel,
         providerUrl: skillResult.videoUrl,
         providerMode: actualVideoRoute.providerMode,
+        contentFilter: actualVideoModel === 'seedance-2.5' ? contentFilter !== false : undefined,
         createdAt: new Date().toISOString(),
         creditsCharged: reservedCredits,
         ...(providerCostUsd != null ? { providerCostUsd } : {}),

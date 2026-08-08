@@ -1616,7 +1616,7 @@ Hard constraints:
         video_operation: z.enum(['generate', 'edit', 'extend']).optional().describe('Seedance 2.5 typed operation. edit/extend require a video reference.'),
         extend_direction: z.enum(['forward', 'backward']).optional().describe('Direction for Seedance 2.5 video extension.'),
         generate_audio: z.boolean().optional().describe('Generate synchronized native audio; Seedance 2.5 defaults to true.'),
-        content_filter: z.boolean().optional().describe('Provider content filter; defaults to true.'),
+        content_filter: z.boolean().optional().describe('Seedance 2.5 output content filter. Default true. Set false only after explicit user confirmation, including the Mature Mode recovery action; it costs 10% more. Never infer or auto-enable Mature Mode from prompt wording.'),
         output_format: z.enum(['mp4', 'mov']).optional().describe('MP4 for playback or MOV for grading.'),
         web_search: z.boolean().optional().describe('Enable Seedance 2.5 text-to-video web grounding.'),
         completion_actions: z.array(z.object({
@@ -1834,6 +1834,7 @@ Hard constraints:
             durationSec: videoSec,
             imageCount: referencedImageUrls.length,
             referenceVideoDurationSec: referenceVideoDuration,
+            contentFilter: content_filter,
           }) ?? Math.ceil(videoSec * 22);
 
           if (ctx.userId) {
@@ -1928,6 +1929,7 @@ Hard constraints:
             aspectRatio: selectedAspectRatio,
             providerModel: skillResult.providerModel || actualVideoRoute.providerModel,
             providerMode: actualVideoRoute.providerMode,
+            contentFilter: actualVideoModel === 'seedance-2.5' ? content_filter !== false : undefined,
             providerUrl: skillResult.videoUrl,
             createdAt: new Date().toISOString(),
             creditsCharged: reservedVideoCredits,
@@ -1965,6 +1967,7 @@ Hard constraints:
             durationSec: videoSec,
             imageCount: referencedImageUrls.length,
             referenceVideoDurationSec: referenceVideoDuration,
+            contentFilter: content_filter,
           });
           if (providerCostUsd != null) videoMeta.providerCostUsd = providerCostUsd;
 

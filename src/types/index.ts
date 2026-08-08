@@ -190,6 +190,8 @@ export interface VideoMeta {
   providerModel?: string;
   providerMode?: string;
   providerCostUsd?: number;
+  /** EvoLink output moderation. False is the explicit Seedance 2.5 Mature Mode retry. */
+  contentFilter?: boolean;
   createdAt?: string;
   error?: string;
   width?: number;
