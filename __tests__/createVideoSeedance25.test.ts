@@ -62,6 +62,37 @@ describe('createVideo Seedance 2.5 integration', () => {
     expect(String(providerBody?.prompt)).toContain('@audio1 for pacing')
   })
 
+  it('ignores failed timeline placeholders for a native text-to-video retry', async () => {
+    let providerBody: Record<string, unknown> | undefined
+    vi.stubGlobal('fetch', vi.fn(async (_url: string | URL | Request, init?: RequestInit) => {
+      providerBody = JSON.parse(String(init?.body || '{}'))
+      return new Response(JSON.stringify({ id: 'task-unified-seedance25-mature-retry' }), { status: 200 })
+    }))
+
+    const { createVideo } = await import('@/lib/skills/create-video')
+    const result = await createVideo({
+      script: 'Boudoir Editorial\nShot 1 (4s): Tasteful fashion film.\nStyle: Premium editorial lighting.',
+      images: ['/video-placeholder.png'],
+      duration: 4,
+      aspectRatio: '16:9',
+      videoModel: 'seedance-2.5',
+      videoResolution: '480p',
+      contentFilter: false,
+    })
+
+    expect(result).toMatchObject({
+      success: true,
+      providerModel: 'seedance-2.5-text-to-video',
+    })
+    expect(providerBody).toMatchObject({
+      model: 'seedance-2.5-text-to-video',
+      content_filter: false,
+      quality: '480p',
+      duration: 4,
+    })
+    expect(providerBody).not.toHaveProperty('image_urls')
+  })
+
   it('uses the dedicated typed video-edit route with locked provider parameters', async () => {
     let providerBody: Record<string, unknown> | undefined
     vi.stubGlobal('fetch', vi.fn(async (_url: string | URL | Request, init?: RequestInit) => {
