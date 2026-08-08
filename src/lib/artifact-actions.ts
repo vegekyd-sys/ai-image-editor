@@ -25,6 +25,10 @@ type VideoFailureCopy = {
   retryLabel: string;
   policyRetryDescription: string;
   retryDescription: string;
+  matureRetryLabel: string;
+  matureRetryDescription: string;
+  matureRetryIntro: string;
+  matureRetryInstruction: string;
   explainLabel: string;
   explainDescription: string;
 };
@@ -54,6 +58,10 @@ const VIDEO_FAILURE_COPY: Record<Locale, VideoFailureCopy> = {
     retryLabel: 'Adjust & retry',
     policyRetryDescription: 'Revise it into a version more likely to pass moderation',
     retryDescription: 'Adjust based on the failure reason, then generate again',
+    matureRetryLabel: 'Retry with Mature Mode',
+    matureRetryDescription: 'Retry once with the relaxed filter · +10% cost',
+    matureRetryIntro: 'Retry the same request once with Seedance 2.5 Mature Mode.',
+    matureRetryInstruction: 'Call generate_animation exactly once with model: seedance-2.5 and content_filter: false. Keep the original request, duration, resolution, aspect ratio, and media references unchanged. This mode costs +10%. If it is rejected again, stop and explain the failure; do not retry repeatedly.',
     explainLabel: 'Review the cause',
     explainDescription: 'Analyze the failure without retrying yet',
   },
@@ -81,6 +89,10 @@ const VIDEO_FAILURE_COPY: Record<Locale, VideoFailureCopy> = {
     retryLabel: '调整后重试',
     policyRetryDescription: '换成更容易通过审核的版本',
     retryDescription: '根据失败原因改一下再生成',
+    matureRetryLabel: '用 Mature Mode 重试',
+    matureRetryDescription: '放宽内容过滤后重试一次 · 费用 +10%',
+    matureRetryIntro: '用 Seedance 2.5 Mature Mode 原样重试一次刚才的请求。',
+    matureRetryInstruction: '只调用一次 generate_animation，并明确传 model: seedance-2.5 和 content_filter: false。保持原要求、时长、分辨率、画幅和全部素材引用不变。这个模式费用 +10%。如果再次被拒，立即停止并解释原因，不要循环重试。',
     explainLabel: '先看原因',
     explainDescription: '先分析失败点，不立刻重试',
   },
@@ -108,6 +120,10 @@ const VIDEO_FAILURE_COPY: Record<Locale, VideoFailureCopy> = {
     retryLabel: '調整後重試',
     policyRetryDescription: '改成更容易通過審核的版本',
     retryDescription: '根據失敗原因調整後再產生',
+    matureRetryLabel: '用 Mature Mode 重試',
+    matureRetryDescription: '放寬內容過濾後重試一次 · 費用 +10%',
+    matureRetryIntro: '用 Seedance 2.5 Mature Mode 原樣重試一次剛才的要求。',
+    matureRetryInstruction: '只呼叫一次 generate_animation，並明確傳入 model: seedance-2.5 和 content_filter: false。保持原要求、時長、解析度、畫幅和全部素材引用不變。此模式費用 +10%。若再次被拒，立即停止並解釋原因，不要循環重試。',
     explainLabel: '先查看原因',
     explainDescription: '先分析失敗原因，暫不重試',
   },
@@ -135,6 +151,10 @@ const VIDEO_FAILURE_COPY: Record<Locale, VideoFailureCopy> = {
     retryLabel: '調整して再試行',
     policyRetryDescription: '審査を通過しやすい内容に修正します',
     retryDescription: '失敗理由に合わせて調整し、再生成します',
+    matureRetryLabel: 'Mature Modeで再試行',
+    matureRetryDescription: 'フィルターを緩和して一度だけ再試行 · 料金 +10%',
+    matureRetryIntro: '同じリクエストをSeedance 2.5 Mature Modeで一度だけ再試行してください。',
+    matureRetryInstruction: 'generate_animationを一度だけ呼び出し、model: seedance-2.5 と content_filter: false を明示してください。元の要件、長さ、解像度、アスペクト比、すべての素材参照は変更しないでください。このモードは料金が +10% です。再び拒否された場合は停止して理由を説明し、繰り返し再試行しないでください。',
     explainLabel: '原因を確認',
     explainDescription: 'まだ再試行せず、失敗理由を分析します',
   },
@@ -258,6 +278,19 @@ function looksLikePolicyFailure(error?: string | null): boolean {
   ].some(keyword => text.includes(keyword));
 }
 
+/** Mature Mode relaxes output moderation; it does not waive input identity or IP restrictions. */
+function isMatureModeIneligibleInputFailure(error?: string | null): boolean {
+  const text = String(error || '').toLowerCase();
+  return [
+    'real person',
+    'copyrighted',
+    'trademarked',
+    'trademark',
+    'logos',
+    'ip characters',
+  ].some(keyword => text.includes(keyword));
+}
+
 export function buildVideoFailureActions(
   videoMeta: Partial<VideoMeta> | null | undefined,
   locale: Locale,
@@ -266,6 +299,10 @@ export function buildVideoFailureActions(
   const error = compact(videoMeta?.error, 420);
   const prompt = compact(videoMeta?.prompt, 900);
   const isPolicyFailure = looksLikePolicyFailure(error);
+  const isMatureRetry = isPolicyFailure &&
+    String(videoMeta?.model || '') === 'seedance-2.5' &&
+    videoMeta?.contentFilter !== false &&
+    !isMatureModeIneligibleInputFailure(error);
   const isMiniServiceAuthFailure = String(videoMeta?.model || '') === 'seedance-mini' &&
     /service authentication failed|service_unavailable|internal service authentication/i.test(error);
   const duration = typeof videoMeta?.duration === 'number' && Number.isFinite(videoMeta.duration)
@@ -290,6 +327,14 @@ export function buildVideoFailureActions(
     prompt ? copy.originalRequest(prompt) : '',
   ].filter(Boolean).join('\n');
 
+  const matureRetryPrompt = [
+    copy.matureRetryIntro,
+    error ? copy.retryReason(error) : copy.retryUnknownReason,
+    copy.originalRequest(prompt || copy.originalFallback),
+    copy.durationAndModel(duration, 'seedance-2.5'),
+    copy.matureRetryInstruction,
+  ].join('\n');
+
   const actions: ArtifactCompletionAction[] = [];
 
   if (isMiniServiceAuthFailure) {
@@ -308,9 +353,13 @@ export function buildVideoFailureActions(
 
   actions.push(
     {
-      label: isPolicyFailure ? copy.policyRetryLabel : copy.retryLabel,
-      description: isPolicyFailure ? copy.policyRetryDescription : copy.retryDescription,
-      prompt: retryPrompt,
+      label: isMatureRetry
+        ? copy.matureRetryLabel
+        : isPolicyFailure ? copy.policyRetryLabel : copy.retryLabel,
+      description: isMatureRetry
+        ? copy.matureRetryDescription
+        : isPolicyFailure ? copy.policyRetryDescription : copy.retryDescription,
+      prompt: isMatureRetry ? matureRetryPrompt : retryPrompt,
       policy: 'confirm',
     },
     {

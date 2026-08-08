@@ -67,6 +67,7 @@ export interface McpServerOptions {
       videoModel?: string
       videoResolution?: string
       referenceVideoDurationSec?: number
+      contentFilter?: boolean
       seedAudioDurationSec?: number
       seedAudioProviderCredits?: number
       seedAudioGenerationSec?: number
@@ -282,7 +283,7 @@ Style: Cinematic, warm golden light.`,
       operation: z.enum(['generate', 'edit', 'extend']).optional().describe('Seedance 2.5 operation. edit and extend require videoUrls.'),
       extendDirection: z.enum(['forward', 'backward']).optional().describe('Seedance 2.5 extension direction.'),
       generateAudio: z.boolean().optional().describe('Generate synchronized native audio. Default true for Seedance 2.5.'),
-      contentFilter: z.boolean().optional().describe('Provider content filter. Default true.'),
+      contentFilter: z.boolean().optional().describe('Seedance 2.5 output content filter. Default true. False enables Mature Mode and costs 10% more; use only after explicit user confirmation, including the recovery action.'),
       outputFormat: z.enum(['mp4', 'mov']).optional().describe('MP4/H264 for playback or MOV for grading.'),
       webSearch: z.boolean().optional().describe('Enable Seedance 2.5 text-to-video web search grounding.'),
     },
@@ -316,6 +317,7 @@ Style: Cinematic, warm golden light.`,
             imageCount: params.images.length,
             videoModel: params.videoModel,
             videoResolution: params.videoResolution,
+            contentFilter: params.contentFilter,
           });
         }
         return { content: [{ type: 'text' as const, text: result.success

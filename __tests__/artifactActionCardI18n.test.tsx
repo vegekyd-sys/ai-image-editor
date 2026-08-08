@@ -122,4 +122,46 @@ describe('AgentChatView video failure action i18n', () => {
     expect(selected.prompt).not.toContain('刚才这个视频生成失败了');
     window.localStorage.removeItem('locale');
   });
+
+  it('renders the Seedance 2.5 Mature Mode recovery only inside the failure card', () => {
+    installDomStubs();
+    const onArtifactAction = vi.fn();
+    const actions = buildVideoFailureActions({
+      error: 'Blocked by content safety policy',
+      prompt: 'A fashion film by the pool',
+      duration: 30,
+      model: 'seedance-2.5',
+      contentFilter: true,
+    }, 'en');
+    const message: Message = {
+      id: 'seedance-25-video-failed',
+      role: 'assistant',
+      content: `Video generation failed.\n${serializeCompletionActions(actions)}`,
+      timestamp: Date.now(),
+    };
+
+    render(
+      <LocaleProvider initialLocale="en">
+        <AgentChatView
+          messages={[message]}
+          isAgentActive={false}
+          agentStatus=""
+          onSendMessage={() => {}}
+          onBack={() => {}}
+          onPipTap={() => {}}
+          onImageTap={() => {}}
+          onArtifactAction={onArtifactAction}
+          mode="panel"
+        />
+      </LocaleProvider>,
+    );
+
+    expect(screen.getByText('Retry with Mature Mode')).toBeTruthy();
+    expect(screen.getByText(/\+10%/)).toBeTruthy();
+    expect(screen.queryByText('Make safer & retry')).toBeNull();
+
+    fireEvent.click(screen.getAllByRole('button', { name: 'Continue' })[0]);
+    expect(onArtifactAction).toHaveBeenCalledTimes(1);
+    expect(onArtifactAction.mock.calls[0][0].prompt).toContain('content_filter: false');
+  });
 });

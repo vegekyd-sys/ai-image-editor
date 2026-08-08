@@ -588,6 +588,7 @@ export function estimateVideoProviderCostUsd(options: {
   imageCount?: number
   referenceVideoDurationSec?: number
   resolution?: VideoResolutionInput
+  contentFilter?: boolean
 }): number | undefined {
   const capability = getVideoModelCapability(options.model)
   const route = resolveVideoGenerationRoute({
@@ -603,9 +604,12 @@ export function estimateVideoProviderCostUsd(options: {
   const inputVideoPerSecond = capability.estimatedInputCostUsdPerVideoSecondByResolution?.[route.resolution]
     ?? capability.estimatedInputCostUsdPerVideoSecond
     ?? 0
-  return options.durationSec * perSecond
+  const standardCost = options.durationSec * perSecond
     + billableImages * (capability.estimatedInputCostUsdPerImage ?? 0)
     + Math.max(0, options.referenceVideoDurationSec ?? 0) * inputVideoPerSecond
+  return normalizeVideoModelId(options.model) === 'seedance-2.5' && options.contentFilter === false
+    ? standardCost * 1.1
+    : standardCost
 }
 
 export function estimateVideoCredits(options: {
@@ -614,6 +618,7 @@ export function estimateVideoCredits(options: {
   imageCount?: number
   referenceVideoDurationSec?: number
   resolution?: VideoResolutionInput
+  contentFilter?: boolean
   markup?: number
 }): number | undefined {
   const costUsd = estimateVideoProviderCostUsd(options)

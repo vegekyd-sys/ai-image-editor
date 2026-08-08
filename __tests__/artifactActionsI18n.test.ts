@@ -72,4 +72,60 @@ describe('buildVideoFailureActions i18n', () => {
     expect(actions[0].prompt).toContain('change the model to seedance-fast');
     expect(actions[0].prompt).not.toMatch(/[\u3400-\u9fff]/);
   });
+
+  const matureLabels: Record<Locale, string> = {
+    en: 'Retry with Mature Mode',
+    zh: '用 Mature Mode 重试',
+    'zh-Hant': '用 Mature Mode 重試',
+    ja: 'Mature Modeで再試行',
+  };
+
+  for (const locale of Object.keys(matureLabels) as Locale[]) {
+    it(`offers one explicit Mature Mode retry for a Seedance 2.5 moderation failure in ${locale}`, () => {
+      const actions = buildVideoFailureActions({
+        error: 'Blocked by content safety policy',
+        prompt: 'A fashion film by the pool',
+        duration: 30,
+        model: 'seedance-2.5',
+        contentFilter: true,
+      }, locale);
+
+      expect(actions).toHaveLength(2);
+      expect(actions[0].label).toBe(matureLabels[locale]);
+      expect(actions[1].label).toBe(expectedCopy[locale].explainLabel);
+      expect(actions[0].description).toContain('+10%');
+      expect(actions[0].prompt).toContain('seedance-2.5');
+      expect(actions[0].prompt).toContain('content_filter: false');
+      expect(actions[0].prompt).toContain('+10%');
+      expect(actions[0].prompt).toContain('A fashion film by the pool');
+      expect(actions[0].prompt).toMatch(/once|一次|一度/);
+    });
+  }
+
+  it('does not offer Mature Mode again after a Mature Mode attempt fails', () => {
+    const actions = buildVideoFailureActions({
+      error: 'Blocked by content safety policy',
+      prompt: 'A fashion film by the pool',
+      model: 'seedance-2.5',
+      contentFilter: false,
+    }, 'en');
+
+    expect(actions[0].label).not.toBe('Retry with Mature Mode');
+    expect(JSON.stringify(actions)).not.toContain('content_filter: false');
+  });
+
+  it.each([
+    'Your input contains a real person. Real people in input images or videos are not supported.',
+    'Your input may contain copyrighted or trademarked content (logos, brands, or IP characters).',
+  ])('does not offer Mature Mode for a Seedance 2.5 input restriction: %s', error => {
+    const actions = buildVideoFailureActions({
+      error,
+      prompt: 'Use the supplied reference',
+      model: 'seedance-2.5',
+      contentFilter: true,
+    }, 'en');
+
+    expect(actions[0].label).not.toBe('Retry with Mature Mode');
+    expect(JSON.stringify(actions)).not.toContain('content_filter: false');
+  });
 });

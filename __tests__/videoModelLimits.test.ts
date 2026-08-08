@@ -91,6 +91,39 @@ describe('video model reference limits', () => {
     })
   })
 
+  it('adds the provider 10% surcharge only when Seedance 2.5 Mature Mode is selected', () => {
+    const standardCost = estimateVideoCredits({
+      model: 'seedance-2.5',
+      resolution: '480p',
+      durationSec: 4,
+      contentFilter: true,
+    })
+    const defaultCost = estimateVideoCredits({
+      model: 'seedance-2.5',
+      resolution: '480p',
+      durationSec: 4,
+    })
+    const matureCost = estimateVideoCredits({
+      model: 'seedance-2.5',
+      resolution: '480p',
+      durationSec: 4,
+      contentFilter: false,
+    })
+
+    expect(defaultCost).toBe(standardCost)
+    expect(matureCost).toBe(Math.ceil(standardCost! * 1.1 - 1e-9))
+    expect(estimateVideoCredits({
+      model: 'seedance-fast',
+      resolution: '480p',
+      durationSec: 4,
+      contentFilter: false,
+    })).toBe(estimateVideoCredits({
+      model: 'seedance-fast',
+      resolution: '480p',
+      durationSec: 4,
+    }))
+  })
+
   it('selects the right Seedance 2.5 provider mode from typed operation and references', () => {
     expect(resolveVideoProviderModel({ model: 'seedance-2.5', imageReferenceCount: 0 })).toBe('seedance-2.5-text-to-video')
     expect(resolveVideoProviderModel({ model: 'seedance-2.5', imageReferenceCount: 1 })).toBe('seedance-2.5-image-to-video')
