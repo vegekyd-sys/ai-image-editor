@@ -8,7 +8,9 @@
 import type { ModelBackend, GenerateImageRequest, TokenUsage } from './types';
 import { ensureJpeg } from '../gemini';
 import {
+  OPENROUTER_IMAGE_API_URL,
   OPENROUTER_GPT_IMAGE_2_MODEL,
+  buildOpenRouterImageRequest,
   readOpenRouterProviderCost,
   resolveOpenAIImageProvider,
 } from './openai-image-provider';
@@ -25,7 +27,6 @@ const PIAPI_BASE = 'https://api.piapi.ai/v1';
 const PIAPI_MODEL = 'gpt-image-2-preview';
 
 // ── OpenRouter constants ─────────────────────────────────────────
-const OPENROUTER_BASE = 'https://openrouter.ai/api/v1/chat/completions';
 const OPENROUTER_MODEL = OPENROUTER_GPT_IMAGE_2_MODEL;
 
 // ── Shared helpers ───────────────────────────────────────────────
@@ -245,49 +246,24 @@ async function generatePiAPI(
 
 // ── OpenRouter implementation (preserved) ────────────────────────
 
-function toImageContent(image: string) {
-  if (image.startsWith('http')) {
-    return { type: 'image_url' as const, image_url: { url: image } };
-  }
-  const dataUrl = image.startsWith('data:') ? image : `data:image/jpeg;base64,${image}`;
-  return { type: 'image_url' as const, image_url: { url: dataUrl } };
-}
-
 async function generateOpenRouter(
   image: string | undefined,
   prompt: string,
   references?: { url: string; role: string }[],
+  aspectRatio?: string,
 ): Promise<{ image: string | null; usage?: TokenUsage }> {
   if (!process.env.OPENROUTER_API_KEY) {
     console.warn('[openai/openrouter] No OPENROUTER_API_KEY');
     return { image: null };
   }
 
-  const userContent: Array<Record<string, unknown>> = [];
-
-  if (references?.length) {
-    for (const ref of references) {
-      userContent.push(toImageContent(ref.url));
-      userContent.push({ type: 'text', text: `[Reference: ${ref.role}]` });
-    }
-  } else if (image) {
-    userContent.push(toImageContent(image));
-  }
-  userContent.push({ type: 'text', text: prompt });
-
-  const body: Record<string, unknown> = {
-    model: OPENROUTER_MODEL,
-    stream: false,
-    modalities: ['image', 'text'],
-    temperature: 1.0,
-    messages: [{ role: 'user', content: userContent }],
-  };
+  const body = buildOpenRouterImageRequest({ image, prompt, references, aspectRatio });
 
   const bodyJson = JSON.stringify(body);
   console.log(`[openai/openrouter] generating... bodySize=${(bodyJson.length / 1024).toFixed(0)}KB`);
   const t0 = Date.now();
 
-  const res = await fetch(OPENROUTER_BASE, {
+  const res = await fetch(OPENROUTER_IMAGE_API_URL, {
     method: 'POST',
     headers: {
       'Authorization': `Bearer ${process.env.OPENROUTER_API_KEY}`,
@@ -315,33 +291,9 @@ async function generateOpenRouter(
   } : undefined;
   if (usage) console.log(`[openai/openrouter] usage: in=${usage.inputTokens} out=${usage.outputTokens}`);
 
-  const choice = data.choices?.[0]?.message;
-  if (!choice) {
-    console.error('[openai/openrouter] No choice in response');
-    return { image: null, usage };
-  }
-
-  if (choice.content && typeof choice.content === 'string') {
-    console.log(`[openai/openrouter] Text: ${choice.content.slice(0, 200)}`);
-  }
-
-  let imageUrl: string | undefined;
-  if (choice.images && Array.isArray(choice.images)) {
-    for (const img of choice.images) {
-      imageUrl = img.image_url?.url || img.url;
-      if (imageUrl) break;
-    }
-  }
-  if (!imageUrl && Array.isArray(choice.content)) {
-    for (const part of choice.content) {
-      if (part.type === 'image_url') {
-        imageUrl = part.image_url?.url || part.url;
-        if (imageUrl) break;
-      }
-    }
-  }
-
-  if (!imageUrl) {
+  const imageData = data.data?.[0];
+  const b64Json = imageData?.b64_json;
+  if (!b64Json) {
     if (data.error?.message?.includes('safety')) {
       console.warn('[openai/openrouter] Safety system rejected request');
     } else {
@@ -350,7 +302,8 @@ async function generateOpenRouter(
     return { image: null, usage };
   }
 
-  const jpeg = await ensureJpeg(imageUrl);
+  const mediaType = imageData.media_type || 'image/png';
+  const jpeg = await ensureJpeg(`data:${mediaType};base64,${b64Json}`);
   return { image: jpeg, usage };
 }
 
@@ -379,6 +332,6 @@ export const openaiBackend: ModelBackend = {
     if (PROVIDER === 'piapi') {
       return generatePiAPI(refs ? undefined : req.image, req.prompt, refs, req.aspectRatio);
     }
-    return generateOpenRouter(refs ? undefined : req.image, req.prompt, refs);
+    return generateOpenRouter(refs ? undefined : req.image, req.prompt, refs, req.aspectRatio);
   },
 };

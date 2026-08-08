@@ -14,7 +14,7 @@ describe('OpenRouter GPT-5.6 health contract', () => {
           'https://openrouter.ai/api/v1/models/openai/gpt-5.6-terra/endpoints',
           'https://openrouter.ai/api/v1/models/openai/gpt-5.6-sol/endpoints',
           'https://openrouter.ai/api/v1/models/openai/gpt-5.6-luna/endpoints',
-          'https://openrouter.ai/api/v1/models/openai/gpt-5.4-image-2/endpoints',
+          'https://openrouter.ai/api/v1/models/openai/gpt-image-2/endpoints',
         ],
       });
     expect(resolveOpenRouterAgentHealthRequest({})).toBeNull();

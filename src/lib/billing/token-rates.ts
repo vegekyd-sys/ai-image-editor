@@ -25,7 +25,7 @@ const CREDIT_VALUE = 0.01
 
 const DEFAULT_TOKEN_RATES: TokenRate[] = [
   {
-    model_id: 'openai/gpt-5.4-image-2',
+    model_id: 'openai/gpt-image-2',
     display_name: 'GPT Image 2 (OpenRouter)',
     input_per_1m: 8.00,
     output_per_1m: 30.00,

@@ -2,7 +2,7 @@ export const REQUIRED_OPENROUTER_MODEL_IDS = [
   'openai/gpt-5.6-terra',
   'openai/gpt-5.6-sol',
   'openai/gpt-5.6-luna',
-  'openai/gpt-5.4-image-2',
+  'openai/gpt-image-2',
 ] as const;
 
 interface OpenRouterAgentHealthEnv {
