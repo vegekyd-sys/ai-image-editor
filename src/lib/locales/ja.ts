@@ -79,7 +79,7 @@ const ja = {
   'aiConsent.dataTitle': '送信されるデータ',
   'aiConsent.data': '選択した写真、動画、音声、プロンプト、チャットメッセージ、および追加編集に必要な生成コンテンツ。',
   'aiConsent.providersTitle': '送信先',
-  'aiConsent.providers': '選択した機能に応じて、Google、OpenAI / Microsoft Azure、DeepSeek、xAI、ByteDance / Volcengine、Kuaishou / Kling、またはMiniMaxがコンテンツを処理する場合があります。',
+  'aiConsent.providers': '選択した機能に応じて、Google、OpenAI、OpenRouter、Microsoft Azure、DeepSeek、xAI、ByteDance / Volcengine、Kuaishou / Kling、またはMiniMaxがコンテンツを処理する場合があります。',
   'aiConsent.accountData': 'ログイン用メールアドレス、パスワード、支払い情報はAIサービスへ送信されません。',
   'aiConsent.allow': 'AI処理を許可して続ける',
   'aiConsent.notNow': '今は許可しない',
@@ -87,6 +87,7 @@ const ja = {
   'aiConsent.offBody': 'Makaronはコンテンツを第三者のAIサービスへ送信しません。AI処理は中核機能のため、作成を始めるには許可が必要です。',
   'aiConsent.review': '内容を確認して選び直す',
   'aiConsent.privacy': 'プライバシーポリシーを見る',
+  'privacy.lastUpdated': '最終更新日：2026年8月8日',
 
   // Project management
   'project.untitled': '無題',

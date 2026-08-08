@@ -24,6 +24,23 @@ type ChangelogEntry = LegacyChangelogEntry | LocalizedChangelogEntry;
 
 const CHANGELOG: ChangelogEntry[] = [
   {
+    date: '2026-08-08',
+    en: {
+      title: 'A More Reliable GPT-5.6 Agent Route',
+      items: [
+        'GPT-5.6 Terra, Sol, and Luna now run through OpenRouter by default while keeping the existing Azure provider available for an explicit rollback.',
+        'The Agent keeps the same streaming, tools, vision, reasoning, project history, and usage-based billing behavior across providers.',
+      ],
+    },
+    zh: {
+      title: 'GPT-5.6 Agent 路由更可靠',
+      items: [
+        'GPT-5.6 Terra、Sol 与 Luna 现在默认通过 OpenRouter 运行，同时保留现有 Azure Provider，随时可以显式回切。',
+        '切换 Provider 后，Agent 的流式输出、工具调用、视觉理解、推理、项目历史和按量计费保持一致。',
+      ],
+    },
+  },
+  {
     date: '2026-08-02',
     en: {
       title: 'MiniMax H3 Video',

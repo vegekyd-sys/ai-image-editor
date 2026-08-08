@@ -60,8 +60,12 @@ export function createAgentModelRuntime(
     };
   }
 
+  const apiKey = process.env.OPENROUTER_API_KEY?.trim();
+  if (!apiKey) {
+    throw new Error('OPENROUTER_API_KEY is required for OpenRouter Agent models');
+  }
   const openrouter = createOpenRouter({
-    apiKey: process.env.OPENROUTER_API_KEY?.trim(),
+    apiKey,
     compatibility: 'strict',
     appName: 'Makaron',
     appUrl: 'https://www.makaron.app',
@@ -129,9 +133,8 @@ export function getAgentProviderOptions(
   const allowedOpenRouterEfforts = new Set(['none', 'minimal', 'low', 'medium', 'high', 'xhigh', 'max']);
   const openRouterEffort = configuredOpenRouterEffort && allowedOpenRouterEfforts.has(configuredOpenRouterEffort)
     ? configuredOpenRouterEffort
-    : runtime.spec.id === 'grok-4.5'
-      ? 'medium'
-      : undefined;
+    : runtime.spec.defaultReasoningEffort
+      ?? (runtime.spec.id === 'grok-4.5' ? 'medium' : undefined);
 
   return {
     openrouter: {

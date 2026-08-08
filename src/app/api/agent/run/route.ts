@@ -260,6 +260,7 @@ export async function POST(req: NextRequest) {
       audioAttachments,
       currentRunId: runId,
       agentModelId: resolvedAgentModel.id,
+      agentModelProvider: resolvedAgentModel.provider,
     });
     const { getAllSkills } = await import('@/lib/workspace');
     const allSkills = await getAllSkills(supabase, userId);

@@ -82,7 +82,7 @@ const zhHant = {
   'aiConsent.dataTitle': '會傳送什麼',
   'aiConsent.data': '你主動選擇的照片、影片、音訊、提示詞、聊天訊息，以及繼續編輯時所需的產生內容。',
   'aiConsent.providersTitle': '傳送給誰',
-  'aiConsent.providers': '依你選擇的功能，內容可能由 Google、OpenAI / Microsoft Azure、DeepSeek、xAI、字節跳動 / 火山引擎、快手 / Kling 或 MiniMax 處理。',
+  'aiConsent.providers': '依你選擇的功能，內容可能由 Google、OpenAI、OpenRouter、Microsoft Azure、DeepSeek、xAI、字節跳動 / 火山引擎、快手 / Kling 或 MiniMax 處理。',
   'aiConsent.accountData': '你的登入電子郵件、密碼和付款資訊不會傳送給 AI 服務。',
   'aiConsent.allow': '允許 AI 處理並繼續',
   'aiConsent.notNow': '暫不允許',
@@ -90,6 +90,7 @@ const zhHant = {
   'aiConsent.offBody': 'Makaron 不會把你的內容傳送給第三方 AI 服務。由於 AI 處理是核心功能，你需要允許後才能開始創作。',
   'aiConsent.review': '重新查看並選擇',
   'aiConsent.privacy': '查看隱私權政策',
+  'privacy.lastUpdated': '最後更新：2026 年 8 月 8 日',
 
   // Project management
   'project.untitled': '未命名',

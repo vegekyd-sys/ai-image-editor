@@ -318,6 +318,7 @@ export async function POST(req: NextRequest) {
               audioAttachments,
               currentRunId: runId,
               agentModelId: resolvedAgentModel.id,
+              agentModelProvider: resolvedAgentModel.provider,
             });
             endContext({
               promptChars: ctx.fullPrompt.length,

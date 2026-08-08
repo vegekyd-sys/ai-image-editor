@@ -381,7 +381,7 @@ const zh = {
   'aiConsent.dataTitle': '会发送什么',
   'aiConsent.data': '你主动选择的照片、视频、音频、提示词、聊天消息，以及继续编辑时所需的生成内容。',
   'aiConsent.providersTitle': '发送给谁',
-  'aiConsent.providers': '根据你选择的功能，内容可能由 Google、OpenAI / Microsoft Azure、DeepSeek、xAI、字节跳动 / 火山引擎、快手 / Kling 或 MiniMax 处理。',
+  'aiConsent.providers': '根据你选择的功能，内容可能由 Google、OpenAI、OpenRouter、Microsoft Azure、DeepSeek、xAI、字节跳动 / 火山引擎、快手 / Kling 或 MiniMax 处理。',
   'aiConsent.accountData': '你的登录邮箱、密码和付款信息不会发送给 AI 服务。',
   'aiConsent.allow': '允许 AI 处理并继续',
   'aiConsent.notNow': '暂不允许',
@@ -389,6 +389,7 @@ const zh = {
   'aiConsent.offBody': 'Makaron 不会把你的内容发送给第三方 AI 服务。由于 AI 处理是核心功能，你需要允许后才能开始创作。',
   'aiConsent.review': '重新查看并选择',
   'aiConsent.privacy': '查看隐私政策',
+  'privacy.lastUpdated': '最后更新：2026 年 8 月 8 日',
 
   // Home creation flow
   'home.create': '创建',

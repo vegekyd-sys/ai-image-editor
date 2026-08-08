@@ -3,6 +3,7 @@ import {
   AGENT_MODEL_IDS,
   normalizeAgentModelPreference,
   normalizeRequestedAgentModelPreference,
+  resolveGPT56AgentProvider,
   resolveAgentModelSpec,
 } from '@/lib/agent-models';
 import {
@@ -24,7 +25,9 @@ describe('agent model catalog', () => {
 
   it('enables provider-native compaction only when a threshold is requested', () => {
     const previousKey = process.env.AZURE_OPENAI_API_KEY;
+    const previousProvider = process.env.GPT56_AGENT_PROVIDER;
     process.env.AZURE_OPENAI_API_KEY = 'test-key';
+    process.env.GPT56_AGENT_PROVIDER = 'azure-openai';
     try {
       const runtime = createAgentModelRuntime('gpt-5.6-sol', 'project-compact');
       expect(getAgentProviderOptions(runtime, { compactAtTokens: 650_000 }))
@@ -36,19 +39,42 @@ describe('agent model catalog', () => {
     } finally {
       if (previousKey === undefined) delete process.env.AZURE_OPENAI_API_KEY;
       else process.env.AZURE_OPENAI_API_KEY = previousKey;
+      if (previousProvider === undefined) delete process.env.GPT56_AGENT_PROVIDER;
+      else process.env.GPT56_AGENT_PROVIDER = previousProvider;
     }
   });
 
-  it('maps explicit product ids to allowlisted provider ids', () => {
+  it('maps GPT-5.6 product ids to the allowlisted OpenRouter ids by default', () => {
     expect(resolveAgentModelSpec('gpt-5.6-sol')).toMatchObject({
-      provider: 'azure-openai',
-      providerModelId: 'gpt-5.6-sol',
-      billingModelId: 'gpt-5.6-sol',
+      provider: 'openrouter',
+      providerModelId: 'openai/gpt-5.6-sol',
+      billingModelId: 'openai/gpt-5.6-sol',
     });
+    expect(resolveAgentModelSpec('gpt-5.6-terra').providerModelId)
+      .toBe('openai/gpt-5.6-terra');
+    expect(resolveAgentModelSpec('gpt-5.6-luna').providerModelId)
+      .toBe('openai/gpt-5.6-luna');
     expect(resolveAgentModelSpec('grok-4.5').providerModelId)
       .toBe('x-ai/grok-4.5');
     expect(resolveAgentModelSpec('deepseek-v4-pro').providerModelId)
       .toBe('deepseek-v4-pro');
+  });
+
+  it('keeps Azure GPT-5.6 routes available behind an explicit provider switch', () => {
+    expect(resolveGPT56AgentProvider()).toBe('openrouter');
+    expect(resolveGPT56AgentProvider('azure')).toBe('azure-openai');
+    expect(resolveGPT56AgentProvider('azure-openai')).toBe('azure-openai');
+    expect(resolveGPT56AgentProvider('unexpected-provider')).toBe('openrouter');
+
+    for (const id of ['gpt-5.6-terra', 'gpt-5.6-sol', 'gpt-5.6-luna'] as const) {
+      expect(resolveAgentModelSpec(id, undefined, 'azure-openai')).toMatchObject({
+        id,
+        provider: 'azure-openai',
+        providerModelId: id,
+        billingModelId: id,
+        supportsImageInput: true,
+      });
+    }
   });
 
   it('defaults auto to Terra and ignores retired Claude AGENT_MODEL values', () => {
@@ -77,20 +103,42 @@ describe('agent model catalog', () => {
 
   it('fails clearly when Azure credentials are missing', () => {
     const previousKey = process.env.AZURE_OPENAI_API_KEY;
+    const previousProvider = process.env.GPT56_AGENT_PROVIDER;
     delete process.env.AZURE_OPENAI_API_KEY;
+    process.env.GPT56_AGENT_PROVIDER = 'azure-openai';
     try {
       expect(() => createAgentModelRuntime('gpt-5.6-terra', 'project-a'))
         .toThrow('AZURE_OPENAI_API_KEY is required');
     } finally {
       if (previousKey === undefined) delete process.env.AZURE_OPENAI_API_KEY;
       else process.env.AZURE_OPENAI_API_KEY = previousKey;
+      if (previousProvider === undefined) delete process.env.GPT56_AGENT_PROVIDER;
+      else process.env.GPT56_AGENT_PROVIDER = previousProvider;
+    }
+  });
+
+  it('fails clearly when the default OpenRouter credentials are missing', () => {
+    const previousKey = process.env.OPENROUTER_API_KEY;
+    const previousProvider = process.env.GPT56_AGENT_PROVIDER;
+    delete process.env.OPENROUTER_API_KEY;
+    delete process.env.GPT56_AGENT_PROVIDER;
+    try {
+      expect(() => createAgentModelRuntime('gpt-5.6-terra', 'project-a'))
+        .toThrow('OPENROUTER_API_KEY is required');
+    } finally {
+      if (previousKey === undefined) delete process.env.OPENROUTER_API_KEY;
+      else process.env.OPENROUTER_API_KEY = previousKey;
+      if (previousProvider === undefined) delete process.env.GPT56_AGENT_PROVIDER;
+      else process.env.GPT56_AGENT_PROVIDER = previousProvider;
     }
   });
 
   it('uses the product reasoning default for Azure GPT-5.6 models', () => {
     const previousKey = process.env.AZURE_OPENAI_API_KEY;
     const previousEffort = process.env.AZURE_OPENAI_AGENT_REASONING_EFFORT;
+    const previousProvider = process.env.GPT56_AGENT_PROVIDER;
     process.env.AZURE_OPENAI_API_KEY = 'test-key';
+    process.env.GPT56_AGENT_PROVIDER = 'azure-openai';
     delete process.env.AZURE_OPENAI_AGENT_REASONING_EFFORT;
     try {
       const runtime = createAgentModelRuntime('gpt-5.6-terra', 'project-a');
@@ -111,6 +159,32 @@ describe('agent model catalog', () => {
       else process.env.AZURE_OPENAI_API_KEY = previousKey;
       if (previousEffort === undefined) delete process.env.AZURE_OPENAI_AGENT_REASONING_EFFORT;
       else process.env.AZURE_OPENAI_AGENT_REASONING_EFFORT = previousEffort;
+      if (previousProvider === undefined) delete process.env.GPT56_AGENT_PROVIDER;
+      else process.env.GPT56_AGENT_PROVIDER = previousProvider;
+    }
+  });
+
+  it('preserves each GPT-5.6 reasoning default on OpenRouter', () => {
+    const previousKey = process.env.OPENROUTER_API_KEY;
+    const previousProvider = process.env.GPT56_AGENT_PROVIDER;
+    const previousEffort = process.env.OPENROUTER_AGENT_REASONING_EFFORT;
+    process.env.OPENROUTER_API_KEY = 'test-key';
+    delete process.env.GPT56_AGENT_PROVIDER;
+    delete process.env.OPENROUTER_AGENT_REASONING_EFFORT;
+    try {
+      expect(getAgentProviderOptions(createAgentModelRuntime('gpt-5.6-terra', 'project-a')))
+        .toMatchObject({ openrouter: { reasoning: { effort: 'medium' } } });
+      expect(getAgentProviderOptions(createAgentModelRuntime('gpt-5.6-sol', 'project-a')))
+        .toMatchObject({ openrouter: { reasoning: { effort: 'high' } } });
+      expect(getAgentProviderOptions(createAgentModelRuntime('gpt-5.6-luna', 'project-a')))
+        .toMatchObject({ openrouter: { reasoning: { effort: 'low' } } });
+    } finally {
+      if (previousKey === undefined) delete process.env.OPENROUTER_API_KEY;
+      else process.env.OPENROUTER_API_KEY = previousKey;
+      if (previousProvider === undefined) delete process.env.GPT56_AGENT_PROVIDER;
+      else process.env.GPT56_AGENT_PROVIDER = previousProvider;
+      if (previousEffort === undefined) delete process.env.OPENROUTER_AGENT_REASONING_EFFORT;
+      else process.env.OPENROUTER_AGENT_REASONING_EFFORT = previousEffort;
     }
   });
 

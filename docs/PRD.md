@@ -312,23 +312,23 @@ Reopen makaron.app
 
 ### Agent (Makaron Agent)
 
-- **Model**: GPT-5.6 Terra by default (Azure Responses); GPT-5.6 Sol and Luna are selectable
+- **Model**: GPT-5.6 Terra by default (OpenRouter); GPT-5.6 Sol and Luna are selectable. Azure Responses remains available as a provider-level rollback.
 - **Tools**:
   - `generate_image`: Calls Gemini for image generation/editing
   - `analyze_image`: Returns image content for the selected model's native vision
   - `rotate_camera`: Calls HuggingFace/fal.ai for 3D camera rotation
 - **Multi-turn context**: Recent messages prepended to prompt
 - **Original image reference**: `snapshots[0]` passed as face reference on each generation
-- **Token-level streaming**: AI SDK text stream over Azure Responses
+- **Token-level streaming**: AI SDK text stream over the selected GPT-5.6 provider
 - **System prompt**: `agent.md` — route layer (workflow, intent, when to call which tool)
 - **Tool descriptions**: Self-contained (parameter meaning, image role, output format, edge cases)
 
 ### Video Script Generation
 
-- **Model**: GPT-5.6 Terra (Azure Responses) — same default Agent, background execution
+- **Model**: GPT-5.6 Terra (OpenRouter by default) — same default Agent, background execution
 - **Input**: Snapshot images (as URLs) + project context
 - **Output**: Motion script streamed into AnimateSheet textarea + CUI messages
-- **Duration**: Depends on image count and Azure model reasoning
+- **Duration**: Depends on image count and selected model reasoning
 
 ---
 
@@ -372,7 +372,7 @@ Gemini 3.1 Flash (OpenRouter) ← Image generation / editing
     v
 Edited Image (JPEG, Sharp quality 95)
 
-GPT-5.6 Terra (Azure Responses) ← Default Agent brain + video script generation
+GPT-5.6 Terra (OpenRouter default; Azure retained) ← Default Agent brain + video script generation
     |-- generate_image tool → Gemini
     |-- analyze_image tool → GPT-5.6 native vision
     |-- rotate_camera tool → HuggingFace/fal.ai

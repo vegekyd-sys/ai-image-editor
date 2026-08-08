@@ -1,4 +1,5 @@
 import type { ModelMessage } from 'ai';
+import type { AgentModelProvider } from './agent-models';
 import type { SupabaseClient } from '@supabase/supabase-js';
 
 export const EXECUTION_SCHEMA_VERSION = 1;
@@ -230,12 +231,19 @@ export function normalizeExecutionSnapshot(
 export function buildTypedCompactionMessage(
   snapshot: DurableExecutionSnapshot | null | undefined,
   modelId?: string,
+  agentProvider?: AgentModelProvider,
 ): ModelMessage | null {
   const compaction = snapshot?.providerCompaction;
   if (compaction?.modelId && modelId && compaction.modelId !== modelId) return null;
   if (compaction?.item
     && (!compaction.modelId || !modelId || compaction.modelId === modelId)) {
     const { providerKey, itemId, encryptedContent } = compaction.item;
+    // Encrypted Responses compaction items are provider-bound. A product model
+    // can keep the same public id while moving from Azure to OpenRouter, but its
+    // old Azure state must never be sent through the OpenRouter chat adapter.
+    if (agentProvider && (agentProvider !== 'azure-openai' || providerKey !== 'azure')) {
+      return null;
+    }
     return {
       role: 'assistant',
       content: [{
@@ -254,6 +262,12 @@ export function buildTypedCompactionMessage(
 
   const summary = compaction?.summary?.trim();
   if (!summary) return null;
+  if (agentProvider && agentProvider !== 'azure-openai') {
+    return {
+      role: 'assistant',
+      content: [{ type: 'text', text: summary }],
+    } as ModelMessage;
+  }
   return {
     role: 'assistant',
     content: [{

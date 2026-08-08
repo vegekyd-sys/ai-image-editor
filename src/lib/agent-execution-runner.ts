@@ -439,6 +439,7 @@ export async function runAgentExecutionAttempt(
     executionRunId: runId,
     contextPolicy: getAgentContextPolicy(resolvedModel.id),
     agentModelId: resolvedModel.id,
+    agentModelProvider: resolvedModel.provider,
     durableContinuation: continuation,
   });
   await admin.from('agent_attempts').update({

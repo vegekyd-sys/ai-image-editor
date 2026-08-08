@@ -10,6 +10,7 @@
 
 import type { SupabaseClient } from '@supabase/supabase-js';
 import type { ModelMessage } from 'ai';
+import type { AgentModelProvider } from './agent-models';
 import type { DesignPayload, Tip } from '@/types';
 import * as workspace from './workspace';
 import { buildModelHistoryFromRows, type DbToolHistoryRow } from './agentToolHistory';
@@ -60,6 +61,8 @@ export interface PromptContextOptions {
   contextPolicy?: AgentContextPolicy;
   /** Resolved model id used to validate provider-native compaction state. */
   agentModelId?: string;
+  /** Resolved provider used to reject incompatible provider-native state. */
+  agentModelProvider?: AgentModelProvider;
   /** Durable server attempt after attempt 1. It retains the same conversation history. */
   durableContinuation?: boolean;
 }
@@ -541,7 +544,11 @@ export async function buildPromptContext(
   const compactionSnapshot = executionSnapshot?.providerCompaction
     ? executionSnapshot
     : projectCompactionSnapshot;
-  const typedCompaction = buildTypedCompactionMessage(compactionSnapshot, options.agentModelId);
+  const typedCompaction = buildTypedCompactionMessage(
+    compactionSnapshot,
+    options.agentModelId,
+    options.agentModelProvider,
+  );
   const compactedThrough = typedCompaction
     ? compactionSnapshot?.providerCompaction?.compactedThrough
     : undefined;

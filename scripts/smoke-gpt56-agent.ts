@@ -7,6 +7,10 @@ import {
   getAgentProviderOptions,
 } from '../src/lib/agent-model-runtime';
 import {
+  isAgentModelId,
+  type AgentModelId,
+} from '../src/lib/agent-models';
+import {
   runMakaronAgent,
   type AgentStreamEvent,
 } from '../src/lib/agent';
@@ -19,19 +23,23 @@ async function collectAgentEvents(
   return events;
 }
 
-function assertSuccessfulAgentRun(events: AgentStreamEvent[]) {
+function assertSuccessfulAgentRun(events: AgentStreamEvent[], expectedBillingModel: string) {
   const error = events.find((event) => event.type === 'error');
   assert.equal(error, undefined, error?.message);
   assert.ok(events.some((event) => event.type === 'done'));
   const usage = events.find((event) => event.type === 'usage');
-  assert.equal(usage?.model, 'gpt-5.6-terra');
+  assert.equal(usage?.model, expectedBillingModel);
   return usage;
 }
 
 async function main() {
   process.env.AGENT_DEBUG_DUMP = '0';
-  const runtime = createAgentModelRuntime('auto', 'gpt56-live-smoke');
-  assert.equal(runtime.spec.id, 'gpt-5.6-terra');
+  const configuredModel = process.env.GPT56_AGENT_SMOKE_MODEL?.trim();
+  const agentModel: AgentModelId | 'auto' = configuredModel && isAgentModelId(configuredModel)
+    ? configuredModel
+    : 'auto';
+  const runtime = createAgentModelRuntime(agentModel, 'gpt56-live-smoke');
+  if (agentModel === 'auto') assert.equal(runtime.spec.id, 'gpt-5.6-terra');
 
   const streamStartedAt = Date.now();
   const stream = streamText({
@@ -97,7 +105,7 @@ async function main() {
     '',
     'gpt56-main-agent-smoke',
     {
-      agentModel: 'auto',
+      agentModel: runtime.spec.id,
       locale: 'en',
       disableToolCalls: true,
       snapshotImages: [],
@@ -105,7 +113,7 @@ async function main() {
       history: [],
     },
   ));
-  const mainUsage = assertSuccessfulAgentRun(mainAgentEvents);
+  const mainUsage = assertSuccessfulAgentRun(mainAgentEvents, runtime.spec.billingModelId);
   const mainText = mainAgentEvents
     .filter((event): event is Extract<AgentStreamEvent, { type: 'content' }> => event.type === 'content')
     .map((event) => event.text)
@@ -122,7 +130,7 @@ async function main() {
     redDataUrl,
     'gpt56-analysis-smoke',
     {
-      agentModel: 'auto',
+      agentModel: runtime.spec.id,
       analysisOnly: true,
       analysisContext: 'initial',
       locale: 'en',
@@ -130,7 +138,7 @@ async function main() {
       currentSnapshotIndex: 0,
     },
   ));
-  const analysisUsage = assertSuccessfulAgentRun(analysisEvents);
+  const analysisUsage = assertSuccessfulAgentRun(analysisEvents, runtime.spec.billingModelId);
   assert.equal(analysisEvents.filter(
     (event) => event.type === 'tool_call' && event.tool === 'analyze_image',
   ).length, 1);
@@ -155,6 +163,7 @@ async function main() {
   console.log(JSON.stringify({
     model: runtime.spec.id,
     provider: runtime.spec.provider,
+    providerModel: runtime.spec.providerModelId,
     stream: {
       text: streamedText.trim(),
       firstTextMs,
