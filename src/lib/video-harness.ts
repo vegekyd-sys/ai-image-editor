@@ -19,6 +19,7 @@ function urlMatch(a: string, b: string): boolean {
 export function validateVideoScript(opts: {
   prompt: string
   imageCount: number
+  availableMediaIndices?: number[]
   imageUrls?: string[]
   imageRefs?: string[]
   videoRefUrl?: string
@@ -30,6 +31,8 @@ export function validateVideoScript(opts: {
   duration?: number
 }): string | null {
   const { prompt, imageCount, videoRefUrl, videoRefType, model, resolution, aspectRatio, motionControl, duration } = opts
+  const availableMediaIndices = opts.availableMediaIndices
+    ?? Array.from({ length: imageCount }, (_, index) => index + 1)
 
   // Motion control: only need video_ref_url, skip image reference checks
   if (motionControl) {
@@ -64,8 +67,9 @@ export function validateVideoScript(opts: {
     Array.from(prompt.matchAll(/<<<(?:image|media)_(\d+)>>>/g), m => Number(m[1]))
   )]
 
-  if (refs.length === 0 && imageCount > 0 && !videoRefUrl) {
-    return `Your script doesn't reference any media with <<<media_N>>> format, but ${imageCount} items are available. You MUST use <<<media_1>>>${imageCount > 1 ? ` through <<<media_${imageCount}>>>` : ''} in your prompt to reference them. The video model needs these markers to know which image to use where.`
+  if (refs.length === 0 && availableMediaIndices.length > 0 && !videoRefUrl) {
+    const markers = availableMediaIndices.map(index => `<<<media_${index}>>>`).join(', ')
+    return `Your script doesn't reference any media with <<<media_N>>> format, but ${availableMediaIndices.length} items are available. You MUST use ${markers} in your prompt to reference them. The video model needs these markers to know which image to use where.`
   }
 
   if (
@@ -77,8 +81,11 @@ export function validateVideoScript(opts: {
 
   // 2. Image index out of bounds
   for (const ref of refs) {
-    if (ref < 1 || ref > imageCount) {
-      return `<<<media_${ref}>>> is referenced in your script but only ${imageCount} item${imageCount !== 1 ? 's are' : ' is'} available (<<<media_1>>>${imageCount > 1 ? ` to <<<media_${imageCount}>>>` : ''}). Fix the reference.`
+    if (ref < 1 || ref > imageCount || !availableMediaIndices.includes(ref)) {
+      const available = availableMediaIndices.length
+        ? availableMediaIndices.map(index => `<<<media_${index}>>>`).join(', ')
+        : 'none'
+      return `<<<media_${ref}>>> is referenced in your script but that timeline item has no usable media. Available media: ${available}. Fix the reference.`
     }
   }
 

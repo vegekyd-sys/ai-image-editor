@@ -1674,6 +1674,9 @@ Hard constraints:
           const harnessError = validateVideoScript({
             prompt: story_prompt,
             imageCount: imageUrls.length,
+            availableMediaIndices: imageUrls.flatMap((url, index) =>
+              url && url !== '/video-placeholder.png' ? [index + 1] : [],
+            ),
             imageUrls,
             imageRefs: media_refs,
             videoRefUrl: video_ref_url,

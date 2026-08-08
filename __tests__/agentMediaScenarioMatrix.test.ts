@@ -339,7 +339,29 @@ describe('video script harness old and new scenarios', () => {
     expect(validateVideoScript({
       prompt: 'Shot 1: use <<<media_3>>>.',
       imageCount: 2,
-    })).toContain('only 2 items')
+    })).toContain('has no usable media')
+  })
+
+  it('ignores failed video placeholders for native text-to-video retries', () => {
+    expect(validateVideoScript({
+      prompt: 'Boudoir Editorial\nShot 1 (4s): Tasteful fashion film.\nStyle: Premium editorial lighting.',
+      imageCount: 1,
+      availableMediaIndices: [],
+      imageUrls: ['/video-placeholder.png'],
+      model: 'seedance-2.5',
+      duration: 4,
+    })).toBeNull()
+  })
+
+  it('does not allow a failed video placeholder to be referenced', () => {
+    expect(validateVideoScript({
+      prompt: 'Shot 1 (4s): Animate <<<media_1>>>.',
+      imageCount: 1,
+      availableMediaIndices: [],
+      imageUrls: ['/video-placeholder.png'],
+      model: 'seedance-2.5',
+      duration: 4,
+    })).toContain('has no usable media')
   })
 
   it('old external reference video scenario rejects URLs embedded in prompt text', () => {
