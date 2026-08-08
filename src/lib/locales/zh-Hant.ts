@@ -115,8 +115,10 @@ const zhHant = {
   // Changelog
   'changelog.heading': '更新',
   'changelog.close': '關閉更新',
-  'changelog.seedance25.title': 'Seedance 2.5 影片模型',
-  'changelog.seedance25.item1': 'Seedance 2.5 已接入 Makaron，支援最長 30 秒、原生同步音訊、多模態參考，以及專用影片編輯與延伸。',
+  'changelog.seedance25.title': 'Seedance 2.5：30 秒多模態影片',
+  'changelog.seedance25.item1': '單次產生最長 30 秒，並支援畫面與原生音訊同步產生。',
+  'changelog.seedance25.item2': '最多可組合 30 張圖片、10 段影片和 10 段音訊作為參考素材。',
+  'changelog.seedance25.item3': '新增專用影片編輯與延伸模式，支援 MP4 或適合調色的 MOV 輸出。',
   'changelog.multilingualAsr.title': 'ASR 支援多國語言',
   'changelog.multilingualAsr.item1': 'Makaron ASR 現在可以辨識包含日語在內的多國語言，為字幕與 Remotion 時間軸提供準確轉寫。',
   'changelog.editableRemotion.title': 'Remotion 可編輯，完整打通',
