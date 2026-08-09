@@ -9,6 +9,7 @@ import {
   isConfirmedExecutionLeaseLoss,
   isRetryableProviderOutage,
   MAX_SAME_PROVIDER_ATTEMPTS,
+  shouldFailoverAzureGPT56ToOpenRouter,
   selectModelHistoryWithinBudget,
   shouldScheduleNextAttempt,
   stableOperationKey,
@@ -212,7 +213,36 @@ describe('durable Agent execution', () => {
     expect(isRetryableProviderOutage('ServiceUnavailableException')).toBe(true);
     expect(isRetryableProviderOutage('ECONNRESET before secure TLS connection was established')).toBe(true);
     expect(isRetryableProviderOutage('TimeoutError: Step timeout of 150000ms exceeded')).toBe(true);
+    expect(isRetryableProviderOutage('Azure Responses API failed with status=401')).toBe(true);
+    expect(isRetryableProviderOutage('Azure Responses API failed with status=429')).toBe(true);
     expect(isRetryableProviderOutage('The composition failed to compile')).toBe(false);
+  });
+
+  it('fails Azure GPT-5.6 over to OpenRouter only after the retry budget', () => {
+    expect(shouldFailoverAzureGPT56ToOpenRouter({
+      requestedProvider: 'azure-openai',
+      hasOpenRouterKey: true,
+      previousProviderFailover: false,
+      retryableFailureCount: MAX_SAME_PROVIDER_ATTEMPTS - 1,
+    })).toBe(false);
+    expect(shouldFailoverAzureGPT56ToOpenRouter({
+      requestedProvider: 'azure-openai',
+      hasOpenRouterKey: true,
+      previousProviderFailover: false,
+      retryableFailureCount: MAX_SAME_PROVIDER_ATTEMPTS,
+    })).toBe(true);
+    expect(shouldFailoverAzureGPT56ToOpenRouter({
+      requestedProvider: 'azure-openai',
+      hasOpenRouterKey: true,
+      previousProviderFailover: true,
+      retryableFailureCount: 0,
+    })).toBe(true);
+    expect(shouldFailoverAzureGPT56ToOpenRouter({
+      requestedProvider: 'azure-openai',
+      hasOpenRouterKey: false,
+      previousProviderFailover: true,
+      retryableFailureCount: MAX_SAME_PROVIDER_ATTEMPTS,
+    })).toBe(false);
   });
 
   it('counts consecutive retryable failures for the requested provider', () => {

@@ -88,7 +88,19 @@ export function isConfirmedExecutionLeaseLoss(input: {
 
 export function isRetryableProviderOutage(detail: unknown): boolean {
   if (typeof detail !== 'string' || !detail.trim()) return false;
-  return /(?:serviceunavailableexception|bedrock.{0,120}(?:unable to process|service unavailable)|\b503\b|econnreset|tls connection was established|step timeout.{0,80}exceeded)/i.test(detail);
+  return /(?:serviceunavailableexception|bedrock.{0,120}(?:unable to process|service unavailable)|\b(?:401|403|408|429|500|502|503|504)\b|econnreset|tls connection was established|step timeout.{0,80}exceeded)/i.test(detail);
+}
+
+export function shouldFailoverAzureGPT56ToOpenRouter(input: {
+  requestedProvider: string;
+  hasOpenRouterKey: boolean;
+  previousProviderFailover: boolean;
+  retryableFailureCount: number;
+}): boolean {
+  return input.requestedProvider === 'azure-openai'
+    && input.hasOpenRouterKey
+    && (input.previousProviderFailover
+      || input.retryableFailureCount >= MAX_SAME_PROVIDER_ATTEMPTS);
 }
 
 export interface ProviderAttemptObservation {

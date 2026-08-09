@@ -1,9 +1,9 @@
 /**
- * OpenAI Image 2 backend — triple provider: Azure (default) / PiAPI / OpenRouter
+ * OpenAI Image 2 backend — Azure primary / OpenRouter backup / PiAPI override
  *
  * Azure: /images/edits + /images/generations (same OpenAI format, different auth)
  * PiAPI: /v1/images/edits + /v1/images/generations
- * OpenRouter: /v1/chat/completions (unified)
+ * OpenRouter: /v1/images (dedicated Image API)
  */
 import type { ModelBackend, GenerateImageRequest, TokenUsage } from './types';
 import { ensureJpeg } from '../gemini';
@@ -12,11 +12,11 @@ import {
   OPENROUTER_GPT_IMAGE_2_MODEL,
   buildOpenRouterImageRequest,
   readOpenRouterProviderCost,
-  resolveOpenAIImageProvider,
+  resolveOpenAIImageProviderOrder,
 } from './openai-image-provider';
 
 // ── Provider selection ───────────────────────────────────────────
-const PROVIDER = resolveOpenAIImageProvider();
+const PROVIDER_ORDER = resolveOpenAIImageProviderOrder();
 
 // ── Azure constants ─────────────────────────────────────────────
 const AZURE_EDITS_URL = process.env.AZURE_OPENAI_EDITS_URL || 'https://meo-ultron.openai.azure.com/openai/deployments/gpt-image-2/images/edits?api-version=2025-04-01-preview';
@@ -313,9 +313,11 @@ export const openaiBackend: ModelBackend = {
   id: 'openai',
 
   canHandle(_req: GenerateImageRequest): boolean {
-    if (PROVIDER === 'azure') return !!process.env.AZURE_OPENAI_API_KEY;
-    if (PROVIDER === 'piapi') return !!process.env.PIAPI_API_KEY;
-    return !!process.env.OPENROUTER_API_KEY;
+    return PROVIDER_ORDER.some(provider => {
+      if (provider === 'azure') return Boolean(process.env.AZURE_OPENAI_API_KEY?.trim());
+      if (provider === 'piapi') return Boolean(process.env.PIAPI_API_KEY?.trim());
+      return Boolean(process.env.OPENROUTER_API_KEY?.trim());
+    });
   },
 
   async generate(req: GenerateImageRequest): Promise<{ image: string | null; usage?: TokenUsage }> {
@@ -326,12 +328,35 @@ export const openaiBackend: ModelBackend = {
         ]
       : undefined;
 
-    if (PROVIDER === 'azure') {
-      return generateAzure(refs ? undefined : req.image, req.prompt, refs, req.aspectRatio);
+    let lastResult: { image: string | null; usage?: TokenUsage } = { image: null };
+    for (const provider of PROVIDER_ORDER) {
+      if (provider === 'azure') {
+        lastResult = await generateAzure(
+          refs ? undefined : req.image,
+          req.prompt,
+          refs,
+          req.aspectRatio,
+        );
+      } else if (provider === 'piapi') {
+        lastResult = await generatePiAPI(
+          refs ? undefined : req.image,
+          req.prompt,
+          refs,
+          req.aspectRatio,
+        );
+      } else {
+        lastResult = await generateOpenRouter(
+          refs ? undefined : req.image,
+          req.prompt,
+          refs,
+          req.aspectRatio,
+        );
+      }
+      if (lastResult.image) return lastResult;
+      if (provider === 'azure' && PROVIDER_ORDER.includes('openrouter')) {
+        console.warn('[openai] Azure returned no image; retrying with OpenRouter backup');
+      }
     }
-    if (PROVIDER === 'piapi') {
-      return generatePiAPI(refs ? undefined : req.image, req.prompt, refs, req.aspectRatio);
-    }
-    return generateOpenRouter(refs ? undefined : req.image, req.prompt, refs, req.aspectRatio);
+    return lastResult;
   },
 };

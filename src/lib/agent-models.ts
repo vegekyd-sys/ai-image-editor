@@ -24,7 +24,7 @@ export interface AgentModelSpec {
 }
 
 export const DEFAULT_AGENT_MODEL_ID: AgentModelId = 'gpt-5.6-terra';
-export const DEFAULT_GPT56_AGENT_PROVIDER: GPT56AgentProvider = 'openrouter';
+export const DEFAULT_GPT56_AGENT_PROVIDER: GPT56AgentProvider = 'azure-openai';
 
 const GPT56_AGENT_MODEL_IDS = [
   'gpt-5.6-terra',
@@ -60,6 +60,7 @@ function isGPT56AgentModelId(id: AgentModelId): id is GPT56AgentModelId {
 
 export function resolveGPT56AgentProvider(value?: string): GPT56AgentProvider {
   const normalized = value?.trim().toLowerCase();
+  if (normalized === 'openrouter') return 'openrouter';
   if (normalized === 'azure' || normalized === 'azure-openai') return 'azure-openai';
   return DEFAULT_GPT56_AGENT_PROVIDER;
 }

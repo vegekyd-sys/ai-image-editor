@@ -16,6 +16,7 @@ import {
   getAgentContextPolicy,
   isConfirmedExecutionLeaseLoss,
   MAX_SAME_PROVIDER_ATTEMPTS,
+  shouldFailoverAzureGPT56ToOpenRouter,
   normalizeExecutionSnapshot,
   shouldScheduleNextAttempt,
   type DurableExecutionSnapshot,
@@ -395,14 +396,12 @@ export async function runAgentExecutionAttempt(
       && failover.from === requestedModel.id,
     );
   });
-  const failoverAgentModel: AgentModelPreference | undefined = process.env.DEEPSEEK_API_KEY?.trim()
-    ? 'deepseek-v4-pro'
-    : process.env.OPENROUTER_API_KEY?.trim()
-      ? 'grok-4.5'
-      : undefined;
-  const providerFailover = requestedModel.provider === 'azure-openai'
-    && Boolean(failoverAgentModel)
-    && (previousProviderFailover || requestedProviderFailureCount >= MAX_SAME_PROVIDER_ATTEMPTS);
+  const providerFailover = shouldFailoverAzureGPT56ToOpenRouter({
+    requestedProvider: requestedModel.provider,
+    hasOpenRouterKey: Boolean(process.env.OPENROUTER_API_KEY?.trim()),
+    previousProviderFailover,
+    retryableFailureCount: requestedProviderFailureCount,
+  });
   const providerRetry = requestedModel.provider === 'azure-openai'
     && !providerFailover
     && requestedProviderFailureCount > 0;
@@ -410,10 +409,10 @@ export async function runAgentExecutionAttempt(
     MAX_SAME_PROVIDER_ATTEMPTS,
     requestedProviderFailureCount + 1,
   );
-  const effectiveAgentModel: AgentModelPreference | undefined = providerFailover
-    ? failoverAgentModel || request.requestedAgentModel
-    : request.requestedAgentModel;
-  const resolvedModel = resolveAgentModelSpec(effectiveAgentModel, process.env.AGENT_MODEL);
+  const effectiveAgentModel = request.requestedAgentModel;
+  const resolvedModel = providerFailover
+    ? resolveAgentModelSpec(requestedModel.id, undefined, 'openrouter')
+    : requestedModel;
   const executionStore = new AgentExecutionStore(admin, run.user_id, run.project_id);
   const previousSnapshot = await executionStore.latestSnapshot(runId);
   const continuation = claim.attempt_no > 1;
@@ -460,6 +459,8 @@ export async function runAgentExecutionAttempt(
         providerFailover: {
           from: requestedModel.id,
           to: resolvedModel.id,
+          fromProvider: requestedModel.provider,
+          toProvider: resolvedModel.provider,
           reason: String(latestRequestedProviderAttempt?.metadata?.terminalDetail || 'provider unavailable'),
         },
       } : {}),
@@ -509,8 +510,8 @@ export async function runAgentExecutionAttempt(
     await writer.processAndEnqueue({
       type: 'status',
       text: request.locale === 'en'
-        ? `The requested model provider is unavailable; continuing this durable run with ${resolvedModel.id}...`
-        : `原模型服务暂不可用，当前 durable run 已切换到 ${resolvedModel.id} 继续...`,
+        ? `Azure is unavailable; continuing this durable run with the same ${resolvedModel.id} model through the OpenRouter backup...`
+        : `Azure 暂不可用，当前 durable run 已通过 OpenRouter 备用线路继续使用同一 ${resolvedModel.id} 模型...`,
     });
   }
 
@@ -565,6 +566,9 @@ export async function runAgentExecutionAttempt(
         locale: request.locale,
         preferredModel: request.preferredModel as any,
         agentModel: effectiveAgentModel,
+        agentProvider: resolvedModel.provider === 'azure-openai' || resolvedModel.provider === 'openrouter'
+          ? resolvedModel.provider
+          : undefined,
         videoModel: request.videoModel,
         videoResolution: request.videoResolution,
         videoAuto: request.videoAuto,

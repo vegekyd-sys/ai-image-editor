@@ -5,6 +5,7 @@ import type { LanguageModel, ModelMessage } from 'ai';
 import {
   resolveAgentModelSpec,
   type AgentModelPreference,
+  type GPT56AgentProvider,
   type AgentReasoningEffort,
   type AgentModelSpec,
 } from './agent-models';
@@ -30,8 +31,13 @@ export function createAzureAgentPromptCacheKey(
 export function createAgentModelRuntime(
   preference: AgentModelPreference | undefined,
   projectId: string,
+  configuredGPT56Provider?: GPT56AgentProvider,
 ): AgentModelRuntime {
-  const spec = resolveAgentModelSpec(preference, process.env.AGENT_MODEL);
+  const spec = resolveAgentModelSpec(
+    preference,
+    process.env.AGENT_MODEL,
+    configuredGPT56Provider ?? process.env.GPT56_AGENT_PROVIDER,
+  );
 
   if (spec.provider === 'azure-openai') {
     const promptCacheKey = createAzureAgentPromptCacheKey(spec.id, projectId);

@@ -58,7 +58,17 @@ export function resolveOpenAIImageProvider(
   if (configured === 'azure' || configured === 'piapi' || configured === 'openrouter') {
     return configured;
   }
-  return 'openrouter';
+  return 'azure';
+}
+
+export function resolveOpenAIImageProviderOrder(
+  env: OpenAIImageProviderEnv = process.env as OpenAIImageProviderEnv,
+): OpenAIImageProvider[] {
+  const primary = resolveOpenAIImageProvider(env);
+  if (primary === 'azure' && env.OPENROUTER_API_KEY?.trim()) {
+    return ['azure', 'openrouter'];
+  }
+  return [primary];
 }
 
 export function readOpenRouterProviderCost(usage: unknown): number | undefined {

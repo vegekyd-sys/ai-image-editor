@@ -54,7 +54,7 @@ import {
 import { compileSavedCompositionPart } from './composition-workspace-runner';
 import { resolveMediaMarkersInString, resolveMediaMarkersInValue } from './media-markers';
 import { isDirectRemotionCompositionSource } from './remotion-code-normalization';
-import type { AgentModelPreference } from './agent-models';
+import type { AgentModelPreference, GPT56AgentProvider } from './agent-models';
 import {
   createAgentModelRuntime,
   getAgentProviderOptions,
@@ -5040,6 +5040,7 @@ export interface RunMakaronAgentOptions {
   locale?: string;
   preferredModel?: ModelId;
   agentModel?: AgentModelPreference;
+  agentProvider?: GPT56AgentProvider;
   videoModel?: string;
   videoResolution?: import('@/types').VideoResolution;
   videoAuto?: boolean;
@@ -5076,7 +5077,11 @@ export async function* runMakaronAgent(
   options?: RunMakaronAgentOptions,
 ): AsyncGenerator<AgentStreamEvent> {
   const perf = options?.perf;
-  const runtime = createAgentModelRuntime(options?.agentModel, projectId);
+  const runtime = createAgentModelRuntime(
+    options?.agentModel,
+    projectId,
+    options?.agentProvider,
+  );
   const ctx: AgentContext = {
     currentImage,
     referenceImages: options?.referenceImages,

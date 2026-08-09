@@ -5,14 +5,15 @@ import {
   buildOpenRouterImageRequest,
   readOpenRouterProviderCost,
   resolveOpenAIImageProvider,
+  resolveOpenAIImageProviderOrder,
 } from '@/lib/models/openai-image-provider';
 
 describe('GPT Image 2 provider routing', () => {
-  it('defaults to OpenRouter even when legacy Azure and PiAPI keys are present', () => {
+  it('defaults to Azure while keeping the OpenRouter Image API contract available', () => {
     expect(resolveOpenAIImageProvider({
       AZURE_OPENAI_API_KEY: 'azure-key',
       PIAPI_API_KEY: 'piapi-key',
-    })).toBe('openrouter');
+    })).toBe('azure');
     expect(OPENROUTER_GPT_IMAGE_2_MODEL).toBe('openai/gpt-image-2');
     expect(OPENROUTER_IMAGE_API_URL).toBe('https://openrouter.ai/api/v1/images');
   });
@@ -36,11 +37,30 @@ describe('GPT Image 2 provider routing', () => {
     });
   });
 
-  it('keeps Azure and PiAPI available as explicit provider choices', () => {
+  it('keeps OpenRouter and PiAPI available as explicit provider choices', () => {
     expect(resolveOpenAIImageProvider({ OPENAI_IMAGE_PROVIDER: 'azure' })).toBe('azure');
     expect(resolveOpenAIImageProvider({ OPENAI_IMAGE_PROVIDER: 'piapi' })).toBe('piapi');
     expect(resolveOpenAIImageProvider({ OPENAI_IMAGE_PROVIDER: 'openrouter' })).toBe('openrouter');
-    expect(resolveOpenAIImageProvider({ OPENAI_IMAGE_PROVIDER: 'typo' })).toBe('openrouter');
+    expect(resolveOpenAIImageProvider({ OPENAI_IMAGE_PROVIDER: 'typo' })).toBe('azure');
+  });
+
+  it('uses OpenRouter only as the Azure image backup', () => {
+    expect(resolveOpenAIImageProviderOrder({
+      AZURE_OPENAI_API_KEY: 'azure-key',
+      OPENROUTER_API_KEY: 'openrouter-key',
+    })).toEqual(['azure', 'openrouter']);
+    expect(resolveOpenAIImageProviderOrder({
+      AZURE_OPENAI_API_KEY: 'azure-key',
+    })).toEqual(['azure']);
+    expect(resolveOpenAIImageProviderOrder({
+      OPENAI_IMAGE_PROVIDER: 'openrouter',
+      OPENROUTER_API_KEY: 'openrouter-key',
+    })).toEqual(['openrouter']);
+    expect(resolveOpenAIImageProviderOrder({
+      OPENAI_IMAGE_PROVIDER: 'piapi',
+      PIAPI_API_KEY: 'piapi-key',
+      OPENROUTER_API_KEY: 'openrouter-key',
+    })).toEqual(['piapi']);
   });
 
   it('accepts only finite non-negative OpenRouter provider cost telemetry', () => {

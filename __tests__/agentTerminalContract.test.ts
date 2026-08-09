@@ -110,7 +110,9 @@ describe('agent terminal contract wiring', () => {
     expect(executionRunnerSource).toContain('inputEpoch: inputVersionAtAttemptStart');
     expect(executionRunnerSource).toContain("status: 'handed_off'");
     expect(executionRunnerSource).toContain('next_attempt_at: new Date().toISOString()');
-    expect(executionRunnerSource).toContain("? 'deepseek-v4-pro'");
+    expect(executionRunnerSource).toContain('shouldFailoverAzureGPT56ToOpenRouter');
+    expect(executionRunnerSource).toContain("resolveAgentModelSpec(requestedModel.id, undefined, 'openrouter')");
+    expect(executionRunnerSource).toContain('agentProvider: resolvedModel.provider');
   });
 
   it('requires explicit done evidence in both persisted run routes', () => {
