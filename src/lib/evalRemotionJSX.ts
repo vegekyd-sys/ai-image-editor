@@ -268,8 +268,14 @@ const PreviewSequence = React.forwardRef(function PreviewSequence(
   const continuityFrames = canHoldLastFrame
     ? (props.postmountFor ?? fps * 3)
     : 0;
-  const holdStartFrame = canHoldLastFrame
+  const lastRealMediaFrameBoundary = canHoldLastFrame
     ? Math.min(authoredDuration, mediaDuration ?? authoredDuration)
+    : authoredDuration;
+  // Give the native tag two frames to settle from playing to frozen before the
+  // actual cut. Without this grace window Chromium can clear one painted frame
+  // exactly when Freeze becomes active.
+  const holdStartFrame = canHoldLastFrame
+    ? Math.max(1, lastRealMediaFrameBoundary - 2)
     : authoredDuration;
   const isHoldingLastFrame = canHoldLastFrame &&
     frame >= (props.from ?? 0) + holdStartFrame;
