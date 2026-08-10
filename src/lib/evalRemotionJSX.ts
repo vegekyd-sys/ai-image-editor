@@ -78,6 +78,44 @@ function childrenContainPreviewVideo(children: React.ReactNode): boolean {
   return containsVideo;
 }
 
+function getPreviewVideoDurationInFrames(children: React.ReactNode): number | null {
+  let duration: number | null = null;
+  React.Children.forEach(children, child => {
+    if (duration !== null || !React.isValidElement(child)) return;
+
+    const type = child.type;
+    const props = child.props as {
+      children?: React.ReactNode;
+      endAt?: number;
+      playbackRate?: number;
+      startFrom?: number;
+      trimAfter?: number;
+      trimBefore?: number;
+    };
+    const isVideoComponent =
+      type === PreviewVideo ||
+      type === Remotion.Html5Video ||
+      type === Video ||
+      componentSourceContainsVideo(type);
+    const rangeStart = props.trimBefore ?? props.startFrom ?? 0;
+    const rangeEnd = props.trimAfter ?? props.endAt;
+    const playbackRate = props.playbackRate ?? 1;
+
+    if (
+      isVideoComponent &&
+      typeof rangeEnd === 'number' &&
+      rangeEnd > rangeStart &&
+      playbackRate > 0
+    ) {
+      duration = (rangeEnd - rangeStart) / playbackRate;
+      return;
+    }
+
+    duration = getPreviewVideoDurationInFrames(props.children);
+  });
+  return duration;
+}
+
 // Browser preview only: report when the native media tag has a decoded frame.
 // Keeping this wrapper at module scope avoids creating a new component per render.
 const PreviewVideo = React.forwardRef(function PreviewVideo(
@@ -195,6 +233,10 @@ const PreviewSequence = React.forwardRef(function PreviewSequence(
     () => childrenContainPreviewVideo(props.children),
     [props.children],
   );
+  const mediaDuration = React.useMemo(
+    () => getPreviewVideoDurationInFrames(props.children),
+    [props.children],
+  );
   const [mediaReady, setMediaReady] = React.useState(!containsVideo);
 
   React.useEffect(() => {
@@ -226,8 +268,11 @@ const PreviewSequence = React.forwardRef(function PreviewSequence(
   const continuityFrames = canHoldLastFrame
     ? (props.postmountFor ?? fps * 3)
     : 0;
+  const holdStartFrame = canHoldLastFrame
+    ? Math.min(authoredDuration, mediaDuration ?? authoredDuration)
+    : authoredDuration;
   const isHoldingLastFrame = canHoldLastFrame &&
-    frame >= (props.from ?? 0) + authoredDuration;
+    frame >= (props.from ?? 0) + holdStartFrame;
   const style = containsVideo
     ? {
         ...props.style,
@@ -246,7 +291,7 @@ const PreviewSequence = React.forwardRef(function PreviewSequence(
         Remotion.Freeze,
         {
           active: isHoldingLastFrame,
-          frame: Math.max(0, authoredDuration - 1),
+          frame: Math.max(0, Math.ceil(holdStartFrame) - 1),
         },
         content,
       )
