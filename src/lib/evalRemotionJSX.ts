@@ -155,6 +155,7 @@ const PreviewVideo = React.forwardRef(function PreviewVideo(
 
   React.useEffect(() => {
     reportedReady.current = false;
+    captureFailed.current = false;
     readiness?.markPending();
   }, [readiness?.markPending, src]);
 
@@ -196,7 +197,6 @@ const PreviewVideo = React.forwardRef(function PreviewVideo(
   React.useEffect(() => {
     if (!readiness?.captureLastFrame) return;
     drawVideoFrame();
-    if (readiness.showLastFrame) return;
 
     const video = videoElementRef.current;
     if (!video || typeof video.requestVideoFrameCallback !== 'function') return;
@@ -209,7 +209,7 @@ const PreviewVideo = React.forwardRef(function PreviewVideo(
     return () => {
       if (callbackId !== null) video.cancelVideoFrameCallback(callbackId);
     };
-  }, [drawVideoFrame, readiness?.captureLastFrame, readiness?.showLastFrame]);
+  }, [drawVideoFrame, readiness?.captureLastFrame]);
 
   const markReady = React.useCallback((video: HTMLVideoElement) => {
     if (reportedReady.current || video.readyState < HTMLMediaElement.HAVE_CURRENT_DATA) return;
@@ -246,7 +246,15 @@ const PreviewVideo = React.forwardRef(function PreviewVideo(
   }, [markReady, onSeeked]);
 
   const handleTimeUpdate = React.useCallback((event: React.SyntheticEvent<HTMLVideoElement>) => {
-    if (readiness?.captureLastFrame && !readiness.showLastFrame) drawVideoFrame();
+    // requestVideoFrameCallback above is frame-accurate and cheaper than doing
+    // a second canvas copy for every timeupdate. Keep timeupdate only as the
+    // fallback for browsers without the frame callback API.
+    if (
+      readiness?.captureLastFrame &&
+      typeof event.currentTarget.requestVideoFrameCallback !== 'function'
+    ) {
+      drawVideoFrame();
+    }
     markReady(event.currentTarget);
     onTimeUpdate?.(event);
   }, [drawVideoFrame, markReady, onTimeUpdate, readiness]);
@@ -276,7 +284,15 @@ const PreviewVideo = React.forwardRef(function PreviewVideo(
       ref: frameCanvasRef,
       style: {
         ...style,
-        display: readiness?.showLastFrame ? style?.display : 'none',
+        // The authored scene is commonly a flex column. A second 100%-height
+        // flex item would shrink the live video and expose a duplicate strip at
+        // the bottom of the frame. Overlay the cache instead so it occupies
+        // exactly the same visual layer without participating in layout.
+        position: 'absolute',
+        inset: 0,
+        display: readiness?.showLastFrame ? (style?.display ?? 'block') : 'none',
+        width: style?.width ?? '100%',
+        height: style?.height ?? '100%',
         pointerEvents: 'none',
       },
     }),
@@ -343,7 +359,11 @@ const PreviewSequence = React.forwardRef(function PreviewSequence(
   const showLastFrameAt = canHoldLastFrame
     ? Math.max(1, lastRealMediaFrameBoundary - showLeadFrames)
     : authoredDuration;
-  const captureLeadFrames = Math.max(4, Math.round(fps * 0.5));
+  // Start close to the handoff. The callback keeps the overlay moving through
+  // the final source frames, then naturally leaves the last decoded frame in
+  // place if the incoming Range seek needs a moment. A long capture window both
+  // wastes large canvas copies and makes cut-time jank more likely.
+  const captureLeadFrames = Math.max(1, Math.round(fps / 15));
   const captureLastFrameAt = canHoldLastFrame
     ? Math.max(0, showLastFrameAt - captureLeadFrames)
     : authoredDuration;
