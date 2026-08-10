@@ -23,6 +23,8 @@ import {
 
 export type { EditableTransformMode } from './editor/editable-react-runtime';
 
+export type BrowserVideoRuntime = 'preview' | 'render';
+
 const { Sequence, useVideoConfig } = Remotion;
 
 // Sequence wrapper: auto-inject premountFor={fps*3} when not specified
@@ -173,7 +175,10 @@ export function pickRemotionComponentName(code: string): string {
 
 export function evalRemotionJSX(
   code: string,
-  options: { editableTransformMode?: EditableTransformMode } = {},
+  options: {
+    editableTransformMode?: EditableTransformMode;
+    videoRuntime?: BrowserVideoRuntime;
+  } = {},
 ): React.ComponentType<any> | null {
   try {
     const src = normalizeRemotionScopeDeclarations(code);
@@ -195,13 +200,28 @@ export function evalRemotionJSX(
     // Prefer the primary composition function. Agent code often declares helper
     // components first (Caption, Badge, etc.) and the real composition last.
     const fnName = pickRemotionComponentName(src);
-    const editableRuntime = createEditableReactRuntime(React, Video);
+    // Interactive Player previews should use the browser's native media pipeline.
+    // @remotion/media's canvas/WebCodecs implementation is deterministic for
+    // client-side rendering, but a newly-active trimmed clip can expose an empty
+    // canvas while its seek finishes. Html5Video can premount and buffer the real
+    // media element through HTTP Range requests before the cut becomes visible.
+    // Poster/frame/export paths keep @remotion/media because web-renderer requires it.
+    const videoComponent = options.videoRuntime === 'preview'
+      ? Remotion.Html5Video
+      : Video;
+    const editableRuntime = createEditableReactRuntime(React, videoComponent);
     const authoredScope = {
       ...REMOTION_SCOPE,
       React: editableRuntime.React,
+      Video: videoComponent,
+      OffthreadVideo: videoComponent,
     };
     const remotionNamespace = { ...Remotion, ...authoredScope };
-    const mediaNamespace = { Audio, Video, OffthreadVideo: Video };
+    const mediaNamespace = {
+      Audio,
+      Video: videoComponent,
+      OffthreadVideo: videoComponent,
+    };
     const pathsNamespace = { ...RemotionPaths };
     const noiseNamespace = { ...RemotionNoise };
     const modules: Record<string, unknown> = {
