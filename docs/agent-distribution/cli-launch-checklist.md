@@ -21,7 +21,7 @@ Do not position Makaron as only a model aggregator or generic image generator.
 
 ## GEO deployment gate
 
-This website GEO rollout does not require a new `makaron-cli` release. Keep the CLI and bundled Skill at `0.13.4` unless a separate CLI change is approved.
+The external source-range handoff is the approved CLI change for `0.13.5`. Keep the CLI package, bundled Skill, and plugin metadata on that version for this release.
 
 Before deploying the website discovery surfaces:
 
