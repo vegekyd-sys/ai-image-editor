@@ -131,6 +131,9 @@ const PreviewVideo = React.forwardRef(function PreviewVideo(
   const videoElementRef = React.useRef<HTMLVideoElement | null>(null);
   const frameCanvasRef = React.useRef<HTMLCanvasElement | null>(null);
   const captureFailed = React.useRef(false);
+  const cachedFrameReady = React.useRef(false);
+  const markReadyRef = React.useRef<(video: HTMLVideoElement) => void>(() => undefined);
+  const [hasCachedFrame, setHasCachedFrame] = React.useState(false);
   const {
     className,
     crossOrigin,
@@ -156,6 +159,8 @@ const PreviewVideo = React.forwardRef(function PreviewVideo(
   React.useEffect(() => {
     reportedReady.current = false;
     captureFailed.current = false;
+    cachedFrameReady.current = false;
+    setHasCachedFrame(false);
     readiness?.markPending();
   }, [readiness?.markPending, src]);
 
@@ -184,7 +189,13 @@ const PreviewVideo = React.forwardRef(function PreviewVideo(
     if (canvas.height !== height) canvas.height = height;
 
     try {
-      canvas.getContext('2d', { alpha: false })?.drawImage(video, 0, 0, width, height);
+      const context = canvas.getContext('2d', { alpha: false });
+      if (!context) return;
+      context.drawImage(video, 0, 0, width, height);
+      if (!cachedFrameReady.current) {
+        cachedFrameReady.current = true;
+        setHasCachedFrame(true);
+      }
     } catch (error) {
       captureFailed.current = true;
       console.warn(
@@ -224,6 +235,24 @@ const PreviewVideo = React.forwardRef(function PreviewVideo(
     reportedReady.current = true;
     readiness?.markReady();
   }, [expectedTime, fps, minimumRevealTime, readiness]);
+  markReadyRef.current = markReady;
+
+  React.useEffect(() => {
+    const video = videoElementRef.current;
+    if (!video || typeof video.requestVideoFrameCallback !== 'function') return;
+
+    let callbackId: number | null = null;
+    const checkReadinessFrame = () => {
+      markReadyRef.current(video);
+      if (!reportedReady.current) {
+        callbackId = video.requestVideoFrameCallback(checkReadinessFrame);
+      }
+    };
+    callbackId = video.requestVideoFrameCallback(checkReadinessFrame);
+    return () => {
+      if (callbackId !== null) video.cancelVideoFrameCallback(callbackId);
+    };
+  }, [src]);
 
   const handleCanPlay = React.useCallback((event: React.SyntheticEvent<HTMLVideoElement>) => {
     markReady(event.currentTarget);
@@ -290,7 +319,9 @@ const PreviewVideo = React.forwardRef(function PreviewVideo(
         // exactly the same visual layer without participating in layout.
         position: 'absolute',
         inset: 0,
-        display: readiness?.showLastFrame ? (style?.display ?? 'block') : 'none',
+        display: readiness?.showLastFrame && hasCachedFrame
+          ? (style?.display ?? 'block')
+          : 'none',
         width: style?.width ?? '100%',
         height: style?.height ?? '100%',
         pointerEvents: 'none',
