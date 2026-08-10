@@ -103,7 +103,7 @@ const PreviewVideo = React.forwardRef(function PreviewVideo(
   const trimStartFrame = trimBefore ?? startFrom ?? 0;
   const minimumRevealTime = (
     trimStartFrame +
-    (readiness?.requirePlaybackAdvance && trimStartFrame === 0 ? 2 : 0)
+    (readiness?.requirePlaybackAdvance ? 2 : 0)
   ) / fps;
   const expectedTime = (trimStartFrame + frame * playbackRate) / fps;
 
