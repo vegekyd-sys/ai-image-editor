@@ -342,8 +342,9 @@ const PreviewSequence = React.forwardRef(function PreviewSequence(
   const showLastFrameAt = canHoldLastFrame
     ? Math.max(1, lastRealMediaFrameBoundary - 2)
     : authoredDuration;
+  const captureLeadFrames = Math.max(4, Math.round(fps * 0.5));
   const captureLastFrameAt = canHoldLastFrame
-    ? Math.max(0, showLastFrameAt - 2)
+    ? Math.max(0, showLastFrameAt - captureLeadFrames)
     : authoredDuration;
   const relativeFrame = frame - (props.from ?? 0);
   const captureLastFrame = canHoldLastFrame && relativeFrame >= captureLastFrameAt;
