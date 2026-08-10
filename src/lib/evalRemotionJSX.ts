@@ -31,9 +31,11 @@ const VIDEO_COMPONENT_CALL = /(?:React\.)?createElement\(\s*(?:Video|OffthreadVi
 const componentContainsVideoCache = new WeakMap<object, boolean>();
 
 type PreviewMediaReadiness = {
+  captureLastFrame: boolean;
   markPending: () => void;
   markReady: () => void;
   requirePlaybackAdvance: boolean;
+  showLastFrame: boolean;
 };
 
 const PreviewMediaReadinessContext = React.createContext<PreviewMediaReadiness | null>(null);
@@ -126,7 +128,12 @@ const PreviewVideo = React.forwardRef(function PreviewVideo(
   const { fps } = useVideoConfig();
   const readiness = React.useContext(PreviewMediaReadinessContext);
   const reportedReady = React.useRef(false);
+  const videoElementRef = React.useRef<HTMLVideoElement | null>(null);
+  const frameCanvasRef = React.useRef<HTMLCanvasElement | null>(null);
+  const captureFailed = React.useRef(false);
   const {
+    className,
+    crossOrigin,
     onCanPlay,
     onLoadedData,
     onPlaying,
@@ -135,6 +142,7 @@ const PreviewVideo = React.forwardRef(function PreviewVideo(
     playbackRate = 1,
     startFrom,
     src,
+    style,
     trimBefore,
     ...rest
   } = props;
@@ -148,7 +156,60 @@ const PreviewVideo = React.forwardRef(function PreviewVideo(
   React.useEffect(() => {
     reportedReady.current = false;
     readiness?.markPending();
-  }, [readiness, src]);
+  }, [readiness?.markPending, src]);
+
+  const setVideoRef = React.useCallback((video: HTMLVideoElement | null) => {
+    videoElementRef.current = video;
+    if (typeof ref === 'function') ref(video);
+    else if (ref) (ref as React.MutableRefObject<HTMLVideoElement | null>).current = video;
+  }, [ref]);
+
+  const drawVideoFrame = React.useCallback(() => {
+    const video = videoElementRef.current;
+    const canvas = frameCanvasRef.current;
+    if (
+      captureFailed.current ||
+      !video ||
+      !canvas ||
+      video.readyState < HTMLMediaElement.HAVE_CURRENT_DATA ||
+      !video.videoWidth ||
+      !video.videoHeight
+    ) return;
+
+    const scale = Math.min(1, 1280 / Math.max(video.videoWidth, video.videoHeight));
+    const width = Math.max(1, Math.round(video.videoWidth * scale));
+    const height = Math.max(1, Math.round(video.videoHeight * scale));
+    if (canvas.width !== width) canvas.width = width;
+    if (canvas.height !== height) canvas.height = height;
+
+    try {
+      canvas.getContext('2d', { alpha: false })?.drawImage(video, 0, 0, width, height);
+    } catch (error) {
+      captureFailed.current = true;
+      console.warn(
+        '[PreviewVideo] Could not cache a decoded frame for cut continuity',
+        error instanceof Error ? error.name : 'unknown error',
+      );
+    }
+  }, []);
+
+  React.useEffect(() => {
+    if (!readiness?.captureLastFrame) return;
+    drawVideoFrame();
+    if (readiness.showLastFrame) return;
+
+    const video = videoElementRef.current;
+    if (!video || typeof video.requestVideoFrameCallback !== 'function') return;
+    let callbackId: number | null = null;
+    const captureNextFrame = () => {
+      drawVideoFrame();
+      callbackId = video.requestVideoFrameCallback(captureNextFrame);
+    };
+    callbackId = video.requestVideoFrameCallback(captureNextFrame);
+    return () => {
+      if (callbackId !== null) video.cancelVideoFrameCallback(callbackId);
+    };
+  }, [drawVideoFrame, readiness?.captureLastFrame, readiness?.showLastFrame]);
 
   const markReady = React.useCallback((video: HTMLVideoElement) => {
     if (reportedReady.current || video.readyState < HTMLMediaElement.HAVE_CURRENT_DATA) return;
@@ -185,23 +246,41 @@ const PreviewVideo = React.forwardRef(function PreviewVideo(
   }, [markReady, onSeeked]);
 
   const handleTimeUpdate = React.useCallback((event: React.SyntheticEvent<HTMLVideoElement>) => {
+    if (readiness?.captureLastFrame && !readiness.showLastFrame) drawVideoFrame();
     markReady(event.currentTarget);
     onTimeUpdate?.(event);
-  }, [markReady, onTimeUpdate]);
+  }, [drawVideoFrame, markReady, onTimeUpdate, readiness]);
 
-  return React.createElement(Remotion.Html5Video, {
-    ...rest,
-    playbackRate,
-    src,
-    startFrom,
-    trimBefore,
-    ref,
-    onCanPlay: handleCanPlay,
-    onLoadedData: handleLoadedData,
-    onPlaying: handlePlaying,
-    onSeeked: handleSeeked,
-    onTimeUpdate: handleTimeUpdate,
-  });
+  return React.createElement(
+    React.Fragment,
+    null,
+    React.createElement(Remotion.Html5Video, {
+      ...rest,
+      className,
+      crossOrigin: crossOrigin ?? 'anonymous',
+      playbackRate,
+      src,
+      startFrom,
+      style,
+      trimBefore,
+      ref: setVideoRef,
+      onCanPlay: handleCanPlay,
+      onLoadedData: handleLoadedData,
+      onPlaying: handlePlaying,
+      onSeeked: handleSeeked,
+      onTimeUpdate: handleTimeUpdate,
+    }),
+    React.createElement('canvas', {
+      'aria-hidden': true,
+      className,
+      ref: frameCanvasRef,
+      style: {
+        ...style,
+        display: readiness?.showLastFrame ? style?.display : 'none',
+        pointerEvents: 'none',
+      },
+    }),
+  );
 });
 
 // Sequence wrapper: auto-inject premountFor={fps*3} when not specified
@@ -216,12 +295,12 @@ const AutoPremountSequence = React.forwardRef(function AutoPremountSequence(
 });
 
 // Interactive preview only: a media scene stays transparent until its native
-// video has decoded the correct range-local frame. The preceding scene remains
-// an active Sequence with its last frame frozen underneath for up to three
-// seconds. We intentionally do not use Sequence postmounting here: native video
-// elements can clear their painted frame when Remotion marks them postmounted.
-// Once the next frame is ready it paints above the frozen scene immediately;
-// there is no fixed transition delay.
+// video has decoded the correct range-local frame. Just before a cut, PreviewVideo
+// caches the last real source-range frame into a canvas. The preceding Sequence
+// stays active with that canvas underneath for up to three seconds. We do not
+// freeze or postmount the native tag itself because Chromium can clear its painted
+// pixels in both transitions. Once the next frame is ready it paints above the
+// cached frame immediately; there is no fixed transition delay.
 const PreviewSequence = React.forwardRef(function PreviewSequence(
   props: any,
   ref: React.Ref<HTMLDivElement>,
@@ -251,17 +330,6 @@ const PreviewSequence = React.forwardRef(function PreviewSequence(
     setMediaReady(true);
     parentReadiness?.markReady();
   }, [parentReadiness]);
-  const readiness = React.useMemo(
-    () => ({
-      markPending,
-      markReady,
-      requirePlaybackAdvance: Boolean(
-        parentReadiness?.requirePlaybackAdvance ||
-        (containsVideo && (props.from ?? 0) > 0)
-      ),
-    }),
-    [containsVideo, markPending, markReady, parentReadiness, props.from],
-  );
 
   const authoredDuration = props.durationInFrames;
   const canHoldLastFrame = containsVideo && Number.isFinite(authoredDuration);
@@ -271,20 +339,43 @@ const PreviewSequence = React.forwardRef(function PreviewSequence(
   const lastRealMediaFrameBoundary = canHoldLastFrame
     ? Math.min(authoredDuration, mediaDuration ?? authoredDuration)
     : authoredDuration;
-  // Give the native tag two frames to settle from playing to frozen before the
-  // actual cut. Without this grace window Chromium can clear one painted frame
-  // exactly when Freeze becomes active.
-  const holdStartFrame = canHoldLastFrame
+  const showLastFrameAt = canHoldLastFrame
     ? Math.max(1, lastRealMediaFrameBoundary - 2)
     : authoredDuration;
-  const isHoldingLastFrame = canHoldLastFrame &&
-    frame >= (props.from ?? 0) + holdStartFrame;
+  const captureLastFrameAt = canHoldLastFrame
+    ? Math.max(0, showLastFrameAt - 2)
+    : authoredDuration;
+  const relativeFrame = frame - (props.from ?? 0);
+  const captureLastFrame = canHoldLastFrame && relativeFrame >= captureLastFrameAt;
+  const showLastFrame = canHoldLastFrame && relativeFrame >= showLastFrameAt;
+  const isContinuingPastCut = canHoldLastFrame && relativeFrame >= authoredDuration;
+  const readiness = React.useMemo(
+    () => ({
+      captureLastFrame: Boolean(parentReadiness?.captureLastFrame || captureLastFrame),
+      markPending,
+      markReady,
+      requirePlaybackAdvance: Boolean(
+        parentReadiness?.requirePlaybackAdvance ||
+        (containsVideo && (props.from ?? 0) > 0)
+      ),
+      showLastFrame: Boolean(parentReadiness?.showLastFrame || showLastFrame),
+    }),
+    [
+      captureLastFrame,
+      containsVideo,
+      markPending,
+      markReady,
+      parentReadiness,
+      props.from,
+      showLastFrame,
+    ],
+  );
   const style = containsVideo
     ? {
         ...props.style,
-        ...(isHoldingLastFrame ? props.styleWhilePostmounted : {}),
+        ...(isContinuingPastCut ? props.styleWhilePostmounted : {}),
         opacity: mediaReady ? 1 : 0,
-        pointerEvents: isHoldingLastFrame ? 'none' : props.style?.pointerEvents,
+        pointerEvents: isContinuingPastCut ? 'none' : props.style?.pointerEvents,
       }
     : props.style;
   const content = React.createElement(
@@ -292,16 +383,6 @@ const PreviewSequence = React.forwardRef(function PreviewSequence(
     { value: readiness },
     props.children,
   );
-  const continuityContent = canHoldLastFrame
-    ? React.createElement(
-        Remotion.Freeze,
-        {
-          active: isHoldingLastFrame,
-          frame: Math.max(0, Math.ceil(holdStartFrame) - 1),
-        },
-        content,
-      )
-    : content;
 
   return React.createElement(
     Sequence,
@@ -316,7 +397,7 @@ const PreviewSequence = React.forwardRef(function PreviewSequence(
       styleWhilePostmounted: canHoldLastFrame ? undefined : props.styleWhilePostmounted,
       ref,
     },
-    continuityContent,
+    content,
   );
 });
 
