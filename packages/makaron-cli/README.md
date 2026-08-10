@@ -151,6 +151,41 @@ npx makaron-cli project media <projectId> --json
 
 This is project-scoped. `responses get <runId> --pick output` only returns artifacts from one run; `project media` returns the whole project timeline: original uploads, references, generated images, video snapshots, and editable compositions.
 
+External source ranges can be added without uploading either the original video or a derivative clip:
+
+```bash
+npx makaron-cli project media add <projectId> \
+  --source-url "https://cdn.example.com/source.mp4" \
+  --start-sec 12.5 --end-sec 19 \
+  --source-uri "dam://project/asset" \
+  --description "Racket frame molding"
+
+# Batch form: a JSON array or {"source_ranges": [...]}
+npx makaron-cli project media add <projectId> --input ranges.json --json
+```
+
+The returned `<<<media_N>>>` is immediately usable by a later Agent run. Its range remains non-destructive metadata; Remotion must trim the original URL to these exact source bounds.
+Use `description` as the provider-neutral media-understanding field. Put any
+already-known summary, editorial purpose, concrete scene evidence, confidence,
+and limitations there. Makaron exposes the full description in Media List
+context so the Agent can edit from it without repeating image/video analysis
+unless a required detail is missing or uncertain.
+
+For an agent-to-agent handoff, create the project, import the external ranges,
+and start the Agent in one command:
+
+```bash
+npx makaron-cli chat --project auto \
+  --media-manifest set-01.json \
+  --json -b \
+  "Make a 30-second 9:16 TikTok with English VO and burned-in captions"
+```
+
+The manifest is a JSON array or `{ "title": "...", "source_ranges": [...] }`.
+It is validated before project creation and supports up to 20 ranges for one
+Makaron task. Batch planning remains the upstream orchestrator's responsibility:
+convert each plan into one manifest and start one independent Makaron task.
+
 ### Export editable Remotion compositions
 
 Animated Remotion compositions are saved as editable timeline/code artifacts first. To materialize one into an MP4 that CLI, V, or another service can read, call the backend export worker:

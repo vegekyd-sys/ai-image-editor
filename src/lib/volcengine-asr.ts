@@ -46,6 +46,7 @@ export interface VolcengineAsrTranscript {
 interface VolcengineAsrOptions {
   mediaUrl: string
   localMediaPath?: string
+  sourceRange?: { startSec: number; endSec: number }
   uid?: string
   language?: string
   requestId?: string
@@ -130,7 +131,11 @@ async function downloadMedia(mediaUrl: string, dir: string): Promise<string> {
   return inputPath
 }
 
-async function extractAudioBase64(mediaUrl: string, localMediaPath?: string): Promise<{ data: string; extractedAudio: boolean }> {
+async function extractAudioBase64(
+  mediaUrl: string,
+  localMediaPath?: string,
+  sourceRange?: { startSec: number; endSec: number },
+): Promise<{ data: string; extractedAudio: boolean }> {
   const workDir = await mkdtemp(path.join(tmpdir(), 'makaron-asr-'))
   try {
     await mkdir(workDir, { recursive: true })
@@ -142,14 +147,20 @@ async function extractAudioBase64(mediaUrl: string, localMediaPath?: string): Pr
         throw new Error(`Local media is too large for ASR preprocessing (${Math.round(localStat.size / 1024 / 1024)}MB).`)
       }
       inputPath = localMediaPath
+    } else if (sourceRange) {
+      inputPath = mediaUrl
     } else {
       inputPath = await downloadMedia(mediaUrl, workDir)
     }
     const outputPath = path.join(workDir, 'audio.mp3')
     const ffmpegPath = await findFfmpeg()
 
+    const rangeArgs = sourceRange
+      ? ['-ss', String(sourceRange.startSec), '-t', String(sourceRange.endSec - sourceRange.startSec)]
+      : []
     await execFileAsync(ffmpegPath, [
       '-y',
+      ...rangeArgs,
       '-i', inputPath,
       '-vn',
       '-ac', '1',
@@ -243,7 +254,7 @@ export async function transcribeWithVolcengineAsr(options: VolcengineAsrOptions)
   if (isAudioUrl(options.mediaUrl) && !options.localMediaPath) {
     audio = { url: options.mediaUrl }
   } else {
-    const extracted = await extractAudioBase64(options.mediaUrl, options.localMediaPath)
+    const extracted = await extractAudioBase64(options.mediaUrl, options.localMediaPath, options.sourceRange)
     audio = { data: extracted.data }
     extractedAudio = extracted.extractedAudio
   }

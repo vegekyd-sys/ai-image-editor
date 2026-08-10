@@ -36,7 +36,11 @@ must not silently replace the evidence the user supplied.
 1. Read `skills/_shared/studio-production/production-contract.md`, the shared
    audio, taste, and review contracts.
 2. Start recipe `source-video-studio`; do not proceed without usable footage.
-3. Analyze every source and transcribe speech when present. The brief records
+3. Read every source's Media Index description first. A specific description may
+   already contain upstream media understanding; use it regardless of provider
+   and do not repeat `analyze_video` or `analyze_image` for content it covers.
+   Analyze only missing, uncertain, or request-critical visual details. Transcribe
+   speech only when dialogue or exact speech timing matters. The brief records
    source roles, strengths, defects, permissions/provenance notes, and mode.
 4. Proposal concepts must describe selection logic, crop/reframe plan, B-roll
    strategy, caption system, audio treatment, and what will remain untouched.
@@ -46,6 +50,9 @@ must not silently replace the evidence the user supplied.
    faces, UI, captions, or important source detail.
 7. Use Remotion for trims, framing, subtitles, overlays, color treatment, and
    generated support. Preserve sentence boundaries and natural reactions.
+   When a Media Index item carries `source_url + start_sec + end_sec`, treat it
+   as only that external source interval: use the original URL with Remotion
+   `trimBefore`/`trimAfter`; do not upload or materialize an intermediate MP4.
 8. Review source fidelity, crop quality, caption readability, audio continuity,
    and whether generated inserts became distracting.
 

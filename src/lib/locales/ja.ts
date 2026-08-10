@@ -113,6 +113,8 @@ const ja = {
   // Changelog
   'changelog.heading': '更新情報',
   'changelog.close': '更新情報を閉じる',
+  'changelog.externalSourceRanges.title': '外部動画を直接編集',
+  'changelog.externalSourceRanges.item1': 'Makaronは外部動画URLと開始・終了時間を指定して、動画全体のアップロードや中間MP4の書き出しなしで直接編集できるようになりました。',
   'changelog.seedance25.title': 'Seedance 2.5：最新 SOTA マルチモーダル動画',
   'changelog.seedance25.item1': '最新 SOTA の Seedance 2.5 は、映像とネイティブ音声を同期し、1回で最長30秒まで生成できます。',
   'changelog.seedance25.item2': '最大30枚の画像、10本の動画、10本の音声を参照素材として組み合わせられます。',

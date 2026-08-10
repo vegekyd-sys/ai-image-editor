@@ -73,6 +73,9 @@ interface ImageCanvasProps {
   videoPlayTrigger?: number;
   /** Start time (seconds) for video playback — synced from CUI inline player */
   videoStartTime?: number;
+  /** Non-destructive external source interval represented by this Media List item. */
+  videoClipStart?: number;
+  videoClipEnd?: number;
   /** Number of reference snapshots at the start of the timeline */
   referenceCount?: number;
   /** Map of timeline index → DesignPayload for animated designs (rendered via Player) */
@@ -123,6 +126,8 @@ export default function ImageCanvas({
   pullDownActive, onPullDown, onPullDownEnd,
   videoPlayTrigger,
   videoStartTime,
+  videoClipStart,
+  videoClipEnd,
   referenceCount = 0,
   animatedDesigns,
   draftDesign,
@@ -291,8 +296,13 @@ export default function ImageCanvas({
       }
       ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
       const dataUrl = canvas.toDataURL('image/jpeg', 0.92);
-      const capturedTime = video.currentTime || videoCurrentTime;
-      const capturedDuration = Number.isFinite(video.duration) ? video.duration : videoDuration;
+      const sourceStart = Number.isFinite(videoClipStart) ? Math.max(0, videoClipStart || 0) : 0;
+      const sourceEnd = Number.isFinite(videoClipEnd) && (videoClipEnd || 0) > sourceStart
+        ? Number(videoClipEnd)
+        : undefined;
+      const capturedTime = Math.max(0, video.currentTime - sourceStart);
+      const sourceDuration = Number.isFinite(video.duration) ? video.duration : sourceStart + videoDuration;
+      const capturedDuration = Math.max(0, Math.min(sourceDuration, sourceEnd ?? sourceDuration) - sourceStart);
       setFrameCaptureFeedback(true);
       window.setTimeout(() => {
         setFrameCaptureFeedback(false);
@@ -302,7 +312,7 @@ export default function ImageCanvas({
       console.warn('[ImageCanvas] current video frame capture failed:', e);
       setFrameCaptureFeedback(false);
     }
-  }, [videoFrameCaptureRequest, onVideoFrameCaptured, videoCurrentTime, videoDuration, naturalDims.w, naturalDims.h]);
+  }, [videoFrameCaptureRequest, onVideoFrameCaptured, videoDuration, videoClipStart, videoClipEnd, naturalDims.w, naturalDims.h]);
 
   const SWIPE_THRESHOLD = 40;
 
@@ -703,6 +713,27 @@ export default function ImageCanvas({
     return `${m}:${Math.floor(s % 60).toString().padStart(2, '0')}`;
   }
 
+  const clipStart = Number.isFinite(videoClipStart) ? Math.max(0, videoClipStart || 0) : 0;
+  const clipEnd = Number.isFinite(videoClipEnd) && (videoClipEnd || 0) > clipStart
+    ? videoClipEnd
+    : undefined;
+  const clipDurationFor = useCallback((sourceDuration: number) => {
+    const boundedEnd = clipEnd === undefined ? sourceDuration : Math.min(sourceDuration, clipEnd);
+    return Math.max(0, boundedEnd - clipStart);
+  }, [clipEnd, clipStart]);
+
+  const playVideoInRange = useCallback(() => {
+    const video = videoRef.current;
+    if (!video) return;
+    const boundedEnd = clipEnd === undefined ? video.duration : Math.min(video.duration || clipEnd, clipEnd);
+    if (!Number.isFinite(video.currentTime) || video.currentTime < clipStart || video.currentTime >= boundedEnd - 0.01) {
+      video.currentTime = clipStart;
+    }
+    video.muted = false;
+    setVideoLoading(true);
+    video.play().catch(() => {});
+  }, [clipEnd, clipStart]);
+
   const resetControlsTimer = useCallback(() => {
     if (controlsHideTimer.current) clearTimeout(controlsHideTimer.current);
     setShowControls(true);
@@ -715,13 +746,13 @@ export default function ImageCanvas({
     const bar = seekBarRef.current;
     const v = videoRef.current;
     if (!bar || !v) return;
-    const dur = v.duration;
+    const dur = clipDurationFor(v.duration);
     if (!dur || !isFinite(dur)) return;
     const rect = bar.getBoundingClientRect();
     const pct = Math.max(0, Math.min(1, (clientX - rect.left) / rect.width));
-    v.currentTime = pct * dur;
+    v.currentTime = clipStart + pct * dur;
     setVideoCurrentTime(pct * dur);
-  }, []);
+  }, [clipDurationFor, clipStart]);
 
   const videoFrameLoaded = videoFrameLoadedUrl === videoUrl;
 
@@ -732,12 +763,11 @@ export default function ImageCanvas({
       prevPlayTrigger.current = videoPlayTrigger;
       const v = videoRef.current;
       if (v && isVideoEntry && videoUrl) {
-        if (videoStartTime) v.currentTime = videoStartTime;
-        v.muted = false;
-        v.play().catch(() => {});
+        if (videoStartTime) v.currentTime = Math.max(clipStart, videoStartTime);
+        playVideoInRange();
       }
     }
-  }, [videoPlayTrigger, isVideoEntry, videoUrl, videoStartTime]);
+  }, [videoPlayTrigger, isVideoEntry, videoUrl, videoStartTime, clipStart, playVideoInRange]);
 
   // Remotion Player: poll current frame for custom seek bar.
   // Draft design only takes priority while the virtual draft slot is selected.
@@ -1132,6 +1162,9 @@ export default function ImageCanvas({
   const effectiveVideoUrl = videoUrl && !videoUrl.includes('cdn.makaron.app') && !videoUrl.includes('supabase.co')
     ? `/api/proxy-video?url=${encodeURIComponent(videoUrl)}`
     : videoUrl;
+  const rangedVideoUrl = effectiveVideoUrl
+    ? `${effectiveVideoUrl.split('#')[0]}#t=${clipStart || 0.001}${clipEnd !== undefined ? `,${clipEnd}` : ''}`
+    : undefined;
 
   const getLabel = (index: number) => {
     // Video entry
@@ -1209,13 +1242,13 @@ export default function ImageCanvas({
               e.stopPropagation();
               if (!showControls) { resetControlsTimer(); return; }
               if (videoPlaying) { videoRef.current?.pause(); }
-              else { if (videoRef.current) videoRef.current.muted = false; setVideoLoading(true); videoRef.current?.play().catch(() => {}); }
+              else { playVideoInRange(); }
             }}
           >
             <video
-              key={effectiveVideoUrl}
+              key={rangedVideoUrl}
               ref={videoRef}
-              src={effectiveVideoUrl ? `${effectiveVideoUrl}#t=0.001` : undefined}
+              src={rangedVideoUrl}
               crossOrigin="anonymous"
               playsInline
               muted
@@ -1248,15 +1281,18 @@ export default function ImageCanvas({
               onTimeUpdate={() => {
                 const v = videoRef.current;
                 if (v) {
-                  setVideoCurrentTime(v.currentTime);
-                  onVideoTimeUpdate?.(v.currentTime, Number.isFinite(v.duration) ? v.duration : videoDuration);
+                  const duration = Number.isFinite(v.duration) ? clipDurationFor(v.duration) : videoDuration;
+                  const relativeTime = Math.max(0, Math.min(duration, v.currentTime - clipStart));
+                  if (clipEnd !== undefined && v.currentTime >= clipEnd - 0.01 && !v.paused) v.pause();
+                  setVideoCurrentTime(relativeTime);
+                  onVideoTimeUpdate?.(relativeTime, duration);
                 }
               }}
               onLoadedData={() => {
                 setVideoFrameLoadedUrl(videoUrl ?? null);
                 const v = videoRef.current;
                 if (onVideoPosterCapture && v && v.videoWidth) {
-                  const seekTo = Math.min(0.5, (v.duration || 1) * 0.1);
+                  const seekTo = clipStart + Math.min(0.5, clipDurationFor(v.duration || 1) * 0.1);
                   v.currentTime = seekTo;
                   const handler = () => {
                     try {
@@ -1266,7 +1302,7 @@ export default function ImageCanvas({
                       canvas.getContext('2d')!.drawImage(v, 0, 0);
                       onVideoPosterCapture(canvas.toDataURL('image/jpeg', 0.75));
                     } catch {}
-                    v.currentTime = 0;
+                    v.currentTime = clipStart;
                     v.removeEventListener('seeked', handler);
                   };
                   v.addEventListener('seeked', handler, { once: true });
@@ -1275,14 +1311,19 @@ export default function ImageCanvas({
               onLoadedMetadata={() => {
                 const v = videoRef.current;
                 if (v && isFinite(v.duration)) {
-                  setVideoDuration(v.duration);
-                  onVideoTimeUpdate?.(v.currentTime || 0, v.duration);
+                  const duration = clipDurationFor(v.duration);
+                  if (v.currentTime < clipStart || (clipEnd !== undefined && v.currentTime >= clipEnd)) v.currentTime = clipStart;
+                  setVideoDuration(duration);
+                  setVideoCurrentTime(Math.max(0, v.currentTime - clipStart));
+                  onVideoTimeUpdate?.(Math.max(0, v.currentTime - clipStart), duration);
                 }
               }}
               onProgress={() => {
                 const v = videoRef.current;
                 if (v && v.buffered.length > 0 && v.duration) {
-                  setVideoBuffered(v.buffered.end(v.buffered.length - 1) / v.duration);
+                  const bufferedEnd = Math.min(v.buffered.end(v.buffered.length - 1), clipEnd ?? v.duration);
+                  const duration = clipDurationFor(v.duration);
+                  setVideoBuffered(duration > 0 ? Math.max(0, bufferedEnd - clipStart) / duration : 0);
                 }
               }}
             />
@@ -1380,7 +1421,7 @@ export default function ImageCanvas({
                   onClick={(e) => {
                     e.stopPropagation();
                     if (videoPlaying) { videoRef.current?.pause(); }
-                    else { if (videoRef.current) videoRef.current.muted = false; videoRef.current?.play().catch(() => {}); }
+                    else { playVideoInRange(); }
                   }}
                   className="mkr-liquid-play-button w-14 h-14 rounded-full flex items-center justify-center active:scale-90 transition-transform"
                 >

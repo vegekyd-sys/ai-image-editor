@@ -104,6 +104,21 @@ npx makaron-cli project media <projectId> --json
 
 This is project-scoped. `responses get <runId> --pick output` only returns artifacts from one run; `project media` returns the whole project timeline: original uploads, references, generated images, video snapshots, and editable compositions.
 
+Publish an external video interval directly into that Media List without uploading the original or a derivative MP4:
+
+```bash
+npx makaron-cli project media add <projectId> --source-url "https://cdn.example.com/source.mp4" --start-sec 12.5 --end-sec 19 --source-uri "dam://project/asset" --description "Racket frame molding"
+npx makaron-cli project media add <projectId> --input ranges.json --json
+```
+
+The JSON input may be an array or `{ "source_ranges": [...] }`. Each item uses `source_url + start_sec + end_sec`; optional `source_uri`, `project_id`, and `asset_id` preserve durable source identity. Put existing media understanding (summary, editorial purpose, scene evidence, confidence, and limitations) in `description`. Makaron reads that provider-neutral Media List field before deciding whether any additional image/video analysis is needed.
+
+For one-call orchestration, use `chat --project auto --media-manifest plan.json`. Makaron validates the manifest, creates the project, imports its ranges, and starts the Agent. If an upstream service returns multiple plans, the caller should start one independent Makaron task per plan instead of passing the provider-specific batch response into Makaron.
+
+```bash
+npx makaron-cli chat --project auto --media-manifest set-01.json --json -b "Make a 30-second 9:16 TikTok with English VO and captions"
+```
+
 ### Export editable Remotion compositions
 
 Animated Remotion compositions are saved as editable timeline/code artifacts first. To materialize one into an MP4 that CLI, V, or another service can read, call the backend export worker:

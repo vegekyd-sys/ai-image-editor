@@ -11,12 +11,15 @@ import { transform as sucraseTransform } from 'sucrase'
 import { findFfmpeg, findFfprobe, probeVideoFile, type VideoProbe } from './ffmpeg-runtime'
 import * as workspace from './workspace'
 import { toPublicStorageUrl } from '@/lib/supabase/storage'
+import { sourceRangeDuration, sourceRangeFromVideoMeta, sourceRangeIdentity } from '@/lib/media-source-range'
+import type { VideoSourceRange } from '@/types'
 
 const { mkdir, mkdtemp, readFile, readdir, rm, stat, writeFile } = fsPromises
 const { existsSync } = fs
 const { tmpdir } = os
 const INPUT_DOWNLOAD_CONCURRENCY = 2
 const INPUT_DOWNLOAD_TIMEOUT_MS = 180_000
+const execFileAsync = util.promisify(childProcess.execFile)
 const serverRequire = createRequire(import.meta.url)
 const BLOCKED_NODE_MODULES = new Set([
   'cluster',
@@ -113,6 +116,8 @@ export interface MediaItem {
   width?: number
   height?: number
   status?: string
+  /** Exact original interval represented by this Media List item. */
+  sourceRange?: VideoSourceRange
 }
 
 export interface MediaInputFile extends MediaItem {
@@ -194,11 +199,32 @@ async function downloadFile(url: string, filePath: string, timeoutMs = INPUT_DOW
   }
 }
 
+async function materializeRemoteSourceRange(item: MediaItem, filePath: string): Promise<void> {
+  if (!item.sourceRange) throw new Error('Source range metadata is required.')
+  const ffmpegPath = await findFfmpeg()
+  await mkdir(path.dirname(filePath), { recursive: true })
+  await execFileAsync(ffmpegPath, [
+    '-y',
+    '-ss', String(item.sourceRange.start_sec),
+    '-t', String(item.sourceRange.end_sec - item.sourceRange.start_sec),
+    '-i', item.sourceRange.source_url,
+    '-map', '0:v:0',
+    '-map', '0:a:0?',
+    '-c:v', 'libx264',
+    '-preset', 'veryfast',
+    '-crf', '20',
+    '-c:a', 'aac',
+    '-movflags', '+faststart',
+    filePath,
+  ], { timeout: INPUT_DOWNLOAD_TIMEOUT_MS, maxBuffer: 12 * 1024 * 1024 })
+}
+
 function urlCacheKey(input: string): string {
   return crypto.createHash('sha1').update(input).digest('hex').slice(0, 16)
 }
 
 function mediaExtension(item: MediaItem): string {
+  if (item.kind === 'video' && item.sourceRange) return '.mp4'
   if (item.url.startsWith('data:')) return item.kind === 'video' ? '.mp4' : '.jpg'
   const cleanUrl = item.url.split('?')[0] || item.url
   const ext = path.extname(cleanUrl)
@@ -232,7 +258,8 @@ async function resolveMediaInputFile(options: {
     }
   }
 
-  const cachePath = `${options.projectId}/media-inputs/${fileName.replace(ext, '')}-${urlCacheKey(item.url)}${ext}`
+  const cacheIdentity = item.sourceRange ? sourceRangeIdentity(item.sourceRange) : item.url
+  const cachePath = `${options.projectId}/media-inputs/${fileName.replace(ext, '')}-${urlCacheKey(cacheIdentity)}${ext}`
   const targetPath = workspace.getLocalWorkspacePath(options.userId, cachePath)
   if (existsSync(targetPath)) {
     console.log(`[media-sandbox] input <<<media_${ref}>>> cache local ${cachePath}`)
@@ -244,6 +271,20 @@ async function resolveMediaInputFile(options: {
       fileName,
       contentType: guessContentType(fileName),
       source: item.url.startsWith('data:') ? 'data-url' : 'cache',
+    }
+  }
+
+  if (item.kind === 'video' && item.sourceRange) {
+    await materializeRemoteSourceRange(item, targetPath)
+    console.log(`[media-sandbox] input <<<media_${ref}>>> materialized external source range ${item.sourceRange.start_sec}-${item.sourceRange.end_sec}s`)
+    return {
+      ...item,
+      inputPath: targetPath,
+      localPath: targetPath,
+      workspacePath: item.workspacePath || cachePath,
+      fileName,
+      contentType: 'video/mp4',
+      source: 'remote',
     }
   }
 
@@ -564,6 +605,7 @@ export async function buildMediaItems(options: {
       const isVideo = snap.type === 'video'
       const videoUrl = typeof videoMeta?.videoUrl === 'string' ? videoMeta.videoUrl : ''
       const videoPath = typeof videoMeta?.videoPath === 'string' ? videoMeta.videoPath : undefined
+      const sourceRange = sourceRangeFromVideoMeta(videoMeta)
       const imageUrl = typeof snap.image_url === 'string' ? snap.image_url : fallback[i]?.url || ''
       return {
         index: i + 1,
@@ -572,10 +614,11 @@ export async function buildMediaItems(options: {
         workspacePath: isVideo ? videoPath : undefined,
         posterUrl: isVideo ? imageUrl : undefined,
         description: typeof snap.description === 'string' ? snap.description : undefined,
-        duration: typeof videoMeta?.duration === 'number' ? videoMeta.duration : undefined,
+        duration: typeof videoMeta?.duration === 'number' ? videoMeta.duration : sourceRangeDuration(sourceRange),
         width: typeof videoMeta?.width === 'number' ? videoMeta.width : undefined,
         height: typeof videoMeta?.height === 'number' ? videoMeta.height : undefined,
         status: typeof videoMeta?.status === 'string' ? videoMeta.status : undefined,
+        sourceRange,
       }
     })
   } catch (e) {

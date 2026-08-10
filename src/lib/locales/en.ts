@@ -75,6 +75,8 @@ const en = {
   // Changelog
   'changelog.heading': 'Updates',
   'changelog.close': 'Close updates',
+  'changelog.externalSourceRanges.title': 'Edit External Video Sources Directly',
+  'changelog.externalSourceRanges.item1': 'Makaron can now edit external video URLs with exact start and end times, without uploading the full video or exporting intermediate MP4 clips.',
   'changelog.seedance25.title': 'Seedance 2.5: New SOTA Multimodal Video',
   'changelog.seedance25.item1': 'The new SOTA Seedance 2.5 generates up to 30 seconds in one pass with native synchronized audio.',
   'changelog.seedance25.item2': 'Combine up to 30 images, 10 videos, and 10 audio clips as references.',
