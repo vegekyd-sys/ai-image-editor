@@ -207,7 +207,6 @@ describe('Agent FFmpeg video lab', () => {
           duration: 1.2,
           sourceRange: {
             source_url: sourceUrl,
-            source_uri: 'scene://test-project/source-asset',
             start_sec: 1.1,
             end_sec: 2.3,
           },

@@ -134,6 +134,8 @@ Tips prompt 迭代到 V42，均分 7.3。V34 历史最高 8.03，V42 是 prompt 
 
 **Remotion editable contract（2026-05-26）**：editable 只属于 `run_code` design 链路（`render` / `design` / 修改已有 design 的 `patch`）。普通 `generate_image`、外部 `generate_animation`、`run_code` 的 sharp/image 输出都不承担 editable 负担。长期方向是让 Agent 使用 `EditableText/Image/Video` 这类高层 primitive，由系统生成 `data-editable`、props 映射和 editables manifest；当前阶段通过 `run_code` tool description + `design-harness` 校验保证 user-facing text、primary image/video、video trim 正确声明。
 
+**外部视频 manifest contract（2026-08-11）**：对外每个 clip 只包含 `source_url + start + end + description`，其中时间单位为秒，数组顺序即剪辑顺序，`source_url` 是不透明稳定能力地址。Makaron 在输入边界兼容旧 `source_ranges/start_sec/end_sec`，但归一化时丢弃上游 provider identity，不再把它写入 Media List；内部存储仍沿用现有 `start_sec/end_sec` 表示，无需数据库迁移。
+
 **Agent 视频路由（2026-05-28）**：`generate_animation` 是视频任务默认路径；文字相关视频需求（加字幕/加花字/加标题/加文案）走 `generate_animation`，让文字作为视频内容自然生成。其他视频包装/记录/剪辑类需求仍按 `agent.md` 的内容 vs 包装规则路由，不能把所有包装需求都默认改成生成路线。
 
 **Preview = Export 一致性（2026-04-19）**：用户 drag/scale editable 元素后，预览和导出必须位置一致。架构：Proxy 拦截 `React.createElement` 注入 CSS 独立属性 `style.translate`/`style.scale`（不用 `style.transform`，会干扰 Moveable）+ `@remotion/web-renderer` patch 加 `style.translate` 支持。详见 `docs/preview-export-consistency.md`。patch 通过 `patch-package` 持久化在 `patches/` 目录。**添加新的可视化编辑属性时必须同步更新 Proxy 和 DesignOverlay.applyStoredOffsets，并确认 web-renderer 兼容。**

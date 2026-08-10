@@ -51,10 +51,10 @@ export async function publishExternalVideoRanges(options: {
 
   const snapshotIds: Array<{ id: string; range: VideoSourceRange; url: string; description: string; created: boolean }> = [];
   for (const item of normalized) {
-    const { duration, description, width, height, ...sourceRange } = item;
+    const { duration, description, ...sourceRange } = item;
     const identity = sourceRangeIdentity(sourceRange);
     const existing = existingByIdentity.get(identity);
-    const label = description || sourceRange.file_name || `External video ${sourceRange.start_sec}-${sourceRange.end_sec}s`;
+    const label = description || `External video ${sourceRange.start_sec}-${sourceRange.end_sec}s`;
     if (existing) {
       const refreshedMeta: VideoMeta = {
         ...existing.videoMeta,
@@ -64,8 +64,6 @@ export async function publishExternalVideoRanges(options: {
         sourceUrls: [sourceRange.source_url],
         sourceRange,
         duration,
-        ...(width !== undefined ? { width } : {}),
-        ...(height !== undefined ? { height } : {}),
       };
       const metadataChanged = JSON.stringify(refreshedMeta) !== JSON.stringify(existing.videoMeta);
       if (metadataChanged || existing.description !== label) {
@@ -97,8 +95,6 @@ export async function publishExternalVideoRanges(options: {
       duration,
       model: 'external-range',
       createdAt: new Date().toISOString(),
-      width,
-      height,
     };
     const { error: insertError } = await options.supabase.from('snapshots').insert({
       id: snapshotId,

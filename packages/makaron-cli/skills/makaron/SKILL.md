@@ -152,11 +152,11 @@ This is project-scoped. `responses get <runId> --pick output` only returns artif
 Publish an external video interval directly into that Media List without uploading the original or a derivative MP4:
 
 ```bash
-npx makaron-cli project media add <projectId> --source-url "https://cdn.example.com/source.mp4" --start-sec 12.5 --end-sec 19 --source-uri "dam://project/asset" --description "Racket frame molding"
+npx makaron-cli project media add <projectId> --source-url "https://cdn.example.com/source.mp4" --start 12.5 --end 19 --description "Racket frame molding"
 npx makaron-cli project media add <projectId> --input ranges.json --json
 ```
 
-The JSON input may be an array or `{ "source_ranges": [...] }`. Each item uses `source_url + start_sec + end_sec`; optional `source_uri`, `project_id`, and `asset_id` preserve durable source identity. Put existing media understanding (summary, editorial purpose, scene evidence, confidence, and limitations) in `description`. Makaron reads that provider-neutral Media List field before deciding whether any additional image/video analysis is needed.
+The JSON input may be an array or `{ "clips": [...] }`. Each clip has exactly `source_url + start + end + description`; `start` and `end` are seconds, array order is edit order, and `source_url` is opaque. Do not add or request provider-specific identity fields. Put existing media understanding (summary, editorial purpose, scene evidence, confidence, and limitations) in `description`. Makaron reads that provider-neutral Media List field before deciding whether any additional image/video analysis is needed.
 
 For one-call orchestration, use `chat --project auto --media-manifest plan.json`. Makaron validates the manifest, creates the project, imports its ranges, and starts the Agent. If an upstream service returns multiple plans, the caller should start one independent Makaron task per plan instead of passing the provider-specific batch response into Makaron.
 

@@ -173,18 +173,13 @@ export interface ArtifactCompletionAction {
 }
 
 /**
- * Non-destructive reference to a bounded interval in an externally hosted
- * source video. The snake_case field names are the public Media List protocol.
+ * Internal non-destructive representation of a bounded interval in an
+ * externally hosted source video. Public inputs use source_url + start + end.
  */
 export interface VideoSourceRange {
   source_url: string;
   start_sec: number;
   end_sec: number;
-  /** Optional durable/provider identity when source_url is signed or rotating. */
-  source_uri?: string;
-  project_id?: string;
-  asset_id?: string;
-  file_name?: string;
 }
 
 export interface VideoMeta {

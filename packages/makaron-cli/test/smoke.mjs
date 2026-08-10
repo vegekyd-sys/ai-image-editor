@@ -341,7 +341,7 @@ const server = http.createServer(async (req, res) => {
 
   if (req.method === 'POST' && url.pathname === '/api/projects/project-auto-1/media') {
     assert.equal(req.headers.authorization, 'Bearer mk_test_smoke');
-    const ranges = body?.source_ranges || [];
+    const ranges = body?.clips || [];
     sendJson(201, {
       projectId: 'project-auto-1',
       project_id: 'project-auto-1',
@@ -353,10 +353,10 @@ const server = http.createServer(async (req, res) => {
         status: 'completed',
         snapshot_id: `snap_external_${index + 1}`,
         url: range.source_url,
-        source_range: range,
+        source_range: { source_url: range.source_url, start_sec: range.start, end_sec: range.end },
         source_url: range.source_url,
-        start_sec: range.start_sec,
-        end_sec: range.end_sec,
+        start_sec: range.start,
+        end_sec: range.end,
         created: true,
       })),
     });
@@ -538,6 +538,15 @@ try {
     assert.doesNotMatch(result.stdout, /^\s+--video-resolution/m);
     assert.match(result.stdout, /Do not pass --agent-model, --image-model,/);
     assert.match(result.stdout, /--media-manifest <file\|->/);
+    assert.match(result.stdout, /source_url \+ start \+ end \+ description/);
+    assert.doesNotMatch(result.stdout, /asset_id|asset-id|source_uri|source-uri/);
+  }
+
+  {
+    const skill = readFileSync(new URL('../skills/makaron/SKILL.md', import.meta.url), 'utf-8');
+    const mediaSection = skill.split('Publish an external video interval')[1].split('### With video input')[0];
+    assert.match(mediaSection, /exactly `source_url \+ start \+ end \+ description`/);
+    assert.doesNotMatch(mediaSection, /source_uri|asset_id|start_sec|end_sec|source-uri|asset-id|start-sec|end-sec/);
   }
 
   {
@@ -598,20 +607,17 @@ try {
     const manifestPath = path.join(tmpHome, 'racket-set-01.json');
     writeFileSync(manifestPath, JSON.stringify({
       title: 'Racket Process · Chinese',
-      source_ranges: [
+      clips: [
         {
           source_url: 'https://media.example/racket-a.mp4',
-          start_sec: 4,
-          end_sec: 9.5,
-          source_uri: 'dam://racket/a',
-          asset_id: 'asset-a',
+          start: 4,
+          end: 9.5,
           description: 'Carbon frame molding close-up',
         },
         {
           source_url: 'https://media.example/racket-b.mp4',
-          start_sec: 12,
-          end_sec: 18,
-          asset_id: 'asset-b',
+          start: 12,
+          end: 18,
           description: 'Worker wraps the racket handle',
         },
       ],
@@ -633,11 +639,41 @@ try {
       'POST /api/agent/run',
     ]);
     assert.equal(flow[0].body.title, 'Racket Process · Chinese');
-    assert.equal(flow[1].body.source_ranges.length, 2);
-    assert.equal(flow[1].body.source_ranges[0].description, 'Carbon frame molding close-up');
+    assert.equal(flow[1].body.clips.length, 2);
+    assert.deepEqual(Object.keys(flow[1].body.clips[0]), ['source_url', 'start', 'end', 'description']);
+    assert.equal(flow[1].body.clips[0].description, 'Carbon frame molding close-up');
     assert.equal(flow[2].body.prompt, '制作30秒中文VO竖屏视频');
     assert.equal(flow[2].body.uploadedVideoCount, 2);
     assert.equal(flow[2].body.turnMediaCount, 2);
+  }
+
+  {
+    const manifestPath = path.join(tmpHome, 'legacy-range-manifest.json');
+    writeFileSync(manifestPath, JSON.stringify({
+      source_ranges: [{
+        source_url: 'https://media.example/legacy.mp4',
+        start_sec: 2,
+        end_sec: 5,
+        source_uri: 'legacy://provider/item',
+        asset_id: 'legacy-item',
+        description: 'Legacy range',
+      }],
+    }));
+    const requestStart = requests.length;
+    await expectSuccess([
+      'chat', '--project', 'auto', '--media-manifest', manifestPath,
+      '--json', '-b', 'legacy compatibility check',
+    ]);
+    const mediaRequest = requests.slice(requestStart)
+      .find(request => request.pathname === '/api/projects/project-auto-1/media');
+    assert.deepEqual(mediaRequest?.body, {
+      clips: [{
+        source_url: 'https://media.example/legacy.mp4',
+        start: 2,
+        end: 5,
+        description: 'Legacy range',
+      }],
+    });
   }
 
   {
@@ -879,10 +915,8 @@ try {
     const result = await expectSuccess([
       'project', 'media', 'add', 'project-auto-1',
       '--source-url', 'https://cdn.example/source.mp4?signature=one',
-      '--start-sec', '12.5',
-      '--end-sec', '19',
-      '--source-uri', 'scene://project-a/asset-b',
-      '--asset-id', 'asset-b',
+      '--start', '12.5',
+      '--end', '19',
       '--description', 'Racket frame molding',
       '--json',
     ]);
@@ -891,12 +925,10 @@ try {
     assert.equal(data.media[0].start_sec, 12.5);
     assert.equal(data.media[0].end_sec, 19);
     const request = requests.filter(req => req.pathname === '/api/projects/project-auto-1/media' && req.method === 'POST').at(-1);
-    assert.deepEqual(request?.body?.source_ranges, [{
+    assert.deepEqual(request?.body?.clips, [{
       source_url: 'https://cdn.example/source.mp4?signature=one',
-      start_sec: 12.5,
-      end_sec: 19,
-      source_uri: 'scene://project-a/asset-b',
-      asset_id: 'asset-b',
+      start: 12.5,
+      end: 19,
       description: 'Racket frame molding',
     }]);
   }

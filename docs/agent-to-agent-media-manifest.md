@@ -25,24 +25,25 @@ two products for standalone use, but it is not required by this contract.
 ```json
 {
   "title": "How rackets are made · English",
-  "source_ranges": [
+  "clips": [
     {
       "source_url": "https://media.example.com/original.mp4",
-      "start_sec": 10.25,
-      "end_sec": 16.75,
-      "source_uri": "dam://project/asset",
-      "project_id": "upstream-project",
-      "asset_id": "upstream-asset",
-      "file_name": "molding.mov",
+      "start": 10.25,
+      "end": 16.75,
       "description": "A worker removes a carbon racket frame from its mold. Editorial purpose: opening reveal."
     }
   ]
 }
 ```
 
-Each task accepts 1-20 ranges. `source_url`, `start_sec`, and `end_sec` are
-required. Existing understanding belongs in `description`; durable provider
-identity belongs in `source_uri` or `project_id + asset_id`.
+Each task accepts 1-20 clips. Every clip contains exactly `source_url`, `start`,
+`end`, and `description`. `start` and `end` are seconds in the original source.
+Array order is edit order. Existing understanding belongs in `description`.
+
+`source_url` is the complete, opaque media identity at this boundary. Do not add
+provider-specific ids or parse identity from the URL. The provider is
+responsible for returning a stable, headerless URL that remains usable for
+preview and rendering.
 
 ## Atomic CLI flow
 

@@ -156,11 +156,10 @@ External source ranges can be added without uploading either the original video 
 ```bash
 npx makaron-cli project media add <projectId> \
   --source-url "https://cdn.example.com/source.mp4" \
-  --start-sec 12.5 --end-sec 19 \
-  --source-uri "dam://project/asset" \
+  --start 12.5 --end 19 \
   --description "Racket frame molding"
 
-# Batch form: a JSON array or {"source_ranges": [...]}
+# Batch form: a JSON array or {"clips": [...]}
 npx makaron-cli project media add <projectId> --input ranges.json --json
 ```
 
@@ -181,10 +180,12 @@ npx makaron-cli chat --project auto \
   "Make a 30-second 9:16 TikTok with English VO and burned-in captions"
 ```
 
-The manifest is a JSON array or `{ "title": "...", "source_ranges": [...] }`.
-It is validated before project creation and supports up to 20 ranges for one
-Makaron task. Batch planning remains the upstream orchestrator's responsibility:
-convert each plan into one manifest and start one independent Makaron task.
+The manifest is a JSON array or `{ "title": "...", "clips": [...] }`. Every
+clip contains exactly `source_url`, `start`, `end`, and `description`; the time
+values are seconds and array order is edit order. It is validated before project
+creation and supports up to 20 clips for one Makaron task. Batch planning remains
+the upstream orchestrator's responsibility: convert each plan into one manifest
+and start one independent Makaron task.
 
 ### Export editable Remotion compositions
 

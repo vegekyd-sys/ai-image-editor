@@ -159,51 +159,50 @@ function readJsonInput(filePath) {
 const MAX_MEDIA_MANIFEST_RANGES = 20;
 
 function normalizeMediaManifest(input) {
-  const manifest = Array.isArray(input) ? { source_ranges: input } : input;
+  const manifest = Array.isArray(input) ? { clips: input } : input;
   if (!manifest || typeof manifest !== 'object') {
     throw new Error('Media manifest must be a JSON object or an array of source ranges.');
   }
-  const rawRanges = Array.isArray(manifest.source_ranges)
-    ? manifest.source_ranges
-    : Array.isArray(manifest.sourceRanges)
-      ? manifest.sourceRanges
-      : null;
+  const rawRanges = Array.isArray(manifest.clips)
+    ? manifest.clips
+    : Array.isArray(manifest.source_ranges)
+      ? manifest.source_ranges
+      : Array.isArray(manifest.sourceRanges)
+        ? manifest.sourceRanges
+        : null;
   if (!rawRanges?.length) {
-    throw new Error('Media manifest must contain a non-empty source_ranges array.');
+    throw new Error('Media manifest must contain a non-empty clips array.');
   }
   if (rawRanges.length > MAX_MEDIA_MANIFEST_RANGES) {
     throw new Error(`Media manifest supports at most ${MAX_MEDIA_MANIFEST_RANGES} source ranges per Makaron task.`);
   }
 
   const sourceRanges = rawRanges.map((raw, index) => {
-    if (!raw || typeof raw !== 'object') throw new Error(`source_ranges[${index}] must be an object.`);
+    if (!raw || typeof raw !== 'object') throw new Error(`clips[${index}] must be an object.`);
     const sourceUrl = typeof raw.source_url === 'string' ? raw.source_url.trim() : '';
     let parsed;
     try {
       parsed = new URL(sourceUrl);
     } catch {
-      throw new Error(`source_ranges[${index}].source_url must be a valid HTTP(S) URL.`);
+      throw new Error(`clips[${index}].source_url must be a valid HTTP(S) URL.`);
     }
     if (!['http:', 'https:'].includes(parsed.protocol)) {
-      throw new Error(`source_ranges[${index}].source_url must use HTTP or HTTPS.`);
+      throw new Error(`clips[${index}].source_url must use HTTP or HTTPS.`);
     }
-    const startSec = Number(raw.start_sec);
-    const endSec = Number(raw.end_sec);
-    if (!Number.isFinite(startSec) || startSec < 0) {
-      throw new Error(`source_ranges[${index}].start_sec must be a finite number >= 0.`);
+    const start = Number(raw.start ?? raw.start_sec);
+    const end = Number(raw.end ?? raw.end_sec);
+    if (!Number.isFinite(start) || start < 0) {
+      throw new Error(`clips[${index}].start must be a finite number >= 0.`);
     }
-    if (!Number.isFinite(endSec) || endSec <= startSec) {
-      throw new Error(`source_ranges[${index}].end_sec must be greater than start_sec.`);
+    if (!Number.isFinite(end) || end <= start) {
+      throw new Error(`clips[${index}].end must be greater than start.`);
     }
-    const range = { source_url: sourceUrl, start_sec: startSec, end_sec: endSec };
-    for (const key of ['source_uri', 'project_id', 'asset_id', 'file_name', 'description']) {
-      if (typeof raw[key] === 'string' && raw[key].trim()) range[key] = raw[key].trim();
-    }
-    for (const key of ['width', 'height']) {
-      const value = Number(raw[key]);
-      if (Number.isFinite(value) && value > 0) range[key] = value;
-    }
-    return range;
+    return {
+      source_url: sourceUrl,
+      start,
+      end,
+      description: typeof raw.description === 'string' ? raw.description.trim() : '',
+    };
   });
 
   return {
@@ -350,7 +349,7 @@ Options:
   --image <file|url>        Attach a reference image or screenshot. Repeatable.
   --video <file|url>        Attach a video to the project timeline. Repeatable.
   --audio <file|url>        Attach a song, beat, or voice reference. MP3/WAV, repeatable.
-  --media-manifest <file|-> Import source_url + start_sec + end_sec ranges before this run.
+  --media-manifest <file|-> Import source_url + start + end + description clips before this run.
   --skill <id|label|name>   Use an installed skill or auto-install a matched marketplace skill.
   --background, -b          Submit and print a runId.
   --json                    Output structured JSON.
@@ -910,7 +909,7 @@ async function addProjectMediaSourceRanges(baseUrl, headers, projectId, ranges, 
   const res = await fetch(`${baseUrl}/api/projects/${projectId}/media`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json', ...headers },
-    body: JSON.stringify({ source_ranges: ranges }),
+    body: JSON.stringify({ clips: ranges }),
   });
   if (!res.ok) { console.error('Project media add failed:', await res.text()); process.exit(1); }
   const data = await res.json();
@@ -1686,7 +1685,7 @@ Commands:
   credits                            Show current credit balance
   list (ls)                          List all projects
   project media <projectId> --json    List timeline media for a project
-  project media add <projectId> --source-url <url> --start-sec <n> --end-sec <n>
+  project media add <projectId> --source-url <url> --start <n> --end <n>
                                      Add an external source range without uploading video
   create --image <file>              Create project from local image
   create --image-url <url>           Create project from URL
@@ -1806,11 +1805,11 @@ function printHelp(topic, subtopic) {
     console.log('Usage: makaron credits [--json]');
   } else if (topic === 'project' || topic === 'projects') {
     if (subtopic === 'media') console.log(`Usage: makaron project media <projectId> [--json]
-  makaron project media add <projectId> --source-url <url> --start-sec <n> --end-sec <n> [--source-uri <uri>] [--description <text>] [--json]
+  makaron project media add <projectId> --source-url <url> --start <n> --end <n> [--description <text>] [--json]
   makaron project media add <projectId> --input <ranges.json> [--json]`);
     else console.log(`Project commands:
   project media <projectId> --json      List timeline media for a project
-  project media add <projectId> ...     Add external source_url + start_sec + end_sec media
+  project media add <projectId> ...     Add external source_url + start + end media
 `);
   } else if (topic === 'abort') {
     console.log('Usage: makaron abort <runId>');
@@ -2496,7 +2495,7 @@ if (!command || command === '--help' || command === '-h' || command === 'help') 
     const jsonOutput = args.includes('--json');
     if (args[2] === 'add') {
       const projectId = args[3];
-      if (!projectId) { console.error('Usage: makaron project media add <projectId> --source-url <url> --start-sec <n> --end-sec <n>'); process.exit(1); }
+      if (!projectId) { console.error('Usage: makaron project media add <projectId> --source-url <url> --start <n> --end <n>'); process.exit(1); }
       const readOption = (name) => {
         const index = args.indexOf(name);
         return index >= 0 ? args[index + 1] : undefined;
@@ -2505,28 +2504,24 @@ if (!command || command === '--help' || command === '-h' || command === 'help') 
       let ranges;
       if (inputPath) {
         const input = readJsonInput(inputPath);
-        ranges = Array.isArray(input) ? input : input.source_ranges || input.sourceRanges;
+        ranges = Array.isArray(input) ? input : input.clips || input.source_ranges || input.sourceRanges;
       } else {
         const sourceUrl = readOption('--source-url');
-        const startSec = Number(readOption('--start-sec'));
-        const endSec = Number(readOption('--end-sec'));
-        if (!sourceUrl || !Number.isFinite(startSec) || !Number.isFinite(endSec)) {
-          console.error('Provide --source-url, --start-sec, and --end-sec, or --input <ranges.json>.');
+        const start = Number(readOption('--start') ?? readOption('--start-sec'));
+        const end = Number(readOption('--end') ?? readOption('--end-sec'));
+        if (!sourceUrl || !Number.isFinite(start) || !Number.isFinite(end)) {
+          console.error('Provide --source-url, --start, and --end, or --input <manifest.json>.');
           process.exit(1);
         }
         ranges = [{
           source_url: sourceUrl,
-          start_sec: startSec,
-          end_sec: endSec,
-          ...(readOption('--source-uri') ? { source_uri: readOption('--source-uri') } : {}),
-          ...(readOption('--project-id') ? { project_id: readOption('--project-id') } : {}),
-          ...(readOption('--asset-id') ? { asset_id: readOption('--asset-id') } : {}),
-          ...(readOption('--file-name') ? { file_name: readOption('--file-name') } : {}),
+          start,
+          end,
           ...(readOption('--description') ? { description: readOption('--description') } : {}),
         }];
       }
       if (!Array.isArray(ranges) || !ranges.length) {
-        console.error('Input must contain a non-empty source_ranges array.');
+        console.error('Input must contain a non-empty clips array.');
         process.exit(1);
       }
       await addProjectMediaSourceRanges(baseUrl, headers, projectId, ranges, { json: jsonOutput });
@@ -2538,7 +2533,7 @@ if (!command || command === '--help' || command === '-h' || command === 'help') 
   } else {
     console.log(`Project commands:
   project media <projectId> --json      List timeline media for a project
-  project media add <projectId> ...     Add external source_url + start_sec + end_sec media
+  project media add <projectId> ...     Add external source_url + start + end media
 `);
   }
 } else if (command === 'abort') {

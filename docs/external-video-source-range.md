@@ -8,12 +8,8 @@ List without uploading the original video or a derivative clip.
 ```json
 {
   "source_url": "https://cdn.example.com/source.mp4",
-  "start_sec": 12.5,
-  "end_sec": 19,
-  "source_uri": "dam://project-id/asset-id",
-  "project_id": "upstream-project-id",
-  "asset_id": "upstream-asset-id",
-  "file_name": "factory-source.mp4",
+  "start": 12.5,
+  "end": 19,
   "description": "Racket frame molding under warm factory lighting.\nEditorial purpose: opening manufacturing beat.\nEvidence: worker positions the frame in the mold | close-up shows resin around the rim.\nBoundary confidence: high"
 }
 ```
@@ -22,14 +18,15 @@ Required fields:
 
 - `source_url`: an HTTP(S) video URL reachable by browser preview and render
   runtimes;
-- `start_sec`: inclusive start in the original source timebase, `>= 0`;
-- `end_sec`: exclusive end in the original source timebase, `> start_sec`.
+- `start`: inclusive start in the original source timebase, in seconds, `>= 0`;
+- `end`: exclusive end in the original source timebase, in seconds, `> start`;
+- `description`: existing useful understanding of this exact interval.
 
-`source_uri`, or `project_id + asset_id`, is the durable identity when
-`source_url` is a rotating signed delivery URL. Republishing the same durable
-identity and exact range refreshes the stored delivery URL instead of creating
-a duplicate Media List item. Makaron does not yet refresh an expired signed URL
-automatically; the source provider or Agent must republish a current URL.
+Those are the only four public fields. `source_url` is an opaque, stable media
+capability and is the complete source identity at this boundary. Do not add
+provider-specific ids and do not parse the URL path. Republishing the same URL
+and exact range updates its description instead of creating a duplicate Media
+List item.
 
 `description` is the existing, provider-neutral Media List understanding field.
 When an upstream service already understands the media, put its summary,
@@ -49,7 +46,7 @@ POST /api/projects/:projectId/media
 Authorization: Bearer <Makaron API key>
 Content-Type: application/json
 
-{"source_ranges": [<canonical payload>, ...]}
+{"clips": [<canonical payload>, ...]}
 ```
 
 CLI:
@@ -57,8 +54,8 @@ CLI:
 ```bash
 makaron project media add <projectId> \
   --source-url "https://cdn.example.com/source.mp4" \
-  --start-sec 12.5 --end-sec 19 \
-  --source-uri "dam://project-id/asset-id"
+  --start 12.5 --end 19 \
+  --description "Racket frame molding"
 ```
 
 ## Atomic agent-to-agent handoff
@@ -69,12 +66,11 @@ and start the creative Agent with one CLI call:
 ```json
 {
   "title": "Racket Process · Japanese",
-  "source_ranges": [
+  "clips": [
     {
       "source_url": "https://cdn.example.com/source-a.mp4",
-      "start_sec": 3.5,
-      "end_sec": 9,
-      "source_uri": "dam://racket-project/asset-a",
+      "start": 3.5,
+      "end": 9,
       "description": "Carbon frame molding close-up. Editorial purpose: opening beat."
     }
   ]
@@ -97,7 +93,8 @@ Multi-plan retrieval stays outside Makaron. The orchestrator converts each
 upstream plan into one provider-neutral manifest and starts one Makaron task per
 plan. Makaron does not parse an upstream provider's batch or multi-set schema.
 
-Agent, in the current project and session:
+Agent, in the current project and session (`rangeA` and `rangeB` use the same
+four public fields):
 
 ```js
 write_file({sourceRanges: [rangeA, rangeB]})
@@ -108,13 +105,14 @@ available immediately to subsequent Agent tools in the same session.
 
 ## Runtime semantics
 
-- Media List duration is `end_sec - start_sec`.
-- Native preview seeks to `start_sec`, reports a zero-based range time, and
-  stops at `end_sec`.
-- Remotion resolves the marker to `source_url`, with
-  `trimBefore = start_sec * fps` and `trimAfter = end_sec * fps`.
+- Media List duration is `end - start` (stored internally in the existing
+  source-range representation).
+- Native preview seeks to `start`, reports a zero-based range time, and stops at
+  `end`.
+- Remotion resolves the marker to `source_url`, with trim frames derived from
+  the public `start` and `end` seconds.
 - `preview_frame` accepts a zero-based time inside the Media List item and adds
-  `start_sec` before extracting from the original source.
+  the range start before extracting from the original source.
 - Video analysis is restricted to the bounded source interval.
 - ASR and explicit Node/FFmpeg work create only an ephemeral range-bounded
   runtime input. That runtime file is not published unless the user explicitly

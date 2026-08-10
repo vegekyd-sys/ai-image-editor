@@ -107,9 +107,10 @@ export async function GET(
           source_range: sourceRange,
           sourceRange,
           source_url: sourceRange.source_url,
+          start: sourceRange.start_sec,
+          end: sourceRange.end_sec,
           start_sec: sourceRange.start_sec,
           end_sec: sourceRange.end_sec,
-          ...(sourceRange.source_uri ? { source_uri: sourceRange.source_uri } : {}),
         } : {}),
         ...(snapshot.created_at ? { created_at: snapshot.created_at } : {}),
       }
@@ -148,13 +149,15 @@ export async function POST(
     if (!project) return NextResponse.json({ error: 'Project not found' }, { status: 404 })
 
     const body = await req.json() as Record<string, unknown>
-    const rawRanges = Array.isArray(body.source_ranges)
-      ? body.source_ranges
-      : Array.isArray(body.sourceRanges)
-        ? body.sourceRanges
-        : body.source_url
-          ? [body]
-          : []
+    const rawRanges = Array.isArray(body.clips)
+      ? body.clips
+      : Array.isArray(body.source_ranges)
+        ? body.source_ranges
+        : Array.isArray(body.sourceRanges)
+          ? body.sourceRanges
+          : body.source_url
+            ? [body]
+            : []
     const published = await publishExternalVideoRanges({
       supabase,
       projectId: id,
@@ -175,6 +178,8 @@ export async function POST(
         description: item.description,
         source_range: item.sourceRange,
         source_url: item.sourceRange.source_url,
+        start: item.sourceRange.start_sec,
+        end: item.sourceRange.end_sec,
         start_sec: item.sourceRange.start_sec,
         end_sec: item.sourceRange.end_sec,
         created: item.created,
@@ -182,7 +187,7 @@ export async function POST(
     }, { status: 201 })
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err)
-    const validationError = /source_url|start_sec|end_sec|source range|maximum 20/i.test(message)
+    const validationError = /source_url|start|end|source range|maximum 20/i.test(message)
     return NextResponse.json({ error: message }, { status: validationError ? 400 : 500 })
   }
 }
