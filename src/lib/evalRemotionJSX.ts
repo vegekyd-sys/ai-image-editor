@@ -374,6 +374,13 @@ const PreviewSequence = React.forwardRef(function PreviewSequence(
     ? {
         ...props.style,
         ...(isContinuingPastCut ? props.styleWhilePostmounted : {}),
+        ...(mediaReady
+          ? {}
+          : {
+              background: 'transparent',
+              backgroundColor: 'transparent',
+              backgroundImage: 'none',
+            }),
         pointerEvents: isContinuingPastCut ? 'none' : props.style?.pointerEvents,
       }
     : props.style;
