@@ -33,6 +33,7 @@ const componentContainsVideoCache = new WeakMap<object, boolean>();
 type PreviewMediaReadiness = {
   markPending: () => void;
   markReady: () => void;
+  requirePlaybackAdvance: boolean;
 };
 
 const PreviewMediaReadinessContext = React.createContext<PreviewMediaReadiness | null>(null);
@@ -100,6 +101,10 @@ const PreviewVideo = React.forwardRef(function PreviewVideo(
     ...rest
   } = props;
   const trimStartFrame = trimBefore ?? startFrom ?? 0;
+  const minimumRevealTime = (
+    trimStartFrame +
+    (readiness?.requirePlaybackAdvance && trimStartFrame === 0 ? 2 : 0)
+  ) / fps;
   const expectedTime = (trimStartFrame + frame * playbackRate) / fps;
 
   React.useEffect(() => {
@@ -115,10 +120,11 @@ const PreviewVideo = React.forwardRef(function PreviewVideo(
     // to the range-local frame that the composition currently expects.
     const allowedDrift = Math.max(0.35, 4 / fps);
     if (Math.abs(video.currentTime - expectedTime) > allowedDrift) return;
+    if (video.currentTime < minimumRevealTime) return;
 
     reportedReady.current = true;
     readiness?.markReady();
-  }, [expectedTime, fps, readiness]);
+  }, [expectedTime, fps, minimumRevealTime, readiness]);
 
   const handleCanPlay = React.useCallback((event: React.SyntheticEvent<HTMLVideoElement>) => {
     markReady(event.currentTarget);
@@ -201,8 +207,15 @@ const PreviewSequence = React.forwardRef(function PreviewSequence(
     parentReadiness?.markReady();
   }, [parentReadiness]);
   const readiness = React.useMemo(
-    () => ({ markPending, markReady }),
-    [markPending, markReady],
+    () => ({
+      markPending,
+      markReady,
+      requirePlaybackAdvance: Boolean(
+        parentReadiness?.requirePlaybackAdvance ||
+        (containsVideo && (props.from ?? 0) > 0)
+      ),
+    }),
+    [containsVideo, markPending, markReady, parentReadiness, props.from],
   );
 
   const style = containsVideo

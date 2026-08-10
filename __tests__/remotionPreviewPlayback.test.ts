@@ -34,6 +34,8 @@ describe('Remotion preview playback contract', () => {
     expect(evalSource).toContain('Sequence: isPreviewRuntime ? PreviewSequence : AutoPremountSequence')
     expect(evalSource).toContain('onCanPlay: handleCanPlay')
     expect(evalSource).toContain('onLoadedData: handleLoadedData')
+    expect(evalSource).toContain('video.currentTime < minimumRevealTime')
+    expect(evalSource).toContain('(containsVideo && (props.from ?? 0) > 0)')
     expect(evalSource).toContain('postmountFor: containsVideo ? (props.postmountFor ?? fps * 3)')
     expect(evalSource).toContain("styleWhilePostmounted, opacity: 1, pointerEvents: 'none'")
     expect(rendererSource).not.toContain('EditableSceneBoundary')
