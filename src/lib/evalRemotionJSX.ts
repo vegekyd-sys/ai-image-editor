@@ -83,42 +83,80 @@ const PreviewVideo = React.forwardRef(function PreviewVideo(
   props: React.ComponentProps<typeof Remotion.Html5Video>,
   ref: React.Ref<HTMLVideoElement>,
 ) {
+  const frame = Remotion.useCurrentFrame();
+  const { fps } = useVideoConfig();
   const readiness = React.useContext(PreviewMediaReadinessContext);
   const reportedReady = React.useRef(false);
   const {
     onCanPlay,
     onLoadedData,
+    onPlaying,
+    onSeeked,
+    onTimeUpdate,
+    playbackRate = 1,
+    startFrom,
     src,
+    trimBefore,
     ...rest
   } = props;
+  const trimStartFrame = trimBefore ?? startFrom ?? 0;
+  const expectedTime = (trimStartFrame + frame * playbackRate) / fps;
 
   React.useEffect(() => {
     reportedReady.current = false;
     readiness?.markPending();
   }, [readiness, src]);
 
-  const markReady = React.useCallback(() => {
-    if (reportedReady.current) return;
+  const markReady = React.useCallback((video: HTMLVideoElement) => {
+    if (reportedReady.current || video.readyState < HTMLMediaElement.HAVE_CURRENT_DATA) return;
+
+    // loadeddata/canplay can fire for source time 0 before Remotion's trim seek
+    // has completed. Do not reveal the scene until the decoded frame is close
+    // to the range-local frame that the composition currently expects.
+    const allowedDrift = Math.max(0.35, 4 / fps);
+    if (Math.abs(video.currentTime - expectedTime) > allowedDrift) return;
+
     reportedReady.current = true;
     readiness?.markReady();
-  }, [readiness]);
+  }, [expectedTime, fps, readiness]);
 
   const handleCanPlay = React.useCallback((event: React.SyntheticEvent<HTMLVideoElement>) => {
-    markReady();
+    markReady(event.currentTarget);
     onCanPlay?.(event);
   }, [markReady, onCanPlay]);
 
   const handleLoadedData = React.useCallback((event: React.SyntheticEvent<HTMLVideoElement>) => {
-    markReady();
+    markReady(event.currentTarget);
     onLoadedData?.(event);
   }, [markReady, onLoadedData]);
 
+  const handlePlaying = React.useCallback((event: React.SyntheticEvent<HTMLVideoElement>) => {
+    markReady(event.currentTarget);
+    onPlaying?.(event);
+  }, [markReady, onPlaying]);
+
+  const handleSeeked = React.useCallback((event: React.SyntheticEvent<HTMLVideoElement>) => {
+    markReady(event.currentTarget);
+    onSeeked?.(event);
+  }, [markReady, onSeeked]);
+
+  const handleTimeUpdate = React.useCallback((event: React.SyntheticEvent<HTMLVideoElement>) => {
+    markReady(event.currentTarget);
+    onTimeUpdate?.(event);
+  }, [markReady, onTimeUpdate]);
+
   return React.createElement(Remotion.Html5Video, {
     ...rest,
+    playbackRate,
     src,
+    startFrom,
+    trimBefore,
     ref,
     onCanPlay: handleCanPlay,
     onLoadedData: handleLoadedData,
+    onPlaying: handlePlaying,
+    onSeeked: handleSeeked,
+    onTimeUpdate: handleTimeUpdate,
   });
 });
 
