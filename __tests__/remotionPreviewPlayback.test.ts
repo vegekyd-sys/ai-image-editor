@@ -43,6 +43,8 @@ describe('Remotion preview playback contract', () => {
     expect(evalSource).toContain("React.createElement('canvas'")
     expect(evalSource).toContain('video.requestVideoFrameCallback(captureNextFrame)')
     expect(evalSource).toContain('Math.max(4, Math.round(fps * 0.5))')
+    expect(evalSource).toContain('Math.max(2, Math.round(fps * 0.3))')
+    expect(evalSource).toContain('lastRealMediaFrameBoundary - showLeadFrames')
     expect(evalSource).toContain('showLastFrameAt - captureLeadFrames')
     expect(evalSource).toContain('PremountedPostmountedSequence forces its active wrapper opacity back to 1')
     expect(evalSource).toContain('Remotion.AbsoluteFill')
