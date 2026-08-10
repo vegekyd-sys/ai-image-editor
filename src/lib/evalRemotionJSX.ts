@@ -27,6 +27,101 @@ export type BrowserVideoRuntime = 'preview' | 'render';
 
 const { Sequence, useVideoConfig } = Remotion;
 
+const VIDEO_COMPONENT_CALL = /(?:React\.)?createElement\(\s*(?:Video|OffthreadVideo|Html5Video)\b/;
+const componentContainsVideoCache = new WeakMap<object, boolean>();
+
+type PreviewMediaReadiness = {
+  markPending: () => void;
+  markReady: () => void;
+};
+
+const PreviewMediaReadinessContext = React.createContext<PreviewMediaReadiness | null>(null);
+
+function componentSourceContainsVideo(type: unknown): boolean {
+  if ((typeof type !== 'function' && typeof type !== 'object') || type === null) return false;
+
+  const key = type as object;
+  const cached = componentContainsVideoCache.get(key);
+  if (cached !== undefined) return cached;
+
+  const render = typeof type === 'function'
+    ? type
+    : (type as { render?: unknown }).render;
+  const containsVideo = typeof render === 'function'
+    ? VIDEO_COMPONENT_CALL.test(Function.prototype.toString.call(render))
+    : false;
+  componentContainsVideoCache.set(key, containsVideo);
+  return containsVideo;
+}
+
+function childrenContainPreviewVideo(children: React.ReactNode): boolean {
+  let containsVideo = false;
+  React.Children.forEach(children, child => {
+    if (containsVideo || !React.isValidElement(child)) return;
+
+    const type = child.type;
+    if (
+      type === PreviewVideo ||
+      type === Remotion.Html5Video ||
+      type === Video ||
+      componentSourceContainsVideo(type)
+    ) {
+      containsVideo = true;
+      return;
+    }
+
+    containsVideo = childrenContainPreviewVideo(
+      (child.props as { children?: React.ReactNode }).children,
+    );
+  });
+  return containsVideo;
+}
+
+// Browser preview only: report when the native media tag has a decoded frame.
+// Keeping this wrapper at module scope avoids creating a new component per render.
+const PreviewVideo = React.forwardRef(function PreviewVideo(
+  props: React.ComponentProps<typeof Remotion.Html5Video>,
+  ref: React.Ref<HTMLVideoElement>,
+) {
+  const readiness = React.useContext(PreviewMediaReadinessContext);
+  const reportedReady = React.useRef(false);
+  const {
+    onCanPlay,
+    onLoadedData,
+    src,
+    ...rest
+  } = props;
+
+  React.useEffect(() => {
+    reportedReady.current = false;
+    readiness?.markPending();
+  }, [readiness, src]);
+
+  const markReady = React.useCallback(() => {
+    if (reportedReady.current) return;
+    reportedReady.current = true;
+    readiness?.markReady();
+  }, [readiness]);
+
+  const handleCanPlay = React.useCallback((event: React.SyntheticEvent<HTMLVideoElement>) => {
+    markReady();
+    onCanPlay?.(event);
+  }, [markReady, onCanPlay]);
+
+  const handleLoadedData = React.useCallback((event: React.SyntheticEvent<HTMLVideoElement>) => {
+    markReady();
+    onLoadedData?.(event);
+  }, [markReady, onLoadedData]);
+
+  return React.createElement(Remotion.Html5Video, {
+    ...rest,
+    src,
+    ref,
+    onCanPlay: handleCanPlay,
+    onLoadedData: handleLoadedData,
+  });
+});
+
 // Sequence wrapper: auto-inject premountFor={fps*3} when not specified
 // 3 seconds of premount gives video elements enough time to buffer before their scene starts
 const AutoPremountSequence = React.forwardRef(function AutoPremountSequence(
@@ -36,6 +131,61 @@ const AutoPremountSequence = React.forwardRef(function AutoPremountSequence(
 ) {
   const { fps } = useVideoConfig();
   return React.createElement(Sequence, { ...props, premountFor: props.premountFor ?? fps * 3, ref });
+});
+
+// Interactive preview only: a media scene stays transparent until its native
+// video has decoded a frame. The preceding scene remains frozen underneath for
+// up to three seconds, so a slow Range request cannot expose the composition's
+// black background at a cut. Once the next frame is ready it paints above the
+// frozen scene immediately; there is no fixed transition delay.
+const PreviewSequence = React.forwardRef(function PreviewSequence(
+  props: any,
+  ref: React.Ref<HTMLDivElement>,
+) {
+  const { fps } = useVideoConfig();
+  const parentReadiness = React.useContext(PreviewMediaReadinessContext);
+  const containsVideo = React.useMemo(
+    () => childrenContainPreviewVideo(props.children),
+    [props.children],
+  );
+  const [mediaReady, setMediaReady] = React.useState(!containsVideo);
+
+  React.useEffect(() => {
+    setMediaReady(!containsVideo);
+  }, [containsVideo]);
+
+  const markPending = React.useCallback(() => {
+    setMediaReady(false);
+    parentReadiness?.markPending();
+  }, [parentReadiness]);
+  const markReady = React.useCallback(() => {
+    setMediaReady(true);
+    parentReadiness?.markReady();
+  }, [parentReadiness]);
+  const readiness = React.useMemo(
+    () => ({ markPending, markReady }),
+    [markPending, markReady],
+  );
+
+  const style = containsVideo
+    ? { ...props.style, opacity: mediaReady ? 1 : 0 }
+    : props.style;
+  const styleWhilePostmounted = containsVideo
+    ? { ...props.styleWhilePostmounted, opacity: 1, pointerEvents: 'none' }
+    : props.styleWhilePostmounted;
+
+  return React.createElement(
+    Sequence,
+    {
+      ...props,
+      style,
+      premountFor: props.premountFor ?? fps * 3,
+      postmountFor: containsVideo ? (props.postmountFor ?? fps * 3) : props.postmountFor,
+      styleWhilePostmounted,
+      ref,
+    },
+    React.createElement(PreviewMediaReadinessContext.Provider, { value: readiness }, props.children),
+  );
 });
 
 /** All Remotion APIs available to Agent's React code — open scope, no artificial limits */
@@ -206,8 +356,9 @@ export function evalRemotionJSX(
     // canvas while its seek finishes. Html5Video can premount and buffer the real
     // media element through HTTP Range requests before the cut becomes visible.
     // Poster/frame/export paths keep @remotion/media because web-renderer requires it.
-    const videoComponent = options.videoRuntime === 'preview'
-      ? Remotion.Html5Video
+    const isPreviewRuntime = options.videoRuntime === 'preview';
+    const videoComponent = isPreviewRuntime
+      ? PreviewVideo
       : Video;
     const editableRuntime = createEditableReactRuntime(React, videoComponent);
     const authoredScope = {
@@ -215,6 +366,7 @@ export function evalRemotionJSX(
       React: editableRuntime.React,
       Video: videoComponent,
       OffthreadVideo: videoComponent,
+      Sequence: isPreviewRuntime ? PreviewSequence : AutoPremountSequence,
     };
     const remotionNamespace = { ...Remotion, ...authoredScope };
     const mediaNamespace = {
