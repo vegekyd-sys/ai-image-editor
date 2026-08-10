@@ -5,6 +5,40 @@ import { createEditableReactRuntime } from '@/lib/editor/editable-react-runtime'
 import { compileDynamicDesignComponent } from '@/remotion/DynamicDesign';
 
 describe('Remotion materialize editable overrides', () => {
+  it('renders escaped and real newlines as line breaks instead of visible \\n text', () => {
+    const runtime = createEditableReactRuntime(React, 'video');
+    const Composition = () => runtime.React.createElement(
+      'div',
+      null,
+      'CONTROL\\nTHE FLOW',
+      runtime.React.createElement('span', null, 'Line one\nLine two'),
+    );
+    const MaterializedComposition = runtime.wrap(Composition, 'proxy');
+
+    const html = renderToStaticMarkup(<MaterializedComposition />);
+
+    expect(html).toContain('CONTROL<br/>THE FLOW');
+    expect(html).toContain('Line one<br/>Line two');
+    expect(html).not.toContain('\\n');
+  });
+
+  it('normalizes editable text overrides at the same shared render boundary', () => {
+    const runtime = createEditableReactRuntime(React, 'video');
+    const Composition = () => runtime.React.createElement(
+      'div',
+      { 'data-editable': 'title' },
+      'Original',
+    );
+    const MaterializedComposition = runtime.wrap(Composition, 'proxy');
+
+    const html = renderToStaticMarkup(
+      <MaterializedComposition title={'First\\nSecond'} />,
+    );
+
+    expect(html).toContain('First<br/>Second');
+    expect(html).not.toContain('First\\nSecond');
+  });
+
   it('applies persisted position and scale in the shared render runtime', () => {
     const runtime = createEditableReactRuntime(React, 'video');
     const Composition = (props: Record<string, unknown>) => runtime.React.createElement(

@@ -106,12 +106,26 @@ Available APIs include all exports from `remotion`, `@remotion/media`, `@remotio
   narration cue ends. Do not replace measured cue ranges with planned Script
   timing, estimated reading speed, or equal scene lengths. Wording, grouping,
   placement, typography, and motion remain specific to the current Composition.
+- Each subtitle cue must have exactly one visible text host and one
+  non-overlapping active range. Apply the caption background and border to that
+  host, or use a wrapper that contains no second copy of the text. Never stack
+  a raw caption, editable mirror, or duplicate subtitle track over the same cue.
+  At each cue midpoint, confirm that one glyph silhouette is visible, not two
+  slightly offset copies.
+- Visible line breaks must render as line breaks, never as the two characters
+  `\\n`. The shared Preview/export runtime normalizes both escaped and real
+  newlines at DOM text leaves; still verify the densest text frame because line
+  count changes the element's bounding box and platform-safe placement.
 - Prefer Remotion `<Video>` or `<OffthreadVideo>`. Lowercase HTML `<video>` is
   also accepted and normalized by the harness to the injected,
   frame-synchronized `<Video>` component.
 - Decoder selection is owned by the preview/export runtime, independent of
   whether the source used `<Video>` or `<OffthreadVideo>`.
 - Use `<Sequence>` for every scene or clip so media mounts only when needed.
+- `useCurrentFrame()` inside a `<Sequence>` is already local to that Sequence.
+  Do not subtract the Sequence's `from` value again; doing so keeps later-scene
+  overlays at negative time and can silently hide every title/subtitle after
+  the first scene.
 - Use `trimBefore`, `trimAfter`, `playbackRate`, and `volume` on `<Video>` for non-destructive timeline edits.
 - Never use `startFrom` or `endAt` for `<Video>` trimming in Makaron compositions. They are deprecated/unsafe in this runtime and can make every sequenced clip restart from the first frame. Use `trimBefore={sourceStartFrame}` and `trimAfter={sourceEndFrame}` instead.
 - Use `AbsoluteFill`, `interpolate`, `spring`, `Easing`, `useCurrentFrame`, and `useVideoConfig` for animation.

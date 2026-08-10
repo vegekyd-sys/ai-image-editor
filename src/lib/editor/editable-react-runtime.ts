@@ -13,6 +13,40 @@ export interface EditableReactRuntime {
   ) => React.ComponentType<any>;
 }
 
+const RENDERED_LINE_BREAK_RE = /(\\r\\n|\\n|\\r|\r\n|\n|\r)/g;
+
+/**
+ * Agent-authored copy frequently crosses JSON, tool-call, and JSX boundaries.
+ * A requested line break can therefore arrive at the final React host as the
+ * two visible characters `\\n` instead of a real newline. React also collapses
+ * real newlines under normal white-space rules. Turn both forms into explicit
+ * <br> nodes at the shared Preview/export boundary so every composition gets
+ * the same deterministic rendering without depending on per-template CSS.
+ */
+export function renderTextLineBreaks(
+  react: ReactRuntime,
+  value: React.ReactNode,
+): React.ReactNode {
+  if (typeof value !== 'string' || !RENDERED_LINE_BREAK_RE.test(value)) {
+    RENDERED_LINE_BREAK_RE.lastIndex = 0;
+    return value;
+  }
+
+  RENDERED_LINE_BREAK_RE.lastIndex = 0;
+  const parts = value.split(RENDERED_LINE_BREAK_RE);
+  const rendered: React.ReactNode[] = [];
+  let breakIndex = 0;
+  for (const part of parts) {
+    if (!part) continue;
+    if (/^(?:\\r\\n|\\n|\\r|\r\n|\n|\r)$/.test(part)) {
+      rendered.push(react.createElement('br', { key: `makaron-line-break-${breakIndex++}` }));
+    } else {
+      rendered.push(part);
+    }
+  }
+  return rendered;
+}
+
 export function createEditableReactRuntime(
   react: ReactRuntime,
   videoComponent: React.ElementType,
@@ -167,6 +201,23 @@ export function createEditableReactRuntime(
           className: [existingClassName, editableRuntimeClassName(id)]
             .filter(Boolean)
             .join(' '),
+        };
+      }
+    }
+
+    // Normalize only host-element text. Custom components should continue to
+    // receive their original string props/children and will be normalized when
+    // they eventually render a DOM text leaf.
+    if (typeof type === 'string') {
+      if (nextChildren.length > 0) {
+        nextChildren = nextChildren.map(child => renderTextLineBreaks(react, child));
+      } else if (nextProps && 'children' in nextProps) {
+        nextProps = {
+          ...nextProps,
+          children: react.Children.map(
+            nextProps.children as React.ReactNode,
+            child => renderTextLineBreaks(react, child),
+          ),
         };
       }
     }

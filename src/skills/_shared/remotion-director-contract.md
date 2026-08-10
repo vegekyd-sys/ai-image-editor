@@ -71,6 +71,18 @@ Before writing or patching composition code, create a compact internal plan:
   whether music, captions, or original sound drives timing.
 - **Verification plan**: choose stable hook, middle, and ending frames to preview before publishing.
 
+## Platform Guideline Gate
+
+When the destination platform is named, its interface zones are part of the
+composition contract rather than an optional styling suggestion. For TikTok,
+read `skills/tiktok-video/SKILL.md` and keep essential content out of its
+placement-specific exclusion zones. Do not collapse several UI zones into one
+small central rectangle: titles in the clear upper lane may be substantially
+wider than subtitles beside the lower-right interaction rail. Full-bleed
+footage may extend beneath UI; subtitles, titles, logos, prices, disclaimers,
+and CTA must pass exclusion-zone collision review. Preview the densest text
+frame and the closing frame at the final aspect ratio before publishing.
+
 If a requested edit is purely mechanical, such as "trim the first two seconds"
 or "put these two clips back to back", the plan may be one sentence. If the
 request asks for style, packaging, storytelling, explanation, or a complete
