@@ -70,7 +70,7 @@ describe('Remotion preview playback contract', () => {
     )
     expect(runtimeSource).not.toContain('currentProps.trimBefore === undefined')
     expect(runtimeSource).not.toContain('currentProps.trimAfter === undefined')
-    expect(evalSource).toContain('createEditableReactRuntime(React, Video)')
+    expect(evalSource).toContain('createEditableReactRuntime(React, videoComponent)')
     expect(dynamicDesignSource).toContain('createEditableReactRuntime(')
   })
 
