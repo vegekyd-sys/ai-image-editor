@@ -3704,6 +3704,8 @@ Select the best 3-7 items for a compelling video. You do NOT need to use all or 
                   : snapshots[snapshots.length - 1]?.image}
                 videoPlayTrigger={videoPlayTrigger}
                 videoStartTime={videoStartTimeRef.current}
+                videoClipStart={isViewingVideoV2 ? currentSnap?.videoMeta?.sourceRange?.start_sec : undefined}
+                videoClipEnd={isViewingVideoV2 ? currentSnap?.videoMeta?.sourceRange?.end_sec : undefined}
                 videoTimelineIndices={videoTimelineIndices}
                 onVideoPosterCapture={(dataUrl) => {
                   const snap = snapshotsRef.current[viewIndex];

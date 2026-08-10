@@ -2,6 +2,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { downloadAsset } from '@/lib/editor/download';
 import type { LocaleContextValue } from '@/lib/i18n';
 import {
+  isNativePhotoLibrarySaveAvailable,
   saveBlobToNativePhotoLibrary,
   saveUrlToNativePhotoLibrary,
 } from '@/lib/native-media';
@@ -34,9 +35,10 @@ function makeParams(overrides: Partial<Parameters<typeof downloadAsset>[0]> = {}
   };
 }
 
-describe('iOS editor image save flow', () => {
+describe('editor asset save flow', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    vi.mocked(isNativePhotoLibrarySaveAvailable).mockReturnValue(true);
     vi.mocked(saveBlobToNativePhotoLibrary).mockResolvedValue(undefined);
     vi.mocked(saveUrlToNativePhotoLibrary).mockResolvedValue(undefined);
   });
@@ -117,6 +119,7 @@ describe('iOS editor image save flow', () => {
   });
 
   it('falls back to the video proxy when native video URL save fails', async () => {
+    vi.spyOn(window.navigator, 'userAgent', 'get').mockReturnValue('iPhone');
     vi.mocked(saveUrlToNativePhotoLibrary).mockRejectedValueOnce(new Error('video url save failed'));
     vi.stubGlobal('fetch', vi.fn(async () => ({
       ok: true,
@@ -144,6 +147,34 @@ describe('iOS editor image save flow', () => {
     );
     expect(fetch).toHaveBeenCalledWith('/api/proxy-video?url=https%3A%2F%2Fcdn.makaron.app%2Fvideo.mp4&download=1');
     expect(params.setAgentStatus).toHaveBeenCalledWith('Native save failed, trying fallback...');
+    expect(params.setAgentStatus).toHaveBeenCalledWith('editor.done');
+    expect(params.showSaveToast).toHaveBeenCalledTimes(1);
+  });
+
+  it('streams completed videos to the desktop download manager without buffering a blob', async () => {
+    vi.mocked(isNativePhotoLibrarySaveAvailable).mockReturnValue(false);
+    vi.spyOn(window.navigator, 'userAgent', 'get').mockReturnValue('Mozilla/5.0 Macintosh Chrome');
+    const fetchSpy = vi.fn();
+    vi.stubGlobal('fetch', fetchSpy);
+    const clickSpy = vi.spyOn(HTMLAnchorElement.prototype, 'click').mockImplementation(() => {});
+    const params = makeParams({
+      isViewingVideo: true,
+      currentVideoUrl: 'https://cdn.makaron.app/video.mp4#t=0.001',
+    });
+
+    await downloadAsset(params);
+
+    expect(fetchSpy).not.toHaveBeenCalled();
+    expect(clickSpy).toHaveBeenCalledTimes(1);
+    const link = clickSpy.mock.instances[0] as HTMLAnchorElement;
+    expect(link.getAttribute('href')).toBe(
+      '/api/proxy-video?url=https%3A%2F%2Fcdn.makaron.app%2Fvideo.mp4%23t%3D0.001&download=1',
+    );
+    expect(link.download).toMatch(/^makaron-video-\d+\.mp4$/);
+    expect(params.setIsSaving).toHaveBeenNthCalledWith(1, true);
+    expect(params.setIsSaving).toHaveBeenLastCalledWith(false);
+    expect(params.setAgentStatus).toHaveBeenCalledWith('Saving to Photos...');
+    expect(params.setAgentStatus).toHaveBeenCalledWith('editor.done');
     expect(params.showSaveToast).toHaveBeenCalledTimes(1);
   });
 });

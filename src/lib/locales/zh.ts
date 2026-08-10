@@ -75,6 +75,8 @@ const zh = {
   // Changelog
   'changelog.heading': '更新',
   'changelog.close': '关闭更新',
+  'changelog.externalSourceRanges.title': '外部视频直接剪辑',
+  'changelog.externalSourceRanges.item1': 'Makaron 现在可以按外部视频 URL 和起止时间直接剪辑，无需上传完整视频或导出中间 MP4。',
   'changelog.seedance25.title': 'Seedance 2.5：全新 SOTA 多模态视频',
   'changelog.seedance25.item1': '全新 SOTA Seedance 2.5 单次生成最长 30 秒，并支持画面与原生音频同步生成。',
   'changelog.seedance25.item2': '最多可组合 30 张图片、10 段视频和 10 段音频作为参考素材。',

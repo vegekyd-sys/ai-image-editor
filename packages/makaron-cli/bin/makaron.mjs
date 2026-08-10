@@ -156,6 +156,71 @@ function readJsonInput(filePath) {
   return JSON.parse(raw);
 }
 
+const MAX_MEDIA_MANIFEST_RANGES = 20;
+
+function normalizeMediaManifest(input) {
+  const manifest = Array.isArray(input) ? { source_ranges: input } : input;
+  if (!manifest || typeof manifest !== 'object') {
+    throw new Error('Media manifest must be a JSON object or an array of source ranges.');
+  }
+  const rawRanges = Array.isArray(manifest.source_ranges)
+    ? manifest.source_ranges
+    : Array.isArray(manifest.sourceRanges)
+      ? manifest.sourceRanges
+      : null;
+  if (!rawRanges?.length) {
+    throw new Error('Media manifest must contain a non-empty source_ranges array.');
+  }
+  if (rawRanges.length > MAX_MEDIA_MANIFEST_RANGES) {
+    throw new Error(`Media manifest supports at most ${MAX_MEDIA_MANIFEST_RANGES} source ranges per Makaron task.`);
+  }
+
+  const sourceRanges = rawRanges.map((raw, index) => {
+    if (!raw || typeof raw !== 'object') throw new Error(`source_ranges[${index}] must be an object.`);
+    const sourceUrl = typeof raw.source_url === 'string' ? raw.source_url.trim() : '';
+    let parsed;
+    try {
+      parsed = new URL(sourceUrl);
+    } catch {
+      throw new Error(`source_ranges[${index}].source_url must be a valid HTTP(S) URL.`);
+    }
+    if (!['http:', 'https:'].includes(parsed.protocol)) {
+      throw new Error(`source_ranges[${index}].source_url must use HTTP or HTTPS.`);
+    }
+    const startSec = Number(raw.start_sec);
+    const endSec = Number(raw.end_sec);
+    if (!Number.isFinite(startSec) || startSec < 0) {
+      throw new Error(`source_ranges[${index}].start_sec must be a finite number >= 0.`);
+    }
+    if (!Number.isFinite(endSec) || endSec <= startSec) {
+      throw new Error(`source_ranges[${index}].end_sec must be greater than start_sec.`);
+    }
+    const range = { source_url: sourceUrl, start_sec: startSec, end_sec: endSec };
+    for (const key of ['source_uri', 'project_id', 'asset_id', 'file_name', 'description']) {
+      if (typeof raw[key] === 'string' && raw[key].trim()) range[key] = raw[key].trim();
+    }
+    for (const key of ['width', 'height']) {
+      const value = Number(raw[key]);
+      if (Number.isFinite(value) && value > 0) range[key] = value;
+    }
+    return range;
+  });
+
+  return {
+    sourceRanges,
+    title: typeof manifest.title === 'string' && manifest.title.trim() ? manifest.title.trim() : undefined,
+  };
+}
+
+function readMediaManifest(filePath) {
+  try {
+    return normalizeMediaManifest(readJsonInput(filePath));
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    throw new Error(`Invalid media manifest: ${message}`);
+  }
+}
+
 // ─── Auth ────────────────────────────────────────────────────────────────────
 
 function loadAuth() {
@@ -285,6 +350,7 @@ Options:
   --image <file|url>        Attach a reference image or screenshot. Repeatable.
   --video <file|url>        Attach a video to the project timeline. Repeatable.
   --audio <file|url>        Attach a song, beat, or voice reference. MP3/WAV, repeatable.
+  --media-manifest <file|-> Import source_url + start_sec + end_sec ranges before this run.
   --skill <id|label|name>   Use an installed skill or auto-install a matched marketplace skill.
   --background, -b          Submit and print a runId.
   --json                    Output structured JSON.
@@ -312,6 +378,9 @@ What you can ask:
 
   Video cuts and assembly
     makaron chat --project <id> --video clip.mp4 "cut out the dead air and keep the best 20 seconds"
+
+  Agent-to-agent source-range handoff
+    makaron chat --project auto --media-manifest set-01.json -b --json "make a 30s vertical video"
 
   Music
     makaron chat --project <id> "add calm piano background music"
@@ -826,9 +895,33 @@ async function listProjectMedia(baseUrl, headers, projectId, opts = {}) {
     const status = item.status && item.status !== 'completed' ? ` ${item.status}` : '';
     const duration = typeof item.duration === 'number' ? ` ${item.duration}s` : '';
     const dimensions = item.width && item.height ? ` ${item.width}x${item.height}` : '';
-    const description = item.description ? ` — ${item.description}` : '';
+    const description = item.description ? ` — ${String(item.description).replace(/\s*\n\s*/g, ' | ')}` : '';
+    const sourceRange = item.source_range || item.sourceRange;
+    const range = sourceRange
+      ? ` source ${formatSeconds(sourceRange.start_sec)}-${formatSeconds(sourceRange.end_sec)}s`
+      : '';
     const url = item.url ? `\n      ${item.url}` : '';
-    console.log(`  ${String(item.index).padStart(2)}. ${ref} [${item.type}${status}${duration}${dimensions}]${description}${url}`);
+    console.log(`  ${String(item.index).padStart(2)}. ${ref} [${item.type}${status}${duration}${dimensions}${range}]${description}${url}`);
+  }
+  return data;
+}
+
+async function addProjectMediaSourceRanges(baseUrl, headers, projectId, ranges, opts = {}) {
+  const res = await fetch(`${baseUrl}/api/projects/${projectId}/media`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...headers },
+    body: JSON.stringify({ source_ranges: ranges }),
+  });
+  if (!res.ok) { console.error('Project media add failed:', await res.text()); process.exit(1); }
+  const data = await res.json();
+  if (opts.json && !opts.silent) {
+    console.log(JSON.stringify(data, null, 2));
+    return data;
+  }
+  if (!opts.silent) {
+    for (const item of data.media || []) {
+      console.log(`${item.ref} ${item.source_url} ${formatSeconds(item.start_sec)}-${formatSeconds(item.end_sec)}s${item.created ? '' : ' (existing)'}`);
+    }
   }
   return data;
 }
@@ -1593,6 +1686,8 @@ Commands:
   credits                            Show current credit balance
   list (ls)                          List all projects
   project media <projectId> --json    List timeline media for a project
+  project media add <projectId> --source-url <url> --start-sec <n> --end-sec <n>
+                                     Add an external source range without uploading video
   create --image <file>              Create project from local image
   create --image-url <url>           Create project from URL
   create --title "name"              Create empty project (text-to-image)
@@ -1601,6 +1696,8 @@ Commands:
   chat --project <id> --skill <id>   Use a built-in or marketplace skill
   chat --project <id> --video <file> Attach video to conversation
   chat --project <id> --audio <file> Attach song/beat/voice reference
+  chat --project auto --media-manifest <file> "message"
+                                     Create, import external ranges, and run Agent
   chat --project <id> -b "message"   Background: submit and print runId
   chat --project <id> --stream "msg" Legacy: stream SSE in real-time
   chat --project <id> --json "msg"   Output structured JSON result
@@ -1708,9 +1805,12 @@ function printHelp(topic, subtopic) {
   } else if (topic === 'credits' || topic === 'credit' || topic === 'balance') {
     console.log('Usage: makaron credits [--json]');
   } else if (topic === 'project' || topic === 'projects') {
-    if (subtopic === 'media') console.log('Usage: makaron project media <projectId> [--json]');
+    if (subtopic === 'media') console.log(`Usage: makaron project media <projectId> [--json]
+  makaron project media add <projectId> --source-url <url> --start-sec <n> --end-sec <n> [--source-uri <uri>] [--description <text>] [--json]
+  makaron project media add <projectId> --input <ranges.json> [--json]`);
     else console.log(`Project commands:
   project media <projectId> --json      List timeline media for a project
+  project media add <projectId> ...     Add external source_url + start_sec + end_sec media
 `);
   } else if (topic === 'abort') {
     console.log('Usage: makaron abort <runId>');
@@ -1868,11 +1968,20 @@ if (!command || command === '--help' || command === '-h' || command === 'help') 
   let background = false;
   let jsonOutput = false;
   let activeSkill = undefined;
+  let mediaManifestPath = undefined;
   for (let i = 1; i < args.length; i++) {
     if (args[i] === '--project' && args[i + 1]) projectId = args[++i];
     else if (args[i] === '--image' && args[i + 1]) chatImages.push(args[++i]);
     else if (args[i] === '--video' && args[i + 1]) chatVideos.push(args[++i]);
     else if (args[i] === '--audio' && args[i + 1]) chatAudios.push(args[++i]);
+    else if (args[i] === '--media-manifest') {
+      if (!args[i + 1] || args[i + 1].startsWith('--')) {
+        process.stderr.write('❌ --media-manifest requires a JSON file path or -.\n');
+        process.exit(1);
+      }
+      mediaManifestPath = args[++i];
+    }
+    else if (args[i].startsWith('--media-manifest=')) mediaManifestPath = args[i].slice('--media-manifest='.length);
     else if (args[i] === '--skill' && args[i + 1]) activeSkill = args[++i];
     else if (args[i].startsWith('--skill=')) activeSkill = args[i].slice('--skill='.length);
     else if (args[i] === '--stream') useStream = true;
@@ -1897,6 +2006,15 @@ if (!command || command === '--help' || command === '-h' || command === 'help') 
     console.error('Usage: makaron chat --project <id|auto> [options] "your message"');
     console.error('Run: makaron chat --help');
     process.exit(1);
+  }
+  let mediaManifest;
+  if (mediaManifestPath) {
+    try {
+      mediaManifest = readMediaManifest(mediaManifestPath);
+    } catch (error) {
+      process.stderr.write(`❌ ${error instanceof Error ? error.message : String(error)}\n`);
+      process.exit(1);
+    }
   }
   const { headers, baseUrl } = getAuth();
   // Split images into URLs vs local files
@@ -1954,12 +2072,30 @@ if (!command || command === '--help' || command === '-h' || command === 'help') 
     const res = await fetch(`${baseUrl}/api/projects/create`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', ...headers },
-      body: JSON.stringify({ title: prompt.slice(0, 50) }),
+      body: JSON.stringify({ title: mediaManifest?.title || prompt.slice(0, 50) }),
     });
     if (!res.ok) { process.stderr.write(`❌ Failed to create project: ${await res.text()}\n`); process.exit(1); }
     const data = await res.json();
     projectId = data.projectId;
     process.stderr.write(`📦 Project created: ${projectId}\n`);
+  }
+  let importedManifestMedia = [];
+  if (mediaManifest) {
+    const imported = await addProjectMediaSourceRanges(
+      baseUrl,
+      headers,
+      projectId,
+      mediaManifest.sourceRanges,
+      { silent: true },
+    );
+    importedManifestMedia = imported.media || [];
+    if (importedManifestMedia.length !== mediaManifest.sourceRanges.length) {
+      process.stderr.write(`❌ Imported ${importedManifestMedia.length}/${mediaManifest.sourceRanges.length} source range(s); aborting run.\n`);
+      process.exit(1);
+    }
+    uploadedTurnMediaCount += importedManifestMedia.length;
+    uploadedTurnVideoCount += importedManifestMedia.length;
+    process.stderr.write(`📎 Imported ${importedManifestMedia.length} external source range(s) from media manifest\n`);
   }
   // Upload additional images to existing project
   if (imageFileList.length > 0 || imageUrlList.length > 0) {
@@ -2106,7 +2242,20 @@ if (!command || command === '--help' || command === '-h' || command === 'help') 
     if (background) {
       // Just print runId and exit
       if (jsonOutput) {
-        console.log(JSON.stringify({ runId, projectId, projectUrl: `${APP_URL}/projects/${projectId}`, status: 'running' }));
+        console.log(JSON.stringify({
+          runId,
+          projectId,
+          projectUrl: `${APP_URL}/projects/${projectId}`,
+          status: 'running',
+          ...(importedManifestMedia.length ? {
+            importedMedia: importedManifestMedia.map(item => ({
+              ref: item.ref,
+              source_url: item.source_url,
+              start_sec: item.start_sec,
+              end_sec: item.end_sec,
+            })),
+          } : {}),
+        }));
       } else {
         console.log(runId);
       }
@@ -2344,13 +2493,52 @@ if (!command || command === '--help' || command === '-h' || command === 'help') 
   const { headers, baseUrl } = getAuth();
   const sub = args[1];
   if (sub === 'media') {
-    const projectId = args[2];
-    if (!projectId) { console.error('Usage: makaron project media <projectId> [--json]'); process.exit(1); }
     const jsonOutput = args.includes('--json');
-    await listProjectMedia(baseUrl, headers, projectId, { json: jsonOutput });
+    if (args[2] === 'add') {
+      const projectId = args[3];
+      if (!projectId) { console.error('Usage: makaron project media add <projectId> --source-url <url> --start-sec <n> --end-sec <n>'); process.exit(1); }
+      const readOption = (name) => {
+        const index = args.indexOf(name);
+        return index >= 0 ? args[index + 1] : undefined;
+      };
+      const inputPath = readOption('--input');
+      let ranges;
+      if (inputPath) {
+        const input = readJsonInput(inputPath);
+        ranges = Array.isArray(input) ? input : input.source_ranges || input.sourceRanges;
+      } else {
+        const sourceUrl = readOption('--source-url');
+        const startSec = Number(readOption('--start-sec'));
+        const endSec = Number(readOption('--end-sec'));
+        if (!sourceUrl || !Number.isFinite(startSec) || !Number.isFinite(endSec)) {
+          console.error('Provide --source-url, --start-sec, and --end-sec, or --input <ranges.json>.');
+          process.exit(1);
+        }
+        ranges = [{
+          source_url: sourceUrl,
+          start_sec: startSec,
+          end_sec: endSec,
+          ...(readOption('--source-uri') ? { source_uri: readOption('--source-uri') } : {}),
+          ...(readOption('--project-id') ? { project_id: readOption('--project-id') } : {}),
+          ...(readOption('--asset-id') ? { asset_id: readOption('--asset-id') } : {}),
+          ...(readOption('--file-name') ? { file_name: readOption('--file-name') } : {}),
+          ...(readOption('--description') ? { description: readOption('--description') } : {}),
+        }];
+      }
+      if (!Array.isArray(ranges) || !ranges.length) {
+        console.error('Input must contain a non-empty source_ranges array.');
+        process.exit(1);
+      }
+      await addProjectMediaSourceRanges(baseUrl, headers, projectId, ranges, { json: jsonOutput });
+    } else {
+      const projectId = args[2];
+      if (!projectId) { console.error('Usage: makaron project media <projectId> [--json]'); process.exit(1); }
+      await listProjectMedia(baseUrl, headers, projectId, { json: jsonOutput });
+    }
   } else {
     console.log(`Project commands:
   project media <projectId> --json      List timeline media for a project
+  project media add <projectId> ...     Add external source_url + start_sec + end_sec media
 `);
   }
 } else if (command === 'abort') {

@@ -29,7 +29,7 @@ import { prepareVisualAsset, resolvePreparedVisualAssetById } from './visual-ass
 import agentPrompt from './prompts/agent.md';
 import generateImageToolPrompt from './prompts/generate_image_tool.md';
 import { normalizeGenerateImageMediaIndex } from './generate-image-input';
-import type { DesignPayload, VideoMeta, VideoModel } from '@/types';
+import type { DesignPayload, VideoMeta, VideoModel, VideoSourceRange } from '@/types';
 import { isPermanentUrl, toPublicStorageUrl, uploadVideo } from '@/lib/supabase/storage';
 import type { AgentPerf } from './agent-perf';
 import { createTextDeltaState, normalizeTextDelta } from './agent-text-delta';
@@ -85,6 +85,7 @@ import {
 import { getSkillLaunchSystemDirective, type SkillLaunchContext } from './skill-launch-context';
 import { buildAgentOutputLanguageDirective } from './agent-response-policy';
 import { stableDraftPromotionSnapshotId } from './draft-promotion';
+import { sourceRangeFromVideoMeta } from './media-source-range';
 
 const MAX_VIDEO_DIMENSION_PROBE_BYTES = 220 * 1024 * 1024;
 
@@ -847,15 +848,15 @@ async function resolveVideoUrlForMediaIndex(ctx: AgentContext, mediaIndex: numbe
   videoUrl?: string;
   duration?: number;
   fps?: number;
+  sourceRange?: VideoSourceRange;
   error?: string;
 }> {
   const v = validateImageIndex(ctx.snapshotImages, mediaIndex);
   if (v.error) return { idx: -1, error: v.error };
 
   const directUrl = ctx.snapshotImages[v.idx];
-  if (isVideoUrl(directUrl)) return { idx: v.idx, videoUrl: directUrl };
-
   if (!ctx.supabase || !ctx.userId) {
+    if (isVideoUrl(directUrl)) return { idx: v.idx, videoUrl: directUrl };
     return { idx: v.idx, error: `No video file found at <<<media_${mediaIndex}>>>. Use analyze_image for still images/posters, or preview_frame for Remotion compositions.` };
   }
 
@@ -874,6 +875,7 @@ async function resolveVideoUrlForMediaIndex(ctx: AgentContext, mediaIndex: numbe
     const fallbackVideoUrl = isVideoUrl(posterOrFallback) ? posterOrFallback : '';
     const duration = Number(meta?.duration);
     const fps = Number(meta?.fps);
+    const sourceRange = sourceRangeFromVideoMeta(meta);
 
     if (videoUrl || fallbackVideoUrl) {
       return {
@@ -881,13 +883,21 @@ async function resolveVideoUrlForMediaIndex(ctx: AgentContext, mediaIndex: numbe
         videoUrl: videoUrl || fallbackVideoUrl,
         duration: Number.isFinite(duration) ? duration : undefined,
         fps: Number.isFinite(fps) ? fps : undefined,
+        sourceRange,
       };
     }
   } catch (e) {
     console.error('[resolveVideoUrlForMediaIndex] exception:', e);
   }
 
+  if (isVideoUrl(directUrl)) return { idx: v.idx, videoUrl: directUrl };
   return { idx: v.idx, error: `No real video file found at <<<media_${mediaIndex}>>>. Use preview_frame only for Remotion compositions with design_path.` };
+}
+
+function scopeVideoQuestionToSourceRange(question: string | undefined, range: VideoSourceRange | undefined): string | undefined {
+  if (!range) return question;
+  const directive = `Analyze only the bounded original-source interval from ${range.start_sec}s through ${range.end_sec}s. Ignore content outside it. Report any timestamps in the original source timebase, not relative to zero.`;
+  return question ? `${directive}\nFocus request: ${question}` : directive;
 }
 
 async function resolveCompositionSource(ctx: AgentContext, input: {
@@ -1121,7 +1131,7 @@ async function publishWorkspaceMediaOutputs(ctx: AgentContext, options: {
   limit?: number;
   mediaType?: 'image' | 'video' | 'all';
   name?: string;
-}): Promise<{ success: boolean; message: string; published: Array<{ snapshotId: string; type: 'image' | 'video'; url: string; path?: string }> }> {
+}): Promise<{ success: boolean; message: string; published: Array<{ snapshotId: string; type: 'image' | 'video'; url: string; path?: string; mediaIndex: number; ref: string }> }> {
   if (!ctx.supabase || !ctx.userId) {
     return { success: false, message: 'Workspace not available (no Supabase connection).', published: [] };
   }
@@ -1237,7 +1247,18 @@ async function publishWorkspaceMediaOutputs(ctx: AgentContext, options: {
   }
 
   const { VIDEO_PLACEHOLDER_IMAGE } = await import('@/lib/editor/timeline-derivations');
-  const published: Array<{ snapshotId: string; type: 'image' | 'video'; url: string; path?: string }> = [];
+  const published: Array<{ snapshotId: string; type: 'image' | 'video'; url: string; path?: string; mediaIndex: number; ref: string }> = [];
+  const ensureMediaIndex = (url: string) => {
+    const identity = normalizeMediaIdentity(url);
+    let index = ctx.snapshotImages.findIndex(existing => normalizeMediaIdentity(existing) === identity);
+    if (index < 0) {
+      ctx.snapshotImages.push(url);
+      index = ctx.snapshotImages.length - 1;
+    }
+    ctx.currentSnapshotIndex = index;
+    const mediaIndex = index + 1;
+    return { mediaIndex, ref: `<<<media_${mediaIndex}>>>` };
+  };
   const { data: existingVideoSnaps } = await ctx.supabase
     .from('snapshots')
     .select('id, video_meta')
@@ -1263,7 +1284,13 @@ async function publishWorkspaceMediaOutputs(ctx: AgentContext, options: {
       const pathKey = normalizeMediaIdentity(output.path);
       const duplicateSnapshotId = (urlKey && existingVideoIdentities.get(`url:${urlKey}`)) || (pathKey && existingVideoIdentities.get(`path:${pathKey}`));
       if (duplicateSnapshotId) {
-        published.push({ snapshotId: duplicateSnapshotId, type: 'video', url: output.storageUrl, path: output.path });
+        published.push({
+          snapshotId: duplicateSnapshotId,
+          type: 'video',
+          url: output.storageUrl,
+          path: output.path,
+          ...ensureMediaIndex(output.storageUrl),
+        });
         continue;
       }
 
@@ -1296,11 +1323,15 @@ async function publishWorkspaceMediaOutputs(ctx: AgentContext, options: {
       });
       if (error) return { success: false, message: `Video publish failed: ${error.message}`, published };
 
-      ctx.snapshotImages.push(output.storageUrl);
-      ctx.currentSnapshotIndex = ctx.snapshotImages.length - 1;
       if (!ctx.pendingVideoSnapshots) ctx.pendingVideoSnapshots = [];
       ctx.pendingVideoSnapshots.push({ snapshotId, taskId, videoMeta });
-      published.push({ snapshotId, type: 'video', url: output.storageUrl, path: output.path });
+      published.push({
+        snapshotId,
+        type: 'video',
+        url: output.storageUrl,
+        path: output.path,
+        ...ensureMediaIndex(output.storageUrl),
+      });
       if (urlKey) existingVideoIdentities.set(`url:${urlKey}`, snapshotId);
       if (pathKey) existingVideoIdentities.set(`path:${pathKey}`, snapshotId);
     } else if (isImageContentType(output.contentType)) {
@@ -1315,17 +1346,21 @@ async function publishWorkspaceMediaOutputs(ctx: AgentContext, options: {
       });
       if (error) return { success: false, message: `Image publish failed: ${error.message}`, published };
 
-      ctx.snapshotImages.push(output.storageUrl);
-      ctx.currentSnapshotIndex = ctx.snapshotImages.length - 1;
       if (!ctx.pendingImageSnapshots) ctx.pendingImageSnapshots = [];
       ctx.pendingImageSnapshots.push({ snapshotId, imageUrl: output.storageUrl, description });
-      published.push({ snapshotId, type: 'image', url: output.storageUrl, path: output.path });
+      published.push({
+        snapshotId,
+        type: 'image',
+        url: output.storageUrl,
+        path: output.path,
+        ...ensureMediaIndex(output.storageUrl),
+      });
     }
   }
 
   return {
     success: true,
-    message: `Published ${published.length} workspace media output${published.length === 1 ? '' : 's'} to timeline:\n${published.map((p, i) => `${i + 1}. ${p.type}: ${p.url}`).join('\n')}`,
+    message: `Published ${published.length} workspace media output${published.length === 1 ? '' : 's'} to timeline and current Media List:\n${published.map((p, i) => `${i + 1}. ${p.ref} ${p.type}: ${p.url}`).join('\n')}\nThese refs are available immediately to later tools in this Agent session.`,
     published,
   };
 }
@@ -2032,7 +2067,7 @@ Hard constraints:
     }),
 
     analyze_image: tool({
-      description: 'See and analyze one timeline photo. Use for questions, red annotations, uncertain target regions, identity/detail inspection, ambiguous edits, or older media without verified evidence. A current upload batch is pre-analyzed in parallel into the Verified current upload batch block; consume that evidence instead of spending one tool round per image. Call analyze_image only when evidence is missing, failed, or a deeper visual question remains. Do not call this before clear direct generate_image edits; generate_image already receives the selected media. Use media_index to look at any snapshot in the timeline.',
+      description: 'See and analyze one timeline photo. Before calling, read that item\'s Media Index description: a specific description is existing media understanding regardless of which pipeline or Agent supplied it. Do not call this tool merely to restate covered content. Use it only when the description/evidence is missing, generic, failed, uncertain, or a concrete visual detail required by the user is not covered. A current upload batch is pre-analyzed in parallel into the Verified current upload batch block; consume that evidence instead of spending one tool round per image. This tool remains appropriate for red annotations, uncertain target regions, identity/detail inspection, ambiguous edits, or deeper questions. Do not call it before clear direct generate_image edits; generate_image already receives selected media. Use media_index to look at any snapshot in the timeline.',
       inputSchema: z.object({
         question: z.string().optional().describe('Optional focus area for the analysis'),
         media_index: z.number().optional().describe('1-based index of the snapshot to analyze (<<<media_1>>> = 1, etc.). Omit to analyze the current image.'),
@@ -2100,6 +2135,8 @@ Hard constraints:
 
 Default mode describes scenes/actions/pacing/audio cues in a timeline video. Current upload batches are pre-analyzed in parallel into the Verified current upload batch block. If any video evidence is missing or failed, pass all affected video indices together in media_indices so the tool analyzes them concurrently. Otherwise do not call this before clear direct video edits such as adding glasses, changing outfit, or using Omni to edit a referenced video; generate_animation already receives selected video references. Use analyze_video only for inspection, comparison, diagnosis, ambiguous targets, or frame-location workflows.
 
+Before calling describe mode, read each item's Media Index description. A specific description may already contain upstream video understanding such as summary, editorial purpose, scene evidence, and temporal bounds. Treat it as available evidence regardless of provider and do not call this tool merely to rediscover covered content. Call describe mode only when the description/evidence is missing, generic, failed, uncertain, or a concrete visual question required by the user remains uncovered.
+
 Use mode="locate_frame" when the user provides a screenshot/frame and you need to find where that frame appears in a video. This is the primary locator for screenshot-based local video edits. Provide the video as media_index and the screenshot as image_url, image_media_index, or workspace_path. For checking a known timestamp visually, use preview_frame instead.`,
       inputSchema: z.object({
         media_index: z.number().optional().describe('1-based snapshot index of one video to analyze (<<<media_1>>> = 1).'),
@@ -2123,8 +2160,12 @@ Use mode="locate_frame" when the user provides a screenshot/frame and you need t
             const resolved = await resolveVideoUrlForMediaIndex(ctx, index);
             if (!resolved.videoUrl) return { media_index: index, error: resolved.error || 'Video not found.' };
             try {
-              const analysis = await analyzeVideoContent(resolved.videoUrl, question, ctx.userId);
-              return { media_index: index, analysis, videoUrl: resolved.videoUrl };
+              const analysis = await analyzeVideoContent(
+                resolved.videoUrl,
+                scopeVideoQuestionToSourceRange(question, resolved.sourceRange),
+                ctx.userId,
+              );
+              return { media_index: index, analysis, videoUrl: resolved.videoUrl, source_range: resolved.sourceRange };
             } catch (err) {
               return { media_index: index, error: `Video analysis failed: ${err instanceof Error ? err.message : String(err)}` };
             }
@@ -2147,7 +2188,12 @@ Use mode="locate_frame" when the user provides a screenshot/frame and you need t
             if (image.error || !image.image) return { error: image.error || 'No screenshot image provided for locate_frame.' };
 
             const { locateFrameInVideoContent, verifyFrameImageMatch } = await import('./gemini');
-            let location = await locateFrameInVideoContent(videoUrl, image.image, question, ctx.userId);
+            let location = await locateFrameInVideoContent(
+              videoUrl,
+              image.image,
+              scopeVideoQuestionToSourceRange(question, resolved.sourceRange),
+              ctx.userId,
+            );
             let verification: Record<string, unknown> | undefined;
 
             if ((location.verdict === 'located' || location.verdict === 'multiple_candidates') && typeof location.timestamp === 'number') {
@@ -2201,13 +2247,18 @@ Use mode="locate_frame" when the user provides a screenshot/frame and you need t
               verification,
               media_index: mediaIndex,
               videoUrl,
+              source_range: resolved.sourceRange,
               imageSource: image.source,
             };
           }
 
           const { analyzeVideoContent } = await import('./gemini');
-          const analysis = await analyzeVideoContent(videoUrl, question, ctx.userId);
-          return { mode: 'describe', analysis, media_index: mediaIndex, videoUrl };
+          const analysis = await analyzeVideoContent(
+            videoUrl,
+            scopeVideoQuestionToSourceRange(question, resolved.sourceRange),
+            ctx.userId,
+          );
+          return { mode: 'describe', analysis, media_index: mediaIndex, videoUrl, source_range: resolved.sourceRange };
         } catch (err) {
           return { error: `Video analysis failed: ${err instanceof Error ? err.message : String(err)}` };
         }
@@ -2269,6 +2320,7 @@ For timeline videos, pass media_index. For external audio/video URLs, pass media
         let localMediaPath: string | undefined;
         let snapshotId: string | undefined;
         let videoMeta: Record<string, unknown> | undefined;
+        let sourceRange: VideoSourceRange | undefined;
         if (!resolvedUrl && media_index !== undefined) {
           const v = validateImageIndex(ctx.snapshotImages, media_index);
           if (v.error) return { error: v.error };
@@ -2288,6 +2340,7 @@ For timeline videos, pass media_index. For external audio/video URLs, pass media
             const snap = snaps?.[v.idx];
             snapshotId = snap?.id as string | undefined;
             videoMeta = snap?.video_meta as Record<string, unknown> | undefined;
+            sourceRange = sourceRangeFromVideoMeta(videoMeta);
             const cached = videoMeta?.transcript as VolcengineAsrTranscript | undefined;
             if (
               cached?.text
@@ -2307,6 +2360,7 @@ For timeline videos, pass media_index. For external audio/video URLs, pass media
                   cached: true,
                   media_index,
                   videoUrl: cached.sourceUrl || resolvedUrl,
+                  source_range: sourceRange,
                 };
               } catch (error) {
                 return { error: `Narration alignment failed: ${error instanceof Error ? error.message : String(error)}` };
@@ -2333,6 +2387,7 @@ For timeline videos, pass media_index. For external audio/video URLs, pass media
           const transcript = await transcribeWithVolcengineAsr({
             mediaUrl: resolvedUrl,
             localMediaPath,
+            sourceRange: sourceRange ? { startSec: sourceRange.start_sec, endSec: sourceRange.end_sec } : undefined,
             uid: ctx.userId || 'makaron-agent',
             language,
           });
@@ -2358,6 +2413,7 @@ For timeline videos, pass media_index. For external audio/video URLs, pass media
             cached: false,
             media_index,
             videoUrl: transcript.sourceUrl || resolvedUrl,
+            source_range: sourceRange,
           };
         } catch (err) {
           return { error: `ASR transcription failed: ${err instanceof Error ? err.message : String(err)}` };
@@ -3292,7 +3348,7 @@ Returns the rendered image so you can see it with your vision.`,
           }
         };
         let design = (ctx as any).__lastDesignPayload;
-        let rawVideo: { url: string; duration?: number; fps?: number } | null = null;
+        let rawVideo: { url: string; duration?: number; fps?: number; sourceRange?: VideoSourceRange } | null = null;
         if (design_path) {
           try {
             const file = await workspace.readFile(design_path, ctx.supabase, ctx.userId);
@@ -3330,11 +3386,13 @@ Returns the rendered image so you can see it with your vision.`,
               const fallbackUrl = isVideoUrl(ctx.snapshotImages[v.idx]) ? ctx.snapshotImages[v.idx] : (isVideoUrl(snap?.image_url) ? snap?.image_url || '' : '');
               const duration = Number(meta?.duration);
               const fps = Number(meta?.fps);
+              const sourceRange = sourceRangeFromVideoMeta(meta);
               if (snap?.type === 'video' || videoUrl || fallbackUrl) {
                 rawVideo = {
                   url: videoUrl || fallbackUrl,
                   duration: Number.isFinite(duration) ? duration : undefined,
                   fps: Number.isFinite(fps) ? fps : undefined,
+                  sourceRange,
                 };
               }
             }
@@ -3344,14 +3402,14 @@ Returns the rendered image so you can see it with your vision.`,
         } else if (targetMediaIndex !== undefined) {
           const resolved = await resolveVideoUrlForMediaIndex(ctx, targetMediaIndex);
           if (resolved.videoUrl) {
-            rawVideo = { url: resolved.videoUrl, duration: resolved.duration, fps: resolved.fps };
+            rawVideo = { url: resolved.videoUrl, duration: resolved.duration, fps: resolved.fps, sourceRange: resolved.sourceRange };
           }
         }
 
         if (targetMediaIndex !== undefined && !design && !rawVideo) {
           const resolved = await resolveVideoUrlForMediaIndex(ctx, targetMediaIndex);
           if (resolved.videoUrl) {
-            rawVideo = { url: resolved.videoUrl, duration: resolved.duration, fps: resolved.fps };
+            rawVideo = { url: resolved.videoUrl, duration: resolved.duration, fps: resolved.fps, sourceRange: resolved.sourceRange };
           }
         }
 
@@ -3465,12 +3523,13 @@ Returns the rendered image so you can see it with your vision.`,
               ? frame / videoFps
               : 0.5;
           const clampedTimestamp = Math.max(0, maxTimestamp !== undefined ? Math.min(targetTimestamp, maxTimestamp) : targetTimestamp);
+          const sourceTimestamp = (rawVideo.sourceRange?.start_sec || 0) + clampedTimestamp;
           const targetFrame = Math.max(0, Math.round(clampedTimestamp * videoFps));
           const totalFrames = rawVideo.duration && rawVideo.duration > 0 ? Math.max(1, Math.round(rawVideo.duration * videoFps)) : undefined;
 
           try {
             const { extractVideoFrame } = await import('./video-frame');
-            const jpegBuffer = await extractVideoFrame(rawVideo.url, { timestamp: clampedTimestamp });
+            const jpegBuffer = await extractVideoFrame(rawVideo.url, { timestamp: sourceTimestamp });
 
             let wsUrl = '';
             const wsPath = `${ctx.projectId}/drafts/video-media${targetMediaIndex || 'current'}-t${clampedTimestamp.toFixed(2).replace('.', '-')}-${Date.now()}.jpg`;
@@ -3482,7 +3541,9 @@ Returns the rendered image so you can see it with your vision.`,
                   path: wsPath,
                   storageUrl: wsUrl,
                   contentType: 'image/jpeg',
-                  description: `video frame at ${clampedTimestamp.toFixed(2)}s`,
+                  description: rawVideo.sourceRange
+                    ? `video range frame at ${clampedTimestamp.toFixed(2)}s (source ${sourceTimestamp.toFixed(2)}s)`
+                    : `video frame at ${clampedTimestamp.toFixed(2)}s`,
                   updatedAt: new Date().toISOString(),
                 }]);
               }
@@ -3499,6 +3560,8 @@ Returns the rendered image so you can see it with your vision.`,
               analysis,
               source: 'video',
               timestamp: clampedTimestamp,
+              sourceTimestamp,
+              sourceRange: rawVideo.sourceRange,
               frame: targetFrame,
               totalFrames,
               fps: videoFps,
@@ -3808,6 +3871,18 @@ Path is auto-generated from the current project and output type. Just provide a 
         content: z.string().optional().describe('File content. Not needed if fromLastRunCode=true.'),
         fromLastRunCode: z.boolean().optional().describe('Legacy same-attempt compatibility only. For durable Composition promotion use publish_draft({design_path}).'),
         fromWorkspaceOutputs: z.boolean().optional().describe('Publish recent workspace image/video outputs to the timeline instead of writing text/code. Use immediately for user-facing FFmpeg split/trim/export MP4 outputs, and for previously exported outputs across turns. Prefer exact workspace paths returned by run_code/list_files; never guess a workspace URL from a file name.'),
+        sourceRanges: z.array(z.object({
+          source_url: z.string().url(),
+          start_sec: z.number().nonnegative(),
+          end_sec: z.number().positive(),
+          source_uri: z.string().min(1).optional(),
+          project_id: z.string().min(1).optional(),
+          asset_id: z.string().min(1).optional(),
+          file_name: z.string().min(1).optional(),
+          description: z.string().min(1).optional(),
+          width: z.number().positive().optional(),
+          height: z.number().positive().optional(),
+        })).max(20).optional().describe('Publish external video intervals directly to the current Media List without uploading derivative MP4s. Each item uses the public source_url + start_sec + end_sec protocol. Put any already-known media analysis (summary, editorial purpose, scene evidence, limitations) into description so later Agent turns can use it without repeating Analyze. source_url must be an HTTP(S) video URL reachable by preview/export runtimes.'),
         workspacePaths: z.array(z.string()).optional().describe('Specific workspace file paths to publish. If omitted with fromWorkspaceOutputs=true, publishes the most recent project media outputs.'),
         mediaType: z.enum(['image', 'video', 'all']).optional().describe('Filter workspace outputs when publishing. Default all.'),
         limit: z.number().int().min(1).max(20).optional().describe('Maximum recent workspace outputs to publish when workspacePaths is omitted. Use 3 for three exported clips, etc.'),
@@ -3833,9 +3908,34 @@ Path is auto-generated from the current project and output type. Just provide a 
           description: z.string().optional(),
         }).optional().describe('Durable metadata for numbered composition parts. Include on the first part and only repeat when it changes; source files are auto-assembled without a final run_code call.'),
       }),
-      execute: async ({ path: filePath, name, content, fromLastRunCode, fromWorkspaceOutputs, workspacePaths, mediaType, limit, publish: shouldPublish, compositionMetadata }) => {
+      execute: async ({ path: filePath, name, content, fromLastRunCode, fromWorkspaceOutputs, sourceRanges, workspacePaths, mediaType, limit, publish: shouldPublish, compositionMetadata }) => {
         if (!ctx.supabase || !ctx.userId) {
           return { success: false, message: 'Workspace not available (no Supabase connection).' };
+        }
+        if (sourceRanges?.length) {
+          if (fromWorkspaceOutputs || fromLastRunCode || filePath || content) {
+            return { success: false, message: 'sourceRanges publishes external Media List entries directly. Do not combine it with file or workspace output modes.' };
+          }
+          if (shouldPublish === false) {
+            return { success: false, message: 'sourceRanges is a Media List publish operation. Omit publish:false.' };
+          }
+          try {
+            const { publishExternalVideoRanges } = await import('./external-video-range');
+            const published = await publishExternalVideoRanges({
+              supabase: ctx.supabase,
+              projectId: ctx.projectId,
+              ranges: sourceRanges,
+            });
+            await refreshSnapshotUrls(ctx);
+            if (published.length) ctx.currentSnapshotIndex = published[published.length - 1].mediaIndex - 1;
+            return {
+              success: true,
+              message: `Published ${published.length} external source range${published.length === 1 ? '' : 's'} to the current Media List without uploading derivative MP4s:\n${published.map((item, index) => `${index + 1}. ${item.ref} source_url=${item.sourceRange.source_url} start_sec=${item.sourceRange.start_sec} end_sec=${item.sourceRange.end_sec}\n   Media description: ${item.description}`).join('\n')}\nThese refs are available immediately to later tools in this same Agent session. Treat each ref as only its bounded source range when composing or editing. Their Media List descriptions are existing media understanding; consume covered content directly and call Analyze only for missing or uncovered details.`,
+              published,
+            };
+          } catch (error) {
+            return { success: false, message: error instanceof Error ? error.message : String(error), published: [] };
+          }
         }
         if (fromWorkspaceOutputs) {
           if (shouldPublish === false) {

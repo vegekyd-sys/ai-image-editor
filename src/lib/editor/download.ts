@@ -108,6 +108,23 @@ export async function downloadAsset(params: DownloadAssetParams): Promise<void> 
       }
 
       const proxyUrl = `/api/proxy-video?url=${encodeURIComponent(videoSrc)}&download=1`;
+      const isMobile = /iPhone|iPad|Android/i.test(navigator.userAgent);
+
+      // Desktop browsers can stream the proxy response straight into their download
+      // manager. Waiting for res.blob() first doubles memory use and makes Save appear
+      // stuck until the entire video has been downloaded in JavaScript.
+      if (!isMobile) {
+        const link = document.createElement('a');
+        link.href = proxyUrl;
+        link.download = filename;
+        link.click();
+        setIsSaving(false);
+        setAgentStatus(t('editor.done'));
+        showSaveToast();
+        return;
+      }
+
+      // Mobile web Share needs a File, so keep the buffered fallback there.
       const res = await fetch(proxyUrl);
       if (!res.ok) throw new Error(`Proxy fetch failed: ${res.status}`);
       const blob = await res.blob();
@@ -118,6 +135,7 @@ export async function downloadAsset(params: DownloadAssetParams): Promise<void> 
         try {
           await navigator.share({ files: [file] });
           setIsSaving(false);
+          setAgentStatus(t('editor.done'));
           showSaveToast();
           return;
         } catch { /* share failed (gesture expired, user cancelled) — fall through to blob download */ }
@@ -130,6 +148,7 @@ export async function downloadAsset(params: DownloadAssetParams): Promise<void> 
       link.click();
       URL.revokeObjectURL(url);
       setIsSaving(false);
+      setAgentStatus(t('editor.done'));
       showSaveToast();
     } catch {
       setIsSaving(false);

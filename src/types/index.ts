@@ -172,9 +172,24 @@ export interface ArtifactCompletionAction {
   policy?: 'confirm' | 'auto';
 }
 
+/**
+ * Non-destructive reference to a bounded interval in an externally hosted
+ * source video. The snake_case field names are the public Media List protocol.
+ */
+export interface VideoSourceRange {
+  source_url: string;
+  start_sec: number;
+  end_sec: number;
+  /** Optional durable/provider identity when source_url is signed or rotating. */
+  source_uri?: string;
+  project_id?: string;
+  asset_id?: string;
+  file_name?: string;
+}
+
 export interface VideoMeta {
   /** Explicit provenance for source uploads vs agent/provider outputs. */
-  origin?: 'source-upload' | 'generated';
+  origin?: 'source-upload' | 'external-range' | 'generated';
   taskId: string | null;
   videoUrl: string | null;
   providerUrl?: string;
@@ -200,6 +215,8 @@ export interface VideoMeta {
   refunded?: boolean;
   transcript?: VideoTranscript;
   completionActions?: ArtifactCompletionAction[];
+  /** Exact original-source interval represented by this Media List item. */
+  sourceRange?: VideoSourceRange;
 }
 
 

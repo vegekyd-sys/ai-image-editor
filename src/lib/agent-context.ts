@@ -17,6 +17,7 @@ import { buildModelHistoryFromRows, type DbToolHistoryRow } from './agentToolHis
 import { formatVideoMediaSpec } from './media-aspect';
 import { loadCompositionDraft } from './composition-draft';
 import { resolveExplicitTurnMediaIndices } from './media-provenance';
+import { formatSourceRangeHint, sourceRangeFromVideoMeta } from './media-source-range';
 import { WorkspaceStudioRunStore } from './studio-run';
 import {
   buildTypedCompactionMessage,
@@ -606,15 +607,20 @@ export async function buildPromptContext(
           : isRef ? 'reference' : isComposition ? 'composition' : 'image';
         const marker = i === currentSnapshotIndex ? '  ← YOU ARE HERE' : '';
         const videoTag = isVideo && videoMeta?.videoUrl ? ` [video: ${videoMeta.videoUrl}]` : '';
+        const sourceRangeTag = isVideo ? formatSourceRangeHint(sourceRangeFromVideoMeta(videoMeta)) : '';
         const transcriptTag = isVideo ? formatTranscriptMediaHint(videoMeta) : '';
         const codePath = s.design_path && !isVideo ? ` [composition code: ${s.design_path}]` : '';
-        return `<<<media_${i + 1}>>> [${typeLabel}]${marker} — ${desc}${videoTag}${transcriptTag}${codePath}`;
+        return `<<<media_${i + 1}>>> [${typeLabel}]${marker} — ${desc}${videoTag}${sourceRangeTag}${transcriptTag}${codePath}`;
       }).join('\n')}\n\n`
+    : '';
+
+  const mediaDescriptionPolicy = snapshots.length >= 1
+    ? `[Media description policy]\nA specific Media Index description may already contain media analysis supplied by an upload pipeline, asset library, earlier tool call, or another Agent. Treat that description as available evidence regardless of its provider. Read it before choosing tools. Do not call analyze_image or analyze_video merely to restate content already covered there. Analyze only when the description is missing/generic, explicitly uncertain or failed, or the user's question requires a concrete visual detail that the description does not cover. Never invent details beyond the supplied description. Use preview_frame for composition/layout/crop/boundary QA, not to repeat semantic analysis.\n\n`
     : '';
 
   // Video/composition mode warnings (mutually exclusive)
   const videoWarning = currentSnapIsVideo
-    ? `[VIDEO MODE] You are viewing a video. Use analyze_video for visual scenes/actions. Use transcribe_audio for dialogue, subtitles, word/utterance timestamps, or time-based cuts. Do NOT read or patch its composition code — that is only a playback wrapper.\n\n`
+    ? `[VIDEO MODE] You are viewing a video. First consume its Media Index description as existing media understanding. Use analyze_video only for missing or uncovered visual scenes/actions. Use transcribe_audio for dialogue, subtitles, word/utterance timestamps, or speech-dependent cuts when exact timing is not already available. Do NOT read or patch its composition code — that is only a playback wrapper.\n\n`
     : '';
 
   const designWarning = !currentSnapIsVideo && currentDesignPath
@@ -672,7 +678,7 @@ export async function buildPromptContext(
     : '';
 
   // Assemble
-  const fullPrompt = `${executionContext}${recoveryContext}${activeStudioRunContext}${videoWarning}${designWarning}${annotationWarning}${draftWarning}${snapshotWarning}${metaContext}${descriptionContext}${snapshotIndexContext}${turnMediaInspectionContext}${verifiedTurnMediaEvidence}${designContext}${recoverableDraftContext}${tipsContext}${refContext}${frameAnchoredVideoEditContext}${videoUploadContext}${audioAttachmentContext}[User request — detect language and reply in the same language]\n${userMessage}`;
+  const fullPrompt = `${executionContext}${recoveryContext}${activeStudioRunContext}${videoWarning}${designWarning}${annotationWarning}${draftWarning}${snapshotWarning}${metaContext}${descriptionContext}${snapshotIndexContext}${mediaDescriptionPolicy}${turnMediaInspectionContext}${verifiedTurnMediaEvidence}${designContext}${recoverableDraftContext}${tipsContext}${refContext}${frameAnchoredVideoEditContext}${videoUploadContext}${audioAttachmentContext}[User request — detect language and reply in the same language]\n${userMessage}`;
 
   const snapshotImages = snapshots.map((s) => {
     const videoMeta = s.video_meta as Record<string, unknown> | undefined;
