@@ -1584,8 +1584,8 @@ function printRootHelp() {
   console.log(`Makaron CLI — Talk to Makaron Agent from the terminal
 
 Commands:
-  setup                              Install makaron-cli globally and add the Makaron Agent Skill
-  install-skill                     Install the Makaron Agent Skill into your coding agent
+  setup                              Install makaron-cli globally and add the Agent Skill
+  install-skill                     Install Makaron Agent Skill into your coding agent
   register --json                    Get challenge for agent self-registration
   register --verify --challenge-id <id> --answer <n>  Verify and save API key
   claim                              Get claim URL for human to link account
@@ -1645,9 +1645,9 @@ function installAgentSkill(values = []) {
   }
 
   const skillDir = fileURLToPath(new URL('../skills/makaron', import.meta.url));
-  const canonicalSkillFile = path.join(skillDir, 'SKILL.md');
-  if (!fs.existsSync(canonicalSkillFile)) {
-    console.error(`Makaron Agent Skill not found at ${skillDir}`);
+  const skillFile = path.join(skillDir, 'SKILL.md');
+  if (!fs.existsSync(skillFile)) {
+    console.error(`Makaron Agent Skill not found at ${skillFile}`);
     process.exit(1);
   }
 
@@ -1677,7 +1677,7 @@ function setupMakaron(values = []) {
   if (!skillArgs.includes('--global') && !skillArgs.includes('-g')) skillArgs.unshift('--global');
   if (!skillArgs.includes('--yes') && !skillArgs.includes('-y')) skillArgs.push('--yes');
 
-  console.error('Installing the Makaron Agent Skill globally...');
+  console.error('Installing Makaron Agent Skill globally...');
   installAgentSkill(skillArgs);
 }
 

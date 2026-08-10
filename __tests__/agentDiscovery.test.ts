@@ -43,25 +43,25 @@ describe('Makaron CLI Agent discovery', () => {
     expect(sitemap).toContain('`${SITE_URL}/mcp`')
   })
 
-  it('presents Makaron Chat as the single creative handoff across machine-readable surfaces', () => {
+  it('presents Makaron Chat as the primary creative interface across machine-readable surfaces', () => {
     const registration = read('src/app/api/agent/register/route.ts')
     const copiedGuide = read('src/components/AgentCopyButton.tsx')
 
     expect(registration).toContain("default_interface: 'makaron chat'")
     expect(registration).toContain('complete user request')
     expect(registration).toContain('responses get $RUN_ID --wait --json')
-    expect(copiedGuide).toContain('do not decompose the request into low-level')
-    expect(copiedGuide).toContain('responses get $RUN_ID --wait --json')
+    expect(copiedGuide).toContain('Use \\`chat\\` for all creative tasks')
+    expect(copiedGuide).toContain('Fallback: Direct Tool Calls')
+    expect(copiedGuide).toContain('responses watch $RUN_ID --jsonl')
   })
 
-  it('aligns CLI and plugin versions and avoids a private repository link', () => {
+  it('aligns discovery plugin versions and omits private repository links from plugin manifests', () => {
     const pkg = JSON.parse(read('packages/makaron-cli/package.json'))
     const codexPlugin = JSON.parse(read('packages/makaron-cli/.codex-plugin/plugin.json'))
     const claudePlugin = JSON.parse(read('packages/makaron-cli/.claude-plugin/plugin.json'))
 
     expect(codexPlugin.version).toBe(pkg.version)
     expect(claudePlugin.version).toBe(pkg.version)
-    expect(pkg.repository).toBeUndefined()
     expect(codexPlugin.repository).toBeUndefined()
     expect(claudePlugin.repository).toBeUndefined()
   })

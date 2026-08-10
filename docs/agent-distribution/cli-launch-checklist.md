@@ -18,20 +18,20 @@ Do not position Makaron as only a model aggregator or generic image generator.
 - Rich `.codex-plugin/plugin.json` metadata and a repo-local marketplace.
 - Claude plugin metadata aligned to CLI version.
 - Five positive and three negative discovery evals; every positive case routes to the same `makaron` Skill and `makaron chat`.
-- npm package no longer advertises a private GitHub repository.
 
-## Release gate
+## GEO deployment gate
 
-Before publishing `makaron-cli@0.13.5` or deploying the website:
+This website GEO rollout does not require a new `makaron-cli` release. Keep the CLI and bundled Skill at `0.13.4` unless a separate CLI change is approved.
+
+Before deploying the website discovery surfaces:
 
 1. Run `npm run build:agent-discovery`.
 2. Run `npm run check:agent-discovery`.
 3. Run `npm run lint:agent-docs`.
 4. Run `npm run test:cli` and `npm test`.
 5. Run `npm run lint` and `npm run build`.
-6. Run `npm pack --dry-run --json` inside `packages/makaron-cli` and verify only `skills/makaron/SKILL.md` plus `evals/agent-discovery.json` are present.
-7. On a preview deployment, verify `GET` and `HEAD` return `200` for `/llms.txt`, `/skill.md`, the discovery index, and the canonical Makaron Skill URL without cookies.
-8. Install from the preview origin in a clean temporary agent environment and run one real image workflow before production release.
+6. On a preview deployment, verify `GET` and `HEAD` return `200` for `/llms.txt`, `/skill.md`, the discovery index, and the canonical Makaron Skill URL without cookies.
+7. Install from the preview origin in a clean temporary agent environment and run one real image workflow before production release.
 
 ## OpenAI first submission
 
@@ -39,7 +39,7 @@ Submit a skills-only plugin containing only the canonical `makaron` Skill. This 
 
 Required human or external steps:
 
-- Deploy these endpoints and publish the aligned npm package.
+- Deploy these endpoints. No npm publish is required for this GEO rollout.
 - Create a public distribution repository or omit the repository URL until it exists.
 - Add public Terms of Service reviewed by the publisher.
 - Prepare logo, category, support, privacy, starter prompts, regions, and release notes.
@@ -60,6 +60,10 @@ Claude Suggested Connectors requires a Directory-listed remote MCP server. Befor
 - Submit from a Claude Team or Enterprise organization with Directory access.
 
 Official requirements: <https://claude.com/docs/connectors/building/submission>
+
+## Future CLI release
+
+Create a new CLI version only when the executable, bundled Skill, or npm package metadata actually changes. Treat private repository metadata cleanup and any npm packaging changes as a separate CLI release with its own tests and release notes.
 
 ## Do not claim completion until visible
 
