@@ -374,15 +374,28 @@ const PreviewSequence = React.forwardRef(function PreviewSequence(
     ? {
         ...props.style,
         ...(isContinuingPastCut ? props.styleWhilePostmounted : {}),
-        opacity: mediaReady ? 1 : 0,
         pointerEvents: isContinuingPastCut ? 'none' : props.style?.pointerEvents,
       }
     : props.style;
-  const content = React.createElement(
+  const readinessContent = React.createElement(
     PreviewMediaReadinessContext.Provider,
     { value: readiness },
     props.children,
   );
+  // PremountedPostmountedSequence forces its active wrapper opacity back to 1,
+  // so readiness gating must live inside Sequence rather than in `style` above.
+  const content = containsVideo
+    ? React.createElement(
+        Remotion.AbsoluteFill,
+        {
+          style: {
+            opacity: mediaReady ? 1 : 0,
+            pointerEvents: mediaReady ? undefined : 'none',
+          },
+        },
+        readinessContent,
+      )
+    : readinessContent;
 
   return React.createElement(
     Sequence,
