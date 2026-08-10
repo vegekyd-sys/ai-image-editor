@@ -178,14 +178,17 @@ const AutoPremountSequence = React.forwardRef(function AutoPremountSequence(
 });
 
 // Interactive preview only: a media scene stays transparent until its native
-// video has decoded a frame. The preceding scene remains frozen underneath for
-// up to three seconds, so a slow Range request cannot expose the composition's
-// black background at a cut. Once the next frame is ready it paints above the
-// frozen scene immediately; there is no fixed transition delay.
+// video has decoded the correct range-local frame. The preceding scene remains
+// an active Sequence with its last frame frozen underneath for up to three
+// seconds. We intentionally do not use Sequence postmounting here: native video
+// elements can clear their painted frame when Remotion marks them postmounted.
+// Once the next frame is ready it paints above the frozen scene immediately;
+// there is no fixed transition delay.
 const PreviewSequence = React.forwardRef(function PreviewSequence(
   props: any,
   ref: React.Ref<HTMLDivElement>,
 ) {
+  const frame = Remotion.useCurrentFrame();
   const { fps } = useVideoConfig();
   const parentReadiness = React.useContext(PreviewMediaReadinessContext);
   const containsVideo = React.useMemo(
@@ -218,24 +221,51 @@ const PreviewSequence = React.forwardRef(function PreviewSequence(
     [containsVideo, markPending, markReady, parentReadiness, props.from],
   );
 
+  const authoredDuration = props.durationInFrames;
+  const canHoldLastFrame = containsVideo && Number.isFinite(authoredDuration);
+  const continuityFrames = canHoldLastFrame
+    ? (props.postmountFor ?? fps * 3)
+    : 0;
+  const isHoldingLastFrame = canHoldLastFrame &&
+    frame >= (props.from ?? 0) + authoredDuration;
   const style = containsVideo
-    ? { ...props.style, opacity: mediaReady ? 1 : 0 }
+    ? {
+        ...props.style,
+        ...(isHoldingLastFrame ? props.styleWhilePostmounted : {}),
+        opacity: mediaReady ? 1 : 0,
+        pointerEvents: isHoldingLastFrame ? 'none' : props.style?.pointerEvents,
+      }
     : props.style;
-  const styleWhilePostmounted = containsVideo
-    ? { ...props.styleWhilePostmounted, opacity: 1, pointerEvents: 'none' }
-    : props.styleWhilePostmounted;
+  const content = React.createElement(
+    PreviewMediaReadinessContext.Provider,
+    { value: readiness },
+    props.children,
+  );
+  const continuityContent = canHoldLastFrame
+    ? React.createElement(
+        Remotion.Freeze,
+        {
+          active: isHoldingLastFrame,
+          frame: Math.max(0, authoredDuration - 1),
+        },
+        content,
+      )
+    : content;
 
   return React.createElement(
     Sequence,
     {
       ...props,
       style,
+      durationInFrames: canHoldLastFrame
+        ? authoredDuration + continuityFrames
+        : authoredDuration,
       premountFor: props.premountFor ?? fps * 3,
-      postmountFor: containsVideo ? (props.postmountFor ?? fps * 3) : props.postmountFor,
-      styleWhilePostmounted,
+      postmountFor: canHoldLastFrame ? 0 : props.postmountFor,
+      styleWhilePostmounted: canHoldLastFrame ? undefined : props.styleWhilePostmounted,
       ref,
     },
-    React.createElement(PreviewMediaReadinessContext.Provider, { value: readiness }, props.children),
+    continuityContent,
   );
 });
 
