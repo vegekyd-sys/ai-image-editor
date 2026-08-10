@@ -1,0 +1,20 @@
+{
+  "name": "makaron-local",
+  "interface": {
+    "displayName": "Makaron Local Plugins"
+  },
+  "plugins": [
+    {
+      "name": "makaron-cli",
+      "source": {
+        "source": "local",
+        "path": "./packages/makaron-cli"
+      },
+      "policy": {
+        "installation": "AVAILABLE",
+        "authentication": "ON_INSTALL"
+      },
+      "category": "Creative Tools"
+    }
+  ]
+}

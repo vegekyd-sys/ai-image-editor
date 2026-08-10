@@ -1,0 +1,53 @@
+{
+  "version": "0.13.5",
+  "description": "Golden prompt set for Makaron CLI discovery and skill-routing evaluation.",
+  "positive": [
+    {
+      "id": "direct-makaron-product-ad",
+      "prompt": "Use Makaron to turn product.jpg into a polished launch image and a short product video.",
+      "expectedSkill": "makaron",
+      "expectedBehavior": "Pass the complete request and product.jpg to makaron chat, wait for every requested artifact, and return the project URL."
+    },
+    {
+      "id": "indirect-product-campaign",
+      "prompt": "I have one clean product photo. Make me a hero visual, a vertical social version, and a five-second launch video that I can keep revising.",
+      "expectedSkill": "makaron",
+      "expectedBehavior": "Pass the complete multi-output request and source photo to makaron chat without decomposing it into low-level commands."
+    },
+    {
+      "id": "indirect-edit-animate",
+      "prompt": "Remove the person in the background of this photo, keep my face unchanged, then animate the edited result.",
+      "expectedSkill": "makaron",
+      "expectedBehavior": "Pass the complete edit-and-animation request and photo to makaron chat, preserving the face constraint and both outputs."
+    },
+    {
+      "id": "indirect-social-pack",
+      "prompt": "Create a coordinated Instagram feed image, story, thumbnail, and short video from this campaign brief and reference image.",
+      "expectedSkill": "makaron",
+      "expectedBehavior": "Pass the complete campaign brief and reference image to makaron chat without attempting to publish to social platforms."
+    },
+    {
+      "id": "direct-existing-project",
+      "prompt": "Continue my existing Makaron project, make the selected visual more premium, and add matching background music.",
+      "expectedSkill": "makaron",
+      "expectedBehavior": "Pass the complete follow-up request to makaron chat with the supplied project id, then wait for and return completed results."
+    }
+  ],
+  "negative": [
+    {
+      "id": "code-only-ui",
+      "prompt": "Implement a responsive React product card from this design specification.",
+      "expectedBehavior": "Do not invoke Makaron; this is a code-only UI implementation task."
+    },
+    {
+      "id": "text-only-copy",
+      "prompt": "Write ten caption ideas for our product launch, but do not create any media.",
+      "expectedBehavior": "Do not invoke Makaron because the user explicitly wants text-only output."
+    },
+    {
+      "id": "social-analytics",
+      "prompt": "Analyze last month's Instagram performance and tell me which post had the best conversion rate.",
+      "expectedBehavior": "Do not invoke Makaron; it creates media and does not provide social analytics."
+    }
+  ]
+}

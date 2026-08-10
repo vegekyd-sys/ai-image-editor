@@ -91,8 +91,13 @@ export async function proxy(request: NextRequest) {
   const user = session?.user
 
   const { pathname } = request.nextUrl
+  const isAgentDiscoveryRoute =
+    pathname === '/llms.txt' ||
+    pathname === '/skill.md' ||
+    pathname.startsWith('/.well-known/agent-skills/')
   const isPublicRoute =
     pathname === '/' ||
+    isAgentDiscoveryRoute ||
     pathname === '/landingpage' ||
     pathname === '/home' ||
     pathname.startsWith('/home/') ||
@@ -169,8 +174,9 @@ export const config = {
      * - _next/static, _next/image (Next.js internals)
      * - favicon.ico, sitemap.xml, robots.txt
      * - /api/* (API routes)
+     * - Public Agent discovery files
      * - Static assets (.svg, .png, .jpg, etc.)
      */
-    '/((?!_next/static|_next/image|favicon\\.ico|sitemap\\.xml|robots\\.txt|api/|storage/|.*\\.(?:svg|png|jpg|jpeg|gif|webp|ico)$).*)',
+    '/((?!_next/static|_next/image|favicon\\.ico|sitemap\\.xml|robots\\.txt|llms\\.txt|skill\\.md|\\.well-known/agent-skills/|api/|storage/|.*\\.(?:svg|png|jpg|jpeg|gif|webp|ico)$).*)',
   ],
 }

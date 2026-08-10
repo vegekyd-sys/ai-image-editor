@@ -2,127 +2,41 @@
 
 import { useState } from 'react'
 
-const AGENT_DOC = `# Makaron CLI — For AI Agents
+const AGENT_DOC = `# Makaron — the creative agent for AI agents
 
-makaron.app is for humans. makaron-cli is for AI agents.
+Give your AI agent a creative agent. Pass the complete request and source media to makaron chat; Makaron plans and produces the finished work in a persistent project.
 
-Makaron is a multimodal AI creative agent. You talk to it via \`makaron chat\`, and it produces images, videos, music, and animated designs — all saved to a persistent project.
+## Install
 
-## Install & Auth
-
-# Install the Makaron Agent Skill from the makaron-cli npm package.
 npx makaron-cli setup
 
-export MAKARON_API_KEY=mk_live_xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx
-npx makaron-cli list   # verify it works
+## Core rule
 
-## Core Workflow
+Use makaron chat for all creative work. Preserve the complete user request, attach every relevant image, video, or audio file, and do not decompose the request into low-level image, video, music, or design commands.
 
-# One-shot: create project + upload image + submit prompt
-RUN_ID=$(npx makaron-cli chat --project auto --image photo.jpg -b "make it cinematic and create a 5s video")
+## New project
 
-# Watch until all artifacts are ready
-npx makaron-cli responses watch $RUN_ID --jsonl
+RUN_ID=$(npx makaron-cli chat --project auto --image photo.jpg -b "<complete user request>")
 
-## chat — Primary Command
+## Existing project
 
-Use \`chat\` for all creative tasks. The Agent decides how to execute.
+RUN_ID=$(npx makaron-cli chat --project <projectId> -b "<complete follow-up request>")
 
-# Submit (returns immediately with runId)
-npx makaron-cli chat --project <id> --json -b "<prompt>"
+## Return the project and finished work
 
-# Auto-create project with images
-npx makaron-cli chat --project auto --image photo.jpg --json -b "make it cinematic"
-npx makaron-cli chat --project auto --image img1.jpg --image img2.jpg --json -b "combine these"
+npx makaron-cli responses get $RUN_ID --pick project_url
+npx makaron-cli responses get $RUN_ID --wait --json
 
-# Add reference images to existing project
-npx makaron-cli chat --project <id> --image ref.jpg -b "use this style"
+Return all requested media as native attachments when possible, plus the Makaron project URL.
 
-## responses — Track Results
+## Self-registration
 
-# Check status
-npx makaron-cli responses get <runId> --json
-
-# Watch until done (streaming)
-npx makaron-cli responses watch <runId> --jsonl
-
-# Extract specific results
-npx makaron-cli responses get <runId> --pick first_image_url
-npx makaron-cli responses get <runId> --pick first_video_url
-npx makaron-cli responses get <runId> --pick text
-npx makaron-cli responses get <runId> --pick status
-
-## Capabilities
-
-| Task | Example prompt |
-|------|---------------|
-| Edit photo | "make it cinematic with warm tones" |
-| Style transfer | "convert to oil painting style" |
-| Add/remove elements | "add a cat on the table" / "remove background" |
-| Text-to-image | "generate a cyberpunk cityscape" |
-| Video from image | "create a 5 second video of her walking" |
-| Video with model | "use seedance model, make a 5s video" |
-| Background music | "add calm piano music" |
-| Motion design | "create an Instagram story with animated text" |
-| Multi-step | "edit the photo then make a video from it" |
-
-## Fallback: Direct Tool Calls
-
-# edit — One-shot image editing
-npx makaron-cli edit --image photo.jpg "add cinematic warm lighting"
-npx makaron-cli edit "a cyberpunk cityscape at night"   # text-to-image
-
-# video — Video generation
-npx makaron-cli video script --image img1.jpg "cinematic story"
-npx makaron-cli video create --script "..." --image https://...jpg --duration 5
-npx makaron-cli video status <taskId>
-
-# music — Music generation
-npx makaron-cli music create "gentle piano, warm strings, cinematic"
-npx makaron-cli music status <taskId>
-
-## Important Notes
-
-- One project = one conversation thread. All history preserved.
-- Provider-generated videos take 3-5 minutes; Grok is usually around 30-40 seconds. Remotion compositions should use \`materialize\` / \`responses get --materialize\`.
-- Music takes ~60 seconds. Images typically 15-30 seconds.
-- Always use \`chat\` as primary interface — even for single edits.
-- stdout = machine-readable JSON/text. Human-friendly logs → stderr.
-
-## Self-Registration (No Human Required)
-
-AI agents can register themselves to get an API key and welcome credits.
-
-Step 1: Get Challenge
 npx makaron-cli register --json
-→ { "challenge_id": "...", "challenge": "...", "expected_format": "numeric, round to 2 decimal places" }
+npx makaron-cli register --verify --challenge-id <id> --answer <number>
 
-Step 2: Solve & Verify
-npx makaron-cli register --verify --challenge-id <id> --answer 34.5
-→ Key saved to ~/.makaron/auth.json
-→ { "api_key": "mk_live_...", "credits": N, "claim_url": "..." }
-
-Step 3: Start using the CLI
-npx makaron-cli chat --project auto --image photo.jpg -b "make it cinematic"
-npx makaron-cli responses watch <runId> --jsonl
-
-## Let a Human Claim This Account
-
-npx makaron-cli claim
-→ { "claim_url": "https://www.makaron.app/claim?token=clm_..." }
-
-Share claim_url with a human. They log in and link the API key to your account.
-
-## Billing
-
-- welcome credits on registration
-- Credits consumed per operation (varies by tool)
-- Top up: https://www.makaron.app/dashboard
-
-## Discovery API
-
-GET https://www.makaron.app/api/agent/register
-→ JSON with full registration flow, CLI commands, and capabilities
+Docs: https://www.makaron.app/agent
+Skill: https://www.makaron.app/skill.md
+Discovery: https://www.makaron.app/.well-known/agent-skills/index.json
 `
 
 export default function CopyButton() {

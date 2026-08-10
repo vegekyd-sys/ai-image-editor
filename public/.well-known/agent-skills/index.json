@@ -1,0 +1,12 @@
+{
+  "$schema": "https://schemas.agentskills.io/discovery/0.2.0/schema.json",
+  "skills": [
+    {
+      "name": "makaron",
+      "type": "skill-md",
+      "description": "Give an AI agent a creative agent through Makaron CLI. Use for any request to create, edit, transform, combine, or continue visual and multimedia work, including images, video, music, motion design, ads, social content, and multi-step creative projects. Pass the user's complete creative intent and source media to `makaron chat`; Makaron plans and executes the workflow. Do not use for text-only advice, analytics, or code-only implementation.",
+      "url": "/.well-known/agent-skills/makaron/SKILL.md",
+      "digest": "sha256:1699475ae950338c73b04e251c15cb6cf5f604efd895ed00a9f7083b142f5732"
+    }
+  ]
+}

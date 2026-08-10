@@ -1,7 +1,7 @@
 {
   "name": "makaron-cli",
-  "version": "0.13.4",
-  "description": "Talk to Makaron Agent from the terminal — create projects, edit images, generate videos",
+  "version": "0.13.5",
+  "description": "Give any AI agent a creative agent — pass complete creative requests to Makaron Chat",
   "type": "module",
   "scripts": {
     "test": "node test/smoke.mjs",
@@ -14,6 +14,7 @@
   "files": [
     "bin/",
     "skills/",
+    "evals/",
     ".codex-plugin/",
     ".claude-plugin/",
     "README.md"
@@ -21,14 +22,17 @@
   "keywords": [
     "makaron",
     "ai",
+    "creative-agent",
+    "multimodal",
     "image-editing",
-    "video",
+    "video-generation",
+    "music-generation",
     "cli",
-    "agent"
+    "agent-skill",
+    "codex",
+    "claude-code"
   ],
   "license": "MIT",
-  "repository": {
-    "type": "git",
-    "url": "git+https://github.com/vegekyd/ai-image-editor.git"
-  }
+  "author": "Versa AI",
+  "homepage": "https://www.makaron.app/agent"
 }

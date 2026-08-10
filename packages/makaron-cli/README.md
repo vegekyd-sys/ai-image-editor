@@ -4,13 +4,21 @@
 
 Makaron is a multimodal AI creative agent. You talk to it via `makaron chat`, and it produces images, videos, music, and animated designs — all saved to a persistent project.
 
+It is designed for the full handoff: an agent creates finished media from a brief, then a human can open the same project in `makaron.app` to inspect, revise, and export it. Makaron CLI is not only a raw model wrapper.
+
 ## Setup
 
 ```bash
-# Install makaron-cli globally and add the Makaron Agent Skill.
+# Install makaron-cli globally and add the single Makaron Agent Skill.
 npx makaron-cli setup
 
 npx makaron-cli --help
+```
+
+Agents that support the open Agent Skills discovery format can install the Makaron Agent Skill directly:
+
+```bash
+npx skills add https://www.makaron.app
 ```
 
 ### Get your API key

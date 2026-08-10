@@ -1,21 +1,30 @@
 {
   "name": "makaron-cli",
-  "version": "0.13.3",
-  "description": "AI image editing, video generation, music creation, and marketplace skill workflows via CLI. Agents can self-register, install skills, create projects, and produce creative media.",
-  "displayName": "Makaron",
-  "shortDescription": "AI image/video/music creation from the terminal",
-  "longDescription": "makaron.app is for humans. makaron-cli is for AI agents. Talk to Makaron Agent from the terminal — list, search, show, and install marketplace skills; create projects; edit images; generate videos; and compose music. Zero dependencies, single file, works with npx. Agents can self-register to get an API key without human intervention.",
+  "version": "0.13.5",
+  "description": "Give Codex a creative agent. Pass complete creative requests and source media to Makaron Chat.",
   "author": {
-    "name": "Makaron AI",
+    "name": "Versa AI",
+    "email": "tianyi@versa-ai.com",
     "url": "https://www.makaron.app"
   },
   "homepage": "https://www.makaron.app/agent",
-  "repository": "https://github.com/vegekyd/ai-image-editor",
   "license": "MIT",
-  "keywords": ["ai", "image-editing", "video", "music", "agent", "creative", "skills"],
-  "category": "Creative Tools",
-  "capabilities": ["image-editing", "video-generation", "music-creation", "text-to-image", "marketplace-skills"],
+  "keywords": ["creative-production", "image-editing", "video-generation", "music", "agent", "cli"],
   "skills": "./skills/",
-  "websiteURL": "https://www.makaron.app",
-  "brandColor": "#d946ef"
+  "interface": {
+    "displayName": "Makaron Creative Studio",
+    "shortDescription": "Give Codex a creative agent",
+    "longDescription": "Pass any complete creative request and source media to Makaron Chat. Makaron plans and produces images, video, music, and motion design in a persistent project that a human can continue editing in makaron.app.",
+    "developerName": "Versa AI",
+    "category": "Creative Tools",
+    "capabilities": ["Read", "Write"],
+    "websiteURL": "https://www.makaron.app/agent",
+    "privacyPolicyURL": "https://www.makaron.app/privacy",
+    "defaultPrompt": [
+      "Pass this complete creative brief and its source files to Makaron Chat.",
+      "Ask Makaron Chat to turn this image into the finished media described in my request.",
+      "Continue this Makaron project with my complete follow-up request."
+    ],
+    "brandColor": "#d946ef"
+  }
 }

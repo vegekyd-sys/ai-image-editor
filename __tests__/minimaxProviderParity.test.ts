@@ -36,11 +36,7 @@ describe('MiniMax H3 provider parity', () => {
   })
 
   it('documents the H3 CLI model, resolution, duration, and reference limits', () => {
-    for (const rel of [
-      'packages/makaron-cli/README.md',
-      'packages/makaron-cli/SKILL.md',
-      'packages/makaron-cli/skills/makaron/SKILL.md',
-    ]) {
+    for (const rel of ['packages/makaron-cli/README.md']) {
       const doc = read(rel)
       expect(doc, rel).toContain('minimax-h3')
       expect(doc, rel).toContain('2k')

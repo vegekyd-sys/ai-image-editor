@@ -1,12 +1,12 @@
 {
   "name": "makaron-cli",
-  "version": "0.13.3",
-  "description": "AI image editing, video generation, music creation, and marketplace skill workflows via CLI. Agents can self-register, install skills, create projects, and produce creative media.",
+  "version": "0.13.5",
+  "description": "Give Claude Code a creative agent. Pass complete creative requests and source media to Makaron Chat.",
   "author": {
-    "name": "Makaron AI",
+    "name": "Versa AI",
+    "email": "tianyi@versa-ai.com",
     "url": "https://www.makaron.app"
   },
   "homepage": "https://www.makaron.app/agent",
-  "repository": "https://github.com/vegekyd/ai-image-editor",
   "skills": "./skills/"
 }
