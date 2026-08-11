@@ -67,7 +67,6 @@ describe('downloadAsset animated Remotion Save', () => {
       currentVideoUrl: null,
       draftParentIndex: null,
       snapshotsRef: { current: [animatedSnapshot] },
-      pendingVideoRef: { current: null },
       setIsSaving,
       setAgentStatus,
       showSaveToast,
@@ -103,7 +102,6 @@ describe('downloadAsset animated Remotion Save', () => {
       currentVideoUrl: null,
       draftParentIndex: null,
       snapshotsRef: { current: [animatedSnapshot] },
-      pendingVideoRef: { current: null },
       setIsSaving,
       setAgentStatus,
       showSaveToast,
@@ -122,5 +120,43 @@ describe('downloadAsset animated Remotion Save', () => {
     expect(setIsSaving).toHaveBeenLastCalledWith(false)
     expect(clickedHref).toBe(objectUrl)
     expect(showSaveToast).toHaveBeenCalled()
+  })
+
+  it('exports and opens mobile Web Share from a single Save click', async () => {
+    const share = vi.fn().mockResolvedValue(undefined)
+    vi.stubGlobal('navigator', {
+      userAgent: 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 Version/18.0 Safari/605.1.15',
+      platform: 'MacIntel',
+      maxTouchPoints: 5,
+      share,
+      canShare: vi.fn().mockReturnValue(true),
+    })
+    vi.mocked(exportDesignVideo).mockResolvedValue(new Blob(['mp4-bytes'], { type: 'video/mp4' }))
+    const setIsSaving = vi.fn()
+    const setAgentStatus = vi.fn()
+    const showSaveToast = vi.fn()
+
+    await downloadAsset({
+      timeline: ['poster'],
+      viewIndex: 0,
+      isViewingVideo: false,
+      currentVideoUrl: null,
+      draftParentIndex: null,
+      snapshotsRef: { current: [animatedSnapshot] },
+      setIsSaving,
+      setAgentStatus,
+      showSaveToast,
+      t: ((key: string) => key) as never,
+      projectTitle: 'Project',
+    })
+
+    expect(exportDesignVideo).toHaveBeenCalledTimes(1)
+    expect(share).toHaveBeenCalledTimes(1)
+    expect(share.mock.calls[0]?.[0]?.files?.[0]).toBeInstanceOf(File)
+    expect(clicked).toBe(false)
+    expect(setIsSaving).toHaveBeenNthCalledWith(1, true)
+    expect(setIsSaving).toHaveBeenLastCalledWith(false)
+    expect(setAgentStatus).toHaveBeenCalledWith('editor.done')
+    expect(showSaveToast).toHaveBeenCalledTimes(1)
   })
 })

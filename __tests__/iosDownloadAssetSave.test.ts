@@ -25,7 +25,6 @@ function makeParams(overrides: Partial<Parameters<typeof downloadAsset>[0]> = {}
     currentVideoUrl: null,
     draftParentIndex: null,
     snapshotsRef: { current: [] },
-    pendingVideoRef: { current: null },
     setIsSaving: vi.fn(),
     setAgentStatus: vi.fn(),
     showSaveToast: vi.fn(),
@@ -147,6 +146,39 @@ describe('editor asset save flow', () => {
     );
     expect(fetch).toHaveBeenCalledWith('/api/proxy-video?url=https%3A%2F%2Fcdn.makaron.app%2Fvideo.mp4&download=1');
     expect(params.setAgentStatus).toHaveBeenCalledWith('Native save failed, trying fallback...');
+    expect(params.setAgentStatus).toHaveBeenCalledWith('editor.done');
+    expect(params.showSaveToast).toHaveBeenCalledTimes(1);
+  });
+
+  it('shares completed videos from a single Save click on iOS Safari', async () => {
+    vi.mocked(isNativePhotoLibrarySaveAvailable).mockReturnValue(false);
+    const shareSpy = vi.fn().mockResolvedValue(undefined);
+    const canShareSpy = vi.fn().mockReturnValue(true);
+    vi.stubGlobal('navigator', {
+      userAgent: 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 Version/18.0 Safari/605.1.15',
+      platform: 'MacIntel',
+      maxTouchPoints: 5,
+      share: shareSpy,
+      canShare: canShareSpy,
+    });
+    const videoBlob = new Blob(['mp4'], { type: 'video/mp4' });
+    const fetchSpy = vi.fn(async () => ({
+      ok: true,
+      blob: async () => videoBlob,
+    }));
+    vi.stubGlobal('fetch', fetchSpy);
+    const clickSpy = vi.spyOn(HTMLAnchorElement.prototype, 'click').mockImplementation(() => {});
+    const params = makeParams({
+      isViewingVideo: true,
+      currentVideoUrl: 'https://cdn.makaron.app/video.mp4',
+    });
+
+    await downloadAsset(params);
+
+    expect(fetchSpy).toHaveBeenCalledTimes(1);
+    expect(shareSpy).toHaveBeenCalledTimes(1);
+    expect(shareSpy.mock.calls[0]?.[0]?.files?.[0]).toBeInstanceOf(File);
+    expect(clickSpy).not.toHaveBeenCalled();
     expect(params.setAgentStatus).toHaveBeenCalledWith('editor.done');
     expect(params.showSaveToast).toHaveBeenCalledTimes(1);
   });

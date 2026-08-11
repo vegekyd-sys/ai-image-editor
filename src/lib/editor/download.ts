@@ -10,7 +10,6 @@ export interface DownloadAssetParams {
   currentVideoUrl: string | null | undefined;
   draftParentIndex: number | null;
   snapshotsRef: { current: Snapshot[] };
-  pendingVideoRef: { current: { blob: Blob; filename: string } | null };
   setIsSaving: (v: boolean) => void;
   setAgentStatus: (msg: string) => void;
   showSaveToast: () => void;
@@ -71,6 +70,15 @@ function shortErrorMessage(error: unknown): string {
   return error instanceof Error ? error.message : String(error);
 }
 
+export function isMobileWebDevice(): boolean {
+  if (typeof navigator === 'undefined') return false;
+
+  const userAgent = navigator.userAgent || '';
+  const isMobileUserAgent = /Android|iPhone|iPad|iPod|Mobile/i.test(userAgent);
+  const isIPadDesktopUserAgent = navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1;
+  return isMobileUserAgent || isIPadDesktopUserAgent;
+}
+
 export async function downloadAsset(params: DownloadAssetParams): Promise<void> {
   const {
     timeline,
@@ -79,7 +87,6 @@ export async function downloadAsset(params: DownloadAssetParams): Promise<void> 
     currentVideoUrl,
     draftParentIndex,
     snapshotsRef,
-    pendingVideoRef,
     setIsSaving,
     setAgentStatus,
     showSaveToast,
@@ -90,6 +97,7 @@ export async function downloadAsset(params: DownloadAssetParams): Promise<void> 
   // Video download — proxy through our API to avoid CORS
   if (isViewingVideo && currentVideoUrl) {
     const videoSrc = currentVideoUrl;
+    const isMobile = isMobileWebDevice();
     const filename = `makaron-video-${Date.now()}.mp4`;
     setIsSaving(true);
     setAgentStatus('Saving to Photos...');
@@ -108,7 +116,6 @@ export async function downloadAsset(params: DownloadAssetParams): Promise<void> 
       }
 
       const proxyUrl = `/api/proxy-video?url=${encodeURIComponent(videoSrc)}&download=1`;
-      const isMobile = /iPhone|iPad|Android/i.test(navigator.userAgent);
 
       // Desktop browsers can stream the proxy response straight into their download
       // manager. Waiting for res.blob() first doubles memory use and makes Save appear
@@ -129,18 +136,21 @@ export async function downloadAsset(params: DownloadAssetParams): Promise<void> 
       if (!res.ok) throw new Error(`Proxy fetch failed: ${res.status}`);
       const blob = await res.blob();
       const file = new File([blob], filename, { type: 'video/mp4' });
-      // Try native share (iOS/Android) — wrapped in its own try/catch so share failure
-      // falls through to blob download instead of navigating away
-      if (navigator.share && navigator.canShare?.({ files: [file] }) && /iPhone|iPad|Android/i.test(navigator.userAgent)) {
+      if (typeof navigator.share === 'function' && navigator.canShare?.({ files: [file] })) {
         try {
           await navigator.share({ files: [file] });
           setIsSaving(false);
           setAgentStatus(t('editor.done'));
           showSaveToast();
           return;
-        } catch { /* share failed (gesture expired, user cancelled) — fall through to blob download */ }
+        } catch {
+          // A cancelled or rejected share must not silently download to Files.
+          setIsSaving(false);
+          setAgentStatus(t('editor.done'));
+          return;
+        }
       }
-      // Fallback: trigger download via blob URL (works on desktop + iOS when share fails)
+      // Fallback for mobile browsers without file sharing support.
       const url = URL.createObjectURL(blob);
       const link = document.createElement('a');
       link.href = url;
@@ -162,40 +172,7 @@ export async function downloadAsset(params: DownloadAssetParams): Promise<void> 
   const snapIdx = snapFromTimeline(viewIndex, draftParentIndex);
   const currentSnap = snapIdx !== null ? snapshotsRef.current[snapIdx] : undefined;
   if (currentSnap?.design?.animation) {
-    const isMobile = /iPhone|iPad|Android/i.test(navigator.userAgent);
-
-    // Mobile step 2: video already exported → share with fresh user gesture
-    if (isMobile && pendingVideoRef.current) {
-      const { blob, filename } = pendingVideoRef.current;
-      pendingVideoRef.current = null;
-      if (isNativePhotoLibrarySaveAvailable()) {
-        try {
-          await saveBlobToNativePhotoLibrary(blob, filename, 'video');
-          setAgentStatus(t('editor.done'));
-          showSaveToast();
-          return;
-        } catch (error) {
-          console.warn('Native pending video save failed, falling back to share:', error);
-        }
-      }
-
-      const file = new File([blob], filename, { type: 'video/mp4' });
-      try {
-        if (typeof navigator.share === 'function' && navigator.canShare?.({ files: [file] })) {
-          await navigator.share({ files: [file] });
-          setAgentStatus(t('editor.done'));
-          showSaveToast();
-        } else {
-          // Fallback: open in new tab (iOS Safari ignores <a download> for blobs)
-          const url = URL.createObjectURL(blob);
-          window.open(url, '_blank');
-          setAgentStatus(t('editor.done'));
-          showSaveToast();
-          setTimeout(() => URL.revokeObjectURL(url), 120000);
-        }
-      } catch { /* user cancelled share sheet */ }
-      return;
-    }
+    const isMobile = isMobileWebDevice();
 
     setIsSaving(true);
     setAgentStatus('Exporting video...');
@@ -224,10 +201,16 @@ export async function downloadAsset(params: DownloadAssetParams): Promise<void> 
 
         const file = new File([blob], filename, { type: 'video/mp4' });
         if (typeof navigator.share === 'function' && navigator.canShare?.({ files: [file] })) {
-          // Mobile + share available: store blob, prompt user to tap Share
-          pendingVideoRef.current = { blob, filename };
-          setIsSaving(false);
-          setAgentStatus(t('editor.videoReady'));
+          try {
+            await navigator.share({ files: [file] });
+            setIsSaving(false);
+            setAgentStatus(t('editor.done'));
+            showSaveToast();
+          } catch {
+            // A cancelled or rejected share must not silently download to Files.
+            setIsSaving(false);
+            setAgentStatus(t('editor.done'));
+          }
         } else {
           // Mobile but no share (localhost/HTTP): download directly
           const url = URL.createObjectURL(blob);
