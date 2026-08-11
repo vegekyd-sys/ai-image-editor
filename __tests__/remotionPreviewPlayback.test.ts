@@ -40,6 +40,7 @@ describe('Remotion preview playback contract', () => {
     expect(evalSource).toContain('(rangeEnd - rangeStart) / playbackRate')
     expect(evalSource).toContain('Math.min(authoredDuration, mediaDuration ?? authoredDuration)')
     expect(evalSource).toContain("crossOrigin: crossOrigin ?? 'anonymous'")
+    expect(evalSource).toContain('pauseWhenBuffering: true')
     expect(evalSource).toContain("React.createElement('canvas'")
     expect(evalSource).toContain('video.requestVideoFrameCallback(captureNextFrame)')
     expect(evalSource).toContain('video.requestVideoFrameCallback(checkReadinessFrame)')
@@ -109,6 +110,7 @@ describe('Remotion preview playback contract', () => {
     expect(waitingHandler).toContain('setRemotionBuffering(true)')
     expect(waitingHandler).not.toContain('player.pause()')
     expect(source).toContain("player.addEventListener('resume', onResume)")
+    expect(source).not.toContain('if (!player || hasVideoElement) return')
   })
 
   it('updates interactive input props without recompiling the composition', () => {

@@ -295,6 +295,12 @@ const PreviewVideo = React.forwardRef(function PreviewVideo(
       ...rest,
       className,
       crossOrigin: crossOrigin ?? 'anonymous',
+      // Html5Video defaults this to false. Without the opt-in, a newly-active
+      // source range may sit at readyState 0 while the Remotion timeline keeps
+      // advancing, leaving captions/motion graphics playing over no footage.
+      // Let Remotion hold the whole Player frame until the media tag has future
+      // data; the outgoing cached frame remains visible during that hold.
+      pauseWhenBuffering: true,
       playbackRate,
       src,
       startFrom,
