@@ -183,6 +183,7 @@ export default function Editor({
   const [isEditing, setIsEditing] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
   const [saveToast, setSaveToast] = useState(false);
+  const pendingVideoRef = useRef<{ blob: Blob; filename: string } | null>(null);
   // Babel CDN loading status for UI feedback
   const [babelStatus, setBabelStatus] = useState<BabelStatus>(getBabelStatus().status);
   useEffect(() => subscribeBabelStatus(() => setBabelStatus(getBabelStatus().status)), []);
@@ -2978,6 +2979,7 @@ Select the best 3-7 items for a compelling video. You do NOT need to use all or 
       currentVideoUrl: currentSnap?.videoMeta?.videoUrl || currentVideo?.videoUrl,
       draftParentIndex: draftParentIndexRef.current,
       snapshotsRef,
+      pendingVideoRef,
       setIsSaving,
       setAgentStatus,
       showSaveToast,
@@ -3861,7 +3863,7 @@ Select the best 3-7 items for a compelling video. You do NOT need to use all or 
                           </svg>
                           Saving
                         </span>
-                      ) : 'Save'}
+                      ) : pendingVideoRef.current && /iPhone|iPad|Android/i.test(navigator.userAgent) ? t('editor.share') : 'Save'}
                     </button>
                     </>
                   )}
