@@ -68,6 +68,21 @@ describe('MiniMax H3 video adapter', () => {
     })).resolves.toBe('minimax-h3-768-task')
   })
 
+  it('defaults the provider request to 768P when resolution is omitted', async () => {
+    vi.stubGlobal('fetch', vi.fn(async (_url: string | URL | Request, init?: RequestInit) => {
+      const body = JSON.parse(String(init?.body))
+      expect(body.resolution).toBe('768P')
+      return new Response(JSON.stringify({ task_id: 'default-768-task' }), { status: 200 })
+    }))
+
+    const { createMinimaxVideoTask } = await import('@/lib/minimax-video')
+    await expect(createMinimaxVideoTask({
+      prompt: 'A cinematic creative pulse crosses a dark studio.',
+      images: [],
+      duration: 5,
+    })).resolves.toBe('minimax-h3-default-768-task')
+  })
+
   it('allows each documented multimodal reference maximum in one request', async () => {
     const images = Array.from({ length: 9 }, (_, index) => `https://example.com/image-${index + 1}.png`)
     const videoUrls = Array.from({ length: 3 }, (_, index) => `https://example.com/video-${index + 1}.mp4`)

@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from 'vitest'
 import { createVideo } from '@/lib/skills/create-video'
-import { estimateVideoCredits, getDefaultVideoModelId, getVideoModelCapability, normalizeVideoModelId, normalizeVideoResolution, resolveAgentVideoSelection, resolveClosestSupportedAspectRatio, resolveVideoGenerationRoute, resolveVideoProviderAspectRatio, resolveVideoProviderModel, validateVideoResolutionRequest } from '@/lib/video-model-capabilities'
+import { estimateVideoCredits, estimateVideoProviderCostUsd, getDefaultVideoModelId, getVideoModelCapability, normalizeVideoModelId, normalizeVideoResolution, resolveAgentVideoSelection, resolveClosestSupportedAspectRatio, resolveVideoGenerationRoute, resolveVideoProviderAspectRatio, resolveVideoProviderModel, validateVideoResolutionRequest } from '@/lib/video-model-capabilities'
 
 describe('video model reference limits', () => {
   it('defaults video generation to SeeDance 2.0 Fast', () => {
@@ -36,7 +36,7 @@ describe('video model reference limits', () => {
   it('registers MiniMax H3 with public 768p and 2K production routes', () => {
     expect(normalizeVideoModelId('minimax')).toBe('minimax-h3')
     expect(normalizeVideoModelId('MiniMax-H3')).toBe('minimax-h3')
-    expect(normalizeVideoResolution('minimax-h3', 'auto')).toBe('2k')
+    expect(normalizeVideoResolution('minimax-h3', 'auto')).toBe('768p')
     expect(resolveVideoGenerationRoute({ model: 'minimax-h3', resolution: '768p' })).toMatchObject({
       model: 'minimax-h3',
       label: 'MiniMax H3',
@@ -44,7 +44,20 @@ describe('video model reference limits', () => {
       providerModel: 'MiniMax-H3',
       resolution: '768p',
     })
-    expect(getVideoModelCapability('minimax-h3').supportedResolutions).toEqual(['768p', '2k'])
+    expect(getVideoModelCapability('minimax-h3')).toMatchObject({
+      supportedResolutions: ['768p', '2k'],
+      defaultResolution: '768p',
+    })
+    expect(estimateVideoProviderCostUsd({ model: 'minimax-h3', resolution: '768p', durationSec: 4 })).toBeCloseTo(0.28)
+    expect(estimateVideoProviderCostUsd({ model: 'minimax-h3', resolution: '2k', durationSec: 4 })).toBeCloseTo(0.448)
+    expect(estimateVideoCredits({ model: 'minimax-h3', resolution: '768p', durationSec: 4 })).toBe(56)
+    expect(estimateVideoCredits({ model: 'minimax-h3', resolution: '2k', durationSec: 4 })).toBe(90)
+    expect(estimateVideoCredits({
+      model: 'minimax-h3',
+      resolution: '768p',
+      durationSec: 4,
+      referenceVideoDurationSec: 4,
+    })).toBe(112)
     expect(estimateVideoCredits({ model: 'minimax-h3', resolution: '768p', durationSec: 15 })).toBe(210)
     expect(estimateVideoCredits({ model: 'minimax-h3', resolution: '2k', durationSec: 15 })).toBe(336)
     expect(estimateVideoCredits({ model: 'minimax-h3', resolution: '2k', durationSec: 15, imageCount: 5 })).toBe(336)

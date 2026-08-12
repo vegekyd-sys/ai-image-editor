@@ -250,7 +250,7 @@ npx makaron-cli video create --script "Shot 1 (5s): <<<image_1>>> ..." --image h
 
 # 3b. Native SeeDance or MiniMax H3 text-to-video (no image required)
 npx makaron-cli video create --script "Shot 1 (5s): A neon one-person studio wakes at dawn" --duration 5 --video-model seedance-fast --aspect 16:9
-npx makaron-cli video create --script "Shot 1 (15s): A premium creative editor comes alive" --duration 15 --video-model minimax-h3 --video-resolution 2k --aspect 16:9
+npx makaron-cli video create --script "Shot 1 (15s): A premium creative editor comes alive" --duration 15 --video-model minimax-h3 --aspect 16:9
 
 # 3c. Edit a video from a local file or public URL
 npx makaron-cli video create --script "make it funny" --video input.mp4 --duration 5 --video-model seedance
@@ -268,7 +268,7 @@ npx makaron-cli chat --project <id|auto> --video input.mp4 -b "make it funny"
 
 `chat` intentionally has no video model or resolution flags. State both in the chat message so the Agent selects a compatible provider and resolution together. Use `video create` only when you explicitly need direct provider controls.
 
-Options for `video create`: `--script "..."`, `--script-file <path>`, `--image <url>` (repeatable, up to the selected model limit), `--video <file|url>` and `--audio <file|url>` (repeatable where supported), `--duration <seconds>`, `--aspect 9:16|16:9|1:1`, `--video-model seedance-fast|seedance-mini|seedance|seedance-2.5|kling|grok|google-omni|minimax-h3`, `--video-resolution auto|480p|720p|768p|1080p|2k|4k`. SeeDance accepts native text-to-video with no image and integer output duration 4-15s (default 5s); MiniMax H3 accepts native text-to-video, 4-15s output, public 768p/2k resolution, and up to 9 image, up to 3 video, and up to 3 audio references through Makaron Agent/chat. H3 defaults to 2k. Kling supports 5-15s.
+Options for `video create`: `--script "..."`, `--script-file <path>`, `--image <url>` (repeatable, up to the selected model limit), `--video <file|url>` and `--audio <file|url>` (repeatable where supported), `--duration <seconds>`, `--aspect 9:16|16:9|1:1`, `--video-model seedance-fast|seedance-mini|seedance|seedance-2.5|kling|grok|google-omni|minimax-h3`, `--video-resolution auto|480p|720p|768p|1080p|2k|4k`. SeeDance accepts native text-to-video with no image and integer output duration 4-15s (default 5s); MiniMax H3 accepts native text-to-video, 4-15s output, public 768p/2k resolution, and up to 9 image, up to 3 video, and up to 3 audio references through Makaron Agent/chat. H3 defaults to 768p; request 2k explicitly for maximum/final quality. Kling supports 5-15s.
 
 For Seedance 2.5, use `--video-model seedance-2.5`; it supports 4-30s, 480p/720p, up to 30 image + 10 video + 10 audio references, and repeatable local-file/URL flags. Typed modes use `--video-operation generate|edit|extend`, with `--extend-direction`, `--output-format mp4|mov`, and optional `--web-search`. Evolink does not expose 4K for this route.
 

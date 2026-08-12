@@ -290,7 +290,10 @@ const MODEL_CAPABILITIES: Record<string, VideoModelCapability> = {
     supportsVideoReference: true,
     supportsBaseVideoEdit: false,
     longVideoChunkSeconds: 15,
-    estimatedCostPerSecondUsd: 0.112,
+    // MiniMax list price (2026-08-12): RMB 0.50/s at 768P and RMB 0.80/s at 2K.
+    // These USD estimates follow Makaron's existing RMB 1 ~= USD 0.14 billing
+    // convention; estimateVideoCredits() applies the product's 2x markup.
+    estimatedCostPerSecondUsd: 0.07,
     estimatedCostPerSecondUsdByResolution: {
       '768p': 0.07,
       '2k': 0.112,
@@ -306,7 +309,7 @@ const MODEL_CAPABILITIES: Record<string, VideoModelCapability> = {
     },
     maxImageReferences: 9,
     supportedResolutions: ['768p', '2k'],
-    defaultResolution: '2k',
+    defaultResolution: '768p',
     supportedAspectRatios: ['16:9', '9:16', '1:1', '4:3', '3:4', '21:9'],
     provider: 'minimax',
     providerModel: 'MiniMax-H3',
