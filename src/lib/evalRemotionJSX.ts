@@ -20,6 +20,7 @@ import {
   createEditableReactRuntime,
   type EditableTransformMode,
 } from './editor/editable-react-runtime';
+import { getPreviewPremountFrames } from './remotion-preview-premount';
 
 export type { EditableTransformMode } from './editor/editable-react-runtime';
 
@@ -44,6 +45,13 @@ const PreviewMediaReadinessContext = React.createContext<PreviewMediaReadiness |
 function isSafariWebKit(): boolean {
   if (typeof navigator === 'undefined') return false;
   return /^((?!chrome|android).)*safari/i.test(navigator.userAgent);
+}
+
+function isIOSWebKit(): boolean {
+  if (typeof navigator === 'undefined' || !isSafariWebKit()) return false;
+  return /iPad|iPhone|iPod/i.test(navigator.userAgent) || (
+    navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1
+  );
 }
 
 type PreviewVideoSource = React.ComponentProps<typeof Remotion.Html5Video>['src'];
@@ -661,6 +669,11 @@ const PreviewSequence = React.forwardRef(function PreviewSequence(
 
   const authoredDuration = props.durationInFrames;
   const canHoldLastFrame = containsVideo && Number.isFinite(authoredDuration);
+  const premountFor = props.premountFor ?? getPreviewPremountFrames({
+    authoredDuration,
+    fps,
+    iosWebKit: isIOSWebKit(),
+  });
   // The Player freezes its composition frame while the incoming source buffers.
   // Keeping the outgoing cache for only a few composition frames therefore
   // preserves it for the entire wall-clock stall without retaining a native
@@ -758,10 +771,10 @@ const PreviewSequence = React.forwardRef(function PreviewSequence(
       durationInFrames: canHoldLastFrame
         ? authoredDuration + continuityFrames
         : authoredDuration,
-      // Long Scene originals need enough lead time to seek before short cuts.
-      // Eight seconds mounts the next two or three clips at frame zero without
-      // retaining the whole composition's decoder set.
-      premountFor: props.premountFor ?? fps * 8,
+      // Desktop browsers can warm several long Scene originals. iOS WebKit
+      // scales the lead to each scene so rapid cuts do not exhaust its much
+      // smaller native video-decoder budget and terminate the page.
+      premountFor,
       postmountFor: canHoldLastFrame ? 0 : props.postmountFor,
       styleWhilePostmounted: canHoldLastFrame ? undefined : props.styleWhilePostmounted,
       ref,
