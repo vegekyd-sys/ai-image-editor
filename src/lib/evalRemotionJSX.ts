@@ -55,6 +55,7 @@ function isIOSWebKit(): boolean {
 }
 
 type PreviewVideoSource = React.ComponentProps<typeof Remotion.Html5Video>['src'];
+type PreviewVideoSourcePhase = 'direct' | 'proxy' | 'direct-retry';
 
 function getPreviewMediaProxySource(src: PreviewVideoSource): PreviewVideoSource {
   if (typeof src !== 'string' || typeof window === 'undefined' || !/^https?:\/\//i.test(src)) return src;
@@ -183,10 +184,9 @@ const PreviewVideo = React.forwardRef(function PreviewVideo(
   const cachedFrameReady = React.useRef(false);
   const safariBufferHandleRef = React.useRef<{ unblock: () => void } | null>(null);
   const safariBufferMutedStateRef = React.useRef<boolean | null>(null);
-  const proxyFallbackTimerRef = React.useRef<number | null>(null);
   const markReadyRef = React.useRef<(video: HTMLVideoElement) => void>(() => undefined);
   const [hasCachedFrame, setHasCachedFrame] = React.useState(false);
-  const [useProxyFallback, setUseProxyFallback] = React.useState(false);
+  const [sourcePhase, setSourcePhase] = React.useState<PreviewVideoSourcePhase>('direct');
   const safari = React.useMemo(() => isSafariWebKit(), []);
   const { delayPlayback } = Remotion.useBufferState();
   const {
@@ -221,36 +221,18 @@ const PreviewVideo = React.forwardRef(function PreviewVideo(
     [src],
   );
   const hasProxyFallback = proxyFallbackSrc !== src;
-  const previewSrc = useProxyFallback ? proxyFallbackSrc : src;
+  const previewSrc = sourcePhase === 'proxy' ? proxyFallbackSrc : src;
 
-  const clearProxyFallbackTimer = React.useCallback(() => {
-    if (proxyFallbackTimerRef.current === null) return;
-    window.clearTimeout(proxyFallbackTimerRef.current);
-    proxyFallbackTimerRef.current = null;
-  }, []);
-
-  const switchToProxyFallback = React.useCallback(() => {
-    if (!hasProxyFallback || useProxyFallback) return false;
-    clearProxyFallbackTimer();
+  const advanceSourceFallback = React.useCallback(() => {
+    if (!hasProxyFallback || sourcePhase === 'direct-retry') return false;
     reportedReady.current = false;
     readiness?.markPending();
-    setUseProxyFallback(true);
+    // Only a terminal media error reaches this path; waiting/stalled events
+    // keep the same native tag so Remotion cannot reset to frame zero. Give the
+    // proxy one attempt, then return to direct exactly once if it also errors.
+    setSourcePhase(current => current === 'direct' ? 'proxy' : 'direct-retry');
     return true;
-  }, [clearProxyFallbackTimer, hasProxyFallback, readiness, useProxyFallback]);
-
-  const scheduleProxyFallback = React.useCallback(() => {
-    if (
-      !isActive ||
-      !hasProxyFallback ||
-      useProxyFallback ||
-      proxyFallbackTimerRef.current !== null
-    ) return;
-
-    proxyFallbackTimerRef.current = window.setTimeout(() => {
-      proxyFallbackTimerRef.current = null;
-      switchToProxyFallback();
-    }, 2500);
-  }, [hasProxyFallback, isActive, switchToProxyFallback, useProxyFallback]);
+  }, [hasProxyFallback, readiness, sourcePhase]);
 
   const unblockSafariPlayback = React.useCallback(() => {
     safariBufferHandleRef.current?.unblock();
@@ -283,10 +265,9 @@ const PreviewVideo = React.forwardRef(function PreviewVideo(
     captureFailed.current = false;
     cachedFrameReady.current = false;
     setHasCachedFrame(false);
-    setUseProxyFallback(false);
+    setSourcePhase('direct');
     readiness?.markPending();
-    return clearProxyFallbackTimer;
-  }, [clearProxyFallbackTimer, readiness?.markPending, src]);
+  }, [readiness?.markPending, src]);
 
   // Remotion 4.0.448 has a Safari-only first-frame deadlock: it pauses the
   // Player while waiting for requestVideoFrameCallback, but Safari may have
@@ -341,6 +322,32 @@ const PreviewVideo = React.forwardRef(function PreviewVideo(
     if (typeof ref === 'function') ref(video);
     else if (ref) (ref as React.MutableRefObject<HTMLVideoElement | null>).current = video;
   }, [ref]);
+
+  // Remotion premounts the native tag but may leave it buffered at source time
+  // zero until the Sequence becomes active. For trimmed Scene clips that means
+  // the first real cut still has to issue a new Range request. Seek hidden
+  // premounts to their authored trim point as soon as metadata is available so
+  // the browser buffers the exact frame range needed at the cut.
+  React.useEffect(() => {
+    const video = videoElementRef.current;
+    if (!video || isActive || trimStartFrame <= 0) return;
+
+    let disposed = false;
+    const primeTrimStart = () => {
+      if (disposed || !Number.isFinite(video.duration) || video.duration <= 0) return;
+      const targetTime = Math.min(trimStartFrame / fps, Math.max(0, video.duration - 0.05));
+      if (Math.abs(video.currentTime - targetTime) > 1 / fps) {
+        video.currentTime = targetTime;
+      }
+    };
+
+    if (video.readyState >= HTMLMediaElement.HAVE_METADATA) primeTrimStart();
+    else video.addEventListener('loadedmetadata', primeTrimStart);
+    return () => {
+      disposed = true;
+      video.removeEventListener('loadedmetadata', primeTrimStart);
+    };
+  }, [fps, isActive, src, trimStartFrame]);
 
   const drawVideoFrame = React.useCallback(() => {
     const video = videoElementRef.current;
@@ -434,7 +441,6 @@ const PreviewVideo = React.forwardRef(function PreviewVideo(
   }, [src]);
 
   const handleCanPlay = React.useCallback((event: React.SyntheticEvent<HTMLVideoElement>) => {
-    clearProxyFallbackTimer();
     markReady(event.currentTarget);
     if (
       reportedReady.current &&
@@ -443,16 +449,14 @@ const PreviewVideo = React.forwardRef(function PreviewVideo(
       unblockSafariPlayback();
     }
     onCanPlay?.(event);
-  }, [clearProxyFallbackTimer, markReady, onCanPlay, unblockSafariPlayback]);
+  }, [markReady, onCanPlay, unblockSafariPlayback]);
 
   const handleLoadedData = React.useCallback((event: React.SyntheticEvent<HTMLVideoElement>) => {
-    clearProxyFallbackTimer();
     markReady(event.currentTarget);
     onLoadedData?.(event);
-  }, [clearProxyFallbackTimer, markReady, onLoadedData]);
+  }, [markReady, onLoadedData]);
 
   const handlePlaying = React.useCallback((event: React.SyntheticEvent<HTMLVideoElement>) => {
-    clearProxyFallbackTimer();
     markReady(event.currentTarget);
     if (!reportedReady.current) {
       blockSafariPlayback();
@@ -467,10 +471,9 @@ const PreviewVideo = React.forwardRef(function PreviewVideo(
       unblockSafariPlayback();
     }
     onPlaying?.(event);
-  }, [blockSafariPlayback, clearProxyFallbackTimer, expectedTime, fps, markReady, minimumRevealTime, onPlaying, unblockSafariPlayback]);
+  }, [blockSafariPlayback, expectedTime, fps, markReady, minimumRevealTime, onPlaying, unblockSafariPlayback]);
 
   const handleSeeked = React.useCallback((event: React.SyntheticEvent<HTMLVideoElement>) => {
-    clearProxyFallbackTimer();
     markReady(event.currentTarget);
     if (
       reportedReady.current &&
@@ -479,10 +482,9 @@ const PreviewVideo = React.forwardRef(function PreviewVideo(
       unblockSafariPlayback();
     }
     onSeeked?.(event);
-  }, [clearProxyFallbackTimer, markReady, onSeeked, unblockSafariPlayback]);
+  }, [markReady, onSeeked, unblockSafariPlayback]);
 
   const handleProgress = React.useCallback((event: React.SyntheticEvent<HTMLVideoElement>) => {
-    clearProxyFallbackTimer();
     markReady(event.currentTarget);
     if (
       reportedReady.current &&
@@ -491,24 +493,22 @@ const PreviewVideo = React.forwardRef(function PreviewVideo(
       unblockSafariPlayback();
     }
     onProgress?.(event);
-  }, [clearProxyFallbackTimer, markReady, onProgress, unblockSafariPlayback]);
+  }, [markReady, onProgress, unblockSafariPlayback]);
 
   const handleWaiting = React.useCallback((event: React.SyntheticEvent<HTMLVideoElement>) => {
-    scheduleProxyFallback();
     blockSafariPlayback();
     onWaiting?.(event);
-  }, [blockSafariPlayback, onWaiting, scheduleProxyFallback]);
+  }, [blockSafariPlayback, onWaiting]);
 
   const handleStalled = React.useCallback((event: React.SyntheticEvent<HTMLVideoElement>) => {
     if (event.currentTarget.readyState < HTMLMediaElement.HAVE_FUTURE_DATA) {
-      scheduleProxyFallback();
       blockSafariPlayback();
     }
     onStalled?.(event);
-  }, [blockSafariPlayback, onStalled, scheduleProxyFallback]);
+  }, [blockSafariPlayback, onStalled]);
 
   const handleError = React.useCallback((error: Error) => {
-    if (switchToProxyFallback()) {
+    if (advanceSourceFallback()) {
       unblockSafariPlayback();
       return;
     }
@@ -516,10 +516,9 @@ const PreviewVideo = React.forwardRef(function PreviewVideo(
     // media error recreates the captions-only failure the buffer guard fixes.
     blockSafariPlayback();
     onError?.(error);
-  }, [blockSafariPlayback, onError, switchToProxyFallback, unblockSafariPlayback]);
+  }, [advanceSourceFallback, blockSafariPlayback, onError, unblockSafariPlayback]);
 
   const handleTimeUpdate = React.useCallback((event: React.SyntheticEvent<HTMLVideoElement>) => {
-    clearProxyFallbackTimer();
     // requestVideoFrameCallback above is frame-accurate and cheaper than doing
     // a second canvas copy for every timeupdate. Keep timeupdate only as the
     // fallback for browsers without the frame callback API.
@@ -551,7 +550,6 @@ const PreviewVideo = React.forwardRef(function PreviewVideo(
     onTimeUpdate?.(event);
   }, [
     blockSafariPlayback,
-    clearProxyFallbackTimer,
     drawVideoFrame,
     expectedTime,
     fps,
