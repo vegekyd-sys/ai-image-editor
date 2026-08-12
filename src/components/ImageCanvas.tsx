@@ -970,15 +970,13 @@ export default function ImageCanvas({
   }, [currentIndex, currentDesign?.code]);
 
   // Mirror buffering so the custom play button can show progress.
-  // Remotion owns pause/resume internally. We only mirror its buffering state;
-  // explicitly pausing here prevents Remotion from resuming after assets recover.
-  // Skip for designs containing <Video> — video elements handle their own buffering,
-  // and scene cuts trigger spurious waiting events that shouldn't pause the Player.
-  const hasVideoElement = !!(currentDesign?.code?.includes('<Video') || currentDesign?.code?.includes('Video,'));
+  // Remotion owns pause/resume internally through Html5Video's
+  // pauseWhenBuffering contract. We only mirror its waiting/resume events;
+  // explicitly pausing here would prevent Remotion from resuming after recovery.
   const resumeTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   useEffect(() => {
     const player = remotionPlayer;
-    if (!player || hasVideoElement) return;
+    if (!player) return;
     const onWaiting = () => {
       if (resumeTimerRef.current) { clearTimeout(resumeTimerRef.current); resumeTimerRef.current = null; }
       remotionBufferingRef.current = true;
@@ -1007,7 +1005,7 @@ export default function ImageCanvas({
       player.removeEventListener('frameupdate', onFrameUpdate);
       if (resumeTimerRef.current) clearTimeout(resumeTimerRef.current);
     };
-  }, [hasVideoElement, remotionPlayer]);
+  }, [remotionPlayer]);
 
   const toggleRemotionPlay = useCallback(() => {
     const p = remotionRef.current;

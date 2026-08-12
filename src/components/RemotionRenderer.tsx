@@ -148,6 +148,7 @@ async function compileBrowserDesign(
   recordBrowserFontTiming({ source, recordedAt: new Date().toISOString(), timing });
   const Component = evalRemotionJSX(prepared.code, {
     editableTransformMode: 'proxy',
+    videoRuntime: source === 'player' ? 'preview' : 'render',
   });
   if (!Component) throw new Error('Failed to compile design code');
 
@@ -172,6 +173,7 @@ function compileBrowserDesignWithoutPinnedFonts(
 ): React.ComponentType<Record<string, unknown>> {
   const Component = evalRemotionJSX(code, {
     editableTransformMode: 'proxy',
+    videoRuntime: 'preview',
   });
   if (!Component) throw new Error('Failed to compile design code');
   return wrapBrowserDesign(Component, 'system-ui, sans-serif');
