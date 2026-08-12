@@ -567,7 +567,7 @@ const ja = {
   'model.googleOmni.name': 'Gemini Omni',
   'model.googleOmni.desc': 'ネイティブ音声付きの高速720p動画編集。',
   'model.minimaxH3.name': 'MiniMax H3',
-  'model.minimaxH3.desc': '15秒、2K出力、複数の参照素材に対応するオープンなマルチモーダル動画モデルです。',
+  'model.minimaxH3.desc': '15秒、768Pまたは2K出力、複数の参照素材に対応するオープンなマルチモーダル動画モデルです。',
   'model.gpt56Terra.name': 'GPT-5.6 Terra',
   'model.gpt56Terra.desc': '知能、速度、コストのバランスに優れた推奨デフォルトです。',
   'model.gpt56Sol.name': 'GPT-5.6 Sol',

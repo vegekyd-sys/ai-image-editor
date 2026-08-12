@@ -24,6 +24,23 @@ type ChangelogEntry = LegacyChangelogEntry | LocalizedChangelogEntry;
 
 const CHANGELOG: ChangelogEntry[] = [
   {
+    date: '2026-08-12',
+    en: {
+      title: 'MiniMax H3 768P',
+      items: [
+        'MiniMax H3 now supports public 768P generation alongside native 2K, giving faster, lower-cost drafts without changing models.',
+        'Choose 768P or 2K in the video resolution selector; H3 continues to default to 2K for final-quality output.',
+      ],
+    },
+    zh: {
+      title: 'MiniMax H3 开放 768P',
+      items: [
+        'MiniMax H3 现已在原生 2K 之外开放 768P，可在不切换模型的情况下生成更快、更低成本的草稿视频。',
+        '可在视频分辨率选择器中选择 768P 或 2K；H3 默认仍使用 2K，适合最终成片。',
+      ],
+    },
+  },
+  {
     date: '2026-08-10',
     localeKey: 'externalSourceRanges',
   },

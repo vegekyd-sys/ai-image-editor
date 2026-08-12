@@ -352,7 +352,7 @@ const zh = {
   'model.googleOmni.name': 'Gemini Omni',
   'model.googleOmni.desc': '快速 720p 视频编辑，原生音频。',
   'model.minimaxH3.name': 'MiniMax H3',
-  'model.minimaxH3.desc': '开放多模态视频模型，支持 15 秒、2K 直出与多参考素材。',
+  'model.minimaxH3.desc': '开放多模态视频模型，支持 15 秒、768P 或 2K 直出与多参考素材。',
   'model.gpt56Terra.name': 'GPT-5.6 Terra',
   'model.gpt56Terra.desc': '推荐默认，兼顾智能、速度与成本。',
   'model.gpt56Sol.name': 'GPT-5.6 Sol',
