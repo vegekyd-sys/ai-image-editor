@@ -769,9 +769,9 @@ const PreviewSequence = React.forwardRef(function PreviewSequence(
       durationInFrames: canHoldLastFrame
         ? authoredDuration + continuityFrames
         : authoredDuration,
-      // Desktop browsers can warm several long Scene originals. iOS WebKit
-      // scales the lead to each scene so rapid cuts do not exhaust its much
-      // smaller native video-decoder budget and terminate the page.
+      // Both runtimes use a scene-relative lead so an uncached browser does not
+      // mount several large originals at frame zero. iOS keeps a larger maximum
+      // allowance while remaining bounded by its native decoder budget.
       premountFor,
       postmountFor: canHoldLastFrame ? 0 : props.postmountFor,
       styleWhilePostmounted: canHoldLastFrame ? undefined : props.styleWhilePostmounted,
