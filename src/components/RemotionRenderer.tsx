@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useRef, useState, useEffect } from 'react';
+import React, { useRef, useState, useEffect, useCallback } from 'react';
 import { Player, type PlayerRef } from '@remotion/player';
 import { renderStillOnWeb, renderMediaOnWeb, type RenderMediaOnWebProgress } from '@remotion/web-renderer';
 import { evalRemotionJSX, preloadBabel } from '@/lib/evalRemotionJSX';
@@ -382,7 +382,10 @@ export default function RemotionRenderer({
     (async () => {
       try {
         await preloadBabel().catch(() => {});
-        const videoResolved = resolvePreviewVideoUrls(design.code);
+        // PreviewVideo owns the direct -> proxy -> direct-retry recovery cycle.
+        // Rewriting the authored URL here would start permanently on the proxy
+        // and prevent both browser-cache reuse and the direct recovery path.
+        const videoResolved = design.code;
         const { code: resolvedCode, blobUrls: imageBlobUrls } = await resolveCodeUrls(
           videoResolved,
           (resourceUrl, error) => reportPreviewFailureRef.current(
@@ -496,14 +499,14 @@ export default function RemotionRenderer({
     onPlayerRefRef.current = onPlayerRef;
   }, [onPlayerRef]);
 
-  useEffect(() => {
-    const player = playerRef.current;
+  const setPlayerRef = useCallback((player: PlayerRef | null) => {
+    if (!player && playerRef.current) playerRef.current.pause();
+    playerRef.current = player;
+    // A useEffect can run before @remotion/player assigns its imperative ref,
+    // leaving the visible play button inert until an unrelated rerender. A
+    // callback ref publishes the Player synchronously on the actual mount.
     onPlayerRefRef.current?.(player);
-    return () => {
-      player?.pause();
-      onPlayerRefRef.current?.(null);
-    };
-  }, [Component]);
+  }, []);
 
   // Static long designs are easy for the Agent to under-size. Measure the
   // rendered editable layer in the browser and let the parent expand height.
@@ -616,7 +619,7 @@ export default function RemotionRenderer({
         borderRadius: 12, overflow: 'hidden', margin: '8px 0',
       }}>
         <Player
-          ref={playerRef}
+          ref={setPlayerRef}
           component={Component}
           inputProps={inputProps}
           compositionWidth={design.width}
@@ -658,16 +661,6 @@ export default function RemotionRenderer({
 
 // Session-level cache: video URL → blob URL (avoids re-downloading on timeline switch)
 const videoBlobCache = new Map<string, string>();
-
-/** Browser preview should stream videos with Range requests instead of blocking
- * on full-file blob downloads. Full blob resolution is only needed by web render/export. */
-function resolvePreviewVideoUrls(code: string): string {
-  const videoExtPattern = /https?:\/\/[^\s"'`<>)}\]]+\.(mp4|webm|mov)([^\s"'`<>)}\]]*)/gi;
-  return code.replace(videoExtPattern, (url) => {
-    if (url.includes('/api/proxy-video?')) return url;
-    return `/api/proxy-video?url=${encodeURIComponent(url)}`;
-  });
-}
 
 /** Pre-fetch remote video URLs via server proxy → blob URLs (fixes CORS for renderMediaOnWeb) */
 async function resolveVideoUrls(code: string): Promise<{ code: string; blobUrls: string[] }> {

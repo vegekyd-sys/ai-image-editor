@@ -226,6 +226,7 @@ export default function ImageCanvas({
   const [remotionPlaying, setRemotionPlaying] = useState(false);
   const remotionFrameRef = useRef(0);
   const remotionStartedRef = useRef(false); // true after first play — poster hides, Player shows
+  const pendingRemotionPlayRef = useRef(false);
   const [remotionLoading, setRemotionLoading] = useState(false); // true while RemotionRenderer is initializing (fetching images/fonts/audio)
   const [showControls, setShowControls] = useState(true);
   const videoPlayingRef = useRef(false);
@@ -964,6 +965,7 @@ export default function ImageCanvas({
     setRemotionLoading(!!currentDesign?.animation);
     remotionFrameRef.current = 0;
     remotionStartedRef.current = false;
+    pendingRemotionPlayRef.current = false;
     updateRemotionUI();
     return () => player?.pause();
 
@@ -1009,17 +1011,22 @@ export default function ImageCanvas({
 
   const toggleRemotionPlay = useCallback(() => {
     const p = remotionRef.current;
-    if (!p) return;
+    if (!p) {
+      // The control can render a frame before RemotionRenderer publishes its
+      // Player ref. Preserve the user's click and start as soon as that ref is
+      // available instead of leaving an inert play button at 0:00.
+      pendingRemotionPlayRef.current = true;
+      return;
+    }
+    pendingRemotionPlayRef.current = false;
     if (remotionPlaying) {
       p.pause();
       setRemotionPlaying(false);
       dispatchActiveTrimPlayhead(false);
     } else {
       if (selectedEditableId && !activeTrimFieldId) onSelectEditable?.(null);
-      // Always seek to start if at or near the end (video designs may not report exact last frame)
       if (remotionFrameRef.current >= remotionTotalFrames - 2) {
         p.seekTo(0);
-        // Small delay to let <Video> element reset before playing
         requestAnimationFrame(() => {
           p.play();
           remotionStartedRef.current = true;
@@ -1572,6 +1579,13 @@ export default function ImageCanvas({
                 setRemotionPlayer(ref);
                 setRemotionPlaying(ref?.isPlaying() ?? false);
                 if (editableFields?.length) setDesignPlayerRef(ref);
+                if (ref && pendingRemotionPlayRef.current) {
+                  pendingRemotionPlayRef.current = false;
+                  ref.play();
+                  remotionStartedRef.current = true;
+                  setRemotionPlaying(true);
+                  dispatchActiveTrimPlayhead(true);
+                }
               }}
             />
 
