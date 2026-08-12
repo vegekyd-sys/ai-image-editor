@@ -43,7 +43,7 @@ function headers(): Record<string, string> {
 }
 
 function providerResolution(resolution?: MinimaxVideoResolution): '768P' | '2K' {
-  return resolution === '768p' ? '768P' : '2K'
+  return resolution === '2k' ? '2K' : '768P'
 }
 
 function normalizePrompt(prompt: string): string {

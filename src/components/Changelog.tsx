@@ -29,14 +29,14 @@ const CHANGELOG: ChangelogEntry[] = [
       title: 'MiniMax H3 768P',
       items: [
         'MiniMax H3 now supports public 768P generation alongside native 2K, giving faster, lower-cost drafts without changing models.',
-        'Choose 768P or 2K in the video resolution selector; H3 continues to default to 2K for final-quality output.',
+        'H3 now defaults to 768P for faster, lower-cost generation; choose 2K explicitly when you need maximum final quality.',
       ],
     },
     zh: {
       title: 'MiniMax H3 开放 768P',
       items: [
         'MiniMax H3 现已在原生 2K 之外开放 768P，可在不切换模型的情况下生成更快、更低成本的草稿视频。',
-        '可在视频分辨率选择器中选择 768P 或 2K；H3 默认仍使用 2K，适合最终成片。',
+        'H3 现默认使用 768P，以更快、更低成本地生成视频；需要最高成片质量时可显式选择 2K。',
       ],
     },
   },

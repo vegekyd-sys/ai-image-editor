@@ -1854,7 +1854,7 @@ Use with chat:
     else console.log(`Video commands:
   video script --image <file> [--image <file>] "direction"   Write video script
   video create --script "..." --video-model seedance-fast    Native text-to-video (no image required)
-  video create --script "..." --video-model minimax-h3 --video-resolution 2k    MiniMax H3 native 2K text-to-video
+  video create --script "..." --video-model minimax-h3                          MiniMax H3 text-to-video (default 768P)
   video create --script "..." --image <url> [--duration 10]  Submit video task
   video create --script "..." --video <public-url> [--video-model seedance-fast|seedance-mini|seedance|seedance-2.5|kling|google-omni|minimax-h3]  Edit/reference a video (Grok does not support video refs)
   video status <taskId>                                      Check video status
@@ -2776,7 +2776,7 @@ if (!command || command === '--help' || command === '-h' || command === 'help') 
     console.log(`Video commands:
   video script --image <file> [--image <file>] "direction"   Write video script
   video create --script "..." --video-model seedance-fast    Native text-to-video (no image required)
-  video create --script "..." --video-model minimax-h3 --video-resolution 2k    MiniMax H3 native 2K text-to-video
+  video create --script "..." --video-model minimax-h3                          MiniMax H3 text-to-video (default 768P)
   video create --script "..." --image <url> [--duration 10]  Submit video task
   video create --script "..." --video <public-url> [--video-model seedance-fast|seedance-mini|seedance|seedance-2.5|kling|google-omni|minimax-h3]  Edit/reference a video (Grok does not support video refs)
   video status <taskId>                                      Check video status

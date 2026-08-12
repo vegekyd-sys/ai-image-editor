@@ -37,7 +37,7 @@ describe('ModelSelector Seedance Mini', () => {
     });
   });
 
-  it('shows MiniMax H3 in the video tab and selects its public 2K default', async () => {
+  it('shows MiniMax H3 in the video tab and selects its public 768P default', async () => {
     const onVideoModelChange = vi.fn();
     const onVideoResolutionChange = vi.fn();
     const onVideoAutoChange = vi.fn();
@@ -64,7 +64,7 @@ describe('ModelSelector Seedance Mini', () => {
     await waitFor(() => {
       expect(onVideoAutoChange).toHaveBeenCalledWith(false);
       expect(onVideoModelChange).toHaveBeenCalledWith('minimax-h3');
-      expect(onVideoResolutionChange).toHaveBeenCalledWith('2k');
+      expect(onVideoResolutionChange).toHaveBeenCalledWith('768p');
     });
   });
 });
