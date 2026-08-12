@@ -116,6 +116,9 @@ const zhHant = {
   // Changelog
   'changelog.heading': '更新',
   'changelog.close': '關閉更新',
+  'changelog.sourcePlayback.title': 'Source 影片合成播放更穩定',
+  'changelog.sourcePlayback.item1': 'Source URL 合成現在會在緩衝時暫停時間軸，並預先載入下一段裁剪片段，減少黑畫面、串鏡和切鏡卡頓。',
+  'changelog.sourcePlayback.item2': '播放現在首次點擊即可可靠啟動，同時限制 iOS 解碼預熱負載，長篇多鏡頭專案不再只播花字或導致 Safari 當機。',
   'changelog.externalSourceRanges.title': '外部影片直接剪輯',
   'changelog.externalSourceRanges.item1': 'Makaron 現在可以按外部影片 URL 和起止時間直接剪輯，無需上傳完整影片或匯出中間 MP4。',
   'changelog.seedance25.title': 'Seedance 2.5：全新 SOTA 多模態影片',

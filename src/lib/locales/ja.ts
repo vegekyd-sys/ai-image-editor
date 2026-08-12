@@ -113,6 +113,9 @@ const ja = {
   // Changelog
   'changelog.heading': '更新情報',
   'changelog.close': '更新情報を閉じる',
+  'changelog.sourcePlayback.title': 'ソース動画の再生を安定化',
+  'changelog.sourcePlayback.item1': 'Source URL のコンポジションはバッファリング中にタイムラインを一時停止し、次のトリミング済みクリップを先読みすることで、黒画面・別カットの混入・カット切り替え時の停止を抑えます。',
+  'changelog.sourcePlayback.item2': '最初のタップで確実に再生を開始し、iOS のデコーダー先読み負荷を制限することで、長いマルチクリップでも字幕だけが進む問題や Safari のクラッシュを防ぎます。',
   'changelog.externalSourceRanges.title': '外部動画を直接編集',
   'changelog.externalSourceRanges.item1': 'Makaronは外部動画URLと開始・終了時間を指定して、動画全体のアップロードや中間MP4の書き出しなしで直接編集できるようになりました。',
   'changelog.seedance25.title': 'Seedance 2.5：最新 SOTA マルチモーダル動画',

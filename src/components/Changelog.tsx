@@ -17,12 +17,16 @@ interface LegacyChangelogEntry {
 
 type LocalizedChangelogEntry = {
   date: string;
-  localeKey: 'externalSourceRanges' | 'seedance25' | 'minimaxH3' | 'multilingualAsr' | 'editableRemotion' | 'editableLayers';
+  localeKey: 'sourcePlayback' | 'externalSourceRanges' | 'seedance25' | 'minimaxH3' | 'multilingualAsr' | 'editableRemotion' | 'editableLayers';
 };
 
 type ChangelogEntry = LegacyChangelogEntry | LocalizedChangelogEntry;
 
 const CHANGELOG: ChangelogEntry[] = [
+  {
+    date: '2026-08-12',
+    localeKey: 'sourcePlayback',
+  },
   {
     date: '2026-08-12',
     en: {
@@ -957,6 +961,13 @@ const iOSAppTopGap = 'max(96px, calc(env(safe-area-inset-top, 0px) + 40px))';
 const iOSAppBottomGap = 'max(14px, env(safe-area-inset-bottom, 0px))';
 
 const LOCALIZED_CHANGELOG_KEYS = {
+  sourcePlayback: {
+    title: 'changelog.sourcePlayback.title',
+    items: [
+      'changelog.sourcePlayback.item1',
+      'changelog.sourcePlayback.item2',
+    ],
+  },
   externalSourceRanges: {
     title: 'changelog.externalSourceRanges.title',
     items: ['changelog.externalSourceRanges.item1'],

@@ -75,6 +75,9 @@ const en = {
   // Changelog
   'changelog.heading': 'Updates',
   'changelog.close': 'Close updates',
+  'changelog.sourcePlayback.title': 'Smoother Source Video Playback',
+  'changelog.sourcePlayback.item1': 'Source URL compositions now pause the timeline while buffering and prewarm the next trimmed clip, reducing black frames, stray shots, and cut stutters.',
+  'changelog.sourcePlayback.item2': 'Playback now starts reliably on the first tap while bounded iOS decoder warmup keeps long multi-clip projects from showing captions without video or crashing Safari.',
   'changelog.externalSourceRanges.title': 'Edit External Video Sources Directly',
   'changelog.externalSourceRanges.item1': 'Makaron can now edit external video URLs with exact start and end times, without uploading the full video or exporting intermediate MP4 clips.',
   'changelog.seedance25.title': 'Seedance 2.5: New SOTA Multimodal Video',

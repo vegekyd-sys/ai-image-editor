@@ -75,6 +75,9 @@ const zh = {
   // Changelog
   'changelog.heading': '更新',
   'changelog.close': '关闭更新',
+  'changelog.sourcePlayback.title': 'Source 视频合成播放更稳定',
+  'changelog.sourcePlayback.item1': 'Source URL 合成现在会在缓冲时暂停时间轴，并提前预热下一个裁剪片段，减少黑屏、串镜和切镜卡顿。',
+  'changelog.sourcePlayback.item2': '播放首次点击即可可靠起播，同时限制 iOS 解码预热负载，长多镜头项目不再只播花字或导致 Safari 崩溃。',
   'changelog.externalSourceRanges.title': '外部视频直接剪辑',
   'changelog.externalSourceRanges.item1': 'Makaron 现在可以按外部视频 URL 和起止时间直接剪辑，无需上传完整视频或导出中间 MP4。',
   'changelog.seedance25.title': 'Seedance 2.5：全新 SOTA 多模态视频',
