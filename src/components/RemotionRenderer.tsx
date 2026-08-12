@@ -117,6 +117,7 @@ async function resolveDesignImageUrls(
 // The query revision prevents previously cached host-bound manifests from
 // sending LAN clients back to localhost.
 const BROWSER_FONT_MANIFEST_URL = '/api/remotion/fonts?browser-manifest=relative-v1';
+const INTERACTIVE_FONT_WAIT_MS = 500;
 
 export interface BrowserRemotionFontTiming {
   source: 'player' | 'poster' | 'preview-frame' | 'web-export';
@@ -392,13 +393,39 @@ export default function RemotionRenderer({
         );
         blobUrls.push(...imageBlobUrls);
         if (cancelled) { blobUrls.forEach(url => URL.revokeObjectURL(url)); return; }
+        const fontCompile = compileBrowserDesign(
+          design,
+          resolvedCode,
+          designPropsRef.current,
+          'player',
+        ).then(
+          component => ({ component, error: null as unknown }),
+          error => ({ component: null, error }),
+        );
+        const fontResult = await Promise.race([
+          fontCompile,
+          new Promise<null>(resolve => {
+            setTimeout(() => resolve(null), INTERACTIVE_FONT_WAIT_MS);
+          }),
+        ]);
+
         let comp: React.ComponentType<Record<string, unknown>>;
-        try {
-          comp = await compileBrowserDesign(design, resolvedCode, designPropsRef.current, 'player');
-        } catch (error) {
-          if (!isRecoverableRemotionPreviewError(error)) throw error;
-          reportPreviewFailureRef.current('font-load', error, { recovered: true });
+        if (fontResult?.component) {
+          comp = fontResult.component;
+        } else {
+          // A slow font manifest must not make the preview play button inert.
+          // The interactive Player can start with system fonts; poster capture
+          // and exports still await the pinned-font path above.
           comp = compileBrowserDesignWithoutPinnedFonts(resolvedCode);
+          if (fontResult?.error) {
+            reportPreviewFailureRef.current('font-load', fontResult.error, { recovered: true });
+          } else {
+            void fontCompile.then(result => {
+              if (result.error && isRecoverableRemotionPreviewError(result.error)) {
+                reportPreviewFailureRef.current('font-load', result.error, { recovered: true });
+              }
+            });
+          }
         }
         if (cancelled) { blobUrls.forEach(url => URL.revokeObjectURL(url)); return; }
         setCompileError(null);
