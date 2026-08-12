@@ -1588,7 +1588,11 @@ export default function ImageCanvas({
             {currentDesign?.animation && !hidePlaybackControls && !isSeeking && (
               <div className="absolute z-30" style={{ bottom: 8, left: 12 }}>
                 <button
-                  onClick={(e) => { e.stopPropagation(); if (!remotionBuffering && !remotionLoading) toggleRemotionPlay(); }}
+                  // Remotion queues play() while its buffer handle is active
+                  // and resumes automatically once the source frame is ready.
+                  // Dropping a click during that window makes Safari appear
+                  // permanently stuck even though the media later decodes.
+                  onClick={(e) => { e.stopPropagation(); toggleRemotionPlay(); }}
                   className="mkr-liquid-play-button w-14 h-14 rounded-full flex items-center justify-center active:scale-90 transition-transform"
                 >
                   {(remotionBuffering || remotionLoading) ? (
