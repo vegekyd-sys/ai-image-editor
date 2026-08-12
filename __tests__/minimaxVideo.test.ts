@@ -49,7 +49,7 @@ describe('MiniMax H3 video adapter', () => {
     expect(taskId).toBe('minimax-h3-424010985738629')
   })
 
-  it('maps the private-preview 768p UI option to the provider 768P value', async () => {
+  it('maps the public 768p UI option to the provider 768P value', async () => {
     const fetchMock = vi.fn(async (_url: string | URL | Request, init?: RequestInit) => {
       const body = JSON.parse(String(init?.body))
       expect(body.resolution).toBe('768P')

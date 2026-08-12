@@ -33,7 +33,7 @@ describe('video model reference limits', () => {
     expect(resolveVideoProviderModel({ model: 'seedance-fast', imageReferenceCount: 1 })).toBe('seedance-2.0-fast-reference-to-video')
   })
 
-  it('registers MiniMax H3 with the public 2K production route', () => {
+  it('registers MiniMax H3 with public 768p and 2K production routes', () => {
     expect(normalizeVideoModelId('minimax')).toBe('minimax-h3')
     expect(normalizeVideoModelId('MiniMax-H3')).toBe('minimax-h3')
     expect(normalizeVideoResolution('minimax-h3', 'auto')).toBe('2k')
@@ -44,7 +44,7 @@ describe('video model reference limits', () => {
       providerModel: 'MiniMax-H3',
       resolution: '768p',
     })
-    expect(getVideoModelCapability('minimax-h3').supportedResolutions).toEqual(['2k'])
+    expect(getVideoModelCapability('minimax-h3').supportedResolutions).toEqual(['768p', '2k'])
     expect(estimateVideoCredits({ model: 'minimax-h3', resolution: '768p', durationSec: 15 })).toBe(210)
     expect(estimateVideoCredits({ model: 'minimax-h3', resolution: '2k', durationSec: 15 })).toBe(336)
     expect(estimateVideoCredits({ model: 'minimax-h3', resolution: '2k', durationSec: 15, imageCount: 5 })).toBe(336)
@@ -58,11 +58,8 @@ describe('video model reference limits', () => {
     })).toBe(672)
   })
 
-  it('keeps MiniMax H3 768p behind an explicit server-side preview gate', () => {
-    expect(validateVideoResolutionRequest({ model: 'minimax-h3', resolution: '768p' })).toContain('does not support 768p')
-    vi.stubEnv('MINIMAX_H3_ENABLE_768P', 'true')
+  it('accepts MiniMax H3 768p without a server-side preview gate', () => {
     expect(validateVideoResolutionRequest({ model: 'minimax-h3', resolution: '768p' })).toBeNull()
-    vi.unstubAllEnvs()
   })
 
   it('models Seedance 2.5 as an explicit 30-second Evolink route', () => {

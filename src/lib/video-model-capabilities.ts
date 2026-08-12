@@ -305,10 +305,7 @@ const MODEL_CAPABILITIES: Record<string, VideoModelCapability> = {
       '2k': 0.112,
     },
     maxImageReferences: 9,
-    // The public H3 API currently exposes 2K only. The adapter understands
-    // 768P for accounts enrolled in MiniMax's gated preview, but the product
-    // selector must not advertise a resolution that ordinary keys reject.
-    supportedResolutions: ['2k'],
+    supportedResolutions: ['768p', '2k'],
     defaultResolution: '2k',
     supportedAspectRatios: ['16:9', '9:16', '1:1', '4:3', '3:4', '21:9'],
     provider: 'minimax',
@@ -505,13 +502,6 @@ export function validateVideoResolutionRequest(options: {
 }): string | null {
   const capability = getVideoModelCapability(options.model)
   const resolution = normalizeVideoResolution(options.model, options.resolution)
-  if (
-    normalizeVideoModelId(options.model) === 'minimax-h3' &&
-    resolution === '768p' &&
-    process.env.MINIMAX_H3_ENABLE_768P === 'true'
-  ) {
-    return null
-  }
   if (capability.supportedResolutions?.length && !capability.supportedResolutions.includes(resolution)) {
     return `${capability.label} does not support ${resolution}. Supported resolutions: ${capability.supportedResolutions.join(', ')}.`
   }
