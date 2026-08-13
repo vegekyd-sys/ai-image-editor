@@ -1,5 +1,4 @@
 import { GoogleGenAI, Chat, Type } from '@google/genai';
-import { streamText } from 'ai';
 import { Tip } from '@/types';
 import enhancePrompt from './prompts/enhance.md';
 import creativePrompt from './prompts/creative.md';
@@ -52,8 +51,6 @@ type TipsProvider = 'openrouter' | 'google';
 const TIPS_PROVIDER: TipsProvider = process.env.TIPS_PROVIDER === 'google'
   ? 'google'
   : 'openrouter';
-// Temperature for tips generation — higher = more creative
-const TIPS_TEMPERATURE = parseFloat(process.env.TIPS_TEMPERATURE || '0.9');
 // Thinking level for tips (Gemini 3.1 Flash): minimal | low | high
 // Default: creative/wild = high, enhance/captions = minimal
 // Override with TIPS_THINKING env var to apply to ALL categories

@@ -156,7 +156,7 @@ Tips prompt 迭代到 V42，均分 7.3。V34 历史最高 8.03，V42 是 prompt 
 
 **模型切换 gemini-3.1-flash-image-preview（2026-02-27）**：`IMAGE_MODEL` 环境变量控制生图模型（默认 `gemini-3-pro-image-preview`），tips 和生图共用同一模型。切换后 tips 速度从 20+s 首 tip 降至 ~3-5s 全部出齐（4x 提速）。新模型额外能力：输出分辨率控制（512px/1K/2K/4K）、超宽比例（1:4/4:1/1:8/8:1）、Thinking 级别（minimal/high）、图片搜索 Grounding、更多参考图（10 物品+4 人物）。
 
-**Tips 速度 vs 质量（已解决，2026-02-27）**：gemini-3.1-flash-image-preview 同时解决速度和质量——tips 全部出齐 ~5s（之前 gemini-3-pro 首 tip 20+s），质量用户确认满意。`TIPS_PROVIDER` 可切换：`openrouter`（默认）/ `google`。`TIPS_TEMPERATURE=0.9`。
+**Tips 速度 vs 质量（已解决，2026-02-27）**：gemini-3.1-flash-image-preview 同时解决速度和质量——tips 全部出齐 ~5s（之前 gemini-3-pro 首 tip 20+s），质量用户确认满意。`TIPS_PROVIDER` 可切换：`openrouter`（默认）/ `google`；创意推理强度由分类默认值或 `TIPS_THINKING` 控制。
 
 **Prompt 架构（V42 重构）**：`.md` 文件是唯一真相来源，gemini.ts system prompt 极简化（2行），batch-test TIPS_SYSTEM_PROMPT 极简化（3行）。enhance.md 包含 7 个方向（A-F + G 净化场景）、FIRST cleanup 第一句约束、jawline 瘦脸条件、眼睛禁改。creative.md 升级 cleanup 为第一句。wild.md 保留原版详细四问自检。V42 遗留问题：wild 眼镜禁止陷阱仍突破、enhance 方向F 人物重新生成、creative 风格化重绘、tip 数量分类不稳定。
 

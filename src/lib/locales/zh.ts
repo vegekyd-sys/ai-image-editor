@@ -75,6 +75,9 @@ const zh = {
   // Changelog
   'changelog.heading': '更新',
   'changelog.close': '关闭更新',
+  'changelog.tiktokVideoSkill.title': '更原生的 TikTok 视频 Skill',
+  'changelog.tiktokVideoSkill.item1': '全新的 TikTok Skill 为 Agent 创作的竖屏视频加入更原生的开场、节奏、字幕、包装和平台安全布局，同时保留每条 Composition 的视觉自主性。',
+  'changelog.tiktokVideoSkill.item2': '口播字幕现在先理解最终旁白的含义和表达，再使用真实词级时间精准同步，不再按字数机械切碎句子。',
   'changelog.sourcePlayback.title': 'Source 视频合成播放更稳定',
   'changelog.sourcePlayback.item1': 'Source URL 合成现在会在缓冲时暂停时间轴，并提前预热下一个裁剪片段，减少黑屏、串镜和切镜卡顿。',
   'changelog.sourcePlayback.item2': '播放首次点击即可可靠起播，同时限制 iOS 解码预热负载，长多镜头项目不再只播花字或导致 Safari 崩溃。',

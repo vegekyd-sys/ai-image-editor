@@ -116,6 +116,9 @@ const zhHant = {
   // Changelog
   'changelog.heading': '更新',
   'changelog.close': '關閉更新',
+  'changelog.tiktokVideoSkill.title': '更原生的 TikTok 影片 Skill',
+  'changelog.tiktokVideoSkill.item1': '全新的 TikTok Skill 為 Agent 創作的直式影片加入更原生的開場、節奏、字幕、包裝和平台安全版位，同時保留每個 Composition 的視覺自主性。',
+  'changelog.tiktokVideoSkill.item2': '口播字幕現在會先理解最終旁白的語意與表達，再使用真實詞級時間精準同步，不再依字數機械切碎句子。',
   'changelog.sourcePlayback.title': 'Source 影片合成播放更穩定',
   'changelog.sourcePlayback.item1': 'Source URL 合成現在會在緩衝時暫停時間軸，並預先載入下一段裁剪片段，減少黑畫面、串鏡和切鏡卡頓。',
   'changelog.sourcePlayback.item2': '播放現在首次點擊即可可靠啟動，同時限制 iOS 解碼預熱負載，長篇多鏡頭專案不再只播花字或導致 Safari 當機。',

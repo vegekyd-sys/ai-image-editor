@@ -288,7 +288,7 @@ Reopen makaron.app
 
 ### Tips Generation
 
-- **Model**: Gemini 3.1 Flash Image Preview (via OpenRouter), `TIPS_TEMPERATURE=0.9`
+- **Model**: Gemini 3.1 Flash Image Preview (via OpenRouter); reasoning effort uses category defaults and can be overridden with `TIPS_THINKING`
 - **Speed**: ~3-5s for all 6 text suggestions (3 parallel category calls)
 - **Strategy**: `.md` template files (enhance.md / creative.md / wild.md) are the single source of truth
 - **Quality**: V42 average 7.3/10; V34 historical best 8.03/10
