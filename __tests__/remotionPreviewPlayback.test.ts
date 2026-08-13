@@ -175,10 +175,13 @@ describe('Remotion preview playback contract', () => {
   it('degrades only browser preview fonts when a resource load fails', () => {
     const rendererSource = read('src/components/RemotionRenderer.tsx')
 
-    expect(rendererSource).toContain('compileBrowserDesignWithoutPinnedFonts')
+    expect(rendererSource).toContain('compileBrowserDesignWithDeferredPinnedFonts')
+    expect(rendererSource).toContain('prepareRemotionFontCodeFromBundledCatalog')
     expect(rendererSource).toContain('const INTERACTIVE_FONT_WAIT_MS = 500')
     expect(rendererSource).toContain('Promise.race([')
     expect(rendererSource).toContain('A slow font manifest must not make the preview play button inert')
+    expect(rendererSource).toContain('The Player and media nodes stay mounted')
+    expect(rendererSource).not.toContain('void fontCompile.then(result => {\n              if (result.component) setComponent')
     expect(rendererSource).toContain('isRecoverableRemotionPreviewError')
     expect(rendererSource).toContain("reportPreviewFailureRef.current('font-load'")
     expect(rendererSource).toContain('recovered: true')

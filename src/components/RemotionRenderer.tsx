@@ -8,6 +8,7 @@ import { EDITABLE_RUNTIME_SELECTOR } from '@/lib/editor/scene-registry';
 import type { DesignPayload } from '@/types';
 import {
   prepareAndLoadRemotionFontsWithTiming,
+  prepareRemotionFontCodeFromBundledCatalog,
   type RemotionFontTiming,
 } from '@/remotion/font-catalog';
 import { useLocale } from '@/lib/i18n';
@@ -169,15 +170,22 @@ function wrapBrowserDesign(
   };
 }
 
-function compileBrowserDesignWithoutPinnedFonts(
+function compileBrowserDesignWithDeferredPinnedFonts(
+  design: DesignPayload,
   code: string,
+  props: Record<string, unknown>,
 ): React.ComponentType<Record<string, unknown>> {
-  const Component = evalRemotionJSX(code, {
+  const prepared = prepareRemotionFontCodeFromBundledCatalog({
+    code,
+    props,
+    substitutions: design.fontSubstitutions,
+  });
+  const Component = evalRemotionJSX(prepared.code, {
     editableTransformMode: 'proxy',
     videoRuntime: 'preview',
   });
   if (!Component) throw new Error('Failed to compile design code');
-  return wrapBrowserDesign(Component, 'system-ui, sans-serif');
+  return wrapBrowserDesign(Component, prepared.defaultFontFamily);
 }
 
 // ─── Standalone poster capture (no DOM needed) ─────────────────────────────
@@ -417,9 +425,14 @@ export default function RemotionRenderer({
           comp = fontResult.component;
         } else {
           // A slow font manifest must not make the preview play button inert.
-          // The interactive Player can start with system fonts; poster capture
-          // and exports still await the pinned-font path above.
-          comp = compileBrowserDesignWithoutPinnedFonts(resolvedCode);
+          // Compile the same versioned family names immediately: generic
+          // fallbacks render first, then the existing DOM reflows in place as
+          // FontFace entries arrive. The Player and media nodes stay mounted.
+          comp = compileBrowserDesignWithDeferredPinnedFonts(
+            design,
+            resolvedCode,
+            designPropsRef.current,
+          );
           if (fontResult?.error) {
             reportPreviewFailureRef.current('font-load', fontResult.error, { recovered: true });
           } else {

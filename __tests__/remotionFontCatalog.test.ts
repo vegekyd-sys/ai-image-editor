@@ -4,6 +4,7 @@ import {
   internalRemotionFontFamily,
   loadPreparedRemotionFonts,
   prepareRemotionFontCode,
+  prepareRemotionFontCodeFromBundledCatalog,
   remotionFontManifestUrlFromServeUrl,
   validateRemotionFontManifest,
   type RemotionFontCatalogManifest,
@@ -74,6 +75,17 @@ describe('Remotion shared font catalog', () => {
     expect(prepared.code).toContain(internalRemotionFontFamily('Ma Shan Zheng'));
     expect(prepared.code).toContain(internalRemotionFontFamily('Noto Serif SC'));
     expect(prepared.code).not.toContain("fontFamily: 'Ma Shan Zheng");
+  });
+
+  it('prepares the deferred browser preview without waiting for the remote manifest', () => {
+    const prepared = prepareRemotionFontCodeFromBundledCatalog({
+      code: `const title = <div style={{fontFamily: 'Montserrat, sans-serif'}}>Title</div>;`,
+    });
+
+    expect(prepared.code).toContain(internalRemotionFontFamily('Montserrat'));
+    expect(prepared.code).toContain(internalRemotionFontFamily('Noto Sans SC'));
+    expect(prepared.defaultFontFamily).toContain(internalRemotionFontFamily('Inter'));
+    expect(prepared.code).not.toContain("fontFamily: 'Montserrat");
   });
 
   it('fails visibly for an unsupported local system font', () => {
