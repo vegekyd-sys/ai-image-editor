@@ -28,6 +28,14 @@ const NPM_PACKAGE_NAME = 'makaron-cli';
 const UPDATE_CHECK_INTERVAL_MS = 24 * 60 * 60 * 1000;
 const UPDATE_CHECK_TIMEOUT_MS = 400;
 const AGENT_WAIT_TIMEOUT_SECONDS = Math.max(900, Number(process.env.MAKARON_AGENT_WAIT_TIMEOUT_SECONDS || 10_800));
+const CHAT_AGENT_MODELS = [
+  'auto',
+  'gpt-5.6-terra',
+  'gpt-5.6-sol',
+  'gpt-5.6-luna',
+  'grok-4.5',
+  'deepseek-v4-pro',
+];
 
 // Public anon key (safe to embed — only enables auth, not data access)
 const SUPABASE_URL = 'https://sdyrtztrjgmmpnirswxt.supabase.co';
@@ -57,6 +65,16 @@ const MINIMAX_H3_MAX_VIDEO_SIDE = 5760;
 
 function warnLegacyModelFlag(replacement) {
   process.stderr.write(`⚠️  --model is deprecated here; use ${replacement}.\n`);
+}
+
+function validateChatAgentModel(value) {
+  if (!value || !CHAT_AGENT_MODELS.includes(value)) {
+    process.stderr.write(`❌ Unknown Agent LLM: ${value || '(missing value)'}\n`);
+    process.stderr.write(`Choose one of: ${CHAT_AGENT_MODELS.join(', ')}\n`);
+    process.stderr.write('--agent-model selects only the Agent LLM. Put image/video model preferences in the chat prompt, or use the explicit edit/video commands.\n');
+    process.exit(1);
+  }
+  return value;
 }
 
 function getCliVersion() {
@@ -351,13 +369,15 @@ Options:
   --audio <file|url>        Attach a song, beat, or voice reference. MP3/WAV, repeatable.
   --media-manifest <file|-> Import source_url + start + end + description clips before this run.
   --skill <id|label|name>   Use an installed skill or auto-install a matched marketplace skill.
+  --agent-model <id>        Agent LLM only: auto, gpt-5.6-terra, gpt-5.6-sol,
+                            gpt-5.6-luna, grok-4.5, or deepseek-v4-pro.
   --background, -b          Submit and print a runId.
   --json                    Output structured JSON.
   --stream                  Legacy live SSE stream.
   --help, -h                Show this help.
 
-Model routing is automatic in chat. Do not pass --agent-model, --image-model,
---video-model, or the legacy --model flag.
+Agent LLM defaults to auto (currently gpt-5.6-terra). Image/video model routing
+stays automatic in chat; --image-model, --video-model, and --model are rejected.
 
 What you can ask:
   Image edit
@@ -380,6 +400,9 @@ What you can ask:
 
   Agent-to-agent source-range handoff
     makaron chat --project auto --media-manifest set-01.json -b --json "make a 30s vertical video"
+
+  Compare Agent LLMs with identical inputs
+    makaron chat --project auto --agent-model deepseek-v4-pro -b --json "make a 20s badminton video"
 
   Music
     makaron chat --project <id> "add calm piano background music"
@@ -422,6 +445,7 @@ async function streamAgent(baseUrl, headers, projectId, prompt, opts = {}) {
       projectId,
       prompt,
       headless: true,
+      ...(opts.agentModel ? { agentModel: opts.agentModel } : {}),
       ...(opts.uploadedVideoCount ? { uploadedVideoCount: opts.uploadedVideoCount } : {}),
       ...(opts.turnMediaCount ? { turnMediaCount: opts.turnMediaCount } : {}),
     }),
@@ -530,6 +554,7 @@ async function streamAgent(baseUrl, headers, projectId, prompt, opts = {}) {
 
 async function submitRun(baseUrl, headers, projectId, prompt, opts = {}) {
   const body = { projectId, prompt };
+  if (opts.agentModel) body.agentModel = opts.agentModel;
   if (opts.currentSnapshotIndex != null) body.currentSnapshotIndex = opts.currentSnapshotIndex;
   if (opts.isNsfw) body.isNsfw = opts.isNsfw;
   if (opts.audioAttachments?.length) body.audioAttachments = opts.audioAttachments;
@@ -1693,6 +1718,8 @@ Commands:
 
   chat --project <id> "message"      Chat (non-blocking, polls for result)
   chat --project <id> --skill <id>   Use a built-in or marketplace skill
+  chat --project <id> --agent-model <id> "message"
+                                     Select only the Agent LLM (strict allowlist)
   chat --project <id> --video <file> Attach video to conversation
   chat --project <id> --audio <file> Attach song/beat/voice reference
   chat --project auto --media-manifest <file> "message"
@@ -1726,7 +1753,8 @@ Examples:
   makaron chat --project <id> "turn this into a short video"
 
 Run makaron <command> --help for command-specific options.
-Chat chooses agent, image, and video models automatically.
+Chat defaults the Agent LLM automatically; --agent-model can select an exact
+Agent LLM. Image and video model routing remains automatic in chat.
 
 Environment:
   MAKARON_API_KEY       API key (mk_live_xxx) — recommended for agents
@@ -1968,6 +1996,7 @@ if (!command || command === '--help' || command === '-h' || command === 'help') 
   let jsonOutput = false;
   let activeSkill = undefined;
   let mediaManifestPath = undefined;
+  let agentModel = undefined;
   for (let i = 1; i < args.length; i++) {
     if (args[i] === '--project' && args[i + 1]) projectId = args[++i];
     else if (args[i] === '--image' && args[i + 1]) chatImages.push(args[++i]);
@@ -1983,6 +2012,21 @@ if (!command || command === '--help' || command === '-h' || command === 'help') 
     else if (args[i].startsWith('--media-manifest=')) mediaManifestPath = args[i].slice('--media-manifest='.length);
     else if (args[i] === '--skill' && args[i + 1]) activeSkill = args[++i];
     else if (args[i].startsWith('--skill=')) activeSkill = args[i].slice('--skill='.length);
+    else if (args[i] === '--agent-model') {
+      if (agentModel !== undefined) {
+        process.stderr.write('❌ Pass --agent-model only once per chat run.\n');
+        process.exit(1);
+      }
+      if (!args[i + 1] || args[i + 1].startsWith('--')) validateChatAgentModel('');
+      agentModel = validateChatAgentModel(args[++i]);
+    }
+    else if (args[i].startsWith('--agent-model=')) {
+      if (agentModel !== undefined) {
+        process.stderr.write('❌ Pass --agent-model only once per chat run.\n');
+        process.exit(1);
+      }
+      agentModel = validateChatAgentModel(args[i].slice('--agent-model='.length));
+    }
     else if (args[i] === '--stream') useStream = true;
     else if (args[i] === '--background' || args[i] === '-b') background = true;
     else if (args[i] === '--json') jsonOutput = true;
@@ -1991,11 +2035,11 @@ if (!command || command === '--help' || command === '-h' || command === 'help') 
       process.exit(1);
     }
     else if (
-      ['--agent-model', '--image-model', '--video-model', '--model'].includes(args[i])
-      || ['--agent-model=', '--image-model=', '--video-model=', '--model='].some(prefix => args[i].startsWith(prefix))
+      ['--image-model', '--video-model', '--model'].includes(args[i])
+      || ['--image-model=', '--video-model=', '--model='].some(prefix => args[i].startsWith(prefix))
     ) {
       const flag = args[i].split('=')[0];
-      process.stderr.write(`❌ makaron chat chooses agent, image, and video models automatically. Remove ${flag} and retry.\n`);
+      process.stderr.write(`❌ ${flag} is not valid for makaron chat. Only --agent-model may select the Agent LLM; image/video routing stays automatic. Remove ${flag} and retry.\n`);
       process.exit(1);
     }
     else promptParts.push(args[i]);
@@ -2222,6 +2266,7 @@ if (!command || command === '--help' || command === '-h' || command === 'help') 
   if (useStream) {
     // Legacy SSE mode
     const { results } = await streamAgent(baseUrl, headers, projectId, finalPrompt, {
+      agentModel,
       uploadedVideoCount: uploadedTurnVideoCount,
       turnMediaCount: uploadedTurnMediaCount,
     });
@@ -2234,6 +2279,7 @@ if (!command || command === '--help' || command === '-h' || command === 'help') 
   } else {
     // Default: fire-and-forget + poll
     const { runId } = await submitRun(baseUrl, headers, projectId, finalPrompt, {
+      agentModel,
       audioAttachments,
       uploadedVideoCount: uploadedTurnVideoCount,
       turnMediaCount: uploadedTurnMediaCount,

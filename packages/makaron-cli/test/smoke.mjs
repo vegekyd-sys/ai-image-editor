@@ -8,6 +8,12 @@ import { spawn } from 'node:child_process';
 const cliPath = new URL('../bin/makaron.mjs', import.meta.url);
 const pkg = JSON.parse(readFileSync(new URL('../package.json', import.meta.url), 'utf-8'));
 
+function extractQuotedValues(source, pattern, label) {
+  const match = source.match(pattern);
+  assert.ok(match, `Could not find ${label}`);
+  return [...match[1].matchAll(/'([^']+)'/g)].map(item => item[1]);
+}
+
 const requests = [];
 
 const marketplaceSkills = [
@@ -473,10 +479,10 @@ try {
 
   for (const [helpArgs, expectedText] of [
     [[], /Makaron CLI/],
-    [['--help'], /Chat chooses agent, image, and video models automatically/],
+    [['--help'], /Chat defaults the Agent LLM automatically/],
     [['login', '--help'], /Usage: makaron login/],
     [['create', '--help'], /Usage: makaron create/],
-    [['chat', '--help'], /Model routing is automatic in chat/],
+    [['chat', '--help'], /Agent LLM defaults to auto/],
     [['responses', '--help'], /Responses commands:/],
     [['responses', 'get', '--help'], /Usage: makaron responses get/],
     [['responses', 'watch', '--help'], /Usage: makaron responses watch/],
@@ -523,23 +529,41 @@ try {
   }
 
   {
-    const result = await expectHelp(['--help'], /Chat chooses agent, image, and video models automatically/);
-    assert.doesNotMatch(result.stdout, /--agent-model/);
+    const result = await expectHelp(['--help'], /--agent-model <id>/);
+    assert.match(result.stdout, /Select only the Agent LLM \(strict allowlist\)/);
     assert.doesNotMatch(result.stdout, /--image-model/);
     assert.doesNotMatch(result.stdout, /--video-model/);
     assert.doesNotMatch(result.stdout, /MAKARON_AGENT_MODEL/);
   }
 
   {
-    const result = await expectHelp(['chat', '--help'], /Model routing is automatic in chat/);
-    assert.doesNotMatch(result.stdout, /^\s+--agent-model/m);
+    const result = await expectHelp(['chat', '--help'], /Agent LLM defaults to auto/);
+    assert.match(result.stdout, /^\s+--agent-model <id>/m);
+    assert.match(result.stdout, /deepseek-v4-pro/);
+    assert.match(result.stdout, /currently gpt-5\.6-terra/);
     assert.doesNotMatch(result.stdout, /^\s+--image-model/m);
     assert.doesNotMatch(result.stdout, /^\s+--video-model/m);
     assert.doesNotMatch(result.stdout, /^\s+--video-resolution/m);
-    assert.match(result.stdout, /Do not pass --agent-model, --image-model,/);
+    assert.match(result.stdout, /Image\/video model routing\s+stays automatic in chat/);
     assert.match(result.stdout, /--media-manifest <file\|->/);
     assert.match(result.stdout, /source_url \+ start \+ end \+ description/);
     assert.doesNotMatch(result.stdout, /asset_id|asset-id|source_uri|source-uri/);
+  }
+
+  {
+    const cliSource = readFileSync(cliPath, 'utf-8');
+    const appCatalogSource = readFileSync(new URL('../../../src/lib/agent-models.ts', import.meta.url), 'utf-8');
+    const cliModels = extractQuotedValues(
+      cliSource,
+      /const CHAT_AGENT_MODELS = \[([\s\S]*?)\];/,
+      'CLI Agent LLM allowlist',
+    );
+    const appModels = extractQuotedValues(
+      appCatalogSource,
+      /export const AGENT_MODEL_IDS = \[([\s\S]*?)\] as const;/,
+      'app Agent model catalog',
+    );
+    assert.deepEqual(cliModels, ['auto', ...appModels], 'CLI Agent LLM allowlist must stay in sync with the app catalog');
   }
 
   {
@@ -601,6 +625,50 @@ try {
     assert.equal(runRequest?.body?.agentModel, undefined);
     assert.equal(runRequest?.body?.preferredModel, undefined);
     assert.equal(runRequest?.body?.videoModel, undefined);
+  }
+
+  {
+    const requestStart = requests.length;
+    const result = await expectSuccess([
+      'chat', '--project', 'project-models-1', '--agent-model', 'deepseek-v4-pro',
+      '--json', '-b', 'make a low-cost comparison run',
+    ]);
+    assert.equal(JSON.parse(result.stdout).runId, 'run_mock_1');
+    const flow = requests.slice(requestStart);
+    assert.deepEqual(flow.map(request => `${request.method} ${request.pathname}`), [
+      'POST /api/agent/run',
+    ]);
+    assert.deepEqual(flow[0].body, {
+      projectId: 'project-models-1',
+      prompt: 'make a low-cost comparison run',
+      agentModel: 'deepseek-v4-pro',
+    });
+  }
+
+  {
+    const requestStart = requests.length;
+    await expectSuccess([
+      'chat', '--project', 'project-models-1', '--agent-model=auto',
+      '--json', '-b', 'use automatic Agent LLM routing',
+    ]);
+    const runRequest = requests.slice(requestStart)
+      .find(request => request.pathname === '/api/agent/run');
+    assert.equal(runRequest?.body?.agentModel, 'auto');
+    assert.equal(runRequest?.body?.preferredModel, undefined);
+    assert.equal(runRequest?.body?.videoModel, undefined);
+  }
+
+  {
+    const requestStart = requests.length;
+    await expectSuccess([
+      'chat', '--project', 'project-models-1', '--stream',
+      '--agent-model', 'gpt-5.6-terra', 'stream with an explicit Agent LLM',
+    ]);
+    const streamRequest = requests.slice(requestStart)
+      .find(request => request.pathname === '/api/agent');
+    assert.equal(streamRequest?.body?.agentModel, 'gpt-5.6-terra');
+    assert.equal(streamRequest?.body?.preferredModel, undefined);
+    assert.equal(streamRequest?.body?.videoModel, undefined);
   }
 
   {
@@ -692,7 +760,6 @@ try {
   }
 
   for (const args of [
-    ['--agent-model', 'deepseek-v4-pro'],
     ['--image-model', 'qwen'],
     ['--video-model', 'seedance pro'],
     ['--video-model=seedance-pro'],
@@ -700,9 +767,34 @@ try {
   ]) {
     const requestCount = requests.length;
     const result = await expectFailure(['chat', '--project', 'project-models-1', ...args, 'must fail fast']);
-    assert.match(result.stderr, /chat chooses agent, image, and video models automatically/);
+    assert.match(result.stderr, /Only --agent-model may select the Agent LLM/);
     assert.match(result.stderr, new RegExp(`Remove ${args[0].split('=')[0]}`));
     assert.equal(requests.length, requestCount, `${args[0]} should fail before making HTTP requests`);
+  }
+
+  for (const args of [
+    ['--agent-model', 'deepseek-pro'],
+    ['--agent-model=seedance-2.5'],
+    ['--agent-model='],
+    ['--agent-model'],
+  ]) {
+    const requestCount = requests.length;
+    const result = await expectFailure(['chat', '--project', 'project-models-1', ...args, ...(args.at(-1) === '--agent-model' ? [] : ['must fail fast'])]);
+    assert.match(result.stderr, /Unknown Agent LLM/);
+    assert.match(result.stderr, /deepseek-v4-pro/);
+    assert.match(result.stderr, /--agent-model selects only the Agent LLM/);
+    assert.equal(requests.length, requestCount, `${args[0]} should fail before making HTTP requests`);
+  }
+
+  {
+    const requestCount = requests.length;
+    const result = await expectFailure([
+      'chat', '--project', 'project-models-1',
+      '--agent-model', 'deepseek-v4-pro', '--agent-model=gpt-5.6-terra',
+      'duplicate selection must fail',
+    ]);
+    assert.match(result.stderr, /Pass --agent-model only once/);
+    assert.equal(requests.length, requestCount);
   }
 
   for (const resolutionArgs of [
