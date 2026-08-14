@@ -24,6 +24,11 @@ export interface RemotionFontCatalogManifest {
   faces: RemotionFontCatalogFace[];
 }
 
+type RemotionFontFamilyManifest = {
+  version: string;
+  faces: Array<Pick<RemotionFontCatalogFace, 'family'>>;
+};
+
 export interface PreparedRemotionFonts {
   code: string;
   defaultFontFamily: string;
@@ -74,6 +79,11 @@ export const REMOTION_DEFAULT_SANS = 'Inter';
 export const REMOTION_DEFAULT_CJK_SANS = 'Noto Sans SC';
 export const REMOTION_DEFAULT_CJK_SERIF = 'Noto Serif SC';
 export const REMOTION_DEFAULT_EMOJI = 'Noto Color Emoji';
+
+const BUNDLED_REMOTION_FONT_FAMILY_MANIFEST: RemotionFontFamilyManifest = {
+  version: REMOTION_FONT_CATALOG_VERSION,
+  faces: REMOTION_FONT_CATALOG.map(({ family }) => ({ family })),
+};
 
 const GENERIC_FAMILIES = new Set(['sans-serif', 'serif', 'monospace', 'cursive']);
 const LEGACY_PLATFORM_FONT_SUBSTITUTIONS: Record<string, string> = {
@@ -171,7 +181,7 @@ export async function fetchRemotionFontManifest(url: string): Promise<RemotionFo
   return (await fetchRemotionFontManifestWithTiming(url)).manifest;
 }
 
-function manifestFamilies(manifest: RemotionFontCatalogManifest): Map<string, string> {
+function manifestFamilies(manifest: RemotionFontFamilyManifest): Map<string, string> {
   const families = new Map<string, string>();
   for (const face of manifest.faces) families.set(face.family.toLowerCase(), face.family);
   return families;
@@ -190,7 +200,7 @@ function defaultFamilyForGeneric(generic: string): string {
 
 function resolveRequestedFamily(input: {
   stack: string;
-  manifest: RemotionFontCatalogManifest;
+  manifest: RemotionFontFamilyManifest;
   substitutions: Record<string, string>;
 }): { family: string; generic: string } {
   const available = manifestFamilies(input.manifest);
@@ -224,7 +234,7 @@ function quotedFamily(family: string): string {
 function internalStack(
   family: string,
   generic: string,
-  manifest: RemotionFontCatalogManifest,
+  manifest: RemotionFontFamilyManifest,
 ): string {
   const available = manifestFamilies(manifest);
   const primary = internalRemotionFontFamily(family, manifest.version);
@@ -241,7 +251,7 @@ function internalStack(
 export function prepareRemotionFontCode(input: {
   code: string;
   props?: Record<string, unknown>;
-  manifest: RemotionFontCatalogManifest;
+  manifest: RemotionFontFamilyManifest;
   substitutions?: Record<string, string>;
 }): PreparedRemotionFonts {
   const usedFamilies: string[] = [];
@@ -311,6 +321,23 @@ export function prepareRemotionFontCode(input: {
     usedFamilies,
     dynamicFamilyAliases,
   };
+}
+
+/**
+ * Rewrites preview code to the same versioned font-family names used by the
+ * remote manifest without waiting for that manifest or any WOFF2 files.
+ * Until the FontFace entries arrive the browser uses each stack's generic
+ * fallback; once registered, the existing DOM reflows in place.
+ */
+export function prepareRemotionFontCodeFromBundledCatalog(input: {
+  code: string;
+  props?: Record<string, unknown>;
+  substitutions?: Record<string, string>;
+}): PreparedRemotionFonts {
+  return prepareRemotionFontCode({
+    ...input,
+    manifest: BUNDLED_REMOTION_FONT_FAMILY_MANIFEST,
+  });
 }
 
 function requestedWeights(text: string): number[] {
