@@ -374,8 +374,18 @@ const zhHant = {
   'billing.subscribeTo': '訂閱',
   'billing.upgradeTo': '升級至',
   'billing.current': '目前',
+  'billing.appleTrialBadge': '3 天免費試用',
+  'billing.appleTrialToday': '今天免費',
+  'billing.appleTrialThen': '之後',
+  'billing.appleTrialCredits': '點試用點數',
+  'billing.appleTrialStart': '開始 3 天免費試用',
+  'billing.appleTrialDisclosure': '今天免費，3 天後自動續訂',
   'billing.iosUnavailableTitle': 'iOS App 內購即將推出',
   'billing.iosUnavailableDesc': '為符合 App Store 審核規範，在 Apple App 內購準備完成前，iOS App 暫不販售點數或訂閱。你仍可使用目前餘額繼續創作。',
+  'admin.iosTrialCredits': 'iOS 試用點數',
+  'admin.iosTrialCreditsDesc': 'Apple 驗證 3 天 Basic 試用後一次性發放',
+  'admin.save': '儲存',
+  'admin.edit': '編輯',
 
   // Skills
   'skills.title': 'Skill 市集',

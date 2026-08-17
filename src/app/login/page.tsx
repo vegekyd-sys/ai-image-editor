@@ -129,25 +129,25 @@ export default function LoginPage() {
     return callback.toString()
   }
 
-  function withWelcomeParam(url: string, welcome?: boolean): string {
-    if (!welcome) return url
+  function withOnboardingParam(url: string, onboarding?: 'welcome' | 'trial'): string {
+    if (!onboarding) return url
     try {
       const parsed = new URL(url, window.location.origin)
-      parsed.searchParams.set('welcome', '1')
+      parsed.searchParams.set(onboarding, '1')
       return parsed.pathname + parsed.search + parsed.hash
     } catch {
       const sep = url.includes('?') ? '&' : '?'
-      return `${url}${sep}welcome=1`
+      return `${url}${sep}${onboarding}=1`
     }
   }
 
-  function redirectAfterAuth(options?: { fallback?: string; welcome?: boolean }) {
+  function redirectAfterAuth(options?: { fallback?: string; onboarding?: 'welcome' | 'trial' }) {
     let returnUrl = getReturnUrl()
     sessionStorage.removeItem('mkr_return_url')
     localStorage.removeItem('mkr_return_url')
     // mkr_return_text and mkr_return_skill are consumed by the home page on mount
     returnUrl = resolveReturnUrlForRuntime(returnUrl)
-    window.location.href = withWelcomeParam(returnUrl || options?.fallback || '/', options?.welcome)
+    window.location.href = withOnboardingParam(returnUrl || options?.fallback || '/', options?.onboarding)
   }
 
   async function completeAuthAndRedirect(options?: { fallback?: string }) {
@@ -165,7 +165,7 @@ export default function LoginPage() {
     }
     redirectAfterAuth({
       fallback: options?.fallback || complete.redirectUrl || '/projects',
-      welcome: Boolean(complete.isNewUser),
+      onboarding: complete.isNewUser ? (complete.trialRequired ? 'trial' : 'welcome') : undefined,
     })
   }
 

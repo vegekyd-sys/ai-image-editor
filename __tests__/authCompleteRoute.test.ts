@@ -6,6 +6,7 @@ const mocks = vi.hoisted(() => ({
   getUser: vi.fn(),
   cookies: vi.fn(),
   from: vi.fn(),
+  rpc: vi.fn(),
   getConfiguredWelcomeCredits: vi.fn(),
   addCredits: vi.fn(),
   sendMetaCapiEvent: vi.fn(),
@@ -17,7 +18,7 @@ vi.mock('@supabase/ssr', () => ({
 
 vi.mock('next/headers', () => ({ cookies: mocks.cookies }))
 vi.mock('@/lib/supabase/service', () => ({
-  getSupabaseAdmin: () => ({ from: mocks.from }),
+  getSupabaseAdmin: () => ({ from: mocks.from, rpc: mocks.rpc }),
 }))
 vi.mock('@/lib/billing/welcome-credits', () => ({
   getConfiguredWelcomeCredits: mocks.getConfiguredWelcomeCredits,
@@ -53,6 +54,10 @@ describe('verified authentication completion route', () => {
       set: vi.fn(),
     })
     mocks.getConfiguredWelcomeCredits.mockResolvedValue(500)
+    mocks.rpc.mockResolvedValue({
+      data: { granted: true, credits: 500, balance: 500, reason: 'granted' },
+      error: null,
+    })
     mocks.addCredits.mockResolvedValue(undefined)
     mocks.sendMetaCapiEvent.mockResolvedValue(undefined)
   })
@@ -78,12 +83,51 @@ describe('verified authentication completion route', () => {
     expect(body).toMatchObject({ ok: true, isNewUser: true, credits: 500 })
     expect(response.cookies.get('mkr_activated')?.value).toBe('1')
     expect(upsert).toHaveBeenCalledWith(expect.objectContaining({ id: 'new-user', activated: true }), { onConflict: 'id' })
-    expect(mocks.addCredits).toHaveBeenCalledWith('new-user', 500)
-    expect(insert).toHaveBeenCalledWith(expect.objectContaining({ credits: 500, source: 'welcome' }))
+    expect(mocks.rpc).toHaveBeenCalledWith('claim_welcome_credits', expect.objectContaining({
+      p_user_id: 'new-user',
+      p_credits: 500,
+      p_channel: 'web_signup',
+    }))
+    expect(insert).not.toHaveBeenCalled()
     expect(mocks.sendMetaCapiEvent).toHaveBeenCalledTimes(1)
     expect(mocks.sendMetaCapiEvent).toHaveBeenCalledWith(
       expect.objectContaining({ eventName: 'CompleteRegistration' }),
     )
+  })
+
+  it('starts a verified iOS user at zero and routes directly to the Apple trial', async () => {
+    mocks.getUser.mockResolvedValue({
+      data: {
+        user: {
+          id: 'new-ios-user',
+          email: 'ios@example.test',
+          email_confirmed_at: '2026-07-21T00:00:00Z',
+          app_metadata: { provider: 'email' },
+        },
+      },
+      error: null,
+    })
+    const { upsert } = mockAdminState({ activated: false, hasBalance: false })
+
+    const response = await POST(new NextRequest('http://localhost:3001/api/auth/complete', {
+      method: 'POST',
+      headers: { 'User-Agent': 'MakaronIOS' },
+    }))
+    const body = await response.json()
+
+    expect(body).toMatchObject({
+      ok: true,
+      isNewUser: true,
+      credits: 0,
+      trialRequired: true,
+      redirectUrl: '/home?trial=1',
+    })
+    expect(upsert).toHaveBeenCalledWith(expect.objectContaining({
+      user_id: 'new-ios-user',
+      balance: 0,
+    }), { onConflict: 'user_id', ignoreDuplicates: true })
+    expect(mocks.getConfiguredWelcomeCredits).not.toHaveBeenCalled()
+    expect(mocks.rpc).not.toHaveBeenCalled()
   })
 
   it('keeps completion idempotent for an already activated user', async () => {

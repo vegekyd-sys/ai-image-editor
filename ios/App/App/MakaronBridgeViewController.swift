@@ -15,6 +15,36 @@ class MakaronBridgeViewController: CAPBridgeViewController, WKScriptMessageHandl
     private var pendingPurchaseResponseIdsByProductId: [String: String] = [:]
     private var handledTransactionIds = Set<String>()
 
+    @available(iOS 15.0, *)
+    private func canonicalPaymentMode(_ mode: Product.SubscriptionOffer.PaymentMode) -> String {
+        switch mode {
+        case .freeTrial:
+            return "freeTrial"
+        case .payAsYouGo:
+            return "payAsYouGo"
+        case .payUpFront:
+            return "payUpFront"
+        default:
+            return "unknown"
+        }
+    }
+
+    @available(iOS 15.0, *)
+    private func canonicalPeriodUnit(_ unit: Product.SubscriptionPeriod.Unit) -> String {
+        switch unit {
+        case .day:
+            return "day"
+        case .week:
+            return "week"
+        case .month:
+            return "month"
+        case .year:
+            return "year"
+        default:
+            return "unknown"
+        }
+    }
+
     override func viewDidLoad() {
         super.viewDidLoad()
         configureNativeWebView()
@@ -133,14 +163,28 @@ class MakaronBridgeViewController: CAPBridgeViewController, WKScriptMessageHandl
         Task {
             do {
                 let products = try await Product.products(for: productIds)
-                let payload = products.map { product in
-                    [
+                var payload: [[String: Any]] = []
+                for product in products {
+                    var item: [String: Any] = [
                         "productId": product.id,
                         "displayName": product.displayName,
                         "description": product.description,
                         "displayPrice": product.displayPrice,
                         "type": String(describing: product.type)
                     ]
+                    if let subscription = product.subscription {
+                        item["isEligibleForIntroOffer"] = await subscription.isEligibleForIntroOffer
+                        if let offer = subscription.introductoryOffer {
+                            item["introductoryOffer"] = [
+                                "displayPrice": offer.displayPrice,
+                                "paymentMode": canonicalPaymentMode(offer.paymentMode),
+                                "periodUnit": canonicalPeriodUnit(offer.period.unit),
+                                "periodValue": offer.period.value,
+                                "periodCount": offer.periodCount
+                            ]
+                        }
+                    }
+                    payload.append(item)
                 }
                 sendNativeResponse(id: id, ok: true, error: nil, extra: ["products": payload])
             } catch {

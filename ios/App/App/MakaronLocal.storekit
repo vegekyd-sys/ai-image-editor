@@ -105,7 +105,13 @@
           "familyShareable": false,
           "groupNumber": 3,
           "internalID": "BASIC_MONTHLY",
-          "introductoryOffer": null,
+          "introductoryOffer": {
+            "billingPlanType": "BILLED_UPFRONT",
+            "internalID": "BASIC_MONTHLY_TRIAL",
+            "numberOfPeriods": 1,
+            "paymentMode": "free",
+            "subscriptionPeriod": "P3D"
+          },
           "localizations": [
             {
               "description": "Basic monthly Makaron subscription",

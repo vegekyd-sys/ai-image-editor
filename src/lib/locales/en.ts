@@ -312,8 +312,18 @@ const en = {
   'billing.subscribeTo': 'Subscribe to',
   'billing.upgradeTo': 'Upgrade to',
   'billing.current': 'Current',
+  'billing.appleTrialBadge': '3-day free trial',
+  'billing.appleTrialToday': 'Free today',
+  'billing.appleTrialThen': 'then',
+  'billing.appleTrialCredits': 'trial credits',
+  'billing.appleTrialStart': 'Start 3-day free trial',
+  'billing.appleTrialDisclosure': 'Free today, auto-renews in 3 days at',
   'billing.iosUnavailableTitle': 'Purchases are coming to iOS',
   'billing.iosUnavailableDesc': 'For App Store compliance, credits and subscriptions are not sold in the iOS app until Apple in-app purchase is ready. You can keep creating with your current balance.',
+  'admin.iosTrialCredits': 'iOS Trial Credits',
+  'admin.iosTrialCreditsDesc': 'Granted once after Apple verifies the 3-day Basic trial',
+  'admin.save': 'Save',
+  'admin.edit': 'Edit',
 
   // Skills
   'skills.title': 'Skill Market',

@@ -312,8 +312,18 @@ const zh = {
   'billing.subscribeTo': '订阅',
   'billing.upgradeTo': '升级到',
   'billing.current': '当前',
+  'billing.appleTrialBadge': '3 天免费试用',
+  'billing.appleTrialToday': '今天免费',
+  'billing.appleTrialThen': '之后',
+  'billing.appleTrialCredits': '点试用点数',
+  'billing.appleTrialStart': '开始 3 天免费试用',
+  'billing.appleTrialDisclosure': '今天免费，3 天后自动续订',
   'billing.iosUnavailableTitle': 'iOS 内购买稍后开放',
   'billing.iosUnavailableDesc': '为了符合 App Store 审核要求，iOS App 暂不通过网页出售点数或订阅。你可以继续使用当前余额创作。',
+  'admin.iosTrialCredits': 'iOS 试用点数',
+  'admin.iosTrialCreditsDesc': 'Apple 验证 3 天 Basic 试用后一次性发放',
+  'admin.save': '保存',
+  'admin.edit': '编辑',
 
   // Misc
   // Skills

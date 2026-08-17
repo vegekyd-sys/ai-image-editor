@@ -47,6 +47,7 @@ import { useCreateInput } from '@/hooks/useCreateInput'
 import CreateInputBox from '@/components/CreateInputBox'
 import MakaronLogo from '@/components/MakaronLogo'
 import LiquidGlassNav from '@/components/LiquidGlassNav'
+import CreditPopup from '@/components/CreditPopup'
 import { loadCreateAgentModelPreference, saveAgentModelPreference, saveCreateAgentModelPreference } from '@/lib/agent-model-preference'
 import type { AgentModelPreference } from '@/lib/agent-models'
 import { LazyVideo, SkillVideo } from '@/components/HomeSkillMedia'
@@ -791,6 +792,7 @@ function HomePageInner() {
   const [placeholderIdx, setPlaceholderIdx] = useState(0)
   const [showWelcome, setShowWelcome] = useState(false)
   const [welcomeCredits, setWelcomeCredits] = useState(0)
+  const [showIOSTrial, setShowIOSTrial] = useState(false)
   useEffect(() => { setPlaceholderIdx(Math.floor(Math.random() * placeholders.length)) }, [])
 
   // Restore state from login redirect + detect welcome
@@ -804,6 +806,12 @@ function HomePageInner() {
     // Welcome credits popup — activates new user + grants credits
     if (typeof window !== 'undefined') {
       const params = new URLSearchParams(window.location.search)
+      if (params.get('trial') && isMakaronIOSApp()) {
+        params.delete('trial')
+        const cleanSearch = params.toString()
+        window.history.replaceState({}, '', `${window.location.pathname}${cleanSearch ? `?${cleanSearch}` : ''}`)
+        setShowIOSTrial(true)
+      }
       if (params.get('welcome')) {
         window.history.replaceState({}, '', window.location.pathname + window.location.search.replace(/[?&]welcome=1/, ''))
         fetch('/api/auth/activate', { method: 'POST' })
@@ -819,7 +827,9 @@ function HomePageInner() {
             if (d.credits > 0) {
               setWelcomeCredits(d.credits); setShowWelcome(true)
               window.dispatchEvent(new Event('credits-updated'))
-            } else if (d.isNew === false) {
+            } else if (d.trialRequired && isMakaronIOSApp()) {
+              setShowIOSTrial(true)
+            } else if (d.isNew === false && !isMakaronIOSApp()) {
               // Already activated user revisiting with ?welcome=1 — just refresh credits
               fetch('/api/billing/credits').then(r => r.json()).then(b => {
                 writeNativeJSONCache('/api/billing/credits', b)
@@ -2713,6 +2723,14 @@ function HomePageInner() {
       )}
 
       {/* Skill menu now handled by SkillSelector component */}
+
+      <CreditPopup
+        open={showIOSTrial}
+        entryPoint="ios_onboarding"
+        onClose={() => setShowIOSTrial(false)}
+        balance={0}
+        subscription={null}
+      />
 
       {/* Welcome credits popup */}
       {showWelcome && welcomeCredits > 0 && (

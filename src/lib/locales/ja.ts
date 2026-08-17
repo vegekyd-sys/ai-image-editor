@@ -378,8 +378,18 @@ const ja = {
   'billing.subscribeTo': '登録：',
   'billing.upgradeTo': 'アップグレード：',
   'billing.current': '現在',
+  'billing.appleTrialBadge': '3日間無料トライアル',
+  'billing.appleTrialToday': '本日は無料',
+  'billing.appleTrialThen': 'その後',
+  'billing.appleTrialCredits': 'トライアルクレジット',
+  'billing.appleTrialStart': '3日間の無料トライアルを開始',
+  'billing.appleTrialDisclosure': '本日は無料、3日後に自動更新',
   'billing.iosUnavailableTitle': 'iOSでの購入は近日対応予定です',
   'billing.iosUnavailableDesc': 'App Storeの要件に準拠するため、Appleのアプリ内課金に対応するまでiOSアプリではクレジットやサブスクリプションを販売しません。現在の残高で引き続き創作できます。',
+  'admin.iosTrialCredits': 'iOSトライアルクレジット',
+  'admin.iosTrialCreditsDesc': 'Appleが3日間のBasicトライアルを確認後、1回のみ付与',
+  'admin.save': '保存',
+  'admin.edit': '編集',
 
   // Skills
   'skills.title': 'Skillマーケット',

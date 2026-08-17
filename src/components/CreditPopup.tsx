@@ -8,6 +8,7 @@ import { writeNativeJSONCache } from '@/lib/native-app-cache';
 import { getAttributionForRequest } from '@/lib/marketing/attribution';
 import { trackCheckoutStart, trackCheckoutSuccessFromUrl } from '@/lib/marketing/meta-pixel';
 import { useAppleBillingProducts } from '@/lib/billing/use-apple-billing';
+import { getEligibleAppleIntroTrial } from '@/lib/billing/apple-trial';
 import {
   finishNativeAppleTransaction,
   getNativeApplePurchaseErrorMessage,
@@ -25,6 +26,7 @@ const PLANS = [
 
 interface CreditPopupProps {
   open: boolean;
+  entryPoint?: 'standard' | 'ios_onboarding';
   onClose: () => void;
   balance: number;
   needed?: number;
@@ -40,7 +42,7 @@ interface CreditPopupProps {
   onBalanceUpdate?: (balance: number, subscription?: { planId: string; status: string } | null) => void;
 }
 
-export default function CreditPopup({ open: externalOpen, onClose: externalOnClose, balance: externalBalance, needed, subscription: externalSubscription, projectId, success: externalSuccess, waiting: externalWaiting, autoDetectPayment, onBalanceUpdate }: CreditPopupProps) {
+export default function CreditPopup({ open: externalOpen, entryPoint = 'standard', onClose: externalOnClose, balance: externalBalance, needed, subscription: externalSubscription, projectId, success: externalSuccess, waiting: externalWaiting, autoDetectPayment, onBalanceUpdate }: CreditPopupProps) {
   const { t } = useLocale();
   const [loading, setLoading] = useState<string | null>(null);
   const [selectedTier, setSelectedTier] = useState<string>('pro');
@@ -112,13 +114,25 @@ export default function CreditPopup({ open: externalOpen, onClose: externalOnClo
   }, [autoDetectPayment]);
 
   const hasSubscription = !!(subscription && subscription.status !== 'canceled');
+  const basicMonthlyProduct = appleBilling.findSubscription('basic', 'month');
+  const basicMonthlyTrial = getEligibleAppleIntroTrial(
+    basicMonthlyProduct,
+    appleBilling.nativeProductFor(basicMonthlyProduct),
+  );
+  const hasBasicMonthlyTrial = !!basicMonthlyTrial;
 
-  const [tab, setTab] = useState<'subscribe' | 'topup'>('topup');
+  const [tab, setTab] = useState<'subscribe' | 'topup'>(entryPoint === 'ios_onboarding' ? 'subscribe' : 'topup');
 
   // Sync tab when subscription status changes (async fetch)
   useEffect(() => {
-    setTab(hasSubscription ? 'subscribe' : 'topup');
-  }, [hasSubscription]);
+    if (entryPoint === 'ios_onboarding' || hasSubscription || hasBasicMonthlyTrial) setTab('subscribe');
+    else if (!appleBilling.loading) setTab('topup');
+
+    if (entryPoint === 'ios_onboarding' || hasBasicMonthlyTrial) {
+      setSelectedPlan('basic');
+      setSelectedBillingInterval('month');
+    }
+  }, [appleBilling.loading, entryPoint, hasBasicMonthlyTrial, hasSubscription]);
   const currentPlanIndex = hasSubscription ? PLANS.findIndex(p => p.id === subscription!.planId) : -1;
 
   // Animate balance count-up on success
@@ -335,6 +349,11 @@ export default function CreditPopup({ open: externalOpen, onClose: externalOnClo
   const selectedAppleTopupProduct = appleBilling.findTopup(selectedTier);
   const selectedAppleTopupReady = !appleBillingAvailable || !!appleBilling.nativeProductFor(selectedAppleTopupProduct);
   const selectedAppleSubscriptionProduct = appleBilling.findSubscription(selectedPlan, selectedBillingInterval);
+  const selectedAppleNativeSubscription = appleBilling.nativeProductFor(selectedAppleSubscriptionProduct);
+  const selectedAppleIntroTrial = getEligibleAppleIntroTrial(
+    selectedAppleSubscriptionProduct,
+    selectedAppleNativeSubscription,
+  );
   const selectedAppleSubscriptionReady = !appleBillingAvailable || !!appleBilling.nativeProductFor(selectedAppleSubscriptionProduct);
   const applePurchaseBlocked = appleBillingAvailable && (appleBilling.loading || !!appleBilling.error);
   const subscribeDisabled = !!loading
@@ -347,8 +366,8 @@ export default function CreditPopup({ open: externalOpen, onClose: externalOnClo
     if (appleBillingAvailable) {
       if (appleBilling.loading) return 'Loading Apple prices...';
       if (!selectedAppleSubscriptionReady) return 'Apple product unavailable';
-      const nativeProduct = appleBilling.nativeProductFor(selectedAppleSubscriptionProduct);
-      return `Subscribe · ${nativeProduct?.displayPrice || (selectedBillingInterval === 'year' ? 'Annual' : 'Monthly')}`;
+      if (selectedAppleIntroTrial) return t('billing.appleTrialStart');
+      return `Subscribe · ${selectedAppleNativeSubscription?.displayPrice || (selectedBillingInterval === 'year' ? 'Annual' : 'Monthly')}`;
     }
     if (hasSubscription) return `${t('billing.upgradeTo')} ${PLANS.find(p => p.id === selectedPlan)?.name}`;
     return `${t('billing.subscribeTo')} ${PLANS.find(p => p.id === selectedPlan)?.name}`;
@@ -670,7 +689,9 @@ export default function CreditPopup({ open: externalOpen, onClose: externalOnClo
                       const isDowngrade = hasSubscription && idx < currentPlanIndex;
                       const isSelected = selectedPlan === plan.id;
                       const appleProduct = appleBilling.findSubscription(plan.id, selectedBillingInterval);
-                      const displayPrice = appleProduct ? appleBilling.nativeProductFor(appleProduct)?.displayPrice : undefined;
+                      const nativeProduct = appleProduct ? appleBilling.nativeProductFor(appleProduct) : undefined;
+                      const displayPrice = nativeProduct?.displayPrice;
+                      const introTrial = getEligibleAppleIntroTrial(appleProduct, nativeProduct);
                       const fallbackPrice = selectedBillingInterval === 'year' ? plan.annualPrice : plan.monthlyPrice;
                       const credits = selectedBillingInterval === 'year' ? plan.credits * 12 : plan.credits;
                       const priceLabel = appleBillingAvailable
@@ -714,13 +735,31 @@ export default function CreditPopup({ open: externalOpen, onClose: externalOnClo
                                   {t('billing.current')}
                                 </span>
                               )}
+                              {introTrial && (
+                                <span data-testid="apple-intro-trial-badge" style={{
+                                  fontSize: 10, fontWeight: 700, padding: '2px 8px', borderRadius: 6,
+                                  background: 'rgba(52,211,153,0.14)', color: '#6ee7b7',
+                                }}>
+                                  {t('billing.appleTrialBadge')}
+                                </span>
+                              )}
                             </div>
                             <div style={{ fontSize: 12, color: 'rgba(255,255,255,0.35)', marginTop: 2 }}>
-                              {credits.toLocaleString()} {selectedBillingInterval === 'year' ? 'credits/year' : t('billing.creditsPerMonth')}
+                              {introTrial
+                                ? <>{introTrial.credits.toLocaleString()} {t('billing.appleTrialCredits')}</>
+                                : <>{credits.toLocaleString()} {selectedBillingInterval === 'year' ? 'credits/year' : t('billing.creditsPerMonth')}</>}
                             </div>
                           </div>
-                          <div style={{ fontSize: 16, fontWeight: 700, color: isSelected && !isCurrent ? '#e879f9' : 'rgba(255,255,255,0.6)' }}>
-                            {priceLabel}{!appleBillingAvailable && <span style={{ fontSize: 11, fontWeight: 400 }}>{selectedBillingInterval === 'year' ? '/yr' : '/mo'}</span>}
+                          <div style={{ textAlign: 'right' }}>
+                            <div style={{ fontSize: 16, fontWeight: 700, color: isSelected && !isCurrent ? '#e879f9' : 'rgba(255,255,255,0.6)' }}>
+                              {introTrial ? t('billing.appleTrialToday') : priceLabel}
+                              {!introTrial && !appleBillingAvailable && <span style={{ fontSize: 11, fontWeight: 400 }}>{selectedBillingInterval === 'year' ? '/yr' : '/mo'}</span>}
+                            </div>
+                            {introTrial && (
+                              <div style={{ fontSize: 10, color: 'rgba(255,255,255,0.38)', marginTop: 2 }}>
+                                {t('billing.appleTrialThen')} {introTrial.renewalPrice}{t('billing.perMonth')}
+                              </div>
+                            )}
                           </div>
                         </button>
                       );
@@ -740,7 +779,12 @@ export default function CreditPopup({ open: externalOpen, onClose: externalOnClo
                       boxShadow: '0 4px 20px rgba(217,70,239,0.3)',
                     }}
                   >
-                    {subscribeButtonLabel}
+                    <span>{subscribeButtonLabel}</span>
+                    {selectedAppleIntroTrial && (
+                      <span style={{ display: 'block', marginTop: 3, fontSize: 11, fontWeight: 500, opacity: 0.78 }}>
+                        {t('billing.appleTrialDisclosure')} {selectedAppleIntroTrial.renewalPrice}{t('billing.perMonth')}
+                      </span>
+                    )}
                   </button>
 
                   {appleBillingAvailable && (

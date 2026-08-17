@@ -37,6 +37,19 @@ export async function isBillingEnabled(): Promise<boolean> {
 
 export function invalidateBillingCache() { _billingEnabled = null }
 
+async function expireAppleTrialCredits(userId: string): Promise<void> {
+  try {
+    const result = await getSupabaseAdmin().rpc('expire_apple_trial_credits', {
+      p_user_id: userId,
+    })
+    if (result?.error) {
+      console.error('[billing] could not expire Apple trial credits:', result.error)
+    }
+  } catch (error) {
+    console.error('[billing] could not expire Apple trial credits:', error)
+  }
+}
+
 /**
  * Check if user has enough credits for a tool call.
  */
@@ -44,6 +57,8 @@ export async function checkBalance(userId: string, toolName: string): Promise<{ 
   const price = await getToolPrice(toolName)
   if (!price) return { ok: true, balance: 0, cost: 0 } // Unknown tool = free (fail open)
   if (price.isFree) return { ok: true, balance: 0, cost: 0 }
+
+  await expireAppleTrialCredits(userId)
 
   const admin = getSupabaseAdmin()
   const { data } = await admin
@@ -66,6 +81,7 @@ export async function requireCredits(
   estimatedCredits: number = 1,
 ): Promise<{ ok: true; balance: number } | { ok: false; balance: number; response: Response }> {
   if (!(await isBillingEnabled())) return { ok: true, balance: 0 }
+  await expireAppleTrialCredits(userId)
   const admin = getSupabaseAdmin()
   let { data } = await admin
     .from('credit_balances')
@@ -264,6 +280,7 @@ export async function deductFixedCredits(
  * Get user's current credit balance.
  */
 export async function getBalance(userId: string): Promise<{ balance: number; lifetimePurchased: number; lifetimeUsed: number }> {
+  await expireAppleTrialCredits(userId)
   const admin = getSupabaseAdmin()
   const { data } = await admin
     .from('credit_balances')

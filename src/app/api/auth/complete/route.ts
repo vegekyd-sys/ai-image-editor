@@ -2,13 +2,15 @@ import { createServerClient } from '@supabase/ssr'
 import { cookies } from 'next/headers'
 import { NextResponse, type NextRequest } from 'next/server'
 import { getSupabaseAdmin } from '@/lib/supabase/service'
-import { getConfiguredWelcomeCredits } from '@/lib/billing/welcome-credits'
-import { resolveAuthCompletionDestination } from '@/lib/auth-return'
+import { initializeSignupCredits } from '@/lib/billing/signup-credits'
+import { userAgentHasMakaronIOSToken } from '@/lib/native-app'
+import { appendAuthReturnParam, normalizeAuthReturnPath } from '@/lib/auth-return'
 import { readAttributionCookie, sendMetaCapiEvent } from '@/lib/marketing/meta-capi'
 
 type CompletionResult = {
   isNewUser: boolean
   credits: number
+  trialRequired: boolean
   redirectUrl: string
   metaEvents: { CompleteRegistration?: string }
   cookiesToSet: { name: string; value: string; options: Record<string, unknown> }[]
@@ -48,6 +50,8 @@ async function completeVerifiedSession(request: NextRequest): Promise<Completion
 
   let isNewUser = false
   let credits = 0
+  const isIOSApp = userAgentHasMakaronIOSToken(request.headers.get('user-agent') ?? undefined)
+  let trialRequired = false
   if (!profile?.activated) {
     await admin.from('user_profiles').upsert({
       id: user.id,
@@ -55,31 +59,16 @@ async function completeVerifiedSession(request: NextRequest): Promise<Completion
       invite_code_used: user.app_metadata?.provider === 'google' ? 'GOOGLE_OAUTH' : 'EMAIL_VERIFIED',
     }, { onConflict: 'id' })
 
+    isNewUser = true
+    trialRequired = isIOSApp
     try {
-      const { data: existingBalance } = await admin
-        .from('credit_balances')
-        .select('balance')
-        .eq('user_id', user.id)
-        .single()
-
-      if (!existingBalance) {
-        isNewUser = true
-        credits = await getConfiguredWelcomeCredits(admin)
-
-        if (credits > 0) {
-          const { addCredits } = await import('@/lib/billing/credits')
-          await addCredits(user.id, credits)
-
-          await admin.from('credit_purchases').insert({
-            user_id: user.id,
-            stripe_session_id: `welcome_gift_${user.app_metadata?.provider || 'email'}`,
-            credits,
-            amount_usd: 0,
-            status: 'completed',
-            source: 'welcome',
-          })
-        }
-      }
+      const result = await initializeSignupCredits({
+        admin,
+        userId: user.id,
+        isIOSApp,
+      })
+      credits = result.credits
+      trialRequired = result.trialRequired
     } catch (completionError) {
       console.error('[auth/complete] Welcome credits failed (non-blocking):', completionError)
     }
@@ -117,7 +106,10 @@ async function completeVerifiedSession(request: NextRequest): Promise<Completion
   return {
     isNewUser,
     credits,
-    redirectUrl: isNewUser ? '/home?welcome=1' : '/projects',
+    trialRequired,
+    redirectUrl: isNewUser
+      ? (trialRequired ? '/home?trial=1' : '/home?welcome=1')
+      : '/projects',
     metaEvents,
     cookiesToSet,
   }
@@ -145,6 +137,7 @@ export async function POST(request: NextRequest) {
     ok: true,
     isNewUser: completion.isNewUser,
     credits: completion.credits,
+    trialRequired: completion.trialRequired,
     redirectUrl: completion.redirectUrl,
     metaEvents: completion.metaEvents,
   }), completion)
@@ -157,7 +150,10 @@ export async function GET(request: NextRequest) {
   }
 
   const requestedReturnPath = request.nextUrl.searchParams.get('next')
-  const destination = resolveAuthCompletionDestination(requestedReturnPath, completion.isNewUser)
+  const normalizedReturnPath = normalizeAuthReturnPath(requestedReturnPath)
+  const destination = completion.isNewUser && normalizedReturnPath
+    ? appendAuthReturnParam(normalizedReturnPath, completion.trialRequired ? 'trial' : 'welcome', '1')
+    : completion.redirectUrl
   return applyCompletionCookies(
     NextResponse.redirect(new URL(destination, request.url)),
     completion,

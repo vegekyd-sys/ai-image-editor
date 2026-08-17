@@ -1,11 +1,12 @@
 import {
+  OfferType,
   Environment,
   NotificationTypeV2,
   SignedDataVerifier,
   type JWSTransactionDecodedPayload,
   type ResponseBodyV2DecodedPayload,
 } from '@apple/app-store-server-library'
-import { addCredits, getBalance } from './credits'
+import { getBalance } from './credits'
 import {
   getAppleSubscriptionProducts,
   getAppleTopUpProducts,
@@ -14,6 +15,7 @@ import {
 } from './plans'
 import { upsertAppleSubscription } from './subscription'
 import { getSupabaseAdmin } from '@/lib/supabase/service'
+import { DEFAULT_IOS_TRIAL_CREDITS, IOS_TRIAL_DAYS, getConfiguredIOSTrialCredits } from './ios-trial'
 
 type AppleEnvironment = Environment.SANDBOX | Environment.PRODUCTION | Environment.XCODE | Environment.LOCAL_TESTING
 
@@ -109,9 +111,15 @@ function getVerifierEnvironments(): AppleEnvironment[] {
   })
 }
 
-export function getConfiguredAppleProducts() {
+export function getConfiguredAppleProducts(trialCredits = DEFAULT_IOS_TRIAL_CREDITS) {
   return [
-    ...getAppleSubscriptionProducts().map(product => ({ ...product, kind: 'subscription' as const })),
+    ...getAppleSubscriptionProducts().map(product => ({
+      ...product,
+      kind: 'subscription' as const,
+      ...(product.planId === 'basic' && product.interval === 'month'
+        ? { introTrial: { days: IOS_TRIAL_DAYS, credits: trialCredits } }
+        : {}),
+    })),
     ...getAppleTopUpProducts().map(product => ({ ...product, kind: 'topup' as const })),
   ]
 }
@@ -168,29 +176,23 @@ async function grantAppleCredits(args: {
   environment: string | null
   credits: number
   amountUsd: number
-  source: 'subscription' | 'topup'
+  source: 'trial' | 'subscription' | 'subscription_annual' | 'topup'
+  trialExpiresAt?: Date | null
 }): Promise<boolean> {
   const admin = getSupabaseAdmin()
-  const { error } = await admin.from('credit_purchases').insert({
-    user_id: args.userId,
-    stripe_session_id: `apple_${args.transactionId}`,
-    credits: args.credits,
-    amount_usd: args.amountUsd,
-    status: 'completed',
-    source: args.source,
-    provider: 'apple',
-    apple_transaction_id: args.transactionId,
-    apple_original_transaction_id: args.originalTransactionId,
-    apple_product_id: args.productId,
-    apple_environment: args.environment,
+  const { data, error } = await admin.rpc('grant_apple_credits_and_record_purchase', {
+    p_user_id: args.userId,
+    p_credits: args.credits,
+    p_amount_usd: args.amountUsd,
+    p_transaction_id: args.transactionId,
+    p_original_transaction_id: args.originalTransactionId,
+    p_product_id: args.productId,
+    p_environment: args.environment,
+    p_source: args.source,
+    p_trial_expires_at: args.trialExpiresAt?.toISOString() ?? null,
   })
-
-  if (!error) {
-    await addCredits(args.userId, args.credits)
-    return true
-  }
-  if (error.code === '23505') return false
-  throw new Error(`Could not record Apple purchase: ${error.message}`)
+  if (error) throw new Error(`Could not grant Apple credits: ${error.message}`)
+  return data?.granted === true
 }
 
 function isUuid(value?: string | null): value is string {
@@ -228,7 +230,7 @@ export async function applyAppleTransaction(args: {
     throw new Error('Apple transaction account token does not match the authenticated user')
   }
 
-  const status = getTransactionStatus(transaction)
+  const baseStatus = getTransactionStatus(transaction)
   const environment = getTransactionEnvironment(transaction)
   const planMatch = getPlanByAppleProductId(productId)
 
@@ -237,7 +239,7 @@ export async function applyAppleTransaction(args: {
     if (!topUp) throw new Error(`Unknown Apple product ID: ${productId}`)
 
     let credited = false
-    if (grantCredits && status === 'active' && topUp.credits > 0) {
+    if (grantCredits && baseStatus === 'active' && topUp.credits > 0) {
       credited = await grantAppleCredits({
         userId,
         transactionId,
@@ -267,6 +269,13 @@ export async function applyAppleTransaction(args: {
 
   const currentPeriodStart = transaction.purchaseDate ? new Date(transaction.purchaseDate) : null
   const currentPeriodEnd = transaction.expiresDate ? new Date(transaction.expiresDate) : null
+  const isIntroTrial = planMatch.plan.id === 'basic'
+    && planMatch.interval === 'month'
+    && transaction.offerType === OfferType.INTRODUCTORY_OFFER
+  if (isIntroTrial && !currentPeriodEnd) {
+    throw new Error('Apple introductory trial is missing an expiry date')
+  }
+  const status = baseStatus === 'active' && isIntroTrial ? 'trialing' : baseStatus
 
   await upsertAppleSubscription({
     userId,
@@ -283,9 +292,12 @@ export async function applyAppleTransaction(args: {
   })
 
   let credited = false
-  const credits = getCreditsForApplePurchase(planMatch.plan.id, planMatch.interval)
+  const credits = isIntroTrial
+    ? await getConfiguredIOSTrialCredits(getSupabaseAdmin())
+    : getCreditsForApplePurchase(planMatch.plan.id, planMatch.interval)
+  const amountUsd = isIntroTrial ? 0 : getAmountUsdForApplePurchase(planMatch.plan.id, planMatch.interval)
 
-  if (grantCredits && status === 'active' && credits > 0) {
+  if (grantCredits && (status === 'active' || status === 'trialing') && credits > 0) {
     credited = await grantAppleCredits({
       userId,
       transactionId,
@@ -293,8 +305,9 @@ export async function applyAppleTransaction(args: {
       productId,
       environment,
       credits,
-      amountUsd: getAmountUsdForApplePurchase(planMatch.plan.id, planMatch.interval),
-      source: 'subscription',
+      amountUsd,
+      source: isIntroTrial ? 'trial' : planMatch.interval === 'year' ? 'subscription_annual' : 'subscription',
+      trialExpiresAt: isIntroTrial ? currentPeriodEnd : null,
     })
   }
 
@@ -304,7 +317,7 @@ export async function applyAppleTransaction(args: {
     purchaseType: 'subscription',
     credited,
     credits: credited ? credits : 0,
-    amountUsd: getAmountUsdForApplePurchase(planMatch.plan.id, planMatch.interval),
+    amountUsd,
     productId,
     transactionId,
     originalTransactionId,

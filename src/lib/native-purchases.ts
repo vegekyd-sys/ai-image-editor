@@ -8,6 +8,14 @@ export interface NativeAppleProduct {
   description: string;
   displayPrice: string;
   type: string;
+  isEligibleForIntroOffer?: boolean;
+  introductoryOffer?: {
+    displayPrice: string;
+    paymentMode: 'freeTrial' | 'payAsYouGo' | 'payUpFront' | string;
+    periodUnit: 'day' | 'week' | 'month' | 'year' | string;
+    periodValue: number;
+    periodCount: number;
+  };
 }
 
 export interface NativeAppleTransaction {

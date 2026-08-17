@@ -22,6 +22,7 @@ vi.mock('@/lib/i18n', () => ({
       'billing.topUp': 'Top Up',
       'billing.credits': 'credits',
       'billing.creditsPerMonth': 'credits/month',
+      'billing.perMonth': '/mo',
       'billing.subscribeTo': 'Subscribe to',
       'billing.upgradeTo': 'Upgrade to',
       'billing.current': 'Current',
@@ -36,6 +37,12 @@ vi.mock('@/lib/i18n', () => ({
       'billing.paymentPendingDesc': 'Payment is still being processed',
       'billing.iosUnavailableTitle': 'Purchases unavailable',
       'billing.iosUnavailableDesc': 'Purchases are unavailable',
+      'billing.appleTrialBadge': '3-day free trial',
+      'billing.appleTrialToday': 'Free today',
+      'billing.appleTrialThen': 'then',
+      'billing.appleTrialCredits': 'trial credits',
+      'billing.appleTrialStart': 'Start 3-day free trial',
+      'billing.appleTrialDisclosure': 'Free today, auto-renews in 3 days at',
     }[key] || key),
   }),
 }));
@@ -67,7 +74,7 @@ vi.mock('@/lib/native-purchases', () => ({
 }));
 
 const appleProducts = [
-  { kind: 'subscription', planId: 'basic', name: 'Basic', interval: 'month', productId: 'app.makaron.ios.subscription.basic.monthly', credits: 1200, price: 999 },
+  { kind: 'subscription', planId: 'basic', name: 'Basic', interval: 'month', productId: 'app.makaron.ios.subscription.basic.monthly', credits: 1200, price: 999, introTrial: { days: 3, credits: 1500 } },
   { kind: 'subscription', planId: 'basic', name: 'Basic', interval: 'year', productId: 'app.makaron.ios.subscription.basic.annual', credits: 14400, price: 9499 },
   { kind: 'subscription', planId: 'pro', name: 'Pro', interval: 'month', productId: 'app.makaron.ios.subscription.pro.monthly', credits: 3000, price: 1999 },
   { kind: 'subscription', planId: 'pro', name: 'Pro', interval: 'year', productId: 'app.makaron.ios.subscription.pro.annual', credits: 36000, price: 18999 },
@@ -186,5 +193,43 @@ describe('CreditPopup Apple purchase flow', () => {
       currency: 'USD',
     });
     await waitFor(() => expect(mocks.finishNativeAppleTransaction).toHaveBeenCalledWith('topup-tx'));
+  });
+
+  it('leads iOS onboarding with the verified 3-day Basic trial and 1,500 credits', async () => {
+    mocks.getNativeAppleProducts.mockResolvedValue(nativeProducts.map(product => (
+      product.productId === 'app.makaron.ios.subscription.basic.monthly'
+        ? {
+            ...product,
+            displayPrice: '$9.99',
+            isEligibleForIntroOffer: true,
+            introductoryOffer: {
+              displayPrice: '$0.00',
+              paymentMode: 'freeTrial',
+              periodUnit: 'day',
+              periodValue: 3,
+              periodCount: 1,
+            },
+          }
+        : product
+    )));
+    mocks.purchaseNativeAppleSubscription.mockResolvedValue({
+      productId: 'app.makaron.ios.subscription.basic.monthly',
+      transactionId: 'trial-tx',
+      originalTransactionId: 'trial-tx',
+      signedTransactionInfo: 'signed-trial',
+    });
+
+    render(<CreditPopup open entryPoint="ios_onboarding" onClose={vi.fn()} balance={0} subscription={null} />);
+
+    expect(await screen.findByText('3-day free trial')).toBeTruthy();
+    expect(screen.getByText('Free today')).toBeTruthy();
+    expect(screen.getByText('then $9.99/mo')).toBeTruthy();
+    expect(screen.getByText('1,500 trial credits')).toBeTruthy();
+
+    fireEvent.click(screen.getByText('Start 3-day free trial'));
+    await waitFor(() => expect(mocks.purchaseNativeAppleSubscription).toHaveBeenCalledWith(
+      'app.makaron.ios.subscription.basic.monthly',
+      '11111111-1111-4111-8111-111111111111',
+    ));
   });
 });
