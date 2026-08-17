@@ -114,6 +114,14 @@ Available APIs include all exports from `remotion`, `@remotion/media`, `@remotio
   a raw caption, editable mirror, or duplicate subtitle track over the same cue.
   At each cue midpoint, confirm that one glyph silhouette is visible, not two
   slightly offset copies.
+- Multi-line subtitles must also be collision-free inside that one host after
+  the intended font has loaded at final canvas size. Neighboring glyph rows may
+  not touch or overprint, and a cloned per-line background, pill, border, or
+  shadow may not cover text on an adjacent line. Keep typography
+  composition-specific: fix the local line-height, padding, width, font size,
+  authored line break, or backing-shape strategy instead of introducing one
+  global line-height constant or universal caption renderer. Verify the stable
+  dense frame and the largest animated state, not only the cue data.
 - Visible line breaks must render as line breaks, never as the two characters
   `\\n`. The shared Preview/export runtime normalizes both escaped and real
   newlines at DOM text leaves; still verify the densest text frame because line

@@ -189,6 +189,15 @@ piece of copy as the same lower-third component.
   visible gap must survive the scaled word's extra width; enlarge the gap or
   prefer color/weight emphasis without scale if it does not. Semantic timing
   can be correct while typography is still unreadable.
+- Treat a wrapped caption's glyphs and backing shapes as one piece of rendered
+  geometry. Compact typography is still an Agent art-direction choice, but the
+  final glyph bounds of neighboring lines must not touch or overprint. When
+  each visual line receives its own cloned background, pill, border, or shadow,
+  those shapes must not cover letters on the lines above or below. Resolve a
+  collision composition by composition: adjust line-height or vertical
+  padding, widen the caption, reduce the font size, author a better line break,
+  or use one backing shape for the whole block. Do not solve this with one
+  shared line-height constant or a fixed caption component.
 - Caption entrances should feel immediate: a short pop, upward settle, or
   cut-on beat over roughly `4–8` frames. Do not use slow fades, floaty webpage
   easing, or a large glass-panel lower third for ordinary speech.
@@ -338,6 +347,13 @@ Before publishing or materializing:
    confirm every word boundary remains visibly spaced. Fix the Agent-authored
    caption layout when per-word spans, scaling, or tracking make adjacent words
    touch; do not alter correct VO timestamps to repair a typography problem.
+9. Inspect every multi-line caption at its stable full-opacity frame and at its
+   most expanded entrance or emphasis frame. Confirm adjacent glyph rows remain
+   distinct and that per-line backing shapes neither cover text nor collapse
+   into an accidental stack. Also inspect the outgoing and incoming boundary
+   frames of neighboring cues so exit motion cannot leave one visible phrase
+   underneath the next. Repair the local typography or animation while keeping
+   the measured VO cue ranges intact.
 
 Official source baseline: TikTok for Business, “TikTok Auction In-Feed Ads,”
 In-Feed Standard Version LTR downloadable overlay (updated June 2026), plus the

@@ -129,6 +129,7 @@ describe('TikTok video guideline', () => {
 
   it('keeps caption art direction autonomous while grounding phrase timing in final VO words', () => {
     const source = read('src/skills/tiktok-video/SKILL.md');
+    const compositionPrompt = read('src/lib/prompts/remotion-composition.md');
 
     expect(source).toContain('art-direction vocabulary, not a fixed');
     expect(source).toContain('The Agent owns the final font family');
@@ -157,5 +158,12 @@ describe('TikTok video guideline', () => {
     expect(source).toContain("scaled word's extra width");
     expect(source).toContain('prefer color/weight emphasis without scale');
     expect(source).toContain('do not alter correct VO timestamps to repair a typography problem');
+    expect(source).toContain("wrapped caption's glyphs and backing shapes");
+    expect(source).toContain('final glyph bounds of neighboring lines must not touch or overprint');
+    expect(source).toContain('Do not solve this with one\n  shared line-height constant');
+    expect(source).toContain('Inspect every multi-line caption at its stable full-opacity frame');
+    expect(source).toContain('outgoing and incoming boundary\n   frames of neighboring cues');
+    expect(compositionPrompt).toContain('Multi-line subtitles must also be collision-free');
+    expect(compositionPrompt).toContain('instead of introducing one\n  global line-height constant');
   });
 });
