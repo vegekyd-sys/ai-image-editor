@@ -125,6 +125,16 @@ describe('TikTok video guideline', () => {
     expect(source).toContain('No persistent full-width lower-third bar');
     expect(source).toContain('For a `20s` English voiceover');
     expect(source).toContain('native-feel pass in addition to collision checks');
+    expect(source).toContain('A short ordinary prompt is enough to\n  activate this default');
+    expect(source).toContain('make them visibly distinct by default');
+    expect(source).toContain('deliberately authored and polished');
+    expect(source).toContain('semantic emphasis visibly present by default');
+    expect(source).toContain('must exist inside the spoken caption itself');
+    expect(source).toContain('does not count as semantic keyword emphasis');
+    expect(source).toContain('Do not declare an accent token or prop and then leave it');
+    expect(source).toContain('unused accent value is not evidence of keyword emphasis');
+    expect(source).toContain('Audit the spoken-caption hierarchy cue by cue');
+    expect(source).toContain('Keep the visual choices autonomous');
   });
 
   it('keeps caption art direction autonomous while grounding phrase timing in final VO words', () => {

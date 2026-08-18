@@ -200,6 +200,19 @@ describe('agent prompt policy guards', () => {
     expect(agentTs).toContain('you must have read and internalized that skill prompt once')
   })
 
+  it('leaves named-platform Skill selection to general Agent routing instead of backend keyword rules', () => {
+    const agent = read('src/lib/prompts/agent.md')
+    const agentTs = read('src/lib/agent.ts')
+
+    expect(agent).toContain('explicitly named destination, platform, format, or installed Skill')
+    expect(agent).toContain('read the destination-specific Skill first')
+    expect(agent).toContain('it may then delegate to the generic workflow')
+    expect(agent).toContain('Exercise this routing judgment in the Agent')
+    expect(agent).toContain('do not wait for backend keyword rules')
+    expect(agentTs).not.toContain('getImplicitSkillSystemDirective')
+    expect(agentTs).not.toContain('implicit-skill-routing')
+  })
+
   it('requires script confirmation before video provider submission unless direct-submit is explicit', () => {
     const agent = read('src/lib/prompts/agent.md')
     const agentTs = read('src/lib/agent.ts')

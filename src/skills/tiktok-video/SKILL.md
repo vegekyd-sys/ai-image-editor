@@ -24,8 +24,16 @@ and TikTok variants of a larger campaign.
 
 ## Production Route
 
-- For a direct AI-generated clip up to 15 seconds, keep the direct video route
-  unless the user also needs precise captions, titles, logos, or layout.
+- When the user names TikTok or Douyin and existing timeline/source footage is
+  available, default to editable Remotion packaging with an authored hook,
+  narration or useful source speech, VO-grounded spoken captions, semantic
+  keyword emphasis, and a native close. A short ordinary prompt is enough to
+  activate this default; do not wait for the user to separately request each
+  packaging layer.
+- Keep the direct AI-generated route for a clip up to 15 seconds only when the
+  user explicitly wants newly generated provider footage, requests no captions
+  or packaging, or the result genuinely does not need precise text, branding,
+  multiple source clips, or deterministic layout.
 - Use editable Remotion packaging when the deliverable needs subtitles,
   kinetic text, branding, CTA, multiple clips, or deterministic placement.
 - For a substantial editable production, read
@@ -152,9 +160,12 @@ piece of copy as the same lower-third component.
 2. **Spoken captions:** one coherent spoken thought at a time, usually no more
    than two readable lines. At `1080 × 1920`, start around `64–84px`, weight
    `700–900`, line-height `0.95–1.08`, with either a strong dark stroke/shadow or
-   one compact opaque/translucent backing shape. Let the speaker's meaning and
-   delivery determine when the caption turns over; do not optimize the track to
-   a repeated word count or mechanical visual cadence.
+   one compact opaque/translucent backing shape. For every cue with meaningful
+   spoken content, choose the one or two words that carry its semantic beat and
+   make them visibly distinct by default. Let the speaker's meaning and
+   delivery determine when the caption turns over and which words receive
+   emphasis; do not optimize the track to a repeated word count or mechanical
+   visual cadence.
 3. **Beat labels:** optional `1–4` word step, reaction, or proof labels attached
    to the action they explain. Use at most one dominant label per scene and
    remove it when its beat ends; do not accumulate badges, cards, and labels.
@@ -171,14 +182,29 @@ piece of copy as the same lower-third component.
   brand, language, and scene geometry; vary them across concepts when that
   makes each cut feel authored. The numeric ranges are strong starting points,
   not a requirement to reuse one colorway or component in every TikTok.
-- Use a bold rounded grotesk or similarly direct sans serif, not a thin
-  editorial subtitle face. White text with a dark outline/shadow is the most
-  neutral native baseline; choose one restrained accent color that comes from
-  the subject or brand.
-- Emphasize only the one or two words that carry the beat. A highlighted word
-  may change accent color, gain a compact fill, or punch to about `1.06–1.14×`
-  for `4–8` frames. Do not rainbow every word or run constant karaoke motion
-  that competes with the footage.
+- Make the typography feel deliberately authored and polished rather than like
+  a browser default or generic film subtitle. Choose a refined display,
+  geometric, rounded, or condensed sans from the approved font catalog whose
+  character fits the footage; use weight, scale, line breaks, and spacing to
+  create an elegant hierarchy. Do not hard-code one family across videos, and
+  do not use a thin editorial subtitle face that loses feed readability. White
+  text with a dark outline/shadow is the most neutral native baseline; choose
+  one restrained accent color that comes from the subject or brand.
+- Emphasize only the one or two words that carry the beat, but make that
+  semantic emphasis visibly present by default rather than merely considering
+  it. The Agent may use accent color, weight, a compact fill, or a punch to about
+  `1.06–1.14×` for `4–8` frames. Omit emphasis only for a one-word cue that is
+  already the focal treatment, a legal/disclaimer line, or a frame where any
+  additional contrast would reduce legibility. Do not rainbow every word or run
+  constant karaoke motion that competes with the footage.
+- The distinction must exist inside the spoken caption itself. A colored scene
+  label, caption rail, border, progress mark, or other surrounding decoration
+  does not count as semantic keyword emphasis. It may support the system, but
+  the viewer must still be able to tell which word or compact phrase in the
+  current spoken cue carries the meaning.
+- Carry the chosen semantic phrase from the VO/caption timing plan into the
+  rendered caption. Do not declare an accent token or prop and then leave it
+  visually unused. The implementation is free; the visible outcome is not.
 - When a phrase is rendered as separate word spans for highlighting, preserve
   unmistakable visible word gaps in the exported frame. Prefer a wrapping flex
   or grid row with an explicit `columnGap` over text whitespace, `marginRight`,
@@ -354,6 +380,17 @@ Before publishing or materializing:
    frames of neighboring cues so exit motion cannot leave one visible phrase
    underneath the next. Repair the local typography or animation while keeping
    the measured VO cue ranges intact.
+10. Audit the spoken-caption hierarchy cue by cue. Every meaningful multi-word
+    cue should have one or two semantically important words that are visibly
+    distinct at the correct measured word timing. Confirm the chosen font,
+    weight hierarchy, line breaking, backing treatment, and restrained accent
+    feel authored for this footage rather than like undifferentiated default
+    subtitles. In sampled frames, compare ordinary caption words with the
+    chosen semantic word or phrase: a scene header, colored rail, border, or
+    unused accent value is not evidence of keyword emphasis.
+    Keep the visual choices autonomous; fail the review when the hierarchy or
+    semantic emphasis is absent, arbitrary, visually indistinguishable, or
+    unreadable.
 
 Official source baseline: TikTok for Business, “TikTok Auction In-Feed Ads,”
 In-Feed Standard Version LTR downloadable overlay (updated June 2026), plus the
