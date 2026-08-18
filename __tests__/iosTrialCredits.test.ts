@@ -40,7 +40,7 @@ describe('iOS direct trial credits', () => {
 
   it('ships an idempotent migration with separate welcome and Apple trial claims', () => {
     const migration = readFileSync(
-      path.join(root, 'supabase/migrations/20260817180000_ios_direct_trial_credits.sql'),
+      path.join(root, 'supabase/migrations/20260817101334_ios_direct_trial_credits.sql'),
       'utf8',
     )
     expect(migration).toContain("VALUES ('ios_trial_credits', '1500', now())")
