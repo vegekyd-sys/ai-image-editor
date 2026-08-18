@@ -215,7 +215,7 @@ describe('Remotion preview playback contract', () => {
     expect(sandboxSource).toContain("return names[names.length - 1] || 'Design'")
 
     expect(serverSource).toContain('prepareRemotionCodeForSandbox(design.code)')
-    expect(serverSource).toContain('designProps: design.props || {}')
+    expect(serverSource).toContain('designProps: normalizeRemotionTextValue(design.props || {})')
     expect(serverSource).not.toContain('remoteImageToDataUrl')
     expect(serverSource).not.toContain('resolveRemoteImagesForSandbox')
   })

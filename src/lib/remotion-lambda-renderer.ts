@@ -1,6 +1,7 @@
 import { randomUUID } from 'node:crypto'
 import type { DesignPayload } from '@/types'
 import { hasRemotionAudioSources } from '@/lib/remotion-audio'
+import { normalizeRemotionTextValue } from '@/lib/remotion-text-normalization'
 import { resolveRemotionLambdaEncodingSettings } from '@/lib/remotion-encoding'
 import { prepareRemotionCodeForSandbox } from '@/lib/remotion-server'
 import { resolveRemotionFontManifestUrl } from '@/lib/remotion-font-manifest'
@@ -487,7 +488,7 @@ export async function renderDesignVideoLambdaToUrl(
       composition: 'dynamic-design',
       inputProps: {
         code: preparedCode,
-        designProps: design.props || {},
+        designProps: normalizeRemotionTextValue(design.props || {}),
         fps,
         durationInFrames,
         width: design.width || 1080,

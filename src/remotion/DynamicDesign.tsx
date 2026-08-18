@@ -17,6 +17,7 @@ import {
   normalizeRemotionScopeDeclarations,
 } from '../lib/remotion-code-normalization';
 import { createEditableReactRuntime } from '../lib/editor/editable-react-runtime';
+import { normalizeRemotionTextValue } from '../lib/remotion-text-normalization';
 import {
   fetchRemotionFontManifestWithTiming,
   loadPreparedRemotionFonts,
@@ -170,7 +171,9 @@ export const DynamicDesign: React.FC<Record<string, unknown>> = ({
   const manifestUrl = typeof fontManifestUrl === 'string' ? fontManifestUrl : '';
   const telemetryId = typeof fontTelemetryId === 'string' ? fontTelemetryId : '';
   const propsObj = useMemo(
-    () => (typeof designProps === 'object' && designProps !== null ? designProps : {}) as Record<string, unknown>,
+    () => normalizeRemotionTextValue(
+      (typeof designProps === 'object' && designProps !== null ? designProps : {}) as Record<string, unknown>,
+    ),
     [designProps],
   );
   const remotionScope = useMemo(

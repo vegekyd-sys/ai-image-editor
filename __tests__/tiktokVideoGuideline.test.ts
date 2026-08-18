@@ -137,6 +137,9 @@ describe('TikTok video guideline', () => {
     expect(source).toContain('does not count as semantic keyword emphasis');
     expect(source).toContain('Do not declare an accent token or prop and then leave it');
     expect(source).toContain('unused accent value is not evidence of keyword emphasis');
+    expect(source).toContain('Judge emphasis at phone viewing size from a real exported frame');
+    expect(source).toContain('This is a visibility outcome,\n  not a mandated style recipe');
+    expect(source).toContain('resolved text\n   props as well as the JSX source');
     expect(source).toContain('Audit the spoken-caption hierarchy cue by cue');
     expect(source).toContain('Keep the visual choices autonomous');
     expect(source).toContain('Compare the rendered contact sheet with the selected concept');
@@ -178,11 +181,14 @@ describe('TikTok video guideline', () => {
     expect(source).toContain('prefer color/weight emphasis without scale');
     expect(source).toContain('do not alter correct VO timestamps to repair a typography problem');
     expect(source).toContain("wrapped caption's glyphs and backing shapes");
+    expect(source).toContain('Avoid relying on `box-decoration-break: clone`');
     expect(source).toContain('final glyph bounds of neighboring lines must not touch or overprint');
     expect(source).toContain('Do not solve this with one\n  shared line-height constant');
     expect(source).toContain('Inspect every multi-line caption at its stable full-opacity frame');
     expect(source).toContain('outgoing and incoming boundary\n   frames of neighboring cues');
     expect(compositionPrompt).toContain('Multi-line subtitles must also be collision-free');
     expect(compositionPrompt).toContain('instead of introducing one\n  global line-height constant');
+    expect(compositionPrompt).toContain('Prefer one block backing shape or explicit');
+    expect(compositionPrompt).toContain('normalizes escaped newlines at renderer input and DOM text leaves');
   });
 });

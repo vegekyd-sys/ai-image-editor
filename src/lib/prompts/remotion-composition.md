@@ -122,10 +122,16 @@ Available APIs include all exports from `remotion`, `@remotion/media`, `@remotio
   authored line break, or backing-shape strategy instead of introducing one
   global line-height constant or universal caption renderer. Verify the stable
   dense frame and the largest animated state, not only the cue data.
+- Do not put `box-decoration-break: clone` around auto-wrapped subtitle prose
+  unless final-resolution preview proves the cloned padding/background cannot
+  cover neighboring glyph rows. Prefer one block backing shape or explicit
+  authored lines when separate per-line shapes are part of the direction.
 - Visible line breaks must render as line breaks, never as the two characters
-  `\\n`. The shared Preview/export runtime normalizes both escaped and real
-  newlines at DOM text leaves; still verify the densest text frame because line
-  count changes the element's bounding box and platform-safe placement.
+  `\\n`. Store intended breaks as actual line feeds or explicit authored lines,
+  not backslash escapes in editable props. The shared Preview/export runtime
+  normalizes escaped newlines at renderer input and DOM text leaves as a safety
+  net, but the resolved props and closing frame still require review because
+  line count changes the element's bounding box and platform-safe placement.
 - Prefer Remotion `<Video>` or `<OffthreadVideo>`. Lowercase HTML `<video>` is
   also accepted and normalized by the harness to the injected,
   frame-synchronized `<Video>` component.

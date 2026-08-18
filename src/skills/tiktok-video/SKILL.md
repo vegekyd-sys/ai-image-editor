@@ -113,7 +113,11 @@ forces the whole design into an unnecessarily narrow center column.
    reframing allows, while permitting hands, scenery, and motion to bleed out.
 4. Use no more caption lines than can remain comfortably inside the safe region.
    Intended line breaks must render as real line breaks; never accept visible
-   `\\n` characters in Preview or the exported MP4.
+   `\\n` characters in Preview or the exported MP4. Inspect the resolved text
+   props as well as the JSX source: an escaped newline stored in JSON can look
+   correct in code review and still render as copy. Prefer an actual line-feed
+   character or an explicit array of authored lines over a backslash escape in
+   an editable text prop.
 5. Render every subtitle cue exactly once. Use one text host with its background
    and border; never stack an editable mirror or second caption track over it.
 6. Do not imitate the TikTok interface and do not bake a TikTok watermark into
@@ -222,6 +226,12 @@ piece of copy as the same lower-third component.
   already the focal treatment, a legal/disclaimer line, or a frame where any
   additional contrast would reduce legibility. Do not rainbow every word or run
   constant karaoke motion that competes with the footage.
+- Judge emphasis at phone viewing size from a real exported frame. Color alone
+  is acceptable only when the semantic word remains immediately distinct after
+  the `1080 × 1920` frame is reduced to roughly `360 × 640`; otherwise combine
+  the Agent-chosen accent with another restrained signal such as weight, a
+  compact fill, underline, or brief scale punch. This is a visibility outcome,
+  not a mandated style recipe.
 - The distinction must exist inside the spoken caption itself. A colored scene
   label, caption rail, border, progress mark, or other surrounding decoration
   does not count as semantic keyword emphasis. It may support the system, but
@@ -249,6 +259,11 @@ piece of copy as the same lower-third component.
   padding, widen the caption, reduce the font size, author a better line break,
   or use one backing shape for the whole block. Do not solve this with one
   shared line-height constant or a fixed caption component.
+- Avoid relying on `box-decoration-break: clone` around browser-auto-wrapped
+  prose: the export renderer can clone padding and background into neighboring
+  glyph rows. Use one backing shape for the whole caption block, or author the
+  visual lines explicitly when each line needs its own shape. Keep the choice
+  composition-specific and confirm it in the exported frame.
 - Caption entrances should feel immediate: a short pop, upward settle, or
   cut-on beat over roughly `4–8` frames. Do not use slow fades, floaty webpage
   easing, or a large glass-panel lower third for ordinary speech.
@@ -378,6 +393,8 @@ Before publishing or materializing:
    forcing unrelated elements into one center stack.
 3. Confirm no visible `\\n`, clipped glyphs, duplicated subtitle glyphs, or
    subtitle/logo overlap with the top, bottom-left, or right-side UI zones.
+   Check both the resolved props payload and the rendered close/caption frames;
+   source code inspection alone cannot prove that JSON-escaped copy is safe.
 4. If the post caption is long or the placement uses an interactive add-on,
    switch to the conservative bottom-left exclusion and use TikTok's final
    preview tool because TikTok states that the usable safe zone can shrink.
@@ -413,6 +430,9 @@ Before publishing or materializing:
     subtitles. In sampled frames, compare ordinary caption words with the
     chosen semantic word or phrase: a scene header, colored rail, border, or
     unused accent value is not evidence of keyword emphasis.
+    Also review the frame at phone size: if ordinary and semantic words scan as
+    one uniform block after downscaling, the keyword is not visibly emphasized
+    even if its CSS color token differs.
     Keep the visual choices autonomous; fail the review when the hierarchy or
     semantic emphasis is absent, arbitrary, visually indistinguishable, or
     unreadable.
