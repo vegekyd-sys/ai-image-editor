@@ -114,6 +114,10 @@ describe('TikTok video guideline', () => {
     const source = read('src/skills/tiktok-video/SKILL.md');
 
     expect(source).toContain('## TikTok-Native Creative Grammar');
+    expect(source).toContain('### Autonomous Concept Commitment');
+    expect(source).toContain('invitation to direct, not permission');
+    expect(source).toContain('timeline order as story order');
+    expect(source).toContain('collapse it into a\n  thinner generic timeline');
     expect(source).toContain('make the first `3–6s` the');
     expect(source).toContain('one coherent spoken thought at a time');
     expect(source).toContain('start around `64–84px`');
@@ -135,6 +139,11 @@ describe('TikTok video guideline', () => {
     expect(source).toContain('unused accent value is not evidence of keyword emphasis');
     expect(source).toContain('Audit the spoken-caption hierarchy cue by cue');
     expect(source).toContain('Keep the visual choices autonomous');
+    expect(source).toContain('Compare the rendered contact sheet with the selected concept');
+    expect(source).toContain('built from one reusable Caption plus one reusable Step');
+    expect(source).toContain('failed visual-analysis bridge is not permission to publish blind');
+    expect(source).toContain('do not bypass that gate by publishing the private draft');
+    expect(source).toContain('a resumed `fast_720p` export is not an equivalent final');
   });
 
   it('keeps caption art direction autonomous while grounding phrase timing in final VO words', () => {

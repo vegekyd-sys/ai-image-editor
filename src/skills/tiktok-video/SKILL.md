@@ -128,6 +128,31 @@ Safe placement is necessary but it does not make a video feel native. For an
 organic post or creator-style ad, the default should feel captured and edited
 for the For You feed rather than resized from a brand film.
 
+### Autonomous Concept Commitment
+
+- An underspecified TikTok request is an invitation to direct, not permission
+  to fall back to a neutral process explainer. Inspect the footage, propose
+  genuinely different creator-native concepts, choose one clear emotional
+  engine or point of view, and commit to it. The result may feel playful,
+  satisfying, surprising, premium, intimate, urgent, or something else the
+  material supports; the Agent decides, but the choice must be visible in the
+  final frames.
+- Search the whole source set for the strongest proof, reveal, reaction, or
+  tactile payoff before accepting timeline order as story order. A finished
+  result may open and close the piece as a bookend. Starting on raw material or
+  an overview is appropriate only when that image itself creates the strongest
+  curiosity and the payoff arrives immediately enough to validate it.
+- Give the selected concept its own source-derived visual identity and motion
+  language. Generic numbered chapters, one repeated caption component, or one
+  accent color used everywhere do not by themselves express a concept. Labels,
+  stickers, typography, reframes, transitions, freezes, flashes, or other
+  devices should earn their place from the chosen point of view and the action
+  they punctuate.
+- Before composing, turn the selected proposal and Storyboard into a small set
+  of signature moves and scene-specific promises. Implement those promises in
+  the Remotion source. Do not write a rich proposal and then collapse it into a
+  thinner generic timeline during Composition.
+
 ### Opening And Edit Rhythm
 
 - Start on a human action, machine action, surprising result, or specific
@@ -391,6 +416,24 @@ Before publishing or materializing:
     Keep the visual choices autonomous; fail the review when the hierarchy or
     semantic emphasis is absent, arbitrary, visually indistinguishable, or
     unreadable.
+11. Compare the rendered contact sheet with the selected concept and Storyboard
+    scene by scene. Confirm that the promised hook structure, source bookend,
+    crop language, motion beats, labels, transitions, color treatment, and
+    ending behavior are actually visible. A mechanically valid composition
+    built from one reusable Caption plus one reusable Step treatment is not a
+    substitute for the chosen direction. Patch the Composition when the plan is
+    richer than the frames.
+12. A failed visual-analysis bridge is not permission to publish blind. Preserve
+    the composition, then inspect the saved contact sheet with `read_file` or
+    another available visual path. If no real visual review is possible, keep
+    the editable draft private and report the preview block instead of calling
+    the video finished.
+13. Finish the same valid Studio Composition workflow before promotion. If a
+    run boundary or ownership check prevents the Composition artifact from
+    being persisted, do not bypass that gate by publishing the private draft
+    from a new non-Studio run. Resume through a valid workflow or report the
+    block. For a standard high-resolution TikTok delivery, `1080 × 1920` is the
+    acceptance output; a resumed `fast_720p` export is not an equivalent final.
 
 Official source baseline: TikTok for Business, “TikTok Auction In-Feed Ads,”
 In-Feed Standard Version LTR downloadable overlay (updated June 2026), plus the
