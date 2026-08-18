@@ -240,6 +240,11 @@ piece of copy as the same lower-third component.
 - Carry the chosen semantic phrase from the VO/caption timing plan into the
   rendered caption. Do not declare an accent token or prop and then leave it
   visually unused. The implementation is free; the visible outcome is not.
+- Scope emphasis to the chosen semantic word or compact phrase inside the cue.
+  A boolean such as `accent={true}` that recolors the entire caption host does
+  not create keyword hierarchy, even when the whole sentence differs from the
+  scene label. The emphasized text must be identifiable as a strict substring
+  of the spoken cue and ordinary words must retain a visibly quieter treatment.
 - When a phrase is rendered as separate word spans for highlighting, preserve
   unmistakable visible word gaps in the exported frame. Prefer a wrapping flex
   or grid row with an explicit `columnGap` over text whitespace, `marginRight`,
@@ -343,6 +348,13 @@ Do not add another renderer or subtitle feature for this. Use the existing
    `timingSource: "transcribe_audio"`. At the representative speaking frame,
    verify that the visible phrase is a contiguous span from the words sounding
    in that window and that the current picture belongs to the same beat.
+11. Treat `subtitleSyncEvidence` as a render-coverage contract, not paperwork.
+    Before Review, map every non-empty narrated Script section to the exact
+    visible caption host and frame range that renders its measured cue text.
+    Narration plus an empty evidence array is a failure. A hook, beat label,
+    `KineticTitle`, `Headline`, or paraphrased chapter title cannot substitute
+    for the spoken caption. If a cue has no visible host, patch the Composition
+    before publishing rather than claiming the editorial titles are captions.
 
 The cue grouping remains editorial and therefore Agent-owned: the Agent decides
 where a human editor would break the spoken line, which one or two words deserve
@@ -433,6 +445,8 @@ Before publishing or materializing:
     Also review the frame at phone size: if ordinary and semantic words scan as
     one uniform block after downscaling, the keyword is not visibly emphasized
     even if its CSS color token differs.
+    Also fail a cue when an `accent` or highlight flag changes the whole
+    sentence uniformly instead of selecting one or two words inside it.
     Keep the visual choices autonomous; fail the review when the hierarchy or
     semantic emphasis is absent, arbitrary, visually indistinguishable, or
     unreadable.
@@ -454,6 +468,17 @@ Before publishing or materializing:
     from a new non-Studio run. Resume through a valid workflow or report the
     block. For a standard high-resolution TikTok delivery, `1080 × 1920` is the
     acceptance output; a resumed `fast_720p` export is not an equivalent final.
+14. Review one stable exported frame inside every `subtitleSyncEvidence` cue,
+    not merely one opening, middle, and closing sample. The exact spoken cue
+    text must be visible in its caption host during that measured range. Empty
+    evidence, missing hosts, or scene titles standing in for narration fail the
+    gate even when the video otherwise looks polished.
+15. Check visual coverage at every scene boundary using frames immediately
+    before and after the cut. A media layer shortened by `trimAfter`,
+    `playbackRate`, or rounding must not expose an accidental black/empty frame.
+    Keep the underlying visual mounted through the full scene, or author an
+    intentional designed transition. A silent mid-video black gap is a failed
+    TikTok export, not pacing.
 
 Official source baseline: TikTok for Business, “TikTok Auction In-Feed Ads,”
 In-Feed Standard Version LTR downloadable overlay (updated June 2026), plus the

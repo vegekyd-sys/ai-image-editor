@@ -136,6 +136,7 @@ describe('TikTok video guideline', () => {
     expect(source).toContain('must exist inside the spoken caption itself');
     expect(source).toContain('does not count as semantic keyword emphasis');
     expect(source).toContain('Do not declare an accent token or prop and then leave it');
+    expect(source).toContain('A boolean such as `accent={true}` that recolors the entire caption host');
     expect(source).toContain('unused accent value is not evidence of keyword emphasis');
     expect(source).toContain('Judge emphasis at phone viewing size from a real exported frame');
     expect(source).toContain('This is a visibility outcome,\n  not a mandated style recipe');
@@ -172,6 +173,9 @@ describe('TikTok video guideline', () => {
     expect(source).toContain("that word's measured start");
     expect(source).toContain('Never reuse stale timestamps from a draft VO');
     expect(source).toContain('`subtitleSyncEvidence`');
+    expect(source).toContain('Treat `subtitleSyncEvidence` as a render-coverage contract');
+    expect(source).toContain('Narration plus an empty evidence array is a failure');
+    expect(source).toContain('`KineticTitle`, `Headline`, or paraphrased chapter title cannot substitute');
     expect(source).toContain('timingSource: "transcribe_audio"');
     expect(source).toContain('existing `transcribe_audio` word data rather than eyeballing');
     expect(source).toContain('preserve\n  unmistakable visible word gaps');
@@ -190,5 +194,8 @@ describe('TikTok video guideline', () => {
     expect(compositionPrompt).toContain('instead of introducing one\n  global line-height constant');
     expect(compositionPrompt).toContain('Prefer one block backing shape or explicit');
     expect(compositionPrompt).toContain('normalizes escaped newlines at renderer input and DOM text leaves');
+    expect(compositionPrompt).toContain('every non-empty `subtitleSyncEvidence` cue must');
+    expect(compositionPrompt).toContain('A boolean accent\n  that recolors the entire caption host');
+    expect(compositionPrompt).toContain('must not expose an accidental black\n  frame');
   });
 });

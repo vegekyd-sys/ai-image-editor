@@ -114,6 +114,15 @@ Available APIs include all exports from `remotion`, `@remotion/media`, `@remotio
   a raw caption, editable mirror, or duplicate subtitle track over the same cue.
   At each cue midpoint, confirm that one glyph silhouette is visible, not two
   slightly offset copies.
+- For narrated compositions, every non-empty `subtitleSyncEvidence` cue must
+  map to one actual spoken-caption host that renders the measured cue text.
+  Editorial hooks, scene labels, `Headline`, and `KineticTitle` components do
+  not satisfy spoken-caption coverage. Narration with an empty evidence array,
+  or evidence without a corresponding visible host, must be repaired before
+  publish.
+- Keyword emphasis must select text inside that spoken cue. A boolean accent
+  that recolors the entire caption host is not semantic word emphasis; keep
+  ordinary words quieter and make the chosen substring visibly distinct.
 - Multi-line subtitles must also be collision-free inside that one host after
   the intended font has loaded at final canvas size. Neighboring glyph rows may
   not touch or overprint, and a cloned per-line background, pill, border, or
@@ -138,6 +147,11 @@ Available APIs include all exports from `remotion`, `@remotion/media`, `@remotio
 - Decoder selection is owned by the preview/export runtime, independent of
   whether the source used `<Video>` or `<OffthreadVideo>`.
 - Use `<Sequence>` for every scene or clip so media mounts only when needed.
+- At every scene join, ensure the outgoing and incoming visual layers cover
+  their complete declared frame ranges after `trimBefore`, `trimAfter`, and
+  `playbackRate` are applied. Preview the frames on both sides of each join;
+  rounding or an exhausted media range must not expose an accidental black
+  frame between otherwise full-bleed scenes.
 - `useCurrentFrame()` inside a `<Sequence>` is already local to that Sequence.
   Do not subtract the Sequence's `from` value again; doing so keeps later-scene
   overlays at negative time and can silently hide every title/subtitle after
