@@ -292,6 +292,7 @@ function compactTranscriptOutput(output: JsonRecord, omitted: string[]): ToolRes
       cached: output.cached,
       media_index: output.media_index,
       videoUrl: output.videoUrl,
+      transcriptPath: output.transcriptPath,
       provider: transcript.provider,
       model: transcript.model,
       durationMs: transcript.durationMs,

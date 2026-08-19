@@ -693,6 +693,29 @@ async function createNarrationCueArtifact(input: {
   return { narrationCueSheet, narrationCuePath };
 }
 
+async function createTranscriptArtifact(input: {
+  ctx: AgentContext;
+  transcript: VolcengineAsrTranscript;
+}): Promise<{ transcriptPath?: string; transcriptWarning?: string }> {
+  if (!input.ctx.supabase || !input.ctx.userId) return {};
+  const transcriptPath = `${input.ctx.projectId}/transcripts/asr-${input.transcript.requestId}.json`;
+  const artifactTranscript = { ...input.transcript };
+  delete artifactTranscript.sourceUrl;
+  const saved = await workspace.writeFile(
+    transcriptPath,
+    JSON.stringify(artifactTranscript, null, 2),
+    input.ctx.supabase,
+    input.ctx.userId,
+    'application/json',
+  );
+  if (!saved.success) {
+    const transcriptWarning = saved.error || 'Failed to persist the full ASR transcript artifact.';
+    console.warn('[transcribe_audio] transcript artifact persistence failed:', transcriptWarning);
+    return { transcriptWarning };
+  }
+  return { transcriptPath };
+}
+
 async function validateCompositionMediaAspect(
   ctx: AgentContext,
   result: { code: string; props?: Record<string, unknown>; width?: number; height?: number },
@@ -2347,6 +2370,7 @@ For timeline videos, pass media_index. For external audio/video URLs, pass media
               && !force_refresh
               && isAsrTranscriptCacheCompatible(cached, language)
             ) {
+              const transcriptArtifact = await createTranscriptArtifact({ ctx, transcript: cached });
               try {
                 const cueArtifact = await createNarrationCueArtifact({
                   ctx,
@@ -2356,6 +2380,7 @@ For timeline videos, pass media_index. For external audio/video URLs, pass media
                 });
                 return {
                   transcript: cached,
+                  ...transcriptArtifact,
                   ...cueArtifact,
                   cached: true,
                   media_index,
@@ -2391,6 +2416,7 @@ For timeline videos, pass media_index. For external audio/video URLs, pass media
             uid: ctx.userId || 'makaron-agent',
             language,
           });
+          const transcriptArtifact = await createTranscriptArtifact({ ctx, transcript });
           const cueArtifact = await createNarrationCueArtifact({
             ctx,
             transcript,
@@ -2409,6 +2435,7 @@ For timeline videos, pass media_index. For external audio/video URLs, pass media
 
           return {
             transcript,
+            ...transcriptArtifact,
             ...cueArtifact,
             cached: false,
             media_index,
@@ -2437,11 +2464,16 @@ For timeline videos, pass media_index. For external audio/video URLs, pass media
               'Use these measured cue ranges and frame ranges for Storyboard, Remotion Sequences, subtitles, visual beats, and music ducking. Do not revert to planned Script timing.',
             ].join('\n')
           : '';
+        const transcriptArtifactText = output.transcriptPath
+          ? `\n\nFull word/utterance transcript artifact: ${output.transcriptPath}\nRead this file when the inline transcript is truncated or when later source-time ranges are needed. Reuse its existing startMs/endMs values; do not retranscribe or invent replacement timecodes.`
+          : output.transcriptWarning
+            ? `\n\nTranscript artifact warning: ${output.transcriptWarning}`
+            : '';
         return {
           type: 'content' as const,
           value: [{
             type: 'text' as const,
-            text: `${output.cached ? 'Cached ' : ''}ASR result${output.media_index ? ` for <<<media_${output.media_index}>>>` : ''}:\n\n${formatTranscriptForModel(transcript)}${cueText}`,
+            text: `${output.cached ? 'Cached ' : ''}ASR result${output.media_index ? ` for <<<media_${output.media_index}>>>` : ''}:\n\n${formatTranscriptForModel(transcript)}${cueText}${transcriptArtifactText}`,
           }],
         };
       },
