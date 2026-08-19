@@ -1,11 +1,11 @@
 import { describe, expect, it } from 'vitest'
-import { readFileSync } from 'fs'
 import path from 'path'
+import { readAgentAwareSource } from './helpers/agentRuntimeSource'
 
 const root = path.resolve(__dirname, '..')
 
 function read(rel: string) {
-  return readFileSync(path.join(root, rel), 'utf8')
+  return readAgentAwareSource(root, rel)
 }
 
 describe('agent prompt policy guards', () => {
@@ -89,11 +89,11 @@ describe('agent prompt policy guards', () => {
     const agentTs = read('src/lib/agent.ts')
     const audio = read('src/lib/prompts/audio.md')
 
-    expect(agentTs).toContain('generate_audio: tool({')
+    expect(agentTs).toContain('function createGenerateAudioTool(')
     expect(agentTs).toContain('kind: z.enum([\'voiceover\', \'dialogue\', \'music\', \'sound_design\', \'mixed\'])')
-    expect(agentTs).not.toContain('generate_voiceover: tool({')
-    expect(agentTs).not.toContain('list_voiceover_voices: tool({')
-    expect(agentTs).not.toContain('generate_music: tool({')
+    expect(agentTs).not.toContain('function createGenerateVoiceoverTool(')
+    expect(agentTs).not.toContain('function createListVoiceoverVoicesTool(')
+    expect(agentTs).not.toContain('function createGenerateMusicTool(')
     expect(audio).toContain('Use `kind: "voiceover"` only when')
     expect(audio).toContain('Voice Performance Brief')
     expect(audio).toContain('do not switch providers')

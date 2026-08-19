@@ -9,6 +9,7 @@ import { promisify } from 'util'
 import { MAX_ACCEPTED_DURATION, MAX_DURATION } from '@/lib/video-upload'
 import { findFfmpeg } from '@/lib/ffmpeg-runtime'
 import { buildMediaItems, runNodeMediaCode } from '@/lib/media-sandbox'
+import { readAgentRuntimeSource } from './helpers/agentRuntimeSource'
 
 const exec = promisify(execFile)
 
@@ -40,7 +41,7 @@ describe('Agent FFmpeg video lab', () => {
 
   it('publishes direct FFmpeg MP4 deliverables to the timeline by default', () => {
     const skill = readFileSync(join(process.cwd(), 'src/skills/video-ffmpeg-lab/SKILL.md'), 'utf8')
-    const agent = readFileSync(join(process.cwd(), 'src/lib/agent.ts'), 'utf8')
+    const agent = readAgentRuntimeSource()
 
     expect(skill).toContain('if FFmpeg produces user-facing MP4 deliverables, publish them to the timeline immediately')
     expect(skill).toContain('Direct user-facing split/trim/export requests are different: publish those MP4 deliverables to the timeline')
@@ -50,7 +51,7 @@ describe('Agent FFmpeg video lab', () => {
   })
 
   it('keeps run_code workspace outputs index-backed and publishable by explicit path', () => {
-    const agent = readFileSync(join(process.cwd(), 'src/lib/agent.ts'), 'utf8')
+    const agent = readAgentRuntimeSource()
 
     expect(agent).toContain('async function ensureWorkspaceFileIndex')
     expect(agent).toContain('await ensureWorkspaceFileIndex(ctx, output)')
@@ -60,7 +61,7 @@ describe('Agent FFmpeg video lab', () => {
   })
 
   it('cleans invalid workspace output durations from published timeline titles', () => {
-    const agent = readFileSync(join(process.cwd(), 'src/lib/agent.ts'), 'utf8')
+    const agent = readAgentRuntimeSource()
 
     expect(agent).toContain('function outputDisplayName')
     expect(agent).toContain('(?:undefined|null|NaN)s?')

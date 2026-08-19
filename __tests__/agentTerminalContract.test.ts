@@ -1,8 +1,9 @@
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
+import { readAgentRuntimeSource } from './helpers/agentRuntimeSource';
 
-const agentSource = readFileSync(join(process.cwd(), 'src/lib/agent.ts'), 'utf8');
+const agentSource = readAgentRuntimeSource();
 const agentModelRuntimeSource = readFileSync(join(process.cwd(), 'src/lib/agent-model-runtime.ts'), 'utf8');
 const agentStreamSource = readFileSync(join(process.cwd(), 'src/lib/agentStream.ts'), 'utf8');
 const agentContextSource = readFileSync(join(process.cwd(), 'src/lib/agent-context.ts'), 'utf8');
@@ -27,7 +28,7 @@ describe('agent terminal contract wiring', () => {
     expect(agentSource).toContain('recoveryAttempt < 1');
     expect(agentSource).toContain("toolChoice: 'none' as const");
     expect(agentSource).toContain('wrapDurableInputAwareTools(');
-    expect(agentSource).toContain('publish_draft: tool({');
+    expect(agentSource).toContain('function createPublishDraftTool(');
     expect(agentSource).toContain('workspace.readFile(design_path');
     expect(agentSource).toContain('Studio draft promotion requires a completed Composition artifact');
     expect(agentSource).toContain('compositionArtifact.designPath !== design_path');
@@ -72,7 +73,7 @@ describe('agent terminal contract wiring', () => {
     expect(agentStreamSource).not.toContain('buildStudioRunAutoResumePrompt');
     expect(agentSource).toContain('streamed-${codeExtractor.toolName}-${targetSlug}.partial.js');
     expect(agentSource).toContain('persistStreamedCodeCheckpoint(true)');
-    expect(agentSource).toContain('write_code_file: tool({');
+    expect(agentSource).toContain('function createWriteCodeFileTool(');
     expect(agentSource).toContain('Composition files may be natural Remotion modules');
     expect(agentSource).toContain('natural JS/TS/JSX/TSX Remotion module');
     expect(agentSource).toContain("code_path: z.string().optional()");

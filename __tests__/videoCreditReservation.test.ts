@@ -1,6 +1,5 @@
-import fs from 'node:fs'
-import path from 'node:path'
 import { describe, expect, it, vi } from 'vitest'
+import { readAgentAwareSource } from './helpers/agentRuntimeSource'
 
 const { mockRpc } = vi.hoisted(() => ({ mockRpc: vi.fn() }))
 
@@ -9,7 +8,7 @@ vi.mock('@/lib/supabase/service', () => ({
 }))
 
 const root = process.cwd()
-const read = (file: string) => fs.readFileSync(path.join(root, file), 'utf8')
+const read = (file: string) => readAgentAwareSource(root, file)
 
 describe('video credit reservation contract', () => {
   it('reserves the estimated video price before provider submission', () => {

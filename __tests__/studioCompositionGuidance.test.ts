@@ -1,9 +1,8 @@
-import { readFileSync } from 'node:fs';
-import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
+import { readAgentAwareSource } from './helpers/agentRuntimeSource';
 
 const root = process.cwd();
-const read = (path: string) => readFileSync(join(root, path), 'utf8');
+const read = (path: string) => readAgentAwareSource(root, path);
 
 const guidancePaths = [
   'src/lib/prompts/agent-coding.md',
