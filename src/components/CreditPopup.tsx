@@ -17,6 +17,7 @@ import {
   purchaseNativeAppleSubscription,
   restoreNativeApplePurchases,
 } from '@/lib/native-purchases';
+import AppleTrialCheckout from './AppleTrialCheckout';
 
 const PLANS = [
   { id: 'basic', name: 'Basic', monthlyPrice: 990, annualPrice: 9500, credits: 1200 },
@@ -26,8 +27,9 @@ const PLANS = [
 
 interface CreditPopupProps {
   open: boolean;
-  entryPoint?: 'standard' | 'ios_onboarding';
+  entryPoint?: 'standard' | 'ios_onboarding' | 'ios_preauth_trial';
   onClose: () => void;
+  onPreAuthTrialConfirmed?: () => void;
   balance: number;
   needed?: number;
   subscription?: { planId: string; status: string } | null;
@@ -42,7 +44,7 @@ interface CreditPopupProps {
   onBalanceUpdate?: (balance: number, subscription?: { planId: string; status: string } | null) => void;
 }
 
-export default function CreditPopup({ open: externalOpen, entryPoint = 'standard', onClose: externalOnClose, balance: externalBalance, needed, subscription: externalSubscription, projectId, success: externalSuccess, waiting: externalWaiting, autoDetectPayment, onBalanceUpdate }: CreditPopupProps) {
+export default function CreditPopup({ open: externalOpen, entryPoint = 'standard', onClose: externalOnClose, onPreAuthTrialConfirmed, balance: externalBalance, needed, subscription: externalSubscription, projectId, success: externalSuccess, waiting: externalWaiting, autoDetectPayment, onBalanceUpdate }: CreditPopupProps) {
   const { t } = useLocale();
   const [loading, setLoading] = useState<string | null>(null);
   const [selectedTier, setSelectedTier] = useState<string>('pro');
@@ -56,6 +58,7 @@ export default function CreditPopup({ open: externalOpen, entryPoint = 'standard
   const [autoOpen, setAutoOpen] = useState(false);
   const [autoWaiting, setAutoWaiting] = useState(false);
   const [autoSuccess, setAutoSuccess] = useState(false);
+  const [autoFailed, setAutoFailed] = useState(false);
   const [autoBalance, setAutoBalance] = useState(0);
   const [autoSubscription, setAutoSubscription] = useState<{ planId: string; status: string } | null>(null);
 
@@ -67,6 +70,12 @@ export default function CreditPopup({ open: externalOpen, entryPoint = 'standard
   const suppressWebBilling = shouldSuppressWebBilling();
   const appleBilling = useAppleBillingProducts({ enabled: open });
   const appleBillingAvailable = appleBilling.available;
+  const isPreAuthTrial = entryPoint === 'ios_preauth_trial';
+  const showDedicatedTrialPaywall = entryPoint !== 'standard'
+    && suppressWebBilling
+    && !success
+    && !waiting
+    && !autoFailed;
 
   const onClose = () => {
     setAutoOpen(false);
@@ -76,7 +85,6 @@ export default function CreditPopup({ open: externalOpen, entryPoint = 'standard
   };
 
   // Auto-detect ?topped_up=1 after Stripe redirect
-  const [autoFailed, setAutoFailed] = useState(false);
   useEffect(() => {
     if (!autoDetectPayment || typeof window === 'undefined') return;
     const params = new URLSearchParams(window.location.search);
@@ -121,14 +129,14 @@ export default function CreditPopup({ open: externalOpen, entryPoint = 'standard
   );
   const hasBasicMonthlyTrial = !!basicMonthlyTrial;
 
-  const [tab, setTab] = useState<'subscribe' | 'topup'>(entryPoint === 'ios_onboarding' ? 'subscribe' : 'topup');
+  const [tab, setTab] = useState<'subscribe' | 'topup'>(entryPoint === 'standard' ? 'topup' : 'subscribe');
 
   // Sync tab when subscription status changes (async fetch)
   useEffect(() => {
-    if (entryPoint === 'ios_onboarding' || hasSubscription || hasBasicMonthlyTrial) setTab('subscribe');
+    if (entryPoint !== 'standard' || hasSubscription || hasBasicMonthlyTrial) setTab('subscribe');
     else if (!appleBilling.loading) setTab('topup');
 
-    if (entryPoint === 'ios_onboarding' || hasBasicMonthlyTrial) {
+    if (entryPoint !== 'standard' || hasBasicMonthlyTrial) {
       setSelectedPlan('basic');
       setSelectedBillingInterval('month');
     }
@@ -266,11 +274,16 @@ export default function CreditPopup({ open: externalOpen, entryPoint = 'standard
             signedTransactionInfo: transaction.signedTransactionInfo,
             metaEventId,
             attribution: getAttributionForRequest(),
+            ...(isPreAuthTrial ? { intent: 'preauth_trial' as const } : {}),
           }),
         });
         const data = await res.json();
         if (!res.ok) throw new Error(data.error || 'Apple purchase verification failed');
         await finishAppleTransaction(transaction.transactionId);
+        if (isPreAuthTrial && data.pendingClaim) {
+          onPreAuthTrialConfirmed?.();
+          return;
+        }
         writeNativeJSONCache('/api/billing/credits', data);
         setAutoOpen(true);
         setAutoWaiting(false);
@@ -324,11 +337,18 @@ export default function CreditPopup({ open: externalOpen, entryPoint = 'standard
       const res = await fetch('/api/billing/apple/verify', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ signedTransactionInfo: transaction.signedTransactionInfo }),
+        body: JSON.stringify({
+          signedTransactionInfo: transaction.signedTransactionInfo,
+          ...(isPreAuthTrial ? { intent: 'preauth_trial' as const } : {}),
+        }),
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || 'Could not restore Apple subscription.');
       await finishAppleTransaction(transaction.transactionId);
+      if (isPreAuthTrial && data.pendingClaim) {
+        onPreAuthTrialConfirmed?.();
+        return;
+      }
       writeNativeJSONCache('/api/billing/credits', data);
       setAutoOpen(true);
       setAutoWaiting(false);
@@ -397,19 +417,26 @@ export default function CreditPopup({ open: externalOpen, entryPoint = 'standard
 
       {/* Modal */}
       <div
+        data-testid={showDedicatedTrialPaywall ? 'credit-popup-trial-shell' : 'credit-popup-modal'}
+        data-presentation={showDedicatedTrialPaywall ? 'bottom-sheet' : 'modal'}
         style={{
           position: 'fixed', zIndex: 301,
-          left: '50%', top: '50%',
-          transform: 'translate(-50%, -50%)',
-          width: '92%', maxWidth: 480,
-          maxHeight: '85dvh',
+          left: '50%',
+          top: showDedicatedTrialPaywall ? undefined : '50%',
+          bottom: showDedicatedTrialPaywall ? 0 : undefined,
+          transform: showDedicatedTrialPaywall ? 'translateX(-50%)' : 'translate(-50%, -50%)',
+          width: showDedicatedTrialPaywall ? 'min(100%, 600px)' : '92%',
+          maxWidth: showDedicatedTrialPaywall ? 600 : 480,
+          maxHeight: showDedicatedTrialPaywall ? '90dvh' : '85dvh',
           overflowY: 'auto',
-          background: 'linear-gradient(180deg, #18181b 0%, #0f0f12 100%)',
-          borderRadius: 20,
+          background: showDedicatedTrialPaywall ? '#09090b' : 'linear-gradient(180deg, #18181b 0%, #0f0f12 100%)',
+          borderRadius: showDedicatedTrialPaywall ? '26px 26px 0 0' : 20,
           border: '1px solid rgba(255,255,255,0.08)',
-          boxShadow: '0 24px 80px rgba(0,0,0,0.8), 0 0 0 1px rgba(255,255,255,0.04)',
-          animation: 'creditScaleIn 0.25s cubic-bezier(0.25, 0.46, 0.45, 0.94)',
+          borderBottom: showDedicatedTrialPaywall ? 0 : undefined,
+          boxShadow: showDedicatedTrialPaywall ? '0 -24px 80px rgba(0,0,0,0.68)' : '0 24px 80px rgba(0,0,0,0.8), 0 0 0 1px rgba(255,255,255,0.04)',
+          animation: showDedicatedTrialPaywall ? 'creditSlideUp 0.36s cubic-bezier(0.22, 1, 0.36, 1)' : 'creditScaleIn 0.25s cubic-bezier(0.25, 0.46, 0.45, 0.94)',
         }}
+        onClick={event => event.stopPropagation()}
       >
         {/* ══════ FAILED STATE ══════ */}
         {autoFailed ? (
@@ -547,6 +574,18 @@ export default function CreditPopup({ open: externalOpen, entryPoint = 'standard
               {t('billing.continueCreating')}
             </button>
           </div>
+        ) : showDedicatedTrialPaywall ? (
+          <AppleTrialCheckout
+            nativeProduct={appleBilling.nativeProductFor(basicMonthlyProduct)}
+            loading={!appleBillingAvailable || appleBilling.loading}
+            disabled={subscribeDisabled}
+            purchasing={loading === 'sub-basic-month'}
+            error={paymentError}
+            onStart={() => void handleSubscribe('basic')}
+            onClose={onClose}
+            onRestore={handleRestoreApplePurchases}
+            restoring={loading === 'restore-apple'}
+          />
         ) : suppressWebBilling && !appleBillingAvailable ? (
           <div data-testid="ios-billing-unavailable" style={{ padding: '32px 24px 28px', textAlign: 'center' }}>
             <div style={{
@@ -873,6 +912,7 @@ export default function CreditPopup({ open: externalOpen, entryPoint = 'standard
         )}
       </div>
 
+      {/* i18n-ignore */}
       <style>{`
         @keyframes creditFadeIn {
           from { opacity: 0 }
@@ -881,6 +921,10 @@ export default function CreditPopup({ open: externalOpen, entryPoint = 'standard
         @keyframes creditScaleIn {
           from { opacity: 0; transform: translate(-50%, -50%) scale(0.95) }
           to { opacity: 1; transform: translate(-50%, -50%) scale(1) }
+        }
+        @keyframes creditSlideUp {
+          from { opacity: 0; transform: translate(-50%, 24px) }
+          to { opacity: 1; transform: translate(-50%, 0) }
         }
         @keyframes creditSuccessPop {
           from { transform: scale(0.5); opacity: 0 }

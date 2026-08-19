@@ -229,7 +229,7 @@ export default function ProjectEditorContainer({
     if (raw) { sessionStorage.removeItem('pendingVideos'); try { return JSON.parse(raw) } catch { return null } }
     return null
   })
-  const isNewProject = !!(pendingImages || pendingImageState.loading || pendingPrompt || pendingVideos)
+  const isNewProject = !!(pendingLaunch || pendingImages || pendingImageState.loading || pendingPrompt || pendingVideos)
 
   useEffect(() => {
     if (!pendingLaunch) return

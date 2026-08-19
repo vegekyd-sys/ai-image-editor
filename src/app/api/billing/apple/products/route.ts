@@ -7,11 +7,12 @@ import { getConfiguredIOSTrialCredits } from '@/lib/billing/ios-trial'
 export async function GET() {
   const supabase = await createClient()
   const { data: { user } } = await supabase.auth.getUser()
-  if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
 
   const trialCredits = await getConfiguredIOSTrialCredits(getSupabaseAdmin())
   return NextResponse.json({
-    appAccountToken: user.id,
+    // Before registration StoreKit intentionally receives no account token.
+    // The verified transaction is held server-side and linked after auth.
+    appAccountToken: user?.id,
     products: getConfiguredAppleProducts(trialCredits),
   })
 }

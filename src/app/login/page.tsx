@@ -15,6 +15,7 @@ import {
   resolveAuthReturnPathForRuntime,
   selectAuthReturnPath,
 } from '@/lib/auth-return'
+import { linkIOSPreAuthTrialContinuation } from '@/lib/ios-preauth-trial'
 
 type View = 'form' | 'verify-otp' | 'forgot-password' | 'reset-password'
 type OtpPurpose = 'signup' | 'recovery'
@@ -163,9 +164,12 @@ export default function LoginPage() {
         complete.metaEvents?.CompleteRegistration || createMetaEventId('registration'),
       )
     }
+    if (complete.appleTrialClaimed) linkIOSPreAuthTrialContinuation()
     redirectAfterAuth({
       fallback: options?.fallback || complete.redirectUrl || '/projects',
-      onboarding: complete.isNewUser ? (complete.trialRequired ? 'trial' : 'welcome') : undefined,
+      onboarding: complete.isNewUser && !complete.appleTrialClaimed
+        ? (complete.trialRequired ? 'trial' : 'welcome')
+        : undefined,
     })
   }
 

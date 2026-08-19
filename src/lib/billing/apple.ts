@@ -148,6 +148,54 @@ export async function verifyAppleNotification(signedPayload: string): Promise<Re
   throw lastError instanceof Error ? lastError : new Error('Apple notification verification failed')
 }
 
+export interface VerifiedAppleIntroTrial {
+  transaction: JWSTransactionDecodedPayload
+  productId: string
+  transactionId: string
+  originalTransactionId: string
+  environment: string | null
+  expiresAt: Date
+}
+
+/**
+ * Validate the only Apple offer allowed to start before a Makaron account
+ * exists. Every other Apple purchase remains authenticated-only.
+ */
+export function requireAppleBasicIntroTrial(
+  transaction: JWSTransactionDecodedPayload,
+): VerifiedAppleIntroTrial {
+  const productId = transaction.productId
+  const transactionId = transaction.transactionId
+  const originalTransactionId = transaction.originalTransactionId || transactionId
+  const planMatch = productId ? getPlanByAppleProductId(productId) : null
+  const expiresAt = transaction.expiresDate ? new Date(transaction.expiresDate) : null
+
+  if (!productId || !transactionId || !originalTransactionId) {
+    throw new Error('Apple transaction is missing productId or transactionId')
+  }
+  if (planMatch?.plan.id !== 'basic' || planMatch.interval !== 'month') {
+    throw new Error('Only the Basic monthly introductory trial can start before registration')
+  }
+  if (transaction.offerType !== OfferType.INTRODUCTORY_OFFER) {
+    throw new Error('Apple did not verify an introductory trial for this purchase')
+  }
+  if (!expiresAt || !Number.isFinite(expiresAt.getTime()) || expiresAt.getTime() <= Date.now()) {
+    throw new Error('Apple introductory trial is missing a valid future expiry date')
+  }
+  if (transaction.revocationDate) {
+    throw new Error('Apple introductory trial has been revoked')
+  }
+
+  return {
+    transaction,
+    productId,
+    transactionId,
+    originalTransactionId,
+    environment: getTransactionEnvironment(transaction),
+    expiresAt,
+  }
+}
+
 function getTransactionStatus(transaction: JWSTransactionDecodedPayload): string {
   if (transaction.revocationDate) return 'refunded'
   if (transaction.expiresDate && transaction.expiresDate <= Date.now()) return 'expired'

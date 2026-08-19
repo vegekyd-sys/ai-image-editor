@@ -11,6 +11,7 @@ const mocks = vi.hoisted(() => ({
   restoreNativeApplePurchases: vi.fn(),
   writeNativeJSONCache: vi.fn(),
   trackCheckoutStart: vi.fn(),
+  suppressWebBilling: false,
 }));
 
 vi.mock('@/lib/i18n', () => ({
@@ -43,12 +44,36 @@ vi.mock('@/lib/i18n', () => ({
       'billing.appleTrialCredits': 'trial credits',
       'billing.appleTrialStart': 'Start 3-day free trial',
       'billing.appleTrialDisclosure': 'Free today, auto-renews in 3 days at',
+      'billing.trial.loadingOffer': 'Checking your Apple offer...',
+      'billing.trial.firstCreationComplete': '3-DAY FREE TRIAL',
+      'billing.trial.nextSkillTitle': 'Create without limits.',
+      'billing.trial.nextSkillSubtitle': 'Start with 1,500 trial credits.',
+      'billing.trial.galleryLabel': 'What you can create',
+      'billing.trial.offerTitle': '3-day free trial',
+      'billing.trial.offerRenewalPrefix': 'then',
+      'billing.trial.offerToday': '$0 today',
+      'billing.trial.close': 'Close trial offer',
+      'billing.trial.creation1': 'Selfie to poster',
+      'billing.trial.creation2': 'Image to video',
+      'billing.trial.creation3': 'Creative Agent',
+      'billing.trial.creationAlt1': 'Selfie poster',
+      'billing.trial.creationAlt2': 'Image video',
+      'billing.trial.creationAlt3': 'Agent variations',
+      'billing.trial.benefitCredits': '1,500 credits during your trial',
+      'billing.trial.benefitSkills': 'Every image and video Skill',
+      'billing.trial.benefitAgent': 'Your creative Agent',
+      'billing.trial.perMonth': '/month',
+      'billing.trial.cta': 'Start 3-day free trial',
+      'billing.trial.confirming': 'Confirming with Apple...',
+      'billing.trial.legal': 'Renews automatically unless canceled.',
+      'billing.trial.restore': 'Restore Apple purchase',
+      'billing.trial.restoring': 'Restoring...',
     }[key] || key),
   }),
 }));
 
 vi.mock('@/lib/native-app', () => ({
-  shouldSuppressWebBilling: () => false,
+  shouldSuppressWebBilling: () => mocks.suppressWebBilling,
 }));
 
 vi.mock('@/lib/native-app-cache', () => ({
@@ -90,7 +115,7 @@ const nativeProducts = appleProducts.map(product => ({
 }));
 
 function mockFetch() {
-  return vi.fn(async (input: RequestInfo | URL) => {
+  return vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
     const url = String(input);
     if (url === '/api/billing/apple/products') {
       return {
@@ -99,6 +124,13 @@ function mockFetch() {
       } as Response;
     }
     if (url === '/api/billing/apple/verify') {
+      const body = init?.body ? JSON.parse(String(init.body)) : {}
+      if (body.intent === 'preauth_trial') {
+        return {
+          ok: true,
+          json: async () => ({ ok: true, pendingClaim: true }),
+        } as Response;
+      }
       return {
         ok: true,
         json: async () => ({
@@ -118,6 +150,7 @@ function mockFetch() {
 describe('CreditPopup Apple purchase flow', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    mocks.suppressWebBilling = false;
     mocks.getNativeAppleProducts.mockResolvedValue(nativeProducts);
     mocks.purchaseNativeAppleProduct.mockResolvedValue({
       productId: 'app.makaron.ios.topup.pro',
@@ -196,6 +229,7 @@ describe('CreditPopup Apple purchase flow', () => {
   });
 
   it('leads iOS onboarding with the verified 3-day Basic trial and 1,500 credits', async () => {
+    mocks.suppressWebBilling = true;
     mocks.getNativeAppleProducts.mockResolvedValue(nativeProducts.map(product => (
       product.productId === 'app.makaron.ios.subscription.basic.monthly'
         ? {
@@ -222,14 +256,66 @@ describe('CreditPopup Apple purchase flow', () => {
     render(<CreditPopup open entryPoint="ios_onboarding" onClose={vi.fn()} balance={0} subscription={null} />);
 
     expect(await screen.findByText('3-day free trial')).toBeTruthy();
-    expect(screen.getByText('Free today')).toBeTruthy();
-    expect(screen.getByText('then $9.99/mo')).toBeTruthy();
-    expect(screen.getByText('1,500 trial credits')).toBeTruthy();
+    expect(screen.getByText('$0 today')).toBeTruthy();
+    expect(screen.getByText('then $9.99/month')).toBeTruthy();
+    expect(screen.getByText('1,500 credits during your trial')).toBeTruthy();
 
     fireEvent.click(screen.getByText('Start 3-day free trial'));
     await waitFor(() => expect(mocks.purchaseNativeAppleSubscription).toHaveBeenCalledWith(
       'app.makaron.ios.subscription.basic.monthly',
       '11111111-1111-4111-8111-111111111111',
     ));
+  });
+
+  it('holds an unauthenticated Apple trial server-side before navigating to registration', async () => {
+    mocks.suppressWebBilling = true;
+    mocks.getNativeAppleProducts.mockResolvedValue(nativeProducts.map(product => (
+      product.productId === 'app.makaron.ios.subscription.basic.monthly'
+        ? {
+            ...product,
+            displayPrice: '$9.99',
+            isEligibleForIntroOffer: true,
+            introductoryOffer: {
+              displayPrice: '$0.00',
+              paymentMode: 'freeTrial',
+              periodUnit: 'day',
+              periodValue: 3,
+              periodCount: 1,
+            },
+          }
+        : product
+    )));
+    mocks.purchaseNativeAppleSubscription.mockResolvedValue({
+      productId: 'app.makaron.ios.subscription.basic.monthly',
+      transactionId: 'preauth-trial-tx',
+      originalTransactionId: 'preauth-trial-tx',
+      signedTransactionInfo: 'signed-preauth-trial',
+    });
+    const onPreAuthTrialConfirmed = vi.fn();
+
+    render(
+      <CreditPopup
+        open
+        entryPoint="ios_preauth_trial"
+        onClose={vi.fn()}
+        onPreAuthTrialConfirmed={onPreAuthTrialConfirmed}
+        balance={0}
+        subscription={null}
+      />,
+    );
+
+    fireEvent.click(await screen.findByText('Start 3-day free trial'));
+    await waitFor(() => expect(fetch).toHaveBeenCalledWith('/api/billing/apple/verify', expect.objectContaining({
+      method: 'POST',
+      body: JSON.stringify({
+        signedTransactionInfo: 'signed-preauth-trial',
+        metaEventId: 'meta-event-id',
+        attribution: {},
+        intent: 'preauth_trial',
+      }),
+    })));
+    await waitFor(() => expect(mocks.finishNativeAppleTransaction).toHaveBeenCalledWith('preauth-trial-tx'));
+    expect(onPreAuthTrialConfirmed).toHaveBeenCalledTimes(1);
+    expect(mocks.writeNativeJSONCache).not.toHaveBeenCalled();
   });
 });

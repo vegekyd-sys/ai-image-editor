@@ -204,6 +204,33 @@ describe('Apple billing integration', () => {
     });
   });
 
+  it('accepts only an active Basic monthly introductory offer before registration', async () => {
+    const { requireAppleBasicIntroTrial } = await import('@/lib/billing/apple');
+    const expiresDate = Date.now() + 3 * 24 * 60 * 60 * 1000;
+    const pending = requireAppleBasicIntroTrial(transaction({
+      appAccountToken: undefined,
+      transactionId: 'preauth-trial',
+      originalTransactionId: 'preauth-trial',
+      productId: 'app.makaron.ios.subscription.basic.monthly',
+      offerType: 1,
+      expiresDate,
+    }));
+
+    expect(pending).toMatchObject({
+      productId: 'app.makaron.ios.subscription.basic.monthly',
+      transactionId: 'preauth-trial',
+      originalTransactionId: 'preauth-trial',
+    });
+    expect(pending.expiresAt.toISOString()).toBe(new Date(expiresDate).toISOString());
+
+    expect(() => requireAppleBasicIntroTrial(transaction({
+      appAccountToken: undefined,
+      productId: 'app.makaron.ios.subscription.basic.monthly',
+      expiresDate,
+      offerType: undefined,
+    }))).toThrow('introductory trial');
+  });
+
   it('rejects a transaction whose appAccountToken belongs to a different user', async () => {
     const { applyAppleTransaction } = await import('@/lib/billing/apple');
     await expect(applyAppleTransaction({
