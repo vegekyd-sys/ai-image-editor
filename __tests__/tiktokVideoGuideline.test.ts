@@ -120,16 +120,16 @@ describe('TikTok video guideline', () => {
     expect(source).toContain('collapse it into a\n  thinner generic timeline');
     expect(source).toContain('make the first `3–6s` the');
     expect(source).toContain('one coherent spoken thought at a time');
-    expect(source).toContain('start around `64–84px`');
-    expect(source).toContain("speaker's meaning and\n   delivery determine when the caption turns over");
+    expect(source).toContain('tighten\n   the VO before styling instead of shrinking every caption');
+    expect(source).toContain("speaker's meaning and delivery determine when the caption turns over");
     expect(source).not.toContain('normally `2–7` spoken words');
     expect(source).not.toContain('every `0.5–1.4s`');
     expect(source).toContain('`1.06–1.14×`');
     expect(source).toContain('exactly one visible caption host');
     expect(source).toContain('No persistent full-width lower-third bar');
-    expect(source).toContain('For a `20s` English voiceover');
+    expect(source).toContain('write only the speech the pictures cannot communicate');
     expect(source).toContain('native-feel pass in addition to collision checks');
-    expect(source).toContain('A short ordinary prompt is enough to\n  activate this default');
+    expect(source).toContain('do not create\n  wall-to-wall VO merely to justify a subtitle track');
     expect(source).toContain('make them visibly distinct by default');
     expect(source).toContain('deliberately authored and polished');
     expect(source).toContain('semantic emphasis visibly present by default');
@@ -148,6 +148,11 @@ describe('TikTok video guideline', () => {
     expect(source).toContain('failed visual-analysis bridge is not permission to publish blind');
     expect(source).toContain('do not bypass that gate by publishing the private draft');
     expect(source).toContain('a resumed `fast_720p` export is not an equivalent final');
+    expect(source).toContain('There\n  is no default subtitle family, black rectangle, left-side vertical rule');
+    expect(source).toContain("one successful video's caption treatment into the Skill's visual");
+    expect(source).toContain('applying one\n  pop preset to every cue');
+    expect(source).toContain('do not\n   require every cue to animate the same way');
+    expect(source).toContain('a dark\n   plaque, left rail, one font family');
   });
 
   it('keeps caption art direction autonomous while grounding phrase timing in final VO words', () => {
@@ -190,6 +195,8 @@ describe('TikTok video guideline', () => {
     expect(source).toContain('Do not solve this with one\n  shared line-height constant');
     expect(source).toContain('Inspect every multi-line caption at its stable full-opacity frame');
     expect(source).toContain('outgoing and incoming boundary\n   frames of neighboring cues');
+    expect(source).toContain('interactive Player frame as provisional until pinned fonts');
+    expect(source).toContain('frame extracted from the materialized MP4');
     expect(compositionPrompt).toContain('Multi-line subtitles must also be collision-free');
     expect(compositionPrompt).toContain('instead of introducing one\n  global line-height constant');
     expect(compositionPrompt).toContain('Prefer one block backing shape or explicit');
@@ -197,5 +204,7 @@ describe('TikTok video guideline', () => {
     expect(compositionPrompt).toContain('every non-empty `subtitleSyncEvidence` cue must');
     expect(compositionPrompt).toContain('A boolean accent\n  that recolors the entire caption host');
     expect(compositionPrompt).toContain('must not expose an accidental black\n  frame');
+    expect(compositionPrompt).toContain('A black subtitle plaque, colored left rail');
+    expect(compositionPrompt).toContain('Interactive Player typography is provisional');
   });
 });

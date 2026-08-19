@@ -135,6 +135,15 @@ Available APIs include all exports from `remotion`, `@remotion/media`, `@remotio
   unless final-resolution preview proves the cloned padding/background cannot
   cover neighboring glyph rows. Prefer one block backing shape or explicit
   authored lines when separate per-line shapes are part of the direction.
+- A black subtitle plaque, colored left rail, lower-left anchor, Inter-like
+  grotesk, or repeated pop is never a default package. Use any of them only
+  when the current concept earns it; do not reproduce the same combined
+  caption treatment across unrelated compositions.
+- Interactive Player typography is provisional until the pinned font resources
+  used by server/Lambda rendering have settled. Accept wrapping, line spacing,
+  and backing geometry from `preview_frame` or a frame extracted from the final
+  MP4. If that frame differs from an earlier browser preview, repair the
+  Composition for the export renderer.
 - Visible line breaks must render as line breaks, never as the two characters
   `\\n`. Store intended breaks as actual line feeds or explicit authored lines,
   not backslash escapes in editable props. The shared Preview/export runtime

@@ -26,10 +26,12 @@ and TikTok variants of a larger campaign.
 
 - When the user names TikTok or Douyin and existing timeline/source footage is
   available, default to editable Remotion packaging with an authored hook,
-  narration or useful source speech, VO-grounded spoken captions, semantic
-  keyword emphasis, and a native close. A short ordinary prompt is enough to
-  activate this default; do not wait for the user to separately request each
-  packaging layer.
+  a deliberate sound strategy, and a native close. Decide whether narration or
+  source speech genuinely adds information or personality; do not create
+  wall-to-wall VO merely to justify a subtitle track. When speech is present,
+  use VO-grounded spoken captions and semantic keyword emphasis. A short
+  ordinary prompt is enough to activate this direction; do not wait for the
+  user to separately request each useful packaging layer.
 - Keep the direct AI-generated route for a clip up to 15 seconds only when the
   user explicitly wants newly generated provider footage, requests no captions
   or packaging, or the result genuinely does not need precise text, branding,
@@ -187,14 +189,16 @@ piece of copy as the same lower-third component.
    heavy weight, compact line-height, and visible for about `0.8–2.0s`. It may
    sit in the clear upper or middle lane when that does not cover the subject.
 2. **Spoken captions:** one coherent spoken thought at a time, usually no more
-   than two readable lines. At `1080 × 1920`, start around `64–84px`, weight
-   `700–900`, line-height `0.95–1.08`, with either a strong dark stroke/shadow or
-   one compact opaque/translucent backing shape. For every cue with meaningful
-   spoken content, choose the one or two words that carry its semantic beat and
-   make them visibly distinct by default. Let the speaker's meaning and
-   delivery determine when the caption turns over and which words receive
-   emphasis; do not optimize the track to a repeated word count or mechanical
-   visual cadence.
+   than two readable lines. Prefer a short, naturally spoken phrase that can
+   breathe on the actual picture; when most cues need two dense lines, tighten
+   the VO before styling instead of shrinking every caption. Size, weight,
+   line-height, outline, shadow, or backing treatment must come from the chosen
+   concept and final font metrics, not from one reusable TikTok preset. For
+   every cue with meaningful spoken content, choose the one or two words that
+   carry its semantic beat and make them visibly distinct by default. Let the
+   speaker's meaning and delivery determine when the caption turns over and
+   which words receive emphasis; do not optimize the track to a repeated word
+   count or mechanical visual cadence.
 3. **Beat labels:** optional `1–4` word step, reaction, or proof labels attached
    to the action they explain. Use at most one dominant label per scene and
    remove it when its beat ends; do not accumulate badges, cards, and labels.
@@ -216,9 +220,18 @@ piece of copy as the same lower-third component.
   geometric, rounded, or condensed sans from the approved font catalog whose
   character fits the footage; use weight, scale, line breaks, and spacing to
   create an elegant hierarchy. Do not hard-code one family across videos, and
-  do not use a thin editorial subtitle face that loses feed readability. White
-  text with a dark outline/shadow is the most neutral native baseline; choose
-  one restrained accent color that comes from the subject or brand.
+  do not use a thin editorial subtitle face that loses feed readability. There
+  is no default subtitle family, black rectangle, left-side vertical rule, or
+  accent color. Text-only type with a restrained outline/shadow, selective word
+  blocks, an authored shape, or another treatment may all work; choose only the
+  devices the current footage and concept earn.
+- Do not turn one successful video's caption treatment into the Skill's visual
+  signature. Repeating the same dark plaque, colored rail, font family,
+  lower-left placement, and entrance animation across unrelated footage is a
+  failed art-direction pass even when each element is individually legible.
+  Before composing, name what makes this video's text system different from a
+  generic process edit, then make that distinction visible without forcing
+  every scene to use a different gimmick.
 - Emphasize only the one or two words that carry the beat, but make that
   semantic emphasis visibly present by default rather than merely considering
   it. The Agent may use accent color, weight, a compact fill, or a punch to about
@@ -269,9 +282,12 @@ piece of copy as the same lower-third component.
   glyph rows. Use one backing shape for the whole caption block, or author the
   visual lines explicitly when each line needs its own shape. Keep the choice
   composition-specific and confirm it in the exported frame.
-- Caption entrances should feel immediate: a short pop, upward settle, or
-  cut-on beat over roughly `4–8` frames. Do not use slow fades, floaty webpage
-  easing, or a large glass-panel lower third for ordinary speech.
+- Derive caption motion from the action and verbal beat instead of applying one
+  pop preset to every cue. A clean cut, held static phrase, mask reveal,
+  tracking change, word-level reaction, camera-attached label, or brief settle
+  can all be right. Vary motion only when the concept benefits; repeated scale
+  pops, identical upward settles, slow webpage fades, and large glass-panel
+  lower thirds make the edit feel templated.
 - Position captions scene by scene around the focal action. Lower-middle is a
   useful default, not a fixed coordinate: move a cue upward or sideways when it
   covers hands, tools, faces, product detail, the bottom-left metadata, or the
@@ -387,9 +403,10 @@ footage, use this default arc when the brief does not provide a stronger one:
 4. **Native close (`19–20s`):** one brief reaction, question, loop-back, or CTA;
    avoid a long logo-only tail.
 
-For a `20s` English voiceover, start with roughly `35–50` conversational words
-and tighten after the real audio timing is measured. Let the visuals carry
-obvious process details instead of narrating every visible motion.
+For a `20s` piece, write only the speech the pictures cannot communicate as
+clearly. Intentional music-, source-sound-, or action-led breathing room is
+valid. Let the visuals carry obvious process details instead of narrating every
+visible motion, then measure the final approved speech before building cues.
 
 ## Review Gate
 
@@ -414,10 +431,14 @@ Before publishing or materializing:
    frame starts with meaningful action, the proposition is clear by `3s`, the
    hook and spoken captions have visibly different roles, captions change in
    short measured phrases, and no persistent corporate lower third or repeated
-   card template has flattened the footage.
+   card template has flattened the footage. Also reject an unexplained caption
+   system repeated across the whole piece or recent comparison outputs: a dark
+   plaque, left rail, one font family, fixed lower-left position, and identical
+   entrance are choices, never the definition of TikTok packaging.
 6. Review at least one caption entrance and one emphasized word in motion, not
-   only as still frames. Confirm the pop/settle is brief, legible, and does not
-   make the subject jump or disappear behind text.
+   only as still frames. Confirm the chosen motion fits the action, remains
+   legible, and does not make the subject jump or disappear behind text; do not
+   require every cue to animate the same way.
 7. For narrated work, audit the opening, a dense middle passage, and the close
    against the final VO: each spoken phrase must enter on its first included
    word, leave on its last included word, and any highlighted word must react on
@@ -434,6 +455,10 @@ Before publishing or materializing:
    frames of neighboring cues so exit motion cannot leave one visible phrase
    underneath the next. Repair the local typography or animation while keeping
    the measured VO cue ranges intact.
+   Treat an interactive Player frame as provisional until pinned fonts have
+   settled. Use `preview_frame` or a frame extracted from the materialized MP4
+   for typography acceptance; if it differs from the browser Player, repair the
+   Composition for the export frame rather than approving the earlier layout.
 10. Audit the spoken-caption hierarchy cue by cue. Every meaningful multi-word
     cue should have one or two semantically important words that are visibly
     distinct at the correct measured word timing. Confirm the chosen font,
