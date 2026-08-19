@@ -1,9 +1,8 @@
-import fs from 'node:fs';
-import path from 'node:path';
 import { describe, expect, it } from 'vitest';
+import { readAgentAwareSource } from './helpers/agentRuntimeSource';
 
 const root = process.cwd();
-const read = (file: string) => fs.readFileSync(path.join(root, file), 'utf8');
+const read = (file: string) => readAgentAwareSource(root, file);
 
 describe('agent reliability policy', () => {
   it('raises the normal agent budget while keeping an environment override', () => {

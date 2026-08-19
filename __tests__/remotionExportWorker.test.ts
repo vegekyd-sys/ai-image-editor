@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest'
 import { readFileSync } from 'fs'
 import { resolveRemotionRenderProfile } from '@/lib/remotion-export'
 import { resolveRemotionLambdaEncodingSettings } from '@/lib/remotion-encoding'
+import { readAgentRuntimeSource } from './helpers/agentRuntimeSource'
 
 const read = (path: string) => readFileSync(path, 'utf-8')
 
@@ -153,7 +154,7 @@ describe('Remotion export worker contract', () => {
     const getRoute = read('src/app/api/remotion/export/[id]/route.ts')
     const materializeRoute = read('src/app/api/media/materialize/route.ts')
     const cli = read('packages/makaron-cli/bin/makaron.mjs')
-    const agent = read('src/lib/agent.ts')
+    const agent = readAgentRuntimeSource()
     const worker = read('workers/remotion-export-worker.ts')
     const videoSnapshotRoute = read('src/app/api/video-snapshot/[snapshotId]/route.ts')
     const videoPollCron = read('src/app/api/cron/video-poll/route.ts')

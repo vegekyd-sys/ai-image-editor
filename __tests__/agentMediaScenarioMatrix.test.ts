@@ -1,10 +1,9 @@
-import { readFileSync } from 'fs'
-import { join } from 'path'
 import { describe, expect, it } from 'vitest'
 import { validateVideoScript } from '@/lib/video-harness'
+import { readAgentAwareSource } from './helpers/agentRuntimeSource'
 
 const root = process.cwd()
-const read = (relativePath: string) => readFileSync(join(root, relativePath), 'utf8')
+const read = (relativePath: string) => readAgentAwareSource(root, relativePath)
 
 describe('agent media scenario matrix', () => {
   const agent = read('src/lib/prompts/agent.md')

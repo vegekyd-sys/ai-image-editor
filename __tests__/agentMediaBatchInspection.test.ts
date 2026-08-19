@@ -1,9 +1,8 @@
 import { describe, expect, it } from 'vitest';
 import { buildTurnMediaInspectionContext } from '@/lib/agent-context';
-import { readFileSync } from 'node:fs';
-import { join } from 'node:path';
+import { readAgentAwareSource } from './helpers/agentRuntimeSource';
 
-const read = (path: string) => readFileSync(join(process.cwd(), path), 'utf8');
+const read = (path: string) => readAgentAwareSource(process.cwd(), path);
 
 describe('current upload batch inspection', () => {
   it('maps the complete trailing upload batch without attaching raw media to the main model', () => {

@@ -17,12 +17,16 @@ interface LegacyChangelogEntry {
 
 type LocalizedChangelogEntry = {
   date: string;
-  localeKey: 'tiktokVideoSkill' | 'sourcePlayback' | 'externalSourceRanges' | 'seedance25' | 'minimaxH3' | 'multilingualAsr' | 'editableRemotion' | 'editableLayers';
+  localeKey: 'smarterEditableDiscovery' | 'tiktokVideoSkill' | 'sourcePlayback' | 'externalSourceRanges' | 'seedance25' | 'minimaxH3' | 'multilingualAsr' | 'editableRemotion' | 'editableLayers';
 };
 
 type ChangelogEntry = LegacyChangelogEntry | LocalizedChangelogEntry;
 
 const CHANGELOG: ChangelogEntry[] = [
+  {
+    date: '2026-08-19',
+    localeKey: 'smarterEditableDiscovery',
+  },
   {
     date: '2026-08-19',
     localeKey: 'tiktokVideoSkill',
@@ -965,6 +969,10 @@ const iOSAppTopGap = 'max(96px, calc(env(safe-area-inset-top, 0px) + 40px))';
 const iOSAppBottomGap = 'max(14px, env(safe-area-inset-bottom, 0px))';
 
 const LOCALIZED_CHANGELOG_KEYS = {
+  smarterEditableDiscovery: {
+    title: 'changelog.smarterEditableDiscovery.title',
+    items: ['changelog.smarterEditableDiscovery.item1'],
+  },
   tiktokVideoSkill: {
     title: 'changelog.tiktokVideoSkill.title',
     items: [

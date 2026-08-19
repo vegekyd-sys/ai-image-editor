@@ -9,9 +9,9 @@ import traverse from '@babel/traverse';
 import { transform as sucraseTransform } from 'sucrase';
 import type { EditableField } from '@/types';
 import {
-  compileEditableManifest,
   type EditableCoverage,
 } from './editor/editable-manifest';
+import { compileEditableManifestWithProvenance } from './editor/editable-provenance-compiler';
 import {
   buildRemotionEvaluatorBody,
   DYNAMIC_DESIGN_SCOPE_NAMES,
@@ -81,7 +81,7 @@ export function validateDesignReport(result: DesignResult): DesignValidationRepo
   result.code = autoFixVideoTags(result.code);
 
   const authoredEditables = result.editables;
-  const manifest = compileEditableManifest({
+  const manifest = compileEditableManifestWithProvenance({
     code: result.code,
     props: result.props,
     editables: authoredEditables,
@@ -256,7 +256,11 @@ export function validateEditables(
     const compilerOwnsMediaBox = compilerOwned && (
       field.source === 'literal'
       || Boolean(dynamicBinding?.openingTag.includes('__makaronEditable_'))
-      || Boolean(!directOpeningTag && code.includes('__makaronEditable_'))
+      || Boolean(
+        !directOpeningTag
+        && !dynamicBinding
+        && code.includes('__makaronEditable_')
+      )
     );
     if (!openingTag && !compilerOwned) {
       return `⚠️ Editable field "${field.id}" is declared but no JSX element has data-editable="${field.id}". Add data-editable to the visible editable wrapper.`;

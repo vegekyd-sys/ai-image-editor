@@ -103,6 +103,8 @@ const en = {
   'changelog.editableLayers.item2': 'Click a layer on the canvas, then move or resize it directly — no need to ask Agent to regenerate the whole result.',
   'changelog.editableLayers.item3': 'Video clips now have a trim strip with playback, scrubber, start/end handles, and range dragging.',
   'changelog.editableLayers.item4': 'Tall poster-style projects are easier to refine: selection boxes stay aligned while you scroll.',
+  'changelog.smarterEditableDiscovery.title': 'Smarter Editable Layers',
+  'changelog.smarterEditableDiscovery.item1': 'Makaron now discovers subtitles and other React-rendered content as editable layers more reliably, while preserving direct move and resize controls.',
 
   // AI status
   'status.thinking': 'Discovering possibilities...',
