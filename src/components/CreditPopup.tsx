@@ -278,7 +278,12 @@ export default function CreditPopup({ open: externalOpen, entryPoint = 'standard
           }),
         });
         const data = await res.json();
-        if (!res.ok) throw new Error(data.error || 'Apple purchase verification failed');
+        if (!res.ok) {
+          if (isPreAuthTrial && data.code === 'APPLE_TRIAL_VERIFICATION_FAILED') {
+            throw new Error(t('billing.trial.verificationPending'));
+          }
+          throw new Error(data.error || 'Apple purchase verification failed');
+        }
         await finishAppleTransaction(transaction.transactionId);
         if (isPreAuthTrial && data.pendingClaim) {
           onPreAuthTrialConfirmed?.();
@@ -343,7 +348,12 @@ export default function CreditPopup({ open: externalOpen, entryPoint = 'standard
         }),
       });
       const data = await res.json();
-      if (!res.ok) throw new Error(data.error || 'Could not restore Apple subscription.');
+      if (!res.ok) {
+        if (isPreAuthTrial && data.code === 'APPLE_TRIAL_VERIFICATION_FAILED') {
+          throw new Error(t('billing.trial.verificationPending'));
+        }
+        throw new Error(data.error || 'Could not restore Apple subscription.');
+      }
       await finishAppleTransaction(transaction.transactionId);
       if (isPreAuthTrial && data.pendingClaim) {
         onPreAuthTrialConfirmed?.();

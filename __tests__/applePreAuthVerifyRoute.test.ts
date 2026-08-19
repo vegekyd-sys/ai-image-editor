@@ -73,4 +73,21 @@ describe('pre-registration Apple trial verification route', () => {
     expect(response.status).toBe(401)
     expect(mocks.prepare).not.toHaveBeenCalled()
   })
+
+  it('does not expose server verification details after Apple completes the purchase', async () => {
+    mocks.prepare.mockRejectedValueOnce(new Error('private server configuration detail'))
+    const response = await POST(new NextRequest('http://localhost:3001/api/billing/apple/verify', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'User-Agent': 'MakaronIOS' },
+      body: JSON.stringify({ signedTransactionInfo: 'signed-transaction', intent: 'preauth_trial' }),
+    }))
+    const body = await response.json()
+
+    expect(response.status).toBe(400)
+    expect(body).toEqual({
+      code: 'APPLE_TRIAL_VERIFICATION_FAILED',
+      error: 'Apple trial verification failed',
+    })
+    expect(JSON.stringify(body)).not.toContain('private server configuration detail')
+  })
 })

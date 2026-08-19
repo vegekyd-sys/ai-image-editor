@@ -53,7 +53,8 @@ export async function POST(req: NextRequest) {
     } catch (error) {
       console.error('[billing/apple/verify] pre-auth trial failed:', error)
       return NextResponse.json({
-        error: error instanceof Error ? error.message : 'Apple trial verification failed',
+        code: 'APPLE_TRIAL_VERIFICATION_FAILED',
+        error: 'Apple trial verification failed',
       }, { status: 400 })
     }
   }

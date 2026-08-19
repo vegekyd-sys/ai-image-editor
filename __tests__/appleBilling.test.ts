@@ -1,4 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { X509Certificate } from 'node:crypto';
 
 const mockInsert = vi.fn();
 const mockSelect = vi.fn();
@@ -52,6 +53,19 @@ describe('Apple billing integration', () => {
       return { insert: mockInsert, select: mockSelect };
     });
     mockGetBalance.mockResolvedValue({ balance: 2200, lifetimePurchased: 2200, lifetimeUsed: 0 });
+  });
+
+  it('bundles the three official Apple root certificates for JWS verification', async () => {
+    const { getBundledAppleRootCertificates } = await import('@/lib/billing/apple-root-certificates');
+    const certificates = getBundledAppleRootCertificates().map(value => new X509Certificate(value));
+
+    expect(certificates).toHaveLength(3);
+    expect(certificates.map(certificate => certificate.subject)).toEqual(expect.arrayContaining([
+      expect.stringContaining('CN=Apple Root CA'),
+      expect.stringContaining('CN=Apple Root CA - G2'),
+      expect.stringContaining('CN=Apple Root CA - G3'),
+    ]));
+    expect(certificates.every(certificate => certificate.ca)).toBe(true);
   });
 
   it('exposes all App Store products with Apple tier pricing isolated from Stripe pricing', async () => {

@@ -16,6 +16,7 @@ import {
 import { upsertAppleSubscription } from './subscription'
 import { getSupabaseAdmin } from '@/lib/supabase/service'
 import { DEFAULT_IOS_TRIAL_CREDITS, IOS_TRIAL_DAYS, getConfiguredIOSTrialCredits } from './ios-trial'
+import { getBundledAppleRootCertificates } from './apple-root-certificates'
 
 type AppleEnvironment = Environment.SANDBOX | Environment.PRODUCTION | Environment.XCODE | Environment.LOCAL_TESTING
 
@@ -81,7 +82,7 @@ function loadAppleRootCertificates(): Buffer[] {
       .map(part => Buffer.from(part, 'base64'))
   }
 
-  throw new Error('APPLE_ROOT_CERTIFICATES_PEM or APPLE_ROOT_CERTIFICATES_BASE64 is required')
+  return getBundledAppleRootCertificates()
 }
 
 function getVerifier(environment: AppleEnvironment): SignedDataVerifier {

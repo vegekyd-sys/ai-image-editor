@@ -68,6 +68,7 @@ vi.mock('@/lib/i18n', () => ({
       'billing.trial.legal': 'Renews automatically unless canceled.',
       'billing.trial.restore': 'Restore Apple purchase',
       'billing.trial.restoring': 'Restoring...',
+      'billing.trial.verificationPending': 'Subscription complete. Tap Restore Apple purchase to continue.',
     }[key] || key),
   }),
 }));
@@ -96,6 +97,10 @@ vi.mock('@/lib/native-purchases', () => ({
   purchaseNativeAppleSubscription: mocks.purchaseNativeAppleSubscription,
   finishNativeAppleTransaction: mocks.finishNativeAppleTransaction,
   restoreNativeApplePurchases: mocks.restoreNativeApplePurchases,
+  isNativeApplePurchaseCancellation: () => false,
+  getNativeApplePurchaseErrorMessage: (error: unknown, fallback: string) => (
+    error instanceof Error ? error.message : fallback
+  ),
 }));
 
 const appleProducts = [
@@ -317,5 +322,45 @@ describe('CreditPopup Apple purchase flow', () => {
     await waitFor(() => expect(mocks.finishNativeAppleTransaction).toHaveBeenCalledWith('preauth-trial-tx'));
     expect(onPreAuthTrialConfirmed).toHaveBeenCalledTimes(1);
     expect(mocks.writeNativeJSONCache).not.toHaveBeenCalled();
+  });
+
+  it('shows a recovery action instead of exposing server verification details', async () => {
+    mocks.suppressWebBilling = true;
+    mocks.getNativeAppleProducts.mockResolvedValue(nativeProducts.map(product => (
+      product.productId === 'app.makaron.ios.subscription.basic.monthly'
+        ? {
+            ...product,
+            displayPrice: '$9.99',
+            isEligibleForIntroOffer: true,
+            introductoryOffer: {
+              displayPrice: '$0.00',
+              paymentMode: 'freeTrial',
+              periodUnit: 'day',
+              periodValue: 3,
+              periodCount: 1,
+            },
+          }
+        : product
+    )));
+    const baseFetch = mockFetch();
+    vi.stubGlobal('fetch', vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+      if (String(input) === '/api/billing/apple/verify') {
+        return {
+          ok: false,
+          json: async () => ({
+            code: 'APPLE_TRIAL_VERIFICATION_FAILED',
+            error: 'private server configuration detail',
+          }),
+        } as Response;
+      }
+      return baseFetch(input, init);
+    }));
+
+    render(<CreditPopup open entryPoint="ios_preauth_trial" onClose={vi.fn()} balance={0} subscription={null} />);
+    fireEvent.click(await screen.findByText('Start 3-day free trial'));
+
+    expect(await screen.findByText('Subscription complete. Tap Restore Apple purchase to continue.')).toBeTruthy();
+    expect(screen.queryByText('private server configuration detail')).toBeNull();
+    expect(mocks.finishNativeAppleTransaction).not.toHaveBeenCalled();
   });
 });

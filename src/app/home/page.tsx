@@ -1855,7 +1855,7 @@ function HomePageInner() {
 
   const skillActionTitle = isGuestSkillAction
     ? isPreAuthIOSSkillAction
-      ? t('home.trialBeforeSignupTitle')
+      ? t('home.trialSurpriseTitle')
       : hasEnoughPhotos
       ? t('home.seeYourVersion')
       : selectedPhotoCount > 0
@@ -1865,7 +1865,7 @@ function HomePageInner() {
 
   const skillActionSubtitle = isGuestSkillAction
     ? isPreAuthIOSSkillAction
-      ? t('home.trialBeforeSignupSubtitle')
+      ? undefined
       : hasEnoughPhotos
       ? t('home.previewNoCard')
       : selectedPhotoCount > 0
@@ -2278,7 +2278,7 @@ function HomePageInner() {
               actionTitle={skillActionTitle}
               actionSubtitle={skillActionSubtitle}
               actionMeta={skillActionMeta || undefined}
-              actionIdleNote={isPreAuthIOSSkillAction ? t('home.trialNoCharge') : t('home.photosNeeded', formatPhotoCount(requiredPhotoCount))}
+              actionIdleNote={isPreAuthIOSSkillAction ? t('home.trialGiftNote') : t('home.photosNeeded', formatPhotoCount(requiredPhotoCount))}
               actionSelectedNote={hasEnoughPhotos
                 ? t('home.previewReady')
                 : t('home.morePhotosNeeded', formatPhotoCount(remainingPhotoCount))}
@@ -2517,7 +2517,7 @@ function HomePageInner() {
               actionTitle={skillActionTitle}
               actionSubtitle={skillActionSubtitle}
               actionMeta={skillActionMeta || undefined}
-              actionIdleNote={isPreAuthIOSSkillAction ? t('home.trialNoCharge') : t('home.photosNeeded', formatPhotoCount(requiredPhotoCount))}
+              actionIdleNote={isPreAuthIOSSkillAction ? t('home.trialGiftNote') : t('home.photosNeeded', formatPhotoCount(requiredPhotoCount))}
               actionSelectedNote={hasEnoughPhotos
                 ? t('home.previewReady')
                 : t('home.morePhotosNeeded', formatPhotoCount(remainingPhotoCount))}
