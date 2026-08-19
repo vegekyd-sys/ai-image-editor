@@ -131,6 +131,11 @@ Available APIs include all exports from `remotion`, `@remotion/media`, `@remotio
   authored line break, or backing-shape strategy instead of introducing one
   global line-height constant or universal caption renderer. Verify the stable
   dense frame and the largest animated state, not only the cue data.
+- Long single-line subtitles must fit completely inside their platform-safe
+  bounds at the settled final font metrics. Do not use `whiteSpace: 'nowrap'`
+  or off-canvas overflow to preserve prose on one line; author a break or adjust
+  the local measure and type size. Preview the stable midpoint of every spoken
+  cue, including the longest single-line cue, rather than sampling only scenes.
 - Do not put `box-decoration-break: clone` around auto-wrapped subtitle prose
   unless final-resolution preview proves the cloned padding/background cannot
   cover neighboring glyph rows. Prefer one block backing shape or explicit
@@ -144,10 +149,14 @@ Available APIs include all exports from `remotion`, `@remotion/media`, `@remotio
   Agent's composition gate because it waits for those pinned resources. Studio
   MP4 export completes asynchronously after the Agent turn, so do not pretend
   to extract final frames before they exist. Batch, CLI, human, or later-turn
-  acceptance should extract corresponding multi-line and backed-caption frames
-  from the encoded MP4. If they differ from settled Preview, repair the same
+  acceptance should extract every spoken cue midpoint, including corresponding
+  long single-line, multi-line, and backed-caption frames, from the encoded MP4.
+  If they differ from settled Preview, repair the same
   editable Composition and materialize again; render success is not typography
   acceptance.
+- Closing copy, CTA, or a final reveal must reach its completed state before the
+  timeline ends. Preview the last visible frame and the frame half a second
+  earlier; do not approve a close whose animation merely runs out of frames.
 - Visible line breaks must render as line breaks, never as the two characters
   `\\n`. Store intended breaks as actual line feeds or explicit authored lines,
   not backslash escapes in editable props. The shared Preview/export runtime

@@ -128,10 +128,16 @@ phone size.
   authors another treatment.
 - Keep the result editable. Use one visible caption host for each spoken cue,
   with highlights inside that host.
+- Fit every cue inside its safe bounds at the settled final font metrics. Do not
+  preserve a prose caption as one unbroken line when it needs an authored break,
+  narrower measure, or smaller type to remain fully visible.
 - Use the final VO master and its `transcribe_audio` word timing. Do not invent
   caption intervals or reuse timestamps from an earlier take.
 - Review the selected concept against the rendered contact sheet. If the frames
   are more generic than the proposal, repair the Composition.
+- Resolve any closing phrase or CTA before the timeline ends. Review both the
+  final visible frame and the preceding half-second; an unfinished close is not
+  an intentional loop unless the concept clearly completes it elsewhere.
 - The settled-font Preview is the Agent's composition gate. Studio MP4 export
   finishes asynchronously, so batch, CLI, or later-turn acceptance must inspect
   the encoded result rather than pretending the same Agent turn reviewed bytes

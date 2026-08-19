@@ -49,6 +49,10 @@ animation, and visual personality to the Composition.
   or overprint at the final font metrics. Repair locally by changing width,
   line break, size, line-height, padding, or backing geometry; do not impose one
   universal caption component or line-height.
+- A long spoken cue must not rely on `white-space: nowrap`, off-canvas overflow,
+  or an oversized single line. At the settled font metrics, author a break or
+  adjust measure and type size so the complete phrase remains inside its safe
+  bounds throughout the entrance, stable hold, and exit.
 - Avoid `box-decoration-break: clone` around browser-auto-wrapped prose unless
   the final encoded frame proves cloned padding cannot cover neighboring rows.
   One block backing shape or explicit authored lines are safer when the concept

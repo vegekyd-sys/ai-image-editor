@@ -8,9 +8,12 @@ Passing one never implies the other.
 
 Before publishing or materializing the editable composition:
 
-1. Preview the hook, a stable midpoint from every scene, the densest text frame,
-   every multi-line cue, the largest animated text state, and the close at the
-   final `9:16` dimensions.
+1. Preview the hook, a stable midpoint from every scene and every spoken-caption
+   cue, the longest single-line cue, every multi-line cue, the largest animated
+   text state, the final visible frame, and the frame half a second before the
+   end at the final `9:16` dimensions. Any intended close or CTA must be fully
+   resolved in one of those last frames. Scene-boundary samples do not
+   substitute for caption-cue midpoints.
 2. Compare essential bounds with the selected platform layout profile.
 3. Confirm no visible `\\n`, clipped glyphs, duplicate caption hosts, touching
    rows, or caption/logo/UI collisions.
@@ -33,9 +36,10 @@ Review and Delivery states. Do not claim the Agent inspected an MP4 that did
 not exist during its turn. When a batch test, CLI workflow, human reviewer, or
 later Agent turn has the final encoded file, run this acceptance:
 
-1. Extract frames directly from the encoded file at every multi-line cue, every
-   backed caption, and every cue whose font or emphasis changes wrapping.
-   Include stable and maximum-animation states.
+1. Extract frames directly from the encoded file at the stable midpoint of every
+   spoken-caption cue, including the longest single-line cue, every multi-line
+   cue, every backed caption, and every cue whose font or emphasis changes
+   wrapping. Include stable and maximum-animation states.
 2. Compare those frames with the corresponding settled-font Preview. The MP4
    is authoritative for glyph metrics, wrapping, line spacing, padding, and
    backing geometry. A clean Preview cannot waive an export-only overlap.
@@ -44,6 +48,8 @@ later Agent turn has the final encoded file, run this acceptance:
 4. Decode the complete video stream, verify `1080 × 1920`, duration, ending,
    source contribution, audio presence, and scene-boundary coverage. A render
    job reporting success is not delivery acceptance.
+   Extract the final visible frame and the frame half a second before it; reject
+   an unfinished closing phrase, CTA, or reveal that simply runs out of frames.
 5. If encoding introduces a rewrap, touching rows, duplicate glyphs, clipping,
    black gap, or different text geometry, return to the same editable
    Composition in a repair turn, fix the local issue, materialize again, and

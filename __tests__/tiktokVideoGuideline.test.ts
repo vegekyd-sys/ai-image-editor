@@ -134,9 +134,12 @@ describe('TikTok video guideline', () => {
     expect(source).toContain('Narration with an empty evidence array is a failure');
     expect(source).toContain('timingSource: "transcribe_audio"');
     expect(source).toContain('explicit `columnGap`');
+    expect(source).toContain('must not rely on `white-space: nowrap`');
     expect(source).toContain('Typography remains Composition-owned');
     expect(source).toContain('There is no required font, black plaque');
     expect(compositionPrompt).toContain('Multi-line subtitles must also be collision-free');
+    expect(compositionPrompt).toContain('Long single-line subtitles must fit completely');
+    expect(compositionPrompt).toContain("Do not use `whiteSpace: 'nowrap'`");
     expect(compositionPrompt).toContain('normalizes escaped newlines at renderer input and DOM text leaves');
     expect(compositionPrompt).toContain('every non-empty `subtitleSyncEvidence` cue must');
   });
@@ -150,9 +153,14 @@ describe('TikTok video guideline', () => {
     expect(source).toContain('Do not claim the Agent inspected an MP4');
     expect(source).toContain('The MP4\n   is authoritative for glyph metrics');
     expect(source).toContain('A clean Preview cannot waive an export-only overlap');
+    expect(source).toContain('stable midpoint from every scene and every spoken-caption');
+    expect(source).toContain('longest single-line cue');
+    expect(source).toContain('frame half a second before');
+    expect(source).toContain('unfinished closing phrase');
     expect(source).toContain('Decode the complete video stream');
     expect(source).toContain('render\n   job reporting success is not delivery acceptance');
-    expect(compositionPrompt).toContain('extract corresponding multi-line and backed-caption frames');
+    expect(compositionPrompt).toContain('extract every spoken cue midpoint');
+    expect(compositionPrompt).toContain('Closing copy, CTA, or a final reveal');
     expect(compositionPrompt).toContain('render success is not typography\n  acceptance');
   });
 });
