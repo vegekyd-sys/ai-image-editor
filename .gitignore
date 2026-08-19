@@ -84,6 +84,7 @@ marketing/meta-ads/
 !/scripts/makaron-release-prod.mjs
 !/scripts/makaron-runner.mjs
 !/scripts/makaron-worktree-fastpath.mjs
+!/scripts/editable-provenance-ab.ts
 !/scripts/smoke-gpt56-agent.ts
 !/scripts/smoke-gpt56-cache.ts
 !/scripts/smoke-volcengine-asr-project.ts

@@ -140,6 +140,8 @@ const ja = {
   'changelog.editableLayers.item2': 'キャンバス上でレイヤーを選択して、そのまま移動やサイズ変更ができます。小さな調整のためにAgentへ全体の再生成を依頼する必要はありません。',
   'changelog.editableLayers.item3': '動画クリップにトリムバーを追加しました。再生、スクラブ、開始・終了ハンドル、範囲全体の移動に対応します。',
   'changelog.editableLayers.item4': '縦長ポスターの編集も快適になり、上下にスクロールしても選択枠が内容に追従します。',
+  'changelog.smarterEditableDiscovery.title': '編集可能レイヤーをより賢く検出',
+  'changelog.smarterEditableDiscovery.item1': 'Makaronは字幕やその他のReact描画コンテンツを編集可能なレイヤーとしてより確実に検出し、移動・サイズ変更もそのまま利用できます。',
 
   // AI status
   'status.thinking': '可能性を探しています...',

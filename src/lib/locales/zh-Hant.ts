@@ -143,6 +143,8 @@ const zhHant = {
   'changelog.editableLayers.item2': '在畫布上選取圖層，就能直接移動和縮放，不必為了小調整重新讓 Agent 產生整張圖。',
   'changelog.editableLayers.item3': '影片片段新增裁剪列：支援播放、拖動時間戳、拖動起止把手，以及整體移動裁剪區間。',
   'changelog.editableLayers.item4': '長海報類專案更容易修改：上下捲動時，選取框會持續跟隨內容。',
+  'changelog.smarterEditableDiscovery.title': '更智慧的可編輯圖層辨識',
+  'changelog.smarterEditableDiscovery.item1': 'Makaron 現在能更可靠地將字幕及其他 React 算繪內容辨識為可編輯圖層，並繼續支援直接移動和縮放。',
 
   // AI status
   'status.thinking': '正在探索有趣的可能性...',

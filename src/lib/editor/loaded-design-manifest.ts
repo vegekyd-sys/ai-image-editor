@@ -1,5 +1,5 @@
 import type { DesignPayload } from '@/types';
-import { compileEditableManifest } from './editable-manifest';
+import { compileEditableManifestWithProvenance } from './editable-provenance-compiler';
 
 export function normalizeLoadedDesignManifest(
   value: unknown,
@@ -9,7 +9,7 @@ export function normalizeLoadedDesignManifest(
   if (typeof design.code !== 'string') return design;
 
   const props = { ...(design.props ?? {}) };
-  const manifest = compileEditableManifest({
+  const manifest = compileEditableManifestWithProvenance({
     code: design.code,
     props,
     editables: design.editables,
