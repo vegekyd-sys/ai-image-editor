@@ -37,12 +37,10 @@ describe('TikTok video guideline', () => {
       }],
     });
 
-    // A wide upper title is valid because the right rail starts lower down.
     expect(platformRectFitsSafeRegion(
       { x: 80, y: 200, width: 560, height: 100 },
       TIKTOK_AUCTION_IN_FEED_LTR_SAFE_REGION,
     )).toBe(true);
-    // The same right edge collides once content enters the lower-right rail.
     expect(platformRectFitsSafeRegion(
       { x: 80, y: 600, width: 560, height: 100 },
       TIKTOK_AUCTION_IN_FEED_LTR_SAFE_REGION,
@@ -90,121 +88,71 @@ describe('TikTok video guideline', () => {
       { x: 80, y: 1120, width: 400, height: 100 },
       TIKTOK_ORGANIC_LTR_SAFE_REGION,
     )).toBe(false);
-    // Lower-right is still usable because the metadata block is left-only.
     expect(platformRectFitsSafeRegion(
       { x: 580, y: 1080, width: 100, height: 100 },
       TIKTOK_ORGANIC_LTR_SAFE_REGION,
     )).toBe(true);
   });
 
-  it('routes every TikTok Remotion composition through the shared guideline gate', () => {
+  it('routes TikTok compositions through focused conditional references', () => {
     const director = read('src/skills/_shared/remotion-director-contract.md');
     const compositionPrompt = read('src/lib/prompts/remotion-composition.md');
+    const skill = read('src/skills/tiktok-video/SKILL.md');
 
     expect(director).toContain('skills/tiktok-video/SKILL.md');
     expect(director).toContain('must pass exclusion-zone collision review');
-    expect(compositionPrompt).toContain('never as the two characters');
-    expect(compositionPrompt).toContain('inside a `<Sequence>` is already local');
     expect(compositionPrompt).toContain('exactly one visible text host');
-    expect(read('src/skills/tiktok-video/SKILL.md')).toContain('midpoint from every scene');
-    expect(read('src/skills/tiktok-video/SKILL.md')).toContain('no single universal safe rect');
+    expect(skill).toContain('references/platform-layout.md');
+    expect(skill).toContain('references/caption-direction.md');
+    expect(skill).toContain('references/delivery-qa.md');
   });
 
-  it('defines native caption, pacing, and packaging grammar beyond safe zones', () => {
+  it('keeps the entrypoint focused on autonomous direction, not a caption template', () => {
     const source = read('src/skills/tiktok-video/SKILL.md');
 
-    expect(source).toContain('## TikTok-Native Creative Grammar');
-    expect(source).toContain('### Autonomous Concept Commitment');
-    expect(source).toContain('invitation to direct, not permission');
-    expect(source).toContain('timeline order as story order');
-    expect(source).toContain('collapse it into a\n  thinner generic timeline');
-    expect(source).toContain('make the first `3–6s` the');
-    expect(source).toContain('one coherent spoken thought at a time');
-    expect(source).toContain('tighten\n   the VO before styling instead of shrinking every caption');
-    expect(source).toContain("speaker's meaning and delivery determine when the caption turns over");
+    expect(source).toContain('invitation to direct');
+    expect(source).toContain('TikTok does not imply narration');
+    expect(source).toContain('Do not create wall-to-wall VO');
+    expect(source).toContain('full\nsentences covering nearly every scene is an over-written cut');
+    expect(source).toContain('There is no default font family, black subtitle rectangle, left vertical');
+    expect(source).toContain('Bold condensed all-caps is one possible voice, not a synonym for TikTok');
+    expect(source).toContain('not the easiest reusable implementation');
+    expect(source).toContain('boolean that recolors the whole sentence does not count');
     expect(source).not.toContain('normally `2–7` spoken words');
     expect(source).not.toContain('every `0.5–1.4s`');
-    expect(source).toContain('`1.06–1.14×`');
-    expect(source).toContain('exactly one visible caption host');
-    expect(source).toContain('No persistent full-width lower-third bar');
-    expect(source).toContain('write only the speech the pictures cannot communicate');
-    expect(source).toContain('native-feel pass in addition to collision checks');
-    expect(source).toContain('do not create\n  wall-to-wall VO merely to justify a subtitle track');
-    expect(source).toContain('make them visibly distinct by default');
-    expect(source).toContain('deliberately authored and polished');
-    expect(source).toContain('semantic emphasis visibly present by default');
-    expect(source).toContain('must exist inside the spoken caption itself');
-    expect(source).toContain('does not count as semantic keyword emphasis');
-    expect(source).toContain('Do not declare an accent token or prop and then leave it');
-    expect(source).toContain('A boolean such as `accent={true}` that recolors the entire caption host');
-    expect(source).toContain('unused accent value is not evidence of keyword emphasis');
-    expect(source).toContain('Judge emphasis at phone viewing size from a real exported frame');
-    expect(source).toContain('This is a visibility outcome,\n  not a mandated style recipe');
-    expect(source).toContain('resolved text\n   props as well as the JSX source');
-    expect(source).toContain('Audit the spoken-caption hierarchy cue by cue');
-    expect(source).toContain('Keep the visual choices autonomous');
-    expect(source).toContain('Compare the rendered contact sheet with the selected concept');
-    expect(source).toContain('built from one reusable Caption plus one reusable Step');
-    expect(source).toContain('failed visual-analysis bridge is not permission to publish blind');
-    expect(source).toContain('do not bypass that gate by publishing the private draft');
-    expect(source).toContain('a resumed `fast_720p` export is not an equivalent final');
-    expect(source).toContain('There\n  is no default subtitle family, black rectangle, left-side vertical rule');
-    expect(source).toContain("one successful video's caption treatment into the Skill's visual");
-    expect(source).toContain('applying one\n  pop preset to every cue');
-    expect(source).toContain('do not\n   require every cue to animate the same way');
-    expect(source).toContain('a dark\n   plaque, left rail, one font family');
+    expect(source.split('\n').length).toBeLessThan(190);
   });
 
-  it('keeps caption art direction autonomous while grounding phrase timing in final VO words', () => {
-    const source = read('src/skills/tiktok-video/SKILL.md');
+  it('grounds speech timing without owning the caption appearance', () => {
+    const source = read('src/skills/tiktok-video/references/caption-direction.md');
     const compositionPrompt = read('src/lib/prompts/remotion-composition.md');
 
-    expect(source).toContain('art-direction vocabulary, not a fixed');
-    expect(source).toContain('The Agent owns the final font family');
-    expect(source).toContain('### Meaning-First, VO-Grounded Phrase Captions');
-    expect(source).toContain('Lock the final VO master first');
-    expect(source).toContain('utterance and word timestamps');
-    expect(source).toContain('understand the complete utterance as speech');
+    expect(source).toContain('Lock the final VO master before building captions');
     expect(source).toContain('Semantic and prosodic coherence outrank brevity');
-    expect(source).toContain('Word count and cue\n   duration are not targets or quotas');
-    expect(source).toContain('illustrations of editorial judgment, not templates or parser rules');
-    expect(source).toContain('read the proposed cue sequence aloud');
-    expect(source).toContain('look at every cue in isolation');
-    expect(source).toContain('probably serves the layout rather than\n   the speaker');
-    expect(source).toContain('not a\n   requirement that every cue be a formal written sentence');
-    expect(source).toContain('Record the chosen cue\n   text and word range in the Composition Plan');
-    expect(source).toContain("start at the first\n   included word's measured start");
-    expect(source).toContain("last included word's measured\n   end");
-    expect(source).toContain("that word's measured start");
-    expect(source).toContain('Never reuse stale timestamps from a draft VO');
+    expect(source).toContain('Read the cue sequence aloud');
     expect(source).toContain('`subtitleSyncEvidence`');
-    expect(source).toContain('Treat `subtitleSyncEvidence` as a render-coverage contract');
-    expect(source).toContain('Narration plus an empty evidence array is a failure');
-    expect(source).toContain('`KineticTitle`, `Headline`, or paraphrased chapter title cannot substitute');
+    expect(source).toContain('Narration with an empty evidence array is a failure');
     expect(source).toContain('timingSource: "transcribe_audio"');
-    expect(source).toContain('existing `transcribe_audio` word data rather than eyeballing');
-    expect(source).toContain('preserve\n  unmistakable visible word gaps');
     expect(source).toContain('explicit `columnGap`');
-    expect(source).toContain('non-breaking-space spacer spans');
-    expect(source).toContain("scaled word's extra width");
-    expect(source).toContain('prefer color/weight emphasis without scale');
-    expect(source).toContain('do not alter correct VO timestamps to repair a typography problem');
-    expect(source).toContain("wrapped caption's glyphs and backing shapes");
-    expect(source).toContain('Avoid relying on `box-decoration-break: clone`');
-    expect(source).toContain('final glyph bounds of neighboring lines must not touch or overprint');
-    expect(source).toContain('Do not solve this with one\n  shared line-height constant');
-    expect(source).toContain('Inspect every multi-line caption at its stable full-opacity frame');
-    expect(source).toContain('outgoing and incoming boundary\n   frames of neighboring cues');
-    expect(source).toContain('interactive Player frame as provisional until pinned fonts');
-    expect(source).toContain('frame extracted from the materialized MP4');
+    expect(source).toContain('Typography remains Composition-owned');
+    expect(source).toContain('There is no required font, black plaque');
     expect(compositionPrompt).toContain('Multi-line subtitles must also be collision-free');
-    expect(compositionPrompt).toContain('instead of introducing one\n  global line-height constant');
-    expect(compositionPrompt).toContain('Prefer one block backing shape or explicit');
     expect(compositionPrompt).toContain('normalizes escaped newlines at renderer input and DOM text leaves');
     expect(compositionPrompt).toContain('every non-empty `subtitleSyncEvidence` cue must');
-    expect(compositionPrompt).toContain('A boolean accent\n  that recolors the entire caption host');
-    expect(compositionPrompt).toContain('must not expose an accidental black\n  frame');
-    expect(compositionPrompt).toContain('A black subtitle plaque, colored left rail');
-    expect(compositionPrompt).toContain('Interactive Player typography is provisional');
+  });
+
+  it('requires final MP4 acceptance separately from Preview', () => {
+    const source = read('src/skills/tiktok-video/references/delivery-qa.md');
+    const compositionPrompt = read('src/lib/prompts/remotion-composition.md');
+
+    expect(source).toContain("Settled-font Preview is the Agent's composition gate");
+    expect(source).toContain('Ordinary Studio export completes asynchronously');
+    expect(source).toContain('Do not claim the Agent inspected an MP4');
+    expect(source).toContain('The MP4\n   is authoritative for glyph metrics');
+    expect(source).toContain('A clean Preview cannot waive an export-only overlap');
+    expect(source).toContain('Decode the complete video stream');
+    expect(source).toContain('render\n   job reporting success is not delivery acceptance');
+    expect(compositionPrompt).toContain('extract corresponding multi-line and backed-caption frames');
+    expect(compositionPrompt).toContain('render success is not typography\n  acceptance');
   });
 });

@@ -140,10 +140,14 @@ Available APIs include all exports from `remotion`, `@remotion/media`, `@remotio
   when the current concept earns it; do not reproduce the same combined
   caption treatment across unrelated compositions.
 - Interactive Player typography is provisional until the pinned font resources
-  used by server/Lambda rendering have settled. Accept wrapping, line spacing,
-  and backing geometry from `preview_frame` or a frame extracted from the final
-  MP4. If that frame differs from an earlier browser preview, repair the
-  Composition for the export renderer.
+  used by server/Lambda rendering have settled. Use `preview_frame` for the
+  Agent's composition gate because it waits for those pinned resources. Studio
+  MP4 export completes asynchronously after the Agent turn, so do not pretend
+  to extract final frames before they exist. Batch, CLI, human, or later-turn
+  acceptance should extract corresponding multi-line and backed-caption frames
+  from the encoded MP4. If they differ from settled Preview, repair the same
+  editable Composition and materialize again; render success is not typography
+  acceptance.
 - Visible line breaks must render as line breaks, never as the two characters
   `\\n`. Store intended breaks as actual line feeds or explicit authored lines,
   not backslash escapes in editable props. The shared Preview/export runtime
