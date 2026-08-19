@@ -104,6 +104,7 @@ describe('TikTok video guideline', () => {
     expect(compositionPrompt).toContain('exactly one visible text host');
     expect(skill).toContain('references/platform-layout.md');
     expect(skill).toContain('references/caption-direction.md');
+    expect(skill).toContain('references/audio-sync.md');
     expect(skill).toContain('references/delivery-qa.md');
   });
 
@@ -111,8 +112,8 @@ describe('TikTok video guideline', () => {
     const source = read('src/skills/tiktok-video/SKILL.md');
 
     expect(source).toContain('invitation to direct');
-    expect(source).toContain('TikTok does not imply narration');
-    expect(source).toContain('Do not create wall-to-wall VO');
+    expect(source).toContain('defaults to muted clip audio');
+    expect(source).toContain('does\n  not require wall-to-wall narration');
     expect(source).toContain('full\nsentences covering nearly every scene is an over-written cut');
     expect(source).toContain('There is no default font family, black subtitle rectangle, left vertical');
     expect(source).toContain('Bold condensed all-caps is one possible voice, not a synonym for TikTok');
@@ -127,7 +128,7 @@ describe('TikTok video guideline', () => {
     const source = read('src/skills/tiktok-video/references/caption-direction.md');
     const compositionPrompt = read('src/lib/prompts/remotion-composition.md');
 
-    expect(source).toContain('Lock the final VO master before building captions');
+    expect(source).toContain('Lock the final narration-containing audio master');
     expect(source).toContain('Semantic and prosodic coherence outrank brevity');
     expect(source).toContain('Read the cue sequence aloud');
     expect(source).toContain('`subtitleSyncEvidence`');
@@ -142,6 +143,30 @@ describe('TikTok video guideline', () => {
     expect(compositionPrompt).toContain("Do not use `whiteSpace: 'nowrap'`");
     expect(compositionPrompt).toContain('normalizes escaped newlines at renderer input and DOM text leaves');
     expect(compositionPrompt).toContain('every non-empty `subtitleSyncEvidence` cue must');
+  });
+
+  it('defaults to one muted-source VO plus BGM master and one measured clock', () => {
+    const skill = read('src/skills/tiktok-video/SKILL.md');
+    const audio = read('src/skills/tiktok-video/references/audio-sync.md');
+    const compositionPrompt = read('src/lib/prompts/remotion-composition.md');
+    const director = read('src/skills/_shared/remotion-director-contract.md');
+
+    expect(skill).toContain('containing VO and instrumental BGM');
+    expect(skill).toContain('mute their embedded\n  audio');
+    expect(skill).toContain('rather than trusting only the aggregate pass flag');
+    expect(audio).toContain('`generate_audio({ kind: "mixed", ... })` once');
+    expect(audio).toContain('never keep more than one accepted master');
+    expect(audio).toContain('intentional BGM-only tail');
+    expect(audio).toContain('not only the aggregate `verification.passed`');
+    expect(audio).toContain('drops its final meaningful word');
+    expect(audio).toContain("that cue's actual\n  transcript");
+    expect(audio).toContain('every narrated\n   Script section in `expected_sections`');
+    expect(audio).toContain('`volume={0}`');
+    expect(audio).toContain('the only speech clock');
+    expect(audio).toContain('visible phrase and emphasized keyword');
+    expect(compositionPrompt).toContain('one generated mixed VO+BGM');
+    expect(compositionPrompt).toContain('planned Script timing or BGM rhythm cannot replace measured speech timing');
+    expect(director).toContain('one mixed VO+BGM soundtrack');
   });
 
   it('requires final MP4 acceptance separately from Preview', () => {

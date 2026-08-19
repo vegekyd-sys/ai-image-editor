@@ -2,7 +2,7 @@
 name: tiktok-video
 description: >
   Create and package TikTok-ready 9:16 videos with platform-aware placement,
-  creator-native direction, optional speech-led captions, and editable Remotion delivery.
+  creator-native direction, synchronized VO/BGM captions, and editable Remotion delivery.
 allowed-tools: read_file studio_run prepare_visual_asset analyze_video analyze_image transcribe_audio generate_image generate_animation generate_audio run_code write_file preview_frame materialize_media
 metadata:
   makaron:
@@ -28,6 +28,8 @@ TikTok variants of a larger campaign.
 - If the final piece contains narration or useful source speech, read
   `skills/tiktok-video/references/caption-direction.md` before writing the
   Script and again before composing the caption track.
+- For the default VO-plus-BGM soundtrack and its shared timing contract, read
+  `skills/tiktok-video/references/audio-sync.md` before writing the Script.
 - Before completing Review or Delivery, read
   `skills/tiktok-video/references/delivery-qa.md`.
 - For a substantial editable production, also read
@@ -42,9 +44,10 @@ TikTok variants of a larger campaign.
 - A direct generated-video route is appropriate only when the user actually
   wants newly generated provider footage and the result does not need precise
   captions, branding, multiple sources, or deterministic layout.
-- TikTok does not imply narration. Choose among speech-led, source-sound-led,
-  music-led, or concise editorial-text-led storytelling based on what the
-  footage needs. Do not create wall-to-wall VO merely to justify subtitles.
+- Unless the user explicitly asks for source sound, silence, music-only, or
+  another audio treatment, a source-footage TikTok defaults to muted clip audio
+  plus one finished soundtrack containing VO and instrumental BGM. This does
+  not require wall-to-wall narration; keep useful BGM-led breathing room.
 
 ## Direct The Footage
 
@@ -63,8 +66,10 @@ material supports; the choice must be visible in the final frames.
 - Cut on action, contact, material change, tool impact, or spoken emphasis.
   Reframes, freezes, speed changes, match cuts, or longer satisfying holds are
   choices, not a mandatory checklist.
-- Preserve useful source sound and physical texture. A polished TikTok can
-  still breathe; it need not narrate or decorate every second.
+- Treat source clips as visual material by default and mute their embedded
+  audio. If the user explicitly wants real ambience or a source-sound moment,
+  preserve it as a deliberate exception rather than letting every clip leak
+  into the VO/BGM mix.
 - Turn the selected proposal into a small set of signature moves and
   scene-specific promises, then implement them. A rich Storyboard must not
   collapse into one reusable caption plus one reusable step label.
@@ -84,8 +89,8 @@ progress decoration.
 
 ## Write Less, Say Something
 
-For process footage, write only the speech the pictures and source sound cannot
-communicate as clearly. Before approving the Script, challenge every spoken
+For process footage, write only the speech the pictures cannot communicate as
+clearly. Before approving the Script, challenge every spoken
 line with a silent-viewing test: if the action already says it, remove the line
 or compress it to a sharper observation.
 
@@ -131,8 +136,14 @@ phone size.
 - Fit every cue inside its safe bounds at the settled final font metrics. Do not
   preserve a prose caption as one unbroken line when it needs an authored break,
   narrower measure, or smaller type to remain fully visible.
-- Use the final VO master and its `transcribe_audio` word timing. Do not invent
-  caption intervals or reuse timestamps from an earlier take.
+- Use the final narration-containing audio master and its `transcribe_audio`
+  word timing. Do not invent caption intervals or reuse timestamps from an
+  earlier take.
+- Inspect every measured cue rather than trusting only the aggregate pass flag.
+  A take with a dropped final meaningful word or clipped clause is not the final
+  master: shorten or clarify that VO line and regenerate it before Storyboard.
+- Use that same measured cue sheet for captions, visual emphasis, and linked
+  scene ranges. Script estimates and BGM beats are not speech-sync evidence.
 - Review the selected concept against the rendered contact sheet. If the frames
   are more generic than the proposal, repair the Composition.
 - Resolve any closing phrase or CTA before the timeline ends. Review both the

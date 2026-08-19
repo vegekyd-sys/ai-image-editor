@@ -108,6 +108,12 @@ Available APIs include all exports from `remotion`, `@remotion/media`, `@remotio
   narration cue ends. Do not replace measured cue ranges with planned Script
   timing, estimated reading speed, or equal scene lengths. Wording, grouping,
   placement, typography, and motion remain specific to the current Composition.
+- When the active TikTok Skill uses its default audio route, every source
+  `<Video>` and `<OffthreadVideo>` must be explicitly silent with `volume={0}`
+  (or an equivalent deterministic mute). Use the one generated mixed VO+BGM
+  master as the only audible layer. Its persisted `transcribe_audio` cue sheet
+  drives spoken captions, linked scene ranges, and semantic visual beats;
+  planned Script timing or BGM rhythm cannot replace measured speech timing.
 - Each subtitle cue must have exactly one visible text host and one
   non-overlapping active range. Apply the caption background and border to that
   host, or use a wrapper that contains no second copy of the text. Never stack

@@ -6,7 +6,7 @@ animation, and visual personality to the Composition.
 
 ## Shape The Speech First
 
-- Lock the final VO master before building captions.
+- Lock the final narration-containing audio master before building captions.
 - Listen to the audio and read the transcript together. Remove narration that
   merely describes visible action; preserve speech-free room unless the brief
   benefits from a continuous creator monologue.
@@ -34,6 +34,9 @@ animation, and visual personality to the Composition.
    `timingSource: "transcribe_audio"`, exact cue text, frame range, and visible
    caption host. Narration with an empty evidence array is a failure. A hook,
    beat label, `KineticTitle`, or `Headline` cannot substitute for speech.
+7. Use the same cue-sheet seconds and frame ranges for the linked visual scene,
+   spoken-caption host, and semantic keyword emphasis. Do not make separate
+   timing decisions for voice, caption, and picture.
 
 ## Keep The Visual Direction Autonomous
 

@@ -61,14 +61,17 @@ Before writing or patching composition code, create a compact internal plan:
 - **Visual carrier**: for substantial scenes, use the `visualPlan` to record the
   dominant technical media path: native, plate, cutout, or edge-video. This is
   asset routing metadata, not a limit on supporting layers or visual invention.
-- **Audio/subtitle relation**: when narration exists, the isolated voiceover
-  master is the clock. Generate it after Script, align it with
+- **Audio/subtitle relation**: when narration exists, the final generated audio
+  master containing the approved VO is the clock. Generate it after Script,
+  align it with
   `transcribe_audio(expected_sections, fps)`, and lock the measured narration
   cue sheet before Storyboard or Composition. Storyboard scenes, Remotion
   Sequences, subtitles, visual emphasis, and music ducking must all derive from
   that same seconds/frame timebase. Never replace measured cues with estimated
   reading speed or equal scene lengths. When there is no narration, decide
-  whether music, captions, or original sound drives timing.
+  whether music, captions, or original sound drives timing. For the TikTok
+  default route, that master is one mixed VO+BGM soundtrack and source clips are
+  explicitly muted.
 - **Verification plan**: choose stable hook, middle, and ending frames to preview before publishing.
 
 ## Platform Guideline Gate

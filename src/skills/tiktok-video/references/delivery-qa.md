@@ -27,6 +27,11 @@ Before publishing or materializing the editable composition:
    empty frames.
 7. Treat an interactive Player frame as provisional until pinned fonts have
    settled. Use `preview_frame` for composition QA.
+8. Inspect the Composition audio graph: source video layers are explicitly
+   muted, one generated mixed master is audible, and every narrated cue maps to
+   the measured `transcribe_audio` evidence used by its caption and scene.
+   Check each cue's actual transcript for a complete ending; an aggregate
+   passing score does not excuse a dropped final word or clipped clause.
 
 ## Encoded MP4 Acceptance
 
@@ -50,6 +55,10 @@ later Agent turn has the final encoded file, run this acceptance:
    job reporting success is not delivery acceptance.
    Extract the final visible frame and the frame half a second before it; reject
    an unfinished closing phrase, CTA, or reveal that simply runs out of frames.
+   Listen for both VO and BGM and reject leaked source audio. Compare the spoken
+   line, visible caption, and linked picture at cue midpoints and boundaries;
+   the spoken caption follows the actual transcript rather than paraphrasing a
+   truncated take.
 5. If encoding introduces a rewrap, touching rows, duplicate glyphs, clipping,
    black gap, or different text geometry, return to the same editable
    Composition in a repair turn, fix the local issue, materialize again, and
