@@ -92,6 +92,7 @@ describe('Remotion export worker contract', () => {
     expect(exporter).toContain("renderer: 'remotion-export-v6-font-runtime-pinned'")
     expect(exporter).toContain('fontCatalogVersion: REMOTION_FONT_CATALOG_VERSION')
     expect(exporter).toContain('fontRuntimeVersion: REMOTION_FONT_RUNTIME_VERSION')
+    expect(exporter).toContain('editableRuntimeVersion: REMOTION_EDITABLE_RUNTIME_VERSION')
     expect(exporter).toContain("lambdaServeUrl: readEnv('REMOTION_LAMBDA_SERVE_URL') || null")
     expect(exporter).toContain('fontSubstitutions: design.fontSubstitutions || null')
     expect(exporter).toContain('publishSnapshotIds')
@@ -139,9 +140,11 @@ describe('Remotion export worker contract', () => {
     expect(read('src/lib/remotion-lambda-renderer.ts')).toContain("new URL('public/remotion-runtime.json', serveUrl)")
     expect(read('src/lib/remotion-lambda-renderer.ts')).toContain('Remotion render site is not font-pinned')
     expect(JSON.parse(read('public/remotion-runtime.json'))).toEqual({
-      runtimeVersion: 'remotion-font-runtime-r7-legacy-platform-fonts',
+      runtimeVersion: 'remotion-font-runtime-r8-editable-provenance',
       fontCatalogVersion: 'makaron-fonts-r1',
+      editableRuntimeVersion: 'remotion-editable-runtime-r1-provenance-id',
     })
+    expect(read('src/lib/remotion-lambda-renderer.ts')).toContain('editableRuntimeVersion !== REMOTION_EDITABLE_RUNTIME_VERSION')
     expect(read('src/remotion/DynamicDesign.tsx')).toContain('makaron-remotion-font-timing')
     expect(read('src/remotion/DynamicDesign.tsx')).toContain('props: propsObj')
     expect(read('src/lib/remotion-lambda-renderer.ts')).toContain('fontTelemetry')

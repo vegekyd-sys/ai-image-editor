@@ -5,6 +5,7 @@ import { getSupabaseAdmin } from '@/lib/supabase/service'
 import { toPublicStorageUrl } from '@/lib/supabase/storage'
 import * as workspace from '@/lib/workspace'
 import { resolveRemotionLambdaEncodingSettings } from '@/lib/remotion-encoding'
+import { REMOTION_EDITABLE_RUNTIME_VERSION } from '@/lib/editor/editable-react-runtime'
 import { REMOTION_FONT_CATALOG_VERSION, REMOTION_FONT_RUNTIME_VERSION } from '@/remotion/font-catalog'
 import {
   prepareRemotionCodeForSandbox,
@@ -262,6 +263,7 @@ function fingerprintDesign(
     renderer: 'remotion-export-v6-font-runtime-pinned',
     fontCatalogVersion: REMOTION_FONT_CATALOG_VERSION,
     fontRuntimeVersion: REMOTION_FONT_RUNTIME_VERSION,
+    editableRuntimeVersion: REMOTION_EDITABLE_RUNTIME_VERSION,
     outputType,
     renderProfile,
     outputSettings: {
