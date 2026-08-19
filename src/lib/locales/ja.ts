@@ -116,6 +116,7 @@ const ja = {
   'changelog.tiktokVideoSkill.title': 'TikTok ネイティブな動画 Skill',
   'changelog.tiktokVideoSkill.item1': '新しい TikTok Skill は、Agent が作る縦型動画にクリエイターらしいフック、テンポ、字幕、パッケージとプラットフォームを考慮した配置を加えつつ、Composition ごとの表現の自由を保ちます。',
   'changelog.tiktokVideoSkill.item2': '音声字幕は最終ナレーションの意味と話し方を理解して区切り、実際の単語タイミングで正確に同期するため、文字数だけで機械的に分割されません。',
+  'changelog.tiktokVideoSkill.item3': 'TikTok 動画は素材の元音声をデフォルトでミュートし、完成した1本の VO + BGM 音源から取得した実際の発話タイミングで、映像・字幕・キーワード強調を同期します。',
   'changelog.sourcePlayback.title': 'ソース動画の再生を安定化',
   'changelog.sourcePlayback.item1': 'Source URL のコンポジションはバッファリング中にタイムラインを一時停止し、次のトリミング済みクリップを先読みすることで、黒画面・別カットの混入・カット切り替え時の停止を抑えます。',
   'changelog.sourcePlayback.item2': '最初のタップで確実に再生を開始し、iOS のデコーダー先読み負荷を制限することで、長いマルチクリップでも字幕だけが進む問題や Safari のクラッシュを防ぎます。',
