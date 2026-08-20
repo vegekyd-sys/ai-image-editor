@@ -29,6 +29,13 @@ describe('iOS attribution release contract', () => {
     expect(plugin).toContain('Settings.shared.loggingBehaviors.insert(.networkRequests)')
     expect(plugin).toContain('ApplicationDelegate.shared.application')
     expect(plugin).toContain('AppLinkUtility.fetchDeferredAppLink')
+    expect(plugin).toContain('DeferredAppLinkCoordinator.shared.start()')
+    expect(plugin).toContain('DeferredAppLinkCoordinator.shared.resolve')
+    expect(plugin).toContain('"errorDomain"')
+    expect(plugin).toContain('"errorCode"')
+    expect(plugin).toContain('"nativeFetchStartedAt"')
+    expect(plugin).toContain('"nativeFetchLatencyMs"')
+    expect(plugin).not.toContain('call.reject("Unable to fetch deferred app link"')
     expect(plugin).toContain('import AppTrackingTransparency')
     expect(plugin).toContain('"appVersion"')
     expect(plugin).toContain('"appBuild"')
@@ -39,6 +46,9 @@ describe('iOS attribution release contract', () => {
     expect(plugin).toContain('-MakaronDeferredAppLink')
     expect(plugin.indexOf('ApplicationDelegate.shared.application')).toBeLessThan(
       plugin.indexOf('Settings.shared.isAdvertiserIDCollectionEnabled = false'),
+    )
+    expect(plugin.indexOf('Settings.shared.isSKAdNetworkReportEnabled = true')).toBeLessThan(
+      plugin.indexOf('DeferredAppLinkCoordinator.shared.start()'),
     )
     expect(plugin).toContain('AppEvents.Name.completedRegistration')
     expect(plugin).toContain('AppEvents.Name.customizeProduct')
@@ -58,6 +68,7 @@ describe('iOS attribution release contract', () => {
 
     expect(info).toContain('<string>makaron</string>')
     expect(info).toContain('<string>app.makaron.ios</string>')
+    expect(info).toContain('<string>fb1690601878920639</string>')
     expect(info.match(/<key>CFBundleURLTypes<\/key>/g)).toHaveLength(1)
     expect(info).toContain('<key>FacebookAppID</key>')
     expect(info).toContain('<string>1690601878920639</string>')

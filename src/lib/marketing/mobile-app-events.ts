@@ -30,13 +30,29 @@ export interface DeferredMobileAppLinkResult {
   status: DeferredMobileAppLinkStatus
   url?: string
   error?: string
+  errorDomain?: string
+  errorCode?: number
+  nativeFetchStartedAt?: string
+  nativeFetchLatencyMs?: number
   context: MobileAppEventsContext
 }
 
 const PENDING_DEEP_LINK_KEY = 'makaron:pending-deep-link'
 const DEFERRED_DEEP_LINK_CHECKED_KEY = 'makaron:meta-deferred-deep-link-checked'
 type DeferredLinkCapableMetaAppEvents = typeof MetaAppEvents & {
-  fetchDeferredAppLink?: () => Promise<{ url?: string | null }>
+  fetchDeferredAppLink?: () => Promise<{
+    status?: 'resolved' | 'empty' | 'error'
+    url?: string | null
+    errorDomain?: string
+    errorCode?: number
+    errorDescription?: string
+    nativeFetchStartedAt?: string
+    nativeFetchLatencyMs?: number
+    appVersion?: string
+    appBuild?: string
+    advertiserTrackingStatus?: string
+    advertiserIDCollectionEnabled?: boolean
+  }>
 }
 const AUTOMATIC_META_EVENTS = new Set<MetaEventName>([
   'AppFirstOpen',
@@ -189,17 +205,38 @@ export async function fetchDeferredMobileAppLinkResult(
       localStorage.setItem(DEFERRED_DEEP_LINK_CHECKED_KEY, 'sdk_unavailable')
       return { status: 'sdk_unavailable', context }
     }
-    // Meta's native API is first-launch only. Persist the attempt before calling it
-    // so a rejected promise cannot be mistaken for an untried install on next boot.
-    localStorage.setItem(DEFERRED_DEEP_LINK_CHECKED_KEY, 'started')
     onStart?.()
     const result = await fetchDeferredAppLink.call(MetaAppEvents)
+    context = {
+      ...context,
+      appVersion: result.appVersion ?? context.appVersion,
+      appBuild: result.appBuild ?? context.appBuild,
+      advertiserTrackingStatus:
+        result.advertiserTrackingStatus ?? context.advertiserTrackingStatus,
+      advertiserIDCollectionEnabled:
+        result.advertiserIDCollectionEnabled ?? context.advertiserIDCollectionEnabled,
+    }
+    const diagnostics = {
+      errorDomain: result.errorDomain,
+      errorCode: result.errorCode,
+      nativeFetchStartedAt: result.nativeFetchStartedAt,
+      nativeFetchLatencyMs: result.nativeFetchLatencyMs,
+    }
+    if (result.status === 'error') {
+      localStorage.setItem(DEFERRED_DEEP_LINK_CHECKED_KEY, 'error')
+      return {
+        status: 'error',
+        error: result.errorDescription || 'Deferred app link lookup failed',
+        ...diagnostics,
+        context,
+      }
+    }
     if (typeof result.url === 'string' && result.url) {
       localStorage.setItem(DEFERRED_DEEP_LINK_CHECKED_KEY, 'resolved')
-      return { status: 'resolved', url: result.url, context }
+      return { status: 'resolved', url: result.url, ...diagnostics, context }
     }
     localStorage.setItem(DEFERRED_DEEP_LINK_CHECKED_KEY, 'empty')
-    return { status: 'empty', context }
+    return { status: 'empty', ...diagnostics, context }
   } catch (error) {
     console.warn('[MetaAppEvents] deferred app link lookup failed:', error)
     try {

@@ -109,6 +109,10 @@ export default function MobileAppEventsBootstrap() {
               launch_source: 'first_launch',
               deferred_status: deferred.status,
               error_message: deferred.error?.slice(0, 200),
+              error_domain: deferred.errorDomain,
+              error_code: deferred.errorCode,
+              native_fetch_started_at: deferred.nativeFetchStartedAt,
+              native_fetch_latency_ms: deferred.nativeFetchLatencyMs,
               ...sdkParams(),
             }, createMetaEventId(`deferred.${deferred.status}`))
           }
