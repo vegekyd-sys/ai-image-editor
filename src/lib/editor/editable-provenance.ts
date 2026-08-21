@@ -228,6 +228,44 @@ function expressionFromAttribute(attribute: JSXAttribute | undefined): Expressio
   return null;
 }
 
+/**
+ * Recover the stable ids from the canonical marker emitted by the provenance
+ * compiler. Re-analyzing persisted code must not evaluate the marker call as
+ * ordinary JavaScript: its first argument is the rendered value (often a URL),
+ * while the second argument is the durable editable-id candidate list.
+ */
+function compilerEditableMarkerIds(expression: Expression): string[] | null {
+  if (expression.type !== 'CallExpression') return null;
+  const callee = expression.callee;
+  if (
+    callee.type !== 'MemberExpression'
+    || callee.computed
+    || callee.object.type !== 'Identifier'
+    || callee.object.name !== 'React'
+    || callee.property.type !== 'Identifier'
+    || callee.property.name !== '__makaronEditableId'
+  ) {
+    return null;
+  }
+  const candidates = expression.arguments[1];
+  if (!candidates || candidates.type !== 'ArrayExpression') return null;
+  const ids = candidates.elements.flatMap(candidate => {
+    if (!candidate || candidate.type !== 'ObjectExpression') return [];
+    for (const property of candidate.properties) {
+      if (property.type !== 'ObjectProperty' || property.computed) continue;
+      const key = property.key.type === 'Identifier'
+        ? property.key.name
+        : property.key.type === 'StringLiteral'
+          ? property.key.value
+          : null;
+      if (key !== 'id' || property.value.type !== 'StringLiteral') continue;
+      return property.value.value ? [property.value.value] : [];
+    }
+    return [];
+  });
+  return ids.length > 0 ? [...new Set(ids)] : null;
+}
+
 function sourceForNode(code: string, node: Node | null | undefined): string | null {
   if (!node || node.start == null || node.end == null) return null;
   return code.slice(node.start, node.end);
@@ -958,7 +996,12 @@ class ProvenanceAnalyzer {
     const site = `${component}:${element.start ?? element.loc?.start.line ?? tag}:${context}`;
     const explicit = expressionFromAttribute(attributeByName(element, 'data-editable'));
     const explicitValue = explicit ? this.evaluate(explicit, environment) : EMPTY_VALUE();
-    const explicitId = explicitValue.strings.size === 1 ? [...explicitValue.strings][0] : null;
+    const compilerMarkerIds = explicit ? compilerEditableMarkerIds(explicit) : null;
+    const explicitId = compilerMarkerIds?.length === 1
+      ? compilerMarkerIds[0]
+      : explicitValue.strings.size === 1
+        ? [...explicitValue.strings][0]
+        : null;
     const nodeId = explicitId ?? `node_${hashText(site)}`;
     const existingNode = this.nodes.get(nodeId);
     const bindingKeys = [...new Set([
@@ -1045,8 +1088,9 @@ class ProvenanceAnalyzer {
     const attribute = attributeByName(element, 'data-editable');
     const expression = expressionFromAttribute(attribute);
     if (!attribute || !expression) return inferred;
-    const marker = this.evaluate(expression, environment);
-    const ids = [...marker.strings].filter(Boolean);
+    const compilerMarkerIds = compilerEditableMarkerIds(expression);
+    const marker = compilerMarkerIds ? null : this.evaluate(expression, environment);
+    const ids = compilerMarkerIds ?? [...(marker?.strings ?? [])].filter(Boolean);
     if (ids.length === 0) return inferred;
     const explicit = EMPTY_VALUE();
     ids.forEach(id => {

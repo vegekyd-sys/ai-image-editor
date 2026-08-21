@@ -246,7 +246,7 @@ describe('design harness compile preflight', () => {
     expect(validateDesign(design)).toBeNull();
   });
 
-  it('still blocks legacy editable metadata with no visible owner', () => {
+  it('omits legacy editable metadata with no visible owner without blocking the composition', () => {
     const design = {
       code: 'function Composition() { return <AbsoluteFill />; }',
       props: { orphanTitle: 'Invisible title' },
@@ -255,7 +255,11 @@ describe('design harness compile preflight', () => {
       ],
     };
 
-    expect(validateDesign(design)).toContain('no JSX element has data-editable="orphanTitle"');
+    const report = validateDesignReport(design);
+    expect(report.blocking).toEqual([]);
+    expect(report.advisories.join('\n')).toContain('no JSX element has data-editable="orphanTitle"');
+    expect(design.editables).toEqual([]);
+    expect(validateDesign(design)).toBeNull();
   });
 });
 

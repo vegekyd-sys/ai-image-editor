@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { validateDesign, type DesignResult } from '@/lib/design-harness';
+import { validateDesign, validateDesignReport, type DesignResult } from '@/lib/design-harness';
 
 describe('editable media contract', () => {
   it('accepts a generated Remotion composition with text, image, and trim-ready video editables', () => {
@@ -151,8 +151,8 @@ describe('editable media contract', () => {
     expect(result).toBeNull();
   });
 
-  it('validates each active-scene media field against its own dynamic wrapper', () => {
-    const result = validateDesign({
+  it('drops an unmeasurable active-scene field without blocking the composition', () => {
+    const payload: DesignResult = {
       code: `function Composition(props) {
         const scene = props.sceneData[0];
         return (
@@ -178,9 +178,12 @@ describe('editable media contract', () => {
         { id: 'title0', type: 'text', label: 'Title', propKey: 'title0' },
         { id: 'image0', type: 'image', label: 'Image', propKey: 'image0' },
       ],
-    });
+    };
 
-    expect(result).toEqual(expect.stringMatching(/image0|measurable wrapper/i));
+    const report = validateDesignReport(payload);
+    expect(report.blocking).toEqual([]);
+    expect(report.advisories.join('\n')).toMatch(/image0|measurable wrapper/i);
+    expect(payload.editables?.map(field => field.id)).toEqual(['title0']);
   });
 
   it('infers active-scene fields omitted from legacy editable metadata', () => {
@@ -439,8 +442,8 @@ describe('editable media contract', () => {
     ]);
   });
 
-  it('rejects text editables that do not read from their prop key', () => {
-    const result = validateDesign({
+  it('keeps renderable text when editable ownership needs a fallback', () => {
+    const payload: DesignResult = {
       code: `function Design(props) {
         return (
           <AbsoluteFill>
@@ -452,9 +455,11 @@ describe('editable media contract', () => {
       editables: [
         { id: 'title', type: 'text', label: 'Title', propKey: 'title' },
       ],
-    });
+    };
 
-    expect(result).toEqual(expect.stringMatching(/props\.title|prop key|hardcoded/i));
+    const report = validateDesignReport(payload);
+    expect(report.blocking).toEqual([]);
+    expect(report.advisories.join('\n')).toMatch(/props\.title|prop key|hardcoded/i);
   });
 
   it('auto-lifts hardcoded rendered text arrays alongside media editables', () => {
@@ -658,8 +663,8 @@ describe('editable media contract', () => {
     expect(result).toEqual(expect.stringMatching(/durationInSeconds|1 second|30s|timeline duration/i));
   });
 
-  it('rejects image editables whose wrapper cannot be measured by Moveable', () => {
-    const result = validateDesign({
+  it('drops image editables whose wrapper cannot be measured by Moveable', () => {
+    const payload: DesignResult = {
       code: `function Design(props) {
         return (
           <AbsoluteFill>
@@ -673,13 +678,16 @@ describe('editable media contract', () => {
       editables: [
         { id: 'cover', type: 'image', label: 'Cover image', propKey: 'coverImage' },
       ],
-    });
+    };
 
-    expect(result).toEqual(expect.stringMatching(/measurable|width|height|inset|box/i));
+    const report = validateDesignReport(payload);
+    expect(report.blocking).toEqual([]);
+    expect(report.advisories.join('\n')).toMatch(/measurable|width|height|inset|box/i);
+    expect(payload.editables).toEqual([]);
   });
 
-  it('rejects video editables that declare trim keys but do not wire them to Video props', () => {
-    const result = validateDesign({
+  it('drops unwired trim metadata without blocking the video composition', () => {
+    const payload: DesignResult = {
       code: `function Design(props) {
         return (
           <AbsoluteFill>
@@ -710,8 +718,11 @@ describe('editable media contract', () => {
           trimAfterPropKey: 'heroVideoEnd',
         },
       ],
-    });
+    };
 
-    expect(result).toEqual(expect.stringMatching(/trimBefore|trimAfter|heroVideoStart|heroVideoEnd/));
+    const report = validateDesignReport(payload);
+    expect(report.blocking).toEqual([]);
+    expect(report.advisories.join('\n')).toMatch(/trimBefore|trimAfter|heroVideoStart|heroVideoEnd/);
+    expect(payload.editables).toEqual([]);
   });
 });

@@ -1,3 +1,6 @@
+import { parse } from '@babel/parser';
+import traverse from '@babel/traverse';
+import type { Expression, JSXAttribute } from '@babel/types';
 import type { EditableField } from '@/types';
 import {
   compileEditableManifest,
@@ -12,6 +15,7 @@ import {
 
 interface SourceInsertion {
   offset: number;
+  end?: number;
   text: string;
 }
 
@@ -30,10 +34,101 @@ function applyInsertions(code: string, insertions: SourceInsertion[]): string {
     .sort((a, b) => b.offset - a.offset)
     .reduce(
       (current, insertion) => (
-        `${current.slice(0, insertion.offset)}${insertion.text}${current.slice(insertion.offset)}`
+        `${current.slice(0, insertion.offset)}${insertion.text}${current.slice(insertion.end ?? insertion.offset)}`
       ),
       code,
     );
+}
+
+function staticEditableId(attribute: JSXAttribute | undefined): string | null {
+  if (!attribute?.value) return null;
+  if (attribute.value.type === 'StringLiteral') return attribute.value.value;
+  if (
+    attribute.value.type === 'JSXExpressionContainer'
+    && attribute.value.expression.type === 'StringLiteral'
+  ) {
+    return attribute.value.expression.value;
+  }
+  return null;
+}
+
+function expressionFromJsxAttribute(attribute: JSXAttribute | undefined): Expression | null {
+  if (
+    attribute?.value?.type === 'JSXExpressionContainer'
+    && attribute.value.expression.type !== 'JSXEmptyExpression'
+  ) {
+    return attribute.value.expression as Expression;
+  }
+  return null;
+}
+
+function isDirectPropRead(expression: Expression | null, propKey: string): boolean {
+  if (
+    expression?.type !== 'MemberExpression'
+    || expression.object.type !== 'Identifier'
+    || expression.object.name !== 'props'
+  ) {
+    return false;
+  }
+  if (!expression.computed && expression.property.type === 'Identifier') {
+    return expression.property.name === propKey;
+  }
+  return expression.computed
+    && expression.property.type === 'StringLiteral'
+    && expression.property.value === propKey;
+}
+
+/**
+ * A static editable id on a reusable media leaf is unsafe when its `src` is a
+ * helper parameter or another dynamic expression: every rendered instance can
+ * be claimed by the same id. Remove only that marker and let provenance infer
+ * the real per-source ids. Direct `src={props.<matching key>}` ownership and
+ * explicit wrapper ownership remain untouched.
+ */
+function removeUnsafeStaticMediaMarkers(
+  code: string,
+  editables?: EditableField[],
+): string {
+  let ast: ReturnType<typeof parse>;
+  try {
+    ast = parse(code, {
+      sourceType: 'unambiguous',
+      plugins: ['jsx', 'typescript'],
+    });
+  } catch {
+    return code;
+  }
+  const propKeyById = new Map((editables ?? []).map(field => [field.id, field.propKey]));
+  const removals: SourceInsertion[] = [];
+  traverse(ast, {
+    JSXOpeningElement(path) {
+      const opening = path.node;
+      if (
+        opening.name.type !== 'JSXIdentifier'
+        || !['Img', 'img', 'Video', 'video', 'OffthreadVideo'].includes(opening.name.name)
+      ) {
+        return;
+      }
+      const marker = opening.attributes.find((attribute): attribute is JSXAttribute => (
+        attribute.type === 'JSXAttribute'
+        && attribute.name.type === 'JSXIdentifier'
+        && attribute.name.name === 'data-editable'
+      ));
+      const id = staticEditableId(marker);
+      if (!marker || !id || marker.start == null || marker.end == null) return;
+      const src = opening.attributes.find((attribute): attribute is JSXAttribute => (
+        attribute.type === 'JSXAttribute'
+        && attribute.name.type === 'JSXIdentifier'
+        && attribute.name.name === 'src'
+      ));
+      const propKey = propKeyById.get(id) ?? id;
+      if (isDirectPropRead(expressionFromJsxAttribute(src), propKey)) return;
+      let offset = marker.start;
+      while (offset > 0 && /[ \t]/.test(code[offset - 1])) offset -= 1;
+      removals.push({ offset, end: marker.end, text: '' });
+    },
+  });
+  return removals.length > 0 ? applyInsertions(code, removals) : code;
 }
 
 function sourcePathParts(sourcePath: string): Array<string | number> | null {
@@ -174,7 +269,10 @@ function mergeFields(
 export function compileEditableManifestWithProvenance(
   input: EditableManifestInput,
 ): EditableManifestResult {
-  const legacy = compileEditableManifest(input);
+  const legacy = compileEditableManifest({
+    ...input,
+    code: removeUnsafeStaticMediaMarkers(input.code, input.editables),
+  });
   const provenance = analyzeEditableProvenance({
     code: legacy.code,
     props: input.props,

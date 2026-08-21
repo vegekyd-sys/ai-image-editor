@@ -131,4 +131,28 @@ describe('Editable provenance runtime integration', () => {
     expect(html).toContain('scale:1.2 1.2');
     expect(html).toContain('data-editable="clip2"');
   });
+
+  it('does not let one static marker replace every source in a reusable media helper', () => {
+    const props = {
+      strings: 'https://example.com/strings.mp4',
+      paint: 'https://example.com/paint.mp4',
+    };
+    const Component = compileDynamicDesignComponent(`
+      function Clip({ src }) {
+        return <Video data-editable="strings" src={src} />;
+      }
+      function Composition(props) {
+        const segments = [props.strings, props.paint];
+        return <div>{segments.map(src => <Clip key={src} src={src} />)}</div>;
+      }
+    `, { React, Video: 'video', Img: 'img' });
+    expect(Component).not.toBeNull();
+    if (!Component) throw new Error('Expected composition to compile');
+
+    const html = renderToStaticMarkup(<Component {...props} />);
+
+    expect(html).toContain('src="https://example.com/strings.mp4"');
+    expect(html).toContain('src="https://example.com/paint.mp4"');
+    expect(html.match(/data-editable="strings"/g)).toHaveLength(1);
+  });
 });

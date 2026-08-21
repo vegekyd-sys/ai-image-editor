@@ -14,8 +14,11 @@ export function normalizeLoadedDesignManifest(
     props,
     editables: design.editables,
   });
-  if (manifest.diagnostics.length > 0) return design;
 
+  // Editable discovery is intentionally partial and fail-soft. One ambiguous
+  // sink must not discard markers and aliases that were proven elsewhere in
+  // the same composition. Compiler diagnostics describe only the fields that
+  // remain non-editable; the visible composition stays authoritative.
   return {
     ...design,
     code: manifest.code,

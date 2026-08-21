@@ -273,6 +273,11 @@ Rules:
   editable advisories. Do not rewrite scenes merely to clear advisories. Make a
   local adjustment only when preview or coverage shows an intentional visible
   field is actually missing.
+- Editable coverage is opportunistic and fail-soft. Never patch otherwise
+  correct visual code only to satisfy editable metadata, never add one static
+  `data-editable` id to a reusable media helper, and never delay publishing for
+  an editable-only diagnostic. The harness keeps every proven field and safely
+  leaves uncertain fields non-editable.
 
 Ordinary reusable React components work without editor-specific parameters:
 
@@ -304,7 +309,8 @@ props, or an `editables` array to ordinary helpers.
 Use `data-editable` only for custom runtime ownership that coverage explicitly
 cannot infer. Put it on the real visual host, never on a full-canvas structural
 ancestor. Legacy explicit `editables` metadata remains accepted when patching
-an old composition, but new output should omit it.
+an old composition, but new output should omit it. If inference is incomplete,
+publish the correct composition with fewer editables instead of rewriting it.
 
 Video trim is non-destructive and belongs to the selected video node:
 
