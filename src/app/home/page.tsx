@@ -1498,7 +1498,7 @@ function HomePageInner() {
     localStorage.setItem('mkr_return_url', returnPath)
     sessionStorage.setItem('mkr_return_url', returnPath)
     setShowPreAuthIOSTrial(false)
-    window.location.href = '/login'
+    window.location.href = '/login?focus=email'
   }, [createInput.files, createInput.text, saveCreateDraftBeforeLogin])
 
   const handleCreateProject = useCallback(async (files: File[], prompt?: string): Promise<boolean> => {
@@ -1621,6 +1621,33 @@ function HomePageInner() {
   }, [createInput, homeSkills, installHomeSkill, router, user])
 
   const consumePreAuthTrialRef = useRef(false)
+  const retryPreAuthTrialClaimRef = useRef(false)
+  useEffect(() => {
+    if (!user || retryPreAuthTrialClaimRef.current) return
+    const continuation = readIOSPreAuthTrialContinuation()
+    if (!continuation?.confirmed || continuation.linked) return
+
+    retryPreAuthTrialClaimRef.current = true
+    fetch('/api/auth/complete', { method: 'POST' })
+      .then(async response => ({ response, data: await response.json().catch(() => ({})) }))
+      .then(({ response, data }) => {
+        if (!response.ok || !data.appleTrialClaimed) {
+          retryPreAuthTrialClaimRef.current = false
+          return
+        }
+        linkIOSPreAuthTrialContinuation()
+        writeNativeJSONCache('/api/billing/credits', {
+          balance: data.credits,
+          trialBalance: data.credits,
+        })
+        window.dispatchEvent(new Event('credits-updated'))
+        setTrialContinuationVersion(version => version + 1)
+      })
+      .catch(() => {
+        retryPreAuthTrialClaimRef.current = false
+      })
+  }, [user])
+
   useEffect(() => {
     if (!user || consumePreAuthTrialRef.current) return
     const continuation = readIOSPreAuthTrialContinuation()
@@ -1842,12 +1869,16 @@ function HomePageInner() {
   const isSkillAction = !!activeSkill
   const isGuestSkillAction = !renderUser && !!activeSkill
   const isPreAuthIOSSkillAction = isPreAuthIOSGuest && !!activeSkill
+  const iosTrialContinuation = isPreAuthIOSGuest ? readIOSPreAuthTrialContinuation() : null
+  const pendingIOSRegistration = Boolean(
+    iosTrialContinuation?.confirmed && !iosTrialContinuation.linked,
+  )
   const shouldLoginOnEmptyCreate = !renderUser && !activeSkill
   const formatPhotoCount = (count: number) => t('home.photoCount', count)
 
   const skillActionCreateLabel = isSkillAction
     ? isPreAuthIOSSkillAction
-      ? t('home.tryFree')
+      ? pendingIOSRegistration ? t('home.continueRegistration') : t('home.tryFree')
       : hasEnoughPhotos
       ? isGuestSkillAction ? t('home.previewFree') : t('home.create')
       : t('home.uploadPhoto')
@@ -1855,7 +1886,7 @@ function HomePageInner() {
 
   const skillActionTitle = isGuestSkillAction
     ? isPreAuthIOSSkillAction
-      ? t('home.trialSurpriseTitle')
+      ? pendingIOSRegistration ? t('home.subscriptionConfirmedTitle') : t('home.trialSurpriseTitle')
       : hasEnoughPhotos
       ? t('home.seeYourVersion')
       : selectedPhotoCount > 0
@@ -1908,6 +1939,12 @@ function HomePageInner() {
 
   const handleCreateOrUpload = useCallback(() => {
     if (isPreAuthIOSGuest) {
+      const continuation = readIOSPreAuthTrialContinuation()
+      if (continuation?.confirmed && !continuation.linked) {
+        if (activeSkill?.id) rememberIOSSkillReturn(activeSkill.id)
+        window.location.href = '/login?focus=email'
+        return
+      }
       beginPreAuthIOSTrial(activeSkill?.id)
       return
     }
@@ -1926,6 +1963,12 @@ function HomePageInner() {
 
   const handleInputSlotClick = useCallback(async () => {
     if (isPreAuthIOSGuest) {
+      const continuation = readIOSPreAuthTrialContinuation()
+      if (continuation?.confirmed && !continuation.linked) {
+        if (selectedDetail?.id) rememberIOSSkillReturn(selectedDetail.id)
+        window.location.href = '/login?focus=email'
+        return
+      }
       beginPreAuthIOSTrial(selectedDetail?.id)
       return
     }

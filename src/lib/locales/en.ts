@@ -455,6 +455,8 @@ const en = {
   'home.firstFree': 'First creation free',
   'home.trialSurpriseTitle': 'See what happens',
   'home.trialGiftNote': 'The first one is on Makaron',
+  'home.continueRegistration': 'Continue signup',
+  'home.subscriptionConfirmedTitle': 'Your trial is reserved',
   'home.photoCount': (n: number) => `${n} photo${n === 1 ? '' : 's'}`,
   'home.previewFree': 'Preview free',
   'home.seeYourVersion': 'See your version',

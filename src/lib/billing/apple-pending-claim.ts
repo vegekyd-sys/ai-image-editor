@@ -6,6 +6,7 @@ import {
   verifyAppleTransaction,
   type AppleApplyResult,
 } from './apple'
+import { IOS_TRIAL_DAYS } from './ios-trial'
 
 export const APPLE_PENDING_CLAIM_COOKIE = 'mkr_apple_trial_claim'
 export const APPLE_PENDING_CLAIM_MAX_AGE_SECONDS = 24 * 60 * 60
@@ -23,6 +24,7 @@ interface PendingClaimRow {
   expires_at: string
   claimed_by: string | null
   claimed_at: string | null
+  created_at: string
 }
 
 export interface PendingAppleTrialClaimResult {
@@ -128,7 +130,14 @@ export async function claimPendingAppleTrial(args: {
   }
 
   const transaction = await verifyAppleTransaction(pending.signed_transaction_info)
-  const verified = requireAppleBasicIntroTrial(transaction)
+  const environment = (pending.apple_environment || '').toLowerCase()
+  const acceleratedTestEnvironment = environment === 'sandbox'
+    || environment === 'xcode'
+    || environment === 'localtesting'
+    || environment === 'local_testing'
+  const verified = requireAppleBasicIntroTrial(transaction, {
+    allowExpired: acceleratedTestEnvironment,
+  })
   if (
     verified.originalTransactionId !== pending.apple_original_transaction_id
     || verified.transactionId !== pending.apple_transaction_id
@@ -140,12 +149,24 @@ export async function claimPendingAppleTrial(args: {
     throw new Error('Apple transaction account token does not match the authenticated user')
   }
 
+  const pendingCreatedAt = new Date(pending.created_at)
+  if (
+    acceleratedTestEnvironment
+    && (!Number.isFinite(pendingCreatedAt.getTime()) || pendingCreatedAt.getTime() >= verified.expiresAt.getTime())
+  ) {
+    throw new Error('Sandbox introductory trial was not active when the pending claim was created')
+  }
+  const trialCreditExpiresAt = acceleratedTestEnvironment && verified.expiresAt.getTime() <= Date.now()
+    ? new Date(Date.now() + IOS_TRIAL_DAYS * 24 * 60 * 60 * 1000)
+    : verified.expiresAt
+
   // Existing transaction/user uniqueness constraints make retries idempotent
   // and prevent one StoreKit purchase from crediting two Makaron accounts.
   const result = await applyAppleTransaction({
     userId: args.userId,
     transaction,
     grantCredits: true,
+    introTrialExpiresAtOverride: trialCreditExpiresAt,
   })
 
   if (!pending.claimed_at) {

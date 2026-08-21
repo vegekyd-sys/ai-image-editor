@@ -218,6 +218,37 @@ describe('Apple billing integration', () => {
     });
   });
 
+  it('keeps an accelerated Sandbox trial claim usable for three product days after signup', async () => {
+    mockSingle.mockResolvedValueOnce({ data: { value: '1500' }, error: null });
+    mockGetBalance.mockResolvedValue({ balance: 1500, lifetimePurchased: 0, lifetimeUsed: 0 });
+    const { applyAppleTransaction } = await import('@/lib/billing/apple');
+    const productExpiry = new Date(Date.now() + 3 * 24 * 60 * 60 * 1000);
+    const result = await applyAppleTransaction({
+      userId: '11111111-1111-4111-8111-111111111111',
+      transaction: transaction({
+        transactionId: 'sandbox-expired-trial',
+        originalTransactionId: 'sandbox-expired-trial',
+        productId: 'app.makaron.ios.subscription.basic.monthly',
+        offerType: 1,
+        expiresDate: Date.now() - 20_000,
+        environment: 'Sandbox',
+      }),
+      grantCredits: true,
+      introTrialExpiresAtOverride: productExpiry,
+    });
+
+    expect(mockUpsertAppleSubscription).toHaveBeenCalledWith(expect.objectContaining({
+      status: 'trialing',
+      currentPeriodEnd: productExpiry,
+    }));
+    expect(mockRpc).toHaveBeenCalledWith('grant_apple_credits_and_record_purchase', expect.objectContaining({
+      p_source: 'trial',
+      p_credits: 1500,
+      p_trial_expires_at: productExpiry.toISOString(),
+    }));
+    expect(result).toMatchObject({ credited: true, credits: 1500 });
+  });
+
   it('accepts only an active Basic monthly introductory offer before registration', async () => {
     const { requireAppleBasicIntroTrial } = await import('@/lib/billing/apple');
     const expiresDate = Date.now() + 3 * 24 * 60 * 60 * 1000;

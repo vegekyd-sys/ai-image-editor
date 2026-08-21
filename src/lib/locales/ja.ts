@@ -294,6 +294,8 @@ const ja = {
   'home.firstFree': '初回無料',
   'home.trialSurpriseTitle': '何が起きるか、見てみよう',
   'home.trialGiftNote': '最初の1回はMakaronから',
+  'home.continueRegistration': '登録を続ける',
+  'home.subscriptionConfirmedTitle': 'トライアルを確保しました',
   'home.photoCount': (n: number) => `写真${n}枚`,
   'home.previewFree': '無料でプレビュー',
   'home.seeYourVersion': 'あなたのバージョンを見る',

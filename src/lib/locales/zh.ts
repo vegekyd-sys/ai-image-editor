@@ -455,6 +455,8 @@ const zh = {
   'home.firstFree': '首次免费',
   'home.trialSurpriseTitle': '看看会发生什么',
   'home.trialGiftNote': '第一次，Makaron 请你',
+  'home.continueRegistration': '继续注册',
+  'home.subscriptionConfirmedTitle': '试用已经为你保留',
   'home.photoCount': (n: number) => `${n} 张照片`,
   'home.previewFree': '免费预览',
   'home.seeYourVersion': '看看你的版本',

@@ -164,6 +164,7 @@ export interface VerifiedAppleIntroTrial {
  */
 export function requireAppleBasicIntroTrial(
   transaction: JWSTransactionDecodedPayload,
+  options?: { allowExpired?: boolean },
 ): VerifiedAppleIntroTrial {
   const productId = transaction.productId
   const transactionId = transaction.transactionId
@@ -180,7 +181,11 @@ export function requireAppleBasicIntroTrial(
   if (transaction.offerType !== OfferType.INTRODUCTORY_OFFER) {
     throw new Error('Apple did not verify an introductory trial for this purchase')
   }
-  if (!expiresAt || !Number.isFinite(expiresAt.getTime()) || expiresAt.getTime() <= Date.now()) {
+  if (
+    !expiresAt
+    || !Number.isFinite(expiresAt.getTime())
+    || (!options?.allowExpired && expiresAt.getTime() <= Date.now())
+  ) {
     throw new Error('Apple introductory trial is missing a valid future expiry date')
   }
   if (transaction.revocationDate) {
@@ -266,6 +271,7 @@ export async function applyAppleTransaction(args: {
   userId: string
   transaction: JWSTransactionDecodedPayload
   grantCredits: boolean
+  introTrialExpiresAtOverride?: Date
 }): Promise<AppleApplyResult> {
   const { userId, transaction, grantCredits } = args
   const productId = transaction.productId
@@ -317,14 +323,22 @@ export async function applyAppleTransaction(args: {
   }
 
   const currentPeriodStart = transaction.purchaseDate ? new Date(transaction.purchaseDate) : null
-  const currentPeriodEnd = transaction.expiresDate ? new Date(transaction.expiresDate) : null
+  const receiptPeriodEnd = transaction.expiresDate ? new Date(transaction.expiresDate) : null
   const isIntroTrial = planMatch.plan.id === 'basic'
     && planMatch.interval === 'month'
     && transaction.offerType === OfferType.INTRODUCTORY_OFFER
-  if (isIntroTrial && !currentPeriodEnd) {
+  if (isIntroTrial && !receiptPeriodEnd) {
     throw new Error('Apple introductory trial is missing an expiry date')
   }
-  const status = baseStatus === 'active' && isIntroTrial ? 'trialing' : baseStatus
+  const overridePeriodEnd = args.introTrialExpiresAtOverride
+  if (overridePeriodEnd && (!Number.isFinite(overridePeriodEnd.getTime()) || overridePeriodEnd.getTime() <= Date.now())) {
+    throw new Error('Apple introductory trial override is not a valid future expiry date')
+  }
+  const currentPeriodEnd = isIntroTrial && overridePeriodEnd
+    ? overridePeriodEnd
+    : receiptPeriodEnd
+  const introTrialActive = isIntroTrial && Boolean(currentPeriodEnd && currentPeriodEnd.getTime() > Date.now())
+  const status = introTrialActive ? 'trialing' : baseStatus
 
   await upsertAppleSubscription({
     userId,

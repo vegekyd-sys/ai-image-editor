@@ -64,6 +64,7 @@ export default function LoginPage() {
 
   const supabaseRef = useRef<SupabaseClient | null>(null)
   const pageRef = useRef<HTMLDivElement | null>(null)
+  const emailRef = useRef<HTMLInputElement | null>(null)
   function getSupabase() {
     if (!supabaseRef.current) supabaseRef.current = createClient()
     return supabaseRef.current
@@ -100,6 +101,16 @@ export default function LoginPage() {
     const timer = setTimeout(() => setResendCooldown(c => c - 1), 1000)
     return () => clearTimeout(timer)
   }, [resendCooldown])
+
+  useEffect(() => {
+    if (!iosApp || view !== 'form') return
+    if (new URLSearchParams(window.location.search).get('focus') !== 'email') return
+    const timer = window.setTimeout(() => {
+      emailRef.current?.focus({ preventScroll: true })
+      if (emailRef.current) keepFocusedFieldVisible(emailRef.current)
+    }, 180)
+    return () => window.clearTimeout(timer)
+  }, [iosApp, view])
 
   function getReturnUrl(): string {
     const queryReturn = new URLSearchParams(window.location.search).get('next')
@@ -571,7 +582,7 @@ export default function LoginPage() {
 
 
             <form onSubmit={handleContinue} className="space-y-4">
-              <input type="email" placeholder={t('auth.email')} value={email} onFocus={(e) => keepFocusedFieldVisible(e.currentTarget)} onChange={(e) => { setEmail(e.target.value); setError('') }} required
+              <input ref={emailRef} type="email" inputMode="email" enterKeyHint="next" autoComplete="email" placeholder={t('auth.email')} value={email} onFocus={(e) => keepFocusedFieldVisible(e.currentTarget)} onChange={(e) => { setEmail(e.target.value); setError('') }} required
                 className="w-full px-4 py-3 rounded-lg bg-white/[0.07] text-white placeholder-white/30 border border-white/10 focus:border-fuchsia-500/50 focus:outline-none focus:ring-1 focus:ring-fuchsia-500/50 transition-colors" />
               <input type="password" placeholder={t('auth.password')} value={password} onFocus={(e) => keepFocusedFieldVisible(e.currentTarget)} onChange={(e) => { setPassword(e.target.value); setError('') }} required minLength={6}
                 className="w-full px-4 py-3 rounded-lg bg-white/[0.07] text-white placeholder-white/30 border border-white/10 focus:border-fuchsia-500/50 focus:outline-none focus:ring-1 focus:ring-fuchsia-500/50 transition-colors" />

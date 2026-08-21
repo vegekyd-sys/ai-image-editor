@@ -295,6 +295,8 @@ const zhHant = {
   'home.firstFree': '首次免費',
   'home.trialSurpriseTitle': '看看會發生什麼',
   'home.trialGiftNote': '第一次，Makaron 請你',
+  'home.continueRegistration': '繼續註冊',
+  'home.subscriptionConfirmedTitle': '試用已經為你保留',
   'home.photoCount': (n: number) => `${n} 張照片`,
   'home.previewFree': '免費預覽',
   'home.seeYourVersion': '看看你的版本',
