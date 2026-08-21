@@ -108,12 +108,27 @@ Available APIs include all exports from `remotion`, `@remotion/media`, `@remotio
   narration cue ends. Do not replace measured cue ranges with planned Script
   timing, estimated reading speed, or equal scene lengths. Wording, grouping,
   placement, typography, and motion remain specific to the current Composition.
+- When the active TikTok Skill uses its default audio route, every source
+  `<Video>` and `<OffthreadVideo>` must be explicitly silent with `volume={0}`
+  (or an equivalent deterministic mute). Use the one generated mixed VO+BGM
+  master as the only audible layer. Its persisted `transcribe_audio` cue sheet
+  drives spoken captions, linked scene ranges, and semantic visual beats;
+  planned Script timing or BGM rhythm cannot replace measured speech timing.
 - Each subtitle cue must have exactly one visible text host and one
   non-overlapping active range. Apply the caption background and border to that
   host, or use a wrapper that contains no second copy of the text. Never stack
   a raw caption, editable mirror, or duplicate subtitle track over the same cue.
   At each cue midpoint, confirm that one glyph silhouette is visible, not two
   slightly offset copies.
+- For narrated compositions, every non-empty `subtitleSyncEvidence` cue must
+  map to one actual spoken-caption host that renders the measured cue text.
+  Editorial hooks, scene labels, `Headline`, and `KineticTitle` components do
+  not satisfy spoken-caption coverage. Narration with an empty evidence array,
+  or evidence without a corresponding visible host, must be repaired before
+  publish.
+- Keyword emphasis must select text inside that spoken cue. A boolean accent
+  that recolors the entire caption host is not semantic word emphasis; keep
+  ordinary words quieter and make the chosen substring visibly distinct.
 - Multi-line subtitles must also be collision-free inside that one host after
   the intended font has loaded at final canvas size. Neighboring glyph rows may
   not touch or overprint, and a cloned per-line background, pill, border, or
@@ -122,16 +137,49 @@ Available APIs include all exports from `remotion`, `@remotion/media`, `@remotio
   authored line break, or backing-shape strategy instead of introducing one
   global line-height constant or universal caption renderer. Verify the stable
   dense frame and the largest animated state, not only the cue data.
+- Long single-line subtitles must fit completely inside their platform-safe
+  bounds at the settled final font metrics. Do not use `whiteSpace: 'nowrap'`
+  or off-canvas overflow to preserve prose on one line; author a break or adjust
+  the local measure and type size. Preview the stable midpoint of every spoken
+  cue, including the longest single-line cue, rather than sampling only scenes.
+- Do not put `box-decoration-break: clone` around auto-wrapped subtitle prose
+  unless final-resolution preview proves the cloned padding/background cannot
+  cover neighboring glyph rows. Prefer one block backing shape or explicit
+  authored lines when separate per-line shapes are part of the direction.
+- A black subtitle plaque, colored left rail, lower-left anchor, Inter-like
+  grotesk, or repeated pop is never a default package. Use any of them only
+  when the current concept earns it; do not reproduce the same combined
+  caption treatment across unrelated compositions.
+- Interactive Player typography is provisional until the pinned font resources
+  used by server/Lambda rendering have settled. Use `preview_frame` for the
+  Agent's composition gate because it waits for those pinned resources. Studio
+  MP4 export completes asynchronously after the Agent turn, so do not pretend
+  to extract final frames before they exist. Batch, CLI, human, or later-turn
+  acceptance should extract every spoken cue midpoint, including corresponding
+  long single-line, multi-line, and backed-caption frames, from the encoded MP4.
+  If they differ from settled Preview, repair the same
+  editable Composition and materialize again; render success is not typography
+  acceptance.
+- Closing copy, CTA, or a final reveal must reach its completed state before the
+  timeline ends. Preview the last visible frame and the frame half a second
+  earlier; do not approve a close whose animation merely runs out of frames.
 - Visible line breaks must render as line breaks, never as the two characters
-  `\\n`. The shared Preview/export runtime normalizes both escaped and real
-  newlines at DOM text leaves; still verify the densest text frame because line
-  count changes the element's bounding box and platform-safe placement.
+  `\\n`. Store intended breaks as actual line feeds or explicit authored lines,
+  not backslash escapes in editable props. The shared Preview/export runtime
+  normalizes escaped newlines at renderer input and DOM text leaves as a safety
+  net, but the resolved props and closing frame still require review because
+  line count changes the element's bounding box and platform-safe placement.
 - Prefer Remotion `<Video>` or `<OffthreadVideo>`. Lowercase HTML `<video>` is
   also accepted and normalized by the harness to the injected,
   frame-synchronized `<Video>` component.
 - Decoder selection is owned by the preview/export runtime, independent of
   whether the source used `<Video>` or `<OffthreadVideo>`.
 - Use `<Sequence>` for every scene or clip so media mounts only when needed.
+- At every scene join, ensure the outgoing and incoming visual layers cover
+  their complete declared frame ranges after `trimBefore`, `trimAfter`, and
+  `playbackRate` are applied. Preview the frames on both sides of each join;
+  rounding or an exhausted media range must not expose an accidental black
+  frame between otherwise full-bleed scenes.
 - `useCurrentFrame()` inside a `<Sequence>` is already local to that Sequence.
   Do not subtract the Sequence's `from` value again; doing so keeps later-scene
   overlays at negative time and can silently hide every title/subtitle after

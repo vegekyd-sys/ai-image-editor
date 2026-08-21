@@ -29,6 +29,7 @@
 			<string>app.makaron.ios</string>
 			<key>CFBundleURLSchemes</key>
 			<array>
+				<string>fb1690601878920639</string>
 				<string>makaron</string>
 				<string>app.makaron.ios</string>
 			</array>

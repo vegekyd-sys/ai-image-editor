@@ -1,4 +1,5 @@
 {
-  "runtimeVersion": "remotion-font-runtime-r7-legacy-platform-fonts",
-  "fontCatalogVersion": "makaron-fonts-r1"
+  "runtimeVersion": "remotion-font-runtime-r8-editable-provenance",
+  "fontCatalogVersion": "makaron-fonts-r1",
+  "editableRuntimeVersion": "remotion-editable-runtime-r1-provenance-id"
 }

@@ -7,6 +7,7 @@
 import type { DesignPayload } from '@/types';
 import { hasRemotionAudioSources } from '@/lib/remotion-audio';
 import { resolveRemotionFontManifestUrl } from '@/lib/remotion-font-manifest';
+import { normalizeRemotionTextValue } from '@/lib/remotion-text-normalization';
 
 function readEnv(name: string): string | undefined {
   const value = process.env[name]?.replace(/\\[rn]|[\r\n]/g, '').trim();
@@ -129,7 +130,7 @@ export async function renderDesignFrame(
         compositionId: 'dynamic-design',
         inputProps: {
           code: prepareRemotionCodeForSandbox(design.code),
-          designProps: design.props || {},
+          designProps: normalizeRemotionTextValue(design.props || {}),
           fps,
           durationInFrames,
           width: design.width || 1080,
@@ -215,7 +216,7 @@ export async function renderDesignVideo(
         compositionId: 'dynamic-design',
         inputProps: {
           code: prepareRemotionCodeForSandbox(design.code),
-          designProps: design.props || {},
+          designProps: normalizeRemotionTextValue(design.props || {}),
           fps,
           durationInFrames,
           width: design.width || 1080,

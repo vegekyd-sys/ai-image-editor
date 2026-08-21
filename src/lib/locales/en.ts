@@ -78,6 +78,7 @@ const en = {
   'changelog.tiktokVideoSkill.title': 'TikTok-Native Video Skill',
   'changelog.tiktokVideoSkill.item1': 'The new TikTok Skill gives Agent-made vertical videos creator-native hooks, pacing, captions, packaging, and platform-aware placement while keeping every composition visually authored.',
   'changelog.tiktokVideoSkill.item2': 'Spoken captions now follow the meaning and delivery of the final voiceover, with precise word timing used for synchronization instead of mechanically chopping lines by length.',
+  'changelog.tiktokVideoSkill.item3': 'TikTok videos now mute source audio by default and use the real spoken timing from one finished VO + BGM soundtrack to synchronize visuals, captions, and keyword highlights.',
   'changelog.sourcePlayback.title': 'Smoother Source Video Playback',
   'changelog.sourcePlayback.item1': 'Source URL compositions now pause the timeline while buffering and prewarm the next trimmed clip, reducing black frames, stray shots, and cut stutters.',
   'changelog.sourcePlayback.item2': 'Playback now starts reliably on the first tap while bounded iOS decoder warmup keeps long multi-clip projects from showing captions without video or crashing Safari.',

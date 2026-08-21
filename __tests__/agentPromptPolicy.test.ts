@@ -1,11 +1,11 @@
 import { describe, expect, it } from 'vitest'
-import { readFileSync } from 'fs'
 import path from 'path'
+import { readAgentAwareSource } from './helpers/agentRuntimeSource'
 
 const root = path.resolve(__dirname, '..')
 
 function read(rel: string) {
-  return readFileSync(path.join(root, rel), 'utf8')
+  return readAgentAwareSource(root, rel)
 }
 
 describe('agent prompt policy guards', () => {
@@ -89,11 +89,11 @@ describe('agent prompt policy guards', () => {
     const agentTs = read('src/lib/agent.ts')
     const audio = read('src/lib/prompts/audio.md')
 
-    expect(agentTs).toContain('generate_audio: tool({')
+    expect(agentTs).toContain('function createGenerateAudioTool(')
     expect(agentTs).toContain('kind: z.enum([\'voiceover\', \'dialogue\', \'music\', \'sound_design\', \'mixed\'])')
-    expect(agentTs).not.toContain('generate_voiceover: tool({')
-    expect(agentTs).not.toContain('list_voiceover_voices: tool({')
-    expect(agentTs).not.toContain('generate_music: tool({')
+    expect(agentTs).not.toContain('function createGenerateVoiceoverTool(')
+    expect(agentTs).not.toContain('function createListVoiceoverVoicesTool(')
+    expect(agentTs).not.toContain('function createGenerateMusicTool(')
     expect(audio).toContain('Use `kind: "voiceover"` only when')
     expect(audio).toContain('Voice Performance Brief')
     expect(audio).toContain('do not switch providers')
@@ -198,6 +198,19 @@ describe('agent prompt policy guards', () => {
     expect(image).toContain('backend no longer injects the full template automatically')
     expect(agentTs).not.toContain('template rules are auto-injected')
     expect(agentTs).toContain('you must have read and internalized that skill prompt once')
+  })
+
+  it('leaves named-platform Skill selection to general Agent routing instead of backend keyword rules', () => {
+    const agent = read('src/lib/prompts/agent.md')
+    const agentTs = read('src/lib/agent.ts')
+
+    expect(agent).toContain('explicitly named destination, platform, format, or installed Skill')
+    expect(agent).toContain('read the destination-specific Skill first')
+    expect(agent).toContain('it may then delegate to the generic workflow')
+    expect(agent).toContain('Exercise this routing judgment in the Agent')
+    expect(agent).toContain('do not wait for backend keyword rules')
+    expect(agentTs).not.toContain('getImplicitSkillSystemDirective')
+    expect(agentTs).not.toContain('implicit-skill-routing')
   })
 
   it('requires script confirmation before video provider submission unless direct-submit is explicit', () => {

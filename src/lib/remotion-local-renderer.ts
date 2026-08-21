@@ -8,6 +8,7 @@ import { bundle } from '@remotion/bundler'
 import { renderMedia, selectComposition } from '@remotion/renderer'
 import type { DesignPayload } from '@/types'
 import { hasRemotionAudioSources } from '@/lib/remotion-audio'
+import { normalizeRemotionTextValue } from '@/lib/remotion-text-normalization'
 import { resolveRemotionFontManifestUrl } from '@/lib/remotion-font-manifest'
 
 let bundlePromise: Promise<string> | null = null
@@ -306,7 +307,7 @@ export async function renderDesignVideoLocal(
 
   const inputProps = {
     code: prepareRemotionCodeForLocalRenderer(resolvedDesign.code),
-    designProps: resolvedDesign.props || {},
+    designProps: normalizeRemotionTextValue(resolvedDesign.props || {}),
     fps,
     durationInFrames,
     width: resolvedDesign.width || 1080,

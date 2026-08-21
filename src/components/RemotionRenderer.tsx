@@ -421,6 +421,7 @@ export default function RemotionRenderer({
         ]);
 
         let comp: React.ComponentType<Record<string, unknown>>;
+        let fontsSettled = true;
         if (fontResult?.component) {
           comp = fontResult.component;
         } else {
@@ -433,20 +434,30 @@ export default function RemotionRenderer({
             resolvedCode,
             designPropsRef.current,
           );
+          fontsSettled = false;
           if (fontResult?.error) {
             reportPreviewFailureRef.current('font-load', fontResult.error, { recovered: true });
+            fontsSettled = true;
           } else {
             void fontCompile.then(result => {
+              if (cancelled) return;
               if (result.error && isRecoverableRemotionPreviewError(result.error)) {
                 reportPreviewFailureRef.current('font-load', result.error, { recovered: true });
               }
+              // Keep the mounted Player/media nodes, but do not present the
+              // interactive preview as ready until the same pinned FontFace
+              // resources used by server/Lambda export have settled. The
+              // deferred component already references those versioned family
+              // names, so registering the faces reflows it in place without
+              // resetting playback.
+              onLoading?.(false);
             });
           }
         }
         if (cancelled) { blobUrls.forEach(url => URL.revokeObjectURL(url)); return; }
         setCompileError(null);
         setComponent(() => comp);
-        onLoading?.(false);
+        if (fontsSettled) onLoading?.(false);
       } catch (e) {
         if (cancelled) return;
         const msg = e instanceof Error ? e.message : String(e);

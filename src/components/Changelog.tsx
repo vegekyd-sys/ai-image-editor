@@ -28,7 +28,7 @@ const CHANGELOG: ChangelogEntry[] = [
     localeKey: 'smarterEditableDiscovery',
   },
   {
-    date: '2026-08-13',
+    date: '2026-08-19',
     localeKey: 'tiktokVideoSkill',
   },
   {
@@ -978,6 +978,7 @@ const LOCALIZED_CHANGELOG_KEYS = {
     items: [
       'changelog.tiktokVideoSkill.item1',
       'changelog.tiktokVideoSkill.item2',
+      'changelog.tiktokVideoSkill.item3',
     ],
   },
   sourcePlayback: {

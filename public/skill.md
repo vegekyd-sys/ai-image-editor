@@ -85,7 +85,11 @@ npx makaron-cli chat --project auto --image photo.jpg --json -b "make it cinemat
 npx makaron-cli chat --project auto --image img1.jpg --image img2.jpg --json -b "combine these"
 ```
 
-`chat` always routes agent, image, and video models automatically. Never pass `--agent-model`, `--image-model`, `--video-model`, or the legacy `--model` flag to `chat`; the CLI rejects them before starting a run. Model flags remain available only on explicit low-level commands such as `edit` and `video create`.
+`chat` routes image and video models automatically. Use `--agent-model` only when the user explicitly asks to select or compare the reasoning/tool-calling Agent LLM. Accepted values are exactly `auto`, `gpt-5.6-terra`, `gpt-5.6-sol`, `gpt-5.6-luna`, `grok-4.5`, and `deepseek-v4-pro`; `auto` currently resolves to `gpt-5.6-terra`. Never put an image or video model ID in `--agent-model`. The CLI rejects unknown Agent IDs plus `--image-model`, `--video-model`, and legacy `--model` before starting a chat run.
+
+```bash
+npx makaron-cli chat --project auto --agent-model deepseek-v4-pro --json -b "make a 20s badminton video"
+```
 
 Returns immediately:
 ```json

@@ -1,9 +1,11 @@
 import { randomUUID } from 'node:crypto'
 import type { DesignPayload } from '@/types'
 import { hasRemotionAudioSources } from '@/lib/remotion-audio'
+import { normalizeRemotionTextValue } from '@/lib/remotion-text-normalization'
 import { resolveRemotionLambdaEncodingSettings } from '@/lib/remotion-encoding'
 import { prepareRemotionCodeForSandbox } from '@/lib/remotion-server'
 import { resolveRemotionFontManifestUrl } from '@/lib/remotion-font-manifest'
+import { REMOTION_EDITABLE_RUNTIME_VERSION } from '@/lib/editor/editable-react-runtime'
 import {
   REMOTION_FONT_CATALOG_VERSION,
   REMOTION_FONT_RUNTIME_VERSION,
@@ -147,6 +149,24 @@ export function resolveRemotionLambdaVideoFlags(
 
 const runtimeMarkerCache = new Map<string, Promise<void>>()
 
+export function assertRemotionRuntimeMarker(
+  marker: unknown,
+  serveUrl: string,
+): void {
+  const value = marker && typeof marker === 'object'
+    ? marker as Record<string, unknown>
+    : {}
+  if (value.runtimeVersion !== REMOTION_FONT_RUNTIME_VERSION
+    || value.fontCatalogVersion !== REMOTION_FONT_CATALOG_VERSION
+    || value.editableRuntimeVersion !== REMOTION_EDITABLE_RUNTIME_VERSION) {
+    throw new Error(
+      `Remotion render site version mismatch: ${serveUrl}. `
+      + `Expected ${REMOTION_FONT_RUNTIME_VERSION}/${REMOTION_FONT_CATALOG_VERSION}`
+      + `/${REMOTION_EDITABLE_RUNTIME_VERSION}.`,
+    )
+  }
+}
+
 async function assertPinnedRemotionRuntime(serveUrl: string): Promise<void> {
   const markerUrl = new URL('public/remotion-runtime.json', serveUrl).href
   let pending = runtimeMarkerCache.get(markerUrl)
@@ -159,14 +179,7 @@ async function assertPinnedRemotionRuntime(serveUrl: string): Promise<void> {
           + 'Deploy the current Remotion runtime and update REMOTION_LAMBDA_SERVE_URL.',
         )
       }
-      const marker = await response.json() as Record<string, unknown>
-      if (marker.runtimeVersion !== REMOTION_FONT_RUNTIME_VERSION
-        || marker.fontCatalogVersion !== REMOTION_FONT_CATALOG_VERSION) {
-        throw new Error(
-          `Remotion render site version mismatch: ${serveUrl}. `
-          + `Expected ${REMOTION_FONT_RUNTIME_VERSION}/${REMOTION_FONT_CATALOG_VERSION}.`,
-        )
-      }
+      assertRemotionRuntimeMarker(await response.json(), serveUrl)
     })()
     runtimeMarkerCache.set(markerUrl, pending)
   }
@@ -190,6 +203,17 @@ function readPositiveInteger(value: string | undefined, fallback: number): numbe
 // Cross-composition benchmark default. Keep experiments behind the env override
 // instead of retuning the product default from a single composition.
 const DEFAULT_FRAMES_PER_LAMBDA = 20
+const MAX_LAMBDAS_PER_RENDER = 200
+
+export function resolveFramesPerLambda(
+  durationInFrames: number,
+  configuredFramesPerLambda = DEFAULT_FRAMES_PER_LAMBDA,
+): number {
+  return Math.max(
+    Math.max(1, Math.round(configuredFramesPerLambda)),
+    Math.ceil(Math.max(1, durationInFrames) / MAX_LAMBDAS_PER_RENDER),
+  )
+}
 
 function readBooleanEnv(name: string): boolean {
   const value = readEnv(name)
@@ -458,7 +482,10 @@ export async function renderDesignVideoLambdaToUrl(
     : undefined
   const framesPerLambda = concurrency
     ? undefined
-    : readPositiveInteger(readEnv('REMOTION_LAMBDA_FRAMES_PER_LAMBDA'), DEFAULT_FRAMES_PER_LAMBDA)
+    : resolveFramesPerLambda(
+        durationInFrames,
+        readPositiveInteger(readEnv('REMOTION_LAMBDA_FRAMES_PER_LAMBDA'), DEFAULT_FRAMES_PER_LAMBDA),
+      )
   const pollMs = readPositiveInteger(readEnv('REMOTION_LAMBDA_POLL_MS'), 1000)
   const x264Preset = readX264Preset()
   const jpegQuality = readPositiveInteger(readEnv('REMOTION_LAMBDA_JPEG_QUALITY'), 80)
@@ -487,7 +514,7 @@ export async function renderDesignVideoLambdaToUrl(
       composition: 'dynamic-design',
       inputProps: {
         code: preparedCode,
-        designProps: design.props || {},
+        designProps: normalizeRemotionTextValue(design.props || {}),
         fps,
         durationInFrames,
         width: design.width || 1080,

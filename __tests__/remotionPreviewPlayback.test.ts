@@ -182,6 +182,9 @@ describe('Remotion preview playback contract', () => {
     expect(rendererSource).toContain('A slow font manifest must not make the preview play button inert')
     expect(rendererSource).toContain('The Player and media nodes stay mounted')
     expect(rendererSource).not.toContain('void fontCompile.then(result => {\n              if (result.component) setComponent')
+    expect(rendererSource).toContain('do not present the\n              // interactive preview as ready until the same pinned FontFace')
+    expect(rendererSource).toContain('if (fontsSettled) onLoading?.(false)')
+    expect(rendererSource).toContain('void fontCompile.then(result => {\n              if (cancelled) return;')
     expect(rendererSource).toContain('isRecoverableRemotionPreviewError')
     expect(rendererSource).toContain("reportPreviewFailureRef.current('font-load'")
     expect(rendererSource).toContain('recovered: true')
@@ -215,7 +218,7 @@ describe('Remotion preview playback contract', () => {
     expect(sandboxSource).toContain("return names[names.length - 1] || 'Design'")
 
     expect(serverSource).toContain('prepareRemotionCodeForSandbox(design.code)')
-    expect(serverSource).toContain('designProps: design.props || {}')
+    expect(serverSource).toContain('designProps: normalizeRemotionTextValue(design.props || {})')
     expect(serverSource).not.toContain('remoteImageToDataUrl')
     expect(serverSource).not.toContain('resolveRemoteImagesForSandbox')
   })

@@ -26,7 +26,7 @@ If a task combines timeline images, pass `reference_media_indices`. Keep timelin
 
 Use the smallest capable workflow.
 
-The skill manifest routes clear matches: read `skills/NAME/SKILL.md`; that Skill owns its workflow. Video routes by the selected model's duration limit first: SeeDance 2.0 is <=15s, while an explicitly selected SeeDance 2.5 generation may be 4-30s. Longer requests may activate a matching Skill.
+The skill manifest routes clear matches: read `skills/NAME/SKILL.md`; that Skill owns its workflow. Treat an explicitly named destination, platform, format, or installed Skill as a clear semantic match and read the best matching Skill before choosing the workflow. When a destination-specific Skill and a generic source/workflow Skill both fit, read the destination-specific Skill first; it may then delegate to the generic workflow. Exercise this routing judgment in the Agent; do not wait for backend keyword rules to select a Skill. Video routes by the selected model's duration limit first: SeeDance 2.0 is <=15s, while an explicitly selected SeeDance 2.5 generation may be 4-30s. Longer requests may activate a matching Skill.
 
 For `[Active skill: NAME]`, read `skills/NAME/SKILL.md` first and follow it. Internal adapters may be absent from the manifest. `long-video-director` remains authoritative.
 
