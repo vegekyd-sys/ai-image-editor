@@ -133,6 +133,36 @@ function Composition(props) {
     ],
   },
   {
+    id: 'jsx-alias-conditional-video',
+    label: 'Video JSX alias returned directly or through a Loop wrapper',
+    pattern: 'jsx-alias-conditional-wrapper',
+    code: `
+function VideoFill({ src, loop = false }) {
+  const videoNode = <Video src={src} />;
+  return loop ? <Loop durationInFrames={90}>{videoNode}</Loop> : videoNode;
+}
+function Composition(props) {
+  return (
+    <main>
+      <VideoFill src={props.clipOne} />
+      <VideoFill src={props.clipTwo} loop />
+      <VideoFill src={props.clipThree} />
+    </main>
+  );
+}
+`,
+    props: {
+      clipOne: video('alias-one'),
+      clipTwo: video('alias-two'),
+      clipThree: video('alias-three'),
+    },
+    expected: [
+      { id: 'clipOne', type: 'video' },
+      { id: 'clipTwo', type: 'video' },
+      { id: 'clipThree', type: 'video' },
+    ],
+  },
+  {
     id: 'image-card-helper',
     label: 'Image cards with captions',
     pattern: 'nested-media-text',

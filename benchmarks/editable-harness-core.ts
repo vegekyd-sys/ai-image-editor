@@ -135,6 +135,7 @@ function compileBenchmarkComponent(
       Video: 'video',
       OffthreadVideo: 'video',
       Img: 'img',
+      Loop: ({ children }: { children?: React.ReactNode }) => children,
     };
     const authoredModule = { exports: {} as Record<string, unknown> };
     const factory = new Function(

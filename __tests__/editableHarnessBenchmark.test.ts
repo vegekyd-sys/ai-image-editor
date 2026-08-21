@@ -6,7 +6,7 @@ describe('Editable Harness benchmark release gates', () => {
   it('keeps coverage high without adding editable repair pressure for the Agent', () => {
     const report = runEditableHarnessBenchmark(EDITABLE_HARNESS_BENCHMARK_CORPUS);
 
-    expect(report.summary.cases).toBe(12);
+    expect(report.summary.cases).toBe(13);
     expect(report.summary.gates).toEqual({
       weightedCoverage: true,
       textCoverage: true,

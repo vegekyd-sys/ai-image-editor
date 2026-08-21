@@ -24,6 +24,8 @@ interface ProvenanceValue {
   origins: Map<string, ProvenanceOrigin>;
   strings: Set<string>;
   numbers: Set<number>;
+  /** JSX stored in a local alias, for example `const video = <Video src={src} />`. */
+  renderables?: RenderableNode[];
   members?: Map<string, ProvenanceValue>;
   items?: ProvenanceValue[];
   unknown?: boolean;
@@ -72,6 +74,7 @@ function cloneValue(value: ProvenanceValue): ProvenanceValue {
     origins: new Map(value.origins),
     strings: new Set(value.strings),
     numbers: new Set(value.numbers),
+    ...(value.renderables ? { renderables: [...value.renderables] } : {}),
     ...(value.members ? { members: new Map(value.members) } : {}),
     ...(value.items ? { items: [...value.items] } : {}),
     ...(value.unknown ? { unknown: true } : {}),
@@ -82,12 +85,14 @@ function mergeValues(values: Array<ProvenanceValue | null | undefined>): Provena
   const result = EMPTY_VALUE();
   const memberValues = new Map<string, ProvenanceValue[]>();
   const itemValues: ProvenanceValue[] = [];
+  const renderables: RenderableNode[] = [];
   for (const value of values) {
     if (!value) continue;
     value.origins.forEach((origin, key) => result.origins.set(key, origin));
     value.strings.forEach(value => result.strings.add(value));
     value.numbers.forEach(value => result.numbers.add(value));
     if (value.unknown) result.unknown = true;
+    if (value.renderables) renderables.push(...value.renderables);
     value.members?.forEach((member, key) => {
       const existing = memberValues.get(key) ?? [];
       existing.push(member);
@@ -101,6 +106,7 @@ function mergeValues(values: Array<ProvenanceValue | null | undefined>): Provena
     );
   }
   if (itemValues.length > 0) result.items = itemValues;
+  if (renderables.length > 0) result.renderables = [...new Set(renderables)];
   return result;
 }
 
@@ -450,6 +456,9 @@ class ProvenanceAnalyzer {
         return literalValue(node.value);
       case 'NullLiteral':
         return EMPTY_VALUE();
+      case 'JSXElement':
+      case 'JSXFragment':
+        return { ...EMPTY_VALUE(), renderables: [node] };
       case 'TemplateLiteral':
         return mergeValues([
           ...node.quasis.map(quasi => literalValue(quasi.value.cooked ?? quasi.value.raw)),
@@ -828,7 +837,18 @@ class ProvenanceAnalyzer {
           }
         });
       }
+      return;
     }
+
+    // React authors commonly assign JSX to a local variable before wrapping or
+    // conditionally returning it. Preserve that renderable identity so media
+    // provenance is not lost merely because `<Video>` is one alias away.
+    const aliased = this.evaluate(node, environment).renderables ?? [];
+    aliased.forEach(renderable => {
+      if (renderable !== node) {
+        this.processRenderable(renderable, environment, component, `${context}:alias`);
+      }
+    });
   }
 
   private expressionRendersElements(node: Node): boolean {
@@ -1012,7 +1032,10 @@ class ProvenanceAnalyzer {
       } else if (
         child.type === 'JSXExpressionContainer'
         && child.expression.type !== 'JSXEmptyExpression'
-        && this.expressionRendersElements(child.expression)
+        && (
+          this.expressionRendersElements(child.expression)
+          || (this.evaluate(child.expression, environment).renderables?.length ?? 0) > 0
+        )
       ) {
         // Remotion structural components such as AbsoluteFill and Sequence are
         // runtime scope values rather than locally declared functions. Their
@@ -1050,7 +1073,12 @@ class ProvenanceAnalyzer {
         );
       }
     });
-    const site = `${component}:${element.start ?? element.loc?.start.line ?? tag}:${context}`;
+    // The same aliased JSX node can be reachable through both sides of a
+    // conditional (`loop ? <Loop>{video}</Loop> : video`). Branch labels are
+    // traversal details, not separate runtime hosts. Keep call/map identity but
+    // collapse duplicate visits to the same authored element.
+    const stableContext = context.replace(/:(?:then|else|logical|alias)\b/g, '');
+    const site = `${component}:${element.start ?? element.loc?.start.line ?? tag}:${stableContext}`;
     const explicit = expressionFromAttribute(attributeByName(element, 'data-editable'));
     const explicitValue = explicit ? this.evaluate(explicit, environment) : EMPTY_VALUE();
     const compilerMarkerIds = explicit ? compilerEditableMarkerIds(explicit) : null;
