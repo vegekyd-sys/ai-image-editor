@@ -24,6 +24,8 @@ interface ProvenanceValue {
   origins: Map<string, ProvenanceOrigin>;
   strings: Set<string>;
   numbers: Set<number>;
+  /** Original authored literals retained through presentation transforms such as split(). */
+  literalRoots?: Set<string>;
   /** JSX stored in a local alias, for example `const video = <Video src={src} />`. */
   renderables?: RenderableNode[];
   members?: Map<string, ProvenanceValue>;
@@ -74,6 +76,7 @@ function cloneValue(value: ProvenanceValue): ProvenanceValue {
     origins: new Map(value.origins),
     strings: new Set(value.strings),
     numbers: new Set(value.numbers),
+    ...(value.literalRoots ? { literalRoots: new Set(value.literalRoots) } : {}),
     ...(value.renderables ? { renderables: [...value.renderables] } : {}),
     ...(value.members ? { members: new Map(value.members) } : {}),
     ...(value.items ? { items: [...value.items] } : {}),
@@ -86,6 +89,7 @@ function mergeValues(values: Array<ProvenanceValue | null | undefined>): Provena
   const memberValues = new Map<string, ProvenanceValue[]>();
   const itemValues: ProvenanceValue[] = [];
   const renderables: RenderableNode[] = [];
+  const literalRoots = new Set<string>();
   for (const value of values) {
     if (!value) continue;
     value.origins.forEach((origin, key) => result.origins.set(key, origin));
@@ -93,6 +97,7 @@ function mergeValues(values: Array<ProvenanceValue | null | undefined>): Provena
     value.numbers.forEach(value => result.numbers.add(value));
     if (value.unknown) result.unknown = true;
     if (value.renderables) renderables.push(...value.renderables);
+    value.literalRoots?.forEach(root => literalRoots.add(root));
     value.members?.forEach((member, key) => {
       const existing = memberValues.get(key) ?? [];
       existing.push(member);
@@ -107,6 +112,7 @@ function mergeValues(values: Array<ProvenanceValue | null | undefined>): Provena
   }
   if (itemValues.length > 0) result.items = itemValues;
   if (renderables.length > 0) result.renderables = [...new Set(renderables)];
+  if (literalRoots.size > 0) result.literalRoots = literalRoots;
   return result;
 }
 
@@ -177,7 +183,10 @@ function valueFromConcrete(value: unknown, path: Array<string | number>): Proven
 
 function literalValue(value: unknown): ProvenanceValue {
   const result = EMPTY_VALUE();
-  if (typeof value === 'string') result.strings.add(value);
+  if (typeof value === 'string') {
+    result.strings.add(value);
+    result.literalRoots = new Set([value]);
+  }
   if (typeof value === 'number') result.numbers.add(value);
   if (typeof value === 'boolean') result.strings.add(String(value));
   return result;
@@ -966,7 +975,11 @@ class ProvenanceAnalyzer {
           || (hasValueExpression && !hasLiteralText && text.strings.size > 0)
         );
         if (text.origins.size === 0 && canLiftLiteral) {
-          const literalOrigins = [...text.strings]
+          const promotedValues = text.literalRoots?.size === 1
+            ? [...text.literalRoots]
+            : [...text.strings];
+          text.strings = new Set(promotedValues);
+          const literalOrigins = promotedValues
             .filter(Boolean)
             .map((value, index) => {
               const sourcePath = `literal:${component}:${element.start ?? element.loc?.start.line ?? name}:${context}:${index}`;
@@ -978,7 +991,33 @@ class ProvenanceAnalyzer {
           literalOrigins.forEach(origin => text.origins.set(origin.sourcePath, origin));
         }
         if (text.origins.size > 0) {
-          this.registerNode(element, name, 'text', text, component, context, environment);
+          const ownsCompositeLiteral = (
+            (text.literalRoots?.size ?? 0) === 1
+            && element.children.some(child => child.type === 'JSXElement' || child.type === 'JSXFragment')
+          );
+          const compositeValueExpression = ownsCompositeLiteral
+            ? [...environment].find(([, candidate]) => (
+                !candidate.items
+                && candidate.literalRoots?.size === 1
+                && [...candidate.literalRoots][0] === [...(text.literalRoots ?? [])][0]
+              ))?.[0]
+            : undefined;
+          this.registerNode(
+            element,
+            name,
+            'text',
+            text,
+            component,
+            context,
+            environment,
+            compositeValueExpression,
+          );
+          if (ownsCompositeLiteral) {
+            // A styled caption such as `{parts[0]}<span>{accent}</span>{parts[1]}`
+            // is one user-owned sentence. The parent owns the measurable text
+            // host; nested accent spans are presentation, not separate fields.
+            ownsAggregateRenderedText = true;
+          }
         }
       }
 

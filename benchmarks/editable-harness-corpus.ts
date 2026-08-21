@@ -313,6 +313,31 @@ function Composition(props) {
     ],
   },
   {
+    id: 'hardcoded-accent-caption-array',
+    label: 'Hardcoded caption records split around a styled accent',
+    pattern: 'literal-caption-array-accent-split',
+    code: `
+function Caption({ text, accent }) {
+  const parts = text.split(accent);
+  return <div>{parts[0]}<span>{accent}</span>{parts[1]}</div>;
+}
+function Composition() {
+  const captions = [
+    { text: 'A racket survives a tiny factory Olympics.', accent: 'factory Olympics' },
+    { text: 'Every edge gets the final polish.', accent: 'final polish' },
+  ];
+  return <main>{captions.map((caption) => (
+    <Caption key={caption.text} text={caption.text} accent={caption.accent} />
+  ))}</main>;
+}
+`,
+    props: {},
+    expected: [
+      { id: 'literal4_1holvqn', type: 'text' },
+      { id: 'literal4_13255x2', type: 'text' },
+    ],
+  },
+  {
     id: 'stale-authored-metadata',
     label: 'Valid inferred field survives one stale authored field',
     pattern: 'fail-soft-partial',
