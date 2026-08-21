@@ -37,6 +37,7 @@ export interface EditableProvenanceNode {
   origins: ProvenanceOrigin[];
   component: string;
   line?: number;
+  endLine?: number;
   tag: string;
   dynamic: boolean;
   openingStart?: number;
@@ -602,6 +603,23 @@ class ProvenanceAnalyzer {
         return mergeValues(receiver.items);
       }
       if (method === 'filter') return receiver;
+      if (method === 'split') {
+        const separator = args[0]?.strings.size === 1
+          ? [...args[0].strings][0]
+          : undefined;
+        const concrete = receiver.strings.size === 1
+          ? [...receiver.strings][0]
+          : null;
+        if (concrete == null) return receiver;
+        return {
+          ...cloneValue(receiver),
+          items: (separator === undefined ? [concrete] : concrete.split(separator)).map(part => ({
+            ...cloneValue(receiver),
+            strings: new Set([part]),
+            numbers: new Set(),
+          })),
+        };
+      }
       if ([
         'replace',
         'replaceAll',
@@ -629,7 +647,7 @@ class ProvenanceAnalyzer {
         ) {
           const items = receiver.items ?? [mergeValues(receiver.items ?? [])];
           return {
-            ...EMPTY_VALUE(),
+            ...cloneValue(receiver),
             items: items.map((item, index) => this.evaluateInlineFunction(
               callback,
               [item, literalValue(index)],
@@ -896,6 +914,7 @@ class ProvenanceAnalyzer {
       this.registerNode(element, name, ownMediaType, source, component, context, environment);
     }
 
+    let ownsAggregateRenderedText = false;
     if (/^[a-z]/.test(name)) {
       const textValues: ProvenanceValue[] = [];
       let hasLiteralText = false;
@@ -942,6 +961,42 @@ class ProvenanceAnalyzer {
           this.registerNode(element, name, 'text', text, component, context, environment);
         }
       }
+
+      // Styled captions commonly render one sentence through split().map()
+      // word spans. The sentence is the user-owned value; the spans are only
+      // its presentation. Aggregate a single proven source on the measurable
+      // parent so editing remains one field per sentence, not one id per word.
+      const renderedExpressions = element.children.flatMap(child => {
+        if (
+          child.type !== 'JSXExpressionContainer'
+          || child.expression.type === 'JSXEmptyExpression'
+          || !this.expressionRendersElements(child.expression)
+        ) {
+          return [];
+        }
+        return [{
+          expression: child.expression,
+          value: this.evaluate(child.expression, environment),
+        }];
+      });
+      if (
+        textValues.length === 0
+        && renderedExpressions.length === 1
+        && renderedExpressions[0].value.origins.size === 1
+      ) {
+        const expression = sourceForNode(this.code, renderedExpressions[0].expression);
+        this.registerNode(
+          element,
+          name,
+          'text',
+          renderedExpressions[0].value,
+          component,
+          context,
+          environment,
+          expression ?? undefined,
+        );
+        ownsAggregateRenderedText = true;
+      }
     }
 
     // An authored marker owns its complete measurable subtree. Do not add a
@@ -949,6 +1004,7 @@ class ProvenanceAnalyzer {
     // silently bypass the existing wrapper-size validation and could move or
     // scale a different box than the author selected.
     if (attributeByName(element, 'data-editable')) return;
+    if (ownsAggregateRenderedText) return;
 
     element.children.forEach(child => {
       if (child.type === 'JSXElement' || child.type === 'JSXFragment') {
@@ -974,6 +1030,7 @@ class ProvenanceAnalyzer {
     component: string,
     context: string,
     environment: Environment,
+    valueExpressionOverride?: string,
   ) {
     const origins = [...value.origins.values()];
     if (origins.length === 0) return;
@@ -1033,7 +1090,7 @@ class ProvenanceAnalyzer {
     const insertionOffset = opening.end == null
       ? undefined
       : opening.end - (opening.selfClosing ? 2 : 1);
-    const valueExpression = type === 'text'
+    const valueExpression = valueExpressionOverride ?? (type === 'text'
       ? (() => {
           const expressions = element.children.flatMap(child => {
             if (
@@ -1054,7 +1111,7 @@ class ProvenanceAnalyzer {
       : sourceForNode(
           this.code,
           expressionFromAttribute(attributeByName(element, 'src')),
-        ) ?? undefined;
+        ) ?? undefined);
     this.nodes.set(nodeId, {
       nodeId,
       type,
@@ -1063,6 +1120,7 @@ class ProvenanceAnalyzer {
       origins: mergedOrigins,
       component,
       ...(element.loc?.start.line ? { line: element.loc.start.line } : {}),
+      ...(element.loc?.end.line ? { endLine: element.loc.end.line } : {}),
       tag,
       dynamic: bindingKeys.length > 1,
       ...(opening.start != null ? { openingStart: opening.start } : {}),

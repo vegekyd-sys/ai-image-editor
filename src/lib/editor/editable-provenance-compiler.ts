@@ -242,7 +242,17 @@ function unsupportedResolved(
   if (!match) return false;
   const [, tag, lineText] = match;
   const line = lineText ? Number(lineText) : null;
-  return nodes.some(node => node.tag === tag && (line == null || node.line === line));
+  return nodes.some(node => (
+    (node.tag === tag && (line == null || node.line === line))
+    || (
+      node.type === 'text'
+      && line != null
+      && node.line != null
+      && node.endLine != null
+      && line >= node.line
+      && line <= node.endLine
+    )
+  ));
 }
 
 function mergeFields(
