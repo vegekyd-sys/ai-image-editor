@@ -130,6 +130,10 @@ describe('Remotion preview playback contract', () => {
 
     expect(sandboxSource).toContain('OffthreadVideo: serverRendering ? serverVideo : MediaVideo')
     expect(serverSource).toContain('useOffthreadVideo: true')
+    expect(serverSource).toContain("readEnv('REMOTION_RENDERER') === 'local'")
+    expect(serverSource).toContain('renderDesignFrameLocal')
+    expect(localRendererSource).toContain('export async function renderDesignFrameLocal')
+    expect(localRendererSource).toContain('await renderStill({')
     expect(sandboxSource).toContain("from '../lib/remotion-code-normalization'")
     expect(sandboxSource).not.toContain("from '@/lib/remotion-code-normalization'")
     expect(localRendererSource).toContain("process.env.TMPDIR || '/tmp'")
