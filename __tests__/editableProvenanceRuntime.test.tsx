@@ -131,4 +131,70 @@ describe('Editable provenance runtime integration', () => {
     expect(html).toContain('scale:1.2 1.2');
     expect(html).toContain('data-editable="clip2"');
   });
+
+  it('does not let one static marker replace every source in a reusable media helper', () => {
+    const props = {
+      strings: 'https://example.com/strings.mp4',
+      paint: 'https://example.com/paint.mp4',
+    };
+    const Component = compileDynamicDesignComponent(`
+      function Clip({ src }) {
+        return <Video data-editable="strings" src={src} />;
+      }
+      function Composition(props) {
+        const segments = [props.strings, props.paint];
+        return <div>{segments.map(src => <Clip key={src} src={src} />)}</div>;
+      }
+    `, { React, Video: 'video', Img: 'img' });
+    expect(Component).not.toBeNull();
+    if (!Component) throw new Error('Expected composition to compile');
+
+    const html = renderToStaticMarkup(<Component {...props} />);
+
+    expect(html).toContain('src="https://example.com/strings.mp4"');
+    expect(html).toContain('src="https://example.com/paint.mp4"');
+    expect(html.match(/data-editable="strings"/g)).toHaveLength(1);
+  });
+
+  it('aggregates split/map word styling into one sentence editable', () => {
+    const props = {
+      caption: 'One editable sentence across styled words',
+    };
+    const { Component, manifest } = compileForRender(`
+      function Caption({ sentence }) {
+        return (
+          <div>
+            {sentence.split(' ').map((word, index) => (
+              <span key={index} style={{ color: index === 1 ? 'pink' : 'white' }}>
+                {word}{' '}
+              </span>
+            ))}
+          </div>
+        );
+      }
+      function Composition(props) {
+        return <Caption sentence={props.caption} />;
+      }
+    `, props);
+
+    expect(manifest.editables.map(field => [field.id, field.type])).toEqual([
+      ['caption', 'text'],
+    ]);
+    expect(manifest.code.match(/data-editable="caption"/g)).toHaveLength(1);
+
+    const html = renderToStaticMarkup(
+      <Component
+        {...props}
+        caption="Edited sentence keeps word styling"
+        _pos_caption={{ x: 12, y: 18 }}
+      />,
+    );
+
+    expect(html).toContain('data-editable="caption"');
+    expect(html).toContain('Edited');
+    expect(html).toContain('word ');
+    expect(html).toContain('styling ');
+    expect(html).toContain('translate:12px 18px');
+    expect(html.match(/data-editable="caption"/g)).toHaveLength(1);
+  });
 });

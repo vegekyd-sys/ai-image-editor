@@ -5,6 +5,7 @@ import { mkdir, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 import { compileEditableManifestWithProvenance } from '../src/lib/editor/editable-provenance-compiler';
 import { renderDesignVideoLambdaToUrl } from '../src/lib/remotion-lambda-renderer';
+import { renderDesignFrame } from '../src/lib/remotion-server';
 import type { DesignPayload } from '../src/types';
 
 function readArg(name: string): string | undefined {
@@ -49,14 +50,16 @@ function minimalRepeatedCaptionDesign(): {
   helperInjected: boolean;
 } {
   const props: Record<string, unknown> = {
-    captionA: 'Repeated subtitle A',
-    captionB: '重复字幕 B',
+    captionA: 'Before it wins a rally, a badminton racket survives a tiny factory Olympics.',
+    captionB: 'Lambda 导出必须保持一个完整字幕背景',
     audioSrc: toneDataUrl(3),
   };
   const authoredCode = `
 const {AbsoluteFill,Sequence,Audio}=Remotion;
 function Caption({text}) {
-  return <div style={{fontFamily:'Inter, Noto Sans SC, sans-serif',fontSize:54,fontWeight:800,color:'white',backgroundColor:'rgba(0,0,0,0.72)',padding:'20px 28px',borderRadius:18}}>{text}</div>;
+  return <div style={{width:420,fontFamily:'Inter, Noto Sans SC, sans-serif',fontSize:42,fontWeight:800,lineHeight:1.18,color:'white'}}>
+    <div style={{display:'inline-block',maxWidth:'100%',boxSizing:'border-box',padding:'10px 14px',backgroundColor:'rgba(13,12,13,.72)'}}>{text}</div>
+  </div>;
 }
 function Composition(props) {
   const captions=[
@@ -179,6 +182,11 @@ async function main(): Promise<void> {
   const outputDir = path.resolve(readArg('--output-dir') || '/tmp/makaron-remotion-lambda-runtime-regression');
   const projectId = readArg('--project-id');
   const designPath = readArg('--design-path');
+  const snapshotFrameArg = readArg('--snapshot-frame');
+  const requestedScale = Number(readArg('--scale') || 1);
+  if (!Number.isFinite(requestedScale) || requestedScale <= 0) {
+    throw new Error('--scale must be a positive number');
+  }
   if (designPath && !projectId) throw new Error('--design-path requires --project-id');
   const testName = projectId ? `project-${projectId}` : 'minimal-repeated-captions';
   await mkdir(outputDir, { recursive: true });
@@ -203,9 +211,36 @@ async function main(): Promise<void> {
     source = { kind: 'generated-minimal' };
   }
 
+  if (snapshotFrameArg !== undefined) {
+    const snapshotFrame = Math.max(0, Math.round(Number(snapshotFrameArg)));
+    if (!Number.isFinite(snapshotFrame)) {
+      throw new Error('--snapshot-frame must be a non-negative frame number');
+    }
+    const startedAt = Date.now();
+    const image = await renderDesignFrame(design, snapshotFrame);
+    const framePath = path.join(outputDir, `${testName}.preview-frame-${snapshotFrame}.jpeg`);
+    const resultPath = path.join(outputDir, `${testName}.preview-frame-${snapshotFrame}.result.json`);
+    await writeFile(framePath, image);
+    const result = {
+      testName,
+      source,
+      renderer: 'vercel-snapshot',
+      snapshotFrame,
+      width: design.width,
+      height: design.height,
+      elapsedSeconds: Math.round((Date.now() - startedAt) / 10) / 100,
+      downloadedBytes: image.length,
+      framePath,
+    };
+    await writeFile(resultPath, JSON.stringify(result, null, 2));
+    console.log(JSON.stringify({ ...result, resultPath }, null, 2));
+    return;
+  }
+
   const progressEvents: Record<string, unknown>[] = [];
   const startedAt = Date.now();
   const rendered = await renderDesignVideoLambdaToUrl(design, {
+    scale: requestedScale,
     onProgress: (progress) => {
       const event = safeProgress(progress);
       progressEvents.push(event);
@@ -248,6 +283,9 @@ async function main(): Promise<void> {
     fontProps,
     width: design.width,
     height: design.height,
+    scale: requestedScale,
+    outputWidth: Math.round((design.width || 1080) * requestedScale),
+    outputHeight: Math.round((design.height || 1920) * requestedScale),
     animation: design.animation,
     errors,
     timings: withoutCapabilityUrls(rendered.timings),

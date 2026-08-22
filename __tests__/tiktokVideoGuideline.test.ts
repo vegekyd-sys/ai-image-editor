@@ -106,6 +106,7 @@ describe('TikTok video guideline', () => {
     expect(skill).toContain('references/caption-direction.md');
     expect(skill).toContain('references/audio-sync.md');
     expect(skill).toContain('references/delivery-qa.md');
+    expect(skill).toContain('Before choosing Composition dimensions');
   });
 
   it('keeps the entrypoint focused on autonomous direction, not a caption template', () => {
@@ -119,6 +120,8 @@ describe('TikTok video guideline', () => {
     expect(source).toContain('Bold condensed all-caps is one possible voice, not a synonym for TikTok');
     expect(source).toContain('not the easiest reusable implementation');
     expect(source).toContain('boolean that recolors the whole sentence does not count');
+    expect(source).toContain('missing `drawtext` filter is not permission to downgrade');
+    expect(source).toContain('generic ASS subtitles');
     expect(source).not.toContain('normally `2–7` spoken words');
     expect(source).not.toContain('every `0.5–1.4s`');
     expect(source.split('\n').length).toBeLessThan(190);
@@ -163,6 +166,12 @@ describe('TikTok video guideline', () => {
     expect(audio).toContain('every narrated\n   Script section in `expected_sections`');
     expect(audio).toContain('`volume={0}`');
     expect(audio).toContain('the only speech clock');
+    expect(audio).toContain('derive those ranges from it');
+    expect(audio).toContain('do not copy its\n   numbers into a second hand-authored caption');
+    expect(audio).toContain('treat\non-screen copy as editorial beat text rather than speech subtitles');
+    expect(audio).toContain('retry it once on the same\n   accepted master');
+    expect(audio).toContain('stop before narrated Storyboard, Composition');
+    expect(audio).toContain('It is not a fallback clock for a\ngenerated mixed master');
     expect(audio).toContain('visible phrase and emphasized keyword');
     expect(compositionPrompt).toContain('one generated mixed VO+BGM');
     expect(compositionPrompt).toContain('planned Script timing or BGM rhythm cannot replace measured speech timing');
@@ -184,6 +193,12 @@ describe('TikTok video guideline', () => {
     expect(source).toContain('unfinished closing phrase');
     expect(source).toContain('Decode the complete video stream');
     expect(source).toContain('render\n   job reporting success is not delivery acceptance');
+    expect(source).toContain('generic ASS/`drawtext` burn-in');
+    expect(source).toContain('generated narration master with failed or unavailable ASR blocks this gate');
+    expect(source).toContain('second\n   manually retyped subtitle schedule is a synchronization failure');
+    expect(read('src/skills/tiktok-video/references/platform-layout.md')).toContain(
+      'placement references only',
+    );
     expect(compositionPrompt).toContain('extract every spoken cue midpoint');
     expect(compositionPrompt).toContain('Closing copy, CTA, or a final reveal');
     expect(compositionPrompt).toContain('render success is not typography\n  acceptance');

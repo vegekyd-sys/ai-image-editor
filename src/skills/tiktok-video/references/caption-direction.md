@@ -56,16 +56,22 @@ animation, and visual personality to the Composition.
   or an oversized single line. At the settled font metrics, author a break or
   adjust measure and type size so the complete phrase remains inside its safe
   bounds throughout the entrance, stable hold, and exit.
-- Avoid `box-decoration-break: clone` around browser-auto-wrapped prose unless
-  the final encoded frame proves cloned padding cannot cover neighboring rows.
-  One block backing shape or explicit authored lines are safer when the concept
-  actually needs a backing.
+- Never combine `display: inline` and `box-decoration-break: clone` around
+  browser-auto-wrapped prose. Lambda Chromium can fragment and paint the
+  backing differently from interactive Preview, especially on scaled exports.
+  Use one wrapping `inline-block` backing (`maxWidth: '100%'`) or explicit
+  authored line boxes when separate per-line shapes are essential.
 - Store intended breaks as real line feeds or explicit authored lines. The
   shared runtime normalizes escaped newlines as a safety net, but resolved props
   and exported frames still require review.
 - Derive motion from the meaning and action. Compare at least two different
   cues in motion; identical entrances need a creative reason, not merely a
   shared component.
+- A plain ASS or `drawtext` subtitle track is a technical fallback, not an
+  automatic TikTok art direction. When authored typography, semantic emphasis,
+  or editable delivery matters, keep captions in the Composition. A deliberately
+  minimal caption can still be right, but it must be a creative choice visible
+  in Preview rather than a renderer limitation.
 
 Typography remains Composition-owned. There is no required font, black plaque,
 left rail, accent color, caption position, or entrance animation.

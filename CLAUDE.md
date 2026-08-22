@@ -38,16 +38,16 @@ printf 'value' | npx vercel env add NAME production --force
 printf 'value' | npx vercel env add NAME preview --force
 ```
 
-## Production Qwen / Vast worker guardrail（2026-06-24）
+## Production Qwen / Vast worker guardrail（2026-08-21）
 
 当前线上 Qwen/ComfyUI 走**长期租赁 Vast 实例**，不要按 Serverless 思路处理。
 
-- 生产实例：`38761988`，label `makaron-qwen-a6000-benchmark`，RTX A6000 48GB，固定域名 `https://comfyui.makaron.app`。
+- 生产实例：`48270326`，label `makaron-qwen-a6000-prod-20260821`，RTX A6000 48GB，固定域名 `https://comfyui.makaron.app`，价格约 `$0.483/h`（含 150GB 磁盘），Vast reliability 约 `0.999`。
 - 这台机器必须保持 running。禁止在普通 cleanup / scan / cost-saving 中 stop、destroy、recycle、update template 或把它和旧实验机一起批量处理。
-- 旧实验机 `37898939`、旧生产机 `38953964`、慢迁移机 `40942907` 都不是当前生产机；任何清理或迁移都必须显式保护 `38761988`。
-- 生产自愈入口：`docs/ops/vast/ensure-makaron-qwen-vast.sh`。它会检查 `38761988`，若实例停了则 start，随后通过 SSH 启动 `/workspace/makaron-qwen-onstart.sh` 并等待线上 health 变绿。
+- 故障旧机 `43290829` 的宿主 reliability 约 `0.70`，2026-08-21 进入 `actual_status=offline` 且 start/reboot 无法恢复；不要再把生产切回它。旧实验机 `37898939`、历史基线 `38761988`、旧生产机 `38953964`、慢迁移机 `40942907` 也都不是当前生产机。
+- 生产自愈入口：`docs/ops/vast/ensure-makaron-qwen-vast.sh`。它会检查 `48270326`，若实例停了则 start；若连续处于 offline，会请求一次 Vast reboot；随后通过 SSH 启动 `/workspace/makaron-qwen-onstart.sh` 并等待线上 health 变绿。默认不会停止其他 Vast 实例，只有显式设置 `MAKARON_STOP_EXTRA_VAST_RUNNING=true` 才会执行该动作。
 - 机器内自愈脚本在 `docs/ops/vast/makaron-qwen-onstart.sh` 和 `docs/ops/vast/makaron-qwen-watchdog.sh`；远端对应 `/workspace/makaron-qwen-onstart.sh` 和 `/workspace/makaron-watchdog.sh`。
-- Qwen、Pony、WAI 都通过同一个 `https://comfyui.makaron.app` hostname 验收；Pony 需要 `fucktasticAnimePony_v22`，WAI 需要 `waiIllustriousSDXL_v160.safetensors`。
+- Qwen、Pony、WAI 都通过同一个 `https://comfyui.makaron.app` hostname 验收；运行时必须是 `torch 2.12.0.dev20260408+cu128`，Qwen 需要 `Qwen-Rapid-AIO-NSFW-v23.safetensors` 和 `qwen-image-edit-2511-multiple-angles-lora.safetensors`，Pony 需要 `fucktasticAnimePony_v22`，WAI 需要 `waiIllustriousSDXL_v160.safetensors`。
 - 如果确实需要停止/替换这台生产实例，必须先得到用户明确批准，并先确认替代实例、Cloudflare tunnel、Vercel env、`/api/health` 和真实 Qwen/Pony/WAI 生成都已验证。
 
 ## i18n（多语言，2026-03-04）

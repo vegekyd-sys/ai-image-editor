@@ -103,6 +103,84 @@ describe('Editable Manifest harness integration', () => {
     expect(result.code).toContain('__makaronEditable_title="titleTwo"');
   });
 
+  it('revalidates persisted multi-source media helpers without asking for a repair', () => {
+    const first: DesignResult = {
+      code: `
+        function Clip({ src }) {
+          return <Video src={src} />;
+        }
+        function Composition(props) {
+          const clips = { strings: props.strings, paint: props.paint };
+          const segments = [
+            { src: clips.strings },
+            { src: clips.paint },
+          ];
+          return (
+            <AbsoluteFill>
+              {segments.map((segment, index) => (
+                <Clip key={index} src={segment.src} />
+              ))}
+            </AbsoluteFill>
+          );
+        }
+      `,
+      props: {
+        strings: 'https://example.com/strings.mp4',
+        paint: 'https://example.com/paint.mp4',
+      },
+      animation: { fps: 30, durationInSeconds: 10 },
+    };
+
+    expect(validateDesign(first)).toBeNull();
+    expect(first.editables?.map(field => field.id).sort()).toEqual([
+      'paint',
+      'strings',
+    ]);
+    expect(first.code).toContain('React.__makaronEditableId(src');
+
+    const persisted = JSON.parse(JSON.stringify(first)) as DesignResult;
+    expect(validateDesign(persisted)).toBeNull();
+    expect(persisted.editables?.map(field => field.id).sort()).toEqual([
+      'paint',
+      'strings',
+    ]);
+    expect(persisted.editables?.some(field => field.id.startsWith('https://'))).toBe(false);
+    expect(persisted.code).toBe(first.code);
+  });
+
+  it('replaces an unsafe static media-helper marker with inferred per-source ownership', () => {
+    const result: DesignResult = {
+      code: `
+        function Clip({ src }) {
+          return <Video data-editable="strings" src={src} />;
+        }
+        function Composition(props) {
+          const clips = { strings: props.strings, paint: props.paint };
+          const segments = [{ src: clips.strings }, { src: clips.paint }];
+          return segments.map((segment, index) => (
+            <Clip key={index} src={segment.src} />
+          ));
+        }
+      `,
+      props: {
+        strings: 'https://example.com/strings.mp4',
+        paint: 'https://example.com/paint.mp4',
+      },
+      editables: [
+        { id: 'strings', type: 'video', label: 'Strings', propKey: 'strings' },
+      ],
+      animation: { fps: 30, durationInSeconds: 10 },
+    };
+
+    expect(validateDesign(result)).toBeNull();
+    expect(result.code).not.toContain('data-editable="strings" src={src}');
+    expect(result.code).toContain('React.__makaronEditableId(src');
+    expect(result.editables?.map(field => field.id).sort()).toEqual([
+      'paint',
+      'strings',
+    ]);
+  });
+
   it('auto-lifts visible hardcoded text with no authored prop ownership', () => {
     const result: DesignResult = {
       code: `

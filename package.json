@@ -45,6 +45,8 @@
     "worker:remotion-export:once": "npx tsx workers/remotion-export-worker.ts --once",
     "benchmark:remotion-export": "npx tsx benchmarks/remotion-export.ts",
     "benchmark:remotion-fonts": "npx tsx benchmarks/remotion-font-telemetry.ts",
+    "benchmark:editable-harness": "npx tsx benchmarks/editable-harness.ts",
+    "benchmark:editable-agent-friction": "npx tsx benchmarks/editable-agent-friction.ts",
     "e2e:remotion-materialize": "npx tsx e2e/remotion-materialize.ts",
     "e2e:remotion-frontend-agent": "npx tsx e2e/frontend-agent-remotion.ts",
     "ops:remotion-lambda-provision": "npx tsx scripts/remotion-lambda-provision.ts",

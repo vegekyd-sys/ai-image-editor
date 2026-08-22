@@ -4,7 +4,7 @@ import { editableRuntimeClassName } from './scene-registry';
 export type EditableTransformMode = 'proxy' | 'registry';
 
 export const REMOTION_EDITABLE_RUNTIME_VERSION =
-  'remotion-editable-runtime-r1-provenance-id';
+  'remotion-editable-runtime-r4-caption-style-preserving';
 
 type ReactRuntime = typeof React;
 
@@ -24,6 +24,15 @@ function normalizedEditableValue(value: unknown): string | number | boolean | nu
     .replace(/\r\n|\r/g, '\n')
     .replace(/\s+/g, ' ')
     .trim();
+}
+
+function editableValuesMatch(left: unknown, right: unknown): boolean {
+  if (Object.is(left, right)) return true;
+  const normalizedLeft = normalizedEditableValue(left);
+  const normalizedRight = normalizedEditableValue(right);
+  return normalizedLeft != null
+    && normalizedRight != null
+    && normalizedLeft === normalizedRight;
 }
 
 interface EditableIdCandidate {
@@ -221,8 +230,24 @@ export function createEditableReactRuntime(
       const renderedChildren = nextChildren.length > 0
         ? nextChildren
         : react.Children.toArray(nextProps.children as React.ReactNode);
-      const ownsTransform = !hasSameIdEditableDescendant(renderedChildren, id);
       const textOverride = currentProps[id];
+      // A static marker on a reusable media helper can otherwise claim every
+      // <Video>/<Img> instance and replace all sources with one prop. Compiler
+      // markers carry provenance and are safe; legacy static markers only own
+      // a direct media node when that node is actually rendering their value.
+      const ownsMediaSource = !nextProps
+        || !('src' in nextProps)
+        || hasProvenanceValue
+        || editableValuesMatch(nextProps.src, textOverride);
+      if (!ownsMediaSource && nextProps && 'src' in nextProps) {
+        const { 'data-editable': _unsafeMediaMarker, ...rest } = nextProps;
+        void _unsafeMediaMarker;
+        nextProps = rest;
+      }
+      const ownsTransform = (
+        !hasSameIdEditableDescendant(renderedChildren, id)
+        && ownsMediaSource
+      );
       const ownsTextLeaf = (
         ownsTransform
         && typeof type === 'string'

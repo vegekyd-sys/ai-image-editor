@@ -24,6 +24,10 @@ interface ProvenanceValue {
   origins: Map<string, ProvenanceOrigin>;
   strings: Set<string>;
   numbers: Set<number>;
+  /** Original authored literals retained through presentation transforms such as split(). */
+  literalRoots?: Set<string>;
+  /** JSX stored in a local alias, for example `const video = <Video src={src} />`. */
+  renderables?: RenderableNode[];
   members?: Map<string, ProvenanceValue>;
   items?: ProvenanceValue[];
   unknown?: boolean;
@@ -37,6 +41,7 @@ export interface EditableProvenanceNode {
   origins: ProvenanceOrigin[];
   component: string;
   line?: number;
+  endLine?: number;
   tag: string;
   dynamic: boolean;
   openingStart?: number;
@@ -71,6 +76,8 @@ function cloneValue(value: ProvenanceValue): ProvenanceValue {
     origins: new Map(value.origins),
     strings: new Set(value.strings),
     numbers: new Set(value.numbers),
+    ...(value.literalRoots ? { literalRoots: new Set(value.literalRoots) } : {}),
+    ...(value.renderables ? { renderables: [...value.renderables] } : {}),
     ...(value.members ? { members: new Map(value.members) } : {}),
     ...(value.items ? { items: [...value.items] } : {}),
     ...(value.unknown ? { unknown: true } : {}),
@@ -81,12 +88,16 @@ function mergeValues(values: Array<ProvenanceValue | null | undefined>): Provena
   const result = EMPTY_VALUE();
   const memberValues = new Map<string, ProvenanceValue[]>();
   const itemValues: ProvenanceValue[] = [];
+  const renderables: RenderableNode[] = [];
+  const literalRoots = new Set<string>();
   for (const value of values) {
     if (!value) continue;
     value.origins.forEach((origin, key) => result.origins.set(key, origin));
     value.strings.forEach(value => result.strings.add(value));
     value.numbers.forEach(value => result.numbers.add(value));
     if (value.unknown) result.unknown = true;
+    if (value.renderables) renderables.push(...value.renderables);
+    value.literalRoots?.forEach(root => literalRoots.add(root));
     value.members?.forEach((member, key) => {
       const existing = memberValues.get(key) ?? [];
       existing.push(member);
@@ -100,6 +111,8 @@ function mergeValues(values: Array<ProvenanceValue | null | undefined>): Provena
     );
   }
   if (itemValues.length > 0) result.items = itemValues;
+  if (renderables.length > 0) result.renderables = [...new Set(renderables)];
+  if (literalRoots.size > 0) result.literalRoots = literalRoots;
   return result;
 }
 
@@ -170,7 +183,10 @@ function valueFromConcrete(value: unknown, path: Array<string | number>): Proven
 
 function literalValue(value: unknown): ProvenanceValue {
   const result = EMPTY_VALUE();
-  if (typeof value === 'string') result.strings.add(value);
+  if (typeof value === 'string') {
+    result.strings.add(value);
+    result.literalRoots = new Set([value]);
+  }
   if (typeof value === 'number') result.numbers.add(value);
   if (typeof value === 'boolean') result.strings.add(String(value));
   return result;
@@ -226,6 +242,44 @@ function expressionFromAttribute(attribute: JSXAttribute | undefined): Expressio
     return attribute.value.expression as Expression;
   }
   return null;
+}
+
+/**
+ * Recover the stable ids from the canonical marker emitted by the provenance
+ * compiler. Re-analyzing persisted code must not evaluate the marker call as
+ * ordinary JavaScript: its first argument is the rendered value (often a URL),
+ * while the second argument is the durable editable-id candidate list.
+ */
+function compilerEditableMarkerIds(expression: Expression): string[] | null {
+  if (expression.type !== 'CallExpression') return null;
+  const callee = expression.callee;
+  if (
+    callee.type !== 'MemberExpression'
+    || callee.computed
+    || callee.object.type !== 'Identifier'
+    || callee.object.name !== 'React'
+    || callee.property.type !== 'Identifier'
+    || callee.property.name !== '__makaronEditableId'
+  ) {
+    return null;
+  }
+  const candidates = expression.arguments[1];
+  if (!candidates || candidates.type !== 'ArrayExpression') return null;
+  const ids = candidates.elements.flatMap(candidate => {
+    if (!candidate || candidate.type !== 'ObjectExpression') return [];
+    for (const property of candidate.properties) {
+      if (property.type !== 'ObjectProperty' || property.computed) continue;
+      const key = property.key.type === 'Identifier'
+        ? property.key.name
+        : property.key.type === 'StringLiteral'
+          ? property.key.value
+          : null;
+      if (key !== 'id' || property.value.type !== 'StringLiteral') continue;
+      return property.value.value ? [property.value.value] : [];
+    }
+    return [];
+  });
+  return ids.length > 0 ? [...new Set(ids)] : null;
 }
 
 function sourceForNode(code: string, node: Node | null | undefined): string | null {
@@ -411,6 +465,9 @@ class ProvenanceAnalyzer {
         return literalValue(node.value);
       case 'NullLiteral':
         return EMPTY_VALUE();
+      case 'JSXElement':
+      case 'JSXFragment':
+        return { ...EMPTY_VALUE(), renderables: [node] };
       case 'TemplateLiteral':
         return mergeValues([
           ...node.quasis.map(quasi => literalValue(quasi.value.cooked ?? quasi.value.raw)),
@@ -564,6 +621,23 @@ class ProvenanceAnalyzer {
         return mergeValues(receiver.items);
       }
       if (method === 'filter') return receiver;
+      if (method === 'split') {
+        const separator = args[0]?.strings.size === 1
+          ? [...args[0].strings][0]
+          : undefined;
+        const concrete = receiver.strings.size === 1
+          ? [...receiver.strings][0]
+          : null;
+        if (concrete == null) return receiver;
+        return {
+          ...cloneValue(receiver),
+          items: (separator === undefined ? [concrete] : concrete.split(separator)).map(part => ({
+            ...cloneValue(receiver),
+            strings: new Set([part]),
+            numbers: new Set(),
+          })),
+        };
+      }
       if ([
         'replace',
         'replaceAll',
@@ -591,7 +665,7 @@ class ProvenanceAnalyzer {
         ) {
           const items = receiver.items ?? [mergeValues(receiver.items ?? [])];
           return {
-            ...EMPTY_VALUE(),
+            ...cloneValue(receiver),
             items: items.map((item, index) => this.evaluateInlineFunction(
               callback,
               [item, literalValue(index)],
@@ -772,7 +846,18 @@ class ProvenanceAnalyzer {
           }
         });
       }
+      return;
     }
+
+    // React authors commonly assign JSX to a local variable before wrapping or
+    // conditionally returning it. Preserve that renderable identity so media
+    // provenance is not lost merely because `<Video>` is one alias away.
+    const aliased = this.evaluate(node, environment).renderables ?? [];
+    aliased.forEach(renderable => {
+      if (renderable !== node) {
+        this.processRenderable(renderable, environment, component, `${context}:alias`);
+      }
+    });
   }
 
   private expressionRendersElements(node: Node): boolean {
@@ -858,6 +943,7 @@ class ProvenanceAnalyzer {
       this.registerNode(element, name, ownMediaType, source, component, context, environment);
     }
 
+    let ownsAggregateRenderedText = false;
     if (/^[a-z]/.test(name)) {
       const textValues: ProvenanceValue[] = [];
       let hasLiteralText = false;
@@ -889,7 +975,11 @@ class ProvenanceAnalyzer {
           || (hasValueExpression && !hasLiteralText && text.strings.size > 0)
         );
         if (text.origins.size === 0 && canLiftLiteral) {
-          const literalOrigins = [...text.strings]
+          const promotedValues = text.literalRoots?.size === 1
+            ? [...text.literalRoots]
+            : [...text.strings];
+          text.strings = new Set(promotedValues);
+          const literalOrigins = promotedValues
             .filter(Boolean)
             .map((value, index) => {
               const sourcePath = `literal:${component}:${element.start ?? element.loc?.start.line ?? name}:${context}:${index}`;
@@ -901,8 +991,70 @@ class ProvenanceAnalyzer {
           literalOrigins.forEach(origin => text.origins.set(origin.sourcePath, origin));
         }
         if (text.origins.size > 0) {
-          this.registerNode(element, name, 'text', text, component, context, environment);
+          const ownsCompositeLiteral = (
+            (text.literalRoots?.size ?? 0) === 1
+            && element.children.some(child => child.type === 'JSXElement' || child.type === 'JSXFragment')
+          );
+          const compositeValueExpression = ownsCompositeLiteral
+            ? [...environment].find(([, candidate]) => (
+                !candidate.items
+                && candidate.literalRoots?.size === 1
+                && [...candidate.literalRoots][0] === [...(text.literalRoots ?? [])][0]
+              ))?.[0]
+            : undefined;
+          this.registerNode(
+            element,
+            name,
+            'text',
+            text,
+            component,
+            context,
+            environment,
+            compositeValueExpression,
+          );
+          if (ownsCompositeLiteral) {
+            // A styled caption such as `{parts[0]}<span>{accent}</span>{parts[1]}`
+            // is one user-owned sentence. The parent owns the measurable text
+            // host; nested accent spans are presentation, not separate fields.
+            ownsAggregateRenderedText = true;
+          }
         }
+      }
+
+      // Styled captions commonly render one sentence through split().map()
+      // word spans. The sentence is the user-owned value; the spans are only
+      // its presentation. Aggregate a single proven source on the measurable
+      // parent so editing remains one field per sentence, not one id per word.
+      const renderedExpressions = element.children.flatMap(child => {
+        if (
+          child.type !== 'JSXExpressionContainer'
+          || child.expression.type === 'JSXEmptyExpression'
+          || !this.expressionRendersElements(child.expression)
+        ) {
+          return [];
+        }
+        return [{
+          expression: child.expression,
+          value: this.evaluate(child.expression, environment),
+        }];
+      });
+      if (
+        textValues.length === 0
+        && renderedExpressions.length === 1
+        && renderedExpressions[0].value.origins.size === 1
+      ) {
+        const expression = sourceForNode(this.code, renderedExpressions[0].expression);
+        this.registerNode(
+          element,
+          name,
+          'text',
+          renderedExpressions[0].value,
+          component,
+          context,
+          environment,
+          expression ?? undefined,
+        );
+        ownsAggregateRenderedText = true;
       }
     }
 
@@ -911,6 +1063,7 @@ class ProvenanceAnalyzer {
     // silently bypass the existing wrapper-size validation and could move or
     // scale a different box than the author selected.
     if (attributeByName(element, 'data-editable')) return;
+    if (ownsAggregateRenderedText) return;
 
     element.children.forEach(child => {
       if (child.type === 'JSXElement' || child.type === 'JSXFragment') {
@@ -918,7 +1071,10 @@ class ProvenanceAnalyzer {
       } else if (
         child.type === 'JSXExpressionContainer'
         && child.expression.type !== 'JSXEmptyExpression'
-        && this.expressionRendersElements(child.expression)
+        && (
+          this.expressionRendersElements(child.expression)
+          || (this.evaluate(child.expression, environment).renderables?.length ?? 0) > 0
+        )
       ) {
         // Remotion structural components such as AbsoluteFill and Sequence are
         // runtime scope values rather than locally declared functions. Their
@@ -936,6 +1092,7 @@ class ProvenanceAnalyzer {
     component: string,
     context: string,
     environment: Environment,
+    valueExpressionOverride?: string,
   ) {
     const origins = [...value.origins.values()];
     if (origins.length === 0) return;
@@ -955,10 +1112,20 @@ class ProvenanceAnalyzer {
         );
       }
     });
-    const site = `${component}:${element.start ?? element.loc?.start.line ?? tag}:${context}`;
+    // The same aliased JSX node can be reachable through both sides of a
+    // conditional (`loop ? <Loop>{video}</Loop> : video`). Branch labels are
+    // traversal details, not separate runtime hosts. Keep call/map identity but
+    // collapse duplicate visits to the same authored element.
+    const stableContext = context.replace(/:(?:then|else|logical|alias)\b/g, '');
+    const site = `${component}:${element.start ?? element.loc?.start.line ?? tag}:${stableContext}`;
     const explicit = expressionFromAttribute(attributeByName(element, 'data-editable'));
     const explicitValue = explicit ? this.evaluate(explicit, environment) : EMPTY_VALUE();
-    const explicitId = explicitValue.strings.size === 1 ? [...explicitValue.strings][0] : null;
+    const compilerMarkerIds = explicit ? compilerEditableMarkerIds(explicit) : null;
+    const explicitId = compilerMarkerIds?.length === 1
+      ? compilerMarkerIds[0]
+      : explicitValue.strings.size === 1
+        ? [...explicitValue.strings][0]
+        : null;
     const nodeId = explicitId ?? `node_${hashText(site)}`;
     const existingNode = this.nodes.get(nodeId);
     const bindingKeys = [...new Set([
@@ -990,7 +1157,7 @@ class ProvenanceAnalyzer {
     const insertionOffset = opening.end == null
       ? undefined
       : opening.end - (opening.selfClosing ? 2 : 1);
-    const valueExpression = type === 'text'
+    const valueExpression = valueExpressionOverride ?? (type === 'text'
       ? (() => {
           const expressions = element.children.flatMap(child => {
             if (
@@ -1011,7 +1178,7 @@ class ProvenanceAnalyzer {
       : sourceForNode(
           this.code,
           expressionFromAttribute(attributeByName(element, 'src')),
-        ) ?? undefined;
+        ) ?? undefined);
     this.nodes.set(nodeId, {
       nodeId,
       type,
@@ -1020,6 +1187,7 @@ class ProvenanceAnalyzer {
       origins: mergedOrigins,
       component,
       ...(element.loc?.start.line ? { line: element.loc.start.line } : {}),
+      ...(element.loc?.end.line ? { endLine: element.loc.end.line } : {}),
       tag,
       dynamic: bindingKeys.length > 1,
       ...(opening.start != null ? { openingStart: opening.start } : {}),
@@ -1045,8 +1213,9 @@ class ProvenanceAnalyzer {
     const attribute = attributeByName(element, 'data-editable');
     const expression = expressionFromAttribute(attribute);
     if (!attribute || !expression) return inferred;
-    const marker = this.evaluate(expression, environment);
-    const ids = [...marker.strings].filter(Boolean);
+    const compilerMarkerIds = compilerEditableMarkerIds(expression);
+    const marker = compilerMarkerIds ? null : this.evaluate(expression, environment);
+    const ids = compilerMarkerIds ?? [...(marker?.strings ?? [])].filter(Boolean);
     if (ids.length === 0) return inferred;
     const explicit = EMPTY_VALUE();
     ids.forEach(id => {

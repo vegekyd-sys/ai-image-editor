@@ -32,6 +32,11 @@ Before publishing or materializing the editable composition:
    the measured `transcribe_audio` evidence used by its caption and scene.
    Check each cue's actual transcript for a complete ending; an aggregate
    passing score does not excuse a dropped final word or clipped clause.
+   A generated narration master with failed or unavailable ASR blocks this gate;
+   Script estimates and `explicit-audio-placement` cannot satisfy it.
+9. Confirm the published Composition still owns authored caption typography and
+   semantic emphasis. Do not accept a generic ASS/`drawtext` burn-in created
+   only because a media-preparation renderer lacked the intended text filter.
 
 ## Encoded MP4 Acceptance
 
@@ -59,6 +64,9 @@ later Agent turn has the final encoded file, run this acceptance:
    line, visible caption, and linked picture at cue midpoints and boundaries;
    the spoken caption follows the actual transcript rather than paraphrasing a
    truncated take.
+   Compare the Composition cue data with the encoded frame changes; a second
+   manually retyped subtitle schedule is a synchronization failure even when a
+   few sampled midpoints happen to look close.
 5. If encoding introduces a rewrap, touching rows, duplicate glyphs, clipping,
    black gap, or different text geometry, return to the same editable
    Composition in a repair turn, fix the local issue, materialize again, and

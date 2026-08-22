@@ -7,6 +7,8 @@ centered safe rectangle.
 ## Canvas
 
 - Standard high-resolution composition: `1080 × 1920`.
+- The `720 × 1280` coordinates below are placement references only. Never use
+  them as the final Composition or export dimensions.
 - Background footage, color, and nonessential atmosphere may bleed to every
   edge. Do not letterbox a vertical deliverable.
 - Keep the primary face, hands, tool, or product readable while allowing

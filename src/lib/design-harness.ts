@@ -138,23 +138,40 @@ export function validateDesignReport(result: DesignResult): DesignValidationRepo
   const urlError = checkImageUrls(result.code);
   if (urlError) blocking.push(urlError);
 
-  // Check 6: Editables validation
-  // The compiler owns inferred fields and has already validated their graph.
-  // Keep the legacy validator for authored metadata only.
-  const editablesError = validateEditables(
-    authoredEditables,
-    result.code,
-    result.props,
-    compilerOwnedIds,
-  );
-  if (editablesError) blocking.push(editablesError);
+  // Check 6: Editable metadata is best-effort. A bad or stale field must never
+  // make an otherwise playable composition fail publication or ask the Agent
+  // to rewrite visual code. Keep every verified/inferred field and omit only
+  // authored fields whose ownership contract cannot be proven.
+  const invalidAuthoredIds = new Set<string>();
+  for (const field of authoredEditables ?? []) {
+    const editableError = validateEditables(
+      [field],
+      result.code,
+      result.props,
+      compilerOwnedIds,
+    );
+    if (!editableError) continue;
+    invalidAuthoredIds.add(field.id);
+    advisories.push(
+      `${editableError} The field was omitted; keep the rendered composition unchanged.`,
+    );
+  }
+  if (invalidAuthoredIds.size > 0) {
+    result.editables = result.editables?.filter(
+      field => !invalidAuthoredIds.has(field.id),
+    );
+  }
 
   const hardcodedTextError = validateHardcodedEditableText(
     result.editables,
     result.code,
     result.props,
   );
-  if (hardcodedTextError) blocking.push(hardcodedTextError);
+  if (hardcodedTextError) {
+    advisories.push(
+      `${hardcodedTextError} Keep the rendered composition unchanged; this copy can remain non-editable.`,
+    );
+  }
 
   return {
     blocking: [...new Set(blocking)],
@@ -247,14 +264,17 @@ export function validateEditables(
       ? dynamicBindings.get(field.id) ?? null
       : null;
     const directOpeningTag = findEditableOpeningTag(code, field.id);
+    const compilerOpeningTag = findCompilerEditableOpeningTag(code, field.id);
     const openingTag = directOpeningTag
       ?? dynamicBinding?.openingTag
+      ?? compilerOpeningTag
       ?? (field.source === 'literal'
         ? findConditionalLiteralOpeningTag(code, field.id)
         : null);
     const compilerOwned = compilerOwnedIds.has(field.id);
     const compilerOwnsMediaBox = compilerOwned && (
       field.source === 'literal'
+      || Boolean(compilerOpeningTag)
       || Boolean(dynamicBinding?.openingTag.includes('__makaronEditable_'))
       || Boolean(
         !directOpeningTag
@@ -353,6 +373,20 @@ function findConditionalLiteralOpeningTag(code: string, id: string): string | nu
     'm',
   );
   return code.match(pattern)?.[0] ?? null;
+}
+
+function findCompilerEditableOpeningTag(code: string, id: string): string | null {
+  const openingTagPattern = new RegExp(
+    '<[A-Za-z][\\w.:-]*(?:\\s|\\n|\\r)[^>]*data-editable\\s*=\\s*\\{\\s*React\\.__makaronEditableId\\([\\s\\S]*?\\)\\s*\\}[^>]*>',
+    'gm',
+  );
+  const idPattern = new RegExp(
+    `["']id["']\\s*:\\s*["']${escapeRegExp(id)}["']`,
+  );
+  for (const match of code.matchAll(openingTagPattern)) {
+    if (idPattern.test(match[0])) return match[0];
+  }
+  return null;
 }
 
 interface DynamicEditableBinding {

@@ -39,6 +39,42 @@ describe('Remotion materialize editable overrides', () => {
     expect(html).not.toContain('First\\nSecond');
   });
 
+  it('preserves composition-authored caption backing styles verbatim', () => {
+    const runtime = createEditableReactRuntime(React, 'video');
+    const Composition = () => runtime.React.createElement(
+      'div',
+      {
+        style: {
+          display: 'inline',
+          fontFamily: 'Inter, Noto Sans SC, sans-serif',
+          fontSize: 42,
+          fontWeight: 800,
+          lineHeight: 1.18,
+          color: '#fff',
+          backgroundColor: 'rgba(13,12,13,.72)',
+          boxShadow: '0 0 0 14px rgba(13,12,13,.72)',
+          boxDecorationBreak: 'clone',
+          WebkitBoxDecorationBreak: 'clone',
+        },
+      },
+      'Before it wins a rally, a badminton racket survives a tiny factory Olympics.',
+    );
+    const MaterializedComposition = runtime.wrap(Composition, 'proxy');
+
+    const html = renderToStaticMarkup(<MaterializedComposition />);
+
+    expect(html).toContain('display:inline');
+    expect(html).toContain('font-family:Inter, Noto Sans SC, sans-serif');
+    expect(html).toContain('font-size:42px');
+    expect(html).toContain('font-weight:800');
+    expect(html).toContain('line-height:1.18');
+    expect(html).toContain('color:#fff');
+    expect(html).toContain('box-decoration-break:clone');
+    expect(html).toContain('-webkit-box-decoration-break:clone');
+    expect(html).toContain('box-shadow:0 0 0 14px rgba(13,12,13,.72)');
+    expect(html).not.toContain('display:inline-block');
+  });
+
   it('applies persisted position and scale in the shared render runtime', () => {
     const runtime = createEditableReactRuntime(React, 'video');
     const Composition = (props: Record<string, unknown>) => runtime.React.createElement(

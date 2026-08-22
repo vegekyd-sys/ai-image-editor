@@ -142,10 +142,11 @@ Available APIs include all exports from `remotion`, `@remotion/media`, `@remotio
   or off-canvas overflow to preserve prose on one line; author a break or adjust
   the local measure and type size. Preview the stable midpoint of every spoken
   cue, including the longest single-line cue, rather than sampling only scenes.
-- Do not put `box-decoration-break: clone` around auto-wrapped subtitle prose
-  unless final-resolution preview proves the cloned padding/background cannot
-  cover neighboring glyph rows. Prefer one block backing shape or explicit
-  authored lines when separate per-line shapes are part of the direction.
+- Do not put `display: inline` + `box-decoration-break: clone` around
+  auto-wrapped subtitle prose. Lambda Chromium can fragment and paint that
+  backing differently from the interactive Preview, especially on scaled
+  exports. Use one wrapping `inline-block` backing shape (`maxWidth: '100%'`)
+  or explicit authored line boxes when separate per-line shapes are essential.
 - A black subtitle plaque, colored left rail, lower-left anchor, Inter-like
   grotesk, or repeated pop is never a default package. Use any of them only
   when the current concept earns it; do not reproduce the same combined
@@ -273,6 +274,11 @@ Rules:
   editable advisories. Do not rewrite scenes merely to clear advisories. Make a
   local adjustment only when preview or coverage shows an intentional visible
   field is actually missing.
+- Editable coverage is opportunistic and fail-soft. Never patch otherwise
+  correct visual code only to satisfy editable metadata, never add one static
+  `data-editable` id to a reusable media helper, and never delay publishing for
+  an editable-only diagnostic. The harness keeps every proven field and safely
+  leaves uncertain fields non-editable.
 
 Ordinary reusable React components work without editor-specific parameters:
 
@@ -304,7 +310,8 @@ props, or an `editables` array to ordinary helpers.
 Use `data-editable` only for custom runtime ownership that coverage explicitly
 cannot infer. Put it on the real visual host, never on a full-canvas structural
 ancestor. Legacy explicit `editables` metadata remains accepted when patching
-an old composition, but new output should omit it.
+an old composition, but new output should omit it. If inference is incomplete,
+publish the correct composition with fewer editables instead of rewriting it.
 
 Video trim is non-destructive and belongs to the selected video node:
 

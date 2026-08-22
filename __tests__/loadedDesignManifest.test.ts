@@ -37,4 +37,29 @@ describe('loaded composition Editable Manifest', () => {
     expect(upgraded?.code).toContain('__makaronEditable_title="title"');
     expect(normalizeLoadedDesignManifest(upgraded)).toEqual(upgraded);
   });
+
+  it('keeps proven fields when another visible sink remains ambiguous', () => {
+    const upgraded = normalizeLoadedDesignManifest({
+      width: 1080,
+      height: 1920,
+      props: {
+        title: 'Factory Olympics',
+        subtitle: 'Real process',
+        body: 'Skilled hands at work',
+      },
+      code: `
+        function Composition(props) {
+          return (
+            <AbsoluteFill>
+              <h1>{props.title} — {props.subtitle}</h1>
+              <p>{props.body}</p>
+            </AbsoluteFill>
+          );
+        }
+      `,
+    });
+
+    expect(upgraded?.editables?.map(field => field.id)).toContain('body');
+    expect(upgraded?.code).toContain('data-editable="body"');
+  });
 });

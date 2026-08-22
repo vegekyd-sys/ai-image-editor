@@ -109,6 +109,14 @@ export async function renderDesignFrame(
   design: DesignPayload,
   frame = 0,
 ): Promise<Buffer> {
+  if (readEnv('REMOTION_RENDERER') === 'local') {
+    const { renderDesignFrameLocal } = await import('@/lib/remotion-local-renderer');
+    return renderDesignFrameLocal(design, frame, {
+      cacheDir: readEnv('REMOTION_LOCAL_MEDIA_CACHE_DIR'),
+      mediaServerPort: Number(readEnv('REMOTION_LOCAL_MEDIA_PORT') || 5123),
+    });
+  }
+
   const { renderStillOnVercel } = await import('@remotion/vercel');
 
   const fps = design.animation?.fps || 30;
