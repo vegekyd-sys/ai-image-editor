@@ -11,11 +11,17 @@ animation, and visual personality to the Composition.
   merely describes visible action; preserve speech-free room unless the brief
   benefits from a continuous creator monologue.
 - Group consecutive timed words the way a strong human short-form editor would
-  phrase the thought. Semantic and prosodic coherence outrank brevity. Word
-  count and cue duration are not quotas.
+  phrase the thought. Aim for the shortest natural phrase that still carries
+  one complete semantic beat. Feed readability decides how much thought appears
+  at once; neither a word-count quota nor preserving a whole sentence or Script
+  section decides the boundary.
+- When one settled cue becomes two or three dense lines, first split it at a
+  measured clause, emphasis, or breath boundary. If there is no clean boundary,
+  tighten the VO and transcribe again. Do not shrink the type or add a backing
+  merely to accommodate an over-written cue.
 - Read the cue sequence aloud. Reconsider a boundary that sounds unfinished,
-  attaches a word to the wrong thought, or creates a repetitive chopping
-  rhythm.
+  attaches a word to the wrong thought, creates a repetitive chopping rhythm,
+  or leaves multiple independent ideas competing in one card.
 
 ## Use Measured Timing
 
@@ -31,12 +37,17 @@ animation, and visual personality to the Composition.
 5. If wording, pace, or take changes, transcribe again and rebuild affected
    cues. Never reuse stale timing.
 6. Retain one `subtitleSyncEvidence` record per narrated Script section with
-   `timingSource: "transcribe_audio"`, exact cue text, frame range, and visible
-   caption host. Narration with an empty evidence array is a failure. A hook,
-   beat label, `KineticTitle`, or `Headline` cannot substitute for speech.
-7. Use the same cue-sheet seconds and frame ranges for the linked visual scene,
-   spoken-caption host, and semantic keyword emphasis. Do not make separate
-   timing decisions for voice, caption, and picture.
+   `timingSource: "transcribe_audio"`, exact section text, and measured word
+   timing. Partition those same words into an ordered `captionCues` array when a
+   section contains more than one readable semantic beat. Each micro-cue uses
+   the measured start of its first word and end of its last word; no word may be
+   dropped, duplicated, paraphrased, or moved. A Script section is not required
+   to become one visible caption host.
+7. Use the same word-timed micro-cue ranges for the spoken-caption host,
+   semantic keyword emphasis, and linked visual beat. Do not make separate
+   timing decisions for voice, caption, and picture. Narration with empty
+   section evidence or caption cues is a failure; a hook, beat label,
+   `KineticTitle`, or `Headline` cannot substitute for speech.
 
 ## Keep The Visual Direction Autonomous
 
@@ -68,8 +79,11 @@ animation, and visual personality to the Composition.
 - Never combine `display: inline` and `box-decoration-break: clone` around
   browser-auto-wrapped prose. Lambda Chromium can fragment and paint the
   backing differently from interactive Preview, especially on scaled exports.
-  Use one wrapping `inline-block` backing (`maxWidth: '100%'`) or explicit
-  authored line boxes when separate per-line shapes are essential.
+  When the current concept actually needs a backing, use one wrapping
+  `inline-block` shape (`maxWidth: '100%'`) or explicit authored line boxes when
+  separate per-line shapes are essential. This export safeguard does not ask
+  for a backing when text-only, outlined, shadowed, or selectively blocked type
+  better fits the footage.
 - Store intended breaks as real line feeds or explicit authored lines. The
   shared runtime normalizes escaped newlines as a safety net, but resolved props
   and exported frames still require review.

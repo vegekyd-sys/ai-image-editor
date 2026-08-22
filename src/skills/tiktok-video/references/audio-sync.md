@@ -54,8 +54,9 @@ generated mixed master whose actual spoken timing has not been measured.
 
 ## Synchronization Review
 
-- Confirm every narrated Script section has non-empty timing evidence and one
-  visible spoken-caption host.
+- Confirm every narrated Script section has non-empty timing evidence and an
+  ordered, non-overlapping spoken micro-cue partition. One section may produce
+  multiple visible caption hosts, but exactly one host is active per micro-cue.
 - At each cue midpoint, the visible phrase and emphasized keyword must belong to
   the words currently spoken. The linked visual scene must begin no later than
   the cue and remain visible until the cue ends.
