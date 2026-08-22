@@ -106,6 +106,7 @@ describe('TikTok video guideline', () => {
     expect(skill).toContain('references/caption-direction.md');
     expect(skill).toContain('references/audio-sync.md');
     expect(skill).toContain('references/delivery-qa.md');
+    expect(skill).toContain('Before choosing Composition dimensions');
   });
 
   it('keeps the entrypoint focused on autonomous direction, not a caption template', () => {
@@ -195,6 +196,9 @@ describe('TikTok video guideline', () => {
     expect(source).toContain('generic ASS/`drawtext` burn-in');
     expect(source).toContain('generated narration master with failed or unavailable ASR blocks this gate');
     expect(source).toContain('second\n   manually retyped subtitle schedule is a synchronization failure');
+    expect(read('src/skills/tiktok-video/references/platform-layout.md')).toContain(
+      'placement references only',
+    );
     expect(compositionPrompt).toContain('extract every spoken cue midpoint');
     expect(compositionPrompt).toContain('Closing copy, CTA, or a final reveal');
     expect(compositionPrompt).toContain('render success is not typography\n  acceptance');

@@ -30,8 +30,9 @@ TikTok variants of a larger campaign.
   Script and again before composing the caption track.
 - For the default VO-plus-BGM soundtrack and its shared timing contract, read
   `skills/tiktok-video/references/audio-sync.md` before writing the Script.
-- Before completing Review or Delivery, read
-  `skills/tiktok-video/references/delivery-qa.md`.
+- Before choosing Composition dimensions or writing the Composition, read
+  `skills/tiktok-video/references/delivery-qa.md`; read it again before Review
+  or Delivery.
 - For a substantial editable production, also read
   `skills/motion-design-video/SKILL.md`,
   `skills/_shared/studio-production/production-contract.md`, and
@@ -134,8 +135,8 @@ phone size.
 ## Compose And Deliver
 
 - Deliver full-screen `1080 × 1920` for the standard high-resolution TikTok
-  composition. Keep source footage full-bleed unless the concept deliberately
-  authors another treatment.
+  composition. The `720 × 1280` placement references are not final canvas or
+  export dimensions. Keep footage full-bleed unless the concept says otherwise.
 - Keep the result editable. Use one visible caption host for each spoken cue,
   with highlights inside that host.
 - Fit every cue inside its safe bounds at the settled final font metrics. Do not
