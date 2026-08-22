@@ -75,6 +75,10 @@ const zh = {
   // Changelog
   'changelog.heading': '更新',
   'changelog.close': '关闭更新',
+  'changelog.talkingHeadEditing.title': '口播剪辑',
+  'changelog.talkingHeadEditing.item1': '上传一段原始口播，Makaron 会根据 ASR 自动删掉气口、停顿、重复和不连贯表达，整理成更流畅的成片。',
+  'changelog.talkingHeadEditing.item2': '字幕会跟随保留原声的真实词级时间，自动切成更短、更有重点的动态字幕，并保持可编辑。',
+  'changelog.talkingHeadEditing.item3': 'Agent 还能加入适量 B-roll、信息图和短视频包装，直接发布可编辑 Composition 和 MP4 成片。',
   'changelog.tiktokVideoSkill.title': '更原生的 TikTok 视频 Skill',
   'changelog.tiktokVideoSkill.item1': '全新的 TikTok Skill 为 Agent 创作的竖屏视频加入更原生的开场、节奏、字幕、包装和平台安全布局，同时保留每条 Composition 的视觉自主性。',
   'changelog.tiktokVideoSkill.item2': '口播字幕现在先理解最终旁白的含义和表达，再使用真实词级时间精准同步，不再按字数机械切碎句子。',

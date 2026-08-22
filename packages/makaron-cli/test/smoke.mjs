@@ -119,6 +119,8 @@ const server = http.createServer(async (req, res) => {
           studioRunRecipe: 'cinematic-video',
           studioRunProfile: 'generated-or-hybrid',
           sourceMediaRequired: false,
+          userSelectable: true,
+          manifestVisible: true,
         },
         {
           name: 'source-video-studio',
@@ -128,6 +130,30 @@ const server = http.createServer(async (req, res) => {
           studioRunRecipe: 'source-video-studio',
           studioRunProfile: 'source-led',
           sourceMediaRequired: true,
+          userSelectable: true,
+          manifestVisible: true,
+        },
+        {
+          name: 'talking-head',
+          label: 'Talking Head',
+          builtIn: true,
+          description: 'Edit talking-head footage with transcript-led cuts, synced captions, B-roll, and highlights.',
+          studioRunRecipe: 'talking-head',
+          studioRunProfile: 'source-led',
+          sourceMediaRequired: true,
+          inputHint: 'A talking-head video with clear, audible speech',
+          tags: ['video', 'talking-head', 'captions', 'b-roll'],
+          userSelectable: false,
+          manifestVisible: true,
+        },
+        {
+          name: 'speech-clock-internal',
+          label: 'Speech Clock Internal',
+          builtIn: true,
+          description: 'Internal timing helper.',
+          sourceMediaRequired: true,
+          userSelectable: false,
+          manifestVisible: false,
         },
       ],
     });
@@ -935,8 +961,22 @@ try {
   {
     const result = await expectSuccess(['skills', 'list', '--built-in', '--json']);
     const data = JSON.parse(result.stdout);
-    assert.equal(data.skills.length, 2);
+    assert.equal(data.skills.length, 3);
     assert.equal(data.skills[0].studioRunRecipe, 'cinematic-video');
+    assert.equal(data.skills[2].name, 'talking-head');
+  }
+
+  {
+    const result = await expectSuccess(['skills', 'list', '--built-in', '--all', '--json']);
+    const data = JSON.parse(result.stdout);
+    assert.equal(data.skills.length, 4);
+    assert.equal(data.skills[3].name, 'speech-clock-internal');
+  }
+
+  {
+    const result = await expectSuccess(['skills', 'search', 'talking head captions', '--built-in', '--json']);
+    const data = JSON.parse(result.stdout);
+    assert.deepEqual(data.skills.map(skill => skill.name), ['talking-head']);
   }
 
   {
@@ -944,6 +984,13 @@ try {
     const data = JSON.parse(result.stdout);
     assert.equal(data.sourceMediaRequired, true);
     assert.equal(data.studioRunProfile, 'source-led');
+  }
+
+  {
+    const result = await expectSuccess(['skills', 'show', 'talking-head', '--built-in']);
+    assert.match(result.stdout, /Purpose:/);
+    assert.match(result.stdout, /A talking-head video with clear, audible speech/);
+    assert.match(result.stdout, /--skill talking-head/);
   }
 
   {

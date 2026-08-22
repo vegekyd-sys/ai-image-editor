@@ -75,6 +75,10 @@ const en = {
   // Changelog
   'changelog.heading': 'Updates',
   'changelog.close': 'Close updates',
+  'changelog.talkingHeadEditing.title': 'Talking-Head Editing',
+  'changelog.talkingHeadEditing.item1': 'Upload a raw talking-head video and Makaron uses ASR to remove dead air, filler, repetition, and broken delivery for a smoother cut.',
+  'changelog.talkingHeadEditing.item2': 'Captions follow the retained voice with real word timing, becoming shorter, emphasized, dynamic, and still editable.',
+  'changelog.talkingHeadEditing.item3': 'Agent can add selective B-roll, infographics, and social packaging, then publish an editable composition and finished MP4.',
   'changelog.tiktokVideoSkill.title': 'TikTok-Native Video Skill',
   'changelog.tiktokVideoSkill.item1': 'The new TikTok Skill gives Agent-made vertical videos creator-native hooks, pacing, captions, packaging, and platform-aware placement while keeping every composition visually authored.',
   'changelog.tiktokVideoSkill.item2': 'Spoken captions now follow the meaning and delivery of the final voiceover, with precise word timing used for synchronization instead of mechanically chopping lines by length.',

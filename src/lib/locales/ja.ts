@@ -113,6 +113,10 @@ const ja = {
   // Changelog
   'changelog.heading': '更新情報',
   'changelog.close': '更新情報を閉じる',
+  'changelog.talkingHeadEditing.title': 'トーキングヘッド編集',
+  'changelog.talkingHeadEditing.item1': '素材のトーキングヘッド動画をアップロードすると、Makaron が ASR を使って間、フィラー、重複、不自然な言い直しを削り、より滑らかな動画に整えます。',
+  'changelog.talkingHeadEditing.item2': '字幕は残した音声の実際の単語タイミングに従い、短く、強調された動的な表現になり、編集可能な状態を保ちます。',
+  'changelog.talkingHeadEditing.item3': 'Agent は必要な B-roll、インフォグラフィック、ショート動画向けの演出を加え、編集可能な Composition と完成 MP4 を公開できます。',
   'changelog.tiktokVideoSkill.title': 'TikTok ネイティブな動画 Skill',
   'changelog.tiktokVideoSkill.item1': '新しい TikTok Skill は、Agent が作る縦型動画にクリエイターらしいフック、テンポ、字幕、パッケージとプラットフォームを考慮した配置を加えつつ、Composition ごとの表現の自由を保ちます。',
   'changelog.tiktokVideoSkill.item2': '音声字幕は最終ナレーションの意味と話し方を理解して区切り、実際の単語タイミングで正確に同期するため、文字数だけで機械的に分割されません。',

@@ -1,6 +1,6 @@
 {
   "name": "makaron-cli",
-  "version": "0.13.7",
+  "version": "0.13.8",
   "description": "Give Claude Code a creative agent. Pass complete creative requests and source media to Makaron Chat.",
   "author": {
     "name": "Versa AI",

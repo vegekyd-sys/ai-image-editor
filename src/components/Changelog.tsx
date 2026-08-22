@@ -17,12 +17,16 @@ interface LegacyChangelogEntry {
 
 type LocalizedChangelogEntry = {
   date: string;
-  localeKey: 'smarterEditableDiscovery' | 'tiktokVideoSkill' | 'sourcePlayback' | 'externalSourceRanges' | 'seedance25' | 'minimaxH3' | 'multilingualAsr' | 'editableRemotion' | 'editableLayers';
+  localeKey: 'talkingHeadEditing' | 'smarterEditableDiscovery' | 'tiktokVideoSkill' | 'sourcePlayback' | 'externalSourceRanges' | 'seedance25' | 'minimaxH3' | 'multilingualAsr' | 'editableRemotion' | 'editableLayers';
 };
 
 type ChangelogEntry = LegacyChangelogEntry | LocalizedChangelogEntry;
 
 const CHANGELOG: ChangelogEntry[] = [
+  {
+    date: '2026-08-22',
+    localeKey: 'talkingHeadEditing',
+  },
   {
     date: '2026-08-19',
     localeKey: 'smarterEditableDiscovery',
@@ -969,6 +973,14 @@ const iOSAppTopGap = 'max(96px, calc(env(safe-area-inset-top, 0px) + 40px))';
 const iOSAppBottomGap = 'max(14px, env(safe-area-inset-bottom, 0px))';
 
 const LOCALIZED_CHANGELOG_KEYS = {
+  talkingHeadEditing: {
+    title: 'changelog.talkingHeadEditing.title',
+    items: [
+      'changelog.talkingHeadEditing.item1',
+      'changelog.talkingHeadEditing.item2',
+      'changelog.talkingHeadEditing.item3',
+    ],
+  },
   smarterEditableDiscovery: {
     title: 'changelog.smarterEditableDiscovery.title',
     items: ['changelog.smarterEditableDiscovery.item1'],

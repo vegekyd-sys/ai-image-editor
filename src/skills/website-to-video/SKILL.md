@@ -1,8 +1,9 @@
 ---
 name: website-to-video
 description: >
-  Makaron adapter with adapted support for OpenMontage's website-to-video
-  craft skill, using existing Makaron tools and durable project outputs.
+  Turn a real website, screen recording, or screenshots into an editable product
+  demo or launch video with readable actions, callouts, pacing, and optional
+  narration. Use when the website experience is the source evidence.
 allowed-tools: read_file studio_run prepare_visual_asset analyze_video analyze_image transcribe_audio generate_image generate_animation generate_audio run_code write_file preview_frame materialize_media
 metadata:
   makaron:
@@ -21,6 +22,7 @@ metadata:
     studioRunRecipe: "website-to-video"
     studioRunProfile: "site-led-remotion"
     sourceMediaRequired: false
+    inputHint: "A website URL, screen recording, or screenshots"
     tags: [openmontage, agent-skill, video-workflow, adapted, video, workflow, studio-run, remotion]
 ---
 

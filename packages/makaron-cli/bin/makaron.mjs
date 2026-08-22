@@ -392,6 +392,11 @@ What you can ask:
   Marketplace skill
     makaron chat --project auto --image selfie.jpg --skill "Football Captain" "make this cinematic"
 
+  Built-in production skill
+    makaron skills list --built-in
+    makaron skills show talking-head --built-in
+    makaron chat --project auto --video talk.mp4 --skill talking-head "make a tight captioned edit"
+
   Fix one video moment from a screenshot
     makaron chat --project <id> --image screenshot.png "@4 this frame should be Paris; only fix this moment"
 
@@ -1174,12 +1179,29 @@ async function fetchBuiltInSkills(baseUrl) {
   return (data.skills || []).filter(skill => skill.builtIn);
 }
 
-function printBuiltInSkills(skills) {
+function isDiscoverableBuiltInSkill(skill) {
+  return skill.userSelectable !== false || skill.manifestVisible === true;
+}
+
+function builtInSkillSearchText(skill) {
+  return [
+    skill.name,
+    skill.label,
+    skill.description,
+    skill.studioRunRecipe,
+    skill.studioRunProfile,
+    skill.canonicalSkill,
+    ...(Array.isArray(skill.tags) ? skill.tags : []),
+  ].filter(Boolean).join(' ').toLowerCase();
+}
+
+function printBuiltInSkills(skills, opts = {}) {
   if (!skills.length) {
     console.log('No built-in skills found.');
     return;
   }
-  console.log(`Built-in skills: ${skills.length}\n`);
+  const heading = opts.heading || 'Built-in skills';
+  console.log(`${heading}: ${skills.length}\n`);
   for (const skill of skills) {
     const recipe = skill.studioRunRecipe ? `  [Studio Run: ${skill.studioRunRecipe}]` : '';
     const source = skill.sourceMediaRequired ? '  [source media required]' : '';
@@ -1189,6 +1211,30 @@ function printBuiltInSkills(skills) {
     console.log(`  ${skill.name}${recipe}${source}${adapter}`);
     if (skill.description) console.log(`    ${String(skill.description).replace(/\s+/g, ' ').trim()}`);
   }
+  if (opts.hint !== false) {
+    console.log('\nInspect and use a skill:');
+    console.log('  makaron skills show <name> --built-in');
+    console.log('  makaron chat --project auto --skill <name> "your request"');
+  }
+}
+
+function printBuiltInSkill(skill) {
+  const description = String(skill.description || '').replace(/\s+/g, ' ').trim();
+  console.log(`${skill.label || skill.name} (${skill.name})`);
+  if (description) console.log(`\nPurpose:\n  ${description}`);
+  console.log('\nBest input:');
+  console.log(`  ${skill.inputHint || (skill.sourceMediaRequired ? 'Source media is required. Attach it with --video, --image, or --audio as appropriate.' : 'Start from a clear brief; attach source media when the request depends on existing footage or assets.')}`);
+  if (skill.studioRunRecipe || skill.studioRunProfile) {
+    console.log('\nWorkflow:');
+    if (skill.studioRunRecipe) console.log(`  Studio Run recipe: ${skill.studioRunRecipe}`);
+    if (skill.studioRunProfile) console.log(`  Profile: ${skill.studioRunProfile}`);
+  }
+  if (Array.isArray(skill.tags) && skill.tags.length) {
+    console.log(`\nKeywords:\n  ${skill.tags.join(', ')}`);
+  }
+  console.log('\nUse with chat:');
+  const media = skill.sourceMediaRequired ? ' --video <file>' : '';
+  console.log(`  makaron chat --project auto${media} --skill ${skill.name} "describe the result you want"`);
 }
 
 function marketplaceSearchText(skill) {
@@ -1846,20 +1892,25 @@ function printHelp(topic, subtopic) {
   } else if (topic === 'install-skill') {
     console.log('Usage: makaron install-skill [--global] [--agent <agent>] [--yes]');
   } else if (topic === 'skills') {
-    if (subtopic === 'list') console.log('Usage: makaron skills list [--built-in] [--json]');
-    else if (subtopic === 'search') console.log('Usage: makaron skills search <query> [--json]');
-    else if (subtopic === 'show') console.log('Usage: makaron skills show <marketplace-id|label> [--json]');
+    if (subtopic === 'list') console.log('Usage: makaron skills list [--built-in] [--all] [--json]');
+    else if (subtopic === 'search') console.log('Usage: makaron skills search <query> [--built-in] [--all] [--json]');
+    else if (subtopic === 'show') console.log('Usage: makaron skills show <id|label|name> [--built-in] [--json]');
     else if (subtopic === 'install') console.log('Usage: makaron skills install <marketplace-id|label> [--json]');
     else console.log(`Skill commands:
-  skills list --built-in              List all built-in Makaron skills and Studio Run recipes
+  skills list --built-in              List user-facing built-in skills and what they do
+  skills list --built-in --all        Include internal/adapted helper skills
   skills list                         List marketplace skills
   skills search <query>               Search marketplace skills
+  skills search <query> --built-in    Find a built-in skill by task or keyword
   skills show <id|label> --built-in   Show a built-in skill
   skills show <id|label>              Show a marketplace skill
   skills install <id|label>           Install a marketplace skill to your workspace
 
 Use with chat:
   makaron chat --project auto --skill <id|label> "your request"
+
+Not sure which built-in skill to use? Start with:
+  makaron skills list --built-in
 `);
   } else if (topic === 'materialize') {
     console.log(`Usage: makaron materialize --project <id> (--media <N> | --snapshot <snapshotId> | --design-path <path> | --design-json <file|->) [--wait] [--publish|--no-publish] [--profile fast_720p|source] [--pick url|job_id|status]`);
@@ -2485,22 +2536,41 @@ if (!command || command === '--help' || command === '-h' || command === 'help') 
 
   if (sub === 'list') {
     const builtIn = args.includes('--built-in');
-    const skills = builtIn ? await fetchBuiltInSkills(baseUrl) : await fetchMarketplaceSkills(baseUrl);
+    const allBuiltIn = args.includes('--all');
+    const fetchedSkills = builtIn ? await fetchBuiltInSkills(baseUrl) : await fetchMarketplaceSkills(baseUrl);
+    const skills = builtIn && !allBuiltIn
+      ? fetchedSkills.filter(isDiscoverableBuiltInSkill)
+      : fetchedSkills;
     if (jsonOutput) console.log(JSON.stringify({ skills }, null, 2));
-    else if (builtIn) printBuiltInSkills(skills);
+    else if (builtIn) printBuiltInSkills(skills, {
+      heading: allBuiltIn ? 'All built-in skills' : 'Built-in skills available to use',
+    });
     else printMarketplaceSkills(skills);
   } else if (sub === 'search') {
-    const query = args.filter((arg, index) => index > 1 && arg !== '--json').join(' ').trim();
-    if (!query) { console.error('Usage: makaron skills search <query> [--json]'); process.exit(1); }
+    const builtIn = args.includes('--built-in');
+    const allBuiltIn = args.includes('--all');
+    const query = args.filter((arg, index) => index > 1 && !['--json', '--built-in', '--all'].includes(arg)).join(' ').trim();
+    if (!query) { console.error('Usage: makaron skills search <query> [--built-in] [--all] [--json]'); process.exit(1); }
     const lowerQuery = query.toLowerCase();
     const slugQuery = slugifySkill(query);
-    const skills = (await fetchMarketplaceSkills(baseUrl))
-      .filter(skill => {
-        const rawMatch = marketplaceSkillTokens(skill).some(token => token.includes(lowerQuery));
-        const slugMatch = slugQuery ? marketplaceSearchText(skill).includes(slugQuery) : false;
-        return rawMatch || slugMatch;
-      });
+    const builtInQueryTokens = slugQuery.split('-').filter(Boolean);
+    const skills = builtIn
+      ? (await fetchBuiltInSkills(baseUrl))
+        .filter(skill => allBuiltIn || isDiscoverableBuiltInSkill(skill))
+        .filter(skill => {
+          const searchText = builtInSkillSearchText(skill);
+          const slugText = slugifySkill(searchText);
+          return searchText.includes(lowerQuery)
+            || (builtInQueryTokens.length > 0 && builtInQueryTokens.every(token => slugText.includes(token)));
+        })
+      : (await fetchMarketplaceSkills(baseUrl))
+        .filter(skill => {
+          const rawMatch = marketplaceSkillTokens(skill).some(token => token.includes(lowerQuery));
+          const slugMatch = slugQuery ? marketplaceSearchText(skill).includes(slugQuery) : false;
+          return rawMatch || slugMatch;
+        });
     if (jsonOutput) console.log(JSON.stringify({ skills }, null, 2));
+    else if (builtIn) printBuiltInSkills(skills, { heading: `Built-in skill matches for "${query}"` });
     else printMarketplaceSkills(skills);
   } else if (sub === 'show') {
     const identifier = args[2];
@@ -2512,7 +2582,7 @@ if (!command || command === '--help' || command === '-h' || command === 'help') 
       : findMarketplaceSkill(skills, identifier);
     if (!skill) { console.error(`Skill not found: ${identifier}`); process.exit(1); }
     if (jsonOutput) console.log(JSON.stringify(skill, null, 2));
-    else if (builtIn) printBuiltInSkills([skill]);
+    else if (builtIn) printBuiltInSkill(skill);
     else printMarketplaceSkill(skill);
   } else if (sub === 'install') {
     const identifier = args[2];
@@ -2526,9 +2596,11 @@ if (!command || command === '--help' || command === '-h' || command === 'help') 
     else console.log(data.skillName);
   } else {
     console.log(`Skill commands:
-  skills list --built-in              List all built-in Makaron skills and Studio Run recipes
+  skills list --built-in              List user-facing built-in skills and what they do
+  skills list --built-in --all        Include internal/adapted helper skills
   skills list                         List marketplace skills
   skills search <query>               Search marketplace skills
+  skills search <query> --built-in    Find a built-in skill by task or keyword
   skills show <id|label> --built-in   Show a built-in skill
   skills show <id|label>              Show a marketplace skill
   skills install <id|label>           Install a marketplace skill to your workspace

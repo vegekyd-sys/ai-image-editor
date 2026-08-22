@@ -22,6 +22,7 @@ metadata:
     studioRunProfile: "source-led"
     defaultAspectRatio: "16:9"
     sourceMediaRequired: true
+    inputHint: "A talking-head video with clear, audible speech"
     tags: [video, talking-head, transcript, asr, b-roll, highlights, remotion]
 ---
 

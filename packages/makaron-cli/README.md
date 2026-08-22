@@ -140,6 +140,20 @@ npx makaron-cli chat --project auto --image selfie.jpg --skill <marketplace-id-o
 
 `--skill` accepts an installed skill name, a marketplace UUID, or a unique marketplace label. If a marketplace skill is matched, the CLI installs or reuses it and sends `[Active skill: <installed-skill-name>]` to Makaron Agent. Ordinary users do not need admin commands, and the CLI intentionally does not expose skill deletion.
 
+### Built-in production skills
+
+Discover the available production workflows before choosing `--skill`:
+
+```bash
+npx makaron-cli skills list --built-in
+npx makaron-cli skills search "talking head captions" --built-in
+npx makaron-cli skills show talking-head --built-in
+npx makaron-cli chat --project auto --video talk.mp4 --skill talking-head -b "make a tight captioned edit"
+```
+
+The default list shows callable/discoverable skills with their purpose and input
+requirements. Add `--all` to include internal adapters and helper skills.
+
 ### With additional images (existing project)
 
 ```bash
