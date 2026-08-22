@@ -141,6 +141,8 @@ describe('TikTok video guideline', () => {
     expect(source).toContain('must not rely on `white-space: nowrap`');
     expect(source).toContain('Typography remains Composition-owned');
     expect(source).toContain('There is no required font, black plaque');
+    expect(source).toContain('Splitting on a\n  keyword removes that delimiter');
+    expect(source).toContain('Flatten the rendered caption host');
     expect(compositionPrompt).toContain('Multi-line subtitles must also be collision-free');
     expect(compositionPrompt).toContain('Long single-line subtitles must fit completely');
     expect(compositionPrompt).toContain("Do not use `whiteSpace: 'nowrap'`");
@@ -196,9 +198,13 @@ describe('TikTok video guideline', () => {
     expect(source).toContain('generic ASS/`drawtext` burn-in');
     expect(source).toContain('generated narration master with failed or unavailable ASR blocks this gate');
     expect(source).toContain('second\n   manually retyped subtitle schedule is a synchronization failure');
+    expect(source).toContain('Flatten each rendered spoken-caption host');
+    expect(source).toContain('actual emphasized word is absent');
     expect(read('src/skills/tiktok-video/references/platform-layout.md')).toContain(
       'placement references only',
     );
+    expect(compositionPrompt).toContain('`text.split(keyword)` removes the keyword');
+    expect(compositionPrompt).toContain('actual emphasized word disappears');
     expect(compositionPrompt).toContain('extract every spoken cue midpoint');
     expect(compositionPrompt).toContain('Closing copy, CTA, or a final reveal');
     expect(compositionPrompt).toContain('render success is not typography\n  acceptance');

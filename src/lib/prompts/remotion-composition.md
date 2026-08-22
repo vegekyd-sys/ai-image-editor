@@ -129,6 +129,11 @@ Available APIs include all exports from `remotion`, `@remotion/media`, `@remotio
 - Keyword emphasis must select text inside that spoken cue. A boolean accent
   that recolors the entire caption host is not semantic word emphasis; keep
   ordinary words quieter and make the chosen substring visibly distinct.
+  Styling must preserve the complete cue text exactly once. Remember that
+  `text.split(keyword)` removes the keyword: explicitly render the prefix,
+  highlighted match, and suffix (or use a capturing tokenizer), and render the
+  full cue unchanged when the match is absent. Never let the accent shape
+  survive while the actual emphasized word disappears.
 - Multi-line subtitles must also be collision-free inside that one host after
   the intended font has loaded at final canvas size. Neighboring glyph rows may
   not touch or overprint, and a cloned per-line background, pill, border, or
