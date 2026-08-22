@@ -29,7 +29,7 @@ interface CreditPopupProps {
   open: boolean;
   entryPoint?: 'standard' | 'ios_onboarding' | 'ios_preauth_trial';
   onClose: () => void;
-  onPreAuthTrialConfirmed?: () => void;
+  onPreAuthTrialConfirmed?: () => void | Promise<void>;
   balance: number;
   needed?: number;
   subscription?: { planId: string; status: string } | null;
@@ -286,7 +286,7 @@ export default function CreditPopup({ open: externalOpen, entryPoint = 'standard
         }
         await finishAppleTransaction(transaction.transactionId);
         if (isPreAuthTrial && data.pendingClaim) {
-          onPreAuthTrialConfirmed?.();
+          await onPreAuthTrialConfirmed?.();
           return;
         }
         writeNativeJSONCache('/api/billing/credits', data);
@@ -356,7 +356,7 @@ export default function CreditPopup({ open: externalOpen, entryPoint = 'standard
       }
       await finishAppleTransaction(transaction.transactionId);
       if (isPreAuthTrial && data.pendingClaim) {
-        onPreAuthTrialConfirmed?.();
+        await onPreAuthTrialConfirmed?.();
         return;
       }
       writeNativeJSONCache('/api/billing/credits', data);

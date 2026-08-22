@@ -58,8 +58,9 @@ describe('iOS subscription-before-registration flow', () => {
     expect(migration).toContain('GRANT ALL ON TABLE pending_apple_trial_claims TO service_role')
   })
 
-  it('replaces the iOS guest Skill uploader with the trial CTA and resumes in the editor', () => {
+  it('stages iOS guest media before the trial and resumes the same Skill in the editor', () => {
     const home = fs.readFileSync(path.join(root, 'src/app/home/page.tsx'), 'utf8')
+    const creditPopup = fs.readFileSync(path.join(root, 'src/components/CreditPopup.tsx'), 'utf8')
     const editorContainer = fs.readFileSync(path.join(root, 'src/components/ProjectEditorContainer.tsx'), 'utf8')
     const productsRoute = fs.readFileSync(path.join(root, 'src/app/api/billing/apple/products/route.ts'), 'utf8')
     const verifyRoute = fs.readFileSync(path.join(root, 'src/app/api/billing/apple/verify/route.ts'), 'utf8')
@@ -69,7 +70,11 @@ describe('iOS subscription-before-registration flow', () => {
     expect(home).toContain("entryPoint=\"ios_preauth_trial\"")
     expect(home).toContain('!isPreAuthIOSSkillAction && renderUploadSlots(selectedDetail, true)')
     expect(home).toContain('confirmIOSPreAuthTrialContinuation()')
-    expect(home).toContain("window.location.href = '/login?focus=email'")
+    expect(home).toContain("router.push('/login?focus=email')")
+    expect(home).toContain('handleCreateFilesSelected')
+    expect(home).toContain('if (createInput.files.length > 0 || createInput.text.trim())')
+    expect(home).toContain('if (trialContinuation?.confirmed && !trialContinuation.linked) return')
+    expect(home).toContain('if (getCreateDraftContinuationId()) return')
     expect(home).toContain("fetch('/api/auth/complete', { method: 'POST' })")
     expect(home).toContain("t('home.continueRegistration')")
     expect(home).toContain('router.replace(`/projects/${result.projectId}`)')
@@ -78,6 +83,8 @@ describe('iOS subscription-before-registration flow', () => {
     expect(productsRoute).not.toContain("return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })")
     expect(verifyRoute).toContain("body.intent !== 'preauth_trial'")
     expect(login).toContain('!complete.appleTrialClaimed')
+    expect(login).toContain('router.replace(destination)')
     expect(login).toContain('emailRef.current?.focus')
+    expect(creditPopup).toContain('await onPreAuthTrialConfirmed?.()')
   })
 })

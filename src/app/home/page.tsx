@@ -1482,7 +1482,7 @@ function HomePageInner() {
     const continuation = confirmIOSPreAuthTrialContinuation()
     if (!continuation) return
 
-    if (continuation.kind === 'create' && (createInput.files.length > 0 || createInput.text.trim())) {
+    if (createInput.files.length > 0 || createInput.text.trim()) {
       try {
         await saveCreateDraftBeforeLogin(
           createInput.files,
@@ -1498,8 +1498,8 @@ function HomePageInner() {
     localStorage.setItem('mkr_return_url', returnPath)
     sessionStorage.setItem('mkr_return_url', returnPath)
     setShowPreAuthIOSTrial(false)
-    window.location.href = '/login?focus=email'
-  }, [createInput.files, createInput.text, saveCreateDraftBeforeLogin])
+    router.push('/login?focus=email')
+  }, [createInput.files, createInput.text, router, saveCreateDraftBeforeLogin])
 
   const handleCreateProject = useCallback(async (files: File[], prompt?: string): Promise<boolean> => {
     const homeSkill = selectedDetail || activeSkill
@@ -1557,6 +1557,8 @@ function HomePageInner() {
   const consumeDraftRef = useRef(false)
   useEffect(() => {
     if (!user || consumeDraftRef.current) return
+    const trialContinuation = readIOSPreAuthTrialContinuation()
+    if (trialContinuation?.confirmed && !trialContinuation.linked) return
     const continuationId = getCreateDraftContinuationId()
     if (!continuationId) return
     consumeDraftRef.current = true
@@ -1618,7 +1620,7 @@ function HomePageInner() {
     }
     void consume()
     return () => { cancelled = true }
-  }, [createInput, homeSkills, installHomeSkill, router, user])
+  }, [createInput, homeSkills, installHomeSkill, router, trialContinuationVersion, user])
 
   const consumePreAuthTrialRef = useRef(false)
   const retryPreAuthTrialClaimRef = useRef(false)
@@ -1652,7 +1654,10 @@ function HomePageInner() {
     if (!user || consumePreAuthTrialRef.current) return
     const continuation = readIOSPreAuthTrialContinuation()
     if (!continuation?.confirmed || !continuation.linked) return
-    if (continuation.kind === 'create' && getCreateDraftContinuationId()) return
+    // A staged draft owns the continuation for both generic creation and
+    // Skill launches. Let the draft consumer preserve its images and Skill
+    // context instead of racing this empty-project fallback.
+    if (getCreateDraftContinuationId()) return
     if (continuation.kind === 'skill' && homeSkills.length === 0) return
 
     consumePreAuthTrialRef.current = true
@@ -1704,8 +1709,10 @@ function HomePageInner() {
     const droppedFiles = allFiles.filter(f => f.type.startsWith('image/') || f.type.startsWith('video/') || isHeicFile(f))
     if (!zipFile && droppedFiles.length === 0) return
     if (isPreAuthIOSGuest) {
-      if (!activeSkill && droppedFiles.length > 0) createInput.addFiles(droppedFiles)
-      beginPreAuthIOSTrial(activeSkill?.id)
+      if (droppedFiles.length > 0) {
+        createInput.addFiles(droppedFiles)
+        beginPreAuthIOSTrial(activeSkill?.id)
+      }
       return
     }
     const authedUser = await requireAuth()
@@ -1719,6 +1726,7 @@ function HomePageInner() {
     const files = Array.from(e.dataTransfer.files ?? []).filter(f => f.type.startsWith('image/') || isHeicFile(f))
     if (files.length === 0) return
     if (isPreAuthIOSGuest) {
+      createInput.addFiles(files)
       beginPreAuthIOSTrial(selectedDetail?.id)
       return
     }
@@ -1937,12 +1945,17 @@ function HomePageInner() {
     }, createMetaEventId('file.selected'))
   }, [activeSkill?.id, isGuestSkillAction, skillActionMeta])
 
+  const handleCreateFilesSelected = useCallback((files: File[], source: string) => {
+    trackFileSelected(files, source)
+    if (isPreAuthIOSGuest) beginPreAuthIOSTrial(activeSkill?.id)
+  }, [activeSkill?.id, beginPreAuthIOSTrial, isPreAuthIOSGuest, trackFileSelected])
+
   const handleCreateOrUpload = useCallback(() => {
     if (isPreAuthIOSGuest) {
       const continuation = readIOSPreAuthTrialContinuation()
       if (continuation?.confirmed && !continuation.linked) {
         if (activeSkill?.id) rememberIOSSkillReturn(activeSkill.id)
-        window.location.href = '/login?focus=email'
+        router.push('/login?focus=email')
         return
       }
       beginPreAuthIOSTrial(activeSkill?.id)
@@ -1959,17 +1972,19 @@ function HomePageInner() {
       return
     }
     handleCreate()
-  }, [activeSkill, beginPreAuthIOSTrial, createInput.fileInputRef, createInput.files.length, createInput.text, goToLoginFromEmptyCreate, handleCreate, hasEnoughPhotos, isPreAuthIOSGuest, rememberIOSSkillReturn, shouldLoginOnEmptyCreate, trackUploadIntent])
+  }, [activeSkill, beginPreAuthIOSTrial, createInput.fileInputRef, createInput.files.length, createInput.text, goToLoginFromEmptyCreate, handleCreate, hasEnoughPhotos, isPreAuthIOSGuest, rememberIOSSkillReturn, router, shouldLoginOnEmptyCreate, trackUploadIntent])
 
   const handleInputSlotClick = useCallback(async () => {
     if (isPreAuthIOSGuest) {
       const continuation = readIOSPreAuthTrialContinuation()
       if (continuation?.confirmed && !continuation.linked) {
         if (selectedDetail?.id) rememberIOSSkillReturn(selectedDetail.id)
-        window.location.href = '/login?focus=email'
+        router.push('/login?focus=email')
         return
       }
-      beginPreAuthIOSTrial(selectedDetail?.id)
+      if (selectedDetail?.id) rememberIOSSkillReturn(selectedDetail.id)
+      trackUploadIntent('slot')
+      createInput.fileInputRef.current?.click()
       return
     }
     if (!user && selectedDetail) {
@@ -1983,7 +1998,7 @@ function HomePageInner() {
       trackUploadIntent('slot')
       createInput.fileInputRef.current?.click()
     }
-  }, [beginPreAuthIOSTrial, createInput.fileInputRef, isPreAuthIOSGuest, rememberIOSSkillReturn, requireAuth, selectedDetail, trackUploadIntent, user])
+  }, [createInput.fileInputRef, isPreAuthIOSGuest, rememberIOSSkillReturn, requireAuth, router, selectedDetail, trackUploadIntent, user])
 
   const isVideoUrl = (url: string) => /\.(mp4|webm|mov)(\?|$)/i.test(url)
 
@@ -2330,7 +2345,7 @@ function HomePageInner() {
               fallbackHref={shouldLoginOnEmptyCreate && !isPreAuthIOSGuest ? '/login' : undefined}
               onSubmit={handleCreateOrUpload}
               onSlotClick={handleInputSlotClick}
-              onFilesSelected={(files) => trackFileSelected(files, 'file_input')}
+              onFilesSelected={(files) => handleCreateFilesSelected(files, 'file_input')}
               onTextareaFocus={keepSkillComposerAboveKeyboard}
               onTextareaBlur={handleHomeTextareaBlur}
               skills={availableSkills}
@@ -2569,7 +2584,7 @@ function HomePageInner() {
               fallbackHref={shouldLoginOnEmptyCreate && !isPreAuthIOSGuest ? '/login' : undefined}
               onSubmit={handleCreateOrUpload}
               onSlotClick={handleInputSlotClick}
-              onFilesSelected={(files) => trackFileSelected(files, 'file_input')}
+              onFilesSelected={(files) => handleCreateFilesSelected(files, 'file_input')}
               onTextareaFocus={keepSkillComposerAboveKeyboard}
               onTextareaBlur={handleHomeTextareaBlur}
               skills={availableSkills}

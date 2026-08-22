@@ -2,6 +2,7 @@
 
 import { useState, useRef, useEffect } from 'react'
 import Link from 'next/link'
+import { useRouter } from 'next/navigation'
 import { createClient } from '@/lib/supabase/client'
 import type { SupabaseClient } from '@supabase/supabase-js'
 import { useLocale, LocaleToggle } from '@/lib/i18n'
@@ -34,6 +35,7 @@ function isAppleLoginEnabled(): boolean {
 
 export default function LoginPage() {
   const { t } = useLocale()
+  const router = useRouter()
   const hydrated = useHydrated()
   const [view, setView] = useState<View>('form')
   const inApp = hydrated && isInAppBrowser()
@@ -159,7 +161,12 @@ export default function LoginPage() {
     localStorage.removeItem('mkr_return_url')
     // mkr_return_text and mkr_return_skill are consumed by the home page on mount
     returnUrl = resolveReturnUrlForRuntime(returnUrl)
-    window.location.href = withOnboardingParam(returnUrl || options?.fallback || '/', options?.onboarding)
+    const destination = withOnboardingParam(returnUrl || options?.fallback || '/', options?.onboarding)
+    if (isMakaronIOSApp()) {
+      router.replace(destination)
+      return
+    }
+    window.location.href = destination
   }
 
   async function completeAuthAndRedirect(options?: { fallback?: string }) {
