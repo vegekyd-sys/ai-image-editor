@@ -37,10 +37,12 @@ Before publishing or materializing the editable composition:
 9. Confirm the published Composition still owns authored caption typography and
    semantic emphasis. Do not accept a generic ASS/`drawtext` burn-in created
    only because a media-preparation renderer lacked the intended text filter.
-10. Flatten each rendered spoken-caption host and compare it with its intended
-    cue text. Keyword styling may add spans but may not remove, duplicate,
-    paraphrase, or reorder the selected substring. Reject a colored rail or
-    background when the actual emphasized word is absent.
+10. For each `subtitleSyncEvidence` section, flatten its ordered rendered
+    spoken-caption hosts and concatenate their micro-cue texts. The result must
+    reproduce the complete measured section with no dropped, duplicated,
+    paraphrased, or reordered word. Keyword styling may add spans but may not
+    remove the selected substring. Reject a colored rail or background when the
+    actual emphasized word is absent.
 
 ## Encoded MP4 Acceptance
 

@@ -3,7 +3,9 @@ name: source-video-studio
 description: >
   Turn real uploaded footage into a polished talking-head edit, hybrid story,
   documentary montage, or source-led feature while preserving the footage as
-  the primary evidence.
+  the primary evidence. Use when no destination-specific production Skill fits;
+  when the user names TikTok or Douyin, choose tiktok-video instead even when
+  the project is built from real source footage.
 allowed-tools: read_file studio_run prepare_visual_asset analyze_video transcribe_audio analyze_image generate_image generate_animation generate_audio run_code write_file preview_frame materialize_media
 metadata:
   makaron:

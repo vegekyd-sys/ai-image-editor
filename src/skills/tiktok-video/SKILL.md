@@ -2,7 +2,10 @@
 name: tiktok-video
 description: >
   Create and package TikTok-ready 9:16 videos with platform-aware placement,
-  creator-native direction, synchronized VO/BGM captions, and editable Remotion delivery.
+  creator-native direction, synchronized VO/BGM captions, and editable Remotion
+  delivery. Select this whenever the user explicitly names TikTok or Douyin,
+  including edits built entirely from real source footage; prefer it over a
+  generic source-video workflow.
 allowed-tools: read_file studio_run prepare_visual_asset analyze_video analyze_image transcribe_audio generate_image generate_animation generate_audio run_code write_file preview_frame materialize_media
 metadata:
   makaron:
@@ -102,9 +105,13 @@ or compress it to a sharper observation.
 
 Unless the user explicitly asks for continuous narration, a sequence of full
 sentences covering nearly every scene is an over-written cut. Intentional
-speech-free beats are valid. When speech is used, preserve coherent thoughts
-rather than chopping language into mechanical word-count cards; cue grouping
-remains an editorial judgment grounded in measured word timing.
+speech-free beats are valid. When speech is used, look for the shortest natural
+phrase that still carries one complete semantic beat. A whole sentence or
+Script section is not automatically one caption cue. If a cue becomes two or
+three dense lines, revisit its clause boundary or tighten the VO before styling;
+do not shrink the type or add a backing merely to hold an over-written cue.
+Cue grouping remains an editorial judgment grounded in measured word timing,
+not a mechanical word-count quota.
 
 ## Give Each Video Its Own Text Voice
 
@@ -138,17 +145,20 @@ caption must still contain the complete cue text exactly once.
 - Deliver full-screen `1080 × 1920` for the standard high-resolution TikTok
   composition. The `720 × 1280` placement references are not final canvas or
   export dimensions. Keep footage full-bleed unless the concept says otherwise.
-- Keep the result editable. Use one visible caption host for each spoken cue,
-  with highlights inside that host.
+- Keep the result editable. Use one visible caption host for each derived spoken
+  micro-cue, with highlights inside that host. One Script/ASR section may and
+  often should produce several consecutive micro-cues.
 - Fit every cue inside its safe bounds at the settled final font metrics. Do not
   preserve a prose caption as one unbroken line when it needs an authored break,
   narrower measure, or smaller type to remain fully visible.
 - Use the final narration-containing audio master and its `transcribe_audio`
   word timing. Do not invent caption intervals or reuse timestamps from an
   earlier take.
-- Persist that cue sheet as one data source and derive spoken-caption
-  Sequences, word emphasis, and linked visual ranges from it. Do not manually
-  retype a second schedule in JSX, FFmpeg arguments, or subtitle files.
+- Persist the section evidence and its word-timed micro-cue partition as one
+  data source, then derive spoken-caption Sequences, word emphasis, and linked
+  visual ranges from it. Every measured word belongs to exactly one consecutive
+  micro-cue. Do not manually retype a second schedule in JSX, FFmpeg arguments,
+  or subtitle files.
 - For generated narration, `explicit-audio-placement` and Script estimates are
   not ASR fallbacks. If measured transcription remains unavailable after one
   retry, preserve the work and stop before narrated Composition or Delivery.

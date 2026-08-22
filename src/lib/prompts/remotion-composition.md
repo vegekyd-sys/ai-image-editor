@@ -115,17 +115,27 @@ Available APIs include all exports from `remotion`, `@remotion/media`, `@remotio
   drives spoken captions, linked scene ranges, and semantic visual beats;
   planned Script timing or BGM rhythm cannot replace measured speech timing.
 - Each subtitle cue must have exactly one visible text host and one
-  non-overlapping active range. Apply the caption background and border to that
-  host, or use a wrapper that contains no second copy of the text. Never stack
+  non-overlapping active range. If the current concept intentionally uses a
+  caption background or border, apply it to that host or to a wrapper that
+  contains no second copy of the text. Never stack
   a raw caption, editable mirror, or duplicate subtitle track over the same cue.
   At each cue midpoint, confirm that one glyph silhouette is visible, not two
   slightly offset copies.
-- For narrated compositions, every non-empty `subtitleSyncEvidence` cue must
-  map to one actual spoken-caption host that renders the measured cue text.
-  Editorial hooks, scene labels, `Headline`, and `KineticTitle` components do
-  not satisfy spoken-caption coverage. Narration with an empty evidence array,
-  or evidence without a corresponding visible host, must be repaired before
-  publish.
+- For narrated compositions, partition each non-empty `subtitleSyncEvidence`
+  section's measured words into one or more consecutive semantic micro-cues.
+  Each micro-cue gets one visible spoken-caption host and the measured range of
+  its own first and last word. Concatenating the flattened micro-cue texts in
+  order must reproduce the complete section text with no dropped, duplicated,
+  paraphrased, or reordered word. A Script/ASR section is not required to stay
+  inside one caption card. Editorial hooks, scene labels, `Headline`, and
+  `KineticTitle` components do not satisfy spoken-caption coverage. Narration
+  with empty section evidence or an empty micro-cue partition must be repaired
+  before publish.
+- At phone size, each ordinary micro-cue should read as one glance. An ordinary
+  cue settling into three dense lines signals a failed partition: split it at a
+  measured clause, emphasis, or breath boundary, or tighten and regenerate the
+  VO. Preserve deliberate quotations or legal copy only when the concept gives
+  them enough hold time.
 - Keyword emphasis must select text inside that spoken cue. A boolean accent
   that recolors the entire caption host is not semantic word emphasis; keep
   ordinary words quieter and make the chosen substring visibly distinct.
@@ -150,8 +160,10 @@ Available APIs include all exports from `remotion`, `@remotion/media`, `@remotio
 - Do not put `display: inline` + `box-decoration-break: clone` around
   auto-wrapped subtitle prose. Lambda Chromium can fragment and paint that
   backing differently from the interactive Preview, especially on scaled
-  exports. Use one wrapping `inline-block` backing shape (`maxWidth: '100%'`)
-  or explicit authored line boxes when separate per-line shapes are essential.
+  exports. When the current concept actually needs a backing, use one wrapping
+  `inline-block` shape (`maxWidth: '100%'`) or explicit authored line boxes when
+  separate per-line shapes are essential. This export safeguard is not a reason
+  to add a backing to text-only, outlined, shadowed, or selectively blocked type.
 - A black subtitle plaque, colored left rail, lower-left anchor, Inter-like
   grotesk, or repeated pop is never a default package. Use any of them only
   when the current concept earns it; do not reproduce the same combined
