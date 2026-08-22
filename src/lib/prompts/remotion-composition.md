@@ -142,10 +142,11 @@ Available APIs include all exports from `remotion`, `@remotion/media`, `@remotio
   or off-canvas overflow to preserve prose on one line; author a break or adjust
   the local measure and type size. Preview the stable midpoint of every spoken
   cue, including the longest single-line cue, rather than sampling only scenes.
-- Do not put `box-decoration-break: clone` around auto-wrapped subtitle prose
-  unless final-resolution preview proves the cloned padding/background cannot
-  cover neighboring glyph rows. Prefer one block backing shape or explicit
-  authored lines when separate per-line shapes are part of the direction.
+- Do not put `display: inline` + `box-decoration-break: clone` around
+  auto-wrapped subtitle prose. Lambda Chromium can fragment and paint that
+  backing differently from the interactive Preview, especially on scaled
+  exports. Use one wrapping `inline-block` backing shape (`maxWidth: '100%'`)
+  or explicit authored line boxes when separate per-line shapes are essential.
 - A black subtitle plaque, colored left rail, lower-left anchor, Inter-like
   grotesk, or repeated pop is never a default package. Use any of them only
   when the current concept earns it; do not reproduce the same combined

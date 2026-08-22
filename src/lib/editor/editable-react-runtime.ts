@@ -4,7 +4,7 @@ import { editableRuntimeClassName } from './scene-registry';
 export type EditableTransformMode = 'proxy' | 'registry';
 
 export const REMOTION_EDITABLE_RUNTIME_VERSION =
-  'remotion-editable-runtime-r2-media-ownership';
+  'remotion-editable-runtime-r3-caption-block-parity';
 
 type ReactRuntime = typeof React;
 
@@ -60,6 +60,42 @@ function readEditableSourcePath(
 }
 
 const RENDERED_LINE_BREAK_RE = /(\\r\\n|\\n|\\r|\r\n|\n|\r)/g;
+
+function hasCaptionBacking(style: Record<string, unknown>): boolean {
+  return typeof style.background === 'string'
+    || typeof style.backgroundColor === 'string'
+    || typeof style.boxShadow === 'string';
+}
+
+/**
+ * Chromium does not give a cross-renderer geometry guarantee for decorations
+ * on an auto-wrapped inline box. In particular, `box-decoration-break: clone`
+ * creates one fragment per visual line; Preview and Lambda can then paint the
+ * fragments in a different order once font hinting and output scaling differ.
+ * The result is the familiar broken black plaque / covered neighboring row.
+ *
+ * Keep Agent-authored colors, spacing, line-height, shadow, and measure, but
+ * make the decorated text one wrapping inline-block. That produces one backing
+ * rectangle in both the interactive Player and the encoded MP4 without asking
+ * the Agent to rewrite an existing saved composition.
+ */
+export function stabilizeMultilineCaptionBacking(
+  style: Record<string, unknown>,
+): Record<string, unknown> {
+  const usesClonedInlineFragments = style.display === 'inline'
+    && (style.boxDecorationBreak === 'clone'
+      || style.WebkitBoxDecorationBreak === 'clone');
+  if (!usesClonedInlineFragments || !hasCaptionBacking(style)) return style;
+
+  return {
+    ...style,
+    display: 'inline-block',
+    maxWidth: style.maxWidth ?? '100%',
+    boxSizing: style.boxSizing ?? 'border-box',
+    boxDecorationBreak: 'slice',
+    WebkitBoxDecorationBreak: 'slice',
+  };
+}
 
 /**
  * Agent-authored copy frequently crosses JSON, tool-call, and JSX boundaries.
@@ -356,6 +392,14 @@ export function createEditableReactRuntime(
     // receive their original string props/children and will be normalized when
     // they eventually render a DOM text leaf.
     if (typeof type === 'string') {
+      if (nextProps?.style && typeof nextProps.style === 'object') {
+        nextProps = {
+          ...nextProps,
+          style: stabilizeMultilineCaptionBacking(
+            nextProps.style as Record<string, unknown>,
+          ),
+        };
+      }
       if (nextChildren.length > 0) {
         nextChildren = nextChildren.map(child => renderTextLineBreaks(react, child));
       } else if (nextProps && 'children' in nextProps) {

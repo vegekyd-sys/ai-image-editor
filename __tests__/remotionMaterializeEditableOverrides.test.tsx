@@ -39,6 +39,48 @@ describe('Remotion materialize editable overrides', () => {
     expect(html).not.toContain('First\\nSecond');
   });
 
+  it('renders cloned inline caption backing as one stable Preview/export block', () => {
+    const runtime = createEditableReactRuntime(React, 'video');
+    const Composition = () => runtime.React.createElement(
+      'div',
+      {
+        style: {
+          display: 'inline',
+          backgroundColor: 'rgba(13,12,13,.72)',
+          boxShadow: '0 0 0 14px rgba(13,12,13,.72)',
+          boxDecorationBreak: 'clone',
+          WebkitBoxDecorationBreak: 'clone',
+        },
+      },
+      'Before it wins a rally, a badminton racket survives a tiny factory Olympics.',
+    );
+    const MaterializedComposition = runtime.wrap(Composition, 'proxy');
+
+    const html = renderToStaticMarkup(<MaterializedComposition />);
+
+    expect(html).toContain('display:inline-block');
+    expect(html).toContain('max-width:100%');
+    expect(html).toContain('box-sizing:border-box');
+    expect(html).toContain('box-decoration-break:slice');
+    expect(html).toContain('-webkit-box-decoration-break:slice');
+    expect(html).toContain('box-shadow:0 0 0 14px rgba(13,12,13,.72)');
+  });
+
+  it('does not rewrite ordinary inline emphasis without a cloned backing', () => {
+    const runtime = createEditableReactRuntime(React, 'video');
+    const Composition = () => runtime.React.createElement(
+      'span',
+      { style: { display: 'inline', color: '#ffcd3c' } },
+      'factory Olympics',
+    );
+    const MaterializedComposition = runtime.wrap(Composition, 'proxy');
+
+    const html = renderToStaticMarkup(<MaterializedComposition />);
+
+    expect(html).toContain('display:inline');
+    expect(html).not.toContain('display:inline-block');
+  });
+
   it('applies persisted position and scale in the shared render runtime', () => {
     const runtime = createEditableReactRuntime(React, 'video');
     const Composition = (props: Record<string, unknown>) => runtime.React.createElement(

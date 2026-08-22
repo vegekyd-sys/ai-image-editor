@@ -142,7 +142,7 @@ describe('Remotion export worker contract', () => {
     expect(JSON.parse(read('public/remotion-runtime.json'))).toEqual({
       runtimeVersion: 'remotion-font-runtime-r8-editable-provenance',
       fontCatalogVersion: 'makaron-fonts-r1',
-      editableRuntimeVersion: 'remotion-editable-runtime-r2-media-ownership',
+      editableRuntimeVersion: 'remotion-editable-runtime-r3-caption-block-parity',
     })
     expect(read('src/lib/remotion-lambda-renderer.ts')).toContain('editableRuntimeVersion !== REMOTION_EDITABLE_RUNTIME_VERSION')
     expect(read('src/remotion/DynamicDesign.tsx')).toContain('makaron-remotion-font-timing')

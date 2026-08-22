@@ -49,14 +49,16 @@ function minimalRepeatedCaptionDesign(): {
   helperInjected: boolean;
 } {
   const props: Record<string, unknown> = {
-    captionA: 'Repeated subtitle A',
-    captionB: '重复字幕 B',
+    captionA: 'Before it wins a rally, a badminton racket survives a tiny factory Olympics.',
+    captionB: 'Lambda 导出必须保持一个完整字幕背景',
     audioSrc: toneDataUrl(3),
   };
   const authoredCode = `
 const {AbsoluteFill,Sequence,Audio}=Remotion;
 function Caption({text}) {
-  return <div style={{fontFamily:'Inter, Noto Sans SC, sans-serif',fontSize:54,fontWeight:800,color:'white',backgroundColor:'rgba(0,0,0,0.72)',padding:'20px 28px',borderRadius:18}}>{text}</div>;
+  return <div style={{width:420,fontFamily:'Inter, Noto Sans SC, sans-serif',fontSize:42,fontWeight:800,lineHeight:1.18,color:'white'}}>
+    <div style={{display:'inline',backgroundColor:'rgba(13,12,13,.72)',boxShadow:'0 0 0 14px rgba(13,12,13,.72)',boxDecorationBreak:'clone',WebkitBoxDecorationBreak:'clone'}}>{text}</div>
+  </div>;
 }
 function Composition(props) {
   const captions=[
