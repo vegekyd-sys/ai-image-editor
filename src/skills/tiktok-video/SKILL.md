@@ -41,6 +41,11 @@ TikTok variants of a larger campaign.
 
 - Existing timeline or source footage normally calls for an editable Remotion
   composition with a deliberate hook, sound strategy, and native close.
+- When the finished piece depends on authored captions, semantic keyword
+  emphasis, or branded text motion, keep that packaging in the editable
+  Remotion Composition. FFmpeg may normalize or trim source media, but a
+  missing `drawtext` filter is not permission to downgrade the final captions
+  to generic ASS subtitles or another renderer-owned fallback.
 - A direct generated-video route is appropriate only when the user actually
   wants newly generated provider footage and the result does not need precise
   captions, branding, multiple sources, or deterministic layout.
@@ -139,6 +144,12 @@ phone size.
 - Use the final narration-containing audio master and its `transcribe_audio`
   word timing. Do not invent caption intervals or reuse timestamps from an
   earlier take.
+- Persist that cue sheet as one data source and derive spoken-caption
+  Sequences, word emphasis, and linked visual ranges from it. Do not manually
+  retype a second schedule in JSX, FFmpeg arguments, or subtitle files.
+- For generated narration, `explicit-audio-placement` and Script estimates are
+  not ASR fallbacks. If measured transcription remains unavailable after one
+  retry, preserve the work and stop before narrated Composition or Delivery.
 - Inspect every measured cue rather than trusting only the aggregate pass flag.
   A take with a dropped final meaningful word or clipped clause is not the final
   master: shorten or clarify that VO line and regenerate it before Storyboard.

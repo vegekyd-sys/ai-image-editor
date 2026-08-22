@@ -24,9 +24,15 @@ or another audio treatment overrides this default.
    clause, or aligns only a fragment of the expected line, even if fuzzy
    matching produces a passing overall score. Shorten or clarify the affected
    line before generating the replacement; do not repeat the same crowded read.
+   If the tool itself is temporarily unavailable, retry it once on the same
+   accepted master. If it still fails, preserve the Script and master, report
+   the synchronization block, and stop before narrated Storyboard, Composition,
+   publish, or Delivery. Never replace failed ASR with Script-estimated timing.
 4. Persist the returned narration cue sheet. Its measured section, word, second,
    and frame ranges are the only speech clock for Storyboard scenes, Remotion
-   Sequences, spoken captions, keyword emphasis, and visual beats.
+   Sequences, spoken captions, keyword emphasis, and visual beats. Pass this
+   cue sheet forward as data and derive those ranges from it; do not copy its
+   numbers into a second hand-authored caption or scene schedule.
 5. In the Composition, every source `<Video>` or `<OffthreadVideo>` is explicitly
    silent (`volume={0}` or an equivalent deterministic mute). The generated
    mixed master is the only audible layer unless the user requested a deliberate
@@ -36,6 +42,15 @@ Do not align captions to planned Script timestamps, equal scene lengths, a prior
 audio take, waveform guesses, or the BGM beat alone. Do not create separate VO
 and music generations for this default route. If transcription cannot align the
 expected VO, shorten or clarify the audio prompt and regenerate before composing.
+
+If the user explicitly requests source sound plus music and no narration, treat
+on-screen copy as editorial beat text rather than speech subtitles. Tie it to the
+visible action and music structure, but do not claim VO/caption synchronization
+or fabricate `transcribe_audio` evidence for speech that does not exist.
+
+`explicit-audio-placement` is valid only when speech was intentionally placed at
+known fixed offsets by the production itself. It is not a fallback clock for a
+generated mixed master whose actual spoken timing has not been measured.
 
 ## Synchronization Review
 
