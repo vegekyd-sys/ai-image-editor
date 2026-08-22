@@ -5,6 +5,7 @@ import { mkdir, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 import { compileEditableManifestWithProvenance } from '../src/lib/editor/editable-provenance-compiler';
 import { renderDesignVideoLambdaToUrl } from '../src/lib/remotion-lambda-renderer';
+import { renderDesignFrame } from '../src/lib/remotion-server';
 import type { DesignPayload } from '../src/types';
 
 function readArg(name: string): string | undefined {
@@ -181,6 +182,7 @@ async function main(): Promise<void> {
   const outputDir = path.resolve(readArg('--output-dir') || '/tmp/makaron-remotion-lambda-runtime-regression');
   const projectId = readArg('--project-id');
   const designPath = readArg('--design-path');
+  const snapshotFrameArg = readArg('--snapshot-frame');
   const requestedScale = Number(readArg('--scale') || 1);
   if (!Number.isFinite(requestedScale) || requestedScale <= 0) {
     throw new Error('--scale must be a positive number');
@@ -207,6 +209,32 @@ async function main(): Promise<void> {
     design = minimal.design;
     helperInjected = minimal.helperInjected;
     source = { kind: 'generated-minimal' };
+  }
+
+  if (snapshotFrameArg !== undefined) {
+    const snapshotFrame = Math.max(0, Math.round(Number(snapshotFrameArg)));
+    if (!Number.isFinite(snapshotFrame)) {
+      throw new Error('--snapshot-frame must be a non-negative frame number');
+    }
+    const startedAt = Date.now();
+    const image = await renderDesignFrame(design, snapshotFrame);
+    const framePath = path.join(outputDir, `${testName}.preview-frame-${snapshotFrame}.jpeg`);
+    const resultPath = path.join(outputDir, `${testName}.preview-frame-${snapshotFrame}.result.json`);
+    await writeFile(framePath, image);
+    const result = {
+      testName,
+      source,
+      renderer: 'vercel-snapshot',
+      snapshotFrame,
+      width: design.width,
+      height: design.height,
+      elapsedSeconds: Math.round((Date.now() - startedAt) / 10) / 100,
+      downloadedBytes: image.length,
+      framePath,
+    };
+    await writeFile(resultPath, JSON.stringify(result, null, 2));
+    console.log(JSON.stringify({ ...result, resultPath }, null, 2));
+    return;
   }
 
   const progressEvents: Record<string, unknown>[] = [];
