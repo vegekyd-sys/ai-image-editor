@@ -2308,7 +2308,8 @@ if (!command || command === '--help' || command === '-h' || command === 'help') 
         uploadedTurnVideoCount += videoSnaps.length;
         uploadedTurnMediaCount += videoSnaps.length;
       } else {
-        process.stderr.write(`⚠️ Failed to add videos: ${await res.text()}\n`);
+        process.stderr.write(`❌ Failed to add videos to the project timeline: ${await res.text()}\n`);
+        process.exit(1);
       }
     }
 

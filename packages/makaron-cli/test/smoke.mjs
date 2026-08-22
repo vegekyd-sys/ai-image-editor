@@ -188,6 +188,10 @@ const server = http.createServer(async (req, res) => {
   }
 
   if (req.method === 'POST' && url.pathname === '/api/projects/create') {
+    if (body?.videoUrls?.includes('https://cdn.example/fail.mp4')) {
+      sendJson(413, { error: 'Payload Too Large' });
+      return;
+    }
     const snapshots = (body?.imageUrls || []).map((imageUrl, index) => ({
       snapshotId: `snap_uploaded_${index + 1}`,
       imageUrl,
@@ -991,6 +995,16 @@ try {
     assert.match(result.stdout, /Purpose:/);
     assert.match(result.stdout, /A talking-head video with clear, audible speech/);
     assert.match(result.stdout, /--skill talking-head/);
+  }
+
+  {
+    const runCount = requests.filter(req => req.pathname === '/api/agent/run').length;
+    const result = await expectFailure([
+      'chat', '--project', 'project-existing-1', '--video', 'https://cdn.example/fail.mp4',
+      'this must not start without the requested video',
+    ]);
+    assert.match(result.stderr, /Failed to add videos to the project timeline/);
+    assert.equal(requests.filter(req => req.pathname === '/api/agent/run').length, runCount);
   }
 
   {
