@@ -17,6 +17,7 @@ function makeManifest(): RemotionFontCatalogManifest {
     'Inter',
     'Noto Sans SC',
     'Noto Serif SC',
+    'Noto Sans Symbols 2',
     'Noto Color Emoji',
     'Ma Shan Zheng',
     'GFS Didot',
@@ -84,8 +85,43 @@ describe('Remotion shared font catalog', () => {
 
     expect(prepared.code).toContain(internalRemotionFontFamily('Montserrat'));
     expect(prepared.code).toContain(internalRemotionFontFamily('Noto Sans SC'));
+    expect(prepared.code).toContain(internalRemotionFontFamily('Noto Sans Symbols 2'));
     expect(prepared.defaultFontFamily).toContain(internalRemotionFontFamily('Inter'));
     expect(prepared.code).not.toContain("fontFamily: 'Montserrat");
+  });
+
+  it('loads a pinned symbol face for plain Unicode icons instead of relying on OS fallback', async () => {
+    class MockFontFace {
+      constructor(
+        readonly family: string,
+        readonly source: string,
+        readonly descriptors: FontFaceDescriptors,
+      ) {}
+
+      async load() {
+        return this;
+      }
+    }
+    vi.stubGlobal('FontFace', MockFontFace);
+    const fonts = {
+      ready: Promise.resolve(),
+      add: vi.fn(),
+      check: vi.fn(() => true),
+    };
+    const targetDocument = { fonts } as unknown as Document;
+    const manifest = makeManifest();
+    const code = `const badge = <div style={{fontFamily: 'Noto Sans SC'}}>✦ 高支 · 高针 · 高密</div>;`;
+    const prepared = prepareRemotionFontCode({ code, manifest });
+
+    await loadPreparedRemotionFonts({
+      manifest,
+      prepared,
+      text: code,
+      targetDocument,
+    });
+
+    const registeredFamilies = fonts.add.mock.calls.map(([face]) => face.family);
+    expect(registeredFamilies).toContain(internalRemotionFontFamily('Noto Sans Symbols 2'));
   });
 
   it('fails visibly for an unsupported local system font', () => {

@@ -15,4 +15,16 @@ describe('Remotion deploy-time font provisioner', () => {
       }
     }
   });
+
+  it('includes a pinned glyph for the plain four-pointed-star icon used by compositions', async () => {
+    const faces = await collectRemotionFontSourceFaces();
+    const codePoint = 0x2726;
+    const symbolFaces = faces.filter((face) => face.family === 'Noto Sans Symbols 2');
+    const coversCodePoint = (unicodeRange: string) => unicodeRange.split(',').some((part) => {
+      const [startRaw, endRaw = startRaw] = part.trim().replace(/^U\+/i, '').split('-');
+      return codePoint >= Number.parseInt(startRaw, 16) && codePoint <= Number.parseInt(endRaw, 16);
+    });
+
+    expect(symbolFaces.some((face) => coversCodePoint(face.unicodeRange))).toBe(true);
+  });
 });

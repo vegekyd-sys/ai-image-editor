@@ -73,11 +73,12 @@ export interface RemotionFontTiming {
 }
 
 export const REMOTION_FONT_CATALOG_VERSION = catalogData.version;
-export const REMOTION_FONT_RUNTIME_VERSION = 'remotion-font-runtime-r8-editable-provenance';
+export const REMOTION_FONT_RUNTIME_VERSION = 'remotion-font-runtime-r9-symbol-fallback';
 export const REMOTION_FONT_CATALOG = catalogData.families as RemotionFontCatalogDefinition[];
 export const REMOTION_DEFAULT_SANS = 'Inter';
 export const REMOTION_DEFAULT_CJK_SANS = 'Noto Sans SC';
 export const REMOTION_DEFAULT_CJK_SERIF = 'Noto Serif SC';
+export const REMOTION_DEFAULT_SYMBOLS = 'Noto Sans Symbols 2';
 export const REMOTION_DEFAULT_EMOJI = 'Noto Color Emoji';
 
 const BUNDLED_REMOTION_FONT_FAMILY_MANIFEST: RemotionFontFamilyManifest = {
@@ -242,10 +243,17 @@ function internalStack(
   const fallback = available.has(fallbackName.toLowerCase())
     ? internalRemotionFontFamily(fallbackName, manifest.version)
     : primary;
+  const symbols = available.has(REMOTION_DEFAULT_SYMBOLS.toLowerCase())
+    ? internalRemotionFontFamily(REMOTION_DEFAULT_SYMBOLS, manifest.version)
+    : fallback;
   const emoji = available.has(REMOTION_DEFAULT_EMOJI.toLowerCase())
     ? internalRemotionFontFamily(REMOTION_DEFAULT_EMOJI, manifest.version)
     : fallback;
-  return [...new Set([primary, fallback, emoji])].map(quotedFamily).join(', ') + `, ${generic}`;
+  // Keep emoji before symbols so characters with a real emoji presentation
+  // stay colorful. Plain Unicode symbols that Noto Color Emoji does not own
+  // (for example U+2726 BLACK FOUR POINTED STAR) continue into the pinned
+  // symbol face instead of depending on a macOS/Linux system fallback.
+  return [...new Set([primary, fallback, emoji, symbols])].map(quotedFamily).join(', ') + `, ${generic}`;
 }
 
 export function prepareRemotionFontCode(input: {
@@ -313,8 +321,16 @@ export function prepareRemotionFontCode(input: {
     if (canonical) addDynamicAlias(source, canonical);
   }
 
-  const defaultFamilies = [REMOTION_DEFAULT_SANS, REMOTION_DEFAULT_CJK_SANS, REMOTION_DEFAULT_EMOJI];
-  for (const family of defaultFamilies) if (!usedFamilies.includes(family)) usedFamilies.push(family);
+  const available = manifestFamilies(input.manifest);
+  const defaultFamilies = [
+    REMOTION_DEFAULT_SANS,
+    REMOTION_DEFAULT_CJK_SANS,
+    REMOTION_DEFAULT_EMOJI,
+    REMOTION_DEFAULT_SYMBOLS,
+  ];
+  for (const family of defaultFamilies) {
+    if (available.has(family.toLowerCase()) && !usedFamilies.includes(family)) usedFamilies.push(family);
+  }
   return {
     code,
     defaultFontFamily: internalStack(REMOTION_DEFAULT_SANS, 'sans-serif', input.manifest),
@@ -378,6 +394,15 @@ function containsEmoji(text: string): boolean {
   return /\p{Extended_Pictographic}/u.test(text);
 }
 
+function containsPinnedSymbol(text: string): boolean {
+  return [...text].some((char) => {
+    const codePoint = char.codePointAt(0) || 0;
+    return codePoint >= 0x2000
+      && /\p{Symbol}/u.test(char)
+      && !/\p{Extended_Pictographic}/u.test(char);
+  });
+}
+
 function closestWeight(requested: number, available: number[]): number {
   return available.reduce((best, candidate) =>
     Math.abs(candidate - requested) < Math.abs(best - requested) ? candidate : best, available[0]);
@@ -410,9 +435,11 @@ export async function loadPreparedRemotionFonts(input: {
   const waitStartedAt = nowMs();
   const selectionStartedAt = nowMs();
   const targetDocument = input.targetDocument || document;
-  const usedFamilies = input.prepared.usedFamilies.filter(
-    (family) => family !== REMOTION_DEFAULT_EMOJI || containsEmoji(input.text),
-  );
+  const usedFamilies = input.prepared.usedFamilies.filter((family) => {
+    if (family === REMOTION_DEFAULT_EMOJI) return containsEmoji(input.text);
+    if (family === REMOTION_DEFAULT_SYMBOLS) return containsPinnedSymbol(input.text);
+    return true;
+  });
   const codePoints = uniqueCodePoints(input.text);
   const facesToLoad: RemotionFontCatalogFace[] = [];
   const loadedFacesByFamily = new Map<string, RemotionFontCatalogFace[]>();

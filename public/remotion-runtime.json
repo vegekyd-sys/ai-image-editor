@@ -1,5 +1,5 @@
 {
-  "runtimeVersion": "remotion-font-runtime-r8-editable-provenance",
-  "fontCatalogVersion": "makaron-fonts-r1",
+  "runtimeVersion": "remotion-font-runtime-r9-symbol-fallback",
+  "fontCatalogVersion": "makaron-fonts-r2-symbol-fallback",
   "editableRuntimeVersion": "remotion-editable-runtime-r4-caption-style-preserving"
 }
