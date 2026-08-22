@@ -37,6 +37,10 @@ Before publishing or materializing the editable composition:
 9. Confirm the published Composition still owns authored caption typography and
    semantic emphasis. Do not accept a generic ASS/`drawtext` burn-in created
    only because a media-preparation renderer lacked the intended text filter.
+10. Flatten each rendered spoken-caption host and compare it with its intended
+    cue text. Keyword styling may add spans but may not remove, duplicate,
+    paraphrase, or reorder the selected substring. Reject a colored rail or
+    background when the actual emphasized word is absent.
 
 ## Encoded MP4 Acceptance
 
@@ -54,7 +58,9 @@ later Agent turn has the final encoded file, run this acceptance:
    is authoritative for glyph metrics, wrapping, line spacing, padding, and
    backing geometry. A clean Preview cannot waive an export-only overlap.
 3. Inspect the encoded frames at phone size. Keyword emphasis must remain
-   visible and ordinary words must remain readable.
+   visible and ordinary words must remain readable. Read the complete visible
+   cue, including its emphasized word; a surviving accent shape does not excuse
+   a keyword deleted by caption assembly.
 4. Decode the complete video stream, verify `1080 × 1920`, duration, ending,
    source contribution, audio presence, and scene-boundary coverage. A render
    job reporting success is not delivery acceptance.

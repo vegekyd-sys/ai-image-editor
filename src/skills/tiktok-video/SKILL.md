@@ -130,7 +130,8 @@ When speech is present, choose one or two meaningful words or a compact phrase
 inside the spoken cue for visible emphasis. A colored rail, scene label, or a
 boolean that recolors the whole sentence does not count as semantic keyword
 emphasis. The Agent owns the visual method; the emphasis must remain visible at
-phone size.
+phone size. Styling may wrap the chosen substring, but the flattened visible
+caption must still contain the complete cue text exactly once.
 
 ## Compose And Deliver
 

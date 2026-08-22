@@ -45,6 +45,15 @@ animation, and visual personality to the Composition.
   phrase.
 - Select semantic emphasis from inside the spoken cue. Recoloring the whole
   sentence or decorating a surrounding rail is not keyword emphasis.
+- Preserve the complete cue while styling its chosen substring. Splitting on a
+  keyword removes that delimiter; do not map only the remaining pieces and
+  accidentally delete the emphasized word. Render prefix + highlighted match +
+  suffix (or use a capturing tokenizer), and fall back to the full unstyled cue
+  if the requested match is absent.
+- Flatten the rendered caption host before approval and compare it with the cue.
+  Ignoring intentional case styling, every word and punctuation mark must remain
+  in the same order exactly once; the highlighted substring itself must be
+  visible, not represented only by a rail, border, or background accent.
 - Preserve visible word gaps when highlights use separate spans. A wrapping
   flex or grid row with explicit `columnGap` is more reliable than whitespace,
   negative tracking, or spacer spans when words also scale.
