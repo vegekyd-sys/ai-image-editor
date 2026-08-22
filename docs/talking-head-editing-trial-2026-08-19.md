@@ -134,3 +134,20 @@ source ASR time -> retained source range -> output composition time
 - 不合入 local-first；
 - 不新增传统剪辑 GUI；
 - 视频上传时长上限从 120s 调整为 900s，模型 reference 限制不变。
+
+## 2026-08-20 Skill-first 收敛
+
+真实新项目试剪暴露的主要成本不是缺少新 tool，而是 Agent 多轮返工：项目
+边界错误、重复/慢 ASR、源视频 trim 被覆盖、漏字幕、字幕覆盖不完整，以及
+多次 publish/materialize。当前路线因此收敛为现有工具上的 one-pass skill：
+
+1. 锁定一个新项目和一个主视频；
+2. 成功 ASR 一次，后续只读 transcript artifact；
+3. 一次决定 keep ranges、字幕、B-roll 和品牌层；
+4. 一次 `run_code` 生成完整 composition；
+5. 在 publish 前机械检查 trim、字幕覆盖和 B-roll anchor；
+6. `preview_frame` 一次，随后 publish 一次、materialize 一次。
+
+目标耗时为 6–10 分钟。四个 transcript/edit-plan tool、分页 transcript、
+异步分片 ASR、local-first、resumable upload、diarization、自动 reframe 和传统
+时间线 GUI 均不是当前 roadmap；只有真实用户样本证明现有边界不够时才重开。

@@ -1,8 +1,15 @@
 # Makaron 口播剪辑：Skill + Tool 方案
 
-状态：方案草案，尚未实现  
+状态：历史方案，已被 2026-08-20 skill-first 决策取代
 分支：`codex/talking-head-editing`  
 基线：`dev@73724a7f`
+
+> 2026-08-20 产品决策：当前不新增 transcript/edit-plan tools，不建设
+> transcript 分页、异步分片 ASR、local-first adapter、resumable upload、
+> diarization、speaker tracking 或传统时间线 GUI。先把现有 Agent 能力通过
+> `talking-head` skill 组织成一次闭环：一个新项目、一次 ASR、一次完整
+> composition、一次预览、一次 publish、一次 materialize，目标 6–10 分钟。
+> 下文重型架构仅保留为历史分析和未来触发条件，不是当前 roadmap。
 
 > 2026-08-19 真实试剪修订：15 分钟阶段不新增本方案原先设想的四个
 > transcript/edit-plan tool。先复用现有 `transcribe_audio`、`run_code`、
@@ -11,7 +18,7 @@
 > 完整 transcript 通过 workspace artifact 补足模型输出截断。下文的四
 > tool 设计仅保留为未来 1–2 小时、异步/分页场景的候选架构，不是当前实现。
 
-## 1. 结论
+## 1. 历史结论（当前不实施）
 
 这一版不做传统剪辑器，也不做一套新的复杂 GUI。产品入口继续是 Makaron CUI：用户放入一条 1–2 小时的口播素材，然后用自然语言完成三类任务：
 

@@ -29,6 +29,7 @@ TikTok variants of a larger campaign.
 - Before laying out any text, read
   `skills/tiktok-video/references/platform-layout.md`.
 - If the final piece contains narration or useful source speech, read
+  `skills/_shared/spoken-caption.md`, then
   `skills/tiktok-video/references/caption-direction.md` before writing the
   Script and again before composing the caption track.
 - For the default VO-plus-BGM soundtrack and its shared timing contract, read
@@ -105,13 +106,8 @@ or compress it to a sharper observation.
 
 Unless the user explicitly asks for continuous narration, a sequence of full
 sentences covering nearly every scene is an over-written cut. Intentional
-speech-free beats are valid. When speech is used, look for the shortest natural
-phrase that still carries one complete semantic beat. A whole sentence or
-Script section is not automatically one caption cue. If a cue becomes two or
-three dense lines, revisit its clause boundary or tighten the VO before styling;
-do not shrink the type or add a backing merely to hold an over-written cue.
-Cue grouping remains an editorial judgment grounded in measured word timing,
-not a mechanical word-count quota.
+speech-free beats are valid. When speech is used, follow the shared Spoken
+Caption micro-cue contract; do not turn Script sections into transcript cards.
 
 ## Give Each Video Its Own Text Voice
 
@@ -133,24 +129,17 @@ Skill itself.
   may fit. Repeating one entrance is valid only when the repetition is an
   intentional part of the concept, not the easiest reusable implementation.
 
-When speech is present, choose one or two meaningful words or a compact phrase
-inside the spoken cue for visible emphasis. A colored rail, scene label, or a
-boolean that recolors the whole sentence does not count as semantic keyword
-emphasis. The Agent owns the visual method; the emphasis must remain visible at
-phone size. Styling may wrap the chosen substring, but the flattened visible
-caption must still contain the complete cue text exactly once.
+When speech is present, follow the shared semantic-emphasis contract. The Agent
+still owns the visual method, which must fit this video's concept and remain
+visible at phone size.
 
 ## Compose And Deliver
 
 - Deliver full-screen `1080 × 1920` for the standard high-resolution TikTok
   composition. The `720 × 1280` placement references are not final canvas or
   export dimensions. Keep footage full-bleed unless the concept says otherwise.
-- Keep the result editable. Use one visible caption host for each derived spoken
-  micro-cue, with highlights inside that host. One Script/ASR section may and
-  often should produce several consecutive micro-cues.
-- Fit every cue inside its safe bounds at the settled final font metrics. Do not
-  preserve a prose caption as one unbroken line when it needs an authored break,
-  narrower measure, or smaller type to remain fully visible.
+- Keep the result editable and preserve the shared Spoken Caption host,
+  micro-cue, safe-placement, and text-integrity contract.
 - Use the final narration-containing audio master and its `transcribe_audio`
   word timing. Do not invent caption intervals or reuse timestamps from an
   earlier take.

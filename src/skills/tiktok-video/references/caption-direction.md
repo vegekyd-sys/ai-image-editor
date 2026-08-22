@@ -1,100 +1,36 @@
 # TikTok Speech And Caption Direction
 
-Read this only when the video contains narration or useful source speech. It
-standardizes timing and export correctness while leaving typography, layout,
-animation, and visual personality to the Composition.
+Read `skills/_shared/spoken-caption.md` first. It owns micro-cues, semantic
+emphasis, layout integrity, and final-MP4 caption review. This reference contains
+only TikTok/Douyin speech and art-direction choices.
 
 ## Shape The Speech First
 
-- Lock the final narration-containing audio master before building captions.
 - Listen to the audio and read the transcript together. Remove narration that
   merely describes visible action; preserve speech-free room unless the brief
   benefits from a continuous creator monologue.
-- Group consecutive timed words the way a strong human short-form editor would
-  phrase the thought. Aim for the shortest natural phrase that still carries
-  one complete semantic beat. Feed readability decides how much thought appears
-  at once; neither a word-count quota nor preserving a whole sentence or Script
-  section decides the boundary.
-- When one settled cue becomes two or three dense lines, first split it at a
-  measured clause, emphasis, or breath boundary. If there is no clean boundary,
-  tighten the VO and transcribe again. Do not shrink the type or add a backing
-  merely to accommodate an over-written cue.
-- Read the cue sequence aloud. Reconsider a boundary that sounds unfinished,
-  attaches a word to the wrong thought, creates a repetitive chopping rhythm,
-  or leaves multiple independent ideas competing in one card.
-
-## Use Measured Timing
-
-1. Run `transcribe_audio` on the final VO or source-speech master.
-2. Derive each cue from the words it contains: enter on the first included
-   word's measured start and leave on the last included word's measured end,
-   converted through the same Composition FPS.
-3. A tiny legibility pad is allowed only inside real silence. Adjacent cues
-   must not overlap, and a phrase must not be stretched to fill its visual
-   scene.
-4. Trigger word emphasis on that word's measured timestamp, not at the phrase
-   entrance or an invented beat.
-5. If wording, pace, or take changes, transcribe again and rebuild affected
-   cues. Never reuse stale timing.
-6. Retain one `subtitleSyncEvidence` record per narrated Script section with
-   `timingSource: "transcribe_audio"`, exact section text, and measured word
-   timing. Partition those same words into an ordered `captionCues` array when a
-   section contains more than one readable semantic beat. Each micro-cue uses
-   the measured start of its first word and end of its last word; no word may be
-   dropped, duplicated, paraphrased, or moved. A Script section is not required
-   to become one visible caption host.
-7. Use the same word-timed micro-cue ranges for the spoken-caption host,
-   semantic keyword emphasis, and linked visual beat. Do not make separate
-   timing decisions for voice, caption, and picture. Narration with empty
-   section evidence or caption cues is a failure; a hook, beat label,
-   `KineticTitle`, or `Headline` cannot substitute for speech.
+- Read the resulting cue sequence aloud. Reconsider a boundary that sounds
+  unfinished, creates a mechanical chopping rhythm, or weakens the creator's
+  point of view. Tighten and regenerate crowded VO instead of asking captions
+  to rescue an over-written Script.
 
 ## Keep The Visual Direction Autonomous
 
-- Use one visible caption host per cue. A highlighted word belongs inside it;
-  never stack a raw subtitle, editable mirror, or duplicate track over the same
-  phrase.
-- Select semantic emphasis from inside the spoken cue. Recoloring the whole
-  sentence or decorating a surrounding rail is not keyword emphasis.
-- Preserve the complete cue while styling its chosen substring. Splitting on a
-  keyword removes that delimiter; do not map only the remaining pieces and
-  accidentally delete the emphasized word. Render prefix + highlighted match +
-  suffix (or use a capturing tokenizer), and fall back to the full unstyled cue
-  if the requested match is absent.
-- Flatten the rendered caption host before approval and compare it with the cue.
-  Ignoring intentional case styling, every word and punctuation mark must remain
-  in the same order exactly once; the highlighted substring itself must be
-  visible, not represented only by a rail, border, or background accent.
-- Preserve visible word gaps when highlights use separate spans. A wrapping
-  flex or grid row with explicit `columnGap` is more reliable than whitespace,
-  negative tracking, or spacer spans when words also scale.
-- Multi-line glyph rows, outlines, shadows, and backing shapes must not touch
-  or overprint at the final font metrics. Repair locally by changing width,
-  line break, size, line-height, padding, or backing geometry; do not impose one
-  universal caption component or line-height.
-- A long spoken cue must not rely on `white-space: nowrap`, off-canvas overflow,
-  or an oversized single line. At the settled font metrics, author a break or
-  adjust measure and type size so the complete phrase remains inside its safe
-  bounds throughout the entrance, stable hold, and exit.
-- Never combine `display: inline` and `box-decoration-break: clone` around
-  browser-auto-wrapped prose. Lambda Chromium can fragment and paint the
-  backing differently from interactive Preview, especially on scaled exports.
-  When the current concept actually needs a backing, use one wrapping
-  `inline-block` shape (`maxWidth: '100%'`) or explicit authored line boxes when
-  separate per-line shapes are essential. This export safeguard does not ask
-  for a backing when text-only, outlined, shadowed, or selectively blocked type
-  better fits the footage.
-- Store intended breaks as real line feeds or explicit authored lines. The
-  shared runtime normalizes escaped newlines as a safety net, but resolved props
-  and exported frames still require review.
-- Derive motion from the meaning and action. Compare at least two different
-  cues in motion; identical entrances need a creative reason, not merely a
-  shared component.
+- Treat feed readability as part of the hook. Use confident hierarchy, immediate
+  entrances, and selective emphasis that survives phone-size viewing without
+  making every word shout.
+- Keep hooks, spoken captions, beat labels, and the close visually distinct.
+  Do not stack them just because the lower safe zone has space.
+- Derive position and motion from the footage and verbal beat. A tool impact,
+  material change, gesture, reveal, or camera movement can motivate the caption
+  response; identical entrances need a creative reason.
+- Respect `platform-layout.md` exclusion zones. Move around important action and
+  UI instead of locking every cue to one lower-third anchor.
 - A plain ASS or `drawtext` subtitle track is a technical fallback, not an
   automatic TikTok art direction. When authored typography, semantic emphasis,
   or editable delivery matters, keep captions in the Composition. A deliberately
   minimal caption can still be right, but it must be a creative choice visible
   in Preview rather than a renderer limitation.
 
-Typography remains Composition-owned. There is no required font, black plaque,
-left rail, accent color, caption position, or entrance animation.
+Typography remains Composition-owned. There is no required condensed font,
+black plaque, left rail, accent color, caption position, or pop animation.

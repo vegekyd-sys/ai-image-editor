@@ -100,6 +100,24 @@ describe('Editable provenance runtime integration', () => {
     expect(html).toContain('data-editable="word2"');
   });
 
+  it('exposes the provenance id helper through namespace React imports', () => {
+    const props: Record<string, unknown> = {
+      words: ['one', 'two'],
+    };
+    const { Component, manifest } = compileForRender(`
+      import * as React from 'react';
+      function Word({ value }) { return <span>{value}</span>; }
+      function Composition(props) {
+        return <div>{props.words.map(value => <Word key={value} value={value} />)}</div>;
+      }
+    `, props);
+
+    expect(manifest.code).toContain('React.__makaronEditableId(value');
+    const html = renderToStaticMarkup(<Component {...props} />);
+    expect(html).toContain('data-editable="word1"');
+    expect(html).toContain('data-editable="word2"');
+  });
+
   it('applies the same move and scale contract to provenance media nodes', () => {
     const props: Record<string, unknown> = {
       clips: ['https://example.com/one.mp4', 'https://example.com/two.mp4'],
@@ -196,5 +214,35 @@ describe('Editable provenance runtime integration', () => {
     expect(html).toContain('styling ');
     expect(html).toContain('translate:12px 18px');
     expect(html.match(/data-editable="caption"/g)).toHaveLength(1);
+  });
+
+  it('keeps emphasized dynamic caption fragments out of the editable manifest', () => {
+    const props: Record<string, unknown> = {
+      cues: [
+        { from: 0, to: 30, text: '脑子里有个画面｜特别想做出来' },
+        { from: 30, to: 60, text: '几分钟｜就能出好版' },
+      ],
+    };
+    const { Component, manifest } = compileForRender(`
+      function Caption({ cue }) {
+        const parts = cue.text.split('｜');
+        return <div><span>{parts[0]}</span>{parts[1] && <strong>{parts[1]}</strong>}</div>;
+      }
+      function Composition(props) {
+        return <section>{props.cues.map(cue => <Caption key={cue.from} cue={cue} />)}</section>;
+      }
+    `, props);
+
+    expect(manifest.diagnostics).toEqual([]);
+    expect(manifest.coverage.unsupported).toEqual([]);
+    expect(manifest.editables).toEqual([]);
+    expect(manifest.coverage.ignored).toBe(1);
+    expect(manifest.code.match(/data-editable-ignore/g)).toHaveLength(1);
+
+    const html = renderToStaticMarkup(<Component {...props} />);
+    expect(html).toContain('脑子里有个画面');
+    expect(html).toContain('特别想做出来');
+    expect(html).toContain('几分钟');
+    expect(html).toContain('就能出好版');
   });
 });

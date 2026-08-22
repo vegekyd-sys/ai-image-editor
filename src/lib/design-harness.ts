@@ -76,6 +76,7 @@ export function validateDesignDiagnostics(result: DesignResult): string[] {
  * draft or force the Agent to rewrite otherwise valid Remotion source.
  */
 export function validateDesignReport(result: DesignResult): DesignValidationReport {
+  const authoredCode = result.code;
   // Auto-fix: Replace <img> with Remotion <Img> for delayRender support
   result.code = autoFixImgTags(result.code);
   result.code = autoFixVideoTags(result.code);
@@ -120,7 +121,13 @@ export function validateDesignReport(result: DesignResult): DesignValidationRepo
   const timelineDurationError = validateTimelineDuration(result);
   const blocking: string[] = [];
   const advisories: string[] = [...manifest.diagnostics];
+  advisories.push(...captionLayoutAdvisories(result.code));
   if (timelineDurationError) blocking.push(timelineDurationError);
+
+  // Check the Agent-authored source before editable instrumentation duplicates
+  // or decorates JSX. Integrity belongs to the composition, not compiler output.
+  const captionTextIntegrityError = validateCaptionTextIntegrity(authoredCode);
+  if (captionTextIntegrityError) blocking.push(captionTextIntegrityError);
 
   // Check 2: Hooks evaluated while the composition module is being created.
   const hookError = checkTopLevelHookCalls(result.code);
@@ -178,6 +185,96 @@ export function validateDesignReport(result: DesignResult): DesignValidationRepo
     advisories: [...new Set(advisories)],
     editableCoverage: manifest.coverage,
   };
+}
+
+/**
+ * Catch two cross-skill caption layout hazards before settled-font Preview.
+ * These remain advisories because typography is composition-owned and an
+ * authored layout may prove safe at final resolution.
+ */
+function captionLayoutAdvisories(code: string): string[] {
+  if (!/\b(?:caption|subtitle|cue|spoken)\b/i.test(code)) return [];
+
+  const advisories: string[] = [];
+  if (/\b(?:Webkit)?BoxDecorationBreak\s*:\s*["']clone["']/.test(code)) {
+    advisories.push(
+      'Caption layout risk: auto-wrapped prose uses box-decoration-break: clone. Cloned inline padding can cover adjacent glyph rows. Prefer one block backing shape, or authored line blocks in a column with real vertical gap.',
+    );
+  }
+
+  const splitIdentifier = code.match(/\.split\(\s*([A-Za-z_$][\w$]*)\s*\)/)?.[1];
+  if (
+    splitIdentifier
+    && new RegExp(`\\{\\s*${escapeRegExp(splitIdentifier)}\\s*\\}`).test(code)
+    && !/\bwhiteSpace\s*:\s*["']nowrap["']/.test(code)
+  ) {
+    advisories.push(
+      'Caption layout risk: an emphasized substring can wrap inside the highlighted word. Keep only that compact substring atomic with display: inline-block and whiteSpace: nowrap; leave the full caption prose wrappable.',
+    );
+  }
+
+  return advisories;
+}
+
+/**
+ * Highlighting is allowed to change styling, never the spoken text. Catch the
+ * common dynamic-keyword regression where split(keyword).map(...) renders only
+ * the split segments and silently drops the delimiter itself.
+ */
+function validateCaptionTextIntegrity(code: string): string | null {
+  if (!/\b(?:caption|subtitle|cue|spoken)\b/i.test(code)) return null;
+
+  try {
+    const ast = parse(normalizeRemotionScopeDeclarations(code), {
+      sourceType: 'unambiguous',
+      plugins: ['jsx', 'typescript'],
+    });
+    const omittedKeywords = new Set<string>();
+
+    traverse(ast, {
+      CallExpression(path) {
+        const mapCallee = path.node.callee;
+        if (
+          mapCallee.type !== 'MemberExpression'
+          || mapCallee.computed
+          || mapCallee.property.type !== 'Identifier'
+          || mapCallee.property.name !== 'map'
+          || mapCallee.object.type !== 'CallExpression'
+        ) return;
+
+        const splitCall = mapCallee.object;
+        const splitCallee = splitCall.callee;
+        const delimiter = splitCall.arguments[0];
+        if (
+          splitCallee.type !== 'MemberExpression'
+          || splitCallee.computed
+          || splitCallee.property.type !== 'Identifier'
+          || splitCallee.property.name !== 'split'
+          || !delimiter
+          || delimiter.type !== 'Identifier'
+        ) return;
+
+        const callbackPath = path.get('arguments.0');
+        if (!callbackPath.isArrowFunctionExpression() && !callbackPath.isFunctionExpression()) return;
+
+        let keywordIsRendered = false;
+        callbackPath.traverse({
+          ReferencedIdentifier(identifierPath) {
+            if (identifierPath.node.name !== delimiter.name) return;
+            if (identifierPath.findParent(parent => parent.isJSXAttribute())) return;
+            keywordIsRendered = true;
+          },
+        });
+        if (!keywordIsRendered) omittedKeywords.add(delimiter.name);
+      },
+    });
+
+    if (omittedKeywords.size === 0) return null;
+    return `⚠️ Caption text integrity error: keyword highlight split drops ${[...omittedKeywords].join(', ')} from the rendered cue. Styling must preserve the exact spoken text; render the delimiter in sequence so before + keyword + after equals the original cue.`;
+  } catch {
+    // Syntax errors are already reported by checkCompile().
+    return null;
+  }
 }
 
 /** Hooks may run inside components/custom hooks, never while evaluating the source module. */

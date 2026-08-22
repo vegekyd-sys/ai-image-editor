@@ -27,6 +27,7 @@ interface InstrumentationSite {
   bindingKeys: Set<string>;
   sourcePathsByBinding: Map<string, Set<string>>;
   valueExpression?: string;
+  dynamicTimelineText: boolean;
 }
 
 function applyInsertions(code: string, insertions: SourceInsertion[]): string {
@@ -176,7 +177,53 @@ function materializeBindingAliases(
   });
 }
 
-function instrumentationSites(nodes: EditableProvenanceNode[]): InstrumentationSite[] {
+const TIMELINE_TEXT_KEYS = new Set(['text', 'word', 'caption', 'subtitle', 'copy']);
+const TIMELINE_RANGE_PAIRS = [
+  ['from', 'to'],
+  ['start', 'end'],
+  ['startMs', 'endMs'],
+  ['sourceStart', 'sourceEnd'],
+  ['outputStart', 'outputEnd'],
+] as const;
+
+function dynamicTimelineTextOrigin(
+  origin: ProvenanceOrigin,
+  props: Record<string, unknown> | undefined,
+): boolean {
+  if (!props) return false;
+  const parts = sourcePathParts(origin.sourcePath);
+  if (!parts || parts.length < 3) return false;
+  const field = parts.at(-1);
+  if (typeof field !== 'string' || !TIMELINE_TEXT_KEYS.has(field)) return false;
+  const collection = parts[0];
+  const index = parts[1];
+  if (
+    typeof collection !== 'string'
+    || !/(?:cue|caption|subtitle|word)/i.test(collection)
+    || typeof index !== 'number'
+  ) return false;
+  const items = props[collection];
+  const item = Array.isArray(items) ? items[index] : null;
+  if (!item || typeof item !== 'object') return false;
+  const record = item as Record<string, unknown>;
+  return TIMELINE_RANGE_PAIRS.some(([start, end]) => (
+    Number.isFinite(Number(record[start])) && Number.isFinite(Number(record[end]))
+  ));
+}
+
+function isDynamicTimelineTextNode(
+  node: EditableProvenanceNode,
+  props: Record<string, unknown> | undefined,
+): boolean {
+  return node.type === 'text'
+    && node.origins.length > 0
+    && node.origins.every(origin => dynamicTimelineTextOrigin(origin, props));
+}
+
+function instrumentationSites(
+  nodes: EditableProvenanceNode[],
+  props: Record<string, unknown> | undefined,
+): InstrumentationSite[] {
   const sites = new Map<number, InstrumentationSite>();
   nodes.forEach(node => {
     if (
@@ -184,6 +231,7 @@ function instrumentationSites(nodes: EditableProvenanceNode[]): InstrumentationS
       || node.openingStart == null
       || node.insertionOffset == null
     ) return;
+    const dynamicTimelineText = isDynamicTimelineTextNode(node, props);
     const existing = sites.get(node.openingStart);
     if (existing) {
       node.bindingKeys.forEach(key => existing.bindingKeys.add(key));
@@ -193,6 +241,7 @@ function instrumentationSites(nodes: EditableProvenanceNode[]): InstrumentationS
         existing.sourcePathsByBinding.set(origin.bindingKey, paths);
       });
       existing.valueExpression ??= node.valueExpression;
+      existing.dynamicTimelineText = existing.dynamicTimelineText && dynamicTimelineText;
       return;
     }
     sites.set(node.openingStart, {
@@ -205,6 +254,7 @@ function instrumentationSites(nodes: EditableProvenanceNode[]): InstrumentationS
         origin.bindingKey,
         new Set([origin.sourcePath]),
       ])),
+      dynamicTimelineText,
       ...(node.valueExpression ? { valueExpression: node.valueExpression } : {}),
     });
   });
@@ -212,6 +262,12 @@ function instrumentationSites(nodes: EditableProvenanceNode[]): InstrumentationS
 }
 
 function insertionForSite(site: InstrumentationSite): SourceInsertion | null {
+  if (site.dynamicTimelineText) {
+    return {
+      offset: site.insertionOffset,
+      text: ' data-editable-ignore',
+    };
+  }
   const bindingKeys = [...site.bindingKeys].sort();
   if (bindingKeys.length === 0) return null;
   if (bindingKeys.length === 1) {
@@ -290,19 +346,19 @@ export function compileEditableManifestWithProvenance(
   });
   materializeBindingAliases(provenance.nodes, input.props);
 
-  const sites = instrumentationSites(provenance.nodes);
+  const sites = instrumentationSites(provenance.nodes, input.props);
   const insertions = sites
     .map(insertionForSite)
     .filter((insertion): insertion is SourceInsertion => insertion !== null);
   const uninstrumented = sites.filter(site => insertionForSite(site) === null);
-  const instrumentedStarts = new Set(
+  const editableInstrumentedStarts = new Set(
     sites
-      .filter(site => insertionForSite(site) !== null)
+      .filter(site => !site.dynamicTimelineText && insertionForSite(site) !== null)
       .map(site => site.openingStart),
   );
   const resolvedBindingKeys = new Set(provenance.nodes.flatMap(node => (
     node.hasExplicitMarker
-    || (node.openingStart != null && instrumentedStarts.has(node.openingStart))
+    || (node.openingStart != null && editableInstrumentedStarts.has(node.openingStart))
       ? node.bindingKeys
       : []
   )));
@@ -341,7 +397,7 @@ export function compileEditableManifestWithProvenance(
     coverage: {
       visibleSinks: Math.max(legacy.coverage.visibleSinks, provenance.nodes.length),
       editable: fields.length,
-      ignored: legacy.coverage.ignored,
+      ignored: legacy.coverage.ignored + sites.filter(site => site.dynamicTimelineText).length,
       unsupported: unresolved,
     },
   };

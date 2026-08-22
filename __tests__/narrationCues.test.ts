@@ -1,5 +1,8 @@
 import { describe, expect, it } from 'vitest'
-import { buildNarrationCueSheet } from '@/lib/narration-cues'
+import {
+  buildNarrationCueSheet,
+  normalizeExpectedNarrationSections,
+} from '@/lib/narration-cues'
 import type { VolcengineAsrTranscript } from '@/lib/volcengine-asr'
 import {
   assertStoryboardNarrationTimingEvidence,
@@ -41,6 +44,17 @@ function transcript(): VolcengineAsrTranscript {
 }
 
 describe('buildNarrationCueSheet', () => {
+  it('drops structured-tool placeholders without weakening real script verification', () => {
+    expect(normalizeExpectedNarrationSections([{ id: '_', text: '_' }])).toBeUndefined()
+    expect(normalizeExpectedNarrationSections([{ id: 'placeholder', text: 'placeholder' }])).toBeUndefined()
+    expect(normalizeExpectedNarrationSections([{ id: 'placeholder', text: 'x' }])).toBeUndefined()
+    expect(normalizeExpectedNarrationSections([{ id: 'x', text: 'x' }])).toBeUndefined()
+    expect(normalizeExpectedNarrationSections([{ id: 'source', text: 'source' }])).toBeUndefined()
+    expect(normalizeExpectedNarrationSections([{ id: 'hook', text: '真实旁白' }])).toEqual([
+      { id: 'hook', text: '真实旁白' },
+    ])
+  })
+
   it('maps script sections to authoritative seconds and frames', () => {
     const sheet = buildNarrationCueSheet({
       transcript: transcript(),

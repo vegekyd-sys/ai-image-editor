@@ -104,6 +104,7 @@ describe('TikTok video guideline', () => {
     expect(director).toContain('must pass exclusion-zone collision review');
     expect(compositionPrompt).toContain('exactly one visible text host');
     expect(skill).toContain('references/platform-layout.md');
+    expect(skill).toContain('skills/_shared/spoken-caption.md');
     expect(skill).toContain('references/caption-direction.md');
     expect(skill).toContain('references/audio-sync.md');
     expect(skill).toContain('references/delivery-qa.md');
@@ -114,18 +115,21 @@ describe('TikTok video guideline', () => {
 
   it('keeps the entrypoint focused on autonomous direction, not a caption template', () => {
     const source = read('src/skills/tiktok-video/SKILL.md');
+    const spokenCaption = read('src/skills/_shared/spoken-caption.md');
+    const normalizedCaption = spokenCaption.replace(/\s+/g, ' ');
 
     expect(source).toContain('invitation to direct');
     expect(source).toContain('defaults to muted clip audio');
     expect(source).toContain('does\n  not require wall-to-wall narration');
     expect(source).toContain('full\nsentences covering nearly every scene is an over-written cut');
-    expect(source).toContain('shortest natural\nphrase that still carries one complete semantic beat');
-    expect(source).toContain('A whole sentence or\nScript section is not automatically one caption cue');
-    expect(source).toContain('do not shrink the type or add a backing');
+    expect(source).toContain('shared Spoken\nCaption micro-cue contract');
+    expect(spokenCaption).toContain('shortest natural phrase');
+    expect(spokenCaption).toContain('not automatically one caption card');
+    expect(spokenCaption).toContain('before shrinking the type');
     expect(source).toContain('There is no default font family, black subtitle rectangle, left vertical');
     expect(source).toContain('Bold condensed all-caps is one possible voice, not a synonym for TikTok');
     expect(source).toContain('not the easiest reusable implementation');
-    expect(source).toContain('boolean that recolors the whole sentence does not count');
+    expect(normalizedCaption).toContain('Recoloring the whole sentence');
     expect(source).toContain('missing `drawtext` filter is not permission to downgrade');
     expect(source).toContain('generic ASS subtitles');
     expect(source).not.toContain('normally `2–7` spoken words');
@@ -134,28 +138,28 @@ describe('TikTok video guideline', () => {
   });
 
   it('grounds speech timing without owning the caption appearance', () => {
-    const source = read('src/skills/tiktok-video/references/caption-direction.md');
+    const source = read('src/skills/_shared/spoken-caption.md');
+    const normalizedSource = source.replace(/\s+/g, ' ');
+    const tiktokDirection = read('src/skills/tiktok-video/references/caption-direction.md');
     const compositionPrompt = read('src/lib/prompts/remotion-composition.md');
+    const normalizedCompositionPrompt = compositionPrompt.replace(/\s+/g, ' ');
 
-    expect(source).toContain('Lock the final narration-containing audio master');
-    expect(source).toContain('shortest natural phrase that still carries');
-    expect(source).toContain('two or three dense lines');
-    expect(source).toContain('measured clause, emphasis, or breath boundary');
-    expect(source).toContain('Read the cue sequence aloud');
-    expect(source).toContain('`subtitleSyncEvidence`');
-    expect(source).toContain('Narration with empty\n   section evidence or caption cues is a failure');
-    expect(source).toContain('timingSource: "transcribe_audio"');
-    expect(source).toContain('explicit `columnGap`');
-    expect(source).toContain('must not rely on `white-space: nowrap`');
-    expect(source).toContain('Typography remains Composition-owned');
-    expect(source).toContain('There is no required font, black plaque');
-    expect(source).toContain('Splitting on a\n  keyword removes that delimiter');
-    expect(source).toContain('Flatten the rendered caption host');
-    expect(source).toContain('ordered `captionCues` array');
-    expect(source).toContain('A Script section is not required');
+    expect(source).toContain('shortest natural phrase');
+    expect(source).toContain('dense prose');
+    expect(normalizedSource).toContain('measured clause, emphasis, or breath boundary');
+    expect(source).toContain('one visible caption host per active cue');
+    expect(source).toContain('complete cue exactly once');
+    expect(source).toContain('`text.split(keyword)` alone removes the keyword');
+    expect(source).toContain('There is no shared font, plaque, lower-third');
+    expect(source).toContain('final MP4 is the acceptance artifact');
+    expect(tiktokDirection).toContain('only TikTok/Douyin speech and art-direction choices');
+    expect(tiktokDirection).toContain('feed readability');
+    expect(tiktokDirection).toContain('platform-layout.md');
     expect(compositionPrompt).toContain('Multi-line subtitles must also be collision-free');
     expect(compositionPrompt).toContain('Long single-line subtitles must fit completely');
     expect(compositionPrompt).toContain("Do not use `whiteSpace: 'nowrap'`");
+    expect(compositionPrompt).toContain("`display: 'inline-block'` and `whiteSpace: 'nowrap'`");
+    expect(normalizedCompositionPrompt).toContain('explicit authored line boxes in a column');
     expect(compositionPrompt).toContain('normalizes escaped newlines at renderer input and DOM text leaves');
     expect(compositionPrompt).toContain('partition each non-empty `subtitleSyncEvidence`');
   });
@@ -163,6 +167,8 @@ describe('TikTok video guideline', () => {
   it('defaults to one muted-source VO plus BGM master and one measured clock', () => {
     const skill = read('src/skills/tiktok-video/SKILL.md');
     const audio = read('src/skills/tiktok-video/references/audio-sync.md');
+    const speechClock = read('src/skills/_shared/speech-clock.md');
+    const normalizedSpeechClock = speechClock.replace(/\s+/g, ' ');
     const compositionPrompt = read('src/lib/prompts/remotion-composition.md');
     const director = read('src/skills/_shared/remotion-director-contract.md');
 
@@ -174,17 +180,17 @@ describe('TikTok video guideline', () => {
     expect(audio).toContain('intentional BGM-only tail');
     expect(audio).toContain('not only the aggregate `verification.passed`');
     expect(audio).toContain('drops its final meaningful word');
-    expect(audio).toContain("that cue's actual\n  transcript");
+    expect(normalizedSpeechClock).toContain('wording and order stay faithful to the speech');
     expect(audio).toContain('every narrated\n   Script section in `expected_sections`');
     expect(audio).toContain('`volume={0}`');
-    expect(audio).toContain('the only speech clock');
-    expect(audio).toContain('derive those ranges from it');
-    expect(audio).toContain('do not copy its\n   numbers into a second hand-authored caption');
+    expect(audio).toContain('skills/_shared/speech-clock.md');
+    expect(audio).toContain('Speech Clock generated-master route');
+    expect(normalizedSpeechClock).toContain('only speech clock');
+    expect(speechClock).toContain('Never maintain separate cut, caption, B-roll, or animation clocks');
     expect(audio).toContain('treat\non-screen copy as editorial beat text rather than speech subtitles');
-    expect(audio).toContain('retry it once on the same\n   accepted master');
-    expect(audio).toContain('stop before narrated Storyboard, Composition');
-    expect(audio).toContain('It is not a fallback clock for a\ngenerated mixed master');
-    expect(audio).toContain('visible phrase and emphasized keyword');
+    expect(speechClock).toContain('retry the same asset once');
+    expect(normalizedSpeechClock).toContain('stop before claiming synced speech delivery');
+    expect(speechClock).toContain('At cue midpoints and boundaries');
     expect(compositionPrompt).toContain('one generated mixed VO+BGM');
     expect(compositionPrompt).toContain('planned Script timing or BGM rhythm cannot replace measured speech timing');
     expect(director).toContain('one mixed VO+BGM soundtrack');
@@ -219,10 +225,8 @@ describe('TikTok video guideline', () => {
     expect(compositionPrompt).toContain('A Script/ASR section is not required to stay');
     expect(compositionPrompt).toContain('three dense lines signals a failed partition');
     expect(compositionPrompt).toContain('If the current concept intentionally uses a');
-    expect(compositionPrompt).toContain('This export safeguard is not a reason');
-    expect(read('src/skills/tiktok-video/references/caption-direction.md')).toContain(
-      'This export safeguard does not ask',
-    );
+    expect(compositionPrompt).toContain('export safeguard\n  is not a reason');
+    expect(read('src/skills/_shared/spoken-caption.md')).toContain('A backing is optional');
     expect(compositionPrompt).toContain('extract every spoken cue midpoint');
     expect(compositionPrompt).toContain('Closing copy, CTA, or a final reveal');
     expect(compositionPrompt).toContain('render success is not typography\n  acceptance');

@@ -101,8 +101,12 @@ export function compileDynamicDesignComponent(
       ...scope,
       React: editableRuntime.React,
     };
+    const editableId = (editableRuntime.React as typeof React & {
+      __makaronEditableId?: (...args: unknown[]) => string | undefined;
+    }).__makaronEditableId;
     const reactModule = {
       ...editableRuntime.React,
+      __makaronEditableId: editableId,
       default: editableRuntime.React,
       __esModule: true,
     };

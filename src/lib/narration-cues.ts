@@ -9,6 +9,20 @@ export interface ExpectedNarrationSection {
   text: string
 }
 
+const STRUCTURED_TOOL_PLACEHOLDERS = new Set(['_', 'placeholder'])
+
+export function normalizeExpectedNarrationSections(
+  sections?: ExpectedNarrationSection[],
+): ExpectedNarrationSection[] | undefined {
+  if (!sections?.length) return undefined
+  const placeholdersOnly = sections.every(section => (
+    STRUCTURED_TOOL_PLACEHOLDERS.has(section.id.trim().toLocaleLowerCase())
+    || STRUCTURED_TOOL_PLACEHOLDERS.has(section.text.trim().toLocaleLowerCase())
+    || section.id.trim().toLocaleLowerCase() === section.text.trim().toLocaleLowerCase()
+  ))
+  return placeholdersOnly ? undefined : sections
+}
+
 export interface NarrationCue {
   scriptSectionId: string
   expectedText: string

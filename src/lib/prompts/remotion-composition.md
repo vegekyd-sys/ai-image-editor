@@ -100,8 +100,10 @@ Available APIs include all exports from `remotion`, `@remotion/media`, `@remotio
 - Use Remotion `<Img>`, never HTML `<img>`.
 - Subtitles, kinetic text, and scene labels are authored directly inside this
   composition. The harness does not provide a universal subtitle overlay or
-  impose shared styling. When narration is present, use the persisted
-  `transcribe_audio` narration cue sheet as the authoritative master clock.
+  impose shared styling. When narration is present, follow
+  `skills/_shared/spoken-caption.md` and use the persisted `transcribe_audio`
+  result under `skills/_shared/speech-clock.md` as the authoritative Speech
+  Clock.
   Convert cue seconds to frames once at the Composition FPS, then drive
   `<Sequence>` ranges, subtitle activation, visual emphasis, and music ducking
   from those same ranges. A linked visual scene must not end before its
@@ -144,6 +146,10 @@ Available APIs include all exports from `remotion`, `@remotion/media`, `@remotio
   highlighted match, and suffix (or use a capturing tokenizer), and render the
   full cue unchanged when the match is absent. Never let the accent shape
   survive while the actual emphasized word disappears.
+  Keep a compact emphasized substring atomic: wrap only that substring with
+  `display: 'inline-block'` and `whiteSpace: 'nowrap'` so CJK or other text
+  cannot break inside the highlighted word. This does not permit the full
+  caption prose to use `nowrap`.
 - Multi-line subtitles must also be collision-free inside that one host after
   the intended font has loaded at final canvas size. Neighboring glyph rows may
   not touch or overprint, and a cloned per-line background, pill, border, or
@@ -161,9 +167,11 @@ Available APIs include all exports from `remotion`, `@remotion/media`, `@remotio
   auto-wrapped subtitle prose. Lambda Chromium can fragment and paint that
   backing differently from the interactive Preview, especially on scaled
   exports. When the current concept actually needs a backing, use one wrapping
-  `inline-block` shape (`maxWidth: '100%'`) or explicit authored line boxes when
-  separate per-line shapes are essential. This export safeguard is not a reason
-  to add a backing to text-only, outlined, shadowed, or selectively blocked type.
+  `inline-block` shape (`maxWidth: '100%'`) or explicit authored line boxes in a
+  column with real vertical gap when separate per-line shapes are essential. Do
+  not rely on browser auto-wrap plus cloned inline padding. This export safeguard
+  is not a reason to add a backing to text-only, outlined, shadowed, or
+  selectively blocked type.
 - A black subtitle plaque, colored left rail, lower-left anchor, Inter-like
   grotesk, or repeated pop is never a default package. Use any of them only
   when the current concept earns it; do not reproduce the same combined
@@ -204,6 +212,11 @@ Available APIs include all exports from `remotion`, `@remotion/media`, `@remotio
   the first scene.
 - Use `trimBefore`, `trimAfter`, `playbackRate`, and `volume` on `<Video>` for non-destructive timeline edits.
 - Never use `startFrom` or `endAt` for `<Video>` trimming in Makaron compositions. They are deprecated/unsafe in this runtime and can make every sequenced clip restart from the first frame. Use `trimBefore={sourceStartFrame}` and `trimAfter={sourceEndFrame}` instead.
+- When multiple `Sequence`s reuse one source prop with different trim ranges,
+  add `data-editable-ignore` to each ranged `<Video>`. Never assign the same
+  `data-editable` id to all of them: one GUI trim prop would override every
+  per-clip `trimBefore` and restart each cut at source frame zero. Keep the URL
+  as a top-level prop and the ranges in editable composition code.
 - Use `AbsoluteFill`, `interpolate`, `spring`, `Easing`, `useCurrentFrame`, and `useVideoConfig` for animation.
 
 Video trimming example:
@@ -234,6 +247,7 @@ return (
         <Video
           src={clip.src}
           trimBefore={clip.trimBefore}
+          data-editable-ignore
           style={{ width: '100%', height: '100%', objectFit: 'cover' }}
         />
       </Sequence>
@@ -383,6 +397,7 @@ After render or patch:
 - A `preview_frame` screenshot is a publishable workspace image. If the user wants that exact frame on the timeline, call `write_file({ fromWorkspaceOutputs: true, mediaType: "image", limit: 1 })` or pass the returned `workspacePath`; do not route it through an image model.
 - Visual verification is required for transitions, subtitles, overlays, trim timing, cropping, or any composition you are about to publish to the timeline.
 - If `preview_frame` returns an image or no explicit textual error, do not infer a Remotion compatibility failure from missing prose. Continue by patching if needed, then save/publish the composition.
+- If `preview_frame` returns an explicit infrastructure error twice for the same mechanically valid draft, do not rewrite the composition again or stop a requested MP4 delivery. Publish the saved draft, materialize the MP4, and disclose that frame preview was unavailable; the exported file becomes the next QA artifact.
 - For trim edits, verify the final `animation.durationInSeconds` matches the actual total frame count before saving or publishing.
 - Capture stable middle frames for each scene, not transition starts.
 - Check subject cropping, text readability, overlay placement, and final frame content.

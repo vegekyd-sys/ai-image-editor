@@ -23,7 +23,11 @@ import {
   type VolcengineAsrTranscript,
   type TranscriptWord,
 } from './volcengine-asr';
-import { buildNarrationCueSheet, type ExpectedNarrationSection } from './narration-cues';
+import {
+  buildNarrationCueSheet,
+  normalizeExpectedNarrationSections,
+  type ExpectedNarrationSection,
+} from './narration-cues';
 import { prepareVisualAsset, resolvePreparedVisualAssetById } from './visual-assets/bridge';
 import generateImageToolPrompt from './prompts/generate_image_tool.md';
 import { normalizeGenerateImageMediaIndex } from './generate-image-input';
@@ -676,6 +680,48 @@ async function createNarrationCueArtifact(input: {
     throw new Error(saved.error || 'Failed to persist narration cue sheet.')
   }
   return { narrationCueSheet, narrationCuePath };
+}
+
+async function createOptionalNarrationCueArtifact(input: {
+  ctx: AgentContext;
+  transcript: VolcengineAsrTranscript;
+  expectedSections?: ExpectedNarrationSection[];
+  fps?: number;
+}): Promise<{
+  narrationCueSheet?: ReturnType<typeof buildNarrationCueSheet>;
+  narrationCuePath?: string;
+  narrationWarning?: string;
+}> {
+  try {
+    return await createNarrationCueArtifact(input);
+  } catch (error) {
+    const narrationWarning = `Optional narration alignment was skipped: ${error instanceof Error ? error.message : String(error)}`;
+    console.warn('[transcribe_audio] optional narration alignment failed:', narrationWarning);
+    return { narrationWarning };
+  }
+}
+
+async function createTranscriptArtifact(input: {
+  ctx: AgentContext;
+  transcript: VolcengineAsrTranscript;
+}): Promise<{ transcriptPath?: string; transcriptWarning?: string }> {
+  if (!input.ctx.supabase || !input.ctx.userId) return {};
+  const transcriptPath = `${input.ctx.projectId}/transcripts/asr-${input.transcript.requestId}.json`;
+  const artifactTranscript = { ...input.transcript };
+  delete artifactTranscript.sourceUrl;
+  const saved = await workspace.writeFile(
+    transcriptPath,
+    JSON.stringify(artifactTranscript, null, 2),
+    input.ctx.supabase,
+    input.ctx.userId,
+    'application/json',
+  );
+  if (!saved.success) {
+    const transcriptWarning = saved.error || 'Failed to persist the full ASR transcript artifact.';
+    console.warn('[transcribe_audio] transcript artifact persistence failed:', transcriptWarning);
+    return { transcriptWarning };
+  }
+  return { transcriptPath };
 }
 
 async function validateCompositionMediaAspect(
@@ -2179,7 +2225,7 @@ function createTranscribeAudioTool(
 
 Use this when the user asks for transcript, subtitles, dialogue, spoken words, lyrics-like speech timing, time-based editing such as "cut the part where they say X", or when \`prompts/audio.md\` requires verification of Seed Audio exact speech, brand names, numbers, multilingual lines, duration, or cue timing.
 
-For narrated Remotion/Explainer work, pass expected_sections from the approved Script plus the Composition fps. The tool will align the measured speech to those section IDs, convert the same timebase to frames, and persist a narration cue sheet. That cue sheet is authoritative for Storyboard ranges, Remotion Sequences, subtitles, visual beats, and music ducking.
+For narrated Remotion/Explainer work, pass expected_sections from the approved Script plus the Composition fps. The tool will align the measured speech to those section IDs, convert the same timebase to frames, and persist a narration cue sheet. That cue sheet is authoritative for Storyboard ranges, Remotion Sequences, subtitles, visual beats, and music ducking. Narration alignment is optional: if it fails, the successful ASR transcript is still returned with a warning.
 
 For timeline videos, pass media_index. For external audio/video URLs, pass media_url. Results are cached into the video snapshot's video_meta.transcript when media_index is used. Use analyze_video instead for visual scene/action understanding.`,
       inputSchema: z.object({
@@ -2194,6 +2240,7 @@ For timeline videos, pass media_index. For external audio/video URLs, pass media
         fps: z.number().positive().max(120).optional().describe('Composition FPS used to convert measured speech seconds to frame ranges. Default 30.'),
       }),
       execute: async ({ media_index, media_url, language, force_refresh, expected_sections, fps }) => {
+        const effectiveExpectedSections = normalizeExpectedNarrationSections(expected_sections);
         let resolvedUrl = media_url;
         let localMediaPath: string | undefined;
         let snapshotId: string | undefined;
@@ -2225,24 +2272,22 @@ For timeline videos, pass media_index. For external audio/video URLs, pass media
               && !force_refresh
               && isAsrTranscriptCacheCompatible(cached, language)
             ) {
-              try {
-                const cueArtifact = await createNarrationCueArtifact({
-                  ctx,
-                  transcript: cached,
-                  expectedSections: expected_sections,
-                  fps,
-                });
-                return {
-                  transcript: cached,
-                  ...cueArtifact,
-                  cached: true,
-                  media_index,
-                  videoUrl: cached.sourceUrl || resolvedUrl,
-                  source_range: sourceRange,
-                };
-              } catch (error) {
-                return { error: `Narration alignment failed: ${error instanceof Error ? error.message : String(error)}` };
-              }
+              const transcriptArtifact = await createTranscriptArtifact({ ctx, transcript: cached });
+              const cueArtifact = await createOptionalNarrationCueArtifact({
+                ctx,
+                transcript: cached,
+                expectedSections: effectiveExpectedSections,
+                fps,
+              });
+              return {
+                transcript: cached,
+                ...transcriptArtifact,
+                ...cueArtifact,
+                cached: true,
+                media_index,
+                videoUrl: cached.sourceUrl || resolvedUrl,
+                source_range: sourceRange,
+              };
             }
             resolvedUrl = resolvedUrl || (videoMeta?.videoUrl as string | undefined);
             const videoPath = typeof videoMeta?.videoPath === 'string' ? videoMeta.videoPath : '';
@@ -2269,10 +2314,11 @@ For timeline videos, pass media_index. For external audio/video URLs, pass media
             uid: ctx.userId || 'makaron-agent',
             language,
           });
-          const cueArtifact = await createNarrationCueArtifact({
+          const transcriptArtifact = await createTranscriptArtifact({ ctx, transcript });
+          const cueArtifact = await createOptionalNarrationCueArtifact({
             ctx,
             transcript,
-            expectedSections: expected_sections,
+            expectedSections: effectiveExpectedSections,
             fps,
           });
 
@@ -2287,6 +2333,7 @@ For timeline videos, pass media_index. For external audio/video URLs, pass media
 
           return {
             transcript,
+            ...transcriptArtifact,
             ...cueArtifact,
             cached: false,
             media_index,
@@ -2315,11 +2362,19 @@ For timeline videos, pass media_index. For external audio/video URLs, pass media
               'Use these measured cue ranges and frame ranges for Storyboard, Remotion Sequences, subtitles, visual beats, and music ducking. Do not revert to planned Script timing.',
             ].join('\n')
           : '';
+        const transcriptArtifactText = output.transcriptPath
+          ? `\n\nFull word/utterance transcript artifact: ${output.transcriptPath}\nRead this file when the inline transcript is truncated or when later source-time ranges are needed. Reuse its existing startMs/endMs values; do not retranscribe or invent replacement timecodes.`
+          : output.transcriptWarning
+            ? `\n\nTranscript artifact warning: ${output.transcriptWarning}`
+            : '';
+        const narrationWarningText = output.narrationWarning
+          ? `\n\nNarration alignment warning: ${output.narrationWarning}\nThe ASR transcript above succeeded and remains usable. Do not retranscribe unless the transcript itself is wrong.`
+          : '';
         return {
           type: 'content' as const,
           value: [{
             type: 'text' as const,
-            text: `${output.cached ? 'Cached ' : ''}ASR result${output.media_index ? ` for <<<media_${output.media_index}>>>` : ''}:\n\n${formatTranscriptForModel(transcript)}${cueText}`,
+            text: `${output.cached ? 'Cached ' : ''}ASR result${output.media_index ? ` for <<<media_${output.media_index}>>>` : ''}:\n\n${formatTranscriptForModel(transcript)}${cueText}${transcriptArtifactText}${narrationWarningText}`,
           }],
         };
       },
@@ -4207,7 +4262,7 @@ Node media runtime provides a standard isolated Node environment with \`require\
         console.log(`🔧 [run_code] ${desc || 'executing code'}...`);
         const startTime = Date.now();
         let resolvedComposition = composition;
-        if (resolvedComposition && !resolvedComposition.code && code_path) {
+        if (resolvedComposition && !resolvedComposition.code && executableCode.trim()) {
           resolvedComposition = { ...resolvedComposition, code: executableCode };
         }
         if (
@@ -4382,17 +4437,24 @@ Node media runtime provides a standard isolated Node environment with \`require\
           if (resolvedComposition) {
             result = { type: 'render', ...resolvedComposition };
           } else {
-          // Pre-fetch requested snapshot images as Buffers
+          // Pre-fetch requested still images as Buffers. Timeline video refs are
+          // resolved through <<<media_N>>> in the returned composition; sending
+          // their MP4 bytes through Sharp fails before the composition can run.
           let preloadedImages: Buffer[] = [];
           if (media_refs?.length) {
             for (const ref of media_refs) {
               const v = validateImageIndex(ctx.snapshotImages, ref);
               if (v.error) return { type: 'text' as const, content: v.error };
             }
+            const stillMediaRefs = media_refs.filter(ref => !isVideoUrl(ctx.snapshotImages[ref - 1]));
+            const skippedVideoRefs = media_refs.filter(ref => isVideoUrl(ctx.snapshotImages[ref - 1]));
             preloadedImages = await Promise.all(
-              media_refs.map(ref => fetchImageBuffer(ctx.snapshotImages[ref - 1]))
+              stillMediaRefs.map(ref => fetchImageBuffer(ctx.snapshotImages[ref - 1]))
             );
             console.log(`📦 [run_code] pre-fetched ${preloadedImages.length} images (${preloadedImages.map(b => `${(b.length / 1024).toFixed(0)}KB`).join(', ')})`);
+            if (skippedVideoRefs.length) {
+              console.log(`🎬 [run_code] kept video refs marker-backed: ${skippedVideoRefs.map(ref => `<<<media_${ref}>>>`).join(', ')}`);
+            }
           }
 
           // Build sandbox context
