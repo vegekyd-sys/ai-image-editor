@@ -741,7 +741,7 @@ export async function getSkillManifest(supabase?: SupabaseClient, userId?: strin
     return '';
   }
 
-  const manifest = `\n## Available Skills\n\nThis is the semantic routing index. Select a skill when the user request clearly matches its name, description, or trigger, then read \`skills/{name}/SKILL.md\` before planning or choosing tools. The selected Skill owns its workflow; a Studio recipe shown here is metadata, not permission to skip the Skill instructions. For video creation, choose the smallest workflow first: ordinary requests up to and including 15 seconds stay on direct Agent video generation, while requests longer than 15 seconds may activate the best matching Skill. Explicit Skill template launches and explicit Studio/Remotion/editable requests remain authoritative.\n\n${lines.join('\n')}\n`;
+  const manifest = `\n## Available Skills\n\nThis is the semantic routing index. Select a skill when the user request clearly matches its name, description, or trigger, then read \`skills/{name}/SKILL.md\` before planning or choosing tools. The selected Skill owns its workflow; a Studio recipe shown here is metadata, not permission to skip the Skill instructions. Video routes by duration and operation before semantic packaging: a finished video within the selected model's single-generation limit reads \`prompts/animate.md\` first and stays on direct Agent video generation regardless of platform, copy, subtitles, branding, or shot count. A named platform is not by itself a workflow override. Explicit Studio/Remotion/editability and source-led assembly remain Composition routes; longer requests may activate the best matching production Skill.\n\n${lines.join('\n')}\n`;
   setCache(cacheKey, manifest);
   return manifest;
 }

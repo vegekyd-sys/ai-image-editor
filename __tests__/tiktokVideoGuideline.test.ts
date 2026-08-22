@@ -94,11 +94,16 @@ describe('TikTok video guideline', () => {
     )).toBe(true);
   });
 
-  it('routes TikTok compositions through focused conditional references', () => {
+  it('keeps TikTok packaging focused without hijacking short generated-video requests', () => {
     const director = read('src/skills/_shared/remotion-director-contract.md');
     const compositionPrompt = read('src/lib/prompts/remotion-composition.md');
     const skill = read('src/skills/tiktok-video/SKILL.md');
     const sourceVideoSkill = read('src/skills/source-video-studio/SKILL.md');
+    const animate = read('src/lib/prompts/animate.md');
+    const agent = read('src/lib/prompts/agent.md');
+    const workspace = read('src/lib/workspace.ts');
+    const normalizedSkill = skill.replace(/\s+/g, ' ');
+    const normalizedSourceVideoSkill = sourceVideoSkill.replace(/\s+/g, ' ');
 
     expect(director).toContain('skills/tiktok-video/SKILL.md');
     expect(director).toContain('must pass exclusion-zone collision review');
@@ -109,8 +114,16 @@ describe('TikTok video guideline', () => {
     expect(skill).toContain('references/audio-sync.md');
     expect(skill).toContain('references/delivery-qa.md');
     expect(skill).toContain('Before choosing Composition dimensions');
-    expect(skill).toContain('prefer it over a\n  generic source-video workflow');
-    expect(sourceVideoSkill).toContain('when the user names TikTok or Douyin, choose tiktok-video instead');
+    expect(normalizedSkill).toContain('TikTok or Douyin is a delivery destination, not a production engine');
+    expect(normalizedSkill).toContain('read `prompts/animate.md` first');
+    expect(normalizedSkill).toContain('Exact on-screen copy does not by itself require Remotion');
+    expect(normalizedSkill).toContain('Do not generate a still and then fake the requested cinematic motion');
+    expect(normalizedSourceVideoSkill).toContain('only when the request is source-led editing or deterministic packaging');
+    expect(animate).toContain('A named platform is a delivery constraint, not a reason to switch engines');
+    expect(agent).toContain('read `prompts/animate.md` before any platform or content Skill');
+    expect(workspace).toContain('A named platform is not by itself a workflow override');
+    expect(skill).not.toContain('Select this whenever the user explicitly names TikTok or Douyin');
+    expect(sourceVideoSkill).not.toContain('when the user names TikTok or Douyin, choose tiktok-video instead');
   });
 
   it('keeps the entrypoint focused on autonomous direction, not a caption template', () => {

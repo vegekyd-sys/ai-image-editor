@@ -1,11 +1,7 @@
 ---
 name: tiktok-video
 description: >
-  Create and package TikTok-ready 9:16 videos with platform-aware placement,
-  creator-native direction, synchronized VO/BGM captions, and editable Remotion
-  delivery. Select this whenever the user explicitly names TikTok or Douyin,
-  including edits built entirely from real source footage; prefer it over a
-  generic source-video workflow.
+  Edit and package source-led TikTok/Douyin footage in editable Remotion; do not use this Skill for short provider-generated video from text or image references.
 allowed-tools: read_file studio_run prepare_visual_asset analyze_video analyze_image transcribe_audio generate_image generate_animation generate_audio run_code write_file preview_frame materialize_media
 metadata:
   makaron:
@@ -20,9 +16,12 @@ metadata:
 
 # TikTok Video
 
-Use this Skill whenever the destination is TikTok or Douyin, including organic
-posts, creator-style ads, process edits, product demos, UGC packaging, and
-TikTok variants of a larger campaign.
+Use this Skill after the Agent has chosen a source-led or explicitly editable
+Composition workflow for a TikTok/Douyin deliverable: organic edits,
+creator-style cuts, process footage, talking heads, product demos, UGC
+packaging, and deterministic platform variants. TikTok or Douyin is a delivery
+destination, not a production engine. Do not enter this Skill merely because
+the platform is named.
 
 ## Read The Conditional References
 
@@ -44,6 +43,16 @@ TikTok variants of a larger campaign.
 
 ## Choose The Production Route
 
+- Decide the visual carrier before platform packaging. When the user asks for
+  newly imagined scenes, subject performance, transformation, cinematic camera
+  action, or motion generated from text/image/video references within the
+  selected provider's single-generation limit, read `prompts/animate.md` first
+  and use `generate_animation`. Carry TikTok framing, pacing, safe placement,
+  sound, and requested text into that generation script.
+- Exact on-screen copy does not by itself require Remotion. A detailed shot
+  list also remains one provider-generation script when it fits the model's
+  duration limit. Do not generate a still and then fake the requested cinematic
+  motion with pans, gradients, UI blocks, or code.
 - Existing timeline or source footage normally calls for an editable Remotion
   composition with a deliberate hook, sound strategy, and native close.
 - When the finished piece depends on authored captions, semantic keyword
@@ -51,9 +60,9 @@ TikTok variants of a larger campaign.
   Remotion Composition. FFmpeg may normalize or trim source media, but a
   missing `drawtext` filter is not permission to downgrade the final captions
   to generic ASS subtitles or another renderer-owned fallback.
-- A direct generated-video route is appropriate only when the user actually
-  wants newly generated provider footage and the result does not need precise
-  captions, branding, multiple sources, or deterministic layout.
+- Use this editable route when the source itself is the evidence, when the user
+  asks to cut/package existing footage, or when deterministic post-production
+  and later editability are explicit requirements.
 - Unless the user explicitly asks for source sound, silence, music-only, or
   another audio treatment, a source-footage TikTok defaults to muted clip audio
   plus one finished soundtrack containing VO and instrumental BGM. This does

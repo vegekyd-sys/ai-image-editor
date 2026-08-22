@@ -8,6 +8,15 @@ Execution behavior: in an ordinary CUI/editor request, write the complete visibl
 
 Native-audio contract: this script is the complete audio direction for `generate_animation`. Keep dialogue, narration, voice performance, music, ambience, and sound effects inside the script so the video model generates them with the picture. Never prepare this workflow with `generate_audio`, and never call it after submitting the video. A request for voice or music inside the final video is not a request for a separate audio asset.
 
+Workflow boundary: use this guide when the requested short video's visual carrier
+is newly generated motion, scenes, transformation, performance, or camera action.
+A named platform is a delivery constraint, not a reason to switch engines. Put
+TikTok/Douyin/Reels framing, safe placement, pacing, and exact requested copy in
+the complete generation script. Exact on-screen copy or a multi-shot plan does
+not by itself require an editable Composition. Switch to Remotion only when the
+user explicitly requests Remotion/editability or the work is fundamentally
+source-led timeline editing, deterministic compositing, or post-production.
+
 Reference-image preflight: EvoLink Seedance accepts JPEG/PNG/WebP images only, with width and height each 300-6000px, aspect ratio 0.4-2.5, and at most 30MB per image. The tool returns a specific `errorReason` (`too_small`, `too_large`, `invalid_aspect_ratio`, `unsupported_format`, or `unreadable`) plus actual dimensions and limits. `retryable: false` means do not resubmit the same URL. When `repairable: true`, decide whether to create a new resized/padded/converted public image URL or ask the user for a better source, then submit only with that new URL. A second unchanged submission becomes `terminal: true` and ends the retry loop.
 
 ## Input
