@@ -58,7 +58,7 @@ function minimalRepeatedCaptionDesign(): {
 const {AbsoluteFill,Sequence,Audio}=Remotion;
 function Caption({text}) {
   return <div style={{width:420,fontFamily:'Inter, Noto Sans SC, sans-serif',fontSize:42,fontWeight:800,lineHeight:1.18,color:'white'}}>
-    <div style={{display:'inline',backgroundColor:'rgba(13,12,13,.72)',boxShadow:'0 0 0 14px rgba(13,12,13,.72)',boxDecorationBreak:'clone',WebkitBoxDecorationBreak:'clone'}}>{text}</div>
+    <div style={{display:'inline-block',maxWidth:'100%',boxSizing:'border-box',padding:'10px 14px',backgroundColor:'rgba(13,12,13,.72)'}}>{text}</div>
   </div>;
 }
 function Composition(props) {

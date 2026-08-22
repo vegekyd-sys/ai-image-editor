@@ -39,13 +39,18 @@ describe('Remotion materialize editable overrides', () => {
     expect(html).not.toContain('First\\nSecond');
   });
 
-  it('renders cloned inline caption backing as one stable Preview/export block', () => {
+  it('preserves composition-authored caption backing styles verbatim', () => {
     const runtime = createEditableReactRuntime(React, 'video');
     const Composition = () => runtime.React.createElement(
       'div',
       {
         style: {
           display: 'inline',
+          fontFamily: 'Inter, Noto Sans SC, sans-serif',
+          fontSize: 42,
+          fontWeight: 800,
+          lineHeight: 1.18,
+          color: '#fff',
           backgroundColor: 'rgba(13,12,13,.72)',
           boxShadow: '0 0 0 14px rgba(13,12,13,.72)',
           boxDecorationBreak: 'clone',
@@ -58,26 +63,15 @@ describe('Remotion materialize editable overrides', () => {
 
     const html = renderToStaticMarkup(<MaterializedComposition />);
 
-    expect(html).toContain('display:inline-block');
-    expect(html).toContain('max-width:100%');
-    expect(html).toContain('box-sizing:border-box');
-    expect(html).toContain('box-decoration-break:slice');
-    expect(html).toContain('-webkit-box-decoration-break:slice');
-    expect(html).toContain('box-shadow:0 0 0 14px rgba(13,12,13,.72)');
-  });
-
-  it('does not rewrite ordinary inline emphasis without a cloned backing', () => {
-    const runtime = createEditableReactRuntime(React, 'video');
-    const Composition = () => runtime.React.createElement(
-      'span',
-      { style: { display: 'inline', color: '#ffcd3c' } },
-      'factory Olympics',
-    );
-    const MaterializedComposition = runtime.wrap(Composition, 'proxy');
-
-    const html = renderToStaticMarkup(<MaterializedComposition />);
-
     expect(html).toContain('display:inline');
+    expect(html).toContain('font-family:Inter, Noto Sans SC, sans-serif');
+    expect(html).toContain('font-size:42px');
+    expect(html).toContain('font-weight:800');
+    expect(html).toContain('line-height:1.18');
+    expect(html).toContain('color:#fff');
+    expect(html).toContain('box-decoration-break:clone');
+    expect(html).toContain('-webkit-box-decoration-break:clone');
+    expect(html).toContain('box-shadow:0 0 0 14px rgba(13,12,13,.72)');
     expect(html).not.toContain('display:inline-block');
   });
 
