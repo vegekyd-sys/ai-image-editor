@@ -181,6 +181,10 @@ async function main(): Promise<void> {
   const outputDir = path.resolve(readArg('--output-dir') || '/tmp/makaron-remotion-lambda-runtime-regression');
   const projectId = readArg('--project-id');
   const designPath = readArg('--design-path');
+  const requestedScale = Number(readArg('--scale') || 1);
+  if (!Number.isFinite(requestedScale) || requestedScale <= 0) {
+    throw new Error('--scale must be a positive number');
+  }
   if (designPath && !projectId) throw new Error('--design-path requires --project-id');
   const testName = projectId ? `project-${projectId}` : 'minimal-repeated-captions';
   await mkdir(outputDir, { recursive: true });
@@ -208,6 +212,7 @@ async function main(): Promise<void> {
   const progressEvents: Record<string, unknown>[] = [];
   const startedAt = Date.now();
   const rendered = await renderDesignVideoLambdaToUrl(design, {
+    scale: requestedScale,
     onProgress: (progress) => {
       const event = safeProgress(progress);
       progressEvents.push(event);
@@ -250,6 +255,9 @@ async function main(): Promise<void> {
     fontProps,
     width: design.width,
     height: design.height,
+    scale: requestedScale,
+    outputWidth: Math.round((design.width || 1080) * requestedScale),
+    outputHeight: Math.round((design.height || 1920) * requestedScale),
     animation: design.animation,
     errors,
     timings: withoutCapabilityUrls(rendered.timings),
