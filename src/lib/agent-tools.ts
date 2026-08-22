@@ -21,8 +21,11 @@ import {
   isAsrTranscriptCacheCompatible,
   transcribeWithVolcengineAsr,
   type VolcengineAsrTranscript,
-  type TranscriptWord,
 } from './volcengine-asr';
+import {
+  formatInlineWordTimingCoverageNotice,
+  formatTranscriptForModel,
+} from './transcript-inline';
 import {
   buildNarrationCueSheet,
   normalizeExpectedNarrationSections,
@@ -602,54 +605,6 @@ function formatGeneratedImageForModel(output: unknown): string {
     `Do not call list_files or write_file(fromWorkspaceOutputs) to find this generated image. It is timeline media, not a workspace file output.`,
     typeof record.message === 'string' ? `Tool message: ${record.message}` : '',
   ].filter(Boolean).join('\n');
-}
-
-function formatMs(ms: number | null | undefined): string {
-  if (typeof ms !== 'number' || !Number.isFinite(ms)) return '?';
-  return (ms / 1000).toFixed(2).replace(/\.00$/, '');
-}
-
-function formatTranscriptWords(words: TranscriptWord[] | undefined, maxChars: number): string {
-  if (!words?.length || maxChars <= 0) return '';
-  let out = '';
-  for (const word of words) {
-    const next = `${out ? ' | ' : ''}${formatMs(word.startMs)}-${formatMs(word.endMs)} ${word.text}`;
-    if (out.length + next.length > maxChars) return `${out} | ...`;
-    out += next;
-  }
-  return out;
-}
-
-function formatTranscriptForModel(transcript: VolcengineAsrTranscript, includeWordTimings = true): string {
-  const lines: string[] = [
-    `Transcript (${transcript.provider}/${transcript.model}, ${transcript.durationMs ? `${formatMs(transcript.durationMs)}s` : 'duration unknown'}):`,
-    transcript.text || '(empty transcript)',
-    '',
-    'Utterance timecodes:',
-  ];
-
-  let charBudget = includeWordTimings ? 24_000 : 8_000;
-  for (const [idx, utterance] of transcript.utterances.entries()) {
-    const line = `${idx + 1}. [${formatMs(utterance.startMs)}s-${formatMs(utterance.endMs)}s]${utterance.speaker ? ` speaker ${utterance.speaker}` : ''} ${utterance.text}`;
-    if (charBudget - line.length < 0) {
-      lines.push('[transcript truncated]');
-      break;
-    }
-    lines.push(line);
-    charBudget -= line.length;
-    const words = includeWordTimings ? formatTranscriptWords(utterance.words, Math.min(1200, charBudget)) : '';
-    if (words) {
-      const wordLine = `   words: ${words}`;
-      if (charBudget - wordLine.length < 0) {
-        lines.push('   words: [truncated]');
-        break;
-      }
-      lines.push(wordLine);
-      charBudget -= wordLine.length;
-    }
-  }
-
-  return lines.join('\n');
 }
 
 async function createNarrationCueArtifact(input: {
@@ -2362,6 +2317,11 @@ For timeline videos, pass media_index. For external audio/video URLs, pass media
               'Use these measured cue ranges and frame ranges for Storyboard, Remotion Sequences, subtitles, visual beats, and music ducking. Do not revert to planned Script timing.',
             ].join('\n')
           : '';
+        const inlineTranscript = formatTranscriptForModel(transcript);
+        const inlineCoverageText = formatInlineWordTimingCoverageNotice(
+          inlineTranscript,
+          output.transcriptPath,
+        );
         const transcriptArtifactText = output.transcriptPath
           ? `\n\nFull word/utterance transcript artifact: ${output.transcriptPath}\nRead this file when the inline transcript is truncated or when later source-time ranges are needed. Reuse its existing startMs/endMs values; do not retranscribe or invent replacement timecodes.`
           : output.transcriptWarning
@@ -2374,7 +2334,7 @@ For timeline videos, pass media_index. For external audio/video URLs, pass media
           type: 'content' as const,
           value: [{
             type: 'text' as const,
-            text: `${output.cached ? 'Cached ' : ''}ASR result${output.media_index ? ` for <<<media_${output.media_index}>>>` : ''}:\n\n${formatTranscriptForModel(transcript)}${cueText}${transcriptArtifactText}${narrationWarningText}`,
+            text: `${output.cached ? 'Cached ' : ''}ASR result${output.media_index ? ` for <<<media_${output.media_index}>>>` : ''}:\n\n${inlineTranscript.text}${inlineCoverageText}${cueText}${transcriptArtifactText}${narrationWarningText}`,
           }],
         };
       },

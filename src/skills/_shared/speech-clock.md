@@ -21,6 +21,13 @@ asset again. On a temporary tool failure, retry the same asset once; if measured
 timing is still unavailable, preserve the work and stop before claiming synced
 speech delivery.
 
+`transcribe_audio` may compact long word lists in its inline response while
+preserving the complete result at `transcriptPath`. When it reports
+`wordTimingTruncated: true`, read that existing artifact before retaining,
+captioning, or synchronizing any affected or later speech range. Utterance text
+and line timecodes are not word-level coverage. Reading the artifact reuses the
+same ASR result; do not transcribe again.
+
 ## Map source time to output time
 
 Keep source and output coordinates explicit. Derive every caption, emphasis,
