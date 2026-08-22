@@ -67,6 +67,11 @@ animation, and visual personality to the Composition.
 - Derive motion from the meaning and action. Compare at least two different
   cues in motion; identical entrances need a creative reason, not merely a
   shared component.
+- A plain ASS or `drawtext` subtitle track is a technical fallback, not an
+  automatic TikTok art direction. When authored typography, semantic emphasis,
+  or editable delivery matters, keep captions in the Composition. A deliberately
+  minimal caption can still be right, but it must be a creative choice visible
+  in Preview rather than a renderer limitation.
 
 Typography remains Composition-owned. There is no required font, black plaque,
 left rail, accent color, caption position, or entrance animation.
