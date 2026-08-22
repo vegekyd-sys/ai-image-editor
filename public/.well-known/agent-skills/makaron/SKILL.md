@@ -109,6 +109,33 @@ Returns immediately:
 | Beat-sync video from audio | `npx makaron-cli chat --project auto --audio beat.mp3 "use Seedance Mini at 480p to make a beat-synced video"` |
 | Create motion design | `npx makaron-cli chat --project <id> "make an animated Instagram story with this image"` |
 
+### Built-in production skills
+
+When the request names a production format or the correct workflow is unclear,
+discover the current built-in skills before starting. Do not guess a skill slug
+from memory: the server list is the source of truth.
+
+```bash
+# Short list of callable/discoverable production skills and their purpose
+npx makaron-cli skills list --built-in
+
+# Search by task, format, or keyword
+npx makaron-cli skills search "talking head captions" --built-in
+
+# Inspect input requirements, workflow, keywords, and exact invocation
+npx makaron-cli skills show talking-head --built-in
+
+# Use the exact slug returned by list/show
+npx makaron-cli chat --project auto --video talk.mp4 \
+  --skill talking-head -b "remove false starts, add synced captions and useful B-roll"
+```
+
+Use `--all` only when debugging adapters or looking for an internal helper Skill.
+For ordinary creative work, choose from the default built-in list. A named
+destination takes priority over a generic source workflow: for example,
+explicit TikTok/Douyin work uses `tiktok-video`; ordinary speech-led cleanup
+uses `talking-head`; broader mixed-footage editing uses `source-video-studio`.
+
 ### Marketplace skills
 
 Use marketplace skills when the user asks for a named Makaron effect, template, or skill such as "Football Captain", "足球队长", "World Cup MVP", or a marketplace UUID.
