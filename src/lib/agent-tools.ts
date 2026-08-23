@@ -373,6 +373,7 @@ export type AgentStreamEvent =
 import { type ParsedSkill } from './skill-registry';
 // Workspace service — unified access to skills, memory, assets
 import * as workspace from './workspace';
+import { recordEvolvingSkillUsage } from './skill-evolution';
 
 // ---------------------------------------------------------------------------
 // Shared image reference utilities
@@ -3687,6 +3688,16 @@ Use this to read skill instructions (SKILL.md), reference images, or your memory
 
         const result = await workspace.readFile(filePath, ctx.supabase, ctx.userId);
         if (!result) return { error: `File not found: ${filePath}` };
+
+        await recordEvolvingSkillUsage({
+          supabase: ctx.supabase,
+          runId: ctx.agentRunId || ctx.execution?.runId,
+          projectId: ctx.projectId,
+          userId: ctx.userId,
+          sourcePath: filePath,
+          content: result.content,
+          activationSource: 'read_file',
+        });
 
         if (result.contentType.startsWith('image/')) {
           // Return image for vision — same pattern as analyze_image
