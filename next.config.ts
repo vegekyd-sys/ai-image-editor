@@ -65,6 +65,14 @@ const nextConfig: NextConfig = {
       './app-store-assets/**',
     ],
   },
+  outputFileTracingIncludes: {
+    '/api/agent/**': [
+      './node_modules/@aws-crypto/**',
+      './node_modules/@aws-sdk/types/**',
+      './node_modules/@smithy/**',
+      './node_modules/tslib/**',
+    ],
+  },
   turbopack: {
     rules: {
       "*.md": {
