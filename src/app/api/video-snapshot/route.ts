@@ -98,7 +98,8 @@ export async function POST(req: NextRequest) {
         }
       }
     }
-    if (referenceVideoDuration != null && referenceVideoDuration > videoCapability.maxReferenceVideoDuration + 0.5) {
+    const acceptedReferenceDuration = videoCapability.maxReferenceVideoDuration + (videoCapability.referenceVideoDurationTolerance ?? 0)
+    if (referenceVideoDuration != null && referenceVideoDuration > acceptedReferenceDuration) {
       return NextResponse.json({ error: `Reference video duration too long (${referenceVideoDuration.toFixed(1).replace(/\.0$/, '')}s). Maximum ${videoCapability.maxReferenceVideoDuration}s with small metadata tolerance.` }, { status: 400 })
     }
     const effectiveDuration = duration ?? (referenceVideoDuration != null ? Math.min(videoCapability.maxOutputDuration, Math.round(referenceVideoDuration)) : undefined)

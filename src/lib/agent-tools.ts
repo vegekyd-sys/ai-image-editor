@@ -1504,14 +1504,14 @@ Hard constraints:
 - The script must have been shown to the user and confirmed before this tool is called, unless the user's current request explicitly asks for direct submission without confirmation or the system prompt supplies the trusted Skill template launch exception.`,
       inputSchema: z.object({
         story_prompt: z.string().describe('The complete video script. First line = short title, then the body. Native SeeDance or MiniMax H3 text-to-video uses no media markers. Seedance 2.5 markers are translated to @imageN, @videoN, and @audioN for Evolink.'),
-        duration: z.number().optional().describe('Duration in seconds. Seedance 2.5 accepts 4-30s; SeeDance/SeeDance Mini and MiniMax H3 accept 4-15s; Kling accepts 5-15s; Grok accepts 1-15s; Google Omni accepts 3-10s.'),
+        duration: z.number().optional().describe('Duration in seconds. Seedance 2.5 accepts 4-30s; for Seedance 2.5 video_operation="edit", omit duration or pass -1 because Makaron follows the source duration automatically. SeeDance/SeeDance Mini and MiniMax H3 accept 4-15s; Kling accepts 5-15s; Grok accepts 1-15s; Google Omni accepts 3-10s.'),
         aspect_ratio: z.enum(['16:9', '9:16', '1:1', '4:3', '3:4', '21:9', '3:2', '2:3']).optional().describe('Output aspect ratio. Pass it only when the user asks for a specific shape and the selected model can safely honor it. For Grok single-image-to-video, omit this field because xAI stretches the source image when a forced ratio differs from the image. Seedance supports 16:9/9:16/1:1/4:3/3:4/21:9/adaptive; Makaron intentionally does not pass forced ratios to Grok image-to-video.'),
         model: z.string().optional().describe('Video model/provider id. Supported ids include seedance-fast, seedance-mini, seedance, seedance-2.5, kling, grok, google-omni, and minimax-h3.'),
         video_resolution: z.enum(['480p', '720p', '768p', '1080p', '2k', '4k', 'auto']).optional().describe('Output resolution. Seedance 2.5 supports 480p/720p; MiniMax H3 supports 768p/2k and defaults to 768p.'),
         media_refs: z.array(z.string()).optional().describe('Additional image URLs NOT already in Media Index (e.g. workspace files from list_files). Images in Media Index are auto-available — just use <<<media_N>>> in script. Passing Media Index URLs here will be rejected.'),
         audio_refs: z.array(z.string()).optional().describe('Reference audio labels from the Audio Index block, e.g. ["audio_1"]. Use for beat sync, pacing, or music reference. These are separate from <<<media_N>>> and supported by SeeDance models and MiniMax H3.'),
-        video_ref_url: z.string().optional().describe('External reference video URL (from workspace/skill assets via list_files). For timeline videos, just use <<<media_N>>> — they are auto-routed. Only use this for external URLs not in Media Index. SeeDance video references must be <=50MB, width/height 300-6000px, aspect ratio 0.4-2.5, frame pixels 409,600-2,086,876. MiniMax H3 video references must be <=50MB, width/height 256-5760px, aspect ratio 0.4-2.5, with at most 3 videos totaling <=15s. Kling video references must be <=200MB and <=2K; no explicit lower resolution is documented. Google Omni accepts one reference video in Makaron. Grok does not support video references in Makaron yet.'),
-        video_ref_type: z.enum(['base', 'feature']).optional().describe('How to use the reference video. feature (default): reference motion/style. base: direct edit (Kling only, output duration=input). Almost always use feature.'),
+        video_ref_url: z.string().optional().describe('External reference video URL (from workspace/skill assets via list_files). For timeline videos, just use <<<media_N>>> — they are auto-routed. Only use this for external URLs not in Media Index. SeeDance 2.0 video references must be <=50MB, width/height 300-6000px, aspect ratio 0.4-2.5, frame pixels 409,600-2,086,876. Seedance 2.5 accepts .mp4/.mov <=200MB, width/height 300-6000px, frame pixels 409,600-8,295,044, 4-30s each and <=30s total. MiniMax H3 video references must be <=50MB, width/height 256-5760px, aspect ratio 0.4-2.5, with at most 3 videos totaling <=15s. Kling video references must be <=200MB and <=2K; no explicit lower resolution is documented. Google Omni accepts one reference video in Makaron. Grok does not support video references in Makaron yet.'),
+        video_ref_type: z.enum(['base', 'feature']).optional().describe('How to use an external reference video. feature (default): reference motion/style. base: direct edit for Kling, or use with Seedance 2.5 video_operation="edit". Timeline videos are auto-routed from <<<media_N>>>.'),
         keep_original_sound: z.boolean().optional().describe('Keep audio from reference video. Default: false.'),
         motion_control: z.boolean().optional().describe('Use Kling Motion Control for precise action transfer from reference video. Requires video_ref_url. Duration = reference video length. No detailed prompt needed — just a title. Kling only.'),
         character_orientation: z.enum(['image', 'video']).optional().describe('For motion_control: match photo orientation (image, ≤10s) or video orientation (video, ≤30s). Default: image.'),
@@ -1547,6 +1547,7 @@ Hard constraints:
           toolResolution: video_resolution,
         });
         const videoModel = videoSelection.model;
+        const isSeedance25Edit = videoModel === 'seedance-2.5' && video_operation === 'edit';
         const videoRoute = resolveVideoGenerationRoute({
           model: videoModel,
           resolution: videoSelection.resolution,
@@ -1587,6 +1588,7 @@ Hard constraints:
             aspectRatio: selectedAspectRatio,
             motionControl: motion_control,
             duration,
+            operation: video_operation,
           });
           if (harnessError) {
             return { success: false as const, message: harnessError };
@@ -1662,7 +1664,7 @@ Hard constraints:
             model: videoModel,
             resolution: videoRoute.resolution,
             aspectRatio: selectedAspectRatio,
-            outputDuration: duration,
+            outputDuration: isSeedance25Edit ? -1 : duration,
             referenceVideoDuration,
             referenceVideoMetas: referenceVideoMetas.length ? referenceVideoMetas : undefined,
             hasVideoReference: allVideoUrls.length > 0,
@@ -1677,7 +1679,7 @@ Hard constraints:
             };
           }
           const effectiveDuration = resolveVideoOutputDuration({
-            requestedDuration: duration,
+            requestedDuration: isSeedance25Edit ? undefined : duration,
             referenceVideoDuration,
             model: videoModel,
           });

@@ -32,13 +32,39 @@ A short title on the first line (2-5 words, no quotes, no markdown), then the vi
 
 Every SeeDance 2.0 script must be **4 to 15 seconds**. Seedance 2.5 scripts may be **4 to 30 seconds** in one call. The minimum output duration is 4 seconds.
 
-If the user asks for exactly 16-30s and selects Seedance 2.5, write one complete direct-generation script. For anything beyond the selected model limit, use the long-video-director workflow.
+If the user asks for exactly 16-30s and selects Seedance 2.5, write one complete direct-generation script using the longer-form direction rules below. For anything beyond the selected model limit, use the long-video-director workflow.
 
-If the user gives a complete script whose total duration is 4s to 15s, keep it as **one video generation script**. The whole title + every `Shot N (Xs):` line + `Style:` line must be submitted together as one prompt, with the generation duration set to the total script duration when known. If the script totals less than 4s, extend it to a compact 4s script instead of submitting a shorter duration. Do not submit only a single shot or a single line from the script. Do not split a valid short script into separate generations just because it has multiple `Shot N (Xs):` lines. Multiple shots are normal inside one 15s video.
+If the user gives a complete script whose total duration fits the selected model's single-call limit, keep it as **one video generation script**. The whole title + every `Shot N (Xs):` line + `Style:` line must be submitted together as one prompt, with the generation duration set to the total script duration when known. If the script totals less than 4s, extend it to a compact 4s script instead of submitting a shorter duration. Do not submit only a single shot or a single line from the script. Do not split a valid script into separate generations just because it has multiple `Shot N (Xs):` lines. Multiple shots are normal inside one 15s video, and a 16-30s Seedance 2.5 video should use the extra time for additional meaningful beats.
 
 If the source/reference video itself is longer than the selected model's input limit (15s for SeeDance 2.0, 30s for SeeDance 2.5), do **not** compress the whole source into one short edit unless the user explicitly asks to summarize it. Treat it as long-video input: analyze its pacing, split it into model-sized self-contained segments, carry the seam requirements into each segment script, and wait for approval before rendering.
 
 Uploaded/reference videos may total **15 seconds for SeeDance 2.0** or **30 seconds for Seedance 2.5** in one generation.
+
+## Seedance 2.5 Longer-Form Direction (16-30s)
+
+Do not write a 15s idea and stretch it to 30s with slower camera motion, repeated coverage, vague ambience, or a long static hold. The extra duration must carry additional story information, visual development, escalation, or payoff.
+
+Default planning density (guidance, not a hard quota):
+- **16-20s:** usually 4-6 distinct shots, or 4-5 clearly visible phases in a continuous take.
+- **21-30s:** usually 6-9 distinct shots, or 5-7 clearly visible phases in a continuous take.
+- Most shots should last 2-5 seconds. Use sub-2-second shots only for an intentional hook, impact cut, or short montage accent.
+
+Build a complete longer-form arc:
+- **Hook (first 1-2s):** open on the most arresting action, transformation, question, or visual contradiction.
+- **Orientation:** establish the subject, goal, and spatial context without repeating what the reference image already shows.
+- **Development:** add at least two cause-and-effect beats that change the action, environment, relationship, or stakes.
+- **Escalation / reveal:** create a clear visual peak, transformation, discovery, or emotional turn rather than more coverage of the setup.
+- **Resolution (final 2-4s):** land on a deliberate payoff, reaction, callback, product/result reveal, or memorable closing image. Do not default to a static logo hold unless the user asks for one.
+
+Longer-form shot craft:
+- The sum of all `Shot N (Xs):` durations must equal the requested duration exactly.
+- Each shot still has one dominant subject action and one camera movement. More time means more purposeful beats, not more simultaneous instructions per shot.
+- Adjacent shots must change at least one meaningful dimension: framing, angle, camera path, action, scale, location, lighting state, or emotional intensity. Avoid two shots that communicate the same information.
+- Preserve identity, wardrobe, props, geography, screen direction, and cause-and-effect continuity across the whole generation. If the location changes, write the transition that motivates it.
+- Re-anchor the main subject or motif every 2-3 shots so richer coverage does not become a disconnected montage.
+- Give native audio its own arc: an opening cue, evolving ambience/rhythm, a peak synchronized to the reveal, and a clean final resolve. Do not repeat the same generic sound cue on every shot.
+
+When the user explicitly selects Seedance 2.5, requests a direct 16-30 second video, or needs its edit/extend and higher-reference limits, use `model: "seedance-2.5"`. It supports a single 4-30 second output at 480p/720p, native synchronized audio, up to 30 image + 10 video + 10 audio references (50 total), and dedicated `video_operation: "edit" | "extend"` routes. Use `extend_direction: "forward" | "backward"` for extension. The Evolink API does not currently expose 4K output, so never promise 4K for this route.
 
 ## Modes
 
@@ -67,7 +93,8 @@ Rules:
 - **External videos** (workspace/skill assets): pass `video_ref_url` + `video_ref_type: feature`
 - **Duration lock**: when editing an existing video within the selected model's limit, the output duration should match the input video duration. SeeDance 2.0 accepts up to 15s. SeeDance 2.5 accepts up to 30s and its dedicated edit mode may use adaptive duration (`-1`). For longer sources, use the long-video-director workflow instead of one short compressed edit. Never default to a 5s script for video editing unless the user explicitly asks to shorten it.
 - **Combined video limit**: when referencing one or more timeline/uploaded videos or external reference videos, add their source durations together. The total must be 15s or less for SeeDance 2.0, or 30s or less for SeeDance 2.5.
-- **SeeDance video size limit**: .mp4/.mov, <=50MB each, width and height each 300-6000px, aspect ratio 0.4-2.5, and frame pixels width*height between 409,600 and 2,086,876. If the source is too small, resize/pad it before generation; do not submit tiny reference videos directly.
+- **SeeDance 2.0 video size limit**: .mp4/.mov, <=50MB each, width and height each 300-6000px, aspect ratio 0.4-2.5, and frame pixels width*height between 409,600 and 2,086,876. If the source is too small, resize/pad it before generation; do not submit tiny reference videos directly.
+- **Seedance 2.5 video size/duration limit**: .mp4/.mov, <=200MB each, width and height each 300-6000px, aspect ratio 0.4-2.5, frame pixels width*height between 409,600 and 8,295,044, and 4-30s per video with all video references totaling <=30s. A normal encoded 30s file may contain up to 0.5s of container/tail-frame metadata tolerance; treat it as 30s rather than asking the user to split it. For `video_operation: "edit"`, omit `duration` or use `-1`; Makaron follows the source duration automatically.
 - **Kling video size limit**: one .mp4/.mov reference video, <=200MB, resolution <=2K. Kling docs do not state a video resolution lower bound.
 - Can combine images + videos in the same prompt
 - Keep prompt concise (under 200 chars when referencing video for motion)
@@ -188,7 +215,7 @@ Shot 2 (3s): Close-up, ...
 
 9. **Segment seams**: If this script is part of a long-video segment plan, any seam requirements must be written into the script itself. The first shot/action must satisfy the previous seam's required opening, and the final shot/action must satisfy the next seam's required ending. Do not leave continuity only as a separate note outside the script.
 
-10. **Duration**: 4s = minimum compact unit, 5s = default/common preset, 10s = complete detail. Recommend 10s for complex scenes. Never write or submit a SeeDance generated video duration below 4s.
+10. **Duration**: 4s = minimum compact unit, 5s = default/common preset, 10s = complete detail. Recommend 10s for complex scenes. For an explicitly selected Seedance 2.5 request, use 16-30s when the concept benefits from a fuller story arc rather than compressing it into the 15s pattern. Never write or submit a SeeDance generated video duration below 4s.
    - **Video editing exception**: if the prompt references an existing video within the selected model's input limit, match the source video's duration. Clamp to 4-15s for SeeDance 2.0 or 4-30s for SeeDance 2.5; dedicated SeeDance 2.5 edit may instead use adaptive duration (`-1`). Split sources longer than the selected model limit into long-video segments first. Do not use the single-photo 5s formula for video edits.
 
 11. **Select & reorder**: Pick 3-7 images from the Media Index. Skip duplicates and weak edits. Reorder freely for the strongest story — don't follow upload order.
@@ -269,12 +296,3 @@ Style: Urban cinematic, neon noir, handheld energy.
 ---
 
 Now analyze the provided images and write the video prompt. Output ONLY the prompt text, nothing else.
-# Seedance 2.5
-
-When the user explicitly selects Seedance 2.5, requests a direct 16-30 second
-video, or needs its edit/extend and higher-reference limits, use
-`model: "seedance-2.5"`. It supports a single 4-30 second output at 480p/720p,
-native synchronized audio, up to 30 image + 10 video + 10 audio references (50
-total), and dedicated `video_operation: "edit" | "extend"` routes. Use
-`extend_direction: "forward" | "backward"` for extension. The Evolink API does
-not currently expose 4K output, so never promise 4K for this route.

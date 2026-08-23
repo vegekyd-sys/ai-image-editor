@@ -4,6 +4,7 @@ export interface VideoModelCapability {
   minOutputDuration: number
   maxOutputDuration: number
   maxReferenceVideoDuration: number
+  referenceVideoDurationTolerance?: number
   referenceVideoSize?: VideoReferenceSizeCapability
   supportsVideoReference: boolean
   supportsBaseVideoEdit: boolean
@@ -194,6 +195,7 @@ const MODEL_CAPABILITIES: Record<string, VideoModelCapability> = {
     minOutputDuration: 4,
     maxOutputDuration: 30,
     maxReferenceVideoDuration: 30,
+    referenceVideoDurationTolerance: 0.5,
     referenceVideoSize: {
       maxFileSizeMb: 200,
       minWidth: 300,
@@ -463,6 +465,7 @@ export function supportsNativeTextToVideo(model?: string | null): boolean {
 export function resolveVideoProviderModel(options: {
   model?: string | null
   resolution?: VideoResolutionInput
+  aspectRatio?: VideoAspectRatioInput
   imageReferenceCount?: number
   hasVideoReference?: boolean
   hasAudioReference?: boolean
@@ -485,7 +488,8 @@ export function resolveVideoProviderModel(options: {
       (options.imageReferenceCount ?? 0) >= 1 &&
       (options.imageReferenceCount ?? 0) <= 2 &&
       !options.hasVideoReference &&
-      !options.hasAudioReference
+      !options.hasAudioReference &&
+      (!options.aspectRatio || options.aspectRatio === 'auto')
     ) {
       return 'seedance-2.5-image-to-video'
     }
@@ -718,7 +722,8 @@ export function validateVideoModelRequest(options: {
     return `${capability.label} does not support video extension.`
   }
 
-  if (options.referenceVideoDuration != null && options.referenceVideoDuration > capability.maxReferenceVideoDuration) {
+  const acceptedReferenceDuration = capability.maxReferenceVideoDuration + (capability.referenceVideoDurationTolerance ?? 0)
+  if (options.referenceVideoDuration != null && options.referenceVideoDuration > acceptedReferenceDuration) {
     return `${capability.label} reference video duration must be ${capability.maxReferenceVideoDuration.toFixed(1).replace(/\.0$/, '')} seconds or less. Read skills/video-ffmpeg-lab/SKILL.md, then use run_code runtime="node" with FFmpeg to split the source video first, submit one generation task per chunk, and concatenate the results.`
   }
 

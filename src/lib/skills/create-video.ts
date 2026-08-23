@@ -333,6 +333,7 @@ export async function createVideo(input: CreateVideoInput): Promise<CreateVideoR
       const providerModel = resolveVideoProviderModel({
         model: provider,
         resolution: route.resolution,
+        aspectRatio,
         imageReferenceCount: filteredImages.length,
         hasVideoReference: providerVideoUrls.length > 0,
         hasAudioReference,
