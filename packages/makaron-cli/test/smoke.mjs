@@ -275,6 +275,30 @@ const server = http.createServer(async (req, res) => {
     return;
   }
 
+  if (req.method === 'GET' && url.pathname === '/api/agent/run/run_project_media_reconcile') {
+    sendJson(200, {
+      id: 'run_project_media_reconcile',
+      project_id: 'project-reconcile-1',
+      status: 'in_progress',
+      agent_status: 'completed',
+      incomplete: true,
+      next_poll_after_ms: 10_000,
+      output: [{
+        id: 'out_video_reconcile',
+        type: 'video',
+        status: 'rendering',
+        task_id: 'task-unified-reconcile',
+      }],
+      result: {
+        videos: [{
+          taskId: 'task-unified-reconcile',
+          status: 'rendering',
+        }],
+      },
+    });
+    return;
+  }
+
   if (req.method === 'GET' && url.pathname === '/api/agent/run/run_failed_video') {
     sendJson(200, {
       id: 'run_failed_video',
@@ -369,6 +393,35 @@ const server = http.createServer(async (req, res) => {
           snapshotId: 'snap_comp_1',
           codePath: 'code/snap_comp_1.json',
           description: 'Editable Remotion composition',
+        },
+      ],
+    });
+    return;
+  }
+
+  if (req.method === 'GET' && url.pathname === '/api/projects/project-reconcile-1/media') {
+    sendJson(200, {
+      projectId: 'project-reconcile-1',
+      media: [
+        {
+          id: 'media_old_video',
+          type: 'video',
+          status: 'completed',
+          snapshot_id: 'snap_old_video',
+          task_id: 'task-unified-other-run',
+          url: 'https://cdn.example/other-run.mp4',
+        },
+        {
+          id: 'media_reconciled_video',
+          type: 'video',
+          status: 'completed',
+          snapshot_id: 'snap_reconciled_video',
+          task_id: 'task-unified-reconcile',
+          url: 'https://cdn.example/reconciled.mp4',
+          posterUrl: 'https://cdn.example/reconciled-poster.jpg',
+          duration: 30.08,
+          width: 720,
+          height: 1280,
         },
       ],
     });
@@ -1049,6 +1102,23 @@ try {
   {
     const result = await expectSuccess(['responses', 'get', 'run_legacy_video', '--pick', 'video_urls']);
     assert.deepEqual(JSON.parse(result.stdout), ['https://cdn.example/legacy-delivery.mp4']);
+  }
+
+  {
+    const result = await expectSuccess(['responses', 'get', 'run_project_media_reconcile', '--wait', '--json']);
+    const data = JSON.parse(result.stdout);
+    assert.equal(data.status, 'completed');
+    assert.equal(data.incomplete, false);
+    assert.equal(data.next_poll_after_ms, undefined);
+    assert.equal(data.output[0].status, 'completed');
+    assert.equal(data.output[0].url, 'https://cdn.example/reconciled.mp4');
+    assert.equal(data.output[0].snapshot_id, 'snap_reconciled_video');
+    assert.equal(data.output[0].duration, 30.08);
+    assert.equal(data.output[0].width, 720);
+    assert.equal(data.output[0].height, 1280);
+    assert.equal(data.result.videos[0].status, 'completed');
+    assert.equal(data.result.videos[0].videoUrl, 'https://cdn.example/reconciled.mp4');
+    assert.ok(requests.some(req => req.pathname === '/api/projects/project-reconcile-1/media'));
   }
 
   {

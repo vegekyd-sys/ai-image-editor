@@ -428,6 +428,7 @@ type CompletionAction = {
 3. Stop when `status` is `"completed"`, `"failed"`, or `"aborted"`
 4. Top-level `status: "completed"` means ALL artifacts are ready (including rendered videos)
 5. If an async video fails, top-level `status` is `"failed"` and the failed video may include `completion_actions` for a safe retry or diagnosis. Agents can surface these as the next user-confirmed step.
+6. `responses get --wait` reconciles pending video output against completed Project Media with the same `snapshot_id` or `task_id`. A lagging Run row therefore does not block delivery after the durable project video is ready.
 
 ## Exit Codes
 

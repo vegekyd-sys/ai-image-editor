@@ -328,6 +328,86 @@ function normalizeRunResponse(data) {
   return data;
 }
 
+function projectMediaIdentity(item) {
+  const snapshotId = item?.snapshot_id || item?.snapshotId;
+  const taskId = item?.task_id || item?.taskId;
+  return {
+    snapshotId: typeof snapshotId === 'string' && snapshotId ? snapshotId : null,
+    taskId: typeof taskId === 'string' && taskId ? taskId : null,
+  };
+}
+
+function findMatchingCompletedProjectVideo(item, media) {
+  const identity = projectMediaIdentity(item);
+  if (!identity.snapshotId && !identity.taskId) return null;
+  return (media || []).find(candidate => {
+    if (candidate?.type !== 'video' || candidate?.status !== 'completed' || !candidate?.url) return false;
+    const candidateIdentity = projectMediaIdentity(candidate);
+    return (identity.snapshotId && candidateIdentity.snapshotId === identity.snapshotId)
+      || (identity.taskId && candidateIdentity.taskId === identity.taskId);
+  }) || null;
+}
+
+async function reconcileRunWithProjectMedia(baseUrl, headers, data) {
+  normalizeRunResponse(data);
+  const output = Array.isArray(data.output) ? data.output : [];
+  const pendingVideos = output.filter(item =>
+    item?.type === 'video' && (item.status === 'queued' || item.status === 'rendering')
+  );
+  const agentDone = data.agent_status === 'completed'
+    || (data.status === 'in_progress' && data.incomplete === true);
+  if (!agentDone || pendingVideos.length === 0 || !data.projectId) return data;
+
+  let projectMedia;
+  try {
+    const res = await fetch(`${baseUrl}/api/projects/${data.projectId}/media`, { headers });
+    if (!res.ok) return data;
+    projectMedia = await res.json();
+  } catch {
+    return data;
+  }
+
+  let reconciled = false;
+  for (const item of pendingVideos) {
+    const completed = findMatchingCompletedProjectVideo(item, projectMedia.media);
+    if (!completed) continue;
+    const identity = projectMediaIdentity(completed);
+    item.status = 'completed';
+    item.url = completed.url;
+    if (identity.snapshotId) item.snapshot_id = identity.snapshotId;
+    if (identity.taskId) item.task_id = identity.taskId;
+    if (completed.posterUrl) item.poster_url = completed.posterUrl;
+    for (const field of ['duration', 'width', 'height']) {
+      if (typeof completed[field] === 'number') item[field] = completed[field];
+    }
+
+    const legacyVideos = Array.isArray(data.result?.videos) ? data.result.videos : [];
+    const legacy = legacyVideos.find(video => {
+      const legacyIdentity = projectMediaIdentity(video);
+      return (identity.snapshotId && legacyIdentity.snapshotId === identity.snapshotId)
+        || (identity.taskId && legacyIdentity.taskId === identity.taskId);
+    });
+    if (legacy) {
+      legacy.status = 'completed';
+      legacy.videoUrl = completed.url;
+      if (identity.snapshotId && !legacy.snapshotId) legacy.snapshotId = identity.snapshotId;
+    }
+    reconciled = true;
+  }
+
+  if (!reconciled) return data;
+  const pendingArtifacts = output.some(item =>
+    (item?.type === 'video' || item?.type === 'music')
+    && (item.status === 'queued' || item.status === 'rendering')
+  );
+  if (!pendingArtifacts) {
+    data.status = 'completed';
+    data.incomplete = false;
+    delete data.next_poll_after_ms;
+  }
+  return data;
+}
+
 function collectCompletionActions(data) {
   const items = [];
   const add = (action, source) => {
@@ -612,6 +692,7 @@ async function pollRun(baseUrl, headers, runId, opts = {}) {
         continue;
       }
       data = await res.json();
+      data = await reconcileRunWithProjectMedia(baseUrl, headers, data);
     } catch {
       continue;
     }
@@ -764,6 +845,7 @@ async function watchRun(baseUrl, headers, runId, opts = {}) {
         continue;
       }
       data = await res.json();
+      data = await reconcileRunWithProjectMedia(baseUrl, headers, data);
     } catch {
       await new Promise(r => setTimeout(r, interval));
       continue;
@@ -2398,7 +2480,7 @@ if (!command || command === '--help' || command === '-h' || command === 'help') 
       const res = await fetch(`${baseUrl}/api/agent/run/${runId}`, { headers });
       if (!res.ok) { process.stderr.write(`Error ${res.status}: ${await res.text()}\n`); process.exit(1); }
       let data = await res.json();
-      normalizeRunResponse(data);
+      data = await reconcileRunWithProjectMedia(baseUrl, headers, data);
       if (exportCompositions && data.status === 'completed') {
         data = await exportAnimatedCompositionsFromRun(baseUrl, headers, data, { publish: publishExports, quiet: jsonOutput || !!pick });
       }

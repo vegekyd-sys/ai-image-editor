@@ -315,6 +315,7 @@ type MakaronOutput =
 2. Use `next_poll_after_ms` as interval (default 5000ms)
 3. Stop when `status` is `"completed"`, `"failed"`, or `"aborted"`
 4. Top-level `status: "completed"` means ALL artifacts are ready (including rendered videos)
+5. `responses get --wait` reconciles pending video output against completed Project Media with the same `snapshot_id` or `task_id`. A lagging Run row therefore does not block delivery after the durable project video is ready.
 
 ## Exit Codes
 
