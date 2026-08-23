@@ -37,6 +37,17 @@ describe('GPT Image 2 provider routing', () => {
     });
   });
 
+  it('requests PNG output when transparency is explicit', () => {
+    expect(buildOpenRouterImageRequest({
+      prompt: 'a magenta star sticker',
+      background: 'transparent',
+    })).toMatchObject({
+      model: 'openai/gpt-image-2',
+      background: 'transparent',
+      output_format: 'png',
+    });
+  });
+
   it('keeps OpenRouter and PiAPI available as explicit provider choices', () => {
     expect(resolveOpenAIImageProvider({ OPENAI_IMAGE_PROVIDER: 'azure' })).toBe('azure');
     expect(resolveOpenAIImageProvider({ OPENAI_IMAGE_PROVIDER: 'piapi' })).toBe('piapi');

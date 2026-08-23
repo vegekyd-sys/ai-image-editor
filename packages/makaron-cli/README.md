@@ -341,9 +341,12 @@ npx makaron-cli edit --image photo.jpg --ref style.jpg "match this style"
 
 # Output to file
 npx makaron-cli edit --image photo.jpg --out result.jpg "make it dramatic"
+
+# Strict transparent PNG/WebP output through GPT Image 2 (fails rather than returning opaque)
+npx makaron-cli edit --image-model openai --background transparent --out sticker.png "a magenta star sticker"
 ```
 
-Options: `--image`, `--image-model gemini|gemini-lite|qwen|openai|pony|wai`, `--ref <file>` (up to 3), `--aspect <ratio>`, `--out <path>`
+Options: `--image`, `--image-model gemini|gemini-lite|qwen|openai|pony|wai`, `--ref <file>` (up to 3), `--aspect <ratio>`, `--background auto|opaque|transparent`, `--out <path>`. Transparent output routes strictly to GPT Image 2 and is returned only when the provider supplies real PNG/WebP alpha.
 
 ### `video` — Standalone video tools (no project timeline)
 

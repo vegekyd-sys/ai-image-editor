@@ -1787,7 +1787,12 @@ function saveMcpImage(result, outputPath) {
   const imageBlock = content.find(c => c.type === 'image');
   if (textBlock) process.stderr.write(`${textBlock.text}\n`);
   if (imageBlock) {
-    const out = outputPath || `makaron-output-${Date.now()}.jpg`;
+    const extension = imageBlock.mimeType === 'image/png'
+      ? 'png'
+      : imageBlock.mimeType === 'image/webp'
+        ? 'webp'
+        : 'jpg';
+    const out = outputPath || `makaron-output-${Date.now()}.${extension}`;
     fs.writeFileSync(out, Buffer.from(imageBlock.data, 'base64'));
     console.log(out);
     return out;
@@ -2005,7 +2010,7 @@ Not sure which built-in skill to use? Start with:
   composition status <jobId> [--wait] [--json]
 `);
   } else if (topic === 'edit') {
-    console.log('Usage: makaron edit [--image <file|url>] [--image-model gemini|gemini-lite|qwen|openai|pony|wai] [--skill enhance|creative|wild|captions] [--ref <file>] [--out <file>] "prompt"');
+    console.log('Usage: makaron edit [--image <file|url>] [--image-model gemini|gemini-lite|qwen|openai|pony|wai] [--skill enhance|creative|wild|captions] [--ref <file>] [--aspect <ratio>] [--background auto|opaque|transparent] [--out <file>] "prompt"');
   } else if (topic === 'analyze') {
     console.log('Usage: makaron analyze --video <file|url> ["question"]');
   } else if (topic === 'video') {
@@ -2772,11 +2777,19 @@ if (!command || command === '--help' || command === '-h' || command === 'help') 
       editArgs.referenceImages.push(imageToArg(args[++i]));
     }
     else if (args[i] === '--aspect' && args[i + 1]) editArgs.aspectRatio = args[++i];
+    else if (args[i] === '--background' && args[i + 1]) {
+      const background = args[++i];
+      if (!['auto', 'opaque', 'transparent'].includes(background)) {
+        console.error('Invalid --background. Use auto, opaque, or transparent.');
+        process.exit(1);
+      }
+      editArgs.background = background;
+    }
     else if (args[i] === '--out' && args[i + 1]) outputPath = args[++i];
     else promptParts.push(args[i]);
   }
   editArgs.editPrompt = promptParts.join(' ');
-  if (!editArgs.editPrompt) { console.error('Usage: makaron edit [--image <file|url>] [--image-model gemini|gemini-lite|qwen|openai|pony|wai] [--ref <file>] [--out <file>] "prompt"'); process.exit(1); }
+  if (!editArgs.editPrompt) { console.error('Usage: makaron edit [--image <file|url>] [--image-model gemini|gemini-lite|qwen|openai|pony|wai] [--ref <file>] [--aspect <ratio>] [--background auto|opaque|transparent] [--out <file>] "prompt"'); process.exit(1); }
   process.stderr.write('🎨 Generating...\n');
   const result = await callMcpTool(baseUrl, headers, 'makaron_edit_image', editArgs);
   saveMcpImage(result, outputPath);

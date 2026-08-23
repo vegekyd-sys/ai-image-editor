@@ -1,11 +1,13 @@
 import { generateImage } from '../model-router';
-import type { ModelId, TokenUsage } from '../models/types';
+import type { ImageBackground, ModelId, TokenUsage } from '../models/types';
 import type { SkillContext, SkillResult } from './index';
 
 export interface EditImageInput {
   editPrompt: string;
   skill?: 'enhance' | 'creative' | 'wild' | 'captions';
   aspectRatio?: string;
+  /** Explicit output background. Transparent requests route strictly to GPT Image 2. */
+  background?: ImageBackground;
   /** @deprecated Use workspace service instead. Kept for backward compat. */
   skillPrompts?: Record<string, string>;
   /** User's preferred model override — bypasses default routing */
@@ -18,7 +20,8 @@ export async function editImage(
   input: EditImageInput,
   ctx: SkillContext,
 ): Promise<SkillResult> {
-  const { editPrompt, skill, aspectRatio, preferredModel, isNsfw } = input;
+  const { editPrompt, skill, aspectRatio, background, preferredModel, isNsfw } = input;
+  const requestedModel = background === 'transparent' ? 'openai' : preferredModel;
   const hasReference = !!ctx.referenceImages?.length;
 
   // Agent reads skill templates via read_file and internalizes rules into editPrompt.
@@ -26,7 +29,7 @@ export async function editImage(
   const finalPrompt = editPrompt;
 
   const t0 = Date.now();
-  console.log(`\n🎨 [edit_image] skill=${skill ?? 'none'} hasReference=${hasReference} model=${preferredModel ?? 'auto'}\neditPrompt: ${editPrompt.slice(0, 200)}\n`);
+  console.log(`\n🎨 [edit_image] skill=${skill ?? 'none'} hasReference=${hasReference} model=${requestedModel ?? 'auto'} background=${background ?? 'default'}\neditPrompt: ${editPrompt.slice(0, 200)}\n`);
 
   // Build references array for multi-image mode
   let references: { url: string; role: string }[] | undefined;
@@ -56,9 +59,10 @@ export async function editImage(
     const genResult = await generateImage({
       image: references ? undefined : ctx.currentImage,
       prompt: finalPrompt,
-      model: preferredModel,
+      model: requestedModel,
       category: skill,
       aspectRatio,
+      background,
       thinkingEffort: 'minimal',
       references,
       fallbackPrompt: undefined,
@@ -79,17 +83,22 @@ export async function editImage(
 
   if (!result) {
     console.error(`❌ [edit_image] all attempts failed after ${((Date.now() - t0) / 1000).toFixed(1)}s, failedModels=${lastFailedModels}`);
+    const message = background === 'transparent'
+      ? 'Transparent image generation is not available from the configured GPT Image 2 provider yet. No opaque fallback was returned.'
+      : 'Image generation failed after retry. The AI model returned no image — this can happen with complex prompts or temporary API issues. Please try rephrasing your request.';
     return {
       success: false,
       contentBlocked,
-      message: 'Image generation failed after retry. The AI model returned no image — this can happen with complex prompts or temporary API issues. Please try rephrasing your request.',
+      message,
     };
   }
 
-  console.log(`✅ [edit_image] done in ${((Date.now() - t0) / 1000).toFixed(1)}s (image ${(result.length / 1024).toFixed(0)}KB) model=${usedModel}${preferredModel && usedModel !== preferredModel ? ` (requested=${preferredModel}, fallback from ${lastFailedModels?.join(',')})` : ''}`);
+  console.log(`✅ [edit_image] done in ${((Date.now() - t0) / 1000).toFixed(1)}s (image ${(result.length / 1024).toFixed(0)}KB) model=${usedModel}${requestedModel && usedModel !== requestedModel ? ` (requested=${requestedModel}, fallback from ${lastFailedModels?.join(',')})` : ''}`);
   let msg = 'Image generated successfully.';
-  if (preferredModel && usedModel !== preferredModel) {
-    msg += ` ⚠️ Note: requested model "${preferredModel}" failed, fell back to "${usedModel}". Tell the user.`;
+  if (requestedModel && usedModel !== requestedModel) {
+    msg += ` ⚠️ Note: requested model "${requestedModel}" failed, fell back to "${usedModel}". Tell the user.`;
+  } else if (background === 'transparent' && preferredModel && preferredModel !== 'openai') {
+    msg += ' Transparent output required the OpenAI image model.';
   }
   return { success: true, message: msg, image: result, usedModel, contentBlocked, usage: lastUsage };
 }

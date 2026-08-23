@@ -5,8 +5,7 @@
  * PiAPI: /v1/images/edits + /v1/images/generations
  * OpenRouter: /v1/images (dedicated Image API)
  */
-import type { ModelBackend, GenerateImageRequest, TokenUsage } from './types';
-import { ensureJpeg } from '../gemini';
+import type { ImageBackground, ModelBackend, GenerateImageRequest, TokenUsage } from './types';
 import {
   OPENROUTER_IMAGE_API_URL,
   OPENROUTER_GPT_IMAGE_2_MODEL,
@@ -14,6 +13,7 @@ import {
   readOpenRouterProviderCost,
   resolveOpenAIImageProviderOrder,
 } from './openai-image-provider';
+import { normalizeOpenAIImageOutput } from './openai-image-output';
 
 // ── Provider selection ───────────────────────────────────────────
 const PROVIDER_ORDER = resolveOpenAIImageProviderOrder();
@@ -66,6 +66,7 @@ async function generateAzure(
   prompt: string,
   references?: { url: string; role: string }[],
   aspectRatio?: string,
+  background?: ImageBackground,
 ): Promise<{ image: string | null; usage?: TokenUsage }> {
   const apiKey = process.env.AZURE_OPENAI_API_KEY;
   if (!apiKey) {
@@ -86,6 +87,8 @@ async function generateAzure(
     form.append('quality', 'low');
     form.append('size', size);
     form.append('moderation', 'low');
+    if (background) form.append('background', background);
+    if (background === 'transparent') form.append('output_format', 'png');
 
     if (references?.length) {
       for (const ref of references) {
@@ -100,7 +103,14 @@ async function generateAzure(
     console.log(`[openai/azure] edits size=${size} images=${references?.length || 1}`);
     res = await fetch(AZURE_EDITS_URL, { method: 'POST', headers, body: form });
   } else {
-    const body = { prompt, quality: 'low', size, moderation: 'low' };
+    const body = {
+      prompt,
+      quality: 'low',
+      size,
+      moderation: 'low',
+      ...(background ? { background } : {}),
+      ...(background === 'transparent' ? { output_format: 'png' } : {}),
+    };
     console.log(`[openai/azure] generations size=${size}`);
     res = await fetch(AZURE_GENERATIONS_URL, {
       method: 'POST',
@@ -146,8 +156,11 @@ async function generateAzure(
     return { image: null };
   }
 
-  const jpeg = await ensureJpeg(resultDataUrl);
-  return { image: jpeg };
+  const normalized = await normalizeOpenAIImageOutput(resultDataUrl, background);
+  if (!normalized && background === 'transparent') {
+    console.warn('[openai/azure] Provider response did not contain real PNG/WebP transparency');
+  }
+  return { image: normalized };
 }
 
 // ── PiAPI implementation ────────────────────────────────────────
@@ -157,6 +170,7 @@ async function generatePiAPI(
   prompt: string,
   references?: { url: string; role: string }[],
   aspectRatio?: string,
+  background?: ImageBackground,
 ): Promise<{ image: string | null; usage?: TokenUsage }> {
   const apiKey = process.env.PIAPI_API_KEY;
   if (!apiKey) {
@@ -178,6 +192,8 @@ async function generatePiAPI(
     form.append('prompt', prompt);
     form.append('quality', 'low');
     form.append('size', size);
+    if (background) form.append('background', background);
+    if (background === 'transparent') form.append('output_format', 'png');
 
     if (references?.length) {
       for (const ref of references) {
@@ -194,7 +210,15 @@ async function generatePiAPI(
     res = await fetch(`${PIAPI_BASE}/images/edits`, { method: 'POST', headers, body: form });
   } else {
     // txt2img: /v1/images/generations (JSON)
-    const body = { model: PIAPI_MODEL, prompt, quality: 'low', size, moderation: 'low' };
+    const body = {
+      model: PIAPI_MODEL,
+      prompt,
+      quality: 'low',
+      size,
+      moderation: 'low',
+      ...(background ? { background } : {}),
+      ...(background === 'transparent' ? { output_format: 'png' } : {}),
+    };
     console.log(`[openai/piapi] generations size=${size}`);
     res = await fetch(`${PIAPI_BASE}/images/generations`, {
       method: 'POST',
@@ -240,8 +264,11 @@ async function generatePiAPI(
     return { image: null };
   }
 
-  const jpeg = await ensureJpeg(resultDataUrl);
-  return { image: jpeg };
+  const normalized = await normalizeOpenAIImageOutput(resultDataUrl, background);
+  if (!normalized && background === 'transparent') {
+    console.warn('[openai/piapi] Provider response did not contain real PNG/WebP transparency');
+  }
+  return { image: normalized };
 }
 
 // ── OpenRouter implementation (preserved) ────────────────────────
@@ -251,13 +278,14 @@ async function generateOpenRouter(
   prompt: string,
   references?: { url: string; role: string }[],
   aspectRatio?: string,
+  background?: ImageBackground,
 ): Promise<{ image: string | null; usage?: TokenUsage }> {
   if (!process.env.OPENROUTER_API_KEY) {
     console.warn('[openai/openrouter] No OPENROUTER_API_KEY');
     return { image: null };
   }
 
-  const body = buildOpenRouterImageRequest({ image, prompt, references, aspectRatio });
+  const body = buildOpenRouterImageRequest({ image, prompt, references, aspectRatio, background });
 
   const bodyJson = JSON.stringify(body);
   console.log(`[openai/openrouter] generating... bodySize=${(bodyJson.length / 1024).toFixed(0)}KB`);
@@ -303,8 +331,11 @@ async function generateOpenRouter(
   }
 
   const mediaType = imageData.media_type || 'image/png';
-  const jpeg = await ensureJpeg(`data:${mediaType};base64,${b64Json}`);
-  return { image: jpeg, usage };
+  const normalized = await normalizeOpenAIImageOutput(`data:${mediaType};base64,${b64Json}`, background);
+  if (!normalized && background === 'transparent') {
+    console.warn('[openai/openrouter] Provider response did not contain real PNG/WebP transparency');
+  }
+  return { image: normalized, usage };
 }
 
 // ── Backend export ───────────────────────────────────────────────
@@ -336,6 +367,7 @@ export const openaiBackend: ModelBackend = {
           req.prompt,
           refs,
           req.aspectRatio,
+          req.background,
         );
       } else if (provider === 'piapi') {
         lastResult = await generatePiAPI(
@@ -343,6 +375,7 @@ export const openaiBackend: ModelBackend = {
           req.prompt,
           refs,
           req.aspectRatio,
+          req.background,
         );
       } else {
         lastResult = await generateOpenRouter(
@@ -350,6 +383,7 @@ export const openaiBackend: ModelBackend = {
           req.prompt,
           refs,
           req.aspectRatio,
+          req.background,
         );
       }
       if (lastResult.image) return lastResult;

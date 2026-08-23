@@ -22,11 +22,17 @@ export async function POST(req: NextRequest) {
     const creditCheck = await requireCredits(user.id, 2);
     if (!creditCheck.ok) return creditCheck.response;
 
-    const { image, editPrompt, aspectRatio, category, isNsfw } = await req.json();
+    const { image, editPrompt, aspectRatio, background, category, isNsfw } = await req.json();
 
     if (!image || !editPrompt) {
       return new Response(
         JSON.stringify({ error: 'image and editPrompt are required' }),
+        { status: 400, headers: { 'Content-Type': 'application/json' } }
+      );
+    }
+    if (background !== undefined && !['auto', 'opaque', 'transparent'].includes(background)) {
+      return new Response(
+        JSON.stringify({ error: 'background must be auto, opaque, or transparent' }),
         { status: 400, headers: { 'Content-Type': 'application/json' } }
       );
     }
@@ -40,14 +46,16 @@ export async function POST(req: NextRequest) {
     }
 
     let liteResult: Awaited<ReturnType<typeof generateTipsPreviewImageOpenRouter>> = { image: null };
-    try {
-      liteResult = await generateTipsPreviewImageOpenRouter(image, editPrompt, aspectRatio);
-    } catch (error) {
-      console.warn('[preview] Lite preview failed, falling back to model-router:', error);
+    if (background !== 'transparent') {
+      try {
+        liteResult = await generateTipsPreviewImageOpenRouter(image, editPrompt, aspectRatio);
+      } catch (error) {
+        console.warn('[preview] Lite preview failed, falling back to model-router:', error);
+      }
     }
     const result = liteResult.image
       ? { image: liteResult.image, model: 'gemini' as const, fallbackUsed: false, contentBlocked: undefined, usage: liteResult.usage }
-      : await generateImage({ image, prompt: editPrompt, aspectRatio, category, isNsfw });
+      : await generateImage({ image, prompt: editPrompt, aspectRatio, background, category, isNsfw });
 
     // Deduct credits regardless of success (API tokens already consumed)
     if (result.usage) {

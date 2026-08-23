@@ -81,4 +81,15 @@ describe('editImage reference contract', () => {
       ],
     }));
   });
+
+  it('passes the strict transparent background contract to the model router', async () => {
+    await editImage(
+      { editPrompt: 'Create a sticker.', background: 'transparent' },
+      {},
+    );
+
+    expect(mockedGenerateImage).toHaveBeenCalledWith(expect.objectContaining({
+      background: 'transparent',
+    }));
+  });
 });

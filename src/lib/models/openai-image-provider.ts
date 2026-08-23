@@ -1,3 +1,5 @@
+import type { ImageBackground } from './types';
+
 export type OpenAIImageProvider = 'azure' | 'piapi' | 'openrouter';
 
 export const OPENROUTER_GPT_IMAGE_2_MODEL = 'openai/gpt-image-2';
@@ -8,6 +10,7 @@ interface OpenRouterImageRequestInput {
   image?: string;
   references?: { url: string; role: string }[];
   aspectRatio?: string;
+  background?: ImageBackground;
 }
 
 const OPENROUTER_GPT_IMAGE_2_ASPECT_RATIOS = new Set([
@@ -19,6 +22,7 @@ export function buildOpenRouterImageRequest({
   image,
   references,
   aspectRatio,
+  background,
 }: OpenRouterImageRequestInput): Record<string, unknown> {
   const referenceUrls = [
     ...(image ? [image] : []),
@@ -32,6 +36,10 @@ export function buildOpenRouterImageRequest({
   };
   if (aspectRatio && OPENROUTER_GPT_IMAGE_2_ASPECT_RATIOS.has(aspectRatio)) {
     body.aspect_ratio = aspectRatio;
+  }
+  if (background) {
+    body.background = background;
+    if (background === 'transparent') body.output_format = 'png';
   }
   if (referenceUrls.length) {
     body.input_references = referenceUrls.map(url => ({

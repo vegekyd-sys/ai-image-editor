@@ -1,20 +1,21 @@
 Edit the current photo or generate a new image from text.
 
-Call `read_file('prompts/image.md')` before complex image work, multi-image composition, skill routing, red annotations, restoration, model selection, captions, or layout/mockup images. Do not re-read it if already in tool-result history.
+Call `read_file('prompts/image.md')` before complex, multi-image, annotated, restoration, caption, model-selection, or layout work. Do not re-read it.
 
-For a clear direct edit such as "make this a neon poster" or "change the background to a beach", do not read the full guide first; call `generate_image` directly.
+For a clear direct edit, call `generate_image` without reading the full guide first.
 
 Core contract:
 
 - `media_index` selects the timeline snapshot to edit. When editing a photo, pass it explicitly.
-- `reference_media_indices` sends extra timeline snapshots when `editPrompt` mentions Image 2, Image 3, another `<<<media_N>>>`, a source background/person, or timeline style reference.
+- `reference_media_indices` sends extra timeline snapshots mentioned by `editPrompt`.
 - Omit `media_index` entirely for pure text-to-image generation. Never pass `0`.
 - `image_refs` is only for workspace asset provider URLs, not timeline snapshots.
 - `skill` may be `enhance`, `creative`, `wild`, `captions`, or a user skill. Use it for general style intent; omit it for precise manual instructions.
 - To restore details from the original photo, edit the current snapshot with `media_index` and pass the original timeline snapshot, usually `<<<media_1>>>`, through `reference_media_indices`.
 - `model` is optional. Use `qwen` for NSFW risk; `openai` for text, identity, layout/mockup images, and director storyboard images required by `long-video-director`; `gemini-lite` only when the user asks for Nano Banana 2 Lite / Lite.
+- Set `background: "transparent"` only for an explicit transparent/no-background/alpha request. It strictly uses GPT Image 2 and never returns an opaque fallback. Otherwise omit it.
 
-Built-in skill fast-path routing is summarized in `agent.md`. If that fast path selects a built-in skill, read only that one skill prompt file once, unless it already appears in tool-result history. Do not read `prompts/image.md` just to route the skill. For precise manual instructions, omit `skill` and write the full editPrompt yourself.
+Built-in skill routing is in `agent.md`. If selected, read only that one skill prompt file once. Do not read `prompts/image.md` just to route the skill. For precise instructions, omit `skill`.
 
 Edit Mode prompt shape:
 

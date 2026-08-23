@@ -21,6 +21,17 @@ export function toPublicStorageUrl(url: string): string {
   return normalizeDomain(url)
 }
 
+export function normalizeImageFilename(filename: string, mimeType: string): string {
+  const extension = mimeType === 'image/png'
+    ? 'png'
+    : mimeType === 'image/webp'
+      ? 'webp'
+      : 'jpg'
+  return /\.(?:jpe?g|png|webp)$/i.test(filename)
+    ? filename.replace(/\.(?:jpe?g|png|webp)$/i, `.${extension}`)
+    : `${filename}.${extension}`
+}
+
 /**
  * Upload a base64 data URL image to Supabase Storage.
  * Returns the public URL on success, null on failure.
@@ -47,7 +58,8 @@ export async function uploadImage(
       bytes[i] = binaryString.charCodeAt(i)
     }
 
-    const path = `${userId}/${projectId}/${filename}`
+    const normalizedFilename = normalizeImageFilename(filename, mimeType)
+    const path = `${userId}/${projectId}/${normalizedFilename}`
 
     const { error } = await supabase.storage
       .from(BUCKET)

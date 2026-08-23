@@ -24,6 +24,8 @@ Edit the current photo or generate a new image from text.
 
 `editPrompt` format depends on the mode. See Context Mode versus Edit Mode below.
 
+When the user explicitly requests a transparent background, no background, a cutout with alpha, or an alpha channel, set `background: "transparent"`. Do not rely on prompt wording alone. Omit `background` for normal images. A transparent request is strict: it must not fall back to an opaque image.
+
 When no photo exists, use text-to-image mode and write the `editPrompt` describing the scene. Omit `media_index` entirely; never pass `0`.
 
 ### Media Index for generate_image

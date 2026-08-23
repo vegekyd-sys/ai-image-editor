@@ -30,13 +30,18 @@ function resolveImage(input: string): string {
 
 /** In stdio mode, save result to disk. In serverless mode, return base64 in MCP response. */
 function formatResult(image: string, message: string, prefix: string) {
+  const mimeType = image.startsWith('data:image/png')
+    ? 'image/png' as const
+    : image.startsWith('data:image/webp')
+      ? 'image/webp' as const
+      : 'image/jpeg' as const;
+  const extension = mimeType === 'image/png' ? 'png' : mimeType === 'image/webp' ? 'webp' : 'jpg';
   // Try to save to disk (stdio mode). If fs is unavailable or cwd is read-only (serverless), return base64.
   try {
     const outDir = join(process.cwd(), 'mcp-output');
     if (!existsSync(outDir)) mkdirSync(outDir, { recursive: true });
-    const raw = image.replace(/^data:image\/\w+;base64,/, '');
-    const ext = image.includes('image/png') ? 'png' : 'jpg';
-    const filename = `${prefix}-${Date.now()}.${ext}`;
+    const raw = image.replace(/^data:image\/[a-z0-9.+-]+;base64,/i, '');
+    const filename = `${prefix}-${Date.now()}.${extension}`;
     const filePath = join(outDir, filename);
     writeFileSync(filePath, Buffer.from(raw, 'base64'));
     return {
@@ -44,11 +49,11 @@ function formatResult(image: string, message: string, prefix: string) {
     };
   } catch {
     // Serverless: return base64 image in MCP content
-    const raw = image.replace(/^data:image\/\w+;base64,/, '');
+    const raw = image.replace(/^data:image\/[a-z0-9.+-]+;base64,/i, '');
     return {
       content: [
         { type: 'text' as const, text: message },
-        { type: 'image' as const, data: raw, mimeType: 'image/jpeg' as const },
+        { type: 'image' as const, data: raw, mimeType },
       ],
     };
   }
@@ -112,6 +117,7 @@ IMPORTANT: Image generation takes 15-30 seconds. Long and detailed prompts are f
       model: z.enum(['gemini', 'gemini-lite', 'qwen', 'pony', 'wai', 'openai']).nullish().describe('NEVER set unless user literally names a model. Use gemini-lite only when the user asks for Nano Banana 2 Lite / Lite. Gemini refused→retry with qwen. For design/poster/text-heavy tasks, try openai. Otherwise ALWAYS omit.'),
       referenceImages: z.array(z.string()).nullish().describe('Additional reference images (up to 3). Put the original photo here when restoring face/color/details from it.'),
       aspectRatio: z.string().nullish().describe('Target aspect ratio e.g. "4:5", "1:1", "16:9"'),
+      background: z.enum(['auto', 'opaque', 'transparent']).nullish().describe('Output background. Use transparent only when explicitly requested; it routes strictly to GPT Image 2 and never returns an opaque fallback.'),
     },
     async (params) => {
       try {
@@ -135,6 +141,7 @@ IMPORTANT: Image generation takes 15-30 seconds. Long and detailed prompts are f
             skill: params.skill ?? undefined,
             preferredModel: params.model ?? undefined,
             aspectRatio: params.aspectRatio ?? undefined,
+            background: params.background ?? undefined,
           },
           ctx,
         );
