@@ -4,7 +4,7 @@ import { hasRemotionAudioSources } from '@/lib/remotion-audio'
 import { normalizeRemotionTextValue } from '@/lib/remotion-text-normalization'
 import { resolveRemotionLambdaEncodingSettings } from '@/lib/remotion-encoding'
 import { prepareRemotionCodeForSandbox } from '@/lib/remotion-server'
-import { resolveRemotionFontManifestUrl } from '@/lib/remotion-font-manifest'
+import { resolveRemotionFontManifestUrlForDesign } from '@/lib/remotion-font-resolver'
 import { REMOTION_EDITABLE_RUNTIME_VERSION } from '@/lib/editor/editable-react-runtime'
 import {
   REMOTION_FONT_CATALOG_VERSION,
@@ -496,7 +496,12 @@ export async function renderDesignVideoLambdaToUrl(
   const progressRetryAttempts = readPositiveInteger(readEnv('REMOTION_LAMBDA_PROGRESS_RETRIES'), 3)
   const fontTelemetryId = randomUUID()
   const preparedCode = prepareRemotionCodeForSandbox(design.code)
-  const fontManifestUrl = resolveRemotionFontManifestUrl(serveUrl)
+  const fontManifestUrl = await resolveRemotionFontManifestUrlForDesign({
+    serveUrl,
+    code: preparedCode,
+    props: design.props || {},
+    substitutions: design.fontSubstitutions || {},
+  })
   const hasAudioSources = hasRemotionAudioSources(design.code)
   const encoding = resolveRemotionLambdaEncodingSettings()
   const audioBitrate = hasAudioSources ? encoding.audioBitrate : null

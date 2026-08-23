@@ -141,7 +141,7 @@ describe('Remotion export worker contract', () => {
     expect(read('src/lib/remotion-lambda-renderer.ts')).toContain("new URL('public/remotion-runtime.json', serveUrl)")
     expect(read('src/lib/remotion-lambda-renderer.ts')).toContain('Remotion render site is not font-pinned')
     expect(JSON.parse(read('public/remotion-runtime.json'))).toEqual({
-      runtimeVersion: 'remotion-font-runtime-r9-symbol-fallback',
+      runtimeVersion: 'remotion-font-runtime-r10-google-fonts-on-demand',
       fontCatalogVersion: 'makaron-fonts-r2-symbol-fallback',
       editableRuntimeVersion: 'remotion-editable-runtime-r4-caption-style-preserving',
     })

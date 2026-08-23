@@ -9,7 +9,7 @@ import { renderMedia, renderStill, selectComposition } from '@remotion/renderer'
 import type { DesignPayload } from '@/types'
 import { hasRemotionAudioSources } from '@/lib/remotion-audio'
 import { normalizeRemotionTextValue } from '@/lib/remotion-text-normalization'
-import { resolveRemotionFontManifestUrl } from '@/lib/remotion-font-manifest'
+import { resolveRemotionFontManifestUrlForDesign } from '@/lib/remotion-font-resolver'
 
 let bundlePromise: Promise<string> | null = null
 let mediaServer: http.Server | null = null
@@ -299,6 +299,11 @@ export async function renderDesignVideoLocal(
 
   const resolvedDesign = await localizeVideos(design, cacheDir, mediaServerPort)
   const serveUrl = await getBundleUrl()
+  const fontManifestUrl = await resolveRemotionFontManifestUrlForDesign({
+    code: resolvedDesign.code,
+    props: resolvedDesign.props || {},
+    substitutions: resolvedDesign.fontSubstitutions || {},
+  })
   const outputLocation = path.join(
     process.env.REMOTION_LOCAL_OUTPUT_DIR || '/tmp',
     `remotion-export-${Date.now()}-${Math.random().toString(36).slice(2)}.mp4`,
@@ -312,7 +317,7 @@ export async function renderDesignVideoLocal(
     durationInFrames,
     width: resolvedDesign.width || 1080,
     height: resolvedDesign.height || 1920,
-    fontManifestUrl: resolveRemotionFontManifestUrl(),
+    fontManifestUrl,
     fontSubstitutions: resolvedDesign.fontSubstitutions || {},
     useNativeVideo: true,
   }
@@ -392,6 +397,11 @@ export async function renderDesignFrameLocal(
 
   const resolvedDesign = await localizeVideos(design, cacheDir, mediaServerPort)
   const serveUrl = await getBundleUrl()
+  const fontManifestUrl = await resolveRemotionFontManifestUrlForDesign({
+    code: resolvedDesign.code,
+    props: resolvedDesign.props || {},
+    substitutions: resolvedDesign.fontSubstitutions || {},
+  })
   const outputLocation = path.join(
     process.env.REMOTION_LOCAL_OUTPUT_DIR || '/tmp',
     `remotion-still-${frame}-${Date.now()}-${Math.random().toString(36).slice(2)}.jpeg`,
@@ -404,7 +414,7 @@ export async function renderDesignFrameLocal(
     durationInFrames,
     width: resolvedDesign.width || 1080,
     height: resolvedDesign.height || 1920,
-    fontManifestUrl: resolveRemotionFontManifestUrl(),
+    fontManifestUrl,
     fontSubstitutions: resolvedDesign.fontSubstitutions || {},
     useOffthreadVideo: true,
   }

@@ -1,5 +1,8 @@
 import { describe, expect, it } from 'vitest';
-import { collectRemotionFontSourceFaces } from '@/lib/remotion-font-provision';
+import {
+  collectRemotionFontSourceFaces,
+  collectRemotionFontSourceFacesForFamilies,
+} from '@/lib/remotion-font-provision';
 import { REMOTION_FONT_CATALOG, internalRemotionFontFamily } from '@/remotion/font-catalog';
 
 describe('Remotion deploy-time font provisioner', () => {
@@ -26,5 +29,13 @@ describe('Remotion deploy-time font provisioner', () => {
     });
 
     expect(symbolFaces.some((face) => coversCodePoint(face.unicodeRange))).toBe(true);
+  });
+
+  it('discovers all normal faces for an arbitrary Google Font outside the base catalog', async () => {
+    const faces = await collectRemotionFontSourceFacesForFamilies(['Bungee Spice']);
+
+    expect(faces.length).toBeGreaterThan(0);
+    expect(faces.every((face) => face.family === 'Bungee Spice')).toBe(true);
+    expect(faces.every((face) => face.sourceUrl.startsWith('https://fonts.gstatic.com/'))).toBe(true);
   });
 });

@@ -6,7 +6,7 @@
 
 import type { DesignPayload } from '@/types';
 import { hasRemotionAudioSources } from '@/lib/remotion-audio';
-import { resolveRemotionFontManifestUrl } from '@/lib/remotion-font-manifest';
+import { resolveRemotionFontManifestUrlForDesign } from '@/lib/remotion-font-resolver';
 import { normalizeRemotionTextValue } from '@/lib/remotion-text-normalization';
 
 function readEnv(name: string): string | undefined {
@@ -122,7 +122,11 @@ export async function renderDesignFrame(
   const fps = design.animation?.fps || 30;
   const dur = design.animation?.durationInSeconds || 0;
   const durationInFrames = dur > 0 ? Math.max(1, Math.round(fps * dur)) : 1;
-  const fontManifestUrl = resolveRemotionFontManifestUrl();
+  const fontManifestUrl = await resolveRemotionFontManifestUrlForDesign({
+    code: design.code,
+    props: design.props || {},
+    substitutions: design.fontSubstitutions || {},
+  });
   // Unique output file per render — prevents concurrent renders from overwriting each other
   const outputFile = `/tmp/still-${frame}-${Date.now()}.jpeg`;
 
@@ -208,7 +212,11 @@ export async function renderDesignVideo(
   const durationInFrames = Math.max(1, Math.round(fps * dur));
   const outputFile = `/tmp/remotion-export-${Date.now()}-${Math.random().toString(36).slice(2)}.mp4`;
   const hasAudio = hasRemotionAudioSources(design.code);
-  const fontManifestUrl = resolveRemotionFontManifestUrl();
+  const fontManifestUrl = await resolveRemotionFontManifestUrlForDesign({
+    code: design.code,
+    props: design.props || {},
+    substitutions: design.fontSubstitutions || {},
+  });
 
   for (let attempt = 0; attempt < 2; attempt++) {
     const sandbox = await ensureSandbox();
