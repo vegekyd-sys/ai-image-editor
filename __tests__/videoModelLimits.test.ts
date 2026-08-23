@@ -138,6 +138,8 @@ describe('video model reference limits', () => {
     expect(resolveVideoProviderModel({ model: 'seedance-2.5', imageReferenceCount: 0 })).toBe('seedance-2.5-text-to-video')
     expect(resolveVideoProviderModel({ model: 'seedance-2.5', imageReferenceCount: 1 })).toBe('seedance-2.5-image-to-video')
     expect(resolveVideoProviderModel({ model: 'seedance-2.5', imageReferenceCount: 2 })).toBe('seedance-2.5-image-to-video')
+    expect(resolveVideoProviderModel({ model: 'seedance-2.5', imageReferenceCount: 1, aspectRatio: '9:16' })).toBe('seedance-2.5-reference-to-video')
+    expect(resolveVideoProviderModel({ model: 'seedance-2.5', imageReferenceCount: 2, aspectRatio: '16:9' })).toBe('seedance-2.5-reference-to-video')
     expect(resolveVideoProviderModel({ model: 'seedance-2.5', imageReferenceCount: 3 })).toBe('seedance-2.5-reference-to-video')
     expect(resolveVideoProviderModel({ model: 'seedance-2.5', imageReferenceCount: 1, hasVideoReference: true })).toBe('seedance-2.5-reference-to-video')
     expect(resolveVideoProviderModel({ model: 'seedance-2.5', hasVideoReference: true, operation: 'edit' })).toBe('seedance-2.5-video-edit')

@@ -463,6 +463,7 @@ export function supportsNativeTextToVideo(model?: string | null): boolean {
 export function resolveVideoProviderModel(options: {
   model?: string | null
   resolution?: VideoResolutionInput
+  aspectRatio?: VideoAspectRatioInput
   imageReferenceCount?: number
   hasVideoReference?: boolean
   hasAudioReference?: boolean
@@ -485,7 +486,8 @@ export function resolveVideoProviderModel(options: {
       (options.imageReferenceCount ?? 0) >= 1 &&
       (options.imageReferenceCount ?? 0) <= 2 &&
       !options.hasVideoReference &&
-      !options.hasAudioReference
+      !options.hasAudioReference &&
+      (!options.aspectRatio || options.aspectRatio === 'auto')
     ) {
       return 'seedance-2.5-image-to-video'
     }
