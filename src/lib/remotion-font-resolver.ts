@@ -1,5 +1,9 @@
 import { getAvailableFonts } from '@remotion/google-fonts';
-import { collectRemotionFontFamilyCandidates, REMOTION_FONT_CATALOG } from '@/remotion/font-catalog';
+import {
+  collectRemotionFontFamilyCandidates,
+  REMOTION_FONT_CATALOG,
+  type RemotionFontCatalogManifest,
+} from '@/remotion/font-catalog';
 import { resolveRemotionFontManifestUrl } from '@/lib/remotion-font-manifest';
 import { provisionRemotionFontFamilies } from '@/lib/remotion-font-provision';
 
@@ -9,7 +13,12 @@ interface FontDesignInput {
   substitutions?: Record<string, string>;
 }
 
-const pendingManifests = new Map<string, Promise<string>>();
+export interface ResolvedRemotionFontManifest {
+  manifestUrl: string;
+  manifest?: RemotionFontCatalogManifest;
+}
+
+const pendingManifests = new Map<string, Promise<ResolvedRemotionFontManifest>>();
 const MAX_DYNAMIC_GOOGLE_FONTS_PER_DESIGN = 12;
 const GOOGLE_FONT_NAME_BY_LOWERCASE = new Map(
   getAvailableFonts().map((font) => [font.fontFamily.toLowerCase(), font.fontFamily]),
@@ -40,14 +49,14 @@ export function discoverGoogleFontFamilies(input: FontDesignInput): string[] {
   return [...new Set(families)].sort((a, b) => a.localeCompare(b));
 }
 
-export async function resolveRemotionFontManifestUrlForDesign(
+export async function resolveRemotionFontManifestForDesign(
   input: FontDesignInput & { serveUrl?: string },
-): Promise<string> {
+): Promise<ResolvedRemotionFontManifest> {
   const baseManifestUrl = resolveRemotionFontManifestUrl(input.serveUrl);
   const requestedFamilies = discoverGoogleFontFamilies(input);
   const baseFamilies = new Set(REMOTION_FONT_CATALOG.map(({ family }) => family.toLowerCase()));
   const dynamicFamilies = requestedFamilies.filter((family) => !baseFamilies.has(family.toLowerCase()));
-  if (dynamicFamilies.length === 0) return baseManifestUrl;
+  if (dynamicFamilies.length === 0) return { manifestUrl: baseManifestUrl };
   if (dynamicFamilies.length > MAX_DYNAMIC_GOOGLE_FONTS_PER_DESIGN) {
     throw new Error(
       `A Remotion design can use at most ${MAX_DYNAMIC_GOOGLE_FONTS_PER_DESIGN} on-demand Google Fonts`,
@@ -70,7 +79,7 @@ export async function resolveRemotionFontManifestUrlForDesign(
         families: dynamicFamilies,
         concurrency: Number(readEnv('REMOTION_FONT_PROVISION_CONCURRENCY') || 12),
       });
-      return result.manifestUrl;
+      return { manifestUrl: result.manifestUrl, manifest: result.manifest };
     })();
     pendingManifests.set(requestKey, pending);
   }
@@ -80,4 +89,10 @@ export async function resolveRemotionFontManifestUrlForDesign(
     pendingManifests.delete(requestKey);
     throw error;
   }
+}
+
+export async function resolveRemotionFontManifestUrlForDesign(
+  input: FontDesignInput & { serveUrl?: string },
+): Promise<string> {
+  return (await resolveRemotionFontManifestForDesign(input)).manifestUrl;
 }

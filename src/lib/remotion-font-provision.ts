@@ -397,15 +397,14 @@ export async function provisionRemotionFontFamilies(input: {
     if (!canonical) throw new Error(`Unsupported Google Font "${family}"`);
     return canonical;
   }))].sort((a, b) => a.localeCompare(b));
-
-  const baseResponse = await fetch(input.baseManifestUrl, { cache: 'no-store' });
-  if (!baseResponse.ok) {
-    throw new Error(`Remotion base font manifest returned ${baseResponse.status}`);
-  }
-  const baseManifest = validateRemotionFontManifest(await baseResponse.json());
-  const baseFamilies = new Set(baseManifest.faces.map((face) => face.family.toLowerCase()));
-  const addedFamilies = requestedFamilies.filter((family) => !baseFamilies.has(family.toLowerCase()));
+  const catalogFamilies = new Set(REMOTION_FONT_CATALOG.map(({ family }) => family.toLowerCase()));
+  const addedFamilies = requestedFamilies.filter((family) => !catalogFamilies.has(family.toLowerCase()));
   if (addedFamilies.length === 0) {
+    const baseResponse = await fetch(input.baseManifestUrl, { cache: 'no-store' });
+    if (!baseResponse.ok) {
+      throw new Error(`Remotion base font manifest returned ${baseResponse.status}`);
+    }
+    const baseManifest = validateRemotionFontManifest(await baseResponse.json());
     return {
       manifest: baseManifest,
       manifestUrl: input.baseManifestUrl,
@@ -443,9 +442,16 @@ export async function provisionRemotionFontFamilies(input: {
     // First use is expected to miss; continue with deterministic provisioning.
   }
 
+  const [baseResponse, sourceFaces] = await Promise.all([
+    fetch(input.baseManifestUrl, { cache: 'no-store' }),
+    collectRemotionFontSourceFacesForFamilies(addedFamilies),
+  ]);
+  if (!baseResponse.ok) {
+    throw new Error(`Remotion base font manifest returned ${baseResponse.status}`);
+  }
+  const baseManifest = validateRemotionFontManifest(await baseResponse.json());
   normalizeAwsCredentials();
   const s3 = new S3Client({ region: input.region });
-  const sourceFaces = await collectRemotionFontSourceFacesForFamilies(addedFamilies);
   const sourceUrls = [...new Set(sourceFaces.map((face) => face.sourceUrl))];
   let uploadedAssetCount = 0;
   let totalBytes = 0;

@@ -1,17 +1,15 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { authenticateRequest } from '@/lib/api-auth';
 import { resolveRemotionFontManifestUrl } from '@/lib/remotion-font-manifest';
-import { resolveRemotionFontManifestUrlForDesign } from '@/lib/remotion-font-resolver';
-import { validateRemotionFontManifest } from '@/remotion/font-catalog';
+import { resolveRemotionFontManifestForDesign } from '@/lib/remotion-font-resolver';
+import {
+  validateRemotionFontManifest,
+  type RemotionFontCatalogManifest,
+} from '@/remotion/font-catalog';
 
 export const runtime = 'nodejs';
 
-async function browserManifest(manifestUrl: string) {
-  const response = await fetch(manifestUrl, { cache: 'no-store' });
-  if (!response.ok) {
-    throw new Error(`Font manifest upstream returned ${response.status}`);
-  }
-  const manifest = validateRemotionFontManifest(await response.json());
+function sameOriginBrowserManifest(manifest: RemotionFontCatalogManifest) {
   return {
     ...manifest,
     faces: manifest.faces.map((face) => ({
@@ -21,6 +19,14 @@ async function browserManifest(manifestUrl: string) {
       url: `/api/remotion/fonts/${face.sha256}`,
     })),
   };
+}
+
+async function browserManifest(manifestUrl: string) {
+  const response = await fetch(manifestUrl, { cache: 'no-store' });
+  if (!response.ok) {
+    throw new Error(`Font manifest upstream returned ${response.status}`);
+  }
+  return sameOriginBrowserManifest(validateRemotionFontManifest(await response.json()));
 }
 
 export async function GET() {
@@ -50,7 +56,7 @@ export async function POST(request: NextRequest) {
     if (typeof body.code !== 'string') {
       return NextResponse.json({ error: 'code is required' }, { status: 400 });
     }
-    const manifestUrl = await resolveRemotionFontManifestUrlForDesign({
+    const resolved = await resolveRemotionFontManifestForDesign({
       code: body.code,
       props: body.props && typeof body.props === 'object'
         ? body.props as Record<string, unknown>
@@ -59,7 +65,10 @@ export async function POST(request: NextRequest) {
         ? body.fontSubstitutions as Record<string, string>
         : {},
     });
-    return NextResponse.json(await browserManifest(manifestUrl), {
+    const manifest = resolved.manifest
+      ? sameOriginBrowserManifest(resolved.manifest)
+      : await browserManifest(resolved.manifestUrl);
+    return NextResponse.json(manifest, {
       headers: { 'Cache-Control': 'private, no-cache' },
     });
   } catch (error) {
