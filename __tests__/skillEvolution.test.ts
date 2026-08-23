@@ -1,9 +1,10 @@
 import {
   evaluateSkillRun,
   fingerprintEvolvingSkill,
+  recordEvolvingSkillUsage,
   resolveEvolvingSkill,
 } from '@/lib/skill-evolution'
-import { describe, expect, it } from 'vitest'
+import { describe, expect, it, vi } from 'vitest'
 
 describe('Skill Evolution', () => {
   it('resolves the three initial evolving Skill sources', () => {
@@ -23,6 +24,26 @@ describe('Skill Evolution', () => {
     expect(same?.contentSha256).toBe(first?.contentSha256)
     expect(changed?.contentSha256).not.toBe(first?.contentSha256)
     expect(first?.contentLength).toBe(11)
+  })
+
+  it('never blocks a creative run when telemetry storage fails', async () => {
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => undefined)
+    const fingerprint = await recordEvolvingSkillUsage({
+      supabase: {
+        rpc: async () => {
+          throw new Error('telemetry unavailable')
+        },
+      },
+      runId: 'run-1',
+      projectId: 'project-1',
+      userId: 'user-1',
+      sourcePath: 'prompts/animate.md',
+      content: 'animate contract',
+    })
+
+    expect(fingerprint?.skillKey).toBe('animate')
+    expect(warn).toHaveBeenCalledWith(expect.stringContaining('telemetry unavailable'))
+    warn.mockRestore()
   })
 
   it('does not call incomplete evidence a failure', () => {

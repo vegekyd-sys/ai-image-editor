@@ -98,6 +98,7 @@ export function fingerprintEvolvingSkill(sourcePath: string, content: string): S
 }
 
 export async function recordEvolvingSkillUsage(input: {
+  /** Test/backfill override. Production callers use the server-only admin client. */
   supabase?: SkillEvolutionRpcClient | null
   runId?: string | null
   projectId?: string | null
@@ -108,30 +109,35 @@ export async function recordEvolvingSkillUsage(input: {
   observedAt?: string
 }): Promise<SkillFingerprint | null> {
   const fingerprint = fingerprintEvolvingSkill(input.sourcePath, input.content)
-  if (!fingerprint || !input.supabase || !input.runId || !input.projectId || !input.userId) {
+  if (!fingerprint || !input.runId || !input.projectId || !input.userId) {
     return fingerprint
   }
 
-  const { error } = await input.supabase.rpc('record_skill_run_usage', {
-    p_run_id: input.runId,
-    p_project_id: input.projectId,
-    p_user_id: input.userId,
-    p_skill_key: fingerprint.skillKey,
-    p_source_path: fingerprint.sourcePath,
-    p_content_sha256: fingerprint.contentSha256,
-    p_content_length: fingerprint.contentLength,
-    p_activation_source: input.activationSource ?? 'read_file',
-    p_git_sha: process.env.VERCEL_GIT_COMMIT_SHA || process.env.GIT_COMMIT_SHA || null,
-    p_observed_at: input.observedAt ?? new Date().toISOString(),
-    p_metadata: {
-      deploymentId: process.env.VERCEL_DEPLOYMENT_ID || null,
-      environment: process.env.VERCEL_ENV || process.env.NODE_ENV || null,
-    },
-  })
-  if (error) {
+  try {
+    const client = input.supabase || (await import('@/lib/supabase/service')).getSupabaseAdmin()
+    if (typeof client.rpc !== 'function') return fingerprint
+    const { error } = await client.rpc('record_skill_run_usage', {
+      p_run_id: input.runId,
+      p_project_id: input.projectId,
+      p_user_id: input.userId,
+      p_skill_key: fingerprint.skillKey,
+      p_source_path: fingerprint.sourcePath,
+      p_content_sha256: fingerprint.contentSha256,
+      p_content_length: fingerprint.contentLength,
+      p_activation_source: input.activationSource ?? 'read_file',
+      p_git_sha: process.env.VERCEL_GIT_COMMIT_SHA || process.env.GIT_COMMIT_SHA || null,
+      p_observed_at: input.observedAt ?? new Date().toISOString(),
+      p_metadata: {
+        deploymentId: process.env.VERCEL_DEPLOYMENT_ID || null,
+        environment: process.env.VERCEL_ENV || process.env.NODE_ENV || null,
+      },
+    })
+    if (error) throw new Error(error.message || 'unknown RPC error')
+  } catch (error) {
     // Telemetry must never block the user's creative run. A missing migration is
     // expected while the worktree is being evaluated before deployment.
-    console.warn(`[skill-evolution] usage record failed for ${fingerprint.skillKey}: ${error.message || 'unknown error'}`)
+    const message = error instanceof Error ? error.message : String(error)
+    console.warn(`[skill-evolution] usage record failed for ${fingerprint.skillKey}: ${message}`)
   }
   return fingerprint
 }

@@ -3690,7 +3690,6 @@ Use this to read skill instructions (SKILL.md), reference images, or your memory
         if (!result) return { error: `File not found: ${filePath}` };
 
         await recordEvolvingSkillUsage({
-          supabase: ctx.supabase,
           runId: ctx.agentRunId || ctx.execution?.runId,
           projectId: ctx.projectId,
           userId: ctx.userId,

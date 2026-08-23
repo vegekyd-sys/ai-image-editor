@@ -116,8 +116,8 @@ DECLARE
   v_version_id uuid;
   v_usage_id uuid;
 BEGIN
-  IF auth.role() <> 'service_role' AND auth.uid() IS DISTINCT FROM p_user_id THEN
-    RAISE EXCEPTION 'Skill usage user does not match authenticated user';
+  IF auth.role() <> 'service_role' THEN
+    RAISE EXCEPTION 'Skill usage registration requires service role';
   END IF;
 
   IF NOT EXISTS (
@@ -177,7 +177,7 @@ REVOKE ALL ON FUNCTION public.record_skill_run_usage(
 ) FROM PUBLIC, anon;
 GRANT EXECUTE ON FUNCTION public.record_skill_run_usage(
   uuid, uuid, uuid, text, text, text, integer, text, text, timestamptz, jsonb
-) TO authenticated, service_role;
+) TO service_role;
 
 COMMENT ON TABLE public.skill_versions IS
   'Immutable hashes for Skill source observed by a real Agent Run; content stays in Git.';
