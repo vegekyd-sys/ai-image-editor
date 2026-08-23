@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from 'vitest'
 import { createVideo } from '@/lib/skills/create-video'
-import { estimateVideoCredits, estimateVideoProviderCostUsd, getDefaultVideoModelId, getVideoModelCapability, normalizeVideoModelId, normalizeVideoResolution, resolveAgentVideoSelection, resolveClosestSupportedAspectRatio, resolveVideoGenerationRoute, resolveVideoProviderAspectRatio, resolveVideoProviderModel, validateVideoResolutionRequest } from '@/lib/video-model-capabilities'
+import { estimateVideoCredits, estimateVideoProviderCostUsd, getDefaultVideoModelId, getVideoModelCapability, normalizeVideoModelId, normalizeVideoResolution, resolveAgentVideoSelection, resolveClosestSupportedAspectRatio, resolveVideoGenerationRoute, resolveVideoProviderAspectRatio, resolveVideoProviderModel, validateVideoModelRequest, validateVideoResolutionRequest } from '@/lib/video-model-capabilities'
 
 describe('video model reference limits', () => {
   it('defaults video generation to SeeDance 2.0 Fast', () => {
@@ -90,6 +90,7 @@ describe('video model reference limits', () => {
       minOutputDuration: 4,
       maxOutputDuration: 30,
       maxReferenceVideoDuration: 30,
+      referenceVideoDurationTolerance: 0.5,
       maxImageReferences: 30,
       maxVideoReferences: 10,
       maxAudioReferences: 10,
@@ -99,6 +100,20 @@ describe('video model reference limits', () => {
       supportsVideoExtend: true,
       supportedResolutions: ['480p', '720p'],
     })
+  })
+
+  it('accepts normal tail-frame metadata on a 30 second Seedance 2.5 edit', () => {
+    const editRequest = {
+      model: 'seedance-2.5',
+      operation: 'edit' as const,
+      outputDuration: -1,
+      hasVideoReference: true,
+      videoReferenceCount: 1,
+    }
+
+    expect(validateVideoModelRequest({ ...editRequest, referenceVideoDuration: 30.08 })).toBeNull()
+    expect(validateVideoModelRequest({ ...editRequest, referenceVideoDuration: 30.5 })).toBeNull()
+    expect(validateVideoModelRequest({ ...editRequest, referenceVideoDuration: 30.51 })).toContain('30 seconds or less')
   })
 
   it('adds the provider 10% surcharge only when Seedance 2.5 Mature Mode is selected', () => {
