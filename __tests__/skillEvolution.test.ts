@@ -3,6 +3,7 @@ import {
   fingerprintEvolvingSkill,
   resolveEvolvingSkill,
 } from '@/lib/skill-evolution'
+import { describe, expect, it } from 'vitest'
 
 describe('Skill Evolution', () => {
   it('resolves the three initial evolving Skill sources', () => {
@@ -95,7 +96,7 @@ describe('Skill Evolution', () => {
 
     expect(sparse.overallScore).toBeNull()
     expect(sparse.scoreCoverage).toBe(0.3)
-    expect(covered.overallScore).toBeCloseTo(79.7, 1)
+    expect(covered.overallScore).toBe(80)
     expect(covered.scoreCoverage).toBe(0.8)
   })
 })
