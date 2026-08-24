@@ -116,6 +116,7 @@ describe('OpenMontage full skill migration', () => {
     expect(manifest).toContain('**music-to-video**');
     expect(manifest).toContain('**website-to-video**');
     expect(manifest).toContain('**avatar-spokesperson**');
+    expect(manifest).toContain('**video-translate**');
   });
 
   it('exposes exactly the new user-facing OpenMontage workflows without losing existing ones', () => {
@@ -125,7 +126,7 @@ describe('OpenMontage full skill migration', () => {
       .sort();
     expect(selectable).toEqual([
       'avatar-spokesperson', 'character-animation', 'localization-dub',
-      'music-to-video', 'screen-demo', 'website-to-video',
+      'music-to-video', 'screen-demo', 'video-translate', 'website-to-video',
     ]);
   });
 });

@@ -1,48 +1,120 @@
 ---
 name: video-translate
 description: >
-  Makaron adapter with native support for OpenMontage's video-translate
-  craft skill, using existing Makaron tools and durable project outputs.
-allowed-tools: read_file studio_run prepare_visual_asset analyze_video analyze_image transcribe_audio generate_image generate_animation generate_audio run_code write_file preview_frame materialize_media
+  Translate an accepted video into another language: use Seed Audio for
+  off-screen VO and non-talking-head footage, or SeeDance 2.0 for a visible
+  talking-head speaker, then rebuild target-language captions and B-roll.
+allowed-tools: read_file analyze_video transcribe_audio generate_audio generate_animation run_code write_code_file write_file preview_frame publish_draft materialize_media generate_image
 metadata:
   makaron:
-    icon: "◫"
+    icon: "译"
     color: "#d946ef"
     tipsEnabled: false
     builtIn: true
-    userSelectable: false
-    manifestVisible: false
+    userSelectable: true
+    manifestVisible: true
     sourceProject: "openmontage"
     sourceSkill: "video-translate"
     sourceKind: "agent-skill"
     supportLevel: "native"
     adapterFamily: "video-workflow"
-    canonicalSkill: "localization-dub"
-    tags: [openmontage, agent-skill, video-workflow, native]
+    canonicalSkill: "video-translate"
+    sourceMediaRequired: true
+    tags: [video, translation, dubbing, talking-head, voiceover, captions, seed-audio, seedance]
 ---
 
-# Video Translate
+# Video Translation
 
-This is a Makaron-native adaptation of the OpenMontage capability. Preserve the
-production intent, but use Makaron's existing tools and workspace contract. Do
-not invoke OpenMontage Python tools, HyperFrames, or unexposed provider APIs.
+Translate only the accepted content. If the user also asks to edit a
+talking-head take, finish the Talking Head keep-range edit first. Translation
+does not choose new cuts. Captions and B-roll come after the translated speech
+is accepted.
 
-## Required Reading
+Before acting, read `skills/_shared/speech-clock.md`,
+`skills/_shared/spoken-caption.md`, and
+`skills/_shared/voice-translation.md`. Reuse the accepted source transcript;
+do not transcribe the same source again.
 
-1. Follow this adapter before using tools.
-2. Read `skills/localization-dub/SKILL.md` and use it as the execution contract.
+## Choose by visual carrier
 
-## Execution Contract
+### Non-talking-head or off-screen VO: Seed Audio
 
-- Run the full Studio Run contract for substantial work. Preserve source evidence, make production choices explicit, and use the canonical Makaron workflow for execution.
-- Keep provider and runtime claims honest. An adapted skill preserves the goal,
-  not an unavailable vendor implementation.
-- Use project timeline media and workspace files as the source of truth.
-- For auto-approved Studio Runs, batch adjacent text stages when possible,
-  preview hook/body/end in one contact sheet, publish once, and materialize once.
-- If the exact capability is unavailable, stop with the concrete gap instead of
-  silently producing a different class of result.
+Use this route when no visible mouth must match the translated speech: process
+footage, product footage, documentary B-roll, motion graphics, screen footage,
+or any video led by off-screen narration.
 
-## Completion
+- Call `generate_audio` once with `kind: "translation"`, the target language,
+  and exactly one source voice. Send only an audio derivative to Seed Audio.
+- Preserve claims, names, numbers, product terms, calls to action, and meaning.
+  Use `translated_script` when that wording must be deterministic.
+- Mute the old VO and make the translated master the only audible speech.
+- Transcribe the accepted translated audio once. Its target-language word
+  timestamps become the only clock for captions, emphasis, scene beats, and
+  B-roll. Never reuse source-language caption timing.
 
-Complete all applicable stages with an editable source, reviewed MP4, and delivery artifact.
+### Visible talking head: SeeDance 2.0
+
+Use this route when the speaker is visibly delivering the translated words.
+The upstream Talking Head Skill owns cuts; this Skill owns translation. Do not
+call Seed Audio anywhere in this route.
+
+1. Materialize the accepted clean A-roll before captions or B-roll. Each
+   SeeDance 2.0 request must be 4-15 seconds; split longer edits at sentence
+   boundaries and preserve order.
+2. Read `skills/video-ffmpeg-lab/SKILL.md`, then use one Node/FFmpeg preparation
+   run to create two model inputs from each accepted chunk:
+   - a visually identical MP4 with its audio removed;
+   - a clean MP3/WAV of the original speaker for voice identity only.
+   Keep these as intermediate workspace outputs rather than timeline deliverables.
+3. Translate the retained argument, then shape it into short natural spoken
+   beats that fit the chunk. Preserve protected wording and meaning.
+4. Read `prompts/animate.md`. Call `generate_animation` with the default
+   `seedance-fast` model, the silent MP4 as `video_ref_url`, and the extracted
+   voice URL as the single `audio_refs` item. Use standard `seedance` only when
+   the user explicitly requests standard/full/1080p SeeDance.
+5. Because SeeDance completes asynchronously, this video is an intermediate
+   artifact. Add one `completion_actions` entry whose prompt identifies the
+   completed translated video as the new A-roll and instructs the next Agent
+   turn to transcribe it, add target-language captions/B-roll, publish, and
+   export without translating again. Use `policy: "auto"` only when the current
+   request explicitly authorizes the complete end-to-end flow; otherwise use
+   `policy: "confirm"`. Never end with only a prose promise to continue.
+
+The complete script must use this form, adapted to the target language:
+
+```text
+Translated Talking Head
+
+<<<video_1>>> (silent accepted A-roll) is the only visible speaker.
+<<<audio_1>>> is voice identity, age, timbre, energy, and delivery reference only; do not repeat its source-language words.
+
+Shot 1 (7s): Fixed talking-head shot. The same speaker says in natural target-language speech: "First short translated phrase." After a natural pause, the speaker continues: "Second short translated phrase." Keep identity stable and match every target-language phoneme with natural mouth and jaw motion.
+Sound: Only the quoted target-language dialogue. No source-language speech, music, effects, or subtitles.
+Style: Photorealistic talking head, exact identity and setting, stable face, no beautification, no text.
+```
+
+Put the target-language dialogue directly inside the `Shot` as quoted speech;
+an instruction such as “translate this video” is not dialogue. Split long copy
+into shorter quoted phrases. To retain the speaker's personal delivery, ask for
+their natural cadence and light non-native accent without naming the source
+language as the desired accent; naming it can cause the model to repeat the
+source-language audio.
+
+Poll the actual MP4 and transcribe its audio. Reject omitted, added, garbled, or
+source-language words. Retry once with shorter quoted phrases when wording
+drifts; do not switch to Seed Audio inside this route. Review identity,
+background, mouth motion, and unwanted performance drift. SeeDance may
+regenerate head or body motion, so do not describe it as pixel-preserving lip
+sync.
+
+## Package after translation
+
+Use the accepted target-language ASR as the Speech Clock. Add target-language
+captions with the shared Spoken Caption contract, then add only B-roll or
+graphics that explain the translated beat or cover a necessary join. Keep the
+translated speech audible and incidental B-roll audio muted.
+
+Publish the editable composition and export a playable MP4 in the same project.
+Review the encoded file with sound, including the first phrase, final word,
+caption boundaries, and any B-roll transition. Provider completion alone is not
+delivery.

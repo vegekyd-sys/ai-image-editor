@@ -97,10 +97,16 @@ function resolveReferenceAspectRatio(
 }
 
 function findAudioMarkers(prompt: string): Set<number> {
-  return new Set(
-    Array.from(prompt.matchAll(/<<<audio_(\d+)>>>/gi), match => Number(match[1]))
-      .filter(n => Number.isInteger(n) && n > 0)
-  );
+  return new Set([
+    ...Array.from(prompt.matchAll(/<<<audio_(\d+)>>>/gi), match => Number(match[1])),
+    ...Array.from(prompt.matchAll(/@audio(\d+)/gi), match => Number(match[1])),
+  ].filter(n => Number.isInteger(n) && n > 0));
+}
+
+function prepareSeedance20ReferenceMarkers(prompt: string): string {
+  return prompt
+    .replace(/<<<video_(\d+)>>>/gi, (_marker, rawIndex) => `@video${Number(rawIndex)}`)
+    .replace(/<<<audio_(\d+)>>>/gi, (_marker, rawIndex) => `@audio${Number(rawIndex)}`);
 }
 
 function prepareSeedance25References(options: {
@@ -369,8 +375,11 @@ export async function createVideo(input: CreateVideoInput): Promise<CreateVideoR
       const providerDuration = provider === 'seedance-2.5' && videoOperation === 'edit'
         ? -1
         : resolvedDuration != null ? resolvedDuration : undefined;
+      const providerPrompt = provider === 'seedance-2.5'
+        ? finalPrompt
+        : prepareSeedance20ReferenceMarkers(finalPrompt);
       taskId = await createEvolinkTask({
-        prompt: finalPrompt,
+        prompt: providerPrompt,
         images: filteredImages,
         duration: providerDuration,
         aspectRatio: providerAspectRatio,

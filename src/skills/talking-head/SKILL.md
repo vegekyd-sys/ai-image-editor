@@ -36,8 +36,8 @@ stay with it unless it actually fails.
 Before editing, read `skills/_shared/speech-clock.md` and
 `skills/_shared/spoken-caption.md`. Follow the source-speech route and shared
 caption contract. This Skill owns only the talking-head editorial decisions.
-For translation or dubbing, finish the edit first, then read and follow
-`skills/_shared/voice-translation.md`.
+For another language, finish and materialize the clean A-roll first, then hand
+it to `skills/video-translate/SKILL.md`. Talking Head does not translate.
 
 ## Find the story, then cut it
 
