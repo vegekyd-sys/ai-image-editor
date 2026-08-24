@@ -266,6 +266,7 @@ Models:
 - grok — Grok Video 1.5 via xAI, fastest single-image-to-video, native audio, defaults to 480p at $0.08/s + $0.01/input image
 - google-omni — Gemini Omni Flash via Google, fast image/video generation and editing, up to 6 image references without a video reference, one video reference for direct edits, native generated audio, no uploaded audio references
 - minimax-h3 — MiniMax H3 direct API, native text-to-video plus up to 9 image / 3 video / 3 audio references, 4-15s, public 768p/2K, default 768P
+- sync-lipsync-v3 — exact replacement-audio lip sync; requires exactly one source video and one audio URL, preserves source framing and the supplied audio
 
 Example script format:
 Shot 1 (2s): Wide shot, <<<media_1>>> ...
@@ -274,11 +275,11 @@ Style: Cinematic, warm golden light.`,
     {
       script: z.string().describe('Video script with <<<media_N>>> references'),
       images: z.array(z.string().url()).max(30).default([]).describe('Optional public image URLs. Seedance 2.5 accepts up to 30; older routes may accept fewer.'),
-      videoUrls: z.array(z.string().url()).max(10).optional().describe('Seedance 2.5 public reference video URLs, up to 10 with 30 seconds combined.'),
-      audioUrls: z.array(z.string().url()).max(10).optional().describe('Seedance 2.5 public reference audio URLs, up to 10 with 30 seconds combined.'),
-      duration: z.number().optional().describe('Duration in seconds. Seedance 2.5 accepts 4-30s; SeeDance 2.0 and MiniMax H3 accept 4-15s. Omit for smart mode.'),
+      videoUrls: z.array(z.string().url()).max(10).optional().describe('Public reference video URLs. Sync Lipsync v3 requires exactly one; Seedance 2.5 accepts up to 10 with 30 seconds combined.'),
+      audioUrls: z.array(z.string().url()).max(10).optional().describe('Public reference audio URLs. Sync Lipsync v3 requires exactly one replacement track; Seedance 2.5 accepts up to 10.'),
+      duration: z.number().optional().describe('Duration in seconds. Sync Lipsync v3 follows a 2-120s source; Seedance 2.5 accepts 4-30s; SeeDance 2.0 and MiniMax H3 accept 4-15s. Omit for smart mode.'),
       aspectRatio: z.enum(['auto', '16:9', '9:16', '1:1', '4:3', '3:4', '21:9', '3:2', '2:3']).optional().describe('Aspect ratio. Use auto/adaptive or a provider-supported ratio. Seedance supports 21:9. Grok image-to-video ignores forced ratios to avoid stretching the source image; pad the source or choose another model for a fixed final shape.'),
-      videoModel: z.enum(['seedance-fast', 'seedance-mini', 'seedance', 'seedance-2.5', 'kling', 'grok', 'google-omni', 'minimax-h3']).optional().describe('Video model. seedance-2.5 supports 30s multimodal generation/edit/extend; minimax-h3 provides 768p/2K multimodal generation.'),
+      videoModel: z.enum(['seedance-fast', 'seedance-mini', 'seedance', 'seedance-2.5', 'kling', 'grok', 'google-omni', 'minimax-h3', 'sync-lipsync-v3']).optional().describe('Video model. sync-lipsync-v3 requires exactly one video and one replacement audio track.'),
       videoResolution: z.enum(['auto', '480p', '720p', '768p', '1080p', '2k', '4k']).optional().describe('Output resolution. Use auto to follow the selected model default; MiniMax H3 supports 768p/2k and defaults to 768p.'),
       operation: z.enum(['generate', 'edit', 'extend']).optional().describe('Seedance 2.5 operation. edit and extend require videoUrls.'),
       extendDirection: z.enum(['forward', 'backward']).optional().describe('Seedance 2.5 extension direction.'),

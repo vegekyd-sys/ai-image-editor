@@ -1,7 +1,8 @@
 # Same-Speaker Voice Translation
 
 Use this contract when existing speech must move to another language while the
-speaker remains recognizably the same person. This is dubbing, not lip sync.
+speaker remains recognizably the same person. Dubbing is the required base;
+lip sync is an optional second stage.
 
 ## Translate the accepted edit
 
@@ -43,3 +44,22 @@ rate and regenerate; do not stretch generated speech. Use purposeful B-roll to
 support meaning and cover visibly distracting mouth mismatch, but do not claim
 lip sync. Captions must follow the translated ASR words and the shared Spoken
 Caption contract.
+
+## Optional mouth alignment
+
+When the user asks for translated mouth motion, materialize the accepted
+keep-range timeline as one clean A-roll MP4 before adding captions or B-roll.
+Call `generate_animation` with `model: "sync-lipsync-v3"`, that one video, and
+the translated Seed Audio as the only `audio_refs` item. Mention the matching
+`<<<audio_N>>>` marker in `story_prompt`; pass the known accepted duration and
+omit a forced aspect ratio. This operation preserves the supplied audio and
+redraws mouth motion. It must not translate again, generate new speech, retain
+the Chinese source track, or add visual packaging.
+
+For an accepted edit longer than 60 seconds, split at sentence boundaries,
+lip-sync the chunks independently, and assemble them in order. After polling
+the real MP4, transcribe its audio once to confirm the approved translation is
+still complete. Then use the lip-synced A-roll as the composition source, and
+add captions from the translated ASR plus selective B-roll. If lip sync fails
+or introduces visible face artifacts, fall back to the translated audio-only
+route and cover only the distracting mouth moments with purposeful B-roll.

@@ -2010,7 +2010,7 @@ Not sure which built-in skill to use? Start with:
     console.log('Usage: makaron analyze --video <file|url> ["question"]');
   } else if (topic === 'video') {
     if (subtopic === 'script') console.log('Usage: makaron video script --image <file> [--image <file>] [--lang en|zh] "direction"');
-    else if (subtopic === 'create') console.log('Usage: makaron video create --script "..." [--image <url> ...] [--video <url> ...] [--audio <url> ...] [--duration 10] [--aspect 9:16] [--video-model seedance-fast|seedance-mini|seedance|seedance-2.5|kling|grok|google-omni|minimax-h3] [--operation generate|edit|extend] [--video-resolution auto|480p|720p|768p|1080p|2k|4k] [--keep-original-sound]');
+    else if (subtopic === 'create') console.log('Usage: makaron video create --script "..." [--image <url> ...] [--video <url> ...] [--audio <url> ...] [--duration 10] [--aspect 9:16] [--video-model seedance-fast|seedance-mini|seedance|seedance-2.5|kling|grok|google-omni|minimax-h3|sync-lipsync-v3] [--operation generate|edit|extend] [--video-resolution auto|480p|720p|768p|1080p|2k|4k] [--keep-original-sound]');
     else if (subtopic === 'status') console.log('Usage: makaron video status <taskId> | --snapshot <snapshotId> [--wait]');
     else console.log(`Video commands:
   video script --image <file> [--image <file>] "direction"   Write video script
@@ -2018,6 +2018,7 @@ Not sure which built-in skill to use? Start with:
   video create --script "..." --video-model minimax-h3                          MiniMax H3 text-to-video (default 768P)
   video create --script "..." --image <url> [--duration 10]  Submit video task
   video create --script "..." --video <public-url> [--video-model seedance-fast|seedance-mini|seedance|seedance-2.5|kling|google-omni|minimax-h3]  Edit/reference a video (Grok does not support video refs)
+  video create --script "Use the supplied audio" --video <url> --audio <url> --video-model sync-lipsync-v3  Lip-sync exact replacement audio
   video status <taskId>                                      Check video status
   video status --snapshot <snapshotId> [--wait]              Check v2 video snapshot
 `);
@@ -2850,6 +2851,7 @@ if (!command || command === '--help' || command === '-h' || command === 'help') 
     const isSeedance25 = selectedVideoModel === 'seedance-2.5';
     const isSeedanceModel = selectedVideoModel === 'seedance-fast' || selectedVideoModel === 'seedance-mini' || selectedVideoModel === 'seedance' || isSeedance25;
     const isMinimaxH3 = selectedVideoModel === 'minimax-h3';
+    const isSyncLipsync = selectedVideoModel === 'sync-lipsync-v3';
     const supportsNativeTextToVideo = isSeedanceModel || isMinimaxH3;
     if (!script || (!images.length && !videos.length && !audios.length && !supportsNativeTextToVideo)) {
       console.error('Usage: makaron video create --script "..." [--image <url>] [--video <file|url>] [--audio <file|url>] [--duration 30] [--video-model seedance-2.5|minimax-h3]');
@@ -2861,6 +2863,10 @@ if (!command || command === '--help' || command === '-h' || command === 'help') 
     if (isMinimaxH3 && images.length > 9) { console.error('MiniMax H3 supports at most 9 image references.'); process.exit(1); }
     if (isMinimaxH3 && videos.length > 3) { console.error('MiniMax H3 supports at most 3 video references.'); process.exit(1); }
     if (isMinimaxH3 && audios.length > 3) { console.error('MiniMax H3 supports at most 3 audio references.'); process.exit(1); }
+    if (isSyncLipsync && (images.length !== 0 || videos.length !== 1 || audios.length !== 1)) { console.error('Sync Lipsync v3 requires exactly one --video and one --audio, with no --image.'); process.exit(1); }
+    if (isSyncLipsync && !/<<<audio_1>>>/i.test(script)) {
+      script += '\nUse <<<audio_1>>> as the exact replacement soundtrack.';
+    }
     if (videoOperation && !['generate', 'edit', 'extend'].includes(videoOperation)) { console.error('--video-operation must be generate, edit, or extend.'); process.exit(1); }
     if (extendDirection && !['forward', 'backward'].includes(extendDirection)) { console.error('--extend-direction must be forward or backward.'); process.exit(1); }
     if (outputFormat && !['mp4', 'mov'].includes(outputFormat)) { console.error('--output-format must be mp4 or mov.'); process.exit(1); }
@@ -2870,8 +2876,9 @@ if (!command || command === '--help' || command === '-h' || command === 'help') 
       process.exit(1);
     }
 
-    const providerMaxDuration = isSeedance25 ? SEEDANCE25_MAX_VIDEO_REFERENCE_DURATION : MAX_VIDEO_PROVIDER_REFERENCE_DURATION;
-    const providerMaxPixels = isMinimaxH3 ? Infinity : isSeedance25 ? SEEDANCE25_MAX_VIDEO_FRAME_PIXELS : MAX_VIDEO_FRAME_PIXELS;
+    let providerMaxDuration = isSeedance25 ? SEEDANCE25_MAX_VIDEO_REFERENCE_DURATION : MAX_VIDEO_PROVIDER_REFERENCE_DURATION;
+    if (isSyncLipsync) providerMaxDuration = 60;
+    const providerMaxPixels = isSyncLipsync || isMinimaxH3 ? Infinity : isSeedance25 ? SEEDANCE25_MAX_VIDEO_FRAME_PIXELS : MAX_VIDEO_FRAME_PIXELS;
     const localImages = images.filter(image => !isHttpUrl(image));
     if (localImages.length) {
       const uploadedImages = await uploadImageFilesViaSignedUrl(baseUrl, headers, undefined, localImages);
@@ -2886,7 +2893,7 @@ if (!command || command === '--help' || command === '-h' || command === 'help') 
         maxDuration: providerMaxDuration,
         durationTolerance: MAX_VIDEO_PROVIDER_REFERENCE_DURATION_TOLERANCE,
         maxFramePixels: providerMaxPixels,
-        maxFileSize: isSeedance25 ? 200 * 1024 * 1024 : MAX_VIDEO_UPLOAD_FILE_SIZE,
+        maxFileSize: isSeedance25 || isSyncLipsync ? 200 * 1024 * 1024 : MAX_VIDEO_UPLOAD_FILE_SIZE,
         ...(selectedVideoModel === 'minimax-h3' ? {
           allowedExtensions: ['mp4', 'mov'],
           minSide: MINIMAX_H3_MIN_VIDEO_SIDE,
@@ -2912,7 +2919,7 @@ if (!command || command === '--help' || command === '-h' || command === 'help') 
     const audioUrls = [];
     for (const audio of audios) {
       if (isHttpUrl(audio)) { audioUrls.push(audio); continue; }
-      const valid = validateAudioReferenceFile(audio, { maxDuration: isSeedance25 ? 30 : MAX_AUDIO_REFERENCE_DURATION });
+      const valid = validateAudioReferenceFile(audio, { maxDuration: isSyncLipsync ? 60 : isSeedance25 ? 30 : MAX_AUDIO_REFERENCE_DURATION });
       if (!valid.ok) { console.error(`❌ ${valid.error}`); process.exit(1); }
       process.stderr.write(`🎵 Uploading ${path.basename(audio)}...\n`);
       const uploaded = await uploadFileViaSignedUrl(baseUrl, headers, undefined, audio, valid.mime, { uploadKind: 'audio' });
@@ -2922,7 +2929,9 @@ if (!command || command === '--help' || command === '-h' || command === 'help') 
     // Standalone MCP tool (no project timeline write)
     process.stderr.write('🎬 Submitting video...\n');
     const resolvedOperation = videoOperation || (isSeedance25 && videoUrls.length ? 'edit' : 'generate');
-    const vArgs = isSeedance25
+    const vArgs = isSyncLipsync
+      ? { script, images, videoUrls, audioUrls, videoModel: selectedVideoModel, videoResolution }
+      : isSeedance25
       ? { script, images, videoUrls, audioUrls, videoModel: selectedVideoModel, videoResolution, operation: resolvedOperation, extendDirection, outputFormat, generateAudio, contentFilter, webSearch }
       : isMinimaxH3
         ? { script, images, videoUrls, audioUrls, videoModel: selectedVideoModel, videoResolution }
@@ -2933,7 +2942,7 @@ if (!command || command === '--help' || command === '-h' || command === 'help') 
     if (effectiveDuration) vArgs.duration = effectiveDuration;
     if (aspectRatio) vArgs.aspectRatio = aspectRatio;
     if (keepOriginalSound && videoUrls.length && !isSeedance25) vArgs.keepOriginalSound = true;
-    const result = await callMcpTool(baseUrl, headers, videoUrls.length && !isSeedance25 && !isMinimaxH3 ? 'makaron_edit_video' : 'makaron_create_video', vArgs);
+    const result = await callMcpTool(baseUrl, headers, videoUrls.length && !isSeedance25 && !isMinimaxH3 && !isSyncLipsync ? 'makaron_edit_video' : 'makaron_create_video', vArgs);
     const text = result?.content?.find(c => c.type === 'text')?.text;
     if (text) {
       console.log(text);
@@ -2980,6 +2989,7 @@ if (!command || command === '--help' || command === '-h' || command === 'help') 
   video create --script "..." --video-model minimax-h3                          MiniMax H3 text-to-video (default 768P)
   video create --script "..." --image <url> [--duration 10]  Submit video task
   video create --script "..." --video <public-url> [--video-model seedance-fast|seedance-mini|seedance|seedance-2.5|kling|google-omni|minimax-h3]  Edit/reference a video (Grok does not support video refs)
+  video create --script "Use the supplied audio" --video <url> --audio <url> --video-model sync-lipsync-v3  Lip-sync exact replacement audio
   video status <taskId>                                      Check video status
   video status --snapshot <snapshotId> [--wait]              Check v2 video snapshot
 `);

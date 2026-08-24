@@ -38,6 +38,7 @@ export async function GET(
     const isXai = taskId.startsWith('xai-')
     const isGoogleOmni = taskId.startsWith('google-omni-')
     const isMinimax = taskId.startsWith('minimax-h3-')
+    const isSyncLipsync = taskId.startsWith('sync3-')
     const provider = process.env.ANIMATE_PROVIDER || 'kling'
     let result: { taskId: string; status: string; videoUrl?: string; error?: string }
     const realTaskId = isMotionControl ? taskId.slice(3) : taskId
@@ -67,6 +68,9 @@ export async function GET(
     } else if (isMinimax) {
       const { getMinimaxVideoTask } = await import('@/lib/minimax-video')
       result = await getMinimaxVideoTask(taskId)
+    } else if (isSyncLipsync) {
+      const { getSyncLipsyncTask } = await import('@/lib/sync-lipsync')
+      result = await getSyncLipsyncTask(taskId)
     } else if (provider === 'piapi') {
       result = await getKlingTaskPiAPI(taskId)
     } else {

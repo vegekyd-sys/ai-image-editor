@@ -177,12 +177,12 @@ export async function createVideo(input: CreateVideoInput): Promise<CreateVideoR
       message: `SeeDance 2.5 ${videoOperation} requires at least one video reference.`,
     };
   }
-  if (hasAudioReference && route.provider !== 'seedance' && route.provider !== 'minimax') {
+  if (hasAudioReference && route.provider !== 'seedance' && route.provider !== 'minimax' && route.provider !== 'fal-sync') {
     return {
       success: false,
       message: route.provider === 'google-omni'
         ? 'Google Omni generates native audio from the prompt, but uploaded reference audio is not enabled in the current API. Use Seedance for audio_refs, or describe the soundtrack in the prompt for Omni.'
-        : 'Reference audio is only supported by Seedance video models.',
+        : 'Reference audio is only supported by Seedance, MiniMax H3, and Sync Lipsync v3.',
     };
   }
   if ((audioUrls?.length || 0) > (capability.maxAudioReferences ?? 3)) {
@@ -310,6 +310,7 @@ export async function createVideo(input: CreateVideoInput): Promise<CreateVideoR
     const loggedVideoRefType = videoUrl ? (videoReferType ?? 'base') : (videoUrls?.length ? 'feature' : undefined);
     let providerAspectRatio = resolveReferenceAspectRatio(provider, aspectRatio, providerVideoUrls.length > 0, resolvedReferenceVideoMetas);
     if (provider === 'seedance-2.5' && videoOperation !== 'generate') providerAspectRatio = 'adaptive';
+    if (route.provider === 'fal-sync') providerAspectRatio = undefined;
     console.log(`\n🎬 [create_video] provider=${provider}, resolution=${route.resolution}, ${filteredImages.length}/${images.length} images, duration=${resolvedDuration ?? 'smart'}, aspectRatio=${providerAspectRatio ?? 'auto'}${hasVideoReference ? `, video=${loggedVideoRefType}` : ''}${hasAudioReference ? `, audio=${audioUrls?.length}` : ''}`);
     console.log(`Script (${finalPrompt.length} chars): ${finalPrompt.slice(0, 150)}...`);
 
@@ -328,7 +329,30 @@ export async function createVideo(input: CreateVideoInput): Promise<CreateVideoR
       };
     }
 
-    if (route.provider === 'seedance') {
+    if (route.provider === 'fal-sync') {
+      if (filteredImages.length > 0) {
+        return { success: false, message: 'Sync Lipsync v3 accepts one source video and one replacement audio file, not image references.' };
+      }
+      if (providerVideoUrls.length !== 1 || (audioUrls?.length || 0) !== 1) {
+        return {
+          success: false,
+          message: 'Sync Lipsync v3 requires exactly one source video and exactly one reference audio file.',
+        };
+      }
+      const { createSyncLipsyncTask } = await import('../sync-lipsync');
+      taskId = await createSyncLipsyncTask({
+        videoUrl: providerVideoUrls[0],
+        audioUrl: audioUrls![0],
+      });
+      console.log(`✅ [create_video] Sync Lipsync v3 task created: ${taskId}`);
+      return {
+        success: true,
+        taskId,
+        videoModel: provider,
+        providerModel: route.providerModel,
+        message: `Lip-sync task created. Task ID: ${taskId}. Use makaron_get_video_status to poll.`,
+      };
+    } else if (route.provider === 'seedance') {
       const { createEvolinkTask } = await import('../evolink');
       const providerModel = resolveVideoProviderModel({
         model: provider,

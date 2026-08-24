@@ -23,7 +23,7 @@ export interface VideoModelCapability {
   defaultResolution?: VideoResolution
   supportedAspectRatios?: VideoAspectRatio[]
   estimatedCostPerSecondUsdByResolution?: Partial<Record<VideoResolution, number>>
-  provider?: 'kling' | 'seedance' | 'grok' | 'google-omni' | 'minimax' | 'piapi'
+  provider?: 'kling' | 'seedance' | 'grok' | 'google-omni' | 'minimax' | 'fal-sync' | 'piapi'
   providerModel?: string
 }
 
@@ -230,6 +230,30 @@ const MODEL_CAPABILITIES: Record<string, VideoModelCapability> = {
     provider: 'seedance',
     providerModel: 'seedance-2.5-reference-to-video',
   },
+  'sync-lipsync-v3': {
+    id: 'sync-lipsync-v3',
+    label: 'Sync Lipsync v3',
+    minOutputDuration: 2,
+    maxOutputDuration: 60,
+    maxReferenceVideoDuration: 60,
+    referenceVideoSize: {
+      maxFileSizeMb: 200,
+      description: '<=200MB; output preserves the source frame size and aspect ratio',
+    },
+    supportsVideoReference: true,
+    supportsBaseVideoEdit: true,
+    longVideoChunkSeconds: 60,
+    estimatedCostPerSecondUsd: 8 / 60,
+    maxImageReferences: 0,
+    maxVideoReferences: 1,
+    maxAudioReferences: 1,
+    maxTotalReferences: 2,
+    supportedResolutions: ['720p', '1080p', '2k', '4k'],
+    defaultResolution: '1080p',
+    supportedAspectRatios: ['16:9', '9:16', '1:1', '4:3', '3:4', '21:9', '3:2', '2:3'],
+    provider: 'fal-sync',
+    providerModel: 'fal-ai/sync-lipsync/v3',
+  },
   grok: {
     id: 'grok',
     label: 'Grok Video 1.5',
@@ -373,6 +397,9 @@ export function normalizeVideoModelId(model?: string | null): string {
   }
   if (normalized === 'seedance25' || normalized === 'seedance_2_5' || normalized === 'seedance-2-5') {
     return 'seedance-2.5'
+  }
+  if (normalized === 'sync3' || normalized === 'sync-v3' || normalized === 'lipsync' || normalized === 'lip-sync') {
+    return 'sync-lipsync-v3'
   }
   return normalized
 }
@@ -534,7 +561,7 @@ export function resolveVideoProviderAspectRatio(
   const route = resolveVideoGenerationRoute({ model })
   // xAI stretches the source image when image-to-video receives a forced
   // aspect_ratio. Grok in Makaron is single-image-to-video, so keep source AR.
-  if (route.provider === 'grok') return undefined
+  if (route.provider === 'grok' || route.provider === 'fal-sync') return undefined
   if (!aspectRatio || aspectRatio === 'auto') {
     return route.provider === 'seedance' ? 'adaptive' : undefined
   }

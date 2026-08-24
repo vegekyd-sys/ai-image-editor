@@ -76,6 +76,9 @@ export async function GET(req: NextRequest) {
       } else if (vm.taskId.startsWith('minimax-h3-')) {
         const { getMinimaxVideoTask } = await import('@/lib/minimax-video')
         result = await getMinimaxVideoTask(vm.taskId)
+      } else if (vm.taskId.startsWith('sync3-')) {
+        const { getSyncLipsyncTask } = await import('@/lib/sync-lipsync')
+        result = await getSyncLipsyncTask(vm.taskId)
       } else {
         const { getKlingTask } = await import('@/lib/kling')
         result = await getKlingTask(vm.taskId)

@@ -7,7 +7,7 @@ import type { ModelId } from './models/types';
 import { editImage } from './skills/edit-image';
 import { rotateCamera } from './skills/rotate-camera';
 import { createVideo } from './skills/create-video';
-import { estimateVideoCredits, estimateVideoProviderCostUsd, resolveAgentVideoSelection, resolveVideoGenerationRoute, resolveVideoOutputDuration, supportsNativeTextToVideo, validateVideoModelRequest } from './video-model-capabilities';
+import { estimateVideoCredits, estimateVideoProviderCostUsd, normalizeVideoModelId, resolveAgentVideoSelection, resolveVideoGenerationRoute, resolveVideoOutputDuration, supportsNativeTextToVideo, validateVideoModelRequest } from './video-model-capabilities';
 import {
   deductFixedCredits,
   isInsufficientCreditsError,
@@ -1486,7 +1486,8 @@ Hard constraints:
 - First line of script = short title (2-5 words). Then script body.
 - Use \`<<<media_N>>>\` to reference images AND videos (N starts at 1). Videos in the timeline are auto-routed — just reference them like images. For native SeeDance or MiniMax H3 text-to-video with no source media, use no media markers and do not generate an intermediate image first.
 - To EDIT a video: reference it with \`<<<media_N>>>\` and describe the changes. The selected model must support reference videos.
-- To use CLI/app imported reference music/audio for pacing or beat sync, mention its Audio Index marker in \`story_prompt\` (for example \`<<<audio_1>>>\`) AND pass \`audio_refs\` like ["audio_1"]. Audio refs are NOT Timeline Media Index refs. Reference audio is only supported by Seedance video models or MiniMax H3.
+- To use CLI/app imported reference music/audio for pacing or beat sync, mention its Audio Index marker in \`story_prompt\` (for example \`<<<audio_1>>>\`) AND pass \`audio_refs\` like ["audio_1"]. Audio refs are NOT Timeline Media Index refs. Reference audio is supported by Seedance video models, MiniMax H3, and Sync Lipsync v3.
+- Exact translated-mouth exception: after \`generate_audio(kind="translation")\`, use \`model: "sync-lipsync-v3"\` with exactly one accepted source video and that exact Audio Index reference. This path preserves the supplied audio and changes mouth motion; it is not ordinary native-audio video generation.
 - Works for Kling, SeeDance, SeeDance Mini, Seedance 2.5, Grok, Gemini Omni, and MiniMax H3, but respect capability limits and tool errors.
 - Single-call total duration: Seedance 2.5 is 4-30 seconds; SeeDance 2.0 is 4-15 seconds; SeeDance/SeeDance Mini and MiniMax H3 are 4-15 seconds; Kling is 5-15 seconds; Grok 1.5 is 1-15 seconds; Google Omni is 3-10 seconds. A requested 30-second direct generation should use \`model: "seedance-2.5"\` in one call.
 - If a complete script fits the selected model's single-call limit, submit it as one video generation call. Put the whole title, every \`Shot N (Xs):\` line, and the \`Style:\` line into the same \`story_prompt\`; set \`duration\` to the total script duration when known. Do not submit only one shot, the first shot, or one line from the script.
@@ -1505,9 +1506,9 @@ Hard constraints:
 - The script must have been shown to the user and confirmed before this tool is called, unless the user's current request explicitly asks for direct submission without confirmation or the system prompt supplies the trusted Skill template launch exception.`,
       inputSchema: z.object({
         story_prompt: z.string().describe('The complete video script. First line = short title, then the body. Native SeeDance or MiniMax H3 text-to-video uses no media markers. Seedance 2.5 markers are translated to @imageN, @videoN, and @audioN for Evolink.'),
-        duration: z.number().optional().describe('Duration in seconds. Seedance 2.5 accepts 4-30s; for Seedance 2.5 video_operation="edit", omit duration or pass -1 because Makaron follows the source duration automatically. SeeDance/SeeDance Mini and MiniMax H3 accept 4-15s; Kling accepts 5-15s; Grok accepts 1-15s; Google Omni accepts 3-10s.'),
+        duration: z.number().optional().describe('Duration in seconds. Sync Lipsync v3 follows a 2-60s accepted source; Seedance 2.5 accepts 4-30s; for Seedance 2.5 video_operation="edit", omit duration or pass -1 because Makaron follows the source duration automatically. SeeDance/SeeDance Mini and MiniMax H3 accept 4-15s; Kling accepts 5-15s; Grok accepts 1-15s; Google Omni accepts 3-10s.'),
         aspect_ratio: z.enum(['16:9', '9:16', '1:1', '4:3', '3:4', '21:9', '3:2', '2:3']).optional().describe('Output aspect ratio. Pass it only when the user asks for a specific shape and the selected model can safely honor it. For Grok single-image-to-video, omit this field because xAI stretches the source image when a forced ratio differs from the image. Seedance supports 16:9/9:16/1:1/4:3/3:4/21:9/adaptive; Makaron intentionally does not pass forced ratios to Grok image-to-video.'),
-        model: z.string().optional().describe('Video model/provider id. Supported ids include seedance-fast, seedance-mini, seedance, seedance-2.5, kling, grok, google-omni, and minimax-h3.'),
+        model: z.string().optional().describe('Video model/provider id. Supported ids include seedance-fast, seedance-mini, seedance, seedance-2.5, kling, grok, google-omni, minimax-h3, and sync-lipsync-v3. Use sync-lipsync-v3 only with exactly one source video and one replacement audio ref.'),
         video_resolution: z.enum(['480p', '720p', '768p', '1080p', '2k', '4k', 'auto']).optional().describe('Output resolution. Seedance 2.5 supports 480p/720p; MiniMax H3 supports 768p/2k and defaults to 768p.'),
         media_refs: z.array(z.string()).optional().describe('Additional image URLs NOT already in Media Index (e.g. workspace files from list_files). Images in Media Index are auto-available — just use <<<media_N>>> in script. Passing Media Index URLs here will be rejected.'),
         audio_refs: z.array(z.string()).optional().describe('Reference audio labels from the Audio Index block, e.g. ["audio_1"]. Use for beat sync, pacing, or music reference. These are separate from <<<media_N>>> and supported by SeeDance models and MiniMax H3.'),
@@ -1540,13 +1541,16 @@ Hard constraints:
         if (media_refs?.length) {
           imageUrls = [...(imageUrls || []), ...media_refs.filter(u => u.startsWith('http'))];
         }
-        const videoSelection = resolveAgentVideoSelection({
-          appModel: (ctx as any).videoModel,
-          appResolution: (ctx as any).videoResolution,
-          appAuto: (ctx as any).videoAuto,
-          toolModel: model,
-          toolResolution: video_resolution,
-        });
+        const requestedModel = normalizeVideoModelId(model);
+        const videoSelection = requestedModel === 'sync-lipsync-v3'
+          ? { model: requestedModel, resolution: video_resolution ?? 'auto', locked: false }
+          : resolveAgentVideoSelection({
+            appModel: (ctx as any).videoModel,
+            appResolution: (ctx as any).videoResolution,
+            appAuto: (ctx as any).videoAuto,
+            toolModel: model,
+            toolResolution: video_resolution,
+          });
         const videoModel = videoSelection.model;
         const isSeedance25Edit = videoModel === 'seedance-2.5' && video_operation === 'edit';
         const videoRoute = resolveVideoGenerationRoute({
@@ -1564,12 +1568,12 @@ Hard constraints:
           if (resolvedAudioRefs.error) {
             return { success: false as const, message: resolvedAudioRefs.error };
           }
-          if (resolvedAudioRefs.audioUrls.length > 0 && videoRoute.provider !== 'seedance' && videoRoute.provider !== 'minimax') {
+          if (resolvedAudioRefs.audioUrls.length > 0 && videoRoute.provider !== 'seedance' && videoRoute.provider !== 'minimax' && videoRoute.provider !== 'fal-sync') {
             return {
               success: false as const,
               message: videoRoute.provider === 'google-omni'
                 ? 'Google Omni can generate native audio from the prompt, but uploaded audio_refs are not enabled in the current API. Choose seedance-fast, seedance-mini, or seedance for audio_refs, or remove audio_refs and describe the soundtrack for Omni.'
-                : 'Reference audio is only supported by Seedance video models or MiniMax H3. Choose seedance-fast, seedance-mini, seedance, or minimax-h3, or remove audio_refs.',
+                : 'Reference audio is only supported by Seedance video models or MiniMax H3, except exact replacement audio with Sync Lipsync v3. Choose a compatible model or remove audio_refs.',
             };
           }
 
