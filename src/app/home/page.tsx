@@ -48,6 +48,8 @@ import CreateInputBox from '@/components/CreateInputBox'
 import MakaronLogo from '@/components/MakaronLogo'
 import LiquidGlassNav from '@/components/LiquidGlassNav'
 import CreditPopup from '@/components/CreditPopup'
+import { getEligibleAppleIntroTrial } from '@/lib/billing/apple-trial'
+import { useAppleBillingProducts } from '@/lib/billing/use-apple-billing'
 import { loadCreateAgentModelPreference, saveAgentModelPreference, saveCreateAgentModelPreference } from '@/lib/agent-model-preference'
 import type { AgentModelPreference } from '@/lib/agent-models'
 import { LazyVideo, SkillVideo } from '@/components/HomeSkillMedia'
@@ -106,7 +108,18 @@ function HomePageInner() {
   const pathname = usePathname()
   const isDesktop = useIsDesktop()
   const isIOSAppShell = hydrated && isMakaronIOSApp()
-  const isPreAuthIOSGuest = isIOSAppShell && !renderUser
+  const preAuthAppleBilling = useAppleBillingProducts({
+    enabled: isIOSAppShell && !renderUser,
+  })
+  const preAuthBasicMonthlyProduct = preAuthAppleBilling.findSubscription('basic', 'month')
+  const preAuthBasicMonthlyTrial = getEligibleAppleIntroTrial(
+    preAuthBasicMonthlyProduct,
+    preAuthAppleBilling.nativeProductFor(preAuthBasicMonthlyProduct),
+  )
+  // Build 1.0.7 exposes only the base StoreKit product fields, so it stays on
+  // the established upload -> registration -> trial flow. Build 1.0.8 adds
+  // verified introductory-offer metadata and alone can enter subscribe-first.
+  const isPreAuthIOSGuest = isIOSAppShell && !renderUser && !!preAuthBasicMonthlyTrial
 
   const [viewMode, setViewMode] = useState<'human' | 'agent'>('human')
   const createInput = useCreateInput()

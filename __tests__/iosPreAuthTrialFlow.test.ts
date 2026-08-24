@@ -8,6 +8,7 @@ import {
   readIOSPreAuthTrialContinuation,
   writeIOSPreAuthTrialIntent,
 } from '@/lib/ios-preauth-trial'
+import { getEligibleAppleIntroTrial } from '@/lib/billing/apple-trial'
 
 const root = path.resolve(__dirname, '..')
 
@@ -66,7 +67,8 @@ describe('iOS subscription-before-registration flow', () => {
     const verifyRoute = fs.readFileSync(path.join(root, 'src/app/api/billing/apple/verify/route.ts'), 'utf8')
     const login = fs.readFileSync(path.join(root, 'src/app/login/page.tsx'), 'utf8')
 
-    expect(home).toContain('const isPreAuthIOSGuest = isIOSAppShell && !renderUser')
+    expect(home).toContain('const preAuthBasicMonthlyTrial = getEligibleAppleIntroTrial(')
+    expect(home).toContain('const isPreAuthIOSGuest = isIOSAppShell && !renderUser && !!preAuthBasicMonthlyTrial')
     expect(home).toContain("entryPoint=\"ios_preauth_trial\"")
     expect(home).toContain('{renderUploadSlots(selectedDetail, true)}')
     expect(home).not.toContain('!isPreAuthIOSSkillAction && renderUploadSlots')
@@ -95,6 +97,47 @@ describe('iOS subscription-before-registration flow', () => {
     expect(creditPopup).toContain('await onPreAuthTrialConfirmed?.()')
     expect(creditPopup).toContain('isPreAuthTrial,')
     expect(creditPopup).toContain('restoreNativeApplePurchases(isPreAuthTrial)')
+  })
+
+  it('keeps the legacy 1.0.7 StoreKit bridge on the original registration-first flow', () => {
+    const configuredProduct = {
+      kind: 'subscription' as const,
+      planId: 'basic',
+      interval: 'month' as const,
+      name: 'Basic Monthly',
+      productId: 'app.makaron.ios.subscription.basic.monthly',
+      credits: 1200,
+      price: 999,
+      introTrial: { days: 3, credits: 1500 },
+    }
+
+    expect(getEligibleAppleIntroTrial(configuredProduct, {
+      productId: configuredProduct.productId,
+      displayName: 'Basic Monthly',
+      description: 'Legacy StoreKit response',
+      displayPrice: '$9.99',
+      type: 'autoRenewable',
+    })).toBeNull()
+
+    expect(getEligibleAppleIntroTrial(configuredProduct, {
+      productId: configuredProduct.productId,
+      displayName: 'Basic Monthly',
+      description: 'StoreKit response with verified trial capability',
+      displayPrice: '$9.99',
+      type: 'autoRenewable',
+      isEligibleForIntroOffer: true,
+      introductoryOffer: {
+        displayPrice: '$0.00',
+        paymentMode: 'freeTrial',
+        periodUnit: 'day',
+        periodValue: 3,
+        periodCount: 1,
+      },
+    })).toEqual({
+      days: 3,
+      credits: 1500,
+      renewalPrice: '$9.99',
+    })
   })
 
   it('isolates StoreKit test configuration from the real-device App scheme', () => {
