@@ -20,6 +20,43 @@ import { getBundledAppleRootCertificates } from './apple-root-certificates'
 
 type AppleEnvironment = Environment.SANDBOX | Environment.PRODUCTION | Environment.XCODE | Environment.LOCAL_TESTING
 
+const LOCAL_APPLE_ENVIRONMENTS = new Set<AppleEnvironment>([
+  Environment.XCODE,
+  Environment.LOCAL_TESTING,
+])
+
+function isLoopbackSupabaseUrl(value?: string): boolean {
+  if (!value) return false
+  try {
+    const hostname = new URL(value).hostname.toLowerCase()
+    return hostname === 'localhost' || hostname === '127.0.0.1' || hostname === '::1'
+  } catch {
+    return false
+  }
+}
+
+/**
+ * Xcode/LocalTesting payload verification deliberately skips App Store
+ * signatures in Apple's server library. Never allow those payloads anywhere
+ * near a hosted or shared Supabase project.
+ */
+export function assertAppleIAPEnvironmentIsolation(
+  environments: AppleEnvironment[],
+  env: NodeJS.ProcessEnv = process.env,
+): void {
+  if (!environments.some(environment => LOCAL_APPLE_ENVIRONMENTS.has(environment))) return
+
+  if (env.MAKARON_E2E !== '1') {
+    throw new Error('Xcode Apple transactions require MAKARON_E2E=1')
+  }
+  if (!isLoopbackSupabaseUrl(env.NEXT_PUBLIC_SUPABASE_URL)) {
+    throw new Error('Xcode Apple transactions require a loopback-only Supabase project')
+  }
+  if (environments.some(environment => !LOCAL_APPLE_ENVIRONMENTS.has(environment))) {
+    throw new Error('Local Apple transaction verification cannot be combined with Sandbox or Production')
+  }
+}
+
 export interface AppleApplyResult {
   transaction: JWSTransactionDecodedPayload
   purchaseType: 'subscription' | 'topup'
@@ -106,7 +143,10 @@ function getVerifierEnvironments(): AppleEnvironment[] {
     ? configured.split(/[,;]+/).map(value => parseAppleEnvironment(value.trim()))
     : [Environment.SANDBOX, Environment.PRODUCTION]
 
-  return Array.from(new Set(list)).filter(env => {
+  const environments = Array.from(new Set(list))
+  assertAppleIAPEnvironmentIsolation(environments)
+
+  return environments.filter(env => {
     if (env !== Environment.PRODUCTION) return true
     return Boolean(getAppAppleId())
   })

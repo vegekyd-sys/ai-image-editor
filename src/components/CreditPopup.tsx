@@ -16,6 +16,7 @@ import {
   purchaseNativeAppleProduct,
   purchaseNativeAppleSubscription,
   restoreNativeApplePurchases,
+  type NativeAppleTransaction,
 } from '@/lib/native-purchases';
 import AppleTrialCheckout from './AppleTrialCheckout';
 
@@ -44,6 +45,12 @@ interface CreditPopupProps {
   onBalanceUpdate?: (balance: number, subscription?: { planId: string; status: string } | null) => void;
 }
 
+interface PendingAppleTrialVerification {
+  transaction: NativeAppleTransaction;
+  metaEventId?: string;
+  attribution: Record<string, unknown>;
+}
+
 export default function CreditPopup({ open: externalOpen, entryPoint = 'standard', onClose: externalOnClose, onPreAuthTrialConfirmed, balance: externalBalance, needed, subscription: externalSubscription, projectId, success: externalSuccess, waiting: externalWaiting, autoDetectPayment, onBalanceUpdate }: CreditPopupProps) {
   const { t } = useLocale();
   const [loading, setLoading] = useState<string | null>(null);
@@ -52,6 +59,7 @@ export default function CreditPopup({ open: externalOpen, entryPoint = 'standard
   const [selectedBillingInterval, setSelectedBillingInterval] = useState<'month' | 'year'>('month');
   const [animatedBalance, setAnimatedBalance] = useState(0);
   const [paymentError, setPaymentError] = useState<string | null>(null);
+  const [pendingAppleTrialVerification, setPendingAppleTrialVerification] = useState<PendingAppleTrialVerification | null>(null);
   const animatingRef = useRef(false);
 
   // Auto-detect payment state (self-managed when autoDetectPayment=true)
@@ -179,6 +187,30 @@ export default function CreditPopup({ open: externalOpen, entryPoint = 'standard
     }
   };
 
+  const verifyApplePurchase = async (payload: Record<string, unknown>) => {
+    for (let attempt = 0; attempt < 3; attempt += 1) {
+      try {
+        const res = await fetch('/api/billing/apple/verify', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(payload),
+        });
+        const data = await res.json();
+        if (res.ok) return data;
+        const retryablePreAuthConfirmation = isPreAuthTrial
+          && data.code === 'APPLE_TRIAL_VERIFICATION_FAILED';
+        if (!retryablePreAuthConfirmation) {
+          throw new Error(data.error || 'Apple purchase verification failed');
+        }
+        if (attempt === 2) throw new Error(t('billing.trial.verificationPending'));
+      } catch (error) {
+        if (attempt === 2) throw error;
+      }
+      await new Promise(resolve => window.setTimeout(resolve, 350 * (attempt + 1)));
+    }
+    throw new Error(t('billing.trial.verificationPending'));
+  };
+
   const handleCheckout = async (tier: string) => {
     setLoading(tier);
     setPaymentError(null);
@@ -258,34 +290,36 @@ export default function CreditPopup({ open: externalOpen, entryPoint = 'standard
         const appleProduct = appleBilling.findSubscription(planId, selectedBillingInterval);
         if (!appleProduct) throw new Error('Apple subscription product is not configured');
         if (!appleBilling.nativeProductFor(appleProduct)) throw new Error('Apple subscription product is still loading');
-        const metaEventId = trackCheckoutStart('subscription', {
-          content_name: planId,
-          content_id: appleProduct.productId,
-          billing_interval: selectedBillingInterval,
-          value: appleProduct.price / 100,
-          currency: 'USD',
-        });
-        sessionStorage.setItem('mkr_pre_topup_balance', String(externalBalance));
-        const transaction = await purchaseNativeAppleSubscription(appleProduct.productId, appleBilling.appAccountToken);
-        const res = await fetch('/api/billing/apple/verify', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            signedTransactionInfo: transaction.signedTransactionInfo,
-            metaEventId,
-            attribution: getAttributionForRequest(),
-            ...(isPreAuthTrial ? { intent: 'preauth_trial' as const } : {}),
-          }),
-        });
-        const data = await res.json();
-        if (!res.ok) {
-          if (isPreAuthTrial && data.code === 'APPLE_TRIAL_VERIFICATION_FAILED') {
-            throw new Error(t('billing.trial.verificationPending'));
-          }
-          throw new Error(data.error || 'Apple purchase verification failed');
+        let verification = isPreAuthTrial ? pendingAppleTrialVerification : null;
+        if (!verification) {
+          const metaEventId = trackCheckoutStart('subscription', {
+            content_name: planId,
+            content_id: appleProduct.productId,
+            billing_interval: selectedBillingInterval,
+            value: appleProduct.price / 100,
+            currency: 'USD',
+          });
+          const attribution = (getAttributionForRequest() ?? {}) as Record<string, unknown>;
+          sessionStorage.setItem('mkr_pre_topup_balance', String(externalBalance));
+          const transaction = await purchaseNativeAppleSubscription(
+            appleProduct.productId,
+            appleBilling.appAccountToken,
+            isPreAuthTrial,
+          );
+          verification = { transaction, metaEventId, attribution };
+          if (isPreAuthTrial) setPendingAppleTrialVerification(verification);
         }
+        if (!verification) throw new Error('Apple purchase verification could not be resumed');
+        const { transaction, metaEventId, attribution } = verification;
+        const data = await verifyApplePurchase({
+          signedTransactionInfo: transaction.signedTransactionInfo,
+          metaEventId,
+          attribution,
+          ...(isPreAuthTrial ? { intent: 'preauth_trial' as const } : {}),
+        });
         await finishAppleTransaction(transaction.transactionId);
         if (isPreAuthTrial && data.pendingClaim) {
+          setPendingAppleTrialVerification(null);
           await onPreAuthTrialConfirmed?.();
           return;
         }
@@ -336,7 +370,7 @@ export default function CreditPopup({ open: externalOpen, entryPoint = 'standard
     setPaymentError(null);
     try {
       sessionStorage.setItem('mkr_pre_topup_balance', String(externalBalance));
-      const transactions = await restoreNativeApplePurchases();
+      const transactions = await restoreNativeApplePurchases(isPreAuthTrial);
       const transaction = transactions[0];
       if (!transaction) throw new Error('No active Apple subscription was found.');
       const res = await fetch('/api/billing/apple/verify', {
@@ -590,6 +624,7 @@ export default function CreditPopup({ open: externalOpen, entryPoint = 'standard
             loading={!appleBillingAvailable || appleBilling.loading}
             disabled={subscribeDisabled}
             purchasing={loading === 'sub-basic-month'}
+            confirmationPending={!!pendingAppleTrialVerification}
             error={paymentError}
             onStart={() => void handleSubscribe('basic')}
             onClose={onClose}

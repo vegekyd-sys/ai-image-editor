@@ -68,6 +68,29 @@ describe('Apple billing integration', () => {
     expect(certificates.every(certificate => certificate.ca)).toBe(true);
   });
 
+  it('allows unsigned Xcode payload decoding only against an isolated loopback E2E Supabase', async () => {
+    const { assertAppleIAPEnvironmentIsolation } = await import('@/lib/billing/apple');
+
+    expect(() => assertAppleIAPEnvironmentIsolation(['Xcode'] as never, {
+      MAKARON_E2E: '1',
+      NEXT_PUBLIC_SUPABASE_URL: 'http://127.0.0.1:55321',
+    } as unknown as NodeJS.ProcessEnv)).not.toThrow();
+
+    expect(() => assertAppleIAPEnvironmentIsolation(['Xcode'] as never, {
+      NEXT_PUBLIC_SUPABASE_URL: 'http://127.0.0.1:55321',
+    } as unknown as NodeJS.ProcessEnv)).toThrow('MAKARON_E2E=1');
+
+    expect(() => assertAppleIAPEnvironmentIsolation(['Xcode'] as never, {
+      MAKARON_E2E: '1',
+      NEXT_PUBLIC_SUPABASE_URL: 'https://shared-project.supabase.co',
+    } as unknown as NodeJS.ProcessEnv)).toThrow('loopback-only Supabase');
+
+    expect(() => assertAppleIAPEnvironmentIsolation(['Xcode', 'Sandbox'] as never, {
+      MAKARON_E2E: '1',
+      NEXT_PUBLIC_SUPABASE_URL: 'http://localhost:55321',
+    } as unknown as NodeJS.ProcessEnv)).toThrow('cannot be combined');
+  });
+
   it('exposes all App Store products with Apple tier pricing isolated from Stripe pricing', async () => {
     const { getConfiguredAppleProducts } = await import('@/lib/billing/apple');
     const products = getConfiguredAppleProducts();

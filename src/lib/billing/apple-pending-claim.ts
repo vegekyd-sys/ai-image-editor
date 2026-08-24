@@ -47,6 +47,30 @@ function normalizeAttribution(value: unknown): Record<string, unknown> {
   }
 }
 
+export function resolvePendingAppleTrialCreditExpiry(args: {
+  environment: string
+  receiptExpiresAt: Date
+  pendingCreatedAt: Date
+}): Date {
+  const environment = args.environment.toLowerCase()
+  const acceleratedTestEnvironment = environment === 'sandbox'
+    || environment === 'xcode'
+    || environment === 'localtesting'
+    || environment === 'local_testing'
+  if (!acceleratedTestEnvironment) return args.receiptExpiresAt
+
+  // StoreKit compresses a three-day introductory offer to a few minutes in
+  // Sandbox/Xcode. Verification still uses the Apple receipt, while our test
+  // account receives the same product-length trial window as a real customer.
+  // This branch is unreachable for Production receipts.
+  const productWindowEnd = new Date(
+    args.pendingCreatedAt.getTime() + IOS_TRIAL_DAYS * 24 * 60 * 60 * 1000,
+  )
+  return productWindowEnd.getTime() > args.receiptExpiresAt.getTime()
+    ? productWindowEnd
+    : args.receiptExpiresAt
+}
+
 export async function preparePendingAppleTrialClaim(args: {
   signedTransactionInfo: string
   metaEventId?: string
@@ -156,9 +180,11 @@ export async function claimPendingAppleTrial(args: {
   ) {
     throw new Error('Sandbox introductory trial was not active when the pending claim was created')
   }
-  const trialCreditExpiresAt = acceleratedTestEnvironment && verified.expiresAt.getTime() <= Date.now()
-    ? new Date(Date.now() + IOS_TRIAL_DAYS * 24 * 60 * 60 * 1000)
-    : verified.expiresAt
+  const trialCreditExpiresAt = resolvePendingAppleTrialCreditExpiry({
+    environment,
+    receiptExpiresAt: verified.expiresAt,
+    pendingCreatedAt,
+  })
 
   // Existing transaction/user uniqueness constraints make retries idempotent
   // and prevent one StoreKit purchase from crediting two Makaron accounts.

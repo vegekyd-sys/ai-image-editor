@@ -45,6 +45,7 @@ const eslintConfig = defineConfig([
     ".codex/**",
     "infra/**",
     "test-output/**",
+    ".artifacts/**",
     ".playwright-mcp/**",
   ]),
 ]);

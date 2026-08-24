@@ -9,6 +9,7 @@ interface AppleTrialCheckoutProps {
   loading: boolean
   disabled: boolean
   purchasing: boolean
+  confirmationPending?: boolean
   error?: string | null
   onStart: () => void
   onClose: () => void
@@ -39,6 +40,7 @@ export default function AppleTrialCheckout({
   loading,
   disabled,
   purchasing,
+  confirmationPending = false,
   error,
   onStart,
   onClose,
@@ -126,7 +128,11 @@ export default function AppleTrialCheckout({
               disabled={disabled}
               className="apple-trial-cta"
             >
-              {purchasing ? t('billing.trial.confirming') : t('billing.trial.cta')}
+              {purchasing
+                ? t('billing.trial.confirming')
+                : confirmationPending
+                  ? t('billing.trial.continueConfirmation')
+                  : t('billing.trial.cta')}
             </button>
 
             {error && <p data-testid="apple-trial-error" className="apple-trial-error">{error}</p>}

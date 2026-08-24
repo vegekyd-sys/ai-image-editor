@@ -133,6 +133,8 @@ export default function AIDataConsentGate({
             <>
               <button
                 type="button"
+                aria-label={t('aiConsent.allow')}
+                data-testid="ai-data-consent-allow"
                 className="h-12 w-full bg-white px-5 text-[16px] font-semibold text-black active:bg-white/80"
                 onClick={() => {
                   storeConsent();

@@ -589,14 +589,14 @@ export default function LoginPage() {
 
 
             <form onSubmit={handleContinue} className="space-y-4">
-              <input ref={emailRef} type="email" inputMode="email" enterKeyHint="next" autoComplete="email" placeholder={t('auth.email')} value={email} onFocus={(e) => keepFocusedFieldVisible(e.currentTarget)} onChange={(e) => { setEmail(e.target.value); setError('') }} required
+              <input ref={emailRef} data-testid="auth-email" aria-label={t('auth.email')} type="email" inputMode="email" enterKeyHint="next" autoComplete="email" placeholder={t('auth.email')} value={email} onFocus={(e) => keepFocusedFieldVisible(e.currentTarget)} onChange={(e) => { setEmail(e.target.value); setError('') }} required
                 className="w-full px-4 py-3 rounded-lg bg-white/[0.07] text-white placeholder-white/30 border border-white/10 focus:border-fuchsia-500/50 focus:outline-none focus:ring-1 focus:ring-fuchsia-500/50 transition-colors" />
-              <input type="password" placeholder={t('auth.password')} value={password} onFocus={(e) => keepFocusedFieldVisible(e.currentTarget)} onChange={(e) => { setPassword(e.target.value); setError('') }} required minLength={6}
+              <input data-testid="auth-password" aria-label={t('auth.password')} type="password" placeholder={t('auth.password')} value={password} onFocus={(e) => keepFocusedFieldVisible(e.currentTarget)} onChange={(e) => { setPassword(e.target.value); setError('') }} required minLength={6}
                 className="w-full px-4 py-3 rounded-lg bg-white/[0.07] text-white placeholder-white/30 border border-white/10 focus:border-fuchsia-500/50 focus:outline-none focus:ring-1 focus:ring-fuchsia-500/50 transition-colors" />
 
               {error && <p className="text-red-400 text-sm text-center">{error}</p>}
 
-              <button type="submit" disabled={loading}
+              <button type="submit" data-testid="auth-continue" disabled={loading}
                 className="w-full py-3 rounded-lg font-medium text-white transition-all disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
                 style={{ background: 'linear-gradient(to right, #c026d3, #9333ea)' }}>
                 {loading && <svg className="animate-spin h-4 w-4" viewBox="0 0 24 24"><circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" fill="none" /><path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" /></svg>}
@@ -635,6 +635,8 @@ export default function LoginPage() {
               {otpDigits.map((digit, i) => (
                 <input
                   key={i}
+                  data-testid={`auth-otp-${i}`}
+                  aria-label={t('auth.otp.digitLabel').replace('{index}', String(i + 1))}
                   ref={el => { otpRefs.current[i] = el }}
                   type="text"
                   inputMode="numeric"
@@ -653,6 +655,7 @@ export default function LoginPage() {
             {otpError && <p className="text-red-400 text-sm mb-4">{otpError}</p>}
 
             <button
+              data-testid="auth-verify-otp"
               onClick={handleVerifyOtp}
               disabled={otpLoading || otpDigits.some(d => !d)}
               className="w-full py-3 rounded-lg font-medium text-white transition-all disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2 mb-4"

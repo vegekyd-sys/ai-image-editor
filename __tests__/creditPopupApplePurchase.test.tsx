@@ -65,10 +65,11 @@ vi.mock('@/lib/i18n', () => ({
       'billing.trial.perMonth': '/month',
       'billing.trial.cta': 'Start 3-day free trial',
       'billing.trial.confirming': 'Confirming with Apple...',
+      'billing.trial.continueConfirmation': 'Continue confirmation',
       'billing.trial.legal': 'Renews automatically unless canceled.',
       'billing.trial.restore': 'Restore Apple purchase',
       'billing.trial.restoring': 'Restoring...',
-      'billing.trial.verificationPending': 'Subscription complete. Tap Restore Apple purchase to continue.',
+      'billing.trial.verificationPending': 'Subscription complete. Tap Continue confirmation; no restore is needed.',
     }[key] || key),
   }),
 }));
@@ -193,6 +194,7 @@ describe('CreditPopup Apple purchase flow', () => {
     await waitFor(() => expect(mocks.purchaseNativeAppleSubscription).toHaveBeenCalledWith(
       'app.makaron.ios.subscription.pro.annual',
       '11111111-1111-4111-8111-111111111111',
+      false,
     ));
     expect(fetch).toHaveBeenCalledWith('/api/billing/apple/verify', expect.objectContaining({
       method: 'POST',
@@ -269,6 +271,7 @@ describe('CreditPopup Apple purchase flow', () => {
     await waitFor(() => expect(mocks.purchaseNativeAppleSubscription).toHaveBeenCalledWith(
       'app.makaron.ios.subscription.basic.monthly',
       '11111111-1111-4111-8111-111111111111',
+      false,
     ));
   });
 
@@ -310,6 +313,11 @@ describe('CreditPopup Apple purchase flow', () => {
     );
 
     fireEvent.click(await screen.findByText('Start 3-day free trial'));
+    await waitFor(() => expect(mocks.purchaseNativeAppleSubscription).toHaveBeenCalledWith(
+      'app.makaron.ios.subscription.basic.monthly',
+      '11111111-1111-4111-8111-111111111111',
+      true,
+    ));
     await waitFor(() => expect(fetch).toHaveBeenCalledWith('/api/billing/apple/verify', expect.objectContaining({
       method: 'POST',
       body: JSON.stringify({
@@ -324,7 +332,7 @@ describe('CreditPopup Apple purchase flow', () => {
     expect(mocks.writeNativeJSONCache).not.toHaveBeenCalled();
   });
 
-  it('shows a recovery action instead of exposing server verification details', async () => {
+  it('retries the purchased transaction from the primary CTA without asking for Restore', async () => {
     mocks.suppressWebBilling = true;
     mocks.getNativeAppleProducts.mockResolvedValue(nativeProducts.map(product => (
       product.productId === 'app.makaron.ios.subscription.basic.monthly'
@@ -343,8 +351,16 @@ describe('CreditPopup Apple purchase flow', () => {
         : product
     )));
     const baseFetch = mockFetch();
+    let verifyAttempts = 0;
     vi.stubGlobal('fetch', vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
       if (String(input) === '/api/billing/apple/verify') {
+        verifyAttempts += 1;
+        if (verifyAttempts > 3) {
+          return {
+            ok: true,
+            json: async () => ({ ok: true, pendingClaim: true }),
+          } as Response;
+        }
         return {
           ok: false,
           json: async () => ({
@@ -356,11 +372,30 @@ describe('CreditPopup Apple purchase flow', () => {
       return baseFetch(input, init);
     }));
 
-    render(<CreditPopup open entryPoint="ios_preauth_trial" onClose={vi.fn()} balance={0} subscription={null} />);
+    const onPreAuthTrialConfirmed = vi.fn();
+    render(
+      <CreditPopup
+        open
+        entryPoint="ios_preauth_trial"
+        onClose={vi.fn()}
+        onPreAuthTrialConfirmed={onPreAuthTrialConfirmed}
+        balance={0}
+        subscription={null}
+      />,
+    );
     fireEvent.click(await screen.findByText('Start 3-day free trial'));
 
-    expect(await screen.findByText('Subscription complete. Tap Restore Apple purchase to continue.')).toBeTruthy();
+    expect(await screen.findByText(
+      'Subscription complete. Tap Continue confirmation; no restore is needed.',
+      {},
+      { timeout: 4000 },
+    )).toBeTruthy();
     expect(screen.queryByText('private server configuration detail')).toBeNull();
     expect(mocks.finishNativeAppleTransaction).not.toHaveBeenCalled();
+
+    fireEvent.click(screen.getByText('Continue confirmation'));
+    await waitFor(() => expect(onPreAuthTrialConfirmed).toHaveBeenCalledTimes(1));
+    expect(mocks.purchaseNativeAppleSubscription).toHaveBeenCalledTimes(1);
+    expect(mocks.finishNativeAppleTransaction).toHaveBeenCalledWith('sub-tx');
   });
 });

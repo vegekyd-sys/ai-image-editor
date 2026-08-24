@@ -13,7 +13,60 @@ class MakaronBridgeViewController: CAPBridgeViewController, WKScriptMessageHandl
     private var oauthSession: ASWebAuthenticationSession?
     private var transactionUpdatesTask: Task<Void, Never>?
     private var pendingPurchaseResponseIdsByProductId: [String: String] = [:]
+    private var pendingPurchaseRequiresIntroByProductId: [String: Bool] = [:]
     private var handledTransactionIds = Set<String>()
+
+#if DEBUG && targetEnvironment(simulator)
+    private var usesLocalE2EPurchase: Bool {
+        ProcessInfo.processInfo.arguments.contains("--makaron-e2e-local-purchase")
+    }
+
+    private func base64URLEncoded(_ data: Data) -> String {
+        data.base64EncodedString()
+            .replacingOccurrences(of: "+", with: "-")
+            .replacingOccurrences(of: "/", with: "_")
+            .replacingOccurrences(of: "=", with: "")
+    }
+
+    /// Xcode 26 no longer attaches a scheme StoreKit configuration to an app
+    /// launched by XCUIApplication. Keep the regression deterministic by
+    /// returning an unsigned Xcode receipt only in an explicitly opted-in
+    /// Debug Simulator process. The E2E server separately requires MAKARON_E2E=1
+    /// and a loopback-only Supabase URL before it accepts this environment.
+    private func localE2ETransactionPayload(productId: String) throws -> [String: Any] {
+        let now = Int64(Date().timeIntervalSince1970 * 1_000)
+        let transactionId = "xcode-e2e-\(UUID().uuidString.lowercased())"
+        let payload: [String: Any] = [
+            "originalTransactionId": transactionId,
+            "transactionId": transactionId,
+            "bundleId": Bundle.main.bundleIdentifier ?? "app.makaron.ios",
+            "productId": productId,
+            "purchaseDate": now,
+            "originalPurchaseDate": now,
+            // Match StoreKit's accelerated Sandbox/Xcode behavior. The server
+            // must convert this to the product's full three-day credit window.
+            "expiresDate": now + 120_000,
+            "quantity": 1,
+            "type": "Auto-Renewable Subscription",
+            "inAppOwnershipType": "PURCHASED",
+            "signedDate": now,
+            "offerType": 1,
+            "offerDiscountType": "FREE_TRIAL",
+            "offerPeriod": "P3D",
+            "transactionReason": "PURCHASE",
+            "environment": "Xcode"
+        ]
+        let headerData = try JSONSerialization.data(withJSONObject: ["alg": "none", "typ": "JWT"])
+        let payloadData = try JSONSerialization.data(withJSONObject: payload)
+        let signedTransactionInfo = "\(base64URLEncoded(headerData)).\(base64URLEncoded(payloadData)).e2e"
+        return [
+            "productId": productId,
+            "transactionId": transactionId,
+            "originalTransactionId": transactionId,
+            "signedTransactionInfo": signedTransactionInfo
+        ]
+    }
+#endif
 
     @available(iOS 15.0, *)
     private func canonicalPaymentMode(_ mode: Product.SubscriptionOffer.PaymentMode) -> String {
@@ -102,7 +155,7 @@ class MakaronBridgeViewController: CAPBridgeViewController, WKScriptMessageHandl
         case "purchaseProduct":
             handlePurchaseProduct(id: id, body: body)
         case "restorePurchases":
-            handleRestorePurchases(id: id)
+            handleRestorePurchases(id: id, body: body)
         case "finishTransaction":
             handleFinishTransaction(id: id, body: body)
         default:
@@ -204,6 +257,20 @@ class MakaronBridgeViewController: CAPBridgeViewController, WKScriptMessageHandl
             return
         }
 
+#if DEBUG && targetEnvironment(simulator)
+        if usesLocalE2EPurchase {
+            do {
+                let payload = try localE2ETransactionPayload(productId: productId)
+                NSLog("[Makaron] Local E2E purchase completed product=%@ transaction=%@", productId, payload["transactionId"] as? String ?? "")
+                sendNativeResponse(id: id, ok: true, error: nil, extra: payload)
+            } catch {
+                sendNativeResponse(id: id, ok: false, error: error.localizedDescription)
+            }
+            return
+        }
+#endif
+        let introductoryOfferOnly = body["introductoryOfferOnly"] as? Bool ?? false
+
         NSLog("[Makaron] StoreKit purchase requested product=%@ response=%@", productId, id)
         Task { @MainActor in
             do {
@@ -214,7 +281,21 @@ class MakaronBridgeViewController: CAPBridgeViewController, WKScriptMessageHandl
                     return
                 }
 
+                // A server verification failure deliberately leaves the StoreKit transaction
+                // unfinished. The primary purchase button must resume that exact transaction
+                // instead of asking a first-time subscriber to use the separate Restore action.
+                if let recovered = try await unfinishedTransaction(
+                    for: productId,
+                    introductoryOfferOnly: introductoryOfferOnly
+                ) {
+                    clearPendingPurchaseResponse(productId: productId, id: id)
+                    NSLog("[Makaron] StoreKit resumed unfinished transaction product=%@ transaction=%@ response=%@", productId, String(recovered.transaction.id), id)
+                    sendTransactionResponse(id: id, transaction: recovered.transaction, signedTransactionInfo: recovered.signedTransactionInfo)
+                    return
+                }
+
                 pendingPurchaseResponseIdsByProductId[productId] = id
+                pendingPurchaseRequiresIntroByProductId[productId] = introductoryOfferOnly
                 NSLog("[Makaron] StoreKit product ready product=%@ price=%@ response=%@", product.id, product.displayPrice, id)
 
                 var options: Set<Product.PurchaseOption> = []
@@ -233,7 +314,10 @@ class MakaronBridgeViewController: CAPBridgeViewController, WKScriptMessageHandl
                     sendTransactionResponse(id: id, transaction: transaction, signedTransactionInfo: signedTransactionInfo)
                 case .userCancelled:
                     NSLog("[Makaron] StoreKit purchase returned userCancelled product=%@ response=%@", productId, id)
-                    if let recovered = try await unfinishedTransaction(for: productId) {
+                    if let recovered = try await unfinishedTransaction(
+                        for: productId,
+                        introductoryOfferOnly: introductoryOfferOnly
+                    ) {
                         clearPendingPurchaseResponse(productId: productId, id: id)
                         NSLog("[Makaron] StoreKit recovered unfinished transaction product=%@ transaction=%@ response=%@", productId, String(recovered.transaction.id), id)
                         sendTransactionResponse(id: id, transaction: recovered.transaction, signedTransactionInfo: recovered.signedTransactionInfo)
@@ -260,12 +344,13 @@ class MakaronBridgeViewController: CAPBridgeViewController, WKScriptMessageHandl
         }
     }
 
-    private func handleRestorePurchases(id: String) {
+    private func handleRestorePurchases(id: String, body: [String: Any]) {
         guard #available(iOS 15.0, *) else {
             sendNativeResponse(id: id, ok: false, error: "Apple subscriptions require iOS 15 or later")
             return
         }
 
+        let introductoryOfferOnly = body["introductoryOfferOnly"] as? Bool ?? false
         Task {
             do {
                 try await AppStore.sync()
@@ -276,6 +361,7 @@ class MakaronBridgeViewController: CAPBridgeViewController, WKScriptMessageHandl
                     let transaction = try checkVerified(unfinished)
                     let transactionId = String(transaction.id)
                     guard transaction.revocationDate == nil else { continue }
+                    guard !introductoryOfferOnly || isIntroductoryOffer(transaction) else { continue }
                     guard !seenTransactionIds.contains(transactionId) else { continue }
                     seenTransactionIds.insert(transactionId)
                     transactions.append(transactionPayload(transaction, signedTransactionInfo: unfinished.jwsRepresentation))
@@ -286,6 +372,7 @@ class MakaronBridgeViewController: CAPBridgeViewController, WKScriptMessageHandl
                     let transactionId = String(transaction.id)
                     guard transaction.revocationDate == nil else { continue }
                     guard transaction.productType == .autoRenewable else { continue }
+                    guard !introductoryOfferOnly || isIntroductoryOffer(transaction) else { continue }
                     guard !seenTransactionIds.contains(transactionId) else { continue }
                     seenTransactionIds.insert(transactionId)
                     transactions.append(transactionPayload(transaction, signedTransactionInfo: entitlement.jwsRepresentation))
@@ -307,6 +394,13 @@ class MakaronBridgeViewController: CAPBridgeViewController, WKScriptMessageHandl
             sendNativeResponse(id: id, ok: false, error: "Missing Apple transaction ID")
             return
         }
+
+#if DEBUG && targetEnvironment(simulator)
+        if usesLocalE2EPurchase && transactionId.hasPrefix("xcode-e2e-") {
+            sendNativeResponse(id: id, ok: true, error: nil, extra: ["transactionId": transactionId])
+            return
+        }
+#endif
 
         Task {
             do {
@@ -348,6 +442,11 @@ class MakaronBridgeViewController: CAPBridgeViewController, WKScriptMessageHandl
                     let signedTransactionInfo = update.jwsRepresentation
                     await MainActor.run {
                         guard !self.handledTransactionIds.contains(transactionId) else { return }
+                        let introductoryOfferOnly = self.pendingPurchaseRequiresIntroByProductId[transaction.productID] ?? false
+                        guard !introductoryOfferOnly || self.isIntroductoryOffer(transaction) else {
+                            NSLog("[Makaron] StoreKit ignored non-intro transaction for trial response product=%@ transaction=%@", transaction.productID, transactionId)
+                            return
+                        }
                         self.handledTransactionIds.insert(transactionId)
                         guard let responseId = self.pendingPurchaseResponseIdsByProductId.removeValue(forKey: transaction.productID) else {
                             NSLog("[Makaron] StoreKit transaction update without pending web response product=%@ transaction=%@", transaction.productID, transactionId)
@@ -364,11 +463,18 @@ class MakaronBridgeViewController: CAPBridgeViewController, WKScriptMessageHandl
     }
 
     @available(iOS 15.0, *)
-    private func unfinishedTransaction(for productId: String) async throws -> (transaction: Transaction, signedTransactionInfo: String)? {
+    private func unfinishedTransaction(
+        for productId: String,
+        introductoryOfferOnly: Bool = false
+    ) async throws -> (transaction: Transaction, signedTransactionInfo: String)? {
         for await unfinished in Transaction.unfinished {
             let transaction = try checkVerified(unfinished)
             guard transaction.revocationDate == nil else { continue }
             guard transaction.productID == productId else { continue }
+            guard !introductoryOfferOnly || isIntroductoryOffer(transaction) else {
+                NSLog("[Makaron] StoreKit skipped unfinished non-intro transaction product=%@ transaction=%@", productId, String(transaction.id))
+                continue
+            }
             return (transaction, unfinished.jwsRepresentation)
         }
         NSLog("[Makaron] StoreKit no unfinished transaction product=%@", productId)
@@ -379,7 +485,16 @@ class MakaronBridgeViewController: CAPBridgeViewController, WKScriptMessageHandl
     private func clearPendingPurchaseResponse(productId: String, id: String) {
         if pendingPurchaseResponseIdsByProductId[productId] == id {
             pendingPurchaseResponseIdsByProductId.removeValue(forKey: productId)
+            pendingPurchaseRequiresIntroByProductId.removeValue(forKey: productId)
         }
+    }
+
+    @available(iOS 15.0, *)
+    private func isIntroductoryOffer(_ transaction: Transaction) -> Bool {
+        if #available(iOS 17.2, *) {
+            return transaction.offer?.type == .introductory
+        }
+        return transaction.offerType == .introductory
     }
 
     @available(iOS 15.0, *)

@@ -68,13 +68,20 @@ describe('iOS subscription-before-registration flow', () => {
 
     expect(home).toContain('const isPreAuthIOSGuest = isIOSAppShell && !renderUser')
     expect(home).toContain("entryPoint=\"ios_preauth_trial\"")
-    expect(home).toContain('!isPreAuthIOSSkillAction && renderUploadSlots(selectedDetail, true)')
+    expect(home).toContain('{renderUploadSlots(selectedDetail, true)}')
+    expect(home).not.toContain('!isPreAuthIOSSkillAction && renderUploadSlots')
+    expect(home).toContain('data-testid="skill-photo-slots"')
+    expect(home).toContain('data-testid={`skill-photo-slot-${i}`}')
+    expect(home).toContain('data-testid="skill-before-image"')
     expect(home).toContain('confirmIOSPreAuthTrialContinuation()')
     expect(home).toContain("router.push('/login?focus=email')")
     expect(home).toContain('handleCreateFilesSelected')
     expect(home).toContain('if (createInput.files.length > 0 || createInput.text.trim())')
     expect(home).toContain('if (trialContinuation?.confirmed && !trialContinuation.linked) return')
-    expect(home).toContain('if (getCreateDraftContinuationId()) return')
+    expect(home).toContain('if (consumeDraftRef.current || getCreateDraftContinuationId()) return')
+    expect(home).toContain('Subscription is complete, but an editor project must always have user')
+    expect(home).toContain('router.replace(returnPath)')
+    expect(home).not.toContain("throw new Error('Failed to create the post-trial project')")
     expect(home).toContain("fetch('/api/auth/complete', { method: 'POST' })")
     expect(home).toContain("t('home.continueRegistration')")
     expect(home).toContain('router.replace(`/projects/${result.projectId}`)')
@@ -86,5 +93,30 @@ describe('iOS subscription-before-registration flow', () => {
     expect(login).toContain('router.replace(destination)')
     expect(login).toContain('emailRef.current?.focus')
     expect(creditPopup).toContain('await onPreAuthTrialConfirmed?.()')
+    expect(creditPopup).toContain('isPreAuthTrial,')
+    expect(creditPopup).toContain('restoreNativeApplePurchases(isPreAuthTrial)')
+  })
+
+  it('isolates StoreKit test configuration from the real-device App scheme', () => {
+    const appScheme = fs.readFileSync(
+      path.join(root, 'ios/App/App.xcodeproj/xcshareddata/xcschemes/App.xcscheme'),
+      'utf8',
+    )
+    const e2eScheme = fs.readFileSync(
+      path.join(root, 'ios/App/App.xcodeproj/xcshareddata/xcschemes/App-E2E.xcscheme'),
+      'utf8',
+    )
+    const project = fs.readFileSync(path.join(root, 'ios/App/App.xcodeproj/project.pbxproj'), 'utf8')
+
+    expect(appScheme).not.toContain('StoreKitConfigurationFileReference')
+    expect(e2eScheme).toContain('StoreKitConfigurationFileReference')
+    expect(e2eScheme).toContain('MakaronE2E.storekit')
+    expect(project).not.toContain('D10E00000000000000000001 /* MakaronE2E.storekit in Resources */')
+    expect(project).not.toContain('CODE_SIGN_ENTITLEMENTS = "App/App-E2E.entitlements"')
+
+    const bridge = fs.readFileSync(path.join(root, 'ios/App/App/MakaronBridgeViewController.swift'), 'utf8')
+    expect(bridge).toContain('introductoryOfferOnly')
+    expect(bridge).toContain('isIntroductoryOffer(transaction)')
+    expect(bridge).toContain('StoreKit skipped unfinished non-intro transaction')
   })
 })

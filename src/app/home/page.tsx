@@ -1657,39 +1657,21 @@ function HomePageInner() {
     // A staged draft owns the continuation for both generic creation and
     // Skill launches. Let the draft consumer preserve its images and Skill
     // context instead of racing this empty-project fallback.
-    if (getCreateDraftContinuationId()) return
+    if (consumeDraftRef.current || getCreateDraftContinuationId()) return
     if (continuation.kind === 'skill' && homeSkills.length === 0) return
 
     consumePreAuthTrialRef.current = true
-    const continueIntoEditor = async () => {
-      createInput.setCreating(true)
-      try {
-        const supabase = createClient()
-        const options: ProjectLaunchOptions = {}
-        if (continuation.kind === 'skill') {
-          const homeSkill = homeSkills.find(skill => skill.id === continuation.skillId)
-          if (!homeSkill) throw new Error('The selected Skill is no longer available')
-          const skillName = homeSkill.skill_path
-            ? await installHomeSkill(homeSkill)
-            : homeSkill.id
-          options.skill = skillName
-          const launchContext = createHomeSkillLaunchContext(homeSkill, undefined, skillName)
-          if (launchContext) options.skillLaunchContext = launchContext
-        }
-
-        const result = await createProject(supabase, user.id, [], options)
-        if (!result) throw new Error('Failed to create the post-trial project')
-        saveAgentModelPreference(result.projectId, createAgentModel)
-        clearIOSPreAuthTrialContinuation()
-        router.replace(`/projects/${result.projectId}`)
-      } catch (error) {
-        console.error('Resume post-purchase creation error:', error)
-        consumePreAuthTrialRef.current = false
-        createInput.setCreating(false)
-      }
-    }
-    void continueIntoEditor()
-  }, [createAgentModel, createInput, homeSkills, installHomeSkill, router, trialContinuationVersion, user])
+    // Subscription is complete, but an editor project must always have user
+    // input. With no staged media, return to the exact Skill surface and let
+    // its existing upload guidance collect a photo instead of creating an
+    // empty project.
+    const returnPath = continuation.kind === 'skill' && continuation.skillId
+      ? `/home/${continuation.skillId}`
+      : '/home'
+    clearIOSPreAuthTrialContinuation()
+    createInput.setCreating(false)
+    router.replace(returnPath)
+  }, [createInput, homeSkills, router, trialContinuationVersion, user])
 
   const handleCreate = useCallback(async () => {
     const hasText = createInput.text.trim()
@@ -1711,7 +1693,6 @@ function HomePageInner() {
     if (isPreAuthIOSGuest) {
       if (droppedFiles.length > 0) {
         createInput.addFiles(droppedFiles)
-        beginPreAuthIOSTrial(activeSkill?.id)
       }
       return
     }
@@ -1719,7 +1700,7 @@ function HomePageInner() {
     if (!authedUser) return
     if (zipFile) { handleSkillUpload(zipFile); return }
     createInput.addFiles(droppedFiles)
-  }, [activeSkill, beginPreAuthIOSTrial, createInput, handleSkillUpload, isPreAuthIOSGuest, requireAuth])
+  }, [createInput, handleSkillUpload, isPreAuthIOSGuest, requireAuth])
 
   const handleSlotDrop = useCallback(async (e: React.DragEvent) => {
     e.preventDefault()
@@ -1727,7 +1708,6 @@ function HomePageInner() {
     if (files.length === 0) return
     if (isPreAuthIOSGuest) {
       createInput.addFiles(files)
-      beginPreAuthIOSTrial(selectedDetail?.id)
       return
     }
     if (!user && selectedDetail) {
@@ -1738,7 +1718,7 @@ function HomePageInner() {
     const authedUser = await requireAuth()
     if (!authedUser) return
     createInput.addFiles(files)
-  }, [beginPreAuthIOSTrial, createInput, isPreAuthIOSGuest, rememberIOSSkillReturn, requireAuth, selectedDetail, user])
+  }, [createInput, isPreAuthIOSGuest, rememberIOSSkillReturn, requireAuth, selectedDetail, user])
 
   const trackUploadIntentEvent = useCallback((source: string) => {
     if (user || !activeSkill) return
@@ -1763,11 +1743,18 @@ function HomePageInner() {
     const befores = (template.before_images || []).slice(0, 3)
     const showBefores = befores.length > 0 && createInput.files.length === 0
     return (
-      <div style={{ display: 'flex', alignItems: 'center', gap: 10, overflowX: 'visible', position: 'relative', minHeight: 64 }}>
+      <div
+        data-testid="skill-photo-slots"
+        style={{ display: 'flex', alignItems: 'center', gap: 10, overflowX: 'visible', position: 'relative', minHeight: 64 }}
+      >
         {Array.from({ length: count }, (_, i) => {
           const isDragTarget = slotDragOver === i
           return (
             <div key={i}
+              data-testid={`skill-photo-slot-${i}`}
+              role={isActive ? 'button' : undefined}
+              tabIndex={isActive ? 0 : undefined}
+              aria-label={isActive ? `${t('home.uploadPhoto')} ${i + 1}` : undefined}
               onClick={async () => {
                 if (!isActive || createInput.previews[i] || createInput.creating) return
                 if (!user && selectedDetail) {
@@ -1780,6 +1767,13 @@ function HomePageInner() {
                 if (u) {
                   trackUploadIntentEvent('upload_slot')
                   createInput.fileInputRef.current?.click()
+                }
+              }}
+              onKeyDown={(e) => {
+                if (!isActive || createInput.previews[i] || createInput.creating) return
+                if (e.key === 'Enter' || e.key === ' ') {
+                  e.preventDefault()
+                  e.currentTarget.click()
                 }
               }}
               onDragEnter={(e) => { e.preventDefault(); setSlotDragOver(i) }}
@@ -1843,7 +1837,7 @@ function HomePageInner() {
             </svg>
             {befores.map((url, i, arr) => (
 
-              <img key={i} src={getThumbnailUrl(url, 200, 60, 250, 'cover')} alt=""
+              <img key={i} data-testid="skill-before-image" src={getThumbnailUrl(url, 200, 60, 250, 'cover')} alt=""
                 style={{
                   width: 96, height: 120, objectFit: 'cover',
                   border: '3px solid rgba(255,255,255,0.95)',
@@ -1860,7 +1854,7 @@ function HomePageInner() {
         )}
       </div>
     )
-  }, [createInput, handleSlotDrop, rememberIOSSkillReturn, requireAuth, selectedDetail, slotDragOver, trackUploadIntentEvent, user])
+  }, [createInput, handleSlotDrop, rememberIOSSkillReturn, requireAuth, selectedDetail, slotDragOver, t, trackUploadIntentEvent, user])
 
   const guestSkillCreateLabel = selectedDetail && !renderUser
     ? createInput.files.length > 0
@@ -1947,15 +1941,27 @@ function HomePageInner() {
 
   const handleCreateFilesSelected = useCallback((files: File[], source: string) => {
     trackFileSelected(files, source)
-    if (isPreAuthIOSGuest) beginPreAuthIOSTrial(activeSkill?.id)
-  }, [activeSkill?.id, beginPreAuthIOSTrial, isPreAuthIOSGuest, trackFileSelected])
+  }, [trackFileSelected])
 
   const handleCreateOrUpload = useCallback(() => {
     if (isPreAuthIOSGuest) {
       const continuation = readIOSPreAuthTrialContinuation()
       if (continuation?.confirmed && !continuation.linked) {
         if (activeSkill?.id) rememberIOSSkillReturn(activeSkill.id)
-        router.push('/login?focus=email')
+        void (async () => {
+          if (createInput.files.length > 0 || createInput.text.trim()) {
+            try {
+              await saveCreateDraftBeforeLogin(
+                createInput.files,
+                createInput.text.trim() || undefined,
+              )
+            } catch (error) {
+              console.error('Save pre-registration create draft error:', error)
+              return
+            }
+          }
+          router.push('/login?focus=email')
+        })()
         return
       }
       beginPreAuthIOSTrial(activeSkill?.id)
@@ -1972,16 +1978,10 @@ function HomePageInner() {
       return
     }
     handleCreate()
-  }, [activeSkill, beginPreAuthIOSTrial, createInput.fileInputRef, createInput.files.length, createInput.text, goToLoginFromEmptyCreate, handleCreate, hasEnoughPhotos, isPreAuthIOSGuest, rememberIOSSkillReturn, router, shouldLoginOnEmptyCreate, trackUploadIntent])
+  }, [activeSkill, beginPreAuthIOSTrial, createInput.fileInputRef, createInput.files, createInput.text, goToLoginFromEmptyCreate, handleCreate, hasEnoughPhotos, isPreAuthIOSGuest, rememberIOSSkillReturn, router, saveCreateDraftBeforeLogin, shouldLoginOnEmptyCreate, trackUploadIntent])
 
   const handleInputSlotClick = useCallback(async () => {
     if (isPreAuthIOSGuest) {
-      const continuation = readIOSPreAuthTrialContinuation()
-      if (continuation?.confirmed && !continuation.linked) {
-        if (selectedDetail?.id) rememberIOSSkillReturn(selectedDetail.id)
-        router.push('/login?focus=email')
-        return
-      }
       if (selectedDetail?.id) rememberIOSSkillReturn(selectedDetail.id)
       trackUploadIntent('slot')
       createInput.fileInputRef.current?.click()
@@ -1998,7 +1998,7 @@ function HomePageInner() {
       trackUploadIntent('slot')
       createInput.fileInputRef.current?.click()
     }
-  }, [createInput.fileInputRef, isPreAuthIOSGuest, rememberIOSSkillReturn, requireAuth, router, selectedDetail, trackUploadIntent, user])
+  }, [createInput.fileInputRef, isPreAuthIOSGuest, rememberIOSSkillReturn, requireAuth, selectedDetail, trackUploadIntent, user])
 
   const isVideoUrl = (url: string) => /\.(mp4|webm|mov)(\?|$)/i.test(url)
 
@@ -2472,8 +2472,14 @@ function HomePageInner() {
                 key={template.id}
                 data-testid="home-skill-card"
                 data-skill-id={template.id}
+                role="button"
+                tabIndex={0}
+                aria-label={pickLocalizedValue(template.labels, locale)}
                 className={`mkr-skill-card${categoryHasChanged ? '' : ' mkr-row-enter'}`}
                 onClick={(e) => handleSkillCardClick(template, e)}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter' || e.key === ' ') e.currentTarget.click()
+                }}
                 style={{
                   position: 'relative',
                   aspectRatio: '3 / 4',
@@ -2556,7 +2562,7 @@ function HomePageInner() {
             {selectedDetail && !isDesktop && (
               <div style={{ padding: '0 4px 10px', display: 'flex', flexDirection: 'column', gap: 8 }}>
                 {renderTemplateLabel(selectedDetail)}
-                {!isPreAuthIOSSkillAction && renderUploadSlots(selectedDetail, true)}
+                {renderUploadSlots(selectedDetail, true)}
               </div>
             )}
             <CreateInputBox
@@ -2872,7 +2878,7 @@ function HomePageInner() {
                       <div style={{ position: 'absolute', bottom: 24, left: 0, right: 0, zIndex: 1 }}>
                         <div style={{ padding: '0 16px', display: 'flex', flexDirection: 'column', gap: 10 }}>
                           {renderTemplateLabel(template)}
-                          {template.id === selectedDetail?.id && !isPreAuthIOSSkillAction && renderUploadSlots(template, true)}
+                          {template.id === selectedDetail?.id && renderUploadSlots(template, true)}
                         </div>
                       </div>
                     )}
