@@ -17,14 +17,23 @@ interface LegacyChangelogEntry {
 
 type LocalizedChangelogEntry = {
   date: string;
-  localeKey: 'tiktokVideoSkill' | 'sourcePlayback' | 'externalSourceRanges' | 'seedance25' | 'minimaxH3' | 'multilingualAsr' | 'editableRemotion' | 'editableLayers';
+  localeKey: 'talkingHeadEditing' | 'smarterEditableDiscovery' | 'tiktokVideoSkill' | 'sourcePlayback' | 'externalSourceRanges' | 'seedance25' | 'minimaxH3' | 'multilingualAsr' | 'editableRemotion' | 'editableLayers';
 };
 
 type ChangelogEntry = LegacyChangelogEntry | LocalizedChangelogEntry;
 
 const CHANGELOG: ChangelogEntry[] = [
+  { date: '2026-08-24', en: { title: 'Any Google Font, Preview to Export', items: ['Remotion now loads Google Fonts on demand and pins the same font files for Preview and MP4 export, removing the built-in font-list limit.'] }, zh: { title: '任意 Google Fonts，从预览到导出', items: ['Remotion 现在按需加载 Google Fonts，并让 Preview 与 MP4 导出使用同一份固定字体文件，不再受内置字体列表限制。'] } },
   {
-    date: '2026-08-13',
+    date: '2026-08-22',
+    localeKey: 'talkingHeadEditing',
+  },
+  {
+    date: '2026-08-19',
+    localeKey: 'smarterEditableDiscovery',
+  },
+  {
+    date: '2026-08-19',
     localeKey: 'tiktokVideoSkill',
   },
   {
@@ -965,11 +974,24 @@ const iOSAppTopGap = 'max(96px, calc(env(safe-area-inset-top, 0px) + 40px))';
 const iOSAppBottomGap = 'max(14px, env(safe-area-inset-bottom, 0px))';
 
 const LOCALIZED_CHANGELOG_KEYS = {
+  talkingHeadEditing: {
+    title: 'changelog.talkingHeadEditing.title',
+    items: [
+      'changelog.talkingHeadEditing.item1',
+      'changelog.talkingHeadEditing.item2',
+      'changelog.talkingHeadEditing.item3',
+    ],
+  },
+  smarterEditableDiscovery: {
+    title: 'changelog.smarterEditableDiscovery.title',
+    items: ['changelog.smarterEditableDiscovery.item1'],
+  },
   tiktokVideoSkill: {
     title: 'changelog.tiktokVideoSkill.title',
     items: [
       'changelog.tiktokVideoSkill.item1',
       'changelog.tiktokVideoSkill.item2',
+      'changelog.tiktokVideoSkill.item3',
     ],
   },
   sourcePlayback: {

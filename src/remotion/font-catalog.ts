@@ -73,11 +73,12 @@ export interface RemotionFontTiming {
 }
 
 export const REMOTION_FONT_CATALOG_VERSION = catalogData.version;
-export const REMOTION_FONT_RUNTIME_VERSION = 'remotion-font-runtime-r7-legacy-platform-fonts';
+export const REMOTION_FONT_RUNTIME_VERSION = 'remotion-font-runtime-r10-google-fonts-on-demand';
 export const REMOTION_FONT_CATALOG = catalogData.families as RemotionFontCatalogDefinition[];
 export const REMOTION_DEFAULT_SANS = 'Inter';
 export const REMOTION_DEFAULT_CJK_SANS = 'Noto Sans SC';
 export const REMOTION_DEFAULT_CJK_SERIF = 'Noto Serif SC';
+export const REMOTION_DEFAULT_SYMBOLS = 'Noto Sans Symbols 2';
 export const REMOTION_DEFAULT_EMOJI = 'Noto Color Emoji';
 
 const BUNDLED_REMOTION_FONT_FAMILY_MANIFEST: RemotionFontFamilyManifest = {
@@ -114,6 +115,47 @@ function roundedMs(value: number): number {
 
 function cleanFamily(value: string): string {
   return value.trim().replace(/^['"]|['"]$/g, '').trim();
+}
+
+function collectStringValues(value: unknown, values: Set<string>): void {
+  if (typeof value === 'string') {
+    values.add(value);
+    return;
+  }
+  if (Array.isArray(value)) {
+    for (const item of value) collectStringValues(item, values);
+    return;
+  }
+  if (value && typeof value === 'object') {
+    for (const item of Object.values(value)) collectStringValues(item, values);
+  }
+}
+
+/**
+ * Collects authored font-family candidates before a remote manifest exists.
+ * The returned values are only candidates: server-side Google Fonts discovery
+ * decides which names are real Google families, while local/system names keep
+ * being rejected by prepareRemotionFontCode().
+ */
+export function collectRemotionFontFamilyCandidates(input: {
+  code: string;
+  props?: Record<string, unknown>;
+  substitutions?: Record<string, string>;
+}): string[] {
+  const values = new Set<string>();
+  for (const match of input.code.matchAll(/fontFamily\s*:\s*(['"`])([\s\S]*?)\1/g)) {
+    if (match[1] === '`' && match[2].includes('${')) continue;
+    for (const family of match[2].split(',').map(cleanFamily).filter(Boolean)) {
+      if (!GENERIC_FAMILIES.has(family.toLowerCase())) values.add(family);
+    }
+  }
+  // Helper props and persisted composition props can carry a family name into
+  // style={{fontFamily: someProp}}. Keep their exact string values available
+  // for matching against @remotion/google-fonts on the server.
+  for (const match of input.code.matchAll(/(['"`])([\s\S]*?)\1/g)) values.add(match[2]);
+  collectStringValues(input.props, values);
+  for (const target of Object.values(input.substitutions || {})) values.add(target);
+  return [...values];
 }
 
 function slug(value: string): string {
@@ -242,10 +284,17 @@ function internalStack(
   const fallback = available.has(fallbackName.toLowerCase())
     ? internalRemotionFontFamily(fallbackName, manifest.version)
     : primary;
+  const symbols = available.has(REMOTION_DEFAULT_SYMBOLS.toLowerCase())
+    ? internalRemotionFontFamily(REMOTION_DEFAULT_SYMBOLS, manifest.version)
+    : fallback;
   const emoji = available.has(REMOTION_DEFAULT_EMOJI.toLowerCase())
     ? internalRemotionFontFamily(REMOTION_DEFAULT_EMOJI, manifest.version)
     : fallback;
-  return [...new Set([primary, fallback, emoji])].map(quotedFamily).join(', ') + `, ${generic}`;
+  // Keep emoji before symbols so characters with a real emoji presentation
+  // stay colorful. Plain Unicode symbols that Noto Color Emoji does not own
+  // (for example U+2726 BLACK FOUR POINTED STAR) continue into the pinned
+  // symbol face instead of depending on a macOS/Linux system fallback.
+  return [...new Set([primary, fallback, emoji, symbols])].map(quotedFamily).join(', ') + `, ${generic}`;
 }
 
 export function prepareRemotionFontCode(input: {
@@ -313,8 +362,16 @@ export function prepareRemotionFontCode(input: {
     if (canonical) addDynamicAlias(source, canonical);
   }
 
-  const defaultFamilies = [REMOTION_DEFAULT_SANS, REMOTION_DEFAULT_CJK_SANS, REMOTION_DEFAULT_EMOJI];
-  for (const family of defaultFamilies) if (!usedFamilies.includes(family)) usedFamilies.push(family);
+  const available = manifestFamilies(input.manifest);
+  const defaultFamilies = [
+    REMOTION_DEFAULT_SANS,
+    REMOTION_DEFAULT_CJK_SANS,
+    REMOTION_DEFAULT_EMOJI,
+    REMOTION_DEFAULT_SYMBOLS,
+  ];
+  for (const family of defaultFamilies) {
+    if (available.has(family.toLowerCase()) && !usedFamilies.includes(family)) usedFamilies.push(family);
+  }
   return {
     code,
     defaultFontFamily: internalStack(REMOTION_DEFAULT_SANS, 'sans-serif', input.manifest),
@@ -334,9 +391,28 @@ export function prepareRemotionFontCodeFromBundledCatalog(input: {
   props?: Record<string, unknown>;
   substitutions?: Record<string, string>;
 }): PreparedRemotionFonts {
+  const directFamilies = new Set<string>();
+  for (const match of input.code.matchAll(/fontFamily\s*:\s*(['"`])([\s\S]*?)\1/g)) {
+    if (match[1] === '`' && match[2].includes('${')) continue;
+    for (const family of match[2].split(',').map(cleanFamily).filter(Boolean)) {
+      if (!GENERIC_FAMILIES.has(family.toLowerCase()) && !family.startsWith('Makaron_')) {
+        directFamilies.add(family);
+      }
+    }
+  }
+  for (const family of Object.values(input.substitutions || {})) directFamilies.add(family);
+  const familyNames = new Set(REMOTION_FONT_CATALOG.map(({ family }) => family.toLowerCase()));
   return prepareRemotionFontCode({
     ...input,
-    manifest: BUNDLED_REMOTION_FONT_FAMILY_MANIFEST,
+    manifest: {
+      ...BUNDLED_REMOTION_FONT_FAMILY_MANIFEST,
+      faces: [
+        ...BUNDLED_REMOTION_FONT_FAMILY_MANIFEST.faces,
+        ...[...directFamilies]
+          .filter((family) => !familyNames.has(family.toLowerCase()))
+          .map((family) => ({ family })),
+      ],
+    },
   });
 }
 
@@ -378,6 +454,15 @@ function containsEmoji(text: string): boolean {
   return /\p{Extended_Pictographic}/u.test(text);
 }
 
+function containsPinnedSymbol(text: string): boolean {
+  return [...text].some((char) => {
+    const codePoint = char.codePointAt(0) || 0;
+    return codePoint >= 0x2000
+      && /\p{Symbol}/u.test(char)
+      && !/\p{Extended_Pictographic}/u.test(char);
+  });
+}
+
 function closestWeight(requested: number, available: number[]): number {
   return available.reduce((best, candidate) =>
     Math.abs(candidate - requested) < Math.abs(best - requested) ? candidate : best, available[0]);
@@ -410,9 +495,11 @@ export async function loadPreparedRemotionFonts(input: {
   const waitStartedAt = nowMs();
   const selectionStartedAt = nowMs();
   const targetDocument = input.targetDocument || document;
-  const usedFamilies = input.prepared.usedFamilies.filter(
-    (family) => family !== REMOTION_DEFAULT_EMOJI || containsEmoji(input.text),
-  );
+  const usedFamilies = input.prepared.usedFamilies.filter((family) => {
+    if (family === REMOTION_DEFAULT_EMOJI) return containsEmoji(input.text);
+    if (family === REMOTION_DEFAULT_SYMBOLS) return containsPinnedSymbol(input.text);
+    return true;
+  });
   const codePoints = uniqueCodePoints(input.text);
   const facesToLoad: RemotionFontCatalogFace[] = [];
   const loadedFacesByFamily = new Map<string, RemotionFontCatalogFace[]>();
@@ -560,12 +647,18 @@ export async function loadPreparedRemotionFonts(input: {
 export async function prepareAndLoadRemotionFontsWithTiming(input: {
   code: string;
   props?: Record<string, unknown>;
-  manifestUrl: string;
+  manifestUrl?: string;
+  manifest?: RemotionFontCatalogManifest;
   substitutions?: Record<string, string>;
   targetDocument?: Document;
 }): Promise<{ prepared: PreparedRemotionFonts; timing: RemotionFontTiming }> {
   const totalStartedAt = nowMs();
-  const manifestResult = await fetchRemotionFontManifestWithTiming(input.manifestUrl);
+  if (!input.manifest && !input.manifestUrl) {
+    throw new Error('A Remotion font manifest or manifest URL is required');
+  }
+  const manifestResult = input.manifest
+    ? { manifest: validateRemotionFontManifest(input.manifest), durationMs: 0, cacheHit: false }
+    : await fetchRemotionFontManifestWithTiming(input.manifestUrl as string);
   const prepareStartedAt = nowMs();
   const prepared = prepareRemotionFontCode({
     code: input.code,
@@ -597,7 +690,8 @@ export async function prepareAndLoadRemotionFontsWithTiming(input: {
 export async function prepareAndLoadRemotionFonts(input: {
   code: string;
   props?: Record<string, unknown>;
-  manifestUrl: string;
+  manifestUrl?: string;
+  manifest?: RemotionFontCatalogManifest;
   substitutions?: Record<string, string>;
   targetDocument?: Document;
 }): Promise<PreparedRemotionFonts> {

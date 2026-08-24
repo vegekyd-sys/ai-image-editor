@@ -3,7 +3,8 @@ name: source-video-studio
 description: >
   Turn real uploaded footage into a polished talking-head edit, hybrid story,
   documentary montage, or source-led feature while preserving the footage as
-  the primary evidence.
+  primary evidence; use tiktok-video only for source-led TikTok/Douyin editing,
+  never solely because a platform is named.
 allowed-tools: read_file studio_run prepare_visual_asset analyze_video transcribe_audio analyze_image generate_image generate_animation generate_audio run_code write_file preview_frame materialize_media
 metadata:
   makaron:
@@ -22,6 +23,11 @@ metadata:
 
 The uploaded footage is the subject. Generated media may clarify or bridge, but
 must not silently replace the evidence the user supplied.
+
+Choose `tiktok-video` instead only when the request is source-led editing or
+deterministic packaging for TikTok/Douyin. If the requested result is newly
+generated motion within the selected provider's duration limit, return to
+`prompts/animate.md` even when TikTok/Douyin is the destination.
 
 ## Modes
 

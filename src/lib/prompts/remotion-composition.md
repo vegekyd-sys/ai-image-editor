@@ -100,20 +100,56 @@ Available APIs include all exports from `remotion`, `@remotion/media`, `@remotio
 - Use Remotion `<Img>`, never HTML `<img>`.
 - Subtitles, kinetic text, and scene labels are authored directly inside this
   composition. The harness does not provide a universal subtitle overlay or
-  impose shared styling. When narration is present, use the persisted
-  `transcribe_audio` narration cue sheet as the authoritative master clock.
+  impose shared styling. When narration is present, follow
+  `skills/_shared/spoken-caption.md` and use the persisted `transcribe_audio`
+  result under `skills/_shared/speech-clock.md` as the authoritative Speech
+  Clock.
   Convert cue seconds to frames once at the Composition FPS, then drive
   `<Sequence>` ranges, subtitle activation, visual emphasis, and music ducking
   from those same ranges. A linked visual scene must not end before its
   narration cue ends. Do not replace measured cue ranges with planned Script
   timing, estimated reading speed, or equal scene lengths. Wording, grouping,
   placement, typography, and motion remain specific to the current Composition.
+- When the active TikTok Skill uses its default audio route, every source
+  `<Video>` and `<OffthreadVideo>` must be explicitly silent with `volume={0}`
+  (or an equivalent deterministic mute). Use the one generated mixed VO+BGM
+  master as the only audible layer. Its persisted `transcribe_audio` cue sheet
+  drives spoken captions, linked scene ranges, and semantic visual beats;
+  planned Script timing or BGM rhythm cannot replace measured speech timing.
 - Each subtitle cue must have exactly one visible text host and one
-  non-overlapping active range. Apply the caption background and border to that
-  host, or use a wrapper that contains no second copy of the text. Never stack
+  non-overlapping active range. If the current concept intentionally uses a
+  caption background or border, apply it to that host or to a wrapper that
+  contains no second copy of the text. Never stack
   a raw caption, editable mirror, or duplicate subtitle track over the same cue.
   At each cue midpoint, confirm that one glyph silhouette is visible, not two
   slightly offset copies.
+- For narrated compositions, partition each non-empty `subtitleSyncEvidence`
+  section's measured words into one or more consecutive semantic micro-cues.
+  Each micro-cue gets one visible spoken-caption host and the measured range of
+  its own first and last word. Concatenating the flattened micro-cue texts in
+  order must reproduce the complete section text with no dropped, duplicated,
+  paraphrased, or reordered word. A Script/ASR section is not required to stay
+  inside one caption card. Editorial hooks, scene labels, `Headline`, and
+  `KineticTitle` components do not satisfy spoken-caption coverage. Narration
+  with empty section evidence or an empty micro-cue partition must be repaired
+  before publish.
+- At phone size, each ordinary micro-cue should read as one glance. An ordinary
+  cue settling into three dense lines signals a failed partition: split it at a
+  measured clause, emphasis, or breath boundary, or tighten and regenerate the
+  VO. Preserve deliberate quotations or legal copy only when the concept gives
+  them enough hold time.
+- Keyword emphasis must select text inside that spoken cue. A boolean accent
+  that recolors the entire caption host is not semantic word emphasis; keep
+  ordinary words quieter and make the chosen substring visibly distinct.
+  Styling must preserve the complete cue text exactly once. Remember that
+  `text.split(keyword)` removes the keyword: explicitly render the prefix,
+  highlighted match, and suffix (or use a capturing tokenizer), and render the
+  full cue unchanged when the match is absent. Never let the accent shape
+  survive while the actual emphasized word disappears.
+  Keep a compact emphasized substring atomic: wrap only that substring with
+  `display: 'inline-block'` and `whiteSpace: 'nowrap'` so CJK or other text
+  cannot break inside the highlighted word. This does not permit the full
+  caption prose to use `nowrap`.
 - Multi-line subtitles must also be collision-free inside that one host after
   the intended font has loaded at final canvas size. Neighboring glyph rows may
   not touch or overprint, and a cloned per-line background, pill, border, or
@@ -122,22 +158,65 @@ Available APIs include all exports from `remotion`, `@remotion/media`, `@remotio
   authored line break, or backing-shape strategy instead of introducing one
   global line-height constant or universal caption renderer. Verify the stable
   dense frame and the largest animated state, not only the cue data.
+- Long single-line subtitles must fit completely inside their platform-safe
+  bounds at the settled final font metrics. Do not use `whiteSpace: 'nowrap'`
+  or off-canvas overflow to preserve prose on one line; author a break or adjust
+  the local measure and type size. Preview the stable midpoint of every spoken
+  cue, including the longest single-line cue, rather than sampling only scenes.
+- Do not put `display: inline` + `box-decoration-break: clone` around
+  auto-wrapped subtitle prose. Lambda Chromium can fragment and paint that
+  backing differently from the interactive Preview, especially on scaled
+  exports. When the current concept actually needs a backing, use one wrapping
+  `inline-block` shape (`maxWidth: '100%'`) or explicit authored line boxes in a
+  column with real vertical gap when separate per-line shapes are essential. Do
+  not rely on browser auto-wrap plus cloned inline padding. This export safeguard
+  is not a reason to add a backing to text-only, outlined, shadowed, or
+  selectively blocked type.
+- A black subtitle plaque, colored left rail, lower-left anchor, Inter-like
+  grotesk, or repeated pop is never a default package. Use any of them only
+  when the current concept earns it; do not reproduce the same combined
+  caption treatment across unrelated compositions.
+- Interactive Player typography is provisional until the pinned font resources
+  used by server/Lambda rendering have settled. Use `preview_frame` for the
+  Agent's composition gate because it waits for those pinned resources. Studio
+  MP4 export completes asynchronously after the Agent turn, so do not pretend
+  to extract final frames before they exist. Batch, CLI, human, or later-turn
+  acceptance should extract every spoken cue midpoint, including corresponding
+  long single-line, multi-line, and backed-caption frames, from the encoded MP4.
+  If they differ from settled Preview, repair the same
+  editable Composition and materialize again; render success is not typography
+  acceptance.
+- Closing copy, CTA, or a final reveal must reach its completed state before the
+  timeline ends. Preview the last visible frame and the frame half a second
+  earlier; do not approve a close whose animation merely runs out of frames.
 - Visible line breaks must render as line breaks, never as the two characters
-  `\\n`. The shared Preview/export runtime normalizes both escaped and real
-  newlines at DOM text leaves; still verify the densest text frame because line
-  count changes the element's bounding box and platform-safe placement.
+  `\\n`. Store intended breaks as actual line feeds or explicit authored lines,
+  not backslash escapes in editable props. The shared Preview/export runtime
+  normalizes escaped newlines at renderer input and DOM text leaves as a safety
+  net, but the resolved props and closing frame still require review because
+  line count changes the element's bounding box and platform-safe placement.
 - Prefer Remotion `<Video>` or `<OffthreadVideo>`. Lowercase HTML `<video>` is
   also accepted and normalized by the harness to the injected,
   frame-synchronized `<Video>` component.
 - Decoder selection is owned by the preview/export runtime, independent of
   whether the source used `<Video>` or `<OffthreadVideo>`.
 - Use `<Sequence>` for every scene or clip so media mounts only when needed.
+- At every scene join, ensure the outgoing and incoming visual layers cover
+  their complete declared frame ranges after `trimBefore`, `trimAfter`, and
+  `playbackRate` are applied. Preview the frames on both sides of each join;
+  rounding or an exhausted media range must not expose an accidental black
+  frame between otherwise full-bleed scenes.
 - `useCurrentFrame()` inside a `<Sequence>` is already local to that Sequence.
   Do not subtract the Sequence's `from` value again; doing so keeps later-scene
   overlays at negative time and can silently hide every title/subtitle after
   the first scene.
 - Use `trimBefore`, `trimAfter`, `playbackRate`, and `volume` on `<Video>` for non-destructive timeline edits.
 - Never use `startFrom` or `endAt` for `<Video>` trimming in Makaron compositions. They are deprecated/unsafe in this runtime and can make every sequenced clip restart from the first frame. Use `trimBefore={sourceStartFrame}` and `trimAfter={sourceEndFrame}` instead.
+- When multiple `Sequence`s reuse one source prop with different trim ranges,
+  add `data-editable-ignore` to each ranged `<Video>`. Never assign the same
+  `data-editable` id to all of them: one GUI trim prop would override every
+  per-clip `trimBefore` and restart each cut at source frame zero. Keep the URL
+  as a top-level prop and the ranges in editable composition code.
 - Use `AbsoluteFill`, `interpolate`, `spring`, `Easing`, `useCurrentFrame`, and `useVideoConfig` for animation.
 
 Video trimming example:
@@ -168,6 +247,7 @@ return (
         <Video
           src={clip.src}
           trimBefore={clip.trimBefore}
+          data-editable-ignore
           style={{ width: '100%', height: '100%', objectFit: 'cover' }}
         />
       </Sequence>
@@ -225,6 +305,11 @@ Rules:
   editable advisories. Do not rewrite scenes merely to clear advisories. Make a
   local adjustment only when preview or coverage shows an intentional visible
   field is actually missing.
+- Editable coverage is opportunistic and fail-soft. Never patch otherwise
+  correct visual code only to satisfy editable metadata, never add one static
+  `data-editable` id to a reusable media helper, and never delay publishing for
+  an editable-only diagnostic. The harness keeps every proven field and safely
+  leaves uncertain fields non-editable.
 
 Ordinary reusable React components work without editor-specific parameters:
 
@@ -256,7 +341,8 @@ props, or an `editables` array to ordinary helpers.
 Use `data-editable` only for custom runtime ownership that coverage explicitly
 cannot infer. Put it on the real visual host, never on a full-canvas structural
 ancestor. Legacy explicit `editables` metadata remains accepted when patching
-an old composition, but new output should omit it.
+an old composition, but new output should omit it. If inference is incomplete,
+publish the correct composition with fewer editables instead of rewriting it.
 
 Video trim is non-destructive and belongs to the selected video node:
 
@@ -295,13 +381,9 @@ For static visuals, use `generate_image` instead of Remotion unless editability 
 - Prefer CSS gradients for atmosphere instead of a second blurred media layer.
 - Animate `transform` and opacity, not layout properties.
 - Keep filter stacks and shadows modest for iOS Safari.
-- Fonts are pinned assets shared by Player, Sandbox preview, and Lambda export. If you specify `fontFamily`, use only these catalog names:
-  - Chinese/CJK sans: `Noto Sans SC`, `Noto Sans TC`, `Noto Sans JP`, `Noto Sans KR`
-  - Chinese/CJK serif: `Noto Serif SC`, `Noto Serif TC`, `Noto Serif JP`, `Noto Serif KR`
-  - Chinese display/handwriting: `Ma Shan Zheng`, `ZCOOL KuaiLe`, `ZCOOL XiaoWei`, `ZCOOL QingKe HuangYou`, `Liu Jian Mao Cao`, `Long Cang`, `Zhi Mang Xing`, `LXGW WenKai TC`
-  - Latin: `Inter`, `Playfair Display`, `Montserrat`, `Oswald`, `Poppins`, `Lato`, `Roboto`, `Bebas Neue`, `Dancing Script`, `Pacifico`, `Lobster`, `Anton`, `Caveat`, `Raleway`, `JetBrains Mono`, `GFS Didot`, `Bodoni Moda`
+- Fonts are pinned assets shared by Player, Sandbox preview, and Lambda export. You may use any exact family name available in Google Fonts (for example `Bungee Spice`, `Cormorant Garamond`, or `Noto Sans SC`); Makaron discovers and pins it on demand before rendering.
 - Never use `Arial`, `Helvetica`, `Times New Roman`, `PingFang SC`, `Microsoft YaHei`, `STKaiti`, `Kaiti SC`, `KaiTi`, `Didot`, `Bodoni 72`, or another local/system font name. Local fonts differ between macOS and Linux and will be rejected instead of silently falling back.
-- For an old composition only, migrate a legacy family by persisting an explicit top-level `fontSubstitutions` map in the design payload (for example `{ "STKaiti": "Ma Shan Zheng", "Didot": "GFS Didot", "Arial": "Inter" }`). This is a product/design decision, not a runtime alias. New compositions must use the catalog family directly.
+- For an old composition only, migrate a legacy family by persisting an explicit top-level `fontSubstitutions` map in the design payload (for example `{ "STKaiti": "Ma Shan Zheng", "Didot": "GFS Didot", "Arial": "Inter" }`). This is a product/design decision, not a runtime alias. New compositions must use the exact Google Fonts family directly.
 
 ## Verification
 
@@ -311,6 +393,7 @@ After render or patch:
 - A `preview_frame` screenshot is a publishable workspace image. If the user wants that exact frame on the timeline, call `write_file({ fromWorkspaceOutputs: true, mediaType: "image", limit: 1 })` or pass the returned `workspacePath`; do not route it through an image model.
 - Visual verification is required for transitions, subtitles, overlays, trim timing, cropping, or any composition you are about to publish to the timeline.
 - If `preview_frame` returns an image or no explicit textual error, do not infer a Remotion compatibility failure from missing prose. Continue by patching if needed, then save/publish the composition.
+- If `preview_frame` returns an explicit infrastructure error twice for the same mechanically valid draft, do not rewrite the composition again or stop a requested MP4 delivery. Publish the saved draft, materialize the MP4, and disclose that frame preview was unavailable; the exported file becomes the next QA artifact.
 - For trim edits, verify the final `animation.durationInSeconds` matches the actual total frame count before saving or publishing.
 - Capture stable middle frames for each scene, not transition starts.
 - Check subject cropping, text readability, overlay placement, and final frame content.

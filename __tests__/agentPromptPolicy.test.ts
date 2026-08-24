@@ -1,11 +1,11 @@
 import { describe, expect, it } from 'vitest'
-import { readFileSync } from 'fs'
 import path from 'path'
+import { readAgentAwareSource } from './helpers/agentRuntimeSource'
 
 const root = path.resolve(__dirname, '..')
 
 function read(rel: string) {
-  return readFileSync(path.join(root, rel), 'utf8')
+  return readAgentAwareSource(root, rel)
 }
 
 describe('agent prompt policy guards', () => {
@@ -89,11 +89,11 @@ describe('agent prompt policy guards', () => {
     const agentTs = read('src/lib/agent.ts')
     const audio = read('src/lib/prompts/audio.md')
 
-    expect(agentTs).toContain('generate_audio: tool({')
+    expect(agentTs).toContain('function createGenerateAudioTool(')
     expect(agentTs).toContain('kind: z.enum([\'voiceover\', \'dialogue\', \'music\', \'sound_design\', \'mixed\'])')
-    expect(agentTs).not.toContain('generate_voiceover: tool({')
-    expect(agentTs).not.toContain('list_voiceover_voices: tool({')
-    expect(agentTs).not.toContain('generate_music: tool({')
+    expect(agentTs).not.toContain('function createGenerateVoiceoverTool(')
+    expect(agentTs).not.toContain('function createListVoiceoverVoicesTool(')
+    expect(agentTs).not.toContain('function createGenerateMusicTool(')
     expect(audio).toContain('Use `kind: "voiceover"` only when')
     expect(audio).toContain('Voice Performance Brief')
     expect(audio).toContain('do not switch providers')
@@ -200,6 +200,19 @@ describe('agent prompt policy guards', () => {
     expect(agentTs).toContain('you must have read and internalized that skill prompt once')
   })
 
+  it('leaves platform-aware engine selection to Agent judgment instead of backend keyword rules', () => {
+    const agent = read('src/lib/prompts/agent.md')
+    const agentTs = read('src/lib/agent.ts')
+
+    expect(agent).toContain('Video routes by duration and requested operation before platform packaging')
+    expect(agent).toContain('read `prompts/animate.md` before any platform or content Skill')
+    expect(agent).toContain('TikTok, Douyin, Reels, exact copy, subtitles, branding, multiple shots')
+    expect(agent).toContain('Exercise this routing judgment in the Agent')
+    expect(agent).toContain('do not wait for backend keyword rules')
+    expect(agentTs).not.toContain('getImplicitSkillSystemDirective')
+    expect(agentTs).not.toContain('implicit-skill-routing')
+  })
+
   it('requires script confirmation before video provider submission unless direct-submit is explicit', () => {
     const agent = read('src/lib/prompts/agent.md')
     const agentTs = read('src/lib/agent.ts')
@@ -256,6 +269,13 @@ describe('agent prompt policy guards', () => {
     expect(animate).toContain('Do not submit only a single shot or a single line from the script')
     expect(animate).toContain('Multiple shots are normal inside one 15s video')
     expect(animate).toContain('exactly 16-30s and selects Seedance 2.5')
+    expect(animate).toContain('## Seedance 2.5 Longer-Form Direction (16-30s)')
+    expect(animate).toContain('Do not write a 15s idea and stretch it to 30s')
+    expect(animate).toContain('**16-20s:** usually 4-6 distinct shots')
+    expect(animate).toContain('**21-30s:** usually 6-9 distinct shots')
+    expect(animate).toContain('The sum of all `Shot N (Xs):` durations must equal the requested duration exactly')
+    expect(animate).toContain('Re-anchor the main subject or motif every 2-3 shots')
+    expect(animate).toContain('Give native audio its own arc')
     expect(animate).toContain("If the source/reference video itself is longer than the selected model's input limit")
     expect(animate).toContain('For longer sources, use the long-video-director workflow instead of one short compressed edit')
     expect(animate).toContain('**30 seconds for Seedance 2.5**')
@@ -283,6 +303,9 @@ describe('agent prompt policy guards', () => {
     expect(agentTs).toContain('frame pixels width*height between 409,600 and 2,086,876')
     expect(agentTs).toContain('Kling video references must be <=200MB and <=2K; no explicit lower resolution is documented')
     expect(agentTs).toContain("clamped to 4-15s for SeeDance 2.0 or 4-30s for SeeDance 2.5")
+    expect(agentTs).toContain("const isSeedance25Edit = videoModel === 'seedance-2.5' && video_operation === 'edit'")
+    expect(agentTs).toContain('outputDuration: isSeedance25Edit ? -1 : duration')
+    expect(agentTs).toContain('requestedDuration: isSeedance25Edit ? undefined : duration')
     expect(agentTs).not.toContain('Duration in seconds: 3, 5, 7, 10, or 15')
     expect(agentTs).not.toContain("The model's minimum generation duration is 5 seconds")
   })
@@ -291,22 +314,27 @@ describe('agent prompt policy guards', () => {
     const agent = read('src/lib/prompts/agent.md')
     const agentTs = read('src/lib/agent.ts')
     const workspace = read('src/lib/workspace.ts')
+    const normalizedWorkspace = workspace.replace(/\\/g, '')
     const longVideoDirector = read('src/skills/long-video-director/SKILL.md')
 
     expect(agent).toContain('The skill manifest routes clear matches')
     expect(agent).toContain('read `skills/NAME/SKILL.md`')
     expect(agent).toContain('that Skill owns its workflow')
-    expect(agent).toContain("Video routes by the selected model's duration limit first")
-    expect(agent).toContain('SeeDance 2.0 is <=15s')
-    expect(agent).toContain('SeeDance 2.5 generation may be 4-30s')
+    expect(agent).toContain('Video routes by duration and requested operation before platform packaging')
+    expect(agent).toContain('SeeDance 2.0 supports up to 15s')
+    expect(agent).toContain('explicitly selected SeeDance 2.5 generation supports up to 30s')
     expect(agent).toContain('read `prompts/animate.md` and use `generate_animation`')
+    expect(agent).toContain('read `prompts/animate.md` before any platform or content Skill')
+    expect(agent).toContain('TikTok, Douyin, Reels, exact copy, subtitles, branding, multiple shots')
+    expect(agent).toContain('Select a Composition Skill only for explicit Studio/Remotion/editability')
     expect(agent).toContain('Model selection happens after workflow routing')
     expect(agent).not.toContain('matched built-in Composition requests route to that editable workflow')
     expect(agentTs).toContain('A video up to and including 15 seconds stays on direct \\`generate_animation\\`')
     expect(agentTs).not.toContain('resolveVideoWorkflowRoute')
     expect(agentTs).not.toContain('videoWorkflowRoute')
     expect(workspace).toContain('This is the semantic routing index')
-    expect(workspace).toContain('choose the smallest workflow first')
+    expect(workspace).toContain('Video routes by duration and operation before semantic packaging')
+    expect(normalizedWorkspace).toContain('reads `prompts/animate.md` first')
     expect(workspace).toContain('extras.push(`Studio Run recipe:')
     expect(workspace).toContain('extras.push(`profile:')
     expect(longVideoDirector).toContain('Do not use this workflow when the selected built-in skill requires Studio Run')

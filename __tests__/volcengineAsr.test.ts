@@ -1,9 +1,17 @@
 import { afterEach, describe, expect, it, vi } from 'vitest'
+import { execFile } from 'child_process'
+import { mkdtemp, rm } from 'fs/promises'
+import { tmpdir } from 'os'
+import path from 'path'
+import { promisify } from 'util'
 import {
   isAsrTranscriptCacheCompatible,
   transcribeWithVolcengineAsr,
   type VolcengineAsrTranscript,
 } from '@/lib/volcengine-asr'
+import { findFfmpeg } from '@/lib/ffmpeg-runtime'
+
+const execFileAsync = promisify(execFile)
 
 function cachedTranscript(requestedLanguage?: string): VolcengineAsrTranscript {
   return {
@@ -151,6 +159,45 @@ describe('volcengine ASR client', () => {
       mediaUrl: 'https://cdn.example.com/audio.wav',
       requestId: 'req-2',
     })).resolves.toMatchObject({ requestId: 'req-2' })
+  })
+
+  it('extracts audio from a video before sending the provider request', async () => {
+    vi.stubEnv('VOLCENGINE_ASR_API_KEY', 'test-api-key')
+    const workDir = await mkdtemp(path.join(tmpdir(), 'makaron-video-asr-test-'))
+    const localVideo = path.join(workDir, 'source.mp4')
+    const ffmpeg = await findFfmpeg()
+    await execFileAsync(ffmpeg, [
+      '-hide_banner', '-loglevel', 'error',
+      '-f', 'lavfi', '-i', 'color=c=blue:size=160x90:rate=12',
+      '-f', 'lavfi', '-i', 'sine=frequency=440:sample_rate=16000',
+      '-t', '1', '-shortest', '-c:v', 'libx264', '-pix_fmt', 'yuv420p',
+      '-c:a', 'aac', '-movflags', '+faststart', '-y', localVideo,
+    ])
+
+    const fetchMock = vi.fn(async (_url: string | URL | Request, init?: RequestInit) => {
+      const rawBody = String(init?.body)
+      const body = JSON.parse(rawBody)
+      expect(body.audio.data).toEqual(expect.any(String))
+      expect(body.audio.data.length).toBeGreaterThan(100)
+      expect(body.audio).not.toHaveProperty('url')
+      expect(rawBody).not.toContain(localVideo)
+      return new Response(JSON.stringify({ result: { text: 'audio only', utterances: [] } }), {
+        status: 200,
+        headers: { 'X-Api-Status-Code': '20000000' },
+      })
+    })
+    vi.stubGlobal('fetch', fetchMock)
+
+    try {
+      await expect(transcribeWithVolcengineAsr({
+        mediaUrl: 'https://local.invalid/source.mp4',
+        localMediaPath: localVideo,
+        requestId: 'req-video-audio-only',
+      })).resolves.toMatchObject({ text: 'audio only', extractedAudio: true })
+      expect(fetchMock).toHaveBeenCalledOnce()
+    } finally {
+      await rm(workDir, { recursive: true, force: true })
+    }
   })
 
   it('fails clearly when ASR credentials are missing', async () => {

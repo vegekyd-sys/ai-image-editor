@@ -3,6 +3,9 @@ import { editableRuntimeClassName } from './scene-registry';
 
 export type EditableTransformMode = 'proxy' | 'registry';
 
+export const REMOTION_EDITABLE_RUNTIME_VERSION =
+  'remotion-editable-runtime-r4-caption-style-preserving';
+
 type ReactRuntime = typeof React;
 
 export interface EditableReactRuntime {
@@ -11,6 +14,49 @@ export interface EditableReactRuntime {
     Component: React.ComponentType<any>,
     transformMode: EditableTransformMode,
   ) => React.ComponentType<any>;
+}
+
+function normalizedEditableValue(value: unknown): string | number | boolean | null {
+  if (typeof value === 'number' || typeof value === 'boolean') return value;
+  if (typeof value !== 'string') return null;
+  return value
+    .replace(/\\r\\n|\\n|\\r/g, '\n')
+    .replace(/\r\n|\r/g, '\n')
+    .replace(/\s+/g, ' ')
+    .trim();
+}
+
+function editableValuesMatch(left: unknown, right: unknown): boolean {
+  if (Object.is(left, right)) return true;
+  const normalizedLeft = normalizedEditableValue(left);
+  const normalizedRight = normalizedEditableValue(right);
+  return normalizedLeft != null
+    && normalizedRight != null
+    && normalizedLeft === normalizedRight;
+}
+
+interface EditableIdCandidate {
+  id: string;
+  paths?: readonly string[];
+}
+
+function readEditableSourcePath(
+  props: Record<string, unknown>,
+  sourcePath: string,
+): unknown {
+  if (!sourcePath.startsWith('props')) return undefined;
+  const suffix = sourcePath.slice('props'.length);
+  const tokenPattern = /\.([A-Za-z_$][A-Za-z0-9_$]*)|\[(\d+)\]/g;
+  let consumed = 0;
+  let value: unknown = props;
+  for (const match of suffix.matchAll(tokenPattern)) {
+    if (match.index !== consumed) return undefined;
+    if (value == null || typeof value !== 'object') return undefined;
+    const key = match[1] ?? Number(match[2]);
+    value = (value as Record<string | number, unknown>)[key];
+    consumed = (match.index ?? 0) + match[0].length;
+  }
+  return consumed === suffix.length ? value : undefined;
 }
 
 const RENDERED_LINE_BREAK_RE = /(\\r\\n|\\n|\\r|\r\n|\n|\r)/g;
@@ -54,6 +100,55 @@ export function createEditableReactRuntime(
   let currentProps: Record<string, unknown> = {};
   let currentTransformMode: EditableTransformMode = 'proxy';
   const originalCreateElement = react.createElement;
+
+  const resolveEditableId = (
+    renderedValue: unknown,
+    candidates: readonly (string | EditableIdCandidate)[],
+  ): string | undefined => {
+    const normalizedCandidates = candidates.map(candidate => (
+      typeof candidate === 'string' ? { id: candidate } : candidate
+    ));
+    const candidateIds = normalizedCandidates.map(candidate => candidate.id);
+    if (candidateIds.length === 1) return candidateIds[0];
+    const candidateValues = (candidate: EditableIdCandidate): unknown[] => [
+      currentProps[candidate.id],
+      ...(candidate.paths ?? []).map(path => readEditableSourcePath(currentProps, path)),
+    ];
+    const exactMatches = normalizedCandidates.filter(candidate => (
+      candidateValues(candidate).some(value => Object.is(value, renderedValue))
+    ));
+    if (exactMatches.length === 1) return exactMatches[0].id;
+
+    const normalizedRendered = normalizedEditableValue(renderedValue);
+    if (normalizedRendered == null) return undefined;
+    const normalizedMatches = normalizedCandidates.filter(candidate => (
+      candidateValues(candidate).some(value => (
+        normalizedEditableValue(value) === normalizedRendered
+      ))
+    ));
+    if (normalizedMatches.length === 1) return normalizedMatches[0].id;
+
+    if (typeof normalizedRendered !== 'string') return undefined;
+    const caseFolded = normalizedRendered.toLocaleLowerCase();
+    const caseInsensitiveMatches = normalizedCandidates.filter(candidate => {
+      return candidateValues(candidate).some(value => {
+        const normalized = normalizedEditableValue(value);
+        return typeof normalized === 'string'
+          && normalized.toLocaleLowerCase() === caseFolded;
+      });
+    });
+    if (caseInsensitiveMatches.length === 1) return caseInsensitiveMatches[0].id;
+
+    const containedMatches = normalizedCandidates.filter(candidate => (
+      candidateValues(candidate).some(value => {
+        const normalized = normalizedEditableValue(value);
+        return typeof normalized === 'string'
+          && normalized.length > 0
+          && caseFolded.includes(normalized.toLocaleLowerCase());
+      })
+    ));
+    return containedMatches.length === 1 ? containedMatches[0].id : undefined;
+  };
 
   const readFrameProp = (key: string): number | undefined => {
     const value = currentProps[key];
@@ -122,11 +217,37 @@ export function createEditableReactRuntime(
     let nextChildren = children;
     if (nextProps && typeof nextProps['data-editable'] === 'string') {
       const id = nextProps['data-editable'];
+      const hasProvenanceValue = Object.prototype.hasOwnProperty.call(
+        nextProps,
+        'data-editable-provenance',
+      );
+      const provenanceValue = nextProps['data-editable-provenance'];
+      if (hasProvenanceValue) {
+        const { 'data-editable-provenance': _provenanceValue, ...rest } = nextProps;
+        void _provenanceValue;
+        nextProps = rest;
+      }
       const renderedChildren = nextChildren.length > 0
         ? nextChildren
         : react.Children.toArray(nextProps.children as React.ReactNode);
-      const ownsTransform = !hasSameIdEditableDescendant(renderedChildren, id);
       const textOverride = currentProps[id];
+      // A static marker on a reusable media helper can otherwise claim every
+      // <Video>/<Img> instance and replace all sources with one prop. Compiler
+      // markers carry provenance and are safe; legacy static markers only own
+      // a direct media node when that node is actually rendering their value.
+      const ownsMediaSource = !nextProps
+        || !('src' in nextProps)
+        || hasProvenanceValue
+        || editableValuesMatch(nextProps.src, textOverride);
+      if (!ownsMediaSource && nextProps && 'src' in nextProps) {
+        const { 'data-editable': _unsafeMediaMarker, ...rest } = nextProps;
+        void _unsafeMediaMarker;
+        nextProps = rest;
+      }
+      const ownsTransform = (
+        !hasSameIdEditableDescendant(renderedChildren, id)
+        && ownsMediaSource
+      );
       const ownsTextLeaf = (
         ownsTransform
         && typeof type === 'string'
@@ -142,11 +263,37 @@ export function createEditableReactRuntime(
         ownsTextLeaf
         && (typeof textOverride === 'string' || typeof textOverride === 'number')
       ) {
-        if (nextChildren.length > 0) {
+        if (hasProvenanceValue) {
+          const replaceProvenanceChild = (child: React.ReactNode): React.ReactNode => {
+            if (Object.is(child, provenanceValue)) return textOverride;
+            const childValue = normalizedEditableValue(child);
+            const sourceValue = normalizedEditableValue(provenanceValue);
+            return childValue != null && childValue === sourceValue ? textOverride : child;
+          };
+          if (nextChildren.length > 0) {
+            nextChildren = nextChildren.map(replaceProvenanceChild);
+          } else {
+            nextProps = {
+              ...nextProps,
+              children: react.Children.map(
+                nextProps.children as React.ReactNode,
+                replaceProvenanceChild,
+              ),
+            };
+          }
+        } else if (nextChildren.length > 0) {
           nextChildren = [textOverride];
         } else {
           nextProps = { ...nextProps, children: textOverride };
         }
+      }
+      if (
+        ownsTransform
+        && typeof textOverride === 'string'
+        && nextProps
+        && 'src' in nextProps
+      ) {
+        nextProps = { ...nextProps, src: textOverride };
       }
 
       const position = currentProps[`_pos_${id}`] as
@@ -233,6 +380,7 @@ export function createEditableReactRuntime(
   const patchedReact = new Proxy(react, {
     get(target, prop) {
       if (prop === 'createElement') return patchedCreateElement;
+      if (prop === '__makaronEditableId') return resolveEditableId;
       return Reflect.get(target, prop);
     },
   });

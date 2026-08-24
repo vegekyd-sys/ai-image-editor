@@ -19,6 +19,18 @@ describe('Remotion audio detection', () => {
     expect(hasRemotionAudioSources('return React.createElement(Remotion.OffthreadVideo, { src })')).toBe(true)
   })
 
+  it('keeps audio enabled when React.createElement is assigned to a local alias', () => {
+    const code = `
+      const h = React.createElement;
+      return h(Video, { src: props.sourceVideo, trimBefore: 30, trimAfter: 90 });
+    `
+    expect(hasRemotionAudioSources(code)).toBe(true)
+  })
+
+  it('does not treat an unused React.createElement alias as audio', () => {
+    expect(hasRemotionAudioSources('const h = React.createElement; return h(Img, { src })')).toBe(false)
+  })
+
   it('mutes purely visual compositions', () => {
     expect(hasRemotionAudioSources('return <AbsoluteFill><Img src="x.jpg" /></AbsoluteFill>')).toBe(false)
   })

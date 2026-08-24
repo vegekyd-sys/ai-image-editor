@@ -463,6 +463,49 @@ describe('Editable Manifest compiler', () => {
     });
   });
 
+  it('traces video provenance through a local JSX alias and conditional wrapper', () => {
+    const props = {
+      clipOne: 'https://example.com/one.mp4',
+      clipTwo: 'https://example.com/two.mp4',
+      clipThree: 'https://example.com/three.mp4',
+    };
+    const input = {
+      code: `
+        function VideoFill({ src, loop = false }) {
+          const videoNode = <Video src={src} />;
+          return loop ? <Loop durationInFrames={90}>{videoNode}</Loop> : videoNode;
+        }
+        function Composition(props) {
+          return (
+            <AbsoluteFill>
+              <VideoFill src={props.clipOne} />
+              <VideoFill src={props.clipTwo} loop />
+              <VideoFill src={props.clipThree} />
+            </AbsoluteFill>
+          );
+        }
+      `,
+      props,
+    };
+    const result = compileEditableManifest(input);
+
+    expect(result.diagnostics).toEqual([]);
+    expect(result.editables.filter(field => field.type === 'video')).toEqual([
+      { id: 'clipOne', type: 'video', label: 'Clip one', propKey: 'clipOne' },
+      { id: 'clipTwo', type: 'video', label: 'Clip two', propKey: 'clipTwo' },
+      { id: 'clipThree', type: 'video', label: 'Clip three', propKey: 'clipThree' },
+    ]);
+    expect(result.code.match(/data-editable=\{__makaronEditable_src\}/g)).toHaveLength(1);
+    expect(result.code).toContain('__makaronEditable_src="clipOne"');
+    expect(result.code).toContain('__makaronEditable_src="clipTwo"');
+    expect(result.code).toContain('__makaronEditable_src="clipThree"');
+    expect(compileEditableManifest({
+      code: result.code,
+      props,
+      editables: result.editables,
+    })).toEqual(result);
+  });
+
   it('migrates an old compiler marker from Video to its DOM owner box', () => {
     const props: Record<string, unknown> = {
       title: 'WeChat growth moments',

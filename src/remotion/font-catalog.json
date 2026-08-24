@@ -1,5 +1,5 @@
 {
-  "version": "makaron-fonts-r1",
+  "version": "makaron-fonts-r2-symbol-fallback",
   "families": [
     { "family": "Inter", "weights": [400, 500, 600, 700, 900] },
     { "family": "Noto Sans SC", "weights": [400, 500, 600, 700, 900] },
@@ -11,6 +11,7 @@
     { "family": "Noto Sans KR", "weights": [400, 700] },
     { "family": "Noto Serif KR", "weights": [400, 700] },
     { "family": "Noto Serif", "weights": [400, 700] },
+    { "family": "Noto Sans Symbols 2", "weights": [400] },
     { "family": "Noto Color Emoji", "weights": [400] },
     { "family": "Ma Shan Zheng", "weights": [400] },
     { "family": "ZCOOL KuaiLe", "weights": [400] },

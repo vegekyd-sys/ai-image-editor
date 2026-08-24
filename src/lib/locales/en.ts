@@ -77,9 +77,14 @@ const en = {
   // Changelog
   'changelog.heading': 'Updates',
   'changelog.close': 'Close updates',
+  'changelog.talkingHeadEditing.title': 'Talking-Head Editing',
+  'changelog.talkingHeadEditing.item1': 'Upload a raw talking-head video and Makaron uses ASR to remove dead air, filler, repetition, and broken delivery for a smoother cut.',
+  'changelog.talkingHeadEditing.item2': 'Captions follow the retained voice with real word timing, becoming shorter, emphasized, dynamic, and still editable.',
+  'changelog.talkingHeadEditing.item3': 'Agent can add selective B-roll, infographics, and social packaging, then publish an editable composition and finished MP4.',
   'changelog.tiktokVideoSkill.title': 'TikTok-Native Video Skill',
   'changelog.tiktokVideoSkill.item1': 'The new TikTok Skill gives Agent-made vertical videos creator-native hooks, pacing, captions, packaging, and platform-aware placement while keeping every composition visually authored.',
   'changelog.tiktokVideoSkill.item2': 'Spoken captions now follow the meaning and delivery of the final voiceover, with precise word timing used for synchronization instead of mechanically chopping lines by length.',
+  'changelog.tiktokVideoSkill.item3': 'TikTok videos now mute source audio by default and use the real spoken timing from one finished VO + BGM soundtrack to synchronize visuals, captions, and keyword highlights.',
   'changelog.sourcePlayback.title': 'Smoother Source Video Playback',
   'changelog.sourcePlayback.item1': 'Source URL compositions now pause the timeline while buffering and prewarm the next trimmed clip, reducing black frames, stray shots, and cut stutters.',
   'changelog.sourcePlayback.item2': 'Playback now starts reliably on the first tap while bounded iOS decoder warmup keeps long multi-clip projects from showing captions without video or crashing Safari.',
@@ -104,6 +109,8 @@ const en = {
   'changelog.editableLayers.item2': 'Click a layer on the canvas, then move or resize it directly — no need to ask Agent to regenerate the whole result.',
   'changelog.editableLayers.item3': 'Video clips now have a trim strip with playback, scrubber, start/end handles, and range dragging.',
   'changelog.editableLayers.item4': 'Tall poster-style projects are easier to refine: selection boxes stay aligned while you scroll.',
+  'changelog.smarterEditableDiscovery.title': 'Smarter Editable Layers',
+  'changelog.smarterEditableDiscovery.item1': 'Makaron now discovers subtitles and other React-rendered content as editable layers more reliably, while preserving direct move and resize controls.',
 
   // AI status
   'status.thinking': 'Discovering possibilities...',

@@ -10,7 +10,7 @@ const meta = vi.hoisted(() => ({
     advertiserTrackingStatus: 'notDetermined',
     advertiserIDCollectionEnabled: false,
   }),
-  fetchDeferredAppLink: vi.fn().mockResolvedValue({ url: null }),
+  fetchDeferredAppLink: vi.fn().mockResolvedValue({ status: 'empty', url: null }),
   trackEvent: vi.fn().mockResolvedValue({ tracked: true }),
   flush: vi.fn().mockResolvedValue(undefined),
 }))
@@ -39,7 +39,7 @@ describe('Meta mobile app events bridge', () => {
       advertiserTrackingStatus: 'notDetermined',
       advertiserIDCollectionEnabled: false,
     })
-    meta.fetchDeferredAppLink.mockResolvedValue({ url: null })
+    meta.fetchDeferredAppLink.mockResolvedValue({ status: 'empty', url: null })
   })
 
   it('initializes the official SDK and forwards registration events', async () => {
@@ -66,11 +66,16 @@ describe('Meta mobile app events bridge', () => {
 
   it('distinguishes resolved, empty, error, and already-checked deferred lookups', async () => {
     meta.fetchDeferredAppLink.mockResolvedValueOnce({
+      status: 'resolved',
       url: 'makaron://skill/7ef2c391-a7e4-4519-ac06-62ec3acff2ac?utm_source=meta&utm_campaign=asian-culture',
+      nativeFetchStartedAt: '2026-08-20T01:02:03Z',
+      nativeFetchLatencyMs: 428,
     })
     await expect(fetchDeferredMobileAppLinkResult()).resolves.toMatchObject({
       status: 'resolved',
       url: expect.stringContaining('utm_campaign=asian-culture'),
+      nativeFetchStartedAt: '2026-08-20T01:02:03Z',
+      nativeFetchLatencyMs: 428,
       context: {
         appVersion: '1.0.6',
         appBuild: '16',
@@ -83,14 +88,28 @@ describe('Meta mobile app events bridge', () => {
     })
 
     localStorage.clear()
-    meta.fetchDeferredAppLink.mockResolvedValueOnce({ url: null })
+    meta.fetchDeferredAppLink.mockResolvedValueOnce({ status: 'empty', url: null })
     await expect(fetchDeferredMobileAppLinkResult()).resolves.toMatchObject({ status: 'empty' })
 
     localStorage.clear()
-    meta.fetchDeferredAppLink.mockRejectedValueOnce(new Error('network unavailable'))
+    meta.fetchDeferredAppLink.mockResolvedValueOnce({
+      status: 'error',
+      url: null,
+      errorDomain: 'NSURLErrorDomain',
+      errorCode: -1009,
+      errorDescription: 'The Internet connection appears to be offline.',
+      advertiserTrackingStatus: 'denied',
+      advertiserIDCollectionEnabled: false,
+    })
     await expect(fetchDeferredMobileAppLinkResult()).resolves.toMatchObject({
       status: 'error',
-      error: 'network unavailable',
+      error: 'The Internet connection appears to be offline.',
+      errorDomain: 'NSURLErrorDomain',
+      errorCode: -1009,
+      context: {
+        advertiserTrackingStatus: 'denied',
+        advertiserIDCollectionEnabled: false,
+      },
     })
     await expect(fetchDeferredMobileAppLinkResult()).resolves.toMatchObject({
       status: 'already_checked',
@@ -100,6 +119,7 @@ describe('Meta mobile app events bridge', () => {
   it('returns the deferred Meta app link only once per install', async () => {
     localStorage.clear()
     meta.fetchDeferredAppLink.mockResolvedValueOnce({
+      status: 'resolved',
       url: 'makaron://skill/7ef2c391-a7e4-4519-ac06-62ec3acff2ac',
     })
 

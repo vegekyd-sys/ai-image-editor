@@ -1,12 +1,12 @@
 import { describe, expect, it } from 'vitest'
-import { readFileSync } from 'fs'
 import path from 'path'
 import { buildAgentOutputLanguageDirective, stripAgentInternalContextForDisplay } from '@/lib/agent-response-policy'
 import { getChatSystemPrompt } from '@/lib/chat-response-policy'
 import { getTipsPromptTemplate } from '@/lib/tips-response-policy'
+import { readAgentAwareSource } from './helpers/agentRuntimeSource'
 
 const root = path.resolve(__dirname, '..')
-const read = (rel: string) => readFileSync(path.join(root, rel), 'utf8')
+const read = (rel: string) => readAgentAwareSource(root, rel)
 
 describe('Agent locale isolation', () => {
   it('enforces English in the system policy without changing the Chinese policy', () => {

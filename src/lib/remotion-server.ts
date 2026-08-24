@@ -6,7 +6,8 @@
 
 import type { DesignPayload } from '@/types';
 import { hasRemotionAudioSources } from '@/lib/remotion-audio';
-import { resolveRemotionFontManifestUrl } from '@/lib/remotion-font-manifest';
+import { resolveRemotionFontManifestUrlForDesign } from '@/lib/remotion-font-resolver';
+import { normalizeRemotionTextValue } from '@/lib/remotion-text-normalization';
 
 function readEnv(name: string): string | undefined {
   const value = process.env[name]?.replace(/\\[rn]|[\r\n]/g, '').trim();
@@ -108,12 +109,24 @@ export async function renderDesignFrame(
   design: DesignPayload,
   frame = 0,
 ): Promise<Buffer> {
+  if (readEnv('REMOTION_RENDERER') === 'local') {
+    const { renderDesignFrameLocal } = await import('@/lib/remotion-local-renderer');
+    return renderDesignFrameLocal(design, frame, {
+      cacheDir: readEnv('REMOTION_LOCAL_MEDIA_CACHE_DIR'),
+      mediaServerPort: Number(readEnv('REMOTION_LOCAL_MEDIA_PORT') || 5123),
+    });
+  }
+
   const { renderStillOnVercel } = await import('@remotion/vercel');
 
   const fps = design.animation?.fps || 30;
   const dur = design.animation?.durationInSeconds || 0;
   const durationInFrames = dur > 0 ? Math.max(1, Math.round(fps * dur)) : 1;
-  const fontManifestUrl = resolveRemotionFontManifestUrl();
+  const fontManifestUrl = await resolveRemotionFontManifestUrlForDesign({
+    code: design.code,
+    props: design.props || {},
+    substitutions: design.fontSubstitutions || {},
+  });
   // Unique output file per render — prevents concurrent renders from overwriting each other
   const outputFile = `/tmp/still-${frame}-${Date.now()}.jpeg`;
 
@@ -129,7 +142,7 @@ export async function renderDesignFrame(
         compositionId: 'dynamic-design',
         inputProps: {
           code: prepareRemotionCodeForSandbox(design.code),
-          designProps: design.props || {},
+          designProps: normalizeRemotionTextValue(design.props || {}),
           fps,
           durationInFrames,
           width: design.width || 1080,
@@ -199,7 +212,11 @@ export async function renderDesignVideo(
   const durationInFrames = Math.max(1, Math.round(fps * dur));
   const outputFile = `/tmp/remotion-export-${Date.now()}-${Math.random().toString(36).slice(2)}.mp4`;
   const hasAudio = hasRemotionAudioSources(design.code);
-  const fontManifestUrl = resolveRemotionFontManifestUrl();
+  const fontManifestUrl = await resolveRemotionFontManifestUrlForDesign({
+    code: design.code,
+    props: design.props || {},
+    substitutions: design.fontSubstitutions || {},
+  });
 
   for (let attempt = 0; attempt < 2; attempt++) {
     const sandbox = await ensureSandbox();
@@ -215,7 +232,7 @@ export async function renderDesignVideo(
         compositionId: 'dynamic-design',
         inputProps: {
           code: prepareRemotionCodeForSandbox(design.code),
-          designProps: design.props || {},
+          designProps: normalizeRemotionTextValue(design.props || {}),
           fps,
           durationInFrames,
           width: design.width || 1080,

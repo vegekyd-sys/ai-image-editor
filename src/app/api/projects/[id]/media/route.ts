@@ -79,7 +79,7 @@ export async function GET(
       const type = mediaType(snapshot)
       const videoMeta = snapshot.video_meta ?? undefined
       const url = type === 'video'
-        ? videoMeta?.videoUrl || snapshot.image_url || undefined
+        ? videoMeta?.videoUrl || undefined
         : snapshot.image_url || undefined
       const description = snapshot.description?.trim()
         || (type === 'video' ? videoMeta?.prompt?.trim() || 'Video snapshot' : undefined)

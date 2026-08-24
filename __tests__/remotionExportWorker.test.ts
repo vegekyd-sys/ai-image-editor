@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest'
 import { readFileSync } from 'fs'
 import { resolveRemotionRenderProfile } from '@/lib/remotion-export'
 import { resolveRemotionLambdaEncodingSettings } from '@/lib/remotion-encoding'
+import { readAgentRuntimeSource } from './helpers/agentRuntimeSource'
 
 const read = (path: string) => readFileSync(path, 'utf-8')
 
@@ -91,6 +92,7 @@ describe('Remotion export worker contract', () => {
     expect(exporter).toContain("renderer: 'remotion-export-v6-font-runtime-pinned'")
     expect(exporter).toContain('fontCatalogVersion: REMOTION_FONT_CATALOG_VERSION')
     expect(exporter).toContain('fontRuntimeVersion: REMOTION_FONT_RUNTIME_VERSION')
+    expect(exporter).toContain('editableRuntimeVersion: REMOTION_EDITABLE_RUNTIME_VERSION')
     expect(exporter).toContain("lambdaServeUrl: readEnv('REMOTION_LAMBDA_SERVE_URL') || null")
     expect(exporter).toContain('fontSubstitutions: design.fontSubstitutions || null')
     expect(exporter).toContain('publishSnapshotIds')
@@ -131,16 +133,19 @@ describe('Remotion export worker contract', () => {
     expect(read('src/lib/remotion-lambda-renderer.ts')).toContain('audioBitrate')
     expect(read('src/lib/remotion-lambda-renderer.ts')).toContain("readEnv('REMOTION_LAMBDA_FRAMES_PER_LAMBDA')")
     expect(read('src/lib/remotion-lambda-renderer.ts')).toContain('const DEFAULT_FRAMES_PER_LAMBDA = 20')
-    expect(read('src/lib/remotion-lambda-renderer.ts')).toContain("readPositiveInteger(readEnv('REMOTION_LAMBDA_FRAMES_PER_LAMBDA'), DEFAULT_FRAMES_PER_LAMBDA)")
+    expect(read('src/lib/remotion-lambda-renderer.ts')).toContain('resolveFramesPerLambda(')
+    expect(read('src/lib/remotion-lambda-renderer.ts')).toContain('MAX_LAMBDAS_PER_RENDER')
     expect(read('src/lib/remotion-lambda-renderer.ts')).toContain('REMOTION_LAMBDA_USE_CONCURRENCY')
     expect(read('src/lib/remotion-lambda-renderer.ts')).toContain('REMOTION_LAMBDA_TIMEOUT_MS')
     expect(read('src/lib/remotion-lambda-renderer.ts')).toContain('timeoutInMilliseconds')
     expect(read('src/lib/remotion-lambda-renderer.ts')).toContain("new URL('public/remotion-runtime.json', serveUrl)")
     expect(read('src/lib/remotion-lambda-renderer.ts')).toContain('Remotion render site is not font-pinned')
     expect(JSON.parse(read('public/remotion-runtime.json'))).toEqual({
-      runtimeVersion: 'remotion-font-runtime-r7-legacy-platform-fonts',
-      fontCatalogVersion: 'makaron-fonts-r1',
+      runtimeVersion: 'remotion-font-runtime-r10-google-fonts-on-demand',
+      fontCatalogVersion: 'makaron-fonts-r2-symbol-fallback',
+      editableRuntimeVersion: 'remotion-editable-runtime-r4-caption-style-preserving',
     })
+    expect(read('src/lib/remotion-lambda-renderer.ts')).toContain('editableRuntimeVersion !== REMOTION_EDITABLE_RUNTIME_VERSION')
     expect(read('src/remotion/DynamicDesign.tsx')).toContain('makaron-remotion-font-timing')
     expect(read('src/remotion/DynamicDesign.tsx')).toContain('props: propsObj')
     expect(read('src/lib/remotion-lambda-renderer.ts')).toContain('fontTelemetry')
@@ -153,7 +158,7 @@ describe('Remotion export worker contract', () => {
     const getRoute = read('src/app/api/remotion/export/[id]/route.ts')
     const materializeRoute = read('src/app/api/media/materialize/route.ts')
     const cli = read('packages/makaron-cli/bin/makaron.mjs')
-    const agent = read('src/lib/agent.ts')
+    const agent = readAgentRuntimeSource()
     const worker = read('workers/remotion-export-worker.ts')
     const videoSnapshotRoute = read('src/app/api/video-snapshot/[snapshotId]/route.ts')
     const videoPollCron = read('src/app/api/cron/video-poll/route.ts')

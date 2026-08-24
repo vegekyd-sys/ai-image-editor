@@ -9,12 +9,13 @@ import { promisify } from 'util'
 import { MAX_ACCEPTED_DURATION, MAX_DURATION } from '@/lib/video-upload'
 import { findFfmpeg } from '@/lib/ffmpeg-runtime'
 import { buildMediaItems, runNodeMediaCode } from '@/lib/media-sandbox'
+import { readAgentRuntimeSource } from './helpers/agentRuntimeSource'
 
 const exec = promisify(execFile)
 
 describe('Agent FFmpeg video lab', () => {
   it('allows long uploads for Agent-side FFmpeg workflows', () => {
-    expect(MAX_DURATION).toBeGreaterThanOrEqual(120)
+    expect(MAX_DURATION).toBe(900)
     expect(MAX_ACCEPTED_DURATION).toBeGreaterThan(38.776)
   })
 
@@ -23,24 +24,24 @@ describe('Agent FFmpeg video lab', () => {
     const readme = readFileSync(join(process.cwd(), 'packages/makaron-cli/README.md'), 'utf8')
     const skill = readFileSync(join(process.cwd(), 'packages/makaron-cli/skills/makaron/SKILL.md'), 'utf8')
 
-    expect(cli).toContain('const MAX_VIDEO_UPLOAD_DURATION = 120')
+    expect(cli).toContain('const MAX_VIDEO_UPLOAD_DURATION = 900')
     expect(cli).toContain('const MAX_VIDEO_UPLOAD_FILE_SIZE_MB = 50')
     expect(cli).toContain('const MAX_VIDEO_PROVIDER_REFERENCE_DURATION = 15')
     expect(cli).toContain('SEEDANCE25_MAX_VIDEO_REFERENCE_DURATION = 30')
     expect(cli).toContain('providerMaxDuration = isSeedance25 ? SEEDANCE25_MAX_VIDEO_REFERENCE_DURATION : MAX_VIDEO_PROVIDER_REFERENCE_DURATION')
     expect(cli).toContain('Math.min(providerMaxDuration')
     expect(cli).not.toContain('const MAX_VIDEO_DURATION = 15')
-    expect(readme).toContain('max 50MB, max 120s')
-    expect(skill).toContain('max 50MB, max 120s')
+    expect(readme).toContain('max 50MB, max 900s (15 minutes)')
+    expect(skill).toContain('max 50MB, max 900s (15 minutes)')
     expect(readme).toContain('frame pixels 409,600-2,086,876')
     expect(skill).toContain('frame pixels 409,600-2,086,876')
-    expect(readme).not.toContain('max 200MB, max 120s')
-    expect(skill).not.toContain('max 200MB, max 120s')
+    expect(readme).not.toContain('max 200MB, max 900s')
+    expect(skill).not.toContain('max 200MB, max 900s')
   })
 
   it('publishes direct FFmpeg MP4 deliverables to the timeline by default', () => {
     const skill = readFileSync(join(process.cwd(), 'src/skills/video-ffmpeg-lab/SKILL.md'), 'utf8')
-    const agent = readFileSync(join(process.cwd(), 'src/lib/agent.ts'), 'utf8')
+    const agent = readAgentRuntimeSource()
 
     expect(skill).toContain('if FFmpeg produces user-facing MP4 deliverables, publish them to the timeline immediately')
     expect(skill).toContain('Direct user-facing split/trim/export requests are different: publish those MP4 deliverables to the timeline')
@@ -50,7 +51,7 @@ describe('Agent FFmpeg video lab', () => {
   })
 
   it('keeps run_code workspace outputs index-backed and publishable by explicit path', () => {
-    const agent = readFileSync(join(process.cwd(), 'src/lib/agent.ts'), 'utf8')
+    const agent = readAgentRuntimeSource()
 
     expect(agent).toContain('async function ensureWorkspaceFileIndex')
     expect(agent).toContain('await ensureWorkspaceFileIndex(ctx, output)')
@@ -60,7 +61,7 @@ describe('Agent FFmpeg video lab', () => {
   })
 
   it('cleans invalid workspace output durations from published timeline titles', () => {
-    const agent = readFileSync(join(process.cwd(), 'src/lib/agent.ts'), 'utf8')
+    const agent = readAgentRuntimeSource()
 
     expect(agent).toContain('function outputDisplayName')
     expect(agent).toContain('(?:undefined|null|NaN)s?')

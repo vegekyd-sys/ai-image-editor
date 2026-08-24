@@ -26,8 +26,10 @@ describe('Makaron CLI Agent discovery', () => {
     }
   })
 
-  it('keeps the top-level skill alias synchronized with the canonical CLI skill', () => {
-    expect(read('public/skill.md')).toBe(read('packages/makaron-cli/skills/makaron/SKILL.md'))
+  it('keeps every public skill alias synchronized with the canonical CLI skill', () => {
+    const canonical = read('packages/makaron-cli/skills/makaron/SKILL.md')
+    expect(read('public/skill.md')).toBe(canonical)
+    expect(read('public/.well-known/agent-skills/makaron/SKILL.md')).toBe(canonical)
   })
 
   it('keeps discovery routes public and crawlable', () => {

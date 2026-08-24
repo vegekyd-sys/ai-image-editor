@@ -124,6 +124,32 @@ describe('agent tool history sanitizer', () => {
     expect(json).not.toContain('function Composition');
   });
 
+  it('labels compact transcript history so it cannot be mistaken for full word timing', () => {
+    const words = Array.from({ length: 45 }, (_, index) => ({
+      text: `词${index}`,
+      startMs: index * 100,
+      endMs: (index + 1) * 100,
+    }));
+    const result = sanitizeToolHistory(
+      'transcribe_audio',
+      { media_index: 1 },
+      {
+        transcriptPath: 'project/transcripts/asr-request.json',
+        transcript: {
+          provider: 'volcengine',
+          model: 'bigmodel-flash',
+          text: words.map(word => word.text).join(''),
+          utterances: [{ text: '长句', startMs: 0, endMs: 4_500, words }],
+        },
+      },
+      { rows: 0, chars: 0 },
+    );
+
+    expect(JSON.stringify(result.output)).toContain('"historyWordTimingTruncated":true');
+    expect(JSON.stringify(result.output)).toContain('Read transcriptPath');
+    expect(result.omitted).toContain('truncated_transcript_words');
+  });
+
   it('stores write_code_file as a workspace pointer instead of replaying source', () => {
     const source = `function Composition() { return '${'scene'.repeat(8_000)}'; }`;
     const result = sanitizeToolHistory(

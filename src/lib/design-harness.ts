@@ -9,9 +9,9 @@ import traverse from '@babel/traverse';
 import { transform as sucraseTransform } from 'sucrase';
 import type { EditableField } from '@/types';
 import {
-  compileEditableManifest,
   type EditableCoverage,
 } from './editor/editable-manifest';
+import { compileEditableManifestWithProvenance } from './editor/editable-provenance-compiler';
 import {
   buildRemotionEvaluatorBody,
   DYNAMIC_DESIGN_SCOPE_NAMES,
@@ -76,12 +76,13 @@ export function validateDesignDiagnostics(result: DesignResult): string[] {
  * draft or force the Agent to rewrite otherwise valid Remotion source.
  */
 export function validateDesignReport(result: DesignResult): DesignValidationReport {
+  const authoredCode = result.code;
   // Auto-fix: Replace <img> with Remotion <Img> for delayRender support
   result.code = autoFixImgTags(result.code);
   result.code = autoFixVideoTags(result.code);
 
   const authoredEditables = result.editables;
-  const manifest = compileEditableManifest({
+  const manifest = compileEditableManifestWithProvenance({
     code: result.code,
     props: result.props,
     editables: authoredEditables,
@@ -120,7 +121,13 @@ export function validateDesignReport(result: DesignResult): DesignValidationRepo
   const timelineDurationError = validateTimelineDuration(result);
   const blocking: string[] = [];
   const advisories: string[] = [...manifest.diagnostics];
+  advisories.push(...captionLayoutAdvisories(result.code));
   if (timelineDurationError) blocking.push(timelineDurationError);
+
+  // Check the Agent-authored source before editable instrumentation duplicates
+  // or decorates JSX. Integrity belongs to the composition, not compiler output.
+  const captionTextIntegrityError = validateCaptionTextIntegrity(authoredCode);
+  if (captionTextIntegrityError) blocking.push(captionTextIntegrityError);
 
   // Check 2: Hooks evaluated while the composition module is being created.
   const hookError = checkTopLevelHookCalls(result.code);
@@ -138,29 +145,136 @@ export function validateDesignReport(result: DesignResult): DesignValidationRepo
   const urlError = checkImageUrls(result.code);
   if (urlError) blocking.push(urlError);
 
-  // Check 6: Editables validation
-  // The compiler owns inferred fields and has already validated their graph.
-  // Keep the legacy validator for authored metadata only.
-  const editablesError = validateEditables(
-    authoredEditables,
-    result.code,
-    result.props,
-    compilerOwnedIds,
-  );
-  if (editablesError) blocking.push(editablesError);
+  // Check 6: Editable metadata is best-effort. A bad or stale field must never
+  // make an otherwise playable composition fail publication or ask the Agent
+  // to rewrite visual code. Keep every verified/inferred field and omit only
+  // authored fields whose ownership contract cannot be proven.
+  const invalidAuthoredIds = new Set<string>();
+  for (const field of authoredEditables ?? []) {
+    const editableError = validateEditables(
+      [field],
+      result.code,
+      result.props,
+      compilerOwnedIds,
+    );
+    if (!editableError) continue;
+    invalidAuthoredIds.add(field.id);
+    advisories.push(
+      `${editableError} The field was omitted; keep the rendered composition unchanged.`,
+    );
+  }
+  if (invalidAuthoredIds.size > 0) {
+    result.editables = result.editables?.filter(
+      field => !invalidAuthoredIds.has(field.id),
+    );
+  }
 
   const hardcodedTextError = validateHardcodedEditableText(
     result.editables,
     result.code,
     result.props,
   );
-  if (hardcodedTextError) blocking.push(hardcodedTextError);
+  if (hardcodedTextError) {
+    advisories.push(
+      `${hardcodedTextError} Keep the rendered composition unchanged; this copy can remain non-editable.`,
+    );
+  }
 
   return {
     blocking: [...new Set(blocking)],
     advisories: [...new Set(advisories)],
     editableCoverage: manifest.coverage,
   };
+}
+
+/**
+ * Catch two cross-skill caption layout hazards before settled-font Preview.
+ * These remain advisories because typography is composition-owned and an
+ * authored layout may prove safe at final resolution.
+ */
+function captionLayoutAdvisories(code: string): string[] {
+  if (!/\b(?:caption|subtitle|cue|spoken)\b/i.test(code)) return [];
+
+  const advisories: string[] = [];
+  if (/\b(?:Webkit)?BoxDecorationBreak\s*:\s*["']clone["']/.test(code)) {
+    advisories.push(
+      'Caption layout risk: auto-wrapped prose uses box-decoration-break: clone. Cloned inline padding can cover adjacent glyph rows. Prefer one block backing shape, or authored line blocks in a column with real vertical gap.',
+    );
+  }
+
+  const splitIdentifier = code.match(/\.split\(\s*([A-Za-z_$][\w$]*)\s*\)/)?.[1];
+  if (
+    splitIdentifier
+    && new RegExp(`\\{\\s*${escapeRegExp(splitIdentifier)}\\s*\\}`).test(code)
+    && !/\bwhiteSpace\s*:\s*["']nowrap["']/.test(code)
+  ) {
+    advisories.push(
+      'Caption layout risk: an emphasized substring can wrap inside the highlighted word. Keep only that compact substring atomic with display: inline-block and whiteSpace: nowrap; leave the full caption prose wrappable.',
+    );
+  }
+
+  return advisories;
+}
+
+/**
+ * Highlighting is allowed to change styling, never the spoken text. Catch the
+ * common dynamic-keyword regression where split(keyword).map(...) renders only
+ * the split segments and silently drops the delimiter itself.
+ */
+function validateCaptionTextIntegrity(code: string): string | null {
+  if (!/\b(?:caption|subtitle|cue|spoken)\b/i.test(code)) return null;
+
+  try {
+    const ast = parse(normalizeRemotionScopeDeclarations(code), {
+      sourceType: 'unambiguous',
+      plugins: ['jsx', 'typescript'],
+    });
+    const omittedKeywords = new Set<string>();
+
+    traverse(ast, {
+      CallExpression(path) {
+        const mapCallee = path.node.callee;
+        if (
+          mapCallee.type !== 'MemberExpression'
+          || mapCallee.computed
+          || mapCallee.property.type !== 'Identifier'
+          || mapCallee.property.name !== 'map'
+          || mapCallee.object.type !== 'CallExpression'
+        ) return;
+
+        const splitCall = mapCallee.object;
+        const splitCallee = splitCall.callee;
+        const delimiter = splitCall.arguments[0];
+        if (
+          splitCallee.type !== 'MemberExpression'
+          || splitCallee.computed
+          || splitCallee.property.type !== 'Identifier'
+          || splitCallee.property.name !== 'split'
+          || !delimiter
+          || delimiter.type !== 'Identifier'
+        ) return;
+
+        const callbackPath = path.get('arguments.0');
+        if (!callbackPath.isArrowFunctionExpression() && !callbackPath.isFunctionExpression()) return;
+
+        let keywordIsRendered = false;
+        callbackPath.traverse({
+          ReferencedIdentifier(identifierPath) {
+            if (identifierPath.node.name !== delimiter.name) return;
+            if (identifierPath.findParent(parent => parent.isJSXAttribute())) return;
+            keywordIsRendered = true;
+          },
+        });
+        if (!keywordIsRendered) omittedKeywords.add(delimiter.name);
+      },
+    });
+
+    if (omittedKeywords.size === 0) return null;
+    return `⚠️ Caption text integrity error: keyword highlight split drops ${[...omittedKeywords].join(', ')} from the rendered cue. Styling must preserve the exact spoken text; render the delimiter in sequence so before + keyword + after equals the original cue.`;
+  } catch {
+    // Syntax errors are already reported by checkCompile().
+    return null;
+  }
 }
 
 /** Hooks may run inside components/custom hooks, never while evaluating the source module. */
@@ -247,16 +361,23 @@ export function validateEditables(
       ? dynamicBindings.get(field.id) ?? null
       : null;
     const directOpeningTag = findEditableOpeningTag(code, field.id);
+    const compilerOpeningTag = findCompilerEditableOpeningTag(code, field.id);
     const openingTag = directOpeningTag
       ?? dynamicBinding?.openingTag
+      ?? compilerOpeningTag
       ?? (field.source === 'literal'
         ? findConditionalLiteralOpeningTag(code, field.id)
         : null);
     const compilerOwned = compilerOwnedIds.has(field.id);
     const compilerOwnsMediaBox = compilerOwned && (
       field.source === 'literal'
+      || Boolean(compilerOpeningTag)
       || Boolean(dynamicBinding?.openingTag.includes('__makaronEditable_'))
-      || Boolean(!directOpeningTag && code.includes('__makaronEditable_'))
+      || Boolean(
+        !directOpeningTag
+        && !dynamicBinding
+        && code.includes('__makaronEditable_')
+      )
     );
     if (!openingTag && !compilerOwned) {
       return `⚠️ Editable field "${field.id}" is declared but no JSX element has data-editable="${field.id}". Add data-editable to the visible editable wrapper.`;
@@ -349,6 +470,20 @@ function findConditionalLiteralOpeningTag(code: string, id: string): string | nu
     'm',
   );
   return code.match(pattern)?.[0] ?? null;
+}
+
+function findCompilerEditableOpeningTag(code: string, id: string): string | null {
+  const openingTagPattern = new RegExp(
+    '<[A-Za-z][\\w.:-]*(?:\\s|\\n|\\r)[^>]*data-editable\\s*=\\s*\\{\\s*React\\.__makaronEditableId\\([\\s\\S]*?\\)\\s*\\}[^>]*>',
+    'gm',
+  );
+  const idPattern = new RegExp(
+    `["']id["']\\s*:\\s*["']${escapeRegExp(id)}["']`,
+  );
+  for (const match of code.matchAll(openingTagPattern)) {
+    if (idPattern.test(match[0])) return match[0];
+  }
+  return null;
 }
 
 interface DynamicEditableBinding {

@@ -140,6 +140,20 @@ npx makaron-cli chat --project auto --image selfie.jpg --skill <marketplace-id-o
 
 `--skill` accepts an installed skill name, a marketplace UUID, or a unique marketplace label. If a marketplace skill is matched, the CLI installs or reuses it and sends `[Active skill: <installed-skill-name>]` to Makaron Agent. Ordinary users do not need admin commands, and the CLI intentionally does not expose skill deletion.
 
+### Built-in production skills
+
+Discover the available production workflows before choosing `--skill`:
+
+```bash
+npx makaron-cli skills list --built-in
+npx makaron-cli skills search "talking head captions" --built-in
+npx makaron-cli skills show talking-head --built-in
+npx makaron-cli chat --project auto --video talk.mp4 --skill talking-head -b "make a tight captioned edit"
+```
+
+The default list shows callable/discoverable skills with their purpose and input
+requirements. Add `--all` to include internal adapters and helper skills.
+
 ### With additional images (existing project)
 
 ```bash
@@ -246,7 +260,7 @@ npx makaron-cli chat --project <id> --video party.mp4 --image kid.jpg -b "make t
 npx makaron-cli chat --project <id> --video clip1.mp4 --video clip2.mp4 -b "splice these into one seamless video"
 ```
 
-Video files are uploaded via signed URL. CLI local video uploads support `.mp4`, `.mov`, or `.webm`, max 50MB, max 120s with 1s metadata tolerance, and <=1080p / 2,086,876 frame pixels. The frontend can transcode larger videos before upload; the CLI uploads directly to Storage and rejects videos above those limits.
+Video files are uploaded via signed URL. CLI local video uploads support `.mp4`, `.mov`, or `.webm`, max 50MB, max 900s (15 minutes) with 1s metadata tolerance, and <=1080p / 2,086,876 frame pixels. The frontend can transcode larger videos before upload; the CLI uploads directly to Storage and rejects videos above those limits.
 The agent understands video content natively — it can analyze scenes, edit, extend, and compose videos. Seedance video-reference editing is still limited to ~15s provider references, so longer uploaded videos should be split/prepared by the agent before model submission; Kling remains the base/direct edit path.
 Use `chat --project <id|auto> --video ...` for any project/timeline video work. Direct `video create` is standalone and does not write timeline entries.
 
@@ -414,6 +428,7 @@ type CompletionAction = {
 3. Stop when `status` is `"completed"`, `"failed"`, or `"aborted"`
 4. Top-level `status: "completed"` means ALL artifacts are ready (including rendered videos)
 5. If an async video fails, top-level `status` is `"failed"` and the failed video may include `completion_actions` for a safe retry or diagnosis. Agents can surface these as the next user-confirmed step.
+6. `responses get --wait` reconciles pending video output against completed Project Media with the same `snapshot_id` or `task_id`. A lagging Run row therefore does not block delivery after the durable project video is ready.
 
 ## Exit Codes
 

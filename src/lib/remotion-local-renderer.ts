@@ -5,10 +5,11 @@ import path from 'node:path'
 import { pipeline } from 'node:stream/promises'
 import { Readable } from 'node:stream'
 import { bundle } from '@remotion/bundler'
-import { renderMedia, selectComposition } from '@remotion/renderer'
+import { renderMedia, renderStill, selectComposition } from '@remotion/renderer'
 import type { DesignPayload } from '@/types'
 import { hasRemotionAudioSources } from '@/lib/remotion-audio'
-import { resolveRemotionFontManifestUrl } from '@/lib/remotion-font-manifest'
+import { normalizeRemotionTextValue } from '@/lib/remotion-text-normalization'
+import { resolveRemotionFontManifestUrlForDesign } from '@/lib/remotion-font-resolver'
 
 let bundlePromise: Promise<string> | null = null
 let mediaServer: http.Server | null = null
@@ -298,6 +299,11 @@ export async function renderDesignVideoLocal(
 
   const resolvedDesign = await localizeVideos(design, cacheDir, mediaServerPort)
   const serveUrl = await getBundleUrl()
+  const fontManifestUrl = await resolveRemotionFontManifestUrlForDesign({
+    code: resolvedDesign.code,
+    props: resolvedDesign.props || {},
+    substitutions: resolvedDesign.fontSubstitutions || {},
+  })
   const outputLocation = path.join(
     process.env.REMOTION_LOCAL_OUTPUT_DIR || '/tmp',
     `remotion-export-${Date.now()}-${Math.random().toString(36).slice(2)}.mp4`,
@@ -306,12 +312,12 @@ export async function renderDesignVideoLocal(
 
   const inputProps = {
     code: prepareRemotionCodeForLocalRenderer(resolvedDesign.code),
-    designProps: resolvedDesign.props || {},
+    designProps: normalizeRemotionTextValue(resolvedDesign.props || {}),
     fps,
     durationInFrames,
     width: resolvedDesign.width || 1080,
     height: resolvedDesign.height || 1920,
-    fontManifestUrl: resolveRemotionFontManifestUrl(),
+    fontManifestUrl,
     fontSubstitutions: resolvedDesign.fontSubstitutions || {},
     useNativeVideo: true,
   }
@@ -366,5 +372,75 @@ export async function renderDesignVideoLocal(
     renderSeconds: (Date.now() - t0) / 1000,
     bytes: buffer.length,
   }))
+  return buffer
+}
+
+export async function renderDesignFrameLocal(
+  design: DesignPayload,
+  frame = 0,
+  options: {
+    cacheDir?: string
+    mediaServerPort?: number
+  } = {},
+): Promise<Buffer> {
+  const fps = design.animation?.fps || 30
+  const dur = design.animation?.durationInSeconds || 1 / fps
+  const durationInFrames = Math.max(1, Math.round(fps * dur))
+  const cacheDir = options.cacheDir || process.env.REMOTION_LOCAL_MEDIA_CACHE_DIR || '/tmp/makaron-remotion-media'
+  const mediaServerPort = options.mediaServerPort || Number(process.env.REMOTION_LOCAL_MEDIA_PORT || 5123)
+  const browserExecutable = process.env.REMOTION_BROWSER_EXECUTABLE || undefined
+  const chromeMode = resolveChromeMode(browserExecutable)
+  const chromiumOptions = {
+    gl: null,
+    disableWebSecurity: true,
+  }
+
+  const resolvedDesign = await localizeVideos(design, cacheDir, mediaServerPort)
+  const serveUrl = await getBundleUrl()
+  const fontManifestUrl = await resolveRemotionFontManifestUrlForDesign({
+    code: resolvedDesign.code,
+    props: resolvedDesign.props || {},
+    substitutions: resolvedDesign.fontSubstitutions || {},
+  })
+  const outputLocation = path.join(
+    process.env.REMOTION_LOCAL_OUTPUT_DIR || '/tmp',
+    `remotion-still-${frame}-${Date.now()}-${Math.random().toString(36).slice(2)}.jpeg`,
+  )
+  mkdirSync(path.dirname(outputLocation), { recursive: true })
+  const inputProps = {
+    code: prepareRemotionCodeForLocalRenderer(resolvedDesign.code),
+    designProps: normalizeRemotionTextValue(resolvedDesign.props || {}),
+    fps,
+    durationInFrames,
+    width: resolvedDesign.width || 1080,
+    height: resolvedDesign.height || 1920,
+    fontManifestUrl,
+    fontSubstitutions: resolvedDesign.fontSubstitutions || {},
+    useOffthreadVideo: true,
+  }
+  const composition = await selectComposition({
+    serveUrl,
+    id: 'dynamic-design',
+    inputProps,
+    browserExecutable,
+    chromeMode,
+    chromiumOptions,
+  })
+
+  const safeFrame = Math.min(Math.max(0, Math.round(frame)), durationInFrames - 1)
+  await renderStill({
+    composition,
+    serveUrl,
+    output: outputLocation,
+    inputProps,
+    browserExecutable,
+    chromeMode,
+    chromiumOptions,
+    imageFormat: 'jpeg',
+    jpegQuality: 90,
+    frame: safeFrame,
+  })
+  const buffer = await fs.readFile(outputLocation)
+  await fs.unlink(outputLocation).catch(() => {})
   return buffer
 }

@@ -1,4 +1,3 @@
-import { readFileSync } from 'fs';
 import path from 'path';
 import sharp from 'sharp';
 import { describe, expect, it, vi } from 'vitest';
@@ -16,6 +15,7 @@ import {
 } from '../src/lib/visual-assets/bridge';
 import { analyzeEdgeFrameBuffers } from '../src/lib/visual-assets/edge-video';
 import { prepareChromaKeyCutout, renderCutoutContactSheet } from '../src/lib/visual-assets/image-cutout';
+import { readAgentAwareSource } from './helpers/agentRuntimeSource';
 
 const workspaceFiles = vi.hoisted(() => new Map<string, { content: string | Buffer; contentType: string; storageUrl: string }>());
 
@@ -32,7 +32,7 @@ vi.mock('../src/lib/workspace', () => ({
 const root = path.resolve(__dirname, '..');
 
 function read(relativePath: string): string {
-  return readFileSync(path.join(root, relativePath), 'utf8');
+  return readAgentAwareSource(root, relativePath);
 }
 
 async function chromaFixture(clipped = false): Promise<Buffer> {
@@ -549,7 +549,7 @@ describe('Visual Asset Bridge', () => {
     const bridge = read('src/skills/_shared/visual-asset-bridge/SKILL.md');
     const production = read('src/skills/_shared/studio-production/production-contract.md');
 
-    expect(agent).toContain('prepare_visual_asset: tool({');
+    expect(agent).toContain('function createPrepareVisualAssetTool(');
     expect(agent).toContain("'prepare_visual_asset'");
     expect(agent).toContain('The image above is the QA contact sheet');
     expect(agent).toContain('mode + asset_id and no media source first');

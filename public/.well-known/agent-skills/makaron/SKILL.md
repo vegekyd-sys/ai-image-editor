@@ -85,7 +85,11 @@ npx makaron-cli chat --project auto --image photo.jpg --json -b "make it cinemat
 npx makaron-cli chat --project auto --image img1.jpg --image img2.jpg --json -b "combine these"
 ```
 
-`chat` always routes agent, image, and video models automatically. Never pass `--agent-model`, `--image-model`, `--video-model`, or the legacy `--model` flag to `chat`; the CLI rejects them before starting a run. Model flags remain available only on explicit low-level commands such as `edit` and `video create`.
+`chat` routes image and video models automatically. Use `--agent-model` only when the user explicitly asks to select or compare the reasoning/tool-calling Agent LLM. Accepted values are exactly `auto`, `gpt-5.6-terra`, `gpt-5.6-sol`, `gpt-5.6-luna`, `grok-4.5`, and `deepseek-v4-pro`; `auto` currently resolves to `gpt-5.6-terra`. Never put an image or video model ID in `--agent-model`. The CLI rejects unknown Agent IDs plus `--image-model`, `--video-model`, and legacy `--model` before starting a chat run.
+
+```bash
+npx makaron-cli chat --project auto --agent-model deepseek-v4-pro --json -b "make a 20s badminton video"
+```
 
 Returns immediately:
 ```json
@@ -104,6 +108,33 @@ Returns immediately:
 | Add music | `npx makaron-cli chat --project <id> "add calm piano background music"` |
 | Beat-sync video from audio | `npx makaron-cli chat --project auto --audio beat.mp3 "use Seedance Mini at 480p to make a beat-synced video"` |
 | Create motion design | `npx makaron-cli chat --project <id> "make an animated Instagram story with this image"` |
+
+### Built-in production skills
+
+When the request names a production format or the correct workflow is unclear,
+discover the current built-in skills before starting. Do not guess a skill slug
+from memory: the server list is the source of truth.
+
+```bash
+# Short list of callable/discoverable production skills and their purpose
+npx makaron-cli skills list --built-in
+
+# Search by task, format, or keyword
+npx makaron-cli skills search "talking head captions" --built-in
+
+# Inspect input requirements, workflow, keywords, and exact invocation
+npx makaron-cli skills show talking-head --built-in
+
+# Use the exact slug returned by list/show
+npx makaron-cli chat --project auto --video talk.mp4 \
+  --skill talking-head -b "remove false starts, add synced captions and useful B-roll"
+```
+
+Use `--all` only when debugging adapters or looking for an internal helper Skill.
+For ordinary creative work, choose from the default built-in list. A named
+destination takes priority over a generic source workflow: for example,
+explicit TikTok/Douyin work uses `tiktok-video`; ordinary speech-led cleanup
+uses `talking-head`; broader mixed-footage editing uses `source-video-studio`.
 
 ### Marketplace skills
 
@@ -180,7 +211,7 @@ npx makaron-cli chat --project <id> --video clip1.mp4 --video clip2.mp4 -b "comb
 npx makaron-cli chat --project auto --video https://example.com/dance.mp4 -b "extend this to 15 seconds"
 ```
 
-Supported formats: MP4, MOV, WebM. CLI local video uploads support max 50MB, max 120s with 1s metadata tolerance, and <=1080p / 2,086,876 frame pixels. The frontend can transcode larger videos before upload; the CLI uploads directly to Storage and rejects videos above those limits. Videos are uploaded to the project timeline. The Agent can analyze scenes, edit content, compose multiple clips, extend duration, and add effects — all via natural language. Seedance video-reference editing is still limited to ~15s provider references, so longer uploaded videos should be split/prepared by the agent before model submission; Kling remains the base/direct edit path.
+Supported formats: MP4, MOV, WebM. CLI local video uploads support max 50MB, max 900s (15 minutes) with 1s metadata tolerance, and <=1080p / 2,086,876 frame pixels. The frontend can transcode larger videos before upload; the CLI uploads directly to Storage and rejects videos above those limits. Videos are uploaded to the project timeline. The Agent can analyze scenes, edit content, compose multiple clips, extend duration, and add effects — all via natural language. Seedance reference-video limits remain provider-specific, so longer uploaded videos should be split/prepared by the agent before model submission; Kling remains the base/direct edit path.
 
 Use `chat --project <id|auto> --video ...` for any project/timeline video work. Direct video commands are standalone raw-tool calls.
 
@@ -347,6 +378,7 @@ type CompletionAction = {
 3. Stop when `status` is `"completed"`, `"failed"`, or `"aborted"`
 4. Top-level `status: "completed"` means ALL artifacts are ready (including rendered videos)
 5. If an async video fails, top-level `status` is `"failed"` and the failed video may include `completion_actions` for a safe retry or diagnosis. Agents can surface these as the next user-confirmed step.
+6. `responses get --wait` reconciles pending video output against completed Project Media with the same `snapshot_id` or `task_id`. A lagging Run row therefore does not block delivery after the durable project video is ready.
 
 ## Exit Codes
 

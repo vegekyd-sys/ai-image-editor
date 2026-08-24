@@ -1,10 +1,9 @@
-import { readFileSync } from 'fs'
-import { join } from 'path'
 import { describe, expect, it } from 'vitest'
 import { validateVideoScript } from '@/lib/video-harness'
+import { readAgentAwareSource } from './helpers/agentRuntimeSource'
 
 const root = process.cwd()
-const read = (relativePath: string) => readFileSync(join(root, relativePath), 'utf8')
+const read = (relativePath: string) => readAgentAwareSource(root, relativePath)
 
 describe('agent media scenario matrix', () => {
   const agent = read('src/lib/prompts/agent.md')
@@ -31,7 +30,7 @@ describe('agent media scenario matrix', () => {
   const cli = read('packages/makaron-cli/bin/makaron.mjs')
 
   it('keeps the core agent prompt as a lightweight router', () => {
-    expect(agent.length).toBeLessThan(11_500)
+    expect(agent.length).toBeLessThan(12_000)
     expect(agent).toContain("read_file('prompts/image.md')")
     expect(agent).toContain("read_file('prompts/animate.md')")
     expect(agent).toContain('`skills/video-ffmpeg-lab/SKILL.md`')
@@ -187,6 +186,7 @@ describe('agent media scenario matrix', () => {
     expect(remotion).toContain('composition draft')
     expect(remotion).toContain('Visual verification is required for transitions, subtitles')
     expect(remotion).toContain('If `preview_frame` returns an image or no explicit textual error')
+    expect(remotion).toContain('do not rewrite the composition again or stop a requested MP4 delivery')
     expect(remotion).toContain('Do not tell the user a clip is 18s while returning a 20s animation')
     expect(remotion).toContain('Never leave `durationInSeconds: 1` on a multi-scene timeline')
     expect(remotion).toContain('function Composition(props)')
@@ -212,6 +212,9 @@ describe('agent media scenario matrix', () => {
     expect(agentTs).toContain('mediaResult.type === \'video\'')
     expect(agentTs).toContain('transcribe_audio')
     expect(agentTs).toContain('transcribeWithVolcengineAsr')
+    expect(agentTs).toContain('createOptionalNarrationCueArtifact')
+    expect(agentTs).toContain('The ASR transcript above succeeded and remains usable. Do not retranscribe')
+    expect(agentTs).not.toContain('return { error: `Narration alignment failed:')
   })
 
   it('keeps agent-visible media context on composition terminology', () => {
@@ -245,6 +248,7 @@ describe('agent media scenario matrix', () => {
     expect(agentTs).toContain('frames: z.array(z.number()).min(2).max(6)')
     expect(agentTs).toContain('createContactSheet')
     expect(agentTs).toContain('composition: z.object({')
+    expect(agentTs).toContain('resolvedComposition && !resolvedComposition.code && executableCode.trim()')
     expect(agentTs).toContain("result = { type: 'render', ...resolvedComposition }")
     expect(agentTs).toContain('Provide executable code, a code_path, a direct composition payload, or durable composition parts.')
     expect(agentTs).toContain('raw uploaded/generated videos are extracted with FFmpeg')

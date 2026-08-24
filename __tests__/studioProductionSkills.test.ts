@@ -1,12 +1,12 @@
 import { describe, expect, it } from 'vitest';
-import { readFileSync } from 'fs';
 import path from 'path';
 import { parseSkillMd } from '@/lib/skill-registry';
+import { readAgentAwareSource } from './helpers/agentRuntimeSource';
 
 const root = path.resolve(__dirname, '..');
 
 function read(relativePath: string) {
-  return readFileSync(path.join(root, relativePath), 'utf8');
+  return readAgentAwareSource(root, relativePath);
 }
 
 const recipes = [

@@ -1,4 +1,5 @@
 {
-  "runtimeVersion": "remotion-font-runtime-r7-legacy-platform-fonts",
-  "fontCatalogVersion": "makaron-fonts-r1"
+  "runtimeVersion": "remotion-font-runtime-r10-google-fonts-on-demand",
+  "fontCatalogVersion": "makaron-fonts-r2-symbol-fallback",
+  "editableRuntimeVersion": "remotion-editable-runtime-r4-caption-style-preserving"
 }

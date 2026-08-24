@@ -43,7 +43,7 @@ const SUPABASE_ANON_KEY = 'sb_publishable_FJFN2YYaWaQjABUKLqxQcA_fhxPLFDY';
 
 const MAX_VIDEO_UPLOAD_FILE_SIZE_MB = 50;
 const MAX_VIDEO_UPLOAD_FILE_SIZE = MAX_VIDEO_UPLOAD_FILE_SIZE_MB * 1024 * 1024;
-const MAX_VIDEO_UPLOAD_DURATION = 120;
+const MAX_VIDEO_UPLOAD_DURATION = 900;
 const MAX_VIDEO_UPLOAD_DURATION_TOLERANCE = 1;
 const MAX_VIDEO_PROVIDER_REFERENCE_DURATION = 15;
 const MAX_VIDEO_PROVIDER_REFERENCE_DURATION_TOLERANCE = 0.5;
@@ -328,6 +328,86 @@ function normalizeRunResponse(data) {
   return data;
 }
 
+function projectMediaIdentity(item) {
+  const snapshotId = item?.snapshot_id || item?.snapshotId;
+  const taskId = item?.task_id || item?.taskId;
+  return {
+    snapshotId: typeof snapshotId === 'string' && snapshotId ? snapshotId : null,
+    taskId: typeof taskId === 'string' && taskId ? taskId : null,
+  };
+}
+
+function findMatchingCompletedProjectVideo(item, media) {
+  const identity = projectMediaIdentity(item);
+  if (!identity.snapshotId && !identity.taskId) return null;
+  return (media || []).find(candidate => {
+    if (candidate?.type !== 'video' || candidate?.status !== 'completed' || !candidate?.url) return false;
+    const candidateIdentity = projectMediaIdentity(candidate);
+    return (identity.snapshotId && candidateIdentity.snapshotId === identity.snapshotId)
+      || (identity.taskId && candidateIdentity.taskId === identity.taskId);
+  }) || null;
+}
+
+async function reconcileRunWithProjectMedia(baseUrl, headers, data) {
+  normalizeRunResponse(data);
+  const output = Array.isArray(data.output) ? data.output : [];
+  const pendingVideos = output.filter(item =>
+    item?.type === 'video' && (item.status === 'queued' || item.status === 'rendering')
+  );
+  const agentDone = data.agent_status === 'completed'
+    || (data.status === 'in_progress' && data.incomplete === true);
+  if (!agentDone || pendingVideos.length === 0 || !data.projectId) return data;
+
+  let projectMedia;
+  try {
+    const res = await fetch(`${baseUrl}/api/projects/${data.projectId}/media`, { headers });
+    if (!res.ok) return data;
+    projectMedia = await res.json();
+  } catch {
+    return data;
+  }
+
+  let reconciled = false;
+  for (const item of pendingVideos) {
+    const completed = findMatchingCompletedProjectVideo(item, projectMedia.media);
+    if (!completed) continue;
+    const identity = projectMediaIdentity(completed);
+    item.status = 'completed';
+    item.url = completed.url;
+    if (identity.snapshotId) item.snapshot_id = identity.snapshotId;
+    if (identity.taskId) item.task_id = identity.taskId;
+    if (completed.posterUrl) item.poster_url = completed.posterUrl;
+    for (const field of ['duration', 'width', 'height']) {
+      if (typeof completed[field] === 'number') item[field] = completed[field];
+    }
+
+    const legacyVideos = Array.isArray(data.result?.videos) ? data.result.videos : [];
+    const legacy = legacyVideos.find(video => {
+      const legacyIdentity = projectMediaIdentity(video);
+      return (identity.snapshotId && legacyIdentity.snapshotId === identity.snapshotId)
+        || (identity.taskId && legacyIdentity.taskId === identity.taskId);
+    });
+    if (legacy) {
+      legacy.status = 'completed';
+      legacy.videoUrl = completed.url;
+      if (identity.snapshotId && !legacy.snapshotId) legacy.snapshotId = identity.snapshotId;
+    }
+    reconciled = true;
+  }
+
+  if (!reconciled) return data;
+  const pendingArtifacts = output.some(item =>
+    (item?.type === 'video' || item?.type === 'music')
+    && (item.status === 'queued' || item.status === 'rendering')
+  );
+  if (!pendingArtifacts) {
+    data.status = 'completed';
+    data.incomplete = false;
+    delete data.next_poll_after_ms;
+  }
+  return data;
+}
+
 function collectCompletionActions(data) {
   const items = [];
   const add = (action, source) => {
@@ -391,6 +471,11 @@ What you can ask:
 
   Marketplace skill
     makaron chat --project auto --image selfie.jpg --skill "Football Captain" "make this cinematic"
+
+  Built-in production skill
+    makaron skills list --built-in
+    makaron skills show talking-head --built-in
+    makaron chat --project auto --video talk.mp4 --skill talking-head "make a tight captioned edit"
 
   Fix one video moment from a screenshot
     makaron chat --project <id> --image screenshot.png "@4 this frame should be Paris; only fix this moment"
@@ -607,6 +692,7 @@ async function pollRun(baseUrl, headers, runId, opts = {}) {
         continue;
       }
       data = await res.json();
+      data = await reconcileRunWithProjectMedia(baseUrl, headers, data);
     } catch {
       continue;
     }
@@ -759,6 +845,7 @@ async function watchRun(baseUrl, headers, runId, opts = {}) {
         continue;
       }
       data = await res.json();
+      data = await reconcileRunWithProjectMedia(baseUrl, headers, data);
     } catch {
       await new Promise(r => setTimeout(r, interval));
       continue;
@@ -1174,12 +1261,29 @@ async function fetchBuiltInSkills(baseUrl) {
   return (data.skills || []).filter(skill => skill.builtIn);
 }
 
-function printBuiltInSkills(skills) {
+function isDiscoverableBuiltInSkill(skill) {
+  return skill.userSelectable !== false || skill.manifestVisible === true;
+}
+
+function builtInSkillSearchText(skill) {
+  return [
+    skill.name,
+    skill.label,
+    skill.description,
+    skill.studioRunRecipe,
+    skill.studioRunProfile,
+    skill.canonicalSkill,
+    ...(Array.isArray(skill.tags) ? skill.tags : []),
+  ].filter(Boolean).join(' ').toLowerCase();
+}
+
+function printBuiltInSkills(skills, opts = {}) {
   if (!skills.length) {
     console.log('No built-in skills found.');
     return;
   }
-  console.log(`Built-in skills: ${skills.length}\n`);
+  const heading = opts.heading || 'Built-in skills';
+  console.log(`${heading}: ${skills.length}\n`);
   for (const skill of skills) {
     const recipe = skill.studioRunRecipe ? `  [Studio Run: ${skill.studioRunRecipe}]` : '';
     const source = skill.sourceMediaRequired ? '  [source media required]' : '';
@@ -1189,6 +1293,30 @@ function printBuiltInSkills(skills) {
     console.log(`  ${skill.name}${recipe}${source}${adapter}`);
     if (skill.description) console.log(`    ${String(skill.description).replace(/\s+/g, ' ').trim()}`);
   }
+  if (opts.hint !== false) {
+    console.log('\nInspect and use a skill:');
+    console.log('  makaron skills show <name> --built-in');
+    console.log('  makaron chat --project auto --skill <name> "your request"');
+  }
+}
+
+function printBuiltInSkill(skill) {
+  const description = String(skill.description || '').replace(/\s+/g, ' ').trim();
+  console.log(`${skill.label || skill.name} (${skill.name})`);
+  if (description) console.log(`\nPurpose:\n  ${description}`);
+  console.log('\nBest input:');
+  console.log(`  ${skill.inputHint || (skill.sourceMediaRequired ? 'Source media is required. Attach it with --video, --image, or --audio as appropriate.' : 'Start from a clear brief; attach source media when the request depends on existing footage or assets.')}`);
+  if (skill.studioRunRecipe || skill.studioRunProfile) {
+    console.log('\nWorkflow:');
+    if (skill.studioRunRecipe) console.log(`  Studio Run recipe: ${skill.studioRunRecipe}`);
+    if (skill.studioRunProfile) console.log(`  Profile: ${skill.studioRunProfile}`);
+  }
+  if (Array.isArray(skill.tags) && skill.tags.length) {
+    console.log(`\nKeywords:\n  ${skill.tags.join(', ')}`);
+  }
+  console.log('\nUse with chat:');
+  const media = skill.sourceMediaRequired ? ' --video <file>' : '';
+  console.log(`  makaron chat --project auto${media} --skill ${skill.name} "describe the result you want"`);
 }
 
 function marketplaceSearchText(skill) {
@@ -1846,20 +1974,25 @@ function printHelp(topic, subtopic) {
   } else if (topic === 'install-skill') {
     console.log('Usage: makaron install-skill [--global] [--agent <agent>] [--yes]');
   } else if (topic === 'skills') {
-    if (subtopic === 'list') console.log('Usage: makaron skills list [--built-in] [--json]');
-    else if (subtopic === 'search') console.log('Usage: makaron skills search <query> [--json]');
-    else if (subtopic === 'show') console.log('Usage: makaron skills show <marketplace-id|label> [--json]');
+    if (subtopic === 'list') console.log('Usage: makaron skills list [--built-in] [--all] [--json]');
+    else if (subtopic === 'search') console.log('Usage: makaron skills search <query> [--built-in] [--all] [--json]');
+    else if (subtopic === 'show') console.log('Usage: makaron skills show <id|label|name> [--built-in] [--json]');
     else if (subtopic === 'install') console.log('Usage: makaron skills install <marketplace-id|label> [--json]');
     else console.log(`Skill commands:
-  skills list --built-in              List all built-in Makaron skills and Studio Run recipes
+  skills list --built-in              List user-facing built-in skills and what they do
+  skills list --built-in --all        Include internal/adapted helper skills
   skills list                         List marketplace skills
   skills search <query>               Search marketplace skills
+  skills search <query> --built-in    Find a built-in skill by task or keyword
   skills show <id|label> --built-in   Show a built-in skill
   skills show <id|label>              Show a marketplace skill
   skills install <id|label>           Install a marketplace skill to your workspace
 
 Use with chat:
   makaron chat --project auto --skill <id|label> "your request"
+
+Not sure which built-in skill to use? Start with:
+  makaron skills list --built-in
 `);
   } else if (topic === 'materialize') {
     console.log(`Usage: makaron materialize --project <id> (--media <N> | --snapshot <snapshotId> | --design-path <path> | --design-json <file|->) [--wait] [--publish|--no-publish] [--profile fast_720p|source] [--pick url|job_id|status]`);
@@ -2257,7 +2390,8 @@ if (!command || command === '--help' || command === '-h' || command === 'help') 
         uploadedTurnVideoCount += videoSnaps.length;
         uploadedTurnMediaCount += videoSnaps.length;
       } else {
-        process.stderr.write(`⚠️ Failed to add videos: ${await res.text()}\n`);
+        process.stderr.write(`❌ Failed to add videos to the project timeline: ${await res.text()}\n`);
+        process.exit(1);
       }
     }
 
@@ -2346,7 +2480,7 @@ if (!command || command === '--help' || command === '-h' || command === 'help') 
       const res = await fetch(`${baseUrl}/api/agent/run/${runId}`, { headers });
       if (!res.ok) { process.stderr.write(`Error ${res.status}: ${await res.text()}\n`); process.exit(1); }
       let data = await res.json();
-      normalizeRunResponse(data);
+      data = await reconcileRunWithProjectMedia(baseUrl, headers, data);
       if (exportCompositions && data.status === 'completed') {
         data = await exportAnimatedCompositionsFromRun(baseUrl, headers, data, { publish: publishExports, quiet: jsonOutput || !!pick });
       }
@@ -2485,22 +2619,41 @@ if (!command || command === '--help' || command === '-h' || command === 'help') 
 
   if (sub === 'list') {
     const builtIn = args.includes('--built-in');
-    const skills = builtIn ? await fetchBuiltInSkills(baseUrl) : await fetchMarketplaceSkills(baseUrl);
+    const allBuiltIn = args.includes('--all');
+    const fetchedSkills = builtIn ? await fetchBuiltInSkills(baseUrl) : await fetchMarketplaceSkills(baseUrl);
+    const skills = builtIn && !allBuiltIn
+      ? fetchedSkills.filter(isDiscoverableBuiltInSkill)
+      : fetchedSkills;
     if (jsonOutput) console.log(JSON.stringify({ skills }, null, 2));
-    else if (builtIn) printBuiltInSkills(skills);
+    else if (builtIn) printBuiltInSkills(skills, {
+      heading: allBuiltIn ? 'All built-in skills' : 'Built-in skills available to use',
+    });
     else printMarketplaceSkills(skills);
   } else if (sub === 'search') {
-    const query = args.filter((arg, index) => index > 1 && arg !== '--json').join(' ').trim();
-    if (!query) { console.error('Usage: makaron skills search <query> [--json]'); process.exit(1); }
+    const builtIn = args.includes('--built-in');
+    const allBuiltIn = args.includes('--all');
+    const query = args.filter((arg, index) => index > 1 && !['--json', '--built-in', '--all'].includes(arg)).join(' ').trim();
+    if (!query) { console.error('Usage: makaron skills search <query> [--built-in] [--all] [--json]'); process.exit(1); }
     const lowerQuery = query.toLowerCase();
     const slugQuery = slugifySkill(query);
-    const skills = (await fetchMarketplaceSkills(baseUrl))
-      .filter(skill => {
-        const rawMatch = marketplaceSkillTokens(skill).some(token => token.includes(lowerQuery));
-        const slugMatch = slugQuery ? marketplaceSearchText(skill).includes(slugQuery) : false;
-        return rawMatch || slugMatch;
-      });
+    const builtInQueryTokens = slugQuery.split('-').filter(Boolean);
+    const skills = builtIn
+      ? (await fetchBuiltInSkills(baseUrl))
+        .filter(skill => allBuiltIn || isDiscoverableBuiltInSkill(skill))
+        .filter(skill => {
+          const searchText = builtInSkillSearchText(skill);
+          const slugText = slugifySkill(searchText);
+          return searchText.includes(lowerQuery)
+            || (builtInQueryTokens.length > 0 && builtInQueryTokens.every(token => slugText.includes(token)));
+        })
+      : (await fetchMarketplaceSkills(baseUrl))
+        .filter(skill => {
+          const rawMatch = marketplaceSkillTokens(skill).some(token => token.includes(lowerQuery));
+          const slugMatch = slugQuery ? marketplaceSearchText(skill).includes(slugQuery) : false;
+          return rawMatch || slugMatch;
+        });
     if (jsonOutput) console.log(JSON.stringify({ skills }, null, 2));
+    else if (builtIn) printBuiltInSkills(skills, { heading: `Built-in skill matches for "${query}"` });
     else printMarketplaceSkills(skills);
   } else if (sub === 'show') {
     const identifier = args[2];
@@ -2512,7 +2665,7 @@ if (!command || command === '--help' || command === '-h' || command === 'help') 
       : findMarketplaceSkill(skills, identifier);
     if (!skill) { console.error(`Skill not found: ${identifier}`); process.exit(1); }
     if (jsonOutput) console.log(JSON.stringify(skill, null, 2));
-    else if (builtIn) printBuiltInSkills([skill]);
+    else if (builtIn) printBuiltInSkill(skill);
     else printMarketplaceSkill(skill);
   } else if (sub === 'install') {
     const identifier = args[2];
@@ -2526,9 +2679,11 @@ if (!command || command === '--help' || command === '-h' || command === 'help') 
     else console.log(data.skillName);
   } else {
     console.log(`Skill commands:
-  skills list --built-in              List all built-in Makaron skills and Studio Run recipes
+  skills list --built-in              List user-facing built-in skills and what they do
+  skills list --built-in --all        Include internal/adapted helper skills
   skills list                         List marketplace skills
   skills search <query>               Search marketplace skills
+  skills search <query> --built-in    Find a built-in skill by task or keyword
   skills show <id|label> --built-in   Show a built-in skill
   skills show <id|label>              Show a marketplace skill
   skills install <id|label>           Install a marketplace skill to your workspace

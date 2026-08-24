@@ -1,5 +1,5 @@
 import type { DesignPayload } from '@/types';
-import { compileEditableManifest } from './editable-manifest';
+import { compileEditableManifestWithProvenance } from './editable-provenance-compiler';
 
 export function normalizeLoadedDesignManifest(
   value: unknown,
@@ -9,13 +9,16 @@ export function normalizeLoadedDesignManifest(
   if (typeof design.code !== 'string') return design;
 
   const props = { ...(design.props ?? {}) };
-  const manifest = compileEditableManifest({
+  const manifest = compileEditableManifestWithProvenance({
     code: design.code,
     props,
     editables: design.editables,
   });
-  if (manifest.diagnostics.length > 0) return design;
 
+  // Editable discovery is intentionally partial and fail-soft. One ambiguous
+  // sink must not discard markers and aliases that were proven elsewhere in
+  // the same composition. Compiler diagnostics describe only the fields that
+  // remain non-editable; the visible composition stays authoritative.
   return {
     ...design,
     code: manifest.code,

@@ -26,7 +26,7 @@ If a task combines timeline images, pass `reference_media_indices`. Keep timelin
 
 Use the smallest capable workflow.
 
-The skill manifest routes clear matches: read `skills/NAME/SKILL.md`; that Skill owns its workflow. Video routes by the selected model's duration limit first: SeeDance 2.0 is <=15s, while an explicitly selected SeeDance 2.5 generation may be 4-30s. Longer requests may activate a matching Skill.
+The skill manifest routes clear matches: read `skills/NAME/SKILL.md`; that Skill owns its workflow. Video routes by duration and requested operation before platform packaging. For a finished video within the selected model's single-generation limit, read `prompts/animate.md` before any platform or content Skill and use `generate_animation`. TikTok, Douyin, Reels, exact copy, subtitles, branding, multiple shots, or an explainer/product-film label do not override that route. Select a Composition Skill only for explicit Studio/Remotion/editability, deterministic post-production, or assembly/editing where existing footage is the evidence. Longer requests may activate a matching production Skill. Exercise this routing judgment in the Agent; do not wait for backend keyword rules.
 
 For `[Active skill: NAME]`, read `skills/NAME/SKILL.md` first and follow it. Internal adapters may be absent from the manifest. `long-video-director` remains authoritative.
 
@@ -66,7 +66,7 @@ For transcript requests or speech-dependent edits, call `transcribe_audio`
 first. New composition subtitles may follow their own narration timeline; use
 transcription only when exact timing matters. Use `analyze_video` for visuals.
 
-Video duration is authoritative. For output within the selected model's single-generation limit, read `prompts/animate.md` and use `generate_animation`, including explainers with voiceover, music, subtitles, or multiple scenes. SeeDance 2.0 supports up to 15s; an explicitly selected SeeDance 2.5 generation supports up to 30s. Beyond that limit, activate and read the best matching production Skill; otherwise read `skills/long-video-director/SKILL.md` for visual anchors and clip transitions. Do not jump straight to full scripts; do not use fenced code blocks. Explicit Studio/Remotion/editability or a trusted Skill template overrides. Do not mention Remotion unless selected.
+Video duration is authoritative. For output within the selected model's single-generation limit, read `prompts/animate.md` and use `generate_animation`, including explainers, product films, platform-native shorts, exact on-screen copy, voiceover, music, subtitles, branding, or multiple scenes. SeeDance 2.0 supports up to 15s; an explicitly selected SeeDance 2.5 generation supports up to 30s. Beyond that limit, activate and read the matching Skill; otherwise read `skills/long-video-director/SKILL.md` for visual anchors and clip transitions. Do not jump straight to full scripts; do not use fenced code blocks. Explicit Studio/Remotion/editability or source-led assembly overrides. Do not mention Remotion unless selected.
 
 Hard duration range: a single SeeDance 2.0 script/call must be 4-15s; SeeDance 2.5 must be 4-30s; Kling is 5-15s; Grok 1.5 is 1-15s for one starting image; Google Omni is 3-10s. If requested/source duration is shorter than the model minimum, use the minimum. If output is longer than the selected model max, use `skills/long-video-director/SKILL.md`, split into model-sized segments, show the plan, and stop for approval.
 

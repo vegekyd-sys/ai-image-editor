@@ -17,6 +17,7 @@ import {
   normalizeRemotionScopeDeclarations,
 } from '../lib/remotion-code-normalization';
 import { createEditableReactRuntime } from '../lib/editor/editable-react-runtime';
+import { normalizeRemotionTextValue } from '../lib/remotion-text-normalization';
 import {
   fetchRemotionFontManifestWithTiming,
   loadPreparedRemotionFonts,
@@ -100,8 +101,12 @@ export function compileDynamicDesignComponent(
       ...scope,
       React: editableRuntime.React,
     };
+    const editableId = (editableRuntime.React as typeof React & {
+      __makaronEditableId?: (...args: unknown[]) => string | undefined;
+    }).__makaronEditableId;
     const reactModule = {
       ...editableRuntime.React,
+      __makaronEditableId: editableId,
       default: editableRuntime.React,
       __esModule: true,
     };
@@ -170,7 +175,9 @@ export const DynamicDesign: React.FC<Record<string, unknown>> = ({
   const manifestUrl = typeof fontManifestUrl === 'string' ? fontManifestUrl : '';
   const telemetryId = typeof fontTelemetryId === 'string' ? fontTelemetryId : '';
   const propsObj = useMemo(
-    () => (typeof designProps === 'object' && designProps !== null ? designProps : {}) as Record<string, unknown>,
+    () => normalizeRemotionTextValue(
+      (typeof designProps === 'object' && designProps !== null ? designProps : {}) as Record<string, unknown>,
+    ),
     [designProps],
   );
   const remotionScope = useMemo(
@@ -195,8 +202,7 @@ export const DynamicDesign: React.FC<Record<string, unknown>> = ({
 
   // Combine code + props for font detection
   const allText = useMemo(() => {
-    const propsStr = Object.values(propsObj).filter(v => typeof v === 'string').join(' ');
-    return codeStr + '\n' + propsStr;
+    return `${codeStr}\n${JSON.stringify(propsObj)}`;
   }, [codeStr, propsObj]);
 
   const handleRef = useRef<number | null>(null);

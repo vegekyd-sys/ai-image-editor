@@ -285,6 +285,11 @@ function compactTranscriptOutput(output: JsonRecord, omitted: string[]): ToolRes
 
   const utterances = Array.isArray(transcript.utterances) ? transcript.utterances : [];
   if (utterances.length > 80) omitted.push('truncated_transcript_utterances');
+  const historyWordTimingTruncated = utterances.some(item => {
+    const u = item && typeof item === 'object' ? item as JsonRecord : {};
+    return Array.isArray(u.words) && u.words.length > 40;
+  });
+  if (historyWordTimingTruncated) omitted.push('truncated_transcript_words');
 
   return {
     type: 'json',
@@ -292,6 +297,11 @@ function compactTranscriptOutput(output: JsonRecord, omitted: string[]): ToolRes
       cached: output.cached,
       media_index: output.media_index,
       videoUrl: output.videoUrl,
+      transcriptPath: output.transcriptPath,
+      historyWordTimingTruncated,
+      historyWordTimingNote: historyWordTimingTruncated
+        ? 'This history row is a compact preview. Read transcriptPath for complete word timestamps.'
+        : undefined,
       provider: transcript.provider,
       model: transcript.model,
       durationMs: transcript.durationMs,

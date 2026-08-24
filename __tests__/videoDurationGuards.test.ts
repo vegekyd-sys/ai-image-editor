@@ -134,6 +134,19 @@ describe('video duration guards', () => {
     expect(error).toContain('totals 31s')
   })
 
+  it('allows provider-managed duration for Seedance 2.5 video edit', () => {
+    const error = validateVideoScript({
+      prompt: 'Edit <<<media_1>>>（源视频）to replace the background while preserving timing.',
+      imageCount: 1,
+      availableMediaIndices: [1],
+      model: 'seedance-2.5',
+      duration: -1,
+      operation: 'edit',
+    })
+
+    expect(error).toBeNull()
+  })
+
   it('allows a normal short script', () => {
     const error = validateVideoScript({
       prompt: [

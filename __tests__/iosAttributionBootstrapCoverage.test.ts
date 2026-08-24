@@ -19,6 +19,10 @@ describe('iOS attribution bootstrap coverage', () => {
     expect(deferredLookup).toBeGreaterThan(launchLookup)
     expect(captureCall).toBeGreaterThan(-1)
     expect(firstOpenCall).toBeGreaterThan(deferredLookup)
+    expect(source).toContain('error_domain: deferred.errorDomain')
+    expect(source).toContain('error_code: deferred.errorCode')
+    expect(source).toContain('native_fetch_started_at: deferred.nativeFetchStartedAt')
+    expect(source).toContain('native_fetch_latency_ms: deferred.nativeFetchLatencyMs')
   })
 
   it('does not treat welcome credits as a paid trial', () => {

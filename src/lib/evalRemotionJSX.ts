@@ -961,6 +961,9 @@ export function evalRemotionJSX(
       OffthreadVideo: videoComponent,
       Sequence: isPreviewRuntime ? PreviewSequence : AutoPremountSequence,
     };
+    const editableId = (editableRuntime.React as typeof React & {
+      __makaronEditableId?: (...args: unknown[]) => string | undefined;
+    }).__makaronEditableId;
     const remotionNamespace = { ...Remotion, ...authoredScope };
     const mediaNamespace = {
       Audio,
@@ -972,6 +975,7 @@ export function evalRemotionJSX(
     const modules: Record<string, unknown> = {
       react: {
         ...editableRuntime.React,
+        __makaronEditableId: editableId,
         default: editableRuntime.React,
         __esModule: true,
       },

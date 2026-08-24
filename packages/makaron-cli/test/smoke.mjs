@@ -119,6 +119,8 @@ const server = http.createServer(async (req, res) => {
           studioRunRecipe: 'cinematic-video',
           studioRunProfile: 'generated-or-hybrid',
           sourceMediaRequired: false,
+          userSelectable: true,
+          manifestVisible: true,
         },
         {
           name: 'source-video-studio',
@@ -128,6 +130,30 @@ const server = http.createServer(async (req, res) => {
           studioRunRecipe: 'source-video-studio',
           studioRunProfile: 'source-led',
           sourceMediaRequired: true,
+          userSelectable: true,
+          manifestVisible: true,
+        },
+        {
+          name: 'talking-head',
+          label: 'Talking Head',
+          builtIn: true,
+          description: 'Edit talking-head footage with transcript-led cuts, synced captions, B-roll, and highlights.',
+          studioRunRecipe: 'talking-head',
+          studioRunProfile: 'source-led',
+          sourceMediaRequired: true,
+          inputHint: 'A talking-head video with clear, audible speech',
+          tags: ['video', 'talking-head', 'captions', 'b-roll'],
+          userSelectable: false,
+          manifestVisible: true,
+        },
+        {
+          name: 'speech-clock-internal',
+          label: 'Speech Clock Internal',
+          builtIn: true,
+          description: 'Internal timing helper.',
+          sourceMediaRequired: true,
+          userSelectable: false,
+          manifestVisible: false,
         },
       ],
     });
@@ -162,6 +188,10 @@ const server = http.createServer(async (req, res) => {
   }
 
   if (req.method === 'POST' && url.pathname === '/api/projects/create') {
+    if (body?.videoUrls?.includes('https://cdn.example/fail.mp4')) {
+      sendJson(413, { error: 'Payload Too Large' });
+      return;
+    }
     const snapshots = (body?.imageUrls || []).map((imageUrl, index) => ({
       snapshotId: `snap_uploaded_${index + 1}`,
       imageUrl,
@@ -239,6 +269,30 @@ const server = http.createServer(async (req, res) => {
           taskId: 'studio-delivery-run_legacy_video',
           status: 'completed',
           videoUrl: 'https://cdn.example/legacy-delivery.mp4',
+        }],
+      },
+    });
+    return;
+  }
+
+  if (req.method === 'GET' && url.pathname === '/api/agent/run/run_project_media_reconcile') {
+    sendJson(200, {
+      id: 'run_project_media_reconcile',
+      project_id: 'project-reconcile-1',
+      status: 'in_progress',
+      agent_status: 'completed',
+      incomplete: true,
+      next_poll_after_ms: 10_000,
+      output: [{
+        id: 'out_video_reconcile',
+        type: 'video',
+        status: 'rendering',
+        task_id: 'task-unified-reconcile',
+      }],
+      result: {
+        videos: [{
+          taskId: 'task-unified-reconcile',
+          status: 'rendering',
         }],
       },
     });
@@ -339,6 +393,35 @@ const server = http.createServer(async (req, res) => {
           snapshotId: 'snap_comp_1',
           codePath: 'code/snap_comp_1.json',
           description: 'Editable Remotion composition',
+        },
+      ],
+    });
+    return;
+  }
+
+  if (req.method === 'GET' && url.pathname === '/api/projects/project-reconcile-1/media') {
+    sendJson(200, {
+      projectId: 'project-reconcile-1',
+      media: [
+        {
+          id: 'media_old_video',
+          type: 'video',
+          status: 'completed',
+          snapshot_id: 'snap_old_video',
+          task_id: 'task-unified-other-run',
+          url: 'https://cdn.example/other-run.mp4',
+        },
+        {
+          id: 'media_reconciled_video',
+          type: 'video',
+          status: 'completed',
+          snapshot_id: 'snap_reconciled_video',
+          task_id: 'task-unified-reconcile',
+          url: 'https://cdn.example/reconciled.mp4',
+          posterUrl: 'https://cdn.example/reconciled-poster.jpg',
+          duration: 30.08,
+          width: 720,
+          height: 1280,
         },
       ],
     });
@@ -935,8 +1018,22 @@ try {
   {
     const result = await expectSuccess(['skills', 'list', '--built-in', '--json']);
     const data = JSON.parse(result.stdout);
-    assert.equal(data.skills.length, 2);
+    assert.equal(data.skills.length, 3);
     assert.equal(data.skills[0].studioRunRecipe, 'cinematic-video');
+    assert.equal(data.skills[2].name, 'talking-head');
+  }
+
+  {
+    const result = await expectSuccess(['skills', 'list', '--built-in', '--all', '--json']);
+    const data = JSON.parse(result.stdout);
+    assert.equal(data.skills.length, 4);
+    assert.equal(data.skills[3].name, 'speech-clock-internal');
+  }
+
+  {
+    const result = await expectSuccess(['skills', 'search', 'talking head captions', '--built-in', '--json']);
+    const data = JSON.parse(result.stdout);
+    assert.deepEqual(data.skills.map(skill => skill.name), ['talking-head']);
   }
 
   {
@@ -944,6 +1041,23 @@ try {
     const data = JSON.parse(result.stdout);
     assert.equal(data.sourceMediaRequired, true);
     assert.equal(data.studioRunProfile, 'source-led');
+  }
+
+  {
+    const result = await expectSuccess(['skills', 'show', 'talking-head', '--built-in']);
+    assert.match(result.stdout, /Purpose:/);
+    assert.match(result.stdout, /A talking-head video with clear, audible speech/);
+    assert.match(result.stdout, /--skill talking-head/);
+  }
+
+  {
+    const runCount = requests.filter(req => req.pathname === '/api/agent/run').length;
+    const result = await expectFailure([
+      'chat', '--project', 'project-existing-1', '--video', 'https://cdn.example/fail.mp4',
+      'this must not start without the requested video',
+    ]);
+    assert.match(result.stderr, /Failed to add videos to the project timeline/);
+    assert.equal(requests.filter(req => req.pathname === '/api/agent/run').length, runCount);
   }
 
   {
@@ -988,6 +1102,23 @@ try {
   {
     const result = await expectSuccess(['responses', 'get', 'run_legacy_video', '--pick', 'video_urls']);
     assert.deepEqual(JSON.parse(result.stdout), ['https://cdn.example/legacy-delivery.mp4']);
+  }
+
+  {
+    const result = await expectSuccess(['responses', 'get', 'run_project_media_reconcile', '--wait', '--json']);
+    const data = JSON.parse(result.stdout);
+    assert.equal(data.status, 'completed');
+    assert.equal(data.incomplete, false);
+    assert.equal(data.next_poll_after_ms, undefined);
+    assert.equal(data.output[0].status, 'completed');
+    assert.equal(data.output[0].url, 'https://cdn.example/reconciled.mp4');
+    assert.equal(data.output[0].snapshot_id, 'snap_reconciled_video');
+    assert.equal(data.output[0].duration, 30.08);
+    assert.equal(data.output[0].width, 720);
+    assert.equal(data.output[0].height, 1280);
+    assert.equal(data.result.videos[0].status, 'completed');
+    assert.equal(data.result.videos[0].videoUrl, 'https://cdn.example/reconciled.mp4');
+    assert.ok(requests.some(req => req.pathname === '/api/projects/project-reconcile-1/media'));
   }
 
   {

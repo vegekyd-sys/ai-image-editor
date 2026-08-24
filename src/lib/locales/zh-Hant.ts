@@ -118,9 +118,14 @@ const zhHant = {
   // Changelog
   'changelog.heading': '更新',
   'changelog.close': '關閉更新',
+  'changelog.talkingHeadEditing.title': '口播剪輯',
+  'changelog.talkingHeadEditing.item1': '上傳一段原始口播，Makaron 會根據 ASR 自動刪除氣口、停頓、重複和不連貫表達，整理成更流暢的成片。',
+  'changelog.talkingHeadEditing.item2': '字幕會跟隨保留原聲的真實詞級時間，自動切成更短、更有重點的動態字幕，並保持可編輯。',
+  'changelog.talkingHeadEditing.item3': 'Agent 還能加入適量 B-roll、資訊圖和短影片包裝，直接發布可編輯 Composition 和 MP4 成片。',
   'changelog.tiktokVideoSkill.title': '更原生的 TikTok 影片 Skill',
   'changelog.tiktokVideoSkill.item1': '全新的 TikTok Skill 為 Agent 創作的直式影片加入更原生的開場、節奏、字幕、包裝和平台安全版位，同時保留每個 Composition 的視覺自主性。',
   'changelog.tiktokVideoSkill.item2': '口播字幕現在會先理解最終旁白的語意與表達，再使用真實詞級時間精準同步，不再依字數機械切碎句子。',
+  'changelog.tiktokVideoSkill.item3': 'TikTok 影片現在預設靜音素材原聲，並用同一條 VO + BGM 成品聲軌的真實口播時間同步畫面、字幕與關鍵詞高亮。',
   'changelog.sourcePlayback.title': 'Source 影片合成播放更穩定',
   'changelog.sourcePlayback.item1': 'Source URL 合成現在會在緩衝時暫停時間軸，並預先載入下一段裁剪片段，減少黑畫面、串鏡和切鏡卡頓。',
   'changelog.sourcePlayback.item2': '播放現在首次點擊即可可靠啟動，同時限制 iOS 解碼預熱負載，長篇多鏡頭專案不再只播花字或導致 Safari 當機。',
@@ -145,6 +150,8 @@ const zhHant = {
   'changelog.editableLayers.item2': '在畫布上選取圖層，就能直接移動和縮放，不必為了小調整重新讓 Agent 產生整張圖。',
   'changelog.editableLayers.item3': '影片片段新增裁剪列：支援播放、拖動時間戳、拖動起止把手，以及整體移動裁剪區間。',
   'changelog.editableLayers.item4': '長海報類專案更容易修改：上下捲動時，選取框會持續跟隨內容。',
+  'changelog.smarterEditableDiscovery.title': '更智慧的可編輯圖層辨識',
+  'changelog.smarterEditableDiscovery.item1': 'Makaron 現在能更可靠地將字幕及其他 React 算繪內容辨識為可編輯圖層，並繼續支援直接移動和縮放。',
 
   // AI status
   'status.thinking': '正在探索有趣的可能性...',

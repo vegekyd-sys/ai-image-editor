@@ -131,6 +131,85 @@ describe('design harness compile preflight', () => {
     expect(validateDesign(design)).toBeNull();
   });
 
+  it('accepts source-timed captions with dynamic keyword emphasis', () => {
+    const design = {
+      code: `
+        function Caption({ cue }) {
+          const parts = cue.text.split('｜');
+          return <div><span>{parts[0]}</span>{parts[1] && <strong>{parts[1]}</strong>}</div>;
+        }
+        function Composition(props) {
+          return <AbsoluteFill>{props.cues.map(cue => <Caption key={cue.from} cue={cue} />)}</AbsoluteFill>;
+        }
+      `,
+      props: {
+        cues: [
+          { from: 0, to: 30, text: '脑子里有个画面｜特别想做出来' },
+          { from: 30, to: 60, text: '几分钟｜就能出好版' },
+        ],
+      },
+    };
+
+    const report = validateDesignReport(design);
+
+    expect(report.blocking).toEqual([]);
+    expect(report.advisories).toEqual([]);
+    expect(report.editableCoverage.unsupported).toEqual([]);
+    expect(design.code.match(/data-editable-ignore/g)).toHaveLength(1);
+  });
+
+  it('advises on cross-skill caption wrapping hazards without blocking publish', () => {
+    const report = validateDesignReport({
+      code: `
+        function Caption({text,keyWord}) {
+          const parts = text.split(keyWord);
+          return <div style={{display:'inline',WebkitBoxDecorationBreak:'clone',boxDecorationBreak:'clone',padding:'12px 18px'}}>
+            {parts[0]}<span>{keyWord}</span>{parts[1]}
+          </div>;
+        }
+        function Composition(props) { return <Caption text={props.caption} keyWord={props.keyWord} />; }
+      `,
+      props: { caption: '脑子里有个画面', keyWord: '画面' },
+    });
+
+    expect(report.blocking).toEqual([]);
+    expect(report.advisories.join('\n')).toContain('box-decoration-break: clone');
+    expect(report.advisories.join('\n')).toContain('highlighted word');
+  });
+
+  it('blocks keyword highlighting that drops spoken caption text', () => {
+    const report = validateDesignReport({
+      code: `
+        function Caption({line, hot}) {
+          return <div>{line.split(hot).map((part, index) => <span key={index}>{part}</span>)}</div>;
+        }
+        function Composition(props) { return <Caption line={props.caption} hot={props.keyword} />; }
+      `,
+      props: { caption: '脑子里有个画面', keyword: '画面' },
+    });
+
+    expect(report.blocking.join('\n')).toContain('Caption text integrity error');
+    expect(report.blocking.join('\n')).toContain('before + keyword + after');
+  });
+
+  it('accepts keyword highlighting that reconstructs the exact caption', () => {
+    const report = validateDesignReport({
+      code: `
+        function Caption({line, hot}) {
+          return <div>{line.split(hot).map((part, index) => (
+            <React.Fragment key={index}>
+              {part}{index === 0 && <span style={{display:'inline-block',whiteSpace:'nowrap'}}>{hot}</span>}
+            </React.Fragment>
+          ))}</div>;
+        }
+        function Composition(props) { return <Caption line={props.caption} hot={props.keyword} />; }
+      `,
+      props: { caption: '脑子里有个画面', keyword: '画面' },
+    });
+
+    expect(report.blocking).toEqual([]);
+  });
+
   it('keeps compiler-owned image and literal fields valid on repeated validation', () => {
     const design = {
       code: `
@@ -246,7 +325,7 @@ describe('design harness compile preflight', () => {
     expect(validateDesign(design)).toBeNull();
   });
 
-  it('still blocks legacy editable metadata with no visible owner', () => {
+  it('omits legacy editable metadata with no visible owner without blocking the composition', () => {
     const design = {
       code: 'function Composition() { return <AbsoluteFill />; }',
       props: { orphanTitle: 'Invisible title' },
@@ -255,7 +334,11 @@ describe('design harness compile preflight', () => {
       ],
     };
 
-    expect(validateDesign(design)).toContain('no JSX element has data-editable="orphanTitle"');
+    const report = validateDesignReport(design);
+    expect(report.blocking).toEqual([]);
+    expect(report.advisories.join('\n')).toContain('no JSX element has data-editable="orphanTitle"');
+    expect(design.editables).toEqual([]);
+    expect(validateDesign(design)).toBeNull();
   });
 });
 

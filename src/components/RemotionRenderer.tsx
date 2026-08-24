@@ -9,6 +9,8 @@ import type { DesignPayload } from '@/types';
 import {
   prepareAndLoadRemotionFontsWithTiming,
   prepareRemotionFontCodeFromBundledCatalog,
+  validateRemotionFontManifest,
+  type RemotionFontCatalogManifest,
   type RemotionFontTiming,
 } from '@/remotion/font-catalog';
 import { useLocale } from '@/lib/i18n';
@@ -115,10 +117,8 @@ async function resolveDesignImageUrls(
   return { code: resolvedCode, props, blobUrls: [...codeBlobUrls, ...propBlobUrls] };
 }
 
-// The query revision prevents previously cached host-bound manifests from
-// sending LAN clients back to localhost.
-const BROWSER_FONT_MANIFEST_URL = '/api/remotion/fonts?browser-manifest=relative-v1';
 const INTERACTIVE_FONT_WAIT_MS = 500;
+const browserFontManifestCache = new Map<string, Promise<RemotionFontCatalogManifest>>();
 
 export interface BrowserRemotionFontTiming {
   source: 'player' | 'poster' | 'preview-frame' | 'web-export';
@@ -135,16 +135,55 @@ function recordBrowserFontTiming(entry: BrowserRemotionFontTiming): void {
   window.dispatchEvent(new CustomEvent('makaron:remotion-font-timing', { detail: entry }));
 }
 
+async function resolveBrowserFontManifest(
+  design: DesignPayload,
+  code: string,
+  props: Record<string, unknown>,
+): Promise<RemotionFontCatalogManifest> {
+  const body = JSON.stringify({
+    code,
+    props,
+    fontSubstitutions: design.fontSubstitutions || {},
+  });
+  let pending = browserFontManifestCache.get(body);
+  if (!pending) {
+    pending = (async () => {
+      const response = await fetch('/api/remotion/fonts', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body,
+      });
+      if (!response.ok) {
+        const errorBody = await response.json().catch(() => null) as { error?: string } | null;
+        throw new Error(errorBody?.error || `Remotion font manifest failed: ${response.status}`);
+      }
+      return validateRemotionFontManifest(await response.json());
+    })();
+    browserFontManifestCache.set(body, pending);
+    if (browserFontManifestCache.size > 20) {
+      const oldest = browserFontManifestCache.keys().next().value;
+      if (oldest) browserFontManifestCache.delete(oldest);
+    }
+  }
+  try {
+    return await pending;
+  } catch (error) {
+    browserFontManifestCache.delete(body);
+    throw error;
+  }
+}
+
 async function compileBrowserDesign(
   design: DesignPayload,
   code: string,
   props: Record<string, unknown>,
   source: BrowserRemotionFontTiming['source'],
 ): Promise<React.ComponentType<Record<string, unknown>>> {
+  const manifest = await resolveBrowserFontManifest(design, code, props);
   const { prepared, timing } = await prepareAndLoadRemotionFontsWithTiming({
     code,
     props,
-    manifestUrl: BROWSER_FONT_MANIFEST_URL,
+    manifest,
     substitutions: design.fontSubstitutions,
   });
   recordBrowserFontTiming({ source, recordedAt: new Date().toISOString(), timing });
@@ -421,6 +460,7 @@ export default function RemotionRenderer({
         ]);
 
         let comp: React.ComponentType<Record<string, unknown>>;
+        let fontsSettled = true;
         if (fontResult?.component) {
           comp = fontResult.component;
         } else {
@@ -433,20 +473,30 @@ export default function RemotionRenderer({
             resolvedCode,
             designPropsRef.current,
           );
+          fontsSettled = false;
           if (fontResult?.error) {
             reportPreviewFailureRef.current('font-load', fontResult.error, { recovered: true });
+            fontsSettled = true;
           } else {
             void fontCompile.then(result => {
+              if (cancelled) return;
               if (result.error && isRecoverableRemotionPreviewError(result.error)) {
                 reportPreviewFailureRef.current('font-load', result.error, { recovered: true });
               }
+              // Keep the mounted Player/media nodes, but do not present the
+              // interactive preview as ready until the same pinned FontFace
+              // resources used by server/Lambda export have settled. The
+              // deferred component already references those versioned family
+              // names, so registering the faces reflows it in place without
+              // resetting playback.
+              onLoading?.(false);
             });
           }
         }
         if (cancelled) { blobUrls.forEach(url => URL.revokeObjectURL(url)); return; }
         setCompileError(null);
         setComponent(() => comp);
-        onLoading?.(false);
+        if (fontsSettled) onLoading?.(false);
       } catch (e) {
         if (cancelled) return;
         const msg = e instanceof Error ? e.message : String(e);
