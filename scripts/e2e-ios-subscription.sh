@@ -24,6 +24,14 @@ cleanup() {
 }
 trap cleanup EXIT INT TERM
 
+prime_photo_library() {
+  # simctl addmedia returns before Photos has necessarily indexed the asset.
+  # Opening Photos once makes the subsequent PHPicker grid deterministic.
+  xcrun simctl launch "$SIMULATOR_ID" com.apple.mobileslideshow >/dev/null 2>&1 || true
+  sleep 2
+  xcrun simctl terminate "$SIMULATOR_ID" com.apple.mobileslideshow >/dev/null 2>&1 || true
+}
+
 for command_name in curl docker npx npm rg xcodebuild xcrun; do
   command -v "$command_name" >/dev/null || {
     printf 'Missing required command: %s\n' "$command_name" >&2
@@ -63,6 +71,7 @@ xcrun simctl boot "$SIMULATOR_ID"
 open -a Simulator --args -CurrentDeviceUDID "$SIMULATOR_ID"
 xcrun simctl bootstatus "$SIMULATOR_ID" -b
 xcrun simctl addmedia "$SIMULATOR_ID" "$PHOTO_FIXTURE"
+prime_photo_library
 
 npx supabase db reset --workdir "$SUPABASE_WORKDIR" --local
 
@@ -133,6 +142,7 @@ xcrun simctl boot "$SIMULATOR_ID"
 open -a Simulator --args -CurrentDeviceUDID "$SIMULATOR_ID"
 xcrun simctl bootstatus "$SIMULATOR_ID" -b
 xcrun simctl addmedia "$SIMULATOR_ID" "$PHOTO_FIXTURE"
+prime_photo_library
 npx supabase db reset --workdir "$SUPABASE_WORKDIR" --local
 
 set -o pipefail

@@ -26,8 +26,15 @@ final class MakaronStoreKitUITests: XCTestCase {
         ]
         app.launch()
 
-        let consent = webElement(app, identifier: "Allow AI processing and continue")
-        if consent.waitForExistence(timeout: 5) {
+        // WKWebView exposes this button's visible aria-label but does not
+        // consistently promote its data-testid to accessibilityIdentifier.
+        let consent = app.buttons
+            .matching(NSPredicate(format: "label == %@", "Allow AI processing and continue"))
+            .firstMatch
+        // A cold local Next.js compile can finish after the native WebView is
+        // already visible. Give the first-run consent document enough time to
+        // become accessible before continuing into the seeded Skill flow.
+        if consent.waitForExistence(timeout: 20) {
             consent.tap()
         }
 
@@ -40,7 +47,7 @@ final class MakaronStoreKitUITests: XCTestCase {
         }
 
         let skill = webElement(app, identifier: "E2E Ending Spirit")
-        XCTAssertTrue(skill.waitForExistence(timeout: 20), "Seeded E2E Skill did not load")
+        XCTAssertTrue(skill.waitForExistence(timeout: 30), "Seeded E2E Skill did not load")
         skill.tap()
         attachScreenshot(app, name: "01-skill-detail")
 
@@ -58,18 +65,22 @@ final class MakaronStoreKitUITests: XCTestCase {
         if includesPhoto {
             uploadPhoto.tap()
 
-            // iOS 26 exposes PHPicker grid assets as Images rather than Cells.
-            // The picker is a remote scene, but it remains in the host app's AX tree.
-            let firstPhoto = app.images.matching(identifier: "PXGGridLayout-Info").firstMatch
-            XCTAssertTrue(firstPhoto.waitForExistence(timeout: 10), "Native photo picker did not open")
             let pickerDone = app.buttons["Done"]
-            XCTAssertTrue(pickerDone.waitForExistence(timeout: 5), "Native photo picker Done button did not appear")
-            // The remote Photos scene can expose the first grid item just before it
-            // is ready to accept the synthesized tap. Only continue after the Done
-            // button proves that an item is actually selected.
+            XCTAssertTrue(pickerDone.waitForExistence(timeout: 15), "Native photo picker did not open")
+            // Querying an individual Photos grid asset can deadlock XCUI for two
+            // minutes when the iOS 26 remote picker scene is still indexing.
+            // The dedicated simulator always contains the fixture as the first
+            // grid item, so tap that visible cell by its stable grid position.
+            RunLoop.current.run(until: Date().addingTimeInterval(2))
+            let firstPhotoPoint = CGVector(
+                dx: app.frame.width / 6,
+                dy: app.frame.height * 0.42
+            )
             var selectedPhoto = false
             for _ in 0..<3 where !selectedPhoto {
-                firstPhoto.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.5)).tap()
+                app.coordinate(withNormalizedOffset: CGVector(dx: 0, dy: 0))
+                    .withOffset(firstPhotoPoint)
+                    .tap()
                 selectedPhoto = XCTWaiter.wait(
                     for: [XCTNSPredicateExpectation(predicate: NSPredicate(format: "isEnabled == true"), object: pickerDone)],
                     timeout: 2
@@ -127,7 +138,24 @@ final class MakaronStoreKitUITests: XCTestCase {
                 field.tap()
             }
             XCTAssertTrue(key.waitForExistence(timeout: 3), "OTP keypad digit \(digit) was unavailable")
-            key.tap()
+            if key.isHittable {
+                key.tap()
+            } else {
+                // The iOS 26 remote number pad can expose a valid key frame
+                // while XCUIElement.tap() tries to scroll it and resolves to
+                // {-1,-1}. Tap the already-proven visible frame directly.
+                let keyFrame = key.frame
+                if !keyFrame.isEmpty && app.frame.intersects(keyFrame) {
+                    app.coordinate(withNormalizedOffset: CGVector(dx: 0, dy: 0))
+                        .withOffset(CGVector(dx: keyFrame.midX, dy: keyFrame.midY))
+                        .tap()
+                } else {
+                    let field = app.textFields.matching(identifier: "OTP digit \(index + 1)").firstMatch
+                    XCTAssertTrue(field.waitForExistence(timeout: 3), "OTP digit \(index + 1) field was unavailable")
+                    field.tap()
+                    field.typeText(String(digit))
+                }
+            }
         }
         // The web flow auto-submits as soon as digit 8 lands. Do not race the
         // transient Verify button: it becomes disabled while verification is
