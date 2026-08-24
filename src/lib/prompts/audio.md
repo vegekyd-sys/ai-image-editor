@@ -12,6 +12,7 @@ This guide follows the ByteDance Seed Audio 1.0 capability position published on
 - Use `generate_audio` for every standalone voiceover, narration, dialogue, music, ambience, SFX, and mixed scene.
 - Choose the final audio architecture before the first call. If one finished soundtrack contains voice/dialogue plus any music, ambience, or SFX, call `generate_audio` exactly once with `kind: "mixed"` and direct every layer in that single prompt. Never generate voiceover first and music/effects second, never ask Seed Audio for stems, and never assemble this soundtrack from multiple model generations.
 - Use `kind: "voiceover"` only when the requested asset is an intentionally isolated voice master with no music, ambience, SFX, or sung vocals. Never look for or call a separate voiceover or voice-catalog tool.
+- Use `kind: "translation"` for same-speaker speech translation. Pass exactly one typed `source_voice` plus `target_language`; do not use `reference_voices` or image conditioning. Omit `translated_script` for direct translation, or provide the exact target-language script when protected wording must be deterministic. The tool supplies the voice-identity preservation brief.
 - A final video produced by `generate_animation` keeps its native-audio contract: put audio direction in `story_prompt` and do not create a separate audio asset.
 - When exact spoken words, brand names, numbers, multilingual lines, or cue timing matter, call `transcribe_audio` on the returned public audio URL before claiming success. Compare the transcript and word/utterance timestamps with the script. If verification fails, retry Seed Audio with a shorter, clearer voice-first prompt; do not silently accept missing or mistimed speech and do not switch providers.
 - For narrated Remotion, Explainer, or editable Composition work, call `transcribe_audio` with the approved Script `expected_sections` and Composition `fps`. Do this before Storyboard or `run_code`; the returned narration cue sheet is the master clock.
@@ -22,6 +23,7 @@ This guide follows the ByteDance Seed Audio 1.0 capability position published on
 - Current gateway limits: final provider prompt <= 1,500 characters, output <= 120 seconds, up to 3 reference voices/audio clips, and at most 1 reference image. Keep the Agent-authored `prompt` <= 1,250 characters because the tool adds a short mode wrapper before submission.
 - Reference audio and reference image are mutually exclusive.
 - Reference clips should be clean, single-speaker, <= 30 seconds, with minimal music and noise.
+- MP3 and WAV are valid reference inputs. A translation may also extract and concatenate 2-30 seconds of ASR-aligned speech ranges from one explicitly referenced timeline video; only the audio derivative reaches Seed Audio.
 - Use `@audio1`, `@audio2`, and `@audio3` inside the prompt in the same order as `reference_voices`.
 - `target_duration` is a prompt target, not a guaranteed provider duration field.
 - Timeline cues are model instructions, not sample-accurate editing. Use tenths of a second when useful and verify the output.
@@ -34,9 +36,10 @@ Choose one primary mode:
 2. **Full scene** — dialogue or narration with music, ambience, and meaningful SFX; use one `kind: "mixed"` generation.
 3. **Multi-character** — named speakers with distinct identity, delivery, and turn-taking.
 4. **Multilingual** — one language, localization, or code-switching while preserving character identity.
-5. **Music bed** — instrumental soundtrack with a clear energy arc and intentional ending.
-6. **Sound design** — ambience, foley, transitions, and isolated or layered effects.
-7. **Continuation** — use a previous clean voice/audio reference to continue character identity and scene tone.
+5. **Translation** — move existing speech into a target language while preserving the source speaker and performance.
+6. **Music bed** — instrumental soundtrack with a clear energy arc and intentional ending.
+7. **Sound design** — ambience, foley, transitions, and isolated or layered effects.
+8. **Continuation** — use a previous clean voice/audio reference to continue character identity and scene tone.
 
 ## Prompt structure
 
@@ -141,6 +144,9 @@ Omit empty sections. For a simple music or SFX request, use the same playback-or
 ## Parameter policy
 
 - `reference_voices`: highest-impact voice-consistency control. Items are Audio Index labels such as `audio_1` or provider preset voice IDs. Maximum 3.
+- `source_voice`: required only for `kind: "translation"`. Use one Audio Index MP3/WAV, or one explicitly referenced timeline video plus ordered ASR ranges totaling 2-30 seconds. This is separate from `reference_voices`.
+- `target_language`: required for translation. Use a clear locale when regional delivery matters.
+- `translated_script`: optional exact target-language wording. Omit it for direct translation of the source reference; add it after direct-translation drift or whenever names, numbers, claims, or protected terms must be exact.
 - `conditioning: { type: "image", media_index: N }`: use one still image only when it belongs to the current upload batch or the user explicitly names it as `@N` / `<<<media_N>>>`. Omit conditioning for ordinary audio. Never inherit the currently selected Timeline item, and never combine image conditioning with a reference voice.
 - `speech_rate`: 0.5-2.0. Default 1.0; change only for delivery or duration pressure.
 - `loudness_rate`: 0.5-2.0. Default 1.0; prompt-level mix direction still matters.
@@ -164,6 +170,7 @@ Before calling the tool, check:
 - Any promised music-only intro, interlude, or outro has real speech-free time
   budget; do not assume planned timestamps will force it to exist.
 - A `voiceover` request contains only voice and a complete Voice Performance Brief.
+- A `translation` request has one source voice, a target language, no image conditioning, and no supporting audio layers. After generation, transcribe the translated master and use that measured result as the new clock.
 
 After generation, verify target duration and exact speech when they are acceptance requirements. For narrated video, persist the measured narration cue sheet and use it as the only speech timebase. Treat provider completion as transport success, not a quality pass.
 

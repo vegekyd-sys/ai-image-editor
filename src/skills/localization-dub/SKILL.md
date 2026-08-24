@@ -33,7 +33,8 @@ localization, not lip sync unless a real lip-sync path is explicitly available.
 ## Workflow
 
 1. Read `skills/_shared/studio-production/production-contract.md`, the shared
-   audio and review contracts.
+   audio and review contracts. For same-speaker dubbing, also read
+   `skills/_shared/voice-translation.md`.
 2. Start recipe `localization-dub`; lock source language, target locale(s),
    subtitle/dub mode, voice expectation, and source runtime.
 3. Analyze and transcribe the source. The brief lists protected product names,
@@ -42,8 +43,10 @@ localization, not lip sync unless a real lip-sync path is explicitly available.
    must preserve claims and source structure.
 5. The script artifact contains timed translated cues. Favor natural spoken
    language over literal syntax without changing meaning.
-6. For dubbing, choose and sample a voice, then fit phrasing to source timing.
-   Rewrite cues that drift more than 10% instead of extending the video.
+6. For ordinary dubbing, choose and sample a voice. For same-speaker dubbing,
+   follow the shared voice-translation contract and use Seed Audio translation
+   with the source speaker as the only voice reference. Fit phrasing to source
+   timing; rewrite cues that drift more than 10% instead of extending the video.
 7. Storyboard dense subtitle frames and final legal/CTA frames. Account for
    longer target-language lines and safe areas.
 8. Compose locale variants in Remotion, preview dense text and closing copy,

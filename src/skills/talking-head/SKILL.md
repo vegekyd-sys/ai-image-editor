@@ -3,7 +3,7 @@ name: talking-head
 description: >
   Edit talking-head footage with transcript-led cuts, synced captions, B-roll,
   and highlights.
-allowed-tools: read_file analyze_video transcribe_audio studio_run run_code write_file publish_draft preview_frame materialize_media generate_image generate_animation
+allowed-tools: read_file analyze_video transcribe_audio studio_run run_code write_file publish_draft preview_frame materialize_media generate_image generate_animation generate_audio
 metadata:
   makaron:
     icon: "✂"
@@ -36,6 +36,8 @@ stay with it unless it actually fails.
 Before editing, read `skills/_shared/speech-clock.md` and
 `skills/_shared/spoken-caption.md`. Follow the source-speech route and shared
 caption contract. This Skill owns only the talking-head editorial decisions.
+For translation or dubbing, finish the edit first, then read and follow
+`skills/_shared/voice-translation.md`.
 
 ## Find the story, then cut it
 

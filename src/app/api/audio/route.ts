@@ -17,6 +17,11 @@ export async function POST(req: NextRequest) {
     const body = await req.json()
     const {
       prompt,
+      kind,
+      targetLanguage,
+      target_language,
+      translatedScript,
+      translated_script,
       durationSeconds,
       duration_seconds,
       audioReferences,
@@ -39,8 +44,8 @@ export async function POST(req: NextRequest) {
       project_id,
       model,
     } = body
-    if (!prompt) {
-      return NextResponse.json({ error: 'prompt is required' }, { status: 400 })
+    if (!prompt && kind !== 'translation') {
+      return NextResponse.json({ error: 'prompt is required unless kind=translation' }, { status: 400 })
     }
 
     const estimatedCredits = seedAudioMakaronCredits({ durationSeconds: durationSeconds ?? duration_seconds ?? 20 })
@@ -49,6 +54,9 @@ export async function POST(req: NextRequest) {
 
     const result = await createAudio({
       prompt,
+      kind,
+      targetLanguage: targetLanguage ?? target_language,
+      translatedScript: translatedScript ?? translated_script,
       durationSeconds: durationSeconds ?? duration_seconds,
       audioReferences: audioReferences ?? audio_references,
       imageUrls: imageUrls ?? image_urls,

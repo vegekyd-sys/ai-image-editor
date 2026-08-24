@@ -484,9 +484,12 @@ Poll every 10-15 seconds. Do NOT poll in a tight loop.`,
     'makaron_create_audio',
     `Generate one complete standalone soundtrack with Seed Audio 1.0.
 
-Use a compact playback-order timeline for narration, dialogue, multilingual speech, music, ambience, and sound effects. The current gateway accepts prompts up to 1,500 characters and outputs up to 120 seconds. You may provide up to 3 audio references or 1 image reference, but never both. Bind audio references in prompt order as @audio1, @audio2, and @audio3. WAV/48 kHz is the production-master default.`,
+Use a compact playback-order timeline for narration, dialogue, multilingual speech, music, ambience, and sound effects. Use kind=translation with exactly one MP3/WAV audio reference and target_language to translate speech while retaining the speaker's voice and performance. The current gateway accepts prompts up to 1,500 characters and outputs up to 120 seconds. You may provide up to 3 audio references or 1 image reference, but never both. Bind ordinary audio references in prompt order as @audio1, @audio2, and @audio3. WAV/48 kHz is the production-master default.`,
     {
-      prompt: z.string().max(1500).describe('Complete timeline-directed Seed Audio production brief.'),
+      kind: z.enum(['voiceover', 'dialogue', 'music', 'sound_design', 'mixed', 'translation']).optional(),
+      prompt: z.string().max(1250).optional().describe('Complete timeline-directed Seed Audio production brief. Optional only for kind=translation.'),
+      target_language: z.string().optional().describe('Required for kind=translation.'),
+      translated_script: z.string().optional().describe('Optional exact target-language script. Omit to translate all speech in audio_references[0] directly.'),
       duration_seconds: z.number().positive().max(120).optional().describe('Target duration in seconds.'),
       audio_references: z.array(z.string()).max(3).optional().describe('Public HTTPS audio URLs or provider preset voice IDs, bound as @audio1..@audio3 in the prompt.'),
       image_urls: z.array(z.string().url()).max(1).optional().describe('At most one public HTTPS image URL; mutually exclusive with audio_references.'),
@@ -507,6 +510,9 @@ Use a compact playback-order timeline for narration, dialogue, multilingual spee
         const t0 = Date.now();
         const result = await createAudio({
           prompt: params.prompt,
+          kind: params.kind,
+          targetLanguage: params.target_language,
+          translatedScript: params.translated_script,
           durationSeconds: params.duration_seconds,
           audioReferences: params.audio_references,
           imageUrls: params.image_urls,
