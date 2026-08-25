@@ -42,7 +42,8 @@ describe('Remotion preview error handling', () => {
     expect(route).toContain("console.error('[remotion-client-error]'");
     expect(fontRoute).toContain('url: `/api/remotion/fonts/${face.sha256}`');
     expect(fontRoute).not.toContain('new URL(`/api/remotion/fonts/');
-    expect(renderer).toContain("'/api/remotion/fonts?browser-manifest=relative-v1'");
+    expect(renderer).toContain("fetch('/api/remotion/fonts'");
+    expect(renderer).toContain("method: 'POST'");
     expect(fontRoute).toContain("'Cache-Control': 'private, no-cache'");
     expect(fontAssetRoute).toContain('const body = await response.arrayBuffer()');
     expect(fontAssetRoute).toContain("'Content-Length': String(body.byteLength)");

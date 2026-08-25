@@ -1,7 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
 import { getSupabaseAdmin } from '@/lib/supabase/service'
-import { getConfiguredWelcomeCredits } from '@/lib/billing/welcome-credits'
+import { initializeSignupCredits } from '@/lib/billing/signup-credits'
+import { userAgentHasMakaronIOSToken } from '@/lib/native-app'
 
 // Authenticated endpoint — validates invite code and activates user
 export async function POST(req: NextRequest) {
@@ -13,6 +14,7 @@ export async function POST(req: NextRequest) {
   }
 
   const { code, autoActivate } = await req.json()
+  const isIOSApp = userAgentHasMakaronIOSToken(req.headers.get('user-agent') ?? undefined)
 
   // Auto-activate: user already activated in DB, or existing user with projects
   if (autoActivate) {
@@ -46,32 +48,15 @@ export async function POST(req: NextRequest) {
       .from('user_profiles')
       .upsert({ id: user.id, activated: true }, { onConflict: 'id' })
 
-    // Grant welcome credits if no balance exists
-    let isNewUser = false
-    const { data: existingBalance } = await admin
-      .from('credit_balances')
-      .select('balance')
-      .eq('user_id', user.id)
-      .single()
+    const signupCredits = await initializeSignupCredits({ admin, userId: user.id, isIOSApp })
 
-    if (!existingBalance) {
-      isNewUser = true
-      const welcomeCredits = await getConfiguredWelcomeCredits(admin)
-      if (welcomeCredits > 0) {
-        const { addCredits } = await import('@/lib/billing/credits')
-        await addCredits(user.id, welcomeCredits)
-        await admin.from('credit_purchases').insert({
-          user_id: user.id,
-          stripe_session_id: 'welcome_gift',
-          credits: welcomeCredits,
-          amount_usd: 0,
-          status: 'completed',
-          source: 'welcome',
-        })
-      }
-    }
-
-    const response = NextResponse.json({ success: true, autoActivated: true, welcome: isNewUser })
+    const response = NextResponse.json({
+      success: true,
+      autoActivated: true,
+      welcome: signupCredits.credits > 0,
+      trialRequired: signupCredits.trialRequired,
+      credits: signupCredits.credits,
+    })
     response.cookies.set('mkr_activated', '1', {
       path: '/',
       maxAge: 365 * 24 * 60 * 60,
@@ -121,39 +106,20 @@ export async function POST(req: NextRequest) {
       invite_code_used: normalizedCode,
     }, { onConflict: 'id' })
 
-  // Grant welcome credits (only if user has no balance yet)
-  let isNewUser = false
+  let signupCredits = { credits: 0, trialRequired: isIOSApp }
   try {
     const admin = getSupabaseAdmin()
-    const { data: existingBalance } = await admin
-      .from('credit_balances')
-      .select('balance')
-      .eq('user_id', user.id)
-      .single()
-
-    if (!existingBalance) {
-      isNewUser = true
-      const welcomeCredits = await getConfiguredWelcomeCredits(admin)
-
-      if (welcomeCredits > 0) {
-        const { addCredits } = await import('@/lib/billing/credits')
-        await addCredits(user.id, welcomeCredits)
-
-        await admin.from('credit_purchases').insert({
-          user_id: user.id,
-          stripe_session_id: 'welcome_gift',
-          credits: welcomeCredits,
-          amount_usd: 0,
-          status: 'completed',
-          source: 'welcome',
-        })
-      }
-    }
+    signupCredits = await initializeSignupCredits({ admin, userId: user.id, isIOSApp })
   } catch (e) {
     console.error('[validate-invite] Welcome credits failed (non-blocking):', e)
   }
 
-  const response = NextResponse.json({ success: true, welcome: isNewUser })
+  const response = NextResponse.json({
+    success: true,
+    welcome: signupCredits.credits > 0,
+    trialRequired: signupCredits.trialRequired,
+    credits: signupCredits.credits,
+  })
   response.cookies.set('mkr_activated', '1', {
     path: '/',
     maxAge: 365 * 24 * 60 * 60,

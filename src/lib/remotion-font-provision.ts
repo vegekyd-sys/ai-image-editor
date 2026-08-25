@@ -17,6 +17,11 @@ import {
   type RemotionFontCatalogManifest,
 } from '@/remotion/font-catalog';
 
+const AVAILABLE_GOOGLE_FONTS = getAvailableFonts();
+const GOOGLE_FONT_BY_NAME = new Map(
+  AVAILABLE_GOOGLE_FONTS.map((font) => [font.fontFamily.toLowerCase(), font]),
+);
+
 interface GoogleFontInfo {
   unicodeRanges: Record<string, string>;
   fonts: Record<string, Record<string, Record<string, string>>>;
@@ -30,6 +35,11 @@ interface SourceFontFace {
   subset: string;
   unicodeRange: string;
   sourceUrl: string;
+}
+
+interface RequestedFontDefinition {
+  family: string;
+  weights?: number[];
 }
 
 export interface ProvisionedRemotionFontCatalog {
@@ -68,12 +78,13 @@ function closestWeight(requested: number, available: number[]): number {
     Math.abs(candidate - requested) < Math.abs(best - requested) ? candidate : best, available[0]);
 }
 
-export async function collectRemotionFontSourceFaces(): Promise<SourceFontFace[]> {
-  const availableFonts = getAvailableFonts();
+async function collectSourceFaces(
+  definitions: RequestedFontDefinition[],
+): Promise<SourceFontFace[]> {
   const faces: SourceFontFace[] = [];
 
-  for (const definition of REMOTION_FONT_CATALOG) {
-    const available = availableFonts.find((font) => font.fontFamily === definition.family);
+  for (const definition of definitions) {
+    const available = GOOGLE_FONT_BY_NAME.get(definition.family.toLowerCase());
     if (!available) throw new Error(`@remotion/google-fonts is missing ${definition.family}`);
     const fontModule = await available.load();
     const info = fontModule.getInfo() as GoogleFontInfo;
@@ -82,7 +93,8 @@ export async function collectRemotionFontSourceFaces(): Promise<SourceFontFace[]
     const availableWeights = Object.keys(normal).map(Number).filter(Number.isFinite);
     if (availableWeights.length === 0) throw new Error(`Remotion font ${definition.family} has no weights`);
 
-    for (const requestedWeight of definition.weights) {
+    const requestedWeights = definition.weights || availableWeights;
+    for (const requestedWeight of requestedWeights) {
       const sourceWeight = closestWeight(requestedWeight, availableWeights);
       const subsets = normal[String(sourceWeight)];
       for (const [subset, sourceUrl] of Object.entries(subsets)) {
@@ -103,6 +115,17 @@ export async function collectRemotionFontSourceFaces(): Promise<SourceFontFace[]
     }
   }
   return faces;
+}
+
+export async function collectRemotionFontSourceFaces(): Promise<SourceFontFace[]> {
+  return collectSourceFaces(REMOTION_FONT_CATALOG);
+}
+
+export async function collectRemotionFontSourceFacesForFamilies(
+  families: string[],
+): Promise<SourceFontFace[]> {
+  const uniqueFamilies = [...new Set(families.map((family) => family.trim()).filter(Boolean))];
+  return collectSourceFaces(uniqueFamilies.map((family) => ({ family })));
 }
 
 function manifestCoversCatalog(manifest: RemotionFontCatalogManifest): boolean {
@@ -171,15 +194,19 @@ async function uploadPublicManifest(
   s3: S3Client,
   bucketName: string,
   manifest: RemotionFontCatalogManifest,
+  key = `sites/_font-catalog/${REMOTION_FONT_CATALOG_VERSION}/manifest.json`,
+  immutable = false,
 ): Promise<void> {
   const compressed = gzipSync(Buffer.from(JSON.stringify(manifest)));
   await s3.send(new PutObjectCommand({
     Bucket: bucketName,
-    Key: `sites/_font-catalog/${REMOTION_FONT_CATALOG_VERSION}/manifest.json`,
+    Key: key,
     Body: compressed,
     ContentType: 'application/json; charset=utf-8',
     ContentEncoding: 'gzip',
-    CacheControl: 'public, max-age=300, s-maxage=300, stale-while-revalidate=86400',
+    CacheControl: immutable
+      ? 'public, max-age=31536000, immutable'
+      : 'public, max-age=300, s-maxage=300, stale-while-revalidate=86400',
     ACL: 'public-read',
   }));
 }
@@ -338,5 +365,139 @@ export async function provisionRemotionFontCatalog(input: {
     totalBytes,
     reusedExistingManifest: false,
     elapsedMs: Date.now() - startedAt,
+  };
+}
+
+export interface ProvisionedRemotionFontManifest {
+  manifest: RemotionFontCatalogManifest;
+  manifestUrl: string;
+  requestedFamilies: string[];
+  addedFamilies: string[];
+  uploadedAssetCount: number;
+  totalBytes: number;
+  reusedExistingManifest: boolean;
+}
+
+/**
+ * Extends the deploy-time base catalog with arbitrary Google Font families.
+ * Assets remain content-addressed and the derived manifest is immutable, so
+ * browser preview, Sandbox, local render, and Lambda all consume identical
+ * bytes without growing the base catalog to every Google Font up front.
+ */
+export async function provisionRemotionFontFamilies(input: {
+  region: string;
+  bucketName: string;
+  serveUrl: string;
+  baseManifestUrl: string;
+  families: string[];
+  concurrency?: number;
+}): Promise<ProvisionedRemotionFontManifest> {
+  const requestedFamilies = [...new Set(input.families.map((family) => {
+    const canonical = GOOGLE_FONT_BY_NAME.get(family.trim().toLowerCase())?.fontFamily;
+    if (!canonical) throw new Error(`Unsupported Google Font "${family}"`);
+    return canonical;
+  }))].sort((a, b) => a.localeCompare(b));
+  const catalogFamilies = new Set(REMOTION_FONT_CATALOG.map(({ family }) => family.toLowerCase()));
+  const addedFamilies = requestedFamilies.filter((family) => !catalogFamilies.has(family.toLowerCase()));
+  if (addedFamilies.length === 0) {
+    const baseResponse = await fetch(input.baseManifestUrl, { cache: 'no-store' });
+    if (!baseResponse.ok) {
+      throw new Error(`Remotion base font manifest returned ${baseResponse.status}`);
+    }
+    const baseManifest = validateRemotionFontManifest(await baseResponse.json());
+    return {
+      manifest: baseManifest,
+      manifestUrl: input.baseManifestUrl,
+      requestedFamilies,
+      addedFamilies,
+      uploadedAssetCount: 0,
+      totalBytes: 0,
+      reusedExistingManifest: true,
+    };
+  }
+
+  const requestHash = createHash('sha256')
+    .update(`${REMOTION_FONT_CATALOG_VERSION}\n${addedFamilies.join('\n')}`)
+    .digest('hex');
+  const manifestKey = `sites/_font-catalog/${REMOTION_FONT_CATALOG_VERSION}/manifests/${requestHash}.json`;
+  const manifestUrl = publicObjectUrl(input.serveUrl, manifestKey);
+  try {
+    const existingResponse = await fetch(manifestUrl, { cache: 'no-store' });
+    if (existingResponse.ok) {
+      const existing = validateRemotionFontManifest(await existingResponse.json());
+      const existingFamilies = new Set(existing.faces.map((face) => face.family.toLowerCase()));
+      if (addedFamilies.every((family) => existingFamilies.has(family.toLowerCase()))) {
+        return {
+          manifest: existing,
+          manifestUrl,
+          requestedFamilies,
+          addedFamilies,
+          uploadedAssetCount: 0,
+          totalBytes: 0,
+          reusedExistingManifest: true,
+        };
+      }
+    }
+  } catch {
+    // First use is expected to miss; continue with deterministic provisioning.
+  }
+
+  const [baseResponse, sourceFaces] = await Promise.all([
+    fetch(input.baseManifestUrl, { cache: 'no-store' }),
+    collectRemotionFontSourceFacesForFamilies(addedFamilies),
+  ]);
+  if (!baseResponse.ok) {
+    throw new Error(`Remotion base font manifest returned ${baseResponse.status}`);
+  }
+  const baseManifest = validateRemotionFontManifest(await baseResponse.json());
+  normalizeAwsCredentials();
+  const s3 = new S3Client({ region: input.region });
+  const sourceUrls = [...new Set(sourceFaces.map((face) => face.sourceUrl))];
+  let uploadedAssetCount = 0;
+  let totalBytes = 0;
+  const assets = await mapWithConcurrency(
+    sourceUrls,
+    Math.max(1, input.concurrency || 12),
+    async (sourceUrl) => {
+      const bytes = await fetchFontBytes(sourceUrl);
+      const sha256 = createHash('sha256').update(bytes).digest('hex');
+      const key = assetKey(sha256);
+      if (!(await objectExists(s3, input.bucketName, key))) {
+        await s3.send(new PutObjectCommand({
+          Bucket: input.bucketName,
+          Key: key,
+          Body: bytes,
+          ContentType: 'font/woff2',
+          CacheControl: 'public, max-age=31536000, immutable',
+          ACL: 'public-read',
+        }));
+        uploadedAssetCount++;
+      }
+      totalBytes += bytes.byteLength;
+      return [sourceUrl, { sha256, url: publicObjectUrl(input.serveUrl, key) }] as const;
+    },
+  );
+  const assetsBySource = new Map(assets);
+  const dynamicFaces = sourceFaces.map(({ sourceUrl, ...face }) => {
+    const asset = assetsBySource.get(sourceUrl);
+    if (!asset) throw new Error(`Missing provisioned font asset for ${sourceUrl}`);
+    return { ...face, ...asset };
+  });
+  const manifest: RemotionFontCatalogManifest = {
+    version: REMOTION_FONT_CATALOG_VERSION,
+    generatedAt: new Date().toISOString(),
+    faces: [...baseManifest.faces, ...dynamicFaces],
+  };
+  validateRemotionFontManifest(manifest);
+  await uploadPublicManifest(s3, input.bucketName, manifest, manifestKey, true);
+
+  return {
+    manifest,
+    manifestUrl,
+    requestedFamilies,
+    addedFamilies,
+    uploadedAssetCount,
+    totalBytes,
+    reusedExistingManifest: false,
   };
 }

@@ -171,6 +171,7 @@ export default function TopBar({ authReturnPath }: TopBarProps) {
     }
     if (!isMakaronIOSApp()) return
     TOPBAR_ROUTE_WARM_APIS[route]?.forEach((apiPath) => {
+      if (!user && apiPath.startsWith('/api/billing/')) return
       void warmNativeJSONCache(apiPath)
     })
     if (route === '/projects' && user?.id) {

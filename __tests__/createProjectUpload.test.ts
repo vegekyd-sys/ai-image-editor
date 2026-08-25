@@ -8,6 +8,7 @@ import {
   clearPendingProjectLaunches,
   getCreateDraft,
   getCreateDraftContinuationId,
+  getCachedProjectDataSync,
   getPendingProjectImagesSync,
   getPendingProjectLaunchSync,
   shouldConsumeCreateDraft,
@@ -87,7 +88,20 @@ describe('createProject upload flow', () => {
         })
       }
       expect(url).toBe('/api/projects/create')
-      expect(JSON.parse(String(init?.body))).toMatchObject({
+      const body = JSON.parse(String(init?.body))
+      if (body._addToProject) {
+        expect(body).toMatchObject({
+          _addToProject: '11111111-1111-4111-8111-111111111111',
+          imageUrls: ['https://cdn.makaron.app/11111111-1111-4111-8111-111111111111/anonymous-source-0.jpg'],
+        })
+        return new Response(JSON.stringify({
+          snapshots: [{
+            snapshotId: 'snapshot-from-api',
+            imageUrl: body.imageUrls[0],
+          }],
+        }), { status: 200, headers: { 'Content-Type': 'application/json' } })
+      }
+      expect(body).toMatchObject({
         title: 'Untitled',
         clientProjectId: '11111111-1111-4111-8111-111111111111',
         idempotencyKey: 'continuation-1',
@@ -112,8 +126,12 @@ describe('createProject upload flow', () => {
 
     expect(result?.projectId).toBe('11111111-1111-4111-8111-111111111111')
     expect(supabase.from).not.toHaveBeenCalled()
-    expect(getPendingProjectImagesSync('11111111-1111-4111-8111-111111111111')).toEqual([
-      expect.stringMatching(/^https:\/\/cdn\.makaron\.app\/11111111-1111-4111-8111-111111111111\/anonymous-source-/),
+    expect(getPendingProjectImagesSync('11111111-1111-4111-8111-111111111111')).toBeNull()
+    expect(getCachedProjectDataSync('11111111-1111-4111-8111-111111111111')?.snapshots).toEqual([
+      expect.objectContaining({
+        id: 'snapshot-from-api',
+        imageUrl: 'https://cdn.makaron.app/11111111-1111-4111-8111-111111111111/anonymous-source-0.jpg',
+      }),
     ])
     expect(sessionStorage.getItem('pendingImages')).toBeNull()
     expect(JSON.parse(sessionStorage.getItem('pendingMetadata') || '{}')).toEqual({ location: 'Draft City' })
@@ -135,8 +153,19 @@ describe('createProject upload flow', () => {
     })
     const fetchMock = vi.fn(async (url: string, init?: RequestInit) => {
       if (url === '/api/marketing/events') return new Response('{}', { status: 200 })
+      const body = JSON.parse(String(init?.body))
+      if (body._addToProject) {
+        sequence.push('persist')
+        expect(body).toMatchObject({
+          _addToProject: '22222222-2222-4222-8222-222222222222',
+          imageUrls: ['https://cdn.makaron.app/22222222-2222-4222-8222-222222222222/anonymous-source-0.jpg'],
+        })
+        return new Response(JSON.stringify({
+          snapshots: [{ snapshotId: 'snapshot-from-api', imageUrl: body.imageUrls[0] }],
+        }), { status: 200, headers: { 'Content-Type': 'application/json' } })
+      }
       sequence.push('create')
-      expect(JSON.parse(String(init?.body))).toMatchObject({
+      expect(body).toMatchObject({
         clientProjectId: '22222222-2222-4222-8222-222222222222',
         idempotencyKey: 'continuation-2',
       })
@@ -153,7 +182,7 @@ describe('createProject upload flow', () => {
       continuationId: 'continuation-2',
     })
 
-    expect(sequence).toEqual(['upload', 'create'])
+    expect(sequence).toEqual(['upload', 'create', 'persist'])
   })
 
   it('does not create an empty project when restored anonymous media upload fails', async () => {

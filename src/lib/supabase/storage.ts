@@ -6,7 +6,10 @@ const CDN_HOST = process.env.NEXT_PUBLIC_SUPABASE_URL || LEGACY_HOST
 
 /** Check if a URL is permanently stored in our Supabase Storage (not a temporary provider URL). */
 export function isPermanentUrl(url: string): boolean {
-  return url.includes('supabase.co/storage/') || url.includes('makaron.app/storage/')
+  const configuredStoragePrefix = `${CDN_HOST.replace(/\/$/, '')}/storage/`
+  return url.startsWith(configuredStoragePrefix)
+    || url.includes('supabase.co/storage/')
+    || url.includes('makaron.app/storage/')
 }
 
 export function normalizeDomain(url: string): string {
@@ -14,6 +17,18 @@ export function normalizeDomain(url: string): string {
     return url.replace(LEGACY_HOST, CDN_HOST)
   }
   return url
+}
+
+function supportsSupabaseImageTransforms(url: string): boolean {
+  try {
+    const hostname = new URL(url).hostname.toLowerCase()
+    return hostname !== 'localhost'
+      && hostname !== '127.0.0.1'
+      && hostname !== '::1'
+      && hostname !== '[::1]'
+  } catch {
+    return true
+  }
 }
 
 /** Return the Supabase storage URL with normalized domain. */
@@ -101,6 +116,9 @@ export function getPublicUrl(supabase: SupabaseClient, path: string): string {
  *  (our uploads are max 2048px, 2.3% smaller is imperceptible). quality=95 is visually lossless. */
 export function getOptimizedUrl(url: string, quality = 95): string {
   if (!url || !url.includes('/storage/v1/object/public/')) return url
+  // Local Supabase Storage does not expose the hosted /render/image route.
+  // E2E must render the original object instead of a guaranteed 404.
+  if (!supportsSupabaseImageTransforms(url)) return normalizeDomain(url)
   const base = normalizeDomain(url).replace(
     '/storage/v1/object/public/',
     '/storage/v1/render/image/public/',
@@ -208,6 +226,7 @@ export async function uploadAudio(
 
 export function getThumbnailUrl(url: string, width = 200, quality = 60, height?: number, resize: 'cover' | 'contain' = 'cover'): string {
   if (!url || !url.includes('/storage/v1/object/public/')) return url
+  if (!supportsSupabaseImageTransforms(url)) return normalizeDomain(url)
   const base = normalizeDomain(url).split('?')[0].replace(
     '/storage/v1/object/public/',
     '/storage/v1/render/image/public/',
@@ -219,6 +238,7 @@ export function getThumbnailUrl(url: string, width = 200, quality = 60, height?:
 
 export function getOriginFormatThumbnailUrl(url: string, width = 200, quality = 60, height?: number, resize: 'cover' | 'contain' = 'cover'): string {
   if (!url || !url.includes('/storage/v1/object/public/')) return url
+  if (!supportsSupabaseImageTransforms(url)) return normalizeDomain(url)
   const base = normalizeDomain(url).split('?')[0].replace(
     '/storage/v1/object/public/',
     '/storage/v1/render/image/public/',

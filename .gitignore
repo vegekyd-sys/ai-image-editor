@@ -97,6 +97,11 @@ marketing/meta-ads/
 !/scripts/sticker-bridge-acceptance.ts
 !/scripts/edge-video-bridge-acceptance.ts
 !/scripts/agent-execution-acceptance.ts
+!/scripts/e2e-ios-subscription.sh
+
+# iOS subscription E2E Supabase runtime metadata
+/e2e/ios-subscription/supabase/.branches/
+/e2e/ios-subscription/supabase/.temp/
 
 
 # claude code local settings
@@ -116,6 +121,7 @@ test-kling.mjs
 /output/
 /outputs/
 /artifacts/
+/.artifacts/
 /work/
 /.playwright-cli/
 /.remotion-bundle-local/

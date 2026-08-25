@@ -37,6 +37,7 @@ output/
 .remotion-bundle-local/
 .codex/
 artifacts/
+.artifacts/
 outputs/
 screenshots/
 mcp-output/

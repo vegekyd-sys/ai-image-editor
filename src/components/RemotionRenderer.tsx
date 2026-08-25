@@ -9,6 +9,8 @@ import type { DesignPayload } from '@/types';
 import {
   prepareAndLoadRemotionFontsWithTiming,
   prepareRemotionFontCodeFromBundledCatalog,
+  validateRemotionFontManifest,
+  type RemotionFontCatalogManifest,
   type RemotionFontTiming,
 } from '@/remotion/font-catalog';
 import { useLocale } from '@/lib/i18n';
@@ -115,10 +117,8 @@ async function resolveDesignImageUrls(
   return { code: resolvedCode, props, blobUrls: [...codeBlobUrls, ...propBlobUrls] };
 }
 
-// The query revision prevents previously cached host-bound manifests from
-// sending LAN clients back to localhost.
-const BROWSER_FONT_MANIFEST_URL = '/api/remotion/fonts?browser-manifest=relative-v1';
 const INTERACTIVE_FONT_WAIT_MS = 500;
+const browserFontManifestCache = new Map<string, Promise<RemotionFontCatalogManifest>>();
 
 export interface BrowserRemotionFontTiming {
   source: 'player' | 'poster' | 'preview-frame' | 'web-export';
@@ -135,16 +135,55 @@ function recordBrowserFontTiming(entry: BrowserRemotionFontTiming): void {
   window.dispatchEvent(new CustomEvent('makaron:remotion-font-timing', { detail: entry }));
 }
 
+async function resolveBrowserFontManifest(
+  design: DesignPayload,
+  code: string,
+  props: Record<string, unknown>,
+): Promise<RemotionFontCatalogManifest> {
+  const body = JSON.stringify({
+    code,
+    props,
+    fontSubstitutions: design.fontSubstitutions || {},
+  });
+  let pending = browserFontManifestCache.get(body);
+  if (!pending) {
+    pending = (async () => {
+      const response = await fetch('/api/remotion/fonts', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body,
+      });
+      if (!response.ok) {
+        const errorBody = await response.json().catch(() => null) as { error?: string } | null;
+        throw new Error(errorBody?.error || `Remotion font manifest failed: ${response.status}`);
+      }
+      return validateRemotionFontManifest(await response.json());
+    })();
+    browserFontManifestCache.set(body, pending);
+    if (browserFontManifestCache.size > 20) {
+      const oldest = browserFontManifestCache.keys().next().value;
+      if (oldest) browserFontManifestCache.delete(oldest);
+    }
+  }
+  try {
+    return await pending;
+  } catch (error) {
+    browserFontManifestCache.delete(body);
+    throw error;
+  }
+}
+
 async function compileBrowserDesign(
   design: DesignPayload,
   code: string,
   props: Record<string, unknown>,
   source: BrowserRemotionFontTiming['source'],
 ): Promise<React.ComponentType<Record<string, unknown>>> {
+  const manifest = await resolveBrowserFontManifest(design, code, props);
   const { prepared, timing } = await prepareAndLoadRemotionFontsWithTiming({
     code,
     props,
-    manifestUrl: BROWSER_FONT_MANIFEST_URL,
+    manifest,
     substitutions: design.fontSubstitutions,
   });
   recordBrowserFontTiming({ source, recordedAt: new Date().toISOString(), timing });

@@ -13,6 +13,7 @@
     "acceptance:edge-video-bridge": "tsx scripts/edge-video-bridge-acceptance.ts",
     "acceptance:sticker-bridge": "tsx scripts/sticker-bridge-acceptance.ts",
     "test:ios": "vitest run __tests__/ios*.test.ts __tests__/ios*.test.tsx",
+    "e2e:ios-subscription": "bash scripts/e2e-ios-subscription.sh",
     "smoke:ios-final": "node scripts/ios-final-smoke.mjs",
     "smoke:gpt56-agent": "tsx --require ./md-loader.cjs scripts/smoke-gpt56-agent.ts",
     "smoke:gpt56-cache": "tsx scripts/smoke-gpt56-cache.ts",

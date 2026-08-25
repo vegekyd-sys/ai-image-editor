@@ -4,7 +4,8 @@ import { NextResponse, type NextRequest } from 'next/server'
 import { getSupabaseAdmin } from '@/lib/supabase/service'
 import { readAttributionCookie, sendMetaCapiEvent } from '@/lib/marketing/meta-capi'
 import { getPublicOrigin } from '@/lib/auth/public-origin'
-import { getConfiguredWelcomeCredits } from '@/lib/billing/welcome-credits'
+import { initializeSignupCredits } from '@/lib/billing/signup-credits'
+import { userAgentHasMakaronIOSToken } from '@/lib/native-app'
 import { appendAuthReturnParam, normalizeAuthReturnPath } from '@/lib/auth-return'
 
 export async function GET(request: NextRequest) {
@@ -12,6 +13,7 @@ export async function GET(request: NextRequest) {
   const origin = getPublicOrigin(request)
   const code = searchParams.get('code')
   const requestedReturnPath = normalizeAuthReturnPath(searchParams.get('next'))
+  const isIOSApp = userAgentHasMakaronIOSToken(request.headers.get('user-agent') ?? undefined)
 
   if (searchParams.get('native_oauth') === '1') {
     return buildNativeOAuthCallbackPage(request)
@@ -75,43 +77,21 @@ export async function GET(request: NextRequest) {
     invite_code_used: user.app_metadata?.provider === 'google' ? 'GOOGLE_OAUTH' : 'EMAIL_VERIFIED',
   }, { onConflict: 'id' })
 
-  // Grant welcome credits (only if user has no balance yet)
-  let isNewUser = false
+  const isNewUser = true
+  let trialRequired = isIOSApp
   try {
-    const { data: existingBalance } = await admin
-      .from('credit_balances')
-      .select('balance')
-      .eq('user_id', user.id)
-      .single()
-
-    if (!existingBalance) {
-      isNewUser = true
-      const welcomeCredits = await getConfiguredWelcomeCredits(admin)
-
-      if (welcomeCredits > 0) {
-        const { addCredits } = await import('@/lib/billing/credits')
-        await addCredits(user.id, welcomeCredits)
-
-        await admin.from('credit_purchases').insert({
-          user_id: user.id,
-          stripe_session_id: `welcome_gift_${user.app_metadata?.provider || 'email'}`,
-          credits: welcomeCredits,
-          amount_usd: 0,
-          status: 'completed',
-          source: 'welcome',
-        })
-      }
-    }
+    const result = await initializeSignupCredits({ admin, userId: user.id, isIOSApp })
+    trialRequired = result.trialRequired
   } catch (e) {
     console.error('[auth/callback] Welcome credits failed (non-blocking):', e)
   }
 
   const requestedDestination = requestedReturnPath
-    ? (isNewUser ? appendAuthReturnParam(requestedReturnPath, 'welcome', '1') : requestedReturnPath)
+    ? appendAuthReturnParam(requestedReturnPath, trialRequired ? 'trial' : 'welcome', '1')
     : ''
   const redirectUrl = requestedDestination
     ? new URL(requestedDestination, origin).toString()
-    : (isNewUser ? `${origin}/home?welcome=1` : `${origin}/projects`)
+    : `${origin}/home?${trialRequired ? 'trial' : 'welcome'}=1`
   if (isNewUser) {
     const attribution = readAttributionCookie(request.cookies.get('mkr_attribution')?.value)
     let eventSourceUrl = `${origin}/home`
@@ -174,8 +154,8 @@ if(skillMatch){
   }
 }
 var fallback=${serializedRedirectUrl};
-var welcome=fallback.includes('welcome=1');
-if(r){var sep=r.includes('?')?'&':'?';window.location.href=r+(welcome?sep+'welcome=1':'');}
+var onboarding=fallback.includes('trial=1')?'trial=1':fallback.includes('welcome=1')?'welcome=1':'';
+if(r){var sep=r.includes('?')?'&':'?';window.location.href=r+(onboarding?sep+onboarding:'');}
 else{window.location.href=fallback;}
 </script></body></html>`,
     { status: 200, headers: { 'Content-Type': 'text/html' } }

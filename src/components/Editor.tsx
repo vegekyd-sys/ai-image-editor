@@ -3538,6 +3538,8 @@ Select the best 3-7 items for a compelling video. You do NOT need to use all or 
   return (
     <div
       data-testid="editor"
+      role="main"
+      aria-label={t('editor.workspace')}
       data-tips-status={isTipsFetching ? 'loading' : (currentTips.length ? 'ready' : 'empty')}
       data-tips-count={snapshots.reduce((n, s) => n + (s.tips?.length || 0), 0)}
       data-agent-status={isAgentActive ? 'active' : 'idle'}

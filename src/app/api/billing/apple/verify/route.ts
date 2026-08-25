@@ -1,23 +1,62 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
 import { applyAppleSignedTransaction } from '@/lib/billing/apple'
+import {
+  APPLE_PENDING_CLAIM_COOKIE,
+  APPLE_PENDING_CLAIM_MAX_AGE_SECONDS,
+  preparePendingAppleTrialClaim,
+} from '@/lib/billing/apple-pending-claim'
 import { getActiveSubscription } from '@/lib/billing/subscription'
 import { recordFirstPartyMarketingEvent } from '@/lib/marketing/meta-capi'
+import { userAgentHasMakaronIOSToken } from '@/lib/native-app'
 
 interface AppleVerifyBody {
   signedTransactionInfo?: string
   metaEventId?: string
   attribution?: Record<string, unknown>
+  intent?: 'preauth_trial'
 }
 
 export async function POST(req: NextRequest) {
-  const supabase = await createClient()
-  const { data: { user } } = await supabase.auth.getUser()
-  if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
-
   const body = await req.json().catch(() => null) as AppleVerifyBody | null
   if (!body?.signedTransactionInfo) {
     return NextResponse.json({ error: 'Missing signedTransactionInfo' }, { status: 400 })
+  }
+
+  const supabase = await createClient()
+  const { data: { user } } = await supabase.auth.getUser()
+  if (!user) {
+    const isIOSApp = userAgentHasMakaronIOSToken(req.headers.get('user-agent') ?? undefined)
+    if (!isIOSApp || body.intent !== 'preauth_trial') {
+      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+    }
+
+    try {
+      const pending = await preparePendingAppleTrialClaim({
+        signedTransactionInfo: body.signedTransactionInfo,
+        metaEventId: body.metaEventId,
+        attribution: body.attribution,
+      })
+      const response = NextResponse.json({
+        ok: true,
+        pendingClaim: true,
+        expiresAt: pending.expiresAt,
+      })
+      response.cookies.set(APPLE_PENDING_CLAIM_COOKIE, pending.claimToken, {
+        httpOnly: true,
+        secure: req.nextUrl.protocol === 'https:',
+        sameSite: 'lax',
+        path: '/',
+        maxAge: APPLE_PENDING_CLAIM_MAX_AGE_SECONDS,
+      })
+      return response
+    } catch (error) {
+      console.error('[billing/apple/verify] pre-auth trial failed:', error)
+      return NextResponse.json({
+        code: 'APPLE_TRIAL_VERIFICATION_FAILED',
+        error: 'Apple trial verification failed',
+      }, { status: 400 })
+    }
   }
 
   try {

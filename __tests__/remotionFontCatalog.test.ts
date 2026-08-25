@@ -90,6 +90,16 @@ describe('Remotion shared font catalog', () => {
     expect(prepared.code).not.toContain("fontFamily: 'Montserrat");
   });
 
+  it('prepares an arbitrary authored Google Font while its pinned manifest is resolving', () => {
+    const prepared = prepareRemotionFontCodeFromBundledCatalog({
+      code: `const title = <div style={{fontFamily: 'Bungee Spice, sans-serif'}}>Title</div>;`,
+    });
+
+    expect(prepared.code).toContain(internalRemotionFontFamily('Bungee Spice'));
+    expect(prepared.usedFamilies).toContain('Bungee Spice');
+    expect(prepared.code).not.toContain("fontFamily: 'Bungee Spice");
+  });
+
   it('loads a pinned symbol face for plain Unicode icons instead of relying on OS fallback', async () => {
     class MockFontFace {
       constructor(

@@ -47,6 +47,9 @@ import { useCreateInput } from '@/hooks/useCreateInput'
 import CreateInputBox from '@/components/CreateInputBox'
 import MakaronLogo from '@/components/MakaronLogo'
 import LiquidGlassNav from '@/components/LiquidGlassNav'
+import CreditPopup from '@/components/CreditPopup'
+import { getEligibleAppleIntroTrial } from '@/lib/billing/apple-trial'
+import { useAppleBillingProducts } from '@/lib/billing/use-apple-billing'
 import { loadCreateAgentModelPreference, saveAgentModelPreference, saveCreateAgentModelPreference } from '@/lib/agent-model-preference'
 import type { AgentModelPreference } from '@/lib/agent-models'
 import { LazyVideo, SkillVideo } from '@/components/HomeSkillMedia'
@@ -59,6 +62,13 @@ import {
   resolveHomeSkillCategorySwipe,
   type HomeSkillCategorySwipeDirection,
 } from '@/lib/home-skill-category-swipe'
+import {
+  clearIOSPreAuthTrialContinuation,
+  confirmIOSPreAuthTrialContinuation,
+  linkIOSPreAuthTrialContinuation,
+  readIOSPreAuthTrialContinuation,
+  writeIOSPreAuthTrialIntent,
+} from '@/lib/ios-preauth-trial'
 
 const Z = { INPUT: 100, HERO_FLY: 90, OVERLAY: 80, AMBIENT: 0 } as const
 const IOS_SKILL_BACK_EDGE_PX = 36
@@ -98,6 +108,18 @@ function HomePageInner() {
   const pathname = usePathname()
   const isDesktop = useIsDesktop()
   const isIOSAppShell = hydrated && isMakaronIOSApp()
+  const preAuthAppleBilling = useAppleBillingProducts({
+    enabled: isIOSAppShell && !renderUser,
+  })
+  const preAuthBasicMonthlyProduct = preAuthAppleBilling.findSubscription('basic', 'month')
+  const preAuthBasicMonthlyTrial = getEligibleAppleIntroTrial(
+    preAuthBasicMonthlyProduct,
+    preAuthAppleBilling.nativeProductFor(preAuthBasicMonthlyProduct),
+  )
+  // Build 1.0.7 exposes only the base StoreKit product fields, so it stays on
+  // the established upload -> registration -> trial flow. Build 1.0.8 adds
+  // verified introductory-offer metadata and alone can enter subscribe-first.
+  const isPreAuthIOSGuest = isIOSAppShell && !renderUser && !!preAuthBasicMonthlyTrial
 
   const [viewMode, setViewMode] = useState<'human' | 'agent'>('human')
   const createInput = useCreateInput()
@@ -791,6 +813,9 @@ function HomePageInner() {
   const [placeholderIdx, setPlaceholderIdx] = useState(0)
   const [showWelcome, setShowWelcome] = useState(false)
   const [welcomeCredits, setWelcomeCredits] = useState(0)
+  const [showIOSTrial, setShowIOSTrial] = useState(false)
+  const [showPreAuthIOSTrial, setShowPreAuthIOSTrial] = useState(false)
+  const [trialContinuationVersion, setTrialContinuationVersion] = useState(0)
   useEffect(() => { setPlaceholderIdx(Math.floor(Math.random() * placeholders.length)) }, [])
 
   // Restore state from login redirect + detect welcome
@@ -804,6 +829,12 @@ function HomePageInner() {
     // Welcome credits popup — activates new user + grants credits
     if (typeof window !== 'undefined') {
       const params = new URLSearchParams(window.location.search)
+      if (params.get('trial') && isMakaronIOSApp()) {
+        params.delete('trial')
+        const cleanSearch = params.toString()
+        window.history.replaceState({}, '', `${window.location.pathname}${cleanSearch ? `?${cleanSearch}` : ''}`)
+        setShowIOSTrial(true)
+      }
       if (params.get('welcome')) {
         window.history.replaceState({}, '', window.location.pathname + window.location.search.replace(/[?&]welcome=1/, ''))
         fetch('/api/auth/activate', { method: 'POST' })
@@ -819,7 +850,9 @@ function HomePageInner() {
             if (d.credits > 0) {
               setWelcomeCredits(d.credits); setShowWelcome(true)
               window.dispatchEvent(new Event('credits-updated'))
-            } else if (d.isNew === false) {
+            } else if (d.trialRequired && isMakaronIOSApp()) {
+              setShowIOSTrial(true)
+            } else if (d.isNew === false && !isMakaronIOSApp()) {
               // Already activated user revisiting with ?welcome=1 — just refresh credits
               fetch('/api/billing/credits').then(r => r.json()).then(b => {
                 writeNativeJSONCache('/api/billing/credits', b)
@@ -1449,6 +1482,38 @@ function HomePageInner() {
     sessionStorage.setItem('mkr_return_url', returnPath)
   }, [activeSkill, selectedDetail, selectedSkill])
 
+  const beginPreAuthIOSTrial = useCallback((skillId?: string) => {
+    writeIOSPreAuthTrialIntent({
+      kind: skillId ? 'skill' : 'create',
+      skillId,
+    })
+    if (skillId) rememberIOSSkillReturn(skillId)
+    setShowPreAuthIOSTrial(true)
+  }, [rememberIOSSkillReturn])
+
+  const finishPreAuthIOSTrial = useCallback(async () => {
+    const continuation = confirmIOSPreAuthTrialContinuation()
+    if (!continuation) return
+
+    if (createInput.files.length > 0 || createInput.text.trim()) {
+      try {
+        await saveCreateDraftBeforeLogin(
+          createInput.files,
+          createInput.text.trim() || undefined,
+        )
+      } catch (error) {
+        console.error('Save post-purchase create draft error:', error)
+        return
+      }
+    }
+
+    const returnPath = continuation.skillId ? `/home/${continuation.skillId}` : '/home'
+    localStorage.setItem('mkr_return_url', returnPath)
+    sessionStorage.setItem('mkr_return_url', returnPath)
+    setShowPreAuthIOSTrial(false)
+    router.push('/login?focus=email')
+  }, [createInput.files, createInput.text, router, saveCreateDraftBeforeLogin])
+
   const handleCreateProject = useCallback(async (files: File[], prompt?: string): Promise<boolean> => {
     const homeSkill = selectedDetail || activeSkill
     if (
@@ -1505,6 +1570,8 @@ function HomePageInner() {
   const consumeDraftRef = useRef(false)
   useEffect(() => {
     if (!user || consumeDraftRef.current) return
+    const trialContinuation = readIOSPreAuthTrialContinuation()
+    if (trialContinuation?.confirmed && !trialContinuation.linked) return
     const continuationId = getCreateDraftContinuationId()
     if (!continuationId) return
     consumeDraftRef.current = true
@@ -1553,6 +1620,7 @@ function HomePageInner() {
         })
         if (!result) throw new Error('Failed to create project from draft')
         await clearCreateDraft()
+        clearIOSPreAuthTrialContinuation()
         localStorage.removeItem('mkr_return_text')
         localStorage.removeItem('mkr_return_skill')
         localStorage.removeItem('mkr_return_url')
@@ -1565,7 +1633,58 @@ function HomePageInner() {
     }
     void consume()
     return () => { cancelled = true }
-  }, [createInput, homeSkills, installHomeSkill, router, user])
+  }, [createInput, homeSkills, installHomeSkill, router, trialContinuationVersion, user])
+
+  const consumePreAuthTrialRef = useRef(false)
+  const retryPreAuthTrialClaimRef = useRef(false)
+  useEffect(() => {
+    if (!user || retryPreAuthTrialClaimRef.current) return
+    const continuation = readIOSPreAuthTrialContinuation()
+    if (!continuation?.confirmed || continuation.linked) return
+
+    retryPreAuthTrialClaimRef.current = true
+    fetch('/api/auth/complete', { method: 'POST' })
+      .then(async response => ({ response, data: await response.json().catch(() => ({})) }))
+      .then(({ response, data }) => {
+        if (!response.ok || !data.appleTrialClaimed) {
+          retryPreAuthTrialClaimRef.current = false
+          return
+        }
+        linkIOSPreAuthTrialContinuation()
+        writeNativeJSONCache('/api/billing/credits', {
+          balance: data.credits,
+          trialBalance: data.credits,
+        })
+        window.dispatchEvent(new Event('credits-updated'))
+        setTrialContinuationVersion(version => version + 1)
+      })
+      .catch(() => {
+        retryPreAuthTrialClaimRef.current = false
+      })
+  }, [user])
+
+  useEffect(() => {
+    if (!user || consumePreAuthTrialRef.current) return
+    const continuation = readIOSPreAuthTrialContinuation()
+    if (!continuation?.confirmed || !continuation.linked) return
+    // A staged draft owns the continuation for both generic creation and
+    // Skill launches. Let the draft consumer preserve its images and Skill
+    // context instead of racing this empty-project fallback.
+    if (consumeDraftRef.current || getCreateDraftContinuationId()) return
+    if (continuation.kind === 'skill' && homeSkills.length === 0) return
+
+    consumePreAuthTrialRef.current = true
+    // Subscription is complete, but an editor project must always have user
+    // input. With no staged media, return to the exact Skill surface and let
+    // its existing upload guidance collect a photo instead of creating an
+    // empty project.
+    const returnPath = continuation.kind === 'skill' && continuation.skillId
+      ? `/home/${continuation.skillId}`
+      : '/home'
+    clearIOSPreAuthTrialContinuation()
+    createInput.setCreating(false)
+    router.replace(returnPath)
+  }, [createInput, homeSkills, router, trialContinuationVersion, user])
 
   const handleCreate = useCallback(async () => {
     const hasText = createInput.text.trim()
@@ -1584,16 +1703,26 @@ function HomePageInner() {
     const zipFile = allFiles.find(f => f.name.endsWith('.zip'))
     const droppedFiles = allFiles.filter(f => f.type.startsWith('image/') || f.type.startsWith('video/') || isHeicFile(f))
     if (!zipFile && droppedFiles.length === 0) return
+    if (isPreAuthIOSGuest) {
+      if (droppedFiles.length > 0) {
+        createInput.addFiles(droppedFiles)
+      }
+      return
+    }
     const authedUser = await requireAuth()
     if (!authedUser) return
     if (zipFile) { handleSkillUpload(zipFile); return }
     createInput.addFiles(droppedFiles)
-  }, [createInput, handleSkillUpload, requireAuth])
+  }, [createInput, handleSkillUpload, isPreAuthIOSGuest, requireAuth])
 
   const handleSlotDrop = useCallback(async (e: React.DragEvent) => {
     e.preventDefault()
     const files = Array.from(e.dataTransfer.files ?? []).filter(f => f.type.startsWith('image/') || isHeicFile(f))
     if (files.length === 0) return
+    if (isPreAuthIOSGuest) {
+      createInput.addFiles(files)
+      return
+    }
     if (!user && selectedDetail) {
       rememberIOSSkillReturn(selectedDetail.id)
       createInput.addFiles(files)
@@ -1602,7 +1731,7 @@ function HomePageInner() {
     const authedUser = await requireAuth()
     if (!authedUser) return
     createInput.addFiles(files)
-  }, [createInput, rememberIOSSkillReturn, requireAuth, selectedDetail, user])
+  }, [createInput, isPreAuthIOSGuest, rememberIOSSkillReturn, requireAuth, selectedDetail, user])
 
   const trackUploadIntentEvent = useCallback((source: string) => {
     if (user || !activeSkill) return
@@ -1627,11 +1756,18 @@ function HomePageInner() {
     const befores = (template.before_images || []).slice(0, 3)
     const showBefores = befores.length > 0 && createInput.files.length === 0
     return (
-      <div style={{ display: 'flex', alignItems: 'center', gap: 10, overflowX: 'visible', position: 'relative', minHeight: 64 }}>
+      <div
+        data-testid="skill-photo-slots"
+        style={{ display: 'flex', alignItems: 'center', gap: 10, overflowX: 'visible', position: 'relative', minHeight: 64 }}
+      >
         {Array.from({ length: count }, (_, i) => {
           const isDragTarget = slotDragOver === i
           return (
             <div key={i}
+              data-testid={`skill-photo-slot-${i}`}
+              role={isActive ? 'button' : undefined}
+              tabIndex={isActive ? 0 : undefined}
+              aria-label={isActive ? `${t('home.uploadPhoto')} ${i + 1}` : undefined}
               onClick={async () => {
                 if (!isActive || createInput.previews[i] || createInput.creating) return
                 if (!user && selectedDetail) {
@@ -1644,6 +1780,13 @@ function HomePageInner() {
                 if (u) {
                   trackUploadIntentEvent('upload_slot')
                   createInput.fileInputRef.current?.click()
+                }
+              }}
+              onKeyDown={(e) => {
+                if (!isActive || createInput.previews[i] || createInput.creating) return
+                if (e.key === 'Enter' || e.key === ' ') {
+                  e.preventDefault()
+                  e.currentTarget.click()
                 }
               }}
               onDragEnter={(e) => { e.preventDefault(); setSlotDragOver(i) }}
@@ -1707,7 +1850,7 @@ function HomePageInner() {
             </svg>
             {befores.map((url, i, arr) => (
 
-              <img key={i} src={getThumbnailUrl(url, 200, 60, 250, 'cover')} alt=""
+              <img key={i} data-testid="skill-before-image" src={getThumbnailUrl(url, 200, 60, 250, 'cover')} alt=""
                 style={{
                   width: 96, height: 120, objectFit: 'cover',
                   border: '3px solid rgba(255,255,255,0.95)',
@@ -1724,7 +1867,7 @@ function HomePageInner() {
         )}
       </div>
     )
-  }, [createInput, handleSlotDrop, rememberIOSSkillReturn, requireAuth, selectedDetail, slotDragOver, trackUploadIntentEvent, user])
+  }, [createInput, handleSlotDrop, rememberIOSSkillReturn, requireAuth, selectedDetail, slotDragOver, t, trackUploadIntentEvent, user])
 
   const guestSkillCreateLabel = selectedDetail && !renderUser
     ? createInput.files.length > 0
@@ -1740,17 +1883,26 @@ function HomePageInner() {
   const hasEnoughPhotos = remainingPhotoCount === 0
   const isSkillAction = !!activeSkill
   const isGuestSkillAction = !renderUser && !!activeSkill
+  const isPreAuthIOSSkillAction = isPreAuthIOSGuest && !!activeSkill
+  const iosTrialContinuation = isPreAuthIOSGuest ? readIOSPreAuthTrialContinuation() : null
+  const pendingIOSRegistration = Boolean(
+    iosTrialContinuation?.confirmed && !iosTrialContinuation.linked,
+  )
   const shouldLoginOnEmptyCreate = !renderUser && !activeSkill
   const formatPhotoCount = (count: number) => t('home.photoCount', count)
 
   const skillActionCreateLabel = isSkillAction
-    ? hasEnoughPhotos
+    ? isPreAuthIOSSkillAction
+      ? pendingIOSRegistration ? t('home.continueRegistration') : t('home.tryFree')
+      : hasEnoughPhotos
       ? isGuestSkillAction ? t('home.previewFree') : t('home.create')
       : t('home.uploadPhoto')
     : guestSkillCreateLabel
 
   const skillActionTitle = isGuestSkillAction
-    ? hasEnoughPhotos
+    ? isPreAuthIOSSkillAction
+      ? pendingIOSRegistration ? t('home.subscriptionConfirmedTitle') : t('home.trialSurpriseTitle')
+      : hasEnoughPhotos
       ? t('home.seeYourVersion')
       : selectedPhotoCount > 0
         ? t('home.almostReady')
@@ -1758,7 +1910,9 @@ function HomePageInner() {
     : undefined
 
   const skillActionSubtitle = isGuestSkillAction
-    ? hasEnoughPhotos
+    ? isPreAuthIOSSkillAction
+      ? undefined
+      : hasEnoughPhotos
       ? t('home.previewNoCard')
       : selectedPhotoCount > 0
         ? t('home.addPhotosToPreview', formatPhotoCount(remainingPhotoCount))
@@ -1798,7 +1952,34 @@ function HomePageInner() {
     }, createMetaEventId('file.selected'))
   }, [activeSkill?.id, isGuestSkillAction, skillActionMeta])
 
+  const handleCreateFilesSelected = useCallback((files: File[], source: string) => {
+    trackFileSelected(files, source)
+  }, [trackFileSelected])
+
   const handleCreateOrUpload = useCallback(() => {
+    if (isPreAuthIOSGuest) {
+      const continuation = readIOSPreAuthTrialContinuation()
+      if (continuation?.confirmed && !continuation.linked) {
+        if (activeSkill?.id) rememberIOSSkillReturn(activeSkill.id)
+        void (async () => {
+          if (createInput.files.length > 0 || createInput.text.trim()) {
+            try {
+              await saveCreateDraftBeforeLogin(
+                createInput.files,
+                createInput.text.trim() || undefined,
+              )
+            } catch (error) {
+              console.error('Save pre-registration create draft error:', error)
+              return
+            }
+          }
+          router.push('/login?focus=email')
+        })()
+        return
+      }
+      beginPreAuthIOSTrial(activeSkill?.id)
+      return
+    }
     if (shouldLoginOnEmptyCreate && createInput.files.length === 0 && !createInput.text.trim()) {
       goToLoginFromEmptyCreate()
       return
@@ -1810,9 +1991,15 @@ function HomePageInner() {
       return
     }
     handleCreate()
-  }, [activeSkill, createInput.fileInputRef, createInput.files.length, createInput.text, goToLoginFromEmptyCreate, handleCreate, hasEnoughPhotos, rememberIOSSkillReturn, shouldLoginOnEmptyCreate, trackUploadIntent])
+  }, [activeSkill, beginPreAuthIOSTrial, createInput.fileInputRef, createInput.files, createInput.text, goToLoginFromEmptyCreate, handleCreate, hasEnoughPhotos, isPreAuthIOSGuest, rememberIOSSkillReturn, router, saveCreateDraftBeforeLogin, shouldLoginOnEmptyCreate, trackUploadIntent])
 
   const handleInputSlotClick = useCallback(async () => {
+    if (isPreAuthIOSGuest) {
+      if (selectedDetail?.id) rememberIOSSkillReturn(selectedDetail.id)
+      trackUploadIntent('slot')
+      createInput.fileInputRef.current?.click()
+      return
+    }
     if (!user && selectedDetail) {
       rememberIOSSkillReturn(selectedDetail.id)
       trackUploadIntent('slot')
@@ -1824,7 +2011,7 @@ function HomePageInner() {
       trackUploadIntent('slot')
       createInput.fileInputRef.current?.click()
     }
-  }, [createInput.fileInputRef, rememberIOSSkillReturn, requireAuth, selectedDetail, trackUploadIntent, user])
+  }, [createInput.fileInputRef, isPreAuthIOSGuest, rememberIOSSkillReturn, requireAuth, selectedDetail, trackUploadIntent, user])
 
   const isVideoUrl = (url: string) => /\.(mp4|webm|mov)(\?|$)/i.test(url)
 
@@ -2158,20 +2345,20 @@ function HomePageInner() {
               placeholder={placeholders[placeholderIdx]}
               createLabel={skillActionCreateLabel}
               actionMode={isGuestSkillAction}
-              actionEyebrow={isGuestSkillAction ? t('home.previewFree') : undefined}
+              actionEyebrow={isPreAuthIOSSkillAction ? t('home.firstFree') : isGuestSkillAction ? t('home.previewFree') : undefined}
               actionTitle={skillActionTitle}
               actionSubtitle={skillActionSubtitle}
               actionMeta={skillActionMeta || undefined}
-              actionIdleNote={t('home.photosNeeded', formatPhotoCount(requiredPhotoCount))}
+              actionIdleNote={isPreAuthIOSSkillAction ? t('home.trialGiftNote') : t('home.photosNeeded', formatPhotoCount(requiredPhotoCount))}
               actionSelectedNote={hasEnoughPhotos
                 ? t('home.previewReady')
                 : t('home.morePhotosNeeded', formatPhotoCount(remainingPhotoCount))}
               showLoginIcon={!renderUser}
               submitWhenEmpty={shouldLoginOnEmptyCreate}
-              fallbackHref={shouldLoginOnEmptyCreate ? '/login' : undefined}
+              fallbackHref={shouldLoginOnEmptyCreate && !isPreAuthIOSGuest ? '/login' : undefined}
               onSubmit={handleCreateOrUpload}
               onSlotClick={handleInputSlotClick}
-              onFilesSelected={(files) => trackFileSelected(files, 'file_input')}
+              onFilesSelected={(files) => handleCreateFilesSelected(files, 'file_input')}
               onTextareaFocus={keepSkillComposerAboveKeyboard}
               onTextareaBlur={handleHomeTextareaBlur}
               skills={availableSkills}
@@ -2298,8 +2485,14 @@ function HomePageInner() {
                 key={template.id}
                 data-testid="home-skill-card"
                 data-skill-id={template.id}
+                role="button"
+                tabIndex={0}
+                aria-label={pickLocalizedValue(template.labels, locale)}
                 className={`mkr-skill-card${categoryHasChanged ? '' : ' mkr-row-enter'}`}
                 onClick={(e) => handleSkillCardClick(template, e)}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter' || e.key === ' ') e.currentTarget.click()
+                }}
                 style={{
                   position: 'relative',
                   aspectRatio: '3 / 4',
@@ -2397,20 +2590,20 @@ function HomePageInner() {
               placeholder={placeholders[placeholderIdx]}
               createLabel={skillActionCreateLabel}
               actionMode={isGuestSkillAction}
-              actionEyebrow={isGuestSkillAction ? t('home.previewFree') : undefined}
+              actionEyebrow={isPreAuthIOSSkillAction ? t('home.firstFree') : isGuestSkillAction ? t('home.previewFree') : undefined}
               actionTitle={skillActionTitle}
               actionSubtitle={skillActionSubtitle}
               actionMeta={skillActionMeta || undefined}
-              actionIdleNote={t('home.photosNeeded', formatPhotoCount(requiredPhotoCount))}
+              actionIdleNote={isPreAuthIOSSkillAction ? t('home.trialGiftNote') : t('home.photosNeeded', formatPhotoCount(requiredPhotoCount))}
               actionSelectedNote={hasEnoughPhotos
                 ? t('home.previewReady')
                 : t('home.morePhotosNeeded', formatPhotoCount(remainingPhotoCount))}
               showLoginIcon={!renderUser}
               submitWhenEmpty={shouldLoginOnEmptyCreate}
-              fallbackHref={shouldLoginOnEmptyCreate ? '/login' : undefined}
+              fallbackHref={shouldLoginOnEmptyCreate && !isPreAuthIOSGuest ? '/login' : undefined}
               onSubmit={handleCreateOrUpload}
               onSlotClick={handleInputSlotClick}
-              onFilesSelected={(files) => trackFileSelected(files, 'file_input')}
+              onFilesSelected={(files) => handleCreateFilesSelected(files, 'file_input')}
               onTextareaFocus={keepSkillComposerAboveKeyboard}
               onTextareaBlur={handleHomeTextareaBlur}
               skills={availableSkills}
@@ -2713,6 +2906,29 @@ function HomePageInner() {
       )}
 
       {/* Skill menu now handled by SkillSelector component */}
+
+      <CreditPopup
+        open={showPreAuthIOSTrial}
+        entryPoint="ios_preauth_trial"
+        onClose={() => setShowPreAuthIOSTrial(false)}
+        onPreAuthTrialConfirmed={() => { void finishPreAuthIOSTrial() }}
+        balance={0}
+        subscription={null}
+      />
+
+      <CreditPopup
+        open={showIOSTrial}
+        entryPoint="ios_onboarding"
+        onClose={() => setShowIOSTrial(false)}
+        balance={0}
+        subscription={null}
+        onBalanceUpdate={() => {
+          if (linkIOSPreAuthTrialContinuation()) {
+            setTrialContinuationVersion(version => version + 1)
+          }
+          setShowIOSTrial(false)
+        }}
+      />
 
       {/* Welcome credits popup */}
       {showWelcome && welcomeCredits > 0 && (

@@ -237,8 +237,13 @@ export default function CreateInputBox({
         const f = Array.from(e.target.files ?? []);
         e.target.value = '';
         if (f.length) {
-          onFilesSelected?.(f);
-          addFiles(f);
+          // Persist the selected media before opening a pre-auth paywall. The
+          // continuation must be able to carry these exact files into Editor
+          // after StoreKit and OTP registration complete.
+          void (async () => {
+            await addFiles(f);
+            onFilesSelected?.(f);
+          })();
         }
       }}
     />
@@ -256,6 +261,8 @@ export default function CreateInputBox({
         ref={boxRef}
         className={liquidInputClassName}
         role="button"
+        aria-label={actionTitle || createLabel}
+        data-testid="skill-primary-action"
         tabIndex={0}
         onClick={handlePrimaryAction}
         onKeyDown={(e) => {

@@ -192,8 +192,16 @@ export async function POST(req: NextRequest) {
     // Add images/videos to existing project (used by CLI chat --image / --video)
     if (_addToProject && (imageCount > 0 || videos.length > 0)) {
       const existingProjectId = _addToProject as string;
+      if (!validClientProjectId(existingProjectId)) {
+        return NextResponse.json({ error: '_addToProject must be a valid UUID' }, { status: 400 });
+      }
+      const ownedProject = await findOwnedProject(supabase, userId, existingProjectId);
+      if (!ownedProject) {
+        return NextResponse.json({ error: 'Project not found' }, { status: 404 });
+      }
       // Atomic sort_order allocation
-      const { data: startSort } = await supabase.rpc('next_sort_order', { p_project_id: existingProjectId });
+      const { data: startSort, error: sortError } = await supabase.rpc('next_sort_order', { p_project_id: existingProjectId });
+      if (sortError) throw sortError;
       let sortOrder = startSort ?? 0;
 
       const snapshots: { snapshotId: string; imageUrl: string; type?: string }[] = [];
@@ -207,10 +215,11 @@ export async function POST(req: NextRequest) {
         }
         if (!finalUrl) continue;
         const snapshotId = crypto.randomUUID();
-        await supabase.from('snapshots').insert({
+        const { error: snapshotError } = await supabase.from('snapshots').insert({
           id: snapshotId, project_id: existingProjectId, image_url: finalUrl,
           tips: [], message_id: '', sort_order: sortOrder++,
         });
+        if (snapshotError) throw snapshotError;
         snapshots.push({ snapshotId, imageUrl: finalUrl });
       }
 

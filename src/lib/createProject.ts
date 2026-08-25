@@ -3,7 +3,7 @@ import { compressImageFile } from '@/lib/image/compress'
 import { extractPhotoMetadata } from '@/lib/image/metadata'
 import { getMarketingAttribution } from '@/lib/marketing/attribution'
 import { createMetaEventId, trackMetaEvent } from '@/lib/marketing/meta-pixel'
-import { stagePendingProjectImages, stagePendingProjectLaunch } from '@/lib/imageCache'
+import { cacheProjectData, stagePendingProjectImages, stagePendingProjectLaunch } from '@/lib/imageCache'
 import { uploadImage } from '@/lib/supabase/storage'
 import type { PhotoMetadata } from '@/types'
 import type { SkillLaunchContext } from '@/lib/skill-launch-context'
@@ -73,6 +73,23 @@ async function persistCreateImages(
     if (!url) throw new Error('Failed to upload image')
     return url
   }))
+}
+
+async function persistInitialProjectSnapshots(
+  projectId: string,
+  imageUrls: string[],
+): Promise<Array<{ snapshotId: string; imageUrl: string }>> {
+  if (imageUrls.length === 0) return []
+  const response = await fetch('/api/projects/create', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ _addToProject: projectId, imageUrls }),
+  })
+  const data = await response.json().catch(() => ({}))
+  if (!response.ok || !Array.isArray(data.snapshots) || data.snapshots.length !== imageUrls.length) {
+    throw new Error(data.error || 'Failed to persist initial project snapshots')
+  }
+  return data.snapshots as Array<{ snapshotId: string; imageUrl: string }>
 }
 
 function trackProjectCreated(projectId: string, options?: { prompt?: string; skill?: string; eventId?: string }) {
@@ -201,14 +218,25 @@ export async function createProjectFromStagedMedia(
   let imageUrls: string[] = []
   if (staged.images?.length) {
     imageUrls = await persistCreateImages(supabase, userId, projectId, staged.images, 'anonymous-source')
-    await stagePendingProjectImages(projectId, imageUrls)
   }
   const createdProjectId = await createProjectShell('Untitled', marketing, {
     clientProjectId: projectId,
     idempotencyKey: staged.continuationId,
   })
-  if (createdProjectId !== projectId && imageUrls.length) {
-    await stagePendingProjectImages(createdProjectId, imageUrls)
+  if (imageUrls.length) {
+    const persistedSnapshots = await persistInitialProjectSnapshots(createdProjectId, imageUrls)
+    cacheProjectData(
+      createdProjectId,
+      persistedSnapshots.map(({ snapshotId, imageUrl }) => ({
+        id: snapshotId,
+        image: imageUrl,
+        imageUrl,
+        tips: [],
+        messageId: '',
+      })),
+      [],
+      'Untitled',
+    )
   }
   stageProjectLaunch(createdProjectId, {
     prompt: staged.prompt,

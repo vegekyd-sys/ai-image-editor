@@ -29,4 +29,18 @@ describe('Vercel deployment footprint', () => {
     }
     expect(vercelIgnore).toContain('*.tsbuildinfo');
   });
+
+  it('ships the transitive S3 checksum runtime needed by Agent routes', () => {
+    const nextConfig = read('next.config.ts');
+
+    expect(nextConfig).toContain("'/api/agent/**'");
+    for (const dependency of [
+      '@aws-crypto',
+      '@aws-sdk/types',
+      '@smithy',
+      'tslib',
+    ]) {
+      expect(nextConfig).toContain(`'./node_modules/${dependency}/**'`);
+    }
+  });
 });

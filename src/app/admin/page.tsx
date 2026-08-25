@@ -4,7 +4,9 @@ import { useState, useEffect, useCallback } from 'react'
 import { useRouter } from 'next/navigation'
 import { navigateBackInIOSApp } from '@/lib/native-navigation'
 import { LOCALE_CONFIG, type Locale } from '@/lib/locales'
+import { useLocale } from '@/lib/i18n'
 import { DEFAULT_WELCOME_CREDITS } from '@/lib/billing/welcome-credits'
+import { DEFAULT_IOS_TRIAL_CREDITS } from '@/lib/billing/ios-trial'
 
 interface InviteCode {
   id: string
@@ -168,6 +170,7 @@ function actionValue(insights: MetaInsightsSummary | null, actionType: string): 
 
 export default function AdminPage() {
   const router = useRouter()
+  const { t } = useLocale()
   const [tab, setTab] = useState<'codes' | 'waitlist' | 'billing' | 'skills' | 'meta'>('codes')
   const [codes, setCodes] = useState<InviteCode[]>([])
   const [waitlist, setWaitlist] = useState<WaitlistEntry[]>([])
@@ -181,6 +184,9 @@ export default function AdminPage() {
   const [welcomeCredits, setWelcomeCredits] = useState(DEFAULT_WELCOME_CREDITS)
   const [editingWelcome, setEditingWelcome] = useState(false)
   const [welcomeInput, setWelcomeInput] = useState(String(DEFAULT_WELCOME_CREDITS))
+  const [iosTrialCredits, setIOSTrialCredits] = useState(DEFAULT_IOS_TRIAL_CREDITS)
+  const [editingIOSTrial, setEditingIOSTrial] = useState(false)
+  const [iosTrialInput, setIOSTrialInput] = useState(String(DEFAULT_IOS_TRIAL_CREDITS))
   const [addCreditEmail, setAddCreditEmail] = useState('')
   const [addCreditAmount, setAddCreditAmount] = useState('100')
   const [addCreditResult, setAddCreditResult] = useState<string | null>(null)
@@ -250,6 +256,8 @@ export default function AdminPage() {
     setBillingEnabled(data.enabled ?? false)
     setWelcomeCredits(data.welcomeCredits ?? DEFAULT_WELCOME_CREDITS)
     setWelcomeInput(String(data.welcomeCredits ?? DEFAULT_WELCOME_CREDITS))
+    setIOSTrialCredits(data.iosTrialCredits ?? DEFAULT_IOS_TRIAL_CREDITS)
+    setIOSTrialInput(String(data.iosTrialCredits ?? DEFAULT_IOS_TRIAL_CREDITS))
   }, [])
 
   const fetchMetaStatus = useCallback(async () => {
@@ -535,6 +543,49 @@ export default function AdminPage() {
                 <>
                   <span className="text-fuchsia-400 font-medium text-sm">{welcomeCredits}</span>
                   <button onClick={() => setEditingWelcome(true)} className="px-2 py-1 rounded text-white/30 text-xs hover:text-white/60 hover:bg-white/5">Edit</button>
+                </>
+              )}
+            </div>
+          </div>
+
+          {/* iOS introductory trial credits config */}
+          <div className="bg-white/5 rounded-xl p-4 mb-4 border border-white/10 flex items-center justify-between">
+            <div>
+              <div className="text-sm font-medium">{t('admin.iosTrialCredits')}</div>
+              <div className="text-xs text-white/40 mt-0.5">{t('admin.iosTrialCreditsDesc')}</div>
+            </div>
+            <div className="flex items-center gap-2">
+              {editingIOSTrial ? (
+                <>
+                  <input
+                    type="number"
+                    min="0"
+                    value={iosTrialInput}
+                    onChange={(e) => setIOSTrialInput(e.target.value)}
+                    className="w-20 px-2 py-1 rounded bg-white/10 text-white text-sm text-right border border-white/20 focus:border-fuchsia-500/50 focus:outline-none"
+                  />
+                  <button
+                    onClick={async () => {
+                      const next = Number.isFinite(Number(iosTrialInput)) && Number(iosTrialInput) >= 0
+                        ? Math.floor(Number(iosTrialInput))
+                        : DEFAULT_IOS_TRIAL_CREDITS
+                      await fetch('/api/admin/billing-toggle', {
+                        method: 'PUT',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ iosTrialCredits: next }),
+                      })
+                      setIOSTrialCredits(next)
+                      setIOSTrialInput(String(next))
+                      setEditingIOSTrial(false)
+                    }}
+                    className="px-2 py-1 rounded bg-fuchsia-600 text-white text-xs"
+                  >{t('admin.save')}</button>
+                  <button onClick={() => { setEditingIOSTrial(false); setIOSTrialInput(String(iosTrialCredits)); }} className="px-2 py-1 rounded bg-white/10 text-white/50 text-xs">✕</button>
+                </>
+              ) : (
+                <>
+                  <span className="text-fuchsia-400 font-medium text-sm">{iosTrialCredits}</span>
+                  <button onClick={() => setEditingIOSTrial(true)} className="px-2 py-1 rounded text-white/30 text-xs hover:text-white/60 hover:bg-white/5">{t('admin.edit')}</button>
                 </>
               )}
             </div>

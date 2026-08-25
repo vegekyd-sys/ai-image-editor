@@ -8,6 +8,14 @@ export interface NativeAppleProduct {
   description: string;
   displayPrice: string;
   type: string;
+  isEligibleForIntroOffer?: boolean;
+  introductoryOffer?: {
+    displayPrice: string;
+    paymentMode: 'freeTrial' | 'payAsYouGo' | 'payUpFront' | string;
+    periodUnit: 'day' | 'week' | 'month' | 'year' | string;
+    periodValue: number;
+    periodCount: number;
+  };
 }
 
 export interface NativeAppleTransaction {
@@ -38,12 +46,14 @@ type NativePurchasePayload = {
   action: 'purchaseSubscription';
   productId: string;
   appAccountToken?: string;
+  introductoryOfferOnly?: boolean;
 } | {
   action: 'purchaseProduct';
   productId: string;
   appAccountToken?: string;
 } | {
   action: 'restorePurchases';
+  introductoryOfferOnly?: boolean;
 } | {
   action: 'finishTransaction';
   transactionId: string;
@@ -51,9 +61,9 @@ type NativePurchasePayload = {
 
 type NativePurchaseMessage =
   | { action: 'getProducts'; productIds: string[] }
-  | { action: 'purchaseSubscription'; productId: string; appAccountToken?: string }
+  | { action: 'purchaseSubscription'; productId: string; appAccountToken?: string; introductoryOfferOnly?: boolean }
   | { action: 'purchaseProduct'; productId: string; appAccountToken?: string }
-  | { action: 'restorePurchases' }
+  | { action: 'restorePurchases'; introductoryOfferOnly?: boolean }
   | { action: 'finishTransaction'; transactionId: string };
 
 let nativeMessageId = 0;
@@ -166,13 +176,32 @@ export async function purchaseNativeAppleProduct(productId: string, appAccountTo
   };
 }
 
-export async function purchaseNativeAppleSubscription(productId: string, appAccountToken?: string): Promise<NativeAppleTransaction> {
-  return purchaseNativeAppleProduct(productId, appAccountToken);
+export async function purchaseNativeAppleSubscription(
+  productId: string,
+  appAccountToken?: string,
+  introductoryOfferOnly = false,
+): Promise<NativeAppleTransaction> {
+  const result = await sendNativePurchaseMessage<NativePurchaseResponse>({
+    action: 'purchaseSubscription',
+    productId,
+    appAccountToken,
+    introductoryOfferOnly,
+  });
+  if (!result.signedTransactionInfo || !result.transactionId || !result.originalTransactionId || !result.productId) {
+    throw new Error('Native purchase returned incomplete transaction data');
+  }
+  return {
+    productId: result.productId,
+    transactionId: result.transactionId,
+    originalTransactionId: result.originalTransactionId,
+    signedTransactionInfo: result.signedTransactionInfo,
+  };
 }
 
-export async function restoreNativeApplePurchases(): Promise<NativeAppleTransaction[]> {
+export async function restoreNativeApplePurchases(introductoryOfferOnly = false): Promise<NativeAppleTransaction[]> {
   const result = await sendNativePurchaseMessage<NativePurchaseResponse>({
     action: 'restorePurchases',
+    introductoryOfferOnly,
   }, 120000);
   return result.transactions || [];
 }

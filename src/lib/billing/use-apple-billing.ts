@@ -16,6 +16,10 @@ export interface AppleBillingProduct {
   productId: string;
   credits: number;
   price: number;
+  introTrial?: {
+    days: number;
+    credits: number;
+  };
 }
 
 interface UseAppleBillingProductsOptions {

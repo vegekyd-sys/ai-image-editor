@@ -6,9 +6,12 @@ const mocks = vi.hoisted(() => ({
   getUser: vi.fn(),
   cookies: vi.fn(),
   from: vi.fn(),
+  rpc: vi.fn(),
   getConfiguredWelcomeCredits: vi.fn(),
   addCredits: vi.fn(),
   sendMetaCapiEvent: vi.fn(),
+  recordFirstPartyMarketingEvent: vi.fn(),
+  claimPendingAppleTrial: vi.fn(),
 }))
 
 vi.mock('@supabase/ssr', () => ({
@@ -17,7 +20,7 @@ vi.mock('@supabase/ssr', () => ({
 
 vi.mock('next/headers', () => ({ cookies: mocks.cookies }))
 vi.mock('@/lib/supabase/service', () => ({
-  getSupabaseAdmin: () => ({ from: mocks.from }),
+  getSupabaseAdmin: () => ({ from: mocks.from, rpc: mocks.rpc }),
 }))
 vi.mock('@/lib/billing/welcome-credits', () => ({
   getConfiguredWelcomeCredits: mocks.getConfiguredWelcomeCredits,
@@ -26,6 +29,11 @@ vi.mock('@/lib/billing/credits', () => ({ addCredits: mocks.addCredits }))
 vi.mock('@/lib/marketing/meta-capi', () => ({
   readAttributionCookie: () => ({}),
   sendMetaCapiEvent: mocks.sendMetaCapiEvent,
+  recordFirstPartyMarketingEvent: mocks.recordFirstPartyMarketingEvent,
+}))
+vi.mock('@/lib/billing/apple-pending-claim', () => ({
+  APPLE_PENDING_CLAIM_COOKIE: 'mkr_apple_trial_claim',
+  claimPendingAppleTrial: mocks.claimPendingAppleTrial,
 }))
 
 function mockAdminState(options: { activated: boolean; hasBalance: boolean }) {
@@ -53,8 +61,13 @@ describe('verified authentication completion route', () => {
       set: vi.fn(),
     })
     mocks.getConfiguredWelcomeCredits.mockResolvedValue(500)
+    mocks.rpc.mockResolvedValue({
+      data: { granted: true, credits: 500, balance: 500, reason: 'granted' },
+      error: null,
+    })
     mocks.addCredits.mockResolvedValue(undefined)
     mocks.sendMetaCapiEvent.mockResolvedValue(undefined)
+    mocks.recordFirstPartyMarketingEvent.mockResolvedValue(undefined)
   })
 
   it('activates a verified new user, grants configured credits, and writes the cookie', async () => {
@@ -78,12 +91,107 @@ describe('verified authentication completion route', () => {
     expect(body).toMatchObject({ ok: true, isNewUser: true, credits: 500 })
     expect(response.cookies.get('mkr_activated')?.value).toBe('1')
     expect(upsert).toHaveBeenCalledWith(expect.objectContaining({ id: 'new-user', activated: true }), { onConflict: 'id' })
-    expect(mocks.addCredits).toHaveBeenCalledWith('new-user', 500)
-    expect(insert).toHaveBeenCalledWith(expect.objectContaining({ credits: 500, source: 'welcome' }))
+    expect(mocks.rpc).toHaveBeenCalledWith('claim_welcome_credits', expect.objectContaining({
+      p_user_id: 'new-user',
+      p_credits: 500,
+      p_channel: 'web_signup',
+    }))
+    expect(insert).not.toHaveBeenCalled()
     expect(mocks.sendMetaCapiEvent).toHaveBeenCalledTimes(1)
     expect(mocks.sendMetaCapiEvent).toHaveBeenCalledWith(
       expect.objectContaining({ eventName: 'CompleteRegistration' }),
     )
+  })
+
+  it('starts a verified iOS user at zero and routes directly to the Apple trial', async () => {
+    mocks.getUser.mockResolvedValue({
+      data: {
+        user: {
+          id: 'new-ios-user',
+          email: 'ios@example.test',
+          email_confirmed_at: '2026-07-21T00:00:00Z',
+          app_metadata: { provider: 'email' },
+        },
+      },
+      error: null,
+    })
+    const { upsert } = mockAdminState({ activated: false, hasBalance: false })
+
+    const response = await POST(new NextRequest('http://localhost:3001/api/auth/complete', {
+      method: 'POST',
+      headers: { 'User-Agent': 'MakaronIOS' },
+    }))
+    const body = await response.json()
+
+    expect(body).toMatchObject({
+      ok: true,
+      isNewUser: true,
+      credits: 0,
+      trialRequired: true,
+      redirectUrl: '/home?trial=1',
+    })
+    expect(upsert).toHaveBeenCalledWith(expect.objectContaining({
+      user_id: 'new-ios-user',
+      balance: 0,
+    }), { onConflict: 'user_id', ignoreDuplicates: true })
+    expect(mocks.getConfiguredWelcomeCredits).not.toHaveBeenCalled()
+    expect(mocks.rpc).not.toHaveBeenCalled()
+  })
+
+  it('links a pre-registration Apple trial and returns the new iOS user with 1,500 credits', async () => {
+    mocks.getUser.mockResolvedValue({
+      data: {
+        user: {
+          id: 'new-ios-user',
+          email: 'ios@example.test',
+          email_confirmed_at: '2026-07-21T00:00:00Z',
+          app_metadata: { provider: 'email' },
+        },
+      },
+      error: null,
+    })
+    mockAdminState({ activated: false, hasBalance: false })
+    mocks.claimPendingAppleTrial.mockResolvedValue({
+      result: {
+        credited: true,
+        credits: 1500,
+        amountUsd: 0,
+        productId: 'app.makaron.ios.subscription.basic.monthly',
+        transactionId: 'trial-transaction',
+        originalTransactionId: 'trial-original',
+        planId: 'basic',
+        billingInterval: 'month',
+        balance: { balance: 1500, lifetimePurchased: 1500, lifetimeUsed: 0 },
+      },
+      metaEventId: 'checkout-event',
+      attribution: { skill_id: 'skill-1' },
+    })
+
+    const request = new NextRequest('http://localhost:3001/api/auth/complete', {
+      method: 'POST',
+      headers: { 'User-Agent': 'MakaronIOS' },
+    })
+    request.cookies.set('mkr_apple_trial_claim', 'pending-token')
+    const response = await POST(request)
+    const body = await response.json()
+
+    expect(mocks.claimPendingAppleTrial).toHaveBeenCalledWith({
+      claimToken: 'pending-token',
+      userId: 'new-ios-user',
+    })
+    expect(body).toMatchObject({
+      ok: true,
+      isNewUser: true,
+      credits: 1500,
+      trialRequired: false,
+      appleTrialClaimed: true,
+      redirectUrl: '/home?trial_ready=1',
+    })
+    expect(mocks.recordFirstPartyMarketingEvent).toHaveBeenCalledWith(expect.objectContaining({
+      eventName: 'Subscribe',
+      userId: 'new-ios-user',
+    }))
+    expect(response.cookies.get('mkr_apple_trial_claim')?.value).toBe('')
   })
 
   it('keeps completion idempotent for an already activated user', async () => {

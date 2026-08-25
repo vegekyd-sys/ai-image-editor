@@ -110,6 +110,8 @@ describe('iOS App Store readiness guardrails', () => {
     expect(packageJson.scripts['ios:prod']).toContain('--reset');
     expect(helper).toContain('IOS_DEV_SERVER_URL');
     expect(helper).toContain('delete config.server.url');
+    expect(helper).toMatch(/if \(args\.includes\('--reset'\)\)[\s\S]*config\.server\.errorPath = 'index\.html'/);
+    expect(helper).toMatch(/config\.server\.url = parsed[\s\S]*delete config\.server\.errorPath/);
   });
 
   it('keeps native safe-area padding scoped to iOS editor controls instead of the body', () => {

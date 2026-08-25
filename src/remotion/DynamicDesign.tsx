@@ -202,8 +202,7 @@ export const DynamicDesign: React.FC<Record<string, unknown>> = ({
 
   // Combine code + props for font detection
   const allText = useMemo(() => {
-    const propsStr = Object.values(propsObj).filter(v => typeof v === 'string').join(' ');
-    return codeStr + '\n' + propsStr;
+    return `${codeStr}\n${JSON.stringify(propsObj)}`;
   }, [codeStr, propsObj]);
 
   const handleRef = useRef<number | null>(null);
