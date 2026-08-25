@@ -26,8 +26,10 @@ metadata:
 
 # Talking Head Editing
 
-Use your editorial judgment for a confident, natural video. Direct composition
-and Studio Run are both valid; pick one unless it fails.
+Deliver the finished video in the current project. Use your editorial judgment;
+the goal is a confident, natural piece, not the maximum number of cuts, captions,
+or effects. A direct composition and Studio Run are both valid. Pick one path and
+stay with it unless it actually fails.
 
 Before editing, read `skills/_shared/speech-clock.md` and
 `skills/_shared/spoken-caption.md`. Follow the source-speech route and shared
@@ -44,9 +46,10 @@ to `skills/tiktok-video/SKILL.md` for final packaging.
 Transcribe once with `transcribe_audio({ media_index })`; omit
 `expected_sections` and reuse the saved word timing.
 
-Make one coherent keep-range timeline. Remove false starts, retakes, accidental
-repetition, filler, hesitation, and momentum-draining pauses. Preserve meaning,
-personality, emphasis, and short breaths that make speech sound human.
+Understand the delivery and gestures, then make one coherent keep-range timeline.
+Remove false starts, retakes, accidental repetition, filler, hesitation, and
+pauses that drain momentum. Preserve meaning, personality, emphasis, and the
+short breaths that make speech sound human.
 
 Cut at semantic boundaries when possible. Use word boundaries for a precise
 mistake only when the join stays natural; leave a small audio handle so words are
@@ -77,8 +80,8 @@ Keep A-roll dominant. Add B-roll, an example, a small diagram, product/UI proof,
 or a brief mascot accent only where it makes an idea clearer or covers a hard
 join. Keep source speech audible, mute incidental B-roll audio, and preserve the
 captions. When the user explicitly asks for B-roll or information graphics,
-include a few purposeful
-moments selected by editorial judgment; do not silently omit the request.
+include a few purposeful moments selected by editorial judgment; do not silently
+omit the request.
 
 ## Compose and finish
 
@@ -99,4 +102,5 @@ moments selected by editorial judgment; do not silently omit the request.
 - Publish the editable composition and export a playable MP4. A bare fallback
   that drops requested captions or visual support is not finished.
 
-Do not build transcript tools, editing infrastructure, or a traditional timeline UI.
+Do not build transcript tools, editing infrastructure, or a traditional timeline
+UI for this task.
