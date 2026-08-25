@@ -7,7 +7,7 @@ import type { ImageBackground, ModelId } from './models/types';
 import { editImage } from './skills/edit-image';
 import { rotateCamera } from './skills/rotate-camera';
 import { createVideo } from './skills/create-video';
-import { estimateVideoCredits, estimateVideoProviderCostUsd, resolveAgentVideoSelection, resolveVideoGenerationRoute, resolveVideoOutputDuration, supportsNativeTextToVideo, validateVideoModelRequest } from './video-model-capabilities';
+import { estimateVideoCredits, estimateVideoProviderCostUsd, normalizeVideoModelId, resolveAgentVideoSelection, resolveVideoGenerationRoute, resolveVideoOutputDuration, supportsNativeTextToVideo, validateVideoModelRequest } from './video-model-capabilities';
 import {
   deductFixedCredits,
   isInsufficientCreditsError,
@@ -75,6 +75,8 @@ import {
 } from './locales';
 import { stableDraftPromotionSnapshotId } from './draft-promotion';
 import { sourceRangeFromVideoMeta } from './media-source-range';
+import { materializeSeedAudioReference } from './seed-audio-reference';
+import { resolveAudioRefs } from './audio-reference-resolver';
 
 const MAX_VIDEO_DIMENSION_PROBE_BYTES = 220 * 1024 * 1024;
 
@@ -384,28 +386,6 @@ function validateImageIndex(snapshotImages: string[], index: number): { idx: num
   }
   if (!snapshotImages[idx]) return { idx: -1, error: 'No image at this index' };
   return { idx };
-}
-
-function resolveAudioRefs(audioAttachments: AudioAttachment[] | undefined, refs: string[] | undefined): { audioUrls: string[]; error?: string } {
-  if (!refs?.length) return { audioUrls: [] };
-  const attachments = audioAttachments || [];
-  const audioUrls: string[] = [];
-  const invalid: string[] = [];
-  for (const ref of refs) {
-    const match = String(ref).trim().match(/^audio_(\d+)$/i);
-    const idx = match ? Number(match[1]) - 1 : -1;
-    const audio = idx >= 0 ? attachments[idx] : undefined;
-    if (!audio?.audioUrl) {
-      invalid.push(ref);
-      continue;
-    }
-    audioUrls.push(audio.audioUrl);
-  }
-  if (invalid.length) {
-    const available = attachments.map((audio, i) => `audio_${i + 1}${audio.title ? ` (${audio.title})` : ''}`).join(', ') || 'none';
-    return { audioUrls, error: `Invalid audio_refs: ${invalid.join(', ')}. Available audio refs: ${available}. Audio refs are separate from <<<media_N>>>.` };
-  }
-  return { audioUrls };
 }
 
 function resolveSeedAudioReferences(
@@ -1489,7 +1469,8 @@ Hard constraints:
 - First line of script = short title (2-5 words). Then script body.
 - Use \`<<<media_N>>>\` to reference images AND videos (N starts at 1). Videos in the timeline are auto-routed — just reference them like images. For native SeeDance or MiniMax H3 text-to-video with no source media, use no media markers and do not generate an intermediate image first.
 - To EDIT a video: reference it with \`<<<media_N>>>\` and describe the changes. The selected model must support reference videos.
-- To use CLI/app imported reference music/audio for pacing or beat sync, mention its Audio Index marker in \`story_prompt\` (for example \`<<<audio_1>>>\`) AND pass \`audio_refs\` like ["audio_1"]. Audio refs are NOT Timeline Media Index refs. Reference audio is only supported by Seedance video models or MiniMax H3.
+- To use CLI/app imported reference music/audio for pacing or beat sync, mention its Audio Index marker in \`story_prompt\` (for example \`<<<audio_1>>>\`) AND pass \`audio_refs\` like ["audio_1"]. Audio refs are NOT Timeline Media Index refs. Reference audio is supported by Seedance video models, MiniMax H3, and Sync Lipsync v3.
+- Talking-head translation exception: finish the source edit first, prepare a silent accepted A-roll plus its original voice reference, then use SeeDance 2.0 with the target-language dialogue written directly inside the complete \`Shot N (Xs):\` script. Do not call Seed Audio for this route.
 - Works for Kling, SeeDance, SeeDance Mini, Seedance 2.5, Grok, Gemini Omni, and MiniMax H3, but respect capability limits and tool errors.
 - Single-call total duration: Seedance 2.5 is 4-30 seconds; SeeDance 2.0 is 4-15 seconds; SeeDance/SeeDance Mini and MiniMax H3 are 4-15 seconds; Kling is 5-15 seconds; Grok 1.5 is 1-15 seconds; Google Omni is 3-10 seconds. A requested 30-second direct generation should use \`model: "seedance-2.5"\` in one call.
 - If a complete script fits the selected model's single-call limit, submit it as one video generation call. Put the whole title, every \`Shot N (Xs):\` line, and the \`Style:\` line into the same \`story_prompt\`; set \`duration\` to the total script duration when known. Do not submit only one shot, the first shot, or one line from the script.
@@ -1507,13 +1488,13 @@ Hard constraints:
 - If the generated video is an intermediate artifact, pass \`completion_actions\` so CUI/CLI can show the next step after rendering finishes. These actions are user-confirmed by default; do not rely on the user remembering what to do next. For local video repair, include exact replaceStart/replaceEnd/replacementDuration and say to trim/fit the patch to that duration before merging so the final video keeps the original duration.
 - The script must have been shown to the user and confirmed before this tool is called, unless the user's current request explicitly asks for direct submission without confirmation or the system prompt supplies the trusted Skill template launch exception.`,
       inputSchema: z.object({
-        story_prompt: z.string().describe('The complete video script. First line = short title, then the body. Native SeeDance or MiniMax H3 text-to-video uses no media markers. Seedance 2.5 markers are translated to @imageN, @videoN, and @audioN for Evolink.'),
-        duration: z.number().optional().describe('Duration in seconds. Seedance 2.5 accepts 4-30s; for Seedance 2.5 video_operation="edit", omit duration or pass -1 because Makaron follows the source duration automatically. SeeDance/SeeDance Mini and MiniMax H3 accept 4-15s; Kling accepts 5-15s; Grok accepts 1-15s; Google Omni accepts 3-10s.'),
+        story_prompt: z.string().describe('The complete video script. First line = short title, then the body. Native SeeDance or MiniMax H3 text-to-video uses no media markers. Seedance 2.x reference markers such as <<<video_1>>> and <<<audio_1>>> are translated to @video1 and @audio1 for Evolink.'),
+        duration: z.number().optional().describe('Duration in seconds. Sync Lipsync v3 follows a 2-60s accepted source; Seedance 2.5 accepts 4-30s; for Seedance 2.5 video_operation="edit", omit duration or pass -1 because Makaron follows the source duration automatically. SeeDance/SeeDance Mini and MiniMax H3 accept 4-15s; Kling accepts 5-15s; Grok accepts 1-15s; Google Omni accepts 3-10s.'),
         aspect_ratio: z.enum(['16:9', '9:16', '1:1', '4:3', '3:4', '21:9', '3:2', '2:3']).optional().describe('Output aspect ratio. Pass it only when the user asks for a specific shape and the selected model can safely honor it. For Grok single-image-to-video, omit this field because xAI stretches the source image when a forced ratio differs from the image. Seedance supports 16:9/9:16/1:1/4:3/3:4/21:9/adaptive; Makaron intentionally does not pass forced ratios to Grok image-to-video.'),
-        model: z.string().optional().describe('Video model/provider id. Supported ids include seedance-fast, seedance-mini, seedance, seedance-2.5, kling, grok, google-omni, and minimax-h3.'),
+        model: z.string().optional().describe('Video model/provider id. Supported ids include seedance-fast, seedance-mini, seedance, seedance-2.5, kling, grok, google-omni, minimax-h3, and sync-lipsync-v3. Use sync-lipsync-v3 only with exactly one source video and one replacement audio ref.'),
         video_resolution: z.enum(['480p', '720p', '768p', '1080p', '2k', '4k', 'auto']).optional().describe('Output resolution. Seedance 2.5 supports 480p/720p; MiniMax H3 supports 768p/2k and defaults to 768p.'),
         media_refs: z.array(z.string()).optional().describe('Additional image URLs NOT already in Media Index (e.g. workspace files from list_files). Images in Media Index are auto-available — just use <<<media_N>>> in script. Passing Media Index URLs here will be rejected.'),
-        audio_refs: z.array(z.string()).optional().describe('Reference audio labels from the Audio Index block, e.g. ["audio_1"]. Use for beat sync, pacing, or music reference. These are separate from <<<media_N>>> and supported by SeeDance models and MiniMax H3.'),
+        audio_refs: z.array(z.string()).optional().describe('Reference audio labels from the Audio Index block, e.g. ["audio_1"], or HTTPS provider URLs returned by run_code Node media preparation. Use for voice identity, beat sync, pacing, or music reference. Mention each one as <<<audio_N>>> in story_prompt. Supported by SeeDance models and MiniMax H3.'),
         video_ref_url: z.string().optional().describe('External reference video URL (from workspace/skill assets via list_files). For timeline videos, just use <<<media_N>>> — they are auto-routed. Only use this for external URLs not in Media Index. SeeDance 2.0 video references must be <=50MB, width/height 300-6000px, aspect ratio 0.4-2.5, frame pixels 409,600-2,086,876. Seedance 2.5 accepts .mp4/.mov <=200MB, width/height 300-6000px, frame pixels 409,600-8,295,044, 4-30s each and <=30s total. MiniMax H3 video references must be <=50MB, width/height 256-5760px, aspect ratio 0.4-2.5, with at most 3 videos totaling <=15s. Kling video references must be <=200MB and <=2K; no explicit lower resolution is documented. Google Omni accepts one reference video in Makaron. Grok does not support video references in Makaron yet.'),
         video_ref_type: z.enum(['base', 'feature']).optional().describe('How to use an external reference video. feature (default): reference motion/style. base: direct edit for Kling, or use with Seedance 2.5 video_operation="edit". Timeline videos are auto-routed from <<<media_N>>>.'),
         keep_original_sound: z.boolean().optional().describe('Keep audio from reference video. Default: false.'),
@@ -1543,13 +1524,16 @@ Hard constraints:
         if (media_refs?.length) {
           imageUrls = [...(imageUrls || []), ...media_refs.filter(u => u.startsWith('http'))];
         }
-        const videoSelection = resolveAgentVideoSelection({
-          appModel: (ctx as any).videoModel,
-          appResolution: (ctx as any).videoResolution,
-          appAuto: (ctx as any).videoAuto,
-          toolModel: model,
-          toolResolution: video_resolution,
-        });
+        const requestedModel = normalizeVideoModelId(model);
+        const videoSelection = requestedModel === 'sync-lipsync-v3'
+          ? { model: requestedModel, resolution: video_resolution ?? 'auto', locked: false }
+          : resolveAgentVideoSelection({
+            appModel: (ctx as any).videoModel,
+            appResolution: (ctx as any).videoResolution,
+            appAuto: (ctx as any).videoAuto,
+            toolModel: model,
+            toolResolution: video_resolution,
+          });
         const videoModel = videoSelection.model;
         const isSeedance25Edit = videoModel === 'seedance-2.5' && video_operation === 'edit';
         const videoRoute = resolveVideoGenerationRoute({
@@ -1567,12 +1551,12 @@ Hard constraints:
           if (resolvedAudioRefs.error) {
             return { success: false as const, message: resolvedAudioRefs.error };
           }
-          if (resolvedAudioRefs.audioUrls.length > 0 && videoRoute.provider !== 'seedance' && videoRoute.provider !== 'minimax') {
+          if (resolvedAudioRefs.audioUrls.length > 0 && videoRoute.provider !== 'seedance' && videoRoute.provider !== 'minimax' && videoRoute.provider !== 'fal-sync') {
             return {
               success: false as const,
               message: videoRoute.provider === 'google-omni'
                 ? 'Google Omni can generate native audio from the prompt, but uploaded audio_refs are not enabled in the current API. Choose seedance-fast, seedance-mini, or seedance for audio_refs, or remove audio_refs and describe the soundtrack for Omni.'
-                : 'Reference audio is only supported by Seedance video models or MiniMax H3. Choose seedance-fast, seedance-mini, seedance, or minimax-h3, or remove audio_refs.',
+                : 'Reference audio is only supported by Seedance video models or MiniMax H3, except exact replacement audio with Sync Lipsync v3. Choose a compatible model or remove audio_refs.',
             };
           }
 
@@ -4754,19 +4738,35 @@ function createGenerateAudioTool(
   return tool({
       description: `Generate audio from a natural-language prompt.
 
-This is the single Agent-facing audio-generation tool. Use it for every standalone voiceover, narration, dialogue, multilingual character performance, music bed, ambience, sound effect, and mixed sound scene. All voiceover content is generated by Seed Audio; there is no separate Agent voiceover or voice-catalog tool.
+This is the single Agent-facing audio-generation tool. Use it for every standalone voiceover, narration, dialogue, speech translation, multilingual character performance, music bed, ambience, sound effect, and mixed sound scene. All voiceover content is generated by Seed Audio; there is no separate Agent voiceover or voice-catalog tool.
 
-Before its first use in a conversation, read \`prompts/audio.md\` and write one compact production brief with an audible timeline. If the final soundtrack contains voice plus music, ambience, or SFX, make exactly one model generation with kind="mixed"; never generate voiceover and supporting audio separately. Use kind="voiceover" only for an intentionally isolated voice master. Include the exact spoken script plus a Voice Performance Brief, then call transcribe_audio with expected_sections and fps before Storyboard or Remotion composition work.
+Before its first use in a conversation, read \`prompts/audio.md\` and write one compact production brief with an audible timeline. If the final soundtrack contains voice plus music, ambience, or SFX, make exactly one model generation with kind="mixed"; never generate voiceover and supporting audio separately. Use kind="voiceover" only for an intentionally isolated voice master. Use kind="translation" to translate source speech while retaining the source speaker; it requires exactly one source_voice and a target_language. Include translated_script when claims or wording need deterministic control, otherwise Seed Audio translates the referenced speech directly. Then call transcribe_audio on every translated result before composition work.
 
 Exception: if the chosen final-video workflow is generate_animation, do not generate a separate audio asset. Put the requested sound design in story_prompt so the video model generates it with the picture.
 
 Available audio model notes:
 ${formatAudioCapabilitiesForAgent()}`,
       inputSchema: z.object({
-        kind: z.enum(['voiceover', 'dialogue', 'music', 'sound_design', 'mixed']).describe('Required audio intent. Use mixed whenever one deliverable contains voice plus music/ambience/SFX; this produces every layer in one Seed Audio model generation. Use voiceover only for an intentionally isolated voice-only master.'),
-        prompt: z.string().max(SEED_AUDIO_AGENT_PROMPT_MAX_CHARS).describe(`Natural-language description of the audio to create, maximum ${SEED_AUDIO_AGENT_PROMPT_MAX_CHARS} characters before the internal mode wrapper. Include duration, exact speech, mood, instruments, sound effects, voice direction, and constraints directly in this one compact prompt.`),
+        kind: z.enum(['voiceover', 'dialogue', 'music', 'sound_design', 'mixed', 'translation']).describe('Required audio intent. Use translation for same-speaker cross-language speech. Use mixed whenever one deliverable contains voice plus music/ambience/SFX. Use voiceover only for an intentionally isolated voice-only master.'),
+        prompt: z.string().max(SEED_AUDIO_AGENT_PROMPT_MAX_CHARS).optional().describe(`Natural-language production direction, maximum ${SEED_AUDIO_AGENT_PROMPT_MAX_CHARS} characters before the internal mode wrapper. Required for every kind except translation. For translation, use this only for extra performance direction; target language, source voice, identity preservation, and exact translated text have typed fields.`),
         duration_seconds: z.number().optional().describe('Requested duration in seconds. Seed Audio supports up to 120 seconds. Also include the duration in the prompt for best results.'),
         reference_voices: z.array(z.string()).max(3).optional().describe('Up to 3 Audio Index labels such as audio_1, or provider preset voice IDs. The prompt must bind them in order as @audio1, @audio2, and @audio3. Cannot be combined with image conditioning.'),
+        target_language: z.string().optional().describe('Required for kind=translation, for example English, Japanese, or Spanish (Mexico).'),
+        translated_script: z.string().optional().describe('Optional exact target-language script for kind=translation. Omit for direct translation of all source speech; provide it when protected terms, claims, numbers, or deliberate localization wording must be exact.'),
+        source_voice: z.discriminatedUnion('type', [
+          z.object({
+            type: z.literal('audio_index'),
+            ref: z.string().describe('One Audio Index label such as audio_1. MP3 and WAV inputs are supported.'),
+          }),
+          z.object({
+            type: z.literal('timeline_media'),
+            media_index: z.number().int().positive().describe('1-based Timeline Media index containing the source speaker.'),
+            ranges: z.array(z.object({
+              start_sec: z.number().nonnegative(),
+              end_sec: z.number().positive(),
+            })).min(1).max(20).describe('ASR-aligned source speech ranges in playback order. The tool extracts audio only and concatenates the ranges into one 2-30 second MP3 reference.'),
+          }),
+        ]).optional().describe('Required for kind=translation. Use Audio Index MP3/WAV directly, or extract ASR-aligned speech ranges from a timeline video without sending the video to Seed Audio.'),
         conditioning: z.discriminatedUnion('type', [
           z.object({ type: z.literal('none') }),
           z.object({
@@ -4787,6 +4787,9 @@ ${formatAudioCapabilitiesForAgent()}`,
         prompt,
         duration_seconds,
         reference_voices,
+        target_language,
+        translated_script,
+        source_voice,
         conditioning,
         speech_rate,
         loudness_rate,
@@ -4799,10 +4802,65 @@ ${formatAudioCapabilitiesForAgent()}`,
         const imageMediaIndex = conditioning?.type === 'image'
           ? conditioning.media_index
           : undefined;
+        if (kind !== 'translation' && !prompt?.trim()) {
+          return { success: false as const, message: 'prompt is required unless kind=translation.' };
+        }
+        if (kind === 'translation' && !target_language?.trim()) {
+          return { success: false as const, message: 'target_language is required for kind=translation.' };
+        }
+        if (kind === 'translation' && !source_voice) {
+          return { success: false as const, message: 'source_voice is required for kind=translation.' };
+        }
+        if (kind === 'translation' && reference_voices?.length) {
+          return { success: false as const, message: 'Use source_voice, not reference_voices, for kind=translation.' };
+        }
         if (reference_voices?.length && imageMediaIndex != null) {
           return { success: false as const, message: 'Seed Audio reference_voices and image conditioning are mutually exclusive.' };
         }
-        const resolvedReferences = resolveSeedAudioReferences(ctx.audioAttachments, reference_voices);
+        if (kind === 'translation' && imageMediaIndex != null) {
+          return { success: false as const, message: 'Speech translation cannot use image conditioning.' };
+        }
+        let translationReference: string[] = [];
+        if (kind === 'translation' && source_voice?.type === 'audio_index') {
+          const resolved = resolveSeedAudioReferences(ctx.audioAttachments, [source_voice.ref]);
+          if (resolved.error) return { success: false as const, message: resolved.error };
+          translationReference = resolved.references;
+        }
+        if (kind === 'translation' && source_voice?.type === 'timeline_media') {
+          if (!ctx.explicitMediaIndices.includes(source_voice.media_index)) {
+            return {
+              success: false as const,
+              message: `Source voice extraction only accepts media introduced or explicitly referenced in the current user turn. Ask the user to attach the video or name it as @${source_voice.media_index} / <<<media_${source_voice.media_index}>>>.`,
+            };
+          }
+          const validated = validateImageIndex(ctx.snapshotImages, source_voice.media_index);
+          if (validated.error) return { success: false as const, message: validated.error };
+          const mediaUrl = toPublicStorageUrl(ctx.snapshotImages[validated.idx]);
+          if (!/^https:\/\//i.test(mediaUrl) || !isVideoUrl(mediaUrl)) {
+            return { success: false as const, message: `<<<media_${source_voice.media_index}>>> must be a public timeline video.` };
+          }
+          if (!ctx.supabase || !ctx.userId) {
+            return { success: false as const, message: 'Source voice extraction requires an authenticated project workspace.' };
+          }
+          try {
+            const materialized = await materializeSeedAudioReference({
+              mediaUrl,
+              ranges: source_voice.ranges.map(range => ({ startSec: range.start_sec, endSec: range.end_sec })),
+              supabase: ctx.supabase,
+              userId: ctx.userId,
+              projectId: ctx.projectId,
+            });
+            translationReference = [materialized.audioUrl];
+          } catch (error) {
+            return {
+              success: false as const,
+              message: `Failed to extract source voice: ${error instanceof Error ? error.message : String(error)}`,
+            };
+          }
+        }
+        const resolvedReferences = kind === 'translation'
+          ? { references: translationReference }
+          : resolveSeedAudioReferences(ctx.audioAttachments, reference_voices);
         if (resolvedReferences.error) {
           return { success: false as const, message: resolvedReferences.error };
         }
@@ -4828,6 +4886,8 @@ ${formatAudioCapabilitiesForAgent()}`,
         const result = await createAudio({
           kind,
           prompt,
+          targetLanguage: target_language,
+          translatedScript: translated_script,
           durationSeconds: duration_seconds,
           audioReferences: resolvedReferences.references,
           imageUrls,
@@ -4849,6 +4909,8 @@ ${formatAudioCapabilitiesForAgent()}`,
               title: result.title || title || (
                 kind === 'voiceover'
                   ? 'Generated voiceover'
+                  : kind === 'translation'
+                    ? `Translated ${target_language || ''} voice`.trim()
                   : kind === 'mixed'
                     ? 'Generated unified soundtrack'
                     : 'Generated audio'
@@ -4856,7 +4918,7 @@ ${formatAudioCapabilitiesForAgent()}`,
               duration: result.duration,
               trackIndex: result.trackIndex,
             });
-            result.message = `${result.message}\nAdded to Audio Index as <<<audio_${audioIndex}>>>.\nResolved ${kind === 'voiceover' ? 'voiceover master' : kind === 'mixed' ? 'unified soundtrack' : 'audio'} URL: ${result.audioUrl}\nUse this URL directly in Remotion <Audio src>; do not rely on the marker inside composition code or props.${kind === 'voiceover' || kind === 'mixed' ? '\nIf this asset contains speech, call transcribe_audio with expected_sections and the Composition fps before Storyboard or run_code.' : ''}`;
+            result.message = `${result.message}\nAdded to Audio Index as <<<audio_${audioIndex}>>>.\nResolved ${kind === 'voiceover' ? 'voiceover master' : kind === 'translation' ? 'translated voice master' : kind === 'mixed' ? 'unified soundtrack' : 'audio'} URL: ${result.audioUrl}\nUse this URL directly in Remotion <Audio src>; do not rely on the marker inside composition code or props.${kind === 'voiceover' || kind === 'translation' || kind === 'mixed' ? '\nIf this asset contains speech, call transcribe_audio with expected_sections and the Composition fps before Storyboard or run_code.' : ''}`;
           }
           deductSeedAudioCredits(ctx.userId ?? '', {
             durationSeconds: result.duration,

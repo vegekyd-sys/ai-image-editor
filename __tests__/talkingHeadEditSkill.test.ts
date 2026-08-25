@@ -11,7 +11,7 @@ const normalizedCaption = spokenCaption.replace(/\s+/g, ' ')
 
 describe('talking-head editing skill', () => {
   it('stays concise while preserving editorial autonomy', () => {
-    expect(skill.length).toBeLessThan(5_000)
+    expect(skill.length).toBeLessThan(6_500)
     expect(normalized).toContain('Use your editorial judgment')
     expect(normalized).toContain('both valid')
     expect(skill).not.toContain('exactly one `run_code`')

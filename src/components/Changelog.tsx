@@ -17,7 +17,7 @@ interface LegacyChangelogEntry {
 
 type LocalizedChangelogEntry = {
   date: string;
-  localeKey: 'talkingHeadEditing' | 'smarterEditableDiscovery' | 'tiktokVideoSkill' | 'sourcePlayback' | 'externalSourceRanges' | 'seedance25' | 'minimaxH3' | 'multilingualAsr' | 'editableRemotion' | 'editableLayers';
+  localeKey: 'videoTranslation' | 'talkingHeadEditing' | 'smarterEditableDiscovery' | 'tiktokVideoSkill' | 'sourcePlayback' | 'externalSourceRanges' | 'seedance25' | 'minimaxH3' | 'multilingualAsr' | 'editableRemotion' | 'editableLayers';
 };
 
 type ChangelogEntry = LegacyChangelogEntry | LocalizedChangelogEntry;
@@ -27,6 +27,10 @@ const CHANGELOG: ChangelogEntry[] = [
     date: '2026-08-25',
     en: { title: 'Transparent PNGs with GPT Image 2', items: ['Ask for a transparent background to create reusable stickers, design assets, and video overlays that can be placed anywhere without removing the background again.'] },
     zh: { title: 'GPT Image 2 透明 PNG', items: ['直接说“透明底”，即可生成可复用的贴纸、设计素材和视频叠加层，放进任何画面时都不需要再次处理背景。'] },
+  },
+  {
+    date: '2026-08-25',
+    localeKey: 'videoTranslation',
   },
   { date: '2026-08-24', en: { title: 'Any Google Font, Preview to Export', items: ['Remotion now loads Google Fonts on demand and pins the same font files for Preview and MP4 export, removing the built-in font-list limit.'] }, zh: { title: '任意 Google Fonts，从预览到导出', items: ['Remotion 现在按需加载 Google Fonts，并让 Preview 与 MP4 导出使用同一份固定字体文件，不再受内置字体列表限制。'] } },
   {
@@ -979,6 +983,13 @@ const iOSAppTopGap = 'max(96px, calc(env(safe-area-inset-top, 0px) + 40px))';
 const iOSAppBottomGap = 'max(14px, env(safe-area-inset-bottom, 0px))';
 
 const LOCALIZED_CHANGELOG_KEYS = {
+  videoTranslation: {
+    title: 'changelog.videoTranslation.title',
+    items: [
+      'changelog.videoTranslation.item1',
+      'changelog.videoTranslation.item2',
+    ],
+  },
   talkingHeadEditing: {
     title: 'changelog.talkingHeadEditing.title',
     items: [

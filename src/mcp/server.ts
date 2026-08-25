@@ -280,6 +280,7 @@ Models:
 - grok — Grok Video 1.5 via xAI, fastest single-image-to-video, native audio, defaults to 480p at $0.08/s + $0.01/input image
 - google-omni — Gemini Omni Flash via Google, fast image/video generation and editing, up to 6 image references without a video reference, one video reference for direct edits, native generated audio, no uploaded audio references
 - minimax-h3 — MiniMax H3 direct API, native text-to-video plus up to 9 image / 3 video / 3 audio references, 4-15s, public 768p/2K, default 768P
+- sync-lipsync-v3 — exact replacement-audio lip sync; requires exactly one source video and one audio URL, preserves source framing and the supplied audio
 
 Example script format:
 Shot 1 (2s): Wide shot, <<<media_1>>> ...
@@ -288,11 +289,11 @@ Style: Cinematic, warm golden light.`,
     {
       script: z.string().describe('Video script with <<<media_N>>> references'),
       images: z.array(z.string().url()).max(30).default([]).describe('Optional public image URLs. Seedance 2.5 accepts up to 30; older routes may accept fewer.'),
-      videoUrls: z.array(z.string().url()).max(10).optional().describe('Seedance 2.5 public reference video URLs, up to 10 with 30 seconds combined.'),
-      audioUrls: z.array(z.string().url()).max(10).optional().describe('Seedance 2.5 public reference audio URLs, up to 10 with 30 seconds combined.'),
-      duration: z.number().optional().describe('Duration in seconds. Seedance 2.5 accepts 4-30s; SeeDance 2.0 and MiniMax H3 accept 4-15s. Omit for smart mode.'),
+      videoUrls: z.array(z.string().url()).max(10).optional().describe('Public reference video URLs. Sync Lipsync v3 requires exactly one; Seedance 2.5 accepts up to 10 with 30 seconds combined.'),
+      audioUrls: z.array(z.string().url()).max(10).optional().describe('Public reference audio URLs. Sync Lipsync v3 requires exactly one replacement track; Seedance 2.5 accepts up to 10.'),
+      duration: z.number().optional().describe('Duration in seconds. Sync Lipsync v3 follows a 2-120s source; Seedance 2.5 accepts 4-30s; SeeDance 2.0 and MiniMax H3 accept 4-15s. Omit for smart mode.'),
       aspectRatio: z.enum(['auto', '16:9', '9:16', '1:1', '4:3', '3:4', '21:9', '3:2', '2:3']).optional().describe('Aspect ratio. Use auto/adaptive or a provider-supported ratio. Seedance supports 21:9. Grok image-to-video ignores forced ratios to avoid stretching the source image; pad the source or choose another model for a fixed final shape.'),
-      videoModel: z.enum(['seedance-fast', 'seedance-mini', 'seedance', 'seedance-2.5', 'kling', 'grok', 'google-omni', 'minimax-h3']).optional().describe('Video model. seedance-2.5 supports 30s multimodal generation/edit/extend; minimax-h3 provides 768p/2K multimodal generation.'),
+      videoModel: z.enum(['seedance-fast', 'seedance-mini', 'seedance', 'seedance-2.5', 'kling', 'grok', 'google-omni', 'minimax-h3', 'sync-lipsync-v3']).optional().describe('Video model. sync-lipsync-v3 requires exactly one video and one replacement audio track.'),
       videoResolution: z.enum(['auto', '480p', '720p', '768p', '1080p', '2k', '4k']).optional().describe('Output resolution. Use auto to follow the selected model default; MiniMax H3 supports 768p/2k and defaults to 768p.'),
       operation: z.enum(['generate', 'edit', 'extend']).optional().describe('Seedance 2.5 operation. edit and extend require videoUrls.'),
       extendDirection: z.enum(['forward', 'backward']).optional().describe('Seedance 2.5 extension direction.'),
@@ -498,9 +499,12 @@ Poll every 10-15 seconds. Do NOT poll in a tight loop.`,
     'makaron_create_audio',
     `Generate one complete standalone soundtrack with Seed Audio 1.0.
 
-Use a compact playback-order timeline for narration, dialogue, multilingual speech, music, ambience, and sound effects. The current gateway accepts prompts up to 1,500 characters and outputs up to 120 seconds. You may provide up to 3 audio references or 1 image reference, but never both. Bind audio references in prompt order as @audio1, @audio2, and @audio3. WAV/48 kHz is the production-master default.`,
+Use a compact playback-order timeline for narration, dialogue, multilingual speech, music, ambience, and sound effects. Use kind=translation with exactly one MP3/WAV audio reference and target_language to translate speech while retaining the speaker's voice and performance. The current gateway accepts prompts up to 1,500 characters and outputs up to 120 seconds. You may provide up to 3 audio references or 1 image reference, but never both. Bind ordinary audio references in prompt order as @audio1, @audio2, and @audio3. WAV/48 kHz is the production-master default.`,
     {
-      prompt: z.string().max(1500).describe('Complete timeline-directed Seed Audio production brief.'),
+      kind: z.enum(['voiceover', 'dialogue', 'music', 'sound_design', 'mixed', 'translation']).optional(),
+      prompt: z.string().max(1250).optional().describe('Complete timeline-directed Seed Audio production brief. Optional only for kind=translation.'),
+      target_language: z.string().optional().describe('Required for kind=translation.'),
+      translated_script: z.string().optional().describe('Optional exact target-language script. Omit to translate all speech in audio_references[0] directly.'),
       duration_seconds: z.number().positive().max(120).optional().describe('Target duration in seconds.'),
       audio_references: z.array(z.string()).max(3).optional().describe('Public HTTPS audio URLs or provider preset voice IDs, bound as @audio1..@audio3 in the prompt.'),
       image_urls: z.array(z.string().url()).max(1).optional().describe('At most one public HTTPS image URL; mutually exclusive with audio_references.'),
@@ -521,6 +525,9 @@ Use a compact playback-order timeline for narration, dialogue, multilingual spee
         const t0 = Date.now();
         const result = await createAudio({
           prompt: params.prompt,
+          kind: params.kind,
+          targetLanguage: params.target_language,
+          translatedScript: params.translated_script,
           durationSeconds: params.duration_seconds,
           audioReferences: params.audio_references,
           imageUrls: params.image_urls,

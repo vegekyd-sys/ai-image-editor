@@ -118,6 +118,9 @@ const zhHant = {
   // Changelog
   'changelog.heading': '更新',
   'changelog.close': '關閉更新',
+  'changelog.videoTranslation.title': '影片翻譯',
+  'changelog.videoTranslation.item1': '非口播影片和畫外音現在可以用 Seed Audio 翻譯成英文、日文等語言，同時盡量保留原說話人的聲紋、語氣和節奏。',
+  'changelog.videoTranslation.item2': '可見人物口播會先剪順，再用 Seedance 2.0 Fast 翻譯並匹配口型；長影片可自動分段，並繼續完成譯後字幕、B-roll 和 TikTok 成片。',
   'changelog.talkingHeadEditing.title': '口播剪輯',
   'changelog.talkingHeadEditing.item1': '上傳一段原始口播，Makaron 會根據 ASR 自動刪除氣口、停頓、重複和不連貫表達，整理成更流暢的成片。',
   'changelog.talkingHeadEditing.item2': '字幕會跟隨保留原聲的真實詞級時間，自動切成更短、更有重點的動態字幕，並保持可編輯。',

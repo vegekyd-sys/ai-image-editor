@@ -380,7 +380,7 @@ For project/timeline video editing, use:
 npx makaron-cli chat --project <id|auto> --video input.mp4 -b "make it funny"
 ```
 
-Options for `video create`: `--script "..."`, `--script-file <path>`, `--image <url>` (repeatable, up to the selected model limit), `--video <file|url>` and `--audio <file|url>` (repeatable where supported), `--duration <seconds>`, `--aspect 9:16|16:9|1:1`, `--video-model seedance-fast|seedance-mini|seedance|seedance-2.5|kling|grok|google-omni|minimax-h3`, `--video-resolution auto|480p|720p|768p|1080p|2k|4k`. Default model is `seedance-fast`. SeeDance accepts native text-to-video with no image and integer output duration 4-15s (default 5s); `seedance-mini` supports 480p/720p and is best for cheaper drafts/multi-size tests; MiniMax H3 accepts native text-to-video, 4-15s output, public 768p/2k resolution, and up to 9 image, up to 3 video, and up to 3 audio references through Makaron Agent/chat. H3 defaults to 768p; request 2k explicitly for maximum/final quality. Kling supports 5-15s; Grok 1.5 supports 1-15s single-image-to-video only; Gemini Omni supports 3-10s fast 720p image/video generation and editing with native generated audio, including up to 6 image references when no video reference is provided. For `--video-model grok`, forced `--aspect` is ignored to avoid xAI stretching the source image; pad/create the image at the target shape first or use another model.
+Options for `video create`: `--script "..."`, `--script-file <path>`, `--image <url>` (repeatable, up to the selected model limit), `--video <file|url>` and `--audio <file|url>` (repeatable where supported), `--duration <seconds>`, `--aspect 9:16|16:9|1:1`, `--video-model seedance-fast|seedance-mini|seedance|seedance-2.5|kling|grok|google-omni|minimax-h3|sync-lipsync-v3`, `--video-resolution auto|480p|720p|768p|1080p|2k|4k`. Default model is `seedance-fast`. SeeDance accepts native text-to-video with no image and integer output duration 4-15s (default 5s); `seedance-mini` supports 480p/720p and is best for cheaper drafts/multi-size tests; MiniMax H3 accepts native text-to-video, 4-15s output, public 768p/2k resolution, and up to 9 image, up to 3 video, and up to 3 audio references through Makaron Agent/chat. `sync-lipsync-v3` requires exactly one video plus one MP3/WAV and preserves that replacement audio while aligning the mouth. H3 defaults to 768p; request 2k explicitly for maximum/final quality. Kling supports 5-15s; Grok 1.5 supports 1-15s single-image-to-video only; Gemini Omni supports 3-10s fast 720p image/video generation and editing with native generated audio, including up to 6 image references when no video reference is provided. For `--video-model grok`, forced `--aspect` is ignored to avoid xAI stretching the source image; pad/create the image at the target shape first or use another model.
 
 Seedance 2.5: use `--video-model seedance-2.5` for 4-30 second output at 480p/720p. `--image` accepts local files or URLs (up to 30), while repeatable `--video` and `--audio` accept up to 10 each. Use `--video-operation generate|edit|extend`, `--extend-direction forward|backward`, `--output-format mp4|mov`, `--web-search`, `--generated-audio` / `--no-generated-audio`, and `--relaxed-content-filter`. Edit/extend require a video reference. The Evolink route does not currently expose 4K output.
 
@@ -511,6 +511,15 @@ send_message "All done!"
 ## Admin: Skill Marketplace Operations
 
 Admin commands require an API key with admin privileges. Ask your admin to run `makaron admin set-admin <your-email>` to grant access.
+
+### Add credits to a user
+
+Use either the account email address or the Supabase user UUID. Credits must be a positive integer.
+
+```bash
+npx makaron-cli admin add-credits user@example.com 1000
+npx makaron-cli admin add-credits <user-id> 1000 --json
+```
 
 ### List all marketplace skills
 

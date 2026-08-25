@@ -6,7 +6,7 @@ Default model behavior: follow the app's selected video model, usually SeeDance 
 
 Execution behavior: in an ordinary CUI/editor request, write the complete visible script and wait for confirmation before calling `generate_animation`. Submit in the same turn when the current request explicitly authorizes direct submission or the system prompt explicitly supplies a `Trusted Skill template launch`. A trusted template launch continues through long-video and multi-segment intermediate stages without confirmation; pause only for genuinely missing required inputs, an explicit request to review first, or cancellation.
 
-Native-audio contract: this script is the complete audio direction for `generate_animation`. Keep dialogue, narration, voice performance, music, ambience, and sound effects inside the script so the video model generates them with the picture. Never prepare this workflow with `generate_audio`, and never call it after submitting the video. A request for voice or music inside the final video is not a request for a separate audio asset.
+Native-audio contract: this script is the complete audio direction for `generate_animation` in ordinary generation. Keep dialogue, narration, voice performance, music, ambience, and sound effects inside the script so the video model generates them with the picture. Never prepare this workflow with `generate_audio`, and never call it after submitting the video. A request for voice or music inside the final video is not a request for a separate audio asset. Talking-head translation follows `skills/video-translate/SKILL.md`: the accepted edit is supplied as a silent video, the original speech is voice-identity reference only, and the target-language dialogue is written directly as quoted speech inside each Shot. Do not call Seed Audio for that route.
 
 Workflow boundary: use this guide when the requested short video's visual carrier
 is newly generated motion, scenes, transformation, performance, or camera action.
@@ -65,6 +65,8 @@ Longer-form shot craft:
 - Give native audio its own arc: an opening cue, evolving ambience/rhythm, a peak synchronized to the reveal, and a clean final resolve. Do not repeat the same generic sound cue on every shot.
 
 When the user explicitly selects Seedance 2.5, requests a direct 16-30 second video, or needs its edit/extend and higher-reference limits, use `model: "seedance-2.5"`. It supports a single 4-30 second output at 480p/720p, native synchronized audio, up to 30 image + 10 video + 10 audio references (50 total), and dedicated `video_operation: "edit" | "extend"` routes. Use `extend_direction: "forward" | "backward"` for extension. The Evolink API does not currently expose 4K output, so never promise 4K for this route.
+
+For visible talking-head translation, use the default SeeDance 2.0 route from `skills/video-translate/SKILL.md`. Keep each accepted chunk within 4-15 seconds, write the exact target-language dialogue directly in the Shot, and generate it against the silent accepted A-roll plus original-speaker voice reference. Add captions and B-roll only after the translated MP4 passes ASR.
 
 ## Modes
 
