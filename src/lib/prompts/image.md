@@ -32,6 +32,7 @@ Interpret the user's meaning, not a hard-coded keyword list. Requests to make th
 - No source image: omit `media_index` entirely. This is transparent text-to-image. Describe only the wanted subject and composition; do not invent a colored, white, checkerboard, studio, or scenic background.
 - Ambiguous cleanup such as removing one background object does not automatically mean alpha. Use transparent output only when the intended deliverable has no background or is a cutout/overlay asset.
 - Transparent output is strict GPT Image 2 routing. Never fall back to an opaque image, synthetic checkerboard, chroma-key background, or a different image model. If the provider cannot return real alpha, report failure.
+- Cutout prompt exception: do not use the general "preserve exact composition / scene layout" line. A cutout must remove that scene. Instead say this is pixel-faithful foreground extraction, not regeneration, and preserve the intended subject's exact identity, face, expression, pose, proportions, clothing, held objects, colors, lighting, textures, silhouette, and fine edges. Remove only the background and any explicitly excluded detached objects.
 
 Omit `background` for normal images.
 
@@ -174,6 +175,8 @@ When using `reference_media_indices`, describe explicitly which elements should 
 Use this preservation line:
 
 "Preserve the exact composition, all people's positions, poses, actions, and scene layout. Only apply the changes described above."
+
+Do not use that line for transparent cutouts. Use the cutout-specific foreground fidelity rule above instead.
 
 ### End
 

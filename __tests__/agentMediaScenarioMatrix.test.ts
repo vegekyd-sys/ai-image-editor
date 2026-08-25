@@ -108,6 +108,8 @@ describe('agent media scenario matrix', () => {
     expect(image).toContain('Interpret the user\'s meaning, not a hard-coded keyword list')
     expect(image).toContain('This is an image-to-image cutout/edit')
     expect(image).toContain('Never fall back to an opaque image')
+    expect(generateImageTool).toContain('do not append the ordinary composition/scene-layout preservation line')
+    expect(image).toContain('pixel-faithful foreground extraction')
   })
 
   it('prevents Remotion helper components from reading outer props', () => {

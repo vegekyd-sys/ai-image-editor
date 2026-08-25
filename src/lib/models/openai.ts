@@ -42,6 +42,15 @@ export function aspectRatioToSize(ar?: string): string {
   return '1024x1024';
 }
 
+export function resolveOpenAIImageQuality(
+  hasImage: boolean,
+  background?: ImageBackground,
+): 'low' | 'high' {
+  // Background removal is a fidelity-sensitive edit, not ordinary generation.
+  // Low output quality visibly redraws faces, props, and small identity details.
+  return hasImage && background === 'transparent' ? 'high' : 'low';
+}
+
 async function imageToBlob(image: string): Promise<Blob> {
   if (image.startsWith('http')) {
     const res = await fetch(image);
@@ -76,6 +85,7 @@ async function generateAzure(
   const headers: Record<string, string> = { 'api-key': apiKey };
   const hasImage = !!(image || references?.length);
   const size = aspectRatioToSize(aspectRatio);
+  const quality = resolveOpenAIImageQuality(hasImage, background);
   const t0 = Date.now();
 
   let res: Response;
@@ -83,7 +93,7 @@ async function generateAzure(
   if (hasImage) {
     const form = new FormData();
     form.append('prompt', prompt);
-    form.append('quality', 'low');
+    form.append('quality', quality);
     form.append('size', size);
     form.append('moderation', 'low');
     if (background) form.append('background', background);
@@ -99,18 +109,18 @@ async function generateAzure(
       form.append('image[]', blob, 'input.png');
     }
 
-    console.log(`[openai/azure] edits size=${size} images=${references?.length || 1}`);
+    console.log(`[openai/azure] edits size=${size} quality=${quality} images=${references?.length || 1}`);
     res = await fetch(AZURE_EDITS_URL, { method: 'POST', headers, body: form });
   } else {
     const body = {
       prompt,
-      quality: 'low',
+      quality,
       size,
       moderation: 'low',
       ...(background ? { background } : {}),
       ...(background === 'transparent' ? { output_format: 'png' } : {}),
     };
-    console.log(`[openai/azure] generations size=${size}`);
+    console.log(`[openai/azure] generations size=${size} quality=${quality}`);
     res = await fetch(AZURE_GENERATIONS_URL, {
       method: 'POST',
       headers: { ...headers, 'Content-Type': 'application/json' },
@@ -127,6 +137,11 @@ async function generateAzure(
   }
 
   const data = await res.json();
+  const usage: TokenUsage | undefined = data.usage ? {
+    inputTokens: data.usage.input_tokens ?? data.usage.prompt_tokens ?? 0,
+    outputTokens: data.usage.output_tokens ?? data.usage.completion_tokens ?? 0,
+    modelId: OPENROUTER_MODEL,
+  } : undefined;
 
   if (data.error) {
     const code = data.error.code || data.error.type || 'unknown';
@@ -159,7 +174,7 @@ async function generateAzure(
   if (!normalized && background === 'transparent') {
     console.warn('[openai/azure] Provider response did not contain real PNG/WebP transparency');
   }
-  return { image: normalized };
+  return { image: normalized, usage };
 }
 
 // ── PiAPI implementation ────────────────────────────────────────
