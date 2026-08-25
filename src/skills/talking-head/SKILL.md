@@ -1,8 +1,6 @@
 ---
 name: talking-head
-description: >
-  Edit talking-head footage with transcript-led cuts, synced captions, B-roll,
-  and highlights.
+description: Edit talking-head footage with transcript-led cuts, synced captions, B-roll, and highlights; continue through video-translate for another language and tiktok-video for TikTok/Douyin delivery.
 allowed-tools: read_file analyze_video transcribe_audio studio_run run_code write_file publish_draft preview_frame materialize_media generate_image generate_animation generate_audio
 metadata:
   makaron:
@@ -28,26 +26,27 @@ metadata:
 
 # Talking Head Editing
 
-Deliver the finished video in the current project. Use your editorial judgment;
-the goal is a confident, natural piece, not the maximum number of cuts, captions,
-or effects. A direct composition and Studio Run are both valid. Pick one path and
-stay with it unless it actually fails.
+Use your editorial judgment for a confident, natural video. Direct composition
+and Studio Run are both valid; pick one unless it fails.
 
 Before editing, read `skills/_shared/speech-clock.md` and
 `skills/_shared/spoken-caption.md`. Follow the source-speech route and shared
 caption contract. This Skill owns only the talking-head editorial decisions.
-For another language, finish and materialize the clean A-roll first, then hand
-it to `skills/video-translate/SKILL.md`. Talking Head does not translate.
+
+For another language, read `skills/_shared/voice-translation.md` and
+`skills/video-translate/SKILL.md` now. Materialize clean A-roll, then continue
+the same request through translation without stopping or asking for a restated
+task. Talking Head does not translate. For TikTok/Douyin, translation continues
+to `skills/tiktok-video/SKILL.md` for final packaging.
 
 ## Find the story, then cut it
 
 Transcribe once with `transcribe_audio({ media_index })`; omit
 `expected_sections` and reuse the saved word timing.
 
-Understand the delivery and gestures, then make one coherent keep-range timeline.
-Remove false starts, retakes, accidental
-repetition, filler, hesitation, and pauses that drain momentum. Preserve meaning,
-personality, emphasis, and the short breaths that make speech sound human.
+Make one coherent keep-range timeline. Remove false starts, retakes, accidental
+repetition, filler, hesitation, and momentum-draining pauses. Preserve meaning,
+personality, emphasis, and short breaths that make speech sound human.
 
 Cut at semantic boundaries when possible. Use word boundaries for a precise
 mistake only when the join stays natural; leave a small audio handle so words are
@@ -68,10 +67,9 @@ Shorten by splitting a kept thought into consecutive micro-cues, never by
 summarizing or deleting words that remain audible. A long kept utterance and a
 caption cue are different units.
 
-For TikTok or Douyin, use `skills/tiktok-video/SKILL.md` for creator-native and
-platform direction only; this Skill's source-speech route overrides TikTok's
-generated-VO default. Place captions around the face and platform UI while
-keeping the speaker visually dominant.
+For TikTok/Douyin, let `skills/tiktok-video/SKILL.md` own platform direction;
+this source-speech route overrides its generated-VO default. Keep captions clear
+of the face and platform UI.
 
 ## Add visual support selectively
 
@@ -101,5 +99,4 @@ moments selected by editorial judgment; do not silently omit the request.
 - Publish the editable composition and export a playable MP4. A bare fallback
   that drops requested captions or visual support is not finished.
 
-Do not build new transcript tools, editing infrastructure, or a traditional
-timeline UI for this task.
+Do not build transcript tools, editing infrastructure, or a traditional timeline UI.

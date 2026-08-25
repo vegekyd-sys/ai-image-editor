@@ -1,6 +1,7 @@
 import fs from 'node:fs'
 import path from 'node:path'
 import { describe, expect, it } from 'vitest'
+import { parseSkillMd } from '@/lib/skill-registry'
 
 const root = process.cwd()
 const read = (file: string) => fs.readFileSync(path.join(root, file), 'utf8')
@@ -11,16 +12,21 @@ describe('independent video translation skill', () => {
     const localization = read('src/skills/localization-dub/SKILL.md')
     const translation = read('src/skills/video-translate/SKILL.md')
     const shared = read('src/skills/_shared/voice-translation.md')
+    const tiktok = read('src/skills/tiktok-video/SKILL.md')
+    const parsedTranslation = parseSkillMd(translation)
+    const manifestLine = `${parsedTranslation?.name}: ${parsedTranslation?.description.trim().split('\n')[0] ?? ''}`
+    const normalizedTranslation = translation.replace(/\s+/g, ' ')
 
     expect(talkingHead).toContain('generate_audio')
     expect(talkingHead).toContain('skills/video-translate/SKILL.md')
+    expect(talkingHead).toContain('same request')
     expect(localization).toContain('skills/video-translate/SKILL.md')
     expect(translation).toContain('userSelectable: true')
     expect(translation).toContain('manifestVisible: true')
     expect(translation).toContain('Non-talking-head or off-screen VO: Seed Audio')
     expect(translation).toContain('Visible talking head: SeeDance 2.0')
     expect(translation).toContain('Do not\ncall Seed Audio anywhere in this route')
-    expect(translation).toContain('finish the Talking Head keep-range edit first')
+    expect(normalizedTranslation).toContain('finish the Talking Head keep-range edit first')
     expect(translation).toContain('Captions and B-roll come after the translated speech')
     expect(translation).toContain('`seedance-fast`')
     expect(translation).toContain('<<<video_1>>>')
@@ -28,10 +34,21 @@ describe('independent video translation skill', () => {
     expect(translation).toContain('dialogue directly inside the `Shot` as quoted speech')
     expect(translation).toContain('Add one `completion_actions` entry')
     expect(translation).toContain('Never end with only a prose promise to continue')
+    expect(translation).toContain('skills/talking-head/SKILL.md')
+    expect(translation).toContain('skills/tiktok-video/SKILL.md')
+    expect(translation).toContain('Do not assemble or package while any chunk is unverified')
+    expect(manifestLine).toContain('talking-head')
+    expect(manifestLine).toContain('video-translate')
+    expect(manifestLine).toContain('tiktok-video')
     expect(shared).toContain('`kind: "translation"`')
     expect(shared).toContain('A visible talking head is edited first by Talking Head')
     expect(shared).toContain('Seed Audio must not be used in that route')
     expect(shared).toContain('translated ASR words')
     expect(shared).toContain('Add B-roll only after translation')
+    expect(shared).toContain('`talking-head` → `video-translate` → `tiktok-video`')
+    expect(shared).toContain('all target-language chunks verified from their actual ASR')
+    expect(tiktok).toContain('skills/talking-head/SKILL.md')
+    expect(tiktok).toContain('skills/video-translate/SKILL.md')
+    expect(tiktok).toContain('`talking-head` → `video-translate` →')
   })
 })

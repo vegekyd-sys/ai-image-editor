@@ -21,6 +21,22 @@ Choose from the visible carrier, not from a generic “lip sync” toggle:
   voice reference, and quoted target-language dialogue in the animation
   Prompt. Seed Audio must not be used in that route.
 
+## Continue the composite request
+
+When one prompt asks to edit, translate, and publish a visible talking head, the
+Skill chain is `talking-head` → `video-translate` → `tiktok-video` for a
+TikTok/Douyin deliverable. Each Skill owns one decision layer, but reading the
+next Skill continues the same user request. Do not stop at a handoff, ask the
+user to restate the task, or present a clean A-roll, provider result, or one
+translated chunk as the finished video.
+
+Advance only through three accepted artifacts: a materialized clean A-roll;
+all target-language chunks verified from their actual ASR and assembled in
+order; then the captioned, visually supported, exported video. Retry only a
+failed translated chunk. Platform captions and B-roll belong after translated
+speech acceptance, so they follow the target-language clock rather than the
+source clock.
+
 Never promise sample-identical voice. Verify the actual output and preserve the
 source speaker's age, timbre, emotion, emphasis, pauses, pacing, energy, and
 microphone character as closely as the chosen model allows.
