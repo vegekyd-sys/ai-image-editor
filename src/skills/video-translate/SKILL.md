@@ -70,11 +70,24 @@ call Seed Audio anywhere in this route.
    - a clean MP3/WAV of the original speaker for voice identity only.
    Keep these as intermediate workspace outputs rather than timeline deliverables.
 3. Translate the retained argument, then shape it into short natural spoken
-   beats that fit the chunk. Preserve protected wording and meaning.
+   beats. Preserve protected wording and meaning. Estimate the target-language
+   reading time and set the generated duration from that target speech, not
+   from the source chunk. Use the shortest integer duration that allows a
+   natural delivery plus a small head/tail breath; the dialogue should occupy
+   most of the generated clip. If it will not fit within 15 seconds, split at
+   another sentence boundary. If it is shorter than the 4-second minimum, join
+   it to an adjacent complete beat. Excess empty duration invites SeeDance to
+   improvise, repeat, or fall back toward the source-language audio.
 4. Read `prompts/animate.md`. Call `generate_animation` with the default
    `seedance-fast` model, the silent MP4 as `video_ref_url`, and the extracted
-   voice URL as the single `audio_refs` item. Use standard `seedance` only when
-   the user explicitly requests standard/full/1080p SeeDance.
+   voice URL as the single `audio_refs` item. Pass `video_ref_type: "feature"`:
+   this is reference regeneration, not a base video edit. If a call is rejected
+   because base editing is unsupported, correct that argument to `feature` and
+   keep `seedance-fast`; do not switch to Seedance 2.5. Use standard `seedance`
+   only when the user explicitly requests standard/full/1080p SeeDance. Before
+   submitting, read the final `story_prompt` once: it must contain literal
+   `<<<video_1>>>` and `<<<audio_1>>>` markers, the dialogue lock, and no `...`
+   or `…` inside any quoted line.
 5. Because SeeDance completes asynchronously, every generated chunk is an
    intermediate artifact. Add one `completion_actions` entry whose prompt says
    to resume `skills/video-translate/SKILL.md` for the same request, wait for all
@@ -84,25 +97,34 @@ call Seed Audio anywhere in this route.
    `policy: "auto"` only when the current request explicitly authorizes the
    complete end-to-end flow; otherwise use `policy: "confirm"`. Never end with only a prose promise to continue.
 
-The complete script must use this form, adapted to the target language:
+The first request should already use the same exact dialogue lock that a good
+retry would use. Keep the entire control prompt compact and in English; only
+the quoted dialogue changes language. Put the dialogue before secondary visual
+instructions. Do not add a long Style block or repeat negative constraints.
+Use this form:
 
 ```text
-Translated Talking Head
-
-<<<video_1>>> (silent accepted A-roll) is the only visible speaker.
-<<<audio_1>>> is voice identity, age, timbre, energy, and delivery reference only; do not repeat its source-language words.
-
-Shot 1 (7s): Fixed talking-head shot. The same speaker says in natural target-language speech: "First short translated phrase." After a natural pause, the speaker continues: "Second short translated phrase." Keep identity stable and match every target-language phoneme with natural mouth and jaw motion.
-Sound: Only the quoted target-language dialogue. No source-language speech, music, effects, or subtitles.
-Style: Photorealistic talking head, exact identity and setting, stable face, no beautification, no text.
+Target-Language Talking Head
+<<<video_1>>> Same speaker and same shot. <<<audio_1>>> Use only this speaker's voice, tone, accent, and cadence; ignore its source-language words.
+The speaker says in Target Language exactly once: "First complete translated sentence. Second complete translated sentence."
+No other speech. No subtitles. Keep the same face, clothing, background, framing, and natural mouth motion.
 ```
 
-Put the target-language dialogue directly inside the `Shot` as quoted speech;
-an instruction such as “translate this video” is not dialogue. Split long copy
-into shorter quoted phrases. To retain the speaker's personal delivery, ask for
-their natural cadence and light non-native accent without naming the source
-language as the desired accent; naming it can cause the model to repeat the
-source-language audio.
+This compact translation prompt overrides the ordinary generated-video `Shot`
+template in `prompts/animate.md`; a single talking-head performance does not
+need shot choreography. Put the target-language dialogue directly in
+`story_prompt` as quoted speech; an instruction such as “translate this video”
+is not dialogue. For one speaker, prefer one quotation containing the complete
+short performance in natural sentence order; use multiple quotations only when
+another speaker or a real pause must be distinguished. Never send an ellipsis,
+dangling clause, or unfinished thought to SeeDance. If the retained source
+itself ends mid-sentence, stop at its last complete semantic beat; the
+incomplete tail carries no additional claim to preserve. Never include a known
+wrong word merely to negate it; the dialogue lock already excludes every
+unquoted word. To retain the speaker's personal
+delivery, ask for their natural cadence and light non-native accent without
+naming the source language as the desired accent; naming it can cause the model
+to repeat the source-language audio.
 
 Poll every actual chunk MP4 and transcribe its audio. Reject omitted, added,
 garbled, or source-language words. Retry only the failed chunk once with shorter
