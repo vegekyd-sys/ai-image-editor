@@ -25,6 +25,6 @@ Edit Mode prompt shape for ordinary in-place edits:
 3. Preservation line: preserve exact composition, positions, poses, actions, and scene layout.
 4. End line: "Do NOT add any text, watermarks, or borders." Omit this if the user explicitly requested text or captions.
 
-Transparent cutout exception: do not append the ordinary composition/scene-layout preservation line. Say this is pixel-faithful foreground extraction, not redesign; preserve the exact subject, pose, held objects, colors, textures, silhouette, and fine edges while removing only the background and explicitly excluded detached objects.
+Transparent cutout: read `prompts/cutout.md` once, follow its canonical ordered contract, and do not append ordinary composition/scene-layout preservation.
 
 Context Mode for `model='openai'`: pass the user's request verbatim as `editPrompt`; do not rewrite, translate, expand, or invent layout/color details. For multi-turn layout/mockup image tasks, include concise prior feedback.

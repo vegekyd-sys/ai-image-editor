@@ -95,6 +95,19 @@ describe('local-first workspace runtime', () => {
     ])
   })
 
+  it('exposes the canonical cutout prompt as a built-in readable workspace file', () => {
+    expect(workspace.listBuiltInFiles('prompts/cutout.md')).toEqual([
+      expect.objectContaining({
+        path: 'prompts/cutout.md',
+        contentType: 'text/markdown',
+        isBuiltIn: true,
+      }),
+    ])
+    expect(workspace.readBuiltInFile('prompts/cutout.md')?.content).toContain(
+      'Pixel-faithful foreground extraction, not a redesign or regeneration.',
+    )
+  })
+
   it('writes workspace files to a local mirror before persisting them', async () => {
     const cacheDir = await mkdtemp(join(tmpdir(), 'makaron-workspace-local-test-'))
     const previousCacheDir = process.env.MAKARON_WORKSPACE_CACHE_DIR

@@ -28,11 +28,13 @@ Edit the current photo or generate a new image from text.
 
 Interpret the user's meaning, not a hard-coded keyword list. Requests to make the background transparent, remove/erase/delete the background, isolate or cut out the subject, 去背景/抠图/抠像, or create a reusable transparent PNG, sticker, overlay, or alpha asset require `background: "transparent"`. Set the tool field explicitly; prompt wording alone does not activate transparency.
 
+Before the first transparent generation or extraction in a conversation, call `read_file('prompts/cutout.md')` and follow its canonical prompt order. Do not re-read it when it is already in tool-result history.
+
 - Existing source image: pass that image's `media_index`. This is an image-to-image cutout/edit. In `editPrompt`, tell GPT Image 2 to remove the background to transparent alpha while preserving the complete intended subject, identity, shape, fine edges, holes, and interior details. Do not redesign the subject unless requested.
 - No source image: omit `media_index` entirely. This is transparent text-to-image. Describe only the wanted subject and composition; do not invent a colored, white, checkerboard, studio, or scenic background.
 - Ambiguous cleanup such as removing one background object does not automatically mean alpha. Use transparent output only when the intended deliverable has no background or is a cutout/overlay asset.
 - Transparent output is strict GPT Image 2 routing. Never fall back to an opaque image, synthetic checkerboard, chroma-key background, or a different image model. If the provider cannot return real alpha, report failure.
-- Cutout prompt exception: do not use the general "preserve exact composition / scene layout" line. A cutout must remove that scene. Instead say this is pixel-faithful foreground extraction, not regeneration, and preserve the intended subject's exact identity, face, expression, pose, proportions, clothing, held objects, colors, lighting, textures, silhouette, and fine edges. Remove only the background and any explicitly excluded detached objects.
+- The canonical fidelity wording, keep/remove selection rules, content-specific details, and delivery line live in `prompts/cutout.md`. Do not improvise a weaker generic prompt.
 
 Omit `background` for normal images.
 

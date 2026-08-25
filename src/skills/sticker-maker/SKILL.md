@@ -42,6 +42,11 @@ If these answers are weak, do not generate the asset.
 
 ## 2. Prefer Native Transparent Generation Or Extraction
 
+Before native transparent generation or source extraction, read
+`prompts/cutout.md` once. It is the canonical GPT Image 2 `editPrompt`
+contract. This Skill adds asset staging, transparent padding, preparation, and
+video QA requirements; it does not replace the general cutout contract.
+
 For a new sticker, icon, character pose, product insert, reaction, particle,
 foreground prop, or overlay, call:
 
