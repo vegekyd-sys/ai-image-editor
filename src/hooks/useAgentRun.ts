@@ -290,12 +290,13 @@ function dispatchEvent(row: AgentEventRow, callbacks: AgentStreamCallbacks) {
       callbacks.onNewTurn?.((data as { messageId?: string }).messageId)
       break
     case 'image': {
-      const imgData = data as { imageUrl?: string; snapshotId?: string; usedModel?: string }
+      const imgData = data as { imageUrl?: string; snapshotId?: string; usedModel?: string; metadata?: import('@/types').PhotoMetadata }
       callbacks.onImage?.(
         imgData.imageUrl ?? '',
         imgData.usedModel,
         imgData.snapshotId,
         imgData.imageUrl,
+        imgData.metadata,
       )
       break
     }

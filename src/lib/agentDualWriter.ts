@@ -150,6 +150,7 @@ export class AgentDualWriter {
             tips: [],
             message_id: this.currentMessageId,
             sort_order: sortOrder,
+            metadata: event.metadata,
           }, { onConflict: 'id' });
           if (error) throw new Error(`Failed to persist generated image snapshot: ${error.message}`);
           this.currentMessageHasImage = true;
@@ -165,6 +166,7 @@ export class AgentDualWriter {
           imageUrl: imageUrl ?? undefined,
           usedModel: event.usedModel,
           description: event.description,
+          metadata: event.metadata,
         });
 
         // SSE: enriched event with server IDs
@@ -174,6 +176,7 @@ export class AgentDualWriter {
           usedModel: event.usedModel,
           snapshotId,
           imageUrl,
+          metadata: event.metadata,
         });
         return;
       }

@@ -21,6 +21,7 @@ vi.mock('@/lib/supabase/storage', () => ({
 
 vi.mock('@/lib/image/compress', () => ({
   compressImageFile: vi.fn(async () => 'data:image/jpeg;base64,compressed'),
+  inspectDataUrlAlpha: vi.fn(async () => false),
 }))
 
 vi.mock('@/lib/image/metadata', () => ({
@@ -134,7 +135,11 @@ describe('createProject upload flow', () => {
       }),
     ])
     expect(sessionStorage.getItem('pendingImages')).toBeNull()
-    expect(JSON.parse(sessionStorage.getItem('pendingMetadata') || '{}')).toEqual({ location: 'Draft City' })
+    expect(JSON.parse(sessionStorage.getItem('pendingMetadata') || '{}')).toEqual({
+      location: 'Draft City',
+      imageMimeType: 'image/jpeg',
+      hasAlpha: false,
+    })
     expect(sessionStorage.getItem('pendingPrompt')).toBe('make it cinematic')
     expect(sessionStorage.getItem('pendingSkill')).toBe('installed-skill')
     expect(getPendingProjectLaunchSync('11111111-1111-4111-8111-111111111111')).toMatchObject({

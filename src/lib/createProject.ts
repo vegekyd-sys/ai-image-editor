@@ -1,5 +1,5 @@
 import { SupabaseClient } from '@supabase/supabase-js'
-import { compressImageFile } from '@/lib/image/compress'
+import { compressImageFile, inspectDataUrlAlpha } from '@/lib/image/compress'
 import { extractPhotoMetadata } from '@/lib/image/metadata'
 import { getMarketingAttribution } from '@/lib/marketing/attribution'
 import { createMetaEventId, trackMetaEvent } from '@/lib/marketing/meta-pixel'
@@ -40,6 +40,18 @@ export async function compressCreateImageFiles(files: File[]): Promise<string[]>
   return payloads
 }
 
+async function enrichImageMetadata(base64: string, metadata?: PhotoMetadata): Promise<PhotoMetadata | undefined> {
+  const mimeType = base64.match(/^data:(image\/[^;]+);/i)?.[1]
+  if (!mimeType) return metadata
+  const hasAlpha = await inspectDataUrlAlpha(base64)
+  return {
+    ...metadata,
+    imageMimeType: mimeType,
+    hasAlpha,
+    ...(hasAlpha ? { generationBackground: 'transparent' as const } : {}),
+  }
+}
+
 async function createProjectShell(
   title = 'Untitled',
   marketing?: { metaEventId?: string; skillId?: string; hasPrompt?: boolean },
@@ -66,9 +78,14 @@ async function persistCreateImages(
 ): Promise<string[]> {
   return Promise.all(payloads.map(async (payload, index) => {
     if (payload.startsWith('http')) return payload
+    const extension = /^data:image\/png;/i.test(payload)
+      ? 'png'
+      : /^data:image\/webp;/i.test(payload)
+        ? 'webp'
+        : 'jpg'
     const filename = stablePrefix
-      ? `${stablePrefix}-${index}.jpg`
-      : `snapshot-${crypto.randomUUID()}.jpg`
+      ? `${stablePrefix}-${index}.${extension}`
+      : `snapshot-${crypto.randomUUID()}.${extension}`
     const url = await uploadImage(supabase, userId, projectId, filename, payload)
     if (!url) throw new Error('Failed to upload image')
     return url
@@ -152,11 +169,12 @@ export async function createProject(
 
   // Single image (no videos): compress + metadata + DB insert in parallel
   if (imageFiles.length <= 1 && videoFiles.length === 0) {
-    const [base64, metadata, projectId] = await Promise.all([
+    const [base64, rawMetadata, projectId] = await Promise.all([
       compressCreateImageFile(imageFiles[0]),
       preExtractedMetadata ? Promise.resolve(preExtractedMetadata) : extractPhotoMetadata(imageFiles[0]),
       createProjectShell('Untitled', marketing),
     ]);
+    const metadata = await enrichImageMetadata(base64, rawMetadata)
     if (base64) {
       const imageUrls = await persistCreateImages(supabase, userId, projectId, [base64])
       await stagePendingProjectImages(projectId, imageUrls)
@@ -173,8 +191,8 @@ export async function createProject(
     preExtractedMetadata ? Promise.resolve(preExtractedMetadata) : (!isVideoFile(firstImage) ? extractPhotoMetadata(firstImage) : Promise.resolve(undefined)),
   ]);
 
-  const imageUrls = await Promise.all(imageFiles.map(async file => {
-    const payload = await compressCreateImageFile(file)
+  const payloads = await Promise.all(imageFiles.map(file => compressCreateImageFile(file)))
+  const imageUrls = await Promise.all(payloads.map(async payload => {
     return (await persistCreateImages(supabase, userId, projectId, [payload]))[0]
   }))
   if (imageUrls.length) await stagePendingProjectImages(projectId, imageUrls)
@@ -186,10 +204,11 @@ export async function createProject(
     sessionStorage.setItem('pendingVideos', JSON.stringify(videoData));
   }
 
-  stageProjectLaunch(projectId, options, metadata)
+  const enrichedMetadata = payloads[0] ? await enrichImageMetadata(payloads[0], metadata) : metadata
+  stageProjectLaunch(projectId, options, enrichedMetadata)
 
   trackProjectCreated(projectId, { ...options, eventId: metaEventId });
-  return { projectId, metadata };
+  return { projectId, metadata: enrichedMetadata };
 }
 
 export async function createProjectFromStagedMedia(
@@ -216,6 +235,9 @@ export async function createProjectFromStagedMedia(
     hasPrompt: Boolean(staged.prompt),
   }
   let imageUrls: string[] = []
+  const metadata = staged.images?.[0]
+    ? await enrichImageMetadata(staged.images[0], staged.metadata)
+    : staged.metadata
   if (staged.images?.length) {
     imageUrls = await persistCreateImages(supabase, userId, projectId, staged.images, 'anonymous-source')
   }
@@ -242,7 +264,7 @@ export async function createProjectFromStagedMedia(
     prompt: staged.prompt,
     skill: staged.skill,
     skillLaunchContext: staged.skillLaunchContext,
-  }, staged.metadata)
+  }, metadata)
   trackProjectCreated(createdProjectId, { prompt: staged.prompt, skill: staged.skill, eventId: metaEventId })
-  return { projectId: createdProjectId, metadata: staged.metadata }
+  return { projectId: createdProjectId, metadata }
 }

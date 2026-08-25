@@ -206,7 +206,7 @@ export function makeAgentCallbacks(ctx: AgentCallbackContext) {
       }
     },
 
-    onImage: (imageData, usedModel, serverSnapshotId, serverImageUrl) => {
+    onImage: (imageData, usedModel, serverSnapshotId, serverImageUrl, metadata) => {
       const elapsed = ((performance.now() - t0) / 1000).toFixed(1);
       const genDuration = genStartTime ? ((performance.now() - genStartTime) / 1000).toFixed(1) : '?';
       console.log(`⏱️ [agent] IMAGE received at +${elapsed}s (${usedModel || 'gemini'} took ${genDuration}s)`);
@@ -225,6 +225,7 @@ export function makeAgentCallbacks(ctx: AgentCallbackContext) {
         messageId: targetMessageId,
         description: editDesc,
         ...(serverImageUrl ? { imageUrl: serverImageUrl } : {}),
+        metadata,
       };
 
       ctx.setSnapshots(prev => {
@@ -234,6 +235,7 @@ export function makeAgentCallbacks(ctx: AgentCallbackContext) {
               ...s,
               image: s.image || displayImage,
               ...(serverImageUrl && !s.imageUrl ? { imageUrl: serverImageUrl } : {}),
+              ...(metadata ? { metadata: { ...s.metadata, ...metadata } } : {}),
               messageId: s.messageId || targetMessageId,
             }
             : s);

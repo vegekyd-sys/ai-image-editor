@@ -72,6 +72,12 @@ export interface PhotoMetadata {
     lng?: number;
     datetime?: string;
   };
+  /** Image transport metadata. Stored with the snapshot so alpha survives
+   * reloads and can inform Agent routing, previews, Canvas, and exports. */
+  imageMimeType?: string;
+  hasAlpha?: boolean;
+  transparentRatio?: number;
+  generationBackground?: 'auto' | 'opaque' | 'transparent';
 }
 
 // ── Annotation types ──

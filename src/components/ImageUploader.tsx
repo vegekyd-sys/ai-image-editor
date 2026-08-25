@@ -2,39 +2,12 @@
 
 import { useCallback, useRef } from 'react';
 import { ensureDecodableFile, isHeicFile } from '@/lib/imageUtils';
+import { compressImageFile } from '@/lib/image/compress';
 
 interface ImageUploaderProps {
   onImageSelect: (base64: string) => void;
   onVideoSelect?: (file: File) => void;
   disabled?: boolean;
-}
-
-function compressImage(file: File, maxWidth = 2048): Promise<string> {
-  return new Promise((resolve, reject) => {
-    const reader = new FileReader();
-    reader.onload = (e) => {
-      const img = new Image();
-      img.onload = () => {
-        const canvas = document.createElement('canvas');
-        let { width, height } = img;
-
-        if (width > maxWidth) {
-          height = (height * maxWidth) / width;
-          width = maxWidth;
-        }
-
-        canvas.width = width;
-        canvas.height = height;
-        const ctx = canvas.getContext('2d')!;
-        ctx.drawImage(img, 0, 0, width, height);
-        resolve(canvas.toDataURL('image/jpeg', 0.92));
-      };
-      img.onerror = reject;
-      img.src = e.target?.result as string;
-    };
-    reader.onerror = reject;
-    reader.readAsDataURL(file);
-  });
 }
 
 export default function ImageUploader({ onImageSelect, onVideoSelect, disabled }: ImageUploaderProps) {
@@ -48,7 +21,7 @@ export default function ImageUploader({ onImageSelect, onVideoSelect, disabled }
       }
       if (!file.type.startsWith('image/') && !isHeicFile(file)) return;
       const decodable = await ensureDecodableFile(file);
-      const base64 = await compressImage(decodable);
+      const base64 = await compressImageFile(decodable, 2048, 0.92);
       onImageSelect(base64);
     },
     [onImageSelect, onVideoSelect]

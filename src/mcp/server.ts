@@ -20,8 +20,15 @@ function resolveImage(input: string): string {
     const filePath = input.startsWith('file://') ? input.slice(7) : input;
     if (!existsSync(filePath)) throw new Error(`File not found: ${filePath}`);
     const buf = readFileSync(filePath);
-    const ext = filePath.toLowerCase().endsWith('.png') ? 'png' : 'jpeg';
-    return `data:image/${ext};base64,${buf.toString('base64')}`;
+    const lower = filePath.toLowerCase();
+    const mimeType = lower.endsWith('.png')
+      ? 'image/png'
+      : lower.endsWith('.webp')
+        ? 'image/webp'
+        : lower.endsWith('.avif')
+          ? 'image/avif'
+          : 'image/jpeg';
+    return `data:${mimeType};base64,${buf.toString('base64')}`;
   } catch (e: unknown) {
     if (e instanceof Error && e.message.startsWith('File not found')) throw e;
     throw new Error(`Cannot resolve image: ${input.slice(0, 100)}. Use a URL or base64 data URL.`);
@@ -117,7 +124,7 @@ IMPORTANT: Image generation takes 15-30 seconds. Long and detailed prompts are f
       model: z.enum(['gemini', 'gemini-lite', 'qwen', 'pony', 'wai', 'openai']).nullish().describe('NEVER set unless user literally names a model. Use gemini-lite only when the user asks for Nano Banana 2 Lite / Lite. Gemini refused→retry with qwen. For design/poster/text-heavy tasks, try openai. Otherwise ALWAYS omit.'),
       referenceImages: z.array(z.string()).nullish().describe('Additional reference images (up to 3). Put the original photo here when restoring face/color/details from it.'),
       aspectRatio: z.string().nullish().describe('Target aspect ratio e.g. "4:5", "1:1", "16:9"'),
-      background: z.enum(['auto', 'opaque', 'transparent']).nullish().describe('Output background. Use transparent only when explicitly requested; it routes strictly to GPT Image 2 and never returns an opaque fallback.'),
+      background: z.enum(['auto', 'opaque', 'transparent']).nullish().describe('Output background. Set transparent for transparent/no-background output, background removal, subject cutout/isolation, or a reusable PNG/sticker/overlay/alpha asset. With image input this is GPT Image 2 image-to-image cutout; without image input it is text-to-image. It never returns an opaque fallback.'),
     },
     async (params) => {
       try {

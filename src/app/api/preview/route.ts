@@ -79,9 +79,15 @@ export async function POST(req: NextRequest) {
     }
 
     if (!result.image) {
+      const transparentUnavailable = background === 'transparent';
       return new Response(
-        JSON.stringify({ error: 'Failed to generate preview' }),
-        { status: 500, headers: { 'Content-Type': 'application/json' } }
+        JSON.stringify({
+          error: transparentUnavailable
+            ? 'Transparent preview is unavailable from the configured GPT Image 2 provider. No opaque fallback was returned.'
+            : 'Failed to generate preview',
+          code: transparentUnavailable ? 'transparent_provider_unavailable' : 'preview_generation_failed',
+        }),
+        { status: transparentUnavailable ? 503 : 500, headers: { 'Content-Type': 'application/json' } }
       );
     }
 

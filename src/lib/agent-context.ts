@@ -100,7 +100,7 @@ interface DbSnapshot {
   tips: Tip[];
   sort_order: number;
   video_meta?: Record<string, unknown>;
-  metadata?: { takenAt?: string; location?: string };
+  metadata?: import('@/types').PhotoMetadata;
 }
 
 const GENERIC_MEDIA_DESCRIPTIONS = new Set([
@@ -610,7 +610,10 @@ export async function buildPromptContext(
         const sourceRangeTag = isVideo ? formatSourceRangeHint(sourceRangeFromVideoMeta(videoMeta)) : '';
         const transcriptTag = isVideo ? formatTranscriptMediaHint(videoMeta) : '';
         const codePath = s.design_path && !isVideo ? ` [composition code: ${s.design_path}]` : '';
-        return `<<<media_${i + 1}>>> [${typeLabel}]${marker} — ${desc}${videoTag}${sourceRangeTag}${transcriptTag}${codePath}`;
+        const alphaTag = s.metadata?.hasAlpha
+          ? ' [transparent alpha asset; preserve transparency in later image edits unless the user explicitly asks for a new background]'
+          : '';
+        return `<<<media_${i + 1}>>> [${typeLabel}]${marker} — ${desc}${alphaTag}${videoTag}${sourceRangeTag}${transcriptTag}${codePath}`;
       }).join('\n')}\n\n`
     : '';
 

@@ -1056,10 +1056,12 @@ const isTipsFetchingRef = useRef(isTipsFetching);
     }));
 
     try {
+      const sourceSnapshot = snapshotsRef.current.find(s => s.id === snapshotId);
+      const background = sourceSnapshot?.metadata?.hasAlpha ? 'transparent' : undefined;
       const res = await fetch('/api/preview', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ image: imageForApi, editPrompt, aspectRatio, category, isNsfw: isNsfwRef.current || undefined }),
+        body: JSON.stringify({ image: imageForApi, editPrompt, aspectRatio, category, background, isNsfw: isNsfwRef.current || undefined }),
         signal: previewAbortRef.current.signal,
       });
 
@@ -2073,6 +2075,14 @@ Select the best 3-7 items for a compelling video. You do NOT need to use all or 
       tips: [],
       messageId: assistantMsg.id,
       description: tipDesc,
+      metadata: snapshots[draftParentIndex]?.metadata?.hasAlpha
+        ? {
+            ...snapshots[draftParentIndex].metadata,
+            imageMimeType: 'image/png',
+            hasAlpha: true,
+            generationBackground: 'transparent',
+          }
+        : undefined,
     };
     setSnapshots((prev) => [...prev, newSnapshot]);
     cacheImage(`snap:${snapId}`, newSnapshot.image);

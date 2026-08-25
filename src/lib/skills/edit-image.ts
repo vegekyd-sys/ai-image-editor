@@ -53,7 +53,9 @@ export async function editImage(
   let lastFailedModels: ModelId[] | undefined;
   let contentBlocked = false;
   let lastUsage: TokenUsage | undefined;
-  const MAX_ATTEMPTS = 2;
+  // A transparent request is a strict, paid provider call. Do not fan it out
+  // or repeat it after failure; surface the capability error to the user.
+  const MAX_ATTEMPTS = background === 'transparent' ? 1 : 2;
 
   for (let attempt = 1; attempt <= MAX_ATTEMPTS; attempt++) {
     const genResult = await generateImage({

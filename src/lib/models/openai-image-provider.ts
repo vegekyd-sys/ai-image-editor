@@ -79,6 +79,17 @@ export function resolveOpenAIImageProviderOrder(
   return [primary];
 }
 
+/** Capability gate for strict alpha output. The current rollout has been
+ * verified on Azure; known-unsupported backups must not receive paid calls. */
+export function filterOpenAIImageProvidersForBackground(
+  providers: OpenAIImageProvider[],
+  background?: ImageBackground,
+): OpenAIImageProvider[] {
+  return background === 'transparent'
+    ? providers.filter(provider => provider === 'azure')
+    : providers;
+}
+
 export function readOpenRouterProviderCost(usage: unknown): number | undefined {
   const cost = (usage as { cost?: unknown } | undefined)?.cost;
   return typeof cost === 'number' && Number.isFinite(cost) && cost >= 0

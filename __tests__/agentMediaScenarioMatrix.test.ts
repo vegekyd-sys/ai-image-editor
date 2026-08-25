@@ -100,6 +100,16 @@ describe('agent media scenario matrix', () => {
     expect(generateImageTool).toContain("Context Mode for `model='openai'`")
   })
 
+  it('routes natural-language transparency and cutouts through the explicit tool contract', () => {
+    expect(generateImageTool).toContain('去背景/抠图/抠像')
+    expect(generateImageTool).toContain('background: "transparent"')
+    expect(generateImageTool).toContain('pass its `media_index`')
+    expect(generateImageTool).toContain('omit `media_index` for transparent text-to-image')
+    expect(image).toContain('Interpret the user\'s meaning, not a hard-coded keyword list')
+    expect(image).toContain('This is an image-to-image cutout/edit')
+    expect(image).toContain('Never fall back to an opaque image')
+  })
+
   it('prevents Remotion helper components from reading outer props', () => {
     expect(remotion).toContain('Only `Composition(props)` may read `props` directly')
     expect(remotion).toContain('Helper components must receive every value they use as function parameters')

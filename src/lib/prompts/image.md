@@ -24,7 +24,16 @@ Edit the current photo or generate a new image from text.
 
 `editPrompt` format depends on the mode. See Context Mode versus Edit Mode below.
 
-When the user explicitly requests a transparent background, no background, a cutout with alpha, or an alpha channel, set `background: "transparent"`. Do not rely on prompt wording alone. Omit `background` for normal images. A transparent request is strict: it must not fall back to an opaque image.
+### Transparent Output and Cutout Routing
+
+Interpret the user's meaning, not a hard-coded keyword list. Requests to make the background transparent, remove/erase/delete the background, isolate or cut out the subject, 去背景/抠图/抠像, or create a reusable transparent PNG, sticker, overlay, or alpha asset require `background: "transparent"`. Set the tool field explicitly; prompt wording alone does not activate transparency.
+
+- Existing source image: pass that image's `media_index`. This is an image-to-image cutout/edit. In `editPrompt`, tell GPT Image 2 to remove the background to transparent alpha while preserving the complete intended subject, identity, shape, fine edges, holes, and interior details. Do not redesign the subject unless requested.
+- No source image: omit `media_index` entirely. This is transparent text-to-image. Describe only the wanted subject and composition; do not invent a colored, white, checkerboard, studio, or scenic background.
+- Ambiguous cleanup such as removing one background object does not automatically mean alpha. Use transparent output only when the intended deliverable has no background or is a cutout/overlay asset.
+- Transparent output is strict GPT Image 2 routing. Never fall back to an opaque image, synthetic checkerboard, chroma-key background, or a different image model. If the provider cannot return real alpha, report failure.
+
+Omit `background` for normal images.
 
 When no photo exists, use text-to-image mode and write the `editPrompt` describing the scene. Omit `media_index` entirely; never pass `0`.
 

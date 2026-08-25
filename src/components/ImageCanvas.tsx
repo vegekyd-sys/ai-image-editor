@@ -6,7 +6,14 @@ import type { PlayerRef } from '@remotion/player';
 import type { AnnotationEntry, DesignPayload, EditableField } from '@/types';
 import AnnotationCanvas from '@/components/AnnotationCanvas';
 import DesignOverlay from '@/components/DesignOverlay';
+import TransparencyBackdrop from '@/components/TransparencyBackdrop';
 import { containRect } from '@/lib/image/geometry';
+import {
+  detectImageTransparency,
+  getCachedImageTransparency,
+  getTransparencyCrossOrigin,
+  type ImageTransparency,
+} from '@/lib/image/transparency';
 import { useLocale } from '@/lib/i18n';
 import { VIDEO_PLACEHOLDER_IMAGE } from '@/lib/editor/timeline-derivations';
 import { getVideoTrimPropKeys } from '@/lib/editor/video-trim';
@@ -183,6 +190,13 @@ export default function ImageCanvas({
   const [isComparing, setIsComparing] = useState(false);
   const longPressTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
+  const baseImage = timeline[currentIndex];
+  // When viewing __VIDEO__ sentinel with no videoUrl, fallback to last real snapshot
+  const fallbackImage = baseImage === VIDEO_SENTINEL && !videoUrl
+    ? timeline.slice(0, -1).filter(t => t !== VIDEO_SENTINEL).pop() ?? baseImage
+    : baseImage;
+  const displayImage = isComparing && previousImage ? previousImage : fallbackImage;
+
   // Double tap
   const lastTapTime = useRef(0);
 
@@ -192,8 +206,17 @@ export default function ImageCanvas({
   const [imageRect, setImageRect] = useState({ l: 0, t: 0, w: 0, h: 0 });
   const [naturalDims, setNaturalDims] = useState({ w: 0, h: 0 });
 
-  // Image loading state
-  const [imageLoaded, setImageLoaded] = useState(true);
+  // Keep the image hidden until alpha detection finishes in the same load event.
+  // This prevents transparent pixels flashing against black before the grid appears.
+  const [loadedImageSource, setLoadedImageSource] = useState<string | null>(null);
+  const [transparencyResult, setTransparencyResult] = useState<{
+    source: string;
+    value: ImageTransparency;
+  } | null>(null);
+  const imageLoaded = Boolean(displayImage) && loadedImageSource === displayImage;
+  const imageTransparency = transparencyResult?.source === displayImage
+    ? transparencyResult.value
+    : (displayImage ? getCachedImageTransparency(displayImage) : undefined);
 
   const activeDraftDesign = isDraft ? draftDesign : null;
   const timelineDesign = animatedDesigns?.get(currentIndex) || null;
@@ -259,6 +282,25 @@ export default function ImageCanvas({
     setImageRect(rect);
     setNaturalDims({ w: img.naturalWidth, h: img.naturalHeight });
   }, []);
+
+  const finalizeLoadedImage = useCallback((image: HTMLImageElement) => {
+    if (!image.naturalWidth) return;
+    const result = detectImageTransparency(image, displayImage);
+    setTransparencyResult({ source: displayImage, value: result });
+    setLoadedImageSource(displayImage);
+    updateImageRect();
+  }, [displayImage, updateImageRect]);
+
+  const handleImageRef = useCallback((image: HTMLImageElement | null) => {
+    imgElRef.current = image;
+    // Cached and SSR-loaded images can finish before React attaches onLoad.
+    // Finalize from the ref as well so they never remain invisibly "loading".
+    if (image?.complete) finalizeLoadedImage(image);
+  }, [finalizeLoadedImage]);
+
+  const handleImageLoad = useCallback((event: React.SyntheticEvent<HTMLImageElement>) => {
+    finalizeLoadedImage(event.currentTarget);
+  }, [finalizeLoadedImage]);
 
   useEffect(() => {
     const container = containerRef.current;
@@ -1185,13 +1227,6 @@ export default function ImageCanvas({
     return `@${editNum}`;
   };
 
-  const baseImage = timeline[currentIndex];
-  // When viewing __VIDEO__ sentinel with no videoUrl, fallback to last real snapshot
-  const fallbackImage = baseImage === VIDEO_SENTINEL && !videoUrl
-    ? timeline.slice(0, -1).filter(t => t !== VIDEO_SENTINEL).pop() ?? baseImage
-    : baseImage;
-  const displayImage = isComparing && previousImage ? previousImage : fallbackImage;
-
   return (
     <div
       ref={containerRef}
@@ -1226,7 +1261,7 @@ export default function ImageCanvas({
         } : undefined}
       >
         {/* Grey placeholder while loading (skip for drafts — they show a low-res thumbnail instead) */}
-        {!isVideoEntry && !imageLoaded && !isDraftLoading && (
+        {!isVideoEntry && !currentDesign && !!displayImage && !imageLoaded && !isDraftLoading && (
           <div className="absolute inset-0 bg-zinc-900 animate-pulse" />
         )}
 
@@ -1700,37 +1735,49 @@ export default function ImageCanvas({
         ) : displayImage ? (
           isLongContent ? (
             <div ref={longScrollRef} className="w-full h-full overflow-y-auto overflow-x-hidden">
-              { }
+              <div className="relative w-full">
+                {imageLoaded && imageTransparency === 'transparent' && (
+                  <TransparencyBackdrop compact={!isDesktop} />
+                )}
+                <img
+                  key={displayImage}
+                  ref={handleImageRef}
+                  crossOrigin={getTransparencyCrossOrigin(displayImage)}
+                  src={displayImage}
+                  alt="preview"
+                  className={`relative w-full h-auto select-none pointer-events-none transition-all duration-150 ${
+                    pullDownActive ? 'opacity-[0.15] grayscale' :
+                    animDir === 'left' ? 'opacity-0 -translate-x-8' :
+                    animDir === 'right' ? 'opacity-0 translate-x-8' :
+                    imageLoaded ? 'opacity-100 translate-x-0' : 'opacity-0'
+                  }`}
+                  draggable={false}
+                  onLoad={handleImageLoad}
+                />
+              </div>
+            </div>
+          ) : (
+            <div className="relative w-full h-full">
+              {imageLoaded && imageTransparency === 'transparent' && imageRect.w > 0 && (
+                <TransparencyBackdrop rect={imageRect} compact={!isDesktop} />
+              )}
               <img
-                ref={imgElRef}
+                key={displayImage}
+                ref={handleImageRef}
+                crossOrigin={getTransparencyCrossOrigin(displayImage)}
                 src={displayImage}
                 alt="preview"
-                className={`w-full h-auto select-none pointer-events-none transition-all duration-150 ${
+                fetchPriority="high"
+                className={`relative w-full h-full object-contain select-none pointer-events-none transition-all duration-150 ${
                   pullDownActive ? 'opacity-[0.15] grayscale' :
                   animDir === 'left' ? 'opacity-0 -translate-x-8' :
                   animDir === 'right' ? 'opacity-0 translate-x-8' :
                   imageLoaded ? 'opacity-100 translate-x-0' : 'opacity-0'
                 }`}
                 draggable={false}
-                onLoad={() => { setImageLoaded(true); updateImageRect(); }}
+                onLoad={handleImageLoad}
               />
             </div>
-          ) : (
-
-            <img
-              ref={imgElRef}
-              src={displayImage}
-              alt="preview"
-              fetchPriority="high"
-              className={`w-full h-full object-contain select-none pointer-events-none transition-all duration-150 ${
-                pullDownActive ? 'opacity-[0.15] grayscale' :
-                animDir === 'left' ? 'opacity-0 -translate-x-8' :
-                animDir === 'right' ? 'opacity-0 translate-x-8' :
-                imageLoaded ? 'opacity-100 translate-x-0' : 'opacity-0'
-              }`}
-              draggable={false}
-              onLoad={() => { setImageLoaded(true); updateImageRect(); }}
-            />
           )
         ) : (
           /* Design snapshot without poster — placeholder until captureDesignPoster runs */

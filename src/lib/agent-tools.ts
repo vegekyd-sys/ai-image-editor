@@ -3,7 +3,7 @@ import { after } from 'next/server';
 import { z } from 'zod';
 import sharp from 'sharp';
 import { validateDesign } from './design-harness';
-import type { ModelId } from './models/types';
+import type { ImageBackground, ModelId } from './models/types';
 import { editImage } from './skills/edit-image';
 import { rotateCamera } from './skills/rotate-camera';
 import { createVideo } from './skills/create-video';
@@ -193,6 +193,8 @@ export interface AgentContext {
   userId?: string;            // Current user ID for workspace
   /** Images generated during this run (base64). Streamed to frontend out-of-band. */
   generatedImages: string[];
+  /** Background contract for the most recently generated image. */
+  lastImageBackground?: ImageBackground;
   /** Which model was used for the last image generation */
   lastUsedModel?: ModelId;
   /** User's preferred model override */
@@ -311,7 +313,7 @@ export type AgentStreamEvent =
   | { type: 'status'; text: string }
   | { type: 'content'; text: string }
   | { type: 'new_turn' }  // signals start of a new assistant response (after tool result)
-  | { type: 'image'; image: string; usedModel?: string; snapshotId?: string; imageUrl?: string; description?: string }
+  | { type: 'image'; image: string; usedModel?: string; snapshotId?: string; imageUrl?: string; description?: string; metadata?: import('@/types').PhotoMetadata }
   | { type: 'tool_call'; tool: string; input: Record<string, unknown>; displayInput?: Record<string, unknown>; images?: string[]; toolCallId?: string; step?: number }
   | { type: 'tool_result'; tool: string; toolCallId?: string; step?: number; output?: unknown }
   | { type: 'animation_task'; taskId: string; prompt: string; imageUrls?: string[]; model?: string }
@@ -1375,7 +1377,7 @@ function createGenerateImageTool(
         skill: z.string().optional().describe('Activate a skill template (e.g. enhance, creative, wild, captions). See tool description and available skills.'),
         model: z.enum(['gemini', 'gemini-lite', 'qwen', 'pony', 'wai', 'openai']).optional().describe('NEVER set this unless the user literally says a model name like "用pony" or "use qwen" or "用openai" or "nano banana lite", or the active long-video-director workflow is generating director storyboard images, which MUST set "openai". For NSFW after Gemini refusal, set "qwen". Otherwise ALWAYS omit — the router handles everything automatically. Setting this without explicit user request is a bug.'),
         aspectRatio: z.string().optional().describe('Target aspect ratio e.g. "4:5", "1:1", "16:9"'),
-        background: z.enum(['auto', 'opaque', 'transparent']).optional().describe('Output background contract. Set "transparent" only when the user explicitly requests a transparent background or alpha channel. Transparent requests route strictly to GPT Image 2 and never fall back to an opaque image.'),
+        background: z.enum(['auto', 'opaque', 'transparent']).optional().describe('Output background contract. Set "transparent" when the user asks for transparent/no background, background removal, subject cutout/isolation, 抠图/抠像/去背景, or a reusable PNG/sticker/overlay/alpha asset. With a source image also pass media_index for GPT Image 2 image-to-image cutout; without one omit media_index for text-to-image. Never return an opaque fallback.'),
         media_index: z.number().optional().describe('1-based index of the snapshot to edit (<<<media_1>>> = 1, <<<media_2>>> = 2, ...). Omit the field entirely for text-to-image (no photo sent); never send 0. For most edits, pass the current snapshot index.'),
         reference_media_indices: z.array(z.number()).optional().describe('1-based indices of snapshots to use as reference images (e.g. [1, 3] to reference <<<media_1>>> and <<<media_3>>>). Use when combining elements from multiple snapshots — e.g. "use the person from media_1 and the background from media_2". The editPrompt should describe how to combine them (e.g. "Place the person from Media 2 into the scene of Media 1").'),
       }),
@@ -1440,6 +1442,7 @@ function createGenerateImageTool(
           ctx.currentImage = skillResult.image;
           ctx.snapshotImages.push(skillResult.image);
           ctx.generatedImages.push(skillResult.image);
+          ctx.lastImageBackground = background;
           if (skillResult.usedModel) ctx.lastUsedModel = skillResult.usedModel;
           // Refresh URLs from DB — DualWriter uploads to Storage in parallel,
           // so base64 entries get replaced with http URLs for downstream tools
@@ -2350,7 +2353,7 @@ function createPrepareVisualAssetTool(
   return tool({
       description: `Prepare generated or supplied media for visual compositing without choosing the final layout.
 
-Use mode "cutout" for a chroma-background image that should become a transparent PNG. The deterministic bridge removes border-connected chroma plus sizeable enclosed high-confidence chroma pockets, despills semi-transparent edges, preserves only tiny isolated same-color subject details, computes subject/safe boxes, and renders a five-background QA sheet.
+Use mode "cutout" for a native transparent PNG/WebP or a controlled chroma-background image that should become a transparent PNG. Native alpha is preserved without re-keying; otherwise the deterministic bridge removes border-connected chroma plus sizeable enclosed high-confidence chroma pockets, despills semi-transparent edges, preserves only tiny isolated same-color subject details, computes subject/safe boxes, and renders a five-background QA sheet.
 
 Use mode "edge-video" for an ordinary opaque clip generated with quiet edges close to the intended Remotion background. The bridge samples the clip over time, measures edge color/detail/drift, preserves a cached workspace copy, and returns target background, edge palette, feather guidance, and a QA contact sheet. It never creates transparent video or a fixed renderer.
 
@@ -3635,6 +3638,7 @@ Parameters:
         if (skillResult.image) {
           ctx.currentImage = skillResult.image;
           ctx.generatedImages.push(skillResult.image);
+          ctx.lastImageBackground = undefined;
           // Bill for camera rotation (per-action)
           import('./billing/credits').then(({ deductCredits }) =>
             deductCredits(ctx.userId ?? '', null, 'rotate_camera')

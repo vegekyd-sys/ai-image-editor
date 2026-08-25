@@ -14,7 +14,7 @@ import {
   resolvePreparedVisualAssetById,
 } from '../src/lib/visual-assets/bridge';
 import { analyzeEdgeFrameBuffers } from '../src/lib/visual-assets/edge-video';
-import { prepareChromaKeyCutout, renderCutoutContactSheet } from '../src/lib/visual-assets/image-cutout';
+import { prepareChromaKeyCutout, prepareNativeAlphaCutout, renderCutoutContactSheet } from '../src/lib/visual-assets/image-cutout';
 import { readAgentAwareSource } from './helpers/agentRuntimeSource';
 
 const workspaceFiles = vi.hoisted(() => new Map<string, { content: string | Buffer; contentType: string; storageUrl: string }>());
@@ -218,6 +218,25 @@ describe('Visual Asset Bridge', () => {
     expect(magentaOvershootPixels).toBe(0);
   });
 
+  it('preserves provider-authored native alpha without chroma keying', async () => {
+    const source = await sharp({
+      create: { width: 320, height: 320, channels: 4, background: { r: 0, g: 0, b: 0, alpha: 0 } },
+    }).composite([{
+      input: Buffer.from('<svg width="200" height="200" xmlns="http://www.w3.org/2000/svg"><circle cx="100" cy="100" r="82" fill="#7138dd" fill-opacity="0.86"/></svg>'),
+      left: 60,
+      top: 60,
+    }]).png().toBuffer();
+
+    const result = await prepareNativeAlphaCutout(source);
+    expect(result.quality.status).toBe('pass');
+    expect(result.quality.metrics?.nativeAlpha).toBe(1);
+    expect(result.quality.metrics?.transparentRatio).toBeGreaterThan(0.5);
+    expect(result.width).toBeLessThan(320);
+    expect(result.height).toBeLessThan(320);
+    const metadata = await sharp(result.png).metadata();
+    expect(metadata.hasAlpha).toBe(true);
+  });
+
   it('removes a sizeable chroma pocket enclosed by a foreground effect', async () => {
     const result = await prepareChromaKeyCutout(await enclosedChromaPocketFixture());
     expect(result.quality.status).toBe('pass');
@@ -336,6 +355,30 @@ describe('Visual Asset Bridge', () => {
     expect(second.cached).toBe(true);
     expect(second.asset.cacheKey).toBe(first.asset.cacheKey);
     expect(workspaceFiles.size).toBe(fileCount);
+  });
+
+  it('keeps even a small native alpha area on the native path instead of chroma-keying it', async () => {
+    workspaceFiles.clear();
+    const source = await sharp({
+      create: { width: 320, height: 320, channels: 4, background: { r: 0, g: 0, b: 0, alpha: 0 } },
+    }).composite([{
+      input: Buffer.from('<svg width="308" height="308" xmlns="http://www.w3.org/2000/svg"><rect width="308" height="308" fill="#7138dd"/></svg>'),
+      left: 6,
+      top: 6,
+    }]).png().toBuffer();
+
+    const result = await prepareVisualAsset({
+      projectId: 'project-small-alpha',
+      userId: 'user-1',
+      supabase: {},
+      sourceUrl: `data:image/png;base64,${source.toString('base64')}`,
+      mode: 'cutout',
+      assetId: 'soft-overlay',
+    });
+
+    expect(result.asset.alphaSource).toBe('native');
+    expect(result.asset.quality.metrics?.nonOpaqueRatio).toBeGreaterThan(0);
+    expect(result.asset.quality.metrics?.transparentRatio).toBeLessThan(0.08);
   });
 
   it('refreshes the semantic pointer when QA changes without changing the output URL', async () => {
@@ -554,6 +597,8 @@ describe('Visual Asset Bridge', () => {
     expect(agent).toContain('The image above is the QA contact sheet');
     expect(agent).toContain('mode + asset_id and no media source first');
     expect(sticker).toContain('five-background QA sheet');
+    expect(sticker).toContain('background: "transparent"');
+    expect(sticker).toContain('alphaSource: "native"');
     expect(sticker).toContain('enclosed high-confidence chroma pockets');
     expect(sticker).toContain('empty chroma canvas');
     expect(sticker).not.toContain('run_code({ runtime: "node" })');

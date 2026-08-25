@@ -10,6 +10,7 @@ import {
   OPENROUTER_IMAGE_API_URL,
   OPENROUTER_GPT_IMAGE_2_MODEL,
   buildOpenRouterImageRequest,
+  filterOpenAIImageProvidersForBackground,
   readOpenRouterProviderCost,
   resolveOpenAIImageProviderOrder,
 } from './openai-image-provider';
@@ -31,14 +32,12 @@ const OPENROUTER_MODEL = OPENROUTER_GPT_IMAGE_2_MODEL;
 
 // ── Shared helpers ───────────────────────────────────────────────
 
-function aspectRatioToSize(ar?: string, isTxt2img = false): string {
+export function aspectRatioToSize(ar?: string): string {
   if (!ar) return 'auto';
   const [w, h] = ar.split(':').map(Number);
   if (!w || !h) return 'auto';
   const ratio = w / h;
-  if (ratio > 1.5 && isTxt2img) return '1792x1024';
   if (ratio > 1.2) return '1536x1024';
-  if (1 / ratio > 1.5 && isTxt2img) return '1024x1792';
   if (1 / ratio > 1.2) return '1024x1536';
   return '1024x1024';
 }
@@ -76,7 +75,7 @@ async function generateAzure(
 
   const headers: Record<string, string> = { 'api-key': apiKey };
   const hasImage = !!(image || references?.length);
-  const size = aspectRatioToSize(aspectRatio, !hasImage);
+  const size = aspectRatioToSize(aspectRatio);
   const t0 = Date.now();
 
   let res: Response;
@@ -180,7 +179,7 @@ async function generatePiAPI(
 
   const headers = { 'Authorization': `Bearer ${apiKey}` };
   const hasImage = !!(image || references?.length);
-  const size = aspectRatioToSize(aspectRatio, !hasImage);
+  const size = aspectRatioToSize(aspectRatio);
   const t0 = Date.now();
 
   let res: Response;
@@ -343,8 +342,9 @@ async function generateOpenRouter(
 export const openaiBackend: ModelBackend = {
   id: 'openai',
 
-  canHandle(_req: GenerateImageRequest): boolean {
-    return PROVIDER_ORDER.some(provider => {
+  canHandle(req: GenerateImageRequest): boolean {
+    const capableProviders = filterOpenAIImageProvidersForBackground(PROVIDER_ORDER, req.background);
+    return capableProviders.some(provider => {
       if (provider === 'azure') return Boolean(process.env.AZURE_OPENAI_API_KEY?.trim());
       if (provider === 'piapi') return Boolean(process.env.PIAPI_API_KEY?.trim());
       return Boolean(process.env.OPENROUTER_API_KEY?.trim());
@@ -360,7 +360,8 @@ export const openaiBackend: ModelBackend = {
       : undefined;
 
     let lastResult: { image: string | null; usage?: TokenUsage } = { image: null };
-    for (const provider of PROVIDER_ORDER) {
+    const capableProviders = filterOpenAIImageProvidersForBackground(PROVIDER_ORDER, req.background);
+    for (const provider of capableProviders) {
       if (provider === 'azure') {
         lastResult = await generateAzure(
           refs ? undefined : req.image,
@@ -387,7 +388,7 @@ export const openaiBackend: ModelBackend = {
         );
       }
       if (lastResult.image) return lastResult;
-      if (provider === 'azure' && PROVIDER_ORDER.includes('openrouter')) {
+      if (provider === 'azure' && capableProviders.includes('openrouter')) {
         console.warn('[openai] Azure returned no image; retrying with OpenRouter backup');
       }
     }

@@ -29,6 +29,15 @@ export interface ChromaKeyResult {
   quality: VisualAssetQuality;
 }
 
+export interface NativeAlphaCutoutResult {
+  png: Buffer;
+  width: number;
+  height: number;
+  subjectBox?: PixelRect;
+  safeArea?: PixelRect;
+  quality: VisualAssetQuality;
+}
+
 export const CUTOUT_QA_BACKGROUNDS = [
   { name: 'black', color: '#000000' },
   { name: 'white', color: '#ffffff' },
@@ -254,6 +263,84 @@ function expandRect(rect: PixelRect, width: number, height: number): PixelRect {
     y,
     width: Math.min(width - x, rect.width + padding * 2),
     height: Math.min(height - y, rect.height + padding * 2),
+  };
+}
+
+/**
+ * Validate and trim an image that already contains a real alpha matte. This
+ * path preserves provider-authored edge colors and alpha exactly; it never
+ * applies chroma keying or despill.
+ */
+export async function prepareNativeAlphaCutout(input: Buffer): Promise<NativeAlphaCutoutResult> {
+  const source = sharp(input, { failOn: 'error' }).ensureAlpha();
+  const { data, info } = await source.raw().toBuffer({ resolveWithObject: true });
+  const width = info.width;
+  const height = info.height;
+  if (width < 8 || height < 8 || info.channels < 4) throw new Error('Native-alpha source must be a valid image');
+
+  const pixelCount = width * height;
+  let transparentPixels = 0;
+  let nonOpaquePixels = 0;
+  let partialPixels = 0;
+  let visiblePixels = 0;
+  let alphaMin = 255;
+  for (let index = 0; index < pixelCount; index++) {
+    const alpha = data[index * info.channels + 3];
+    alphaMin = Math.min(alphaMin, alpha);
+    if (alpha < 255) nonOpaquePixels++;
+    if (alpha <= 12) transparentPixels++;
+    else {
+      visiblePixels++;
+      if (alpha < 248) partialPixels++;
+    }
+  }
+
+  const sourceSubjectBox = calculateSubjectBox(data, width, height);
+  const sourceSafeArea = sourceSubjectBox ? expandRect(sourceSubjectBox, width, height) : undefined;
+  const minimumMargin = Math.max(3, Math.round(Math.min(width, height) * 0.008));
+  const touchesEdge = Boolean(sourceSubjectBox && (
+    sourceSubjectBox.x < minimumMargin
+    || sourceSubjectBox.y < minimumMargin
+    || width - (sourceSubjectBox.x + sourceSubjectBox.width) < minimumMargin
+    || height - (sourceSubjectBox.y + sourceSubjectBox.height) < minimumMargin
+  ));
+  const transparentRatio = transparentPixels / pixelCount;
+  const nonOpaqueRatio = nonOpaquePixels / pixelCount;
+  const subjectCoverage = visiblePixels / pixelCount;
+  const partialAlphaRatio = partialPixels / pixelCount;
+  const issues: string[] = [];
+  if (!sourceSubjectBox || subjectCoverage < 0.003) issues.push('No usable foreground subject exists in the alpha matte.');
+  if (transparentRatio < 0.08) issues.push('The image does not contain enough transparent background for a reusable cutout.');
+  if (touchesEdge) issues.push('The foreground subject touches the canvas edge and may be clipped in composition.');
+
+  const crop = sourceSafeArea || { x: 0, y: 0, width, height };
+  const png = await sharp(data, { raw: { width, height, channels: 4 } })
+    .extract({ left: crop.x, top: crop.y, width: crop.width, height: crop.height })
+    .png()
+    .toBuffer();
+  const preparedRaw = await sharp(png).ensureAlpha().raw().toBuffer();
+  const subjectBox = calculateSubjectBox(preparedRaw, crop.width, crop.height);
+  const safeArea = subjectBox ? expandRect(subjectBox, crop.width, crop.height) : undefined;
+
+  return {
+    png,
+    width: crop.width,
+    height: crop.height,
+    subjectBox,
+    safeArea,
+    quality: {
+      status: issues.length === 0 ? 'pass' : sourceSubjectBox ? 'revise' : 'fail',
+      issues,
+      metrics: {
+        nativeAlpha: 1,
+        alphaMin,
+        nonOpaqueRatio,
+        transparentRatio,
+        subjectCoverage,
+        partialAlphaRatio,
+        subjectTouchesEdge: touchesEdge ? 1 : 0,
+      },
+    },
   };
 }
 

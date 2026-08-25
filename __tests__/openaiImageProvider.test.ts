@@ -3,12 +3,18 @@ import {
   OPENROUTER_IMAGE_API_URL,
   OPENROUTER_GPT_IMAGE_2_MODEL,
   buildOpenRouterImageRequest,
+  filterOpenAIImageProvidersForBackground,
   readOpenRouterProviderCost,
   resolveOpenAIImageProvider,
   resolveOpenAIImageProviderOrder,
 } from '@/lib/models/openai-image-provider';
 
 describe('GPT Image 2 provider routing', () => {
+  it('keeps transparent requests on the verified Azure capability only', () => {
+    expect(filterOpenAIImageProvidersForBackground(['azure', 'openrouter'], 'transparent')).toEqual(['azure']);
+    expect(filterOpenAIImageProvidersForBackground(['openrouter'], 'transparent')).toEqual([]);
+    expect(filterOpenAIImageProvidersForBackground(['azure', 'openrouter'], 'opaque')).toEqual(['azure', 'openrouter']);
+  });
   it('defaults to Azure while keeping the OpenRouter Image API contract available', () => {
     expect(resolveOpenAIImageProvider({
       AZURE_OPENAI_API_KEY: 'azure-key',

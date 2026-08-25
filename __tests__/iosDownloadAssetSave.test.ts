@@ -94,6 +94,33 @@ describe('iOS editor image save flow', () => {
     expect(params.showSaveToast).toHaveBeenCalledTimes(1);
   });
 
+  it('saves the original transparent PNG instead of the transformed timeline preview', async () => {
+    const fetchSpy = vi.fn();
+    vi.stubGlobal('fetch', fetchSpy);
+    const params = makeParams({
+      timeline: ['https://example.supabase.co/storage/v1/render/image/public/images/u/p/sticker.png?width=2000'],
+      snapshotsRef: {
+        current: [{
+          id: 'snap-alpha',
+          image: '',
+          imageUrl: 'https://example.supabase.co/storage/v1/object/public/images/u/p/sticker.png',
+          tips: [],
+          messageId: '',
+          metadata: { imageMimeType: 'image/png', hasAlpha: true, generationBackground: 'transparent' },
+        }],
+      },
+    });
+
+    await downloadAsset(params);
+
+    expect(saveUrlToNativePhotoLibrary).toHaveBeenCalledWith(
+      'https://example.supabase.co/storage/v1/object/public/images/u/p/sticker.png',
+      'makaron-my-project-1.png',
+      'image',
+    );
+    expect(fetchSpy).not.toHaveBeenCalled();
+  });
+
   it('saves remote videos through native Photos URL save before proxying downloads', async () => {
     const fetchSpy = vi.fn();
     vi.stubGlobal('fetch', fetchSpy);

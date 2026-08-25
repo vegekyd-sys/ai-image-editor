@@ -1792,7 +1792,17 @@ function saveMcpImage(result, outputPath) {
       : imageBlock.mimeType === 'image/webp'
         ? 'webp'
         : 'jpg';
-    const out = outputPath || `makaron-output-${Date.now()}.${extension}`;
+    let out = outputPath || `makaron-output-${Date.now()}.${extension}`;
+    if (outputPath) {
+      const requestedExtension = path.extname(outputPath).slice(1).toLowerCase();
+      const compatible = extension === 'jpg'
+        ? ['jpg', 'jpeg'].includes(requestedExtension)
+        : requestedExtension === extension;
+      if (!compatible) {
+        out = `${outputPath.slice(0, outputPath.length - path.extname(outputPath).length)}.${extension}`;
+        process.stderr.write(`Output is ${imageBlock.mimeType}; saving as ${out} so bytes and filename agree.\n`);
+      }
+    }
     fs.writeFileSync(out, Buffer.from(imageBlock.data, 'base64'));
     console.log(out);
     return out;

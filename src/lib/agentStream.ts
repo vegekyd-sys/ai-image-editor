@@ -8,7 +8,7 @@ export interface AgentStreamCallbacks {
   onStatus?: (text: string) => void;
   onContent?: (text: string) => void;
   onNewTurn?: (messageId?: string) => void;
-  onImage?: (image: string, usedModel?: string, snapshotId?: string, imageUrl?: string) => void;
+  onImage?: (image: string, usedModel?: string, snapshotId?: string, imageUrl?: string, metadata?: import('@/types').PhotoMetadata) => void;
   onToolCall?: (tool: string, input: Record<string, unknown>, images?: string[]) => void;
   onAnimationTask?: (taskId: string, prompt: string, imageUrls?: string[], model?: string) => void;
   onVideoSnapshot?: (snapshotId: string, taskId: string, videoMeta: import('@/types').VideoMeta) => void;
@@ -89,7 +89,7 @@ function dispatchPersistedAgentEvent(event: PersistedAgentEvent, callbacks: Agen
     case 'content': callbacks.onContent?.(String(data.text || '')); break;
     case 'new_turn': callbacks.onNewTurn?.(data.messageId); break;
     case 'tool_call': callbacks.onToolCall?.(String(data.tool || ''), data.input || {}, data.images); break;
-    case 'image': callbacks.onImage?.(data.imageUrl || '', data.usedModel, data.snapshotId, data.imageUrl); break;
+    case 'image': callbacks.onImage?.(data.imageUrl || '', data.usedModel, data.snapshotId, data.imageUrl, data.metadata); break;
     case 'render':
     case 'design': callbacks.onRender?.(data as Parameters<NonNullable<AgentStreamCallbacks['onRender']>>[0]); break;
     case 'animation_task': callbacks.onAnimationTask?.(data.taskId, data.prompt || '', data.imageUrls, data.model); break;
@@ -279,7 +279,13 @@ async function streamAgentAttempt(
             break;
           case 'image': {
             const img = event as Record<string, unknown>;
-            callbacks.onImage?.(event.image, event.usedModel, img.snapshotId as string | undefined, img.imageUrl as string | undefined);
+            callbacks.onImage?.(
+              event.image,
+              event.usedModel,
+              img.snapshotId as string | undefined,
+              img.imageUrl as string | undefined,
+              img.metadata as import('@/types').PhotoMetadata | undefined,
+            );
             break;
           }
           case 'tool_call':

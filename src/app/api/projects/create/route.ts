@@ -51,12 +51,17 @@ async function resolveImageUrl(
   const res = await fetch(url);
   if (!res.ok) throw new Error(`Failed to fetch image: ${res.status}`);
   const buffer = Buffer.from(await res.arrayBuffer());
-  const jpeg = await sharp(buffer)
-    .resize(2048, 2048, { fit: 'inside', withoutEnlargement: true })
-    .jpeg({ quality: 92 })
-    .toBuffer();
-  const base64 = `data:image/jpeg;base64,${jpeg.toString('base64')}`;
-  const filename = `snapshot-${crypto.randomUUID()}.jpg`;
+  const pipeline = sharp(buffer, { failOn: 'error' })
+    .resize(2048, 2048, { fit: 'inside', withoutEnlargement: true });
+  const metadata = await sharp(buffer, { failOn: 'error' }).metadata();
+  const preserveAlpha = Boolean(metadata.hasAlpha);
+  const normalized = preserveAlpha
+    ? await pipeline.png({ compressionLevel: 9 }).toBuffer()
+    : await pipeline.jpeg({ quality: 92 }).toBuffer();
+  const mimeType = preserveAlpha ? 'image/png' : 'image/jpeg';
+  const extension = preserveAlpha ? 'png' : 'jpg';
+  const base64 = `data:${mimeType};base64,${normalized.toString('base64')}`;
+  const filename = `snapshot-${crypto.randomUUID()}.${extension}`;
   const storageUrl = await uploadImage(supabase, userId, projectId, filename, base64);
   return storageUrl || url;
 }
