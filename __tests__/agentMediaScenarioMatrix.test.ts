@@ -107,6 +107,8 @@ describe('agent media scenario matrix', () => {
     expect(generateImageTool).toContain('background: "transparent"')
     expect(generateImageTool).toContain('pass its `media_index`')
     expect(generateImageTool).toContain('omit `media_index` for transparent text-to-image')
+    expect(generateImageTool).toContain('six stickers on 16:9')
+    expect(generateImageTool).toContain('the requested layout wins')
     expect(image).toContain('Interpret the user\'s meaning, not a hard-coded keyword list')
     expect(image).toContain('This is an image-to-image cutout/edit')
     expect(image).toContain('Never fall back to an opaque image')

@@ -9,9 +9,13 @@ add staging or QA requirements, but must not replace or weaken this contract.
 
 - Existing image: pass its literal 1-based `media_index` and set
   `background: "transparent"`.
-- Existing-image cutout: omit `aspectRatio`. The Image 2 request uses
+- Pure existing-image cutout: omit `aspectRatio`. The Image 2 request uses
   `size: "auto"`, then Makaron fits the transparent result onto a canvas with
   the source image's exact dimensions without stretching or cropping it.
+- When the user explicitly requests a new transparent layout or canvas ratio,
+  such as a multi-pose sticker sheet in 16:9, pass that `aspectRatio`. This is
+  a layout generation request, so the requested canvas overrides source-canvas
+  preservation.
 - No source image: omit `media_index` and set `background: "transparent"` for
   transparent text-to-image.
 - Never use prompt wording, white, checkerboard, or chroma as a substitute for

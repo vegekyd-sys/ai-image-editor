@@ -15,7 +15,10 @@ import {
   resolveOpenAIImageProviderOrder,
 } from './openai-image-provider';
 import { normalizeOpenAIImageOutput } from './openai-image-output';
-import { fitTransparentResultToSourceCanvas } from './transparent-source-canvas';
+import {
+  fitTransparentResultToAspectRatio,
+  fitTransparentResultToSourceCanvas,
+} from './transparent-source-canvas';
 
 // ── Provider selection ───────────────────────────────────────────
 const PROVIDER_ORDER = resolveOpenAIImageProviderOrder();
@@ -410,6 +413,15 @@ export const openaiBackend: ModelBackend = {
         );
       }
       if (lastResult.image) {
+        if (req.background === 'transparent' && req.aspectRatio) {
+          try {
+            const image = await fitTransparentResultToAspectRatio(lastResult.image, req.aspectRatio);
+            console.log(`[openai] transparent output fitted to requested ${req.aspectRatio} canvas`);
+            return { ...lastResult, image };
+          } catch (error) {
+            console.warn('[openai] requested aspect-ratio normalization failed:', error instanceof Error ? error.message : error);
+          }
+        }
         if (req.background === 'transparent' && req.image && !refs && !req.aspectRatio) {
           try {
             const image = await fitTransparentResultToSourceCanvas(req.image, lastResult.image);
