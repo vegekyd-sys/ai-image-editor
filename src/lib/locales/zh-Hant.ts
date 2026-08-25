@@ -118,6 +118,9 @@ const zhHant = {
   // Changelog
   'changelog.heading': '更新',
   'changelog.close': '關閉更新',
+  'changelog.talkingHeadTranslation.title': '口播翻譯',
+  'changelog.talkingHeadTranslation.item1': '口播影片現在可以先剪順，再用 Seedance 2.0 Fast 翻譯成英文、日文等語言，同時盡量保留本人聲紋、語氣和自然口型。',
+  'changelog.talkingHeadTranslation.item2': '長影片會按目標語言的自然語速分段，翻譯後的真實語音時間繼續驅動字幕、B-roll 和 TikTok 成片。',
   'changelog.talkingHeadEditing.title': '口播剪輯',
   'changelog.talkingHeadEditing.item1': '上傳一段原始口播，Makaron 會根據 ASR 自動刪除氣口、停頓、重複和不連貫表達，整理成更流暢的成片。',
   'changelog.talkingHeadEditing.item2': '字幕會跟隨保留原聲的真實詞級時間，自動切成更短、更有重點的動態字幕，並保持可編輯。',
