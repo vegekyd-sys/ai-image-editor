@@ -47,6 +47,16 @@ export function normalizeImageFilename(filename: string, mimeType: string): stri
     : `${filename}.${extension}`
 }
 
+export function parseImageDataUrl(base64DataUrl: string): { mimeType: string; base64Data: string } | null {
+  if (!base64DataUrl.startsWith('data:image/')) return null
+  const separator = base64DataUrl.indexOf(';base64,')
+  if (separator < 0) return null
+  const mimeType = base64DataUrl.slice(5, separator)
+  if (!/^image\/[a-z0-9.+-]+$/i.test(mimeType)) return null
+  const base64Data = base64DataUrl.slice(separator + ';base64,'.length)
+  return base64Data ? { mimeType, base64Data } : null
+}
+
 /**
  * Upload a base64 data URL image to Supabase Storage.
  * Returns the public URL on success, null on failure.
@@ -60,11 +70,9 @@ export async function uploadImage(
 ): Promise<string | null> {
   try {
     // Extract raw base64 and mime type from data URL
-    const match = base64DataUrl.match(/^data:(image\/\w+);base64,(.+)$/)
-    if (!match) return null
-
-    const mimeType = match[1]
-    const base64Data = match[2]
+    const parsed = parseImageDataUrl(base64DataUrl)
+    if (!parsed) return null
+    const { mimeType, base64Data } = parsed
 
     // Convert base64 to Uint8Array
     const binaryString = atob(base64Data)

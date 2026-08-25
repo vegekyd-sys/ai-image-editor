@@ -14,6 +14,7 @@ Core contract:
 - `model` is optional. Use `qwen` for NSFW risk; `openai` for layout/mockup images and director storyboard images required by `long-video-director`; `gemini-lite` only on explicit Lite requests.
 - Background removal, subject isolation/cutout, 去背景/抠图/抠像, or transparent PNG/sticker/overlay/alpha delivery means: set `background: "transparent"`; prompt wording alone is insufficient.
 - Existing-image cutout: pass its `media_index`; with no source, omit `media_index` for transparent text-to-image.
+- Existing-image cutout: omit `aspectRatio`; Makaron uses Image 2 `size: "auto"` and restores the source canvas dimensions without stretching or cropping the generated cutout.
 - Transparent output is strict: it uses GPT Image 2 only and never returns an opaque fallback. Otherwise omit `background`.
 
 Built-in skill routing is in `agent.md`; read only that one skill prompt file once. Do not read `prompts/image.md` just to route the skill.

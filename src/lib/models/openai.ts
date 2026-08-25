@@ -15,6 +15,7 @@ import {
   resolveOpenAIImageProviderOrder,
 } from './openai-image-provider';
 import { normalizeOpenAIImageOutput } from './openai-image-output';
+import { fitTransparentResultToSourceCanvas } from './transparent-source-canvas';
 
 // ── Provider selection ───────────────────────────────────────────
 const PROVIDER_ORDER = resolveOpenAIImageProviderOrder();
@@ -97,7 +98,13 @@ async function generateAzure(
     form.append('size', size);
     form.append('moderation', 'low');
     if (background) form.append('background', background);
-    if (background === 'transparent') form.append('output_format', 'png');
+    if (background === 'transparent') {
+      form.append('output_format', 'png');
+      // Transparent cutouts are source-preservation edits. Ask GPT Image to
+      // spend more input tokens on retaining the supplied pixels instead of
+      // loosely recreating the subject.
+      form.append('input_fidelity', 'high');
+    }
 
     if (references?.length) {
       for (const ref of references) {
@@ -402,7 +409,18 @@ export const openaiBackend: ModelBackend = {
           req.background,
         );
       }
-      if (lastResult.image) return lastResult;
+      if (lastResult.image) {
+        if (req.background === 'transparent' && req.image && !refs && !req.aspectRatio) {
+          try {
+            const image = await fitTransparentResultToSourceCanvas(req.image, lastResult.image);
+            console.log('[openai] transparent edit restored to source canvas dimensions');
+            return { ...lastResult, image };
+          } catch (error) {
+            console.warn('[openai] source canvas normalization failed:', error instanceof Error ? error.message : error);
+          }
+        }
+        return lastResult;
+      }
       if (provider === 'azure' && capableProviders.includes('openrouter')) {
         console.warn('[openai] Azure returned no image; retrying with OpenRouter backup');
       }
