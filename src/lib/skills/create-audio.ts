@@ -7,12 +7,14 @@ import {
 } from '../evolink-seed-audio'
 import { uploadAudio } from '../supabase/storage'
 
-export type AudioGenerationKind = 'voiceover' | 'dialogue' | 'music' | 'sound_design' | 'mixed'
+export type AudioGenerationKind = 'voiceover' | 'dialogue' | 'music' | 'sound_design' | 'mixed' | 'translation'
 export const SEED_AUDIO_AGENT_PROMPT_MAX_CHARS = 1250
 
 export interface CreateAudioInput {
-  prompt: string
+  prompt?: string
   kind?: AudioGenerationKind
+  targetLanguage?: string
+  translatedScript?: string
   durationSeconds?: number
   audioReferences?: string[]
   imageUrls?: string[]
@@ -122,8 +124,10 @@ async function persistAudioAsset(input: {
 
 export async function createAudio(input: CreateAudioInput): Promise<CreateAudioResult> {
   const kind = input.kind || 'mixed'
-  const rawPrompt = input.prompt.trim()
-  if (!rawPrompt) {
+  const rawPrompt = input.prompt?.trim() || ''
+  const targetLanguage = input.targetLanguage?.trim() || ''
+  const translatedScript = input.translatedScript?.trim() || ''
+  if (kind !== 'translation' && !rawPrompt) {
     return { success: false, message: 'Audio prompt is required.' }
   }
   if (rawPrompt.length > SEED_AUDIO_AGENT_PROMPT_MAX_CHARS) {
@@ -132,12 +136,35 @@ export async function createAudio(input: CreateAudioInput): Promise<CreateAudioR
       message: `Audio prompt must be ${SEED_AUDIO_AGENT_PROMPT_MAX_CHARS} characters or less before the Seed Audio mode wrapper is added.`,
     }
   }
+  if (kind === 'translation') {
+    if (!targetLanguage) {
+      return { success: false, message: 'targetLanguage is required for speech translation.' }
+    }
+    if (input.audioReferences?.length !== 1) {
+      return { success: false, message: 'Speech translation requires exactly one source voice/audio reference.' }
+    }
+    if (input.imageUrls?.length) {
+      return { success: false, message: 'Speech translation cannot use image conditioning.' }
+    }
+  }
   const prompt = kind === 'voiceover'
     ? [
         'Mode: isolated voiceover master.',
         'Generate spoken voice only. No music, ambience, sound effects, or sung vocals.',
         rawPrompt,
       ].join('\n')
+    : kind === 'translation'
+      ? [
+          'Mode: direct speech translation.',
+          'Source voice and speech content: @audio1.',
+          `Target language: ${targetLanguage}.`,
+          translatedScript
+            ? `Speak this translated script exactly, without additions or omissions: "${translatedScript}"`
+            : 'Translate all spoken content in @audio1. Preserve meaning, claims, numbers, names, order, and emphasis; do not summarize, omit, add, or explain.',
+          'Preserve the same speaker identity, age, vocal timbre, conversational tone, emotion, emphasis, pauses, breath pattern, pacing, energy, and microphone distance. Keep natural cross-language pronunciation without turning the delivery into an announcer voice.',
+          'Voice only. No music, ambience, sound effects, reverb tail, or sung delivery.',
+          rawPrompt ? `Additional direction: ${rawPrompt}` : '',
+        ].filter(Boolean).join('\n')
     : kind === 'mixed'
       ? [
           'Mode: one-pass unified finished soundtrack.',
@@ -147,6 +174,14 @@ export async function createAudio(input: CreateAudioInput): Promise<CreateAudioR
       : rawPrompt
   const model = normalizeAudioModelId(input.model)
   const capability = getAudioModelCapability(model)
+  if (capability.maxPromptChars && prompt.length > capability.maxPromptChars) {
+    return {
+      success: false,
+      message: kind === 'translation'
+        ? `Translated script and direction must fit within the ${capability.maxPromptChars}-character Seed Audio prompt limit.`
+        : `Audio prompt and mode direction must fit within the ${capability.maxPromptChars}-character Seed Audio prompt limit.`,
+    }
+  }
   const validationError = validateAudioRequest({ model, durationSeconds: input.durationSeconds })
   if (validationError) {
     return { success: false, message: validationError }
@@ -169,6 +204,8 @@ export async function createAudio(input: CreateAudioInput): Promise<CreateAudioR
     const title = input.title?.trim() || (
       kind === 'voiceover'
         ? 'Generated voiceover'
+        : kind === 'translation'
+          ? `Translated ${targetLanguage} voice`
         : kind === 'mixed'
           ? 'Generated unified soundtrack'
           : 'Generated audio'

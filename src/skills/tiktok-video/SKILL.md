@@ -1,7 +1,6 @@
 ---
 name: tiktok-video
-description: >
-  Edit and package source-led TikTok/Douyin footage in editable Remotion; do not use this Skill for short provider-generated video from text or image references.
+description: Package accepted source-led footage for TikTok/Douyin in editable Remotion; compose first with talking-head and video-translate for visible-speaker editing or translation.
 allowed-tools: read_file studio_run prepare_visual_asset analyze_video analyze_image transcribe_audio generate_image generate_animation generate_audio run_code write_file preview_frame materialize_media
 metadata:
   makaron:
@@ -15,13 +14,17 @@ metadata:
 ---
 
 # TikTok Video
-
 Use this Skill after the Agent has chosen a source-led or explicitly editable
 Composition workflow for a TikTok/Douyin deliverable: organic edits,
 creator-style cuts, process footage, talking heads, product demos, UGC
 packaging, and deterministic platform variants. TikTok or Douyin is a delivery
 destination, not a production engine. Do not enter this Skill merely because
 the platform is named.
+
+For visible-speaker cleanup, read `skills/talking-head/SKILL.md`; for a language
+change, read `skills/video-translate/SKILL.md`. Together the order is
+`talking-head` → `video-translate` → `tiktok-video`: clean A-roll, verified
+translation, then captions, B-roll, platform layout, composition, and export in the same request. Intermediate edits, chunks, and provider results are not delivery.
 
 ## Read The Conditional References
 

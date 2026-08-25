@@ -220,7 +220,9 @@ export function useProject(projectId: string, userId: string) {
             ? 'google-omni'
             : taskId?.startsWith('minimax-h3-')
               ? 'minimax-h3'
-          : 'kling';
+              : taskId?.startsWith('sync3-')
+                ? 'sync-lipsync-v3'
+                : 'kling';
       return {
         id: row.id as string,
         projectId,

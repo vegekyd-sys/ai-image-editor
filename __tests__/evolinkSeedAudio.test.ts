@@ -17,7 +17,7 @@ describe('EvoLink Seed Audio client', () => {
         const body = JSON.parse(String(init?.body))
         expect(body.model).toBe('doubao-seed-audio-1-0')
         expect(body.prompt).toContain('Generate about 8 seconds of audio.')
-        expect(body.audio_references).toEqual(['voice-preset-1'])
+        expect(body.audio_references).toEqual(['https://example.com/source-voice.mp3'])
         expect(body.speech_rate).toBe(0.92)
         expect(body.loudness_rate).toBe(1.08)
         expect(body.pitch_rate).toBe(-1)
@@ -40,7 +40,7 @@ describe('EvoLink Seed Audio client', () => {
     const result = await generateWithEvolinkSeedAudio({
       prompt: '@audio1 reads one short line over clean keyboard typing.',
       durationSeconds: 8,
-      audioReferences: ['voice-preset-1'],
+      audioReferences: ['https://example.com/source-voice.mp3'],
       speechRate: 0.92,
       loudnessRate: 1.08,
       pitchRate: -1,

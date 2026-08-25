@@ -115,6 +115,9 @@ const ja = {
   // Changelog
   'changelog.heading': '更新情報',
   'changelog.close': '更新情報を閉じる',
+  'changelog.talkingHeadTranslation.title': 'トーキングヘッド翻訳',
+  'changelog.talkingHeadTranslation.item1': 'トーキングヘッド動画を先に整え、Seedance 2.0 Fast で英語や日本語などに翻訳しながら、本人らしい声質、話し方、自然な口の動きをできる限り保ちます。',
+  'changelog.talkingHeadTranslation.item2': '長い動画は翻訳後の自然な発話時間に合わせて分割し、その実測タイミングを字幕、B-roll、完成した TikTok 編集まで引き継ぎます。',
   'changelog.talkingHeadEditing.title': 'トーキングヘッド編集',
   'changelog.talkingHeadEditing.item1': '素材のトーキングヘッド動画をアップロードすると、Makaron が ASR を使って間、フィラー、重複、不自然な言い直しを削り、より滑らかな動画に整えます。',
   'changelog.talkingHeadEditing.item2': '字幕は残した音声の実際の単語タイミングに従い、短く、強調された動的な表現になり、編集可能な状態を保ちます。',

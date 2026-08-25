@@ -102,6 +102,44 @@ describe('video model reference limits', () => {
     })
   })
 
+  it('registers Sync Lipsync v3 as exact one-video plus one-audio processing', () => {
+    expect(normalizeVideoModelId('lipsync')).toBe('sync-lipsync-v3')
+    expect(resolveVideoGenerationRoute({ model: 'sync-lipsync-v3', resolution: 'auto' })).toMatchObject({
+      model: 'sync-lipsync-v3',
+      provider: 'fal-sync',
+      providerModel: 'fal-ai/sync-lipsync/v3',
+      resolution: '1080p',
+    })
+    expect(getVideoModelCapability('sync-lipsync-v3')).toMatchObject({
+      minOutputDuration: 2,
+      maxOutputDuration: 60,
+      maxReferenceVideoDuration: 60,
+      maxImageReferences: 0,
+      maxVideoReferences: 1,
+      maxAudioReferences: 1,
+      supportsVideoReference: true,
+      supportsBaseVideoEdit: true,
+    })
+    expect(estimateVideoProviderCostUsd({ model: 'sync-lipsync-v3', durationSec: 12 })).toBeCloseTo(1.6)
+    expect(estimateVideoCredits({ model: 'sync-lipsync-v3', durationSec: 12 })).toBe(320)
+    expect(resolveVideoProviderAspectRatio('sync-lipsync-v3', '9:16')).toBeUndefined()
+  })
+
+  it('rejects an incomplete Sync Lipsync request before provider submission', async () => {
+    const result = await createVideo({
+      script: 'Translated mouth alignment',
+      images: [],
+      videoUrls: ['https://example.com/source.mp4'],
+      referenceVideoMetas: [{ width: 1080, height: 1920, fileSizeBytes: 1_000_000 }],
+      duration: 12,
+      videoModel: 'sync-lipsync-v3',
+    })
+
+    expect(result.success).toBe(false)
+    expect(result.message).toContain('exactly one source video')
+    expect(result.message).toContain('exactly one reference audio')
+  })
+
   it('accepts normal tail-frame metadata on a 30 second Seedance 2.5 edit', () => {
     const editRequest = {
       model: 'seedance-2.5',
