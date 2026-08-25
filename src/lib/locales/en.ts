@@ -77,9 +77,9 @@ const en = {
   // Changelog
   'changelog.heading': 'Updates',
   'changelog.close': 'Close updates',
-  'changelog.talkingHeadTranslation.title': 'Talking-Head Translation',
-  'changelog.talkingHeadTranslation.item1': 'Clean up a talking-head video first, then translate it into English, Japanese, and more with Seedance 2.0 Fast while preserving the speaker’s voice, tone, and natural mouth movement.',
-  'changelog.talkingHeadTranslation.item2': 'Long videos split around natural target-language delivery, and the translated speech clock continues into captions, B-roll, and the finished TikTok edit.',
+  'changelog.videoTranslation.title': 'Video Translation',
+  'changelog.videoTranslation.item1': 'Translate off-screen narration and non-talking-head videos into English, Japanese, and more with Seed Audio while preserving the original speaker’s voice, tone, and cadence.',
+  'changelog.videoTranslation.item2': 'Visible talking heads are cleaned up first, then translated with Seedance 2.0 Fast and matching mouth movement; long videos can split automatically before translated captions, B-roll, and TikTok delivery.',
   'changelog.talkingHeadEditing.title': 'Talking-Head Editing',
   'changelog.talkingHeadEditing.item1': 'Upload a raw talking-head video and Makaron uses ASR to remove dead air, filler, repetition, and broken delivery for a smoother cut.',
   'changelog.talkingHeadEditing.item2': 'Captions follow the retained voice with real word timing, becoming shorter, emphasized, dynamic, and still editable.',

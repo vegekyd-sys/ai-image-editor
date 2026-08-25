@@ -17,7 +17,7 @@ interface LegacyChangelogEntry {
 
 type LocalizedChangelogEntry = {
   date: string;
-  localeKey: 'talkingHeadTranslation' | 'talkingHeadEditing' | 'smarterEditableDiscovery' | 'tiktokVideoSkill' | 'sourcePlayback' | 'externalSourceRanges' | 'seedance25' | 'minimaxH3' | 'multilingualAsr' | 'editableRemotion' | 'editableLayers';
+  localeKey: 'videoTranslation' | 'talkingHeadEditing' | 'smarterEditableDiscovery' | 'tiktokVideoSkill' | 'sourcePlayback' | 'externalSourceRanges' | 'seedance25' | 'minimaxH3' | 'multilingualAsr' | 'editableRemotion' | 'editableLayers';
 };
 
 type ChangelogEntry = LegacyChangelogEntry | LocalizedChangelogEntry;
@@ -25,7 +25,7 @@ type ChangelogEntry = LegacyChangelogEntry | LocalizedChangelogEntry;
 const CHANGELOG: ChangelogEntry[] = [
   {
     date: '2026-08-25',
-    localeKey: 'talkingHeadTranslation',
+    localeKey: 'videoTranslation',
   },
   { date: '2026-08-24', en: { title: 'Any Google Font, Preview to Export', items: ['Remotion now loads Google Fonts on demand and pins the same font files for Preview and MP4 export, removing the built-in font-list limit.'] }, zh: { title: '任意 Google Fonts，从预览到导出', items: ['Remotion 现在按需加载 Google Fonts，并让 Preview 与 MP4 导出使用同一份固定字体文件，不再受内置字体列表限制。'] } },
   {
@@ -978,11 +978,11 @@ const iOSAppTopGap = 'max(96px, calc(env(safe-area-inset-top, 0px) + 40px))';
 const iOSAppBottomGap = 'max(14px, env(safe-area-inset-bottom, 0px))';
 
 const LOCALIZED_CHANGELOG_KEYS = {
-  talkingHeadTranslation: {
-    title: 'changelog.talkingHeadTranslation.title',
+  videoTranslation: {
+    title: 'changelog.videoTranslation.title',
     items: [
-      'changelog.talkingHeadTranslation.item1',
-      'changelog.talkingHeadTranslation.item2',
+      'changelog.videoTranslation.item1',
+      'changelog.videoTranslation.item2',
     ],
   },
   talkingHeadEditing: {
