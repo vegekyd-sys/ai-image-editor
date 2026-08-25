@@ -1873,7 +1873,7 @@ Commands:
   video script|create|status         Video generation
   music create|status                Music generation
 
-  admin                              Admin commands (skills, upload, set-admin)
+  admin                              Admin commands (skills, credits, upload, set-admin)
 
 Examples:
   makaron chat --project auto "plan a launch poster"
@@ -2034,6 +2034,7 @@ Not sure which built-in skill to use? Start with:
     else if (subtopic === 'skill-categories') console.log('Usage: makaron admin skill-categories [--json|add|update|delete] ...');
     else if (subtopic === 'upload') console.log('Usage: makaron admin upload <local-file> <storage-path>');
     else if (subtopic === 'fetch-skill') console.log('Usage: makaron admin fetch-skill <share-code|url>');
+    else if (subtopic === 'add-credits') console.log('Usage: makaron admin add-credits <email-or-user-id> <credits> [--json]');
     else if (subtopic === 'set-admin') console.log('Usage: makaron admin set-admin <email>');
     else console.log(`Admin commands:
   admin skills                         List all marketplace skills
@@ -2046,6 +2047,7 @@ Not sure which built-in skill to use? Start with:
   admin skill-categories delete <id>   Delete a category
   admin upload <file> <storage-path>   Upload file to Storage
   admin fetch-skill <code|url>         Download skill from share link
+  admin add-credits <user> <credits>   Add credits by email or user ID
   admin set-admin <email>              Grant admin access to a user
 `);
   } else if (topic === 'register') {
@@ -3195,6 +3197,31 @@ if (!command || command === '--help' || command === '-h' || command === 'help') 
     if (!res.ok) { console.error(`Error ${res.status}:`, await res.text()); process.exit(1); }
     console.log(`✅ ${email} is now admin`);
 
+  } else if (sub === 'add-credits') {
+    const user = args[2]?.trim();
+    const credits = Number(args[3]);
+    if (!user || !Number.isSafeInteger(credits) || credits <= 0) {
+      console.error('Usage: makaron admin add-credits <email-or-user-id> <credits> [--json]');
+      console.error('Credits must be a positive integer.');
+      process.exit(1);
+    }
+
+    const res = await fetch(`${baseUrl}/api/admin/add-credits`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', ...headers },
+      body: JSON.stringify({ email: user, credits }),
+    });
+    const data = await res.json().catch(() => null);
+    if (!res.ok) {
+      console.error(`Error ${res.status}:`, data?.error || 'Failed to add credits');
+      process.exit(1);
+    }
+    if (args.includes('--json')) {
+      console.log(JSON.stringify(data));
+    } else {
+      console.log(`✅ Added ${credits} credits to ${user}. New balance: ${data.newBalance}`);
+    }
+
   } else {
     console.log(`Admin commands:
   admin skills                         List all marketplace skills
@@ -3207,6 +3234,7 @@ if (!command || command === '--help' || command === '-h' || command === 'help') 
   admin skill-categories delete <id>   Delete a category
   admin upload <file> <storage-path>   Upload file to Storage
   admin fetch-skill <code|url>         Download skill from share link
+  admin add-credits <user> <credits>   Add credits by email or user ID
   admin set-admin <email>              Grant admin access to a user
 `);
   }

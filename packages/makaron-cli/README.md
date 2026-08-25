@@ -509,6 +509,15 @@ send_message "All done!"
 
 Admin commands require an API key with admin privileges. Ask your admin to run `makaron admin set-admin <your-email>` to grant access.
 
+### Add credits to a user
+
+Use either the account email address or the Supabase user UUID. Credits must be a positive integer.
+
+```bash
+npx makaron-cli admin add-credits user@example.com 1000
+npx makaron-cli admin add-credits <user-id> 1000 --json
+```
+
 ### List all marketplace skills
 
 ```bash

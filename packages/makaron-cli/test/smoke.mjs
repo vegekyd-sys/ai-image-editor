@@ -108,6 +108,18 @@ const server = http.createServer(async (req, res) => {
     return;
   }
 
+  if (req.method === 'POST' && url.pathname === '/api/admin/add-credits') {
+    assert.equal(req.headers.authorization, 'Bearer mk_test_smoke');
+    sendJson(200, {
+      success: true,
+      userId: 'user_credit_test',
+      email: body.email,
+      credits: body.credits,
+      newBalance: 1321,
+    });
+    return;
+  }
+
   if (req.method === 'GET' && url.pathname === '/api/skills') {
     sendJson(200, {
       skills: [
@@ -598,6 +610,7 @@ try {
     [['admin', 'skill-categories', '--help'], /Usage: makaron admin skill-categories/],
     [['admin', 'upload', '--help'], /Usage: makaron admin upload/],
     [['admin', 'fetch-skill', '--help'], /Usage: makaron admin fetch-skill/],
+    [['admin', 'add-credits', '--help'], /Usage: makaron admin add-credits/],
     [['admin', 'set-admin', '--help'], /Usage: makaron admin set-admin/],
     [['register', '--help'], /Usage: makaron register/],
     [['register', '--verify', '--help'], /Usage: makaron register --verify/],
@@ -998,6 +1011,26 @@ try {
     assert.equal(categoryRequests.at(-3)?.body?.labels?.ja, 'ツール');
     assert.equal(categoryRequests.at(-2)?.body?.id, 'tools');
     assert.deepEqual(categoryRequests.at(-1)?.body, { id: 'tools' });
+  }
+
+  {
+    const result = await expectSuccess(['admin', 'add-credits', 'user@example.com', '1000']);
+    assert.match(result.stdout, /Added 1000 credits to user@example\.com\. New balance: 1321/);
+    const request = requests.filter(req => req.pathname === '/api/admin/add-credits').at(-1);
+    assert.equal(request?.method, 'POST');
+    assert.deepEqual(request?.body, { email: 'user@example.com', credits: 1000 });
+  }
+
+  {
+    const result = await expectSuccess(['admin', 'add-credits', '77dffdcf-2e47-4f59-944a-84392885e4c9', '25', '--json']);
+    const data = JSON.parse(result.stdout);
+    assert.equal(data.credits, 25);
+    assert.equal(data.newBalance, 1321);
+  }
+
+  for (const invalidCredits of ['0', '-1', '1.5', 'not-a-number']) {
+    const result = await expectFailure(['admin', 'add-credits', 'user@example.com', invalidCredits]);
+    assert.match(result.stderr, /Credits must be a positive integer/);
   }
 
   {
