@@ -46,7 +46,6 @@ HANDOFF*.md
 
 # supabase local project link metadata
 supabase/.temp/*
-!supabase/.temp/cli-latest
 
 # typescript
 *.tsbuildinfo
