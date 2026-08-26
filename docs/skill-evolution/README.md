@@ -1,7 +1,7 @@
 # Makaron Skill Evolution
 
-Status: Phase 0 foundation in isolated worktree. No production deployment and
-no automatic Skill mutation.
+Status: Phase 0 observability is active in production as of 2026-08-26. Skill
+mutation and promotion remain gated; this release changes no Skill content.
 
 ## Goal
 
@@ -27,8 +27,11 @@ A read-only aggregate on 2026-08-24 found the following activity since
 - 62 reads of `skills/talking-head/SKILL.md`
 - 752 `generate_animation` calls and 1,168 `run_code` calls
 
-This is enough volume to start observation, but historical rows do not carry an
-immutable Skill version. Phase 0 adds that missing join.
+This was enough volume to start observation, but historical rows did not carry
+an immutable Skill version. Production now records the exact effective bundle,
+per-run deployment URL, activation source, and environment. The first production
+TikTok receipt captured a complete 10-component bundle; future natural runs can
+therefore form an attributable cohort.
 
 ## The loop
 
