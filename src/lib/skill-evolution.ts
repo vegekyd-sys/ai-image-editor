@@ -215,6 +215,7 @@ export async function recordEvolvingSkillUsage(input: {
       p_observed_at: input.observedAt ?? new Date().toISOString(),
       p_metadata: {
         deploymentId: process.env.VERCEL_DEPLOYMENT_ID || null,
+        deploymentUrl: process.env.VERCEL_URL || null,
         environment: process.env.VERCEL_ENV || process.env.NODE_ENV || null,
         bundleSchema: 'effective-skill-bundle-v1',
         bundleComplete: fingerprint.bundleComplete,

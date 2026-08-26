@@ -74,6 +74,29 @@ describe('Skill Evolution', () => {
     warn.mockRestore()
   })
 
+  it('records deployment identity without storing Skill content', async () => {
+    const rpc = vi.fn(async () => ({ data: null, error: null }))
+    vi.stubEnv('VERCEL_URL', 'preview.example.test')
+
+    await recordEvolvingSkillUsage({
+      supabase: { rpc },
+      runId: 'run-1',
+      projectId: 'project-1',
+      userId: 'user-1',
+      sourcePath: 'prompts/animate.md',
+      content: 'private Skill content',
+    })
+
+    expect(rpc).toHaveBeenCalledWith('record_skill_run_usage', expect.objectContaining({
+      p_metadata: expect.objectContaining({
+        deploymentUrl: 'preview.example.test',
+        bundleComplete: false,
+      }),
+    }))
+    expect(JSON.stringify(rpc.mock.calls[0])).not.toContain('private Skill content')
+    vi.unstubAllEnvs()
+  })
+
   it('does not call incomplete evidence a failure', () => {
     const evaluation = evaluateSkillRun('talking-head', {
       artifactCreated: true,
