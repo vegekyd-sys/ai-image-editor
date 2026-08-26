@@ -174,25 +174,19 @@ function readJsonInput(filePath) {
   return JSON.parse(raw);
 }
 
-const MAX_MEDIA_MANIFEST_RANGES = 20;
+const MAX_MEDIA_MANIFEST_ITEMS = 20;
 
 function normalizeMediaManifest(input) {
   const manifest = Array.isArray(input) ? { clips: input } : input;
   if (!manifest || typeof manifest !== 'object') {
-    throw new Error('Media manifest must be a JSON object or an array of source ranges.');
+    throw new Error('Media manifest must be a JSON object or an array of media items.');
   }
-  const rawRanges = Array.isArray(manifest.clips)
-    ? manifest.clips
-    : Array.isArray(manifest.source_ranges)
-      ? manifest.source_ranges
-      : Array.isArray(manifest.sourceRanges)
-        ? manifest.sourceRanges
-        : null;
+  const rawRanges = Array.isArray(manifest.clips) ? manifest.clips : null;
   if (!rawRanges?.length) {
     throw new Error('Media manifest must contain a non-empty clips array.');
   }
-  if (rawRanges.length > MAX_MEDIA_MANIFEST_RANGES) {
-    throw new Error(`Media manifest supports at most ${MAX_MEDIA_MANIFEST_RANGES} source ranges per Makaron task.`);
+  if (rawRanges.length > MAX_MEDIA_MANIFEST_ITEMS) {
+    throw new Error(`Media manifest supports at most ${MAX_MEDIA_MANIFEST_ITEMS} media items per Makaron task.`);
   }
 
   const sourceRanges = rawRanges.map((raw, index) => {
@@ -207,8 +201,19 @@ function normalizeMediaManifest(input) {
     if (!['http:', 'https:'].includes(parsed.protocol)) {
       throw new Error(`clips[${index}].source_url must use HTTP or HTTPS.`);
     }
-    const start = Number(raw.start ?? raw.start_sec);
-    const end = Number(raw.end ?? raw.end_sec);
+    const declaredType = raw.type;
+    if (declaredType !== 'image' && declaredType !== 'video') {
+      throw new Error(`clips[${index}].type must be image or video.`);
+    }
+    const description = typeof raw.description === 'string' ? raw.description.trim() : '';
+    if (declaredType === 'image') {
+      if (raw.start !== undefined || raw.end !== undefined || raw.start_sec !== undefined || raw.end_sec !== undefined) {
+        throw new Error(`clips[${index}] image items must not include start or end.`);
+      }
+      return { source_url: sourceUrl, type: 'image', description };
+    }
+    const start = Number(raw.start);
+    const end = Number(raw.end);
     if (!Number.isFinite(start) || start < 0) {
       throw new Error(`clips[${index}].start must be a finite number >= 0.`);
     }
@@ -217,9 +222,10 @@ function normalizeMediaManifest(input) {
     }
     return {
       source_url: sourceUrl,
+      type: declaredType,
       start,
       end,
-      description: typeof raw.description === 'string' ? raw.description.trim() : '',
+      description,
     };
   });
 
@@ -447,7 +453,7 @@ Options:
   --image <file|url>        Attach a reference image or screenshot. Repeatable.
   --video <file|url>        Attach a video to the project timeline. Repeatable.
   --audio <file|url>        Attach a song, beat, or voice reference. MP3/WAV, repeatable.
-  --media-manifest <file|-> Import source_url + start + end + description clips before this run.
+  --media-manifest <file|-> Import typed image/video media before this run.
   --skill <id|label|name>   Use an installed skill or auto-install a matched marketplace skill.
   --agent-model <id>        Agent LLM only: auto, gpt-5.6-terra, gpt-5.6-sol,
                             gpt-5.6-luna, grok-4.5, or deepseek-v4-pro.
@@ -1031,7 +1037,10 @@ async function addProjectMediaSourceRanges(baseUrl, headers, projectId, ranges, 
   }
   if (!opts.silent) {
     for (const item of data.media || []) {
-      console.log(`${item.ref} ${item.source_url} ${formatSeconds(item.start_sec)}-${formatSeconds(item.end_sec)}s${item.created ? '' : ' (existing)'}`);
+      const range = item.type === 'video' && Number.isFinite(item.start_sec) && Number.isFinite(item.end_sec)
+        ? ` ${formatSeconds(item.start_sec)}-${formatSeconds(item.end_sec)}s`
+        : '';
+      console.log(`${item.ref} [${item.type || 'media'}] ${item.source_url}${range}${item.created ? '' : ' (existing)'}`);
     }
   }
   return data;
@@ -1853,8 +1862,10 @@ Commands:
   credits                            Show current credit balance
   list (ls)                          List all projects
   project media <projectId> --json    List timeline media for a project
-  project media add <projectId> --source-url <url> --start <n> --end <n>
-                                     Add an external source range without uploading video
+  project media add <projectId> --type image --source-url <url>
+                                     Add an external image without uploading it
+  project media add <projectId> --type video --source-url <url> --start <n> --end <n>
+                                     Add an external video range without uploading it
   create --image <file>              Create project from local image
   create --image-url <url>           Create project from URL
   create --title "name"              Create empty project (text-to-image)
@@ -1866,7 +1877,7 @@ Commands:
   chat --project <id> --video <file> Attach video to conversation
   chat --project <id> --audio <file> Attach song/beat/voice reference
   chat --project auto --media-manifest <file> "message"
-                                     Create, import external ranges, and run Agent
+                                     Create, import typed external media, and run Agent
   chat --project <id> -b "message"   Background: submit and print runId
   chat --project <id> --stream "msg" Legacy: stream SSE in real-time
   chat --project <id> --json "msg"   Output structured JSON result
@@ -1976,11 +1987,12 @@ function printHelp(topic, subtopic) {
     console.log('Usage: makaron credits [--json]');
   } else if (topic === 'project' || topic === 'projects') {
     if (subtopic === 'media') console.log(`Usage: makaron project media <projectId> [--json]
-  makaron project media add <projectId> --source-url <url> --start <n> --end <n> [--description <text>] [--json]
-  makaron project media add <projectId> --input <ranges.json> [--json]`);
+  makaron project media add <projectId> --type image --source-url <url> [--description <text>] [--json]
+  makaron project media add <projectId> --type video --source-url <url> --start <n> --end <n> [--description <text>] [--json]
+  makaron project media add <projectId> --input <media.json> [--json]`);
     else console.log(`Project commands:
   project media <projectId> --json      List timeline media for a project
-  project media add <projectId> ...     Add external source_url + start + end media
+  project media add <projectId> ...     Add typed external image/video media
 `);
   } else if (topic === 'abort') {
     console.log('Usage: makaron abort <runId>');
@@ -2284,12 +2296,12 @@ if (!command || command === '--help' || command === '-h' || command === 'help') 
     );
     importedManifestMedia = imported.media || [];
     if (importedManifestMedia.length !== mediaManifest.sourceRanges.length) {
-      process.stderr.write(`❌ Imported ${importedManifestMedia.length}/${mediaManifest.sourceRanges.length} source range(s); aborting run.\n`);
+      process.stderr.write(`❌ Imported ${importedManifestMedia.length}/${mediaManifest.sourceRanges.length} media item(s); aborting run.\n`);
       process.exit(1);
     }
     uploadedTurnMediaCount += importedManifestMedia.length;
-    uploadedTurnVideoCount += importedManifestMedia.length;
-    process.stderr.write(`📎 Imported ${importedManifestMedia.length} external source range(s) from media manifest\n`);
+    uploadedTurnVideoCount += importedManifestMedia.filter(item => item.type === 'video').length;
+    process.stderr.write(`📎 Imported ${importedManifestMedia.length} typed external media item(s) from media manifest\n`);
   }
   // Upload additional images to existing project
   if (imageFileList.length > 0 || imageUrlList.length > 0) {
@@ -2447,9 +2459,12 @@ if (!command || command === '--help' || command === '-h' || command === 'help') 
           ...(importedManifestMedia.length ? {
             importedMedia: importedManifestMedia.map(item => ({
               ref: item.ref,
+              type: item.type,
               source_url: item.source_url,
-              start_sec: item.start_sec,
-              end_sec: item.end_sec,
+              ...(item.type === 'video' ? {
+                start_sec: item.start_sec,
+                end_sec: item.end_sec,
+              } : {}),
             })),
           } : {}),
         }));
@@ -2714,7 +2729,7 @@ if (!command || command === '--help' || command === '-h' || command === 'help') 
     const jsonOutput = args.includes('--json');
     if (args[2] === 'add') {
       const projectId = args[3];
-      if (!projectId) { console.error('Usage: makaron project media add <projectId> --source-url <url> --start <n> --end <n>'); process.exit(1); }
+      if (!projectId) { console.error('Usage: makaron project media add <projectId> --type <image|video> --source-url <url> [--start <n> --end <n>]'); process.exit(1); }
       const readOption = (name) => {
         const index = args.indexOf(name);
         return index >= 0 ? args[index + 1] : undefined;
@@ -2722,26 +2737,25 @@ if (!command || command === '--help' || command === '-h' || command === 'help') 
       const inputPath = readOption('--input');
       let ranges;
       if (inputPath) {
-        const input = readJsonInput(inputPath);
-        ranges = Array.isArray(input) ? input : input.clips || input.source_ranges || input.sourceRanges;
+        const normalized = normalizeMediaManifest(readJsonInput(inputPath));
+        ranges = normalized.sourceRanges;
       } else {
         const sourceUrl = readOption('--source-url');
-        const start = Number(readOption('--start') ?? readOption('--start-sec'));
-        const end = Number(readOption('--end') ?? readOption('--end-sec'));
-        if (!sourceUrl || !Number.isFinite(start) || !Number.isFinite(end)) {
-          console.error('Provide --source-url, --start, and --end, or --input <manifest.json>.');
+        const type = readOption('--type');
+        const start = readOption('--start');
+        const end = readOption('--end');
+        if (!sourceUrl || (type !== 'image' && type !== 'video')) {
+          console.error('Provide --type <image|video> and --source-url <url>, or --input <manifest.json>.');
           process.exit(1);
         }
-        ranges = [{
+        const normalized = normalizeMediaManifest([{
           source_url: sourceUrl,
-          start,
-          end,
+          type,
+          ...(start !== undefined ? { start } : {}),
+          ...(end !== undefined ? { end } : {}),
           ...(readOption('--description') ? { description: readOption('--description') } : {}),
-        }];
-      }
-      if (!Array.isArray(ranges) || !ranges.length) {
-        console.error('Input must contain a non-empty clips array.');
-        process.exit(1);
+        }]);
+        ranges = normalized.sourceRanges;
       }
       await addProjectMediaSourceRanges(baseUrl, headers, projectId, ranges, { json: jsonOutput });
     } else {
@@ -2752,7 +2766,7 @@ if (!command || command === '--help' || command === '-h' || command === 'help') 
   } else {
     console.log(`Project commands:
   project media <projectId> --json      List timeline media for a project
-  project media add <projectId> ...     Add external source_url + start + end media
+  project media add <projectId> ...     Add typed external image/video media
 `);
   }
 } else if (command === 'abort') {

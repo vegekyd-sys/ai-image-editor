@@ -63,6 +63,7 @@ describe('current upload batch inspection', () => {
     expect(context).toContain('analyzeVideoContent(');
     expect(context).toContain('[Verified current upload batch — ${count} items]');
     expect(context).toContain('[turn-media-preflight] completed ${count} items');
+    expect(context).toContain('uploadedVideoCount && !options.turnMediaCount');
     expect(agent).not.toContain('inspectionImages?: string[]');
     expect(agent).toContain('A current upload batch is pre-analyzed in parallel');
     expect(agent).toContain("return { mode: 'batch_describe', analyses }");

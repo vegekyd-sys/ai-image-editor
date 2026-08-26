@@ -643,6 +643,8 @@ const ja = {
   'model.aspectRatio.auto': '自動調整',
   'model.autoTips': 'Tipsを自動プレビュー',
   'model.autoTips.desc': '編集アイデアのプレビュー画像を自動生成',
+  'changelog.externalImages.title': 'Scene画像を動画で直接利用',
+  'changelog.externalImages.item1': 'Sceneから読み込んだ画像を画像として処理し、PreviewとMP4書き出しで動画と誤認しないようになりました。',
   'model.agentAutoDesc': '推奨モデルに従います。現在のデフォルトはGPT-5.6 Terraです',
   'model.agentLabel': 'Agentモデル',
   'model.closeAgentSelector': 'Agentモデル選択を閉じる',

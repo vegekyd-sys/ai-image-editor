@@ -171,23 +171,25 @@ export async function POST(
       media: published.map(item => ({
         ref: item.ref,
         index: item.mediaIndex,
-        type: 'video',
+        type: item.type,
         status: 'completed',
         snapshot_id: item.snapshotId,
         url: item.url,
+        source_url: item.url,
         description: item.description,
-        source_range: item.sourceRange,
-        source_url: item.sourceRange.source_url,
-        start: item.sourceRange.start_sec,
-        end: item.sourceRange.end_sec,
-        start_sec: item.sourceRange.start_sec,
-        end_sec: item.sourceRange.end_sec,
+        ...(item.sourceRange ? {
+          source_range: item.sourceRange,
+          start: item.sourceRange.start_sec,
+          end: item.sourceRange.end_sec,
+          start_sec: item.sourceRange.start_sec,
+          end_sec: item.sourceRange.end_sec,
+        } : {}),
         created: item.created,
       })),
     }, { status: 201 })
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err)
-    const validationError = /source_url|start|end|source range|maximum 20/i.test(message)
+    const validationError = /source_url|start|end|source range|media type|type must|maximum 20/i.test(message)
     return NextResponse.json({ error: message }, { status: validationError ? 400 : 500 })
   }
 }

@@ -180,16 +180,17 @@ npx makaron-cli project media <projectId> --json
 
 This is project-scoped. `responses get <runId> --pick output` only returns artifacts from one run; `project media` returns the whole project timeline: original uploads, references, generated images, video snapshots, and editable compositions.
 
-Publish an external video interval directly into that Media List without uploading the original or a derivative MP4:
+Publish typed external images and video intervals directly into that Media List without uploading the original media:
 
 ```bash
-npx makaron-cli project media add <projectId> --source-url "https://cdn.example.com/source.mp4" --start 12.5 --end 19 --description "Racket frame molding"
-npx makaron-cli project media add <projectId> --input ranges.json --json
+npx makaron-cli project media add <projectId> --type image --source-url "https://cdn.example.com/product.jpg" --description "Hero product image"
+npx makaron-cli project media add <projectId> --type video --source-url "https://cdn.example.com/source.mp4" --start 12.5 --end 19 --description "Racket frame molding"
+npx makaron-cli project media add <projectId> --input media.json --json
 ```
 
-The JSON input may be an array or `{ "clips": [...] }`. Each clip has exactly `source_url + start + end + description`; `start` and `end` are seconds, array order is edit order, and `source_url` is opaque. Do not add or request provider-specific identity fields. Put existing media understanding (summary, editorial purpose, scene evidence, confidence, and limitations) in `description`. Makaron reads that provider-neutral Media List field before deciding whether any additional image/video analysis is needed.
+The JSON input may be an array or `{ "clips": [...] }`. Every item declares `type` as `image` or `video`. Images have `source_url + type + description` and no time range. Videos have `source_url + type + start + end + description`; `start` and `end` are seconds. Array order is edit order and `source_url` is opaque. Do not add or request provider-specific identity fields. Put existing media understanding (summary, editorial purpose, scene evidence, confidence, and limitations) in `description`. Makaron reads that provider-neutral Media List field before deciding whether any additional image/video analysis is needed.
 
-For one-call orchestration, use `chat --project auto --media-manifest plan.json`. Makaron validates the manifest, creates the project, imports its ranges, and starts the Agent. If an upstream service returns multiple plans, the caller should start one independent Makaron task per plan instead of passing the provider-specific batch response into Makaron.
+For one-call orchestration, use `chat --project auto --media-manifest plan.json`. Makaron validates the manifest, creates the project, imports its media, and starts the Agent. If an upstream service returns multiple plans, the caller should start one independent Makaron task per plan instead of passing the provider-specific batch response into Makaron.
 
 ```bash
 npx makaron-cli chat --project auto --media-manifest set-01.json --json -b "Make a 30-second 9:16 TikTok with English VO and captions"

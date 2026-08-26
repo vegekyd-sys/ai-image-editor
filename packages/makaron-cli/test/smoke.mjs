@@ -447,19 +447,24 @@ const server = http.createServer(async (req, res) => {
       projectId: 'project-auto-1',
       project_id: 'project-auto-1',
       published: [],
-      media: ranges.map((range, index) => ({
-        ref: `<<<media_${index + 4}>>>`,
-        index: index + 4,
-        type: 'video',
-        status: 'completed',
-        snapshot_id: `snap_external_${index + 1}`,
-        url: range.source_url,
-        source_range: { source_url: range.source_url, start_sec: range.start, end_sec: range.end },
-        source_url: range.source_url,
-        start_sec: range.start,
-        end_sec: range.end,
-        created: true,
-      })),
+      media: ranges.map((range, index) => {
+        const type = range.type === 'image' ? 'image' : 'video';
+        return {
+          ref: `<<<media_${index + 4}>>>`,
+          index: index + 4,
+          type,
+          status: 'completed',
+          snapshot_id: `snap_external_${index + 1}`,
+          url: range.source_url,
+          source_url: range.source_url,
+          ...(type === 'video' ? {
+            source_range: { source_url: range.source_url, start_sec: range.start, end_sec: range.end },
+            start_sec: range.start,
+            end_sec: range.end,
+          } : {}),
+          created: true,
+        };
+      }),
     });
     return;
   }
@@ -642,7 +647,7 @@ try {
     assert.doesNotMatch(result.stdout, /^\s+--video-resolution/m);
     assert.match(result.stdout, /Image\/video model routing\s+stays automatic in chat/);
     assert.match(result.stdout, /--media-manifest <file\|->/);
-    assert.match(result.stdout, /source_url \+ start \+ end \+ description/);
+    assert.match(result.stdout, /typed image\/video media/);
     assert.doesNotMatch(result.stdout, /asset_id|asset-id|source_uri|source-uri/);
   }
 
@@ -664,8 +669,9 @@ try {
 
   {
     const skill = readFileSync(new URL('../skills/makaron/SKILL.md', import.meta.url), 'utf-8');
-    const mediaSection = skill.split('Publish an external video interval')[1].split('### With video input')[0];
-    assert.match(mediaSection, /exactly `source_url \+ start \+ end \+ description`/);
+    const mediaSection = skill.split('Publish typed external images and video intervals')[1].split('### With video input')[0];
+    assert.match(mediaSection, /Images have `source_url \+ type \+ description` and no time range/);
+    assert.match(mediaSection, /Videos have `source_url \+ type \+ start \+ end \+ description`/);
     assert.doesNotMatch(mediaSection, /source_uri|asset_id|start_sec|end_sec|source-uri|asset-id|start-sec|end-sec/);
   }
 
@@ -774,12 +780,14 @@ try {
       clips: [
         {
           source_url: 'https://media.example/racket-a.mp4',
+          type: 'video',
           start: 4,
           end: 9.5,
           description: 'Carbon frame molding close-up',
         },
         {
           source_url: 'https://media.example/racket-b.mp4',
+          type: 'video',
           start: 12,
           end: 18,
           description: 'Worker wraps the racket handle',
@@ -804,7 +812,7 @@ try {
     ]);
     assert.equal(flow[0].body.title, 'Racket Process · Chinese');
     assert.equal(flow[1].body.clips.length, 2);
-    assert.deepEqual(Object.keys(flow[1].body.clips[0]), ['source_url', 'start', 'end', 'description']);
+    assert.deepEqual(Object.keys(flow[1].body.clips[0]), ['source_url', 'type', 'start', 'end', 'description']);
     assert.equal(flow[1].body.clips[0].description, 'Carbon frame molding close-up');
     assert.equal(flow[2].body.prompt, '制作30秒中文VO竖屏视频');
     assert.equal(flow[2].body.uploadedVideoCount, 2);
@@ -812,9 +820,67 @@ try {
   }
 
   {
+    const manifestPath = path.join(tmpHome, 'typed-mixed-media.json');
+    writeFileSync(manifestPath, JSON.stringify({
+      title: 'Typed mixed media',
+      clips: [
+        {
+          source_url: 'https://media.example/product.jpg',
+          type: 'image',
+          description: 'Hero product image',
+        },
+        {
+          source_url: 'https://media.example/demo.mp4',
+          type: 'video',
+          start: 3,
+          end: 8.5,
+          description: 'Product demo range',
+        },
+      ],
+    }));
+    const requestStart = requests.length;
+    const result = await expectSuccess([
+      'chat', '--project', 'auto', '--media-manifest', manifestPath,
+      '--json', '-b', 'make a mixed-media video',
+    ]);
+    const data = JSON.parse(result.stdout);
+    assert.deepEqual(data.importedMedia, [
+      {
+        ref: '<<<media_4>>>',
+        type: 'image',
+        source_url: 'https://media.example/product.jpg',
+      },
+      {
+        ref: '<<<media_5>>>',
+        type: 'video',
+        source_url: 'https://media.example/demo.mp4',
+        start_sec: 3,
+        end_sec: 8.5,
+      },
+    ]);
+    const flow = requests.slice(requestStart);
+    assert.deepEqual(flow[1].body.clips, [
+      {
+        source_url: 'https://media.example/product.jpg',
+        type: 'image',
+        description: 'Hero product image',
+      },
+      {
+        source_url: 'https://media.example/demo.mp4',
+        type: 'video',
+        start: 3,
+        end: 8.5,
+        description: 'Product demo range',
+      },
+    ]);
+    assert.equal(flow[2].body.uploadedVideoCount, 1);
+    assert.equal(flow[2].body.turnMediaCount, 2);
+  }
+
+  {
     const manifestPath = path.join(tmpHome, 'legacy-range-manifest.json');
     writeFileSync(manifestPath, JSON.stringify({
-      source_ranges: [{
+      clips: [{
         source_url: 'https://media.example/legacy.mp4',
         start_sec: 2,
         end_sec: 5,
@@ -823,27 +889,40 @@ try {
         description: 'Legacy range',
       }],
     }));
-    const requestStart = requests.length;
-    await expectSuccess([
+    const requestCount = requests.length;
+    const result = await expectFailure([
       'chat', '--project', 'auto', '--media-manifest', manifestPath,
       '--json', '-b', 'legacy compatibility check',
     ]);
-    const mediaRequest = requests.slice(requestStart)
-      .find(request => request.pathname === '/api/projects/project-auto-1/media');
-    assert.deepEqual(mediaRequest?.body, {
+    assert.match(result.stderr, /Invalid media manifest/);
+    assert.match(result.stderr, /type must be image or video/);
+    assert.equal(requests.length, requestCount);
+  }
+
+  {
+    const invalidManifestPath = path.join(tmpHome, 'typed-image-with-range.json');
+    writeFileSync(invalidManifestPath, JSON.stringify({
       clips: [{
-        source_url: 'https://media.example/legacy.mp4',
-        start: 2,
-        end: 5,
-        description: 'Legacy range',
+        source_url: 'https://media.example/product.jpg',
+        type: 'image',
+        start: 0,
+        end: 1,
       }],
-    });
+    }));
+    const requestCount = requests.length;
+    const result = await expectFailure([
+      'chat', '--project', 'auto', '--media-manifest', invalidManifestPath,
+      '--json', '-b', 'must reject image time ranges',
+    ]);
+    assert.match(result.stderr, /Invalid media manifest/);
+    assert.match(result.stderr, /image items must not include start or end/);
+    assert.equal(requests.length, requestCount);
   }
 
   {
     const invalidManifestPath = path.join(tmpHome, 'invalid-media-manifest.json');
     writeFileSync(invalidManifestPath, JSON.stringify({
-      source_ranges: [{ source_url: 'file:///private/video.mp4', start_sec: 2, end_sec: 1 }],
+      clips: [{ source_url: 'file:///private/video.mp4', type: 'video', start: 2, end: 1 }],
     }));
     const requestCount = requests.length;
     const result = await expectFailure([
@@ -852,6 +931,21 @@ try {
     ]);
     assert.match(result.stderr, /Invalid media manifest/);
     assert.match(result.stderr, /must use HTTP or HTTPS/);
+    assert.equal(requests.length, requestCount);
+  }
+
+  {
+    const invalidManifestPath = path.join(tmpHome, 'typed-video-without-range.json');
+    writeFileSync(invalidManifestPath, JSON.stringify({
+      clips: [{ source_url: 'https://media.example/video.mp4', type: 'video' }],
+    }));
+    const requestCount = requests.length;
+    const result = await expectFailure([
+      'chat', '--project', 'auto', '--media-manifest', invalidManifestPath,
+      '--json', '-b', 'must reject incomplete typed video',
+    ]);
+    assert.match(result.stderr, /Invalid media manifest/);
+    assert.match(result.stderr, /start must be a finite number/);
     assert.equal(requests.length, requestCount);
   }
 
@@ -1170,6 +1264,7 @@ try {
   {
     const result = await expectSuccess([
       'project', 'media', 'add', 'project-auto-1',
+      '--type', 'video',
       '--source-url', 'https://cdn.example/source.mp4?signature=one',
       '--start', '12.5',
       '--end', '19',
@@ -1183,10 +1278,44 @@ try {
     const request = requests.filter(req => req.pathname === '/api/projects/project-auto-1/media' && req.method === 'POST').at(-1);
     assert.deepEqual(request?.body?.clips, [{
       source_url: 'https://cdn.example/source.mp4?signature=one',
+      type: 'video',
       start: 12.5,
       end: 19,
       description: 'Racket frame molding',
     }]);
+  }
+
+  {
+    const result = await expectSuccess([
+      'project', 'media', 'add', 'project-auto-1',
+      '--type', 'image',
+      '--source-url', 'https://cdn.example/product.jpg',
+      '--description', 'Hero product image',
+      '--json',
+    ]);
+    const data = JSON.parse(result.stdout);
+    assert.equal(data.media[0].type, 'image');
+    assert.equal(data.media[0].start_sec, undefined);
+    assert.equal(data.media[0].end_sec, undefined);
+    const request = requests.filter(req => req.pathname === '/api/projects/project-auto-1/media' && req.method === 'POST').at(-1);
+    assert.deepEqual(request?.body?.clips, [{
+      source_url: 'https://cdn.example/product.jpg',
+      type: 'image',
+      description: 'Hero product image',
+    }]);
+  }
+
+  {
+    const requestCount = requests.length;
+    const result = await expectFailure([
+      'project', 'media', 'add', 'project-auto-1',
+      '--source-url', 'https://cdn.example/untyped.mp4',
+      '--start', '0',
+      '--end', '5',
+      '--json',
+    ]);
+    assert.match(result.stderr, /Provide --type <image\|video>/);
+    assert.equal(requests.length, requestCount);
   }
 
   {

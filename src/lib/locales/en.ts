@@ -645,6 +645,8 @@ const en = {
   'studio.source.openAria': (stage: string) => `Open ${stage} source file`,
 
   // Agent model selector
+  'changelog.externalImages.title': 'Use Scene Images Directly in Video',
+  'changelog.externalImages.item1': 'Scene images now render as images in Preview and MP4 export instead of being mistaken for videos.',
   'model.agentAutoDesc': 'Follow the recommended default, currently GPT-5.6 Terra',
   'model.agentLabel': 'Agent model',
   'model.closeAgentSelector': 'Close model selector',

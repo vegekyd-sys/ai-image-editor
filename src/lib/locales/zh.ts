@@ -645,6 +645,8 @@ const zh = {
   'studio.source.openAria': (stage: string) => `打开${stage}原始文件`,
 
   // Agent model selector
+  'changelog.externalImages.title': 'Scene 图片可直接用于视频',
+  'changelog.externalImages.item1': '从 Scene 导入的图片现在会按图片渲染，Preview 与 MP4 导出不再把它误当成视频。',
   'model.agentAutoDesc': '跟随后端推荐，默认 GPT-5.6 Terra',
   'model.agentLabel': 'Agent 模型',
   'model.closeAgentSelector': '关闭模型选择',
