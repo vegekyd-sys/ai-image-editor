@@ -4,14 +4,36 @@ export const EVOLVING_SKILLS = {
   animate: {
     sourcePath: 'prompts/animate.md',
     label: 'Animate',
+    ownedPaths: ['prompts/animate.md'],
+    dependencyPaths: ['skills/video-ffmpeg-lab/SKILL.md'],
   },
   'tiktok-video': {
     sourcePath: 'skills/tiktok-video/SKILL.md',
     label: 'TikTok Video',
+    ownedPaths: [
+      'skills/tiktok-video/SKILL.md',
+      'skills/tiktok-video/references/audio-sync.md',
+      'skills/tiktok-video/references/caption-direction.md',
+      'skills/tiktok-video/references/delivery-qa.md',
+      'skills/tiktok-video/references/platform-layout.md',
+    ],
+    dependencyPaths: [
+      'prompts/animate.md',
+      'skills/_shared/remotion-director-contract.md',
+      'skills/_shared/spoken-caption.md',
+      'skills/_shared/studio-production/production-contract.md',
+      'skills/motion-design-video/SKILL.md',
+    ],
   },
   'talking-head': {
     sourcePath: 'skills/talking-head/SKILL.md',
     label: 'Talking Head',
+    ownedPaths: ['skills/talking-head/SKILL.md'],
+    dependencyPaths: [
+      'skills/_shared/speech-clock.md',
+      'skills/_shared/spoken-caption.md',
+      'skills/tiktok-video/SKILL.md',
+    ],
   },
 } as const
 
@@ -23,6 +45,13 @@ export interface SkillFingerprint {
   sourcePath: string
   contentSha256: string
   contentLength: number
+  bundleComplete: boolean
+  components: Array<{
+    path: string
+    sha256: string
+    contentLength: number
+    ownership: 'owned' | 'dependency'
+  }>
 }
 
 export type SkillQualityDimension =
@@ -86,14 +115,70 @@ export function resolveEvolvingSkill(sourcePath: string): EvolvingSkillKey | nul
   return null
 }
 
-export function fingerprintEvolvingSkill(sourcePath: string, content: string): SkillFingerprint | null {
+export function evolvingSkillBundlePaths(sourcePath: string): {
+  skillKey: EvolvingSkillKey
+  ownedPaths: readonly string[]
+  dependencyPaths: readonly string[]
+} | null {
   const skillKey = resolveEvolvingSkill(sourcePath)
   if (!skillKey) return null
+  const config = EVOLVING_SKILLS[skillKey]
   return {
     skillKey,
-    sourcePath: EVOLVING_SKILLS[skillKey].sourcePath,
-    contentSha256: createHash('sha256').update(content, 'utf8').digest('hex'),
-    contentLength: Buffer.byteLength(content, 'utf8'),
+    ownedPaths: config.ownedPaths,
+    dependencyPaths: config.dependencyPaths,
+  }
+}
+
+function fingerprintBundle(componentContents: Record<string, string>): {
+  sha256: string
+  contentLength: number
+  components: Array<{ path: string; sha256: string; contentLength: number }>
+} {
+  const components = Object.entries(componentContents)
+    .sort(([a], [b]) => a.localeCompare(b))
+    .map(([path, content]) => ({
+      path,
+      sha256: createHash('sha256').update(content, 'utf8').digest('hex'),
+      contentLength: Buffer.byteLength(content, 'utf8'),
+    }))
+  const canonical = components
+    .map(component => `${component.path}\n${component.sha256}\n${component.contentLength}`)
+    .join('\n---\n')
+  return {
+    sha256: createHash('sha256').update(canonical, 'utf8').digest('hex'),
+    contentLength: components.reduce((sum, component) => sum + component.contentLength, 0),
+    components,
+  }
+}
+
+export function fingerprintEvolvingSkill(
+  sourcePath: string,
+  content: string,
+  componentContents?: Record<string, string>,
+): SkillFingerprint | null {
+  const skillKey = resolveEvolvingSkill(sourcePath)
+  if (!skillKey) return null
+  const config = EVOLVING_SKILLS[skillKey]
+  const expectedPaths = [...config.ownedPaths, ...config.dependencyPaths]
+  const bundleComplete = Boolean(
+    componentContents && expectedPaths.every(path => componentContents[path] !== undefined),
+  )
+  const effectiveContents = bundleComplete
+    ? Object.fromEntries(expectedPaths.map(path => [path, componentContents![path]]))
+    : { [config.sourcePath]: content }
+  const bundle = fingerprintBundle(effectiveContents)
+  const owned = new Set<string>(config.ownedPaths)
+  return {
+    skillKey,
+    sourcePath: config.sourcePath,
+    contentSha256: bundle.sha256,
+    contentLength: bundle.contentLength,
+    bundleComplete,
+    components: bundle.components.map(component => ({
+      ...component,
+      ownership: owned.has(component.path) ? 'owned' : 'dependency',
+    })),
   }
 }
 
@@ -105,10 +190,11 @@ export async function recordEvolvingSkillUsage(input: {
   userId?: string | null
   sourcePath: string
   content: string
+  componentContents?: Record<string, string>
   activationSource?: SkillActivationSource
   observedAt?: string
 }): Promise<SkillFingerprint | null> {
-  const fingerprint = fingerprintEvolvingSkill(input.sourcePath, input.content)
+  const fingerprint = fingerprintEvolvingSkill(input.sourcePath, input.content, input.componentContents)
   if (!fingerprint || !input.runId || !input.projectId || !input.userId) {
     return fingerprint
   }
@@ -130,6 +216,9 @@ export async function recordEvolvingSkillUsage(input: {
       p_metadata: {
         deploymentId: process.env.VERCEL_DEPLOYMENT_ID || null,
         environment: process.env.VERCEL_ENV || process.env.NODE_ENV || null,
+        bundleSchema: 'effective-skill-bundle-v1',
+        bundleComplete: fingerprint.bundleComplete,
+        components: fingerprint.components,
       },
     })
     if (error) throw new Error(error.message || 'unknown RPC error')

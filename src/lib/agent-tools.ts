@@ -373,7 +373,7 @@ export type AgentStreamEvent =
 import { type ParsedSkill } from './skill-registry';
 // Workspace service — unified access to skills, memory, assets
 import * as workspace from './workspace';
-import { recordEvolvingSkillUsage } from './skill-evolution';
+import { evolvingSkillBundlePaths, recordEvolvingSkillUsage } from './skill-evolution';
 
 // ---------------------------------------------------------------------------
 // Shared image reference utilities
@@ -3689,12 +3689,27 @@ Use this to read skill instructions (SKILL.md), reference images, or your memory
         const result = await workspace.readFile(filePath, ctx.supabase, ctx.userId);
         if (!result) return { error: `File not found: ${filePath}` };
 
+        const bundlePaths = evolvingSkillBundlePaths(filePath);
+        let componentContents: Record<string, string> | undefined;
+        if (bundlePaths) {
+          const paths = [...bundlePaths.ownedPaths, ...bundlePaths.dependencyPaths];
+          const resolved = await Promise.all(paths.map(async path => {
+            if (path === filePath) return [path, result.content] as const;
+            const component = await workspace.readFile(path, ctx.supabase, ctx.userId);
+            return component ? [path, component.content] as const : null;
+          }));
+          if (resolved.every((component): component is readonly [string, string] => component !== null)) {
+            componentContents = Object.fromEntries(resolved);
+          }
+        }
+
         await recordEvolvingSkillUsage({
           runId: ctx.agentRunId || ctx.execution?.runId,
           projectId: ctx.projectId,
           userId: ctx.userId,
           sourcePath: filePath,
           content: result.content,
+          componentContents,
           activationSource: 'read_file',
         });
 

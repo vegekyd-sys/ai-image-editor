@@ -90,9 +90,18 @@ ALTER TABLE public.skill_run_usages ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.skill_run_evaluations ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.skill_improvement_proposals ENABLE ROW LEVEL SECURITY;
 
--- These are internal evaluation tables. Service-role-backed admin/jobs access
--- them directly. Authenticated users can only register usage for their own run
--- through the checked function below.
+-- These are internal evaluation tables. Only service-role-backed server code
+-- can access them. RLS remains enabled as defense in depth.
+
+REVOKE ALL ON TABLE public.skill_versions FROM anon, authenticated;
+REVOKE ALL ON TABLE public.skill_run_usages FROM anon, authenticated;
+REVOKE ALL ON TABLE public.skill_run_evaluations FROM anon, authenticated;
+REVOKE ALL ON TABLE public.skill_improvement_proposals FROM anon, authenticated;
+
+GRANT SELECT, INSERT, UPDATE, DELETE ON TABLE public.skill_versions TO service_role;
+GRANT SELECT, INSERT, UPDATE, DELETE ON TABLE public.skill_run_usages TO service_role;
+GRANT SELECT, INSERT, UPDATE, DELETE ON TABLE public.skill_run_evaluations TO service_role;
+GRANT SELECT, INSERT, UPDATE, DELETE ON TABLE public.skill_improvement_proposals TO service_role;
 
 CREATE OR REPLACE FUNCTION public.record_skill_run_usage(
   p_run_id uuid,
@@ -109,17 +118,13 @@ CREATE OR REPLACE FUNCTION public.record_skill_run_usage(
 )
 RETURNS TABLE (version_id uuid, usage_id uuid)
 LANGUAGE plpgsql
-SECURITY DEFINER
+SECURITY INVOKER
 SET search_path = public
 AS $$
 DECLARE
   v_version_id uuid;
   v_usage_id uuid;
 BEGIN
-  IF auth.role() <> 'service_role' THEN
-    RAISE EXCEPTION 'Skill usage registration requires service role';
-  END IF;
-
   IF NOT EXISTS (
     SELECT 1
     FROM public.agent_runs run
@@ -174,7 +179,7 @@ $$;
 
 REVOKE ALL ON FUNCTION public.record_skill_run_usage(
   uuid, uuid, uuid, text, text, text, integer, text, text, timestamptz, jsonb
-) FROM PUBLIC, anon;
+) FROM PUBLIC, anon, authenticated;
 GRANT EXECUTE ON FUNCTION public.record_skill_run_usage(
   uuid, uuid, uuid, text, text, text, integer, text, text, timestamptz, jsonb
 ) TO service_role;

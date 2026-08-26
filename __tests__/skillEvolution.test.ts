@@ -24,6 +24,34 @@ describe('Skill Evolution', () => {
     expect(same?.contentSha256).toBe(first?.contentSha256)
     expect(changed?.contentSha256).not.toBe(first?.contentSha256)
     expect(first?.contentLength).toBe(11)
+    expect(first?.bundleComplete).toBe(false)
+  })
+
+  it('versions the complete effective Skill bundle', () => {
+    const root = 'skills/tiktok-video/SKILL.md'
+    const paths = [
+      'skills/tiktok-video/SKILL.md',
+      'skills/tiktok-video/references/audio-sync.md',
+      'skills/tiktok-video/references/caption-direction.md',
+      'skills/tiktok-video/references/delivery-qa.md',
+      'skills/tiktok-video/references/platform-layout.md',
+      'prompts/animate.md',
+      'skills/_shared/remotion-director-contract.md',
+      'skills/_shared/spoken-caption.md',
+      'skills/_shared/studio-production/production-contract.md',
+      'skills/motion-design-video/SKILL.md',
+    ]
+    const components = Object.fromEntries(paths.map(path => [path, `content:${path}`]))
+    const first = fingerprintEvolvingSkill(root, components[root], components)
+    const changed = fingerprintEvolvingSkill(root, components[root], {
+      ...components,
+      'skills/tiktok-video/references/delivery-qa.md': 'changed review gate',
+    })
+
+    expect(first?.bundleComplete).toBe(true)
+    expect(first?.components).toHaveLength(paths.length)
+    expect(first?.components.filter(component => component.ownership === 'owned')).toHaveLength(5)
+    expect(changed?.contentSha256).not.toBe(first?.contentSha256)
   })
 
   it('never blocks a creative run when telemetry storage fails', async () => {

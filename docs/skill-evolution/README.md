@@ -51,7 +51,8 @@ must not merge, deploy, or change the production release channel by itself.
 
 Every evaluated run needs four independent identities:
 
-1. Skill: source path plus SHA-256 and Git/deployment revision.
+1. Skill: effective bundle SHA-256 (entrypoint, owned references, and declared
+   shared dependencies) plus Git/deployment revision.
 2. Agent/model: Agent model, provider model, retries, and tool trace.
 3. Input: media type/count/ranges and non-sensitive technical metadata.
 4. Output: final artifact, renderer/provider version, media probes, and user
@@ -110,7 +111,9 @@ after measuring variance.
 
 ### Phase 0: traceability (this worktree)
 
-- Register exact content SHA when one of the three sources is read.
+- Register the exact effective-bundle SHA when one of the three sources is
+  read. Incomplete bundles remain observable but cannot enter replay or canary
+  cohorts.
 - Add deterministic evaluation contracts and storage schema.
 - Establish privacy, attribution, and human-promotion boundaries.
 
