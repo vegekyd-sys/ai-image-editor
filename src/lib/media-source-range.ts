@@ -2,11 +2,25 @@ import type { VideoMeta, VideoSourceRange } from '@/types';
 
 export interface ExternalVideoRangeInput {
   source_url: string;
+  /** Scene exposes `type`; the aliases keep other API callers compatible. */
+  type?: 'image' | 'video';
+  media_type?: 'image' | 'video';
+  mediaType?: 'image' | 'video';
   start?: number;
   end?: number;
   /** Legacy aliases accepted at the input boundary. */
   start_sec?: number;
   end_sec?: number;
+  description?: string;
+}
+
+export type ExternalMediaType = 'image' | 'video';
+
+export interface NormalizedExternalMediaInput {
+  source_url: string;
+  type?: ExternalMediaType;
+  start?: number;
+  end?: number;
   description?: string;
 }
 
@@ -24,7 +38,7 @@ function finiteNumber(value: unknown): number | undefined {
   return Number.isFinite(number) ? number : undefined;
 }
 
-export function normalizeExternalVideoRange(input: unknown): NormalizedExternalVideoRange {
+export function normalizeExternalMediaInput(input: unknown): NormalizedExternalMediaInput {
   if (!input || typeof input !== 'object') throw new Error('Source range must be an object.');
   const value = input as Record<string, unknown>;
   const sourceUrl = optionalString(value.source_url);
@@ -39,17 +53,37 @@ export function normalizeExternalVideoRange(input: unknown): NormalizedExternalV
     throw new Error('source_url must use http or https.');
   }
 
-  const startSec = finiteNumber(value.start ?? value.start_sec);
-  const endSec = finiteNumber(value.end ?? value.end_sec);
+  const declaredType = value.type ?? value.media_type ?? value.mediaType;
+  if (declaredType !== undefined && declaredType !== 'image' && declaredType !== 'video') {
+    throw new Error('type must be image or video.');
+  }
+
+  return {
+    source_url: sourceUrl,
+    ...(declaredType ? { type: declaredType } : {}),
+    ...(finiteNumber(value.start ?? value.start_sec) !== undefined
+      ? { start: finiteNumber(value.start ?? value.start_sec) }
+      : {}),
+    ...(finiteNumber(value.end ?? value.end_sec) !== undefined
+      ? { end: finiteNumber(value.end ?? value.end_sec) }
+      : {}),
+    ...(optionalString(value.description) ? { description: optionalString(value.description) } : {}),
+  };
+}
+
+export function normalizeExternalVideoRange(input: unknown): NormalizedExternalVideoRange {
+  const normalized = normalizeExternalMediaInput(input);
+  const startSec = normalized.start;
+  const endSec = normalized.end;
   if (startSec === undefined || startSec < 0) throw new Error('start must be a finite number >= 0.');
   if (endSec === undefined || endSec <= startSec) throw new Error('end must be greater than start.');
 
   return {
-    source_url: sourceUrl,
+    source_url: normalized.source_url,
     start_sec: startSec,
     end_sec: endSec,
     duration: endSec - startSec,
-    ...(optionalString(value.description) ? { description: optionalString(value.description) } : {}),
+    ...(normalized.description ? { description: normalized.description } : {}),
   };
 }
 

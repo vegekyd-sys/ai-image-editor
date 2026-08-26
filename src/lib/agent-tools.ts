@@ -3800,10 +3800,13 @@ Path is auto-generated from the current project and output type. Just provide a 
         fromWorkspaceOutputs: z.boolean().optional().describe('Publish recent workspace image/video outputs to the timeline instead of writing text/code. Use immediately for user-facing FFmpeg split/trim/export MP4 outputs, and for previously exported outputs across turns. Prefer exact workspace paths returned by run_code/list_files; never guess a workspace URL from a file name.'),
         sourceRanges: z.array(z.object({
           source_url: z.string().url(),
-          start: z.number().nonnegative(),
-          end: z.number().positive(),
+          type: z.enum(['image', 'video']).optional(),
+          media_type: z.enum(['image', 'video']).optional(),
+          mediaType: z.enum(['image', 'video']).optional(),
+          start: z.number().nonnegative().optional(),
+          end: z.number().positive().optional(),
           description: z.string().min(1).optional(),
-        })).max(20).optional().describe('Publish external video intervals directly to the current Media List without uploading derivative MP4s. Each item uses only source_url + start + end + description. Put any already-known media analysis (summary, editorial purpose, scene evidence, limitations) into description so later Agent turns can use it without repeating Analyze. source_url must be an HTTP(S) video URL reachable by preview/export runtimes.'),
+        })).max(20).optional().describe('Publish external image or video media directly to the current Media List without uploading derivatives. Preserve Scene type="image" or type="video" when available. Images need source_url + type + description; videos also require start + end. Older callers may omit type, in which case the server detects it once from MIME/file bytes. Put known media analysis into description so later Agent turns can use it without repeating Analyze.'),
         workspacePaths: z.array(z.string()).optional().describe('Specific workspace file paths to publish. If omitted with fromWorkspaceOutputs=true, publishes the most recent project media outputs.'),
         mediaType: z.enum(['image', 'video', 'all']).optional().describe('Filter workspace outputs when publishing. Default all.'),
         limit: z.number().int().min(1).max(20).optional().describe('Maximum recent workspace outputs to publish when workspacePaths is omitted. Use 3 for three exported clips, etc.'),
@@ -3851,7 +3854,10 @@ Path is auto-generated from the current project and output type. Just provide a 
             if (published.length) ctx.currentSnapshotIndex = published[published.length - 1].mediaIndex - 1;
             return {
               success: true,
-              message: `Published ${published.length} external source range${published.length === 1 ? '' : 's'} to the current Media List without uploading derivative MP4s:\n${published.map((item, index) => `${index + 1}. ${item.ref} source_url=${item.sourceRange.source_url} start=${item.sourceRange.start_sec} end=${item.sourceRange.end_sec}\n   Media description: ${item.description}`).join('\n')}\nThese refs are available immediately to later tools in this same Agent session. Treat each ref as only its bounded source range when composing or editing. Their Media List descriptions are existing media understanding; consume covered content directly and call Analyze only for missing or uncovered details.`,
+              message: `Published ${published.length} external media item${published.length === 1 ? '' : 's'} to the current Media List without uploading derivatives:\n${published.map((item, index) => item.sourceRange
+                ? `${index + 1}. ${item.ref} [video] source_url=${item.sourceRange.source_url} start=${item.sourceRange.start_sec} end=${item.sourceRange.end_sec}\n   Media description: ${item.description}`
+                : `${index + 1}. ${item.ref} [image] source_url=${item.url}\n   Media description: ${item.description}`
+              ).join('\n')}\nThese refs are available immediately to later tools in this same Agent session. Video refs are bounded to their source ranges; image refs use their source URL directly. Their Media List descriptions are existing media understanding; consume covered content directly and call Analyze only for missing or uncovered details.`,
               published,
             };
           } catch (error) {

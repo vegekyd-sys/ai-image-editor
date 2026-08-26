@@ -621,6 +621,8 @@ const zhHant = {
   'model.aspectRatio.auto': '自動調整',
   'model.autoTips': '自動預覽 Tips',
   'model.autoTips.desc': '自動產生編輯建議的預覽圖片',
+  'changelog.externalImages.title': 'Scene 圖片可直接用於影片',
+  'changelog.externalImages.item1': '從 Scene 匯入的圖片現在會按圖片渲染，Preview 與 MP4 匯出不再把它誤當成影片。',
   'model.agentAutoDesc': '跟隨後端建議，目前預設為 GPT-5.6 Terra',
   'model.agentLabel': 'Agent 模型',
   'model.closeAgentSelector': '關閉模型選擇',

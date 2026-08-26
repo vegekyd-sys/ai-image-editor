@@ -1,12 +1,25 @@
 import { describe, expect, it } from 'vitest';
 import {
   formatSourceRangeHint,
+  normalizeExternalMediaInput,
   normalizeExternalVideoRange,
   sourceRangeFromVideoMeta,
   sourceRangeIdentity,
 } from '@/lib/media-source-range';
 
 describe('external video source range protocol', () => {
+  it('accepts a Scene image type without inventing a time range', () => {
+    expect(normalizeExternalMediaInput({
+      source_url: 'https://scenes-ai.com/v1/assets/photo/media',
+      type: 'image',
+      description: 'Product photo',
+    })).toEqual({
+      source_url: 'https://scenes-ai.com/v1/assets/photo/media',
+      type: 'image',
+      description: 'Product photo',
+    });
+  });
+
   it('normalizes the four-field public contract, drops provider metadata, and derives duration', () => {
     expect(normalizeExternalVideoRange({
       source_url: 'https://cdn.example.com/source.mp4?signature=one',
@@ -32,6 +45,13 @@ describe('external video source range protocol', () => {
     [{ source_url: 'https://cdn.example.com/source.mp4', start: 2, end: 2 }, 'end'],
   ])('rejects invalid protocol input %#', (input, message) => {
     expect(() => normalizeExternalVideoRange(input)).toThrow(message);
+  });
+
+  it('rejects unsupported declared media types', () => {
+    expect(() => normalizeExternalMediaInput({
+      source_url: 'https://cdn.example.com/source.bin',
+      type: 'audio',
+    })).toThrow('type must be image or video');
   });
 
   it('accepts legacy time aliases but does not retain legacy provider keys', () => {
