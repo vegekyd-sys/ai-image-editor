@@ -170,26 +170,37 @@ npx makaron-cli project media <projectId> --json
 
 This is project-scoped. `responses get <runId> --pick output` only returns artifacts from one run; `project media` returns the whole project timeline: original uploads, references, generated images, video snapshots, and editable compositions.
 
-External source ranges can be added without uploading either the original video or a derivative clip:
+Typed external images and video ranges can be added without uploading the original media:
 
 ```bash
 npx makaron-cli project media add <projectId> \
+  --type image \
+  --source-url "https://cdn.example.com/product.jpg" \
+  --description "Hero product image"
+
+npx makaron-cli project media add <projectId> \
+  --type video \
   --source-url "https://cdn.example.com/source.mp4" \
   --start 12.5 --end 19 \
   --description "Racket frame molding"
 
 # Batch form: a JSON array or {"clips": [...]}
-npx makaron-cli project media add <projectId> --input ranges.json --json
+npx makaron-cli project media add <projectId> --input media.json --json
 ```
 
-The returned `<<<media_N>>>` is immediately usable by a later Agent run. Its range remains non-destructive metadata; Remotion must trim the original URL to these exact source bounds.
+Every item must declare `type` as `image` or `video`. Images contain
+`source_url + type + description` and do not have a time range. Videos contain
+`source_url + type + start + end + description`; their ranges remain
+non-destructive metadata, and Remotion must trim the original URL to those exact
+source bounds. The returned `<<<media_N>>>` is immediately usable by a later
+Agent run.
 Use `description` as the provider-neutral media-understanding field. Put any
 already-known summary, editorial purpose, concrete scene evidence, confidence,
 and limitations there. Makaron exposes the full description in Media List
 context so the Agent can edit from it without repeating image/video analysis
 unless a required detail is missing or uncertain.
 
-For an agent-to-agent handoff, create the project, import the external ranges,
+For an agent-to-agent handoff, create the project, import the typed external media,
 and start the Agent in one command:
 
 ```bash
@@ -200,9 +211,9 @@ npx makaron-cli chat --project auto \
 ```
 
 The manifest is a JSON array or `{ "title": "...", "clips": [...] }`. Every
-clip contains exactly `source_url`, `start`, `end`, and `description`; the time
-values are seconds and array order is edit order. It is validated before project
-creation and supports up to 20 clips for one Makaron task. Batch planning remains
+item declares `type`. Images omit `start` and `end`; videos require both values
+in seconds. Array order is edit order. It is validated before project creation
+and supports up to 20 media items for one Makaron task. Batch planning remains
 the upstream orchestrator's responsibility: convert each plan into one manifest
 and start one independent Makaron task.
 
