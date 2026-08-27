@@ -2,15 +2,26 @@ import { createServerClient } from '@supabase/ssr'
 import { cookies } from 'next/headers'
 import { NextResponse, type NextRequest } from 'next/server'
 import { getSupabaseAdmin } from '@/lib/supabase/service'
-import { getConfiguredWelcomeCredits } from '@/lib/billing/welcome-credits'
-import { resolveAuthCompletionDestination } from '@/lib/auth-return'
-import { readAttributionCookie, sendMetaCapiEvent } from '@/lib/marketing/meta-capi'
+import { initializeSignupCredits } from '@/lib/billing/signup-credits'
+import {
+  APPLE_PENDING_CLAIM_COOKIE,
+  claimPendingAppleTrial,
+} from '@/lib/billing/apple-pending-claim'
+import { userAgentHasMakaronIOSToken } from '@/lib/native-app'
+import { appendAuthReturnParam, normalizeAuthReturnPath } from '@/lib/auth-return'
+import {
+  readAttributionCookie,
+  recordFirstPartyMarketingEvent,
+  sendMetaCapiEvent,
+} from '@/lib/marketing/meta-capi'
 
 type CompletionResult = {
   isNewUser: boolean
   credits: number
+  trialRequired: boolean
+  appleTrialClaimed: boolean
   redirectUrl: string
-  metaEvents: { CompleteRegistration?: string; StartTrial?: string }
+  metaEvents: { CompleteRegistration?: string }
   cookiesToSet: { name: string; value: string; options: Record<string, unknown> }[]
 }
 
@@ -48,6 +59,9 @@ async function completeVerifiedSession(request: NextRequest): Promise<Completion
 
   let isNewUser = false
   let credits = 0
+  const isIOSApp = userAgentHasMakaronIOSToken(request.headers.get('user-agent') ?? undefined)
+  let trialRequired = false
+  let appleTrialClaimed = false
   if (!profile?.activated) {
     await admin.from('user_profiles').upsert({
       id: user.id,
@@ -55,40 +69,63 @@ async function completeVerifiedSession(request: NextRequest): Promise<Completion
       invite_code_used: user.app_metadata?.provider === 'google' ? 'GOOGLE_OAUTH' : 'EMAIL_VERIFIED',
     }, { onConflict: 'id' })
 
+    isNewUser = true
+    trialRequired = isIOSApp
     try {
-      const { data: existingBalance } = await admin
-        .from('credit_balances')
-        .select('balance')
-        .eq('user_id', user.id)
-        .single()
-
-      if (!existingBalance) {
-        isNewUser = true
-        credits = await getConfiguredWelcomeCredits(admin)
-
-        if (credits > 0) {
-          const { addCredits } = await import('@/lib/billing/credits')
-          await addCredits(user.id, credits)
-
-          await admin.from('credit_purchases').insert({
-            user_id: user.id,
-            stripe_session_id: `welcome_gift_${user.app_metadata?.provider || 'email'}`,
-            credits,
-            amount_usd: 0,
-            status: 'completed',
-            source: 'welcome',
-          })
-        }
-      }
+      const result = await initializeSignupCredits({
+        admin,
+        userId: user.id,
+        isIOSApp,
+      })
+      credits = result.credits
+      trialRequired = result.trialRequired
     } catch (completionError) {
       console.error('[auth/complete] Welcome credits failed (non-blocking):', completionError)
+    }
+  }
+
+  const pendingAppleClaim = request.cookies.get(APPLE_PENDING_CLAIM_COOKIE)?.value
+  if (isIOSApp && pendingAppleClaim) {
+    try {
+      const claimed = await claimPendingAppleTrial({
+        claimToken: pendingAppleClaim,
+        userId: user.id,
+      })
+      appleTrialClaimed = true
+      trialRequired = false
+      credits = claimed.result.balance.balance
+
+      if (claimed.result.credited) {
+        await recordFirstPartyMarketingEvent({
+          eventName: 'Subscribe',
+          eventId: `apple.subscription.${claimed.result.transactionId}`,
+          eventSourceUrl: `${request.nextUrl.origin}/home`,
+          userId: user.id,
+          value: claimed.result.amountUsd,
+          currency: 'USD',
+          request,
+          customData: {
+            provider: 'apple',
+            product_id: claimed.result.productId,
+            transaction_id: claimed.result.transactionId,
+            original_transaction_id: claimed.result.originalTransactionId,
+            credits: claimed.result.credits,
+            checkout_event_id: claimed.metaEventId,
+            plan_id: claimed.result.planId,
+            billing_interval: claimed.result.billingInterval,
+            signup_order: 'subscription_before_registration',
+            ...claimed.attribution,
+          },
+        })
+      }
+    } catch (claimError) {
+      console.error('[auth/complete] Pending Apple trial claim failed (non-blocking):', claimError)
     }
   }
 
   const metaEvents: CompletionResult['metaEvents'] = isNewUser
     ? {
       CompleteRegistration: `registration.${user.id}`,
-      ...(credits > 0 ? { StartTrial: `starttrial.${user.id}` } : {}),
     }
     : {}
 
@@ -110,17 +147,6 @@ async function completeVerifiedSession(request: NextRequest): Promise<Completion
         eventSourceUrl,
         customData: attribution,
       })
-      if (credits > 0) {
-        await sendMetaCapiEvent({
-          eventName: 'StartTrial',
-          eventId: metaEvents.StartTrial!,
-          userId: user.id,
-          email: user.email,
-          request,
-          eventSourceUrl,
-          customData: { credits, ...attribution },
-        })
-      }
     } catch (trackingError) {
       console.error('[auth/complete] Registration tracking failed (non-blocking):', trackingError)
     }
@@ -129,7 +155,13 @@ async function completeVerifiedSession(request: NextRequest): Promise<Completion
   return {
     isNewUser,
     credits,
-    redirectUrl: isNewUser ? '/home?welcome=1' : '/projects',
+    trialRequired,
+    appleTrialClaimed,
+    redirectUrl: appleTrialClaimed
+      ? '/home?trial_ready=1'
+      : isNewUser
+        ? (trialRequired ? '/home?trial=1' : '/home?welcome=1')
+        : '/projects',
     metaEvents,
     cookiesToSet,
   }
@@ -144,6 +176,14 @@ function applyCompletionCookies(response: NextResponse, completion: CompletionRe
     maxAge: 365 * 24 * 60 * 60,
     sameSite: 'lax',
   })
+  if (completion.appleTrialClaimed) {
+    response.cookies.set(APPLE_PENDING_CLAIM_COOKIE, '', {
+      httpOnly: true,
+      sameSite: 'lax',
+      path: '/',
+      maxAge: 0,
+    })
+  }
   return response
 }
 
@@ -157,6 +197,8 @@ export async function POST(request: NextRequest) {
     ok: true,
     isNewUser: completion.isNewUser,
     credits: completion.credits,
+    trialRequired: completion.trialRequired,
+    appleTrialClaimed: completion.appleTrialClaimed,
     redirectUrl: completion.redirectUrl,
     metaEvents: completion.metaEvents,
   }), completion)
@@ -169,7 +211,10 @@ export async function GET(request: NextRequest) {
   }
 
   const requestedReturnPath = request.nextUrl.searchParams.get('next')
-  const destination = resolveAuthCompletionDestination(requestedReturnPath, completion.isNewUser)
+  const normalizedReturnPath = normalizeAuthReturnPath(requestedReturnPath)
+  const destination = completion.isNewUser && normalizedReturnPath && !completion.appleTrialClaimed
+    ? appendAuthReturnParam(normalizedReturnPath, completion.trialRequired ? 'trial' : 'welcome', '1')
+    : normalizedReturnPath || completion.redirectUrl
   return applyCompletionCookies(
     NextResponse.redirect(new URL(destination, request.url)),
     completion,

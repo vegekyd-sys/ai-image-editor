@@ -40,8 +40,9 @@ or materializing an MP4.
    recorded in `subtitleSyncEvidence`. The displayed phrase must describe the
    same beat as both the current picture and the narration actually sounding
    then. Planned Script ranges alone are not timing evidence for a continuous
-   TTS file. Use ASR timing, retime mismatches, and keep evidence linked to the
-   persisted Storyboard scene. Do not standardize wording, placement,
+   voiceover master. Use the persisted narration cue sheet, retime mismatches,
+   and keep evidence linked to the persisted Storyboard scene. Do not
+   standardize wording, placement,
    typography, JSX, or animation merely to pass this check.
 5. Confirm required audio props are resolved public URLs, not undefined values
    or `<<<audio_N>>>` markers. Check unexpected silence, intelligible speech,
@@ -54,13 +55,13 @@ or materializing an MP4.
 
 ## Materialization Boundary
 
-- Publish the exact reviewed `design_path` once.
-- Call `materialize_media` once. In Studio Run it waits for the real MP4 at the
-  locked source resolution.
-- Successful materialization automatically completes the Review and Delivery UI
-  stages and records the MP4 plus editable source paths.
+- Publish the exact reviewed `design_path` once with `publish_draft`.
+- Call `materialize_media` once. It queues the real MP4 at the locked source
+  resolution and returns immediately.
+- The durable worker automatically completes the Review and Delivery UI stages
+  when the MP4 is ready, and records the MP4 plus editable source paths.
 - Do not author Review or Delivery JSON, and do not start another review,
-  preview, publish, or render loop after materialization succeeds.
+  preview, publish, or render loop after queue submission succeeds.
 - If export fails, keep the editable Composition and report the export failure.
   If the source itself needs revision, patch Composition before retrying.
 

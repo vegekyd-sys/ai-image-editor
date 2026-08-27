@@ -10,6 +10,9 @@ interface ToolPricing {
 const DEFAULT_TOOL_PRICING: Record<string, { credits: number; isFree: boolean }> = {
   create_seed_audio: { credits: 10, isFree: false },
   create_voiceover: { credits: 2, isFree: false },
+  // GPT Image 2 low-quality generation/edit fallback when the provider does
+  // not return token usage. 1 credit = $0.01; includes the standard 2x markup.
+  edit_image_openai: { credits: 4, isFree: false },
 }
 
 // In-memory cache with TTL

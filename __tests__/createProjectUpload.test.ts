@@ -1,5 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { createProject, createProjectFromStagedMedia } from '@/lib/createProject'
+import { uploadImage } from '@/lib/supabase/storage'
 import {
   beginCreateDraftContinuation,
   cacheCreateDraft,
@@ -7,6 +8,7 @@ import {
   clearPendingProjectLaunches,
   getCreateDraft,
   getCreateDraftContinuationId,
+  getCachedProjectDataSync,
   getPendingProjectImagesSync,
   getPendingProjectLaunchSync,
   shouldConsumeCreateDraft,
@@ -19,6 +21,7 @@ vi.mock('@/lib/supabase/storage', () => ({
 
 vi.mock('@/lib/image/compress', () => ({
   compressImageFile: vi.fn(async () => 'data:image/jpeg;base64,compressed'),
+  inspectDataUrlAlpha: vi.fn(async () => false),
 }))
 
 vi.mock('@/lib/image/metadata', () => ({
@@ -31,6 +34,8 @@ describe('createProject upload flow', () => {
     localStorage.clear()
     clearPendingProjectLaunches()
     vi.restoreAllMocks()
+    vi.mocked(uploadImage).mockImplementation(async (_supabase, _userId, projectId, filename) =>
+      `https://cdn.makaron.app/${projectId}/${filename}`)
     Object.defineProperty(navigator, 'sendBeacon', {
       configurable: true,
       value: vi.fn(() => true),
@@ -84,12 +89,27 @@ describe('createProject upload flow', () => {
         })
       }
       expect(url).toBe('/api/projects/create')
-      expect(JSON.parse(String(init?.body))).toMatchObject({
+      const body = JSON.parse(String(init?.body))
+      if (body._addToProject) {
+        expect(body).toMatchObject({
+          _addToProject: '11111111-1111-4111-8111-111111111111',
+          imageUrls: ['https://cdn.makaron.app/11111111-1111-4111-8111-111111111111/anonymous-source-0.jpg'],
+        })
+        return new Response(JSON.stringify({
+          snapshots: [{
+            snapshotId: 'snapshot-from-api',
+            imageUrl: body.imageUrls[0],
+          }],
+        }), { status: 200, headers: { 'Content-Type': 'application/json' } })
+      }
+      expect(body).toMatchObject({
         title: 'Untitled',
+        clientProjectId: '11111111-1111-4111-8111-111111111111',
+        idempotencyKey: 'continuation-1',
         skillId: 'installed-skill',
         hasPrompt: true,
       })
-      return new Response(JSON.stringify({ projectId: 'restored-project', snapshots: [] }), {
+      return new Response(JSON.stringify({ projectId: '11111111-1111-4111-8111-111111111111', snapshots: [] }), {
         status: 200,
         headers: { 'Content-Type': 'application/json' },
       })
@@ -98,26 +118,90 @@ describe('createProject upload flow', () => {
 
     const result = await createProjectFromStagedMedia(supabase as never, 'user-1', {
       images: ['data:image/jpeg;base64,restored'],
+      projectId: '11111111-1111-4111-8111-111111111111',
+      continuationId: 'continuation-1',
       metadata: { location: 'Draft City' },
       prompt: 'make it cinematic',
       skill: 'installed-skill',
     })
 
-    expect(result?.projectId).toBe('restored-project')
+    expect(result?.projectId).toBe('11111111-1111-4111-8111-111111111111')
     expect(supabase.from).not.toHaveBeenCalled()
-    expect(getPendingProjectImagesSync('restored-project')).toEqual([
-      expect.stringMatching(/^https:\/\/cdn\.makaron\.app\/restored-project\/snapshot-/),
+    expect(getPendingProjectImagesSync('11111111-1111-4111-8111-111111111111')).toBeNull()
+    expect(getCachedProjectDataSync('11111111-1111-4111-8111-111111111111')?.snapshots).toEqual([
+      expect.objectContaining({
+        id: 'snapshot-from-api',
+        imageUrl: 'https://cdn.makaron.app/11111111-1111-4111-8111-111111111111/anonymous-source-0.jpg',
+      }),
     ])
     expect(sessionStorage.getItem('pendingImages')).toBeNull()
-    expect(JSON.parse(sessionStorage.getItem('pendingMetadata') || '{}')).toEqual({ location: 'Draft City' })
+    expect(JSON.parse(sessionStorage.getItem('pendingMetadata') || '{}')).toEqual({
+      location: 'Draft City',
+      imageMimeType: 'image/jpeg',
+      hasAlpha: false,
+    })
     expect(sessionStorage.getItem('pendingPrompt')).toBe('make it cinematic')
     expect(sessionStorage.getItem('pendingSkill')).toBe('installed-skill')
-    expect(getPendingProjectLaunchSync('restored-project')).toMatchObject({
-      projectId: 'restored-project',
+    expect(getPendingProjectLaunchSync('11111111-1111-4111-8111-111111111111')).toMatchObject({
+      projectId: '11111111-1111-4111-8111-111111111111',
       prompt: 'make it cinematic',
       skill: 'installed-skill',
       metadata: { location: 'Draft City' },
     })
+  })
+
+  it('uploads a restored anonymous draft before creating its visible project shell', async () => {
+    const sequence: string[] = []
+    vi.mocked(uploadImage).mockImplementationOnce(async (_supabase, _userId, projectId, filename) => {
+      sequence.push('upload')
+      return `https://cdn.makaron.app/${projectId}/${filename}`
+    })
+    const fetchMock = vi.fn(async (url: string, init?: RequestInit) => {
+      if (url === '/api/marketing/events') return new Response('{}', { status: 200 })
+      const body = JSON.parse(String(init?.body))
+      if (body._addToProject) {
+        sequence.push('persist')
+        expect(body).toMatchObject({
+          _addToProject: '22222222-2222-4222-8222-222222222222',
+          imageUrls: ['https://cdn.makaron.app/22222222-2222-4222-8222-222222222222/anonymous-source-0.jpg'],
+        })
+        return new Response(JSON.stringify({
+          snapshots: [{ snapshotId: 'snapshot-from-api', imageUrl: body.imageUrls[0] }],
+        }), { status: 200, headers: { 'Content-Type': 'application/json' } })
+      }
+      sequence.push('create')
+      expect(body).toMatchObject({
+        clientProjectId: '22222222-2222-4222-8222-222222222222',
+        idempotencyKey: 'continuation-2',
+      })
+      return new Response(JSON.stringify({
+        projectId: '22222222-2222-4222-8222-222222222222',
+        snapshots: [],
+      }), { status: 200, headers: { 'Content-Type': 'application/json' } })
+    })
+    vi.stubGlobal('fetch', fetchMock)
+
+    await createProjectFromStagedMedia({} as never, 'user-1', {
+      images: ['data:image/jpeg;base64,restored'],
+      projectId: '22222222-2222-4222-8222-222222222222',
+      continuationId: 'continuation-2',
+    })
+
+    expect(sequence).toEqual(['upload', 'create', 'persist'])
+  })
+
+  it('does not create an empty project when restored anonymous media upload fails', async () => {
+    vi.mocked(uploadImage).mockResolvedValueOnce(null)
+    const fetchMock = vi.fn()
+    vi.stubGlobal('fetch', fetchMock)
+
+    await expect(createProjectFromStagedMedia({} as never, 'user-1', {
+      images: ['data:image/jpeg;base64,broken'],
+      projectId: '33333333-3333-4333-8333-333333333333',
+      continuationId: 'continuation-3',
+    })).rejects.toThrow('Failed to upload image')
+
+    expect(fetchMock).not.toHaveBeenCalledWith('/api/projects/create', expect.anything())
   })
 
   it('binds a text-only prompt to its project so mobile editor remounts cannot lose CUI entry', async () => {
@@ -206,6 +290,7 @@ describe('createProject upload flow', () => {
 
     await expect(getCreateDraft()).resolves.toMatchObject({
       images: ['data:image/jpeg;base64,draft'],
+      projectId: expect.stringMatching(/^[0-9a-f-]{36}$/),
       prompt: 'try this skill',
       homeSkillId: 'home-skill-id',
       skillLaunchContext: {

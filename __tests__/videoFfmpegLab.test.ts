@@ -2,18 +2,20 @@ import { describe, expect, it } from 'vitest'
 import { execFile } from 'child_process'
 import { readFileSync } from 'fs'
 import { mkdtemp, readFile, rm } from 'fs/promises'
+import { createServer } from 'http'
 import { tmpdir } from 'os'
 import { join } from 'path'
 import { promisify } from 'util'
 import { MAX_ACCEPTED_DURATION, MAX_DURATION } from '@/lib/video-upload'
 import { findFfmpeg } from '@/lib/ffmpeg-runtime'
 import { buildMediaItems, runNodeMediaCode } from '@/lib/media-sandbox'
+import { readAgentRuntimeSource } from './helpers/agentRuntimeSource'
 
 const exec = promisify(execFile)
 
 describe('Agent FFmpeg video lab', () => {
   it('allows long uploads for Agent-side FFmpeg workflows', () => {
-    expect(MAX_DURATION).toBeGreaterThanOrEqual(120)
+    expect(MAX_DURATION).toBe(900)
     expect(MAX_ACCEPTED_DURATION).toBeGreaterThan(38.776)
   })
 
@@ -22,23 +24,24 @@ describe('Agent FFmpeg video lab', () => {
     const readme = readFileSync(join(process.cwd(), 'packages/makaron-cli/README.md'), 'utf8')
     const skill = readFileSync(join(process.cwd(), 'packages/makaron-cli/skills/makaron/SKILL.md'), 'utf8')
 
-    expect(cli).toContain('const MAX_VIDEO_UPLOAD_DURATION = 120')
+    expect(cli).toContain('const MAX_VIDEO_UPLOAD_DURATION = 900')
     expect(cli).toContain('const MAX_VIDEO_UPLOAD_FILE_SIZE_MB = 50')
     expect(cli).toContain('const MAX_VIDEO_PROVIDER_REFERENCE_DURATION = 15')
-    expect(cli).toContain('maxDuration: MAX_VIDEO_PROVIDER_REFERENCE_DURATION')
-    expect(cli).toContain('Math.min(MAX_VIDEO_PROVIDER_REFERENCE_DURATION')
+    expect(cli).toContain('SEEDANCE25_MAX_VIDEO_REFERENCE_DURATION = 30')
+    expect(cli).toContain('providerMaxDuration = isSeedance25 ? SEEDANCE25_MAX_VIDEO_REFERENCE_DURATION : MAX_VIDEO_PROVIDER_REFERENCE_DURATION')
+    expect(cli).toContain('Math.min(providerMaxDuration')
     expect(cli).not.toContain('const MAX_VIDEO_DURATION = 15')
-    expect(readme).toContain('max 50MB, max 120s')
-    expect(skill).toContain('max 50MB, max 120s')
+    expect(readme).toContain('max 50MB, max 900s (15 minutes)')
+    expect(skill).toContain('max 50MB, max 900s (15 minutes)')
     expect(readme).toContain('frame pixels 409,600-2,086,876')
     expect(skill).toContain('frame pixels 409,600-2,086,876')
-    expect(readme).not.toContain('max 200MB, max 120s')
-    expect(skill).not.toContain('max 200MB, max 120s')
+    expect(readme).not.toContain('max 200MB, max 900s')
+    expect(skill).not.toContain('max 200MB, max 900s')
   })
 
   it('publishes direct FFmpeg MP4 deliverables to the timeline by default', () => {
     const skill = readFileSync(join(process.cwd(), 'src/skills/video-ffmpeg-lab/SKILL.md'), 'utf8')
-    const agent = readFileSync(join(process.cwd(), 'src/lib/agent.ts'), 'utf8')
+    const agent = readAgentRuntimeSource()
 
     expect(skill).toContain('if FFmpeg produces user-facing MP4 deliverables, publish them to the timeline immediately')
     expect(skill).toContain('Direct user-facing split/trim/export requests are different: publish those MP4 deliverables to the timeline')
@@ -48,7 +51,7 @@ describe('Agent FFmpeg video lab', () => {
   })
 
   it('keeps run_code workspace outputs index-backed and publishable by explicit path', () => {
-    const agent = readFileSync(join(process.cwd(), 'src/lib/agent.ts'), 'utf8')
+    const agent = readAgentRuntimeSource()
 
     expect(agent).toContain('async function ensureWorkspaceFileIndex')
     expect(agent).toContain('await ensureWorkspaceFileIndex(ctx, output)')
@@ -58,7 +61,7 @@ describe('Agent FFmpeg video lab', () => {
   })
 
   it('cleans invalid workspace output durations from published timeline titles', () => {
-    const agent = readFileSync(join(process.cwd(), 'src/lib/agent.ts'), 'utf8')
+    const agent = readAgentRuntimeSource()
 
     expect(agent).toContain('function outputDisplayName')
     expect(agent).toContain('(?:undefined|null|NaN)s?')
@@ -139,6 +142,91 @@ describe('Agent FFmpeg video lab', () => {
     expect(result.primaryOutput?.height).toBe(120)
     expect(result.primaryOutput?.probe).toBeTruthy()
   }, 20_000)
+
+  it('hydrates only an external source range for Node media work', async () => {
+    const tempDir = await mkdtemp(join(tmpdir(), 'makaron-source-range-'))
+    const sourcePath = join(tempDir, 'source.mp4')
+    const ffmpegPath = await findFfmpeg()
+    let server: ReturnType<typeof createServer> | undefined
+
+    try {
+      await exec(ffmpegPath, [
+        '-y',
+        '-f', 'lavfi',
+        '-i', 'testsrc2=duration=4:size=160x90:rate=24',
+        '-f', 'lavfi',
+        '-i', 'sine=frequency=440:duration=4',
+        '-shortest',
+        '-c:v', 'libx264',
+        '-pix_fmt', 'yuv420p',
+        '-c:a', 'aac',
+        '-movflags', '+faststart',
+        sourcePath,
+      ])
+      const source = await readFile(sourcePath)
+      server = createServer((req, res) => {
+        const range = req.headers.range?.match(/^bytes=(\d+)-(\d*)$/)
+        if (!range) {
+          res.writeHead(200, {
+            'Content-Type': 'video/mp4',
+            'Content-Length': source.length,
+            'Accept-Ranges': 'bytes',
+          })
+          res.end(source)
+          return
+        }
+        const start = Number(range[1])
+        const end = range[2] ? Math.min(Number(range[2]), source.length - 1) : source.length - 1
+        res.writeHead(206, {
+          'Content-Type': 'video/mp4',
+          'Content-Length': end - start + 1,
+          'Content-Range': `bytes ${start}-${end}/${source.length}`,
+          'Accept-Ranges': 'bytes',
+        })
+        res.end(source.subarray(start, end + 1))
+      })
+      await new Promise<void>(resolve => server!.listen(0, '127.0.0.1', resolve))
+      const address = server.address()
+      if (!address || typeof address === 'string') throw new Error('HTTP test server did not expose a port')
+      const sourceUrl = `http://127.0.0.1:${address.port}/source.mp4`
+
+      const result = await runNodeMediaCode({
+        code: `
+          const fs = require('fs');
+          const probe = await probeVideo(inputFiles[0].inputPath);
+          return {type: 'text', content: JSON.stringify({
+            duration: probe.duration,
+            bytes: fs.statSync(inputFiles[0].inputPath).size,
+            sourceRange: inputFiles[0].sourceRange,
+          })};
+        `,
+        mediaRefs: [1],
+        mediaItems: [{
+          index: 1,
+          kind: 'video',
+          url: sourceUrl,
+          duration: 1.2,
+          sourceRange: {
+            source_url: sourceUrl,
+            start_sec: 1.1,
+            end_sec: 2.3,
+          },
+        }],
+        projectId: `source-range-${Date.now()}`,
+        userId: 'test-user',
+        timeoutMs: 30_000,
+      })
+
+      expect(result.type).toBe('text')
+      const content = JSON.parse(result.content || '{}')
+      expect(content.duration).toBeCloseTo(1.2, 1)
+      expect(content.bytes).toBeLessThan(source.length)
+      expect(content.sourceRange).toMatchObject({ start_sec: 1.1, end_sec: 2.3 })
+    } finally {
+      await new Promise<void>(resolve => server?.close(() => resolve()) ?? resolve())
+      await rm(tempDir, { recursive: true, force: true })
+    }
+  }, 45_000)
 
   it('cuts ten video inputs into one workspace MP4 without losing the output index', async () => {
     const tempDir = await mkdtemp(join(tmpdir(), 'makaron-10-video-'))

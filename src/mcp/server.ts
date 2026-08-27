@@ -8,6 +8,7 @@ import { writeVideoScript } from '../lib/skills/write-video-script';
 import { createVideo } from '../lib/skills/create-video';
 import { getVideoStatus } from '../lib/skills/get-video-status';
 import { analyzeVideo } from '../lib/skills/analyze-video';
+import { createAudio } from '../lib/skills/create-audio';
 import { createMusic } from '../lib/skills/create-music';
 import { getMusicStatus } from '../lib/skills/get-music-status';
 
@@ -19,8 +20,15 @@ function resolveImage(input: string): string {
     const filePath = input.startsWith('file://') ? input.slice(7) : input;
     if (!existsSync(filePath)) throw new Error(`File not found: ${filePath}`);
     const buf = readFileSync(filePath);
-    const ext = filePath.toLowerCase().endsWith('.png') ? 'png' : 'jpeg';
-    return `data:image/${ext};base64,${buf.toString('base64')}`;
+    const lower = filePath.toLowerCase();
+    const mimeType = lower.endsWith('.png')
+      ? 'image/png'
+      : lower.endsWith('.webp')
+        ? 'image/webp'
+        : lower.endsWith('.avif')
+          ? 'image/avif'
+          : 'image/jpeg';
+    return `data:${mimeType};base64,${buf.toString('base64')}`;
   } catch (e: unknown) {
     if (e instanceof Error && e.message.startsWith('File not found')) throw e;
     throw new Error(`Cannot resolve image: ${input.slice(0, 100)}. Use a URL or base64 data URL.`);
@@ -29,13 +37,18 @@ function resolveImage(input: string): string {
 
 /** In stdio mode, save result to disk. In serverless mode, return base64 in MCP response. */
 function formatResult(image: string, message: string, prefix: string) {
+  const mimeType = image.startsWith('data:image/png')
+    ? 'image/png' as const
+    : image.startsWith('data:image/webp')
+      ? 'image/webp' as const
+      : 'image/jpeg' as const;
+  const extension = mimeType === 'image/png' ? 'png' : mimeType === 'image/webp' ? 'webp' : 'jpg';
   // Try to save to disk (stdio mode). If fs is unavailable or cwd is read-only (serverless), return base64.
   try {
     const outDir = join(process.cwd(), 'mcp-output');
     if (!existsSync(outDir)) mkdirSync(outDir, { recursive: true });
-    const raw = image.replace(/^data:image\/\w+;base64,/, '');
-    const ext = image.includes('image/png') ? 'png' : 'jpg';
-    const filename = `${prefix}-${Date.now()}.${ext}`;
+    const raw = image.replace(/^data:image\/[a-z0-9.+-]+;base64,/i, '');
+    const filename = `${prefix}-${Date.now()}.${extension}`;
     const filePath = join(outDir, filename);
     writeFileSync(filePath, Buffer.from(raw, 'base64'));
     return {
@@ -43,11 +56,11 @@ function formatResult(image: string, message: string, prefix: string) {
     };
   } catch {
     // Serverless: return base64 image in MCP content
-    const raw = image.replace(/^data:image\/\w+;base64,/, '');
+    const raw = image.replace(/^data:image\/[a-z0-9.+-]+;base64,/i, '');
     return {
       content: [
         { type: 'text' as const, text: message },
-        { type: 'image' as const, data: raw, mimeType: 'image/jpeg' as const },
+        { type: 'image' as const, data: raw, mimeType },
       ],
     };
   }
@@ -59,12 +72,14 @@ export interface McpServerOptions {
     toolName: string,
     model?: string,
     durationMs?: number,
-    usage?: { inputTokens: number; outputTokens: number; modelId: string },
+    usage?: { inputTokens: number; outputTokens: number; modelId: string; providerCostUsd?: number },
     meta?: {
       videoDurationSec?: number
       imageCount?: number
       videoModel?: string
       videoResolution?: string
+      referenceVideoDurationSec?: number
+      contentFilter?: boolean
       seedAudioDurationSec?: number
       seedAudioProviderCredits?: number
       seedAudioGenerationSec?: number
@@ -109,6 +124,7 @@ IMPORTANT: Image generation takes 15-30 seconds. Long and detailed prompts are f
       model: z.enum(['gemini', 'gemini-lite', 'qwen', 'pony', 'wai', 'openai']).nullish().describe('NEVER set unless user literally names a model. Use gemini-lite only when the user asks for Nano Banana 2 Lite / Lite. Gemini refused→retry with qwen. For design/poster/text-heavy tasks, try openai. Otherwise ALWAYS omit.'),
       referenceImages: z.array(z.string()).nullish().describe('Additional reference images (up to 3). Put the original photo here when restoring face/color/details from it.'),
       aspectRatio: z.string().nullish().describe('Target aspect ratio e.g. "4:5", "1:1", "16:9"'),
+      background: z.enum(['auto', 'opaque', 'transparent']).nullish().describe('Output background. Set transparent for transparent/no-background output, background removal, subject cutout/isolation, or a reusable PNG/sticker/overlay/alpha asset. With image input this is GPT Image 2 image-to-image cutout; without image input it is text-to-image. It never returns an opaque fallback.'),
     },
     async (params) => {
       try {
@@ -132,6 +148,7 @@ IMPORTANT: Image generation takes 15-30 seconds. Long and detailed prompts are f
             skill: params.skill ?? undefined,
             preferredModel: params.model ?? undefined,
             aspectRatio: params.aspectRatio ?? undefined,
+            background: params.background ?? undefined,
           },
           ctx,
         );
@@ -246,20 +263,24 @@ Tips:
     `Submit a video rendering task. Returns a taskId for polling.
 
 IMPORTANT:
-- SeeDance supports native text-to-video with no images. For image/reference generation, images must be publicly accessible URLs (not base64).
+- SeeDance and MiniMax H3 support native text-to-video with no images. For image/reference generation, images must be publicly accessible URLs (not base64).
 - EvoLink Seedance reference images must be JPEG/PNG/WebP, width and height each 300-6000px, aspect ratio 0.4-2.5, and <=30MB each. Input errors distinguish too_small, too_large, invalid_aspect_ratio, unsupported_format, and unreadable. NON_RETRYABLE means the same URL must not be resubmitted; prepare a new compliant URL or replace the source first.
 - When images are provided, script should use <<<media_N>>> format (from makaron_write_video_script output). Text-to-video scripts should not invent media markers.
 - Provider-generated video rendering takes 3-5 minutes; Grok is usually around 30-40 seconds; Gemini Omni is usually around 30-70 seconds plus Storage handoff. Use makaron_get_video_status to poll.
-- Duration: omit for smart mode. SeeDance supports integer output duration 4-15s (default 5s); Kling supports 5-15s; Grok 1.5 supports 1-15s for single-image; Gemini Omni supports 3-10s in Makaron.
-- Resolution: omit or use "auto" for the selected model default. seedance-fast/seedance-mini/grok support 480p/720p; seedance supports 480p/720p/1080p; kling supports 720p/1080p/4k; google-omni outputs 720p.
+- Duration: omit for smart mode. Seedance 2.5 supports 4-30s; SeeDance 2.0 and MiniMax H3 support 4-15s; Kling supports 5-15s; Grok 1.5 supports 1-15s; Gemini Omni supports 3-10s.
+- Resolution: omit or use "auto" for the selected model default. Seedance 2.5 supports 480p/720p; minimax-h3 supports 768p/2k and defaults to 768p; seedance-fast/seedance-mini/grok support 480p/720p; seedance supports 480p/720p/1080p; kling supports 720p/1080p/4k; google-omni outputs 720p.
+- Seedance 2.5 accepts up to 30 image, 10 video, and 10 audio references, plus dedicated edit/extend modes.
 
 Models:
 - seedance-fast (default) — SeeDance 2.0 Fast via Evolink, 480p/720p, default 720p
 - seedance-mini — SeeDance 2.0 Mini via Evolink, lower-cost 480p/720p route for drafts and multi-size tests
 - seedance — SeeDance 2.0 standard via Evolink, supports 480p/720p/1080p
+- seedance-2.5 — Seedance 2.5 via Evolink, 4-30s, multimodal references, native audio, edit and extend
 - kling — Kling v3-omni, supports 720p/1080p/4k
 - grok — Grok Video 1.5 via xAI, fastest single-image-to-video, native audio, defaults to 480p at $0.08/s + $0.01/input image
 - google-omni — Gemini Omni Flash via Google, fast image/video generation and editing, up to 6 image references without a video reference, one video reference for direct edits, native generated audio, no uploaded audio references
+- minimax-h3 — MiniMax H3 direct API, native text-to-video plus up to 9 image / 3 video / 3 audio references, 4-15s, public 768p/2K, default 768P
+- sync-lipsync-v3 — exact replacement-audio lip sync; requires exactly one source video and one audio URL, preserves source framing and the supplied audio
 
 Example script format:
 Shot 1 (2s): Wide shot, <<<media_1>>> ...
@@ -267,11 +288,19 @@ Shot 2 (3s): Close-up, <<<media_2>>> ...
 Style: Cinematic, warm golden light.`,
     {
       script: z.string().describe('Video script with <<<media_N>>> references'),
-      images: z.array(z.string().url()).max(7).default([]).describe('Optional public image URLs. Omit or pass [] for native SeeDance text-to-video.'),
-      duration: z.number().optional().describe('Duration in seconds. SeeDance accepts integer output duration 4-15s (default 5s); Kling supports 5-15s; Grok 1.5 supports 1-15s; Gemini Omni supports 3-10s. Omit for smart mode.'),
+      images: z.array(z.string().url()).max(30).default([]).describe('Optional public image URLs. Seedance 2.5 accepts up to 30; older routes may accept fewer.'),
+      videoUrls: z.array(z.string().url()).max(10).optional().describe('Public reference video URLs. Sync Lipsync v3 requires exactly one; Seedance 2.5 accepts up to 10 with 30 seconds combined.'),
+      audioUrls: z.array(z.string().url()).max(10).optional().describe('Public reference audio URLs. Sync Lipsync v3 requires exactly one replacement track; Seedance 2.5 accepts up to 10.'),
+      duration: z.number().optional().describe('Duration in seconds. Sync Lipsync v3 follows a 2-120s source; Seedance 2.5 accepts 4-30s; SeeDance 2.0 and MiniMax H3 accept 4-15s. Omit for smart mode.'),
       aspectRatio: z.enum(['auto', '16:9', '9:16', '1:1', '4:3', '3:4', '21:9', '3:2', '2:3']).optional().describe('Aspect ratio. Use auto/adaptive or a provider-supported ratio. Seedance supports 21:9. Grok image-to-video ignores forced ratios to avoid stretching the source image; pad the source or choose another model for a fixed final shape.'),
-      videoModel: z.enum(['seedance-fast', 'seedance-mini', 'seedance', 'kling', 'grok', 'google-omni']).optional().describe('Video model: seedance-fast (default), seedance-mini (lower-cost drafts), seedance (standard/1080p), kling (1080p/4k), grok (fastest single-image-to-video with native audio), or google-omni (fast Gemini Omni image/video generation and editing with native generated audio)'),
-      videoResolution: z.enum(['auto', '480p', '720p', '1080p', '4k']).optional().describe('Output resolution. Use auto to follow the selected model default.'),
+      videoModel: z.enum(['seedance-fast', 'seedance-mini', 'seedance', 'seedance-2.5', 'kling', 'grok', 'google-omni', 'minimax-h3', 'sync-lipsync-v3']).optional().describe('Video model. sync-lipsync-v3 requires exactly one video and one replacement audio track.'),
+      videoResolution: z.enum(['auto', '480p', '720p', '768p', '1080p', '2k', '4k']).optional().describe('Output resolution. Use auto to follow the selected model default; MiniMax H3 supports 768p/2k and defaults to 768p.'),
+      operation: z.enum(['generate', 'edit', 'extend']).optional().describe('Seedance 2.5 operation. edit and extend require videoUrls.'),
+      extendDirection: z.enum(['forward', 'backward']).optional().describe('Seedance 2.5 extension direction.'),
+      generateAudio: z.boolean().optional().describe('Generate synchronized native audio. Default true for Seedance 2.5.'),
+      contentFilter: z.boolean().optional().describe('Seedance 2.5 output content filter. Default true. False enables Mature Mode and costs 10% more; use only after explicit user confirmation, including the recovery action.'),
+      outputFormat: z.enum(['mp4', 'mov']).optional().describe('MP4/H264 for playback or MOV for grading.'),
+      webSearch: z.boolean().optional().describe('Enable Seedance 2.5 text-to-video web search grounding.'),
     },
     async (params) => {
       try {
@@ -283,10 +312,18 @@ Style: Cinematic, warm golden light.`,
         const result = await createVideo({
           script: params.script,
           images: params.images,
+          videoUrls: params.videoUrls,
+          audioUrls: params.audioUrls,
           duration: params.duration,
           aspectRatio: params.aspectRatio,
           videoModel: params.videoModel,
           videoResolution: params.videoResolution,
+          videoOperation: params.operation,
+          videoExtendDirection: params.extendDirection,
+          generateAudio: params.generateAudio,
+          contentFilter: params.contentFilter,
+          outputFormat: params.outputFormat,
+          webSearch: params.webSearch,
         });
 
         if (result.success) {
@@ -295,6 +332,7 @@ Style: Cinematic, warm golden light.`,
             imageCount: params.images.length,
             videoModel: params.videoModel,
             videoResolution: params.videoResolution,
+            contentFilter: params.contentFilter,
           });
         }
         return { content: [{ type: 'text' as const, text: result.success
@@ -333,8 +371,8 @@ Example: Edit a video to add cinematic color grading:
       images: z.array(z.string().url()).max(7).optional().describe('Optional reference images (public URLs)'),
       duration: z.number().optional().describe('Output duration in seconds. SeeDance accepts integer output duration 4-15s (default 5s); Kling supports 5-15s; Grok 1.5 supports 1-15s for one image but does not edit/reference videos; Gemini Omni supports 3-10s video editing in Makaron. Omit for smart mode.'),
       aspectRatio: z.enum(['auto', '16:9', '9:16', '1:1', '4:3', '3:4', '21:9', '3:2', '2:3']).optional().describe('Aspect ratio. Use auto/adaptive or a provider-supported ratio.'),
-      videoModel: z.enum(['seedance-fast', 'seedance-mini', 'seedance', 'kling', 'grok', 'google-omni']).optional().describe('Video model: seedance-fast (default reference-video edit), seedance-mini (lower-cost drafts), seedance (standard/1080p), kling (base/direct edit), grok (single-image only; no video edit), or google-omni (fast direct video edit with native generated audio)'),
-      videoResolution: z.enum(['auto', '480p', '720p', '1080p', '4k']).optional().describe('Output resolution. Use auto to follow the selected model default.'),
+      videoModel: z.enum(['seedance-fast', 'seedance-mini', 'seedance', 'seedance-2.5', 'kling', 'grok', 'google-omni', 'minimax-h3']).optional().describe('Video model. Seedance 2.5 uses its dedicated typed video-edit route; MiniMax H3 supports feature/reference video.'),
+      videoResolution: z.enum(['auto', '480p', '720p', '768p', '1080p', '2k', '4k']).optional().describe('Output resolution. Use auto to follow the selected model default; MiniMax H3 supports 768p/2k and defaults to 768p.'),
       referType: z.enum(['base', 'feature']).optional().describe('Video role: "base" (edit this video, default) or "feature" (use as style/motion reference)'),
       keepOriginalSound: z.boolean().optional().describe('Keep original video sound (default: false)'),
     },
@@ -346,7 +384,7 @@ Example: Edit a video to add cinematic color grading:
         }
         const t0 = Date.now();
         const resolvedModel = params.videoModel ?? 'seedance-fast';
-        const resolvedReferType = params.referType ?? (resolvedModel === 'seedance' || resolvedModel === 'seedance-fast' || resolvedModel === 'seedance-mini' ? 'feature' : 'base');
+        const resolvedReferType = params.referType ?? (resolvedModel === 'seedance' || resolvedModel === 'seedance-fast' || resolvedModel === 'seedance-mini' || resolvedModel === 'minimax-h3' ? 'feature' : 'base');
         const result = await createVideo({
           script: params.editPrompt,
           images: params.images ?? [],
@@ -357,6 +395,7 @@ Example: Edit a video to add cinematic color grading:
           videoUrl: params.videoUrl,
           videoReferType: resolvedReferType,
           keepOriginalSound: params.keepOriginalSound ?? false,
+          videoOperation: resolvedModel === 'seedance-2.5' ? 'edit' : 'generate',
         });
 
         if (result.success) {
@@ -365,6 +404,7 @@ Example: Edit a video to add cinematic color grading:
             imageCount: params.images?.length ?? 0,
             videoModel: resolvedModel,
             videoResolution: params.videoResolution,
+            referenceVideoDurationSec: resolvedModel === 'minimax-h3' ? (params.duration ?? 10) : undefined,
           });
         }
         return { content: [{ type: 'text' as const, text: result.success
@@ -453,11 +493,75 @@ Poll every 10-15 seconds. Do NOT poll in a tight loop.`,
     },
   );
 
-  // ── Music generation ─────────────────────────────────────────────────────
+  // ── Unified audio generation ─────────────────────────────────────────────
+
+  server.tool(
+    'makaron_create_audio',
+    `Generate one complete standalone soundtrack with Seed Audio 1.0.
+
+Use a compact playback-order timeline for narration, dialogue, multilingual speech, music, ambience, and sound effects. Use kind=translation with exactly one MP3/WAV audio reference and target_language to translate speech while retaining the speaker's voice and performance. The current gateway accepts prompts up to 1,500 characters and outputs up to 120 seconds. You may provide up to 3 audio references or 1 image reference, but never both. Bind ordinary audio references in prompt order as @audio1, @audio2, and @audio3. WAV/48 kHz is the production-master default.`,
+    {
+      kind: z.enum(['voiceover', 'dialogue', 'music', 'sound_design', 'mixed', 'translation']).optional(),
+      prompt: z.string().max(1250).optional().describe('Complete timeline-directed Seed Audio production brief. Optional only for kind=translation.'),
+      target_language: z.string().optional().describe('Required for kind=translation.'),
+      translated_script: z.string().optional().describe('Optional exact target-language script. Omit to translate all speech in audio_references[0] directly.'),
+      duration_seconds: z.number().positive().max(120).optional().describe('Target duration in seconds.'),
+      audio_references: z.array(z.string()).max(3).optional().describe('Public HTTPS audio URLs or provider preset voice IDs, bound as @audio1..@audio3 in the prompt.'),
+      image_urls: z.array(z.string().url()).max(1).optional().describe('At most one public HTTPS image URL; mutually exclusive with audio_references.'),
+      speech_rate: z.number().min(0.5).max(2).optional(),
+      loudness_rate: z.number().min(0.5).max(2).optional(),
+      pitch_rate: z.number().int().min(-12).max(12).optional(),
+      format: z.enum(['wav', 'mp3', 'ogg_opus', 'pcm']).optional(),
+      sample_rate: z.union([z.literal(8000), z.literal(16000), z.literal(24000), z.literal(48000)]).optional(),
+      callback_url: z.string().url().optional().describe('Optional HTTPS callback URL.'),
+      title: z.string().optional(),
+    },
+    async (params) => {
+      try {
+        if (options?.onToolStart) {
+          const check = await options.onToolStart('makaron_create_seed_audio');
+          if (!check.allowed) return { content: [{ type: 'text' as const, text: check.message || 'Insufficient credits' }] };
+        }
+        const t0 = Date.now();
+        const result = await createAudio({
+          prompt: params.prompt,
+          kind: params.kind,
+          targetLanguage: params.target_language,
+          translatedScript: params.translated_script,
+          durationSeconds: params.duration_seconds,
+          audioReferences: params.audio_references,
+          imageUrls: params.image_urls,
+          speechRate: params.speech_rate,
+          loudnessRate: params.loudness_rate,
+          pitchRate: params.pitch_rate,
+          format: params.format,
+          sampleRate: params.sample_rate,
+          callbackUrl: params.callback_url,
+          title: params.title,
+        });
+        if (result.success) {
+          await options?.onToolComplete?.('makaron_create_seed_audio', result.model, Date.now() - t0, undefined, {
+            seedAudioDurationSec: result.duration,
+            seedAudioProviderCredits: result.creditsUsed,
+            seedAudioGenerationSec: result.generationSeconds,
+          });
+        }
+        return { content: [{ type: 'text' as const, text: result.success
+          ? `${result.message}\n\nAudio URL: ${result.audioUrl || 'not returned'}\nTask ID: ${result.taskId || 'n/a'}\nFormat: ${result.format || 'n/a'} / ${result.sampleRate || 'n/a'} Hz`
+          : result.message }] };
+      } catch (e) {
+        const msg = e instanceof Error ? e.message : String(e);
+        console.error('[MCP create_audio error]', msg);
+        return { content: [{ type: 'text' as const, text: `Error: ${msg}` }] };
+      }
+    },
+  );
+
+  // ── Music generation (compatibility alias) ───────────────────────────────
 
   server.tool(
     'makaron_create_music',
-    `Generate background music using Seed Audio. Returns a completed audio URL when generation succeeds.
+    `Compatibility alias for music-only Seed Audio requests. Returns a completed audio URL when generation succeeds.
 
 - Music generation waits for the provider result and returns one persisted audio asset when project persistence is available.
 - Default: instrumental background music, no vocals.
@@ -465,9 +569,14 @@ Poll every 10-15 seconds. Do NOT poll in a tight loop.`,
 - Style: optional genre/mood tags for custom mode (e.g. "lo-fi, ambient, chill").
 - New music generation no longer uses Suno.`,
     {
-      prompt: z.string().describe('Music description: genre, mood, instruments (max 500 chars)'),
+      prompt: z.string().max(1500).describe('Timeline-directed music description: genre, mood, energy arc, instruments, mix role, and ending.'),
       instrumental: z.boolean().optional().describe('Instrumental only, no vocals (default: true)'),
       style: z.string().optional().describe('Genre/mood tags for custom mode (e.g. "lo-fi, ambient")'),
+      duration_seconds: z.number().positive().max(120).optional(),
+      loudness_rate: z.number().min(0.5).max(2).optional(),
+      pitch_rate: z.number().int().min(-12).max(12).optional(),
+      format: z.enum(['wav', 'mp3', 'ogg_opus', 'pcm']).optional(),
+      sample_rate: z.union([z.literal(8000), z.literal(16000), z.literal(24000), z.literal(48000)]).optional(),
     },
     async (params) => {
       try {
@@ -480,6 +589,11 @@ Poll every 10-15 seconds. Do NOT poll in a tight loop.`,
           prompt: params.prompt,
           instrumental: params.instrumental,
           style: params.style,
+          durationSeconds: params.duration_seconds,
+          loudnessRate: params.loudness_rate,
+          pitchRate: params.pitch_rate,
+          format: params.format,
+          sampleRate: params.sample_rate,
         });
 
         if (result.success) {

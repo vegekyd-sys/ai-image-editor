@@ -6,10 +6,34 @@ import sharp from 'sharp';
 import type { SupabaseClient } from '@supabase/supabase-js';
 import type { VideoMeta } from '@/types';
 
-const MAX_VIDEO_DURATION = 120;
+const MAX_VIDEO_DURATION = 900;
 const MAX_VIDEO_DURATION_TOLERANCE = 1;
 const MAX_VIDEO_FRAME_PIXELS = 2_086_876;
 const MAX_VIDEO_DIMENSION_PROBE_BYTES = 220 * 1024 * 1024;
+const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+
+function validClientProjectId(value: unknown): value is string {
+  return typeof value === 'string' && UUID_PATTERN.test(value);
+}
+
+function validIdempotencyKey(value: unknown): value is string | undefined {
+  return value === undefined || (typeof value === 'string' && value.length > 0 && value.length <= 200);
+}
+
+async function findOwnedProject(
+  supabase: SupabaseClient,
+  userId: string,
+  projectId: string,
+): Promise<{ id: string } | null> {
+  const { data, error } = await supabase
+    .from('projects')
+    .select('id')
+    .eq('id', projectId)
+    .eq('user_id', userId)
+    .maybeSingle();
+  if (error) throw error;
+  return data;
+}
 
 function formatSeconds(seconds: number): string {
   return Number.isInteger(seconds) ? String(seconds) : seconds.toFixed(1).replace(/\.0$/, '');
@@ -27,12 +51,17 @@ async function resolveImageUrl(
   const res = await fetch(url);
   if (!res.ok) throw new Error(`Failed to fetch image: ${res.status}`);
   const buffer = Buffer.from(await res.arrayBuffer());
-  const jpeg = await sharp(buffer)
-    .resize(2048, 2048, { fit: 'inside', withoutEnlargement: true })
-    .jpeg({ quality: 92 })
-    .toBuffer();
-  const base64 = `data:image/jpeg;base64,${jpeg.toString('base64')}`;
-  const filename = `snapshot-${crypto.randomUUID()}.jpg`;
+  const pipeline = sharp(buffer, { failOn: 'error' })
+    .resize(2048, 2048, { fit: 'inside', withoutEnlargement: true });
+  const metadata = await sharp(buffer, { failOn: 'error' }).metadata();
+  const preserveAlpha = Boolean(metadata.hasAlpha);
+  const normalized = preserveAlpha
+    ? await pipeline.png({ compressionLevel: 9 }).toBuffer()
+    : await pipeline.jpeg({ quality: 92 }).toBuffer();
+  const mimeType = preserveAlpha ? 'image/png' : 'image/jpeg';
+  const extension = preserveAlpha ? 'png' : 'jpg';
+  const base64 = `data:${mimeType};base64,${normalized.toString('base64')}`;
+  const filename = `snapshot-${crypto.randomUUID()}.${extension}`;
   const storageUrl = await uploadImage(supabase, userId, projectId, filename, base64);
   return storageUrl || url;
 }
@@ -147,7 +176,16 @@ export async function POST(req: NextRequest) {
       metaEventId,
       skillId: marketingSkillId,
       hasPrompt: marketingHasPrompt,
+      clientProjectId,
+      idempotencyKey,
     } = await req.json();
+
+    if (clientProjectId !== undefined && !validClientProjectId(clientProjectId)) {
+      return NextResponse.json({ error: 'clientProjectId must be a valid UUID' }, { status: 400 });
+    }
+    if (!validIdempotencyKey(idempotencyKey)) {
+      return NextResponse.json({ error: 'Invalid idempotencyKey' }, { status: 400 });
+    }
 
     // Support single or multiple images
     const urls: (string | undefined)[] = imageUrls || (imageUrl ? [imageUrl] : []);
@@ -159,8 +197,16 @@ export async function POST(req: NextRequest) {
     // Add images/videos to existing project (used by CLI chat --image / --video)
     if (_addToProject && (imageCount > 0 || videos.length > 0)) {
       const existingProjectId = _addToProject as string;
+      if (!validClientProjectId(existingProjectId)) {
+        return NextResponse.json({ error: '_addToProject must be a valid UUID' }, { status: 400 });
+      }
+      const ownedProject = await findOwnedProject(supabase, userId, existingProjectId);
+      if (!ownedProject) {
+        return NextResponse.json({ error: 'Project not found' }, { status: 404 });
+      }
       // Atomic sort_order allocation
-      const { data: startSort } = await supabase.rpc('next_sort_order', { p_project_id: existingProjectId });
+      const { data: startSort, error: sortError } = await supabase.rpc('next_sort_order', { p_project_id: existingProjectId });
+      if (sortError) throw sortError;
       let sortOrder = startSort ?? 0;
 
       const snapshots: { snapshotId: string; imageUrl: string; type?: string }[] = [];
@@ -174,10 +220,11 @@ export async function POST(req: NextRequest) {
         }
         if (!finalUrl) continue;
         const snapshotId = crypto.randomUUID();
-        await supabase.from('snapshots').insert({
+        const { error: snapshotError } = await supabase.from('snapshots').insert({
           id: snapshotId, project_id: existingProjectId, image_url: finalUrl,
           tips: [], message_id: '', sort_order: sortOrder++,
         });
+        if (snapshotError) throw snapshotError;
         snapshots.push({ snapshotId, imageUrl: finalUrl });
       }
 
@@ -249,9 +296,32 @@ export async function POST(req: NextRequest) {
 
     // Text-to-image: no images/videos, just create empty project (agent will generate)
     if (imageCount === 0 && videos.length === 0) {
-      const projectId = crypto.randomUUID();
+      const projectId = clientProjectId || crypto.randomUUID();
+      if (clientProjectId) {
+        const existing = await findOwnedProject(supabase, userId, projectId);
+        if (existing) {
+          return NextResponse.json({
+            projectId,
+            snapshots: [],
+            projectUrl: `https://www.makaron.app/projects/${projectId}`,
+            idempotent: true,
+          });
+        }
+      }
       const { error: projectError } = await supabase.from('projects').insert({ id: projectId, user_id: userId, title: title || 'Untitled', timeline_version: 2 });
       if (projectError) {
+        if (clientProjectId && projectError.code === '23505') {
+          const existing = await findOwnedProject(supabase, userId, projectId);
+          if (existing) {
+            return NextResponse.json({
+              projectId,
+              snapshots: [],
+              projectUrl: `https://www.makaron.app/projects/${projectId}`,
+              idempotent: true,
+            });
+          }
+          return NextResponse.json({ error: 'Project ID already exists' }, { status: 409 });
+        }
         return NextResponse.json({ error: projectError.message }, { status: 500 });
       }
       sendCustomizeProductCapiAfter(req, {
@@ -265,11 +335,12 @@ export async function POST(req: NextRequest) {
         projectId,
         snapshots: [],
         projectUrl: `https://www.makaron.app/projects/${projectId}`,
+        idempotent: false,
       });
     }
 
     // Create project
-    const projectId = crypto.randomUUID();
+    const projectId = clientProjectId || crypto.randomUUID();
     const { error: projectError } = await supabase.from('projects').insert({
       id: projectId,
       user_id: userId,

@@ -1,5 +1,6 @@
 import type { SupabaseClient } from '@supabase/supabase-js'
 import { createAudio } from './create-audio'
+import type { SeedAudioFormat } from '../evolink-seed-audio'
 
 export interface CreateMusicInput {
   prompt: string
@@ -7,6 +8,13 @@ export interface CreateMusicInput {
   model?: string
   style?: string
   durationSeconds?: number
+  audioReferences?: string[]
+  imageUrls?: string[]
+  speechRate?: number
+  loudnessRate?: number
+  pitchRate?: number
+  format?: SeedAudioFormat
+  sampleRate?: number
   supabase?: SupabaseClient
   userId?: string
   projectId?: string
@@ -48,6 +56,13 @@ export async function createMusic(input: CreateMusicInput): Promise<CreateMusicR
   const result = await createAudio({
     prompt: buildSeedAudioPrompt(input),
     durationSeconds: input.durationSeconds,
+    audioReferences: input.audioReferences,
+    imageUrls: input.imageUrls,
+    speechRate: input.speechRate,
+    loudnessRate: input.loudnessRate,
+    pitchRate: input.pitchRate,
+    format: input.format,
+    sampleRate: input.sampleRate,
     title: 'Generated music',
     model: 'evolink-seed-audio',
     supabase: input.supabase,

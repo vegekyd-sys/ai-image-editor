@@ -6,7 +6,10 @@ const CDN_HOST = process.env.NEXT_PUBLIC_SUPABASE_URL || LEGACY_HOST
 
 /** Check if a URL is permanently stored in our Supabase Storage (not a temporary provider URL). */
 export function isPermanentUrl(url: string): boolean {
-  return url.includes('supabase.co/storage/') || url.includes('makaron.app/storage/')
+  const configuredStoragePrefix = `${CDN_HOST.replace(/\/$/, '')}/storage/`
+  return url.startsWith(configuredStoragePrefix)
+    || url.includes('supabase.co/storage/')
+    || url.includes('makaron.app/storage/')
 }
 
 export function normalizeDomain(url: string): string {
@@ -16,9 +19,42 @@ export function normalizeDomain(url: string): string {
   return url
 }
 
+function supportsSupabaseImageTransforms(url: string): boolean {
+  try {
+    const hostname = new URL(url).hostname.toLowerCase()
+    return hostname !== 'localhost'
+      && hostname !== '127.0.0.1'
+      && hostname !== '::1'
+      && hostname !== '[::1]'
+  } catch {
+    return true
+  }
+}
+
 /** Return the Supabase storage URL with normalized domain. */
 export function toPublicStorageUrl(url: string): string {
   return normalizeDomain(url)
+}
+
+export function normalizeImageFilename(filename: string, mimeType: string): string {
+  const extension = mimeType === 'image/png'
+    ? 'png'
+    : mimeType === 'image/webp'
+      ? 'webp'
+      : 'jpg'
+  return /\.(?:jpe?g|png|webp)$/i.test(filename)
+    ? filename.replace(/\.(?:jpe?g|png|webp)$/i, `.${extension}`)
+    : `${filename}.${extension}`
+}
+
+export function parseImageDataUrl(base64DataUrl: string): { mimeType: string; base64Data: string } | null {
+  if (!base64DataUrl.startsWith('data:image/')) return null
+  const separator = base64DataUrl.indexOf(';base64,')
+  if (separator < 0) return null
+  const mimeType = base64DataUrl.slice(5, separator)
+  if (!/^image\/[a-z0-9.+-]+$/i.test(mimeType)) return null
+  const base64Data = base64DataUrl.slice(separator + ';base64,'.length)
+  return base64Data ? { mimeType, base64Data } : null
 }
 
 /**
@@ -34,11 +70,9 @@ export async function uploadImage(
 ): Promise<string | null> {
   try {
     // Extract raw base64 and mime type from data URL
-    const match = base64DataUrl.match(/^data:(image\/\w+);base64,(.+)$/)
-    if (!match) return null
-
-    const mimeType = match[1]
-    const base64Data = match[2]
+    const parsed = parseImageDataUrl(base64DataUrl)
+    if (!parsed) return null
+    const { mimeType, base64Data } = parsed
 
     // Convert base64 to Uint8Array
     const binaryString = atob(base64Data)
@@ -47,7 +81,8 @@ export async function uploadImage(
       bytes[i] = binaryString.charCodeAt(i)
     }
 
-    const path = `${userId}/${projectId}/${filename}`
+    const normalizedFilename = normalizeImageFilename(filename, mimeType)
+    const path = `${userId}/${projectId}/${normalizedFilename}`
 
     const { error } = await supabase.storage
       .from(BUCKET)
@@ -89,6 +124,9 @@ export function getPublicUrl(supabase: SupabaseClient, path: string): string {
  *  (our uploads are max 2048px, 2.3% smaller is imperceptible). quality=95 is visually lossless. */
 export function getOptimizedUrl(url: string, quality = 95): string {
   if (!url || !url.includes('/storage/v1/object/public/')) return url
+  // Local Supabase Storage does not expose the hosted /render/image route.
+  // E2E must render the original object instead of a guaranteed 404.
+  if (!supportsSupabaseImageTransforms(url)) return normalizeDomain(url)
   const base = normalizeDomain(url).replace(
     '/storage/v1/object/public/',
     '/storage/v1/render/image/public/',
@@ -167,13 +205,20 @@ export async function uploadAudio(
   taskId: string,
   trackIndex: number,
   buffer: Uint8Array,
+  format: 'mp3' | 'wav' | 'pcm' | 'ogg_opus' = 'mp3',
 ): Promise<string | null> {
   try {
-    const path = `${userId}/${projectId}/audio/${taskId}-${trackIndex}.mp3`
+    const audioType = {
+      mp3: { extension: 'mp3', contentType: 'audio/mpeg' },
+      wav: { extension: 'wav', contentType: 'audio/wav' },
+      pcm: { extension: 'pcm', contentType: 'audio/L16' },
+      ogg_opus: { extension: 'ogg', contentType: 'audio/ogg; codecs=opus' },
+    }[format]
+    const path = `${userId}/${projectId}/audio/${taskId}-${trackIndex}.${audioType.extension}`
     const { error } = await supabase.storage
       .from(BUCKET)
       .upload(path, buffer, {
-        contentType: 'audio/mpeg',
+        contentType: audioType.contentType,
         upsert: true,
       })
     if (error) {
@@ -189,6 +234,7 @@ export async function uploadAudio(
 
 export function getThumbnailUrl(url: string, width = 200, quality = 60, height?: number, resize: 'cover' | 'contain' = 'cover'): string {
   if (!url || !url.includes('/storage/v1/object/public/')) return url
+  if (!supportsSupabaseImageTransforms(url)) return normalizeDomain(url)
   const base = normalizeDomain(url).split('?')[0].replace(
     '/storage/v1/object/public/',
     '/storage/v1/render/image/public/',
@@ -200,6 +246,7 @@ export function getThumbnailUrl(url: string, width = 200, quality = 60, height?:
 
 export function getOriginFormatThumbnailUrl(url: string, width = 200, quality = 60, height?: number, resize: 'cover' | 'contain' = 'cover'): string {
   if (!url || !url.includes('/storage/v1/object/public/')) return url
+  if (!supportsSupabaseImageTransforms(url)) return normalizeDomain(url)
   const base = normalizeDomain(url).split('?')[0].replace(
     '/storage/v1/object/public/',
     '/storage/v1/render/image/public/',

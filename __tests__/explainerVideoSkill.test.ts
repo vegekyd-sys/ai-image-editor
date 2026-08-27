@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest'
 import { readFileSync } from 'fs'
 import path from 'path'
 import { parseSkillMd } from '../src/lib/skill-registry'
+import { getSkillManifest } from '../src/lib/workspace'
 
 const root = path.resolve(__dirname, '..')
 
@@ -10,6 +11,15 @@ function read(rel: string) {
 }
 
 describe('Explainer Video built-in skill', () => {
+  it('is exposed as a semantic route with its Studio workflow metadata', async () => {
+    const manifest = await getSkillManifest()
+
+    expect(manifest).toContain('This is the semantic routing index')
+    expect(manifest).toContain('**explainer-video**')
+    expect(manifest).toContain('Studio Run recipe: explainer-video')
+    expect(manifest).toContain('profile: generated-explainer')
+  })
+
   it('uses the current Remotion composition architecture', () => {
     const agent = read('src/lib/prompts/agent.md')
     const compositionPrompt = read('src/lib/prompts/remotion-composition.md')
@@ -29,8 +39,6 @@ describe('Explainer Video built-in skill', () => {
       'write_file',
       'preview_frame',
       'materialize_media',
-      'list_voiceover_voices',
-      'generate_voiceover',
       'transcribe_audio',
       'generate_audio',
       'generate_image',
@@ -55,12 +63,27 @@ describe('Explainer Video built-in skill', () => {
     expect(rawSkill).toContain('Do not recreate or resubmit those three JSON documents')
     expect(rawSkill).toContain('A failed Studio Run artifact write')
     expect(rawSkill).toContain('never change the video duration to match an')
-    expect(rawSkill).toContain('Voiceover is part of this skill by default')
+    expect(rawSkill).toContain('Voiceover and an instrumental score are part of this skill by default')
+    expect(rawSkill).toContain('generate narration, continuous music, ambience, and meaningful SFX')
+    expect(rawSkill).toContain('Seed Audio')
+    expect(rawSkill).toContain('`generate_audio({ kind: "mixed", ... })` exactly once')
+    expect(rawSkill).toContain('canonical performance-score blocks')
+    expect(rawSkill).toContain('`[MUSIC]`')
+    expect(rawSkill).toContain('`[VOICE]`')
+    expect(rawSkill).toContain('`[SFX]`')
+    expect(rawSkill).toContain('`[MIX]`')
+    expect(rawSkill).toContain('every spoken line')
+    expect(rawSkill).toContain('co-leading layer')
+    expect(rawSkill).toContain('no more than 1-2 dB of ducking')
+    expect(rawSkill).toContain('Do not add a second generated audio layer after step 6')
     expect(rawSkill).toContain('Subtitles are part of this skill by default')
-    expect(rawSkill).toContain('Sound design is part of the planning pass')
-    expect(rawSkill).toContain('Use `generate_audio` for prompt-first assets')
-    expect(rawSkill).toContain('new music')
-    expect(rawSkill).toContain('uses Seed Audio, not Suno')
+    expect(rawSkill).toContain('Sound design is part of the default planning pass')
+    expect(rawSkill).toContain('For every narrated explainer')
+    expect(rawSkill).not.toContain('When music is requested')
+    expect(rawSkill).not.toContain('would make the explanation clearer or more memorable')
+    expect(rawSkill).toContain('same one-pass `mixed` prompt')
+    expect(rawSkill).toContain('Prompt timestamps express order and intent')
+    expect(rawSkill).toContain('All new standalone audio generation uses Seed Audio')
     expect(rawSkill).not.toContain('provider: "suno"')
     expect(rawSkill).toContain('Audio Index markers such as `<<<audio_N>>>` are labels')
     expect(rawSkill).toContain('Use the returned public `audioUrl` directly in Remotion')
@@ -83,11 +106,12 @@ describe('Explainer Video built-in skill', () => {
     expect(rawSkill).toContain('Scene Cue Sheet Pattern')
     expect(rawSkill).toContain('All Chinese,')
     expect(rawSkill).toContain('Unexpected identifier')
-    expect(rawSkill).toContain('Unless the user explicitly requested a silent/text-only video')
-    expect(rawSkill).toContain('`transcribe_audio({ media_url: audioUrl })` when a single continuous')
-    expect(rawSkill).toContain('planned Script ranges are not proof')
-    expect(rawSkill).toContain('timing evidence, not a')
-    expect(rawSkill).toContain('does not generate cue files')
+    expect(rawSkill).toContain('Unless the user explicitly requested no audio')
+    expect(rawSkill).toContain('`transcribe_audio({ media_url: audioUrl, expected_sections:')
+    expect(rawSkill).toContain('authoritative narration cue sheet')
+    expect(rawSkill).toContain('planned Script')
+    expect(rawSkill).toContain('ranges are not proof')
+    expect(rawSkill).toContain('timing data, not a caption renderer')
     expect(rawSkill).toContain('They do not choose subtitle text styling')
     expect(rawSkill).toContain('There is no required prop name')
     expect(rawSkill).toContain('Treat subtitles as part of the visual direction')
@@ -108,23 +132,33 @@ describe('Explainer Video built-in skill', () => {
     expect(rawSkill).toContain('actual subtitle visibility and picture alignment are')
     expect(rawSkill).toContain('verified from the representative Composition preview frames before export')
     expect(rawSkill).toContain('Do not author a separate')
-    expect(rawSkill).toContain('automatically projects both Review and')
+    expect(rawSkill).toContain('worker projects both Review and Delivery')
     expect(rawSkill).toContain('primaryAssetId')
     expect(rawSkill).toContain('read and follow')
     expect(rawSkill).toContain('skills/sticker-maker/SKILL.md')
     expect(rawSkill).toContain('At least three `preview_frame` checks')
     expect(rawSkill).toContain('The composition is saved and published to the timeline')
     expect(rawSkill).not.toContain('awesome-design-md')
-    expect(compositionPrompt).toContain('The harness does not generate separate caption data')
-    expect(compositionPrompt).toContain('choose the wording, grouping, timing')
+    expect(compositionPrompt).toContain('skills/_shared/speech-clock.md')
+    expect(compositionPrompt.replace(/\s+/g, ' ')).toContain('authoritative Speech Clock')
+    expect(compositionPrompt).toContain('Wording, grouping,')
     expect(compositionPrompt).not.toContain('props.captions` is authoritative')
+    expect(rawSkill).not.toContain('generate_voiceover')
+    expect(rawSkill).not.toContain('list_voiceover_voices')
+    expect(rawSkill).not.toContain('generate_music')
 
     expect(skill?.description).toContain('explainer video')
+    expect(skill?.description).toContain('longer than 15s')
     expect(rawSkill).toContain('"explainer video"')
     expect(rawSkill).toContain('"Explainer Video"')
     expect(rawSkill).toContain('"解释视频"')
     expect(rawSkill).toContain('"讲解视频"')
-    expect(agent).not.toContain('skills/explainer-video/SKILL.md')
+    expect(agent).toContain('Video duration is authoritative')
+    expect(agent).toContain("For output within the selected model's single-generation limit")
+    expect(agent).toContain('including explainers, product films, platform-native shorts')
+    expect(agent).toContain('Beyond that limit, activate and read the matching Skill')
+    expect(rawSkill).toContain('For a video up to and including 15 seconds')
+    expect(rawSkill).toContain('the explainer label alone does not justify this')
   })
 
   it('uses the first-class Visual Asset Bridge for sticker preparation', () => {

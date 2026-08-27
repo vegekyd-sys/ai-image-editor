@@ -143,7 +143,7 @@ export default function ProjectEditorContainer({
   isInlineActive = true,
 }: ProjectEditorContainerProps) {
   const { user, loading: authLoading } = useAuth()
-  const { t } = useLocale()
+  const { locale, t } = useLocale()
   const router = useRouter()
   const navigatingRef = useRef(false)
   const leaveEditor = useCallback((path: '/projects' | '/login') => {
@@ -229,7 +229,7 @@ export default function ProjectEditorContainer({
     if (raw) { sessionStorage.removeItem('pendingVideos'); try { return JSON.parse(raw) } catch { return null } }
     return null
   })
-  const isNewProject = !!(pendingImages || pendingImageState.loading || pendingPrompt || pendingVideos)
+  const isNewProject = !!(pendingLaunch || pendingImages || pendingImageState.loading || pendingPrompt || pendingVideos)
 
   useEffect(() => {
     if (!pendingLaunch) return
@@ -301,7 +301,14 @@ export default function ProjectEditorContainer({
     }
   }, [authLoading, isPublicProject, user, projectOwnerId, projectId, leaveEditor, isInlineActive])
 
-  const isOwner = user?.id === projectOwnerId
+  // A freshly staged project renders before the async ownership effect has
+  // copied the authenticated user id into projectOwnerId. Treat that one
+  // initial state as owned so Editor receives its persistence callbacks on
+  // the first render; otherwise pending media is displayed but never saved.
+  // Supabase RLS still rejects writes if a forged staged project is not owned.
+  const isOwner = Boolean(
+    user && (user.id === projectOwnerId || (isNewProject && projectOwnerId === null)),
+  )
   const readOnly = !isOwner
 
   async function patchFromImageCache(snapshots: Snapshot[]): Promise<Snapshot[]> {
@@ -403,7 +410,7 @@ export default function ProjectEditorContainer({
       const failedVideos = restoredSnapshots.filter(isFailedGeneratedVideoSnapshot)
       for (const snap of failedVideos) {
         if (messages.some(m => m.content?.includes(`snap:${snap.id}`))) continue
-        const actionLines = serializeCompletionActions(buildVideoFailureActions(snap.videoMeta))
+        const actionLines = serializeCompletionActions(buildVideoFailureActions(snap.videoMeta, locale))
         const reason = snap.videoMeta?.error ? `\n${snap.videoMeta.error}` : ''
         messages.push({
           id: `video-failed-${snap.id}`,
@@ -474,7 +481,11 @@ export default function ProjectEditorContainer({
     router.push(user ? '/projects' : '/home')
   }, [onBack, router, user])
 
-  if (!loaded) {
+  // A post-registration continuation can navigate before useAuth has emitted
+  // the new session. Mounting Editor in that gap consumes pending media with
+  // no authenticated persistence callbacks, leaving the photo only in local
+  // cache. Keep the loading shell until the new-project owner is available.
+  if (!loaded || (isNewProject && (authLoading || !user))) {
     return (
       <div className={loadingClassName}>
         <EditorLoadingShell />

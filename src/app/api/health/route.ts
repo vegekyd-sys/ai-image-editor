@@ -4,6 +4,12 @@ import {
   isRequiredServiceDown,
   resolveAzureOpenAIModelsRequest,
 } from '@/lib/azure-openai-health'
+import { resolveGPT56AgentProvider } from '@/lib/agent-models'
+import {
+  assertOpenRouterGPT56ModelEndpoint,
+  REQUIRED_OPENROUTER_MODEL_IDS,
+  resolveOpenRouterAgentHealthRequest,
+} from '@/lib/openrouter-agent-health'
 
 type ServiceStatus = 'healthy' | 'unhealthy' | 'unavailable'
 
@@ -96,14 +102,23 @@ async function checkGemini(): Promise<ServiceResult> {
 }
 
 async function checkOpenRouter(): Promise<ServiceResult> {
-  const key = process.env.OPENROUTER_API_KEY
-  if (!key) return unavailable('OPENROUTER_API_KEY not set')
+  const request = resolveOpenRouterAgentHealthRequest()
+  if (!request) return unavailable('OPENROUTER_API_KEY not set')
 
   return checkWithTimeout('openrouter', async () => {
-    const res = await fetch('https://openrouter.ai/api/v1/auth/key', {
-      headers: { Authorization: `Bearer ${key}` },
-    })
-    if (!res.ok) throw new Error(`HTTP ${res.status}`)
+    const headers = { Authorization: `Bearer ${request.apiKey}` }
+    const [authResponse, ...modelResponses] = await Promise.all([
+      fetch(request.authUrl, { headers }),
+      ...request.modelUrls.map(url => fetch(url, { headers })),
+    ])
+    if (!authResponse.ok) throw new Error(`auth HTTP ${authResponse.status}`)
+    for (const [index, modelResponse] of modelResponses.entries()) {
+      const requiredModelId = REQUIRED_OPENROUTER_MODEL_IDS[index]
+      if (!modelResponse.ok) {
+        throw new Error(`${requiredModelId} HTTP ${modelResponse.status}`)
+      }
+      assertOpenRouterGPT56ModelEndpoint(await modelResponse.json(), requiredModelId)
+    }
   }, 5000)
 }
 
@@ -291,12 +306,18 @@ export async function GET() {
   const unhealthy = entries.filter(s => s.status === 'unhealthy').length
   const unavailableCount = entries.filter(s => s.status === 'unavailable').length
 
-  // Core services: if persistence, image generation, or the default Agent is down → down
+  // Core services: if persistence, image generation, or the selected default
+  // Agent provider is down -> down. The retained standby provider may degrade
+  // independently without making the active OpenRouter Agent look unavailable.
+  const selectedGPT56Provider = resolveGPT56AgentProvider(process.env.GPT56_AGENT_PROVIDER)
+  const selectedAgentHealth = selectedGPT56Provider === 'azure-openai'
+    ? azureOpenai
+    : openrouter
   const coreDown =
     supabaseDb.status === 'unhealthy' ||
     supabaseAuth.status === 'unhealthy' ||
     gemini.status === 'unhealthy' ||
-    isRequiredServiceDown(azureOpenai.status)
+    isRequiredServiceDown(selectedAgentHealth.status)
 
   const overallStatus = coreDown ? 'down' : unhealthy > 0 ? 'degraded' : 'healthy'
 

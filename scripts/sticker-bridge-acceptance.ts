@@ -1,7 +1,7 @@
 import { mkdir, readFile, writeFile } from 'fs/promises';
 import path from 'path';
 import sharp from 'sharp';
-import { prepareChromaKeyCutout, renderCutoutContactSheet } from '../src/lib/visual-assets/image-cutout';
+import { prepareChromaKeyCutout, prepareNativeAlphaCutout, renderCutoutContactSheet } from '../src/lib/visual-assets/image-cutout';
 
 function arg(name: string): string | undefined {
   const index = process.argv.indexOf(name);
@@ -36,9 +36,15 @@ async function main() {
   const keyColor = arg('--key-color');
   await mkdir(outDir, { recursive: true });
   const source = sourcePath ? await readFile(path.resolve(sourcePath)) : await makeAdversarialFixture();
-  const result = await prepareChromaKeyCutout(source, { keyColor });
+  const metadata = await sharp(source).metadata();
+  const nativeCandidate = metadata.hasAlpha ? await prepareNativeAlphaCutout(source) : null;
+  const useNativeAlpha = Boolean(nativeCandidate && (nativeCandidate.quality.metrics?.nonOpaqueRatio ?? 0) > 0);
+  const result = useNativeAlpha
+    ? nativeCandidate!
+    : await prepareChromaKeyCutout(source, { keyColor });
+  const alphaSource = useNativeAlpha ? 'native' : 'chroma-key';
   const contactSheet = await renderCutoutContactSheet(result.png);
-  const sourceOutput = path.join(outDir, '01-chroma-source.png');
+  const sourceOutput = path.join(outDir, `01-${alphaSource}-source.png`);
   const cutoutOutput = path.join(outDir, '02-transparent-cutout.png');
   const qaOutput = path.join(outDir, '03-five-background-qa.png');
   const reportOutput = path.join(outDir, 'acceptance.json');
@@ -49,7 +55,8 @@ async function main() {
     writeFile(reportOutput, JSON.stringify({
       status: result.quality.status,
       source: sourcePath ? path.resolve(sourcePath) : 'generated-adversarial-fixture',
-      keyColor: result.keyColor,
+      alphaSource,
+      keyColor: 'keyColor' in result ? result.keyColor : undefined,
       width: result.width,
       height: result.height,
       subjectBox: result.subjectBox,
@@ -60,6 +67,7 @@ async function main() {
   ]);
   console.log(JSON.stringify({
     status: result.quality.status,
+    alphaSource,
     issues: result.quality.issues,
     metrics: result.quality.metrics,
     outputs: { sourceOutput, cutoutOutput, qaOutput, reportOutput },

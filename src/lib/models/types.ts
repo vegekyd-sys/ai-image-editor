@@ -1,5 +1,6 @@
 export type ModelId = 'gemini' | 'gemini-lite' | 'qwen' | 'pony' | 'wai' | 'openai';
 export type ReasoningEffort = 'minimal' | 'low' | 'medium' | 'high';
+export type ImageBackground = 'auto' | 'opaque' | 'transparent';
 
 export interface GenerateImageRequest {
   image?: string;           // input image (URL/base64). Missing = text-to-image
@@ -7,6 +8,8 @@ export interface GenerateImageRequest {
   model?: ModelId;          // explicit model choice (agent tool param or UI selector)
   category?: string;        // tip category (for auto-routing)
   aspectRatio?: string;
+  /** Output background contract. Transparent output is currently GPT Image 2 only. */
+  background?: ImageBackground;
   thinkingEffort?: ReasoningEffort;
   references?: { url: string; role: string }[];  // multi-image references (Gemini + Qwen)
   fallbackPrompt?: string;  // clean prompt without skill template — used when falling back to a model that can't digest .md templates
@@ -17,6 +20,8 @@ export interface TokenUsage {
   inputTokens: number;
   outputTokens: number;
   modelId: string;          // full model ID for billing (e.g. 'gemini-3.1-flash-image-preview')
+  /** Provider-reported exact routed cost when available (for example OpenRouter). */
+  providerCostUsd?: number;
 }
 
 export interface GenerateImageResult {

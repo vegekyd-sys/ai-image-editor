@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from 'vitest'
 import { createVideo } from '@/lib/skills/create-video'
-import { estimateVideoCredits, getDefaultVideoModelId, getVideoModelCapability, normalizeVideoModelId, normalizeVideoResolution, resolveAgentVideoSelection, resolveClosestSupportedAspectRatio, resolveVideoGenerationRoute, resolveVideoProviderAspectRatio, resolveVideoProviderModel } from '@/lib/video-model-capabilities'
+import { estimateVideoCredits, estimateVideoProviderCostUsd, getDefaultVideoModelId, getVideoModelCapability, normalizeVideoModelId, normalizeVideoResolution, resolveAgentVideoSelection, resolveClosestSupportedAspectRatio, resolveVideoGenerationRoute, resolveVideoProviderAspectRatio, resolveVideoProviderModel, validateVideoModelRequest, validateVideoResolutionRequest } from '@/lib/video-model-capabilities'
 
 describe('video model reference limits', () => {
   it('defaults video generation to SeeDance 2.0 Fast', () => {
@@ -31,6 +31,172 @@ describe('video model reference limits', () => {
     expect(resolveVideoProviderModel({ model: 'seedance-mini', imageReferenceCount: 0 })).toBe('seedance-2.0-mini-text-to-video')
     expect(resolveVideoProviderModel({ model: 'seedance', imageReferenceCount: 0 })).toBe('seedance-2.0-text-to-video')
     expect(resolveVideoProviderModel({ model: 'seedance-fast', imageReferenceCount: 1 })).toBe('seedance-2.0-fast-reference-to-video')
+  })
+
+  it('registers MiniMax H3 with public 768p and 2K production routes', () => {
+    expect(normalizeVideoModelId('minimax')).toBe('minimax-h3')
+    expect(normalizeVideoModelId('MiniMax-H3')).toBe('minimax-h3')
+    expect(normalizeVideoResolution('minimax-h3', 'auto')).toBe('768p')
+    expect(resolveVideoGenerationRoute({ model: 'minimax-h3', resolution: '768p' })).toMatchObject({
+      model: 'minimax-h3',
+      label: 'MiniMax H3',
+      provider: 'minimax',
+      providerModel: 'MiniMax-H3',
+      resolution: '768p',
+    })
+    expect(getVideoModelCapability('minimax-h3')).toMatchObject({
+      supportedResolutions: ['768p', '2k'],
+      defaultResolution: '768p',
+    })
+    expect(estimateVideoProviderCostUsd({ model: 'minimax-h3', resolution: '768p', durationSec: 4 })).toBeCloseTo(0.28)
+    expect(estimateVideoProviderCostUsd({ model: 'minimax-h3', resolution: '2k', durationSec: 4 })).toBeCloseTo(0.448)
+    expect(estimateVideoCredits({ model: 'minimax-h3', resolution: '768p', durationSec: 4 })).toBe(56)
+    expect(estimateVideoCredits({ model: 'minimax-h3', resolution: '2k', durationSec: 4 })).toBe(90)
+    expect(estimateVideoCredits({
+      model: 'minimax-h3',
+      resolution: '768p',
+      durationSec: 4,
+      referenceVideoDurationSec: 4,
+    })).toBe(112)
+    expect(estimateVideoCredits({ model: 'minimax-h3', resolution: '768p', durationSec: 15 })).toBe(210)
+    expect(estimateVideoCredits({ model: 'minimax-h3', resolution: '2k', durationSec: 15 })).toBe(336)
+    expect(estimateVideoCredits({ model: 'minimax-h3', resolution: '2k', durationSec: 15, imageCount: 5 })).toBe(336)
+    expect(estimateVideoCredits({ model: 'minimax-h3', resolution: '2k', durationSec: 15, imageCount: 6 })).toBe(342)
+    expect(estimateVideoCredits({
+      model: 'minimax-h3',
+      resolution: '2k',
+      durationSec: 15,
+      imageCount: 5,
+      referenceVideoDurationSec: 15,
+    })).toBe(672)
+  })
+
+  it('accepts MiniMax H3 768p without a server-side preview gate', () => {
+    expect(validateVideoResolutionRequest({ model: 'minimax-h3', resolution: '768p' })).toBeNull()
+  })
+
+  it('models Seedance 2.5 as an explicit 30-second Evolink route', () => {
+    expect(normalizeVideoModelId('seedance-2.5')).toBe('seedance-2.5')
+    expect(normalizeVideoModelId('seedance25')).toBe('seedance-2.5')
+    expect(normalizeVideoResolution('seedance-2.5', 'auto')).toBe('720p')
+    expect(resolveVideoGenerationRoute({ model: 'seedance-2.5', resolution: '480p' })).toMatchObject({
+      model: 'seedance-2.5',
+      label: 'Seedance 2.5',
+      provider: 'seedance',
+      providerModel: 'seedance-2.5-reference-to-video',
+      resolution: '480p',
+    })
+    expect(getVideoModelCapability('seedance-2.5')).toMatchObject({
+      minOutputDuration: 4,
+      maxOutputDuration: 30,
+      maxReferenceVideoDuration: 30,
+      referenceVideoDurationTolerance: 0.5,
+      maxImageReferences: 30,
+      maxVideoReferences: 10,
+      maxAudioReferences: 10,
+      maxTotalReferences: 50,
+      supportsVideoReference: true,
+      supportsBaseVideoEdit: true,
+      supportsVideoExtend: true,
+      supportedResolutions: ['480p', '720p'],
+    })
+  })
+
+  it('registers Sync Lipsync v3 as exact one-video plus one-audio processing', () => {
+    expect(normalizeVideoModelId('lipsync')).toBe('sync-lipsync-v3')
+    expect(resolveVideoGenerationRoute({ model: 'sync-lipsync-v3', resolution: 'auto' })).toMatchObject({
+      model: 'sync-lipsync-v3',
+      provider: 'fal-sync',
+      providerModel: 'fal-ai/sync-lipsync/v3',
+      resolution: '1080p',
+    })
+    expect(getVideoModelCapability('sync-lipsync-v3')).toMatchObject({
+      minOutputDuration: 2,
+      maxOutputDuration: 60,
+      maxReferenceVideoDuration: 60,
+      maxImageReferences: 0,
+      maxVideoReferences: 1,
+      maxAudioReferences: 1,
+      supportsVideoReference: true,
+      supportsBaseVideoEdit: true,
+    })
+    expect(estimateVideoProviderCostUsd({ model: 'sync-lipsync-v3', durationSec: 12 })).toBeCloseTo(1.6)
+    expect(estimateVideoCredits({ model: 'sync-lipsync-v3', durationSec: 12 })).toBe(320)
+    expect(resolveVideoProviderAspectRatio('sync-lipsync-v3', '9:16')).toBeUndefined()
+  })
+
+  it('rejects an incomplete Sync Lipsync request before provider submission', async () => {
+    const result = await createVideo({
+      script: 'Translated mouth alignment',
+      images: [],
+      videoUrls: ['https://example.com/source.mp4'],
+      referenceVideoMetas: [{ width: 1080, height: 1920, fileSizeBytes: 1_000_000 }],
+      duration: 12,
+      videoModel: 'sync-lipsync-v3',
+    })
+
+    expect(result.success).toBe(false)
+    expect(result.message).toContain('exactly one source video')
+    expect(result.message).toContain('exactly one reference audio')
+  })
+
+  it('accepts normal tail-frame metadata on a 30 second Seedance 2.5 edit', () => {
+    const editRequest = {
+      model: 'seedance-2.5',
+      operation: 'edit' as const,
+      outputDuration: -1,
+      hasVideoReference: true,
+      videoReferenceCount: 1,
+    }
+
+    expect(validateVideoModelRequest({ ...editRequest, referenceVideoDuration: 30.08 })).toBeNull()
+    expect(validateVideoModelRequest({ ...editRequest, referenceVideoDuration: 30.5 })).toBeNull()
+    expect(validateVideoModelRequest({ ...editRequest, referenceVideoDuration: 30.51 })).toContain('30 seconds or less')
+  })
+
+  it('adds the provider 10% surcharge only when Seedance 2.5 Mature Mode is selected', () => {
+    const standardCost = estimateVideoCredits({
+      model: 'seedance-2.5',
+      resolution: '480p',
+      durationSec: 4,
+      contentFilter: true,
+    })
+    const defaultCost = estimateVideoCredits({
+      model: 'seedance-2.5',
+      resolution: '480p',
+      durationSec: 4,
+    })
+    const matureCost = estimateVideoCredits({
+      model: 'seedance-2.5',
+      resolution: '480p',
+      durationSec: 4,
+      contentFilter: false,
+    })
+
+    expect(defaultCost).toBe(standardCost)
+    expect(matureCost).toBe(Math.ceil(standardCost! * 1.1 - 1e-9))
+    expect(estimateVideoCredits({
+      model: 'seedance-fast',
+      resolution: '480p',
+      durationSec: 4,
+      contentFilter: false,
+    })).toBe(estimateVideoCredits({
+      model: 'seedance-fast',
+      resolution: '480p',
+      durationSec: 4,
+    }))
+  })
+
+  it('selects the right Seedance 2.5 provider mode from typed operation and references', () => {
+    expect(resolveVideoProviderModel({ model: 'seedance-2.5', imageReferenceCount: 0 })).toBe('seedance-2.5-text-to-video')
+    expect(resolveVideoProviderModel({ model: 'seedance-2.5', imageReferenceCount: 1 })).toBe('seedance-2.5-image-to-video')
+    expect(resolveVideoProviderModel({ model: 'seedance-2.5', imageReferenceCount: 2 })).toBe('seedance-2.5-image-to-video')
+    expect(resolveVideoProviderModel({ model: 'seedance-2.5', imageReferenceCount: 1, aspectRatio: '9:16' })).toBe('seedance-2.5-reference-to-video')
+    expect(resolveVideoProviderModel({ model: 'seedance-2.5', imageReferenceCount: 2, aspectRatio: '16:9' })).toBe('seedance-2.5-reference-to-video')
+    expect(resolveVideoProviderModel({ model: 'seedance-2.5', imageReferenceCount: 3 })).toBe('seedance-2.5-reference-to-video')
+    expect(resolveVideoProviderModel({ model: 'seedance-2.5', imageReferenceCount: 1, hasVideoReference: true })).toBe('seedance-2.5-reference-to-video')
+    expect(resolveVideoProviderModel({ model: 'seedance-2.5', hasVideoReference: true, operation: 'edit' })).toBe('seedance-2.5-video-edit')
+    expect(resolveVideoProviderModel({ model: 'seedance-2.5', hasVideoReference: true, operation: 'extend' })).toBe('seedance-2.5-video-extend')
   })
 
   it('maps non-standard vertical reference videos to supported Seedance aspect ratios', () => {

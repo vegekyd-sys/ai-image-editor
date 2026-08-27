@@ -1,9 +1,9 @@
 ---
 name: sticker-maker
 description: >
-  Generate and prepare transparent image assets for video composition. Creates a subject on a
-  controlled chroma background, runs deterministic chroma keying and despill, and
-  verifies the result on five backgrounds before handing the PNG to Remotion.
+  Generate, extract, and prepare transparent image assets for video composition. Prefers native
+  GPT Image 2 alpha, falls back to controlled chroma keying when needed, and verifies the result
+  on five backgrounds before handing the PNG to Remotion.
 allowed-tools: generate_image analyze_image prepare_visual_asset
 metadata:
   makaron:
@@ -20,7 +20,8 @@ a transparent foreground or midground asset in a video or editable
 composition. Read `skills/_shared/visual-asset-bridge/SKILL.md` first.
 
 The Agent decides what to generate and how it will be staged. The deterministic
-Visual Asset Bridge owns chroma removal, despill, caching, metadata, and QA.
+Visual Asset Bridge owns native-alpha validation or chroma removal, cropping,
+caching, metadata, and QA.
 Do not write an ad hoc Sharp script and do not remove backgrounds inside the
 Composition runtime.
 When a Studio Storyboard selects `carrier: "cutout"`, set
@@ -39,7 +40,45 @@ Before generation, state:
 
 If these answers are weak, do not generate the asset.
 
-## 2. Generate A Clean Chroma Source
+## 2. Prefer Native Transparent Generation Or Extraction
+
+Before native transparent generation or source extraction, read
+`prompts/cutout.md` once. It is the canonical GPT Image 2 `editPrompt`
+contract. This Skill adds asset staging, transparent padding, preparation, and
+video QA requirements; it does not replace the general cutout contract.
+
+For a new sticker, icon, character pose, product insert, reaction, particle,
+foreground prop, or overlay, call:
+
+```text
+generate_image({
+  editPrompt: "[specific subject, pose, expression, material, camera angle; full silhouette and padding]",
+  background: "transparent"
+})
+```
+
+For an uploaded/source image that needs background removal, pass it as the
+literal `media_index` and use the same native-alpha contract. Describe what
+must be preserved (identity, product geometry, typography, fine edges, glow)
+rather than asking the model to redesign it. Do not route through a normal
+opaque fallback.
+
+Native-alpha requirements:
+
+- one complete subject with generous transparent padding on every side;
+- no floor, horizon, environmental shadow, border, sticker outline, or text
+  unless the requested asset itself contains text;
+- keep translucent materials, glow, hair, fur, fingers, and holes in the matte;
+- use actual reference images when identity or product fidelity matters.
+
+Then call `prepare_visual_asset({ mode: "cutout", ... })`. The bridge recognizes
+native alpha, preserves it without re-keying, crops excess padding, records
+`alphaSource: "native"`, and still produces the five-background QA sheet.
+
+## 3. Chroma Fallback
+
+Use controlled chroma only when native-alpha generation is unavailable or a
+native result fails QA and a deterministic key source is more appropriate.
 
 Default to a solid bright green background `#00ff00`. If the subject contains
 important green material, choose solid magenta `#ff00ff`; if it contains both
@@ -68,7 +107,7 @@ Requirements:
 If the generated source visibly violates these requirements, regenerate before
 keying. Preparation cannot repair a cropped limb or a textured background.
 
-## 3. Prepare The Cutout
+## 4. Prepare The Cutout
 
 Call:
 
@@ -82,8 +121,10 @@ prepare_visual_asset({
 })
 ```
 
-`key_color` may be omitted when the canvas border is unambiguous. The tool:
+`key_color` is only for chroma fallback and may be omitted when the border is
+unambiguous. The tool:
 
+- preserves provider-authored native alpha without chroma keying or despill;
 - removes key-like pixels connected to the canvas border plus enclosed high-confidence chroma pockets large enough to be background;
 - preserves only tiny isolated same-color details; choose a different key color whenever the subject contains meaningful key-colored material;
 - reconstructs and despills semi-transparent antialiased edges;
@@ -95,7 +136,7 @@ prepare_visual_asset({
 - caches by source bytes and preparation settings;
 - produces a five-background QA sheet.
 
-## 4. Sticker Acceptance Gate
+## 5. Sticker Acceptance Gate
 
 Inspect the QA image returned directly by `prepare_visual_asset`; do not approve
 from `quality.status` alone. The contact sheet composites the PNG over black,
@@ -105,7 +146,7 @@ The asset passes only when all are true:
 
 - the complete silhouette is present with visible margin on every side;
 - hair, fingers, thin lines, glow edges, and antialiasing remain coherent;
-- no green, magenta, or blue fringe is visible on any QA background;
+- no green, magenta, blue, white, or dark halo is visible on any QA background;
 - white and pale subject details were not accidentally removed;
 - meaningful subject details do not share the selected key color;
 - `residualChromaRatio` stays below the QA threshold, including inside loops made by props, limbs, strokes, or glow effects;
@@ -120,7 +161,7 @@ If it fails:
 - remaining spill -> regenerate a flatter, cleaner chroma source rather than
   hiding the asset at a tiny size.
 
-## 5. Composition Handoff
+## 6. Composition Handoff
 
 Use the returned `preparedUrl` with Remotion `<Img>`. Use `subjectBox` and
 `safeArea` as evidence when choosing scale and placement, not as a fixed layout.
@@ -129,5 +170,9 @@ typography, depth, and interaction. Store the full PreparedVisualAsset record in
 the Studio Assets manifest, set that manifest asset's `path` to `preparedUrl`,
 and keep its ID equal to `visualPlan.primaryAssetId` so later edits reuse the
 same PNG.
+Use the prepared PNG for reaction overlays, product callouts, mascot beats,
+foreground props, particle/effect layers, transition accents, and reusable
+picture-in-picture inserts. Animate it as a real scene participant with
+position/scale/rotation/opacity; do not bake the QA background into the video.
 After recovery, resolve it first with the same `asset_id` and no media source;
 regenerate only when that lookup misses or QA requires a new source.

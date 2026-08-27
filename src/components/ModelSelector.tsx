@@ -85,6 +85,7 @@ function ModelRow({
   model,
   name,
   desc,
+  badge,
   selected,
   disabled,
   onSelect,
@@ -93,6 +94,7 @@ function ModelRow({
   model: ModelInfo;
   name: string;
   desc: string;
+  badge?: string;
   selected: boolean;
   disabled: boolean;
   onSelect: () => void;
@@ -148,7 +150,7 @@ function ModelRow({
           }}>
             {name}
           </span>
-          {model.speedLabel && (
+          {badge && (
             <span style={{
               fontSize: 10,
               padding: '1px 5px',
@@ -156,7 +158,7 @@ function ModelRow({
               background: 'rgba(255,255,255,0.06)',
               color: 'rgba(255,255,255,0.35)',
             }}>
-              {model.speedLabel}
+              {badge}
             </span>
           )}
         </div>
@@ -245,9 +247,9 @@ function ResolutionChips({
 }
 
 function VideoModelRow({
-  model,
   name,
   desc,
+  badge,
   selected,
   onSelect,
   resolutionLabel,
@@ -255,9 +257,9 @@ function VideoModelRow({
   selectedVideoResolution,
   onResolutionSelect,
 }: {
-  model: ModelInfo;
   name: string;
   desc: string;
+  badge?: string;
   selected: boolean;
   onSelect: () => void;
   resolutionLabel: string;
@@ -317,7 +319,7 @@ function VideoModelRow({
             }}>
               {name}
             </span>
-            {model.speedLabel && (
+            {badge && (
               <span style={{
                 fontSize: 10,
                 padding: '1px 5px',
@@ -325,7 +327,7 @@ function VideoModelRow({
                 background: 'rgba(255,255,255,0.06)',
                 color: 'rgba(255,255,255,0.35)',
               }}>
-                {model.speedLabel}
+                {badge}
               </span>
             )}
           </div>
@@ -761,9 +763,9 @@ export default function ModelSelector({
                   return (
                     <VideoModelRow
                       key={model.id}
-                      model={model}
                       name={t(model.nameKey as Parameters<typeof t>[0])}
                       desc={t(model.descKey as Parameters<typeof t>[0])}
+                      badge={model.speedLabelKey ? t(model.speedLabelKey) : model.speedLabel}
                       selected={model.id === selectedId}
                       onSelect={() => handleVideoSelect(model.id)}
                       resolutionLabel={t('model.resolution')}
@@ -779,6 +781,7 @@ export default function ModelSelector({
                     model={model}
                     name={t(model.nameKey as Parameters<typeof t>[0])}
                     desc={t(model.descKey as Parameters<typeof t>[0])}
+                    badge={model.speedLabelKey ? t(model.speedLabelKey) : model.speedLabel}
                     selected={model.id === selectedId}
                     disabled={false}
                     onSelect={() => activeTab === 'agent'

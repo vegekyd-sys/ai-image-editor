@@ -34,7 +34,7 @@ function blobToImageElement(blob: Blob): Promise<HTMLImageElement> {
   });
 }
 
-async function normalizeImageBlobForNativeSave(blob: Blob): Promise<{ blob: Blob; filenameExt: 'jpg' | 'png' }> {
+export async function normalizeImageBlobForNativeSave(blob: Blob): Promise<{ blob: Blob; filenameExt: 'jpg' | 'png' }> {
   if (blob.type === 'image/jpeg' || blob.type === 'image/jpg') {
     return { blob, filenameExt: 'jpg' };
   }
@@ -50,16 +50,18 @@ async function normalizeImageBlobForNativeSave(blob: Blob): Promise<{ blob: Blob
     const ctx = canvas.getContext('2d');
     if (!ctx || canvas.width === 0 || canvas.height === 0) throw new Error('Could not prepare image canvas');
     ctx.drawImage(image, 0, 0);
-    const jpegBlob = await new Promise<Blob>((resolve, reject) => {
+    // Photos support for WebP/AVIF varies. PNG is the lossless interchange
+    // format and preserves any decoded alpha instead of flattening to JPEG.
+    const pngBlob = await new Promise<Blob>((resolve, reject) => {
       canvas.toBlob((result) => {
         if (result) resolve(result);
         else reject(new Error('Could not encode image for native save'));
-      }, 'image/jpeg', 0.95);
+      }, 'image/png');
     });
-    return { blob: jpegBlob, filenameExt: 'jpg' };
+    return { blob: pngBlob, filenameExt: 'png' };
   } catch (error) {
-    console.warn('Native image save normalization failed, using original image blob:', error);
-    return { blob, filenameExt: blob.type === 'image/png' ? 'png' : 'jpg' };
+    console.warn('Native image save normalization failed:', error);
+    throw error;
   }
 }
 
@@ -69,6 +71,19 @@ function isRemoteHttpUrl(value: string): boolean {
 
 function shortErrorMessage(error: unknown): string {
   return error instanceof Error ? error.message : String(error);
+}
+
+function imageExtensionFromSource(source: string): 'jpg' | 'png' | 'webp' | 'unknown' {
+  if (/^data:image\/png;/i.test(source)) return 'png';
+  if (/^data:image\/webp;/i.test(source)) return 'webp';
+  if (/^data:image\/jpe?g;/i.test(source)) return 'jpg';
+  try {
+    const pathname = new URL(source, window.location.href).pathname;
+    if (/\.png$/i.test(pathname)) return 'png';
+    if (/\.webp$/i.test(pathname)) return 'webp';
+    if (/\.jpe?g$/i.test(pathname)) return 'jpg';
+  } catch {}
+  return 'unknown';
 }
 
 export async function downloadAsset(params: DownloadAssetParams): Promise<void> {
@@ -263,12 +278,22 @@ export async function downloadAsset(params: DownloadAssetParams): Promise<void> 
       }
     }
 
+    // The timeline commonly contains a transformed WebP preview. Save the
+    // original persisted snapshot so alpha and the provider output format are
+    // not lost to the display optimization pipeline.
+    if (!snapForSave?.design && snapForSave?.imageUrl) img = snapForSave.imageUrl;
+
     const slug = (projectTitle || 'edit').toLowerCase().replace(/[^a-z0-9一-鿿]+/g, '-').replace(/^-|-$/g, '').slice(0, 30);
     const idx = (snapIdxForSave ?? viewIndex) + 1;
 
-    if (isNativePhotoLibrarySaveAvailable() && isRemoteHttpUrl(img)) {
+    const sourceExtension = imageExtensionFromSource(img);
+    if (
+      isNativePhotoLibrarySaveAvailable()
+      && isRemoteHttpUrl(img)
+      && (sourceExtension === 'jpg' || sourceExtension === 'png')
+    ) {
       try {
-        await saveUrlToNativePhotoLibrary(img, `makaron-${slug}-${idx}.jpg`, 'image');
+        await saveUrlToNativePhotoLibrary(img, `makaron-${slug}-${idx}.${sourceExtension}`, 'image');
         setIsSaving(false);
         setAgentStatus(t('editor.done'));
         showSaveToast();
@@ -322,7 +347,8 @@ export async function downloadAsset(params: DownloadAssetParams): Promise<void> 
     setAgentStatus(`Save failed: ${shortErrorMessage(error).slice(0, 80)}`);
     const link = document.createElement('a');
     link.href = img;
-    link.download = `ai-edited-${Date.now()}.jpg`;
+    const fallbackExtension = imageExtensionFromSource(img);
+    link.download = `ai-edited-${Date.now()}.${fallbackExtension === 'unknown' ? 'png' : fallbackExtension}`;
     link.click();
   }
 }

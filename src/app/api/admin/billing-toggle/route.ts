@@ -4,6 +4,7 @@ import { isAdmin } from '@/lib/admin'
 import { getSupabaseAdmin } from '@/lib/supabase/service'
 import { invalidateBillingCache } from '@/lib/billing/credits'
 import { getConfiguredWelcomeCredits } from '@/lib/billing/welcome-credits'
+import { getConfiguredIOSTrialCredits } from '@/lib/billing/ios-trial'
 
 async function checkAdmin(req: Request): Promise<string | null> {
   const authResult = await authenticateRequest(req)
@@ -20,13 +21,14 @@ export async function GET(req: NextRequest) {
   return NextResponse.json({
     enabled: billing?.value === 'true',
     welcomeCredits: await getConfiguredWelcomeCredits(admin),
+    iosTrialCredits: await getConfiguredIOSTrialCredits(admin),
   })
 }
 
 // PUT: update billing settings
 export async function PUT(req: NextRequest) {
   if (!(await checkAdmin(req))) return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
-  const { enabled, welcomeCredits } = await req.json()
+  const { enabled, welcomeCredits, iosTrialCredits } = await req.json()
   const admin = getSupabaseAdmin()
   if (enabled !== undefined) {
     await admin.from('app_settings').upsert({
@@ -43,5 +45,18 @@ export async function PUT(req: NextRequest) {
       updated_at: new Date().toISOString(),
     }, { onConflict: 'key' })
   }
-  return NextResponse.json({ enabled, welcomeCredits })
+  if (iosTrialCredits !== undefined) {
+    const parsedTrialCredits = Number(iosTrialCredits)
+    if (!Number.isFinite(parsedTrialCredits) || parsedTrialCredits < 0) {
+      return NextResponse.json({ error: 'Invalid iOS trial credits' }, { status: 400 })
+    }
+    const normalizedTrialCredits = Math.floor(parsedTrialCredits)
+    await admin.from('app_settings').upsert({
+      key: 'ios_trial_credits',
+      value: String(normalizedTrialCredits),
+      updated_at: new Date().toISOString(),
+    }, { onConflict: 'key' })
+    return NextResponse.json({ enabled, welcomeCredits, iosTrialCredits: normalizedTrialCredits })
+  }
+  return NextResponse.json({ enabled, welcomeCredits, iosTrialCredits })
 }

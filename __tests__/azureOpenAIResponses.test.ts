@@ -4,7 +4,10 @@ import {
   createAzureOpenAIResponsesModel,
   resolveAzureOpenAIResponsesConfig,
 } from '@/lib/azure-openai-responses';
-import { buildTypedCompactionMessage } from '@/lib/agent-execution';
+import {
+  buildTypedCompactionMessage,
+  type DurableExecutionSnapshot,
+} from '@/lib/agent-execution';
 
 const RESPONSE_FIXTURE = {
   id: 'resp_test',
@@ -195,7 +198,7 @@ describe('Azure OpenAI Responses adapter', () => {
       endpoint: 'https://resource.openai.azure.com/openai/responses?api-version=2025-04-01-preview',
       fetch: fakeFetch,
     });
-    const compacted = buildTypedCompactionMessage({
+    const snapshot: DurableExecutionSnapshot = {
       version: 1,
       objective: 'Long task',
       acceptanceCriteria: [],
@@ -215,7 +218,17 @@ describe('Azure OpenAI Responses adapter', () => {
           encryptedContent: 'durable-encrypted-state',
         },
       },
-    }, 'gpt-5.6-sol');
+    };
+    expect(buildTypedCompactionMessage(
+      snapshot,
+      'gpt-5.6-sol',
+      'openrouter',
+    )).toBeNull();
+    const compacted = buildTypedCompactionMessage(
+      snapshot,
+      'gpt-5.6-sol',
+      'azure-openai',
+    );
     expect(compacted).not.toBeNull();
 
     await generateText({

@@ -1,30 +1,31 @@
 Edit the current photo or generate a new image from text.
 
-Call `read_file('prompts/image.md')` before complex image work, multi-image composition, skill routing, red annotations, restoration, model selection, captions, or layout/mockup images. Do not re-read it if already in tool-result history.
+Call `read_file('prompts/image.md')` before complex, multi-image, annotated, restoration, caption, model-selection, or layout work.
 
-For a clear direct edit such as "make this a neon poster" or "change the background to a beach", do not read the full guide first; call `generate_image` directly.
+For a clear direct edit, call `generate_image` without reading the full guide first.
 
 Core contract:
 
-- `media_index` selects the timeline snapshot to edit. When editing a photo, pass it explicitly.
-- `reference_media_indices` sends extra timeline snapshots when `editPrompt` mentions Image 2, Image 3, another `<<<media_N>>>`, a source background/person, or timeline style reference.
-- Omit `media_index` entirely for pure text-to-image generation. Never pass `0`.
+- For edits, pass the 1-based `media_index`. Omit it for text-to-image; never pass `0`.
+- `reference_media_indices` sends extra timeline snapshots named by `editPrompt`.
+- To restore original detail, include that snapshot through `reference_media_indices`.
 - `image_refs` is only for workspace asset provider URLs, not timeline snapshots.
-- `skill` may be `enhance`, `creative`, `wild`, `captions`, or a user skill. Use it for general style intent; omit it for precise manual instructions.
-- To restore details from the original photo, edit the current snapshot with `media_index` and pass the original timeline snapshot, usually `<<<media_1>>>`, through `reference_media_indices`.
-- `model` is optional. Use `qwen` for NSFW risk; `openai` for text, identity, layout/mockup images, and director storyboard images required by `long-video-director`; `gemini-lite` only when the user asks for Nano Banana 2 Lite / Lite.
+- `skill` labels general intent; omit it for precise manual instructions.
+- `model` is optional. Use `qwen` for NSFW risk; `openai` for layout/mockup images and director storyboard images required by `long-video-director`; `gemini-lite` only on explicit Lite requests.
+- Background removal, subject isolation/cutout, 去背景/抠图/抠像, or transparent PNG/sticker/overlay/alpha delivery means: set `background: "transparent"`; prompt wording alone is insufficient.
+- Existing-image cutout: pass its `media_index`; with no source, omit `media_index` for transparent text-to-image.
+- Pure cutout: omit `aspectRatio` to preserve the source canvas. If the user requests a new transparent layout (e.g. six stickers on 16:9), pass it; the requested layout wins.
+- Transparent output is strict: it uses GPT Image 2 only and never returns an opaque fallback. Otherwise omit `background`.
 
-Built-in skill fast-path routing is summarized in `agent.md`. If that fast path selects a built-in skill, read only that one skill prompt file once, unless it already appears in tool-result history. Do not read `prompts/image.md` just to route the skill. For precise manual instructions, omit `skill` and write the full editPrompt yourself.
+Built-in skill routing is in `agent.md`; read only that one skill prompt file once. Do not read `prompts/image.md` just to route the skill.
 
-Edit Mode prompt shape:
+Edit Mode prompt shape for ordinary in-place edits:
 
 1. Face rule when people are present.
 2. Exact edit instruction in detailed English.
 3. Preservation line: preserve exact composition, positions, poses, actions, and scene layout.
 4. End line: "Do NOT add any text, watermarks, or borders." Omit this if the user explicitly requested text or captions.
 
-Context Mode for `model='openai'`:
+Transparent cutout: read `prompts/cutout.md` once, follow its canonical ordered contract, and do not append ordinary composition/scene-layout preservation.
 
-- Use the user's original request as `editPrompt`.
-- Do not rewrite, translate, compress, expand, or replace the model's judgment with layout/color details.
-- In multi-turn layout/mockup image tasks, include concise prior user feedback as context.
+Context Mode for `model='openai'`: pass the user's request verbatim as `editPrompt`; do not rewrite, translate, expand, or invent layout/color details. For multi-turn layout/mockup image tasks, include concise prior feedback.

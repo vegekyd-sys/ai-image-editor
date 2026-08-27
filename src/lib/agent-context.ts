@@ -10,11 +10,14 @@
 
 import type { SupabaseClient } from '@supabase/supabase-js';
 import type { ModelMessage } from 'ai';
+import type { AgentModelProvider } from './agent-models';
 import type { DesignPayload, Tip } from '@/types';
 import * as workspace from './workspace';
 import { buildModelHistoryFromRows, type DbToolHistoryRow } from './agentToolHistory';
 import { formatVideoMediaSpec } from './media-aspect';
 import { loadCompositionDraft } from './composition-draft';
+import { resolveExplicitTurnMediaIndices } from './media-provenance';
+import { formatSourceRangeHint, sourceRangeFromVideoMeta } from './media-source-range';
 import { WorkspaceStudioRunStore } from './studio-run';
 import {
   buildTypedCompactionMessage,
@@ -59,6 +62,8 @@ export interface PromptContextOptions {
   contextPolicy?: AgentContextPolicy;
   /** Resolved model id used to validate provider-native compaction state. */
   agentModelId?: string;
+  /** Resolved provider used to reject incompatible provider-native state. */
+  agentModelProvider?: AgentModelProvider;
   /** Durable server attempt after attempt 1. It retains the same conversation history. */
   durableContinuation?: boolean;
 }
@@ -76,7 +81,11 @@ export interface PromptContextResult {
   recoverableDesignPath?: string;
   /** Project-scoped audio refs available as audio_1, audio_2, ... (not media_N). */
   audioAttachments: AudioAttachmentContext[];
+  /** Timeline media explicitly introduced or referenced by the current user turn. */
+  explicitMediaIndices: number[];
   executionSnapshot?: DurableExecutionSnapshot;
+  /** Persisted Studio workflow context for model guidance only. */
+  activeStudioWorkflowStage?: string;
   contextStats: ContextSelectionStats;
   /** Latest persisted input row represented by this context. */
   historyBoundary?: string;
@@ -91,7 +100,7 @@ interface DbSnapshot {
   tips: Tip[];
   sort_order: number;
   video_meta?: Record<string, unknown>;
-  metadata?: { takenAt?: string; location?: string };
+  metadata?: import('@/types').PhotoMetadata;
 }
 
 const GENERIC_MEDIA_DESCRIPTIONS = new Set([
@@ -322,12 +331,6 @@ export function selectPriorTerminalRun<T extends { id?: string; status?: string 
   ));
 }
 
-export function isStudioRunContinuationRequest(userMessage: string): boolean {
-  const message = userMessage.trim();
-  return /(?:继续|接着|恢复|续上|跑完|完成|continue|resume).{0,48}studio\s*run/i.test(message)
-    || /studio\s*run.{0,48}(?:继续|接着|恢复|续上|跑完|完成|continue|resume)/i.test(message);
-}
-
 function normalizeLegacyCompositionDescription(description: string | undefined, fallback: string): string {
   if (!description) return fallback;
   const trimmed = description.trim();
@@ -366,9 +369,9 @@ export async function buildPromptContext(
         .maybeSingle()
     : Promise.resolve({ data: null, error: null });
   const executionRunPromise = options.executionRunId
-    ? supabase
+      ? supabase
         .from('agent_runs')
-        .select('objective, prompt, acceptance_criteria, current_work_unit')
+        .select('objective, prompt, acceptance_criteria')
         .eq('id', options.executionRunId)
         .maybeSingle()
     : Promise.resolve({ data: null, error: null });
@@ -438,24 +441,27 @@ export async function buildPromptContext(
     ? priorRun.metadata as Record<string, unknown> | null | undefined
     : undefined;
   const recoveryContext = buildAgentRecoveryContext(userMessage, recoverableMetadata);
-  const activeStudioRun = studioRuns.find(run => run.status === 'running' && run.currentStage);
-  const activeStudioContinuation = Boolean(
-    activeStudioRun && isStudioRunContinuationRequest(userMessage),
-  );
-  const activeStudioRunContext = activeStudioContinuation && activeStudioRun
-    ? `[Active Studio Run]\nstudio run id: ${activeStudioRun.id}\ncurrent studio stage: ${activeStudioRun.currentStage}\nstudio state path: ${activeStudioRun.projectId}/studio-runs/${activeStudioRun.id}/run.json\nCall studio_run status first, then read only the persisted artifacts required by the current stage. Do not reread skill, prompt, director, component-library, or reference files.\n\n`
+  const activeAgentRunId = options.executionRunId || options.currentRunId;
+  const activeStudioRun = activeAgentRunId
+    ? studioRuns.find(run => (
+        run.agentRunId === activeAgentRunId
+        && run.status === 'running'
+        && run.currentStage
+      ))
+    : undefined;
+  const activeStudioRunContext = activeStudioRun
+    ? `[Active Studio workflow in this Agent Run]\nworkflow invocation id: ${activeStudioRun.id}\ncurrent workflow stage: ${activeStudioRun.currentStage}\nworkflow state path: ${activeStudioRun.projectId}/studio-runs/${activeStudioRun.id}/run.json\nCall studio_run status first, then read only the persisted artifacts required by the current stage. This workflow belongs to Agent Run ${activeAgentRunId}; never search for or adopt another project's active Studio state. Do not reread skill, prompt, director, component-library, or reference files.\n\n`
     : '';
   const executionRow = executionRunRes.data as {
     objective?: string | null;
     prompt?: string | null;
     acceptance_criteria?: unknown;
-    current_work_unit?: string | null;
   } | null;
   const executionObjective = executionRow?.objective || executionRow?.prompt || originMessage?.content || userMessage;
   const priorSnapshot = executionSnapshotRes.data?.content
     ? normalizeExecutionSnapshot(executionSnapshotRes.data.content, {
         objective: executionObjective,
-        currentWorkUnit: executionRow?.current_work_unit || activeStudioRun?.currentStage || 'agent',
+        currentWorkUnit: 'agent',
         nextAction: 'Continue the unfinished objective from durable project artifacts.',
       })
     : undefined;
@@ -466,7 +472,7 @@ export async function buildPromptContext(
         acceptanceCriteria: Array.isArray(executionRow?.acceptance_criteria)
           ? executionRow.acceptance_criteria.filter((item): item is string => typeof item === 'string')
           : priorSnapshot.acceptanceCriteria,
-        currentWorkUnit: executionRow?.current_work_unit || activeStudioRun?.currentStage || 'agent',
+        currentWorkUnit: 'agent',
         nextAction: 'Start the current request while preserving relevant prior decisions and durable artifacts.',
       }
     : priorSnapshot;
@@ -474,7 +480,7 @@ export async function buildPromptContext(
     ? persistedSnapshot ?? normalizeExecutionSnapshot({
         objective: executionObjective,
         acceptanceCriteria: Array.isArray(executionRow?.acceptance_criteria) ? executionRow?.acceptance_criteria : [],
-        currentWorkUnit: executionRow?.current_work_unit || activeStudioRun?.currentStage || 'agent',
+        currentWorkUnit: 'agent',
         nextAction: 'Start the objective and create the first durable artifact before broad exploration.',
       }, {
         objective: executionObjective,
@@ -539,7 +545,11 @@ export async function buildPromptContext(
   const compactionSnapshot = executionSnapshot?.providerCompaction
     ? executionSnapshot
     : projectCompactionSnapshot;
-  const typedCompaction = buildTypedCompactionMessage(compactionSnapshot, options.agentModelId);
+  const typedCompaction = buildTypedCompactionMessage(
+    compactionSnapshot,
+    options.agentModelId,
+    options.agentModelProvider,
+  );
   const compactedThrough = typedCompaction
     ? compactionSnapshot?.providerCompaction?.compactedThrough
     : undefined;
@@ -597,15 +607,23 @@ export async function buildPromptContext(
           : isRef ? 'reference' : isComposition ? 'composition' : 'image';
         const marker = i === currentSnapshotIndex ? '  ← YOU ARE HERE' : '';
         const videoTag = isVideo && videoMeta?.videoUrl ? ` [video: ${videoMeta.videoUrl}]` : '';
+        const sourceRangeTag = isVideo ? formatSourceRangeHint(sourceRangeFromVideoMeta(videoMeta)) : '';
         const transcriptTag = isVideo ? formatTranscriptMediaHint(videoMeta) : '';
         const codePath = s.design_path && !isVideo ? ` [composition code: ${s.design_path}]` : '';
-        return `<<<media_${i + 1}>>> [${typeLabel}]${marker} — ${desc}${videoTag}${transcriptTag}${codePath}`;
+        const alphaTag = s.metadata?.hasAlpha
+          ? ' [transparent alpha asset; preserve transparency in later image edits unless the user explicitly asks for a new background]'
+          : '';
+        return `<<<media_${i + 1}>>> [${typeLabel}]${marker} — ${desc}${alphaTag}${videoTag}${sourceRangeTag}${transcriptTag}${codePath}`;
       }).join('\n')}\n\n`
+    : '';
+
+  const mediaDescriptionPolicy = snapshots.length >= 1
+    ? `[Media description policy]\nA specific Media Index description may already contain media analysis supplied by an upload pipeline, asset library, earlier tool call, or another Agent. Treat that description as available evidence regardless of its provider. Read it before choosing tools. Do not call analyze_image or analyze_video merely to restate content already covered there. Analyze only when the description is missing/generic, explicitly uncertain or failed, or the user's question requires a concrete visual detail that the description does not cover. Never invent details beyond the supplied description. Use preview_frame for composition/layout/crop/boundary QA, not to repeat semantic analysis.\n\n`
     : '';
 
   // Video/composition mode warnings (mutually exclusive)
   const videoWarning = currentSnapIsVideo
-    ? `[VIDEO MODE] You are viewing a video. Use analyze_video for visual scenes/actions. Use transcribe_audio for dialogue, subtitles, word/utterance timestamps, or time-based cuts. Do NOT read or patch its composition code — that is only a playback wrapper.\n\n`
+    ? `[VIDEO MODE] You are viewing a video. First consume its Media Index description as existing media understanding. Use analyze_video only for missing or uncovered visual scenes/actions. Use transcribe_audio for dialogue, subtitles, word/utterance timestamps, or speech-dependent cuts when exact timing is not already available. Do NOT read or patch its composition code — that is only a playback wrapper.\n\n`
     : '';
 
   const designWarning = !currentSnapIsVideo && currentDesignPath
@@ -642,7 +660,7 @@ export async function buildPromptContext(
     ? `[Frame-anchored video edit]\nThe user attached a screenshot/frame and referenced a video moment in the text. Treat the attached image as the visual anchor for local video repair: read skills/video-segment-edit/SKILL.md, locate the moment with analyze_video({ mode: "locate_frame" }) using the screenshot + referenced video, and do not call generate_animation until the user explicitly confirms generation.\n\n`
     : '';
 
-  const videoUploadContext = uploadedVideoCount
+  const videoUploadContext = uploadedVideoCount && !options.turnMediaCount
     ? (() => {
         const total = snapshots.length;
         const startIdx = total - uploadedVideoCount + 1;
@@ -659,16 +677,25 @@ export async function buildPromptContext(
         const duration = typeof audio.duration === 'number' ? `, ${formatSecondsForPrompt(audio.duration)}s` : '';
         const track = typeof audio.trackIndex === 'number' ? `, project_music track_index=${audio.trackIndex}` : '';
         return `<<<${label}>>> [audio] — ${title}${duration}${track}, ${audio.audioUrl}`;
-      }).join('\n')}\nUse these as music/audio references. To use one in video generation, mention its marker in story_prompt and pass audio_refs, e.g. story_prompt includes <<<audio_1>>> and audio_refs is ["audio_1"]. Audio markers are not Timeline Media Index items and must not be referenced as <<<media_N>>>.\n\n`
+      }).join('\n')}\nUse these as music/audio references. For same-speaker translation, pass one label to generate_audio as source_voice {type:"audio_index",ref:"audio_1"}; MP3 and WAV are supported. To use one in video generation, mention its marker in story_prompt and pass audio_refs, e.g. story_prompt includes <<<audio_1>>> and audio_refs is ["audio_1"]. Audio markers are not Timeline Media Index items and must not be referenced as <<<media_N>>>.\n\n`
     : '';
 
   // Assemble
-  const fullPrompt = `${executionContext}${recoveryContext}${activeStudioRunContext}${videoWarning}${designWarning}${annotationWarning}${draftWarning}${snapshotWarning}${metaContext}${descriptionContext}${snapshotIndexContext}${turnMediaInspectionContext}${verifiedTurnMediaEvidence}${designContext}${recoverableDraftContext}${tipsContext}${refContext}${frameAnchoredVideoEditContext}${videoUploadContext}${audioAttachmentContext}[User request — detect language and reply in the same language]\n${userMessage}`;
+  const fullPrompt = `${executionContext}${recoveryContext}${activeStudioRunContext}${videoWarning}${designWarning}${annotationWarning}${draftWarning}${snapshotWarning}${metaContext}${descriptionContext}${snapshotIndexContext}${mediaDescriptionPolicy}${turnMediaInspectionContext}${verifiedTurnMediaEvidence}${designContext}${recoverableDraftContext}${tipsContext}${refContext}${frameAnchoredVideoEditContext}${videoUploadContext}${audioAttachmentContext}[User request — detect language and reply in the same language]\n${userMessage}`;
 
   const snapshotImages = snapshots.map((s) => {
     const videoMeta = s.video_meta as Record<string, unknown> | undefined;
     const videoUrl = typeof videoMeta?.videoUrl === 'string' ? videoMeta.videoUrl : '';
     return s.type === 'video' && videoUrl ? videoUrl : (s.image_url || '');
+  });
+  const explicitMediaIndices = resolveExplicitTurnMediaIndices({
+    totalMediaCount: snapshots.length,
+    userMessage: options.executionRunId
+      ? `${executionObjective}\n${userMessage}`
+      : userMessage,
+    turnMediaCount: options.turnMediaCount,
+    referenceImageCount,
+    uploadedVideoCount,
   });
   const historyBoundary = [...messages, ...toolHistory]
     .map(row => row.created_at)
@@ -684,7 +711,9 @@ export async function buildPromptContext(
     currentDesignPath,
     recoverableDesignPath: recoverableDraft?.path,
     audioAttachments: resolvedAudioAttachments,
+    explicitMediaIndices,
     executionSnapshot,
+    activeStudioWorkflowStage: activeStudioRun?.currentStage || undefined,
     contextStats: selectedHistory.stats,
     historyBoundary,
   };

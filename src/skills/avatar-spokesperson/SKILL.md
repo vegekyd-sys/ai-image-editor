@@ -1,9 +1,11 @@
 ---
 name: avatar-spokesperson
 description: >
-  Makaron adapter with adapted support for OpenMontage's avatar-spokesperson
-  production pipeline, using existing Makaron tools and durable project outputs.
-allowed-tools: read_file studio_run prepare_visual_asset analyze_video analyze_image transcribe_audio generate_image generate_animation generate_audio generate_music list_voiceover_voices generate_voiceover run_code write_file preview_frame materialize_media
+  Create presenter-led videos from a supplied identity image, presenter footage,
+  script, or voiceover, with captions and editable delivery. Use when an avatar
+  or on-screen spokesperson should deliver the message; do not promise exact lip
+  sync unless the selected provider supports it.
+allowed-tools: read_file studio_run prepare_visual_asset analyze_video analyze_image transcribe_audio generate_image generate_animation generate_audio run_code write_file preview_frame materialize_media
 metadata:
   makaron:
     icon: "◫"
@@ -21,6 +23,7 @@ metadata:
     studioRunRecipe: "avatar-spokesperson"
     studioRunProfile: "generated-presenter"
     sourceMediaRequired: false
+    inputHint: "A presenter image or footage, plus a script or voice track"
     tags: [openmontage, pipeline, video-workflow, adapted, video, workflow, studio-run, remotion]
 ---
 

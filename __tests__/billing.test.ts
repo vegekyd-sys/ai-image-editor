@@ -661,6 +661,45 @@ describe('credits', () => {
       expect(result.charged).toBe(0);
       expect(mockRpc).not.toHaveBeenCalled();
     });
+
+    it('rejects an atomic overdraft without touching balance tables', async () => {
+      mockRpc.mockResolvedValue({
+        data: null,
+        error: {
+          code: 'P0001',
+          message: 'insufficient_credits: balance=93, required=322',
+        },
+      });
+      mockFrom.mockImplementation((t: string) => t === 'app_settings' ? billingSettingsChain : mockQuery(null));
+
+      const {
+        deductFixedCredits,
+        InsufficientCreditsError,
+      } = await import('@/lib/billing/credits');
+
+      await expect(
+        deductFixedCredits('user-1', 322, 'create_video', 'seedance-fast'),
+      ).rejects.toEqual(new InsufficientCreditsError(93, 322));
+
+      const fromCalls = mockFrom.mock.calls.map((call: string[]) => call[0]);
+      expect(fromCalls).not.toContain('credit_balances');
+      expect(fromCalls).not.toContain('usage_logs');
+    });
+
+    it('refunds only the explicitly reserved amount through the atomic RPC', async () => {
+      mockRpc.mockResolvedValue({ data: 415, error: null });
+
+      const { refundCredits } = await import('@/lib/billing/credits');
+      const remaining = await refundCredits('user-1', 93, 'create_video');
+
+      expect(remaining).toBe(415);
+      expect(mockRpc).toHaveBeenCalledWith('refund_credits_and_log', {
+        p_user_id: 'user-1',
+        p_amount: 93,
+        p_tool_name: 'create_video',
+        p_source: 'app',
+      });
+    });
   });
 
   describe('Seed Audio usage billing', () => {
@@ -730,42 +769,35 @@ describe('credits', () => {
       expect(fromCalls).not.toContain('usage_logs');
     });
 
-    it('falls back to separate deduct + log when RPC fails', async () => {
+    it('fails closed when the atomic RPC is unavailable', async () => {
       const rates = [
         { model_id: 'us.anthropic.claude-sonnet-4-6', display_name: 'Sonnet', input_per_1m: 3, output_per_1m: 15, markup: 2, is_active: true },
       ];
       const ratesChain = mockQuery(rates);
       ratesChain.order = vi.fn().mockResolvedValue({ data: rates, error: null });
 
-      // RPC fails
-      mockRpc.mockResolvedValue({ data: null, error: { message: 'function not found' } });
-
-      const balanceChain = mockQuery({ balance: 100, lifetime_used: 50 });
-      const insertFn = vi.fn().mockResolvedValue({ data: null, error: null });
-      const usageChain = { insert: insertFn };
+      mockRpc.mockResolvedValue({
+        data: null,
+        error: { code: 'PGRST202', message: 'function not found' },
+      });
 
       mockFrom.mockImplementation((table: string) => {
         if (table === 'app_settings') return billingSettingsChain;
         if (table === 'token_rates') return ratesChain;
-        if (table === 'credit_balances') return balanceChain;
-        if (table === 'usage_logs') return usageChain;
         return mockQuery(null);
       });
-
-      const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
 
       const { deductByTokens } = await import('@/lib/billing/credits');
       const { invalidateTokenRateCache } = await import('@/lib/billing/token-rates');
       invalidateTokenRateCache();
 
-      await deductByTokens('user-1', 'agent', 'us.anthropic.claude-sonnet-4-6', 10000, 500);
+      await expect(
+        deductByTokens('user-1', 'agent', 'us.anthropic.claude-sonnet-4-6', 10000, 500),
+      ).rejects.toThrow('Credit deduction failed: function not found');
 
-      // Should log warning about fallback
-      expect(warnSpy).toHaveBeenCalledWith(expect.stringContaining('deduct_and_log RPC not available'), expect.any(String));
-      // Should have written to usage_logs via fallback
-      expect(insertFn).toHaveBeenCalled();
-
-      warnSpy.mockRestore();
+      const fromCalls = mockFrom.mock.calls.map((call: string[]) => call[0]);
+      expect(fromCalls).not.toContain('credit_balances');
+      expect(fromCalls).not.toContain('usage_logs');
     });
   });
 

@@ -46,7 +46,6 @@ HANDOFF*.md
 
 # supabase local project link metadata
 supabase/.temp/*
-!supabase/.temp/cli-latest
 
 # typescript
 *.tsbuildinfo
@@ -81,15 +80,27 @@ marketing/meta-ads/
 !/scripts/
 /scripts/*
 !/scripts/makaron-release-check.mjs
+!/scripts/makaron-release-prod.mjs
+!/scripts/makaron-runner.mjs
 !/scripts/makaron-worktree-fastpath.mjs
+!/scripts/editable-provenance-ab.ts
+!/scripts/remotion-lambda-runtime-regression.ts
 !/scripts/smoke-gpt56-agent.ts
 !/scripts/smoke-gpt56-cache.ts
+!/scripts/smoke-volcengine-asr-project.ts
 !/scripts/backfill-annual-subscription-credits.mjs
 !/scripts/audit-liquid-glass-perf.mjs
+!/scripts/check-ui-i18n.mjs
+!/scripts/ui-i18n-baseline.json
 !/scripts/studio-run-golden.ts
 !/scripts/sticker-bridge-acceptance.ts
 !/scripts/edge-video-bridge-acceptance.ts
 !/scripts/agent-execution-acceptance.ts
+!/scripts/e2e-ios-subscription.sh
+
+# iOS subscription E2E Supabase runtime metadata
+/e2e/ios-subscription/supabase/.branches/
+/e2e/ios-subscription/supabase/.temp/
 
 
 # claude code local settings
@@ -109,13 +120,17 @@ test-kling.mjs
 /output/
 /outputs/
 /artifacts/
+/.artifacts/
 /work/
 /.playwright-cli/
 /.remotion-bundle-local/
 
 # workspace agent runtime data
 .workspace/
-.agents/
+.agents/*
+!.agents/plugins/
+.agents/plugins/*
+!.agents/plugins/marketplace.json
 .claude/worktrees/
 .codex/
 

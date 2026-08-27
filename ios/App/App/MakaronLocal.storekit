@@ -1,11 +1,11 @@
 {
-  "identifier": "MAKARON_LOCAL_IAP",
+  "identifier": "4D4B5231",
   "nonRenewingSubscriptions": [],
   "products": [
     {
       "displayPrice": "4.99",
       "familyShareable": false,
-      "internalID": "TOPUP_STARTER",
+      "internalID": "10000001",
       "localizations": [
         {
           "description": "500 Makaron credits",
@@ -20,7 +20,7 @@
     {
       "displayPrice": "19.99",
       "familyShareable": false,
-      "internalID": "TOPUP_PRO",
+      "internalID": "10000002",
       "localizations": [
         {
           "description": "2,200 Makaron credits",
@@ -35,7 +35,7 @@
     {
       "displayPrice": "49.99",
       "familyShareable": false,
-      "internalID": "TOPUP_TEAM",
+      "internalID": "10000003",
       "localizations": [
         {
           "description": "5,750 Makaron credits",
@@ -50,7 +50,7 @@
     {
       "displayPrice": "99.99",
       "familyShareable": false,
-      "internalID": "TOPUP_STUDIO",
+      "internalID": "10000004",
       "localizations": [
         {
           "description": "11,500 Makaron credits",
@@ -65,7 +65,7 @@
     {
       "displayPrice": "199.99",
       "familyShareable": false,
-      "internalID": "TOPUP_ENTERPRISE",
+      "internalID": "10000005",
       "localizations": [
         {
           "description": "24,000 Makaron credits",
@@ -79,7 +79,6 @@
     }
   ],
   "settings": {
-    "_applicationInternalID": "app.makaron.ios",
     "_askToBuyEnabled": false,
     "_billingGracePeriodEnabled": false,
     "_failTransactionsEnabled": false,
@@ -88,7 +87,7 @@
   },
   "subscriptionGroups": [
     {
-      "id": "MAKARON_PRO_GROUP",
+      "id": "30000001",
       "localizations": [
         {
           "customAgreement": "",
@@ -104,8 +103,12 @@
           "displayPrice": "9.99",
           "familyShareable": false,
           "groupNumber": 3,
-          "internalID": "BASIC_MONTHLY",
-          "introductoryOffer": null,
+          "internalID": "20000001",
+          "introductoryOffer": {
+            "internalID": "2F000001",
+            "paymentMode": "free",
+            "subscriptionPeriod": "P3D"
+          },
           "localizations": [
             {
               "description": "Basic monthly Makaron subscription",
@@ -116,7 +119,7 @@
           "productID": "app.makaron.ios.subscription.basic.monthly",
           "recurringSubscriptionPeriod": "P1M",
           "referenceName": "Basic Monthly",
-          "subscriptionGroupID": "MAKARON_PRO_GROUP",
+          "subscriptionGroupID": "30000001",
           "type": "RecurringSubscription"
         },
         {
@@ -125,7 +128,7 @@
           "displayPrice": "94.99",
           "familyShareable": false,
           "groupNumber": 3,
-          "internalID": "BASIC_ANNUAL",
+          "internalID": "20000002",
           "introductoryOffer": null,
           "localizations": [
             {
@@ -137,7 +140,7 @@
           "productID": "app.makaron.ios.subscription.basic.annual",
           "recurringSubscriptionPeriod": "P1Y",
           "referenceName": "Basic Annual",
-          "subscriptionGroupID": "MAKARON_PRO_GROUP",
+          "subscriptionGroupID": "30000001",
           "type": "RecurringSubscription"
         },
         {
@@ -146,7 +149,7 @@
           "displayPrice": "19.99",
           "familyShareable": false,
           "groupNumber": 2,
-          "internalID": "PRO_MONTHLY",
+          "internalID": "20000003",
           "introductoryOffer": null,
           "localizations": [
             {
@@ -158,7 +161,7 @@
           "productID": "app.makaron.ios.subscription.pro.monthly",
           "recurringSubscriptionPeriod": "P1M",
           "referenceName": "Pro Monthly",
-          "subscriptionGroupID": "MAKARON_PRO_GROUP",
+          "subscriptionGroupID": "30000001",
           "type": "RecurringSubscription"
         },
         {
@@ -167,7 +170,7 @@
           "displayPrice": "189.99",
           "familyShareable": false,
           "groupNumber": 2,
-          "internalID": "PRO_ANNUAL",
+          "internalID": "20000004",
           "introductoryOffer": null,
           "localizations": [
             {
@@ -179,7 +182,7 @@
           "productID": "app.makaron.ios.subscription.pro.annual",
           "recurringSubscriptionPeriod": "P1Y",
           "referenceName": "Pro Annual",
-          "subscriptionGroupID": "MAKARON_PRO_GROUP",
+          "subscriptionGroupID": "30000001",
           "type": "RecurringSubscription"
         },
         {
@@ -188,7 +191,7 @@
           "displayPrice": "49.99",
           "familyShareable": false,
           "groupNumber": 1,
-          "internalID": "BUSINESS_MONTHLY",
+          "internalID": "20000005",
           "introductoryOffer": null,
           "localizations": [
             {
@@ -200,7 +203,7 @@
           "productID": "app.makaron.ios.subscription.business.monthly",
           "recurringSubscriptionPeriod": "P1M",
           "referenceName": "Business Monthly",
-          "subscriptionGroupID": "MAKARON_PRO_GROUP",
+          "subscriptionGroupID": "30000001",
           "type": "RecurringSubscription"
         },
         {
@@ -209,7 +212,7 @@
           "displayPrice": "479.99",
           "familyShareable": false,
           "groupNumber": 1,
-          "internalID": "BUSINESS_ANNUAL",
+          "internalID": "20000006",
           "introductoryOffer": null,
           "localizations": [
             {
@@ -221,14 +224,14 @@
           "productID": "app.makaron.ios.subscription.business.annual",
           "recurringSubscriptionPeriod": "P1Y",
           "referenceName": "Business Annual",
-          "subscriptionGroupID": "MAKARON_PRO_GROUP",
+          "subscriptionGroupID": "30000001",
           "type": "RecurringSubscription"
         }
       ]
     }
   ],
   "version": {
-    "major": 2,
+    "major": 3,
     "minor": 0
   }
 }

@@ -1,3 +1,5 @@
+import { resolveMediaMarkersInString } from '../media-markers';
+
 interface PreparedAssetEvidence {
   assetId: string;
   mode: 'cutout' | 'edge-video';
@@ -27,6 +29,120 @@ interface StoryboardScene {
 }
 
 type PreparedAssetResolver = (assetId: string) => Promise<PreparedAssetEvidence | null>;
+
+interface CompositionVisualAsset extends ManifestAsset {
+  type: 'image' | 'video' | 'audio' | 'music' | 'font' | 'code';
+  sceneIds: string[];
+  status: 'ready' | 'missing' | 'failed';
+  role?: 'hero' | 'support' | 'decoration';
+}
+
+interface CompositionDesign {
+  code?: unknown;
+  props?: unknown;
+  editables?: unknown;
+}
+
+function serializedContains(value: unknown, expected: string): boolean {
+  if (!expected) return false;
+  if (typeof value === 'string') return value.includes(expected);
+  try {
+    return JSON.stringify(value).includes(expected);
+  } catch {
+    return false;
+  }
+}
+
+function editableConsumesAsset(
+  design: CompositionDesign,
+  asset: CompositionVisualAsset,
+  resolvedPath: string,
+): boolean {
+  if (!Array.isArray(design.editables) || !design.props || typeof design.props !== 'object') {
+    return false;
+  }
+  const props = design.props as Record<string, unknown>;
+  return design.editables.some((candidate) => {
+    if (!candidate || typeof candidate !== 'object') return false;
+    const editable = candidate as Record<string, unknown>;
+    if (editable.type !== asset.type || typeof editable.propKey !== 'string') return false;
+    return serializedContains(props[editable.propKey], resolvedPath);
+  });
+}
+
+export function assertCompositionConsumesVisualAssets(input: {
+  storyboard: { scenes: StoryboardScene[] };
+  manifest: { assets: CompositionVisualAsset[] };
+  composition: { mode: 'editable' | 'atelier' | 'templated'; sceneIds: string[] };
+  design: CompositionDesign;
+  mediaUrls: string[];
+}): void {
+  const compositionSceneIds = new Set(input.composition.sceneIds);
+  const assetsById = new Map(input.manifest.assets.map(asset => [asset.id, asset]));
+  const requiredAssetIds = new Set<string>();
+
+  for (const scene of input.storyboard.scenes) {
+    if (!compositionSceneIds.has(scene.id)) continue;
+    const carrier = scene.visualPlan?.carrier;
+    for (const assetId of scene.assetIds) {
+      const asset = assetsById.get(assetId);
+      if (!asset || asset.status !== 'ready' || (asset.type !== 'image' && asset.type !== 'video')) continue;
+      if (
+        carrier === 'plate'
+        || carrier === 'cutout'
+        || carrier === 'edge-video'
+        || scene.visualPlan?.primaryAssetId === assetId
+        || asset.role === 'hero'
+      ) {
+        requiredAssetIds.add(assetId);
+      }
+    }
+  }
+
+  for (const asset of input.manifest.assets) {
+    if (
+      asset.status === 'ready'
+      && asset.role === 'hero'
+      && (asset.type === 'image' || asset.type === 'video')
+      && asset.sceneIds.some(sceneId => compositionSceneIds.has(sceneId))
+    ) {
+      requiredAssetIds.add(asset.id);
+    }
+  }
+
+  const issues: string[] = [];
+  for (const assetId of requiredAssetIds) {
+    const asset = assetsById.get(assetId)!;
+    const resolvedPath = resolveMediaMarkersInString(asset.path, input.mediaUrls);
+    const linkedScenes = asset.sceneIds.filter(sceneId => compositionSceneIds.has(sceneId));
+    const sceneSummary = linkedScenes.length > 0 ? linkedScenes.join(', ') : 'the persisted Storyboard';
+
+    if (/<<<media_\d+>>>/.test(resolvedPath)) {
+      issues.push(`required ${asset.type} asset ${asset.id} (${asset.path}) could not be resolved from the Media Index`);
+      continue;
+    }
+    if (
+      !serializedContains(input.design.code, resolvedPath)
+      && !serializedContains(input.design.props, resolvedPath)
+    ) {
+      issues.push(`required ${asset.type} asset ${asset.id} (${asset.path}) is absent from the saved Composition for ${sceneSummary}`);
+      continue;
+    }
+    if (
+      input.composition.mode === 'editable'
+      && !editableConsumesAsset(input.design, asset, resolvedPath)
+    ) {
+      issues.push(`required ${asset.type} asset ${asset.id} (${asset.path}) is not exposed as an editable ${asset.type} in the saved Composition`);
+    }
+  }
+
+  if (issues.length > 0) {
+    throw new Error(
+      `Composition asset consumption failed:\n${issues.map(issue => `- ${issue}`).join('\n')}\n`
+      + 'Patch the same saved Composition to render the existing manifest assets with <Img>/<Video>; do not regenerate or replace them with procedural graphics.',
+    );
+  }
+}
 
 export function assertVisualAssetBridgeEvidence(input: {
   storyboard: { scenes: StoryboardScene[] };

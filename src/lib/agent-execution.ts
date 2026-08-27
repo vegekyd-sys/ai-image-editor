@@ -1,4 +1,5 @@
 import type { ModelMessage } from 'ai';
+import type { AgentModelProvider } from './agent-models';
 import type { SupabaseClient } from '@supabase/supabase-js';
 
 export const EXECUTION_SCHEMA_VERSION = 1;
@@ -54,7 +55,8 @@ export interface DurableExecutionRef {
   runId: string;
   attemptId: string;
   attemptNo: number;
-  workUnitKey: string;
+  /** Infrastructure epoch claimed at attempt start; never a workflow state. */
+  inputEpoch: number;
 }
 
 export interface ContextSelectionStats {
@@ -69,16 +71,6 @@ export interface ContextSelectionStats {
 export interface ExecutionLeaseState {
   status?: string | null;
   lease_token?: string | null;
-}
-
-export function resolveExecutionHandoffWorkUnit(
-  currentWorkUnit: string,
-  checkpoint?: Record<string, unknown>,
-): string {
-  const studioRunStage = checkpoint?.studioRunStage;
-  return typeof studioRunStage === 'string' && studioRunStage.trim()
-    ? `studio:${studioRunStage}`
-    : currentWorkUnit;
 }
 
 export function isConfirmedExecutionLeaseLoss(input: {
@@ -96,7 +88,19 @@ export function isConfirmedExecutionLeaseLoss(input: {
 
 export function isRetryableProviderOutage(detail: unknown): boolean {
   if (typeof detail !== 'string' || !detail.trim()) return false;
-  return /(?:serviceunavailableexception|bedrock.{0,120}(?:unable to process|service unavailable)|\b503\b|econnreset|tls connection was established|step timeout.{0,80}exceeded)/i.test(detail);
+  return /(?:serviceunavailableexception|bedrock.{0,120}(?:unable to process|service unavailable)|\b(?:401|403|408|429|500|502|503|504)\b|econnreset|tls connection was established|step timeout.{0,80}exceeded)/i.test(detail);
+}
+
+export function shouldFailoverAzureGPT56ToOpenRouter(input: {
+  requestedProvider: string;
+  hasOpenRouterKey: boolean;
+  previousProviderFailover: boolean;
+  retryableFailureCount: number;
+}): boolean {
+  return input.requestedProvider === 'azure-openai'
+    && input.hasOpenRouterKey
+    && (input.previousProviderFailover
+      || input.retryableFailureCount >= MAX_SAME_PROVIDER_ATTEMPTS);
 }
 
 export interface ProviderAttemptObservation {
@@ -191,7 +195,6 @@ export function formatDurableExecutionSnapshot(snapshot: DurableExecutionSnapsho
     snapshot.completedWork.length ? `Completed work:\n${snapshot.completedWork.map(item => `- ${item}`).join('\n')}` : '',
     snapshot.artifacts.length ? `Durable artifacts:\n${snapshot.artifacts.map(item => `- ${item.kind}: ${item.path || item.url || item.label || 'persisted'}`).join('\n')}` : '',
     snapshot.openQuestions.length ? `Open questions:\n${snapshot.openQuestions.map(item => `- ${item}`).join('\n')}` : '',
-    `Current work unit: ${snapshot.currentWorkUnit}`,
     snapshot.attemptSummary ? `Previous attempt summary: ${snapshot.attemptSummary}` : '',
     `Next action: ${snapshot.nextAction}`,
     'Continue from this handoff. Do not repeat completed side effects or reread broad skill catalogs.',
@@ -240,12 +243,19 @@ export function normalizeExecutionSnapshot(
 export function buildTypedCompactionMessage(
   snapshot: DurableExecutionSnapshot | null | undefined,
   modelId?: string,
+  agentProvider?: AgentModelProvider,
 ): ModelMessage | null {
   const compaction = snapshot?.providerCompaction;
   if (compaction?.modelId && modelId && compaction.modelId !== modelId) return null;
   if (compaction?.item
     && (!compaction.modelId || !modelId || compaction.modelId === modelId)) {
     const { providerKey, itemId, encryptedContent } = compaction.item;
+    // Encrypted Responses compaction items are provider-bound. A product model
+    // can keep the same public id while moving from Azure to OpenRouter, but its
+    // old Azure state must never be sent through the OpenRouter chat adapter.
+    if (agentProvider && (agentProvider !== 'azure-openai' || providerKey !== 'azure')) {
+      return null;
+    }
     return {
       role: 'assistant',
       content: [{
@@ -264,6 +274,12 @@ export function buildTypedCompactionMessage(
 
   const summary = compaction?.summary?.trim();
   if (!summary) return null;
+  if (agentProvider && agentProvider !== 'azure-openai') {
+    return {
+      role: 'assistant',
+      content: [{ type: 'text', text: summary }],
+    } as ModelMessage;
+  }
   return {
     role: 'assistant',
     content: [{
@@ -274,7 +290,14 @@ export function buildTypedCompactionMessage(
   } as ModelMessage;
 }
 
-export function stableOperationKey(workUnitKey: string, toolName: string, input: unknown): string {
+export function stableOperationKey(
+  toolName: string,
+  input: unknown,
+  inputEpoch = 0,
+): string {
+  // Retries of the same instruction reuse side effects across attempts. A real
+  // new user input advances the epoch and may intentionally repeat the tool.
+  // Studio workflow stages never participate in Agent operation identity.
   const stable = (value: unknown): string => {
     if (value == null || typeof value !== 'object') return JSON.stringify(value);
     if (Array.isArray(value)) return `[${value.map(stable).join(',')}]`;
@@ -283,7 +306,7 @@ export function stableOperationKey(workUnitKey: string, toolName: string, input:
       .map(([key, inner]) => `${JSON.stringify(key)}:${stable(inner)}`)
       .join(',')}}`;
   };
-  const text = `${workUnitKey}\n${toolName}\n${stable(input)}`;
+  const text = `${inputEpoch}\n${toolName}\n${stable(input)}`;
   let h1 = 0x811c9dc5;
   let h2 = 0x01000193;
   for (let i = 0; i < text.length; i++) {

@@ -1,12 +1,12 @@
 import { describe, expect, it } from 'vitest';
-import { readFileSync } from 'fs';
 import path from 'path';
 import { parseSkillMd } from '@/lib/skill-registry';
+import { readAgentAwareSource } from './helpers/agentRuntimeSource';
 
 const root = path.resolve(__dirname, '..');
 
 function read(relativePath: string) {
-  return readFileSync(path.join(root, relativePath), 'utf8');
+  return readAgentAwareSource(root, relativePath);
 }
 
 const recipes = [
@@ -63,7 +63,7 @@ describe('Studio production skills', () => {
     expect(motion).toContain('does not mean "no audio"');
     expect(motion).toContain('Visual execution does not replace storytelling');
     expect(production).toContain('fresh project and');
-    expect(production).toContain('Record Agent completion');
+    expect(production).toContain('Record Agent queue-submission');
     expect(production).toContain('skills/_shared/visual-direction/SKILL.md');
     expect(production).toContain('skills/_shared/studio-production/taste-direction.md');
     expect(production).toContain('skills/_shared/visual-asset-bridge/SKILL.md');
@@ -71,6 +71,10 @@ describe('Studio production skills', () => {
     expect(production).toContain('`prepared` field');
     expect(production).not.toContain('creative-direction/SKILL.md');
     expect(audio).toContain('Treat audio as part of the edit');
+    expect(audio).toContain('Voice Performance Brief');
+    expect(audio).toContain('intentionally\n  isolated narration/VO master');
+    expect(audio).toContain('`generate_audio({ kind: "mixed", ... })` exactly once');
+    expect(audio).toContain('master clock');
     expect(review).toContain('Call `materialize_media` once');
     expect(review).toContain('Semantic completeness');
     expect(review).toContain('subtitleSyncEvidence');
@@ -92,7 +96,8 @@ describe('Studio production skills', () => {
     expect(production).toContain('Generate or load');
     expect(production).toContain('linked Storyboard range and representative overlap');
     expect(production).toContain('narrationTimingEvidence');
-    expect(agent).toContain('const renderProfile: RemotionRenderProfile = studioCheckpoint.studioRunId');
+    expect(production).toContain('returned narration cue sheet');
+    expect(agent).toContain('const renderProfile = studioCheckpoint.studioRunId');
     expect(agent).toContain("? 'source'");
     expect(agent).toContain('Studio Composition must keep the locked delivery resolution');
   });

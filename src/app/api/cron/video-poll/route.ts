@@ -21,6 +21,15 @@ function getPublishedSnapshotIds(metadata: Record<string, unknown> | null | unde
     : []
 }
 
+async function tryHandleVideoFailure(snapshotId: string, error?: string): Promise<boolean> {
+  try {
+    return await handleVideoFailure(snapshotId, error)
+  } catch (failureError) {
+    console.error(`[cron/video-poll] Failed to persist terminal state for ${snapshotId}:`, failureError)
+    return false
+  }
+}
+
 export async function GET(req: NextRequest) {
   if (req.headers.get('authorization') !== `Bearer ${process.env.CRON_SECRET}`) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
@@ -61,14 +70,22 @@ export async function GET(req: NextRequest) {
       } else if (vm.taskId.startsWith('xai-')) {
         const { getXaiVideoTask } = await import('@/lib/xai-video')
         result = await getXaiVideoTask(vm.taskId)
+      } else if (vm.taskId.startsWith('google-omni-')) {
+        const { getGoogleOmniVideoTask } = await import('@/lib/google-omni-video')
+        result = await getGoogleOmniVideoTask(vm.taskId, vm.videoUrl || vm.providerUrl)
+      } else if (vm.taskId.startsWith('minimax-h3-')) {
+        const { getMinimaxVideoTask } = await import('@/lib/minimax-video')
+        result = await getMinimaxVideoTask(vm.taskId)
+      } else if (vm.taskId.startsWith('sync3-')) {
+        const { getSyncLipsyncTask } = await import('@/lib/sync-lipsync')
+        result = await getSyncLipsyncTask(vm.taskId)
       } else {
         const { getKlingTask } = await import('@/lib/kling')
         result = await getKlingTask(vm.taskId)
       }
 
       if (result.status === 'failed') {
-        await handleVideoFailure(snap.id, result.error)
-        processed++
+        if (await tryHandleVideoFailure(snap.id, result.error)) processed++
       } else if (result.status === 'completed' && result.videoUrl) {
         const updatedMeta = { ...vm, status: 'completed' as const, videoUrl: result.videoUrl, providerUrl: result.videoUrl }
         await admin.from('snapshots').update({
@@ -90,14 +107,12 @@ export async function GET(req: NextRequest) {
       }
       // still processing after 30min → mark timeout
       if (result.status !== 'completed' && result.status !== 'failed' && age > 30 * 60 * 1000) {
-        await handleVideoFailure(snap.id, 'Timed out after 30 minutes')
-        processed++
+        if (await tryHandleVideoFailure(snap.id, 'Timed out after 30 minutes')) processed++
       }
     } catch (e) {
       console.error(`[cron/video-poll] Error polling ${snap.id}:`, e)
       if (age > 30 * 60 * 1000) {
-        await handleVideoFailure(snap.id, 'Provider polling failed after 30 minutes')
-        processed++
+        if (await tryHandleVideoFailure(snap.id, 'Provider polling failed after 30 minutes')) processed++
       }
     }
   }

@@ -3,7 +3,8 @@ import type { NextRequest } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
 import { getSupabaseAdmin } from '@/lib/supabase/service'
 import { readAttributionCookie, sendMetaCapiEvent } from '@/lib/marketing/meta-capi'
-import { getConfiguredWelcomeCredits } from '@/lib/billing/welcome-credits'
+import { initializeSignupCredits } from '@/lib/billing/signup-credits'
+import { userAgentHasMakaronIOSToken } from '@/lib/native-app'
 
 /**
  * POST /api/auth/activate
@@ -18,6 +19,7 @@ export async function POST(req: NextRequest) {
   }
 
   const admin = getSupabaseAdmin()
+  const isIOSApp = userAgentHasMakaronIOSToken(req.headers.get('user-agent') ?? undefined)
 
   const { data: profile } = await admin
     .from('user_profiles')
@@ -35,39 +37,20 @@ export async function POST(req: NextRequest) {
     invite_code_used: user.app_metadata?.provider === 'google' ? 'GOOGLE_OAUTH' : 'EMAIL_OTP',
   }, { onConflict: 'id' })
 
-  let credits = 0
-  const { data: existingBalance } = await admin
-    .from('credit_balances')
-    .select('balance')
-    .eq('user_id', user.id)
-    .single()
-
-  if (!existingBalance) {
-    credits = await getConfiguredWelcomeCredits(admin)
-
-    if (credits > 0) {
-      const { addCredits } = await import('@/lib/billing/credits')
-      await addCredits(user.id, credits)
-      await admin.from('credit_purchases').insert({
-        user_id: user.id,
-        stripe_session_id: 'welcome_gift',
-        credits,
-        amount_usd: 0,
-        status: 'completed',
-        source: 'welcome',
-      })
-    }
-  }
+  const signupCredits = await initializeSignupCredits({
+    admin,
+    userId: user.id,
+    isIOSApp,
+  })
 
   const registrationEventId = `registration.${user.id}`
-  const startTrialEventId = `starttrial.${user.id}`
   const response = NextResponse.json({
     activated: true,
     isNew: true,
-    credits,
+    credits: signupCredits.credits,
+    trialRequired: signupCredits.trialRequired,
     metaEvents: {
       CompleteRegistration: registrationEventId,
-      ...(credits > 0 ? { StartTrial: startTrialEventId } : {}),
     },
   })
   const attribution = readAttributionCookie(req.cookies.get('mkr_attribution')?.value)
@@ -86,17 +69,6 @@ export async function POST(req: NextRequest) {
     eventSourceUrl,
     customData: attribution,
   })
-  if (credits > 0) {
-    await sendMetaCapiEvent({
-      eventName: 'StartTrial',
-      eventId: startTrialEventId,
-      userId: user.id,
-      email: user.email,
-      request: req,
-      eventSourceUrl,
-      customData: { credits, ...attribution },
-    })
-  }
   response.cookies.set('mkr_activated', '1', {
     path: '/',
     maxAge: 365 * 24 * 60 * 60,

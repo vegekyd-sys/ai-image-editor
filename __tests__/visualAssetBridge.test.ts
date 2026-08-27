@@ -1,9 +1,9 @@
-import { readFileSync } from 'fs';
 import path from 'path';
 import sharp from 'sharp';
 import { describe, expect, it, vi } from 'vitest';
 import { studioArtifactSchemas } from '../src/lib/studio-run/contracts';
 import {
+  assertCompositionConsumesVisualAssets,
   assertPersistedVisualAssetBridgeEvidence,
   assertVisualAssetBridgeEvidence,
 } from '../src/lib/studio-run/visual-asset-evidence';
@@ -14,7 +14,8 @@ import {
   resolvePreparedVisualAssetById,
 } from '../src/lib/visual-assets/bridge';
 import { analyzeEdgeFrameBuffers } from '../src/lib/visual-assets/edge-video';
-import { prepareChromaKeyCutout, renderCutoutContactSheet } from '../src/lib/visual-assets/image-cutout';
+import { prepareChromaKeyCutout, prepareNativeAlphaCutout, renderCutoutContactSheet } from '../src/lib/visual-assets/image-cutout';
+import { readAgentAwareSource } from './helpers/agentRuntimeSource';
 
 const workspaceFiles = vi.hoisted(() => new Map<string, { content: string | Buffer; contentType: string; storageUrl: string }>());
 
@@ -31,7 +32,7 @@ vi.mock('../src/lib/workspace', () => ({
 const root = path.resolve(__dirname, '..');
 
 function read(relativePath: string): string {
-  return readFileSync(path.join(root, relativePath), 'utf8');
+  return readAgentAwareSource(root, relativePath);
 }
 
 async function chromaFixture(clipped = false): Promise<Buffer> {
@@ -118,6 +119,76 @@ async function detailedMatchingEdgeFrame(edgeColor: string): Promise<Buffer> {
 }
 
 describe('Visual Asset Bridge', () => {
+  it('blocks a Studio Composition that drops ready hero plates from the Storyboard', () => {
+    const storyboard = {
+      scenes: [
+        { id: 'scene-input', assetIds: ['chip'], visualPlan: { carrier: 'plate' as const } },
+        { id: 'scene-compute', assetIds: ['network'], visualPlan: { carrier: 'plate' as const } },
+        { id: 'scene-output', assetIds: ['output'], visualPlan: { carrier: 'plate' as const } },
+      ],
+    };
+    const manifest = {
+      assets: [
+        { id: 'chip', type: 'image' as const, path: '<<<media_1>>>', sceneIds: ['scene-input'], status: 'ready' as const, role: 'hero' as const },
+        { id: 'network', type: 'image' as const, path: '<<<media_2>>>', sceneIds: ['scene-compute'], status: 'ready' as const, role: 'hero' as const },
+        { id: 'output', type: 'image' as const, path: '<<<media_3>>>', sceneIds: ['scene-output'], status: 'ready' as const, role: 'hero' as const },
+        { id: 'score', type: 'audio' as const, path: 'score.wav', sceneIds: ['scene-input'], status: 'ready' as const, role: 'support' as const },
+      ],
+    };
+
+    expect(() => assertCompositionConsumesVisualAssets({
+      storyboard,
+      manifest,
+      composition: { mode: 'editable', sceneIds: ['scene-input', 'scene-compute', 'scene-output'] },
+      design: {
+        code: 'function Composition(props){return <AbsoluteFill><Audio src={props.score}/></AbsoluteFill>}',
+        props: { score: 'score.wav', title: 'AI inference' },
+        editables: [{ id: 'title', type: 'text', propKey: 'title' }],
+      },
+      mediaUrls: ['https://cdn.test/chip.jpg', 'https://cdn.test/network.jpg', 'https://cdn.test/output.jpg'],
+    })).toThrow(/chip.*absent[\s\S]*network.*absent[\s\S]*output.*absent[\s\S]*do not regenerate/);
+  });
+
+  it('accepts rendered hero plates only when editable mode exposes each media prop', () => {
+    const storyboard = {
+      scenes: [{ id: 'scene-input', assetIds: ['chip'], visualPlan: { carrier: 'plate' as const } }],
+    };
+    const manifest = {
+      assets: [{
+        id: 'chip',
+        type: 'image' as const,
+        path: '<<<media_1>>>',
+        sceneIds: ['scene-input'],
+        status: 'ready' as const,
+        role: 'hero' as const,
+      }],
+    };
+    const base = {
+      storyboard,
+      manifest,
+      composition: { mode: 'editable' as const, sceneIds: ['scene-input'] },
+      mediaUrls: ['https://cdn.test/chip.jpg'],
+    };
+
+    expect(() => assertCompositionConsumesVisualAssets({
+      ...base,
+      design: {
+        code: 'function Composition(props){return <Img src={props.chip}/>}',
+        props: { chip: 'https://cdn.test/chip.jpg' },
+        editables: [],
+      },
+    })).toThrow(/not exposed as an editable image/);
+
+    expect(() => assertCompositionConsumesVisualAssets({
+      ...base,
+      design: {
+        code: 'function Composition(props){return <Img src={props.chip}/>}',
+        props: { chip: 'https://cdn.test/chip.jpg' },
+        editables: [{ id: 'chip', type: 'image', propKey: 'chip' }],
+      },
+    })).not.toThrow();
+  });
+
   it('keys the border background, despills edges, and preserves only tiny isolated key-colored details', async () => {
     const result = await prepareChromaKeyCutout(await chromaFixture());
     expect(result.keyColor).toBe('#00ff00');
@@ -145,6 +216,25 @@ describe('Visual Asset Bridge', () => {
       }
     }
     expect(magentaOvershootPixels).toBe(0);
+  });
+
+  it('preserves provider-authored native alpha without chroma keying', async () => {
+    const source = await sharp({
+      create: { width: 320, height: 320, channels: 4, background: { r: 0, g: 0, b: 0, alpha: 0 } },
+    }).composite([{
+      input: Buffer.from('<svg width="200" height="200" xmlns="http://www.w3.org/2000/svg"><circle cx="100" cy="100" r="82" fill="#7138dd" fill-opacity="0.86"/></svg>'),
+      left: 60,
+      top: 60,
+    }]).png().toBuffer();
+
+    const result = await prepareNativeAlphaCutout(source);
+    expect(result.quality.status).toBe('pass');
+    expect(result.quality.metrics?.nativeAlpha).toBe(1);
+    expect(result.quality.metrics?.transparentRatio).toBeGreaterThan(0.5);
+    expect(result.width).toBeLessThan(320);
+    expect(result.height).toBeLessThan(320);
+    const metadata = await sharp(result.png).metadata();
+    expect(metadata.hasAlpha).toBe(true);
   });
 
   it('removes a sizeable chroma pocket enclosed by a foreground effect', async () => {
@@ -265,6 +355,30 @@ describe('Visual Asset Bridge', () => {
     expect(second.cached).toBe(true);
     expect(second.asset.cacheKey).toBe(first.asset.cacheKey);
     expect(workspaceFiles.size).toBe(fileCount);
+  });
+
+  it('keeps even a small native alpha area on the native path instead of chroma-keying it', async () => {
+    workspaceFiles.clear();
+    const source = await sharp({
+      create: { width: 320, height: 320, channels: 4, background: { r: 0, g: 0, b: 0, alpha: 0 } },
+    }).composite([{
+      input: Buffer.from('<svg width="308" height="308" xmlns="http://www.w3.org/2000/svg"><rect width="308" height="308" fill="#7138dd"/></svg>'),
+      left: 6,
+      top: 6,
+    }]).png().toBuffer();
+
+    const result = await prepareVisualAsset({
+      projectId: 'project-small-alpha',
+      userId: 'user-1',
+      supabase: {},
+      sourceUrl: `data:image/png;base64,${source.toString('base64')}`,
+      mode: 'cutout',
+      assetId: 'soft-overlay',
+    });
+
+    expect(result.asset.alphaSource).toBe('native');
+    expect(result.asset.quality.metrics?.nonOpaqueRatio).toBeGreaterThan(0);
+    expect(result.asset.quality.metrics?.transparentRatio).toBeLessThan(0.08);
   });
 
   it('refreshes the semantic pointer when QA changes without changing the output URL', async () => {
@@ -478,11 +592,13 @@ describe('Visual Asset Bridge', () => {
     const bridge = read('src/skills/_shared/visual-asset-bridge/SKILL.md');
     const production = read('src/skills/_shared/studio-production/production-contract.md');
 
-    expect(agent).toContain('prepare_visual_asset: tool({');
+    expect(agent).toContain('function createPrepareVisualAssetTool(');
     expect(agent).toContain("'prepare_visual_asset'");
     expect(agent).toContain('The image above is the QA contact sheet');
     expect(agent).toContain('mode + asset_id and no media source first');
     expect(sticker).toContain('five-background QA sheet');
+    expect(sticker).toContain('background: "transparent"');
+    expect(sticker).toContain('alphaSource: "native"');
     expect(sticker).toContain('enclosed high-confidence chroma pockets');
     expect(sticker).toContain('empty chroma canvas');
     expect(sticker).not.toContain('run_code({ runtime: "node" })');

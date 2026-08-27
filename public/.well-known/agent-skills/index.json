@@ -1,0 +1,12 @@
+{
+  "$schema": "https://schemas.agentskills.io/discovery/0.2.0/schema.json",
+  "skills": [
+    {
+      "name": "makaron",
+      "type": "skill-md",
+      "description": "Use Makaron CLI to generate AI images, videos, music, and motion designs. Trigger when user needs creative media production — photo editing, video generation, video editing, music composition, or design creation. Requires `npx makaron-cli` and MAKARON_API_KEY env var.",
+      "url": "/.well-known/agent-skills/makaron/SKILL.md",
+      "digest": "sha256:5a61f4d82c49306a51b23180bef27e6e0e7d0c884e1b38df33980baeecc44a47"
+    }
+  ]
+}

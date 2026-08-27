@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest'
 import { readFileSync } from 'fs'
 import { resolveRemotionRenderProfile } from '@/lib/remotion-export'
 import { resolveRemotionLambdaEncodingSettings } from '@/lib/remotion-encoding'
+import { readAgentRuntimeSource } from './helpers/agentRuntimeSource'
 
 const read = (path: string) => readFileSync(path, 'utf-8')
 
@@ -70,6 +71,7 @@ describe('Remotion export worker contract', () => {
   it('renders MP4s server-side and records workspace output', () => {
     const server = read('src/lib/remotion-server.ts')
     const exporter = read('src/lib/remotion-export.ts')
+    const nextConfig = read('next.config.ts')
 
     expect(server).toContain('renderMediaOnVercel')
     expect(server).toContain('export async function renderDesignVideo')
@@ -87,7 +89,12 @@ describe('Remotion export worker contract', () => {
     expect(exporter).toContain('resolveRemotionRenderProfile')
     expect(exporter).toContain('metadata.renderProfile')
     expect(exporter).toContain('fingerprintDesign')
-    expect(exporter).toContain("renderer: 'remotion-export-v4'")
+    expect(exporter).toContain("renderer: 'remotion-export-v6-font-runtime-pinned'")
+    expect(exporter).toContain('fontCatalogVersion: REMOTION_FONT_CATALOG_VERSION')
+    expect(exporter).toContain('fontRuntimeVersion: REMOTION_FONT_RUNTIME_VERSION')
+    expect(exporter).toContain('editableRuntimeVersion: REMOTION_EDITABLE_RUNTIME_VERSION')
+    expect(exporter).toContain("lambdaServeUrl: readEnv('REMOTION_LAMBDA_SERVE_URL') || null")
+    expect(exporter).toContain('fontSubstitutions: design.fontSubstitutions || null')
     expect(exporter).toContain('publishSnapshotIds')
     expect(exporter).toContain('completeStudioRunForExport')
     expect(exporter).toContain('completePersistedStudioRunFromMaterialization')
@@ -125,9 +132,25 @@ describe('Remotion export worker contract', () => {
     expect(read('src/lib/remotion-lambda-renderer.ts')).toContain('videoBitrate: encoding.videoBitrate')
     expect(read('src/lib/remotion-lambda-renderer.ts')).toContain('audioBitrate')
     expect(read('src/lib/remotion-lambda-renderer.ts')).toContain("readEnv('REMOTION_LAMBDA_FRAMES_PER_LAMBDA')")
+    expect(read('src/lib/remotion-lambda-renderer.ts')).toContain('const DEFAULT_FRAMES_PER_LAMBDA = 20')
+    expect(read('src/lib/remotion-lambda-renderer.ts')).toContain('resolveFramesPerLambda(')
+    expect(read('src/lib/remotion-lambda-renderer.ts')).toContain('MAX_LAMBDAS_PER_RENDER')
     expect(read('src/lib/remotion-lambda-renderer.ts')).toContain('REMOTION_LAMBDA_USE_CONCURRENCY')
     expect(read('src/lib/remotion-lambda-renderer.ts')).toContain('REMOTION_LAMBDA_TIMEOUT_MS')
     expect(read('src/lib/remotion-lambda-renderer.ts')).toContain('timeoutInMilliseconds')
+    expect(read('src/lib/remotion-lambda-renderer.ts')).toContain("new URL('public/remotion-runtime.json', serveUrl)")
+    expect(read('src/lib/remotion-lambda-renderer.ts')).toContain('Remotion render site is not font-pinned')
+    expect(JSON.parse(read('public/remotion-runtime.json'))).toEqual({
+      runtimeVersion: 'remotion-font-runtime-r10-google-fonts-on-demand',
+      fontCatalogVersion: 'makaron-fonts-r2-symbol-fallback',
+      editableRuntimeVersion: 'remotion-editable-runtime-r4-caption-style-preserving',
+    })
+    expect(read('src/lib/remotion-lambda-renderer.ts')).toContain('editableRuntimeVersion !== REMOTION_EDITABLE_RUNTIME_VERSION')
+    expect(read('src/remotion/DynamicDesign.tsx')).toContain('makaron-remotion-font-timing')
+    expect(read('src/remotion/DynamicDesign.tsx')).toContain('props: propsObj')
+    expect(read('src/lib/remotion-lambda-renderer.ts')).toContain('fontTelemetry')
+    expect(read('scripts/remotion-lambda-provision.ts')).toContain("publicDir: path.resolve(process.cwd(), 'public')")
+    expect(nextConfig).toContain("'@remotion/lambda-client'")
   })
 
   it('exposes API and CLI entrypoints for composition export', () => {
@@ -135,7 +158,7 @@ describe('Remotion export worker contract', () => {
     const getRoute = read('src/app/api/remotion/export/[id]/route.ts')
     const materializeRoute = read('src/app/api/media/materialize/route.ts')
     const cli = read('packages/makaron-cli/bin/makaron.mjs')
-    const agent = read('src/lib/agent.ts')
+    const agent = readAgentRuntimeSource()
     const worker = read('workers/remotion-export-worker.ts')
     const videoSnapshotRoute = read('src/app/api/video-snapshot/[snapshotId]/route.ts')
     const videoPollCron = read('src/app/api/cron/video-poll/route.ts')
@@ -151,14 +174,17 @@ describe('Remotion export worker contract', () => {
     expect(materializeRoute).toContain('@/app/api/remotion/export/route')
     expect(agent).toContain('materialize_media')
     expect(agent).toContain('createRemotionExportJob')
-    expect(agent).toContain('runRemotionExportJobAndWait')
     expect(agent).toContain('const shouldPublish = publish !== false')
-    expect(agent).toContain('wait === true')
-    expect(agent).toContain('Boolean(studioCheckpoint.studioRunId) || wait === true')
+    expect(agent).not.toContain('runRemotionExportJobAndWait')
+    expect(agent).not.toContain("profile: z.enum(['fast_720p', 'source'])")
+    expect(agent).not.toContain('wait: z.boolean()')
+    expect(agent).toContain("studioCheckpoint.studioRunId\n            ? 'source'\n            : 'fast_720p'")
     expect(agent).toContain('studioRunId: studioCheckpoint.studioRunId')
-    expect(agent).toContain('completion.run.status === \'completed\'')
+    expect(agent).toContain('studioRunPending: Boolean(studioCheckpoint.studioRunId)')
     expect(agent).toContain('ctx.pendingVideoSnapshot')
     expect(agent).not.toContain('void runRemotionExportJob(job.id)')
+    expect(agent).toContain('runRemotionExportAfterResponse(job.id)')
+    expect(agent).toContain("if (job.status === 'queued')")
     expect(agent).toContain('Pending export snapshot insert failed')
     expect(agent).toContain("taskId: `remotion-export-pending-${job.id}`")
     expect(agent).toContain('VIDEO_PLACEHOLDER_IMAGE')

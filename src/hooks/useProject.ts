@@ -8,6 +8,8 @@ import { resolveAudioUrlsInCode } from '@/lib/audio-url-resolver'
 import { resolveVideoUrlsInCode } from '@/lib/video-url-resolver'
 import { Snapshot, Message, Tip, DbSnapshot, DbMessage, ProjectAnimation, VideoMeta } from '@/types'
 import { VIDEO_PLACEHOLDER_IMAGE } from '@/lib/editor/timeline-derivations'
+import { createPersistedEditableDesign } from '@/lib/editor/editable-persistence'
+import { cacheProjectData, getCachedProjectData } from '@/lib/imageCache'
 
 interface LoadedProject {
   snapshots: Snapshot[]
@@ -153,7 +155,14 @@ export function useProject(projectId: string, userId: string) {
             }
           }
         }
-        if (design) snap.design = design as Snapshot['design']
+        if (design) {
+          // Lazy import keeps the AST compiler out of the initial editor
+          // bundle. Existing compositions upgrade in memory when opened.
+          const { normalizeLoadedDesignManifest } = await import(
+            '@/lib/editor/loaded-design-manifest'
+          )
+          snap.design = await normalizeLoadedDesignManifest(design)
+        }
       } catch (e) {
         console.warn('Failed to load design from workspace:', dp, e)
       }
@@ -207,7 +216,13 @@ export function useProject(projectId: string, userId: string) {
         ? 'seedance'
         : taskId?.startsWith('xai-')
           ? 'grok'
-          : 'kling';
+          : taskId?.startsWith('google-omni-')
+            ? 'google-omni'
+            : taskId?.startsWith('minimax-h3-')
+              ? 'minimax-h3'
+              : taskId?.startsWith('sync3-')
+                ? 'sync-lipsync-v3'
+                : 'kling';
       return {
         id: row.id as string,
         projectId,
@@ -263,14 +278,7 @@ export function useProject(projectId: string, userId: string) {
         let designPath: string | null = null
         if (snapshot.design?.code) {
           designPath = `code/${snapshot.id}.json`
-          const designJson = JSON.stringify({
-            code: snapshot.design.code,
-            width: snapshot.design.width,
-            height: snapshot.design.height,
-            animation: snapshot.design.animation,
-            props: snapshot.design.props,
-            ...(snapshot.design.editables?.length ? { editables: snapshot.design.editables } : {}),
-          })
+          const designJson = JSON.stringify(createPersistedEditableDesign(snapshot.design))
           const bucket = supabase.storage.from('images')
           const storagePath = `${userId}/workspace/${designPath}`
           await bucket.upload(storagePath, new Blob([designJson], { type: 'application/json' }), { upsert: true })
@@ -309,28 +317,40 @@ export function useProject(projectId: string, userId: string) {
     })
   }, [projectId, userId])
 
-  // Re-upload design JSON when props change (e.g. GUI text editing)
-  const saveDesignProps = useCallback((snapshotId: string, design: import('@/types').DesignPayload) => {
-    Promise.resolve().then(async () => {
-      try {
-        const supabase = getSupabase()
-        const designPath = `code/${snapshotId}.json`
-        const designJson = JSON.stringify({
-          code: design.code,
-          width: design.width,
-          height: design.height,
-          animation: design.animation,
-          props: design.props,
-          ...(design.editables?.length ? { editables: design.editables } : {}),
-        })
-        const bucket = supabase.storage.from('images')
-        const storagePath = `${userId}/workspace/${designPath}`
-        await bucket.upload(storagePath, new Blob([designJson], { type: 'application/json' }), { upsert: true })
-      } catch (err) {
-        console.warn('saveDesignProps error:', err)
-      }
-    })
-  }, [userId])
+  const saveDesignProps = useCallback(async (
+    snapshotId: string,
+    design: import('@/types').DesignPayload,
+    options: { propsOnly?: boolean; revision?: number } = {},
+  ) => {
+    const response = await fetch(
+      `/api/projects/${encodeURIComponent(projectId)}/snapshots/${encodeURIComponent(snapshotId)}/design`,
+      {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        credentials: 'same-origin',
+        keepalive: options.propsOnly === true,
+        body: JSON.stringify(options.propsOnly
+          ? { props: design.props || {}, revision: options.revision }
+          : { design: createPersistedEditableDesign(design) }),
+      },
+    )
+    if (!response.ok) {
+      const payload = await response.json().catch(() => ({})) as { error?: string }
+      throw new Error(payload.error || `Composition save failed (${response.status})`)
+    }
+
+    const cached = await getCachedProjectData(projectId)
+    if (cached) {
+      cacheProjectData(
+        projectId,
+        cached.snapshots.map((snapshot: Snapshot) => (
+          snapshot.id === snapshotId ? { ...snapshot, design } : snapshot
+        )),
+        cached.messages,
+        cached.title,
+      )
+    }
+  }, [projectId])
 
   const saveMessage = useCallback((message: Message) => {
     Promise.resolve().then(async () => {

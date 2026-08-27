@@ -1,14 +1,151 @@
 'use client';
 
 import { useEffect, useState, type CSSProperties } from 'react';
+import { normalizeLocale, translate, type TranslationKey } from '@/lib/locales';
 
-interface ChangelogEntry {
-  date: string;
-  en: { title: string; items: string[]; link?: { label: string; href: string; variant?: 'text' | 'button' } };
-  zh: { title: string; items: string[]; link?: { label: string; href: string; variant?: 'text' | 'button' } };
+interface ChangelogContent {
+  title: string;
+  items: string[];
+  link?: { label: string; href: string; variant?: 'text' | 'button' };
 }
 
+interface LegacyChangelogEntry {
+  date: string;
+  en: ChangelogContent;
+  zh: ChangelogContent;
+}
+
+type LocalizedChangelogEntry = {
+  date: string;
+  localeKey: 'externalImages' | 'videoTranslation' | 'talkingHeadEditing' | 'smarterEditableDiscovery' | 'tiktokVideoSkill' | 'sourcePlayback' | 'externalSourceRanges' | 'seedance25' | 'minimaxH3' | 'multilingualAsr' | 'editableRemotion' | 'editableLayers';
+};
+
+type ChangelogEntry = LegacyChangelogEntry | LocalizedChangelogEntry;
+
 const CHANGELOG: ChangelogEntry[] = [
+  { date: '2026-08-26', localeKey: 'externalImages' },
+  {
+    date: '2026-08-25',
+    en: { title: 'Transparent PNGs with GPT Image 2', items: ['Ask for a transparent background to create reusable stickers, design assets, and video overlays that can be placed anywhere without removing the background again.'] },
+    zh: { title: 'GPT Image 2 透明 PNG', items: ['直接说“透明底”，即可生成可复用的贴纸、设计素材和视频叠加层，放进任何画面时都不需要再次处理背景。'] },
+  },
+  {
+    date: '2026-08-25',
+    localeKey: 'videoTranslation',
+  },
+  { date: '2026-08-24', en: { title: 'Any Google Font, Preview to Export', items: ['Remotion now loads Google Fonts on demand and pins the same font files for Preview and MP4 export, removing the built-in font-list limit.'] }, zh: { title: '任意 Google Fonts，从预览到导出', items: ['Remotion 现在按需加载 Google Fonts，并让 Preview 与 MP4 导出使用同一份固定字体文件，不再受内置字体列表限制。'] } },
+  {
+    date: '2026-08-22',
+    localeKey: 'talkingHeadEditing',
+  },
+  {
+    date: '2026-08-19',
+    localeKey: 'smarterEditableDiscovery',
+  },
+  {
+    date: '2026-08-19',
+    localeKey: 'tiktokVideoSkill',
+  },
+  {
+    date: '2026-08-12',
+    localeKey: 'sourcePlayback',
+  },
+  {
+    date: '2026-08-12',
+    en: {
+      title: 'MiniMax H3 768P',
+      items: [
+        'MiniMax H3 now supports public 768P generation alongside native 2K, giving faster, lower-cost drafts without changing models.',
+        'H3 now defaults to 768P for faster, lower-cost generation; choose 2K explicitly when you need maximum final quality.',
+      ],
+    },
+    zh: {
+      title: 'MiniMax H3 开放 768P',
+      items: [
+        'MiniMax H3 现已在原生 2K 之外开放 768P，可在不切换模型的情况下生成更快、更低成本的草稿视频。',
+        'H3 现默认使用 768P，以更快、更低成本地生成视频；需要最高成片质量时可显式选择 2K。',
+      ],
+    },
+  },
+  {
+    date: '2026-08-10',
+    localeKey: 'externalSourceRanges',
+  },
+  {
+    date: '2026-08-08',
+    localeKey: 'seedance25',
+  },
+  {
+    date: '2026-08-08',
+    en: {
+      title: 'A More Reliable GPT-5.6 Agent Route',
+      items: [
+        'GPT-5.6 Terra, Sol, and Luna now run through OpenRouter by default while keeping the existing Azure provider available for an explicit rollback.',
+        'GPT Image 2 now uses the same reliable OpenRouter route by default for image generation and editing, while its Azure route remains available for an explicit rollback.',
+        'The Agent keeps the same streaming, tools, vision, reasoning, project history, and usage-based billing behavior across providers.',
+      ],
+    },
+    zh: {
+      title: 'GPT-5.6 Agent 路由更可靠',
+      items: [
+        'GPT-5.6 Terra、Sol 与 Luna 现在默认通过 OpenRouter 运行，同时保留现有 Azure Provider，随时可以显式回切。',
+        'GPT Image 2 的生图与编辑也默认切换到同一条 OpenRouter 路由，并保留 Azure 路由供显式回切。',
+        '切换 Provider 后，Agent 的流式输出、工具调用、视觉理解、推理、项目历史和按量计费保持一致。',
+      ],
+    },
+  },
+  {
+    date: '2026-08-02',
+    localeKey: 'minimaxH3',
+  },
+  {
+    date: '2026-07-29',
+    localeKey: 'multilingualAsr',
+  },
+  {
+    date: '2026-07-28',
+    localeKey: 'editableRemotion',
+  },
+  {
+    date: '2026-07-25',
+    en: { title: 'Consistent Remotion Fonts', items: ['Remotion previews and Lambda MP4 exports now use the same pinned Chinese and English fonts, so typography stays consistent from editing to delivery.'] },
+    zh: { title: 'Remotion 字体一致性修复', items: ['Remotion 预览与 Lambda MP4 导出现在使用同一套固定的中英文字体，从编辑到成片不再出现字体变化。'] },
+  },
+  {
+    date: '2026-07-24',
+    en: { title: 'Agent Coding, Without Dead Ends', items: [
+      'Makaron now gives Agent-written Node and FFmpeg programs a dedicated isolated Sandbox with real process feedback, standard Node capabilities, and npm packages installed on demand.',
+      'Editable Remotion compositions and file-level MP4 work now use separate runtimes, so the Agent can repair its own code and finish more video tasks without compatibility loops.',
+    ]},
+    zh: { title: 'Agent 编程，不再卡在死胡同', items: [
+      'Makaron 现在为 Agent 编写的 Node 与 FFmpeg 程序提供独立隔离 Sandbox，支持真实进程反馈、标准 Node 能力和按需安装 npm 包。',
+      '可编辑 Remotion composition 与文件级 MP4 处理现在使用独立运行时，让 Agent 能持续修复自己的代码并完成更多视频任务，不再反复陷入兼容性循环。',
+    ]},
+  },
+  {
+    date: '2026-07-23',
+    en: { title: 'Seed Audio: One Prompt, One Complete Soundtrack', items: [
+      'Voiceover, music, and sound effects are now composed together in a single Seed Audio generation, so the whole soundtrack feels like one performance instead of separate layers stitched together.',
+      'Every spoken line can carry its own emotion, pacing, and delivery direction, with expressive narration available across 20+ languages.',
+      'After generation, Makaron recovers the real spoken timing from the finished audio and uses it to synchronize Remotion scenes and subtitles with the performance.',
+      'Music now plays a more present, co-leading role in the mix and helps drive the story forward.',
+    ]},
+    zh: { title: 'Seed Audio：一个 Prompt，一条完整声轨', items: [
+      '旁白、音乐和音效现在会在一次 Seed Audio 生成中共同完成，让整条声轨像一次完整表演，而不是把多个独立音轨事后拼在一起。',
+      '每一句旁白都可以拥有自己的情绪、节奏和演绎方式，并支持 20 多种语言的情感表达。',
+      '生成完成后，Makaron 会从最终音频中还原真实口播时间点，让 Remotion 画面、场景切换和字幕跟随实际表演精准同步。',
+      '配乐现在会更有存在感，与旁白共同推进叙事。',
+    ]},
+  },
+  {
+    date: '2026-07-21',
+    en: { title: 'Smarter Video Creation', items: [
+      'Short videos now choose direct generation instead of unnecessary editing workflows, while dialogue, sound, and music stay with the video model for better sync and fewer redundant tool calls.',
+    ]},
+    zh: { title: '视频生成更懂你的意图', items: [
+      '短视频现在会优先直接生成，不再误入复杂剪辑流程；对白、音效和配乐也会交给视频模型随画面一次完成，减少重复工具调用带来的效果损失。',
+    ]},
+  },
   {
     date: '2026-07-19',
     en: { title: 'Studio Run + Agent Run: Long Tasks, Uninterrupted', items: [
@@ -130,6 +267,10 @@ const CHANGELOG: ChangelogEntry[] = [
       '现在可以从模型选择器、CUI 或 makaron-cli chat 触发，用来给短视频换风格、让单张图动起来，或快速做一版视频修改。',
       '针对品牌、知名角色和受保护 IP 等更容易触发审核的请求，Makaron 会给出更清楚的失败提示和更安全的原创替代表达。',
     ]},
+  },
+  {
+    date: '2026-07-01',
+    localeKey: 'editableLayers',
   },
   {
     date: '2026-06-30',
@@ -842,9 +983,99 @@ const changelogGlassEdgeStyle: CSSProperties = {
 const iOSAppTopGap = 'max(96px, calc(env(safe-area-inset-top, 0px) + 40px))';
 const iOSAppBottomGap = 'max(14px, env(safe-area-inset-bottom, 0px))';
 
+const LOCALIZED_CHANGELOG_KEYS = {
+  externalImages: {
+    title: 'changelog.externalImages.title',
+    items: ['changelog.externalImages.item1'],
+  },
+  videoTranslation: {
+    title: 'changelog.videoTranslation.title',
+    items: [
+      'changelog.videoTranslation.item1',
+      'changelog.videoTranslation.item2',
+    ],
+  },
+  talkingHeadEditing: {
+    title: 'changelog.talkingHeadEditing.title',
+    items: [
+      'changelog.talkingHeadEditing.item1',
+      'changelog.talkingHeadEditing.item2',
+      'changelog.talkingHeadEditing.item3',
+    ],
+  },
+  smarterEditableDiscovery: {
+    title: 'changelog.smarterEditableDiscovery.title',
+    items: ['changelog.smarterEditableDiscovery.item1'],
+  },
+  tiktokVideoSkill: {
+    title: 'changelog.tiktokVideoSkill.title',
+    items: [
+      'changelog.tiktokVideoSkill.item1',
+      'changelog.tiktokVideoSkill.item2',
+      'changelog.tiktokVideoSkill.item3',
+    ],
+  },
+  sourcePlayback: {
+    title: 'changelog.sourcePlayback.title',
+    items: [
+      'changelog.sourcePlayback.item1',
+      'changelog.sourcePlayback.item2',
+    ],
+  },
+  externalSourceRanges: {
+    title: 'changelog.externalSourceRanges.title',
+    items: ['changelog.externalSourceRanges.item1'],
+  },
+  seedance25: {
+    title: 'changelog.seedance25.title',
+    items: [
+      'changelog.seedance25.item1',
+      'changelog.seedance25.item2',
+      'changelog.seedance25.item3',
+    ],
+  },
+  minimaxH3: {
+    title: 'changelog.minimaxH3.title',
+    items: [
+      'changelog.minimaxH3.item1',
+      'changelog.minimaxH3.item2',
+      'changelog.minimaxH3.item3',
+    ],
+  },
+  multilingualAsr: {
+    title: 'changelog.multilingualAsr.title',
+    items: [
+      'changelog.multilingualAsr.item1',
+    ],
+  },
+  editableRemotion: {
+    title: 'changelog.editableRemotion.title',
+    items: [
+      'changelog.editableRemotion.item1',
+      'changelog.editableRemotion.item2',
+      'changelog.editableRemotion.item3',
+    ],
+  },
+  editableLayers: {
+    title: 'changelog.editableLayers.title',
+    items: [
+      'changelog.editableLayers.item1',
+      'changelog.editableLayers.item2',
+      'changelog.editableLayers.item3',
+      'changelog.editableLayers.item4',
+    ],
+  },
+} as const satisfies Record<LocalizedChangelogEntry['localeKey'], {
+  title: TranslationKey;
+  items: readonly TranslationKey[];
+}>;
+
 export default function Changelog({ onClose, locale }: { onClose: () => void; locale: string }) {
-  // Release notes stay bilingual: Simplified Chinese uses zh, every other locale falls back to en.
-  const isZh = locale === 'zh';
+  const normalizedLocale = normalizeLocale(locale, 'en');
+  // Historical release notes stay bilingual. Newly added entries use all four product locales.
+  const isZh = normalizedLocale === 'zh';
+  const heading = translate(normalizedLocale, 'changelog.heading');
+  const closeLabel = translate(normalizedLocale, 'changelog.close');
   const [isIOSApp, setIsIOSApp] = useState(false);
 
   useEffect(() => {
@@ -880,7 +1111,7 @@ export default function Changelog({ onClose, locale }: { onClose: () => void; lo
         }
         role="dialog"
         aria-modal="true"
-        aria-label={isZh ? '更新' : 'Updates'}
+        aria-label={heading}
         style={{
           ...changelogGlassStyle,
           maxHeight: isIOSApp ? `calc(100dvh - ${iOSAppTopGap} - ${iOSAppBottomGap})` : undefined,
@@ -921,12 +1152,12 @@ export default function Changelog({ onClose, locale }: { onClose: () => void; lo
               </svg>
             </span>
             <h2 className="text-base font-semibold" style={{ color: 'rgba(255,255,255,0.88)' }}>
-              {isZh ? '更新' : 'Updates'}
+              {heading}
             </h2>
           </div>
           <button
             onClick={onClose}
-            aria-label={isZh ? '关闭更新' : 'Close updates'}
+            aria-label={closeLabel}
             className="w-7 h-7 flex items-center justify-center rounded-full"
             style={{
               background: 'rgba(255,255,255,0.045)',
@@ -943,9 +1174,16 @@ export default function Changelog({ onClose, locale }: { onClose: () => void; lo
         {/* Scrollable entries */}
         <div className="relative z-[1] flex-1 overflow-y-auto overscroll-contain px-5 pb-6" style={{ WebkitOverflowScrolling: 'touch' }}>
           {CHANGELOG.map((entry, i) => {
-            const loc = isZh ? entry.zh : entry.en;
+            const loc: ChangelogContent = 'localeKey' in entry
+              ? {
+                  title: translate(normalizedLocale, LOCALIZED_CHANGELOG_KEYS[entry.localeKey].title),
+                  items: LOCALIZED_CHANGELOG_KEYS[entry.localeKey].items.map((key) => (
+                    translate(normalizedLocale, key)
+                  )),
+                }
+              : (isZh ? entry.zh : entry.en);
             return (
-              <div key={`${entry.date}-${entry.en.title}`} className={i > 0 ? 'mt-5' : 'mt-3'}>
+              <div key={`${entry.date}-${loc.title}`} className={i > 0 ? 'mt-5' : 'mt-3'}>
                 <div className="flex items-center gap-2.5 mb-1.5">
                   <span className="text-[11px] font-mono tabular-nums" style={{ color: 'rgba(232,121,249,0.76)' }}>
                     {entry.date}

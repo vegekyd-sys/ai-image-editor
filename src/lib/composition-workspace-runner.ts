@@ -12,7 +12,7 @@ import {
   type PersistedCompositionDraft,
 } from './composition-draft';
 import { normalizeCompositionAnimation } from './composition-duration';
-import { validateDesignDiagnostics, type DesignResult } from './design-harness';
+import { validateDesignReport, type DesignResult } from './design-harness';
 import { resolveMediaMarkersInString, resolveMediaMarkersInValue } from './media-markers';
 import * as workspace from './workspace';
 
@@ -29,6 +29,7 @@ interface CompositionWorkspaceState {
     at: string;
     totalChars: number;
     diagnostics: string[];
+    advisories?: string[];
     designPath?: string;
   };
 }
@@ -39,6 +40,7 @@ export interface CompositionWorkspaceMetadata {
   props?: Record<string, unknown>;
   editables?: DesignPayload['editables'];
   animation?: DesignPayload['animation'];
+  fontSubstitutions?: DesignPayload['fontSubstitutions'];
   description?: string;
 }
 
@@ -62,6 +64,7 @@ export type CompositionWorkspaceCompileResult =
       totalChars: number;
       designPath: string;
       design: PersistedCompositionDraft;
+      advisories: string[];
       message: string;
     };
 
@@ -147,6 +150,9 @@ function buildWorkspaceDesign(input: {
   const baseRecord = input.base as (PersistedCompositionDraft & Record<string, unknown>) | undefined;
   const width = input.metadata?.width ?? input.base?.width;
   const height = input.metadata?.height ?? input.base?.height;
+  const effectiveEditables = input.metadata
+    ? input.metadata.editables
+    : input.base?.editables;
   if (!width || !height) {
     throw new Error('Composition metadata must provide positive width and height on the first numbered source file.');
   }
@@ -160,13 +166,17 @@ function buildWorkspaceDesign(input: {
       resolvedCode,
       input.metadata?.animation ?? input.base?.animation,
     ),
-    ...((input.metadata?.editables ?? input.base?.editables)
-      ? { editables: input.metadata?.editables ?? input.base?.editables }
+    ...(effectiveEditables?.length
+      ? { editables: effectiveEditables }
+      : {}),
+    ...((input.metadata?.fontSubstitutions ?? input.base?.fontSubstitutions)
+      ? { fontSubstitutions: input.metadata?.fontSubstitutions ?? input.base?.fontSubstitutions }
       : {}),
     description: input.metadata?.description || (baseRecord?.__makaronScaffold === true
       ? 'Composition workspace draft assembled from durable source files'
       : input.base?.description),
   };
+  if (!effectiveEditables?.length) delete design.editables;
   delete design.__makaronDraft;
   delete design.__makaronScaffold;
   return design as DesignPayload & { description?: string };
@@ -294,11 +304,12 @@ export async function compileSavedCompositionPart(input: {
       message: 'Source saved. Compilation needs complete composition metadata.',
     };
   }
+  const validation = validateDesignReport(design as unknown as DesignResult);
   const diagnostics = [
     ...(!hasCompositionEntrypoint(design.code)
       ? ['Composition source has no root entry component yet. Add a root named Composition, Design, App, Main, or a name ending in Composition/Design.']
       : []),
-    ...validateDesignDiagnostics(design as unknown as DesignResult),
+    ...validation.blocking,
   ];
   if (diagnostics.length) {
     state.lastCompile = {
@@ -349,6 +360,7 @@ export async function compileSavedCompositionPart(input: {
     at: state.updatedAt,
     totalChars: assembled.totalChars,
     diagnostics: [],
+    advisories: validation.advisories,
     designPath: saved.path,
   };
   await writeWorkspaceState({ ...input, state });
@@ -359,6 +371,9 @@ export async function compileSavedCompositionPart(input: {
     totalChars: assembled.totalChars,
     designPath: saved.path,
     design: saved.draft,
-    message: `Composition compiled from ${assembled.paths.length} files (${assembled.totalChars} chars) and autosaved to ${saved.path}.`,
+    advisories: validation.advisories,
+    message: `Composition compiled from ${assembled.paths.length} files (${assembled.totalChars} chars) and autosaved to ${saved.path}.${validation.advisories.length > 0
+      ? ` Editable coverage has ${validation.advisories.length} non-blocking ${validation.advisories.length === 1 ? 'advisory' : 'advisories'}; the draft remains previewable and publishable.`
+      : ''}`,
   };
 }

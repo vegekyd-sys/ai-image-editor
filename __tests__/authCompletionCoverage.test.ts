@@ -28,9 +28,10 @@ describe('verified authentication completion coverage', () => {
 
     expect(completion).toContain('user?.email_confirmed_at || user?.phone_confirmed_at')
     expect(completion).toContain("response.cookies.set('mkr_activated', '1'")
-    expect(completion).toContain('getConfiguredWelcomeCredits')
+    expect(completion).toContain('initializeSignupCredits')
+    expect(completion).toContain("'/home?trial=1'")
     expect(completion).toContain("eventName: 'CompleteRegistration'")
-    expect(completion).toContain("eventName: 'StartTrial'")
+    expect(completion).not.toContain("eventName: 'StartTrial'")
   })
 
   it('removes the invite-era page and does not gate authenticated routes on its cookie', () => {
@@ -46,6 +47,7 @@ describe('verified authentication completion coverage', () => {
 
     expect(callback).toContain('exchangeCodeForSession')
     expect(callback).toContain("response.cookies.set('mkr_activated', '1'")
-    expect(callback).toContain('getConfiguredWelcomeCredits')
+    expect(callback).toContain('initializeSignupCredits')
+    expect(callback).toContain("trialRequired ? 'trial' : 'welcome'")
   })
 })

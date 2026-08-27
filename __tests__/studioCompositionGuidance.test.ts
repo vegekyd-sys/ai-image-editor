@@ -1,9 +1,8 @@
-import { readFileSync } from 'node:fs';
-import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
+import { readAgentAwareSource } from './helpers/agentRuntimeSource';
 
 const root = process.cwd();
-const read = (path: string) => readFileSync(join(root, path), 'utf8');
+const read = (path: string) => readAgentAwareSource(root, path);
 
 const guidancePaths = [
   'src/lib/prompts/agent-coding.md',
@@ -49,15 +48,16 @@ describe('durable Composition guidance preload', () => {
     expect(source).toContain('studio_run put_artifact for stage composition');
   });
 
-  it('injects the preload only for the dedicated studio:composition work unit', () => {
+  it('injects the preload from workflow context without creating a Studio work unit', () => {
     const agent = read('src/lib/agent.ts');
     const preloadBlock = agent.slice(
       agent.indexOf('const durableCompositionGuidance'),
       agent.indexOf('const executionSystemPrompt'),
     );
 
-    expect(preloadBlock).toContain("workUnitKey === 'studio:composition'");
+    expect(preloadBlock).toContain("studioWorkflowStage === 'composition'");
     expect(preloadBlock).toContain('buildDurableCompositionGuidance()');
+    expect(agent).not.toContain("workUnitKey === 'studio:composition'");
     expect(agent).toContain('no aggregate source-size or part-count limit');
     expect(agent).toContain('Never shorten approved narration, subtitles, scenes, animation, or visual detail');
   });

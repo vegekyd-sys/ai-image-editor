@@ -1,7 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import {
   buildAgentRecoveryContext,
-  isStudioRunContinuationRequest,
   selectPriorTerminalRun,
 } from '@/lib/agent-context';
 
@@ -46,12 +45,6 @@ describe('agent recovery context', () => {
     expect(buildAgentRecoveryContext('请继续刚才的修改', metadata)).toContain('project/code/saved-draft.json');
     expect(buildAgentRecoveryContext('继续之前的 Studio Run', metadata)).toContain('project/code/saved-draft.json');
     expect(buildAgentRecoveryContext('接着上次的内容做', metadata)).toContain('project/code/saved-draft.json');
-  });
-
-  it('recognizes an explicit continuation of an active Studio Run', () => {
-    expect(isStudioRunContinuationRequest('继续当前 Studio Run 的 composition 阶段')).toBe(true);
-    expect(isStudioRunContinuationRequest('Studio Run continue from review')).toBe(true);
-    expect(isStudioRunContinuationRequest('把这张照片换成黑白')).toBe(false);
   });
 
   it('resumes a Studio Run from its durable stage even before a composition draft exists', () => {

@@ -1,6 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { authenticateRequest } from '@/lib/api-auth'
 import { getSupabaseAdmin } from '@/lib/supabase/service'
+import { publishExternalVideoRanges } from '@/lib/external-video-range'
+import { sourceRangeFromVideoMeta } from '@/lib/media-source-range'
 import type { VideoMeta } from '@/types'
 
 type ProjectRow = {
@@ -77,11 +79,12 @@ export async function GET(
       const type = mediaType(snapshot)
       const videoMeta = snapshot.video_meta ?? undefined
       const url = type === 'video'
-        ? videoMeta?.videoUrl || snapshot.image_url || undefined
+        ? videoMeta?.videoUrl || undefined
         : snapshot.image_url || undefined
-      const description = type === 'video'
-        ? firstLine(snapshot.description) || firstLine(videoMeta?.prompt) || 'Video snapshot'
-        : firstLine(snapshot.description)
+      const description = snapshot.description?.trim()
+        || (type === 'video' ? videoMeta?.prompt?.trim() || 'Video snapshot' : undefined)
+      const label = firstLine(description)
+      const sourceRange = type === 'video' ? sourceRangeFromVideoMeta(videoMeta) : undefined
 
       return {
         id: `media_${idx + 1}`,
@@ -93,12 +96,22 @@ export async function GET(
         snapshotId: snapshot.id,
         url,
         ...(type === 'video' ? { posterUrl: snapshot.image_url || undefined } : {}),
+        ...(label ? { label } : {}),
         ...(description ? { description } : {}),
         ...(snapshot.design_path && type !== 'video' ? { codePath: snapshot.design_path } : {}),
         ...(videoMeta?.taskId ? { task_id: videoMeta.taskId, taskId: videoMeta.taskId } : {}),
         ...(typeof videoMeta?.duration === 'number' ? { duration: videoMeta.duration } : {}),
         ...(typeof videoMeta?.width === 'number' ? { width: videoMeta.width } : {}),
         ...(typeof videoMeta?.height === 'number' ? { height: videoMeta.height } : {}),
+        ...(sourceRange ? {
+          source_range: sourceRange,
+          sourceRange,
+          source_url: sourceRange.source_url,
+          start: sourceRange.start_sec,
+          end: sourceRange.end_sec,
+          start_sec: sourceRange.start_sec,
+          end_sec: sourceRange.end_sec,
+        } : {}),
         ...(snapshot.created_at ? { created_at: snapshot.created_at } : {}),
       }
     })
@@ -113,5 +126,70 @@ export async function GET(
   } catch (err) {
     const msg = err instanceof Error ? err.message : String(err)
     return NextResponse.json({ error: msg }, { status: 500 })
+  }
+}
+
+export async function POST(
+  req: NextRequest,
+  { params }: { params: Promise<{ id: string }> },
+) {
+  try {
+    const { id } = await params
+    const authResult = await authenticateRequest(req)
+    if ('error' in authResult) return authResult.error
+    const { userId, supabase } = authResult.auth
+
+    const { data: project, error: projectError } = await supabase
+      .from('projects')
+      .select('id')
+      .eq('id', id)
+      .eq('user_id', userId)
+      .maybeSingle()
+    if (projectError) return NextResponse.json({ error: projectError.message }, { status: 500 })
+    if (!project) return NextResponse.json({ error: 'Project not found' }, { status: 404 })
+
+    const body = await req.json() as Record<string, unknown>
+    const rawRanges = Array.isArray(body.clips)
+      ? body.clips
+      : Array.isArray(body.source_ranges)
+        ? body.source_ranges
+        : Array.isArray(body.sourceRanges)
+          ? body.sourceRanges
+          : body.source_url
+            ? [body]
+            : []
+    const published = await publishExternalVideoRanges({
+      supabase,
+      projectId: id,
+      ranges: rawRanges as Parameters<typeof publishExternalVideoRanges>[0]['ranges'],
+    })
+
+    return NextResponse.json({
+      project_id: id,
+      projectId: id,
+      published,
+      media: published.map(item => ({
+        ref: item.ref,
+        index: item.mediaIndex,
+        type: item.type,
+        status: 'completed',
+        snapshot_id: item.snapshotId,
+        url: item.url,
+        source_url: item.url,
+        description: item.description,
+        ...(item.sourceRange ? {
+          source_range: item.sourceRange,
+          start: item.sourceRange.start_sec,
+          end: item.sourceRange.end_sec,
+          start_sec: item.sourceRange.start_sec,
+          end_sec: item.sourceRange.end_sec,
+        } : {}),
+        created: item.created,
+      })),
+    }, { status: 201 })
+  } catch (err) {
+    const message = err instanceof Error ? err.message : String(err)
+    const validationError = /source_url|start|end|source range|media type|type must|maximum 20/i.test(message)
+    return NextResponse.json({ error: message }, { status: validationError ? 400 : 500 })
   }
 }

@@ -2,21 +2,24 @@ import * as childProcess from 'child_process'
 import * as crypto from 'crypto'
 import * as fs from 'fs'
 import * as fsPromises from 'fs/promises'
-import { builtinModules, createRequire } from 'module'
+import { createRequire } from 'module'
 import * as os from 'os'
 import path from 'path'
-import * as url from 'url'
+import * as util from 'util'
 import sharp from 'sharp'
+import { transform as sucraseTransform } from 'sucrase'
 import { findFfmpeg, findFfprobe, probeVideoFile, type VideoProbe } from './ffmpeg-runtime'
 import * as workspace from './workspace'
 import { toPublicStorageUrl } from '@/lib/supabase/storage'
+import { sourceRangeDuration, sourceRangeFromVideoMeta, sourceRangeIdentity } from '@/lib/media-source-range'
+import type { VideoSourceRange } from '@/types'
 
 const { mkdir, mkdtemp, readFile, readdir, rm, stat, writeFile } = fsPromises
 const { existsSync } = fs
 const { tmpdir } = os
-const { pathToFileURL } = url
 const INPUT_DOWNLOAD_CONCURRENCY = 2
 const INPUT_DOWNLOAD_TIMEOUT_MS = 180_000
+const execFileAsync = util.promisify(childProcess.execFile)
 const serverRequire = createRequire(import.meta.url)
 const BLOCKED_NODE_MODULES = new Set([
   'cluster',
@@ -27,17 +30,63 @@ const BLOCKED_NODE_MODULES = new Set([
   'vm',
   'worker_threads',
 ])
-const ALLOWED_MEDIA_PACKAGES = new Set([
-  '@remotion/media',
-  '@remotion/media-utils',
-  '@remotion/renderer',
-  'canvas',
-  'exifr',
-  'heic-convert',
-  'jszip',
-  'remotion',
-  'sharp',
-])
+// Keep every runtime dependency statically discoverable by Next/Webpack.
+// `serverRequire(id)` with a variable passes Vitest but produces an incomplete
+// production bundle ("request of a dependency is an expression").
+const NODE_BUILTIN_LOADERS: Record<string, () => unknown> = {
+  assert: () => serverRequire('assert'),
+  'assert/strict': () => serverRequire('assert/strict'),
+  async_hooks: () => serverRequire('async_hooks'),
+  buffer: () => serverRequire('buffer'),
+  console: () => serverRequire('console'),
+  constants: () => serverRequire('constants'),
+  crypto: () => serverRequire('crypto'),
+  dgram: () => serverRequire('dgram'),
+  diagnostics_channel: () => serverRequire('diagnostics_channel'),
+  dns: () => serverRequire('dns'),
+  'dns/promises': () => serverRequire('dns/promises'),
+  domain: () => serverRequire('domain'),
+  events: () => serverRequire('events'),
+  http: () => serverRequire('http'),
+  http2: () => serverRequire('http2'),
+  https: () => serverRequire('https'),
+  net: () => serverRequire('net'),
+  os: () => serverRequire('os'),
+  perf_hooks: () => serverRequire('perf_hooks'),
+  punycode: () => serverRequire('punycode'),
+  querystring: () => serverRequire('querystring'),
+  readline: () => serverRequire('readline'),
+  'readline/promises': () => serverRequire('node:readline/promises'),
+  stream: () => serverRequire('stream'),
+  'stream/consumers': () => serverRequire('node:stream/consumers'),
+  'stream/promises': () => serverRequire('stream/promises'),
+  'stream/web': () => serverRequire('stream/web'),
+  string_decoder: () => serverRequire('string_decoder'),
+  sys: () => serverRequire('sys'),
+  timers: () => serverRequire('timers'),
+  'timers/promises': () => serverRequire('timers/promises'),
+  tls: () => serverRequire('tls'),
+  trace_events: () => serverRequire('trace_events'),
+  tty: () => serverRequire('tty'),
+  url: () => serverRequire('url'),
+  util: () => serverRequire('util'),
+  'util/types': () => serverRequire('util/types'),
+  v8: () => serverRequire('v8'),
+  wasi: () => serverRequire('wasi'),
+  zlib: () => serverRequire('zlib'),
+}
+
+const MEDIA_PACKAGE_LOADERS: Record<string, () => unknown> = {
+  '@remotion/media': () => serverRequire('@remotion/media'),
+  '@remotion/media-utils': () => serverRequire('@remotion/media-utils'),
+  '@remotion/renderer': () => serverRequire('@remotion/renderer'),
+  canvas: () => serverRequire('canvas'),
+  exifr: () => serverRequire('exifr'),
+  'heic-convert': () => serverRequire('heic-convert'),
+  jszip: () => serverRequire('jszip'),
+  remotion: () => serverRequire('remotion'),
+  sharp: () => sharp,
+}
 const SAFE_ENV_KEYS = new Set([
   'CI',
   'FFMPEG_PATH',
@@ -67,6 +116,8 @@ export interface MediaItem {
   width?: number
   height?: number
   status?: string
+  /** Exact original interval represented by this Media List item. */
+  sourceRange?: VideoSourceRange
 }
 
 export interface MediaInputFile extends MediaItem {
@@ -96,8 +147,9 @@ export interface MediaSandboxResult {
   workDir: string
 }
 
-interface RunNodeMediaCodeOptions {
+export interface RunNodeMediaCodeOptions {
   code: string
+  codePath?: string
   description?: string
   mediaRefs?: number[]
   workspacePaths?: string[]
@@ -147,11 +199,32 @@ async function downloadFile(url: string, filePath: string, timeoutMs = INPUT_DOW
   }
 }
 
+async function materializeRemoteSourceRange(item: MediaItem, filePath: string): Promise<void> {
+  if (!item.sourceRange) throw new Error('Source range metadata is required.')
+  const ffmpegPath = await findFfmpeg()
+  await mkdir(path.dirname(filePath), { recursive: true })
+  await execFileAsync(ffmpegPath, [
+    '-y',
+    '-ss', String(item.sourceRange.start_sec),
+    '-t', String(item.sourceRange.end_sec - item.sourceRange.start_sec),
+    '-i', item.sourceRange.source_url,
+    '-map', '0:v:0',
+    '-map', '0:a:0?',
+    '-c:v', 'libx264',
+    '-preset', 'veryfast',
+    '-crf', '20',
+    '-c:a', 'aac',
+    '-movflags', '+faststart',
+    filePath,
+  ], { timeout: INPUT_DOWNLOAD_TIMEOUT_MS, maxBuffer: 12 * 1024 * 1024 })
+}
+
 function urlCacheKey(input: string): string {
   return crypto.createHash('sha1').update(input).digest('hex').slice(0, 16)
 }
 
 function mediaExtension(item: MediaItem): string {
+  if (item.kind === 'video' && item.sourceRange) return '.mp4'
   if (item.url.startsWith('data:')) return item.kind === 'video' ? '.mp4' : '.jpg'
   const cleanUrl = item.url.split('?')[0] || item.url
   const ext = path.extname(cleanUrl)
@@ -185,7 +258,8 @@ async function resolveMediaInputFile(options: {
     }
   }
 
-  const cachePath = `${options.projectId}/media-inputs/${fileName.replace(ext, '')}-${urlCacheKey(item.url)}${ext}`
+  const cacheIdentity = item.sourceRange ? sourceRangeIdentity(item.sourceRange) : item.url
+  const cachePath = `${options.projectId}/media-inputs/${fileName.replace(ext, '')}-${urlCacheKey(cacheIdentity)}${ext}`
   const targetPath = workspace.getLocalWorkspacePath(options.userId, cachePath)
   if (existsSync(targetPath)) {
     console.log(`[media-sandbox] input <<<media_${ref}>>> cache local ${cachePath}`)
@@ -197,6 +271,20 @@ async function resolveMediaInputFile(options: {
       fileName,
       contentType: guessContentType(fileName),
       source: item.url.startsWith('data:') ? 'data-url' : 'cache',
+    }
+  }
+
+  if (item.kind === 'video' && item.sourceRange) {
+    await materializeRemoteSourceRange(item, targetPath)
+    console.log(`[media-sandbox] input <<<media_${ref}>>> materialized external source range ${item.sourceRange.start_sec}-${item.sourceRange.end_sec}s`)
+    return {
+      ...item,
+      inputPath: targetPath,
+      localPath: targetPath,
+      workspacePath: item.workspacePath || cachePath,
+      fileName,
+      contentType: 'video/mp4',
+      source: 'remote',
     }
   }
 
@@ -338,26 +426,45 @@ function withSafeChildOptions(options: unknown, cwd: string): unknown {
 }
 
 function createSafeChildProcess(cwd: string): typeof childProcess {
+  const safeExec = ((command: string, optionsOrCallback?: unknown, callback?: unknown) => {
+    if (typeof optionsOrCallback === 'function') {
+      return (childProcess.exec as any)(command, withSafeChildOptions(undefined, cwd), optionsOrCallback)
+    }
+    return (childProcess.exec as any)(command, withSafeChildOptions(optionsOrCallback, cwd), callback)
+  }) as typeof childProcess.exec
+  ;(safeExec as any)[util.promisify.custom] = async (command: string, options?: unknown) => {
+    const execAsync = util.promisify(childProcess.exec) as any
+    return execAsync(command, withSafeChildOptions(options, cwd))
+  }
+
+  const safeExecFile = ((file: string, argsOrOptionsOrCallback?: unknown, optionsOrCallback?: unknown, callback?: unknown) => {
+    if (Array.isArray(argsOrOptionsOrCallback)) {
+      if (typeof optionsOrCallback === 'function') {
+        return (childProcess.execFile as any)(file, argsOrOptionsOrCallback, withSafeChildOptions(undefined, cwd), optionsOrCallback)
+      }
+      return (childProcess.execFile as any)(file, argsOrOptionsOrCallback, withSafeChildOptions(optionsOrCallback, cwd), callback)
+    }
+    if (typeof argsOrOptionsOrCallback === 'function') {
+      return (childProcess.execFile as any)(file, [], withSafeChildOptions(undefined, cwd), argsOrOptionsOrCallback)
+    }
+    return (childProcess.execFile as any)(file, [], withSafeChildOptions(argsOrOptionsOrCallback, cwd), optionsOrCallback)
+  }) as typeof childProcess.execFile
+  ;(safeExecFile as any)[util.promisify.custom] = async (
+    file: string,
+    argsOrOptions?: unknown,
+    options?: unknown,
+  ) => {
+    const execFileAsync = util.promisify(childProcess.execFile) as any
+    if (Array.isArray(argsOrOptions)) {
+      return execFileAsync(file, argsOrOptions, withSafeChildOptions(options, cwd))
+    }
+    return execFileAsync(file, [], withSafeChildOptions(argsOrOptions, cwd))
+  }
+
   return {
     ...childProcess,
-    exec: ((command: string, optionsOrCallback?: unknown, callback?: unknown) => {
-      if (typeof optionsOrCallback === 'function') {
-        return (childProcess.exec as any)(command, withSafeChildOptions(undefined, cwd), optionsOrCallback)
-      }
-      return (childProcess.exec as any)(command, withSafeChildOptions(optionsOrCallback, cwd), callback)
-    }) as typeof childProcess.exec,
-    execFile: ((file: string, argsOrOptionsOrCallback?: unknown, optionsOrCallback?: unknown, callback?: unknown) => {
-      if (Array.isArray(argsOrOptionsOrCallback)) {
-        if (typeof optionsOrCallback === 'function') {
-          return (childProcess.execFile as any)(file, argsOrOptionsOrCallback, withSafeChildOptions(undefined, cwd), optionsOrCallback)
-        }
-        return (childProcess.execFile as any)(file, argsOrOptionsOrCallback, withSafeChildOptions(optionsOrCallback, cwd), callback)
-      }
-      if (typeof argsOrOptionsOrCallback === 'function') {
-        return (childProcess.execFile as any)(file, [], withSafeChildOptions(undefined, cwd), argsOrOptionsOrCallback)
-      }
-      return (childProcess.execFile as any)(file, [], withSafeChildOptions(argsOrOptionsOrCallback, cwd), optionsOrCallback)
-    }) as typeof childProcess.execFile,
+    exec: safeExec,
+    execFile: safeExecFile,
     spawn: ((command: string, argsOrOptions?: unknown, options?: unknown) => {
       if (Array.isArray(argsOrOptions)) {
         return childProcess.spawn(command, argsOrOptions, withSafeChildOptions(options, cwd) as childProcess.SpawnOptions)
@@ -413,7 +520,7 @@ function createSafeProcess(cwd: string) {
   }
 }
 
-function createNodeMediaRequire(cwd: string): NodeRequire {
+function createNodeMediaRequire(cwd: string, safeProcess: ReturnType<typeof createSafeProcess>): NodeRequire {
   const builtins: Record<string, unknown> = {
     child_process: createSafeChildProcess(cwd),
     'node:child_process': createSafeChildProcess(cwd),
@@ -423,6 +530,10 @@ function createNodeMediaRequire(cwd: string): NodeRequire {
     'node:fs/promises': fsPromises,
     path,
     'node:path': path,
+    process: safeProcess,
+    'node:process': safeProcess,
+    util,
+    'node:util': util,
     sharp,
   }
 
@@ -432,14 +543,25 @@ function createNodeMediaRequire(cwd: string): NodeRequire {
       throw new Error(`Module "${id}" is not available in the Node media runtime for safety.`)
     }
     if (id in builtins) return builtins[id]
-    if (builtinModules.includes(normalized) || builtinModules.includes(id)) {
-      return serverRequire(id)
-    }
-    if (ALLOWED_MEDIA_PACKAGES.has(id)) {
-      return serverRequire(id)
-    }
+    const builtinLoader = NODE_BUILTIN_LOADERS[normalized]
+    if (builtinLoader) return builtinLoader()
+    const packageLoader = MEDIA_PACKAGE_LOADERS[id]
+    if (packageLoader) return packageLoader()
     throw new Error(`Module "${id}" is not available in the Node media runtime. Node built-ins and media packages are available; arbitrary local files or npm packages are blocked for safety.`)
   }) as NodeRequire
+}
+
+export function compileNodeMediaCode(code: string, codePath?: string): string {
+  try {
+    return sucraseTransform(code, {
+      transforms: ['typescript', 'jsx', 'imports'],
+      jsxRuntime: 'classic',
+      filePath: codePath || 'agent-media-code.tsx',
+    }).code
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error)
+    throw new Error(`Node media compile failed${codePath ? ` for ${codePath}` : ''}: ${message}`)
+  }
 }
 
 async function withTimeout<T>(promise: Promise<T>, timeoutMs: number, label: string): Promise<T> {
@@ -483,6 +605,7 @@ export async function buildMediaItems(options: {
       const isVideo = snap.type === 'video'
       const videoUrl = typeof videoMeta?.videoUrl === 'string' ? videoMeta.videoUrl : ''
       const videoPath = typeof videoMeta?.videoPath === 'string' ? videoMeta.videoPath : undefined
+      const sourceRange = sourceRangeFromVideoMeta(videoMeta)
       const imageUrl = typeof snap.image_url === 'string' ? snap.image_url : fallback[i]?.url || ''
       return {
         index: i + 1,
@@ -491,10 +614,11 @@ export async function buildMediaItems(options: {
         workspacePath: isVideo ? videoPath : undefined,
         posterUrl: isVideo ? imageUrl : undefined,
         description: typeof snap.description === 'string' ? snap.description : undefined,
-        duration: typeof videoMeta?.duration === 'number' ? videoMeta.duration : undefined,
+        duration: typeof videoMeta?.duration === 'number' ? videoMeta.duration : sourceRangeDuration(sourceRange),
         width: typeof videoMeta?.width === 'number' ? videoMeta.width : undefined,
         height: typeof videoMeta?.height === 'number' ? videoMeta.height : undefined,
         status: typeof videoMeta?.status === 'string' ? videoMeta.status : undefined,
+        sourceRange,
       }
     })
   } catch (e) {
@@ -582,57 +706,140 @@ export async function runNodeMediaCode(options: RunNodeMediaCodeOptions): Promis
       ffprobePath,
     }
 
-    const localRequire = createNodeMediaRequire(workDir)
-    const safeProcess = createSafeProcess(workDir)
-    const AsyncFunction = Object.getPrototypeOf(async function () {}).constructor
-    const runner = new AsyncFunction(
-      'require',
-      'process',
-      'console',
-      'fetch',
-      'ctx',
-      'context',
-      'inputFiles',
-      'outputDir',
-      'inputDir',
-      'workDir',
-      'workspaceDir',
-      'ffmpegPath',
-      'ffprobePath',
-      'downloadFile',
-      'saveToWorkspace',
-      'saveOutput',
-      'probeVideo',
-      '__filename',
-      '__dirname',
-      options.code,
-    )
+    const compiledCode = compileNodeMediaCode(options.code, options.codePath)
+    const timeoutMs = options.timeoutMs || 180_000
+    let result: unknown
+    let usedIsolatedExecutor = false
 
-    const result = await withTimeout(
-      runner(
-        localRequire,
-        safeProcess,
-        console,
-        fetch,
-        context,
-        context,
-        inputFiles,
-        outputDir,
-        inputDir,
-        workDir,
-        workspaceDir,
-        ffmpegPath,
-        ffprobePath,
-        downloadFile,
-        saveToWorkspace,
-        saveOutput,
-        probeVideoFile,
-        pathToFileURL(path.join(workDir, 'agent-media-code.js')).toString(),
-        workDir,
-      ),
-      options.timeoutMs || 180_000,
-      'Node media runtime',
-    )
+    const {
+      runNodeMediaCodeInVercelSandbox,
+      shouldUseVercelMediaSandbox,
+      VercelMediaSandboxExecutionError,
+    } = await import('./media-sandbox-vercel')
+    if (shouldUseVercelMediaSandbox()) {
+      try {
+        const isolated = await runNodeMediaCodeInVercelSandbox({
+          code: options.code,
+          compiledCode,
+          codePath: options.codePath,
+          description: options.description,
+          inputFiles,
+          mediaItems: options.mediaItems,
+          mediaRefs: selectedRefs,
+          workspacePaths: selectedWorkspacePaths,
+          localOutputDir: outputDir,
+          projectId: options.projectId,
+          userId: options.userId,
+          timeoutMs,
+        })
+        result = isolated.result
+        usedIsolatedExecutor = true
+        console.log(`[media-sandbox] Agent code completed in isolated Sandbox ${isolated.sandboxId}`)
+      } catch (error) {
+        if (error instanceof VercelMediaSandboxExecutionError) throw error
+        // Availability/bootstrap failures must not strand the user. Preserve the
+        // open local executor as a compatibility fallback so the Agent can keep
+        // repairing its program. Production should normally stay on the true
+        // Sandbox path; this warning is intentionally visible for later triage.
+        console.warn('[media-sandbox] isolated executor unavailable; continuing with local compatibility executor:', error)
+      }
+    }
+
+    if (!usedIsolatedExecutor) {
+      const safeProcess = createSafeProcess(workDir)
+      const localRequire = createNodeMediaRequire(workDir, safeProcess)
+      const mediaModule = { exports: {} as unknown }
+      const AsyncFunction = Object.getPrototypeOf(async function () {}).constructor
+      const runner = new AsyncFunction(
+        'require',
+        'process',
+        'console',
+        'fetch',
+        'ctx',
+        'context',
+        'inputFiles',
+        'outputDir',
+        'inputDir',
+        'workDir',
+        'workspaceDir',
+        'ffmpegPath',
+        'ffprobePath',
+        'downloadFile',
+        'saveToWorkspace',
+        'saveOutput',
+        'probeVideo',
+        '__filename',
+        '__dirname',
+        'module',
+        'exports',
+        compiledCode,
+      )
+
+      result = await withTimeout(
+        runner(
+          localRequire,
+          safeProcess,
+          console,
+          fetch,
+          context,
+          context,
+          inputFiles,
+          outputDir,
+          inputDir,
+          workDir,
+          workspaceDir,
+          ffmpegPath,
+          ffprobePath,
+          downloadFile,
+          saveToWorkspace,
+          saveOutput,
+          probeVideoFile,
+          path.join(workDir, options.codePath ? path.basename(options.codePath) : 'agent-media-code.js'),
+          workDir,
+          mediaModule,
+          mediaModule.exports,
+        ),
+        timeoutMs,
+        'Node media runtime',
+      )
+
+      // Natural ESM/CommonJS files may export their program instead of using a
+      // top-level return. Invoke the conventional exported function with the
+      // same open runtime API, or accept an exported result object directly.
+      if (result === undefined) {
+        const exported = mediaModule.exports as any
+        const entry = exported?.default ?? exported?.main ?? exported?.run ?? exported?.handler
+        if (typeof entry === 'function') {
+          result = await withTimeout(
+            Promise.resolve(entry({
+              require: localRequire,
+              process: safeProcess,
+              console,
+              fetch,
+              ctx: context,
+              context,
+              inputFiles,
+              outputDir,
+              inputDir,
+              workDir,
+              workspaceDir,
+              ffmpegPath,
+              ffprobePath,
+              downloadFile,
+              saveToWorkspace,
+              saveOutput,
+              probeVideo: probeVideoFile,
+            })),
+            timeoutMs,
+            'Node media exported entry',
+          )
+        } else if (entry !== undefined) {
+          result = entry
+        } else if (exported && (typeof exported !== 'object' || Object.keys(exported).length > 0)) {
+          result = exported
+        }
+      }
+    }
 
     let outputs = normalizeOutputs(result, outputDir)
     if (outputs.length === 0) {

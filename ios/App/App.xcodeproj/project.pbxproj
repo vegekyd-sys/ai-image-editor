@@ -19,7 +19,30 @@
 		A10F00000000000000000004 /* MakaronBridgeViewController.swift in Sources */ = {isa = PBXBuildFile; fileRef = A10F00000000000000000003 /* MakaronBridgeViewController.swift */; };
 		A10F00000000000000000006 /* SceneDelegate.swift in Sources */ = {isa = PBXBuildFile; fileRef = A10F00000000000000000005 /* SceneDelegate.swift */; };
 		A10F00000000000000000009 /* MakaronExternalLinkPlugin.swift in Sources */ = {isa = PBXBuildFile; fileRef = A10F00000000000000000008 /* MakaronExternalLinkPlugin.swift */; };
+		B10E00000000000000000001 /* MakaronStoreKitUITests.swift in Sources */ = {isa = PBXBuildFile; fileRef = B10E00000000000000000002 /* MakaronStoreKitUITests.swift */; };
+		B10E00000000000000000003 /* MakaronLocal.storekit in Resources */ = {isa = PBXBuildFile; fileRef = A10F00000000000000000007 /* MakaronLocal.storekit */; };
+		C10E00000000000000000001 /* MakaronStoreKitTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = C10E00000000000000000002 /* MakaronStoreKitTests.swift */; };
+		C10E00000000000000000003 /* MakaronLocal.storekit in Resources */ = {isa = PBXBuildFile; fileRef = A10F00000000000000000007 /* MakaronLocal.storekit */; };
+		D10E00000000000000000003 /* MakaronE2E.storekit in Resources */ = {isa = PBXBuildFile; fileRef = D10E00000000000000000002 /* MakaronE2E.storekit */; };
+		D10E00000000000000000004 /* MakaronE2E.storekit in Resources */ = {isa = PBXBuildFile; fileRef = D10E00000000000000000002 /* MakaronE2E.storekit */; };
 /* End PBXBuildFile section */
+
+/* Begin PBXContainerItemProxy section */
+		B10E00000000000000000004 /* PBXContainerItemProxy */ = {
+			isa = PBXContainerItemProxy;
+			containerPortal = 504EC2FC1FED79650016851F /* Project object */;
+			proxyType = 1;
+			remoteGlobalIDString = 504EC3031FED79650016851F;
+			remoteInfo = App;
+		};
+		C10E00000000000000000004 /* PBXContainerItemProxy */ = {
+			isa = PBXContainerItemProxy;
+			containerPortal = 504EC2FC1FED79650016851F /* Project object */;
+			proxyType = 1;
+			remoteGlobalIDString = 504EC3031FED79650016851F;
+			remoteInfo = App;
+		};
+/* End PBXContainerItemProxy section */
 
 /* Begin PBXFileReference section */
 		2FAD9762203C412B000D30F8 /* config.xml */ = {isa = PBXFileReference; lastKnownFileType = text.xml; path = config.xml; sourceTree = "<group>"; };
@@ -37,6 +60,11 @@
 		A10F00000000000000000005 /* SceneDelegate.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SceneDelegate.swift; sourceTree = "<group>"; };
 		A10F00000000000000000007 /* MakaronLocal.storekit */ = {isa = PBXFileReference; lastKnownFileType = "com.apple.dt.storekitbundle"; path = MakaronLocal.storekit; sourceTree = "<group>"; };
 		A10F00000000000000000008 /* MakaronExternalLinkPlugin.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MakaronExternalLinkPlugin.swift; sourceTree = "<group>"; };
+		B10E00000000000000000002 /* MakaronStoreKitUITests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MakaronStoreKitUITests.swift; sourceTree = "<group>"; };
+		B10E00000000000000000005 /* MakaronStoreKitUITests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = MakaronStoreKitUITests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
+		C10E00000000000000000002 /* MakaronStoreKitTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MakaronStoreKitTests.swift; sourceTree = "<group>"; };
+		C10E00000000000000000005 /* MakaronStoreKitTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = MakaronStoreKitTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
+		D10E00000000000000000002 /* MakaronE2E.storekit */ = {isa = PBXFileReference; lastKnownFileType = "com.apple.dt.storekitbundle"; path = MakaronE2E.storekit; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -48,6 +76,20 @@
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
+		B10E00000000000000000006 /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		C10E00000000000000000006 /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
 /* End PBXFrameworksBuildPhase section */
 
 /* Begin PBXGroup section */
@@ -56,6 +98,8 @@
 			children = (
 				958DCC722DB07C7200EA8C5F /* debug.xcconfig */,
 				504EC3061FED79650016851F /* App */,
+				B10E00000000000000000007 /* MakaronStoreKitUITests */,
+				C10E00000000000000000007 /* MakaronStoreKitTests */,
 				504EC3051FED79650016851F /* Products */,
 			);
 			sourceTree = "<group>";
@@ -64,6 +108,8 @@
 			isa = PBXGroup;
 			children = (
 				504EC3041FED79650016851F /* App.app */,
+				B10E00000000000000000005 /* MakaronStoreKitUITests.xctest */,
+				C10E00000000000000000005 /* MakaronStoreKitTests.xctest */,
 			);
 			name = Products;
 			sourceTree = "<group>";
@@ -81,11 +127,28 @@
 				504EC3101FED79650016851F /* LaunchScreen.storyboard */,
 				504EC3131FED79650016851F /* Info.plist */,
 				A10F00000000000000000007 /* MakaronLocal.storekit */,
+				D10E00000000000000000002 /* MakaronE2E.storekit */,
 				A10F00000000000000000001 /* PrivacyInfo.xcprivacy */,
 				2FAD9762203C412B000D30F8 /* config.xml */,
 				50B271D01FEDC1A000F3C39B /* public */,
 			);
 			path = App;
+			sourceTree = "<group>";
+		};
+		B10E00000000000000000007 /* MakaronStoreKitUITests */ = {
+			isa = PBXGroup;
+			children = (
+				B10E00000000000000000002 /* MakaronStoreKitUITests.swift */,
+			);
+			path = MakaronStoreKitUITests;
+			sourceTree = "<group>";
+		};
+		C10E00000000000000000007 /* MakaronStoreKitTests */ = {
+			isa = PBXGroup;
+			children = (
+				C10E00000000000000000002 /* MakaronStoreKitTests.swift */,
+			);
+			path = MakaronStoreKitTests;
 			sourceTree = "<group>";
 		};
 /* End PBXGroup section */
@@ -111,6 +174,42 @@
 			productReference = 504EC3041FED79650016851F /* App.app */;
 			productType = "com.apple.product-type.application";
 		};
+		B10E00000000000000000008 /* MakaronStoreKitUITests */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = B10E00000000000000000009 /* Build configuration list for PBXNativeTarget "MakaronStoreKitUITests" */;
+			buildPhases = (
+				B10E0000000000000000000A /* Sources */,
+				B10E00000000000000000006 /* Frameworks */,
+				B10E0000000000000000000B /* Resources */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+				B10E0000000000000000000C /* PBXTargetDependency */,
+			);
+			name = MakaronStoreKitUITests;
+			productName = MakaronStoreKitUITests;
+			productReference = B10E00000000000000000005 /* MakaronStoreKitUITests.xctest */;
+			productType = "com.apple.product-type.bundle.ui-testing";
+		};
+		C10E00000000000000000008 /* MakaronStoreKitTests */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = C10E00000000000000000009 /* Build configuration list for PBXNativeTarget "MakaronStoreKitTests" */;
+			buildPhases = (
+				C10E0000000000000000000A /* Sources */,
+				C10E00000000000000000006 /* Frameworks */,
+				C10E0000000000000000000B /* Resources */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+				C10E0000000000000000000C /* PBXTargetDependency */,
+			);
+			name = MakaronStoreKitTests;
+			productName = MakaronStoreKitTests;
+			productReference = C10E00000000000000000005 /* MakaronStoreKitTests.xctest */;
+			productType = "com.apple.product-type.bundle.unit-test";
+		};
 /* End PBXNativeTarget section */
 
 /* Begin PBXProject section */
@@ -124,6 +223,16 @@
 						CreatedOnToolsVersion = 9.2;
 						LastSwiftMigration = 1100;
 						ProvisioningStyle = Automatic;
+					};
+					B10E00000000000000000008 = {
+						CreatedOnToolsVersion = 26.6;
+						ProvisioningStyle = Automatic;
+						TestTargetID = 504EC3031FED79650016851F;
+					};
+					C10E00000000000000000008 = {
+						CreatedOnToolsVersion = 26.6;
+						ProvisioningStyle = Automatic;
+						TestTargetID = 504EC3031FED79650016851F;
 					};
 				};
 			};
@@ -144,6 +253,8 @@
 			projectRoot = "";
 			targets = (
 				504EC3031FED79650016851F /* App */,
+				B10E00000000000000000008 /* MakaronStoreKitUITests */,
+				C10E00000000000000000008 /* MakaronStoreKitTests */,
 			);
 		};
 /* End PBXProject section */
@@ -163,6 +274,22 @@
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
+		B10E0000000000000000000B /* Resources */ = {
+			isa = PBXResourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				D10E00000000000000000003 /* MakaronE2E.storekit in Resources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		C10E0000000000000000000B /* Resources */ = {
+			isa = PBXResourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				D10E00000000000000000004 /* MakaronE2E.storekit in Resources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
 /* End PBXResourcesBuildPhase section */
 
 /* Begin PBXSourcesBuildPhase section */
@@ -177,7 +304,36 @@
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
+		B10E0000000000000000000A /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				B10E00000000000000000001 /* MakaronStoreKitUITests.swift in Sources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		C10E0000000000000000000A /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				C10E00000000000000000001 /* MakaronStoreKitTests.swift in Sources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
 /* End PBXSourcesBuildPhase section */
+
+/* Begin PBXTargetDependency section */
+		B10E0000000000000000000C /* PBXTargetDependency */ = {
+			isa = PBXTargetDependency;
+			target = 504EC3031FED79650016851F /* App */;
+			targetProxy = B10E00000000000000000004 /* PBXContainerItemProxy */;
+		};
+		C10E0000000000000000000C /* PBXTargetDependency */ = {
+			isa = PBXTargetDependency;
+			target = 504EC3031FED79650016851F /* App */;
+			targetProxy = C10E00000000000000000004 /* PBXContainerItemProxy */;
+		};
+/* End PBXTargetDependency section */
 
 /* Begin PBXVariantGroup section */
 		504EC30B1FED79650016851F /* Main.storyboard */ = {
@@ -314,7 +470,7 @@
 			buildSettings = {
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 14;
+				CURRENT_PROJECT_VERSION = 17;
 				DEVELOPMENT_TEAM = E6YTL27QWA;
 				INFOPLIST_FILE = App/Info.plist;
 				IPHONEOS_DEPLOYMENT_TARGET = 15.0;
@@ -322,7 +478,7 @@
 					"$(inherited)",
 					"@executable_path/Frameworks",
 				);
-				MARKETING_VERSION = 1.0.5;
+				MARKETING_VERSION = 1.0.8;
 				OTHER_SWIFT_FLAGS = "$(inherited) \"-D\" \"COCOAPODS\" \"-DDEBUG\"";
 				PRODUCT_BUNDLE_IDENTIFIER = app.makaron.ios;
 				PRODUCT_NAME = "$(TARGET_NAME)";
@@ -337,7 +493,7 @@
 			buildSettings = {
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 14;
+				CURRENT_PROJECT_VERSION = 17;
 				DEVELOPMENT_TEAM = E6YTL27QWA;
 				INFOPLIST_FILE = App/Info.plist;
 				IPHONEOS_DEPLOYMENT_TARGET = 15.0;
@@ -345,12 +501,80 @@
 					"$(inherited)",
 					"@executable_path/Frameworks",
 				);
-				MARKETING_VERSION = 1.0.5;
+				MARKETING_VERSION = 1.0.8;
 				PRODUCT_BUNDLE_IDENTIFIER = app.makaron.ios;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SWIFT_ACTIVE_COMPILATION_CONDITIONS = "";
 				SWIFT_VERSION = 5.0;
 				TARGETED_DEVICE_FAMILY = "1,2";
+			};
+			name = Release;
+		};
+		B10E0000000000000000000D /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				CODE_SIGN_STYLE = Automatic;
+				DEVELOPMENT_TEAM = E6YTL27QWA;
+				GENERATE_INFOPLIST_FILE = YES;
+				IPHONEOS_DEPLOYMENT_TARGET = 15.0;
+				PRODUCT_BUNDLE_IDENTIFIER = app.makaron.ios.storekit-uitests;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SDKROOT = iphoneos;
+				SWIFT_ACTIVE_COMPILATION_CONDITIONS = DEBUG;
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = "1,2";
+				TEST_TARGET_NAME = App;
+			};
+			name = Debug;
+		};
+		B10E0000000000000000000E /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				CODE_SIGN_STYLE = Automatic;
+				DEVELOPMENT_TEAM = E6YTL27QWA;
+				GENERATE_INFOPLIST_FILE = YES;
+				IPHONEOS_DEPLOYMENT_TARGET = 15.0;
+				PRODUCT_BUNDLE_IDENTIFIER = app.makaron.ios.storekit-uitests;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SDKROOT = iphoneos;
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = "1,2";
+				TEST_TARGET_NAME = App;
+			};
+			name = Release;
+		};
+		C10E0000000000000000000D /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				BUNDLE_LOADER = "$(TEST_HOST)";
+				CODE_SIGN_STYLE = Automatic;
+				DEVELOPMENT_TEAM = E6YTL27QWA;
+				GENERATE_INFOPLIST_FILE = YES;
+				IPHONEOS_DEPLOYMENT_TARGET = 15.0;
+				PRODUCT_BUNDLE_IDENTIFIER = app.makaron.ios.storekit-tests;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SDKROOT = iphoneos;
+				SWIFT_ACTIVE_COMPILATION_CONDITIONS = DEBUG;
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = "1,2";
+				TEST_HOST = "$(BUILT_PRODUCTS_DIR)/App.app/$(BUNDLE_EXECUTABLE_FOLDER_PATH)/App";
+			};
+			name = Debug;
+		};
+		C10E0000000000000000000E /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				BUNDLE_LOADER = "$(TEST_HOST)";
+				CODE_SIGN_STYLE = Automatic;
+				DEVELOPMENT_TEAM = E6YTL27QWA;
+				GENERATE_INFOPLIST_FILE = YES;
+				IPHONEOS_DEPLOYMENT_TARGET = 15.0;
+				PRODUCT_BUNDLE_IDENTIFIER = app.makaron.ios.storekit-tests;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SDKROOT = iphoneos;
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = "1,2";
+				TEST_HOST = "$(BUILT_PRODUCTS_DIR)/App.app/$(BUNDLE_EXECUTABLE_FOLDER_PATH)/App";
 			};
 			name = Release;
 		};
@@ -371,6 +595,24 @@
 			buildConfigurations = (
 				504EC3171FED79650016851F /* Debug */,
 				504EC3181FED79650016851F /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
+		B10E00000000000000000009 /* Build configuration list for PBXNativeTarget "MakaronStoreKitUITests" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				B10E0000000000000000000D /* Debug */,
+				B10E0000000000000000000E /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
+		C10E00000000000000000009 /* Build configuration list for PBXNativeTarget "MakaronStoreKitTests" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				C10E0000000000000000000D /* Debug */,
+				C10E0000000000000000000E /* Release */,
 			);
 			defaultConfigurationIsVisible = 0;
 			defaultConfigurationName = Release;

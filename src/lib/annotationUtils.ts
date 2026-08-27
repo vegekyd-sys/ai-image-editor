@@ -63,7 +63,8 @@ export function replayAnnotations(
   }
 }
 
-/** Merge annotation entries onto a base image, return combined base64 JPEG */
+/** Merge annotation entries onto a base image. Alpha-capable sources use WebP
+ * so the annotation guide never flattens a transparent asset to JPEG. */
 export function mergeAnnotation(
   baseImageSrc: string,
   entries: AnnotationEntry[],
@@ -77,7 +78,9 @@ export function mergeAnnotation(
       const ctx = canvas.getContext('2d')!;
       ctx.drawImage(img, 0, 0);
       replayAnnotations(ctx, entries);
-      resolve(canvas.toDataURL('image/jpeg', 0.92));
+      const preserveAlpha = /^data:image\/(?:png|webp|avif);/i.test(baseImageSrc)
+        || /\.(?:png|webp|avif)(?:\?|$)/i.test(baseImageSrc);
+      resolve(canvas.toDataURL(preserveAlpha ? 'image/webp' : 'image/jpeg', 0.92));
     };
     img.onerror = () => resolve(baseImageSrc); // fallback to original
     img.crossOrigin = 'anonymous';

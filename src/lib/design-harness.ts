@@ -9,6 +9,11 @@ import traverse from '@babel/traverse';
 import { transform as sucraseTransform } from 'sucrase';
 import type { EditableField } from '@/types';
 import {
+  type EditableCoverage,
+} from './editor/editable-manifest';
+import { compileEditableManifestWithProvenance } from './editor/editable-provenance-compiler';
+import {
+  buildRemotionEvaluatorBody,
   DYNAMIC_DESIGN_SCOPE_NAMES,
   normalizeRemotionScopeDeclarations,
 } from './remotion-code-normalization';
@@ -17,7 +22,13 @@ export interface DesignResult {
   code: string;
   props?: Record<string, unknown>;
   editables?: EditableField[];
-  [key: string]: unknown;
+  animation?: { fps?: number; durationInSeconds?: number; format?: string };
+}
+
+export interface DesignValidationReport {
+  blocking: string[];
+  advisories: string[];
+  editableCoverage: EditableCoverage;
 }
 
 const SAFE_RUNTIME_GLOBALS = new Set([
@@ -38,6 +49,7 @@ const SAFE_RUNTIME_GLOBALS = new Set([
   'FileReader', 'FormData', 'Headers', 'Request', 'Response', 'TextEncoder',
   'TextDecoder', 'AbortController', 'AbortSignal', 'Image', 'ImageData',
   'fetch', 'atob', 'btoa', 'structuredClone', 'queueMicrotask',
+  'require', 'module', 'exports',
   'setTimeout', 'clearTimeout', 'setInterval', 'clearInterval',
   'requestAnimationFrame', 'cancelAnimationFrame',
 ]);
@@ -47,7 +59,7 @@ const SAFE_RUNTIME_GLOBALS = new Set([
  * or an error message string if the design should be rejected.
  */
 export function validateDesign(result: DesignResult): string | null {
-  const diagnostics = validateDesignDiagnostics(result);
+  const diagnostics = validateDesignReport(result).blocking;
   if (diagnostics.length === 0) return null;
   if (diagnostics.length === 1) return diagnostics[0];
   return `Composition validation found ${diagnostics.length} blocking issues:\n${diagnostics.map(item => `- ${item}`).join('\n')}`;
@@ -55,44 +67,221 @@ export function validateDesign(result: DesignResult): string | null {
 
 /** Return every independent static diagnostic in one model repair turn. */
 export function validateDesignDiagnostics(result: DesignResult): string[] {
+  return validateDesignReport(result).blocking;
+}
+
+/**
+ * Compile and validate a composition while keeping editable inference separate
+ * from renderability. Incomplete editable coverage must not discard a playable
+ * draft or force the Agent to rewrite otherwise valid Remotion source.
+ */
+export function validateDesignReport(result: DesignResult): DesignValidationReport {
+  const authoredCode = result.code;
   // Auto-fix: Replace <img> with Remotion <Img> for delayRender support
   result.code = autoFixImgTags(result.code);
   result.code = autoFixVideoTags(result.code);
 
+  const authoredEditables = result.editables;
+  const manifest = compileEditableManifestWithProvenance({
+    code: result.code,
+    props: result.props,
+    editables: authoredEditables,
+  });
+  result.code = manifest.code;
+  const authoredById = new Map(
+    (authoredEditables ?? []).map(field => [field.id, field]),
+  );
+  const inferredById = new Map(
+    manifest.editables.map(field => [field.id, field]),
+  );
+  const compilerOwnedIds = new Set(manifest.editables.map(field => field.id));
+  result.editables = [
+    ...(authoredEditables ?? []).map(authored => {
+      const inferred = inferredById.get(authored.id);
+      if (!inferred) return authored;
+      return {
+        ...inferred,
+        ...authored,
+        source: authored.source ?? inferred.source,
+      };
+    }),
+    ...manifest.editables.filter(field => !authoredById.has(field.id)),
+  ];
+
   // Check 1: Syntax — Sucrase compile only (no runtime execution)
   const compileError = checkCompile(result.code);
-  if (compileError) return [compileError];
+  if (compileError) {
+    return {
+      blocking: [compileError],
+      advisories: [...new Set(manifest.diagnostics)],
+      editableCoverage: manifest.coverage,
+    };
+  }
 
-  const diagnostics: string[] = [];
+  const timelineDurationError = validateTimelineDuration(result);
+  const blocking: string[] = [];
+  const advisories: string[] = [...manifest.diagnostics];
+  advisories.push(...captionLayoutAdvisories(result.code));
+  if (timelineDurationError) blocking.push(timelineDurationError);
+
+  // Check the Agent-authored source before editable instrumentation duplicates
+  // or decorates JSX. Integrity belongs to the composition, not compiler output.
+  const captionTextIntegrityError = validateCaptionTextIntegrity(authoredCode);
+  if (captionTextIntegrityError) blocking.push(captionTextIntegrityError);
 
   // Check 2: Hooks evaluated while the composition module is being created.
   const hookError = checkTopLevelHookCalls(result.code);
-  if (hookError) diagnostics.push(hookError);
+  if (hookError) blocking.push(hookError);
 
   // Check 3: References that would only fail once Player/export evaluates code
   const referenceError = checkUnresolvedIdentifiers(result.code);
-  if (referenceError) diagnostics.push(referenceError);
+  if (referenceError) blocking.push(referenceError);
 
   // Check 4: Image references
   const imageError = checkImageReferences(result.code, result.props);
-  if (imageError) diagnostics.push(imageError);
+  if (imageError) blocking.push(imageError);
 
   // Check 5: Image URLs valid
   const urlError = checkImageUrls(result.code);
-  if (urlError) diagnostics.push(urlError);
+  if (urlError) blocking.push(urlError);
 
-  // Check 6: Editables validation
-  const editablesError = validateEditables(result.editables);
-  if (editablesError) diagnostics.push(editablesError);
+  // Check 6: Editable metadata is best-effort. A bad or stale field must never
+  // make an otherwise playable composition fail publication or ask the Agent
+  // to rewrite visual code. Keep every verified/inferred field and omit only
+  // authored fields whose ownership contract cannot be proven.
+  const invalidAuthoredIds = new Set<string>();
+  for (const field of authoredEditables ?? []) {
+    const editableError = validateEditables(
+      [field],
+      result.code,
+      result.props,
+      compilerOwnedIds,
+    );
+    if (!editableError) continue;
+    invalidAuthoredIds.add(field.id);
+    advisories.push(
+      `${editableError} The field was omitted; keep the rendered composition unchanged.`,
+    );
+  }
+  if (invalidAuthoredIds.size > 0) {
+    result.editables = result.editables?.filter(
+      field => !invalidAuthoredIds.has(field.id),
+    );
+  }
 
-  return [...new Set(diagnostics)];
+  const hardcodedTextError = validateHardcodedEditableText(
+    result.editables,
+    result.code,
+    result.props,
+  );
+  if (hardcodedTextError) {
+    advisories.push(
+      `${hardcodedTextError} Keep the rendered composition unchanged; this copy can remain non-editable.`,
+    );
+  }
+
+  return {
+    blocking: [...new Set(blocking)],
+    advisories: [...new Set(advisories)],
+    editableCoverage: manifest.coverage,
+  };
+}
+
+/**
+ * Catch two cross-skill caption layout hazards before settled-font Preview.
+ * These remain advisories because typography is composition-owned and an
+ * authored layout may prove safe at final resolution.
+ */
+function captionLayoutAdvisories(code: string): string[] {
+  if (!/\b(?:caption|subtitle|cue|spoken)\b/i.test(code)) return [];
+
+  const advisories: string[] = [];
+  if (/\b(?:Webkit)?BoxDecorationBreak\s*:\s*["']clone["']/.test(code)) {
+    advisories.push(
+      'Caption layout risk: auto-wrapped prose uses box-decoration-break: clone. Cloned inline padding can cover adjacent glyph rows. Prefer one block backing shape, or authored line blocks in a column with real vertical gap.',
+    );
+  }
+
+  const splitIdentifier = code.match(/\.split\(\s*([A-Za-z_$][\w$]*)\s*\)/)?.[1];
+  if (
+    splitIdentifier
+    && new RegExp(`\\{\\s*${escapeRegExp(splitIdentifier)}\\s*\\}`).test(code)
+    && !/\bwhiteSpace\s*:\s*["']nowrap["']/.test(code)
+  ) {
+    advisories.push(
+      'Caption layout risk: an emphasized substring can wrap inside the highlighted word. Keep only that compact substring atomic with display: inline-block and whiteSpace: nowrap; leave the full caption prose wrappable.',
+    );
+  }
+
+  return advisories;
+}
+
+/**
+ * Highlighting is allowed to change styling, never the spoken text. Catch the
+ * common dynamic-keyword regression where split(keyword).map(...) renders only
+ * the split segments and silently drops the delimiter itself.
+ */
+function validateCaptionTextIntegrity(code: string): string | null {
+  if (!/\b(?:caption|subtitle|cue|spoken)\b/i.test(code)) return null;
+
+  try {
+    const ast = parse(normalizeRemotionScopeDeclarations(code), {
+      sourceType: 'unambiguous',
+      plugins: ['jsx', 'typescript'],
+    });
+    const omittedKeywords = new Set<string>();
+
+    traverse(ast, {
+      CallExpression(path) {
+        const mapCallee = path.node.callee;
+        if (
+          mapCallee.type !== 'MemberExpression'
+          || mapCallee.computed
+          || mapCallee.property.type !== 'Identifier'
+          || mapCallee.property.name !== 'map'
+          || mapCallee.object.type !== 'CallExpression'
+        ) return;
+
+        const splitCall = mapCallee.object;
+        const splitCallee = splitCall.callee;
+        const delimiter = splitCall.arguments[0];
+        if (
+          splitCallee.type !== 'MemberExpression'
+          || splitCallee.computed
+          || splitCallee.property.type !== 'Identifier'
+          || splitCallee.property.name !== 'split'
+          || !delimiter
+          || delimiter.type !== 'Identifier'
+        ) return;
+
+        const callbackPath = path.get('arguments.0');
+        if (!callbackPath.isArrowFunctionExpression() && !callbackPath.isFunctionExpression()) return;
+
+        let keywordIsRendered = false;
+        callbackPath.traverse({
+          ReferencedIdentifier(identifierPath) {
+            if (identifierPath.node.name !== delimiter.name) return;
+            if (identifierPath.findParent(parent => parent.isJSXAttribute())) return;
+            keywordIsRendered = true;
+          },
+        });
+        if (!keywordIsRendered) omittedKeywords.add(delimiter.name);
+      },
+    });
+
+    if (omittedKeywords.size === 0) return null;
+    return `⚠️ Caption text integrity error: keyword highlight split drops ${[...omittedKeywords].join(', ')} from the rendered cue. Styling must preserve the exact spoken text; render the delimiter in sequence so before + keyword + after equals the original cue.`;
+  } catch {
+    // Syntax errors are already reported by checkCompile().
+    return null;
+  }
 }
 
 /** Hooks may run inside components/custom hooks, never while evaluating the source module. */
 function checkTopLevelHookCalls(code: string): string | null {
   try {
     const ast = parse(normalizeRemotionScopeDeclarations(code), {
-      sourceType: 'script',
+      sourceType: 'unambiguous',
       plugins: ['jsx', 'typescript'],
     });
     const hooks = new Set<string>();
@@ -128,7 +317,7 @@ function checkTopLevelHookCalls(code: string): string | null {
 function checkUnresolvedIdentifiers(code: string): string | null {
   try {
     const ast = parse(normalizeRemotionScopeDeclarations(code), {
-      sourceType: 'script',
+      sourceType: 'unambiguous',
       plugins: ['jsx', 'typescript'],
     });
     const unresolved = new Set<string>();
@@ -148,18 +337,437 @@ function checkUnresolvedIdentifiers(code: string): string | null {
   } catch (err) {
     const msg = err instanceof Error ? err.message : String(err);
     return `⚠️ Composition compile error: ${msg}. Fix the syntax error in your code and try again.`;
-  }
+}
 }
 
 /** Validate editable fields declaration. Returns error message or null. */
-export function validateEditables(editables?: EditableField[]): string | null {
+export function validateEditables(
+  editables?: EditableField[],
+  code = '',
+  props?: Record<string, unknown>,
+  compilerOwnedIds = new Set<string>(),
+): string | null {
   if (!editables || editables.length === 0) return null;
+  const dynamicBindings = collectDynamicEditableBindingsById(code, props);
   for (const field of editables) {
     if (!field.id || !field.type || !field.propKey) {
       return '⚠️ Editable field missing required properties (id, type, propKey). Each editable must have { id, type, label, propKey }.';
     }
+    if (!['text', 'image', 'video'].includes(field.type)) {
+      return `⚠️ Editable field "${field.id}" has unsupported type "${field.type}". Supported types: text, image, video.`;
+    }
+
+    const dynamicBinding = field.id === field.propKey
+      ? dynamicBindings.get(field.id) ?? null
+      : null;
+    const directOpeningTag = findEditableOpeningTag(code, field.id);
+    const compilerOpeningTag = findCompilerEditableOpeningTag(code, field.id);
+    const openingTag = directOpeningTag
+      ?? dynamicBinding?.openingTag
+      ?? compilerOpeningTag
+      ?? (field.source === 'literal'
+        ? findConditionalLiteralOpeningTag(code, field.id)
+        : null);
+    const compilerOwned = compilerOwnedIds.has(field.id);
+    const compilerOwnsMediaBox = compilerOwned && (
+      field.source === 'literal'
+      || Boolean(compilerOpeningTag)
+      || Boolean(dynamicBinding?.openingTag.includes('__makaronEditable_'))
+      || Boolean(
+        !directOpeningTag
+        && !dynamicBinding
+        && code.includes('__makaronEditable_')
+      )
+    );
+    if (!openingTag && !compilerOwned) {
+      return `⚠️ Editable field "${field.id}" is declared but no JSX element has data-editable="${field.id}". Add data-editable to the visible editable wrapper.`;
+    }
+
+    const compilerLiteral = field.source === 'literal'
+      && props
+      && Object.prototype.hasOwnProperty.call(props, field.propKey);
+    if (
+      !compilerOwned
+      && !codeReadsProp(code, field.propKey)
+      && !dynamicBinding
+      && !compilerLiteral
+    ) {
+      return `⚠️ Editable field "${field.id}" declares prop key "${field.propKey}", but the design code does not read props.${field.propKey}. Avoid hardcoded content; wire the editable element to props.${field.propKey}.`;
+    }
+
+    if (
+      !compilerOwnsMediaBox
+      &&
+      (field.type === 'image' || field.type === 'video')
+      && (
+        !openingTag
+        || (
+          !editableWrapperHasMeasurableBox(openingTag)
+          && !/^<(?:Img|Video|OffthreadVideo)\b/.test(openingTag)
+        )
+      )
+    ) {
+      return `⚠️ Editable ${field.type} field "${field.id}" must put data-editable on a measurable wrapper with an explicit box (width+height or inset). Moveable cannot resize/move a zero-size wrapper.`;
+    }
+
+    if (field.type === 'video') {
+      const trimBeforeError = validateVideoTrimProp(code, field.id, 'trimBefore', field.trimBeforePropKey);
+      if (trimBeforeError) return trimBeforeError;
+      const trimAfterError = validateVideoTrimProp(code, field.id, 'trimAfter', field.trimAfterPropKey);
+      if (trimAfterError) return trimAfterError;
+    }
   }
   return null;
+}
+
+function escapeRegExp(value: string): string {
+  return value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+}
+
+function validateTimelineDuration(result: DesignResult): string | null {
+  const animation = result.animation as { durationInSeconds?: unknown; fps?: unknown } | undefined;
+  const duration = typeof animation?.durationInSeconds === 'number' ? animation.durationInSeconds : null;
+  if (duration === null || duration > 1.5) return null;
+
+  const sequenceCount = (result.code.match(/<Sequence\b/g) || []).length;
+  const hasTimeline = sequenceCount > 0;
+  if (!hasTimeline) return null;
+
+  return '⚠️ Composition timeline appears longer than 1 second, but animation.durationInSeconds is 1. Set animation.durationInSeconds to the requested/final timeline duration (for example 30 for a 30s composition).';
+}
+
+function hasQuotedToken(code: string, token: string): boolean {
+  return new RegExp(`["'\`]${escapeRegExp(token)}["'\`]`).test(code);
+}
+
+function findEditableOpeningTag(code: string, id: string): string | null {
+  const escaped = escapeRegExp(id);
+  const patterns = [
+    new RegExp(`<[A-Za-z][\\w.:-]*(?:\\s|\\n|\\r)[^>]*data-editable\\s*=\\s*"${escaped}"[^>]*>`, 'm'),
+    new RegExp(`<[A-Za-z][\\w.:-]*(?:\\s|\\n|\\r)[^>]*data-editable\\s*=\\s*'${escaped}'[^>]*>`, 'm'),
+    new RegExp(`<[A-Za-z][\\w.:-]*(?:\\s|\\n|\\r)[^>]*data-editable\\s*=\\s*\\{\\s*["'\`]${escaped}["'\`]\\s*\\}[^>]*>`, 'm'),
+  ];
+  for (const pattern of patterns) {
+    const match = code.match(pattern);
+    if (match) return match[0];
+  }
+  const dynamicPrefix = id.match(/^([A-Za-z_$][\w$-]*?)(\d+)$/)?.[1];
+  if (dynamicPrefix) {
+    const dynamicPattern = new RegExp(
+      `<[A-Za-z][\\w.:-]*(?:\\s|\\n|\\r)[^>]*data-editable\\s*=\\s*\\{\\s*["'\`]${escapeRegExp(dynamicPrefix)}["'\`]\\s*\\+[^}]+\\}[^>]*>`,
+      'm',
+    );
+    const match = code.match(dynamicPattern);
+    if (match) return match[0];
+  }
+  return null;
+}
+
+function findConditionalLiteralOpeningTag(code: string, id: string): string | null {
+  const escaped = escapeRegExp(id);
+  const pattern = new RegExp(
+    `<[A-Za-z][\\w.:-]*(?:\\s|\\n|\\r)[^>]*data-editable\\s*=\\s*\\{[^}]*["'\`]${escaped}["'\`][^}]*\\}[^>]*>`,
+    'm',
+  );
+  return code.match(pattern)?.[0] ?? null;
+}
+
+function findCompilerEditableOpeningTag(code: string, id: string): string | null {
+  const openingTagPattern = new RegExp(
+    '<[A-Za-z][\\w.:-]*(?:\\s|\\n|\\r)[^>]*data-editable\\s*=\\s*\\{\\s*React\\.__makaronEditableId\\([\\s\\S]*?\\)\\s*\\}[^>]*>',
+    'gm',
+  );
+  const idPattern = new RegExp(
+    `["']id["']\\s*:\\s*["']${escapeRegExp(id)}["']`,
+  );
+  for (const match of code.matchAll(openingTagPattern)) {
+    if (idPattern.test(match[0])) return match[0];
+  }
+  return null;
+}
+
+interface DynamicEditableBinding {
+  expression: string;
+  openingTag: string;
+}
+
+const DYNAMIC_MEMBER_EXPRESSION = '[A-Za-z_$][\\w$]*(?:(?:\\.[A-Za-z_$][\\w$]*)|(?:\\[[^\\]\\n]+\\]))*';
+
+function normalizeDynamicExpression(expression: string): string {
+  return expression.replace(/\s+/g, '');
+}
+
+function findDynamicEditableBindings(code: string): DynamicEditableBinding[] {
+  const openingTagPattern = new RegExp(
+    `<[A-Za-z][\\w.:-]*(?:\\s|\\n|\\r)[^>]*data-editable\\s*=\\s*\\{\\s*(${DYNAMIC_MEMBER_EXPRESSION})\\s*\\}[^>]*>`,
+    'gm',
+  );
+  const propReadPattern = new RegExp(`\\bprops\\s*\\[\\s*(${DYNAMIC_MEMBER_EXPRESSION})\\s*\\]`, 'gm');
+  const propReadExpressions = new Set(
+    [...code.matchAll(propReadPattern)].map(match => normalizeDynamicExpression(match[1])),
+  );
+
+  return [...code.matchAll(openingTagPattern)]
+    .map(match => ({
+      expression: normalizeDynamicExpression(match[1]),
+      openingTag: match[0],
+    }))
+    .filter(binding => propReadExpressions.has(binding.expression));
+}
+
+function collectDynamicEditableBindingsById(
+  code: string,
+  props?: Record<string, unknown>,
+): Map<string, DynamicEditableBinding> {
+  const bindingsById = new Map<string, DynamicEditableBinding>();
+  const bindings = findDynamicEditableBindings(code);
+  const propKeys = Object.keys(props ?? {});
+
+  for (const binding of bindings) {
+    const propertyName = binding.expression.match(/\.([A-Za-z_$][\w$]*)$/)?.[1];
+    if (!propertyName) {
+      for (const fieldId of propKeys) {
+        if (hasQuotedToken(code, fieldId)) bindingsById.set(fieldId, binding);
+      }
+      continue;
+    }
+
+    const propertyPattern = new RegExp(
+      `\\b${escapeRegExp(propertyName)}\\s*:\\s*["'\`]([^"'\`]+)["'\`]`,
+      'g',
+    );
+    for (const match of code.matchAll(propertyPattern)) {
+      const fieldId = match[1];
+      if (props && Object.prototype.hasOwnProperty.call(props, fieldId)) {
+        bindingsById.set(fieldId, binding);
+      }
+    }
+
+    const visit = (value: unknown) => {
+      if (Array.isArray(value)) {
+        value.forEach(visit);
+        return;
+      }
+      if (!value || typeof value !== 'object') return;
+      for (const [key, child] of Object.entries(value as Record<string, unknown>)) {
+        if (
+          key === propertyName
+          && typeof child === 'string'
+          && props
+          && Object.prototype.hasOwnProperty.call(props, child)
+        ) {
+          bindingsById.set(child, binding);
+        }
+        visit(child);
+      }
+    };
+    visit(props);
+  }
+
+  const compilerMemberPattern = new RegExp(
+    `<[A-Za-z][\\w.:-]*(?:\\s|\\n|\\r)[^>]*data-editable\\s*=\\s*\\{\\s*(${DYNAMIC_MEMBER_EXPRESSION}\\.__makaronEditable_[A-Za-z_$][\\w$]*)\\s*\\}[^>]*>`,
+    'gm',
+  );
+  for (const match of code.matchAll(compilerMemberPattern)) {
+    const expression = normalizeDynamicExpression(match[1]);
+    const propertyName = expression.match(/\.([A-Za-z_$][\w$]*)$/)?.[1];
+    if (!propertyName) continue;
+    const propertyPattern = new RegExp(
+      `\\b${escapeRegExp(propertyName)}\\s*:\\s*["'\`]([^"'\`]+)["'\`]`,
+      'g',
+    );
+    for (const propertyValue of code.matchAll(propertyPattern)) {
+      const fieldId = propertyValue[1];
+      if (!props || Object.prototype.hasOwnProperty.call(props, fieldId)) {
+        bindingsById.set(fieldId, {
+          expression,
+          openingTag: match[0],
+        });
+      }
+    }
+    const visitCompilerMarkers = (value: unknown) => {
+      if (Array.isArray(value)) {
+        value.forEach(visitCompilerMarkers);
+        return;
+      }
+      if (!value || typeof value !== 'object') return;
+      for (const [key, child] of Object.entries(value as Record<string, unknown>)) {
+        if (
+          key === propertyName
+          && typeof child === 'string'
+          && (!props || Object.prototype.hasOwnProperty.call(props, child))
+        ) {
+          bindingsById.set(child, {
+            expression,
+            openingTag: match[0],
+          });
+        }
+        visitCompilerMarkers(child);
+      }
+    };
+    visitCompilerMarkers(props);
+  }
+
+  const compilerBindingPattern = new RegExp(
+    `<[A-Za-z][\\w.:-]*(?:\\s|\\n|\\r)[^>]*data-editable\\s*=\\s*\\{\\s*(__makaronEditable_[A-Za-z_$][\\w$]*)\\s*\\}[^>]*>`,
+    'gm',
+  );
+  for (const match of code.matchAll(compilerBindingPattern)) {
+    const markerParam = match[1];
+    const markerValuePattern = new RegExp(
+      `\\b${escapeRegExp(markerParam)}\\s*=\\s*["'\`]([^"'\`]+)["'\`]`,
+      'g',
+    );
+    for (const markerValue of code.matchAll(markerValuePattern)) {
+      const fieldId = markerValue[1];
+      if (!props || Object.prototype.hasOwnProperty.call(props, fieldId)) {
+        bindingsById.set(fieldId, {
+          expression: markerParam,
+          openingTag: match[0],
+        });
+      }
+    }
+  }
+  return bindingsById;
+}
+
+function codeReadsProp(code: string, propKey: string): boolean {
+  const escaped = escapeRegExp(propKey);
+  const patterns = [
+    new RegExp(`props\\.${escaped}\\b`),
+    new RegExp(`props\\s*\\[\\s*["'\`]${escaped}["'\`]\\s*\\]`),
+  ];
+  if (patterns.some(pattern => pattern.test(code))) return true;
+  return hasQuotedToken(code, propKey) && /\bprops\s*\[\s*[A-Za-z_$][\w$]*(?:\.[A-Za-z_$][\w$]*|\[[^\]]+\])?\s*\]/.test(code);
+}
+
+function validateHardcodedEditableText(
+  editables: EditableField[] | undefined,
+  code: string,
+  props?: Record<string, unknown>,
+): string | null {
+  const editableTokens = (editables ?? []).flatMap(field => {
+    const value = field.source === 'literal'
+      && typeof props?.[field.propKey] === 'string'
+      ? props[field.propKey] as string
+      : null;
+    return [
+      field.id,
+      field.propKey,
+      ...(value === null
+        ? []
+        : [
+            value,
+            JSON.stringify(value).slice(1, -1),
+          ]),
+    ];
+  });
+  const hardcoded = findHardcodedVisibleTextArray(code, editableTokens);
+  if (hardcoded) {
+    const kind = hardcoded.kind === 'object' ? 'text data array' : 'text array';
+    const fix = hardcoded.kind === 'object'
+      ? 'Move every user-facing year/title/description into top-level props and render those props in semantic text hosts.'
+      : 'Move each user-facing label into a top-level prop and render that prop in its own semantic text host.';
+    return `⚠️ Visible ${kind} "${hardcoded.name}" is hardcoded (${hardcoded.literals.slice(0, 3).join(', ')}). ${fix}`;
+  }
+  const hardcodedTextNode = findHardcodedVisibleTextNode(code, editableTokens);
+  if (hardcodedTextNode) {
+    return `⚠️ Visible JSX text is hardcoded (${hardcodedTextNode.literals.slice(0, 3).join(', ')}). User-facing labels, badges, stats, captions, and brand text must come from top-level props; the Editable Manifest is inferred automatically.`;
+  }
+  return null;
+}
+
+function findHardcodedVisibleTextArray(code: string, allowedTokens: string[] = []): { name: string; literals: string[]; kind: 'object' | 'string' } | null {
+  const allowed = new Set(allowedTokens);
+  const localArray = /\b(?:const|let|var)\s+([A-Za-z_$][\w$]*)\s*=\s*\[([\s\S]*?)\]\s*;?/g;
+  for (const match of code.matchAll(localArray)) {
+    const [, name, values] = match;
+    if (name === 'editables') continue;
+    if (!isRenderedLocalArray(code, name)) continue;
+
+    const objectTextLiterals = [...values.matchAll(/\b(?:title|headline|subtitle|caption|label|year|date|desc|description|body|text|copy|cta|name)\s*:\s*["'`]([^"'`{}]{2,})["'`]/gi)]
+      .map(m => m[1].trim())
+      .filter(value => !allowed.has(value))
+      .filter(isVisibleTextLiteral);
+    if (objectTextLiterals.length > 0) {
+      return { name, literals: objectTextLiterals, kind: 'object' };
+    }
+    // Object arrays commonly carry structural selectors such as
+    // kind: 'hook' and titleKey: 'title0'. Only semantic text properties
+    // above are user-facing; the generic literal fallback is for string arrays.
+    if (/\{/.test(values)) continue;
+
+    const literals = [...values.matchAll(/["'`]([^"'`{}]{2,})["'`]/g)]
+      .map(m => m[1].trim())
+      .filter(value => !allowed.has(value))
+      .filter(isVisibleTextLiteral);
+    if (literals.length === 0) continue;
+    return { name, literals, kind: 'string' };
+  }
+  return null;
+}
+
+function isRenderedLocalArray(code: string, name: string): boolean {
+  const escaped = escapeRegExp(name);
+  const patterns = [
+    new RegExp(`\\{\\s*${escaped}\\s*\\[`),
+    new RegExp(`\\b${escaped}\\s*\\[`),
+    new RegExp(`\\b${escaped}\\s*\\.\\s*(?:map|find|filter|slice|sort|toSorted)\\s*\\(`),
+    new RegExp(`\\b${escaped}\\s*\\.\\s*(?:slice|filter|sort|toSorted)\\s*\\([^)]*\\)\\s*\\.\\s*map\\s*\\(`),
+  ];
+  return patterns.some(pattern => pattern.test(code));
+}
+
+function findHardcodedVisibleTextNode(
+  code: string,
+  allowedTokens: string[] = [],
+): { literals: string[] } | null {
+  const allowed = new Set(allowedTokens);
+  const withoutJsxComments = code.replace(/\{\/\*[\s\S]*?\*\/\}/g, '');
+  const literals = [...withoutJsxComments.matchAll(/>\s*([^<>{}\n][^<>{}]*)\s*</g)]
+    .map(m => m[1].replace(/\s+/g, ' ').trim())
+    .filter(value => !allowed.has(value))
+    .filter(value => value.length >= 2)
+    .filter(value => !/\b(?:return|function|const|let|var)\b|[;{}]/.test(value))
+    .filter(value => !/(?:=>|&&|\|\||===|!==|>=|<=|\?\.)/.test(value))
+    .filter(value => !value.startsWith('='))
+    .filter(isVisibleTextLiteral);
+  return literals.length > 0 ? { literals } : null;
+}
+
+function isVisibleTextLiteral(value: string): boolean {
+  if (!/[\p{Script=Han}A-Za-z0-9]/u.test(value)) return false;
+  // JSX/text regexes can catch tiny code-like identifiers from conditional expressions.
+  // Real user-facing labels such as badges/stats are longer, numeric, Han, or uppercase brand text.
+  if (/^[a-z][a-z0-9_]{0,2}$/.test(value)) return false;
+  if (/^(?:https?:|data:|#[0-9a-f]{3,8}$|rgba?\(|hsla?\(|linear-gradient\()/i.test(value)) return false;
+  return true;
+}
+
+function editableWrapperHasMeasurableBox(openingTag: string): boolean {
+  if (!/\bstyle\s*=/.test(openingTag)) return false;
+  const hasWidthAndHeight = /\bwidth\s*:/.test(openingTag) && /\bheight\s*:/.test(openingTag);
+  const hasInset = /\binset\s*:/.test(openingTag);
+  const hasFourEdges =
+    /\bleft\s*:/.test(openingTag) &&
+    /\bright\s*:/.test(openingTag) &&
+    /\btop\s*:/.test(openingTag) &&
+    /\bbottom\s*:/.test(openingTag);
+  return hasWidthAndHeight || hasInset || hasFourEdges;
+}
+
+function validateVideoTrimProp(
+  code: string,
+  fieldId: string,
+  propName: 'trimBefore' | 'trimAfter',
+  propKey?: string,
+): string | null {
+  if (!propKey) return null;
+  const escaped = escapeRegExp(propKey);
+  const attrReadsProp = new RegExp(`${propName}\\s*=\\s*\\{\\s*(?:props\\.${escaped}\\b|props\\s*\\[\\s*["'\`]${escaped}["'\`]\\s*\\])\\s*\\}`);
+  const createElementReadsProp = new RegExp(`${propName}\\s*:\\s*(?:props\\.${escaped}\\b|props\\s*\\[\\s*["'\`]${escaped}["'\`]\\s*\\])`);
+  if (attrReadsProp.test(code) || createElementReadsProp.test(code)) return null;
+  return `⚠️ Editable video field "${fieldId}" declares ${propName}PropKey "${propKey}", but no <Video> uses ${propName}={props.${propKey}}. Wire trimBefore/trimAfter so trim editing works.`;
 }
 
 /** Replace HTML <img with Remotion <Img so renderStillOnWeb waits for image loading */
@@ -171,19 +779,17 @@ function autoFixImgTags(code: string): string {
   return fixed;
 }
 
-/** Replace HTML <video with Remotion <Video and strip native-only attributes */
+/** Replace HTML <video> with the injected frame-synchronized runtime Video. */
 function autoFixVideoTags(code: string): string {
   let fixed = code;
-  // JSX form: <video → <Video
   fixed = fixed.replace(/<video(?=[\s/>])/g, '<Video').replace(/<\/video>/g, '</Video>');
-  // createElement form: createElement('video' → createElement(Video
   fixed = fixed.replace(/createElement\(\s*['"]video['"]/g, 'createElement(Video');
-  // Strip attributes that don't apply to Remotion <Video> (muted is kept — Remotion supports it)
-  fixed = fixed.replace(/\s+autoPlay(?=[\s/>])/g, '');
-  fixed = fixed.replace(/\s+controls(?=[\s/>])/g, '');
-  fixed = fixed.replace(/\s+playsInline(?=[\s/>])/g, '');
-  // createElement props: autoPlay: true → remove
-  fixed = fixed.replace(/,?\s*autoPlay:\s*true\s*,?/g, (m) => m.startsWith(',') && m.endsWith(',') ? ',' : '');
+  // Only remove browser playback props from actual Video JSX tags. The old
+  // global regex also mutated unrelated components and configuration objects.
+  fixed = fixed.replace(/<Video\b[^>]*>/g, tag => tag
+    .replace(/\s+autoPlay(?=[\s/>])/g, '')
+    .replace(/\s+controls(?=[\s/>])/g, '')
+    .replace(/\s+playsInline(?=[\s/>])/g, ''));
   if (fixed !== code) {
     console.log('🔧 [design-harness] auto-fixed <video> → <Video> for Remotion Player sync');
   }
@@ -194,20 +800,14 @@ function autoFixVideoTags(code: string): string {
 /** Compile code with Sucrase — syntax check only, no runtime execution */
 function checkCompile(code: string): string | null {
   try {
-    if (/^\s*(?:import|export)\b/m.test(code)) {
-      return '⚠️ Composition compile error: import/export module syntax is not supported. Declare the component directly and try again.';
-    }
-    if (/\brequire\s*\(|\bmodule\.exports\b|\bexports\s*\./.test(code)) {
-      return '⚠️ Composition compile error: require/module.exports syntax is not supported in DynamicDesign. Use the injected Remotion and React names directly.';
-    }
     const source = normalizeRemotionScopeDeclarations(code);
     const { code: compiled } = sucraseTransform(source, {
-      transforms: ['typescript', 'jsx'],
+      transforms: ['typescript', 'jsx', 'imports'],
       jsxRuntime: 'classic',
     });
-    // DynamicDesign evaluates the compiled body with new Function(). Parse it
-    // the same way here so browser-incompatible syntax fails before rendering.
-    new Function(...DYNAMIC_DESIGN_SCOPE_NAMES, `"use strict";\n${compiled}\nreturn undefined;`);
+    // Parse the exact open-scope module wrapper used by DynamicDesign. This
+    // validates syntax without rejecting normal module/CommonJS authoring.
+    new Function('__scope', 'module', 'exports', 'require', buildRemotionEvaluatorBody(compiled, 'Design'));
     return null;
   } catch (err) {
     const msg = err instanceof Error ? err.message : String(err);
@@ -228,6 +828,10 @@ function checkImageReferences(code: string, props?: Record<string, unknown>): st
     return '⚠️ Composition rejected: a Media Index marker could not be resolved. Check that <<<media_N>>> uses an available 1-based Media Index number, then regenerate.';
   }
 
+  if (/data:image\//i.test(serialized)) {
+    return '⚠️ Composition rejected: inline data:image URLs are not export-safe. Use real HTTPS workspace or Supabase image URLs in props. Regenerate.';
+  }
+
   if (/data:image\/[^;]+;base64,[A-Za-z0-9+/=]{5120000,}/.test(serialized)) {
     return '⚠️ Composition rejected: Base64 image data >5MB found in code/props. Use the corresponding <<<media_N>>> marker for full-size timeline images. Regenerate.';
   }
@@ -239,24 +843,22 @@ function checkImageReferences(code: string, props?: Record<string, unknown>): st
 function checkImageUrls(code: string): string | null {
   const srcValues: string[] = [];
 
-  const staticMatches = code.match(/src=["'`]([^"'`]*)["'`]/g) || [];
-  for (const m of staticMatches) {
-    const match = m.match(/src=["'`]([^"'`]*)["'`]/);
-    if (match) srcValues.push(match[1]);
-  }
-
-  const exprMatches = code.match(/src=\{["'`]([^"'`]*)["'`]\}/g) || [];
-  for (const m of exprMatches) {
-    const match = m.match(/src=\{["'`]([^"'`]*)["'`]\}/);
-    if (match) srcValues.push(match[1]);
+  // Validate only Remotion Img tags. Scanning every `src=` treated Video,
+  // Audio and IFrame sources as images and rejected valid media URLs/data.
+  const imgTags = code.match(/<Img\b[^>]*>/g) || [];
+  for (const tag of imgTags) {
+    const staticMatch = tag.match(/\bsrc=["'`]([^"'`]*)["'`]/);
+    if (staticMatch) srcValues.push(staticMatch[1]);
+    const expressionMatch = tag.match(/\bsrc=\{["'`]([^"'`]*)["'`]\}/);
+    if (expressionMatch) srcValues.push(expressionMatch[1]);
   }
 
   for (const src of srcValues) {
     if (!src || src === 'undefined' || src === 'null' || src === '') {
       return '⚠️ Composition rejected: An <Img> tag has an empty or undefined src. Use a valid <<<media_N>>> marker or HTTPS URL. Regenerate.';
     }
-    if (!src.startsWith('https://') && !src.startsWith('data:image/')) {
-      return `⚠️ Composition rejected: Image src "${src.substring(0, 60)}..." is not a valid HTTPS URL. Use a valid <<<media_N>>> marker or HTTPS URL. Regenerate.`;
+    if (!src.startsWith('https://')) {
+      return `⚠️ Composition rejected: Image src "${src.substring(0, 60)}..." is not a valid HTTPS URL. Use ctx.snapshotImages[N]. Regenerate.`;
     }
   }
 

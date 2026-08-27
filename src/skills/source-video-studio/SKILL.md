@@ -3,8 +3,9 @@ name: source-video-studio
 description: >
   Turn real uploaded footage into a polished talking-head edit, hybrid story,
   documentary montage, or source-led feature while preserving the footage as
-  the primary evidence.
-allowed-tools: read_file studio_run prepare_visual_asset analyze_video transcribe_audio analyze_image generate_image generate_animation generate_audio generate_music run_code write_file preview_frame materialize_media
+  primary evidence; use tiktok-video only for source-led TikTok/Douyin editing,
+  never solely because a platform is named.
+allowed-tools: read_file studio_run prepare_visual_asset analyze_video transcribe_audio analyze_image generate_image generate_animation generate_audio run_code write_file preview_frame materialize_media
 metadata:
   makaron:
     icon: "◉"
@@ -23,6 +24,11 @@ metadata:
 The uploaded footage is the subject. Generated media may clarify or bridge, but
 must not silently replace the evidence the user supplied.
 
+Choose `tiktok-video` instead only when the request is source-led editing or
+deterministic packaging for TikTok/Douyin. If the requested result is newly
+generated motion within the selected provider's duration limit, return to
+`prompts/animate.md` even when TikTok/Douyin is the destination.
+
 ## Modes
 
 - `talking-head`: tighten speech, remove dead air, improve framing, captions,
@@ -36,7 +42,11 @@ must not silently replace the evidence the user supplied.
 1. Read `skills/_shared/studio-production/production-contract.md`, the shared
    audio, taste, and review contracts.
 2. Start recipe `source-video-studio`; do not proceed without usable footage.
-3. Analyze every source and transcribe speech when present. The brief records
+3. Read every source's Media Index description first. A specific description may
+   already contain upstream media understanding; use it regardless of provider
+   and do not repeat `analyze_video` or `analyze_image` for content it covers.
+   Analyze only missing, uncertain, or request-critical visual details. Transcribe
+   speech only when dialogue or exact speech timing matters. The brief records
    source roles, strengths, defects, permissions/provenance notes, and mode.
 4. Proposal concepts must describe selection logic, crop/reframe plan, B-roll
    strategy, caption system, audio treatment, and what will remain untouched.
@@ -46,6 +56,9 @@ must not silently replace the evidence the user supplied.
    faces, UI, captions, or important source detail.
 7. Use Remotion for trims, framing, subtitles, overlays, color treatment, and
    generated support. Preserve sentence boundaries and natural reactions.
+   When a Media Index item carries `source_url + start_sec + end_sec`, treat it
+   as only that external source interval: use the original URL with Remotion
+   `trimBefore`/`trimAfter`; do not upload or materialize an intermediate MP4.
 8. Review source fidelity, crop quality, caption readability, audio continuity,
    and whether generated inserts became distracting.
 

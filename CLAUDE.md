@@ -11,27 +11,50 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 两个环境共享同一个 Supabase 数据库。Vercel 环境变量已配 Production + Preview 双份，preview 部署可正常登录。
 
+### Shared Preview Sandbox isolation
+
+Vercel 的项目级 Preview 环境变量会被所有 worktree、thread 和 Preview
+deployment 共享。实验性的 Sandbox Snapshot 不得覆盖共享环境：
+
+- 禁止在普通功能开发或单一 worktree 验收时运行
+  `vercel env add REMOTION_SNAPSHOT_ID preview --force`。新的 Remotion
+  Snapshot 可能要求旧应用代码没有提供的 props、bundle 或 font manifest，
+  会同时堵塞其他 thread 的 `run_code` / `preview_frame`。
+- Remotion Snapshot 实验必须用单次部署变量隔离：
+  `npx vercel -e REMOTION_SNAPSHOT_ID='snap_...' --yes`。不要把该 deployment
+  设为共享 `git-dev` alias，直到兼容性验收完成。
+- `MEDIA_SANDBOX_SNAPSHOT_ID` 与 `REMOTION_SNAPSHOT_ID` 是独立合同，禁止互相
+  复用。修改其中一个不能要求另一个 runtime 同步升级。
+- 晋升共享 Preview 前，必须同时用候选 Snapshot 验证当前分支和一个未包含
+  新 runtime 合同的旧应用 deployment；两边都要通过真实
+  `makaron chat` -> `run_code` -> `preview_frame`。不能把“成功保存 editable
+  JSON、但 Preview 失败”算通过。
+- Production Snapshot 的更新仍需用户明确批准，并在 Production 变更前完成
+  Preview 兼容性 smoke。
+
 **Vercel 环境变量设置必须用 `printf`，禁止用 `echo`**（echo 会在值末尾加 `\n`，导致值不匹配、API 请求失败等隐蔽 bug）：
 ```bash
 printf 'value' | npx vercel env add NAME production --force
 printf 'value' | npx vercel env add NAME preview --force
 ```
 
-## Production Qwen / Vast worker guardrail（2026-06-24）
+## Production Qwen / Vast worker guardrail（2026-08-21）
 
 当前线上 Qwen/ComfyUI 走**长期租赁 Vast 实例**，不要按 Serverless 思路处理。
 
-- 生产实例：`38761988`，label `makaron-qwen-a6000-benchmark`，RTX A6000 48GB，固定域名 `https://comfyui.makaron.app`。
+- 生产实例：`48270326`，label `makaron-qwen-a6000-prod-20260821`，RTX A6000 48GB，固定域名 `https://comfyui.makaron.app`，价格约 `$0.483/h`（含 150GB 磁盘），Vast reliability 约 `0.999`。
 - 这台机器必须保持 running。禁止在普通 cleanup / scan / cost-saving 中 stop、destroy、recycle、update template 或把它和旧实验机一起批量处理。
-- 旧实验机 `37898939`、旧生产机 `38953964`、慢迁移机 `40942907` 都不是当前生产机；任何清理或迁移都必须显式保护 `38761988`。
-- 生产自愈入口：`docs/ops/vast/ensure-makaron-qwen-vast.sh`。它会检查 `38761988`，若实例停了则 start，随后通过 SSH 启动 `/workspace/makaron-qwen-onstart.sh` 并等待线上 health 变绿。
+- 故障旧机 `43290829` 的宿主 reliability 约 `0.70`，2026-08-21 进入 `actual_status=offline` 且 start/reboot 无法恢复；不要再把生产切回它。旧实验机 `37898939`、历史基线 `38761988`、旧生产机 `38953964`、慢迁移机 `40942907` 也都不是当前生产机。
+- 生产自愈入口：`docs/ops/vast/ensure-makaron-qwen-vast.sh`。它会检查 `48270326`，若实例停了则 start；若连续处于 offline，会请求一次 Vast reboot；随后通过 SSH 启动 `/workspace/makaron-qwen-onstart.sh` 并等待线上 health 变绿。默认不会停止其他 Vast 实例，只有显式设置 `MAKARON_STOP_EXTRA_VAST_RUNNING=true` 才会执行该动作。
 - 机器内自愈脚本在 `docs/ops/vast/makaron-qwen-onstart.sh` 和 `docs/ops/vast/makaron-qwen-watchdog.sh`；远端对应 `/workspace/makaron-qwen-onstart.sh` 和 `/workspace/makaron-watchdog.sh`。
-- Qwen、Pony、WAI 都通过同一个 `https://comfyui.makaron.app` hostname 验收；Pony 需要 `fucktasticAnimePony_v22`，WAI 需要 `waiIllustriousSDXL_v160.safetensors`。
+- Qwen、Pony、WAI 都通过同一个 `https://comfyui.makaron.app` hostname 验收；运行时必须是 `torch 2.12.0.dev20260408+cu128`，Qwen 需要 `Qwen-Rapid-AIO-NSFW-v23.safetensors` 和 `qwen-image-edit-2511-multiple-angles-lora.safetensors`，Pony 需要 `fucktasticAnimePony_v22`，WAI 需要 `waiIllustriousSDXL_v160.safetensors`。
 - 如果确实需要停止/替换这台生产实例，必须先得到用户明确批准，并先确认替代实例、Cloudflare tunnel、Vercel env、`/api/health` 和真实 Qwen/Pony/WAI 生成都已验证。
 
 ## i18n（多语言，2026-03-04）
 
-**架构**：自定义 i18n，无第三方库。`src/lib/i18n.tsx`（LocaleProvider + useLocale + LocaleToggle）+ `src/lib/locales/zh.ts` + `src/lib/locales/en.ts`（~90 keys）。
+**架构**：自定义 i18n，无第三方库。`src/lib/i18n.tsx`（LocaleProvider + useLocale + LocaleToggle）+ `src/lib/locales/` 下的简中、繁中、日语、英语四套 typed dictionary。
+
+**新功能交付门禁**：任何新增/修改的产品 UI 必须在同一变更中补齐 `zh`、`zh-Hant`、`ja`、`en`，覆盖可见文字、状态、单位、空/加载/错误态、按钮、tooltip、placeholder、`title`、`alt`、`aria-label`。`npm run lint` 已串联 `npm run check:i18n-ui`；`scripts/ui-i18n-baseline.json` 只冻结历史债务，新功能禁止新增 baseline 条目。仅品牌名或技术 token 可在相邻位置用 `// i18n-ignore`。Agent 生成的脚本/提案等正文保留用户要求的语言，外层产品 UI 跟随 locale。
 
 **语言切换**：localStorage + cookie 双写。客户端用 `useLocale().t(key)` 读翻译；服务端 API 路由用 `req.cookies.get('locale')` 读语言（无需前端透传）。切换按钮在登录页右上角和项目列表页 Sign out 旁。
 
@@ -39,7 +62,7 @@ printf 'value' | npx vercel env add NAME preview --force
 
 **CUI 回复语言**：`agent.md` 改为 `Reply in the same language the user writes in.`（原来是 `Speak Chinese to the user.`）。这利用 LLM 自然语言跟随能力，用户说中文回中文，说英文回英文。AI-initiated 消息（teaser/reaction/analysis）通过 `api/agent/route.ts` 的 `isEn` 显式控制（中英文两套 prompt）。
 
-**已翻译组件**：layout, login, projects, projects/[id], Editor, AgentStatusBar, AgentChatView, TipsBar, ImageCanvas, AnimateSheet, VideoResultCard。
+**已翻译组件**：layout, login, projects, projects/[id], Editor, AgentStatusBar, AgentChatView, TipsBar, ImageCanvas, AnimateSheet, VideoResultCard, StudioRunDock。
 
 ### Prompt 层 i18n 改动（2026-03-04）
 
@@ -109,6 +132,10 @@ Tips prompt 迭代到 V42，均分 7.3。V34 历史最高 8.03，V42 是 prompt 
 
 **Remotion 渲染引擎（2026-04-09，worktree-workspace-agent 分支）**：Agent 的 `run_code` design 模式用 Remotion 渲染。静态图用 `renderStillOnWeb`（JPEG截图），动画用 `@remotion/player`（带控制条）+ poster 截图。Design JSON 持久化到 workspace `code/{snapId}.json`，刷新后恢复。MP4 导出用 `renderMediaOnWeb`（浏览器端 h264/mp4）。JSX 编译从 Sucrase 切换到 `@babel/standalone`（支持现代语法）。Satori 已移除（design 模式替代）。Agent 默认模型为 Azure Responses 上的 GPT-5.6 Terra，并可选 GPT-5.6 Sol / Luna、Grok 4.5 与 DeepSeek V4 Pro。`run_code` 新增 `image_refs` 参数让模型自选带哪些图片。所有视觉输出默认用 design 模式，sharp 只做格式转换。`video-design` skill 提供视频创作四问自检框架。
 
+**Remotion editable contract（2026-05-26）**：editable 只属于 `run_code` design 链路（`render` / `design` / 修改已有 design 的 `patch`）。普通 `generate_image`、外部 `generate_animation`、`run_code` 的 sharp/image 输出都不承担 editable 负担。长期方向是让 Agent 使用 `EditableText/Image/Video` 这类高层 primitive，由系统生成 `data-editable`、props 映射和 editables manifest；当前阶段通过 `run_code` tool description + `design-harness` 校验保证 user-facing text、primary image/video、video trim 正确声明。
+
+**外部视频 manifest contract（2026-08-11）**：对外每个 clip 只包含 `source_url + start + end + description`，其中时间单位为秒，数组顺序即剪辑顺序，`source_url` 是不透明稳定能力地址。Makaron 在输入边界兼容旧 `source_ranges/start_sec/end_sec`，但归一化时丢弃上游 provider identity，不再把它写入 Media List；内部存储仍沿用现有 `start_sec/end_sec` 表示，无需数据库迁移。
+
 **Agent 视频路由（2026-05-28）**：`generate_animation` 是视频任务默认路径；文字相关视频需求（加字幕/加花字/加标题/加文案）走 `generate_animation`，让文字作为视频内容自然生成。其他视频包装/记录/剪辑类需求仍按 `agent.md` 的内容 vs 包装规则路由，不能把所有包装需求都默认改成生成路线。
 
 **Preview = Export 一致性（2026-04-19）**：用户 drag/scale editable 元素后，预览和导出必须位置一致。架构：Proxy 拦截 `React.createElement` 注入 CSS 独立属性 `style.translate`/`style.scale`（不用 `style.transform`，会干扰 Moveable）+ `@remotion/web-renderer` patch 加 `style.translate` 支持。详见 `docs/preview-export-consistency.md`。patch 通过 `patch-package` 持久化在 `patches/` 目录。**添加新的可视化编辑属性时必须同步更新 Proxy 和 DesignOverlay.applyStoredOffsets，并确认 web-renderer 兼容。**
@@ -129,7 +156,7 @@ Tips prompt 迭代到 V42，均分 7.3。V34 历史最高 8.03，V42 是 prompt 
 
 **模型切换 gemini-3.1-flash-image-preview（2026-02-27）**：`IMAGE_MODEL` 环境变量控制生图模型（默认 `gemini-3-pro-image-preview`），tips 和生图共用同一模型。切换后 tips 速度从 20+s 首 tip 降至 ~3-5s 全部出齐（4x 提速）。新模型额外能力：输出分辨率控制（512px/1K/2K/4K）、超宽比例（1:4/4:1/1:8/8:1）、Thinking 级别（minimal/high）、图片搜索 Grounding、更多参考图（10 物品+4 人物）。
 
-**Tips 速度 vs 质量（已解决，2026-02-27）**：gemini-3.1-flash-image-preview 同时解决速度和质量——tips 全部出齐 ~5s（之前 gemini-3-pro 首 tip 20+s），质量用户确认满意。`TIPS_PROVIDER` 可切换：`openrouter`（默认）/ `google`。`TIPS_TEMPERATURE=0.9`。
+**Tips 速度 vs 质量（已解决，2026-02-27）**：gemini-3.1-flash-image-preview 同时解决速度和质量——tips 全部出齐 ~5s（之前 gemini-3-pro 首 tip 20+s），质量用户确认满意。`TIPS_PROVIDER` 可切换：`openrouter`（默认）/ `google`；创意推理强度由分类默认值或 `TIPS_THINKING` 控制。
 
 **Prompt 架构（V42 重构）**：`.md` 文件是唯一真相来源，gemini.ts system prompt 极简化（2行），batch-test TIPS_SYSTEM_PROMPT 极简化（3行）。enhance.md 包含 7 个方向（A-F + G 净化场景）、FIRST cleanup 第一句约束、jawline 瘦脸条件、眼睛禁改。creative.md 升级 cleanup 为第一句。wild.md 保留原版详细四问自检。V42 遗留问题：wild 眼镜禁止陷阱仍突破、enhance 方向F 人物重新生成、creative 风格化重绘、tip 数量分类不稳定。
 

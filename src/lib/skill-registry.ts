@@ -24,6 +24,7 @@ export interface MakaronSkillMeta {
   studioRunRecipe?: string;
   studioRunProfile?: string;
   sourceMediaRequired?: boolean;
+  inputHint?: string;
   userSelectable?: boolean;
   manifestVisible?: boolean;
   sourceProject?: string;
@@ -165,6 +166,7 @@ export function parseSkillMd(content: string): ParsedSkill | null {
       else if (k === 'studioRunRecipe') makaron.studioRunRecipe = clean;
       else if (k === 'studioRunProfile') makaron.studioRunProfile = clean;
       else if (k === 'sourceMediaRequired') makaron.sourceMediaRequired = clean === 'true';
+      else if (k === 'inputHint') makaron.inputHint = clean;
       else if (k === 'userSelectable') makaron.userSelectable = clean !== 'false';
       else if (k === 'manifestVisible') makaron.manifestVisible = clean !== 'false';
       else if (k === 'sourceProject') makaron.sourceProject = clean;

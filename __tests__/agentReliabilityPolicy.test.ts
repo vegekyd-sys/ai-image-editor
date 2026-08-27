@@ -1,9 +1,8 @@
-import fs from 'node:fs';
-import path from 'node:path';
 import { describe, expect, it } from 'vitest';
+import { readAgentAwareSource } from './helpers/agentRuntimeSource';
 
 const root = process.cwd();
-const read = (file: string) => fs.readFileSync(path.join(root, file), 'utf8');
+const read = (file: string) => readAgentAwareSource(root, file);
 
 describe('agent reliability policy', () => {
   it('raises the normal agent budget while keeping an environment override', () => {
@@ -74,7 +73,7 @@ describe('agent reliability policy', () => {
     expect(contract).toContain('put_creative_packet');
     expect(contract).toContain('Composition draft gate');
     expect(contract).toContain('every scene boundary');
-    expect(contract).toContain('automatically completes Review and Delivery');
+    expect(contract).toContain('durable worker automatically completes Review');
     expect(contract).toContain('do not author Review');
     expect(contract).toContain('`prompts/remotion-composition.md`');
     expect(contract).toContain('`skills/_shared/remotion-director-contract.md`');
@@ -91,9 +90,10 @@ describe('agent reliability policy', () => {
     expect(agent).not.toContain('__lastCaptionCuePath');
     expect(agent).not.toContain("`${ctx.projectId}/captions/*.json`");
     expect(contract).toContain('author them as part of the Composition');
-    expect(contract).toContain('does not create a separate caption artifact');
+    expect(contract).toContain('narration cue sheet standardizes measured timing only');
+    expect(contract).toContain('does not inject caption JSX');
     expect(composition).toContain('authored directly inside this');
-    expect(composition).toContain('does not generate separate caption data');
+    expect(composition).toContain('does not provide a universal subtitle overlay');
   });
 
   it('stops repeated MP4 export attempts for an unchanged composition', () => {
@@ -104,23 +104,27 @@ describe('agent reliability policy', () => {
     expect(agent).toContain(".select('design_path')");
   });
 
-  it('keeps corrected composition exports available and makes Studio materialization terminal', () => {
+  it('queues corrected composition exports and derives resolution from typed Studio state', () => {
     const agent = read('src/lib/agent.ts');
     const nonRepeatable = agent.slice(
       agent.indexOf('const nonRepeatableTools = new Set(['),
       agent.indexOf(']);', agent.indexOf('const nonRepeatableTools = new Set([')),
     );
     expect(nonRepeatable).not.toContain("'materialize_media'");
-    expect(agent).toContain('Boolean(studioCheckpoint.studioRunId) || wait === true');
+    expect(agent).not.toContain('wait: z.boolean()');
+    expect(agent).not.toContain("profile: z.enum(['fast_720p', 'source'])");
+    expect(agent).toContain("studioCheckpoint.studioRunId\n            ? 'source'\n            : 'fast_720p'");
     expect(agent).toContain('studioRunId: studioCheckpoint.studioRunId');
     expect(agent).toContain('shouldPreferLatestDraft');
     expect(agent).toContain('design_path: shouldPreferLatestDraft ? latestDraftPath : design_path');
   });
 
-  it('returns the exact published video media index and terminal Studio result', () => {
+  it('returns a pending video snapshot while the durable worker finishes Studio delivery', () => {
     const agent = read('src/lib/agent.ts');
-    expect(agent).toContain('ctx.snapshotImages.push(videoUrl)');
-    expect(agent).toContain('mediaIndex: publishedMediaIndex');
-    expect(agent).toContain('Studio Run is complete; do not start another Review or Delivery step.');
+    const exporter = read('src/lib/remotion-export.ts');
+    expect(agent).toContain("status: job.status === 'completed' && job.storage_url ? 'completed' : 'processing'");
+    expect(agent).toContain("taskId: `remotion-export-pending-${job.id}`");
+    expect(agent).toContain('studioRunPending: Boolean(studioCheckpoint.studioRunId)');
+    expect(exporter).toContain('completeStudioRunForExport(updated as RemotionExportJob)');
   });
 });

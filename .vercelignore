@@ -32,3 +32,15 @@ docs/meta-swipe-runs/*-assets/**
 tmp/
 output/
 .playwright-cli/
+.tmp/
+.remotion-bundle/
+.remotion-bundle-local/
+.codex/
+artifacts/
+.artifacts/
+outputs/
+screenshots/
+mcp-output/
+testcase old/
+app-store-assets/
+*.tsbuildinfo

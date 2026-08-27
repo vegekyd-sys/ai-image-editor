@@ -81,4 +81,36 @@ describe('editImage reference contract', () => {
       ],
     }));
   });
+
+  it('uses strict OpenAI text-to-image when transparent output has no source', async () => {
+    await editImage(
+      { editPrompt: 'Create a sticker.', background: 'transparent' },
+      {},
+    );
+
+    expect(mockedGenerateImage).toHaveBeenCalledWith(expect.objectContaining({
+      image: undefined,
+      model: 'openai',
+      background: 'transparent',
+      references: undefined,
+    }));
+  });
+
+  it('uses strict OpenAI image-to-image for background removal from a source', async () => {
+    await editImage(
+      {
+        editPrompt: 'Remove the background to transparent alpha while preserving the subject.',
+        background: 'transparent',
+        preferredModel: 'gemini',
+      },
+      { currentImage: 'https://example.com/source.jpg' },
+    );
+
+    expect(mockedGenerateImage).toHaveBeenCalledWith(expect.objectContaining({
+      image: 'https://example.com/source.jpg',
+      model: 'openai',
+      background: 'transparent',
+      references: undefined,
+    }));
+  });
 });

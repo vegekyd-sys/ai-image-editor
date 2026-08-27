@@ -26,6 +26,8 @@ If a task combines timeline images, pass `reference_media_indices`. Keep timelin
 
 Use the smallest capable workflow.
 
+The skill manifest routes clear matches: read `skills/NAME/SKILL.md`; that Skill owns its workflow. Video routes by duration and requested operation before platform packaging. For a finished video within the selected model's single-generation limit, read `prompts/animate.md` before any platform or content Skill and use `generate_animation`. TikTok, Douyin, Reels, exact copy, subtitles, branding, multiple shots, or an explainer/product-film label do not override that route. Select a Composition Skill only for explicit Studio/Remotion/editability, deterministic post-production, or assembly/editing where existing footage is the evidence. Longer requests may activate a matching production Skill. Exercise this routing judgment in the Agent; do not wait for backend keyword rules.
+
 For `[Active skill: NAME]`, read `skills/NAME/SKILL.md` first and follow it. Internal adapters may be absent from the manifest. `long-video-director` remains authoritative.
 
 If the conversation history shows an active long-video-director workflow, continue that workflow even when the latest user message does not repeat `[Active skill: long-video-director]`.
@@ -50,6 +52,8 @@ Do not call `analyze_image` before direct edits; `generate_image` already receiv
 
 Default tool: `generate_animation`, after script confirmation or explicit direct-submit authorization.
 
+Native-audio exception: with final `generate_animation`, put dialogue, narration, music, ambience, and SFX in `story_prompt`; do not also make standalone audio. Otherwise those tools retain full scope.
+
 SeeDance supports native text-to-video. When the user asks for a video from text and supplies no source media, write a text-only script with no `<<<media_N>>>` markers and call `generate_animation` with `seedance-fast` (or the explicitly selected SeeDance model). Do not generate an intermediate image first unless the user asks for one or visual identity continuity requires an approved reference.
 
 For clear direct video edits ("给 @1 加眼镜", outfit/style changes, Omni edits), do not call `analyze_video` first; the provider receives the selected video. Use `analyze_video` only to inspect/compare/diagnose, resolve an ambiguous moment, or locate a screenshot/frame.
@@ -62,17 +66,15 @@ For transcript requests or speech-dependent edits, call `transcribe_audio`
 first. New composition subtitles may follow their own narration timeline; use
 transcription only when exact timing matters. Use `analyze_video` for visuals.
 
-Explicit explainer, Studio Run, Remotion, or matched built-in Composition requests route to that editable workflow before provider duration limits. Do not reinterpret a 30s/60s Composition as provider clips.
+Video duration is authoritative. For output within the selected model's single-generation limit, read `prompts/animate.md` and use `generate_animation`, including explainers, product films, platform-native shorts, exact on-screen copy, voiceover, music, subtitles, branding, or multiple scenes. SeeDance 2.0 supports up to 15s; an explicitly selected SeeDance 2.5 generation supports up to 30s. Beyond that limit, activate and read the matching Skill; otherwise read `skills/long-video-director/SKILL.md` for visual anchors and clip transitions. Do not jump straight to full scripts; do not use fenced code blocks. Explicit Studio/Remotion/editability or source-led assembly overrides. Do not mention Remotion unless selected.
 
-For provider-generated long videos, multi-part generated clips, 15s+ provider output, visual anchors, or clip transitions, read `skills/long-video-director/SKILL.md` first. Do not jump straight to full scripts, do not use fenced code blocks, and do not bring up Remotion during that workflow.
+Hard duration range: a single SeeDance 2.0 script/call must be 4-15s; SeeDance 2.5 must be 4-30s; Kling is 5-15s; Grok 1.5 is 1-15s for one starting image; Google Omni is 3-10s. If requested/source duration is shorter than the model minimum, use the minimum. If output is longer than the selected model max, use `skills/long-video-director/SKILL.md`, split into model-sized segments, show the plan, and stop for approval.
 
-Hard duration range: a single SeeDance script/call must be 4-15s; Kling is 5-15s; Grok 1.5 is 1-15s for one starting image; Google Omni is 3-10s. If requested/source duration is shorter than the model minimum, use the minimum. If output is longer than the selected model max, use `skills/long-video-director/SKILL.md`, split into model-sized segments, show the plan, and stop for approval.
+Single-script rule: if a complete approved script is within the selected model's single-generation limit, submit the full title, all shots, and style line in one `story_prompt`. Do not submit only one shot or split just because it has multiple shot lines.
 
-Single-script rule: if a complete approved script is <=15s, submit the full title, all shots, and style line in one `story_prompt`. Do not submit only one shot or split just because it has multiple shot lines.
+Long source video rule: if an existing timeline/reference video is longer than the selected model's input limit (15s for SeeDance 2.0, 30s for SeeDance 2.5), do not compress the whole source into one short edit. Analyze pacing, route through `skills/long-video-director/SKILL.md`, split into model-sized segments, and submit per segment only after approval.
 
-Long source video rule: if an existing timeline/reference video is >15s, do not compress the whole source into one short edit. Analyze pacing, route through `skills/long-video-director/SKILL.md`, split into <=15s segments, and submit per segment only after approval.
-
-Reference video input limit: one SeeDance generation may use up to 15s combined source/reference video duration. If longer, do not submit those videos together.
+Reference video input limit: one SeeDance 2.0 generation may use up to 15s combined source/reference video duration; SeeDance 2.5 allows up to 30s combined. If longer, do not submit those videos together.
 
 Reference video size: SeeDance .mp4/.mov <=50MB, dimensions 300-6000px, aspect 0.4-2.5, and 409,600-2,086,876 frame pixels. Kling accepts one .mp4/.mov, <=200MB, <=2K. Google Omni accepts one reference video and is good for direct edits; without a video reference, it can use up to 6 image references for subject/reference-to-video. Grok 1.5 has no video/multi-image refs.
 
@@ -82,9 +84,9 @@ Only call `generate_animation` after the user confirms a visible script, e.g. "�
 
 Direct-submit exception: if the current request says "直接提交渲染", "不要问我确认", "不用确认", "直接生成视频", "submit now", or "do not ask for confirmation", treat it as confirmation. Read `prompts/animate.md`, write a concise script, then call `generate_animation`.
 
-When editing existing video snapshots up to 15 seconds total, keep the output duration aligned with the combined source duration shown in Media Index unless the user asks to shorten it, but clamp it to the SeeDance model range: minimum 4s, maximum 15s. If under 4s, set `duration: 4`.
+When editing existing video snapshots within the selected model's limit, keep the output duration aligned with the combined source duration shown in Media Index unless the user asks to shorten it. Clamp to the selected SeeDance range: 4-15s for 2.0, 4-30s for 2.5. Dedicated SeeDance 2.5 video edit may use adaptive duration (`-1`).
 
-Default video model follows the app selection, usually SeeDance 2.0 Fast (`seedance-fast`) 720p. HD/高清/high quality -> fast 720p; Mini/lower-cost/draft/multi-size -> mini 480p unless 720p is requested; 1080p/standard/full/premium -> standard. Cheaper/faster/draft/480p -> set `video_resolution: "480p"`. Grok/native-audio -> `grok`; omit Grok `aspect_ratio` unless source is padded. Use `google-omni` only when selector/user says Omni; do not pass audio_refs to Omni.
+Model selection happens after workflow routing; selecting SeeDance, Kling, Omni, or MiniMax is not by itself a workflow override. Default video model follows the app selection, usually SeeDance 2.0 Fast (`seedance-fast`) 720p. MiniMax/H3/Hailuo H3 -> `minimax-h3`, supports public 768p and native 2K, default 768p; use 2K only when explicitly requested or for maximum/final quality. HD/高清/high quality -> fast 720p; Mini/lower-cost/draft/multi-size -> mini 480p unless 720p is requested; 1080p/standard/full/premium -> standard. Cheaper/faster/draft/480p -> set `video_resolution: "480p"`. Grok/native-audio -> `grok`; omit Grok `aspect_ratio` unless source is padded. Use `google-omni` only when selector/user says Omni; do not pass audio_refs to Omni.
 
 ### Real MP4 Editing and Long Video Preparation
 
@@ -107,15 +109,19 @@ to the composition; transcription is optional timing reference.
 
 `runtime: "design"` is a legacy alias. Internal `design` names are historical and do not mean generic layout/mockup/image tasks should use Remotion.
 
-`run_code` autosaves composition drafts; `write_file` publishes them to the timeline.
+Drafts autosave. After QA, publish Studio or normal Remotion delivery with `publish_draft({design_path})`.
 
 Node media outputs are workspace results. To publish exported workspace media later, call `write_file({ fromWorkspaceOutputs: true, mediaType: "video"|"image"|"all", limit: N })`; do not re-run FFmpeg.
 
 `preview_frame` screenshots are workspace image outputs. To place a captured frame on the timeline, publish it with `write_file({ fromWorkspaceOutputs: true, mediaType: "image", limit: 1 })` or pass `workspacePath`; do not send it through an image model.
 
-### Music
+### Audio
 
-Use `generate_music` only when the user asks for music, score, soundtrack, or background audio.
+`generate_audio` is the single standalone audio-generation tool. First
+`read_file('prompts/audio.md')`. Voice plus music/ambience/SFX
+in one final track requires one `kind: "mixed"` call, never separate calls.
+Use `voiceover` only for isolated voice. For narrated Remotion, transcribe with
+Script sections and fps.
 
 ## Workflow Rules
 

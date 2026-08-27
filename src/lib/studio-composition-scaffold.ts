@@ -63,7 +63,7 @@ function ScaffoldScene({ scene, index }) {
   const frame = useCurrentFrame();
   const opacity = interpolate(frame, [0, 10, Math.max(11, scene.duration - 10), scene.duration], [0, 1, 1, 0], { extrapolateLeft: 'clamp', extrapolateRight: 'clamp' });
   const rise = interpolate(frame, [0, 18], [36, 0], { extrapolateLeft: 'clamp', extrapolateRight: 'clamp' });
-  return <AbsoluteFill style={{ backgroundColor: SCAFFOLD_COLORS[index % SCAFFOLD_COLORS.length], color: '#f5f5f7', fontFamily: '-apple-system, BlinkMacSystemFont, "PingFang SC", sans-serif', opacity, padding: '7%', justifyContent: 'center' }}>
+  return <AbsoluteFill style={{ backgroundColor: SCAFFOLD_COLORS[index % SCAFFOLD_COLORS.length], color: '#f5f5f7', fontFamily: '"Noto Sans SC", sans-serif', opacity, padding: '7%', justifyContent: 'center' }}>
     <div style={{ fontSize: 18, fontWeight: 700, color: '#e65cb6', marginBottom: 24 }}>{scene.eyebrow}</div>
     <div style={{ fontSize: 64, lineHeight: 1.12, fontWeight: 760, maxWidth: '82%', transform: 'translateY(' + rise + 'px)' }}>{scene.title}</div>
     <div style={{ fontSize: 28, lineHeight: 1.45, color: 'rgba(245,245,247,0.68)', maxWidth: '72%', marginTop: 24 }}>{scene.subtitle}</div>
@@ -105,10 +105,15 @@ export async function ensureStudioCompositionScaffold(input: {
   projectId: string;
   userId: string;
   supabase: SupabaseClient;
+  agentRunId: string;
 }): Promise<{ created: boolean; path?: string; studioRunId?: string; codeChars?: number; elapsedMs: number }> {
   const startedAt = Date.now();
   const store = new WorkspaceStudioRunStore(input.supabase, input.userId);
-  const run = (await store.listRuns(input.projectId)).find(item => item.status === 'running' && item.currentStage === 'composition');
+  const run = (await store.listRuns(input.projectId)).find(item => (
+    item.agentRunId === input.agentRunId
+    && item.status === 'running'
+    && item.currentStage === 'composition'
+  ));
   if (!run) return { created: false, elapsedMs: Date.now() - startedAt };
 
   const existing = await loadCompositionDraft(input);

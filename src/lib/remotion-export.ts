@@ -5,6 +5,8 @@ import { getSupabaseAdmin } from '@/lib/supabase/service'
 import { toPublicStorageUrl } from '@/lib/supabase/storage'
 import * as workspace from '@/lib/workspace'
 import { resolveRemotionLambdaEncodingSettings } from '@/lib/remotion-encoding'
+import { REMOTION_EDITABLE_RUNTIME_VERSION } from '@/lib/editor/editable-react-runtime'
+import { REMOTION_FONT_CATALOG_VERSION, REMOTION_FONT_RUNTIME_VERSION } from '@/remotion/font-catalog'
 import {
   prepareRemotionCodeForSandbox,
   renderDesignFrame,
@@ -98,6 +100,9 @@ function parseDesignPayload(content: string): DesignPayload {
     props: isObject(parsed.props) ? parsed.props : undefined,
     animation,
     editables: Array.isArray(parsed.editables) ? parsed.editables as DesignPayload['editables'] : undefined,
+    fontSubstitutions: isObject(parsed.fontSubstitutions)
+      ? Object.fromEntries(Object.entries(parsed.fontSubstitutions).filter((entry): entry is [string, string] => typeof entry[1] === 'string'))
+      : undefined,
   }
 }
 
@@ -255,12 +260,16 @@ function fingerprintDesign(
     ? resolveRemotionLambdaEncodingSettings()
     : null
   const payload = {
-    renderer: 'remotion-export-v4',
+    renderer: 'remotion-export-v6-font-runtime-pinned',
+    fontCatalogVersion: REMOTION_FONT_CATALOG_VERSION,
+    fontRuntimeVersion: REMOTION_FONT_RUNTIME_VERSION,
+    editableRuntimeVersion: REMOTION_EDITABLE_RUNTIME_VERSION,
     outputType,
     renderProfile,
     outputSettings: {
       renderer,
       ...(lambdaEncoding ? {
+        lambdaServeUrl: readEnv('REMOTION_LAMBDA_SERVE_URL') || null,
         lambdaVideoBitrate: lambdaEncoding.videoBitrate,
         lambdaAudioBitrate: lambdaEncoding.audioBitrate,
         lambdaX264Preset: readEnv('REMOTION_LAMBDA_X264_PRESET') || 'ultrafast',
@@ -274,6 +283,7 @@ function fingerprintDesign(
       animation: design.animation || null,
       props: design.props || null,
       editables: design.editables || null,
+      fontSubstitutions: design.fontSubstitutions || null,
     },
   }
   return createHash('sha256').update(stableJson(payload)).digest('hex')

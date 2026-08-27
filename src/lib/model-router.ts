@@ -20,7 +20,10 @@ function getFallbacks(model: ModelId): ModelId[] {
   }
 }
 
-function resolveModelChain(req: GenerateImageRequest): ModelId[] {
+export function resolveModelChain(req: GenerateImageRequest): ModelId[] {
+  // Transparent output is a strict capability contract. Do not silently return
+  // an opaque image from a fallback backend that cannot honor the request.
+  if (req.background === 'transparent') return ['openai'];
   // 0. NSFW project → Qwen only, never touch Gemini
   if (req.isNsfw) return ['qwen'];
   // 1. Explicit model → that model + fallbacks

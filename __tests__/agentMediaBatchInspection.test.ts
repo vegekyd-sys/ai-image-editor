@@ -1,9 +1,8 @@
 import { describe, expect, it } from 'vitest';
 import { buildTurnMediaInspectionContext } from '@/lib/agent-context';
-import { readFileSync } from 'node:fs';
-import { join } from 'node:path';
+import { readAgentAwareSource } from './helpers/agentRuntimeSource';
 
-const read = (path: string) => readFileSync(join(process.cwd(), path), 'utf8');
+const read = (path: string) => readAgentAwareSource(process.cwd(), path);
 
 describe('current upload batch inspection', () => {
   it('maps the complete trailing upload batch without attaching raw media to the main model', () => {
@@ -64,6 +63,7 @@ describe('current upload batch inspection', () => {
     expect(context).toContain('analyzeVideoContent(');
     expect(context).toContain('[Verified current upload batch — ${count} items]');
     expect(context).toContain('[turn-media-preflight] completed ${count} items');
+    expect(context).toContain('uploadedVideoCount && !options.turnMediaCount');
     expect(agent).not.toContain('inspectionImages?: string[]');
     expect(agent).toContain('A current upload batch is pre-analyzed in parallel');
     expect(agent).toContain("return { mode: 'batch_describe', analyses }");

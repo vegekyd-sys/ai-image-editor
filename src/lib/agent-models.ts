@@ -9,6 +9,7 @@ export const AGENT_MODEL_IDS = [
 export type AgentModelId = (typeof AGENT_MODEL_IDS)[number];
 export type AgentModelPreference = 'auto' | AgentModelId;
 export type AgentModelProvider = 'azure-openai' | 'openrouter' | 'deepseek';
+export type GPT56AgentProvider = Extract<AgentModelProvider, 'azure-openai' | 'openrouter'>;
 export type AgentCacheStrategy = 'explicit' | 'automatic';
 export type AgentReasoningEffort = 'none' | 'minimal' | 'low' | 'medium' | 'high' | 'xhigh';
 
@@ -23,31 +24,71 @@ export interface AgentModelSpec {
 }
 
 export const DEFAULT_AGENT_MODEL_ID: AgentModelId = 'gpt-5.6-terra';
+export const DEFAULT_GPT56_AGENT_PROVIDER: GPT56AgentProvider = 'azure-openai';
+
+const GPT56_AGENT_MODEL_IDS = [
+  'gpt-5.6-terra',
+  'gpt-5.6-sol',
+  'gpt-5.6-luna',
+] as const satisfies readonly AgentModelId[];
+
+type GPT56AgentModelId = (typeof GPT56_AGENT_MODEL_IDS)[number];
+
+export const GPT56_PROVIDER_MODEL_IDS: Record<
+  GPT56AgentModelId,
+  Record<GPT56AgentProvider, string>
+> = {
+  'gpt-5.6-terra': {
+    openrouter: 'openai/gpt-5.6-terra',
+    'azure-openai': 'gpt-5.6-terra',
+  },
+  'gpt-5.6-sol': {
+    openrouter: 'openai/gpt-5.6-sol',
+    'azure-openai': 'gpt-5.6-sol',
+  },
+  'gpt-5.6-luna': {
+    openrouter: 'openai/gpt-5.6-luna',
+    'azure-openai': 'gpt-5.6-luna',
+  },
+};
+
+const GPT56_AGENT_MODEL_ID_SET = new Set<string>(GPT56_AGENT_MODEL_IDS);
+
+function isGPT56AgentModelId(id: AgentModelId): id is GPT56AgentModelId {
+  return GPT56_AGENT_MODEL_ID_SET.has(id);
+}
+
+export function resolveGPT56AgentProvider(value?: string): GPT56AgentProvider {
+  const normalized = value?.trim().toLowerCase();
+  if (normalized === 'openrouter') return 'openrouter';
+  if (normalized === 'azure' || normalized === 'azure-openai') return 'azure-openai';
+  return DEFAULT_GPT56_AGENT_PROVIDER;
+}
 
 export const AGENT_MODEL_SPECS: Record<AgentModelId, AgentModelSpec> = {
   'gpt-5.6-terra': {
     id: 'gpt-5.6-terra',
-    provider: 'azure-openai',
-    providerModelId: 'gpt-5.6-terra',
-    billingModelId: 'gpt-5.6-terra',
+    provider: 'openrouter',
+    providerModelId: 'openai/gpt-5.6-terra',
+    billingModelId: 'openai/gpt-5.6-terra',
     cacheStrategy: 'automatic',
     supportsImageInput: true,
     defaultReasoningEffort: 'medium',
   },
   'gpt-5.6-sol': {
     id: 'gpt-5.6-sol',
-    provider: 'azure-openai',
-    providerModelId: 'gpt-5.6-sol',
-    billingModelId: 'gpt-5.6-sol',
+    provider: 'openrouter',
+    providerModelId: 'openai/gpt-5.6-sol',
+    billingModelId: 'openai/gpt-5.6-sol',
     cacheStrategy: 'automatic',
     supportsImageInput: true,
     defaultReasoningEffort: 'high',
   },
   'gpt-5.6-luna': {
     id: 'gpt-5.6-luna',
-    provider: 'azure-openai',
-    providerModelId: 'gpt-5.6-luna',
-    billingModelId: 'gpt-5.6-luna',
+    provider: 'openrouter',
+    providerModelId: 'openai/gpt-5.6-luna',
+    billingModelId: 'openai/gpt-5.6-luna',
     cacheStrategy: 'automatic',
     supportsImageInput: true,
     defaultReasoningEffort: 'low',
@@ -120,16 +161,30 @@ function matchConfiguredModel(value: string | undefined): AgentModelId | undefin
   return AGENT_MODEL_IDS.find((id) => {
     const spec = AGENT_MODEL_SPECS[id];
     return spec.providerModelId.toLowerCase() === normalized
-      || spec.billingModelId.toLowerCase() === normalized;
+      || spec.billingModelId.toLowerCase() === normalized
+      || (isGPT56AgentModelId(id)
+        && Object.values(GPT56_PROVIDER_MODEL_IDS[id])
+          .some(providerModelId => providerModelId.toLowerCase() === normalized));
   });
 }
 
 export function resolveAgentModelSpec(
   preference: AgentModelPreference | undefined,
   configuredDefault?: string,
+  configuredGPT56Provider: string | undefined = process.env.GPT56_AGENT_PROVIDER,
 ): AgentModelSpec {
   const selectedId = preference && preference !== 'auto'
     ? preference
     : matchConfiguredModel(configuredDefault) ?? DEFAULT_AGENT_MODEL_ID;
-  return AGENT_MODEL_SPECS[selectedId];
+  const baseSpec = AGENT_MODEL_SPECS[selectedId];
+  if (!isGPT56AgentModelId(selectedId)) return baseSpec;
+
+  const provider = resolveGPT56AgentProvider(configuredGPT56Provider);
+  const providerModelId = GPT56_PROVIDER_MODEL_IDS[selectedId][provider];
+  return {
+    ...baseSpec,
+    provider,
+    providerModelId,
+    billingModelId: providerModelId,
+  };
 }

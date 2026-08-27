@@ -40,21 +40,20 @@ describe('welcome credits source of truth', () => {
     expect(migration).not.toMatch(/(?:UPDATE|INSERT INTO)\s+(?:public\.)?credit_balances/i)
   })
 
-  it('routes every registration and activation grant through the shared setting reader', () => {
+  it('routes browser registration through the shared signup credit initializer', () => {
     const grantPaths = [
-      'src/lib/billing/credits.ts',
       'src/app/api/auth/callback/route.ts',
       'src/app/api/auth/activate/route.ts',
       'src/app/api/auth/complete/route.ts',
       'src/app/api/auth/validate-invite/route.ts',
-      'src/app/api/agent/register/verify/route.ts',
-      'src/app/api/admin/billing-toggle/route.ts',
     ]
     for (const grantPath of grantPaths) {
       const source = readFileSync(path.join(root, grantPath), 'utf8')
-      expect(source, grantPath).toContain('getConfiguredWelcomeCredits')
+      expect(source, grantPath).toContain('initializeSignupCredits')
       expect(source, grantPath).not.toMatch(/welcome_credits'[\s\S]{0,200}(?:parseInt|\|\|\s*'500')/)
     }
+    expect(readFileSync(path.join(root, 'src/lib/billing/signup-credits.ts'), 'utf8'))
+      .toContain('getConfiguredWelcomeCredits')
   })
 
   it('uses the shared fallback in the admin configuration UI', () => {

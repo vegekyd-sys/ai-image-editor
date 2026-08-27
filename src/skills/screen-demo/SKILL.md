@@ -4,7 +4,7 @@ description: >
   Create an editable product walkthrough from real screen footage or an honest
   synthetic UI or terminal sequence, with readable actions, callouts, captions,
   and optional narration.
-allowed-tools: read_file studio_run prepare_visual_asset analyze_video analyze_image transcribe_audio list_voiceover_voices generate_voiceover generate_audio generate_music run_code write_file preview_frame materialize_media
+allowed-tools: read_file studio_run prepare_visual_asset analyze_video analyze_image transcribe_audio generate_audio run_code write_file preview_frame materialize_media
 metadata:
   makaron:
     icon: "⌘"

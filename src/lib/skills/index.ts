@@ -1,4 +1,4 @@
-import type { ModelId } from '../models/types';
+import type { ModelId, TokenUsage } from '../models/types';
 
 export interface SkillContext {
   currentImage?: string;       // Supabase URL or base64 data URL. Omit for text-to-image.
@@ -11,5 +11,5 @@ export interface SkillResult {
   image?: string;              // base64 result image (data URL)
   usedModel?: ModelId;         // which model generated the image
   contentBlocked?: boolean;    // Gemini refused content (NSFW) — caller should set isNsfw flag
-  usage?: { inputTokens: number; outputTokens: number; modelId: string };  // token usage for billing
+  usage?: TokenUsage;             // token usage for billing
 }

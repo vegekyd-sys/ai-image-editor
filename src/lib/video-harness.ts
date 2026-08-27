@@ -3,10 +3,9 @@
  * Returns null if OK, or an error string to send back to the Agent for retry.
  */
 
-import { getVideoModelCapability, validateVideoAspectRatioRequest, validateVideoResolutionRequest, type VideoAspectRatioInput, type VideoResolutionInput } from '@/lib/video-model-capabilities';
+import { getVideoModelCapability, normalizeVideoModelId, validateVideoAspectRatioRequest, validateVideoResolutionRequest, type VideoAspectRatioInput, type VideoGenerationOperation, type VideoResolutionInput } from '@/lib/video-model-capabilities';
 import { parseTotalDuration } from './kling';
 
-const MAX_VIDEO_DURATION = 15;
 function urlMatch(a: string, b: string): boolean {
   try {
     const ua = new URL(a);
@@ -20,6 +19,7 @@ function urlMatch(a: string, b: string): boolean {
 export function validateVideoScript(opts: {
   prompt: string
   imageCount: number
+  availableMediaIndices?: number[]
   imageUrls?: string[]
   imageRefs?: string[]
   videoRefUrl?: string
@@ -29,8 +29,11 @@ export function validateVideoScript(opts: {
   aspectRatio?: VideoAspectRatioInput
   motionControl?: boolean
   duration?: number
+  operation?: VideoGenerationOperation
 }): string | null {
   const { prompt, imageCount, videoRefUrl, videoRefType, model, resolution, aspectRatio, motionControl, duration } = opts
+  const availableMediaIndices = opts.availableMediaIndices
+    ?? Array.from({ length: imageCount }, (_, index) => index + 1)
 
   // Motion control: only need video_ref_url, skip image reference checks
   if (motionControl) {
@@ -41,6 +44,7 @@ export function validateVideoScript(opts: {
   }
 
   const capability = getVideoModelCapability(model)
+  const providerManagedEditDuration = opts.operation === 'edit' && normalizeVideoModelId(model) === 'seedance-2.5'
   const resolutionError = validateVideoResolutionRequest({ model, resolution })
   if (resolutionError) return resolutionError
   const aspectRatioError = validateVideoAspectRatioRequest({ model, aspectRatio })
@@ -49,13 +53,13 @@ export function validateVideoScript(opts: {
   if (parsedDuration != null && parsedDuration < capability.minOutputDuration) {
     return `A single ${capability.label} video generation script must be at least ${capability.minOutputDuration} seconds, but this script totals ${parsedDuration}s. Extend it to a compact ${capability.minOutputDuration}s script and set duration=${capability.minOutputDuration}; the video model cannot generate shorter clips.`
   }
-  if (parsedDuration != null && parsedDuration > MAX_VIDEO_DURATION) {
-    return `A single video generation script can be at most ${MAX_VIDEO_DURATION} seconds, but this script totals ${parsedDuration}s. Use long-video-director to split it into self-contained segments of ${MAX_VIDEO_DURATION}s or less, and do not submit one long script.`
+  if (parsedDuration != null && parsedDuration > capability.maxOutputDuration) {
+    return `A single video generation script can be at most ${capability.maxOutputDuration} seconds, but this script totals ${parsedDuration}s. Use long-video-director to split it into self-contained segments of ${capability.longVideoChunkSeconds}s or less, and do not submit one long script.`
   }
-  if (duration != null && duration < capability.minOutputDuration) {
+  if (!providerManagedEditDuration && duration != null && duration < capability.minOutputDuration) {
     return `${capability.label} video generation duration must be at least ${capability.minOutputDuration} seconds, but duration=${duration}. Use duration=${capability.minOutputDuration}; the video model cannot generate shorter clips.`
   }
-  if (duration != null && duration > capability.maxOutputDuration) {
+  if (!providerManagedEditDuration && duration != null && duration > capability.maxOutputDuration) {
     return `${capability.label} video generation duration must be ${capability.maxOutputDuration} seconds or less, but duration=${duration}.`
   }
 
@@ -65,8 +69,9 @@ export function validateVideoScript(opts: {
     Array.from(prompt.matchAll(/<<<(?:image|media)_(\d+)>>>/g), m => Number(m[1]))
   )]
 
-  if (refs.length === 0 && imageCount > 0 && !videoRefUrl) {
-    return `Your script doesn't reference any media with <<<media_N>>> format, but ${imageCount} items are available. You MUST use <<<media_1>>>${imageCount > 1 ? ` through <<<media_${imageCount}>>>` : ''} in your prompt to reference them. The video model needs these markers to know which image to use where.`
+  if (refs.length === 0 && availableMediaIndices.length > 0 && !videoRefUrl) {
+    const markers = availableMediaIndices.map(index => `<<<media_${index}>>>`).join(', ')
+    return `Your script doesn't reference any media with <<<media_N>>> format, but ${availableMediaIndices.length} items are available. You MUST use ${markers} in your prompt to reference them. The video model needs these markers to know which image to use where.`
   }
 
   if (
@@ -78,8 +83,11 @@ export function validateVideoScript(opts: {
 
   // 2. Image index out of bounds
   for (const ref of refs) {
-    if (ref < 1 || ref > imageCount) {
-      return `<<<media_${ref}>>> is referenced in your script but only ${imageCount} item${imageCount !== 1 ? 's are' : ' is'} available (<<<media_1>>>${imageCount > 1 ? ` to <<<media_${imageCount}>>>` : ''}). Fix the reference.`
+    if (ref < 1 || ref > imageCount || !availableMediaIndices.includes(ref)) {
+      const available = availableMediaIndices.length
+        ? availableMediaIndices.map(index => `<<<media_${index}>>>`).join(', ')
+        : 'none'
+      return `<<<media_${ref}>>> is referenced in your script but that timeline item has no usable media. Available media: ${available}. Fix the reference.`
     }
   }
 

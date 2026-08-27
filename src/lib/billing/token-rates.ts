@@ -25,6 +25,48 @@ const CREDIT_VALUE = 0.01
 
 const DEFAULT_TOKEN_RATES: TokenRate[] = [
   {
+    model_id: 'openai/gpt-image-2',
+    display_name: 'GPT Image 2 (OpenRouter)',
+    input_per_1m: 8.00,
+    output_per_1m: 30.00,
+    cache_read_per_1m: 2.00,
+    cache_write_per_1m: 8.00,
+    markup: 2.0,
+    is_active: true,
+  },
+  // OpenRouter reports exact routed cost in provider metadata; these rows keep
+  // model attribution and markup stable if that metadata is ever unavailable.
+  {
+    model_id: 'openai/gpt-5.6-terra',
+    display_name: 'GPT-5.6 Terra (OpenRouter)',
+    input_per_1m: 1.00,
+    output_per_1m: 6.00,
+    cache_read_per_1m: 0.10,
+    cache_write_per_1m: 1.25,
+    markup: 2.0,
+    is_active: true,
+  },
+  {
+    model_id: 'openai/gpt-5.6-sol',
+    display_name: 'GPT-5.6 Sol (OpenRouter)',
+    input_per_1m: 5.00,
+    output_per_1m: 30.00,
+    cache_read_per_1m: 0.50,
+    cache_write_per_1m: 6.25,
+    markup: 2.0,
+    is_active: true,
+  },
+  {
+    model_id: 'openai/gpt-5.6-luna',
+    display_name: 'GPT-5.6 Luna (OpenRouter)',
+    input_per_1m: 0.10,
+    output_per_1m: 0.60,
+    cache_read_per_1m: 0.01,
+    cache_write_per_1m: 0.125,
+    markup: 2.0,
+    is_active: true,
+  },
+  {
     model_id: 'gpt-5.6-terra',
     display_name: 'GPT-5.6 Terra',
     input_per_1m: 2.50,

@@ -3,7 +3,6 @@ import {
   createHomeSkillLaunchContext,
   getSkillLaunchSystemDirective,
   normalizeSkillLaunchContext,
-  shouldContinueSkillVideoSubmission,
   verifySkillLaunchContext,
 } from '@/lib/skill-launch-context'
 
@@ -131,16 +130,5 @@ describe('Skill template launch context', () => {
     expect(directive).toContain('call generate_animation in the same run')
     expect(directive).toContain('Do not apply this exception to ordinary CUI or editor requests')
     expect(getSkillLaunchSystemDirective(undefined)).toBe('')
-  })
-
-  it('continues a trusted run when a visible script exists but submission did not start', () => {
-    const context = createHomeSkillLaunchContext(skillTemplate, 'Animate it', installedSkillName)
-    const visibleScript = 'Launch Story\nShot 1 (5s): A slow push-in reveals the subject.'
-
-    expect(shouldContinueSkillVideoSubmission({ context, visibleText: visibleScript, submissionStarted: false })).toBe(true)
-    expect(shouldContinueSkillVideoSubmission({ context, visibleText: '分鏡腳本\n鏡頭 1：主角走進夜色。', submissionStarted: false })).toBe(true)
-    expect(shouldContinueSkillVideoSubmission({ context, visibleText: visibleScript, submissionStarted: true })).toBe(false)
-    expect(shouldContinueSkillVideoSubmission({ context: undefined, visibleText: visibleScript, submissionStarted: false })).toBe(false)
-    expect(shouldContinueSkillVideoSubmission({ context, visibleText: 'Which photo should I use?', submissionStarted: false })).toBe(false)
   })
 })

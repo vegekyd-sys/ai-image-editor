@@ -8,7 +8,7 @@ export interface AgentStreamCallbacks {
   onStatus?: (text: string) => void;
   onContent?: (text: string) => void;
   onNewTurn?: (messageId?: string) => void;
-  onImage?: (image: string, usedModel?: string, snapshotId?: string, imageUrl?: string) => void;
+  onImage?: (image: string, usedModel?: string, snapshotId?: string, imageUrl?: string, metadata?: import('@/types').PhotoMetadata) => void;
   onToolCall?: (tool: string, input: Record<string, unknown>, images?: string[]) => void;
   onAnimationTask?: (taskId: string, prompt: string, imageUrls?: string[], model?: string) => void;
   onVideoSnapshot?: (snapshotId: string, taskId: string, videoMeta: import('@/types').VideoMeta) => void;
@@ -17,14 +17,14 @@ export interface AgentStreamCallbacks {
   onCaptureFrame?: (frame: number, uploadPath: string, captureId: string) => void;
   onPreviewFrame?: (workspaceUrl: string) => void;
   onNsfwDetected?: () => void;
-  onRunId?: (runId: string) => void;
+  onRunId?: (runId: string | null) => void;
   onMessageId?: (messageId: string) => void;
   onClearRunMessages?: (messageIds: string[]) => void;
   onReasoningStart?: () => void;
   onReasoning?: (text: string) => void;
   onCoding?: () => void;
   onCodeStream?: (text: string, done: boolean) => void;
-  onRender?: (design: { code: string; width: number; height: number; props?: Record<string, unknown>; animation?: { fps: number; durationInSeconds: number; format?: string }; editables?: import('@/types').EditableField[]; snapshotId?: string; published?: boolean; previewUrl?: string }) => void;
+  onRender?: (design: { code: string; width: number; height: number; props?: Record<string, unknown>; animation?: { fps: number; durationInSeconds: number; format?: string }; editables?: import('@/types').EditableField[]; fontSubstitutions?: Record<string, string>; snapshotId?: string; published?: boolean; previewUrl?: string }) => void;
   onDone?: () => void;
   onError?: (message: string) => void;
   /** SSE/network ended while the server-side run may still be alive. */
@@ -33,23 +33,6 @@ export interface AgentStreamCallbacks {
 }
 
 type AgentRequestBody = Parameters<typeof streamAgent>[0];
-type AgentErrorEvent = Extract<AgentStreamEvent, { type: 'error' }>;
-
-export const MAX_STUDIO_RUN_AUTO_RESUMES = 2;
-
-export function shouldAutoResumeStudioRun(event: AgentErrorEvent, attempt: number): boolean {
-  return event.recoverable === true
-    && Boolean(event.checkpoint?.studioRunId)
-    && attempt < MAX_STUDIO_RUN_AUTO_RESUMES;
-}
-
-export function buildStudioRunAutoResumePrompt(event: AgentErrorEvent): string {
-  const checkpoint = event.checkpoint;
-  const partial = checkpoint?.streamedCodePath
-    ? ` A partial streamed code checkpoint exists at ${checkpoint.streamedCodePath} (${checkpoint.streamedCodeChars || 0} chars); read it once for useful components and continue from it instead of inventing the same code again.`
-    : '';
-  return `[System automatic recovery] Continue Studio Run ${checkpoint?.studioRunId || ''}${checkpoint?.studioRunStage ? ` from stage ${checkpoint.studioRunStage}` : ''}. Call studio_run status first, then read only the persisted script, storyboard, and assets artifacts needed for the current stage.${partial} Do not reread skill, prompt, director, component-library, or reference files. In Composition, immediately write numbered source files under <project-id>/drafts/composition-parts, salvaging complete definitions from any partial stream; do not restart a monolithic run_code payload. The workspace automatically assembles and autosaves after each source write. Continue until write_file reports compositionWorkspace.status="ready", then use its designPath directly, with no aggregate source-size target and no creative trimming. Reuse all persisted stage artifacts and existing media. Preview and patch the Remotion source until satisfactory, then call materialize_media once; successful materialization completes Review and Delivery automatically. Do not author Review or Delivery artifacts, and do not ask the user to send “continue”.`;
-}
 
 export async function streamAgent(
   body: {
@@ -90,7 +73,7 @@ export async function streamAgent(
     && !body.previewsReady
     && !body.musicReady;
   if (durableNormalRequest) return streamDurableAgent(body, callbacks, signal);
-  return streamAgentAttempt(body, callbacks, signal, 0);
+  return streamAgentAttempt(body, callbacks, signal);
 }
 
 interface PersistedAgentEvent {
@@ -106,7 +89,7 @@ function dispatchPersistedAgentEvent(event: PersistedAgentEvent, callbacks: Agen
     case 'content': callbacks.onContent?.(String(data.text || '')); break;
     case 'new_turn': callbacks.onNewTurn?.(data.messageId); break;
     case 'tool_call': callbacks.onToolCall?.(String(data.tool || ''), data.input || {}, data.images); break;
-    case 'image': callbacks.onImage?.(data.imageUrl || '', data.usedModel, data.snapshotId, data.imageUrl); break;
+    case 'image': callbacks.onImage?.(data.imageUrl || '', data.usedModel, data.snapshotId, data.imageUrl, data.metadata); break;
     case 'render':
     case 'design': callbacks.onRender?.(data as Parameters<NonNullable<AgentStreamCallbacks['onRender']>>[0]); break;
     case 'animation_task': callbacks.onAnimationTask?.(data.taskId, data.prompt || '', data.imageUrls, data.model); break;
@@ -147,7 +130,6 @@ async function streamDurableAgent(
       audioAttachments: body.audioAttachments,
       clientPersistedUserMessage: true,
     }),
-    signal,
   });
   if (!response.ok) {
     if (response.status === 402) {
@@ -162,14 +144,25 @@ async function streamDurableAgent(
   callbacks.onRunId?.(started.runId);
   if (started.firstMessageId) callbacks.onMessageId?.(started.firstMessageId);
 
-  const abortRun = () => {
-    void fetch('/api/agent/abort', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ runId: started.runId }),
-    });
+  const abortRun = async () => {
+    try {
+      await fetch('/api/agent/abort', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ runId: started.runId }),
+      });
+    } finally {
+      callbacks.onRunId?.(null);
+    }
   };
-  signal?.addEventListener('abort', abortRun, { once: true });
+  const handleAbort = () => {
+    void abortRun();
+  };
+  if (signal?.aborted) {
+    await abortRun();
+    return;
+  }
+  signal?.addEventListener('abort', handleAbort, { once: true });
 
   let lastSeq = -1;
   let firstMessageSeen = false;
@@ -218,7 +211,7 @@ async function streamDurableAgent(
       await new Promise(resolve => setTimeout(resolve, Math.min(run.next_poll_after_ms || 1200, 3000)));
     }
   } finally {
-    signal?.removeEventListener('abort', abortRun);
+    signal?.removeEventListener('abort', handleAbort);
   }
 }
 
@@ -226,7 +219,6 @@ async function streamAgentAttempt(
   body: AgentRequestBody,
   callbacks: AgentStreamCallbacks,
   signal: AbortSignal | undefined,
-  autoResumeAttempt: number,
 ): Promise<void> {
   const res = await fetch('/api/agent', {
     method: 'POST',
@@ -261,7 +253,6 @@ async function streamAgentAttempt(
   const decoder = new TextDecoder();
   let buffer = '';
   let receivedDone = false;
-  let recoveryEvent: AgentErrorEvent | null = null;
 
   while (true) {
     const { done, value } = await reader.read();
@@ -288,7 +279,13 @@ async function streamAgentAttempt(
             break;
           case 'image': {
             const img = event as Record<string, unknown>;
-            callbacks.onImage?.(event.image, event.usedModel, img.snapshotId as string | undefined, img.imageUrl as string | undefined);
+            callbacks.onImage?.(
+              event.image,
+              event.usedModel,
+              img.snapshotId as string | undefined,
+              img.imageUrl as string | undefined,
+              img.metadata as import('@/types').PhotoMetadata | undefined,
+            );
             break;
           }
           case 'tool_call':
@@ -335,7 +332,7 @@ async function streamAgentAttempt(
             break;
           case 'design': // backward compat — fall through to 'render'
           case 'render':
-            callbacks.onRender?.(event as { code: string; width: number; height: number; props?: Record<string, unknown>; animation?: { fps: number; durationInSeconds: number; format?: string }; editables?: import('@/types').EditableField[]; snapshotId?: string; published?: boolean });
+            callbacks.onRender?.(event as { code: string; width: number; height: number; props?: Record<string, unknown>; animation?: { fps: number; durationInSeconds: number; format?: string }; editables?: import('@/types').EditableField[]; fontSubstitutions?: Record<string, string>; snapshotId?: string; published?: boolean });
             break;
           case 'done':
             receivedDone = true;
@@ -343,28 +340,13 @@ async function streamAgentAttempt(
             break;
           case 'error':
             receivedDone = true;
-            if (shouldAutoResumeStudioRun(event, autoResumeAttempt)) {
-              recoveryEvent = event;
-            } else {
-              callbacks.onError?.(event.message);
-            }
+            callbacks.onError?.(event.message);
             break;
         }
       } catch (e) {
         console.warn('[agentStream] failed to parse SSE event:', (e as Error)?.message, 'line length:', line.length, 'preview:', line.slice(0, 200));
       }
     }
-  }
-
-  if (recoveryEvent && !signal?.aborted) {
-    callbacks.onStatus?.(`Studio Run 中断，正在自动恢复（${autoResumeAttempt + 1}/${MAX_STUDIO_RUN_AUTO_RESUMES}）...`);
-    await streamAgentAttempt(
-      { ...body, prompt: buildStudioRunAutoResumePrompt(recoveryEvent) },
-      callbacks,
-      signal,
-      autoResumeAttempt + 1,
-    );
-    return;
   }
 
   // Stream ended without done/error event (e.g. Vercel timeout, network cut)

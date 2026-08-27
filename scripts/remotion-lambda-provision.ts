@@ -34,6 +34,17 @@ async function main(): Promise<void> {
   const siteName = readArg('--site-name') || 'makaron-remotion-runtime-next'
   const entryPoint = path.resolve(process.cwd(), 'src/remotion/index.tsx')
 
+  const { provisionRemotionFontCatalog } = await import('../src/lib/remotion-font-provision')
+  console.log(`Preparing shared Remotion font catalog in ${bucketName}...`)
+  const fontCatalog = await provisionRemotionFontCatalog({
+    region,
+    bucketName,
+    serveUrl: currentServeUrl,
+    force: process.argv.includes('--force-fonts'),
+    concurrency: Number(process.env.REMOTION_FONT_PROVISION_CONCURRENCY || 12),
+    onProgress: (message) => console.log(message),
+  })
+
   const { deploySite } = await import('@remotion/lambda')
   const result = await deploySite({
     region: region as Parameters<typeof deploySite>[0]['region'],
@@ -43,6 +54,7 @@ async function main(): Promise<void> {
     privacy: 'public',
     options: {
       rootDir: process.cwd(),
+      publicDir: path.resolve(process.cwd(), 'public'),
       webpackOverride: (webpackConfig) => ({
         ...webpackConfig,
         resolve: {
@@ -61,6 +73,14 @@ async function main(): Promise<void> {
     serveUrl: result.serveUrl,
     bucketName,
     region,
+    fontManifestUrl: fontCatalog.manifestUrl,
+    fontCatalog: {
+      assetCount: fontCatalog.assetCount,
+      uploadedAssetCount: fontCatalog.uploadedAssetCount,
+      totalBytes: fontCatalog.totalBytes,
+      reusedExistingManifest: fontCatalog.reusedExistingManifest,
+      elapsedMs: fontCatalog.elapsedMs,
+    },
     stats: result.stats,
   }, null, 2))
 }

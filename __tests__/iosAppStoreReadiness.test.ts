@@ -110,6 +110,8 @@ describe('iOS App Store readiness guardrails', () => {
     expect(packageJson.scripts['ios:prod']).toContain('--reset');
     expect(helper).toContain('IOS_DEV_SERVER_URL');
     expect(helper).toContain('delete config.server.url');
+    expect(helper).toMatch(/if \(args\.includes\('--reset'\)\)[\s\S]*config\.server\.errorPath = 'index\.html'/);
+    expect(helper).toMatch(/config\.server\.url = parsed[\s\S]*delete config\.server\.errorPath/);
   });
 
   it('keeps native safe-area padding scoped to iOS editor controls instead of the body', () => {
@@ -550,7 +552,8 @@ describe('iOS App Store readiness guardrails', () => {
     expect(download).toContain("setAgentStatus('Native save failed, trying fallback...')");
     expect(download).toContain('Save failed:');
     expect(download).toContain("canvas.toBlob((result) =>");
-    expect(download).toContain("'image/jpeg', 0.95");
+    expect(download).toContain("'image/png'");
+    expect(download).toContain('preserves any decoded alpha');
     expect(download).toContain('saveBlobToNativePhotoLibrary');
     expect(download).toContain('saveUrlToNativePhotoLibrary');
   });
@@ -602,7 +605,7 @@ describe('iOS App Store readiness guardrails', () => {
     expect(homePage).toContain('rememberIOSSkillReturn');
     expect(homePage).toContain("const skillId = new URLSearchParams(window.location.search).get('skill') || pathSkillId || pendingIOSSkillId");
     expect(homePage).not.toContain('useSearchParams');
-    expect(homePage).toContain('draft.homeSkillId && draft.images.length === 0');
+    expect(homePage).toContain('draft.images.length < getRequiredHomeSkillImageCount(homeSkill)');
     expect(homePage).toContain("document.documentElement.style.overflow = 'hidden'");
     expect(homePage).toContain("window.addEventListener('makaron-ios-page-stack-back', unlockIfNoDetail)");
     expect(homeSkillMedia).toContain('function SkillVideo');

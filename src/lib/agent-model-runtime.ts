@@ -5,6 +5,7 @@ import type { LanguageModel, ModelMessage } from 'ai';
 import {
   resolveAgentModelSpec,
   type AgentModelPreference,
+  type GPT56AgentProvider,
   type AgentReasoningEffort,
   type AgentModelSpec,
 } from './agent-models';
@@ -30,8 +31,13 @@ export function createAzureAgentPromptCacheKey(
 export function createAgentModelRuntime(
   preference: AgentModelPreference | undefined,
   projectId: string,
+  configuredGPT56Provider?: GPT56AgentProvider,
 ): AgentModelRuntime {
-  const spec = resolveAgentModelSpec(preference, process.env.AGENT_MODEL);
+  const spec = resolveAgentModelSpec(
+    preference,
+    process.env.AGENT_MODEL,
+    configuredGPT56Provider ?? process.env.GPT56_AGENT_PROVIDER,
+  );
 
   if (spec.provider === 'azure-openai') {
     const promptCacheKey = createAzureAgentPromptCacheKey(spec.id, projectId);
@@ -60,8 +66,12 @@ export function createAgentModelRuntime(
     };
   }
 
+  const apiKey = process.env.OPENROUTER_API_KEY?.trim();
+  if (!apiKey) {
+    throw new Error('OPENROUTER_API_KEY is required for OpenRouter Agent models');
+  }
   const openrouter = createOpenRouter({
-    apiKey: process.env.OPENROUTER_API_KEY?.trim(),
+    apiKey,
     compatibility: 'strict',
     appName: 'Makaron',
     appUrl: 'https://www.makaron.app',
@@ -129,9 +139,8 @@ export function getAgentProviderOptions(
   const allowedOpenRouterEfforts = new Set(['none', 'minimal', 'low', 'medium', 'high', 'xhigh', 'max']);
   const openRouterEffort = configuredOpenRouterEffort && allowedOpenRouterEfforts.has(configuredOpenRouterEffort)
     ? configuredOpenRouterEffort
-    : runtime.spec.id === 'grok-4.5'
-      ? 'medium'
-      : undefined;
+    : runtime.spec.defaultReasoningEffort
+      ?? (runtime.spec.id === 'grok-4.5' ? 'medium' : undefined);
 
   return {
     openrouter: {

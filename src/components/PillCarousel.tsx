@@ -2,6 +2,7 @@
 
 import { ReactNode, useEffect } from 'react';
 import { useHorizontalScroll } from '@/hooks/useHorizontalScroll';
+import { MOBILE_EDITOR_SLOT_HEIGHT } from '@/lib/editor/panel-layout';
 
 interface PillCarouselProps {
   children: ReactNode;
@@ -26,7 +27,10 @@ export default function PillCarousel({ children, toolbar, isDesktop, scrollToRef
   }, [scrollToRef?.current]);
 
   return (
-    <div className="flex flex-col">
+    <div
+      className="flex flex-col"
+      style={isDesktop ? undefined : { height: MOBILE_EDITOR_SLOT_HEIGHT }}
+    >
       {/* Pill carousel */}
       <div
         ref={scrollRef}

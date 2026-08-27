@@ -10,6 +10,7 @@ import {
   useStudioRun,
   type StudioRunSummary,
 } from '@/components/StudioRunDock';
+import { LocaleProvider } from '@/lib/i18n';
 
 const root = path.resolve(__dirname, '..');
 const stageStart = '2026-07-10T00:00:00.000Z';
@@ -49,6 +50,12 @@ function HookHarness() {
   return <StudioRunProgress studioRun={studioRun} />;
 }
 
+function renderWithLocale(ui: React.ReactNode) {
+  return render(ui, {
+    wrapper: ({ children }) => <LocaleProvider initialLocale="zh">{children}</LocaleProvider>,
+  });
+}
+
 afterEach(() => {
   vi.unstubAllGlobals();
   window.sessionStorage.clear();
@@ -57,7 +64,7 @@ afterEach(() => {
 describe('Studio Run CUI surfaces', () => {
   it('stays absent when the project has no Studio Run', async () => {
     vi.stubGlobal('fetch', vi.fn().mockResolvedValue({ ok: true, json: async () => ({ runs: [] }) }));
-    render(<HookHarness />);
+    renderWithLocale(<HookHarness />);
     await waitFor(() => expect(fetch).toHaveBeenCalled());
     expect(screen.queryByTestId('studio-run-progress')).toBeNull();
   });
@@ -82,7 +89,7 @@ describe('Studio Run CUI surfaces', () => {
 
   it('shows readable stage content inline and keeps the artifact expandable', () => {
     const onViewArtifact = vi.fn();
-    render(
+    renderWithLocale(
       <StudioRunStageCard
         stage={run.stages[0]}
         status="completed"
@@ -113,7 +120,7 @@ describe('Studio Run CUI surfaces', () => {
         ? { ...stage, status: 'completed', artifactPath: 'project/review.json' }
         : stage),
     };
-    render(
+    renderWithLocale(
       <StudioRunStageCard
         stage={reviewRun.stages[6]}
         status="completed"
@@ -153,7 +160,7 @@ describe('Studio Run CUI surfaces', () => {
   });
 
   it('expands the bottom progress bar into the complete stage table without green accents', () => {
-    render(<StudioRunProgress studioRun={{ run, artifacts: { [run.stages[0].artifactPath!]: briefArtifact } }} />);
+    renderWithLocale(<StudioRunProgress studioRun={{ run, artifacts: { [run.stages[0].artifactPath!]: briefArtifact } }} />);
 
     expect(screen.queryByTestId('studio-run-progress-table')).toBeNull();
     fireEvent.click(screen.getByTestId('studio-run-progress-toggle'));
@@ -169,7 +176,7 @@ describe('Studio Run CUI surfaces', () => {
   });
 
   it('closes the expanded progress table on the next click anywhere', () => {
-    render(<StudioRunProgress studioRun={{ run, artifacts: {} }} />);
+    renderWithLocale(<StudioRunProgress studioRun={{ run, artifacts: {} }} />);
 
     fireEvent.click(screen.getByTestId('studio-run-progress-toggle'));
     expect(screen.getByTestId('studio-run-progress-table')).toBeTruthy();
@@ -183,7 +190,7 @@ describe('Studio Run CUI surfaces', () => {
   });
 
   it('lets the user dismiss a stopped run and keeps that run hidden for the session', () => {
-    const { rerender } = render(<StudioRunProgress studioRun={{ run, artifacts: {} }} isAgentActive={false} />);
+    const { rerender } = renderWithLocale(<StudioRunProgress studioRun={{ run, artifacts: {} }} isAgentActive={false} />);
 
     fireEvent.click(screen.getByTestId('studio-run-progress-dismiss'));
     expect(screen.queryByTestId('studio-run-progress')).toBeNull();
@@ -193,13 +200,13 @@ describe('Studio Run CUI surfaces', () => {
   });
 
   it('keeps active work visible without a manual dismiss action', () => {
-    render(<StudioRunProgress studioRun={{ run, artifacts: {} }} isAgentActive />);
+    renderWithLocale(<StudioRunProgress studioRun={{ run, artifacts: {} }} isAgentActive />);
     expect(screen.getByTestId('studio-run-progress')).toBeTruthy();
     expect(screen.queryByTestId('studio-run-progress-dismiss')).toBeNull();
   });
 
   it('keeps the read-only progress visible without exposing private file actions', () => {
-    render(
+    renderWithLocale(
       <>
         <StudioRunProgress studioRun={{ run, artifacts: {} }} isAgentActive={false} readOnly />
         <StudioRunStageCard
@@ -225,7 +232,7 @@ describe('Studio Run CUI surfaces', () => {
       currentStage: null,
       stages: run.stages.map(stage => ({ ...stage, status: 'completed' })),
     };
-    const { rerender } = render(
+    const { rerender } = renderWithLocale(
       <StudioRunProgress
         studioRun={{ run: completedRun, artifacts: {} }}
         latestUserMessageTimestamp={Date.parse(completedRun.updatedAt) - 1}

@@ -5,7 +5,15 @@ import { generateChallenge } from '@/lib/challenges'
 export async function GET() {
   return NextResponse.json({
     name: 'Makaron AI',
-    description: 'AI image/video/music creation via CLI',
+    description: 'A creative agent for AI agents. Pass complete creative requests and source media to Makaron Chat.',
+    default_interface: 'makaron chat',
+    handoff_rule: 'Preserve the complete user request and attach all relevant source media. Makaron Chat plans and executes the creative workflow.',
+    agent_skill: {
+      name: 'makaron',
+      install: 'npx makaron-cli setup',
+      url: 'https://www.makaron.app/skill.md',
+      discovery: 'https://www.makaron.app/.well-known/agent-skills/index.json',
+    },
     registration: {
       method_a_cli: {
         step1: 'npx makaron-cli register --json → { challenge_id, challenge, expected_format }',
@@ -18,13 +26,15 @@ export async function GET() {
     },
     after_registration: {
       setup: 'export MAKARON_API_KEY=<your_api_key>',
-      one_shot: 'RUN_ID=$(npx makaron-cli chat --project auto --image photo.jpg -b "make it cinematic")',
-      watch: 'npx makaron-cli responses watch $RUN_ID --jsonl',
+      handoff: 'RUN_ID=$(npx makaron-cli chat --project auto --image photo.jpg -b "<complete user request>")',
+      project_url: 'npx makaron-cli responses get $RUN_ID --pick project_url',
+      wait: 'npx makaron-cli responses get $RUN_ID --wait --json',
     },
     cli_usage: {
-      one_shot: 'npx makaron-cli chat --project auto --image <path> -b "<prompt>"',
-      existing_project: 'npx makaron-cli chat --project <id> -b "<prompt>"',
-      watch_results: 'npx makaron-cli responses watch <runId> --jsonl',
+      new_project: 'npx makaron-cli chat --project auto --image <path> -b "<complete user request>"',
+      existing_project: 'npx makaron-cli chat --project <id> -b "<complete follow-up request>"',
+      wait_for_results: 'npx makaron-cli responses get <runId> --wait --json',
+      advanced_watch: 'npx makaron-cli responses watch <runId> --jsonl',
       pick_result: 'npx makaron-cli responses get <runId> --pick first_image_url',
       check_credits: 'npx makaron-cli credits --json',
       list_projects: 'npx makaron-cli list',
