@@ -142,11 +142,13 @@ function ModelRow({
       </div>
 
       <div style={{ flex: 1, minWidth: 0 }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 4, minWidth: 0, flexWrap: 'nowrap' }}>
           <span style={{
             fontSize: 13,
             fontWeight: 600,
             color: selected && !disabled ? '#e879f9' : 'rgba(255,255,255,0.85)',
+            whiteSpace: 'nowrap',
+            flexShrink: 0,
           }}>
             {name}
           </span>
@@ -157,6 +159,10 @@ function ModelRow({
               borderRadius: 4,
               background: 'rgba(255,255,255,0.06)',
               color: 'rgba(255,255,255,0.35)',
+              whiteSpace: 'nowrap',
+              overflow: 'hidden',
+              textOverflow: 'ellipsis',
+              minWidth: 0,
             }}>
               {badge}
             </span>
@@ -311,11 +317,13 @@ function VideoModelRow({
         </div>
 
         <div style={{ flex: 1, minWidth: 0 }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 4, minWidth: 0, flexWrap: 'nowrap' }}>
             <span style={{
               fontSize: 13,
               fontWeight: 600,
               color: selected ? '#e879f9' : 'rgba(255,255,255,0.85)',
+              whiteSpace: 'nowrap',
+              flexShrink: 0,
             }}>
               {name}
             </span>
@@ -326,6 +334,10 @@ function VideoModelRow({
                 borderRadius: 4,
                 background: 'rgba(255,255,255,0.06)',
                 color: 'rgba(255,255,255,0.35)',
+                whiteSpace: 'nowrap',
+                overflow: 'hidden',
+                textOverflow: 'ellipsis',
+                minWidth: 0,
               }}>
                 {badge}
               </span>
