@@ -116,8 +116,8 @@ describe('google omni video provider', () => {
     expect(fetchMock).toHaveBeenCalledTimes(1)
     expect(providerBody).toMatchObject({
       previous_interaction_id: 'v1_extend_turn_2',
-      generation_config: { video_config: { task: 'extend' } },
     })
+    expect(providerBody).not.toHaveProperty('generation_config')
     expect(providerBody?.input).toContain('Continue the video from the previous interaction')
   })
 })

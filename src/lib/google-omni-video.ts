@@ -255,9 +255,11 @@ export async function createGoogleOmniVideoTask(input: GoogleOmniVideoTaskInput)
         input: requestInput,
         ...(previousInteractionId ? { previous_interaction_id: previousInteractionId } : {}),
         response_format: responseFormat,
-        generation_config: {
-          video_config: { task },
-        },
+        ...(!previousInteractionId ? {
+          generation_config: {
+            video_config: { task },
+          },
+        } : {}),
         store: true,
         stream: false,
       }),

@@ -190,5 +190,7 @@ source/output contact sheets, provider response, usage, and ffprobe metadata.
 - Reuse the stored Google interaction lineage when an Omni-generated result is
   extended again, avoiding re-upload of cumulative videos over 10 seconds and
   allowing 10-second continuations up to the official 40-second total.
+- Stateful follow-ups must omit `generation_config.video_config.task`; Google
+  rejects combining `previous_interaction_id` with an explicit video task.
 - Keep first/last-frame interpolation behind experiment/product-design work until
   its media-role UI and real customer path have dedicated tests.
