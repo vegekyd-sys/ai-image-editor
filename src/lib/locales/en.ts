@@ -645,6 +645,9 @@ const en = {
   'studio.source.openAria': (stage: string) => `Open ${stage} source file`,
 
   // Agent model selector
+  'changelog.googleOmni11.title': 'Gemini Omni 1.1 Is Live',
+  'changelog.googleOmni11.item1': 'Create fast native-audio video in 360p draft, 720p default, or upscaled 1080p and 4K with Gemini Omni 1.1.',
+  'changelog.googleOmni11.item2': 'Reference one timeline video in Chat and ask Makaron to continue it by up to 10 seconds while preserving the original clip as a new cumulative snapshot.',
   'changelog.externalImages.title': 'Use Scene Images Directly in Video',
   'changelog.externalImages.item1': 'Scene images now render as images in Preview and MP4 export instead of being mistaken for videos.',
   'model.agentAutoDesc': 'Follow the recommended default, currently GPT-5.6 Terra',

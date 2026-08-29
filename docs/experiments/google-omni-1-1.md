@@ -187,5 +187,8 @@ source/output contact sheets, provider response, usage, and ffprobe metadata.
   describe the next beat, and save the cumulative result as a new snapshot.
 - Default Omni extension to 10 seconds, preserve the source snapshot, and reject
   backward or multi-video extension.
+- Reuse the stored Google interaction lineage when an Omni-generated result is
+  extended again, avoiding re-upload of cumulative videos over 10 seconds and
+  allowing 10-second continuations up to the official 40-second total.
 - Keep first/last-frame interpolation behind experiment/product-design work until
   its media-role UI and real customer path have dedicated tests.

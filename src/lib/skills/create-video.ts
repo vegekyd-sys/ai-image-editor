@@ -22,6 +22,7 @@ export interface CreateVideoInput {
   motionControl?: boolean;              // Use /v1/videos/motion-control endpoint
   characterOrientation?: 'image' | 'video';  // default: 'image'
   videoOperation?: VideoGenerationOperation; // Typed edit/extend for providers that expose it
+  previousInteractionId?: string;            // Google Omni stateful extension lineage
   videoExtendDirection?: 'forward' | 'backward';
   generateAudio?: boolean;
   contentFilter?: boolean;
@@ -156,8 +157,8 @@ function prepareSeedance25References(options: {
 }
 
 export async function createVideo(input: CreateVideoInput): Promise<CreateVideoResult> {
-  const { script, images, duration, aspectRatio, videoModel, videoResolution, videoUrl, videoReferType, videoUrls, audioUrls, referenceVideoDuration, referenceVideoMetas, keepOriginalSound, motionControl, characterOrientation, videoOperation = 'generate', videoExtendDirection, generateAudio, contentFilter, outputFormat, webSearch } = input;
-  const hasVideoReference = !!videoUrl || !!videoUrls?.length;
+  const { script, images, duration, aspectRatio, videoModel, videoResolution, videoUrl, videoReferType, videoUrls, audioUrls, referenceVideoDuration, referenceVideoMetas, keepOriginalSound, motionControl, characterOrientation, videoOperation = 'generate', previousInteractionId, videoExtendDirection, generateAudio, contentFilter, outputFormat, webSearch } = input;
+  const hasVideoReference = !!videoUrl || !!videoUrls?.length || !!previousInteractionId;
   const hasAudioReference = !!audioUrls?.length;
   const provider = normalizeVideoModelId(videoModel);
   const route = resolveVideoGenerationRoute({ model: provider, resolution: videoResolution });
@@ -168,10 +169,10 @@ export async function createVideo(input: CreateVideoInput): Promise<CreateVideoR
     resolution: route.resolution,
     aspectRatio,
     outputDuration: provider === 'seedance-2.5' && videoOperation === 'edit' ? -1 : duration,
-    referenceVideoDuration,
+    referenceVideoDuration: previousInteractionId ? Math.min(referenceVideoDuration ?? 10, 10) : referenceVideoDuration,
     referenceVideoMetas,
     hasVideoReference,
-    videoReferenceCount: providerVideoUrls.length,
+    videoReferenceCount: previousInteractionId ? 1 : providerVideoUrls.length,
     audioReferenceCount: audioUrls?.length || 0,
     operation: videoOperation,
   });
@@ -187,6 +188,12 @@ export async function createVideo(input: CreateVideoInput): Promise<CreateVideoR
     return {
       success: false,
       message: 'Google Omni can only extend forward from the end of the source video.',
+    };
+  }
+  if (provider === 'google-omni' && previousInteractionId && (referenceVideoDuration ?? 0) + (duration ?? 10) > 40) {
+    return {
+      success: false,
+      message: 'Google Omni stateful extension supports a maximum cumulative duration of 40 seconds.',
     };
   }
   if (hasAudioReference && route.provider !== 'seedance' && route.provider !== 'minimax' && route.provider !== 'fal-sync') {
@@ -451,6 +458,7 @@ export async function createVideo(input: CreateVideoInput): Promise<CreateVideoR
         aspectRatio: providerAspectRatio,
         resolution: route.resolution as '360p' | '720p' | '1080p' | '4k',
         operation: videoOperation,
+        previousInteractionId,
         videoUrl,
         videoUrls,
       });

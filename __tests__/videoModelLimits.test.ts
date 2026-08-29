@@ -654,6 +654,21 @@ describe('video model reference limits', () => {
     })).toContain('at most 1 reference video')
   })
 
+  it('caps stateful Google Omni continuation at 40 seconds cumulatively', async () => {
+    const result = await createVideo({
+      script: 'Continue the final scene.',
+      images: [],
+      duration: 10,
+      referenceVideoDuration: 40,
+      videoModel: 'google-omni',
+      videoOperation: 'extend',
+      previousInteractionId: 'v1_previous',
+    })
+
+    expect(result.success).toBe(false)
+    expect(result.message).toContain('maximum cumulative duration of 40 seconds')
+  })
+
   it('fails fast before calling Google Omni with more than six image references', async () => {
     const result = await createVideo({
       script: 'Omni too many images\n\nAnimate <<<media_1>>>, <<<media_2>>>, <<<media_3>>>, <<<media_4>>>, <<<media_5>>>, <<<media_6>>>, and <<<media_7>>> together.',

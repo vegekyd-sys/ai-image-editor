@@ -645,6 +645,9 @@ const zh = {
   'studio.source.openAria': (stage: string) => `打开${stage}原始文件`,
 
   // Agent model selector
+  'changelog.googleOmni11.title': 'Gemini Omni 1.1 上线',
+  'changelog.googleOmni11.item1': 'Gemini Omni 1.1 支持快速生成原生音频视频，可选 360p 草稿、默认 720p，以及放大后的 1080p 与 4K。',
+  'changelog.googleOmni11.item2': '在 Chat 里引用一段时间线视频，即可让 Makaron 向后续写最多 10 秒，并把保留原片的累计结果保存为新快照。',
   'changelog.externalImages.title': 'Scene 图片可直接用于视频',
   'changelog.externalImages.item1': '从 Scene 导入的图片现在会按图片渲染，Preview 与 MP4 导出不再把它误当成视频。',
   'model.agentAutoDesc': '跟随后端推荐，默认 GPT-5.6 Terra',

@@ -1479,7 +1479,7 @@ Hard constraints:
 - If the source video may exceed model limits, call \`read_file('skills/video-ffmpeg-lab/SKILL.md')\` and split it once with \`run_code({ runtime: "node" })\` before submitting generation.
 - Total duration must fit the selected model's capability. Do not shrink a long source just to bypass a limit; split first.
 - Long source video rule: if a timeline/reference video is longer than the selected model's input limit (15 seconds for SeeDance 2.0 or MiniMax H3, 30 seconds for Seedance 2.5), use \`skills/long-video-director/SKILL.md\`, analyze/split it into model-sized self-contained segments, and submit one script per segment after approval.
-- Reference video input limit: for one SeeDance generation, combined source duration must be at most 15 seconds for SeeDance 2.0 or 30 seconds for SeeDance 2.5. Google Omni edit/extend accepts one source video up to 10 seconds. For one MiniMax H3 generation, up to 3 reference videos may be used and their combined source duration must be 15 seconds or less.
+- Reference video input limit: for one SeeDance generation, combined source duration must be at most 15 seconds for SeeDance 2.0 or 30 seconds for SeeDance 2.5. Google Omni edit/extend accepts one source video up to 10 seconds when uploaded; a Google-generated result can continue statefully to 40 seconds cumulatively. For one MiniMax H3 generation, up to 3 reference videos may be used and their combined source duration must be 15 seconds or less.
 - Reference video size limit: for one SeeDance generation, every reference video must be .mp4/.mov, <=50MB, width and height each 300-6000px, aspect ratio 0.4-2.5, and frame pixels width*height between 409,600 and 2,086,876. MiniMax H3 reference videos must each be .mp4/.mov, <=50MB, width and height each 256-5760px, and aspect ratio 0.4-2.5. Kling video references must be <=200MB and <=2K; no explicit lower resolution is documented.
 - Reference image input limit: EvoLink Seedance requires JPEG/PNG/WebP, width and height each 300-6000px, aspect ratio 0.4-2.5, and <=30MB per image. The runtime returns a specific errorReason such as too_small or too_large. If repairable=true, decide whether to prepare a new compliant image URL or ask the user for a better source; never resubmit the same rejected URL.
 - Reference image input limit: MiniMax H3 accepts up to 9 reference images. The first 5 are free provider inputs; images 6-9 incur per-image provider cost. H3 also accepts up to 3 reference audio files, but audio cannot be the only reference input.
@@ -1594,6 +1594,7 @@ Hard constraints:
           )];
           const autoVideoUrls: string[] = [];
           const sourceVideoSnapshotIds: string[] = [];
+          let googleOmniPreviousInteractionId: string | undefined;
           const videoRefIndices = new Set<number>();
           let totalVideoRefDuration = 0;
           const referenceVideoMetas: Array<{ width?: number | null; height?: number | null; fileSizeBytes?: number | null }> = [];
@@ -1612,6 +1613,16 @@ Hard constraints:
                   autoVideoUrls.push(videoUrl);
                   videoRefIndices.add(ref);
                   if (snap.id) sourceVideoSnapshotIds.push(snap.id);
+                  const sourceTaskId = typeof meta?.taskId === 'string' ? meta.taskId : '';
+                  if (
+                    videoModel === 'google-omni'
+                    && video_operation === 'extend'
+                    && meta?.model === 'google-omni'
+                    && sourceTaskId.startsWith('google-omni-')
+                    && !sourceTaskId.startsWith('google-omni-job-')
+                  ) {
+                    googleOmniPreviousInteractionId = sourceTaskId.slice('google-omni-'.length);
+                  }
                   referenceVideoMetas.push({
                     width: Number.isFinite(Number(meta?.width)) ? Number(meta?.width) : null,
                     height: Number.isFinite(Number(meta?.height)) ? Number(meta?.height) : null,
@@ -1650,12 +1661,26 @@ Hard constraints:
             };
           }
           const referenceVideoDuration = totalVideoRefDuration > 0 ? totalVideoRefDuration : undefined;
+          const isGoogleOmniStatefulExtend = Boolean(
+            videoModel === 'google-omni'
+            && video_operation === 'extend'
+            && googleOmniPreviousInteractionId
+            && allVideoUrls.length === 1
+          );
+          if (isGoogleOmniStatefulExtend && (referenceVideoDuration ?? 0) + (duration ?? 10) > 40) {
+            return {
+              success: false as const,
+              message: 'Google Omni can extend a generated video up to 40 seconds cumulatively.',
+            };
+          }
           const modelError = validateVideoModelRequest({
             model: videoModel,
             resolution: videoRoute.resolution,
             aspectRatio: selectedAspectRatio,
             outputDuration: isSeedance25Edit ? -1 : duration,
-            referenceVideoDuration,
+            referenceVideoDuration: isGoogleOmniStatefulExtend
+              ? Math.min(referenceVideoDuration ?? 10, 10)
+              : referenceVideoDuration,
             referenceVideoMetas: referenceVideoMetas.length ? referenceVideoMetas : undefined,
             hasVideoReference: allVideoUrls.length > 0,
             videoReferenceCount: allVideoUrls.length,
@@ -1676,7 +1701,7 @@ Hard constraints:
           });
           let providerVideoRefUrl = video_ref_url;
           let providerAutoVideoUrls = autoVideoUrls;
-          if (allVideoUrls.length > 0 && ctx.userId && ctx.projectId) {
+          if (allVideoUrls.length > 0 && ctx.userId && ctx.projectId && !isGoogleOmniStatefulExtend) {
             const { prepareProviderVideoReferences } = await import('@/lib/provider-video-reference');
             const referenceSupabase = ctx.supabase || (await import('@/lib/supabase/service')).getSupabaseAdmin();
             const prepared = await prepareProviderVideoReferences({
@@ -1691,6 +1716,10 @@ Hard constraints:
             }
             providerVideoRefUrl = video_ref_url ? prepared.urls[0] : undefined;
             providerAutoVideoUrls = video_ref_url ? prepared.urls.slice(1) : prepared.urls;
+          }
+          if (isGoogleOmniStatefulExtend) {
+            providerVideoRefUrl = undefined;
+            providerAutoVideoUrls = [];
           }
 
           const createVideoInput = {
@@ -1710,6 +1739,7 @@ Hard constraints:
             characterOrientation: character_orientation,
             audioUrls: resolvedAudioRefs.audioUrls.length ? resolvedAudioRefs.audioUrls : undefined,
             videoOperation: video_operation,
+            previousInteractionId: isGoogleOmniStatefulExtend ? googleOmniPreviousInteractionId : undefined,
             videoExtendDirection: extend_direction,
             generateAudio: generate_audio,
             contentFilter: content_filter,
@@ -1731,7 +1761,9 @@ Hard constraints:
             resolution: videoRoute.resolution,
             durationSec: videoSec,
             imageCount: referencedImageUrls.length,
-            referenceVideoDurationSec: referenceVideoDuration,
+            referenceVideoDurationSec: isGoogleOmniStatefulExtend
+              ? Math.min(referenceVideoDuration ?? 10, 10)
+              : referenceVideoDuration,
             contentFilter: content_filter,
           }) ?? Math.ceil(videoSec * 22);
 

@@ -85,4 +85,39 @@ describe('google omni video provider', () => {
     expect(providerBody?.input?.[0]?.content?.at(-1)?.text).toContain('Continue Video1 forward from its tail')
     expect(providerBody?.input?.[0]?.content?.at(-1)?.text).toContain('Preserve its visual style')
   })
+
+  it('extends a Google-generated result statefully without re-uploading the cumulative video', async () => {
+    vi.stubEnv('GOOGLE_API_KEY', 'test-key')
+    let providerBody: Record<string, any> | undefined
+    const fetchMock = vi.fn(async (_url: string | URL | Request, init?: RequestInit) => {
+      providerBody = JSON.parse(String(init?.body))
+      return new Response(JSON.stringify({
+        id: 'v1_extend_turn_3',
+        status: 'completed',
+        output_video: {
+          type: 'video',
+          mime_type: 'video/mp4',
+          uri: 'https://generativelanguage.googleapis.com/v1beta/files/extend-turn-3:download',
+        },
+      }), { status: 200, headers: { 'content-type': 'application/json' } })
+    })
+    vi.stubGlobal('fetch', fetchMock)
+
+    const result = await createGoogleOmniVideoTask({
+      prompt: 'Continue into the final chorus and reveal the Omni 1.1 title.',
+      images: [],
+      duration: 10,
+      resolution: '720p',
+      operation: 'extend',
+      previousInteractionId: 'v1_extend_turn_2',
+    })
+
+    expect(result).toMatchObject({ status: 'completed', taskId: 'google-omni-v1_extend_turn_3' })
+    expect(fetchMock).toHaveBeenCalledTimes(1)
+    expect(providerBody).toMatchObject({
+      previous_interaction_id: 'v1_extend_turn_2',
+      generation_config: { video_config: { task: 'extend' } },
+    })
+    expect(providerBody?.input).toContain('Continue the video from the previous interaction')
+  })
 })

@@ -74,11 +74,11 @@ Single-script rule: if a complete approved script is within the selected model's
 
 Long source video rule: if an existing timeline/reference video is longer than the selected model's input limit (15s for SeeDance 2.0, 30s for SeeDance 2.5), do not compress the whole source into one short edit. Analyze pacing, route through `skills/long-video-director/SKILL.md`, split into model-sized segments, and submit per segment only after approval.
 
-Reference video input limit: one SeeDance 2.0 generation may use up to 15s combined source/reference video duration; SeeDance 2.5 allows up to 30s combined; Google Omni: one <=10s source. Split longer input.
+Reference video input limit: one SeeDance 2.0 generation may use up to 15s combined source/reference video duration; SeeDance 2.5 allows up to 30s combined; Google Omni: one <=10s upload. Split longer input.
 
 Reference video size: SeeDance .mp4/.mov <=50MB, dimensions 300-6000px, aspect 0.4-2.5, 409,600-2,086,876 frame pixels. Kling accepts one .mp4/.mov, <=200MB, <=2K. Google Omni: one video for edit/forward extend, or up to 6 image refs without video. Grok 1.5: no video/multi-image refs.
 
-Google Omni continuation uses the same Refs mental model as Seedance: reference `<<<media_N>>>`, set `video_operation: "extend"`, describe the next beat, default to 10s, preserve continuity, and save a new snapshot.
+Google Omni continuation uses the same Refs mental model as Seedance: reference `<<<media_N>>>`, set `video_operation: "extend"`, describe the next beat, default 10s, preserve continuity, save a new snapshot; Google results can repeat to 40s.
 
 Before writing a video script, call `read_file('prompts/animate.md')`. Do not re-read it if it already appears in tool-result history.
 
