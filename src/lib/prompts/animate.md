@@ -19,6 +19,13 @@ source-led timeline editing, deterministic compositing, or post-production.
 
 Reference-image preflight: EvoLink Seedance accepts JPEG/PNG/WebP images only, with width and height each 300-6000px, aspect ratio 0.4-2.5, and at most 30MB per image. The tool returns a specific `errorReason` (`too_small`, `too_large`, `invalid_aspect_ratio`, `unsupported_format`, or `unreadable`) plus actual dimensions and limits. `retryable: false` means do not resubmit the same URL. When `repairable: true`, decide whether to create a new resized/padded/converted public image URL or ask the user for a better source, then submit only with that new URL. A second unchanged submission becomes `terminal: true` and ends the retry loop.
 
+Reference-replication boundary: when the user wants measurable matching of a
+supplied reference's shot count/order/timing, framing, camera motion,
+transitions, captions, or beat structure, read
+`skills/video-replication/SKILL.md` first. That is deterministic
+post-production even when the output fits one provider call. Loose inspiration
+without a measurable structure lock stays in this direct-generation route.
+
 ## Input
 - Snapshot images within the selected model limit (7 normally; up to 30 for Seedance 2.5). Zero images means native SeeDance text-to-video.
 - A Media Index describing what each snapshot contains

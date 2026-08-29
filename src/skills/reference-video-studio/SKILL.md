@@ -3,7 +3,8 @@ name: reference-video-studio
 description: >
   Analyze a reference video, extract its transferable structure and pacing,
   propose original directions, and produce a new editable video without copying
-  the reference's surface design.
+  the reference's surface design. Use video-replication instead when the user
+  wants measurable shot count, order, timing, framing, or motion matching.
 allowed-tools: read_file studio_run prepare_visual_asset analyze_video transcribe_audio run_code write_file preview_frame materialize_media generate_audio generate_image generate_animation analyze_image
 metadata:
   makaron:
@@ -22,7 +23,8 @@ metadata:
 
 Use when the user says "make something like this" and supplies a video, URL,
 or existing project clip as inspiration. This is distinct from editing that
-exact footage.
+exact footage and from shot-by-shot structural matching, which belongs to
+`skills/video-replication/SKILL.md`.
 
 ## Required Directors
 

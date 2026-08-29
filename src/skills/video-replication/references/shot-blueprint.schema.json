@@ -1,0 +1,143 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://makaron.ai/schemas/shot-blueprint-0.1.0.json",
+  "title": "Makaron Shot Blueprint",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema_version", "reference", "analysis", "global_dna", "boundaries", "shots", "route", "qa_targets"],
+  "properties": {
+    "schema_version": { "const": "0.1.0" },
+    "reference": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["source_name", "duration_sec", "width", "height", "fps", "video_codec", "audio"],
+      "properties": {
+        "source_name": { "type": "string", "minLength": 1 },
+        "duration_sec": { "type": "number", "exclusiveMinimum": 0 },
+        "width": { "type": "integer", "minimum": 1 },
+        "height": { "type": "integer", "minimum": 1 },
+        "fps": { "type": "number", "exclusiveMinimum": 0 },
+        "video_codec": { "type": ["string", "null"] },
+        "audio": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["present", "codec", "sample_rate"],
+          "properties": {
+            "present": { "type": "boolean" },
+            "codec": { "type": ["string", "null"] },
+            "sample_rate": { "type": ["integer", "null"], "minimum": 1 }
+          }
+        }
+      }
+    },
+    "analysis": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["boundary_method", "asr_status", "beat_status", "model_review_status", "unresolved_boundary_candidates", "warnings"],
+      "properties": {
+        "boundary_method": { "type": "string" },
+        "asr_status": { "enum": ["not_run", "complete", "failed", "not_applicable"] },
+        "beat_status": { "enum": ["not_run", "complete", "failed", "not_applicable"] },
+        "model_review_status": { "enum": ["required", "complete", "failed"] },
+        "scene_score_threshold": { "type": "number", "minimum": 0 },
+        "scene_candidate_count": { "type": "integer", "minimum": 0 },
+        "black_candidate_count": { "type": "integer", "minimum": 0 },
+        "unresolved_boundary_candidates": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "required": ["time_sec", "kind", "confidence", "evidence"],
+            "properties": {
+              "time_sec": { "type": "number", "minimum": 0 },
+              "kind": { "enum": ["cut", "fade_or_black", "dissolve", "unknown"] },
+              "confidence": { "type": "number", "minimum": 0, "maximum": 1 },
+              "evidence": { "type": "array", "items": { "type": "object" } }
+            }
+          }
+        },
+        "warnings": { "type": "array", "items": { "type": "string" } }
+      }
+    },
+    "global_dna": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["aspect_ratio", "shot_duration_curve_sec", "cut_rate_per_min", "style", "audio_arc"],
+      "properties": {
+        "aspect_ratio": { "type": "string", "pattern": "^[1-9][0-9]*:[1-9][0-9]*$" },
+        "shot_duration_curve_sec": { "type": "array", "items": { "type": "number", "exclusiveMinimum": 0 } },
+        "cut_rate_per_min": { "type": "number", "minimum": 0 },
+        "style": { "type": ["object", "null"] },
+        "audio_arc": { "type": ["object", "null"] }
+      }
+    },
+    "boundaries": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["time_sec", "kind", "confidence", "evidence"],
+        "properties": {
+          "time_sec": { "type": "number", "minimum": 0 },
+          "kind": { "enum": ["cut", "fade_or_black", "dissolve", "unknown"] },
+          "confidence": { "type": "number", "minimum": 0, "maximum": 1 },
+          "evidence": {
+            "type": "array",
+            "minItems": 1,
+            "items": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": ["method", "time_sec"],
+              "properties": {
+                "method": { "type": "string" },
+                "time_sec": { "type": "number", "minimum": 0 },
+                "score": { "type": "number", "minimum": 0 },
+                "start_sec": { "type": "number", "minimum": 0 },
+                "end_sec": { "type": "number", "minimum": 0 },
+                "frame_index": { "type": "integer", "minimum": 0 },
+                "note": { "type": "string" }
+              }
+            }
+          }
+        }
+      }
+    },
+    "shots": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["id", "order", "source_range", "duration_sec", "narrative_role", "subject_action", "composition", "camera_motion", "transition_in", "transition_out", "text_layers", "audio", "style", "preserve", "replace", "confidence", "needs_model_review"],
+        "properties": {
+          "id": { "type": "string", "pattern": "^shot-[0-9]{3,}$" },
+          "order": { "type": "integer", "minimum": 1 },
+          "source_range": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["start_sec", "end_sec"],
+            "properties": {
+              "start_sec": { "type": "number", "minimum": 0 },
+              "end_sec": { "type": "number", "exclusiveMinimum": 0 }
+            }
+          },
+          "duration_sec": { "type": "number", "exclusiveMinimum": 0 },
+          "narrative_role": { "type": ["string", "null"] },
+          "subject_action": { "type": ["string", "null"] },
+          "composition": { "type": ["object", "null"] },
+          "camera_motion": { "type": ["object", "null"] },
+          "transition_in": { "type": ["object", "null"] },
+          "transition_out": { "type": ["object", "null"] },
+          "text_layers": { "type": "array", "items": { "type": "object" } },
+          "audio": { "type": ["object", "null"] },
+          "style": { "type": ["object", "null"] },
+          "preserve": { "type": "array", "items": { "type": "string" }, "uniqueItems": true },
+          "replace": { "type": "array", "items": { "type": "string" }, "uniqueItems": true },
+          "confidence": { "type": "number", "minimum": 0, "maximum": 1 },
+          "needs_model_review": { "type": "boolean" }
+        }
+      }
+    },
+    "route": { "type": ["object", "null"] },
+    "qa_targets": { "type": ["object", "null"] }
+  }
+}
