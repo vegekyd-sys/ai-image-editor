@@ -317,7 +317,7 @@ export async function createVideo(input: CreateVideoInput): Promise<CreateVideoR
       resolution: route.resolution,
       aspectRatio,
       outputDuration: provider === 'seedance-2.5' && videoOperation === 'edit' ? -1 : resolvedDuration,
-      referenceVideoDuration,
+      referenceVideoDuration: previousInteractionId ? Math.min(referenceVideoDuration ?? 10, 10) : referenceVideoDuration,
       referenceVideoMetas: resolvedReferenceVideoMetas,
       hasVideoReference,
       imageReferenceCount: filteredImages.length,
