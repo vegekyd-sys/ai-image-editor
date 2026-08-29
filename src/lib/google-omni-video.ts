@@ -1,6 +1,7 @@
 import { transcodeVideoBufferToSdrMp4 } from '@/lib/provider-video-reference'
+import type { VideoResolution } from '@/lib/video-model-capabilities'
 
-const GOOGLE_OMNI_MODEL = 'gemini-omni-flash-preview'
+export const GOOGLE_OMNI_MODEL = 'gemini-omni-1.1-flash'
 const GOOGLE_OMNI_ENDPOINT = 'https://generativelanguage.googleapis.com/v1beta/interactions'
 const MAX_FETCH_BYTES = 55 * 1024 * 1024
 export const GOOGLE_OMNI_REQUEST_TIMEOUT_MS = 10 * 60 * 1000
@@ -11,6 +12,7 @@ export interface GoogleOmniVideoTaskInput {
   images: string[]
   duration?: number
   aspectRatio?: string
+  resolution?: Extract<VideoResolution, '360p' | '720p' | '1080p' | '4k'>
   videoUrl?: string
   videoUrls?: string[]
 }
@@ -133,10 +135,32 @@ function findOutputVideo(obj: unknown): { uri?: string; data?: string; mime_type
   return null
 }
 
-function toOmniPrompt(prompt: string, duration?: number): string {
-  const normalized = prompt.replace(/<<<(?:image|media)_(\d+)>>>/g, (_, n: string) => `reference ${n}`)
-  if (!duration) return normalized
-  return `${normalized}\n\nTarget duration: ${duration} seconds.`
+function toOmniPrompt(prompt: string, imageCount: number, hasVideoReference: boolean, duration?: number): string {
+  const useFirstFrame = imageCount === 1 && !hasVideoReference
+  const normalized = prompt.replace(/<<<(?:image|media)_(\d+)>>>/g, (_, n: string) => {
+    const index = Number(n)
+    return useFirstFrame ? `Image${index}` : `<IMAGE_REF_${Math.max(0, index - 1)}>`
+  })
+  const declarations = []
+  const guidance = []
+
+  if (hasVideoReference) {
+    declarations.push('[# Sources <VIDEO_0>@Video1]')
+    guidance.push('Use Video1 as the primary source video to edit.')
+  } else if (useFirstFrame) {
+    declarations.push('[# Sources <FIRST_FRAME>@Image1]')
+    guidance.push('Use Image1 as the starting frame.')
+  }
+
+  if (!useFirstFrame && imageCount > 0) {
+    const refs = Array.from({ length: imageCount }, (_, index) => `<IMAGE_REF_${index}>@Image${index + 1}`).join(' ')
+    declarations.push(`[# References ${refs}]`)
+    guidance.push('Use the given images as references for video generation, not as literal initial frames.')
+  }
+
+  const parts = [declarations.join(' '), normalized, guidance.join(' ')].filter(Boolean)
+  if (duration) parts.push(`Target duration: ${duration} seconds.`)
+  return parts.join('\n\n')
 }
 
 function normalizeAspectRatio(aspectRatio?: string): '9:16' | '16:9' | undefined {
@@ -160,11 +184,12 @@ export async function createGoogleOmniVideoTask(input: GoogleOmniVideoTaskInput)
   }
 
   const videoRef = videoRefs[0]
-  const prompt = toOmniPrompt(input.prompt, input.duration)
+  const prompt = toOmniPrompt(input.prompt, imageParts.length, Boolean(videoRef), input.duration)
   const task = videoRef ? 'edit' : imageParts.length > 1 ? 'reference_to_video' : imageParts.length > 0 ? 'image_to_video' : 'text_to_video'
   const responseFormat: Record<string, unknown> = {
     type: 'video',
     delivery: 'uri',
+    resolution: input.resolution || '720p',
   }
   const aspectRatio = normalizeAspectRatio(input.aspectRatio)
   if (aspectRatio && task !== 'edit') responseFormat.aspect_ratio = aspectRatio

@@ -608,7 +608,7 @@ const zhHant = {
   'model.seedance25.desc': '全新 SOTA，最長 30 秒，支援圖片、影片、音訊參考，以及編輯與延伸。',
   'model.seedance25.badge': '全新 SOTA · 30s',
   'model.grok.desc': '極速預覽，約 30–40 秒，支援原生音訊與單張起始圖片。',
-  'model.googleOmni.desc': '快速 720p 影片編輯，支援原生音訊。',
+  'model.googleOmni.desc': '快速影片生成與編輯，支援 360p 草稿、預設 720p、4K 放大與原生音訊。',
   'model.minimaxH3.desc': '開放多模態影片模型，支援 15 秒、768P 或 2K 直出與多參考素材。',
   'model.gpt56Terra.desc': '建議預設，兼顧智能、速度與成本。',
   'model.gpt56Sol.desc': '能力最強，適合複雜 Agent 任務與創作。',

@@ -24,7 +24,7 @@ export const MODEL_REGISTRY: ModelInfo[] = [
   { id: 'seedance-2.5', nameKey: 'model.seedance25.name', descKey: 'model.seedance25.desc', category: 'video', speedLabelKey: 'model.seedance25.badge' },
   { id: 'kling', nameKey: 'model.kling.name', descKey: 'model.kling.desc', category: 'video', speedLabel: '4K' },
   { id: 'grok', nameKey: 'model.grok.name', descKey: 'model.grok.desc', category: 'video', speedLabel: '30-40s' },
-  { id: 'google-omni', nameKey: 'model.googleOmni.name', descKey: 'model.googleOmni.desc', category: 'video', speedLabel: '30-70s' },
+  { id: 'google-omni', nameKey: 'model.googleOmni.name', descKey: 'model.googleOmni.desc', category: 'video', speedLabel: '360p · 4K' },
   { id: 'minimax-h3', nameKey: 'model.minimaxH3.name', descKey: 'model.minimaxH3.desc', category: 'video', speedLabel: '768P · 2K' },
   // Agent LLM
   { id: 'gpt-5.6-terra', nameKey: 'model.gpt56Terra.name', descKey: 'model.gpt56Terra.desc', category: 'agent', speedLabel: 'Default' },

@@ -263,12 +263,12 @@ Tips:
     `Submit a video rendering task. Returns a taskId for polling.
 
 IMPORTANT:
-- SeeDance and MiniMax H3 support native text-to-video with no images. For image/reference generation, images must be publicly accessible URLs (not base64).
+- SeeDance, Gemini Omni 1.1, and MiniMax H3 support native text-to-video with no images. For image/reference generation, images must be publicly accessible URLs (not base64).
 - EvoLink Seedance reference images must be JPEG/PNG/WebP, width and height each 300-6000px, aspect ratio 0.4-2.5, and <=30MB each. Input errors distinguish too_small, too_large, invalid_aspect_ratio, unsupported_format, and unreadable. NON_RETRYABLE means the same URL must not be resubmitted; prepare a new compliant URL or replace the source first.
 - When images are provided, script should use <<<media_N>>> format (from makaron_write_video_script output). Text-to-video scripts should not invent media markers.
 - Provider-generated video rendering takes 3-5 minutes; Grok is usually around 30-40 seconds; Gemini Omni is usually around 30-70 seconds plus Storage handoff. Use makaron_get_video_status to poll.
 - Duration: omit for smart mode. Seedance 2.5 supports 4-30s; SeeDance 2.0 and MiniMax H3 support 4-15s; Kling supports 5-15s; Grok 1.5 supports 1-15s; Gemini Omni supports 3-10s.
-- Resolution: omit or use "auto" for the selected model default. Seedance 2.5 supports 480p/720p; minimax-h3 supports 768p/2k and defaults to 768p; seedance-fast/seedance-mini/grok support 480p/720p; seedance supports 480p/720p/1080p; kling supports 720p/1080p/4k; google-omni outputs 720p.
+- Resolution: omit or use "auto" for the selected model default. Gemini Omni 1.1 supports 360p drafts, 720p native/default, and upscaled 1080p/4k; Seedance 2.5 supports 480p/720p; minimax-h3 supports 768p/2k and defaults to 768p; seedance-fast/seedance-mini/grok support 480p/720p; seedance supports 480p/720p/1080p; kling supports 720p/1080p/4k.
 - Seedance 2.5 accepts up to 30 image, 10 video, and 10 audio references, plus dedicated edit/extend modes.
 
 Models:
@@ -278,7 +278,7 @@ Models:
 - seedance-2.5 — Seedance 2.5 via Evolink, 4-30s, multimodal references, native audio, edit and extend
 - kling — Kling v3-omni, supports 720p/1080p/4k
 - grok — Grok Video 1.5 via xAI, fastest single-image-to-video, native audio, defaults to 480p at $0.08/s + $0.01/input image
-- google-omni — Gemini Omni Flash via Google, fast image/video generation and editing, up to 6 image references without a video reference, one video reference for direct edits, native generated audio, no uploaded audio references
+- google-omni — Gemini Omni 1.1 Flash via Google, fast text/image/video generation and editing, 360p/720p/upscaled 1080p/4k, up to 6 image references without a video reference, one video reference for direct edits, native generated audio, no uploaded audio references
 - minimax-h3 — MiniMax H3 direct API, native text-to-video plus up to 9 image / 3 video / 3 audio references, 4-15s, public 768p/2K, default 768P
 - sync-lipsync-v3 — exact replacement-audio lip sync; requires exactly one source video and one audio URL, preserves source framing and the supplied audio
 
@@ -294,7 +294,7 @@ Style: Cinematic, warm golden light.`,
       duration: z.number().optional().describe('Duration in seconds. Sync Lipsync v3 follows a 2-120s source; Seedance 2.5 accepts 4-30s; SeeDance 2.0 and MiniMax H3 accept 4-15s. Omit for smart mode.'),
       aspectRatio: z.enum(['auto', '16:9', '9:16', '1:1', '4:3', '3:4', '21:9', '3:2', '2:3']).optional().describe('Aspect ratio. Use auto/adaptive or a provider-supported ratio. Seedance supports 21:9. Grok image-to-video ignores forced ratios to avoid stretching the source image; pad the source or choose another model for a fixed final shape.'),
       videoModel: z.enum(['seedance-fast', 'seedance-mini', 'seedance', 'seedance-2.5', 'kling', 'grok', 'google-omni', 'minimax-h3', 'sync-lipsync-v3']).optional().describe('Video model. sync-lipsync-v3 requires exactly one video and one replacement audio track.'),
-      videoResolution: z.enum(['auto', '480p', '720p', '768p', '1080p', '2k', '4k']).optional().describe('Output resolution. Use auto to follow the selected model default; MiniMax H3 supports 768p/2k and defaults to 768p.'),
+      videoResolution: z.enum(['auto', '360p', '480p', '720p', '768p', '1080p', '2k', '4k']).optional().describe('Output resolution. Use auto to follow the selected model default; Gemini Omni 1.1 supports 360p/720p/1080p/4k, and MiniMax H3 supports 768p/2k.'),
       operation: z.enum(['generate', 'edit', 'extend']).optional().describe('Seedance 2.5 operation. edit and extend require videoUrls.'),
       extendDirection: z.enum(['forward', 'backward']).optional().describe('Seedance 2.5 extension direction.'),
       generateAudio: z.boolean().optional().describe('Generate synchronized native audio. Default true for Seedance 2.5.'),
@@ -372,7 +372,7 @@ Example: Edit a video to add cinematic color grading:
       duration: z.number().optional().describe('Output duration in seconds. SeeDance accepts integer output duration 4-15s (default 5s); Kling supports 5-15s; Grok 1.5 supports 1-15s for one image but does not edit/reference videos; Gemini Omni supports 3-10s video editing in Makaron. Omit for smart mode.'),
       aspectRatio: z.enum(['auto', '16:9', '9:16', '1:1', '4:3', '3:4', '21:9', '3:2', '2:3']).optional().describe('Aspect ratio. Use auto/adaptive or a provider-supported ratio.'),
       videoModel: z.enum(['seedance-fast', 'seedance-mini', 'seedance', 'seedance-2.5', 'kling', 'grok', 'google-omni', 'minimax-h3']).optional().describe('Video model. Seedance 2.5 uses its dedicated typed video-edit route; MiniMax H3 supports feature/reference video.'),
-      videoResolution: z.enum(['auto', '480p', '720p', '768p', '1080p', '2k', '4k']).optional().describe('Output resolution. Use auto to follow the selected model default; MiniMax H3 supports 768p/2k and defaults to 768p.'),
+      videoResolution: z.enum(['auto', '360p', '480p', '720p', '768p', '1080p', '2k', '4k']).optional().describe('Output resolution. Use auto to follow the selected model default; Gemini Omni 1.1 supports 360p/720p/1080p/4k, and MiniMax H3 supports 768p/2k.'),
       referType: z.enum(['base', 'feature']).optional().describe('Video role: "base" (edit this video, default) or "feature" (use as style/motion reference)'),
       keepOriginalSound: z.boolean().optional().describe('Keep original video sound (default: false)'),
     },

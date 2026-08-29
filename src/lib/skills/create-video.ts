@@ -442,6 +442,7 @@ export async function createVideo(input: CreateVideoInput): Promise<CreateVideoR
         images: filteredImages,
         duration: resolvedDuration != null ? resolvedDuration : undefined,
         aspectRatio: providerAspectRatio,
+        resolution: route.resolution as '360p' | '720p' | '1080p' | '4k',
         videoUrl,
         videoUrls,
       });

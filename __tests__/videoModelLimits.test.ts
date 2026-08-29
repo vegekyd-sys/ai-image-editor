@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from 'vitest'
 import { createVideo } from '@/lib/skills/create-video'
-import { estimateVideoCredits, estimateVideoProviderCostUsd, getDefaultVideoModelId, getVideoModelCapability, normalizeVideoModelId, normalizeVideoResolution, resolveAgentVideoSelection, resolveClosestSupportedAspectRatio, resolveVideoGenerationRoute, resolveVideoProviderAspectRatio, resolveVideoProviderModel, validateVideoModelRequest, validateVideoResolutionRequest } from '@/lib/video-model-capabilities'
+import { estimateVideoCredits, estimateVideoProviderCostUsd, getDefaultVideoModelId, getVideoModelCapability, normalizeVideoModelId, normalizeVideoResolution, resolveAgentVideoSelection, resolveClosestSupportedAspectRatio, resolveVideoGenerationRoute, resolveVideoProviderAspectRatio, resolveVideoProviderModel, supportsNativeTextToVideo, validateVideoModelRequest, validateVideoResolutionRequest } from '@/lib/video-model-capabilities'
 
 describe('video model reference limits', () => {
   it('defaults video generation to SeeDance 2.0 Fast', () => {
@@ -587,23 +587,27 @@ describe('video model reference limits', () => {
     expect(estimateVideoCredits({ model: 'grok', resolution: '720p', durationSec: 1, imageCount: 1 })).toBe(30)
   })
 
-  it('models Gemini Omni as a fast 720p image and video edit provider', () => {
+  it('models Gemini Omni 1.1 as a fast multi-resolution generation and edit provider', () => {
     expect(normalizeVideoResolution('google-omni', 'auto')).toBe('720p')
     expect(resolveVideoGenerationRoute({ model: 'google-omni', resolution: 'auto' })).toMatchObject({
       model: 'google-omni',
       resolution: '720p',
       provider: 'google-omni',
-      providerModel: 'gemini-omni-flash-preview',
+      providerModel: 'gemini-omni-1.1-flash',
     })
     expect(getVideoModelCapability('google-omni')).toMatchObject({
       minOutputDuration: 3,
       maxOutputDuration: 10,
       supportsVideoReference: true,
       supportsBaseVideoEdit: true,
+      supportedResolutions: ['360p', '720p', '1080p', '4k'],
       maxReferenceVideoDuration: 10.5,
       maxImageReferences: 6,
     })
-    expect(estimateVideoCredits({ model: 'google-omni', durationSec: 5, imageCount: 1 })).toBe(100)
+    expect(estimateVideoCredits({ model: 'google-omni', durationSec: 5, imageCount: 1 })).toBe(102)
+    expect(estimateVideoCredits({ model: 'google-omni', resolution: '360p', durationSec: 5, imageCount: 1 })).toBe(34)
+    expect(estimateVideoCredits({ model: 'google-omni', resolution: '4k', durationSec: 5, imageCount: 1 })).toBe(305)
+    expect(supportsNativeTextToVideo('google-omni')).toBe(true)
   })
 
   it('fails fast before calling Google Omni with more than six image references', async () => {
@@ -623,7 +627,7 @@ describe('video model reference limits', () => {
     })
 
     expect(result.success).toBe(false)
-    expect(result.message).toContain('Gemini Omni Flash supports at most 6 reference images per request')
+    expect(result.message).toContain('Gemini Omni 1.1 Flash supports at most 6 reference images per request')
   })
 
   it('locks explicit app video model and resolution over agent tool guesses', () => {

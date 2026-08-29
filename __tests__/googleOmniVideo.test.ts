@@ -1,10 +1,48 @@
-import { describe, expect, it } from 'vitest'
-import { normalizeGoogleOmniMimeType } from '@/lib/google-omni-video'
+import { afterEach, describe, expect, it, vi } from 'vitest'
+import { createGoogleOmniVideoTask, GOOGLE_OMNI_MODEL, normalizeGoogleOmniMimeType } from '@/lib/google-omni-video'
+
+afterEach(() => {
+  vi.unstubAllGlobals()
+  vi.unstubAllEnvs()
+})
 
 describe('google omni video provider', () => {
   it('maps QuickTime MOV uploads to Google Omni supported MIME type', () => {
     expect(normalizeGoogleOmniMimeType('video/quicktime')).toBe('video/mov')
     expect(normalizeGoogleOmniMimeType(' video/quicktime ')).toBe('video/mov')
     expect(normalizeGoogleOmniMimeType('video/mp4')).toBe('video/mp4')
+  })
+
+  it('uses the 1.1 GA model and forwards output resolution', async () => {
+    vi.stubEnv('GOOGLE_API_KEY', 'test-key')
+    const fetchMock = vi.fn(async (_url: string | URL | Request, init?: RequestInit) => {
+      const body = JSON.parse(String(init?.body))
+      expect(body.model).toBe('gemini-omni-1.1-flash')
+      expect(body.response_format).toMatchObject({
+        type: 'video',
+        delivery: 'uri',
+        resolution: '4k',
+      })
+      return new Response(JSON.stringify({
+        id: 'v1_test',
+        status: 'completed',
+        output_video: {
+          type: 'video',
+          mime_type: 'video/mp4',
+          uri: 'https://generativelanguage.googleapis.com/v1beta/files/test:download',
+        },
+      }), { status: 200, headers: { 'content-type': 'application/json' } })
+    })
+    vi.stubGlobal('fetch', fetchMock)
+
+    const result = await createGoogleOmniVideoTask({
+      prompt: 'A clean product shot.',
+      images: [],
+      resolution: '4k',
+    })
+
+    expect(GOOGLE_OMNI_MODEL).toBe('gemini-omni-1.1-flash')
+    expect(result).toMatchObject({ status: 'completed', taskId: 'google-omni-v1_test' })
+    expect(fetchMock).toHaveBeenCalledTimes(1)
   })
 })

@@ -27,7 +27,7 @@ export interface VideoModelCapability {
   providerModel?: string
 }
 
-export type VideoResolution = '480p' | '720p' | '768p' | '1080p' | '2k' | '4k'
+export type VideoResolution = '360p' | '480p' | '720p' | '768p' | '1080p' | '2k' | '4k'
 export type VideoResolutionInput = VideoResolution | 'auto' | null | undefined
 export type VideoGenerationOperation = 'generate' | 'edit' | 'extend'
 export type VideoAspectRatio = '16:9' | '9:16' | '1:1' | '4:3' | '3:4' | '21:9' | '3:2' | '2:3'
@@ -278,7 +278,7 @@ const MODEL_CAPABILITIES: Record<string, VideoModelCapability> = {
   },
   'google-omni': {
     id: 'google-omni',
-    label: 'Gemini Omni Flash',
+    label: 'Gemini Omni 1.1 Flash',
     minOutputDuration: 3,
     maxOutputDuration: 10,
     maxReferenceVideoDuration: 10.5,
@@ -289,13 +289,21 @@ const MODEL_CAPABILITIES: Record<string, VideoModelCapability> = {
     supportsVideoReference: true,
     supportsBaseVideoEdit: true,
     longVideoChunkSeconds: 10,
-    estimatedCostPerSecondUsd: 0.1,
+    // Verified from live 1.1 usage metadata on 2026-08-29 at Google's
+    // $17.50 / 1M video-output-token rate.
+    estimatedCostPerSecondUsd: 0.10136,
+    estimatedCostPerSecondUsdByResolution: {
+      '360p': 0.0337925, // 1,931 tokens/s
+      '720p': 0.10136, // 5,792 tokens/s
+      '1080p': 0.15204, // 8,688 tokens/s
+      '4k': 0.30408, // 17,376 tokens/s
+    },
     maxImageReferences: 6,
-    supportedResolutions: ['720p'],
+    supportedResolutions: ['360p', '720p', '1080p', '4k'],
     defaultResolution: '720p',
     supportedAspectRatios: ['16:9', '9:16'],
     provider: 'google-omni',
-    providerModel: 'gemini-omni-flash-preview',
+    providerModel: 'gemini-omni-1.1-flash',
   },
   'minimax-h3': {
     id: 'minimax-h3',
@@ -486,7 +494,7 @@ function getSeedanceProviderBase(model?: string | null): string | undefined {
 
 export function supportsNativeTextToVideo(model?: string | null): boolean {
   const id = normalizeVideoModelId(model)
-  return getSeedanceProviderBase(id) != null || id === 'minimax-h3'
+  return getSeedanceProviderBase(id) != null || id === 'minimax-h3' || id === 'google-omni'
 }
 
 export function resolveVideoProviderModel(options: {
