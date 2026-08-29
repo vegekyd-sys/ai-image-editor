@@ -648,10 +648,19 @@ const ja = {
   'changelog.googleOmni11.item2': 'Chatでタイムライン動画を1本参照すると、元動画を保った累積スナップショットとして最大10秒先まで延長できます。',
   'changelog.externalImages.title': 'Scene画像を動画で直接利用',
   'changelog.externalImages.item1': 'Sceneから読み込んだ画像を画像として処理し、PreviewとMP4書き出しで動画と誤認しないようになりました。',
-  'model.agentAutoDesc': '推奨モデルに従います。現在のデフォルトはGPT-5.6 Terraです',
+  'model.agentAutoDesc': '既定の GPT-5.6 Terra を既存の Azure API で使用します',
   'model.agentLabel': 'Agentモデル',
   'model.closeAgentSelector': 'Agentモデル選択を閉じる',
   'model.chooseAgent': 'Agentモデルを選択',
+  'model.azureApiBadge': 'Azure API',
+  'model.codexSubscription.name': 'GPT-5.6 Terra · Codexプラン',
+  'model.codexSubscription.suffix': 'Codexプラン',
+  'model.codexSubscription.badge': '個人プラン',
+  'model.codexSubscription.desc': '個人のChatGPT/Codexプランを使用し、利用不可時は既存のAPIフォールバックを使用します。',
+  'model.codexSubscription.checking': 'プランの使用量を確認中…',
+  'model.codexSubscription.remaining': (percent: string) => `週間枠 残り ${percent}%`,
+  'model.codexSubscription.resetsAt': (time: string) => `${time} リセット`,
+  'model.codexSubscription.usageUnavailable': 'プランは利用可能ですが、使用量を取得できません',
 } satisfies TranslationDictionary;
 
 export default ja;

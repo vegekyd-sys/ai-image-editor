@@ -87,6 +87,7 @@ marketing/meta-ads/
 !/scripts/remotion-lambda-runtime-regression.ts
 !/scripts/smoke-gpt56-agent.ts
 !/scripts/smoke-gpt56-cache.ts
+!/scripts/smoke-codex-subscription.ts
 !/scripts/smoke-volcengine-asr-project.ts
 !/scripts/backfill-annual-subscription-credits.mjs
 !/scripts/audit-liquid-glass-perf.mjs

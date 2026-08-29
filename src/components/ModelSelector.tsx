@@ -1,11 +1,16 @@
 'use client';
 
-import { useState, useRef, useEffect, useCallback, useId } from 'react';
+import { useState, useRef, useEffect, useCallback, useId, type ReactNode } from 'react';
 import { createPortal } from 'react-dom';
 import type { PreferredModel } from './AgentChatView';
 import type { VideoModel, VideoResolution } from '@/types';
 import { getAgentModels, getImageModels, getVideoModels, type ModelInfo } from '@/lib/model-registry';
-import type { AgentModelPreference } from '@/lib/agent-models';
+import {
+  getCodexSubscriptionAgentModelPreference,
+  isCodexSubscriptionAgentModelPreference,
+  type AgentModelPreference,
+  type GPT56AgentModelId,
+} from '@/lib/agent-models';
 import { useLocale } from '@/lib/i18n';
 import { getDefaultVideoModelId, getVideoModelCapability, normalizeVideoResolution } from '@/lib/video-model-capabilities';
 
@@ -90,6 +95,8 @@ function ModelRow({
   disabled,
   onSelect,
   testId,
+  provider,
+  detail,
 }: {
   model: ModelInfo;
   name: string;
@@ -99,6 +106,8 @@ function ModelRow({
   disabled: boolean;
   onSelect: () => void;
   testId?: string;
+  provider?: string;
+  detail?: ReactNode;
 }) {
   return (
     <button
@@ -107,6 +116,7 @@ function ModelRow({
       data-testid={testId}
       data-model-id={model.id}
       data-model-category={model.category}
+      data-agent-provider={provider}
       aria-pressed={selected}
       className={selected && !disabled ? 'mkr-liquid-pill' : ''}
       style={{
@@ -114,7 +124,7 @@ function ModelRow({
         alignItems: 'center',
         gap: 10,
         width: '100%',
-        height: ROW_HEIGHT,
+        minHeight: detail ? ROW_HEIGHT + 14 : ROW_HEIGHT,
         padding: '0 12px',
         borderRadius: 12,
         border: 'none',
@@ -170,6 +180,16 @@ function ModelRow({
         }}>
           {desc}
         </div>
+        {detail && (
+          <div style={{
+            fontSize: 10,
+            color: 'rgba(103,232,249,0.72)',
+            marginTop: 3,
+            lineHeight: 1.3,
+          }}>
+            {detail}
+          </div>
+        )}
       </div>
 
       <div
@@ -389,7 +409,7 @@ export default function ModelSelector({
   onAgentModelChange,
   onOpenChange,
 }: ModelSelectorProps) {
-  const { t } = useLocale();
+  const { locale, t } = useLocale();
   const popoverId = useId();
   const popoverTitleId = `${popoverId}-title`;
   const [open, setOpen] = useState(false);
@@ -400,6 +420,11 @@ export default function ModelSelector({
   const popoverRef = useRef<HTMLDivElement>(null);
   const scrollBodyRef = useRef<HTMLDivElement>(null);
   const didFocusPopoverRef = useRef(false);
+  const usageRequestedRef = useRef(false);
+  const [subscriptionUsage, setSubscriptionUsage] = useState<{
+    status: 'idle' | 'loading' | 'available' | 'unavailable';
+    weekly?: { remainingPercent: number; resetsAt: number } | null;
+  }>({ status: 'idle' });
   const [popoverPos, setPopoverPos] = useState<{
     bottom: number;
     bodyHeight: number;
@@ -454,6 +479,36 @@ export default function ModelSelector({
       document.removeEventListener('keydown', handleKeyDown);
     };
   }, [open]);
+
+  useEffect(() => {
+    if (!open || activeTab !== 'agent' || usageRequestedRef.current) return;
+    usageRequestedRef.current = true;
+    const controller = new AbortController();
+    setSubscriptionUsage({ status: 'loading' });
+    fetch('/api/agent/subscription-usage', { signal: controller.signal, cache: 'no-store' })
+      .then(async (response) => {
+        const payload = await response.json().catch(() => ({})) as {
+          available?: boolean;
+          weekly?: { remainingPercent: number; resetsAt: number } | null;
+        };
+        if (!payload.available) {
+          setSubscriptionUsage({ status: 'unavailable' });
+          return;
+        }
+        setSubscriptionUsage({
+          status: response.ok ? 'available' : 'unavailable',
+          weekly: payload.weekly,
+        });
+      })
+      .catch((error) => {
+        if ((error as Error).name === 'AbortError') {
+          usageRequestedRef.current = false;
+        } else {
+          setSubscriptionUsage({ status: 'unavailable' });
+        }
+      });
+    return () => controller.abort();
+  }, [activeTab, open]);
 
   const updatePopoverPosition = useCallback(() => {
     if (!open || !triggerRef.current) return;
@@ -549,7 +604,20 @@ export default function ModelSelector({
 
   const imageModels = getImageModels();
   const videoModels = getVideoModels();
-  const agentModels = getAgentModels();
+  const subscriptionVisible = subscriptionUsage.status !== 'unavailable'
+    || isCodexSubscriptionAgentModelPreference(agentModel);
+  const agentModels = getAgentModels().flatMap((model) => {
+    if (!subscriptionVisible || !model.id.startsWith('gpt-5.6-')) return [model];
+    return [
+      model,
+      {
+        ...model,
+        id: getCodexSubscriptionAgentModelPreference(model.id as GPT56AgentModelId),
+        descKey: 'model.codexSubscription.desc',
+        speedLabel: undefined,
+      },
+    ];
+  });
   const models = activeTab === 'image'
     ? imageModels
     : activeTab === 'video'
@@ -566,7 +634,7 @@ export default function ModelSelector({
     : preferredModel;
   const selectedAgentModel = agentModels.find(model => model.id === agentModel);
   const selectedAgentLabel = selectedAgentModel
-    ? t(selectedAgentModel.nameKey as Parameters<typeof t>[0])
+    ? `${t(selectedAgentModel.nameKey as Parameters<typeof t>[0])}${isCodexSubscriptionAgentModelPreference(selectedAgentModel.id) ? ` · ${t('model.codexSubscription.suffix')}` : selectedAgentModel.id.startsWith('gpt-5.6-') ? ` · ${t('model.azureApiBadge')}` : ''}`
     : agentModel;
   const selectedVideoCapability = getVideoModelCapability(videoModel);
   const selectedVideoResolution = videoResolution === 'auto'
@@ -581,6 +649,12 @@ export default function ModelSelector({
         : 'auto';
   const hasExplicitModel = !imageAuto || !videoAuto || !agentAuto;
   const resolutionOptions = selectedVideoCapability.supportedResolutions ?? [];
+  const formatResetTime = (seconds: number) => new Intl.DateTimeFormat(locale, {
+    month: 'short',
+    day: 'numeric',
+    hour: '2-digit',
+    minute: '2-digit',
+  }).format(new Date(seconds * 1_000));
 
   useEffect(() => {
     const el = scrollBodyRef.current;
@@ -775,19 +849,37 @@ export default function ModelSelector({
                     />
                   );
                 }
+                const isCodexSubscription = activeTab === 'agent'
+                  && isCodexSubscriptionAgentModelPreference(model.id);
+                const isAzureAgent = activeTab === 'agent'
+                  && model.id.startsWith('gpt-5.6-')
+                  && !isCodexSubscription;
+                const subscriptionDetail = isCodexSubscription
+                  ? subscriptionUsage.status === 'loading' || subscriptionUsage.status === 'idle'
+                    ? t('model.codexSubscription.checking')
+                    : subscriptionUsage.status === 'available' && subscriptionUsage.weekly
+                      ? `${t('model.codexSubscription.remaining', String(Math.round(subscriptionUsage.weekly.remainingPercent)))} · ${t('model.codexSubscription.resetsAt', formatResetTime(subscriptionUsage.weekly.resetsAt))}`
+                      : t('model.codexSubscription.usageUnavailable')
+                  : undefined;
                 return (
                   <ModelRow
                     key={model.id}
                     model={model}
-                    name={t(model.nameKey as Parameters<typeof t>[0])}
+                    name={`${t(model.nameKey as Parameters<typeof t>[0])}${isCodexSubscription ? ` · ${t('model.codexSubscription.suffix')}` : ''}`}
                     desc={t(model.descKey as Parameters<typeof t>[0])}
-                    badge={model.speedLabelKey ? t(model.speedLabelKey) : model.speedLabel}
+                    badge={isCodexSubscription
+                      ? t('model.codexSubscription.badge')
+                      : isAzureAgent
+                        ? t('model.azureApiBadge')
+                        : model.speedLabelKey ? t(model.speedLabelKey) : model.speedLabel}
                     selected={model.id === selectedId}
                     disabled={false}
                     onSelect={() => activeTab === 'agent'
                       ? handleAgentSelect(model.id)
                       : handleImageSelect(model.id)}
                     testId={activeTab === 'agent' ? `agent-model-${model.id}` : undefined}
+                    provider={isCodexSubscription ? 'codex-subscription' : isAzureAgent ? 'azure-openai' : undefined}
+                    detail={subscriptionDetail}
                   />
                 );
               })}

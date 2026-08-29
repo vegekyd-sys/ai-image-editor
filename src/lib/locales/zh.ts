@@ -650,10 +650,19 @@ const zh = {
   'changelog.googleOmni11.item2': '在 Chat 里引用一段时间线视频，即可让 Makaron 向后续写最多 10 秒，并把保留原片的累计结果保存为新快照。',
   'changelog.externalImages.title': 'Scene 图片可直接用于视频',
   'changelog.externalImages.item1': '从 Scene 导入的图片现在会按图片渲染，Preview 与 MP4 导出不再把它误当成视频。',
-  'model.agentAutoDesc': '跟随后端推荐，默认 GPT-5.6 Terra',
+  'model.agentAutoDesc': '默认 GPT-5.6 Terra，走现有 Azure API',
   'model.agentLabel': 'Agent 模型',
   'model.closeAgentSelector': '关闭模型选择',
   'model.chooseAgent': '选择 Agent 模型',
+  'model.azureApiBadge': 'Azure API',
+  'model.codexSubscription.name': 'GPT-5.6 Terra · Codex 套餐',
+  'model.codexSubscription.suffix': 'Codex 套餐',
+  'model.codexSubscription.badge': '个人订阅',
+  'model.codexSubscription.desc': '使用你的 ChatGPT/Codex 套餐；额度不可用时按现有容错切换 API。',
+  'model.codexSubscription.checking': '正在读取套餐额度…',
+  'model.codexSubscription.remaining': (percent: string) => `周额度剩余 ${percent}%`,
+  'model.codexSubscription.resetsAt': (time: string) => `${time} 重置`,
+  'model.codexSubscription.usageUnavailable': '套餐可用，额度暂时无法读取',
 } as const;
 
 export type TranslationKey = keyof typeof zh;

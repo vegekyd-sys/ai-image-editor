@@ -4,7 +4,13 @@ import { useCallback, useEffect, useId, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { useLocale } from '@/lib/i18n';
 import { getAgentModels } from '@/lib/model-registry';
-import type { AgentModelPreference } from '@/lib/agent-models';
+import {
+  getCodexSubscriptionAgentModelId,
+  getCodexSubscriptionAgentModelPreference,
+  isCodexSubscriptionAgentModelPreference,
+  type AgentModelPreference,
+  type GPT56AgentModelId,
+} from '@/lib/agent-models';
 
 interface AgentModelChipProps {
   value: AgentModelPreference;
@@ -20,6 +26,17 @@ interface PanelPosition {
   mobile: boolean;
 }
 
+interface SubscriptionUsageState {
+  status: 'idle' | 'loading' | 'available' | 'unavailable';
+  planType?: string | null;
+  weekly?: {
+    usedPercent: number;
+    remainingPercent: number;
+    windowDurationMins: number;
+    resetsAt: number;
+  } | null;
+}
+
 function ModelGlyph({ size = 16 }: { size?: number }) {
   return (
     <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
@@ -31,18 +48,62 @@ function ModelGlyph({ size = 16 }: { size?: number }) {
 }
 
 export default function AgentModelChip({ value, onChange, disabled = false }: AgentModelChipProps) {
-  const { t } = useLocale();
+  const { locale, t } = useLocale();
   const [open, setOpen] = useState(false);
   const [position, setPosition] = useState<PanelPosition | null>(null);
+  const [subscriptionUsage, setSubscriptionUsage] = useState<SubscriptionUsageState>({ status: 'idle' });
   const triggerRef = useRef<HTMLButtonElement>(null);
   const panelRef = useRef<HTMLDivElement>(null);
   const scrollRef = useRef<HTMLDivElement>(null);
+  const usageRequestedRef = useRef(false);
   const panelId = useId();
   const models = getAgentModels();
-  const selected = models.find(model => model.id === value);
-  const label = value === 'auto'
-    ? `Auto · ${t('model.gpt56Terra.name')}`
-    : selected ? t(selected.nameKey as Parameters<typeof t>[0]) : value;
+  const selectedModelId = isCodexSubscriptionAgentModelPreference(value)
+    ? getCodexSubscriptionAgentModelId(value)
+    : value;
+  const selected = models.find(model => model.id === selectedModelId);
+  const label = isCodexSubscriptionAgentModelPreference(value) && selected
+    ? `${t(selected.nameKey as Parameters<typeof t>[0])} · ${t('model.codexSubscription.suffix')}`
+    : value === 'auto'
+    ? `Auto · ${t('model.gpt56Terra.name')} · ${t('model.azureApiBadge')}`
+    : selected
+      ? `${t(selected.nameKey as Parameters<typeof t>[0])}${selected.id.startsWith('gpt-5.6-') ? ` · ${t('model.azureApiBadge')}` : ''}`
+      : value;
+
+  useEffect(() => {
+    if (!open || usageRequestedRef.current) return;
+    usageRequestedRef.current = true;
+    const controller = new AbortController();
+    setSubscriptionUsage({ status: 'loading' });
+    fetch('/api/agent/subscription-usage', {
+      signal: controller.signal,
+      cache: 'no-store',
+    })
+      .then(async (response) => {
+        const payload = await response.json().catch(() => ({})) as {
+          available?: boolean;
+          planType?: string | null;
+          weekly?: SubscriptionUsageState['weekly'];
+        };
+        if (!payload.available) {
+          setSubscriptionUsage({ status: 'unavailable' });
+          return;
+        }
+        setSubscriptionUsage({
+          status: response.ok ? 'available' : 'unavailable',
+          planType: payload.planType,
+          weekly: payload.weekly,
+        });
+      })
+      .catch((error) => {
+        if ((error as Error).name !== 'AbortError') {
+          setSubscriptionUsage({ status: 'unavailable' });
+        } else {
+          usageRequestedRef.current = false;
+        }
+      });
+    return () => controller.abort();
+  }, [open]);
 
   const updatePosition = useCallback(() => {
     const trigger = triggerRef.current;
@@ -112,18 +173,47 @@ export default function AgentModelChip({ value, onChange, disabled = false }: Ag
     window.requestAnimationFrame(() => triggerRef.current?.focus());
   };
 
-  const options = [
-    {
-      id: 'auto',
-      name: `Auto · ${t('model.gpt56Terra.name')}`,
-      desc: t('model.agentAutoDesc'),
-    },
-    ...models.map(model => ({
-      id: model.id,
+  const standardOptions = models.flatMap((model) => {
+    const standard = {
+      id: model.id as AgentModelPreference,
       name: t(model.nameKey as Parameters<typeof t>[0]),
       desc: t(model.descKey as Parameters<typeof t>[0]),
-    })),
+      badge: model.id.startsWith('gpt-5.6-') ? t('model.azureApiBadge') : undefined,
+    };
+    if (!model.id.startsWith('gpt-5.6-')) return [standard];
+    const subscriptionId = getCodexSubscriptionAgentModelPreference(
+      model.id as GPT56AgentModelId,
+    );
+    return [
+      standard,
+      {
+        id: subscriptionId,
+        name: `${t(model.nameKey as Parameters<typeof t>[0])} · ${t('model.codexSubscription.suffix')}`,
+        desc: t('model.codexSubscription.desc'),
+        badge: t('model.codexSubscription.badge'),
+      },
+    ];
+  });
+  const subscriptionVisible = subscriptionUsage.status !== 'unavailable'
+    || isCodexSubscriptionAgentModelPreference(value);
+  const options = [
+    {
+      id: 'auto' as AgentModelPreference,
+      name: `Auto · ${t('model.gpt56Terra.name')}`,
+      desc: t('model.agentAutoDesc'),
+      badge: t('model.azureApiBadge'),
+    },
+    ...standardOptions.filter(option => (
+      subscriptionVisible || !isCodexSubscriptionAgentModelPreference(option.id)
+    )),
   ];
+
+  const formatResetTime = (seconds: number) => new Intl.DateTimeFormat(locale, {
+    month: 'short',
+    day: 'numeric',
+    hour: '2-digit',
+    minute: '2-digit',
+  }).format(new Date(seconds * 1_000));
 
   return (
     <>
@@ -181,6 +271,7 @@ export default function AgentModelChip({ value, onChange, disabled = false }: Ag
             >
               {options.map(model => {
                 const active = value === model.id;
+                const isCodexSubscription = isCodexSubscriptionAgentModelPreference(model.id);
                 return (
                   <button
                     key={model.id}
@@ -190,10 +281,23 @@ export default function AgentModelChip({ value, onChange, disabled = false }: Ag
                     onClick={() => choose(model.id as AgentModelPreference)}
                     className="mkr-create-model-option"
                     data-active={active}
+                    data-agent-provider={isCodexSubscription ? 'codex-subscription' : model.id.startsWith('gpt-5.6-') || model.id === 'auto' ? 'azure-openai' : undefined}
                   >
                     <span className="mkr-create-model-copy">
-                      <span className="mkr-create-model-name">{model.name}</span>
+                      <span className="mkr-create-model-name">
+                        {model.name}
+                        {model.badge && <span className="mkr-create-model-badge">{model.badge}</span>}
+                      </span>
                       <span className="mkr-create-model-desc">{model.desc}</span>
+                      {isCodexSubscription && (
+                        <span className="mkr-create-model-usage" data-testid="codex-subscription-usage">
+                          {subscriptionUsage.status === 'loading' || subscriptionUsage.status === 'idle'
+                            ? t('model.codexSubscription.checking')
+                            : subscriptionUsage.status === 'available' && subscriptionUsage.weekly
+                              ? `${t('model.codexSubscription.remaining', String(Math.round(subscriptionUsage.weekly.remainingPercent)))} · ${t('model.codexSubscription.resetsAt', formatResetTime(subscriptionUsage.weekly.resetsAt))}`
+                              : t('model.codexSubscription.usageUnavailable')}
+                        </span>
+                      )}
                     </span>
                     <span className="mkr-create-model-check" aria-hidden="true" />
                   </button>

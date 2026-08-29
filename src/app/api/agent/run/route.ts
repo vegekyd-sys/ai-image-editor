@@ -10,7 +10,7 @@ import { translate } from '@/lib/locales';
 import { resolvePersistedRunStatus } from '@/lib/agent-terminal';
 import {
   normalizeRequestedAgentModelPreference,
-  resolveAgentModelSpec,
+  resolveAgentModelSpecForUser,
 } from '@/lib/agent-models';
 import {
   DEFAULT_ATTEMPT_BUDGET_MS,
@@ -81,7 +81,11 @@ export async function POST(req: NextRequest) {
     if (requestedAgentModel === null) {
       return NextResponse.json({ error: 'Unsupported agentModel' }, { status: 400 });
     }
-    const resolvedAgentModel = resolveAgentModelSpec(requestedAgentModel, process.env.AGENT_MODEL);
+    const resolvedAgentModel = resolveAgentModelSpecForUser(
+      requestedAgentModel,
+      process.env.AGENT_MODEL,
+      userId,
+    );
 
     // Pre-flight credit check
     const creditCheck = await requireCredits(userId, 5);
@@ -456,7 +460,7 @@ export async function POST(req: NextRequest) {
             const namePrompt = `Based on this user request, give a concise project name (2-4 words, no quotes): "${nameSource}". Output only the name.`;
             let projectName = '';
             for await (const ev of runMakaronAgent(namePrompt, '', projectId, {
-              tipReactionOnly: true, locale, agentModel: requestedAgentModel,
+              tipReactionOnly: true, locale, agentModel: requestedAgentModel, userId,
             })) {
               if (ev.type === 'content' && ev.text) projectName += ev.text;
             }

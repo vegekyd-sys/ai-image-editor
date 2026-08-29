@@ -7,7 +7,11 @@ import type { AgentPerf } from './agent-perf';
 import { createTextDeltaState, normalizeTextDelta } from './agent-text-delta';
 import { normalizeAgentErrorMessage } from './agent-error';
 import { compositionPartsPrefix } from './composition-parts';
-import type { AgentModelPreference, GPT56AgentProvider } from './agent-models';
+import {
+  resolveCodexSubscriptionFallbackProvider,
+  type AgentModelPreference,
+  type GPT56AgentProvider,
+} from './agent-models';
 import {
   createAgentModelRuntime,
   getAgentProviderOptions,
@@ -18,7 +22,11 @@ import {
   describeModelStreamError,
   shouldStopAfterTerminalToolFailure,
 } from './agent-terminal';
-import type { DurableExecutionRef } from './agent-execution';
+import {
+  isCodexSubscriptionTerminalFailure,
+  isRetryableProviderOutage,
+  type DurableExecutionRef,
+} from './agent-execution';
 import { buildDurableCompositionGuidance } from './studio-composition-guidance';
 import {
   getReplyLanguageInstruction,
@@ -284,6 +292,7 @@ export async function* runMakaronAgent(
     options?.agentModel,
     projectId,
     options?.agentProvider,
+    options?.userId,
   );
   const ctx: AgentContext = {
     currentImage,
@@ -459,6 +468,7 @@ export async function* runMakaronAgent(
   }
 
   let firstContentAt = 0;
+  let firstVisibleTextAt = 0;
 
   const msgs: ModelMessage[] = [
     ...history,
@@ -874,6 +884,12 @@ export async function* runMakaronAgent(
           continue;
         }
         if (text) {
+          if (!firstVisibleTextAt) {
+            firstVisibleTextAt = Date.now();
+            const firstVisibleTextMs = firstVisibleTextAt - agentStartTime;
+            console.log(`[agent-first-text] ${firstVisibleTextMs}ms`);
+            perf?.mark('model_first_visible_text', { firstVisibleTextMs });
+          }
           finalStepTextChars += text.trim().length;
           yield { type: 'content', text };
         }
@@ -1325,6 +1341,46 @@ export async function* runMakaronAgent(
       }
 
       if (assessment.ok) break;
+
+      const subscriptionFailureDetail = streamError
+        ? describeModelStreamError(streamError)
+        : assessment.detail;
+      const canFallbackFromSubscription = runtime.spec.provider === 'codex-subscription'
+        && !options?.execution
+        && !firstContentAt
+        && !attemptDeliveredArtifact
+        && attemptCommittedTools.size === 0
+        && (
+          isCodexSubscriptionTerminalFailure(subscriptionFailureDetail)
+          || isRetryableProviderOutage(subscriptionFailureDetail)
+        );
+      if (canFallbackFromSubscription) {
+        const fallbackProvider = resolveCodexSubscriptionFallbackProvider();
+        const hasFallbackCredential = fallbackProvider === 'azure-openai'
+          ? Boolean(process.env.AZURE_OPENAI_API_KEY?.trim())
+          : Boolean(process.env.OPENROUTER_API_KEY?.trim());
+        if (hasFallbackCredential) {
+          try {
+            const fallbackRuntime = createAgentModelRuntime(
+              runtime.spec.id,
+              projectId,
+              fallbackProvider,
+              options?.userId,
+            );
+            Object.assign(runtime, fallbackRuntime);
+            recoveryAttempt++;
+            yield { type: 'status', text: translate(responseLocale, 'agent.status.resuming') };
+            console.warn(
+              `[agent] Codex subscription unavailable before output; retrying ${runtime.spec.id} through ${fallbackProvider}`,
+            );
+            continue;
+          } catch (fallbackError) {
+            console.warn(
+              `[agent] Codex subscription API fallback unavailable: ${describeModelStreamError(fallbackError)}`,
+            );
+          }
+        }
+      }
 
       let attemptSteps: any[] = [];
       try { attemptSteps = await result.steps; } catch { /* stream may have failed before a complete step */ }

@@ -650,10 +650,19 @@ const en = {
   'changelog.googleOmni11.item2': 'Reference one timeline video in Chat and ask Makaron to continue it by up to 10 seconds while preserving the original clip as a new cumulative snapshot.',
   'changelog.externalImages.title': 'Use Scene Images Directly in Video',
   'changelog.externalImages.item1': 'Scene images now render as images in Preview and MP4 export instead of being mistaken for videos.',
-  'model.agentAutoDesc': 'Follow the recommended default, currently GPT-5.6 Terra',
+  'model.agentAutoDesc': 'Use the default GPT-5.6 Terra through the existing Azure API',
   'model.agentLabel': 'Agent model',
   'model.closeAgentSelector': 'Close model selector',
   'model.chooseAgent': 'Choose agent model',
+  'model.azureApiBadge': 'Azure API',
+  'model.codexSubscription.name': 'GPT-5.6 Terra · Codex plan',
+  'model.codexSubscription.suffix': 'Codex plan',
+  'model.codexSubscription.badge': 'Personal plan',
+  'model.codexSubscription.desc': 'Use your ChatGPT/Codex plan, with the existing API fallback when unavailable.',
+  'model.codexSubscription.checking': 'Checking plan usage…',
+  'model.codexSubscription.remaining': (percent: string) => `${percent}% weekly allowance remaining`,
+  'model.codexSubscription.resetsAt': (time: string) => `Resets ${time}`,
+  'model.codexSubscription.usageUnavailable': 'Plan available; usage is temporarily unavailable',
 } as const;
 
 export default en;

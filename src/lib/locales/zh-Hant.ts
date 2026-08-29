@@ -626,10 +626,19 @@ const zhHant = {
   'changelog.googleOmni11.item2': '在 Chat 裡引用一段時間軸影片，即可讓 Makaron 向後延伸最多 10 秒，並把保留原片的累積結果儲存為新快照。',
   'changelog.externalImages.title': 'Scene 圖片可直接用於影片',
   'changelog.externalImages.item1': '從 Scene 匯入的圖片現在會按圖片渲染，Preview 與 MP4 匯出不再把它誤當成影片。',
-  'model.agentAutoDesc': '跟隨後端建議，目前預設為 GPT-5.6 Terra',
+  'model.agentAutoDesc': '預設 GPT-5.6 Terra，使用現有 Azure API',
   'model.agentLabel': 'Agent 模型',
   'model.closeAgentSelector': '關閉模型選擇',
   'model.chooseAgent': '選擇 Agent 模型',
+  'model.azureApiBadge': 'Azure API',
+  'model.codexSubscription.name': 'GPT-5.6 Terra · Codex 套餐',
+  'model.codexSubscription.suffix': 'Codex 套餐',
+  'model.codexSubscription.badge': '個人訂閱',
+  'model.codexSubscription.desc': '使用你的 ChatGPT/Codex 套餐；額度不可用時依現有容錯切換 API。',
+  'model.codexSubscription.checking': '正在讀取套餐額度…',
+  'model.codexSubscription.remaining': (percent: string) => `週額度剩餘 ${percent}%`,
+  'model.codexSubscription.resetsAt': (time: string) => `${time} 重置`,
+  'model.codexSubscription.usageUnavailable': '套餐可用，暫時無法讀取額度',
 } satisfies TranslationDictionary;
 
 export default zhHant;

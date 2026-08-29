@@ -121,7 +121,11 @@ GOOGLE_API_KEY
 AI_PROVIDER
 IMAGE_MODEL
 OPENROUTER_API_KEY
-GPT56_AGENT_PROVIDER        # azure-openai (default) or openrouter backup
+GPT56_AGENT_PROVIDER        # azure-openai (default), openrouter, or owner-only codex-subscription
+CODEX_SUBSCRIPTION_OWNER_USER_ID     # required for codex-subscription
+CODEX_SUBSCRIPTION_FALLBACK_PROVIDER # azure-openai (default) or openrouter
+CODEX_SUBSCRIPTION_RELAY_URL          # optional HTTPS relay for Vercel/private split runtime
+CODEX_SUBSCRIPTION_RELAY_SECRET       # shared HMAC secret; never a Codex OAuth token
 OPENAI_IMAGE_PROVIDER       # azure (default), openrouter backup, or piapi
 DEEPSEEK_API_KEY
 AGENT_MODEL
@@ -130,6 +134,9 @@ SUNOAPI_KEY
 STRIPE_SECRET_KEY
 STRIPE_WEBHOOK_SECRET
 ```
+
+The personal Codex subscription experiment is private-runtime only; see
+[`docs/experiments/codex-subscription-provider.md`](docs/experiments/codex-subscription-provider.md).
 
 Do not commit secrets. Vercel environment values should be written with `printf`, not `echo`, so hidden trailing newlines do not break API requests:
 

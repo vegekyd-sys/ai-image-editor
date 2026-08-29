@@ -1,10 +1,14 @@
 import { describe, expect, it } from 'vitest';
 import {
   AGENT_MODEL_IDS,
+  CODEX_SUBSCRIPTION_AGENT_MODEL_PREFERENCES,
   normalizeAgentModelPreference,
   normalizeRequestedAgentModelPreference,
+  resolveCodexSubscriptionFallbackProvider,
   resolveGPT56AgentProvider,
+  resolveGPT56AgentProviderForUser,
   resolveAgentModelSpec,
+  resolveAgentModelSpecForUser,
 } from '@/lib/agent-models';
 import {
   createAgentModelRuntime,
@@ -75,6 +79,117 @@ describe('agent model catalog', () => {
         billingModelId: `openai/${id}`,
         supportsImageInput: true,
       });
+    }
+  });
+
+  it('keeps the same product model ids when Codex subscription is selected', () => {
+    expect(resolveGPT56AgentProvider('codex')).toBe('codex-subscription');
+    expect(resolveGPT56AgentProvider('chatgpt')).toBe('codex-subscription');
+    expect(resolveCodexSubscriptionFallbackProvider('openrouter')).toBe('openrouter');
+    expect(resolveCodexSubscriptionFallbackProvider('codex-subscription')).toBe('azure-openai');
+
+    for (const id of ['gpt-5.6-terra', 'gpt-5.6-sol', 'gpt-5.6-luna'] as const) {
+      expect(resolveAgentModelSpec(id, undefined, 'codex-subscription')).toMatchObject({
+        id,
+        provider: 'codex-subscription',
+        providerModelId: id,
+        billingModelId: id,
+      });
+    }
+  });
+
+  it('keeps GPT-5.6 on Azure by default and uses Codex only for explicit plan options', () => {
+    const previousOwner = process.env.CODEX_SUBSCRIPTION_OWNER_USER_ID;
+    process.env.CODEX_SUBSCRIPTION_OWNER_USER_ID = 'owner-id';
+    try {
+      expect(resolveAgentModelSpecForUser(
+        'gpt-5.6-terra',
+        undefined,
+        'owner-id',
+        'azure-openai',
+      )).toMatchObject({
+        id: 'gpt-5.6-terra',
+        provider: 'azure-openai',
+      });
+      for (const [preference, modelId] of [
+        [CODEX_SUBSCRIPTION_AGENT_MODEL_PREFERENCES[0], 'gpt-5.6-terra'],
+        [CODEX_SUBSCRIPTION_AGENT_MODEL_PREFERENCES[1], 'gpt-5.6-sol'],
+        [CODEX_SUBSCRIPTION_AGENT_MODEL_PREFERENCES[2], 'gpt-5.6-luna'],
+      ] as const) {
+        expect(resolveAgentModelSpecForUser(
+          preference,
+          undefined,
+          'owner-id',
+          'azure-openai',
+        )).toMatchObject({
+          id: modelId,
+          provider: 'codex-subscription',
+        });
+        expect(normalizeAgentModelPreference(preference)).toBe(preference);
+      }
+    } finally {
+      if (previousOwner === undefined) delete process.env.CODEX_SUBSCRIPTION_OWNER_USER_ID;
+      else process.env.CODEX_SUBSCRIPTION_OWNER_USER_ID = previousOwner;
+    }
+  });
+
+  it('limits the personal Codex subscription to its configured owner', () => {
+    expect(resolveGPT56AgentProviderForUser({
+      configuredProvider: 'codex-subscription',
+      userId: 'owner-id',
+      ownerUserId: 'owner-id',
+    })).toBe('codex-subscription');
+    expect(resolveGPT56AgentProviderForUser({
+      configuredProvider: 'codex-subscription',
+      userId: 'someone-else',
+      ownerUserId: 'owner-id',
+      fallbackProvider: 'openrouter',
+    })).toBe('openrouter');
+    expect(() => resolveGPT56AgentProviderForUser({
+      configuredProvider: 'codex-subscription',
+      userId: 'owner-id',
+      ownerUserId: '',
+    })).toThrow('CODEX_SUBSCRIPTION_OWNER_USER_ID is required');
+  });
+
+  it('creates a Codex subscription Responses runtime without changing the Agent model', () => {
+    const previousOwner = process.env.CODEX_SUBSCRIPTION_OWNER_USER_ID;
+    const previousEffort = process.env.CODEX_SUBSCRIPTION_REASONING_EFFORT;
+    process.env.CODEX_SUBSCRIPTION_OWNER_USER_ID = 'owner-id';
+    process.env.CODEX_SUBSCRIPTION_REASONING_EFFORT = 'high';
+    try {
+      const runtime = createAgentModelRuntime(
+        'gpt-5.6-terra',
+        'private-project',
+        'codex-subscription',
+        'owner-id',
+      );
+      expect(runtime.spec).toMatchObject({
+        id: 'gpt-5.6-terra',
+        provider: 'codex-subscription',
+        providerModelId: 'gpt-5.6-terra',
+      });
+      expect(typeof runtime.model === 'string' ? runtime.model : runtime.model.provider)
+        .toBe('codex-subscription.responses');
+      expect(getAgentProviderOptions(runtime)).toEqual({
+        openai: {
+          parallelToolCalls: false,
+          store: false,
+          promptCacheKey: createAzureAgentPromptCacheKey('gpt-5.6-terra', 'private-project'),
+          reasoningEffort: 'high',
+        },
+      });
+      expect(resolveAgentModelSpecForUser(
+        'gpt-5.6-terra',
+        undefined,
+        'someone-else',
+        'codex-subscription',
+      ).provider).toBe('azure-openai');
+    } finally {
+      if (previousOwner === undefined) delete process.env.CODEX_SUBSCRIPTION_OWNER_USER_ID;
+      else process.env.CODEX_SUBSCRIPTION_OWNER_USER_ID = previousOwner;
+      if (previousEffort === undefined) delete process.env.CODEX_SUBSCRIPTION_REASONING_EFFORT;
+      else process.env.CODEX_SUBSCRIPTION_REASONING_EFFORT = previousEffort;
     }
   });
 

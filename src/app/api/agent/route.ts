@@ -10,7 +10,7 @@ import { resolvePersistedRunStatus } from '@/lib/agent-terminal';
 import { translate } from '@/lib/locales';
 import {
   normalizeRequestedAgentModelPreference,
-  resolveAgentModelSpec,
+  resolveAgentModelSpecForUser,
 } from '@/lib/agent-models';
 import { getAgentContextPolicy } from '@/lib/agent-execution';
 import { verifySkillLaunchContext } from '@/lib/skill-launch-context';
@@ -66,7 +66,11 @@ export async function POST(req: NextRequest) {
         { status: 400, headers: { 'Content-Type': 'application/json' } },
       );
     }
-    const resolvedAgentModel = resolveAgentModelSpec(requestedAgentModel, process.env.AGENT_MODEL);
+    const resolvedAgentModel = resolveAgentModelSpecForUser(
+      requestedAgentModel,
+      process.env.AGENT_MODEL,
+      userId,
+    );
 
     if (!projectId || (!tipsTeaser && !nameProject && !previewsReady && !uploadedVideoCount && !image && !prompt)) {
       return new Response(
@@ -221,7 +225,7 @@ export async function POST(req: NextRequest) {
               .join('\n');
             const teaserPrompt = `Here are edit suggestions for a photo:\n${tipsSummary}\n\nPick the most interesting one. Write a single teaser sentence (under 15 words) starting with "Try...". Output only that sentence.`;
             await iterateAgent(runMakaronAgent(teaserPrompt, '', projectId, {
-              tipReactionOnly: true, locale, agentModel: requestedAgentModel,
+              tipReactionOnly: true, locale, agentModel: requestedAgentModel, userId,
             }), controller);
             return;
           }
@@ -231,7 +235,7 @@ export async function POST(req: NextRequest) {
             const desc = (description as string) || '';
             const namePrompt = `Based on this photo description, give a concise project name (2-4 words): ${desc}. Output only the name, no punctuation or explanation.`;
             await iterateAgent(runMakaronAgent(namePrompt, '', projectId, {
-              tipReactionOnly: true, locale, agentModel: requestedAgentModel,
+              tipReactionOnly: true, locale, agentModel: requestedAgentModel, userId,
             }), controller);
             return;
           }
@@ -249,7 +253,7 @@ export async function POST(req: NextRequest) {
               .join('\n');
             const readyPrompt = `All ${tips.length} edit suggestion previews are ready:\n${tipsSummary}\n\nIn 1-2 sentences, tell the user previews are ready and they can scroll TipsBar. Comment on one interesting one. Friendly tone, don't start with "I".`;
             await iterateAgent(runMakaronAgent(readyPrompt, '', projectId, {
-              tipReactionOnly: true, locale, agentModel: requestedAgentModel,
+              tipReactionOnly: true, locale, agentModel: requestedAgentModel, userId,
             }), controller);
             return;
           }
@@ -274,7 +278,7 @@ export async function POST(req: NextRequest) {
             const tip = committedTip as { emoji: string; label: string; desc: string; category: string };
             const reactionPrompt = `User just committed an edit via TipsBar:\n${tip.emoji} ${tip.label} (${tip.category}): ${tip.desc}\n\nReact naturally in 1 sentence, like a friend. Then in 1 short sentence, inspire what direction they could explore next with this photo (e.g. mood, lighting, story element) — but do NOT recommend specific tips. Don't start with "I".`;
             await iterateAgent(runMakaronAgent(reactionPrompt, image, projectId, {
-              tipReactionOnly: true, locale, agentModel: requestedAgentModel,
+              tipReactionOnly: true, locale, agentModel: requestedAgentModel, userId,
             }), controller);
             return;
           }

@@ -1,0 +1,34 @@
+[Unit]
+Description=Makaron owner-only Codex subscription relay
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=makaron-codex
+Group=makaron-codex
+WorkingDirectory=/srv/vlab/makaron-codex-relay/app
+EnvironmentFile=/srv/vlab/makaron-codex-relay/state/relay.env
+Environment=NODE_ENV=production
+Environment=HOST=127.0.0.1
+Environment=PORT=25984
+Environment=CODEX_HOME=/srv/vlab/makaron-codex-relay/state/codex-home
+Environment=CODEX_CLI_PATH=/srv/vlab/makaron-codex-relay/app/node_modules/.bin/codex
+ExecStart=/usr/local/bin/node /srv/vlab/makaron-codex-relay/app/server.mjs
+Restart=always
+RestartSec=5
+TimeoutStopSec=30
+KillMode=control-group
+UMask=0077
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=true
+ReadWritePaths=/srv/vlab/makaron-codex-relay/state
+RestrictSUIDSGID=true
+RestrictRealtime=true
+MemoryMax=1G
+TasksMax=256
+
+[Install]
+WantedBy=multi-user.target
