@@ -1617,7 +1617,6 @@ Hard constraints:
                   if (
                     videoModel === 'google-omni'
                     && video_operation === 'extend'
-                    && meta?.model === 'google-omni'
                     && sourceTaskId.startsWith('google-omni-')
                     && !sourceTaskId.startsWith('google-omni-job-')
                   ) {
@@ -1667,6 +1666,9 @@ Hard constraints:
             && googleOmniPreviousInteractionId
             && allVideoUrls.length === 1
           );
+          if (isGoogleOmniStatefulExtend) {
+            console.log(`[generate_animation] using Google Omni stateful extension lineage from ${sourceVideoSnapshotIds[0] || 'timeline video'}`);
+          }
           if (isGoogleOmniStatefulExtend && (referenceVideoDuration ?? 0) + (duration ?? 10) > 40) {
             return {
               success: false as const,
