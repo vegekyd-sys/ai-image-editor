@@ -10,7 +10,7 @@ export interface CreateVideoInput {
   aspectRatio?: VideoAspectRatioInput;
   videoModel?: string;       // video provider/model id, e.g. 'kling' or 'seedance'
   videoResolution?: VideoResolutionInput;
-  // Video editing (Kling only)
+  // Video reference / edit / extend
   videoUrl?: string;                    // Reference video URL (explicit from agent)
   videoReferType?: 'base' | 'feature';  // default: 'base'
   videoUrls?: string[];                 // Auto-detected video references from timeline
@@ -21,7 +21,7 @@ export interface CreateVideoInput {
   // Motion Control (Kling only)
   motionControl?: boolean;              // Use /v1/videos/motion-control endpoint
   characterOrientation?: 'image' | 'video';  // default: 'image'
-  videoOperation?: VideoGenerationOperation; // Seedance 2.5: generate/edit/extend
+  videoOperation?: VideoGenerationOperation; // Typed edit/extend for providers that expose it
   videoExtendDirection?: 'forward' | 'backward';
   generateAudio?: boolean;
   contentFilter?: boolean;
@@ -177,10 +177,16 @@ export async function createVideo(input: CreateVideoInput): Promise<CreateVideoR
   });
 
   if (modelError) return { success: false, message: modelError };
-  if (provider === 'seedance-2.5' && (videoOperation === 'edit' || videoOperation === 'extend') && !hasVideoReference) {
+  if ((videoOperation === 'edit' || videoOperation === 'extend') && !hasVideoReference) {
     return {
       success: false,
-      message: `SeeDance 2.5 ${videoOperation} requires at least one video reference.`,
+      message: `${capability.label} ${videoOperation} requires at least one video reference.`,
+    };
+  }
+  if (provider === 'google-omni' && videoOperation === 'extend' && videoExtendDirection === 'backward') {
+    return {
+      success: false,
+      message: 'Google Omni can only extend forward from the end of the source video.',
     };
   }
   if (hasAudioReference && route.provider !== 'seedance' && route.provider !== 'minimax' && route.provider !== 'fal-sync') {
@@ -296,6 +302,7 @@ export async function createVideo(input: CreateVideoInput): Promise<CreateVideoR
       requestedDuration: duration,
       referenceVideoDuration,
       model: provider,
+      operation: videoOperation,
     }) ?? parseTotalDuration(finalPrompt);
 
     const filteredModelError = validateVideoModelRequest({
@@ -443,6 +450,7 @@ export async function createVideo(input: CreateVideoInput): Promise<CreateVideoR
         duration: resolvedDuration != null ? resolvedDuration : undefined,
         aspectRatio: providerAspectRatio,
         resolution: route.resolution as '360p' | '720p' | '1080p' | '4k',
+        operation: videoOperation,
         videoUrl,
         videoUrls,
       });

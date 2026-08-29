@@ -258,6 +258,8 @@ describe('agent prompt policy guards', () => {
     expect(agent).toContain('dimensions 300-6000px')
     expect(agent).toContain('409,600-2,086,876 frame pixels')
     expect(agent).toContain('Kling accepts one .mp4/.mov, <=200MB, <=2K')
+    expect(agent).toContain('Google Omni continuation uses the same Refs mental model as Seedance')
+    expect(agent).toContain('set `video_operation: "extend"`')
     expect(agent).toContain('keep the output duration aligned with the combined source duration shown in Media Index')
     expect(agent).toContain('Clamp to the selected SeeDance range: 4-15s for 2.0, 4-30s for 2.5')
 
@@ -282,6 +284,8 @@ describe('agent prompt policy guards', () => {
     expect(animate).toContain('For anything beyond the selected model limit, use the long-video-director workflow')
     expect(animate).toContain('frame pixels width*height between 409,600 and 2,086,876')
     expect(animate).toContain('Kling docs do not state a video resolution lower bound')
+    expect(animate).toContain('**Gemini Omni continuation**: use the same reference flow')
+    expect(animate).toContain('set `video_operation: "extend"`')
     expect(animate).toContain('Never write or submit a SeeDance generated video duration below 4s')
 
     expect(agentTs).toContain('SeeDance/SeeDance Mini and MiniMax H3 are 4-15 seconds')
@@ -302,6 +306,8 @@ describe('agent prompt policy guards', () => {
     expect(agentTs).toContain('combined source duration must be at most 15 seconds for SeeDance 2.0 or 30 seconds for SeeDance 2.5')
     expect(agentTs).toContain('frame pixels width*height between 409,600 and 2,086,876')
     expect(agentTs).toContain('Kling video references must be <=200MB and <=2K; no explicit lower resolution is documented')
+    expect(agentTs).toContain('To CONTINUE a video with Gemini Omni or Seedance 2.5')
+    expect(agentTs).toContain('Google Omni edit/extend accepts one source video up to 10 seconds')
     expect(agentTs).toContain("clamped to 4-15s for SeeDance 2.0 or 4-30s for SeeDance 2.5")
     expect(agentTs).toContain("const isSeedance25Edit = videoModel === 'seedance-2.5' && video_operation === 'edit'")
     expect(agentTs).toContain('outputDuration: isSeedance25Edit ? -1 : duration')

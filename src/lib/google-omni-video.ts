@@ -1,5 +1,5 @@
 import { transcodeVideoBufferToSdrMp4 } from '@/lib/provider-video-reference'
-import type { VideoResolution } from '@/lib/video-model-capabilities'
+import type { VideoGenerationOperation, VideoResolution } from '@/lib/video-model-capabilities'
 
 export const GOOGLE_OMNI_MODEL = 'gemini-omni-1.1-flash'
 const GOOGLE_OMNI_ENDPOINT = 'https://generativelanguage.googleapis.com/v1beta/interactions'
@@ -13,6 +13,7 @@ export interface GoogleOmniVideoTaskInput {
   duration?: number
   aspectRatio?: string
   resolution?: Extract<VideoResolution, '360p' | '720p' | '1080p' | '4k'>
+  operation?: VideoGenerationOperation
   videoUrl?: string
   videoUrls?: string[]
 }
@@ -135,7 +136,13 @@ function findOutputVideo(obj: unknown): { uri?: string; data?: string; mime_type
   return null
 }
 
-function toOmniPrompt(prompt: string, imageCount: number, hasVideoReference: boolean, duration?: number): string {
+function toOmniPrompt(
+  prompt: string,
+  imageCount: number,
+  hasVideoReference: boolean,
+  operation: VideoGenerationOperation,
+  duration?: number,
+): string {
   const useFirstFrame = imageCount === 1 && !hasVideoReference
   const normalized = prompt.replace(/<<<(?:image|media)_(\d+)>>>/g, (_, n: string) => {
     const index = Number(n)
@@ -146,7 +153,9 @@ function toOmniPrompt(prompt: string, imageCount: number, hasVideoReference: boo
 
   if (hasVideoReference) {
     declarations.push('[# Sources <VIDEO_0>@Video1]')
-    guidance.push('Use Video1 as the primary source video to edit.')
+    guidance.push(operation === 'extend'
+      ? 'Continue Video1 forward from its tail. Preserve its visual style, subject identity, motion, camera direction, lighting, and audio continuity unless the prompt explicitly changes them.'
+      : 'Use Video1 as the primary source video to edit.')
   } else if (useFirstFrame) {
     declarations.push('[# Sources <FIRST_FRAME>@Image1]')
     guidance.push('Use Image1 as the starting frame.')
@@ -184,15 +193,21 @@ export async function createGoogleOmniVideoTask(input: GoogleOmniVideoTaskInput)
   }
 
   const videoRef = videoRefs[0]
-  const prompt = toOmniPrompt(input.prompt, imageParts.length, Boolean(videoRef), input.duration)
-  const task = videoRef ? 'edit' : imageParts.length > 1 ? 'reference_to_video' : imageParts.length > 0 ? 'image_to_video' : 'text_to_video'
+  const operation = input.operation || 'generate'
+  if ((operation === 'edit' || operation === 'extend') && !videoRef) {
+    throw new Error(`Google Omni ${operation} requires one source video.`)
+  }
+  const prompt = toOmniPrompt(input.prompt, imageParts.length, Boolean(videoRef), operation, input.duration)
+  const task = videoRef
+    ? operation === 'extend' ? 'extend' : 'edit'
+    : imageParts.length > 1 ? 'reference_to_video' : imageParts.length > 0 ? 'image_to_video' : 'text_to_video'
   const responseFormat: Record<string, unknown> = {
     type: 'video',
     delivery: 'uri',
     resolution: input.resolution || '720p',
   }
   const aspectRatio = normalizeAspectRatio(input.aspectRatio)
-  if (aspectRatio && task !== 'edit') responseFormat.aspect_ratio = aspectRatio
+  if (aspectRatio && task !== 'edit' && task !== 'extend') responseFormat.aspect_ratio = aspectRatio
 
   let requestInput: unknown
   if (videoRef) {
@@ -202,7 +217,7 @@ export async function createGoogleOmniVideoTask(input: GoogleOmniVideoTaskInput)
       content: [
         { type: 'video', mime_type: video.mimeType, data: video.data },
         ...imageParts,
-        { type: 'text', text: `${prompt}\n\nKeep everything else the same unless explicitly requested.` },
+        { type: 'text', text: task === 'extend' ? prompt : `${prompt}\n\nKeep everything else the same unless explicitly requested.` },
       ],
     }]
   } else {

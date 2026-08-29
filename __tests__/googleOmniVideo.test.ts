@@ -45,4 +45,44 @@ describe('google omni video provider', () => {
     expect(result).toMatchObject({ status: 'completed', taskId: 'google-omni-v1_test' })
     expect(fetchMock).toHaveBeenCalledTimes(1)
   })
+
+  it('extends one referenced video through the same reference-media input flow', async () => {
+    vi.stubEnv('GOOGLE_API_KEY', 'test-key')
+    let providerBody: Record<string, any> | undefined
+    const fetchMock = vi.fn(async (url: string | URL | Request, init?: RequestInit) => {
+      if (String(url) === 'https://example.com/source.mp4') {
+        return new Response(Uint8Array.from([0, 1, 2, 3]), {
+          status: 200,
+          headers: { 'content-type': 'video/mp4', 'content-length': '4' },
+        })
+      }
+      providerBody = JSON.parse(String(init?.body))
+      return new Response(JSON.stringify({
+        id: 'v1_extend',
+        status: 'completed',
+        output_video: {
+          type: 'video',
+          mime_type: 'video/mp4',
+          uri: 'https://generativelanguage.googleapis.com/v1beta/files/extend:download',
+        },
+      }), { status: 200, headers: { 'content-type': 'application/json' } })
+    })
+    vi.stubGlobal('fetch', fetchMock)
+
+    const result = await createGoogleOmniVideoTask({
+      prompt: 'The camera continues pulling back and the music reaches its chorus.',
+      images: [],
+      duration: 10,
+      resolution: '720p',
+      operation: 'extend',
+      videoUrl: 'https://example.com/source.mp4',
+    })
+
+    expect(result).toMatchObject({ status: 'completed', taskId: 'google-omni-v1_extend' })
+    expect(providerBody?.generation_config).toEqual({ video_config: { task: 'extend' } })
+    expect(providerBody?.response_format).toEqual({ type: 'video', delivery: 'uri', resolution: '720p' })
+    expect(providerBody?.input?.[0]?.content?.[0]).toMatchObject({ type: 'video', mime_type: 'video/mp4' })
+    expect(providerBody?.input?.[0]?.content?.at(-1)?.text).toContain('Continue Video1 forward from its tail')
+    expect(providerBody?.input?.[0]?.content?.at(-1)?.text).toContain('Preserve its visual style')
+  })
 })

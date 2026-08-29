@@ -9,7 +9,7 @@ import {
   requireCredits,
 } from '@/lib/billing/credits'
 import { VIDEO_PLACEHOLDER_IMAGE } from '@/lib/editor/timeline-derivations'
-import { estimateVideoCredits, estimateVideoProviderCostUsd, getVideoModelCapability, normalizeVideoModelId, resolveVideoGenerationRoute, supportsNativeTextToVideo } from '@/lib/video-model-capabilities'
+import { estimateVideoCredits, estimateVideoProviderCostUsd, getVideoModelCapability, normalizeVideoModelId, resolvePersistedVideoDuration, resolveVideoGenerationRoute, resolveVideoOutputDuration, supportsNativeTextToVideo } from '@/lib/video-model-capabilities'
 import type { VideoMeta } from '@/types'
 
 export const maxDuration = 1800
@@ -102,7 +102,12 @@ export async function POST(req: NextRequest) {
     if (referenceVideoDuration != null && referenceVideoDuration > acceptedReferenceDuration) {
       return NextResponse.json({ error: `Reference video duration too long (${referenceVideoDuration.toFixed(1).replace(/\.0$/, '')}s). Maximum ${videoCapability.maxReferenceVideoDuration}s with small metadata tolerance.` }, { status: 400 })
     }
-    const effectiveDuration = duration ?? (referenceVideoDuration != null ? Math.min(videoCapability.maxOutputDuration, Math.round(referenceVideoDuration)) : undefined)
+    const effectiveDuration = resolveVideoOutputDuration({
+      requestedDuration: duration,
+      referenceVideoDuration,
+      model: selectedVideoModel,
+      operation: videoOperation,
+    })
     const originalVideoUrls = [...(inputVideoUrl ? [inputVideoUrl] : []), ...autoVideoUrls]
     let providerInputVideoUrl = inputVideoUrl
     let providerAutoVideoUrls = autoVideoUrls
@@ -224,13 +229,19 @@ export async function POST(req: NextRequest) {
           ? sourceUrls
           : (originalFirstUrl ? [originalFirstUrl] : []),
         status: skillResult.status === 'completed' && skillResult.videoUrl ? 'completed' : 'processing',
-        duration: effectiveDuration || null,
+        duration: resolvePersistedVideoDuration({
+          model: actualVideoModel,
+          operation: videoOperation,
+          outputDuration: effectiveDuration,
+          referenceVideoDuration,
+        }) || null,
         model: actualVideoModel,
         resolution: actualVideoRoute.resolution,
         aspectRatio,
         providerModel: skillResult.providerModel || actualVideoRoute.providerModel,
         providerUrl: skillResult.videoUrl,
         providerMode: actualVideoRoute.providerMode,
+        operation: videoOperation || 'generate',
         contentFilter: actualVideoModel === 'seedance-2.5' ? contentFilter !== false : undefined,
         createdAt: new Date().toISOString(),
         creditsCharged: reservedCredits,

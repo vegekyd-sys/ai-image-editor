@@ -49,11 +49,10 @@ node --env-file=/Users/tianyicai/ai-image-editor/.env.local \
    temporal stability, and prompt adherence.
 2. 360p is treated as a draft. 1080p and 4K are labeled as upscaled, never native.
 3. Product adapter handles URI delivery for outputs above 4 MB.
-4. Keep the current one-video-reference Makaron boundary until multi-reference and
-   extension are proven through the real product path.
-5. Do not promote extension or interpolation in the public capability contract
-   until their dedicated product inputs, persistence, billing, and recovery paths
-   have regression coverage.
+4. Keep the current one-video-reference Makaron boundary; multi-video extension
+   remains out of scope.
+5. Promote extension only after its Refs-style input, persistence, billing, and
+   recovery paths have regression coverage and a real provider probe succeeds.
 
 ## 2026-08-29 observed results
 
@@ -114,12 +113,68 @@ Google's `$17.50 / 1M video output tokens` rate, the observed per-second table i
 The 4K artifact was 4,437,174 bytes, so it also proves the product's URI delivery
 and authenticated download path above the 4 MB inline-response boundary. The
 capability table uses these measured rates for Credit estimation; text/image input
-and thought tokens remain small additional provider costs outside this per-video-
-second estimate.
+and thought tokens remain small additional provider costs outside this output-
+video-second estimate. Extension input-video cost is measured separately below.
 
 High-resolution artifacts remain local under
 `artifacts/google-omni-1-1/2026-08-29T14-33-23Z/` and
 `artifacts/google-omni-1-1/2026-08-29T14-34-33Z/`.
+
+### Refs-style 10-second video extension
+
+The extension probe reused the completed 5.013-second 720p Omni 1.1 clip as the
+only video reference. The prompt asked the camera to continue its slow clockwise
+orbit while preserving the existing Makaron icon, glass material, pink-purple
+palette, lighting, and ambient audio. The provider task was explicitly `extend`
+with a requested continuation duration of 10 seconds.
+
+| Metric | Observed result |
+| --- | ---: |
+| Source duration | 5.013s |
+| Returned MP4 duration | 15.018s |
+| Added duration | about 10s |
+| End-to-end latency | 65.568s |
+| Output | 1280x720, 24fps, H.264 + AAC 48kHz stereo |
+| File size | 3,126,851 bytes |
+| Source-prefix SSIM | 0.994055 |
+| Input video usage | 27,840 tokens |
+| Output video usage | 57,920 tokens |
+| Provider video cost | $1.0136 output + about $0.0417 source input |
+
+The returned asset is cumulative: it contains the original source followed by the
+continuation, rather than only a detached 10-second tail. Visual inspection found
+strong continuity in the icon subject, glass material, color palette, lighting,
+and clockwise camera motion. The continuation added a pedestal and resolved to a
+centered ending, which is consistent with the requested next beat.
+
+The first 5.013 seconds are not byte-identical to the source, but their decoded
+SSIM of 0.994055 shows only a slight provider-side seam rewrite. Product behavior
+therefore treats extension as a new, non-destructive video snapshot and preserves
+the original snapshot independently.
+
+The probe also revealed billable input-video tokens. Makaron now estimates those
+at `$0.0083303411 / source second` in addition to the 10-second output estimate.
+At the existing 2x markup, this specific 5s-to-15s request reserves 212 Credits;
+a full 10-second source plus 10-second continuation reserves 220 Credits. Text and
+thought tokens are a small additional provider cost outside this estimate.
+
+Reproduction command:
+
+```bash
+node --env-file=/Users/tianyicai/ai-image-editor/.env.local \
+  scripts/benchmark-google-omni-1-1.mjs \
+  --model gemini-omni-1.1-flash \
+  --video artifacts/google-omni-1-1/2026-08-29T14-21-33Z/gemini-omni-1.1-flash-720p.mp4 \
+  --operation extend \
+  --duration 10 \
+  --resolution 720p \
+  --aspect-ratio 16:9 \
+  --prompt "After the current ending, continue the same slow clockwise camera orbit while preserving the icon, glass material, pink-purple palette, lighting, and ambient audio."
+```
+
+Local artifacts are under
+`artifacts/google-omni-1-1/2026-08-29T15-14-43Z/`, including the returned MP4,
+source/output contact sheets, provider response, usage, and ffprobe metadata.
 
 ## Decision
 
@@ -127,6 +182,10 @@ High-resolution artifacts remain local under
 - Keep 720p as the product default. Expose 360p as draft and label 1080p/4K as
   upscaled finals.
 - Do not switch Makaron's global default away from Seedance Fast on this evidence.
-- Keep extension and interpolation behind experiment/product-design work until
-  their media-role UI, persistence, billing, failure recovery, and real customer
-  path have dedicated tests.
+- Enable one-video forward extension through the same Refs mental model already
+  used by Seedance: reference a timeline video, choose `video_operation: "extend"`,
+  describe the next beat, and save the cumulative result as a new snapshot.
+- Default Omni extension to 10 seconds, preserve the source snapshot, and reject
+  backward or multi-video extension.
+- Keep first/last-frame interpolation behind experiment/product-design work until
+  its media-role UI and real customer path have dedicated tests.

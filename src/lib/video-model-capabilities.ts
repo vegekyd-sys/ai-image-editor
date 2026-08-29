@@ -288,6 +288,7 @@ const MODEL_CAPABILITIES: Record<string, VideoModelCapability> = {
     },
     supportsVideoReference: true,
     supportsBaseVideoEdit: true,
+    supportsVideoExtend: true,
     longVideoChunkSeconds: 10,
     // Verified from live 1.1 usage metadata on 2026-08-29 at Google's
     // $17.50 / 1M video-output-token rate.
@@ -298,7 +299,11 @@ const MODEL_CAPABILITIES: Record<string, VideoModelCapability> = {
       '1080p': 0.15204, // 8,688 tokens/s
       '4k': 0.30408, // 17,376 tokens/s
     },
+    // A live 720p extension probe consumed 27,840 input-video tokens for a
+    // 5.013-second source. Google bills those tokens at $1.50 / 1M.
+    estimatedInputCostUsdPerVideoSecond: 0.0083303411,
     maxImageReferences: 6,
+    maxVideoReferences: 1,
     supportedResolutions: ['360p', '720p', '1080p', '4k'],
     defaultResolution: '720p',
     supportedAspectRatios: ['16:9', '9:16'],
@@ -667,13 +672,38 @@ export function resolveVideoOutputDuration(options: {
   requestedDuration?: number
   referenceVideoDuration?: number
   model?: string | null
+  operation?: VideoGenerationOperation
 }): number | undefined {
   const capability = getVideoModelCapability(options.model)
   if (options.requestedDuration != null) return options.requestedDuration
+  if (options.operation === 'extend' && normalizeVideoModelId(options.model) === 'google-omni') {
+    return capability.maxOutputDuration
+  }
   if (options.referenceVideoDuration != null) {
     return Math.min(capability.maxOutputDuration, Math.round(options.referenceVideoDuration))
   }
   return undefined
+}
+
+/**
+ * Duration of the persisted asset, which can differ from the newly generated
+ * segment. Omni returns the uploaded source and its continuation as one MP4.
+ */
+export function resolvePersistedVideoDuration(options: {
+  model?: string | null
+  operation?: VideoGenerationOperation
+  outputDuration?: number
+  referenceVideoDuration?: number
+}): number | undefined {
+  if (options.outputDuration == null) return undefined
+  if (
+    normalizeVideoModelId(options.model) === 'google-omni'
+    && options.operation === 'extend'
+    && options.referenceVideoDuration != null
+  ) {
+    return Math.min(40, options.referenceVideoDuration + options.outputDuration)
+  }
+  return options.outputDuration
 }
 
 export function validateVideoModelRequest(options: {

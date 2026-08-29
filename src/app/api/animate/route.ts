@@ -8,7 +8,7 @@ import {
   refundCredits,
   requireCredits,
 } from '@/lib/billing/credits'
-import { estimateVideoCredits, getVideoModelCapability, normalizeVideoModelId, resolveVideoGenerationRoute, supportsNativeTextToVideo } from '@/lib/video-model-capabilities'
+import { estimateVideoCredits, getVideoModelCapability, normalizeVideoModelId, resolveVideoGenerationRoute, resolveVideoOutputDuration, supportsNativeTextToVideo } from '@/lib/video-model-capabilities'
 
 export const maxDuration = 1800
 
@@ -19,7 +19,7 @@ export async function POST(req: NextRequest) {
     const user = session?.user
     if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
 
-    const { projectId, imageUrls, prompt, duration, aspectRatio, videoModel, videoResolution } = await req.json()
+    const { projectId, imageUrls, prompt, duration, aspectRatio, videoModel, videoResolution, videoOperation, videoExtendDirection } = await req.json()
     const selectedVideoModel = normalizeVideoModelId(videoModel)
     const videoCapability = getVideoModelCapability(selectedVideoModel)
     const videoRoute = resolveVideoGenerationRoute({ model: selectedVideoModel, resolution: videoResolution })
@@ -73,7 +73,12 @@ export async function POST(req: NextRequest) {
     if (referenceVideoDuration != null && referenceVideoDuration > videoCapability.maxReferenceVideoDuration + 0.5) {
       return NextResponse.json({ error: `Reference video duration too long (${referenceVideoDuration.toFixed(1).replace(/\.0$/, '')}s). Maximum ${videoCapability.maxReferenceVideoDuration}s with small metadata tolerance.` }, { status: 400 })
     }
-    const effectiveDuration = duration ?? (referenceVideoDuration != null ? Math.min(videoCapability.maxOutputDuration, Math.round(referenceVideoDuration)) : undefined)
+    const effectiveDuration = resolveVideoOutputDuration({
+      requestedDuration: duration,
+      referenceVideoDuration,
+      model: selectedVideoModel,
+      operation: videoOperation,
+    })
     let providerAutoVideoUrls = autoVideoUrls
     if (autoVideoUrls.length > 0) {
       const { prepareProviderVideoReferences } = await import('@/lib/provider-video-reference')
@@ -136,6 +141,8 @@ export async function POST(req: NextRequest) {
         videoUrls: providerAutoVideoUrls.length ? providerAutoVideoUrls : undefined,
         referenceVideoDuration,
         referenceVideoMetas: referenceVideoMetas.length ? referenceVideoMetas : undefined,
+        videoOperation,
+        videoExtendDirection,
       })
 
       if (!skillResult.success || !skillResult.taskId) {

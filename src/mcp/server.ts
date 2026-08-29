@@ -269,7 +269,7 @@ IMPORTANT:
 - Provider-generated video rendering takes 3-5 minutes; Grok is usually around 30-40 seconds; Gemini Omni is usually around 30-70 seconds plus Storage handoff. Use makaron_get_video_status to poll.
 - Duration: omit for smart mode. Seedance 2.5 supports 4-30s; SeeDance 2.0 and MiniMax H3 support 4-15s; Kling supports 5-15s; Grok 1.5 supports 1-15s; Gemini Omni supports 3-10s.
 - Resolution: omit or use "auto" for the selected model default. Gemini Omni 1.1 supports 360p drafts, 720p native/default, and upscaled 1080p/4k; Seedance 2.5 supports 480p/720p; minimax-h3 supports 768p/2k and defaults to 768p; seedance-fast/seedance-mini/grok support 480p/720p; seedance supports 480p/720p/1080p; kling supports 720p/1080p/4k.
-- Seedance 2.5 accepts up to 30 image, 10 video, and 10 audio references, plus dedicated edit/extend modes.
+- Seedance 2.5 accepts up to 30 image, 10 video, and 10 audio references, plus dedicated edit/extend modes. Gemini Omni accepts one timeline/external video and can extend it forward for 3-10 seconds (10 seconds by default).
 
 Models:
 - seedance-fast (default) — SeeDance 2.0 Fast via Evolink, 480p/720p, default 720p
@@ -278,7 +278,7 @@ Models:
 - seedance-2.5 — Seedance 2.5 via Evolink, 4-30s, multimodal references, native audio, edit and extend
 - kling — Kling v3-omni, supports 720p/1080p/4k
 - grok — Grok Video 1.5 via xAI, fastest single-image-to-video, native audio, defaults to 480p at $0.08/s + $0.01/input image
-- google-omni — Gemini Omni 1.1 Flash via Google, fast text/image/video generation and editing, 360p/720p/upscaled 1080p/4k, up to 6 image references without a video reference, one video reference for direct edits, native generated audio, no uploaded audio references
+- google-omni — Gemini Omni 1.1 Flash via Google, fast text/image/video generation, editing, and forward extension, 360p/720p/upscaled 1080p/4k, up to 6 image references without a video reference, one video reference for edit/extend, native generated audio, no uploaded audio references
 - minimax-h3 — MiniMax H3 direct API, native text-to-video plus up to 9 image / 3 video / 3 audio references, 4-15s, public 768p/2K, default 768P
 - sync-lipsync-v3 — exact replacement-audio lip sync; requires exactly one source video and one audio URL, preserves source framing and the supplied audio
 
@@ -295,8 +295,8 @@ Style: Cinematic, warm golden light.`,
       aspectRatio: z.enum(['auto', '16:9', '9:16', '1:1', '4:3', '3:4', '21:9', '3:2', '2:3']).optional().describe('Aspect ratio. Use auto/adaptive or a provider-supported ratio. Seedance supports 21:9. Grok image-to-video ignores forced ratios to avoid stretching the source image; pad the source or choose another model for a fixed final shape.'),
       videoModel: z.enum(['seedance-fast', 'seedance-mini', 'seedance', 'seedance-2.5', 'kling', 'grok', 'google-omni', 'minimax-h3', 'sync-lipsync-v3']).optional().describe('Video model. sync-lipsync-v3 requires exactly one video and one replacement audio track.'),
       videoResolution: z.enum(['auto', '360p', '480p', '720p', '768p', '1080p', '2k', '4k']).optional().describe('Output resolution. Use auto to follow the selected model default; Gemini Omni 1.1 supports 360p/720p/1080p/4k, and MiniMax H3 supports 768p/2k.'),
-      operation: z.enum(['generate', 'edit', 'extend']).optional().describe('Seedance 2.5 operation. edit and extend require videoUrls.'),
-      extendDirection: z.enum(['forward', 'backward']).optional().describe('Seedance 2.5 extension direction.'),
+      operation: z.enum(['generate', 'edit', 'extend']).optional().describe('Typed operation. Gemini Omni and Seedance 2.5 support extend; edit and extend require videoUrls. Omni extends forward only.'),
+      extendDirection: z.enum(['forward', 'backward']).optional().describe('Seedance 2.5 extension direction. Omit or use forward for Gemini Omni.'),
       generateAudio: z.boolean().optional().describe('Generate synchronized native audio. Default true for Seedance 2.5.'),
       contentFilter: z.boolean().optional().describe('Seedance 2.5 output content filter. Default true. False enables Mature Mode and costs 10% more; use only after explicit user confirmation, including the recovery action.'),
       outputFormat: z.enum(['mp4', 'mov']).optional().describe('MP4/H264 for playback or MOV for grading.'),

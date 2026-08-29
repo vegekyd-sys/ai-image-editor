@@ -205,6 +205,8 @@ export interface VideoMeta {
   aspectRatio?: VideoAspectRatio;
   providerModel?: string;
   providerMode?: string;
+  /** Provider operation used to create this snapshot. */
+  operation?: 'generate' | 'edit' | 'extend';
   providerCostUsd?: number;
   /** EvoLink output moderation. False is the explicit Seedance 2.5 Mature Mode retry. */
   contentFilter?: boolean;

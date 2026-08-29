@@ -14,6 +14,8 @@ const { values } = parseArgs({
     prompt: { type: 'string' },
     image: { type: 'string' },
     'last-image': { type: 'string' },
+    video: { type: 'string' },
+    operation: { type: 'string', default: 'generate' },
     model: { type: 'string', multiple: true },
     resolution: { type: 'string', default: '720p' },
     'aspect-ratio': { type: 'string', default: '9:16' },
@@ -42,6 +44,12 @@ if (!['360p', '720p', '1080p', '4k'].includes(values.resolution)) {
 if (!['9:16', '16:9'].includes(values['aspect-ratio'])) {
   throw new Error('--aspect-ratio must be 9:16 or 16:9')
 }
+if (!['generate', 'edit', 'extend'].includes(values.operation)) {
+  throw new Error('--operation must be generate, edit, or extend')
+}
+if ((values.operation === 'edit' || values.operation === 'extend') && !values.video) {
+  throw new Error(`--operation ${values.operation} requires --video`)
+}
 
 const runStamp = new Date().toISOString().replaceAll(':', '-').replace(/\.\d{3}Z$/, 'Z')
 const outDir = resolve(values['out-dir'] || `artifacts/google-omni-1-1/${runStamp}`)
@@ -59,6 +67,16 @@ function imagePart(path) {
     type: 'image',
     data: readFileSync(resolve(path)).toString('base64'),
     mime_type: mimeFor(path),
+  }
+}
+
+function videoPart(path) {
+  const ext = extname(path).toLowerCase()
+  const mimeType = ext === '.mov' ? 'video/mov' : ext === '.webm' ? 'video/webm' : 'video/mp4'
+  return {
+    type: 'video',
+    data: readFileSync(resolve(path)).toString('base64'),
+    mime_type: mimeType,
   }
 }
 
@@ -153,9 +171,19 @@ function requestFor(model) {
   let task = 'text_to_video'
   let finalPrompt = prompt
 
+  if (values.video) {
+    if (model !== NEW_MODEL && values.operation === 'extend') {
+      throw new Error('Reference-video extension is only included in the 1.1 run')
+    }
+    input.push(videoPart(values.video))
+    task = values.operation === 'extend' ? 'extend' : 'edit'
+    if (task === 'extend') {
+      finalPrompt = `Extend this video forward from its tail. ${prompt} Preserve the established visual style, subject, motion, camera direction, lighting, and audio continuity unless explicitly changed.`
+    }
+  }
   if (values.image) {
     input.push(imagePart(values.image))
-    task = 'image_to_video'
+    if (!values.video) task = 'image_to_video'
   }
   if (values['last-image']) {
     if (!values.image) throw new Error('--last-image requires --image')
@@ -168,8 +196,8 @@ function requestFor(model) {
   const responseFormat = {
     type: 'video',
     delivery: 'uri',
-    aspect_ratio: values['aspect-ratio'],
   }
+  if (task !== 'edit' && task !== 'extend') responseFormat.aspect_ratio = values['aspect-ratio']
   if (model === NEW_MODEL) responseFormat.resolution = values.resolution
 
   return {
@@ -195,6 +223,8 @@ const report = {
   aspectRatio: values['aspect-ratio'],
   sourceImage: values.image ? resolve(values.image) : null,
   lastImage: values['last-image'] ? resolve(values['last-image']) : null,
+  sourceVideo: values.video ? resolve(values.video) : null,
+  operation: values.operation,
   runs: [],
 }
 

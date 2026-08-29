@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from 'vitest'
 import { createVideo } from '@/lib/skills/create-video'
-import { estimateVideoCredits, estimateVideoProviderCostUsd, getDefaultVideoModelId, getVideoModelCapability, normalizeVideoModelId, normalizeVideoResolution, resolveAgentVideoSelection, resolveClosestSupportedAspectRatio, resolveVideoGenerationRoute, resolveVideoProviderAspectRatio, resolveVideoProviderModel, supportsNativeTextToVideo, validateVideoModelRequest, validateVideoResolutionRequest } from '@/lib/video-model-capabilities'
+import { estimateVideoCredits, estimateVideoProviderCostUsd, getDefaultVideoModelId, getVideoModelCapability, normalizeVideoModelId, normalizeVideoResolution, resolveAgentVideoSelection, resolveClosestSupportedAspectRatio, resolvePersistedVideoDuration, resolveVideoGenerationRoute, resolveVideoOutputDuration, resolveVideoProviderAspectRatio, resolveVideoProviderModel, supportsNativeTextToVideo, validateVideoModelRequest, validateVideoResolutionRequest } from '@/lib/video-model-capabilities'
 
 describe('video model reference limits', () => {
   it('defaults video generation to SeeDance 2.0 Fast', () => {
@@ -587,7 +587,7 @@ describe('video model reference limits', () => {
     expect(estimateVideoCredits({ model: 'grok', resolution: '720p', durationSec: 1, imageCount: 1 })).toBe(30)
   })
 
-  it('models Gemini Omni 1.1 as a fast multi-resolution generation and edit provider', () => {
+  it('models Gemini Omni 1.1 as a fast multi-resolution generation, edit, and reference-video extension provider', () => {
     expect(normalizeVideoResolution('google-omni', 'auto')).toBe('720p')
     expect(resolveVideoGenerationRoute({ model: 'google-omni', resolution: 'auto' })).toMatchObject({
       model: 'google-omni',
@@ -600,6 +600,8 @@ describe('video model reference limits', () => {
       maxOutputDuration: 10,
       supportsVideoReference: true,
       supportsBaseVideoEdit: true,
+      supportsVideoExtend: true,
+      maxVideoReferences: 1,
       supportedResolutions: ['360p', '720p', '1080p', '4k'],
       maxReferenceVideoDuration: 10.5,
       maxImageReferences: 6,
@@ -607,7 +609,49 @@ describe('video model reference limits', () => {
     expect(estimateVideoCredits({ model: 'google-omni', durationSec: 5, imageCount: 1 })).toBe(102)
     expect(estimateVideoCredits({ model: 'google-omni', resolution: '360p', durationSec: 5, imageCount: 1 })).toBe(34)
     expect(estimateVideoCredits({ model: 'google-omni', resolution: '4k', durationSec: 5, imageCount: 1 })).toBe(305)
+    expect(estimateVideoProviderCostUsd({
+      model: 'google-omni',
+      durationSec: 10,
+      referenceVideoDurationSec: 5,
+    })).toBeCloseTo(1.0552517055)
+    expect(estimateVideoCredits({
+      model: 'google-omni',
+      durationSec: 10,
+      referenceVideoDurationSec: 5,
+    })).toBe(212)
+    expect(estimateVideoCredits({
+      model: 'google-omni',
+      durationSec: 10,
+      referenceVideoDurationSec: 10,
+    })).toBe(220)
     expect(supportsNativeTextToVideo('google-omni')).toBe(true)
+    expect(resolveVideoOutputDuration({
+      model: 'google-omni',
+      operation: 'extend',
+      referenceVideoDuration: 5,
+    })).toBe(10)
+    expect(resolvePersistedVideoDuration({
+      model: 'google-omni',
+      operation: 'extend',
+      referenceVideoDuration: 5.013,
+      outputDuration: 10,
+    })).toBeCloseTo(15.013)
+    expect(validateVideoModelRequest({
+      model: 'google-omni',
+      operation: 'extend',
+      hasVideoReference: true,
+      videoReferenceCount: 1,
+      referenceVideoDuration: 10,
+      outputDuration: 10,
+    })).toBeNull()
+    expect(validateVideoModelRequest({
+      model: 'google-omni',
+      operation: 'extend',
+      hasVideoReference: true,
+      videoReferenceCount: 2,
+      referenceVideoDuration: 10,
+      outputDuration: 10,
+    })).toContain('at most 1 reference video')
   })
 
   it('fails fast before calling Google Omni with more than six image references', async () => {
