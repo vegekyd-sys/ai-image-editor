@@ -1,9 +1,29 @@
 import { fireEvent, render, screen, waitFor } from '@testing-library/react';
-import { describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import ModelSelector from '@/components/ModelSelector';
 import { LocaleProvider } from '@/lib/i18n';
 
 describe('ModelSelector Agent tab', () => {
+  beforeEach(() => {
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue({
+      ok: true,
+      json: async () => ({
+        available: true,
+        planType: 'pro',
+        weekly: {
+          usedPercent: 61,
+          remainingPercent: 39,
+          windowDurationMins: 10_080,
+          resetsAt: 1_788_465_960,
+        },
+      }),
+    }));
+  });
+
+  afterEach(() => {
+    vi.unstubAllGlobals();
+  });
+
   it('shows the GPT-5.6 lineup with no Claude choices and emits allowlisted Agent preferences', async () => {
     const onAgentModelChange = vi.fn();
     render(
@@ -38,6 +58,15 @@ describe('ModelSelector Agent tab', () => {
     for (const id of ['gpt-5.6-terra', 'gpt-5.6-sol', 'gpt-5.6-luna', 'grok-4.5', 'deepseek-v4-pro']) {
       expect(await screen.findByTestId(`agent-model-${id}`)).not.toBeNull();
     }
+    for (const id of ['gpt-5.6-terra', 'gpt-5.6-sol', 'gpt-5.6-luna']) {
+      expect(await screen.findByTestId(`agent-model-${id}-codex-subscription`)).not.toBeNull();
+    }
+    const providerGroups = Array.from(agentPanel.querySelectorAll('[data-agent-provider-group]'));
+    expect(providerGroups.map(group => (
+      group.getAttribute('data-agent-provider-group')
+    ))).toEqual(['azure', 'codex', 'other']);
+    expect(providerGroups[1]?.textContent).toContain('Codex');
+    expect(screen.getByTestId('codex-subscription-usage').textContent).toContain('39%');
     expect(screen.queryByText(/Sonnet|Opus|Claude/i)).toBeNull();
     expect(screen.getByTestId('model-auto-agent').getAttribute('aria-pressed')).toBe('true');
 

@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useRef, useEffect, useCallback, useId, type ReactNode } from 'react';
+import { Fragment, useState, useRef, useEffect, useCallback, useId, type ReactNode } from 'react';
 import { createPortal } from 'react-dom';
 import type { PreferredModel } from './AgentChatView';
 import type { VideoModel, VideoResolution } from '@/types';
@@ -97,6 +97,7 @@ function ModelRow({
   testId,
   provider,
   detail,
+  compact = false,
 }: {
   model: ModelInfo;
   name: string;
@@ -108,6 +109,7 @@ function ModelRow({
   testId?: string;
   provider?: string;
   detail?: ReactNode;
+  compact?: boolean;
 }) {
   return (
     <button
@@ -118,17 +120,19 @@ function ModelRow({
       data-model-category={model.category}
       data-agent-provider={provider}
       aria-pressed={selected}
-      className={selected && !disabled ? 'mkr-liquid-pill' : ''}
+      className={selected && !disabled && !compact ? 'mkr-liquid-pill' : ''}
       style={{
         display: 'flex',
         alignItems: 'center',
         gap: 10,
         width: '100%',
-        minHeight: detail ? ROW_HEIGHT + 14 : ROW_HEIGHT,
-        padding: '0 12px',
-        borderRadius: 12,
-        border: 'none',
-        background: selected && !disabled ? 'linear-gradient(145deg, rgba(232,121,249,0.12), rgba(10,10,14,0.32))' : 'transparent',
+        minHeight: compact ? 54 : detail ? ROW_HEIGHT + 14 : ROW_HEIGHT,
+        padding: compact ? '0 10px' : '0 12px',
+        borderRadius: compact ? 10 : 12,
+        border: compact && selected && !disabled ? '0.5px solid rgba(232,121,249,0.16)' : '0.5px solid transparent',
+        background: selected && !disabled
+          ? compact ? 'rgba(217,70,239,0.075)' : 'linear-gradient(145deg, rgba(232,121,249,0.12), rgba(10,10,14,0.32))'
+          : 'transparent',
         cursor: disabled ? 'default' : 'pointer',
         transition: 'background 0.15s',
         textAlign: 'left',
@@ -137,10 +141,10 @@ function ModelRow({
     >
       <div
         style={{
-          width: 32,
-          height: 32,
-          borderRadius: 8,
-          background: 'rgba(255,255,255,0.06)',
+          width: compact ? 28 : 32,
+          height: compact ? 28 : 32,
+          borderRadius: compact ? 7 : 8,
+          background: compact ? 'rgba(255,255,255,0.035)' : 'rgba(255,255,255,0.06)',
           display: 'flex',
           alignItems: 'center',
           justifyContent: 'center',
@@ -194,10 +198,10 @@ function ModelRow({
 
       <div
         style={{
-          width: 18,
-          height: 18,
+          width: compact ? 16 : 18,
+          height: compact ? 16 : 18,
           borderRadius: 9,
-          border: `2px solid ${disabled ? 'rgba(255,255,255,0.08)' : selected ? '#c026d3' : 'rgba(255,255,255,0.15)'}`,
+          border: `${compact ? 1 : 2}px solid ${disabled ? 'rgba(255,255,255,0.08)' : selected ? 'rgba(232,121,249,0.85)' : 'rgba(255,255,255,0.15)'}`,
           display: 'flex',
           alignItems: 'center',
           justifyContent: 'center',
@@ -208,10 +212,10 @@ function ModelRow({
       >
         {selected && !disabled && (
           <div style={{
-            width: 10,
-            height: 10,
+            width: compact ? 6 : 10,
+            height: compact ? 6 : 10,
             borderRadius: 5,
-            background: '#c026d3',
+            background: '#e879f9',
           }} />
         )}
       </div>
@@ -606,18 +610,17 @@ export default function ModelSelector({
   const videoModels = getVideoModels();
   const subscriptionVisible = subscriptionUsage.status !== 'unavailable'
     || isCodexSubscriptionAgentModelPreference(agentModel);
-  const agentModels = getAgentModels().flatMap((model) => {
-    if (!subscriptionVisible || !model.id.startsWith('gpt-5.6-')) return [model];
-    return [
-      model,
-      {
+  const baseAgentModels = getAgentModels();
+  const azureAgentModels = baseAgentModels.filter(model => model.id.startsWith('gpt-5.6-'));
+  const subscriptionAgentModels = subscriptionVisible
+    ? azureAgentModels.map(model => ({
         ...model,
         id: getCodexSubscriptionAgentModelPreference(model.id as GPT56AgentModelId),
-        descKey: 'model.codexSubscription.desc',
         speedLabel: undefined,
-      },
-    ];
-  });
+      }))
+    : [];
+  const otherAgentModels = baseAgentModels.filter(model => !model.id.startsWith('gpt-5.6-'));
+  const agentModels = [...azureAgentModels, ...subscriptionAgentModels, ...otherAgentModels];
   const models = activeTab === 'image'
     ? imageModels
     : activeTab === 'video'
@@ -854,33 +857,72 @@ export default function ModelSelector({
                 const isAzureAgent = activeTab === 'agent'
                   && model.id.startsWith('gpt-5.6-')
                   && !isCodexSubscription;
-                const subscriptionDetail = isCodexSubscription
-                  ? subscriptionUsage.status === 'loading' || subscriptionUsage.status === 'idle'
-                    ? t('model.codexSubscription.checking')
-                    : subscriptionUsage.status === 'available' && subscriptionUsage.weekly
-                      ? `${t('model.codexSubscription.remaining', String(Math.round(subscriptionUsage.weekly.remainingPercent)))} · ${t('model.codexSubscription.resetsAt', formatResetTime(subscriptionUsage.weekly.resetsAt))}`
-                      : t('model.codexSubscription.usageUnavailable')
-                  : undefined;
+                const modelIndex = models.indexOf(model);
+                const previousModel = modelIndex > 0 ? models[modelIndex - 1] : undefined;
+                const providerGroup = activeTab !== 'agent'
+                  ? undefined
+                  : isCodexSubscription
+                    ? 'codex'
+                    : isAzureAgent
+                      ? 'azure'
+                      : 'other';
+                const previousProviderGroup = activeTab !== 'agent' || !previousModel
+                  ? undefined
+                  : isCodexSubscriptionAgentModelPreference(previousModel.id)
+                    ? 'codex'
+                    : previousModel.id.startsWith('gpt-5.6-')
+                      ? 'azure'
+                      : 'other';
+                const showProviderHeader = providerGroup && providerGroup !== previousProviderGroup;
+                const providerLabel = providerGroup === 'azure'
+                  ? t('model.agentGroup.azure')
+                  : providerGroup === 'codex'
+                    ? t('model.agentGroup.codex')
+                    : t('model.agentGroup.other');
+                const providerDetail = providerGroup === 'azure'
+                  ? t('model.agentGroup.azureDesc')
+                  : providerGroup === 'codex'
+                    ? subscriptionUsage.status === 'loading' || subscriptionUsage.status === 'idle'
+                      ? t('model.codexSubscription.checking')
+                      : subscriptionUsage.status === 'available' && subscriptionUsage.weekly
+                        ? `${t('model.codexSubscription.remaining', String(Math.round(subscriptionUsage.weekly.remainingPercent)))} · ${t('model.codexSubscription.resetsAt', formatResetTime(subscriptionUsage.weekly.resetsAt))}`
+                        : t('model.codexSubscription.usageUnavailable')
+                    : t('model.agentGroup.otherDesc');
                 return (
-                  <ModelRow
-                    key={model.id}
-                    model={model}
-                    name={`${t(model.nameKey as Parameters<typeof t>[0])}${isCodexSubscription ? ` · ${t('model.codexSubscription.suffix')}` : ''}`}
-                    desc={t(model.descKey as Parameters<typeof t>[0])}
-                    badge={isCodexSubscription
-                      ? t('model.codexSubscription.badge')
-                      : isAzureAgent
-                        ? t('model.azureApiBadge')
+                  <Fragment key={model.id}>
+                    {showProviderHeader && (
+                      <div className="mkr-agent-model-group-header" data-agent-provider-group={providerGroup}>
+                        <span className="mkr-agent-model-group-title">{providerLabel}</span>
+                        <span
+                          className="mkr-agent-model-group-detail"
+                          data-testid={providerGroup === 'codex' ? 'codex-subscription-usage' : undefined}
+                        >
+                          {providerDetail}
+                        </span>
+                        {providerGroup === 'codex' && subscriptionUsage.status === 'available' && subscriptionUsage.weekly && (
+                          <span className="mkr-agent-model-group-track" aria-hidden="true">
+                            <span style={{ width: `${Math.max(0, Math.min(100, subscriptionUsage.weekly.remainingPercent))}%` }} />
+                          </span>
+                        )}
+                      </div>
+                    )}
+                    <ModelRow
+                      model={model}
+                      name={t(model.nameKey as Parameters<typeof t>[0])}
+                      desc={t(model.descKey as Parameters<typeof t>[0])}
+                      badge={activeTab === 'agent'
+                        ? undefined
                         : model.speedLabelKey ? t(model.speedLabelKey) : model.speedLabel}
-                    selected={model.id === selectedId}
-                    disabled={false}
-                    onSelect={() => activeTab === 'agent'
-                      ? handleAgentSelect(model.id)
-                      : handleImageSelect(model.id)}
-                    testId={activeTab === 'agent' ? `agent-model-${model.id}` : undefined}
-                    provider={isCodexSubscription ? 'codex-subscription' : isAzureAgent ? 'azure-openai' : undefined}
-                    detail={subscriptionDetail}
-                  />
+                      selected={model.id === selectedId}
+                      disabled={false}
+                      onSelect={() => activeTab === 'agent'
+                        ? handleAgentSelect(model.id)
+                        : handleImageSelect(model.id)}
+                      testId={activeTab === 'agent' ? `agent-model-${model.id}` : undefined}
+                      provider={isCodexSubscription ? 'codex-subscription' : isAzureAgent ? 'azure-openai' : undefined}
+                      compact={activeTab === 'agent'}
+                    />
+                  </Fragment>
                 );
               })}
             </div>

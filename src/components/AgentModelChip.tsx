@@ -173,47 +173,75 @@ export default function AgentModelChip({ value, onChange, disabled = false }: Ag
     window.requestAnimationFrame(() => triggerRef.current?.focus());
   };
 
-  const standardOptions = models.flatMap((model) => {
-    const standard = {
-      id: model.id as AgentModelPreference,
-      name: t(model.nameKey as Parameters<typeof t>[0]),
-      desc: t(model.descKey as Parameters<typeof t>[0]),
-      badge: model.id.startsWith('gpt-5.6-') ? t('model.azureApiBadge') : undefined,
-    };
-    if (!model.id.startsWith('gpt-5.6-')) return [standard];
-    const subscriptionId = getCodexSubscriptionAgentModelPreference(
-      model.id as GPT56AgentModelId,
-    );
-    return [
-      standard,
-      {
-        id: subscriptionId,
-        name: `${t(model.nameKey as Parameters<typeof t>[0])} · ${t('model.codexSubscription.suffix')}`,
-        desc: t('model.codexSubscription.desc'),
-        badge: t('model.codexSubscription.badge'),
-      },
-    ];
-  });
-  const subscriptionVisible = subscriptionUsage.status !== 'unavailable'
-    || isCodexSubscriptionAgentModelPreference(value);
-  const options = [
-    {
-      id: 'auto' as AgentModelPreference,
-      name: `Auto · ${t('model.gpt56Terra.name')}`,
-      desc: t('model.agentAutoDesc'),
-      badge: t('model.azureApiBadge'),
-    },
-    ...standardOptions.filter(option => (
-      subscriptionVisible || !isCodexSubscriptionAgentModelPreference(option.id)
-    )),
-  ];
-
   const formatResetTime = (seconds: number) => new Intl.DateTimeFormat(locale, {
     month: 'short',
     day: 'numeric',
     hour: '2-digit',
     minute: '2-digit',
   }).format(new Date(seconds * 1_000));
+
+  const azureOptions = models
+    .filter(model => model.id.startsWith('gpt-5.6-'))
+    .map((model) => ({
+      id: model.id as AgentModelPreference,
+      name: t(model.nameKey as Parameters<typeof t>[0]),
+      desc: t(model.descKey as Parameters<typeof t>[0]),
+    }));
+  const subscriptionVisible = subscriptionUsage.status !== 'unavailable'
+    || isCodexSubscriptionAgentModelPreference(value);
+  const subscriptionOptions = subscriptionVisible
+    ? models
+      .filter(model => model.id.startsWith('gpt-5.6-'))
+      .map(model => ({
+        id: getCodexSubscriptionAgentModelPreference(model.id as GPT56AgentModelId),
+        name: t(model.nameKey as Parameters<typeof t>[0]),
+        desc: t(model.descKey as Parameters<typeof t>[0]),
+      }))
+    : [];
+  const otherOptions = models
+    .filter(model => !model.id.startsWith('gpt-5.6-'))
+    .map(model => ({
+      id: model.id as AgentModelPreference,
+      name: t(model.nameKey as Parameters<typeof t>[0]),
+      desc: t(model.descKey as Parameters<typeof t>[0]),
+    }));
+
+  const subscriptionUsageLabel = subscriptionUsage.status === 'loading' || subscriptionUsage.status === 'idle'
+    ? t('model.codexSubscription.checking')
+    : subscriptionUsage.status === 'available' && subscriptionUsage.weekly
+      ? `${t('model.codexSubscription.remaining', String(Math.round(subscriptionUsage.weekly.remainingPercent)))} · ${t('model.codexSubscription.resetsAt', formatResetTime(subscriptionUsage.weekly.resetsAt))}`
+      : t('model.codexSubscription.usageUnavailable');
+
+  const optionGroups = [
+    {
+      id: 'azure',
+      label: t('model.agentGroup.azure'),
+      detail: t('model.agentGroup.azureDesc'),
+      options: [
+        {
+          id: 'auto' as AgentModelPreference,
+          name: `Auto · ${t('model.gpt56Terra.name')}`,
+          desc: t('model.agentAutoDesc'),
+        },
+        ...azureOptions,
+      ],
+    },
+    ...(subscriptionOptions.length > 0 ? [{
+      id: 'codex',
+      label: t('model.agentGroup.codex'),
+      detail: subscriptionUsageLabel,
+      progress: subscriptionUsage.status === 'available'
+        ? subscriptionUsage.weekly?.remainingPercent
+        : undefined,
+      options: subscriptionOptions,
+    }] : []),
+    ...(otherOptions.length > 0 ? [{
+      id: 'other',
+      label: t('model.agentGroup.other'),
+      detail: t('model.agentGroup.otherDesc'),
+      options: otherOptions,
+    }] : []),
+  ];
 
   return (
     <>
@@ -269,40 +297,46 @@ export default function AgentModelChip({ value, onChange, disabled = false }: Ag
               role="radiogroup"
               onTouchMove={(event) => event.stopPropagation()}
             >
-              {options.map(model => {
-                const active = value === model.id;
-                const isCodexSubscription = isCodexSubscriptionAgentModelPreference(model.id);
-                return (
-                  <button
-                    key={model.id}
-                    type="button"
-                    role="radio"
-                    aria-checked={active}
-                    onClick={() => choose(model.id as AgentModelPreference)}
-                    className="mkr-create-model-option"
-                    data-active={active}
-                    data-agent-provider={isCodexSubscription ? 'codex-subscription' : model.id.startsWith('gpt-5.6-') || model.id === 'auto' ? 'azure-openai' : undefined}
-                  >
-                    <span className="mkr-create-model-copy">
-                      <span className="mkr-create-model-name">
-                        {model.name}
-                        {model.badge && <span className="mkr-create-model-badge">{model.badge}</span>}
-                      </span>
-                      <span className="mkr-create-model-desc">{model.desc}</span>
-                      {isCodexSubscription && (
-                        <span className="mkr-create-model-usage" data-testid="codex-subscription-usage">
-                          {subscriptionUsage.status === 'loading' || subscriptionUsage.status === 'idle'
-                            ? t('model.codexSubscription.checking')
-                            : subscriptionUsage.status === 'available' && subscriptionUsage.weekly
-                              ? `${t('model.codexSubscription.remaining', String(Math.round(subscriptionUsage.weekly.remainingPercent)))} · ${t('model.codexSubscription.resetsAt', formatResetTime(subscriptionUsage.weekly.resetsAt))}`
-                              : t('model.codexSubscription.usageUnavailable')}
-                        </span>
-                      )}
+              {optionGroups.map(group => (
+                <section key={group.id} className="mkr-agent-model-group" data-agent-provider-group={group.id}>
+                  <div className="mkr-agent-model-group-header">
+                    <span className="mkr-agent-model-group-title">{group.label}</span>
+                    <span
+                      className="mkr-agent-model-group-detail"
+                      data-testid={group.id === 'codex' ? 'codex-subscription-usage' : undefined}
+                    >
+                      {group.detail}
                     </span>
-                    <span className="mkr-create-model-check" aria-hidden="true" />
-                  </button>
-                );
-              })}
+                    {typeof group.progress === 'number' && (
+                      <span className="mkr-agent-model-group-track" aria-hidden="true">
+                        <span style={{ width: `${Math.max(0, Math.min(100, group.progress))}%` }} />
+                      </span>
+                    )}
+                  </div>
+                  {group.options.map(model => {
+                    const active = value === model.id;
+                    const isCodexSubscription = isCodexSubscriptionAgentModelPreference(model.id);
+                    return (
+                      <button
+                        key={model.id}
+                        type="button"
+                        role="radio"
+                        aria-checked={active}
+                        onClick={() => choose(model.id as AgentModelPreference)}
+                        className="mkr-create-model-option"
+                        data-active={active}
+                        data-agent-provider={isCodexSubscription ? 'codex-subscription' : model.id.startsWith('gpt-5.6-') || model.id === 'auto' ? 'azure-openai' : undefined}
+                      >
+                        <span className="mkr-create-model-copy">
+                          <span className="mkr-create-model-name">{model.name}</span>
+                          <span className="mkr-create-model-desc">{model.desc}</span>
+                        </span>
+                        <span className="mkr-create-model-check" aria-hidden="true" />
+                      </button>
+                    );
+                  })}
+                </section>
+              ))}
             </div>
           </div>
         </div>,
