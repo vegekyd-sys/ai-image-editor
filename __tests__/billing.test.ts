@@ -385,13 +385,31 @@ describe('credits', () => {
       }
     });
 
-    it('treats missing balance as 0', async () => {
+    it('initializes a missing balance through the atomic welcome-credit RPC', async () => {
       const chain = mockQuery(null);
+      chain.single
+        .mockResolvedValueOnce({ data: null, error: { code: 'PGRST116', message: 'No rows' } })
+        .mockResolvedValueOnce({ data: { balance: 500 }, error: null })
       mockFrom.mockImplementation((t: string) => t === 'app_settings' ? billingSettingsChain : chain);
+      mockRpc.mockResolvedValue({ data: { granted: true, balance: 500 }, error: null });
 
       const { requireCredits } = await import('@/lib/billing/credits');
       const result = await requireCredits('user-1', 1);
-      expect(result.ok).toBe(false);
+      expect(result.ok).toBe(true);
+      expect(mockRpc).toHaveBeenCalledWith('claim_welcome_credits', {
+        p_user_id: 'user-1',
+        p_credits: 500,
+        p_channel: 'legacy_auto',
+      });
+    });
+
+    it('fails closed when the balance read fails', async () => {
+      const chain = mockQuery(null, { code: '08006', message: 'connection failure' });
+      mockFrom.mockImplementation((t: string) => t === 'app_settings' ? billingSettingsChain : chain);
+
+      const { requireCredits } = await import('@/lib/billing/credits');
+      await expect(requireCredits('user-1', 1)).rejects.toThrow('Could not read credit balance');
+      expect(mockRpc).not.toHaveBeenCalledWith('claim_welcome_credits', expect.anything());
     });
   });
 
