@@ -10,7 +10,8 @@ import { translate } from '@/lib/locales';
 import { resolvePersistedRunStatus } from '@/lib/agent-terminal';
 import {
   normalizeRequestedAgentModelPreference,
-  resolveAgentModelSpec,
+  resolveAgentModelSpecForUser,
+  shouldRequireAgentCredits,
 } from '@/lib/agent-models';
 import {
   DEFAULT_ATTEMPT_BUDGET_MS,
@@ -19,6 +20,7 @@ import {
   getAgentContextPolicy,
 } from '@/lib/agent-execution';
 import { verifySkillLaunchContext } from '@/lib/skill-launch-context';
+import { isDynamicCodexSubscriptionUserAllowed } from '@/lib/codex-subscription-allowlist';
 import {
   appendAgentRunInput,
   decideAgentRunAdmission,
@@ -41,6 +43,7 @@ export async function POST(req: NextRequest) {
     const authResult = await authenticateRequest(req);
     if ('error' in authResult) return authResult.error;
     const { userId, supabase } = authResult.auth;
+    const codexSubscriptionAllowed = await isDynamicCodexSubscriptionUserAllowed(userId);
     cleanupSupabase = supabase;
 
     const {
@@ -81,11 +84,19 @@ export async function POST(req: NextRequest) {
     if (requestedAgentModel === null) {
       return NextResponse.json({ error: 'Unsupported agentModel' }, { status: 400 });
     }
-    const resolvedAgentModel = resolveAgentModelSpec(requestedAgentModel, process.env.AGENT_MODEL);
+    const resolvedAgentModel = resolveAgentModelSpecForUser(
+      requestedAgentModel,
+      process.env.AGENT_MODEL,
+      userId,
+      undefined,
+      codexSubscriptionAllowed,
+    );
 
     // Pre-flight credit check
-    const creditCheck = await requireCredits(userId, 5);
-    if (!creditCheck.ok) return creditCheck.response;
+    if (shouldRequireAgentCredits(resolvedAgentModel.provider)) {
+      const creditCheck = await requireCredits(userId, 5);
+      if (!creditCheck.ok) return creditCheck.response;
+    }
 
     const locale = getRequestLocale(req);
 
@@ -314,6 +325,7 @@ export async function POST(req: NextRequest) {
           userSkills: userSkills.length ? userSkills : undefined,
           supabase,
           userId: userId,
+          codexSubscriptionAllowed,
           currentDesign: ctx.currentDesign,
           currentDesignPath: ctx.currentDesignPath,
           history: ctx.history,
@@ -363,7 +375,8 @@ export async function POST(req: NextRequest) {
         } catch (persistError) {
           console.error(`[agent/run] Run ${runId} terminal error persistence failed:`, persistError);
         }
-        if (totalInputTokens > 0 || totalOutputTokens > 0 || totalCacheReadTokens > 0 || totalCacheWriteTokens > 0) {
+        if (shouldRequireAgentCredits(resolvedAgentModel.provider)
+          && (totalInputTokens > 0 || totalOutputTokens > 0 || totalCacheReadTokens > 0 || totalCacheWriteTokens > 0)) {
           deductByTokens(
             userId, 'agent', agentModel || 'unknown',
             totalInputTokens, totalOutputTokens,
@@ -409,7 +422,8 @@ export async function POST(req: NextRequest) {
 
       await writer.flush();
       // Deduct agent LLM tokens
-      if (totalInputTokens > 0 || totalOutputTokens > 0 || totalCacheReadTokens > 0 || totalCacheWriteTokens > 0) {
+      if (shouldRequireAgentCredits(resolvedAgentModel.provider)
+        && (totalInputTokens > 0 || totalOutputTokens > 0 || totalCacheReadTokens > 0 || totalCacheWriteTokens > 0)) {
         deductByTokens(
           userId, 'agent', agentModel || 'unknown',
           totalInputTokens, totalOutputTokens,
@@ -456,7 +470,7 @@ export async function POST(req: NextRequest) {
             const namePrompt = `Based on this user request, give a concise project name (2-4 words, no quotes): "${nameSource}". Output only the name.`;
             let projectName = '';
             for await (const ev of runMakaronAgent(namePrompt, '', projectId, {
-              tipReactionOnly: true, locale, agentModel: requestedAgentModel,
+              tipReactionOnly: true, locale, agentModel: requestedAgentModel, userId, codexSubscriptionAllowed,
             })) {
               if (ev.type === 'content' && ev.text) projectName += ev.text;
             }

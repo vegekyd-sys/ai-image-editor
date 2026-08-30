@@ -4,7 +4,13 @@ import { AgentDualWriter } from './agentDualWriter';
 import { buildPromptContext } from './agent-context';
 import { getSupabaseAdmin } from './supabase/service';
 import { deductByTokens } from './billing/credits';
-import { resolveAgentModelSpec, type AgentModelPreference } from './agent-models';
+import {
+  resolveAgentModelSpec,
+  resolveAgentModelSpecForUser,
+  resolveCodexSubscriptionFallbackProvider,
+  shouldRequireAgentCredits,
+  type AgentModelPreference,
+} from './agent-models';
 import {
   AgentExecutionStore,
   buildRecoverablePreflightInstruction,
@@ -15,7 +21,9 @@ import {
   DEFAULT_MAX_ATTEMPTS,
   getAgentContextPolicy,
   isConfirmedExecutionLeaseLoss,
+  isSafeToEnterCodexSubscriptionApiFallback,
   MAX_SAME_PROVIDER_ATTEMPTS,
+  shouldFailoverCodexSubscriptionToApi,
   shouldFailoverAzureGPT56ToOpenRouter,
   normalizeExecutionSnapshot,
   shouldScheduleNextAttempt,
@@ -30,6 +38,7 @@ import {
   loadPendingAgentInputs,
   markAgentRunInputsApplied,
 } from './agent-run-admission';
+import { isDynamicCodexSubscriptionUserAllowed } from './codex-subscription-allowlist';
 
 interface ExecutionRequest {
   locale?: string;
@@ -366,7 +375,14 @@ export async function runAgentExecutionAttempt(
   }
 
   const request = ((run.metadata || {}).executionRequest || {}) as ExecutionRequest;
-  const requestedModel = resolveAgentModelSpec(request.requestedAgentModel, process.env.AGENT_MODEL);
+  const codexSubscriptionAllowed = await isDynamicCodexSubscriptionUserAllowed(run.user_id, admin);
+  const requestedModel = resolveAgentModelSpecForUser(
+    request.requestedAgentModel,
+    process.env.AGENT_MODEL,
+    run.user_id,
+    undefined,
+    codexSubscriptionAllowed,
+  );
   const { data: previousAttempts } = claim.attempt_no > 1
     ? await admin
         .from('agent_attempts')
@@ -374,7 +390,7 @@ export async function runAgentExecutionAttempt(
         .eq('run_id', runId)
         .lt('attempt_no', claim.attempt_no)
         .order('attempt_no', { ascending: false })
-        .limit(40)
+        .limit(policy.maxAttempts)
     : { data: [] };
   const typedPreviousAttempts = (previousAttempts || []) as Array<{
     attempt_no: number;
@@ -389,20 +405,47 @@ export async function runAgentExecutionAttempt(
   );
   const previousProviderFailover = typedPreviousAttempts.some(item => {
     const failover = item.metadata?.providerFailover;
+    const fromProvider = failover && typeof failover === 'object' && 'fromProvider' in failover
+      ? failover.fromProvider
+      : undefined;
     return Boolean(
       failover
       && typeof failover === 'object'
       && 'from' in failover
-      && failover.from === requestedModel.id,
+      && failover.from === requestedModel.id
+      && (
+        requestedModel.provider !== 'codex-subscription'
+        || fromProvider === requestedModel.provider
+      ),
     );
   });
-  const providerFailover = shouldFailoverAzureGPT56ToOpenRouter({
-    requestedProvider: requestedModel.provider,
-    hasOpenRouterKey: Boolean(process.env.OPENROUTER_API_KEY?.trim()),
-    previousProviderFailover,
-    retryableFailureCount: requestedProviderFailureCount,
-  });
-  const providerRetry = requestedModel.provider === 'azure-openai'
+  const failoverProvider = requestedModel.provider === 'codex-subscription'
+    ? resolveCodexSubscriptionFallbackProvider()
+    : 'openrouter';
+  const hasFailoverCredential = failoverProvider === 'azure-openai'
+    ? Boolean(process.env.AZURE_OPENAI_API_KEY?.trim())
+    : Boolean(process.env.OPENROUTER_API_KEY?.trim());
+  const latestFailureDetail = latestRequestedProviderAttempt?.metadata?.terminalDetail;
+  const subscriptionFallbackSafe = isSafeToEnterCodexSubscriptionApiFallback(
+    typedPreviousAttempts,
+    inputVersionAtAttemptStart,
+  );
+  const providerFailover = requestedModel.provider === 'codex-subscription'
+    ? shouldFailoverCodexSubscriptionToApi({
+        requestedProvider: requestedModel.provider,
+        hasApiFallback: hasFailoverCredential && subscriptionFallbackSafe,
+        previousProviderFailover,
+        retryableFailureCount: requestedProviderFailureCount,
+        latestFailureDetail,
+      })
+    : shouldFailoverAzureGPT56ToOpenRouter({
+        requestedProvider: requestedModel.provider,
+        hasOpenRouterKey: Boolean(process.env.OPENROUTER_API_KEY?.trim()),
+        previousProviderFailover,
+        retryableFailureCount: requestedProviderFailureCount,
+      });
+  const providerRetry = (requestedModel.provider === 'azure-openai'
+    || requestedModel.provider === 'codex-subscription')
     && !providerFailover
     && requestedProviderFailureCount > 0;
   const sameProviderAttempt = Math.min(
@@ -411,7 +454,7 @@ export async function runAgentExecutionAttempt(
   );
   const effectiveAgentModel = request.requestedAgentModel;
   const resolvedModel = providerFailover
-    ? resolveAgentModelSpec(requestedModel.id, undefined, 'openrouter')
+    ? resolveAgentModelSpec(requestedModel.id, undefined, failoverProvider)
     : requestedModel;
   const executionStore = new AgentExecutionStore(admin, run.user_id, run.project_id);
   const previousSnapshot = await executionStore.latestSnapshot(runId);
@@ -441,12 +484,15 @@ export async function runAgentExecutionAttempt(
     agentModelProvider: resolvedModel.provider,
     durableContinuation: continuation,
   });
-  await admin.from('agent_attempts').update({
+  const { error: attemptMetadataError } = await admin.from('agent_attempts').update({
     input_token_estimate: ctx.contextStats.estimatedTokens,
     metadata: {
       context: ctx.contextStats,
       model: resolvedModel.id,
+      provider: resolvedModel.provider,
       requestedModel: requestedModel.id,
+      inputEpoch: inputVersionAtAttemptStart,
+      fallbackSafety: 'pending',
       ...(providerRetry ? {
         providerRetry: {
           model: requestedModel.id,
@@ -468,6 +514,11 @@ export async function runAgentExecutionAttempt(
       ...(scaffoldWarning ? { compositionScaffoldWarning: scaffoldWarning } : {}),
     },
   }).eq('id', attemptId);
+  if (attemptMetadataError) {
+    throw new Error(
+      `Failed to persist Agent attempt provider safety boundary: ${attemptMetadataError.message}`,
+    );
+  }
 
   const firstMessageId = typeof run.metadata?.firstMessageId === 'string' ? run.metadata.firstMessageId : undefined;
   const writer = new AgentDualWriter(
@@ -510,8 +561,8 @@ export async function runAgentExecutionAttempt(
     await writer.processAndEnqueue({
       type: 'status',
       text: request.locale === 'en'
-        ? `Azure is unavailable; continuing this durable run with the same ${resolvedModel.id} model through the OpenRouter backup...`
-        : `Azure 暂不可用，当前 durable run 已通过 OpenRouter 备用线路继续使用同一 ${resolvedModel.id} 模型...`,
+        ? `${requestedModel.provider} is unavailable; continuing this durable run with the same ${resolvedModel.id} model through the ${resolvedModel.provider} API backup...`
+        : `${requestedModel.provider} 暂不可用，当前 durable run 已通过 ${resolvedModel.provider} API 备用线路继续使用同一 ${resolvedModel.id} 模型...`,
     });
   }
 
@@ -556,6 +607,23 @@ export async function runAgentExecutionAttempt(
   let cacheWriteTokens = 0;
   let providerCostUsd: number | undefined;
   let billingModel = resolvedModel.billingModelId;
+  let attemptHadVisibleOutput = false;
+  let attemptDeliveredArtifact = false;
+  const attemptCommittedTools = new Set<string>();
+  const attemptSafetyMetadata = () => ({
+    model: resolvedModel.id,
+    provider: resolvedModel.provider,
+    requestedModel: requestedModel.id,
+    inputEpoch: inputVersionAtAttemptStart,
+    fallbackSafety: !attemptHadVisibleOutput
+      && !attemptDeliveredArtifact
+      && attemptCommittedTools.size === 0
+      ? 'safe'
+      : 'blocked',
+    hadVisibleOutput: attemptHadVisibleOutput,
+    deliveredArtifact: attemptDeliveredArtifact,
+    committedTools: [...attemptCommittedTools].sort(),
+  });
 
   try {
     for await (const event of runMakaronAgent(
@@ -566,9 +634,7 @@ export async function runAgentExecutionAttempt(
         locale: request.locale,
         preferredModel: request.preferredModel as any,
         agentModel: effectiveAgentModel,
-        agentProvider: resolvedModel.provider === 'azure-openai' || resolvedModel.provider === 'openrouter'
-          ? resolvedModel.provider
-          : undefined,
+        agentProvider: resolvedModel.provider === 'deepseek' ? undefined : resolvedModel.provider,
         videoModel: request.videoModel,
         videoResolution: request.videoResolution,
         videoAuto: request.videoAuto,
@@ -581,6 +647,7 @@ export async function runAgentExecutionAttempt(
         userSkills: userSkills.length ? userSkills : undefined,
         supabase: admin,
         userId: run.user_id,
+        codexSubscriptionAllowed,
         currentDesign: ctx.currentDesign,
         currentDesignPath: ctx.currentDesignPath,
         history: ctx.history,
@@ -602,7 +669,44 @@ export async function runAgentExecutionAttempt(
         agentRunId: runId,
       },
     )) {
-      if (event.type === 'content') attemptText += event.text;
+      if (event.type === 'content') {
+        attemptText += event.text;
+        if (event.text.trim()) attemptHadVisibleOutput = true;
+      }
+      if (
+        event.type === 'reasoning_start'
+        || (event.type === 'reasoning' && Boolean(event.text.trim()))
+        || event.type === 'new_turn'
+        || event.type === 'tool_call'
+        || event.type === 'coding'
+        || (event.type === 'code_stream' && Boolean(event.text))
+        || event.type === 'image_analyzed'
+        || event.type === 'capture_frame'
+        || event.type === 'preview_frame_captured'
+      ) {
+        attemptHadVisibleOutput = true;
+      }
+      if (
+        event.type === 'image'
+        || event.type === 'animation_task'
+        || event.type === 'video_snapshot'
+        || event.type === 'render'
+        || event.type === 'composition'
+        || event.type === 'design'
+        || event.type === 'music_task'
+      ) {
+        attemptHadVisibleOutput = true;
+        attemptDeliveredArtifact = true;
+      }
+      if (event.type === 'tool_result') {
+        const output = event.output && typeof event.output === 'object'
+          ? event.output as Record<string, unknown>
+          : undefined;
+        const succeeded = output?.success !== false
+          && output?.status !== 'failed'
+          && !(output?.error && output?.success !== true);
+        if (succeeded) attemptCommittedTools.add(event.tool);
+      }
       if (event.type === 'done') sawDone = true;
       if (event.type === 'error') {
         terminal = event;
@@ -648,7 +752,8 @@ export async function runAgentExecutionAttempt(
     await writer.flush();
   }
 
-  if (inputTokens || outputTokens || cacheReadTokens || cacheWriteTokens) {
+  if (shouldRequireAgentCredits(resolvedModel.provider)
+    && (inputTokens || outputTokens || cacheReadTokens || cacheWriteTokens)) {
     void deductByTokens(
       run.user_id,
       'agent',
@@ -674,7 +779,11 @@ export async function runAgentExecutionAttempt(
     expectedLeaseToken: claim.lease_token,
   });
   if (confirmedOwnershipLoss) {
-    await finishAttempt(admin, attemptId, 'aborted', { input_tokens: inputTokens, output_tokens: outputTokens });
+    await finishAttempt(admin, attemptId, 'aborted', {
+      input_tokens: inputTokens,
+      output_tokens: outputTokens,
+      metadata: attemptSafetyMetadata(),
+    });
     return { claimed: true, runId, attemptId, attemptNo: claim.attempt_no, status: 'aborted' };
   }
   if (!currentLease.state) {
@@ -730,7 +839,11 @@ export async function runAgentExecutionAttempt(
       .maybeSingle();
     if (completionError) throw new Error(`Failed to finalize Agent execution: ${completionError.message}`);
     if (completedRun) {
-      await finishAttempt(admin, attemptId, 'completed', { input_tokens: inputTokens, output_tokens: outputTokens });
+      await finishAttempt(admin, attemptId, 'completed', {
+        input_tokens: inputTokens,
+        output_tokens: outputTokens,
+        metadata: attemptSafetyMetadata(),
+      });
       return { claimed: true, runId, attemptId, attemptNo: claim.attempt_no, status: 'completed' };
     }
 
@@ -777,9 +890,12 @@ export async function runAgentExecutionAttempt(
       input_tokens: inputTokens,
       output_tokens: outputTokens,
       terminal_code: terminal?.code || 'missing_terminal_event',
-      ...(terminal?.checkpoint?.errorDetail
-        ? { metadata: { terminalDetail: terminal.checkpoint.errorDetail } }
-        : {}),
+      metadata: {
+        ...attemptSafetyMetadata(),
+        ...(terminal?.checkpoint?.errorDetail
+          ? { terminalDetail: terminal.checkpoint.errorDetail }
+          : {}),
+      },
     });
     await admin.from('agent_runs').update({
       current_work_unit: 'agent',
@@ -814,6 +930,7 @@ export async function runAgentExecutionAttempt(
     input_tokens: inputTokens,
     output_tokens: outputTokens,
     terminal_code: terminal?.code || 'attempt_incomplete',
+    metadata: attemptSafetyMetadata(),
   });
   await admin.from('agent_runs').update({
     status: 'failed',

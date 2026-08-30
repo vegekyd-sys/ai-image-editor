@@ -641,7 +641,8 @@ try {
     const result = await expectHelp(['chat', '--help'], /Agent LLM defaults to auto/);
     assert.match(result.stdout, /^\s+--agent-model <id>/m);
     assert.match(result.stdout, /deepseek-v4-pro/);
-    assert.match(result.stdout, /currently gpt-5\.6-terra/);
+    assert.match(result.stdout, /account owner uses the personal\s+Codex plan/);
+    assert.match(result.stdout, /gpt-5\.6-\*-codex-subscription/);
     assert.doesNotMatch(result.stdout, /^\s+--image-model/m);
     assert.doesNotMatch(result.stdout, /^\s+--video-model/m);
     assert.doesNotMatch(result.stdout, /^\s+--video-resolution/m);
@@ -664,7 +665,19 @@ try {
       /export const AGENT_MODEL_IDS = \[([\s\S]*?)\] as const;/,
       'app Agent model catalog',
     );
-    assert.deepEqual(cliModels, ['auto', ...appModels], 'CLI Agent LLM allowlist must stay in sync with the app catalog');
+    const subscriptionModels = [
+      'gpt-5.6-terra-codex-subscription',
+      ...extractQuotedValues(
+      appCatalogSource,
+      /export const CODEX_SUBSCRIPTION_AGENT_MODEL_PREFERENCES = \[([\s\S]*?)\] as const;/,
+      'app Codex subscription Agent model catalog',
+      ),
+    ];
+    assert.deepEqual(
+      cliModels,
+      ['auto', ...appModels.slice(0, 3), ...subscriptionModels, ...appModels.slice(3)],
+      'CLI Agent LLM allowlist must stay in sync with the app catalog',
+    );
   }
 
   {
@@ -771,6 +784,18 @@ try {
     assert.equal(streamRequest?.body?.agentModel, 'gpt-5.6-terra');
     assert.equal(streamRequest?.body?.preferredModel, undefined);
     assert.equal(streamRequest?.body?.videoModel, undefined);
+  }
+
+  {
+    const requestStart = requests.length;
+    await expectSuccess([
+      'chat', '--project', 'project-models-1', '--agent-model',
+      'gpt-5.6-sol-codex-subscription', '--json', '-b',
+      'use the personal Codex plan explicitly',
+    ]);
+    const runRequest = requests.slice(requestStart)
+      .find(request => request.pathname === '/api/agent/run');
+    assert.equal(runRequest?.body?.agentModel, 'gpt-5.6-sol-codex-subscription');
   }
 
   {

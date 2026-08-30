@@ -33,6 +33,9 @@ const CHAT_AGENT_MODELS = [
   'gpt-5.6-terra',
   'gpt-5.6-sol',
   'gpt-5.6-luna',
+  'gpt-5.6-terra-codex-subscription',
+  'gpt-5.6-sol-codex-subscription',
+  'gpt-5.6-luna-codex-subscription',
   'grok-4.5',
   'deepseek-v4-pro',
 ];
@@ -456,14 +459,16 @@ Options:
   --media-manifest <file|-> Import typed image/video media before this run.
   --skill <id|label|name>   Use an installed skill or auto-install a matched marketplace skill.
   --agent-model <id>        Agent LLM only: auto, gpt-5.6-terra, gpt-5.6-sol,
-                            gpt-5.6-luna, grok-4.5, or deepseek-v4-pro.
+                            gpt-5.6-luna, grok-4.5, deepseek-v4-pro, or a
+                            gpt-5.6-*-codex-subscription personal-plan route.
   --background, -b          Submit and print a runId.
   --json                    Output structured JSON.
   --stream                  Legacy live SSE stream.
   --help, -h                Show this help.
 
-Agent LLM defaults to auto (currently gpt-5.6-terra). Image/video model routing
-stays automatic in chat; --image-model, --video-model, and --model are rejected.
+Agent LLM defaults to auto (GPT-5.6 Terra; the account owner uses the personal
+Codex plan). Base GPT-5.6 ids select Azure API; append -codex-subscription to
+select the personal plan explicitly. Image/video model routing stays automatic in chat.
 
 What you can ask:
   Image edit
@@ -494,6 +499,9 @@ What you can ask:
 
   Compare Agent LLMs with identical inputs
     makaron chat --project auto --agent-model deepseek-v4-pro -b --json "make a 20s badminton video"
+
+  Force the personal Codex plan
+    makaron chat --project auto --agent-model gpt-5.6-sol-codex-subscription -b --json "reply with the active model"
 
   Music
     makaron chat --project <id> "add calm piano background music"

@@ -81,10 +81,11 @@ npx makaron-cli chat --project auto --image photo.jpg --json -b "make it cinemat
 npx makaron-cli chat --project auto --image img1.jpg --image img2.jpg --json -b "combine these"
 ```
 
-`chat` routes image and video models automatically. Use `--agent-model` only when the user explicitly asks to select or compare the reasoning/tool-calling Agent LLM. Accepted values are exactly `auto`, `gpt-5.6-terra`, `gpt-5.6-sol`, `gpt-5.6-luna`, `grok-4.5`, and `deepseek-v4-pro`; `auto` currently resolves to `gpt-5.6-terra`. Never put an image or video model ID in `--agent-model`. The CLI rejects unknown Agent IDs plus `--image-model`, `--video-model`, and legacy `--model` before starting a chat run.
+`chat` routes image and video models automatically. Use `--agent-model` only when the user explicitly asks to select or compare the reasoning/tool-calling Agent LLM. Accepted values are `auto`, the base model IDs (`gpt-5.6-terra`, `gpt-5.6-sol`, `gpt-5.6-luna`, `grok-4.5`, `deepseek-v4-pro`), and the personal-plan routes (`gpt-5.6-terra-codex-subscription`, `gpt-5.6-sol-codex-subscription`, `gpt-5.6-luna-codex-subscription`). For the configured owner, `auto` uses GPT-5.6 Terra through the personal Codex plan; base GPT-5.6 IDs select Azure API, while suffixed IDs explicitly select the personal plan. Never put an image or video model ID in `--agent-model`.
 
 ```bash
 npx makaron-cli chat --project auto --agent-model deepseek-v4-pro --json -b "make a 20s badminton video"
+npx makaron-cli chat --project auto --agent-model gpt-5.6-sol-codex-subscription --json -b "reply with the active model"
 ```
 
 Returns immediately:

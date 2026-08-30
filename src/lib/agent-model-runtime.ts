@@ -3,7 +3,7 @@ import { createOpenAI } from '@ai-sdk/openai';
 import { createOpenRouter } from '@openrouter/ai-sdk-provider';
 import type { LanguageModel, ModelMessage } from 'ai';
 import {
-  resolveAgentModelSpec,
+  resolveAgentModelSpecForUser,
   type AgentModelPreference,
   type GPT56AgentProvider,
   type AgentReasoningEffort,
@@ -11,6 +11,7 @@ import {
 } from './agent-models';
 import { normalizeToolCallInputs } from './tool-inputs';
 import { createAzureOpenAIResponsesModel } from './azure-openai-responses';
+import { createCodexSubscriptionResponsesModel } from './codex-subscription';
 
 export interface AgentModelRuntime {
   spec: AgentModelSpec;
@@ -32,11 +33,15 @@ export function createAgentModelRuntime(
   preference: AgentModelPreference | undefined,
   projectId: string,
   configuredGPT56Provider?: GPT56AgentProvider,
+  userId?: string,
+  codexSubscriptionAllowed?: boolean,
 ): AgentModelRuntime {
-  const spec = resolveAgentModelSpec(
+  const spec = resolveAgentModelSpecForUser(
     preference,
     process.env.AGENT_MODEL,
+    userId,
     configuredGPT56Provider ?? process.env.GPT56_AGENT_PROVIDER,
+    codexSubscriptionAllowed,
   );
 
   if (spec.provider === 'azure-openai') {
@@ -45,6 +50,19 @@ export function createAgentModelRuntime(
       spec,
       model: createAzureOpenAIResponsesModel(spec.providerModelId),
       promptCacheKey,
+      normalizeMessages: normalizeToolCallInputs,
+    };
+  }
+
+  if (spec.provider === 'codex-subscription') {
+    return {
+      spec,
+      model: createCodexSubscriptionResponsesModel(
+        spec.providerModelId,
+        projectId,
+        { userId },
+      ),
+      promptCacheKey: createAzureAgentPromptCacheKey(spec.id, projectId),
       normalizeMessages: normalizeToolCallInputs,
     };
   }
@@ -112,6 +130,34 @@ export function getAgentProviderOptions(
           mode: 'implicit',
           ttl: '30m',
         },
+        ...(reasoningEffort ? { reasoningEffort } : {}),
+        ...(options?.compactAtTokens
+          ? {
+              contextManagement: [{
+                type: 'compaction',
+                compactThreshold: options.compactAtTokens,
+              }],
+            }
+          : {}),
+      },
+    };
+  }
+
+  if (runtime.spec.provider === 'codex-subscription') {
+    const allowedEfforts = new Set<AgentReasoningEffort>([
+      'none', 'minimal', 'low', 'medium', 'high', 'xhigh',
+    ]);
+    const configuredEffort = process.env.CODEX_SUBSCRIPTION_REASONING_EFFORT
+      ?.trim()
+      .toLowerCase() as AgentReasoningEffort | undefined;
+    const reasoningEffort = configuredEffort && allowedEfforts.has(configuredEffort)
+      ? configuredEffort
+      : runtime.spec.defaultReasoningEffort;
+    return {
+      openai: {
+        parallelToolCalls: false,
+        store: false,
+        promptCacheKey: runtime.promptCacheKey,
         ...(reasoningEffort ? { reasoningEffort } : {}),
         ...(options?.compactAtTokens
           ? {

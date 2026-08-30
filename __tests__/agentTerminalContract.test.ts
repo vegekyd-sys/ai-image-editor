@@ -112,7 +112,13 @@ describe('agent terminal contract wiring', () => {
     expect(executionRunnerSource).toContain("status: 'handed_off'");
     expect(executionRunnerSource).toContain('next_attempt_at: new Date().toISOString()');
     expect(executionRunnerSource).toContain('shouldFailoverAzureGPT56ToOpenRouter');
-    expect(executionRunnerSource).toContain("resolveAgentModelSpec(requestedModel.id, undefined, 'openrouter')");
+    expect(executionRunnerSource).toContain('shouldFailoverCodexSubscriptionToApi');
+    expect(executionRunnerSource).toContain('isSafeToEnterCodexSubscriptionApiFallback');
+    expect(executionRunnerSource).toContain("fallbackSafety: 'pending'");
+    expect(executionRunnerSource).toContain('attemptSafetyMetadata()');
+    expect(executionRunnerSource).toContain('attemptMetadataError');
+    expect(executionRunnerSource).toContain('.limit(policy.maxAttempts)');
+    expect(executionRunnerSource).toContain('resolveAgentModelSpec(requestedModel.id, undefined, failoverProvider)');
     expect(executionRunnerSource).toContain('agentProvider: resolvedModel.provider');
   });
 

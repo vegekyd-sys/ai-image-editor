@@ -7,9 +7,12 @@ import {
   formatDurableExecutionSnapshot,
   getAgentContextPolicy,
   isConfirmedExecutionLeaseLoss,
+  isCodexSubscriptionTerminalFailure,
+  isSafeToEnterCodexSubscriptionApiFallback,
   isRetryableProviderOutage,
   MAX_SAME_PROVIDER_ATTEMPTS,
   shouldFailoverAzureGPT56ToOpenRouter,
+  shouldFailoverCodexSubscriptionToApi,
   selectModelHistoryWithinBudget,
   shouldScheduleNextAttempt,
   stableOperationKey,
@@ -164,7 +167,57 @@ describe('durable Agent execution', () => {
     const matching = buildTypedCompactionMessage(snapshot, 'gpt-5.6-sol');
     expect(JSON.stringify(matching)).toContain('openai.compaction');
     expect(JSON.stringify(matching)).toContain('encrypted-context');
+    expect(buildTypedCompactionMessage(
+      snapshot,
+      'gpt-5.6-sol',
+      'azure-openai',
+    )).not.toBeNull();
+    expect(buildTypedCompactionMessage(
+      snapshot,
+      'gpt-5.6-sol',
+      'codex-subscription',
+    )).toBeNull();
     expect(buildTypedCompactionMessage(snapshot, 'gpt-5.6-terra')).toBeNull();
+  });
+
+  it('replays Codex subscription compaction only through its OpenAI Responses transport', () => {
+    const snapshot: DurableExecutionSnapshot = {
+      version: 1,
+      objective: 'long task',
+      acceptanceCriteria: [],
+      decisions: [],
+      completedWork: [],
+      artifacts: [],
+      openQuestions: [],
+      currentWorkUnit: 'agent',
+      nextAction: 'continue',
+      providerCompaction: {
+        provider: 'openai',
+        modelId: 'gpt-5.6-terra',
+        item: {
+          kind: 'openai.compaction',
+          providerKey: 'openai',
+          itemId: 'cmp-subscription-1',
+          encryptedContent: 'subscription-encrypted-context',
+        },
+      },
+    };
+
+    expect(buildTypedCompactionMessage(
+      snapshot,
+      'gpt-5.6-terra',
+      'codex-subscription',
+    )).not.toBeNull();
+    expect(buildTypedCompactionMessage(
+      snapshot,
+      'gpt-5.6-terra',
+      'azure-openai',
+    )).toBeNull();
+    expect(buildTypedCompactionMessage(
+      snapshot,
+      'gpt-5.6-terra',
+      'openrouter',
+    )).toBeNull();
   });
 
   it('makes expensive operation keys stable across attempts', () => {
@@ -243,6 +296,89 @@ describe('durable Agent execution', () => {
       previousProviderFailover: true,
       retryableFailureCount: MAX_SAME_PROVIDER_ATTEMPTS,
     })).toBe(false);
+  });
+
+  it('fails an exhausted personal Codex subscription over to API immediately', () => {
+    expect(isCodexSubscriptionTerminalFailure('UsageLimitExceeded')).toBe(true);
+    expect(isCodexSubscriptionTerminalFailure('HTTP 429: usage limit reached')).toBe(true);
+    expect(isCodexSubscriptionTerminalFailure('CODEX_SUBSCRIPTION_AUTH_UNAVAILABLE: login required'))
+      .toBe(true);
+    expect(isCodexSubscriptionTerminalFailure('temporary HTTP 503')).toBe(false);
+
+    expect(shouldFailoverCodexSubscriptionToApi({
+      requestedProvider: 'codex-subscription',
+      hasApiFallback: true,
+      previousProviderFailover: false,
+      retryableFailureCount: 1,
+      latestFailureDetail: 'UsageLimitExceeded',
+    })).toBe(true);
+    expect(shouldFailoverCodexSubscriptionToApi({
+      requestedProvider: 'codex-subscription',
+      hasApiFallback: false,
+      previousProviderFailover: false,
+      retryableFailureCount: MAX_SAME_PROVIDER_ATTEMPTS,
+      latestFailureDetail: 'HTTP 429',
+    })).toBe(false);
+    expect(shouldFailoverCodexSubscriptionToApi({
+      requestedProvider: 'codex-subscription',
+      hasApiFallback: true,
+      previousProviderFailover: false,
+      retryableFailureCount: MAX_SAME_PROVIDER_ATTEMPTS - 1,
+      latestFailureDetail: 'temporary HTTP 503',
+    })).toBe(false);
+    expect(shouldFailoverCodexSubscriptionToApi({
+      requestedProvider: 'codex-subscription',
+      hasApiFallback: true,
+      previousProviderFailover: false,
+      retryableFailureCount: MAX_SAME_PROVIDER_ATTEMPTS,
+      latestFailureDetail: 'temporary HTTP 503',
+    })).toBe(true);
+  });
+
+  it('enters API fallback only after a fail-closed safe subscription attempt', () => {
+    expect(isSafeToEnterCodexSubscriptionApiFallback([], 3)).toBe(true);
+    expect(isSafeToEnterCodexSubscriptionApiFallback([{
+      metadata: {
+        provider: 'codex-subscription',
+        inputEpoch: 3,
+        fallbackSafety: 'safe',
+        hadVisibleOutput: false,
+        deliveredArtifact: false,
+        committedTools: [],
+      },
+    }], 3)).toBe(true);
+    expect(isSafeToEnterCodexSubscriptionApiFallback([{
+      metadata: {
+        provider: 'codex-subscription',
+        inputEpoch: 3,
+        fallbackSafety: 'blocked',
+        hadVisibleOutput: true,
+        committedTools: [],
+      },
+    }], 3)).toBe(false);
+    expect(isSafeToEnterCodexSubscriptionApiFallback([{
+      metadata: {
+        provider: 'codex-subscription',
+        inputEpoch: 3,
+        fallbackSafety: 'pending',
+      },
+    }], 3)).toBe(false);
+    expect(isSafeToEnterCodexSubscriptionApiFallback([{
+      metadata: {
+        provider: 'codex-subscription',
+        inputEpoch: 2,
+        fallbackSafety: 'blocked',
+        committedTools: ['transcribe_audio'],
+      },
+    }], 3)).toBe(true);
+    expect(isSafeToEnterCodexSubscriptionApiFallback([{
+      metadata: {
+        provider: 'azure-openai',
+        inputEpoch: 3,
+        fallbackSafety: 'blocked',
+        committedTools: ['generate_image'],
+      },
+    }], 3)).toBe(true);
   });
 
   it('counts consecutive retryable failures for the requested provider', () => {
