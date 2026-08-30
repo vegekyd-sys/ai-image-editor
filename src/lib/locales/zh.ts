@@ -651,6 +651,7 @@ const zh = {
   'changelog.externalImages.title': 'Scene 图片可直接用于视频',
   'changelog.externalImages.item1': '从 Scene 导入的图片现在会按图片渲染，Preview 与 MP4 导出不再把它误当成视频。',
   'model.agentAutoDesc': '默认 GPT-5.6 Terra，走现有 Azure API',
+  'model.agentAutoCodexDesc': '默认 GPT-5.6 Terra，优先使用你的个人 Codex 套餐',
   'model.agentLabel': 'Agent 模型',
   'model.closeAgentSelector': '关闭模型选择',
   'model.chooseAgent': '选择 Agent 模型',

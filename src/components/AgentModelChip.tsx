@@ -28,6 +28,7 @@ interface PanelPosition {
 
 interface SubscriptionUsageState {
   status: 'idle' | 'loading' | 'available' | 'unavailable';
+  defaultProvider?: 'azure-openai' | 'codex-subscription';
   planType?: string | null;
   weekly?: {
     usedPercent: number;
@@ -62,16 +63,17 @@ export default function AgentModelChip({ value, onChange, disabled = false }: Ag
     ? getCodexSubscriptionAgentModelId(value)
     : value;
   const selected = models.find(model => model.id === selectedModelId);
+  const ownerDefaultsToCodex = subscriptionUsage.defaultProvider === 'codex-subscription';
   const label = isCodexSubscriptionAgentModelPreference(value) && selected
     ? `${t(selected.nameKey as Parameters<typeof t>[0])} · ${t('model.codexSubscription.suffix')}`
     : value === 'auto'
-    ? `Auto · ${t('model.gpt56Terra.name')} · ${t('model.azureApiBadge')}`
+    ? `Auto · ${t('model.gpt56Terra.name')} · ${ownerDefaultsToCodex ? t('model.codexSubscription.suffix') : t('model.azureApiBadge')}`
     : selected
       ? `${t(selected.nameKey as Parameters<typeof t>[0])}${selected.id.startsWith('gpt-5.6-') ? ` · ${t('model.azureApiBadge')}` : ''}`
       : value;
 
   useEffect(() => {
-    if (!open || usageRequestedRef.current) return;
+    if (usageRequestedRef.current) return;
     usageRequestedRef.current = true;
     const controller = new AbortController();
     setSubscriptionUsage({ status: 'loading' });
@@ -82,15 +84,17 @@ export default function AgentModelChip({ value, onChange, disabled = false }: Ag
       .then(async (response) => {
         const payload = await response.json().catch(() => ({})) as {
           available?: boolean;
+          defaultProvider?: SubscriptionUsageState['defaultProvider'];
           planType?: string | null;
           weekly?: SubscriptionUsageState['weekly'];
         };
         if (!payload.available) {
-          setSubscriptionUsage({ status: 'unavailable' });
+          setSubscriptionUsage({ status: 'unavailable', defaultProvider: payload.defaultProvider });
           return;
         }
         setSubscriptionUsage({
           status: response.ok ? 'available' : 'unavailable',
+          defaultProvider: payload.defaultProvider,
           planType: payload.planType,
           weekly: payload.weekly,
         });
@@ -103,7 +107,7 @@ export default function AgentModelChip({ value, onChange, disabled = false }: Ag
         }
       });
     return () => controller.abort();
-  }, [open]);
+  }, []);
 
   const updatePosition = useCallback(() => {
     const trigger = triggerRef.current;
@@ -218,11 +222,11 @@ export default function AgentModelChip({ value, onChange, disabled = false }: Ag
       label: t('model.agentGroup.azure'),
       detail: t('model.agentGroup.azureDesc'),
       options: [
-        {
+        ...(!ownerDefaultsToCodex ? [{
           id: 'auto' as AgentModelPreference,
           name: `Auto · ${t('model.gpt56Terra.name')}`,
           desc: t('model.agentAutoDesc'),
-        },
+        }] : []),
         ...azureOptions,
       ],
     },
@@ -233,7 +237,14 @@ export default function AgentModelChip({ value, onChange, disabled = false }: Ag
       progress: subscriptionUsage.status === 'available'
         ? subscriptionUsage.weekly?.remainingPercent
         : undefined,
-      options: subscriptionOptions,
+      options: [
+        ...(ownerDefaultsToCodex ? [{
+          id: 'auto' as AgentModelPreference,
+          name: `Auto · ${t('model.gpt56Terra.name')}`,
+          desc: t('model.agentAutoCodexDesc'),
+        }] : []),
+        ...subscriptionOptions,
+      ],
     }] : []),
     ...(otherOptions.length > 0 ? [{
       id: 'other',
@@ -315,7 +326,8 @@ export default function AgentModelChip({ value, onChange, disabled = false }: Ag
                   </div>
                   {group.options.map(model => {
                     const active = value === model.id;
-                    const isCodexSubscription = isCodexSubscriptionAgentModelPreference(model.id);
+                    const isCodexSubscription = isCodexSubscriptionAgentModelPreference(model.id)
+                      || (model.id === 'auto' && ownerDefaultsToCodex);
                     return (
                       <button
                         key={model.id}

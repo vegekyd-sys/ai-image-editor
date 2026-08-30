@@ -109,6 +109,23 @@ export function resolveCodexSubscriptionFallbackProvider(
     : 'azure-openai';
 }
 
+export function isCodexSubscriptionOwner(
+  userId: string | undefined,
+  ownerUserId: string | undefined = process.env.CODEX_SUBSCRIPTION_OWNER_USER_ID,
+): boolean {
+  const normalizedOwnerUserId = ownerUserId?.trim();
+  return Boolean(normalizedOwnerUserId && userId === normalizedOwnerUserId);
+}
+
+export function defaultsToCodexSubscription(
+  preference: AgentModelPreference | undefined,
+  userId: string | undefined,
+  ownerUserId: string | undefined = process.env.CODEX_SUBSCRIPTION_OWNER_USER_ID,
+): boolean {
+  return (preference === undefined || preference === 'auto')
+    && isCodexSubscriptionOwner(userId, ownerUserId);
+}
+
 export function resolveGPT56AgentProviderForUser(options: {
   configuredProvider?: string;
   userId?: string;
@@ -268,6 +285,7 @@ export function resolveAgentModelSpecForUser(
   configuredGPT56Provider: string | undefined = process.env.GPT56_AGENT_PROVIDER,
 ): AgentModelSpec {
   const explicitlyUsesCodexSubscription = isCodexSubscriptionAgentModelPreference(preference);
+  const ownerUsesCodexByDefault = defaultsToCodexSubscription(preference, userId);
   const selected = resolveAgentModelSpec(
     preference,
     configuredDefault,
@@ -276,7 +294,7 @@ export function resolveAgentModelSpecForUser(
   if (!isGPT56AgentModelId(selected.id)) return selected;
 
   const provider = resolveGPT56AgentProviderForUser({
-    configuredProvider: explicitlyUsesCodexSubscription
+    configuredProvider: explicitlyUsesCodexSubscription || ownerUsesCodexByDefault
       ? 'codex-subscription'
       : configuredGPT56Provider,
     userId,

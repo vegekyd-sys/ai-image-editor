@@ -33,7 +33,7 @@ export async function GET(req: NextRequest) {
   const ownerUserId = process.env.CODEX_SUBSCRIPTION_OWNER_USER_ID?.trim();
   if (!ownerUserId || authResult.auth.userId !== ownerUserId) {
     return NextResponse.json(
-      { available: false },
+      { available: false, defaultProvider: 'azure-openai' },
       { status: 403, headers: { 'Cache-Control': 'private, no-store' } },
     );
   }
@@ -41,13 +41,13 @@ export async function GET(req: NextRequest) {
   try {
     const usage = await loadUsage(authResult.auth.userId);
     return NextResponse.json(
-      { available: true, ...usage },
+      { available: true, defaultProvider: 'codex-subscription', ...usage },
       { headers: { 'Cache-Control': 'private, no-store' } },
     );
   } catch (error) {
     console.error('[codex-subscription] usage unavailable:', error);
     return NextResponse.json(
-      { available: true, error: 'usage_unavailable' },
+      { available: true, defaultProvider: 'codex-subscription', error: 'usage_unavailable' },
       { status: 503, headers: { 'Cache-Control': 'private, no-store' } },
     );
   }

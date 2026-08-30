@@ -649,6 +649,7 @@ const ja = {
   'changelog.externalImages.title': 'Scene画像を動画で直接利用',
   'changelog.externalImages.item1': 'Sceneから読み込んだ画像を画像として処理し、PreviewとMP4書き出しで動画と誤認しないようになりました。',
   'model.agentAutoDesc': '既定の GPT-5.6 Terra を既存の Azure API で使用します',
+  'model.agentAutoCodexDesc': '既定の GPT-5.6 Terra を個人の Codex プランで優先的に使用します',
   'model.agentLabel': 'Agentモデル',
   'model.closeAgentSelector': 'Agentモデル選択を閉じる',
   'model.chooseAgent': 'Agentモデルを選択',

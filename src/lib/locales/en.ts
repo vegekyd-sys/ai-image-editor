@@ -651,6 +651,7 @@ const en = {
   'changelog.externalImages.title': 'Use Scene Images Directly in Video',
   'changelog.externalImages.item1': 'Scene images now render as images in Preview and MP4 export instead of being mistaken for videos.',
   'model.agentAutoDesc': 'Use the default GPT-5.6 Terra through the existing Azure API',
+  'model.agentAutoCodexDesc': 'Use the default GPT-5.6 Terra through your personal Codex plan first',
   'model.agentLabel': 'Agent model',
   'model.closeAgentSelector': 'Close model selector',
   'model.chooseAgent': 'Choose agent model',

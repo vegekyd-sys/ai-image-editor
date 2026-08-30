@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import {
   AGENT_MODEL_IDS,
   CODEX_SUBSCRIPTION_AGENT_MODEL_PREFERENCES,
+  defaultsToCodexSubscription,
   normalizeAgentModelPreference,
   normalizeRequestedAgentModelPreference,
   resolveCodexSubscriptionFallbackProvider,
@@ -127,6 +128,57 @@ describe('agent model catalog', () => {
         });
         expect(normalizeAgentModelPreference(preference)).toBe(preference);
       }
+    } finally {
+      if (previousOwner === undefined) delete process.env.CODEX_SUBSCRIPTION_OWNER_USER_ID;
+      else process.env.CODEX_SUBSCRIPTION_OWNER_USER_ID = previousOwner;
+    }
+  });
+
+  it('defaults only the configured owner Auto route to the Codex subscription', () => {
+    const previousOwner = process.env.CODEX_SUBSCRIPTION_OWNER_USER_ID;
+    process.env.CODEX_SUBSCRIPTION_OWNER_USER_ID = 'owner-id';
+    try {
+      expect(defaultsToCodexSubscription(undefined, 'owner-id')).toBe(true);
+      expect(defaultsToCodexSubscription('auto', 'owner-id')).toBe(true);
+      expect(defaultsToCodexSubscription('gpt-5.6-terra', 'owner-id')).toBe(false);
+      expect(defaultsToCodexSubscription('auto', 'someone-else')).toBe(false);
+
+      expect(resolveAgentModelSpecForUser(
+        undefined,
+        undefined,
+        'owner-id',
+        'azure-openai',
+      )).toMatchObject({
+        id: 'gpt-5.6-terra',
+        provider: 'codex-subscription',
+      });
+      expect(resolveAgentModelSpecForUser(
+        'auto',
+        undefined,
+        'owner-id',
+        'azure-openai',
+      )).toMatchObject({
+        id: 'gpt-5.6-terra',
+        provider: 'codex-subscription',
+      });
+      expect(resolveAgentModelSpecForUser(
+        'gpt-5.6-terra',
+        undefined,
+        'owner-id',
+        'azure-openai',
+      )).toMatchObject({
+        id: 'gpt-5.6-terra',
+        provider: 'azure-openai',
+      });
+      expect(resolveAgentModelSpecForUser(
+        'auto',
+        undefined,
+        'someone-else',
+        'azure-openai',
+      )).toMatchObject({
+        id: 'gpt-5.6-terra',
+        provider: 'azure-openai',
+      });
     } finally {
       if (previousOwner === undefined) delete process.env.CODEX_SUBSCRIPTION_OWNER_USER_ID;
       else process.env.CODEX_SUBSCRIPTION_OWNER_USER_ID = previousOwner;

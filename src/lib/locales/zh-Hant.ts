@@ -627,6 +627,7 @@ const zhHant = {
   'changelog.externalImages.title': 'Scene 圖片可直接用於影片',
   'changelog.externalImages.item1': '從 Scene 匯入的圖片現在會按圖片渲染，Preview 與 MP4 匯出不再把它誤當成影片。',
   'model.agentAutoDesc': '預設 GPT-5.6 Terra，使用現有 Azure API',
+  'model.agentAutoCodexDesc': '預設 GPT-5.6 Terra，優先使用你的個人 Codex 套餐',
   'model.agentLabel': 'Agent 模型',
   'model.closeAgentSelector': '關閉模型選擇',
   'model.chooseAgent': '選擇 Agent 模型',
