@@ -2,8 +2,10 @@ import { afterAll, describe, expect, it } from 'vitest';
 
 const previousSecret = process.env.CODEX_SUBSCRIPTION_RELAY_SECRET;
 const previousOwner = process.env.CODEX_SUBSCRIPTION_OWNER_USER_ID;
+const previousAllowed = process.env.CODEX_SUBSCRIPTION_ALLOWED_USER_IDS;
 process.env.CODEX_SUBSCRIPTION_RELAY_SECRET = 'relay-secret';
 process.env.CODEX_SUBSCRIPTION_OWNER_USER_ID = 'owner-id';
+process.env.CODEX_SUBSCRIPTION_ALLOWED_USER_IDS = 'test-user-id,second-test-id';
 
 // The relay deliberately stays a standalone Node service without joining the
 // Next.js TypeScript bundle. Keeping the path dynamic avoids coupling tsc to it.
@@ -15,6 +17,8 @@ afterAll(() => {
   else process.env.CODEX_SUBSCRIPTION_RELAY_SECRET = previousSecret;
   if (previousOwner === undefined) delete process.env.CODEX_SUBSCRIPTION_OWNER_USER_ID;
   else process.env.CODEX_SUBSCRIPTION_OWNER_USER_ID = previousOwner;
+  if (previousAllowed === undefined) delete process.env.CODEX_SUBSCRIPTION_ALLOWED_USER_IDS;
+  else process.env.CODEX_SUBSCRIPTION_ALLOWED_USER_IDS = previousAllowed;
 });
 
 function signedRequest(overrides: { userId?: string; signature?: string } = {}) {
@@ -45,13 +49,17 @@ function signedRequest(overrides: { userId?: string; signature?: string } = {}) 
 }
 
 describe('Codex subscription relay boundary', () => {
-  it('accepts one correctly signed owner request', () => {
+  it('accepts correctly signed owner and allowlisted test-account requests', () => {
     expect(verifyRelayRequest(signedRequest())).toMatchObject({ ok: true, userId: 'owner-id' });
+    expect(verifyRelayRequest(signedRequest({ userId: 'test-user-id' })))
+      .toMatchObject({ ok: true, userId: 'test-user-id' });
+    expect(verifyRelayRequest(signedRequest({ userId: 'second-test-id' })))
+      .toMatchObject({ ok: true, userId: 'second-test-id' });
   });
 
   it('rejects non-owner, tampered, stale, and replayed requests', () => {
     expect(verifyRelayRequest(signedRequest({ userId: 'other-user' })))
-      .toMatchObject({ ok: false, status: 403, error: 'owner_only' });
+      .toMatchObject({ ok: false, status: 403, error: 'not_allowlisted' });
     expect(verifyRelayRequest(signedRequest({ signature: '0'.repeat(64) })))
       .toMatchObject({ ok: false, status: 401, error: 'invalid_signature' });
 

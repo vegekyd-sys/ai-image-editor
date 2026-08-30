@@ -17,6 +17,13 @@ const PORT = Number.parseInt(process.env.PORT || '25984', 10);
 const HOST = process.env.HOST?.trim() || '127.0.0.1';
 const RELAY_SECRET = process.env.CODEX_SUBSCRIPTION_RELAY_SECRET?.trim();
 const OWNER_USER_ID = process.env.CODEX_SUBSCRIPTION_OWNER_USER_ID?.trim();
+const ALLOWED_USER_IDS = new Set(
+  (process.env.CODEX_SUBSCRIPTION_ALLOWED_USER_IDS || '')
+    .split(',')
+    .map(value => value.trim())
+    .filter(Boolean),
+);
+if (OWNER_USER_ID) ALLOWED_USER_IDS.add(OWNER_USER_ID);
 const CODEX_CLI_PATH = process.env.CODEX_CLI_PATH?.trim() || 'codex';
 const ORIGINATOR = process.env.CODEX_SUBSCRIPTION_ORIGINATOR?.trim() || 'makaron';
 
@@ -96,8 +103,8 @@ export function verifyRelayRequest({ method, pathname, headers, body, now = Date
   if (![timestamp, requestId, userId, signature].every(value => typeof value === 'string' && value)) {
     return { ok: false, status: 401, error: 'missing_signature' };
   }
-  if (userId !== OWNER_USER_ID) {
-    return { ok: false, status: 403, error: 'owner_only' };
+  if (!ALLOWED_USER_IDS.has(userId)) {
+    return { ok: false, status: 403, error: 'not_allowlisted' };
   }
   const numericTimestamp = Number(timestamp);
   if (!Number.isFinite(numericTimestamp) || Math.abs(now - numericTimestamp) > SIGNATURE_WINDOW_MS) {

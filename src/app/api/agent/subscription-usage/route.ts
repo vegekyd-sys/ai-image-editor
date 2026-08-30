@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { authenticateRequest } from '@/lib/api-auth';
+import { isCodexSubscriptionAllowedUser } from '@/lib/agent-models';
 import {
   getCodexSubscriptionUsage,
   type CodexSubscriptionUsage,
@@ -30,8 +31,7 @@ export async function GET(req: NextRequest) {
   const authResult = await authenticateRequest(req);
   if ('error' in authResult) return authResult.error;
 
-  const ownerUserId = process.env.CODEX_SUBSCRIPTION_OWNER_USER_ID?.trim();
-  if (!ownerUserId || authResult.auth.userId !== ownerUserId) {
+  if (!isCodexSubscriptionAllowedUser(authResult.auth.userId)) {
     return NextResponse.json(
       { available: false, defaultProvider: 'azure-openai' },
       { status: 403, headers: { 'Cache-Control': 'private, no-store' } },

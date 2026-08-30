@@ -3,6 +3,8 @@ import {
   AGENT_MODEL_IDS,
   CODEX_SUBSCRIPTION_AGENT_MODEL_PREFERENCES,
   defaultsToCodexSubscription,
+  getCodexSubscriptionAllowedUserIds,
+  isCodexSubscriptionAllowedUser,
   normalizeAgentModelPreference,
   normalizeRequestedAgentModelPreference,
   resolveCodexSubscriptionFallbackProvider,
@@ -135,12 +137,21 @@ describe('agent model catalog', () => {
     }
   });
 
-  it('defaults only the configured owner Auto route to the Codex subscription', () => {
+  it('defaults only the configured allowlist Auto route to the Codex subscription', () => {
     const previousOwner = process.env.CODEX_SUBSCRIPTION_OWNER_USER_ID;
+    const previousAllowed = process.env.CODEX_SUBSCRIPTION_ALLOWED_USER_IDS;
     process.env.CODEX_SUBSCRIPTION_OWNER_USER_ID = 'owner-id';
+    process.env.CODEX_SUBSCRIPTION_ALLOWED_USER_IDS = ' test-user-id, second-test-id, test-user-id ';
     try {
+      expect([...getCodexSubscriptionAllowedUserIds()].sort()).toEqual([
+        'owner-id',
+        'second-test-id',
+        'test-user-id',
+      ]);
+      expect(isCodexSubscriptionAllowedUser('test-user-id')).toBe(true);
       expect(defaultsToCodexSubscription(undefined, 'owner-id')).toBe(true);
       expect(defaultsToCodexSubscription('auto', 'owner-id')).toBe(true);
+      expect(defaultsToCodexSubscription('auto', 'test-user-id')).toBe(true);
       expect(defaultsToCodexSubscription('gpt-5.6-terra', 'owner-id')).toBe(false);
       expect(defaultsToCodexSubscription('auto', 'someone-else')).toBe(false);
 
@@ -174,6 +185,15 @@ describe('agent model catalog', () => {
       expect(resolveAgentModelSpecForUser(
         'auto',
         undefined,
+        'test-user-id',
+        'azure-openai',
+      )).toMatchObject({
+        id: 'gpt-5.6-terra',
+        provider: 'codex-subscription',
+      });
+      expect(resolveAgentModelSpecForUser(
+        'auto',
+        undefined,
         'someone-else',
         'azure-openai',
       )).toMatchObject({
@@ -183,6 +203,8 @@ describe('agent model catalog', () => {
     } finally {
       if (previousOwner === undefined) delete process.env.CODEX_SUBSCRIPTION_OWNER_USER_ID;
       else process.env.CODEX_SUBSCRIPTION_OWNER_USER_ID = previousOwner;
+      if (previousAllowed === undefined) delete process.env.CODEX_SUBSCRIPTION_ALLOWED_USER_IDS;
+      else process.env.CODEX_SUBSCRIPTION_ALLOWED_USER_IDS = previousAllowed;
     }
   });
 
@@ -193,11 +215,17 @@ describe('agent model catalog', () => {
     expect(shouldRequireAgentCredits('deepseek')).toBe(true);
   });
 
-  it('limits the personal Codex subscription to its configured owner', () => {
+  it('limits the personal Codex subscription to its owner and explicit allowlist', () => {
     expect(resolveGPT56AgentProviderForUser({
       configuredProvider: 'codex-subscription',
       userId: 'owner-id',
       ownerUserId: 'owner-id',
+    })).toBe('codex-subscription');
+    expect(resolveGPT56AgentProviderForUser({
+      configuredProvider: 'codex-subscription',
+      userId: 'test-user-id',
+      ownerUserId: 'owner-id',
+      allowedUserIds: 'test-user-id,second-test-id',
     })).toBe('codex-subscription');
     expect(resolveGPT56AgentProviderForUser({
       configuredProvider: 'codex-subscription',

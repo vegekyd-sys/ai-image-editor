@@ -117,13 +117,40 @@ export function isCodexSubscriptionOwner(
   return Boolean(normalizedOwnerUserId && userId === normalizedOwnerUserId);
 }
 
+export function getCodexSubscriptionAllowedUserIds(
+  ownerUserId: string | undefined = process.env.CODEX_SUBSCRIPTION_OWNER_USER_ID,
+  configuredAllowedUserIds: string | undefined = process.env.CODEX_SUBSCRIPTION_ALLOWED_USER_IDS,
+): Set<string> {
+  const allowedUserIds = new Set(
+    (configuredAllowedUserIds ?? '')
+      .split(',')
+      .map((value) => value.trim())
+      .filter(Boolean),
+  );
+  const normalizedOwnerUserId = ownerUserId?.trim();
+  if (normalizedOwnerUserId) allowedUserIds.add(normalizedOwnerUserId);
+  return allowedUserIds;
+}
+
+export function isCodexSubscriptionAllowedUser(
+  userId: string | undefined,
+  ownerUserId: string | undefined = process.env.CODEX_SUBSCRIPTION_OWNER_USER_ID,
+  configuredAllowedUserIds: string | undefined = process.env.CODEX_SUBSCRIPTION_ALLOWED_USER_IDS,
+): boolean {
+  return Boolean(userId && getCodexSubscriptionAllowedUserIds(
+    ownerUserId,
+    configuredAllowedUserIds,
+  ).has(userId));
+}
+
 export function defaultsToCodexSubscription(
   preference: AgentModelPreference | undefined,
   userId: string | undefined,
   ownerUserId: string | undefined = process.env.CODEX_SUBSCRIPTION_OWNER_USER_ID,
+  configuredAllowedUserIds: string | undefined = process.env.CODEX_SUBSCRIPTION_ALLOWED_USER_IDS,
 ): boolean {
   return (preference === undefined || preference === 'auto')
-    && isCodexSubscriptionOwner(userId, ownerUserId);
+    && isCodexSubscriptionAllowedUser(userId, ownerUserId, configuredAllowedUserIds);
 }
 
 export function shouldRequireAgentCredits(provider: AgentModelProvider): boolean {
@@ -134,6 +161,7 @@ export function resolveGPT56AgentProviderForUser(options: {
   configuredProvider?: string;
   userId?: string;
   ownerUserId?: string;
+  allowedUserIds?: string;
   fallbackProvider?: string;
 }): GPT56AgentProvider {
   const provider = resolveGPT56AgentProvider(options.configuredProvider);
@@ -146,7 +174,7 @@ export function resolveGPT56AgentProviderForUser(options: {
     );
   }
 
-  return options.userId === ownerUserId
+  return isCodexSubscriptionAllowedUser(options.userId, ownerUserId, options.allowedUserIds)
     ? 'codex-subscription'
     : resolveCodexSubscriptionFallbackProvider(options.fallbackProvider);
 }

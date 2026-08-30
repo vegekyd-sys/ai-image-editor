@@ -2,7 +2,7 @@
 
 ## Goal
 
-Let the Makaron owner run the existing GPT-5.6 Agent through their personal
+Let the Makaron owner and a small explicit test-account allowlist run the existing GPT-5.6 Agent through the owner's personal
 ChatGPT/Codex subscription first, then use the existing Azure OpenAI or
 OpenRouter API path when subscription authentication, quota, or availability is
 exhausted. This experiment does not add a new Agent architecture, UI, queue,
@@ -14,9 +14,10 @@ only changes the provider selected behind the existing `LanguageModel` seam.
 
 ## Boundary
 
-- Owner-only: `CODEX_SUBSCRIPTION_OWNER_USER_ID` must exactly match the current
-  Supabase Auth user id. Every other user always stays on the configured API
-  fallback.
+- Trusted allowlist only: `CODEX_SUBSCRIPTION_OWNER_USER_ID` identifies the
+  subscription owner and is always allowed. `CODEX_SUBSCRIPTION_ALLOWED_USER_IDS`
+  may add a comma-separated set of explicit Supabase Auth user ids. Every other
+  user always stays on the configured API fallback.
 - Private durable credential runtime only: Codex is installed and logged in on
   the owner's Mac or an isolated persistent host. A Vercel deployment may call
   the owner-only HTTPS relay, but never receives the Codex OAuth token itself.
@@ -64,6 +65,7 @@ Server/SDK instead of expanding this adapter.
    ```dotenv
    GPT56_AGENT_PROVIDER=codex-subscription
    CODEX_SUBSCRIPTION_OWNER_USER_ID=<owner Supabase Auth user UUID>
+   CODEX_SUBSCRIPTION_ALLOWED_USER_IDS=<comma-separated trusted test UUIDs>
    CODEX_SUBSCRIPTION_FALLBACK_PROVIDER=azure-openai
    ```
 
@@ -102,13 +104,14 @@ Configure the relay with a root-owned environment file:
 
 ```dotenv
 CODEX_SUBSCRIPTION_OWNER_USER_ID=<owner Supabase Auth user UUID>
+CODEX_SUBSCRIPTION_ALLOWED_USER_IDS=<comma-separated trusted test UUIDs>
 CODEX_SUBSCRIPTION_RELAY_SECRET=<random HMAC secret>
 ```
 
 Expose only the relay HTTP port through TLS. The public surface accepts
 `POST /v1/responses` and `POST /v1/usage`; both require a timestamped HMAC,
-the exact owner UUID, and a unique request id. Replayed, stale, tampered, or
-non-owner requests are rejected before Codex is touched. `/healthz` contains no
+an allowlisted UUID, and a unique request id. Replayed, stale, tampered, or
+non-allowlisted requests are rejected before Codex is touched. `/healthz` contains no
 account or usage data.
 
 Vercel Preview keeps the normal default provider unchanged and receives only:
@@ -116,6 +119,7 @@ Vercel Preview keeps the normal default provider unchanged and receives only:
 ```dotenv
 GPT56_AGENT_PROVIDER=azure-openai
 CODEX_SUBSCRIPTION_OWNER_USER_ID=<owner Supabase Auth user UUID>
+CODEX_SUBSCRIPTION_ALLOWED_USER_IDS=<comma-separated trusted test UUIDs>
 CODEX_SUBSCRIPTION_FALLBACK_PROVIDER=azure-openai
 CODEX_SUBSCRIPTION_RELAY_URL=https://<relay-host>/
 CODEX_SUBSCRIPTION_RELAY_SECRET=<same random HMAC secret>
@@ -127,7 +131,8 @@ hostname, then repeat the same owner, quota, streaming, and API fallback gates.
 
 ## Runtime behavior
 
-1. A GPT-5.6 request for the configured owner selects `codex-subscription`.
+1. A GPT-5.6 request for the configured owner or an allowlisted test account
+   selects `codex-subscription`.
 2. Local mode starts `codex app-server --stdio` directly. Relay mode signs the
    request to VLab; only the isolated relay starts App Server and caches the
    short-lived credential until shortly before expiry.
@@ -138,8 +143,10 @@ hostname, then repeat the same owner, quota, streaming, and API fallback gates.
 5. Authentication/entitlement/quota failures switch to the configured API
    provider immediately at the Agent retry boundary. Transient provider errors
    use the existing retry budget first.
-6. Non-owner requests never touch the personal subscription and use API directly.
+6. Non-allowlisted requests never touch the personal subscription and use API directly.
 
-The transport remains owner-only and experimental. It must not be enabled for a
+The transport remains private and experimental. All allowlisted users share the
+owner's Codex quota, so the list must stay small, explicit, and revocable. It
+must not be enabled for a
 shared user population without per-user OAuth isolation, encrypted credential
 storage, revocation, quota ownership, and an explicit provider consent flow.
