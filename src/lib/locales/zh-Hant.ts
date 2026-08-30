@@ -656,6 +656,7 @@ const zhHant = {
   'model.codexSubscription.desc': '使用你的 ChatGPT/Codex 套餐；額度不可用時依現有容錯切換 API。',
   'model.codexSubscription.checking': '正在讀取套餐額度…',
   'model.codexSubscription.remaining': (percent: string) => `週額度剩餘 ${percent}%`,
+  'model.codexSubscription.remainingShort': (percent: string) => `剩餘 ${percent}%`,
   'model.codexSubscription.resetsAt': (time: string) => `${time} 重置`,
   'model.codexSubscription.usageUnavailable': '套餐可用，暫時無法讀取額度',
 } satisfies TranslationDictionary;

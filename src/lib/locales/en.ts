@@ -680,6 +680,7 @@ const en = {
   'model.codexSubscription.desc': 'Use your ChatGPT/Codex plan, with the existing API fallback when unavailable.',
   'model.codexSubscription.checking': 'Checking plan usage…',
   'model.codexSubscription.remaining': (percent: string) => `${percent}% weekly allowance remaining`,
+  'model.codexSubscription.remainingShort': (percent: string) => `${percent}% left`,
   'model.codexSubscription.resetsAt': (time: string) => `Resets ${time}`,
   'model.codexSubscription.usageUnavailable': 'Plan available; usage is temporarily unavailable',
 } as const;

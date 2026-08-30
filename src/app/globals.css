@@ -517,9 +517,9 @@ textarea {
 
 .mkr-agent-model-group-header {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) auto;
-  align-items: baseline;
-  gap: 2px 10px;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  align-items: center;
+  gap: 3px 10px;
   padding: 9px 10px 5px;
 }
 
@@ -535,6 +535,15 @@ textarea {
   font-size: 10px;
   font-weight: 720;
   letter-spacing: 0.045em;
+  white-space: nowrap;
+}
+
+.mkr-agent-model-group-identity {
+  min-width: 0;
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  overflow: hidden;
 }
 
 .mkr-agent-model-group-detail {
@@ -543,21 +552,72 @@ textarea {
   font-size: 9px;
   line-height: 1.35;
   text-align: right;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.mkr-agent-model-group-header[data-agent-provider-group="codex"] {
+  grid-template-columns: minmax(0, 1fr) auto;
+  margin: 6px 4px 3px;
+  padding: 9px 10px 8px;
+  overflow: hidden;
+  border: 0.5px solid rgba(232,121,249,0.13);
+  border-radius: 11px;
+  background:
+    linear-gradient(120deg, rgba(217,70,239,0.075), rgba(34,211,238,0.025) 72%),
+    rgba(255,255,255,0.018);
+}
+
+.model-selector-scroll > .mkr-agent-model-group-header[data-agent-provider-group="codex"]:not(:first-child) {
+  margin-top: 9px;
+  padding-top: 9px;
+  border-top: 0.5px solid rgba(232,121,249,0.13);
 }
 
 .mkr-agent-model-group-header[data-agent-provider-group="codex"] .mkr-agent-model-group-title {
-  color: rgba(240,171,252,0.82);
+  color: rgba(250,232,255,0.88);
+  font-size: 10.5px;
+  letter-spacing: 0.025em;
 }
 
 .mkr-agent-model-group-header[data-agent-provider-group="codex"] .mkr-agent-model-group-detail {
-  color: rgba(103,232,249,0.62);
+  color: rgba(255,255,255,0.36);
+}
+
+.mkr-agent-model-group-signal {
+  width: 6px;
+  height: 6px;
+  flex: 0 0 6px;
+  border-radius: 999px;
+  background: #e879f9;
+  box-shadow: 0 0 0 3px rgba(232,121,249,0.10), 0 0 12px rgba(232,121,249,0.42);
+}
+
+.mkr-agent-model-group-quota {
+  justify-self: end;
+  padding: 2px 7px;
+  border: 0.5px solid rgba(103,232,249,0.16);
+  border-radius: 999px;
+  background: rgba(34,211,238,0.055);
+  color: rgba(165,243,252,0.82);
+  font-size: 9px;
+  font-weight: 650;
+  line-height: 1.35;
+  white-space: nowrap;
+}
+
+.mkr-agent-model-group-reset {
+  grid-column: 1 / -1;
+  text-align: left;
+  padding-left: 13px;
 }
 
 .mkr-agent-model-group-track {
   grid-column: 1 / -1;
   display: block;
   height: 2px;
-  margin-top: 3px;
+  margin-top: 4px;
   overflow: hidden;
   border-radius: 999px;
   background: rgba(255,255,255,0.06);
@@ -567,7 +627,7 @@ textarea {
   display: block;
   height: 100%;
   border-radius: inherit;
-  background: rgba(103,232,249,0.58);
+  background: linear-gradient(90deg, rgba(217,70,239,0.72), rgba(103,232,249,0.76));
 }
 
 .mkr-liquid-empty-state::after,

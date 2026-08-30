@@ -13,6 +13,7 @@ import {
 } from '@/lib/agent-models';
 import { useLocale } from '@/lib/i18n';
 import { getDefaultVideoModelId, getVideoModelCapability, normalizeVideoResolution } from '@/lib/video-model-capabilities';
+import AgentProviderGroupHeader from './AgentProviderGroupHeader';
 
 interface ModelSelectorProps {
   preferredModel: PreferredModel;
@@ -900,23 +901,26 @@ export default function ModelSelector({
                         ? `${t('model.codexSubscription.remaining', String(Math.round(subscriptionUsage.weekly.remainingPercent)))} · ${t('model.codexSubscription.resetsAt', formatResetTime(subscriptionUsage.weekly.resetsAt))}`
                         : t('model.codexSubscription.usageUnavailable')
                     : t('model.agentGroup.otherDesc');
+                const codexWeekly = providerGroup === 'codex'
+                  && subscriptionUsage.status === 'available'
+                  ? subscriptionUsage.weekly
+                  : undefined;
                 return (
                   <Fragment key={model.id}>
                     {showProviderHeader && (
-                      <div className="mkr-agent-model-group-header" data-agent-provider-group={providerGroup}>
-                        <span className="mkr-agent-model-group-title">{providerLabel}</span>
-                        <span
-                          className="mkr-agent-model-group-detail"
-                          data-testid={providerGroup === 'codex' ? 'codex-subscription-usage' : undefined}
-                        >
-                          {providerDetail}
-                        </span>
-                        {providerGroup === 'codex' && subscriptionUsage.status === 'available' && subscriptionUsage.weekly && (
-                          <span className="mkr-agent-model-group-track" aria-hidden="true">
-                            <span style={{ width: `${Math.max(0, Math.min(100, subscriptionUsage.weekly.remainingPercent))}%` }} />
-                          </span>
-                        )}
-                      </div>
+                      <AgentProviderGroupHeader
+                        provider={providerGroup}
+                        label={providerLabel}
+                        detail={providerDetail}
+                        remainingLabel={codexWeekly
+                          ? t('model.codexSubscription.remainingShort', String(Math.round(codexWeekly.remainingPercent)))
+                          : undefined}
+                        resetLabel={codexWeekly
+                          ? t('model.codexSubscription.resetsAt', formatResetTime(codexWeekly.resetsAt))
+                          : undefined}
+                        progress={codexWeekly?.remainingPercent}
+                        usageTestId={providerGroup === 'codex' ? 'codex-subscription-usage' : undefined}
+                      />
                     )}
                     <ModelRow
                       model={model}
