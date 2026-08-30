@@ -23,6 +23,7 @@ type LocalizedChangelogEntry = {
 type ChangelogEntry = LegacyChangelogEntry | LocalizedChangelogEntry;
 
 const CHANGELOG: ChangelogEntry[] = [
+  { date: '2026-08-30', en: { title: 'Personal Codex Plans for Test Accounts', items: ['Admins can now add registered test accounts to the Codex allowlist so their Agent chats use the owner’s personal Codex plan.'] }, zh: { title: '测试账号可用个人 Codex 套餐', items: ['管理员现在可以把已注册的测试账号加入 Codex 名单，让这些账号的 Agent 对话使用 owner 的个人 Codex 套餐。'] } },
   { date: '2026-08-29', localeKey: 'googleOmni11' },
   { date: '2026-08-26', localeKey: 'externalImages' },
   {
