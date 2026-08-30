@@ -11,6 +11,7 @@ import { resolvePersistedRunStatus } from '@/lib/agent-terminal';
 import {
   normalizeRequestedAgentModelPreference,
   resolveAgentModelSpecForUser,
+  shouldRequireAgentCredits,
 } from '@/lib/agent-models';
 import {
   DEFAULT_ATTEMPT_BUDGET_MS,
@@ -88,8 +89,10 @@ export async function POST(req: NextRequest) {
     );
 
     // Pre-flight credit check
-    const creditCheck = await requireCredits(userId, 5);
-    if (!creditCheck.ok) return creditCheck.response;
+    if (shouldRequireAgentCredits(resolvedAgentModel.provider)) {
+      const creditCheck = await requireCredits(userId, 5);
+      if (!creditCheck.ok) return creditCheck.response;
+    }
 
     const locale = getRequestLocale(req);
 
@@ -367,7 +370,8 @@ export async function POST(req: NextRequest) {
         } catch (persistError) {
           console.error(`[agent/run] Run ${runId} terminal error persistence failed:`, persistError);
         }
-        if (totalInputTokens > 0 || totalOutputTokens > 0 || totalCacheReadTokens > 0 || totalCacheWriteTokens > 0) {
+        if (shouldRequireAgentCredits(resolvedAgentModel.provider)
+          && (totalInputTokens > 0 || totalOutputTokens > 0 || totalCacheReadTokens > 0 || totalCacheWriteTokens > 0)) {
           deductByTokens(
             userId, 'agent', agentModel || 'unknown',
             totalInputTokens, totalOutputTokens,
@@ -413,7 +417,8 @@ export async function POST(req: NextRequest) {
 
       await writer.flush();
       // Deduct agent LLM tokens
-      if (totalInputTokens > 0 || totalOutputTokens > 0 || totalCacheReadTokens > 0 || totalCacheWriteTokens > 0) {
+      if (shouldRequireAgentCredits(resolvedAgentModel.provider)
+        && (totalInputTokens > 0 || totalOutputTokens > 0 || totalCacheReadTokens > 0 || totalCacheWriteTokens > 0)) {
         deductByTokens(
           userId, 'agent', agentModel || 'unknown',
           totalInputTokens, totalOutputTokens,

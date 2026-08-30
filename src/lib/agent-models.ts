@@ -126,6 +126,10 @@ export function defaultsToCodexSubscription(
     && isCodexSubscriptionOwner(userId, ownerUserId);
 }
 
+export function shouldRequireAgentCredits(provider: AgentModelProvider): boolean {
+  return provider !== 'codex-subscription';
+}
+
 export function resolveGPT56AgentProviderForUser(options: {
   configuredProvider?: string;
   userId?: string;

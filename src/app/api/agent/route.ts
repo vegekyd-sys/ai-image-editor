@@ -11,6 +11,7 @@ import { translate } from '@/lib/locales';
 import {
   normalizeRequestedAgentModelPreference,
   resolveAgentModelSpecForUser,
+  shouldRequireAgentCredits,
 } from '@/lib/agent-models';
 import { getAgentContextPolicy } from '@/lib/agent-execution';
 import { verifySkillLaunchContext } from '@/lib/skill-launch-context';
@@ -30,12 +31,6 @@ export async function POST(req: NextRequest) {
     endAuth({ ok: !('error' in authResult) });
     if ('error' in authResult) return authResult.error;
     const { userId, supabase } = authResult.auth;
-
-    // Pre-flight credit check
-    const endCreditCheck = perf.span('credit_check', { userId });
-    const creditCheck = await requireCredits(userId, 5);
-    endCreditCheck({ ok: creditCheck.ok });
-    if (!creditCheck.ok) return creditCheck.response;
 
     const endReadBody = perf.span('read_body');
     const { prompt, image, animationImageUrls, animationImages, projectId, analysisOnly, analysisContext, isVideoAnalysis,
@@ -71,6 +66,13 @@ export async function POST(req: NextRequest) {
       process.env.AGENT_MODEL,
       userId,
     );
+
+    if (shouldRequireAgentCredits(resolvedAgentModel.provider)) {
+      const endCreditCheck = perf.span('credit_check', { userId });
+      const creditCheck = await requireCredits(userId, 5);
+      endCreditCheck({ ok: creditCheck.ok });
+      if (!creditCheck.ok) return creditCheck.response;
+    }
 
     if (!projectId || (!tipsTeaser && !nameProject && !previewsReady && !uploadedVideoCount && !image && !prompt)) {
       return new Response(
@@ -461,7 +463,7 @@ export async function POST(req: NextRequest) {
           // Finalization below atomically persists failed + terminal metadata.
         } finally {
           // Deduct credits based on token usage (fire-and-forget)
-          if (usageEvent) {
+          if (usageEvent && shouldRequireAgentCredits(resolvedAgentModel.provider)) {
             const endBilling = perf.span('billing_deduct', { projectId, model: usageEvent.model });
             deductByTokens(
               userId, 'agent', usageEvent.model,

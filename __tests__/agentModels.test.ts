@@ -10,6 +10,7 @@ import {
   resolveGPT56AgentProviderForUser,
   resolveAgentModelSpec,
   resolveAgentModelSpecForUser,
+  shouldRequireAgentCredits,
 } from '@/lib/agent-models';
 import {
   createAgentModelRuntime,
@@ -183,6 +184,13 @@ describe('agent model catalog', () => {
       if (previousOwner === undefined) delete process.env.CODEX_SUBSCRIPTION_OWNER_USER_ID;
       else process.env.CODEX_SUBSCRIPTION_OWNER_USER_ID = previousOwner;
     }
+  });
+
+  it('does not require Makaron Agent credits for the owner-funded Codex route', () => {
+    expect(shouldRequireAgentCredits('codex-subscription')).toBe(false);
+    expect(shouldRequireAgentCredits('azure-openai')).toBe(true);
+    expect(shouldRequireAgentCredits('openrouter')).toBe(true);
+    expect(shouldRequireAgentCredits('deepseek')).toBe(true);
   });
 
   it('limits the personal Codex subscription to its configured owner', () => {

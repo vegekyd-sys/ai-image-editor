@@ -8,6 +8,7 @@ import {
   resolveAgentModelSpec,
   resolveAgentModelSpecForUser,
   resolveCodexSubscriptionFallbackProvider,
+  shouldRequireAgentCredits,
   type AgentModelPreference,
 } from './agent-models';
 import {
@@ -746,7 +747,8 @@ export async function runAgentExecutionAttempt(
     await writer.flush();
   }
 
-  if (inputTokens || outputTokens || cacheReadTokens || cacheWriteTokens) {
+  if (shouldRequireAgentCredits(resolvedModel.provider)
+    && (inputTokens || outputTokens || cacheReadTokens || cacheWriteTokens)) {
     void deductByTokens(
       run.user_id,
       'agent',
