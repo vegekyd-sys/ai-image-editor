@@ -154,7 +154,7 @@ describe('agent media scenario matrix', () => {
     expect(mcpServer).toContain("default([]).describe('Optional public image URLs")
     expect(cli).toContain('const supportsNativeTextToVideo =')
     expect(cli).toContain('const isSeedanceModel =')
-    expect(cli).toContain('!images.length && !videos.length && !audios.length && !supportsNativeTextToVideo')
+    expect(cli).toContain('!images.length && !videos.length && !audios.length && !referenceVoices.length && !supportsNativeTextToVideo')
   })
 
   it('separates generic coding, Remotion composition, and node media outputs', () => {
@@ -429,7 +429,7 @@ describe('video script harness old and new scenarios', () => {
     })).toBeNull()
   })
 
-  it('new Grok video scenario accepts one image and rejects multi-image references', () => {
+  it('new Grok video scenario supports one starting image or up to seven loose references', () => {
     expect(validateVideoScript({
       prompt: 'Shot 1 (1s): Animate <<<media_1>>> with a slow push-in.',
       imageCount: 1,
@@ -442,6 +442,13 @@ describe('video script harness old and new scenarios', () => {
       imageCount: 2,
       model: 'grok',
       duration: 1,
-    })).toContain('supports at most 1 reference image')
+    })).toBeNull()
+
+    expect(validateVideoScript({
+      prompt: 'Blend <<<media_1>>>, <<<media_2>>>, <<<media_3>>>, <<<media_4>>>, <<<media_5>>>, <<<media_6>>>, <<<media_7>>>, and <<<media_8>>>.',
+      imageCount: 8,
+      model: 'grok',
+      duration: 1,
+    })).toContain('supports at most 7 reference images')
   })
 })

@@ -306,7 +306,7 @@ describe('agent prompt policy guards', () => {
     expect(agentTs).toContain('combined source duration must be at most 15 seconds for SeeDance 2.0 or 30 seconds for SeeDance 2.5')
     expect(agentTs).toContain('frame pixels width*height between 409,600 and 2,086,876')
     expect(agentTs).toContain('Kling video references must be <=200MB and <=2K; no explicit lower resolution is documented')
-    expect(agentTs).toContain('To CONTINUE a video with Gemini Omni or Seedance 2.5')
+    expect(agentTs).toContain('To CONTINUE a video with Gemini Omni, Seedance 2.5, or Grok')
     expect(agentTs).toContain('Google Omni edit/extend accepts one source video up to 10 seconds')
     expect(agentTs).toContain("clamped to 4-15s for SeeDance 2.0 or 4-30s for SeeDance 2.5")
     expect(agentTs).toContain("const isSeedance25Edit = videoModel === 'seedance-2.5' && video_operation === 'edit'")

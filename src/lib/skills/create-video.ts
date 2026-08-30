@@ -15,6 +15,7 @@ export interface CreateVideoInput {
   videoReferType?: 'base' | 'feature';  // default: 'base'
   videoUrls?: string[];                 // Auto-detected video references from timeline
   audioUrls?: string[];                 // SeeDance reference audios (0-3)
+  referenceVoiceIds?: string[];         // xAI preset voice ids (0-3)
   referenceVideoDuration?: number;       // Timeline video duration; output should match when editing video
   referenceVideoMetas?: VideoReferenceMeta[];
   keepOriginalSound?: boolean;          // default: false
@@ -157,9 +158,10 @@ function prepareSeedance25References(options: {
 }
 
 export async function createVideo(input: CreateVideoInput): Promise<CreateVideoResult> {
-  const { script, images, duration, aspectRatio, videoModel, videoResolution, videoUrl, videoReferType, videoUrls, audioUrls, referenceVideoDuration, referenceVideoMetas, keepOriginalSound, motionControl, characterOrientation, videoOperation = 'generate', previousInteractionId, videoExtendDirection, generateAudio, contentFilter, outputFormat, webSearch } = input;
+  const { script, images, duration, aspectRatio, videoModel, videoResolution, videoUrl, videoReferType, videoUrls, audioUrls, referenceVoiceIds, referenceVideoDuration, referenceVideoMetas, keepOriginalSound, motionControl, characterOrientation, videoOperation = 'generate', previousInteractionId, videoExtendDirection, generateAudio, contentFilter, outputFormat, webSearch } = input;
   const hasVideoReference = !!videoUrl || !!videoUrls?.length || !!previousInteractionId;
   const hasAudioReference = !!audioUrls?.length;
+  const hasVoiceReference = !!referenceVoiceIds?.length;
   const provider = normalizeVideoModelId(videoModel);
   const route = resolveVideoGenerationRoute({ model: provider, resolution: videoResolution });
   const capability = getVideoModelCapability(provider);
@@ -172,6 +174,7 @@ export async function createVideo(input: CreateVideoInput): Promise<CreateVideoR
     referenceVideoDuration: previousInteractionId ? Math.min(referenceVideoDuration ?? 10, 10) : referenceVideoDuration,
     referenceVideoMetas,
     hasVideoReference,
+    imageReferenceCount: images.length,
     videoReferenceCount: previousInteractionId ? 1 : providerVideoUrls.length,
     audioReferenceCount: audioUrls?.length || 0,
     operation: videoOperation,
@@ -204,6 +207,18 @@ export async function createVideo(input: CreateVideoInput): Promise<CreateVideoR
         : 'Reference audio is only supported by Seedance, MiniMax H3, and Sync Lipsync v3.',
     };
   }
+  if (hasVoiceReference && route.provider !== 'grok') {
+    return {
+      success: false,
+      message: 'Preset reference voices are currently supported only by Grok Imagine Video 1.5.',
+    };
+  }
+  if ((referenceVoiceIds?.length || 0) > 3) {
+    return {
+      success: false,
+      message: 'Grok Imagine Video 1.5 supports at most 3 preset reference voices per request.',
+    };
+  }
   if ((audioUrls?.length || 0) > (capability.maxAudioReferences ?? 3)) {
     return {
       success: false,
@@ -222,7 +237,7 @@ export async function createVideo(input: CreateVideoInput): Promise<CreateVideoR
     if (!supportsNativeTextToVideo(provider)) {
       return {
         success: false,
-        message: `${capability.label} requires an image or video reference. Native text-to-video is currently available through SeeDance models and MiniMax H3.`,
+        message: `${capability.label} requires an image or video reference. Native text-to-video is currently available through SeeDance, Grok Imagine Video 1.5, Gemini Omni, and MiniMax H3.`,
       };
     }
   }
@@ -435,14 +450,28 @@ export async function createVideo(input: CreateVideoInput): Promise<CreateVideoR
       };
     } else if (route.provider === 'grok') {
       const { createXaiVideoTask } = await import('../xai-video');
-      taskId = await createXaiVideoTask({
+      const xaiSubmission = await createXaiVideoTask({
         prompt: finalPrompt,
         images: filteredImages,
+        videoUrl: providerVideoUrls[0],
+        operation: videoOperation,
         duration: resolvedDuration != null ? resolvedDuration : undefined,
-        aspectRatio: providerAspectRatio,
-        resolution: route.resolution as '480p' | '720p',
+        // Single-image generation deliberately ignores this in the adapter to
+        // preserve source framing. Text and multi-reference generation may use it.
+        aspectRatio: aspectRatio && aspectRatio !== 'auto' ? aspectRatio : undefined,
+        resolution: route.resolution as '480p' | '720p' | '1080p',
+        generateAudio,
+        referenceVoiceIds,
       });
+      taskId = xaiSubmission.taskId;
       console.log(`✅ [create_video] Grok Video task created: ${taskId}`);
+      return {
+        success: true,
+        taskId,
+        videoModel: provider,
+        providerModel: xaiSubmission.providerModel,
+        message: `Grok ${xaiSubmission.mode} task created. Task ID: ${taskId}. Use makaron_get_video_status to poll.`,
+      };
     } else if (route.provider === 'google-omni') {
       const { createGoogleOmniVideoTask } = await import('../google-omni-video');
       if ((videoUrls?.length || 0) > 1 || (videoUrl && (videoUrls?.length || 0) > 0)) {

@@ -256,21 +256,27 @@ const MODEL_CAPABILITIES: Record<string, VideoModelCapability> = {
   },
   grok: {
     id: 'grok',
-    label: 'Grok Video 1.5',
+    label: 'Grok Imagine Video',
     minOutputDuration: 1,
     maxOutputDuration: 15,
-    maxReferenceVideoDuration: 0,
-    supportsVideoReference: false,
-    supportsBaseVideoEdit: false,
+    maxReferenceVideoDuration: 15,
+    referenceVideoSize: {
+      description: 'MP4 with an MP4-supported codec; edit input <=8.7s, extension input 2-15s',
+    },
+    supportsVideoReference: true,
+    supportsBaseVideoEdit: true,
+    supportsVideoExtend: true,
     longVideoChunkSeconds: 10,
     estimatedCostPerSecondUsd: 0.14,
     estimatedCostPerSecondUsdByResolution: {
       '480p': 0.08,
       '720p': 0.14,
+      '1080p': 0.25,
     },
     estimatedInputCostUsdPerImage: 0.01,
-    maxImageReferences: 1,
-    supportedResolutions: ['480p', '720p'],
+    maxImageReferences: 7,
+    maxVideoReferences: 1,
+    supportedResolutions: ['480p', '720p', '1080p'],
     defaultResolution: '480p',
     supportedAspectRatios: ['16:9', '9:16', '1:1', '4:3', '3:4', '3:2', '2:3'],
     provider: 'grok',
@@ -499,7 +505,7 @@ function getSeedanceProviderBase(model?: string | null): string | undefined {
 
 export function supportsNativeTextToVideo(model?: string | null): boolean {
   const id = normalizeVideoModelId(model)
-  return getSeedanceProviderBase(id) != null || id === 'minimax-h3' || id === 'google-omni'
+  return getSeedanceProviderBase(id) != null || id === 'minimax-h3' || id === 'google-omni' || id === 'grok'
 }
 
 export function resolveVideoProviderModel(options: {
@@ -519,6 +525,11 @@ export function resolveVideoProviderModel(options: {
     (options.imageReferenceCount ?? 0) > 0 ||
     options.hasVideoReference === true ||
     options.hasAudioReference === true
+
+  if (route.model === 'grok') {
+    if (options.operation === 'edit' || options.operation === 'extend') return 'grok-imagine-video'
+    return 'grok-imagine-video-1.5'
+  }
 
   if (route.model === 'seedance-2.5') {
     if (options.operation === 'edit') return 'seedance-2.5-video-edit'
@@ -573,7 +584,8 @@ export function resolveVideoProviderAspectRatio(
 ): string | undefined {
   const route = resolveVideoGenerationRoute({ model })
   // xAI stretches the source image when image-to-video receives a forced
-  // aspect_ratio. Grok in Makaron is single-image-to-video, so keep source AR.
+  // aspect_ratio. For Grok single-image-to-video, keep the source AR; text and
+  // multi-reference generation may still use the requested supported ratio.
   if (route.provider === 'grok' || route.provider === 'fal-sync') return undefined
   if (!aspectRatio || aspectRatio === 'auto') {
     return route.provider === 'seedance' ? 'adaptive' : undefined
@@ -625,6 +637,7 @@ export function estimateVideoProviderCostUsd(options: {
   imageCount?: number
   referenceVideoDurationSec?: number
   resolution?: VideoResolutionInput
+  operation?: VideoGenerationOperation
   contentFilter?: boolean
 }): number | undefined {
   const capability = getVideoModelCapability(options.model)
@@ -632,13 +645,20 @@ export function estimateVideoProviderCostUsd(options: {
     model: options.model,
     resolution: options.resolution,
   })
-  const perSecond = route.estimatedCostPerSecondUsd
+  const normalizedModel = normalizeVideoModelId(options.model)
+  const isGrokVideoInput = normalizedModel === 'grok' && (options.operation === 'edit' || options.operation === 'extend')
+  // xAI exposes editing/extension through the base grok-imagine-video model,
+  // whose output is capped at 720p ($0.07/s) and whose source video costs
+  // $0.01/s. Generation/reference modes use the 1.5 resolution table above.
+  const perSecond = isGrokVideoInput ? 0.07 : route.estimatedCostPerSecondUsd
   if (perSecond == null) return undefined
   const acceptedImages = capability.maxImageReferences != null
     ? Math.min(options.imageCount ?? 0, capability.maxImageReferences)
     : (options.imageCount ?? 0)
   const billableImages = Math.max(0, acceptedImages - (capability.freeImageReferences ?? 0))
-  const inputVideoPerSecond = capability.estimatedInputCostUsdPerVideoSecondByResolution?.[route.resolution]
+  const inputVideoPerSecond = isGrokVideoInput
+    ? 0.01
+    : capability.estimatedInputCostUsdPerVideoSecondByResolution?.[route.resolution]
     ?? capability.estimatedInputCostUsdPerVideoSecond
     ?? 0
   const standardCost = options.durationSec * perSecond
@@ -655,6 +675,7 @@ export function estimateVideoCredits(options: {
   imageCount?: number
   referenceVideoDurationSec?: number
   resolution?: VideoResolutionInput
+  operation?: VideoGenerationOperation
   contentFilter?: boolean
   markup?: number
 }): number | undefined {
@@ -675,6 +696,13 @@ export function resolveVideoOutputDuration(options: {
   operation?: VideoGenerationOperation
 }): number | undefined {
   const capability = getVideoModelCapability(options.model)
+  const normalizedModel = normalizeVideoModelId(options.model)
+  if (normalizedModel === 'grok' && options.operation === 'edit') {
+    return options.referenceVideoDuration
+  }
+  if (normalizedModel === 'grok' && options.operation === 'extend') {
+    return options.requestedDuration ?? 6
+  }
   if (options.requestedDuration != null) return options.requestedDuration
   if (options.operation === 'extend' && normalizeVideoModelId(options.model) === 'google-omni') {
     return capability.maxOutputDuration
@@ -697,11 +725,13 @@ export function resolvePersistedVideoDuration(options: {
 }): number | undefined {
   if (options.outputDuration == null) return undefined
   if (
-    normalizeVideoModelId(options.model) === 'google-omni'
+    (normalizeVideoModelId(options.model) === 'google-omni' || normalizeVideoModelId(options.model) === 'grok')
     && options.operation === 'extend'
     && options.referenceVideoDuration != null
   ) {
-    return Math.min(40, options.referenceVideoDuration + options.outputDuration)
+    return normalizeVideoModelId(options.model) === 'google-omni'
+      ? Math.min(40, options.referenceVideoDuration + options.outputDuration)
+      : options.referenceVideoDuration + options.outputDuration
   }
   return options.outputDuration
 }
@@ -720,6 +750,7 @@ export function validateVideoModelRequest(options: {
   operation?: VideoGenerationOperation
 }): string | null {
   const capability = getVideoModelCapability(options.model)
+  const normalizedModel = normalizeVideoModelId(options.model)
   const resolutionError = validateVideoResolutionRequest({
     model: options.model,
     resolution: options.resolution,
@@ -730,6 +761,39 @@ export function validateVideoModelRequest(options: {
     aspectRatio: options.aspectRatio,
   })
   if (aspectRatioError) return aspectRatioError
+
+  if (normalizedModel === 'grok') {
+    const operation = options.operation || 'generate'
+    if (options.hasVideoReference && operation === 'generate') {
+      return 'Grok video input requires video_operation="edit" or "extend". Use edit to modify the existing clip, or extend to continue from its ending.'
+    }
+    if (operation === 'edit') {
+      if (options.referenceVideoDuration != null && options.referenceVideoDuration > 8.7) {
+        return 'Grok video editing accepts one source MP4 up to 8.7 seconds. Split the source first, edit each segment, then reassemble it.'
+      }
+      if ((options.imageReferenceCount ?? 0) > 0 || (options.audioReferenceCount ?? 0) > 0) {
+        return 'Grok video editing cannot be combined with image or audio references in the same request.'
+      }
+    }
+    if (operation === 'extend') {
+      if (options.outputDuration != null && (options.outputDuration < 2 || options.outputDuration > 10)) {
+        return 'Grok video extension duration must be between 2 and 10 seconds.'
+      }
+      if (options.referenceVideoDuration != null && (options.referenceVideoDuration < 2 || options.referenceVideoDuration > 15)) {
+        return 'Grok video extension accepts one source MP4 between 2 and 15 seconds.'
+      }
+      if ((options.imageReferenceCount ?? 0) > 0 || (options.audioReferenceCount ?? 0) > 0) {
+        return 'Grok video extension cannot be combined with image or audio references in the same request.'
+      }
+    }
+    if (
+      operation === 'generate'
+      && (options.imageReferenceCount ?? 0) > 1
+      && normalizeVideoResolution(options.model, options.resolution) === '1080p'
+    ) {
+      return 'Grok reference-to-video is capped at 720p. Native 1080p is available only for text-to-video or single-image-to-video.'
+    }
+  }
 
   if (options.operation === 'edit' && normalizeVideoModelId(options.model) === 'seedance-2.5' && options.outputDuration !== -1) {
     return 'Seedance 2.5 video edit requires duration=-1 so the output follows the input video.'

@@ -502,16 +502,8 @@ describe('video model reference limits', () => {
     }
   })
 
-  it('still rejects zero-media generation for providers without text-to-video support', async () => {
-    const result = await createVideo({
-      script: 'Neon city awakening\n\nA cinematic neon city wakes at dawn.',
-      images: [],
-      duration: 5,
-      videoModel: 'grok',
-    })
-
-    expect(result.success).toBe(false)
-    expect(result.message).toContain('requires an image or video reference')
+  it('recognizes Grok 1.5 native text-to-video without requiring source media', () => {
+    expect(supportsNativeTextToVideo('grok')).toBe(true)
   })
 
   it('does not invent a Kling reference-video lower resolution limit', async () => {
@@ -585,6 +577,84 @@ describe('video model reference limits', () => {
     expect(estimateVideoCredits({ model: 'grok', durationSec: 4, imageCount: 1 })).toBe(66)
     expect(estimateVideoCredits({ model: 'grok', resolution: '480p', durationSec: 1, imageCount: 1 })).toBe(18)
     expect(estimateVideoCredits({ model: 'grok', resolution: '720p', durationSec: 1, imageCount: 1 })).toBe(30)
+    expect(estimateVideoCredits({ model: 'grok', resolution: '1080p', durationSec: 1 })).toBe(50)
+    expect(estimateVideoCredits({
+      model: 'grok',
+      operation: 'edit',
+      durationSec: 5,
+      referenceVideoDurationSec: 5,
+    })).toBe(80)
+    expect(estimateVideoCredits({
+      model: 'grok',
+      operation: 'extend',
+      durationSec: 6,
+      referenceVideoDurationSec: 5,
+    })).toBe(94)
+  })
+
+  it('models the current split Grok generation/edit/extend contract', () => {
+    expect(getVideoModelCapability('grok')).toMatchObject({
+      label: 'Grok Imagine Video',
+      supportsVideoReference: true,
+      supportsBaseVideoEdit: true,
+      supportsVideoExtend: true,
+      maxImageReferences: 7,
+      maxVideoReferences: 1,
+      maxReferenceVideoDuration: 15,
+      supportedResolutions: ['480p', '720p', '1080p'],
+    })
+    expect(resolveVideoProviderModel({ model: 'grok', operation: 'generate' })).toBe('grok-imagine-video-1.5')
+    expect(resolveVideoProviderModel({ model: 'grok', operation: 'edit', hasVideoReference: true })).toBe('grok-imagine-video')
+    expect(resolveVideoProviderModel({ model: 'grok', operation: 'extend', hasVideoReference: true })).toBe('grok-imagine-video')
+    expect(resolveVideoOutputDuration({
+      model: 'grok',
+      operation: 'edit',
+      requestedDuration: 3,
+      referenceVideoDuration: 8.2,
+    })).toBe(8.2)
+    expect(resolveVideoOutputDuration({ model: 'grok', operation: 'extend', referenceVideoDuration: 5 })).toBe(6)
+    expect(resolvePersistedVideoDuration({
+      model: 'grok',
+      operation: 'extend',
+      referenceVideoDuration: 5,
+      outputDuration: 6,
+    })).toBe(11)
+    expect(validateVideoModelRequest({
+      model: 'grok',
+      operation: 'edit',
+      hasVideoReference: true,
+      videoReferenceCount: 1,
+      referenceVideoDuration: 8.7,
+    })).toBeNull()
+    expect(validateVideoModelRequest({
+      model: 'grok',
+      operation: 'edit',
+      hasVideoReference: true,
+      videoReferenceCount: 1,
+      referenceVideoDuration: 8.8,
+    })).toContain('up to 8.7 seconds')
+    expect(validateVideoModelRequest({
+      model: 'grok',
+      operation: 'extend',
+      hasVideoReference: true,
+      videoReferenceCount: 1,
+      referenceVideoDuration: 15,
+      outputDuration: 10,
+    })).toBeNull()
+    expect(validateVideoModelRequest({
+      model: 'grok',
+      operation: 'extend',
+      hasVideoReference: true,
+      videoReferenceCount: 1,
+      referenceVideoDuration: 15,
+      outputDuration: 11,
+    })).toContain('between 2 and 10 seconds')
+    expect(validateVideoModelRequest({
+      model: 'grok',
+      operation: 'generate',
+      imageReferenceCount: 2,
+      resolution: '1080p',
+    })).toContain('reference-to-video is capped at 720p')
   })
 
   it('models Gemini Omni 1.1 as a fast multi-resolution generation, edit, and reference-video extension provider', () => {
@@ -760,7 +830,7 @@ describe('video model reference limits', () => {
       aspectRatio: '21:9',
     })
     expect(unsupported.success).toBe(false)
-    expect(unsupported.message).toContain('Grok Video 1.5 does not support 21:9')
+    expect(unsupported.message).toContain('Grok Imagine Video does not support 21:9')
 
     const supported = await createVideo({
       script: 'Wide Seedance\n\nAnimate <<<media_1>>>.',

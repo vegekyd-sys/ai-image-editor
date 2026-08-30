@@ -135,6 +135,7 @@ export async function POST(req: NextRequest) {
       durationSec: videoSec,
       imageCount: filteredImages.length,
       referenceVideoDurationSec: referenceVideoDuration,
+      operation: videoOperation,
       contentFilter,
     }) ?? Math.ceil(videoSec * 22)
     const toolName = selectedVideoModel === 'grok' ? 'create_video_grok' : 'create_video'
@@ -217,6 +218,7 @@ export async function POST(req: NextRequest) {
         durationSec: videoSec,
         imageCount: filteredImages.length,
         referenceVideoDurationSec: referenceVideoDuration,
+        operation: videoOperation,
         contentFilter,
       })
 
