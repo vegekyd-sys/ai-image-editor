@@ -59,6 +59,7 @@ import { isDirectRemotionCompositionSource } from './remotion-code-normalization
 import {
   type AgentModelRuntime,
 } from './agent-model-runtime';
+import { resolveAnalyzeImageProvider } from './agent-image-analysis';
 import {
   AgentExecutionStore,
   normalizeExecutionSnapshot,
@@ -1349,7 +1350,7 @@ interface AgentToolFactoryScope {
 }
 
 function createGenerateImageTool(
-  { ctx }: AgentToolFactoryScope,
+  { ctx, runtime }: AgentToolFactoryScope,
 ) {
   return tool({
       description: generateImageToolPrompt,
@@ -1392,10 +1393,20 @@ function createGenerateImageTool(
         const resolvedModel = (ctx.preferredModel ? ctx.preferredModel : model) as ModelId | undefined;
         const skillResult = await editImage(
           { editPrompt, skill: skill as 'enhance' | 'creative' | 'wild' | 'captions' | undefined, aspectRatio, background, preferredModel: resolvedModel, isNsfw: ctx.isNsfw },
-          { currentImage: editTarget, referenceImages: resolvedRefs.length ? resolvedRefs : undefined },
+          {
+            currentImage: editTarget,
+            referenceImages: resolvedRefs.length ? resolvedRefs : undefined,
+            codexSubscription: runtime.spec.provider === 'codex-subscription' && ctx.userId
+              ? {
+                  userId: ctx.userId,
+                  projectId: ctx.projectId,
+                  agentModelId: runtime.spec.providerModelId,
+                }
+              : undefined,
+          },
         );
         // Bill for image generation (separate from Agent LLM tokens)
-        if (skillResult.usage) {
+        if (skillResult.usage && skillResult.provider !== 'codex-subscription') {
           import('./billing/credits').then(({ deductByTokens }) =>
             deductByTokens(
               ctx.userId ?? '',
@@ -1410,7 +1421,11 @@ function createGenerateImageTool(
             )
               .catch(e => console.error('[billing] generate_image deduct error:', e))
           );
-        } else if (skillResult.usedModel && skillResult.usedModel !== 'gemini') {
+        } else if (
+          skillResult.provider !== 'codex-subscription'
+          && skillResult.usedModel
+          && skillResult.usedModel !== 'gemini'
+        ) {
           // Per-action for ComfyUI models
           import('./billing/credits').then(({ deductCredits }) =>
             deductCredits(ctx.userId ?? '', null, `edit_image_${skillResult.usedModel}`)
@@ -1440,6 +1455,7 @@ function createGenerateImageTool(
           message: skillResult.message + indexInfo,
           ...(mediaIndex ? { mediaIndex } : {}),
           ...(imageUrl?.startsWith('http') ? { imageUrl } : {}),
+          provider: skillResult.provider,
           contentBlocked: skillResult.contentBlocked,
         };
       },
@@ -1989,16 +2005,24 @@ function createAnalyzeImageTool(
         }
 
         const buf = await fetchImageBuffer(imageSource, { maxBytes: 600_000, maxPx: 1024, quality: 75 });
-        if (!runtime.spec.supportsImageInput) {
+        const analysisProvider = resolveAnalyzeImageProvider(runtime);
+        if (analysisProvider === 'gemini-api') {
           const { analyzeImageContent } = await import('./gemini');
           const analysis = await analyzeImageContent(
             `data:image/jpeg;base64,${buf.toString('base64')}`,
             question,
             ctx.userId,
           );
-          return { analysis, question };
+          console.log(`[analyze_image] provider=gemini-api agentProvider=${runtime.spec.provider} mode=fallback`);
+          return { analysis, question, analysisProvider };
         }
-        return { base64Data: buf.toString('base64'), mimeType: 'image/jpeg', question };
+        console.log(`[analyze_image] provider=${runtime.spec.provider} model=${runtime.spec.providerModelId} mode=in-model`);
+        return {
+          base64Data: buf.toString('base64'),
+          mimeType: 'image/jpeg',
+          question,
+          analysisProvider,
+        };
       },
 
       toModelOutput({ output }: { output: any }) {
