@@ -126,6 +126,7 @@ CODEX_SUBSCRIPTION_OWNER_USER_ID     # required for codex-subscription
 CODEX_SUBSCRIPTION_FALLBACK_PROVIDER # azure-openai (default) or openrouter
 CODEX_SUBSCRIPTION_RELAY_URL          # optional HTTPS relay for Vercel/private split runtime
 CODEX_SUBSCRIPTION_RELAY_SECRET       # shared HMAC secret; never a Codex OAuth token
+CODEX_SUBSCRIPTION_ALLOWLIST_PATH     # relay-only persisted dynamic allowlist (optional override)
 OPENAI_IMAGE_PROVIDER       # azure (default), openrouter backup, or piapi
 DEEPSEEK_API_KEY
 AGENT_MODEL

@@ -8,20 +8,10 @@ import { useLocale } from '@/lib/i18n'
 import { DEFAULT_WELCOME_CREDITS } from '@/lib/billing/welcome-credits'
 import { DEFAULT_IOS_TRIAL_CREDITS } from '@/lib/billing/ios-trial'
 
-interface InviteCode {
-  id: string
-  code: string
-  max_uses: number
-  used_count: number
-  expires_at: string | null
-  created_at: string
-  users: string[]
-}
-
-interface WaitlistEntry {
-  id: string
-  email: string
-  created_at: string
+interface CodexAllowlistUser {
+  userId: string
+  email: string | null
+  isOwner: boolean
 }
 
 interface CreditPricing {
@@ -171,9 +161,11 @@ function actionValue(insights: MetaInsightsSummary | null, actionType: string): 
 export default function AdminPage() {
   const router = useRouter()
   const { t } = useLocale()
-  const [tab, setTab] = useState<'codes' | 'waitlist' | 'billing' | 'skills' | 'meta'>('codes')
-  const [codes, setCodes] = useState<InviteCode[]>([])
-  const [waitlist, setWaitlist] = useState<WaitlistEntry[]>([])
+  const [tab, setTab] = useState<'codex' | 'billing' | 'skills' | 'meta'>('codex')
+  const [codexAllowlist, setCodexAllowlist] = useState<CodexAllowlistUser[]>([])
+  const [codexEmail, setCodexEmail] = useState('')
+  const [codexSaving, setCodexSaving] = useState(false)
+  const [codexMessage, setCodexMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null)
   const [pricing, setPricing] = useState<CreditPricing[]>([])
   const [editingPricing, setEditingPricing] = useState<Record<string, { credits?: string; supplier_cost?: string }>>({})
   const [tokenRates, setTokenRates] = useState<TokenRateEntry[]>([])
@@ -202,23 +194,11 @@ export default function AdminPage() {
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
 
-  // Create code form
-  const [newCode, setNewCode] = useState('')
-  const [newMaxUses, setNewMaxUses] = useState('30')
-  const [creating, setCreating] = useState(false)
-
-  const fetchCodes = useCallback(async () => {
-    const res = await fetch('/api/admin/invite-codes')
+  const fetchCodexAllowlist = useCallback(async () => {
+    const res = await fetch('/api/admin/codex-subscription-allowlist')
     if (res.status === 403) { setError('Not authorized'); return }
     const data = await res.json()
-    if (Array.isArray(data)) setCodes(data)
-  }, [])
-
-  const fetchWaitlist = useCallback(async () => {
-    const res = await fetch('/api/admin/waitlist')
-    if (res.status === 403) { setError('Not authorized'); return }
-    const data = await res.json()
-    if (Array.isArray(data)) setWaitlist(data)
+    if (res.ok && Array.isArray(data.users)) setCodexAllowlist(data.users)
   }, [])
 
   const fetchPricing = useCallback(async () => {
@@ -283,31 +263,50 @@ export default function AdminPage() {
 
   useEffect(() => {
     setLoading(true)
-    Promise.all([fetchCodes(), fetchWaitlist(), fetchPricing(), fetchTokenRates(), fetchBillingToggle(), fetchHomeSkills(), fetchSkillCategories(), fetchMetaStatus()]).finally(() => setLoading(false))
-  }, [fetchCodes, fetchWaitlist, fetchPricing, fetchTokenRates, fetchBillingToggle, fetchHomeSkills, fetchSkillCategories, fetchMetaStatus])
+    Promise.all([fetchCodexAllowlist(), fetchPricing(), fetchTokenRates(), fetchBillingToggle(), fetchHomeSkills(), fetchSkillCategories(), fetchMetaStatus()]).finally(() => setLoading(false))
+  }, [fetchCodexAllowlist, fetchPricing, fetchTokenRates, fetchBillingToggle, fetchHomeSkills, fetchSkillCategories, fetchMetaStatus])
 
-  const handleCreate = async () => {
-    if (!newCode.trim()) return
-    setCreating(true)
+  const handleAddCodexAccount = async () => {
+    if (!codexEmail.trim()) return
+    setCodexSaving(true)
+    setCodexMessage(null)
     try {
-      const res = await fetch('/api/admin/invite-codes', {
+      const res = await fetch('/api/admin/codex-subscription-allowlist', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          code: newCode.trim(),
-          max_uses: parseInt(newMaxUses) || 30,
-        }),
+        body: JSON.stringify({ email: codexEmail.trim() }),
       })
       const data = await res.json()
-      if (res.ok) {
-        setCodes(prev => [data, ...prev])
-        setNewCode('')
-        setNewMaxUses('30')
+      if (res.ok && Array.isArray(data.users)) {
+        setCodexAllowlist(data.users)
+        setCodexEmail('')
+        setCodexMessage({ type: 'success', text: t('admin.codexAllowlist.added') })
       } else {
-        alert(data.error || 'Failed to create')
+        setCodexMessage({ type: 'error', text: data.error || t('admin.codexAllowlist.updateFailed') })
       }
     } finally {
-      setCreating(false)
+      setCodexSaving(false)
+    }
+  }
+
+  const handleRemoveCodexAccount = async (userId: string) => {
+    setCodexSaving(true)
+    setCodexMessage(null)
+    try {
+      const res = await fetch('/api/admin/codex-subscription-allowlist', {
+        method: 'DELETE',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ userId }),
+      })
+      const data = await res.json()
+      if (res.ok && Array.isArray(data.users)) {
+        setCodexAllowlist(data.users)
+        setCodexMessage({ type: 'success', text: t('admin.codexAllowlist.removed') })
+      } else {
+        setCodexMessage({ type: 'error', text: data.error || t('admin.codexAllowlist.updateFailed') })
+      }
+    } finally {
+      setCodexSaving(false)
     }
   }
 
@@ -348,20 +347,12 @@ export default function AdminPage() {
       {/* Tabs */}
       <div className="flex gap-1 mb-6 bg-white/5 rounded-lg p-1">
         <button
-          onClick={() => setTab('codes')}
+          onClick={() => setTab('codex')}
           className={`flex-1 py-2 px-4 rounded-md text-sm font-medium transition-all ${
-            tab === 'codes' ? 'bg-fuchsia-600 text-white' : 'text-white/50 hover:text-white/70'
+            tab === 'codex' ? 'bg-fuchsia-600 text-white' : 'text-white/50 hover:text-white/70'
           }`}
         >
-          Invite Codes ({codes.length})
-        </button>
-        <button
-          onClick={() => setTab('waitlist')}
-          className={`flex-1 py-2 px-4 rounded-md text-sm font-medium transition-all ${
-            tab === 'waitlist' ? 'bg-fuchsia-600 text-white' : 'text-white/50 hover:text-white/70'
-          }`}
-        >
-          Waitlist ({waitlist.length})
+          {t('admin.codexAllowlist.tab')} ({codexAllowlist.length})
         </button>
         <button
           onClick={() => setTab('billing')}
@@ -389,94 +380,67 @@ export default function AdminPage() {
         </button>
       </div>
 
-      {/* ══════ INVITE CODES TAB ══════ */}
-      {tab === 'codes' && (
-        <>
-          {/* Create new code */}
-          <div className="bg-white/5 rounded-xl p-4 mb-6 border border-white/10">
-            <h3 className="text-sm font-medium text-white/60 mb-3">Create new invite code</h3>
-            <div className="flex gap-2">
+      {/* ══════ CODEX SUBSCRIPTION ALLOWLIST TAB ══════ */}
+      {tab === 'codex' && (
+        <div className="space-y-4">
+          <div className="bg-white/5 rounded-xl p-4 border border-white/10">
+            <h2 className="text-sm font-semibold">{t('admin.codexAllowlist.title')}</h2>
+            <p className="mt-1 text-xs leading-relaxed text-white/40">
+              {t('admin.codexAllowlist.desc')}
+            </p>
+            <div className="mt-4 flex flex-col gap-2 sm:flex-row">
               <input
-                type="text"
-                value={newCode}
-                onChange={(e) => setNewCode(e.target.value.toUpperCase())}
-                placeholder="CODE"
-                className="flex-1 px-3 py-2 rounded-lg bg-white/10 text-white text-sm placeholder-white/30 border border-white/10 focus:border-fuchsia-500/50 focus:outline-none uppercase tracking-wider font-mono"
-              />
-              <input
-                type="number"
-                value={newMaxUses}
-                onChange={(e) => setNewMaxUses(e.target.value)}
-                placeholder="Max"
-                className="w-20 px-3 py-2 rounded-lg bg-white/10 text-white text-sm placeholder-white/30 border border-white/10 focus:border-fuchsia-500/50 focus:outline-none text-center"
+                type="email"
+                value={codexEmail}
+                onChange={(event) => setCodexEmail(event.target.value)}
+                onKeyDown={(event) => {
+                  if (event.key === 'Enter') void handleAddCodexAccount()
+                }}
+                placeholder={t('admin.codexAllowlist.emailPlaceholder')}
+                aria-label={t('admin.codexAllowlist.emailPlaceholder')}
+                className="min-w-0 flex-1 rounded-lg border border-white/10 bg-white/10 px-3 py-2 text-sm text-white placeholder-white/30 outline-none focus:border-fuchsia-500/50"
               />
               <button
-                onClick={handleCreate}
-                disabled={creating || !newCode.trim()}
-                className="px-4 py-2 rounded-lg bg-fuchsia-600 text-white text-sm font-medium hover:bg-fuchsia-500 disabled:opacity-40 disabled:cursor-not-allowed transition-all"
+                type="button"
+                onClick={handleAddCodexAccount}
+                disabled={codexSaving || !codexEmail.trim()}
+                className="rounded-lg bg-fuchsia-600 px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-fuchsia-500 disabled:cursor-not-allowed disabled:opacity-40"
               >
-                {creating ? '...' : 'Create'}
+                {codexSaving ? t('admin.codexAllowlist.saving') : t('admin.codexAllowlist.add')}
               </button>
             </div>
+            {codexMessage ? (
+              <p className={`mt-3 text-xs ${codexMessage.type === 'success' ? 'text-emerald-400' : 'text-red-400'}`} role="status">
+                {codexMessage.text}
+              </p>
+            ) : null}
           </div>
 
-          {/* Codes list */}
           <div className="space-y-2">
-            {codes.map((c) => (
-              <div key={c.id} className="bg-white/[0.03] rounded-lg px-4 py-3 border border-white/5">
-                <div className="flex items-center justify-between">
-                  <div>
-                    <span className="font-mono text-sm tracking-wider">{c.code}</span>
-                    {c.expires_at && (
-                      <span className="text-white/30 text-xs ml-2">
-                        exp {new Date(c.expires_at).toLocaleDateString()}
-                      </span>
-                    )}
-                  </div>
-                  <div className="flex items-center gap-4">
-                    <div className="text-sm">
-                      <span className={c.used_count >= c.max_uses ? 'text-red-400' : 'text-green-400'}>
-                        {c.used_count}
-                      </span>
-                      <span className="text-white/30">/{c.max_uses}</span>
-                    </div>
-                    <span className="text-white/20 text-xs">
-                      {new Date(c.created_at).toLocaleDateString()}
+            {codexAllowlist.map((user) => (
+              <div key={user.userId} className="flex items-center justify-between gap-3 rounded-xl border border-white/5 bg-white/[0.03] px-4 py-3">
+                <div className="min-w-0">
+                  <div className="flex items-center gap-2">
+                    <span className="truncate text-sm font-medium">{user.email || t('admin.codexAllowlist.unknownEmail')}</span>
+                    <span className={`shrink-0 rounded-full px-2 py-0.5 text-[10px] font-medium ${user.isOwner ? 'bg-fuchsia-500/15 text-fuchsia-300' : 'bg-emerald-500/15 text-emerald-300'}`}>
+                      {user.isOwner ? t('admin.codexAllowlist.owner') : t('admin.codexAllowlist.allowed')}
                     </span>
                   </div>
+                  <div className="mt-1 truncate font-mono text-[10px] text-white/25">{user.userId}</div>
                 </div>
-                {c.users.length > 0 && (
-                  <div className="mt-2 pt-2 border-t border-white/5 space-y-1">
-                    {c.users.map((email) => (
-                      <div key={email} className="text-white/40 text-xs pl-2">
-                        {email}
-                      </div>
-                    ))}
-                  </div>
+                {user.isOwner ? null : (
+                  <button
+                    type="button"
+                    onClick={() => void handleRemoveCodexAccount(user.userId)}
+                    disabled={codexSaving}
+                    className="shrink-0 rounded-lg border border-red-400/20 px-3 py-1.5 text-xs text-red-300 transition-colors hover:bg-red-400/10 disabled:opacity-40"
+                  >
+                    {t('admin.codexAllowlist.remove')}
+                  </button>
                 )}
               </div>
             ))}
-            {codes.length === 0 && (
-              <p className="text-white/30 text-sm text-center py-8">No invite codes yet</p>
-            )}
           </div>
-        </>
-      )}
-
-      {/* ══════ WAITLIST TAB ══════ */}
-      {tab === 'waitlist' && (
-        <div className="space-y-2">
-          {waitlist.map((w) => (
-            <div key={w.id} className="flex items-center justify-between bg-white/[0.03] rounded-lg px-4 py-3 border border-white/5">
-              <span className="text-sm">{w.email}</span>
-              <span className="text-white/20 text-xs">
-                {new Date(w.created_at).toLocaleDateString()}
-              </span>
-            </div>
-          ))}
-          {waitlist.length === 0 && (
-            <p className="text-white/30 text-sm text-center py-8">No waitlist entries yet</p>
-          )}
         </div>
       )}
 

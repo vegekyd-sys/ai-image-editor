@@ -440,6 +440,28 @@ export async function getCodexSubscriptionUsage(
   });
 }
 
+export async function syncCodexSubscriptionRelayAllowlist(
+  userIds: string[],
+  ownerUserId: string,
+): Promise<void> {
+  const url = resolveRelayUrl('/v1/allowlist');
+  if (!url) {
+    throw new Error('CODEX_SUBSCRIPTION_RELAY_UNAVAILABLE: relay URL is not configured');
+  }
+  const body = JSON.stringify({ userIds });
+  const headers = createCodexRelayHeaders({
+    method: 'POST',
+    url,
+    body,
+    userId: ownerUserId,
+  });
+  headers.set('content-type', 'application/json');
+  const response = await fetch(url, { method: 'POST', headers, body, cache: 'no-store' });
+  if (!response.ok) {
+    throw new Error(`CODEX_SUBSCRIPTION_RELAY_UNAVAILABLE: allowlist sync failed (${response.status})`);
+  }
+}
+
 async function loadCredentialsFromCodexAppServer(
   forceRefresh: boolean,
   verifyRateLimits = false,

@@ -38,6 +38,7 @@ import {
   loadPendingAgentInputs,
   markAgentRunInputsApplied,
 } from './agent-run-admission';
+import { isDynamicCodexSubscriptionUserAllowed } from './codex-subscription-allowlist';
 
 interface ExecutionRequest {
   locale?: string;
@@ -374,10 +375,13 @@ export async function runAgentExecutionAttempt(
   }
 
   const request = ((run.metadata || {}).executionRequest || {}) as ExecutionRequest;
+  const codexSubscriptionAllowed = await isDynamicCodexSubscriptionUserAllowed(run.user_id, admin);
   const requestedModel = resolveAgentModelSpecForUser(
     request.requestedAgentModel,
     process.env.AGENT_MODEL,
     run.user_id,
+    undefined,
+    codexSubscriptionAllowed,
   );
   const { data: previousAttempts } = claim.attempt_no > 1
     ? await admin
@@ -643,6 +647,7 @@ export async function runAgentExecutionAttempt(
         userSkills: userSkills.length ? userSkills : undefined,
         supabase: admin,
         userId: run.user_id,
+        codexSubscriptionAllowed,
         currentDesign: ctx.currentDesign,
         currentDesignPath: ctx.currentDesignPath,
         history: ctx.history,

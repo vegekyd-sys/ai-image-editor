@@ -20,6 +20,7 @@ import {
   getAgentContextPolicy,
 } from '@/lib/agent-execution';
 import { verifySkillLaunchContext } from '@/lib/skill-launch-context';
+import { isDynamicCodexSubscriptionUserAllowed } from '@/lib/codex-subscription-allowlist';
 import {
   appendAgentRunInput,
   decideAgentRunAdmission,
@@ -42,6 +43,7 @@ export async function POST(req: NextRequest) {
     const authResult = await authenticateRequest(req);
     if ('error' in authResult) return authResult.error;
     const { userId, supabase } = authResult.auth;
+    const codexSubscriptionAllowed = await isDynamicCodexSubscriptionUserAllowed(userId);
     cleanupSupabase = supabase;
 
     const {
@@ -86,6 +88,8 @@ export async function POST(req: NextRequest) {
       requestedAgentModel,
       process.env.AGENT_MODEL,
       userId,
+      undefined,
+      codexSubscriptionAllowed,
     );
 
     // Pre-flight credit check
@@ -321,6 +325,7 @@ export async function POST(req: NextRequest) {
           userSkills: userSkills.length ? userSkills : undefined,
           supabase,
           userId: userId,
+          codexSubscriptionAllowed,
           currentDesign: ctx.currentDesign,
           currentDesignPath: ctx.currentDesignPath,
           history: ctx.history,
@@ -465,7 +470,7 @@ export async function POST(req: NextRequest) {
             const namePrompt = `Based on this user request, give a concise project name (2-4 words, no quotes): "${nameSource}". Output only the name.`;
             let projectName = '';
             for await (const ev of runMakaronAgent(namePrompt, '', projectId, {
-              tipReactionOnly: true, locale, agentModel: requestedAgentModel, userId,
+              tipReactionOnly: true, locale, agentModel: requestedAgentModel, userId, codexSubscriptionAllowed,
             })) {
               if (ev.type === 'content' && ev.text) projectName += ev.text;
             }

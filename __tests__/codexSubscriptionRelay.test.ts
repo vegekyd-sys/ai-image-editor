@@ -1,16 +1,22 @@
 import { afterAll, describe, expect, it } from 'vitest';
+import { mkdtempSync, readFileSync, rmSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
 
 const previousSecret = process.env.CODEX_SUBSCRIPTION_RELAY_SECRET;
 const previousOwner = process.env.CODEX_SUBSCRIPTION_OWNER_USER_ID;
 const previousAllowed = process.env.CODEX_SUBSCRIPTION_ALLOWED_USER_IDS;
+const previousAllowlistPath = process.env.CODEX_SUBSCRIPTION_ALLOWLIST_PATH;
+const allowlistDirectory = mkdtempSync(join(tmpdir(), 'makaron-codex-allowlist-'));
 process.env.CODEX_SUBSCRIPTION_RELAY_SECRET = 'relay-secret';
 process.env.CODEX_SUBSCRIPTION_OWNER_USER_ID = 'owner-id';
 process.env.CODEX_SUBSCRIPTION_ALLOWED_USER_IDS = 'test-user-id,second-test-id';
+process.env.CODEX_SUBSCRIPTION_ALLOWLIST_PATH = join(allowlistDirectory, 'allowed-users.json');
 
 // The relay deliberately stays a standalone Node service without joining the
 // Next.js TypeScript bundle. Keeping the path dynamic avoids coupling tsc to it.
 const relayModulePath = '../services/codex-subscription-relay/server.mjs?relay-auth-test';
-const { createRelaySignature, verifyRelayRequest } = await import(relayModulePath);
+const { createRelaySignature, replaceRelayAllowedUserIds, verifyRelayRequest } = await import(relayModulePath);
 
 afterAll(() => {
   if (previousSecret === undefined) delete process.env.CODEX_SUBSCRIPTION_RELAY_SECRET;
@@ -19,6 +25,9 @@ afterAll(() => {
   else process.env.CODEX_SUBSCRIPTION_OWNER_USER_ID = previousOwner;
   if (previousAllowed === undefined) delete process.env.CODEX_SUBSCRIPTION_ALLOWED_USER_IDS;
   else process.env.CODEX_SUBSCRIPTION_ALLOWED_USER_IDS = previousAllowed;
+  if (previousAllowlistPath === undefined) delete process.env.CODEX_SUBSCRIPTION_ALLOWLIST_PATH;
+  else process.env.CODEX_SUBSCRIPTION_ALLOWLIST_PATH = previousAllowlistPath;
+  rmSync(allowlistDirectory, { recursive: true, force: true });
 });
 
 function signedRequest(overrides: { userId?: string; signature?: string } = {}) {
@@ -71,5 +80,17 @@ describe('Codex subscription relay boundary', () => {
     expect(verifyRelayRequest(replayed)).toMatchObject({ ok: true });
     expect(verifyRelayRequest(replayed))
       .toMatchObject({ ok: false, status: 409, error: 'replayed_request' });
+  });
+
+  it('persists an authoritative runtime allowlist while always retaining the owner', () => {
+    expect(replaceRelayAllowedUserIds(['dynamic-user'])).toEqual(['dynamic-user', 'owner-id']);
+    expect(verifyRelayRequest(signedRequest({ userId: 'dynamic-user' })))
+      .toMatchObject({ ok: true, userId: 'dynamic-user' });
+    expect(verifyRelayRequest(signedRequest({ userId: 'test-user-id' })))
+      .toMatchObject({ ok: false, status: 403, error: 'not_allowlisted' });
+    expect(JSON.parse(readFileSync(
+      process.env.CODEX_SUBSCRIPTION_ALLOWLIST_PATH!,
+      'utf8',
+    ))).toEqual({ userIds: ['dynamic-user', 'owner-id'] });
   });
 });

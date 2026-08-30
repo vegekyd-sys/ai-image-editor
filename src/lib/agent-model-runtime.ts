@@ -34,12 +34,14 @@ export function createAgentModelRuntime(
   projectId: string,
   configuredGPT56Provider?: GPT56AgentProvider,
   userId?: string,
+  codexSubscriptionAllowed?: boolean,
 ): AgentModelRuntime {
   const spec = resolveAgentModelSpecForUser(
     preference,
     process.env.AGENT_MODEL,
     userId,
     configuredGPT56Provider ?? process.env.GPT56_AGENT_PROVIDER,
+    codexSubscriptionAllowed,
   );
 
   if (spec.provider === 'azure-openai') {

@@ -16,8 +16,9 @@ only changes the provider selected behind the existing `LanguageModel` seam.
 
 - Trusted allowlist only: `CODEX_SUBSCRIPTION_OWNER_USER_ID` identifies the
   subscription owner and is always allowed. `CODEX_SUBSCRIPTION_ALLOWED_USER_IDS`
-  may add a comma-separated set of explicit Supabase Auth user ids. Every other
-  user always stays on the configured API fallback.
+  is a bootstrap-only comma-separated set of Supabase Auth user ids. After an
+  Admin change, `app_settings.codex_subscription_allowed_user_ids` becomes the
+  authoritative runtime list. Every other user stays on the configured API fallback.
 - Private durable credential runtime only: Codex is installed and logged in on
   the owner's Mac or an isolated persistent host. A Vercel deployment may call
   the owner-only HTTPS relay, but never receives the Codex OAuth token itself.
@@ -128,6 +129,21 @@ CODEX_SUBSCRIPTION_RELAY_SECRET=<same random HMAC secret>
 The temporary Cloudflare quick tunnel used for Preview can change after a
 restart. Before Production, replace it with a dedicated named tunnel and stable
 hostname, then repeat the same owner, quota, streaming, and API fallback gates.
+
+## Admin allowlist management
+
+`/admin` exposes a Codex plan tab for existing Makaron accounts. An admin enters
+an exact registered email; the server resolves its Supabase Auth UUID, signs the
+complete replacement list to `POST /v1/allowlist` on the VLab relay, and then
+stores the same list as JSON in `app_settings`. Removing an account follows the
+same replacement flow. The owner UUID is immutable and is always re-added by
+both runtimes.
+
+The relay persists the authoritative list to
+`$CODEX_HOME/../allowed-users.json` with mode `0600`. Once that file or the
+database setting exists, the old environment list is ignored. This makes an
+Admin removal effective without a Vercel redeploy or Relay restart while still
+keeping the HMAC and Relay-side authorization boundary.
 
 ## Runtime behavior
 

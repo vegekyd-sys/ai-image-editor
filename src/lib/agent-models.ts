@@ -148,9 +148,11 @@ export function defaultsToCodexSubscription(
   userId: string | undefined,
   ownerUserId: string | undefined = process.env.CODEX_SUBSCRIPTION_OWNER_USER_ID,
   configuredAllowedUserIds: string | undefined = process.env.CODEX_SUBSCRIPTION_ALLOWED_USER_IDS,
+  dynamicallyAllowed?: boolean,
 ): boolean {
   return (preference === undefined || preference === 'auto')
-    && isCodexSubscriptionAllowedUser(userId, ownerUserId, configuredAllowedUserIds);
+    && (dynamicallyAllowed
+      ?? isCodexSubscriptionAllowedUser(userId, ownerUserId, configuredAllowedUserIds));
 }
 
 export function shouldRequireAgentCredits(provider: AgentModelProvider): boolean {
@@ -162,6 +164,7 @@ export function resolveGPT56AgentProviderForUser(options: {
   userId?: string;
   ownerUserId?: string;
   allowedUserIds?: string;
+  dynamicallyAllowed?: boolean;
   fallbackProvider?: string;
 }): GPT56AgentProvider {
   const provider = resolveGPT56AgentProvider(options.configuredProvider);
@@ -174,7 +177,8 @@ export function resolveGPT56AgentProviderForUser(options: {
     );
   }
 
-  return isCodexSubscriptionAllowedUser(options.userId, ownerUserId, options.allowedUserIds)
+  return (options.dynamicallyAllowed
+    ?? isCodexSubscriptionAllowedUser(options.userId, ownerUserId, options.allowedUserIds))
     ? 'codex-subscription'
     : resolveCodexSubscriptionFallbackProvider(options.fallbackProvider);
 }
@@ -315,9 +319,16 @@ export function resolveAgentModelSpecForUser(
   configuredDefault: string | undefined,
   userId: string | undefined,
   configuredGPT56Provider: string | undefined = process.env.GPT56_AGENT_PROVIDER,
+  codexSubscriptionAllowed?: boolean,
 ): AgentModelSpec {
   const explicitlyUsesCodexSubscription = isCodexSubscriptionAgentModelPreference(preference);
-  const ownerUsesCodexByDefault = defaultsToCodexSubscription(preference, userId);
+  const ownerUsesCodexByDefault = defaultsToCodexSubscription(
+    preference,
+    userId,
+    undefined,
+    undefined,
+    codexSubscriptionAllowed,
+  );
   const selected = resolveAgentModelSpec(
     preference,
     configuredDefault,
@@ -330,6 +341,7 @@ export function resolveAgentModelSpecForUser(
       ? 'codex-subscription'
       : configuredGPT56Provider,
     userId,
+    dynamicallyAllowed: codexSubscriptionAllowed,
   });
   return resolveAgentModelSpec(selected.id, undefined, provider);
 }

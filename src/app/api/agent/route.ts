@@ -14,6 +14,7 @@ import {
   shouldRequireAgentCredits,
 } from '@/lib/agent-models';
 import { getAgentContextPolicy } from '@/lib/agent-execution';
+import { isDynamicCodexSubscriptionUserAllowed } from '@/lib/codex-subscription-allowlist';
 import { verifySkillLaunchContext } from '@/lib/skill-launch-context';
 import {
   appendAgentRunInput,
@@ -31,6 +32,7 @@ export async function POST(req: NextRequest) {
     endAuth({ ok: !('error' in authResult) });
     if ('error' in authResult) return authResult.error;
     const { userId, supabase } = authResult.auth;
+    const codexSubscriptionAllowed = await isDynamicCodexSubscriptionUserAllowed(userId);
 
     const endReadBody = perf.span('read_body');
     const { prompt, image, animationImageUrls, animationImages, projectId, analysisOnly, analysisContext, isVideoAnalysis,
@@ -65,6 +67,8 @@ export async function POST(req: NextRequest) {
       requestedAgentModel,
       process.env.AGENT_MODEL,
       userId,
+      undefined,
+      codexSubscriptionAllowed,
     );
 
     if (shouldRequireAgentCredits(resolvedAgentModel.provider)) {
@@ -227,7 +231,7 @@ export async function POST(req: NextRequest) {
               .join('\n');
             const teaserPrompt = `Here are edit suggestions for a photo:\n${tipsSummary}\n\nPick the most interesting one. Write a single teaser sentence (under 15 words) starting with "Try...". Output only that sentence.`;
             await iterateAgent(runMakaronAgent(teaserPrompt, '', projectId, {
-              tipReactionOnly: true, locale, agentModel: requestedAgentModel, userId,
+              tipReactionOnly: true, locale, agentModel: requestedAgentModel, userId, codexSubscriptionAllowed,
             }), controller);
             return;
           }
@@ -237,7 +241,7 @@ export async function POST(req: NextRequest) {
             const desc = (description as string) || '';
             const namePrompt = `Based on this photo description, give a concise project name (2-4 words): ${desc}. Output only the name, no punctuation or explanation.`;
             await iterateAgent(runMakaronAgent(namePrompt, '', projectId, {
-              tipReactionOnly: true, locale, agentModel: requestedAgentModel, userId,
+              tipReactionOnly: true, locale, agentModel: requestedAgentModel, userId, codexSubscriptionAllowed,
             }), controller);
             return;
           }
@@ -255,7 +259,7 @@ export async function POST(req: NextRequest) {
               .join('\n');
             const readyPrompt = `All ${tips.length} edit suggestion previews are ready:\n${tipsSummary}\n\nIn 1-2 sentences, tell the user previews are ready and they can scroll TipsBar. Comment on one interesting one. Friendly tone, don't start with "I".`;
             await iterateAgent(runMakaronAgent(readyPrompt, '', projectId, {
-              tipReactionOnly: true, locale, agentModel: requestedAgentModel, userId,
+              tipReactionOnly: true, locale, agentModel: requestedAgentModel, userId, codexSubscriptionAllowed,
             }), controller);
             return;
           }
@@ -265,7 +269,7 @@ export async function POST(req: NextRequest) {
             const musicPrompt = `Background music is ready: ${musicAudioUrl}\n\nFirst, briefly tell the user the music is ready and you're adding it to the video now (1 sentence). Then: load the latest Remotion composition code from workspace (list_files to find it, read_file to load), add <Audio src="${musicAudioUrl}" volume={0.3} /> to it, and call run_code with runtime: "composition" to render the updated version with music.`;
             await iterateAgent(runMakaronAgent(musicPrompt, image || '', projectId, {
               locale, agentModel: requestedAgentModel,
-              snapshotImages, currentSnapshotIndex, supabase, userId: userId,
+              snapshotImages, currentSnapshotIndex, supabase, userId: userId, codexSubscriptionAllowed,
             }), controller);
             return;
           }
@@ -280,7 +284,7 @@ export async function POST(req: NextRequest) {
             const tip = committedTip as { emoji: string; label: string; desc: string; category: string };
             const reactionPrompt = `User just committed an edit via TipsBar:\n${tip.emoji} ${tip.label} (${tip.category}): ${tip.desc}\n\nReact naturally in 1 sentence, like a friend. Then in 1 short sentence, inspire what direction they could explore next with this photo (e.g. mood, lighting, story element) — but do NOT recommend specific tips. Don't start with "I".`;
             await iterateAgent(runMakaronAgent(reactionPrompt, image, projectId, {
-              tipReactionOnly: true, locale, agentModel: requestedAgentModel, userId,
+              tipReactionOnly: true, locale, agentModel: requestedAgentModel, userId, codexSubscriptionAllowed,
             }), controller);
             return;
           }
@@ -392,7 +396,7 @@ export async function POST(req: NextRequest) {
           try {
             const endAgentStream = perf.span('agent_stream', { projectId, runId: runId || null });
             try {
-              for await (const event of runMakaronAgent(agentPrompt, agentImage, projectId, { analysisOnly, analysisContext, isVideoAnalysis, animationImageUrls: animationImageUrls?.length ? animationImageUrls : undefined, animationImages: animationImages?.length ? animationImages : undefined, locale, preferredModel, agentModel: requestedAgentModel, videoModel, videoResolution, videoAuto, skillLaunchContext, audioAttachments: agentAudioAttachments, snapshotImages: agentSnapshotImages, explicitMediaIndices: agentExplicitMediaIndices, currentSnapshotIndex: agentCurrentSnapshotIndex, isNsfw, supabase, userId: userId, currentDesign: agentCurrentDesign, currentDesignPath: agentCurrentDesignPath, history: agentHistory, timelineVersion, perf, abortSignal: modelAbortController.signal, contextCompactAtTokens: agentCompactionRequired ? getAgentContextPolicy(resolvedAgentModel.id).providerCompactAtTokens : undefined, historyBoundary: agentHistoryBoundary, studioWorkflowStage: agentStudioWorkflowStage, agentRunId: runId || undefined })) {
+              for await (const event of runMakaronAgent(agentPrompt, agentImage, projectId, { analysisOnly, analysisContext, isVideoAnalysis, animationImageUrls: animationImageUrls?.length ? animationImageUrls : undefined, animationImages: animationImages?.length ? animationImages : undefined, locale, preferredModel, agentModel: requestedAgentModel, videoModel, videoResolution, videoAuto, skillLaunchContext, audioAttachments: agentAudioAttachments, snapshotImages: agentSnapshotImages, explicitMediaIndices: agentExplicitMediaIndices, currentSnapshotIndex: agentCurrentSnapshotIndex, isNsfw, supabase, userId: userId, codexSubscriptionAllowed, currentDesign: agentCurrentDesign, currentDesignPath: agentCurrentDesignPath, history: agentHistory, timelineVersion, perf, abortSignal: modelAbortController.signal, contextCompactAtTokens: agentCompactionRequired ? getAgentContextPolicy(resolvedAgentModel.id).providerCompactAtTokens : undefined, historyBoundary: agentHistoryBoundary, studioWorkflowStage: agentStudioWorkflowStage, agentRunId: runId || undefined })) {
                 if (event.type === 'done') sawDone = true;
                 if (event.type === 'error') {
                   sawError = true;

@@ -6,6 +6,8 @@ import {
   timingSafeEqual,
 } from 'node:crypto';
 import { createServer } from 'node:http';
+import { readFileSync, renameSync, writeFileSync } from 'node:fs';
+import { dirname, resolve } from 'node:path';
 import { Readable } from 'node:stream';
 
 const RESPONSES_URL = 'https://chatgpt.com/backend-api/codex/responses';
@@ -17,15 +19,18 @@ const PORT = Number.parseInt(process.env.PORT || '25984', 10);
 const HOST = process.env.HOST?.trim() || '127.0.0.1';
 const RELAY_SECRET = process.env.CODEX_SUBSCRIPTION_RELAY_SECRET?.trim();
 const OWNER_USER_ID = process.env.CODEX_SUBSCRIPTION_OWNER_USER_ID?.trim();
-const ALLOWED_USER_IDS = new Set(
+const LEGACY_ALLOWED_USER_IDS = new Set(
   (process.env.CODEX_SUBSCRIPTION_ALLOWED_USER_IDS || '')
     .split(',')
     .map(value => value.trim())
     .filter(Boolean),
 );
-if (OWNER_USER_ID) ALLOWED_USER_IDS.add(OWNER_USER_ID);
 const CODEX_CLI_PATH = process.env.CODEX_CLI_PATH?.trim() || 'codex';
 const ORIGINATOR = process.env.CODEX_SUBSCRIPTION_ORIGINATOR?.trim() || 'makaron';
+const ALLOWLIST_PATH = process.env.CODEX_SUBSCRIPTION_ALLOWLIST_PATH?.trim()
+  || (process.env.CODEX_HOME?.trim()
+    ? resolve(process.env.CODEX_HOME, '..', 'allowed-users.json')
+    : undefined);
 
 const HEADER = {
   timestamp: 'x-makaron-relay-timestamp',
@@ -38,6 +43,45 @@ const HEADER = {
 let cachedCredentials;
 let credentialsInFlight;
 const replayCache = new Map();
+
+function normalizeAllowedUserIds(value) {
+  const normalized = new Set(
+    Array.isArray(value)
+      ? value.filter(item => typeof item === 'string').map(item => item.trim()).filter(Boolean)
+      : [],
+  );
+  if (OWNER_USER_ID) normalized.add(OWNER_USER_ID);
+  return normalized;
+}
+
+function loadAllowedUserIds() {
+  if (ALLOWLIST_PATH) {
+    try {
+      const parsed = JSON.parse(readFileSync(ALLOWLIST_PATH, 'utf8'));
+      if (Array.isArray(parsed?.userIds)) return normalizeAllowedUserIds(parsed.userIds);
+    } catch (error) {
+      if (error?.code !== 'ENOENT') {
+        console.error(`[makaron-codex-relay] unable to read persisted allowlist: ${safeError(error)}`);
+      }
+    }
+  }
+  return normalizeAllowedUserIds([...LEGACY_ALLOWED_USER_IDS]);
+}
+
+let allowedUserIds = loadAllowedUserIds();
+
+export function replaceRelayAllowedUserIds(userIds, options = {}) {
+  const next = normalizeAllowedUserIds(userIds);
+  if (next.size > 100) throw Object.assign(new Error('allowlist too large'), { statusCode: 400 });
+  if (options.persist !== false) {
+    if (!ALLOWLIST_PATH) throw Object.assign(new Error('allowlist persistence is not configured'), { statusCode: 503 });
+    const temporaryPath = resolve(dirname(ALLOWLIST_PATH), `.allowed-users-${randomUUID()}.tmp`);
+    writeFileSync(temporaryPath, `${JSON.stringify({ userIds: [...next] }, null, 2)}\n`, { mode: 0o600 });
+    renameSync(temporaryPath, ALLOWLIST_PATH);
+  }
+  allowedUserIds = next;
+  return [...next];
+}
 
 function safeError(error) {
   return (error instanceof Error ? error.message : String(error))
@@ -103,7 +147,7 @@ export function verifyRelayRequest({ method, pathname, headers, body, now = Date
   if (![timestamp, requestId, userId, signature].every(value => typeof value === 'string' && value)) {
     return { ok: false, status: 401, error: 'missing_signature' };
   }
-  if (!ALLOWED_USER_IDS.has(userId)) {
+  if (!allowedUserIds.has(userId)) {
     return { ok: false, status: 403, error: 'not_allowlisted' };
   }
   const numericTimestamp = Number(timestamp);
@@ -354,7 +398,7 @@ export function createRelayServer() {
       sendJson(res, 200, { ok: true });
       return;
     }
-    if (req.method !== 'POST' || !['/v1/responses', '/v1/usage'].includes(url.pathname)) {
+    if (req.method !== 'POST' || !['/v1/responses', '/v1/usage', '/v1/allowlist'].includes(url.pathname)) {
       sendJson(res, 404, { error: 'not_found' });
       return;
     }
@@ -368,6 +412,16 @@ export function createRelayServer() {
       });
       if (!verified.ok) {
         sendJson(res, verified.status, { error: verified.error });
+        return;
+      }
+      if (url.pathname === '/v1/allowlist') {
+        const payload = JSON.parse(body.toString('utf8'));
+        if (!Array.isArray(payload?.userIds)) {
+          sendJson(res, 400, { error: 'invalid_allowlist' });
+          return;
+        }
+        replaceRelayAllowedUserIds(payload.userIds);
+        sendJson(res, 200, { ok: true });
         return;
       }
       if (url.pathname === '/v1/usage') {

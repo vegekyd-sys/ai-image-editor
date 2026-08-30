@@ -264,6 +264,7 @@ export interface RunMakaronAgentOptions {
   userSkills?: ParsedSkill[];
   supabase?: any;
   userId?: string;
+  codexSubscriptionAllowed?: boolean;
   currentDesign?: { code: string; width: number; height: number; props?: Record<string, unknown>; animation?: { fps: number; durationInSeconds: number; format?: string } };
   currentDesignPath?: string;
   history?: ModelMessage[];
@@ -293,6 +294,7 @@ export async function* runMakaronAgent(
     projectId,
     options?.agentProvider,
     options?.userId,
+    options?.codexSubscriptionAllowed,
   );
   const ctx: AgentContext = {
     currentImage,

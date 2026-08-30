@@ -223,6 +223,19 @@ describe('agent model catalog', () => {
     })).toBe('codex-subscription');
     expect(resolveGPT56AgentProviderForUser({
       configuredProvider: 'codex-subscription',
+      userId: 'database-user-id',
+      ownerUserId: 'owner-id',
+      dynamicallyAllowed: true,
+    })).toBe('codex-subscription');
+    expect(resolveGPT56AgentProviderForUser({
+      configuredProvider: 'codex-subscription',
+      userId: 'test-user-id',
+      ownerUserId: 'owner-id',
+      allowedUserIds: 'test-user-id',
+      dynamicallyAllowed: false,
+    })).toBe('azure-openai');
+    expect(resolveGPT56AgentProviderForUser({
+      configuredProvider: 'codex-subscription',
       userId: 'test-user-id',
       ownerUserId: 'owner-id',
       allowedUserIds: 'test-user-id,second-test-id',
