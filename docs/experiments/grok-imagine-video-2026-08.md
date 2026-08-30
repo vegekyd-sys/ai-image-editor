@@ -77,15 +77,15 @@ node --env-file=/Users/tianyicai/ai-image-editor/.env.local \
 
 ### Paid provider matrix (2026-08-31)
 
-All nine successful MP4s downloaded, decoded end-to-end, and contained one AAC
+All eleven successful MP4s downloaded, decoded end-to-end, and contained one AAC
 audio stream. One earlier attempt failed before submission because Node did not
 inherit the Mac system proxy; it produced no request ID and incurred no provider
-cost. Total provider cost for the successful matrix was $5.26.
+cost. Total provider cost for the successful matrix was $6.96.
 
 | Mode | Request | Actual output | End-to-end | Provider cost |
 | --- | --- | --- | ---: | ---: |
 | Image-to-video | 6s 480p, square source | 544x544, 6.042s | 14.7s | $0.49 |
-| Image-to-video | 6s 720p, matched input/prompt | 960x960, 6.042s | 26.8s | $0.85 |
+| Image-to-video | 6s 720p, matched input/prompt, n=3 | 960x960, 6.042s | 26.8–29.3s; median 29.2s | $0.85/run |
 | Image-to-video | 6s 1080p, matched input/prompt | 1440x1440, 6.042s | 34.2s | $1.51 |
 | Text-to-video | 3s 480p, 16:9 | 848x480, 3.042s | 18.4s | $0.24 |
 | Two-image reference | 4s 720p, square | 720x720, 4.042s | 31.1s | $0.58 |
@@ -95,9 +95,11 @@ cost. Total provider cost for the successful matrix was $5.26.
 | Video extend | 6.042s source + 2s | 960x960, 8.042s | 29.1s | $0.20 |
 
 The matched resolution series shows a useful latency/cost ladder: 480p was 14.7s,
-720p was 26.8s, and native 1080p was 34.2s for the same 6-second clip. The 720p
-result aligns closely with xAI's published approximately-25-second example. These
-are one paid sample per size, not a P50/P95 benchmark.
+the three 720p runs were 26.8s, 29.2s, and 29.3s (mean 28.4s, median 29.2s), and
+native 1080p was 34.2s for the same 6-second clip. The 720p results are close to
+xAI's published approximately-25-second example, with only 2.6 seconds between
+the fastest and slowest observed run. The 480p and 1080p points remain n=1; this
+is useful current-path evidence, not a P50/P95 benchmark.
 
 ### Visual and continuity read
 
