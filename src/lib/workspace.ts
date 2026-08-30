@@ -15,15 +15,46 @@
  */
 
 import { createWriteStream, existsSync } from 'fs';
-import { mkdir, readFile as readLocalFile, stat, writeFile as writeLocalFile } from 'fs/promises';
+import { createHash } from 'crypto';
+import { mkdir, open, readFile as readLocalFile, stat, writeFile as writeLocalFile } from 'fs/promises';
 import { tmpdir } from 'os';
 import path from 'path';
 import { Readable } from 'stream';
 import { pipeline } from 'stream/promises';
 import { parseSkillMd, type ParsedSkill } from './skill-registry';
+import builtInSkillManifest from '../generated/built-in-skill-manifest.json';
 
 
 type SupabaseClient = any;
+
+interface BuiltInSkillManifestEntry {
+  name: string;
+  description: string;
+  referenceImages?: string[];
+  modelPreference?: string[];
+  studioRunRecipe?: string;
+  studioRunProfile?: string;
+  sourceMediaRequired?: boolean;
+}
+
+interface UserSkillManifestEntry {
+  schemaVersion: 1;
+  name: string;
+  path: string;
+  description: string;
+  triggers: string[];
+  modelPreference: string[];
+  referenceImages: string[];
+  contentHash: string;
+  contentHashSource: 'skill-md' | 'frontmatter-and-workspace-metadata';
+  sourceSize?: number;
+  sourceUpdatedAt?: string;
+}
+
+const USER_SKILL_INDEX_FILENAME = '.makaron-skill-index.json';
+const USER_SKILL_FRONTMATTER_CHUNK_BYTES = 512;
+const USER_SKILL_FRONTMATTER_MAX_BYTES = 16 * 1024;
+const USER_SKILL_INDEX_MAX_BYTES = 32 * 1024;
 
 // ── Types ───────────────────────────────────────────────────────────────────
 
@@ -62,6 +93,8 @@ export interface WorkspaceWriteResult {
   success: boolean;
   storageUrl?: string;
   localPath?: string;
+  size?: number;
+  updatedAt?: string;
   error?: string;
 }
 
@@ -91,6 +124,203 @@ function setCache<T>(key: string, value: T, ttl = CACHE_TTL): void {
 
 export function clearWorkspaceCache(): void {
   cache.clear();
+}
+
+function userSkillNameFromPath(filePath: string): string | null {
+  return filePath.match(/^skills\/([^/]+)\/SKILL\.md$/)?.[1] || null;
+}
+
+function userSkillIndexPath(skillName: string): string {
+  return `skills/${skillName}/${USER_SKILL_INDEX_FILENAME}`;
+}
+
+function isUserSkillIndexPath(filePath: string): boolean {
+  return filePath.endsWith(`/${USER_SKILL_INDEX_FILENAME}`);
+}
+
+function compactSemanticText(value: string, maxLength: number): string {
+  const compact = value.replace(/\s+/g, ' ').trim();
+  return compact.length <= maxLength ? compact : `${compact.slice(0, maxLength - 1).trimEnd()}…`;
+}
+
+function compactStringList(values: unknown, maxItems: number, maxItemLength: number): string[] {
+  if (!Array.isArray(values)) return [];
+  const unique = new Set<string>();
+  for (const value of values) {
+    if (typeof value !== 'string') continue;
+    const compact = compactSemanticText(value, maxItemLength);
+    if (compact) unique.add(compact);
+    if (unique.size >= maxItems) break;
+  }
+  return [...unique];
+}
+
+function skillContentHash(content: string): string {
+  return createHash('sha256').update(content, 'utf8').digest('hex');
+}
+
+function buildUserSkillManifestEntry(
+  filePath: string,
+  skillMd: string,
+  source: Pick<WorkspaceFile, 'size' | 'updatedAt'> = {},
+  hashOverride?: string,
+): UserSkillManifestEntry | null {
+  const pathName = userSkillNameFromPath(filePath);
+  const parsed = parseSkillMd(skillMd);
+  if (!pathName || !parsed) return null;
+
+  const description = compactSemanticText(parsed.description, 2_400);
+  if (!description) return null;
+  const triggers = compactStringList(
+    [...(parsed.makaron.triggers || []), ...(parsed.makaron.tags || [])],
+    32,
+    240,
+  );
+
+  return {
+    schemaVersion: 1,
+    name: pathName,
+    path: filePath,
+    description,
+    triggers,
+    modelPreference: compactStringList(parsed.makaron.modelPreference, 8, 120),
+    referenceImages: compactStringList(parsed.makaron.referenceImages, 16, 2_000),
+    contentHash: hashOverride || skillContentHash(skillMd),
+    contentHashSource: hashOverride ? 'frontmatter-and-workspace-metadata' : 'skill-md',
+    ...(source.size != null ? { sourceSize: source.size } : {}),
+    ...(source.updatedAt ? { sourceUpdatedAt: source.updatedAt } : {}),
+  };
+}
+
+function parseUserSkillManifestEntry(raw: string, skillFile: WorkspaceFile): UserSkillManifestEntry | null {
+  let candidate: unknown;
+  try {
+    candidate = JSON.parse(raw);
+  } catch {
+    return null;
+  }
+  if (!candidate || typeof candidate !== 'object' || Array.isArray(candidate)) return null;
+  const value = candidate as Record<string, unknown>;
+  const expectedName = userSkillNameFromPath(skillFile.path);
+  if (
+    value.schemaVersion !== 1
+    || typeof value.name !== 'string'
+    || value.name !== expectedName
+    || value.path !== skillFile.path
+    || typeof value.description !== 'string'
+    || !value.description.trim()
+    || typeof value.contentHash !== 'string'
+    || !/^[a-f0-9]{64}$/.test(value.contentHash)
+    || (value.contentHashSource !== 'skill-md' && value.contentHashSource !== 'frontmatter-and-workspace-metadata')
+  ) {
+    return null;
+  }
+  if (skillFile.size != null && value.sourceSize != null && value.sourceSize !== skillFile.size) return null;
+  if (skillFile.updatedAt && value.sourceUpdatedAt && value.sourceUpdatedAt !== skillFile.updatedAt) return null;
+
+  return {
+    schemaVersion: 1,
+    name: value.name,
+    path: skillFile.path,
+    description: compactSemanticText(value.description, 2_400),
+    triggers: compactStringList(value.triggers, 32, 240),
+    modelPreference: compactStringList(value.modelPreference, 8, 120),
+    referenceImages: compactStringList(value.referenceImages, 16, 2_000),
+    contentHash: value.contentHash,
+    contentHashSource: value.contentHashSource,
+    ...(typeof value.sourceSize === 'number' ? { sourceSize: value.sourceSize } : {}),
+    ...(typeof value.sourceUpdatedAt === 'string' ? { sourceUpdatedAt: value.sourceUpdatedAt } : {}),
+  };
+}
+
+function extractSkillFrontmatterPrefix(raw: string): string | null {
+  const normalized = raw.replace(/^\uFEFF/, '').replace(/\r\n/g, '\n');
+  const match = normalized.match(/^---\n[\s\S]*?\n---(?:\n|$)/);
+  if (!match) return null;
+  return match[0].endsWith('\n') ? match[0] : `${match[0]}\n`;
+}
+
+async function readLocalSkillFrontmatter(localPath: string): Promise<string | null> {
+  let handle: Awaited<ReturnType<typeof open>> | null = null;
+  try {
+    handle = await open(localPath, 'r');
+    const chunks: Buffer[] = [];
+    let offset = 0;
+    while (offset < USER_SKILL_FRONTMATTER_MAX_BYTES) {
+      const length = Math.min(USER_SKILL_FRONTMATTER_CHUNK_BYTES, USER_SKILL_FRONTMATTER_MAX_BYTES - offset);
+      const buffer = Buffer.alloc(length);
+      const { bytesRead } = await handle.read(buffer, 0, length, offset);
+      if (bytesRead <= 0) break;
+      chunks.push(buffer.subarray(0, bytesRead));
+      offset += bytesRead;
+      const frontmatter = extractSkillFrontmatterPrefix(Buffer.concat(chunks).toString('utf8'));
+      if (frontmatter) return frontmatter;
+      if (bytesRead < length) break;
+    }
+  } catch {
+    return null;
+  } finally {
+    await handle?.close().catch(() => undefined);
+  }
+  return null;
+}
+
+async function readRemoteSkillFrontmatter(storageUrl: string): Promise<string | null> {
+  const chunks: Buffer[] = [];
+  let offset = 0;
+  while (offset < USER_SKILL_FRONTMATTER_MAX_BYTES) {
+    const end = Math.min(
+      offset + USER_SKILL_FRONTMATTER_CHUNK_BYTES - 1,
+      USER_SKILL_FRONTMATTER_MAX_BYTES - 1,
+    );
+    let response: Response;
+    try {
+      response = await fetch(storageUrl, { headers: { Range: `bytes=${offset}-${end}` } });
+    } catch {
+      return null;
+    }
+    // A 200 response may contain the entire SKILL.md. Refuse it on the startup
+    // path rather than silently restoring the old full-body download.
+    if (response.status !== 206) {
+      await response.body?.cancel().catch(() => undefined);
+      return null;
+    }
+    const contentRange = response.headers.get('content-range');
+    const rangeStart = contentRange?.match(/^bytes\s+(\d+)-/i)?.[1];
+    if (rangeStart == null || Number(rangeStart) !== offset) return null;
+    const buffer = Buffer.from(await response.arrayBuffer());
+    if (buffer.length === 0 || buffer.length > USER_SKILL_FRONTMATTER_CHUNK_BYTES) return null;
+    chunks.push(buffer);
+    offset += buffer.length;
+    const frontmatter = extractSkillFrontmatterPrefix(Buffer.concat(chunks).toString('utf8'));
+    if (frontmatter) return frontmatter;
+    if (buffer.length < USER_SKILL_FRONTMATTER_CHUNK_BYTES) break;
+  }
+  return null;
+}
+
+async function readUserSkillIndexFile(file: WorkspaceFile): Promise<string | null> {
+  if (file.size != null && file.size > USER_SKILL_INDEX_MAX_BYTES) return null;
+  if (file.localAvailable && file.localPath) {
+    try {
+      const content = await readLocalFile(file.localPath, 'utf8');
+      return Buffer.byteLength(content, 'utf8') <= USER_SKILL_INDEX_MAX_BYTES ? content : null;
+    } catch { /* fall back to the small remote index */ }
+  }
+  if (!file.storageUrl) return null;
+  try {
+    const response = await fetch(file.storageUrl);
+    if (!response.ok) return null;
+    const declaredSize = Number(response.headers.get('content-length') || 0);
+    if (declaredSize > USER_SKILL_INDEX_MAX_BYTES) {
+      await response.body?.cancel().catch(() => undefined);
+      return null;
+    }
+    const content = await response.text();
+    return Buffer.byteLength(content, 'utf8') <= USER_SKILL_INDEX_MAX_BYTES ? content : null;
+  } catch {
+    return null;
+  }
 }
 
 // ── Local workspace mirror ──────────────────────────────────────────────────
@@ -271,6 +501,7 @@ async function dbWriteFile(
   // Get public URL
   const { data: urlData } = supabase.storage.from('images').getPublicUrl(sp);
   const publicUrl = urlData?.publicUrl;
+  const updatedAt = new Date().toISOString();
 
   // Upsert index row
   const { error: dbError } = await supabase.from('workspace_files').upsert({
@@ -279,7 +510,7 @@ async function dbWriteFile(
     content_type: ct,
     size_bytes: sizeBytes,
     storage_url: publicUrl,
-    updated_at: new Date().toISOString(),
+    updated_at: updatedAt,
     ...(marketplaceId ? { marketplace_id: marketplaceId } : {}),
   }, { onConflict: 'user_id,path' });
 
@@ -289,7 +520,7 @@ async function dbWriteFile(
   }
 
   cache.clear();
-  return { success: true, storageUrl: publicUrl, localPath };
+  return { success: true, storageUrl: publicUrl, localPath, size: sizeBytes, updatedAt };
 }
 
 /** Delete file from Storage + workspace_files */
@@ -312,6 +543,105 @@ async function dbDeleteFile(supabase: SupabaseClient, userId: string, path: stri
 
   cache.clear();
   return true;
+}
+
+async function persistUserSkillManifestEntry(
+  entry: UserSkillManifestEntry,
+  supabase: SupabaseClient,
+  userId: string,
+): Promise<boolean> {
+  const result = await dbWriteFile(
+    supabase,
+    userId,
+    userSkillIndexPath(entry.name),
+    `${JSON.stringify(entry)}\n`,
+    'application/json',
+  );
+  if (!result.success) {
+    console.warn(`[workspace] user Skill index write failed for ${entry.path}: ${result.error || 'unknown error'}`);
+  }
+  return result.success;
+}
+
+async function backfillUserSkillManifestEntry(
+  skillFile: WorkspaceFile,
+  supabase: SupabaseClient,
+  userId: string,
+): Promise<UserSkillManifestEntry | null> {
+  const cacheKey = `skill:index:legacy:${userId}:${skillFile.path}:${skillFile.size || ''}:${skillFile.updatedAt || ''}`;
+  const cached = getCached<UserSkillManifestEntry>(cacheKey);
+  if (cached) return cached;
+
+  let frontmatter: string | null = null;
+  if (skillFile.localAvailable && skillFile.localPath) {
+    frontmatter = await readLocalSkillFrontmatter(skillFile.localPath);
+  }
+  if (!frontmatter && skillFile.storageUrl) {
+    frontmatter = await readRemoteSkillFrontmatter(skillFile.storageUrl);
+  }
+  if (!frontmatter) return null;
+
+  // Legacy rows predate the sidecar, so a full-body hash is intentionally not
+  // available on this path. The source metadata makes this fingerprint stale
+  // as soon as the workspace row changes; the next normal SKILL.md write stores
+  // the exact full-content hash.
+  const legacyHash = skillContentHash(
+    `${frontmatter}\0${skillFile.size ?? ''}\0${skillFile.updatedAt ?? ''}`,
+  );
+  const entry = buildUserSkillManifestEntry(skillFile.path, frontmatter, skillFile, legacyHash);
+  if (!entry) return null;
+
+  await persistUserSkillManifestEntry(entry, supabase, userId);
+  setCache(cacheKey, entry, 5 * 60 * 1000);
+  return entry;
+}
+
+async function loadUserSkillManifestEntries(
+  supabase: SupabaseClient,
+  userId: string,
+  excludedNames: ReadonlySet<string>,
+): Promise<{ entries: UserSkillManifestEntry[]; unresolved: WorkspaceFile[] }> {
+  const [skillFiles, indexFiles] = await Promise.all([
+    dbListFiles(supabase, userId, 'skills/%/SKILL.md'),
+    dbListFiles(supabase, userId, `skills/%/${USER_SKILL_INDEX_FILENAME}`),
+  ]);
+  const indexByName = new Map<string, WorkspaceFile>();
+  for (const file of indexFiles) {
+    const name = file.path.match(/^skills\/([^/]+)\/\.makaron-skill-index\.json$/)?.[1];
+    if (name) indexByName.set(name, file);
+  }
+
+  const resolved = await Promise.all(skillFiles
+    .filter(skillFile => {
+      const name = userSkillNameFromPath(skillFile.path);
+      return !!name && !excludedNames.has(name);
+    })
+    .map(async skillFile => {
+      const name = userSkillNameFromPath(skillFile.path);
+      if (!name) return { entry: null, skillFile };
+      const indexFile = indexByName.get(name);
+      if (indexFile) {
+        const raw = await readUserSkillIndexFile(indexFile);
+        const entry = raw ? parseUserSkillManifestEntry(raw, skillFile) : null;
+        if (entry) return { entry, skillFile };
+      }
+      const entry = await backfillUserSkillManifestEntry(skillFile, supabase, userId);
+      return { entry, skillFile };
+    }));
+
+  return {
+    entries: resolved.flatMap(item => item.entry ? [item.entry] : []),
+    unresolved: resolved.flatMap(item => item.entry ? [] : [item.skillFile]),
+  };
+}
+
+function formatUserSkillManifestLine(entry: UserSkillManifestEntry): string {
+  const extras: string[] = [];
+  if (entry.triggers.length) extras.push(`triggers: ${entry.triggers.join('; ')}`);
+  if (entry.referenceImages.length) extras.push('has reference images');
+  if (entry.modelPreference.length) extras.push(`prefers: ${entry.modelPreference.join('/')}`);
+  const suffix = extras.length ? ` [${extras.join(', ')}]` : '';
+  return `- **${entry.name}**: ${entry.description}${suffix}`;
 }
 
 // ── Local filesystem fallback (built-in skills + prompts) ──────────────────
@@ -500,7 +830,8 @@ export async function listFiles(pattern?: string, supabase?: SupabaseClient, use
   // User files from DB
   let userFiles: WorkspaceFile[] = [];
   if (supabase && userId) {
-    userFiles = await dbListFiles(supabase, userId, pattern);
+    userFiles = (await dbListFiles(supabase, userId, pattern))
+      .filter(file => !isUserSkillIndexPath(file.path));
   }
 
   // Merge: user files override built-in if same path
@@ -565,14 +896,31 @@ export async function writeFile(
   contentType?: string,
   marketplaceId?: string,
 ): Promise<WorkspaceWriteResult> {
-  return dbWriteFile(supabase, userId, filePath, content, contentType, marketplaceId);
+  const result = await dbWriteFile(supabase, userId, filePath, content, contentType, marketplaceId);
+  const skillName = userSkillNameFromPath(filePath);
+  if (!result.success || !skillName) return result;
+
+  const skillMd = typeof content === 'string' ? content : content.toString('utf8');
+  const entry = buildUserSkillManifestEntry(filePath, skillMd, result);
+  if (entry) {
+    await persistUserSkillManifestEntry(entry, supabase, userId);
+  } else {
+    // Do not leave stale discovery metadata pointing at an invalid update.
+    await dbDeleteFile(supabase, userId, userSkillIndexPath(skillName));
+  }
+  return result;
 }
 
 /**
  * Delete a file from workspace.
  */
 export async function deleteFile(filePath: string, supabase: SupabaseClient, userId: string): Promise<boolean> {
-  return dbDeleteFile(supabase, userId, filePath);
+  const deleted = await dbDeleteFile(supabase, userId, filePath);
+  const skillName = userSkillNameFromPath(filePath);
+  if (deleted && skillName) {
+    await dbDeleteFile(supabase, userId, userSkillIndexPath(skillName));
+  }
+  return deleted;
 }
 
 // ── Skill install (shared by ZIP upload + claim) ─────────────────────────
@@ -711,28 +1059,32 @@ export async function getSkillManifest(supabase?: SupabaseClient, userId?: strin
   const cached = getCached<string>(cacheKey);
   if (cached !== undefined) return cached;
 
-  const builtIn = [...loadBuiltInSkills().values()].filter(s => (
-    !LEGACY_PROMPTS.has(s.name) && s.makaron?.manifestVisible !== false
-  ));
+  // Generated from SKILL.md frontmatter at development time. Do not parse the
+  // 69 full built-in Skill bodies on the request path just to build an index.
+  const builtIn = builtInSkillManifest as BuiltInSkillManifestEntry[];
   const lines: string[] = builtIn.map(s => {
     const extras: string[] = [];
-    if (s.makaron?.referenceImages?.length) extras.push('has reference images');
-    if (s.makaron?.modelPreference?.length) extras.push(`prefers: ${s.makaron.modelPreference.join('/')}`);
-    if (s.makaron?.studioRunRecipe) extras.push(`Studio Run recipe: ${s.makaron.studioRunRecipe}`);
-    if (s.makaron?.studioRunProfile) extras.push(`profile: ${s.makaron.studioRunProfile}`);
-    if (s.makaron?.sourceMediaRequired) extras.push('requires source media');
+    if (s.referenceImages?.length) extras.push('has reference images');
+    if (s.modelPreference?.length) extras.push(`prefers: ${s.modelPreference.join('/')}`);
+    if (s.studioRunRecipe) extras.push(`Studio Run recipe: ${s.studioRunRecipe}`);
+    if (s.studioRunProfile) extras.push(`profile: ${s.studioRunProfile}`);
+    if (s.sourceMediaRequired) extras.push('requires source media');
     const suffix = extras.length ? ` [${extras.join(', ')}]` : '';
     return `- **${s.name}**: ${s.description.trim().split('\n')[0]}${suffix}`;
   });
   const builtInNames = new Set(builtIn.map(s => s.name));
 
   if (supabase && userId) {
-    const userFiles = await dbListFiles(supabase, userId, 'skills/%/SKILL.md');
-    for (const file of userFiles) {
-      const match = file.path.match(/^skills\/([^/]+)\/SKILL\.md$/);
-      const name = match?.[1];
-      if (!name || builtInNames.has(name) || LEGACY_PROMPTS.has(name)) continue;
-      lines.push(`- **${name}**: user skill at \`${file.path}\` (read this file before using the skill)`);
+    const excludedNames = new Set([...builtInNames, ...LEGACY_PROMPTS]);
+    const userManifest = await loadUserSkillManifestEntries(supabase, userId, excludedNames);
+    for (const entry of userManifest.entries) {
+      lines.push(formatUserSkillManifestLine(entry));
+    }
+    // Safe compatibility fallback for malformed or inaccessible legacy files.
+    // It preserves explicit selection by name without downloading a full body.
+    for (const file of userManifest.unresolved) {
+      const name = userSkillNameFromPath(file.path);
+      if (name) lines.push(`- **${name}**: user skill at \`${file.path}\` (read this file before using the skill)`);
     }
   }
 

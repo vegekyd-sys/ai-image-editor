@@ -230,8 +230,6 @@ export interface AgentContext {
   currentSnapshotIndex: number;
   /** NSFW flag — set when Gemini refuses content. All subsequent calls skip Gemini. */
   isNsfw?: boolean;
-  /** User skills loaded from DB (for reference image lookup) */
-  userSkills?: ParsedSkill[];
   /** Timeline version: 1 = legacy (project_animations), 2 = video-in-timeline (snapshots) */
   timelineVersion?: number;
   /** Published or autosaved composition used as the source for this turn. */
@@ -370,7 +368,6 @@ export type AgentStreamEvent =
     };
 
 // Skill types (workspace replaces hardcoded SKILL_PROMPTS map)
-import { type ParsedSkill } from './skill-registry';
 // Workspace service — unified access to skills, memory, assets
 import * as workspace from './workspace';
 import { evolvingSkillBundlePaths, recordEvolvingSkillUsage } from './skill-evolution';

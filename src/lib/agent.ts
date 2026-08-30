@@ -35,7 +35,6 @@ import {
 } from './locales';
 import { getSkillLaunchSystemDirective, type SkillLaunchContext } from './skill-launch-context';
 import { buildAgentOutputLanguageDirective } from './agent-response-policy';
-import { type ParsedSkill } from './skill-registry';
 import * as workspace from './workspace';
 import {
   createTools,
@@ -92,17 +91,9 @@ function estTokens(chars: number): number {
 
 /** Build system prompt with lightweight skill manifest (not full templates) */
 
-async function buildSystemPrompt(userSkills?: ParsedSkill[], supabase?: any, userId?: string, projectId?: string): Promise<string> {
+async function buildSystemPrompt(supabase?: any, userId?: string, projectId?: string): Promise<string> {
   const base = getAgentSystemPrompt();
   const manifest = await workspace.getSkillManifest(supabase, userId);
-  // Append user skills to manifest if any
-  let userSkillLines = '';
-  if (userSkills?.length) {
-    userSkillLines = '\n' + userSkills.map(s =>
-      `- **${s.name}**: ${s.description.trim().split('\n')[0]}${s.makaron?.referenceImages?.length ? ' [has reference images]' : ''}`
-    ).join('\n');
-  }
-
   const projectPath = projectId ? `${projectId}/` : '';
   const workspaceSection = `
 
@@ -131,7 +122,7 @@ Before writing a new skill, read \`skills/SKILL_README.md\` first — it has the
 
 A good skill is **reusable across any project** — it describes a style, technique, or character, not a specific photo.
 
-${manifest}${userSkillLines}
+${manifest}
 `;
 
   // Memory injection — read user-level and project-level MEMORY.md
@@ -261,7 +252,6 @@ export interface RunMakaronAgentOptions {
   explicitMediaIndices?: number[];
   currentSnapshotIndex?: number;
   isNsfw?: boolean;
-  userSkills?: ParsedSkill[];
   supabase?: any;
   userId?: string;
   codexSubscriptionAllowed?: boolean;
@@ -311,7 +301,6 @@ export async function* runMakaronAgent(
     explicitMediaIndices: options?.explicitMediaIndices ?? [],
     currentSnapshotIndex: options?.currentSnapshotIndex ?? 0,
     isNsfw: options?.isNsfw,
-    userSkills: options?.userSkills,
     supabase: options?.supabase,
     userId: options?.userId,
     timelineVersion: options?.timelineVersion,
@@ -394,12 +383,12 @@ export async function* runMakaronAgent(
   // full workspace skill surface.
   const endSystemPrompt = perf?.span('build_system_prompt', {
     projectId,
-    userSkills: options?.userSkills?.length ?? 0,
+    injectedSkillBodies: 0,
     mode: tipReactionOnly ? 'tipReaction' : analysisOnly ? 'analysis' : 'normal',
   });
   const baseSystemPrompt = (analysisOnly || tipReactionOnly)
     ? buildLightweightSystemPrompt(analysisOnly ? 'analysis' : 'tipReaction', options?.locale)
-    : await buildSystemPrompt(options?.userSkills, options?.supabase, options?.userId, projectId);
+    : await buildSystemPrompt(options?.supabase, options?.userId, projectId);
   const durableExecutionDirective = options?.execution
     ? `\n\n## Durable execution contract\nThis is attempt ${options.execution.attemptNo} of Agent Run ${options.execution.runId}. A later attempt may continue in a fresh model context only after a technical interruption, provider failure, context handoff, or newer user input. Preserve decisions and durable artifact pointers with execution_checkpoint after meaningful progress and before a long, risky generation step. Do not repeat expensive side effects whose tool result is already present. A Studio Run is only a persisted workflow that you follow with studio_run; its stage never decides whether this Agent Run ends or retries. Finish normally when you have completed the current user-facing turn, even if the workflow remains at Review or another stage. If this attempt advances the workflow into Composition, switch to numbered composition parts immediately and never begin a monolithic run_code payload. A newer queued user instruction has precedence over an older delivery target.`
     : '';

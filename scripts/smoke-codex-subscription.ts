@@ -103,7 +103,6 @@ async function main() {
       locale: 'en',
       disableToolCalls: true,
       snapshotImages: [],
-      userSkills: [],
       history: [],
     },
   )) {

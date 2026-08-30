@@ -273,10 +273,6 @@ export async function POST(req: NextRequest) {
       agentModelId: resolvedAgentModel.id,
       agentModelProvider: resolvedAgentModel.provider,
     });
-    const { getAllSkills } = await import('@/lib/workspace');
-    const allSkills = await getAllSkills(supabase, userId);
-    const userSkills = allSkills.filter(s => !s.makaron?.builtIn);
-
     // Run agent after response is sent — next/server after() keeps the function alive
     after(async () => {
       const modelAbortController = new AbortController();
@@ -322,7 +318,6 @@ export async function POST(req: NextRequest) {
           explicitMediaIndices: ctx.explicitMediaIndices,
           currentSnapshotIndex: ctx.currentSnapshotIndex,
           isNsfw,
-          userSkills: userSkills.length ? userSkills : undefined,
           supabase,
           userId: userId,
           codexSubscriptionAllowed,

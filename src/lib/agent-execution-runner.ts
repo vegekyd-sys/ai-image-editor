@@ -566,9 +566,6 @@ export async function runAgentExecutionAttempt(
     });
   }
 
-  const { getAllSkills } = await import('./workspace');
-  const allSkills = await getAllSkills(admin, run.user_id);
-  const userSkills = allSkills.filter(skill => !skill.makaron?.builtIn);
   const { data: project } = await admin.from('projects').select('timeline_version').eq('id', run.project_id).single();
   const timelineVersion = Number(project?.timeline_version ?? 1);
 
@@ -644,7 +641,6 @@ export async function runAgentExecutionAttempt(
         explicitMediaIndices: ctx.explicitMediaIndices,
         currentSnapshotIndex: ctx.currentSnapshotIndex,
         isNsfw: request.isNsfw,
-        userSkills: userSkills.length ? userSkills : undefined,
         supabase: admin,
         userId: run.user_id,
         codexSubscriptionAllowed,
