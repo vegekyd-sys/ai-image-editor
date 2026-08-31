@@ -429,7 +429,7 @@ describe('video script harness old and new scenarios', () => {
     })).toBeNull()
   })
 
-  it('new Grok video scenario supports one starting image or up to seven loose references', () => {
+  it('new Grok video scenario supports one or more feature references', () => {
     expect(validateVideoScript({
       prompt: 'Shot 1 (1s): Animate <<<media_1>>> with a slow push-in.',
       imageCount: 1,

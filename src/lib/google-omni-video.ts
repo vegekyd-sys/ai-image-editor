@@ -146,10 +146,9 @@ function toOmniPrompt(
   operation: VideoGenerationOperation,
   duration?: number,
 ): string {
-  const useFirstFrame = imageCount === 1 && !hasVideoReference && !hasPreviousInteraction
   const normalized = prompt.replace(/<<<(?:image|media)_(\d+)>>>/g, (_, n: string) => {
     const index = Number(n)
-    return useFirstFrame ? `Image${index}` : `<IMAGE_REF_${Math.max(0, index - 1)}>`
+    return `<IMAGE_REF_${Math.max(0, index - 1)}>`
   })
   const declarations = []
   const guidance = []
@@ -161,12 +160,9 @@ function toOmniPrompt(
       : 'Use Video1 as the primary source video to edit.')
   } else if (hasPreviousInteraction) {
     guidance.push('Continue the video from the previous interaction forward from its tail. Preserve its visual style, subject identity, motion, camera direction, lighting, and audio continuity unless the prompt explicitly changes them.')
-  } else if (useFirstFrame) {
-    declarations.push('[# Sources <FIRST_FRAME>@Image1]')
-    guidance.push('Use Image1 as the starting frame.')
   }
 
-  if (!useFirstFrame && imageCount > 0) {
+  if (imageCount > 0) {
     const refs = Array.from({ length: imageCount }, (_, index) => `<IMAGE_REF_${index}>@Image${index + 1}`).join(' ')
     declarations.push(`[# References ${refs}]`)
     guidance.push('Use the given images as references for video generation, not as literal initial frames.')
@@ -211,7 +207,7 @@ export async function createGoogleOmniVideoTask(input: GoogleOmniVideoTaskInput)
     ? 'extend'
     : videoRef
     ? operation === 'extend' ? 'extend' : 'edit'
-    : imageParts.length > 1 ? 'reference_to_video' : imageParts.length > 0 ? 'image_to_video' : 'text_to_video'
+    : imageParts.length > 0 ? 'reference_to_video' : 'text_to_video'
   const responseFormat: Record<string, unknown> = {
     type: 'video',
     delivery: 'uri',

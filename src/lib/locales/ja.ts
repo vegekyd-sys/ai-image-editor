@@ -632,7 +632,7 @@ const ja = {
   'model.wan30Pro.desc': 'MuleRouter超解像版。2〜30秒、1080p・2K・4K、画像・動画・音声参照に対応します。',
   'model.wan30Pro.badge': '4K · Pro',
   'model.grok.name': 'Grok Imagine Video',
-  'model.grok.desc': '1080p・画像参照7枚までの高速ネイティブ音声生成と、動画編集・延長に対応。最新の6秒テストは15〜34秒。',
+  'model.grok.desc': '高速ネイティブ音声生成。テキストのみは最大1080p、1〜7枚の特徴参照画像は最大720pで、動画編集・延長にも対応。最新の6秒テストは15〜34秒。',
   'model.googleOmni.name': 'Gemini Omni 1.1',
   'model.googleOmni.desc': '360p下書き、標準720p、4Kアップスケール、ネイティブ音声に対応した高速動画生成・編集。',
   'model.minimaxH3.name': 'MiniMax H3',

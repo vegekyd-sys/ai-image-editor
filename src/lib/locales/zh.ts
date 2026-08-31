@@ -412,7 +412,7 @@ const zh = {
   'model.wan30Pro.desc': 'MuleRouter 超分版，支持 2–30 秒、1080p / 2K / 4K，以及图片、视频或音频参考。',
   'model.wan30Pro.badge': '4K · 超分',
   'model.grok.name': 'Grok Imagine Video',
-  'model.grok.desc': '快速原生音频生成，最高 1080p、7 张参考图，并支持视频编辑与续写。最新 6 秒实测 15–34 秒。',
+  'model.grok.desc': '快速原生音频生成：纯文本最高 1080p，1–7 张特征参考图最高 720p，并支持视频编辑与续写。最新 6 秒实测 15–34 秒。',
   'model.googleOmni.name': 'Gemini Omni 1.1',
   'model.googleOmni.desc': '快速视频生成与编辑，支持 360p 草稿、默认 720p、4K 放大和原生音频。',
   'model.minimaxH3.name': 'MiniMax H3',

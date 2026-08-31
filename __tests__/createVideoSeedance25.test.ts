@@ -93,7 +93,7 @@ describe('createVideo Seedance 2.5 integration', () => {
     expect(providerBody).not.toHaveProperty('image_urls')
   })
 
-  it('uses reference-to-video so one image can honor an explicit vertical aspect ratio', async () => {
+  it('uses reference-to-video for one image even with adaptive aspect ratio', async () => {
     let providerBody: Record<string, unknown> | undefined
     vi.stubGlobal('fetch', vi.fn(async (_url: string | URL | Request, init?: RequestInit) => {
       if (init?.method !== 'POST') {
@@ -108,10 +108,9 @@ describe('createVideo Seedance 2.5 integration', () => {
 
     const { createVideo } = await import('@/lib/skills/create-video')
     const result = await createVideo({
-      script: 'Keep <<<media_1>>> as the sole identity reference in a vertical portrait film.',
+      script: 'Keep <<<media_1>>> as the sole identity reference in a new city scene.',
       images: ['https://example.com/square-avatar.png'],
       duration: 15,
-      aspectRatio: '9:16',
       videoModel: 'seedance-2.5',
       videoResolution: '720p',
     })
@@ -125,7 +124,7 @@ describe('createVideo Seedance 2.5 integration', () => {
       image_urls: ['https://example.com/square-avatar.png'],
       duration: 15,
       quality: '720p',
-      aspect_ratio: '9:16',
+      aspect_ratio: 'adaptive',
     })
     expect(String(providerBody?.prompt)).toContain('@image1 as the sole identity reference')
   })
