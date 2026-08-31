@@ -23,6 +23,7 @@ type LocalizedChangelogEntry = {
 type ChangelogEntry = LegacyChangelogEntry | LocalizedChangelogEntry;
 
 const CHANGELOG: ChangelogEntry[] = [
+  { date: '2026-08-31', en: { title: 'Grok 1.5 Video Editing', items: ['Edit an existing video with Grok 1.5 to change clothing, backgrounds, materials, or atmosphere while keeping the original motion and sound.', 'Generate with up to seven reference images, or use one source video for editing and extension with limits checked automatically.'] }, zh: { title: 'Grok 1.5 视频编辑', items: ['现在可以用 Grok 1.5 直接编辑现有视频，更换服装、背景、材质或整体氛围，同时保留原有动作与声音。', '生成视频最多支持 7 张参考图；编辑或续写支持 1 条源视频，并会自动检查不同模式的素材上限。'] } },
   { date: '2026-08-30', en: { title: 'Personal Codex Plans for Test Accounts', items: ['Admins can now add registered test accounts to the Codex allowlist so their Agent chats use the owner’s personal Codex plan.'] }, zh: { title: '测试账号可用个人 Codex 套餐', items: ['管理员现在可以把已注册的测试账号加入 Codex 名单，让这些账号的 Agent 对话使用 owner 的个人 Codex 套餐。'] } },
   { date: '2026-08-29', localeKey: 'googleOmni11' },
   { date: '2026-08-26', localeKey: 'externalImages' },
