@@ -214,7 +214,6 @@ export async function createVideo(input: CreateVideoInput): Promise<CreateVideoR
     referenceVideoDuration: previousInteractionId ? Math.min(referenceVideoDuration ?? 10, 10) : referenceVideoDuration,
     referenceVideoMetas,
     hasVideoReference,
-    imageReferenceCount: images.length,
     videoReferenceCount: previousInteractionId ? 1 : providerVideoUrls.length,
     audioReferenceCount: audioUrls?.length || 0,
     operation: videoOperation,
