@@ -1080,6 +1080,15 @@ try {
   }
 
   {
+    const result = await expectSuccess(['video', 'create', '--script', 'Wan Reference\nShot 1 (2s): Preserve the uploaded character while it turns toward a neon pulse', '--image', tinyImagePath, '--duration', '2', '--video-model', 'wan-3.0', '--video-resolution', '480p', '--no-generated-audio']);
+    assert.match(result.stdout, /Task ID: task-unified-text-smoke/);
+    const mcpRequest = requests.filter(req => req.pathname === '/api/mcp').at(-1);
+    assert.equal(mcpRequest?.body?.params?.name, 'makaron_create_video');
+    assert.deepEqual(mcpRequest?.body?.params?.arguments?.images, ['https://cdn.example/uploaded-image.jpg']);
+    assert.equal(mcpRequest?.body?.params?.arguments?.videoModel, 'wan-3.0');
+  }
+
+  {
     const result = await expectSuccess(['video', 'create', '--script', 'Wan Pro\nShot 1 (3s): A crystal city glows at blue hour', '--duration', '3', '--video-model', 'berry-1.0-pro', '--video-resolution', '4k']);
     assert.match(result.stdout, /Task ID: task-unified-text-smoke/);
     const mcpRequest = requests.filter(req => req.pathname === '/api/mcp').at(-1);

@@ -2863,7 +2863,7 @@ if (!command || command === '--help' || command === '-h' || command === 'help') 
     if (text) console.log(text);
 
   } else if (sub === 'create') {
-    const images = [];
+    let images = [];
     const videos = [];
     const audios = [];
     const referenceVoices = [];
