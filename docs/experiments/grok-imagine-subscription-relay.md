@@ -4,7 +4,7 @@ Status: isolated worktree and VLab experiment. Not merged or deployed to product
 
 ## Goal
 
-For explicitly allowlisted Makaron users, run Grok 4.5 Agent chat plus Grok
+For explicitly allowlisted Makaron users, run Grok 4.6 Agent chat plus Grok
 Imagine video generation, edit, and extension through the owner's xAI
 credential on VLab. Keep every other model and every non-allowlisted user on
 the existing provider paths.
@@ -20,7 +20,7 @@ the existing provider paths.
   and refresh-token rotation directly. OpenClaw was used only as a readable
   reference for xAI's public OAuth parameters; it is not installed or executed
   by this service.
-- The relay exposes only health, preflight, Grok 4.5 streaming chat, video
+- The relay exposes only health, preflight, Grok 4.6 streaming chat, plan usage, video
   submit/edit/extend, and video status paths. Agent chat is forwarded to xAI's
   official Grok Build headless endpoint with the official client headers; video
   continues to use the xAI video endpoint. Requests are allowlisted,
@@ -40,10 +40,10 @@ fallback. A successful personal-plan task records zero Makaron credits and no
 estimated API provider cost.
 
 Agent fallback follows the same fail-closed principle at the Makaron execution
-boundary: `grok-subscription` may change to the existing OpenRouter Grok 4.5 API
+boundary: `grok-subscription` may change to the existing OpenRouter Grok 4.6 API
 route only before any visible text, delivered artifact, or committed tool call.
-The base `grok-4.5` preference remains OpenRouter API;
-`grok-4.5-grok-subscription` is the explicit personal-plan preference. Auto and
+The base `grok-4.6` preference remains OpenRouter API;
+`grok-4.6-grok-subscription` is the explicit personal-plan preference. Auto and
 the default Terra route are unchanged.
 
 ## Live acceptance
@@ -77,6 +77,11 @@ the default Terra route are unchanged.
   used Makaron's real AI SDK runtime and resolved `{ provider:
   "grok-subscription", model: "grok-4.5", providerModelId: "grok-4.5" }`
   before receiving the exact streamed response. No xAI API key was supplied.
+- After merging the Grok 4.6 catalog, a real local `makaron chat` run explicitly
+  selected `grok-4.6-grok-subscription`, completed with the exact response
+  `GROK_46_SUBSCRIPTION_OK`, and logged `model=grok-4.6 provider=grok-subscription`.
+  The signed billing check returned the independent xAI weekly window with 98%
+  remaining; Codex usage remained a separate provider-scoped value.
 
 ## Production limitation
 
