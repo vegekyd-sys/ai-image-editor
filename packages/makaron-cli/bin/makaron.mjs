@@ -36,7 +36,7 @@ const CHAT_AGENT_MODELS = [
   'gpt-5.6-terra-codex-subscription',
   'gpt-5.6-sol-codex-subscription',
   'gpt-5.6-luna-codex-subscription',
-  'grok-4.5',
+  'grok-4.6',
   'deepseek-v4-pro',
 ];
 
@@ -461,7 +461,7 @@ Options:
   --media-manifest <file|-> Import typed image/video media before this run.
   --skill <id|label|name>   Use an installed skill or auto-install a matched marketplace skill.
   --agent-model <id>        Agent LLM only: auto, gpt-5.6-terra, gpt-5.6-sol,
-                            gpt-5.6-luna, grok-4.5, deepseek-v4-pro, or a
+                            gpt-5.6-luna, grok-4.6, deepseek-v4-pro, or a
                             gpt-5.6-*-codex-subscription personal-plan route.
   --background, -b          Submit and print a runId.
   --json                    Output structured JSON.

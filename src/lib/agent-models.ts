@@ -2,7 +2,7 @@ export const AGENT_MODEL_IDS = [
   'gpt-5.6-terra',
   'gpt-5.6-sol',
   'gpt-5.6-luna',
-  'grok-4.5',
+  'grok-4.6',
   'deepseek-v4-pro',
 ] as const;
 
@@ -211,11 +211,11 @@ export const AGENT_MODEL_SPECS: Record<AgentModelId, AgentModelSpec> = {
     supportsImageInput: true,
     defaultReasoningEffort: 'low',
   },
-  'grok-4.5': {
-    id: 'grok-4.5',
+  'grok-4.6': {
+    id: 'grok-4.6',
     provider: 'openrouter',
-    providerModelId: 'x-ai/grok-4.5',
-    billingModelId: 'x-ai/grok-4.5',
+    providerModelId: 'x-ai/grok-4.6',
+    billingModelId: 'x-ai/grok-4.6',
     cacheStrategy: 'automatic',
     supportsImageInput: true,
   },
@@ -241,8 +241,21 @@ export function isAgentModelPreference(value: unknown): value is AgentModelPrefe
     || isAgentModelId(value);
 }
 
+const RETIRED_AGENT_MODEL_REPLACEMENTS = new Map<string, AgentModelId>([
+  ['grok-4.5', 'grok-4.6'],
+  ['x-ai/grok-4.5', 'grok-4.6'],
+]);
+
+function getRetiredAgentModelReplacement(value: unknown): AgentModelId | undefined {
+  return typeof value === 'string'
+    ? RETIRED_AGENT_MODEL_REPLACEMENTS.get(value.trim().toLowerCase())
+    : undefined;
+}
+
 export function normalizeAgentModelPreference(value: unknown): AgentModelPreference {
-  return isAgentModelPreference(value) ? value : 'auto';
+  return isAgentModelPreference(value)
+    ? value
+    : getRetiredAgentModelReplacement(value) ?? 'auto';
 }
 
 const RETIRED_CLAUDE_PRODUCT_IDS = new Set([
@@ -269,6 +282,8 @@ export function normalizeRequestedAgentModelPreference(
 ): AgentModelPreference | undefined | null {
   if (value === undefined) return undefined;
   if (isAgentModelPreference(value)) return value;
+  const replacement = getRetiredAgentModelReplacement(value);
+  if (replacement) return replacement;
   if (isRetiredClaudeModel(value)) return 'auto';
   return null;
 }
@@ -277,6 +292,8 @@ function matchConfiguredModel(value: string | undefined): AgentModelId | undefin
   const normalized = value?.trim().toLowerCase();
   if (!normalized) return undefined;
   if (isAgentModelId(normalized)) return normalized;
+  const replacement = getRetiredAgentModelReplacement(normalized);
+  if (replacement) return replacement;
 
   return AGENT_MODEL_IDS.find((id) => {
     const spec = AGENT_MODEL_SPECS[id];

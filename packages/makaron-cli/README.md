@@ -98,7 +98,7 @@ npx makaron-cli chat --project auto --image photo.jpg --json -b "make it cinemat
 npx makaron-cli chat --project auto --image img1.jpg --image img2.jpg --json -b "combine these"
 ```
 
-`chat` routes image and video models automatically, but you may select the Agent LLM with `--agent-model`. Accepted values are `auto`, the base model IDs (`gpt-5.6-terra`, `gpt-5.6-sol`, `gpt-5.6-luna`, `grok-4.5`, `deepseek-v4-pro`), and the personal-plan routes (`gpt-5.6-terra-codex-subscription`, `gpt-5.6-sol-codex-subscription`, `gpt-5.6-luna-codex-subscription`). For the configured owner, `auto` resolves to GPT-5.6 Terra through the personal Codex plan. Base GPT-5.6 IDs select Azure API; the suffixed IDs select the personal plan explicitly. This flag changes only the reasoning/tool-calling Agent LLM.
+`chat` routes image and video models automatically, but you may select the Agent LLM with `--agent-model`. Accepted values are `auto`, the base model IDs (`gpt-5.6-terra`, `gpt-5.6-sol`, `gpt-5.6-luna`, `grok-4.6`, `deepseek-v4-pro`), and the personal-plan routes (`gpt-5.6-terra-codex-subscription`, `gpt-5.6-sol-codex-subscription`, `gpt-5.6-luna-codex-subscription`). For the configured owner, `auto` resolves to GPT-5.6 Terra through the personal Codex plan. Base GPT-5.6 IDs select Azure API; the suffixed IDs select the personal plan explicitly. This flag changes only the reasoning/tool-calling Agent LLM.
 
 ```bash
 # Explicit lower-cost Agent LLM for a controlled comparison
