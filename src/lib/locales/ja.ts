@@ -115,6 +115,9 @@ const ja = {
   // Changelog
   'changelog.heading': '更新情報',
   'changelog.close': '更新情報を閉じる',
+  'changelog.wan30.title': 'Wan 3.0 Standard & Pro',
+  'changelog.wan30.item1': 'Wan 3.0をMuleRouter経由で追加しました。ネイティブ音声付きの2〜30秒動画を生成でき、Standardは最大1080p、Proの超解像版は最大4Kに対応します。',
+  'changelog.wan30.item2': '成人向け動画の依頼はAgentがWan 3.0へ振り分け、画像・動画・音声の混在参照に対応し、送信前に「参照動画時間＋出力時間」の上限を検証します。',
   'changelog.videoTranslation.title': '動画翻訳',
   'changelog.videoTranslation.item1': '画外ナレーションや非トーキングヘッド動画を Seed Audio で英語や日本語などに翻訳し、元の話者らしい声質、語調、リズムをできる限り保ちます。',
   'changelog.videoTranslation.item2': '人物が映るトーキングヘッドは先に整え、Seedance 2.0 Fast で翻訳と口の動きを合わせます。長い動画も自動分割し、翻訳後の字幕、B-roll、TikTok 完成動画まで仕上げられます。',
