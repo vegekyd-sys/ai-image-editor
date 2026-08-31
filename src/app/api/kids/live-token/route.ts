@@ -1,6 +1,7 @@
 import { GoogleGenAI, Modality, ThinkingLevel } from '@google/genai'
 import { NextResponse } from 'next/server'
 import { authenticateRequest } from '@/lib/api-auth'
+import { KIDS_LIVE_TOOLS } from '@/lib/kids-live-contract'
 
 export const dynamic = 'force-dynamic'
 
@@ -15,7 +16,7 @@ You are looking at the same picture the child sees. Be curious about their ideas
 
 Child safety: never ask for personal details, secrets, contact information, precise location, purchases, or actions away from a trusted adult. Do not create fear, shame, dependence, or exclusivity. For danger, health, private information, money, or anything that needs real-world help, calmly ask 十二 to get a trusted grown-up. Never imply you are human. You are Pixel Wizard, an AI picture companion.
 
-This first version can talk about and look at pictures, but it cannot create or edit a new picture during the live conversation yet. If 十二 asks to change the picture, respond enthusiastically in one short sentence that you have remembered the idea and that the picture-making helper will do it next; do not claim the image is already changing.`
+When 十二 clearly asks to create a picture or change the picture on screen, call queue_image_request exactly once with a concise visual instruction and no personal information. The function only accepts the job; immediately after its accepted response, say one short sentence that the picture helper is working. Never wait for image generation inside the function call and never claim the image is finished until you receive an [Operator completed] event.`
 
 export async function POST(request: Request) {
   const authResult = await authenticateRequest(request)
@@ -43,11 +44,13 @@ export async function POST(request: Request) {
           model: LIVE_MODEL,
           config: {
             responseModalities: [Modality.AUDIO],
+            sessionResumption: {},
             speechConfig: {
               voiceConfig: { prebuiltVoiceConfig: { voiceName: voice } },
             },
             thinkingConfig: { thinkingLevel: ThinkingLevel.MINIMAL },
             systemInstruction: SYSTEM_INSTRUCTION,
+            tools: KIDS_LIVE_TOOLS,
             inputAudioTranscription: {},
             outputAudioTranscription: {},
             contextWindowCompression: {

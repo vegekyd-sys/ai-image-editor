@@ -11,7 +11,7 @@ interface AudioCallbacks {
   onPhase: (phase: KidsLivePhase) => void
 }
 
-function floatToPcm16(samples: Float32Array, sourceRate: number) {
+export function floatToPcm16(samples: Float32Array, sourceRate: number) {
   const ratio = sourceRate / INPUT_SAMPLE_RATE
   const outputLength = Math.max(1, Math.round(samples.length / ratio))
   const pcm = new Int16Array(outputLength)
@@ -31,7 +31,7 @@ function floatToPcm16(samples: Float32Array, sourceRate: number) {
   return btoa(binary)
 }
 
-function base64ToPcm(base64: string) {
+export function base64ToPcm(base64: string) {
   const binary = atob(base64)
   const length = Math.floor(binary.length / 2)
   const samples = new Float32Array(length)
@@ -54,6 +54,7 @@ export class KidsLiveAudio {
   private session: Session | null = null
   private nextPlaybackTime = 0
   private playbackSources = new Set<AudioBufferSourceNode>()
+  private generationComplete = false
 
   constructor(private readonly callbacks: AudioCallbacks) {}
 
@@ -101,11 +102,17 @@ export class KidsLiveAudio {
       this.callbacks.onPhase('listening')
       return
     }
-    if (message.data) {
-      this.play(message.data)
+    const audioChunks = message.serverContent?.modelTurn?.parts
+      ?.flatMap((part) => part.inlineData?.data ? [part.inlineData.data] : []) ?? []
+    if (audioChunks.length === 0 && message.data) audioChunks.push(message.data)
+    for (const audioChunk of audioChunks) {
+      this.play(audioChunk)
       this.callbacks.onPhase('speaking')
     }
-    if (message.serverContent?.turnComplete) this.callbacks.onPhase('listening')
+    if (message.serverContent?.generationComplete || message.serverContent?.turnComplete) {
+      this.generationComplete = true
+      if (this.playbackSources.size === 0) this.callbacks.onPhase('listening')
+    }
   }
 
   sendImage(data: string, mimeType: string) {
@@ -125,7 +132,13 @@ export class KidsLiveAudio {
     source.start(startAt)
     this.nextPlaybackTime = startAt + buffer.duration
     this.playbackSources.add(source)
-    source.onended = () => this.playbackSources.delete(source)
+    source.onended = () => {
+      this.playbackSources.delete(source)
+      if (this.generationComplete && this.playbackSources.size === 0) {
+        this.generationComplete = false
+        this.callbacks.onPhase('listening')
+      }
+    }
   }
 
   private clearPlayback() {
@@ -133,6 +146,7 @@ export class KidsLiveAudio {
       try { source.stop() } catch { /* already stopped */ }
     }
     this.playbackSources.clear()
+    this.generationComplete = false
     this.nextPlaybackTime = this.context?.currentTime ?? 0
   }
 

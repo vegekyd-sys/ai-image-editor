@@ -1,712 +1,382 @@
-import type { TranslationDictionary } from './index';
-
-const ja = {
-  // Locale
-  'locale.selector': 'è¨€èªžã‚’é¸æŠž',
-
-  // Auth
-  'auth.email': 'ãƒ¡ãƒ¼ãƒ«ã‚¢ãƒ‰ãƒ¬ã‚¹',
-  'auth.password': 'ãƒ‘ã‚¹ãƒ¯ãƒ¼ãƒ‰',
-  'auth.login': 'ãƒ­ã‚°ã‚¤ãƒ³',
-  'auth.register': 'æ–°è¦ç™»éŒ²',
-  'auth.goLogin': 'ãƒ­ã‚°ã‚¤ãƒ³',
-  'auth.hasAccount': 'ã™ã§ã«ã‚¢ã‚«ã‚¦ãƒ³ãƒˆã‚’ãŠæŒã¡ã§ã™ã‹ï¼Ÿ',
-  'auth.noAccount': 'ã‚¢ã‚«ã‚¦ãƒ³ãƒˆã‚’ãŠæŒã¡ã§ãªã„ã§ã™ã‹ï¼Ÿ',
-  'auth.networkError': 'ãƒãƒƒãƒˆãƒ¯ãƒ¼ã‚¯ã‚¨ãƒ©ãƒ¼ãŒç™ºç”Ÿã—ã¾ã—ãŸã€‚ã‚‚ã†ä¸€åº¦ãŠè©¦ã—ãã ã•ã„',
-  'auth.err.invalidCredentials': 'ãƒ¡ãƒ¼ãƒ«ã‚¢ãƒ‰ãƒ¬ã‚¹ã¾ãŸã¯ãƒ‘ã‚¹ãƒ¯ãƒ¼ãƒ‰ãŒæ­£ã—ãã‚ã‚Šã¾ã›ã‚“',
-  'auth.err.emailNotConfirmed': 'å…ˆã«ãƒ¡ãƒ¼ãƒ«ã‚¢ãƒ‰ãƒ¬ã‚¹ã‚’ç¢ºèªã—ã¦ãã ã•ã„',
-  'auth.err.alreadyRegistered': 'ã“ã®ãƒ¡ãƒ¼ãƒ«ã‚¢ãƒ‰ãƒ¬ã‚¹ã¯ç™»éŒ²æ¸ˆã¿ã§ã™ã€‚ãƒ­ã‚°ã‚¤ãƒ³ã—ã¦ãã ã•ã„',
-  'auth.err.passwordTooShort': 'ãƒ‘ã‚¹ãƒ¯ãƒ¼ãƒ‰ã¯6æ–‡å­—ä»¥ä¸Šã§å…¥åŠ›ã—ã¦ãã ã•ã„',
-  'auth.err.invalidEmail': 'ãƒ¡ãƒ¼ãƒ«ã‚¢ãƒ‰ãƒ¬ã‚¹ã®å½¢å¼ãŒæ­£ã—ãã‚ã‚Šã¾ã›ã‚“',
-  'auth.err.rateLimited': 'è©¦è¡Œå›žæ•°ãŒå¤šã™ãŽã¾ã™ã€‚ã—ã°ã‚‰ãã—ã¦ã‹ã‚‰ãŠè©¦ã—ãã ã•ã„',
-  'auth.err.wait60s': '60ç§’å¾…ã£ã¦ã‹ã‚‰ã‚‚ã†ä¸€åº¦ãŠè©¦ã—ãã ã•ã„',
-  'auth.err.invalidInviteCode': 'æ‹›å¾…ã‚³ãƒ¼ãƒ‰ãŒç„¡åŠ¹ã‹ã€æœŸé™åˆ‡ã‚Œã§ã™',
-  'auth.err.inviteCodeRequired': 'æ–°è¦ç™»éŒ²ã«ã¯æ‹›å¾…ã‚³ãƒ¼ãƒ‰ãŒå¿…è¦ã§ã™',
-  'auth.inviteCodePlaceholder': 'æ‹›å¾…ã‚³ãƒ¼ãƒ‰ã‚’å…¥åŠ›',
-  'auth.activate': 'æœ‰åŠ¹åŒ–',
-  'auth.activated': 'æœ‰åŠ¹åŒ–ã—ã¾ã—ãŸï¼',
-  'auth.noInviteCode': 'æ‹›å¾…ã‚³ãƒ¼ãƒ‰ã‚’ãŠæŒã¡ã§ãªã„ã§ã™ã‹ï¼Ÿ',
-  'auth.joinWaitlist': 'ã‚¦ã‚§ã‚¤ãƒˆãƒªã‚¹ãƒˆã«ç™»éŒ²',
-  'auth.waitlistSuccess': 'ã‚¦ã‚§ã‚¤ãƒˆãƒªã‚¹ãƒˆã«ç™»éŒ²ã—ã¾ã—ãŸï¼',
-  'auth.waitlistSuccessDesc': 'æ‹›å¾…ã‚³ãƒ¼ãƒ‰ã‚’è¿‘æ—¥ä¸­ã«ãŠé€ã‚Šã—ã¾ã™ã€‚',
-  'auth.createAccount': 'ã‚¢ã‚«ã‚¦ãƒ³ãƒˆã‚’ä½œæˆ',
-  'auth.back': 'æˆ»ã‚‹',
-  'auth.continueWithGoogle': 'Googleã§ç¶šã‘ã‚‹',
-  'auth.continueWithApple': 'Appleã§ç¶šã‘ã‚‹',
-  'auth.orDivider': 'ã¾ãŸã¯',
-  'auth.goRegister': 'æ–°è¦ç™»éŒ²',
-  'auth.verifyEmail.title': 'å—ä¿¡ãƒˆãƒ¬ã‚¤ã‚’ç¢ºèªã—ã¦ãã ã•ã„',
-  'auth.verifyEmail.sent': 'ç¢ºèªãƒªãƒ³ã‚¯ã®é€ä¿¡å…ˆï¼š',
-  'auth.verifyEmail.instruction': 'ãƒ¡ãƒ¼ãƒ«å†…ã®ãƒªãƒ³ã‚¯ã‚’ã‚¯ãƒªãƒƒã‚¯ã—ã¦ã‚¢ã‚«ã‚¦ãƒ³ãƒˆã‚’æœ‰åŠ¹åŒ–ã—ã¦ãã ã•ã„ã€‚',
-  'auth.verifyEmail.resend': 'ãƒ¡ãƒ¼ãƒ«ã‚’å†é€',
-  'auth.verifyEmail.resent': 'ãƒ¡ãƒ¼ãƒ«ã‚’é€ä¿¡ã—ã¾ã—ãŸï¼',
-  'auth.verifyEmail.checkSpam': 'è¦‹å½“ãŸã‚Šã¾ã›ã‚“ã‹ï¼Ÿè¿·æƒ‘ãƒ¡ãƒ¼ãƒ«ãƒ•ã‚©ãƒ«ãƒ€ã‚‚ã”ç¢ºèªãã ã•ã„ã€‚',
-  'auth.continue': 'ç¶šã‘ã‚‹',
-  'auth.sendingCode': 'ç¢ºèªã‚³ãƒ¼ãƒ‰ã‚’é€ä¿¡ä¸­...',
-  'auth.tryFree': 'ç„¡æ–™ã§è©¦ã™',
-  'auth.otp.title': 'ç¢ºèªã‚³ãƒ¼ãƒ‰ã‚’å…¥åŠ›',
-  'auth.otp.subtitle': '6æ¡ã®ã‚³ãƒ¼ãƒ‰ã®é€ä¿¡å…ˆï¼š',
-  'auth.otp.verify': 'ç¢ºèª',
-  'auth.otp.resend': 'ã‚³ãƒ¼ãƒ‰ã‚’å†é€',
-  'auth.otp.resendIn': 'å†é€ã¾ã§',
-  'auth.otp.digitLabel': 'ç¢ºèªã‚³ãƒ¼ãƒ‰ã® {index} æ¡ç›®',
-  'auth.forgotPassword': 'ãƒ‘ã‚¹ãƒ¯ãƒ¼ãƒ‰ã‚’ãŠå¿˜ã‚Œã§ã™ã‹ï¼Ÿ',
-  'auth.resetPassword.title': 'ãƒ‘ã‚¹ãƒ¯ãƒ¼ãƒ‰ã‚’ãƒªã‚»ãƒƒãƒˆ',
-  'auth.resetPassword.send': 'ãƒªã‚»ãƒƒãƒˆã‚³ãƒ¼ãƒ‰ã‚’é€ä¿¡',
-  'auth.resetPassword.newPassword': 'æ–°ã—ã„ãƒ‘ã‚¹ãƒ¯ãƒ¼ãƒ‰',
-  'auth.resetPassword.confirm': 'æ–°ã—ã„ãƒ‘ã‚¹ãƒ¯ãƒ¼ãƒ‰ã‚’è¨­å®š',
-  'auth.resetPassword.success': 'ãƒ‘ã‚¹ãƒ¯ãƒ¼ãƒ‰ã‚’æ›´æ–°ã—ã¾ã—ãŸï¼',
-
-  // Navigation
-  'nav.updates': 'æ›´æ–°æƒ…å ±',
-  'nav.dashboard': 'ãƒ€ãƒƒã‚·ãƒ¥ãƒœãƒ¼ãƒ‰',
-  'nav.getApi': 'APIã‚’å–å¾—',
-  'nav.signOut': 'ãƒ­ã‚°ã‚¢ã‚¦ãƒˆ',
-  'nav.account': 'ã‚¢ã‚«ã‚¦ãƒ³ãƒˆ',
-  'nav.profile': 'ãƒ—ãƒ­ãƒ•ã‚£ãƒ¼ãƒ«',
-  'nav.explore': 'æŽ¢ç´¢',
-  'nav.projects': 'ãƒ—ãƒ­ã‚¸ã‚§ã‚¯ãƒˆ',
-  'nav.signIn': 'ãƒ­ã‚°ã‚¤ãƒ³',
-  'nav.openDashboard': 'ãƒ€ãƒƒã‚·ãƒ¥ãƒœãƒ¼ãƒ‰ã‚’é–‹ã',
-  'nav.openAccountMenu': 'ã‚¢ã‚«ã‚¦ãƒ³ãƒˆãƒ¡ãƒ‹ãƒ¥ãƒ¼ã‚’é–‹ã',
-  'nav.closeAccountMenu': 'ã‚¢ã‚«ã‚¦ãƒ³ãƒˆãƒ¡ãƒ‹ãƒ¥ãƒ¼ã‚’é–‰ã˜ã‚‹',
-  'nav.accountMenu': 'ã‚¢ã‚«ã‚¦ãƒ³ãƒˆãƒ¡ãƒ‹ãƒ¥ãƒ¼',
-  'nav.accountNavigation': 'ã‚¢ã‚«ã‚¦ãƒ³ãƒˆãƒŠãƒ“ã‚²ãƒ¼ã‚·ãƒ§ãƒ³',
-  'nav.primary': 'ãƒ¡ã‚¤ãƒ³ãƒŠãƒ“ã‚²ãƒ¼ã‚·ãƒ§ãƒ³',
-
-  // AI data consent
-  'aiConsent.title': 'ã‚³ãƒ³ãƒ†ãƒ³ãƒ„ã®AIå‡¦ç†ã‚’è¨±å¯ã—ã¾ã™ã‹ï¼Ÿ',
-  'aiConsent.body': 'ç”»åƒç·¨é›†ã€å‹•ç”»ãƒ»éŸ³å£°ãƒ»ãƒãƒ£ãƒƒãƒˆã®ç”Ÿæˆã‚’è¡Œã†ãŸã‚ã€Makaronã¯é¸æŠžã•ã‚ŒãŸã‚³ãƒ³ãƒ†ãƒ³ãƒ„ã‚’ç¬¬ä¸‰è€…ã®AIã‚µãƒ¼ãƒ“ã‚¹ã¸é€ä¿¡ã™ã‚‹å¿…è¦ãŒã‚ã‚Šã¾ã™ã€‚è¨±å¯å¾Œã«ã®ã¿é€ä¿¡ã—ã¾ã™ã€‚',
-  'aiConsent.dataTitle': 'é€ä¿¡ã•ã‚Œã‚‹ãƒ‡ãƒ¼ã‚¿',
-  'aiConsent.data': 'é¸æŠžã—ãŸå†™çœŸã€å‹•ç”»ã€éŸ³å£°ã€ãƒ—ãƒ­ãƒ³ãƒ—ãƒˆã€ãƒãƒ£ãƒƒãƒˆãƒ¡ãƒƒã‚»ãƒ¼ã‚¸ã€ãŠã‚ˆã³è¿½åŠ ç·¨é›†ã«å¿…è¦ãªç”Ÿæˆã‚³ãƒ³ãƒ†ãƒ³ãƒ„ã€‚',
-  'aiConsent.providersTitle': 'é€ä¿¡å…ˆ',
-  'aiConsent.providers': 'é¸æŠžã—ãŸæ©Ÿèƒ½ã«å¿œã˜ã¦ã€Googleã€OpenAIã€OpenRouterã€Microsoft Azureã€DeepSeekã€xAIã€ByteDance / Volcengineã€Kuaishou / Klingã€ã¾ãŸã¯MiniMaxãŒã‚³ãƒ³ãƒ†ãƒ³ãƒ„ã‚’å‡¦ç†ã™ã‚‹å ´åˆãŒã‚ã‚Šã¾ã™ã€‚',
-  'aiConsent.accountData': 'ãƒ­ã‚°ã‚¤ãƒ³ç”¨ãƒ¡ãƒ¼ãƒ«ã‚¢ãƒ‰ãƒ¬ã‚¹ã€ãƒ‘ã‚¹ãƒ¯ãƒ¼ãƒ‰ã€æ”¯æ‰•ã„æƒ…å ±ã¯AIã‚µãƒ¼ãƒ“ã‚¹ã¸é€ä¿¡ã•ã‚Œã¾ã›ã‚“ã€‚',
-  'aiConsent.allow': 'AIå‡¦ç†ã‚’è¨±å¯ã—ã¦ç¶šã‘ã‚‹',
-  'aiConsent.notNow': 'ä»Šã¯è¨±å¯ã—ãªã„',
-  'aiConsent.offTitle': 'AIå‡¦ç†ã¯ã‚ªãƒ•ã§ã™',
-  'aiConsent.offBody': 'Makaronã¯ã‚³ãƒ³ãƒ†ãƒ³ãƒ„ã‚’ç¬¬ä¸‰è€…ã®AIã‚µãƒ¼ãƒ“ã‚¹ã¸é€ä¿¡ã—ã¾ã›ã‚“ã€‚AIå‡¦ç†ã¯ä¸­æ ¸æ©Ÿèƒ½ã®ãŸã‚ã€ä½œæˆã‚’å§‹ã‚ã‚‹ã«ã¯è¨±å¯ãŒå¿…è¦ã§ã™ã€‚',
-  'aiConsent.review': 'å†…å®¹ã‚’ç¢ºèªã—ã¦é¸ã³ç›´ã™',
-  'aiConsent.privacy': 'ãƒ—ãƒ©ã‚¤ãƒã‚·ãƒ¼ãƒãƒªã‚·ãƒ¼ã‚’è¦‹ã‚‹',
-  'privacy.lastUpdated': 'æœ€çµ‚æ›´æ–°æ—¥ï¼š2026å¹´8æœˆ8æ—¥',
-
-  // Project management
-  'project.untitled': 'ç„¡é¡Œ',
-  'project.rename': 'åå‰ã‚’å¤‰æ›´',
-  'project.delete': 'ãƒ—ãƒ­ã‚¸ã‚§ã‚¯ãƒˆã‚’å‰Šé™¤',
-  'project.cancel': 'ã‚­ãƒ£ãƒ³ã‚»ãƒ«',
-  'project.save': 'ä¿å­˜',
-
-  // Editor status
-  'editor.current': 'ç¾åœ¨',
-  'editor.versions': 'ãƒãƒ¼ã‚¸ãƒ§ãƒ³',
-  'editor.done': 'å®Œäº†',
-  'editor.videoReady': 'å‹•ç”»ã®æº–å‚™ãŒã§ãã¾ã—ãŸ â€” å…±æœ‰ã‚’ã‚¿ãƒƒãƒ—ã—ã¦ä¿å­˜',
-  'editor.share': 'å…±æœ‰',
-  'editor.count': (n: number) => `${n}ä»¶`,
-  'editor.closePanel': 'ã‚¨ãƒ‡ã‚£ã‚¿ãƒ¼ã‚’é–‰ã˜ã‚‹',
-  'editor.workspace': 'Makaron ç·¨é›†ãƒ¯ãƒ¼ã‚¯ã‚¹ãƒšãƒ¼ã‚¹',
-  'editor.trim.playPreview': 'ãƒˆãƒªãƒ ãƒ—ãƒ¬ãƒ“ãƒ¥ãƒ¼ã‚’å†ç”Ÿ',
-  'editor.trim.pausePreview': 'ãƒˆãƒªãƒ ãƒ—ãƒ¬ãƒ“ãƒ¥ãƒ¼ã‚’ä¸€æ™‚åœæ­¢',
-  'editor.trim.start': 'ãƒˆãƒªãƒ é–‹å§‹ä½ç½®',
-  'editor.trim.end': 'ãƒˆãƒªãƒ çµ‚äº†ä½ç½®',
-  'editor.trim.playhead': 'ãƒˆãƒªãƒ å†ç”Ÿãƒ˜ãƒƒãƒ‰',
-
-  // Changelog
-  'changelog.heading': 'æ›´æ–°æƒ…å ±',
-  'changelog.close': 'æ›´æ–°æƒ…å ±ã‚’é–‰ã˜ã‚‹',
-  'changelog.videoTranslation.title': 'å‹•ç”»ç¿»è¨³',
-  'changelog.videoTranslation.item1': 'ç”»å¤–ãƒŠãƒ¬ãƒ¼ã‚·ãƒ§ãƒ³ã‚„éžãƒˆãƒ¼ã‚­ãƒ³ã‚°ãƒ˜ãƒƒãƒ‰å‹•ç”»ã‚’ Seed Audio ã§è‹±èªžã‚„æ—¥æœ¬èªžãªã©ã«ç¿»è¨³ã—ã€å…ƒã®è©±è€…ã‚‰ã—ã„å£°è³ªã€èªžèª¿ã€ãƒªã‚ºãƒ ã‚’ã§ãã‚‹é™ã‚Šä¿ã¡ã¾ã™ã€‚',
-  'changelog.videoTranslation.item2': 'äººç‰©ãŒæ˜ ã‚‹ãƒˆãƒ¼ã‚­ãƒ³ã‚°ãƒ˜ãƒƒãƒ‰ã¯å…ˆã«æ•´ãˆã€Seedance 2.0 Fast ã§ç¿»è¨³ã¨å£ã®å‹•ãã‚’åˆã‚ã›ã¾ã™ã€‚é•·ã„å‹•ç”»ã‚‚è‡ªå‹•åˆ†å‰²ã—ã€ç¿»è¨³å¾Œã®å­—å¹•ã€B-rollã€TikTok å®Œæˆå‹•ç”»ã¾ã§ä»•ä¸Šã’ã‚‰ã‚Œã¾ã™ã€‚',
-  'changelog.talkingHeadEditing.title': 'ãƒˆãƒ¼ã‚­ãƒ³ã‚°ãƒ˜ãƒƒãƒ‰ç·¨é›†',
-  'changelog.talkingHeadEditing.item1': 'ç´ æã®ãƒˆãƒ¼ã‚­ãƒ³ã‚°ãƒ˜ãƒƒãƒ‰å‹•ç”»ã‚’ã‚¢ãƒƒãƒ—ãƒ­ãƒ¼ãƒ‰ã™ã‚‹ã¨ã€Makaron ãŒ ASR ã‚’ä½¿ã£ã¦é–“ã€ãƒ•ã‚£ãƒ©ãƒ¼ã€é‡è¤‡ã€ä¸è‡ªç„¶ãªè¨€ã„ç›´ã—ã‚’å‰Šã‚Šã€ã‚ˆã‚Šæ»‘ã‚‰ã‹ãªå‹•ç”»ã«æ•´ãˆã¾ã™ã€‚',
-  'changelog.talkingHeadEditing.item2': 'å­—å¹•ã¯æ®‹ã—ãŸéŸ³å£°ã®å®Ÿéš›ã®å˜èªžã‚¿ã‚¤ãƒŸãƒ³ã‚°ã«å¾“ã„ã€çŸ­ãã€å¼·èª¿ã•ã‚ŒãŸå‹•çš„ãªè¡¨ç¾ã«ãªã‚Šã€ç·¨é›†å¯èƒ½ãªçŠ¶æ…‹ã‚’ä¿ã¡ã¾ã™ã€‚',
-  'changelog.talkingHeadEditing.item3': 'Agent ã¯å¿…è¦ãª B-rollã€ã‚¤ãƒ³ãƒ•ã‚©ã‚°ãƒ©ãƒ•ã‚£ãƒƒã‚¯ã€ã‚·ãƒ§ãƒ¼ãƒˆå‹•ç”»å‘ã‘ã®æ¼”å‡ºã‚’åŠ ãˆã€ç·¨é›†å¯èƒ½ãª Composition ã¨å®Œæˆ MP4 ã‚’å…¬é–‹ã§ãã¾ã™ã€‚',
-  'changelog.tiktokVideoSkill.title': 'TikTok ãƒã‚¤ãƒ†ã‚£ãƒ–ãªå‹•ç”» Skill',
-  'changelog.tiktokVideoSkill.item1': 'æ–°ã—ã„ TikTok Skill ã¯ã€Agent ãŒä½œã‚‹ç¸¦åž‹å‹•ç”»ã«ã‚¯ãƒªã‚¨ã‚¤ã‚¿ãƒ¼ã‚‰ã—ã„ãƒ•ãƒƒã‚¯ã€ãƒ†ãƒ³ãƒã€å­—å¹•ã€ãƒ‘ãƒƒã‚±ãƒ¼ã‚¸ã¨ãƒ—ãƒ©ãƒƒãƒˆãƒ•ã‚©ãƒ¼ãƒ ã‚’è€ƒæ…®ã—ãŸé…ç½®ã‚’åŠ ãˆã¤ã¤ã€Composition ã”ã¨ã®è¡¨ç¾ã®è‡ªç”±ã‚’ä¿ã¡ã¾ã™ã€‚',
-  'changelog.tiktokVideoSkill.item2': 'éŸ³å£°å­—å¹•ã¯æœ€çµ‚ãƒŠãƒ¬ãƒ¼ã‚·ãƒ§ãƒ³ã®æ„å‘³ã¨è©±ã—æ–¹ã‚’ç†è§£ã—ã¦åŒºåˆ‡ã‚Šã€å®Ÿéš›ã®å˜èªžã‚¿ã‚¤ãƒŸãƒ³ã‚°ã§æ­£ç¢ºã«åŒæœŸã™ã‚‹ãŸã‚ã€æ–‡å­—æ•°ã ã‘ã§æ©Ÿæ¢°çš„ã«åˆ†å‰²ã•ã‚Œã¾ã›ã‚“ã€‚',
-  'changelog.tiktokVideoSkill.item3': 'TikTok å‹•ç”»ã¯ç´ æã®å…ƒéŸ³å£°ã‚’ãƒ‡ãƒ•ã‚©ãƒ«ãƒˆã§ãƒŸãƒ¥ãƒ¼ãƒˆã—ã€å®Œæˆã—ãŸ1æœ¬ã® VO + BGM éŸ³æºã‹ã‚‰å–å¾—ã—ãŸå®Ÿéš›ã®ç™ºè©±ã‚¿ã‚¤ãƒŸãƒ³ã‚°ã§ã€æ˜ åƒãƒ»å­—å¹•ãƒ»ã‚­ãƒ¼ãƒ¯ãƒ¼ãƒ‰å¼·èª¿ã‚’åŒæœŸã—ã¾ã™ã€‚',
-  'changelog.sourcePlayback.title': 'ã‚½ãƒ¼ã‚¹å‹•ç”»ã®å†ç”Ÿã‚’å®‰å®šåŒ–',
-  'changelog.sourcePlayback.item1': 'Source URL ã®ã‚³ãƒ³ãƒã‚¸ã‚·ãƒ§ãƒ³ã¯ãƒãƒƒãƒ•ã‚¡ãƒªãƒ³ã‚°ä¸­ã«ã‚¿ã‚¤ãƒ ãƒ©ã‚¤ãƒ³ã‚’ä¸€æ™‚åœæ­¢ã—ã€æ¬¡ã®ãƒˆãƒªãƒŸãƒ³ã‚°æ¸ˆã¿ã‚¯ãƒªãƒƒãƒ—ã‚’å…ˆèª­ã¿ã™ã‚‹ã“ã¨ã§ã€é»’ç”»é¢ãƒ»åˆ¥ã‚«ãƒƒãƒˆã®æ··å…¥ãƒ»ã‚«ãƒƒãƒˆåˆ‡ã‚Šæ›¿ãˆæ™‚ã®åœæ­¢ã‚’æŠ‘ãˆã¾ã™ã€‚',
-  'changelog.sourcePlayback.item2': 'æœ€åˆã®ã‚¿ãƒƒãƒ—ã§ç¢ºå®Ÿã«å†ç”Ÿã‚’é–‹å§‹ã—ã€iOS ã®ãƒ‡ã‚³ãƒ¼ãƒ€ãƒ¼å…ˆèª­ã¿è² è·ã‚’åˆ¶é™ã™ã‚‹ã“ã¨ã§ã€é•·ã„ãƒžãƒ«ãƒã‚¯ãƒªãƒƒãƒ—ã§ã‚‚å­—å¹•ã ã‘ãŒé€²ã‚€å•é¡Œã‚„ Safari ã®ã‚¯ãƒ©ãƒƒã‚·ãƒ¥ã‚’é˜²ãŽã¾ã™ã€‚',
-  'changelog.externalSourceRanges.title': 'å¤–éƒ¨å‹•ç”»ã‚’ç›´æŽ¥ç·¨é›†',
-  'changelog.externalSourceRanges.item1': 'Makaronã¯å¤–éƒ¨å‹•ç”»URLã¨é–‹å§‹ãƒ»çµ‚äº†æ™‚é–“ã‚’æŒ‡å®šã—ã¦ã€å‹•ç”»å…¨ä½“ã®ã‚¢ãƒƒãƒ—ãƒ­ãƒ¼ãƒ‰ã‚„ä¸­é–“MP4ã®æ›¸ãå‡ºã—ãªã—ã§ç›´æŽ¥ç·¨é›†ã§ãã‚‹ã‚ˆã†ã«ãªã‚Šã¾ã—ãŸã€‚',
-  'changelog.seedance25.title': 'Seedance 2.5ï¼šæœ€æ–° SOTA ãƒžãƒ«ãƒãƒ¢ãƒ¼ãƒ€ãƒ«å‹•ç”»',
-  'changelog.seedance25.item1': 'æœ€æ–° SOTA ã® Seedance 2.5 ã¯ã€æ˜ åƒã¨ãƒã‚¤ãƒ†ã‚£ãƒ–éŸ³å£°ã‚’åŒæœŸã—ã€1å›žã§æœ€é•·30ç§’ã¾ã§ç”Ÿæˆã§ãã¾ã™ã€‚',
-  'changelog.seedance25.item2': 'æœ€å¤§30æžšã®ç”»åƒã€10æœ¬ã®å‹•ç”»ã€10æœ¬ã®éŸ³å£°ã‚’å‚ç…§ç´ æã¨ã—ã¦çµ„ã¿åˆã‚ã›ã‚‰ã‚Œã¾ã™ã€‚',
-  'changelog.seedance25.item3': 'å°‚ç”¨ã®å‹•ç”»ç·¨é›†ãƒ»å»¶é•·ãƒ¢ãƒ¼ãƒ‰ã¨ã€MP4ã¾ãŸã¯ã‚«ãƒ©ãƒ¼ã‚°ãƒ¬ãƒ¼ãƒ‡ã‚£ãƒ³ã‚°å‘ã‘MOVå‡ºåŠ›ã«å¯¾å¿œã—ã¾ã—ãŸã€‚',
-  'changelog.minimaxH3.title': 'MiniMax H3 å‹•ç”»ãƒ¢ãƒ‡ãƒ«',
-  'changelog.minimaxH3.item1': 'MiniMax H3ã‚’Makaronã«è¿½åŠ ã—ã€ãƒ†ã‚­ã‚¹ãƒˆã€ç”»åƒã€ãƒžãƒ«ãƒãƒ¢ãƒ¼ãƒ€ãƒ«å‚ç…§ã‹ã‚‰ãƒã‚¤ãƒ†ã‚£ãƒ–2Kå‹•ç”»ã‚’ç›´æŽ¥ç”Ÿæˆã§ãã‚‹ã‚ˆã†ã«ãªã‚Šã¾ã—ãŸã€‚',
-  'changelog.minimaxH3.item2': '4ã€œ15ç§’ã€6ç¨®é¡žã®ã‚¢ã‚¹ãƒšã‚¯ãƒˆæ¯”ã€ãƒã‚¤ãƒ†ã‚£ãƒ–ã‚¹ãƒ†ãƒ¬ã‚ªéŸ³å£°ã«å¯¾å¿œã—ã€æœ€å¤§9æžšã®å‚ç…§ç”»åƒã€3æœ¬ã®å‚ç…§å‹•ç”»ã€3ã¤ã®å‚ç…§éŸ³å£°ã‚’åˆ©ç”¨ã§ãã¾ã™ã€‚',
-  'changelog.minimaxH3.item3': 'å‹•ç”»ãƒ¢ãƒ‡ãƒ«ã‚»ãƒ¬ã‚¯ã‚¿ãƒ¼ã§H3ã‚’é¸ã¶ã‹ã€ãƒãƒ£ãƒƒãƒˆã§Agentã«æŒ‡å®šã§ãã¾ã™ã€‚makaron-cli chatã¯ãƒ¢ãƒ‡ãƒ«ã¨è§£åƒåº¦ã‚’ä¸€ç·’ã«é¸æŠžã—ã€éžå¯¾å¿œã®çµ„ã¿åˆã‚ã›ã‚’é˜²ãŽã¾ã™ã€‚',
-  'changelog.multilingualAsr.title': 'å¤šè¨€èªžéŸ³å£°èªè­˜',
-  'changelog.multilingualAsr.item1': 'Makaron ASRã¯æ—¥æœ¬èªžã‚’å«ã‚€è¤‡æ•°ã®è¨€èªžã‚’æ–‡å­—èµ·ã“ã—ã§ãã‚‹ã‚ˆã†ã«ãªã‚Šã€å­—å¹•ã¨Remotionã®ã‚¿ã‚¤ãƒŸãƒ³ã‚°ã‚’æ­£ç¢ºã«åˆã‚ã›ã‚‰ã‚Œã¾ã™ã€‚',
-  'changelog.editableRemotion.title': 'Remotionç·¨é›†ã‚’ã‚¨ãƒ³ãƒ‰ãƒ„ãƒ¼ã‚¨ãƒ³ãƒ‰ã§å®Ÿç¾',
-  'changelog.editableRemotion.item1': 'ãƒ†ã‚­ã‚¹ãƒˆã€ç”»åƒã€å‹•ç”»ã‚’ç·¨é›†å¯èƒ½ãªãƒ¬ã‚¤ãƒ¤ãƒ¼ã¨ã—ã¦è‡ªå‹•æ¤œå‡ºã—ã€ãƒ‡ã‚¹ã‚¯ãƒˆãƒƒãƒ—ã§ã‚‚ãƒ¢ãƒã‚¤ãƒ«ã§ã‚‚é¸æŠžãƒ»ç§»å‹•ãƒ»ã‚µã‚¤ã‚ºå¤‰æ›´ãŒæ˜ åƒã«æ­£ç¢ºã«è¿½å¾“ã™ã‚‹ã‚ˆã†ã«ãªã‚Šã¾ã—ãŸã€‚',
-  'changelog.editableRemotion.item2': 'ç·¨é›†å†…å®¹ã¯å†èª­ã¿è¾¼ã¿ã‚„åˆ¥ã®ç«¯æœ«ã§ã‚‚ä¿æŒã•ã‚Œã€MP4æ›¸ãå‡ºã—ã«ã‚‚åæ˜ ã•ã‚Œã¾ã™ã€‚å‹•ç”»ã®ãƒˆãƒªãƒ ã¯ã‚³ãƒ³ãƒã‚¸ã‚·ãƒ§ãƒ³å…¨ä½“ã§ã¯ãªãã€é¸æŠžã—ãŸã‚¯ãƒªãƒƒãƒ—ã ã‘ã‚’ç·¨é›†ã—ã¾ã™ã€‚',
-  'changelog.editableRemotion.item3': 'ãƒ†ã‚­ã‚¹ãƒˆã®ãƒ€ãƒ–ãƒ«ã‚¯ãƒªãƒƒã‚¯ç·¨é›†ã€æ•´åˆ—ã‚¬ã‚¤ãƒ‰ã€ãƒ¬ã‚¤ãƒ¤ãƒ¼åˆ‡ã‚Šæ›¿ãˆãŒå®‰å®šã—ã€é€£ç¶šã—ã¦ç·¨é›†ã—ã¦ã‚‚é¸æŠžæž ãŒå†…å®¹ã«æ­£ç¢ºã«è¿½å¾“ã—ã¾ã™ã€‚',
-  'changelog.editableLayers.title': 'ç·¨é›†å¯èƒ½ãªç”»åƒãƒ»å‹•ç”»ãƒ¬ã‚¤ãƒ¤ãƒ¼',
-  'changelog.editableLayers.item1': 'AIãŒç”Ÿæˆã—ãŸãƒ“ã‚¸ãƒ¥ã‚¢ãƒ«ã¯ã€å˜ãªã‚‹ãƒ•ãƒ©ãƒƒãƒˆãªãƒ—ãƒ¬ãƒ“ãƒ¥ãƒ¼ã§ã¯ã‚ã‚Šã¾ã›ã‚“ã€‚ãƒ†ã‚­ã‚¹ãƒˆã€å†™çœŸã€å‹•ç”»ã‚¯ãƒªãƒƒãƒ—ã‚’ç”Ÿæˆå¾Œã‚‚ç·¨é›†ã§ãã¾ã™ã€‚',
-  'changelog.editableLayers.item2': 'ã‚­ãƒ£ãƒ³ãƒã‚¹ä¸Šã§ãƒ¬ã‚¤ãƒ¤ãƒ¼ã‚’é¸æŠžã—ã¦ã€ãã®ã¾ã¾ç§»å‹•ã‚„ã‚µã‚¤ã‚ºå¤‰æ›´ãŒã§ãã¾ã™ã€‚å°ã•ãªèª¿æ•´ã®ãŸã‚ã«Agentã¸å…¨ä½“ã®å†ç”Ÿæˆã‚’ä¾é ¼ã™ã‚‹å¿…è¦ã¯ã‚ã‚Šã¾ã›ã‚“ã€‚',
-  'changelog.editableLayers.item3': 'å‹•ç”»ã‚¯ãƒªãƒƒãƒ—ã«ãƒˆãƒªãƒ ãƒãƒ¼ã‚’è¿½åŠ ã—ã¾ã—ãŸã€‚å†ç”Ÿã€ã‚¹ã‚¯ãƒ©ãƒ–ã€é–‹å§‹ãƒ»çµ‚äº†ãƒãƒ³ãƒ‰ãƒ«ã€ç¯„å›²å…¨ä½“ã®ç§»å‹•ã«å¯¾å¿œã—ã¾ã™ã€‚',
-  'changelog.editableLayers.item4': 'ç¸¦é•·ãƒã‚¹ã‚¿ãƒ¼ã®ç·¨é›†ã‚‚å¿«é©ã«ãªã‚Šã€ä¸Šä¸‹ã«ã‚¹ã‚¯ãƒ­ãƒ¼ãƒ«ã—ã¦ã‚‚é¸æŠžæž ãŒå†…å®¹ã«è¿½å¾“ã—ã¾ã™ã€‚',
-  'changelog.smarterEditableDiscovery.title': 'ç·¨é›†å¯èƒ½ãƒ¬ã‚¤ãƒ¤ãƒ¼ã‚’ã‚ˆã‚Šè³¢ãæ¤œå‡º',
-  'changelog.smarterEditableDiscovery.item1': 'Makaronã¯å­—å¹•ã‚„ãã®ä»–ã®Reactæç”»ã‚³ãƒ³ãƒ†ãƒ³ãƒ„ã‚’ç·¨é›†å¯èƒ½ãªãƒ¬ã‚¤ãƒ¤ãƒ¼ã¨ã—ã¦ã‚ˆã‚Šç¢ºå®Ÿã«æ¤œå‡ºã—ã€ç§»å‹•ãƒ»ã‚µã‚¤ã‚ºå¤‰æ›´ã‚‚ãã®ã¾ã¾åˆ©ç”¨ã§ãã¾ã™ã€‚',
-
-  // AI status
-  'status.thinking': 'å¯èƒ½æ€§ã‚’æŽ¢ã—ã¦ã„ã¾ã™...',
-  'status.analyzingImage': 'ç”»åƒã‚’åˆ†æžä¸­...',
-  'status.generatingTips': 'ç·¨é›†ã‚¢ã‚¤ãƒ‡ã‚¢ã‚’ç”Ÿæˆä¸­...',
-  'status.imageGenerated': 'ç”»åƒã‚’ç”Ÿæˆã—ã¾ã—ãŸ',
-  'status.renderingDesign': 'ãƒ‡ã‚¶ã‚¤ãƒ³ã‚’ãƒ¬ãƒ³ãƒ€ãƒªãƒ³ã‚°ä¸­...',
-  'status.designCreated': 'ãƒ‡ã‚¶ã‚¤ãƒ³ã‚’ä½œæˆã—ã¾ã—ãŸ',
-  'status.designFailed': 'ãƒ‡ã‚¶ã‚¤ãƒ³ã®ä½œæˆã«å¤±æ•—ã—ã¾ã—ãŸ',
-  'status.generatingMusic': 'éŸ³æ¥½ã‚’ç”Ÿæˆä¸­...',
-  'status.musicReady': 'éŸ³æ¥½ã®æº–å‚™ãŒã§ãã¾ã—ãŸ',
-  'status.musicStreaming': 'éŸ³æ¥½ãƒ—ãƒ¬ãƒ“ãƒ¥ãƒ¼ã®æº–å‚™ãŒã§ãã¾ã—ãŸ',
-  'status.musicFailed': 'éŸ³æ¥½ã®ç”Ÿæˆã«å¤±æ•—ã—ã¾ã—ãŸ',
-  'status.addingMusic': 'éŸ³æ¥½ã‚’è¿½åŠ ä¸­...',
-  'status.writingScript': 'å‹•ç”»ã‚¹ã‚¯ãƒªãƒ—ãƒˆã‚’ä½œæˆä¸­...',
-  'status.submittingVideo': 'å‹•ç”»ã‚¿ã‚¹ã‚¯ã‚’é€ä¿¡ä¸­...',
-  'status.videoRendering': 'å‹•ç”»ã‚’ãƒ¬ãƒ³ãƒ€ãƒªãƒ³ã‚°ä¸­',
-  'status.videoRenderingEllipsis': 'å‹•ç”»ã‚’ãƒ¬ãƒ³ãƒ€ãƒªãƒ³ã‚°ä¸­...',
-  'status.videoRenderingFast': 'å‹•ç”»ã‚’é«˜é€Ÿãƒ¬ãƒ³ãƒ€ãƒªãƒ³ã‚°ä¸­...',
-  'status.remotionExportRendering': 'MP4ã‚’æ›¸ãå‡ºã—ä¸­...',
-  'status.videoDone': 'å‹•ç”»ã‚’ç”Ÿæˆã—ã¾ã—ãŸ',
-  'status.videoFailed': 'å‹•ç”»ã®ç”Ÿæˆã«å¤±æ•—ã—ã¾ã—ãŸ',
-  'status.scriptDone': 'ã‚¹ã‚¯ãƒªãƒ—ãƒˆã®æº–å‚™ãŒã§ãã¾ã—ãŸ',
-  'status.scriptFailed': 'ã‚¹ã‚¯ãƒªãƒ—ãƒˆã®ç”Ÿæˆã«å¤±æ•—ã—ã¾ã—ãŸ',
-  'status.scriptFailedRetry': 'ã‚¹ã‚¯ãƒªãƒ—ãƒˆã®ç”Ÿæˆã«å¤±æ•—ã—ã¾ã—ãŸã€‚ã‚‚ã†ä¸€åº¦ãŠè©¦ã—ãã ã•ã„',
-  'status.creatingStory': 'å‹•ç”»ã‚¹ãƒˆãƒ¼ãƒªãƒ¼ã‚’ä½œæˆä¸­...',
-  'status.videoTranscoding': (percent: number) => `å‹•ç”»ã‚’å¤‰æ›ä¸­ ${percent}%`,
-  'status.uploadingVideo': 'å‹•ç”»ã‚’ã‚¢ãƒƒãƒ—ãƒ­ãƒ¼ãƒ‰ä¸­...',
-  'status.videoUploadFailed': (message: string) => `å‹•ç”»ã®ã‚¢ãƒƒãƒ—ãƒ­ãƒ¼ãƒ‰ã«å¤±æ•—ã—ã¾ã—ãŸï¼š${message}`,
-
-  // Tips bar
-  'tips.continueEditing': 'ç¢ºå®š',
-  'tips.more': 'ã‚‚ã£ã¨è¦‹ã‚‹',
-  'tips.reload': 'ç·¨é›†ã‚¢ã‚¤ãƒ‡ã‚¢ã‚’å†èª­ã¿è¾¼ã¿',
-
-  // Agent chat
-  'chat.currentImage': 'ç¾åœ¨ã®ç”»åƒï¼ˆç·¨é›†å…ƒï¼‰',
-  'chat.referenceImage': 'å‚ç…§ç”»åƒ',
-  'chat.promptCard': 'Nano Banana 2ã«é€ä¿¡ã—ãŸãƒ—ãƒ­ãƒ³ãƒ—ãƒˆ',
-  'chat.expand': 'å±•é–‹ â–¼',
-  'chat.collapse': 'æŠ˜ã‚ŠãŸãŸã‚€ â–²',
-  'chat.inputImages': 'å…¥åŠ›ç”»åƒ',
-  'chat.imageLabel': 'ç”»åƒ',
-  'chat.placeholder': 'ã©ã®ã‚ˆã†ã«ç·¨é›†ã—ã¾ã™ã‹ï¼Ÿ',
-  'chat.viewInChat': 'ãƒãƒ£ãƒƒãƒˆã§è¦‹ã‚‹ â†—',
-  'chat.editImage': 'ç”»åƒã‚’ç·¨é›†',
-
-  // Video result card
-  'video.title': (n: number) => `å‹•ç”» ${n}`,
-  'video.sourceTitle': (n: number) => `ç´ æ ${n}`,
-  'video.sourceUploaded': 'ã‚¢ãƒƒãƒ—ãƒ­ãƒ¼ãƒ‰æ¸ˆã¿',
-  'video.noVideos': 'å‹•ç”»ã¯ã¾ã ã‚ã‚Šã¾ã›ã‚“',
-  'video.newVideo': 'æ–°ã—ã„å‹•ç”»',
-  'video.completed': 'å®Œäº†',
-  'video.rendering': 'ãƒ¬ãƒ³ãƒ€ãƒªãƒ³ã‚°ä¸­',
-  'video.failed': 'å¤±æ•—',
-  'video.abandoned': 'ä¸­æ­¢æ¸ˆã¿',
-  'video.abandon': 'ä¸­æ­¢',
-  'video.confirmAbandon': 'ä¸­æ­¢ã™ã‚‹',
-  'video.cancel': 'ã‚­ãƒ£ãƒ³ã‚»ãƒ«',
-  'video.retry': 'å†è©¦è¡Œ',
-  'video.invalidParamsHint': 'å‚ç…§å‹•ç”»ã®è§£åƒåº¦ãŒé«˜ã™ãŽã‚‹ï¼ˆæœ€å¤§1080pï¼‰ã‹ã€é•·ã™ãŽã‚‹ï¼ˆæœ€å¤§15ç§’ï¼‰å¯èƒ½æ€§ãŒã‚ã‚Šã¾ã™ã€‚å°ã•ã„å‹•ç”»ã‚’å†ã‚¢ãƒƒãƒ—ãƒ­ãƒ¼ãƒ‰ã—ã¦ãã ã•ã„ã€‚',
-  'video.tooLong': 'å‹•ç”»ãŒé•·ã™ãŽã¾ã™ï¼ˆ{duration}ç§’ï¼‰ã€‚æœ€å¤§{max}ç§’ã§ã™ã€‚',
-  'video.detail': 'è©³ç´°',
-  'video.count': (n: number) => `å‹•ç”»ãƒ»${n}ä»¶`,
-  'video.sourceCount': (n: number) => `ç´ æãƒ»${n}ä»¶`,
-  'video.frameEdit': 'ã“ã®ãƒ•ãƒ¬ãƒ¼ãƒ ã‹ã‚‰ç·¨é›†',
-  'video.frameEditHint': (time: string) => `ç¾åœ¨ ${time}`,
-  'video.frameCaptured': (time: string) => `${time}ã®ãƒ•ãƒ¬ãƒ¼ãƒ ã‚’åˆ‡ã‚Šå‡ºã—ã¾ã—ãŸã€‚ç¢ºèªã—ã¦ã€å¤‰æ›´å†…å®¹ã‚’æ•™ãˆã¦ãã ã•ã„ã€‚`,
-  'video.frameCapturedShort': 'ãƒ•ãƒ¬ãƒ¼ãƒ ã‚’ä¿å­˜ã—ã¾ã—ãŸ',
-  'video.frameEditDraftPrompt': (mediaIndex: number, time: string) => `@${mediaIndex} ${time} ã“ã®ãƒ•ãƒ¬ãƒ¼ãƒ ã‹ã‚‰å‹•ç”»ã‚’ç·¨é›†ã—ã¦ã€`,
-
-  // Animate sheet
-  'animate.title': 'å‹•ç”»ã‚’ç”Ÿæˆ',
-  'animate.detailTitle': 'å‹•ç”»ã®è©³ç´°',
-  'animate.autoScript': 'âœ¨ ã‚¹ã‚¯ãƒªãƒ—ãƒˆã‚’è‡ªå‹•ç”Ÿæˆ',
-  'animate.generateVideo': 'ðŸŽ¬ å‹•ç”»ã‚’ç”Ÿæˆ',
-  'animate.submitting': 'é€ä¿¡ä¸­...',
-  'animate.aiWriting': 'âœ¨ AIãŒã‚¹ã‚¯ãƒªãƒ—ãƒˆã‚’ä½œæˆä¸­...',
-  'animate.aiWritingShort': 'AIãŒä½œæˆä¸­...',
-  'animate.aiRetry': 'AIã§å†è©¦è¡Œ',
-  'animate.aiRewrite': 'AIã§æ›¸ãç›´ã™',
-  'animate.aiAnalyzing': 'AIãŒå†™çœŸã‚’åˆ†æžä¸­...',
-  'animate.storyPlaceholder': 'å‹•ç”»ã®ã‚¹ãƒˆãƒ¼ãƒªãƒ¼ã‚’èª¬æ˜Žã—ã¦ãã ã•ã„...',
-  'animate.storyLabel': 'âœ¨ å‹•ç”»ã‚¹ãƒˆãƒ¼ãƒªãƒ¼',
-  'animate.scriptLabel': 'âœ¨ å‹•ç”»ã‚¹ã‚¯ãƒªãƒ—ãƒˆ',
-  'animate.hintLabel': 'è¦ä»¶',
-  'animate.hintPlaceholder': 'ä¾‹ï¼šæ˜ ç”»é¢¨ã€ã‚¹ãƒ­ãƒ¼ãƒ¢ãƒ¼ã‚·ãƒ§ãƒ³ã€æ„Ÿæƒ…çš„...',
-  'animate.noScript': 'ï¼ˆã‚¹ã‚¯ãƒªãƒ—ãƒˆãªã—ï¼‰',
-  'animate.allImagesRemoved': 'ã™ã¹ã¦ã®ç”»åƒã‚’å‰Šé™¤ã—ã¾ã—ãŸ',
-  'animate.imageCount': (n: number) => `ç”»åƒ${n}æžš`,
-  'animate.model': 'ãƒ¢ãƒ‡ãƒ«',
-  'animate.duration': 'é•·ã•',
-  'animate.status': 'ã‚¹ãƒ†ãƒ¼ã‚¿ã‚¹',
-  'animate.smart': 'è‡ªå‹•',
-  'animate.seconds': (n: number) => `${n}ç§’`,
-  'animate.costEstimate': 'æŽ¨å®šã‚³ã‚¹ãƒˆ',
-  'animate.costByDuration': 'å®Ÿéš›ã®é•·ã•ã§è¨ˆç®—',
-  'animate.errUnavailable': 'å‹•ç”»ã‚µãƒ¼ãƒ“ã‚¹ã‚’ä¸€æ™‚çš„ã«åˆ©ç”¨ã§ãã¾ã›ã‚“ã€‚ã—ã°ã‚‰ãã—ã¦ã‹ã‚‰ãŠè©¦ã—ãã ã•ã„',
-  'animate.errFailed': 'å‹•ç”»ã‚µãƒ¼ãƒ“ã‚¹ã§ã‚¨ãƒ©ãƒ¼ãŒç™ºç”Ÿã—ã¾ã—ãŸã€‚ã—ã°ã‚‰ãã—ã¦ã‹ã‚‰ãŠè©¦ã—ãã ã•ã„',
-
-  // Status bar
-  'statusbar.likeEffect': 'ã“ã®åŠ¹æžœã¯ã„ã‹ãŒã§ã™ã‹ï¼Ÿèª¿æ•´ã—ãŸã„ç‚¹ã‚’æ•™ãˆã¦ãã ã•ã„ ðŸ‘‰ðŸ»',
-
-  // Canvas
-  'canvas.loading': 'èª­ã¿è¾¼ã¿ä¸­...',
-  'canvas.videoExpired': 'å‹•ç”»ãƒªãƒ³ã‚¯ã®æœ‰åŠ¹æœŸé™ãŒåˆ‡ã‚Œã¾ã—ãŸ',
-  'canvas.videoRendering': 'å‹•ç”»ã‚’ãƒ¬ãƒ³ãƒ€ãƒªãƒ³ã‚°ä¸­',
-  'canvas.videoFailed': 'ç”Ÿæˆã«å¤±æ•—ã—ã¾ã—ãŸ',
-  'canvas.usuallyTakes': 'é€šå¸¸3ã€œ5åˆ†ã‹ã‹ã‚Šã¾ã™',
-  'canvas.grokUsuallyTakes': 'é€šå¸¸15ã€œ60ç§’ã‹ã‹ã‚Šã¾ã™',
-  'agentPage.videoTimingNote': 'ãƒ—ãƒ­ãƒã‚¤ãƒ€ãƒ¼å‹•ç”»ã¯3ã€œ5åˆ†ã‹ã‹ã‚‹å ´åˆãŒã‚ã‚Šã¾ã™ã€‚ç¾åœ¨ã®Grokç”Ÿæˆãƒ»ç·¨é›†ãƒ†ã‚¹ãƒˆã¯é€šå¸¸15ã€œ60ç§’ã§ã™ã€‚Remotionã«ã¯æ¬¡ã‚’ä½¿ç”¨ã—ã¦ãã ã•ã„ï¼š',
-  'canvas.remotionExportUsuallyTakes': 'é€šå¸¸ã¯å‹•ç”»ã®é•·ã•ç¨‹åº¦ã§ã™ã€‚åˆå›žèµ·å‹•æ™‚ã¯é•·ãã‹ã‹ã‚‹å ´åˆãŒã‚ã‚Šã¾ã™',
-  'canvas.generateVideo': 'å‹•ç”»ã‚’ç”Ÿæˆ',
-  'canvas.layerTool': 'ãƒ¬ã‚¤ãƒ¤ãƒ¼',
-  'canvas.layering': 'ãƒ¬ã‚¤ãƒ¤ãƒ¼ã‚’åˆ†é›¢ä¸­...',
-  'canvas.layerLabel': (n: number) => `ãƒ¬ã‚¤ãƒ¤ãƒ¼ ${n}`,
-  'canvas.resetLayers': 'ãƒªã‚»ãƒƒãƒˆ',
-  'canvas.layerFailed': 'ãƒ¬ã‚¤ãƒ¤ãƒ¼åˆ†é›¢ã«å¤±æ•—ã—ã¾ã—ãŸ',
-  'canvas.layerEmpty': 'åˆ©ç”¨ã§ãã‚‹ãƒ¬ã‚¤ãƒ¤ãƒ¼ãŒã‚ã‚Šã¾ã›ã‚“',
-  'canvas.layerDelete': 'ãƒ¬ã‚¤ãƒ¤ãƒ¼ã‚’å‰Šé™¤',
-  'canvas.layerResize': 'ãƒ‰ãƒ©ãƒƒã‚°ã—ã¦ã‚µã‚¤ã‚ºå¤‰æ›´',
-  'canvas.previewUnavailable': 'ãƒ—ãƒ¬ãƒ“ãƒ¥ãƒ¼ã‚’ä¸€æ™‚çš„ã«è¡¨ç¤ºã§ãã¾ã›ã‚“',
-  'canvas.previewUsingPoster': 'ã‚«ãƒãƒ¼ç”»åƒã‚’è¡¨ç¤ºã—ã¦ã„ã¾ã™ã€‚å¾Œã§ã‚‚ã†ä¸€åº¦èª­ã¿è¾¼ã‚ã¾ã™',
-  'canvas.previewRetry': 'å†è©¦è¡Œ',
-
-  // Annotation toolbar
-  'annotation.placeholder': 'ãƒžãƒ¼ã‚¯ã—ãŸéƒ¨åˆ†ã‚’ã©ã®ã‚ˆã†ã«ç·¨é›†ã—ã¾ã™ã‹ï¼Ÿ',
-  'annotation.defaultPrompt': 'æ³¨é‡ˆã«æ²¿ã£ã¦ç”»åƒã‚’ç·¨é›†ã—ã¦ãã ã•ã„',
-
-  // Editor inline UI
-  'editor.generatingImage': 'AIãŒç”»åƒã‚’ç”Ÿæˆä¸­...',
-  'editor.errorRetry': 'ã‚¨ãƒ©ãƒ¼ãŒç™ºç”Ÿã—ã¾ã—ãŸã€‚ã‚‚ã†ä¸€åº¦ãŠè©¦ã—ãã ã•ã„',
-  'editor.greeting': 'ã“ã‚“ã«ã¡ã¯ï¼ã“ã®å†™çœŸã‚’ã©ã®ã‚ˆã†ã«ç·¨é›†ã—ã¾ã™ã‹ï¼Ÿ',
-  'editor.multiImageAnalyzing': '{count}æžšã®ç”»åƒã‚’å—ã‘å–ã‚Šã¾ã—ãŸã€‚åˆ†æžã«ã¯ç´„1åˆ†ã‹ã‹ã‚Šã¾ã™ â³',
-  'editor.tipsSuffix': '\n\næ¥½ã—ã„ç·¨é›†ã‚¢ã‚¤ãƒ‡ã‚¢ã‚’è€ƒãˆã¦ã„ã¾ã™...',
-  'editor.agentThinking': 'AgentãŒè€ƒãˆã¦ã„ã¾ã™...',
-  'editor.reconnecting': 'Agentã«å†æŽ¥ç¶šä¸­...',
-  'editor.agentCoding': 'ã‚³ãƒ¼ãƒ‰ã‚’ä½œæˆä¸­...',
-  'editor.makeVideo': 'âœ¨ ã“ã®å†™çœŸã‹ã‚‰å‹•ç”»ã‚’ä½œã£ã¦',
-  'editor.enteringChat': 'ãƒãƒ£ãƒƒãƒˆã¸ç§»å‹•\nç·¨é›†ã‚’ç¶šã‘ã‚‹',
-
-  // Preview generation
-  'status.generatingPreviews': (done: number, total: number) => `ãƒ—ãƒ¬ãƒ“ãƒ¥ãƒ¼ã‚’ç”Ÿæˆä¸­ ${done}/${total}`,
-
-  // Home
-  'home.create': 'ä½œæˆ',
-  'home.createPlaceholder': 'ä½œã‚ŠãŸã„ã‚‚ã®ã‚’èª¬æ˜Žã—ã¦ãã ã•ã„...',
-  'home.projectPlaceholder': 'å†™çœŸãŒã‚ã‚‹ï¼Ÿã‚‚ã£ã¨é­…åŠ›çš„ã«ã—ã‚ˆã†ã€‚\nå†™çœŸãŒãªãã¦ã‚‚ã€ã“ã¡ã‚‰ã§ä½œã‚Œã¾ã™ã€‚',
-  'home.createFreePreview': 'ç„¡æ–™ãƒ—ãƒ¬ãƒ“ãƒ¥ãƒ¼ã‚’ç”Ÿæˆ',
-  'home.uploadPhoto': 'å†™çœŸã‚’ã‚¢ãƒƒãƒ—ãƒ­ãƒ¼ãƒ‰',
-  'home.tryFree': 'ç„¡æ–™ã§è©¦ã™',
-  'home.firstFree': 'åˆå›žç„¡æ–™',
-  'home.trialSurpriseTitle': 'ä½•ãŒèµ·ãã‚‹ã‹ã€è¦‹ã¦ã¿ã‚ˆã†',
-  'home.trialGiftNote': 'æœ€åˆã®1å›žã¯Makaronã‹ã‚‰',
-  'home.continueRegistration': 'ç™»éŒ²ã‚’ç¶šã‘ã‚‹',
-  'home.subscriptionConfirmedTitle': 'ãƒˆãƒ©ã‚¤ã‚¢ãƒ«ã‚’ç¢ºä¿ã—ã¾ã—ãŸ',
-  'home.photoCount': (n: number) => `å†™çœŸ${n}æžš`,
-  'home.previewFree': 'ç„¡æ–™ã§ãƒ—ãƒ¬ãƒ“ãƒ¥ãƒ¼',
-  'home.seeYourVersion': 'ã‚ãªãŸã®ãƒãƒ¼ã‚¸ãƒ§ãƒ³ã‚’è¦‹ã‚‹',
-  'home.almostReady': 'ã‚ã¨å°‘ã—ã§ã™',
-  'home.uploadOnePhoto': 'å†™çœŸã‚’1æžšã‚¢ãƒƒãƒ—ãƒ­ãƒ¼ãƒ‰',
-  'home.previewNoCard': 'ãƒ¯ãƒ³ã‚¯ãƒªãƒƒã‚¯ã§ãƒ—ãƒ¬ãƒ“ãƒ¥ãƒ¼ã€‚ã‚¯ãƒ¬ã‚¸ãƒƒãƒˆã‚«ãƒ¼ãƒ‰ã¯ä¸è¦ã§ã™ã€‚',
-  'home.addPhotosToPreview': (count: string) => `ã‚ã¨${count}è¿½åŠ ã™ã‚‹ã¨ç„¡æ–™ã§ãƒ—ãƒ¬ãƒ“ãƒ¥ãƒ¼ã§ãã¾ã™ã€‚`,
-  'home.freePreviewNoCard': 'ç„¡æ–™ã§ãƒ—ãƒ¬ãƒ“ãƒ¥ãƒ¼ã‚’ç”Ÿæˆã§ãã¾ã™ã€‚ã‚¯ãƒ¬ã‚¸ãƒƒãƒˆã‚«ãƒ¼ãƒ‰ã¯ä¸è¦ã§ã™ã€‚',
-  'home.photosNeeded': (count: string) => `${count}å¿…è¦`,
-  'home.previewReady': 'ãƒ—ãƒ¬ãƒ“ãƒ¥ãƒ¼ã§ãã¾ã™',
-  'home.morePhotosNeeded': (count: string) => `ã‚ã¨${count}å¿…è¦`,
-  'home.welcomeTitle': 'Makaronã¸ã‚ˆã†ã“ãï¼',
-  'home.welcomeGift': 'å‰µä½œã‚’å§‹ã‚ã‚‹ãŸã‚ã®ã‚®ãƒ•ãƒˆã‚’ãŠè´ˆã‚Šã—ã¾ã™',
-  'home.value': 'ç›¸å½“',
-  'home.startCreating': 'å‰µä½œã‚’å§‹ã‚ã‚‹',
-  'home.placeholder.1': 'ã“ã®å†™çœŸã§Vlogã‚’ä½œã£ã¦',
-  'home.placeholder.2': 'ã“ã®å•†å“å†™çœŸã‹ã‚‰SNSæŠ•ç¨¿ç´ æã‚’ä½œã£ã¦',
-  'home.placeholder.3': 'ã‚‚ã£ã¨ãã‚Œã„ã«è¦‹ã›ã¦',
-  'home.placeholder.4': 'çŒ«ã®å†™çœŸã‹ã‚‰ã‚¹ã‚¿ãƒ³ãƒ—ã‚»ãƒƒãƒˆã‚’ä½œã£ã¦',
-  'home.placeholder.5': 'ã“ã®å†™çœŸã‚’ECãƒã‚¹ã‚¿ãƒ¼ã«ã—ã¦',
-  'home.placeholder.6': 'ã“ã®å†™çœŸã‚’çµµã‚³ãƒ³ãƒ†ã«ã—ã¦éŸ³æ¥½ã‚’ä»˜ã‘ã¦',
-  'home.placeholder.7': '1æžšã®å†™çœŸã‹ã‚‰ã¾ã£ãŸãé•ã†6ã¤ã®æ–¹å‘ã‚’è¦‹ã›ã¦',
-
-  // Landing
-  'landing.tagline': 'one man creative studio',
-  'landing.heroDesc1': 'MakaronãŒæ¬¡ã®ã‚¯ãƒªã‚¨ã‚¤ãƒ†ã‚£ãƒ–ãªä¸€æ‰‹ã‚’å…ˆèª­ã¿ã—ã¾ã™ã€‚',
-  'landing.heroDesc2': 'å†™çœŸã‚’ã‚¢ãƒƒãƒ—ãƒ­ãƒ¼ãƒ‰ã—ã¦ã€ç·¨é›†ãƒ»æŽ¢ç´¢ãƒ»ã‚¢ãƒ‹ãƒ¡ãƒ¼ã‚·ãƒ§ãƒ³ã€‚',
-  'landing.tryFree': 'ç„¡æ–™ã§è©¦ã™',
-  'landing.watchDemo': 'ãƒ‡ãƒ¢ã‚’è¦‹ã‚‹',
-  'landing.statement': 'ç·¨é›†ã€‚æŽ¢ç´¢ã€‚ã‚¢ãƒ‹ãƒ¡ãƒ¼ã‚·ãƒ§ãƒ³ã€‚',
-  'landing.tips.label': 'smart tips',
-  'landing.tips.title': 'AIãŒæ¬¡ã®ä¸€æ‰‹ã‚’å…ˆèª­ã¿',
-  'landing.tips.desc': 'ã©ã“ã‹ã‚‰å§‹ã‚ã‚‹ã‹è¿·ã£ã¦ã‚‚å¤§ä¸ˆå¤«ã€‚MakaronãŒè€ƒãˆã‚‹å‰ã«6ã¤ã®æ–¹å‘ã‚’ææ¡ˆã—ã¾ã™ã€‚',
-  'landing.agent.label': 'ai agent',
-  'landing.agent.title': 'ä¼ãˆã‚‹ã ã‘ã€‚å®Œæˆã€‚',
-  'landing.agent.desc': 'ã€Œ90å¹´ä»£ã®æ˜ ç”»ãƒã‚¹ã‚¿ãƒ¼é¢¨ã«ã—ã¦ã€â€” ã‚¢ã‚¤ãƒ‡ã‚¢ã‚’ä¼ãˆã‚Œã°ã€AgentãŒãã®ã¾ã¾å®Ÿè¡Œã—ã¾ã™ã€‚',
-  'landing.video.label': 'video',
-  'landing.video.title': 'å†™çœŸãŒå‹•ãå‡ºã™',
-  'landing.video.desc': 'ç·¨é›†ã—ãŸå†™çœŸãŒæ˜ ç”»ã®ã‚ˆã†ãªæ˜ åƒã«ã€‚AIãŒã‚¹ã‚¯ãƒªãƒ—ãƒˆã‚’æ›¸ãã€éŸ³ä»˜ãã§ãƒ¬ãƒ³ãƒ€ãƒªãƒ³ã‚°ã—ã¾ã™ã€‚',
-  'landing.useCases.label': 'use cases',
-  'landing.useCases.heading': '1æžšã®å†™çœŸã‹ã‚‰åºƒãŒã‚‹ä¸–ç•Œ',
-  'landing.useCases.sub': 'Makaronã¯å˜ãªã‚‹ã‚¨ãƒ‡ã‚£ã‚¿ãƒ¼ã§ã¯ã‚ã‚Šã¾ã›ã‚“ã€‚ã‚¢ã‚¤ãƒ‡ã‚¢ãŒç”Ÿã¾ã‚Œã€æžåˆ†ã‹ã‚Œã—ã€å‹•ãå‡ºã™å ´æ‰€ã§ã™ã€‚',
-  'landing.uc1.tag': 'ãƒ¬ã‚¿ãƒƒãƒï¼†è£œæ­£',
-  'landing.uc1.title': 'ç´°éƒ¨ã¾ã§å®Œç’§ã«',
-  'landing.uc1.desc': 'Smart TipsãŒå…‰ã€è‚Œè‰²ã€ã‚«ãƒ©ãƒ¼ã‚°ãƒ¬ãƒ¼ãƒ‡ã‚£ãƒ³ã‚°ã‚’ææ¡ˆã€‚ã™ãã«ãƒ—ãƒ¬ãƒ“ãƒ¥ãƒ¼ã—ã¦ãƒ¯ãƒ³ã‚¿ãƒƒãƒ—ã§ç¢ºå®šã§ãã¾ã™ã€‚',
-  'landing.uc1.feature': 'â†’ Smart Tipsãƒ»è£œæ­£ã‚«ãƒ†ã‚´ãƒª',
-  'landing.uc2.tag': 'ã‚¢ã‚¤ãƒ‡ã‚¢æŽ¢ç´¢',
-  'landing.uc2.title': 'ã‚ã‚‰ã‚†ã‚‹æ–¹å‘ã‚’æŽ¢ç´¢',
-  'landing.uc2.desc': 'Creativeã¨Wildã®ææ¡ˆãŒã€å†™çœŸã‚’ãƒãƒƒãƒ—ã‚¢ãƒ¼ãƒˆã€3Dã€ã‚¢ãƒ‹ãƒ¡ã€ã‚²ãƒ¼ãƒ ã‚¢ãƒ¼ãƒˆã¸åºƒã’ã¾ã™ã€‚',
-  'landing.uc2.feature': 'â†’ Smart Tipsãƒ»Creativeï¼†Wild',
-  'landing.uc3.tag': 'ã‚¹ãƒˆãƒ¼ãƒªãƒ¼ãƒœãƒ¼ãƒ‰',
-  'landing.uc3.title': 'ã‚·ãƒ¼ãƒ³ã”ã¨ã«çµ„ã¿ç«‹ã¦ã‚‹',
-  'landing.uc3.desc': 'ç·¨é›†ã”ã¨ã«ã‚¹ãƒŠãƒƒãƒ—ã‚·ãƒ§ãƒƒãƒˆã‚’ä½œæˆã€‚é‡ã­ã¦ãƒ“ã‚¸ãƒ¥ã‚¢ãƒ«ã‚¹ãƒˆãƒ¼ãƒªãƒ¼ãƒœãƒ¼ãƒ‰ã«ã—ã€ãã®ã¾ã¾ææ¡ˆã‚„å‹•ç”»åŒ–ã«ä½¿ãˆã¾ã™ã€‚',
-  'landing.uc3.feature': 'â†’ AI Agentãƒ»ã‚¹ãƒŠãƒƒãƒ—ã‚·ãƒ§ãƒƒãƒˆã‚¿ã‚¤ãƒ ãƒ©ã‚¤ãƒ³',
-  'landing.uc4.tag': 'å‹•ç”»',
-  'landing.uc4.title': 'é™æ­¢ç”»ã‹ã‚‰æ˜ ç”»ã¸',
-  'landing.uc4.desc': 'â–¶ã‚’æŠ¼ã™ã¨AIãŒãƒ¢ãƒ¼ã‚·ãƒ§ãƒ³ã‚¹ã‚¯ãƒªãƒ—ãƒˆã‚’ä½œæˆã€‚éŸ³ä»˜ãã®æ˜ ç”»é¢¨å‹•ç”»ã‚’3ã€œ15ç§’ã§ç”Ÿæˆã—ã¾ã™ã€‚',
-  'landing.uc4.feature': 'â†’ å‹•ç”»ã‚¢ãƒ‹ãƒ¡ãƒ¼ã‚·ãƒ§ãƒ³',
-  'landing.cta.heading1': 'æ¬¡ã®ã‚¢ã‚¤ãƒ‡ã‚¢ãŒ',
-  'landing.cta.heading2': 'ã‚ãªãŸã‚’å¾…ã£ã¦ã„ã¾ã™ã€‚',
-  'landing.cta.sub': 'ãƒ¬ã‚¿ãƒƒãƒã€çµµã‚³ãƒ³ãƒ†ã€æŽ¢ç´¢ã€ã‚¢ãƒ‹ãƒ¡ãƒ¼ã‚·ãƒ§ãƒ³ã€‚ç„¡æ–™ã§å§‹ã‚ã‚‰ã‚Œã¾ã™ã€‚',
-  'landing.cta.button': 'Makaronã‚’é–‹ã',
-
-  // Billing
-  'billing.credits': 'ã‚¯ãƒ¬ã‚¸ãƒƒãƒˆ',
-  'billing.balance': 'æ®‹é«˜',
-  'billing.topUp': 'ãƒãƒ£ãƒ¼ã‚¸',
-  'billing.getMoreCredits': 'ã‚¯ãƒ¬ã‚¸ãƒƒãƒˆã‚’è¿½åŠ ',
-  'billing.subscribe': 'ç™»éŒ²',
-  'billing.upgrade': 'ã‚¢ãƒƒãƒ—ã‚°ãƒ¬ãƒ¼ãƒ‰',
-  'billing.perMonth': '/æœˆ',
-  'billing.creditsPerMonth': 'ã‚¯ãƒ¬ã‚¸ãƒƒãƒˆ/æœˆ',
-  'billing.exhausted': 'ã‚¯ãƒ¬ã‚¸ãƒƒãƒˆã‚’ä½¿ã„åˆ‡ã‚Šã¾ã—ãŸ',
-  'billing.topUpToContinue': 'ç¶šã‘ã‚‹ã«ã¯ãƒãƒ£ãƒ¼ã‚¸ã—ã¦ãã ã•ã„',
-  'billing.creditsAdded': 'ã‚¯ãƒ¬ã‚¸ãƒƒãƒˆã‚’è¿½åŠ ã—ã¾ã—ãŸï¼',
-  'billing.balanceUpdated': 'æ®‹é«˜ã‚’æ›´æ–°ã—ã¾ã—ãŸ',
-  'billing.continueCreating': 'å‰µä½œã‚’ç¶šã‘ã‚‹',
-  'billing.processingPayment': 'ãŠæ”¯æ‰•ã„ã‚’å‡¦ç†ä¸­...',
-  'billing.usuallyFewSeconds': 'é€šå¸¸ã¯æ•°ç§’ã§å®Œäº†ã—ã¾ã™',
-  'billing.paymentPending': 'ãŠæ”¯æ‰•ã„ã‚’å‡¦ç†ä¸­',
-  'billing.paymentPendingDesc': 'ãŠæ”¯æ‰•ã„ã‚’å—ã‘ä»˜ã‘ã¾ã—ãŸãŒã€ã‚¯ãƒ¬ã‚¸ãƒƒãƒˆã¯ã¾ã åæ˜ ã•ã‚Œã¦ã„ã¾ã›ã‚“ã€‚ã—ã°ã‚‰ãã—ã¦ã‹ã‚‰ãƒšãƒ¼ã‚¸ã‚’æ›´æ–°ã—ã¦ãã ã•ã„ã€‚',
-  'billing.close': 'é–‰ã˜ã‚‹',
-  'billing.orTopUp': 'ã¾ãŸã¯ãƒãƒ£ãƒ¼ã‚¸',
-  'billing.creditsAvailable': 'ã‚¯ãƒ¬ã‚¸ãƒƒãƒˆåˆ©ç”¨å¯èƒ½',
-  'billing.subscribeTo': 'ç™»éŒ²ï¼š',
-  'billing.upgradeTo': 'ã‚¢ãƒƒãƒ—ã‚°ãƒ¬ãƒ¼ãƒ‰ï¼š',
-  'billing.current': 'ç¾åœ¨',
-  'billing.appleTrialBadge': '3æ—¥é–“ç„¡æ–™ãƒˆãƒ©ã‚¤ã‚¢ãƒ«',
-  'billing.appleTrialToday': 'æœ¬æ—¥ã¯ç„¡æ–™',
-  'billing.appleTrialThen': 'ãã®å¾Œ',
-  'billing.appleTrialCredits': 'ãƒˆãƒ©ã‚¤ã‚¢ãƒ«ã‚¯ãƒ¬ã‚¸ãƒƒãƒˆ',
-  'billing.appleTrialStart': '3æ—¥é–“ã®ç„¡æ–™ãƒˆãƒ©ã‚¤ã‚¢ãƒ«ã‚’é–‹å§‹',
-  'billing.appleTrialDisclosure': 'æœ¬æ—¥ã¯ç„¡æ–™ã€3æ—¥å¾Œã«è‡ªå‹•æ›´æ–°',
-  'billing.iosUnavailableTitle': 'iOSã§ã®è³¼å…¥ã¯è¿‘æ—¥å¯¾å¿œäºˆå®šã§ã™',
-  'billing.iosUnavailableDesc': 'App Storeã®è¦ä»¶ã«æº–æ‹ ã™ã‚‹ãŸã‚ã€Appleã®ã‚¢ãƒ—ãƒªå†…èª²é‡‘ã«å¯¾å¿œã™ã‚‹ã¾ã§iOSã‚¢ãƒ—ãƒªã§ã¯ã‚¯ãƒ¬ã‚¸ãƒƒãƒˆã‚„ã‚µãƒ–ã‚¹ã‚¯ãƒªãƒ—ã‚·ãƒ§ãƒ³ã‚’è²©å£²ã—ã¾ã›ã‚“ã€‚ç¾åœ¨ã®æ®‹é«˜ã§å¼•ãç¶šãå‰µä½œã§ãã¾ã™ã€‚',
-  'billing.trial.loadingOffer': 'Appleã®ã‚ªãƒ•ã‚¡ãƒ¼å¯¾è±¡è³‡æ ¼ã‚’ç¢ºèªã—ã¦ã„ã¾ã™â€¦',
-  'billing.trial.firstCreationComplete': '3æ—¥é–“ç„¡æ–™ãƒˆãƒ©ã‚¤ã‚¢ãƒ«',
-  'billing.trial.nextSkillTitle': 'ä»Šã™ãã€å‰µä½œã‚’å§‹ã‚ã‚ˆã†',
-  'billing.trial.nextSkillSubtitle': '1,500ãƒˆãƒ©ã‚¤ã‚¢ãƒ«ã‚¯ãƒ¬ã‚¸ãƒƒãƒˆã§ã€ç”»åƒã€å‹•ç”»ã€ã‚¯ãƒªã‚¨ã‚¤ãƒ†ã‚£ãƒ–Agentã‚’ä½¿ãˆã¾ã™ã€‚',
-  'billing.trial.galleryLabel': 'ãƒˆãƒ©ã‚¤ã‚¢ãƒ«ã§ä½œã‚Œã‚‹ã‚‚ã®',
-  'billing.trial.offerTitle': '3æ—¥é–“ç„¡æ–™ãƒˆãƒ©ã‚¤ã‚¢ãƒ«',
-  'billing.trial.offerRenewalPrefix': 'ãã®å¾Œ',
-  'billing.trial.offerToday': 'æœ¬æ—¥ã¯$0',
-  'billing.trial.close': 'ãƒˆãƒ©ã‚¤ã‚¢ãƒ«ã‚ªãƒ•ã‚¡ãƒ¼ã‚’é–‰ã˜ã‚‹',
-  'billing.trial.creation1': 'ã‚»ãƒ«ãƒ•ã‚£ãƒ¼ã‚’ãƒã‚¹ã‚¿ãƒ¼ã«',
-  'billing.trial.creation2': 'ç”»åƒã‹ã‚‰å‹•ç”»ã¸',
-  'billing.trial.creation3': 'Agentã§ç£¨ãä¸Šã’ã‚‹',
-  'billing.trial.creationAlt1': 'ã‚»ãƒ«ãƒ•ã‚£ãƒ¼ã‚’ã‚¹ã‚¿ã‚¸ã‚¢ãƒ é¢¨ãƒã‚¹ã‚¿ãƒ¼ã«å¤‰æ›',
-  'billing.trial.creationAlt2': 'é™æ­¢ç”»ã‹ã‚‰å‹•ç”»ã¸ã®å¤‰åŒ–',
-  'billing.trial.creationAlt3': 'ã‚¯ãƒªã‚¨ã‚¤ãƒ†ã‚£ãƒ–Agentã«ã‚ˆã‚‹è¤‡æ•°ã®ãƒãƒªã‚¨ãƒ¼ã‚·ãƒ§ãƒ³',
-  'billing.trial.benefitCredits': 'ãƒˆãƒ©ã‚¤ã‚¢ãƒ«ä¸­ã«1,500ã‚¯ãƒ¬ã‚¸ãƒƒãƒˆ',
-  'billing.trial.benefitSkills': 'ã™ã¹ã¦ã®ç”»åƒãƒ»å‹•ç”»Skill',
-  'billing.trial.benefitAgent': 'ä»•ä¸Šã’ã‚’æ”¯ãˆã‚‹ã‚¯ãƒªã‚¨ã‚¤ãƒ†ã‚£ãƒ–Agent',
-  'billing.trial.perMonth': '/æœˆ',
-  'billing.trial.cta': '3æ—¥é–“ç„¡æ–™ã§å§‹ã‚ã‚‹',
-  'billing.trial.confirming': 'Appleã§ç¢ºèªã—ã¦ã„ã¾ã™â€¦',
-  'billing.trial.legal': 'ãƒˆãƒ©ã‚¤ã‚¢ãƒ«çµ‚äº†ã®24æ™‚é–“å‰ã¾ã§ã«è§£ç´„ã—ãªã„é™ã‚Šè‡ªå‹•æ›´æ–°ã•ã‚Œã¾ã™ã€‚Apple IDè¨­å®šã‹ã‚‰ã„ã¤ã§ã‚‚ç®¡ç†ã§ãã¾ã™ã€‚',
-  'billing.trial.restore': 'Appleã§ã®è³¼å…¥ã‚’å¾©å…ƒ',
-  'billing.trial.restoring': 'å¾©å…ƒä¸­â€¦',
-  'billing.trial.verificationPending': 'ç™»éŒ²ã¯å®Œäº†ã—ã¦ãŠã‚Šã€ç¢ºèªä¸­ã§ã™ã€‚ã€Œç¢ºèªã‚’ç¶šã‘ã‚‹ã€ã‚’ã‚¿ãƒƒãƒ—ã—ã¦ãã ã•ã„ã€‚è³¼å…¥ã®å¾©å…ƒã¯ä¸è¦ã§ã™ã€‚',
-  'billing.trial.continueConfirmation': 'ç¢ºèªã‚’ç¶šã‘ã‚‹',
-  'admin.iosTrialCredits': 'iOSãƒˆãƒ©ã‚¤ã‚¢ãƒ«ã‚¯ãƒ¬ã‚¸ãƒƒãƒˆ',
-  'admin.iosTrialCreditsDesc': 'AppleãŒ3æ—¥é–“ã®Basicãƒˆãƒ©ã‚¤ã‚¢ãƒ«ã‚’ç¢ºèªå¾Œã€1å›žã®ã¿ä»˜ä¸Ž',
-  'admin.save': 'ä¿å­˜',
-  'admin.edit': 'ç·¨é›†',
-
-  // Skills
-  'skills.title': 'Skillãƒžãƒ¼ã‚±ãƒƒãƒˆ',
-  'skills.subtitle': 'ä¸–ç•Œä¸­ã®ã‚¯ãƒªã‚¨ã‚¤ã‚¿ãƒ¼ã«ã‚ˆã‚‹ã€ã™ãä½¿ãˆã‚‹é­”æ³•',
-  'skills.categoryAll': 'ã™ã¹ã¦',
-  'skills.categories': 'Skillã‚«ãƒ†ã‚´ãƒªãƒ¼',
-  'skills.back': 'æˆ»ã‚‹',
-  'skills.uploading': 'ã‚¢ãƒƒãƒ—ãƒ­ãƒ¼ãƒ‰ä¸­...',
-  'skills.add': '+ Skill',
-  'skills.loading': 'èª­ã¿è¾¼ã¿ä¸­...',
-  'skills.my': 'ãƒžã‚¤Skills',
-  'skills.builtIn': 'çµ„ã¿è¾¼ã¿Skills',
-  'skills.empty': 'Skillã¯ã¾ã ã‚ã‚Šã¾ã›ã‚“',
-  'skills.share': 'Skillã‚’å…±æœ‰',
-  'skills.shareDescription': 'ã“ã®ãƒªãƒ³ã‚¯ã‚’å‹ã ã¡ã«é€ã‚‹ã¨ã€ç›¸æ‰‹ã®ã‚¢ã‚«ã‚¦ãƒ³ãƒˆã«Skillã‚’è¿½åŠ ã§ãã¾ã™ã€‚',
-  'skills.copied': 'ã‚³ãƒ”ãƒ¼ã—ã¾ã—ãŸï¼',
-  'skills.copy': 'ã‚³ãƒ”ãƒ¼',
-  'skills.done': 'é–‰ã˜ã‚‹',
-  'skills.shareError': 'å…±æœ‰ãƒªãƒ³ã‚¯ã‚’ä½œæˆã§ãã¾ã›ã‚“ã§ã—ãŸ',
-  'skills.failed': 'å¤±æ•—ã—ã¾ã—ãŸ',
-
-  // Profile
-  'profile.title': 'ã‚¢ã‚«ã‚¦ãƒ³ãƒˆ',
-  'profile.back': 'æˆ»ã‚‹',
-  'profile.editAvatar': 'å¤‰æ›´',
-  'profile.displayName': 'è¡¨ç¤ºå',
-  'profile.enterName': 'åå‰ã‚’å…¥åŠ›',
-  'profile.saved': 'ä¿å­˜ã—ã¾ã—ãŸ',
-  'profile.email': 'ãƒ¡ãƒ¼ãƒ«ã‚¢ãƒ‰ãƒ¬ã‚¹',
-  'profile.changePassword': 'ãƒ‘ã‚¹ãƒ¯ãƒ¼ãƒ‰ã‚’å¤‰æ›´',
-  'profile.currentPassword': 'ç¾åœ¨ã®ãƒ‘ã‚¹ãƒ¯ãƒ¼ãƒ‰',
-  'profile.newPassword': 'æ–°ã—ã„ãƒ‘ã‚¹ãƒ¯ãƒ¼ãƒ‰',
-  'profile.confirmNewPassword': 'æ–°ã—ã„ãƒ‘ã‚¹ãƒ¯ãƒ¼ãƒ‰ã‚’ç¢ºèª',
-  'profile.passwordMismatch': 'ãƒ‘ã‚¹ãƒ¯ãƒ¼ãƒ‰ãŒä¸€è‡´ã—ã¾ã›ã‚“',
-  'profile.passwordTooShort': 'ãƒ‘ã‚¹ãƒ¯ãƒ¼ãƒ‰ã¯6æ–‡å­—ä»¥ä¸Šã§å…¥åŠ›ã—ã¦ãã ã•ã„',
-  'profile.incorrectPassword': 'ç¾åœ¨ã®ãƒ‘ã‚¹ãƒ¯ãƒ¼ãƒ‰ãŒæ­£ã—ãã‚ã‚Šã¾ã›ã‚“',
-  'profile.passwordUpdated': 'ãƒ‘ã‚¹ãƒ¯ãƒ¼ãƒ‰ã‚’æ›´æ–°ã—ã¾ã—ãŸ',
-  'profile.updatePassword': 'ãƒ‘ã‚¹ãƒ¯ãƒ¼ãƒ‰ã‚’æ›´æ–°',
-  'profile.signOut': 'ãƒ­ã‚°ã‚¢ã‚¦ãƒˆ',
-
-  // Agent runtime
-  'agent.status.starting': 'é–‹å§‹ã—ã¦ã„ã¾ã™...',
-  'agent.status.planning': 'è¨ˆç”»ä¸­...',
-  'agent.status.generatingCode': 'ã‚³ãƒ¼ãƒ‰ã‚’ç”Ÿæˆä¸­...',
-  'agent.status.analyzingImage': (detail: string) => detail ? `ç”»åƒã‚’åˆ†æžä¸­ï¼š${detail}` : 'ç”»åƒã‚’åˆ†æžä¸­',
-  'agent.status.analyzingVideo': (detail: string) => detail ? `å‹•ç”»ã‚’åˆ†æžä¸­ï¼š${detail}` : 'å‹•ç”»ã‚’åˆ†æžä¸­',
-  'agent.status.transcribingAudio': 'éŸ³å£°ã‚’æ–‡å­—èµ·ã“ã—ä¸­...',
-  'agent.status.choosingVoice': 'éŸ³å£°ã‚’é¸æŠžä¸­...',
-  'agent.status.generatingVoiceover': 'ãƒŠãƒ¬ãƒ¼ã‚·ãƒ§ãƒ³ã‚’ç”Ÿæˆä¸­...',
-  'agent.status.generatingAudio': 'éŸ³å£°ã‚’ç”Ÿæˆä¸­...',
-  'agent.status.capturingFrame': (hint: string) => `${hint}ã‚’ã‚­ãƒ£ãƒ—ãƒãƒ£ä¸­...`,
-  'agent.status.generatingImage': 'ç”»åƒã‚’ç”Ÿæˆä¸­...',
-  'agent.status.browsingWorkspace': 'ãƒ¯ãƒ¼ã‚¯ã‚¹ãƒšãƒ¼ã‚¹ã‚’ç¢ºèªä¸­...',
-  'agent.status.readingFile': (name: string) => `${name}ã‚’èª­ã¿è¾¼ã¿ä¸­...`,
-  'agent.status.saving': 'ä¿å­˜ä¸­...',
-  'agent.status.deleting': 'å‰Šé™¤ä¸­...',
-  'agent.status.runningCode': (description: string) => `å®Ÿè¡Œä¸­ï¼š${description || 'ã‚³ãƒ¼ãƒ‰'}...`,
-  'agent.status.rotatingCamera': 'ã‚«ãƒ¡ãƒ©ã‚’å›žè»¢ä¸­...',
-  'agent.status.thinking': 'AgentãŒè€ƒãˆã¦ã„ã¾ã™...',
-  'agent.status.imageGenerationFailed': 'ç”»åƒã®ç”Ÿæˆã«å¤±æ•—ã—ã¾ã—ãŸ',
-  'agent.status.resuming': 'å‰ã®å‡¦ç†ãŒåœæ­¢ã—ã¾ã—ãŸ â€” ä¿å­˜ã—ãŸä¸‹æ›¸ãã‹ã‚‰å†é–‹ã—ã¦ã„ã¾ã™...',
-  'agent.error.recoverable': 'ãƒ¢ãƒ‡ãƒ«ãŒå¤‰æ›´ã‚’å®Œäº†ã™ã‚‹å‰ã«åœæ­¢ã—ã¾ã—ãŸã€‚ä¸‹æ›¸ãã¯ä¿å­˜ã•ã‚Œã¦ã„ã¾ã™ã€‚ã€Œç¶šã‘ã‚‹ã€ã¨é€ä¿¡ã™ã‚‹ã¨å†é–‹ã§ãã¾ã™ã€‚',
-  'agent.error.fatal': 'ãƒ¢ãƒ‡ãƒ«ãŒãƒªã‚¯ã‚¨ã‚¹ãƒˆã‚’å®Œäº†ã™ã‚‹å‰ã«åœæ­¢ã—ã€å†é–‹å¯èƒ½ãªä¸‹æ›¸ãã‚‚ä¿å­˜ã•ã‚Œã¾ã›ã‚“ã§ã—ãŸã€‚ã‚‚ã†ä¸€åº¦ãŠè©¦ã—ãã ã•ã„ã€‚',
-  'agent.error.connectionEnded': 'Agentã®æŽ¥ç¶šãŒå®Œäº†å‰ã«çµ‚äº†ã—ã¾ã—ãŸã€‚ä¿å­˜æ¸ˆã¿ã®ä½œæ¥­ã¯ä¿æŒã•ã‚Œã¦ã„ã¾ã™ã€‚ã€Œç¶šã‘ã‚‹ã€ã¨é€ä¿¡ã™ã‚‹ã¨å†é–‹ã§ãã¾ã™ã€‚',
-  'agent.error.runtimeDraftSaved': 'Agentã®å®Ÿè¡Œç’°å¢ƒãŒåœæ­¢ã—ã¾ã—ãŸãŒã€ä¸‹æ›¸ãã¯ä¿å­˜ã•ã‚Œã¦ã„ã¾ã™ã€‚ã€Œç¶šã‘ã‚‹ã€ã¨é€ä¿¡ã™ã‚‹ã¨å†é–‹ã§ãã¾ã™ã€‚',
-  'agent.error.runtimeNoDraft': 'Agentã®å®Ÿè¡Œç’°å¢ƒãŒåœæ­¢ã—ã€å†é–‹å¯èƒ½ãªä¸‹æ›¸ãã‚‚ä¿å­˜ã•ã‚Œã¾ã›ã‚“ã§ã—ãŸã€‚ã‚‚ã†ä¸€åº¦ãŠè©¦ã—ãã ã•ã„ã€‚',
-  'agent.mock.tipsTeaser': 'ãƒŸãƒ‹ãƒãƒ¥ã‚¢ã®ä¸–ç•Œã«ã—ã¦ã¿ã¾ã›ã‚“ã‹ï¼Ÿã“ã®ã‚·ãƒ¼ãƒ³ã«ã´ã£ãŸã‚Šã§ã™ã€‚',
-  'agent.mock.tipReaction': 'ã„ã„ä»•ä¸ŠãŒã‚Šã§ã™ï¼ç·¨é›†ãŒè‡ªç„¶ã«ãªã˜ã‚“ã§ã„ã¾ã™ã€‚',
-  'agent.mock.nameProject': 'ã‚³ãƒ¼ãƒ’ãƒ¼ã®åˆå¾Œ',
-  'agent.mock.previewsReady': 'ãƒ—ãƒ¬ãƒ“ãƒ¥ãƒ¼ã®æº–å‚™ãŒã§ãã¾ã—ãŸã€‚éŠã³å¿ƒã®ã‚ã‚‹æ¡ˆã‚‚ãœã²è¦‹ã¦ãã ã•ã„ã€‚',
-  'agent.audio.generated': 'éŸ³å£°ã‚’ç”Ÿæˆã—ã¾ã—ãŸ',
-  'agent.audio.generatedNamed': (title: string) => `éŸ³å£°ã‚’ç”Ÿæˆã—ã¾ã—ãŸï¼š${title}`,
-  'artifact.nextSteps': 'æ¬¡ã®ã‚¹ãƒ†ãƒƒãƒ—',
-  'artifact.continue': 'ç¶šã‘ã‚‹',
-
-  // Studio Run
-  'studio.stage.brief': 'åˆ¶ä½œæ¦‚è¦',
-  'studio.stage.brief.short': 'æ¦‚è¦',
-  'studio.stage.proposal': 'ä¼ç”»ææ¡ˆ',
-  'studio.stage.proposal.short': 'ææ¡ˆ',
-  'studio.stage.script': 'ãƒŠãƒ¬ãƒ¼ã‚·ãƒ§ãƒ³å°æœ¬',
-  'studio.stage.script.short': 'å°æœ¬',
-  'studio.stage.storyboard': 'ã‚¹ãƒˆãƒ¼ãƒªãƒ¼ãƒœãƒ¼ãƒ‰',
-  'studio.stage.storyboard.short': 'çµµã‚³ãƒ³ãƒ†',
-  'studio.stage.assets': 'ç´ æä¸€è¦§',
-  'studio.stage.assets.short': 'ç´ æ',
-  'studio.stage.composition': 'ã‚³ãƒ³ãƒã‚¸ã‚·ãƒ§ãƒ³',
-  'studio.stage.composition.short': 'åˆæˆ',
-  'studio.stage.review': 'æœ€çµ‚ãƒ¬ãƒ“ãƒ¥ãƒ¼',
-  'studio.stage.review.short': 'ãƒ¬ãƒ“ãƒ¥ãƒ¼',
-  'studio.stage.delivery': 'ç´å“',
-  'studio.stage.delivery.short': 'ç´å“',
-  'studio.status.pending': 'æœªé–‹å§‹',
-  'studio.status.inProgress': 'é€²è¡Œä¸­',
-  'studio.status.awaitingApproval': 'æ‰¿èªå¾…ã¡',
-  'studio.status.completed': 'å®Œäº†',
-  'studio.status.invalidated': 'æ›´æ–°ãŒå¿…è¦',
-  'studio.status.failed': 'å¤±æ•—',
-  'studio.progress.aria': 'Studio Run ã®é€²æ—',
-  'studio.progress.current': (stage: string) => `é€²è¡Œä¸­ï¼š${stage}`,
-  'studio.progress.completed': (title: string) => `å®Œäº†ï¼š${title}`,
-  'studio.progress.dismiss': 'Studio Run ã®é€²æ—ã‚’éžè¡¨ç¤º',
-  'studio.unit.seconds': (value: string) => `${value}ç§’`,
-  'studio.unit.secondRange': (start: string, end: string) => `${start}ï½ž${end}ç§’`,
-  'studio.unit.sections': (count: number) => `${count}ã‚»ã‚¯ã‚·ãƒ§ãƒ³`,
-  'studio.unit.scenes': (count: number) => `${count}ã‚·ãƒ¼ãƒ³`,
-  'studio.unit.assets': (count: number) => `${count}ç´ æ`,
-  'studio.preview.allAssetsReady': 'ã™ã¹ã¦æº–å‚™å®Œäº†',
-  'studio.preview.editable': 'ç·¨é›†å¯èƒ½',
-  'studio.preview.flattened': 'çµ±åˆæ¸ˆã¿',
-  'studio.preview.sourcePreserved': 'ç·¨é›†å¯èƒ½ãªã‚½ãƒ¼ã‚¹ã‚’ä¿æŒ',
-  'studio.detail.loading': 'ã‚¹ãƒ†ãƒ¼ã‚¸ã®å†…å®¹ã‚’èª­ã¿è¾¼ã‚“ã§ã„ã¾ã™â€¦',
-  'studio.detail.onScreenText': 'ç”»é¢ãƒ†ã‚­ã‚¹ãƒˆ',
-  'studio.detail.labelSeparator': 'ï¼š',
-  'studio.detail.objective': 'ç›®çš„',
-  'studio.detail.audience': 'å¯¾è±¡',
-  'studio.detail.coreMessage': 'ã‚³ã‚¢ãƒ¡ãƒƒã‚»ãƒ¼ã‚¸',
-  'studio.detail.specification': 'ä»•æ§˜',
-  'studio.detail.selectedDirection': 'é¸æŠžã—ãŸæ–¹å‘æ€§',
-  'studio.detail.openingHook': 'å†’é ­ã®ãƒ•ãƒƒã‚¯',
-  'studio.detail.visualDirection': 'ãƒ“ã‚¸ãƒ¥ã‚¢ãƒ«æ–¹é‡',
-  'studio.detail.motionLanguage': 'ãƒ¢ãƒ¼ã‚·ãƒ§ãƒ³è¡¨ç¾',
-  'studio.detail.rationale': 'é¸æŠžç†ç”±',
-  'studio.detail.artDirection': 'ã‚¢ãƒ¼ãƒˆãƒ‡ã‚£ãƒ¬ã‚¯ã‚·ãƒ§ãƒ³',
-  'studio.detail.layoutConstraints': 'ãƒ¬ã‚¤ã‚¢ã‚¦ãƒˆåˆ¶ç´„',
-  'studio.detail.runtime': 'ãƒ©ãƒ³ã‚¿ã‚¤ãƒ ',
-  'studio.detail.frameSpecification': 'æ˜ åƒä»•æ§˜',
-  'studio.detail.designSource': 'ãƒ‡ã‚¶ã‚¤ãƒ³ã‚½ãƒ¼ã‚¹',
-  'studio.detail.editable': 'ç·¨é›†å¯èƒ½',
-  'studio.detail.yes': 'ã¯ã„',
-  'studio.detail.no': 'ã„ã„ãˆ',
-  'studio.detail.pass': 'åˆæ ¼',
-  'studio.detail.revise': 'ä¿®æ­£ãŒå¿…è¦',
-  'studio.detail.fail': 'ä¸åˆæ ¼',
-  'studio.detail.conclusion': 'åˆ¤å®š',
-  'studio.detail.technicalCheck': 'æŠ€è¡“ãƒã‚§ãƒƒã‚¯',
-  'studio.detail.hasAudio': 'éŸ³å£°ã‚ã‚Š',
-  'studio.detail.noAudio': 'éŸ³å£°ãªã—',
-  'studio.detail.visualCheck': 'æ˜ åƒãƒã‚§ãƒƒã‚¯',
-  'studio.detail.framesSampled': (count: string) => `${count}ãƒ•ãƒ¬ãƒ¼ãƒ ã‚’ç¢ºèª`,
-  'studio.detail.blackFramesFound': 'é»’ãƒ•ãƒ¬ãƒ¼ãƒ ã‚ã‚Š',
-  'studio.detail.noBlackFrames': 'é»’ãƒ•ãƒ¬ãƒ¼ãƒ ãªã—',
-  'studio.detail.overlapFound': 'è¦ç´ ã®é‡ãªã‚Šã‚ã‚Š',
-  'studio.detail.noOverlap': 'è¦ç´ ã®é‡ãªã‚Šãªã—',
-  'studio.detail.audioCheck': 'éŸ³å£°ãƒã‚§ãƒƒã‚¯',
-  'studio.detail.loudnessNotMeasured': 'ãƒ©ã‚¦ãƒ‰ãƒã‚¹æœªæ¸¬å®š',
-  'studio.detail.audioConfirmed': 'éŸ³å£°ã‚’ç¢ºèªæ¸ˆã¿',
-  'studio.detail.finalVideo': 'å®Œæˆå‹•ç”»',
-  'studio.detail.editableSource': 'ç·¨é›†å¯èƒ½ãªã‚½ãƒ¼ã‚¹',
-  'studio.detail.checksum': 'ãƒã‚§ãƒƒã‚¯ã‚µãƒ ',
-  'studio.detail.deliveredAt': 'ç´å“æ—¥æ™‚',
-  'studio.stage.generating': 'ã“ã®ã‚¹ãƒ†ãƒ¼ã‚¸ã®å†…å®¹ã‚’ç”Ÿæˆã—ã¦ã„ã¾ã™â€¦',
-  'studio.source.open': 'å…ƒãƒ•ã‚¡ã‚¤ãƒ«ã‚’é–‹ã',
-  'studio.source.openAria': (stage: string) => `${stage}ã®å…ƒãƒ•ã‚¡ã‚¤ãƒ«ã‚’é–‹ã`,
-
-  // Misc
-  'misc.toolUse': 'ãƒ„ãƒ¼ãƒ«ä½¿ç”¨',
-  'misc.error': 'ã‚¨ãƒ©ãƒ¼',
-  'misc.retry': 'å†è©¦è¡Œ',
-  'misc.saveSuccess': 'ä¿å­˜ã—ã¾ã—ãŸ',
-  'misc.shootingTime': 'æ’®å½±æ—¥æ™‚',
-  'misc.usingModel': 'ãƒ¢ãƒ‡ãƒ«',
-
-  // Model selector
-  'model.title': 'ãƒ¢ãƒ‡ãƒ«',
-  'model.auto': 'è‡ªå‹•',
-  'model.tab.image': 'ç”»åƒ',
-  'model.tab.video': 'å‹•ç”»',
-  'model.tab.agent': 'Agent',
-  'model.gemini.name': 'Nano Banana 2',
-  'model.gemini.desc': 'é«˜é€Ÿã§æ±Žç”¨çš„ã€‚ã»ã¨ã‚“ã©ã®ç·¨é›†ã«ãŠã™ã™ã‚ã§ã™ã€‚',
-  'model.geminiLite.name': 'Nano Banana 2 Lite',
-  'model.geminiLite.desc': 'é«˜é€Ÿãªä¸‹æ›¸ãã«é©ã—ãŸä½Žã‚³ã‚¹ãƒˆãƒ¢ãƒ‡ãƒ«ã§ã™ã€‚',
-  'model.qwen.name': 'Qwen Edit',
-  'model.qwen.desc': 'é¡”ã®å†ç¾æ€§ã«å„ªã‚Œã€NSFWã‚³ãƒ³ãƒ†ãƒ³ãƒ„ã«ã‚‚å¯¾å¿œã—ã¾ã™ã€‚',
-  'model.openai.name': 'GPT Image 2',
-  'model.openai.desc': 'æ–‡å­—ã®æç”»ã¨ã‚¯ãƒªã‚¨ã‚¤ãƒ†ã‚£ãƒ–ç”Ÿæˆã«å„ªã‚Œã¦ã„ã¾ã™ã€‚',
-  'model.kling.name': 'Kling O3',
-  'model.kling.desc': 'é«˜é€Ÿãª4Ké«˜å“è³ªå‡ºåŠ›ã€‚ã‚µã‚¦ãƒ³ãƒ‰ã‚‚å†…è”µã—ã¦ã„ã¾ã™ã€‚',
-  'model.seedanceFast.name': 'SeeDance 2.0 Fast',
-  'model.seedanceFast.desc': 'é€Ÿåº¦ã¨ã‚³ã‚¹ãƒˆã®ãƒãƒ©ãƒ³ã‚¹ã«å„ªã‚ŒãŸã€æ™®æ®µä½¿ã„ã®å‹•ç”»ãƒ¢ãƒ‡ãƒ«ã§ã™ã€‚',
-  'model.seedanceMini.name': 'SeeDance 2.0 Mini',
-  'model.seedanceMini.desc': 'ä¸‹æ›¸ãã‚„è¤‡æ•°ã‚µã‚¤ã‚ºã®ãƒ†ã‚¹ãƒˆã«é©ã—ãŸä½Žã‚³ã‚¹ãƒˆãƒ¢ãƒ‡ãƒ«ã§ã™ã€‚',
-  'model.seedance.name': 'SeeDance 2.0',
-  'model.seedance.desc': 'æœ€çµ‚å‡ºåŠ›å‘ã‘ã®é«˜ç”»è³ªãƒ¢ãƒ‡ãƒ«ã§ã™ã€‚ã‚³ã‚¹ãƒˆã¯é«˜ã‚ã§ã™ã€‚',
-  'model.seedance25.name': 'Seedance 2.5',
-  'model.seedance25.desc': 'æœ€æ–° SOTAã€‚æœ€é•·30ç§’ã§ã€ç”»åƒãƒ»å‹•ç”»ãƒ»éŸ³å£°å‚ç…§ã€ç·¨é›†ã€å»¶é•·ã«å¯¾å¿œã—ã¾ã™ã€‚',
-  'model.seedance25.badge': 'æœ€æ–° SOTA Â· 30ç§’',
-  'model.grok.name': 'Grok Imagine Video',
-  'model.grok.desc': '1080pãƒ»ç”»åƒå‚ç…§7æžšã¾ã§ã®é«˜é€Ÿãƒã‚¤ãƒ†ã‚£ãƒ–éŸ³å£°ç”Ÿæˆã¨ã€å‹•ç”»ç·¨é›†ãƒ»å»¶é•·ã«å¯¾å¿œã€‚æœ€æ–°ã®6ç§’ãƒ†ã‚¹ãƒˆã¯15ã€œ34ç§’ã€‚',
-  'model.googleOmni.name': 'Gemini Omni 1.1',
-  'model.googleOmni.desc': '360pä¸‹æ›¸ãã€æ¨™æº–720pã€4Kã‚¢ãƒƒãƒ—ã‚¹ã‚±ãƒ¼ãƒ«ã€ãƒã‚¤ãƒ†ã‚£ãƒ–éŸ³å£°ã«å¯¾å¿œã—ãŸé«˜é€Ÿå‹•ç”»ç”Ÿæˆãƒ»ç·¨é›†ã€‚',
-  'model.minimaxH3.name': 'MiniMax H3',
-  'model.minimaxH3.desc': '15ç§’ã€768Pã¾ãŸã¯2Kå‡ºåŠ›ã€è¤‡æ•°ã®å‚ç…§ç´ æã«å¯¾å¿œã™ã‚‹ã‚ªãƒ¼ãƒ—ãƒ³ãªãƒžãƒ«ãƒãƒ¢ãƒ¼ãƒ€ãƒ«å‹•ç”»ãƒ¢ãƒ‡ãƒ«ã§ã™ã€‚',
-  'model.gpt56Terra.name': 'GPT-5.6 Terra',
-  'model.gpt56Terra.desc': 'çŸ¥èƒ½ã€é€Ÿåº¦ã€ã‚³ã‚¹ãƒˆã®ãƒãƒ©ãƒ³ã‚¹ã«å„ªã‚ŒãŸæŽ¨å¥¨ãƒ‡ãƒ•ã‚©ãƒ«ãƒˆã§ã™ã€‚',
-  'model.gpt56Sol.name': 'GPT-5.6 Sol',
-  'model.gpt56Sol.desc': 'è¤‡é›‘ãªã‚¨ãƒ¼ã‚¸ã‚§ãƒ³ãƒˆä½œæ¥­ã¨å‰µä½œã«æœ€ã‚‚å¼·ã„ãƒ¢ãƒ‡ãƒ«ã§ã™ã€‚',
-  'model.gpt56Luna.name': 'GPT-5.6 Luna',
-  'model.gpt56Luna.desc': 'é«˜é€Ÿã§ä½Žã‚³ã‚¹ãƒˆã€‚æ—¥å¸¸çš„ãªå¤§é‡å‡¦ç†ã«é©ã—ã¦ã„ã¾ã™ã€‚',
-  'model.grok45.name': 'Grok 4.5',
-  'model.grok45.desc': 'çŸ¥è­˜ä½œæ¥­ã‚„è¤‡æ•°ã‚¹ãƒ†ãƒƒãƒ—ã®ãƒ„ãƒ¼ãƒ«æ“ä½œã«ç´ æ—©ãå¯¾å¿œã—ã¾ã™ã€‚',
-  'model.deepseekV4Pro.name': 'DeepSeek V4 Pro',
-  'model.deepseekV4Pro.desc': 'é•·ã„ã‚³ãƒ³ãƒ†ã‚­ã‚¹ãƒˆã¨è¤‡é›‘ãªæŽ¨è«–ã«å¼·ã„é«˜ã‚³ã‚¹ãƒˆãƒ‘ãƒ•ã‚©ãƒ¼ãƒžãƒ³ã‚¹ãƒ¢ãƒ‡ãƒ«ã§ã™ã€‚',
-  'model.resolution': 'è§£åƒåº¦',
-  'model.resolution.auto': 'è‡ªå‹•',
-  'model.aspectRatio': 'ç¸¦æ¨ªæ¯”',
-  'model.aspectRatio.auto': 'è‡ªå‹•èª¿æ•´',
-  'model.autoTips': 'Tipsã‚’è‡ªå‹•ãƒ—ãƒ¬ãƒ“ãƒ¥ãƒ¼',
-  'model.autoTips.desc': 'ç·¨é›†ã‚¢ã‚¤ãƒ‡ã‚¢ã®ãƒ—ãƒ¬ãƒ“ãƒ¥ãƒ¼ç”»åƒã‚’è‡ªå‹•ç”Ÿæˆ',
-  'admin.codexAllowlist.tab': 'Codexãƒ—ãƒ©ãƒ³',
-  'admin.codexAllowlist.title': 'ãƒ†ã‚¹ãƒˆã‚¢ã‚«ã‚¦ãƒ³ãƒˆ Allowlist',
-  'admin.codexAllowlist.desc': 'è¨±å¯ã•ã‚ŒãŸã‚¢ã‚«ã‚¦ãƒ³ãƒˆã¯å€‹äººã®Codexãƒ—ãƒ©ãƒ³ã‚’å„ªå…ˆã—ã€åˆ©ç”¨ã§ããªã„å ´åˆã®ã¿APIã¸åˆ‡ã‚Šæ›¿ãˆã¾ã™ã€‚å¤‰æ›´ã¯VLab Relayã«ã‚‚åŒæœŸã•ã‚Œã¾ã™ã€‚',
-  'admin.codexAllowlist.emailPlaceholder': 'ç™»éŒ²æ¸ˆã¿ã®Makaronãƒ¡ãƒ¼ãƒ«ã‚’å…¥åŠ›',
-  'admin.codexAllowlist.add': 'ã‚¢ã‚«ã‚¦ãƒ³ãƒˆã‚’è¿½åŠ ',
-  'admin.codexAllowlist.saving': 'åŒæœŸä¸­â€¦',
-  'admin.codexAllowlist.added': 'Codexãƒ—ãƒ©ãƒ³ã®è¨±å¯ãƒªã‚¹ãƒˆã«è¿½åŠ ã—ã¾ã—ãŸ',
-  'admin.codexAllowlist.removed': 'Codexãƒ—ãƒ©ãƒ³ã®è¨±å¯ãƒªã‚¹ãƒˆã‹ã‚‰å‰Šé™¤ã—ã¾ã—ãŸ',
-  'admin.codexAllowlist.updateFailed': 'æ›´æ–°ã§ãã¾ã›ã‚“ã§ã—ãŸã€‚ã‚‚ã†ä¸€åº¦ãŠè©¦ã—ãã ã•ã„ã€‚',
-  'admin.codexAllowlist.owner': 'Owner',
-  'admin.codexAllowlist.allowed': 'è¨±å¯æ¸ˆã¿',
-  'admin.codexAllowlist.remove': 'å‰Šé™¤',
-  'admin.codexAllowlist.unknownEmail': 'ä¸æ˜Žãªãƒ¡ãƒ¼ãƒ«',
-  'changelog.googleOmni11.title': 'Gemini Omni 1.1 ã‚’å…¬é–‹',
-  'changelog.googleOmni11.item1': 'Gemini Omni 1.1 ã§ãƒã‚¤ãƒ†ã‚£ãƒ–éŸ³å£°ä»˜ãå‹•ç”»ã‚’é«˜é€Ÿç”Ÿæˆã€‚360pãƒ‰ãƒ©ãƒ•ãƒˆã€æ¨™æº–720pã€ã‚¢ãƒƒãƒ—ã‚¹ã‚±ãƒ¼ãƒ«1080pãƒ»4Kã«å¯¾å¿œã—ã¾ã—ãŸã€‚',
-  'changelog.googleOmni11.item2': 'Chatã§ã‚¿ã‚¤ãƒ ãƒ©ã‚¤ãƒ³å‹•ç”»ã‚’1æœ¬å‚ç…§ã™ã‚‹ã¨ã€å…ƒå‹•ç”»ã‚’ä¿ã£ãŸç´¯ç©ã‚¹ãƒŠãƒƒãƒ—ã‚·ãƒ§ãƒƒãƒˆã¨ã—ã¦æœ€å¤§10ç§’å…ˆã¾ã§å»¶é•·ã§ãã¾ã™ã€‚',
-  'changelog.externalImages.title': 'Sceneç”»åƒã‚’å‹•ç”»ã§ç›´æŽ¥åˆ©ç”¨',
-  'changelog.externalImages.item1': 'Sceneã‹ã‚‰èª­ã¿è¾¼ã‚“ã ç”»åƒã‚’ç”»åƒã¨ã—ã¦å‡¦ç†ã—ã€Previewã¨MP4æ›¸ãå‡ºã—ã§å‹•ç”»ã¨èª¤èªã—ãªã„ã‚ˆã†ã«ãªã‚Šã¾ã—ãŸã€‚',
-  'model.agentAutoDesc': 'æ—¢å®šã® GPT-5.6 Terra ã‚’æ—¢å­˜ã® Azure API ã§ä½¿ç”¨ã—ã¾ã™',
-  'model.agentAutoCodexDesc': 'æ—¢å®šã® GPT-5.6 Terra ã‚’å€‹äººã® Codex ãƒ—ãƒ©ãƒ³ã§å„ªå…ˆçš„ã«ä½¿ç”¨ã—ã¾ã™',
-  'model.agentLabel': 'Agentãƒ¢ãƒ‡ãƒ«',
-  'model.closeAgentSelector': 'Agentãƒ¢ãƒ‡ãƒ«é¸æŠžã‚’é–‰ã˜ã‚‹',
-  'model.chooseAgent': 'Agentãƒ¢ãƒ‡ãƒ«ã‚’é¸æŠž',
-  'model.azureApiBadge': 'Azure API',
-  'model.agentGroup.azure': 'Azure API',
-  'model.agentGroup.azureDesc': 'æ—¢å®š Â· å¾“é‡èª²é‡‘',
-  'model.agentGroup.codex': 'å€‹äººCodexãƒ—ãƒ©ãƒ³',
-  'model.agentGroup.other': 'ãã®ä»–ã®API',
-  'model.agentGroup.otherDesc': 'ãã®ä»–ã®åˆ©ç”¨å¯èƒ½ãªãƒ¢ãƒ‡ãƒ«',
-  'model.codexSubscription.name': 'GPT-5.6 Terra Â· Codexãƒ—ãƒ©ãƒ³',
-  'model.codexSubscription.suffix': 'Codexãƒ—ãƒ©ãƒ³',
-  'model.codexSubscription.badge': 'å€‹äººãƒ—ãƒ©ãƒ³',
-  'model.codexSubscription.desc': 'å€‹äººã®ChatGPT/Codexãƒ—ãƒ©ãƒ³ã‚’ä½¿ç”¨ã—ã€åˆ©ç”¨ä¸å¯æ™‚ã¯æ—¢å­˜ã®APIãƒ•ã‚©ãƒ¼ãƒ«ãƒãƒƒã‚¯ã‚’ä½¿ç”¨ã—ã¾ã™ã€‚',
-  'model.codexSubscription.checking': 'ãƒ—ãƒ©ãƒ³ã®ä½¿ç”¨é‡ã‚’ç¢ºèªä¸­â€¦',
-  'model.codexSubscription.remaining': (percent: string) => `é€±é–“æž  æ®‹ã‚Š ${percent}%`,
-  'model.codexSubscription.resetsAt': (time: string) => `${time} ãƒªã‚»ãƒƒãƒˆ`,
-  'model.codexSubscription.usageUnavailable': 'ãƒ—ãƒ©ãƒ³ã¯åˆ©ç”¨å¯èƒ½ã§ã™ãŒã€ä½¿ç”¨é‡ã‚’å–å¾—ã§ãã¾ã›ã‚“',
-
-  // Makaron Kids
-  'kids.meta.title': 'Makaron Kids',
-  'kids.meta.description': 'å­ã©ã‚‚ã®ãŸã‚ã®éŸ³å£°ä¸­å¿ƒã®çµµã®ãƒ‘ãƒ¼ãƒˆãƒŠãƒ¼ã€‚',
-  'kids.picture': 'åäºŒã®ã¾ã»ã†ã®çµµ',
-  'kids.selectedPicture': 'åäºŒãŒé¸ã‚“ã çµµ',
-  'kids.samplePicture': 'æœˆã®åº­ã®ã‚¯ãƒ¬ãƒ¨ãƒ³ãƒ­ã‚±ãƒƒãƒˆ',
-  'kids.choosePicture': 'çµµã‚’é¸ã¶',
-  'kids.startTalking': 'å°ã•ãªé­”æ³•ä½¿ã„ã¨è©±ã™',
-  'kids.stopTalking': 'éŸ³å£°ã®ä¼šè©±ã‚’æ­¢ã‚ã‚‹',
-  'kids.phase.idle': 'ãƒžã‚¤ã‚¯ã‚’ã‚¿ãƒƒãƒ—ã—ã¦è©±ã™',
-  'kids.phase.connecting': 'å°ã•ãªé­”æ³•ä½¿ã„ãŒæ¥ã¦ã„ã¾ã™',
-  'kids.phase.listening': 'å°ã•ãªé­”æ³•ä½¿ã„ãŒèžã„ã¦ã„ã¾ã™',
-  'kids.phase.speaking': 'å°ã•ãªé­”æ³•ä½¿ã„ãŒè©±ã—ã¦ã„ã¾ã™',
-  'kids.phase.error': 'éŸ³å£°ã«æŽ¥ç¶šã§ãã¾ã›ã‚“ã§ã—ãŸ',
-  'kids.parent.hold': 'é•·æŠ¼ã—ã—ã¦ä¿è­·è€…è¨­å®šã‚’é–‹ã',
-  'kids.parent.title': 'åäºŒç‰ˆ Â· ä¿è­·è€…è¨­å®š',
-  'kids.parent.subtitle': 'ãƒªã‚¢ãƒ«ã‚¿ã‚¤ãƒ éŸ³å£°ã€ãƒ—ãƒ©ã‚¤ãƒã‚·ãƒ¼ã€æ¬¡æ®µéšŽã¸ã®å¼•ãç¶™ãŽ',
-  'kids.parent.close': 'ä¿è­·è€…è¨­å®šã‚’é–‰ã˜ã‚‹',
-  'kids.parent.connection': 'ãƒªã‚¢ãƒ«ã‚¿ã‚¤ãƒ æŽ¥ç¶š',
-  'kids.parent.voice': 'å°ã•ãªé­”æ³•ä½¿ã„ã®å£°',
-  'kids.parent.lastHeard': 'æœ€è¿‘èžã„ãŸå†…å®¹',
-  'kids.parent.lastReply': 'æœ€è¿‘ã®è¿”äº‹',
-  'kids.parent.empty': 'ã¾ã ã‚ã‚Šã¾ã›ã‚“',
-  'kids.parent.error': 'æŽ¥ç¶šã‚¨ãƒ©ãƒ¼',
-  'kids.parent.operator': 'åˆç‰ˆã¯ Gemini Live ã®å—ä»˜å½¹ã§ã™ã€‚Makaron Operator ã®ç”»åƒãƒ„ãƒ¼ãƒ«é€£æºã¯æ¬¡ã®æ®µéšŽã§ã™ã€‚',
-} satisfies TranslationDictionary;
-
-export default ja;
+YªçŠx-®éÜj×¢ëiºÚ+Š§j[h‘éÜ¢éí×­}é:-jZ.¶›­–)Þ³V–×÷'BG—R²G&ç6ÆF–öäF–7F–öæ'’Òg&öÒrâö–æFW‚s° ¦6öç7B¦Ò°¢òòÆö6ÆP¢vÆö6ÆRç6VÆV7F÷"s¢~ŠˆŠ©î8).˜Žh©ârÀ ¢òòWF€¢vWF‚æVÖ–Âs¢~8:8;Î8:¾8*.88ž8:Î8+’rÀ¢vWF‚ç77v÷&Bs¢~898+ž8:þ8;Î88’rÀ¢vWF‚æÆöv–âs¢~8:Þ8+8*N8;2rÀ¢vWF‚ç&Vv—7FW"s¢~ikŠhþy›¾˜Ë"rÀ¢vWF‚ævôÆöv–âs¢~8:Þ8+8*N8;2rÀ¢vWF‚æ†466÷VçBs¢~8ž8~8¾8*.8*¾8*n8;>88Ž8).8®hÈ88~8ž8¾ûÉòrÀ¢vWF‚ææô66÷VçBs¢~8*.8*¾8*n8;>88Ž8).8®hÈ88~8®8N8~8ž8¾ûÉòrÀ¢vWF‚ææWGv÷&´W'&÷"s¢~88Þ88>88Ž8:þ8;Î8*þ8*Ž8:ž8;Î8Îy›®yIþ8~8î8~8þ8.8(.8nKˆ[ªn8®Ššn8~8þ88^8BrÀ¢vWF‚æW'"æ–çfÆ–D7&VFVçF–Ç2s¢~8:8;Î8:¾8*.88ž8:Î8+ž8î8þ8þ898+ž8:þ8;Î88ž8ÎjÚ>8~8þ8.8(®8î8¾8)2rÀ¢vWF‚æW'"æVÖ–Äæ÷D6öæf—&ÖVBs¢~XXŽ8¾8:8;Î8:¾8*.88ž8:Î8+ž8).z+®Š¨Þ8~8n8þ88^8BrÀ¢vWF‚æW'"æÇ&VG•&Vv—7FW&VBs¢~8>8î8:8;Î8:¾8*.88ž8:Î8+ž8þy›¾˜Ë.kˆŽ8þ8~8ž8.8:Þ8+8*N8;>8~8n8þ88^8BrÀ¢vWF‚æW'"ç77v÷&EFöõ6†÷'Bs¢~898+ž8:þ8;Î88ž8ónih~ZÙ~Kº^Kˆ®8~XZ^X©¾8~8n8þ88^8BrÀ¢vWF‚æW'"æ–çfÆ–DVÖ–Âs¢~8:8;Î8:¾8*.88ž8:Î8+ž8î[Ú.[Èþ8ÎjÚ>8~8þ8.8(®8î8¾8)2rÀ¢vWF‚æW'"ç&FTÆ–Ö—FVBs¢~ŠšnŠÎY¹îi[8ÎZI®8ž8î8î8ž8.8~88(ž8þ8~8n8¾8(ž8®Ššn8~8þ88^8BrÀ¢vWF‚æW'"çv—Cc2s¢sczy.[è^8>8n8¾8(ž8(.8nKˆ[ªn8®Ššn8~8þ88^8BrÀ¢vWF‚æW'"æ–çfÆ–D–çf—FT6öFRs¢~h¹¾[è^8+>8;Î88ž8ÎxJX«ž8¾8iÉþ™™Xˆ~8(Î8~8’rÀ¢vWF‚æW'"æ–çf—FT6öFU&WV—&VBs¢~ikŠhþy›¾˜Ë.8¾8þh¹¾[è^8+>8;Î88ž8Î[ø^Šh8~8’rÀ¢vWF‚æ–çf—FT6öFUÆ6V†öÆFW"s¢~h¹¾[è^8+>8;Î88ž8).XZ^X©²rÀ¢vWF‚æ7F—fFRs¢~iÈžX«žXÉbrÀ¢vWF‚æ7F—fFVBs¢~iÈžX«žXÉn8~8î8~8þûÈrÀ¢vWF‚ææô–çf—FT6öFRs¢~h¹¾[è^8+>8;Î88ž8).8®hÈ88~8®8N8~8ž8¾ûÉòrÀ¢vWF‚æ¦ö–åv—FÆ—7Bs¢~8*n8*~8*N88Ž8:®8+ž88Ž8¾y›¾˜Ë"rÀ¢vWF‚çv—FÆ—7E7V66W72s¢~8*n8*~8*N88Ž8:®8+ž88Ž8¾y›¾˜Ë.8~8î8~8þûÈrÀ¢vWF‚çv—FÆ—7E7V66W74FW62s¢~h¹¾[è^8+>8;Î88ž8).‹ùiz^KŠÞ8¾8®˜8(®8~8î8ž8"rÀ¢vWF‚æ7&VFT66÷VçBs¢~8*.8*¾8*n8;>88Ž8).KÙÎh‰rÀ¢vWF‚æ&6²s¢~h‹¾8(²rÀ¢vWF‚æ6öçF–çVUv—F„vöövÆRs¢tvöövÆ^8~{i®88(²rÀ¢vWF‚æ6öçF–çVUv—F„ÆRs¢tÆ^8~{i®88(²rÀ¢vWF‚æ÷$F—f–FW"s¢~8î8þ8òrÀ¢vWF‚ævõ&Vv—7FW"s¢~ikŠhþy›¾˜Ë"rÀ¢vWF‚çfW&–g”VÖ–ÂçF—FÆRs¢~Xù~Kú88Ž8:Î8*N8).z+®Š¨Þ8~8n8þ88^8BrÀ¢vWF‚çfW&–g”VÖ–Âç6VçBs¢~z+®Š¨Þ8:®8;>8*þ8î˜KúXXŽûÉ¢rÀ¢vWF‚çfW&–g”VÖ–Âæ–ç7G'V7F–öâs¢~8:8;Î8:¾Xh^8î8:®8;>8*þ8).8*þ8:®88>8*þ8~8n8*.8*¾8*n8;>88Ž8).iÈžX«žXÉn8~8n8þ88^8N8"rÀ¢vWF‚çfW&–g”VÖ–Âç&W6VæBs¢~8:8;Î8:¾8).XhÞ˜rÀ¢vWF‚çfW&–g”VÖ–Âç&W6VçBs¢~8:8;Î8:¾8).˜Kú8~8î8~8þûÈrÀ¢vWF‚çfW&–g”VÖ–Âæ6†V6µ7Òs¢~Šh¾[Ù>8þ8(®8î8¾8)>8¾ûÉþ‹û~h98:8;Î8:¾89^8*ž8:¾888(.8Nz+®Š¨Þ8þ88^8N8"rÀ¢vWF‚æ6öçF–çVRs¢~{i®88(²rÀ¢vWF‚ç6VæF–æt6öFRs¢~z+®Š¨Þ8+>8;Î88ž8).˜KúKŠÒââârÀ¢vWF‚çG'”g&VRs¢~xJiiž8~Ššn8’rÀ¢vWF‚æ÷GçF—FÆRs¢~z+®Š¨Þ8+>8;Î88ž8).XZ^X©²rÀ¢vWF‚æ÷Gç7V'F—FÆRs¢snj8î8+>8;Î88ž8î˜KúXXŽûÉ¢rÀ¢vWF‚æ÷GçfW&–g’s¢~z+®Š¨ÒrÀ¢vWF‚æ÷Gç&W6VæBs¢~8+>8;Î88ž8).XhÞ˜rÀ¢vWF‚æ÷Gç&W6VæD–âs¢~XhÞ˜8î8rrÀ¢vWF‚æ÷GæF–v—DÆ&VÂs¢~z+®Š¨Þ8+>8;Î88ž8â¶–æFW‡ÒjyºârÀ¢vWF‚æf÷&v÷E77v÷&Bs¢~898+ž8:þ8;Î88ž8).8®[ùŽ8(Î8~8ž8¾ûÉòrÀ¢vWF‚ç&W6WE77v÷&BçF—FÆRs¢~898+ž8:þ8;Î88ž8).8:®8+¾88>88‚rÀ¢vWF‚ç&W6WE77v÷&Bç6VæBs¢~8:®8+¾88>88Ž8+>8;Î88ž8).˜KúrÀ¢vWF‚ç&W6WE77v÷&BææWu77v÷&Bs¢~ik8~8N898+ž8:þ8;Î88’rÀ¢vWF‚ç&W6WE77v÷&Bæ6öæf—&Òs¢~ik8~8N898+ž8:þ8;Î88ž8).ŠŠÞZé¢rÀ¢vWF‚ç&W6WE77v÷&Bç7V66W72s¢~898+ž8:þ8;Î88ž8).i»Nik8~8î8~8þûÈrÀ ¢òòæf–vF–öà¢væbçWFFW2s¢~i»Nikh8^ZrÀ¢væbæF6†&ö&Bs¢~8888>8+~8:^89Î8;Î88’rÀ¢væbævWD’s¢tž8).Xùn[érrÀ¢væbç6–vä÷WBs¢~8:Þ8+8*.8*n88‚rÀ¢væbæ66÷VçBs¢~8*.8*¾8*n8;>88‚rÀ¢væbç&öf–ÆRs¢~89~8:Þ89^8*>8;Î8:²rÀ¢væbæW‡Æ÷&Rs¢~hê.{J"rÀ¢væbç&ö¦V7G2s¢~89~8:Þ8+Ž8*~8*þ88‚rÀ¢væbç6–vä–âs¢~8:Þ8+8*N8;2rÀ¢væbæ÷VäF6†&ö&Bs¢~8888>8+~8:^89Î8;Î88ž8).™h¾8òrÀ¢væbæ÷Vä66÷VçDÖVçRs¢~8*.8*¾8*n8;>88Ž8:88¾8:^8;Î8).™h¾8òrÀ¢væbæ6Æ÷6T66÷VçDÖVçRs¢~8*.8*¾8*n8;>88Ž8:88¾8:^8;Î8).™hž8Ž8(²rÀ¢væbæ66÷VçDÖVçRs¢~8*.8*¾8*n8;>88Ž8:88¾8:^8;ÂrÀ¢væbæ66÷VçDæf–vF–öâs¢~8*.8*¾8*n8;>88Ž88®89>8+.8;Î8+~8:~8;2rÀ¢væbç&–Ö'’s¢~8:8*N8;>88®89>8+.8;Î8+~8:~8;2rÀ ¢òò’FF6öç6Vç@¢v”6öç6VçBçF—FÆRs¢~8+>8;>88n8;>88N8äžXznyn8).Š‹Xúþ8~8î8ž8¾ûÉòrÀ¢v”6öç6VçBæ&öG’s¢~yK¾X8þ{zŽ™¸n8X¹^yK¾8;¾™û>Z;8;¾888:>88>88Ž8îyIþh‰8).ŠÎ8n8þ8(8Ö¶&öî8þ˜Žh©î8^8(Î8þ8+>8;>88n8;>88N8).zÊÎKˆžˆ^8äž8+^8;Î89>8+ž8Ž˜Kú8ž8(¾[ø^Šh8Î8.8(®8î8ž8.Š‹Xúþ[èÎ8¾8î8þ˜Kú8~8î8ž8"rÀ¢v”6öç6VçBæFFF—FÆRs¢~˜Kú8^8(Î8(¾88~8;Î8+òrÀ¢v”6öç6VçBæFFs¢~˜Žh©î8~8þXižyÉþ8X¹^yK¾8™û>Z;889~8:Þ8;>89~88Ž8888:>88>88Ž8:88>8+¾8;Î8+Ž88®8(Ž8>‹ûÞXª{zŽ™¸n8¾[ø^Šh8®yIþh‰8+>8;>88n8;>88N8"rÀ¢v”6öç6VçBç&÷f–FW'5F—FÆRs¢~˜KúXX‚rÀ¢v”6öç6VçBç&÷f–FW'2s¢~˜Žh©î8~8þj™þˆ;Þ8¾[ùÎ8Ž8n8vöövÆ^8÷Väž8÷Vå&÷WFW.8Ö–7&÷6ögB§W&^8FVW6VV¾8„ž8'—FTFæ6RòföÆ6Væv–æ^8·V—6†÷Rò¶Æ–æ~88î8þ8ôÖ–æ”ÖŽ8Î8+>8;>88n8;>88N8).Xznyn8ž8(¾ZNYŽ8Î8.8(®8î8ž8"rÀ¢v”6öç6VçBæ66÷VçDFFs¢~8:Þ8+8*N8;>yJŽ8:8;Î8:¾8*.88ž8:Î8+ž8898+ž8:þ8;Î88ž8iJþh™^8Nh8^Z8ôž8+^8;Î89>8+ž8Ž˜Kú8^8(Î8î8¾8)>8"rÀ¢v”6öç6VçBæÆÆ÷rs¢tžXznyn8).Š‹Xúþ8~8n{i®88(²rÀ¢v”6öç6VçBææ÷Dæ÷rs¢~K¸®8þŠ‹Xúþ8~8®8BrÀ¢v”6öç6VçBæöfeF—FÆRs¢tžXznyn8þ8*®89^8~8’rÀ¢v”6öç6VçBæöfd&öG’s¢tÖ¶&öî8þ8+>8;>88n8;>88N8).zÊÎKˆžˆ^8äž8+^8;Î89>8+ž8Ž˜Kú8~8î8¾8)>8$žXznyn8þKŠÞjŽj™þˆ;Þ8î8þ8(8KÙÎh‰8).Zx¾8(8(¾8¾8þŠ‹Xúþ8Î[ø^Šh8~8ž8"rÀ¢v”6öç6VçBç&Wf–Wrs¢~Xh^Zëž8).z+®Š¨Þ8~8n˜Ž8>y»N8’rÀ¢v”6öç6VçBç&—f7’s¢~89~8:ž8*N898+~8;Î89Þ8:®8+~8;Î8).Šh¾8(²rÀ¢w&—f7’æÆ7EWFFVBs¢~iÈ{X.i»Nikiz^ûÉ£##n[›CŽiÈƒŽizRrÀ ¢òò&ö¦V7BÖævVÖVç@¢w&ö¦V7BçVçF—FÆVBs¢~xJšÂrÀ¢w&ö¦V7Bç&VæÖRs¢~YÞX˜Þ8).ZHži»BrÀ¢w&ö¦V7BæFVÆWFRs¢~89~8:Þ8+Ž8*~8*þ88Ž8).X˜®™šBrÀ¢w&ö¦V7Bæ6æ6VÂs¢~8*Þ8:>8;>8+¾8:²rÀ¢w&ö¦V7Bç6fRs¢~KùÞZÙ‚rÀ ¢òòVF—F÷"7FGW0¢vVF—F÷"æ7W'&VçBs¢~xûîYÊ‚rÀ¢vVF—F÷"çfW'6–öç2s¢~898;Î8+Ž8:~8;2rÀ¢vVF—F÷"æFöæRs¢~ZèÎK¨brÀ¢vVF—F÷"çf–FVõ&VG’s¢~X¹^yK¾8îk©nX)ž8Î8~8Þ8î8~8ò(	BX[iÈž8).8+þ88>89~8~8nKùÞZÙ‚rÀ¢vVF—F÷"ç6†&Rs¢~X[iÈ’rÀ¢vVF—F÷"æ6÷VçBs¢†ã¢çVÖ&W"’ÓâG¶çÞK»fÀ¢vVF—F÷"æ6Æ÷6UæVÂs¢~8*Ž88~8*>8+þ8;Î8).™hž8Ž8(²rÀ¢vVF—F÷"çv÷&·76Rs¢tÖ¶&öâ{zŽ™¸n8:þ8;Î8*þ8+ž89®8;Î8+’rÀ¢vVF—F÷"çG&–ÒçÆ•&Wf–Wrs¢~88Ž8:®8:89~8:Î89>8:^8;Î8).XhÞyIòrÀ¢vVF—F÷"çG&–ÒçW6U&Wf–Wrs¢~88Ž8:®8:89~8:Î89>8:^8;Î8).Kˆi˜.XÎjÚ"rÀ¢vVF—F÷"çG&–Òç7F'Bs¢~88Ž8:®8:™h¾Zx¾KØÞ{ÚârÀ¢vVF—F÷"çG&–ÒæVæBs¢~88Ž8:®8:{X.K¨nKØÞ{ÚârÀ¢vVF—F÷"çG&–ÒçÆ–†VBs¢~88Ž8:®8:XhÞyIþ89Ž88>88’rÀ ¢òò6†ævVÆöp¢v6†ævVÆöræ†VF–ærs¢~i»Nikh8^ZrÀ¢v6†ævVÆöræ6Æ÷6Rs¢~i»Nikh8^Z8).™hž8Ž8(²rÀ¢v6†ævVÆörçf–FVõG&ç6ÆF–öâçF—FÆRs¢~X¹^yK¾{û¾Š‹2rÀ¢v6†ævVÆörçf–FVõG&ç6ÆF–öâæ—FVÓs¢~yK¾ZIn88®8:Î8;Î8+~8:~8;>8(N™Ùî88Ž8;Î8*Þ8;>8+89Ž88>88žX¹^yK¾8)"6VVBVF–ò8~ˆ»Š©î8(Niz^iÊÎŠ©î8®8ž8¾{û¾Š‹>8~8XX>8îŠ›ˆ^8(ž8~8NZ;‹:®8Š©îŠ«þ88:®8+®8:8).8~8Þ8(¾™™8(®KùÞ88î8ž8"rÀ¢v6†ævVÆörçf–FVõG&ç6ÆF–öâæ—FVÓ"s¢~K«®xšž8ÎiŠ8(¾88Ž8;Î8*Þ8;>8+89Ž88>88ž8þXXŽ8¾i[N8Ž86VVFæ6R"ãf7B8~{û¾Š‹>8ŽXú>8îX¹^8Þ8).YŽ8(þ8¾8î8ž8.™[~8NX¹^yK¾8(.ˆz®X¹^XˆnX›.8~8{û¾Š‹>[èÎ8îZÙ~[™^8"×&öÆÎ8F–µFö²ZèÎh‰X¹^yK¾8î8~K¹^Kˆ®8.8(ž8(Î8î8ž8"rÀ¢v6†ævVÆörçFÆ¶–æt†VDVF—F–ærçF—FÆRs¢~88Ž8;Î8*Þ8;>8+89Ž88>88ž{zŽ™¸brÀ¢v6†ævVÆörçFÆ¶–æt†VDVF—F–æræ—FVÓs¢~{JiÙ8î88Ž8;Î8*Þ8;>8+89Ž88>88žX¹^yK¾8).8*.88>89~8:Þ8;Î88ž8ž8(¾8Ž8Ö¶&öâ8Â5"8).KÛþ8>8n™i>889^8*>8:ž8;Î8˜xÞŠH~8KˆÞˆz®xKn8®Šˆ8Ny»N8~8).X˜®8(®88(Ž8(®k¹8(ž8¾8®X¹^yK¾8¾i[N8Ž8î8ž8"rÀ¢v6†ævVÆörçFÆ¶–æt†VDVF—F–æræ—FVÓ"s¢~ZÙ~[™^8þjè¾8~8þ™û>Z;8îZéþ™©¾8îXÙŽŠ©î8+þ8*N89þ8;>8+8¾[é>8N8yúÞ8þ8[Ë~Š«þ8^8(Î8þX¹^y¨N8®ŠŽxûî8¾8®8(®8{zŽ™¸nXúþˆ;Þ8®x«nhX¾8).KùÞ88î8ž8"rÀ¢v6†ævVÆörçFÆ¶–æt†VDVF—F–æræ—FVÓ2s¢tvVçB8þ[ø^Šh8¢"×&öÆÎ88*N8;>89^8*ž8+8:ž89^8*>88>8*þ88+~8:~8;Î88ŽX¹^yK¾Y	88îkÉNX{®8).Xª8Ž8{zŽ™¸nXúþˆ;Þ8¢6ö×÷6—F–öâ8ŽZèÎh‰ÕB8).XZÎ™h¾8~8Þ8î8ž8"rÀ¢v6†ævVÆörçF–·Föµf–FVõ6¶–ÆÂçF—FÆRs¢uF–µFö²88Þ8*N88n8*>89n8®X¹^yK²6¶–ÆÂrÀ¢v6†ævVÆörçF–·Föµf–FVõ6¶–ÆÂæ—FVÓs¢~ik8~8BF–µFö²6¶–ÆÂ8þ8vVçB8ÎKÙÎ8(¾{ŠnYè¾X¹^yK¾8¾8*þ8:®8*Ž8*N8+þ8;Î8(ž8~8N89^88>8*þ888n8;>89Þ8ZÙ~[™^88988>8+8;Î8+Ž8Ž89~8:ž88>88Ž89^8*ž8;Î8:8).ˆ>hZî8~8þ˜XÞ{Úî8).Xª8Ž8N8N86ö×÷6—F–öâ8N8Ž8îŠŽxûî8îˆz®yK8).KùÞ88î8ž8"rÀ¢v6†ævVÆörçF–·Föµf–FVõ6¶–ÆÂæ—FVÓ"s¢~™û>Z;ZÙ~[™^8þiÈ{X.88®8:Î8;Î8+~8:~8;>8îhHþY>8ŽŠ›8~ikž8).ynŠz>8~8nXË®Xˆ~8(®8Zéþ™©¾8îXÙŽŠ©î8+þ8*N89þ8;>8+8~jÚ>z+®8¾YÎiÉþ8ž8(¾8þ8(8ih~ZÙ~i[888~j™þj+y¨N8¾XˆnX›.8^8(Î8î8¾8)>8"rÀ¢v6†ævVÆörçF–·Föµf–FVõ6¶–ÆÂæ—FVÓ2s¢uF–µFö²X¹^yK¾8þ{JiÙ8îXX>™û>Z;8).88~89^8*ž8:¾88Ž8~89þ8:^8;Î88Ž8~8ZèÎh‰8~8óiÊÎ8âdò²$tÒ™û>k©8¾8(žXùn[é~8~8þZéþ™©¾8îy›®Š›8+þ8*N89þ8;>8+8~8iŠX8þ8;¾ZÙ~[™^8;¾8*Þ8;Î8:þ8;Î88ž[Ë~Š«þ8).YÎiÉþ8~8î8ž8"rÀ¢v6†ævVÆörç6÷W&6UÆ–&6²çF—FÆRs¢~8+Þ8;Î8+žX¹^yK¾8îXhÞyIþ8).ZèžZé®XÉbrÀ¢v6†ævVÆörç6÷W&6UÆ–&6²æ—FVÓs¢u6÷W&6RU$Â8î8+>8;>89Þ8+Ž8+~8:~8;>8þ8988>89^8*8:®8;>8+KŠÞ8¾8+þ8*N8:8:ž8*N8;>8).Kˆi˜.XÎjÚ.8~8jÊ8î88Ž8:®89þ8;>8+kˆŽ8þ8*þ8:®88>89~8).XXŽŠªÞ8þ8ž8(¾8>8Ž8~8›¹.yK¾™Ú.8;¾XŠ^8*¾88>88Ž8îk{~XZ^8;¾8*¾88>88ŽXˆ~8(®i»þ8Ži˜.8îXÎjÚ.8).h©8Ž8î8ž8"rÀ¢v6†ævVÆörç6÷W&6UÆ–&6²æ—FVÓ"s¢~iÈX‰Þ8î8+þ88>89~8~z+®Zéþ8¾XhÞyIþ8).™h¾Zx¾8~8”õ28î88~8+>8;Î888;ÎXXŽŠªÞ8þ‹*ˆÛ~8).X‹n™™8ž8(¾8>8Ž8~8™[~8N89î8:¾888*þ8:®88>89~8~8(.ZÙ~[™^888Î˜.8(YXþšÎ8(B6f&’8î8*þ8:ž88>8+~8:^8).™‹.8î8î8ž8"rÀ¢v6†ævVÆöræW‡FW&æÅ6÷W&6U&ævW2çF—FÆRs¢~ZIn˜:ŽX¹^yK¾8).y»Nhê^{zŽ™¸brÀ¢v6†ævVÆöræW‡FW&æÅ6÷W&6U&ævW2æ—FVÓs¢tÖ¶&öî8þZIn˜:ŽX¹^yKµU$Î8Ž™h¾Zx¾8;¾{X.K¨ni˜.™i>8).hÈ~Zé®8~8n8X¹^yK¾XZŽKÙ>8î8*.88>89~8:Þ8;Î88ž8(NKŠÞ™i4ÕN8îi»Ž8ÞX{®8~8®8~8~y»Nhê^{zŽ™¸n8~8Þ8(¾8(Ž8n8¾8®8(®8î8~8þ8"rÀ¢v6†ævVÆörç6VVFæ6S#RçF—FÆRs¢u6VVFæ6R"ã^ûÉ®iÈik4õD89î8:¾888:.8;Î888:¾X¹^yK²rÀ¢v6†ævVÆörç6VVFæ6S#Ræ—FVÓs¢~iÈik4õD8â6VVFæ6R"ãR8þ8iŠX8þ8Ž88Þ8*N88n8*>89n™û>Z;8).YÎiÉþ8~8Y¹î8~iÈ™[s3zy.8î8~yIþh‰8~8Þ8î8ž8"rÀ¢v6†ævVÆörç6VVFæ6S#Ræ—FVÓ"s¢~iÈZJs3ié®8îyK¾X8þ8iÊÎ8îX¹^yK¾8iÊÎ8î™û>Z;8).Xø.xZ~{JiÙ8Ž8~8n{XN8þYŽ8(þ8¾8(ž8(Î8î8ž8"rÀ¢v6†ævVÆörç6VVFæ6S#Ræ—FVÓ2s¢~[.yJŽ8îX¹^yK¾{zŽ™¸n8;¾[»n™[~8:.8;Î88ž8Ž8ÕN8î8þ8þ8*¾8:ž8;Î8+8:Î8;Î88~8*>8;>8+Y	8ÔõnX{®X©¾8¾Zûî[ùÎ8~8î8~8þ8"rÀ¢v6†ævVÆöræÖ–æ–Ö„ƒ2çF—FÆRs¢tÖ–æ”Ö‚ƒ2X¹^yK¾8:.88~8:²rÀ¢v6†ævVÆöræÖ–æ–Ö„ƒ2æ—FVÓs¢tÖ–æ”Ö‚ƒ>8)$Ö¶&öî8¾‹ûÞXª8~888n8*Þ8+ž88Ž8yK¾X8þ889î8:¾888:.8;Î888:¾Xø.xZ~8¾8(ž88Þ8*N88n8*>89c$¾X¹^yK¾8).y»Nhê^yIþh‰8~8Þ8(¾8(Ž8n8¾8®8(®8î8~8þ8"rÀ¢v6†ævVÆöræÖ–æ–Ö„ƒ2æ—FVÓ"s¢sN8	Ã^zy.8nzŠîšî8î8*.8+ž89®8*þ88ŽjùN888Þ8*N88n8*>89n8+ž88n8:Î8*®™û>Z;8¾Zûî[ùÎ8~8iÈZJsžié®8îXø.xZ~yK¾X8þ8>iÊÎ8îXø.xZ~X¹^yK¾8>8N8îXø.xZ~™û>Z;8).XŠžyJŽ8~8Þ8î8ž8"rÀ¢v6†ævVÆöræÖ–æ–Ö„ƒ2æ—FVÓ2s¢~X¹^yK¾8:.88~8:¾8+¾8:Î8*þ8+þ8;Î8tƒ>8).˜Ž8n8¾8888:>88>88Ž8tvVçN8¾hÈ~Zé®8~8Þ8î8ž8&Ö¶&öâÖ6Æ’6†N8þ8:.88~8:¾8ŽŠz>X8þ[ªn8).Kˆ{y.8¾˜Žh©î8~8™ÙîZûî[ùÎ8î{XN8þYŽ8(þ8¾8).™‹.8î8î8ž8"rÀ¢v6†ævVÆöræ×VÇF–Æ–æwVÄ7"çF—FÆRs¢~ZI®ŠˆŠ©î™û>Z;Š¨ÞŠÙ‚rÀ¢v6†ævVÆöræ×VÇF–Æ–æwVÄ7"æ—FVÓs¢tÖ¶&öâ5.8þiz^iÊÎŠ©î8).Y
+¾8(ŠH~i[8îŠˆŠ©î8).ih~ZÙ~‹[~8>8~8~8Þ8(¾8(Ž8n8¾8®8(®8ZÙ~[™^8…&VÖ÷F–öî8î8+þ8*N89þ8;>8+8).jÚ>z+®8¾YŽ8(þ8¾8(ž8(Î8î8ž8"rÀ¢v6†ævVÆöræVF—F&ÆU&VÖ÷F–öâçF—FÆRs¢u&VÖ÷F–öî{zŽ™¸n8).8*Ž8;>88ž88N8;Î8*Ž8;>88ž8~ZéþxûârÀ¢v6†ævVÆöræVF—F&ÆU&VÖ÷F–öâæ—FVÓs¢~88n8*Þ8+ž88Ž8yK¾X8þ8X¹^yK¾8).{zŽ™¸nXúþˆ;Þ8®8:Î8*N8:N8;Î8Ž8~8nˆz®X¹^jIÎX{®8~888~8+ž8*þ88Ž88>89~8~8(.8:.898*N8:¾8~8(.˜Žh©î8;¾z{¾X¹^8;¾8+^8*N8+®ZHži»N8ÎiŠX8þ8¾jÚ>z+®8¾‹ûÞ[é>8ž8(¾8(Ž8n8¾8®8(®8î8~8þ8"rÀ¢v6†ævVÆöræVF—F&ÆU&VÖ÷F–öâæ—FVÓ"s¢~{zŽ™¸nXh^Zëž8þXhÞŠªÞ8þ‹ëÎ8þ8(NXŠ^8îzºþiÊ¾8~8(.KùÞhÈ8^8(Î8ÕNi»Ž8ÞX{®8~8¾8(.XøÞiŠ8^8(Î8î8ž8.X¹^yK¾8î88Ž8:®8:8þ8+>8;>89Þ8+Ž8+~8:~8;>XZŽKÙ>8~8þ8®8þ8˜Žh©î8~8þ8*þ8:®88>89~888).{zŽ™¸n8~8î8ž8"rÀ¢v6†ævVÆöræVF—F&ÆU&VÖ÷F–öâæ—FVÓ2s¢~88n8*Þ8+ž88Ž8î8889n8:¾8*þ8:®88>8*þ{zŽ™¸n8i[NX‰~8*Î8*N88ž88:Î8*N8:N8;ÎXˆ~8(®i»þ8Ž8ÎZèžZé®8~8˜
+>{i®8~8n{zŽ™¸n8~8n8(.˜Žh©îiê8ÎXh^Zëž8¾jÚ>z+®8¾‹ûÞ[é>8~8î8ž8"rÀ¢v6†ævVÆöræVF—F&ÆTÆ–W'2çF—FÆRs¢~{zŽ™¸nXúþˆ;Þ8®yK¾X8þ8;¾X¹^yK¾8:Î8*N8:N8;ÂrÀ¢v6†ævVÆöræVF—F&ÆTÆ–W'2æ—FVÓs¢tž8ÎyIþh‰8~8þ89>8+Ž8:^8*.8:¾8þ8XÙŽ8®8(¾89^8:ž88>88Ž8®89~8:Î89>8:^8;Î8~8þ8.8(®8î8¾8)>8.88n8*Þ8+ž88Ž8XižyÉþ8X¹^yK¾8*þ8:®88>89~8).yIþh‰[èÎ8(.{zŽ™¸n8~8Þ8î8ž8"rÀ¢v6†ævVÆöræVF—F&ÆTÆ–W'2æ—FVÓ"s¢~8*Þ8:>8;>898+žKˆ®8~8:Î8*N8:N8;Î8).˜Žh©î8~8n88Þ8î8î8îz{¾X¹^8(N8+^8*N8+®ZHži»N8Î8~8Þ8î8ž8.[þ8^8®Š«þi[N8î8þ8(8´vVçN8ŽXZŽKÙ>8îXhÞyIþh‰8).KéÞšÎ8ž8(¾[ø^Šh8þ8.8(®8î8¾8)>8"rÀ¢v6†ævVÆöræVF—F&ÆTÆ–W'2æ—FVÓ2s¢~X¹^yK¾8*þ8:®88>89~8¾88Ž8:®8:898;Î8).‹ûÞXª8~8î8~8þ8.XhÞyIþ88+ž8*þ8:ž89n8™h¾Zx¾8;¾{X.K¨n88þ8;>88ž8:¾8zøNY».XZŽKÙ>8îz{¾X¹^8¾Zûî[ùÎ8~8î8ž8"rÀ¢v6†ævVÆöræVF—F&ÆTÆ–W'2æ—FVÓBs¢~{Šn™[~89Þ8+ž8+þ8;Î8î{zŽ™¸n8(.[ú¾˜ž8¾8®8(®8Kˆ®Kˆ¾8¾8+ž8*þ8:Þ8;Î8:¾8~8n8(.˜Žh©îiê8ÎXh^Zëž8¾‹ûÞ[é>8~8î8ž8"rÀ¢v6†ævVÆörç6Ö'FW$VF—F&ÆTF—66÷fW'’çF—FÆRs¢~{zŽ™¸nXúþˆ;Þ8:Î8*N8:N8;Î8).8(Ž8(®‹:.8þjIÎX{¢rÀ¢v6†ævVÆörç6Ö'FW$VF—F&ÆTF—66÷fW'’æ—FVÓs¢tÖ¶&öî8þZÙ~[™^8(N8Þ8îK¹n8å&V7NhøþyK¾8+>8;>88n8;>88N8).{zŽ™¸nXúþˆ;Þ8®8:Î8*N8:N8;Î8Ž8~8n8(Ž8(®z+®Zéþ8¾jIÎX{®8~8z{¾X¹^8;¾8+^8*N8+®ZHži»N8(.8Þ8î8î8îXŠžyJŽ8~8Þ8î8ž8"rÀ ¢òò’7FGW0¢w7FGW2çF†–æ¶–ærs¢~Xúþˆ;Þh
+~8).hê.8~8n8N8î8’ââârÀ¢w7FGW2ææÇ—¦–æt–ÖvRs¢~yK¾X8þ8).XˆniéKŠÒââârÀ¢w7FGW2ævVæW&F–æuF—2s¢~{zŽ™¸n8*.8*N88~8*.8).yIþh‰KŠÒââârÀ¢w7FGW2æ–ÖvTvVæW&FVBs¢~yK¾X8þ8).yIþh‰8~8î8~8òrÀ¢w7FGW2ç&VæFW&–ætFW6–vâs¢~88~8+n8*N8;>8).8:Î8;>888:®8;>8+KŠÒââârÀ¢w7FGW2æFW6–vä7&VFVBs¢~88~8+n8*N8;>8).KÙÎh‰8~8î8~8òrÀ¢w7FGW2æFW6–väf–ÆVBs¢~88~8+n8*N8;>8îKÙÎh‰8¾ZKiY~8~8î8~8òrÀ¢w7FGW2ævVæW&F–æt×W6–2s¢~™û>j[Þ8).yIþh‰KŠÒââârÀ¢w7FGW2æ×W6–5&VG’s¢~™û>j[Þ8îk©nX)ž8Î8~8Þ8î8~8òrÀ¢w7FGW2æ×W6–57G&VÖ–ærs¢~™û>j[Þ89~8:Î89>8:^8;Î8îk©nX)ž8Î8~8Þ8î8~8òrÀ¢w7FGW2æ×W6–4f–ÆVBs¢~™û>j[Þ8îyIþh‰8¾ZKiY~8~8î8~8òrÀ¢w7FGW2æFF–æt×W6–2s¢~™û>j[Þ8).‹ûÞXªKŠÒââârÀ¢w7FGW2çw&—F–æu67&—Bs¢~X¹^yK¾8+ž8*þ8:®89~88Ž8).KÙÎh‰KŠÒââârÀ¢w7FGW2ç7V&Ö—GF–æuf–FVòs¢~X¹^yK¾8+þ8+ž8*þ8).˜KúKŠÒââârÀ¢w7FGW2çf–FVõ&VæFW&–ærs¢~X¹^yK¾8).8:Î8;>888:®8;>8+KŠÒrÀ¢w7FGW2çf–FVõ&VæFW&–ætVÆÆ—6—2s¢~X¹^yK¾8).8:Î8;>888:®8;>8+KŠÒââârÀ¢w7FGW2çf–FVõ&VæFW&–ætf7Bs¢~X¹^yK¾8).š¹Ž˜	þ8:Î8;>888:®8;>8+KŠÒââârÀ¢w7FGW2ç&VÖ÷F–öäW‡÷'E&VæFW&–ærs¢tÕN8).i»Ž8ÞX{®8~KŠÒââârÀ¢w7FGW2çf–FVôFöæRs¢~X¹^yK¾8).yIþh‰8~8î8~8òrÀ¢w7FGW2çf–FVôf–ÆVBs¢~X¹^yK¾8îyIþh‰8¾ZKiY~8~8î8~8òrÀ¢w7FGW2ç67&—DFöæRs¢~8+ž8*þ8:®89~88Ž8îk©nX)ž8Î8~8Þ8î8~8òrÀ¢w7FGW2ç67&—Df–ÆVBs¢~8+ž8*þ8:®89~88Ž8îyIþh‰8¾ZKiY~8~8î8~8òrÀ¢w7FGW2ç67&—Df–ÆVE&WG'’s¢~8+ž8*þ8:®89~88Ž8îyIþh‰8¾ZKiY~8~8î8~8þ8.8(.8nKˆ[ªn8®Ššn8~8þ88^8BrÀ¢w7FGW2æ7&VF–æu7F÷'’s¢~X¹^yK¾8+ž88Ž8;Î8:®8;Î8).KÙÎh‰KŠÒââârÀ¢w7FGW2çf–FVõG&ç66öF–ærs¢‡W&6VçC¢çVÖ&W"’ÓâX¹^yK¾8).ZHžhù¾KŠÒG·W&6VçGÒVÀ¢w7FGW2çWÆöF–æuf–FVòs¢~X¹^yK¾8).8*.88>89~8:Þ8;Î88žKŠÒââârÀ¢w7FGW2çf–FVõWÆöDf–ÆVBs¢†ÖW76vS¢7G&–ær’ÓâX¹^yK¾8î8*.88>89~8:Þ8;Î88ž8¾ZKiY~8~8î8~8þûÉ¢G¶ÖW76vWÖÀ ¢òòF—2& ¢wF—2æ6öçF–çVTVF—F–ærs¢~z+®Zé¢rÀ¢wF—2æÖ÷&Rs¢~8(.8>8ŽŠh¾8(²rÀ¢wF—2ç&VÆöBs¢~{zŽ™¸n8*.8*N88~8*.8).XhÞŠªÞ8þ‹ëÎ8òrÀ ¢òòvVçB6†@¢v6†Bæ7W'&VçD–ÖvRs¢~xûîYÊŽ8îyK¾X8þûÈŽ{zŽ™¸nXX>ûÈ’rÀ¢v6†Bç&VfW&Væ6T–ÖvRs¢~Xø.xZ~yK¾X8òrÀ¢v6†Bç&ö×D6&Bs¢tææò&ææ.8¾˜Kú8~8þ89~8:Þ8;>89~88‚rÀ¢v6†BæW‡æBs¢~[^™h²)kÂrÀ¢v6†Bæ6öÆÆ6Rs¢~h©Ž8(®8þ8þ8()k"rÀ¢v6†Bæ–çWD–ÖvW2s¢~XZ^X©¾yK¾X8òrÀ¢v6†Bæ–ÖvTÆ&VÂs¢~yK¾X8òrÀ¢v6†BçÆ6V†öÆFW"s¢~8ž8î8(Ž8n8¾{zŽ™¸n8~8î8ž8¾ûÉòrÀ¢v6†Bçf–Wt–ä6†Bs¢~888:>88>88Ž8~Šh¾8(²(irrÀ¢v6†BæVF—D–ÖvRs¢~yK¾X8þ8).{zŽ™¸brÀ ¢òòf–FVò&W7VÇB6&@¢wf–FVòçF—FÆRs¢†ã¢çVÖ&W"’ÓâX¹^yK²G¶çÖÀ¢wf–FVòç6÷W&6UF—FÆRs¢†ã¢çVÖ&W"’Óâ{JiÙG¶çÖÀ¢wf–FVòç6÷W&6UWÆöFVBs¢~8*.88>89~8:Þ8;Î88žkˆŽ8òrÀ¢wf–FVòææõf–FV÷2s¢~X¹^yK¾8þ8î88.8(®8î8¾8)2rÀ¢wf–FVòææWuf–FVòs¢~ik8~8NX¹^yK²rÀ¢wf–FVòæ6ö×ÆWFVBs¢~ZèÎK¨brÀ¢wf–FVòç&VæFW&–ærs¢~8:Î8;>888:®8;>8+KŠÒrÀ¢wf–FVòæf–ÆVBs¢~ZKiYrrÀ¢wf–FVòæ&æFöæVBs¢~KŠÞjÚ.kˆŽ8òrÀ¢wf–FVòæ&æFöâs¢~KŠÞjÚ"rÀ¢wf–FVòæ6öæf—&Ô&æFöâs¢~KŠÞjÚ.8ž8(²rÀ¢wf–FVòæ6æ6VÂs¢~8*Þ8:>8;>8+¾8:²rÀ¢wf–FVòç&WG'’s¢~XhÞŠšnŠÂrÀ¢wf–FVòæ–çfÆ–E&×4†–çBs¢~Xø.xZ~X¹^yK¾8îŠz>X8þ[ªn8Îš¹Ž8ž8î8(¾ûÈŽiÈZJsƒûÈž8¾8™[~8ž8î8(¾ûÈŽiÈZJs^zy.ûÈžXúþˆ;Þh
+~8Î8.8(®8î8ž8.[þ8^8NX¹^yK¾8).XhÞ8*.88>89~8:Þ8;Î88ž8~8n8þ88^8N8"rÀ¢wf–FVòçFöôÆöærs¢~X¹^yK¾8Î™[~8ž8î8î8žûÈ‡¶GW&F–öçÞzy.ûÈž8.iÈZJw¶Ö‡Þzy.8~8ž8"rÀ¢wf–FVòæFWF–Âs¢~Š›>{KrÀ¢wf–FVòæ6÷VçBs¢†ã¢çVÖ&W"’ÓâX¹^yK¾8;²G¶çÞK»fÀ¢wf–FVòç6÷W&6T6÷VçBs¢†ã¢çVÖ&W"’Óâ{JiÙ8;²G¶çÞK»fÀ¢wf–FVòæg&ÖTVF—Bs¢~8>8î89^8:Î8;Î8:8¾8(ž{zŽ™¸brÀ¢wf–FVòæg&ÖTVF—D†–çBs¢‡F–ÖS¢7G&–ær’ÓâxûîYÊ‚G·F–ÖWÖÀ¢wf–FVòæg&ÖT6GW&VBs¢‡F–ÖS¢7G&–ær’ÓâG·F–ÖWÞ8î89^8:Î8;Î8:8).Xˆ~8(®X{®8~8î8~8þ8.z+®Š¨Þ8~8n8ZHži»NXh^Zëž8).iYž8Ž8n8þ88^8N8&À¢wf–FVòæg&ÖT6GW&VE6†÷'Bs¢~89^8:Î8;Î8:8).KùÞZÙŽ8~8î8~8òrÀ¢wf–FVòæg&ÖTVF—DG&gE&ö×Bs¢†ÖVF––æFWƒ¢çVÖ&W"ÂF–ÖS¢7G&–ær’ÓâG¶ÖVF––æFW‡ÒG·F–ÖWÒ8>8î89^8:Î8;Î8:8¾8(žX¹^yK¾8).{zŽ™¸n8~8n8À ¢òòæ–ÖFR6†VW@¢væ–ÖFRçF—FÆRs¢~X¹^yK¾8).yIþh‰rÀ¢væ–ÖFRæFWF–ÅF—FÆRs¢~X¹^yK¾8îŠ›>{KrÀ¢væ–ÖFRæWFõ67&—Bs¢~)Ê‚8+ž8*þ8:®89~88Ž8).ˆz®X¹^yIþh‰rÀ¢væ–ÖFRævVæW&FUf–FVòs¢	øêÂX¹^yK¾8).yIþh‰rÀ¢væ–ÖFRç7V&Ö—GF–ærs¢~˜KúKŠÒââârÀ¢væ–ÖFRæ•w&—F–ærs¢~)Ê‚ž8Î8+ž8*þ8:®89~88Ž8).KÙÎh‰KŠÒââârÀ¢væ–ÖFRæ•w&—F–æu6†÷'Bs¢tž8ÎKÙÎh‰KŠÒââârÀ¢væ–ÖFRæ•&WG'’s¢tž8~XhÞŠšnŠÂrÀ¢væ–ÖFRæ•&Ww&—FRs¢tž8~i»Ž8Þy»N8’rÀ¢væ–ÖFRæ”æÇ—¦–ærs¢tž8ÎXižyÉþ8).XˆniéKŠÒââârÀ¢væ–ÖFRç7F÷'•Æ6V†öÆFW"s¢~X¹^yK¾8î8+ž88Ž8;Î8:®8;Î8).ŠªÎiˆî8~8n8þ88^8BââârÀ¢væ–ÖFRç7F÷'”Æ&VÂs¢~)Ê‚X¹^yK¾8+ž88Ž8;Î8:®8;ÂrÀ¢væ–ÖFRç67&—DÆ&VÂs®5÷«h‘éì¶»§q«^wŽ
++ŽžŠë¢ª7’â·ŽŸŽgŽŽ3žŠë¢ª7Ž
+KžÚkŽGŽ
+/Ž7Ž
+KŽ
+ÿŽŽ_Ž_Ž›Ž?ŽƒŽWŽŽ¢Îó–—Ž»–ú§–Ž¿’â7¢šŽŸŽgŽœ°(€€‰¥±±¥¹œ¹ÑÉ¥…°¹½¹Ñ¥¹Õ•½¹™¥Éµ…Ñ¥½¸œè€ŸžŠë¢ª7Ž
+KžÚkŽGŽ
+,œ°(€€…‘µ¥¸¹¥½ÍQÉ¥…±É•‘¥ÑÌœè€¥=OŽ#Ž§Ž
+“Ž
+‹Ž¯Ž
+¿Ž³Ž
+ãŽŽ œ°(€€…‘µ¥¸¹¥½ÍQÉ¥…±É•‘¥ÑÍ•ÍŒœè€ÁÁ±—Ž0Ïš^—¦ZOŽ¹	…Í¥Ž#Ž§Ž
+“Ž
+‹Ž¯Ž
+KžŠë¢ª7–ú3ŽÇ–n{Ž»Žÿ’îc’â8œ°(€€…‘µ¥¸¹Í…Ù”œè€Ÿ’þw–¶`œ°(€€…‘µ¥¸¹•‘¥Ðœè€ŸžÞ£¦nœ°((€€¼¼M­¥±±Ì(€€Í­¥±±Ì¹Ñ¥Ñ±”œè€M­¥±³Ž{ŽóŽ
+ÇŽŽ œ°(€€Í­¥±±Ì¹ÍÕ‰Ñ¥Ñ±”œè€Ÿ’â[žV3’â·Ž»Ž
+¿Ž«Ž
+£Ž
+“Ž
+ÿŽóŽ¯Ž
+#Ž
+/ŽŽgŽC’öÿŽ#Ž
+/¦¶SšÎTœ°(€€Í­¥±±Ì¹…Ñ•½Éå±°œè€ŸŽgŽçŽ˜œ°(€€Í­¥±±Ì¹…Ñ•½É¥•Ìœè€M­¥±³Ž
+¯ŽŽ
+ÓŽ«Žðœ°(€€Í­¥±±Ì¹‰…¬œè€Ÿš"ïŽ
+,œ°(€€Í­¥±±Ì¹ÕÁ±½…‘¥¹œœè€ŸŽ
+‹ŽŽ_Ž·ŽóŽ'’â´¸¸¸œ°(€€Í­¥±±Ì¹…‘œè€œ¬M­¥±°œ°(€€Í­¥±±Ì¹±½…‘¥¹œœè€Ÿ¢ª·Žÿ¢úóŽÿ’â´¸¸¸œ°(€€Í­¥±±Ì¹µäœè€ŸŽ{Ž
+‘M­¥±±Ìœ°(€€Í­¥±±Ì¹‰Õ¥±Ñ%¸œè€ŸžÖŽÿ¢úóŽýM­¥±±Ìœ°(€€Í­¥±±Ì¹•µÁÑäœè€M­¥±³Ž¿ŽûŽƒŽŽ
++ŽûŽoŽ
+Lœ°(€€Í­¥±±Ì¹Í¡…É”œè€M­¥±³Ž
+K–Çšr$œ°(€€Í­¥±±Ì¹Í¡…É••ÍÉ¥ÁÑ¥½¸œè€ŸŽOŽ»Ž«ŽÏŽ
+¿Ž
+K–>/ŽƒŽ‡Ž¯¦Ž
+/Ž£Žžnãš&/Ž»Ž
+‹Ž
+¯Ž
+›ŽÏŽ#Ž­M­¥±³Ž
+K¢þ÷–*ƒŽŸŽ7ŽûŽgŽœ°(€€Í­¥±±Ì¹½Á¥•œè€ŸŽ
+ÏŽSŽóŽ_ŽûŽ_Ž¾òœ°(€€Í­¥±±Ì¹½Áäœè€ŸŽ
+ÏŽSŽðœ°(€€Í­¥±±Ì¹‘½¹”œè€Ÿ¦Z'ŽcŽ
+,œ°(€€Í­¥±±Ì¹Í¡…É•ÉÉ½Èœè€Ÿ–Çšr'Ž«ŽÏŽ
+¿Ž
+K’ösš"CŽŸŽ7ŽûŽoŽ
+OŽŸŽ_Ž|œ°(€€Í­¥±±Ì¹™…¥±•œè€Ÿ–’ÇšV_Ž_ŽûŽ_Ž|œ°((€€¼¼AÉ½™¥±”(€€ÁÉ½™¥±”¹Ñ¥Ñ±”œè€ŸŽ
+‹Ž
+¯Ž
+›ŽÏŽ œ°(€€ÁÉ½™¥±”¹‰…¬œè€Ÿš"ïŽ
+,œ°(€€ÁÉ½™¥±”¹•‘¥ÑÙ…Ñ…Èœè€Ÿ–’'šnÐœ°(€€ÁÉ½™¥±”¹‘¥ÍÁ±…å9…µ”œè€Ÿ¢†£ž’ë–B4œ°(€€ÁÉ½™¥±”¹•¹Ñ•É9…µ”œè€Ÿ–B7–&7Ž
+K–—–*lœ°(€€ÁÉ½™¥±”¹Í…Ù•œè€Ÿ’þw–¶cŽ_ŽûŽ_Ž|œ°(€€ÁÉ½™¥±”¹•µ…¥°œè€ŸŽ‡ŽóŽ¯Ž
+‹Ž'Ž³Ž
+äœ°(€€ÁÉ½™¥±”¹¡…¹•A…ÍÍÝ½Éœè€ŸŽGŽ
+çŽ¿ŽóŽ'Ž
+K–’'šnÐœ°(€€ÁÉ½™¥±”¹ÕÉÉ•¹ÑA…ÍÍÝ½Éœè€Ÿž>û–r£Ž»ŽGŽ
+çŽ¿ŽóŽ$œ°(€€ÁÉ½™¥±”¹¹•ÝA…ÍÍÝ½Éœè€ŸšZÃŽ_ŽŽGŽ
+çŽ¿ŽóŽ$œ°(€€ÁÉ½™¥±”¹½¹™¥Éµ9•ÝA…ÍÍÝ½Éœè€ŸšZÃŽ_ŽŽGŽ
+çŽ¿ŽóŽ'Ž
+KžŠë¢ª4œ°(€€ÁÉ½™¥±”¹Á…ÍÍÝ½É‘5¥Íµ…Ñ œè€ŸŽGŽ
+çŽ¿ŽóŽ'Ž3’â¢ÓŽ_ŽûŽoŽ
+Lœ°(€€ÁÉ½™¥±”¹Á…ÍÍÝ½É‘Q½½M¡½ÉÐœè€ŸŽGŽ
+çŽ¿ŽóŽ'Ž¼ÛšZ–¶_’î—’â+ŽŸ–—–*oŽ_Ž›Ž?ŽƒŽWŽœ°(€€ÁÉ½™¥±”¹¥¹½ÉÉ•ÑA…ÍÍÝ½Éœè€Ÿž>û–r£Ž»ŽGŽ
+çŽ¿ŽóŽ'Ž3š¶Ž_Ž?ŽŽ
++ŽûŽoŽ
+Lœ°(€€ÁÉ½™¥±”¹Á…ÍÍÝ½É‘UÁ‘…Ñ•œè€ŸŽGŽ
+çŽ¿ŽóŽ'Ž
+KšnÓšZÃŽ_ŽûŽ_Ž|œ°(€€ÁÉ½™¥±”¹ÕÁ‘…Ñ•A…ÍÍÝ½Éœè€ŸŽGŽ
+çŽ¿ŽóŽ'Ž
+KšnÓšZÀœ°(€€ÁÉ½™¥±”¹Í¥¹=ÕÐœè€ŸŽ·Ž
+ÃŽ
+‹Ž
+›Ž œ°((€€¼¼•¹ÐÉÕ¹Ñ¥µ”(€€…•¹Ð¹ÍÑ…ÑÕÌ¹ÍÑ…ÉÑ¥¹œœè€Ÿ¦Z/–ž/Ž_Ž›ŽŽûŽd¸¸¸œ°(€€…•¹Ð¹ÍÑ…ÑÕÌ¹Á±…¹¹¥¹œœè€Ÿ¢¢#žRï’â´¸¸¸œ°(€€…•¹Ð¹ÍÑ…ÑÕÌ¹•¹•É…Ñ¥¹½‘”œè€ŸŽ
+ÏŽóŽ'Ž
+KžRš"C’â´¸¸¸œ°(€€…•¹Ð¹ÍÑ…ÑÕÌ¹…¹…±åé¥¹%µ…”œè€¡‘•Ñ…¥°èÍÑÉ¥¹œ¤€ôø‘•Ñ…¥°€üƒžRï–?Ž
+K–"šzC’â·¾òh‘í‘•Ñ…¥±õ€€è€ŸžRï–?Ž
+K–"šzC’â´œ°(€€…•¹Ð¹ÍÑ…ÑÕÌ¹…¹…±åé¥¹Y¥‘•¼œè€¡‘•Ñ…¥°èÍÑÉ¥¹œ¤€ôø‘•Ñ…¥°€üƒ–.WžRïŽ
+K–"šzC’â·¾òh‘í‘•Ñ…¥±õ€€è€Ÿ–.WžRïŽ
+K–"šzC’â´œ°(€€…•¹Ð¹ÍÑ…ÑÕÌ¹ÑÉ…¹ÍÉ¥‰¥¹Õ‘¥¼œè€Ÿ¦~Ï–ŽÃŽ
+KšZ–¶_¢ÖßŽOŽ_’â´¸¸¸œ°(€€…•¹Ð¹ÍÑ…ÑÕÌ¹¡½½Í¥¹Y½¥”œè€Ÿ¦~Ï–ŽÃŽ
+K¦ãš*{’â´¸¸¸œ°(€€…•¹Ð¹ÍÑ…ÑÕÌ¹•¹•É…Ñ¥¹Y½¥•½Ù•Èœè€ŸŽ+Ž³ŽóŽ
+ßŽŸŽÏŽ
+KžRš"C’â´¸¸¸œ°(€€…•¹Ð¹ÍÑ…ÑÕÌ¹•¹•É…Ñ¥¹Õ‘¥¼œè€Ÿ¦~Ï–ŽÃŽ
+KžRš"C’â´¸¸¸œ°(€€…•¹Ð¹ÍÑ…ÑÕÌ¹…ÁÑÕÉ¥¹É…µ”œè€¡¡¥¹ÐèÍÑÉ¥¹œ¤€ôø€‘í¡¥¹Ñ÷Ž
+KŽ
+·ŽŽ_ŽŽ’â´¸¸¹€°(€€…•¹Ð¹ÍÑ…ÑÕÌ¹•¹•É…Ñ¥¹%µ…”œè€ŸžRï–?Ž
+KžRš"C’â´¸¸¸œ°(€€…•¹Ð¹ÍÑ…ÑÕÌ¹‰É½ÝÍ¥¹]½É­ÍÁ…”œè€ŸŽ¿ŽóŽ
+¿Ž
+çŽkŽóŽ
+çŽ
+KžŠë¢ª7’â´¸¸¸œ°(€€…•¹Ð¹ÍÑ…ÑÕÌ¹É•…‘¥¹¥±”œè€¡¹…µ”èÍÑÉ¥¹œ¤€ôø€‘í¹…µ•÷Ž
+K¢ª·Žÿ¢úóŽÿ’â´¸¸¹€°(€€…•¹Ð¹ÍÑ…ÑÕÌ¹Í…Ù¥¹œœè€Ÿ’þw–¶c’â´¸¸¸œ°(€€…•¹Ð¹ÍÑ…ÑÕÌ¹‘•±•Ñ¥¹œœè€Ÿ–&+¦f“’â´¸¸¸œ°(€€…•¹Ð¹ÍÑ…ÑÕÌ¹ÉÕ¹¹¥¹½‘”œè€¡‘•ÍÉ¥ÁÑ¥½¸èÍÑÉ¥¹œ¤€ôøƒ–º¢†3’â·¾òh‘í‘•ÍÉ¥ÁÑ¥½¸ñð€ŸŽ
+ÏŽóŽ$ô¸¸¹€°(€€…•¹Ð¹ÍÑ…ÑÕÌ¹É½Ñ…Ñ¥¹…µ•É„œè€ŸŽ
+¯Ž‡Ž§Ž
+K–n{¢î‹’â´¸¸¸œ°(€€…•¹Ð¹ÍÑ…ÑÕÌ¹Ñ¡¥¹­¥¹œœè€•¹ÓŽ3¢Ž#Ž›ŽŽûŽd¸¸¸œ°(€€…•¹Ð¹ÍÑ…ÑÕÌ¹¥µ…••¹•É…Ñ¥½¹…¥±•œè€ŸžRï–?Ž»žRš"CŽ¯–’ÇšV_Ž_ŽûŽ_Ž|œ°(€€…•¹Ð¹ÍÑ…ÑÕÌ¹É•ÍÕµ¥¹œœè€Ÿ–&7Ž»–›žBŽ3–sš¶‹Ž_ŽûŽ_Ž|ƒŠPƒ’þw–¶cŽ_Ž’â/šnãŽ7Ž/Ž
+'–7¦Z/Ž_Ž›ŽŽûŽd¸¸¸œ°(€€…•¹Ð¹•ÉÉ½È¹É•½Ù•É…‰±”œè€ŸŽ‹ŽŽ¯Ž3–’'šnÓŽ
+K–º3’êŽgŽ
+/–&7Ž¯–sš¶‹Ž_ŽûŽ_ŽŽ’â/šnãŽ7Ž¿’þw–¶cŽWŽ
+3Ž›ŽŽûŽgŽŽ3žÚkŽGŽ
+/Ž7Ž£¦’þ‡ŽgŽ
+/Ž£–7¦Z/ŽŸŽ7ŽûŽgŽœ°(€€…•¹Ð¹•ÉÉ½È¹™…Ñ…°œè€ŸŽ‹ŽŽ¯Ž3Ž«Ž
+¿Ž
+£Ž
+çŽ#Ž
+K–º3’êŽgŽ
+/–&7Ž¯–sš¶‹Ž_Ž–7¦Z/–>¿¢÷Ž«’â/šnãŽ7Ž
+’þw–¶cŽWŽ
+3ŽûŽoŽ
+OŽŸŽ_ŽŽŽ
+Ž’â–ê›Ž+¢¦›Ž_Ž?ŽƒŽWŽŽœ°(€€…•¹Ð¹•ÉÉ½È¹½¹¹•Ñ¥½¹¹‘•œè€•¹ÓŽ»š:—žÚkŽ3–º3’ê–&7Ž¯žÖ’êŽ_ŽûŽ_ŽŽ’þw–¶cšâ#ŽÿŽ»’ösš–·Ž¿’þwš2ŽWŽ
+3Ž›ŽŽûŽgŽŽ3žÚkŽGŽ
+/Ž7Ž£¦’þ‡ŽgŽ
+/Ž£–7¦Z/ŽŸŽ7ŽûŽgŽœ°(€€…•¹Ð¹•ÉÉ½È¹ÉÕ¹Ñ¥µ•É…™ÑM…Ù•œè€•¹ÓŽ»–º¢†3žJÃ–ŠŽ3–sš¶‹Ž_ŽûŽ_ŽŽ3Ž’â/šnãŽ7Ž¿’þw–¶cŽWŽ
+3Ž›ŽŽûŽgŽŽ3žÚkŽGŽ
+/Ž7Ž£¦’þ‡ŽgŽ
+/Ž£–7¦Z/ŽŸŽ7ŽûŽgŽœ°(€€…•¹Ð¹•ÉÉ½È¹ÉÕ¹Ñ¥µ•9½É…™Ðœè€•¹ÓŽ»–º¢†3žJÃ–ŠŽ3–sš¶‹Ž_Ž–7¦Z/–>¿¢÷Ž«’â/šnãŽ7Ž
+’þw–¶cŽWŽ
+3ŽûŽoŽ
+OŽŸŽ_ŽŽŽ
+Ž’â–ê›Ž+¢¦›Ž_Ž?ŽƒŽWŽŽœ°(€€…•¹Ð¹µ½¬¹Ñ¥ÁÍQ•…Í•Èœè€ŸŽŽ/ŽŽ—Ž
+‹Ž»’â[žV3Ž¯Ž_Ž›ŽÿŽûŽoŽ
+OŽ/¾òŽOŽ»Ž
+ßŽóŽÏŽ¯ŽÓŽŽŽ
++ŽŸŽgŽœ°(€€…•¹Ð¹µ½¬¹Ñ¥ÁI•…Ñ¥½¸œè€ŸŽŽ’îW’â+Ž3Ž
++ŽŸŽg¾òžÞ£¦nŽ3¢«žÛŽ¯Ž«ŽcŽ
+OŽŸŽŽûŽgŽœ°(€€…•¹Ð¹µ½¬¹¹…µ•AÉ½©•Ðœè€ŸŽ
+ÏŽóŽKŽóŽ»–6#–ú0œ°(€€…•¹Ð¹µ½¬¹ÁÉ•Ù¥•ÝÍI•…‘äœè€ŸŽ_Ž³ŽOŽ—ŽóŽ»šê[–
+gŽ3ŽŸŽ7ŽûŽ_ŽŽ¦+ŽÏ–þŽ»ŽŽ
+/š†#Ž
+ŽsŽË¢š/Ž›Ž?ŽƒŽWŽŽœ°(€€…•¹Ð¹…Õ‘¥¼¹•¹•É…Ñ•œè€Ÿ¦~Ï–ŽÃŽ
+KžRš"CŽ_ŽûŽ_Ž|œ°(€€…•¹Ð¹…Õ‘¥¼¹•¹•É…Ñ•‘9…µ•œè€¡Ñ¥Ñ±”èÍÑÉ¥¹œ¤€ôøƒ¦~Ï–ŽÃŽ
+KžRš"CŽ_ŽûŽ_Ž¾òh‘íÑ¥Ñ±•õ€°(€€…ÉÑ¥™…Ð¹¹•áÑMÑ•ÁÌœè€Ÿš²‡Ž»Ž
+çŽŽŽ\œ°(€€…ÉÑ¥™…Ð¹½¹Ñ¥¹Õ”œè€ŸžÚkŽGŽ
+,œ°((€€¼¼MÑÕ‘¥¼IÕ¸(€€ÍÑÕ‘¥¼¹ÍÑ…”¹‰É¥•˜œè€Ÿ–"Û’ösšš¢šœ°(€€ÍÑÕ‘¥¼¹ÍÑ…”¹‰É¥•˜¹Í¡½ÉÐœè€Ÿšš¢šœ°(€€ÍÑÕ‘¥¼¹ÍÑ…”¹ÁÉ½Á½Í…°œè€Ÿ’òžRïš>Cš† œ°(€€ÍÑÕ‘¥¼¹ÍÑ…”¹ÁÉ½Á½Í…°¹Í¡½ÉÐœè€Ÿš>Cš† œ°(€€ÍÑÕ‘¥¼¹ÍÑ…”¹ÍÉ¥ÁÐœè€ŸŽ+Ž³ŽóŽ
+ßŽŸŽÏ–>Ãšr°œ°(€€ÍÑÕ‘¥¼¹ÍÑ…”¹ÍÉ¥ÁÐ¹Í¡½ÉÐœè€Ÿ–>Ãšr°œ°(€€ÍÑÕ‘¥¼¹ÍÑ…”¹ÍÑ½Éå‰½…Éœè€ŸŽ
+çŽ#ŽóŽ«ŽóŽsŽóŽ$œ°(€€ÍÑÕ‘¥¼¹ÍÑ…”¹ÍÑ½Éå‰½…É¹Í¡½ÉÐœè€ŸžÖ×Ž
+ÏŽÏŽœ°(€€ÍÑÕ‘¥¼¹ÍÑ…”¹…ÍÍ•ÑÌœè€ŸžÒƒšvC’â¢šœœ°(€€ÍÑÕ‘¥¼¹ÍÑ…”¹…ÍÍ•ÑÌ¹Í¡½ÉÐœè€ŸžÒƒšv@œ°(€€ÍÑÕ‘¥¼¹ÍÑ…”¹½µÁ½Í¥Ñ¥½¸œè€ŸŽ
+ÏŽÏŽwŽ
+ãŽ
+ßŽŸŽÌœ°(€€ÍÑÕ‘¥¼¹ÍÑ…”¹½µÁ½Í¥Ñ¥½¸¹Í¡½ÉÐœè€Ÿ–B#š"@œ°(€€ÍÑÕ‘¥¼¹ÍÑ…”¹É•Ù¥•Üœè€ŸšržÖŽ³ŽOŽ—Žðœ°(€€ÍÑÕ‘¥¼¹ÍÑ…”¹É•Ù¥•Ü¹Í¡½ÉÐœè€ŸŽ³ŽOŽ—Žðœ°(€€ÍÑÕ‘¥¼¹ÍÑ…”¹‘•±¥Ù•Éäœè€ŸžÒ7–Nœ°(€€ÍÑÕ‘¥¼¹ÍÑ…”¹‘•±¥Ù•Éä¹Í¡½ÉÐœè€ŸžÒ7–Nœ°(€€ÍÑÕ‘¥¼¹ÍÑ…ÑÕÌ¹Á•¹‘¥¹œœè€Ÿšr«¦Z/–ž,œ°(€€ÍÑÕ‘¥¼¹ÍÑ…ÑÕÌ¹¥¹AÉ½É•ÍÌœè€Ÿ¦Ë¢†3’â´œ°(€€ÍÑÕ‘¥¼¹ÍÑ…ÑÕÌ¹…Ý…¥Ñ¥¹ÁÁÉ½Ù…°œè€Ÿš&ÿ¢ª7–úŽ„œ°(€€ÍÑÕ‘¥¼¹ÍÑ…ÑÕÌ¹½µÁ±•Ñ•œè€Ÿ–º3’êœ°(€€ÍÑÕ‘¥¼¹ÍÑ…ÑÕÌ¹¥¹Ù…±¥‘…Ñ•œè€ŸšnÓšZÃŽ3–þ¢šœ°(€€ÍÑÕ‘¥¼¹ÍÑ…ÑÕÌ¹™…¥±•œè€Ÿ–’ÇšV\œ°(€€ÍÑÕ‘¥¼¹ÁÉ½É•ÍÌ¹…É¥„œè€MÑÕ‘¥¼IÕ¸ƒŽ»¦Ëš6\œ°(€€ÍÑÕ‘¥¼¹ÁÉ½É•ÍÌ¹ÕÉÉ•¹Ðœè€¡ÍÑ…”èÍÑÉ¥¹œ¤€ôøƒ¦Ë¢†3’â·¾òh‘íÍÑ…•õ€°(€€ÍÑÕ‘¥¼¹ÁÉ½É•ÍÌ¹½µÁ±•Ñ•œè€¡Ñ¥Ñ±”èÍÑÉ¥¹œ¤€ôøƒ–º3’ê¾òh‘íÑ¥Ñ±•õ€°(€€ÍÑÕ‘¥¼¹ÁÉ½É•ÍÌ¹‘¥Íµ¥ÍÌœè€MÑÕ‘¥¼IÕ¸ƒŽ»¦Ëš6_Ž
+K¦v{¢†£ž’èœ°(€€ÍÑÕ‘¥¼¹Õ¹¥Ð¹Í•½¹‘Ìœè€¡Ù…±Õ”èÍÑÉ¥¹œ¤€ôø€‘íÙ…±Õ•÷žžI€°(€€ÍÑÕ‘¥¼¹Õ¹¥Ð¹Í•½¹‘I…¹”œè€¡ÍÑ…ÉÐèÍÑÉ¥¹œ°•¹èÍÑÉ¥¹œ¤€ôø€‘íÍÑ…ÉÑ÷¾öx‘í•¹‘÷žžI€°(€€ÍÑÕ‘¥¼¹Õ¹¥Ð¹Í•Ñ¥½¹Ìœè€¡½Õ¹Ðè¹Õµ‰•È¤€ôø€‘í½Õ¹Ñ÷Ž
+ïŽ
+¿Ž
+ßŽŸŽÍ€°(€€ÍÑÕ‘¥¼¹Õ¹¥Ð¹Í•¹•Ìœè€¡½Õ¹Ðè¹Õµ‰•È¤€ôø€‘í½Õ¹Ñ÷Ž
+ßŽóŽÍ€°(€€ÍÑÕ‘¥¼¹Õ¹¥Ð¹…ÍÍ•ÑÌœè€¡½Õ¹Ðè¹Õµ‰•È¤€ôø€‘í½Õ¹Ñ÷žÒƒšvA€°(€€ÍÑÕ‘¥¼¹ÁÉ•Ù¥•Ü¹…±±ÍÍ•ÑÍI•…‘äœè€ŸŽgŽçŽ›šê[–
+g–º3’êœ°(€€ÍÑÕ‘¥¼¹ÁÉ•Ù¥•Ü¹•‘¥Ñ…‰±”œè€ŸžÞ£¦n–>¿¢ôœ°(€€ÍÑÕ‘¥¼¹ÁÉ•Ù¥•Ü¹™±…ÑÑ•¹•œè€ŸžÖÇ–B#šâ#Žüœ°(€€ÍÑÕ‘¥¼¹ÁÉ•Ù¥•Ü¹Í½ÕÉ•AÉ•Í•ÉÙ•œè€ŸžÞ£¦n–>¿¢÷Ž«Ž
+÷ŽóŽ
+çŽ
+K’þwš2œ°(€€ÍÑÕ‘¥¼¹‘•Ñ…¥°¹±½…‘¥¹œœè€ŸŽ
+çŽŽóŽ
+ãŽ»––ºçŽ
+K¢ª·Žÿ¢úóŽ
+OŽŸŽŽûŽgŠ˜œ°(€€ÍÑÕ‘¥¼¹‘•Ñ…¥°¹½¹MÉ••¹Q•áÐœè€ŸžRï¦v‹ŽŽ
+·Ž
+çŽ œ°(€€ÍÑÕ‘¥¼¹‘•Ñ…¥°¹±…‰•±M•Á…É…Ñ½Èœè€Ÿ¾òhœ°(€€ÍÑÕ‘¥¼¹‘•Ñ…¥°¹½‰©•Ñ¥Ù”œè€Ÿžn»žjœ°(€€ÍÑÕ‘¥¼¹‘•Ñ…¥°¹…Õ‘¥•¹”œè€Ÿ–¾û¢Æ„œ°(€€ÍÑÕ‘¥¼¹‘•Ñ…¥°¹½É•5•ÍÍ…”œè€ŸŽ
+ÏŽ
+‹Ž‡ŽŽ
+ïŽóŽ
+àœ°(€€ÍÑÕ‘¥¼¹‘•Ñ…¥°¹ÍÁ•¥™¥…Ñ¥½¸œè€Ÿ’îWšž`œ°(€€ÍÑÕ‘¥¼¹‘•Ñ…¥°¹Í•±•Ñ•‘¥É•Ñ¥½¸œè€Ÿ¦ãš*{Ž_ŽšZç–BGšœœ°(€€ÍÑÕ‘¥¼¹‘•Ñ…¥°¹½Á•¹¥¹!½½¬œè€Ÿ–K¦‚·Ž»ŽWŽŽ
+¼œ°(€€ÍÑÕ‘¥¼¹‘•Ñ…¥°¹Ù¥ÍÕ…±¥É•Ñ¥½¸œè€ŸŽOŽ
+ãŽ—Ž
+‹Ž¯šZç¦tœ°(€€ÍÑÕ‘¥¼¹‘•Ñ…¥°¹µ½Ñ¥½¹1…¹Õ…”œè€ŸŽ‹ŽóŽ
+ßŽŸŽÏ¢†£ž>øœ°(€€ÍÑÕ‘¥¼¹‘•Ñ…¥°¹É…Ñ¥½¹…±”œè€Ÿ¦ãš*{žBžRÄœ°(€€ÍÑÕ‘¥¼¹‘•Ñ…¥°¹…ÉÑ¥É•Ñ¥½¸œè€ŸŽ
+‹ŽóŽ#ŽŽ
+Ž³Ž
+¿Ž
+ßŽŸŽÌœ°(€€ÍÑÕ‘¥¼¹‘•Ñ…¥°¹±…å½ÕÑ½¹ÍÑÉ…¥¹ÑÌœè€ŸŽ³Ž
+“Ž
+‹Ž
+›Ž#–"ÛžÒœ°(€€ÍÑÕ‘¥¼¹‘•Ñ…¥°¹ÉÕ¹Ñ¥µ”œè€ŸŽ§ŽÏŽ
+ÿŽ
+“Ž€œ°(€€ÍÑÕ‘¥¼¹‘•Ñ…¥°¹™É…µ•MÁ•¥™¥…Ñ¥½¸œè€Ÿšbƒ–?’îWšž`œ°(€€ÍÑÕ‘¥¼¹‘•Ñ…¥°¹‘•Í¥¹M½ÕÉ”œè€ŸŽŽ
+ÛŽ
+“ŽÏŽ
+÷ŽóŽ
+äœ°(€€ÍÑÕ‘¥¼¹‘•Ñ…¥°¹•‘¥Ñ…‰±”œè€ŸžÞ£¦n–>¿¢ôœ°(€€ÍÑÕ‘¥¼¹‘•Ñ…¥°¹å•Ìœè€ŸŽ¿Žœ°(€€ÍÑÕ‘¥¼¹‘•Ñ…¥°¹¹¼œè€ŸŽŽŽ œ°(€€ÍÑÕ‘¥¼¹‘•Ñ…¥°¹Á…ÍÌœè€Ÿ–B#š‚ðœ°(€€ÍÑÕ‘¥¼¹‘•Ñ…¥°¹É•Ù¥Í”œè€Ÿ’þ»š¶Ž3–þ¢šœ°(€€ÍÑÕ‘¥¼¹‘•Ñ…¥°¹™…¥°œè€Ÿ’â7–B#š‚ðœ°(€€ÍÑÕ‘¥¼¹‘•Ñ…¥°¹½¹±ÕÍ¥½¸œè€Ÿ–"“–ºhœ°(€€ÍÑÕ‘¥¼¹‘•Ñ…¥°¹Ñ•¡¹¥…±¡•¬œè€Ÿš*¢†OŽŽ
+ŸŽŽ
+¼œ°(€€ÍÑÕ‘¥¼¹‘•Ñ…¥°¹¡…ÍÕ‘¥¼œè€Ÿ¦~Ï–ŽÃŽŽ
+(œ°(€€ÍÑÕ‘¥¼¹‘•Ñ…¥°¹¹½Õ‘¥¼œè€Ÿ¦~Ï–ŽÃŽ«Ž\œ°(€€ÍÑÕ‘¥¼¹‘•Ñ…¥°¹Ù¥ÍÕ…±¡•¬œè€Ÿšbƒ–?ŽŽ
+ŸŽŽ
+¼œ°(€€ÍÑÕ‘¥¼¹‘•Ñ…¥°¹™É…µ•ÍM…µÁ±•œè€¡½Õ¹ÐèÍÑÉ¥¹œ¤€ôø€‘í½Õ¹Ñ÷ŽWŽ³ŽóŽƒŽ
+KžŠë¢ª5€°(€€ÍÑÕ‘¥¼¹‘•Ñ…¥°¹‰±…­É…µ•Í½Õ¹œè€Ÿ¦îKŽWŽ³ŽóŽƒŽŽ
+(œ°(€€ÍÑÕ‘¥¼¹‘•Ñ…¥°¹¹½	±…­É…µ•Ìœè€Ÿ¦îKŽWŽ³ŽóŽƒŽ«Ž\œ°(€€ÍÑÕ‘¥¼¹‘•Ñ…¥°¹½Ù•É±…Á½Õ¹œè€Ÿ¢šžÒƒŽ»¦7Ž«Ž
++ŽŽ
+(œ°(€€ÍÑÕ‘¥¼¹‘•Ñ…¥°¹¹½=Ù•É±…Àœè€Ÿ¢šžÒƒŽ»¦7Ž«Ž
++Ž«Ž\œ°(€€ÍÑÕ‘¥¼¹‘•Ñ…¥°¹…Õ‘¥½¡•¬œè€Ÿ¦~Ï–ŽÃŽŽ
+ŸŽŽ
+¼œ°(€€ÍÑÕ‘¥¼¹‘•Ñ…¥°¹±½Õ‘¹•ÍÍ9½Ñ5•…ÍÕÉ•œè€ŸŽ§Ž
+›Ž'Ž7Ž
+çšr«šâ³–ºhœ°(€€ÍÑÕ‘¥¼¹‘•Ñ…¥°¹…Õ‘¥½½¹™¥Éµ•œè€Ÿ¦~Ï–ŽÃŽ
+KžŠë¢ª7šâ#Žüœ°(€€ÍÑÕ‘¥¼¹‘•Ñ…¥°¹™¥¹…±Y¥‘•¼œè€Ÿ–º3š"C–.WžRìœ°(€€ÍÑÕ‘¥¼¹‘•Ñ…¥°¹•‘¥Ñ…‰±•M½ÕÉ”œè€ŸžÞ£¦n–>¿¢÷Ž«Ž
+÷ŽóŽ
+äœ°(€€ÍÑÕ‘¥¼¹‘•Ñ…¥°¹¡•­ÍÕ´œè€ŸŽŽ
+ŸŽŽ
+¿Ž
+×Ž€œ°(€€ÍÑÕ‘¥¼¹‘•Ñ…¥°¹‘•±¥Ù•É•‘Ðœè€ŸžÒ7–Nš^—šfœ°(€€ÍÑÕ‘¥¼¹ÍÑ…”¹•¹•É…Ñ¥¹œœè€ŸŽOŽ»Ž
+çŽŽóŽ
+ãŽ»––ºçŽ
+KžRš"CŽ_Ž›ŽŽûŽgŠ˜œ°(€€ÍÑÕ‘¥¼¹Í½ÕÉ”¹½Á•¸œè€Ÿ–ŽWŽ
+‡Ž
+“Ž¯Ž
+K¦Z/Ž<œ°(€€ÍÑÕ‘¥¼¹Í½ÕÉ”¹½Á•¹É¥„œè€¡ÍÑ…”èÍÑÉ¥¹œ¤€ôø€‘íÍÑ…•÷Ž»–ŽWŽ
+‡Ž
+“Ž¯Ž
+K¦Z/Ž=€°((€€¼¼5¥ÍŒ(€€µ¥ÍŒ¹Ñ½½±UÍ”œè€ŸŽŽóŽ¯’öÿžR œ°(€€µ¥ÍŒ¹•ÉÉ½Èœè€ŸŽ
+£Ž§Žðœ°(€€µ¥ÍŒ¹É•ÑÉäœè€Ÿ–7¢¦›¢†0œ°(€€µ¥ÍŒ¹Í…Ù•MÕ•ÍÌœè€Ÿ’þw–¶cŽ_ŽûŽ_Ž|œ°(€€µ¥ÍŒ¹Í¡½½Ñ¥¹Q¥µ”œè€ŸšJ»–öÇš^—šfœ°(€€µ¥ÍŒ¹ÕÍ¥¹5½‘•°œè€ŸŽ‹ŽŽ¬œ°((€€¼¼5½‘•°Í•±•Ñ½È(€€µ½‘•°¹Ñ¥Ñ±”œè€ŸŽ‹ŽŽ¬œ°(€€µ½‘•°¹…ÕÑ¼œè€Ÿ¢«–.Tœ°(€€µ½‘•°¹Ñ…ˆ¹¥µ…”œè€ŸžRï–<œ°(€€µ½‘•°¹Ñ…ˆ¹Ù¥‘•¼œè€Ÿ–.WžRìœ°(€€µ½‘•°¹Ñ…ˆ¹…•¹Ðœè€•¹Ðœ°(€€µ½‘•°¹•µ¥¹¤¹¹…µ”œè€9…¹¼	…¹…¹„€Èœ°(€€µ½‘•°¹•µ¥¹¤¹‘•ÍŒœè€Ÿ¦®c¦ŽŸšÆ;žR£žjŽŽïŽ£Ž
+OŽ§Ž»žÞ£¦nŽ¯Ž+ŽgŽgŽ
+ŽŸŽgŽœ°(€€µ½‘•°¹•µ¥¹¥1¥Ñ”¹¹…µ”œè€9…¹¼	…¹…¹„€È1¥Ñ”œ°(€€µ½‘•°¹•µ¥¹¥1¥Ñ”¹‘•ÍŒœè€Ÿ¦®c¦Ž«’â/šnãŽ7Ž¯¦§Ž_Ž’ö;Ž
+ÏŽ
+çŽ#Ž‹ŽŽ¯ŽŸŽgŽœ°(€€µ½‘•°¹ÅÝ•¸¹¹…µ”œè€EÝ•¸‘¥Ðœ°(€€µ½‘•°¹ÅÝ•¸¹‘•ÍŒœè€Ÿ¦†SŽ»–7ž>ûšŸŽ¯–«Ž
+3Ž9M_Ž
+ÏŽÏŽŽÏŽŽ¯Ž
+–¾û–þsŽ_ŽûŽgŽœ°(€€µ½‘•°¹½Á•¹…¤¹¹…µ”œè€AP%µ…”€Èœ°(€€µ½‘•°¹½Á•¹…¤¹‘•ÍŒœè€ŸšZ–¶_Ž»š>?žRïŽ£Ž
+¿Ž«Ž
+£Ž
+“ŽŽ
+Ž[žRš"CŽ¯–«Ž
+3Ž›ŽŽûŽgŽœ°(€€µ½‘•°¹­±¥¹œ¹¹…µ”œè€-±¥¹œ<Ìœ°(€€µ½‘•°¹­±¥¹œ¹‘•ÍŒœè€Ÿ¦®c¦Ž¨Ñ/¦®c–N¢Î«–ë–*oŽŽ
+×Ž
+›ŽÏŽ'Ž
+–¢R×Ž_Ž›ŽŽûŽgŽœ°(€€µ½‘•°¹Í••‘…¹•…ÍÐ¹¹…µ”œè€M••…¹”€È¸À…ÍÐœ°(€€µ½‘•°¹Í••‘…¹•…ÍÐ¹‘•ÍŒœè€Ÿ¦–ê›Ž£Ž
+ÏŽ
+çŽ#Ž»ŽCŽ§ŽÏŽ
+çŽ¯–«Ž
+3ŽŽšf»šº×’öÿŽŽ»–.WžRïŽ‹ŽŽ¯ŽŸŽgŽœ°(€€µ½‘•°¹Í••‘…¹•5¥¹¤¹¹…µ”œè€M••…¹”€È¸À5¥¹¤œ°(€€µ½‘•°¹Í••‘…¹•5¥¹¤¹‘•ÍŒœè€Ÿ’â/šnãŽ7Ž
+¢’šVÃŽ
+×Ž
+“Ž
+ëŽ»ŽŽ
+çŽ#Ž¯¦§Ž_Ž’ö;Ž
+ÏŽ
+çŽ#Ž‹ŽŽ¯ŽŸŽgŽœ°(€€µ½‘•°¹Í••‘…¹”¹¹…µ”œè€M••…¹”€È¸Àœ°(€€µ½‘•°¹Í••‘…¹”¹‘•ÍŒœè€ŸšržÖ–ë–*o–BGŽGŽ»¦®cžRï¢Î«Ž‹ŽŽ¯ŽŸŽgŽŽ
+ÏŽ
+çŽ#Ž¿¦®cŽ
+ŽŸŽgŽœ°(€€µ½‘•°¹Í••‘…¹”ÈÔ¹¹…µ”œè€M••‘…¹”€È¸Ôœ°(€€µ½‘•°¹Í••‘…¹”ÈÔ¹‘•ÍŒœè€ŸšršZÀM=QŽšr¦VÜÌÃžžKŽŸŽžRï–?Žï–.WžRïŽï¦~Ï–ŽÃ–>žŸŽžÞ£¦nŽ–îÛ¦VßŽ¯–¾û–þsŽ_ŽûŽgŽœ°(€€µ½‘•°¹Í••‘…¹”ÈÔ¹‰…‘”œè€ŸšršZÀM=Qƒ
+Ü€ÌÃžžHœ°(€€µ½‘•°¹É½¬¹¹…µ”œè€É½¬%µ…¥¹”Y¥‘•¼œ°(€€µ½‘•°¹É½¬¹‘•ÍŒœè€œÄÀàÁÃŽïžRï–?–>žœßšzkŽûŽŸŽ»¦®c¦Ž7Ž
+“ŽŽ
+Ž[¦~Ï–ŽÃžRš"CŽ£Ž–.WžRïžÞ£¦nŽï–îÛ¦VßŽ¯–¾û–þsŽšršZÃŽ¸ÛžžKŽŽ
+çŽ#Ž¼Ä×ŽpÌÓžžKŽœ°(€€µ½‘•°¹½½±•=µ¹¤¹¹…µ”œè€•µ¥¹¤=µ¹¤€Ä¸Äœ°(€€µ½‘•°¹½½±•=µ¹¤¹‘•ÍŒœè€œÌØÁÃ’â/šnãŽ7Žš¢gšêXÜÈÁÃŽÑ/Ž
+‹ŽŽ_Ž
+çŽ
+ÇŽóŽ¯ŽŽ7Ž
+“ŽŽ
+Ž[¦~Ï–ŽÃŽ¯–¾û–þsŽ_Ž¦®c¦–.WžRïžRš"CŽïžÞ£¦nŽœ°(€€µ½‘•°¹µ¥¹¥µ…á Ì¹¹…µ”œè€5¥¹¥5…à Ìœ°(€€µ½‘•°¹µ¥¹¥µ…á Ì¹‘•ÍŒœè€œÄ×žžKŽÜØáCŽûŽŽ¼É/–ë–*oŽ¢’šVÃŽ»–>žŸžÒƒšvCŽ¯–¾û–þsŽgŽ
+/Ž
+«ŽóŽ_ŽÏŽ«Ž{Ž¯ŽŽ‹ŽóŽŽ¯–.WžRïŽ‹ŽŽ¯ŽŸŽgŽœ°(€€µ½‘•°¹ÁÐÔÙQ•ÉÉ„¹¹…µ”œè€AP´Ô¸ØQ•ÉÉ„œ°(€€µ½‘•°¹ÁÐÔÙQ•ÉÉ„¹‘•ÍŒœè€Ÿž~—¢÷Ž¦–ê›ŽŽ
+ÏŽ
+çŽ#Ž»ŽCŽ§ŽÏŽ
+çŽ¯–«Ž
+3Žš:£––£ŽŽWŽ
+§Ž¯Ž#ŽŸŽgŽœ°(€€µ½‘•°¹ÁÐÔÙM½°¹¹…µ”œè€AP´Ô¸ØM½°œ°(€€µ½‘•°¹ÁÐÔÙM½°¹‘•ÍŒœè€Ÿ¢’¦nGŽ«Ž
+£ŽóŽ
+ãŽ
+ŸŽÏŽ#’ösš–·Ž£–&×’ösŽ¯šrŽ
+–òßŽŽ‹ŽŽ¯ŽŸŽgŽœ°(€€µ½‘•°¹ÁÐÔÙ1Õ¹„¹¹…µ”œè€AP´Ô¸Ø1Õ¹„œ°(€€µ½‘•°¹ÁÐÔÙ1Õ¹„¹‘•ÍŒœè€Ÿ¦®c¦ŽŸ’ö;Ž
+ÏŽ
+çŽ#Žš^—–âãžjŽ«–’Ÿ¦?–›žBŽ¯¦§Ž_Ž›ŽŽûŽgŽœ°(€€µ½‘•°¹É½¬ÐÔ¹¹…µ”œè€É½¬€Ð¸Ôœ°(€€µ½‘•°¹É½¬ÐÔ¹‘•ÍŒœè€Ÿž~—¢¶c’ösš–·Ž
+¢’šVÃŽ
+çŽŽŽ_Ž»ŽŽóŽ¯šN7’ösŽ¯žÒƒš^§Ž?–¾û–þsŽ_ŽûŽgŽœ°(€€µ½‘•°¹‘••ÁÍ••­XÑAÉ¼¹¹…µ”œè€••ÁM••¬XÐAÉ¼œ°(€€µ½‘•°¹‘••ÁÍ••­XÑAÉ¼¹‘•ÍŒœè€Ÿ¦VßŽŽ
+ÏŽÏŽŽ
+·Ž
+çŽ#Ž£¢’¦nGŽ«š:£¢®[Ž¯–òßŽ¦®cŽ
+ÏŽ
+çŽ#ŽGŽWŽ
+§ŽóŽ{ŽÏŽ
+çŽ‹ŽŽ¯ŽŸŽgŽœ°(€€µ½‘•°¹É•Í½±ÕÑ¥½¸œè€Ÿ¢ž–?–ê˜œ°(€€µ½‘•°¹É•Í½±ÕÑ¥½¸¹…ÕÑ¼œè€Ÿ¢«–.Tœ°(€€µ½‘•°¹…ÍÁ•ÑI…Ñ¥¼œè€Ÿžâ›š¢«š¾Pœ°(€€µ½‘•°¹…ÍÁ•ÑI…Ñ¥¼¹…ÕÑ¼œè€Ÿ¢«–.W¢ªÿšVÐœ°(€€µ½‘•°¹…ÕÑ½Q¥ÁÌœè€Q¥ÁÏŽ
+K¢«–.WŽ_Ž³ŽOŽ—Žðœ°(€€µ½‘•°¹…ÕÑ½Q¥ÁÌ¹‘•ÍŒœè€ŸžÞ£¦nŽ
+‹Ž
+“ŽŽ
+‹Ž»Ž_Ž³ŽOŽ—ŽóžRï–?Ž
+K¢«–.WžRš"@œ°(€€…‘µ¥¸¹½‘•á±±½Ý±¥ÍÐ¹Ñ…ˆœè€½‘•ãŽ_Ž§ŽÌœ°(€€…‘µ¥¸¹½‘•á±±½Ý±¥ÍÐ¹Ñ¥Ñ±”œè€ŸŽŽ
+çŽ#Ž
+‹Ž
+¯Ž
+›ŽÏŽ ±±½Ý±¥ÍÐœ°(€€…‘µ¥¸¹½‘•á±±½Ý±¥ÍÐ¹‘•ÍŒœè€Ÿ¢¢Ç–>¿ŽWŽ
+3ŽŽ
+‹Ž
+¯Ž
+›ŽÏŽ#Ž¿–/’êëŽ¹½‘•ãŽ_Ž§ŽÏŽ
+K–«–#Ž_Ž–"§žR£ŽŸŽ7Ž«Ž–‚Ó–B#Ž»ŽýA'Žã–"Ž
++šnÿŽ#ŽûŽgŽ–’'šnÓŽ½Y1…ˆI•±…çŽ¯Ž
+–B3šrŽWŽ
+3ŽûŽgŽœ°(€€…‘µ¥¸¹½‘•á±±½Ý±¥ÍÐ¹•µ…¥±A±…•¡½±‘•Èœè€Ÿžfï¦2Ëšâ#ŽÿŽ¹5…­…É½»Ž‡ŽóŽ¯Ž
+K–—–*lœ°(€€…‘µ¥¸¹½‘•á±±½Ý±¥ÍÐ¹…‘œè€ŸŽ
+‹Ž
+¯Ž
+›ŽÏŽ#Ž
+K¢þ÷–*€œ°(€€…‘µ¥¸¹½‘•á±±½Ý±¥ÍÐ¹Í…Ù¥¹œœè€Ÿ–B3šr’â·Š˜œ°(€€…‘µ¥¸¹½‘•á±±½Ý±¥ÍÐ¹…‘‘•œè€½‘•ãŽ_Ž§ŽÏŽ»¢¢Ç–>¿Ž«Ž
+çŽ#Ž¯¢þ÷–*ƒŽ_ŽûŽ_Ž|œ°(€€…‘µ¥¸¹½‘•á±±½Ý±¥ÍÐ¹É•µ½Ù•œè€½‘•ãŽ_Ž§ŽÏŽ»¢¢Ç–>¿Ž«Ž
+çŽ#Ž/Ž
+'–&+¦f“Ž_ŽûŽ_Ž|œ°(€€…‘µ¥¸¹½‘•á±±½Ý±¥ÍÐ¹ÕÁ‘…Ñ•…¥±•œè€ŸšnÓšZÃŽŸŽ7ŽûŽoŽ
+OŽŸŽ_ŽŽŽ
+Ž’â–ê›Ž+¢¦›Ž_Ž?ŽƒŽWŽŽœ°(€€…‘µ¥¸¹½‘•á±±½Ý±¥ÍÐ¹½Ý¹•Èœè€=Ý¹•Èœ°(€€…‘µ¥¸¹½‘•á±±½Ý±¥ÍÐ¹…±±½Ý•œè€Ÿ¢¢Ç–>¿šâ#Žüœ°(€€…‘µ¥¸¹½‘•á±±½Ý±¥ÍÐ¹É•µ½Ù”œè€Ÿ–&+¦fœ°(€€…‘µ¥¸¹½‘•á±±½Ý±¥ÍÐ¹Õ¹­¹½Ý¹µ…¥°œè€Ÿ’â7šb;Ž«Ž‡ŽóŽ¬œ°(€€¡…¹•±½œ¹½½±•=µ¹¤ÄÄ¹Ñ¥Ñ±”œè€•µ¥¹¤=µ¹¤€Ä¸ÄƒŽ
+K–³¦Z,œ°(€€¡…¹•±½œ¹½½±•=µ¹¤ÄÄ¹¥Ñ•´Äœè€•µ¥¹¤=µ¹¤€Ä¸ÄƒŽŸŽ7Ž
+“ŽŽ
+Ž[¦~Ï–ŽÃ’îcŽ7–.WžRïŽ
+K¦®c¦žRš"CŽÌØÁÃŽ'Ž§ŽWŽ#Žš¢gšêXÜÈÁÃŽŽ
+‹ŽŽ_Ž
+çŽ
+ÇŽóŽ¬ÄÀàÁÃŽìÑ/Ž¯–¾û–þsŽ_ŽûŽ_ŽŽœ°(€€¡…¹•±½œ¹½½±•=µ¹¤ÄÄ¹¥Ñ•´Èœè€¡…ÓŽŸŽ
+ÿŽ
+“ŽƒŽ§Ž
+“ŽÏ–.WžRïŽ
+HÇšr³–>žŸŽgŽ
+/Ž£Ž––.WžRïŽ
+K’þwŽŽžÒ¿ž¦7Ž
+çŽ+ŽŽ_Ž
+ßŽŸŽŽ#Ž£Ž_Ž›šr–’œÄÃžžK–#ŽûŽŸ–îÛ¦VßŽŸŽ7ŽûŽgŽœ°(€€¡…¹•±½œ¹•áÑ•É¹…±%µ…•Ì¹Ñ¥Ñ±”œè€M•¹—žRï–?Ž
+K–.WžRïŽŸžnÓš:—–"§žR œ°(€€¡…¹•±½œ¹•áÑ•É¹…±%µ…•Ì¹¥Ñ•´Äœè€M•¹—Ž/Ž
+'¢ª·Žÿ¢úóŽ
+OŽƒžRï–?Ž
+KžRï–?Ž£Ž_Ž›–›žBŽ_ŽAÉ•Ù¥•ßŽ¡5@ÓšnãŽ7–ëŽ_ŽŸ–.WžRïŽ£¢ª“¢ª7Ž_Ž«ŽŽ
+#ŽŽ¯Ž«Ž
++ŽûŽ_ŽŽœ°(€€µ½‘•°¹…•¹ÑÕÑ½•ÍŒœè€Ÿš^‹–ºkŽ¸AP´Ô¸ØQ•ÉÉ„ƒŽ
+Kš^‹–¶cŽ¸éÕÉ”A$ƒŽŸ’öÿžR£Ž_ŽûŽdœ°(€€µ½‘•°¹…•¹ÑÕÑ½½‘•á•ÍŒœè€Ÿš^‹–ºkŽ¸AP´Ô¸ØQ•ÉÉ„ƒŽ
+K–/’êëŽ¸½‘•àƒŽ_Ž§ŽÏŽŸ–«–#žjŽ¯’öÿžR£Ž_ŽûŽdœ°(€€µ½‘•°¹…•¹Ñ1…‰•°œè€•¹ÓŽ‹ŽŽ¬œ°(€€µ½‘•°¹±½Í••¹ÑM•±•Ñ½Èœè€•¹ÓŽ‹ŽŽ¯¦ãš*{Ž
+K¦Z'ŽcŽ
+,œ°(€€µ½‘•°¹¡½½Í••¹Ðœè€•¹ÓŽ‹ŽŽ¯Ž
+K¦ãš*xœ°(€€µ½‘•°¹…éÕÉ•Á¥	…‘”œè€éÕÉ”A$œ°(€€µ½‘•°¹…•¹ÑÉ½ÕÀ¹…éÕÉ”œè€éÕÉ”A$œ°(€€µ½‘•°¹…•¹ÑÉ½ÕÀ¹…éÕÉ••ÍŒœè€Ÿš^‹–ºhƒ
+Üƒ–úO¦?¢ªË¦Dœ°(€€µ½‘•°¹…•¹ÑÉ½ÕÀ¹½‘•àœè€Ÿ–/’êé½‘•ãŽ_Ž§ŽÌœ°(€€µ½‘•°¹…•¹ÑÉ½ÕÀ¹½Ñ¡•Èœè€ŸŽwŽ»’î[Ž¹A$œ°(€€µ½‘•°¹…•¹ÑÉ½ÕÀ¹½Ñ¡•É•ÍŒœè€ŸŽwŽ»’î[Ž»–"§žR£–>¿¢÷Ž«Ž‹ŽŽ¬œ°(€€µ½‘•°¹½‘•áMÕ‰ÍÉ¥ÁÑ¥½¸¹¹…µ”œè€AP´Ô¸ØQ•ÉÉ„ƒ
+Ü½‘•ãŽ_Ž§ŽÌœ°(€€µ½‘•°¹½‘•áMÕ‰ÍÉ¥ÁÑ¥½¸¹ÍÕ™™¥àœè€½‘•ãŽ_Ž§ŽÌœ°(€€µ½‘•°¹½‘•áMÕ‰ÍÉ¥ÁÑ¥½¸¹‰…‘”œè€Ÿ–/’êëŽ_Ž§ŽÌœ°(€€µ½‘•°¹½‘•áMÕ‰ÍÉ¥ÁÑ¥½¸¹‘•ÍŒœè€Ÿ–/’êëŽ¹¡…ÑAP½½‘•ãŽ_Ž§ŽÏŽ
+K’öÿžR£Ž_Ž–"§žR£’â7–>¿šfŽ¿š^‹–¶cŽ¹A'ŽWŽ
+§ŽóŽ¯ŽCŽŽ
+¿Ž
+K’öÿžR£Ž_ŽûŽgŽœ°(€€µ½‘•°¹½‘•áMÕ‰ÍÉ¥ÁÑ¥½¸¹¡•­¥¹œœè€ŸŽ_Ž§ŽÏŽ»’öÿžR£¦?Ž
+KžŠë¢ª7’â·Š˜œ°(€€µ½‘•°¹½‘•áMÕ‰ÍÉ¥ÁÑ¥½¸¹É•µ…¥¹¥¹œœè€¡Á•É•¹ÐèÍÑÉ¥¹œ¤€ôøƒ¦Ç¦ZOšz€ƒšº/Ž
+(€‘íÁ•É•¹Ñô•€°(€€µ½‘•°¹½‘•áMÕ‰ÍÉ¥ÁÑ¥½¸¹É•Í•ÑÍÐœè€¡Ñ¥µ”èÍÑÉ¥¹œ¤€ôø€‘íÑ¥µ•ôƒŽ«Ž
+ïŽŽ!€°(€€µ½‘•°¹½‘•áMÕ‰ÍÉ¥ÁÑ¥½¸¹ÕÍ…•U¹…Ù…¥±…‰±”œè€ŸŽ_Ž§ŽÏŽ¿–"§žR£–>¿¢÷ŽŸŽgŽ3Ž’öÿžR£¦?Ž
+K–>[–ú_ŽŸŽ7ŽûŽoŽ
+Lœ°((€€¼¼5…­…É½¸-¥‘Ì(€€­¥‘Ì¹µ•Ñ„¹Ñ¥Ñ±”œè€5…­…É½¸-¥‘Ìœ°(€€­¥‘Ì¹µ•Ñ„¹‘•ÍÉ¥ÁÑ¥½¸œè€Ÿ–¶CŽ§Ž
+Ž»ŽŽ
+Ž»¦~Ï–ŽÃ’â·–þŽ»žÖ×Ž»ŽGŽóŽ#Ž+ŽóŽœ°(€€­¥‘Ì¹Á¥ÑÕÉ”œè€Ÿ–6’ê3Ž»ŽûŽïŽŽ»žÖÔœ°(€€­¥‘Ì¹Í•±•Ñ•‘A¥ÑÕÉ”œè€Ÿ–6’ê3Ž3¦ãŽ
+OŽƒžÖÔœ°(€€­¥‘Ì¹Í…µÁ±•A¥ÑÕÉ”œè€Ÿšr#Ž»–ê·Ž»Ž
+¿Ž³Ž£ŽÏŽ·Ž
+ÇŽŽ œ°(€€­¥‘Ì¹¡½½Í•A¥ÑÕÉ”œè€ŸžÖ×Ž
+K¦ãŽØœ°(€€­¥‘Ì¹ÍÑ…ÉÑQ…±­¥¹œœè€Ÿ–Â?ŽWŽ«¦¶SšÎW’öÿŽŽ£¢¦ÇŽdœ°(€€­¥‘Ì¹ÍÑ½ÁQ…±­¥¹œœè€Ÿ¦~Ï–ŽÃŽ»’òk¢¦ÇŽ
+Kš¶‹Ž
+Ž
+,œ°(€€­¥‘Ì¹Á¡…Í”¹¥‘±”œè€ŸŽ{Ž
+“Ž
+¿Ž
+KŽ
+ÿŽŽ_Ž_Ž›¢¦ÇŽdœ°(€€­¥‘Ì¹Á¡…Í”¹½¹¹•Ñ¥¹œœè€Ÿ–Â?ŽWŽ«¦¶SšÎW’öÿŽŽ3šv—Ž›ŽŽûŽdœ°(€€­¥‘Ì¹Á¡…Í”¹±¥ÍÑ•¹¥¹œœè€Ÿ–Â?ŽWŽ«¦¶SšÎW’öÿŽŽ3¢{ŽŽ›ŽŽûŽdœ°(€€­¥‘Ì¹Á¡…Í”¹ÍÁ•…­¥¹œœè€Ÿ–Â?ŽWŽ«¦¶SšÎW’öÿŽŽ3¢¦ÇŽ_Ž›ŽŽûŽdœ°(€€­¥‘Ì¹Á¡…Í”¹•ÉÉ½Èœè€Ÿ¦~Ï–ŽÃŽ¯š:—žÚkŽŸŽ7ŽûŽoŽ
+OŽŸŽ_Ž|œ°(€€­¥‘Ì¹Á…É•¹Ð¹¡½±œè€Ÿ¦Vßš*óŽ_Ž_Ž›’þw¢¶ß¢¢¢·–ºkŽ
+K¦Z/Ž<œ°(€€­¥‘Ì¹Á…É•¹Ð¹Ñ¥Ñ±”œè€Ÿ–6’ê3ž& ƒ
+Üƒ’þw¢¶ß¢¢¢·–ºhœ°(€€­¥‘Ì¹Á…É•¹Ð¹ÍÕ‰Ñ¥Ñ±”œè€ŸŽ«Ž
+‹Ž¯Ž
+ÿŽ
+“Žƒ¦~Ï–ŽÃŽŽ_Ž§Ž
+“ŽCŽ
+ßŽóŽš²‡šº×¦j;ŽãŽ»–òWŽ7žÚgŽ8œ°(€€­¥‘Ì¹Á…É•¹Ð¹±½Í”œè€Ÿ’þw¢¶ß¢¢¢·–ºkŽ
+K¦Z'ŽcŽ
+,œ°(€€­¥‘Ì¹Á…É•¹Ð¹½¹¹•Ñ¥½¸œè€ŸŽ«Ž
+‹Ž¯Ž
+ÿŽ
+“Žƒš:—žÚhœ°(€€­¥‘Ì¹Á…É•¹Ð¹Ù½¥”œè€Ÿ–Â?ŽWŽ«¦¶SšÎW’öÿŽŽ»–ŽÀœ°(€€­¥‘Ì¹Á…É•¹Ð¹±…ÍÑ!•…Éœè€Ÿšr¢þG¢{ŽŽ––ºäœ°(€€­¥‘Ì¹Á…É•¹Ð¹±…ÍÑI•Á±äœè€Ÿšr¢þGŽ»¢þS’ê,œ°(€€­¥‘Ì¹Á…É•¹Ð¹•µÁÑäœè€ŸŽûŽƒŽŽ
++ŽûŽoŽ
+Lœ°(€€­¥‘Ì¹Á…É•¹Ð¹•ÉÉ½Èœè€Ÿš:—žÚkŽ
+£Ž§Žðœ°(€€­¥‘Ì¹Á…É•¹Ð¹½Á•É…Ñ½È¹¥‘±”œè€=Á•É…Ñ½ÈƒŽ¿š:—žÚkšâ#ŽÿŽŸŽgŽšb;žŠëŽ«–"Û’ös’úw¦‚óŽƒŽGŽ
+Kš^‹–¶cŽ¸5…­…É½¸•¹ÐƒŽ¯–òWŽ7žÚgŽ;ŽûŽgŽœ°(€€­¥‘Ì¹Á…É•¹Ð¹½Á•É…Ñ½È¹ÅÕ•Õ•œè€ŸžRï–?Ž«Ž
+¿Ž
+£Ž
+çŽ#Ž
+K–>_ŽG’îcŽGŽûŽ_ŽŽ	1¥Ù”ƒŽ»’òk¢¦ÇŽ¿žÚkŽGŽ
+'Ž
+3ŽûŽgŽœ°(€€­¥‘Ì¹Á…É•¹Ð¹½Á•É…Ñ½È¹Ý½É­¥¹œœè€5…­…É½¸•¹ÐƒŽ3ŽCŽŽ
+¿Ž
+ÃŽ§Ž
+›ŽÏŽ'ŽŸžRï–?Ž
+K–"Û’ösŽ_Ž›ŽŽûŽgŽœ°(€€­¥‘Ì¹Á…É•¹Ð¹½Á•É…Ñ½È¹‘½¹”œè€ŸšZÃŽ_ŽžRï–?Ž3–º3š"CŽ_ŽŽ‡Ž
+“ŽÏžRï¦v‹Ž¯¢†£ž’ëŽWŽ
+3ŽûŽ_ŽŽœ°(€€­¥‘Ì¹Á…É•¹Ð¹½Á•É…Ñ½È¹•ÉÉ½Èœè€ŸžRï–?Ž
+K–º3š"CŽŸŽ7ŽûŽoŽ
+OŽŸŽ_ŽŽ’þ‡¦‚óŽŸŽ7Ž
+/–’Ÿ’êëŽ3Ž
+‹Ž
+¯Ž
+›ŽÏŽ#ŽûŽŽ¿Ž
+×ŽóŽOŽ
+çž*Ûš/Ž
+KžŠë¢ª7Ž_Ž›Ž?ŽƒŽWŽŽœ°)ôÍ…Ñ¥Í™¥•ÌQÉ…¹Í±…Ñ¥½¹¥Ñ¥½¹…Éäì()•áÁ½ÉÐ‘•™…Õ±Ð©„ì

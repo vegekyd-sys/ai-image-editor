@@ -1,714 +1,5 @@
-const en = {
-  // Auth
-  'auth.email': 'Email',
-  'auth.password': 'Password',
-  'auth.login': 'Sign in',
-  'auth.register': 'Sign up',
-  'auth.goLogin': 'Sign in',
-  'auth.hasAccount': 'Already have an account?',
-  'auth.noAccount': "Don't have an account?",
-  'auth.networkError': 'Network error, please try again',
-  'auth.err.invalidCredentials': 'Invalid email or password',
-  'auth.err.emailNotConfirmed': 'Please verify your email first',
-  'auth.err.alreadyRegistered': 'Email already registered, please sign in',
-  'auth.err.passwordTooShort': 'Password must be at least 6 characters',
-  'auth.err.invalidEmail': 'Invalid email format',
-  'auth.err.rateLimited': 'Too many attempts, please try again later',
-  'auth.err.wait60s': 'Please wait 60 seconds before trying again',
-  'auth.err.invalidInviteCode': 'Invalid or expired invite code',
-  'auth.err.inviteCodeRequired': 'Invite code is required for new accounts',
-  'auth.inviteCodePlaceholder': 'Enter invite code',
-  'auth.activate': 'Activate',
-  'auth.activated': 'Activated!',
-  'auth.noInviteCode': "Don't have an invite code?",
-  'auth.joinWaitlist': 'Join waitlist',
-  'auth.waitlistSuccess': 'You\'re on the list!',
-  'auth.waitlistSuccessDesc': 'We\'ll send you an invite code soon.',
-  'auth.createAccount': 'Create your account',
-  'auth.back': 'Back',
-  'auth.continueWithGoogle': 'Continue with Google',
-  'auth.continueWithApple': 'Continue with Apple',
-  'auth.orDivider': 'or',
-  'auth.goRegister': 'Sign up',
-  'auth.verifyEmail.title': 'Check your inbox',
-  'auth.verifyEmail.sent': 'We sent a verification link to',
-  'auth.verifyEmail.instruction': 'Click the link in the email to activate your account.',
-  'auth.verifyEmail.resend': 'Resend email',
-  'auth.verifyEmail.resent': 'Email sent!',
-  'auth.verifyEmail.checkSpam': "Don't see it? Check your spam folder.",
-  'auth.continue': 'Continue',
-  'auth.sendingCode': 'Sending code...',
-  'auth.tryFree': 'Try free',
-  'auth.otp.title': 'Enter verification code',
-  'auth.otp.subtitle': 'We sent a 6-digit code to',
-  'auth.otp.verify': 'Verify',
-  'auth.otp.resend': 'Resend code',
-  'auth.otp.resendIn': 'Resend in',
-  'auth.otp.digitLabel': 'OTP digit {index}',
-  'auth.forgotPassword': 'Forgot password?',
-  'auth.resetPassword.title': 'Reset your password',
-  'auth.resetPassword.send': 'Send reset code',
-  'auth.resetPassword.newPassword': 'New password',
-  'auth.resetPassword.confirm': 'Set new password',
-  'auth.resetPassword.success': 'Password updated!',
-
-  // Project management
-  'project.untitled': 'Untitled',
-  'project.rename': 'Rename',
-  'project.delete': 'Delete project',
-  'project.cancel': 'Cancel',
-  'project.save': 'Save',
-
-  // Editor status
-  'editor.current': 'Current',
-  'editor.versions': 'versions',
-  'editor.done': 'Done',
-  'editor.videoReady': 'Video ready â€” tap Share to save',
-  'editor.share': 'Share',
-  'editor.count': (n: number) => `${n}`,
-  'editor.closePanel': 'Close editor',
-  'editor.workspace': 'Makaron editor workspace',
-  'editor.trim.playPreview': 'Play trim preview',
-  'editor.trim.pausePreview': 'Pause trim preview',
-  'editor.trim.start': 'Trim start',
-  'editor.trim.end': 'Trim end',
-  'editor.trim.playhead': 'Trim playhead',
-
-  // Changelog
-  'changelog.heading': 'Updates',
-  'changelog.close': 'Close updates',
-  'changelog.videoTranslation.title': 'Video Translation',
-  'changelog.videoTranslation.item1': 'Translate off-screen narration and non-talking-head videos into English, Japanese, and more with Seed Audio while preserving the original speakerâ€™s voice, tone, and cadence.',
-  'changelog.videoTranslation.item2': 'Visible talking heads are cleaned up first, then translated with Seedance 2.0 Fast and matching mouth movement; long videos can split automatically before translated captions, B-roll, and TikTok delivery.',
-  'changelog.talkingHeadEditing.title': 'Talking-Head Editing',
-  'changelog.talkingHeadEditing.item1': 'Upload a raw talking-head video and Makaron uses ASR to remove dead air, filler, repetition, and broken delivery for a smoother cut.',
-  'changelog.talkingHeadEditing.item2': 'Captions follow the retained voice with real word timing, becoming shorter, emphasized, dynamic, and still editable.',
-  'changelog.talkingHeadEditing.item3': 'Agent can add selective B-roll, infographics, and social packaging, then publish an editable composition and finished MP4.',
-  'changelog.tiktokVideoSkill.title': 'TikTok-Native Video Skill',
-  'changelog.tiktokVideoSkill.item1': 'The new TikTok Skill gives Agent-made vertical videos creator-native hooks, pacing, captions, packaging, and platform-aware placement while keeping every composition visually authored.',
-  'changelog.tiktokVideoSkill.item2': 'Spoken captions now follow the meaning and delivery of the final voiceover, with precise word timing used for synchronization instead of mechanically chopping lines by length.',
-  'changelog.tiktokVideoSkill.item3': 'TikTok videos now mute source audio by default and use the real spoken timing from one finished VO + BGM soundtrack to synchronize visuals, captions, and keyword highlights.',
-  'changelog.sourcePlayback.title': 'Smoother Source Video Playback',
-  'changelog.sourcePlayback.item1': 'Source URL compositions now pause the timeline while buffering and prewarm the next trimmed clip, reducing black frames, stray shots, and cut stutters.',
-  'changelog.sourcePlayback.item2': 'Playback now starts reliably on the first tap while bounded iOS decoder warmup keeps long multi-clip projects from showing captions without video or crashing Safari.',
-  'changelog.externalSourceRanges.title': 'Edit External Video Sources Directly',
-  'changelog.externalSourceRanges.item1': 'Makaron can now edit external video URLs with exact start and end times, without uploading the full video or exporting intermediate MP4 clips.',
-  'changelog.seedance25.title': 'Seedance 2.5: New SOTA Multimodal Video',
-  'changelog.seedance25.item1': 'The new SOTA Seedance 2.5 generates up to 30 seconds in one pass with native synchronized audio.',
-  'changelog.seedance25.item2': 'Combine up to 30 images, 10 videos, and 10 audio clips as references.',
-  'changelog.seedance25.item3': 'Use dedicated video edit and extend modes, with MP4 or grading-ready MOV output.',
-  'changelog.minimaxH3.title': 'MiniMax H3 Video',
-  'changelog.minimaxH3.item1': 'MiniMax H3 is now available in Makaron for native 2K video generation from text, images, and multimodal references.',
-  'changelog.minimaxH3.item2': 'Create 4â€“15 second videos in six aspect ratios with native stereo sound, using up to nine reference images, three reference videos, and three reference audio tracks.',
-  'changelog.minimaxH3.item3': 'Choose H3 in the video model selector or ask Agent in chat; makaron-cli chat now keeps model and resolution selection together to avoid incompatible routes.',
-  'changelog.multilingualAsr.title': 'Multilingual Speech Recognition',
-  'changelog.multilingualAsr.item1': 'Makaron ASR can now transcribe speech in multiple languages, including Japanese, for accurate subtitles and Remotion timing.',
-  'changelog.editableRemotion.title': 'Editable Remotion, End to End',
-  'changelog.editableRemotion.item1': 'Text, images, and video are now discovered as editable layers automatically, with selection, moving, and resizing staying aligned across desktop and mobile.',
-  'changelog.editableRemotion.item2': 'Edits persist across refreshes and devices and carry into MP4 exports; video trim now edits the selected clip instead of the whole composition.',
-  'changelog.editableRemotion.item3': 'Double-click text editing, alignment guides, and layer switching are more reliable, with selection frames staying stable through repeated edits.',
-  'changelog.editableLayers.title': 'Editable Image & Video Layers',
-  'changelog.editableLayers.item1': 'AI-made visual results are no longer flat previews: text, photos, and video clips can stay editable after they are created.',
-  'changelog.editableLayers.item2': 'Click a layer on the canvas, then move or resize it directly â€” no need to ask Agent to regenerate the whole result.',
-  'changelog.editableLayers.item3': 'Video clips now have a trim strip with playback, scrubber, start/end handles, and range dragging.',
-  'changelog.editableLayers.item4': 'Tall poster-style projects are easier to refine: selection boxes stay aligned while you scroll.',
-  'changelog.smarterEditableDiscovery.title': 'Smarter Editable Layers',
-  'changelog.smarterEditableDiscovery.item1': 'Makaron now discovers subtitles and other React-rendered content as editable layers more reliably, while preserving direct move and resize controls.',
-
-  // AI status
-  'status.thinking': 'Discovering possibilities...',
-  'status.analyzingImage': 'Analyzing image...',
-  'status.generatingTips': 'Generating edit suggestions...',
-  'status.imageGenerated': 'Image generated',
-  'status.renderingDesign': 'Rendering design...',
-  'status.designCreated': 'Design created',
-  'status.designFailed': 'Design failed',
-  'status.generatingMusic': 'Generating music...',
-  'status.musicReady': 'Music ready',
-  'status.musicStreaming': 'Music preview ready',
-  'status.musicFailed': 'Music generation failed',
-  'status.addingMusic': 'Adding music...',
-  'status.writingScript': 'Writing video script...',
-  'status.submittingVideo': 'Submitting video task...',
-  'status.videoRendering': 'Video rendering',
-  'status.videoRenderingEllipsis': 'Video rendering...',
-  'status.videoRenderingFast': 'Fast video render...',
-  'status.remotionExportRendering': 'Exporting MP4...',
-  'status.videoDone': 'Video generated',
-  'status.videoFailed': 'Video generation failed',
-  'status.scriptDone': 'Script ready',
-  'status.scriptFailed': 'Script generation failed',
-  'status.scriptFailedRetry': 'Script generation failed, please retry',
-  'status.creatingStory': 'Creating video story...',
-  'status.videoTranscoding': (percent: number) => `Transcoding video ${percent}%`,
-  'status.uploadingVideo': 'Uploading video...',
-  'status.videoUploadFailed': (message: string) => `Video upload failed: ${message}`,
-
-  // Tips bar
-  'tips.continueEditing': 'Commit',
-  'tips.more': 'More',
-  'tips.reload': 'Reload edit suggestions',
-
-  // Agent chat
-  'chat.currentImage': 'Current image (edit base)',
-  'chat.referenceImage': 'Reference image',
-  'chat.promptCard': 'Prompt sent to nano banana 2',
-  'chat.expand': 'Expand â–¼',
-  'chat.collapse': 'Collapse â–²',
-  'chat.inputImages': 'Input images',
-  'chat.imageLabel': 'img',
-  'chat.placeholder': 'How would you like to edit?',
-  'chat.viewInChat': 'View in Chat â†—',
-  'chat.editImage': 'Edit image',
-
-  // Video result card
-  'video.title': (n: number) => `Video ${n}`,
-  'video.sourceTitle': (n: number) => `Source ${n}`,
-  'video.sourceUploaded': 'Uploaded',
-  'video.noVideos': 'No videos yet',
-  'video.newVideo': 'New video',
-  'video.completed': 'Completed',
-  'video.rendering': 'Rendering',
-  'video.failed': 'Failed',
-  'video.abandoned': 'Abandoned',
-  'video.abandon': 'Abandon',
-  'video.confirmAbandon': 'Cancel this video render?',
-  'video.cancel': 'Cancel',
-  'video.retry': 'Retry',
-  'video.invalidParamsHint': 'Possible cause: reference video resolution too high (max 1080p) or duration too long (max 15s). Try re-uploading a smaller video.',
-  'video.tooLong': 'Video too long ({duration}s). Maximum {max}s.',
-  'video.detail': 'Detail',
-  'video.count': (n: number) => `${n} video${n !== 1 ? 's' : ''}`,
-  'video.sourceCount': (n: number) => `${n} source${n !== 1 ? 's' : ''}`,
-  'video.frameEdit': 'Edit video here',
-  'video.frameEditHint': (time: string) => `Current ${time}`,
-  'video.frameCaptured': (time: string) => `I captured the frame at ${time}. Check it, then tell me what to change.`,
-  'video.frameCapturedShort': 'Frame saved',
-  'video.frameEditDraftPrompt': (mediaIndex: number, time: string) => `@${mediaIndex} ${time} edit this video starting from this frame, `,
-
-  // Animate sheet
-  'animate.title': 'Generate video',
-  'animate.detailTitle': 'Video details',
-  'animate.autoScript': 'âœ¨ Auto-generate script',
-  'animate.generateVideo': 'ðŸŽ¬ Generate video',
-  'animate.submitting': 'Submitting...',
-  'animate.aiWriting': 'âœ¨ AI is writing script...',
-  'animate.aiWritingShort': 'AI writing...',
-  'animate.aiRetry': 'AI retry',
-  'animate.aiRewrite': 'AI rewrite',
-  'animate.aiAnalyzing': 'AI analyzing photos...',
-  'animate.storyPlaceholder': 'Describe your video story...',
-  'animate.storyLabel': 'âœ¨ Video story',
-  'animate.scriptLabel': 'âœ¨ Video script',
-  'animate.hintLabel': 'Requirements',
-  'animate.hintPlaceholder': 'e.g. cinematic, slow motion, emotional...',
-  'animate.noScript': '(no script)',
-  'animate.allImagesRemoved': 'All images removed',
-  'animate.imageCount': (n: number) => `${n} image${n !== 1 ? 's' : ''}`,
-  'animate.model': 'Model',
-  'animate.duration': 'Duration',
-  'animate.status': 'Status',
-  'animate.smart': 'Smart',
-  'animate.seconds': (n: number) => `${n}s`,
-  'animate.costEstimate': 'Est. cost',
-  'animate.costByDuration': 'By actual duration',
-  'animate.errUnavailable': 'Video service temporarily unavailable, please try again later',
-  'animate.errFailed': 'Video service error, please try again later',
-
-  // Status bar
-  'statusbar.likeEffect': 'Like this effect? Tell me how to adjust it ðŸ‘‰ðŸ»',
-
-  // Canvas
-  'canvas.loading': 'Loading...',
-  'canvas.videoExpired': 'Video link expired',
-  'canvas.videoRendering': 'Video rendering',
-  'canvas.videoFailed': 'Generation failed',
-  'canvas.usuallyTakes': 'Usually takes 3â€“5 minutes',
-  'canvas.grokUsuallyTakes': 'Usually takes 15â€“60 seconds',
-  'agentPage.videoTimingNote': 'Provider videos may take 3â€“5 minutes; current Grok generation/edit probes are usually 15â€“60 seconds. Use these commands for Remotion:',
-  'canvas.remotionExportUsuallyTakes': 'Usually near video length; cold starts may take longer',
-  'canvas.generateVideo': 'Generate video',
-  'canvas.layerTool': 'Layers',
-  'canvas.layering': 'Separating layers...',
-  'canvas.layerLabel': (n: number) => `Layer ${n}`,
-  'canvas.resetLayers': 'Reset',
-  'canvas.layerFailed': 'Layer split failed',
-  'canvas.layerEmpty': 'No layers available',
-  'canvas.layerDelete': 'Delete layer',
-  'canvas.layerResize': 'Drag to resize',
-  'canvas.previewUnavailable': 'Preview temporarily unavailable',
-  'canvas.previewUsingPoster': 'Your poster is preserved. You can reload the preview.',
-  'canvas.previewRetry': 'Retry',
-
-  // Annotation toolbar
-  'annotation.placeholder': 'How should I edit the marked area?',
-  'annotation.defaultPrompt': 'Edit the image based on my annotations',
-
-  // Editor inline UI
-  'editor.generatingImage': 'AI is generating image...',
-  'editor.errorRetry': 'Something went wrong, please retry',
-
-  // Editor inline strings
-  'editor.greeting': 'Hi! How would you like to edit this photo?',
-  'editor.multiImageAnalyzing': 'Got your {count} images! Analyzing them now, about 1 minute â³',
-  'editor.tipsSuffix': '\n\nComing up with some fun edit ideas...',
-  'editor.agentThinking': 'Agent is thinking...',
-  'editor.reconnecting': 'Reconnecting to Agent...',
-  'editor.agentCoding': 'Writing code...',
-  'editor.makeVideo': 'âœ¨ Turn these photos into a video for me',
-
-  // Preview generation
-  'status.generatingPreviews': (done: number, total: number) => `Generating previews ${done}/${total}`,
-
-
-  // Landing
-  'landing.tagline': 'one man creative studio',
-  'landing.heroDesc1': 'Makaron predicts your next creative move.',
-  'landing.heroDesc2': 'Upload a photo â€” edit it, explore it, animate it.',
-  'landing.tryFree': 'Try Free',
-  'landing.watchDemo': 'Watch Demo',
-  'landing.statement': 'Edit. Explore. Animate.',
-  'landing.tips.label': 'smart tips',
-  'landing.tips.title': 'AI predicts your next move',
-  'landing.tips.desc': "Don't know where to start? Makaron gives you 6 directions before you even think about it.",
-  'landing.agent.label': 'ai agent',
-  'landing.agent.title': 'Say it. Done.',
-  'landing.agent.desc': '"Make me look like a 90s movie poster" â€” describe anything, the Agent just does it.',
-  'landing.video.label': 'video',
-  'landing.video.title': 'Photos that move',
-  'landing.video.desc': 'Your edits become a cinematic clip â€” AI writes the script, renders it with sound.',
-  'landing.useCases.label': 'use cases',
-  'landing.useCases.heading': 'Where one photo takes you',
-  'landing.useCases.sub': "Makaron isn't just an editor. It's where your ideas start, branch, and come alive.",
-  'landing.uc1.tag': 'RETOUCH & ENHANCE',
-  'landing.uc1.title': 'Perfect every detail',
-  'landing.uc1.desc': 'Smart Tips suggest lighting, skin tone, and color grading. Preview instantly, commit with a tap.',
-  'landing.uc1.feature': 'â†’ Smart Tips Â· Enhance category',
-  'landing.uc2.tag': 'IDEA EXPLORATION',
-  'landing.uc2.title': 'Explore every direction',
-  'landing.uc2.desc': 'Creative and Wild tips push your photo into pop art, 3D, anime, game art â€” each a new direction.',
-  'landing.uc2.feature': 'â†’ Smart Tips Â· Creative & Wild categories',
-  'landing.uc3.tag': 'STORYBOARD',
-  'landing.uc3.title': 'Build scene by scene',
-  'landing.uc3.desc': 'Each edit becomes a snapshot. Stack them into a visual storyboard, ready to pitch or animate.',
-  'landing.uc3.feature': 'â†’ AI Agent Â· Snapshot timeline',
-  'landing.uc4.tag': 'VIDEO',
-  'landing.uc4.title': 'Still to cinema',
-  'landing.uc4.desc': 'Hit â–¶ and AI writes a motion script. Cinematic video with sound â€” 3 to 15 seconds.',
-  'landing.uc4.feature': 'â†’ Video Animation',
-  'landing.cta.heading1': 'Your next idea',
-  'landing.cta.heading2': 'is waiting.',
-  'landing.cta.sub': 'Retouch, storyboard, explore, animate. Free to start.',
-  'landing.cta.button': 'Open Makaron',
-
-  // Billing
-  'billing.credits': 'Credits',
-  'billing.balance': 'Balance',
-  'billing.topUp': 'Top Up',
-  'billing.getMoreCredits': 'Get More Credits',
-  'billing.subscribe': 'Subscribe',
-  'billing.upgrade': 'Upgrade',
-  'billing.perMonth': '/mo',
-  'billing.creditsPerMonth': 'credits/month',
-  'billing.exhausted': 'Credits exhausted',
-  'billing.topUpToContinue': 'top up to continue',
-  'billing.creditsAdded': 'Credits Added!',
-  'billing.balanceUpdated': 'Your balance has been updated',
-  'billing.continueCreating': 'Continue Creating',
-  'billing.processingPayment': 'Processing payment...',
-  'billing.usuallyFewSeconds': 'This usually takes a few seconds',
-  'billing.paymentPending': 'Payment pending',
-  'billing.paymentPendingDesc': 'Your payment was received but credits haven\'t arrived yet. They should appear shortly â€” please refresh the page in a minute.',
-  'billing.close': 'Close',
-  'billing.orTopUp': 'Or top up',
-  'billing.creditsAvailable': 'credits available',
-  'billing.subscribeTo': 'Subscribe to',
-  'billing.upgradeTo': 'Upgrade to',
-  'billing.current': 'Current',
-  'billing.appleTrialBadge': '3-day free trial',
-  'billing.appleTrialToday': 'Free today',
-  'billing.appleTrialThen': 'then',
-  'billing.appleTrialCredits': 'trial credits',
-  'billing.appleTrialStart': 'Start 3-day free trial',
-  'billing.appleTrialDisclosure': 'Free today, auto-renews in 3 days at',
-  'billing.iosUnavailableTitle': 'Purchases are coming to iOS',
-  'billing.iosUnavailableDesc': 'For App Store compliance, credits and subscriptions are not sold in the iOS app until Apple in-app purchase is ready. You can keep creating with your current balance.',
-  'billing.trial.loadingOffer': 'Checking your Apple offer...',
-  'billing.trial.firstCreationComplete': '3-DAY FREE TRIAL',
-  'billing.trial.nextSkillTitle': 'Create without limits.',
-  'billing.trial.nextSkillSubtitle': 'Start with 1,500 trial credits for images, video, and your creative Agent.',
-  'billing.trial.galleryLabel': 'What you can create',
-  'billing.trial.offerTitle': '3-day free trial',
-  'billing.trial.offerRenewalPrefix': 'then',
-  'billing.trial.offerToday': '$0 today',
-  'billing.trial.close': 'Close trial offer',
-  'billing.trial.creation1': 'Selfie to poster',
-  'billing.trial.creation2': 'Image to video',
-  'billing.trial.creation3': 'Creative Agent',
-  'billing.trial.creationAlt1': 'A selfie transformed into a stadium poster',
-  'billing.trial.creationAlt2': 'A still image becoming a video',
-  'billing.trial.creationAlt3': 'Creative Agent variations of the same portrait',
-  'billing.trial.benefitCredits': '1,500 credits during your trial',
-  'billing.trial.benefitSkills': 'Every image and video Skill',
-  'billing.trial.benefitAgent': 'Your creative Agent, ready to refine',
-  'billing.trial.perMonth': '/month',
-  'billing.trial.cta': 'Start 3-day free trial',
-  'billing.trial.confirming': 'Confirming with Apple...',
-  'billing.trial.legal': 'Renews automatically unless canceled at least 24 hours before the trial ends. Manage anytime in Apple ID settings.',
-  'billing.trial.restore': 'Restore Apple purchase',
-  'billing.trial.restoring': 'Restoring...',
-  'billing.trial.verificationPending': 'Your subscription is complete and is still being confirmed. Tap Continue confirmation; no restore is needed.',
-  'billing.trial.continueConfirmation': 'Continue confirmation',
-  'admin.iosTrialCredits': 'iOS Trial Credits',
-  'admin.iosTrialCreditsDesc': 'Granted once after Apple verifies the 3-day Basic trial',
-  'admin.save': 'Save',
-  'admin.edit': 'Edit',
-
-  // Skills
-  'skills.title': 'Skill Market',
-  'skills.subtitle': 'ready-made magic from creators worldwide',
-  'skills.categoryAll': 'All',
-  'skills.categories': 'Skill categories',
-
-  // Misc
-  'misc.toolUse': 'Tool use',
-  'misc.error': 'Error',
-  'misc.retry': 'Retry',
-  'misc.saveSuccess': 'Saved successfully',
-  'misc.shootingTime': 'Shot on',
-  'misc.usingModel': 'Model',
-  // Model selector
-  'model.title': 'Models',
-  'model.auto': 'Auto',
-  'model.tab.image': 'Image',
-  'model.tab.video': 'Video',
-  'model.tab.agent': 'Agent',
-  'model.gemini.name': 'Nano Banana 2',
-  'model.gemini.desc': 'Fast and versatile. Default for most edits.',
-  'model.geminiLite.name': 'Nano Banana 2 Lite',
-  'model.geminiLite.desc': 'Lower-cost path for fast drafts.',
-  'model.qwen.name': 'Qwen Edit',
-  'model.qwen.desc': 'Best face preservation. Handles NSFW content.',
-  'model.openai.name': 'GPT Image 2',
-  'model.openai.desc': 'Superior text rendering and creative generation.',
-  'model.kling.name': 'Kling O3',
-  'model.kling.desc': 'Premium 4K output, fast, with built-in sound.',
-  'model.seedanceFast.name': 'SeeDance 2.0 Fast',
-  'model.seedanceFast.desc': 'Default video model with the best daily speed and cost balance.',
-  'model.seedanceMini.name': 'SeeDance 2.0 Mini',
-  'model.seedanceMini.desc': 'Lower-cost Seedance route for drafts and multi-size tests.',
-  'model.seedance.name': 'SeeDance 2.0',
-  'model.seedance.desc': 'Higher-quality path for final renders, with higher cost.',
-  'model.seedance25.name': 'Seedance 2.5',
-  'model.seedance25.desc': 'New SOTA model with up to 30 seconds, image, video, and audio references, plus edit and extend modes.',
-  'model.seedance25.badge': 'NEW SOTA Â· 30s',
-  'model.grok.name': 'Grok Imagine Video',
-  'model.grok.desc': 'Fast native-audio generation up to 1080p, 7 image references, plus video edit and extend. Latest 6s test: 15â€“34s.',
-  'model.googleOmni.name': 'Gemini Omni 1.1',
-  'model.googleOmni.desc': 'Fast video generation and editing with 360p drafts, 720p default, 4K upscaling, and native audio.',
-  'model.minimaxH3.name': 'MiniMax H3',
-  'model.minimaxH3.desc': 'Open multimodal video model with 15-second, 768P or native 2K, and multi-reference generation.',
-  'model.gpt56Terra.name': 'GPT-5.6 Terra',
-  'model.gpt56Terra.desc': 'Recommended default balancing intelligence, speed, and cost.',
-  'model.gpt56Sol.name': 'GPT-5.6 Sol',
-  'model.gpt56Sol.desc': 'Most capable option for complex agentic and creative work.',
-  'model.gpt56Luna.name': 'GPT-5.6 Luna',
-  'model.gpt56Luna.desc': 'Fast, affordable option for high-volume everyday work.',
-  'model.grok45.name': 'Grok 4.5',
-  'model.grok45.desc': 'Fast for knowledge work and multi-step tool tasks.',
-  'model.deepseekV4Pro.name': 'DeepSeek V4 Pro',
-  'model.deepseekV4Pro.desc': 'High-value long-context and complex reasoning model.',
-  'model.resolution': 'Resolution',
-  'model.resolution.auto': 'Auto',
-  'model.aspectRatio': 'Aspect',
-  'model.aspectRatio.auto': 'Adaptive',
-  'model.autoTips': 'Auto Tips Previews',
-  'model.autoTips.desc': 'Auto-generate preview images',
-
-  // Locale & navigation
-  'locale.selector': 'Choose language',
-  'nav.updates': 'Updates',
-  'nav.dashboard': 'Dashboard',
-  'nav.getApi': 'Get API',
-  'nav.signOut': 'Sign out',
-  'nav.account': 'Account',
-  'nav.profile': 'Profile',
-  'nav.explore': 'Explore',
-  'nav.projects': 'Projects',
-  'nav.signIn': 'Sign in',
-  'nav.openDashboard': 'Open dashboard',
-  'nav.openAccountMenu': 'Open account menu',
-  'nav.closeAccountMenu': 'Close account menu',
-  'nav.accountMenu': 'Account menu',
-  'nav.accountNavigation': 'Account navigation',
-  'nav.primary': 'Primary navigation',
-
-  // AI data consent
-  'aiConsent.title': 'Allow AI processing of your content?',
-  'aiConsent.body': 'To edit images and generate video, audio, or chat results, Makaron must send the content you choose to third-party AI services. We send it only after you allow this.',
-  'aiConsent.dataTitle': 'What is sent',
-  'aiConsent.data': 'Photos, videos, audio, prompts, chat messages, and generated content you choose when a follow-up edit needs it.',
-  'aiConsent.providersTitle': 'Who receives it',
-  'aiConsent.providers': 'Depending on the feature you choose, content may be processed by Google, OpenAI, OpenRouter, Microsoft Azure, DeepSeek, xAI, ByteDance / Volcengine, Kuaishou / Kling, or MiniMax.',
-  'aiConsent.accountData': 'Your sign-in email, password, and payment information are not sent to AI services.',
-  'aiConsent.allow': 'Allow AI processing and continue',
-  'aiConsent.notNow': 'Not now',
-  'aiConsent.offTitle': 'AI processing is off',
-  'aiConsent.offBody': 'Makaron will not send your content to third-party AI services. Because AI processing is a core feature, you need to allow it before you can create.',
-  'aiConsent.review': 'Review and choose again',
-  'aiConsent.privacy': 'View Privacy Policy',
-  'privacy.lastUpdated': 'Last updated: August 8, 2026',
-
-  // Home creation flow
-  'home.create': 'Create',
-  'home.createPlaceholder': 'Describe what you want to create...',
-  'home.projectPlaceholder': "Got a pic? Let's glow it up.\nNo pic? I'll cook one up.",
-  'home.createFreePreview': 'Create free preview',
-  'home.uploadPhoto': 'Upload photo',
-  'home.tryFree': 'Try free',
-  'home.firstFree': 'First creation free',
-  'home.trialSurpriseTitle': 'See what happens',
-  'home.trialGiftNote': 'The first one is on Makaron',
-  'home.continueRegistration': 'Continue signup',
-  'home.subscriptionConfirmedTitle': 'Your trial is reserved',
-  'home.photoCount': (n: number) => `${n} photo${n === 1 ? '' : 's'}`,
-  'home.previewFree': 'Preview free',
-  'home.seeYourVersion': 'See your version',
-  'home.almostReady': 'Almost ready',
-  'home.uploadOnePhoto': 'Upload one photo',
-  'home.previewNoCard': 'Generate a preview. No credit card.',
-  'home.addPhotosToPreview': (count: string) => `Add ${count} to preview free.`,
-  'home.freePreviewNoCard': 'Get a free preview. No credit card.',
-  'home.photosNeeded': (count: string) => `${count} needed`,
-  'home.previewReady': 'Ready to preview',
-  'home.morePhotosNeeded': (count: string) => `${count} more needed`,
-  'home.welcomeTitle': 'Welcome to Makaron!',
-  'home.welcomeGift': "Here's a gift to get you started",
-  'home.value': 'value',
-  'home.startCreating': 'Start Creating',
-  'home.placeholder.1': 'Turn these photos into a vlog',
-  'home.placeholder.2': 'Make a set of social media content from this product shot',
-  'home.placeholder.3': 'Make me look better',
-  'home.placeholder.4': "Create an emoji pack from my cat's photo",
-  'home.placeholder.5': 'Turn this photo into an e-commerce poster',
-  'home.placeholder.6': 'Storyboard these photos and add a soundtrack',
-  'home.placeholder.7': 'One photo, show me 6 completely different directions',
-  'editor.enteringChat': 'Entering Chat\nContinue Editing',
-
-  // Skills management
-  'skills.back': 'Back',
-  'skills.uploading': 'Uploading...',
-  'skills.add': '+ Skill',
-  'skills.loading': 'Loading...',
-  'skills.my': 'My Skills',
-  'skills.builtIn': 'Built-in',
-  'skills.empty': 'No skills yet',
-  'skills.share': 'Share Skill',
-  'skills.shareDescription': 'Send this link to a friend â€” they can add this Skill to their account.',
-  'skills.copied': 'Copied!',
-  'skills.copy': 'Copy',
-  'skills.done': 'Done',
-  'skills.shareError': 'Failed to create share link',
-  'skills.failed': 'Failed',
-
-  // Profile
-  'profile.title': 'Account',
-  'profile.back': 'Back',
-  'profile.editAvatar': 'Edit',
-  'profile.displayName': 'Display Name',
-  'profile.enterName': 'Enter name',
-  'profile.saved': 'Saved',
-  'profile.email': 'Email',
-  'profile.changePassword': 'Change Password',
-  'profile.currentPassword': 'Current password',
-  'profile.newPassword': 'New password',
-  'profile.confirmNewPassword': 'Confirm new password',
-  'profile.passwordMismatch': 'Passwords do not match',
-  'profile.passwordTooShort': 'Password must be at least 6 characters',
-  'profile.incorrectPassword': 'Current password is incorrect',
-  'profile.passwordUpdated': 'Password updated',
-  'profile.updatePassword': 'Update Password',
-  'profile.signOut': 'Sign Out',
-
-  // Agent runtime
-  'agent.status.starting': 'Starting...',
-  'agent.status.planning': 'Planning...',
-  'agent.status.generatingCode': 'Generating code...',
-  'agent.status.analyzingImage': (detail: string) => detail ? `Analyzing image: ${detail}` : 'Analyzing image',
-  'agent.status.analyzingVideo': (detail: string) => detail ? `Analyzing video: ${detail}` : 'Analyzing video',
-  'agent.status.transcribingAudio': 'Transcribing audio...',
-  'agent.status.choosingVoice': 'Choosing voice...',
-  'agent.status.generatingVoiceover': 'Generating voiceover...',
-  'agent.status.generatingAudio': 'Generating audio...',
-  'agent.status.capturingFrame': (hint: string) => `Capturing ${hint}...`,
-  'agent.status.generatingImage': 'Generating image...',
-  'agent.status.browsingWorkspace': 'Browsing workspace...',
-  'agent.status.readingFile': (name: string) => `Reading ${name}...`,
-  'agent.status.saving': 'Saving...',
-  'agent.status.deleting': 'Deleting...',
-  'agent.status.runningCode': (description: string) => `Running: ${description || 'code'}...`,
-  'agent.status.rotatingCamera': 'Rotating camera...',
-  'agent.status.thinking': 'Thinking...',
-  'agent.status.imageGenerationFailed': 'Image generation failed',
-  'agent.status.resuming': 'The last step stalled â€” resuming from the saved draft...',
-  'agent.error.recoverable': 'The model stopped before completing the promised change. Your draft is saved; send â€œcontinueâ€ to resume from it.',
-  'agent.error.fatal': 'The model stopped before completing this request and no resumable draft was saved. Please retry the request.',
-  'agent.error.connectionEnded': 'The agent connection ended without a completed result. Your saved work is preserved; send â€œcontinueâ€ to resume.',
-  'agent.error.runtimeDraftSaved': 'The agent runtime stopped, but your draft was saved. Send â€œcontinueâ€ to resume from it.',
-  'agent.error.runtimeNoDraft': 'The agent runtime stopped and no resumable draft was saved. Please retry the request.',
-  'agent.mock.tipsTeaser': 'Try turning it into a miniature scene.',
-  'agent.mock.tipReaction': 'Nice, that edit feels natural.',
-  'agent.mock.nameProject': 'Coffee Afternoon',
-  'agent.mock.previewsReady': 'Your previews are ready. The playful one is worth a look.',
-  'agent.audio.generated': 'Audio generated',
-  'agent.audio.generatedNamed': (title: string) => `Audio generated: ${title}`,
-  'artifact.nextSteps': 'Next steps',
-  'artifact.continue': 'Continue',
-
-  // Studio Run
-  'studio.stage.brief': 'Creative brief',
-  'studio.stage.brief.short': 'Brief',
-  'studio.stage.proposal': 'Creative proposal',
-  'studio.stage.proposal.short': 'Proposal',
-  'studio.stage.script': 'Narration script',
-  'studio.stage.script.short': 'Script',
-  'studio.stage.storyboard': 'Storyboard',
-  'studio.stage.storyboard.short': 'Board',
-  'studio.stage.assets': 'Asset manifest',
-  'studio.stage.assets.short': 'Assets',
-  'studio.stage.composition': 'Composition',
-  'studio.stage.composition.short': 'Compose',
-  'studio.stage.review': 'Final review',
-  'studio.stage.review.short': 'Review',
-  'studio.stage.delivery': 'Delivery',
-  'studio.stage.delivery.short': 'Delivery',
-  'studio.status.pending': 'Not started',
-  'studio.status.inProgress': 'In progress',
-  'studio.status.awaitingApproval': 'Awaiting approval',
-  'studio.status.completed': 'Completed',
-  'studio.status.invalidated': 'Needs update',
-  'studio.status.failed': 'Failed',
-  'studio.progress.aria': 'Studio Run progress',
-  'studio.progress.current': (stage: string) => `In progress: ${stage}`,
-  'studio.progress.completed': (title: string) => `Completed: ${title}`,
-  'studio.progress.dismiss': 'Hide Studio Run progress',
-  'studio.unit.seconds': (value: string) => `${value}s`,
-  'studio.unit.secondRange': (start: string, end: string) => `${start}â€“${end}s`,
-  'studio.unit.sections': (count: number) => `${count} section${count === 1 ? '' : 's'}`,
-  'studio.unit.scenes': (count: number) => `${count} scene${count === 1 ? '' : 's'}`,
-  'studio.unit.assets': (count: number) => `${count} asset${count === 1 ? '' : 's'}`,
-  'studio.preview.allAssetsReady': 'All ready',
-  'studio.preview.editable': 'Editable',
-  'studio.preview.flattened': 'Flattened',
-  'studio.preview.sourcePreserved': 'Editable source preserved',
-  'studio.detail.loading': 'Loading stage contentâ€¦',
-  'studio.detail.onScreenText': 'On-screen text',
-  'studio.detail.labelSeparator': ': ',
-  'studio.detail.objective': 'Objective',
-  'studio.detail.audience': 'Audience',
-  'studio.detail.coreMessage': 'Core message',
-  'studio.detail.specification': 'Specifications',
-  'studio.detail.selectedDirection': 'Selected direction',
-  'studio.detail.openingHook': 'Opening hook',
-  'studio.detail.visualDirection': 'Visual direction',
-  'studio.detail.motionLanguage': 'Motion language',
-  'studio.detail.rationale': 'Rationale',
-  'studio.detail.artDirection': 'Art direction',
-  'studio.detail.layoutConstraints': 'Layout constraints',
-  'studio.detail.runtime': 'Runtime',
-  'studio.detail.frameSpecification': 'Frame specifications',
-  'studio.detail.designSource': 'Design source',
-  'studio.detail.editable': 'Editable',
-  'studio.detail.yes': 'Yes',
-  'studio.detail.no': 'No',
-  'studio.detail.pass': 'Passed',
-  'studio.detail.revise': 'Needs revision',
-  'studio.detail.fail': 'Failed',
-  'studio.detail.conclusion': 'Conclusion',
-  'studio.detail.technicalCheck': 'Technical check',
-  'studio.detail.hasAudio': 'Audio included',
-  'studio.detail.noAudio': 'No audio',
-  'studio.detail.visualCheck': 'Visual check',
-  'studio.detail.framesSampled': (count: string) => `${count} frames sampled`,
-  'studio.detail.blackFramesFound': 'Black frames found',
-  'studio.detail.noBlackFrames': 'No black frames',
-  'studio.detail.overlapFound': 'Overlaps found',
-  'studio.detail.noOverlap': 'No element overlaps',
-  'studio.detail.audioCheck': 'Audio check',
-  'studio.detail.loudnessNotMeasured': 'Loudness not measured',
-  'studio.detail.audioConfirmed': 'Audio confirmed',
-  'studio.detail.finalVideo': 'Final video',
-  'studio.detail.editableSource': 'Editable source',
-  'studio.detail.checksum': 'Checksum',
-  'studio.detail.deliveredAt': 'Delivered at',
-  'studio.stage.generating': 'Generating content for this stageâ€¦',
-  'studio.source.open': 'Open source file',
-  'studio.source.openAria': (stage: string) => `Open ${stage} source file`,
-
-  // Agent model selector
-  'admin.codexAllowlist.tab': 'Codex plan',
-  'admin.codexAllowlist.title': 'Test account allowlist',
-  'admin.codexAllowlist.desc': 'Allowed accounts use your personal Codex plan by default and fall back to the API only when unavailable. Changes sync to the VLab relay.',
-  'admin.codexAllowlist.emailPlaceholder': 'Enter a registered Makaron email',
-  'admin.codexAllowlist.add': 'Add account',
-  'admin.codexAllowlist.saving': 'Syncingâ€¦',
-  'admin.codexAllowlist.added': 'Account added to the Codex plan allowlist',
-  'admin.codexAllowlist.removed': 'Account removed from the Codex plan allowlist',
-  'admin.codexAllowlist.updateFailed': 'Update failed. Please try again.',
-  'admin.codexAllowlist.owner': 'Owner',
-  'admin.codexAllowlist.allowed': 'Allowed',
-  'admin.codexAllowlist.remove': 'Remove',
-  'admin.codexAllowlist.unknownEmail': 'Unknown email',
-  'changelog.googleOmni11.title': 'Gemini Omni 1.1 Is Live',
-  'changelog.googleOmni11.item1': 'Create fast native-audio video in 360p draft, 720p default, or upscaled 1080p and 4K with Gemini Omni 1.1.',
-  'changelog.googleOmni11.item2': 'Reference one timeline video in Chat and ask Makaron to continue it by up to 10 seconds while preserving the original clip as a new cumulative snapshot.',
-  'changelog.externalImages.title': 'Use Scene Images Directly in Video',
-  'changelog.externalImages.item1': 'Scene images now render as images in Preview and MP4 export instead of being mistaken for videos.',
-  'model.agentAutoDesc': 'Use the default GPT-5.6 Terra through the existing Azure API',
-  'model.agentAutoCodexDesc': 'Use the default GPT-5.6 Terra through your personal Codex plan first',
-  'model.agentLabel': 'Agent model',
-  'model.closeAgentSelector': 'Close model selector',
-  'model.chooseAgent': 'Choose agent model',
-  'model.azureApiBadge': 'Azure API',
-  'model.agentGroup.azure': 'Azure API',
-  'model.agentGroup.azureDesc': 'Default Â· usage based',
-  'model.agentGroup.codex': 'Personal Codex plan',
-  'model.agentGroup.other': 'Other APIs',
-  'model.agentGroup.otherDesc': 'Other available models',
-  'model.codexSubscription.name': 'GPT-5.6 Terra Â· Codex plan',
-  'model.codexSubscription.suffix': 'Codex plan',
-  'model.codexSubscription.badge': 'Personal plan',
-  'model.codexSubscription.desc': 'Use your ChatGPT/Codex plan, with the existing API fallback when unavailable.',
-  'model.codexSubscription.checking': 'Checking plan usageâ€¦',
-  'model.codexSubscription.remaining': (percent: string) => `${percent}% weekly allowance remaining`,
-  'model.codexSubscription.resetsAt': (time: string) => `Resets ${time}`,
-  'model.codexSubscription.usageUnavailable': 'Plan available; usage is temporarily unavailable',
-
-  // Makaron Kids
-  'kids.meta.title': 'Makaron Kids',
-  'kids.meta.description': 'A voice-first picture companion for kids.',
-  'kids.picture': "Shier's magic picture",
-  'kids.selectedPicture': 'Picture selected by Shier',
-  'kids.samplePicture': 'A crayon rocket in a moon garden',
-  'kids.choosePicture': 'Choose a picture',
-  'kids.startTalking': 'Talk with Pixel Wizard',
-  'kids.stopTalking': 'Stop the voice conversation',
-  'kids.phase.idle': 'Tap the microphone to talk',
-  'kids.phase.connecting': 'Pixel Wizard is on the way',
-  'kids.phase.listening': 'Pixel Wizard is listening',
-  'kids.phase.speaking': 'Pixel Wizard is speaking',
-  'kids.phase.error': 'Voice could not connect',
-  'kids.parent.hold': 'Hold to open parent settings',
-  'kids.parent.title': 'Shier edition Â· Parent settings',
-  'kids.parent.subtitle': 'Live voice, privacy, and operator handoff status',
-  'kids.parent.close': 'Close parent settings',
-  'kids.parent.connection': 'Live connection',
-  'kids.parent.voice': "Pixel Wizard's voice",
-  'kids.parent.lastHeard': 'Last heard',
-  'kids.parent.lastReply': 'Last reply',
-  'kids.parent.empty': 'Nothing yet',
-  'kids.parent.error': 'Connection error',
-  'kids.parent.operator': 'Version one uses Gemini Live as the receptionist. Makaron Operator image-tool handoff is not connected yet.',
-} as const;
-
-export default en;
+YªçŠx-®éÜj×¢ëiºÚ+Š§j[h‘éÜ¢éí×~tÙ:-jZ.¶›­–)Þ³V6öç7BVâÒ°¢òòWF€¢vWF‚æVÖ–Âs¢tVÖ–ÂrÀ¢vWF‚ç77v÷&Bs¢u77v÷&BrÀ¢vWF‚æÆöv–âs¢u6–vâ–ârÀ¢vWF‚ç&Vv—7FW"s¢u6–vâWrÀ¢vWF‚ævôÆöv–âs¢u6–vâ–ârÀ¢vWF‚æ†466÷VçBs¢tÇ&VG’†fRâ66÷VçCòrÀ¢vWF‚ææô66÷VçBs¢$FöâwB†fRâ66÷VçCò"À¢vWF‚ææWGv÷&´W'&÷"s¢tæWGv÷&²W'&÷"ÂÆV6RG'’v–ârÀ¢vWF‚æW'"æ–çfÆ–D7&VFVçF–Ç2s¢t–çfÆ–BVÖ–Â÷"77v÷&BrÀ¢vWF‚æW'"æVÖ–Äæ÷D6öæf—&ÖVBs¢uÆV6RfW&–g’–÷W"VÖ–Âf—'7BrÀ¢vWF‚æW'"æÇ&VG•&Vv—7FW&VBs¢tVÖ–ÂÇ&VG’&Vv—7FW&VBÂÆV6R6–vâ–ârÀ¢vWF‚æW'"ç77v÷&EFöõ6†÷'Bs¢u77v÷&B×W7B&RBÆV7Bb6†&7FW'2rÀ¢vWF‚æW'"æ–çfÆ–DVÖ–Âs¢t–çfÆ–BVÖ–Âf÷&ÖBrÀ¢vWF‚æW'"ç&FTÆ–Ö—FVBs¢uFöòÖç’GFV×G2ÂÆV6RG'’v–âÆFW"rÀ¢vWF‚æW'"çv—Cc2s¢uÆV6Rv—Bc6V6öæG2&Vf÷&RG'––ærv–ârÀ¢vWF‚æW'"æ–çfÆ–D–çf—FT6öFRs¢t–çfÆ–B÷"W‡—&VB–çf—FR6öFRrÀ¢vWF‚æW'"æ–çf—FT6öFU&WV—&VBs¢t–çf—FR6öFR—2&WV—&VBf÷"æWr66÷VçG2rÀ¢vWF‚æ–çf—FT6öFUÆ6V†öÆFW"s¢tVçFW"–çf—FR6öFRrÀ¢vWF‚æ7F—fFRs¢t7F—fFRrÀ¢vWF‚æ7F—fFVBs¢t7F—fFVBrÀ¢vWF‚ææô–çf—FT6öFRs¢$FöâwB†fRâ–çf—FR6öFSò"À¢vWF‚æ¦ö–åv—FÆ—7Bs¢t¦ö–âv—FÆ—7BrÀ¢vWF‚çv—FÆ—7E7V66W72s¢u–÷UÂw&RöâF†RÆ—7BrÀ¢vWF‚çv—FÆ—7E7V66W74FW62s¢uvUÂvÆÂ6VæB–÷Râ–çf—FR6öFR6ööâârÀ¢vWF‚æ7&VFT66÷VçBs¢t7&VFR–÷W"66÷VçBrÀ¢vWF‚æ&6²s¢t&6²rÀ¢vWF‚æ6öçF–çVUv—F„vöövÆRs¢t6öçF–çVRv—F‚vöövÆRrÀ¢vWF‚æ6öçF–çVUv—F„ÆRs¢t6öçF–çVRv—F‚ÆRrÀ¢vWF‚æ÷$F—f–FW"s¢v÷"rÀ¢vWF‚ævõ&Vv—7FW"s¢u6–vâWrÀ¢vWF‚çfW&–g”VÖ–ÂçF—FÆRs¢t6†V6²–÷W"–æ&÷‚rÀ¢vWF‚çfW&–g”VÖ–Âç6VçBs¢uvR6VçBfW&–f–6F–öâÆ–æ²FòrÀ¢vWF‚çfW&–g”VÖ–Âæ–ç7G'V7F–öâs¢t6Æ–6²F†RÆ–æ²–âF†RVÖ–ÂFò7F—fFR–÷W"66÷VçBârÀ¢vWF‚çfW&–g”VÖ–Âç&W6VæBs¢u&W6VæBVÖ–ÂrÀ¢vWF‚çfW&–g”VÖ–Âç&W6VçBs¢tVÖ–Â6VçBrÀ¢vWF‚çfW&–g”VÖ–Âæ6†V6µ7Òs¢$FöâwB6VR—Cò6†V6²–÷W"7ÒföÆFW"â"À¢vWF‚æ6öçF–çVRs¢t6öçF–çVRrÀ¢vWF‚ç6VæF–æt6öFRs¢u6VæF–ær6öFRââârÀ¢vWF‚çG'”g&VRs¢uG'’g&VRrÀ¢vWF‚æ÷GçF—FÆRs¢tVçFW"fW&–f–6F–öâ6öFRrÀ¢vWF‚æ÷Gç7V'F—FÆRs¢uvR6VçBbÖF–v—B6öFRFòrÀ¢vWF‚æ÷GçfW&–g’s¢ufW&–g’rÀ¢vWF‚æ÷Gç&W6VæBs¢u&W6VæB6öFRrÀ¢vWF‚æ÷Gç&W6VæD–âs¢u&W6VæB–ârÀ¢vWF‚æ÷GæF–v—DÆ&VÂs¢tõEF–v—B¶–æFW‡ÒrÀ¢vWF‚æf÷&v÷E77v÷&Bs¢tf÷&v÷B77v÷&CòrÀ¢vWF‚ç&W6WE77v÷&BçF—FÆRs¢u&W6WB–÷W"77v÷&BrÀ¢vWF‚ç&W6WE77v÷&Bç6VæBs¢u6VæB&W6WB6öFRrÀ¢vWF‚ç&W6WE77v÷&BææWu77v÷&Bs¢tæWr77v÷&BrÀ¢vWF‚ç&W6WE77v÷&Bæ6öæf—&Òs¢u6WBæWr77v÷&BrÀ¢vWF‚ç&W6WE77v÷&Bç7V66W72s¢u77v÷&BWFFVBrÀ ¢òò&ö¦V7BÖævVÖVç@¢w&ö¦V7BçVçF—FÆVBs¢uVçF—FÆVBrÀ¢w&ö¦V7Bç&VæÖRs¢u&VæÖRrÀ¢w&ö¦V7BæFVÆWFRs¢tFVÆWFR&ö¦V7BrÀ¢w&ö¦V7Bæ6æ6VÂs¢t6æ6VÂrÀ¢w&ö¦V7Bç6fRs¢u6fRrÀ ¢òòVF—F÷"7FGW0¢vVF—F÷"æ7W'&VçBs¢t7W'&VçBrÀ¢vVF—F÷"çfW'6–öç2s¢wfW'6–öç2rÀ¢vVF—F÷"æFöæRs¢tFöæRrÀ¢vVF—F÷"çf–FVõ&VG’s¢uf–FVò&VG’(	BF6†&RFò6fRrÀ¢vVF—F÷"ç6†&Rs¢u6†&RrÀ¢vVF—F÷"æ6÷VçBs¢†ã¢çVÖ&W"’ÓâG¶çÖÀ¢vVF—F÷"æ6Æ÷6UæVÂs¢t6Æ÷6RVF—F÷"rÀ¢vVF—F÷"çv÷&·76Rs¢tÖ¶&öâVF—F÷"v÷&·76RrÀ¢vVF—F÷"çG&–ÒçÆ•&Wf–Wrs¢uÆ’G&–Ò&Wf–WrrÀ¢vVF—F÷"çG&–ÒçW6U&Wf–Wrs¢uW6RG&–Ò&Wf–WrrÀ¢vVF—F÷"çG&–Òç7F'Bs¢uG&–Ò7F'BrÀ¢vVF—F÷"çG&–ÒæVæBs¢uG&–ÒVæBrÀ¢vVF—F÷"çG&–ÒçÆ–†VBs¢uG&–ÒÆ–†VBrÀ ¢òò6†ævVÆöp¢v6†ævVÆöræ†VF–ærs¢uWFFW2rÀ¢v6†ævVÆöræ6Æ÷6Rs¢t6Æ÷6RWFFW2rÀ¢v6†ævVÆörçf–FVõG&ç6ÆF–öâçF—FÆRs¢uf–FVòG&ç6ÆF–öârÀ¢v6†ævVÆörçf–FVõG&ç6ÆF–öâæ—FVÓs¢uG&ç6ÆFRöfb×67&VVâæ'&F–öâæBæöâ×FÆ¶–ærÖ†VBf–FV÷2–çFòVævÆ—6‚Â¦æW6RÂæBÖ÷&Rv—F‚6VVBVF–òv†–ÆR&W6W'f–ærF†R÷&–v–æÂ7V¶W.(	—2fö–6RÂFöæRÂæB6FVæ6RârÀ¢v6†ævVÆörçf–FVõG&ç6ÆF–öâæ—FVÓ"s¢uf—6–&ÆRFÆ¶–ær†VG2&R6ÆVæVBWf—'7BÂF†VâG&ç6ÆFVBv—F‚6VVFæ6R"ãf7BæBÖF6†–ærÖ÷WF‚Ö÷fVÖVçC²Æöærf–FV÷26â7Æ—BWFöÖF–6ÆÇ’&Vf÷&RG&ç6ÆFVB6F–öç2Â"×&öÆÂÂæBF–µFö²FVÆ—fW'’ârÀ¢v6†ævVÆörçFÆ¶–æt†VDVF—F–ærçF—FÆRs¢uFÆ¶–ærÔ†VBVF—F–ærrÀ¢v6†ævVÆörçFÆ¶–æt†VDVF—F–æræ—FVÓs¢uWÆöB&rFÆ¶–ærÖ†VBf–FVòæBÖ¶&öâW6W25"Fò&VÖ÷fRFVB—"Âf–ÆÆW"Â&WWF—F–öâÂæB'&ö¶VâFVÆ—fW'’f÷"6Öö÷F†W"7WBârÀ¢v6†ævVÆörçFÆ¶–æt†VDVF—F–æræ—FVÓ"s¢t6F–öç2föÆÆ÷rF†R&WF–æVBfö–6Rv—F‚&VÂv÷&BF–Ö–ærÂ&V6öÖ–ær6†÷'FW"ÂV×†6—¦VBÂG–æÖ–2ÂæB7F–ÆÂVF—F&ÆRârÀ¢v6†ævVÆörçFÆ¶–æt†VDVF—F–æræ—FVÓ2s¢tvVçB6âFB6VÆV7F—fR"×&öÆÂÂ–æföw&†–72ÂæB6ö6–Â6¶v–ærÂF†VâV&Æ—6‚âVF—F&ÆR6ö×÷6—F–öâæBf–æ—6†VBÕBârÀ¢v6†ævVÆörçF–·Föµf–FVõ6¶–ÆÂçF—FÆRs¢uF–µFö²ÔæF—fRf–FVò6¶–ÆÂrÀ¢v6†ævVÆörçF–·Föµf–FVõ6¶–ÆÂæ—FVÓs¢uF†RæWrF–µFö²6¶–ÆÂv—fW2vVçBÖÖFRfW'F–6Âf–FV÷27&VF÷"ÖæF—fR†öö·2Â6–ærÂ6F–öç2Â6¶v–ærÂæBÆFf÷&ÒÖv&RÆ6VÖVçBv†–ÆR¶VW–ærWfW'’6ö×÷6—F–öâf—7VÆÇ’WF†÷&VBârÀ¢v6†ævVÆörçF–·Föµf–FVõ6¶–ÆÂæ—FVÓ"s¢u7ö¶Vâ6F–öç2æ÷rföÆÆ÷rF†RÖVæ–æræBFVÆ—fW'’öbF†Rf–æÂfö–6V÷fW"Âv—F‚&V6—6Rv÷&BF–Ö–ærW6VBf÷"7–æ6‡&öæ—¦F–öâ–ç7FVBöbÖV6†æ–6ÆÇ’6†÷–ærÆ–æW2'’ÆVæwF‚ârÀ¢v6†ævVÆörçF–·Föµf–FVõ6¶–ÆÂæ—FVÓ2s¢uF–µFö²f–FV÷2æ÷r×WFR6÷W&6RVF–ò'’FVfVÇBæBW6RF†R&VÂ7ö¶VâF–Ö–ærg&öÒöæRf–æ—6†VBdò²$tÒ6÷VæGG&6²Fò7–æ6‡&öæ—¦Rf—7VÇ2Â6F–öç2ÂæB¶W—v÷&B†–v†Æ–v‡G2ârÀ¢v6†ævVÆörç6÷W&6UÆ–&6²çF—FÆRs¢u6Öö÷F†W"6÷W&6Rf–FVòÆ–&6²rÀ¢v6†ævVÆörç6÷W&6UÆ–&6²æ—FVÓs¢u6÷W&6RU$Â6ö×÷6—F–öç2æ÷rW6RF†RF–ÖVÆ–æRv†–ÆR'VffW&–æræB&Wv&ÒF†RæW‡BG&–ÖÖVB6Æ—Â&VGV6–ær&Æ6²g&ÖW2Â7G&’6†÷G2ÂæB7WB7GWGFW'2ârÀ¢v6†ævVÆörç6÷W&6UÆ–&6²æ—FVÓ"s¢uÆ–&6²æ÷r7F'G2&VÆ–&Ç’öâF†Rf—'7BFv†–ÆR&÷VæFVB”õ2FV6öFW"v&×W¶VW2Æöær×VÇF’Ö6Æ—&ö¦V7G2g&öÒ6†÷v–ær6F–öç2v—F†÷WBf–FVò÷"7&6†–ær6f&’ârÀ¢v6†ævVÆöræW‡FW&æÅ6÷W&6U&ævW2çF—FÆRs¢tVF—BW‡FW&æÂf–FVò6÷W&6W2F—&V7FÇ’rÀ¢v6†ævVÆöræW‡FW&æÅ6÷W&6U&ævW2æ—FVÓs¢tÖ¶&öâ6âæ÷rVF—BW‡FW&æÂf–FVòU$Ç2v—F‚W†7B7F'BæBVæBF–ÖW2Âv—F†÷WBWÆöF–ærF†RgVÆÂf–FVò÷"W‡÷'F–ær–çFW&ÖVF–FRÕB6Æ—2ârÀ¢v6†ævVÆörç6VVFæ6S#RçF—FÆRs¢u6VVFæ6R"ãS¢æWr4õD×VÇF–ÖöFÂf–FVòrÀ¢v6†ævVÆörç6VVFæ6S#Ræ—FVÓs¢uF†RæWr4õD6VVFæ6R"ãRvVæW&FW2WFò36V6öæG2–âöæR72v—F‚æF—fR7–æ6‡&öæ—¦VBVF–òârÀ¢v6†ævVÆörç6VVFæ6S#Ræ—FVÓ"s¢t6öÖ&–æRWFò3–ÖvW2Âf–FV÷2ÂæBVF–ò6Æ—22&VfW&Væ6W2ârÀ¢v6†ævVÆörç6VVFæ6S#Ræ—FVÓ2s¢uW6RFVF–6FVBf–FVòVF—BæBW‡FVæBÖöFW2Âv—F‚ÕB÷"w&F–ær×&VG’Ôõb÷WGWBârÀ¢v6†ævVÆöræÖ–æ–Ö„ƒ2çF—FÆRs¢tÖ–æ”Ö‚ƒ2f–FVòrÀ¢v6†ævVÆöræÖ–æ–Ö„ƒ2æ—FVÓs¢tÖ–æ”Ö‚ƒ2—2æ÷rf–Æ&ÆR–âÖ¶&öâf÷"æF—fR$²f–FVòvVæW&F–öâg&öÒFW‡BÂ–ÖvW2ÂæB×VÇF–ÖöFÂ&VfW&Væ6W2ârÀ¢v6†ævVÆöræÖ–æ–Ö„ƒ2æ—FVÓ"s¢t7&VFRN(	3R6V6öæBf–FV÷2–â6—‚7V7B&F–÷2v—F‚æF—fR7FW&Vò6÷VæBÂW6–ærWFòæ–æR&VfW&Væ6R–ÖvW2ÂF‡&VR&VfW&Væ6Rf–FV÷2ÂæBF‡&VR&VfW&Væ6RVF–òG&6·2ârÀ¢v6†ævVÆöræÖ–æ–Ö„ƒ2æ—FVÓ2s¢t6†ö÷6Rƒ2–âF†Rf–FVòÖöFVÂ6VÆV7F÷"÷"6²vVçB–â6†C²Ö¶&öâÖ6Æ’6†Bæ÷r¶VW2ÖöFVÂæB&W6öÇWF–öâ6VÆV7F–öâFövWF†W"Fòfö–B–æ6ö×F–&ÆR&÷WFW2ârÀ¢v6†ævVÆöræ×VÇF–Æ–æwVÄ7"çF—FÆRs¢t×VÇF–Æ–æwVÂ7VV6‚&V6övæ—F–öârÀ¢v6†ævVÆöræ×VÇF–Æ–æwVÄ7"æ—FVÓs¢tÖ¶&öâ5"6âæ÷rG&ç67&–&R7VV6‚–â×VÇF—ÆRÆæwVvW2Â–æ6ÇVF–ær¦æW6RÂf÷"67W&FR7V'F—FÆW2æB&VÖ÷F–öâF–Ö–ærârÀ¢v6†ævVÆöræVF—F&ÆU&VÖ÷F–öâçF—FÆRs¢tVF—F&ÆR&VÖ÷F–öâÂVæBFòVæBrÀ¢v6†ævVÆöræVF—F&ÆU&VÖ÷F–öâæ—FVÓs¢uFW‡BÂ–ÖvW2ÂæBf–FVò&Ræ÷rF—66÷fW&VB2VF—F&ÆRÆ–W'2WFöÖF–6ÆÇ’Âv—F‚6VÆV7F–öâÂÖ÷f–ærÂæB&W6—¦–ær7F––ærÆ–væVB7&÷72FW6·F÷æBÖö&–ÆRârÀ¢v6†ævVÆöræVF—F&ÆU&VÖ÷F–öâæ—FVÓ"s¢tVF—G2W'6—7B7&÷72&Vg&W6†W2æBFWf–6W2æB6''’–çFòÕBW‡÷'G3²f–FVòG&–Òæ÷rVF—G2F†R6VÆV7FVB6Æ—–ç7FVBöbF†Rv†öÆR6ö×÷6—F–öâârÀ¢v6†ævVÆöræVF—F&ÆU&VÖ÷F–öâæ—FVÓ2s¢tF÷V&ÆRÖ6Æ–6²FW‡BVF—F–ærÂÆ–væÖVçBwV–FW2ÂæBÆ–W"7v—F6†–ær&RÖ÷&R&VÆ–&ÆRÂv—F‚6VÆV7F–öâg&ÖW27F––ær7F&ÆRF‡&÷Vv‚&WVFVBVF—G2ârÀ¢v6†ævVÆöræVF—F&ÆTÆ–W'2çF—FÆRs¢tVF—F&ÆR–ÖvRbf–FVòÆ–W'2rÀ¢v6†ævVÆöræVF—F&ÆTÆ–W'2æ—FVÓs¢t’ÖÖFRf—7VÂ&W7VÇG2&RæòÆöævW"fÆB&Wf–Ww3¢FW‡BÂ†÷F÷2ÂæBf–FVò6Æ—26â7F’VF—F&ÆRgFW"F†W’&R7&VFVBârÀ¢v6†ævVÆöræVF—F&ÆTÆ–W'2æ—FVÓ"s¢t6Æ–6²Æ–W"öâF†R6çf2ÂF†VâÖ÷fR÷"&W6—¦R—BF—&V7FÇ’(	BæòæVVBFò6²vVçBFò&VvVæW&FRF†Rv†öÆR&W7VÇBârÀ¢v6†ævVÆöræVF—F&ÆTÆ–W'2æ—FVÓ2s¢uf–FVò6Æ—2æ÷r†fRG&–Ò7G&—v—F‚Æ–&6²Â67'V&&W"Â7F'BöVæB†æFÆW2ÂæB&ævRG&vv–ærârÀ¢v6†ævVÆöræVF—F&ÆTÆ–W'2æ—FVÓBs¢uFÆÂ÷7FW"×7G–ÆR&ö¦V7G2&RV6–W"Fò&Vf–æS¢6VÆV7F–öâ&÷†W27F’Æ–væVBv†–ÆR–÷R67&öÆÂârÀ¢v6†ævVÆörç6Ö'FW$VF—F&ÆTF—66÷fW'’çF—FÆRs¢u6Ö'FW"VF—F&ÆRÆ–W'2rÀ¢v6†ævVÆörç6Ö'FW$VF—F&ÆTF—66÷fW'’æ—FVÓs¢tÖ¶&öâæ÷rF—66÷fW'27V'F—FÆW2æB÷F†W"&V7B×&VæFW&VB6öçFVçB2VF—F&ÆRÆ–W'2Ö÷&R&VÆ–&Ç’Âv†–ÆR&W6W'f–ærF—&V7BÖ÷fRæB&W6—¦R6öçG&öÇ2ârÀ ¢òò’7FGW0¢w7FGW2çF†–æ¶–ærs¢tF—66÷fW&–ær÷76–&–Æ—F–W2ââârÀ¢w7FGW2ææÇ—¦–æt–ÖvRs¢tæÇ—¦–ær–ÖvRââârÀ¢w7FGW2ævVæW&F–æuF—2s¢tvVæW&F–ærVF—B7VvvW7F–öç2ââârÀ¢w7FGW2æ–ÖvTvVæW&FVBs¢t–ÖvRvVæW&FVBrÀ¢w7FGW2ç&VæFW&–ætFW6–vâs¢u&VæFW&–ærFW6–vâââârÀ¢w7FGW2æFW6–vä7&VFVBs¢tFW6–vâ7&VFVBrÀ¢w7FGW2æFW6–väf–ÆVBs¢tFW6–vâf–ÆVBrÀ¢w7FGW2ævVæW&F–æt×W6–2s¢tvVæW&F–ær×W6–2ââârÀ¢w7FGW2æ×W6–5&VG’s¢t×W6–2&VG’rÀ¢w7FGW2æ×W6–57G&VÖ–ærs¢t×W6–2&Wf–Wr&VG’rÀ¢w7FGW2æ×W6–4f–ÆVBs¢t×W6–2vVæW&F–öâf–ÆVBrÀ¢w7FGW2æFF–æt×W6–2s¢tFF–ær×W6–2ââârÀ¢w7FGW2çw&—F–æu67&—Bs¢uw&—F–ærf–FVò67&—BââârÀ¢w7FGW2ç7V&Ö—GF–æuf–FVòs¢u7V&Ö—GF–ærf–FVòF6²ââârÀ¢w7FGW2çf–FVõ&VæFW&–ærs¢uf–FVò&VæFW&–ærrÀ¢w7FGW2çf–FVõ&VæFW&–ætVÆÆ—6—2s¢uf–FVò&VæFW&–ærââârÀ¢w7FGW2çf–FVõ&VæFW&–ætf7Bs¢tf7Bf–FVò&VæFW"ââârÀ¢w7FGW2ç&VÖ÷F–öäW‡÷'E&VæFW&–ærs¢tW‡÷'F–ærÕBââârÀ¢w7FGW2çf–FVôFöæRs¢uf–FVòvVæW&FVBrÀ¢w7FGW2çf–FVôf–ÆVBs¢uf–FVòvVæW&F–öâf–ÆVBrÀ¢w7FGW2ç67&—DFöæRs¢u67&—B&VG’rÀ¢w7FGW2ç67&—Df–ÆVBs¢u67&—BvVæW&F–öâf–ÆVBrÀ¢w7FGW2ç67&—Df–ÆVE&WG'’s¢u67&—BvVæW&F–öâf–ÆVBÂÆV6R&WG'’rÀ¢w7FGW2æ7&VF–æu7F÷'’s¢t7&VF–ærf–FVò7F÷'’ââârÀ¢w7FGW2çf–FVõG&ç66öF–ærs¢‡W&6VçC¢çVÖ&W"’ÓâG&ç66öF–ærf–FVòG·W&6VçGÒVÀ¢w7FGW2çWÆöF–æuf–FVòs¢uWÆöF–ærf–FVòââârÀ¢w7FGW2çf–FVõWÆöDf–ÆVBs¢†ÖW76vS¢7G&–ær’Óâf–FVòWÆöBf–ÆVC¢G¶ÖW76vWÖÀ ¢òòF—2& ¢wF—2æ6öçF–çVTVF—F–ærs¢t6öÖÖ—BrÀ¢wF—2æÖ÷&Rs¢tÖ÷&RrÀ¢wF—2ç&VÆöBs¢u&VÆöBVF—B7VvvW7F–öç2rÀ ¢òòvVçB6†@¢v6†Bæ7W'&VçD–ÖvRs¢t7W'&VçB–ÖvR†VF—B&6R’rÀ¢v6†Bç&VfW&Væ6T–ÖvRs¢u&VfW&Væ6R–ÖvRrÀ¢v6†Bç&ö×D6&Bs¢u&ö×B6VçBFòææò&ææ"rÀ¢v6†BæW‡æBs¢tW‡æB)kÂrÀ¢v6†Bæ6öÆÆ6Rs¢t6öÆÆ6R)k"rÀ¢v6†Bæ–çWD–ÖvW2s¢t–çWB–ÖvW2rÀ¢v6†Bæ–ÖvTÆ&VÂs¢v–ÖrrÀ¢v6†BçÆ6V†öÆFW"s¢t†÷rv÷VÆB–÷RÆ–¶RFòVF—CòrÀ¢v6†Bçf–Wt–ä6†Bs¢uf–Wr–â6†B(irrÀ¢v6†BæVF—D–ÖvRs¢tVF—B–ÖvRrÀ ¢òòf–FVò&W7VÇB6&@¢wf–FVòçF—FÆRs¢†ã¢çVÖ&W"’Óâf–FVòG¶çÖÀ¢wf–FVòç6÷W&6UF—FÆRs¢†ã¢çVÖ&W"’Óâ6÷W&6RG¶çÖÀ¢wf–FVòç6÷W&6UWÆöFVBs¢uWÆöFVBrÀ¢wf–FVòææõf–FV÷2s¢tæòf–FV÷2–WBrÀ¢wf–FVòææWuf–FVòs¢tæWrf–FVòrÀ¢wf–FVòæ6ö×ÆWFVBs¢t6ö×ÆWFVBrÀ¢wf–FVòç&VæFW&–ærs¢u&VæFW&–ærrÀ¢wf–FVòæf–ÆVBs¢tf–ÆVBrÀ¢wf–FVòæ&æFöæVBs¢t&æFöæVBrÀ¢wf–FVòæ&æFöâs¢t&æFöârÀ¢wf–FVòæ6öæf—&Ô&æFöâs¢t6æ6VÂF†—2f–FVò&VæFW#òrÀ¢wf–FVòæ6æ6VÂs¢t6æ6VÂrÀ¢wf–FVòç&WG'’s¢u&WG'’rÀ¢wf–FVòæ–çfÆ–E&×4†–çBs¢u÷76–&ÆR6W6S¢&VfW&Væ6Rf–FVò&W6öÇWF–öâFöò†–v‚†Ö‚ƒ’÷"GW&F–öâFöòÆöær†Ö‚W2’âG'’&R×WÆöF–ær6ÖÆÆW"f–FVòârÀ¢wf–FVòçFöôÆöærs¢uf–FVòFöòÆöær‡¶GW&F–öç×2’âÖ†–×VÒ¶Ö‡×2ârÀ¢wf–FVòæFWF–Âs¢tFWF–ÂrÀ¢wf–FVòæ6÷VçBs¢†ã¢çVÖ&W"’ÓâG¶çÒf–FVòG¶âÓÒòw2r¢rwÖÀ¢wf–FVòç6÷W&6T6÷VçBs¢†ã¢çVÖ&W"’ÓâG¶çÒ6÷W&6RG¶âÓÒòw2r¢rwÖÀ¢wf–FVòæg&ÖTVF—Bs¢tVF—Bf–FVò†W&RrÀ¢wf–FVòæg&ÖTVF—D†–çBs¢‡F–ÖS¢7G&–ær’Óâ7W'&VçBG·F–ÖWÖÀ¢wf–FVòæg&ÖT6GW&VBs¢‡F–ÖS¢7G&–ær’Óâ’6GW&VBF†Rg&ÖRBG·F–ÖWÒâ6†V6²—BÂF†VâFVÆÂÖRv†BFò6†ævRæÀ¢wf–FVòæg&ÖT6GW&VE6†÷'Bs¢tg&ÖR6fVBrÀ¢wf–FVòæg&ÖTVF—DG&gE&ö×Bs¢†ÖVF––æFWƒ¢çVÖ&W"ÂF–ÖS¢7G&–ær’ÓâG¶ÖVF––æFW‡ÒG·F–ÖWÒVF—BF†—2f–FVò7F'F–ærg&öÒF†—2g&ÖRÂÀ ¢òòæ–ÖFR6†VW@¢væ–ÖFRçF—FÆRs¢tvVæW&FRf–FVòrÀ¢væ–ÖFRæFWF–ÅF—FÆRs¢uf–FVòFWF–Ç2rÀ¢væ–ÖFRæWFõ67&—Bs¢~)Ê‚WFòÖvVæW&FR67&—BrÀ¢væ–ÖFRævVæW&FUf–FVòs¢	øêÂvVæW&FRf–FVòrÀ¢væ–ÖFRç7V&Ö—GF–ærs¢u7V&Ö—GF–ærââârÀ¢væ–ÖFRæ•w&—F–ærs¢~)Ê‚’—2w&—F–ær67&—BââârÀ¢væ–ÖFRæ•w&—F–æu6†÷'Bs¢t’w&—F–ærââârÀ¢væ–ÖFRæ•&WG'’s¢t’&WG'’rÀ¢væ–ÖFRæ•&Ww&—FRs¢t’&Ww&—FRrÀ¢væ–ÖFRæ”æÇ—¦–ærs¢t’æÇ—¦–ær†÷F÷2ââârÀ¢væ–ÖFRç7F÷'•Æ6V†öÆFW"s¢tFW67&–&R–÷W"f–FVò7F÷'’ââârÀ¢væ–ÖFRç7F÷'”Æ&VÂs¢~)Ê‚f–FVò7F÷'’rÀ¢væ–ÖFRç67&—DÆ&VÂs¢~)Ê‚f–FVò67&—BrÀ¢væ–ÖFRæ†–çDÆ&VÂs¢u&WV—&VÖVçG2rÀ¢væ–ÖFRæ†–çEÆ6V†öÆFW"s¢vRærâ6–æVÖF–2Â6Æ÷rÖ÷F–öâÂVÖ÷F–öæÂââârÀ¢væ–ÖFRææõ67&—Bs¢r†æò67&—B’rÀ¢væ–ÖFRæÆÄ–ÖvW5&VÖ÷fVBs¢tÆÂ–ÖvW2&VÖ÷fVBrÀ¢væ–ÖFRæ–ÖvT6÷VçBs¢†ã¢çVÖ&W"’ÓâG¶çÒ–ÖvRG¶âÓÒòw2r¢rwÖÀ¢væ–ÖFRæÖöFVÂs¢tÖöFVÂrÀ¢væ–ÖFRæGW&F–öâs¢tGW&F–öârÀ¢væ–ÖFRç7FGW2s¢u7FGW2rÀ¢væ–ÖFRç6Ö'Bs¢u6Ö'BrÀ¢væ–ÖFRç6V6öæG2s¢†ã¢çVÖ&W"’ÓâG¶ç×6À¢væ–ÖFRæ6÷7DW7F–ÖFRs¢tW7Bâ6÷7BrÀ¢væ–ÖFRæ6÷7D'”GW&F–öâs¢t'’7GVÂGW&F–öârÀ¢væ–ÖFRæW'%Væf–Æ&ÆRs¢uf–FVò6W'f–6RFV×÷&&–Ç’Væf–Æ&ÆRÂÆV6RG'’v–âÆFW"rÀ¢væ–ÖFRæW'$f–ÆVBs¢uf–FVò6W'f–6RW'&÷"ÂÆV6RG'’v–âÆFW"rÀ ¢òò7FGW2& ¢w7FGW6&"æÆ–¶TVffV7Bs¢tÆ–¶RF†—2VffV7CòFVÆÂÖR†÷rFòF§W7B—B	ùŸ	øû²rÀ ¢òò6çf0¢v6çf2æÆöF–ærs¢tÆöF–ærââârÀ¢v6çf2çf–FVôW‡—&VBs¢uf–FVòÆ–æ²W‡—&VBrÀ¢v6çf2çf–FVõ&VæFW&–ærs¢uf–FVò&VæFW&–ærrÀ¢v6çf2çf–FVôf–ÆVBs¢tvVæW&F–öâf–ÆVBrÀ¢v6çf2çW7VÆÇ•F¶W2s¢uW7VÆÇ’F¶W2>(	3RÖ–çWFW2rÀ¢v6çf2æw&öµW7VÆÇ•F¶W2s¢uW7VÆÇ’F¶W2^(	3c6V6öæG2rÀ¢vvVçEvRçf–FVõF–Ö–ætæ÷FRs¢u&÷f–FW"f–FV÷2Ö’F¶R>(	3RÖ–çWFW3²7W'&VçBw&ö²vVæW&F–öâöVF—B&ö&W2&RW7VÆÇ’^(	3c6V6öæG2âW6RF†W6R6öÖÖæG2f÷"&VÖ÷F–öã¢rÀ¢v6çf2ç&VÖ÷F–öäW‡÷'EW7VÆÇ•F¶W2s¢uW7VÆÇ’æV"f–FVòÆVæwFƒ²6öÆB7F'G2Ö’F¶RÆöævW"rÀ¢v6çf2ævVæW&FUf–FVòs¢tvVæW&FRf–FVòrÀ¢v6çf2æÆ–W%FööÂs¢tÆ–W'2rÀ¢v6çf2æÆ–W&–ærs¢u6W&F–ærÆ–W'2ââârÀ¢v6çf2æÆ–W$Æ&VÂs¢†ã¢çVÖ&W"’ÓâÆ–W"G¶çÖÀ¢v6çf2ç&W6WDÆ–W'2s¢u&W6WBrÀ¢v6çf2æÆ–W$f–ÆVBs¢tÆ–W"7Æ—Bf–ÆVBrÀ¢v6çf2æÆ–W$V×G’s¢tæòÆ–W'2f–Æ&ÆRrÀ¢v6çf2æÆ–W$FVÆWFRs¢tFVÆWFRÆ–W"rÀ¢v6çf2æÆ–W%&W6—¦Rs¢tG&rFò&W6—¦RrÀ¢v6çf2ç&Wf–WuVæf–Æ&ÆRs¢u&Wf–WrFV×÷&&–Ç’Væf–Æ&ÆRrÀ¢v6çf2ç&Wf–WuW6–æu÷7FW"s¢u–÷W"÷7FW"—2&W6W'fVBâ–÷R6â&VÆöBF†R&Wf–WrârÀ¢v6çf2ç&Wf–Wu&WG'’s¢u&WG'’rÀ ¢òòææ÷FF–öâFööÆ& ¢vææ÷FF–öâçÆ6V†öÆFW"s¢t†÷r6†÷VÆB’VF—BF†RÖ&¶VB&VòrÀ¢vææ÷FF–öâæFVfVÇE&ö×Bs¢tVF—BF†R–ÖvR&6VBöâ×’ææ÷FF–öç2rÀ ¢òòVF—F÷"–æÆ–æRT¢vVF—F÷"ævVæW&F–æt–ÖvRs¢t’—2vVæW&F–ær–ÖvRââârÀ¢vVF—F÷"æW'&÷%&WG'’s¢u6öÖWF†–ærvVçBw&öærÂÆV6R&WG'’rÀ ¢òòVF—F÷"–æÆ–æR7G&–æw0¢vVF—F÷"æw&VWF–ærs¢t†’†÷rv÷VÆB–÷RÆ–¶RFòVF—BF†—2†÷FóòrÀ¢vVF—F÷"æ×VÇF”–ÖvTæÇ—¦–ærs¢tv÷B–÷W"¶6÷VçGÒ–ÖvW2æÇ—¦–ærF†VÒæ÷rÂ&÷WBÖ–çWFR(û2rÀ¢vVF—F÷"çF—57Vff—‚s¢uÆåÆä6öÖ–ærWv—F‚6öÖRgVâVF—B–FV2ââârÀ¢vVF—F÷"ævVçEF†–æ¶–ærs¢tvVçB—2F†–æ¶–ærââârÀ¢vVF—F÷"ç&V6öææV7F–ærs¢u&V6öææV7F–ærFòvVçBââârÀ¢vVF—F÷"ævVçD6öF–ærs¢uw&—F–ær6öFRââârÀ¢vVF—F÷"æÖ¶Uf–FVòs¢~)Ê‚GW&âF†W6R†÷F÷2–çFòf–FVòf÷"ÖRrÀ ¢òò&Wf–WrvVæW&F–öà¢w7FGW2ævVæW&F–æu&Wf–Ww2s¢†FöæS¢çVÖ&W"ÂF÷FÃ¢çVÖ&W"’ÓâvVæW&F–ær&Wf–Ww2G¶FöæWÒòG·F÷FÇÖÀ  ¢òòÆæF–æp¢vÆæF–ærçFvÆ–æRs¢vöæRÖâ7&VF—fR7GVF–òrÀ¢vÆæF–æræ†W&ôFW63s¢tÖ¶&öâ&VF–7G2–÷W"æW‡B7&VF—fRÖ÷fRârÀ¢vÆæF–æræ†W&ôFW63"s¢uWÆöB†÷Fò(	BVF—B—BÂW‡Æ÷&R—BÂæ–ÖFR—BârÀ¢vÆæF–ærçG'”g&VRs¢uG'’g&VRrÀ¢vÆæF–ærçvF6„FVÖòs¢uvF6‚FVÖòrÀ¢vÆæF–ærç7FFVÖVçBs¢tVF—BâW‡Æ÷&Râæ–ÖFRârÀ¢vÆæF–ærçF—2æÆ&VÂs¢w6Ö'BF—2rÀ¢vÆæF–ærçF—2çF—FÆRs¢t’&VF–7G2–÷W"æW‡BÖ÷fRrÀ¢vÆæF–ærçF—2æFW62s¢$FöâwB¶æ÷rv†W&RFò7F'CòÖ¶&öâv—fW2–÷RbF—&V7F–öç2&Vf÷&R–÷RWfVâF†–æ²&÷WB—Bâ"À¢vÆæF–ærævVçBæÆ&VÂs¢v’vVçBrÀ¢vÆæF–ærævVçBçF—FÆRs¢u6’—BâFöæRârÀ¢vÆæF–ærævVçBæFW62s¢r$Ö¶RÖRÆöö²Æ–¶R“2Ö÷f–R÷7FW""(	BFW67&–&Rç—F†–ærÂF†RvVçB§W7BFöW2—BârÀ¢vÆæF–ærçf–FVòæÆ&VÂs¢wf–FVòrÀ¢vÆæF–ærçf–FVòçF—FÆRs¢u†÷F÷2F†BÖ÷fRrÀ¢vÆæF–ærçf–FVòæFW62s¢u–÷W"VF—G2&V6öÖR6–æVÖF–26Æ—(	B’w&—FW2F†R67&—BÂ&VæFW'2—Bv—F‚6÷VæBârÀ¢vÆæF–ærçW6T66W2æÆ&VÂs¢wW6R66W2rÀ¢vÆæF–ærçW6T66W2æ†VF–ærs¢uv†W&RöæR†÷FòF¶W2–÷RrÀ¢vÆæF–ærçW6T66W2ç7V"s¢$Ö¶&öâ—6âwB§W7BâVF—F÷"â—Bw2v†W&R–÷W"–FV27F'BÂ'&æ6‚ÂæB6öÖRÆ—fRâ"À¢vÆæF–ærçV3çFrs¢u$UDõT4‚bTä„ä4RrÀ¢vÆæF–ærçV3çF—FÆRs¢uW&fV7BWfW'’FWF–ÂrÀ¢vÆæF–ærçV3æFW62s¢u6Ö'BF—27VvvW7BÆ–v‡F–ærÂ6¶–âFöæRÂæB6öÆ÷"w&F–ærâ&Wf–Wr–ç7FçFÇ’Â6öÖÖ—Bv—F‚FârÀ¢vÆæF–ærçV3æfVGW&Rs¢~(i"6Ö'BF—2+rVæ†æ6R6FVv÷'’rÀ¢vÆæF–ærçV3"çFrs¢t”DTU…Äõ$D”ôârÀ¢vÆæF–ærçV3"çF—FÆRs¢tW‡Æ÷&RWfW'’F—&V7F–öârÀ¢vÆæF–ærçV3"æFW62s¢t7&VF—fRæBv–ÆBF—2W6‚–÷W"†÷Fò–çFò÷'BÂ4BÂæ–ÖRÂvÖR'B(	BV6‚æWrF—&V7F–öâârÀ¢vÆæF–ærçV3"æfVGW&Rs¢~(i"6Ö'BF—2+r7&VF—fRbv–ÆB6FVv÷&–W2rÀ¢vÆæF–ærçV32çFrs¢u5Dõ%”$ô$BrÀ¢vÆæF–ærçV32çF—FÆRs¢t'V–ÆB66VæR'’66VæRrÀ¢vÆæF–ærçV32æFW62s¢tV6‚VF—B&V6öÖW26æ6†÷Bâ7F6²F†VÒ–çFòf—7VÂ7F÷'–&ö&BÂ&VG’Fò—F6‚÷"æ–ÖFRârÀ¢vÆæF–ærçV32æfVGW&Rs¢~(i"’vVçB+r6æ6†÷BF–ÖVÆ–æRrÀ¢vÆæF–ærçV3BçFrs¢ud”DTòrÀ¢vÆæF–ærçV3BçF—FÆRs¢u7F–ÆÂFò6–æVÖrÀ¢vÆæF–ærçV3BæFW62s¢t†—B)kbæB’w&—FW2Ö÷F–öâ67&—Bâ6–æVÖF–2f–FVòv—F‚6÷VæB(	B2FòR6V6öæG2ârÀ¢vÆæF–ærçV3BæfVGW&Rs¢~(i"f–FVòæ–ÖF–öârÀ¢vÆæF–æræ7Fæ†VF–æss¢u–÷W"æW‡B–FVrÀ¢vÆæF–æræ7Fæ†VF–æs"s¢v—2v—F–ærârÀ¢vÆæF–æræ7Fç7V"s¢u&WF÷V6‚Â7F÷'–&ö&BÂW‡Æ÷&RÂæ–ÖFRâg&VRFò7F'BârÀ¢vÆæF–æræ7Fæ'WGFöâs¢t÷VâÖ¶&öârÀ ¢òò&–ÆÆ–æp¢v&–ÆÆ–æræ7&VF—G2s¢t7&VF—G2rÀ¢v&–ÆÆ–æræ&Ææ6Rs¢t&Ææ6RrÀ¢v&–ÆÆ–ærçF÷Ws¢uF÷WrÀ¢v&–ÆÆ–ærævWDÖ÷&T7&VF—G2s¢tvWBÖ÷&R7&VF—G2rÀ¢v&–ÆÆ–ærç7]yÓkh‘éì¶»§q«^u°¹Í••‘…¹•…ÍÐ¹¹…µ”œè€M••…¹”€È¸À…ÍÐœ°(€€µ½‘•°¹Í••‘…¹•…ÍÐ¹‘•ÍŒœè€•™…Õ±ÐÙ¥‘•¼µ½‘•°Ý¥Ñ Ñ¡”‰•ÍÐ‘…¥±äÍÁ••…¹½ÍÐ‰…±…¹”¸œ°(€€µ½‘•°¹Í••‘…¹•5¥¹¤¹¹…µ”œè€M••…¹”€È¸À5¥¹¤œ°(€€µ½‘•°¹Í••‘…¹•5¥¹¤¹‘•ÍŒœè€1½Ý•Èµ½ÍÐM••‘…¹”É½ÕÑ”™½È‘É…™ÑÌ…¹µÕ±Ñ¤µÍ¥é”Ñ•ÍÑÌ¸œ°(€€µ½‘•°¹Í••‘…¹”¹¹…µ”œè€M••…¹”€È¸Àœ°(€€µ½‘•°¹Í••‘…¹”¹‘•ÍŒœè€!¥¡•ÈµÅÕ…±¥ÑäÁ…Ñ ™½È™¥¹…°É•¹‘•ÉÌ°Ý¥Ñ ¡¥¡•È½ÍÐ¸œ°(€€µ½‘•°¹Í••‘…¹”ÈÔ¹¹…µ”œè€M••‘…¹”€È¸Ôœ°(€€µ½‘•°¹Í••‘…¹”ÈÔ¹‘•ÍŒœè€9•ÜM=Qµ½‘•°Ý¥Ñ ÕÀÑ¼€ÌÀÍ•½¹‘Ì°¥µ…”°Ù¥‘•¼°…¹…Õ‘¥¼É•™•É•¹•Ì°Á±ÕÌ•‘¥Ð…¹•áÑ•¹µ½‘•Ì¸œ°(€€µ½‘•°¹Í••‘…¹”ÈÔ¹‰…‘”œè€9\M=Qƒ
+Ü€ÌÁÌœ°(€€µ½‘•°¹É½¬¹¹…µ”œè€É½¬%µ…¥¹”Y¥‘•¼œ°(€€µ½‘•°¹É½¬¹‘•ÍŒœè€…ÍÐ¹…Ñ¥Ù”µ…Õ‘¥¼•¹•É…Ñ¥½¸ÕÀÑ¼€ÄÀàÁÀ°€Ü¥µ…”É•™•É•¹•Ì°Á±ÕÌÙ¥‘•¼•‘¥Ð…¹•áÑ•¹¸1…Ñ•ÍÐ€ÙÌÑ•ÍÐè€Ä×ŠLÌÑÌ¸œ°(€€µ½‘•°¹½½±•=µ¹¤¹¹…µ”œè€•µ¥¹¤=µ¹¤€Ä¸Äœ°(€€µ½‘•°¹½½±•=µ¹¤¹‘•ÍŒœè€…ÍÐÙ¥‘•¼•¹•É…Ñ¥½¸…¹•‘¥Ñ¥¹œÝ¥Ñ €ÌØÁÀ‘É…™ÑÌ°€ÜÈÁÀ‘•™…Õ±Ð°€Ñ,ÕÁÍ…±¥¹œ°…¹¹…Ñ¥Ù”…Õ‘¥¼¸œ°(€€µ½‘•°¹µ¥¹¥µ…á Ì¹¹…µ”œè€5¥¹¥5…à Ìœ°(€€µ½‘•°¹µ¥¹¥µ…á Ì¹‘•ÍŒœè€=Á•¸µÕ±Ñ¥µ½‘…°Ù¥‘•¼µ½‘•°Ý¥Ñ €ÄÔµÍ•½¹°€ÜØá@½È¹…Ñ¥Ù”€É,°…¹µÕ±Ñ¤µÉ•™•É•¹”•¹•É…Ñ¥½¸¸œ°(€€µ½‘•°¹ÁÐÔÙQ•ÉÉ„¹¹…µ”œè€AP´Ô¸ØQ•ÉÉ„œ°(€€µ½‘•°¹ÁÐÔÙQ•ÉÉ„¹‘•ÍŒœè€I•½µµ•¹‘•‘•™…Õ±Ð‰…±…¹¥¹œ¥¹Ñ•±±¥•¹”°ÍÁ••°…¹½ÍÐ¸œ°(€€µ½‘•°¹ÁÐÔÙM½°¹¹…µ”œè€AP´Ô¸ØM½°œ°(€€µ½‘•°¹ÁÐÔÙM½°¹‘•ÍŒœè€5½ÍÐ…Á…‰±”½ÁÑ¥½¸™½È½µÁ±•à…•¹Ñ¥Œ…¹É•…Ñ¥Ù”Ý½É¬¸œ°(€€µ½‘•°¹ÁÐÔÙ1Õ¹„¹¹…µ”œè€AP´Ô¸Ø1Õ¹„œ°(€€µ½‘•°¹ÁÐÔÙ1Õ¹„¹‘•ÍŒœè€…ÍÐ°…™™½É‘…‰±”½ÁÑ¥½¸™½È¡¥ µÙ½±Õµ”•Ù•Éå‘…äÝ½É¬¸œ°(€€µ½‘•°¹É½¬ÐÔ¹¹…µ”œè€É½¬€Ð¸Ôœ°(€€µ½‘•°¹É½¬ÐÔ¹‘•ÍŒœè€…ÍÐ™½È­¹½Ý±•‘”Ý½É¬…¹µÕ±Ñ¤µÍÑ•ÀÑ½½°Ñ…Í­Ì¸œ°(€€µ½‘•°¹‘••ÁÍ••­XÑAÉ¼¹¹…µ”œè€••ÁM••¬XÐAÉ¼œ°(€€µ½‘•°¹‘••ÁÍ••­XÑAÉ¼¹‘•ÍŒœè€!¥ µÙ…±Õ”±½¹œµ½¹Ñ•áÐ…¹½µÁ±•àÉ•…Í½¹¥¹œµ½‘•°¸œ°(€€µ½‘•°¹É•Í½±ÕÑ¥½¸œè€I•Í½±ÕÑ¥½¸œ°(€€µ½‘•°¹É•Í½±ÕÑ¥½¸¹…ÕÑ¼œè€ÕÑ¼œ°(€€µ½‘•°¹…ÍÁ•ÑI…Ñ¥¼œè€ÍÁ•Ðœ°(€€µ½‘•°¹…ÍÁ•ÑI…Ñ¥¼¹…ÕÑ¼œè€‘…ÁÑ¥Ù”œ°(€€µ½‘•°¹…ÕÑ½Q¥ÁÌœè€ÕÑ¼Q¥ÁÌAÉ•Ù¥•ÝÌœ°(€€µ½‘•°¹…ÕÑ½Q¥ÁÌ¹‘•ÍŒœè€ÕÑ¼µ•¹•É…Ñ”ÁÉ•Ù¥•Ü¥µ…•Ìœ°((€€¼¼1½…±”€˜¹…Ù¥…Ñ¥½¸(€€±½…±”¹Í•±•Ñ½Èœè€¡½½Í”±…¹Õ…”œ°(€€¹…Ø¹ÕÁ‘…Ñ•Ìœè€UÁ‘…Ñ•Ìœ°(€€¹…Ø¹‘…Í¡‰½…Éœè€…Í¡‰½…Éœ°(€€¹…Ø¹•ÑÁ¤œè€•ÐA$œ°(€€¹…Ø¹Í¥¹=ÕÐœè€M¥¸½ÕÐœ°(€€¹…Ø¹…½Õ¹Ðœè€½Õ¹Ðœ°(€€¹…Ø¹ÁÉ½™¥±”œè€AÉ½™¥±”œ°(€€¹…Ø¹•áÁ±½É”œè€áÁ±½É”œ°(€€¹…Ø¹ÁÉ½©•ÑÌœè€AÉ½©•ÑÌœ°(€€¹…Ø¹Í¥¹%¸œè€M¥¸¥¸œ°(€€¹…Ø¹½Á•¹…Í¡‰½…Éœè€=Á•¸‘…Í¡‰½…Éœ°(€€¹…Ø¹½Á•¹½Õ¹Ñ5•¹Ôœè€=Á•¸…½Õ¹Ðµ•¹Ôœ°(€€¹…Ø¹±½Í•½Õ¹Ñ5•¹Ôœè€±½Í”…½Õ¹Ðµ•¹Ôœ°(€€¹…Ø¹…½Õ¹Ñ5•¹Ôœè€½Õ¹Ðµ•¹Ôœ°(€€¹…Ø¹…½Õ¹Ñ9…Ù¥…Ñ¥½¸œè€½Õ¹Ð¹…Ù¥…Ñ¥½¸œ°(€€¹…Ø¹ÁÉ¥µ…Éäœè€AÉ¥µ…Éä¹…Ù¥…Ñ¥½¸œ°((€€¼¼$‘…Ñ„½¹Í•¹Ð(€€…¥½¹Í•¹Ð¹Ñ¥Ñ±”œè€±±½Ü$ÁÉ½•ÍÍ¥¹œ½˜å½ÕÈ½¹Ñ•¹Ðüœ°(€€…¥½¹Í•¹Ð¹‰½‘äœè€Q¼•‘¥Ð¥µ…•Ì…¹•¹•É…Ñ”Ù¥‘•¼°…Õ‘¥¼°½È¡…ÐÉ•ÍÕ±ÑÌ°5…­…É½¸µÕÍÐÍ•¹Ñ¡”½¹Ñ•¹Ðå½Ô¡½½Í”Ñ¼Ñ¡¥ÉµÁ…ÉÑä$Í•ÉÙ¥•Ì¸]”Í•¹¥Ð½¹±ä…™Ñ•Èå½Ô…±±½ÜÑ¡¥Ì¸œ°(€€…¥½¹Í•¹Ð¹‘…Ñ…Q¥Ñ±”œè€]¡…Ð¥ÌÍ•¹Ðœ°(€€…¥½¹Í•¹Ð¹‘…Ñ„œè€A¡½Ñ½Ì°Ù¥‘•½Ì°…Õ‘¥¼°ÁÉ½µÁÑÌ°¡…Ðµ•ÍÍ…•Ì°…¹•¹•É…Ñ•½¹Ñ•¹Ðå½Ô¡½½Í”Ý¡•¸„™½±±½ÜµÕÀ•‘¥Ð¹••‘Ì¥Ð¸œ°(€€…¥½¹Í•¹Ð¹ÁÉ½Ù¥‘•ÉÍQ¥Ñ±”œè€]¡¼É••¥Ù•Ì¥Ðœ°(€€…¥½¹Í•¹Ð¹ÁÉ½Ù¥‘•ÉÌœè€•Á•¹‘¥¹œ½¸Ñ¡”™•…ÑÕÉ”å½Ô¡½½Í”°½¹Ñ•¹Ðµ…ä‰”ÁÉ½•ÍÍ•‰ä½½±”°=Á•¹$°=Á•¹I½ÕÑ•È°5¥É½Í½™ÐéÕÉ”°••ÁM••¬°á$°	åÑ•…¹”€¼Y½±•¹¥¹”°-Õ…¥Í¡½Ô€¼-±¥¹œ°½È5¥¹¥5…à¸œ°(€€…¥½¹Í•¹Ð¹…½Õ¹Ñ…Ñ„œè€e½ÕÈÍ¥¸µ¥¸•µ…¥°°Á…ÍÍÝ½É°…¹Á…åµ•¹Ð¥¹™½Éµ…Ñ¥½¸…É”¹½ÐÍ•¹ÐÑ¼$Í•ÉÙ¥•Ì¸œ°(€€…¥½¹Í•¹Ð¹…±±½Üœè€±±½Ü$ÁÉ½•ÍÍ¥¹œ…¹½¹Ñ¥¹Õ”œ°(€€…¥½¹Í•¹Ð¹¹½Ñ9½Üœè€9½Ð¹½Üœ°(€€…¥½¹Í•¹Ð¹½™™Q¥Ñ±”œè€$ÁÉ½•ÍÍ¥¹œ¥Ì½™˜œ°(€€…¥½¹Í•¹Ð¹½™™	½‘äœè€5…­…É½¸Ý¥±°¹½ÐÍ•¹å½ÕÈ½¹Ñ•¹ÐÑ¼Ñ¡¥ÉµÁ…ÉÑä$Í•ÉÙ¥•Ì¸	•…ÕÍ”$ÁÉ½•ÍÍ¥¹œ¥Ì„½É”™•…ÑÕÉ”°å½Ô¹••Ñ¼…±±½Ü¥Ð‰•™½É”å½Ô…¸É•…Ñ”¸œ°(€€…¥½¹Í•¹Ð¹É•Ù¥•Üœè€I•Ù¥•Ü…¹¡½½Í”……¥¸œ°(€€…¥½¹Í•¹Ð¹ÁÉ¥Ù…äœè€Y¥•ÜAÉ¥Ù…äA½±¥äœ°(€€ÁÉ¥Ù…ä¹±…ÍÑUÁ‘…Ñ•œè€1…ÍÐÕÁ‘…Ñ•èÕÕÍÐ€à°€ÈÀÈØœ°((€€¼¼!½µ”É•…Ñ¥½¸™±½Ü(€€¡½µ”¹É•…Ñ”œè€É•…Ñ”œ°(€€¡½µ”¹É•…Ñ•A±…•¡½±‘•Èœè€•ÍÉ¥‰”Ý¡…Ðå½ÔÝ…¹ÐÑ¼É•…Ñ”¸¸¸œ°(€€¡½µ”¹ÁÉ½©•ÑA±…•¡½±‘•Èœè€‰½Ð„Á¥Œü1•ÐÌ±½Ü¥ÐÕÀ¹q¹9¼Á¥Œü$±°½½¬½¹”ÕÀ¸ˆ°(€€¡½µ”¹É•…Ñ•É••AÉ•Ù¥•Üœè€É•…Ñ”™É•”ÁÉ•Ù¥•Üœ°(€€¡½µ”¹ÕÁ±½…‘A¡½Ñ¼œè€UÁ±½…Á¡½Ñ¼œ°(€€¡½µ”¹ÑÉåÉ•”œè€QÉä™É•”œ°(€€¡½µ”¹™¥ÉÍÑÉ•”œè€¥ÉÍÐÉ•…Ñ¥½¸™É•”œ°(€€¡½µ”¹ÑÉ¥…±MÕÉÁÉ¥Í•Q¥Ñ±”œè€M•”Ý¡…Ð¡…ÁÁ•¹Ìœ°(€€¡½µ”¹ÑÉ¥…±¥™Ñ9½Ñ”œè€Q¡”™¥ÉÍÐ½¹”¥Ì½¸5…­…É½¸œ°(€€¡½µ”¹½¹Ñ¥¹Õ•I•¥ÍÑÉ…Ñ¥½¸œè€½¹Ñ¥¹Õ”Í¥¹ÕÀœ°(€€¡½µ”¹ÍÕ‰ÍÉ¥ÁÑ¥½¹½¹™¥Éµ•‘Q¥Ñ±”œè€e½ÕÈÑÉ¥…°¥ÌÉ•Í•ÉÙ•œ°(€€¡½µ”¹Á¡½Ñ½½Õ¹Ðœè€¡¸è¹Õµ‰•È¤€ôø€‘í¹ôÁ¡½Ñ¼‘í¸€ôôô€Ä€ü€œœ€è€Ìõ€°(€€¡½µ”¹ÁÉ•Ù¥•ÝÉ•”œè€AÉ•Ù¥•Ü™É•”œ°(€€¡½µ”¹Í••e½ÕÉY•ÉÍ¥½¸œè€M•”å½ÕÈÙ•ÉÍ¥½¸œ°(€€¡½µ”¹…±µ½ÍÑI•…‘äœè€±µ½ÍÐÉ•…‘äœ°(€€¡½µ”¹ÕÁ±½…‘=¹•A¡½Ñ¼œè€UÁ±½…½¹”Á¡½Ñ¼œ°(€€¡½µ”¹ÁÉ•Ù¥•Ý9½…Éœè€•¹•É…Ñ”„ÁÉ•Ù¥•Ü¸9¼É•‘¥Ð…É¸œ°(€€¡½µ”¹…‘‘A¡½Ñ½ÍQ½AÉ•Ù¥•Üœè€¡½Õ¹ÐèÍÑÉ¥¹œ¤€ôø‘€‘í½Õ¹ÑôÑ¼ÁÉ•Ù¥•Ü™É•”¹€°(€€¡½µ”¹™É••AÉ•Ù¥•Ý9½…Éœè€•Ð„™É•”ÁÉ•Ù¥•Ü¸9¼É•‘¥Ð…É¸œ°(€€¡½µ”¹Á¡½Ñ½Í9••‘•œè€¡½Õ¹ÐèÍÑÉ¥¹œ¤€ôø€‘í½Õ¹Ñô¹••‘•‘€°(€€¡½µ”¹ÁÉ•Ù¥•ÝI•…‘äœè€I•…‘äÑ¼ÁÉ•Ù¥•Üœ°(€€¡½µ”¹µ½É•A¡½Ñ½Í9••‘•œè€¡½Õ¹ÐèÍÑÉ¥¹œ¤€ôø€‘í½Õ¹Ñôµ½É”¹••‘•‘€°(€€¡½µ”¹Ý•±½µ•Q¥Ñ±”œè€]•±½µ”Ñ¼5…­…É½¸„œ°(€€¡½µ”¹Ý•±½µ•¥™Ðœè€‰!•É”Ì„¥™ÐÑ¼•Ðå½ÔÍÑ…ÉÑ•ˆ°(€€¡½µ”¹Ù…±Õ”œè€Ù…±Õ”œ°(€€¡½µ”¹ÍÑ…ÉÑÉ•…Ñ¥¹œœè€MÑ…ÉÐÉ•…Ñ¥¹œœ°(€€¡½µ”¹Á±…•¡½±‘•È¸Äœè€QÕÉ¸Ñ¡•Í”Á¡½Ñ½Ì¥¹Ñ¼„Ù±½œœ°(€€¡½µ”¹Á±…•¡½±‘•È¸Èœè€5…­”„Í•Ð½˜Í½¥…°µ•‘¥„½¹Ñ•¹Ð™É½´Ñ¡¥ÌÁÉ½‘ÕÐÍ¡½Ðœ°(€€¡½µ”¹Á±…•¡½±‘•È¸Ìœè€5…­”µ”±½½¬‰•ÑÑ•Èœ°(€€¡½µ”¹Á±…•¡½±‘•È¸Ðœè€‰É•…Ñ”…¸•µ½©¤Á…¬™É½´µä…ÐÌÁ¡½Ñ¼ˆ°(€€¡½µ”¹Á±…•¡½±‘•È¸Ôœè€QÕÉ¸Ñ¡¥ÌÁ¡½Ñ¼¥¹Ñ¼…¸”µ½µµ•É”Á½ÍÑ•Èœ°(€€¡½µ”¹Á±…•¡½±‘•È¸Øœè€MÑ½Éå‰½…ÉÑ¡•Í”Á¡½Ñ½Ì…¹…‘„Í½Õ¹‘ÑÉ…¬œ°(€€¡½µ”¹Á±…•¡½±‘•È¸Üœè€=¹”Á¡½Ñ¼°Í¡½Üµ”€Ø½µÁ±•Ñ•±ä‘¥™™•É•¹Ð‘¥É•Ñ¥½¹Ìœ°(€€•‘¥Ñ½È¹•¹Ñ•É¥¹¡…Ðœè€¹Ñ•É¥¹œ¡…Ñq¹½¹Ñ¥¹Õ”‘¥Ñ¥¹œœ°((€€¼¼M­¥±±Ìµ…¹…•µ•¹Ð(€€Í­¥±±Ì¹‰…¬œè€	…¬œ°(€€Í­¥±±Ì¹ÕÁ±½…‘¥¹œœè€UÁ±½…‘¥¹œ¸¸¸œ°(€€Í­¥±±Ì¹…‘œè€œ¬M­¥±°œ°(€€Í­¥±±Ì¹±½…‘¥¹œœè€1½…‘¥¹œ¸¸¸œ°(€€Í­¥±±Ì¹µäœè€5äM­¥±±Ìœ°(€€Í­¥±±Ì¹‰Õ¥±Ñ%¸œè€	Õ¥±Ðµ¥¸œ°(€€Í­¥±±Ì¹•µÁÑäœè€9¼Í­¥±±Ìå•Ðœ°(€€Í­¥±±Ì¹Í¡…É”œè€M¡…É”M­¥±°œ°(€€Í­¥±±Ì¹Í¡…É••ÍÉ¥ÁÑ¥½¸œè€M•¹Ñ¡¥Ì±¥¹¬Ñ¼„™É¥•¹ƒŠPÑ¡•ä…¸…‘Ñ¡¥ÌM­¥±°Ñ¼Ñ¡•¥È…½Õ¹Ð¸œ°(€€Í­¥±±Ì¹½Á¥•œè€½Á¥•„œ°(€€Í­¥±±Ì¹½Áäœè€½Áäœ°(€€Í­¥±±Ì¹‘½¹”œè€½¹”œ°(€€Í­¥±±Ì¹Í¡…É•ÉÉ½Èœè€…¥±•Ñ¼É•…Ñ”Í¡…É”±¥¹¬œ°(€€Í­¥±±Ì¹™…¥±•œè€…¥±•œ°((€€¼¼AÉ½™¥±”(€€ÁÉ½™¥±”¹Ñ¥Ñ±”œè€½Õ¹Ðœ°(€€ÁÉ½™¥±”¹‰…¬œè€	…¬œ°(€€ÁÉ½™¥±”¹•‘¥ÑÙ…Ñ…Èœè€‘¥Ðœ°(€€ÁÉ½™¥±”¹‘¥ÍÁ±…å9…µ”œè€¥ÍÁ±…ä9…µ”œ°(€€ÁÉ½™¥±”¹•¹Ñ•É9…µ”œè€¹Ñ•È¹…µ”œ°(€€ÁÉ½™¥±”¹Í…Ù•œè€M…Ù•œ°(€€ÁÉ½™¥±”¹•µ…¥°œè€µ…¥°œ°(€€ÁÉ½™¥±”¹¡…¹•A…ÍÍÝ½Éœè€¡…¹”A…ÍÍÝ½Éœ°(€€ÁÉ½™¥±”¹ÕÉÉ•¹ÑA…ÍÍÝ½Éœè€ÕÉÉ•¹ÐÁ…ÍÍÝ½Éœ°(€€ÁÉ½™¥±”¹¹•ÝA…ÍÍÝ½Éœè€9•ÜÁ…ÍÍÝ½Éœ°(€€ÁÉ½™¥±”¹½¹™¥Éµ9•ÝA…ÍÍÝ½Éœè€½¹™¥É´¹•ÜÁ…ÍÍÝ½Éœ°(€€ÁÉ½™¥±”¹Á…ÍÍÝ½É‘5¥Íµ…Ñ œè€A…ÍÍÝ½É‘Ì‘¼¹½Ðµ…Ñ œ°(€€ÁÉ½™¥±”¹Á…ÍÍÝ½É‘Q½½M¡½ÉÐœè€A…ÍÍÝ½ÉµÕÍÐ‰”…Ð±•…ÍÐ€Ø¡…É…Ñ•ÉÌœ°(€€ÁÉ½™¥±”¹¥¹½ÉÉ•ÑA…ÍÍÝ½Éœè€ÕÉÉ•¹ÐÁ…ÍÍÝ½É¥Ì¥¹½ÉÉ•Ðœ°(€€ÁÉ½™¥±”¹Á…ÍÍÝ½É‘UÁ‘…Ñ•œè€A…ÍÍÝ½ÉÕÁ‘…Ñ•œ°(€€ÁÉ½™¥±”¹ÕÁ‘…Ñ•A…ÍÍÝ½Éœè€UÁ‘…Ñ”A…ÍÍÝ½Éœ°(€€ÁÉ½™¥±”¹Í¥¹=ÕÐœè€M¥¸=ÕÐœ°((€€¼¼•¹ÐÉÕ¹Ñ¥µ”(€€…•¹Ð¹ÍÑ…ÑÕÌ¹ÍÑ…ÉÑ¥¹œœè€MÑ…ÉÑ¥¹œ¸¸¸œ°(€€…•¹Ð¹ÍÑ…ÑÕÌ¹Á±…¹¹¥¹œœè€A±…¹¹¥¹œ¸¸¸œ°(€€…•¹Ð¹ÍÑ…ÑÕÌ¹•¹•É…Ñ¥¹½‘”œè€•¹•É…Ñ¥¹œ½‘”¸¸¸œ°(€€…•¹Ð¹ÍÑ…ÑÕÌ¹…¹…±åé¥¹%µ…”œè€¡‘•Ñ…¥°èÍÑÉ¥¹œ¤€ôø‘•Ñ…¥°€ü¹…±åé¥¹œ¥µ…”è€‘í‘•Ñ…¥±õ€€è€¹…±åé¥¹œ¥µ…”œ°(€€…•¹Ð¹ÍÑ…ÑÕÌ¹…¹…±åé¥¹Y¥‘•¼œè€¡‘•Ñ…¥°èÍÑÉ¥¹œ¤€ôø‘•Ñ…¥°€ü¹…±åé¥¹œÙ¥‘•¼è€‘í‘•Ñ…¥±õ€€è€¹…±åé¥¹œÙ¥‘•¼œ°(€€…•¹Ð¹ÍÑ…ÑÕÌ¹ÑÉ…¹ÍÉ¥‰¥¹Õ‘¥¼œè€QÉ…¹ÍÉ¥‰¥¹œ…Õ‘¥¼¸¸¸œ°(€€…•¹Ð¹ÍÑ…ÑÕÌ¹¡½½Í¥¹Y½¥”œè€¡½½Í¥¹œÙ½¥”¸¸¸œ°(€€…•¹Ð¹ÍÑ…ÑÕÌ¹•¹•É…Ñ¥¹Y½¥•½Ù•Èœè€•¹•É…Ñ¥¹œÙ½¥•½Ù•È¸¸¸œ°(€€…•¹Ð¹ÍÑ…ÑÕÌ¹•¹•É…Ñ¥¹Õ‘¥¼œè€•¹•É…Ñ¥¹œ…Õ‘¥¼¸¸¸œ°(€€…•¹Ð¹ÍÑ…ÑÕÌ¹…ÁÑÕÉ¥¹É…µ”œè€¡¡¥¹ÐèÍÑÉ¥¹œ¤€ôø…ÁÑÕÉ¥¹œ€‘í¡¥¹Ñô¸¸¹€°(€€…•¹Ð¹ÍÑ…ÑÕÌ¹•¹•É…Ñ¥¹%µ…”œè€•¹•É…Ñ¥¹œ¥µ…”¸¸¸œ°(€€…•¹Ð¹ÍÑ…ÑÕÌ¹‰É½ÝÍ¥¹]½É­ÍÁ…”œè€	É½ÝÍ¥¹œÝ½É­ÍÁ…”¸¸¸œ°(€€…•¹Ð¹ÍÑ…ÑÕÌ¹É•…‘¥¹¥±”œè€¡¹…µ”èÍÑÉ¥¹œ¤€ôøI•…‘¥¹œ€‘í¹…µ•ô¸¸¹€°(€€…•¹Ð¹ÍÑ…ÑÕÌ¹Í…Ù¥¹œœè€M…Ù¥¹œ¸¸¸œ°(€€…•¹Ð¹ÍÑ…ÑÕÌ¹‘•±•Ñ¥¹œœè€•±•Ñ¥¹œ¸¸¸œ°(€€…•¹Ð¹ÍÑ…ÑÕÌ¹ÉÕ¹¹¥¹½‘”œè€¡‘•ÍÉ¥ÁÑ¥½¸èÍÑÉ¥¹œ¤€ôøIÕ¹¹¥¹œè€‘í‘•ÍÉ¥ÁÑ¥½¸ñð€½‘”ô¸¸¹€°(€€…•¹Ð¹ÍÑ…ÑÕÌ¹É½Ñ…Ñ¥¹…µ•É„œè€I½Ñ…Ñ¥¹œ…µ•É„¸¸¸œ°(€€…•¹Ð¹ÍÑ…ÑÕÌ¹Ñ¡¥¹­¥¹œœè€Q¡¥¹­¥¹œ¸¸¸œ°(€€…•¹Ð¹ÍÑ…ÑÕÌ¹¥µ…••¹•É…Ñ¥½¹…¥±•œè€%µ…”•¹•É…Ñ¥½¸™…¥±•œ°(€€…•¹Ð¹ÍÑ…ÑÕÌ¹É•ÍÕµ¥¹œœè€Q¡”±…ÍÐÍÑ•ÀÍÑ…±±•ƒŠPÉ•ÍÕµ¥¹œ™É½´Ñ¡”Í…Ù•‘É…™Ð¸¸¸œ°(€€…•¹Ð¹•ÉÉ½È¹É•½Ù•É…‰±”œè€Q¡”µ½‘•°ÍÑ½ÁÁ•‰•™½É”½µÁ±•Ñ¥¹œÑ¡”ÁÉ½µ¥Í•¡…¹”¸e½ÕÈ‘É…™Ð¥ÌÍ…Ù•ìÍ•¹ƒŠq½¹Ñ¥¹Õ—ŠtÑ¼É•ÍÕµ”™É½´¥Ð¸œ°(€€…•¹Ð¹•ÉÉ½È¹™…Ñ…°œè€Q¡”µ½‘•°ÍÑ½ÁÁ•‰•™½É”½µÁ±•Ñ¥¹œÑ¡¥ÌÉ•ÅÕ•ÍÐ…¹¹¼É•ÍÕµ…‰±”‘É…™ÐÝ…ÌÍ…Ù•¸A±•…Í”É•ÑÉäÑ¡”É•ÅÕ•ÍÐ¸œ°(€€…•¹Ð¹•ÉÉ½È¹½¹¹•Ñ¥½¹¹‘•œè€Q¡”…•¹Ð½¹¹•Ñ¥½¸•¹‘•Ý¥Ñ¡½ÕÐ„½µÁ±•Ñ•É•ÍÕ±Ð¸e½ÕÈÍ…Ù•Ý½É¬¥ÌÁÉ•Í•ÉÙ•ìÍ•¹ƒŠq½¹Ñ¥¹Õ—ŠtÑ¼É•ÍÕµ”¸œ°(€€…•¹Ð¹•ÉÉ½È¹ÉÕ¹Ñ¥µ•É…™ÑM…Ù•œè€Q¡”…•¹ÐÉÕ¹Ñ¥µ”ÍÑ½ÁÁ•°‰ÕÐå½ÕÈ‘É…™ÐÝ…ÌÍ…Ù•¸M•¹ƒŠq½¹Ñ¥¹Õ—ŠtÑ¼É•ÍÕµ”™É½´¥Ð¸œ°(€€…•¹Ð¹•ÉÉ½È¹ÉÕ¹Ñ¥µ•9½É…™Ðœè€Q¡”…•¹ÐÉÕ¹Ñ¥µ”ÍÑ½ÁÁ•…¹¹¼É•ÍÕµ…‰±”‘É…™ÐÝ…ÌÍ…Ù•¸A±•…Í”É•ÑÉäÑ¡”É•ÅÕ•ÍÐ¸œ°(€€…•¹Ð¹µ½¬¹Ñ¥ÁÍQ•…Í•Èœè€QÉäÑÕÉ¹¥¹œ¥Ð¥¹Ñ¼„µ¥¹¥…ÑÕÉ”Í•¹”¸œ°(€€…•¹Ð¹µ½¬¹Ñ¥ÁI•…Ñ¥½¸œè€9¥”°Ñ¡…Ð•‘¥Ð™••±Ì¹…ÑÕÉ…°¸œ°(€€…•¹Ð¹µ½¬¹¹…µ•AÉ½©•Ðœè€½™™•”™Ñ•É¹½½¸œ°(€€…•¹Ð¹µ½¬¹ÁÉ•Ù¥•ÝÍI•…‘äœè€e½ÕÈÁÉ•Ù¥•ÝÌ…É”É•…‘ä¸Q¡”Á±…å™Õ°½¹”¥ÌÝ½ÉÑ „±½½¬¸œ°(€€…•¹Ð¹…Õ‘¥¼¹•¹•É…Ñ•œè€Õ‘¥¼•¹•É…Ñ•œ°(€€…•¹Ð¹…Õ‘¥¼¹•¹•É…Ñ•‘9…µ•œè€¡Ñ¥Ñ±”èÍÑÉ¥¹œ¤€ôøÕ‘¥¼•¹•É…Ñ•è€‘íÑ¥Ñ±•õ€°(€€…ÉÑ¥™…Ð¹¹•áÑMÑ•ÁÌœè€9•áÐÍÑ•ÁÌœ°(€€…ÉÑ¥™…Ð¹½¹Ñ¥¹Õ”œè€½¹Ñ¥¹Õ”œ°((€€¼¼MÑÕ‘¥¼IÕ¸(€€ÍÑÕ‘¥¼¹ÍÑ…”¹‰É¥•˜œè€É•…Ñ¥Ù”‰É¥•˜œ°(€€ÍÑÕ‘¥¼¹ÍÑ…”¹‰É¥•˜¹Í¡½ÉÐœè€	É¥•˜œ°(€€ÍÑÕ‘¥¼¹ÍÑ…”¹ÁÉ½Á½Í…°œè€É•…Ñ¥Ù”ÁÉ½Á½Í…°œ°(€€ÍÑÕ‘¥¼¹ÍÑ…”¹ÁÉ½Á½Í…°¹Í¡½ÉÐœè€AÉ½Á½Í…°œ°(€€ÍÑÕ‘¥¼¹ÍÑ…”¹ÍÉ¥ÁÐœè€9…ÉÉ…Ñ¥½¸ÍÉ¥ÁÐœ°(€€ÍÑÕ‘¥¼¹ÍÑ…”¹ÍÉ¥ÁÐ¹Í¡½ÉÐœè€MÉ¥ÁÐœ°(€€ÍÑÕ‘¥¼¹ÍÑ…”¹ÍÑ½Éå‰½…Éœè€MÑ½Éå‰½…Éœ°(€€ÍÑÕ‘¥¼¹ÍÑ…”¹ÍÑ½Éå‰½…É¹Í¡½ÉÐœè€	½…Éœ°(€€ÍÑÕ‘¥¼¹ÍÑ…”¹…ÍÍ•ÑÌœè€ÍÍ•Ðµ…¹¥™•ÍÐœ°(€€ÍÑÕ‘¥¼¹ÍÑ…”¹…ÍÍ•ÑÌ¹Í¡½ÉÐœè€ÍÍ•ÑÌœ°(€€ÍÑÕ‘¥¼¹ÍÑ…”¹½µÁ½Í¥Ñ¥½¸œè€½µÁ½Í¥Ñ¥½¸œ°(€€ÍÑÕ‘¥¼¹ÍÑ…”¹½µÁ½Í¥Ñ¥½¸¹Í¡½ÉÐœè€½µÁ½Í”œ°(€€ÍÑÕ‘¥¼¹ÍÑ…”¹É•Ù¥•Üœè€¥¹…°É•Ù¥•Üœ°(€€ÍÑÕ‘¥¼¹ÍÑ…”¹É•Ù¥•Ü¹Í¡½ÉÐœè€I•Ù¥•Üœ°(€€ÍÑÕ‘¥¼¹ÍÑ…”¹‘•±¥Ù•Éäœè€•±¥Ù•Éäœ°(€€ÍÑÕ‘¥¼¹ÍÑ…”¹‘•±¥Ù•Éä¹Í¡½ÉÐœè€•±¥Ù•Éäœ°(€€ÍÑÕ‘¥¼¹ÍÑ…ÑÕÌ¹Á•¹‘¥¹œœè€9½ÐÍÑ…ÉÑ•œ°(€€ÍÑÕ‘¥¼¹ÍÑ…ÑÕÌ¹¥¹AÉ½É•ÍÌœè€%¸ÁÉ½É•ÍÌœ°(€€ÍÑÕ‘¥¼¹ÍÑ…ÑÕÌ¹…Ý…¥Ñ¥¹ÁÁÉ½Ù…°œè€Ý…¥Ñ¥¹œ…ÁÁÉ½Ù…°œ°(€€ÍÑÕ‘¥¼¹ÍÑ…ÑÕÌ¹½µÁ±•Ñ•œè€½µÁ±•Ñ•œ°(€€ÍÑÕ‘¥¼¹ÍÑ…ÑÕÌ¹¥¹Ù…±¥‘…Ñ•œè€9••‘ÌÕÁ‘…Ñ”œ°(€€ÍÑÕ‘¥¼¹ÍÑ…ÑÕÌ¹™…¥±•œè€…¥±•œ°(€€ÍÑÕ‘¥¼¹ÁÉ½É•ÍÌ¹…É¥„œè€MÑÕ‘¥¼IÕ¸ÁÉ½É•ÍÌœ°(€€ÍÑÕ‘¥¼¹ÁÉ½É•ÍÌ¹ÕÉÉ•¹Ðœè€¡ÍÑ…”èÍÑÉ¥¹œ¤€ôø%¸ÁÉ½É•ÍÌè€‘íÍÑ…•õ€°(€€ÍÑÕ‘¥¼¹ÁÉ½É•ÍÌ¹½µÁ±•Ñ•œè€¡Ñ¥Ñ±”èÍÑÉ¥¹œ¤€ôø½µÁ±•Ñ•è€‘íÑ¥Ñ±•õ€°(€€ÍÑÕ‘¥¼¹ÁÉ½É•ÍÌ¹‘¥Íµ¥ÍÌœè€!¥‘”MÑÕ‘¥¼IÕ¸ÁÉ½É•ÍÌœ°(€€ÍÑÕ‘¥¼¹Õ¹¥Ð¹Í•½¹‘Ìœè€¡Ù…±Õ”èÍÑÉ¥¹œ¤€ôø€‘íÙ…±Õ•õÍ€°(€€ÍÑÕ‘¥¼¹Õ¹¥Ð¹Í•½¹‘I…¹”œè€¡ÍÑ…ÉÐèÍÑÉ¥¹œ°•¹èÍÑÉ¥¹œ¤€ôø€‘íÍÑ…ÉÑ÷ŠL‘í•¹‘õÍ€°(€€ÍÑÕ‘¥¼¹Õ¹¥Ð¹Í•Ñ¥½¹Ìœè€¡½Õ¹Ðè¹Õµ‰•È¤€ôø€‘í½Õ¹ÑôÍ•Ñ¥½¸‘í½Õ¹Ð€ôôô€Ä€ü€œœ€è€Ìõ€°(€€ÍÑÕ‘¥¼¹Õ¹¥Ð¹Í•¹•Ìœè€¡½Õ¹Ðè¹Õµ‰•È¤€ôø€‘í½Õ¹ÑôÍ•¹”‘í½Õ¹Ð€ôôô€Ä€ü€œœ€è€Ìõ€°(€€ÍÑÕ‘¥¼¹Õ¹¥Ð¹…ÍÍ•ÑÌœè€¡½Õ¹Ðè¹Õµ‰•È¤€ôø€‘í½Õ¹Ñô…ÍÍ•Ð‘í½Õ¹Ð€ôôô€Ä€ü€œœ€è€Ìõ€°(€€ÍÑÕ‘¥¼¹ÁÉ•Ù¥•Ü¹…±±ÍÍ•ÑÍI•…‘äœè€±°É•…‘äœ°(€€ÍÑÕ‘¥¼¹ÁÉ•Ù¥•Ü¹•‘¥Ñ…‰±”œè€‘¥Ñ…‰±”œ°(€€ÍÑÕ‘¥¼¹ÁÉ•Ù¥•Ü¹™±…ÑÑ•¹•œè€±…ÑÑ•¹•œ°(€€ÍÑÕ‘¥¼¹ÁÉ•Ù¥•Ü¹Í½ÕÉ•AÉ•Í•ÉÙ•œè€‘¥Ñ…‰±”Í½ÕÉ”ÁÉ•Í•ÉÙ•œ°(€€ÍÑÕ‘¥¼¹‘•Ñ…¥°¹±½…‘¥¹œœè€1½…‘¥¹œÍÑ…”½¹Ñ•¹ÓŠ˜œ°(€€ÍÑÕ‘¥¼¹‘•Ñ…¥°¹½¹MÉ••¹Q•áÐœè€=¸µÍÉ••¸Ñ•áÐœ°(€€ÍÑÕ‘¥¼¹‘•Ñ…¥°¹±…‰•±M•Á…É…Ñ½Èœè€œè€œ°(€€ÍÑÕ‘¥¼¹‘•Ñ…¥°¹½‰©•Ñ¥Ù”œè€=‰©•Ñ¥Ù”œ°(€€ÍÑÕ‘¥¼¹‘•Ñ…¥°¹…Õ‘¥•¹”œè€Õ‘¥•¹”œ°(€€ÍÑÕ‘¥¼¹‘•Ñ…¥°¹½É•5•ÍÍ…”œè€½É”µ•ÍÍ…”œ°(€€ÍÑÕ‘¥¼¹‘•Ñ…¥°¹ÍÁ•¥™¥…Ñ¥½¸œè€MÁ•¥™¥…Ñ¥½¹Ìœ°(€€ÍÑÕ‘¥¼¹‘•Ñ…¥°¹Í•±•Ñ•‘¥É•Ñ¥½¸œè€M•±•Ñ•‘¥É•Ñ¥½¸œ°(€€ÍÑÕ‘¥¼¹‘•Ñ…¥°¹½Á•¹¥¹!½½¬œè€=Á•¹¥¹œ¡½½¬œ°(€€ÍÑÕ‘¥¼¹‘•Ñ…¥°¹Ù¥ÍÕ…±¥É•Ñ¥½¸œè€Y¥ÍÕ…°‘¥É•Ñ¥½¸œ°(€€ÍÑÕ‘¥¼¹‘•Ñ…¥°¹µ½Ñ¥½¹1…¹Õ…”œè€5½Ñ¥½¸±…¹Õ…”œ°(€€ÍÑÕ‘¥¼¹‘•Ñ…¥°¹É…Ñ¥½¹…±”œè€I…Ñ¥½¹…±”œ°(€€ÍÑÕ‘¥¼¹‘•Ñ…¥°¹…ÉÑ¥É•Ñ¥½¸œè€ÉÐ‘¥É•Ñ¥½¸œ°(€€ÍÑÕ‘¥¼¹‘•Ñ…¥°¹±…å½ÕÑ½¹ÍÑÉ…¥¹ÑÌœè€1…å½ÕÐ½¹ÍÑÉ…¥¹ÑÌœ°(€€ÍÑÕ‘¥¼¹‘•Ñ…¥°¹ÉÕ¹Ñ¥µ”œè€IÕ¹Ñ¥µ”œ°(€€ÍÑÕ‘¥¼¹‘•Ñ…¥°¹™É…µ•MÁ•¥™¥…Ñ¥½¸œè€É…µ”ÍÁ•¥™¥…Ñ¥½¹Ìœ°(€€ÍÑÕ‘¥¼¹‘•Ñ…¥°¹‘•Í¥¹M½ÕÉ”œè€•Í¥¸Í½ÕÉ”œ°(€€ÍÑÕ‘¥¼¹‘•Ñ…¥°¹•‘¥Ñ…‰±”œè€‘¥Ñ…‰±”œ°(€€ÍÑÕ‘¥¼¹‘•Ñ…¥°¹å•Ìœè€e•Ìœ°(€€ÍÑÕ‘¥¼¹‘•Ñ…¥°¹¹¼œè€9¼œ°(€€ÍÑÕ‘¥¼¹‘•Ñ…¥°¹Á…ÍÌœè€A…ÍÍ•œ°(€€ÍÑÕ‘¥¼¹‘•Ñ…¥°¹É•Ù¥Í”œè€9••‘ÌÉ•Ù¥Í¥½¸œ°(€€ÍÑÕ‘¥¼¹‘•Ñ…¥°¹™…¥°œè€…¥±•œ°(€€ÍÑÕ‘¥¼¹‘•Ñ…¥°¹½¹±ÕÍ¥½¸œè€½¹±ÕÍ¥½¸œ°(€€ÍÑÕ‘¥¼¹‘•Ñ…¥°¹Ñ•¡¹¥…±¡•¬œè€Q•¡¹¥…°¡•¬œ°(€€ÍÑÕ‘¥¼¹‘•Ñ…¥°¹¡…ÍÕ‘¥¼œè€Õ‘¥¼¥¹±Õ‘•œ°(€€ÍÑÕ‘¥¼¹‘•Ñ…¥°¹¹½Õ‘¥¼œè€9¼…Õ‘¥¼œ°(€€ÍÑÕ‘¥¼¹‘•Ñ…¥°¹Ù¥ÍÕ…±¡•¬œè€Y¥ÍÕ…°¡•¬œ°(€€ÍÑÕ‘¥¼¹‘•Ñ…¥°¹™É…µ•ÍM…µÁ±•œè€¡½Õ¹ÐèÍÑÉ¥¹œ¤€ôø€‘í½Õ¹Ñô™É…µ•ÌÍ…µÁ±•‘€°(€€ÍÑÕ‘¥¼¹‘•Ñ…¥°¹‰±…­É…µ•Í½Õ¹œè€	±…¬™É…µ•Ì™½Õ¹œ°(€€ÍÑÕ‘¥¼¹‘•Ñ…¥°¹¹½	±…­É…µ•Ìœè€9¼‰±…¬™É…µ•Ìœ°(€€ÍÑÕ‘¥¼¹‘•Ñ…¥°¹½Ù•É±…Á½Õ¹œè€=Ù•É±…ÁÌ™½Õ¹œ°(€€ÍÑÕ‘¥¼¹‘•Ñ…¥°¹¹½=Ù•É±…Àœè€9¼•±•µ•¹Ð½Ù•É±…ÁÌœ°(€€ÍÑÕ‘¥¼¹‘•Ñ…¥°¹…Õ‘¥½¡•¬œè€Õ‘¥¼¡•¬œ°(€€ÍÑÕ‘¥¼¹‘•Ñ…¥°¹±½Õ‘¹•ÍÍ9½Ñ5•…ÍÕÉ•œè€1½Õ‘¹•ÍÌ¹½Ðµ•…ÍÕÉ•œ°(€€ÍÑÕ‘¥¼¹‘•Ñ…¥°¹…Õ‘¥½½¹™¥Éµ•œè€Õ‘¥¼½¹™¥Éµ•œ°(€€ÍÑÕ‘¥¼¹‘•Ñ…¥°¹™¥¹…±Y¥‘•¼œè€¥¹…°Ù¥‘•¼œ°(€€ÍÑÕ‘¥¼¹‘•Ñ…¥°¹•‘¥Ñ…‰±•M½ÕÉ”œè€‘¥Ñ…‰±”Í½ÕÉ”œ°(€€ÍÑÕ‘¥¼¹‘•Ñ…¥°¹¡•­ÍÕ´œè€¡•­ÍÕ´œ°(€€ÍÑÕ‘¥¼¹‘•Ñ…¥°¹‘•±¥Ù•É•‘Ðœè€•±¥Ù•É•…Ðœ°(€€ÍÑÕ‘¥¼¹ÍÑ…”¹•¹•É…Ñ¥¹œœè€•¹•É…Ñ¥¹œ½¹Ñ•¹Ð™½ÈÑ¡¥ÌÍÑ…—Š˜œ°(€€ÍÑÕ‘¥¼¹Í½ÕÉ”¹½Á•¸œè€=Á•¸Í½ÕÉ”™¥±”œ°(€€ÍÑÕ‘¥¼¹Í½ÕÉ”¹½Á•¹É¥„œè€¡ÍÑ…”èÍÑÉ¥¹œ¤€ôø=Á•¸€‘íÍÑ…•ôÍ½ÕÉ”™¥±•€°((€€¼¼•¹Ðµ½‘•°Í•±•Ñ½È(€€…‘µ¥¸¹½‘•á±±½Ý±¥ÍÐ¹Ñ…ˆœè€½‘•àÁ±…¸œ°(€€…‘µ¥¸¹½‘•á±±½Ý±¥ÍÐ¹Ñ¥Ñ±”œè€Q•ÍÐ…½Õ¹Ð…±±½Ý±¥ÍÐœ°(€€…‘µ¥¸¹½‘•á±±½Ý±¥ÍÐ¹‘•ÍŒœè€±±½Ý•…½Õ¹ÑÌÕÍ”å½ÕÈÁ•ÉÍ½¹…°½‘•àÁ±…¸‰ä‘•™…Õ±Ð…¹™…±°‰…¬Ñ¼Ñ¡”A$½¹±äÝ¡•¸Õ¹…Ù…¥±…‰±”¸¡…¹•ÌÍå¹ŒÑ¼Ñ¡”Y1…ˆÉ•±…ä¸œ°(€€…‘µ¥¸¹½‘•á±±½Ý±¥ÍÐ¹•µ…¥±A±…•¡½±‘•Èœè€¹Ñ•È„É•¥ÍÑ•É•5…­…É½¸•µ…¥°œ°(€€…‘µ¥¸¹½‘•á±±½Ý±¥ÍÐ¹…‘œè€‘…½Õ¹Ðœ°(€€…‘µ¥¸¹½‘•á±±½Ý±¥ÍÐ¹Í…Ù¥¹œœè€Må¹¥¹ŸŠ˜œ°(€€…‘µ¥¸¹½‘•á±±½Ý±¥ÍÐ¹…‘‘•œè€½Õ¹Ð…‘‘•Ñ¼Ñ¡”½‘•àÁ±…¸…±±½Ý±¥ÍÐœ°(€€…‘µ¥¸¹½‘•á±±½Ý±¥ÍÐ¹É•µ½Ù•œè€½Õ¹ÐÉ•µ½Ù•™É½´Ñ¡”½‘•àÁ±…¸…±±½Ý±¥ÍÐœ°(€€…‘µ¥¸¹½‘•á±±½Ý±¥ÍÐ¹ÕÁ‘…Ñ•…¥±•œè€UÁ‘…Ñ”™…¥±•¸A±•…Í”ÑÉä……¥¸¸œ°(€€…‘µ¥¸¹½‘•á±±½Ý±¥ÍÐ¹½Ý¹•Èœè€=Ý¹•Èœ°(€€…‘µ¥¸¹½‘•á±±½Ý±¥ÍÐ¹…±±½Ý•œè€±±½Ý•œ°(€€…‘µ¥¸¹½‘•á±±½Ý±¥ÍÐ¹É•µ½Ù”œè€I•µ½Ù”œ°(€€…‘µ¥¸¹½‘•á±±½Ý±¥ÍÐ¹Õ¹­¹½Ý¹µ…¥°œè€U¹­¹½Ý¸•µ…¥°œ°(€€¡…¹•±½œ¹½½±•=µ¹¤ÄÄ¹Ñ¥Ñ±”œè€•µ¥¹¤=µ¹¤€Ä¸Ä%Ì1¥Ù”œ°(€€¡…¹•±½œ¹½½±•=µ¹¤ÄÄ¹¥Ñ•´Äœè€É•…Ñ”™…ÍÐ¹…Ñ¥Ù”µ…Õ‘¥¼Ù¥‘•¼¥¸€ÌØÁÀ‘É…™Ð°€ÜÈÁÀ‘•™…Õ±Ð°½ÈÕÁÍ…±•€ÄÀàÁÀ…¹€Ñ,Ý¥Ñ •µ¥¹¤=µ¹¤€Ä¸Ä¸œ°(€€¡…¹•±½œ¹½½±•=µ¹¤ÄÄ¹¥Ñ•´Èœè€I•™•É•¹”½¹”Ñ¥µ•±¥¹”Ù¥‘•¼¥¸¡…Ð…¹…Í¬5…­…É½¸Ñ¼½¹Ñ¥¹Õ”¥Ð‰äÕÀÑ¼€ÄÀÍ•½¹‘ÌÝ¡¥±”ÁÉ•Í•ÉÙ¥¹œÑ¡”½É¥¥¹…°±¥À…Ì„¹•ÜÕµÕ±…Ñ¥Ù”Í¹…ÁÍ¡½Ð¸œ°(€€¡…¹•±½œ¹•áÑ•É¹…±%µ…•Ì¹Ñ¥Ñ±”œè€UÍ”M•¹”%µ…•Ì¥É•Ñ±ä¥¸Y¥‘•¼œ°(€€¡…¹•±½œ¹•áÑ•É¹…±%µ…•Ì¹¥Ñ•´Äœè€M•¹”¥µ…•Ì¹½ÜÉ•¹‘•È…Ì¥µ…•Ì¥¸AÉ•Ù¥•Ü…¹5@Ð•áÁ½ÉÐ¥¹ÍÑ•…½˜‰•¥¹œµ¥ÍÑ…­•¸™½ÈÙ¥‘•½Ì¸œ°(€€µ½‘•°¹…•¹ÑÕÑ½•ÍŒœè€UÍ”Ñ¡”‘•™…Õ±ÐAP´Ô¸ØQ•ÉÉ„Ñ¡É½Õ Ñ¡”•á¥ÍÑ¥¹œéÕÉ”A$œ°(€€µ½‘•°¹…•¹ÑÕÑ½½‘•á•ÍŒœè€UÍ”Ñ¡”‘•™…Õ±ÐAP´Ô¸ØQ•ÉÉ„Ñ¡É½Õ å½ÕÈÁ•ÉÍ½¹…°½‘•àÁ±…¸™¥ÉÍÐœ°(€€µ½‘•°¹…•¹Ñ1…‰•°œè€•¹Ðµ½‘•°œ°(€€µ½‘•°¹±½Í••¹ÑM•±•Ñ½Èœè€±½Í”µ½‘•°Í•±•Ñ½Èœ°(€€µ½‘•°¹¡½½Í••¹Ðœè€¡½½Í”…•¹Ðµ½‘•°œ°(€€µ½‘•°¹…éÕÉ•Á¥	…‘”œè€éÕÉ”A$œ°(€€µ½‘•°¹…•¹ÑÉ½ÕÀ¹…éÕÉ”œè€éÕÉ”A$œ°(€€µ½‘•°¹…•¹ÑÉ½ÕÀ¹…éÕÉ••ÍŒœè€•™…Õ±Ðƒ
+ÜÕÍ…”‰…Í•œ°(€€µ½‘•°¹…•¹ÑÉ½ÕÀ¹½‘•àœè€A•ÉÍ½¹…°½‘•àÁ±…¸œ°(€€µ½‘•°¹…•¹ÑÉ½ÕÀ¹½Ñ¡•Èœè€=Ñ¡•ÈA%Ìœ°(€€µ½‘•°¹…•¹ÑÉ½ÕÀ¹½Ñ¡•É•ÍŒœè€=Ñ¡•È…Ù…¥±…‰±”µ½‘•±Ìœ°(€€µ½‘•°¹½‘•áMÕ‰ÍÉ¥ÁÑ¥½¸¹¹…µ”œè€AP´Ô¸ØQ•ÉÉ„ƒ
+Ü½‘•àÁ±…¸œ°(€€µ½‘•°¹½‘•áMÕ‰ÍÉ¥ÁÑ¥½¸¹ÍÕ™™¥àœè€½‘•àÁ±…¸œ°(€€µ½‘•°¹½‘•áMÕ‰ÍÉ¥ÁÑ¥½¸¹‰…‘”œè€A•ÉÍ½¹…°Á±…¸œ°(€€µ½‘•°¹½‘•áMÕ‰ÍÉ¥ÁÑ¥½¸¹‘•ÍŒœè€UÍ”å½ÕÈ¡…ÑAP½½‘•àÁ±…¸°Ý¥Ñ Ñ¡”•á¥ÍÑ¥¹œA$™…±±‰…¬Ý¡•¸Õ¹…Ù…¥±…‰±”¸œ°(€€µ½‘•°¹½‘•áMÕ‰ÍÉ¥ÁÑ¥½¸¹¡•­¥¹œœè€¡•­¥¹œÁ±…¸ÕÍ…—Š˜œ°(€€µ½‘•°¹½‘•áMÕ‰ÍÉ¥ÁÑ¥½¸¹É•µ…¥¹¥¹œœè€¡Á•É•¹ÐèÍÑÉ¥¹œ¤€ôø€‘íÁ•É•¹Ñô”Ý••­±ä…±±½Ý…¹”É•µ…¥¹¥¹€°(€€µ½‘•°¹½‘•áMÕ‰ÍÉ¥ÁÑ¥½¸¹É•Í•ÑÍÐœè€¡Ñ¥µ”èÍÑÉ¥¹œ¤€ôøI•Í•ÑÌ€‘íÑ¥µ•õ€°(€€µ½‘•°¹½‘•áMÕ‰ÍÉ¥ÁÑ¥½¸¹ÕÍ…•U¹…Ù…¥±…‰±”œè€A±…¸…Ù…¥±…‰±”ìÕÍ…”¥ÌÑ•µÁ½É…É¥±äÕ¹…Ù…¥±…‰±”œ°((€€¼¼5…­…É½¸-¥‘Ì(€€­¥‘Ì¹µ•Ñ„¹Ñ¥Ñ±”œè€5…­…É½¸-¥‘Ìœ°(€€­¥‘Ì¹µ•Ñ„¹‘•ÍÉ¥ÁÑ¥½¸œè€Ù½¥”µ™¥ÉÍÐÁ¥ÑÕÉ”½µÁ…¹¥½¸™½È­¥‘Ì¸œ°(€€­¥‘Ì¹Á¥ÑÕÉ”œè€‰M¡¥•ÈÌµ…¥ŒÁ¥ÑÕÉ”ˆ°(€€­¥‘Ì¹Í•±•Ñ•‘A¥ÑÕÉ”œè€A¥ÑÕÉ”Í•±•Ñ•‰äM¡¥•Èœ°(€€­¥‘Ì¹Í…µÁ±•A¥ÑÕÉ”œè€É…å½¸É½­•Ð¥¸„µ½½¸…É‘•¸œ°(€€­¥‘Ì¹¡½½Í•A¥ÑÕÉ”œè€¡½½Í”„Á¥ÑÕÉ”œ°(€€­¥‘Ì¹ÍÑ…ÉÑQ…±­¥¹œœè€Q…±¬Ý¥Ñ A¥á•°]¥é…Éœ°(€€­¥‘Ì¹ÍÑ½ÁQ…±­¥¹œœè€MÑ½ÀÑ¡”Ù½¥”½¹Ù•ÉÍ…Ñ¥½¸œ°(€€­¥‘Ì¹Á¡…Í”¹¥‘±”œè€Q…ÀÑ¡”µ¥É½Á¡½¹”Ñ¼Ñ…±¬œ°(€€­¥‘Ì¹Á¡…Í”¹½¹¹•Ñ¥¹œœè€A¥á•°]¥é…É¥Ì½¸Ñ¡”Ý…äœ°(€€­¥‘Ì¹Á¡…Í”¹±¥ÍÑ•¹¥¹œœè€A¥á•°]¥é…É¥Ì±¥ÍÑ•¹¥¹œœ°(€€­¥‘Ì¹Á¡…Í”¹ÍÁ•…­¥¹œœè€A¥á•°]¥é…É¥ÌÍÁ•…­¥¹œœ°(€€­¥‘Ì¹Á¡…Í”¹•ÉÉ½Èœè€Y½¥”½Õ±¹½Ð½¹¹•Ðœ°(€€­¥‘Ì¹Á…É•¹Ð¹¡½±œè€!½±Ñ¼½Á•¸Á…É•¹ÐÍ•ÑÑ¥¹Ìœ°(€€­¥‘Ì¹Á…É•¹Ð¹Ñ¥Ñ±”œè€M¡¥•È•‘¥Ñ¥½¸ƒ
+ÜA…É•¹ÐÍ•ÑÑ¥¹Ìœ°(€€­¥‘Ì¹Á…É•¹Ð¹ÍÕ‰Ñ¥Ñ±”œè€1¥Ù”Ù½¥”°ÁÉ¥Ù…ä°…¹½Á•É…Ñ½È¡…¹‘½™˜ÍÑ…ÑÕÌœ°(€€­¥‘Ì¹Á…É•¹Ð¹±½Í”œè€±½Í”Á…É•¹ÐÍ•ÑÑ¥¹Ìœ°(€€­¥‘Ì¹Á…É•¹Ð¹½¹¹•Ñ¥½¸œè€1¥Ù”½¹¹•Ñ¥½¸œ°(€€­¥‘Ì¹Á…É•¹Ð¹Ù½¥”œè€‰A¥á•°]¥é…ÉÌÙ½¥”ˆ°(€€­¥‘Ì¹Á…É•¹Ð¹±…ÍÑ!•…Éœè€1…ÍÐ¡•…Éœ°(€€­¥‘Ì¹Á…É•¹Ð¹±…ÍÑI•Á±äœè€1…ÍÐÉ•Á±äœ°(€€­¥‘Ì¹Á…É•¹Ð¹•µÁÑäœè€9½Ñ¡¥¹œå•Ðœ°(€€­¥‘Ì¹Á…É•¹Ð¹•ÉÉ½Èœè€½¹¹•Ñ¥½¸•ÉÉ½Èœ°(€€­¥‘Ì¹Á…É•¹Ð¹½Á•É…Ñ½È¹¥‘±”œè€=Á•É…Ñ½È¥Ì½¹¹•Ñ•¸=¹±ä•áÁ±¥¥ÐÉ•…Ñ¥Ù”É•ÅÕ•ÍÑÌ…É”¡…¹‘•Ñ¼Ñ¡”•á¥ÍÑ¥¹œ5…­…É½¸•¹Ð¸œ°(€€­¥‘Ì¹Á…É•¹Ð¹½Á•É…Ñ½È¹ÅÕ•Õ•œè€Q¡”¥µ…”É•ÅÕ•ÍÐÝ…Ì…•ÁÑ•ìÑ¡”1¥Ù”½¹Ù•ÉÍ…Ñ¥½¸…¸½¹Ñ¥¹Õ”¸œ°(€€­¥‘Ì¹Á…É•¹Ð¹½Á•É…Ñ½È¹Ý½É­¥¹œœè€5…­…É½¸•¹Ð¥Ìµ…­¥¹œÑ¡”¥µ…”¥¸Ñ¡”‰…­É½Õ¹¸œ°(€€­¥‘Ì¹Á…É•¹Ð¹½Á•É…Ñ½È¹‘½¹”œè€Q¡”¹•Ü¥µ…”¥Ì½µÁ±•Ñ”…¹Ù¥Í¥‰±”½¸Ñ¡”µ…¥¸…¹Ù…Ì¸œ°(€€­¥‘Ì¹Á…É•¹Ð¹½Á•É…Ñ½È¹•ÉÉ½Èœè€Q¡”¥µ…”Ñ…Í¬‘¥¹½Ð™¥¹¥Í ¸ÑÉÕÍÑ•…‘Õ±ÐÍ¡½Õ±¡•¬Ñ¡”…½Õ¹Ð½ÈÍ•ÉÙ¥”ÍÑ…ÑÕÌ¸œ°)ô…Ì½¹ÍÐì()•áÁ½ÉÐ‘•™…Õ±Ð•¸ì(

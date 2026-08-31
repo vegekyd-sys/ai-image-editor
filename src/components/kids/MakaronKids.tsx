@@ -3,7 +3,9 @@
 import Image from 'next/image'
 import { ChangeEvent, PointerEvent, useCallback, useEffect, useRef, useState } from 'react'
 import { useLocale } from '@/lib/i18n'
+import { KIDS_IMAGE_FUNCTION, KIDS_LIVE_TOOLS, parseKidsImageRequest } from '@/lib/kids-live-contract'
 import { KidsLiveAudio, type KidsLivePhase } from './kids-audio'
+import { KidsOperatorHandoff, type KidsOperatorPhase } from './kids-operator'
 import styles from './MakaronKids.module.css'
 
 const SIDE_BARS = Array.from({ length: 18 }, (_, index) => index)
@@ -73,10 +75,32 @@ export default function MakaronKids() {
   const [inputTranscript, setInputTranscript] = useState('')
   const [outputTranscript, setOutputTranscript] = useState('')
   const [errorMessage, setErrorMessage] = useState('')
+  const [operatorPhase, setOperatorPhase] = useState<KidsOperatorPhase>('idle')
   const sessionRef = useRef<LiveSession | null>(null)
   const audioRef = useRef<KidsLiveAudio | null>(null)
   const fileInputRef = useRef<HTMLInputElement>(null)
   const parentTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const parentGateRef = useRef<HTMLButtonElement>(null)
+  const parentCloseRef = useRef<HTMLButtonElement>(null)
+  const operatorRef = useRef<KidsOperatorHandoff | null>(null)
+
+  if (!operatorRef.current) {
+    operatorRef.current = new KidsOperatorHandoff({
+      onImage: (url) => setPicture({ url, data: '', mimeType: 'image/jpeg' }),
+      onPhase: (nextPhase) => {
+        setOperatorPhase(nextPhase)
+        if (nextPhase === 'done') {
+          sessionRef.current?.sendClientContent({
+            turns: '[Operator completed] The requested picture is now visible on the main canvas. Tell the child in one short sentence.',
+          })
+        } else if (nextPhase === 'error') {
+          sessionRef.current?.sendClientContent({
+            turns: '[Operator could not complete the picture] Calmly ask the child to get a trusted grown-up. Keep it to one short sentence.',
+          })
+        }
+      },
+    })
+  }
 
   const stopLive = useCallback(async () => {
     await audioRef.current?.stop()
@@ -88,9 +112,23 @@ export default function MakaronKids() {
   }, [])
 
   useEffect(() => () => {
+    if (parentTimerRef.current) clearTimeout(parentTimerRef.current)
     void audioRef.current?.stop()
     sessionRef.current?.close()
   }, [])
+
+  useEffect(() => {
+    if (!parentOpen) return
+    parentCloseRef.current?.focus()
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.key !== 'Escape') return
+      event.preventDefault()
+      setParentOpen(false)
+      parentGateRef.current?.focus()
+    }
+    document.addEventListener('keydown', handleKeyDown)
+    return () => document.removeEventListener('keydown', handleKeyDown)
+  }, [parentOpen])
 
   const startLive = useCallback(async () => {
     if (phase !== 'idle' && phase !== 'error') {
@@ -123,10 +161,29 @@ export default function MakaronKids() {
       audioRef.current = audio
       const session = await ai.live.connect({
         model: tokenData.model,
-        config: { responseModalities: [Modality.AUDIO] },
+        config: { responseModalities: [Modality.AUDIO], tools: KIDS_LIVE_TOOLS, sessionResumption: {} },
         callbacks: {
           onopen: () => undefined,
-          onmessage: (message) => audio.handleMessage(message),
+          onmessage: (message) => {
+            audio.handleMessage(message)
+            if (!message.toolCall?.functionCalls?.length) return
+            const functionResponses = message.toolCall.functionCalls.map((call) => {
+              const request = call.name === KIDS_IMAGE_FUNCTION
+                ? parseKidsImageRequest(call.args)
+                : null
+              const accepted = request
+                ? operatorRef.current?.queue(request, picture ? { data: picture.data, mimeType: picture.mimeType } : null) === true
+                : false
+              return {
+                id: call.id,
+                name: call.name,
+                response: accepted
+                  ? { accepted: true, status: 'queued' }
+                  : { accepted: false, error: request ? 'busy' : 'invalid_request' },
+              }
+            })
+            sessionRef.current?.sendToolResponse({ functionResponses })
+          },
           onerror: (event) => {
             console.error('[MakaronKids] Live session error:', event.message)
             setErrorMessage(event.message)
@@ -155,13 +212,15 @@ export default function MakaronKids() {
     const file = event.target.files?.[0]
     if (!file) return
     const nextPicture = await readPicture(file)
+    operatorRef.current?.resetSource()
+    setOperatorPhase('idle')
     setPicture(nextPicture)
     audioRef.current?.sendImage(nextPicture.data, nextPicture.mimeType)
     event.target.value = ''
   }
 
   const beginParentHold = (event: PointerEvent<HTMLButtonElement>) => {
-    event.currentTarget.setPointerCapture(event.pointerId)
+    event.currentTarget.setPointerCapture?.(event.pointerId)
     parentTimerRef.current = setTimeout(() => setParentOpen(true), 900)
   }
 
@@ -175,10 +234,11 @@ export default function MakaronKids() {
   const dynamicLevel = phase === 'speaking' ? 0.72 : level
 
   return (
-    <main className={styles.stage} data-phase={phase} style={{ '--voice-level': dynamicLevel } as React.CSSProperties}>
+    <main className={styles.stage} data-phase={phase} data-operator-phase={operatorPhase} style={{ '--voice-level': dynamicLevel } as React.CSSProperties}>
       <div className={styles.ambient} aria-hidden="true" />
       <div className={styles.spark}><SparkMark /></div>
       <button
+        ref={parentGateRef}
         type="button"
         className={styles.parentGate}
         aria-label={t('kids.parent.hold')}
@@ -222,7 +282,7 @@ export default function MakaronKids() {
         </div>
       </section>
 
-      <div className={styles.wizard} data-speaking={phase === 'speaking'} aria-hidden="true">
+      <div className={styles.wizard} data-speaking={phase === 'speaking'} data-working={operatorPhase === 'queued' || operatorPhase === 'working'} aria-hidden="true">
         <Image src="/kids/pixel-wizard-wave.png" alt="" fill priority sizes="28vw" />
       </div>
 
@@ -264,7 +324,10 @@ export default function MakaronKids() {
                 <h1 id="kids-parent-title">{t('kids.parent.title')}</h1>
                 <p>{t('kids.parent.subtitle')}</p>
               </div>
-              <button type="button" onClick={() => setParentOpen(false)} aria-label={t('kids.parent.close')}>×</button>
+              <button ref={parentCloseRef} type="button" onClick={() => {
+                setParentOpen(false)
+                parentGateRef.current?.focus()
+              }} aria-label={t('kids.parent.close')}>×</button>
             </header>
             <div className={styles.parentRow}>
               <div>
@@ -299,7 +362,7 @@ export default function MakaronKids() {
               <p>{outputTranscript || t('kids.parent.empty')}</p>
             </div>
             {errorMessage ? <p className={styles.error}>{t('kids.parent.error')}: {errorMessage}</p> : null}
-            <p className={styles.operatorNote}>{t('kids.parent.operator')}</p>
+            <p className={styles.operatorNote}>{t(`kids.parent.operator.${operatorPhase}` as Parameters<typeof t>[0])}</p>
           </section>
         </div>
       ) : null}
