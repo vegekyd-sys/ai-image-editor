@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from 'vitest'
 import { createVideo } from '@/lib/skills/create-video'
-import { estimateVideoCredits, estimateVideoProviderCostUsd, getDefaultVideoModelId, getVideoModelCapability, normalizeVideoModelId, normalizeVideoResolution, resolveAgentVideoSelection, resolveClosestSupportedAspectRatio, resolvePersistedVideoDuration, resolveVideoGenerationRoute, resolveVideoOutputDuration, resolveVideoProviderAspectRatio, resolveVideoProviderModel, supportsNativeTextToVideo, validateVideoModelRequest, validateVideoResolutionRequest } from '@/lib/video-model-capabilities'
+import { estimateVideoCredits, estimateVideoProviderCostUsd, getDefaultVideoModelId, getRequiredVideoCredits, getVideoModelCapability, listVideoModelCapabilities, normalizeVideoModelId, normalizeVideoResolution, resolveAgentVideoSelection, resolveClosestSupportedAspectRatio, resolvePersistedVideoDuration, resolveVideoGenerationRoute, resolveVideoOutputDuration, resolveVideoProviderAspectRatio, resolveVideoProviderModel, supportsNativeTextToVideo, validateVideoModelRequest, validateVideoResolutionRequest } from '@/lib/video-model-capabilities'
 
 describe('video model reference limits', () => {
   it('defaults video generation to SeeDance 2.0 Fast', () => {
@@ -669,6 +669,28 @@ describe('video model reference limits', () => {
     expect(validateVideoModelRequest({ ...request, outputDuration: 24 })).toBeNull()
     expect(validateVideoModelRequest({ ...request, outputDuration: 25 })).toContain('30 seconds or less')
     expect(validateVideoModelRequest({ ...request, outputDuration: 30 })).toContain('duration=24')
+  })
+
+  it('charges Wan 3.0 from MuleRouter resolution pricing with the standard 2x markup', () => {
+    expect(estimateVideoCredits({ model: 'wan-3.0', resolution: '480p', durationSec: 5 })).toBe(50)
+    expect(estimateVideoCredits({ model: 'wan-3.0', resolution: '720p', durationSec: 5 })).toBe(100)
+    expect(estimateVideoCredits({ model: 'wan-3.0', resolution: '1080p', durationSec: 5 })).toBe(200)
+    expect(estimateVideoCredits({ model: 'wan-3.0-pro', resolution: '1080p', durationSec: 5 })).toBe(180)
+    expect(estimateVideoCredits({ model: 'wan-3.0-pro', resolution: '2k', durationSec: 5 })).toBe(200)
+    expect(estimateVideoCredits({ model: 'wan-3.0-pro', resolution: '4k', durationSec: 5 })).toBe(230)
+  })
+
+  it('requires explicit provider pricing for every registered video model', () => {
+    for (const capability of listVideoModelCapabilities()) {
+      const hasProviderPrice = capability.estimatedCostPerSecondUsd != null
+        || capability.estimatedCostPerSecondUsdByResolution != null
+      expect(hasProviderPrice, `${capability.id} must declare provider pricing`).toBe(true)
+    }
+    expect(() => getRequiredVideoCredits({
+      model: 'unpriced-video-model',
+      resolution: '720p',
+      durationSec: 5,
+    })).toThrow('Generation is blocked to prevent incorrect billing')
   })
 
   it('models Gemini Omni 1.1 as a fast multi-resolution generation, edit, and reference-video extension provider', () => {

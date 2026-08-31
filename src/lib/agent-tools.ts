@@ -7,7 +7,7 @@ import type { ImageBackground, ModelId } from './models/types';
 import { editImage } from './skills/edit-image';
 import { rotateCamera } from './skills/rotate-camera';
 import { createVideo } from './skills/create-video';
-import { estimateVideoCredits, estimateVideoProviderCostUsd, normalizeVideoModelId, resolveAgentVideoSelection, resolvePersistedVideoDuration, resolveVideoGenerationRoute, resolveVideoOutputDuration, supportsNativeTextToVideo, validateVideoModelRequest } from './video-model-capabilities';
+import { estimateVideoProviderCostUsd, getRequiredVideoCredits, normalizeVideoModelId, resolveAgentVideoSelection, resolvePersistedVideoDuration, resolveVideoGenerationRoute, resolveVideoOutputDuration, supportsNativeTextToVideo, validateVideoModelRequest } from './video-model-capabilities';
 import {
   deductFixedCredits,
   isInsufficientCreditsError,
@@ -1775,7 +1775,7 @@ Hard constraints:
             .map(ref => originalImageUrlsByIndex[ref - 1])
             .filter((u): u is string => !!u && u.startsWith('http') && !u.endsWith('.mp4'));
           const videoSec = effectiveDuration || 10;
-          const creditsRequired = estimateVideoCredits({
+          const creditsRequired = getRequiredVideoCredits({
             model: videoModel,
             resolution: videoRoute.resolution,
             durationSec: videoSec,
@@ -1785,7 +1785,7 @@ Hard constraints:
               : referenceVideoDuration,
             operation: video_operation,
             contentFilter: content_filter,
-          }) ?? Math.ceil(videoSec * 22);
+          });
 
           if (ctx.userId) {
             const creditCheck = await requireCredits(ctx.userId, creditsRequired);
