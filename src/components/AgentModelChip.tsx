@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useId, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { useLocale } from '@/lib/i18n';
+import AgentProviderGroupHeader from './AgentProviderGroupHeader';
 import { getAgentModels } from '@/lib/model-registry';
 import {
   getCodexSubscriptionAgentModelId,
@@ -215,6 +216,9 @@ export default function AgentModelChip({ value, onChange, disabled = false }: Ag
     : subscriptionUsage.status === 'available' && subscriptionUsage.weekly
       ? `${t('model.codexSubscription.remaining', String(Math.round(subscriptionUsage.weekly.remainingPercent)))} · ${t('model.codexSubscription.resetsAt', formatResetTime(subscriptionUsage.weekly.resetsAt))}`
       : t('model.codexSubscription.usageUnavailable');
+  const subscriptionWeekly = subscriptionUsage.status === 'available'
+    ? subscriptionUsage.weekly
+    : undefined;
 
   const optionGroups = [
     {
@@ -309,21 +313,20 @@ export default function AgentModelChip({ value, onChange, disabled = false }: Ag
               onTouchMove={(event) => event.stopPropagation()}
             >
               {optionGroups.map(group => (
-                <section key={group.id} className="mkr-agent-model-group" data-agent-provider-group={group.id}>
-                  <div className="mkr-agent-model-group-header">
-                    <span className="mkr-agent-model-group-title">{group.label}</span>
-                    <span
-                      className="mkr-agent-model-group-detail"
-                      data-testid={group.id === 'codex' ? 'codex-subscription-usage' : undefined}
-                    >
-                      {group.detail}
-                    </span>
-                    {typeof group.progress === 'number' && (
-                      <span className="mkr-agent-model-group-track" aria-hidden="true">
-                        <span style={{ width: `${Math.max(0, Math.min(100, group.progress))}%` }} />
-                      </span>
-                    )}
-                  </div>
+                <section key={group.id} className="mkr-agent-model-group">
+                  <AgentProviderGroupHeader
+                    provider={group.id as 'azure' | 'codex' | 'other'}
+                    label={group.label}
+                    detail={group.detail}
+                    remainingLabel={group.id === 'codex' && subscriptionWeekly
+                      ? t('model.codexSubscription.remainingShort', String(Math.round(subscriptionWeekly.remainingPercent)))
+                      : undefined}
+                    resetLabel={group.id === 'codex' && subscriptionWeekly
+                      ? t('model.codexSubscription.resetsAt', formatResetTime(subscriptionWeekly.resetsAt))
+                      : undefined}
+                    progress={group.progress}
+                    usageTestId={group.id === 'codex' ? 'codex-subscription-usage' : undefined}
+                  />
                   {group.options.map(model => {
                     const active = value === model.id;
                     const isCodexSubscription = isCodexSubscriptionAgentModelPreference(model.id)

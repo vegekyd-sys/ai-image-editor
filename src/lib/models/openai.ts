@@ -19,6 +19,7 @@ import {
   fitTransparentResultToAspectRatio,
   fitTransparentResultToSourceCanvas,
 } from './transparent-source-canvas';
+import { generateCodexSubscriptionImage } from '../codex-subscription-image';
 
 // ── Provider selection ───────────────────────────────────────────
 const PROVIDER_ORDER = resolveOpenAIImageProviderOrder();
@@ -368,6 +369,7 @@ export const openaiBackend: ModelBackend = {
   id: 'openai',
 
   canHandle(req: GenerateImageRequest): boolean {
+    if (req.codexSubscription && req.background !== 'transparent') return true;
     const capableProviders = filterOpenAIImageProvidersForBackground(PROVIDER_ORDER, req.background);
     return capableProviders.some(provider => {
       if (provider === 'azure') return Boolean(process.env.AZURE_OPENAI_API_KEY?.trim());
@@ -376,7 +378,7 @@ export const openaiBackend: ModelBackend = {
     });
   },
 
-  async generate(req: GenerateImageRequest): Promise<{ image: string | null; usage?: TokenUsage }> {
+  async generate(req: GenerateImageRequest): Promise<{ image: string | null; usage?: TokenUsage; provider?: string }> {
     const refs = req.references?.length
       ? [
           ...(req.image ? [{ url: req.image, role: 'Photo to edit (base image)' }] : []),
@@ -384,33 +386,48 @@ export const openaiBackend: ModelBackend = {
         ]
       : undefined;
 
-    let lastResult: { image: string | null; usage?: TokenUsage } = { image: null };
+    if (req.codexSubscription && req.background !== 'transparent') {
+      const subscriptionResult = await generateCodexSubscriptionImage(req);
+      if (subscriptionResult.image) {
+        const normalized = await normalizeOpenAIImageOutput(subscriptionResult.image, req.background);
+        if (normalized) {
+          return {
+            image: normalized,
+            usage: subscriptionResult.usage,
+            provider: 'codex-subscription',
+          };
+        }
+      }
+      console.warn('[openai] Codex subscription returned no usable image; trying API providers');
+    }
+
+    let lastResult: { image: string | null; usage?: TokenUsage; provider?: string } = { image: null };
     const capableProviders = filterOpenAIImageProvidersForBackground(PROVIDER_ORDER, req.background);
     for (const provider of capableProviders) {
       if (provider === 'azure') {
-        lastResult = await generateAzure(
+        lastResult = { ...await generateAzure(
           refs ? undefined : req.image,
           req.prompt,
           refs,
           req.aspectRatio,
           req.background,
-        );
+        ), provider: 'azure' };
       } else if (provider === 'piapi') {
-        lastResult = await generatePiAPI(
+        lastResult = { ...await generatePiAPI(
           refs ? undefined : req.image,
           req.prompt,
           refs,
           req.aspectRatio,
           req.background,
-        );
+        ), provider: 'piapi' };
       } else {
-        lastResult = await generateOpenRouter(
+        lastResult = { ...await generateOpenRouter(
           refs ? undefined : req.image,
           req.prompt,
           refs,
           req.aspectRatio,
           req.background,
-        );
+        ), provider: 'openrouter' };
       }
       if (lastResult.image) {
         if (req.background === 'transparent' && req.aspectRatio) {

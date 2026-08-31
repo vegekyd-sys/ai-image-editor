@@ -14,6 +14,12 @@ export interface GenerateImageRequest {
   references?: { url: string; role: string }[];  // multi-image references (Gemini + Qwen)
   fallbackPrompt?: string;  // clean prompt without skill template — used when falling back to a model that can't digest .md templates
   isNsfw?: boolean;         // project-level NSFW flag — skip Gemini entirely when true
+  /** Prefer the authenticated user's Codex subscription for GPT Image 2. */
+  codexSubscription?: {
+    userId: string;
+    projectId: string;
+    agentModelId?: string;
+  };
 }
 
 export interface TokenUsage {
@@ -22,6 +28,8 @@ export interface TokenUsage {
   modelId: string;          // full model ID for billing (e.g. 'gemini-3.1-flash-image-preview')
   /** Provider-reported exact routed cost when available (for example OpenRouter). */
   providerCostUsd?: number;
+  /** Actual provider used. Codex subscription usage is not billed as Makaron API usage. */
+  provider?: string;
 }
 
 export interface GenerateImageResult {
@@ -31,10 +39,11 @@ export interface GenerateImageResult {
   failedModels?: ModelId[]; // models that were tried and returned null/error
   contentBlocked?: boolean; // Gemini refused content (NSFW) — caller should set isNsfw flag
   usage?: TokenUsage;       // token usage for billing (available for Gemini/OpenRouter)
+  provider?: string;        // provider that actually produced the image
 }
 
 export interface ModelBackend {
   id: ModelId;
   canHandle(req: GenerateImageRequest): boolean;
-  generate(req: GenerateImageRequest): Promise<{ image: string | null; usage?: TokenUsage }>;
+  generate(req: GenerateImageRequest): Promise<{ image: string | null; usage?: TokenUsage; provider?: string }>;
 }

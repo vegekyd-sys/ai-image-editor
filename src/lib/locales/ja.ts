@@ -679,6 +679,7 @@ const ja = {
   'model.codexSubscription.desc': '個人のChatGPT/Codexプランを使用し、利用不可時は既存のAPIフォールバックを使用します。',
   'model.codexSubscription.checking': 'プランの使用量を確認中…',
   'model.codexSubscription.remaining': (percent: string) => `週間枠 残り ${percent}%`,
+  'model.codexSubscription.remainingShort': (percent: string) => `残り ${percent}%`,
   'model.codexSubscription.resetsAt': (time: string) => `${time} リセット`,
   'model.codexSubscription.usageUnavailable': 'プランは利用可能ですが、使用量を取得できません',
 } satisfies TranslationDictionary;

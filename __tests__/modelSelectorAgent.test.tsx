@@ -66,7 +66,12 @@ describe('ModelSelector Agent tab', () => {
       group.getAttribute('data-agent-provider-group')
     ))).toEqual(['azure', 'codex', 'other']);
     expect(providerGroups[1]?.textContent).toContain('Codex');
-    expect(screen.getByTestId('codex-subscription-usage').textContent).toContain('39%');
+    const codexUsage = screen.getByTestId('codex-subscription-usage');
+    expect(codexUsage.textContent).toContain('39%');
+    expect(codexUsage.classList.contains('mkr-agent-model-group-quota')).toBe(true);
+    const codexHeader = codexUsage.closest('[data-agent-provider-group="codex"]');
+    expect(codexHeader?.querySelector('.mkr-agent-model-group-reset')?.textContent).toMatch(/Resets|重置/);
+    expect(codexHeader?.querySelector('.mkr-agent-model-group-title')?.textContent).toContain('Codex');
     expect(screen.queryByText(/Sonnet|Opus|Claude/i)).toBeNull();
     expect(screen.getByTestId('model-auto-agent').getAttribute('aria-pressed')).toBe('true');
 
