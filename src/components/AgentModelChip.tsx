@@ -23,7 +23,8 @@ interface AgentModelChipProps {
 
 interface PanelPosition {
   left: number;
-  bottom: number;
+  top?: number;
+  bottom?: number;
   width: number;
   maxHeight: number;
   mobile: boolean;
@@ -127,14 +128,20 @@ export default function AgentModelChip({ value, onChange, disabled = false }: Ag
     const rect = trigger.getBoundingClientRect();
     const mobile = window.innerWidth < 640;
     const width = mobile ? window.innerWidth - 24 : 320;
-    const bottom = Math.max(10, window.innerHeight - rect.top + 10);
-    const maxHeight = mobile
-      ? Math.max(260, Math.min(window.innerHeight * 0.62, rect.top - 20))
-      : Math.max(260, Math.min(480, rect.top - 16));
+    const edgeGap = 10;
+    const triggerGap = 10;
+    const availableAbove = Math.max(0, rect.top - edgeGap - triggerGap);
+    const availableBelow = Math.max(0, window.innerHeight - rect.bottom - edgeGap - triggerGap);
+    const preferredHeight = mobile ? window.innerHeight * 0.62 : 480;
+    const openBelow = availableAbove < 260 && availableBelow > availableAbove;
+    const availableHeight = openBelow ? availableBelow : availableAbove;
+    const maxHeight = Math.max(80, Math.min(preferredHeight, availableHeight));
+    const top = openBelow ? rect.bottom + triggerGap : undefined;
+    const bottom = openBelow ? undefined : window.innerHeight - rect.top + triggerGap;
     const left = mobile
       ? 12
       : Math.min(Math.max(8, rect.left), window.innerWidth - width - 8);
-    setPosition({ left, bottom, width, maxHeight, mobile });
+    setPosition({ left, top, bottom, width, maxHeight, mobile });
   }, []);
 
   useEffect(() => {
@@ -324,6 +331,7 @@ export default function AgentModelChip({ value, onChange, disabled = false }: Ag
             data-mobile={position.mobile}
             style={{
               left: position.left,
+              top: position.top,
               bottom: position.bottom,
               width: position.width,
               maxHeight: position.maxHeight,
