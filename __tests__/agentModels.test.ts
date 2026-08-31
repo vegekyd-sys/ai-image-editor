@@ -26,7 +26,7 @@ describe('agent model catalog', () => {
       'gpt-5.6-terra',
       'gpt-5.6-sol',
       'gpt-5.6-luna',
-      'grok-4.5',
+      'grok-4.6',
       'deepseek-v4-pro',
     ]);
   });
@@ -62,8 +62,8 @@ describe('agent model catalog', () => {
       .toBe('gpt-5.6-terra');
     expect(resolveAgentModelSpec('gpt-5.6-luna').providerModelId)
       .toBe('gpt-5.6-luna');
-    expect(resolveAgentModelSpec('grok-4.5').providerModelId)
-      .toBe('x-ai/grok-4.5');
+    expect(resolveAgentModelSpec('grok-4.6').providerModelId)
+      .toBe('x-ai/grok-4.6');
     expect(resolveAgentModelSpec('deepseek-v4-pro').providerModelId)
       .toBe('deepseek-v4-pro');
   });
@@ -329,6 +329,14 @@ describe('agent model catalog', () => {
     expect(normalizeAgentModelPreference('arbitrary/provider-model')).toBe('auto');
   });
 
+  it('migrates retired Grok 4.5 preferences and configured defaults to Grok 4.6', () => {
+    expect(normalizeAgentModelPreference('grok-4.5')).toBe('grok-4.6');
+    expect(normalizeRequestedAgentModelPreference('grok-4.5')).toBe('grok-4.6');
+    expect(normalizeRequestedAgentModelPreference('x-ai/grok-4.5')).toBe('grok-4.6');
+    expect(resolveAgentModelSpec('auto', 'grok-4.5').id).toBe('grok-4.6');
+    expect(resolveAgentModelSpec('auto', 'x-ai/grok-4.5').id).toBe('grok-4.6');
+  });
+
   it('rolls retired Claude requests to Auto/Terra but still rejects unknown API ids', () => {
     expect(normalizeRequestedAgentModelPreference('sonnet-5')).toBe('auto');
     expect(normalizeRequestedAgentModelPreference('us.anthropic.claude-opus-4-6-v1')).toBe('auto');
@@ -462,7 +470,7 @@ describe('agent model catalog', () => {
     process.env.AGENT_REASONING_EFFORT = 'max';
     delete process.env.OPENROUTER_AGENT_REASONING_EFFORT;
     try {
-      const runtime = createAgentModelRuntime('grok-4.5', 'project-a');
+      const runtime = createAgentModelRuntime('grok-4.6', 'project-a');
       expect(getAgentProviderOptions(runtime))
         .toMatchObject({ openrouter: { reasoning: { effort: 'medium' } } });
     } finally {

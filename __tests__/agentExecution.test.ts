@@ -25,7 +25,7 @@ function message(role: 'user' | 'assistant', content: string): ModelMessage {
 
 describe('durable Agent execution', () => {
   it('uses the shared 1M context policy for every Agent provider', () => {
-    for (const modelId of ['sonnet-4.6', 'sonnet-5', 'opus-4.8', 'grok-4.5', 'deepseek-v4-pro']) {
+    for (const modelId of ['sonnet-4.6', 'sonnet-5', 'opus-4.8', 'grok-4.6', 'deepseek-v4-pro']) {
       const policy = getAgentContextPolicy(modelId);
       expect(policy.contextWindowTokens).toBe(1_000_000);
       expect(policy.historySoftLimitTokens).toBeGreaterThanOrEqual(400_000);

@@ -186,7 +186,7 @@ export function getAgentProviderOptions(
   const openRouterEffort = configuredOpenRouterEffort && allowedOpenRouterEfforts.has(configuredOpenRouterEffort)
     ? configuredOpenRouterEffort
     : runtime.spec.defaultReasoningEffort
-      ?? (runtime.spec.id === 'grok-4.5' ? 'medium' : undefined);
+      ?? (runtime.spec.id === 'grok-4.6' ? 'medium' : undefined);
 
   return {
     openrouter: {
