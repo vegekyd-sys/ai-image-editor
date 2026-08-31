@@ -1,5 +1,9 @@
 # Wan 3.0 on Evolink: adult-content boundary validation
 
+> Historical evidence only. Makaron's active Wan 3.0 provider was replaced by
+> MuleRouter on 2026-08-31. These Evolink tasks remain useful as comparison
+> artifacts, but the runtime no longer submits Wan requests to Evolink.
+
 Status: isolated experiment on `codex/wan3-evolink-validation`; not merged or deployed.
 
 ## Question

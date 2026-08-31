@@ -1080,6 +1080,16 @@ try {
   }
 
   {
+    const result = await expectSuccess(['video', 'create', '--script', 'Wan Pro\nShot 1 (3s): A crystal city glows at blue hour', '--duration', '3', '--video-model', 'berry-1.0-pro', '--video-resolution', '4k']);
+    assert.match(result.stdout, /Task ID: task-unified-text-smoke/);
+    const mcpRequest = requests.filter(req => req.pathname === '/api/mcp').at(-1);
+    assert.equal(mcpRequest?.body?.params?.name, 'makaron_create_video');
+    assert.equal(mcpRequest?.body?.params?.arguments?.videoModel, 'wan-3.0-pro');
+    assert.equal(mcpRequest?.body?.params?.arguments?.duration, 3);
+    assert.equal(mcpRequest?.body?.params?.arguments?.videoResolution, '4k');
+  }
+
+  {
     const result = await expectSuccess(['skills', 'list', '--json'], { apiKey: false });
     const data = JSON.parse(result.stdout);
     assert.equal(data.skills.length, 2);

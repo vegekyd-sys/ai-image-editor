@@ -202,6 +202,7 @@ export async function createVideo(input: CreateVideoInput): Promise<CreateVideoR
   const hasAudioReference = !!audioUrls?.length;
   const hasVoiceReference = !!referenceVoiceIds?.length;
   const provider = normalizeVideoModelId(videoModel);
+  const isWan30 = provider === 'wan-3.0' || provider === 'wan-3.0-pro';
   const route = resolveVideoGenerationRoute({ model: provider, resolution: videoResolution });
   const capability = getVideoModelCapability(provider);
   const providerVideoUrls = [...(videoUrl ? [videoUrl] : []), ...(videoUrls || [])].filter(Boolean);
@@ -220,10 +221,10 @@ export async function createVideo(input: CreateVideoInput): Promise<CreateVideoR
   });
 
   if (modelError) return { success: false, message: modelError };
-  if (provider === 'wan-3.0' && contentFilter != null) {
+  if (isWan30 && contentFilter != null) {
     return {
       success: false,
-      message: 'Wan 3.0 does not expose a content-filter switch through Evolink. Remove content_filter instead of assuming Seedance 2.5 Mature Mode applies.',
+      message: 'Wan 3.0 does not expose a content-filter switch through MuleRouter. Remove content_filter instead of assuming another provider\'s safety option applies.',
     };
   }
   if ((videoOperation === 'edit' || videoOperation === 'extend') && !hasVideoReference) {
@@ -244,7 +245,7 @@ export async function createVideo(input: CreateVideoInput): Promise<CreateVideoR
       message: 'Google Omni stateful extension supports a maximum cumulative duration of 40 seconds.',
     };
   }
-  if (hasAudioReference && route.provider !== 'seedance' && route.provider !== 'wan' && route.provider !== 'minimax' && route.provider !== 'fal-sync') {
+  if (hasAudioReference && route.provider !== 'seedance' && route.provider !== 'mulerouter' && route.provider !== 'minimax' && route.provider !== 'fal-sync') {
     return {
       success: false,
       message: route.provider === 'google-omni'
@@ -273,7 +274,7 @@ export async function createVideo(input: CreateVideoInput): Promise<CreateVideoR
   const resolvedReferenceVideoMetas = await fillReferenceVideoMetas(providerVideoUrls, referenceVideoMetas);
 
   if (images.length === 0 && !hasVideoReference) {
-    if (hasAudioReference && provider !== 'seedance-2.5' && provider !== 'wan-3.0') {
+    if (hasAudioReference && provider !== 'seedance-2.5' && !isWan30) {
       return {
         success: false,
         message: 'Reference audio cannot be used alone. Provide an image or video reference for the video generation.',
@@ -330,7 +331,7 @@ export async function createVideo(input: CreateVideoInput): Promise<CreateVideoR
       });
       filteredImages = prepared.images;
       finalPrompt = prepared.prompt;
-    } else if (provider === 'wan-3.0') {
+    } else if (isWan30) {
       const prepared = prepareWan30References({
         prompt: script,
         images,
@@ -440,7 +441,7 @@ export async function createVideo(input: CreateVideoInput): Promise<CreateVideoR
         providerModel: route.providerModel,
         message: `Lip-sync task created. Task ID: ${taskId}. Use makaron_get_video_status to poll.`,
       };
-    } else if (route.provider === 'seedance' || route.provider === 'wan') {
+    } else if (route.provider === 'seedance') {
       const { createEvolinkTask } = await import('../evolink');
       const providerModel = resolveVideoProviderModel({
         model: provider,
@@ -457,7 +458,7 @@ export async function createVideo(input: CreateVideoInput): Promise<CreateVideoR
       const providerDuration = provider === 'seedance-2.5' && videoOperation === 'edit'
         ? -1
         : resolvedDuration != null ? resolvedDuration : undefined;
-      const providerPrompt = provider === 'seedance-2.5' || provider === 'wan-3.0'
+      const providerPrompt = provider === 'seedance-2.5'
         ? finalPrompt
         : prepareSeedance20ReferenceMarkers(finalPrompt);
       taskId = await createEvolinkTask({
@@ -481,6 +482,27 @@ export async function createVideo(input: CreateVideoInput): Promise<CreateVideoR
         videoModel: provider,
         providerModel,
         message: `Video rendering task created. Task ID: ${taskId}. Rendering time depends on the selected model. Use makaron_get_video_status to poll.`,
+      };
+    } else if (route.provider === 'mulerouter') {
+      const { createMuleRouterVideoTask } = await import('../mulerouter-video');
+      taskId = await createMuleRouterVideoTask({
+        model: provider === 'wan-3.0-pro' ? 'pro' : 'standard',
+        prompt: finalPrompt,
+        images: filteredImages,
+        videoUrls: providerVideoUrls.length ? providerVideoUrls : undefined,
+        audioUrls: audioUrls?.length ? audioUrls : undefined,
+        duration: resolvedDuration != null ? resolvedDuration : -1,
+        aspectRatio: providerAspectRatio,
+        resolution: route.resolution as '480p' | '720p' | '1080p' | '2k' | '4k',
+        generateAudio,
+      });
+      console.log(`✅ [create_video] ${capability.label} (MuleRouter) task created: ${taskId}`);
+      return {
+        success: true,
+        taskId,
+        videoModel: provider,
+        providerModel: route.providerModel,
+        message: `MuleRouter video task created. Task ID: ${taskId}. Use makaron_get_video_status to poll.`,
       };
     } else if (route.provider === 'minimax') {
       const { createMinimaxVideoTask } = await import('../minimax-video');

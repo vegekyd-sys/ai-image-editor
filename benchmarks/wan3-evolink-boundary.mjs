@@ -1,5 +1,8 @@
 #!/usr/bin/env node
 
+// Historical provider probe only. Makaron's active Wan 3.0 integration uses
+// MuleRouter; do not use this script as a production routing check.
+
 import { execFileSync } from 'node:child_process'
 import { mkdirSync, writeFileSync } from 'node:fs'
 import { resolve } from 'node:path'
