@@ -1,5 +1,5 @@
 import { filterAndRemapImages, parseTotalDuration } from '../kling';
-import { getVideoModelCapability, normalizeVideoModelId, resolveClosestSupportedAspectRatio, resolveVideoGenerationRoute, resolveVideoOutputDuration, resolveVideoProviderAspectRatio, resolveVideoProviderModel, supportsNativeTextToVideo, validateVideoModelRequest, type VideoAspectRatioInput, type VideoGenerationOperation, type VideoReferenceMeta, type VideoResolutionInput } from '@/lib/video-model-capabilities';
+import { getVideoModelCapability, normalizeVideoModelId, resolveClosestSupportedAspectRatio, resolveVideoGenerationRoute, resolveVideoImageWorkflow, resolveVideoOutputDuration, resolveVideoProviderAspectRatio, resolveVideoProviderModel, supportsNativeTextToVideo, validateVideoModelRequest, type VideoAspectRatioInput, type VideoGenerationOperation, type VideoImageWorkflow, type VideoReferenceMeta, type VideoResolutionInput } from '@/lib/video-model-capabilities';
 
 const MAX_REFERENCE_VIDEO_PROBE_BYTES = 55 * 1024 * 1024;
 
@@ -23,6 +23,9 @@ export interface CreateVideoInput {
   motionControl?: boolean;              // Use /v1/videos/motion-control endpoint
   characterOrientation?: 'image' | 'video';  // default: 'image'
   videoOperation?: VideoGenerationOperation; // Typed edit/extend for providers that expose it
+  // Images are feature references unless a model explicitly opts into and the
+  // caller explicitly requests a first-frame/image-to-video workflow.
+  imageWorkflow?: VideoImageWorkflow;
   previousInteractionId?: string;            // Google Omni stateful extension lineage
   videoExtendDirection?: 'forward' | 'backward';
   generateAudio?: boolean;
@@ -197,7 +200,7 @@ function prepareWan30References(options: {
 }
 
 export async function createVideo(input: CreateVideoInput): Promise<CreateVideoResult> {
-  const { script, images, duration, aspectRatio, videoModel, videoResolution, videoUrl, videoReferType, videoUrls, audioUrls, referenceVoiceIds, referenceVideoDuration, referenceVideoMetas, keepOriginalSound, motionControl, characterOrientation, videoOperation = 'generate', previousInteractionId, videoExtendDirection, generateAudio, contentFilter, outputFormat, webSearch } = input;
+  const { script, images, duration, aspectRatio, videoModel, videoResolution, videoUrl, videoReferType, videoUrls, audioUrls, referenceVoiceIds, referenceVideoDuration, referenceVideoMetas, keepOriginalSound, motionControl, characterOrientation, videoOperation = 'generate', imageWorkflow, previousInteractionId, videoExtendDirection, generateAudio, contentFilter, outputFormat, webSearch } = input;
   const hasVideoReference = !!videoUrl || !!videoUrls?.length || !!previousInteractionId;
   const hasAudioReference = !!audioUrls?.length;
   const hasVoiceReference = !!referenceVoiceIds?.length;
@@ -216,6 +219,7 @@ export async function createVideo(input: CreateVideoInput): Promise<CreateVideoR
     hasVideoReference,
     videoReferenceCount: previousInteractionId ? 1 : providerVideoUrls.length,
     audioReferenceCount: audioUrls?.length || 0,
+    imageWorkflow,
     operation: videoOperation,
   });
 
@@ -392,15 +396,22 @@ export async function createVideo(input: CreateVideoInput): Promise<CreateVideoR
       videoReferenceCount: providerVideoUrls.length,
       audioReferenceCount: audioUrls?.length || 0,
       voiceReferenceCount: referenceVoiceIds?.length || 0,
+      imageWorkflow,
       operation: videoOperation,
     });
     if (filteredModelError) return { success: false, message: filteredModelError };
+
+    const resolvedImageWorkflow = resolveVideoImageWorkflow({
+      model: provider,
+      imageReferenceCount: filteredImages.length,
+      requestedWorkflow: imageWorkflow,
+    });
 
     const loggedVideoRefType = videoUrl ? (videoReferType ?? 'base') : (videoUrls?.length ? 'feature' : undefined);
     let providerAspectRatio = resolveReferenceAspectRatio(provider, aspectRatio, providerVideoUrls.length > 0, resolvedReferenceVideoMetas);
     if (provider === 'seedance-2.5' && videoOperation !== 'generate') providerAspectRatio = 'adaptive';
     if (route.provider === 'fal-sync') providerAspectRatio = undefined;
-    console.log(`\n🎬 [create_video] provider=${provider}, resolution=${route.resolution}, ${filteredImages.length}/${images.length} images, duration=${resolvedDuration ?? 'smart'}, aspectRatio=${providerAspectRatio ?? 'auto'}${hasVideoReference ? `, video=${loggedVideoRefType}` : ''}${hasAudioReference ? `, audio=${audioUrls?.length}` : ''}`);
+    console.log(`\n🎬 [create_video] provider=${provider}, resolution=${route.resolution}, ${filteredImages.length}/${images.length} images${resolvedImageWorkflow ? `, imageWorkflow=${resolvedImageWorkflow}` : ''}, duration=${resolvedDuration ?? 'smart'}, aspectRatio=${providerAspectRatio ?? 'auto'}${hasVideoReference ? `, video=${loggedVideoRefType}` : ''}${hasAudioReference ? `, audio=${audioUrls?.length}` : ''}`);
     console.log(`Script (${finalPrompt.length} chars): ${finalPrompt.slice(0, 150)}...`);
 
     let taskId: string;
