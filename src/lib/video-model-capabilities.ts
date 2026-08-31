@@ -4,6 +4,7 @@ export interface VideoModelCapability {
   minOutputDuration: number
   maxOutputDuration: number
   maxReferenceVideoDuration: number
+  maxCombinedReferenceAndOutputDuration?: number
   referenceVideoDurationTolerance?: number
   referenceVideoSize?: VideoReferenceSizeCapability
   supportsVideoReference: boolean
@@ -23,7 +24,7 @@ export interface VideoModelCapability {
   defaultResolution?: VideoResolution
   supportedAspectRatios?: VideoAspectRatio[]
   estimatedCostPerSecondUsdByResolution?: Partial<Record<VideoResolution, number>>
-  provider?: 'kling' | 'seedance' | 'grok' | 'google-omni' | 'minimax' | 'fal-sync' | 'piapi'
+  provider?: 'kling' | 'seedance' | 'mulerouter' | 'grok' | 'google-omni' | 'minimax' | 'fal-sync' | 'piapi'
   providerModel?: string
 }
 
@@ -230,6 +231,70 @@ const MODEL_CAPABILITIES: Record<string, VideoModelCapability> = {
     provider: 'seedance',
     providerModel: 'seedance-2.5-reference-to-video',
   },
+  'wan-3.0': {
+    id: 'wan-3.0',
+    label: 'Wan 3.0 Standard',
+    minOutputDuration: 2,
+    maxOutputDuration: 30,
+    maxReferenceVideoDuration: 15,
+    maxCombinedReferenceAndOutputDuration: 30,
+    referenceVideoDurationTolerance: 0.5,
+    referenceVideoSize: {
+      maxFileSizeMb: 100,
+      minWidth: 240,
+      maxWidth: 4096,
+      minHeight: 240,
+      maxHeight: 4096,
+      minAspectRatio: 0.125,
+      maxAspectRatio: 8,
+      description: '<=100MB MP4/MOV, side 240-4096px, aspect <=8:1, each 1-15s and <=15s total',
+    },
+    supportsVideoReference: true,
+    supportsBaseVideoEdit: false,
+    supportsVideoExtend: false,
+    longVideoChunkSeconds: 30,
+    maxImageReferences: 10,
+    maxVideoReferences: 5,
+    maxAudioReferences: 5,
+    maxTotalReferences: 20,
+    supportedResolutions: ['480p', '720p', '1080p'],
+    defaultResolution: '1080p',
+    supportedAspectRatios: ['16:9', '9:16', '1:1', '4:3', '3:4'],
+    provider: 'mulerouter',
+    providerModel: 'carrothub/w3.0-video',
+  },
+  'wan-3.0-pro': {
+    id: 'wan-3.0-pro',
+    label: 'Wan 3.0 Pro',
+    minOutputDuration: 2,
+    maxOutputDuration: 30,
+    maxReferenceVideoDuration: 15,
+    maxCombinedReferenceAndOutputDuration: 30,
+    referenceVideoDurationTolerance: 0.5,
+    referenceVideoSize: {
+      maxFileSizeMb: 100,
+      minWidth: 240,
+      maxWidth: 4096,
+      minHeight: 240,
+      maxHeight: 4096,
+      minAspectRatio: 0.125,
+      maxAspectRatio: 8,
+      description: '<=100MB MP4/MOV, side 240-4096px, aspect <=8:1, each 1-15s and <=15s total',
+    },
+    supportsVideoReference: true,
+    supportsBaseVideoEdit: false,
+    supportsVideoExtend: false,
+    longVideoChunkSeconds: 30,
+    maxImageReferences: 10,
+    maxVideoReferences: 5,
+    maxAudioReferences: 5,
+    maxTotalReferences: 20,
+    supportedResolutions: ['1080p', '2k', '4k'],
+    defaultResolution: '1080p',
+    supportedAspectRatios: ['16:9', '9:16', '1:1', '4:3', '3:4'],
+    provider: 'mulerouter',
+    providerModel: 'carrothub/berry-1.0-pro',
+  },
   'sync-lipsync-v3': {
     id: 'sync-lipsync-v3',
     label: 'Sync Lipsync v3',
@@ -417,6 +482,12 @@ export function normalizeVideoModelId(model?: string | null): string {
   if (normalized === 'seedance25' || normalized === 'seedance_2_5' || normalized === 'seedance-2-5') {
     return 'seedance-2.5'
   }
+  if (normalized === 'wan3' || normalized === 'wan30' || normalized === 'wan3.0' || normalized === 'wan-3' || normalized === 'wan_3_0') {
+    return 'wan-3.0'
+  }
+  if (normalized === 'wan3-pro' || normalized === 'wan30-pro' || normalized === 'wan3.0-pro' || normalized === 'wan-3-pro' || normalized === 'wan_3_0_pro' || normalized === 'berry-1.0-pro') {
+    return 'wan-3.0-pro'
+  }
   if (normalized === 'sync3' || normalized === 'sync-v3' || normalized === 'lipsync' || normalized === 'lip-sync') {
     return 'sync-lipsync-v3'
   }
@@ -505,7 +576,7 @@ function getSeedanceProviderBase(model?: string | null): string | undefined {
 
 export function supportsNativeTextToVideo(model?: string | null): boolean {
   const id = normalizeVideoModelId(model)
-  return getSeedanceProviderBase(id) != null || id === 'minimax-h3' || id === 'google-omni' || id === 'grok'
+  return getSeedanceProviderBase(id) != null || id === 'wan-3.0' || id === 'wan-3.0-pro' || id === 'minimax-h3' || id === 'google-omni' || id === 'grok'
 }
 
 export function resolveVideoProviderModel(options: {
@@ -545,6 +616,10 @@ export function resolveVideoProviderModel(options: {
       return 'seedance-2.5-image-to-video'
     }
     return 'seedance-2.5-reference-to-video'
+  }
+
+  if (route.model === 'wan-3.0' || route.model === 'wan-3.0-pro') {
+    return route.providerModel
   }
 
   if (supportsNativeTextToVideo(route.model) && !hasReferenceMedia) {
@@ -588,7 +663,7 @@ export function resolveVideoProviderAspectRatio(
   // multi-reference generation may still use the requested supported ratio.
   if (route.provider === 'grok' || route.provider === 'fal-sync') return undefined
   if (!aspectRatio || aspectRatio === 'auto') {
-    return route.provider === 'seedance' ? 'adaptive' : undefined
+    return route.provider === 'seedance' || route.provider === 'mulerouter' ? 'adaptive' : undefined
   }
   return aspectRatio
 }
@@ -795,6 +870,10 @@ export function validateVideoModelRequest(options: {
     }
   }
 
+  if ((normalizedModel === 'wan-3.0' || normalizedModel === 'wan-3.0-pro') && options.operation && options.operation !== 'generate') {
+    return 'Wan 3.0 supports generation with multimodal references, but does not expose typed video edit or extend operations. Use video_operation="generate" with feature references.'
+  }
+
   if (options.operation === 'edit' && normalizeVideoModelId(options.model) === 'seedance-2.5' && options.outputDuration !== -1) {
     return 'Seedance 2.5 video edit requires duration=-1 so the output follows the input video.'
   }
@@ -854,6 +933,25 @@ export function validateVideoModelRequest(options: {
   const acceptedReferenceDuration = capability.maxReferenceVideoDuration + (capability.referenceVideoDurationTolerance ?? 0)
   if (options.referenceVideoDuration != null && options.referenceVideoDuration > acceptedReferenceDuration) {
     return `${capability.label} reference video duration must be ${capability.maxReferenceVideoDuration.toFixed(1).replace(/\.0$/, '')} seconds or less. Read skills/video-ffmpeg-lab/SKILL.md, then use run_code runtime="node" with FFmpeg to split the source video first, submit one generation task per chunk, and concatenate the results.`
+  }
+
+  const combinedDurationLimit = capability.maxCombinedReferenceAndOutputDuration
+  if (
+    combinedDurationLimit != null
+    && options.hasVideoReference
+    && options.referenceVideoDuration != null
+    && options.outputDuration != null
+    && options.outputDuration !== -1
+  ) {
+    const combinedDuration = options.referenceVideoDuration + options.outputDuration
+    if (combinedDuration > combinedDurationLimit) {
+      const formatSeconds = (value: number) => Number(value.toFixed(2)).toString()
+      const maximumWholeSecondOutput = Math.floor(combinedDurationLimit - options.referenceVideoDuration + Number.EPSILON)
+      const repair = maximumWholeSecondOutput >= capability.minOutputDuration
+        ? `Set duration=${maximumWholeSecondOutput} or shorter, or trim the reference video before submitting.`
+        : `Trim the reference video before submitting so at least ${capability.minOutputDuration} seconds remain for the output.`
+      return `${capability.label} reference-plus-output duration must be ${formatSeconds(combinedDurationLimit)} seconds or less. Current request: ${formatSeconds(options.referenceVideoDuration)}s reference + ${formatSeconds(options.outputDuration)}s output = ${formatSeconds(combinedDuration)}s. ${repair}`
+    }
   }
 
   const sizeError = validateVideoReferenceSize(capability, options.referenceVideoMetas)

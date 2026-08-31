@@ -65,6 +65,8 @@ const SEEDANCE_MIN_VIDEO_ASPECT = 0.4;
 const SEEDANCE_MAX_VIDEO_ASPECT = 2.5;
 const MINIMAX_H3_MIN_VIDEO_SIDE = 256;
 const MINIMAX_H3_MAX_VIDEO_SIDE = 5760;
+const MULEROUTER_WAN_MAX_VIDEO_SIDE = 4096;
+const MULEROUTER_WAN_MAX_VIDEO_FILE_SIZE = 100 * 1024 * 1024;
 
 function warnLegacyModelFlag(replacement) {
   process.stderr.write(`⚠️  --model is deprecated here; use ${replacement}.\n`);
@@ -2045,11 +2047,13 @@ Not sure which built-in skill to use? Start with:
     console.log('Usage: makaron analyze --video <file|url> ["question"]');
   } else if (topic === 'video') {
     if (subtopic === 'script') console.log('Usage: makaron video script --image <file> [--image <file>] [--lang en|zh] "direction"');
-    else if (subtopic === 'create') console.log('Usage: makaron video create --script "..." [--image <url> ...] [--video <url> ...] [--audio <url> ...] [--voice <xai-preset-id> ...] [--duration 10] [--aspect 9:16] [--video-model seedance-fast|seedance-mini|seedance|seedance-2.5|kling|grok|google-omni|minimax-h3|sync-lipsync-v3] [--operation generate|edit|extend] [--video-resolution auto|480p|720p|768p|1080p|2k|4k] [--keep-original-sound]');
+    else if (subtopic === 'create') console.log('Usage: makaron video create --script "..." [--image <url> ...] [--video <url> ...] [--audio <url> ...] [--voice <xai-preset-id> ...] [--duration 10] [--aspect 9:16] [--video-model seedance-fast|seedance-mini|seedance|seedance-2.5|wan-3.0|wan-3.0-pro|kling|grok|google-omni|minimax-h3|sync-lipsync-v3] [--operation generate|edit|extend] [--video-resolution auto|480p|720p|768p|1080p|2k|4k] [--keep-original-sound]');
     else if (subtopic === 'status') console.log('Usage: makaron video status <taskId> | --snapshot <snapshotId> [--wait]');
     else console.log(`Video commands:
   video script --image <file> [--image <file>] "direction"   Write video script
   video create --script "..." --video-model seedance-fast    Native text-to-video (no image required)
+  video create --script "..." --video-model wan-3.0          Wan 3.0 Standard via MuleRouter
+  video create --script "..." --video-model wan-3.0-pro      Wan 3.0 Pro super-resolution via MuleRouter
   video create --script "..." --video-model minimax-h3                          MiniMax H3 text-to-video (default 768P)
   video create --script "..." --image <url> [--duration 10]  Submit video task
   video create --script "..." --video <file|url> --video-model grok [--operation edit|extend]  Edit or extend one MP4 with Grok
@@ -2896,21 +2900,29 @@ if (!command || command === '--help' || command === '-h' || command === 'help') 
       }
       else if (args[i] === '--wait') wait = true;
     }
-    const selectedVideoModel = videoModel || 'seedance-fast';
+    const selectedVideoModel = ['wan3', 'wan3.0', 'wan30', 'wan-3'].includes(videoModel)
+      ? 'wan-3.0'
+      : ['wan3-pro', 'wan3.0-pro', 'wan30-pro', 'wan-3-pro', 'berry-1.0-pro'].includes(videoModel)
+        ? 'wan-3.0-pro'
+        : (videoModel || 'seedance-fast');
     const isSeedance25 = selectedVideoModel === 'seedance-2.5';
+    const isWan30 = selectedVideoModel === 'wan-3.0' || selectedVideoModel === 'wan-3.0-pro';
     const isSeedanceModel = selectedVideoModel === 'seedance-fast' || selectedVideoModel === 'seedance-mini' || selectedVideoModel === 'seedance' || isSeedance25;
     const isMinimaxH3 = selectedVideoModel === 'minimax-h3';
     const isGrok = selectedVideoModel === 'grok';
     const isGoogleOmni = selectedVideoModel === 'google-omni';
     const isSyncLipsync = selectedVideoModel === 'sync-lipsync-v3';
-    const supportsNativeTextToVideo = isSeedanceModel || isMinimaxH3 || isGrok || isGoogleOmni;
+    const supportsNativeTextToVideo = isSeedanceModel || isWan30 || isMinimaxH3 || isGrok || isGoogleOmni;
     if (!script || (!images.length && !videos.length && !audios.length && !referenceVoices.length && !supportsNativeTextToVideo)) {
-      console.error('Usage: makaron video create --script "..." [--image <url>] [--video <file|url>] [--audio <file|url>] [--duration 30] [--video-model seedance-2.5|minimax-h3]');
+      console.error('Usage: makaron video create --script "..." [--image <url>] [--video <file|url>] [--audio <file|url>] [--duration 30] [--video-model seedance-2.5|wan-3.0|wan-3.0-pro|minimax-h3]');
       process.exit(1);
     }
     if (isSeedance25 && images.length > 30) { console.error('Seedance 2.5 supports at most 30 image references.'); process.exit(1); }
     if (isSeedance25 && videos.length > 10) { console.error('Seedance 2.5 supports at most 10 video references.'); process.exit(1); }
     if (isSeedance25 && audios.length > 10) { console.error('Seedance 2.5 supports at most 10 audio references.'); process.exit(1); }
+    if (isWan30 && images.length > 10) { console.error('Wan 3.0 supports at most 10 image references.'); process.exit(1); }
+    if (isWan30 && videos.length > 5) { console.error('Wan 3.0 supports at most 5 video references.'); process.exit(1); }
+    if (isWan30 && audios.length > 5) { console.error('Wan 3.0 supports at most 5 audio references.'); process.exit(1); }
     if (isMinimaxH3 && images.length > 9) { console.error('MiniMax H3 supports at most 9 image references.'); process.exit(1); }
     if (isMinimaxH3 && videos.length > 3) { console.error('MiniMax H3 supports at most 3 video references.'); process.exit(1); }
     if (isMinimaxH3 && audios.length > 3) { console.error('MiniMax H3 supports at most 3 audio references.'); process.exit(1); }
@@ -2923,6 +2935,8 @@ if (!command || command === '--help' || command === '-h' || command === 'help') 
       script += '\nUse <<<audio_1>>> as the exact replacement soundtrack.';
     }
     if (videoOperation && !['generate', 'edit', 'extend'].includes(videoOperation)) { console.error('--video-operation must be generate, edit, or extend.'); process.exit(1); }
+    if (isWan30 && videoOperation && videoOperation !== 'generate') { console.error('Wan 3.0 supports generation with feature references, not typed edit or extend.'); process.exit(1); }
+    if (!isSeedance25 && contentFilter === false) { console.error('--relaxed-content-filter is only supported with --video-model seedance-2.5.'); process.exit(1); }
     if (extendDirection && !['forward', 'backward'].includes(extendDirection)) { console.error('--extend-direction must be forward or backward.'); process.exit(1); }
     if (outputFormat && !['mp4', 'mov'].includes(outputFormat)) { console.error('--output-format must be mp4 or mov.'); process.exit(1); }
 
@@ -2935,7 +2949,7 @@ if (!command || command === '--help' || command === '-h' || command === 'help') 
     let providerMaxDuration = isSeedance25 ? SEEDANCE25_MAX_VIDEO_REFERENCE_DURATION : MAX_VIDEO_PROVIDER_REFERENCE_DURATION;
     if (isGrok) providerMaxDuration = inferredOperation === 'edit' ? 8.7 : 15;
     if (isSyncLipsync) providerMaxDuration = 60;
-    const providerMaxPixels = isSyncLipsync || isMinimaxH3 ? Infinity : isSeedance25 ? SEEDANCE25_MAX_VIDEO_FRAME_PIXELS : MAX_VIDEO_FRAME_PIXELS;
+    const providerMaxPixels = isSyncLipsync || isMinimaxH3 || isWan30 ? Infinity : isSeedance25 ? SEEDANCE25_MAX_VIDEO_FRAME_PIXELS : MAX_VIDEO_FRAME_PIXELS;
     const localImages = images.filter(image => !isHttpUrl(image));
     if (localImages.length) {
       const uploadedImages = await uploadImageFilesViaSignedUrl(baseUrl, headers, undefined, localImages);
@@ -2950,7 +2964,7 @@ if (!command || command === '--help' || command === '-h' || command === 'help') 
         maxDuration: providerMaxDuration,
         durationTolerance: MAX_VIDEO_PROVIDER_REFERENCE_DURATION_TOLERANCE,
         maxFramePixels: providerMaxPixels,
-        maxFileSize: isSeedance25 || isSyncLipsync ? 200 * 1024 * 1024 : MAX_VIDEO_UPLOAD_FILE_SIZE,
+        maxFileSize: isWan30 ? MULEROUTER_WAN_MAX_VIDEO_FILE_SIZE : isSeedance25 || isSyncLipsync ? 200 * 1024 * 1024 : MAX_VIDEO_UPLOAD_FILE_SIZE,
         ...(isGrok ? {
           allowedExtensions: ['mp4'],
         } : selectedVideoModel === 'minimax-h3' ? {
@@ -2959,6 +2973,12 @@ if (!command || command === '--help' || command === '-h' || command === 'help') 
           maxSide: MINIMAX_H3_MAX_VIDEO_SIDE,
           minAspect: SEEDANCE_MIN_VIDEO_ASPECT,
           maxAspect: SEEDANCE_MAX_VIDEO_ASPECT,
+        } : isWan30 ? {
+          minSide: 240,
+          maxSide: MULEROUTER_WAN_MAX_VIDEO_SIDE,
+          minAspect: 0.125,
+          maxAspect: 8,
+          allowedExtensions: ['mp4', 'mov'],
         } : isSeedanceModel ? {
           minFramePixels: SEEDANCE_MIN_VIDEO_FRAME_PIXELS,
           minSide: SEEDANCE_MIN_VIDEO_SIDE,
@@ -2990,7 +3010,7 @@ if (!command || command === '--help' || command === '-h' || command === 'help') 
     const resolvedOperation = inferredOperation;
     const vArgs = isSyncLipsync
       ? { script, images, videoUrls, audioUrls, videoModel: selectedVideoModel, videoResolution }
-      : isSeedance25 || isGrok
+      : isSeedance25 || isWan30 || isGrok
       ? { script, images, videoUrls, audioUrls, referenceVoiceIds: referenceVoices, videoModel: selectedVideoModel, videoResolution, operation: resolvedOperation, extendDirection, outputFormat, generateAudio, contentFilter, webSearch }
       : isMinimaxH3
         ? { script, images, videoUrls, audioUrls, videoModel: selectedVideoModel, videoResolution }
@@ -3002,7 +3022,7 @@ if (!command || command === '--help' || command === '-h' || command === 'help') 
     if (effectiveDuration) vArgs.duration = effectiveDuration;
     if (aspectRatio) vArgs.aspectRatio = aspectRatio;
     if (keepOriginalSound && videoUrls.length && !isSeedance25) vArgs.keepOriginalSound = true;
-    const result = await callMcpTool(baseUrl, headers, videoUrls.length && !isSeedance25 && !isGrok && !isMinimaxH3 && !isSyncLipsync ? 'makaron_edit_video' : 'makaron_create_video', vArgs);
+    const result = await callMcpTool(baseUrl, headers, videoUrls.length && !isSeedance25 && !isWan30 && !isGrok && !isMinimaxH3 && !isSyncLipsync ? 'makaron_edit_video' : 'makaron_create_video', vArgs);
     const text = result?.content?.find(c => c.type === 'text')?.text;
     if (text) {
       console.log(text);
@@ -3046,6 +3066,8 @@ if (!command || command === '--help' || command === '-h' || command === 'help') 
     console.log(`Video commands:
   video script --image <file> [--image <file>] "direction"   Write video script
   video create --script "..." --video-model seedance-fast    Native text-to-video (no image required)
+  video create --script "..." --video-model wan-3.0          Wan 3.0 Standard via MuleRouter
+  video create --script "..." --video-model wan-3.0-pro      Wan 3.0 Pro super-resolution via MuleRouter
   video create --script "..." --video-model minimax-h3                          MiniMax H3 text-to-video (default 768P)
   video create --script "..." --image <url> [--duration 10]  Submit video task
   video create --script "..." --video <file|url> --video-model grok [--operation edit|extend]  Edit or extend one MP4 with Grok
