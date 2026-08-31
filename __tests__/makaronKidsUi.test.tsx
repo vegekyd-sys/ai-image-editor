@@ -13,6 +13,7 @@ const mocks = vi.hoisted(() => ({
   startRecording: vi.fn(),
   stopRecording: vi.fn(),
   finishInput: vi.fn(),
+  backupRecording: Promise.resolve(new Blob(['recording'], { type: 'audio/webm' })),
   operatorRespond: vi.fn(async () => '小巫师收到啦'),
   play: vi.fn(async () => undefined),
 }))
@@ -27,6 +28,7 @@ vi.mock('@/components/kids/kids-audio', () => ({
     finishInput() {
       mocks.finishInput()
       mocks.audioCallbacks?.onPhase('thinking')
+      return mocks.backupRecording
     }
     handleMessage(message: { data?: string; serverContent?: { turnComplete?: boolean } }) {
       if (message.data) mocks.audioCallbacks?.onPhase('speaking')
@@ -67,6 +69,7 @@ describe('Makaron Kids UI state and parent accessibility', () => {
     vi.clearAllMocks()
     mocks.audioCallbacks = null
     mocks.liveCallbacks = null
+    mocks.backupRecording = Promise.resolve(new Blob(['recording'], { type: 'audio/webm' }))
     vi.stubGlobal('fetch', vi.fn(async () => new Response(JSON.stringify({
       token: 'token', model: 'gemini-3.1-flash-live-preview',
     }), { status: 200, headers: { 'Content-Type': 'application/json' } })))
@@ -157,5 +160,32 @@ describe('Makaron Kids UI state and parent accessibility', () => {
     await waitFor(() => expect(mocks.play).toHaveBeenCalledOnce())
     expect(fetchMock.mock.calls[1]?.[0]).toBe('/api/kids/transcribe')
     expect(fetchMock.mock.calls[2]?.[0]).toBe('/api/kids/speak')
+  })
+
+  it('uses the backup recording when Live never sends a turn-complete event', async () => {
+    vi.useFakeTimers({ shouldAdvanceTime: true })
+    const fetchMock = vi.fn()
+      .mockResolvedValueOnce(new Response(JSON.stringify({
+        token: 'token', model: 'gemini-3.1-flash-live-preview',
+      }), { status: 200, headers: { 'Content-Type': 'application/json' } }))
+      .mockResolvedValueOnce(new Response(JSON.stringify({ text: '火箭飞去月亮' }), {
+        status: 200, headers: { 'Content-Type': 'application/json' },
+      }))
+      .mockResolvedValueOnce(new Response(new Blob(['voice'], { type: 'audio/mpeg' }), { status: 200 }))
+    vi.stubGlobal('fetch', fetchMock)
+    const { container } = render(<MakaronKids />)
+
+    fireEvent.click(screen.getByRole('button', { name: 'kids.startTalking' }))
+    await waitFor(() => expect(container.querySelector('main')?.getAttribute('data-phase')).toBe('listening'))
+    fireEvent.click(screen.getByRole('button', { name: 'kids.finishTalking' }))
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(8_000)
+    })
+
+    await waitFor(() => expect(mocks.operatorRespond).toHaveBeenCalledWith('火箭飞去月亮', null))
+    await waitFor(() => expect(mocks.play).toHaveBeenCalledOnce())
+    expect(fetchMock.mock.calls[1]?.[0]).toBe('/api/kids/transcribe')
+    expect(fetchMock.mock.calls[2]?.[0]).toBe('/api/kids/speak')
+    vi.useRealTimers()
   })
 })

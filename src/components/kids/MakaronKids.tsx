@@ -13,6 +13,7 @@ import styles from './MakaronKids.module.css'
 const SIDE_BARS = Array.from({ length: 18 }, (_, index) => index)
 const BOTTOM_BARS = Array.from({ length: 30 }, (_, index) => index)
 const VOICES = ['Kore', 'Aoede', 'Leda', 'Sulafat'] as const
+const LIVE_EMPTY_TURN_TIMEOUT_MS = 8_000
 
 type LiveSession = Awaited<ReturnType<InstanceType<typeof import('@google/genai').GoogleGenAI>['live']['connect']>>
 
@@ -87,6 +88,7 @@ export default function MakaronKids() {
   const parentGateRef = useRef<HTMLButtonElement>(null)
   const parentCloseRef = useRef<HTMLButtonElement>(null)
   const operatorRef = useRef<KidsOperatorHandoff | null>(null)
+  const liveTurnTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
 
   if (!operatorRef.current) {
     operatorRef.current = new KidsOperatorHandoff({
@@ -106,7 +108,14 @@ export default function MakaronKids() {
     })
   }
 
+  const clearLiveTurnTimer = useCallback(() => {
+    if (!liveTurnTimerRef.current) return
+    clearTimeout(liveTurnTimerRef.current)
+    liveTurnTimerRef.current = null
+  }, [])
+
   const stopLive = useCallback(async () => {
+    clearLiveTurnTimer()
     await audioRef.current?.stop()
     audioRef.current = null
     sessionRef.current?.close()
@@ -114,14 +123,15 @@ export default function MakaronKids() {
     turnAudioRef.current?.cancel()
     setPhase('idle')
     setLevel(0)
-  }, [])
+  }, [clearLiveTurnTimer])
 
   useEffect(() => () => {
     if (parentTimerRef.current) clearTimeout(parentTimerRef.current)
+    clearLiveTurnTimer()
     void audioRef.current?.stop()
     sessionRef.current?.close()
     turnAudioRef.current?.cancel()
-  }, [])
+  }, [clearLiveTurnTimer])
 
   useEffect(() => {
     if (!parentOpen) return
@@ -209,13 +219,44 @@ export default function MakaronKids() {
     }
   }, [processRecordedTurn])
 
+  const settleLiveTurn = useCallback((
+    audio: KidsLiveAudio,
+    result: { hadOutput: boolean; recording: Promise<Blob | null> },
+  ) => {
+    if (audioRef.current !== audio) return
+    clearLiveTurnTimer()
+    audioRef.current = null
+    void audio.stop()
+    sessionRef.current?.close()
+    sessionRef.current = null
+    if (result.hadOutput) {
+      setPhase('idle')
+      return
+    }
+    setVoiceMode('fallback')
+    void result.recording.then((blob) => {
+      if (!blob) throw new Error('Live voice returned no content and the backup recording was empty')
+      return processRecordedTurn(blob)
+    }).catch((error) => {
+      console.error('[MakaronKids] Live voice fallback failed:', error)
+      setErrorMessage(error instanceof Error ? error.message : String(error))
+      setPhase('error')
+    })
+  }, [clearLiveTurnTimer, processRecordedTurn])
+
   const startLive = useCallback(async () => {
     if (phase === 'recording') {
       await finishFallbackTurn()
       return
     }
     if (phase === 'listening' && voiceMode === 'live') {
-      audioRef.current?.finishInput()
+      const audio = audioRef.current
+      if (!audio) return
+      const recording = audio.finishInput()
+      clearLiveTurnTimer()
+      liveTurnTimerRef.current = setTimeout(() => {
+        settleLiveTurn(audio, { hadOutput: false, recording })
+      }, LIVE_EMPTY_TURN_TIMEOUT_MS)
       return
     }
     if (phase === 'parent') {
@@ -252,35 +293,22 @@ export default function MakaronKids() {
       if (!tokenResponse.ok) throw new Error(`Token request failed (${tokenResponse.status})`)
       const tokenData = await tokenResponse.json() as { token: string; model: string }
       const { GoogleGenAI, Modality } = await import('@google/genai')
-      const ai = new GoogleGenAI({ apiKey: tokenData.token, httpOptions: { apiVersion: 'v1beta' } })
+      const ai = new GoogleGenAI({ apiKey: tokenData.token, httpOptions: { apiVersion: 'v1alpha' } })
       const audio = new KidsLiveAudio({
         onLevel: setLevel,
-        onPhase: setPhase,
-        onTurnComplete: ({ hadOutput, recording }) => {
-          if (audioRef.current !== audio) return
-          audioRef.current = null
-          void audio.stop()
-          sessionRef.current?.close()
-          sessionRef.current = null
-          if (hadOutput) {
-            setPhase('idle')
-            return
-          }
-          setVoiceMode('fallback')
-          void recording.then((blob) => {
-            if (!blob) throw new Error('Live voice returned no content and the backup recording was empty')
-            return processRecordedTurn(blob)
-          }).catch((error) => {
-            console.error('[MakaronKids] Live voice fallback failed:', error)
-            setErrorMessage(error instanceof Error ? error.message : String(error))
-            setPhase('error')
-          })
+        onPhase: (nextPhase) => {
+          setPhase(nextPhase)
+          if (nextPhase === 'speaking') clearLiveTurnTimer()
         },
+        onTurnComplete: (result) => settleLiveTurn(audio, result),
         onMessage: (message) => {
           const input = message.serverContent?.inputTranscription?.text
           const output = message.serverContent?.outputTranscription?.text
           if (input) setInputTranscript((current) => `${current}${input}`.slice(-600))
-          if (output) setOutputTranscript((current) => `${current}${output}`.slice(-600))
+          if (output) {
+            clearLiveTurnTimer()
+            setOutputTranscript((current) => `${current}${output}`.slice(-600))
+          }
         },
       })
       audioRef.current = audio
@@ -342,7 +370,7 @@ export default function MakaronKids() {
         setPhase('error')
       }
     }
-  }, [beginFallbackRecording, finishFallbackTurn, phase, picture, processRecordedTurn, requireParent, stopLive, voice, voiceMode])
+  }, [beginFallbackRecording, clearLiveTurnTimer, finishFallbackTurn, phase, picture, requireParent, settleLiveTurn, stopLive, voice, voiceMode])
 
   const handlePicture = async (event: ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0]
