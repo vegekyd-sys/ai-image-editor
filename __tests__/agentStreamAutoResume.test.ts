@@ -66,6 +66,8 @@ describe('Agent stream ownership', () => {
     );
 
     expect(fetchMock).toHaveBeenCalledTimes(2);
+    expect(String(fetchMock.mock.calls[1]?.[0])).toContain('events=true');
+    expect(String(fetchMock.mock.calls[1]?.[0])).toContain('view=stream');
     expect(onVideoSnapshot).toHaveBeenCalledWith(
       'snapshot-1',
       'task-unified-1',

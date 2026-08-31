@@ -1,6 +1,7 @@
 import type { SupabaseClient } from '@supabase/supabase-js';
 import { runMakaronAgent, type AgentStreamEvent } from './agent';
 import { AgentDualWriter } from './agentDualWriter';
+import { AgentPerf } from './agent-perf';
 import { buildPromptContext } from './agent-context';
 import { getSupabaseAdmin } from './supabase/service';
 import { deductByTokens } from './billing/credits';
@@ -56,6 +57,7 @@ interface ExecutionRequest {
   turnMediaCount?: number;
   isNsfw?: boolean;
   audioAttachments?: Array<{ audioUrl: string; title?: string; duration?: number; trackIndex?: number }>;
+  codexSubscriptionAllowed?: boolean;
   origin?: string;
 }
 
@@ -298,8 +300,11 @@ export async function runAgentExecutionAttempt(
   runId: string,
   options: { admin?: SupabaseClient; workerId?: string; origin?: string } = {},
 ): Promise<AgentAttemptResult> {
+  const perf = new AgentPerf('agent-execution-attempt', { runId });
   const admin = options.admin ?? getSupabaseAdmin();
+  const endRunLoad = perf.span('load_run');
   const { data: runData } = await admin.from('agent_runs').select('*').eq('id', runId).maybeSingle();
+  endRunLoad({ found: !!runData });
   const run = runData as AgentRunRecord | null;
   if (!run || run.status !== 'running') return { claimed: false, runId };
   const inputVersionAtAttemptStart = run.input_version || 0;
@@ -320,11 +325,13 @@ export async function runAgentExecutionAttempt(
   }
 
   const workerId = options.workerId || `worker-${crypto.randomUUID()}`;
+  const endClaim = perf.span('claim_execution');
   const { data: claimData, error: claimError } = await admin.rpc('claim_agent_execution', {
     p_run_id: runId,
     p_worker_id: workerId,
     p_lease_seconds: policy.leaseSeconds,
   });
+  endClaim({ ok: !claimError });
   if (claimError) throw new Error(`Failed to claim Agent execution: ${claimError.message}`);
   const claim = (Array.isArray(claimData) ? claimData[0] : claimData) as ClaimedExecution | undefined;
   if (!claim) return { claimed: false, runId };
@@ -333,26 +340,41 @@ export async function runAgentExecutionAttempt(
   // execution lease, all older running attempts are definitively superseded.
   // finishAttempt only updates running rows, so a late old worker cannot
   // overwrite this terminal state.
-  await admin.from('agent_attempts').update({
-    status: 'interrupted',
-    ended_at: new Date().toISOString(),
-    terminal_code: 'lease_expired',
-  }).eq('run_id', runId).eq('status', 'running');
+  if (claim.attempt_no > 1) {
+    const endInterruptPrior = perf.span('interrupt_prior_attempts');
+    await admin.from('agent_attempts').update({
+      status: 'interrupted',
+      ended_at: new Date().toISOString(),
+      terminal_code: 'lease_expired',
+    }).eq('run_id', runId).eq('status', 'running');
+    endInterruptPrior();
+  } else {
+    perf.mark('interrupt_prior_attempts_skipped', { reason: 'first_attempt' });
+  }
 
-  const activeStudioWorkflowStage = await resolveActiveStudioWorkflowStage(admin, run);
   const workUnit = 'agent';
-  await admin.from('agent_runs').update({ current_work_unit: workUnit }).eq('id', runId).eq('lease_token', claim.lease_token);
-  const { data: attempt, error: attemptError } = await admin.from('agent_attempts').insert({
-    run_id: runId,
-    user_id: run.user_id,
-    attempt_no: claim.attempt_no,
-    work_unit_key: workUnit,
-    status: 'running',
-    lease_token: claim.lease_token,
-  }).select('id').single();
+  const endAttemptSetup = perf.span('attempt_setup', { attemptNo: claim.attempt_no });
+  const [activeStudioWorkflowStage, , attemptResult, pendingInputs] = await Promise.all([
+    // A brand-new run cannot already own a Studio workflow. Scanning all
+    // workspace Studio files here only delays the first model request.
+    claim.attempt_no > 1 ? resolveActiveStudioWorkflowStage(admin, run) : Promise.resolve(undefined),
+    claim.attempt_no > 1
+      ? admin.from('agent_runs').update({ current_work_unit: workUnit }).eq('id', runId).eq('lease_token', claim.lease_token)
+      : Promise.resolve({ error: null }),
+    admin.from('agent_attempts').insert({
+      run_id: runId,
+      user_id: run.user_id,
+      attempt_no: claim.attempt_no,
+      work_unit_key: workUnit,
+      status: 'running',
+      lease_token: claim.lease_token,
+    }).select('id').single(),
+    loadPendingAgentInputs(admin, runId),
+  ]);
+  endAttemptSetup({ activeStudioWorkflowStage: activeStudioWorkflowStage || null });
+  const { data: attempt, error: attemptError } = attemptResult;
   if (attemptError || !attempt?.id) throw new Error(`Failed to create Agent attempt: ${attemptError?.message || 'missing id'}`);
   const attemptId = attempt.id as string;
-  const pendingInputs = await loadPendingAgentInputs(admin, runId);
 
   let scaffoldResult: Awaited<ReturnType<typeof import('./studio-composition-scaffold')['ensureStudioCompositionScaffold']>> | undefined;
   let scaffoldWarning: string | undefined;
@@ -375,7 +397,13 @@ export async function runAgentExecutionAttempt(
   }
 
   const request = ((run.metadata || {}).executionRequest || {}) as ExecutionRequest;
-  const codexSubscriptionAllowed = await isDynamicCodexSubscriptionUserAllowed(run.user_id, admin);
+  // The start route resolved this authorization immediately before creating
+  // the trusted run. Reuse it within the same run instead of repeating the
+  // allowlist DB read milliseconds later; older/recovered rows still fail
+  // closed through the live lookup.
+  const codexSubscriptionAllowed = typeof request.codexSubscriptionAllowed === 'boolean'
+    ? request.codexSubscriptionAllowed
+    : await isDynamicCodexSubscriptionUserAllowed(run.user_id, admin);
   const requestedModel = resolveAgentModelSpecForUser(
     request.requestedAgentModel,
     process.env.AGENT_MODEL,
@@ -457,8 +485,8 @@ export async function runAgentExecutionAttempt(
     ? resolveAgentModelSpec(requestedModel.id, undefined, failoverProvider)
     : requestedModel;
   const executionStore = new AgentExecutionStore(admin, run.user_id, run.project_id);
-  const previousSnapshot = await executionStore.latestSnapshot(runId);
   const continuation = claim.attempt_no > 1;
+  const previousSnapshot = continuation ? await executionStore.latestSnapshot(runId) : undefined;
   const baseAttemptPrompt = continuation
     ? `[System durable continuation] Resume execution ${runId}, attempt ${claim.attempt_no}. ${previousSnapshot?.nextAction || 'Continue the unfinished objective from durable artifacts.'}`
     : (run.objective || claim.objective || run.prompt || 'Continue the requested task.');
@@ -468,6 +496,27 @@ export async function runAgentExecutionAttempt(
     .filter(Boolean)
     .join('\n\n');
 
+  const firstMessageId = typeof run.metadata?.firstMessageId === 'string' ? run.metadata.firstMessageId : undefined;
+  const writer = new AgentDualWriter(
+    runId,
+    admin,
+    run.user_id,
+    run.project_id,
+    undefined,
+    undefined,
+    continuation ? undefined : firstMessageId,
+  );
+  const writerReady = (async () => {
+    const endWriterReady = perf.span('writer_ready');
+    await writer.initializeSequence();
+    if (continuation) await writer.beginContinuationTurn();
+    await writer.persistHeartbeat();
+    endWriterReady();
+  })();
+  const projectPromise = Promise.resolve(
+    admin.from('projects').select('timeline_version').eq('id', run.project_id).single(),
+  );
+  const endContext = perf.span('build_prompt_context');
   const ctx = await buildPromptContext(run.project_id, admin, run.user_id, {
     userMessage: attemptPrompt,
     currentSnapshotIndex: request.currentSnapshotIndex,
@@ -483,8 +532,15 @@ export async function runAgentExecutionAttempt(
     agentModelId: resolvedModel.id,
     agentModelProvider: resolvedModel.provider,
     durableContinuation: continuation,
+    executionObjective: run.objective || claim.objective || run.prompt || undefined,
+    executionAcceptanceCriteria: run.acceptance_criteria,
   });
-  const { error: attemptMetadataError } = await admin.from('agent_attempts').update({
+  endContext({
+    promptChars: ctx.fullPrompt.length,
+    historyTurns: ctx.history.length,
+    mediaCount: ctx.snapshotImages.length,
+  });
+  const attemptMetadataPromise = admin.from('agent_attempts').update({
     input_token_estimate: ctx.contextStats.estimatedTokens,
     metadata: {
       context: ctx.contextStats,
@@ -514,25 +570,18 @@ export async function runAgentExecutionAttempt(
       ...(scaffoldWarning ? { compositionScaffoldWarning: scaffoldWarning } : {}),
     },
   }).eq('id', attemptId);
+  const [, projectResult, attemptMetadataResult] = await Promise.all([
+    writerReady,
+    projectPromise,
+    attemptMetadataPromise,
+  ]);
+  const { error: attemptMetadataError } = attemptMetadataResult;
   if (attemptMetadataError) {
     throw new Error(
       `Failed to persist Agent attempt provider safety boundary: ${attemptMetadataError.message}`,
     );
   }
 
-  const firstMessageId = typeof run.metadata?.firstMessageId === 'string' ? run.metadata.firstMessageId : undefined;
-  const writer = new AgentDualWriter(
-    runId,
-    admin,
-    run.user_id,
-    run.project_id,
-    undefined,
-    undefined,
-    continuation ? undefined : firstMessageId,
-  );
-  await writer.initializeSequence();
-  if (continuation) await writer.beginContinuationTurn();
-  await writer.persistHeartbeat();
   if (scaffoldResult?.created) {
     await writer.processAndEnqueue({
       type: 'status',
@@ -566,8 +615,9 @@ export async function runAgentExecutionAttempt(
     });
   }
 
-  const { data: project } = await admin.from('projects').select('timeline_version').eq('id', run.project_id).single();
+  const { data: project } = projectResult;
   const timelineVersion = Number(project?.timeline_version ?? 1);
+  perf.mark('model_start', { model: resolvedModel.id, provider: resolvedModel.provider });
 
   const modelAbortController = new AbortController();
   let leaseHeartbeatInFlight: Promise<void> | null = null;
@@ -663,6 +713,7 @@ export async function runAgentExecutionAttempt(
         },
         studioWorkflowStage: activeStudioWorkflowStage,
         agentRunId: runId,
+        perf,
       },
     )) {
       if (event.type === 'content') {

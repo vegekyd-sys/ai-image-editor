@@ -77,7 +77,8 @@ export function useAgentRun({ projectId, enabled, skipRunIdRef, isActiveRef }: U
     return supabaseRef.current
   }
 
-  // Persistent watcher: polls /api/agent/poll to detect running agent runs
+  // A one-shot mount check restores an existing run. Live SSE disconnects
+  // announce their runId directly, so idle pages do not need a tight poll loop.
   useEffect(() => {
     if (!enabled || !projectId) return
     if (activeRunId) return
@@ -97,9 +98,29 @@ export function useAgentRun({ projectId, enabled, skipRunIdRef, isActiveRef }: U
       } catch { /* polling is best-effort */ }
     }
 
-    poll()
-    const timer = setInterval(poll, 3000)
-    return () => clearInterval(timer)
+    const onDisconnected = (event: Event) => {
+      const runId = (event as CustomEvent<{ runId?: string }>).detail?.runId
+      if (runId) setActiveRunId(runId)
+    }
+    const onVisible = () => {
+      if (document.visibilityState === 'visible') void poll()
+    }
+
+    void poll()
+    // Slow fallback keeps CLI/background discovery without putting an API call
+    // in every foreground interaction's critical window.
+    const timer = setInterval(() => {
+      if (document.visibilityState === 'visible') void poll()
+    }, 15_000)
+    window.addEventListener('makaron-agent-disconnected', onDisconnected)
+    window.addEventListener('online', onVisible)
+    document.addEventListener('visibilitychange', onVisible)
+    return () => {
+      clearInterval(timer)
+      window.removeEventListener('makaron-agent-disconnected', onDisconnected)
+      window.removeEventListener('online', onVisible)
+      document.removeEventListener('visibilitychange', onVisible)
+    }
 
   }, [enabled, projectId, activeRunId])
 
@@ -119,7 +140,7 @@ export function useAgentRun({ projectId, enabled, skipRunIdRef, isActiveRef }: U
 
     try {
       const fetchRunEvents = async (afterSeq?: number): Promise<AgentRunApiResponse> => {
-        const params = new URLSearchParams({ events: 'true' })
+        const params = new URLSearchParams({ events: 'true', view: 'stream' })
         if (afterSeq !== undefined) params.set('after', String(afterSeq))
         const res = await fetch(`/api/agent/run/${activeRunId}?${params.toString()}`)
         if (!res.ok) throw new Error(`agent run fetch failed: ${res.status}`)

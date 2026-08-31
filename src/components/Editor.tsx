@@ -1626,13 +1626,21 @@ const isTipsFetchingRef = useRef(isTipsFetching);
     const currentSnap = snapIdx !== null ? snapshotsRef.current[snapIdx] : undefined;
     if (!currentImage && !currentSnap?.design && snapshotsRef.current.length > 0 && !options?.silent) return;
 
-    // Prefer URL (tiny payload) over base64 for API calls — server handles both
-    // When URL isn't available yet (upload still in progress), compress base64 to fit Vercel 4.5MB limit
-    // Use 3MB limit (not 1.8MB) — agent generates images, aggressive compression destroys quality
+    // Interactive CUI always starts on the SSE fast lane. Reconnect safety comes
+    // from the run event log, not from booting the durable worker before TTFT.
+    // Only transient draft/annotation pixels need to cross this request; normal
+    // project media is rebuilt from persisted state on the server.
+    const isDraftMode = snapIdx === null && draftParentIndexRef.current !== null;
+    const hasTransientPixels = Boolean(overrideImage) || isDraftMode;
+
+    // Prefer URL (tiny payload) over base64 for direct SSE calls. When URL isn't
+    // available yet, compress base64 to fit Vercel's request limit.
     const snapForApi = snapIdx !== null ? snapshotsRef.current[snapIdx] : undefined;
     const rawImage = snapForApi ? getImageForApi(snapForApi) : (currentImage || '');
-    const imageForApi = overrideImage
-      || (rawImage.startsWith('data:') ? await compressBase64Image(rawImage, 3_000_000) : rawImage);
+    const imageForApi = hasTransientPixels
+      ? (overrideImage
+        || (rawImage.startsWith('data:') ? await compressBase64Image(rawImage, 3_000_000) : rawImage))
+      : '';
     // Show attached/annotated images in the user message bubble (skip for silent/system-initiated requests)
     if (!options?.silent) {
       const msgImages = options?.displayImages || (overrideImage ? [overrideImage] : (attachedImages?.length ? attachedImages : undefined));
@@ -1654,19 +1662,10 @@ const isTipsFetchingRef = useRef(isTipsFetching);
 
     // currentMsgId and agentMsgIds are now managed by makeAgentCallbacks factory
 
-    // UI state flags — server-side buildPromptContext handles all project context
-    const isDraftMode = snapIdx === null && draftParentIndexRef.current !== null;
-
     // Snapshot images for API: prefer Storage URLs (tiny payload).
     // base64 fallback only for the current image (needed for vision); others skip if no URL yet.
-    // Wait briefly for image uploads to complete (up to 5s) if any snapshot lacks a URL
-    const hasAllUrls = () => snapshotsRef.current.every(s => s.imageUrl || s.design);
-    if (!hasAllUrls()) {
-      for (let i = 0; i < 10; i++) {
-        await new Promise(r => setTimeout(r, 500));
-        if (hasAllUrls()) break;
-      }
-    }
+    // Do not wait for every snapshot upload before a text turn. Persisted media
+    // is loaded server-side; transient media already has an in-memory fallback.
     // Build snapshot media: video snapshots use video URL, image snapshots use Storage URL/base64
     const snapshotImagesForApi = snapshotsRef.current.map((s) => {
       if (s.type === 'video' && s.videoMeta?.videoUrl) return s.videoMeta.videoUrl;
@@ -1750,7 +1749,7 @@ const isTipsFetchingRef = useRef(isTipsFetching);
 
     try {
       await streamAgent(
-        { prompt: text, image: imageForApi, projectId, durable: true, ...(preferredModelRef.current !== 'auto' ? { preferredModel: preferredModelRef.current } : {}), ...(agentModelForRequest !== 'auto' ? { agentModel: agentModelForRequest } : {}), videoModel: videoModelRef.current, videoResolution: videoResolutionRef.current, videoAuto: videoAutoRef.current, skillLaunchContext: options?.skillLaunchContext, snapshotImages: snapshotImagesForApi, currentSnapshotIndex: contextSnapshotIndex, isNsfw: isNsfwRef.current || undefined, ...(snapshotsRef.current[contextSnapshotIndex]?.design && snapshotsRef.current[contextSnapshotIndex]?.type !== 'video' ? { currentDesign: snapshotsRef.current[contextSnapshotIndex].design, currentDesignPath: snapshotsRef.current[contextSnapshotIndex].designPath } : {}), hasAnnotation: !!overrideImage, isDraft: isDraftMode, referenceImageCount: attachedImages?.length || 0, uploadedVideoCount: options?.uploadedVideoCount || 0, turnMediaCount: options?.turnMediaCount || 0 },
+        { prompt: text, image: imageForApi, projectId, durable: false, ...(preferredModelRef.current !== 'auto' ? { preferredModel: preferredModelRef.current } : {}), ...(agentModelForRequest !== 'auto' ? { agentModel: agentModelForRequest } : {}), videoModel: videoModelRef.current, videoResolution: videoResolutionRef.current, videoAuto: videoAutoRef.current, skillLaunchContext: options?.skillLaunchContext, ...(hasTransientPixels ? { snapshotImages: snapshotImagesForApi } : {}), currentSnapshotIndex: contextSnapshotIndex, isNsfw: isNsfwRef.current || undefined, ...(snapshotsRef.current[contextSnapshotIndex]?.design && snapshotsRef.current[contextSnapshotIndex]?.type !== 'video' ? { currentDesign: snapshotsRef.current[contextSnapshotIndex].design, currentDesignPath: snapshotsRef.current[contextSnapshotIndex].designPath } : {}), hasAnnotation: !!overrideImage, isDraft: isDraftMode, referenceImageCount: attachedImages?.length || 0, uploadedVideoCount: options?.uploadedVideoCount || 0, turnMediaCount: options?.turnMediaCount || 0 },
         agentCallbacks,
         agentAbortRef.current.signal,
       );
