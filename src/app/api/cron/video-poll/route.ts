@@ -59,7 +59,10 @@ export async function GET(req: NextRequest) {
     try {
       let result: { status: string; videoUrl?: string; error?: string }
 
-      if (vm.taskId.startsWith('task-unified-')) {
+      if (vm.taskId.startsWith('mr-wan30-')) {
+        const { getMuleRouterVideoTask } = await import('@/lib/mulerouter-video')
+        result = await getMuleRouterVideoTask(vm.taskId)
+      } else if (vm.taskId.startsWith('task-unified-')) {
         const { getEvolinkTask } = await import('@/lib/evolink')
         result = await getEvolinkTask(vm.taskId)
       } else if (vm.taskId.startsWith('cgt-')) {

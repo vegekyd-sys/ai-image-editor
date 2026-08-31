@@ -162,12 +162,52 @@ function prepareSeedance25References(options: {
   return { prompt, images: referencedImages };
 }
 
+function prepareWan30References(options: {
+  prompt: string;
+  images: string[];
+  videoUrls: string[];
+}): { prompt: string; images: string[] } {
+  const refs = [...new Set(
+    Array.from(options.prompt.matchAll(/<<<(?:image|media)_(\d+)>>>/g), match => Number(match[1]))
+  )];
+  const mediaTags = new Map<number, string>();
+  const referencedImages: string[] = [];
+  let videoIndex = 0;
+
+  for (const ref of refs) {
+    const image = options.images[ref - 1];
+    if (image?.startsWith('http')) {
+      referencedImages.push(image);
+      mediaTags.set(ref, `Image ${referencedImages.length}`);
+    } else if (videoIndex < options.videoUrls.length) {
+      videoIndex += 1;
+      mediaTags.set(ref, `Video ${videoIndex}`);
+    }
+  }
+
+  let prompt = options.prompt.replace(/<<<(?:image|media)_(\d+)>>>/g, (marker, rawIndex) => {
+    return mediaTags.get(Number(rawIndex)) || marker;
+  });
+  prompt = prompt.replace(/<<<audio_(\d+)>>>/gi, (_marker, rawIndex) => `Audio ${Number(rawIndex)}`);
+
+  if (videoIndex < options.videoUrls.length) {
+    const remaining = options.videoUrls
+      .slice(videoIndex)
+      .map((_, index) => `Video ${videoIndex + index + 1}`)
+      .join(', ');
+    prompt = `${prompt}\nUse ${remaining} as motion, camera, and visual-style references.`;
+  }
+
+  return { prompt, images: referencedImages };
+}
+
 export async function createVideo(input: CreateVideoInput): Promise<CreateVideoResult> {
   const { script, images, duration, aspectRatio, videoModel, videoResolution, videoUrl, videoReferType, videoUrls, audioUrls, referenceVoiceIds, referenceVideoDuration, referenceVideoMetas, keepOriginalSound, motionControl, characterOrientation, videoOperation = 'generate', previousInteractionId, videoExtendDirection, generateAudio, contentFilter, outputFormat, webSearch } = input;
   const hasVideoReference = !!videoUrl || !!videoUrls?.length || !!previousInteractionId;
   const hasAudioReference = !!audioUrls?.length;
   const hasVoiceReference = !!referenceVoiceIds?.length;
   const provider = normalizeVideoModelId(videoModel);
+  const isWan30 = provider === 'wan-3.0' || provider === 'wan-3.0-pro';
   const route = resolveVideoGenerationRoute({ model: provider, resolution: videoResolution });
   const capability = getVideoModelCapability(provider);
   const providerVideoUrls = [...(videoUrl ? [videoUrl] : []), ...(videoUrls || [])].filter(Boolean);
@@ -186,6 +226,12 @@ export async function createVideo(input: CreateVideoInput): Promise<CreateVideoR
   });
 
   if (modelError) return { success: false, message: modelError };
+  if (isWan30 && contentFilter != null) {
+    return {
+      success: false,
+      message: 'Wan 3.0 does not expose a content-filter switch through MuleRouter. Remove content_filter instead of assuming another provider\'s safety option applies.',
+    };
+  }
   if ((videoOperation === 'edit' || videoOperation === 'extend') && !hasVideoReference) {
     return {
       success: false,
@@ -204,12 +250,12 @@ export async function createVideo(input: CreateVideoInput): Promise<CreateVideoR
       message: 'Google Omni stateful extension supports a maximum cumulative duration of 40 seconds.',
     };
   }
-  if (hasAudioReference && route.provider !== 'seedance' && route.provider !== 'minimax' && route.provider !== 'fal-sync') {
+  if (hasAudioReference && route.provider !== 'seedance' && route.provider !== 'mulerouter' && route.provider !== 'minimax' && route.provider !== 'fal-sync') {
     return {
       success: false,
       message: route.provider === 'google-omni'
         ? 'Google Omni generates native audio from the prompt, but uploaded reference audio is not enabled in the current API. Use Seedance for audio_refs, or describe the soundtrack in the prompt for Omni.'
-        : 'Reference audio is only supported by Seedance, MiniMax H3, and Sync Lipsync v3.',
+        : 'Reference audio is only supported by Seedance, Wan 3.0, MiniMax H3, and Sync Lipsync v3.',
     };
   }
   if (hasVoiceReference && route.provider !== 'grok') {
@@ -233,7 +279,7 @@ export async function createVideo(input: CreateVideoInput): Promise<CreateVideoR
   const resolvedReferenceVideoMetas = await fillReferenceVideoMetas(providerVideoUrls, referenceVideoMetas);
 
   if (images.length === 0 && !hasVideoReference) {
-    if (hasAudioReference && provider !== 'seedance-2.5') {
+    if (hasAudioReference && provider !== 'seedance-2.5' && !isWan30) {
       return {
         success: false,
         message: 'Reference audio cannot be used alone. Provide an image or video reference for the video generation.',
@@ -242,7 +288,7 @@ export async function createVideo(input: CreateVideoInput): Promise<CreateVideoR
     if (!supportsNativeTextToVideo(provider)) {
       return {
         success: false,
-        message: `${capability.label} requires an image or video reference. Native text-to-video is currently available through SeeDance, Grok Imagine Video 1.5, Gemini Omni, and MiniMax H3.`,
+        message: `${capability.label} requires an image or video reference. Native text-to-video is currently available through SeeDance, Wan 3.0, Grok Imagine Video 1.5, Gemini Omni, and MiniMax H3.`,
       };
     }
   }
@@ -287,6 +333,14 @@ export async function createVideo(input: CreateVideoInput): Promise<CreateVideoR
         audioUrls: audioUrls || [],
         operation: videoOperation,
         extendDirection: videoExtendDirection,
+      });
+      filteredImages = prepared.images;
+      finalPrompt = prepared.prompt;
+    } else if (isWan30) {
+      const prepared = prepareWan30References({
+        prompt: script,
+        images,
+        videoUrls: providerVideoUrls,
       });
       filteredImages = prepared.images;
       finalPrompt = prepared.prompt;
@@ -343,6 +397,7 @@ export async function createVideo(input: CreateVideoInput): Promise<CreateVideoR
       imageReferenceCount: filteredImages.length,
       videoReferenceCount: providerVideoUrls.length,
       audioReferenceCount: audioUrls?.length || 0,
+      voiceReferenceCount: referenceVoiceIds?.length || 0,
       operation: videoOperation,
     });
     if (filteredModelError) return { success: false, message: filteredModelError };
@@ -403,9 +458,6 @@ export async function createVideo(input: CreateVideoInput): Promise<CreateVideoR
         hasAudioReference,
         operation: videoOperation,
       });
-      if (provider === 'seedance-2.5' && providerModel === 'seedance-2.5-image-to-video') {
-        providerAspectRatio = 'adaptive';
-      }
       const providerDuration = provider === 'seedance-2.5' && videoOperation === 'edit'
         ? -1
         : resolvedDuration != null ? resolvedDuration : undefined;
@@ -426,13 +478,34 @@ export async function createVideo(input: CreateVideoInput): Promise<CreateVideoR
         outputFormat,
         webSearch,
       });
-      console.log(`✅ [create_video] SeeDance (Evolink) task created: ${taskId}`);
+      console.log(`✅ [create_video] ${capability.label} (Evolink) task created: ${taskId}`);
       return {
         success: true,
         taskId,
         videoModel: provider,
         providerModel,
         message: `Video rendering task created. Task ID: ${taskId}. Rendering time depends on the selected model. Use makaron_get_video_status to poll.`,
+      };
+    } else if (route.provider === 'mulerouter') {
+      const { createMuleRouterVideoTask } = await import('../mulerouter-video');
+      taskId = await createMuleRouterVideoTask({
+        model: provider === 'wan-3.0-pro' ? 'pro' : 'standard',
+        prompt: finalPrompt,
+        images: filteredImages,
+        videoUrls: providerVideoUrls.length ? providerVideoUrls : undefined,
+        audioUrls: audioUrls?.length ? audioUrls : undefined,
+        duration: resolvedDuration != null ? resolvedDuration : -1,
+        aspectRatio: providerAspectRatio,
+        resolution: route.resolution as '480p' | '720p' | '1080p' | '2k' | '4k',
+        generateAudio,
+      });
+      console.log(`✅ [create_video] ${capability.label} (MuleRouter) task created: ${taskId}`);
+      return {
+        success: true,
+        taskId,
+        videoModel: provider,
+        providerModel: route.providerModel,
+        message: `MuleRouter video task created. Task ID: ${taskId}. Use makaron_get_video_status to poll.`,
       };
     } else if (route.provider === 'minimax') {
       const { createMinimaxVideoTask } = await import('../minimax-video');
@@ -461,9 +534,7 @@ export async function createVideo(input: CreateVideoInput): Promise<CreateVideoR
         videoUrl: providerVideoUrls[0],
         operation: videoOperation,
         duration: resolvedDuration != null ? resolvedDuration : undefined,
-        // Single-image generation deliberately ignores this in the adapter to
-        // preserve source framing. Text and multi-reference generation may use it.
-        aspectRatio: aspectRatio && aspectRatio !== 'auto' ? aspectRatio : undefined,
+        aspectRatio: providerAspectRatio,
         resolution: route.resolution as '480p' | '720p' | '1080p',
         generateAudio,
         referenceVoiceIds,

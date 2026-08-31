@@ -4,7 +4,7 @@ import { validateApiKey } from '@/lib/billing/api-keys';
 import { checkBalance, deductCredits, deductByTokens } from '@/lib/billing/credits';
 import { resolveToolName } from '@/lib/billing/pricing';
 import { deductSeedAudioCredits } from '@/lib/billing/seed-audio';
-import { estimateVideoCredits, normalizeVideoModelId } from '@/lib/video-model-capabilities';
+import { getRequiredVideoCredits, normalizeVideoModelId } from '@/lib/video-model-capabilities';
 import { isGrokSubscriptionAllowedUser } from '@/lib/grok-subscription';
 
 export const maxDuration = 180;
@@ -92,7 +92,7 @@ async function handleMcp(req: Request): Promise<Response> {
         );
       } else if (meta?.videoDurationSec && meta.provider !== 'grok-subscription') {
         const videoModel = normalizeVideoModelId(meta.videoModel || model);
-        const videoCredits = estimateVideoCredits({
+        const videoCredits = getRequiredVideoCredits({
           model: videoModel,
           resolution: meta.videoResolution as any,
           durationSec: meta.videoDurationSec,
@@ -100,7 +100,7 @@ async function handleMcp(req: Request): Promise<Response> {
           referenceVideoDurationSec: meta.referenceVideoDurationSec,
           operation: meta.videoOperation,
           contentFilter: meta.contentFilter,
-        }) ?? Math.ceil(meta.videoDurationSec * 22);
+        });
         const { deductFixedCredits } = await import('@/lib/billing/credits');
         await deductFixedCredits(auth.userId!, videoCredits, toolName, videoModel, durationMs, auth.keyId);
       } else if (meta?.seedAudioDurationSec || meta?.seedAudioProviderCredits) {

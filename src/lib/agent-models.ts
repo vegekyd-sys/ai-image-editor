@@ -2,7 +2,7 @@ export const AGENT_MODEL_IDS = [
   'gpt-5.6-terra',
   'gpt-5.6-sol',
   'gpt-5.6-luna',
-  'grok-4.5',
+  'grok-4.6',
   'deepseek-v4-pro',
 ] as const;
 
@@ -14,7 +14,7 @@ export const CODEX_SUBSCRIPTION_AGENT_MODEL_PREFERENCES = [
   'gpt-5.6-luna-codex-subscription',
 ] as const;
 export type CodexSubscriptionAgentModelPreference = (typeof CODEX_SUBSCRIPTION_AGENT_MODEL_PREFERENCES)[number];
-export const GROK_SUBSCRIPTION_AGENT_MODEL_PREFERENCE = 'grok-4.5-grok-subscription' as const;
+export const GROK_SUBSCRIPTION_AGENT_MODEL_PREFERENCE = 'grok-4.6-grok-subscription' as const;
 export type GrokSubscriptionAgentModelPreference = typeof GROK_SUBSCRIPTION_AGENT_MODEL_PREFERENCE;
 export type AgentModelPreference = 'auto' | AgentModelId | CodexSubscriptionAgentModelPreference | GrokSubscriptionAgentModelPreference;
 export type AgentModelProvider = 'azure-openai' | 'codex-subscription' | 'grok-subscription' | 'openrouter' | 'deepseek';
@@ -237,11 +237,11 @@ export const AGENT_MODEL_SPECS: Record<AgentModelId, AgentModelSpec> = {
     supportsImageInput: true,
     defaultReasoningEffort: 'low',
   },
-  'grok-4.5': {
-    id: 'grok-4.5',
+  'grok-4.6': {
+    id: 'grok-4.6',
     provider: 'openrouter',
-    providerModelId: 'x-ai/grok-4.5',
-    billingModelId: 'x-ai/grok-4.5',
+    providerModelId: 'x-ai/grok-4.6',
+    billingModelId: 'x-ai/grok-4.6',
     cacheStrategy: 'automatic',
     supportsImageInput: true,
   },
@@ -268,8 +268,29 @@ export function isAgentModelPreference(value: unknown): value is AgentModelPrefe
     || isAgentModelId(value);
 }
 
+const RETIRED_AGENT_MODEL_REPLACEMENTS = new Map<string, AgentModelId>([
+  ['grok-4.5', 'grok-4.6'],
+  ['x-ai/grok-4.5', 'grok-4.6'],
+]);
+
+const RETIRED_AGENT_MODEL_PREFERENCE_REPLACEMENTS = new Map<string, AgentModelPreference>([
+  ['grok-4.5-grok-subscription', GROK_SUBSCRIPTION_AGENT_MODEL_PREFERENCE],
+]);
+
+function getRetiredAgentModelReplacement(value: unknown): AgentModelId | undefined {
+  return typeof value === 'string'
+    ? RETIRED_AGENT_MODEL_REPLACEMENTS.get(value.trim().toLowerCase())
+    : undefined;
+}
+
 export function normalizeAgentModelPreference(value: unknown): AgentModelPreference {
-  return isAgentModelPreference(value) ? value : 'auto';
+  return isAgentModelPreference(value)
+    ? value
+    : typeof value === 'string'
+      ? RETIRED_AGENT_MODEL_PREFERENCE_REPLACEMENTS.get(value.trim().toLowerCase())
+        ?? getRetiredAgentModelReplacement(value)
+        ?? 'auto'
+      : 'auto';
 }
 
 const RETIRED_CLAUDE_PRODUCT_IDS = new Set([
@@ -296,6 +317,12 @@ export function normalizeRequestedAgentModelPreference(
 ): AgentModelPreference | undefined | null {
   if (value === undefined) return undefined;
   if (isAgentModelPreference(value)) return value;
+  if (typeof value === 'string') {
+    const preferenceReplacement = RETIRED_AGENT_MODEL_PREFERENCE_REPLACEMENTS.get(value.trim().toLowerCase());
+    if (preferenceReplacement) return preferenceReplacement;
+  }
+  const replacement = getRetiredAgentModelReplacement(value);
+  if (replacement) return replacement;
   if (isRetiredClaudeModel(value)) return 'auto';
   return null;
 }
@@ -304,6 +331,8 @@ function matchConfiguredModel(value: string | undefined): AgentModelId | undefin
   const normalized = value?.trim().toLowerCase();
   if (!normalized) return undefined;
   if (isAgentModelId(normalized)) return normalized;
+  const replacement = getRetiredAgentModelReplacement(normalized);
+  if (replacement) return replacement;
 
   return AGENT_MODEL_IDS.find((id) => {
     const spec = AGENT_MODEL_SPECS[id];
@@ -325,7 +354,7 @@ export function resolveAgentModelSpec(
   const selectedId = explicitlyUsesCodexSubscription
     ? getCodexSubscriptionAgentModelId(preference)
     : explicitlyUsesGrokSubscription
-    ? 'grok-4.5'
+    ? 'grok-4.6'
     : preference && preference !== 'auto'
     ? preference
     : matchConfiguredModel(configuredDefault) ?? DEFAULT_AGENT_MODEL_ID;
@@ -334,8 +363,8 @@ export function resolveAgentModelSpec(
     return {
       ...baseSpec,
       provider: 'grok-subscription',
-      providerModelId: 'grok-4.5',
-      billingModelId: 'grok-4.5',
+      providerModelId: 'grok-4.6',
+      billingModelId: 'grok-4.6',
     };
   }
   if (!isGPT56AgentModelId(selectedId)) return baseSpec;
@@ -366,7 +395,7 @@ export function resolveAgentModelSpecForUser(
     // allowlisted users through the owner's SuperGrok credential.
     return isGrokSubscriptionAgentAllowedUser(userId)
       ? selected
-      : AGENT_MODEL_SPECS['grok-4.5'];
+      : AGENT_MODEL_SPECS['grok-4.6'];
   }
   const explicitlyUsesCodexSubscription = isCodexSubscriptionAgentModelPreference(preference);
   const ownerUsesCodexByDefault = defaultsToCodexSubscription(

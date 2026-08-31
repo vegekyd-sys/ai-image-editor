@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from 'vitest'
 import { createVideo } from '@/lib/skills/create-video'
-import { estimateVideoCredits, estimateVideoProviderCostUsd, getDefaultVideoModelId, getVideoModelCapability, normalizeVideoModelId, normalizeVideoResolution, resolveAgentVideoSelection, resolveClosestSupportedAspectRatio, resolvePersistedVideoDuration, resolveVideoGenerationRoute, resolveVideoOutputDuration, resolveVideoProviderAspectRatio, resolveVideoProviderModel, supportsNativeTextToVideo, validateVideoModelRequest, validateVideoResolutionRequest } from '@/lib/video-model-capabilities'
+import { estimateVideoCredits, estimateVideoProviderCostUsd, getDefaultVideoModelId, getRequiredVideoCredits, getVideoModelCapability, listVideoModelCapabilities, normalizeVideoModelId, normalizeVideoResolution, resolveAgentVideoSelection, resolveClosestSupportedAspectRatio, resolvePersistedVideoDuration, resolveVideoGenerationRoute, resolveVideoOutputDuration, resolveVideoProviderAspectRatio, resolveVideoProviderModel, supportsNativeTextToVideo, validateVideoModelRequest, validateVideoResolutionRequest } from '@/lib/video-model-capabilities'
 
 describe('video model reference limits', () => {
   it('defaults video generation to SeeDance 2.0 Fast', () => {
@@ -31,6 +31,8 @@ describe('video model reference limits', () => {
     expect(resolveVideoProviderModel({ model: 'seedance-mini', imageReferenceCount: 0 })).toBe('seedance-2.0-mini-text-to-video')
     expect(resolveVideoProviderModel({ model: 'seedance', imageReferenceCount: 0 })).toBe('seedance-2.0-text-to-video')
     expect(resolveVideoProviderModel({ model: 'seedance-fast', imageReferenceCount: 1 })).toBe('seedance-2.0-fast-reference-to-video')
+    expect(resolveVideoProviderModel({ model: 'seedance-mini', imageReferenceCount: 1 })).toBe('seedance-2.0-mini-reference-to-video')
+    expect(resolveVideoProviderModel({ model: 'seedance', imageReferenceCount: 1 })).toBe('seedance-2.0-reference-to-video')
   })
 
   it('registers MiniMax H3 with public 768p and 2K production routes', () => {
@@ -189,8 +191,8 @@ describe('video model reference limits', () => {
 
   it('selects the right Seedance 2.5 provider mode from typed operation and references', () => {
     expect(resolveVideoProviderModel({ model: 'seedance-2.5', imageReferenceCount: 0 })).toBe('seedance-2.5-text-to-video')
-    expect(resolveVideoProviderModel({ model: 'seedance-2.5', imageReferenceCount: 1 })).toBe('seedance-2.5-image-to-video')
-    expect(resolveVideoProviderModel({ model: 'seedance-2.5', imageReferenceCount: 2 })).toBe('seedance-2.5-image-to-video')
+    expect(resolveVideoProviderModel({ model: 'seedance-2.5', imageReferenceCount: 1 })).toBe('seedance-2.5-reference-to-video')
+    expect(resolveVideoProviderModel({ model: 'seedance-2.5', imageReferenceCount: 2 })).toBe('seedance-2.5-reference-to-video')
     expect(resolveVideoProviderModel({ model: 'seedance-2.5', imageReferenceCount: 1, aspectRatio: '9:16' })).toBe('seedance-2.5-reference-to-video')
     expect(resolveVideoProviderModel({ model: 'seedance-2.5', imageReferenceCount: 2, aspectRatio: '16:9' })).toBe('seedance-2.5-reference-to-video')
     expect(resolveVideoProviderModel({ model: 'seedance-2.5', imageReferenceCount: 3 })).toBe('seedance-2.5-reference-to-video')
@@ -652,9 +654,51 @@ describe('video model reference limits', () => {
     expect(validateVideoModelRequest({
       model: 'grok',
       operation: 'generate',
-      imageReferenceCount: 2,
+      imageReferenceCount: 1,
       resolution: '1080p',
     })).toContain('reference-to-video is capped at 720p')
+    expect(validateVideoModelRequest({
+      model: 'grok',
+      operation: 'generate',
+      voiceReferenceCount: 1,
+      resolution: '1080p',
+    })).toContain('reference-to-video is capped at 720p')
+  })
+
+  it('enforces the Wan reference-plus-output 30-second budget', () => {
+    const request = {
+      model: 'wan-3.0',
+      operation: 'generate' as const,
+      hasVideoReference: true,
+      videoReferenceCount: 1,
+      referenceVideoDuration: 5.04,
+    }
+
+    expect(validateVideoModelRequest({ ...request, outputDuration: 24 })).toBeNull()
+    expect(validateVideoModelRequest({ ...request, outputDuration: 25 })).toContain('30 seconds or less')
+    expect(validateVideoModelRequest({ ...request, outputDuration: 30 })).toContain('duration=24')
+  })
+
+  it('charges Wan 3.0 from MuleRouter resolution pricing with the standard 2x markup', () => {
+    expect(estimateVideoCredits({ model: 'wan-3.0', resolution: '480p', durationSec: 5 })).toBe(50)
+    expect(estimateVideoCredits({ model: 'wan-3.0', resolution: '720p', durationSec: 5 })).toBe(100)
+    expect(estimateVideoCredits({ model: 'wan-3.0', resolution: '1080p', durationSec: 5 })).toBe(200)
+    expect(estimateVideoCredits({ model: 'wan-3.0-pro', resolution: '1080p', durationSec: 5 })).toBe(180)
+    expect(estimateVideoCredits({ model: 'wan-3.0-pro', resolution: '2k', durationSec: 5 })).toBe(200)
+    expect(estimateVideoCredits({ model: 'wan-3.0-pro', resolution: '4k', durationSec: 5 })).toBe(230)
+  })
+
+  it('requires explicit provider pricing for every registered video model', () => {
+    for (const capability of listVideoModelCapabilities()) {
+      const hasProviderPrice = capability.estimatedCostPerSecondUsd != null
+        || capability.estimatedCostPerSecondUsdByResolution != null
+      expect(hasProviderPrice, `${capability.id} must declare provider pricing`).toBe(true)
+    }
+    expect(() => getRequiredVideoCredits({
+      model: 'unpriced-video-model',
+      resolution: '720p',
+      durationSec: 5,
+    })).toThrow('Generation is blocked to prevent incorrect billing')
   })
 
   it('models Gemini Omni 1.1 as a fast multi-resolution generation, edit, and reference-video extension provider', () => {
@@ -815,7 +859,7 @@ describe('video model reference limits', () => {
     expect(resolveVideoProviderAspectRatio('seedance', 'auto')).toBe('adaptive')
     expect(resolveVideoProviderAspectRatio('seedance', '21:9')).toBe('21:9')
     expect(resolveVideoProviderAspectRatio('grok', 'auto')).toBeUndefined()
-    expect(resolveVideoProviderAspectRatio('grok', '3:2')).toBeUndefined()
+    expect(resolveVideoProviderAspectRatio('grok', '3:2')).toBe('3:2')
     expect(resolveVideoProviderAspectRatio('kling', 'auto')).toBeUndefined()
     expect(resolveVideoProviderAspectRatio('google-omni', '9:16')).toBe('9:16')
     expect(resolveVideoProviderAspectRatio('google-omni', '1:1')).toBe('1:1')

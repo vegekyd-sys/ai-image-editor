@@ -8,7 +8,12 @@ process.env.GROK_SUBSCRIPTION_OWNER_USER_ID = 'owner-id'
 process.env.GROK_SUBSCRIPTION_ALLOWED_USER_IDS = 'test-user-id'
 
 const relayModulePath = '../services/grok-subscription-relay/server.mjs?relay-auth-test'
-const { buildGrokAgentHeaders, createRelaySignature, verifyRelayRequest } = await import(relayModulePath)
+const {
+  buildGrokAgentHeaders,
+  createRelaySignature,
+  normalizeGrokUsage,
+  verifyRelayRequest,
+} = await import(relayModulePath)
 
 afterAll(() => {
   if (previousSecret === undefined) delete process.env.GROK_SUBSCRIPTION_RELAY_SECRET
@@ -51,7 +56,7 @@ describe('Grok subscription relay boundary', () => {
     expect(buildGrokAgentHeaders('oauth-access-token')).toMatchObject({
       authorization: 'Bearer oauth-access-token',
       'x-xai-token-auth': 'xai-grok-cli',
-      'x-grok-model-override': 'grok-4.5',
+      'x-grok-model-override': 'grok-4.6',
       'x-grok-client-identifier': 'grok-shell',
       'x-grok-client-mode': 'headless',
     })
@@ -76,5 +81,30 @@ describe('Grok subscription relay boundary', () => {
     expect(verifyRelayRequest(replayed)).toMatchObject({ ok: true })
     expect(verifyRelayRequest(replayed))
       .toMatchObject({ ok: false, status: 409, error: 'replayed_request' })
+  })
+
+  it('normalizes official Grok billing percentages without exposing billing details', () => {
+    expect(normalizeGrokUsage({
+      subscriptionTier: 'SuperGrok Heavy',
+      config: {
+        creditUsagePercent: 37.5,
+        currentPeriod: {
+          type: 'monthly',
+          start: '2026-08-01T00:00:00.000Z',
+          end: '2026-09-01T00:00:00.000Z',
+        },
+        privateBillingField: 'not-for-clients',
+      },
+    })).toEqual({
+      available: true,
+      planType: 'SuperGrok Heavy',
+      usage: {
+        usedPercent: 37.5,
+        remainingPercent: 62.5,
+        windowDurationMins: 44_640,
+        resetsAt: 1_788_220_800,
+        periodType: 'monthly',
+      },
+    })
   })
 })

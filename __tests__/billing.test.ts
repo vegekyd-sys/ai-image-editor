@@ -299,6 +299,25 @@ describe('token-rates', () => {
     });
   });
 
+  it('includes the official Grok 4.6 OpenRouter fallback rate', async () => {
+    const chain = mockQuery([]);
+    mockFrom.mockReturnValue(chain);
+    chain.order = vi.fn().mockResolvedValue({ data: [], error: null });
+
+    const { getTokenRate, invalidateTokenRateCache } = await import('@/lib/billing/token-rates');
+    invalidateTokenRateCache();
+
+    const rate = await getTokenRate('x-ai/grok-4.6');
+    expect(rate).toMatchObject({
+      display_name: 'Grok 4.6',
+      input_per_1m: 2,
+      output_per_1m: 6,
+      cache_read_per_1m: 0.5,
+      cache_write_per_1m: 0,
+      markup: 2,
+    });
+  });
+
   it('includes the exact GPT-5.6 Terra fallback rate and bills its usage', async () => {
     const chain = mockQuery([]);
     mockFrom.mockReturnValue(chain);

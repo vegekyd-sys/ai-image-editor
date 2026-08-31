@@ -67,6 +67,7 @@ function dedupeLegacyVideos<T extends { videoUrl?: string; taskId?: string }>(it
 
 async function pollVideoProvider(taskId: string, userId?: string): Promise<{ taskId: string; status: string; videoUrl?: string; error?: string }> {
   const isEvolink = taskId.startsWith('task-unified-');
+  const isMuleRouter = taskId.startsWith('mr-wan30-');
   const isSeedance = taskId.startsWith('cgt-');
   const isMotionControl = taskId.startsWith('mc-');
   const isXai = taskId.startsWith('xai-');
@@ -75,7 +76,10 @@ async function pollVideoProvider(taskId: string, userId?: string): Promise<{ tas
   const isSyncLipsync = taskId.startsWith('sync3-');
   const realTaskId = isMotionControl ? taskId.slice(3) : taskId;
 
-  if (isEvolink) {
+  if (isMuleRouter) {
+    const { getMuleRouterVideoTask } = await import('@/lib/mulerouter-video');
+    return getMuleRouterVideoTask(taskId);
+  } else if (isEvolink) {
     const { getEvolinkTask } = await import('@/lib/evolink');
     return getEvolinkTask(taskId);
   } else if (isSeedance) {

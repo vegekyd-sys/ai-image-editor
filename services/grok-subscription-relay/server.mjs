@@ -122,7 +122,10 @@ function isAllowedPath(method, pathname) {
       '/v1/videos/extensions',
     ].includes(pathname);
   }
-  return method === 'GET' && /^\/v1\/videos\/[A-Za-z0-9-]+$/.test(pathname);
+  return method === 'GET' && (
+    pathname === '/v1/usage'
+    || /^\/v1\/videos\/[A-Za-z0-9-]+$/.test(pathname)
+  );
 }
 
 export function buildGrokAgentHeaders(accessToken) {
@@ -136,7 +139,61 @@ export function buildGrokAgentHeaders(accessToken) {
     'x-grok-client-mode': 'headless',
     'x-authenticateresponse': 'authenticate-response',
     'x-xai-token-auth': 'xai-grok-cli',
-    'x-grok-model-override': 'grok-4.5',
+    'x-grok-model-override': 'grok-4.6',
+  };
+}
+
+function toUnixSeconds(value) {
+  if (typeof value === 'number' && Number.isFinite(value)) {
+    return value > 10_000_000_000 ? Math.round(value / 1_000) : Math.round(value);
+  }
+  if (typeof value !== 'string' || !value.trim()) return undefined;
+  const numeric = Number(value);
+  if (Number.isFinite(numeric)) {
+    return numeric > 10_000_000_000 ? Math.round(numeric / 1_000) : Math.round(numeric);
+  }
+  const parsed = Date.parse(value);
+  return Number.isFinite(parsed) ? Math.round(parsed / 1_000) : undefined;
+}
+
+function clampPercent(value) {
+  const numeric = Number(value);
+  return Number.isFinite(numeric) ? Math.max(0, Math.min(100, numeric)) : undefined;
+}
+
+export function normalizeGrokUsage(value) {
+  const config = value?.config && typeof value.config === 'object' ? value.config : {};
+  let usedPercent = clampPercent(config.creditUsagePercent);
+  if (usedPercent === undefined) {
+    const used = Number(config.used);
+    const monthlyLimit = Number(config.monthlyLimit);
+    if (Number.isFinite(used) && Number.isFinite(monthlyLimit) && monthlyLimit > 0) {
+      usedPercent = clampPercent((used / monthlyLimit) * 100);
+    }
+  }
+  const period = config.currentPeriod && typeof config.currentPeriod === 'object'
+    ? config.currentPeriod
+    : {};
+  const startsAt = toUnixSeconds(period.start ?? config.billingPeriodStart);
+  const resetsAt = toUnixSeconds(period.end ?? config.billingPeriodEnd);
+  const windowDurationMins = startsAt && resetsAt && resetsAt > startsAt
+    ? Math.round((resetsAt - startsAt) / 60)
+    : undefined;
+  const usage = usedPercent === undefined
+    ? null
+    : {
+        usedPercent,
+        remainingPercent: 100 - usedPercent,
+        ...(windowDurationMins ? { windowDurationMins } : {}),
+        ...(resetsAt ? { resetsAt } : {}),
+        ...(typeof period.type === 'string' && period.type ? { periodType: period.type } : {}),
+      };
+  return {
+    available: true,
+    planType: typeof value?.subscriptionTier === 'string' && value.subscriptionTier
+      ? value.subscriptionTier
+      : null,
+    usage,
   };
 }
 
@@ -150,7 +207,7 @@ function validateGrokAgentBody(body) {
   if (!payload || typeof payload !== 'object' || Array.isArray(payload)) {
     return { ok: false, error: 'invalid_payload' };
   }
-  if (payload.model !== 'grok-4.5') return { ok: false, error: 'unsupported_model' };
+  if (payload.model !== 'grok-4.6') return { ok: false, error: 'unsupported_model' };
   if (payload.stream !== true) return { ok: false, error: 'stream_required' };
   return { ok: true };
 }
@@ -179,6 +236,37 @@ async function forwardGrokAgent(res, body) {
     return;
   }
   Readable.fromWeb(upstream.body).on('error', () => res.destroy()).pipe(res);
+}
+
+async function forwardGrokUsage(res) {
+  const send = async credential => fetch(`${GROK_CLI_PROXY_BASE_URL}/v1/billing?format=credits`, {
+    headers: {
+      authorization: `Bearer ${credential.access}`,
+      accept: 'application/json',
+      'user-agent': `grok-shell/${GROK_BUILD_CLIENT_VERSION}`,
+      'x-grok-client-version': GROK_BUILD_CLIENT_VERSION,
+      'x-grok-client-mode': 'headless',
+      'x-xai-token-auth': 'xai-grok-cli',
+      ...(credential.accountId ? { 'x-userid': credential.accountId } : {}),
+    },
+  });
+  let upstream = await send(await getValidXaiOAuthCredential());
+  if (upstream.status === 401) {
+    await upstream.body?.cancel().catch(() => undefined);
+    upstream = await send(await getValidXaiOAuthCredential({ forceRefresh: true }));
+  }
+  if (!upstream.ok) {
+    sendJson(
+      res,
+      upstream.status,
+      { error: 'grok_usage_unavailable' },
+      { 'x-makaron-relay-outcome': 'upstream-rejected-before-task' },
+    );
+    await upstream.body?.cancel().catch(() => undefined);
+    return;
+  }
+  const payload = await upstream.json();
+  sendJson(res, 200, normalizeGrokUsage(payload));
 }
 
 async function forwardXai(req, res, url, body) {
@@ -255,7 +343,9 @@ export function createRelayServer() {
         sendJson(res, verified.status, { error: verified.error }, { 'x-makaron-relay-outcome': 'rejected-before-upstream' });
         return;
       }
-      if (url.pathname === '/v1/chat/completions') {
+      if (url.pathname === '/v1/usage') {
+        await forwardGrokUsage(res);
+      } else if (url.pathname === '/v1/chat/completions') {
         const validation = validateGrokAgentBody(body);
         if (!validation.ok) {
           sendJson(res, 400, { error: validation.error }, { 'x-makaron-relay-outcome': 'rejected-before-upstream' });

@@ -23,8 +23,9 @@ export async function getVideoStatus(input: GetVideoStatusInput): Promise<GetVid
   }
 
   try {
-    // Route by taskId prefix: task-unified-* = Evolink, cgt-* = SeeDance Volcengine, sync3-* = Sync Lipsync v3, xai-* = Grok, google-omni-* = Gemini Omni, minimax-h3-* = MiniMax H3
+    // Route by taskId prefix: task-unified-* = Evolink, mr-wan30-* = MuleRouter Wan, cgt-* = SeeDance Volcengine, sync3-* = Sync Lipsync v3, xai-* = Grok, google-omni-* = Gemini Omni, minimax-h3-* = MiniMax H3
     const isEvolink = taskId.startsWith('task-unified-');
+    const isMuleRouter = taskId.startsWith('mr-wan30-');
     const isSeedance = isEvolink || taskId.startsWith('cgt-');
     const isXai = taskId.startsWith('xai-');
     const isGoogleOmni = taskId.startsWith('google-omni-');
@@ -44,6 +45,22 @@ export async function getVideoStatus(input: GetVideoStatusInput): Promise<GetVid
           : result.status === 'failed'
             ? `Lip-sync rendering failed: ${result.error || 'Unknown error'}`
             : 'Lip-sync video is rendering.',
+      };
+    }
+
+    if (isMuleRouter) {
+      const { getMuleRouterVideoTask } = await import('../mulerouter-video');
+      const result = await getMuleRouterVideoTask(taskId);
+      return {
+        success: result.status !== 'failed',
+        status: result.status,
+        videoUrl: result.videoUrl,
+        error: result.error,
+        message: result.status === 'completed'
+          ? 'MuleRouter Wan video rendering completed!'
+          : result.status === 'failed'
+            ? `MuleRouter Wan video rendering failed: ${result.error || 'Unknown error'}`
+            : 'MuleRouter Wan video is rendering.',
       };
     }
 

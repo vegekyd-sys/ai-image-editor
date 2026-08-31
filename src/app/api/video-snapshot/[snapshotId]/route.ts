@@ -232,8 +232,9 @@ export async function GET(
     }
 
     // Poll provider — route by taskId prefix
-    // task-unified-* = Evolink SeeDance, cgt-* = SeeDance (Volcengine), mc-* = Motion Control, xai-* = Grok, google-omni-* = Gemini Omni, minimax-h3-* = MiniMax H3, else = Kling
+    // task-unified-* = Evolink SeeDance, mr-wan30-* = MuleRouter Wan, cgt-* = SeeDance (Volcengine), mc-* = Motion Control, xai-* = Grok, google-omni-* = Gemini Omni, minimax-h3-* = MiniMax H3, else = Kling
     const isEvolink = videoMeta.taskId.startsWith('task-unified-')
+    const isMuleRouter = videoMeta.taskId.startsWith('mr-wan30-')
     const isSeedance = videoMeta.taskId.startsWith('cgt-')
     const isMotionControl = videoMeta.taskId.startsWith('mc-')
     const isXai = videoMeta.taskId.startsWith('xai-')
@@ -244,7 +245,10 @@ export async function GET(
     let result: { taskId: string; status: string; videoUrl?: string; error?: string }
     const realTaskId = isMotionControl ? videoMeta.taskId.slice(3) : videoMeta.taskId
 
-    if (isEvolink) {
+    if (isMuleRouter) {
+      const { getMuleRouterVideoTask } = await import('@/lib/mulerouter-video')
+      result = await getMuleRouterVideoTask(videoMeta.taskId)
+    } else if (isEvolink) {
       const { getEvolinkTask } = await import('@/lib/evolink')
       result = await getEvolinkTask(videoMeta.taskId)
     } else if (isSeedance) {

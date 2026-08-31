@@ -92,22 +92,23 @@ describe('xAI video submission modes', () => {
     })
   })
 
-  it('keeps single-image framing by using image-to-video without aspect_ratio', async () => {
+  it('uses reference-to-video for a single image instead of locking it as the first frame', async () => {
     const fetchMock = mockSubmission()
-    await createXaiVideoTask({
+    await expect(createXaiVideoTask({
       prompt: 'Animate <<<media_1>>> with a slow push-in',
       images: ['https://example.com/source.jpg'],
       aspectRatio: '16:9',
-      resolution: '1080p',
-    })
+      resolution: '720p',
+    })).resolves.toMatchObject({ mode: 'reference-to-video' })
 
     expect(JSON.parse(fetchMock.mock.calls[0][1].body)).toMatchObject({
       model: 'grok-imagine-video-1.5',
-      prompt: 'Animate the source image with a slow push-in',
-      image: { url: 'https://example.com/source.jpg' },
-      resolution: '1080p',
+      prompt: 'Animate <IMAGE_1> with a slow push-in',
+      reference_images: [{ url: 'https://example.com/source.jpg' }],
+      resolution: '720p',
+      aspect_ratio: '16:9',
     })
-    expect(JSON.parse(fetchMock.mock.calls[0][1].body)).not.toHaveProperty('aspect_ratio')
+    expect(JSON.parse(fetchMock.mock.calls[0][1].body)).not.toHaveProperty('image')
   })
 
   it('uses reference_images and xAI markers for multi-image generation', async () => {
@@ -174,11 +175,11 @@ describe('xAI video submission modes', () => {
     })
   })
 
-  it('rejects 1080p multi-reference requests before submission', async () => {
+  it('rejects 1080p reference requests even when there is only one image', async () => {
     const fetchMock = mockSubmission()
     await expect(createXaiVideoTask({
-      prompt: 'Combine both references',
-      images: ['https://example.com/a.jpg', 'https://example.com/b.jpg'],
+      prompt: 'Use the reference',
+      images: ['https://example.com/a.jpg'],
       resolution: '1080p',
     })).rejects.toThrow('reference-to-video is capped at 720p')
     expect(fetchMock).not.toHaveBeenCalled()

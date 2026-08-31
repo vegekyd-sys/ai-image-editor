@@ -31,8 +31,9 @@ export async function GET(
     }
 
     // Poll task — route by taskId prefix or env var
-    // task-unified-* = Evolink SeeDance, cgt-* = SeeDance (Volcengine), mc-* = Motion Control, xai-* = Grok, google-omni-* = Gemini Omni, minimax-h3-* = MiniMax H3, else = Kling
+    // task-unified-* = Evolink SeeDance, mr-wan30-* = MuleRouter Wan, cgt-* = SeeDance (Volcengine), mc-* = Motion Control, xai-* = Grok, google-omni-* = Gemini Omni, minimax-h3-* = MiniMax H3, else = Kling
     const isEvolink = taskId.startsWith('task-unified-')
+    const isMuleRouter = taskId.startsWith('mr-wan30-')
     const isSeedance = taskId.startsWith('cgt-')
     const isMotionControl = taskId.startsWith('mc-')
     const isXai = taskId.startsWith('xai-')
@@ -54,7 +55,10 @@ export async function GET(
       grokOwnerUserId = Array.isArray(projects) ? projects[0]?.user_id : projects?.user_id
     }
 
-    if (isEvolink) {
+    if (isMuleRouter) {
+      const { getMuleRouterVideoTask } = await import('@/lib/mulerouter-video')
+      result = await getMuleRouterVideoTask(taskId)
+    } else if (isEvolink) {
       const { getEvolinkTask } = await import('@/lib/evolink')
       result = await getEvolinkTask(taskId)
     } else if (isSeedance) {

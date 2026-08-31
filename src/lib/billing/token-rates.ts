@@ -97,8 +97,8 @@ const DEFAULT_TOKEN_RATES: TokenRate[] = [
     is_active: true,
   },
   {
-    model_id: 'x-ai/grok-4.5',
-    display_name: 'Grok 4.5',
+    model_id: 'x-ai/grok-4.6',
+    display_name: 'Grok 4.6',
     input_per_1m: 2.00,
     output_per_1m: 6.00,
     cache_read_per_1m: 0.50,

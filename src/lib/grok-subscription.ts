@@ -18,6 +18,18 @@ export class GrokSubscriptionRelayError extends Error {
   }
 }
 
+export interface GrokSubscriptionUsage {
+  available: true;
+  planType: string | null;
+  usage: {
+    usedPercent: number;
+    remainingPercent: number;
+    windowDurationMins?: number;
+    resetsAt?: number;
+    periodType?: string;
+  } | null;
+}
+
 function relayUrl(): string | undefined {
   return process.env.GROK_SUBSCRIPTION_RELAY_URL?.trim();
 }
@@ -175,6 +187,50 @@ export async function preflightGrokSubscriptionRelay(userId: string): Promise<vo
       response.status,
     );
   }
+}
+
+export async function getGrokSubscriptionUsage(userId: string): Promise<GrokSubscriptionUsage> {
+  let response: Response;
+  try {
+    response = await signedRelayFetch({
+      method: 'GET',
+      pathname: '/v1/usage',
+      userId,
+    });
+  } catch (error) {
+    if (error instanceof GrokSubscriptionRelayError) throw error;
+    throw new GrokSubscriptionRelayError(
+      `GROK_SUBSCRIPTION_RELAY_UNAVAILABLE: ${error instanceof Error ? error.message : String(error)}`,
+      true,
+    );
+  }
+  if (!response.ok) {
+    throw new GrokSubscriptionRelayError(
+      `GROK_SUBSCRIPTION_USAGE_UNAVAILABLE: HTTP ${response.status}`,
+      true,
+      response.status,
+    );
+  }
+  const payload = await response.json() as Partial<GrokSubscriptionUsage>;
+  const usage = payload.usage && typeof payload.usage === 'object'
+    ? payload.usage
+    : null;
+  if (payload.available !== true) {
+    throw new GrokSubscriptionRelayError('GROK_SUBSCRIPTION_USAGE_UNAVAILABLE: invalid response', true);
+  }
+  return {
+    available: true,
+    planType: typeof payload.planType === 'string' ? payload.planType : null,
+    usage: usage && Number.isFinite(usage.usedPercent) && Number.isFinite(usage.remainingPercent)
+      ? {
+          usedPercent: Math.max(0, Math.min(100, usage.usedPercent)),
+          remainingPercent: Math.max(0, Math.min(100, usage.remainingPercent)),
+          ...(Number.isFinite(usage.windowDurationMins) ? { windowDurationMins: usage.windowDurationMins } : {}),
+          ...(Number.isFinite(usage.resetsAt) ? { resetsAt: usage.resetsAt } : {}),
+          ...(typeof usage.periodType === 'string' ? { periodType: usage.periodType } : {}),
+        }
+      : null,
+  };
 }
 
 export async function fetchGrokSubscriptionRelay(options: {
