@@ -659,6 +659,8 @@ const zh = {
   'admin.codexAllowlist.allowed': '已允许',
   'admin.codexAllowlist.remove': '移除',
   'admin.codexAllowlist.unknownEmail': '未知邮箱',
+  'changelog.fastDurableAgent.title': '启动更快，长任务不断',
+  'changelog.fastDurableAgent.item1': 'Agent 对话现在会立即开始流式输出；长任务仍会持续保存进度，并在刷新、断网或执行进程重启后自动接上。',
   'changelog.googleOmni11.title': 'Gemini Omni 1.1 上线',
   'changelog.googleOmni11.item1': 'Gemini Omni 1.1 支持快速生成原生音频视频，可选 360p 草稿、默认 720p，以及放大后的 1080p 与 4K。',
   'changelog.googleOmni11.item2': '在 Chat 里引用一段时间线视频，即可让 Makaron 向后续写最多 10 秒，并把保留原片的累计结果保存为新快照。',

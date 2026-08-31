@@ -657,6 +657,8 @@ const ja = {
   'admin.codexAllowlist.allowed': '許可済み',
   'admin.codexAllowlist.remove': '削除',
   'admin.codexAllowlist.unknownEmail': '不明なメール',
+  'changelog.fastDurableAgent.title': 'すばやく開始、長いタスクも継続',
+  'changelog.fastDurableAgent.item1': 'Agentチャットはすぐにストリーミングを開始し、長い制作タスクは進捗を保存しながら、再読み込み、切断、実行プロセスの再起動後も自動で再接続します。',
   'changelog.googleOmni11.title': 'Gemini Omni 1.1 を公開',
   'changelog.googleOmni11.item1': 'Gemini Omni 1.1 でネイティブ音声付き動画を高速生成。360pドラフト、標準720p、アップスケール1080p・4Kに対応しました。',
   'changelog.googleOmni11.item2': 'Chatでタイムライン動画を1本参照すると、元動画を保った累積スナップショットとして最大10秒先まで延長できます。',

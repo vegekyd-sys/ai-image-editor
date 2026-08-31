@@ -659,6 +659,8 @@ const en = {
   'admin.codexAllowlist.allowed': 'Allowed',
   'admin.codexAllowlist.remove': 'Remove',
   'admin.codexAllowlist.unknownEmail': 'Unknown email',
+  'changelog.fastDurableAgent.title': 'Fast Starts, Durable Long Runs',
+  'changelog.fastDurableAgent.item1': 'Agent chats now start streaming immediately, while long creative runs keep saving progress and reconnect automatically after a refresh, network drop, or worker restart.',
   'changelog.googleOmni11.title': 'Gemini Omni 1.1 Is Live',
   'changelog.googleOmni11.item1': 'Create fast native-audio video in 360p draft, 720p default, or upscaled 1080p and 4K with Gemini Omni 1.1.',
   'changelog.googleOmni11.item2': 'Reference one timeline video in Chat and ask Makaron to continue it by up to 10 seconds while preserving the original clip as a new cumulative snapshot.',

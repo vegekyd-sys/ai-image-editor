@@ -635,6 +635,8 @@ const zhHant = {
   'admin.codexAllowlist.allowed': '已允許',
   'admin.codexAllowlist.remove': '移除',
   'admin.codexAllowlist.unknownEmail': '未知電郵',
+  'changelog.fastDurableAgent.title': '啟動更快，長任務不中斷',
+  'changelog.fastDurableAgent.item1': 'Agent 對話現在會立即開始串流輸出；長任務仍會持續儲存進度，並在重新整理、斷線或執行程序重啟後自動接續。',
   'changelog.googleOmni11.title': 'Gemini Omni 1.1 上線',
   'changelog.googleOmni11.item1': 'Gemini Omni 1.1 支援快速產生原生音訊影片，可選 360p 草稿、預設 720p，以及放大後的 1080p 與 4K。',
   'changelog.googleOmni11.item2': '在 Chat 裡引用一段時間軸影片，即可讓 Makaron 向後延伸最多 10 秒，並把保留原片的累積結果儲存為新快照。',
