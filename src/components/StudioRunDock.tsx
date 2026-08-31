@@ -298,10 +298,17 @@ export function useStudioRun(projectId: string | undefined, active: boolean): St
 
   useEffect(() => {
     void refresh();
+  }, [refresh]);
+
+  useEffect(() => {
     if (!active) return;
-    const timer = window.setInterval(refresh, 3500);
+    // Studio status is supplementary and should not contend with Agent startup.
+    // Refresh quickly only after a Studio Run is known; an ordinary chat turn
+    // can wait until after the first-token window before probing for a new run.
+    const intervalMs = run ? 3500 : 10_000;
+    const timer = window.setInterval(refresh, intervalMs);
     return () => window.clearInterval(timer);
-  }, [active, refresh]);
+  }, [active, refresh, run]);
 
   return { run, artifacts };
 }

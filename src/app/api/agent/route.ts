@@ -1,8 +1,7 @@
 import { NextRequest } from 'next/server';
 import type { ModelMessage } from 'ai';
 import { authenticateRequest } from '@/lib/api-auth';
-import { runMakaronAgent } from '@/lib/agent';
-import { AgentDualWriter } from '@/lib/agentDualWriter';
+import type { AgentDualWriter as AgentDualWriterType } from '@/lib/agentDualWriter';
 import { requireCredits, deductByTokens } from '@/lib/billing/credits';
 import { AgentPerf } from '@/lib/agent-perf';
 import { getRequestLocale } from '@/lib/server-locale';
@@ -13,7 +12,11 @@ import {
   resolveAgentModelSpecForUser,
   shouldRequireAgentCredits,
 } from '@/lib/agent-models';
-import { getAgentContextPolicy } from '@/lib/agent-execution';
+import {
+  DEFAULT_ATTEMPT_BUDGET_MS,
+  DEFAULT_ATTEMPT_MAX_STEPS,
+  getAgentContextPolicy,
+} from '@/lib/agent-execution';
 import { isDynamicCodexSubscriptionUserAllowed } from '@/lib/codex-subscription-allowlist';
 import { verifySkillLaunchContext } from '@/lib/skill-launch-context';
 import {
@@ -28,27 +31,33 @@ export async function POST(req: NextRequest) {
   const perf = new AgentPerf('agent-api', { route: '/api/agent' });
   try {
     const endAuth = perf.span('authenticate');
-    const authResult = await authenticateRequest(req);
+    const endReadBody = perf.span('read_body');
+    const [authResult, requestBody] = await Promise.all([
+      authenticateRequest(req),
+      req.json(),
+    ]);
     endAuth({ ok: !('error' in authResult) });
+    endReadBody();
     if ('error' in authResult) return authResult.error;
     const { userId, supabase } = authResult.auth;
-    const codexSubscriptionAllowed = await isDynamicCodexSubscriptionUserAllowed(userId);
 
-    const endReadBody = perf.span('read_body');
     const { prompt, image, animationImageUrls, animationImages, projectId, analysisOnly, analysisContext, isVideoAnalysis,
             tipReaction, committedTip, tipsTeaser, tipsPayload, nameProject, description,
             previewsReady, readyTips, preferredModel, agentModel, snapshotImages, currentSnapshotIndex, isNsfw,
             musicReady, musicAudioUrl, currentDesign, currentDesignPath, videoModel, videoResolution, videoAuto,
             headless, hasAnnotation, isDraft, referenceImageCount, uploadedVideoCount, turnMediaCount, audioAttachments,
-            skillLaunchContext: rawSkillLaunchContext } = await req.json();
-    endReadBody({
+            skillLaunchContext: rawSkillLaunchContext } = requestBody;
+    perf.mark('request_ready', {
       projectId: projectId || null,
       promptChars: typeof prompt === 'string' ? prompt.length : 0,
       hasImage: !!image,
       headless: !!headless,
     });
     const locale = getRequestLocale(req);
-    const skillLaunchContext = await verifySkillLaunchContext(supabase, rawSkillLaunchContext, userId);
+    const [codexSubscriptionAllowed, skillLaunchContext] = await Promise.all([
+      isDynamicCodexSubscriptionUserAllowed(userId),
+      verifySkillLaunchContext(supabase, rawSkillLaunchContext, userId),
+    ]);
     if (rawSkillLaunchContext && !skillLaunchContext) {
       return new Response(
         JSON.stringify({ error: 'Skill template launch could not be verified' }),
@@ -95,19 +104,53 @@ export async function POST(req: NextRequest) {
     // Only dual-write for normal agent flow (not lightweight teaser/name/reaction/analysis branches)
     const isNormalMode = !tipsTeaser && !nameProject && !previewsReady && !tipReaction && !analysisOnly;
 
-    // Query timeline version for video-in-timeline support
+    // Agent tools pull in media codecs and the full tool registry. Load that
+    // runtime in parallel with admission instead of blocking route startup.
+    const agentRuntimePromise = import('@/lib/agent');
+    const durableRunnerPromise = isNormalMode
+      ? import('@/lib/agent-execution-runner')
+      : Promise.resolve(null);
+    const writerRuntimePromise = isNormalMode
+      ? import('@/lib/agentDualWriter')
+      : Promise.resolve(null);
+
+    // Timeline and admission are independent. Keep both off the serial path.
     const endProjectLoad = perf.span('load_project', { projectId });
-    const { data: projectRow } = await supabase.from('projects').select('timeline_version').eq('id', projectId).single();
-    endProjectLoad({ timelineVersion: (projectRow as Record<string, unknown>)?.timeline_version as number ?? 1 });
-    const timelineVersion: number = (projectRow as Record<string, unknown>)?.timeline_version as number ?? 1;
+    const projectPromise = supabase.from('projects').select('timeline_version').eq('id', projectId).single();
+    const activeRunPromise = isNormalMode
+      ? findActiveAgentRun(supabase, projectId, userId)
+      : Promise.resolve(null);
+    const timelineVersionPromise = projectPromise.then(({ data: projectRow }) => {
+      const timelineVersion = (projectRow as Record<string, unknown>)?.timeline_version as number ?? 1;
+      endProjectLoad({ timelineVersion });
+      return timelineVersion;
+    });
+    const activeRun = await activeRunPromise;
 
     let runId: string | null = null;
     let firstMessageId: string | null = null;
+    let inlineInitialClaim: {
+      attemptId: string;
+      leaseToken: string;
+      workerId: string;
+    } | null = null;
+    let inlineRunPreload: {
+      id: string;
+      project_id: string;
+      user_id: string;
+      status: string;
+      objective: string;
+      prompt: string;
+      execution_policy: Record<string, unknown>;
+      attempt_count: number;
+      total_input_tokens: number;
+      total_output_tokens: number;
+      input_version: number;
+      metadata: Record<string, unknown>;
+    } | null = null;
     if (isNormalMode) {
       const endRunCreate = perf.span('create_agent_run', { projectId, userId });
-      const admission = decideAgentRunAdmission(
-        await findActiveAgentRun(supabase, projectId, userId),
-      );
+      const admission = decideAgentRunAdmission(activeRun);
       if (admission.kind === 'append') {
         if (headless) {
           await supabase.from('messages').insert({
@@ -149,22 +192,92 @@ export async function POST(req: NextRequest) {
         }), { status: 409, headers: { 'Content-Type': 'application/json' } });
       }
 
-      const { data: run } = await supabase.from('agent_runs').insert({
+      runId = crypto.randomUUID();
+      firstMessageId = crypto.randomUUID();
+      const inlineLeaseSeconds = Math.max(
+        60,
+        Math.min(900, Number(process.env.AGENT_INLINE_LEASE_SECONDS) || 120),
+      );
+      const leaseToken = crypto.randomUUID();
+      const inlineWorkerId = `inline-${crypto.randomUUID()}`;
+      inlineInitialClaim = {
+        attemptId: crypto.randomUUID(),
+        leaseToken,
+        workerId: inlineWorkerId,
+      };
+      const objective = prompt || 'Continue the current project conversation.';
+      const executionPolicy = {
+        durable: true as const,
+        transport: 'sse',
+        reconnect: 'event-log',
+        mode: 'inline-first-attempt',
+        attemptBudgetMs: DEFAULT_ATTEMPT_BUDGET_MS,
+        attemptMaxSteps: DEFAULT_ATTEMPT_MAX_STEPS,
+        leaseSeconds: inlineLeaseSeconds,
+        maxAttempts: 40,
+        maxTotalInputTokens: 12_000_000,
+      };
+      const runMetadata = {
+        locale,
+        preferredModel,
+        requestedAgentModel: requestedAgentModel ?? 'auto',
+        agentModel: resolvedAgentModel.id,
+        agentProvider: resolvedAgentModel.provider,
+        agentProviderModel: resolvedAgentModel.providerModelId,
+        isNsfw,
+        analysisOnly,
+        firstMessageId,
+        executionRequest: {
+          locale,
+          preferredModel,
+          requestedAgentModel: requestedAgentModel ?? 'auto',
+          videoModel,
+          videoResolution,
+          videoAuto,
+          skillLaunchContext,
+          currentSnapshotIndex,
+          hasAnnotation,
+          isDraft,
+          referenceImageCount,
+          uploadedVideoCount,
+          turnMediaCount,
+          isNsfw,
+          audioAttachments,
+          codexSubscriptionAllowed,
+          origin: req.nextUrl.origin,
+        },
+      };
+      inlineRunPreload = {
+        id: runId,
+        project_id: projectId,
+        user_id: userId,
+        status: 'running',
+        objective,
+        prompt: (prompt ?? '').slice(0, 500),
+        execution_policy: executionPolicy,
+        attempt_count: 1,
+        total_input_tokens: 0,
+        total_output_tokens: 0,
+        input_version: 0,
+        metadata: runMetadata,
+      };
+      const { error: runInsertError } = await supabase.from('agent_runs').insert({
+        id: runId,
         project_id: projectId,
         user_id: userId,
         status: 'running',
         prompt: (prompt ?? '').slice(0, 500),
-        metadata: {
-          locale,
-          preferredModel,
-          requestedAgentModel: requestedAgentModel ?? 'auto',
-          agentModel: resolvedAgentModel.id,
-          agentProviderModel: resolvedAgentModel.providerModelId,
-          isNsfw,
-          analysisOnly,
-        },
-      }).select('id').single();
-      runId = run?.id ?? null;
+        objective,
+        execution_policy: executionPolicy,
+        current_work_unit: 'agent',
+        attempt_count: 1,
+        lease_token: leaseToken,
+        lease_owner: inlineWorkerId,
+        lease_expires_at: new Date(Date.now() + inlineLeaseSeconds * 1000).toISOString(),
+        next_attempt_at: null,
+        metadata: runMetadata,
+      });
+      if (runInsertError) throw new Error(`Failed to create inline durable Agent Run: ${runInsertError.message}`);
       endRunCreate({ runId: runId || null });
     }
 
@@ -180,6 +293,54 @@ export async function POST(req: NextRequest) {
           text: translate(locale, 'agent.status.starting'),
         });
         perf.mark('first_sse_sent', { eventType: 'status' });
+
+        // Normal interactive turns are durable from creation, but attempt 1
+        // runs inside this SSE request so the browser receives model output
+        // without polling or a second worker dispatch. If this process dies,
+        // its short lease expires and the durable cron resumes the same run.
+        if (runId && isNormalMode) {
+          try {
+            const runnerRuntime = await durableRunnerPromise;
+            if (!runnerRuntime) throw new Error('Durable runner is unavailable');
+            const timelineVersion = await timelineVersionPromise;
+            const result = await runnerRuntime.runAgentExecutionAttempt(runId, {
+              admin: supabase,
+              workerId: inlineInitialClaim?.workerId,
+              origin: req.nextUrl.origin,
+              controller,
+              encoder,
+              timelineVersion,
+              preloadedRun: inlineRunPreload || undefined,
+              initialClaim: inlineInitialClaim || undefined,
+              requestOverrides: {
+                image: typeof image === 'string' ? image : undefined,
+                snapshotImages: Array.isArray(snapshotImages) ? snapshotImages : undefined,
+                currentDesign: currentDesign && typeof currentDesign === 'object'
+                  ? currentDesign as Record<string, unknown>
+                  : undefined,
+                currentDesignPath: typeof currentDesignPath === 'string' ? currentDesignPath : undefined,
+              },
+            });
+            perf.mark('inline_durable_attempt_finished', {
+              claimed: result.claimed,
+              status: result.status || null,
+              attemptNo: result.attemptNo || null,
+            });
+          } catch (error) {
+            // Never convert a worker/process interruption into a terminal run.
+            // The due run or expired lease remains recoverable by cron.
+            console.error(`[agent] inline durable attempt interrupted for ${runId}:`, error);
+          } finally {
+            perf.mark('stream_close', { projectId, runId });
+            try { controller.close(); } catch { /* browser already disconnected */ }
+          }
+          return;
+        }
+
+        const [{ runMakaronAgent }, writerRuntime] = await Promise.all([
+          agentRuntimePromise,
+          writerRuntimePromise,
+        ]);
         // Track token usage for billing
         let usageEvent: Extract<import('@/lib/agent').AgentStreamEvent, { type: 'usage' }> | null = null;
         let sawDone = false;
@@ -197,25 +358,15 @@ export async function POST(req: NextRequest) {
         }
 
         // Create dual writer if normal mode with a valid run
-        const writer = (runId && isNormalMode)
-          ? new AgentDualWriter(runId, supabase, userId, projectId, controller, encoder)
+        const writer: AgentDualWriterType | null = (runId && isNormalMode && writerRuntime)
+          ? new writerRuntime.AgentDualWriter(runId, supabase, userId, projectId, controller, encoder, firstMessageId)
           : null;
         if (writer) {
-          await writer.persistHeartbeat();
-          firstMessageId = writer.firstMessageId;
-          // Store firstMessageId in run metadata for reconnect
-          supabase.from('agent_runs').update({
-            metadata: {
-              locale,
-              preferredModel,
-              requestedAgentModel: requestedAgentModel ?? 'auto',
-              agentModel: resolvedAgentModel.id,
-              agentProviderModel: resolvedAgentModel.providerModelId,
-              isNsfw,
-              analysisOnly,
-              firstMessageId,
-            },
-          }).eq('id', runId).then(() => {});
+          // Reconnect logging must not delay context construction or model start.
+          // insertEvent reserves seq synchronously, so later events remain ordered.
+          void writer.persistHeartbeat().catch(error => {
+            console.warn('[agent] initial fast-lane heartbeat failed', error);
+          });
         }
 
         try {
@@ -396,6 +547,9 @@ export async function POST(req: NextRequest) {
           try {
             const endAgentStream = perf.span('agent_stream', { projectId, runId: runId || null });
             try {
+              // The timeline lookup started during admission and normally
+              // resolves while prompt context is being built.
+              const timelineVersion = await timelineVersionPromise;
               for await (const event of runMakaronAgent(agentPrompt, agentImage, projectId, { analysisOnly, analysisContext, isVideoAnalysis, animationImageUrls: animationImageUrls?.length ? animationImageUrls : undefined, animationImages: animationImages?.length ? animationImages : undefined, locale, preferredModel, agentModel: requestedAgentModel, videoModel, videoResolution, videoAuto, skillLaunchContext, audioAttachments: agentAudioAttachments, snapshotImages: agentSnapshotImages, explicitMediaIndices: agentExplicitMediaIndices, currentSnapshotIndex: agentCurrentSnapshotIndex, isNsfw, supabase, userId: userId, codexSubscriptionAllowed, currentDesign: agentCurrentDesign, currentDesignPath: agentCurrentDesignPath, history: agentHistory, timelineVersion, perf, abortSignal: modelAbortController.signal, contextCompactAtTokens: agentCompactionRequired ? getAgentContextPolicy(resolvedAgentModel.id).providerCompactAtTokens : undefined, historyBoundary: agentHistoryBoundary, studioWorkflowStage: agentStudioWorkflowStage, agentRunId: runId || undefined })) {
                 if (event.type === 'done') sawDone = true;
                 if (event.type === 'error') {

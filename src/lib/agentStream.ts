@@ -67,6 +67,8 @@ export async function streamAgent(
 ): Promise<void> {
   const durableNormalRequest = body.durable === true
     && !body.analysisOnly
+    && !body.hasAnnotation
+    && !body.isDraft
     && !body.tipReaction
     && !body.tipsTeaser
     && !body.nameProject
@@ -166,9 +168,13 @@ async function streamDurableAgent(
 
   let lastSeq = -1;
   let firstMessageSeen = false;
+  let receivedVisibleOutput = false;
   try {
     while (!signal?.aborted) {
-      const params = new URLSearchParams({ events: 'true' });
+      // The full run-status representation resolves and enriches every async
+      // artifact. CUI only needs incremental events and the Agent terminal
+      // state, so use the lightweight view on the latency-sensitive path.
+      const params = new URLSearchParams({ events: 'true', view: 'stream' });
       if (lastSeq >= 0) params.set('after', String(lastSeq));
       let runResponse: Response;
       try {
@@ -197,6 +203,17 @@ async function streamDurableAgent(
       for (const event of run.events || []) {
         if (event.seq <= lastSeq) continue;
         lastSeq = event.seq;
+        if (
+          event.type === 'content'
+          || event.type === 'reasoning'
+          || event.type === 'tool_call'
+          || event.type === 'image'
+          || event.type === 'render'
+          || event.type === 'animation_task'
+          || event.type === 'music_task'
+        ) {
+          receivedVisibleOutput = true;
+        }
         dispatchPersistedAgentEvent(event, callbacks);
       }
       const agentStatus = run.agent_status || run.status;
@@ -208,7 +225,14 @@ async function streamDurableAgent(
         callbacks.onError?.(run.error?.message || (agentStatus === 'aborted' ? 'Agent run aborted' : 'Agent run failed'));
         return;
       }
-      await new Promise(resolve => setTimeout(resolve, Math.min(run.next_poll_after_ms || 1200, 3000)));
+      // Before first visible output, a 3s polling sleep can dominate TTFT even
+      // after the model has already emitted text. Keep the initial catch-up
+      // tight; back off once the user has something visible.
+      const pollCapMs = receivedVisibleOutput ? 1_000 : 250;
+      await new Promise(resolve => setTimeout(
+        resolve,
+        Math.min(run.next_poll_after_ms || pollCapMs, pollCapMs),
+      ));
     }
   } finally {
     signal?.removeEventListener('abort', handleAbort);
