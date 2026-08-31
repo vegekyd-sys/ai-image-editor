@@ -696,7 +696,7 @@ const zh = {
   'kids.finishTalking': '说完了，发送给小巫师',
   'kids.phase.idle': '轻触麦克风开始说话',
   'kids.phase.connecting': '小巫师正在过来',
-  'kids.phase.listening': '小巫师正在听',
+  'kids.phase.listening': '小巫师正在听，轻触麦克风表示说完了',
   'kids.phase.recording': '小巫师正在听，轻触麦克风表示说完了',
   'kids.phase.thinking': '小巫师正在想',
   'kids.phase.speaking': '小巫师正在说话',

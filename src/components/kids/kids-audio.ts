@@ -9,6 +9,7 @@ interface AudioCallbacks {
   onLevel: (level: number) => void
   onMessage: (message: LiveServerMessage) => void
   onPhase: (phase: KidsLivePhase) => void
+  onTurnComplete?: () => void
 }
 
 export function floatToPcm16(samples: Float32Array, sourceRate: number) {
@@ -55,11 +56,13 @@ export class KidsLiveAudio {
   private nextPlaybackTime = 0
   private playbackSources = new Set<AudioBufferSourceNode>()
   private generationComplete = false
+  private inputEnded = false
 
   constructor(private readonly callbacks: AudioCallbacks) {}
 
   async start(session: Session) {
     this.session = session
+    this.inputEnded = false
     const AudioContextClass = window.AudioContext
     this.context = new AudioContextClass({ latencyHint: 'interactive' })
     await this.context.resume()
@@ -95,6 +98,22 @@ export class KidsLiveAudio {
     this.callbacks.onPhase('listening')
   }
 
+  finishInput() {
+    if (this.inputEnded) return
+    this.inputEnded = true
+    this.processor?.disconnect()
+    this.source?.disconnect()
+    this.sink?.disconnect()
+    this.processor = null
+    this.source = null
+    this.sink = null
+    this.stream?.getTracks().forEach((track) => track.stop())
+    this.stream = null
+    this.session?.sendRealtimeInput({ audioStreamEnd: true })
+    this.callbacks.onLevel(0)
+    this.callbacks.onPhase('thinking')
+  }
+
   handleMessage(message: LiveServerMessage) {
     this.callbacks.onMessage(message)
     if (message.serverContent?.interrupted) {
@@ -105,13 +124,14 @@ export class KidsLiveAudio {
     const audioChunks = message.serverContent?.modelTurn?.parts
       ?.flatMap((part) => part.inlineData?.data ? [part.inlineData.data] : []) ?? []
     if (audioChunks.length === 0 && message.data) audioChunks.push(message.data)
+    if (audioChunks.length > 0) this.finishInput()
     for (const audioChunk of audioChunks) {
       this.play(audioChunk)
       this.callbacks.onPhase('speaking')
     }
     if (message.serverContent?.generationComplete || message.serverContent?.turnComplete) {
       this.generationComplete = true
-      if (this.playbackSources.size === 0) this.callbacks.onPhase('listening')
+      if (this.playbackSources.size === 0) this.finishTurn()
     }
   }
 
@@ -135,10 +155,15 @@ export class KidsLiveAudio {
     source.onended = () => {
       this.playbackSources.delete(source)
       if (this.generationComplete && this.playbackSources.size === 0) {
-        this.generationComplete = false
-        this.callbacks.onPhase('listening')
+        this.finishTurn()
       }
     }
+  }
+
+  private finishTurn() {
+    this.generationComplete = false
+    if (this.callbacks.onTurnComplete) this.callbacks.onTurnComplete()
+    else this.callbacks.onPhase('listening')
   }
 
   private clearPlayback() {
@@ -151,7 +176,8 @@ export class KidsLiveAudio {
   }
 
   async stop() {
-    this.session?.sendRealtimeInput({ audioStreamEnd: true })
+    if (!this.inputEnded) this.session?.sendRealtimeInput({ audioStreamEnd: true })
+    this.inputEnded = true
     this.session = null
     this.clearPlayback()
     this.processor?.disconnect()

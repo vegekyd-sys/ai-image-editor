@@ -2,13 +2,14 @@ import { act, fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 
 const mocks = vi.hoisted(() => ({
-  audioCallbacks: null as null | { onPhase: (phase: string) => void },
+  audioCallbacks: null as null | { onPhase: (phase: string) => void; onTurnComplete?: () => void },
   liveCallbacks: null as null | { onmessage: (message: unknown) => void },
   close: vi.fn(),
   sendToolResponse: vi.fn(),
   sendClientContent: vi.fn(),
   startRecording: vi.fn(),
   stopRecording: vi.fn(),
+  finishInput: vi.fn(),
 }))
 
 vi.mock('next/image', () => ({ default: ({ alt = '', ...props }: Record<string, unknown>) => <img alt={String(alt)} {...props} /> }))
@@ -18,6 +19,10 @@ vi.mock('@/components/kids/kids-audio', () => ({
     constructor(callbacks: typeof mocks.audioCallbacks) { mocks.audioCallbacks = callbacks }
     async start() { mocks.audioCallbacks?.onPhase('listening') }
     async stop() {}
+    finishInput() {
+      mocks.finishInput()
+      mocks.audioCallbacks?.onPhase('thinking')
+    }
     handleMessage(message: { data?: string; serverContent?: { turnComplete?: boolean } }) {
       if (message.data) mocks.audioCallbacks?.onPhase('speaking')
       if (message.serverContent?.turnComplete) mocks.audioCallbacks?.onPhase('listening')
@@ -63,6 +68,11 @@ describe('Makaron Kids UI state and parent accessibility', () => {
     fireEvent.click(mic)
     expect(stage.getAttribute('data-phase')).toBe('connecting')
     await waitFor(() => expect(stage.getAttribute('data-phase')).toBe('listening'))
+
+    fireEvent.click(screen.getByRole('button', { name: 'kids.finishTalking' }))
+    expect(mocks.finishInput).toHaveBeenCalledOnce()
+    expect(mocks.close).not.toHaveBeenCalled()
+    expect(stage.getAttribute('data-phase')).toBe('thinking')
 
     act(() => mocks.liveCallbacks?.onmessage({ data: 'AA==' }))
     expect(stage.getAttribute('data-phase')).toBe('speaking')

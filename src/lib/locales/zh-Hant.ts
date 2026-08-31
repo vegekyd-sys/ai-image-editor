@@ -672,7 +672,7 @@ const zhHant = {
   'kids.finishTalking': '說完了，傳送給小巫師',
   'kids.phase.idle': '輕觸麥克風開始說話',
   'kids.phase.connecting': '小巫師正在過來',
-  'kids.phase.listening': '小巫師正在聽',
+  'kids.phase.listening': '小巫師正在聽，輕觸麥克風表示說完了',
   'kids.phase.recording': '小巫師正在聽，輕觸麥克風表示說完了',
   'kids.phase.thinking': '小巫師正在想',
   'kids.phase.speaking': '小巫師正在說話',

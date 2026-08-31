@@ -694,7 +694,7 @@ const ja = {
   'kids.finishTalking': '話し終わったので送る',
   'kids.phase.idle': 'マイクをタップして話す',
   'kids.phase.connecting': '小さな魔法使いが来ています',
-  'kids.phase.listening': '小さな魔法使いが聞いています',
+  'kids.phase.listening': '聞いています。話し終えたらマイクをタップ',
   'kids.phase.recording': '聞いています。話し終えたらマイクをタップ',
   'kids.phase.thinking': '小さな魔法使いが考えています',
   'kids.phase.speaking': '小さな魔法使いが話しています',

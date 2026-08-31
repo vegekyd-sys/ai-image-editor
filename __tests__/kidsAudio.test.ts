@@ -43,13 +43,30 @@ describe('Makaron Kids audio conversion and interruption', () => {
       serverContent: { modelTurn: { parts: [{ inlineData: { data: chunk, mimeType: 'audio/pcm;rate=24000' } }] } },
     } as LiveServerMessage)
     audio.handleMessage({ serverContent: { turnComplete: true } } as LiveServerMessage)
-    expect(phases).toEqual(['speaking'])
+    expect(phases).toEqual(['thinking', 'speaking'])
     sources[0].onended?.()
-    expect(phases).toEqual(['speaking', 'listening'])
+    expect(phases).toEqual(['thinking', 'speaking', 'listening'])
 
     audio.handleMessage({ data: chunk } as LiveServerMessage)
     audio.handleMessage({ serverContent: { interrupted: true } } as LiveServerMessage)
     expect(sources[1].stop).toHaveBeenCalledOnce()
     expect(phases.at(-1)).toBe('listening')
+  })
+
+  it('ends microphone input without closing the Live session before the reply arrives', () => {
+    const phases: string[] = []
+    const session = { sendRealtimeInput: vi.fn() }
+    const track = { stop: vi.fn() }
+    const audio = new KidsLiveAudio({
+      onLevel: vi.fn(), onMessage: vi.fn(), onPhase: (phase) => phases.push(phase),
+    })
+    ;(audio as unknown as { session: typeof session }).session = session
+    ;(audio as unknown as { stream: { getTracks: () => typeof track[] } }).stream = { getTracks: () => [track] }
+
+    audio.finishInput()
+
+    expect(session.sendRealtimeInput).toHaveBeenCalledWith({ audioStreamEnd: true })
+    expect(track.stop).toHaveBeenCalledOnce()
+    expect(phases).toEqual(['thinking'])
   })
 })

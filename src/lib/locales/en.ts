@@ -696,7 +696,7 @@ const en = {
   'kids.finishTalking': 'I am done talking',
   'kids.phase.idle': 'Tap the microphone to talk',
   'kids.phase.connecting': 'Pixel Wizard is on the way',
-  'kids.phase.listening': 'Pixel Wizard is listening',
+  'kids.phase.listening': 'Listening — tap the microphone when you are done',
   'kids.phase.recording': 'Pixel Wizard is listening. Tap when you are done',
   'kids.phase.thinking': 'Pixel Wizard is thinking',
   'kids.phase.speaking': 'Pixel Wizard is speaking',

@@ -203,6 +203,10 @@ export default function MakaronKids() {
       await finishFallbackTurn()
       return
     }
+    if (phase === 'listening' && voiceMode === 'live') {
+      audioRef.current?.finishInput()
+      return
+    }
     if (phase === 'parent') {
       setParentOpen(true)
       return
@@ -241,6 +245,14 @@ export default function MakaronKids() {
       const audio = new KidsLiveAudio({
         onLevel: setLevel,
         onPhase: setPhase,
+        onTurnComplete: () => {
+          if (audioRef.current !== audio) return
+          audioRef.current = null
+          void audio.stop()
+          sessionRef.current?.close()
+          sessionRef.current = null
+          setPhase('idle')
+        },
         onMessage: (message) => {
           const input = message.serverContent?.inputTranscription?.text
           const output = message.serverContent?.outputTranscription?.text
@@ -407,7 +419,7 @@ export default function MakaronKids() {
         type="button"
         className={styles.micButton}
         onClick={() => void startLive()}
-        aria-label={phase === 'recording' ? t('kids.finishTalking') : active ? t('kids.stopTalking') : t('kids.startTalking')}
+        aria-label={phase === 'recording' || phase === 'listening' ? t('kids.finishTalking') : active ? t('kids.stopTalking') : t('kids.startTalking')}
         aria-pressed={active}
       >
         <span className={styles.micHalo} aria-hidden="true" />
