@@ -476,8 +476,13 @@ describe('iOS App Store readiness guardrails', () => {
       'src/app/page.tsx',
       'src/app/home/[skillId]/page.tsx',
     ]);
+    const standaloneWebOnly = new Set([
+      // Makaron Kids is an iPad-first web experiment with its own full-screen shell.
+      // It is intentionally not embedded in the current Capacitor iOS app shell.
+      'src/app/kids/page.tsx',
+    ]);
 
-    expect([...shellCovered, ...handledByComposition, ...redirectsOnly].sort()).toEqual([...pages].sort());
+    expect([...shellCovered, ...handledByComposition, ...redirectsOnly, ...standaloneWebOnly].sort()).toEqual([...pages].sort());
 
     for (const file of shellCovered) {
       const source = fs.readFileSync(path.join(root, file), 'utf8');

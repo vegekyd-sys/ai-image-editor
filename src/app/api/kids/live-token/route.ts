@@ -37,6 +37,7 @@ export async function POST(request: Request) {
     })
     const token = await ai.authTokens.create({
       config: {
+        abortSignal: AbortSignal.timeout(8_000),
         uses: 1,
         newSessionExpireTime: new Date(now + 60_000).toISOString(),
         expireTime: new Date(now + 30 * 60_000).toISOString(),

@@ -58,4 +58,29 @@ describe('Makaron Kids Operator handoff', () => {
     await vi.waitFor(() => expect(phases).toEqual(['queued', 'working', 'done']))
     expect(images).toEqual(['https://cdn.makaron.app/result.jpg'])
   })
+
+  it('reuses the durable Agent for a short fallback voice turn', async () => {
+    const phases: string[] = []
+    mocks.streamAgent.mockImplementation(async (_body, callbacks) => {
+      callbacks.onContent('好呀，')
+      callbacks.onContent('我们让小猫飞起来！')
+    })
+    vi.stubGlobal('fetch', vi.fn(async () => new Response(JSON.stringify({ projectId: 'project-voice' }), {
+      status: 200,
+      headers: { 'Content-Type': 'application/json' },
+    })))
+    const handoff = new KidsOperatorHandoff({
+      onImage: vi.fn(),
+      onPhase: (phase) => phases.push(phase),
+    })
+
+    const reply = await handoff.respond('画一只会飞的小猫', null)
+
+    expect(reply).toBe('好呀，我们让小猫飞起来！')
+    expect(phases).toEqual(['queued', 'working', 'done'])
+    expect(mocks.streamAgent.mock.calls[0][0]).toMatchObject({
+      projectId: 'project-voice', durable: true,
+    })
+    expect(mocks.streamAgent.mock.calls[0][0].prompt).toContain('generate_image')
+  })
 })

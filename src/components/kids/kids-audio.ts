@@ -3,7 +3,7 @@ import type { LiveServerMessage, Session } from '@google/genai'
 const INPUT_SAMPLE_RATE = 16_000
 const OUTPUT_SAMPLE_RATE = 24_000
 
-export type KidsLivePhase = 'idle' | 'connecting' | 'listening' | 'speaking' | 'error'
+export type KidsLivePhase = 'idle' | 'connecting' | 'listening' | 'recording' | 'thinking' | 'speaking' | 'parent' | 'error'
 
 interface AudioCallbacks {
   onLevel: (level: number) => void

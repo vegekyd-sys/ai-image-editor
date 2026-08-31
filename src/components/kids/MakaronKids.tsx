@@ -5,7 +5,9 @@ import { ChangeEvent, PointerEvent, useCallback, useEffect, useRef, useState } f
 import { useLocale } from '@/lib/i18n'
 import { KIDS_IMAGE_FUNCTION, KIDS_LIVE_TOOLS, parseKidsImageRequest } from '@/lib/kids-live-contract'
 import { KidsLiveAudio, type KidsLivePhase } from './kids-audio'
+import { connectKidsLiveWithTimeout } from './kids-live-timeout'
 import { KidsOperatorHandoff, type KidsOperatorPhase } from './kids-operator'
+import { KidsTurnAudio } from './kids-turn-audio'
 import styles from './MakaronKids.module.css'
 
 const SIDE_BARS = Array.from({ length: 18 }, (_, index) => index)
@@ -76,8 +78,10 @@ export default function MakaronKids() {
   const [outputTranscript, setOutputTranscript] = useState('')
   const [errorMessage, setErrorMessage] = useState('')
   const [operatorPhase, setOperatorPhase] = useState<KidsOperatorPhase>('idle')
+  const [voiceMode, setVoiceMode] = useState<'live' | 'fallback'>('live')
   const sessionRef = useRef<LiveSession | null>(null)
   const audioRef = useRef<KidsLiveAudio | null>(null)
+  const turnAudioRef = useRef<KidsTurnAudio | null>(null)
   const fileInputRef = useRef<HTMLInputElement>(null)
   const parentTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
   const parentGateRef = useRef<HTMLButtonElement>(null)
@@ -107,6 +111,7 @@ export default function MakaronKids() {
     audioRef.current = null
     sessionRef.current?.close()
     sessionRef.current = null
+    turnAudioRef.current?.cancel()
     setPhase('idle')
     setLevel(0)
   }, [])
@@ -115,6 +120,7 @@ export default function MakaronKids() {
     if (parentTimerRef.current) clearTimeout(parentTimerRef.current)
     void audioRef.current?.stop()
     sessionRef.current?.close()
+    turnAudioRef.current?.cancel()
   }, [])
 
   useEffect(() => {
@@ -130,9 +136,89 @@ export default function MakaronKids() {
     return () => document.removeEventListener('keydown', handleKeyDown)
   }, [parentOpen])
 
+  const requireParent = useCallback(() => {
+    setErrorMessage('')
+    setPhase('parent')
+    setParentOpen(true)
+  }, [])
+
+  const beginFallbackRecording = useCallback(async () => {
+    const turnAudio = turnAudioRef.current ?? new KidsTurnAudio()
+    turnAudioRef.current = turnAudio
+    await turnAudio.startRecording()
+    setVoiceMode('fallback')
+    setPhase('recording')
+  }, [])
+
+  const finishFallbackTurn = useCallback(async () => {
+    const turnAudio = turnAudioRef.current
+    if (!turnAudio) return
+    setPhase('thinking')
+    setErrorMessage('')
+    try {
+      const recording = await turnAudio.stopRecording()
+      const form = new FormData()
+      const extension = recording.type.includes('mp4') ? 'm4a' : recording.type.includes('ogg') ? 'ogg' : 'webm'
+      form.append('audio', recording, `kids-turn.${extension}`)
+      const transcriptResponse = await fetch('/api/kids/transcribe', { method: 'POST', body: form })
+      if (transcriptResponse.status === 401) {
+        requireParent()
+        return
+      }
+      if (!transcriptResponse.ok) throw new Error(`Voice recognition failed (${transcriptResponse.status})`)
+      const transcript = await transcriptResponse.json() as { text?: string }
+      const text = transcript.text?.trim() ?? ''
+      if (!text) throw new Error('No speech detected')
+      setInputTranscript(text.slice(-600))
+
+      const reply = await operatorRef.current?.respond(
+        text,
+        picture ? { data: picture.data, mimeType: picture.mimeType } : null,
+      )
+      if (!reply) throw new Error('Picture helper did not reply')
+      setOutputTranscript(reply.slice(-600))
+      setPhase('speaking')
+
+      const speechResponse = await fetch('/api/kids/speak', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ text: reply }),
+      })
+      if (speechResponse.status === 401) {
+        requireParent()
+        return
+      }
+      if (!speechResponse.ok) throw new Error(`Voice reply failed (${speechResponse.status})`)
+      await turnAudio.play(await speechResponse.blob())
+      setPhase('idle')
+    } catch (error) {
+      console.error('[MakaronKids] Fallback voice turn failed:', error)
+      setErrorMessage(error instanceof Error ? error.message : String(error))
+      setPhase('error')
+    }
+  }, [picture, requireParent])
+
   const startLive = useCallback(async () => {
+    if (phase === 'recording') {
+      await finishFallbackTurn()
+      return
+    }
+    if (phase === 'parent') {
+      setParentOpen(true)
+      return
+    }
     if (phase !== 'idle' && phase !== 'error') {
       await stopLive()
+      return
+    }
+
+    if (voiceMode === 'fallback') {
+      try {
+        await beginFallbackRecording()
+      } catch (error) {
+        setErrorMessage(error instanceof Error ? error.message : String(error))
+        setPhase('error')
+      }
       return
     }
 
@@ -144,6 +230,10 @@ export default function MakaronKids() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ voice }),
       })
+      if (tokenResponse.status === 401) {
+        requireParent()
+        return
+      }
       if (!tokenResponse.ok) throw new Error(`Token request failed (${tokenResponse.status})`)
       const tokenData = await tokenResponse.json() as { token: string; model: string }
       const { GoogleGenAI, Modality } = await import('@google/genai')
@@ -159,7 +249,7 @@ export default function MakaronKids() {
         },
       })
       audioRef.current = audio
-      const session = await ai.live.connect({
+      const session = await connectKidsLiveWithTimeout(ai.live.connect({
         model: tokenData.model,
         config: { responseModalities: [Modality.AUDIO], tools: KIDS_LIVE_TOOLS, sessionResumption: {} },
         callbacks: {
@@ -187,26 +277,37 @@ export default function MakaronKids() {
           onerror: (event) => {
             console.error('[MakaronKids] Live session error:', event.message)
             setErrorMessage(event.message)
-            setPhase('error')
+            void audio.stop()
+            audioRef.current = null
+            sessionRef.current?.close()
+            sessionRef.current = null
+            setVoiceMode('fallback')
+            setPhase('idle')
           },
           onclose: () => {
             if (sessionRef.current) setPhase('idle')
           },
         },
-      })
+      }), 8_000)
       sessionRef.current = session
       await audio.start(session)
       if (picture) audio.sendImage(picture.data, picture.mimeType)
     } catch (error) {
       console.error('[MakaronKids] Could not start live voice:', error)
       setErrorMessage(error instanceof Error ? error.message : String(error))
-      setPhase('error')
       await audioRef.current?.stop()
       audioRef.current = null
       sessionRef.current?.close()
       sessionRef.current = null
+      try {
+        await beginFallbackRecording()
+      } catch (fallbackError) {
+        console.error('[MakaronKids] Could not start fallback voice:', fallbackError)
+        setErrorMessage(fallbackError instanceof Error ? fallbackError.message : String(fallbackError))
+        setPhase('error')
+      }
     }
-  }, [phase, picture, stopLive, voice])
+  }, [beginFallbackRecording, finishFallbackTurn, phase, picture, requireParent, stopLive, voice, voiceMode])
 
   const handlePicture = async (event: ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0]
@@ -230,7 +331,7 @@ export default function MakaronKids() {
   }
 
   const phaseLabel = t(`kids.phase.${phase}` as Parameters<typeof t>[0])
-  const active = phase === 'listening' || phase === 'speaking'
+  const active = phase === 'listening' || phase === 'recording' || phase === 'thinking' || phase === 'speaking'
   const dynamicLevel = phase === 'speaking' ? 0.72 : level
 
   return (
@@ -306,12 +407,12 @@ export default function MakaronKids() {
         type="button"
         className={styles.micButton}
         onClick={() => void startLive()}
-        aria-label={active ? t('kids.stopTalking') : t('kids.startTalking')}
+        aria-label={phase === 'recording' ? t('kids.finishTalking') : active ? t('kids.stopTalking') : t('kids.startTalking')}
         aria-pressed={active}
       >
         <span className={styles.micHalo} aria-hidden="true" />
         <MicIcon />
-        {phase === 'connecting' ? <span className={styles.spinner} aria-hidden="true" /> : null}
+        {phase === 'connecting' || phase === 'thinking' ? <span className={styles.spinner} aria-hidden="true" /> : null}
       </button>
 
       <div className={styles.srStatus} role="status" aria-live="polite">{phaseLabel}</div>
@@ -333,35 +434,42 @@ export default function MakaronKids() {
               <div>
                 <strong>{t('kids.parent.connection')}</strong>
                 <span>{phaseLabel}</span>
+                <span>{t(`kids.parent.mode.${voiceMode}` as Parameters<typeof t>[0])}</span>
               </div>
               <span className={styles.statusDot} data-active={active} />
             </div>
-            <fieldset>
-              <legend>{t('kids.parent.voice')}</legend>
-              <div className={styles.voiceGrid}>
-                {VOICES.map((option) => (
-                  <button
-                    key={option}
-                    type="button"
-                    data-selected={voice === option}
-                    onClick={() => {
-                      if (option !== voice) void stopLive()
-                      setVoice(option)
-                    }}
-                  >
-                    <span aria-hidden="true">{option === 'Kore' ? '●' : option === 'Aoede' ? '◆' : option === 'Leda' ? '■' : '▲'}</span>
-                    {option}
-                  </button>
-                ))}
-              </div>
-            </fieldset>
-            <div className={styles.transcript}>
-              <strong>{t('kids.parent.lastHeard')}</strong>
-              <p>{inputTranscript || t('kids.parent.empty')}</p>
-              <strong>{t('kids.parent.lastReply')}</strong>
-              <p>{outputTranscript || t('kids.parent.empty')}</p>
-            </div>
-            {errorMessage ? <p className={styles.error}>{t('kids.parent.error')}: {errorMessage}</p> : null}
+            {phase === 'parent' ? (
+              <a className={styles.parentSignIn} href="/login?next=%2Fkids">{t('kids.parent.signIn')}</a>
+            ) : (
+              <>
+                <fieldset>
+                  <legend>{t('kids.parent.voice')}</legend>
+                  <div className={styles.voiceGrid}>
+                    {VOICES.map((option) => (
+                      <button
+                        key={option}
+                        type="button"
+                        data-selected={voice === option}
+                        onClick={() => {
+                          if (option !== voice) void stopLive()
+                          setVoice(option)
+                        }}
+                      >
+                        <span aria-hidden="true">{option === 'Kore' ? '●' : option === 'Aoede' ? '◆' : option === 'Leda' ? '■' : '▲'}</span>
+                        {option}
+                      </button>
+                    ))}
+                  </div>
+                </fieldset>
+                <div className={styles.transcript}>
+                  <strong>{t('kids.parent.lastHeard')}</strong>
+                  <p>{inputTranscript || t('kids.parent.empty')}</p>
+                  <strong>{t('kids.parent.lastReply')}</strong>
+                  <p>{outputTranscript || t('kids.parent.empty')}</p>
+                </div>
+                {errorMessage ? <p className={styles.error}>{t('kids.parent.error')}: {errorMessage}</p> : null}
+              </>
+            )}
             <p className={styles.operatorNote}>{t(`kids.parent.operator.${operatorPhase}` as Parameters<typeof t>[0])}</p>
           </section>
         </div>

@@ -4,6 +4,7 @@
   "private": true,
   "scripts": {
     "dev": "next dev --webpack",
+    "dev:kids": "node scripts/dev-kids.mjs",
     "dev:ios": "MOCK_AI=true next dev --webpack -H 0.0.0.0 -p 3001",
     "build": "next build",
     "start": "next start",

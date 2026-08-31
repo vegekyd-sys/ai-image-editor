@@ -7,6 +7,8 @@ const mocks = vi.hoisted(() => ({
   close: vi.fn(),
   sendToolResponse: vi.fn(),
   sendClientContent: vi.fn(),
+  startRecording: vi.fn(),
+  stopRecording: vi.fn(),
 }))
 
 vi.mock('next/image', () => ({ default: ({ alt = '', ...props }: Record<string, unknown>) => <img alt={String(alt)} {...props} /> }))
@@ -21,6 +23,14 @@ vi.mock('@/components/kids/kids-audio', () => ({
       if (message.serverContent?.turnComplete) mocks.audioCallbacks?.onPhase('listening')
     }
     sendImage() {}
+  },
+}))
+vi.mock('@/components/kids/kids-turn-audio', () => ({
+  KidsTurnAudio: class {
+    startRecording = mocks.startRecording
+    stopRecording = mocks.stopRecording
+    cancel() {}
+    async play() {}
   },
 }))
 vi.mock('@google/genai', () => ({
@@ -75,5 +85,30 @@ describe('Makaron Kids UI state and parent accessibility', () => {
     act(() => vi.advanceTimersByTime(900))
     expect(screen.getByRole('dialog')).not.toBeNull()
     vi.useRealTimers()
+  })
+
+  it('turns a public-page 401 into a parent sign-in state instead of a provider error', async () => {
+    vi.stubGlobal('fetch', vi.fn(async () => new Response('Unauthorized', { status: 401 })))
+    const { container } = render(<MakaronKids />)
+
+    fireEvent.click(screen.getByRole('button', { name: 'kids.startTalking' }))
+
+    await waitFor(() => expect(container.querySelector('main')?.getAttribute('data-phase')).toBe('parent'))
+    expect(screen.getByRole('dialog')).not.toBeNull()
+    expect(screen.getByRole('link', { name: 'kids.parent.signIn' }).getAttribute('href')).toBe('/login?next=%2Fkids')
+  })
+
+  it('starts the compatible recorder when Live token provisioning is unavailable', async () => {
+    vi.stubGlobal('fetch', vi.fn(async () => new Response(JSON.stringify({ error: 'provider unavailable' }), {
+      status: 502,
+      headers: { 'Content-Type': 'application/json' },
+    })))
+    const { container } = render(<MakaronKids />)
+
+    fireEvent.click(screen.getByRole('button', { name: 'kids.startTalking' }))
+
+    await waitFor(() => expect(container.querySelector('main')?.getAttribute('data-phase')).toBe('recording'))
+    expect(mocks.startRecording).toHaveBeenCalledOnce()
+    expect(screen.getByRole('button', { name: 'kids.finishTalking' })).not.toBeNull()
   })
 })

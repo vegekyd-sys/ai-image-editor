@@ -136,7 +136,9 @@
 }
 
 [data-phase='listening'] .sideWave i,
+[data-phase='recording'] .sideWave i,
 [data-phase='listening'] .bottomWave i,
+[data-phase='recording'] .bottomWave i,
 [data-phase='speaking'] .sideWave i,
 [data-phase='speaking'] .bottomWave i {
   animation: wave 720ms ease-in-out infinite alternate;
@@ -228,6 +230,7 @@
 }
 
 [data-phase='listening'] .micHalo,
+[data-phase='recording'] .micHalo,
 [data-phase='speaking'] .micHalo {
   animation: halo 1.25s ease-out infinite;
 }
@@ -363,6 +366,20 @@
 .operatorNote, .error { margin: 14px 0 0; font-size: 12px; line-height: 1.5; }
 .operatorNote { color: rgba(255,255,255,.38); }
 .error { color: #ff9dba; }
+.parentSignIn {
+  display: block;
+  margin-top: 16px;
+  padding: 14px 18px;
+  border-radius: 15px;
+  color: white;
+  background: linear-gradient(135deg, var(--violet), var(--pink));
+  font-size: 14px;
+  font-weight: 720;
+  text-align: center;
+  text-decoration: none;
+  box-shadow: 0 10px 24px rgba(225, 55, 191, .26);
+}
+.parentSignIn:focus-visible { outline: 4px solid var(--moon); outline-offset: 4px; }
 
 @keyframes wave { to { transform: scaleY(1.5) scaleX(1.2); opacity: 1; } }
 @keyframes wizardTalk { to { transform: rotate(2deg) translateY(-6px) scale(1.02); } }
