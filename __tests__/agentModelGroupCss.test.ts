@@ -11,7 +11,8 @@ describe('Agent model provider group layout', () => {
     expect(headerRule).toMatch(/z-index:\s*[1-9]/);
     expect(headerRule).toContain('background: #17161c');
 
-    const personalRule = css.match(/\.mkr-agent-model-group-header\[data-agent-provider-group="codex"\]\s*\{([^}]*)\}/)?.[1] ?? '';
+    const personalRule = css.match(/\.mkr-agent-model-group-header\[data-agent-provider-group="codex"\][\s\S]*?\{([^}]*)\}/)?.[1] ?? '';
     expect(personalRule).toContain('#17161c');
+    expect(css).toContain('.mkr-agent-model-group-header[data-agent-provider-group="grok"]');
   });
 });

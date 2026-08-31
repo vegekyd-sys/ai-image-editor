@@ -30,6 +30,15 @@ const preflightBody = Buffer.from('{}');
 const preflight = await signedFetch('POST', '/v1/preflight', preflightBody);
 if (!preflight.ok) throw new Error(`preflight failed (${preflight.status}): ${await preflight.text()}`);
 
+if (process.argv.includes('--usage')) {
+  const usageResponse = await signedFetch('GET', '/v1/usage');
+  const usageText = await usageResponse.text();
+  if (!usageResponse.ok) throw new Error(`usage failed (${usageResponse.status}): ${usageText}`);
+  const usage = JSON.parse(usageText);
+  process.stdout.write(`${JSON.stringify(usage)}\n`);
+  process.exit(0);
+}
+
 const createBody = Buffer.from(JSON.stringify({
   model: 'grok-imagine-video-1.5',
   prompt: 'A single white paper airplane glides across a plain blue studio background, static camera.',
