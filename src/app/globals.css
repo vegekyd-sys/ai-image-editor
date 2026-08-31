@@ -516,11 +516,15 @@ textarea {
 }
 
 .mkr-agent-model-group-header {
+  position: sticky;
+  top: 0;
+  z-index: 3;
   display: grid;
   grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
   align-items: center;
   gap: 3px 10px;
   padding: 9px 10px 5px;
+  background: #17161c;
 }
 
 .model-selector-scroll > .mkr-agent-model-group-header:not(:first-child) {
@@ -566,7 +570,8 @@ textarea {
   border-radius: 11px;
   background:
     linear-gradient(120deg, rgba(217,70,239,0.075), rgba(34,211,238,0.025) 72%),
-    rgba(255,255,255,0.018);
+    #17161c;
+  box-shadow: 0 5px 12px rgba(23,22,28,0.88);
 }
 
 .model-selector-scroll > .mkr-agent-model-group-header[data-agent-provider-group="codex"]:not(:first-child) {
