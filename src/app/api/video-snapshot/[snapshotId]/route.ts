@@ -256,7 +256,7 @@ export async function GET(
       result.taskId = videoMeta.taskId
     } else if (isXai) {
       const { getXaiVideoTask } = await import('@/lib/xai-video')
-      result = await getXaiVideoTask(videoMeta.taskId)
+      result = await getXaiVideoTask(videoMeta.taskId, ownerUserId)
     } else if (isGoogleOmni) {
       if (videoMeta.taskId.startsWith('google-omni-job-') && !videoMeta.videoUrl && !videoMeta.providerUrl) {
         const {

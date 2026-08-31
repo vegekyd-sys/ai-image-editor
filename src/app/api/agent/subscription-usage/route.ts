@@ -5,6 +5,7 @@ import {
   getCodexSubscriptionUsage,
   type CodexSubscriptionUsage,
 } from '@/lib/codex-subscription';
+import { isGrokSubscriptionAllowedUser } from '@/lib/grok-subscription';
 
 export const dynamic = 'force-dynamic';
 
@@ -31,23 +32,32 @@ export async function GET(req: NextRequest) {
   const authResult = await authenticateRequest(req);
   if ('error' in authResult) return authResult.error;
 
-  if (!(await isDynamicCodexSubscriptionUserAllowed(authResult.auth.userId))) {
+  const codexAvailable = await isDynamicCodexSubscriptionUserAllowed(authResult.auth.userId);
+  const grokAvailable = isGrokSubscriptionAllowedUser(authResult.auth.userId);
+  if (!codexAvailable && !grokAvailable) {
     return NextResponse.json(
-      { available: false, defaultProvider: 'azure-openai' },
+      { available: false, grokAvailable: false, defaultProvider: 'azure-openai' },
       { status: 403, headers: { 'Cache-Control': 'private, no-store' } },
+    );
+  }
+
+  if (!codexAvailable) {
+    return NextResponse.json(
+      { available: false, grokAvailable: true, defaultProvider: 'azure-openai' },
+      { headers: { 'Cache-Control': 'private, no-store' } },
     );
   }
 
   try {
     const usage = await loadUsage(authResult.auth.userId);
     return NextResponse.json(
-      { available: true, defaultProvider: 'codex-subscription', ...usage },
+      { available: true, grokAvailable, defaultProvider: 'codex-subscription', ...usage },
       { headers: { 'Cache-Control': 'private, no-store' } },
     );
   } catch (error) {
     console.error('[codex-subscription] usage unavailable:', error);
     return NextResponse.json(
-      { available: true, defaultProvider: 'codex-subscription', error: 'usage_unavailable' },
+      { available: true, grokAvailable, defaultProvider: 'codex-subscription', error: 'usage_unavailable' },
       { status: 503, headers: { 'Cache-Control': 'private, no-store' } },
     );
   }

@@ -668,9 +668,11 @@ const ja = {
   'model.closeAgentSelector': 'Agentモデル選択を閉じる',
   'model.chooseAgent': 'Agentモデルを選択',
   'model.azureApiBadge': 'Azure API',
+  'model.openRouterApiBadge': 'OpenRouter API',
   'model.agentGroup.azure': 'Azure API',
   'model.agentGroup.azureDesc': '既定 · 従量課金',
   'model.agentGroup.codex': '個人Codexプラン',
+  'model.agentGroup.personal': '個人サブスクリプション',
   'model.agentGroup.other': 'その他のAPI',
   'model.agentGroup.otherDesc': 'その他の利用可能なモデル',
   'model.codexSubscription.name': 'GPT-5.6 Terra · Codexプラン',
@@ -682,6 +684,9 @@ const ja = {
   'model.codexSubscription.remainingShort': (percent: string) => `残り ${percent}%`,
   'model.codexSubscription.resetsAt': (time: string) => `${time} リセット`,
   'model.codexSubscription.usageUnavailable': 'プランは利用可能ですが、使用量を取得できません',
+  'model.grokSubscription.suffix': 'Grokプラン',
+  'model.grokSubscription.desc': '個人のSuperGrokプランを使用し、未出力の状態で利用不能な場合のみOpenRouter APIへ切り替えます。',
+  'model.grokSubscription.available': 'SuperGrokプラン利用可能',
 } satisfies TranslationDictionary;
 
 export default ja;

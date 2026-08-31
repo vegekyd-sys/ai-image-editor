@@ -5,13 +5,14 @@ import type { LanguageModel, ModelMessage } from 'ai';
 import {
   resolveAgentModelSpecForUser,
   type AgentModelPreference,
-  type GPT56AgentProvider,
+  type AgentModelProvider,
   type AgentReasoningEffort,
   type AgentModelSpec,
 } from './agent-models';
 import { normalizeToolCallInputs } from './tool-inputs';
 import { createAzureOpenAIResponsesModel } from './azure-openai-responses';
 import { createCodexSubscriptionResponsesModel } from './codex-subscription';
+import { createGrokSubscriptionFetch } from './grok-subscription';
 
 export interface AgentModelRuntime {
   spec: AgentModelSpec;
@@ -32,7 +33,7 @@ export function createAzureAgentPromptCacheKey(
 export function createAgentModelRuntime(
   preference: AgentModelPreference | undefined,
   projectId: string,
-  configuredGPT56Provider?: GPT56AgentProvider,
+  configuredGPT56Provider?: AgentModelProvider,
   userId?: string,
   codexSubscriptionAllowed?: boolean,
 ): AgentModelRuntime {
@@ -63,6 +64,21 @@ export function createAgentModelRuntime(
         { userId },
       ),
       promptCacheKey: createAzureAgentPromptCacheKey(spec.id, projectId),
+      normalizeMessages: normalizeToolCallInputs,
+    };
+  }
+
+  if (spec.provider === 'grok-subscription') {
+    if (!userId) throw new Error('GROK_SUBSCRIPTION_USER_REQUIRED');
+    const grokSubscription = createOpenAI({
+      name: 'grok-subscription',
+      baseURL: 'https://grok-subscription-relay.invalid/v1',
+      apiKey: 'relay-auth-is-hmac-signed-server-side',
+      fetch: createGrokSubscriptionFetch(userId),
+    });
+    return {
+      spec,
+      model: grokSubscription.chat(spec.providerModelId),
       normalizeMessages: normalizeToolCallInputs,
     };
   }
@@ -172,6 +188,14 @@ export function getAgentProviderOptions(
   }
 
   if (runtime.spec.provider === 'deepseek') {
+    return {
+      openai: {
+        parallelToolCalls: false,
+      },
+    };
+  }
+
+  if (runtime.spec.provider === 'grok-subscription') {
     return {
       openai: {
         parallelToolCalls: false,

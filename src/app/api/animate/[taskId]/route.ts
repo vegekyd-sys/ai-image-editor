@@ -42,6 +42,17 @@ export async function GET(
     const provider = process.env.ANIMATE_PROVIDER || 'kling'
     let result: { taskId: string; status: string; videoUrl?: string; error?: string }
     const realTaskId = isMotionControl ? taskId.slice(3) : taskId
+    let grokOwnerUserId: string | undefined
+    if (taskId.startsWith('xai-sub-')) {
+      const admin = getSupabaseAdmin()
+      const { data: ownerRow } = await admin
+        .from('project_animations')
+        .select('projects(user_id)')
+        .eq('piapi_task_id', taskId)
+        .maybeSingle()
+      const projects = ownerRow?.projects as any
+      grokOwnerUserId = Array.isArray(projects) ? projects[0]?.user_id : projects?.user_id
+    }
 
     if (isEvolink) {
       const { getEvolinkTask } = await import('@/lib/evolink')
@@ -55,7 +66,7 @@ export async function GET(
       result.taskId = taskId // preserve mc- prefix for frontend
     } else if (isXai) {
       const { getXaiVideoTask } = await import('@/lib/xai-video')
-      result = await getXaiVideoTask(taskId)
+      result = await getXaiVideoTask(taskId, grokOwnerUserId)
     } else if (isGoogleOmni) {
       const admin = getSupabaseAdmin()
       const { data: anim } = await admin

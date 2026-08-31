@@ -670,9 +670,11 @@ const en = {
   'model.closeAgentSelector': 'Close model selector',
   'model.chooseAgent': 'Choose agent model',
   'model.azureApiBadge': 'Azure API',
+  'model.openRouterApiBadge': 'OpenRouter API',
   'model.agentGroup.azure': 'Azure API',
   'model.agentGroup.azureDesc': 'Default · usage based',
   'model.agentGroup.codex': 'Personal Codex plan',
+  'model.agentGroup.personal': 'Personal plans',
   'model.agentGroup.other': 'Other APIs',
   'model.agentGroup.otherDesc': 'Other available models',
   'model.codexSubscription.name': 'GPT-5.6 Terra · Codex plan',
@@ -684,6 +686,9 @@ const en = {
   'model.codexSubscription.remainingShort': (percent: string) => `${percent}% left`,
   'model.codexSubscription.resetsAt': (time: string) => `Resets ${time}`,
   'model.codexSubscription.usageUnavailable': 'Plan available; usage is temporarily unavailable',
+  'model.grokSubscription.suffix': 'Grok plan',
+  'model.grokSubscription.desc': 'Use your personal SuperGrok plan, falling back to the OpenRouter API only before any output.',
+  'model.grokSubscription.available': 'SuperGrok plan available',
 } as const;
 
 export default en;

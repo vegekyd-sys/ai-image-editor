@@ -1,3 +1,10 @@
+import {
+  fetchGrokSubscriptionRelay,
+  GrokSubscriptionRelayError,
+  isGrokSubscriptionAllowedUser,
+  preflightGrokSubscriptionRelay,
+} from './grok-subscription'
+
 const XAI_BASE_URL = process.env.XAI_API_BASE || 'https://api.x.ai'
 export const XAI_VIDEO_GENERATION_MODEL = 'grok-imagine-video-1.5'
 export const XAI_VIDEO_EDIT_MODEL = 'grok-imagine-video'
@@ -22,6 +29,7 @@ export interface XaiVideoSubmission {
   taskId: string
   providerModel: typeof XAI_VIDEO_GENERATION_MODEL | typeof XAI_VIDEO_EDIT_MODEL
   mode: 'text-to-video' | 'image-to-video' | 'reference-to-video' | 'edit-video' | 'extend-video'
+  provider: 'grok-subscription' | 'xai-api'
 }
 
 export interface XaiVideoTaskResult {
@@ -102,7 +110,13 @@ function dollarsFromUsage(data: Record<string, unknown>): number | undefined {
   return ticks / 10_000_000_000
 }
 
-export async function createXaiVideoTask(input: XaiVideoTaskInput): Promise<XaiVideoSubmission> {
+export async function createXaiVideoTask(
+  input: XaiVideoTaskInput,
+  options?: {
+    userId?: string
+    onBeforeApiFallback?: () => Promise<void>
+  },
+): Promise<XaiVideoSubmission> {
   const operation = input.operation || 'generate'
   const images = input.images.filter(Boolean)
   const referenceVoiceIds = (input.referenceVoiceIds || []).filter(Boolean)
@@ -163,11 +177,37 @@ export async function createXaiVideoTask(input: XaiVideoTaskInput): Promise<XaiV
     }
   }
 
-  const res = await fetch(`${XAI_BASE_URL}${endpoint}`, {
-    method: 'POST',
-    headers: headers(),
-    body: JSON.stringify(body),
-  })
+  const bodyText = JSON.stringify(body)
+  const bodyBytes = new TextEncoder().encode(bodyText)
+  let res: Response
+  let usedSubscription = false
+  const useSubscription = isGrokSubscriptionAllowedUser(options?.userId)
+  if (useSubscription && options?.userId) {
+    try {
+      await preflightGrokSubscriptionRelay(options.userId)
+      res = await fetchGrokSubscriptionRelay({
+        method: 'POST',
+        pathname: endpoint,
+        userId: options.userId,
+        body: bodyBytes,
+      })
+      usedSubscription = true
+    } catch (error) {
+      if (!(error instanceof GrokSubscriptionRelayError) || !error.safeToFallback) throw error
+      await options.onBeforeApiFallback?.()
+      res = await fetch(`${XAI_BASE_URL}${endpoint}`, {
+        method: 'POST',
+        headers: headers(),
+        body: bodyText,
+      })
+    }
+  } else {
+    res = await fetch(`${XAI_BASE_URL}${endpoint}`, {
+      method: 'POST',
+      headers: headers(),
+      body: bodyText,
+    })
+  }
 
   if (!res.ok) {
     const text = await res.text()
@@ -180,24 +220,36 @@ export async function createXaiVideoTask(input: XaiVideoTaskInput): Promise<XaiV
     throw new Error(`xAI video API did not return request_id: ${JSON.stringify(data)}`)
   }
   return {
-    taskId: `xai-${requestId}`,
+    taskId: usedSubscription ? `xai-sub-${requestId}` : `xai-${requestId}`,
     providerModel,
     mode,
+    provider: usedSubscription ? 'grok-subscription' : 'xai-api',
   }
 }
 
-export async function getXaiVideoTask(taskId: string): Promise<XaiVideoTaskResult> {
-  const requestId = taskId.startsWith('xai-') ? taskId.slice(4) : taskId
-  const res = await fetch(`${XAI_BASE_URL}/v1/videos/${requestId}`, {
-    headers: { Authorization: `Bearer ${getApiKey()}` },
-  })
+export async function getXaiVideoTask(taskId: string, userId?: string): Promise<XaiVideoTaskResult> {
+  const subscriptionTask = taskId.startsWith('xai-sub-')
+  const requestId = subscriptionTask
+    ? taskId.slice('xai-sub-'.length)
+    : taskId.startsWith('xai-') ? taskId.slice(4) : taskId
+  const res = subscriptionTask
+    ? userId
+      ? await fetchGrokSubscriptionRelay({
+          method: 'GET',
+          pathname: `/v1/videos/${requestId}`,
+          userId,
+        })
+      : (() => { throw new Error('GROK_SUBSCRIPTION_RELAY_UNAVAILABLE: user id is required to poll a subscription task') })()
+    : await fetch(`${XAI_BASE_URL}/v1/videos/${requestId}`, {
+        headers: { Authorization: `Bearer ${getApiKey()}` },
+      })
 
   if (!res.ok) {
     const text = await res.text()
     const data = parseResponseObject(text)
     if (isTerminalStatusResponse(res.status)) {
       return {
-        taskId: `xai-${requestId}`,
+        taskId: subscriptionTask ? `xai-sub-${requestId}` : `xai-${requestId}`,
         status: 'failed',
         error: (data && extractError(data)) || text.slice(0, 500) || `xAI video generation failed (${res.status})`,
         costUsd: data ? dollarsFromUsage(data) : undefined,
@@ -209,7 +261,7 @@ export async function getXaiVideoTask(taskId: string): Promise<XaiVideoTaskResul
   const data = await res.json() as Record<string, unknown>
   const video = data.video as Record<string, unknown> | undefined
   return {
-    taskId: `xai-${requestId}`,
+    taskId: subscriptionTask ? `xai-sub-${requestId}` : `xai-${requestId}`,
     status: normalizeStatus(String(data.status || 'processing')),
     videoUrl: typeof video?.url === 'string' ? video.url : undefined,
     error: extractError(data),

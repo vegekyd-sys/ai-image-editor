@@ -21,9 +21,10 @@ import {
   DEFAULT_MAX_ATTEMPTS,
   getAgentContextPolicy,
   isConfirmedExecutionLeaseLoss,
-  isSafeToEnterCodexSubscriptionApiFallback,
+  isSafeToEnterSubscriptionApiFallback,
   MAX_SAME_PROVIDER_ATTEMPTS,
   shouldFailoverCodexSubscriptionToApi,
+  shouldFailoverGrokSubscriptionToApi,
   shouldFailoverAzureGPT56ToOpenRouter,
   normalizeExecutionSnapshot,
   shouldScheduleNextAttempt,
@@ -414,7 +415,7 @@ export async function runAgentExecutionAttempt(
       && 'from' in failover
       && failover.from === requestedModel.id
       && (
-        requestedModel.provider !== 'codex-subscription'
+        !['codex-subscription', 'grok-subscription'].includes(requestedModel.provider)
         || fromProvider === requestedModel.provider
       ),
     );
@@ -426,12 +427,24 @@ export async function runAgentExecutionAttempt(
     ? Boolean(process.env.AZURE_OPENAI_API_KEY?.trim())
     : Boolean(process.env.OPENROUTER_API_KEY?.trim());
   const latestFailureDetail = latestRequestedProviderAttempt?.metadata?.terminalDetail;
-  const subscriptionFallbackSafe = isSafeToEnterCodexSubscriptionApiFallback(
-    typedPreviousAttempts,
-    inputVersionAtAttemptStart,
-  );
+  const subscriptionFallbackSafe = requestedModel.provider === 'codex-subscription'
+    || requestedModel.provider === 'grok-subscription'
+    ? isSafeToEnterSubscriptionApiFallback(
+        typedPreviousAttempts,
+        inputVersionAtAttemptStart,
+        requestedModel.provider,
+      )
+    : false;
   const providerFailover = requestedModel.provider === 'codex-subscription'
     ? shouldFailoverCodexSubscriptionToApi({
+        requestedProvider: requestedModel.provider,
+        hasApiFallback: hasFailoverCredential && subscriptionFallbackSafe,
+        previousProviderFailover,
+        retryableFailureCount: requestedProviderFailureCount,
+        latestFailureDetail,
+      })
+    : requestedModel.provider === 'grok-subscription'
+    ? shouldFailoverGrokSubscriptionToApi({
         requestedProvider: requestedModel.provider,
         hasApiFallback: hasFailoverCredential && subscriptionFallbackSafe,
         previousProviderFailover,
@@ -445,14 +458,17 @@ export async function runAgentExecutionAttempt(
         retryableFailureCount: requestedProviderFailureCount,
       });
   const providerRetry = (requestedModel.provider === 'azure-openai'
-    || requestedModel.provider === 'codex-subscription')
+    || requestedModel.provider === 'codex-subscription'
+    || requestedModel.provider === 'grok-subscription')
     && !providerFailover
     && requestedProviderFailureCount > 0;
   const sameProviderAttempt = Math.min(
     MAX_SAME_PROVIDER_ATTEMPTS,
     requestedProviderFailureCount + 1,
   );
-  const effectiveAgentModel = request.requestedAgentModel;
+  const effectiveAgentModel = providerFailover
+    ? requestedModel.id
+    : request.requestedAgentModel;
   const resolvedModel = providerFailover
     ? resolveAgentModelSpec(requestedModel.id, undefined, failoverProvider)
     : requestedModel;

@@ -29,6 +29,10 @@ export interface CreateVideoInput {
   contentFilter?: boolean;
   outputFormat?: 'mp4' | 'mov';
   webSearch?: boolean;
+  /** Authenticated owner used only for the private Grok subscription relay. */
+  userId?: string;
+  /** Called before a safe subscription-to-API fallback creates a paid task. */
+  onBeforeGrokApiFallback?: () => Promise<void>;
 }
 
 export interface CreateVideoResult {
@@ -36,6 +40,7 @@ export interface CreateVideoResult {
   taskId?: string;
   videoModel?: string;
   providerModel?: string;
+  provider?: string;
   videoUrl?: string;
   status?: 'completed' | 'processing' | 'pending' | 'failed';
   message: string;
@@ -462,6 +467,9 @@ export async function createVideo(input: CreateVideoInput): Promise<CreateVideoR
         resolution: route.resolution as '480p' | '720p' | '1080p',
         generateAudio,
         referenceVoiceIds,
+      }, {
+        userId: input.userId,
+        onBeforeApiFallback: input.onBeforeGrokApiFallback,
       });
       taskId = xaiSubmission.taskId;
       console.log(`✅ [create_video] Grok Video task created: ${taskId}`);
@@ -470,7 +478,8 @@ export async function createVideo(input: CreateVideoInput): Promise<CreateVideoR
         taskId,
         videoModel: provider,
         providerModel: xaiSubmission.providerModel,
-        message: `Grok ${xaiSubmission.mode} task created. Task ID: ${taskId}. Use makaron_get_video_status to poll.`,
+        provider: xaiSubmission.provider,
+        message: `Grok ${xaiSubmission.mode} task created through ${xaiSubmission.provider === 'grok-subscription' ? 'the personal Grok plan' : 'the xAI API'}. Task ID: ${taskId}. Use makaron_get_video_status to poll.`,
       };
     } else if (route.provider === 'google-omni') {
       const { createGoogleOmniVideoTask } = await import('../google-omni-video');

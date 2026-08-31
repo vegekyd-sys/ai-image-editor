@@ -1,0 +1,20 @@
+[Unit]
+Description=Cloudflare tunnel for Makaron Grok subscription relay
+After=network-online.target makaron-grok-relay.service
+Wants=network-online.target makaron-grok-relay.service
+
+[Service]
+Type=simple
+User=makaron-grok
+Group=makaron-grok
+ExecStart=/usr/local/bin/cloudflared tunnel --no-autoupdate --protocol http2 --url http://127.0.0.1:25985
+Restart=always
+RestartSec=5
+TimeoutStopSec=20
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=true
+
+[Install]
+WantedBy=multi-user.target

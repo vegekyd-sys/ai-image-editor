@@ -646,9 +646,11 @@ const zhHant = {
   'model.closeAgentSelector': '關閉模型選擇',
   'model.chooseAgent': '選擇 Agent 模型',
   'model.azureApiBadge': 'Azure API',
+  'model.openRouterApiBadge': 'OpenRouter API',
   'model.agentGroup.azure': 'Azure API',
   'model.agentGroup.azureDesc': '預設 · API 按量計費',
   'model.agentGroup.codex': '個人 Codex 訂閱',
+  'model.agentGroup.personal': '個人訂閱方案',
   'model.agentGroup.other': '其他 API',
   'model.agentGroup.otherDesc': '其他可用模型',
   'model.codexSubscription.name': 'GPT-5.6 Terra · Codex 套餐',
@@ -660,6 +662,9 @@ const zhHant = {
   'model.codexSubscription.remainingShort': (percent: string) => `剩餘 ${percent}%`,
   'model.codexSubscription.resetsAt': (time: string) => `${time} 重置`,
   'model.codexSubscription.usageUnavailable': '套餐可用，暫時無法讀取額度',
+  'model.grokSubscription.suffix': 'Grok 方案',
+  'model.grokSubscription.desc': '使用你的 SuperGrok 個人方案；不可用且尚未輸出時才回退 OpenRouter API。',
+  'model.grokSubscription.available': 'SuperGrok 方案可用',
 } satisfies TranslationDictionary;
 
 export default zhHant;

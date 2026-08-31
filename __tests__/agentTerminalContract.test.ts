@@ -113,7 +113,8 @@ describe('agent terminal contract wiring', () => {
     expect(executionRunnerSource).toContain('next_attempt_at: new Date().toISOString()');
     expect(executionRunnerSource).toContain('shouldFailoverAzureGPT56ToOpenRouter');
     expect(executionRunnerSource).toContain('shouldFailoverCodexSubscriptionToApi');
-    expect(executionRunnerSource).toContain('isSafeToEnterCodexSubscriptionApiFallback');
+    expect(executionRunnerSource).toContain('isSafeToEnterSubscriptionApiFallback');
+    expect(executionRunnerSource).toContain('shouldFailoverGrokSubscriptionToApi');
     expect(executionRunnerSource).toContain("fallbackSafety: 'pending'");
     expect(executionRunnerSource).toContain('attemptSafetyMetadata()');
     expect(executionRunnerSource).toContain('attemptMetadataError');

@@ -1,5 +1,6 @@
 export interface GetVideoStatusInput {
   taskId: string;
+  userId?: string;
 }
 
 export interface GetVideoStatusResult {
@@ -48,7 +49,7 @@ export async function getVideoStatus(input: GetVideoStatusInput): Promise<GetVid
 
     if (isXai) {
       const { getXaiVideoTask } = await import('../xai-video');
-      const result = await getXaiVideoTask(taskId);
+      const result = await getXaiVideoTask(taskId, input.userId);
 
       let message: string;
       switch (result.status) {

@@ -14,8 +14,10 @@ export const CODEX_SUBSCRIPTION_AGENT_MODEL_PREFERENCES = [
   'gpt-5.6-luna-codex-subscription',
 ] as const;
 export type CodexSubscriptionAgentModelPreference = (typeof CODEX_SUBSCRIPTION_AGENT_MODEL_PREFERENCES)[number];
-export type AgentModelPreference = 'auto' | AgentModelId | CodexSubscriptionAgentModelPreference;
-export type AgentModelProvider = 'azure-openai' | 'codex-subscription' | 'openrouter' | 'deepseek';
+export const GROK_SUBSCRIPTION_AGENT_MODEL_PREFERENCE = 'grok-4.5-grok-subscription' as const;
+export type GrokSubscriptionAgentModelPreference = typeof GROK_SUBSCRIPTION_AGENT_MODEL_PREFERENCE;
+export type AgentModelPreference = 'auto' | AgentModelId | CodexSubscriptionAgentModelPreference | GrokSubscriptionAgentModelPreference;
+export type AgentModelProvider = 'azure-openai' | 'codex-subscription' | 'grok-subscription' | 'openrouter' | 'deepseek';
 export type GPT56ApiProvider = Extract<AgentModelProvider, 'azure-openai' | 'openrouter'>;
 export type GPT56AgentProvider = GPT56ApiProvider | 'codex-subscription';
 export type AgentCacheStrategy = 'explicit' | 'automatic';
@@ -77,6 +79,12 @@ export function isCodexSubscriptionAgentModelPreference(
 ): value is CodexSubscriptionAgentModelPreference {
   return typeof value === 'string'
     && CODEX_SUBSCRIPTION_AGENT_MODEL_PREFERENCE_SET.has(value);
+}
+
+export function isGrokSubscriptionAgentModelPreference(
+  value: unknown,
+): value is GrokSubscriptionAgentModelPreference {
+  return value === GROK_SUBSCRIPTION_AGENT_MODEL_PREFERENCE;
 }
 
 export function getCodexSubscriptionAgentModelId(
@@ -156,7 +164,25 @@ export function defaultsToCodexSubscription(
 }
 
 export function shouldRequireAgentCredits(provider: AgentModelProvider): boolean {
-  return provider !== 'codex-subscription';
+  return provider !== 'codex-subscription' && provider !== 'grok-subscription';
+}
+
+function isGrokSubscriptionAgentAllowedUser(userId: string | undefined): boolean {
+  if (!userId
+    || !process.env.GROK_SUBSCRIPTION_RELAY_URL?.trim()
+    || !process.env.GROK_SUBSCRIPTION_RELAY_SECRET?.trim()) {
+    return false;
+  }
+  const allowed = new Set(
+    (process.env.GROK_SUBSCRIPTION_ALLOWED_USER_IDS || '')
+      .split(',')
+      .map(value => value.trim())
+      .filter(Boolean),
+  );
+  const owner = process.env.GROK_SUBSCRIPTION_OWNER_USER_ID?.trim()
+    || process.env.CODEX_SUBSCRIPTION_OWNER_USER_ID?.trim();
+  if (owner) allowed.add(owner);
+  return allowed.has(userId);
 }
 
 export function resolveGPT56AgentProviderForUser(options: {
@@ -238,6 +264,7 @@ export function isAgentModelId(value: unknown): value is AgentModelId {
 export function isAgentModelPreference(value: unknown): value is AgentModelPreference {
   return value === 'auto'
     || isCodexSubscriptionAgentModelPreference(value)
+    || isGrokSubscriptionAgentModelPreference(value)
     || isAgentModelId(value);
 }
 
@@ -294,12 +321,23 @@ export function resolveAgentModelSpec(
   configuredGPT56Provider: string | undefined = process.env.GPT56_AGENT_PROVIDER,
 ): AgentModelSpec {
   const explicitlyUsesCodexSubscription = isCodexSubscriptionAgentModelPreference(preference);
+  const explicitlyUsesGrokSubscription = isGrokSubscriptionAgentModelPreference(preference);
   const selectedId = explicitlyUsesCodexSubscription
     ? getCodexSubscriptionAgentModelId(preference)
+    : explicitlyUsesGrokSubscription
+    ? 'grok-4.5'
     : preference && preference !== 'auto'
     ? preference
     : matchConfiguredModel(configuredDefault) ?? DEFAULT_AGENT_MODEL_ID;
   const baseSpec = AGENT_MODEL_SPECS[selectedId];
+  if (explicitlyUsesGrokSubscription) {
+    return {
+      ...baseSpec,
+      provider: 'grok-subscription',
+      providerModelId: 'grok-4.5',
+      billingModelId: 'grok-4.5',
+    };
+  }
   if (!isGPT56AgentModelId(selectedId)) return baseSpec;
 
   const provider = explicitlyUsesCodexSubscription
@@ -321,6 +359,15 @@ export function resolveAgentModelSpecForUser(
   configuredGPT56Provider: string | undefined = process.env.GPT56_AGENT_PROVIDER,
   codexSubscriptionAllowed?: boolean,
 ): AgentModelSpec {
+  const explicitlyUsesGrokSubscription = isGrokSubscriptionAgentModelPreference(preference);
+  if (explicitlyUsesGrokSubscription) {
+    const selected = resolveAgentModelSpec(preference, configuredDefault, configuredGPT56Provider);
+    // Keep the public model preference valid for all clients, but only route
+    // allowlisted users through the owner's SuperGrok credential.
+    return isGrokSubscriptionAgentAllowedUser(userId)
+      ? selected
+      : AGENT_MODEL_SPECS['grok-4.5'];
+  }
   const explicitlyUsesCodexSubscription = isCodexSubscriptionAgentModelPreference(preference);
   const ownerUsesCodexByDefault = defaultsToCodexSubscription(
     preference,

@@ -9,6 +9,7 @@ describe('ModelSelector Agent tab', () => {
       ok: true,
       json: async () => ({
         available: true,
+        grokAvailable: true,
         planType: 'pro',
         weekly: {
           usedPercent: 61,
@@ -61,17 +62,22 @@ describe('ModelSelector Agent tab', () => {
     for (const id of ['gpt-5.6-terra', 'gpt-5.6-sol', 'gpt-5.6-luna']) {
       expect(await screen.findByTestId(`agent-model-${id}-codex-subscription`)).not.toBeNull();
     }
+    expect(await screen.findByTestId('agent-model-grok-4.5-grok-subscription')).not.toBeNull();
+    expect(screen.getByTestId('agent-model-grok-4.5-grok-subscription').getAttribute('data-agent-provider'))
+      .toBe('grok-subscription');
+    expect(screen.getByTestId('agent-model-grok-4.5').getAttribute('data-agent-provider'))
+      .toBe('openrouter');
     const providerGroups = Array.from(agentPanel.querySelectorAll('[data-agent-provider-group]'));
     expect(providerGroups.map(group => (
       group.getAttribute('data-agent-provider-group')
     ))).toEqual(['azure', 'codex', 'other']);
-    expect(providerGroups[1]?.textContent).toContain('Codex');
+    expect(providerGroups[1]?.textContent).toMatch(/个人订阅|Personal plans/);
     const codexUsage = screen.getByTestId('codex-subscription-usage');
     expect(codexUsage.textContent).toContain('39%');
     expect(codexUsage.classList.contains('mkr-agent-model-group-quota')).toBe(true);
     const codexHeader = codexUsage.closest('[data-agent-provider-group="codex"]');
     expect(codexHeader?.querySelector('.mkr-agent-model-group-reset')?.textContent).toMatch(/Resets|重置/);
-    expect(codexHeader?.querySelector('.mkr-agent-model-group-title')?.textContent).toContain('Codex');
+    expect(codexHeader?.querySelector('.mkr-agent-model-group-title')?.textContent).toMatch(/个人订阅|Personal plans/);
     expect(screen.queryByText(/Sonnet|Opus|Claude/i)).toBeNull();
     expect(screen.getByTestId('model-auto-agent').getAttribute('aria-pressed')).toBe('true');
 
@@ -80,6 +86,9 @@ describe('ModelSelector Agent tab', () => {
 
     fireEvent.click(screen.getByTestId('agent-model-gpt-5.6-sol'));
     expect(onAgentModelChange).toHaveBeenCalledWith('gpt-5.6-sol');
+
+    fireEvent.click(screen.getByTestId('agent-model-grok-4.5-grok-subscription'));
+    expect(onAgentModelChange).toHaveBeenCalledWith('grok-4.5-grok-subscription');
 
     fireEvent.keyDown(agentTab, { key: 'ArrowLeft' });
     expect(screen.getByTestId('model-tab-video').getAttribute('aria-selected')).toBe('true');
