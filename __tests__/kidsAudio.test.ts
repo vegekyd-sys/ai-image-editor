@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from 'vitest'
 import type { LiveServerMessage } from '@google/genai'
-import { base64ToPcm, floatToPcm16, KidsLiveAudio } from '@/components/kids/kids-audio'
+import { base64ToPcm, floatToPcm16, KidsLiveAudio, pcm16ChunksToWav } from '@/components/kids/kids-audio'
 
 function pcmBase64(values: number[]) {
   const pcm = new Int16Array(values)
@@ -18,6 +18,21 @@ describe('Makaron Kids audio conversion and interruption', () => {
 
     const decoded = base64ToPcm(pcmBase64([-32768, 0, 32767]))
     expect(Array.from(decoded)).toEqual([-1, 0, 32767 / 32768])
+  })
+
+  it('wraps the exact Live PCM input in a mono 16 kHz WAV backup', async () => {
+    const wav = pcm16ChunksToWav([
+      new Uint8Array([0, 0, 255, 127]),
+      new Uint8Array([0, 128]),
+    ])
+    expect(wav?.type).toBe('audio/wav')
+    expect(wav?.size).toBe(50)
+
+    const bytes = new Uint8Array(await wav!.arrayBuffer())
+    expect(new TextDecoder().decode(bytes.slice(0, 4))).toBe('RIFF')
+    expect(new TextDecoder().decode(bytes.slice(8, 12))).toBe('WAVE')
+    expect(new DataView(bytes.buffer).getUint32(24, true)).toBe(16_000)
+    expect(Array.from(bytes.slice(44))).toEqual([0, 0, 255, 127, 0, 128])
   })
 
   it('uses official inlineData audio, waits for queue drain, and clears queued playback on VAD interruption', () => {
@@ -61,12 +76,17 @@ describe('Makaron Kids audio conversion and interruption', () => {
       onLevel: vi.fn(), onMessage: vi.fn(), onPhase: (phase) => phases.push(phase),
     })
     ;(audio as unknown as { session: typeof session }).session = session
-    ;(audio as unknown as { stream: { getTracks: () => typeof track[] } }).stream = { getTracks: () => [track] }
+    ;(audio as unknown as {
+      stream: { getTracks: () => typeof track[] }
+      pcmRecordingChunks: Uint8Array[]
+    }).stream = { getTracks: () => [track] }
+    ;(audio as unknown as { pcmRecordingChunks: Uint8Array[] }).pcmRecordingChunks = [new Uint8Array([0, 0])]
 
-    audio.finishInput()
+    const recording = audio.finishInput()
 
     expect(session.sendRealtimeInput).toHaveBeenCalledWith({ audioStreamEnd: true })
     expect(track.stop).toHaveBeenCalledOnce()
     expect(phases).toEqual(['thinking'])
+    return expect(recording).resolves.toMatchObject({ type: 'audio/wav', size: 46 })
   })
 })

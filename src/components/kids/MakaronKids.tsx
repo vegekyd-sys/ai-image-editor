@@ -167,7 +167,13 @@ export default function MakaronKids() {
     setErrorMessage('')
     try {
       const form = new FormData()
-      const extension = recording.type.includes('mp4') ? 'm4a' : recording.type.includes('ogg') ? 'ogg' : 'webm'
+      const extension = recording.type.includes('mp4')
+        ? 'm4a'
+        : recording.type.includes('ogg')
+          ? 'ogg'
+          : recording.type.includes('wav')
+            ? 'wav'
+            : 'webm'
       form.append('audio', recording, `kids-turn.${extension}`)
       const transcriptResponse = await fetch('/api/kids/transcribe', { method: 'POST', body: form })
       if (transcriptResponse.status === 401) {
@@ -201,7 +207,7 @@ export default function MakaronKids() {
       await turnAudio.play(await speechResponse.blob())
       setPhase('idle')
     } catch (error) {
-      console.error('[MakaronKids] Fallback voice turn failed:', error)
+      console.warn('[MakaronKids] Fallback voice turn failed:', error)
       setErrorMessage(error instanceof Error ? error.message : String(error))
       setPhase('error')
     }
