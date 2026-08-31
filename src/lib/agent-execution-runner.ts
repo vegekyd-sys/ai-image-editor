@@ -311,6 +311,11 @@ export async function runAgentExecutionAttempt(
     requestOverrides?: Partial<ExecutionRequest>;
     preloadedRun?: AgentRunRecord;
     timelineVersion?: number;
+    initialClaim?: {
+      attemptId: string;
+      leaseToken: string;
+      workerId: string;
+    };
   } = {},
 ): Promise<AgentAttemptResult> {
   const perf = new AgentPerf('agent-execution-attempt', { runId });
@@ -340,15 +345,31 @@ export async function runAgentExecutionAttempt(
   }
 
   const workerId = options.workerId || `worker-${crypto.randomUUID()}`;
-  const endClaim = perf.span('claim_execution');
-  const { data: claimData, error: claimError } = await admin.rpc('claim_agent_execution', {
-    p_run_id: runId,
-    p_worker_id: workerId,
-    p_lease_seconds: policy.leaseSeconds,
-  });
-  endClaim({ ok: !claimError });
-  if (claimError) throw new Error(`Failed to claim Agent execution: ${claimError.message}`);
-  const claim = (Array.isArray(claimData) ? claimData[0] : claimData) as ClaimedExecution | undefined;
+  let claim: ClaimedExecution | undefined;
+  if (options.initialClaim && options.preloadedRun?.id === runId) {
+    claim = {
+      run_id: runId,
+      lease_token: options.initialClaim.leaseToken,
+      attempt_no: 1,
+      user_id: run.user_id,
+      project_id: run.project_id,
+      objective: run.objective || run.prompt || '',
+      acceptance_criteria: run.acceptance_criteria,
+      execution_policy: run.execution_policy,
+      metadata: run.metadata || null,
+    };
+    perf.mark('claim_execution_preclaimed', { workerId: options.initialClaim.workerId });
+  } else {
+    const endClaim = perf.span('claim_execution');
+    const { data: claimData, error: claimError } = await admin.rpc('claim_agent_execution', {
+      p_run_id: runId,
+      p_worker_id: workerId,
+      p_lease_seconds: policy.leaseSeconds,
+    });
+    endClaim({ ok: !claimError });
+    if (claimError) throw new Error(`Failed to claim Agent execution: ${claimError.message}`);
+    claim = (Array.isArray(claimData) ? claimData[0] : claimData) as ClaimedExecution | undefined;
+  }
   if (!claim) return { claimed: false, runId };
 
   // A platform kill cannot close its attempt row. Once this worker owns the
@@ -369,27 +390,52 @@ export async function runAgentExecutionAttempt(
 
   const workUnit = 'agent';
   const endAttemptSetup = perf.span('attempt_setup', { attemptNo: claim.attempt_no });
-  const [activeStudioWorkflowStage, , attemptResult, pendingInputs] = await Promise.all([
-    // A brand-new run cannot already own a Studio workflow. Scanning all
-    // workspace Studio files here only delays the first model request.
-    claim.attempt_no > 1 ? resolveActiveStudioWorkflowStage(admin, run) : Promise.resolve(undefined),
-    claim.attempt_no > 1
-      ? admin.from('agent_runs').update({ current_work_unit: workUnit }).eq('id', runId).eq('lease_token', claim.lease_token)
-      : Promise.resolve({ error: null }),
-    admin.from('agent_attempts').insert({
+  let activeStudioWorkflowStage: string | undefined;
+  let pendingInputs: Awaited<ReturnType<typeof loadPendingAgentInputs>> = [];
+  let attemptId: string;
+  let attemptReady: Promise<void>;
+  if (options.initialClaim && claim.attempt_no === 1) {
+    attemptId = options.initialClaim.attemptId;
+    // Reserve the ID up front so model/context preparation can proceed while
+    // the ledger insert crosses the network. Tool calls happen much later and
+    // still require this row before any durable mutation is allowed.
+    attemptReady = Promise.resolve(admin.from('agent_attempts').insert({
+      id: attemptId,
       run_id: runId,
       user_id: run.user_id,
       attempt_no: claim.attempt_no,
       work_unit_key: workUnit,
       status: 'running',
       lease_token: claim.lease_token,
-    }).select('id').single(),
-    loadPendingAgentInputs(admin, runId),
-  ]);
-  endAttemptSetup({ activeStudioWorkflowStage: activeStudioWorkflowStage || null });
-  const { data: attempt, error: attemptError } = attemptResult;
-  if (attemptError || !attempt?.id) throw new Error(`Failed to create Agent attempt: ${attemptError?.message || 'missing id'}`);
-  const attemptId = attempt.id as string;
+    })).then(({ error }) => {
+      if (error) throw new Error(`Failed to create inline Agent attempt: ${error.message}`);
+    });
+    endAttemptSetup({ activeStudioWorkflowStage: null, parallel: true });
+  } else {
+    const [, , attemptResult, loadedPendingInputs] = await Promise.all([
+      claim.attempt_no > 1
+        ? resolveActiveStudioWorkflowStage(admin, run).then(value => { activeStudioWorkflowStage = value; })
+        : Promise.resolve(),
+      claim.attempt_no > 1
+        ? admin.from('agent_runs').update({ current_work_unit: workUnit }).eq('id', runId).eq('lease_token', claim.lease_token)
+        : Promise.resolve({ error: null }),
+      admin.from('agent_attempts').insert({
+        run_id: runId,
+        user_id: run.user_id,
+        attempt_no: claim.attempt_no,
+        work_unit_key: workUnit,
+        status: 'running',
+        lease_token: claim.lease_token,
+      }).select('id').single(),
+      loadPendingAgentInputs(admin, runId),
+    ]);
+    pendingInputs = loadedPendingInputs;
+    endAttemptSetup({ activeStudioWorkflowStage: activeStudioWorkflowStage || null });
+    const { data: attempt, error: attemptError } = attemptResult;
+    if (attemptError || !attempt?.id) throw new Error(`Failed to create Agent attempt: ${attemptError?.message || 'missing id'}`);
+    attemptId = attempt.id as string;
+    attemptReady = Promise.resolve();
+  }
 
   let scaffoldResult: Awaited<ReturnType<typeof import('./studio-composition-scaffold')['ensureStudioCompositionScaffold']>> | undefined;
   let scaffoldWarning: string | undefined;
@@ -570,7 +616,7 @@ export async function runAgentExecutionAttempt(
     historyTurns: ctx.history.length,
     mediaCount: ctx.snapshotImages.length,
   });
-  const attemptMetadataPromise = admin.from('agent_attempts').update({
+  const attemptMetadataPromise = attemptReady.then(() => admin.from('agent_attempts').update({
     input_token_estimate: ctx.contextStats.estimatedTokens,
     metadata: {
       context: ctx.contextStats,
@@ -599,10 +645,11 @@ export async function runAgentExecutionAttempt(
       ...(scaffoldResult ? { compositionScaffold: scaffoldResult } : {}),
       ...(scaffoldWarning ? { compositionScaffoldWarning: scaffoldWarning } : {}),
     },
-  }).eq('id', attemptId);
-  const [, projectResult, attemptMetadataResult] = await Promise.all([
+  }).eq('id', attemptId));
+  const [, projectResult, , attemptMetadataResult] = await Promise.all([
     writerReady,
     projectPromise,
+    attemptReady,
     attemptMetadataPromise,
   ]);
   const { error: attemptMetadataError } = attemptMetadataResult;

@@ -129,6 +129,11 @@ export async function POST(req: NextRequest) {
 
     let runId: string | null = null;
     let firstMessageId: string | null = null;
+    let inlineInitialClaim: {
+      attemptId: string;
+      leaseToken: string;
+      workerId: string;
+    } | null = null;
     let inlineRunPreload: {
       id: string;
       project_id: string;
@@ -193,6 +198,13 @@ export async function POST(req: NextRequest) {
         60,
         Math.min(900, Number(process.env.AGENT_INLINE_LEASE_SECONDS) || 120),
       );
+      const leaseToken = crypto.randomUUID();
+      const inlineWorkerId = `inline-${crypto.randomUUID()}`;
+      inlineInitialClaim = {
+        attemptId: crypto.randomUUID(),
+        leaseToken,
+        workerId: inlineWorkerId,
+      };
       const objective = prompt || 'Continue the current project conversation.';
       const executionPolicy = {
         durable: true as const,
@@ -243,7 +255,7 @@ export async function POST(req: NextRequest) {
         objective,
         prompt: (prompt ?? '').slice(0, 500),
         execution_policy: executionPolicy,
-        attempt_count: 0,
+        attempt_count: 1,
         total_input_tokens: 0,
         total_output_tokens: 0,
         input_version: 0,
@@ -258,7 +270,11 @@ export async function POST(req: NextRequest) {
         objective,
         execution_policy: executionPolicy,
         current_work_unit: 'agent',
-        next_attempt_at: new Date().toISOString(),
+        attempt_count: 1,
+        lease_token: leaseToken,
+        lease_owner: inlineWorkerId,
+        lease_expires_at: new Date(Date.now() + inlineLeaseSeconds * 1000).toISOString(),
+        next_attempt_at: null,
         metadata: runMetadata,
       });
       if (runInsertError) throw new Error(`Failed to create inline durable Agent Run: ${runInsertError.message}`);
@@ -289,12 +305,13 @@ export async function POST(req: NextRequest) {
             const timelineVersion = await timelineVersionPromise;
             const result = await runnerRuntime.runAgentExecutionAttempt(runId, {
               admin: supabase,
-              workerId: `inline-${crypto.randomUUID()}`,
+              workerId: inlineInitialClaim?.workerId,
               origin: req.nextUrl.origin,
               controller,
               encoder,
               timelineVersion,
               preloadedRun: inlineRunPreload || undefined,
+              initialClaim: inlineInitialClaim || undefined,
               requestOverrides: {
                 image: typeof image === 'string' ? image : undefined,
                 snapshotImages: Array.isArray(snapshotImages) ? snapshotImages : undefined,
