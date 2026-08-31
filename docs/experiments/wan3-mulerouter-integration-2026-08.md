@@ -39,6 +39,25 @@ Official contracts:
   removed.
 - The product default remains `seedance-fast`; Wan is selected explicitly.
 
+## Pricing and Makaron credits
+
+MuleRouter bills only output resolution unit price multiplied by output seconds;
+audio and media references do not add a separate charge. Makaron applies its
+standard 2x markup and rounds the whole run up to a full credit:
+
+| Model | Resolution | Supplier cost | Makaron credits / second |
+| --- | --- | ---: | ---: |
+| Wan 3.0 Standard | 480p | $0.05/s | 10 |
+| Wan 3.0 Standard | 720p | $0.10/s | 20 |
+| Wan 3.0 Standard | 1080p | $0.20/s | 40 |
+| Wan 3.0 Pro | 1080p | $0.18/s | 36 |
+| Wan 3.0 Pro | 2K | $0.20/s | 40 |
+| Wan 3.0 Pro | 4K | $0.23/s | 46 |
+
+Every registered video model must declare explicit provider pricing; tests fail
+if a model omits it, and runtime submission fails closed instead of falling
+through to a generic video estimate.
+
 ## Verification
 
 Implementation/unit/CLI/build results and live artifact paths are recorded in

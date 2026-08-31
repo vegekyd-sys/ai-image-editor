@@ -8,7 +8,7 @@ import {
   refundCredits,
   requireCredits,
 } from '@/lib/billing/credits'
-import { estimateVideoCredits, getVideoModelCapability, normalizeVideoModelId, resolveVideoGenerationRoute, resolveVideoOutputDuration, supportsNativeTextToVideo } from '@/lib/video-model-capabilities'
+import { getRequiredVideoCredits, getVideoModelCapability, normalizeVideoModelId, resolveVideoGenerationRoute, resolveVideoOutputDuration, supportsNativeTextToVideo } from '@/lib/video-model-capabilities'
 
 export const maxDuration = 1800
 
@@ -97,14 +97,14 @@ export async function POST(req: NextRequest) {
 
     const { filteredImages, finalPrompt } = filterAndRemapImages(prompt, inputImageUrls, videoCapability.maxImageReferences ?? 7)
     const videoSec = effectiveDuration || 10
-    const creditsRequired = estimateVideoCredits({
+    const creditsRequired = getRequiredVideoCredits({
       model: selectedVideoModel,
       resolution: videoRoute.resolution,
       durationSec: videoSec,
       imageCount: filteredImages.length,
       referenceVideoDurationSec: referenceVideoDuration,
       operation: videoOperation,
-    }) ?? Math.ceil(videoSec * 22)
+    })
     const toolName = selectedVideoModel === 'grok' ? 'create_video_grok' : 'create_video'
     const creditCheck = await requireCredits(user.id, creditsRequired)
     if (!creditCheck.ok) return creditCheck.response

@@ -257,6 +257,14 @@ const MODEL_CAPABILITIES: Record<string, VideoModelCapability> = {
     maxVideoReferences: 5,
     maxAudioReferences: 5,
     maxTotalReferences: 20,
+    // MuleRouter W3.0 pricing, verified 2026-09-01. Audio is included at the
+    // same rate; references do not add a separate input charge.
+    estimatedCostPerSecondUsd: 0.2,
+    estimatedCostPerSecondUsdByResolution: {
+      '480p': 0.05,
+      '720p': 0.1,
+      '1080p': 0.2,
+    },
     supportedResolutions: ['480p', '720p', '1080p'],
     defaultResolution: '1080p',
     supportedAspectRatios: ['16:9', '9:16', '1:1', '4:3', '3:4'],
@@ -289,6 +297,14 @@ const MODEL_CAPABILITIES: Record<string, VideoModelCapability> = {
     maxVideoReferences: 5,
     maxAudioReferences: 5,
     maxTotalReferences: 20,
+    // MuleRouter Berry 1.0 Pro pricing, verified 2026-09-01. Audio is included
+    // at the same rate; references do not add a separate input charge.
+    estimatedCostPerSecondUsd: 0.18,
+    estimatedCostPerSecondUsdByResolution: {
+      '1080p': 0.18,
+      '2k': 0.2,
+      '4k': 0.23,
+    },
     supportedResolutions: ['1080p', '2k', '4k'],
     defaultResolution: '1080p',
     supportedAspectRatios: ['16:9', '9:16', '1:1', '4:3', '3:4'],
@@ -757,6 +773,22 @@ export function estimateVideoCredits(options: {
   const costUsd = estimateVideoProviderCostUsd(options)
   if (costUsd == null) return undefined
   return Math.ceil(costUsd * 100 * (options.markup ?? 2) - 1e-9)
+}
+
+export function getRequiredVideoCredits(
+  options: Parameters<typeof estimateVideoCredits>[0],
+): number {
+  const credits = estimateVideoCredits(options)
+  if (credits == null) {
+    const route = resolveVideoGenerationRoute({
+      model: options.model,
+      resolution: options.resolution,
+    })
+    throw new Error(
+      `Video pricing is not configured for ${route.label} at ${route.resolution}. Generation is blocked to prevent incorrect billing.`,
+    )
+  }
+  return credits
 }
 
 export function isFastVideoRenderModel(model?: string | null): boolean {
