@@ -167,4 +167,42 @@ describe('ModelSelector Agent tab', () => {
     unmount();
     vi.unstubAllGlobals();
   });
+
+  it('uses the available vertical space for the Agent provider groups', async () => {
+    vi.stubGlobal('innerWidth', 1024);
+    vi.stubGlobal('innerHeight', 1000);
+
+    const { unmount } = render(
+      <LocaleProvider>
+        <ModelSelector
+          preferredModel="auto"
+          onModelChange={vi.fn()}
+          agentModel="auto"
+          onAgentModelChange={vi.fn()}
+        />
+      </LocaleProvider>,
+    );
+    const trigger = screen.getByTestId('model-selector');
+    vi.spyOn(trigger, 'getBoundingClientRect').mockReturnValue({
+      x: 100,
+      y: 900,
+      top: 900,
+      right: 132,
+      bottom: 932,
+      left: 100,
+      width: 32,
+      height: 32,
+      toJSON: () => ({}),
+    });
+
+    fireEvent.click(trigger);
+    fireEvent.click(await screen.findByTestId('model-tab-agent'));
+
+    await waitFor(() => {
+      expect(screen.getByRole('tabpanel').style.height).toBe('700px');
+    });
+
+    unmount();
+    vi.unstubAllGlobals();
+  });
 });

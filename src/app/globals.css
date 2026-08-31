@@ -527,6 +527,15 @@ textarea {
   background: #17161c;
 }
 
+/* ModelSelector renders provider headers as siblings in one scroll container.
+   Keep them in normal flow there so later groups cannot cover earlier rows. */
+.model-selector-scroll > .mkr-agent-model-group-header {
+  position: static;
+  top: auto;
+  z-index: auto;
+  flex-shrink: 0;
+}
+
 .model-selector-scroll > .mkr-agent-model-group-header:not(:first-child) {
   margin-top: 6px;
   padding-top: 11px;
