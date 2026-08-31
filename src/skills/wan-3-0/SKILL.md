@@ -31,6 +31,9 @@ Pro, super-resolution, 2K, or 4K requests. Keep the app default on
 ## Provider contract
 
 - Output duration: 2-30 seconds.
+- With video references, combined reference-video duration + output duration must
+  be 30 seconds or less. Output duration is a whole number, so use
+  `floor(30 - referenceDuration)`; a 5.04s reference permits at most 24s.
 - Standard output: 480p, 720p, or 1080p (default) through MuleRouter
   `carrothub/w3.0-video`.
 - Pro output: 1080p (default), 2K, or 4K through MuleRouter
@@ -42,6 +45,8 @@ Pro, super-resolution, 2K, or 4K requests. Keep the app default on
   reference mixes use MuleRouter's reference mode.
 - Use `video_operation: "generate"` with feature references. Wan 3.0 does not
   expose typed direct edit or extend operations in Makaron.
+- The runtime preflight rejects over-budget duration combinations before credit
+  reservation and before MuleRouter submission. Do not retry the same values.
 - Native synchronized audio is available. MuleRouter does not document a Wan 3.0
   content-filter switch, so do not pass or imply one.
 

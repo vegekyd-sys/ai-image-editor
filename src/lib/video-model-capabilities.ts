@@ -4,6 +4,7 @@ export interface VideoModelCapability {
   minOutputDuration: number
   maxOutputDuration: number
   maxReferenceVideoDuration: number
+  maxCombinedReferenceAndOutputDuration?: number
   referenceVideoDurationTolerance?: number
   referenceVideoSize?: VideoReferenceSizeCapability
   supportsVideoReference: boolean
@@ -236,6 +237,7 @@ const MODEL_CAPABILITIES: Record<string, VideoModelCapability> = {
     minOutputDuration: 2,
     maxOutputDuration: 30,
     maxReferenceVideoDuration: 15,
+    maxCombinedReferenceAndOutputDuration: 30,
     referenceVideoDurationTolerance: 0.5,
     referenceVideoSize: {
       maxFileSizeMb: 100,
@@ -267,6 +269,7 @@ const MODEL_CAPABILITIES: Record<string, VideoModelCapability> = {
     minOutputDuration: 2,
     maxOutputDuration: 30,
     maxReferenceVideoDuration: 15,
+    maxCombinedReferenceAndOutputDuration: 30,
     referenceVideoDurationTolerance: 0.5,
     referenceVideoSize: {
       maxFileSizeMb: 100,
@@ -930,6 +933,25 @@ export function validateVideoModelRequest(options: {
   const acceptedReferenceDuration = capability.maxReferenceVideoDuration + (capability.referenceVideoDurationTolerance ?? 0)
   if (options.referenceVideoDuration != null && options.referenceVideoDuration > acceptedReferenceDuration) {
     return `${capability.label} reference video duration must be ${capability.maxReferenceVideoDuration.toFixed(1).replace(/\.0$/, '')} seconds or less. Read skills/video-ffmpeg-lab/SKILL.md, then use run_code runtime="node" with FFmpeg to split the source video first, submit one generation task per chunk, and concatenate the results.`
+  }
+
+  const combinedDurationLimit = capability.maxCombinedReferenceAndOutputDuration
+  if (
+    combinedDurationLimit != null
+    && options.hasVideoReference
+    && options.referenceVideoDuration != null
+    && options.outputDuration != null
+    && options.outputDuration !== -1
+  ) {
+    const combinedDuration = options.referenceVideoDuration + options.outputDuration
+    if (combinedDuration > combinedDurationLimit) {
+      const formatSeconds = (value: number) => Number(value.toFixed(2)).toString()
+      const maximumWholeSecondOutput = Math.floor(combinedDurationLimit - options.referenceVideoDuration + Number.EPSILON)
+      const repair = maximumWholeSecondOutput >= capability.minOutputDuration
+        ? `Set duration=${maximumWholeSecondOutput} or shorter, or trim the reference video before submitting.`
+        : `Trim the reference video before submitting so at least ${capability.minOutputDuration} seconds remain for the output.`
+      return `${capability.label} reference-plus-output duration must be ${formatSeconds(combinedDurationLimit)} seconds or less. Current request: ${formatSeconds(options.referenceVideoDuration)}s reference + ${formatSeconds(options.outputDuration)}s output = ${formatSeconds(combinedDuration)}s. ${repair}`
+    }
   }
 
   const sizeError = validateVideoReferenceSize(capability, options.referenceVideoMetas)

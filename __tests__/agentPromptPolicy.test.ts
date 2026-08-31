@@ -294,6 +294,7 @@ describe('agent prompt policy guards', () => {
     expect(animate).toContain('When the user explicitly selects Wan 3.0 or the request is NSFW/adult-explicit')
     expect(animate).toContain('NSFW routing has priority over the 16-30 second Seedance 2.5 duration default')
     expect(animate).toContain('Wan 3.0 scripts may be **2 to 30 seconds**')
+    expect(animate).toContain('reference-video duration + requested output duration must be 30 seconds or less')
 
     expect(agentTs).toContain('SeeDance/SeeDance Mini and MiniMax H3 are 4-15 seconds')
     expect(agentTs).toContain('For native SeeDance, Wan 3.0, or MiniMax H3 text-to-video')
@@ -306,6 +307,7 @@ describe('agent prompt policy guards', () => {
     expect(agentTs).toContain('For any NSFW/adult-explicit video request, choose Wan 3.0 instead')
     expect(agentTs).toContain('analogous to choosing Qwen for NSFW image requests')
     expect(agentTs).toContain('the NSFW route overrides the 16-30 second Seedance 2.5 route')
+    expect(agentTs).toContain('reference-video duration + requested output duration <= 30 seconds')
     expect(agentTs).toContain('Kling is 5-15 seconds')
     expect(agentTs).toContain("If a complete script fits the selected model's single-call limit, submit it as one video generation call")
     expect(agentTs).toContain('Put the whole title, every \\`Shot N (Xs):\\` line, and the \\`Style:\\` line into the same \\`story_prompt\\`')

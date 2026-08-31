@@ -38,6 +38,7 @@ describe('Wan 3.0 MuleRouter integration', () => {
       minOutputDuration: 2,
       maxOutputDuration: 30,
       maxReferenceVideoDuration: 15,
+      maxCombinedReferenceAndOutputDuration: 30,
       maxImageReferences: 10,
       maxVideoReferences: 5,
       maxAudioReferences: 5,
@@ -54,6 +55,27 @@ describe('Wan 3.0 MuleRouter integration', () => {
     expect(validateVideoModelRequest({ model: 'wan-3.0', outputDuration: 1 })).toContain('2 seconds or more')
     expect(validateVideoModelRequest({ model: 'wan-3.0-pro', resolution: '720p' })).toContain('does not support 720p')
     expect(validateVideoModelRequest({ model: 'wan-3.0-pro', operation: 'edit' })).toContain('does not expose typed video edit')
+  })
+
+  it('rejects Wan reference-plus-output requests before calling MuleRouter', async () => {
+    const fetchMock = vi.fn()
+    vi.stubGlobal('fetch', fetchMock)
+
+    const { createVideo } = await import('@/lib/skills/create-video')
+    const result = await createVideo({
+      script: 'Thirty Second Continuation\nShot 1 (30s): Continue the reference performance.',
+      images: [''],
+      videoUrls: ['https://example.com/source.mp4'],
+      referenceVideoDuration: 5.04,
+      duration: 30,
+      videoModel: 'wan-3.0',
+      videoResolution: '1080p',
+    })
+
+    expect(result).toMatchObject({ success: false })
+    expect(result.message).toContain('5.04s reference + 30s output = 35.04s')
+    expect(result.message).toContain('duration=24')
+    expect(fetchMock).not.toHaveBeenCalled()
   })
 
   it('submits Standard native text-to-video with the official MuleRouter field names', async () => {

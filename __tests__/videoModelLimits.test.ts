@@ -657,6 +657,20 @@ describe('video model reference limits', () => {
     })).toContain('reference-to-video is capped at 720p')
   })
 
+  it('enforces the Wan reference-plus-output 30-second budget', () => {
+    const request = {
+      model: 'wan-3.0',
+      operation: 'generate' as const,
+      hasVideoReference: true,
+      videoReferenceCount: 1,
+      referenceVideoDuration: 5.04,
+    }
+
+    expect(validateVideoModelRequest({ ...request, outputDuration: 24 })).toBeNull()
+    expect(validateVideoModelRequest({ ...request, outputDuration: 25 })).toContain('30 seconds or less')
+    expect(validateVideoModelRequest({ ...request, outputDuration: 30 })).toContain('duration=24')
+  })
+
   it('models Gemini Omni 1.1 as a fast multi-resolution generation, edit, and reference-video extension provider', () => {
     expect(normalizeVideoResolution('google-omni', 'auto')).toBe('720p')
     expect(resolveVideoGenerationRoute({ model: 'google-omni', resolution: 'auto' })).toMatchObject({
