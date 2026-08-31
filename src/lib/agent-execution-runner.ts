@@ -309,12 +309,16 @@ export async function runAgentExecutionAttempt(
     controller?: ReadableStreamDefaultController;
     encoder?: TextEncoder;
     requestOverrides?: Partial<ExecutionRequest>;
+    preloadedRun?: AgentRunRecord;
+    timelineVersion?: number;
   } = {},
 ): Promise<AgentAttemptResult> {
   const perf = new AgentPerf('agent-execution-attempt', { runId });
   const admin = options.admin ?? getSupabaseAdmin();
   const endRunLoad = perf.span('load_run');
-  const { data: runData } = await admin.from('agent_runs').select('*').eq('id', runId).maybeSingle();
+  const { data: runData } = options.preloadedRun?.id === runId
+    ? { data: options.preloadedRun }
+    : await admin.from('agent_runs').select('*').eq('id', runId).maybeSingle();
   endRunLoad({ found: !!runData });
   const run = runData as AgentRunRecord | null;
   if (!run || run.status !== 'running') return { claimed: false, runId };
@@ -522,14 +526,23 @@ export async function runAgentExecutionAttempt(
   );
   const writerReady = (async () => {
     const endWriterReady = perf.span('writer_ready');
-    await writer.initializeSequence();
-    if (continuation) await writer.beginContinuationTurn();
-    await writer.persistHeartbeat();
+    if (continuation) {
+      await writer.initializeSequence();
+      await writer.beginContinuationTurn();
+      await writer.persistHeartbeat();
+    } else {
+      // A new run has no persisted events, so seq=0 is already known. Reserve
+      // the heartbeat sequence synchronously, but keep its DB round-trip out
+      // of the first model request's critical path.
+      void writer.persistHeartbeat().catch(error => {
+        console.warn('[agent-execution] initial inline heartbeat failed', error);
+      });
+    }
     endWriterReady();
   })();
-  const projectPromise = Promise.resolve(
-    admin.from('projects').select('timeline_version').eq('id', run.project_id).single(),
-  );
+  const projectPromise = options.timelineVersion !== undefined
+    ? Promise.resolve({ data: { timeline_version: options.timelineVersion }, error: null })
+    : Promise.resolve(admin.from('projects').select('timeline_version').eq('id', run.project_id).single());
   const endContext = perf.span('build_prompt_context');
   const ctx = await buildPromptContext(run.project_id, admin, run.user_id, {
     userMessage: attemptPrompt,

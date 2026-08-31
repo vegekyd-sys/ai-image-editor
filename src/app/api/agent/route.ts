@@ -129,6 +129,20 @@ export async function POST(req: NextRequest) {
 
     let runId: string | null = null;
     let firstMessageId: string | null = null;
+    let inlineRunPreload: {
+      id: string;
+      project_id: string;
+      user_id: string;
+      status: string;
+      objective: string;
+      prompt: string;
+      execution_policy: Record<string, unknown>;
+      attempt_count: number;
+      total_input_tokens: number;
+      total_output_tokens: number;
+      input_version: number;
+      metadata: Record<string, unknown>;
+    } | null = null;
     if (isNormalMode) {
       const endRunCreate = perf.span('create_agent_run', { projectId, userId });
       const admission = decideAgentRunAdmission(activeRun);
@@ -179,56 +193,73 @@ export async function POST(req: NextRequest) {
         60,
         Math.min(900, Number(process.env.AGENT_INLINE_LEASE_SECONDS) || 120),
       );
+      const objective = prompt || 'Continue the current project conversation.';
+      const executionPolicy = {
+        durable: true as const,
+        transport: 'sse',
+        reconnect: 'event-log',
+        mode: 'inline-first-attempt',
+        attemptBudgetMs: DEFAULT_ATTEMPT_BUDGET_MS,
+        attemptMaxSteps: DEFAULT_ATTEMPT_MAX_STEPS,
+        leaseSeconds: inlineLeaseSeconds,
+        maxAttempts: 40,
+        maxTotalInputTokens: 12_000_000,
+      };
+      const runMetadata = {
+        locale,
+        preferredModel,
+        requestedAgentModel: requestedAgentModel ?? 'auto',
+        agentModel: resolvedAgentModel.id,
+        agentProvider: resolvedAgentModel.provider,
+        agentProviderModel: resolvedAgentModel.providerModelId,
+        isNsfw,
+        analysisOnly,
+        firstMessageId,
+        executionRequest: {
+          locale,
+          preferredModel,
+          requestedAgentModel: requestedAgentModel ?? 'auto',
+          videoModel,
+          videoResolution,
+          videoAuto,
+          skillLaunchContext,
+          currentSnapshotIndex,
+          hasAnnotation,
+          isDraft,
+          referenceImageCount,
+          uploadedVideoCount,
+          turnMediaCount,
+          isNsfw,
+          audioAttachments,
+          codexSubscriptionAllowed,
+          origin: req.nextUrl.origin,
+        },
+      };
+      inlineRunPreload = {
+        id: runId,
+        project_id: projectId,
+        user_id: userId,
+        status: 'running',
+        objective,
+        prompt: (prompt ?? '').slice(0, 500),
+        execution_policy: executionPolicy,
+        attempt_count: 0,
+        total_input_tokens: 0,
+        total_output_tokens: 0,
+        input_version: 0,
+        metadata: runMetadata,
+      };
       const { error: runInsertError } = await supabase.from('agent_runs').insert({
         id: runId,
         project_id: projectId,
         user_id: userId,
         status: 'running',
         prompt: (prompt ?? '').slice(0, 500),
-        objective: prompt || 'Continue the current project conversation.',
-        execution_policy: {
-          durable: true,
-          transport: 'sse',
-          reconnect: 'event-log',
-          mode: 'inline-first-attempt',
-          attemptBudgetMs: DEFAULT_ATTEMPT_BUDGET_MS,
-          attemptMaxSteps: DEFAULT_ATTEMPT_MAX_STEPS,
-          leaseSeconds: inlineLeaseSeconds,
-          maxAttempts: 40,
-          maxTotalInputTokens: 12_000_000,
-        },
+        objective,
+        execution_policy: executionPolicy,
         current_work_unit: 'agent',
         next_attempt_at: new Date().toISOString(),
-        metadata: {
-          locale,
-          preferredModel,
-          requestedAgentModel: requestedAgentModel ?? 'auto',
-          agentModel: resolvedAgentModel.id,
-          agentProvider: resolvedAgentModel.provider,
-          agentProviderModel: resolvedAgentModel.providerModelId,
-          isNsfw,
-          analysisOnly,
-          firstMessageId,
-          executionRequest: {
-            locale,
-            preferredModel,
-            requestedAgentModel: requestedAgentModel ?? 'auto',
-            videoModel,
-            videoResolution,
-            videoAuto,
-            skillLaunchContext,
-            currentSnapshotIndex,
-            hasAnnotation,
-            isDraft,
-            referenceImageCount,
-            uploadedVideoCount,
-            turnMediaCount,
-            isNsfw,
-            audioAttachments,
-            codexSubscriptionAllowed,
-            origin: req.nextUrl.origin,
-          },
-        },
+        metadata: runMetadata,
       });
       if (runInsertError) throw new Error(`Failed to create inline durable Agent Run: ${runInsertError.message}`);
       endRunCreate({ runId: runId || null });
@@ -255,12 +286,15 @@ export async function POST(req: NextRequest) {
           try {
             const runnerRuntime = await durableRunnerPromise;
             if (!runnerRuntime) throw new Error('Durable runner is unavailable');
+            const timelineVersion = await timelineVersionPromise;
             const result = await runnerRuntime.runAgentExecutionAttempt(runId, {
               admin: supabase,
               workerId: `inline-${crypto.randomUUID()}`,
               origin: req.nextUrl.origin,
               controller,
               encoder,
+              timelineVersion,
+              preloadedRun: inlineRunPreload || undefined,
               requestOverrides: {
                 image: typeof image === 'string' ? image : undefined,
                 snapshotImages: Array.isArray(snapshotImages) ? snapshotImages : undefined,
