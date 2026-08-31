@@ -120,7 +120,7 @@ const zhHant = {
   'changelog.close': '關閉更新',
   'changelog.wan30.title': 'Wan 3.0 標準版與 Pro',
   'changelog.wan30.item1': 'Wan 3.0 已透過 MuleRouter 接入，可產生 2–30 秒原生音訊影片：標準版最高 1080p，Pro 超解析度版最高支援 4K。',
-  'changelog.wan30.item2': 'Agent 會把成人內容影片需求交給 Wan 3.0，支援圖片、影片與音訊混合參考，並在送出前檢查「參考影片時長 + 輸出時長」限制。',
+  'changelog.wan30.item2': '支援圖片、影片與音訊混合參考。',
   'changelog.videoTranslation.title': '影片翻譯',
   'changelog.videoTranslation.item1': '非口播影片和畫外音現在可以用 Seed Audio 翻譯成英文、日文等語言，同時盡量保留原說話人的聲紋、語氣和節奏。',
   'changelog.videoTranslation.item2': '可見人物口播會先剪順，再用 Seedance 2.0 Fast 翻譯並匹配口型；長影片可自動分段，並繼續完成譯後字幕、B-roll 和 TikTok 成片。',

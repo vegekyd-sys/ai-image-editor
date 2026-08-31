@@ -79,7 +79,7 @@ const en = {
   'changelog.close': 'Close updates',
   'changelog.wan30.title': 'Wan 3.0 Standard & Pro',
   'changelog.wan30.item1': 'Create 2–30 second native-audio videos with Wan 3.0 through MuleRouter: Standard supports up to 1080p, while Pro supports super-resolution output up to 4K.',
-  'changelog.wan30.item2': 'Agent routes adult-content video requests to Wan 3.0, supports mixed image, video, and audio references, and checks the reference-plus-output duration before submission.',
+  'changelog.wan30.item2': 'Supports mixed image, video, and audio references.',
   'changelog.videoTranslation.title': 'Video Translation',
   'changelog.videoTranslation.item1': 'Translate off-screen narration and non-talking-head videos into English, Japanese, and more with Seed Audio while preserving the original speaker’s voice, tone, and cadence.',
   'changelog.videoTranslation.item2': 'Visible talking heads are cleaned up first, then translated with Seedance 2.0 Fast and matching mouth movement; long videos can split automatically before translated captions, B-roll, and TikTok delivery.',
