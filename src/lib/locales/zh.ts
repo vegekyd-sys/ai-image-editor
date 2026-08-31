@@ -683,6 +683,32 @@ const zh = {
   'model.codexSubscription.remaining': (percent: string) => `周额度剩余 ${percent}%`,
   'model.codexSubscription.resetsAt': (time: string) => `${time} 重置`,
   'model.codexSubscription.usageUnavailable': '套餐可用，额度暂时无法读取',
+
+  // Makaron Kids
+  'kids.meta.title': 'Makaron Kids',
+  'kids.meta.description': '为孩子设计的语音优先图片伙伴。',
+  'kids.picture': '十二的魔法画面',
+  'kids.selectedPicture': '十二选择的图片',
+  'kids.samplePicture': '月亮花园里的蜡笔火箭',
+  'kids.choosePicture': '选择一张图片',
+  'kids.startTalking': '开始和小巫师说话',
+  'kids.stopTalking': '停止语音对话',
+  'kids.phase.idle': '轻触麦克风开始说话',
+  'kids.phase.connecting': '小巫师正在过来',
+  'kids.phase.listening': '小巫师正在听',
+  'kids.phase.speaking': '小巫师正在说话',
+  'kids.phase.error': '语音暂时没有连上',
+  'kids.parent.hold': '按住打开家长设置',
+  'kids.parent.title': '十二版 · 家长设置',
+  'kids.parent.subtitle': '实时语音、隐私与下一阶段接力状态',
+  'kids.parent.close': '关闭家长设置',
+  'kids.parent.connection': '实时连接',
+  'kids.parent.voice': '小巫师的声音',
+  'kids.parent.lastHeard': '最近听到',
+  'kids.parent.lastReply': '最近回复',
+  'kids.parent.empty': '还没有内容',
+  'kids.parent.error': '连接错误',
+  'kids.parent.operator': '首版为 Gemini Live 接线员；Makaron Operator 图片工具接力尚未接入。',
 } as const;
 
 export type TranslationKey = keyof typeof zh;

@@ -681,6 +681,32 @@ const ja = {
   'model.codexSubscription.remaining': (percent: string) => `週間枠 残り ${percent}%`,
   'model.codexSubscription.resetsAt': (time: string) => `${time} リセット`,
   'model.codexSubscription.usageUnavailable': 'プランは利用可能ですが、使用量を取得できません',
+
+  // Makaron Kids
+  'kids.meta.title': 'Makaron Kids',
+  'kids.meta.description': '子どものための音声中心の絵のパートナー。',
+  'kids.picture': '十二のまほうの絵',
+  'kids.selectedPicture': '十二が選んだ絵',
+  'kids.samplePicture': '月の庭のクレヨンロケット',
+  'kids.choosePicture': '絵を選ぶ',
+  'kids.startTalking': '小さな魔法使いと話す',
+  'kids.stopTalking': '音声の会話を止める',
+  'kids.phase.idle': 'マイクをタップして話す',
+  'kids.phase.connecting': '小さな魔法使いが来ています',
+  'kids.phase.listening': '小さな魔法使いが聞いています',
+  'kids.phase.speaking': '小さな魔法使いが話しています',
+  'kids.phase.error': '音声に接続できませんでした',
+  'kids.parent.hold': '長押しして保護者設定を開く',
+  'kids.parent.title': '十二版 · 保護者設定',
+  'kids.parent.subtitle': 'リアルタイム音声、プライバシー、次段階への引き継ぎ',
+  'kids.parent.close': '保護者設定を閉じる',
+  'kids.parent.connection': 'リアルタイム接続',
+  'kids.parent.voice': '小さな魔法使いの声',
+  'kids.parent.lastHeard': '最近聞いた内容',
+  'kids.parent.lastReply': '最近の返事',
+  'kids.parent.empty': 'まだありません',
+  'kids.parent.error': '接続エラー',
+  'kids.parent.operator': '初版は Gemini Live の受付役です。Makaron Operator の画像ツール連携は次の段階です。',
 } satisfies TranslationDictionary;
 
 export default ja;

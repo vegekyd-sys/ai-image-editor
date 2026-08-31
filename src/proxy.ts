@@ -102,6 +102,7 @@ export async function proxy(request: NextRequest) {
     pathname === '/home' ||
     pathname.startsWith('/home/') ||
     pathname === '/makaron' ||
+    pathname === '/kids' ||
     pathname === '/agent' ||
     pathname === '/privacy' ||
     pathname === '/support' ||

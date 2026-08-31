@@ -683,6 +683,32 @@ const en = {
   'model.codexSubscription.remaining': (percent: string) => `${percent}% weekly allowance remaining`,
   'model.codexSubscription.resetsAt': (time: string) => `Resets ${time}`,
   'model.codexSubscription.usageUnavailable': 'Plan available; usage is temporarily unavailable',
+
+  // Makaron Kids
+  'kids.meta.title': 'Makaron Kids',
+  'kids.meta.description': 'A voice-first picture companion for kids.',
+  'kids.picture': "Shier's magic picture",
+  'kids.selectedPicture': 'Picture selected by Shier',
+  'kids.samplePicture': 'A crayon rocket in a moon garden',
+  'kids.choosePicture': 'Choose a picture',
+  'kids.startTalking': 'Talk with Pixel Wizard',
+  'kids.stopTalking': 'Stop the voice conversation',
+  'kids.phase.idle': 'Tap the microphone to talk',
+  'kids.phase.connecting': 'Pixel Wizard is on the way',
+  'kids.phase.listening': 'Pixel Wizard is listening',
+  'kids.phase.speaking': 'Pixel Wizard is speaking',
+  'kids.phase.error': 'Voice could not connect',
+  'kids.parent.hold': 'Hold to open parent settings',
+  'kids.parent.title': 'Shier edition · Parent settings',
+  'kids.parent.subtitle': 'Live voice, privacy, and operator handoff status',
+  'kids.parent.close': 'Close parent settings',
+  'kids.parent.connection': 'Live connection',
+  'kids.parent.voice': "Pixel Wizard's voice",
+  'kids.parent.lastHeard': 'Last heard',
+  'kids.parent.lastReply': 'Last reply',
+  'kids.parent.empty': 'Nothing yet',
+  'kids.parent.error': 'Connection error',
+  'kids.parent.operator': 'Version one uses Gemini Live as the receptionist. Makaron Operator image-tool handoff is not connected yet.',
 } as const;
 
 export default en;
