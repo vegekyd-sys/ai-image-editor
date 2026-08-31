@@ -554,7 +554,10 @@ export async function runAgentExecutionAttempt(
     turnMediaCount: request.turnMediaCount,
     audioAttachments: request.audioAttachments,
     currentRunId: runId,
-    executionRunId: runId,
+    // Attempt 1 already has the original objective in userMessage. Keep the
+    // verbose durable snapshot out of that model request; recovered attempts
+    // receive the full typed continuation context.
+    executionRunId: continuation ? runId : undefined,
     contextPolicy: getAgentContextPolicy(resolvedModel.id),
     agentModelId: resolvedModel.id,
     agentModelProvider: resolvedModel.provider,

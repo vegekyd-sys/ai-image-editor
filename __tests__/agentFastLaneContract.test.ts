@@ -28,6 +28,7 @@ describe('interactive Agent fast lane', () => {
     expect(projectsPage).toContain('durable: true');
     expect(cron).toContain('lease_expires_at.lte');
     expect(cron).toContain('runAgentExecutionAttempt(runId');
+    expect(route).toContain("mode: 'inline-first-attempt'");
   });
 
   it('keeps reconnect logging out of the pre-model critical path', () => {

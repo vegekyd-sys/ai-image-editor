@@ -43,7 +43,8 @@ describe('agent terminal contract wiring', () => {
     expect(agentSource).not.toContain('shouldCompleteDurableStudioRun');
     expect(agentSource).not.toContain('shouldHandoffToStudioComposition');
     expect(agentSource).not.toContain("code: 'studio_stage_handoff'");
-    expect(agentSource).toContain('&& !options?.execution');
+    expect(agentSource).toContain('const durableContinuation = Boolean(options?.execution && options.execution.attemptNo > 1)');
+    expect(agentSource).toContain('if (!durableContinuation) delete (allTools as Record<string, unknown>).execution_checkpoint');
     expect(agentSource).not.toContain("code: 'studio_run_incomplete'");
     expect(agentSource).not.toContain("code: 'skill_video_submission_pending'");
     expect(agentSource).toContain("run.status !== 'running'");
