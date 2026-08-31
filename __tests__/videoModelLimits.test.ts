@@ -31,6 +31,8 @@ describe('video model reference limits', () => {
     expect(resolveVideoProviderModel({ model: 'seedance-mini', imageReferenceCount: 0 })).toBe('seedance-2.0-mini-text-to-video')
     expect(resolveVideoProviderModel({ model: 'seedance', imageReferenceCount: 0 })).toBe('seedance-2.0-text-to-video')
     expect(resolveVideoProviderModel({ model: 'seedance-fast', imageReferenceCount: 1 })).toBe('seedance-2.0-fast-reference-to-video')
+    expect(resolveVideoProviderModel({ model: 'seedance-mini', imageReferenceCount: 1 })).toBe('seedance-2.0-mini-reference-to-video')
+    expect(resolveVideoProviderModel({ model: 'seedance', imageReferenceCount: 1 })).toBe('seedance-2.0-reference-to-video')
   })
 
   it('registers MiniMax H3 with public 768p and 2K production routes', () => {
@@ -189,8 +191,8 @@ describe('video model reference limits', () => {
 
   it('selects the right Seedance 2.5 provider mode from typed operation and references', () => {
     expect(resolveVideoProviderModel({ model: 'seedance-2.5', imageReferenceCount: 0 })).toBe('seedance-2.5-text-to-video')
-    expect(resolveVideoProviderModel({ model: 'seedance-2.5', imageReferenceCount: 1 })).toBe('seedance-2.5-image-to-video')
-    expect(resolveVideoProviderModel({ model: 'seedance-2.5', imageReferenceCount: 2 })).toBe('seedance-2.5-image-to-video')
+    expect(resolveVideoProviderModel({ model: 'seedance-2.5', imageReferenceCount: 1 })).toBe('seedance-2.5-reference-to-video')
+    expect(resolveVideoProviderModel({ model: 'seedance-2.5', imageReferenceCount: 2 })).toBe('seedance-2.5-reference-to-video')
     expect(resolveVideoProviderModel({ model: 'seedance-2.5', imageReferenceCount: 1, aspectRatio: '9:16' })).toBe('seedance-2.5-reference-to-video')
     expect(resolveVideoProviderModel({ model: 'seedance-2.5', imageReferenceCount: 2, aspectRatio: '16:9' })).toBe('seedance-2.5-reference-to-video')
     expect(resolveVideoProviderModel({ model: 'seedance-2.5', imageReferenceCount: 3 })).toBe('seedance-2.5-reference-to-video')
@@ -652,7 +654,13 @@ describe('video model reference limits', () => {
     expect(validateVideoModelRequest({
       model: 'grok',
       operation: 'generate',
-      imageReferenceCount: 2,
+      imageReferenceCount: 1,
+      resolution: '1080p',
+    })).toContain('reference-to-video is capped at 720p')
+    expect(validateVideoModelRequest({
+      model: 'grok',
+      operation: 'generate',
+      voiceReferenceCount: 1,
       resolution: '1080p',
     })).toContain('reference-to-video is capped at 720p')
   })
@@ -851,7 +859,7 @@ describe('video model reference limits', () => {
     expect(resolveVideoProviderAspectRatio('seedance', 'auto')).toBe('adaptive')
     expect(resolveVideoProviderAspectRatio('seedance', '21:9')).toBe('21:9')
     expect(resolveVideoProviderAspectRatio('grok', 'auto')).toBeUndefined()
-    expect(resolveVideoProviderAspectRatio('grok', '3:2')).toBeUndefined()
+    expect(resolveVideoProviderAspectRatio('grok', '3:2')).toBe('3:2')
     expect(resolveVideoProviderAspectRatio('kling', 'auto')).toBeUndefined()
     expect(resolveVideoProviderAspectRatio('google-omni', '9:16')).toBe('9:16')
     expect(resolveVideoProviderAspectRatio('google-omni', '1:1')).toBe('1:1')

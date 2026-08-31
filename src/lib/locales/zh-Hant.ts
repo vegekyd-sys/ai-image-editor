@@ -617,7 +617,7 @@ const zhHant = {
   'model.wan30Pro.name': 'Wan 3.0 Pro',
   'model.wan30Pro.desc': 'MuleRouter 超分版，支援 2–30 秒、1080p / 2K / 4K，以及圖片、影片或音訊參考。',
   'model.wan30Pro.badge': '4K · 超分',
-  'model.grok.desc': '快速原生音訊生成，最高 1080p、7 張參考圖，並支援影片編輯與續寫。最新 6 秒實測 15–34 秒。',
+  'model.grok.desc': '快速原生音訊生成：純文字最高 1080p，1–7 張特徵參考圖最高 720p，並支援影片編輯與續寫。最新 6 秒實測 15–34 秒。',
   'model.googleOmni.desc': '快速影片生成與編輯，支援 360p 草稿、預設 720p、4K 放大與原生音訊。',
   'model.minimaxH3.desc': '開放多模態影片模型，支援 15 秒、768P 或 2K 直出與多參考素材。',
   'model.gpt56Terra.desc': '建議預設，兼顧智能、速度與成本。',

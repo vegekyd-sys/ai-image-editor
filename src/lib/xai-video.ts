@@ -21,7 +21,7 @@ export interface XaiVideoTaskInput {
 export interface XaiVideoSubmission {
   taskId: string
   providerModel: typeof XAI_VIDEO_GENERATION_MODEL | typeof XAI_VIDEO_EDIT_MODEL
-  mode: 'text-to-video' | 'image-to-video' | 'reference-to-video' | 'edit-video' | 'extend-video'
+  mode: 'text-to-video' | 'reference-to-video' | 'edit-video' | 'extend-video'
 }
 
 export interface XaiVideoTaskResult {
@@ -45,12 +45,6 @@ function headers() {
     Authorization: `Bearer ${getApiKey()}`,
     'Content-Type': 'application/json',
   }
-}
-
-function toImageToVideoPrompt(prompt: string): string {
-  return prompt.replace(/<<<(?:image|media)_(\d+)>>>/g, (_, n: string) => {
-    return n === '1' ? 'the source image' : `reference ${n}`
-  })
 }
 
 function toReferencePrompt(prompt: string): string {
@@ -143,16 +137,10 @@ export async function createXaiVideoTask(input: XaiVideoTaskInput): Promise<XaiV
     if (images.length === 0 && referenceVoiceIds.length === 0) {
       mode = 'text-to-video'
       if (input.aspectRatio) body.aspect_ratio = input.aspectRatio
-    } else if (images.length === 1 && referenceVoiceIds.length === 0) {
-      mode = 'image-to-video'
-      body.prompt = toImageToVideoPrompt(input.prompt)
-      body.image = { url: images[0] }
-      // xAI stretches image-to-video input when aspect_ratio overrides the
-      // source. Keep the source framing by intentionally omitting it here.
     } else {
       mode = 'reference-to-video'
       if (resolution === '1080p') {
-        throw new Error('Grok reference-to-video is capped at 720p. Use 480p or 720p, or use one image for native 1080p image-to-video.')
+        throw new Error('Grok reference-to-video is capped at 720p. Use 480p or 720p, or remove all image and voice references for native 1080p text-to-video.')
       }
       body.prompt = toReferencePrompt(input.prompt)
       if (images.length > 0) body.reference_images = images.map(url => ({ url }))

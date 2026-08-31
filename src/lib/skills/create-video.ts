@@ -392,6 +392,7 @@ export async function createVideo(input: CreateVideoInput): Promise<CreateVideoR
       imageReferenceCount: filteredImages.length,
       videoReferenceCount: providerVideoUrls.length,
       audioReferenceCount: audioUrls?.length || 0,
+      voiceReferenceCount: referenceVoiceIds?.length || 0,
       operation: videoOperation,
     });
     if (filteredModelError) return { success: false, message: filteredModelError };
@@ -452,9 +453,6 @@ export async function createVideo(input: CreateVideoInput): Promise<CreateVideoR
         hasAudioReference,
         operation: videoOperation,
       });
-      if (provider === 'seedance-2.5' && providerModel === 'seedance-2.5-image-to-video') {
-        providerAspectRatio = 'adaptive';
-      }
       const providerDuration = provider === 'seedance-2.5' && videoOperation === 'edit'
         ? -1
         : resolvedDuration != null ? resolvedDuration : undefined;
@@ -531,9 +529,7 @@ export async function createVideo(input: CreateVideoInput): Promise<CreateVideoR
         videoUrl: providerVideoUrls[0],
         operation: videoOperation,
         duration: resolvedDuration != null ? resolvedDuration : undefined,
-        // Single-image generation deliberately ignores this in the adapter to
-        // preserve source framing. Text and multi-reference generation may use it.
-        aspectRatio: aspectRatio && aspectRatio !== 'auto' ? aspectRatio : undefined,
+        aspectRatio: providerAspectRatio,
         resolution: route.resolution as '480p' | '720p' | '1080p',
         generateAudio,
         referenceVoiceIds,

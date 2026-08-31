@@ -88,7 +88,7 @@ Direct-submit exception: if the current request says "直接提交渲染", "不�
 
 When editing existing video snapshots within the selected model's limit, keep the output duration aligned with the combined source duration shown in Media Index unless the user asks to shorten it. Clamp to the selected SeeDance range: 4-15s for 2.0, 4-30s for 2.5. Dedicated SeeDance 2.5 video edit may use adaptive duration (`-1`).
 
-Model selection happens after workflow routing; a model name alone does not override workflow. Default video model follows the app selection, usually SeeDance 2.0 Fast (`seedance-fast`) 720p. A non-NSFW direct 16-30 second request defaults to `seedance-2.5`; any NSFW/adult-explicit video request uses `wan-3.0` instead, even at 16-30 seconds, just as NSFW image requests use Qwen. MiniMax/H3 -> `minimax-h3` 768p. HD -> fast 720p; 1080p -> standard; draft -> 480p. Grok -> `grok`; omit one-image `aspect_ratio`. Use `google-omni` only when requested; no `audio_refs`.
+Model selection happens after workflow routing; a model name alone does not override workflow. Default video model follows the app selection, usually SeeDance 2.0 Fast (`seedance-fast`) 720p. A non-NSFW direct 16-30 second request defaults to `seedance-2.5`; any NSFW/adult-explicit video request uses `wan-3.0` instead, even at 16-30 seconds, just as NSFW image requests use Qwen. MiniMax/H3 -> `minimax-h3` 768p. HD -> fast 720p; 1080p -> standard; draft -> 480p. Grok -> `grok`; any image input is a feature reference and limits output to 720p. Use `google-omni` only when requested; no `audio_refs`.
 
 ### Real MP4 Editing and Long Video Preparation
 

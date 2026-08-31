@@ -622,15 +622,6 @@ export function resolveVideoProviderModel(options: {
     if (options.operation === 'edit') return 'seedance-2.5-video-edit'
     if (options.operation === 'extend') return 'seedance-2.5-video-extend'
     if (!hasReferenceMedia) return 'seedance-2.5-text-to-video'
-    if (
-      (options.imageReferenceCount ?? 0) >= 1 &&
-      (options.imageReferenceCount ?? 0) <= 2 &&
-      !options.hasVideoReference &&
-      !options.hasAudioReference &&
-      (!options.aspectRatio || options.aspectRatio === 'auto')
-    ) {
-      return 'seedance-2.5-image-to-video'
-    }
     return 'seedance-2.5-reference-to-video'
   }
 
@@ -674,10 +665,7 @@ export function resolveVideoProviderAspectRatio(
   aspectRatio?: VideoAspectRatioInput,
 ): string | undefined {
   const route = resolveVideoGenerationRoute({ model })
-  // xAI stretches the source image when image-to-video receives a forced
-  // aspect_ratio. For Grok single-image-to-video, keep the source AR; text and
-  // multi-reference generation may still use the requested supported ratio.
-  if (route.provider === 'grok' || route.provider === 'fal-sync') return undefined
+  if (route.provider === 'fal-sync') return undefined
   if (!aspectRatio || aspectRatio === 'auto') {
     return route.provider === 'seedance' || route.provider === 'mulerouter' ? 'adaptive' : undefined
   }
@@ -854,6 +842,7 @@ export function validateVideoModelRequest(options: {
   imageReferenceCount?: number
   videoReferenceCount?: number
   audioReferenceCount?: number
+  voiceReferenceCount?: number
   operation?: VideoGenerationOperation
 }): string | null {
   const capability = getVideoModelCapability(options.model)
@@ -878,7 +867,7 @@ export function validateVideoModelRequest(options: {
       if (options.referenceVideoDuration != null && options.referenceVideoDuration > 8.7) {
         return 'Grok video editing accepts one source MP4 up to 8.7 seconds. Split the source first, edit each segment, then reassemble it.'
       }
-      if ((options.imageReferenceCount ?? 0) > 0 || (options.audioReferenceCount ?? 0) > 0) {
+      if ((options.imageReferenceCount ?? 0) > 0 || (options.audioReferenceCount ?? 0) > 0 || (options.voiceReferenceCount ?? 0) > 0) {
         return 'Grok video editing cannot be combined with image or audio references in the same request.'
       }
     }
@@ -889,16 +878,16 @@ export function validateVideoModelRequest(options: {
       if (options.referenceVideoDuration != null && (options.referenceVideoDuration < 2 || options.referenceVideoDuration > 15)) {
         return 'Grok video extension accepts one source MP4 between 2 and 15 seconds.'
       }
-      if ((options.imageReferenceCount ?? 0) > 0 || (options.audioReferenceCount ?? 0) > 0) {
+      if ((options.imageReferenceCount ?? 0) > 0 || (options.audioReferenceCount ?? 0) > 0 || (options.voiceReferenceCount ?? 0) > 0) {
         return 'Grok video extension cannot be combined with image or audio references in the same request.'
       }
     }
     if (
       operation === 'generate'
-      && (options.imageReferenceCount ?? 0) > 1
+      && ((options.imageReferenceCount ?? 0) > 0 || (options.voiceReferenceCount ?? 0) > 0)
       && normalizeVideoResolution(options.model, options.resolution) === '1080p'
     ) {
-      return 'Grok reference-to-video is capped at 720p. Native 1080p is available only for text-to-video or single-image-to-video.'
+      return 'Grok reference-to-video is capped at 720p. Native 1080p is available only for text-to-video without image or voice references.'
     }
   }
 

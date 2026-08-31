@@ -412,7 +412,7 @@ const en = {
   'model.wan30Pro.desc': 'MuleRouter super-resolution generation for 2–30 second videos at 1080p, 2K, or 4K with multimodal references.',
   'model.wan30Pro.badge': '4K · PRO',
   'model.grok.name': 'Grok Imagine Video',
-  'model.grok.desc': 'Fast native-audio generation up to 1080p, 7 image references, plus video edit and extend. Latest 6s test: 15–34s.',
+  'model.grok.desc': 'Fast native-audio generation: text-only up to 1080p, 1–7 feature references up to 720p, plus video edit and extend. Latest 6s test: 15–34s.',
   'model.googleOmni.name': 'Gemini Omni 1.1',
   'model.googleOmni.desc': 'Fast video generation and editing with 360p drafts, 720p default, 4K upscaling, and native audio.',
   'model.minimaxH3.name': 'MiniMax H3',

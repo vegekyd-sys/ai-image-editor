@@ -46,6 +46,43 @@ describe('google omni video provider', () => {
     expect(fetchMock).toHaveBeenCalledTimes(1)
   })
 
+  it('submits a single image as reference-to-video rather than image-to-video', async () => {
+    vi.stubEnv('GOOGLE_API_KEY', 'test-key')
+    let providerBody: Record<string, any> | undefined
+    const fetchMock = vi.fn(async (url: string | URL | Request, init?: RequestInit) => {
+      if (String(url) === 'https://example.com/subject.png') {
+        return new Response(Uint8Array.from([1, 2, 3]), {
+          status: 200,
+          headers: { 'content-type': 'image/png', 'content-length': '3' },
+        })
+      }
+      providerBody = JSON.parse(String(init?.body))
+      return new Response(JSON.stringify({
+        id: 'v1_reference',
+        status: 'completed',
+        output_video: {
+          type: 'video',
+          mime_type: 'video/mp4',
+          uri: 'https://generativelanguage.googleapis.com/v1beta/files/reference:download',
+        },
+      }), { status: 200, headers: { 'content-type': 'application/json' } })
+    })
+    vi.stubGlobal('fetch', fetchMock)
+
+    await createGoogleOmniVideoTask({
+      prompt: 'Keep <<<media_1>>> as the character identity in a new city scene.',
+      images: ['https://example.com/subject.png'],
+      aspectRatio: '9:16',
+      resolution: '720p',
+    })
+
+    expect(providerBody?.generation_config).toEqual({ video_config: { task: 'reference_to_video' } })
+    expect(providerBody?.input?.[0]).toMatchObject({ type: 'image', mime_type: 'image/png' })
+    expect(providerBody?.input?.at(-1)?.text).toContain('<IMAGE_REF_0>')
+    expect(providerBody?.input?.at(-1)?.text).toContain('not as literal initial frames')
+    expect(providerBody?.input?.at(-1)?.text).not.toContain('starting frame')
+  })
+
   it('extends one referenced video through the same reference-media input flow', async () => {
     vi.stubEnv('GOOGLE_API_KEY', 'test-key')
     let providerBody: Record<string, any> | undefined

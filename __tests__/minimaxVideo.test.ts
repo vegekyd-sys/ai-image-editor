@@ -68,6 +68,27 @@ describe('MiniMax H3 video adapter', () => {
     })).resolves.toBe('minimax-h3-768-task')
   })
 
+  it('keeps a single image in the reference_image role with no first-frame field', async () => {
+    const fetchMock = vi.fn(async (_url: string | URL | Request, init?: RequestInit) => {
+      const body = JSON.parse(String(init?.body))
+      expect(body.content).toEqual([
+        { type: 'text', text: 'Use reference image 1 as character identity in a new scene.' },
+        { type: 'image_url', image_url: { url: 'https://example.com/character.png' }, role: 'reference_image' },
+      ])
+      expect(body).not.toHaveProperty('first_frame_image')
+      expect(body).not.toHaveProperty('image')
+      return new Response(JSON.stringify({ task_id: 'single-reference-task' }), { status: 200 })
+    })
+    vi.stubGlobal('fetch', fetchMock)
+
+    const { createMinimaxVideoTask } = await import('@/lib/minimax-video')
+    await expect(createMinimaxVideoTask({
+      prompt: 'Use <<<media_1>>> as character identity in a new scene.',
+      images: ['https://example.com/character.png'],
+      duration: 5,
+    })).resolves.toBe('minimax-h3-single-reference-task')
+  })
+
   it('defaults the provider request to 768P when resolution is omitted', async () => {
     vi.stubGlobal('fetch', vi.fn(async (_url: string | URL | Request, init?: RequestInit) => {
       const body = JSON.parse(String(init?.body))
