@@ -159,7 +159,7 @@ describe('Wan 3.0 MuleRouter integration', () => {
     expect(fetchMock).not.toHaveBeenCalled()
   })
 
-  it('uses first-frame mode for one image and reference mode for mixed media', async () => {
+  it('uses reference mode for one image and mixed media on Standard and Pro', async () => {
     const bodies: Record<string, unknown>[] = []
     vi.stubGlobal('fetch', vi.fn(async (_url: string | URL | Request, init?: RequestInit) => {
       if (init?.method !== 'POST') return new Response(new Uint8Array(), { status: 200 })
@@ -176,11 +176,11 @@ describe('Wan 3.0 MuleRouter integration', () => {
     })
     expect(imageResult.success).toBe(true)
     expect(bodies[0]).toMatchObject({
-      first_frame: 'https://example.com/portrait.jpg',
+      reference_images: ['https://example.com/portrait.jpg'],
       resolution: '1080p',
     })
-    expect(bodies[0]).not.toHaveProperty('reference_images')
-    expect(String(bodies[0].prompt)).toContain('the first frame slowly comes alive')
+    expect(bodies[0]).not.toHaveProperty('first_frame')
+    expect(String(bodies[0].prompt)).toContain('Image 1 slowly comes alive')
 
     const mixedResult = await createVideo({
       script: 'Mixed Motion\nUse <<<media_1>>> as the subject, <<<media_2>>> for motion, and <<<audio_1>>> for pacing.',
@@ -202,6 +202,20 @@ describe('Wan 3.0 MuleRouter integration', () => {
     expect(String(bodies[1].prompt)).toContain('Image 1 as the subject')
     expect(String(bodies[1].prompt)).toContain('Video 1 for motion')
     expect(String(bodies[1].prompt)).toContain('Audio 1 for pacing')
+
+    const proImageResult = await createVideo({
+      script: 'Pro Portrait\nShot 1 (4s): <<<media_1>>> turns toward the light.',
+      images: ['https://example.com/pro-portrait.jpg'],
+      duration: 4,
+      videoModel: 'wan-3.0-pro',
+      videoResolution: '4k',
+    })
+    expect(proImageResult.success).toBe(true)
+    expect(bodies[2]).toMatchObject({
+      reference_images: ['https://example.com/pro-portrait.jpg'],
+      resolution: '4k',
+    })
+    expect(bodies[2]).not.toHaveProperty('first_frame')
   })
 
   it('polls Standard and Pro task ids against their matching endpoint', async () => {

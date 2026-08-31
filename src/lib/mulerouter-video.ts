@@ -88,9 +88,8 @@ export async function createMuleRouterVideoTask(input: MuleRouterVideoTaskInput)
     throw new Error('Wan 3.0 supports at most 20 total reference assets per request.')
   }
 
-  const isSingleImageKeyframe = images.length === 1 && videoUrls.length === 0 && audioUrls.length === 0
   const payload: Record<string, unknown> = {
-    prompt: isSingleImageKeyframe ? prompt.replace(/\bImage 1\b/gi, 'the first frame') : prompt,
+    prompt,
     resolution: input.resolution,
     ratio: input.aspectRatio || 'adaptive',
     audio: input.generateAudio ?? true,
@@ -99,15 +98,12 @@ export async function createMuleRouterVideoTask(input: MuleRouterVideoTaskInput)
   if (input.duration != null) payload.duration = input.duration
   if (input.seed != null) payload.seed = input.seed
 
-  // A single image is an opening keyframe. Mixed or multi-reference requests
-  // use reference mode; MuleRouter explicitly forbids mixing these two modes.
-  if (isSingleImageKeyframe) {
-    payload.first_frame = images[0]
-  } else {
-    if (images.length) payload.reference_images = images
-    if (videoUrls.length) payload.reference_videos = videoUrls
-    if (audioUrls.length) payload.reference_audios = audioUrls
-  }
+  // Makaron intentionally uses Wan's feature-reference path for every media
+  // input, including a single image. Do not silently reinterpret one image as
+  // an opening keyframe (`first_frame`).
+  if (images.length) payload.reference_images = images
+  if (videoUrls.length) payload.reference_videos = videoUrls
+  if (audioUrls.length) payload.reference_audios = audioUrls
 
   console.log(`[mulerouter] Creating ${model} Wan task: ${images.length} images, ${videoUrls.length} videos, ${audioUrls.length} audios, duration=${input.duration ?? 'smart'}, resolution=${input.resolution}`)
   const response = await fetch(`${BASE_URL}${getPath(model)}`, {

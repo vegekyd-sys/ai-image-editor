@@ -20,14 +20,16 @@ Official contracts:
 - Ratios: `16:9`, `4:3`, `1:1`, `3:4`, `9:16`, or `adaptive`.
 - Standard resolutions: 480p, 720p, 1080p (default 1080p).
 - Pro resolutions: 1080p, 2K, 4K (default 1080p).
-- One image uses keyframe mode (`first_frame`). Mixed/multiple inputs use
-  reference mode (`reference_images`, `reference_videos`, `reference_audios`).
+- All media inputs use reference mode (`reference_images`, `reference_videos`,
+  `reference_audios`), including a single image. Makaron does not send Wan
+  images as `first_frame`.
 - Reference limits: 10 images, 5 videos, 5 audios, 20 total.
 - Reference videos: URL-only MP4/MOV, each 1-15 seconds and <=100MB, <=15
   seconds total, side 240-4096px, ratio <=8:1.
 - Reference audios: URL-only WAV/MP3, each 1-15 seconds and <=15MB, <=15
   seconds total.
-- Keyframe and reference modes are mutually exclusive.
+- Keyframe and reference modes are mutually exclusive; Makaron intentionally
+  exposes only the reference path for Wan media inputs.
 
 ## Makaron routing
 
