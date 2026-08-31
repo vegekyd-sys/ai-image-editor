@@ -1,4 +1,5 @@
 import type { LiveServerMessage, Session } from '@google/genai'
+import { selectKidsRecorderMimeType } from './kids-turn-audio'
 
 const INPUT_SAMPLE_RATE = 16_000
 const OUTPUT_SAMPLE_RATE = 24_000
@@ -9,7 +10,7 @@ interface AudioCallbacks {
   onLevel: (level: number) => void
   onMessage: (message: LiveServerMessage) => void
   onPhase: (phase: KidsLivePhase) => void
-  onTurnComplete?: () => void
+  onTurnComplete?: (result: { hadOutput: boolean; recording: Promise<Blob | null> }) => void
 }
 
 export function floatToPcm16(samples: Float32Array, sourceRate: number) {
@@ -57,12 +58,18 @@ export class KidsLiveAudio {
   private playbackSources = new Set<AudioBufferSourceNode>()
   private generationComplete = false
   private inputEnded = false
+  private recorder: MediaRecorder | null = null
+  private recorderChunks: Blob[] = []
+  private recording: Promise<Blob | null> = Promise.resolve(null)
+  private resolveRecording: ((blob: Blob | null) => void) | null = null
+  private receivedOutput = false
 
   constructor(private readonly callbacks: AudioCallbacks) {}
 
   async start(session: Session) {
     this.session = session
     this.inputEnded = false
+    this.receivedOutput = false
     const AudioContextClass = window.AudioContext
     this.context = new AudioContextClass({ latencyHint: 'interactive' })
     await this.context.resume()
@@ -74,6 +81,7 @@ export class KidsLiveAudio {
         autoGainControl: true,
       },
     })
+    this.startBackupRecording(this.stream)
     this.source = this.context.createMediaStreamSource(this.stream)
     this.processor = this.context.createScriptProcessor(2048, 1, 1)
     this.sink = this.context.createGain()
@@ -99,7 +107,7 @@ export class KidsLiveAudio {
   }
 
   finishInput() {
-    if (this.inputEnded) return
+    if (this.inputEnded) return this.recording
     this.inputEnded = true
     this.processor?.disconnect()
     this.source?.disconnect()
@@ -107,11 +115,14 @@ export class KidsLiveAudio {
     this.processor = null
     this.source = null
     this.sink = null
+    if (this.recorder?.state === 'recording') this.recorder.stop()
+    else if (!this.recorder) this.resolveBackupRecording(null)
     this.stream?.getTracks().forEach((track) => track.stop())
     this.stream = null
     this.session?.sendRealtimeInput({ audioStreamEnd: true })
     this.callbacks.onLevel(0)
     this.callbacks.onPhase('thinking')
+    return this.recording
   }
 
   handleMessage(message: LiveServerMessage) {
@@ -124,6 +135,7 @@ export class KidsLiveAudio {
     const audioChunks = message.serverContent?.modelTurn?.parts
       ?.flatMap((part) => part.inlineData?.data ? [part.inlineData.data] : []) ?? []
     if (audioChunks.length === 0 && message.data) audioChunks.push(message.data)
+    if (audioChunks.length > 0 || message.serverContent?.outputTranscription?.text) this.receivedOutput = true
     if (audioChunks.length > 0) this.finishInput()
     for (const audioChunk of audioChunks) {
       this.play(audioChunk)
@@ -162,8 +174,40 @@ export class KidsLiveAudio {
 
   private finishTurn() {
     this.generationComplete = false
-    if (this.callbacks.onTurnComplete) this.callbacks.onTurnComplete()
+    if (this.callbacks.onTurnComplete) {
+      this.callbacks.onTurnComplete({ hadOutput: this.receivedOutput, recording: this.finishInput() })
+    }
     else this.callbacks.onPhase('listening')
+  }
+
+  private startBackupRecording(stream: MediaStream) {
+    this.recorderChunks = []
+    this.recording = new Promise((resolve) => { this.resolveRecording = resolve })
+    if (typeof MediaRecorder === 'undefined') {
+      this.resolveBackupRecording(null)
+      return
+    }
+    const mimeType = selectKidsRecorderMimeType()
+    const recorder = new MediaRecorder(stream, mimeType ? { mimeType } : undefined)
+    this.recorder = recorder
+    recorder.ondataavailable = (event) => {
+      if (event.data.size > 0) this.recorderChunks.push(event.data)
+    }
+    recorder.onerror = () => this.resolveBackupRecording(null)
+    recorder.onstop = () => {
+      const blob = new Blob(this.recorderChunks, {
+        type: recorder.mimeType || this.recorderChunks[0]?.type || 'audio/webm',
+      })
+      this.resolveBackupRecording(blob.size > 0 ? blob : null)
+    }
+    recorder.start(250)
+  }
+
+  private resolveBackupRecording(blob: Blob | null) {
+    this.resolveRecording?.(blob)
+    this.resolveRecording = null
+    this.recorder = null
+    this.recorderChunks = []
   }
 
   private clearPlayback() {
@@ -178,6 +222,8 @@ export class KidsLiveAudio {
   async stop() {
     if (!this.inputEnded) this.session?.sendRealtimeInput({ audioStreamEnd: true })
     this.inputEnded = true
+    if (this.recorder?.state === 'recording') this.recorder.stop()
+    else if (!this.recorder) this.resolveBackupRecording(null)
     this.session = null
     this.clearPlayback()
     this.processor?.disconnect()

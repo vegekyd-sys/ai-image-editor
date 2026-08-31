@@ -2,7 +2,10 @@ import { act, fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 
 const mocks = vi.hoisted(() => ({
-  audioCallbacks: null as null | { onPhase: (phase: string) => void; onTurnComplete?: () => void },
+  audioCallbacks: null as null | {
+    onPhase: (phase: string) => void
+    onTurnComplete?: (result: { hadOutput: boolean; recording: Promise<Blob | null> }) => void
+  },
   liveCallbacks: null as null | { onmessage: (message: unknown) => void },
   close: vi.fn(),
   sendToolResponse: vi.fn(),
@@ -10,6 +13,8 @@ const mocks = vi.hoisted(() => ({
   startRecording: vi.fn(),
   stopRecording: vi.fn(),
   finishInput: vi.fn(),
+  operatorRespond: vi.fn(async () => '小巫师收到啦'),
+  play: vi.fn(async () => undefined),
 }))
 
 vi.mock('next/image', () => ({ default: ({ alt = '', ...props }: Record<string, unknown>) => <img alt={String(alt)} {...props} /> }))
@@ -35,7 +40,14 @@ vi.mock('@/components/kids/kids-turn-audio', () => ({
     startRecording = mocks.startRecording
     stopRecording = mocks.stopRecording
     cancel() {}
-    async play() {}
+    play = mocks.play
+  },
+}))
+vi.mock('@/components/kids/kids-operator', () => ({
+  KidsOperatorHandoff: class {
+    respond = mocks.operatorRespond
+    queue() { return false }
+    resetSource() {}
   },
 }))
 vi.mock('@google/genai', () => ({
@@ -120,5 +132,30 @@ describe('Makaron Kids UI state and parent accessibility', () => {
     await waitFor(() => expect(container.querySelector('main')?.getAttribute('data-phase')).toBe('recording'))
     expect(mocks.startRecording).toHaveBeenCalledOnce()
     expect(screen.getByRole('button', { name: 'kids.finishTalking' })).not.toBeNull()
+  })
+
+  it('reuses the same recording through the compatible path when Live returns an empty turn', async () => {
+    const fetchMock = vi.fn()
+      .mockResolvedValueOnce(new Response(JSON.stringify({
+        token: 'token', model: 'gemini-3.1-flash-live-preview',
+      }), { status: 200, headers: { 'Content-Type': 'application/json' } }))
+      .mockResolvedValueOnce(new Response(JSON.stringify({ text: '画一只小猫' }), {
+        status: 200, headers: { 'Content-Type': 'application/json' },
+      }))
+      .mockResolvedValueOnce(new Response(new Blob(['voice'], { type: 'audio/mpeg' }), { status: 200 }))
+    vi.stubGlobal('fetch', fetchMock)
+    const { container } = render(<MakaronKids />)
+
+    fireEvent.click(screen.getByRole('button', { name: 'kids.startTalking' }))
+    await waitFor(() => expect(container.querySelector('main')?.getAttribute('data-phase')).toBe('listening'))
+    act(() => mocks.audioCallbacks?.onTurnComplete?.({
+      hadOutput: false,
+      recording: Promise.resolve(new Blob(['recording'], { type: 'audio/webm' })),
+    }))
+
+    await waitFor(() => expect(mocks.operatorRespond).toHaveBeenCalledWith('画一只小猫', null))
+    await waitFor(() => expect(mocks.play).toHaveBeenCalledOnce())
+    expect(fetchMock.mock.calls[1]?.[0]).toBe('/api/kids/transcribe')
+    expect(fetchMock.mock.calls[2]?.[0]).toBe('/api/kids/speak')
   })
 })

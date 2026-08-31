@@ -150,13 +150,12 @@ export default function MakaronKids() {
     setPhase('recording')
   }, [])
 
-  const finishFallbackTurn = useCallback(async () => {
-    const turnAudio = turnAudioRef.current
-    if (!turnAudio) return
+  const processRecordedTurn = useCallback(async (recording: Blob) => {
+    const turnAudio = turnAudioRef.current ?? new KidsTurnAudio()
+    turnAudioRef.current = turnAudio
     setPhase('thinking')
     setErrorMessage('')
     try {
-      const recording = await turnAudio.stopRecording()
       const form = new FormData()
       const extension = recording.type.includes('mp4') ? 'm4a' : recording.type.includes('ogg') ? 'ogg' : 'webm'
       form.append('audio', recording, `kids-turn.${extension}`)
@@ -197,6 +196,18 @@ export default function MakaronKids() {
       setPhase('error')
     }
   }, [picture, requireParent])
+
+  const finishFallbackTurn = useCallback(async () => {
+    const turnAudio = turnAudioRef.current
+    if (!turnAudio) return
+    try {
+      await processRecordedTurn(await turnAudio.stopRecording())
+    } catch (error) {
+      console.error('[MakaronKids] Could not finish fallback recording:', error)
+      setErrorMessage(error instanceof Error ? error.message : String(error))
+      setPhase('error')
+    }
+  }, [processRecordedTurn])
 
   const startLive = useCallback(async () => {
     if (phase === 'recording') {
@@ -245,13 +256,25 @@ export default function MakaronKids() {
       const audio = new KidsLiveAudio({
         onLevel: setLevel,
         onPhase: setPhase,
-        onTurnComplete: () => {
+        onTurnComplete: ({ hadOutput, recording }) => {
           if (audioRef.current !== audio) return
           audioRef.current = null
           void audio.stop()
           sessionRef.current?.close()
           sessionRef.current = null
-          setPhase('idle')
+          if (hadOutput) {
+            setPhase('idle')
+            return
+          }
+          setVoiceMode('fallback')
+          void recording.then((blob) => {
+            if (!blob) throw new Error('Live voice returned no content and the backup recording was empty')
+            return processRecordedTurn(blob)
+          }).catch((error) => {
+            console.error('[MakaronKids] Live voice fallback failed:', error)
+            setErrorMessage(error instanceof Error ? error.message : String(error))
+            setPhase('error')
+          })
         },
         onMessage: (message) => {
           const input = message.serverContent?.inputTranscription?.text
@@ -319,7 +342,7 @@ export default function MakaronKids() {
         setPhase('error')
       }
     }
-  }, [beginFallbackRecording, finishFallbackTurn, phase, picture, requireParent, stopLive, voice, voiceMode])
+  }, [beginFallbackRecording, finishFallbackTurn, phase, picture, processRecordedTurn, requireParent, stopLive, voice, voiceMode])
 
   const handlePicture = async (event: ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0]
