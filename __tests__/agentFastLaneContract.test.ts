@@ -11,14 +11,23 @@ describe('interactive Agent fast lane', () => {
   const callbacks = read('src/lib/agentCallbacks.ts');
   const projectsPage = read('src/app/projects/page.tsx');
   const projectEditor = read('src/components/ProjectEditorContainer.tsx');
+  const cron = read('src/app/api/cron/agent-executions/route.ts');
 
-  it('streams interactive turns without booting the durable worker', () => {
-    expect(editor).toContain('durable: false');
+  it('streams the first durable attempt inline without a second worker dispatch', () => {
+    expect(editor).toContain('durable: true');
     expect(editor).toContain('hasTransientPixels ? { snapshotImages: snapshotImagesForApi } : {}');
     expect(editor).not.toContain('hasAllUrls');
     expect(route).toContain("transport: 'sse'");
     expect(route).toContain("reconnect: 'event-log'");
-    expect(route).toContain('durable: false');
+    expect(route).toContain('durable: true');
+    expect(route).toContain("mode: 'inline-first-attempt'");
+    expect(route).toContain('runAgentExecutionAttempt(runId');
+    expect(route).toContain('controller,');
+    expect(route).toContain('encoder,');
+    expect(route).toContain('leaseSeconds: inlineLeaseSeconds');
+    expect(projectsPage).toContain('durable: true');
+    expect(cron).toContain('lease_expires_at.lte');
+    expect(cron).toContain('runAgentExecutionAttempt(runId');
   });
 
   it('keeps reconnect logging out of the pre-model critical path', () => {

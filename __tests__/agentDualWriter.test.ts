@@ -3,6 +3,47 @@ import { AgentDualWriter } from '../src/lib/agentDualWriter';
 import * as workspace from '../src/lib/workspace';
 
 describe('AgentDualWriter', () => {
+  it('keeps persisting events after the inline SSE client disconnects', async () => {
+    const inserted: Array<{ type: string; data: Record<string, unknown> }> = [];
+    let enqueueAttempts = 0;
+    const controller = {
+      enqueue: () => {
+        enqueueAttempts += 1;
+        throw new TypeError('ReadableStream is already closed');
+      },
+    } as unknown as ReadableStreamDefaultController;
+    const fakeSupabase = {
+      from: () => ({
+        insert: async (row: { type: string; data: Record<string, unknown> }) => {
+          inserted.push(row);
+          return { error: null };
+        },
+      }),
+    };
+    const writer = new AgentDualWriter(
+      'run-id',
+      fakeSupabase as never,
+      'user-id',
+      'project-id',
+      controller,
+      new TextEncoder(),
+    );
+
+    await writer.processAndEnqueue({ type: 'content', text: 'first token' });
+    await writer.processAndEnqueue({ type: 'status', text: 'still running' });
+    await writer.flush();
+
+    expect(enqueueAttempts).toBe(1);
+    expect(inserted).toContainEqual(expect.objectContaining({
+      type: 'content',
+      data: { text: 'first token' },
+    }));
+    expect(inserted).toContainEqual(expect.objectContaining({
+      type: 'status',
+      data: { text: 'still running' },
+    }));
+  });
+
   it('retries transient event writes with one stable id and sequence', async () => {
     const rows: Array<Record<string, unknown>> = [];
     let attempts = 0;

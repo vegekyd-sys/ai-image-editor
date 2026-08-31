@@ -59,6 +59,10 @@ interface ExecutionRequest {
   audioAttachments?: Array<{ audioUrl: string; title?: string; duration?: number; trackIndex?: number }>;
   codexSubscriptionAllowed?: boolean;
   origin?: string;
+  image?: string;
+  snapshotImages?: string[];
+  currentDesign?: Record<string, unknown>;
+  currentDesignPath?: string;
 }
 
 interface ExecutionPolicy {
@@ -298,7 +302,14 @@ async function finishAttempt(
 
 export async function runAgentExecutionAttempt(
   runId: string,
-  options: { admin?: SupabaseClient; workerId?: string; origin?: string } = {},
+  options: {
+    admin?: SupabaseClient;
+    workerId?: string;
+    origin?: string;
+    controller?: ReadableStreamDefaultController;
+    encoder?: TextEncoder;
+    requestOverrides?: Partial<ExecutionRequest>;
+  } = {},
 ): Promise<AgentAttemptResult> {
   const perf = new AgentPerf('agent-execution-attempt', { runId });
   const admin = options.admin ?? getSupabaseAdmin();
@@ -396,7 +407,10 @@ export async function runAgentExecutionAttempt(
     }
   }
 
-  const request = ((run.metadata || {}).executionRequest || {}) as ExecutionRequest;
+  const request = {
+    ...(((run.metadata || {}).executionRequest || {}) as ExecutionRequest),
+    ...(options.requestOverrides || {}),
+  } satisfies ExecutionRequest;
   // The start route resolved this authorization immediately before creating
   // the trusted run. Reuse it within the same run instead of repeating the
   // allowlist DB read milliseconds later; older/recovered rows still fail
@@ -502,8 +516,8 @@ export async function runAgentExecutionAttempt(
     admin,
     run.user_id,
     run.project_id,
-    undefined,
-    undefined,
+    options.controller,
+    options.encoder,
     continuation ? undefined : firstMessageId,
   );
   const writerReady = (async () => {
@@ -619,6 +633,24 @@ export async function runAgentExecutionAttempt(
   const timelineVersion = Number(project?.timeline_version ?? 1);
   perf.mark('model_start', { model: resolvedModel.id, provider: resolvedModel.provider });
 
+  // The inline first attempt can use in-memory media/design that has not
+  // reached Storage yet. A recovered attempt deliberately falls back to the
+  // persisted project context, which is normally available by lease expiry.
+  const attemptSnapshotImages = request.snapshotImages?.length
+    ? request.snapshotImages
+    : ctx.snapshotImages;
+  const attemptCurrentSnapshotIndex = Math.max(
+    0,
+    Math.min(
+      request.currentSnapshotIndex ?? ctx.currentSnapshotIndex,
+      Math.max(attemptSnapshotImages.length - 1, 0),
+    ),
+  );
+  const attemptImage = request.image
+    || attemptSnapshotImages[attemptCurrentSnapshotIndex]
+    || ctx.snapshotImages[ctx.currentSnapshotIndex]
+    || '';
+
   const modelAbortController = new AbortController();
   let leaseHeartbeatInFlight: Promise<void> | null = null;
   const runLeaseHeartbeat = () => {
@@ -675,7 +707,7 @@ export async function runAgentExecutionAttempt(
   try {
     for await (const event of runMakaronAgent(
       ctx.fullPrompt,
-      ctx.snapshotImages[ctx.currentSnapshotIndex] || '',
+      attemptImage,
       run.project_id,
       {
         locale: request.locale,
@@ -687,15 +719,15 @@ export async function runAgentExecutionAttempt(
         videoAuto: request.videoAuto,
         skillLaunchContext: request.skillLaunchContext,
         audioAttachments: ctx.audioAttachments,
-        snapshotImages: ctx.snapshotImages,
+        snapshotImages: attemptSnapshotImages,
         explicitMediaIndices: ctx.explicitMediaIndices,
-        currentSnapshotIndex: ctx.currentSnapshotIndex,
+        currentSnapshotIndex: attemptCurrentSnapshotIndex,
         isNsfw: request.isNsfw,
         supabase: admin,
         userId: run.user_id,
         codexSubscriptionAllowed,
-        currentDesign: ctx.currentDesign,
-        currentDesignPath: ctx.currentDesignPath,
+        currentDesign: request.currentDesign as typeof ctx.currentDesign || ctx.currentDesign,
+        currentDesignPath: request.currentDesignPath || ctx.currentDesignPath,
         history: ctx.history,
         timelineVersion,
         abortSignal: modelAbortController.signal,

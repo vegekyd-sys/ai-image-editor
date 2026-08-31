@@ -909,7 +909,7 @@ function ProjectsPageInner() {
               projectId: result.projectId,
               prompt,
               image: '',
-              durable: false,
+              durable: true,
               ...(createAgentModel !== 'auto' ? { agentModel: createAgentModel } : {}),
             }),
           })

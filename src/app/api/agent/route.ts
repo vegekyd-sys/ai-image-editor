@@ -12,7 +12,11 @@ import {
   resolveAgentModelSpecForUser,
   shouldRequireAgentCredits,
 } from '@/lib/agent-models';
-import { getAgentContextPolicy } from '@/lib/agent-execution';
+import {
+  DEFAULT_ATTEMPT_BUDGET_MS,
+  DEFAULT_ATTEMPT_MAX_STEPS,
+  getAgentContextPolicy,
+} from '@/lib/agent-execution';
 import { isDynamicCodexSubscriptionUserAllowed } from '@/lib/codex-subscription-allowlist';
 import { verifySkillLaunchContext } from '@/lib/skill-launch-context';
 import {
@@ -103,6 +107,9 @@ export async function POST(req: NextRequest) {
     // Agent tools pull in media codecs and the full tool registry. Load that
     // runtime in parallel with admission instead of blocking route startup.
     const agentRuntimePromise = import('@/lib/agent');
+    const durableRunnerPromise = isNormalMode
+      ? import('@/lib/agent-execution-runner')
+      : Promise.resolve(null);
     const writerRuntimePromise = isNormalMode
       ? import('@/lib/agentDualWriter')
       : Promise.resolve(null);
@@ -168,29 +175,62 @@ export async function POST(req: NextRequest) {
 
       runId = crypto.randomUUID();
       firstMessageId = crypto.randomUUID();
+      const inlineLeaseSeconds = Math.max(
+        60,
+        Math.min(900, Number(process.env.AGENT_INLINE_LEASE_SECONDS) || 120),
+      );
       const { error: runInsertError } = await supabase.from('agent_runs').insert({
         id: runId,
         project_id: projectId,
         user_id: userId,
         status: 'running',
         prompt: (prompt ?? '').slice(0, 500),
+        objective: prompt || 'Continue the current project conversation.',
         execution_policy: {
-          durable: false,
+          durable: true,
           transport: 'sse',
           reconnect: 'event-log',
+          mode: 'inline-first-attempt',
+          attemptBudgetMs: DEFAULT_ATTEMPT_BUDGET_MS,
+          attemptMaxSteps: DEFAULT_ATTEMPT_MAX_STEPS,
+          leaseSeconds: inlineLeaseSeconds,
+          maxAttempts: 40,
+          maxTotalInputTokens: 12_000_000,
         },
+        current_work_unit: 'agent',
+        next_attempt_at: new Date().toISOString(),
         metadata: {
           locale,
           preferredModel,
           requestedAgentModel: requestedAgentModel ?? 'auto',
           agentModel: resolvedAgentModel.id,
+          agentProvider: resolvedAgentModel.provider,
           agentProviderModel: resolvedAgentModel.providerModelId,
           isNsfw,
           analysisOnly,
           firstMessageId,
+          executionRequest: {
+            locale,
+            preferredModel,
+            requestedAgentModel: requestedAgentModel ?? 'auto',
+            videoModel,
+            videoResolution,
+            videoAuto,
+            skillLaunchContext,
+            currentSnapshotIndex,
+            hasAnnotation,
+            isDraft,
+            referenceImageCount,
+            uploadedVideoCount,
+            turnMediaCount,
+            isNsfw,
+            audioAttachments,
+            codexSubscriptionAllowed,
+            origin: req.nextUrl.origin,
+          },
         },
       });
-      if (runInsertError) throw new Error(`Failed to create fast Agent Run: ${runInsertError.message}`);
+      if (runInsertError) throw new Error(`Failed to create inline durable Agent Run: ${runInsertError.message}`);
       endRunCreate({ runId: runId || null });
     }
 
@@ -206,6 +246,46 @@ export async function POST(req: NextRequest) {
           text: translate(locale, 'agent.status.starting'),
         });
         perf.mark('first_sse_sent', { eventType: 'status' });
+
+        // Normal interactive turns are durable from creation, but attempt 1
+        // runs inside this SSE request so the browser receives model output
+        // without polling or a second worker dispatch. If this process dies,
+        // its short lease expires and the durable cron resumes the same run.
+        if (runId && isNormalMode) {
+          try {
+            const runnerRuntime = await durableRunnerPromise;
+            if (!runnerRuntime) throw new Error('Durable runner is unavailable');
+            const result = await runnerRuntime.runAgentExecutionAttempt(runId, {
+              admin: supabase,
+              workerId: `inline-${crypto.randomUUID()}`,
+              origin: req.nextUrl.origin,
+              controller,
+              encoder,
+              requestOverrides: {
+                image: typeof image === 'string' ? image : undefined,
+                snapshotImages: Array.isArray(snapshotImages) ? snapshotImages : undefined,
+                currentDesign: currentDesign && typeof currentDesign === 'object'
+                  ? currentDesign as Record<string, unknown>
+                  : undefined,
+                currentDesignPath: typeof currentDesignPath === 'string' ? currentDesignPath : undefined,
+              },
+            });
+            perf.mark('inline_durable_attempt_finished', {
+              claimed: result.claimed,
+              status: result.status || null,
+              attemptNo: result.attemptNo || null,
+            });
+          } catch (error) {
+            // Never convert a worker/process interruption into a terminal run.
+            // The due run or expired lease remains recoverable by cron.
+            console.error(`[agent] inline durable attempt interrupted for ${runId}:`, error);
+          } finally {
+            perf.mark('stream_close', { projectId, runId });
+            try { controller.close(); } catch { /* browser already disconnected */ }
+          }
+          return;
+        }
+
         const [{ runMakaronAgent }, writerRuntime] = await Promise.all([
           agentRuntimePromise,
           writerRuntimePromise,
