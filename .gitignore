@@ -93,6 +93,7 @@ marketing/meta-ads/
 !/scripts/audit-liquid-glass-perf.mjs
 !/scripts/benchmark-google-omni-1-1.mjs
 !/scripts/check-ui-i18n.mjs
+!/scripts/check-video-reference-workflow.mjs
 !/scripts/ui-i18n-baseline.json
 !/scripts/studio-run-golden.ts
 !/scripts/sticker-bridge-acceptance.ts

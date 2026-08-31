@@ -1,8 +1,60 @@
 import { describe, expect, it, vi } from 'vitest'
 import { createVideo } from '@/lib/skills/create-video'
-import { estimateVideoCredits, estimateVideoProviderCostUsd, getDefaultVideoModelId, getRequiredVideoCredits, getVideoModelCapability, listVideoModelCapabilities, normalizeVideoModelId, normalizeVideoResolution, resolveAgentVideoSelection, resolveClosestSupportedAspectRatio, resolvePersistedVideoDuration, resolveVideoGenerationRoute, resolveVideoOutputDuration, resolveVideoProviderAspectRatio, resolveVideoProviderModel, supportsNativeTextToVideo, validateVideoModelRequest, validateVideoResolutionRequest } from '@/lib/video-model-capabilities'
+import { estimateVideoCredits, estimateVideoProviderCostUsd, getDefaultVideoModelId, getRequiredVideoCredits, getVideoModelCapability, listVideoModelCapabilities, normalizeVideoModelId, normalizeVideoResolution, resolveAgentVideoSelection, resolveClosestSupportedAspectRatio, resolvePersistedVideoDuration, resolveVideoGenerationRoute, resolveVideoImageWorkflow, resolveVideoOutputDuration, resolveVideoProviderAspectRatio, resolveVideoProviderModel, supportsNativeTextToVideo, validateVideoImageWorkflowRequest, validateVideoModelRequest, validateVideoResolutionRequest } from '@/lib/video-model-capabilities'
 
 describe('video model reference limits', () => {
+  it('defaults every image-capable provider to reference-to-video', () => {
+    const imageCapableModels = listVideoModelCapabilities()
+      .filter(capability => capability.maxImageReferences !== 0)
+
+    expect(imageCapableModels.length).toBeGreaterThan(0)
+    for (const capability of imageCapableModels) {
+      expect(capability.defaultImageWorkflow, capability.id).toBe('reference-to-video')
+      expect(resolveVideoImageWorkflow({
+        model: capability.id,
+        imageReferenceCount: 1,
+      }), capability.id).toBe('reference-to-video')
+    }
+  })
+
+  it('keeps unknown future providers on reference-to-video and rejects implicit first-frame mode', () => {
+    expect(resolveVideoImageWorkflow({
+      model: 'future-video-provider',
+      imageReferenceCount: 1,
+    })).toBe('reference-to-video')
+    expect(resolveVideoImageWorkflow({
+      model: 'future-video-provider',
+      imageReferenceCount: 7,
+    })).toBe('reference-to-video')
+    expect(validateVideoImageWorkflowRequest({
+      model: 'future-video-provider',
+      imageReferenceCount: 1,
+      requestedWorkflow: 'image-to-video',
+    })).toContain('does not expose an explicit image-to-video/first-frame workflow')
+  })
+
+  it('fails closed in create_video when a caller requests undeclared first-frame mode', async () => {
+    const result = await createVideo({
+      script: 'Shot 1 (5s): <<<media_1>>> walks through a sunlit room.',
+      images: ['https://example.com/subject.jpg'],
+      duration: 5,
+      videoModel: 'wan-3.0',
+      imageWorkflow: 'image-to-video',
+    })
+
+    expect(result).toMatchObject({
+      success: false,
+      message: expect.stringContaining('does not expose an explicit image-to-video/first-frame workflow'),
+    })
+  })
+
+  it('rejects image references for models that explicitly declare no image workflow', () => {
+    expect(validateVideoImageWorkflowRequest({
+      model: 'sync-lipsync-v3',
+      imageReferenceCount: 1,
+    })).toBe('Sync Lipsync v3 does not support image references.')
+  })
+
   it('defaults video generation to SeeDance 2.0 Fast', () => {
     expect(getDefaultVideoModelId()).toBe('seedance-fast')
     expect(normalizeVideoModelId()).toBe('seedance-fast')

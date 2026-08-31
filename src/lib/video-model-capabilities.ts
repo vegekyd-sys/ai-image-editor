@@ -19,6 +19,13 @@ export interface VideoModelCapability {
   maxVideoReferences?: number
   maxAudioReferences?: number
   maxTotalReferences?: number
+  /**
+   * Image inputs are feature references by default across Makaron. Models that
+   * do not accept images must say `none`; first-frame/image-to-video is never a
+   * valid default and requires a separate, explicit product contract.
+   */
+  defaultImageWorkflow: 'reference-to-video' | 'none'
+  supportsExplicitImageToVideo?: boolean
   supportsVideoExtend?: boolean
   supportedResolutions?: VideoResolution[]
   defaultResolution?: VideoResolution
@@ -31,6 +38,7 @@ export interface VideoModelCapability {
 export type VideoResolution = '360p' | '480p' | '720p' | '768p' | '1080p' | '2k' | '4k'
 export type VideoResolutionInput = VideoResolution | 'auto' | null | undefined
 export type VideoGenerationOperation = 'generate' | 'edit' | 'extend'
+export type VideoImageWorkflow = 'reference-to-video' | 'image-to-video'
 export type VideoAspectRatio = '16:9' | '9:16' | '1:1' | '4:3' | '3:4' | '21:9' | '3:2' | '2:3'
 export type VideoAspectRatioInput = VideoAspectRatio | 'auto' | null | undefined
 
@@ -80,6 +88,7 @@ const MODEL_CAPABILITIES: Record<string, VideoModelCapability> = {
     },
     supportsVideoReference: true,
     supportsBaseVideoEdit: true,
+    defaultImageWorkflow: 'reference-to-video',
     longVideoChunkSeconds: 15,
     estimatedCostPerSecondUsd: 0.112,
     estimatedCostPerSecondUsdByResolution: {
@@ -113,6 +122,7 @@ const MODEL_CAPABILITIES: Record<string, VideoModelCapability> = {
     },
     supportsVideoReference: true,
     supportsBaseVideoEdit: false,
+    defaultImageWorkflow: 'reference-to-video',
     longVideoChunkSeconds: 15,
     estimatedCostPerSecondUsd: 0.161,
     estimatedCostPerSecondUsdByResolution: {
@@ -145,6 +155,7 @@ const MODEL_CAPABILITIES: Record<string, VideoModelCapability> = {
     },
     supportsVideoReference: true,
     supportsBaseVideoEdit: false,
+    defaultImageWorkflow: 'reference-to-video',
     longVideoChunkSeconds: 15,
     estimatedCostPerSecondUsd: 0.056,
     estimatedCostPerSecondUsdByResolution: {
@@ -177,6 +188,7 @@ const MODEL_CAPABILITIES: Record<string, VideoModelCapability> = {
     },
     supportsVideoReference: true,
     supportsBaseVideoEdit: false,
+    defaultImageWorkflow: 'reference-to-video',
     longVideoChunkSeconds: 15,
     estimatedCostPerSecondUsd: 0.199,
     estimatedCostPerSecondUsdByResolution: {
@@ -211,6 +223,7 @@ const MODEL_CAPABILITIES: Record<string, VideoModelCapability> = {
     },
     supportsVideoReference: true,
     supportsBaseVideoEdit: true,
+    defaultImageWorkflow: 'reference-to-video',
     supportsVideoExtend: true,
     longVideoChunkSeconds: 30,
     maxImageReferences: 30,
@@ -251,6 +264,7 @@ const MODEL_CAPABILITIES: Record<string, VideoModelCapability> = {
     },
     supportsVideoReference: true,
     supportsBaseVideoEdit: false,
+    defaultImageWorkflow: 'reference-to-video',
     supportsVideoExtend: false,
     longVideoChunkSeconds: 30,
     maxImageReferences: 10,
@@ -291,6 +305,7 @@ const MODEL_CAPABILITIES: Record<string, VideoModelCapability> = {
     },
     supportsVideoReference: true,
     supportsBaseVideoEdit: false,
+    defaultImageWorkflow: 'reference-to-video',
     supportsVideoExtend: false,
     longVideoChunkSeconds: 30,
     maxImageReferences: 10,
@@ -323,6 +338,7 @@ const MODEL_CAPABILITIES: Record<string, VideoModelCapability> = {
     },
     supportsVideoReference: true,
     supportsBaseVideoEdit: true,
+    defaultImageWorkflow: 'none',
     longVideoChunkSeconds: 60,
     estimatedCostPerSecondUsd: 8 / 60,
     maxImageReferences: 0,
@@ -346,6 +362,7 @@ const MODEL_CAPABILITIES: Record<string, VideoModelCapability> = {
     },
     supportsVideoReference: true,
     supportsBaseVideoEdit: true,
+    defaultImageWorkflow: 'reference-to-video',
     supportsVideoExtend: true,
     longVideoChunkSeconds: 10,
     estimatedCostPerSecondUsd: 0.14,
@@ -375,6 +392,7 @@ const MODEL_CAPABILITIES: Record<string, VideoModelCapability> = {
     },
     supportsVideoReference: true,
     supportsBaseVideoEdit: true,
+    defaultImageWorkflow: 'reference-to-video',
     supportsVideoExtend: true,
     longVideoChunkSeconds: 10,
     // Verified from live 1.1 usage metadata on 2026-08-29 at Google's
@@ -415,6 +433,7 @@ const MODEL_CAPABILITIES: Record<string, VideoModelCapability> = {
     },
     supportsVideoReference: true,
     supportsBaseVideoEdit: false,
+    defaultImageWorkflow: 'reference-to-video',
     longVideoChunkSeconds: 15,
     // MiniMax list price (2026-08-12): RMB 0.50/s at 768P and RMB 0.80/s at 2K.
     // These USD estimates follow Makaron's existing RMB 1 ~= USD 0.14 billing
@@ -448,6 +467,7 @@ const MODEL_CAPABILITIES: Record<string, VideoModelCapability> = {
     maxReferenceVideoDuration: 0,
     supportsVideoReference: false,
     supportsBaseVideoEdit: false,
+    defaultImageWorkflow: 'reference-to-video',
     longVideoChunkSeconds: 15,
     estimatedCostPerSecondUsd: 0.112,
     supportedResolutions: ['720p', '1080p'],
@@ -477,6 +497,7 @@ const GENERIC_VIDEO_MODEL: VideoModelCapability = {
   },
   supportsVideoReference: true,
   supportsBaseVideoEdit: false,
+  defaultImageWorkflow: 'reference-to-video',
   longVideoChunkSeconds: 15,
 }
 
@@ -521,6 +542,46 @@ export function getVideoModelCapability(model?: string | null): VideoModelCapabi
 
 export function listVideoModelCapabilities(): VideoModelCapability[] {
   return Object.values(MODEL_CAPABILITIES)
+}
+
+/**
+ * Resolve how image inputs are interpreted before selecting a provider.
+ *
+ * One image is still a feature reference. Image count must never implicitly
+ * switch generation into a first-frame/image-to-video route. A future model
+ * may expose that workflow only through both an explicit request and an
+ * explicit capability opt-in.
+ */
+export function resolveVideoImageWorkflow(options: {
+  model?: string | null
+  imageReferenceCount?: number
+  requestedWorkflow?: VideoImageWorkflow
+}): VideoImageWorkflow | undefined {
+  if ((options.imageReferenceCount ?? 0) <= 0) return undefined
+
+  const capability = getVideoModelCapability(options.model)
+  if (capability.defaultImageWorkflow === 'none') {
+    throw new Error(`${capability.label} does not support image references.`)
+  }
+  if (options.requestedWorkflow === 'image-to-video' && !capability.supportsExplicitImageToVideo) {
+    throw new Error(
+      `${capability.label} does not expose an explicit image-to-video/first-frame workflow. Images are feature references by default.`,
+    )
+  }
+  return options.requestedWorkflow ?? capability.defaultImageWorkflow
+}
+
+export function validateVideoImageWorkflowRequest(options: {
+  model?: string | null
+  imageReferenceCount?: number
+  requestedWorkflow?: VideoImageWorkflow
+}): string | null {
+  try {
+    resolveVideoImageWorkflow(options)
+    return null
+  } catch (error) {
+    return error instanceof Error ? error.message : String(error)
+  }
 }
 
 export function normalizeVideoResolution(
@@ -843,6 +904,7 @@ export function validateVideoModelRequest(options: {
   videoReferenceCount?: number
   audioReferenceCount?: number
   voiceReferenceCount?: number
+  imageWorkflow?: VideoImageWorkflow
   operation?: VideoGenerationOperation
 }): string | null {
   const capability = getVideoModelCapability(options.model)
@@ -857,6 +919,12 @@ export function validateVideoModelRequest(options: {
     aspectRatio: options.aspectRatio,
   })
   if (aspectRatioError) return aspectRatioError
+  const imageWorkflowError = validateVideoImageWorkflowRequest({
+    model: options.model,
+    imageReferenceCount: options.imageReferenceCount,
+    requestedWorkflow: options.imageWorkflow,
+  })
+  if (imageWorkflowError) return imageWorkflowError
 
   if (normalizedModel === 'grok') {
     const operation = options.operation || 'generate'
