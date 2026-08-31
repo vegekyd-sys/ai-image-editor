@@ -1700,7 +1700,6 @@ Hard constraints:
               : referenceVideoDuration,
             referenceVideoMetas: referenceVideoMetas.length ? referenceVideoMetas : undefined,
             hasVideoReference: allVideoUrls.length > 0,
-            imageReferenceCount: imageUrls.filter(Boolean).length,
             videoReferenceCount: allVideoUrls.length,
             audioReferenceCount: resolvedAudioRefs.audioUrls.length,
             operation: video_operation,

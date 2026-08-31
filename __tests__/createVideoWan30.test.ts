@@ -218,6 +218,31 @@ describe('Wan 3.0 MuleRouter integration', () => {
     expect(bodies[2]).not.toHaveProperty('first_frame')
   })
 
+  it('uses the existing post-selection harness when the timeline exceeds the model limit', async () => {
+    const bodies: Record<string, unknown>[] = []
+    vi.stubGlobal('fetch', vi.fn(async (_url: string | URL | Request, init?: RequestInit) => {
+      bodies.push(JSON.parse(String(init?.body || '{}')))
+      const suffix = String(bodies.length).padStart(12, '0')
+      return taskCreated(`44444444-4444-4444-8444-${suffix}`)
+    }))
+
+    const { createVideo } = await import('@/lib/skills/create-video')
+    const imageSlots = Array.from({ length: 11 }, () => '')
+    imageSlots[3] = 'https://example.com/original-media-4.jpg'
+
+    const imageOnly = await createVideo({
+      script: 'Selected Still\nShot 1 (4s): Animate <<<media_4>>> only.',
+      images: imageSlots,
+      duration: 4,
+      videoModel: 'wan-3.0',
+    })
+    expect(imageOnly.success).toBe(true)
+    expect(bodies[0]).toMatchObject({
+      reference_images: ['https://example.com/original-media-4.jpg'],
+    })
+    expect(bodies[0]).not.toHaveProperty('reference_videos')
+  })
+
   it('polls Standard and Pro task ids against their matching endpoint', async () => {
     const urls: string[] = []
     vi.stubGlobal('fetch', vi.fn(async (url: string | URL | Request) => {

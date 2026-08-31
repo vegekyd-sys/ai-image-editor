@@ -28,6 +28,7 @@ describe('agent media scenario matrix', () => {
   const compositionDuration = read('src/lib/composition-duration.ts')
   const animateRoute = read('src/app/api/animate/route.ts')
   const videoSnapshotRoute = read('src/app/api/video-snapshot/route.ts')
+  const createVideo = read('src/lib/skills/create-video.ts')
   const mcpServer = read('src/mcp/server.ts')
   const cli = read('packages/makaron-cli/bin/makaron.mjs')
 
@@ -155,6 +156,17 @@ describe('agent media scenario matrix', () => {
     expect(cli).toContain('const supportsNativeTextToVideo =')
     expect(cli).toContain('const isSeedanceModel =')
     expect(cli).toContain('!images.length && !videos.length && !audios.length && !referenceVoices.length && !supportsNativeTextToVideo')
+  })
+
+  it('validates model image limits only after Media Index selection', () => {
+    expect(agentTs).not.toContain('imageReferenceCount: imageUrls.filter(Boolean)')
+
+    const entryPreflightStart = createVideo.indexOf('const modelError = validateVideoModelRequest({')
+    const filteredPreflightStart = createVideo.indexOf('const filteredModelError = validateVideoModelRequest({')
+    expect(entryPreflightStart).toBeGreaterThanOrEqual(0)
+    expect(filteredPreflightStart).toBeGreaterThan(entryPreflightStart)
+    expect(createVideo.slice(entryPreflightStart, filteredPreflightStart)).not.toContain('imageReferenceCount:')
+    expect(createVideo.slice(filteredPreflightStart)).toContain('imageReferenceCount: filteredImages.length')
   })
 
   it('separates generic coding, Remotion composition, and node media outputs', () => {
