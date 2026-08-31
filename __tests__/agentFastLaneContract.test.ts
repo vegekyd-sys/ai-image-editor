@@ -9,6 +9,8 @@ describe('interactive Agent fast lane', () => {
   const route = read('src/app/api/agent/route.ts');
   const reconnect = read('src/hooks/useAgentRun.ts');
   const callbacks = read('src/lib/agentCallbacks.ts');
+  const projectsPage = read('src/app/projects/page.tsx');
+  const projectEditor = read('src/components/ProjectEditorContainer.tsx');
 
   it('streams interactive turns without booting the durable worker', () => {
     expect(editor).toContain('durable: false');
@@ -31,5 +33,13 @@ describe('interactive Agent fast lane', () => {
     expect(reconnect).toContain("window.addEventListener('makaron-agent-disconnected'");
     expect(reconnect).toContain("view: 'stream'");
     expect(reconnect).toContain('15_000');
+  });
+
+  it('pre-starts text-only project turns before navigation', () => {
+    expect(projectsPage).toContain("sessionStorage.setItem(`pendingAgentRun:${result.projectId}`, runId)");
+    expect(projectsPage).toContain('await agentResponse.body?.cancel()');
+    expect(projectEditor).toContain('pendingAgentRunId={!readOnly');
+    expect(editor).toContain('initialRunId: pendingAgentRunId');
+    expect(editor).toContain("addMessage('user', pendingPrompt!)");
   });
 });

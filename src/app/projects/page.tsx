@@ -895,6 +895,34 @@ function ProjectsPageInner() {
       const result = await createProject(supabase, user.id, files, Object.keys(opts).length ? opts : undefined, extractedMetadataRef.current)
       if (!result) throw new Error('Failed to create project')
       saveAgentModelPreference(result.projectId, createAgentModel)
+
+      // Text-only projects can start the Agent before navigation. Await only
+      // the SSE headers (run id), then hand rendering to the destination page's
+      // event-log reconnect path. Media projects still let Editor persist the
+      // staged files before starting the model.
+      if (prompt && files.length === 0) {
+        try {
+          const agentResponse = await fetch('/api/agent', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              projectId: result.projectId,
+              prompt,
+              image: '',
+              durable: false,
+              ...(createAgentModel !== 'auto' ? { agentModel: createAgentModel } : {}),
+            }),
+          })
+          const runId = agentResponse.headers.get('X-Agent-Run-Id')
+          if (agentResponse.ok && runId) {
+            sessionStorage.setItem(`pendingAgentRun:${result.projectId}`, runId)
+            await agentResponse.body?.cancel()
+          }
+        } catch {
+          // Destination Editor keeps pendingPrompt and starts the normal fast
+          // lane when pre-start cannot be established.
+        }
+      }
       if (useIOSInlineProjectNavigation) {
         createInput.setCreating(false)
         openIOSProject(result.projectId)

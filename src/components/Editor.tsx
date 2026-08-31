@@ -93,6 +93,8 @@ interface EditorProps {
   pendingVideos?: Array<{ videoUrl: string; duration: number; width: number; height: number }>;
   pendingMetadata?: PhotoMetadata;
   pendingPrompt?: string;
+  /** Agent run pre-started by the project-list text-only creation flow. */
+  pendingAgentRunId?: string;
   pendingSkill?: string;
   pendingSkillLaunchContext?: SkillLaunchContext;
   onSaveSnapshot?: (snapshot: Snapshot, sortOrder: number, onUploaded?: (imageUrl: string) => void) => void | Promise<void>;
@@ -143,6 +145,7 @@ export default function Editor({
   pendingVideos,
   pendingMetadata,
   pendingPrompt,
+  pendingAgentRunId,
   pendingSkill,
   pendingSkillLaunchContext,
   onSaveSnapshot,
@@ -433,6 +436,7 @@ export default function Editor({
     // Text-only/CLI projects can have an active run before their first snapshot.
     // Reconnect follows the project run, not whether GUI content already exists.
     enabled: !!projectId && !inactive,
+    initialRunId: pendingAgentRunId,
     skipRunIdRef: agentRunIdRef,
     isActiveRef: isAgentActiveRef,
   });
@@ -2556,12 +2560,19 @@ Select the best 3-7 items for a compelling video. You do NOT need to use all or 
       if (hasPrompt) {
         const skillPrefix = pendingSkill && !pendingSkillLaunchContext ? `[Active skill: ${pendingSkill}]\n` : '';
         if (!isDesktop) setViewMode('cui');
-        await handleAgentRequest(skillPrefix + pendingPrompt!, undefined, undefined, {
-          displayText: pendingPrompt!,
-          uploadedVideoCount: pendingVideos?.length || 0,
-          turnMediaCount: workSnapshots.length,
-          skillLaunchContext: pendingSkillLaunchContext,
-        });
+        if (pendingAgentRunId) {
+          // The model is already running. Render/persist the user turn locally;
+          // useAgentRun's mount check replays assistant events by run id.
+          addMessage('user', pendingPrompt!);
+          setAgentStatus(t('editor.reconnecting'));
+        } else {
+          await handleAgentRequest(skillPrefix + pendingPrompt!, undefined, undefined, {
+            displayText: pendingPrompt!,
+            uploadedVideoCount: pendingVideos?.length || 0,
+            turnMediaCount: workSnapshots.length,
+            skillLaunchContext: pendingSkillLaunchContext,
+          });
+        }
       }
 
       // ── Step 8: CUI mode ──
@@ -2571,7 +2582,7 @@ Select the best 3-7 items for a compelling video. You do NOT need to use all or 
     };
 
     init();
-  }, [pendingImages, pendingMetadata, pendingPrompt, pendingSkill, pendingSkillLaunchContext, fetchTipsForSnapshot, onSaveSnapshot, runAutoAnalysis, handleAgentRequest, isDesktop]);
+  }, [pendingImages, pendingMetadata, pendingPrompt, pendingSkill, pendingSkillLaunchContext, pendingAgentRunId, fetchTipsForSnapshot, onSaveSnapshot, runAutoAnalysis, handleAgentRequest, addMessage, isDesktop, t]);
 
   // Existing project/current timeline item with no tips — auto-fetch once per snapshot.
   // Do not mark a snapshot attempted until it has a usable image; cached projects can

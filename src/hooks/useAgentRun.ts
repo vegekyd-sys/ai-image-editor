@@ -37,6 +37,7 @@ interface AgentRunApiResponse {
 interface UseAgentRunOptions {
   projectId: string
   enabled: boolean
+  initialRunId?: string
   skipRunIdRef?: RefObject<string | null>
   isActiveRef?: RefObject<boolean>
 }
@@ -63,10 +64,10 @@ interface UseAgentRunReturn {
  * 3. reconnect() replays historical events then subscribes to Realtime for new ones
  * 4. When run completes (status change), automatically unsubscribes
  */
-export function useAgentRun({ projectId, enabled, skipRunIdRef, isActiveRef }: UseAgentRunOptions): UseAgentRunReturn {
+export function useAgentRun({ projectId, enabled, initialRunId, skipRunIdRef, isActiveRef }: UseAgentRunOptions): UseAgentRunReturn {
   const supabaseRef = useRef<SupabaseClient | null>(null)
   const channelsRef = useRef<RealtimeChannel[]>([])
-  const [activeRunId, setActiveRunId] = useState<string | null>(null)
+  const [activeRunId, setActiveRunId] = useState<string | null>(initialRunId ?? null)
   const [runMessageIds, setRunMessageIds] = useState<string[]>([])
   const [isReconnecting, setIsReconnecting] = useState(false)
 
