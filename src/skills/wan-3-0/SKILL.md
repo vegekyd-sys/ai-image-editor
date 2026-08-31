@@ -41,8 +41,8 @@ Pro, super-resolution, 2K, or 4K requests. Keep the app default on
 - References: up to 10 images, 5 videos, and 5 audio files, with 20 total.
 - Use `<<<media_N>>>` and `<<<audio_N>>>` in Makaron. The runtime translates
   them to Wan's `Image N`, `Video N`, and `Audio N` provider markers.
-- Zero references uses text-to-video; one image uses first-frame mode; other
-  reference mixes use MuleRouter's reference mode.
+- Zero references uses text-to-video. Any media input—including one image—uses
+  MuleRouter reference mode. Do not treat a single image as `first_frame`.
 - Use `video_operation: "generate"` with feature references. Wan 3.0 does not
   expose typed direct edit or extend operations in Makaron.
 - The runtime preflight rejects over-budget duration combinations before credit
