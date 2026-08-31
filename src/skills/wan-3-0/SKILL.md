@@ -21,10 +21,12 @@ metadata:
 
 # Wan 3.0
 
-Use `generate_animation` with `model: "wan-3.0"` only when the user explicitly
-selects or requests Wan 3.0 Standard. Use `model: "wan-3.0-pro"` for explicit
+Use `generate_animation` with `model: "wan-3.0"` when the user explicitly
+selects Wan 3.0 Standard or the video request is NSFW/adult-explicit. The Agent
+must make this semantic choice itself; NSFW routing overrides the normal 16-30
+second Seedance 2.5 duration default. Use `model: "wan-3.0-pro"` for explicit
 Pro, super-resolution, 2K, or 4K requests. Keep the app default on
-`seedance-fast` otherwise.
+`seedance-fast` for other requests.
 
 ## Provider contract
 
