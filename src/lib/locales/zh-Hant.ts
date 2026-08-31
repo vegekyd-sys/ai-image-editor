@@ -673,7 +673,7 @@ const zhHant = {
   'model.codexSubscription.resetsAt': (time: string) => `${time} 重置`,
   'model.codexSubscription.usageUnavailable': '套餐可用，暫時無法讀取額度',
   'model.grokSubscription.suffix': 'Grok 方案',
-  'model.grokSubscription.desc': '使用你的 SuperGrok 個人方案；不可用且尚未輸出時才回退 OpenRouter API。',
+  'model.grokSubscription.desc': '使用 SuperGrok 方案；未輸出時才回退 API。',
   'model.grokSubscription.available': 'SuperGrok 方案可用',
   'model.grokSubscription.checking': '正在讀取 Grok 方案額度…',
   'model.grokSubscription.remaining': (percent: string) => `方案額度剩餘 ${percent}%`,

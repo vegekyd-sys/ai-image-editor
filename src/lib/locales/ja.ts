@@ -695,7 +695,7 @@ const ja = {
   'model.codexSubscription.resetsAt': (time: string) => `${time} リセット`,
   'model.codexSubscription.usageUnavailable': 'プランは利用可能ですが、使用量を取得できません',
   'model.grokSubscription.suffix': 'Grokプラン',
-  'model.grokSubscription.desc': '個人のSuperGrokプランを使用し、未出力の状態で利用不能な場合のみOpenRouter APIへ切り替えます。',
+  'model.grokSubscription.desc': 'SuperGrokを使用し、出力前のみAPIへ切り替えます。',
   'model.grokSubscription.available': 'SuperGrokプラン利用可能',
   'model.grokSubscription.checking': 'Grokプランの使用量を確認中…',
   'model.grokSubscription.remaining': (percent: string) => `プラン枠 残り ${percent}%`,

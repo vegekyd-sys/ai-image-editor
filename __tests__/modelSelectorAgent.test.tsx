@@ -168,7 +168,7 @@ describe('ModelSelector Agent tab', () => {
     vi.unstubAllGlobals();
   });
 
-  it('uses the available vertical space for the Agent provider groups', async () => {
+  it('keeps Image, Video, and Agent tabs the same height', async () => {
     vi.stubGlobal('innerWidth', 1024);
     vi.stubGlobal('innerHeight', 1000);
 
@@ -196,11 +196,18 @@ describe('ModelSelector Agent tab', () => {
     });
 
     fireEvent.click(trigger);
-    fireEvent.click(await screen.findByTestId('model-tab-agent'));
+    const imageTab = await screen.findByTestId('model-tab-image');
+    const videoTab = screen.getByTestId('model-tab-video');
+    const agentTab = screen.getByTestId('model-tab-agent');
 
-    await waitFor(() => {
-      expect(screen.getByRole('tabpanel').style.height).toBe('700px');
-    });
+    expect(imageTab.getAttribute('aria-selected')).toBe('true');
+    expect(screen.getByRole('tabpanel').style.height).toBe('340px');
+
+    fireEvent.click(videoTab);
+    expect(screen.getByRole('tabpanel').style.height).toBe('340px');
+
+    fireEvent.click(agentTab);
+    expect(screen.getByRole('tabpanel').style.height).toBe('340px');
 
     unmount();
     vi.unstubAllGlobals();

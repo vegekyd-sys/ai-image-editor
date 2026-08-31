@@ -697,7 +697,7 @@ const en = {
   'model.codexSubscription.resetsAt': (time: string) => `Resets ${time}`,
   'model.codexSubscription.usageUnavailable': 'Plan available; usage is temporarily unavailable',
   'model.grokSubscription.suffix': 'Grok plan',
-  'model.grokSubscription.desc': 'Use your personal SuperGrok plan, falling back to the OpenRouter API only before any output.',
+  'model.grokSubscription.desc': 'Uses SuperGrok; falls back to API only before output.',
   'model.grokSubscription.available': 'SuperGrok plan available',
   'model.grokSubscription.checking': 'Checking Grok plan usage…',
   'model.grokSubscription.remaining': (percent: string) => `${percent}% plan allowance remaining`,

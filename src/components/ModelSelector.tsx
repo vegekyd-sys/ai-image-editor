@@ -33,7 +33,6 @@ interface ModelSelectorProps {
 
 const ROW_HEIGHT = 68;
 const PANEL_BODY_HEIGHT = ROW_HEIGHT * 5;
-const AGENT_PANEL_BODY_HEIGHT = 700;
 const AUTO_TIPS_FOOTER_HEIGHT = ROW_HEIGHT + 14;
 const PANEL_CHROME_HEIGHT = 104;
 
@@ -572,10 +571,7 @@ export default function ModelSelector({
     // used as the bottom coordinate or the popover falls behind the keyboard.
     const bottom = Math.max(8, window.innerHeight - rect.top + 8);
     const maxHeight = Math.max(0, rect.top - visualViewportTop - 8);
-    const preferredBodyHeight = activeTab === 'agent'
-      ? AGENT_PANEL_BODY_HEIGHT
-      : PANEL_BODY_HEIGHT;
-    const bodyHeight = Math.max(0, Math.min(preferredBodyHeight, maxHeight - PANEL_CHROME_HEIGHT));
+    const bodyHeight = Math.max(0, Math.min(PANEL_BODY_HEIGHT, maxHeight - PANEL_CHROME_HEIGHT));
     if (isMobile) {
       setPopoverPos({ bottom, bodyHeight, maxHeight, left: 12, right: 12 });
       return;
@@ -591,7 +587,7 @@ export default function ModelSelector({
     } else {
       setPopoverPos({ bottom, bodyHeight, maxHeight, left: Math.max(8, (window.innerWidth - panelWidth) / 2) });
     }
-  }, [activeTab, open]);
+  }, [open]);
 
   useEffect(() => {
     if (!open) return;
