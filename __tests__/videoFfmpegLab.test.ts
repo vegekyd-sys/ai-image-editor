@@ -28,7 +28,7 @@ describe('Agent FFmpeg video lab', () => {
     expect(cli).toContain('const MAX_VIDEO_UPLOAD_FILE_SIZE_MB = 50')
     expect(cli).toContain('const MAX_VIDEO_PROVIDER_REFERENCE_DURATION = 15')
     expect(cli).toContain('SEEDANCE25_MAX_VIDEO_REFERENCE_DURATION = 30')
-    expect(cli).toContain('providerMaxDuration = isSeedance25 ? SEEDANCE25_MAX_VIDEO_REFERENCE_DURATION : MAX_VIDEO_PROVIDER_REFERENCE_DURATION')
+    expect(cli).toContain('providerMaxDuration = isSeedance25 || isWan30 ? SEEDANCE25_MAX_VIDEO_REFERENCE_DURATION : MAX_VIDEO_PROVIDER_REFERENCE_DURATION')
     expect(cli).toContain('Math.min(providerMaxDuration')
     expect(cli).not.toContain('const MAX_VIDEO_DURATION = 15')
     expect(readme).toContain('max 50MB, max 900s (15 minutes)')

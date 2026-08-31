@@ -157,6 +157,45 @@ function prepareSeedance25References(options: {
   return { prompt, images: referencedImages };
 }
 
+function prepareWan30References(options: {
+  prompt: string;
+  images: string[];
+  videoUrls: string[];
+}): { prompt: string; images: string[] } {
+  const refs = [...new Set(
+    Array.from(options.prompt.matchAll(/<<<(?:image|media)_(\d+)>>>/g), match => Number(match[1]))
+  )];
+  const mediaTags = new Map<number, string>();
+  const referencedImages: string[] = [];
+  let videoIndex = 0;
+
+  for (const ref of refs) {
+    const image = options.images[ref - 1];
+    if (image?.startsWith('http')) {
+      referencedImages.push(image);
+      mediaTags.set(ref, `Image ${referencedImages.length}`);
+    } else if (videoIndex < options.videoUrls.length) {
+      videoIndex += 1;
+      mediaTags.set(ref, `Video ${videoIndex}`);
+    }
+  }
+
+  let prompt = options.prompt.replace(/<<<(?:image|media)_(\d+)>>>/g, (marker, rawIndex) => {
+    return mediaTags.get(Number(rawIndex)) || marker;
+  });
+  prompt = prompt.replace(/<<<audio_(\d+)>>>/gi, (_marker, rawIndex) => `Audio ${Number(rawIndex)}`);
+
+  if (videoIndex < options.videoUrls.length) {
+    const remaining = options.videoUrls
+      .slice(videoIndex)
+      .map((_, index) => `Video ${videoIndex + index + 1}`)
+      .join(', ');
+    prompt = `${prompt}\nUse ${remaining} as motion, camera, and visual-style references.`;
+  }
+
+  return { prompt, images: referencedImages };
+}
+
 export async function createVideo(input: CreateVideoInput): Promise<CreateVideoResult> {
   const { script, images, duration, aspectRatio, videoModel, videoResolution, videoUrl, videoReferType, videoUrls, audioUrls, referenceVoiceIds, referenceVideoDuration, referenceVideoMetas, keepOriginalSound, motionControl, characterOrientation, videoOperation = 'generate', previousInteractionId, videoExtendDirection, generateAudio, contentFilter, outputFormat, webSearch } = input;
   const hasVideoReference = !!videoUrl || !!videoUrls?.length || !!previousInteractionId;
@@ -181,6 +220,12 @@ export async function createVideo(input: CreateVideoInput): Promise<CreateVideoR
   });
 
   if (modelError) return { success: false, message: modelError };
+  if (provider === 'wan-3.0' && contentFilter != null) {
+    return {
+      success: false,
+      message: 'Wan 3.0 does not expose a content-filter switch through Evolink. Remove content_filter instead of assuming Seedance 2.5 Mature Mode applies.',
+    };
+  }
   if ((videoOperation === 'edit' || videoOperation === 'extend') && !hasVideoReference) {
     return {
       success: false,
@@ -199,12 +244,12 @@ export async function createVideo(input: CreateVideoInput): Promise<CreateVideoR
       message: 'Google Omni stateful extension supports a maximum cumulative duration of 40 seconds.',
     };
   }
-  if (hasAudioReference && route.provider !== 'seedance' && route.provider !== 'minimax' && route.provider !== 'fal-sync') {
+  if (hasAudioReference && route.provider !== 'seedance' && route.provider !== 'wan' && route.provider !== 'minimax' && route.provider !== 'fal-sync') {
     return {
       success: false,
       message: route.provider === 'google-omni'
         ? 'Google Omni generates native audio from the prompt, but uploaded reference audio is not enabled in the current API. Use Seedance for audio_refs, or describe the soundtrack in the prompt for Omni.'
-        : 'Reference audio is only supported by Seedance, MiniMax H3, and Sync Lipsync v3.',
+        : 'Reference audio is only supported by Seedance, Wan 3.0, MiniMax H3, and Sync Lipsync v3.',
     };
   }
   if (hasVoiceReference && route.provider !== 'grok') {
@@ -228,7 +273,7 @@ export async function createVideo(input: CreateVideoInput): Promise<CreateVideoR
   const resolvedReferenceVideoMetas = await fillReferenceVideoMetas(providerVideoUrls, referenceVideoMetas);
 
   if (images.length === 0 && !hasVideoReference) {
-    if (hasAudioReference && provider !== 'seedance-2.5') {
+    if (hasAudioReference && provider !== 'seedance-2.5' && provider !== 'wan-3.0') {
       return {
         success: false,
         message: 'Reference audio cannot be used alone. Provide an image or video reference for the video generation.',
@@ -237,7 +282,7 @@ export async function createVideo(input: CreateVideoInput): Promise<CreateVideoR
     if (!supportsNativeTextToVideo(provider)) {
       return {
         success: false,
-        message: `${capability.label} requires an image or video reference. Native text-to-video is currently available through SeeDance, Grok Imagine Video 1.5, Gemini Omni, and MiniMax H3.`,
+        message: `${capability.label} requires an image or video reference. Native text-to-video is currently available through SeeDance, Wan 3.0, Grok Imagine Video 1.5, Gemini Omni, and MiniMax H3.`,
       };
     }
   }
@@ -282,6 +327,14 @@ export async function createVideo(input: CreateVideoInput): Promise<CreateVideoR
         audioUrls: audioUrls || [],
         operation: videoOperation,
         extendDirection: videoExtendDirection,
+      });
+      filteredImages = prepared.images;
+      finalPrompt = prepared.prompt;
+    } else if (provider === 'wan-3.0') {
+      const prepared = prepareWan30References({
+        prompt: script,
+        images,
+        videoUrls: providerVideoUrls,
       });
       filteredImages = prepared.images;
       finalPrompt = prepared.prompt;
@@ -387,7 +440,7 @@ export async function createVideo(input: CreateVideoInput): Promise<CreateVideoR
         providerModel: route.providerModel,
         message: `Lip-sync task created. Task ID: ${taskId}. Use makaron_get_video_status to poll.`,
       };
-    } else if (route.provider === 'seedance') {
+    } else if (route.provider === 'seedance' || route.provider === 'wan') {
       const { createEvolinkTask } = await import('../evolink');
       const providerModel = resolveVideoProviderModel({
         model: provider,
@@ -404,7 +457,7 @@ export async function createVideo(input: CreateVideoInput): Promise<CreateVideoR
       const providerDuration = provider === 'seedance-2.5' && videoOperation === 'edit'
         ? -1
         : resolvedDuration != null ? resolvedDuration : undefined;
-      const providerPrompt = provider === 'seedance-2.5'
+      const providerPrompt = provider === 'seedance-2.5' || provider === 'wan-3.0'
         ? finalPrompt
         : prepareSeedance20ReferenceMarkers(finalPrompt);
       taskId = await createEvolinkTask({
@@ -421,7 +474,7 @@ export async function createVideo(input: CreateVideoInput): Promise<CreateVideoR
         outputFormat,
         webSearch,
       });
-      console.log(`✅ [create_video] SeeDance (Evolink) task created: ${taskId}`);
+      console.log(`✅ [create_video] ${capability.label} (Evolink) task created: ${taskId}`);
       return {
         success: true,
         taskId,

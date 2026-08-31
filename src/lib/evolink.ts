@@ -1,8 +1,9 @@
 /**
- * Evolink Seedance 2.0 / 2.5 Video API Client
+ * Evolink Seedance 2.0 / 2.5 and Wan 3.0 Video API Client
  *
- * Evolink wraps Volcengine SeeDance with real human face support.
- * API Docs: https://docs.evolink.ai/en/api-manual/video-series/seedance2.0/seedance-2.0-overview
+ * Shared client for Evolink-hosted video model families.
+ * Seedance API Docs: https://docs.evolink.ai/en/api-manual/video-series/seedance2.0/seedance-2.0-overview
+ * Wan 3.0 product contract: https://evolink.ai/wan-3-0
  */
 
 const BASE_URL = 'https://api.evolink.ai'
@@ -10,8 +11,8 @@ const API_KEY = process.env.EVOLINK_API_KEY
 
 export interface EvolinkTaskInput {
   prompt: string
-  images: string[]           // 0-9 public URLs
-  duration?: number          // 4-15 (omit for default 5)
+  images: string[]           // public URLs; model-specific limits apply
+  duration?: number          // model-specific range; omit for smart/default mode
   aspectRatio?: string       // adaptive/16:9/9:16/1:1/4:3/3:4/21:9
   quality?: string           // 480p / 720p / 1080p depending on model
   model?: string
@@ -74,6 +75,8 @@ export async function createEvolinkTask(input: EvolinkTaskInput): Promise<string
     ? 'seedance-2.0-fast-reference-to-video'
     : 'seedance-2.0-fast-text-to-video')
   const isSeedance25 = model.startsWith('seedance-2.5-')
+  const isSeedance = model.startsWith('seedance-')
+  const isWan30 = model.startsWith('wan3.0-')
 
   if (isSeedance25) {
     if (images.length > 30) throw new Error('Seedance 2.5 supports at most 30 reference images per request.')
@@ -84,7 +87,16 @@ export async function createEvolinkTask(input: EvolinkTaskInput): Promise<string
     }
   }
 
-  if (images.length > 0) {
+  if (isWan30) {
+    if (images.length > 10) throw new Error('Wan 3.0 supports at most 10 reference images per request.')
+    if ((videoUrls?.length || 0) > 5) throw new Error('Wan 3.0 supports at most 5 reference videos per request.')
+    if ((audioUrls?.length || 0) > 5) throw new Error('Wan 3.0 supports at most 5 reference audio files per request.')
+    if (images.length + (videoUrls?.length || 0) + (audioUrls?.length || 0) > 20) {
+      throw new Error('Wan 3.0 supports at most 20 total reference assets per request.')
+    }
+  }
+
+  if (isSeedance && images.length > 0) {
     const { validateSeedanceImageReferences } = await import('./provider-image-reference')
     const failure = await validateSeedanceImageReferences(images)
     if (failure) throw new EvolinkInputError(failure)

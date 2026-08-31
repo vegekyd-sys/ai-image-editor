@@ -146,7 +146,7 @@ describe('agent media scenario matrix', () => {
   it('keeps native SeeDance text-to-video reachable without generating an intermediate image', () => {
     expect(agent).toContain('SeeDance supports native text-to-video')
     expect(agent).toContain('Do not generate an intermediate image first')
-    expect(animate).toContain('Zero images means native SeeDance text-to-video')
+    expect(animate).toContain('Zero images can use native SeeDance or Wan 3.0 text-to-video')
     expect(animate).toContain('do not call `generate_image` first')
     expect(agentTs).toContain('!supportsNativeTextToVideo(videoModel)')
     expect(animateRoute).toContain('!supportsNativeTextToVideo(selectedVideoModel)')
