@@ -102,7 +102,7 @@ describe('Remotion export worker contract', () => {
     expect(exporter).toContain('promotedReusableExport')
     expect(exporter).toContain('reusableNeedsPromotion')
     expect(exporter).toContain('Reusable export promotion failed')
-    expect(read('supabase/migrations/20260901000000_remotion_export_capacity_queue.sql')).toContain("j.status = 'queued'")
+    expect(read('supabase/migrations/20260901140000_remotion_export_capacity_queue.sql')).toContain("j.status = 'queued'")
     expect(exporter).toContain('REMOTION_EXPORT_STALE_MS')
     expect(exporter).toContain('claim_remotion_export_job_with_capacity')
     expect(exporter).toContain('resolveRemotionExportCapacityLimit')
@@ -164,7 +164,7 @@ describe('Remotion export worker contract', () => {
     const videoSnapshotRoute = read('src/app/api/video-snapshot/[snapshotId]/route.ts')
     const videoPollCron = read('src/app/api/cron/video-poll/route.ts')
     const remotionExportCron = read('src/app/api/cron/remotion-export/route.ts')
-    const capacityMigration = read('supabase/migrations/20260901000000_remotion_export_capacity_queue.sql')
+    const capacityMigration = read('supabase/migrations/20260901140000_remotion_export_capacity_queue.sql')
     const packageJson = read('package.json')
 
     expect(postRoute).toContain('createRemotionExportJob')
