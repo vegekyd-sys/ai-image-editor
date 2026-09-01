@@ -82,6 +82,26 @@ describe('editImage reference contract', () => {
     }));
   });
 
+  it('passes the authenticated Codex subscription context to GPT Image 2', async () => {
+    await editImage(
+      { editPrompt: 'Create a polished poster.', preferredModel: 'openai' },
+      {
+        codexSubscription: {
+          userId: 'allowed-user',
+          projectId: 'project-1',
+        },
+      },
+    );
+
+    expect(mockedGenerateImage).toHaveBeenCalledWith(expect.objectContaining({
+      model: 'openai',
+      codexSubscription: {
+        userId: 'allowed-user',
+        projectId: 'project-1',
+      },
+    }));
+  });
+
   it('uses strict OpenAI text-to-image when transparent output has no source', async () => {
     await editImage(
       { editPrompt: 'Create a sticker.', background: 'transparent' },

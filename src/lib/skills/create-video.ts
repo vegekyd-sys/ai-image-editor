@@ -1,5 +1,5 @@
 import { filterAndRemapImages, parseTotalDuration } from '../kling';
-import { getVideoModelCapability, normalizeVideoModelId, resolveClosestSupportedAspectRatio, resolveVideoGenerationRoute, resolveVideoOutputDuration, resolveVideoProviderAspectRatio, resolveVideoProviderModel, supportsNativeTextToVideo, validateVideoModelRequest, type VideoAspectRatioInput, type VideoGenerationOperation, type VideoReferenceMeta, type VideoResolutionInput } from '@/lib/video-model-capabilities';
+import { getVideoModelCapability, normalizeVideoModelId, resolveClosestSupportedAspectRatio, resolveVideoGenerationRoute, resolveVideoImageWorkflow, resolveVideoOutputDuration, resolveVideoProviderAspectRatio, resolveVideoProviderModel, supportsNativeTextToVideo, validateVideoModelRequest, type VideoAspectRatioInput, type VideoGenerationOperation, type VideoImageWorkflow, type VideoReferenceMeta, type VideoResolutionInput } from '@/lib/video-model-capabilities';
 
 const MAX_REFERENCE_VIDEO_PROBE_BYTES = 55 * 1024 * 1024;
 
@@ -10,18 +10,23 @@ export interface CreateVideoInput {
   aspectRatio?: VideoAspectRatioInput;
   videoModel?: string;       // video provider/model id, e.g. 'kling' or 'seedance'
   videoResolution?: VideoResolutionInput;
-  // Video editing (Kling only)
+  // Video reference / edit / extend
   videoUrl?: string;                    // Reference video URL (explicit from agent)
   videoReferType?: 'base' | 'feature';  // default: 'base'
   videoUrls?: string[];                 // Auto-detected video references from timeline
   audioUrls?: string[];                 // SeeDance reference audios (0-3)
+  referenceVoiceIds?: string[];         // xAI preset voice ids (0-3)
   referenceVideoDuration?: number;       // Timeline video duration; output should match when editing video
   referenceVideoMetas?: VideoReferenceMeta[];
   keepOriginalSound?: boolean;          // default: false
   // Motion Control (Kling only)
   motionControl?: boolean;              // Use /v1/videos/motion-control endpoint
   characterOrientation?: 'image' | 'video';  // default: 'image'
-  videoOperation?: VideoGenerationOperation; // Seedance 2.5: generate/edit/extend
+  videoOperation?: VideoGenerationOperation; // Typed edit/extend for providers that expose it
+  // Images are feature references unless a model explicitly opts into and the
+  // caller explicitly requests a first-frame/image-to-video workflow.
+  imageWorkflow?: VideoImageWorkflow;
+  previousInteractionId?: string;            // Google Omni stateful extension lineage
   videoExtendDirection?: 'forward' | 'backward';
   generateAudio?: boolean;
   contentFilter?: boolean;
@@ -155,11 +160,52 @@ function prepareSeedance25References(options: {
   return { prompt, images: referencedImages };
 }
 
+function prepareWan30References(options: {
+  prompt: string;
+  images: string[];
+  videoUrls: string[];
+}): { prompt: string; images: string[] } {
+  const refs = [...new Set(
+    Array.from(options.prompt.matchAll(/<<<(?:image|media)_(\d+)>>>/g), match => Number(match[1]))
+  )];
+  const mediaTags = new Map<number, string>();
+  const referencedImages: string[] = [];
+  let videoIndex = 0;
+
+  for (const ref of refs) {
+    const image = options.images[ref - 1];
+    if (image?.startsWith('http')) {
+      referencedImages.push(image);
+      mediaTags.set(ref, `Image ${referencedImages.length}`);
+    } else if (videoIndex < options.videoUrls.length) {
+      videoIndex += 1;
+      mediaTags.set(ref, `Video ${videoIndex}`);
+    }
+  }
+
+  let prompt = options.prompt.replace(/<<<(?:image|media)_(\d+)>>>/g, (marker, rawIndex) => {
+    return mediaTags.get(Number(rawIndex)) || marker;
+  });
+  prompt = prompt.replace(/<<<audio_(\d+)>>>/gi, (_marker, rawIndex) => `Audio ${Number(rawIndex)}`);
+
+  if (videoIndex < options.videoUrls.length) {
+    const remaining = options.videoUrls
+      .slice(videoIndex)
+      .map((_, index) => `Video ${videoIndex + index + 1}`)
+      .join(', ');
+    prompt = `${prompt}\nUse ${remaining} as motion, camera, and visual-style references.`;
+  }
+
+  return { prompt, images: referencedImages };
+}
+
 export async function createVideo(input: CreateVideoInput): Promise<CreateVideoResult> {
-  const { script, images, duration, aspectRatio, videoModel, videoResolution, videoUrl, videoReferType, videoUrls, audioUrls, referenceVideoDuration, referenceVideoMetas, keepOriginalSound, motionControl, characterOrientation, videoOperation = 'generate', videoExtendDirection, generateAudio, contentFilter, outputFormat, webSearch } = input;
-  const hasVideoReference = !!videoUrl || !!videoUrls?.length;
+  const { script, images, duration, aspectRatio, videoModel, videoResolution, videoUrl, videoReferType, videoUrls, audioUrls, referenceVoiceIds, referenceVideoDuration, referenceVideoMetas, keepOriginalSound, motionControl, characterOrientation, videoOperation = 'generate', imageWorkflow, previousInteractionId, videoExtendDirection, generateAudio, contentFilter, outputFormat, webSearch } = input;
+  const hasVideoReference = !!videoUrl || !!videoUrls?.length || !!previousInteractionId;
   const hasAudioReference = !!audioUrls?.length;
+  const hasVoiceReference = !!referenceVoiceIds?.length;
   const provider = normalizeVideoModelId(videoModel);
+  const isWan30 = provider === 'wan-3.0' || provider === 'wan-3.0-pro';
   const route = resolveVideoGenerationRoute({ model: provider, resolution: videoResolution });
   const capability = getVideoModelCapability(provider);
   const providerVideoUrls = [...(videoUrl ? [videoUrl] : []), ...(videoUrls || [])].filter(Boolean);
@@ -168,27 +214,58 @@ export async function createVideo(input: CreateVideoInput): Promise<CreateVideoR
     resolution: route.resolution,
     aspectRatio,
     outputDuration: provider === 'seedance-2.5' && videoOperation === 'edit' ? -1 : duration,
-    referenceVideoDuration,
+    referenceVideoDuration: previousInteractionId ? Math.min(referenceVideoDuration ?? 10, 10) : referenceVideoDuration,
     referenceVideoMetas,
     hasVideoReference,
-    videoReferenceCount: providerVideoUrls.length,
+    videoReferenceCount: previousInteractionId ? 1 : providerVideoUrls.length,
     audioReferenceCount: audioUrls?.length || 0,
+    imageWorkflow,
     operation: videoOperation,
   });
 
   if (modelError) return { success: false, message: modelError };
-  if (provider === 'seedance-2.5' && (videoOperation === 'edit' || videoOperation === 'extend') && !hasVideoReference) {
+  if (isWan30 && contentFilter != null) {
     return {
       success: false,
-      message: `SeeDance 2.5 ${videoOperation} requires at least one video reference.`,
+      message: 'Wan 3.0 does not expose a content-filter switch through MuleRouter. Remove content_filter instead of assuming another provider\'s safety option applies.',
     };
   }
-  if (hasAudioReference && route.provider !== 'seedance' && route.provider !== 'minimax' && route.provider !== 'fal-sync') {
+  if ((videoOperation === 'edit' || videoOperation === 'extend') && !hasVideoReference) {
+    return {
+      success: false,
+      message: `${capability.label} ${videoOperation} requires at least one video reference.`,
+    };
+  }
+  if (provider === 'google-omni' && videoOperation === 'extend' && videoExtendDirection === 'backward') {
+    return {
+      success: false,
+      message: 'Google Omni can only extend forward from the end of the source video.',
+    };
+  }
+  if (provider === 'google-omni' && previousInteractionId && (referenceVideoDuration ?? 0) + (duration ?? 10) > 40) {
+    return {
+      success: false,
+      message: 'Google Omni stateful extension supports a maximum cumulative duration of 40 seconds.',
+    };
+  }
+  if (hasAudioReference && route.provider !== 'seedance' && route.provider !== 'mulerouter' && route.provider !== 'minimax' && route.provider !== 'fal-sync') {
     return {
       success: false,
       message: route.provider === 'google-omni'
         ? 'Google Omni generates native audio from the prompt, but uploaded reference audio is not enabled in the current API. Use Seedance for audio_refs, or describe the soundtrack in the prompt for Omni.'
-        : 'Reference audio is only supported by Seedance, MiniMax H3, and Sync Lipsync v3.',
+        : 'Reference audio is only supported by Seedance, Wan 3.0, MiniMax H3, and Sync Lipsync v3.',
+    };
+  }
+  if (hasVoiceReference && route.provider !== 'grok') {
+    return {
+      success: false,
+      message: 'Preset reference voices are currently supported only by Grok Imagine Video 1.5.',
+    };
+  }
+  if ((referenceVoiceIds?.length || 0) > 3) {
+    return {
+      success: false,
+      message: 'Grok Imagine Video 1.5 supports at most 3 preset reference voices per request.',
     };
   }
   if ((audioUrls?.length || 0) > (capability.maxAudioReferences ?? 3)) {
@@ -200,7 +277,7 @@ export async function createVideo(input: CreateVideoInput): Promise<CreateVideoR
   const resolvedReferenceVideoMetas = await fillReferenceVideoMetas(providerVideoUrls, referenceVideoMetas);
 
   if (images.length === 0 && !hasVideoReference) {
-    if (hasAudioReference && provider !== 'seedance-2.5') {
+    if (hasAudioReference && provider !== 'seedance-2.5' && !isWan30) {
       return {
         success: false,
         message: 'Reference audio cannot be used alone. Provide an image or video reference for the video generation.',
@@ -209,7 +286,7 @@ export async function createVideo(input: CreateVideoInput): Promise<CreateVideoR
     if (!supportsNativeTextToVideo(provider)) {
       return {
         success: false,
-        message: `${capability.label} requires an image or video reference. Native text-to-video is currently available through SeeDance models and MiniMax H3.`,
+        message: `${capability.label} requires an image or video reference. Native text-to-video is currently available through SeeDance, Wan 3.0, Grok Imagine Video 1.5, Gemini Omni, and MiniMax H3.`,
       };
     }
   }
@@ -257,6 +334,14 @@ export async function createVideo(input: CreateVideoInput): Promise<CreateVideoR
       });
       filteredImages = prepared.images;
       finalPrompt = prepared.prompt;
+    } else if (isWan30) {
+      const prepared = prepareWan30References({
+        prompt: script,
+        images,
+        videoUrls: providerVideoUrls,
+      });
+      filteredImages = prepared.images;
+      finalPrompt = prepared.prompt;
     }
 
     if (hasAudioReference) {
@@ -296,6 +381,7 @@ export async function createVideo(input: CreateVideoInput): Promise<CreateVideoR
       requestedDuration: duration,
       referenceVideoDuration,
       model: provider,
+      operation: videoOperation,
     }) ?? parseTotalDuration(finalPrompt);
 
     const filteredModelError = validateVideoModelRequest({
@@ -303,21 +389,29 @@ export async function createVideo(input: CreateVideoInput): Promise<CreateVideoR
       resolution: route.resolution,
       aspectRatio,
       outputDuration: provider === 'seedance-2.5' && videoOperation === 'edit' ? -1 : resolvedDuration,
-      referenceVideoDuration,
+      referenceVideoDuration: previousInteractionId ? Math.min(referenceVideoDuration ?? 10, 10) : referenceVideoDuration,
       referenceVideoMetas: resolvedReferenceVideoMetas,
       hasVideoReference,
       imageReferenceCount: filteredImages.length,
       videoReferenceCount: providerVideoUrls.length,
       audioReferenceCount: audioUrls?.length || 0,
+      voiceReferenceCount: referenceVoiceIds?.length || 0,
+      imageWorkflow,
       operation: videoOperation,
     });
     if (filteredModelError) return { success: false, message: filteredModelError };
+
+    const resolvedImageWorkflow = resolveVideoImageWorkflow({
+      model: provider,
+      imageReferenceCount: filteredImages.length,
+      requestedWorkflow: imageWorkflow,
+    });
 
     const loggedVideoRefType = videoUrl ? (videoReferType ?? 'base') : (videoUrls?.length ? 'feature' : undefined);
     let providerAspectRatio = resolveReferenceAspectRatio(provider, aspectRatio, providerVideoUrls.length > 0, resolvedReferenceVideoMetas);
     if (provider === 'seedance-2.5' && videoOperation !== 'generate') providerAspectRatio = 'adaptive';
     if (route.provider === 'fal-sync') providerAspectRatio = undefined;
-    console.log(`\n🎬 [create_video] provider=${provider}, resolution=${route.resolution}, ${filteredImages.length}/${images.length} images, duration=${resolvedDuration ?? 'smart'}, aspectRatio=${providerAspectRatio ?? 'auto'}${hasVideoReference ? `, video=${loggedVideoRefType}` : ''}${hasAudioReference ? `, audio=${audioUrls?.length}` : ''}`);
+    console.log(`\n🎬 [create_video] provider=${provider}, resolution=${route.resolution}, ${filteredImages.length}/${images.length} images${resolvedImageWorkflow ? `, imageWorkflow=${resolvedImageWorkflow}` : ''}, duration=${resolvedDuration ?? 'smart'}, aspectRatio=${providerAspectRatio ?? 'auto'}${hasVideoReference ? `, video=${loggedVideoRefType}` : ''}${hasAudioReference ? `, audio=${audioUrls?.length}` : ''}`);
     console.log(`Script (${finalPrompt.length} chars): ${finalPrompt.slice(0, 150)}...`);
 
     let taskId: string;
@@ -369,9 +463,6 @@ export async function createVideo(input: CreateVideoInput): Promise<CreateVideoR
         hasAudioReference,
         operation: videoOperation,
       });
-      if (provider === 'seedance-2.5' && providerModel === 'seedance-2.5-image-to-video') {
-        providerAspectRatio = 'adaptive';
-      }
       const providerDuration = provider === 'seedance-2.5' && videoOperation === 'edit'
         ? -1
         : resolvedDuration != null ? resolvedDuration : undefined;
@@ -392,13 +483,34 @@ export async function createVideo(input: CreateVideoInput): Promise<CreateVideoR
         outputFormat,
         webSearch,
       });
-      console.log(`✅ [create_video] SeeDance (Evolink) task created: ${taskId}`);
+      console.log(`✅ [create_video] ${capability.label} (Evolink) task created: ${taskId}`);
       return {
         success: true,
         taskId,
         videoModel: provider,
         providerModel,
         message: `Video rendering task created. Task ID: ${taskId}. Rendering time depends on the selected model. Use makaron_get_video_status to poll.`,
+      };
+    } else if (route.provider === 'mulerouter') {
+      const { createMuleRouterVideoTask } = await import('../mulerouter-video');
+      taskId = await createMuleRouterVideoTask({
+        model: provider === 'wan-3.0-pro' ? 'pro' : 'standard',
+        prompt: finalPrompt,
+        images: filteredImages,
+        videoUrls: providerVideoUrls.length ? providerVideoUrls : undefined,
+        audioUrls: audioUrls?.length ? audioUrls : undefined,
+        duration: resolvedDuration != null ? resolvedDuration : -1,
+        aspectRatio: providerAspectRatio,
+        resolution: route.resolution as '480p' | '720p' | '1080p' | '2k' | '4k',
+        generateAudio,
+      });
+      console.log(`✅ [create_video] ${capability.label} (MuleRouter) task created: ${taskId}`);
+      return {
+        success: true,
+        taskId,
+        videoModel: provider,
+        providerModel: route.providerModel,
+        message: `MuleRouter video task created. Task ID: ${taskId}. Use makaron_get_video_status to poll.`,
       };
     } else if (route.provider === 'minimax') {
       const { createMinimaxVideoTask } = await import('../minimax-video');
@@ -421,14 +533,26 @@ export async function createVideo(input: CreateVideoInput): Promise<CreateVideoR
       };
     } else if (route.provider === 'grok') {
       const { createXaiVideoTask } = await import('../xai-video');
-      taskId = await createXaiVideoTask({
+      const xaiSubmission = await createXaiVideoTask({
         prompt: finalPrompt,
         images: filteredImages,
+        videoUrl: providerVideoUrls[0],
+        operation: videoOperation,
         duration: resolvedDuration != null ? resolvedDuration : undefined,
         aspectRatio: providerAspectRatio,
-        resolution: route.resolution as '480p' | '720p',
+        resolution: route.resolution as '480p' | '720p' | '1080p',
+        generateAudio,
+        referenceVoiceIds,
       });
+      taskId = xaiSubmission.taskId;
       console.log(`✅ [create_video] Grok Video task created: ${taskId}`);
+      return {
+        success: true,
+        taskId,
+        videoModel: provider,
+        providerModel: xaiSubmission.providerModel,
+        message: `Grok ${xaiSubmission.mode} task created. Task ID: ${taskId}. Use makaron_get_video_status to poll.`,
+      };
     } else if (route.provider === 'google-omni') {
       const { createGoogleOmniVideoTask } = await import('../google-omni-video');
       if ((videoUrls?.length || 0) > 1 || (videoUrl && (videoUrls?.length || 0) > 0)) {
@@ -442,6 +566,9 @@ export async function createVideo(input: CreateVideoInput): Promise<CreateVideoR
         images: filteredImages,
         duration: resolvedDuration != null ? resolvedDuration : undefined,
         aspectRatio: providerAspectRatio,
+        resolution: route.resolution as '360p' | '720p' | '1080p' | '4k',
+        operation: videoOperation,
+        previousInteractionId,
         videoUrl,
         videoUrls,
       });

@@ -53,6 +53,7 @@ export async function editImage(
   let lastFailedModels: ModelId[] | undefined;
   let contentBlocked = false;
   let lastUsage: TokenUsage | undefined;
+  let usedProvider: string | undefined;
   // A transparent request is a strict, paid provider call. Do not fan it out
   // or repeat it after failure; surface the capability error to the user.
   const MAX_ATTEMPTS = background === 'transparent' ? 1 : 2;
@@ -69,6 +70,7 @@ export async function editImage(
       references,
       fallbackPrompt: undefined,
       isNsfw,
+      codexSubscription: ctx.codexSubscription,
     });
 
     result = genResult.image;
@@ -76,6 +78,7 @@ export async function editImage(
     lastFailedModels = genResult.failedModels;
     if (genResult.contentBlocked) contentBlocked = true;
     if (genResult.usage) lastUsage = genResult.usage;
+    usedProvider = genResult.provider;
 
     if (result) break;
     if (attempt < MAX_ATTEMPTS) {
@@ -95,12 +98,15 @@ export async function editImage(
     };
   }
 
-  console.log(`✅ [edit_image] done in ${((Date.now() - t0) / 1000).toFixed(1)}s (image ${(result.length / 1024).toFixed(0)}KB) model=${usedModel}${requestedModel && usedModel !== requestedModel ? ` (requested=${requestedModel}, fallback from ${lastFailedModels?.join(',')})` : ''}`);
+  console.log(`✅ [edit_image] done in ${((Date.now() - t0) / 1000).toFixed(1)}s (image ${(result.length / 1024).toFixed(0)}KB) model=${usedModel} provider=${usedProvider ?? 'default'}${requestedModel && usedModel !== requestedModel ? ` (requested=${requestedModel}, fallback from ${lastFailedModels?.join(',')})` : ''}`);
   let msg = 'Image generated successfully.';
   if (requestedModel && usedModel !== requestedModel) {
     msg += ` ⚠️ Note: requested model "${requestedModel}" failed, fell back to "${usedModel}". Tell the user.`;
   } else if (background === 'transparent' && preferredModel && preferredModel !== 'openai') {
     msg += ' Transparent output required the OpenAI image model.';
   }
-  return { success: true, message: msg, image: result, usedModel, contentBlocked, usage: lastUsage };
+  if (usedProvider === 'codex-subscription') {
+    msg += ' Provider: Codex subscription.';
+  }
+  return { success: true, message: msg, image: result, usedModel, provider: usedProvider, contentBlocked, usage: lastUsage };
 }

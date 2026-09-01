@@ -28,6 +28,7 @@ describe('agent media scenario matrix', () => {
   const compositionDuration = read('src/lib/composition-duration.ts')
   const animateRoute = read('src/app/api/animate/route.ts')
   const videoSnapshotRoute = read('src/app/api/video-snapshot/route.ts')
+  const createVideo = read('src/lib/skills/create-video.ts')
   const mcpServer = read('src/mcp/server.ts')
   const cli = read('packages/makaron-cli/bin/makaron.mjs')
 
@@ -146,7 +147,7 @@ describe('agent media scenario matrix', () => {
   it('keeps native SeeDance text-to-video reachable without generating an intermediate image', () => {
     expect(agent).toContain('SeeDance supports native text-to-video')
     expect(agent).toContain('Do not generate an intermediate image first')
-    expect(animate).toContain('Zero images means native SeeDance text-to-video')
+    expect(animate).toContain('Zero images can use native SeeDance or Wan 3.0 text-to-video')
     expect(animate).toContain('do not call `generate_image` first')
     expect(agentTs).toContain('!supportsNativeTextToVideo(videoModel)')
     expect(animateRoute).toContain('!supportsNativeTextToVideo(selectedVideoModel)')
@@ -154,7 +155,18 @@ describe('agent media scenario matrix', () => {
     expect(mcpServer).toContain("default([]).describe('Optional public image URLs")
     expect(cli).toContain('const supportsNativeTextToVideo =')
     expect(cli).toContain('const isSeedanceModel =')
-    expect(cli).toContain('!images.length && !videos.length && !audios.length && !supportsNativeTextToVideo')
+    expect(cli).toContain('!images.length && !videos.length && !audios.length && !referenceVoices.length && !supportsNativeTextToVideo')
+  })
+
+  it('validates model image limits only after Media Index selection', () => {
+    expect(agentTs).not.toContain('imageReferenceCount: imageUrls.filter(Boolean)')
+
+    const entryPreflightStart = createVideo.indexOf('const modelError = validateVideoModelRequest({')
+    const filteredPreflightStart = createVideo.indexOf('const filteredModelError = validateVideoModelRequest({')
+    expect(entryPreflightStart).toBeGreaterThanOrEqual(0)
+    expect(filteredPreflightStart).toBeGreaterThan(entryPreflightStart)
+    expect(createVideo.slice(entryPreflightStart, filteredPreflightStart)).not.toContain('imageReferenceCount:')
+    expect(createVideo.slice(filteredPreflightStart)).toContain('imageReferenceCount: filteredImages.length')
   })
 
   it('separates generic coding, Remotion composition, and node media outputs', () => {
@@ -429,7 +441,7 @@ describe('video script harness old and new scenarios', () => {
     })).toBeNull()
   })
 
-  it('new Grok video scenario accepts one image and rejects multi-image references', () => {
+  it('new Grok video scenario supports one or more feature references', () => {
     expect(validateVideoScript({
       prompt: 'Shot 1 (1s): Animate <<<media_1>>> with a slow push-in.',
       imageCount: 1,
@@ -442,6 +454,13 @@ describe('video script harness old and new scenarios', () => {
       imageCount: 2,
       model: 'grok',
       duration: 1,
-    })).toContain('supports at most 1 reference image')
+    })).toBeNull()
+
+    expect(validateVideoScript({
+      prompt: 'Blend <<<media_1>>>, <<<media_2>>>, <<<media_3>>>, <<<media_4>>>, <<<media_5>>>, <<<media_6>>>, <<<media_7>>>, and <<<media_8>>>.',
+      imageCount: 8,
+      model: 'grok',
+      duration: 1,
+    })).toContain('supports at most 7 reference images')
   })
 })

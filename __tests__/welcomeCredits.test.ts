@@ -61,4 +61,20 @@ describe('welcome credits source of truth', () => {
     expect(adminPage).toContain('DEFAULT_WELCOME_CREDITS')
     expect(adminPage).not.toMatch(/welcomeCredits\s*\?\?\s*500|parseInt\(welcomeInput\)\s*\|\|\s*500/)
   })
+
+  it('never uses a read-modify-upsert helper to grant credits', () => {
+    const credits = readFileSync(path.join(root, 'src/lib/billing/credits.ts'), 'utf8')
+    const adminGrant = readFileSync(path.join(root, 'src/app/api/admin/add-credits/route.ts'), 'utf8')
+    const agentGrant = readFileSync(path.join(root, 'src/app/api/agent/register/verify/route.ts'), 'utf8')
+    const guard = readFileSync(
+      path.join(root, 'supabase/migrations/20260830034219_protect_credit_balance_counters.sql'),
+      'utf8',
+    )
+
+    expect(credits).not.toContain('function addCredits')
+    expect(adminGrant).toContain('grantCreditsAndRecordPurchase')
+    expect(agentGrant).toContain("p_channel: 'agent_registration'")
+    expect(guard).toContain('NEW.lifetime_purchased < OLD.lifetime_purchased')
+    expect(guard).toContain('BEFORE UPDATE ON public.credit_balances')
+  })
 })

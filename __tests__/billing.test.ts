@@ -299,6 +299,25 @@ describe('token-rates', () => {
     });
   });
 
+  it('includes the official Grok 4.6 OpenRouter fallback rate', async () => {
+    const chain = mockQuery([]);
+    mockFrom.mockReturnValue(chain);
+    chain.order = vi.fn().mockResolvedValue({ data: [], error: null });
+
+    const { getTokenRate, invalidateTokenRateCache } = await import('@/lib/billing/token-rates');
+    invalidateTokenRateCache();
+
+    const rate = await getTokenRate('x-ai/grok-4.6');
+    expect(rate).toMatchObject({
+      display_name: 'Grok 4.6',
+      input_per_1m: 2,
+      output_per_1m: 6,
+      cache_read_per_1m: 0.5,
+      cache_write_per_1m: 0,
+      markup: 2,
+    });
+  });
+
   it('includes the exact GPT-5.6 Terra fallback rate and bills its usage', async () => {
     const chain = mockQuery([]);
     mockFrom.mockReturnValue(chain);
@@ -385,13 +404,31 @@ describe('credits', () => {
       }
     });
 
-    it('treats missing balance as 0', async () => {
+    it('initializes a missing balance through the atomic welcome-credit RPC', async () => {
       const chain = mockQuery(null);
+      chain.single
+        .mockResolvedValueOnce({ data: null, error: { code: 'PGRST116', message: 'No rows' } })
+        .mockResolvedValueOnce({ data: { balance: 500 }, error: null })
       mockFrom.mockImplementation((t: string) => t === 'app_settings' ? billingSettingsChain : chain);
+      mockRpc.mockResolvedValue({ data: { granted: true, balance: 500 }, error: null });
 
       const { requireCredits } = await import('@/lib/billing/credits');
       const result = await requireCredits('user-1', 1);
-      expect(result.ok).toBe(false);
+      expect(result.ok).toBe(true);
+      expect(mockRpc).toHaveBeenCalledWith('claim_welcome_credits', {
+        p_user_id: 'user-1',
+        p_credits: 500,
+        p_channel: 'legacy_auto',
+      });
+    });
+
+    it('fails closed when the balance read fails', async () => {
+      const chain = mockQuery(null, { code: '08006', message: 'connection failure' });
+      mockFrom.mockImplementation((t: string) => t === 'app_settings' ? billingSettingsChain : chain);
+
+      const { requireCredits } = await import('@/lib/billing/credits');
+      await expect(requireCredits('user-1', 1)).rejects.toThrow('Could not read credit balance');
+      expect(mockRpc).not.toHaveBeenCalledWith('claim_welcome_credits', expect.anything());
     });
   });
 

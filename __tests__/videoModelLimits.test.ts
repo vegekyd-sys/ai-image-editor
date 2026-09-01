@@ -1,8 +1,60 @@
 import { describe, expect, it, vi } from 'vitest'
 import { createVideo } from '@/lib/skills/create-video'
-import { estimateVideoCredits, estimateVideoProviderCostUsd, getDefaultVideoModelId, getVideoModelCapability, normalizeVideoModelId, normalizeVideoResolution, resolveAgentVideoSelection, resolveClosestSupportedAspectRatio, resolveVideoGenerationRoute, resolveVideoProviderAspectRatio, resolveVideoProviderModel, validateVideoModelRequest, validateVideoResolutionRequest } from '@/lib/video-model-capabilities'
+import { estimateVideoCredits, estimateVideoProviderCostUsd, getDefaultVideoModelId, getRequiredVideoCredits, getVideoModelCapability, listVideoModelCapabilities, normalizeVideoModelId, normalizeVideoResolution, resolveAgentVideoSelection, resolveClosestSupportedAspectRatio, resolvePersistedVideoDuration, resolveVideoGenerationRoute, resolveVideoImageWorkflow, resolveVideoOutputDuration, resolveVideoProviderAspectRatio, resolveVideoProviderModel, supportsNativeTextToVideo, validateVideoImageWorkflowRequest, validateVideoModelRequest, validateVideoResolutionRequest } from '@/lib/video-model-capabilities'
 
 describe('video model reference limits', () => {
+  it('defaults every image-capable provider to reference-to-video', () => {
+    const imageCapableModels = listVideoModelCapabilities()
+      .filter(capability => capability.maxImageReferences !== 0)
+
+    expect(imageCapableModels.length).toBeGreaterThan(0)
+    for (const capability of imageCapableModels) {
+      expect(capability.defaultImageWorkflow, capability.id).toBe('reference-to-video')
+      expect(resolveVideoImageWorkflow({
+        model: capability.id,
+        imageReferenceCount: 1,
+      }), capability.id).toBe('reference-to-video')
+    }
+  })
+
+  it('keeps unknown future providers on reference-to-video and rejects implicit first-frame mode', () => {
+    expect(resolveVideoImageWorkflow({
+      model: 'future-video-provider',
+      imageReferenceCount: 1,
+    })).toBe('reference-to-video')
+    expect(resolveVideoImageWorkflow({
+      model: 'future-video-provider',
+      imageReferenceCount: 7,
+    })).toBe('reference-to-video')
+    expect(validateVideoImageWorkflowRequest({
+      model: 'future-video-provider',
+      imageReferenceCount: 1,
+      requestedWorkflow: 'image-to-video',
+    })).toContain('does not expose an explicit image-to-video/first-frame workflow')
+  })
+
+  it('fails closed in create_video when a caller requests undeclared first-frame mode', async () => {
+    const result = await createVideo({
+      script: 'Shot 1 (5s): <<<media_1>>> walks through a sunlit room.',
+      images: ['https://example.com/subject.jpg'],
+      duration: 5,
+      videoModel: 'wan-3.0',
+      imageWorkflow: 'image-to-video',
+    })
+
+    expect(result).toMatchObject({
+      success: false,
+      message: expect.stringContaining('does not expose an explicit image-to-video/first-frame workflow'),
+    })
+  })
+
+  it('rejects image references for models that explicitly declare no image workflow', () => {
+    expect(validateVideoImageWorkflowRequest({
+      model: 'sync-lipsync-v3',
+      imageReferenceCount: 1,
+    })).toBe('Sync Lipsync v3 does not support image references.')
+  })
+
   it('defaults video generation to SeeDance 2.0 Fast', () => {
     expect(getDefaultVideoModelId()).toBe('seedance-fast')
     expect(normalizeVideoModelId()).toBe('seedance-fast')
@@ -31,6 +83,8 @@ describe('video model reference limits', () => {
     expect(resolveVideoProviderModel({ model: 'seedance-mini', imageReferenceCount: 0 })).toBe('seedance-2.0-mini-text-to-video')
     expect(resolveVideoProviderModel({ model: 'seedance', imageReferenceCount: 0 })).toBe('seedance-2.0-text-to-video')
     expect(resolveVideoProviderModel({ model: 'seedance-fast', imageReferenceCount: 1 })).toBe('seedance-2.0-fast-reference-to-video')
+    expect(resolveVideoProviderModel({ model: 'seedance-mini', imageReferenceCount: 1 })).toBe('seedance-2.0-mini-reference-to-video')
+    expect(resolveVideoProviderModel({ model: 'seedance', imageReferenceCount: 1 })).toBe('seedance-2.0-reference-to-video')
   })
 
   it('registers MiniMax H3 with public 768p and 2K production routes', () => {
@@ -189,8 +243,8 @@ describe('video model reference limits', () => {
 
   it('selects the right Seedance 2.5 provider mode from typed operation and references', () => {
     expect(resolveVideoProviderModel({ model: 'seedance-2.5', imageReferenceCount: 0 })).toBe('seedance-2.5-text-to-video')
-    expect(resolveVideoProviderModel({ model: 'seedance-2.5', imageReferenceCount: 1 })).toBe('seedance-2.5-image-to-video')
-    expect(resolveVideoProviderModel({ model: 'seedance-2.5', imageReferenceCount: 2 })).toBe('seedance-2.5-image-to-video')
+    expect(resolveVideoProviderModel({ model: 'seedance-2.5', imageReferenceCount: 1 })).toBe('seedance-2.5-reference-to-video')
+    expect(resolveVideoProviderModel({ model: 'seedance-2.5', imageReferenceCount: 2 })).toBe('seedance-2.5-reference-to-video')
     expect(resolveVideoProviderModel({ model: 'seedance-2.5', imageReferenceCount: 1, aspectRatio: '9:16' })).toBe('seedance-2.5-reference-to-video')
     expect(resolveVideoProviderModel({ model: 'seedance-2.5', imageReferenceCount: 2, aspectRatio: '16:9' })).toBe('seedance-2.5-reference-to-video')
     expect(resolveVideoProviderModel({ model: 'seedance-2.5', imageReferenceCount: 3 })).toBe('seedance-2.5-reference-to-video')
@@ -502,16 +556,8 @@ describe('video model reference limits', () => {
     }
   })
 
-  it('still rejects zero-media generation for providers without text-to-video support', async () => {
-    const result = await createVideo({
-      script: 'Neon city awakening\n\nA cinematic neon city wakes at dawn.',
-      images: [],
-      duration: 5,
-      videoModel: 'grok',
-    })
-
-    expect(result.success).toBe(false)
-    expect(result.message).toContain('requires an image or video reference')
+  it('recognizes Grok 1.5 native text-to-video without requiring source media', () => {
+    expect(supportsNativeTextToVideo('grok')).toBe(true)
   })
 
   it('does not invent a Kling reference-video lower resolution limit', async () => {
@@ -585,25 +631,208 @@ describe('video model reference limits', () => {
     expect(estimateVideoCredits({ model: 'grok', durationSec: 4, imageCount: 1 })).toBe(66)
     expect(estimateVideoCredits({ model: 'grok', resolution: '480p', durationSec: 1, imageCount: 1 })).toBe(18)
     expect(estimateVideoCredits({ model: 'grok', resolution: '720p', durationSec: 1, imageCount: 1 })).toBe(30)
+    expect(estimateVideoCredits({ model: 'grok', resolution: '1080p', durationSec: 1 })).toBe(50)
+    expect(estimateVideoCredits({
+      model: 'grok',
+      operation: 'edit',
+      durationSec: 5,
+      referenceVideoDurationSec: 5,
+    })).toBe(80)
+    expect(estimateVideoCredits({
+      model: 'grok',
+      operation: 'extend',
+      durationSec: 6,
+      referenceVideoDurationSec: 5,
+    })).toBe(94)
   })
 
-  it('models Gemini Omni as a fast 720p image and video edit provider', () => {
+  it('models the current split Grok generation/edit/extend contract', () => {
+    expect(getVideoModelCapability('grok')).toMatchObject({
+      label: 'Grok Imagine Video',
+      supportsVideoReference: true,
+      supportsBaseVideoEdit: true,
+      supportsVideoExtend: true,
+      maxImageReferences: 7,
+      maxVideoReferences: 1,
+      maxReferenceVideoDuration: 15,
+      supportedResolutions: ['480p', '720p', '1080p'],
+    })
+    expect(resolveVideoProviderModel({ model: 'grok', operation: 'generate' })).toBe('grok-imagine-video-1.5')
+    expect(resolveVideoProviderModel({ model: 'grok', operation: 'edit', hasVideoReference: true })).toBe('grok-imagine-video')
+    expect(resolveVideoProviderModel({ model: 'grok', operation: 'extend', hasVideoReference: true })).toBe('grok-imagine-video')
+    expect(resolveVideoOutputDuration({
+      model: 'grok',
+      operation: 'edit',
+      requestedDuration: 3,
+      referenceVideoDuration: 8.2,
+    })).toBe(8.2)
+    expect(resolveVideoOutputDuration({ model: 'grok', operation: 'extend', referenceVideoDuration: 5 })).toBe(6)
+    expect(resolvePersistedVideoDuration({
+      model: 'grok',
+      operation: 'extend',
+      referenceVideoDuration: 5,
+      outputDuration: 6,
+    })).toBe(11)
+    expect(validateVideoModelRequest({
+      model: 'grok',
+      operation: 'edit',
+      hasVideoReference: true,
+      videoReferenceCount: 1,
+      referenceVideoDuration: 8.7,
+    })).toBeNull()
+    expect(validateVideoModelRequest({
+      model: 'grok',
+      operation: 'edit',
+      hasVideoReference: true,
+      videoReferenceCount: 1,
+      referenceVideoDuration: 8.8,
+    })).toContain('up to 8.7 seconds')
+    expect(validateVideoModelRequest({
+      model: 'grok',
+      operation: 'extend',
+      hasVideoReference: true,
+      videoReferenceCount: 1,
+      referenceVideoDuration: 15,
+      outputDuration: 10,
+    })).toBeNull()
+    expect(validateVideoModelRequest({
+      model: 'grok',
+      operation: 'extend',
+      hasVideoReference: true,
+      videoReferenceCount: 1,
+      referenceVideoDuration: 15,
+      outputDuration: 11,
+    })).toContain('between 2 and 10 seconds')
+    expect(validateVideoModelRequest({
+      model: 'grok',
+      operation: 'generate',
+      imageReferenceCount: 1,
+      resolution: '1080p',
+    })).toContain('reference-to-video is capped at 720p')
+    expect(validateVideoModelRequest({
+      model: 'grok',
+      operation: 'generate',
+      voiceReferenceCount: 1,
+      resolution: '1080p',
+    })).toContain('reference-to-video is capped at 720p')
+  })
+
+  it('enforces the Wan reference-plus-output 30-second budget', () => {
+    const request = {
+      model: 'wan-3.0',
+      operation: 'generate' as const,
+      hasVideoReference: true,
+      videoReferenceCount: 1,
+      referenceVideoDuration: 5.04,
+    }
+
+    expect(validateVideoModelRequest({ ...request, outputDuration: 24 })).toBeNull()
+    expect(validateVideoModelRequest({ ...request, outputDuration: 25 })).toContain('30 seconds or less')
+    expect(validateVideoModelRequest({ ...request, outputDuration: 30 })).toContain('duration=24')
+  })
+
+  it('charges Wan 3.0 from MuleRouter resolution pricing with the standard 2x markup', () => {
+    expect(estimateVideoCredits({ model: 'wan-3.0', resolution: '480p', durationSec: 5 })).toBe(50)
+    expect(estimateVideoCredits({ model: 'wan-3.0', resolution: '720p', durationSec: 5 })).toBe(100)
+    expect(estimateVideoCredits({ model: 'wan-3.0', resolution: '1080p', durationSec: 5 })).toBe(200)
+    expect(estimateVideoCredits({ model: 'wan-3.0-pro', resolution: '1080p', durationSec: 5 })).toBe(180)
+    expect(estimateVideoCredits({ model: 'wan-3.0-pro', resolution: '2k', durationSec: 5 })).toBe(200)
+    expect(estimateVideoCredits({ model: 'wan-3.0-pro', resolution: '4k', durationSec: 5 })).toBe(230)
+  })
+
+  it('requires explicit provider pricing for every registered video model', () => {
+    for (const capability of listVideoModelCapabilities()) {
+      const hasProviderPrice = capability.estimatedCostPerSecondUsd != null
+        || capability.estimatedCostPerSecondUsdByResolution != null
+      expect(hasProviderPrice, `${capability.id} must declare provider pricing`).toBe(true)
+    }
+    expect(() => getRequiredVideoCredits({
+      model: 'unpriced-video-model',
+      resolution: '720p',
+      durationSec: 5,
+    })).toThrow('Generation is blocked to prevent incorrect billing')
+  })
+
+  it('models Gemini Omni 1.1 as a fast multi-resolution generation, edit, and reference-video extension provider', () => {
     expect(normalizeVideoResolution('google-omni', 'auto')).toBe('720p')
     expect(resolveVideoGenerationRoute({ model: 'google-omni', resolution: 'auto' })).toMatchObject({
       model: 'google-omni',
       resolution: '720p',
       provider: 'google-omni',
-      providerModel: 'gemini-omni-flash-preview',
+      providerModel: 'gemini-omni-1.1-flash',
     })
     expect(getVideoModelCapability('google-omni')).toMatchObject({
       minOutputDuration: 3,
       maxOutputDuration: 10,
       supportsVideoReference: true,
       supportsBaseVideoEdit: true,
+      supportsVideoExtend: true,
+      maxVideoReferences: 1,
+      supportedResolutions: ['360p', '720p', '1080p', '4k'],
       maxReferenceVideoDuration: 10.5,
       maxImageReferences: 6,
     })
-    expect(estimateVideoCredits({ model: 'google-omni', durationSec: 5, imageCount: 1 })).toBe(100)
+    expect(estimateVideoCredits({ model: 'google-omni', durationSec: 5, imageCount: 1 })).toBe(102)
+    expect(estimateVideoCredits({ model: 'google-omni', resolution: '360p', durationSec: 5, imageCount: 1 })).toBe(34)
+    expect(estimateVideoCredits({ model: 'google-omni', resolution: '4k', durationSec: 5, imageCount: 1 })).toBe(305)
+    expect(estimateVideoProviderCostUsd({
+      model: 'google-omni',
+      durationSec: 10,
+      referenceVideoDurationSec: 5,
+    })).toBeCloseTo(1.0552517055)
+    expect(estimateVideoCredits({
+      model: 'google-omni',
+      durationSec: 10,
+      referenceVideoDurationSec: 5,
+    })).toBe(212)
+    expect(estimateVideoCredits({
+      model: 'google-omni',
+      durationSec: 10,
+      referenceVideoDurationSec: 10,
+    })).toBe(220)
+    expect(supportsNativeTextToVideo('google-omni')).toBe(true)
+    expect(resolveVideoOutputDuration({
+      model: 'google-omni',
+      operation: 'extend',
+      referenceVideoDuration: 5,
+    })).toBe(10)
+    expect(resolvePersistedVideoDuration({
+      model: 'google-omni',
+      operation: 'extend',
+      referenceVideoDuration: 5.013,
+      outputDuration: 10,
+    })).toBeCloseTo(15.013)
+    expect(validateVideoModelRequest({
+      model: 'google-omni',
+      operation: 'extend',
+      hasVideoReference: true,
+      videoReferenceCount: 1,
+      referenceVideoDuration: 10,
+      outputDuration: 10,
+    })).toBeNull()
+    expect(validateVideoModelRequest({
+      model: 'google-omni',
+      operation: 'extend',
+      hasVideoReference: true,
+      videoReferenceCount: 2,
+      referenceVideoDuration: 10,
+      outputDuration: 10,
+    })).toContain('at most 1 reference video')
+  })
+
+  it('caps stateful Google Omni continuation at 40 seconds cumulatively', async () => {
+    const result = await createVideo({
+      script: 'Continue the final scene.',
+      images: [],
+      duration: 10,
+      referenceVideoDuration: 40,
+      videoModel: 'google-omni',
+      videoOperation: 'extend',
+      previousInteractionId: 'v1_previous',
+    })
+
+    expect(result.success).toBe(false)
+    expect(result.message).toContain('maximum cumulative duration of 40 seconds')
   })
 
   it('fails fast before calling Google Omni with more than six image references', async () => {
@@ -623,7 +852,7 @@ describe('video model reference limits', () => {
     })
 
     expect(result.success).toBe(false)
-    expect(result.message).toContain('Gemini Omni Flash supports at most 6 reference images per request')
+    expect(result.message).toContain('Gemini Omni 1.1 Flash supports at most 6 reference images per request')
   })
 
   it('locks explicit app video model and resolution over agent tool guesses', () => {
@@ -682,7 +911,7 @@ describe('video model reference limits', () => {
     expect(resolveVideoProviderAspectRatio('seedance', 'auto')).toBe('adaptive')
     expect(resolveVideoProviderAspectRatio('seedance', '21:9')).toBe('21:9')
     expect(resolveVideoProviderAspectRatio('grok', 'auto')).toBeUndefined()
-    expect(resolveVideoProviderAspectRatio('grok', '3:2')).toBeUndefined()
+    expect(resolveVideoProviderAspectRatio('grok', '3:2')).toBe('3:2')
     expect(resolveVideoProviderAspectRatio('kling', 'auto')).toBeUndefined()
     expect(resolveVideoProviderAspectRatio('google-omni', '9:16')).toBe('9:16')
     expect(resolveVideoProviderAspectRatio('google-omni', '1:1')).toBe('1:1')
@@ -697,7 +926,7 @@ describe('video model reference limits', () => {
       aspectRatio: '21:9',
     })
     expect(unsupported.success).toBe(false)
-    expect(unsupported.message).toContain('Grok Video 1.5 does not support 21:9')
+    expect(unsupported.message).toContain('Grok Imagine Video does not support 21:9')
 
     const supported = await createVideo({
       script: 'Wide Seedance\n\nAnimate <<<media_1>>>.',

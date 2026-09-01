@@ -59,7 +59,7 @@ export async function generateImage(req: GenerateImageRequest): Promise<Generate
       if (image) {
         const fallbackUsed = modelId !== chain[0];
         if (fallbackUsed) console.log(`[model-router] Fallback: ${chain[0]} → ${modelId}`);
-        return { image, model: modelId, fallbackUsed, failedModels: failedModels.length ? failedModels : undefined, contentBlocked: contentBlocked || undefined, usage };
+        return { image, model: modelId, fallbackUsed, failedModels: failedModels.length ? failedModels : undefined, contentBlocked: contentBlocked || undefined, usage, provider: genResult.provider ?? usage?.provider };
       }
       console.log(`[model-router] ${modelId} returned null, trying next...`);
       failedModels.push(modelId);

@@ -1,0 +1,153 @@
+[
+  {
+    "name": "anchor",
+    "description": "Produce and review reusable long-video visual anchors: character cards,"
+  },
+  {
+    "name": "avatar-spokesperson",
+    "description": "Create presenter-led videos from a supplied identity image, presenter footage,",
+    "studioRunRecipe": "avatar-spokesperson",
+    "studioRunProfile": "generated-presenter"
+  },
+  {
+    "name": "character-animation",
+    "description": "Build a reusable local character animation proof with a consistent character",
+    "studioRunRecipe": "character-animation",
+    "studioRunProfile": "local-character-animation"
+  },
+  {
+    "name": "cinematic-video",
+    "description": "Produce an authored trailer, teaser, launch film, mood piece, or cinematic",
+    "studioRunRecipe": "cinematic-video",
+    "studioRunProfile": "generated-or-hybrid"
+  },
+  {
+    "name": "content-repurpose",
+    "description": "Convert a long video, interview, webinar, livestream, or podcast into ranked",
+    "studioRunRecipe": "content-repurpose",
+    "studioRunProfile": "batch-source-led",
+    "sourceMediaRequired": true
+  },
+  {
+    "name": "explainer-aesthetic-disney",
+    "description": "Controlled explainer-video benchmark using only the character animation principles lens as the aesthetic variable.",
+    "studioRunRecipe": "explainer-video",
+    "studioRunProfile": "generated-explainer",
+    "sourceMediaRequired": true
+  },
+  {
+    "name": "explainer-aesthetic-lottiefiles",
+    "description": "Controlled explainer-video benchmark using only the LottieFiles motion lens as the aesthetic variable.",
+    "studioRunRecipe": "explainer-video",
+    "studioRunProfile": "generated-explainer",
+    "sourceMediaRequired": true
+  },
+  {
+    "name": "explainer-aesthetic-rampstack",
+    "description": "Controlled explainer-video benchmark using only the Rampstack direction lens as the aesthetic variable.",
+    "studioRunRecipe": "explainer-video",
+    "studioRunProfile": "generated-explainer",
+    "sourceMediaRequired": true
+  },
+  {
+    "name": "explainer-video",
+    "description": "Create a narrated explainer video longer than 15s, typically 30-90s, about a",
+    "studioRunRecipe": "explainer-video",
+    "studioRunProfile": "generated-explainer"
+  },
+  {
+    "name": "localization-dub",
+    "description": "Produce multi-locale subtitle, dub, or subtitle-plus-dub variants from one",
+    "studioRunRecipe": "localization-dub",
+    "studioRunProfile": "source-led-variant",
+    "sourceMediaRequired": true
+  },
+  {
+    "name": "long-video-director",
+    "description": "Orchestrate and review provider-generated long-video workflows. Use for"
+  },
+  {
+    "name": "makaron-mascot",
+    "description": "Generate images featuring Pixel Wizard, the Makaron mascot character.",
+    "referenceImages": [
+      "assets/makaron-spark-pixel-wizard-concepts.png"
+    ],
+    "modelPreference": [
+      "gemini"
+    ]
+  },
+  {
+    "name": "motion-design-video",
+    "description": "Create motion-first videos using kinetic typography, diagrams, charts,",
+    "studioRunRecipe": "motion-design-video",
+    "studioRunProfile": "local-animation"
+  },
+  {
+    "name": "music-to-video",
+    "description": "Turn a supplied song, beat, or voice track into an editable audio-led video",
+    "studioRunRecipe": "music-to-video",
+    "studioRunProfile": "audio-led-local-animation"
+  },
+  {
+    "name": "photo-to-video",
+    "description": "Turn photos into a wild, imaginative video. Single photo: evolve it"
+  },
+  {
+    "name": "reference-video-studio",
+    "description": "Analyze a reference video, extract its transferable structure and pacing,",
+    "studioRunRecipe": "reference-video-studio",
+    "studioRunProfile": "reference-led",
+    "sourceMediaRequired": true
+  },
+  {
+    "name": "screen-demo",
+    "description": "Create an editable product walkthrough from real screen footage or an honest",
+    "studioRunRecipe": "screen-demo",
+    "studioRunProfile": "capture-or-synthetic"
+  },
+  {
+    "name": "source-video-studio",
+    "description": "Turn real uploaded footage into a polished talking-head edit, hybrid story,",
+    "studioRunRecipe": "source-video-studio",
+    "studioRunProfile": "source-led",
+    "sourceMediaRequired": true
+  },
+  {
+    "name": "sticker-maker",
+    "description": "Generate, extract, and prepare transparent image assets for video composition. Prefers native"
+  },
+  {
+    "name": "storyboard",
+    "description": "Produce and review one OpenAI 6+ panel storyboard image per approved long-video"
+  },
+  {
+    "name": "talking-head",
+    "description": "Edit talking-head footage with transcript-led cuts, synced captions, B-roll, and highlights; continue through video-translate for another language and tiktok-video for TikTok/Douyin delivery.",
+    "studioRunRecipe": "talking-head",
+    "studioRunProfile": "source-led",
+    "sourceMediaRequired": true
+  },
+  {
+    "name": "tiktok-video",
+    "description": "Package accepted source-led footage for TikTok/Douyin in editable Remotion; compose first with talking-head and video-translate for visible-speaker editing or translation."
+  },
+  {
+    "name": "video-ffmpeg-lab",
+    "description": "Real MP4 editing mindset for Makaron Agent using run_code runtime=node, FFmpeg, FFprobe, and workspace outputs."
+  },
+  {
+    "name": "video-segment-edit",
+    "description": "Locate a user-provided screenshot/frame inside a video, regenerate only the"
+  },
+  {
+    "name": "video-translate",
+    "description": "Translate accepted video into another language; compose first with talking-head when visible-speaker cuts are requested and finish through tiktok-video for TikTok/Douyin. Use Seed Audio for off-screen VO and SeeDance 2.0 for a visible speaker.",
+    "sourceMediaRequired": true
+  },
+  {
+    "name": "website-to-video",
+    "description": "Turn a real website, screen recording, or screenshots into an editable product",
+    "studioRunRecipe": "website-to-video",
+    "studioRunProfile": "site-led-remotion"
+  }
+]

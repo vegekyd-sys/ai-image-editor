@@ -7,7 +7,11 @@ import type { AgentPerf } from './agent-perf';
 import { createTextDeltaState, normalizeTextDelta } from './agent-text-delta';
 import { normalizeAgentErrorMessage } from './agent-error';
 import { compositionPartsPrefix } from './composition-parts';
-import type { AgentModelPreference, GPT56AgentProvider } from './agent-models';
+import {
+  resolveCodexSubscriptionFallbackProvider,
+  type AgentModelPreference,
+  type GPT56AgentProvider,
+} from './agent-models';
 import {
   createAgentModelRuntime,
   getAgentProviderOptions,
@@ -18,7 +22,11 @@ import {
   describeModelStreamError,
   shouldStopAfterTerminalToolFailure,
 } from './agent-terminal';
-import type { DurableExecutionRef } from './agent-execution';
+import {
+  isCodexSubscriptionTerminalFailure,
+  isRetryableProviderOutage,
+  type DurableExecutionRef,
+} from './agent-execution';
 import { buildDurableCompositionGuidance } from './studio-composition-guidance';
 import {
   getReplyLanguageInstruction,
@@ -27,7 +35,6 @@ import {
 } from './locales';
 import { getSkillLaunchSystemDirective, type SkillLaunchContext } from './skill-launch-context';
 import { buildAgentOutputLanguageDirective } from './agent-response-policy';
-import { type ParsedSkill } from './skill-registry';
 import * as workspace from './workspace';
 import {
   createTools,
@@ -84,17 +91,9 @@ function estTokens(chars: number): number {
 
 /** Build system prompt with lightweight skill manifest (not full templates) */
 
-async function buildSystemPrompt(userSkills?: ParsedSkill[], supabase?: any, userId?: string, projectId?: string): Promise<string> {
+async function buildSystemPrompt(supabase?: any, userId?: string, projectId?: string): Promise<string> {
   const base = getAgentSystemPrompt();
   const manifest = await workspace.getSkillManifest(supabase, userId);
-  // Append user skills to manifest if any
-  let userSkillLines = '';
-  if (userSkills?.length) {
-    userSkillLines = '\n' + userSkills.map(s =>
-      `- **${s.name}**: ${s.description.trim().split('\n')[0]}${s.makaron?.referenceImages?.length ? ' [has reference images]' : ''}`
-    ).join('\n');
-  }
-
   const projectPath = projectId ? `${projectId}/` : '';
   const workspaceSection = `
 
@@ -123,7 +122,7 @@ Before writing a new skill, read \`skills/SKILL_README.md\` first — it has the
 
 A good skill is **reusable across any project** — it describes a style, technique, or character, not a specific photo.
 
-${manifest}${userSkillLines}
+${manifest}
 `;
 
   // Memory injection — read user-level and project-level MEMORY.md
@@ -253,9 +252,9 @@ export interface RunMakaronAgentOptions {
   explicitMediaIndices?: number[];
   currentSnapshotIndex?: number;
   isNsfw?: boolean;
-  userSkills?: ParsedSkill[];
   supabase?: any;
   userId?: string;
+  codexSubscriptionAllowed?: boolean;
   currentDesign?: { code: string; width: number; height: number; props?: Record<string, unknown>; animation?: { fps: number; durationInSeconds: number; format?: string } };
   currentDesignPath?: string;
   history?: ModelMessage[];
@@ -284,6 +283,8 @@ export async function* runMakaronAgent(
     options?.agentModel,
     projectId,
     options?.agentProvider,
+    options?.userId,
+    options?.codexSubscriptionAllowed,
   );
   const ctx: AgentContext = {
     currentImage,
@@ -300,7 +301,6 @@ export async function* runMakaronAgent(
     explicitMediaIndices: options?.explicitMediaIndices ?? [],
     currentSnapshotIndex: options?.currentSnapshotIndex ?? 0,
     isNsfw: options?.isNsfw,
-    userSkills: options?.userSkills,
     supabase: options?.supabase,
     userId: options?.userId,
     timelineVersion: options?.timelineVersion,
@@ -319,7 +319,8 @@ export async function* runMakaronAgent(
     ),
     ctx,
   );
-  if (!options?.execution) delete (allTools as Record<string, unknown>).execution_checkpoint;
+  const durableContinuation = Boolean(options?.execution && options.execution.attemptNo > 1);
+  if (!durableContinuation) delete (allTools as Record<string, unknown>).execution_checkpoint;
   perf?.mark('agent_tools_created', { toolCount: Object.keys(allTools).length });
   let imagesSent = 0;
   let stepCount = 0;
@@ -383,19 +384,20 @@ export async function* runMakaronAgent(
   // full workspace skill surface.
   const endSystemPrompt = perf?.span('build_system_prompt', {
     projectId,
-    userSkills: options?.userSkills?.length ?? 0,
+    injectedSkillBodies: 0,
     mode: tipReactionOnly ? 'tipReaction' : analysisOnly ? 'analysis' : 'normal',
   });
   const baseSystemPrompt = (analysisOnly || tipReactionOnly)
     ? buildLightweightSystemPrompt(analysisOnly ? 'analysis' : 'tipReaction', options?.locale)
-    : await buildSystemPrompt(options?.userSkills, options?.supabase, options?.userId, projectId);
-  const durableExecutionDirective = options?.execution
-    ? `\n\n## Durable execution contract\nThis is attempt ${options.execution.attemptNo} of Agent Run ${options.execution.runId}. A later attempt may continue in a fresh model context only after a technical interruption, provider failure, context handoff, or newer user input. Preserve decisions and durable artifact pointers with execution_checkpoint after meaningful progress and before a long, risky generation step. Do not repeat expensive side effects whose tool result is already present. A Studio Run is only a persisted workflow that you follow with studio_run; its stage never decides whether this Agent Run ends or retries. Finish normally when you have completed the current user-facing turn, even if the workflow remains at Review or another stage. If this attempt advances the workflow into Composition, switch to numbered composition parts immediately and never begin a monolithic run_code payload. A newer queued user instruction has precedence over an older delivery target.`
+    : await buildSystemPrompt(options?.supabase, options?.userId, projectId);
+  const continuationExecution = durableContinuation ? options?.execution : undefined;
+  const durableExecutionDirective = continuationExecution
+    ? `\n\n## Durable execution contract\nThis is attempt ${continuationExecution.attemptNo} of Agent Run ${continuationExecution.runId}. A later attempt may continue in a fresh model context only after a technical interruption, provider failure, context handoff, or newer user input. Preserve decisions and durable artifact pointers with execution_checkpoint after meaningful progress and before a long, risky generation step. Do not repeat expensive side effects whose tool result is already present. A Studio Run is only a persisted workflow that you follow with studio_run; its stage never decides whether this Agent Run ends or retries. Finish normally when you have completed the current user-facing turn, even if the workflow remains at Review or another stage. If this attempt advances the workflow into Composition, switch to numbered composition parts immediately and never begin a monolithic run_code payload. A newer queued user instruction has precedence over an older delivery target.`
     : '';
-  const durableCompositionDirective = options?.execution && options.studioWorkflowStage === 'composition'
+  const durableCompositionDirective = continuationExecution && options?.studioWorkflowStage === 'composition'
     ? `\n\n## Durable Composition workspace\nKeep the full original Composition and Director creative standard, but do not emit a monolithic run_code composition payload. Long tool-input streams can reset before the call closes. Author the final Remotion source as numbered files under ${projectId}/drafts/composition-parts, one cohesive part per model step with write_file. Include compositionMetadata with the first part so dimensions, props, and animation are durable; omit editables because the assembled composition infers its Manifest automatically. Only repeat metadata when it changes. Keep each part under the 12000-character transport limit, wait for its tool result, and create as many parts as the approved content needs. Parts around 3000-8000 characters are preferred, but never compress creative detail merely to hit that range. Rewriting the same numbered path is safe after recovery. Do not use import/export; the files are concatenated into one scope with no aggregate source-size or part-count limit. Never shorten approved narration, subtitles, scenes, animation, or visual detail to reduce source size. Every successful write automatically assembles, validates, and autosaves the workspace. Continue until write_file reports compositionWorkspace.status="ready", then preview or patch its designPath directly. Do not spend another model turn calling run_code merely to assemble the directory. This changes only persistence and transport; it must not simplify the approved story, audio, visual direction, or ending.`
     : '';
-  const durableCompositionGuidance = options?.execution && options.studioWorkflowStage === 'composition'
+  const durableCompositionGuidance = continuationExecution && options?.studioWorkflowStage === 'composition'
     ? buildDurableCompositionGuidance()
     : '';
   const executionSystemPrompt = `${baseSystemPrompt}${durableExecutionDirective}${durableCompositionDirective}${durableCompositionGuidance}`;
@@ -459,6 +461,7 @@ export async function* runMakaronAgent(
   }
 
   let firstContentAt = 0;
+  let firstVisibleTextAt = 0;
 
   const msgs: ModelMessage[] = [
     ...history,
@@ -874,6 +877,12 @@ export async function* runMakaronAgent(
           continue;
         }
         if (text) {
+          if (!firstVisibleTextAt) {
+            firstVisibleTextAt = Date.now();
+            const firstVisibleTextMs = firstVisibleTextAt - agentStartTime;
+            console.log(`[agent-first-text] ${firstVisibleTextMs}ms`);
+            perf?.mark('model_first_visible_text', { firstVisibleTextMs });
+          }
           finalStepTextChars += text.trim().length;
           yield { type: 'content', text };
         }
@@ -1325,6 +1334,46 @@ export async function* runMakaronAgent(
       }
 
       if (assessment.ok) break;
+
+      const subscriptionFailureDetail = streamError
+        ? describeModelStreamError(streamError)
+        : assessment.detail;
+      const canFallbackFromSubscription = runtime.spec.provider === 'codex-subscription'
+        && !options?.execution
+        && !firstContentAt
+        && !attemptDeliveredArtifact
+        && attemptCommittedTools.size === 0
+        && (
+          isCodexSubscriptionTerminalFailure(subscriptionFailureDetail)
+          || isRetryableProviderOutage(subscriptionFailureDetail)
+        );
+      if (canFallbackFromSubscription) {
+        const fallbackProvider = resolveCodexSubscriptionFallbackProvider();
+        const hasFallbackCredential = fallbackProvider === 'azure-openai'
+          ? Boolean(process.env.AZURE_OPENAI_API_KEY?.trim())
+          : Boolean(process.env.OPENROUTER_API_KEY?.trim());
+        if (hasFallbackCredential) {
+          try {
+            const fallbackRuntime = createAgentModelRuntime(
+              runtime.spec.id,
+              projectId,
+              fallbackProvider,
+              options?.userId,
+            );
+            Object.assign(runtime, fallbackRuntime);
+            recoveryAttempt++;
+            yield { type: 'status', text: translate(responseLocale, 'agent.status.resuming') };
+            console.warn(
+              `[agent] Codex subscription unavailable before output; retrying ${runtime.spec.id} through ${fallbackProvider}`,
+            );
+            continue;
+          } catch (fallbackError) {
+            console.warn(
+              `[agent] Codex subscription API fallback unavailable: ${describeModelStreamError(fallbackError)}`,
+            );
+          }
+        }
+      }
 
       let attemptSteps: any[] = [];
       try { attemptSteps = await result.steps; } catch { /* stream may have failed before a complete step */ }

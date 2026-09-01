@@ -4,7 +4,11 @@ import {
   isRequiredServiceDown,
   resolveAzureOpenAIModelsRequest,
 } from '@/lib/azure-openai-health'
-import { resolveGPT56AgentProvider } from '@/lib/agent-models'
+import {
+  resolveCodexSubscriptionFallbackProvider,
+  resolveGPT56AgentProvider,
+} from '@/lib/agent-models'
+import { assertCodexSubscriptionAuthenticated } from '@/lib/codex-subscription'
 import {
   assertOpenRouterGPT56ModelEndpoint,
   REQUIRED_OPENROUTER_MODEL_IDS,
@@ -233,6 +237,16 @@ async function checkAzureOpenAI(): Promise<ServiceResult> {
   }, 5000)
 }
 
+async function checkCodexSubscription(): Promise<ServiceResult> {
+  const ownerUserId = process.env.CODEX_SUBSCRIPTION_OWNER_USER_ID?.trim()
+  if (!ownerUserId) {
+    return unavailable('CODEX_SUBSCRIPTION_OWNER_USER_ID not set')
+  }
+  return checkWithTimeout('codex_subscription', async () => {
+    await assertCodexSubscriptionAuthenticated(ownerUserId)
+  }, 15_000)
+}
+
 async function checkHuggingFace(): Promise<ServiceResult> {
   const token = process.env.HF_TOKEN
   if (!token) return unavailable('HF_TOKEN not set')
@@ -260,6 +274,7 @@ export async function GET() {
     kling,
     piapi,
     azureOpenai,
+    codexSubscription,
     huggingface,
   ] = await Promise.all([
     checkSupabaseDB(),
@@ -283,6 +298,7 @@ export async function GET() {
     checkKling(),
     checkPiAPI(),
     checkAzureOpenAI(),
+    checkCodexSubscription(),
     checkHuggingFace(),
   ])
 
@@ -298,6 +314,7 @@ export async function GET() {
     kling,
     piapi,
     azure_openai: azureOpenai,
+    codex_subscription: codexSubscription,
     huggingface,
   }
 
@@ -310,9 +327,17 @@ export async function GET() {
   // Agent provider is down -> down. The retained standby provider may degrade
   // independently without making the active OpenRouter Agent look unavailable.
   const selectedGPT56Provider = resolveGPT56AgentProvider(process.env.GPT56_AGENT_PROVIDER)
-  const selectedAgentHealth = selectedGPT56Provider === 'azure-openai'
+  const codexOwnerConfigured = Boolean(process.env.CODEX_SUBSCRIPTION_OWNER_USER_ID?.trim())
+  const codexFallbackHealth = resolveCodexSubscriptionFallbackProvider() === 'azure-openai'
     ? azureOpenai
     : openrouter
+  const selectedAgentHealth = selectedGPT56Provider === 'azure-openai'
+    ? azureOpenai
+    : selectedGPT56Provider === 'codex-subscription'
+      ? codexOwnerConfigured && codexSubscription.status !== 'healthy'
+        ? codexFallbackHealth
+        : codexSubscription
+      : openrouter
   const coreDown =
     supabaseDb.status === 'unhealthy' ||
     supabaseAuth.status === 'unhealthy' ||

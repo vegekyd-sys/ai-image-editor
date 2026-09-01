@@ -91,6 +91,50 @@ export function isRetryableProviderOutage(detail: unknown): boolean {
   return /(?:serviceunavailableexception|bedrock.{0,120}(?:unable to process|service unavailable)|\b(?:401|403|408|429|500|502|503|504)\b|econnreset|tls connection was established|step timeout.{0,80}exceeded)/i.test(detail);
 }
 
+export function isCodexSubscriptionTerminalFailure(detail: unknown): boolean {
+  if (typeof detail !== 'string' || !detail.trim()) return false;
+  return /(?:CODEX_SUBSCRIPTION_AUTH_UNAVAILABLE|UsageLimitExceeded|usage[_ -]?limit|usage_not_included|insufficient_quota|\b(?:401|403|429)\b)/i.test(detail);
+}
+
+export function shouldFailoverCodexSubscriptionToApi(input: {
+  requestedProvider: string;
+  hasApiFallback: boolean;
+  previousProviderFailover: boolean;
+  retryableFailureCount: number;
+  latestFailureDetail?: unknown;
+}): boolean {
+  return input.requestedProvider === 'codex-subscription'
+    && input.hasApiFallback
+    && (
+      input.previousProviderFailover
+      || isCodexSubscriptionTerminalFailure(input.latestFailureDetail)
+      || input.retryableFailureCount >= MAX_SAME_PROVIDER_ATTEMPTS
+    );
+}
+
+export function isSafeToEnterCodexSubscriptionApiFallback(
+  attempts: Array<{ metadata?: Record<string, unknown> | null }>,
+  inputEpoch: number,
+): boolean {
+  return !attempts.some((attempt) => {
+    const metadata = attempt.metadata;
+    if (
+      metadata?.provider !== 'codex-subscription'
+      || Number(metadata.inputEpoch) !== inputEpoch
+    ) {
+      return false;
+    }
+
+    // `pending` also covers a process kill before the attempt could persist its
+    // terminal safety state. Fail closed: an unknown attempt may already have
+    // streamed copy or committed a paid tool result.
+    return metadata.fallbackSafety !== 'safe'
+      || metadata.hadVisibleOutput === true
+      || metadata.deliveredArtifact === true
+      || (Array.isArray(metadata.committedTools) && metadata.committedTools.length > 0);
+  });
+}
+
 export function shouldFailoverAzureGPT56ToOpenRouter(input: {
   requestedProvider: string;
   hasOpenRouterKey: boolean;
@@ -251,9 +295,15 @@ export function buildTypedCompactionMessage(
     && (!compaction.modelId || !modelId || compaction.modelId === modelId)) {
     const { providerKey, itemId, encryptedContent } = compaction.item;
     // Encrypted Responses compaction items are provider-bound. A product model
-    // can keep the same public id while moving from Azure to OpenRouter, but its
-    // old Azure state must never be sent through the OpenRouter chat adapter.
-    if (agentProvider && (agentProvider !== 'azure-openai' || providerKey !== 'azure')) {
+    // can keep the same public id while moving between Azure, a personal Codex
+    // subscription, and OpenRouter, but opaque state must only return to the
+    // Responses transport that created it.
+    const expectedProviderKey = agentProvider === 'azure-openai'
+      ? 'azure'
+      : agentProvider === 'codex-subscription'
+        ? 'openai'
+        : undefined;
+    if (agentProvider && (!expectedProviderKey || providerKey !== expectedProviderKey)) {
       return null;
     }
     return {

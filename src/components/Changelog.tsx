@@ -17,12 +17,17 @@ interface LegacyChangelogEntry {
 
 type LocalizedChangelogEntry = {
   date: string;
-  localeKey: 'externalImages' | 'videoTranslation' | 'talkingHeadEditing' | 'smarterEditableDiscovery' | 'tiktokVideoSkill' | 'sourcePlayback' | 'externalSourceRanges' | 'seedance25' | 'minimaxH3' | 'multilingualAsr' | 'editableRemotion' | 'editableLayers';
+  localeKey: 'fastDurableAgent' | 'wan30' | 'googleOmni11' | 'externalImages' | 'videoTranslation' | 'talkingHeadEditing' | 'smarterEditableDiscovery' | 'tiktokVideoSkill' | 'sourcePlayback' | 'externalSourceRanges' | 'seedance25' | 'minimaxH3' | 'multilingualAsr' | 'editableRemotion' | 'editableLayers';
 };
 
 type ChangelogEntry = LegacyChangelogEntry | LocalizedChangelogEntry;
 
 const CHANGELOG: ChangelogEntry[] = [
+  { date: '2026-09-01', localeKey: 'fastDurableAgent' },
+  { date: '2026-09-01', localeKey: 'wan30' },
+  { date: '2026-08-31', en: { title: 'Grok 1.5 Video Editing', items: ['Edit an existing video with Grok 1.5 to change clothing, backgrounds, materials, or atmosphere while keeping the original motion and sound.', 'Generate with up to seven reference images, or use one source video for editing and extension with limits checked automatically.'] }, zh: { title: 'Grok 1.5 视频编辑', items: ['现在可以用 Grok 1.5 直接编辑现有视频，更换服装、背景、材质或整体氛围，同时保留原有动作与声音。', '生成视频最多支持 7 张参考图；编辑或续写支持 1 条源视频，并会自动检查不同模式的素材上限。'] } },
+  { date: '2026-08-30', en: { title: 'Personal Codex Plans for Test Accounts', items: ['Admins can now add registered test accounts to the Codex allowlist so their Agent chats use the owner’s personal Codex plan.'] }, zh: { title: '测试账号可用个人 Codex 套餐', items: ['管理员现在可以把已注册的测试账号加入 Codex 名单，让这些账号的 Agent 对话使用 owner 的个人 Codex 套餐。'] } },
+  { date: '2026-08-29', localeKey: 'googleOmni11' },
   { date: '2026-08-26', localeKey: 'externalImages' },
   {
     date: '2026-08-25',
@@ -984,6 +989,24 @@ const iOSAppTopGap = 'max(96px, calc(env(safe-area-inset-top, 0px) + 40px))';
 const iOSAppBottomGap = 'max(14px, env(safe-area-inset-bottom, 0px))';
 
 const LOCALIZED_CHANGELOG_KEYS = {
+  fastDurableAgent: {
+    title: 'changelog.fastDurableAgent.title',
+    items: ['changelog.fastDurableAgent.item1'],
+  },
+  wan30: {
+    title: 'changelog.wan30.title',
+    items: [
+      'changelog.wan30.item1',
+      'changelog.wan30.item2',
+    ],
+  },
+  googleOmni11: {
+    title: 'changelog.googleOmni11.title',
+    items: [
+      'changelog.googleOmni11.item1',
+      'changelog.googleOmni11.item2',
+    ],
+  },
   externalImages: {
     title: 'changelog.externalImages.title',
     items: ['changelog.externalImages.item1'],

@@ -81,10 +81,11 @@ npx makaron-cli chat --project auto --image photo.jpg --json -b "make it cinemat
 npx makaron-cli chat --project auto --image img1.jpg --image img2.jpg --json -b "combine these"
 ```
 
-`chat` routes image and video models automatically. Use `--agent-model` only when the user explicitly asks to select or compare the reasoning/tool-calling Agent LLM. Accepted values are exactly `auto`, `gpt-5.6-terra`, `gpt-5.6-sol`, `gpt-5.6-luna`, `grok-4.5`, and `deepseek-v4-pro`; `auto` currently resolves to `gpt-5.6-terra`. Never put an image or video model ID in `--agent-model`. The CLI rejects unknown Agent IDs plus `--image-model`, `--video-model`, and legacy `--model` before starting a chat run.
+`chat` routes image and video models automatically. Use `--agent-model` only when the user explicitly asks to select or compare the reasoning/tool-calling Agent LLM. Accepted values are `auto`, the base model IDs (`gpt-5.6-terra`, `gpt-5.6-sol`, `gpt-5.6-luna`, `grok-4.6`, `deepseek-v4-pro`), and the personal-plan routes (`gpt-5.6-terra-codex-subscription`, `gpt-5.6-sol-codex-subscription`, `gpt-5.6-luna-codex-subscription`). For the configured owner, `auto` uses GPT-5.6 Terra through the personal Codex plan; base GPT-5.6 IDs select Azure API, while suffixed IDs explicitly select the personal plan. Never put an image or video model ID in `--agent-model`.
 
 ```bash
 npx makaron-cli chat --project auto --agent-model deepseek-v4-pro --json -b "make a 20s badminton video"
+npx makaron-cli chat --project auto --agent-model gpt-5.6-sol-codex-subscription --json -b "reply with the active model"
 ```
 
 Returns immediately:
@@ -253,10 +254,10 @@ npx makaron-cli video script --image img1.jpg "cinematic story"
 # 2. Analyze a video (standalone, no timeline write)
 npx makaron-cli analyze --video input.mp4 "describe the key actions and pacing"
 
-# 3a. Submit image-to-video rendering (images must be public URLs from step 1 or uploaded)
+# 3a. Submit reference-to-video rendering (images must be public URLs from step 1 or uploaded)
 npx makaron-cli video create --script "Shot 1 (5s): <<<image_1>>> ..." --image https://...jpg --duration 5 --video-model kling
 
-# 3b. Native SeeDance or MiniMax H3 text-to-video (no image required)
+# 3b. Native SeeDance, Wan 3.0, or MiniMax H3 text-to-video (no image required)
 npx makaron-cli video create --script "Shot 1 (5s): A neon one-person studio wakes at dawn" --duration 5 --video-model seedance-fast --aspect 16:9
 npx makaron-cli video create --script "Shot 1 (15s): A premium creative editor comes alive" --duration 15 --video-model minimax-h3 --aspect 16:9
 
@@ -276,11 +277,13 @@ npx makaron-cli chat --project <id|auto> --video input.mp4 -b "make it funny"
 
 `chat` intentionally has no video model or resolution flags. State both in the chat message so the Agent selects a compatible provider and resolution together. Use `video create` only when you explicitly need direct provider controls.
 
-Options for `video create`: `--script "..."`, `--script-file <path>`, `--image <url>` (repeatable, up to the selected model limit), `--video <file|url>` and `--audio <file|url>` (repeatable where supported), `--duration <seconds>`, `--aspect 9:16|16:9|1:1`, `--video-model seedance-fast|seedance-mini|seedance|seedance-2.5|kling|grok|google-omni|minimax-h3|sync-lipsync-v3`, `--video-resolution auto|480p|720p|768p|1080p|2k|4k`. SeeDance accepts native text-to-video with no image and integer output duration 4-15s (default 5s); MiniMax H3 accepts native text-to-video, 4-15s output, public 768p/2k resolution, and up to 9 image, up to 3 video, and up to 3 audio references through Makaron Agent/chat. `sync-lipsync-v3` requires exactly one video plus one MP3/WAV and preserves that replacement audio while aligning the mouth. H3 defaults to 768p; request 2k explicitly for maximum/final quality. Kling supports 5-15s.
+Options for `video create`: `--script "..."`, `--script-file <path>`, `--image <url>` (repeatable), `--video <file|url>` and `--audio <file|url>` (repeatable where supported), `--voice <xai-preset-id>` (repeatable, Grok only), `--duration <seconds>`, `--aspect 9:16|16:9|1:1`, `--video-model seedance-fast|seedance-mini|seedance|seedance-2.5|wan-3.0|wan-3.0-pro|kling|grok|google-omni|minimax-h3|sync-lipsync-v3`, `--video-resolution auto|480p|720p|768p|1080p|2k|4k`. SeeDance accepts native text-to-video with no image and integer output duration 4-15s (default 5s); every Seedance image input uses reference-to-video, including one image. Wan 3.0 Standard supports 480p/720p/1080p and Wan 3.0 Pro supports 1080p/2K/4K through MuleRouter. MiniMax H3 accepts native text-to-video, 4-15s output, public 768p/2k resolution, and up to 9 image, up to 3 video, and up to 3 audio feature references through Makaron Agent/chat. Grok text-only generation supports 480p/720p/1080p; any 1-7 image or preset voice input uses reference-to-video and is capped at 720p. Grok edit/extend uses the base model internally. Gemini Omni image-only generation always uses `reference_to_video`, including one image. `sync-lipsync-v3` requires exactly one video plus one MP3/WAV. Kling supports 5-15s.
 
 For Seedance 2.5, use `--video-model seedance-2.5`; it supports 4-30s, 480p/720p, up to 30 image + 10 video + 10 audio references, and repeatable local-file/URL flags. Typed modes use `--video-operation generate|edit|extend`, with `--extend-direction`, `--output-format mp4|mov`, and optional `--web-search`. Evolink does not expose 4K for this route.
 
-Video edit model behavior: `--video-model kling --video` uses Kling base/direct edit internally; `--video-model seedance-fast --video`, `--video-model seedance-mini --video`, or `--video-model seedance --video` uses the Seedance video-reference path and requires target <=15s, <=50MB, width/height 300-6000px, aspect ratio 0.4-2.5, and frame pixels 409,600-2,086,876. Tiny metadata padding up to 15.5s is accepted and output duration is clamped to 15s. `--video-model minimax-h3 --video` uses H3 feature/reference mode: up to 3 video references totaling <=15s, each <=50MB with width/height 256-5760px and aspect ratio 0.4-2.5.
+For Wan 3.0, use `--video-model wan-3.0` for MuleRouter Standard at 480p/720p/1080p, or `--video-model wan-3.0-pro` for MuleRouter Pro super-resolution at 1080p/2K/4K. Both support 2-30s generation, up to 10 image + 5 video + 5 audio feature references, and native audio. They do not expose typed edit/extend or a relaxed-content-filter flag.
+
+Video edit model behavior: `--video-model kling --video` uses Kling base/direct edit internally; `--video-model seedance-fast --video`, `--video-model seedance-mini --video`, or `--video-model seedance --video` uses the Seedance video-reference path and requires target <=15s, <=50MB, width/height 300-6000px, aspect ratio 0.4-2.5, and frame pixels 409,600-2,086,876. Tiny metadata padding up to 15.5s is accepted and output duration is clamped to 15s. `--video-model minimax-h3 --video` uses H3 feature/reference mode: up to 3 video references totaling <=15s. `--video-model grok --video --operation edit` accepts one MP4 up to 8.7s; `--operation extend` accepts one 2-15s MP4 and adds 2-10s. Grok edit/extend output is capped at 720p.
 
 ### `music` — Music generation
 

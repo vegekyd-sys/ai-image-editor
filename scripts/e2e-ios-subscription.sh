@@ -12,6 +12,11 @@ PHOTO_FIXTURE="public/landing/trial-selfie-poster.jpg"
 RUN_STAMP="$(date -u +%Y%m%dT%H%M%SZ)"
 ARTIFACT_DIR=".artifacts/ios-e2e/${RUN_STAMP}"
 SERVER_PID=""
+SIMULATOR_VERIFIED=false
+# Keep one DerivedData location across worktrees instead of letting Xcode create
+# a multi-GB cache for every absolute checkout path.
+E2E_TMP_ROOT="${TMPDIR:-/tmp}"
+E2E_DERIVED_DATA="${MAKARON_E2E_DERIVED_DATA:-${E2E_TMP_ROOT%/}/makaron-ios-subscription-e2e-derived-data}"
 
 cd "$REPO_ROOT"
 mkdir -p "$ARTIFACT_DIR"
@@ -20,6 +25,14 @@ cleanup() {
   if [[ -n "$SERVER_PID" ]]; then
     kill -TERM "$SERVER_PID" 2>/dev/null || true
     wait "$SERVER_PID" 2>/dev/null || true
+  fi
+
+  # This simulator is disposable by contract and every run starts by erasing it.
+  # Erase on both success and failure so interrupted E2E runs do not retain app,
+  # WebView, Photos, and StoreKit data. Set the escape hatch only for debugging.
+  if [[ "$SIMULATOR_VERIFIED" == true && "${MAKARON_E2E_KEEP_SIMULATOR_STATE:-0}" != 1 ]]; then
+    xcrun simctl shutdown "$SIMULATOR_ID" >/dev/null 2>&1 || true
+    xcrun simctl erase "$SIMULATOR_ID" >/dev/null 2>&1 || true
   fi
 }
 trap cleanup EXIT INT TERM
@@ -43,6 +56,8 @@ if ! xcrun simctl list devices | rg -F "$SIMULATOR_NAME" | rg -q -F "$SIMULATOR_
   printf 'Refusing to erase simulator %s: it is not the dedicated %s device.\n' "$SIMULATOR_ID" "$SIMULATOR_NAME" >&2
   exit 1
 fi
+SIMULATOR_VERIFIED=true
+mkdir -p "$E2E_DERIVED_DATA"
 
 if ! npx supabase status --workdir "$SUPABASE_WORKDIR" >/dev/null 2>&1; then
   npx supabase start --workdir "$SUPABASE_WORKDIR"
@@ -100,6 +115,7 @@ fi
 set -o pipefail
 xcodebuild test \
   -parallel-testing-enabled NO \
+  -derivedDataPath "$E2E_DERIVED_DATA" \
   -project ios/App/App.xcodeproj \
   -scheme App-E2E \
   -destination "platform=iOS Simulator,id=$SIMULATOR_ID" \
@@ -148,6 +164,7 @@ npx supabase db reset --workdir "$SUPABASE_WORKDIR" --local
 set -o pipefail
 xcodebuild test \
   -parallel-testing-enabled NO \
+  -derivedDataPath "$E2E_DERIVED_DATA" \
   -project ios/App/App.xcodeproj \
   -scheme App-E2E \
   -destination "platform=iOS Simulator,id=$SIMULATOR_ID" \

@@ -36,6 +36,7 @@ export interface MakaronSkillMeta {
   referenceImages?: string[];
   referenceVideos?: string[];
   tags?: string[];
+  triggers?: string[];
 }
 
 export interface ParsedSkill {
@@ -175,7 +176,7 @@ export function parseSkillMd(content: string): ParsedSkill | null {
       else if (k === 'supportLevel') makaron.supportLevel = clean;
       else if (k === 'adapterFamily') makaron.adapterFamily = clean;
       else if (k === 'canonicalSkill') makaron.canonicalSkill = clean;
-      else if (k === 'modelPreference' || k === 'tags' || k === 'referenceImages' || k === 'referenceVideos') {
+      else if (k === 'modelPreference' || k === 'tags' || k === 'triggers' || k === 'referenceImages' || k === 'referenceVideos') {
         if (clean.startsWith('[')) {
           (makaron as Record<string, unknown>)[k] = clean.slice(1, -1).split(',').map(s => s.trim());
         } else if (!clean) {

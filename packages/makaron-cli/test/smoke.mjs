@@ -641,7 +641,8 @@ try {
     const result = await expectHelp(['chat', '--help'], /Agent LLM defaults to auto/);
     assert.match(result.stdout, /^\s+--agent-model <id>/m);
     assert.match(result.stdout, /deepseek-v4-pro/);
-    assert.match(result.stdout, /currently gpt-5\.6-terra/);
+    assert.match(result.stdout, /account owner uses the personal\s+Codex plan/);
+    assert.match(result.stdout, /gpt-5\.6-\*-codex-subscription/);
     assert.doesNotMatch(result.stdout, /^\s+--image-model/m);
     assert.doesNotMatch(result.stdout, /^\s+--video-model/m);
     assert.doesNotMatch(result.stdout, /^\s+--video-resolution/m);
@@ -664,7 +665,19 @@ try {
       /export const AGENT_MODEL_IDS = \[([\s\S]*?)\] as const;/,
       'app Agent model catalog',
     );
-    assert.deepEqual(cliModels, ['auto', ...appModels], 'CLI Agent LLM allowlist must stay in sync with the app catalog');
+    const subscriptionModels = [
+      'gpt-5.6-terra-codex-subscription',
+      ...extractQuotedValues(
+      appCatalogSource,
+      /export const CODEX_SUBSCRIPTION_AGENT_MODEL_PREFERENCES = \[([\s\S]*?)\] as const;/,
+      'app Codex subscription Agent model catalog',
+      ),
+    ];
+    assert.deepEqual(
+      cliModels,
+      ['auto', ...appModels.slice(0, 3), ...subscriptionModels, ...appModels.slice(3)],
+      'CLI Agent LLM allowlist must stay in sync with the app catalog',
+    );
   }
 
   {
@@ -771,6 +784,18 @@ try {
     assert.equal(streamRequest?.body?.agentModel, 'gpt-5.6-terra');
     assert.equal(streamRequest?.body?.preferredModel, undefined);
     assert.equal(streamRequest?.body?.videoModel, undefined);
+  }
+
+  {
+    const requestStart = requests.length;
+    await expectSuccess([
+      'chat', '--project', 'project-models-1', '--agent-model',
+      'gpt-5.6-sol-codex-subscription', '--json', '-b',
+      'use the personal Codex plan explicitly',
+    ]);
+    const runRequest = requests.slice(requestStart)
+      .find(request => request.pathname === '/api/agent/run');
+    assert.equal(runRequest?.body?.agentModel, 'gpt-5.6-sol-codex-subscription');
   }
 
   {
@@ -1041,6 +1066,36 @@ try {
     assert.equal(mcpRequest?.body?.params?.arguments?.duration, 30);
     assert.equal(mcpRequest?.body?.params?.arguments?.outputFormat, 'mp4');
     assert.equal(mcpRequest?.body?.params?.arguments?.webSearch, true);
+  }
+
+  {
+    const result = await expectSuccess(['video', 'create', '--script', 'Wan Value\nShot 1 (2s): A paper planet turns under soft studio light', '--duration', '2', '--video-model', 'wan3.0', '--video-resolution', '480p', '--no-generated-audio']);
+    assert.match(result.stdout, /Task ID: task-unified-text-smoke/);
+    const mcpRequest = requests.filter(req => req.pathname === '/api/mcp').at(-1);
+    assert.equal(mcpRequest?.body?.params?.name, 'makaron_create_video');
+    assert.equal(mcpRequest?.body?.params?.arguments?.videoModel, 'wan-3.0');
+    assert.equal(mcpRequest?.body?.params?.arguments?.duration, 2);
+    assert.equal(mcpRequest?.body?.params?.arguments?.videoResolution, '480p');
+    assert.equal(mcpRequest?.body?.params?.arguments?.generateAudio, false);
+  }
+
+  {
+    const result = await expectSuccess(['video', 'create', '--script', 'Wan Reference\nShot 1 (2s): Preserve the uploaded character while it turns toward a neon pulse', '--image', tinyImagePath, '--duration', '2', '--video-model', 'wan-3.0', '--video-resolution', '480p', '--no-generated-audio']);
+    assert.match(result.stdout, /Task ID: task-unified-text-smoke/);
+    const mcpRequest = requests.filter(req => req.pathname === '/api/mcp').at(-1);
+    assert.equal(mcpRequest?.body?.params?.name, 'makaron_create_video');
+    assert.deepEqual(mcpRequest?.body?.params?.arguments?.images, ['https://cdn.example/uploaded-image.jpg']);
+    assert.equal(mcpRequest?.body?.params?.arguments?.videoModel, 'wan-3.0');
+  }
+
+  {
+    const result = await expectSuccess(['video', 'create', '--script', 'Wan Pro\nShot 1 (3s): A crystal city glows at blue hour', '--duration', '3', '--video-model', 'berry-1.0-pro', '--video-resolution', '4k']);
+    assert.match(result.stdout, /Task ID: task-unified-text-smoke/);
+    const mcpRequest = requests.filter(req => req.pathname === '/api/mcp').at(-1);
+    assert.equal(mcpRequest?.body?.params?.name, 'makaron_create_video');
+    assert.equal(mcpRequest?.body?.params?.arguments?.videoModel, 'wan-3.0-pro');
+    assert.equal(mcpRequest?.body?.params?.arguments?.duration, 3);
+    assert.equal(mcpRequest?.body?.params?.arguments?.videoResolution, '4k');
   }
 
   {

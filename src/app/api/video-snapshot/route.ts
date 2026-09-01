@@ -9,7 +9,7 @@ import {
   requireCredits,
 } from '@/lib/billing/credits'
 import { VIDEO_PLACEHOLDER_IMAGE } from '@/lib/editor/timeline-derivations'
-import { estimateVideoCredits, estimateVideoProviderCostUsd, getVideoModelCapability, normalizeVideoModelId, resolveVideoGenerationRoute, supportsNativeTextToVideo } from '@/lib/video-model-capabilities'
+import { estimateVideoProviderCostUsd, getRequiredVideoCredits, getVideoModelCapability, normalizeVideoModelId, resolvePersistedVideoDuration, resolveVideoGenerationRoute, resolveVideoOutputDuration, supportsNativeTextToVideo } from '@/lib/video-model-capabilities'
 import type { VideoMeta } from '@/types'
 
 export const maxDuration = 1800
@@ -102,7 +102,12 @@ export async function POST(req: NextRequest) {
     if (referenceVideoDuration != null && referenceVideoDuration > acceptedReferenceDuration) {
       return NextResponse.json({ error: `Reference video duration too long (${referenceVideoDuration.toFixed(1).replace(/\.0$/, '')}s). Maximum ${videoCapability.maxReferenceVideoDuration}s with small metadata tolerance.` }, { status: 400 })
     }
-    const effectiveDuration = duration ?? (referenceVideoDuration != null ? Math.min(videoCapability.maxOutputDuration, Math.round(referenceVideoDuration)) : undefined)
+    const effectiveDuration = resolveVideoOutputDuration({
+      requestedDuration: duration,
+      referenceVideoDuration,
+      model: selectedVideoModel,
+      operation: videoOperation,
+    })
     const originalVideoUrls = [...(inputVideoUrl ? [inputVideoUrl] : []), ...autoVideoUrls]
     let providerInputVideoUrl = inputVideoUrl
     let providerAutoVideoUrls = autoVideoUrls
@@ -124,14 +129,15 @@ export async function POST(req: NextRequest) {
 
     const videoSec = effectiveDuration || 10
     const { filteredImages } = filterAndRemapImages(prompt, inputImageUrls, videoCapability.maxImageReferences ?? 7)
-    const creditsRequired = estimateVideoCredits({
+    const creditsRequired = getRequiredVideoCredits({
       model: selectedVideoModel,
       resolution: videoRoute.resolution,
       durationSec: videoSec,
       imageCount: filteredImages.length,
       referenceVideoDurationSec: referenceVideoDuration,
+      operation: videoOperation,
       contentFilter,
-    }) ?? Math.ceil(videoSec * 22)
+    })
     const toolName = selectedVideoModel === 'grok' ? 'create_video_grok' : 'create_video'
     const creditCheck = await requireCredits(userId, creditsRequired)
     if (!creditCheck.ok) return creditCheck.response
@@ -212,6 +218,7 @@ export async function POST(req: NextRequest) {
         durationSec: videoSec,
         imageCount: filteredImages.length,
         referenceVideoDurationSec: referenceVideoDuration,
+        operation: videoOperation,
         contentFilter,
       })
 
@@ -224,13 +231,19 @@ export async function POST(req: NextRequest) {
           ? sourceUrls
           : (originalFirstUrl ? [originalFirstUrl] : []),
         status: skillResult.status === 'completed' && skillResult.videoUrl ? 'completed' : 'processing',
-        duration: effectiveDuration || null,
+        duration: resolvePersistedVideoDuration({
+          model: actualVideoModel,
+          operation: videoOperation,
+          outputDuration: effectiveDuration,
+          referenceVideoDuration,
+        }) || null,
         model: actualVideoModel,
         resolution: actualVideoRoute.resolution,
         aspectRatio,
         providerModel: skillResult.providerModel || actualVideoRoute.providerModel,
         providerUrl: skillResult.videoUrl,
         providerMode: actualVideoRoute.providerMode,
+        operation: videoOperation || 'generate',
         contentFilter: actualVideoModel === 'seedance-2.5' ? contentFilter !== false : undefined,
         createdAt: new Date().toISOString(),
         creditsCharged: reservedCredits,
