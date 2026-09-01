@@ -84,13 +84,14 @@ const MAX_VIDEO_DIMENSION_PROBE_BYTES = 220 * 1024 * 1024;
 function runRemotionExportAfterResponse(jobId: string) {
   after(async () => {
     try {
-      const { runRemotionExportJob } = await import('@/lib/remotion-export');
-      await runRemotionExportJob(jobId);
+      const {
+        drainRemotionExportQueue,
+        shouldRunRemotionExportInline,
+      } = await import('@/lib/remotion-export');
+      if (!shouldRunRemotionExportInline()) return;
+      await drainRemotionExportQueue({ source: `agent:${jobId}` });
     } catch (error) {
-      const message = error instanceof Error ? error.message : String(error);
-      if (!message.includes('already rendering')) {
-        console.error(`[agent] Remotion export worker failed for ${jobId}:`, error);
-      }
+      console.error(`[agent] Remotion export queue drain failed after ${jobId}:`, error);
     }
   });
 }

@@ -166,6 +166,12 @@ REMOTION_EXPORT_INLINE_AFTER=false npm run worker:remotion-export
 
 Keeping this worker warm avoids paying sandbox cold-start cost on every CLI or service call.
 
+Lambda exports use a shared weighted queue. Keep
+`REMOTION_LAMBDA_FRAMES_PER_LAMBDA=20` for current single-video speed and use
+`REMOTION_EXPORT_LAMBDA_CAPACITY` (default `270`) to bound aggregate Lambda
+pressure. The minute cron's `REMOTION_EXPORT_CRON_LANES` only fills available
+capacity; it cannot bypass that global cap.
+
 ### With video input (edit, compose, extend)
 
 ```bash

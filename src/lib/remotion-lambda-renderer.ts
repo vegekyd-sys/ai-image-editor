@@ -3,6 +3,10 @@ import type { DesignPayload } from '@/types'
 import { hasRemotionAudioSources } from '@/lib/remotion-audio'
 import { normalizeRemotionTextValue } from '@/lib/remotion-text-normalization'
 import { resolveRemotionLambdaEncodingSettings } from '@/lib/remotion-encoding'
+import {
+  DEFAULT_REMOTION_LAMBDA_FRAMES_PER_LAMBDA,
+  resolveFramesPerLambda,
+} from '@/lib/remotion-export-capacity'
 import { prepareRemotionCodeForSandbox } from '@/lib/remotion-server'
 import { resolveRemotionFontManifestUrlForDesign } from '@/lib/remotion-font-resolver'
 import { REMOTION_EDITABLE_RUNTIME_VERSION } from '@/lib/editor/editable-react-runtime'
@@ -200,20 +204,7 @@ function readPositiveInteger(value: string | undefined, fallback: number): numbe
   return Math.max(1, Math.round(readPositiveNumber(value, fallback)))
 }
 
-// Cross-composition benchmark default. Keep experiments behind the env override
-// instead of retuning the product default from a single composition.
-const DEFAULT_FRAMES_PER_LAMBDA = 20
-const MAX_LAMBDAS_PER_RENDER = 200
-
-export function resolveFramesPerLambda(
-  durationInFrames: number,
-  configuredFramesPerLambda = DEFAULT_FRAMES_PER_LAMBDA,
-): number {
-  return Math.max(
-    Math.max(1, Math.round(configuredFramesPerLambda)),
-    Math.ceil(Math.max(1, durationInFrames) / MAX_LAMBDAS_PER_RENDER),
-  )
-}
+export { resolveFramesPerLambda } from '@/lib/remotion-export-capacity'
 
 function readBooleanEnv(name: string): boolean {
   const value = readEnv(name)
@@ -323,12 +314,14 @@ export async function retryRemotionLambdaSubmission<T>(
     attempts?: number
     delayMs?: number
     sleepFn?: (ms: number) => Promise<void>
+    randomFn?: () => number
     onRetry?: (input: { attempt: number; nextAttempt: number; error: unknown }) => void | Promise<void>
   } = {},
 ): Promise<T> {
   const attempts = Math.max(1, Math.round(options.attempts ?? 3))
   const delayMs = Math.max(0, Math.round(options.delayMs ?? 1000))
   const sleepFn = options.sleepFn || sleep
+  const randomFn = options.randomFn || Math.random
   let lastError: unknown
 
   for (let attempt = 1; attempt <= attempts; attempt++) {
@@ -338,7 +331,8 @@ export async function retryRemotionLambdaSubmission<T>(
       lastError = error
       if (attempt === attempts || !isRetryableRemotionLambdaSubmissionError(error)) throw error
       await options.onRetry?.({ attempt, nextAttempt: attempt + 1, error })
-      await sleepFn(delayMs * attempt)
+      const jitter = 0.75 + Math.min(1, Math.max(0, randomFn())) * 0.5
+      await sleepFn(Math.round(delayMs * attempt * jitter))
     }
   }
 
@@ -529,7 +523,10 @@ export async function renderDesignVideoLambdaToUrl(
     ? undefined
     : resolveFramesPerLambda(
         durationInFrames,
-        readPositiveInteger(readEnv('REMOTION_LAMBDA_FRAMES_PER_LAMBDA'), DEFAULT_FRAMES_PER_LAMBDA),
+        readPositiveInteger(
+          readEnv('REMOTION_LAMBDA_FRAMES_PER_LAMBDA'),
+          DEFAULT_REMOTION_LAMBDA_FRAMES_PER_LAMBDA,
+        ),
       )
   const pollMs = readPositiveInteger(readEnv('REMOTION_LAMBDA_POLL_MS'), 1000)
   const x264Preset = readX264Preset()

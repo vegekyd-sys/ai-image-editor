@@ -35,6 +35,7 @@ describe('Remotion Lambda submission retry', () => {
       attempts: 3,
       delayMs: 25,
       sleepFn,
+      randomFn: () => 0.5,
       onRetry,
     })).resolves.toEqual({ renderId: 'render-ok' })
 

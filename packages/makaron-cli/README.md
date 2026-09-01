@@ -259,6 +259,14 @@ REMOTION_EXPORT_INLINE_AFTER=false npm run worker:remotion-export
 
 Keeping this worker warm avoids paying sandbox cold-start cost on every CLI or service call.
 
+Lambda exports are admitted by a shared capacity-weighted queue. The default
+`REMOTION_EXPORT_LAMBDA_CAPACITY=270` preserves the current per-video
+`REMOTION_LAMBDA_FRAMES_PER_LAMBDA=20` chunking while leaving headroom under the
+account concurrency quota. A 30-second 30fps video is estimated as 45 renderer
+Lambdas plus one control slot, so five such videos can render concurrently and
+the rest remain queued. `REMOTION_EXPORT_CRON_LANES` controls how many queue
+lanes the one-minute rescue cron keeps warm; it does not raise the capacity cap.
+
 ### With video input (MP4/MOV/WebM)
 
 ```bash
