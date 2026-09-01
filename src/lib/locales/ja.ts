@@ -166,6 +166,9 @@ const ja = {
   // Changelog
   'changelog.heading': '更新情報',
   'changelog.close': '更新情報を閉じる',
+  'changelog.qwenSpicy.title': 'Qwen Spicy を公開',
+  'changelog.qwenSpicy.item1': 'Qwen Spicy を独立した画像モデルとして公開しました。1〜3枚の元画像を使った大胆な高解像度編集に対応します。',
+  'changelog.qwenSpicy.item2': '画像モデル選択、Agentへの指定、または makaron-cli の qwen-spicy から利用できます。既存の Qwen Edit は別モデルとして引き続き利用できます。',
   'changelog.gptImage25.title': 'GPT Image 2.5 登場：商品画像からインフォグラフィックまで',
   'changelog.gptImage25.item1': '短い指示から商品広告、EC画像、ポスター、インフォグラフィックを制作。ブランド、文字、ビジュアルを一つの画面にまとめられます。アプリやWebサイトの静的なコンセプト画像、動画の絵コンテにも使えます。',
   'changelog.gptImage25.item2': '商品や人物の参考画像をアップロードして、背景や構図を変更。複数の参考画像を組み合わせて新しいシーンを作り、手元の素材からアイデアを広げられます。',
@@ -679,6 +682,8 @@ const ja = {
   'model.geminiLite.desc': '高速な下書きに適した低コストモデルです。',
   'model.qwen.name': 'Qwen Edit',
   'model.qwen.desc': '顔の再現性に優れ、NSFWコンテンツにも対応します。',
+  'model.qwenSpicy.name': 'Qwen Spicy',
+  'model.qwenSpicy.desc': '1〜3枚の画像編集に対応する独立モデル。大胆な変化と高解像度出力が特長です。',
   'model.image25Flare.name': 'GPT Image 2.5 Flare',
   'model.image25Flare.desc': '日常の制作に適した高速生成',
   'model.image25Sunburst.name': 'GPT Image 2.5 Sunburst',

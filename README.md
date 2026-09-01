@@ -131,6 +131,7 @@ OPENAI_IMAGE_PROVIDER       # azure (default), openrouter backup, or piapi
 DEEPSEEK_API_KEY
 AGENT_MODEL
 COMFYUI_QWEN_URL
+MULEROUTER_API_KEY        # Wan 3.0 and the independent Qwen Spicy image model
 SUNOAPI_KEY
 STRIPE_SECRET_KEY
 STRIPE_WEBHOOK_SECRET

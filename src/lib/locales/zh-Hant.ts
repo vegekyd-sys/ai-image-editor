@@ -169,6 +169,9 @@ const zhHant = {
   // Changelog
   'changelog.heading': '更新',
   'changelog.close': '關閉更新',
+  'changelog.qwenSpicy.title': 'Qwen Spicy 上線',
+  'changelog.qwenSpicy.item1': 'Qwen Spicy 現已作為獨立圖片模型上線，支援用 1–3 張原圖進行更大膽的高解析度編輯。',
+  'changelog.qwenSpicy.item2': '可在圖片模型選擇器中選擇、直接讓 Agent 使用 Qwen Spicy，或在 makaron-cli 中指定 qwen-spicy；原有 Qwen Edit 繼續獨立保留。',
   'changelog.gptImage25.title': 'GPT Image 2.5 上線：從產品圖到資訊圖表',
   'changelog.gptImage25.item1': '用一句話製作產品廣告、電商圖片、海報和資訊圖表，將品牌、文字與畫面組織在一起；也可以探索 App、網站介面的靜態概念圖和影片分鏡。',
   'changelog.gptImage25.item2': '上傳產品或人物參考圖，就能更換背景、調整畫面，或結合多張參考圖創作新的場景，讓既有素材延伸出更多創意。',
@@ -670,6 +673,8 @@ const zhHant = {
   'model.gemini.desc': '快速且通用，是大多數編輯的預設選擇。',
   'model.geminiLite.desc': '成本較低，適合快速草稿。',
   'model.qwen.desc': '人臉保真效果最佳，可處理 NSFW 內容。',
+  'model.qwenSpicy.name': 'Qwen Spicy',
+  'model.qwenSpicy.desc': '獨立的 1–3 圖編輯模型，變化大膽並保留高解析度。',
   'model.image25Flare.name': 'GPT Image 2.5 Flare',
   'model.image25Flare.desc': '快速生成，適合日常創作',
   'model.image25Sunburst.name': 'GPT Image 2.5 Sunburst',

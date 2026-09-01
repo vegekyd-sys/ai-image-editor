@@ -14,6 +14,7 @@ function getFallbacks(model: ModelId): ModelId[] {
     case 'gemini': return ['qwen'];
     case 'gemini-lite': return ['gemini', 'qwen'];
     case 'qwen':   return ['gemini'];
+    case 'qwen-spicy': return [];
     case 'pony':   return ['wai', 'gemini'];
     case 'wai':    return ['pony', 'gemini'];
     case 'openai': return ['gemini', 'qwen'];

@@ -88,7 +88,7 @@ async function handleMcp(req: Request): Promise<Response> {
         return check.ok ? { allowed: true } : { allowed: false, message: 'Insufficient credits.' };
       }
       if (['makaron_write_video_script', 'makaron_analyze_video'].includes(toolName)
-        || (toolName === 'makaron_edit_image' && !['qwen', 'pony', 'wai', 'wan2.7-image'].includes(model ?? ''))) {
+        || (toolName === 'makaron_edit_image' && !['qwen', 'qwen-spicy', 'pony', 'wai', 'wan2.7-image'].includes(model ?? ''))) {
         const check = await requireCredits(auth.userId!, 5);
         return check.ok ? { allowed: true } : { allowed: false, message: 'Insufficient credits.' };
       }
