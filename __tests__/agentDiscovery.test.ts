@@ -32,6 +32,18 @@ describe('Makaron CLI Agent discovery', () => {
     expect(read('public/.well-known/agent-skills/makaron/SKILL.md')).toBe(canonical)
   })
 
+  it('indexes a scoped NSFW reference and publishes it with the official skill', () => {
+    const canonical = read('packages/makaron-cli/skills/makaron/SKILL.md')
+    const reference = read('packages/makaron-cli/skills/makaron/references/nsfw.md')
+
+    expect(canonical).toContain('read `references/nsfw.md`')
+    expect(reference).toContain('grok-4.6')
+    expect(reference).toContain('image model `qwen`')
+    expect(reference).toContain('video model `wan-3.0`')
+    expect(reference).not.toMatch(/Feishu|Lark|card runner|马卡龙卡/i)
+    expect(read('public/.well-known/agent-skills/makaron/references/nsfw.md')).toBe(reference)
+  })
+
   it('keeps discovery routes public and crawlable', () => {
     const proxy = read('src/proxy.ts')
     const robots = read('src/app/robots.ts')

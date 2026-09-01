@@ -70,6 +70,11 @@ npx makaron-cli responses get $RUN_ID --wait --json
 
 Use `chat` for all creative tasks. Makaron Agent decides how to execute — it can edit images, generate videos, compose music, and create designs in a single conversation.
 
+For clearly adult, erotic, or NSFW requests, read `references/nsfw.md`
+([public copy](https://www.makaron.app/.well-known/agent-skills/makaron/references/nsfw.md))
+before submitting the job. It adds per-job routing exceptions only; do not load
+or apply it to ordinary SFW work.
+
 ```bash
 npx makaron-cli chat --help
 ```

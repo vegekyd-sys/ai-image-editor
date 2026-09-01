@@ -1,5 +1,5 @@
 import { createHash } from 'node:crypto'
-import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs'
+import { cpSync, existsSync, mkdirSync, readFileSync, readdirSync, rmSync, writeFileSync } from 'node:fs'
 import path from 'node:path'
 import process from 'node:process'
 
@@ -36,6 +36,36 @@ function ensureFile(file, content) {
   writeFileSync(file, content)
 }
 
+function ensureDirectory(source, target) {
+  if (checkOnly) {
+    const sourceFiles = new Map()
+    const targetFiles = new Map()
+
+    const collect = (rootDir, currentDir, output) => {
+      for (const entry of readdirSync(currentDir, { withFileTypes: true })) {
+        const absolute = path.join(currentDir, entry.name)
+        if (entry.isDirectory()) collect(rootDir, absolute, output)
+        else output.set(path.relative(rootDir, absolute), readFileSync(absolute))
+      }
+    }
+
+    collect(source, source, sourceFiles)
+    if (existsSync(target)) collect(target, target, targetFiles)
+
+    if (
+      sourceFiles.size !== targetFiles.size
+      || [...sourceFiles].some(([file, content]) => !targetFiles.get(file)?.equals(content))
+    ) {
+      throw new Error(`${path.relative(root, target)} is stale; run npm run build:agent-discovery`)
+    }
+    return
+  }
+
+  rmSync(target, { recursive: true, force: true })
+  mkdirSync(path.dirname(target), { recursive: true })
+  cpSync(source, target, { recursive: true })
+}
+
 const skills = skillNames.map((expectedName) => {
   const source = path.join(sourceRoot, expectedName, 'SKILL.md')
   const content = readFileSync(source, 'utf8')
@@ -47,8 +77,7 @@ const skills = skillNames.map((expectedName) => {
     throw new Error(`${source}: invalid Agent Skill name`)
   }
 
-  const target = path.join(publicRoot, expectedName, 'SKILL.md')
-  ensureFile(target, content)
+  ensureDirectory(path.dirname(source), path.join(publicRoot, expectedName))
 
   return {
     name: metadata.name,
