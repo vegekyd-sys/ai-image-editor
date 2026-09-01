@@ -2,7 +2,7 @@ import type { DesignPayload } from '@/types'
 
 export const DEFAULT_REMOTION_LAMBDA_FRAMES_PER_LAMBDA = 20
 export const MAX_REMOTION_LAMBDAS_PER_RENDER = 200
-export const DEFAULT_REMOTION_EXPORT_CAPACITY = 270
+export const DEFAULT_REMOTION_EXPORT_CAPACITY = 330
 export const DEFAULT_REMOTION_EXPORT_LEGACY_JOB_SLOTS = 46
 
 function positiveInteger(value: string | number | undefined, fallback: number): number {

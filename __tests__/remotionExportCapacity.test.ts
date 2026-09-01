@@ -18,7 +18,8 @@ describe('Remotion export capacity estimation', () => {
       rendererLambdaSlots: 45,
       controlLambdaSlots: 1,
     })
-    expect(Math.floor(DEFAULT_REMOTION_EXPORT_CAPACITY / estimate.estimatedLambdaSlots)).toBe(5)
+    expect(Math.floor(DEFAULT_REMOTION_EXPORT_CAPACITY / estimate.estimatedLambdaSlots)).toBe(7)
+    expect(estimate.estimatedLambdaSlots * 8).toBeGreaterThan(DEFAULT_REMOTION_EXPORT_CAPACITY)
   })
 
   it('weights longer videos by their actual frame count', () => {

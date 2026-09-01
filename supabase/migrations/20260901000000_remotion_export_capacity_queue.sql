@@ -2,7 +2,7 @@
 -- read-active-capacity + claim operation atomic across Vercel, cron, and workers.
 CREATE OR REPLACE FUNCTION public.claim_remotion_export_job_with_capacity(
   p_worker_id text,
-  p_capacity_limit integer DEFAULT 270,
+  p_capacity_limit integer DEFAULT 330,
   p_stale_cutoff timestamptz DEFAULT now() - interval '2 minutes',
   p_job_id uuid DEFAULT NULL,
   p_legacy_job_slots integer DEFAULT 46
