@@ -7,7 +7,11 @@ import { getKlingTask as getKlingTaskPiAPI } from '@/lib/piapi'
 import { uploadVideo, isPermanentUrl } from '@/lib/supabase/storage'
 import type { VideoMeta } from '@/types'
 import { buildVideoFailureActions } from '@/lib/artifact-actions'
-import { getRemotionExportJob, runRemotionExportJob } from '@/lib/remotion-export'
+import {
+  drainRemotionExportQueue,
+  getRemotionExportJob,
+  shouldRunRemotionExportInline,
+} from '@/lib/remotion-export'
 import { getRequestLocale } from '@/lib/server-locale'
 
 export const maxDuration = 1800
@@ -21,12 +25,10 @@ function getProjectInfo(projects: SnapshotProject | null | undefined) {
 function runRemotionExportAfterResponse(jobId: string) {
   after(async () => {
     try {
-      await runRemotionExportJob(jobId)
+      if (!shouldRunRemotionExportInline()) return
+      await drainRemotionExportQueue({ source: `video-snapshot:${jobId}` })
     } catch (err) {
-      const message = err instanceof Error ? err.message : String(err)
-      if (!message.includes('already rendering')) {
-        console.error(`[video-snapshot] Remotion export worker failed for ${jobId}:`, err)
-      }
+      console.error(`[video-snapshot] Remotion export queue drain failed after ${jobId}:`, err)
     }
   })
 }
