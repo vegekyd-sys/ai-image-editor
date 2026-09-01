@@ -214,6 +214,10 @@ function ModelRow({
           color: 'rgba(255,255,255,0.35)',
           marginTop: 1,
           lineHeight: 1.3,
+          display: '-webkit-box',
+          WebkitBoxOrient: 'vertical',
+          WebkitLineClamp: selected ? 2 : 1,
+          overflow: 'hidden',
         }}>
           {desc}
         </div>
@@ -399,6 +403,10 @@ function VideoModelRow({
             color: 'rgba(255,255,255,0.35)',
             marginTop: 1,
             lineHeight: 1.3,
+            display: '-webkit-box',
+            WebkitBoxOrient: 'vertical',
+            WebkitLineClamp: selected ? 2 : 1,
+            overflow: 'hidden',
           }}>
             {desc}
           </div>
@@ -463,7 +471,6 @@ export default function ModelSelector({
   const popoverRef = useRef<HTMLDivElement>(null);
   const scrollBodyRef = useRef<HTMLDivElement>(null);
   const didFocusPopoverRef = useRef(false);
-  const usageRequestedRef = useRef(false);
   const [subscriptionUsage, setSubscriptionUsage] = useState<SubscriptionUsageState>({ status: 'idle' });
   const [popoverPos, setPopoverPos] = useState<{
     bottom: number;
@@ -521,8 +528,7 @@ export default function ModelSelector({
   }, [open]);
 
   useEffect(() => {
-    if (!open || activeTab !== 'agent' || usageRequestedRef.current) return;
-    usageRequestedRef.current = true;
+    if (!open || activeTab !== 'agent') return;
     const controller = new AbortController();
     setSubscriptionUsage({ status: 'loading' });
     fetch('/api/agent/subscription-usage', { signal: controller.signal, cache: 'no-store' })
@@ -552,9 +558,7 @@ export default function ModelSelector({
         });
       })
       .catch((error) => {
-        if ((error as Error).name === 'AbortError') {
-          usageRequestedRef.current = false;
-        } else {
+        if ((error as Error).name !== 'AbortError') {
           setSubscriptionUsage({ status: 'unavailable' });
         }
       });

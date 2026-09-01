@@ -73,7 +73,6 @@ export default function AgentModelChip({ value, onChange, disabled = false }: Ag
   const triggerRef = useRef<HTMLButtonElement>(null);
   const panelRef = useRef<HTMLDivElement>(null);
   const scrollRef = useRef<HTMLDivElement>(null);
-  const usageRequestedRef = useRef(false);
   const panelId = useId();
   const models = getAgentModels();
   const selectedModelId = isCodexSubscriptionAgentModelPreference(value)
@@ -94,8 +93,6 @@ export default function AgentModelChip({ value, onChange, disabled = false }: Ag
       : value;
 
   useEffect(() => {
-    if (usageRequestedRef.current) return;
-    usageRequestedRef.current = true;
     const controller = new AbortController();
     setSubscriptionUsage({ status: 'loading' });
     fetch('/api/agent/subscription-usage', {
@@ -132,8 +129,6 @@ export default function AgentModelChip({ value, onChange, disabled = false }: Ag
       .catch((error) => {
         if ((error as Error).name !== 'AbortError') {
           setSubscriptionUsage({ status: 'unavailable' });
-        } else {
-          usageRequestedRef.current = false;
         }
       });
     return () => controller.abort();
