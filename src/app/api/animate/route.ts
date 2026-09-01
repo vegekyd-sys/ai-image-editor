@@ -4,11 +4,13 @@ import { createVideo } from '@/lib/skills/create-video'
 import { filterAndRemapImages } from '@/lib/kling'
 import {
   deductFixedCredits,
+  InsufficientCreditsError,
   isInsufficientCreditsError,
   refundCredits,
   requireCredits,
 } from '@/lib/billing/credits'
 import { getRequiredVideoCredits, getVideoModelCapability, normalizeVideoModelId, resolveVideoGenerationRoute, resolveVideoOutputDuration, supportsNativeTextToVideo } from '@/lib/video-model-capabilities'
+import { isGrokSubscriptionAllowedUser } from '@/lib/grok-subscription'
 
 export const maxDuration = 1800
 
@@ -106,29 +108,24 @@ export async function POST(req: NextRequest) {
       operation: videoOperation,
     })
     const toolName = selectedVideoModel === 'grok' ? 'create_video_grok' : 'create_video'
-    const creditCheck = await requireCredits(user.id, creditsRequired)
-    if (!creditCheck.ok) return creditCheck.response
-
     let reservedCredits = 0
-    try {
-      const reservation = await deductFixedCredits(
-        user.id,
-        creditsRequired,
-        toolName,
-        selectedVideoModel,
-        undefined,
-      )
+    const reserveApiCredits = async () => {
+      if (reservedCredits > 0) return
+      const creditCheck = await requireCredits(user.id, creditsRequired)
+      if (!creditCheck.ok) throw new InsufficientCreditsError(creditCheck.balance, creditsRequired)
+      const reservation = await deductFixedCredits(user.id, creditsRequired, toolName, selectedVideoModel, undefined)
       reservedCredits = reservation.charged
-    } catch (error) {
-      if (isInsufficientCreditsError(error)) {
-        return NextResponse.json({
-          error: 'insufficient_credits',
-          balance: error.balance,
-          needed: error.required,
-          action: 'topup',
-        }, { status: 402 })
+    }
+    const grokSubscriptionPreferred = selectedVideoModel === 'grok' && isGrokSubscriptionAllowedUser(user.id)
+    if (!grokSubscriptionPreferred) {
+      try {
+        await reserveApiCredits()
+      } catch (error) {
+        if (isInsufficientCreditsError(error)) {
+          return NextResponse.json({ error: 'insufficient_credits', balance: error.balance, needed: error.required, action: 'topup' }, { status: 402 })
+        }
+        throw error
       }
-      throw error
     }
 
     try {
@@ -144,6 +141,8 @@ export async function POST(req: NextRequest) {
         referenceVideoMetas: referenceVideoMetas.length ? referenceVideoMetas : undefined,
         videoOperation,
         videoExtendDirection,
+        userId: user.id,
+        onBeforeGrokApiFallback: grokSubscriptionPreferred ? reserveApiCredits : undefined,
       })
 
       if (!skillResult.success || !skillResult.taskId) {
@@ -180,10 +179,18 @@ export async function POST(req: NextRequest) {
       if (error) throw error
 
       reservedCredits = 0
-      return NextResponse.json({ animationId: animation.id, taskId })
+      return NextResponse.json({ animationId: animation.id, taskId, provider: skillResult.provider })
     } catch (error) {
       if (reservedCredits > 0) {
         await refundCredits(user.id, reservedCredits, toolName)
+      }
+      if (isInsufficientCreditsError(error)) {
+        return NextResponse.json({
+          error: 'insufficient_credits',
+          balance: error.balance,
+          needed: error.required,
+          action: 'topup',
+        }, { status: 402 })
       }
       throw error
     }

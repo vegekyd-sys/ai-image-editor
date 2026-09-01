@@ -4,6 +4,7 @@ import { createVideo } from '@/lib/skills/create-video'
 import { filterAndRemapImages } from '@/lib/kling'
 import {
   deductFixedCredits,
+  InsufficientCreditsError,
   isInsufficientCreditsError,
   refundCredits,
   requireCredits,
@@ -11,6 +12,7 @@ import {
 import { VIDEO_PLACEHOLDER_IMAGE } from '@/lib/editor/timeline-derivations'
 import { estimateVideoProviderCostUsd, getRequiredVideoCredits, getVideoModelCapability, normalizeVideoModelId, resolvePersistedVideoDuration, resolveVideoGenerationRoute, resolveVideoOutputDuration, supportsNativeTextToVideo } from '@/lib/video-model-capabilities'
 import type { VideoMeta } from '@/types'
+import { isGrokSubscriptionAllowedUser } from '@/lib/grok-subscription'
 
 export const maxDuration = 1800
 
@@ -139,29 +141,24 @@ export async function POST(req: NextRequest) {
       contentFilter,
     })
     const toolName = selectedVideoModel === 'grok' ? 'create_video_grok' : 'create_video'
-    const creditCheck = await requireCredits(userId, creditsRequired)
-    if (!creditCheck.ok) return creditCheck.response
-
     let reservedCredits = 0
-    try {
-      const reservation = await deductFixedCredits(
-        userId,
-        creditsRequired,
-        toolName,
-        selectedVideoModel,
-        undefined,
-      )
+    const reserveApiCredits = async () => {
+      if (reservedCredits > 0) return
+      const creditCheck = await requireCredits(userId, creditsRequired)
+      if (!creditCheck.ok) throw new InsufficientCreditsError(creditCheck.balance, creditsRequired)
+      const reservation = await deductFixedCredits(userId, creditsRequired, toolName, selectedVideoModel, undefined)
       reservedCredits = reservation.charged
-    } catch (error) {
-      if (isInsufficientCreditsError(error)) {
-        return NextResponse.json({
-          error: 'insufficient_credits',
-          balance: error.balance,
-          needed: error.required,
-          action: 'topup',
-        }, { status: 402 })
+    }
+    const grokSubscriptionPreferred = selectedVideoModel === 'grok' && isGrokSubscriptionAllowedUser(userId)
+    if (!grokSubscriptionPreferred) {
+      try {
+        await reserveApiCredits()
+      } catch (error) {
+        if (isInsufficientCreditsError(error)) {
+          return NextResponse.json({ error: 'insufficient_credits', balance: error.balance, needed: error.required, action: 'topup' }, { status: 402 })
+        }
+        throw error
       }
-      throw error
     }
 
     try {
@@ -184,6 +181,8 @@ export async function POST(req: NextRequest) {
         contentFilter,
         outputFormat,
         webSearch,
+        userId,
+        onBeforeGrokApiFallback: grokSubscriptionPreferred ? reserveApiCredits : undefined,
       })
 
       if (!skillResult.success || !skillResult.taskId) {
@@ -212,7 +211,7 @@ export async function POST(req: NextRequest) {
         .map(ref => originalImageUrlsByIndex[ref - 1])
         .filter((u): u is string => !!u && u.startsWith('http') && !u.endsWith('.mp4'))
       const sourceUrls = [...referencedImageUrls, ...(inputVideoUrl ? [inputVideoUrl] : []), ...autoVideoUrls].filter(Boolean)
-      const providerCostUsd = estimateVideoProviderCostUsd({
+      const providerCostUsd = skillResult.provider === 'grok-subscription' ? undefined : estimateVideoProviderCostUsd({
         model: actualVideoModel,
         resolution: actualVideoRoute.resolution,
         durationSec: videoSec,
@@ -243,6 +242,7 @@ export async function POST(req: NextRequest) {
         providerModel: skillResult.providerModel || actualVideoRoute.providerModel,
         providerUrl: skillResult.videoUrl,
         providerMode: actualVideoRoute.providerMode,
+        provider: skillResult.provider,
         operation: videoOperation || 'generate',
         contentFilter: actualVideoModel === 'seedance-2.5' ? contentFilter !== false : undefined,
         createdAt: new Date().toISOString(),
@@ -269,6 +269,14 @@ export async function POST(req: NextRequest) {
     } catch (error) {
       if (reservedCredits > 0) {
         await refundCredits(userId, reservedCredits, toolName)
+      }
+      if (isInsufficientCreditsError(error)) {
+        return NextResponse.json({
+          error: 'insufficient_credits',
+          balance: error.balance,
+          needed: error.required,
+          action: 'topup',
+        }, { status: 402 })
       }
       throw error
     }

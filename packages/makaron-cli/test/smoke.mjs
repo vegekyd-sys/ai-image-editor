@@ -646,7 +646,8 @@ try {
     assert.doesNotMatch(result.stdout, /^\s+--image-model/m);
     assert.doesNotMatch(result.stdout, /^\s+--video-model/m);
     assert.doesNotMatch(result.stdout, /^\s+--video-resolution/m);
-    assert.match(result.stdout, /Image\/video model routing\s+stays automatic in chat/);
+    assert.match(result.stdout, /Image\/video\s+model routing\s+stays automatic in chat/);
+    assert.match(result.stdout, /grok-4\.6-grok-subscription/);
     assert.match(result.stdout, /--media-manifest <file\|->/);
     assert.match(result.stdout, /typed image\/video media/);
     assert.doesNotMatch(result.stdout, /asset_id|asset-id|source_uri|source-uri/);
@@ -673,9 +674,21 @@ try {
       'app Codex subscription Agent model catalog',
       ),
     ];
+    const grokSubscriptionModel = extractQuotedValues(
+      appCatalogSource,
+      /export const GROK_SUBSCRIPTION_AGENT_MODEL_PREFERENCE = ([^;]+);/,
+      'app Grok subscription Agent model catalog',
+    );
     assert.deepEqual(
       cliModels,
-      ['auto', ...appModels.slice(0, 3), ...subscriptionModels, ...appModels.slice(3)],
+      [
+        'auto',
+        ...appModels.slice(0, 3),
+        ...subscriptionModels,
+        appModels[3],
+        ...grokSubscriptionModel,
+        ...appModels.slice(4),
+      ],
       'CLI Agent LLM allowlist must stay in sync with the app catalog',
     );
   }

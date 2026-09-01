@@ -65,7 +65,7 @@ function dedupeLegacyVideos<T extends { videoUrl?: string; taskId?: string }>(it
   return result;
 }
 
-async function pollVideoProvider(taskId: string): Promise<{ taskId: string; status: string; videoUrl?: string; error?: string }> {
+async function pollVideoProvider(taskId: string, userId?: string): Promise<{ taskId: string; status: string; videoUrl?: string; error?: string }> {
   const isEvolink = taskId.startsWith('task-unified-');
   const isMuleRouter = taskId.startsWith('mr-wan30-');
   const isSeedance = taskId.startsWith('cgt-');
@@ -91,7 +91,7 @@ async function pollVideoProvider(taskId: string): Promise<{ taskId: string; stat
     return { ...result, taskId };
   } else if (isXai) {
     const { getXaiVideoTask } = await import('@/lib/xai-video');
-    return getXaiVideoTask(taskId);
+    return getXaiVideoTask(taskId, userId);
   } else if (isGoogleOmni) {
     const { getGoogleOmniVideoTask } = await import('@/lib/google-omni-video');
     return getGoogleOmniVideoTask(taskId);
@@ -576,7 +576,7 @@ export async function GET(
               // Actively poll provider API
               try {
                 const taskId = videoMeta.taskId as string;
-                const pollResult = await pollVideoProvider(taskId);
+                const pollResult = await pollVideoProvider(taskId, ownerUserId);
                 if (pollResult.status === 'completed' && pollResult.videoUrl) {
                   const updatedMeta = { ...videoMeta, status: 'completed', videoUrl: pollResult.videoUrl };
                   await admin.from('snapshots')
@@ -660,7 +660,7 @@ export async function GET(
             if (anim.status === 'processing') {
               try {
                 const taskId = v.task_id as string;
-                const result = await pollVideoProvider(taskId);
+                const result = await pollVideoProvider(taskId, ownerUserId);
                 if (result.status === 'completed' && result.videoUrl) {
                   const admin = getSupabaseAdmin();
                   await admin.from('project_animations')

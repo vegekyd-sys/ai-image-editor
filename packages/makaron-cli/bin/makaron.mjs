@@ -37,6 +37,7 @@ const CHAT_AGENT_MODELS = [
   'gpt-5.6-sol-codex-subscription',
   'gpt-5.6-luna-codex-subscription',
   'grok-4.6',
+  'grok-4.6-grok-subscription',
   'deepseek-v4-pro',
 ];
 
@@ -462,7 +463,8 @@ Options:
   --skill <id|label|name>   Use an installed skill or auto-install a matched marketplace skill.
   --agent-model <id>        Agent LLM only: auto, gpt-5.6-terra, gpt-5.6-sol,
                             gpt-5.6-luna, grok-4.6, deepseek-v4-pro, or a
-                            gpt-5.6-*-codex-subscription personal-plan route.
+                            gpt-5.6-*-codex-subscription or
+                            grok-4.6-grok-subscription personal-plan route.
   --background, -b          Submit and print a runId.
   --json                    Output structured JSON.
   --stream                  Legacy live SSE stream.
@@ -470,7 +472,9 @@ Options:
 
 Agent LLM defaults to auto (GPT-5.6 Terra; the account owner uses the personal
 Codex plan). Base GPT-5.6 ids select Azure API; append -codex-subscription to
-select the personal plan explicitly. Image/video model routing stays automatic in chat.
+select the personal plan explicitly. Base grok-4.6 selects OpenRouter API;
+grok-4.6-grok-subscription selects the personal SuperGrok plan. Image/video
+model routing stays automatic in chat.
 
 What you can ask:
   Image edit
@@ -504,6 +508,9 @@ What you can ask:
 
   Force the personal Codex plan
     makaron chat --project auto --agent-model gpt-5.6-sol-codex-subscription -b --json "reply with the active model"
+
+  Force the personal SuperGrok plan
+    makaron chat --project auto --agent-model grok-4.6-grok-subscription -b --json "reply with the active model"
 
   Music
     makaron chat --project <id> "add calm piano background music"

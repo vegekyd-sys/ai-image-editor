@@ -67,6 +67,8 @@ function formatResult(image: string, message: string, prefix: string) {
 }
 
 export interface McpServerOptions {
+  /** Authenticated Makaron owner for private subscription relay routing. */
+  userId?: string;
   /** Called after each tool completes successfully. Used for billing. */
   onToolComplete?: (
     toolName: string,
@@ -81,13 +83,16 @@ export interface McpServerOptions {
       referenceVideoDurationSec?: number
       videoOperation?: 'generate' | 'edit' | 'extend'
       contentFilter?: boolean
+      provider?: string
       seedAudioDurationSec?: number
       seedAudioProviderCredits?: number
       seedAudioGenerationSec?: number
     },
   ) => void | Promise<void>;
   /** Called before each tool executes. Return false to reject (insufficient credits). */
-  onToolStart?: (toolName: string) => Promise<{ allowed: boolean; message?: string }>;
+  onToolStart?: (toolName: string, model?: string) => Promise<{ allowed: boolean; message?: string }>;
+  /** Called only before a Grok personal-plan request safely falls back to the paid API. */
+  onBeforeGrokApiFallback?: (toolName: string, model?: string) => Promise<void>;
 }
 
 export function createMakaronMcpServer(options?: McpServerOptions) {
@@ -310,7 +315,7 @@ Style: Cinematic, warm golden light.`,
     async (params) => {
       try {
         if (options?.onToolStart) {
-          const check = await options.onToolStart('makaron_create_video');
+          const check = await options.onToolStart('makaron_create_video', params.videoModel);
           if (!check.allowed) return { content: [{ type: 'text' as const, text: check.message || 'Insufficient credits' }] };
         }
         const t0 = Date.now();
@@ -331,6 +336,10 @@ Style: Cinematic, warm golden light.`,
           contentFilter: params.contentFilter,
           outputFormat: params.outputFormat,
           webSearch: params.webSearch,
+          userId: options?.userId,
+          onBeforeGrokApiFallback: options?.onBeforeGrokApiFallback
+            ? () => options.onBeforeGrokApiFallback!('makaron_create_video', params.videoModel)
+            : undefined,
         });
 
         if (result.success) {
@@ -344,6 +353,7 @@ Style: Cinematic, warm golden light.`,
             videoOperation: params.operation,
             referenceVideoDurationSec: params.referenceVideoDuration,
             contentFilter: params.contentFilter,
+            provider: result.provider,
           });
         }
         return { content: [{ type: 'text' as const, text: result.success
@@ -390,7 +400,7 @@ Example: Edit a video to add cinematic color grading:
     async (params) => {
       try {
         if (options?.onToolStart) {
-          const check = await options.onToolStart('makaron_edit_video');
+          const check = await options.onToolStart('makaron_edit_video', params.videoModel);
           if (!check.allowed) return { content: [{ type: 'text' as const, text: check.message || 'Insufficient credits' }] };
         }
         const t0 = Date.now();
@@ -407,6 +417,10 @@ Example: Edit a video to add cinematic color grading:
           videoReferType: resolvedReferType,
           keepOriginalSound: params.keepOriginalSound ?? false,
           videoOperation: resolvedModel === 'seedance-2.5' || resolvedModel === 'grok' || resolvedModel === 'google-omni' ? 'edit' : 'generate',
+          userId: options?.userId,
+          onBeforeGrokApiFallback: options?.onBeforeGrokApiFallback
+            ? () => options.onBeforeGrokApiFallback!('makaron_edit_video', params.videoModel)
+            : undefined,
         });
 
         if (result.success) {
@@ -417,6 +431,7 @@ Example: Edit a video to add cinematic color grading:
             videoResolution: params.videoResolution,
             referenceVideoDurationSec: resolvedModel === 'minimax-h3' ? (params.duration ?? 10) : undefined,
             videoOperation: resolvedModel === 'seedance-2.5' || resolvedModel === 'grok' || resolvedModel === 'google-omni' ? 'edit' : 'generate',
+            provider: result.provider,
           });
         }
         return { content: [{ type: 'text' as const, text: result.success
@@ -486,7 +501,7 @@ Poll every 10-15 seconds. Do NOT poll in a tight loop.`,
     },
     async (params) => {
       try {
-        const result = await getVideoStatus({ taskId: params.taskId });
+        const result = await getVideoStatus({ taskId: params.taskId, userId: options?.userId });
 
         let response = result.message;
         if (result.status === 'completed' && result.videoUrl) {

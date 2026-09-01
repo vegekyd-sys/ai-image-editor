@@ -9,8 +9,8 @@ import { normalizeAgentErrorMessage } from './agent-error';
 import { compositionPartsPrefix } from './composition-parts';
 import {
   resolveCodexSubscriptionFallbackProvider,
+  type AgentModelProvider,
   type AgentModelPreference,
-  type GPT56AgentProvider,
 } from './agent-models';
 import {
   createAgentModelRuntime,
@@ -24,6 +24,7 @@ import {
 } from './agent-terminal';
 import {
   isCodexSubscriptionTerminalFailure,
+  isGrokSubscriptionTerminalFailure,
   isRetryableProviderOutage,
   type DurableExecutionRef,
 } from './agent-execution';
@@ -242,7 +243,7 @@ export interface RunMakaronAgentOptions {
   locale?: string;
   preferredModel?: ModelId;
   agentModel?: AgentModelPreference;
-  agentProvider?: GPT56AgentProvider;
+  agentProvider?: AgentModelProvider;
   videoModel?: string;
   videoResolution?: import('@/types').VideoResolution;
   videoAuto?: boolean;
@@ -1338,17 +1339,23 @@ export async function* runMakaronAgent(
       const subscriptionFailureDetail = streamError
         ? describeModelStreamError(streamError)
         : assessment.detail;
-      const canFallbackFromSubscription = runtime.spec.provider === 'codex-subscription'
+      const canFallbackFromSubscription = (runtime.spec.provider === 'codex-subscription'
+        || runtime.spec.provider === 'grok-subscription')
         && !options?.execution
         && !firstContentAt
         && !attemptDeliveredArtifact
         && attemptCommittedTools.size === 0
         && (
-          isCodexSubscriptionTerminalFailure(subscriptionFailureDetail)
+          (runtime.spec.provider === 'codex-subscription'
+            ? isCodexSubscriptionTerminalFailure(subscriptionFailureDetail)
+            : isGrokSubscriptionTerminalFailure(subscriptionFailureDetail))
           || isRetryableProviderOutage(subscriptionFailureDetail)
         );
       if (canFallbackFromSubscription) {
-        const fallbackProvider = resolveCodexSubscriptionFallbackProvider();
+        const subscriptionProvider = runtime.spec.provider;
+        const fallbackProvider = subscriptionProvider === 'codex-subscription'
+          ? resolveCodexSubscriptionFallbackProvider()
+          : 'openrouter';
         const hasFallbackCredential = fallbackProvider === 'azure-openai'
           ? Boolean(process.env.AZURE_OPENAI_API_KEY?.trim())
           : Boolean(process.env.OPENROUTER_API_KEY?.trim());
@@ -1364,12 +1371,12 @@ export async function* runMakaronAgent(
             recoveryAttempt++;
             yield { type: 'status', text: translate(responseLocale, 'agent.status.resuming') };
             console.warn(
-              `[agent] Codex subscription unavailable before output; retrying ${runtime.spec.id} through ${fallbackProvider}`,
+              `[agent] ${subscriptionProvider} unavailable before output; retrying ${runtime.spec.id} through ${fallbackProvider}`,
             );
             continue;
           } catch (fallbackError) {
             console.warn(
-              `[agent] Codex subscription API fallback unavailable: ${describeModelStreamError(fallbackError)}`,
+              `[agent] ${subscriptionProvider} API fallback unavailable: ${describeModelStreamError(fallbackError)}`,
             );
           }
         }

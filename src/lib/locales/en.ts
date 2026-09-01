@@ -681,9 +681,12 @@ const en = {
   'model.closeAgentSelector': 'Close model selector',
   'model.chooseAgent': 'Choose agent model',
   'model.azureApiBadge': 'Azure API',
+  'model.openRouterApiBadge': 'OpenRouter API',
   'model.agentGroup.azure': 'Azure API',
   'model.agentGroup.azureDesc': 'Default · usage based',
   'model.agentGroup.codex': 'Personal Codex plan',
+  'model.agentGroup.grok': 'Personal Grok plan',
+  'model.agentGroup.personal': 'Personal plans',
   'model.agentGroup.other': 'Other APIs',
   'model.agentGroup.otherDesc': 'Other available models',
   'model.codexSubscription.name': 'GPT-5.6 Terra · Codex plan',
@@ -695,6 +698,14 @@ const en = {
   'model.codexSubscription.remainingShort': (percent: string) => `${percent}% left`,
   'model.codexSubscription.resetsAt': (time: string) => `Resets ${time}`,
   'model.codexSubscription.usageUnavailable': 'Plan available; usage is temporarily unavailable',
+  'model.grokSubscription.suffix': 'Grok plan',
+  'model.grokSubscription.desc': 'Uses SuperGrok; falls back to API only before output.',
+  'model.grokSubscription.available': 'SuperGrok plan available',
+  'model.grokSubscription.checking': 'Checking Grok plan usage…',
+  'model.grokSubscription.remaining': (percent: string) => `${percent}% plan allowance remaining`,
+  'model.grokSubscription.remainingShort': (percent: string) => `${percent}% left`,
+  'model.grokSubscription.resetsAt': (time: string) => `Resets ${time}`,
+  'model.grokSubscription.usageUnavailable': 'Plan available; usage is temporarily unavailable',
 } as const;
 
 export default en;

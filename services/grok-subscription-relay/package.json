@@ -1,0 +1,8 @@
+{
+  "name": "makaron-grok-subscription-relay",
+  "private": true,
+  "type": "module",
+  "engines": {
+    "node": ">=22"
+  }
+}

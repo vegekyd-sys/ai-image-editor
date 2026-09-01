@@ -1,0 +1,33 @@
+[Unit]
+Description=Makaron owner-only Grok subscription relay
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=makaron-grok
+Group=makaron-grok
+WorkingDirectory=/srv/vlab/makaron-grok-relay/app
+EnvironmentFile=/srv/vlab/makaron-grok-relay/state/relay.env
+Environment=NODE_ENV=production
+Environment=HOST=127.0.0.1
+Environment=PORT=25985
+Environment=GROK_SUBSCRIPTION_OAUTH_PATH=/srv/vlab/makaron-grok-relay/state/xai-oauth.json
+ExecStart=/usr/local/bin/node /srv/vlab/makaron-grok-relay/app/server.mjs
+Restart=always
+RestartSec=5
+TimeoutStopSec=30
+KillMode=control-group
+UMask=0077
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=true
+ReadWritePaths=/srv/vlab/makaron-grok-relay/state
+RestrictSUIDSGID=true
+RestrictRealtime=true
+MemoryMax=512M
+TasksMax=128
+
+[Install]
+WantedBy=multi-user.target

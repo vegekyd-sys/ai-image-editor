@@ -7,7 +7,9 @@ import type { VideoModel, VideoResolution } from '@/types';
 import { getAgentModels, getImageModels, getVideoModels, type ModelInfo } from '@/lib/model-registry';
 import {
   getCodexSubscriptionAgentModelPreference,
+  GROK_SUBSCRIPTION_AGENT_MODEL_PREFERENCE,
   isCodexSubscriptionAgentModelPreference,
+  isGrokSubscriptionAgentModelPreference,
   type AgentModelPreference,
   type GPT56AgentModelId,
 } from '@/lib/agent-models';
@@ -33,6 +35,30 @@ const ROW_HEIGHT = 68;
 const PANEL_BODY_HEIGHT = ROW_HEIGHT * 5;
 const AUTO_TIPS_FOOTER_HEIGHT = ROW_HEIGHT + 14;
 const PANEL_CHROME_HEIGHT = 104;
+
+interface PlanUsage {
+  usedPercent?: number;
+  remainingPercent: number;
+  windowDurationMins?: number;
+  resetsAt?: number;
+  periodType?: string;
+}
+
+interface SubscriptionUsageState {
+  status: 'idle' | 'loading' | 'available' | 'unavailable';
+  codexAvailable?: boolean;
+  grokAvailable?: boolean;
+  codex?: {
+    available: boolean;
+    planType?: string | null;
+    weekly?: PlanUsage | null;
+  };
+  grok?: {
+    available: boolean;
+    planType?: string | null;
+    usage?: PlanUsage | null;
+  };
+}
 
 function ModelIcon({ size = 18 }: { size?: number }) {
   return (
@@ -188,6 +214,10 @@ function ModelRow({
           color: 'rgba(255,255,255,0.35)',
           marginTop: 1,
           lineHeight: 1.3,
+          display: '-webkit-box',
+          WebkitBoxOrient: 'vertical',
+          WebkitLineClamp: selected ? 2 : 1,
+          overflow: 'hidden',
         }}>
           {desc}
         </div>
@@ -373,6 +403,10 @@ function VideoModelRow({
             color: 'rgba(255,255,255,0.35)',
             marginTop: 1,
             lineHeight: 1.3,
+            display: '-webkit-box',
+            WebkitBoxOrient: 'vertical',
+            WebkitLineClamp: selected ? 2 : 1,
+            overflow: 'hidden',
           }}>
             {desc}
           </div>
@@ -437,11 +471,7 @@ export default function ModelSelector({
   const popoverRef = useRef<HTMLDivElement>(null);
   const scrollBodyRef = useRef<HTMLDivElement>(null);
   const didFocusPopoverRef = useRef(false);
-  const usageRequestedRef = useRef(false);
-  const [subscriptionUsage, setSubscriptionUsage] = useState<{
-    status: 'idle' | 'loading' | 'available' | 'unavailable';
-    weekly?: { remainingPercent: number; resetsAt: number } | null;
-  }>({ status: 'idle' });
+  const [subscriptionUsage, setSubscriptionUsage] = useState<SubscriptionUsageState>({ status: 'idle' });
   const [popoverPos, setPopoverPos] = useState<{
     bottom: number;
     bodyHeight: number;
@@ -498,29 +528,37 @@ export default function ModelSelector({
   }, [open]);
 
   useEffect(() => {
-    if (!open || activeTab !== 'agent' || usageRequestedRef.current) return;
-    usageRequestedRef.current = true;
+    if (!open || activeTab !== 'agent') return;
     const controller = new AbortController();
     setSubscriptionUsage({ status: 'loading' });
     fetch('/api/agent/subscription-usage', { signal: controller.signal, cache: 'no-store' })
       .then(async (response) => {
         const payload = await response.json().catch(() => ({})) as {
           available?: boolean;
-          weekly?: { remainingPercent: number; resetsAt: number } | null;
+          grokAvailable?: boolean;
+          planType?: string | null;
+          weekly?: PlanUsage | null;
+          codex?: SubscriptionUsageState['codex'];
+          grok?: SubscriptionUsageState['grok'];
         };
-        if (!payload.available) {
-          setSubscriptionUsage({ status: 'unavailable' });
+        if (!payload.available && !payload.grokAvailable) {
+          setSubscriptionUsage({ status: 'unavailable', codexAvailable: false, grokAvailable: false });
           return;
         }
         setSubscriptionUsage({
           status: response.ok ? 'available' : 'unavailable',
-          weekly: payload.weekly,
+          codexAvailable: Boolean(payload.available),
+          grokAvailable: Boolean(payload.grokAvailable),
+          codex: payload.codex ?? {
+            available: Boolean(payload.available),
+            planType: payload.planType,
+            weekly: payload.weekly,
+          },
+          grok: payload.grok ?? { available: Boolean(payload.grokAvailable) },
         });
       })
       .catch((error) => {
-        if ((error as Error).name === 'AbortError') {
-          usageRequestedRef.current = false;
-        } else {
+        if ((error as Error).name !== 'AbortError') {
           setSubscriptionUsage({ status: 'unavailable' });
         }
       });
@@ -621,19 +659,38 @@ export default function ModelSelector({
 
   const imageModels = getImageModels();
   const videoModels = getVideoModels();
-  const subscriptionVisible = subscriptionUsage.status !== 'unavailable'
+  const subscriptionVisible = (subscriptionUsage.status !== 'unavailable' && subscriptionUsage.codexAvailable !== false)
     || isCodexSubscriptionAgentModelPreference(agentModel);
   const baseAgentModels = getAgentModels();
   const azureAgentModels = baseAgentModels.filter(model => model.id.startsWith('gpt-5.6-'));
-  const subscriptionAgentModels = subscriptionVisible
+  const codexSubscriptionAgentModels: ModelInfo[] = subscriptionVisible
     ? azureAgentModels.map(model => ({
         ...model,
         id: getCodexSubscriptionAgentModelPreference(model.id as GPT56AgentModelId),
         speedLabel: undefined,
       }))
     : [];
+  const grokSubscriptionVisible = (subscriptionUsage.status !== 'unavailable' && subscriptionUsage.grokAvailable !== false)
+    || isGrokSubscriptionAgentModelPreference(agentModel);
+  const grokSubscriptionAgentModels: ModelInfo[] = [];
+  if (grokSubscriptionVisible) {
+    const grok = baseAgentModels.find(model => model.id === 'grok-4.6');
+    if (grok) {
+      grokSubscriptionAgentModels.push({
+        ...grok,
+        id: GROK_SUBSCRIPTION_AGENT_MODEL_PREFERENCE,
+        descKey: 'model.grokSubscription.desc',
+        speedLabel: undefined,
+      });
+    }
+  }
   const otherAgentModels = baseAgentModels.filter(model => !model.id.startsWith('gpt-5.6-'));
-  const agentModels = [...azureAgentModels, ...subscriptionAgentModels, ...otherAgentModels];
+  const agentModels = [
+    ...azureAgentModels,
+    ...codexSubscriptionAgentModels,
+    ...grokSubscriptionAgentModels,
+    ...otherAgentModels,
+  ];
   const models = activeTab === 'image'
     ? imageModels
     : activeTab === 'video'
@@ -650,7 +707,7 @@ export default function ModelSelector({
     : preferredModel;
   const selectedAgentModel = agentModels.find(model => model.id === agentModel);
   const selectedAgentLabel = selectedAgentModel
-    ? `${t(selectedAgentModel.nameKey as Parameters<typeof t>[0])}${isCodexSubscriptionAgentModelPreference(selectedAgentModel.id) ? ` · ${t('model.codexSubscription.suffix')}` : selectedAgentModel.id.startsWith('gpt-5.6-') ? ` · ${t('model.azureApiBadge')}` : ''}`
+    ? `${t(selectedAgentModel.nameKey as Parameters<typeof t>[0])}${isCodexSubscriptionAgentModelPreference(selectedAgentModel.id) ? ` · ${t('model.codexSubscription.suffix')}` : isGrokSubscriptionAgentModelPreference(selectedAgentModel.id) ? ` · ${t('model.grokSubscription.suffix')}` : selectedAgentModel.id.startsWith('gpt-5.6-') ? ` · ${t('model.azureApiBadge')}` : selectedAgentModel.id === 'grok-4.6' ? ` · ${t('model.openRouterApiBadge')}` : ''}`
     : agentModel;
   const selectedVideoCapability = getVideoModelCapability(videoModel);
   const selectedVideoResolution = videoResolution === 'auto'
@@ -867,6 +924,8 @@ export default function ModelSelector({
                 }
                 const isCodexSubscription = activeTab === 'agent'
                   && isCodexSubscriptionAgentModelPreference(model.id);
+                const isGrokSubscription = activeTab === 'agent'
+                  && isGrokSubscriptionAgentModelPreference(model.id);
                 const isAzureAgent = activeTab === 'agent'
                   && model.id.startsWith('gpt-5.6-')
                   && !isCodexSubscription;
@@ -876,6 +935,8 @@ export default function ModelSelector({
                   ? undefined
                   : isCodexSubscription
                     ? 'codex'
+                    : isGrokSubscription
+                      ? 'grok'
                     : isAzureAgent
                       ? 'azure'
                       : 'other';
@@ -883,6 +944,8 @@ export default function ModelSelector({
                   ? undefined
                   : isCodexSubscriptionAgentModelPreference(previousModel.id)
                     ? 'codex'
+                    : isGrokSubscriptionAgentModelPreference(previousModel.id)
+                      ? 'grok'
                     : previousModel.id.startsWith('gpt-5.6-')
                       ? 'azure'
                       : 'other';
@@ -891,19 +954,33 @@ export default function ModelSelector({
                   ? t('model.agentGroup.azure')
                   : providerGroup === 'codex'
                     ? t('model.agentGroup.codex')
+                    : providerGroup === 'grok'
+                      ? t('model.agentGroup.grok')
                     : t('model.agentGroup.other');
                 const providerDetail = providerGroup === 'azure'
                   ? t('model.agentGroup.azureDesc')
                   : providerGroup === 'codex'
                     ? subscriptionUsage.status === 'loading' || subscriptionUsage.status === 'idle'
                       ? t('model.codexSubscription.checking')
-                      : subscriptionUsage.status === 'available' && subscriptionUsage.weekly
-                        ? `${t('model.codexSubscription.remaining', String(Math.round(subscriptionUsage.weekly.remainingPercent)))} · ${t('model.codexSubscription.resetsAt', formatResetTime(subscriptionUsage.weekly.resetsAt))}`
+                      : subscriptionUsage.status === 'available' && subscriptionUsage.codex?.weekly
+                        ? `${t('model.codexSubscription.remaining', String(Math.round(subscriptionUsage.codex.weekly.remainingPercent)))}${subscriptionUsage.codex.weekly.resetsAt ? ` · ${t('model.codexSubscription.resetsAt', formatResetTime(subscriptionUsage.codex.weekly.resetsAt))}` : ''}`
                         : t('model.codexSubscription.usageUnavailable')
+                    : providerGroup === 'grok'
+                      ? subscriptionUsage.status === 'loading' || subscriptionUsage.status === 'idle'
+                        ? t('model.grokSubscription.checking')
+                        : subscriptionUsage.status === 'available' && subscriptionUsage.grok?.usage
+                          ? `${t('model.grokSubscription.remaining', String(Math.round(subscriptionUsage.grok.usage.remainingPercent)))}${subscriptionUsage.grok.usage.resetsAt ? ` · ${t('model.grokSubscription.resetsAt', formatResetTime(subscriptionUsage.grok.usage.resetsAt))}` : ''}`
+                          : subscriptionUsage.grok?.planType
+                            ? subscriptionUsage.grok.planType
+                            : t('model.grokSubscription.usageUnavailable')
                     : t('model.agentGroup.otherDesc');
                 const codexWeekly = providerGroup === 'codex'
                   && subscriptionUsage.status === 'available'
-                  ? subscriptionUsage.weekly
+                  ? subscriptionUsage.codex?.weekly
+                  : undefined;
+                const grokUsage = providerGroup === 'grok'
+                  && subscriptionUsage.status === 'available'
+                  ? subscriptionUsage.grok?.usage
                   : undefined;
                 return (
                   <Fragment key={model.id}>
@@ -914,17 +991,25 @@ export default function ModelSelector({
                         detail={providerDetail}
                         remainingLabel={codexWeekly
                           ? t('model.codexSubscription.remainingShort', String(Math.round(codexWeekly.remainingPercent)))
-                          : undefined}
-                        resetLabel={codexWeekly
+                          : grokUsage
+                            ? t('model.grokSubscription.remainingShort', String(Math.round(grokUsage.remainingPercent)))
+                            : undefined}
+                        resetLabel={codexWeekly?.resetsAt
                           ? t('model.codexSubscription.resetsAt', formatResetTime(codexWeekly.resetsAt))
-                          : undefined}
-                        progress={codexWeekly?.remainingPercent}
-                        usageTestId={providerGroup === 'codex' ? 'codex-subscription-usage' : undefined}
+                          : grokUsage?.resetsAt
+                            ? t('model.grokSubscription.resetsAt', formatResetTime(grokUsage.resetsAt))
+                            : undefined}
+                        progress={codexWeekly?.remainingPercent ?? grokUsage?.remainingPercent}
+                        usageTestId={providerGroup === 'codex'
+                          ? 'codex-subscription-usage'
+                          : providerGroup === 'grok'
+                            ? 'grok-subscription-usage'
+                            : undefined}
                       />
                     )}
                     <ModelRow
                       model={model}
-                      name={t(model.nameKey as Parameters<typeof t>[0])}
+                      name={`${t(model.nameKey as Parameters<typeof t>[0])}${isCodexSubscription ? ` · ${t('model.codexSubscription.suffix')}` : isGrokSubscription ? ` · ${t('model.grokSubscription.suffix')}` : model.id === 'grok-4.6' ? ` · ${t('model.openRouterApiBadge')}` : ''}`}
                       desc={t(model.descKey as Parameters<typeof t>[0])}
                       badge={activeTab === 'agent'
                         ? undefined
@@ -935,7 +1020,15 @@ export default function ModelSelector({
                         ? handleAgentSelect(model.id)
                         : handleImageSelect(model.id)}
                       testId={activeTab === 'agent' ? `agent-model-${model.id}` : undefined}
-                      provider={isCodexSubscription ? 'codex-subscription' : isAzureAgent ? 'azure-openai' : undefined}
+                      provider={isCodexSubscription
+                        ? 'codex-subscription'
+                        : isGrokSubscription
+                        ? 'grok-subscription'
+                        : isAzureAgent
+                        ? 'azure-openai'
+                        : model.id === 'grok-4.6'
+                        ? 'openrouter'
+                        : undefined}
                       compact={activeTab === 'agent'}
                     />
                   </Fragment>

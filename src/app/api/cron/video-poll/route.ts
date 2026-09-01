@@ -51,6 +51,7 @@ export async function GET(req: NextRequest) {
   for (const snap of stale || []) {
     const vm = snap.video_meta as VideoMeta
     if (!vm?.taskId) continue
+    const ownerUserId = getProjectInfo(snap.projects as SnapshotProject)?.user_id
     const createdAt = vm.createdAt || snap.created_at
     const createdAtMs = new Date(createdAt).getTime()
     const age = Number.isFinite(createdAtMs) ? Date.now() - createdAtMs : 0
@@ -72,7 +73,7 @@ export async function GET(req: NextRequest) {
         result = await getKlingMotionControlTask(vm.taskId.slice(3))
       } else if (vm.taskId.startsWith('xai-')) {
         const { getXaiVideoTask } = await import('@/lib/xai-video')
-        result = await getXaiVideoTask(vm.taskId)
+        result = await getXaiVideoTask(vm.taskId, ownerUserId)
       } else if (vm.taskId.startsWith('google-omni-')) {
         const { getGoogleOmniVideoTask } = await import('@/lib/google-omni-video')
         result = await getGoogleOmniVideoTask(vm.taskId, vm.videoUrl || vm.providerUrl)
@@ -94,7 +95,6 @@ export async function GET(req: NextRequest) {
         await admin.from('snapshots').update({
           video_meta: updatedMeta,
         }).eq('id', snap.id)
-        const ownerUserId = getProjectInfo(snap.projects as SnapshotProject)?.user_id
         if (ownerUserId) {
           const { ensureVideoPosterForSnapshot } = await import('@/lib/video-poster-repair')
           await ensureVideoPosterForSnapshot({

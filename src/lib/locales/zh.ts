@@ -681,9 +681,12 @@ const zh = {
   'model.closeAgentSelector': '关闭模型选择',
   'model.chooseAgent': '选择 Agent 模型',
   'model.azureApiBadge': 'Azure API',
+  'model.openRouterApiBadge': 'OpenRouter API',
   'model.agentGroup.azure': 'Azure API',
   'model.agentGroup.azureDesc': '默认 · API 按量计费',
   'model.agentGroup.codex': '个人 Codex 订阅',
+  'model.agentGroup.grok': '个人 Grok 订阅',
+  'model.agentGroup.personal': '个人订阅套餐',
   'model.agentGroup.other': '其他 API',
   'model.agentGroup.otherDesc': '其他可用模型',
   'model.codexSubscription.name': 'GPT-5.6 Terra · Codex 套餐',
@@ -695,6 +698,14 @@ const zh = {
   'model.codexSubscription.remainingShort': (percent: string) => `剩余 ${percent}%`,
   'model.codexSubscription.resetsAt': (time: string) => `${time} 重置`,
   'model.codexSubscription.usageUnavailable': '套餐可用，额度暂时无法读取',
+  'model.grokSubscription.suffix': 'Grok 套餐',
+  'model.grokSubscription.desc': '使用 SuperGrok 套餐；未输出时才回退 API。',
+  'model.grokSubscription.available': 'SuperGrok 套餐可用',
+  'model.grokSubscription.checking': '正在读取 Grok 套餐额度…',
+  'model.grokSubscription.remaining': (percent: string) => `套餐额度剩余 ${percent}%`,
+  'model.grokSubscription.remainingShort': (percent: string) => `剩余 ${percent}%`,
+  'model.grokSubscription.resetsAt': (time: string) => `${time} 重置`,
+  'model.grokSubscription.usageUnavailable': '套餐可用，额度暂时无法读取',
 } as const;
 
 export type TranslationKey = keyof typeof zh;

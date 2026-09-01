@@ -23,6 +23,7 @@ type LocalizedChangelogEntry = {
 type ChangelogEntry = LegacyChangelogEntry | LocalizedChangelogEntry;
 
 const CHANGELOG: ChangelogEntry[] = [
+  { date: '2026-09-01', en: { title: 'Personal Grok Plans for Test Accounts', items: ['Admins can now add registered test accounts to the Grok allowlist so their Agent chats and Grok Imagine videos use the owner’s personal SuperGrok plan.'] }, zh: { title: '测试账号可用个人 Grok 套餐', items: ['管理员现在可以把已注册的测试账号加入 Grok 名单，让这些账号的 Agent 对话和 Grok Imagine 视频使用 owner 的个人 SuperGrok 套餐。'] } },
   { date: '2026-09-01', localeKey: 'fastDurableAgent' },
   { date: '2026-09-01', localeKey: 'wan30' },
   { date: '2026-08-31', en: { title: 'Grok 1.5 Video Editing', items: ['Edit an existing video with Grok 1.5 to change clothing, backgrounds, materials, or atmosphere while keeping the original motion and sound.', 'Generate with up to seven reference images, or use one source video for editing and extension with limits checked automatically.'] }, zh: { title: 'Grok 1.5 视频编辑', items: ['现在可以用 Grok 1.5 直接编辑现有视频，更换服装、背景、材质或整体氛围，同时保留原有动作与声音。', '生成视频最多支持 7 张参考图；编辑或续写支持 1 条源视频，并会自动检查不同模式的素材上限。'] } },

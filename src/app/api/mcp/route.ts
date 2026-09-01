@@ -5,6 +5,7 @@ import { checkBalance, deductCredits, deductByTokens } from '@/lib/billing/credi
 import { resolveToolName } from '@/lib/billing/pricing';
 import { deductSeedAudioCredits } from '@/lib/billing/seed-audio';
 import { getRequiredVideoCredits, normalizeVideoModelId } from '@/lib/video-model-capabilities';
+import { isGrokSubscriptionAllowedUser } from '@/lib/grok-subscription';
 
 export const maxDuration = 180;
 
@@ -53,14 +54,25 @@ async function handleMcp(req: Request): Promise<Response> {
   if (authError) return authError;
 
   const server = createMakaronMcpServer({
+    userId: auth.userId,
     // Pre-check: ensure user has enough credits
-    onToolStart: auth.type === 'user' ? async (toolName) => {
+    onToolStart: auth.type === 'user' ? async (toolName, model) => {
+      if (normalizeVideoModelId(model) === 'grok' && isGrokSubscriptionAllowedUser(auth.userId)) {
+        return { allowed: true };
+      }
       const pricingName = resolveToolName(toolName, undefined); // model unknown at start, use base name
       const { ok, balance, cost } = await checkBalance(auth.userId!, pricingName);
       if (!ok) {
         return { allowed: false, message: `Insufficient credits. Need ${cost}, have ${balance}. Top up at https://www.makaron.app/dashboard` };
       }
       return { allowed: true };
+    } : undefined,
+    onBeforeGrokApiFallback: auth.type === 'user' ? async (toolName, model) => {
+      const pricingName = resolveToolName(toolName, model);
+      const { ok, balance, cost } = await checkBalance(auth.userId!, pricingName);
+      if (!ok) {
+        throw new Error(`Insufficient credits: ${balance} available, ${cost} required for xAI API fallback`);
+      }
     } : undefined,
 
     // Post-complete: deduct credits (token-based if usage available, else per-action)
@@ -78,7 +90,7 @@ async function handleMcp(req: Request): Promise<Response> {
           undefined,
           usage.providerCostUsd,
         );
-      } else if (meta?.videoDurationSec) {
+      } else if (meta?.videoDurationSec && meta.provider !== 'grok-subscription') {
         const videoModel = normalizeVideoModelId(meta.videoModel || model);
         const videoCredits = getRequiredVideoCredits({
           model: videoModel,

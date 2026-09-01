@@ -78,6 +78,7 @@ import { stableDraftPromotionSnapshotId } from './draft-promotion';
 import { sourceRangeFromVideoMeta } from './media-source-range';
 import { materializeSeedAudioReference } from './seed-audio-reference';
 import { resolveAudioRefs } from './audio-reference-resolver';
+import { isGrokSubscriptionAllowedUser } from './grok-subscription';
 
 const MAX_VIDEO_DIMENSION_PROBE_BYTES = 220 * 1024 * 1024;
 
@@ -1740,7 +1741,7 @@ Hard constraints:
             providerAutoVideoUrls = [];
           }
 
-          const createVideoInput = {
+          const createVideoInput: Parameters<typeof createVideo>[0] = {
             script: story_prompt,
             images: imageUrls,
             duration: effectiveDuration,
@@ -1764,6 +1765,7 @@ Hard constraints:
             contentFilter: content_filter,
             outputFormat: output_format,
             webSearch: web_search,
+            userId: ctx.userId,
           };
           const isGoogleOmniAsync = videoRoute.provider === 'google-omni';
           if (isGoogleOmniAsync && !ctx.userId) {
@@ -1787,13 +1789,11 @@ Hard constraints:
             contentFilter: content_filter,
           });
 
-          if (ctx.userId) {
+          const reserveGrokApiCredits = async () => {
+            if (!ctx.userId || reservedVideoCredits > 0) return;
             const creditCheck = await requireCredits(ctx.userId, creditsRequired);
             if (!creditCheck.ok) {
-              return {
-                success: false as const,
-                message: `Insufficient credits. This video needs ${creditsRequired} credits, but the current balance is ${creditCheck.balance}.`,
-              };
+              throw new Error(`Insufficient credits. This video needs ${creditsRequired} credits, but the current balance is ${creditCheck.balance}.`);
             }
             try {
               const reservation = await deductFixedCredits(
@@ -1806,12 +1806,20 @@ Hard constraints:
               reservedVideoCredits = reservation.charged;
             } catch (error) {
               if (isInsufficientCreditsError(error)) {
-                return {
-                  success: false as const,
-                  message: `Insufficient credits. This video needs ${error.required} credits, but the current balance is ${error.balance}.`,
-                };
+                throw new Error(`Insufficient credits. This video needs ${error.required} credits, but the current balance is ${error.balance}.`);
               }
               throw error;
+            }
+          };
+          const grokSubscriptionPreferred = videoModel === 'grok'
+            && isGrokSubscriptionAllowedUser(ctx.userId);
+          if (grokSubscriptionPreferred) {
+            createVideoInput.onBeforeGrokApiFallback = reserveGrokApiCredits;
+          } else if (ctx.userId) {
+            try {
+              await reserveGrokApiCredits();
+            } catch (error) {
+              return { success: false as const, message: error instanceof Error ? error.message : String(error) };
             }
           }
 
@@ -1884,6 +1892,7 @@ Hard constraints:
             aspectRatio: selectedAspectRatio,
             providerModel: skillResult.providerModel || actualVideoRoute.providerModel,
             providerMode: actualVideoRoute.providerMode,
+            provider: skillResult.provider,
             operation: video_operation || 'generate',
             contentFilter: actualVideoModel === 'seedance-2.5' ? content_filter !== false : undefined,
             providerUrl: skillResult.videoUrl,
@@ -1917,7 +1926,7 @@ Hard constraints:
           }
           reservedVideoCredits = 0;
 
-          const providerCostUsd = estimateVideoProviderCostUsd({
+          const providerCostUsd = skillResult.provider === 'grok-subscription' ? undefined : estimateVideoProviderCostUsd({
             model: actualVideoModel,
             resolution: actualVideoRoute.resolution,
             durationSec: videoSec,
