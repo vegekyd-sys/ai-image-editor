@@ -34,35 +34,88 @@ editable result.
 
 After understanding the complete clip, call `generate_animation` once with one
 complete, natural `story_prompt`. The Skill is the implementation: do not look
-for a separate replication mode, schema, or runtime prompt compiler. Include:
+for a separate replication mode, schema, or runtime prompt compiler. Do not
+optimize this prompt for brevity: keep every measured fact that helps the model
+reproduce the source. Write the following prompt spine in this order and adapt
+it to the actual clip rather than pasting generic filler.
 
-- the complete source video Media Index and measured duration;
-- each source performer identified by appearance/costume **plus** an opening or
-  distinctive action, mapped to one replacement identity Media Index;
-- source and replacement environment anchors when scenery changes;
-- timed actions, style direction, requested sound, and case-specific exclusions.
+### 1. Source Authority
+
+Name the complete reference-video Media Index and measured duration. State that
+it is the sole temporal performance, edit, composition, and camera authority
+from the first visible frame through the final held state. Require the same:
+
+- shot count/order, cut points, shot durations, and transitions;
+- camera path, lens perspective, framing changes, horizon, subject scale, and
+  screen direction;
+- performer/object spacing, floor contact, depth, and travel direction;
+- action/choreography, body and object trajectories, gestures, contacts,
+  impacts, reactions, pauses, motion blur, and outcome.
+
+Replacement media controls only the layers the user asked to replace. It must
+not rewrite the reference action, timing, camera, editing, or result.
+
+### 2. Role and Object Mapping
+
+For every replaced person or object, identify the source role by stable visible
+evidence plus an opening or distinctive action. Then bind it to one replacement
+Media Index and describe the traits that must stay stable. A person replacement
+normally includes face, hair, body, clothing, colors, and accessories from the
+supplied image unless the user narrows the change. An object replacement must
+retain the supplied shape, material, color, and distinctive details throughout
+its complete state progression.
+
+Never map a role only as "left/right/front/back": subjects cross, turn, overlap,
+fall, and reverse screen direction. Track them through identity plus action.
+
+### 3. Identity, Causality, and Continuity Lock
+
+Require replacement identities and objects to remain stable during profiles,
+rear views, fast motion, overlap, partial occlusion, contact, falls, smoke, and
+motion blur. Preserve who initiates and receives each action, who interacts with
+each object, who wins or loses, every travel direction, and the exact final
+poses/object state.
+
+Explicitly prohibit morphing, blending, duplication, costume drift, role swap,
+transition back to the source subject, and reference-sheet/contact-sheet leakage.
+
+### 4. Environment Policy
+
+Say explicitly whether the source environment stays or is replaced. If it is
+replaced, remove conflicting source architecture, decoration, signage, props,
+lighting motifs, and scenery while preserving camera geometry, subject spacing,
+floor contact, depth, lens perspective, and lighting continuity. If it stays,
+name the visible background anchors that must survive every shot.
+
+### 5. Timed Shot Reconstruction
+
+Describe every shot in source order with measured or best-evidence duration.
+Include its opening pose/state, preparation, anticipation, action, impact,
+recoil, recovery, crossing, transition, and ending hold. Name important boundary
+and impact times. Preserve the original camera-to-subject relationship after
+replacement. Do not beautify, simplify, reinterpret, extend, shorten, or turn
+the clip into a merely similar new scene.
+
+### 6. Sound and Style
 
 Unless the user explicitly asks for silence, leave model-native audio enabled
-and describe sound naturally in `story_prompt`. Never identify a performer only
-as "left fighter" or "right fighter" because screen direction may change.
+and describe requested music, ambience, dialogue, voice, and effects naturally
+in `story_prompt`, tied to visible beats where relevant. Do not add automatic
+audio post-processing. Describe style without allowing it to override timing,
+identity, physical coherence, or the source outcome.
 
-Write the prompt in this order:
+### 7. Hard Exclusions and Final Priority
 
-1. Define the reference video as motion/camera/timing/choreography authority.
-2. Define each replacement image by stable identity and role. Do not map only by
-   left/right position because screen direction may reverse.
-3. State what must disappear from the source and what must remain structurally
-   identical.
-4. Describe action in source order with boundary/impact timing. Do not invent a
-   new story, extra shot, slow-motion beat, camera path, costume, or character.
-5. Require identity stability from first visible frame through the last; no
-   morphing, blending, duplication, role swap, or transition back to source.
-6. State background policy explicitly: preserve the reference environment, or
-   replace it with the supplied environment while keeping reference geometry and
-   camera relation.
-7. Put the requested music, ambience, dialogue, or sound effects directly in the
-   prompt. Set `generate_audio: false` only when the user explicitly asks for a
-   silent result; do not add an automatic audio post-processing workflow.
+End with clip-specific exclusions plus all relevant invariants: no new or
+omitted shots/actions/impacts/reactions/pauses; no different opening or ending;
+no invented camera angle, lens, zoom, pan, tilt, dolly, orbit, or handheld
+motion; no slow motion, speed ramp, freeze, montage, or time remapping unless it
+exists in the source; and no invented props, people, text, logos, effects, or
+story events.
+
+Finish by telling the model this is a structural repaint of the supplied video,
+not a newly staged scene inspired by it. Exact temporal fidelity has higher
+priority than novelty or visual embellishment.
 
 ## Complete-Understanding Gate
 

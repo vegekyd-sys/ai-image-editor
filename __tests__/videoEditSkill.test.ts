@@ -78,8 +78,14 @@ describe('video-edit Skill replication profile', () => {
     const agentToolsSource = read('src/lib/agent-tools.ts')
     expect(directReferenceRoute).not.toContain('replication_contract')
     expect(directReferenceRoute).not.toContain('"audio_policy"')
-    expect(directReferenceRoute).toContain("describe sound naturally in `story_prompt`")
-    expect(directReferenceRoute).toContain('Set `generate_audio: false` only when the user explicitly asks')
+    expect(directReferenceRoute).toContain(
+      'describe requested music, ambience, dialogue, voice, and effects naturally',
+    )
+    expect(directReferenceRoute).toContain('Unless the user explicitly asks for silence')
+    expect(directReferenceRoute).toContain('optimize this prompt for brevity')
+    expect(directReferenceRoute).toContain('sole temporal performance, edit, composition, and camera authority')
+    expect(directReferenceRoute).toContain('reference-sheet/contact-sheet leakage')
+    expect(directReferenceRoute).toContain('Exact temporal fidelity has higher')
     expect(agentToolsSource).not.toContain('replication_contract')
     expect(read('src/skills/reference-video-studio/SKILL.md')).toContain(
       'Use the video-edit replication profile',
