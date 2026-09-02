@@ -541,3 +541,36 @@ replacement-conflict check 提升为付费提交前门禁：职业/故事角色�
 Agent 先看完整视频、把正确约束写进 prompt、在提交前发现语义冲突并执行 QA；它不能保证模型
 逐条服从。要把模型随机性与 Skill 质量分开验收，后续应冻结同一 prompt 做多 seed/provider
 对照，或加入逐镜检测后的有限重试门禁，而不是再增加一套 contract 体系。
+
+## 2026-09-03 Contract restored acceptance
+
+用户对两版 Skill-only 成片复核后明确认为效果仍不如 contract，因此 commit `feadcff4`
+恢复 `generate_animation.replication_contract` 与确定性 prompt compiler。产品入口仍只有一个
+可发现的 `video-edit` Skill；contract 是该 Skill 使用的内部 tool input，不新增页面、Agent、
+数据库状态或用户模式。恢复时没有照搬旧版全部设计：
+
+- 人物 contract 固定整人替换默认包含脸、头发、身体、服装、颜色、鞋和配饰；职业/剧情角色
+  不得擅自保留源制服；
+- 新增 `objects` 映射，用 source 状态/动作/持有者锚定蛋糕等物体，并锁定替换物的形状、材质、
+  颜色、表面细节和完整运动/破坏状态；
+- 环境不替换时应省略 environment；若 Agent 错把 reference video 自己填成 replacement，
+  compiler 规范化为 Preserve；
+- 不恢复 `audio_policy`，不推断精确复用源音轨；音乐、环境音、对白和音效继续留在自然语言
+  `story_prompt`，由视频模型生成同步声音；
+- `story_prompt` 只保存逐镜/连续动作阶段的测量事实和声音方向，runtime 确定性加入 source、
+  identity、causality、structure 和 exclusions，避免 Agent 自由压缩或改写这些脆弱约束。
+
+Preview `https://ai-image-editor-o20q5e5oy-vegekyd-sys-projects.vercel.app` 使用与两轮
+Skill-only 完全相同的普通 CUI 请求、素材、模型和分辨率各跑一次：
+
+| Case | Contract restored evidence | Output acceptance |
+| --- | --- | --- |
+| 打斗 / Seedance 2.0 720p | Project `5716d279-2b5b-4e3b-b4fb-7aa03fedc4b2`；Run `2983403f-bc45-41d0-a491-0ed29a1618bb`；task `task-unified-1788365474-oxyz4wkc`；compiler prompt 6,590 字符；Agent 正确识别 10.08s 连续一镜与六个动作阶段，而不是虚构五次切镜 | 349s；H.264/AAC、1280x720、24fps、10.080s、7,025,494 bytes；完整 decode，音频 mean -20.8 dB/max -1.6 dB。0.5s 抽帧可见高踢、跳跃躲扫、连续攻防、翻滚/下潜、胸腹重击、倒地和胜负终态；两角色/服装/道场稳定，无参考板泄漏。明显追回 strict Skill-only 漏掉的空中/跳跃动作。 |
+| 婚宴 / Wan 3.0 480p | Project `736f9475-2428-4cc0-b4f4-cca9617bf573`；Run `0fa4f5e6-8210-4430-ae3b-15fea92ccb6c`；task `mr-wan30-5577f5b2-48a9-4ee7-889d-69724c7d5cf7`；compiler prompt 6,285 字符；typed ROLE 锁定紫色背心/白裤，typed OBJECT 锁定巧克力蛋糕和樱桃 | 213s；H.264/AAC、832x480、30fps、8.034s、9,964,408 bytes；完整 decode，音频 mean -23.2 dB/max -1.2 dB。抽帧确认紫色服装、巧克力蛋糕、背面火场、烟雾/羽毛、撞击、托盘/蛋糕飞落与落地结尾；无男服务生回流或参考板泄漏。 |
+
+本次可见结果支持恢复 contract：它没有消除 provider 随机性，但显著降低了 Agent 在最终
+provider prompt 中压缩、漏写或反向解释 replacement 的自由度。最终架构结论修正为：
+**一个用户可发现的 `video-edit` Skill + 一个内部最小 replication contract/compiler**。
+二者不是两套产品；Skill 负责发现、分析、路线、成本和 QA，contract/compiler 负责把已测得
+事实稳定传递到 provider prompt。该结论仍是 branch/Preview 验收，不是 merged、deployed 或
+production-accepted 状态。

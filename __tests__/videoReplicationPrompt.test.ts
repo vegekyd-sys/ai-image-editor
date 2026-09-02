@@ -68,4 +68,18 @@ describe('video replication provider prompt compiler', () => {
     expect(prompt).toContain('Do not infer exact source-track reuse')
     expect(prompt).not.toContain('Preserve the reference video audio exactly')
   })
+
+  it('normalizes a source-video self-reference to environment preservation', () => {
+    const prompt = compileVideoReplicationPrompt('Video Replica', {
+      ...contract,
+      environment: {
+        replacementMediaIndex: 4,
+        sourceEnvironmentAnchor: 'the source ballroom',
+        replacementEnvironment: 'preserve the same source ballroom',
+      },
+    })
+
+    expect(prompt).toContain('ENVIRONMENT: Preserve the environment visible in <<<media_4>>>')
+    expect(prompt).not.toContain('Replace the entire visible environment with <<<media_4>>>')
+  })
 })

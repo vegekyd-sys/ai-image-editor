@@ -1545,7 +1545,7 @@ Hard constraints:
             replacement_media_index: z.number().int().positive().describe('Timeline Media Index of the replacement environment image.'),
             source_environment_anchor: z.string().min(8).describe('Visible source environment features to remove.'),
             replacement_environment: z.string().min(8).describe('Replacement environment and its required stable details.'),
-          }).optional(),
+          }).optional().describe('Use only when replacing the environment with a separate image. Omit it to preserve the source environment; never pass the reference video itself as replacement_media_index.'),
           style_direction: z.string().optional(),
           additional_exclusions: z.array(z.string()).max(12).optional(),
         }).optional().describe('Measured semantic contract for exact source-led video replication. Use only after complete-video understanding; runtime deterministically compiles the invariant-heavy provider prompt. Sound remains natural language in story_prompt.'),

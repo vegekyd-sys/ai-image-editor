@@ -53,7 +53,9 @@ export function compileVideoReplicationPrompt(
     'Keep that replacement object stable through handling, overlap, impact, damage, deformation, breakage, falling, and the final state. Preserve who interacts with it and its complete source trajectory and timing.',
   ].join(' ')).join('\n');
 
-  const environment = contract.environment
+  const replacesEnvironment = contract.environment
+    && contract.environment.replacementMediaIndex !== contract.referenceVideoMediaIndex;
+  const environment = replacesEnvironment && contract.environment
     ? [
         `ENVIRONMENT: In ${source}, the source environment is: ${contract.environment.sourceEnvironmentAnchor}.`,
         `Replace the entire visible environment with ${mediaMarker(contract.environment.replacementMediaIndex)}: ${contract.environment.replacementEnvironment}.`,
