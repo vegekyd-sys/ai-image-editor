@@ -2,9 +2,11 @@
 
 日期：2026-08-30；Skill 架构更新：2026-09-02
 
-当前决策：复刻只由 `video-edit` Skill 编排。此前实验过的结构化复刻参数和确定性 prompt
-compiler 已在后续简化中删除；Agent 完整理解视频后，直接把角色映射、镜头节奏、替换要求和
-声音要求写入一次普通 `story_prompt`。下文保留旧实验数据，仅作为前后对比基线，不代表当前接口。
+当前决策：用户入口只有一个 `video-edit` Skill；精确复刻时，该 Skill 使用内部最小
+`replication_contract` 和确定性 prompt compiler，稳定传递已测得的角色、物体、环境和
+source-authority 约束。逐镜动作与自然声音方向仍写入普通 `story_prompt`。这不是第二个 Skill、
+用户模式或产品层。2026-09-03 的双 case 单次实测后，未指定模型的精确复刻默认改为
+Wan 3.0 Prime；普通视频生成默认不变，用户或 App 明确选择的模型仍优先。
 
 分支：`codex/video-replication-skill-exploration`
 
@@ -574,3 +576,23 @@ provider prompt 中压缩、漏写或反向解释 replacement 的自由度。最
 二者不是两套产品；Skill 负责发现、分析、路线、成本和 QA，contract/compiler 负责把已测得
 事实稳定传递到 provider prompt。该结论仍是 branch/Preview 验收，不是 merged、deployed 或
 production-accepted 状态。
+
+## 2026-09-03 Wan 3.0 Prime 单次复刻与默认路由
+
+在同一个 Preview 上，按用户要求让两个新 case 都只调用一次 Wan 3.0 Prime，不重试、不修改：
+
+| Case | Provider evidence | Output acceptance |
+| --- | --- | --- |
+| 屋顶追逐/人物与环境替换 | Project `89ff0142-1e36-4a88-9fa6-127c55f93fa3`；task `mr-wan30-prime-c7ab8081-855d-4d7a-b41a-cf56bb7e8c98` | `/Users/tianyicai/Downloads/makaron-wan3-prime-rooftop-once-20260903.mp4`；H.264/AAC、1920x1080、30fps、9.032s、51,292,840 bytes；完整 decode，通过；音频非静音。人物、屋顶环境和动作次序保持良好。 |
+| 舞厅/人物替换 | Project `8d2d4945-7480-45a6-92e9-2123ff727fa3`；task `mr-wan30-prime-62d51373-8c01-466b-a8e0-9ac3dbe0324a` | `/Users/tianyicai/Downloads/makaron-wan3-prime-ballroom-once-20260903.mp4`；H.264/AAC、1920x1080、30fps、7.035s、30,312,272 bytes；完整 decode，通过；音频非静音。短发、圆框眼镜和人物身份全程稳定，没有 Seedance 对照在约 3.5s 后出现的源人物回流。 |
+
+据此，本分支将“带 `replication_contract` 的精确源视频复刻”设为一个窄路由：用户和 App
+都没有明确选择模型时，runtime 默认 `wan-3.0-prime`，并使用模型原生默认 1080p；普通文生
+视频、图生视频继续使用现有默认，用户点名 Seedance、MiniMax、Gemini 等时也不覆盖。Agent
+必须在未指定模型时省略 tool 的 `model` 字段，防止它把普通生成默认值误当成用户选择。
+
+这一默认值目前只是 **branch-only/local-only**：上面两条成片验证了明确选择 Wan 3.0 Prime
+时的 provider 质量，单元测试验证了默认解析、App lock 和显式模型覆盖，但尚未部署新版后用
+“不写模型”的真实 CUI 请求做端到端验收。Wan Prime 当前默认 1080p，成本和输出体积显著高于
+低清草稿模型；后续若要提供便宜探索，应由用户明确选低成本模型或单独设计 draft policy，
+不应暗中改变精确复刻的默认质量。

@@ -73,6 +73,7 @@ export interface VideoReferenceMeta {
 }
 
 const DEFAULT_MODEL_ID = 'seedance-fast'
+export const DEFAULT_VIDEO_REPLICATION_MODEL_ID = 'wan-3.0-prime'
 
 const MODEL_CAPABILITIES: Record<string, VideoModelCapability> = {
   kling: {
@@ -540,6 +541,13 @@ export function normalizeVideoModelId(model?: string | null): string {
 
 export function getDefaultVideoModelId(): string {
   return DEFAULT_MODEL_ID
+}
+
+export function resolveVideoReplicationModelId(model?: string | null): string {
+  const requested = String(model ?? '').trim()
+  return requested
+    ? normalizeVideoModelId(requested)
+    : DEFAULT_VIDEO_REPLICATION_MODEL_ID
 }
 
 export function getVideoModelCapability(model?: string | null): VideoModelCapability {

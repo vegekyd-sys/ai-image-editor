@@ -33,10 +33,14 @@ not pixel identity or a vague "similar feeling".
    editable work uses the full schema and Studio artifacts.
 4. **Choose one execution route.** Use direct reference replication for one
    provider-sized clip when whole-clip motion/camera/choreography should transfer
-   in one call. Otherwise choose A = deterministic re-edit of supplied
-   replacements, B = per-shot generation, or C = hybrid; prefer A, then C, then
-   B. Kling Motion Control is only for supported single-person continuous action,
-   not a general multi-person or multi-shot route.
+   in one call. When neither the user nor the app selector chooses a model,
+   direct replication defaults to Wan 3.0 Prime at its native default resolution;
+   this exception does not change the default for ordinary video generation.
+   Preserve an explicit provider or cost/resolution request. Otherwise choose A
+   = deterministic re-edit of supplied replacements, B = per-shot generation,
+   or C = hybrid; prefer A, then C, then B. Kling Motion Control is only for
+   supported single-person continuous action, not a general multi-person or
+   multi-shot route.
 5. **Gate generation.** For structured work, prove one representative 4-5
    second shot before a batch. For a direct short clip, one complete attempt is
    the representative proof. Allow one evidence-driven correction; more paid
