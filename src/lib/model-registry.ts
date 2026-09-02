@@ -24,7 +24,6 @@ export const MODEL_REGISTRY: ModelInfo[] = [
   { id: 'seedance-2.5', nameKey: 'model.seedance25.name', descKey: 'model.seedance25.desc', category: 'video', speedLabelKey: 'model.seedance25.badge' },
   { id: 'wan-3.0', nameKey: 'model.wan30.name', descKey: 'model.wan30.desc', category: 'video', speedLabelKey: 'model.wan30.badge' },
   { id: 'wan-3.0-prime', nameKey: 'model.wan30Prime.name', descKey: 'model.wan30Prime.desc', category: 'video', speedLabelKey: 'model.wan30Prime.badge' },
-  { id: 'wan-3.0-pro', nameKey: 'model.wan30Pro.name', descKey: 'model.wan30Pro.desc', category: 'video', speedLabelKey: 'model.wan30Pro.badge' },
   { id: 'kling', nameKey: 'model.kling.name', descKey: 'model.kling.desc', category: 'video', speedLabel: '4K' },
   { id: 'grok', nameKey: 'model.grok.name', descKey: 'model.grok.desc', category: 'video', speedLabel: '30-40s' },
   { id: 'google-omni', nameKey: 'model.googleOmni.name', descKey: 'model.googleOmni.desc', category: 'video', speedLabel: '360p · 4K' },

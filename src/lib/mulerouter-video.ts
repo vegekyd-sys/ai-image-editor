@@ -1,24 +1,25 @@
 /**
- * MuleRouter CarrotHub video client for Wan 3.0 Standard, Prime, and Pro.
+ * MuleRouter CarrotHub video client for Wan 3.0 and Wan 3.0 Prime.
+ * 2K/4K resolutions switch to each model's FlashVSR/Pro endpoint.
  *
  * Official contracts:
  * https://www.mulerouter.ai/docs/api-reference/endpoint/carrothub/w3.0-video/generation
  * https://www.mulerouter.ai/docs/api-reference/endpoint/carrothub/w3.0-video-prime/generation
  * https://www.mulerouter.ai/docs/api-reference/endpoint/carrothub/w3.0-video-pro/generation
+ * https://www.mulerouter.ai/docs/api-reference/endpoint/carrothub/w3.0-video-prime-pro/generation
  */
 
 const BASE_URL = 'https://api.mulerouter.ai'
 const STANDARD_PATH = '/vendors/carrothub/v1/w3.0-video/generation'
 const PRIME_PATH = '/vendors/carrothub/v1/w3.0-video-prime/generation'
 const PRO_PATH = '/vendors/carrothub/v1/w3.0-video-pro/generation'
-const LEGACY_BERRY_PRO_PATH = '/vendors/carrothub/v1/berry-1.0-pro/generation'
+const PRIME_PRO_PATH = '/vendors/carrothub/v1/w3.0-video-prime-pro/generation'
 const STANDARD_TASK_PREFIX = 'mr-wan30-'
 const PRIME_TASK_PREFIX = 'mr-wan30-prime-'
-const PRO_TASK_PREFIX = 'mr-wan30-w3pro-'
-const LEGACY_BERRY_PRO_TASK_PREFIX = 'mr-wan30-pro-'
+const PRO_TASK_PREFIX = 'mr-wan30-pro-'
+const PRIME_PRO_TASK_PREFIX = 'mr-wan30-prime-pro-'
 
-export type MuleRouterWanModel = 'standard' | 'prime' | 'pro'
-type MuleRouterWanTaskRoute = MuleRouterWanModel | 'legacy-berry-pro'
+export type MuleRouterWanModel = 'standard' | 'prime' | 'pro' | 'prime-pro'
 
 export interface MuleRouterVideoTaskInput {
   model: MuleRouterWanModel
@@ -47,33 +48,33 @@ function getApiKey(): string {
   return key
 }
 
-function getPath(model: MuleRouterWanTaskRoute): string {
+function getPath(model: MuleRouterWanModel): string {
   if (model === 'prime') return PRIME_PATH
   if (model === 'pro') return PRO_PATH
-  if (model === 'legacy-berry-pro') return LEGACY_BERRY_PRO_PATH
+  if (model === 'prime-pro') return PRIME_PRO_PATH
   return STANDARD_PATH
 }
 
 function wrapTaskId(model: MuleRouterWanModel, providerTaskId: string): string {
-  const prefix = model === 'prime'
-    ? PRIME_TASK_PREFIX
-    : model === 'pro'
-      ? PRO_TASK_PREFIX
-      : STANDARD_TASK_PREFIX
+  const prefix = model === 'prime-pro'
+    ? PRIME_PRO_TASK_PREFIX
+    : model === 'prime'
+      ? PRIME_TASK_PREFIX
+      : model === 'pro'
+        ? PRO_TASK_PREFIX
+        : STANDARD_TASK_PREFIX
   return `${prefix}${providerTaskId}`
 }
 
-function parseTaskId(taskId: string): { model: MuleRouterWanTaskRoute; providerTaskId: string } {
+function parseTaskId(taskId: string): { model: MuleRouterWanModel; providerTaskId: string } {
+  if (taskId.startsWith(PRIME_PRO_TASK_PREFIX)) {
+    return { model: 'prime-pro', providerTaskId: taskId.slice(PRIME_PRO_TASK_PREFIX.length) }
+  }
   if (taskId.startsWith(PRIME_TASK_PREFIX)) {
     return { model: 'prime', providerTaskId: taskId.slice(PRIME_TASK_PREFIX.length) }
   }
   if (taskId.startsWith(PRO_TASK_PREFIX)) {
     return { model: 'pro', providerTaskId: taskId.slice(PRO_TASK_PREFIX.length) }
-  }
-  // Tasks created before the W3.0 Pro endpoint migration use Berry's distinct
-  // task type and must keep polling the legacy endpoint indefinitely.
-  if (taskId.startsWith(LEGACY_BERRY_PRO_TASK_PREFIX)) {
-    return { model: 'legacy-berry-pro', providerTaskId: taskId.slice(LEGACY_BERRY_PRO_TASK_PREFIX.length) }
   }
   if (taskId.startsWith(STANDARD_TASK_PREFIX)) {
     return { model: 'standard', providerTaskId: taskId.slice(STANDARD_TASK_PREFIX.length) }
