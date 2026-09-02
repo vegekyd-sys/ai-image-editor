@@ -250,7 +250,7 @@ describe('agent prompt policy guards', () => {
 
     expect(agent).toContain('Hard duration range: a single SeeDance 2.0 script/call must be 4-15s; SeeDance 2.5 must be 4-30s')
     expect(agent).toContain('A non-NSFW direct 16-30 second request defaults to `seedance-2.5`')
-    expect(agent).toContain('any NSFW/adult-explicit video request uses `wan-3.0` instead')
+    expect(agent).toContain('any NSFW/adult-explicit video request defaults to `wan-3.0-prime` instead')
     expect(agent).toContain('just as NSFW image requests use Qwen')
     expect(agent).toContain('If requested/source duration is shorter than the model minimum, use the minimum')
     expect(agent).toContain('If output is longer than the selected model max, use `skills/long-video-director/SKILL.md`')
@@ -298,7 +298,8 @@ describe('agent prompt policy guards', () => {
     expect(animate).toContain('`video_resolution` is the shared resolution control for every video service')
     expect(animate).toContain('Do not create provider-specific natural-language keyword routing for resolution')
     expect(animate).toContain('Both accept the shared `video_resolution` field')
-    expect(animate).toContain('The existing NSFW semantic route still has priority over the 16-30 second Seedance 2.5 duration default')
+    expect(animate).toContain('The existing NSFW semantic route defaults to `wan-3.0-prime`')
+    expect(animate).toContain('preserve an explicit user or app selection of `wan-3.0`')
     expect(animate).toContain('Wan 3.0 scripts may be **2 to 30 seconds**')
     expect(animate).toContain('reference-video duration + requested output duration must be 30 seconds or less')
 
@@ -310,7 +311,7 @@ describe('agent prompt policy guards', () => {
     expect(agentTs).toContain('Native SeeDance, Wan 3.0, or MiniMax H3 text-to-video uses no media markers')
     expect(agentTs).toContain('Reference audio is only supported by Seedance video models, Wan 3.0, or MiniMax H3')
     expect(agentTs).toContain('Seedance 2.5 is 4-30 seconds; Wan 3.0 is 2-30 seconds')
-    expect(agentTs).toContain('For any NSFW/adult-explicit video request, choose Wan 3.0 instead')
+    expect(agentTs).toContain('For any NSFW/adult-explicit video request, default to Wan 3.0 Prime')
     expect(agentTs).toContain('analogous to choosing Qwen for NSFW image requests')
     expect(agentTs).toContain('overrides the 16-30 second Seedance 2.5 route')
     expect(agentTs).toContain('reference-video duration + requested output duration <= 30 seconds')
