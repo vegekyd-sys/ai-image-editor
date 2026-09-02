@@ -44,7 +44,8 @@ export function validateVideoScript(opts: {
   }
 
   const capability = getVideoModelCapability(model)
-  const providerManagedEditDuration = opts.operation === 'edit' && normalizeVideoModelId(model) === 'seedance-2.5'
+  const providerManagedAdaptiveDuration = normalizeVideoModelId(model) === 'seedance-2.5'
+    && (opts.operation === 'edit' || duration === -1)
   const resolutionError = validateVideoResolutionRequest({ model, resolution })
   if (resolutionError) return resolutionError
   const aspectRatioError = validateVideoAspectRatioRequest({ model, aspectRatio })
@@ -56,10 +57,10 @@ export function validateVideoScript(opts: {
   if (parsedDuration != null && parsedDuration > capability.maxOutputDuration) {
     return `A single video generation script can be at most ${capability.maxOutputDuration} seconds, but this script totals ${parsedDuration}s. Use long-video-director to split it into self-contained segments of ${capability.longVideoChunkSeconds}s or less, and do not submit one long script.`
   }
-  if (!providerManagedEditDuration && duration != null && duration < capability.minOutputDuration) {
+  if (!providerManagedAdaptiveDuration && duration != null && duration < capability.minOutputDuration) {
     return `${capability.label} video generation duration must be at least ${capability.minOutputDuration} seconds, but duration=${duration}. Use duration=${capability.minOutputDuration}; the video model cannot generate shorter clips.`
   }
-  if (!providerManagedEditDuration && duration != null && duration > capability.maxOutputDuration) {
+  if (!providerManagedAdaptiveDuration && duration != null && duration > capability.maxOutputDuration) {
     return `${capability.label} video generation duration must be ${capability.maxOutputDuration} seconds or less, but duration=${duration}.`
   }
 

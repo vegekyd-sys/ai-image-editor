@@ -414,7 +414,9 @@ export async function createVideo(input: CreateVideoInput): Promise<CreateVideoR
 
     const loggedVideoRefType = videoUrl ? (videoReferType ?? 'base') : (videoUrls?.length ? 'feature' : undefined);
     let providerAspectRatio = resolveReferenceAspectRatio(provider, aspectRatio, providerVideoUrls.length > 0, resolvedReferenceVideoMetas);
-    if (provider === 'seedance-2.5' && videoOperation !== 'generate') providerAspectRatio = 'adaptive';
+    if (provider === 'seedance-2.5' && (videoOperation !== 'generate' || resolvedDuration === -1)) {
+      providerAspectRatio = 'adaptive';
+    }
     if (route.provider === 'fal-sync') providerAspectRatio = undefined;
     console.log(`\n🎬 [create_video] provider=${provider}, resolution=${route.resolution}, ${filteredImages.length}/${images.length} images${resolvedImageWorkflow ? `, imageWorkflow=${resolvedImageWorkflow}` : ''}, duration=${resolvedDuration ?? 'smart'}, aspectRatio=${providerAspectRatio ?? 'auto'}${hasVideoReference ? `, video=${loggedVideoRefType}` : ''}${hasAudioReference ? `, audio=${audioUrls?.length}` : ''}`);
     console.log(`Script (${finalPrompt.length} chars): ${finalPrompt.slice(0, 150)}...`);

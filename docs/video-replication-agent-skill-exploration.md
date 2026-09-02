@@ -348,3 +348,35 @@ EDL 和 beat/caption 标注** 的参考片，提供同数量替换素材，走�
 
 这个实验能先隔离 Skill 编排与确定性工具的缺口，再评估生成 provider；失败时知道该
 修 detector、composition 还是生成模型，而不是把所有问题归为“看起来不像”。
+
+## 2026-09-02 真实 CUI Reference Spike（branch-only）
+
+用户随后明确提供并授权本轮使用一条 10.08s 双人打斗视频、两张目标角色图和一张目标
+道场图。该实验通过当前 Worktree 启动的本地 Makaron CUI/CLI 路径提交，没有下载陌生
+素材、没有发布或部署。三张 384x216 参考图仅做无内容修改的 Lanczos 放大到 768x432，
+以满足 Seedance 最小边长 300px 的输入合同。
+
+等条件输入为 3 image references + 1 video reference、720p、无生成音频、同一完整 prompt；
+唯一 A/B 变量是模型：
+
+| 模型与实际 provider route | 合同结果 | 可解码结果 | 内容观察 |
+| --- | --- | --- | --- |
+| `seedance-fast` → `seedance-2.0-fast-reference-to-video` | `duration=10`、`16:9` 一次成功；task `task-unified-1788335703-lt18klpt` | H.264、1280x720、24fps、241 帧、10.041667s | 两位目标角色和新榻榻米道场从首帧保持到末帧；未见原白道服/棕斗篷/红灯笼场景回流。动作胜负与大节拍接近，但镜位、构图和局部动作不是 frame-exact。 |
+| `seedance-2.5` → `seedance-2.5-reference-to-video` | 固定 `duration=10` 首次被 provider 识别为 edit-like request 并拒绝；保持 reference route、改为 `duration=-1` 后成功；task `task-unified-1788336065-cauxrj1s` | H.264、1280x720、24fps、241 帧、10.041667s | 人物替换和源片动作/机位/光线明显更贴近，但几乎保留原红灯笼武馆，目标道场图服从失败。 |
+
+首次 2.5 失败信息明确给出两种选择：改用 dedicated edit model，或保留当前 reference model
+并使用 provider-managed source duration。第二种路径已真实成功，因此产品层可以继续统一为
+reference，而不必让用户理解单独的 Edit 模式；但确定性工具仍必须表达 `duration=-1` 这种
+provider contract，不能假装 Reference 与 Edit 的底层语义完全相同。
+
+本分支补了最小通用工具修正：允许 Seedance 2.5 Reference 的 `duration=-1`，按真实源时长
+估算 credits，持久化真实时长，并在 adaptive duration 时强制 provider aspect 为
+`adaptive`。相关 4 个测试文件共 82 个断言通过。实验前后余额从 13,339 到 12,361，
+观察到总差额 978 credits；它包含 Agent 与成功/失败尝试，不能误报为单个 provider 的纯
+生成价格。
+
+本次 A/B 验证的关键结论：单一 Reference 入口可用，但“强时序复刻”和“全背景替换”会
+竞争参考权重。Fast 更偏图像服从，2.5 更偏视频服从。下一步最小实验不是加 UI 或再写更长
+prompt，而是同一 10s 样片做两阶段混合路线：先用 2.5 Reference 锁动作/人物，再以其输出
+为 base 做一次仅背景替换，或反过来先生成新道场 clean plate/角色合成后只用视频传递动作；
+分别测背景覆盖率、角色首末帧一致性和相机轨迹误差，最多各一次，避免无门禁重抽。

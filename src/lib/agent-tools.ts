@@ -1507,7 +1507,7 @@ Hard constraints:
 - The script must have been shown to the user and confirmed before this tool is called, unless the user's current request explicitly asks for direct submission without confirmation or the system prompt supplies the trusted Skill template launch exception.`,
       inputSchema: z.object({
         story_prompt: z.string().describe('The complete video script. First line = short title, then the body. Native SeeDance, Wan 3.0, or MiniMax H3 text-to-video uses no media markers; Gemini Omni 1.1 follows the same rule. Makaron translates <<<media_N>>> / <<<audio_N>>> into each provider family\'s markers.'),
-        duration: z.number().optional().describe('Duration in seconds. Sync Lipsync v3 follows a 2-60s accepted source; Seedance 2.5 accepts 4-30s; Wan 3.0 accepts 2-30s; for Seedance 2.5 video_operation="edit", omit duration or pass -1 because Makaron follows the source duration automatically. SeeDance/SeeDance Mini and MiniMax H3 accept 4-15s; Kling accepts 5-15s; Grok accepts 1-15s; Google Omni accepts 3-10s.'),
+        duration: z.number().optional().describe('Duration in seconds. Sync Lipsync v3 follows a 2-60s source; Seedance 2.5 accepts 4-30s; pass -1 for Seedance 2.5 provider-managed source duration, including reference-to-video requests that repaint the full source clip and dedicated video_operation="edit". Wan 3.0 accepts 2-30s; SeeDance/SeeDance Mini and MiniMax H3 accept 4-15s; Kling accepts 5-15s; Grok accepts 1-15s; Google Omni accepts 3-10s.'),
         aspect_ratio: z.enum(['16:9', '9:16', '1:1', '4:3', '3:4', '21:9', '3:2', '2:3']).optional().describe('Output aspect ratio. Pass it only when the user asks for a specific shape and the selected model can honor it. Seedance supports 16:9/9:16/1:1/4:3/3:4/21:9/adaptive. Grok reference-to-video accepts supported fixed ratios.'),
         model: z.string().optional().describe('Video model/provider id. Supported ids include seedance-fast, seedance-mini, seedance, seedance-2.5, wan-3.0, wan-3.0-prime, kling, grok, google-omni, minimax-h3, and sync-lipsync-v3. Default to seedance-2.5 for non-NSFW direct 16-30s requests and wan-3.0-prime for the NSFW semantic route. Use sync-lipsync-v3 only with exactly one source video and one replacement audio ref.'),
         video_resolution: z.enum(['360p', '480p', '720p', '768p', '1080p', '2k', '4k', 'auto']).optional().describe('Shared output-resolution control for every video model. Infer it from the complete user intent, choose a value supported by the selected model, or use auto/default when unspecified. Grok 1.5 supports 480p/720p/native 1080p for text-to-video; any image/voice reference and video edit/extend are capped at 720p. Gemini Omni 1.1 supports 360p drafts, 720p native/default, and upscaled 1080p/4k.'),
@@ -1776,7 +1776,9 @@ Hard constraints:
             .filter(ref => !videoRefIndices.has(ref))
             .map(ref => originalImageUrlsByIndex[ref - 1])
             .filter((u): u is string => !!u && u.startsWith('http') && !u.endsWith('.mp4'));
-          const videoSec = effectiveDuration || 10;
+          const videoSec = effectiveDuration === -1
+            ? referenceVideoDuration ?? 10
+            : effectiveDuration || 10;
           const creditsRequired = getRequiredVideoCredits({
             model: videoModel,
             resolution: videoRoute.resolution,
@@ -1884,7 +1886,7 @@ Hard constraints:
             duration: resolvePersistedVideoDuration({
               model: actualVideoModel,
               operation: video_operation,
-              outputDuration: effectiveDuration,
+              outputDuration: effectiveDuration === -1 ? referenceVideoDuration : effectiveDuration,
               referenceVideoDuration,
             }) || null,
             model: actualVideoModel as import('@/types').VideoModel,
