@@ -409,3 +409,56 @@ Index → 同一 prompt 重提。没有 `--skill` 硬路由；修复阶段没有
 `saveOutput()` descriptor 或 workspace path 放进 `outputs[].path`；Seedance 2.0 现在按
 时间线真实媒体类型把混排的 `<<<media_N>>>` 映射为 `@imageN/@videoN`，避免新增准备图后
 引用错位。Skill 同时明确禁止为了尺寸/格式修复调用生图模型。
+
+### 结构化 Contract / Preview 720p 回归
+
+普通话 480p 回归的工具历史后来证明，`analyze_video` 当时因 Gemini 地域限制返回
+`User location is not supported for the API use`，Agent 实际没有完整视频证据，且最终
+provider prompt 仅 501 字符。换代理后先把提交 `c2e7081e` 发到 Vercel Preview 做纯分析：
+同一 10.08s 视频的 `analyze_video` 成功返回逐段动作、镜头、人物和结尾证据，确认地域问题
+在 Preview 已恢复。
+
+随后本分支新增 `generate_animation.replication_contract`。Agent 只填写测得的 source
+duration、每位源演员的“外观/服装 + 开场或关键动作”锚点、替换身份、环境和音频策略；
+`src/lib/video-replication-prompt.ts` 确定性扩写不应被压缩的时序、镜头、构图、身份和排除项。
+同时 `preview_frame` 可对 raw video 一次抽 2-6 个时点作为 `analyze_video` 失败兜底；两条
+路径都不能提供开场/动作/冲击/结尾证据时，Skill 要求在付费生成前停止。
+
+新提交 `77d0d38e` 发布到 Preview 后，仍只发送同一句普通用户请求，不传 `--skill`：
+
+> 帮我复刻这条打斗视频。两个打斗人物分别换成前两张人物图，场景换成第三张道场图，
+> 尽量保留原视频的动作、镜头和节奏。用 Seedance 2.0 720p，直接生成。
+
+观察与证据：
+
+- Preview: `https://ai-image-editor-l22n0kfx8-vegekyd-sys-projects.vercel.app`
+- Project: `e41f6fbc-5f65-444b-9c35-e2a61ceaf0b5`
+- Agent Run: `23fc256b-2b35-4edd-9889-1aed8162b824`
+- Provider task: `task-unified-1788354134-hmiphqq2`
+- 自动路径：`animate.md` → `video-edit/SKILL.md` → replication/Blueprint/direct references →
+  成功完整视频分析 → 三张图片分析 → `replication_contract`；没有关键词 router 或 `--skill`。
+- 三张 384x216 图首次被 input preflight 拒绝后，Agent 只用 Node/Sharp 等比准备并发布为
+  1280x720；没有调用生图模型。10.08 非整数秒 provider 请求被拒后完整退款，随后以最接近的
+  10 秒提交；最终只有一个成功付费视频 task。
+- 实际 route `seedance-2.0-fast-reference-to-video`；provider prompt 4,141 字符，而普通话
+  480p 回归只有 501 字符、此前人工成功 prompt 为 2,532 字符。最终视频扣 322 credits，
+  provider cost 记录为 $1.61，渲染 262s。
+- 原始 provider MP4：H.264 1280x720 24fps + AAC 32kHz stereo，10.080s，6,674,502 bytes，
+  全片 decode 通过。0–约 8.9s 的开场站位、高踢、空中旋转、组合攻防、近景、倒地顺序和
+  道场替换明显贴近原片，也比 501 字 prompt 回归更接近此前人工成功基线。
+- 音频不是原声逐样本复制：sample correlation 0.4906；50ms RMS envelope correlation
+  0.9720，说明重生成音效保留了较强节奏结构。
+- 未通过项：约 9.0s 后画面突然泄漏为银发人物的三视图参考板，并持续到结尾；因此原始
+  provider 输出不能标成全片通过。这也是多视图 character sheet 作为 reference 的可测风险，
+  不是 prompt 或 decode 层能完全保证的。
+- 不增加第二个付费 generation。离线 QA 仅保留 0–8.9s 模型画面，并冻结最后一个正确的
+  胜负构图到 10.08s；修复版仍为 H.264/AAC、1280x720、24fps、10.080s 且 decode 通过。
+- 本轮自动 scene detector 在高速运动中把 motion change 大量误判为 cut（源 22 段、输出
+  44 段），不能作为 shot-count 验收数字；P1 仍需专用 boundary detector/ground-truth EDL。
+
+本轮结论：Skill-first + 完整视频理解 + 确定性 strict prompt compiler 已显著修复“普通 CLI
+构图不一致”的主要链路问题，证明简单 CUI 请求能够自动走到接近人工成功 prompt 的结果；
+但 provider 仍有随机的 reference-board leak，P0 必须保留首尾帧/参考图泄漏 QA 和无付费的
+末帧冻结/裁切修复，不能仅凭 task completed 宣称成功。下一次最小付费实验应只改变 reference
+准备：从多视图人物板确定性裁出单一全身 hero view，再用相同 contract/task budget 跑一次，
+验证是否消除结尾泄漏；不改 UI/API/DB，不自动重抽。
