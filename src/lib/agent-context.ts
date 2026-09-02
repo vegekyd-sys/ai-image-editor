@@ -137,6 +137,7 @@ async function buildVerifiedTurnMediaEvidence(
   requestedCount: number | undefined,
   supabase: SupabaseClient,
   userId: string,
+  supportsImageInput = false,
 ): Promise<string> {
   const count = Math.min(snapshots.length, Math.max(0, Math.floor(requestedCount || 0)));
   if (!count) return '';
@@ -144,15 +145,23 @@ async function buildVerifiedTurnMediaEvidence(
   const preflightStartedAt = Date.now();
   const start = snapshots.length - count;
   const batch = snapshots.slice(start);
-  const { analyzeImageContent, analyzeVideoContent } = await import('./gemini');
-  await Promise.all(batch.map(async (snapshot, offset) => {
-    const mediaIndex = start + offset + 1;
+  const evidenceBatch = batch
+    .map((snapshot, offset) => ({ snapshot, mediaIndex: start + offset + 1 }))
+    // Multimodal Agents inspect still images directly. Raw video is not part of
+    // their image input contract, so video evidence continues through Gemini.
+    .filter(({ snapshot }) => !supportsImageInput || snapshot.type === 'video');
+  if (!evidenceBatch.length) return '';
+
+  let analyzersPromise: Promise<typeof import('./gemini')> | undefined;
+  const loadAnalyzers = () => (analyzersPromise ??= import('./gemini'));
+  await Promise.all(evidenceBatch.map(async ({ snapshot, mediaIndex }) => {
     const itemStartedAt = Date.now();
     if (hasVerifiedMediaDescription(snapshot.description)) {
       console.info(`[turn-media-preflight] media_${mediaIndex} cached in ${Date.now() - itemStartedAt}ms`);
       return;
     }
     try {
+      const { analyzeImageContent, analyzeVideoContent } = await loadAnalyzers();
       const isVideo = snapshot.type === 'video';
       const videoMeta = snapshot.video_meta as Record<string, unknown> | undefined;
       const source = isVideo
@@ -182,12 +191,11 @@ async function buildVerifiedTurnMediaEvidence(
       console.warn(`[turn-media-preflight] media_${mediaIndex} failed in ${Date.now() - itemStartedAt}ms`, error);
     }
   }));
-  console.info(`[turn-media-preflight] completed ${count} items in ${Date.now() - preflightStartedAt}ms`);
+  console.info(`[turn-media-preflight] completed ${evidenceBatch.length} items in ${Date.now() - preflightStartedAt}ms`);
 
-  return `[Verified current upload batch — ${count} items]
-The Media Analyzer inspected every item below before the Agent began planning. This is visual evidence, not filenames or guesses:
-${batch.map((snapshot, offset) => {
-  const mediaIndex = start + offset + 1;
+  return `[Verified current upload ${supportsImageInput ? 'video ' : ''}evidence — ${evidenceBatch.length} item${evidenceBatch.length === 1 ? '' : 's'}]
+The media evidence required before Agent planning is listed below. Treat successful descriptions as visual evidence, not filenames or guesses:
+${evidenceBatch.map(({ snapshot, mediaIndex }) => {
   const type = snapshot.type === 'video' ? 'video' : 'image';
   return `- <<<media_${mediaIndex}>>> [${type}]: ${snapshot.description || '[analysis missing]'}`;
 }).join('\n')}
@@ -209,7 +217,7 @@ export function buildTurnMediaInspectionContext(
 
   const turnMediaStart = snapshots.length - turnMediaCount;
   const evidenceInstruction = nativeVision
-    ? 'Every still image below is attached to this same Agent request after its matching Media Index marker. Inspect those images directly. Videos are not image attachments; use their existing Media Index evidence or analyze_video when that evidence is missing.'
+    ? 'Every still image below is attached to this same Agent request after its matching Media Index marker. Inspect those images directly. Videos are not image attachments; verified video evidence follows below. If video analysis failed or is insufficient for the request, call analyze_video once with all affected media_indices.'
     : 'A verified evidence block for this exact batch follows below; consume every line before deciding how each item contributes.';
 
   return `[Current upload batch — inspect every item before planning]
@@ -442,17 +450,16 @@ export async function buildPromptContext(
 
   const snapshots: DbSnapshot[] = snapshotsRes.data ?? [];
   const currentSnapshotIndex = options.currentSnapshotIndex ?? Math.max(0, snapshots.length - 1);
-  // Text-only Agents still need the Gemini bridge. Multimodal Agents receive
-  // the still images in their own first request and must not be blocked by a
-  // separate Gemini policy decision before they start.
-  const verifiedTurnMediaEvidence = options.supportsImageInput
-    ? ''
-    : await buildVerifiedTurnMediaEvidence(
-        snapshots,
-        options.turnMediaCount,
-        supabase,
-        userId,
-      );
+  // Text-only Agents need Gemini evidence for every medium. Multimodal Agents
+  // inspect still images directly but retain Gemini preflight for raw videos,
+  // which are outside the Agent image-input contract.
+  const verifiedTurnMediaEvidence = await buildVerifiedTurnMediaEvidence(
+    snapshots,
+    options.turnMediaCount,
+    supabase,
+    userId,
+    options.supportsImageInput === true,
+  );
   const originMessage = messages[0];
   const projectAudios: AudioAttachmentContext[] = ((musicRes.data ?? []) as DbProjectMusic[])
     .map((row) => {

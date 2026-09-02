@@ -69,11 +69,12 @@ describe('current upload batch inspection', () => {
     expect(runner).toContain('turnMediaCount: request.turnMediaCount');
     expect(cli).toContain('uploadedTurnMediaCount += addedCount');
     expect(cli).toContain('turnMediaCount: uploadedTurnMediaCount');
-    expect(context).toContain("const verifiedTurnMediaEvidence = options.supportsImageInput");
+    expect(context).toContain('options.supportsImageInput === true');
+    expect(context).toContain(".filter(({ snapshot }) => !supportsImageInput || snapshot.type === 'video')");
     expect(context).toContain('analyzeImageContent(');
     expect(context).toContain('analyzeVideoContent(');
-    expect(context).toContain('[Verified current upload batch — ${count} items]');
-    expect(context).toContain('[turn-media-preflight] completed ${count} items');
+    expect(context).toContain("[Verified current upload ${supportsImageInput ? 'video ' : ''}evidence");
+    expect(context).toContain('[turn-media-preflight] completed ${evidenceBatch.length} items');
     expect(context).toContain('nativeVisionImages');
     expect(context).toContain('selectNativeVisionImages');
     expect(context).toContain('uploadedVideoCount && !options.turnMediaCount');
@@ -81,6 +82,9 @@ describe('current upload batch inspection', () => {
     expect(agent).toContain('buildNativeVisionUserContent(');
     expect(agent).toContain('nativeImageAnalysis');
     expect(agent).toContain("return { mode: 'batch_describe', analyses }");
+    expect(editor).toContain('First-turn media understanding (no user prompt)');
+    expect(editor).toContain('turnMediaCount: workSnapshots.length');
+    expect(editor).not.toContain('workSnapshots.map(snap => runAutoAnalysis');
     expect(execution).toContain(".eq('run_id', runId)");
   });
 });
