@@ -2054,12 +2054,13 @@ Not sure which built-in skill to use? Start with:
     console.log('Usage: makaron analyze --video <file|url> ["question"]');
   } else if (topic === 'video') {
     if (subtopic === 'script') console.log('Usage: makaron video script --image <file> [--image <file>] [--lang en|zh] "direction"');
-    else if (subtopic === 'create') console.log('Usage: makaron video create --script "..." [--image <url> ...] [--video <url> ...] [--audio <url> ...] [--voice <xai-preset-id> ...] [--duration 10] [--aspect 9:16] [--video-model seedance-fast|seedance-mini|seedance|seedance-2.5|wan-3.0|wan-3.0-pro|kling|grok|google-omni|minimax-h3|sync-lipsync-v3] [--operation generate|edit|extend] [--video-resolution auto|480p|720p|768p|1080p|2k|4k] [--keep-original-sound]');
+    else if (subtopic === 'create') console.log('Usage: makaron video create --script "..." [--image <url> ...] [--video <url> ...] [--audio <url> ...] [--voice <xai-preset-id> ...] [--duration 10] [--aspect 9:16] [--video-model seedance-fast|seedance-mini|seedance|seedance-2.5|wan-3.0|wan-3.0-prime|wan-3.0-pro|kling|grok|google-omni|minimax-h3|sync-lipsync-v3] [--operation generate|edit|extend] [--video-resolution auto|480p|720p|768p|1080p|2k|4k] [--keep-original-sound]');
     else if (subtopic === 'status') console.log('Usage: makaron video status <taskId> | --snapshot <snapshotId> [--wait]');
     else console.log(`Video commands:
   video script --image <file> [--image <file>] "direction"   Write video script
   video create --script "..." --video-model seedance-fast    Native text-to-video (no image required)
   video create --script "..." --video-model wan-3.0          Wan 3.0 Standard via MuleRouter
+  video create --script "..." --video-model wan-3.0-prime    Wan 3.0 Prime fast tier via MuleRouter
   video create --script "..." --video-model wan-3.0-pro      Wan 3.0 Pro super-resolution via MuleRouter
   video create --script "..." --video-model minimax-h3                          MiniMax H3 text-to-video (default 768P)
   video create --script "..." --image <url> [--duration 10]  Submit video task
@@ -2909,11 +2910,13 @@ if (!command || command === '--help' || command === '-h' || command === 'help') 
     }
     const selectedVideoModel = ['wan3', 'wan3.0', 'wan30', 'wan-3'].includes(videoModel)
       ? 'wan-3.0'
-      : ['wan3-pro', 'wan3.0-pro', 'wan30-pro', 'wan-3-pro', 'berry-1.0-pro'].includes(videoModel)
-        ? 'wan-3.0-pro'
-        : (videoModel || 'seedance-fast');
+      : ['wan3-prime', 'wan3.0-prime', 'wan30-prime', 'wan-3-prime', 'w3.0-video-prime', 'prime'].includes(videoModel)
+        ? 'wan-3.0-prime'
+        : ['wan3-pro', 'wan3.0-pro', 'wan30-pro', 'wan-3-pro', 'berry-1.0-pro', 'w3.0-video-pro'].includes(videoModel)
+          ? 'wan-3.0-pro'
+          : (videoModel || 'seedance-fast');
     const isSeedance25 = selectedVideoModel === 'seedance-2.5';
-    const isWan30 = selectedVideoModel === 'wan-3.0' || selectedVideoModel === 'wan-3.0-pro';
+    const isWan30 = selectedVideoModel === 'wan-3.0' || selectedVideoModel === 'wan-3.0-prime' || selectedVideoModel === 'wan-3.0-pro';
     const isSeedanceModel = selectedVideoModel === 'seedance-fast' || selectedVideoModel === 'seedance-mini' || selectedVideoModel === 'seedance' || isSeedance25;
     const isMinimaxH3 = selectedVideoModel === 'minimax-h3';
     const isGrok = selectedVideoModel === 'grok';
@@ -2921,7 +2924,7 @@ if (!command || command === '--help' || command === '-h' || command === 'help') 
     const isSyncLipsync = selectedVideoModel === 'sync-lipsync-v3';
     const supportsNativeTextToVideo = isSeedanceModel || isWan30 || isMinimaxH3 || isGrok || isGoogleOmni;
     if (!script || (!images.length && !videos.length && !audios.length && !referenceVoices.length && !supportsNativeTextToVideo)) {
-      console.error('Usage: makaron video create --script "..." [--image <url>] [--video <file|url>] [--audio <file|url>] [--duration 30] [--video-model seedance-2.5|wan-3.0|wan-3.0-pro|minimax-h3]');
+      console.error('Usage: makaron video create --script "..." [--image <url>] [--video <file|url>] [--audio <file|url>] [--duration 30] [--video-model seedance-2.5|wan-3.0|wan-3.0-prime|wan-3.0-pro|minimax-h3]');
       process.exit(1);
     }
     if (isSeedance25 && images.length > 30) { console.error('Seedance 2.5 supports at most 30 image references.'); process.exit(1); }
@@ -3074,6 +3077,7 @@ if (!command || command === '--help' || command === '-h' || command === 'help') 
   video script --image <file> [--image <file>] "direction"   Write video script
   video create --script "..." --video-model seedance-fast    Native text-to-video (no image required)
   video create --script "..." --video-model wan-3.0          Wan 3.0 Standard via MuleRouter
+  video create --script "..." --video-model wan-3.0-prime    Wan 3.0 Prime fast tier via MuleRouter
   video create --script "..." --video-model wan-3.0-pro      Wan 3.0 Pro super-resolution via MuleRouter
   video create --script "..." --video-model minimax-h3                          MiniMax H3 text-to-video (default 768P)
   video create --script "..." --image <url> [--duration 10]  Submit video task

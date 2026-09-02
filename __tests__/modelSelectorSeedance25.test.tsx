@@ -29,6 +29,9 @@ describe('ModelSelector Seedance 2.5', () => {
     expect(screen.getByText('Wan 3.0 标准版')).toBeTruthy();
     expect(screen.getByText('1080p · 30s')).toBeTruthy();
     expect(screen.getByText(/MuleRouter 标准版/)).toBeTruthy();
+    expect(screen.getByText('Wan 3.0 Prime')).toBeTruthy();
+    expect(screen.getByText('快速 · 1080p')).toBeTruthy();
+    expect(screen.getByText(/MuleRouter 快速版/)).toBeTruthy();
     expect(screen.getByText('Wan 3.0 Pro')).toBeTruthy();
     expect(screen.getByText('4K · 超分')).toBeTruthy();
     expect(screen.getByText(/MuleRouter 超分版/)).toBeTruthy();

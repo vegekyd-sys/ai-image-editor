@@ -210,7 +210,7 @@ export async function createVideo(input: CreateVideoInput): Promise<CreateVideoR
   const hasAudioReference = !!audioUrls?.length;
   const hasVoiceReference = !!referenceVoiceIds?.length;
   const provider = normalizeVideoModelId(videoModel);
-  const isWan30 = provider === 'wan-3.0' || provider === 'wan-3.0-pro';
+  const isWan30 = provider === 'wan-3.0' || provider === 'wan-3.0-prime' || provider === 'wan-3.0-pro';
   const route = resolveVideoGenerationRoute({ model: provider, resolution: videoResolution });
   const capability = getVideoModelCapability(provider);
   const providerVideoUrls = [...(videoUrl ? [videoUrl] : []), ...(videoUrls || [])].filter(Boolean);
@@ -499,7 +499,11 @@ export async function createVideo(input: CreateVideoInput): Promise<CreateVideoR
     } else if (route.provider === 'mulerouter') {
       const { createMuleRouterVideoTask } = await import('../mulerouter-video');
       taskId = await createMuleRouterVideoTask({
-        model: provider === 'wan-3.0-pro' ? 'pro' : 'standard',
+        model: provider === 'wan-3.0-prime'
+          ? 'prime'
+          : provider === 'wan-3.0-pro'
+            ? 'pro'
+            : 'standard',
         prompt: finalPrompt,
         images: filteredImages,
         videoUrls: providerVideoUrls.length ? providerVideoUrls : undefined,

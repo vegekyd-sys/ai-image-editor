@@ -1102,6 +1102,15 @@ try {
   }
 
   {
+    const result = await expectSuccess(['video', 'create', '--script', 'Wan Prime\nShot 1 (2s): A neon windmill spins at dawn', '--duration', '2', '--video-model', 'w3.0-video-prime', '--video-resolution', '480p']);
+    assert.match(result.stdout, /Task ID: task-unified-text-smoke/);
+    const mcpRequest = requests.filter(req => req.pathname === '/api/mcp').at(-1);
+    assert.equal(mcpRequest?.body?.params?.name, 'makaron_create_video');
+    assert.equal(mcpRequest?.body?.params?.arguments?.videoModel, 'wan-3.0-prime');
+    assert.equal(mcpRequest?.body?.params?.arguments?.videoResolution, '480p');
+  }
+
+  {
     const result = await expectSuccess(['video', 'create', '--script', 'Wan Pro\nShot 1 (3s): A crystal city glows at blue hour', '--duration', '3', '--video-model', 'berry-1.0-pro', '--video-resolution', '4k']);
     assert.match(result.stdout, /Task ID: task-unified-text-smoke/);
     const mcpRequest = requests.filter(req => req.pathname === '/api/mcp').at(-1);

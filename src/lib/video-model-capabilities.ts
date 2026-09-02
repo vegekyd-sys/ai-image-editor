@@ -285,6 +285,47 @@ const MODEL_CAPABILITIES: Record<string, VideoModelCapability> = {
     provider: 'mulerouter',
     providerModel: 'carrothub/w3.0-video',
   },
+  'wan-3.0-prime': {
+    id: 'wan-3.0-prime',
+    label: 'Wan 3.0 Prime',
+    minOutputDuration: 2,
+    maxOutputDuration: 30,
+    maxReferenceVideoDuration: 15,
+    maxCombinedReferenceAndOutputDuration: 30,
+    referenceVideoDurationTolerance: 0.5,
+    referenceVideoSize: {
+      maxFileSizeMb: 100,
+      minWidth: 240,
+      maxWidth: 4096,
+      minHeight: 240,
+      maxHeight: 4096,
+      minAspectRatio: 0.125,
+      maxAspectRatio: 8,
+      description: '<=100MB MP4/MOV, side 240-4096px, aspect <=8:1, each 1-15s and <=15s total',
+    },
+    supportsVideoReference: true,
+    supportsBaseVideoEdit: false,
+    defaultImageWorkflow: 'reference-to-video',
+    supportsVideoExtend: false,
+    longVideoChunkSeconds: 30,
+    maxImageReferences: 10,
+    maxVideoReferences: 5,
+    maxAudioReferences: 5,
+    maxTotalReferences: 20,
+    // MuleRouter W3.0 Prime list pricing, verified 2026-09-02. Prime uses
+    // the same reference contract as Standard with a faster generation tier.
+    estimatedCostPerSecondUsd: 0.28,
+    estimatedCostPerSecondUsdByResolution: {
+      '480p': 0.068,
+      '720p': 0.14,
+      '1080p': 0.28,
+    },
+    supportedResolutions: ['480p', '720p', '1080p'],
+    defaultResolution: '1080p',
+    supportedAspectRatios: ['16:9', '9:16', '1:1', '4:3', '3:4'],
+    provider: 'mulerouter',
+    providerModel: 'carrothub/w3.0-video-prime',
+  },
   'wan-3.0-pro': {
     id: 'wan-3.0-pro',
     label: 'Wan 3.0 Pro',
@@ -312,8 +353,8 @@ const MODEL_CAPABILITIES: Record<string, VideoModelCapability> = {
     maxVideoReferences: 5,
     maxAudioReferences: 5,
     maxTotalReferences: 20,
-    // MuleRouter Berry 1.0 Pro pricing, verified 2026-09-01. Audio is included
-    // at the same rate; references do not add a separate input charge.
+    // MuleRouter W3.0 Pro pricing, verified 2026-09-02. Berry 1.0 Pro has the
+    // same generation contract, but its task type is not API-interchangeable.
     estimatedCostPerSecondUsd: 0.18,
     estimatedCostPerSecondUsdByResolution: {
       '1080p': 0.18,
@@ -324,7 +365,7 @@ const MODEL_CAPABILITIES: Record<string, VideoModelCapability> = {
     defaultResolution: '1080p',
     supportedAspectRatios: ['16:9', '9:16', '1:1', '4:3', '3:4'],
     provider: 'mulerouter',
-    providerModel: 'carrothub/berry-1.0-pro',
+    providerModel: 'carrothub/w3.0-video-pro',
   },
   'sync-lipsync-v3': {
     id: 'sync-lipsync-v3',
@@ -522,7 +563,10 @@ export function normalizeVideoModelId(model?: string | null): string {
   if (normalized === 'wan3' || normalized === 'wan30' || normalized === 'wan3.0' || normalized === 'wan-3' || normalized === 'wan_3_0') {
     return 'wan-3.0'
   }
-  if (normalized === 'wan3-pro' || normalized === 'wan30-pro' || normalized === 'wan3.0-pro' || normalized === 'wan-3-pro' || normalized === 'wan_3_0_pro' || normalized === 'berry-1.0-pro') {
+  if (normalized === 'wan3-prime' || normalized === 'wan30-prime' || normalized === 'wan3.0-prime' || normalized === 'wan-3-prime' || normalized === 'wan_3_0_prime' || normalized === 'w3.0-video-prime' || normalized === 'prime') {
+    return 'wan-3.0-prime'
+  }
+  if (normalized === 'wan3-pro' || normalized === 'wan30-pro' || normalized === 'wan3.0-pro' || normalized === 'wan-3-pro' || normalized === 'wan_3_0_pro' || normalized === 'berry-1.0-pro' || normalized === 'w3.0-video-pro') {
     return 'wan-3.0-pro'
   }
   if (normalized === 'sync3' || normalized === 'sync-v3' || normalized === 'lipsync' || normalized === 'lip-sync') {
@@ -653,7 +697,7 @@ function getSeedanceProviderBase(model?: string | null): string | undefined {
 
 export function supportsNativeTextToVideo(model?: string | null): boolean {
   const id = normalizeVideoModelId(model)
-  return getSeedanceProviderBase(id) != null || id === 'wan-3.0' || id === 'wan-3.0-pro' || id === 'minimax-h3' || id === 'google-omni' || id === 'grok'
+  return getSeedanceProviderBase(id) != null || id === 'wan-3.0' || id === 'wan-3.0-prime' || id === 'wan-3.0-pro' || id === 'minimax-h3' || id === 'google-omni' || id === 'grok'
 }
 
 export function resolveVideoProviderModel(options: {
@@ -686,7 +730,7 @@ export function resolveVideoProviderModel(options: {
     return 'seedance-2.5-reference-to-video'
   }
 
-  if (route.model === 'wan-3.0' || route.model === 'wan-3.0-pro') {
+  if (route.model === 'wan-3.0' || route.model === 'wan-3.0-prime' || route.model === 'wan-3.0-pro') {
     return route.providerModel
   }
 
@@ -959,7 +1003,7 @@ export function validateVideoModelRequest(options: {
     }
   }
 
-  if ((normalizedModel === 'wan-3.0' || normalizedModel === 'wan-3.0-pro') && options.operation && options.operation !== 'generate') {
+  if ((normalizedModel === 'wan-3.0' || normalizedModel === 'wan-3.0-prime' || normalizedModel === 'wan-3.0-pro') && options.operation && options.operation !== 'generate') {
     return 'Wan 3.0 supports generation with multimodal references, but does not expose typed video edit or extend operations. Use video_operation="generate" with feature references.'
   }
 

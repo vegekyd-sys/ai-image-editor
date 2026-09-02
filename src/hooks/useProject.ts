@@ -212,11 +212,13 @@ export function useProject(projectId: string, userId: string) {
 
     const animations: ProjectAnimation[] = (animationRes.data ?? []).map((row: Record<string, unknown>) => {
       const taskId = (row.piapi_task_id as string) ?? null;
-      const videoModel = taskId?.startsWith('mr-wan30-pro-')
+      const videoModel = taskId?.startsWith('mr-wan30-w3pro-') || taskId?.startsWith('mr-wan30-pro-')
         ? 'wan-3.0-pro'
-        : taskId?.startsWith('mr-wan30-')
-          ? 'wan-3.0'
-          : taskId?.startsWith('task-unified-') || taskId?.startsWith('cgt-')
+        : taskId?.startsWith('mr-wan30-prime-')
+          ? 'wan-3.0-prime'
+          : taskId?.startsWith('mr-wan30-')
+            ? 'wan-3.0'
+            : taskId?.startsWith('task-unified-') || taskId?.startsWith('cgt-')
         ? 'seedance'
         : taskId?.startsWith('xai-')
           ? 'grok'
