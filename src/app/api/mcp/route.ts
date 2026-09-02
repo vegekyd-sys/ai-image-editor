@@ -1,7 +1,7 @@
 import { createMakaronMcpServer } from '@/mcp/server';
 import { WebStandardStreamableHTTPServerTransport } from '@modelcontextprotocol/sdk/server/webStandardStreamableHttp.js';
 import { validateApiKey } from '@/lib/billing/api-keys';
-import { checkBalance, deductCredits, deductByTokens } from '@/lib/billing/credits';
+import { checkBalance, deductCredits, deductByTokens, recordSubscriptionUsage } from '@/lib/billing/credits';
 import { resolveToolName } from '@/lib/billing/pricing';
 import { deductSeedAudioCredits } from '@/lib/billing/seed-audio';
 import { getRequiredVideoCredits, normalizeVideoModelId } from '@/lib/video-model-capabilities';
@@ -77,7 +77,40 @@ async function handleMcp(req: Request): Promise<Response> {
 
     // Post-complete: deduct credits (token-based if usage available, else per-action)
     onToolComplete: auth.type === 'user' ? async (toolName, model, durationMs, usage, meta) => {
-      if (usage) {
+      const usageSubscriptionProvider = usage?.provider === 'codex-subscription'
+        || usage?.provider === 'grok-subscription'
+        ? usage.provider
+        : undefined;
+      if (usage && usageSubscriptionProvider) {
+        try {
+          await recordSubscriptionUsage(
+            auth.userId!,
+            usageSubscriptionProvider,
+            toolName,
+            usage.modelId,
+            {
+              inputTokens: usage.inputTokens,
+              outputTokens: usage.outputTokens,
+              durationMs,
+              apiKeyId: auth.keyId,
+            },
+          );
+        } catch (error) {
+          console.error('[billing] MCP subscription usage logging error:', error);
+        }
+      } else if (meta?.provider === 'grok-subscription') {
+        try {
+          await recordSubscriptionUsage(
+            auth.userId!,
+            'grok-subscription',
+            toolName,
+            model || meta.videoModel || 'grok',
+            { durationMs, apiKeyId: auth.keyId },
+          );
+        } catch (error) {
+          console.error('[billing] MCP subscription usage logging error:', error);
+        }
+      } else if (usage) {
         // Token-based billing — Gemini/OpenRouter tools that return usage
         await deductByTokens(
           auth.userId!,

@@ -11,6 +11,7 @@ import { estimateVideoProviderCostUsd, getRequiredVideoCredits, normalizeVideoMo
 import {
   deductFixedCredits,
   isInsufficientCreditsError,
+  recordSubscriptionUsage,
   refundCredits,
   requireCredits,
 } from './billing/credits';
@@ -347,7 +348,7 @@ export type AgentStreamEvent =
       };
       inputTokens?: number;
     }
-  | { type: 'usage'; inputTokens: number; outputTokens: number; cacheReadTokens?: number; cacheWriteTokens?: number; cacheWriteTelemetryComplete?: boolean; providerCostUsd?: number; model: string }  // token usage for billing (inputTokens = noCache only)
+  | { type: 'usage'; inputTokens: number; outputTokens: number; cacheReadTokens?: number; cacheWriteTokens?: number; cacheWriteTelemetryComplete?: boolean; providerCostUsd?: number; model: string; provider: string }  // token usage for billing (inputTokens = noCache only)
   | { type: 'done' }
   | {
       type: 'error';
@@ -1405,7 +1406,22 @@ function createGenerateImageTool(
           },
         );
         // Bill for image generation (separate from Agent LLM tokens)
-        if (skillResult.usage && skillResult.provider !== 'codex-subscription') {
+        if (skillResult.usage && skillResult.provider === 'codex-subscription' && ctx.userId) {
+          try {
+            await recordSubscriptionUsage(
+              ctx.userId,
+              'codex-subscription',
+              'generate_image',
+              skillResult.usage.modelId,
+              {
+                inputTokens: skillResult.usage.inputTokens,
+                outputTokens: skillResult.usage.outputTokens,
+              },
+            );
+          } catch (error) {
+            console.error('[billing] generate_image subscription usage logging error:', error);
+          }
+        } else if (skillResult.usage && skillResult.provider !== 'codex-subscription') {
           import('./billing/credits').then(({ deductByTokens }) =>
             deductByTokens(
               ctx.userId ?? '',
@@ -1957,6 +1973,19 @@ Hard constraints:
             }
           }
           await supabase.from('snapshots').update({ video_meta: videoMeta }).eq('id', snapshotId);
+
+          if (skillResult.provider === 'grok-subscription' && ctx.userId) {
+            try {
+              await recordSubscriptionUsage(
+                ctx.userId,
+                'grok-subscription',
+                reservationToolName,
+                skillResult.providerModel || actualVideoRoute.providerModel || actualVideoModel,
+              );
+            } catch (error) {
+              console.error('[billing] generate_animation subscription usage logging error:', error);
+            }
+          }
 
           if (isGoogleOmniAsync && ctx.userId) {
             runGoogleOmniVideoSnapshotAfterResponse({

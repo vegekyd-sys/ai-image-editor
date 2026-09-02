@@ -2,7 +2,7 @@ import { NextRequest } from 'next/server';
 import type { ModelMessage } from 'ai';
 import { authenticateRequest } from '@/lib/api-auth';
 import type { AgentDualWriter as AgentDualWriterType } from '@/lib/agentDualWriter';
-import { requireCredits, deductByTokens } from '@/lib/billing/credits';
+import { requireCredits, recordAgentTokenUsage } from '@/lib/billing/credits';
 import { AgentPerf } from '@/lib/agent-perf';
 import { getRequestLocale } from '@/lib/server-locale';
 import { resolvePersistedRunStatus } from '@/lib/agent-terminal';
@@ -620,25 +620,26 @@ export async function POST(req: NextRequest) {
           }
           // Finalization below atomically persists failed + terminal metadata.
         } finally {
-          // Deduct credits based on token usage (fire-and-forget)
-          if (usageEvent && shouldRequireAgentCredits(resolvedAgentModel.provider)) {
+          // Charge API providers or record personal-plan usage at zero cost.
+          if (usageEvent) {
             const endBilling = perf.span('billing_deduct', { projectId, model: usageEvent.model });
-            deductByTokens(
-              userId, 'agent', usageEvent.model,
-              usageEvent.inputTokens, usageEvent.outputTokens,
-              undefined, undefined,
-              {
-                cacheRead: usageEvent.cacheReadTokens ?? 0,
-                cacheWrite: usageEvent.cacheWriteTokens ?? 0,
+            try {
+              await recordAgentTokenUsage({
+                userId,
+                provider: usageEvent.provider || resolvedAgentModel.provider,
+                modelId: usageEvent.model,
+                inputTokens: usageEvent.inputTokens,
+                outputTokens: usageEvent.outputTokens,
+                cacheReadTokens: usageEvent.cacheReadTokens ?? 0,
+                cacheWriteTokens: usageEvent.cacheWriteTokens ?? 0,
                 cacheWriteTelemetryComplete: usageEvent.cacheWriteTelemetryComplete,
-              },
-              usageEvent.providerCostUsd,
-            )
-              .then(() => endBilling({ ok: true }))
-              .catch(e => {
-                endBilling({ ok: false });
-                console.error('[billing] agent deduct error:', e);
+                providerCostUsd: usageEvent.providerCostUsd,
               });
+              endBilling({ ok: true });
+            } catch (e) {
+              endBilling({ ok: false });
+              console.error('[billing] agent usage logging error:', e);
+            }
           }
 
           if (writer) {

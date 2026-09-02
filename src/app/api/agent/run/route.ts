@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { after } from 'next/server';
 import { authenticateRequest } from '@/lib/api-auth';
 import { AgentPerf } from '@/lib/agent-perf';
-import { requireCredits, deductByTokens } from '@/lib/billing/credits';
+import { requireCredits, recordAgentTokenUsage } from '@/lib/billing/credits';
 import { getRequestLocale } from '@/lib/server-locale';
 import { translate } from '@/lib/locales';
 import { resolvePersistedRunStatus } from '@/lib/agent-terminal';
@@ -298,6 +298,7 @@ export async function POST(req: NextRequest) {
       let cacheWriteTelemetryComplete = true;
       let providerCostUsd: number | undefined;
       let agentModel = '';
+      let agentProvider = resolvedAgentModel.provider;
       let sawDone = false;
       let sawError = false;
       let wasStopped = false;
@@ -346,6 +347,7 @@ export async function POST(req: NextRequest) {
             }
             providerCostUsd = event.providerCostUsd;
             if (event.model) agentModel = event.model;
+            if (event.provider) agentProvider = event.provider as typeof agentProvider;
           }
           await writer.processAndEnqueue(event);
           if (await shouldStop()) {
@@ -368,19 +370,18 @@ export async function POST(req: NextRequest) {
         } catch (persistError) {
           console.error(`[agent/run] Run ${runId} terminal error persistence failed:`, persistError);
         }
-        if (shouldRequireAgentCredits(resolvedAgentModel.provider)
-          && (totalInputTokens > 0 || totalOutputTokens > 0 || totalCacheReadTokens > 0 || totalCacheWriteTokens > 0)) {
-          deductByTokens(
-            userId, 'agent', agentModel || 'unknown',
-            totalInputTokens, totalOutputTokens,
-            undefined, undefined,
-            {
-              cacheRead: totalCacheReadTokens,
-              cacheWrite: totalCacheWriteTokens,
-              cacheWriteTelemetryComplete,
-            },
+        if (totalInputTokens > 0 || totalOutputTokens > 0 || totalCacheReadTokens > 0 || totalCacheWriteTokens > 0) {
+          await recordAgentTokenUsage({
+            userId,
+            provider: agentProvider,
+            modelId: agentModel || 'unknown',
+            inputTokens: totalInputTokens,
+            outputTokens: totalOutputTokens,
+            cacheReadTokens: totalCacheReadTokens,
+            cacheWriteTokens: totalCacheWriteTokens,
+            cacheWriteTelemetryComplete,
             providerCostUsd,
-          ).catch(e => console.error('[agent/run] billing error:', e));
+          }).catch(e => console.error('[agent/run] usage logging error:', e));
         }
         const { data: failedRun } = await supabase.from('agent_runs')
           .select('metadata').eq('id', runId).single();
@@ -414,20 +415,19 @@ export async function POST(req: NextRequest) {
       }
 
       await writer.flush();
-      // Deduct agent LLM tokens
-      if (shouldRequireAgentCredits(resolvedAgentModel.provider)
-        && (totalInputTokens > 0 || totalOutputTokens > 0 || totalCacheReadTokens > 0 || totalCacheWriteTokens > 0)) {
-        deductByTokens(
-          userId, 'agent', agentModel || 'unknown',
-          totalInputTokens, totalOutputTokens,
-          undefined, undefined,
-          {
-            cacheRead: totalCacheReadTokens,
-            cacheWrite: totalCacheWriteTokens,
-            cacheWriteTelemetryComplete,
-          },
+      // Charge API providers or record personal-plan usage at zero cost.
+      if (totalInputTokens > 0 || totalOutputTokens > 0 || totalCacheReadTokens > 0 || totalCacheWriteTokens > 0) {
+        await recordAgentTokenUsage({
+          userId,
+          provider: agentProvider,
+          modelId: agentModel || 'unknown',
+          inputTokens: totalInputTokens,
+          outputTokens: totalOutputTokens,
+          cacheReadTokens: totalCacheReadTokens,
+          cacheWriteTokens: totalCacheWriteTokens,
+          cacheWriteTelemetryComplete,
           providerCostUsd,
-        ).catch(e => console.error('[agent/run] billing error:', e));
+        }).catch(e => console.error('[agent/run] usage logging error:', e));
       }
       const { data: finalRun } = await supabase.from('agent_runs')
         .select('status, metadata').eq('id', runId).single();
