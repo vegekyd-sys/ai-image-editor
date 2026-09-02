@@ -23,7 +23,7 @@ describe('Wan 3.0 MuleRouter integration', () => {
     vi.resetModules()
   })
 
-  it('registers Standard and Pro aliases, limits, resolutions, and provider routes', async () => {
+  it('registers Wan and Prime as two models with resolution-driven FlashVSR routes', async () => {
     const {
       getVideoModelCapability,
       normalizeVideoModelId,
@@ -32,7 +32,10 @@ describe('Wan 3.0 MuleRouter integration', () => {
     } = await import('@/lib/video-model-capabilities')
 
     expect(normalizeVideoModelId('wan3.0')).toBe('wan-3.0')
-    expect(normalizeVideoModelId('berry-1.0-pro')).toBe('wan-3.0-pro')
+    expect(normalizeVideoModelId('w3.0-video-prime')).toBe('wan-3.0-prime')
+    expect(normalizeVideoModelId('berry-1.0-pro')).toBe('wan-3.0')
+    expect(normalizeVideoModelId('w3.0-video-pro')).toBe('wan-3.0')
+    expect(normalizeVideoModelId('w3.0-video-prime-pro')).toBe('wan-3.0-prime')
     expect(getVideoModelCapability('wan-3.0')).toMatchObject({
       provider: 'mulerouter',
       minOutputDuration: 2,
@@ -43,18 +46,19 @@ describe('Wan 3.0 MuleRouter integration', () => {
       maxVideoReferences: 5,
       maxAudioReferences: 5,
       defaultResolution: '1080p',
-      supportedResolutions: ['480p', '720p', '1080p'],
+      supportedResolutions: ['480p', '720p', '1080p', '2k', '4k'],
     })
-    expect(getVideoModelCapability('wan-3.0-pro')).toMatchObject({
+    expect(getVideoModelCapability('wan-3.0-prime')).toMatchObject({
       provider: 'mulerouter',
       defaultResolution: '1080p',
-      supportedResolutions: ['1080p', '2k', '4k'],
+      supportedResolutions: ['480p', '720p', '1080p', '2k', '4k'],
     })
     expect(resolveVideoProviderModel({ model: 'wan-3.0' })).toBe('carrothub/w3.0-video')
-    expect(resolveVideoProviderModel({ model: 'wan-3.0-pro' })).toBe('carrothub/berry-1.0-pro')
+    expect(resolveVideoProviderModel({ model: 'wan-3.0-prime' })).toBe('carrothub/w3.0-video-prime')
+    expect(resolveVideoProviderModel({ model: 'wan-3.0', resolution: '2k' })).toBe('carrothub/w3.0-video-pro')
+    expect(resolveVideoProviderModel({ model: 'wan-3.0-prime', resolution: '4k' })).toBe('carrothub/w3.0-video-prime-pro')
     expect(validateVideoModelRequest({ model: 'wan-3.0', outputDuration: 1 })).toContain('2 seconds or more')
-    expect(validateVideoModelRequest({ model: 'wan-3.0-pro', resolution: '720p' })).toContain('does not support 720p')
-    expect(validateVideoModelRequest({ model: 'wan-3.0-pro', operation: 'edit' })).toContain('does not expose typed video edit')
+    expect(validateVideoModelRequest({ model: 'wan-3.0-prime', operation: 'edit' })).toContain('does not expose typed video edit')
   })
 
   it('rejects Wan reference-plus-output requests before calling MuleRouter', async () => {
@@ -116,7 +120,39 @@ describe('Wan 3.0 MuleRouter integration', () => {
     expect(providerBody).not.toHaveProperty('model')
   })
 
-  it('submits Pro 4K through berry-1.0-pro and preserves a distinct task prefix', async () => {
+  it('submits Prime 480p through the fast endpoint and preserves a distinct task prefix', async () => {
+    let providerUrl = ''
+    let providerBody: Record<string, unknown> | undefined
+    vi.stubGlobal('fetch', vi.fn(async (url: string | URL | Request, init?: RequestInit) => {
+      providerUrl = String(url)
+      providerBody = JSON.parse(String(init?.body || '{}'))
+      return taskCreated('12121212-1212-4212-8212-121212121212')
+    }))
+
+    const { createVideo } = await import('@/lib/skills/create-video')
+    const result = await createVideo({
+      script: 'Prime Orbit\nShot 1 (2s): <<<media_1>>> spins under a neon rim light.',
+      images: ['https://example.com/prime-reference.jpg'],
+      duration: 2,
+      videoModel: 'wan-3.0-prime',
+      videoResolution: '480p',
+      generateAudio: false,
+    })
+
+    expect(result).toMatchObject({
+      success: true,
+      taskId: 'mr-wan30-prime-12121212-1212-4212-8212-121212121212',
+      providerModel: 'carrothub/w3.0-video-prime',
+    })
+    expect(providerUrl).toBe('https://api.mulerouter.ai/vendors/carrothub/v1/w3.0-video-prime/generation')
+    expect(providerBody).toMatchObject({
+      reference_images: ['https://example.com/prime-reference.jpg'],
+      resolution: '480p',
+    })
+    expect(providerBody).not.toHaveProperty('first_frame')
+  })
+
+  it('submits Wan 4K through w3.0-video-pro based only on the resolution', async () => {
     let providerUrl = ''
     let providerBody: Record<string, unknown> | undefined
     vi.stubGlobal('fetch', vi.fn(async (url: string | URL | Request, init?: RequestInit) => {
@@ -130,17 +166,41 @@ describe('Wan 3.0 MuleRouter integration', () => {
       script: 'Crystal City\nShot 1 (3s): A crystalline city glows at blue hour.',
       images: [],
       duration: 3,
-      videoModel: 'wan-3.0-pro',
+      videoModel: 'wan-3.0',
       videoResolution: '4k',
     })
 
     expect(result).toMatchObject({
       success: true,
       taskId: 'mr-wan30-pro-22222222-2222-4222-8222-222222222222',
-      providerModel: 'carrothub/berry-1.0-pro',
+      providerModel: 'carrothub/w3.0-video-pro',
     })
-    expect(providerUrl).toBe('https://api.mulerouter.ai/vendors/carrothub/v1/berry-1.0-pro/generation')
+    expect(providerUrl).toBe('https://api.mulerouter.ai/vendors/carrothub/v1/w3.0-video-pro/generation')
     expect(providerBody).toMatchObject({ resolution: '4k', duration: 3 })
+  })
+
+  it('submits Wan Prime 2K through w3.0-video-prime-pro based only on the resolution', async () => {
+    let providerUrl = ''
+    vi.stubGlobal('fetch', vi.fn(async (url: string | URL | Request) => {
+      providerUrl = String(url)
+      return taskCreated('23232323-2323-4323-8323-232323232323')
+    }))
+
+    const { createVideo } = await import('@/lib/skills/create-video')
+    const result = await createVideo({
+      script: 'Prime Harbor\nShot 1 (2s): A luminous harbor wakes before sunrise.',
+      images: [],
+      duration: 2,
+      videoModel: 'wan-3.0-prime',
+      videoResolution: '2k',
+    })
+
+    expect(result).toMatchObject({
+      success: true,
+      taskId: 'mr-wan30-prime-pro-23232323-2323-4323-8323-232323232323',
+      providerModel: 'carrothub/w3.0-video-prime-pro',
+    })
+    expect(providerUrl).toBe('https://api.mulerouter.ai/vendors/carrothub/v1/w3.0-video-prime-pro/generation')
   })
 
   it('rejects an attempted provider-specific content-filter flag', async () => {
@@ -151,7 +211,7 @@ describe('Wan 3.0 MuleRouter integration', () => {
       script: 'No Hidden Toggle\nShot 1 (2s): A studio light turns on.',
       images: [],
       duration: 2,
-      videoModel: 'wan-3.0-pro',
+      videoModel: 'wan-3.0-prime',
       contentFilter: false,
     })
     expect(result).toMatchObject({ success: false })
@@ -159,7 +219,7 @@ describe('Wan 3.0 MuleRouter integration', () => {
     expect(fetchMock).not.toHaveBeenCalled()
   })
 
-  it('uses reference mode for one image and mixed media on Standard and Pro', async () => {
+  it('uses reference mode for one image and mixed media on Wan and Prime', async () => {
     const bodies: Record<string, unknown>[] = []
     vi.stubGlobal('fetch', vi.fn(async (_url: string | URL | Request, init?: RequestInit) => {
       if (init?.method !== 'POST') return new Response(new Uint8Array(), { status: 200 })
@@ -204,10 +264,10 @@ describe('Wan 3.0 MuleRouter integration', () => {
     expect(String(bodies[1].prompt)).toContain('Audio 1 for pacing')
 
     const proImageResult = await createVideo({
-      script: 'Pro Portrait\nShot 1 (4s): <<<media_1>>> turns toward the light.',
+      script: 'Prime 4K Portrait\nShot 1 (4s): <<<media_1>>> turns toward the light.',
       images: ['https://example.com/pro-portrait.jpg'],
       duration: 4,
-      videoModel: 'wan-3.0-pro',
+      videoModel: 'wan-3.0-prime',
       videoResolution: '4k',
     })
     expect(proImageResult.success).toBe(true)
@@ -243,7 +303,7 @@ describe('Wan 3.0 MuleRouter integration', () => {
     expect(bodies[0]).not.toHaveProperty('reference_videos')
   })
 
-  it('polls Standard and Pro task ids against their matching endpoint', async () => {
+  it('polls native and FlashVSR task ids against their matching endpoint', async () => {
     const urls: string[] = []
     vi.stubGlobal('fetch', vi.fn(async (url: string | URL | Request) => {
       urls.push(String(url))
@@ -254,8 +314,12 @@ describe('Wan 3.0 MuleRouter integration', () => {
     }))
     const { getMuleRouterVideoTask } = await import('@/lib/mulerouter-video')
     await expect(getMuleRouterVideoTask('mr-wan30-aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa')).resolves.toMatchObject({ status: 'completed' })
-    await expect(getMuleRouterVideoTask('mr-wan30-pro-bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb')).resolves.toMatchObject({ status: 'completed' })
+    await expect(getMuleRouterVideoTask('mr-wan30-prime-cccccccc-cccc-4ccc-8ccc-cccccccccccc')).resolves.toMatchObject({ status: 'completed' })
+    await expect(getMuleRouterVideoTask('mr-wan30-prime-pro-eeeeeeee-eeee-4eee-8eee-eeeeeeeeeeee')).resolves.toMatchObject({ status: 'completed' })
+    await expect(getMuleRouterVideoTask('mr-wan30-pro-dddddddd-dddd-4ddd-8ddd-dddddddddddd')).resolves.toMatchObject({ status: 'completed' })
     expect(urls[0]).toContain('/w3.0-video/generation/aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa')
-    expect(urls[1]).toContain('/berry-1.0-pro/generation/bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb')
+    expect(urls[1]).toContain('/w3.0-video-prime/generation/cccccccc-cccc-4ccc-8ccc-cccccccccccc')
+    expect(urls[2]).toContain('/w3.0-video-prime-pro/generation/eeeeeeee-eeee-4eee-8eee-eeeeeeeeeeee')
+    expect(urls[3]).toContain('/w3.0-video-pro/generation/dddddddd-dddd-4ddd-8ddd-dddddddddddd')
   })
 })

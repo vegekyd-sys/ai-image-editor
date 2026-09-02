@@ -39,7 +39,7 @@ describe('Makaron CLI Agent discovery', () => {
     expect(canonical).toContain('read `references/nsfw.md`')
     expect(reference).toContain('grok-4.6')
     expect(reference).toContain('image model `qwen`')
-    expect(reference).toContain('video model `wan-3.0`')
+    expect(reference).toContain('video model `wan-3.0-prime`')
     expect(reference).not.toMatch(/Feishu|Lark|card runner|马卡龙卡/i)
     expect(read('public/.well-known/agent-skills/makaron/references/nsfw.md')).toBe(reference)
   })
