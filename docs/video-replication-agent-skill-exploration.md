@@ -492,6 +492,52 @@ contract 基线相同的普通 CUI 请求、素材、模型和分辨率各运行
   和蛋糕落地顺序与旧版接近。新版把女生置于原服务生制服，旧版更忠实保留了参考图的紫色
   上衣；若服装也必须随人物替换，Skill 应明确写入 prompt，而不是恢复一个 Runtime contract。
 
-两例都表明 contract 不是完整理解、角色映射或逐段 prompt 的必要条件，删除后 prompt 减少
-约 76%-80%，输出没有观察到整体结构退化。打斗结尾反而更好，但单次随机生成不能证明这是
-删除 contract 的因果收益；它只证明保留 contract 没有被这两个 case 的可见结果所支持。
+这轮工程证据仍表明 contract 不是完整理解、角色映射或逐段 prompt 的必要条件；但用户复核
+认为视觉效果相对 contract 基线下降，因此不能把“可解码且大体结构存在”当作产品验收通过。
+尤其婚宴版把女生放回服务生制服，已经证明精简后的 Skill 没有充分改变 Agent 决策。后续应
+把 contract 中有效的 source authority、角色/服装映射、逐镜 timing、连续性和硬排除要求迁入
+同一个 Skill，而不是恢复第二套 runtime schema/compiler。
+
+## 2026-09-02 Strict Skill-only 回归
+
+Commit `c865a9a9` 将旧 compiler 中影响质量的非显然规则迁入
+`video-edit/references/direct-reference-route.md`：source authority、角色/物体映射、身份与因果
+连续性、环境策略、逐镜 timing、声音/风格和 hard exclusions。实现仍只有一个 Skill；
+`generate_animation` 仍只接收自然语言 `story_prompt`，没有恢复 contract、schema 或 prompt
+compiler。相同普通用户请求在 Preview
+`https://ai-image-editor-mycdoqbz5-vegekyd-sys-projects.vercel.app` 各运行一次：
+
+- 打斗 / Seedance 2.0 720p：Project `ee5a95f0-ea61-47d0-b017-52e6113480a9`，Run
+  `67025f68-fa37-4c60-a311-ca16ef6ee519`，task
+  `task-unified-1788362307-9wxsx4mi`。最终 prompt 1,203 字符，明确描述 5 段动作、角色因果、
+  服装、背景替换和参考板泄漏禁令。渲染 275s；MP4 为 H.264/AAC、1280x720、24fps、
+  10.080s，完整 decode 通过。两位人物、服装、道场、首个高踢、组合拳和最终倒地稳定，末尾
+  没有参考板泄漏；但本次模型漏掉了原片/前两版都出现的空中旋踢。该缺失发生在 prompt 已
+  明确写入动作之后，属于 provider 服从/随机性问题，不是 contract 能确定性保证的结果。
+- 婚宴 / Wan 3.0 480p 首次 strict run：Project
+  `00355f1f-d257-4342-8379-f2cb34720109`，Run
+  `79e2a975-20b3-468e-a4f5-20165deb9b5b`，task
+  `mr-wan30-6d298426-3b85-4028-ba3e-0a2a68b2d4a7`。最终 prompt 1,089 字符并有逐镜结构，
+  但 Agent 自己写入“穿原服务生的红马甲、白衬衫和白围裙”；成片因此仍保留制服，并在首帧
+  出现原男服务生面部回流。这里是 Agent prompt authoring 失败，不应归因于 Wan。
+
+根据第二项证据，commit `b87c2a14` 把“整人替换默认包含参考图服装”和 literal
+replacement-conflict check 提升为付费提交前门禁：职业/故事角色不得擅自把人物换回源制服；
+任何 prompt 句子若重新引入被替换的源人物/物体属性，必须先重写。仍使用完全相同的普通用户
+请求，在 Preview `https://ai-image-editor-bjwzytnl4-vegekyd-sys-projects.vercel.app` 只重跑
+低成本婚宴 case：
+
+- Project `a460584b-c89d-4e5e-b1db-d936c54069b2`，Run
+  `973bbf79-e97a-4313-8d06-8f583f66693c`，task
+  `mr-wan30-ac39babd-34d8-4e03-9b5a-aa55d6184f93`；最终 prompt 1,111 字符，明确锁定紫色
+  背心、白色高腰阔腿裤、紫色腰带、金色颈圈和紫色鞋，并禁止原男服务生/参考三联画。
+- 成片逐秒/0.5 秒抽帧确认：目标人物与参考服装、巧克力蛋糕、原宴会厅、背面火场、羽毛烟雾、
+  正面回归、右侧撞击、托盘/蛋糕飞落和巧克力结尾均存在；没有源人物回流或参考板泄漏。
+  MP4 为 H.264/AAC、832x480、30fps、8.034s、10,492,168 bytes，完整 decode 通过；音轨
+  mean -23.0 dB、max -2.2 dB，非静音。渲染 204s。
+
+这组回归支持“一个更严格的 Skill 足够，不需要 contract”这一产品方向，但不支持“长 prompt
+可以保证完美复刻”。同一 provider 的单次随机生成仍可能漏动作或改变精确镜位。Skill 能保证
+Agent 先看完整视频、把正确约束写进 prompt、在提交前发现语义冲突并执行 QA；它不能保证模型
+逐条服从。要把模型随机性与 Skill 质量分开验收，后续应冻结同一 prompt 做多 seed/provider
+对照，或加入逐镜检测后的有限重试门禁，而不是再增加一套 contract 体系。
