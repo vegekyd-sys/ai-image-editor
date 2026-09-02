@@ -60,10 +60,19 @@ not rewrite the reference action, timing, camera, editing, or result.
 For every replaced person or object, identify the source role by stable visible
 evidence plus an opening or distinctive action. Then bind it to one replacement
 Media Index and describe the traits that must stay stable. A person replacement
-normally includes face, hair, body, clothing, colors, and accessories from the
-supplied image unless the user narrows the change. An object replacement must
-retain the supplied shape, material, color, and distinctive details throughout
-its complete state progression.
+includes face, hair, body, clothing, colors, and accessories from the supplied
+image unless the user explicitly narrows the change. Do not infer that an
+occupation or story role requires preserving the source person's uniform. For
+example, replacing a waiter with a full-body reference replaces the waiter's
+uniform too unless the user says to keep it. An object replacement must retain
+the supplied shape, material, color, and distinctive details throughout its
+complete state progression.
+
+Immediately before submission, perform a literal replacement-conflict check on
+the final `story_prompt`: no sentence may preserve or reintroduce a source face,
+hair, body, garment, color, accessory, or object property that the selected
+replacement reference is supposed to control. If there is a conflict, rewrite
+the prompt before calling `generate_animation`; this is a paid-submit blocker.
 
 Never map a role only as "left/right/front/back": subjects cross, turn, overlap,
 fall, and reverse screen direction. Track them through identity plus action.
