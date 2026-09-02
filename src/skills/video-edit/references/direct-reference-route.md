@@ -21,8 +21,7 @@ generation, not deterministic pixel replacement.
     "choreography and contact timing",
     "transition and beat structure"
   ],
-  "replace": ["fighter identities", "environment"],
-  "audio_policy": "preserve-source-structure"
+  "replace": ["fighter identities", "environment"]
 }
 ```
 
@@ -55,12 +54,17 @@ the Agent supplies measured facts and semantic anchors:
 - each source performer identified by appearance/costume **plus** an opening or
   distinctive action, mapped to one replacement identity Media Index;
 - source and replacement environment anchors when scenery changes;
-- audio policy, style direction, and any case-specific exclusions.
+- style direction and any case-specific exclusions.
 
-Keep `story_prompt` to a short user-visible title or summary when the contract
-is present. Never identify a performer only as "left fighter" or "right
-fighter". The compiled prompt tracks performer identity through action and
-choreography even when screen direction changes.
+Keep sound instructions in the ordinary `story_prompt`; do not encode them as a
+separate replication policy. Unless the user explicitly asks for silence, leave
+model-native audio enabled and let the selected video model interpret the sound
+request together with the reference.
+
+Keep `story_prompt` concise, but include the user's natural-language sound
+direction when present. Never identify a performer only as "left fighter" or
+"right fighter". The compiled prompt tracks performer identity through action
+and choreography even when screen direction changes.
 
 The script must begin with role mapping, then an invariant, then timed action:
 
@@ -76,9 +80,9 @@ The script must begin with role mapping, then an invariant, then timed action:
 6. State background policy explicitly: preserve the reference environment, or
    replace it with the supplied environment while keeping reference geometry and
    camera relation.
-7. Put music/ambience/SFX structure in the prompt only when native audio should
-   be regenerated. If exact source sound must survive, restore it after the
-   visual result instead of trusting synthesis.
+7. Put the requested music, ambience, dialogue, or sound effects directly in the
+   prompt. Set `generate_audio: false` only when the user explicitly asks for a
+   silent result; do not add an automatic audio post-processing workflow.
 
 ## Complete-Understanding Gate
 
@@ -126,7 +130,7 @@ Run the shared similarity gates. For a first P0 comparison, prioritize:
 2. shot count/order and action sequence match;
 3. camera/framing and contact/impact timing match;
 4. requested background policy is honored;
-5. output duration, audio policy, and decodability pass.
+5. output duration, requested audio presence/sync, and decodability pass.
 
 The correction prompt must name one or two measured failures. If one attempt
 preserves characters but misses camera, and another preserves camera but misses

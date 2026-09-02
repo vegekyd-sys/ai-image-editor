@@ -75,6 +75,12 @@ describe('video-edit Skill replication profile', () => {
     expect(read('src/lib/agent-tools.ts')).toContain(
       "source: 'video-contact-sheet'",
     )
+    const directReferenceRoute = read('src/skills/video-edit/references/direct-reference-route.md')
+    const agentToolsSource = read('src/lib/agent-tools.ts')
+    expect(directReferenceRoute).not.toContain('"audio_policy"')
+    expect(directReferenceRoute).toContain("sound instructions in the ordinary `story_prompt`")
+    expect(directReferenceRoute).toContain('Set `generate_audio: false` only when the user explicitly asks')
+    expect(agentToolsSource).not.toContain('replication_contract.audio_policy')
     expect(read('src/skills/reference-video-studio/SKILL.md')).toContain(
       'Use the video-edit replication profile',
     )

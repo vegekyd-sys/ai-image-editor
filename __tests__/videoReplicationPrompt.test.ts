@@ -24,12 +24,11 @@ describe('video replication provider prompt compiler', () => {
       sourceEnvironmentAnchor: 'sunlit hall with red lanterns, wooden floor, training equipment, and a rear altar',
       replacementEnvironment: 'empty traditional Japanese tatami dojo with shoji windows and dark timber columns',
     },
-    audioPolicy: 'preserve_source' as const,
     styleDirection: 'Photorealistic cinematic martial-arts film with coherent anatomy and grounded impacts.',
   }
 
   it('keeps measured semantic mappings while expanding structural invariants', () => {
-    const prompt = compileVideoReplicationPrompt('道场格斗复刻', contract)
+    const prompt = compileVideoReplicationPrompt('道场格斗复刻\n声音要有清晰的动作冲击，并跟随参考视频的节奏。', contract)
 
     expect(prompt).toContain('<<<media_4>>> as the sole and exact temporal performance')
     expect(prompt).toContain('white karate gi with a red belt')
@@ -42,22 +41,17 @@ describe('video replication provider prompt compiler', () => {
     expect(prompt).toContain('no new shots or extra cuts')
     expect(prompt).toContain('no different opening or ending')
     expect(prompt).toContain('Preserve which source performer initiates and receives every action')
-    expect(prompt).toContain('Preserve the reference video audio exactly')
+    expect(prompt).toContain('REQUEST DIRECTION')
+    expect(prompt).toContain('声音要有清晰的动作冲击，并跟随参考视频的节奏。')
+    expect(prompt).not.toContain('Preserve the reference video audio exactly')
     expect(prompt.length).toBeGreaterThan(2500)
   })
 
-  it('makes audio policy explicit instead of leaving it to provider defaults', () => {
-    const silent = compileVideoReplicationPrompt('Silent Replica', {
-      ...contract,
-      audioPolicy: 'silent',
-    })
-    const regenerated = compileVideoReplicationPrompt('Audio Replica', {
-      ...contract,
-      audioPolicy: 'regenerate',
-    })
+  it('does not invent an audio policy when the agent gives no sound direction', () => {
+    const prompt = compileVideoReplicationPrompt('Video Replica', contract)
 
-    expect(silent).toContain('Return a silent video')
-    expect(regenerated).toContain('Regenerate synchronized audio')
-    expect(regenerated).toContain('impact timing')
+    expect(prompt).not.toContain('AUDIO:')
+    expect(prompt).not.toContain('Return a silent video')
+    expect(prompt).not.toContain('Regenerate synchronized audio')
   })
 })

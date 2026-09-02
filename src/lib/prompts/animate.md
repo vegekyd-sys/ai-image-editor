@@ -268,7 +268,11 @@ Shot 2 (3s): Close-up, ...
 **Timeline videos** (in Media Index marked as `[video]`): Just use `<<<media_N>>>（角色/标签）` in your script. The system auto-routes video URLs to the video model. This is the primary and preferred way to reference videos.
 
 **External videos** (user pastes a URL, or workspace/skill assets): Pass as `video_ref_url` + `video_ref_type: "feature"`. Never put raw video URLs in the prompt text — they must go through the parameter.
-- Set `keep_original_sound: true` if the user wants to keep the original audio
+- Describe the requested sound naturally in `story_prompt` and leave native
+  audio enabled unless the user explicitly asks for silence. Use
+  `keep_original_sound` only for a provider route that explicitly supports that
+  switch, currently Kling video reference and Motion Control; it is not a
+  cross-provider preservation policy.
 - Your prompt describes the desired result; the reference video provides motion/timing
 - You can combine `<<<media_N>>>` (photos) + `video_ref_url` (external video)
 

@@ -1519,12 +1519,12 @@ Hard constraints:
         reference_voice_ids: z.array(z.string()).max(3).optional().describe('Grok Imagine Video 1.5 preset xAI voice ids, e.g. ["eve"] or ["eve","leo"]. Reference them as <AUDIO_0>, <AUDIO_1> in story_prompt. Do not use Audio Index labels or uploaded URLs here.'),
         video_ref_url: z.string().optional().describe('External reference video URL (from workspace/skill assets via list_files). For timeline videos, just use <<<media_N>>> — they are auto-routed. Only use this for external URLs not in Media Index. SeeDance 2.0 video references must be <=50MB, width/height 300-6000px, aspect ratio 0.4-2.5, frame pixels 409,600-2,086,876. Seedance 2.5 accepts .mp4/.mov <=200MB, width/height 300-6000px, frame pixels 409,600-8,295,044, 4-30s each and <=30s total. MiniMax H3 video references must be <=50MB, width/height 256-5760px, aspect ratio 0.4-2.5, with at most 3 videos totaling <=15s. Kling video references must be <=200MB and <=2K; no explicit lower resolution is documented. Google Omni accepts one reference video in Makaron. Grok edit accepts one MP4 up to 8.7 seconds; Grok extend accepts one MP4 from 2 to 15 seconds.'),
         video_ref_type: z.enum(['base', 'feature']).optional().describe('How to use an external reference video. feature (default): reference motion/style. base: direct edit. For Gemini Omni or Seedance 2.5 continuation, also set video_operation="extend". Timeline videos are auto-routed from <<<media_N>>>.'),
-        keep_original_sound: z.boolean().optional().describe('Keep audio from reference video. Default: false.'),
+        keep_original_sound: z.boolean().optional().describe('Provider-native source-sound toggle. Use only when the selected model explicitly supports it, currently Kling video reference and Motion Control. For other models, describe the sound request naturally in story_prompt.'),
         motion_control: z.boolean().optional().describe('Use Kling Motion Control for precise action transfer from reference video. Requires video_ref_url. Duration = reference video length. No detailed prompt needed — just a title. Kling only.'),
         character_orientation: z.enum(['image', 'video']).optional().describe('For motion_control: match photo orientation (image, ≤10s) or video orientation (video, ≤30s). Default: image.'),
         video_operation: z.enum(['generate', 'edit', 'extend']).optional().describe('Typed video operation. Grok, Gemini Omni, and Seedance 2.5 support edit/extend; both require a video reference. Grok edit preserves source duration/aspect and caps output at 720p; Grok extend adds 2-10s.'),
         extend_direction: z.enum(['forward', 'backward']).optional().describe('Direction for Seedance 2.5 video extension. Gemini Omni only extends forward.'),
-        generate_audio: z.boolean().optional().describe('Generate synchronized native audio; Seedance 2.5 defaults to true.'),
+        generate_audio: z.boolean().optional().describe('Generate synchronized model-native audio. Supported providers default to true. Set false only when the user explicitly requests a silent video; otherwise describe the desired sound naturally in story_prompt and let the video model render it.'),
         content_filter: z.boolean().optional().describe('Seedance 2.5-only output content filter. Omit it for every other model. Seedance 2.5 defaults to true; set false only after explicit user confirmation, including the Mature Mode recovery action, because it costs 10% more. Never infer or auto-enable Mature Mode from prompt wording.'),
         output_format: z.enum(['mp4', 'mov']).optional().describe('MP4 for playback or MOV for grading.'),
         web_search: z.boolean().optional().describe('Enable Seedance 2.5 text-to-video web grounding.'),
@@ -1541,7 +1541,6 @@ Hard constraints:
             source_environment_anchor: z.string().min(8).describe('Visible source environment features to remove.'),
             replacement_environment: z.string().min(8).describe('Replacement environment and its required stable details.'),
           }).optional(),
-          audio_policy: z.enum(['preserve_source', 'regenerate', 'silent']),
           style_direction: z.string().optional(),
           additional_exclusions: z.array(z.string()).max(12).optional(),
         }).optional().describe('Measured semantic contract for exact source-led video replication. Use only after complete-video understanding; runtime compiles the invariant-heavy provider prompt.'),
@@ -1567,7 +1566,7 @@ Hard constraints:
           return { success: false as const, message: 'replication_contract uses reference-to-video generation. Do not combine it with typed video edit or extend.' };
         }
         const effectiveStoryPrompt = replication_contract
-          ? compileVideoReplicationPrompt(story_prompt.split('\n')[0] || 'Exact Video Replication', {
+          ? compileVideoReplicationPrompt(story_prompt || 'Exact Video Replication', {
               referenceVideoMediaIndex: replication_contract.reference_video_media_index,
               sourceDurationSeconds: replication_contract.source_duration_seconds,
               characters: replication_contract.characters.map(character => ({
@@ -1582,7 +1581,6 @@ Hard constraints:
                     replacementEnvironment: replication_contract.environment.replacement_environment,
                   }
                 : undefined,
-              audioPolicy: replication_contract.audio_policy,
               styleDirection: replication_contract.style_direction,
               additionalExclusions: replication_contract.additional_exclusions,
             })
@@ -1797,9 +1795,7 @@ Hard constraints:
             videoUrls: providerAutoVideoUrls.length ? providerAutoVideoUrls : undefined,
             referenceVideoDuration,
             referenceVideoMetas: referenceVideoMetas.length ? referenceVideoMetas : undefined,
-            keepOriginalSound: replication_contract
-              ? replication_contract.audio_policy === 'preserve_source'
-              : keep_original_sound,
+            keepOriginalSound: keep_original_sound,
             motionControl: motion_control,
             characterOrientation: character_orientation,
             audioUrls: resolvedAudioRefs.audioUrls.length ? resolvedAudioRefs.audioUrls : undefined,
@@ -1807,9 +1803,7 @@ Hard constraints:
             videoOperation: video_operation,
             previousInteractionId: isGoogleOmniStatefulExtend ? googleOmniPreviousInteractionId : undefined,
             videoExtendDirection: extend_direction,
-            generateAudio: replication_contract
-              ? replication_contract.audio_policy === 'regenerate'
-              : generate_audio,
+            generateAudio: generate_audio,
             contentFilter: content_filter,
             outputFormat: output_format,
             webSearch: web_search,

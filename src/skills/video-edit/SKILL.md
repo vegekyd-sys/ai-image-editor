@@ -45,7 +45,7 @@ generation in `prompts/animate.md`.
 ## Shared Protocol
 
 1. Resolve the exact source and replacement inputs. Record duration/aspect/FPS,
-   audio policy, target output, rights, and a compact change/preserve contract.
+   requested sound, target output, rights, and a compact change/preserve contract.
 2. Inspect only to the required depth. A clear source edit does not need
    `analyze_video`; replication must understand the complete clip and lock
    uncertain boundaries before paid generation.

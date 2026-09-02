@@ -17,8 +17,8 @@ not pixel identity or a vague "similar feeling".
 
 1. **Resolve scope and rights.** Identify one exact reference, replacement role
    map, preserve/change layers, delivery duration/aspect/resolution, captions,
-   and audio policy. Probe the exact file. Get permission before sending private
-   references to third-party models; otherwise stay local.
+   and requested sound. Probe the exact file. Get permission before sending
+   private references to third-party models; otherwise stay local.
 2. **Understand the complete clip.** Extract deterministic file truth, candidate
    boundaries, frames, audio envelope, and beat candidates. Transcribe only when
    speech timing matters. Use a multimodal model to label composition,
@@ -43,13 +43,14 @@ not pixel identity or a vague "similar feeling".
    work needs approval.
 6. **Generate or map content.** For direct structural replication, pass
    `generate_animation.replication_contract` with measured duration, source
-   performer anchors, replacement identities, environment policy, and audio
-   policy. Runtime compiles the strict invariant wording. Seedance uses
+   performer anchors, replacement identities, and environment policy. Put sound
+   direction in the ordinary `story_prompt`; runtime preserves that natural
+   language while compiling the strict visual invariant wording. Seedance uses
    reference-to-video, never typed edit.
 7. **Assemble only when needed.** A direct reference result may remain one
    provider output after QA. Structured routes put pixels into one editable
-   Remotion composition; the Blueprint stays the master clock. Restore exact
-   source/replacement audio deterministically when required.
+   Remotion composition; the Blueprint stays the master clock. Do not add a
+   separate audio post-production path unless the user explicitly requests one.
 8. **Measure and repair.** Compare boundaries/order/durations, framing, camera
    and subject motion, transitions, captions, beat alignment, color/style, role
    identity, and final decodability. Repair the smallest failing layer; never

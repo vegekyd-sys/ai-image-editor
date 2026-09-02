@@ -15,7 +15,6 @@ export interface VideoReplicationContract {
   sourceDurationSeconds: number;
   characters: VideoReplicationCharacterRole[];
   environment?: VideoReplicationEnvironmentRole;
-  audioPolicy: 'preserve_source' | 'regenerate' | 'silent';
   styleDirection?: string;
   additionalExclusions?: string[];
 }
@@ -24,22 +23,12 @@ function mediaMarker(index: number) {
   return `<<<media_${index}>>>`;
 }
 
-function audioInstruction(policy: VideoReplicationContract['audioPolicy']) {
-  if (policy === 'preserve_source') {
-    return 'Preserve the reference video audio exactly, including its timing, rhythm, ambience, impacts, and silence. Do not synthesize replacement dialogue or music.';
-  }
-  if (policy === 'silent') {
-    return 'Return a silent video. Do not add dialogue, music, ambience, or sound effects.';
-  }
-  return 'Regenerate synchronized audio that follows the reference video beat structure and impact timing, while matching the requested replacement world. Do not shift any visual action to fit the new audio.';
-}
-
 /**
  * Compile the invariant-heavy provider prompt for exact source-led replication.
  * The Agent supplies semantic observations; runtime owns the fragile wording.
  */
 export function compileVideoReplicationPrompt(
-  title: string,
+  request: string,
   contract: VideoReplicationContract,
 ) {
   const source = mediaMarker(contract.referenceVideoMediaIndex);
@@ -69,7 +58,12 @@ export function compileVideoReplicationPrompt(
     ...(contract.additionalExclusions || []),
   ];
 
-  const cleanTitle = title.trim() || 'Exact Video Replication';
+  const [titleLine = '', ...requestLines] = request.trim().split(/\r?\n/);
+  const cleanTitle = titleLine.trim() || 'Exact Video Replication';
+  const requestDirection = requestLines.join('\n').trim();
+  const requestSection = requestDirection
+    ? `\n\nREQUEST DIRECTION:\n${requestDirection}`
+    : '';
   return `${cleanTitle}
 
 Use ${source} as the sole and exact temporal performance, edit, composition, and camera authority for the full ${duration}-second output. Recreate the complete reference video beat for beat from its first visible frame through its final pose. Match the exact shot count and order, cut points, shot durations, camera path, lens perspective, framing changes, horizon, subject scale, screen direction, spatial relationship, choreography, footwork, body trajectories, gestures, attacks, blocks, dodges, falls, contacts, impact timing, reactions, pauses, motion blur, and final held state. The replacement media controls identity and environment only; it must not rewrite the reference action, timing, camera, editing, or outcome.
@@ -80,9 +74,7 @@ IDENTITY LOCK: Keep every replacement identity stable from first appearance to l
 
 ${environment}
 
-STRUCTURE LOCK: Copy the source continuity exactly. Keep every opening pose, preparation beat, anticipation, action, impact, recoil, recovery, crossing, screen-position change, and ending hold at the same relative time. Preserve the original camera-to-subject relationship even after replacing the people and environment. Do not beautify, simplify, reinterpret, extend, shorten, or create a merely similar fight.
-
-AUDIO: ${audioInstruction(contract.audioPolicy)}
+STRUCTURE LOCK: Copy the source continuity exactly. Keep every opening pose, preparation beat, anticipation, action, impact, recoil, recovery, crossing, screen-position change, and ending hold at the same relative time. Preserve the original camera-to-subject relationship even after replacing the people and environment. Do not beautify, simplify, reinterpret, extend, shorten, or create a merely similar fight.${requestSection}
 
 STYLE: ${contract.styleDirection?.trim() || 'Photorealistic cinematic live action with physically coherent contact, natural anatomy, stable faces, consistent wardrobe, believable weight, grounded feet, and motion blur matching the reference.'}
 
