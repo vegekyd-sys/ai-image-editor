@@ -548,6 +548,7 @@ export async function* runMakaronAgent(
         cacheWriteTelemetryComplete,
         providerCostUsd,
         model: modelId,
+        provider: runtime.spec.provider,
       };
     };
 

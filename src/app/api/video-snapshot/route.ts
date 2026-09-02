@@ -6,6 +6,7 @@ import {
   deductFixedCredits,
   InsufficientCreditsError,
   isInsufficientCreditsError,
+  recordSubscriptionUsage,
   refundCredits,
   requireCredits,
 } from '@/lib/billing/credits'
@@ -264,6 +265,20 @@ export async function POST(req: NextRequest) {
       })
 
       if (error) throw error
+
+      if (skillResult.provider === 'grok-subscription') {
+        try {
+          await recordSubscriptionUsage(
+            userId,
+            'grok-subscription',
+            toolName,
+            skillResult.providerModel || actualVideoRoute.providerModel || actualVideoModel,
+          )
+        } catch (usageError) {
+          console.error('[billing] video-snapshot subscription usage logging error:', usageError)
+        }
+      }
+
       reservedCredits = 0
       return NextResponse.json({ snapshotId, taskId, videoMeta })
     } catch (error) {

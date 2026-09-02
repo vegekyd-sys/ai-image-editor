@@ -374,6 +374,146 @@ describe('credits', () => {
     setupBillingMock();
   });
 
+  describe('subscription usage logging', () => {
+    it('records Codex usage at zero credits without touching the balance', async () => {
+      const insert = vi.fn().mockResolvedValue({ data: null, error: null });
+      mockFrom.mockImplementation((table: string) => {
+        if (table === 'usage_logs') return { insert };
+        return table === 'app_settings' ? billingSettingsChain : mockQuery(null);
+      });
+
+      const { recordSubscriptionUsage } = await import('@/lib/billing/credits');
+      await recordSubscriptionUsage(
+        'user-1',
+        'codex-subscription',
+        'agent',
+        'gpt-5.6-terra',
+        {
+          inputTokens: 123,
+          outputTokens: 45,
+          cacheReadTokens: 67,
+          cacheWriteTokens: 0,
+        },
+      );
+
+      expect(insert).toHaveBeenCalledWith({
+        user_id: 'user-1',
+        api_key_id: null,
+        tool_name: 'agent',
+        model_used: 'gpt-5.6-terra:codex-subscription',
+        credits_charged: 0,
+        input_tokens: 123,
+        output_tokens: 45,
+        cache_read_tokens: 67,
+        cache_write_tokens: 0,
+        duration_ms: null,
+        source: 'app',
+      });
+      expect(mockRpc).not.toHaveBeenCalled();
+    });
+
+    it('records Grok MCP usage at zero credits even when billing is disabled', async () => {
+      const insert = vi.fn().mockResolvedValue({ data: null, error: null });
+      mockFrom.mockImplementation((table: string) => {
+        if (table === 'usage_logs') return { insert };
+        return table === 'app_settings'
+          ? {
+              select: vi.fn().mockReturnThis(),
+              eq: vi.fn().mockReturnThis(),
+              single: vi.fn().mockResolvedValue({ data: { value: 'false' }, error: null }),
+            }
+          : mockQuery(null);
+      });
+
+      const { recordSubscriptionUsage } = await import('@/lib/billing/credits');
+      await recordSubscriptionUsage(
+        'user-1',
+        'grok-subscription',
+        'makaron_create_video',
+        'grok-imagine-video',
+        { durationMs: 321, apiKeyId: 'api-key-1' },
+      );
+
+      expect(insert).toHaveBeenCalledWith(expect.objectContaining({
+        model_used: 'grok-imagine-video:grok-subscription',
+        credits_charged: 0,
+        source: 'mcp',
+        api_key_id: 'api-key-1',
+        duration_ms: 321,
+      }));
+      expect(mockFrom).not.toHaveBeenCalledWith('credit_balances');
+      expect(mockRpc).not.toHaveBeenCalled();
+    });
+
+    it('routes Agent subscription tokens to the zero-cost ledger', async () => {
+      const insert = vi.fn().mockResolvedValue({ data: null, error: null });
+      mockFrom.mockImplementation((table: string) => table === 'usage_logs'
+        ? { insert }
+        : mockQuery(null));
+
+      const { recordAgentTokenUsage } = await import('@/lib/billing/credits');
+      const result = await recordAgentTokenUsage({
+        userId: 'user-1',
+        provider: 'grok-subscription',
+        modelId: 'grok-4.6',
+        inputTokens: 500,
+        outputTokens: 30,
+        cacheReadTokens: 20,
+        cacheWriteTokens: 10,
+        cacheWriteTelemetryComplete: false,
+      });
+
+      expect(result).toEqual({ charged: 0, remaining: 0 });
+      expect(insert).toHaveBeenCalledWith(expect.objectContaining({
+        tool_name: 'agent',
+        model_used: 'grok-4.6:grok-subscription',
+        credits_charged: 0,
+        input_tokens: 500,
+        output_tokens: 30,
+        cache_read_tokens: 20,
+        cache_write_tokens: null,
+      }));
+      expect(mockRpc).not.toHaveBeenCalled();
+    });
+
+    it('keeps ordinary Agent API providers on paid token billing', async () => {
+      const rates = [{
+        model_id: 'openai/gpt-5.6-terra',
+        display_name: 'GPT-5.6 Terra',
+        input_per_1m: 2.5,
+        output_per_1m: 15,
+        markup: 2,
+        is_active: true,
+      }];
+      const ratesChain = mockQuery(rates);
+      ratesChain.order = vi.fn().mockResolvedValue({ data: rates, error: null });
+      mockRpc.mockResolvedValue({ data: 98, error: null });
+      mockFrom.mockImplementation((table: string) => {
+        if (table === 'app_settings') return billingSettingsChain;
+        if (table === 'token_rates') return ratesChain;
+        return mockQuery(null);
+      });
+
+      const { recordAgentTokenUsage } = await import('@/lib/billing/credits');
+      const { invalidateTokenRateCache } = await import('@/lib/billing/token-rates');
+      invalidateTokenRateCache();
+      const result = await recordAgentTokenUsage({
+        userId: 'user-1',
+        provider: 'openrouter',
+        modelId: 'openai/gpt-5.6-terra',
+        inputTokens: 1_000,
+        outputTokens: 100,
+      });
+
+      expect(result.charged).toBeGreaterThan(0);
+      expect(mockRpc).toHaveBeenCalledWith('deduct_and_log', expect.objectContaining({
+        p_user_id: 'user-1',
+        p_amount: result.charged,
+        p_model_used: 'openai/gpt-5.6-terra',
+      }));
+    });
+  });
+
   describe('requireCredits', () => {
     it('returns ok when balance is sufficient', async () => {
       const chain = mockQuery({ balance: 100 });
