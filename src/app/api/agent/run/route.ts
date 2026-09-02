@@ -1,16 +1,15 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { after } from 'next/server';
 import { authenticateRequest } from '@/lib/api-auth';
-import { runMakaronAgent } from '@/lib/agent';
-import { AgentDualWriter } from '@/lib/agentDualWriter';
-import { buildPromptContext } from '@/lib/agent-context';
+import { AgentPerf } from '@/lib/agent-perf';
 import { requireCredits, deductByTokens } from '@/lib/billing/credits';
 import { getRequestLocale } from '@/lib/server-locale';
 import { translate } from '@/lib/locales';
 import { resolvePersistedRunStatus } from '@/lib/agent-terminal';
 import {
   normalizeRequestedAgentModelPreference,
-  resolveAgentModelSpec,
+  resolveAgentModelSpecForUser,
+  shouldRequireAgentCredits,
 } from '@/lib/agent-models';
 import {
   DEFAULT_ATTEMPT_BUDGET_MS,
@@ -19,6 +18,7 @@ import {
   getAgentContextPolicy,
 } from '@/lib/agent-execution';
 import { verifySkillLaunchContext } from '@/lib/skill-launch-context';
+import { isDynamicCodexSubscriptionUserAllowed } from '@/lib/codex-subscription-allowlist';
 import {
   appendAgentRunInput,
   decideAgentRunAdmission,
@@ -35,10 +35,16 @@ export const maxDuration = 1800;
  * All results are written to DB via DualWriter (no SSE needed).
  */
 export async function POST(req: NextRequest) {
+  const perf = new AgentPerf('agent-run-start', { route: '/api/agent/run' });
   let createdRunId: string | undefined;
   let cleanupSupabase: any;
   try {
-    const authResult = await authenticateRequest(req);
+    const endRequestRead = perf.span('request_read');
+    const [authResult, requestBody] = await Promise.all([
+      authenticateRequest(req),
+      req.json(),
+    ]);
+    endRequestRead({ authenticated: !('error' in authResult) });
     if ('error' in authResult) return authResult.error;
     const { userId, supabase } = authResult.auth;
     cleanupSupabase = supabase;
@@ -61,8 +67,15 @@ export async function POST(req: NextRequest) {
       skillLaunchContext: rawSkillLaunchContext,
       audioAttachments,
       clientPersistedUserMessage,
-    } = await req.json();
-    const skillLaunchContext = await verifySkillLaunchContext(supabase, rawSkillLaunchContext, userId);
+    } = requestBody;
+
+    const endAdmissionPreflight = perf.span('admission_preflight', { projectId: projectId || null });
+    const [codexSubscriptionAllowed, skillLaunchContext, activeRun] = await Promise.all([
+      isDynamicCodexSubscriptionUserAllowed(userId),
+      verifySkillLaunchContext(supabase, rawSkillLaunchContext, userId),
+      projectId ? findActiveAgentRun(supabase, projectId, userId) : Promise.resolve(null),
+    ]);
+    endAdmissionPreflight({ codexSubscriptionAllowed, hasActiveRun: !!activeRun });
     if (rawSkillLaunchContext && !skillLaunchContext) {
       return NextResponse.json(
         { error: 'Skill template launch could not be verified' },
@@ -81,17 +94,23 @@ export async function POST(req: NextRequest) {
     if (requestedAgentModel === null) {
       return NextResponse.json({ error: 'Unsupported agentModel' }, { status: 400 });
     }
-    const resolvedAgentModel = resolveAgentModelSpec(requestedAgentModel, process.env.AGENT_MODEL);
+    const resolvedAgentModel = resolveAgentModelSpecForUser(
+      requestedAgentModel,
+      process.env.AGENT_MODEL,
+      userId,
+      undefined,
+      codexSubscriptionAllowed,
+    );
 
     // Pre-flight credit check
-    const creditCheck = await requireCredits(userId, 5);
-    if (!creditCheck.ok) return creditCheck.response;
+    if (shouldRequireAgentCredits(resolvedAgentModel.provider)) {
+      const endCreditCheck = perf.span('credit_check', { provider: resolvedAgentModel.provider });
+      const creditCheck = await requireCredits(userId, 5);
+      endCreditCheck({ ok: creditCheck.ok });
+      if (!creditCheck.ok) return creditCheck.response;
+    }
 
     const locale = getRequestLocale(req);
-
-    // Query timeline version
-    const { data: projectRow } = await supabase.from('projects').select('timeline_version').eq('id', projectId).single();
-    const timelineVersion: number = (projectRow as Record<string, unknown>)?.timeline_version as number ?? 1;
 
     const persistHeadlessUserMessage = async () => {
       if (clientPersistedUserMessage) return;
@@ -104,9 +123,7 @@ export async function POST(req: NextRequest) {
       });
     };
 
-    const admission = decideAgentRunAdmission(
-      await findActiveAgentRun(supabase, projectId, userId),
-    );
+    const admission = decideAgentRunAdmission(activeRun);
     if (admission.kind === 'append') {
       await persistHeadlessUserMessage();
       const inputId = await appendAgentRunInput({
@@ -134,70 +151,26 @@ export async function POST(req: NextRequest) {
       }, { status: 409 });
     }
 
-    // Create run
-    const { data: run } = await supabase.from('agent_runs').insert({
-      project_id: projectId,
-      user_id: userId,
-      status: 'running',
-      prompt: prompt.slice(0, 500),
-      metadata: {
-        locale,
-        preferredModel,
-        requestedAgentModel: requestedAgentModel ?? 'auto',
-        agentModel: resolvedAgentModel.id,
-        agentProviderModel: resolvedAgentModel.providerModelId,
-        isNsfw,
-        headless: true,
-      },
-    }).select('id').single();
-
-    const runId = run?.id;
-    if (!runId) {
-      return NextResponse.json({ error: 'Failed to create run' }, { status: 500 });
-    }
-    createdRunId = runId;
-
-    // Write user message to DB (frontend does this itself, headless mode must do it here)
-    await persistHeadlessUserMessage();
-
-    // DualWriter in headless mode (no SSE controller)
-    const writer = new AgentDualWriter(runId, supabase, userId, projectId);
-    await writer.persistHeartbeat();
-
-    // Store firstMessageId in run metadata
-    await supabase.from('agent_runs').update({
-      metadata: {
-        locale,
-        preferredModel,
-        requestedAgentModel: requestedAgentModel ?? 'auto',
-        agentModel: resolvedAgentModel.id,
-        agentProviderModel: resolvedAgentModel.providerModelId,
-        isNsfw,
-        headless: true,
-        firstMessageId: writer.firstMessageId,
-      },
-    }).eq('id', runId);
-
-    // Durable execution is the default path. Keep the legacy one-function
-    // runner below as an explicit rollback switch while the new worker soaks.
-    if (process.env.AGENT_DURABLE_EXECUTION !== 'false') {
-      const executionPolicy = {
-        durable: true,
-        attemptBudgetMs: DEFAULT_ATTEMPT_BUDGET_MS,
-        attemptMaxSteps: DEFAULT_ATTEMPT_MAX_STEPS,
-        leaseSeconds: DEFAULT_ATTEMPT_LEASE_SECONDS,
-        maxAttempts: 40,
-        maxTotalInputTokens: 12_000_000,
-      };
-      const metadata = {
-        locale,
-        preferredModel,
-        requestedAgentModel: requestedAgentModel ?? 'auto',
-        agentModel: resolvedAgentModel.id,
-        agentProviderModel: resolvedAgentModel.providerModelId,
-        isNsfw,
-        headless: true,
-        firstMessageId: writer.firstMessageId,
+    const durableExecution = process.env.AGENT_DURABLE_EXECUTION !== 'false';
+    const firstMessageId = crypto.randomUUID();
+    const executionPolicy = durableExecution ? {
+      durable: true,
+      attemptBudgetMs: DEFAULT_ATTEMPT_BUDGET_MS,
+      attemptMaxSteps: DEFAULT_ATTEMPT_MAX_STEPS,
+      leaseSeconds: DEFAULT_ATTEMPT_LEASE_SECONDS,
+      maxAttempts: 40,
+      maxTotalInputTokens: 12_000_000,
+    } : undefined;
+    const metadata = {
+      locale,
+      preferredModel,
+      requestedAgentModel: requestedAgentModel ?? 'auto',
+      agentModel: resolvedAgentModel.id,
+      agentProviderModel: resolvedAgentModel.providerModelId,
+      isNsfw,
+      headless: true,
+      firstMessageId,
+      ...(durableExecution ? {
         executionRequest: {
           locale,
           preferredModel,
@@ -214,22 +187,49 @@ export async function POST(req: NextRequest) {
           turnMediaCount,
           isNsfw,
           audioAttachments,
+          codexSubscriptionAllowed,
           origin: req.nextUrl.origin,
         },
-      };
-      const { error: executionUpdateError } = await supabase.from('agent_runs').update({
+      } : {}),
+    };
+
+    // Create the durable run fully initialized in one write. The previous path
+    // inserted a partial row, wrote a heartbeat, then updated metadata twice
+    // before the browser was allowed to begin observing the run.
+    const endRunCreate = perf.span('create_run', { durable: durableExecution });
+    const { data: run, error: runCreateError } = await supabase.from('agent_runs').insert({
+      project_id: projectId,
+      user_id: userId,
+      status: 'running',
+      prompt: prompt.slice(0, 500),
+      metadata,
+      ...(durableExecution ? {
         objective: prompt,
         execution_policy: executionPolicy,
         current_work_unit: 'agent',
         next_attempt_at: new Date().toISOString(),
-        metadata,
-      }).eq('id', runId);
-      if (executionUpdateError) {
-        throw new Error(`Failed to initialize durable Agent execution: ${executionUpdateError.message}`);
-      }
-      const { runAgentExecutionAttempt } = await import('@/lib/agent-execution-runner');
+      } : {}),
+    }).select('id').single();
+    endRunCreate({ ok: !runCreateError, runId: run?.id ?? null });
+
+    const runId = run?.id;
+    if (runCreateError || !runId) {
+      return NextResponse.json({ error: runCreateError?.message || 'Failed to create run' }, { status: 500 });
+    }
+    createdRunId = runId;
+
+    // Write user message to DB (frontend does this itself, headless mode must do it here)
+    await persistHeadlessUserMessage();
+
+    // Durable execution is the default path. Keep the legacy one-function
+    // runner below as an explicit rollback switch while the new worker soaks.
+    if (durableExecution) {
       after(async () => {
         try {
+          // Keep the full Agent/tool runtime out of the start response's module
+          // initialization path. The durable worker loads it after the browser
+          // already has the run id and can begin its lightweight event watch.
+          const { runAgentExecutionAttempt } = await import('@/lib/agent-execution-runner');
           await runAgentExecutionAttempt(runId, { admin: supabase as any, workerId: `initial-${crypto.randomUUID()}` });
         } catch (executionError) {
           console.error(`[agent/run] durable attempt failed for ${runId}:`, executionError);
@@ -240,7 +240,7 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({
         runId,
         executionId: runId,
-        firstMessageId: writer.firstMessageId,
+        firstMessageId,
         status: 'running',
         durable: true,
       });
@@ -249,6 +249,15 @@ export async function POST(req: NextRequest) {
     // The legacy rollback path still runs in this request's background task.
     // Durable workers build context and skills themselves, so keeping this below
     // the durable return avoids doing both expensive loads twice on every run.
+    const [{ runMakaronAgent }, { AgentDualWriter }, { buildPromptContext }] = await Promise.all([
+      import('@/lib/agent'),
+      import('@/lib/agentDualWriter'),
+      import('@/lib/agent-context'),
+    ]);
+    const writer = new AgentDualWriter(runId, supabase, userId, projectId, undefined, undefined, firstMessageId);
+    await writer.persistHeartbeat();
+    const { data: projectRow } = await supabase.from('projects').select('timeline_version').eq('id', projectId).single();
+    const timelineVersion: number = (projectRow as Record<string, unknown>)?.timeline_version as number ?? 1;
     const ctx = await buildPromptContext(projectId, supabase, userId, {
       userMessage: prompt,
       currentSnapshotIndex,
@@ -262,10 +271,6 @@ export async function POST(req: NextRequest) {
       agentModelId: resolvedAgentModel.id,
       agentModelProvider: resolvedAgentModel.provider,
     });
-    const { getAllSkills } = await import('@/lib/workspace');
-    const allSkills = await getAllSkills(supabase, userId);
-    const userSkills = allSkills.filter(s => !s.makaron?.builtIn);
-
     // Run agent after response is sent — next/server after() keeps the function alive
     after(async () => {
       const modelAbortController = new AbortController();
@@ -311,9 +316,9 @@ export async function POST(req: NextRequest) {
           explicitMediaIndices: ctx.explicitMediaIndices,
           currentSnapshotIndex: ctx.currentSnapshotIndex,
           isNsfw,
-          userSkills: userSkills.length ? userSkills : undefined,
           supabase,
           userId: userId,
+          codexSubscriptionAllowed,
           currentDesign: ctx.currentDesign,
           currentDesignPath: ctx.currentDesignPath,
           history: ctx.history,
@@ -363,7 +368,8 @@ export async function POST(req: NextRequest) {
         } catch (persistError) {
           console.error(`[agent/run] Run ${runId} terminal error persistence failed:`, persistError);
         }
-        if (totalInputTokens > 0 || totalOutputTokens > 0 || totalCacheReadTokens > 0 || totalCacheWriteTokens > 0) {
+        if (shouldRequireAgentCredits(resolvedAgentModel.provider)
+          && (totalInputTokens > 0 || totalOutputTokens > 0 || totalCacheReadTokens > 0 || totalCacheWriteTokens > 0)) {
           deductByTokens(
             userId, 'agent', agentModel || 'unknown',
             totalInputTokens, totalOutputTokens,
@@ -409,7 +415,8 @@ export async function POST(req: NextRequest) {
 
       await writer.flush();
       // Deduct agent LLM tokens
-      if (totalInputTokens > 0 || totalOutputTokens > 0 || totalCacheReadTokens > 0 || totalCacheWriteTokens > 0) {
+      if (shouldRequireAgentCredits(resolvedAgentModel.provider)
+        && (totalInputTokens > 0 || totalOutputTokens > 0 || totalCacheReadTokens > 0 || totalCacheWriteTokens > 0)) {
         deductByTokens(
           userId, 'agent', agentModel || 'unknown',
           totalInputTokens, totalOutputTokens,
@@ -456,7 +463,7 @@ export async function POST(req: NextRequest) {
             const namePrompt = `Based on this user request, give a concise project name (2-4 words, no quotes): "${nameSource}". Output only the name.`;
             let projectName = '';
             for await (const ev of runMakaronAgent(namePrompt, '', projectId, {
-              tipReactionOnly: true, locale, agentModel: requestedAgentModel,
+              tipReactionOnly: true, locale, agentModel: requestedAgentModel, userId, codexSubscriptionAllowed,
             })) {
               if (ev.type === 'content' && ev.text) projectName += ev.text;
             }

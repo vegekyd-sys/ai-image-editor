@@ -1,13 +1,21 @@
 'use client';
 
-import { useState, useRef, useEffect, useCallback, useId } from 'react';
+import { Fragment, useState, useRef, useEffect, useCallback, useId, type ReactNode } from 'react';
 import { createPortal } from 'react-dom';
 import type { PreferredModel } from './AgentChatView';
 import type { VideoModel, VideoResolution } from '@/types';
 import { getAgentModels, getImageModels, getVideoModels, type ModelInfo } from '@/lib/model-registry';
-import type { AgentModelPreference } from '@/lib/agent-models';
+import {
+  getCodexSubscriptionAgentModelPreference,
+  GROK_SUBSCRIPTION_AGENT_MODEL_PREFERENCE,
+  isCodexSubscriptionAgentModelPreference,
+  isGrokSubscriptionAgentModelPreference,
+  type AgentModelPreference,
+  type GPT56AgentModelId,
+} from '@/lib/agent-models';
 import { useLocale } from '@/lib/i18n';
 import { getDefaultVideoModelId, getVideoModelCapability, normalizeVideoResolution } from '@/lib/video-model-capabilities';
+import AgentProviderGroupHeader from './AgentProviderGroupHeader';
 
 interface ModelSelectorProps {
   preferredModel: PreferredModel;
@@ -27,6 +35,30 @@ const ROW_HEIGHT = 68;
 const PANEL_BODY_HEIGHT = ROW_HEIGHT * 5;
 const AUTO_TIPS_FOOTER_HEIGHT = ROW_HEIGHT + 14;
 const PANEL_CHROME_HEIGHT = 104;
+
+interface PlanUsage {
+  usedPercent?: number;
+  remainingPercent: number;
+  windowDurationMins?: number;
+  resetsAt?: number;
+  periodType?: string;
+}
+
+interface SubscriptionUsageState {
+  status: 'idle' | 'loading' | 'available' | 'unavailable';
+  codexAvailable?: boolean;
+  grokAvailable?: boolean;
+  codex?: {
+    available: boolean;
+    planType?: string | null;
+    weekly?: PlanUsage | null;
+  };
+  grok?: {
+    available: boolean;
+    planType?: string | null;
+    usage?: PlanUsage | null;
+  };
+}
 
 function ModelIcon({ size = 18 }: { size?: number }) {
   return (
@@ -90,6 +122,9 @@ function ModelRow({
   disabled,
   onSelect,
   testId,
+  provider,
+  detail,
+  compact = false,
 }: {
   model: ModelInfo;
   name: string;
@@ -99,6 +134,9 @@ function ModelRow({
   disabled: boolean;
   onSelect: () => void;
   testId?: string;
+  provider?: string;
+  detail?: ReactNode;
+  compact?: boolean;
 }) {
   return (
     <button
@@ -107,18 +145,21 @@ function ModelRow({
       data-testid={testId}
       data-model-id={model.id}
       data-model-category={model.category}
+      data-agent-provider={provider}
       aria-pressed={selected}
-      className={selected && !disabled ? 'mkr-liquid-pill' : ''}
+      className={selected && !disabled && !compact ? 'mkr-liquid-pill' : ''}
       style={{
         display: 'flex',
         alignItems: 'center',
         gap: 10,
         width: '100%',
-        height: ROW_HEIGHT,
-        padding: '0 12px',
-        borderRadius: 12,
-        border: 'none',
-        background: selected && !disabled ? 'linear-gradient(145deg, rgba(232,121,249,0.12), rgba(10,10,14,0.32))' : 'transparent',
+        minHeight: compact ? 54 : detail ? ROW_HEIGHT + 14 : ROW_HEIGHT,
+        padding: compact ? '0 10px' : '0 12px',
+        borderRadius: compact ? 10 : 12,
+        border: compact && selected && !disabled ? '0.5px solid rgba(232,121,249,0.16)' : '0.5px solid transparent',
+        background: selected && !disabled
+          ? compact ? 'rgba(217,70,239,0.075)' : 'linear-gradient(145deg, rgba(232,121,249,0.12), rgba(10,10,14,0.32))'
+          : 'transparent',
         cursor: disabled ? 'default' : 'pointer',
         transition: 'background 0.15s',
         textAlign: 'left',
@@ -127,10 +168,10 @@ function ModelRow({
     >
       <div
         style={{
-          width: 32,
-          height: 32,
-          borderRadius: 8,
-          background: 'rgba(255,255,255,0.06)',
+          width: compact ? 28 : 32,
+          height: compact ? 28 : 32,
+          borderRadius: compact ? 7 : 8,
+          background: compact ? 'rgba(255,255,255,0.035)' : 'rgba(255,255,255,0.06)',
           display: 'flex',
           alignItems: 'center',
           justifyContent: 'center',
@@ -142,11 +183,13 @@ function ModelRow({
       </div>
 
       <div style={{ flex: 1, minWidth: 0 }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 4, minWidth: 0, flexWrap: 'nowrap' }}>
           <span style={{
             fontSize: 13,
             fontWeight: 600,
             color: selected && !disabled ? '#e879f9' : 'rgba(255,255,255,0.85)',
+            whiteSpace: 'nowrap',
+            flexShrink: 0,
           }}>
             {name}
           </span>
@@ -157,6 +200,10 @@ function ModelRow({
               borderRadius: 4,
               background: 'rgba(255,255,255,0.06)',
               color: 'rgba(255,255,255,0.35)',
+              whiteSpace: 'nowrap',
+              overflow: 'hidden',
+              textOverflow: 'ellipsis',
+              minWidth: 0,
             }}>
               {badge}
             </span>
@@ -167,17 +214,31 @@ function ModelRow({
           color: 'rgba(255,255,255,0.35)',
           marginTop: 1,
           lineHeight: 1.3,
+          display: '-webkit-box',
+          WebkitBoxOrient: 'vertical',
+          WebkitLineClamp: selected ? 2 : 1,
+          overflow: 'hidden',
         }}>
           {desc}
         </div>
+        {detail && (
+          <div style={{
+            fontSize: 10,
+            color: 'rgba(103,232,249,0.72)',
+            marginTop: 3,
+            lineHeight: 1.3,
+          }}>
+            {detail}
+          </div>
+        )}
       </div>
 
       <div
         style={{
-          width: 18,
-          height: 18,
+          width: compact ? 16 : 18,
+          height: compact ? 16 : 18,
           borderRadius: 9,
-          border: `2px solid ${disabled ? 'rgba(255,255,255,0.08)' : selected ? '#c026d3' : 'rgba(255,255,255,0.15)'}`,
+          border: `${compact ? 1 : 2}px solid ${disabled ? 'rgba(255,255,255,0.08)' : selected ? 'rgba(232,121,249,0.85)' : 'rgba(255,255,255,0.15)'}`,
           display: 'flex',
           alignItems: 'center',
           justifyContent: 'center',
@@ -188,10 +249,10 @@ function ModelRow({
       >
         {selected && !disabled && (
           <div style={{
-            width: 10,
-            height: 10,
+            width: compact ? 6 : 10,
+            height: compact ? 6 : 10,
             borderRadius: 5,
-            background: '#c026d3',
+            background: '#e879f9',
           }} />
         )}
       </div>
@@ -311,11 +372,13 @@ function VideoModelRow({
         </div>
 
         <div style={{ flex: 1, minWidth: 0 }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 4, minWidth: 0, flexWrap: 'nowrap' }}>
             <span style={{
               fontSize: 13,
               fontWeight: 600,
               color: selected ? '#e879f9' : 'rgba(255,255,255,0.85)',
+              whiteSpace: 'nowrap',
+              flexShrink: 0,
             }}>
               {name}
             </span>
@@ -326,6 +389,10 @@ function VideoModelRow({
                 borderRadius: 4,
                 background: 'rgba(255,255,255,0.06)',
                 color: 'rgba(255,255,255,0.35)',
+                whiteSpace: 'nowrap',
+                overflow: 'hidden',
+                textOverflow: 'ellipsis',
+                minWidth: 0,
               }}>
                 {badge}
               </span>
@@ -336,6 +403,10 @@ function VideoModelRow({
             color: 'rgba(255,255,255,0.35)',
             marginTop: 1,
             lineHeight: 1.3,
+            display: '-webkit-box',
+            WebkitBoxOrient: 'vertical',
+            WebkitLineClamp: selected ? 2 : 1,
+            overflow: 'hidden',
           }}>
             {desc}
           </div>
@@ -389,7 +460,7 @@ export default function ModelSelector({
   onAgentModelChange,
   onOpenChange,
 }: ModelSelectorProps) {
-  const { t } = useLocale();
+  const { locale, t } = useLocale();
   const popoverId = useId();
   const popoverTitleId = `${popoverId}-title`;
   const [open, setOpen] = useState(false);
@@ -400,6 +471,7 @@ export default function ModelSelector({
   const popoverRef = useRef<HTMLDivElement>(null);
   const scrollBodyRef = useRef<HTMLDivElement>(null);
   const didFocusPopoverRef = useRef(false);
+  const [subscriptionUsage, setSubscriptionUsage] = useState<SubscriptionUsageState>({ status: 'idle' });
   const [popoverPos, setPopoverPos] = useState<{
     bottom: number;
     bodyHeight: number;
@@ -454,6 +526,44 @@ export default function ModelSelector({
       document.removeEventListener('keydown', handleKeyDown);
     };
   }, [open]);
+
+  useEffect(() => {
+    if (!open || activeTab !== 'agent') return;
+    const controller = new AbortController();
+    setSubscriptionUsage({ status: 'loading' });
+    fetch('/api/agent/subscription-usage', { signal: controller.signal, cache: 'no-store' })
+      .then(async (response) => {
+        const payload = await response.json().catch(() => ({})) as {
+          available?: boolean;
+          grokAvailable?: boolean;
+          planType?: string | null;
+          weekly?: PlanUsage | null;
+          codex?: SubscriptionUsageState['codex'];
+          grok?: SubscriptionUsageState['grok'];
+        };
+        if (!payload.available && !payload.grokAvailable) {
+          setSubscriptionUsage({ status: 'unavailable', codexAvailable: false, grokAvailable: false });
+          return;
+        }
+        setSubscriptionUsage({
+          status: response.ok ? 'available' : 'unavailable',
+          codexAvailable: Boolean(payload.available),
+          grokAvailable: Boolean(payload.grokAvailable),
+          codex: payload.codex ?? {
+            available: Boolean(payload.available),
+            planType: payload.planType,
+            weekly: payload.weekly,
+          },
+          grok: payload.grok ?? { available: Boolean(payload.grokAvailable) },
+        });
+      })
+      .catch((error) => {
+        if ((error as Error).name !== 'AbortError') {
+          setSubscriptionUsage({ status: 'unavailable' });
+        }
+      });
+    return () => controller.abort();
+  }, [activeTab, open]);
 
   const updatePopoverPosition = useCallback(() => {
     if (!open || !triggerRef.current) return;
@@ -549,7 +659,38 @@ export default function ModelSelector({
 
   const imageModels = getImageModels();
   const videoModels = getVideoModels();
-  const agentModels = getAgentModels();
+  const subscriptionVisible = (subscriptionUsage.status !== 'unavailable' && subscriptionUsage.codexAvailable !== false)
+    || isCodexSubscriptionAgentModelPreference(agentModel);
+  const baseAgentModels = getAgentModels();
+  const azureAgentModels = baseAgentModels.filter(model => model.id.startsWith('gpt-5.6-'));
+  const codexSubscriptionAgentModels: ModelInfo[] = subscriptionVisible
+    ? azureAgentModels.map(model => ({
+        ...model,
+        id: getCodexSubscriptionAgentModelPreference(model.id as GPT56AgentModelId),
+        speedLabel: undefined,
+      }))
+    : [];
+  const grokSubscriptionVisible = (subscriptionUsage.status !== 'unavailable' && subscriptionUsage.grokAvailable !== false)
+    || isGrokSubscriptionAgentModelPreference(agentModel);
+  const grokSubscriptionAgentModels: ModelInfo[] = [];
+  if (grokSubscriptionVisible) {
+    const grok = baseAgentModels.find(model => model.id === 'grok-4.6');
+    if (grok) {
+      grokSubscriptionAgentModels.push({
+        ...grok,
+        id: GROK_SUBSCRIPTION_AGENT_MODEL_PREFERENCE,
+        descKey: 'model.grokSubscription.desc',
+        speedLabel: undefined,
+      });
+    }
+  }
+  const otherAgentModels = baseAgentModels.filter(model => !model.id.startsWith('gpt-5.6-'));
+  const agentModels = [
+    ...azureAgentModels,
+    ...codexSubscriptionAgentModels,
+    ...grokSubscriptionAgentModels,
+    ...otherAgentModels,
+  ];
   const models = activeTab === 'image'
     ? imageModels
     : activeTab === 'video'
@@ -566,7 +707,7 @@ export default function ModelSelector({
     : preferredModel;
   const selectedAgentModel = agentModels.find(model => model.id === agentModel);
   const selectedAgentLabel = selectedAgentModel
-    ? t(selectedAgentModel.nameKey as Parameters<typeof t>[0])
+    ? `${t(selectedAgentModel.nameKey as Parameters<typeof t>[0])}${isCodexSubscriptionAgentModelPreference(selectedAgentModel.id) ? ` · ${t('model.codexSubscription.suffix')}` : isGrokSubscriptionAgentModelPreference(selectedAgentModel.id) ? ` · ${t('model.grokSubscription.suffix')}` : selectedAgentModel.id.startsWith('gpt-5.6-') ? ` · ${t('model.azureApiBadge')}` : selectedAgentModel.id === 'grok-4.6' ? ` · ${t('model.openRouterApiBadge')}` : ''}`
     : agentModel;
   const selectedVideoCapability = getVideoModelCapability(videoModel);
   const selectedVideoResolution = videoResolution === 'auto'
@@ -581,6 +722,12 @@ export default function ModelSelector({
         : 'auto';
   const hasExplicitModel = !imageAuto || !videoAuto || !agentAuto;
   const resolutionOptions = selectedVideoCapability.supportedResolutions ?? [];
+  const formatResetTime = (seconds: number) => new Intl.DateTimeFormat(locale, {
+    month: 'short',
+    day: 'numeric',
+    hour: '2-digit',
+    minute: '2-digit',
+  }).format(new Date(seconds * 1_000));
 
   useEffect(() => {
     const el = scrollBodyRef.current;
@@ -775,20 +922,116 @@ export default function ModelSelector({
                     />
                   );
                 }
+                const isCodexSubscription = activeTab === 'agent'
+                  && isCodexSubscriptionAgentModelPreference(model.id);
+                const isGrokSubscription = activeTab === 'agent'
+                  && isGrokSubscriptionAgentModelPreference(model.id);
+                const isAzureAgent = activeTab === 'agent'
+                  && model.id.startsWith('gpt-5.6-')
+                  && !isCodexSubscription;
+                const modelIndex = models.indexOf(model);
+                const previousModel = modelIndex > 0 ? models[modelIndex - 1] : undefined;
+                const providerGroup = activeTab !== 'agent'
+                  ? undefined
+                  : isCodexSubscription
+                    ? 'codex'
+                    : isGrokSubscription
+                      ? 'grok'
+                    : isAzureAgent
+                      ? 'azure'
+                      : 'other';
+                const previousProviderGroup = activeTab !== 'agent' || !previousModel
+                  ? undefined
+                  : isCodexSubscriptionAgentModelPreference(previousModel.id)
+                    ? 'codex'
+                    : isGrokSubscriptionAgentModelPreference(previousModel.id)
+                      ? 'grok'
+                    : previousModel.id.startsWith('gpt-5.6-')
+                      ? 'azure'
+                      : 'other';
+                const showProviderHeader = providerGroup && providerGroup !== previousProviderGroup;
+                const providerLabel = providerGroup === 'azure'
+                  ? t('model.agentGroup.azure')
+                  : providerGroup === 'codex'
+                    ? t('model.agentGroup.codex')
+                    : providerGroup === 'grok'
+                      ? t('model.agentGroup.grok')
+                    : t('model.agentGroup.other');
+                const providerDetail = providerGroup === 'azure'
+                  ? t('model.agentGroup.azureDesc')
+                  : providerGroup === 'codex'
+                    ? subscriptionUsage.status === 'loading' || subscriptionUsage.status === 'idle'
+                      ? t('model.codexSubscription.checking')
+                      : subscriptionUsage.status === 'available' && subscriptionUsage.codex?.weekly
+                        ? `${t('model.codexSubscription.remaining', String(Math.round(subscriptionUsage.codex.weekly.remainingPercent)))}${subscriptionUsage.codex.weekly.resetsAt ? ` · ${t('model.codexSubscription.resetsAt', formatResetTime(subscriptionUsage.codex.weekly.resetsAt))}` : ''}`
+                        : t('model.codexSubscription.usageUnavailable')
+                    : providerGroup === 'grok'
+                      ? subscriptionUsage.status === 'loading' || subscriptionUsage.status === 'idle'
+                        ? t('model.grokSubscription.checking')
+                        : subscriptionUsage.status === 'available' && subscriptionUsage.grok?.usage
+                          ? `${t('model.grokSubscription.remaining', String(Math.round(subscriptionUsage.grok.usage.remainingPercent)))}${subscriptionUsage.grok.usage.resetsAt ? ` · ${t('model.grokSubscription.resetsAt', formatResetTime(subscriptionUsage.grok.usage.resetsAt))}` : ''}`
+                          : subscriptionUsage.grok?.planType
+                            ? subscriptionUsage.grok.planType
+                            : t('model.grokSubscription.usageUnavailable')
+                    : t('model.agentGroup.otherDesc');
+                const codexWeekly = providerGroup === 'codex'
+                  && subscriptionUsage.status === 'available'
+                  ? subscriptionUsage.codex?.weekly
+                  : undefined;
+                const grokUsage = providerGroup === 'grok'
+                  && subscriptionUsage.status === 'available'
+                  ? subscriptionUsage.grok?.usage
+                  : undefined;
                 return (
-                  <ModelRow
-                    key={model.id}
-                    model={model}
-                    name={t(model.nameKey as Parameters<typeof t>[0])}
-                    desc={t(model.descKey as Parameters<typeof t>[0])}
-                    badge={model.speedLabelKey ? t(model.speedLabelKey) : model.speedLabel}
-                    selected={model.id === selectedId}
-                    disabled={false}
-                    onSelect={() => activeTab === 'agent'
-                      ? handleAgentSelect(model.id)
-                      : handleImageSelect(model.id)}
-                    testId={activeTab === 'agent' ? `agent-model-${model.id}` : undefined}
-                  />
+                  <Fragment key={model.id}>
+                    {showProviderHeader && (
+                      <AgentProviderGroupHeader
+                        provider={providerGroup}
+                        label={providerLabel}
+                        detail={providerDetail}
+                        remainingLabel={codexWeekly
+                          ? t('model.codexSubscription.remainingShort', String(Math.round(codexWeekly.remainingPercent)))
+                          : grokUsage
+                            ? t('model.grokSubscription.remainingShort', String(Math.round(grokUsage.remainingPercent)))
+                            : undefined}
+                        resetLabel={codexWeekly?.resetsAt
+                          ? t('model.codexSubscription.resetsAt', formatResetTime(codexWeekly.resetsAt))
+                          : grokUsage?.resetsAt
+                            ? t('model.grokSubscription.resetsAt', formatResetTime(grokUsage.resetsAt))
+                            : undefined}
+                        progress={codexWeekly?.remainingPercent ?? grokUsage?.remainingPercent}
+                        usageTestId={providerGroup === 'codex'
+                          ? 'codex-subscription-usage'
+                          : providerGroup === 'grok'
+                            ? 'grok-subscription-usage'
+                            : undefined}
+                      />
+                    )}
+                    <ModelRow
+                      model={model}
+                      name={`${t(model.nameKey as Parameters<typeof t>[0])}${isCodexSubscription ? ` · ${t('model.codexSubscription.suffix')}` : isGrokSubscription ? ` · ${t('model.grokSubscription.suffix')}` : model.id === 'grok-4.6' ? ` · ${t('model.openRouterApiBadge')}` : ''}`}
+                      desc={t(model.descKey as Parameters<typeof t>[0])}
+                      badge={activeTab === 'agent'
+                        ? undefined
+                        : model.speedLabelKey ? t(model.speedLabelKey) : model.speedLabel}
+                      selected={model.id === selectedId}
+                      disabled={false}
+                      onSelect={() => activeTab === 'agent'
+                        ? handleAgentSelect(model.id)
+                        : handleImageSelect(model.id)}
+                      testId={activeTab === 'agent' ? `agent-model-${model.id}` : undefined}
+                      provider={isCodexSubscription
+                        ? 'codex-subscription'
+                        : isGrokSubscription
+                        ? 'grok-subscription'
+                        : isAzureAgent
+                        ? 'azure-openai'
+                        : model.id === 'grok-4.6'
+                        ? 'openrouter'
+                        : undefined}
+                      compact={activeTab === 'agent'}
+                    />
+                  </Fragment>
                 );
               })}
             </div>

@@ -24,7 +24,7 @@ function headers() {
   }
 }
 
-/** Submit an image-to-video task. Returns the PiAPI task ID. */
+/** Submit an omni video task whose images are prompt-addressable feature references. */
 export async function createKlingTask(input: KlingTaskInput): Promise<string> {
   const body = {
     model: 'kling',

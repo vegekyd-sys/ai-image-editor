@@ -7,7 +7,7 @@ import type { ImageBackground, ModelId } from './models/types';
 import { editImage } from './skills/edit-image';
 import { rotateCamera } from './skills/rotate-camera';
 import { createVideo } from './skills/create-video';
-import { estimateVideoCredits, estimateVideoProviderCostUsd, normalizeVideoModelId, resolveAgentVideoSelection, resolveVideoGenerationRoute, resolveVideoOutputDuration, supportsNativeTextToVideo, validateVideoModelRequest } from './video-model-capabilities';
+import { estimateVideoProviderCostUsd, getRequiredVideoCredits, normalizeVideoModelId, resolveAgentVideoSelection, resolvePersistedVideoDuration, resolveVideoGenerationRoute, resolveVideoOutputDuration, supportsNativeTextToVideo, validateVideoModelRequest } from './video-model-capabilities';
 import {
   deductFixedCredits,
   isInsufficientCreditsError,
@@ -59,6 +59,7 @@ import { isDirectRemotionCompositionSource } from './remotion-code-normalization
 import {
   type AgentModelRuntime,
 } from './agent-model-runtime';
+import { resolveAnalyzeImageProvider } from './agent-image-analysis';
 import {
   AgentExecutionStore,
   normalizeExecutionSnapshot,
@@ -77,19 +78,21 @@ import { stableDraftPromotionSnapshotId } from './draft-promotion';
 import { sourceRangeFromVideoMeta } from './media-source-range';
 import { materializeSeedAudioReference } from './seed-audio-reference';
 import { resolveAudioRefs } from './audio-reference-resolver';
+import { isGrokSubscriptionAllowedUser } from './grok-subscription';
 
 const MAX_VIDEO_DIMENSION_PROBE_BYTES = 220 * 1024 * 1024;
 
 function runRemotionExportAfterResponse(jobId: string) {
   after(async () => {
     try {
-      const { runRemotionExportJob } = await import('@/lib/remotion-export');
-      await runRemotionExportJob(jobId);
+      const {
+        drainRemotionExportQueue,
+        shouldRunRemotionExportInline,
+      } = await import('@/lib/remotion-export');
+      if (!shouldRunRemotionExportInline()) return;
+      await drainRemotionExportQueue({ source: `agent:${jobId}` });
     } catch (error) {
-      const message = error instanceof Error ? error.message : String(error);
-      if (!message.includes('already rendering')) {
-        console.error(`[agent] Remotion export worker failed for ${jobId}:`, error);
-      }
+      console.error(`[agent] Remotion export queue drain failed after ${jobId}:`, error);
     }
   });
 }
@@ -230,8 +233,6 @@ export interface AgentContext {
   currentSnapshotIndex: number;
   /** NSFW flag — set when Gemini refuses content. All subsequent calls skip Gemini. */
   isNsfw?: boolean;
-  /** User skills loaded from DB (for reference image lookup) */
-  userSkills?: ParsedSkill[];
   /** Timeline version: 1 = legacy (project_animations), 2 = video-in-timeline (snapshots) */
   timelineVersion?: number;
   /** Published or autosaved composition used as the source for this turn. */
@@ -370,7 +371,6 @@ export type AgentStreamEvent =
     };
 
 // Skill types (workspace replaces hardcoded SKILL_PROMPTS map)
-import { type ParsedSkill } from './skill-registry';
 // Workspace service — unified access to skills, memory, assets
 import * as workspace from './workspace';
 import { evolvingSkillBundlePaths, recordEvolvingSkillUsage } from './skill-evolution';
@@ -1349,7 +1349,7 @@ interface AgentToolFactoryScope {
 }
 
 function createGenerateImageTool(
-  { ctx }: AgentToolFactoryScope,
+  { ctx, runtime }: AgentToolFactoryScope,
 ) {
   return tool({
       description: generateImageToolPrompt,
@@ -1392,10 +1392,20 @@ function createGenerateImageTool(
         const resolvedModel = (ctx.preferredModel ? ctx.preferredModel : model) as ModelId | undefined;
         const skillResult = await editImage(
           { editPrompt, skill: skill as 'enhance' | 'creative' | 'wild' | 'captions' | undefined, aspectRatio, background, preferredModel: resolvedModel, isNsfw: ctx.isNsfw },
-          { currentImage: editTarget, referenceImages: resolvedRefs.length ? resolvedRefs : undefined },
+          {
+            currentImage: editTarget,
+            referenceImages: resolvedRefs.length ? resolvedRefs : undefined,
+            codexSubscription: runtime.spec.provider === 'codex-subscription' && ctx.userId
+              ? {
+                  userId: ctx.userId,
+                  projectId: ctx.projectId,
+                  agentModelId: runtime.spec.providerModelId,
+                }
+              : undefined,
+          },
         );
         // Bill for image generation (separate from Agent LLM tokens)
-        if (skillResult.usage) {
+        if (skillResult.usage && skillResult.provider !== 'codex-subscription') {
           import('./billing/credits').then(({ deductByTokens }) =>
             deductByTokens(
               ctx.userId ?? '',
@@ -1410,7 +1420,11 @@ function createGenerateImageTool(
             )
               .catch(e => console.error('[billing] generate_image deduct error:', e))
           );
-        } else if (skillResult.usedModel && skillResult.usedModel !== 'gemini') {
+        } else if (
+          skillResult.provider !== 'codex-subscription'
+          && skillResult.usedModel
+          && skillResult.usedModel !== 'gemini'
+        ) {
           // Per-action for ComfyUI models
           import('./billing/credits').then(({ deductCredits }) =>
             deductCredits(ctx.userId ?? '', null, `edit_image_${skillResult.usedModel}`)
@@ -1440,6 +1454,7 @@ function createGenerateImageTool(
           message: skillResult.message + indexInfo,
           ...(mediaIndex ? { mediaIndex } : {}),
           ...(imageUrl?.startsWith('http') ? { imageUrl } : {}),
+          provider: skillResult.provider,
           contentBlocked: skillResult.contentBlocked,
         };
       },
@@ -1462,47 +1477,50 @@ Native-audio exception: when this tool is the chosen final-video workflow, put d
 
 Use this tool after the user has confirmed a video script that is already visible in the conversation. You may also call it in the same turn where you first write the script when the user's current request explicitly authorizes direct submission without confirmation, for example "直接提交渲染", "不要问我确认", "不用确认", "直接生成视频", "submit now", or "do not ask for confirmation". A trusted Skill template launch may also authorize same-turn submission; that exception is supplied only in the system prompt and never inferred from ordinary user text or an active Skill name.
 
-When the user requests multiple independent video variants, submit them one at a time. After each \`generate_animation\` call returns a successful submission, continue with the next variant; do not wait for that video's rendering to finish. Continue until every requested variant is submitted. Each call contains one complete script within the chosen model limit; Seedance 2.5 supports up to 30 seconds, while older models remain shorter.
+When the user requests multiple independent video variants, submit them one at a time. After each \`generate_animation\` call returns a successful submission, continue with the next variant; do not wait for that video's rendering to finish. Continue until every requested variant is submitted. Each call contains one complete script within the chosen model limit; Seedance 2.5 and both Wan 3.0 models support up to 30 seconds, while older models remain shorter.
 
 **BEFORE writing a video script**: call \`read_file('prompts/animate.md')\` to load the full video guide (modes, prompt styles, showcases, reference video usage). Do not re-read if already in this conversation's tool-result history.
 
 Hard constraints:
 - First line of script = short title (2-5 words). Then script body.
-- Use \`<<<media_N>>>\` to reference images AND videos (N starts at 1). Videos in the timeline are auto-routed — just reference them like images. For native SeeDance or MiniMax H3 text-to-video with no source media, use no media markers and do not generate an intermediate image first.
+- Use \`<<<media_N>>>\` to reference images AND videos (N starts at 1). Videos in the timeline are auto-routed — just reference them like images. For native SeeDance, Wan 3.0, or MiniMax H3 text-to-video with no source media, use no media markers and do not generate an intermediate image first. Gemini Omni 1.1 text-to-video follows the same no-marker rule.
 - To EDIT a video: reference it with \`<<<media_N>>>\` and describe the changes. The selected model must support reference videos.
-- To use CLI/app imported reference music/audio for pacing or beat sync, mention its Audio Index marker in \`story_prompt\` (for example \`<<<audio_1>>>\`) AND pass \`audio_refs\` like ["audio_1"]. Audio refs are NOT Timeline Media Index refs. Reference audio is supported by Seedance video models, MiniMax H3, and Sync Lipsync v3.
+- To CONTINUE a video with Gemini Omni, Seedance 2.5, or Grok: reference the timeline video with \`<<<media_N>>>\`, set \`video_operation: "extend"\`, and write only what should happen after its current ending. Grok accepts one 2-15s MP4 and adds 2-10s; Gemini Omni continues forward for 3-10s (10s by default).
+- To use CLI/app imported reference music/audio for pacing or beat sync, mention its Audio Index marker in \`story_prompt\` (for example \`<<<audio_1>>>\`) AND pass \`audio_refs\` like ["audio_1"]. Audio refs are NOT Timeline Media Index refs. Reference audio is supported by Seedance video models, Wan 3.0, MiniMax H3, and Sync Lipsync v3.
 - Talking-head translation exception: finish the source edit first, prepare a silent accepted A-roll plus its original voice reference, then use SeeDance 2.0 with the target-language dialogue written directly inside the complete \`Shot N (Xs):\` script. Do not call Seed Audio for this route.
-- Works for Kling, SeeDance, SeeDance Mini, Seedance 2.5, Grok, Gemini Omni, and MiniMax H3, but respect capability limits and tool errors.
-- Single-call total duration: Seedance 2.5 is 4-30 seconds; SeeDance 2.0 is 4-15 seconds; SeeDance/SeeDance Mini and MiniMax H3 are 4-15 seconds; Kling is 5-15 seconds; Grok 1.5 is 1-15 seconds; Google Omni is 3-10 seconds. A requested 30-second direct generation should use \`model: "seedance-2.5"\` in one call.
+- Works for Kling, SeeDance, SeeDance Mini, Seedance 2.5, Wan 3.0, Grok, Gemini Omni, and MiniMax H3, but respect capability limits and tool errors. Grok uses 1.5 for text/image/reference generation and the base Imagine Video model for edit/extend.
+- Single-call total duration: Seedance 2.5 is 4-30 seconds; Wan 3.0 is 2-30 seconds; SeeDance 2.0 is 4-15 seconds; SeeDance/SeeDance Mini and MiniMax H3 are 4-15 seconds; Kling is 5-15 seconds; Grok 1.5 is 1-15 seconds; Google Omni is 3-10 seconds. A non-NSFW direct 16-30 second request defaults to Seedance 2.5. An NSFW/adult-explicit video request defaults to Wan 3.0 Prime; this semantic route has higher priority than the duration route, analogous to choosing Qwen for NSFW image requests.
 - If a complete script fits the selected model's single-call limit, submit it as one video generation call. Put the whole title, every \`Shot N (Xs):\` line, and the \`Style:\` line into the same \`story_prompt\`; set \`duration\` to the total script duration when known. Do not submit only one shot, the first shot, or one line from the script.
 - If the source video may exceed model limits, call \`read_file('skills/video-ffmpeg-lab/SKILL.md')\` and split it once with \`run_code({ runtime: "node" })\` before submitting generation.
 - Total duration must fit the selected model's capability. Do not shrink a long source just to bypass a limit; split first.
-- Long source video rule: if a timeline/reference video is longer than the selected model's input limit (15 seconds for SeeDance 2.0 or MiniMax H3, 30 seconds for Seedance 2.5), use \`skills/long-video-director/SKILL.md\`, analyze/split it into model-sized self-contained segments, and submit one script per segment after approval.
-- Reference video input limit: for one SeeDance generation, combined source duration must be at most 15 seconds for SeeDance 2.0 or 30 seconds for SeeDance 2.5. For one MiniMax H3 generation, up to 3 reference videos may be used and their combined source duration must be 15 seconds or less.
+- Long source video rule: if a timeline/reference video is longer than the selected model's input limit (15 seconds for SeeDance 2.0, MiniMax H3, or Wan 3.0; 30 seconds for Seedance 2.5), use \`skills/long-video-director/SKILL.md\`, analyze/split it into model-sized self-contained segments, and submit one script per segment after approval.
+- Reference video input limit: for one SeeDance generation, combined source duration must be at most 15 seconds for SeeDance 2.0 or 30 seconds for SeeDance 2.5. Google Omni edit/extend accepts one source video up to 10 seconds when uploaded; a Google-generated result can continue statefully to 40 seconds cumulatively. Grok edit accepts one MP4 up to 8.7 seconds; Grok extend accepts one MP4 from 2 to 15 seconds and adds 2 to 10 seconds. For one MiniMax H3 generation, up to 3 reference videos may be used and their combined source duration must be 15 seconds or less.
+- Wan 3.0 reference limit: use generation mode with up to 10 images, 5 videos, and 5 audio files (20 total). MuleRouter accepts provider-readable MP4/MOV references up to 100MB each, enforces a 15-second combined input budget, and requires reference-video duration + requested output duration <= 30 seconds. For example, a 5.04s reference permits at most duration=24 because output duration is submitted in whole seconds. Compute this before calling the tool; the runtime harness also rejects an invalid combination before credits or provider submission.
 - Reference video size limit: for one SeeDance generation, every reference video must be .mp4/.mov, <=50MB, width and height each 300-6000px, aspect ratio 0.4-2.5, and frame pixels width*height between 409,600 and 2,086,876. MiniMax H3 reference videos must each be .mp4/.mov, <=50MB, width and height each 256-5760px, and aspect ratio 0.4-2.5. Kling video references must be <=200MB and <=2K; no explicit lower resolution is documented.
 - Reference image input limit: EvoLink Seedance requires JPEG/PNG/WebP, width and height each 300-6000px, aspect ratio 0.4-2.5, and <=30MB per image. The runtime returns a specific errorReason such as too_small or too_large. If repairable=true, decide whether to prepare a new compliant image URL or ask the user for a better source; never resubmit the same rejected URL.
 - Reference image input limit: MiniMax H3 accepts up to 9 reference images. The first 5 are free provider inputs; images 6-9 incur per-image provider cost. H3 also accepts up to 3 reference audio files, but audio cannot be the only reference input.
 - Video edit duration lock: when editing timeline videos within the selected model's input limit, output duration should match the combined source duration from Media Index, clamped to 4-15s for SeeDance 2.0 or 4-30s for SeeDance 2.5. Dedicated Seedance 2.5 edit may use adaptive duration.
-- Default model follows app selection, usually SeeDance 2.0 Fast (\`seedance-fast\`) at 720p; do not silently change it. Use \`seedance-2.5\` when the user asks for Seedance 2.5, a single 16-30 second generation, more than the older reference limits, or its dedicated edit/extend features. Use \`minimax-h3\` only when the selector or user explicitly asks for MiniMax/H3/Hailuo H3; it supports public 768p and native 2K multimodal generation, defaulting to 768p. Use 2K only when explicitly requested or when the user asks for maximum/final quality.
-- Grok aspect-ratio rule: for Grok single-image-to-video, do not pass \`aspect_ratio\`. xAI stretches the source image when a forced ratio differs from the image. If the user asks for a different final shape, choose Seedance/Kling or first create/pad the source image to that target shape, then generate.
+- Default model is SeeDance 2.0 Fast (\`seedance-fast\`) at 720p. Use \`seedance-2.5\` for a non-NSFW single 16-30 second generation, higher reference limits, or its dedicated edit/extend features. The NSFW semantic route defaults to \`wan-3.0-prime\` and overrides the 16-30 second Seedance 2.5 route. Resolution is one shared control for every video service: infer \`video_resolution\` from the full request, use a value supported by the selected model, or keep its default when unspecified. Do not build provider-specific keyword routing for resolution. Wan exposes \`wan-3.0\` and \`wan-3.0-prime\`, both with 480p/720p/1080p/2K/4K. Both generate 2-30s with up to 10 image + 5 video + 5 audio references and do not expose typed edit/extend or a content-filter toggle. Use \`minimax-h3\` only when requested as MiniMax/H3/Hailuo H3; it supports public 768p and native 2K multimodal generation, defaulting to 768p.
+- Grok modes: text-to-video supports 480p/720p/native 1080p. Any image or preset voice input uses reference-to-video and is capped at 720p, including a single image. Reference prompts must map every image to a role and may use a supported \`aspect_ratio\`. Optional \`reference_voice_ids\` accepts up to three xAI preset voices such as eve/leo; do not put uploaded audio URLs there.
 - \`video_ref_url\`: ONLY for external videos not in Media Index (e.g. from workspace/list_files). Never put video URLs in prompt text.
 - If the generated video is an intermediate artifact, pass \`completion_actions\` so CUI/CLI can show the next step after rendering finishes. These actions are user-confirmed by default; do not rely on the user remembering what to do next. For local video repair, include exact replaceStart/replaceEnd/replacementDuration and say to trim/fit the patch to that duration before merging so the final video keeps the original duration.
 - The script must have been shown to the user and confirmed before this tool is called, unless the user's current request explicitly asks for direct submission without confirmation or the system prompt supplies the trusted Skill template launch exception.`,
       inputSchema: z.object({
-        story_prompt: z.string().describe('The complete video script. First line = short title, then the body. Native SeeDance or MiniMax H3 text-to-video uses no media markers. Seedance 2.x reference markers such as <<<video_1>>> and <<<audio_1>>> are translated to @video1 and @audio1 for Evolink.'),
-        duration: z.number().optional().describe('Duration in seconds. Sync Lipsync v3 follows a 2-60s accepted source; Seedance 2.5 accepts 4-30s; for Seedance 2.5 video_operation="edit", omit duration or pass -1 because Makaron follows the source duration automatically. SeeDance/SeeDance Mini and MiniMax H3 accept 4-15s; Kling accepts 5-15s; Grok accepts 1-15s; Google Omni accepts 3-10s.'),
-        aspect_ratio: z.enum(['16:9', '9:16', '1:1', '4:3', '3:4', '21:9', '3:2', '2:3']).optional().describe('Output aspect ratio. Pass it only when the user asks for a specific shape and the selected model can safely honor it. For Grok single-image-to-video, omit this field because xAI stretches the source image when a forced ratio differs from the image. Seedance supports 16:9/9:16/1:1/4:3/3:4/21:9/adaptive; Makaron intentionally does not pass forced ratios to Grok image-to-video.'),
-        model: z.string().optional().describe('Video model/provider id. Supported ids include seedance-fast, seedance-mini, seedance, seedance-2.5, kling, grok, google-omni, minimax-h3, and sync-lipsync-v3. Use sync-lipsync-v3 only with exactly one source video and one replacement audio ref.'),
-        video_resolution: z.enum(['480p', '720p', '768p', '1080p', '2k', '4k', 'auto']).optional().describe('Output resolution. Seedance 2.5 supports 480p/720p; MiniMax H3 supports 768p/2k and defaults to 768p.'),
+        story_prompt: z.string().describe('The complete video script. First line = short title, then the body. Native SeeDance, Wan 3.0, or MiniMax H3 text-to-video uses no media markers; Gemini Omni 1.1 follows the same rule. Makaron translates <<<media_N>>> / <<<audio_N>>> into each provider family\'s markers.'),
+        duration: z.number().optional().describe('Duration in seconds. Sync Lipsync v3 follows a 2-60s accepted source; Seedance 2.5 accepts 4-30s; Wan 3.0 accepts 2-30s; for Seedance 2.5 video_operation="edit", omit duration or pass -1 because Makaron follows the source duration automatically. SeeDance/SeeDance Mini and MiniMax H3 accept 4-15s; Kling accepts 5-15s; Grok accepts 1-15s; Google Omni accepts 3-10s.'),
+        aspect_ratio: z.enum(['16:9', '9:16', '1:1', '4:3', '3:4', '21:9', '3:2', '2:3']).optional().describe('Output aspect ratio. Pass it only when the user asks for a specific shape and the selected model can honor it. Seedance supports 16:9/9:16/1:1/4:3/3:4/21:9/adaptive. Grok reference-to-video accepts supported fixed ratios.'),
+        model: z.string().optional().describe('Video model/provider id. Supported ids include seedance-fast, seedance-mini, seedance, seedance-2.5, wan-3.0, wan-3.0-prime, kling, grok, google-omni, minimax-h3, and sync-lipsync-v3. Default to seedance-2.5 for non-NSFW direct 16-30s requests and wan-3.0-prime for the NSFW semantic route. Use sync-lipsync-v3 only with exactly one source video and one replacement audio ref.'),
+        video_resolution: z.enum(['360p', '480p', '720p', '768p', '1080p', '2k', '4k', 'auto']).optional().describe('Shared output-resolution control for every video model. Infer it from the complete user intent, choose a value supported by the selected model, or use auto/default when unspecified. Grok 1.5 supports 480p/720p/native 1080p for text-to-video; any image/voice reference and video edit/extend are capped at 720p. Gemini Omni 1.1 supports 360p drafts, 720p native/default, and upscaled 1080p/4k.'),
         media_refs: z.array(z.string()).optional().describe('Additional image URLs NOT already in Media Index (e.g. workspace files from list_files). Images in Media Index are auto-available — just use <<<media_N>>> in script. Passing Media Index URLs here will be rejected.'),
-        audio_refs: z.array(z.string()).optional().describe('Reference audio labels from the Audio Index block, e.g. ["audio_1"], or HTTPS provider URLs returned by run_code Node media preparation. Use for voice identity, beat sync, pacing, or music reference. Mention each one as <<<audio_N>>> in story_prompt. Supported by SeeDance models and MiniMax H3.'),
-        video_ref_url: z.string().optional().describe('External reference video URL (from workspace/skill assets via list_files). For timeline videos, just use <<<media_N>>> — they are auto-routed. Only use this for external URLs not in Media Index. SeeDance 2.0 video references must be <=50MB, width/height 300-6000px, aspect ratio 0.4-2.5, frame pixels 409,600-2,086,876. Seedance 2.5 accepts .mp4/.mov <=200MB, width/height 300-6000px, frame pixels 409,600-8,295,044, 4-30s each and <=30s total. MiniMax H3 video references must be <=50MB, width/height 256-5760px, aspect ratio 0.4-2.5, with at most 3 videos totaling <=15s. Kling video references must be <=200MB and <=2K; no explicit lower resolution is documented. Google Omni accepts one reference video in Makaron. Grok does not support video references in Makaron yet.'),
-        video_ref_type: z.enum(['base', 'feature']).optional().describe('How to use an external reference video. feature (default): reference motion/style. base: direct edit for Kling, or use with Seedance 2.5 video_operation="edit". Timeline videos are auto-routed from <<<media_N>>>.'),
+        audio_refs: z.array(z.string()).optional().describe('Reference audio labels from the Audio Index block, e.g. ["audio_1"], or HTTPS provider URLs returned by run_code Node media preparation. Use for voice identity, beat sync, pacing, or music reference. Mention each one as <<<audio_N>>> in story_prompt. Supported by SeeDance models, Wan 3.0, and MiniMax H3.'),
+        reference_voice_ids: z.array(z.string()).max(3).optional().describe('Grok Imagine Video 1.5 preset xAI voice ids, e.g. ["eve"] or ["eve","leo"]. Reference them as <AUDIO_0>, <AUDIO_1> in story_prompt. Do not use Audio Index labels or uploaded URLs here.'),
+        video_ref_url: z.string().optional().describe('External reference video URL (from workspace/skill assets via list_files). For timeline videos, just use <<<media_N>>> — they are auto-routed. Only use this for external URLs not in Media Index. SeeDance 2.0 video references must be <=50MB, width/height 300-6000px, aspect ratio 0.4-2.5, frame pixels 409,600-2,086,876. Seedance 2.5 accepts .mp4/.mov <=200MB, width/height 300-6000px, frame pixels 409,600-8,295,044, 4-30s each and <=30s total. MiniMax H3 video references must be <=50MB, width/height 256-5760px, aspect ratio 0.4-2.5, with at most 3 videos totaling <=15s. Kling video references must be <=200MB and <=2K; no explicit lower resolution is documented. Google Omni accepts one reference video in Makaron. Grok edit accepts one MP4 up to 8.7 seconds; Grok extend accepts one MP4 from 2 to 15 seconds.'),
+        video_ref_type: z.enum(['base', 'feature']).optional().describe('How to use an external reference video. feature (default): reference motion/style. base: direct edit. For Gemini Omni or Seedance 2.5 continuation, also set video_operation="extend". Timeline videos are auto-routed from <<<media_N>>>.'),
         keep_original_sound: z.boolean().optional().describe('Keep audio from reference video. Default: false.'),
         motion_control: z.boolean().optional().describe('Use Kling Motion Control for precise action transfer from reference video. Requires video_ref_url. Duration = reference video length. No detailed prompt needed — just a title. Kling only.'),
         character_orientation: z.enum(['image', 'video']).optional().describe('For motion_control: match photo orientation (image, ≤10s) or video orientation (video, ≤30s). Default: image.'),
-        video_operation: z.enum(['generate', 'edit', 'extend']).optional().describe('Seedance 2.5 typed operation. edit/extend require a video reference.'),
-        extend_direction: z.enum(['forward', 'backward']).optional().describe('Direction for Seedance 2.5 video extension.'),
+        video_operation: z.enum(['generate', 'edit', 'extend']).optional().describe('Typed video operation. Grok, Gemini Omni, and Seedance 2.5 support edit/extend; both require a video reference. Grok edit preserves source duration/aspect and caps output at 720p; Grok extend adds 2-10s.'),
+        extend_direction: z.enum(['forward', 'backward']).optional().describe('Direction for Seedance 2.5 video extension. Gemini Omni only extends forward.'),
         generate_audio: z.boolean().optional().describe('Generate synchronized native audio; Seedance 2.5 defaults to true.'),
         content_filter: z.boolean().optional().describe('Seedance 2.5 output content filter. Default true. Set false only after explicit user confirmation, including the Mature Mode recovery action; it costs 10% more. Never infer or auto-enable Mature Mode from prompt wording.'),
         output_format: z.enum(['mp4', 'mov']).optional().describe('MP4 for playback or MOV for grading.'),
@@ -1514,7 +1532,7 @@ Hard constraints:
           policy: z.enum(['confirm', 'auto']).optional().describe('confirm = show an action for the user to click. auto is reserved for explicitly authorized end-to-end workflows. Default confirm.'),
         })).optional().describe('Optional next-step actions to show when this async video finishes. Use this for intermediate artifacts such as a generated segment that should later be merged, or generated clips that can be assembled. Do not use it for ordinary final videos.'),
       }),
-      execute: async ({ story_prompt, duration, aspect_ratio, model, video_resolution, media_refs, audio_refs, video_ref_url, video_ref_type, keep_original_sound, motion_control, character_orientation, video_operation, extend_direction, generate_audio, content_filter, output_format, web_search, completion_actions }) => serializeVideoSubmission(async () => {
+      execute: async ({ story_prompt, duration, aspect_ratio, model, video_resolution, media_refs, audio_refs, reference_voice_ids, video_ref_url, video_ref_type, keep_original_sound, motion_control, character_orientation, video_operation, extend_direction, generate_audio, content_filter, output_format, web_search, completion_actions }) => serializeVideoSubmission(async () => {
         // Refresh base64 → URL from DB before video submission
         await refreshSnapshotUrls(ctx);
         // GUI animation mode: use animationImageUrls; CUI mode: use full snapshotImages (no filter — preserve index alignment)
@@ -1542,7 +1560,7 @@ Hard constraints:
           resolution: videoSelection.resolution,
         });
         if (!imageUrls?.length && !video_ref_url && !supportsNativeTextToVideo(videoModel)) {
-          return { success: false as const, message: `${videoRoute.label} requires an image or video reference. Use SeeDance or MiniMax H3 for native text-to-video.` };
+          return { success: false as const, message: `${videoRoute.label} requires an image or video reference. Use SeeDance, Wan 3.0, Grok Imagine Video, Gemini Omni, or MiniMax H3 for native text-to-video.` };
         }
         let reservedVideoCredits = 0;
         const reservationToolName = videoModel === 'grok' ? 'create_video_grok' : 'create_video';
@@ -1552,12 +1570,12 @@ Hard constraints:
           if (resolvedAudioRefs.error) {
             return { success: false as const, message: resolvedAudioRefs.error };
           }
-          if (resolvedAudioRefs.audioUrls.length > 0 && videoRoute.provider !== 'seedance' && videoRoute.provider !== 'minimax' && videoRoute.provider !== 'fal-sync') {
+          if (resolvedAudioRefs.audioUrls.length > 0 && videoRoute.provider !== 'seedance' && videoRoute.provider !== 'mulerouter' && videoRoute.provider !== 'minimax' && videoRoute.provider !== 'fal-sync') {
             return {
               success: false as const,
               message: videoRoute.provider === 'google-omni'
                 ? 'Google Omni can generate native audio from the prompt, but uploaded audio_refs are not enabled in the current API. Choose seedance-fast, seedance-mini, or seedance for audio_refs, or remove audio_refs and describe the soundtrack for Omni.'
-                : 'Reference audio is only supported by Seedance video models or MiniMax H3, except exact replacement audio with Sync Lipsync v3. Choose a compatible model or remove audio_refs.',
+                : 'Reference audio is only supported by Seedance video models, Wan 3.0, or MiniMax H3, except exact replacement audio with Sync Lipsync v3. Choose a compatible model or remove audio_refs.',
             };
           }
 
@@ -1593,6 +1611,7 @@ Hard constraints:
           )];
           const autoVideoUrls: string[] = [];
           const sourceVideoSnapshotIds: string[] = [];
+          let googleOmniPreviousInteractionId: string | undefined;
           const videoRefIndices = new Set<number>();
           let totalVideoRefDuration = 0;
           const referenceVideoMetas: Array<{ width?: number | null; height?: number | null; fileSizeBytes?: number | null }> = [];
@@ -1611,6 +1630,15 @@ Hard constraints:
                   autoVideoUrls.push(videoUrl);
                   videoRefIndices.add(ref);
                   if (snap.id) sourceVideoSnapshotIds.push(snap.id);
+                  const sourceTaskId = typeof meta?.taskId === 'string' ? meta.taskId : '';
+                  if (
+                    videoModel === 'google-omni'
+                    && video_operation === 'extend'
+                    && sourceTaskId.startsWith('google-omni-')
+                    && !sourceTaskId.startsWith('google-omni-job-')
+                  ) {
+                    googleOmniPreviousInteractionId = sourceTaskId.slice('google-omni-'.length);
+                  }
                   referenceVideoMetas.push({
                     width: Number.isFinite(Number(meta?.width)) ? Number(meta?.width) : null,
                     height: Number.isFinite(Number(meta?.height)) ? Number(meta?.height) : null,
@@ -1642,19 +1670,36 @@ Hard constraints:
             };
           }
           const allVideoUrls = [...(video_ref_url ? [video_ref_url] : []), ...autoVideoUrls];
-          if (video_ref_url && autoVideoUrls.length > 0 && videoModel !== 'seedance-2.5') {
+          if (video_ref_url && autoVideoUrls.length > 0 && videoModel !== 'seedance-2.5' && videoModel !== 'wan-3.0' && videoModel !== 'wan-3.0-prime') {
             return {
               success: false as const,
               message: 'Do not mix video_ref_url with timeline video markers in one generation. For a local segment edit, pass only the extracted segment as video_ref_url and remove any <<<media_N>>> markers that point to timeline videos.',
             };
           }
           const referenceVideoDuration = totalVideoRefDuration > 0 ? totalVideoRefDuration : undefined;
+          const isGoogleOmniStatefulExtend = Boolean(
+            videoModel === 'google-omni'
+            && video_operation === 'extend'
+            && googleOmniPreviousInteractionId
+            && allVideoUrls.length === 1
+          );
+          if (isGoogleOmniStatefulExtend) {
+            console.log(`[generate_animation] using Google Omni stateful extension lineage from ${sourceVideoSnapshotIds[0] || 'timeline video'}`);
+          }
+          if (isGoogleOmniStatefulExtend && (referenceVideoDuration ?? 0) + (duration ?? 10) > 40) {
+            return {
+              success: false as const,
+              message: 'Google Omni can extend a generated video up to 40 seconds cumulatively.',
+            };
+          }
           const modelError = validateVideoModelRequest({
             model: videoModel,
             resolution: videoRoute.resolution,
             aspectRatio: selectedAspectRatio,
             outputDuration: isSeedance25Edit ? -1 : duration,
-            referenceVideoDuration,
+            referenceVideoDuration: isGoogleOmniStatefulExtend
+              ? Math.min(referenceVideoDuration ?? 10, 10)
+              : referenceVideoDuration,
             referenceVideoMetas: referenceVideoMetas.length ? referenceVideoMetas : undefined,
             hasVideoReference: allVideoUrls.length > 0,
             videoReferenceCount: allVideoUrls.length,
@@ -1671,10 +1716,11 @@ Hard constraints:
             requestedDuration: isSeedance25Edit ? undefined : duration,
             referenceVideoDuration,
             model: videoModel,
+            operation: video_operation,
           });
           let providerVideoRefUrl = video_ref_url;
           let providerAutoVideoUrls = autoVideoUrls;
-          if (allVideoUrls.length > 0 && ctx.userId && ctx.projectId) {
+          if (allVideoUrls.length > 0 && ctx.userId && ctx.projectId && !isGoogleOmniStatefulExtend) {
             const { prepareProviderVideoReferences } = await import('@/lib/provider-video-reference');
             const referenceSupabase = ctx.supabase || (await import('@/lib/supabase/service')).getSupabaseAdmin();
             const prepared = await prepareProviderVideoReferences({
@@ -1690,8 +1736,12 @@ Hard constraints:
             providerVideoRefUrl = video_ref_url ? prepared.urls[0] : undefined;
             providerAutoVideoUrls = video_ref_url ? prepared.urls.slice(1) : prepared.urls;
           }
+          if (isGoogleOmniStatefulExtend) {
+            providerVideoRefUrl = undefined;
+            providerAutoVideoUrls = [];
+          }
 
-          const createVideoInput = {
+          const createVideoInput: Parameters<typeof createVideo>[0] = {
             script: story_prompt,
             images: imageUrls,
             duration: effectiveDuration,
@@ -1707,12 +1757,15 @@ Hard constraints:
             motionControl: motion_control,
             characterOrientation: character_orientation,
             audioUrls: resolvedAudioRefs.audioUrls.length ? resolvedAudioRefs.audioUrls : undefined,
+            referenceVoiceIds: reference_voice_ids,
             videoOperation: video_operation,
+            previousInteractionId: isGoogleOmniStatefulExtend ? googleOmniPreviousInteractionId : undefined,
             videoExtendDirection: extend_direction,
             generateAudio: generate_audio,
             contentFilter: content_filter,
             outputFormat: output_format,
             webSearch: web_search,
+            userId: ctx.userId,
           };
           const isGoogleOmniAsync = videoRoute.provider === 'google-omni';
           if (isGoogleOmniAsync && !ctx.userId) {
@@ -1724,22 +1777,23 @@ Hard constraints:
             .map(ref => originalImageUrlsByIndex[ref - 1])
             .filter((u): u is string => !!u && u.startsWith('http') && !u.endsWith('.mp4'));
           const videoSec = effectiveDuration || 10;
-          const creditsRequired = estimateVideoCredits({
+          const creditsRequired = getRequiredVideoCredits({
             model: videoModel,
             resolution: videoRoute.resolution,
             durationSec: videoSec,
             imageCount: referencedImageUrls.length,
-            referenceVideoDurationSec: referenceVideoDuration,
+            referenceVideoDurationSec: isGoogleOmniStatefulExtend
+              ? Math.min(referenceVideoDuration ?? 10, 10)
+              : referenceVideoDuration,
+            operation: video_operation,
             contentFilter: content_filter,
-          }) ?? Math.ceil(videoSec * 22);
+          });
 
-          if (ctx.userId) {
+          const reserveGrokApiCredits = async () => {
+            if (!ctx.userId || reservedVideoCredits > 0) return;
             const creditCheck = await requireCredits(ctx.userId, creditsRequired);
             if (!creditCheck.ok) {
-              return {
-                success: false as const,
-                message: `Insufficient credits. This video needs ${creditsRequired} credits, but the current balance is ${creditCheck.balance}.`,
-              };
+              throw new Error(`Insufficient credits. This video needs ${creditsRequired} credits, but the current balance is ${creditCheck.balance}.`);
             }
             try {
               const reservation = await deductFixedCredits(
@@ -1752,12 +1806,20 @@ Hard constraints:
               reservedVideoCredits = reservation.charged;
             } catch (error) {
               if (isInsufficientCreditsError(error)) {
-                return {
-                  success: false as const,
-                  message: `Insufficient credits. This video needs ${error.required} credits, but the current balance is ${error.balance}.`,
-                };
+                throw new Error(`Insufficient credits. This video needs ${error.required} credits, but the current balance is ${error.balance}.`);
               }
               throw error;
+            }
+          };
+          const grokSubscriptionPreferred = videoModel === 'grok'
+            && isGrokSubscriptionAllowedUser(ctx.userId);
+          if (grokSubscriptionPreferred) {
+            createVideoInput.onBeforeGrokApiFallback = reserveGrokApiCredits;
+          } else if (ctx.userId) {
+            try {
+              await reserveGrokApiCredits();
+            } catch (error) {
+              return { success: false as const, message: error instanceof Error ? error.message : String(error) };
             }
           }
 
@@ -1819,12 +1881,19 @@ Hard constraints:
             sourceSnapshotIds: sourceVideoSnapshotIds,
             sourceUrls: sourceUrls.length > 0 ? sourceUrls : (originalFirstUrl ? [originalFirstUrl] : []),
             status: skillResult.status === 'completed' && skillResult.videoUrl ? 'completed' : 'processing',
-            duration: effectiveDuration || null,
+            duration: resolvePersistedVideoDuration({
+              model: actualVideoModel,
+              operation: video_operation,
+              outputDuration: effectiveDuration,
+              referenceVideoDuration,
+            }) || null,
             model: actualVideoModel as import('@/types').VideoModel,
             resolution: actualVideoRoute.resolution,
             aspectRatio: selectedAspectRatio,
             providerModel: skillResult.providerModel || actualVideoRoute.providerModel,
             providerMode: actualVideoRoute.providerMode,
+            provider: skillResult.provider,
+            operation: video_operation || 'generate',
             contentFilter: actualVideoModel === 'seedance-2.5' ? content_filter !== false : undefined,
             providerUrl: skillResult.videoUrl,
             createdAt: new Date().toISOString(),
@@ -1857,12 +1926,13 @@ Hard constraints:
           }
           reservedVideoCredits = 0;
 
-          const providerCostUsd = estimateVideoProviderCostUsd({
+          const providerCostUsd = skillResult.provider === 'grok-subscription' ? undefined : estimateVideoProviderCostUsd({
             model: actualVideoModel,
             resolution: actualVideoRoute.resolution,
             durationSec: videoSec,
             imageCount: referencedImageUrls.length,
             referenceVideoDurationSec: referenceVideoDuration,
+            operation: video_operation,
             contentFilter: content_filter,
           });
           if (providerCostUsd != null) videoMeta.providerCostUsd = providerCostUsd;
@@ -1947,16 +2017,24 @@ function createAnalyzeImageTool(
         }
 
         const buf = await fetchImageBuffer(imageSource, { maxBytes: 600_000, maxPx: 1024, quality: 75 });
-        if (!runtime.spec.supportsImageInput) {
+        const analysisProvider = resolveAnalyzeImageProvider(runtime);
+        if (analysisProvider === 'gemini-api') {
           const { analyzeImageContent } = await import('./gemini');
           const analysis = await analyzeImageContent(
             `data:image/jpeg;base64,${buf.toString('base64')}`,
             question,
             ctx.userId,
           );
-          return { analysis, question };
+          console.log(`[analyze_image] provider=gemini-api agentProvider=${runtime.spec.provider} mode=fallback`);
+          return { analysis, question, analysisProvider };
         }
-        return { base64Data: buf.toString('base64'), mimeType: 'image/jpeg', question };
+        console.log(`[analyze_image] provider=${runtime.spec.provider} model=${runtime.spec.providerModelId} mode=in-model`);
+        return {
+          base64Data: buf.toString('base64'),
+          mimeType: 'image/jpeg',
+          question,
+          analysisProvider,
+        };
       },
 
       toModelOutput({ output }: { output: any }) {

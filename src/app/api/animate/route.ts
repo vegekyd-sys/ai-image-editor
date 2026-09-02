@@ -4,11 +4,13 @@ import { createVideo } from '@/lib/skills/create-video'
 import { filterAndRemapImages } from '@/lib/kling'
 import {
   deductFixedCredits,
+  InsufficientCreditsError,
   isInsufficientCreditsError,
   refundCredits,
   requireCredits,
 } from '@/lib/billing/credits'
-import { estimateVideoCredits, getVideoModelCapability, normalizeVideoModelId, resolveVideoGenerationRoute, supportsNativeTextToVideo } from '@/lib/video-model-capabilities'
+import { getRequiredVideoCredits, getVideoModelCapability, normalizeVideoModelId, resolveVideoGenerationRoute, resolveVideoOutputDuration, supportsNativeTextToVideo } from '@/lib/video-model-capabilities'
+import { isGrokSubscriptionAllowedUser } from '@/lib/grok-subscription'
 
 export const maxDuration = 1800
 
@@ -19,7 +21,7 @@ export async function POST(req: NextRequest) {
     const user = session?.user
     if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
 
-    const { projectId, imageUrls, prompt, duration, aspectRatio, videoModel, videoResolution } = await req.json()
+    const { projectId, imageUrls, prompt, duration, aspectRatio, videoModel, videoResolution, videoOperation, videoExtendDirection } = await req.json()
     const selectedVideoModel = normalizeVideoModelId(videoModel)
     const videoCapability = getVideoModelCapability(selectedVideoModel)
     const videoRoute = resolveVideoGenerationRoute({ model: selectedVideoModel, resolution: videoResolution })
@@ -73,7 +75,12 @@ export async function POST(req: NextRequest) {
     if (referenceVideoDuration != null && referenceVideoDuration > videoCapability.maxReferenceVideoDuration + 0.5) {
       return NextResponse.json({ error: `Reference video duration too long (${referenceVideoDuration.toFixed(1).replace(/\.0$/, '')}s). Maximum ${videoCapability.maxReferenceVideoDuration}s with small metadata tolerance.` }, { status: 400 })
     }
-    const effectiveDuration = duration ?? (referenceVideoDuration != null ? Math.min(videoCapability.maxOutputDuration, Math.round(referenceVideoDuration)) : undefined)
+    const effectiveDuration = resolveVideoOutputDuration({
+      requestedDuration: duration,
+      referenceVideoDuration,
+      model: selectedVideoModel,
+      operation: videoOperation,
+    })
     let providerAutoVideoUrls = autoVideoUrls
     if (autoVideoUrls.length > 0) {
       const { prepareProviderVideoReferences } = await import('@/lib/provider-video-reference')
@@ -92,37 +99,33 @@ export async function POST(req: NextRequest) {
 
     const { filteredImages, finalPrompt } = filterAndRemapImages(prompt, inputImageUrls, videoCapability.maxImageReferences ?? 7)
     const videoSec = effectiveDuration || 10
-    const creditsRequired = estimateVideoCredits({
+    const creditsRequired = getRequiredVideoCredits({
       model: selectedVideoModel,
       resolution: videoRoute.resolution,
       durationSec: videoSec,
       imageCount: filteredImages.length,
       referenceVideoDurationSec: referenceVideoDuration,
-    }) ?? Math.ceil(videoSec * 22)
+      operation: videoOperation,
+    })
     const toolName = selectedVideoModel === 'grok' ? 'create_video_grok' : 'create_video'
-    const creditCheck = await requireCredits(user.id, creditsRequired)
-    if (!creditCheck.ok) return creditCheck.response
-
     let reservedCredits = 0
-    try {
-      const reservation = await deductFixedCredits(
-        user.id,
-        creditsRequired,
-        toolName,
-        selectedVideoModel,
-        undefined,
-      )
+    const reserveApiCredits = async () => {
+      if (reservedCredits > 0) return
+      const creditCheck = await requireCredits(user.id, creditsRequired)
+      if (!creditCheck.ok) throw new InsufficientCreditsError(creditCheck.balance, creditsRequired)
+      const reservation = await deductFixedCredits(user.id, creditsRequired, toolName, selectedVideoModel, undefined)
       reservedCredits = reservation.charged
-    } catch (error) {
-      if (isInsufficientCreditsError(error)) {
-        return NextResponse.json({
-          error: 'insufficient_credits',
-          balance: error.balance,
-          needed: error.required,
-          action: 'topup',
-        }, { status: 402 })
+    }
+    const grokSubscriptionPreferred = selectedVideoModel === 'grok' && isGrokSubscriptionAllowedUser(user.id)
+    if (!grokSubscriptionPreferred) {
+      try {
+        await reserveApiCredits()
+      } catch (error) {
+        if (isInsufficientCreditsError(error)) {
+          return NextResponse.json({ error: 'insufficient_credits', balance: error.balance, needed: error.required, action: 'topup' }, { status: 402 })
+        }
+        throw error
       }
-      throw error
     }
 
     try {
@@ -136,6 +139,10 @@ export async function POST(req: NextRequest) {
         videoUrls: providerAutoVideoUrls.length ? providerAutoVideoUrls : undefined,
         referenceVideoDuration,
         referenceVideoMetas: referenceVideoMetas.length ? referenceVideoMetas : undefined,
+        videoOperation,
+        videoExtendDirection,
+        userId: user.id,
+        onBeforeGrokApiFallback: grokSubscriptionPreferred ? reserveApiCredits : undefined,
       })
 
       if (!skillResult.success || !skillResult.taskId) {
@@ -172,10 +179,18 @@ export async function POST(req: NextRequest) {
       if (error) throw error
 
       reservedCredits = 0
-      return NextResponse.json({ animationId: animation.id, taskId })
+      return NextResponse.json({ animationId: animation.id, taskId, provider: skillResult.provider })
     } catch (error) {
       if (reservedCredits > 0) {
         await refundCredits(user.id, reservedCredits, toolName)
+      }
+      if (isInsufficientCreditsError(error)) {
+        return NextResponse.json({
+          error: 'insufficient_credits',
+          balance: error.balance,
+          needed: error.required,
+          action: 'topup',
+        }, { status: 402 })
       }
       throw error
     }

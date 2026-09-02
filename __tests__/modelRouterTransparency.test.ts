@@ -51,4 +51,32 @@ describe('transparent image routing', () => {
       failedModels: ['openai'],
     });
   });
+
+  it('preserves the actual subscription provider for billing and provenance', async () => {
+    mockedGetBackend.mockReturnValue({
+      id: 'openai',
+      canHandle: () => true,
+      generate: vi.fn().mockResolvedValue({
+        image: 'data:image/png;base64,cG5n',
+        provider: 'codex-subscription',
+        usage: {
+          inputTokens: 0,
+          outputTokens: 0,
+          modelId: 'gpt-image-2',
+          provider: 'codex-subscription',
+        },
+      }),
+    });
+
+    await expect(generateImage({
+      prompt: 'A product poster.',
+      model: 'openai',
+      codexSubscription: { userId: 'allowed-user', projectId: 'project-1' },
+    })).resolves.toMatchObject({
+      image: 'data:image/png;base64,cG5n',
+      model: 'openai',
+      provider: 'codex-subscription',
+      usage: { provider: 'codex-subscription' },
+    });
+  });
 });

@@ -43,7 +43,8 @@ describe('agent terminal contract wiring', () => {
     expect(agentSource).not.toContain('shouldCompleteDurableStudioRun');
     expect(agentSource).not.toContain('shouldHandoffToStudioComposition');
     expect(agentSource).not.toContain("code: 'studio_stage_handoff'");
-    expect(agentSource).toContain('&& !options?.execution');
+    expect(agentSource).toContain('const durableContinuation = Boolean(options?.execution && options.execution.attemptNo > 1)');
+    expect(agentSource).toContain('if (!durableContinuation) delete (allTools as Record<string, unknown>).execution_checkpoint');
     expect(agentSource).not.toContain("code: 'studio_run_incomplete'");
     expect(agentSource).not.toContain("code: 'skill_video_submission_pending'");
     expect(agentSource).toContain("run.status !== 'running'");
@@ -112,7 +113,14 @@ describe('agent terminal contract wiring', () => {
     expect(executionRunnerSource).toContain("status: 'handed_off'");
     expect(executionRunnerSource).toContain('next_attempt_at: new Date().toISOString()');
     expect(executionRunnerSource).toContain('shouldFailoverAzureGPT56ToOpenRouter');
-    expect(executionRunnerSource).toContain("resolveAgentModelSpec(requestedModel.id, undefined, 'openrouter')");
+    expect(executionRunnerSource).toContain('shouldFailoverCodexSubscriptionToApi');
+    expect(executionRunnerSource).toContain('isSafeToEnterSubscriptionApiFallback');
+    expect(executionRunnerSource).toContain('shouldFailoverGrokSubscriptionToApi');
+    expect(executionRunnerSource).toContain("fallbackSafety: 'pending'");
+    expect(executionRunnerSource).toContain('attemptSafetyMetadata()');
+    expect(executionRunnerSource).toContain('attemptMetadataError');
+    expect(executionRunnerSource).toContain('.limit(policy.maxAttempts)');
+    expect(executionRunnerSource).toContain('resolveAgentModelSpec(requestedModel.id, undefined, failoverProvider)');
     expect(executionRunnerSource).toContain('agentProvider: resolvedModel.provider');
   });
 

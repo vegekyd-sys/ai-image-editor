@@ -3,8 +3,17 @@
 import { useCallback, useEffect, useId, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { useLocale } from '@/lib/i18n';
+import AgentProviderGroupHeader from './AgentProviderGroupHeader';
 import { getAgentModels } from '@/lib/model-registry';
-import type { AgentModelPreference } from '@/lib/agent-models';
+import {
+  getCodexSubscriptionAgentModelId,
+  getCodexSubscriptionAgentModelPreference,
+  GROK_SUBSCRIPTION_AGENT_MODEL_PREFERENCE,
+  isCodexSubscriptionAgentModelPreference,
+  isGrokSubscriptionAgentModelPreference,
+  type AgentModelPreference,
+  type GPT56AgentModelId,
+} from '@/lib/agent-models';
 
 interface AgentModelChipProps {
   value: AgentModelPreference;
@@ -14,10 +23,36 @@ interface AgentModelChipProps {
 
 interface PanelPosition {
   left: number;
-  bottom: number;
+  top?: number;
+  bottom?: number;
   width: number;
   maxHeight: number;
   mobile: boolean;
+}
+
+interface SubscriptionUsageState {
+  status: 'idle' | 'loading' | 'available' | 'unavailable';
+  codexAvailable?: boolean;
+  grokAvailable?: boolean;
+  defaultProvider?: 'azure-openai' | 'codex-subscription';
+  codex?: {
+    available: boolean;
+    planType?: string | null;
+    weekly?: PlanUsage | null;
+  };
+  grok?: {
+    available: boolean;
+    planType?: string | null;
+    usage?: PlanUsage | null;
+  };
+}
+
+interface PlanUsage {
+  usedPercent: number;
+  remainingPercent: number;
+  windowDurationMins?: number;
+  resetsAt?: number;
+  periodType?: string;
 }
 
 function ModelGlyph({ size = 16 }: { size?: number }) {
@@ -31,18 +66,73 @@ function ModelGlyph({ size = 16 }: { size?: number }) {
 }
 
 export default function AgentModelChip({ value, onChange, disabled = false }: AgentModelChipProps) {
-  const { t } = useLocale();
+  const { locale, t } = useLocale();
   const [open, setOpen] = useState(false);
   const [position, setPosition] = useState<PanelPosition | null>(null);
+  const [subscriptionUsage, setSubscriptionUsage] = useState<SubscriptionUsageState>({ status: 'idle' });
   const triggerRef = useRef<HTMLButtonElement>(null);
   const panelRef = useRef<HTMLDivElement>(null);
   const scrollRef = useRef<HTMLDivElement>(null);
   const panelId = useId();
   const models = getAgentModels();
-  const selected = models.find(model => model.id === value);
-  const label = value === 'auto'
-    ? `Auto · ${t('model.gpt56Terra.name')}`
-    : selected ? t(selected.nameKey as Parameters<typeof t>[0]) : value;
+  const selectedModelId = isCodexSubscriptionAgentModelPreference(value)
+    ? getCodexSubscriptionAgentModelId(value)
+    : isGrokSubscriptionAgentModelPreference(value)
+    ? 'grok-4.6'
+    : value;
+  const selected = models.find(model => model.id === selectedModelId);
+  const ownerDefaultsToCodex = subscriptionUsage.defaultProvider === 'codex-subscription';
+  const label = isCodexSubscriptionAgentModelPreference(value) && selected
+    ? `${t(selected.nameKey as Parameters<typeof t>[0])} · ${t('model.codexSubscription.suffix')}`
+    : isGrokSubscriptionAgentModelPreference(value) && selected
+    ? `${t(selected.nameKey as Parameters<typeof t>[0])} · ${t('model.grokSubscription.suffix')}`
+    : value === 'auto'
+    ? `Auto · ${t('model.gpt56Terra.name')} · ${ownerDefaultsToCodex ? t('model.codexSubscription.suffix') : t('model.azureApiBadge')}`
+    : selected
+      ? `${t(selected.nameKey as Parameters<typeof t>[0])}${selected.id.startsWith('gpt-5.6-') ? ` · ${t('model.azureApiBadge')}` : selected.id === 'grok-4.6' ? ` · ${t('model.openRouterApiBadge')}` : ''}`
+      : value;
+
+  useEffect(() => {
+    const controller = new AbortController();
+    setSubscriptionUsage({ status: 'loading' });
+    fetch('/api/agent/subscription-usage', {
+      signal: controller.signal,
+      cache: 'no-store',
+    })
+      .then(async (response) => {
+        const payload = await response.json().catch(() => ({})) as {
+          available?: boolean;
+          grokAvailable?: boolean;
+          defaultProvider?: SubscriptionUsageState['defaultProvider'];
+          planType?: string | null;
+          weekly?: PlanUsage | null;
+          codex?: SubscriptionUsageState['codex'];
+          grok?: SubscriptionUsageState['grok'];
+        };
+        if (!payload.available && !payload.grokAvailable) {
+          setSubscriptionUsage({ status: 'unavailable', codexAvailable: false, grokAvailable: false, defaultProvider: payload.defaultProvider });
+          return;
+        }
+        setSubscriptionUsage({
+          status: response.ok ? 'available' : 'unavailable',
+          codexAvailable: Boolean(payload.available),
+          grokAvailable: Boolean(payload.grokAvailable),
+          defaultProvider: payload.defaultProvider,
+          codex: payload.codex ?? {
+            available: Boolean(payload.available),
+            planType: payload.planType,
+            weekly: payload.weekly,
+          },
+          grok: payload.grok ?? { available: Boolean(payload.grokAvailable) },
+        });
+      })
+      .catch((error) => {
+        if ((error as Error).name !== 'AbortError') {
+          setSubscriptionUsage({ status: 'unavailable' });
+        }
+      });
+    return () => controller.abort();
+  }, []);
 
   const updatePosition = useCallback(() => {
     const trigger = triggerRef.current;
@@ -50,14 +140,20 @@ export default function AgentModelChip({ value, onChange, disabled = false }: Ag
     const rect = trigger.getBoundingClientRect();
     const mobile = window.innerWidth < 640;
     const width = mobile ? window.innerWidth - 24 : 320;
-    const bottom = Math.max(10, window.innerHeight - rect.top + 10);
-    const maxHeight = mobile
-      ? Math.max(260, Math.min(window.innerHeight * 0.62, rect.top - 20))
-      : Math.max(260, Math.min(480, rect.top - 16));
+    const edgeGap = 10;
+    const triggerGap = 10;
+    const availableAbove = Math.max(0, rect.top - edgeGap - triggerGap);
+    const availableBelow = Math.max(0, window.innerHeight - rect.bottom - edgeGap - triggerGap);
+    const preferredHeight = mobile ? window.innerHeight * 0.62 : 480;
+    const openBelow = availableAbove < 260 && availableBelow > availableAbove;
+    const availableHeight = openBelow ? availableBelow : availableAbove;
+    const maxHeight = Math.max(80, Math.min(preferredHeight, availableHeight));
+    const top = openBelow ? rect.bottom + triggerGap : undefined;
+    const bottom = openBelow ? undefined : window.innerHeight - rect.top + triggerGap;
     const left = mobile
       ? 12
       : Math.min(Math.max(8, rect.left), window.innerWidth - width - 8);
-    setPosition({ left, bottom, width, maxHeight, mobile });
+    setPosition({ left, top, bottom, width, maxHeight, mobile });
   }, []);
 
   useEffect(() => {
@@ -112,17 +208,118 @@ export default function AgentModelChip({ value, onChange, disabled = false }: Ag
     window.requestAnimationFrame(() => triggerRef.current?.focus());
   };
 
-  const options = [
-    {
-      id: 'auto',
-      name: `Auto · ${t('model.gpt56Terra.name')}`,
-      desc: t('model.agentAutoDesc'),
-    },
-    ...models.map(model => ({
-      id: model.id,
+  const formatResetTime = (seconds: number) => new Intl.DateTimeFormat(locale, {
+    month: 'short',
+    day: 'numeric',
+    hour: '2-digit',
+    minute: '2-digit',
+  }).format(new Date(seconds * 1_000));
+
+  const azureOptions = models
+    .filter(model => model.id.startsWith('gpt-5.6-'))
+    .map((model) => ({
+      id: model.id as AgentModelPreference,
       name: t(model.nameKey as Parameters<typeof t>[0]),
       desc: t(model.descKey as Parameters<typeof t>[0]),
-    })),
+    }));
+  const codexSubscriptionVisible = (subscriptionUsage.status !== 'unavailable' && subscriptionUsage.codexAvailable !== false)
+    || isCodexSubscriptionAgentModelPreference(value);
+  const codexSubscriptionOptions: Array<{ id: AgentModelPreference; name: string; desc: string }> = codexSubscriptionVisible
+    ? models
+      .filter(model => model.id.startsWith('gpt-5.6-'))
+      .map(model => ({
+        id: getCodexSubscriptionAgentModelPreference(model.id as GPT56AgentModelId),
+        name: `${t(model.nameKey as Parameters<typeof t>[0])} · ${t('model.codexSubscription.suffix')}`,
+        desc: t(model.descKey as Parameters<typeof t>[0]),
+      }))
+    : [];
+  const grokSubscriptionVisible = (subscriptionUsage.status !== 'unavailable' && subscriptionUsage.grokAvailable !== false)
+    || isGrokSubscriptionAgentModelPreference(value);
+  const grokSubscriptionOptions: Array<{ id: AgentModelPreference; name: string; desc: string }> = [];
+  if (grokSubscriptionVisible) {
+    const grok = models.find(model => model.id === 'grok-4.6');
+    if (grok) {
+      grokSubscriptionOptions.push({
+        id: GROK_SUBSCRIPTION_AGENT_MODEL_PREFERENCE,
+        name: `${t(grok.nameKey as Parameters<typeof t>[0])} · ${t('model.grokSubscription.suffix')}`,
+        desc: t('model.grokSubscription.desc'),
+      });
+    }
+  }
+  const otherOptions = models
+    .filter(model => !model.id.startsWith('gpt-5.6-'))
+    .map(model => ({
+      id: model.id as AgentModelPreference,
+      name: model.id === 'grok-4.6'
+        ? `${t(model.nameKey as Parameters<typeof t>[0])} · ${t('model.openRouterApiBadge')}`
+        : t(model.nameKey as Parameters<typeof t>[0]),
+      desc: t(model.descKey as Parameters<typeof t>[0]),
+    }));
+
+  const codexUsageLabel = subscriptionUsage.status === 'loading' || subscriptionUsage.status === 'idle'
+    ? t('model.codexSubscription.checking')
+    : subscriptionUsage.status === 'available' && subscriptionUsage.codex?.weekly
+      ? `${t('model.codexSubscription.remaining', String(Math.round(subscriptionUsage.codex.weekly.remainingPercent)))}${subscriptionUsage.codex.weekly.resetsAt ? ` · ${t('model.codexSubscription.resetsAt', formatResetTime(subscriptionUsage.codex.weekly.resetsAt))}` : ''}`
+      : t('model.codexSubscription.usageUnavailable');
+  const grokUsageLabel = subscriptionUsage.status === 'loading' || subscriptionUsage.status === 'idle'
+    ? t('model.grokSubscription.checking')
+    : subscriptionUsage.status === 'available' && subscriptionUsage.grok?.usage
+      ? `${t('model.grokSubscription.remaining', String(Math.round(subscriptionUsage.grok.usage.remainingPercent)))}${subscriptionUsage.grok.usage.resetsAt ? ` · ${t('model.grokSubscription.resetsAt', formatResetTime(subscriptionUsage.grok.usage.resetsAt))}` : ''}`
+      : subscriptionUsage.grok?.planType
+        ? subscriptionUsage.grok.planType
+        : subscriptionUsage.grokAvailable
+          ? t('model.grokSubscription.usageUnavailable')
+          : t('model.grokSubscription.available');
+  const codexWeekly = subscriptionUsage.status === 'available'
+    ? subscriptionUsage.codex?.weekly
+    : undefined;
+  const grokUsage = subscriptionUsage.status === 'available'
+    ? subscriptionUsage.grok?.usage
+    : undefined;
+
+  const optionGroups = [
+    {
+      id: 'azure',
+      label: t('model.agentGroup.azure'),
+      detail: t('model.agentGroup.azureDesc'),
+      options: [
+        ...(!ownerDefaultsToCodex ? [{
+          id: 'auto' as AgentModelPreference,
+          name: `Auto · ${t('model.gpt56Terra.name')}`,
+          desc: t('model.agentAutoDesc'),
+        }] : []),
+        ...azureOptions,
+      ],
+    },
+    ...(codexSubscriptionOptions.length > 0 ? [{
+      id: 'codex',
+      label: t('model.agentGroup.codex'),
+      detail: codexUsageLabel,
+      progress: subscriptionUsage.status === 'available'
+        ? codexWeekly?.remainingPercent
+        : undefined,
+      options: [
+        ...(ownerDefaultsToCodex ? [{
+          id: 'auto' as AgentModelPreference,
+          name: `Auto · ${t('model.gpt56Terra.name')}`,
+          desc: t('model.agentAutoCodexDesc'),
+        }] : []),
+        ...codexSubscriptionOptions,
+      ],
+    }] : []),
+    ...(grokSubscriptionOptions.length > 0 ? [{
+      id: 'grok',
+      label: t('model.agentGroup.grok'),
+      detail: grokUsageLabel,
+      progress: grokUsage?.remainingPercent,
+      options: grokSubscriptionOptions,
+    }] : []),
+    ...(otherOptions.length > 0 ? [{
+      id: 'other',
+      label: t('model.agentGroup.other'),
+      detail: t('model.agentGroup.otherDesc'),
+      options: otherOptions,
+    }] : []),
   ];
 
   return (
@@ -164,6 +361,7 @@ export default function AgentModelChip({ value, onChange, disabled = false }: Ag
             data-mobile={position.mobile}
             style={{
               left: position.left,
+              top: position.top,
               bottom: position.bottom,
               width: position.width,
               maxHeight: position.maxHeight,
@@ -179,26 +377,63 @@ export default function AgentModelChip({ value, onChange, disabled = false }: Ag
               role="radiogroup"
               onTouchMove={(event) => event.stopPropagation()}
             >
-              {options.map(model => {
-                const active = value === model.id;
-                return (
-                  <button
-                    key={model.id}
-                    type="button"
-                    role="radio"
-                    aria-checked={active}
-                    onClick={() => choose(model.id as AgentModelPreference)}
-                    className="mkr-create-model-option"
-                    data-active={active}
-                  >
-                    <span className="mkr-create-model-copy">
-                      <span className="mkr-create-model-name">{model.name}</span>
-                      <span className="mkr-create-model-desc">{model.desc}</span>
-                    </span>
-                    <span className="mkr-create-model-check" aria-hidden="true" />
-                  </button>
-                );
-              })}
+              {optionGroups.map(group => (
+                <section key={group.id} className="mkr-agent-model-group">
+                  <AgentProviderGroupHeader
+                    provider={group.id as 'azure' | 'codex' | 'grok' | 'other'}
+                    label={group.label}
+                    detail={group.detail}
+                    remainingLabel={group.id === 'codex' && codexWeekly
+                      ? t('model.codexSubscription.remainingShort', String(Math.round(codexWeekly.remainingPercent)))
+                      : group.id === 'grok' && grokUsage
+                        ? t('model.grokSubscription.remainingShort', String(Math.round(grokUsage.remainingPercent)))
+                        : undefined}
+                    resetLabel={group.id === 'codex' && codexWeekly?.resetsAt
+                      ? t('model.codexSubscription.resetsAt', formatResetTime(codexWeekly.resetsAt))
+                      : group.id === 'grok' && grokUsage?.resetsAt
+                        ? t('model.grokSubscription.resetsAt', formatResetTime(grokUsage.resetsAt))
+                        : undefined}
+                    progress={group.progress}
+                    usageTestId={group.id === 'codex'
+                      ? 'codex-subscription-usage'
+                      : group.id === 'grok'
+                        ? 'grok-subscription-usage'
+                        : undefined}
+                  />
+                  {group.options.map(model => {
+                    const active = value === model.id;
+                    const isCodexSubscription = isCodexSubscriptionAgentModelPreference(model.id)
+                      || (model.id === 'auto' && ownerDefaultsToCodex);
+                    const isGrokSubscription = isGrokSubscriptionAgentModelPreference(model.id);
+                    return (
+                      <button
+                        key={model.id}
+                        type="button"
+                        role="radio"
+                        aria-checked={active}
+                        onClick={() => choose(model.id as AgentModelPreference)}
+                        className="mkr-create-model-option"
+                        data-active={active}
+                        data-agent-provider={isCodexSubscription
+                          ? 'codex-subscription'
+                          : isGrokSubscription
+                          ? 'grok-subscription'
+                          : model.id.startsWith('gpt-5.6-') || model.id === 'auto'
+                          ? 'azure-openai'
+                          : model.id === 'grok-4.6'
+                          ? 'openrouter'
+                          : undefined}
+                      >
+                        <span className="mkr-create-model-copy">
+                          <span className="mkr-create-model-name">{model.name}</span>
+                          <span className="mkr-create-model-desc">{model.desc}</span>
+                        </span>
+                        <span className="mkr-create-model-check" aria-hidden="true" />
+                      </button>
+                    );
+                  })}
+                </section>
+              ))}
             </div>
           </div>
         </div>,

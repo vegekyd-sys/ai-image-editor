@@ -215,6 +215,13 @@ export default function ProjectEditorContainer({
     if (p) sessionStorage.removeItem('pendingPrompt')
     return p
   })
+  const [pendingAgentRunId] = useState<string | null>(() => {
+    if (typeof window === 'undefined') return null
+    const key = `pendingAgentRun:${projectId}`
+    const runId = sessionStorage.getItem(key)
+    if (runId) sessionStorage.removeItem(key)
+    return runId
+  })
   const [pendingSkill] = useState<string | null>(() => {
     if (typeof window === 'undefined') return null
     if (pendingLaunch?.skill) return pendingLaunch.skill
@@ -503,6 +510,7 @@ export default function ProjectEditorContainer({
         pendingVideos={!readOnly ? (pendingVideos ?? undefined) : undefined}
         pendingMetadata={!readOnly ? pendingMetadata : undefined}
         pendingPrompt={!readOnly ? (pendingPrompt ?? undefined) : undefined}
+        pendingAgentRunId={!readOnly ? (pendingAgentRunId ?? undefined) : undefined}
         pendingSkill={!readOnly ? (pendingSkill ?? undefined) : undefined}
         pendingSkillLaunchContext={!readOnly ? pendingSkillLaunchContext : undefined}
         onSaveSnapshot={!readOnly ? handleSaveSnapshot : undefined}

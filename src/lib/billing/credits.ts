@@ -83,27 +83,45 @@ export async function requireCredits(
   if (!(await isBillingEnabled())) return { ok: true, balance: 0 }
   await expireAppleTrialCredits(userId)
   const admin = getSupabaseAdmin()
-  let { data } = await admin
+  const balanceResult = await admin
     .from('credit_balances')
     .select('balance')
     .eq('user_id', userId)
     .single()
+  let data = balanceResult.data
+  const balanceError = balanceResult.error
+
+  // A transient read failure must never be interpreted as a zero balance.
+  // PGRST116 is the expected "no row" response from .single().
+  if (balanceError && balanceError.code !== 'PGRST116') {
+    throw new Error(`Could not read credit balance: ${balanceError.message}`)
+  }
 
   // Auto-initialize for users without a credit_balances row (e.g. old users)
   if (!data) {
     const welcomeCredits = await getConfiguredWelcomeCredits(admin)
     if (welcomeCredits > 0) {
-      await addCredits(userId, welcomeCredits)
-      try {
-        await admin.from('credit_purchases').insert({
-          user_id: userId, stripe_session_id: `welcome_auto_${Date.now()}`,
-          credits: welcomeCredits, amount_usd: 0, status: 'completed', source: 'welcome',
-        })
-      } catch { /* ignore duplicate */ }
+      const { error } = await admin.rpc('claim_welcome_credits', {
+        p_user_id: userId,
+        p_credits: welcomeCredits,
+        p_channel: 'legacy_auto',
+      })
+      if (error) throw new Error(`Could not initialize welcome credits: ${error.message}`)
     } else {
-      await admin.from('credit_balances').upsert({ user_id: userId, balance: 0, lifetime_purchased: 0, lifetime_used: 0 }, { onConflict: 'user_id' })
+      const { error } = await admin.from('credit_balances').upsert({
+        user_id: userId,
+        balance: 0,
+        lifetime_purchased: 0,
+        lifetime_used: 0,
+      }, { onConflict: 'user_id', ignoreDuplicates: true })
+      if (error) throw new Error(`Could not initialize credit balance: ${error.message}`)
     }
-    const { data: fresh } = await admin.from('credit_balances').select('balance').eq('user_id', userId).single()
+    const { data: fresh, error: freshError } = await admin
+      .from('credit_balances')
+      .select('balance')
+      .eq('user_id', userId)
+      .single()
+    if (freshError) throw new Error(`Could not read initialized credit balance: ${freshError.message}`)
     data = fresh
   }
 
@@ -292,32 +310,6 @@ export async function getBalance(userId: string): Promise<{ balance: number; lif
     lifetimePurchased: data?.lifetime_purchased ?? 0,
     lifetimeUsed: data?.lifetime_used ?? 0,
   }
-}
-
-/**
- * Add credits to a user's balance (after Stripe payment).
- */
-export async function addCredits(userId: string, credits: number): Promise<number> {
-  const admin = getSupabaseAdmin()
-  const { data } = await admin
-    .from('credit_balances')
-    .select('balance, lifetime_purchased')
-    .eq('user_id', userId)
-    .single()
-
-  const newBalance = (data?.balance ?? 0) + credits
-  const newPurchased = (data?.lifetime_purchased ?? 0) + credits
-
-  await admin
-    .from('credit_balances')
-    .upsert({
-      user_id: userId,
-      balance: newBalance,
-      lifetime_purchased: newPurchased,
-      updated_at: new Date().toISOString(),
-    }, { onConflict: 'user_id' })
-
-  return newBalance
 }
 
 export async function grantCreditsAndRecordPurchase(params: {

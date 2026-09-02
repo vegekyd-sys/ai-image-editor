@@ -31,8 +31,9 @@ export async function GET(
     }
 
     // Poll task — route by taskId prefix or env var
-    // task-unified-* = Evolink SeeDance, cgt-* = SeeDance (Volcengine), mc-* = Motion Control, xai-* = Grok, google-omni-* = Gemini Omni, minimax-h3-* = MiniMax H3, else = Kling
+    // task-unified-* = Evolink SeeDance, mr-wan30-* = MuleRouter Wan, cgt-* = SeeDance (Volcengine), mc-* = Motion Control, xai-* = Grok, google-omni-* = Gemini Omni, minimax-h3-* = MiniMax H3, else = Kling
     const isEvolink = taskId.startsWith('task-unified-')
+    const isMuleRouter = taskId.startsWith('mr-wan30-')
     const isSeedance = taskId.startsWith('cgt-')
     const isMotionControl = taskId.startsWith('mc-')
     const isXai = taskId.startsWith('xai-')
@@ -42,8 +43,22 @@ export async function GET(
     const provider = process.env.ANIMATE_PROVIDER || 'kling'
     let result: { taskId: string; status: string; videoUrl?: string; error?: string }
     const realTaskId = isMotionControl ? taskId.slice(3) : taskId
+    let grokOwnerUserId: string | undefined
+    if (taskId.startsWith('xai-sub-')) {
+      const admin = getSupabaseAdmin()
+      const { data: ownerRow } = await admin
+        .from('project_animations')
+        .select('projects(user_id)')
+        .eq('piapi_task_id', taskId)
+        .maybeSingle()
+      const projects = ownerRow?.projects as any
+      grokOwnerUserId = Array.isArray(projects) ? projects[0]?.user_id : projects?.user_id
+    }
 
-    if (isEvolink) {
+    if (isMuleRouter) {
+      const { getMuleRouterVideoTask } = await import('@/lib/mulerouter-video')
+      result = await getMuleRouterVideoTask(taskId)
+    } else if (isEvolink) {
       const { getEvolinkTask } = await import('@/lib/evolink')
       result = await getEvolinkTask(taskId)
     } else if (isSeedance) {
@@ -55,7 +70,7 @@ export async function GET(
       result.taskId = taskId // preserve mc- prefix for frontend
     } else if (isXai) {
       const { getXaiVideoTask } = await import('@/lib/xai-video')
-      result = await getXaiVideoTask(taskId)
+      result = await getXaiVideoTask(taskId, grokOwnerUserId)
     } else if (isGoogleOmni) {
       const admin = getSupabaseAdmin()
       const { data: anim } = await admin

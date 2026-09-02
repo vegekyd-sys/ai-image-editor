@@ -7,7 +7,11 @@ import { getKlingTask as getKlingTaskPiAPI } from '@/lib/piapi'
 import { uploadVideo, isPermanentUrl } from '@/lib/supabase/storage'
 import type { VideoMeta } from '@/types'
 import { buildVideoFailureActions } from '@/lib/artifact-actions'
-import { getRemotionExportJob, runRemotionExportJob } from '@/lib/remotion-export'
+import {
+  drainRemotionExportQueue,
+  getRemotionExportJob,
+  shouldRunRemotionExportInline,
+} from '@/lib/remotion-export'
 import { getRequestLocale } from '@/lib/server-locale'
 
 export const maxDuration = 1800
@@ -21,12 +25,10 @@ function getProjectInfo(projects: SnapshotProject | null | undefined) {
 function runRemotionExportAfterResponse(jobId: string) {
   after(async () => {
     try {
-      await runRemotionExportJob(jobId)
+      if (!shouldRunRemotionExportInline()) return
+      await drainRemotionExportQueue({ source: `video-snapshot:${jobId}` })
     } catch (err) {
-      const message = err instanceof Error ? err.message : String(err)
-      if (!message.includes('already rendering')) {
-        console.error(`[video-snapshot] Remotion export worker failed for ${jobId}:`, err)
-      }
+      console.error(`[video-snapshot] Remotion export queue drain failed after ${jobId}:`, err)
     }
   })
 }
@@ -232,8 +234,9 @@ export async function GET(
     }
 
     // Poll provider — route by taskId prefix
-    // task-unified-* = Evolink SeeDance, cgt-* = SeeDance (Volcengine), mc-* = Motion Control, xai-* = Grok, google-omni-* = Gemini Omni, minimax-h3-* = MiniMax H3, else = Kling
+    // task-unified-* = Evolink SeeDance, mr-wan30-* = MuleRouter Wan, cgt-* = SeeDance (Volcengine), mc-* = Motion Control, xai-* = Grok, google-omni-* = Gemini Omni, minimax-h3-* = MiniMax H3, else = Kling
     const isEvolink = videoMeta.taskId.startsWith('task-unified-')
+    const isMuleRouter = videoMeta.taskId.startsWith('mr-wan30-')
     const isSeedance = videoMeta.taskId.startsWith('cgt-')
     const isMotionControl = videoMeta.taskId.startsWith('mc-')
     const isXai = videoMeta.taskId.startsWith('xai-')
@@ -244,7 +247,10 @@ export async function GET(
     let result: { taskId: string; status: string; videoUrl?: string; error?: string }
     const realTaskId = isMotionControl ? videoMeta.taskId.slice(3) : videoMeta.taskId
 
-    if (isEvolink) {
+    if (isMuleRouter) {
+      const { getMuleRouterVideoTask } = await import('@/lib/mulerouter-video')
+      result = await getMuleRouterVideoTask(videoMeta.taskId)
+    } else if (isEvolink) {
       const { getEvolinkTask } = await import('@/lib/evolink')
       result = await getEvolinkTask(videoMeta.taskId)
     } else if (isSeedance) {
@@ -256,7 +262,7 @@ export async function GET(
       result.taskId = videoMeta.taskId
     } else if (isXai) {
       const { getXaiVideoTask } = await import('@/lib/xai-video')
-      result = await getXaiVideoTask(videoMeta.taskId)
+      result = await getXaiVideoTask(videoMeta.taskId, ownerUserId)
     } else if (isGoogleOmni) {
       if (videoMeta.taskId.startsWith('google-omni-job-') && !videoMeta.videoUrl && !videoMeta.providerUrl) {
         const {

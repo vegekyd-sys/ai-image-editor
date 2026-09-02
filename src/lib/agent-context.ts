@@ -66,6 +66,10 @@ export interface PromptContextOptions {
   agentModelProvider?: AgentModelProvider;
   /** Durable server attempt after attempt 1. It retains the same conversation history. */
   durableContinuation?: boolean;
+  /** Trusted run objective already loaded by the durable worker. */
+  executionObjective?: string;
+  /** Trusted acceptance criteria already loaded by the durable worker. */
+  executionAcceptanceCriteria?: unknown;
 }
 
 export interface PromptContextResult {
@@ -359,7 +363,7 @@ export async function buildPromptContext(
   // in parallel. Audio is a separate project-scoped index; it never occupies
   // Timeline Media Index slots like <<<media_N>>>.
   const studioRunStore = new WorkspaceStudioRunStore(supabase, userId);
-  const executionSnapshotPromise = options.executionRunId
+  const executionSnapshotPromise = options.executionRunId && options.durableContinuation
     ? supabase
         .from('agent_context_snapshots')
         .select('content, run_id')
@@ -368,13 +372,19 @@ export async function buildPromptContext(
         .limit(1)
         .maybeSingle()
     : Promise.resolve({ data: null, error: null });
-  const executionRunPromise = options.executionRunId
+  const executionRunPromise = options.executionRunId && !options.executionObjective
       ? supabase
         .from('agent_runs')
         .select('objective, prompt, acceptance_criteria')
         .eq('id', options.executionRunId)
         .maybeSingle()
-    : Promise.resolve({ data: null, error: null });
+      : Promise.resolve({
+          data: options.executionRunId ? {
+            objective: options.executionObjective,
+            acceptance_criteria: options.executionAcceptanceCriteria,
+          } : null,
+          error: null,
+        });
   const projectCompactionPromise = supabase
     .from('agent_context_snapshots')
     .select('content, run_id, created_at')
@@ -408,7 +418,9 @@ export async function buildPromptContext(
       .eq('user_id', userId)
       .order('started_at', { ascending: false })
       .limit(10),
-    studioRunStore.listRuns(projectId).catch(() => []),
+    options.durableContinuation
+      ? studioRunStore.listRuns(projectId).catch(() => [])
+      : Promise.resolve([]),
     executionSnapshotPromise,
     executionRunPromise,
     projectCompactionPromise,

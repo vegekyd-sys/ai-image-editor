@@ -65,8 +65,9 @@ function dedupeLegacyVideos<T extends { videoUrl?: string; taskId?: string }>(it
   return result;
 }
 
-async function pollVideoProvider(taskId: string): Promise<{ taskId: string; status: string; videoUrl?: string; error?: string }> {
+async function pollVideoProvider(taskId: string, userId?: string): Promise<{ taskId: string; status: string; videoUrl?: string; error?: string }> {
   const isEvolink = taskId.startsWith('task-unified-');
+  const isMuleRouter = taskId.startsWith('mr-wan30-');
   const isSeedance = taskId.startsWith('cgt-');
   const isMotionControl = taskId.startsWith('mc-');
   const isXai = taskId.startsWith('xai-');
@@ -75,7 +76,10 @@ async function pollVideoProvider(taskId: string): Promise<{ taskId: string; stat
   const isSyncLipsync = taskId.startsWith('sync3-');
   const realTaskId = isMotionControl ? taskId.slice(3) : taskId;
 
-  if (isEvolink) {
+  if (isMuleRouter) {
+    const { getMuleRouterVideoTask } = await import('@/lib/mulerouter-video');
+    return getMuleRouterVideoTask(taskId);
+  } else if (isEvolink) {
     const { getEvolinkTask } = await import('@/lib/evolink');
     return getEvolinkTask(taskId);
   } else if (isSeedance) {
@@ -87,7 +91,7 @@ async function pollVideoProvider(taskId: string): Promise<{ taskId: string; stat
     return { ...result, taskId };
   } else if (isXai) {
     const { getXaiVideoTask } = await import('@/lib/xai-video');
-    return getXaiVideoTask(taskId);
+    return getXaiVideoTask(taskId, userId);
   } else if (isGoogleOmni) {
     const { getGoogleOmniVideoTask } = await import('@/lib/google-omni-video');
     return getGoogleOmniVideoTask(taskId);
@@ -122,14 +126,41 @@ export async function GET(
   try {
     const { id: runId } = await params;
     const admin = getSupabaseAdmin();
-    const authResult = await authenticateRequest(req);
+    const url = new URL(req.url);
+    const wantEvents = url.searchParams.get('events') === 'true';
+    const streamView = wantEvents && url.searchParams.get('view') === 'stream';
+    const afterSeq = url.searchParams.has('after') ? parseInt(url.searchParams.get('after')!) : undefined;
+
+    let streamEventsQuery = admin
+      .from('agent_events')
+      .select('type, data, seq, created_at')
+      .eq('run_id', runId)
+      .order('seq')
+      .limit(1000);
+    if (afterSeq !== undefined) streamEventsQuery = streamEventsQuery.gt('seq', afterSeq);
+
+    // Authentication, run ownership, and incremental events are independent
+    // reads. Start them together so the CUI stream view costs one network
+    // round-trip instead of serializing the same Supabase latency.
+    const [authResult, runResult, streamEventsResult, latestStreamEventResult] = await Promise.all([
+      authenticateRequest(req),
+      admin.from('agent_runs')
+        .select('id, status, prompt, started_at, ended_at, metadata, project_id, user_id, execution_policy, lease_expires_at, next_attempt_at, projects(is_public)')
+        .eq('id', runId)
+        .single(),
+      streamView ? streamEventsQuery : Promise.resolve({ data: undefined, error: null }),
+      streamView
+        ? admin.from('agent_events')
+            .select('created_at')
+            .eq('run_id', runId)
+            .order('created_at', { ascending: false })
+            .limit(1)
+            .maybeSingle()
+        : Promise.resolve({ data: undefined, error: null }),
+    ]);
     const authUserId = 'auth' in authResult ? authResult.auth.userId : null;
     const hasBearerAuth = req.headers.get('authorization')?.startsWith('Bearer ') ?? false;
-
-    const { data: run } = await admin.from('agent_runs')
-      .select('id, status, prompt, started_at, ended_at, metadata, project_id, user_id, execution_policy, lease_expires_at, next_attempt_at, projects(is_public)')
-      .eq('id', runId)
-      .single();
+    const run = runResult.data;
 
     if (!run) {
       return NextResponse.json({ error: 'Run not found' }, { status: 404 });
@@ -152,13 +183,15 @@ export async function GET(
     // that failure observable: after the lease expires, atomically close the
     // run and preserve the latest saved write_file draft as a resume point.
     if (run.status === 'running') {
-      const { data: lastEvent } = await admin
-        .from('agent_events')
-        .select('created_at')
-        .eq('run_id', runId)
-        .order('created_at', { ascending: false })
-        .limit(1)
-        .maybeSingle();
+      const { data: lastEvent } = streamView
+        ? latestStreamEventResult
+        : await admin
+            .from('agent_events')
+            .select('created_at')
+            .eq('run_id', runId)
+            .order('created_at', { ascending: false })
+            .limit(1)
+            .maybeSingle();
       const lastActivityAt = Date.parse(lastEvent?.created_at || run.started_at || '') || 0;
       if (lastActivityAt > 0 && Date.now() - lastActivityAt > getAgentRunStaleMs()) {
         const executionPolicy = run.execution_policy as Record<string, unknown> | null;
@@ -210,9 +243,19 @@ export async function GET(
       }
     }
 
-    const url = new URL(req.url);
-    const wantEvents = url.searchParams.get('events') === 'true';
-    const afterSeq = url.searchParams.has('after') ? parseInt(url.searchParams.get('after')!) : undefined;
+    if (streamView) {
+      const metadata = (run.metadata as Record<string, unknown> | null) ?? {};
+      const terminal = metadata.terminal as { message?: string } | undefined;
+      return NextResponse.json({
+        id: run.id,
+        status: run.status,
+        ...(run.status !== 'running' ? { agent_status: run.status } : {}),
+        first_message_id: metadata.firstMessageId,
+        events: streamEventsResult.data ?? [],
+        ...(run.status === 'running' ? { next_poll_after_ms: 250 } : {}),
+        ...(terminal?.message ? { error: { code: 'agent_error', message: terminal.message } } : {}),
+      });
+    }
 
     const { count: eventCount } = await admin
       .from('agent_events')
@@ -533,7 +576,7 @@ export async function GET(
               // Actively poll provider API
               try {
                 const taskId = videoMeta.taskId as string;
-                const pollResult = await pollVideoProvider(taskId);
+                const pollResult = await pollVideoProvider(taskId, ownerUserId);
                 if (pollResult.status === 'completed' && pollResult.videoUrl) {
                   const updatedMeta = { ...videoMeta, status: 'completed', videoUrl: pollResult.videoUrl };
                   await admin.from('snapshots')
@@ -617,7 +660,7 @@ export async function GET(
             if (anim.status === 'processing') {
               try {
                 const taskId = v.task_id as string;
-                const result = await pollVideoProvider(taskId);
+                const result = await pollVideoProvider(taskId, ownerUserId);
                 if (result.status === 'completed' && result.videoUrl) {
                   const admin = getSupabaseAdmin();
                   await admin.from('project_animations')

@@ -1,10 +1,17 @@
 import type { SupabaseClient } from '@supabase/supabase-js';
 import { runMakaronAgent, type AgentStreamEvent } from './agent';
 import { AgentDualWriter } from './agentDualWriter';
+import { AgentPerf } from './agent-perf';
 import { buildPromptContext } from './agent-context';
 import { getSupabaseAdmin } from './supabase/service';
 import { deductByTokens } from './billing/credits';
-import { resolveAgentModelSpec, type AgentModelPreference } from './agent-models';
+import {
+  resolveAgentModelSpec,
+  resolveAgentModelSpecForUser,
+  resolveCodexSubscriptionFallbackProvider,
+  shouldRequireAgentCredits,
+  type AgentModelPreference,
+} from './agent-models';
 import {
   AgentExecutionStore,
   buildRecoverablePreflightInstruction,
@@ -15,7 +22,10 @@ import {
   DEFAULT_MAX_ATTEMPTS,
   getAgentContextPolicy,
   isConfirmedExecutionLeaseLoss,
+  isSafeToEnterSubscriptionApiFallback,
   MAX_SAME_PROVIDER_ATTEMPTS,
+  shouldFailoverCodexSubscriptionToApi,
+  shouldFailoverGrokSubscriptionToApi,
   shouldFailoverAzureGPT56ToOpenRouter,
   normalizeExecutionSnapshot,
   shouldScheduleNextAttempt,
@@ -30,6 +40,7 @@ import {
   loadPendingAgentInputs,
   markAgentRunInputsApplied,
 } from './agent-run-admission';
+import { isDynamicCodexSubscriptionUserAllowed } from './codex-subscription-allowlist';
 
 interface ExecutionRequest {
   locale?: string;
@@ -47,7 +58,12 @@ interface ExecutionRequest {
   turnMediaCount?: number;
   isNsfw?: boolean;
   audioAttachments?: Array<{ audioUrl: string; title?: string; duration?: number; trackIndex?: number }>;
+  codexSubscriptionAllowed?: boolean;
   origin?: string;
+  image?: string;
+  snapshotImages?: string[];
+  currentDesign?: Record<string, unknown>;
+  currentDesignPath?: string;
 }
 
 interface ExecutionPolicy {
@@ -287,10 +303,29 @@ async function finishAttempt(
 
 export async function runAgentExecutionAttempt(
   runId: string,
-  options: { admin?: SupabaseClient; workerId?: string; origin?: string } = {},
+  options: {
+    admin?: SupabaseClient;
+    workerId?: string;
+    origin?: string;
+    controller?: ReadableStreamDefaultController;
+    encoder?: TextEncoder;
+    requestOverrides?: Partial<ExecutionRequest>;
+    preloadedRun?: AgentRunRecord;
+    timelineVersion?: number;
+    initialClaim?: {
+      attemptId: string;
+      leaseToken: string;
+      workerId: string;
+    };
+  } = {},
 ): Promise<AgentAttemptResult> {
+  const perf = new AgentPerf('agent-execution-attempt', { runId });
   const admin = options.admin ?? getSupabaseAdmin();
-  const { data: runData } = await admin.from('agent_runs').select('*').eq('id', runId).maybeSingle();
+  const endRunLoad = perf.span('load_run');
+  const { data: runData } = options.preloadedRun?.id === runId
+    ? { data: options.preloadedRun }
+    : await admin.from('agent_runs').select('*').eq('id', runId).maybeSingle();
+  endRunLoad({ found: !!runData });
   const run = runData as AgentRunRecord | null;
   if (!run || run.status !== 'running') return { claimed: false, runId };
   const inputVersionAtAttemptStart = run.input_version || 0;
@@ -311,39 +346,97 @@ export async function runAgentExecutionAttempt(
   }
 
   const workerId = options.workerId || `worker-${crypto.randomUUID()}`;
-  const { data: claimData, error: claimError } = await admin.rpc('claim_agent_execution', {
-    p_run_id: runId,
-    p_worker_id: workerId,
-    p_lease_seconds: policy.leaseSeconds,
-  });
-  if (claimError) throw new Error(`Failed to claim Agent execution: ${claimError.message}`);
-  const claim = (Array.isArray(claimData) ? claimData[0] : claimData) as ClaimedExecution | undefined;
+  let claim: ClaimedExecution | undefined;
+  if (options.initialClaim && options.preloadedRun?.id === runId) {
+    claim = {
+      run_id: runId,
+      lease_token: options.initialClaim.leaseToken,
+      attempt_no: 1,
+      user_id: run.user_id,
+      project_id: run.project_id,
+      objective: run.objective || run.prompt || '',
+      acceptance_criteria: run.acceptance_criteria,
+      execution_policy: run.execution_policy,
+      metadata: run.metadata || null,
+    };
+    perf.mark('claim_execution_preclaimed', { workerId: options.initialClaim.workerId });
+  } else {
+    const endClaim = perf.span('claim_execution');
+    const { data: claimData, error: claimError } = await admin.rpc('claim_agent_execution', {
+      p_run_id: runId,
+      p_worker_id: workerId,
+      p_lease_seconds: policy.leaseSeconds,
+    });
+    endClaim({ ok: !claimError });
+    if (claimError) throw new Error(`Failed to claim Agent execution: ${claimError.message}`);
+    claim = (Array.isArray(claimData) ? claimData[0] : claimData) as ClaimedExecution | undefined;
+  }
   if (!claim) return { claimed: false, runId };
 
   // A platform kill cannot close its attempt row. Once this worker owns the
   // execution lease, all older running attempts are definitively superseded.
   // finishAttempt only updates running rows, so a late old worker cannot
   // overwrite this terminal state.
-  await admin.from('agent_attempts').update({
-    status: 'interrupted',
-    ended_at: new Date().toISOString(),
-    terminal_code: 'lease_expired',
-  }).eq('run_id', runId).eq('status', 'running');
+  if (claim.attempt_no > 1) {
+    const endInterruptPrior = perf.span('interrupt_prior_attempts');
+    await admin.from('agent_attempts').update({
+      status: 'interrupted',
+      ended_at: new Date().toISOString(),
+      terminal_code: 'lease_expired',
+    }).eq('run_id', runId).eq('status', 'running');
+    endInterruptPrior();
+  } else {
+    perf.mark('interrupt_prior_attempts_skipped', { reason: 'first_attempt' });
+  }
 
-  const activeStudioWorkflowStage = await resolveActiveStudioWorkflowStage(admin, run);
   const workUnit = 'agent';
-  await admin.from('agent_runs').update({ current_work_unit: workUnit }).eq('id', runId).eq('lease_token', claim.lease_token);
-  const { data: attempt, error: attemptError } = await admin.from('agent_attempts').insert({
-    run_id: runId,
-    user_id: run.user_id,
-    attempt_no: claim.attempt_no,
-    work_unit_key: workUnit,
-    status: 'running',
-    lease_token: claim.lease_token,
-  }).select('id').single();
-  if (attemptError || !attempt?.id) throw new Error(`Failed to create Agent attempt: ${attemptError?.message || 'missing id'}`);
-  const attemptId = attempt.id as string;
-  const pendingInputs = await loadPendingAgentInputs(admin, runId);
+  const endAttemptSetup = perf.span('attempt_setup', { attemptNo: claim.attempt_no });
+  let activeStudioWorkflowStage: string | undefined;
+  let pendingInputs: Awaited<ReturnType<typeof loadPendingAgentInputs>> = [];
+  let attemptId: string;
+  let attemptReady: Promise<void>;
+  if (options.initialClaim && claim.attempt_no === 1) {
+    attemptId = options.initialClaim.attemptId;
+    // Reserve the ID up front so model/context preparation can proceed while
+    // the ledger insert crosses the network. Tool calls happen much later and
+    // still require this row before any durable mutation is allowed.
+    attemptReady = Promise.resolve(admin.from('agent_attempts').insert({
+      id: attemptId,
+      run_id: runId,
+      user_id: run.user_id,
+      attempt_no: claim.attempt_no,
+      work_unit_key: workUnit,
+      status: 'running',
+      lease_token: claim.lease_token,
+    })).then(({ error }) => {
+      if (error) throw new Error(`Failed to create inline Agent attempt: ${error.message}`);
+    });
+    endAttemptSetup({ activeStudioWorkflowStage: null, parallel: true });
+  } else {
+    const [, , attemptResult, loadedPendingInputs] = await Promise.all([
+      claim.attempt_no > 1
+        ? resolveActiveStudioWorkflowStage(admin, run).then(value => { activeStudioWorkflowStage = value; })
+        : Promise.resolve(),
+      claim.attempt_no > 1
+        ? admin.from('agent_runs').update({ current_work_unit: workUnit }).eq('id', runId).eq('lease_token', claim.lease_token)
+        : Promise.resolve({ error: null }),
+      admin.from('agent_attempts').insert({
+        run_id: runId,
+        user_id: run.user_id,
+        attempt_no: claim.attempt_no,
+        work_unit_key: workUnit,
+        status: 'running',
+        lease_token: claim.lease_token,
+      }).select('id').single(),
+      loadPendingAgentInputs(admin, runId),
+    ]);
+    pendingInputs = loadedPendingInputs;
+    endAttemptSetup({ activeStudioWorkflowStage: activeStudioWorkflowStage || null });
+    const { data: attempt, error: attemptError } = attemptResult;
+    if (attemptError || !attempt?.id) throw new Error(`Failed to create Agent attempt: ${attemptError?.message || 'missing id'}`);
+    attemptId = attempt.id as string;
+    attemptReady = Promise.resolve();
+  }
 
   let scaffoldResult: Awaited<ReturnType<typeof import('./studio-composition-scaffold')['ensureStudioCompositionScaffold']>> | undefined;
   let scaffoldWarning: string | undefined;
@@ -365,8 +458,24 @@ export async function runAgentExecutionAttempt(
     }
   }
 
-  const request = ((run.metadata || {}).executionRequest || {}) as ExecutionRequest;
-  const requestedModel = resolveAgentModelSpec(request.requestedAgentModel, process.env.AGENT_MODEL);
+  const request = {
+    ...(((run.metadata || {}).executionRequest || {}) as ExecutionRequest),
+    ...(options.requestOverrides || {}),
+  } satisfies ExecutionRequest;
+  // The start route resolved this authorization immediately before creating
+  // the trusted run. Reuse it within the same run instead of repeating the
+  // allowlist DB read milliseconds later; older/recovered rows still fail
+  // closed through the live lookup.
+  const codexSubscriptionAllowed = typeof request.codexSubscriptionAllowed === 'boolean'
+    ? request.codexSubscriptionAllowed
+    : await isDynamicCodexSubscriptionUserAllowed(run.user_id, admin);
+  const requestedModel = resolveAgentModelSpecForUser(
+    request.requestedAgentModel,
+    process.env.AGENT_MODEL,
+    run.user_id,
+    undefined,
+    codexSubscriptionAllowed,
+  );
   const { data: previousAttempts } = claim.attempt_no > 1
     ? await admin
         .from('agent_attempts')
@@ -374,7 +483,7 @@ export async function runAgentExecutionAttempt(
         .eq('run_id', runId)
         .lt('attempt_no', claim.attempt_no)
         .order('attempt_no', { ascending: false })
-        .limit(40)
+        .limit(policy.maxAttempts)
     : { data: [] };
   const typedPreviousAttempts = (previousAttempts || []) as Array<{
     attempt_no: number;
@@ -389,33 +498,75 @@ export async function runAgentExecutionAttempt(
   );
   const previousProviderFailover = typedPreviousAttempts.some(item => {
     const failover = item.metadata?.providerFailover;
+    const fromProvider = failover && typeof failover === 'object' && 'fromProvider' in failover
+      ? failover.fromProvider
+      : undefined;
     return Boolean(
       failover
       && typeof failover === 'object'
       && 'from' in failover
-      && failover.from === requestedModel.id,
+      && failover.from === requestedModel.id
+      && (
+        !['codex-subscription', 'grok-subscription'].includes(requestedModel.provider)
+        || fromProvider === requestedModel.provider
+      ),
     );
   });
-  const providerFailover = shouldFailoverAzureGPT56ToOpenRouter({
-    requestedProvider: requestedModel.provider,
-    hasOpenRouterKey: Boolean(process.env.OPENROUTER_API_KEY?.trim()),
-    previousProviderFailover,
-    retryableFailureCount: requestedProviderFailureCount,
-  });
-  const providerRetry = requestedModel.provider === 'azure-openai'
+  const failoverProvider = requestedModel.provider === 'codex-subscription'
+    ? resolveCodexSubscriptionFallbackProvider()
+    : 'openrouter';
+  const hasFailoverCredential = failoverProvider === 'azure-openai'
+    ? Boolean(process.env.AZURE_OPENAI_API_KEY?.trim())
+    : Boolean(process.env.OPENROUTER_API_KEY?.trim());
+  const latestFailureDetail = latestRequestedProviderAttempt?.metadata?.terminalDetail;
+  const subscriptionFallbackSafe = requestedModel.provider === 'codex-subscription'
+    || requestedModel.provider === 'grok-subscription'
+    ? isSafeToEnterSubscriptionApiFallback(
+        typedPreviousAttempts,
+        inputVersionAtAttemptStart,
+        requestedModel.provider,
+      )
+    : false;
+  const providerFailover = requestedModel.provider === 'codex-subscription'
+    ? shouldFailoverCodexSubscriptionToApi({
+        requestedProvider: requestedModel.provider,
+        hasApiFallback: hasFailoverCredential && subscriptionFallbackSafe,
+        previousProviderFailover,
+        retryableFailureCount: requestedProviderFailureCount,
+        latestFailureDetail,
+      })
+    : requestedModel.provider === 'grok-subscription'
+    ? shouldFailoverGrokSubscriptionToApi({
+        requestedProvider: requestedModel.provider,
+        hasApiFallback: hasFailoverCredential && subscriptionFallbackSafe,
+        previousProviderFailover,
+        retryableFailureCount: requestedProviderFailureCount,
+        latestFailureDetail,
+      })
+    : shouldFailoverAzureGPT56ToOpenRouter({
+        requestedProvider: requestedModel.provider,
+        hasOpenRouterKey: Boolean(process.env.OPENROUTER_API_KEY?.trim()),
+        previousProviderFailover,
+        retryableFailureCount: requestedProviderFailureCount,
+      });
+  const providerRetry = (requestedModel.provider === 'azure-openai'
+    || requestedModel.provider === 'codex-subscription'
+    || requestedModel.provider === 'grok-subscription')
     && !providerFailover
     && requestedProviderFailureCount > 0;
   const sameProviderAttempt = Math.min(
     MAX_SAME_PROVIDER_ATTEMPTS,
     requestedProviderFailureCount + 1,
   );
-  const effectiveAgentModel = request.requestedAgentModel;
+  const effectiveAgentModel = providerFailover
+    ? requestedModel.id
+    : request.requestedAgentModel;
   const resolvedModel = providerFailover
-    ? resolveAgentModelSpec(requestedModel.id, undefined, 'openrouter')
+    ? resolveAgentModelSpec(requestedModel.id, undefined, failoverProvider)
     : requestedModel;
   const executionStore = new AgentExecutionStore(admin, run.user_id, run.project_id);
-  const previousSnapshot = await executionStore.latestSnapshot(runId);
   const continuation = claim.attempt_no > 1;
+  const previousSnapshot = continuation ? await executionStore.latestSnapshot(runId) : undefined;
   const baseAttemptPrompt = continuation
     ? `[System durable continuation] Resume execution ${runId}, attempt ${claim.attempt_no}. ${previousSnapshot?.nextAction || 'Continue the unfinished objective from durable artifacts.'}`
     : (run.objective || claim.objective || run.prompt || 'Continue the requested task.');
@@ -425,6 +576,36 @@ export async function runAgentExecutionAttempt(
     .filter(Boolean)
     .join('\n\n');
 
+  const firstMessageId = typeof run.metadata?.firstMessageId === 'string' ? run.metadata.firstMessageId : undefined;
+  const writer = new AgentDualWriter(
+    runId,
+    admin,
+    run.user_id,
+    run.project_id,
+    options.controller,
+    options.encoder,
+    continuation ? undefined : firstMessageId,
+  );
+  const writerReady = (async () => {
+    const endWriterReady = perf.span('writer_ready');
+    if (continuation) {
+      await writer.initializeSequence();
+      await writer.beginContinuationTurn();
+      await writer.persistHeartbeat();
+    } else {
+      // A new run has no persisted events, so seq=0 is already known. Reserve
+      // the heartbeat sequence synchronously, but keep its DB round-trip out
+      // of the first model request's critical path.
+      void writer.persistHeartbeat().catch(error => {
+        console.warn('[agent-execution] initial inline heartbeat failed', error);
+      });
+    }
+    endWriterReady();
+  })();
+  const projectPromise = options.timelineVersion !== undefined
+    ? Promise.resolve({ data: { timeline_version: options.timelineVersion }, error: null })
+    : Promise.resolve(admin.from('projects').select('timeline_version').eq('id', run.project_id).single());
+  const endContext = perf.span('build_prompt_context');
   const ctx = await buildPromptContext(run.project_id, admin, run.user_id, {
     userMessage: attemptPrompt,
     currentSnapshotIndex: request.currentSnapshotIndex,
@@ -435,18 +616,31 @@ export async function runAgentExecutionAttempt(
     turnMediaCount: request.turnMediaCount,
     audioAttachments: request.audioAttachments,
     currentRunId: runId,
-    executionRunId: runId,
+    // Attempt 1 already has the original objective in userMessage. Keep the
+    // verbose durable snapshot out of that model request; recovered attempts
+    // receive the full typed continuation context.
+    executionRunId: continuation ? runId : undefined,
     contextPolicy: getAgentContextPolicy(resolvedModel.id),
     agentModelId: resolvedModel.id,
     agentModelProvider: resolvedModel.provider,
     durableContinuation: continuation,
+    executionObjective: run.objective || claim.objective || run.prompt || undefined,
+    executionAcceptanceCriteria: run.acceptance_criteria,
   });
-  await admin.from('agent_attempts').update({
+  endContext({
+    promptChars: ctx.fullPrompt.length,
+    historyTurns: ctx.history.length,
+    mediaCount: ctx.snapshotImages.length,
+  });
+  const attemptMetadataPromise = attemptReady.then(() => admin.from('agent_attempts').update({
     input_token_estimate: ctx.contextStats.estimatedTokens,
     metadata: {
       context: ctx.contextStats,
       model: resolvedModel.id,
+      provider: resolvedModel.provider,
       requestedModel: requestedModel.id,
+      inputEpoch: inputVersionAtAttemptStart,
+      fallbackSafety: 'pending',
       ...(providerRetry ? {
         providerRetry: {
           model: requestedModel.id,
@@ -467,21 +661,20 @@ export async function runAgentExecutionAttempt(
       ...(scaffoldResult ? { compositionScaffold: scaffoldResult } : {}),
       ...(scaffoldWarning ? { compositionScaffoldWarning: scaffoldWarning } : {}),
     },
-  }).eq('id', attemptId);
+  }).eq('id', attemptId));
+  const [, projectResult, , attemptMetadataResult] = await Promise.all([
+    writerReady,
+    projectPromise,
+    attemptReady,
+    attemptMetadataPromise,
+  ]);
+  const { error: attemptMetadataError } = attemptMetadataResult;
+  if (attemptMetadataError) {
+    throw new Error(
+      `Failed to persist Agent attempt provider safety boundary: ${attemptMetadataError.message}`,
+    );
+  }
 
-  const firstMessageId = typeof run.metadata?.firstMessageId === 'string' ? run.metadata.firstMessageId : undefined;
-  const writer = new AgentDualWriter(
-    runId,
-    admin,
-    run.user_id,
-    run.project_id,
-    undefined,
-    undefined,
-    continuation ? undefined : firstMessageId,
-  );
-  await writer.initializeSequence();
-  if (continuation) await writer.beginContinuationTurn();
-  await writer.persistHeartbeat();
   if (scaffoldResult?.created) {
     await writer.processAndEnqueue({
       type: 'status',
@@ -510,16 +703,32 @@ export async function runAgentExecutionAttempt(
     await writer.processAndEnqueue({
       type: 'status',
       text: request.locale === 'en'
-        ? `Azure is unavailable; continuing this durable run with the same ${resolvedModel.id} model through the OpenRouter backup...`
-        : `Azure 暂不可用，当前 durable run 已通过 OpenRouter 备用线路继续使用同一 ${resolvedModel.id} 模型...`,
+        ? `${requestedModel.provider} is unavailable; continuing this durable run with the same ${resolvedModel.id} model through the ${resolvedModel.provider} API backup...`
+        : `${requestedModel.provider} 暂不可用，当前 durable run 已通过 ${resolvedModel.provider} API 备用线路继续使用同一 ${resolvedModel.id} 模型...`,
     });
   }
 
-  const { getAllSkills } = await import('./workspace');
-  const allSkills = await getAllSkills(admin, run.user_id);
-  const userSkills = allSkills.filter(skill => !skill.makaron?.builtIn);
-  const { data: project } = await admin.from('projects').select('timeline_version').eq('id', run.project_id).single();
+  const { data: project } = projectResult;
   const timelineVersion = Number(project?.timeline_version ?? 1);
+  perf.mark('model_start', { model: resolvedModel.id, provider: resolvedModel.provider });
+
+  // The inline first attempt can use in-memory media/design that has not
+  // reached Storage yet. A recovered attempt deliberately falls back to the
+  // persisted project context, which is normally available by lease expiry.
+  const attemptSnapshotImages = request.snapshotImages?.length
+    ? request.snapshotImages
+    : ctx.snapshotImages;
+  const attemptCurrentSnapshotIndex = Math.max(
+    0,
+    Math.min(
+      request.currentSnapshotIndex ?? ctx.currentSnapshotIndex,
+      Math.max(attemptSnapshotImages.length - 1, 0),
+    ),
+  );
+  const attemptImage = request.image
+    || attemptSnapshotImages[attemptCurrentSnapshotIndex]
+    || ctx.snapshotImages[ctx.currentSnapshotIndex]
+    || '';
 
   const modelAbortController = new AbortController();
   let leaseHeartbeatInFlight: Promise<void> | null = null;
@@ -556,33 +765,48 @@ export async function runAgentExecutionAttempt(
   let cacheWriteTokens = 0;
   let providerCostUsd: number | undefined;
   let billingModel = resolvedModel.billingModelId;
+  let attemptHadVisibleOutput = false;
+  let attemptDeliveredArtifact = false;
+  const attemptCommittedTools = new Set<string>();
+  const attemptSafetyMetadata = () => ({
+    model: resolvedModel.id,
+    provider: resolvedModel.provider,
+    requestedModel: requestedModel.id,
+    inputEpoch: inputVersionAtAttemptStart,
+    fallbackSafety: !attemptHadVisibleOutput
+      && !attemptDeliveredArtifact
+      && attemptCommittedTools.size === 0
+      ? 'safe'
+      : 'blocked',
+    hadVisibleOutput: attemptHadVisibleOutput,
+    deliveredArtifact: attemptDeliveredArtifact,
+    committedTools: [...attemptCommittedTools].sort(),
+  });
 
   try {
     for await (const event of runMakaronAgent(
       ctx.fullPrompt,
-      ctx.snapshotImages[ctx.currentSnapshotIndex] || '',
+      attemptImage,
       run.project_id,
       {
         locale: request.locale,
         preferredModel: request.preferredModel as any,
         agentModel: effectiveAgentModel,
-        agentProvider: resolvedModel.provider === 'azure-openai' || resolvedModel.provider === 'openrouter'
-          ? resolvedModel.provider
-          : undefined,
+        agentProvider: resolvedModel.provider === 'deepseek' ? undefined : resolvedModel.provider,
         videoModel: request.videoModel,
         videoResolution: request.videoResolution,
         videoAuto: request.videoAuto,
         skillLaunchContext: request.skillLaunchContext,
         audioAttachments: ctx.audioAttachments,
-        snapshotImages: ctx.snapshotImages,
+        snapshotImages: attemptSnapshotImages,
         explicitMediaIndices: ctx.explicitMediaIndices,
-        currentSnapshotIndex: ctx.currentSnapshotIndex,
+        currentSnapshotIndex: attemptCurrentSnapshotIndex,
         isNsfw: request.isNsfw,
-        userSkills: userSkills.length ? userSkills : undefined,
         supabase: admin,
         userId: run.user_id,
-        currentDesign: ctx.currentDesign,
-        currentDesignPath: ctx.currentDesignPath,
+        codexSubscriptionAllowed,
+        currentDesign: request.currentDesign as typeof ctx.currentDesign || ctx.currentDesign,
+        currentDesignPath: request.currentDesignPath || ctx.currentDesignPath,
         history: ctx.history,
         timelineVersion,
         abortSignal: modelAbortController.signal,
@@ -600,9 +824,47 @@ export async function runAgentExecutionAttempt(
         },
         studioWorkflowStage: activeStudioWorkflowStage,
         agentRunId: runId,
+        perf,
       },
     )) {
-      if (event.type === 'content') attemptText += event.text;
+      if (event.type === 'content') {
+        attemptText += event.text;
+        if (event.text.trim()) attemptHadVisibleOutput = true;
+      }
+      if (
+        event.type === 'reasoning_start'
+        || (event.type === 'reasoning' && Boolean(event.text.trim()))
+        || event.type === 'new_turn'
+        || event.type === 'tool_call'
+        || event.type === 'coding'
+        || (event.type === 'code_stream' && Boolean(event.text))
+        || event.type === 'image_analyzed'
+        || event.type === 'capture_frame'
+        || event.type === 'preview_frame_captured'
+      ) {
+        attemptHadVisibleOutput = true;
+      }
+      if (
+        event.type === 'image'
+        || event.type === 'animation_task'
+        || event.type === 'video_snapshot'
+        || event.type === 'render'
+        || event.type === 'composition'
+        || event.type === 'design'
+        || event.type === 'music_task'
+      ) {
+        attemptHadVisibleOutput = true;
+        attemptDeliveredArtifact = true;
+      }
+      if (event.type === 'tool_result') {
+        const output = event.output && typeof event.output === 'object'
+          ? event.output as Record<string, unknown>
+          : undefined;
+        const succeeded = output?.success !== false
+          && output?.status !== 'failed'
+          && !(output?.error && output?.success !== true);
+        if (succeeded) attemptCommittedTools.add(event.tool);
+      }
       if (event.type === 'done') sawDone = true;
       if (event.type === 'error') {
         terminal = event;
@@ -648,7 +910,8 @@ export async function runAgentExecutionAttempt(
     await writer.flush();
   }
 
-  if (inputTokens || outputTokens || cacheReadTokens || cacheWriteTokens) {
+  if (shouldRequireAgentCredits(resolvedModel.provider)
+    && (inputTokens || outputTokens || cacheReadTokens || cacheWriteTokens)) {
     void deductByTokens(
       run.user_id,
       'agent',
@@ -674,7 +937,11 @@ export async function runAgentExecutionAttempt(
     expectedLeaseToken: claim.lease_token,
   });
   if (confirmedOwnershipLoss) {
-    await finishAttempt(admin, attemptId, 'aborted', { input_tokens: inputTokens, output_tokens: outputTokens });
+    await finishAttempt(admin, attemptId, 'aborted', {
+      input_tokens: inputTokens,
+      output_tokens: outputTokens,
+      metadata: attemptSafetyMetadata(),
+    });
     return { claimed: true, runId, attemptId, attemptNo: claim.attempt_no, status: 'aborted' };
   }
   if (!currentLease.state) {
@@ -730,7 +997,11 @@ export async function runAgentExecutionAttempt(
       .maybeSingle();
     if (completionError) throw new Error(`Failed to finalize Agent execution: ${completionError.message}`);
     if (completedRun) {
-      await finishAttempt(admin, attemptId, 'completed', { input_tokens: inputTokens, output_tokens: outputTokens });
+      await finishAttempt(admin, attemptId, 'completed', {
+        input_tokens: inputTokens,
+        output_tokens: outputTokens,
+        metadata: attemptSafetyMetadata(),
+      });
       return { claimed: true, runId, attemptId, attemptNo: claim.attempt_no, status: 'completed' };
     }
 
@@ -777,9 +1048,12 @@ export async function runAgentExecutionAttempt(
       input_tokens: inputTokens,
       output_tokens: outputTokens,
       terminal_code: terminal?.code || 'missing_terminal_event',
-      ...(terminal?.checkpoint?.errorDetail
-        ? { metadata: { terminalDetail: terminal.checkpoint.errorDetail } }
-        : {}),
+      metadata: {
+        ...attemptSafetyMetadata(),
+        ...(terminal?.checkpoint?.errorDetail
+          ? { terminalDetail: terminal.checkpoint.errorDetail }
+          : {}),
+      },
     });
     await admin.from('agent_runs').update({
       current_work_unit: 'agent',
@@ -814,6 +1088,7 @@ export async function runAgentExecutionAttempt(
     input_tokens: inputTokens,
     output_tokens: outputTokens,
     terminal_code: terminal?.code || 'attempt_incomplete',
+    metadata: attemptSafetyMetadata(),
   });
   await admin.from('agent_runs').update({
     status: 'failed',

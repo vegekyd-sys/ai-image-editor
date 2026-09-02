@@ -578,6 +578,13 @@ export function makeAgentCallbacks(ctx: AgentCallbackContext) {
       // the id here would make skipRunIdRef suppress the reconnect forever.
       if (ctx.agentRunIdRef.current === runId) ctx.agentRunIdRef.current = null;
       setStatus(ctx.t('editor.reconnecting'));
+      // Wake the reconnect hook immediately. The 15s idle poll is only a
+      // fallback for runs started from another surface (for example CLI).
+      if (typeof window !== 'undefined') {
+        window.dispatchEvent(new CustomEvent('makaron-agent-disconnected', {
+          detail: { runId },
+        }));
+      }
     },
 
     onInsufficientCredits: (balance) => {

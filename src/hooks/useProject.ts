@@ -212,17 +212,21 @@ export function useProject(projectId: string, userId: string) {
 
     const animations: ProjectAnimation[] = (animationRes.data ?? []).map((row: Record<string, unknown>) => {
       const taskId = (row.piapi_task_id as string) ?? null;
-      const videoModel = taskId?.startsWith('task-unified-') || taskId?.startsWith('cgt-')
-        ? 'seedance'
-        : taskId?.startsWith('xai-')
-          ? 'grok'
-          : taskId?.startsWith('google-omni-')
-            ? 'google-omni'
-            : taskId?.startsWith('minimax-h3-')
-              ? 'minimax-h3'
-              : taskId?.startsWith('sync3-')
-                ? 'sync-lipsync-v3'
-                : 'kling';
+      const videoModel = taskId?.startsWith('mr-wan30-prime-pro-') || taskId?.startsWith('mr-wan30-prime-')
+        ? 'wan-3.0-prime'
+        : taskId?.startsWith('mr-wan30-pro-') || taskId?.startsWith('mr-wan30-')
+          ? 'wan-3.0'
+          : taskId?.startsWith('task-unified-') || taskId?.startsWith('cgt-')
+            ? 'seedance'
+            : taskId?.startsWith('xai-')
+              ? 'grok'
+              : taskId?.startsWith('google-omni-')
+                ? 'google-omni'
+                : taskId?.startsWith('minimax-h3-')
+                  ? 'minimax-h3'
+                  : taskId?.startsWith('sync3-')
+                    ? 'sync-lipsync-v3'
+                    : 'kling';
       return {
         id: row.id as string,
         projectId,

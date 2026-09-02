@@ -1,10 +1,12 @@
 'use client'
 
 import AgentCopyButton from './AgentCopyButton'
+import { useLocale } from '@/lib/i18n'
 
 const INSTALL_SKILL_COMMAND = 'npx makaron-cli setup'
 
 export default function AgentContent() {
+  const { t } = useLocale()
   return (
     <div className="makaron-ios-page makaron-ios-page-x min-h-screen w-full bg-black text-gray-200 font-mono p-6 md:p-12 overflow-hidden">
       <div className="max-w-4xl mx-auto">
@@ -162,7 +164,7 @@ npx makaron-cli music status <taskId>`}
         <h2 className="text-lg text-fuchsia-400 mb-4">Important Notes</h2>
         <ul className="list-disc list-inside space-y-1 text-sm text-gray-300">
           <li>One project = one conversation thread. All history preserved.</li>
-          <li>Provider-generated videos take 3-5 minutes; Grok is usually around 30-40 seconds. Remotion compositions should use <code className="text-fuchsia-300">materialize</code> / <code className="text-fuchsia-300">responses get --materialize</code>.</li>
+          <li>{t('agentPage.videoTimingNote')} <code className="text-fuchsia-300">materialize</code> / <code className="text-fuchsia-300">responses get --materialize</code>.</li>
           <li>Music takes ~60 seconds. Images typically 15-30 seconds.</li>
           <li>Always use <code className="text-fuchsia-300">chat</code> as primary interface — even for single edits.</li>
           <li>stdout = machine-readable JSON/text. Human-friendly logs → stderr.</li>

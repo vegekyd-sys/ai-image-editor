@@ -67,6 +67,8 @@ function formatResult(image: string, message: string, prefix: string) {
 }
 
 export interface McpServerOptions {
+  /** Authenticated Makaron owner for private subscription relay routing. */
+  userId?: string;
   /** Called after each tool completes successfully. Used for billing. */
   onToolComplete?: (
     toolName: string,
@@ -79,14 +81,18 @@ export interface McpServerOptions {
       videoModel?: string
       videoResolution?: string
       referenceVideoDurationSec?: number
+      videoOperation?: 'generate' | 'edit' | 'extend'
       contentFilter?: boolean
+      provider?: string
       seedAudioDurationSec?: number
       seedAudioProviderCredits?: number
       seedAudioGenerationSec?: number
     },
   ) => void | Promise<void>;
   /** Called before each tool executes. Return false to reject (insufficient credits). */
-  onToolStart?: (toolName: string) => Promise<{ allowed: boolean; message?: string }>;
+  onToolStart?: (toolName: string, model?: string) => Promise<{ allowed: boolean; message?: string }>;
+  /** Called only before a Grok personal-plan request safely falls back to the paid API. */
+  onBeforeGrokApiFallback?: (toolName: string, model?: string) => Promise<void>;
 }
 
 export function createMakaronMcpServer(options?: McpServerOptions) {
@@ -263,22 +269,24 @@ Tips:
     `Submit a video rendering task. Returns a taskId for polling.
 
 IMPORTANT:
-- SeeDance and MiniMax H3 support native text-to-video with no images. For image/reference generation, images must be publicly accessible URLs (not base64).
+- SeeDance, Wan 3.0, Gemini Omni 1.1, and MiniMax H3 support native text-to-video with no images. For image/reference generation, images must be publicly accessible URLs (not base64).
 - EvoLink Seedance reference images must be JPEG/PNG/WebP, width and height each 300-6000px, aspect ratio 0.4-2.5, and <=30MB each. Input errors distinguish too_small, too_large, invalid_aspect_ratio, unsupported_format, and unreadable. NON_RETRYABLE means the same URL must not be resubmitted; prepare a new compliant URL or replace the source first.
 - When images are provided, script should use <<<media_N>>> format (from makaron_write_video_script output). Text-to-video scripts should not invent media markers.
-- Provider-generated video rendering takes 3-5 minutes; Grok is usually around 30-40 seconds; Gemini Omni is usually around 30-70 seconds plus Storage handoff. Use makaron_get_video_status to poll.
-- Duration: omit for smart mode. Seedance 2.5 supports 4-30s; SeeDance 2.0 and MiniMax H3 support 4-15s; Kling supports 5-15s; Grok 1.5 supports 1-15s; Gemini Omni supports 3-10s.
-- Resolution: omit or use "auto" for the selected model default. Seedance 2.5 supports 480p/720p; minimax-h3 supports 768p/2k and defaults to 768p; seedance-fast/seedance-mini/grok support 480p/720p; seedance supports 480p/720p/1080p; kling supports 720p/1080p/4k; google-omni outputs 720p.
-- Seedance 2.5 accepts up to 30 image, 10 video, and 10 audio references, plus dedicated edit/extend modes.
+- Provider-generated video rendering takes 3-5 minutes; Grok is optimized for substantially faster generation; Gemini Omni is usually around 30-70 seconds plus Storage handoff. Use makaron_get_video_status to poll and measure the actual elapsed time.
+- Duration: omit for smart mode. Seedance 2.5 supports 4-30s; Wan 3.0 supports 2-30s; SeeDance 2.0 and MiniMax H3 support 4-15s; Kling supports 5-15s; Grok 1.5 supports 1-15s; Gemini Omni supports 3-10s.
+- Resolution: omit or use "auto" for the selected model default. wan-3.0 and wan-3.0-prime expose 480p/720p/1080p/2k/4k; 2k/4k automatically use the matching FlashVSR/Pro endpoint. Gemini Omni 1.1 supports 360p drafts, 720p native/default, and upscaled 1080p/4k; Seedance 2.5 supports 480p/720p; minimax-h3 supports 768p/2k and defaults to 768p; Grok Imagine Video 1.5 supports text-to-video at 480p/720p/1080p but caps every image/voice reference request at 720p; seedance-fast/seedance-mini support 480p/720p; seedance supports 480p/720p/1080p; kling supports 720p/1080p/4k.
+- Seedance 2.5 accepts up to 30 image, 10 video, and 10 audio references, plus dedicated edit/extend modes. Gemini Omni accepts one timeline/external video and can extend it forward for 3-10 seconds (10 seconds by default).
 
 Models:
 - seedance-fast (default) — SeeDance 2.0 Fast via Evolink, 480p/720p, default 720p
 - seedance-mini — SeeDance 2.0 Mini via Evolink, lower-cost 480p/720p route for drafts and multi-size tests
 - seedance — SeeDance 2.0 standard via Evolink, supports 480p/720p/1080p
 - seedance-2.5 — Seedance 2.5 via Evolink, 4-30s, multimodal references, native audio, edit and extend
+- wan-3.0 — Wan 3.0 via MuleRouter, 2-30s, 480p/720p/1080p/2k/4k, native audio, up to 10 image + 5 video + 5 audio feature references; 2k/4k use FlashVSR automatically
+- wan-3.0-prime — Wan 3.0 Prime fast tier via MuleRouter with the same duration, resolutions, and reference limits; 2k/4k use Prime FlashVSR automatically
 - kling — Kling v3-omni, supports 720p/1080p/4k
-- grok — Grok Video 1.5 via xAI, fastest single-image-to-video, native audio, defaults to 480p at $0.08/s + $0.01/input image
-- google-omni — Gemini Omni Flash via Google, fast image/video generation and editing, up to 6 image references without a video reference, one video reference for direct edits, native generated audio, no uploaded audio references
+- grok — one Makaron selector with split xAI routing: Grok Imagine Video 1.5 for text generation (up to 1080p) or feature/reference generation (1-7 images or preset voices, up to 720p, native audio), and Grok Imagine Video for one-video edit/extend (up to 720p)
+- google-omni — Gemini Omni 1.1 Flash via Google, fast text/image/video generation, editing, and forward extension, 360p/720p/upscaled 1080p/4k, up to 6 image references without a video reference, one video reference for edit/extend, native generated audio, no uploaded audio references
 - minimax-h3 — MiniMax H3 direct API, native text-to-video plus up to 9 image / 3 video / 3 audio references, 4-15s, public 768p/2K, default 768P
 - sync-lipsync-v3 — exact replacement-audio lip sync; requires exactly one source video and one audio URL, preserves source framing and the supplied audio
 
@@ -291,12 +299,14 @@ Style: Cinematic, warm golden light.`,
       images: z.array(z.string().url()).max(30).default([]).describe('Optional public image URLs. Seedance 2.5 accepts up to 30; older routes may accept fewer.'),
       videoUrls: z.array(z.string().url()).max(10).optional().describe('Public reference video URLs. Sync Lipsync v3 requires exactly one; Seedance 2.5 accepts up to 10 with 30 seconds combined.'),
       audioUrls: z.array(z.string().url()).max(10).optional().describe('Public reference audio URLs. Sync Lipsync v3 requires exactly one replacement track; Seedance 2.5 accepts up to 10.'),
-      duration: z.number().optional().describe('Duration in seconds. Sync Lipsync v3 follows a 2-120s source; Seedance 2.5 accepts 4-30s; SeeDance 2.0 and MiniMax H3 accept 4-15s. Omit for smart mode.'),
-      aspectRatio: z.enum(['auto', '16:9', '9:16', '1:1', '4:3', '3:4', '21:9', '3:2', '2:3']).optional().describe('Aspect ratio. Use auto/adaptive or a provider-supported ratio. Seedance supports 21:9. Grok image-to-video ignores forced ratios to avoid stretching the source image; pad the source or choose another model for a fixed final shape.'),
-      videoModel: z.enum(['seedance-fast', 'seedance-mini', 'seedance', 'seedance-2.5', 'kling', 'grok', 'google-omni', 'minimax-h3', 'sync-lipsync-v3']).optional().describe('Video model. sync-lipsync-v3 requires exactly one video and one replacement audio track.'),
-      videoResolution: z.enum(['auto', '480p', '720p', '768p', '1080p', '2k', '4k']).optional().describe('Output resolution. Use auto to follow the selected model default; MiniMax H3 supports 768p/2k and defaults to 768p.'),
-      operation: z.enum(['generate', 'edit', 'extend']).optional().describe('Seedance 2.5 operation. edit and extend require videoUrls.'),
-      extendDirection: z.enum(['forward', 'backward']).optional().describe('Seedance 2.5 extension direction.'),
+      referenceVoiceIds: z.array(z.string()).max(3).optional().describe('Grok Imagine Video 1.5 preset voice ids (up to 3), such as eve or leo. These are provider voice names, not uploaded audio URLs.'),
+      referenceVideoDuration: z.number().positive().optional().describe('Known source-video duration in seconds. Pass this for Grok edit/extend so duration validation and input-video billing match the actual source.'),
+      duration: z.number().optional().describe('Duration in seconds. Sync Lipsync v3 follows a 2-120s source; Seedance 2.5 accepts 4-30s; Wan 3.0 accepts 2-30s; SeeDance 2.0 and MiniMax H3 accept 4-15s. Omit for smart mode.'),
+      aspectRatio: z.enum(['auto', '16:9', '9:16', '1:1', '4:3', '3:4', '21:9', '3:2', '2:3']).optional().describe('Aspect ratio. Use auto/adaptive or a provider-supported ratio. Seedance supports 21:9. Grok reference-to-video supports fixed provider ratios.'),
+      videoModel: z.enum(['seedance-fast', 'seedance-mini', 'seedance', 'seedance-2.5', 'wan-3.0', 'wan-3.0-prime', 'kling', 'grok', 'google-omni', 'minimax-h3', 'sync-lipsync-v3']).optional().describe('Video model. Wan exposes wan-3.0 and wan-3.0-prime; there is no separate Pro product model. sync-lipsync-v3 requires exactly one video and one replacement audio track.'),
+      videoResolution: z.enum(['auto', '360p', '480p', '720p', '768p', '1080p', '2k', '4k']).optional().describe('Shared output-resolution control for every video model. Use auto for the model default and otherwise choose a supported value from the complete request. Grok Imagine Video 1.5 supports text-to-video at 480p/720p/1080p and caps every image/voice reference request at 720p; Gemini Omni 1.1 supports 360p/720p/1080p/4k; MiniMax H3 supports 768p/2k.'),
+      operation: z.enum(['generate', 'edit', 'extend']).optional().describe('Typed operation. Grok, Gemini Omni, and Seedance 2.5 support edit/extend; both require videoUrls. Grok and Omni extend forward only.'),
+      extendDirection: z.enum(['forward', 'backward']).optional().describe('Seedance 2.5 extension direction. Omit or use forward for Gemini Omni.'),
       generateAudio: z.boolean().optional().describe('Generate synchronized native audio. Default true for Seedance 2.5.'),
       contentFilter: z.boolean().optional().describe('Seedance 2.5 output content filter. Default true. False enables Mature Mode and costs 10% more; use only after explicit user confirmation, including the recovery action.'),
       outputFormat: z.enum(['mp4', 'mov']).optional().describe('MP4/H264 for playback or MOV for grading.'),
@@ -305,7 +315,7 @@ Style: Cinematic, warm golden light.`,
     async (params) => {
       try {
         if (options?.onToolStart) {
-          const check = await options.onToolStart('makaron_create_video');
+          const check = await options.onToolStart('makaron_create_video', params.videoModel);
           if (!check.allowed) return { content: [{ type: 'text' as const, text: check.message || 'Insufficient credits' }] };
         }
         const t0 = Date.now();
@@ -314,6 +324,8 @@ Style: Cinematic, warm golden light.`,
           images: params.images,
           videoUrls: params.videoUrls,
           audioUrls: params.audioUrls,
+          referenceVoiceIds: params.referenceVoiceIds,
+          referenceVideoDuration: params.referenceVideoDuration,
           duration: params.duration,
           aspectRatio: params.aspectRatio,
           videoModel: params.videoModel,
@@ -324,15 +336,24 @@ Style: Cinematic, warm golden light.`,
           contentFilter: params.contentFilter,
           outputFormat: params.outputFormat,
           webSearch: params.webSearch,
+          userId: options?.userId,
+          onBeforeGrokApiFallback: options?.onBeforeGrokApiFallback
+            ? () => options.onBeforeGrokApiFallback!('makaron_create_video', params.videoModel)
+            : undefined,
         });
 
         if (result.success) {
           await options?.onToolComplete?.('makaron_create_video', params.videoModel, Date.now() - t0, undefined, {
-            videoDurationSec: params.duration ?? 10,
+            videoDurationSec: params.videoModel === 'grok' && params.operation === 'edit'
+              ? (params.referenceVideoDuration ?? params.duration ?? 10)
+              : (params.duration ?? 10),
             imageCount: params.images.length,
             videoModel: params.videoModel,
             videoResolution: params.videoResolution,
+            videoOperation: params.operation,
+            referenceVideoDurationSec: params.referenceVideoDuration,
             contentFilter: params.contentFilter,
+            provider: result.provider,
           });
         }
         return { content: [{ type: 'text' as const, text: result.success
@@ -361,7 +382,7 @@ IMPORTANT:
 - When referType is "feature": the video provides style/motion reference. Images define the actual content.
 - For videoModel "seedance-fast", "seedance-mini", or "seedance", use referType "feature" (default for SeeDance). Base/direct edit is Kling-only.
 - images (if any) must be publicly accessible URLs
-- Provider-generated video rendering takes 3-5 minutes; Grok is usually around 30-40 seconds; Gemini Omni is usually around 30-70 seconds plus Storage handoff. Use makaron_get_video_status to poll.
+- Provider-generated video rendering takes 3-5 minutes; Grok is optimized for substantially faster generation; Gemini Omni is usually around 30-70 seconds plus Storage handoff. Use makaron_get_video_status to poll and measure actual elapsed time.
 
 Example: Edit a video to add cinematic color grading:
   videoUrl: "https://...", editPrompt: "Apply warm cinematic color grading with film grain", videoModel: "seedance-fast"`,
@@ -369,17 +390,17 @@ Example: Edit a video to add cinematic color grading:
       videoUrl: z.string().url().describe('Video URL to edit (MP4/MOV/WebM, target ≤15s with tiny metadata padding accepted, ≤1080p, ≤200MB)'),
       editPrompt: z.string().describe('Editing instructions describing what to change'),
       images: z.array(z.string().url()).max(7).optional().describe('Optional reference images (public URLs)'),
-      duration: z.number().optional().describe('Output duration in seconds. SeeDance accepts integer output duration 4-15s (default 5s); Kling supports 5-15s; Grok 1.5 supports 1-15s for one image but does not edit/reference videos; Gemini Omni supports 3-10s video editing in Makaron. Omit for smart mode.'),
+      duration: z.number().optional().describe('Output duration in seconds. SeeDance accepts integer output duration 4-15s (default 5s); Kling supports 5-15s; Grok edit retains a source up to 8.7s and Grok extend adds 2-10s to a 2-15s source; Gemini Omni supports 3-10s video editing in Makaron. Omit for smart mode.'),
       aspectRatio: z.enum(['auto', '16:9', '9:16', '1:1', '4:3', '3:4', '21:9', '3:2', '2:3']).optional().describe('Aspect ratio. Use auto/adaptive or a provider-supported ratio.'),
-      videoModel: z.enum(['seedance-fast', 'seedance-mini', 'seedance', 'seedance-2.5', 'kling', 'grok', 'google-omni', 'minimax-h3']).optional().describe('Video model. Seedance 2.5 uses its dedicated typed video-edit route; MiniMax H3 supports feature/reference video.'),
-      videoResolution: z.enum(['auto', '480p', '720p', '768p', '1080p', '2k', '4k']).optional().describe('Output resolution. Use auto to follow the selected model default; MiniMax H3 supports 768p/2k and defaults to 768p.'),
+      videoModel: z.enum(['seedance-fast', 'seedance-mini', 'seedance', 'seedance-2.5', 'kling', 'grok', 'google-omni', 'minimax-h3']).optional().describe('Video model. Seedance 2.5, Grok, and Google Omni use dedicated typed edit routes; MiniMax H3 supports feature/reference video.'),
+      videoResolution: z.enum(['auto', '360p', '480p', '720p', '768p', '1080p', '2k', '4k']).optional().describe('Output resolution. Grok edit retains the source shape up to 720p. Use auto to follow the selected model default; Gemini Omni 1.1 supports 360p/720p/1080p/4k, and MiniMax H3 supports 768p/2k.'),
       referType: z.enum(['base', 'feature']).optional().describe('Video role: "base" (edit this video, default) or "feature" (use as style/motion reference)'),
       keepOriginalSound: z.boolean().optional().describe('Keep original video sound (default: false)'),
     },
     async (params) => {
       try {
         if (options?.onToolStart) {
-          const check = await options.onToolStart('makaron_edit_video');
+          const check = await options.onToolStart('makaron_edit_video', params.videoModel);
           if (!check.allowed) return { content: [{ type: 'text' as const, text: check.message || 'Insufficient credits' }] };
         }
         const t0 = Date.now();
@@ -395,7 +416,11 @@ Example: Edit a video to add cinematic color grading:
           videoUrl: params.videoUrl,
           videoReferType: resolvedReferType,
           keepOriginalSound: params.keepOriginalSound ?? false,
-          videoOperation: resolvedModel === 'seedance-2.5' ? 'edit' : 'generate',
+          videoOperation: resolvedModel === 'seedance-2.5' || resolvedModel === 'grok' || resolvedModel === 'google-omni' ? 'edit' : 'generate',
+          userId: options?.userId,
+          onBeforeGrokApiFallback: options?.onBeforeGrokApiFallback
+            ? () => options.onBeforeGrokApiFallback!('makaron_edit_video', params.videoModel)
+            : undefined,
         });
 
         if (result.success) {
@@ -405,6 +430,8 @@ Example: Edit a video to add cinematic color grading:
             videoModel: resolvedModel,
             videoResolution: params.videoResolution,
             referenceVideoDurationSec: resolvedModel === 'minimax-h3' ? (params.duration ?? 10) : undefined,
+            videoOperation: resolvedModel === 'seedance-2.5' || resolvedModel === 'grok' || resolvedModel === 'google-omni' ? 'edit' : 'generate',
+            provider: result.provider,
           });
         }
         return { content: [{ type: 'text' as const, text: result.success
@@ -464,7 +491,7 @@ IMPORTANT:
 
 Status values:
 - pending: task queued
-- processing: provider rendering in progress (usually 3-5 minutes; Grok usually 30-40 seconds)
+- processing: provider rendering in progress (usually 3-5 minutes; Grok generation is optimized for substantially lower latency)
 - completed: done, videoUrl available
 - failed: error occurred
 
@@ -474,7 +501,7 @@ Poll every 10-15 seconds. Do NOT poll in a tight loop.`,
     },
     async (params) => {
       try {
-        const result = await getVideoStatus({ taskId: params.taskId });
+        const result = await getVideoStatus({ taskId: params.taskId, userId: options?.userId });
 
         let response = result.message;
         if (result.status === 'completed' && result.videoUrl) {

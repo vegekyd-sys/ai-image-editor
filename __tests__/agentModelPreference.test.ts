@@ -40,4 +40,13 @@ describe('agent model preference persistence', () => {
     saveCreateAgentModelPreference('gpt-5.6-luna');
     expect(loadCreateAgentModelPreference()).toBe('gpt-5.6-luna');
   });
+
+  it('upgrades persisted Grok 4.5 selections to Grok 4.6', () => {
+    const key = getAgentModelPreferenceStorageKey('project-a');
+    window.localStorage.setItem(key, JSON.stringify({ v: 1, agentModel: 'grok-4.5' }));
+    expect(loadAgentModelPreference('project-a')).toBe('grok-4.6');
+
+    window.localStorage.setItem('makaron:create-agent-model:v1', 'grok-4.5');
+    expect(loadCreateAgentModelPreference()).toBe('grok-4.6');
+  });
 });

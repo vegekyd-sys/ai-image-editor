@@ -26,6 +26,12 @@ describe('ModelSelector Seedance 2.5', () => {
     fireEvent.click(await screen.findByText(/视频|Video/));
     expect(await screen.findByText('全新 SOTA · 30s')).toBeTruthy();
     expect(screen.getByText(/全新 SOTA，最长 30 秒/)).toBeTruthy();
+    expect(screen.getByText('Wan 3.0 标准版')).toBeTruthy();
+    expect(screen.getByText('4K · 30s')).toBeTruthy();
+    expect(screen.getByText(/自动启用 FlashVSR/)).toBeTruthy();
+    expect(screen.getByText('Wan 3.0 Prime')).toBeTruthy();
+    expect(screen.getByText('快速 · 4K')).toBeTruthy();
+    expect(screen.queryByText('Wan 3.0 Pro')).toBeNull();
     expect(screen.getByText('MiniMax H3')).toBeTruthy();
     fireEvent.click(await screen.findByText('Seedance 2.5'));
     await waitFor(() => {

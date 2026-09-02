@@ -70,6 +70,11 @@ npx makaron-cli responses get $RUN_ID --wait --json
 
 Use `chat` for all creative tasks. Makaron Agent decides how to execute — it can edit images, generate videos, compose music, and create designs in a single conversation.
 
+For clearly adult, erotic, or NSFW requests, read `references/nsfw.md`
+([public copy](https://www.makaron.app/.well-known/agent-skills/makaron/references/nsfw.md))
+before submitting the job. It adds per-job routing exceptions only; do not load
+or apply it to ordinary SFW work.
+
 ```bash
 npx makaron-cli chat --help
 ```
@@ -85,10 +90,11 @@ npx makaron-cli chat --project auto --image photo.jpg --json -b "make it cinemat
 npx makaron-cli chat --project auto --image img1.jpg --image img2.jpg --json -b "combine these"
 ```
 
-`chat` routes image and video models automatically. Use `--agent-model` only when the user explicitly asks to select or compare the reasoning/tool-calling Agent LLM. Accepted values are exactly `auto`, `gpt-5.6-terra`, `gpt-5.6-sol`, `gpt-5.6-luna`, `grok-4.5`, and `deepseek-v4-pro`; `auto` currently resolves to `gpt-5.6-terra`. Never put an image or video model ID in `--agent-model`. The CLI rejects unknown Agent IDs plus `--image-model`, `--video-model`, and legacy `--model` before starting a chat run.
+`chat` routes image and video models automatically. Use `--agent-model` only when the user explicitly asks to select or compare the reasoning/tool-calling Agent LLM. Accepted values are `auto`, the base model IDs (`gpt-5.6-terra`, `gpt-5.6-sol`, `gpt-5.6-luna`, `grok-4.6`, `deepseek-v4-pro`), and the personal-plan routes (`gpt-5.6-terra-codex-subscription`, `gpt-5.6-sol-codex-subscription`, `gpt-5.6-luna-codex-subscription`). For the configured owner, `auto` uses GPT-5.6 Terra through the personal Codex plan; base GPT-5.6 IDs select Azure API, while suffixed IDs explicitly select the personal plan. Never put an image or video model ID in `--agent-model`.
 
 ```bash
 npx makaron-cli chat --project auto --agent-model deepseek-v4-pro --json -b "make a 20s badminton video"
+npx makaron-cli chat --project auto --agent-model gpt-5.6-sol-codex-subscription --json -b "reply with the active model"
 ```
 
 Returns immediately:
@@ -309,11 +315,11 @@ npx makaron-cli video script --image img1.jpg "cinematic story"
 # 2. Analyze a video (standalone, no timeline write)
 npx makaron-cli analyze --video input.mp4 "describe the key actions and pacing"
 
-# 3a. Submit image-to-video rendering (images must be public URLs from step 1 or uploaded)
+# 3a. Submit reference-to-video rendering (images must be public URLs from step 1 or uploaded)
 npx makaron-cli video create --script "Shot 1 (5s): <<<image_1>>> ..." --image https://...jpg --duration 5 --video-model kling
 npx makaron-cli video create --script "Shot 1 (15s): <<<image_1>>> and <<<image_2>>> build a neon one-person studio" --image https://...jpg --image https://...webp --duration 15 --video-model seedance-mini --video-resolution 480p --aspect 9:16
 
-# 3b. Native SeeDance or MiniMax H3 text-to-video (no image required)
+# 3b. Native SeeDance, Wan 3.0, or MiniMax H3 text-to-video (no image required)
 npx makaron-cli video create --script "Shot 1 (5s): A neon one-person studio wakes at dawn" --duration 5 --video-model seedance-fast --aspect 16:9
 npx makaron-cli video create --script "Shot 1 (15s): A premium creative editor comes alive" --duration 15 --video-model minimax-h3 --aspect 16:9
 
@@ -331,11 +337,15 @@ npx makaron-cli video status <taskId>
 npx makaron-cli chat --project <id|auto> --video input.mp4 -b "make it funny"
 ```
 
-Options for `video create`: `--script "..."`, `--script-file <path>`, `--image <url>` (repeatable, up to the selected model limit), `--video <file|url>` and `--audio <file|url>` (repeatable where supported), `--duration <seconds>`, `--aspect 9:16|16:9|1:1`, `--video-model seedance-fast|seedance-mini|seedance|seedance-2.5|kling|grok|google-omni|minimax-h3|sync-lipsync-v3`, `--video-resolution auto|480p|720p|768p|1080p|2k|4k`. Default model is `seedance-fast`. SeeDance accepts native text-to-video with no image and integer output duration 4-15s (default 5s); `seedance-mini` supports 480p/720p and is best for cheaper drafts/multi-size tests; MiniMax H3 accepts native text-to-video, 4-15s output, public 768p/2k resolution, and up to 9 image, up to 3 video, and up to 3 audio references through Makaron Agent/chat. `sync-lipsync-v3` requires exactly one video plus one MP3/WAV and preserves that replacement audio while aligning the mouth. H3 defaults to 768p; request 2k explicitly for maximum/final quality. Kling supports 5-15s; Grok 1.5 supports 1-15s single-image-to-video only; Gemini Omni supports 3-10s fast 720p image/video generation and editing with native generated audio, including up to 6 image references when no video reference is provided. For `--video-model grok`, forced `--aspect` is ignored to avoid xAI stretching the source image; pad/create the image at the target shape first or use another model.
+Options for `video create`: `--script "..."`, `--script-file <path>`, `--image <url>` (repeatable, up to the selected model limit), `--video <file|url>` and `--audio <file|url>` (repeatable where supported), `--voice <xai-preset-id>` (repeatable, Grok only), `--duration <seconds>`, `--aspect 9:16|16:9|1:1`, `--video-model seedance-fast|seedance-mini|seedance|seedance-2.5|wan-3.0|wan-3.0-prime|kling|grok|google-omni|minimax-h3|sync-lipsync-v3`, `--video-resolution auto|480p|720p|768p|1080p|2k|4k`. Default model is `seedance-fast`. SeeDance accepts native text-to-video with no image and integer output duration 4-15s (default 5s); every Seedance image input uses reference-to-video, including one image. `seedance-mini` supports 480p/720p and is best for cheaper drafts/multi-size tests. Wan 3.0 and Wan 3.0 Prime both expose 480p/720p/1080p/2K/4K; 2K/4K automatically use the matching FlashVSR endpoint. MiniMax H3 accepts native text-to-video, 4-15s output, public 768p/2k resolution, and up to 9 image, up to 3 video, and up to 3 audio feature references through Makaron Agent/chat; a single image keeps the `reference_image` role. `sync-lipsync-v3` requires exactly one video plus one MP3/WAV and preserves that replacement audio while aligning the mouth. H3 defaults to 768p; request 2k explicitly for maximum/final quality. Kling supports 5-15s. Grok text-only generation supports 480p/720p/1080p; any 1-7 image or preset voice input uses reference-to-video and is capped at 720p. Grok edit/extend uses `grok-imagine-video` internally. Gemini Omni image-only generation always uses `reference_to_video`, including one image, with up to 6 images when no video reference is provided.
+
+Provider integration contract: every image passed to video generation is a feature reference by default, even when there is exactly one image. Never infer image-to-video/first-frame mode from image count. A first-frame workflow may be added only as a separately declared model capability and an explicit caller request.
 
 Seedance 2.5 uses `--video-model seedance-2.5` and supports 4-30s at 480p/720p, up to 30 images + 10 videos + 10 audios, repeatable local/URL references, `--video-operation generate|edit|extend`, `--extend-direction`, `--output-format mp4|mov`, and `--web-search`. The Evolink route does not currently expose 4K output.
 
-Video edit model behavior: `--video-model kling --video` uses Kling base/direct edit internally; `--video-model seedance-fast --video`, `--video-model seedance-mini --video`, or `--video-model seedance --video` uses the SeeDance video-reference path and requires target <=15s, <=50MB, width/height 300-6000px, aspect ratio 0.4-2.5, and frame pixels 409,600-2,086,876. `--video-model minimax-h3 --video` uses H3 feature/reference mode: up to 3 video references totaling <=15s, each <=50MB with width/height 256-5760px and aspect ratio 0.4-2.5. `--video-model google-omni --video` uses Gemini Omni direct video editing and accepts one reference video in Makaron. Output duration is clamped to 3-10s. Grok does not support video references.
+Wan 3.0 exposes two model choices: `--video-model wan-3.0` and the faster `--video-model wan-3.0-prime`. Both support 2-30s generation, native audio, up to 10 images + 5 videos + 5 audios, and 480p/720p/1080p/2K/4K. Pass `--video-resolution 2k|4k` to select the matching FlashVSR/Pro endpoint automatically; Pro is not a separate model selector. Use generation mode with feature references; typed edit/extend and the relaxed content-filter flag are not supported.
+
+Video edit model behavior: `--video-model kling --video` uses Kling base/direct edit internally; `--video-model seedance-fast --video`, `--video-model seedance-mini --video`, or `--video-model seedance --video` uses the SeeDance video-reference path and requires target <=15s, <=50MB, width/height 300-6000px, aspect ratio 0.4-2.5, and frame pixels 409,600-2,086,876. `--video-model minimax-h3 --video` uses H3 feature/reference mode: up to 3 video references totaling <=15s, each <=50MB with width/height 256-5760px and aspect ratio 0.4-2.5. `--video-model google-omni --video` uses Gemini Omni direct video editing and accepts one reference video in Makaron. `--video-model grok --video --operation edit` accepts one MP4 up to 8.7s and caps output at 720p; `--operation extend` accepts one 2-15s MP4 and adds 2-10s.
 
 ### `music` — Music generation
 
@@ -469,7 +479,7 @@ send_message "All done!"
 - One project = one conversation thread. All history is preserved.
 - One active Agent Run at a time per project. A new message received while it is active is appended to that same Agent Run and processed at a durable work-unit boundary; it does not interrupt the execution or create a second owner for an in-progress Studio workflow.
 - Multi-image: `create --image a.jpg --image b.jpg` or `chat --image ref.jpg`.
-- Provider-generated videos can take 3-5 minutes; Grok is usually around 30-40 seconds; Gemini Omni is usually around 30-70 seconds plus Storage handoff. Remotion compositions should be converted with `materialize` / `responses get --materialize`, and timing should be read from `duration_seconds`, `render_seconds`, and `realtime_ratio`.
+- Provider-generated videos can take 3-5 minutes; current Grok generation/edit probes are usually around 15-60 seconds; Gemini Omni is usually around 30-70 seconds plus Storage handoff. Remotion compositions should be converted with `materialize` / `responses get --materialize`, and timing should be read from `duration_seconds`, `render_seconds`, and `realtime_ratio`.
 - Music takes ~60 seconds. Appears in output when done.
 - Images are typically ready in 15-30 seconds.
 - stdout is always machine-readable JSON/text. Human-friendly logs go to stderr.
