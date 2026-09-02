@@ -1,9 +1,7 @@
 ---
 name: video-edit
-description: >
-  Makaron adapter with native support for OpenMontage's video-edit
-  craft skill, using existing Makaron tools and durable project outputs.
-allowed-tools: read_file analyze_video transcribe_audio run_code write_file preview_frame materialize_media
+description: Edit, transform, or faithfully recreate a supplied video. Use for source-preserving trims, repairs, captions, audio, effects, and subject/background replacement, or when a reference video's timing, camera, action, transitions, and beat structure must be reproduced with new content. Distinguishes source-edit from replication internally; use direct generation for a new video with no source authority and reference-video-studio for loose inspiration.
+allowed-tools: read_file list_files prepare_visual_asset analyze_video transcribe_audio analyze_image generate_image generate_animation generate_audio run_code write_code_file write_file preview_frame materialize_media studio_run
 metadata:
   makaron:
     icon: "⌁"
@@ -11,38 +9,73 @@ metadata:
     tipsEnabled: false
     builtIn: true
     userSelectable: false
-    manifestVisible: false
+    manifestVisible: true
+    sourceMediaRequired: true
     sourceProject: "openmontage"
     sourceSkill: "video-edit"
     sourceKind: "agent-skill"
     supportLevel: "native"
     adapterFamily: "media"
-    canonicalSkill: "video-ffmpeg-lab"
-    tags: [openmontage, agent-skill, media, native]
+    tags: [video, edit, replication, source-led, reference-to-video, ffmpeg, remotion]
 ---
 
 # Video Edit
 
-This is a Makaron-native adaptation of the OpenMontage capability. Preserve the
-production intent, but use Makaron's existing tools and workspace contract. Do
-not invoke OpenMontage Python tools, HyperFrames, or unexposed provider APIs.
+Use one Skill for any request in which a supplied video controls the result.
+"Edit" is a user intent, not a requirement to expose a provider's typed edit
+mode. First decide what authority the source has; that decision changes the
+analysis depth, execution plan, and acceptance gates.
 
-## Required Reading
+## Choose One Profile
 
-1. Follow this adapter before using tools.
-2. Read `skills/video-ffmpeg-lab/SKILL.md` and use it as the execution contract.
+- **source-edit** — the supplied video's pixels remain the base. Change only the
+  named range/layer and preserve every unspecified part. Read
+  `skills/video-edit/references/editing-protocol.md`.
+- **replication** — the supplied video is structural authority, while people,
+  objects, setting, brand, or other content is regenerated/replaced. Preserve
+  observable shot grammar: order, timing, framing, camera, choreography,
+  transitions, captions, and audio/beat structure. Read
+  `skills/video-edit/references/replication-protocol.md`, then its conditional
+  references.
 
-## Execution Contract
+If the source is only mood/style inspiration with no measurable structure lock,
+use `reference-video-studio`. If there is no source authority, return to direct
+generation in `prompts/animate.md`.
 
-- Use the Node media runtime and FFmpeg/FFprobe for exact file operations. Probe once, transform once, publish existing workspace output instead of re-running work.
-- Keep provider and runtime claims honest. An adapted skill preserves the goal,
-  not an unavailable vendor implementation.
-- Use project timeline media and workspace files as the source of truth.
-- For auto-approved Studio Runs, batch adjacent text stages when possible,
-  preview hook/body/end in one contact sheet, publish once, and materialize once.
-- If the exact capability is unavailable, stop with the concrete gap instead of
-  silently producing a different class of result.
+## Shared Protocol
 
-## Completion
+1. Resolve the exact source and replacement inputs. Record duration/aspect/FPS,
+   audio policy, target output, rights, and a compact change/preserve contract.
+2. Inspect only to the required depth. A clear source edit does not need
+   `analyze_video`; replication must understand the complete clip and lock
+   uncertain boundaries before paid generation.
+3. Choose the smallest capable path: deterministic FFmpeg, editable Remotion,
+   reference-to-video synthesis, or a hybrid. Models decide semantic intent and
+   visual labels; deterministic tools own measurements, timecodes, assembly,
+   and decode checks.
+4. For Seedance, keep the video in the reference set and express its authority
+   in the prompt. Use reference-to-video semantics for both profiles; do not ask
+   the user to choose an "edit mode" and do not set
+   `video_operation: "edit"`. Extension remains a distinct operation.
+5. Before paid work, state provider, current capability, billable duration/cost,
+   and retry ceiling. Show the final script and respect the normal confirmation
+   gate unless the request explicitly authorizes submission.
+6. Verify the real output, not task completion: decode, streams, duration,
+   changed content, preserved layers, identity, continuity, structure, and audio
+   sync. Retry only against one or two measured failures.
 
-Deliver a real probed file with the requested duration, dimensions, streams, and timeline publication.
+## Interrupt and Resume
+
+Persist the source fingerprint, selected profile, change/preserve contract,
+prompt or Blueprint, provider/task ID, budget, outputs, and QA status before an
+async boundary. Reuse successful provider outputs and reconcile pending or
+terminal tasks before any resubmission. Structured replication reuses the
+existing Studio Run artifacts instead of inventing another state machine.
+
+## Stop Conditions
+
+Stop when the source is ambiguous or unreadable, rights are unclear, replacement
+roles conflict, the plan violates the preserve contract, structural evidence is
+too uncertain, provider capability/cost cannot be confirmed, a paid retry lacks
+a measurable correction, the retry ceiling is reached, or the output cannot be
+decoded.

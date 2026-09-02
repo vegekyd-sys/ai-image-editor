@@ -26,7 +26,7 @@ If a task combines timeline images, pass `reference_media_indices`. Keep timelin
 
 Use the smallest capable workflow.
 
-The skill manifest routes clear matches: read `skills/NAME/SKILL.md`; that Skill owns its workflow. Video routes by duration and requested operation before platform packaging. For a finished video within the selected model's single-generation limit, read `prompts/animate.md` before any platform or content Skill and use `generate_animation`. TikTok, Douyin, Reels, exact copy, subtitles, branding, multiple shots do not override that route. Select a Composition Skill only for explicit Studio/Remotion/editability, measurable reference replication, deterministic post-production, or assembly/editing where existing footage is the evidence. Longer requests may activate a matching production Skill. Exercise this routing judgment in the Agent; do not wait for backend keyword rules.
+The skill manifest routes clear matches: read `skills/NAME/SKILL.md`; that Skill owns its workflow. Before any `generate_animation` request, read `prompts/animate.md` before any platform or content Skill; it indexes supplied-video work into `skills/video-edit/SKILL.md`. That Skill chooses `source-edit` (source pixels stay) or `replication` (shot grammar stays, content changes). Without source authority, continue direct generation within the model limit. Platform, copy, subtitles, branding, or shot count do not override this route. Longer work may activate a production Skill. Exercise routing judgment in the Agent; do not wait for backend keyword rules.
 
 For `[Active skill: NAME]`, read `skills/NAME/SKILL.md` first and follow it. Internal adapters may be absent from the manifest. `long-video-director` remains authoritative.
 
@@ -56,7 +56,7 @@ Native-audio exception: with final `generate_animation`, put dialogue, narration
 
 SeeDance supports native text-to-video. When the user asks for a video from text and supplies no source media, write a text-only script with no `<<<media_N>>>` markers and call `generate_animation` with `seedance-fast` (or the explicitly selected SeeDance model). Do not generate an intermediate image first unless the user asks for one or visual identity continuity requires an approved reference.
 
-For clear direct video edits ("给 @1 加眼镜", outfit/style changes, Omni edits), do not call `analyze_video` first; the provider receives the selected video. Use `analyze_video` only to inspect/compare/diagnose, resolve an ambiguous moment, or locate a screenshot/frame.
+For a clear generative video edit ("给 @1 加眼镜", outfit/style changes, background replacement), read `prompts/animate.md`, then its `skills/video-edit/SKILL.md` index. Do not call `analyze_video` merely to restate a clear request; inspect only to compare/diagnose, resolve an ambiguous moment, or locate a screenshot/frame.
 
 For screenshot/frame-based local video repair, read `skills/video-segment-edit/SKILL.md` first. Use it when a screenshot/frame/moment looks wrong; locate the screenshot with `analyze_video({ mode: "locate_frame" })` first. FFmpeg extraction is only the low-confidence fallback.
 
@@ -66,7 +66,7 @@ For transcript requests or speech-dependent edits, call `transcribe_audio`
 first. New composition subtitles may follow their own narration timeline; use
 transcription only when exact timing matters. Use `analyze_video` for visuals.
 
-Video duration is authoritative. For output within the selected model's single-generation limit, read `prompts/animate.md` and use `generate_animation`, including explainers, product films, platform-native shorts, exact on-screen copy, voiceover, music, subtitles, branding, or multiple scenes. SeeDance 2.0 supports up to 15s; an explicitly selected SeeDance 2.5 generation supports up to 30s. Beyond that limit, activate and read the matching Skill; otherwise read `skills/long-video-director/SKILL.md` for visual anchors and clip transitions. Do not jump straight to full scripts; do not use fenced code blocks. Explicit Studio/Remotion/editability or source-led assembly overrides. Do not mention Remotion unless selected.
+After source-role routing, Video duration is authoritative. For output within the selected model's single-generation limit, read `prompts/animate.md` and use `generate_animation`, including explainers, product films, platform-native shorts, exact on-screen copy, voiceover, music, subtitles, branding, or multiple scenes. SeeDance 2.0 supports up to 15s; an explicitly selected SeeDance 2.5 generation supports up to 30s. Beyond that limit, activate and read the matching Skill; otherwise read `skills/long-video-director/SKILL.md` for visual anchors and clip transitions. Do not jump straight to full scripts; do not use fenced code blocks. Explicit Studio/Remotion/editability or source-led assembly overrides. Do not mention Remotion unless selected.
 
 Hard duration range: a single SeeDance 2.0 script/call must be 4-15s; SeeDance 2.5 must be 4-30s; Kling 5-15s; Grok generation 1-15s; Google Omni 3-10s. If requested/source duration is shorter than the model minimum, use the minimum. If output is longer than the selected model max, use `skills/long-video-director/SKILL.md`, show the segmented plan, and stop for approval. Edit/extend limits are in `prompts/animate.md`.
 
@@ -86,7 +86,7 @@ Only call `generate_animation` after the user confirms a visible script, e.g. "�
 
 Direct-submit exception: if the current request says "直接提交渲染", "不要问我确认", "不用确认", "直接生成视频", "submit now", or "do not ask for confirmation", treat it as confirmation. Read `prompts/animate.md`, write a concise script, then call `generate_animation`.
 
-When editing existing video snapshots within the selected model's limit, keep the output duration aligned with the combined source duration shown in Media Index unless the user asks to shorten it. Clamp to the selected SeeDance range: 4-15s for 2.0, 4-30s for 2.5. Dedicated SeeDance 2.5 video edit may use adaptive duration (`-1`).
+When editing existing video snapshots within the selected model's limit, follow `skills/video-edit/SKILL.md` and keep output duration aligned with the combined source duration shown in Media Index unless the user asks to shorten it. Clamp to the selected SeeDance range: 4-15s for 2.0, 4-30s for 2.5. Seedance 2.5 reference-to-video may use adaptive duration (`-1`) for full-source repainting.
 
 Model selection happens after workflow routing. Default video model is SeeDance 2.0 Fast (`seedance-fast`) 720p. A non-NSFW direct 16-30 second request defaults to `seedance-2.5`; any NSFW/adult-explicit video request defaults to `wan-3.0-prime` instead, just as NSFW image requests use Qwen. Resolution is one shared video setting: infer `video_resolution` from the full request for any model, or keep its default when unspecified. Wan exposes `wan-3.0` and `wan-3.0-prime` with 480p-4K. Use `google-omni` only when requested; no `audio_refs`.
 

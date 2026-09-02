@@ -12,36 +12,38 @@ import { clearWorkspaceCache, getSkillManifest, readBuiltInFile } from '@/lib/wo
 const root = process.cwd()
 const read = (path: string) => readFileSync(join(root, path), 'utf8')
 
-describe('video-replication Skill', () => {
-  it('is semantically discoverable without a keyword router or new recipe', async () => {
+describe('video-edit Skill replication profile', () => {
+  it('uses one discoverable Skill for source edits and measurable replication', async () => {
     clearSkillCache()
     clearWorkspaceCache()
-    const raw = read('src/skills/video-replication/SKILL.md')
+    const raw = read('src/skills/video-edit/SKILL.md')
     const skill = parseSkillMd(raw)
     const manifest = await getSkillManifest()
     const description = skill?.description.replace(/\s+/g, ' ')
 
-    expect(loadBuiltInSkills().has('video-replication')).toBe(true)
-    expect(manifest).toContain('**video-replication**')
-    expect(manifest).toContain("Orchestrate supervised recreation of a supplied reference video's shot grammar")
-    expect(manifest).toContain('use reference-video-studio for loose inspiration')
-    expect(manifest).toContain('Use video-replication instead when the user wants measurable')
-    expect(manifest).toContain("Measurable replication of a supplied reference's shot grammar")
-    expect(read('src/lib/prompts/animate.md')).toContain('skills/video-replication/SKILL.md')
-    expect(read('src/lib/prompts/agent.md')).toContain('measurable reference replication')
-    expect(readBuiltInFile('skills/video-replication/references/shot-blueprint.md')?.content).toContain(
+    expect(loadBuiltInSkills().has('video-edit')).toBe(true)
+    expect(loadBuiltInSkills().has('video-replication')).toBe(false)
+    expect(manifest).toContain('**video-edit**')
+    expect(manifest).toContain('Edit, transform, or faithfully recreate a supplied video')
+    expect(manifest).toContain('source-edit')
+    expect(manifest).toContain('replication')
+    expect(read('src/lib/prompts/animate.md')).toContain('skills/video-edit/SKILL.md')
+    expect(read('src/lib/prompts/animate.md')).toContain('choose its `replication` profile')
+    expect(read('src/lib/prompts/agent.md')).toContain('Before any `generate_animation` request')
+    expect(read('src/lib/prompts/agent.md')).toContain('`source-edit`')
+    expect(read('src/lib/prompts/agent.md')).toContain('`replication`')
+    expect(readBuiltInFile('skills/video-edit/references/shot-blueprint.md')?.content).toContain(
       'P0 machine-readable skeleton',
     )
-    expect(readBuiltInFile('skills/video-replication/scripts/extract-shot-blueprint.mjs')?.content).toContain(
+    expect(readBuiltInFile('skills/video-edit/scripts/extract-shot-blueprint.mjs')?.content).toContain(
       'adaptive_scene_plus_black',
     )
-    expect(description).toContain('shot count, order, timing, framing')
-    expect(description).toContain('use reference-video-studio for loose inspiration')
-    expect(skill?.makaron.studioRunRecipe).toBe('reference-video-studio')
-    expect(skill?.makaron.studioRunProfile).toBe('reference-led')
+    expect(description).toContain("reference video's timing, camera, action, transitions")
+    expect(description).toContain('reference-video-studio for loose inspiration')
     expect(skill?.makaron.sourceMediaRequired).toBe(true)
     expect(skill?.makaron.userSelectable).toBe(false)
-    expect(skill?.makaron.supportLevel).toBe('experimental')
+    expect(skill?.makaron.manifestVisible).toBe(true)
+    expect(skill?.makaron.supportLevel).toBe('native')
     expect(skill?.allowedTools).toEqual(expect.arrayContaining([
       'analyze_video',
       'transcribe_audio',
@@ -50,11 +52,13 @@ describe('video-replication Skill', () => {
       'preview_frame',
       'materialize_media',
     ]))
-    expect(raw).toContain('skills/video-replication/references/shot-blueprint.md')
-    expect(raw).toContain('skills/video-replication/references/similarity-qa.md')
-    expect(raw).toContain('skills/video-ffmpeg-lab/SKILL.md')
+    expect(raw).toContain('skills/video-edit/references/editing-protocol.md')
+    expect(raw).toContain('skills/video-edit/references/replication-protocol.md')
+    expect(read('src/skills/video-edit/references/replication-protocol.md')).toContain(
+      'skills/video-edit/references/similarity-qa.md',
+    )
     expect(read('src/skills/reference-video-studio/SKILL.md')).toContain(
-      'Use video-replication instead when the user',
+      'Use the video-edit replication profile',
     )
   })
 
@@ -64,7 +68,7 @@ describe('video-replication Skill', () => {
     try {
       const [ffmpegPath, ffprobePath] = await Promise.all([findFfmpeg(), findFfprobe()])
       execFileSync(process.execPath, [
-        join(root, 'src/skills/video-replication/scripts/extract-shot-blueprint.mjs'),
+        join(root, 'src/skills/video-edit/scripts/extract-shot-blueprint.mjs'),
         join(root, 'makaron-intro/renders/makaron-intro_2026-05-07_02-05-55.mp4'),
         '--output', output,
         '--ffmpeg', ffmpegPath,
@@ -72,7 +76,7 @@ describe('video-replication Skill', () => {
       ], { encoding: 'utf8', timeout: 20_000 })
 
       const blueprint = JSON.parse(readFileSync(output, 'utf8'))
-      const schema = JSON.parse(read('src/skills/video-replication/references/shot-blueprint.schema.json'))
+      const schema = JSON.parse(read('src/skills/video-edit/references/shot-blueprint.schema.json'))
 
       expect(schema.$schema).toBe('http://json-schema.org/draft-07/schema#')
       expect(Object.keys(blueprint)).toEqual(expect.arrayContaining(schema.required))
@@ -113,7 +117,7 @@ describe('video-replication Skill', () => {
         '-map', '[outv]', '-c:v', 'libx264', '-pix_fmt', 'yuv420p', source,
       ], { timeout: 20_000 })
       execFileSync(process.execPath, [
-        join(root, 'src/skills/video-replication/scripts/extract-shot-blueprint.mjs'),
+        join(root, 'src/skills/video-edit/scripts/extract-shot-blueprint.mjs'),
         source,
         '--output', output,
         '--ffmpeg', ffmpegPath,

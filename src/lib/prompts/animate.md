@@ -17,14 +17,21 @@ not by itself require an editable Composition. Switch to Remotion only when the
 user explicitly requests Remotion/editability or the work is fundamentally
 source-led timeline editing, deterministic compositing, or post-production.
 
+Source-video index: when an existing video controls the result, now read
+`skills/video-edit/SKILL.md`. That Skill owns the change/preserve contract,
+chooses source-edit versus replication, and may return here for the provider
+prompt. Do not expose a provider `edit` mode as the product workflow.
+
 Reference-image preflight: EvoLink Seedance accepts JPEG/PNG/WebP images only, with width and height each 300-6000px, aspect ratio 0.4-2.5, and at most 30MB per image. The tool returns a specific `errorReason` (`too_small`, `too_large`, `invalid_aspect_ratio`, `unsupported_format`, or `unreadable`) plus actual dimensions and limits. `retryable: false` means do not resubmit the same URL. When `repairable: true`, decide whether to create a new resized/padded/converted public image URL or ask the user for a better source, then submit only with that new URL. A second unchanged submission becomes `terminal: true` and ends the retry loop.
 
 Reference-replication boundary: when the user wants measurable matching of a
 supplied reference's shot count/order/timing, framing, camera motion,
 transitions, captions, or beat structure, read
-`skills/video-replication/SKILL.md` first. That is deterministic
-post-production even when the output fits one provider call. Loose inspiration
-without a measurable structure lock stays in this direct-generation route.
+`skills/video-edit/SKILL.md` and choose its `replication` profile. The same Skill
+owns ordinary source edits, but the profile changes the analysis and QA depth.
+Loose inspiration without a measurable structure lock stays in this direct-
+generation route or uses `reference-video-studio` when an editable production is
+requested.
 
 ## Input
 - Snapshot images within the selected model limit (7 normally; up to 30 for Seedance 2.5 or 10 for Wan 3.0). Zero images can use native SeeDance or Wan 3.0 text-to-video.
@@ -92,11 +99,17 @@ Images serve as visual references. Prompt uses `<<<media_N>>>` to reference them
 - Requires `aspect_ratio` only when the selected model can safely honor a fixed output shape. Grok image inputs always use reference-to-video and may use a supported fixed ratio.
 - Max 7 images normally; Seedance 2.5 accepts up to 30 and Wan 3.0 accepts up to 10.
 
-### Video Editing Mode
-Edit, remix, or build upon an existing video. Use `<<<media_N>>>` to reference timeline videos — the system auto-routes them. If the source video may exceed the selected model's reference/output limit, read `skills/video-ffmpeg-lab/SKILL.md` first and split the MP4 before generation.
+### Source Video Reference
+
+This is the provider-input contract, not the editing workflow. For an edit of
+the supplied video itself, read `skills/video-edit/SKILL.md`. Use
+`<<<media_N>>>` to reference timeline videos; the system routes them. If the
+source may exceed the selected model's reference/output limit, follow the
+chosen Skill and `skills/video-ffmpeg-lab/SKILL.md` to split it before
+generation.
 
 Use cases:
-- **Edit video content**: add effects, characters, or elements to an existing video
+- **Source video edit**: add effects, characters, or elements while preserving unspecified source layers
 - **Reference motion/style**: use a video as motion template for photos
 - **Remix**: combine photos + video into something new
 
@@ -105,18 +118,18 @@ Rules:
 - **Timeline videos**: use `<<<media_N>>>` and let the tool route media refs.
 - **External videos** (workspace/skill assets): pass `video_ref_url` + `video_ref_type: feature`
 - **Gemini Omni continuation**: use the same reference flow—point to one timeline video with `<<<media_N>>>` (or pass one external `video_ref_url`), set `video_operation: "extend"`, and describe only the next beat. Omni extends forward from the tail for 3-10s, default 10s, and the result is saved as a new video snapshot. A Google-generated result may be selected and extended again up to 40s cumulatively through its stateful interaction lineage.
-- **Duration lock**: when editing an existing video within the selected model's limit, the output duration should match the input video duration. SeeDance 2.0 accepts up to 15s. SeeDance 2.5 accepts up to 30s and its dedicated edit mode may use adaptive duration (`-1`). For longer sources, use the long-video-director workflow instead of one short compressed edit. Never default to a 5s script for video editing unless the user explicitly asks to shorten it.
+- **Duration lock**: when editing an existing video within the selected model's limit, the output duration should match the input video duration. SeeDance 2.0 accepts up to 15s. SeeDance 2.5 accepts up to 30s and reference-to-video may use adaptive duration (`-1`). For longer sources, use the long-video-director workflow instead of one short compressed edit. Never default to a 5s script for video editing unless the user explicitly asks to shorten it.
 - **Combined video limit**: when referencing one or more timeline/uploaded videos or external reference videos, add their source durations together. The total must be 15s or less for SeeDance 2.0, or 30s or less for SeeDance 2.5.
 - **Wan 3.0 combined budget**: all reference-video duration plus requested output duration must be <=30s. Since Wan output duration is a whole number of seconds, use `floor(30 - referenceDuration)` as the maximum output; for a 5.04s reference, submit at most `duration: 24`.
 - **SeeDance 2.0 video size limit**: .mp4/.mov, <=50MB each, width and height each 300-6000px, aspect ratio 0.4-2.5, and frame pixels width*height between 409,600 and 2,086,876. If the source is too small, resize/pad it before generation; do not submit tiny reference videos directly.
-- **Seedance 2.5 video size/duration limit**: .mp4/.mov, <=200MB each, width and height each 300-6000px, aspect ratio 0.4-2.5, frame pixels width*height between 409,600 and 8,295,044, and 4-30s per video with all video references totaling <=30s. A normal encoded 30s file may contain up to 0.5s of container/tail-frame metadata tolerance; treat it as 30s rather than asking the user to split it. For `video_operation: "edit"`, omit `duration` or use `-1`; Makaron follows the source duration automatically.
+- **Seedance 2.5 video size/duration limit**: .mp4/.mov, <=200MB each, width and height each 300-6000px, aspect ratio 0.4-2.5, frame pixels width*height between 409,600 and 8,295,044, and 4-30s per video with all video references totaling <=30s. A normal encoded 30s file may contain up to 0.5s of container/tail-frame metadata tolerance; treat it as 30s rather than asking the user to split it. For full-source reference repainting, omit `duration` or use `-1`; Makaron follows the source duration automatically.
 - **Kling video size limit**: one .mp4/.mov reference video, <=200MB, resolution <=2K. Kling docs do not state a video resolution lower bound.
 - Can combine images + videos in the same prompt
 - `keep_original_sound: true` to preserve the original audio
 
 Prompt examples:
-- Edit: `在<<<media_1>>>（视频）的基础上，加入飞舞的金色粒子特效`
-- Edit: `Add a glowing fairy sprite flying around the character in <<<media_1>>>`
+- Source edit: `在<<<media_1>>>（视频）的基础上，只加入飞舞的金色粒子特效，其余不变`
+- Source edit: `Add only a glowing fairy sprite around the character in <<<media_1>>>; preserve everything else.`
 - Motion reference: `<<<media_2>>>模仿<<<media_1>>>的表情和动作` (media_1 is video)
 - Remix: `Based on <<<media_3>>>, <<<media_1>>> performs the same dance in a neon studio.`
 - Combine: `Put <<<media_2>>> (photo person) into the scene of <<<media_1>>> (video)`

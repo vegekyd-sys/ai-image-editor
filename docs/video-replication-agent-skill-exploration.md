@@ -1,6 +1,6 @@
-# Makaron 视频拉片 / 视频复刻 Agent Skill 探索
+# Makaron 内置 Video Edit / 视频复刻 Agent Skill 探索
 
-日期：2026-08-30
+日期：2026-08-30；Skill 架构更新：2026-09-02
 
 分支：`codex/video-replication-skill-exploration`
 
@@ -8,19 +8,17 @@
 
 ## 结论
 
-推荐产品形态是一个内置 `video-replication` Skill；本分支只实现了候选原型和
-通用 discovery 边界，尚未完成真实 CUI 选路 E2E。目标是由现有 CUI Agent 通过
-Skill manifest 的语义描述自动发现并读取；它复用
-`reference-video-studio` 的 Studio Run recipe、FFmpeg/FFprobe、ASR、Workspace
-Agent、Remotion、现有视频 provider 与 materialize/review，不新增页面、编辑器、
-平行 Agent、业务 API 或 DB。
+推荐产品形态收敛为一个内置、可发现的 `video-edit` Skill，而不是分别暴露
+`video-edit` 与 `video-replication`。凡是“给了一条视频且它控制结果”的请求，都由
+`animate.md` 索引进入该 Skill；Skill 再按素材权威选择两个内部 profile：
+`source-edit`（原像素是底片，只改指定范围/层）和 `replication`（原视频是 shot
+grammar 权威，内容主体可全部替换）。两者共享同一套输入、provider、FFmpeg、Remotion、
+恢复和 QA 工具，差异只保留在分析深度与验收门禁，避免两个 Skill 争抢语义路由。
 
-名字选择 `video-replication` 而不是 `shot-replication`：用户目标不只有镜头，
-还包括字幕和音频结构；但描述把边界收窄到“可测量的 shot grammar 复刻”。现有
-`reference-video-studio` 继续负责宽松灵感/remix，并增加一条负向边界，避免两个
-Skill 竞争。本原型还修正了多行 description 在 manifest 中被截断的问题，并增加
-“可测量 shot grammar = deterministic post-production”的 operation-level carve-out；
-没有用户关键词表。单元测试证明 manifest 可见，尚未证明真实 CUI 一定选中。
+`reference-video-studio` 继续负责宽松灵感/remix；没有来源权威的新生成继续由
+`animate.md` 直接处理。该形态复用现有 CUI Agent、FFmpeg/FFprobe、ASR、Workspace、
+Remotion、provider 与 materialize/review，不新增页面、编辑器、平行 Agent、业务 API
+或 DB，也不依赖用户关键词硬编码。
 
 最可行路线是 **A 优先、C 默认扩展、B 最后**：已有素材先确定性重剪；缺镜才逐镜
 生成；整片的 timing、cut、transition、caption、beat 和最终音轨永远在 Remotion/
@@ -47,25 +45,26 @@ FFmpeg 锁定。逐镜生成不能承担 frame-accurate 剪辑时钟。
 | `video-reverse.md` / `video-to-template.ts` | observed + merged (`d29b510f`)，但 dormant | 整片 Gemini 分析后产出单个 Kling prompt；未被当前路由引用，也没有 Blueprint、边界验证或相似度 QA，不能当成现成产品。 |
 | native local-video adapter | branch-only (`codex/makaron-native-agent-local-video@3a87ccbb`，15 unique；另有 `codex/makaron-local-video@a0555b0c`，3 unique) | 旧分支有 no-full-upload/contact sheet/local ASR 合同；当前 CUI 仍是上传路径。P0 不迁入其大范围改动。 |
 | shot/beat/camera/OCR 结构分析与自动 similarity QA | absent | 定点搜索没有发现稳定的 shot detector、beat detector、global motion/camera estimator、OCR layout extractor、typed Video DNA 或多维视频相似度门禁。 |
-| 本探索的 `video-replication` 原型 | worktree-only at evidence capture；最终若本地提交则为 branch-only | `builtIn: true`/`supportLevel: experimental` 只是候选注册类型。只有 Skill、references/schema、离线 extractor、测试和本文；不是可用产品，更不是 deployed。 |
+| 本探索的统一 `video-edit` Skill | worktree-only at evidence capture；最终若本地提交则为 branch-only | 将原本隐藏的 OpenMontage/FFmpeg adapter 改成 manifest 可见的一等 Skill，并把复刻作为内部 profile；只有 Skill、references/schema、离线 extractor、测试和本文，不是 deployed。 |
 | discovery/MIME 补口 | worktree-only at evidence capture | 折叠完整 description、增加 operation carve-out、补 `.mjs/.cjs -> text/javascript`，使 Agent 能发现并读取；仍不能直接把 built-in path 当 `run_code.code_path`，也未做 CUI E2E。 |
 
 公开 `packages/makaron-cli/skills/makaron` 与 `public/.well-known/agent-skills`
-是 umbrella discovery；若验证后合入，候选 canonical 路径是
-`src/skills/video-replication/SKILL.md`，由运行时动态 manifest 发现。P0 不改
-marketplace、不改公开 umbrella alias。`animate.md` 仍负责能在单次模型时长内完成的
-直接新生成视频；可测量逐镜结构匹配被定义成确定性后期，并先读取本 Skill。TikTok
-Skill 只增加平台包装/安全区，不拥有复刻流程；这条边界目前只有代码/manifest 测试，
-仍需真实 CUI 正负例。
+是 umbrella discovery；canonical 路径是 `src/skills/video-edit/SKILL.md`，由内置
+semantic manifest 发现。P0 不改 marketplace、不改公开 umbrella alias。`animate.md`
+仍是每次视频生成都会读取的总入口，并在发现 source authority 时索引到该 Skill；
+Skill 选择 profile 后，仅在需要模型生成像素时回读 `animate.md` 的 provider 合同。
 
 ## Skill 原型合同
 
 ### 目录
 
 ```text
-src/skills/video-replication/
+src/skills/video-edit/
 ├── SKILL.md
 ├── references/
+│   ├── editing-protocol.md
+│   ├── replication-protocol.md
+│   ├── direct-reference-route.md
 │   ├── shot-blueprint.md
 │   ├── shot-blueprint.schema.json
 │   └── similarity-qa.md
@@ -79,15 +78,13 @@ Blueprint 锁定、A/B/C 选择、工具顺序、sample/cost/retry gate、停止
 
 ### 触发描述
 
-> Orchestrate supervised recreation of a supplied reference video's shot
-> grammar with replacement subjects or assets: shot count, order, timing,
-> framing, camera motion, transitions, captions, and audio-beat structure. Use
-> for measurable shot-by-shot matching; use reference-video-studio for loose
-> inspiration and source-video-studio when the original footage itself is the
-> edit.
+> Edit, transform, or faithfully recreate a supplied video. Use for source-
+> preserving edits, or when a reference video's timing, camera, action,
+> transitions, and beat structure must be reproduced with new content.
 
-这段描述与宽松“做一个类似的”以及“编辑这条原片”互斥。原型已证明完整描述进入
-semantic manifest，不需要关键词表；是否在真实 CUI 对正负请求稳定选中仍待 E2E。
+这段描述故意同时覆盖“编辑原片”和“按原片复刻”；两者进入 Skill 后再按 source
+authority 分流。它只与宽松“做一个类似的”和无来源的新生成互斥。完整描述进入
+semantic manifest，不需要关键词表；真实 CUI 的正负路由稳定性仍待 E2E。
 
 ### 输入 / 输出
 
@@ -241,9 +238,10 @@ provisional boundaries、schema 校验和内部连续性 validator；其余需 P
 
 ## P0 / P1 / P2
 
-### P0-S：Skill-only supervised feasibility
+### P0-S：单一 Skill 的 supervised feasibility
 
-- 新增 `video-replication/SKILL.md`、Blueprint schema/reference、QA reference；
+- 将 `video-edit/SKILL.md` 升级为一等内置 Skill，增加 `source-edit` / `replication`
+  profile，并附 Blueprint schema/reference、QA reference；
 - 用户显式激活 Skill，或明确要求 Remotion/可编辑/确定性后期时，可复用现有
   `reference-video-studio` recipe、FFmpeg lab、Workspace/Remotion、preview/materialize；
 - 人工确认 Blueprint 后只走 route A，或在独立批准下做一个代表镜；
@@ -251,9 +249,9 @@ provisional boundaries、schema 校验和内部连续性 validator；其余需 P
 
 ### P0-D：CUI 自动发现的最小公共补口（本分支原型，仍待 E2E）
 
-- manifest 折叠完整 YAML description，使新旧 Skill 的互斥边界实际可见；
-- `agent.md` / manifest / `animate.md` 增加 operation-level carve-out：可测量 reference
-  shot grammar 属于 deterministic post-production；不使用关键词 router；
+- manifest 收录完整单行 description，使统一 Skill 的覆盖范围实际可见；
+- `agent.md` / manifest / `animate.md` 统一索引 `video-edit`，由 Skill 内部根据 source
+  authority 选 profile；不使用关键词 router；
 - `.mjs/.cjs` workspace MIME 映射让 Agent 可读 Skill script；
 - 已有单元测试验证 manifest 和路由合同字符串；必须再跑真实 CUI 正例/负例，才能说
   “Agent 自动发现”成立。
@@ -295,12 +293,12 @@ provisional boundaries、schema 校验和内部连续性 validator；其余需 P
 
 | 层 | 文件 | 状态 |
 | --- | --- | --- |
-| Skill | `src/skills/video-replication/{SKILL.md,references/*,scripts/*}` | 本地 experimental prototype |
+| Skill | `src/skills/video-edit/{SKILL.md,references/*,scripts/*}` | 本地统一 Skill prototype |
 | Discovery boundary | `src/lib/workspace.ts`、`src/lib/prompts/agent.md`、`src/lib/prompts/animate.md` | 本地最小 carve-out；待真实 CUI 正负例 |
 | Deterministic tool | `src/lib/video-structure-analysis.ts`、`src/lib/agent-tools.ts` | proposed；接 `inputFiles/probeVideo/ffmpegPath` |
 | Durable QA | materialization worker 与 Studio Run review/delivery glue | proposed；post-export decode/metrics 进 complete gate |
 | Provider contracts | 现有 `video-model-capabilities.ts`、Kling/Google adapters | proposed 小步迁移；不新增业务 API |
-| Tests | `videoReplicationSkill.test.ts` | 本地：manifest/route/readability、仓库样片、快切回归 |
+| Tests | `videoEditSkill.test.ts` | 本地：单 Skill manifest/profile route/readability、仓库样片、快切回归 |
 | Future tests | `videoStructureAnalysis.test.ts`、CUI route eval、Studio resume/invalidation、materialization QA gate | proposed；必须含 hard cut/dissolve/no-black、0.3–1.2s 快切、rotation/SAR/VFR、schema 负例与最终 decode |
 
 ## 离线 spike 证据

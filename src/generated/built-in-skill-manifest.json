@@ -94,7 +94,7 @@
   },
   {
     "name": "reference-video-studio",
-    "description": "Analyze a reference video, extract its transferable structure and pacing,",
+    "description": "Analyze a reference video, extract transferable structure and pacing, propose original directions, and produce a new editable video without copying its surface design. Use the video-edit replication profile instead when the user wants measurable shot count, order, timing, framing, or motion matching.",
     "studioRunRecipe": "reference-video-studio",
     "studioRunProfile": "reference-led",
     "sourceMediaRequired": true
@@ -130,6 +130,11 @@
   {
     "name": "tiktok-video",
     "description": "Package accepted source-led footage for TikTok/Douyin in editable Remotion; compose first with talking-head and video-translate for visible-speaker editing or translation."
+  },
+  {
+    "name": "video-edit",
+    "description": "Edit, transform, or faithfully recreate a supplied video. Use for source-preserving trims, repairs, captions, audio, effects, and subject/background replacement, or when a reference video's timing, camera, action, transitions, and beat structure must be reproduced with new content. Distinguishes source-edit from replication internally; use direct generation for a new video with no source authority and reference-video-studio for loose inspiration.",
+    "sourceMediaRequired": true
   },
   {
     "name": "video-ffmpeg-lab",

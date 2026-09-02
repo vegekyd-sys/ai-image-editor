@@ -6,7 +6,7 @@ creative brief. Keep seconds as decimals in reference time; convert to frames
 only after the output FPS is locked.
 
 The companion JSON Schema is
-`skills/video-replication/references/shot-blueprint.schema.json`.
+`skills/video-edit/references/shot-blueprint.schema.json`.
 The offline prototype also rejects inconsistent shot/boundary counts, order,
 non-contiguous coverage, duration math, duration-curve length, and an uncovered
 ending. Composition/camera/text/audio/style fields are still a P0 skeleton: keep
