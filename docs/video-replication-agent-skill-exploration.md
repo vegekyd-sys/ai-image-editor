@@ -378,3 +378,34 @@ provider contract，不能假装 Reference 与 Edit 的底层语义完全相同�
 prompt，而是同一 10s 样片做两阶段混合路线：先用 2.5 Reference 锁动作/人物，再以其输出
 为 base 做一次仅背景替换，或反过来先生成新道场 clean plate/角色合成后只用视频传递动作；
 分别测背景覆盖率、角色首末帧一致性和相机轨迹误差，最多各一次，避免无门禁重抽。
+
+### 普通话 Prompt / 480p 回归
+
+为验证 Skill-first 的真实入口，随后创建了全新项目，不传 `--skill`，只附同一条视频和三张
+原始 384x216 WebP，并向 Makaron CLI Chat 发送一句普通用户表达：
+
+> 帮我复刻这条打斗视频。两个打斗人物分别换成前两张人物图，场景换成第三张道场图，
+> 尽量保留原视频的动作、镜头和节奏。用 Seedance 2.0 480p，直接生成。
+
+观察到的 Agent 路径：`animate.md` → `video-edit/SKILL.md` → replication references →
+完整视频/图片理解 → `generate_animation` 输入预检 → 确定性 Lanczos 放大 → 发布新 Media
+Index → 同一 prompt 重提。没有 `--skill` 硬路由；修复阶段没有调用 `generate_image`。
+
+- Project: `b59f6741-ccee-41d4-ab11-dd511dbb6514`
+- Agent Run: `cd9c611d-757f-4a6c-881b-70168d9d95bf`
+- Provider task: `task-unified-1788341240-9yz1e8ol`
+- Actual route: `seedance-2.0-fast-reference-to-video`, 480p, 3 images + 1 video,
+  `duration=10`, `16:9`, `generate_audio=false`, `keep_original_sound=true`
+- Provider completion: 326s；没有付费视频重抽。
+- MP4: H.264 864x496, 24fps, AAC stereo 32kHz, 10.080s, 4,064,624 bytes；完整
+  decode 通过。源片也是 10.080s/24fps/AAC 32kHz。
+- 音频：PCM 不逐样本相同，但全长 sample correlation 为 0.9580，50ms RMS envelope
+  零延迟相关为 0.9944，说明原声节奏/击打结构基本保留。
+- 视觉：两位目标角色、服装主色和目标道场在全程抽帧中保持；原片“首位角色先攻、对手
+  反击、首位角色最终倒地”的动作因果和胜负关系复现。局部拳脚、精确构图和逐帧 camera
+  trajectory 仍不同，因此是高质量结构复刻，不是 frame-exact edit。
+
+该回归暴露并在分支内修复了两个通用层问题：Node media runtime 现在容忍 Agent 将
+`saveOutput()` descriptor 或 workspace path 放进 `outputs[].path`；Seedance 2.0 现在按
+时间线真实媒体类型把混排的 `<<<media_N>>>` 映射为 `@imageN/@videoN`，避免新增准备图后
+引用错位。Skill 同时明确禁止为了尺寸/格式修复调用生图模型。

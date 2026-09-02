@@ -1,8 +1,34 @@
 import { describe, expect, it, vi } from 'vitest'
-import { createVideo } from '@/lib/skills/create-video'
+import { createVideo, prepareSeedance20References } from '@/lib/skills/create-video'
 import { estimateVideoCredits, estimateVideoProviderCostUsd, getDefaultVideoModelId, getRequiredVideoCredits, getVideoModelCapability, listVideoModelCapabilities, normalizeVideoModelId, normalizeVideoResolution, resolveAgentVideoSelection, resolveClosestSupportedAspectRatio, resolvePersistedVideoDuration, resolveVideoGenerationRoute, resolveVideoImageWorkflow, resolveVideoOutputDuration, resolveVideoProviderAspectRatio, resolveVideoProviderModel, supportsNativeTextToVideo, validateVideoImageWorkflowRequest, validateVideoModelRequest, validateVideoResolutionRequest } from '@/lib/video-model-capabilities'
 
 describe('video model reference limits', () => {
+  it('maps mixed timeline image/video indices to Seedance 2.0 provider markers', () => {
+    const prepared = prepareSeedance20References({
+      prompt: 'Use <<<media_4>>> for motion, replace actors with <<<media_5>>> and <<<media_6>>>, background <<<media_7>>>.',
+      images: [
+        'https://example.com/original-a.webp',
+        'https://example.com/original-b.webp',
+        'https://example.com/original-bg.webp',
+        '',
+        'https://example.com/prepared-a.png',
+        'https://example.com/prepared-b.png',
+        'https://example.com/prepared-bg.png',
+      ],
+      videoUrls: ['https://example.com/source.mp4'],
+    })
+
+    expect(prepared.images).toEqual([
+      'https://example.com/prepared-a.png',
+      'https://example.com/prepared-b.png',
+      'https://example.com/prepared-bg.png',
+    ])
+    expect(prepared.prompt).toContain('@video1 for motion')
+    expect(prepared.prompt).toContain('@image1 and @image2')
+    expect(prepared.prompt).toContain('background @image3')
+    expect(prepared.prompt).not.toContain('<<<media_')
+  })
+
   it('defaults every image-capable provider to reference-to-video', () => {
     const imageCapableModels = listVideoModelCapabilities()
       .filter(capability => capability.maxImageReferences !== 0)

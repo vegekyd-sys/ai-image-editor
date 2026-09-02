@@ -57,6 +57,9 @@ describe('video-edit Skill replication profile', () => {
     expect(read('src/skills/video-edit/references/replication-protocol.md')).toContain(
       'skills/video-edit/references/similarity-qa.md',
     )
+    expect(read('src/skills/video-edit/references/direct-reference-route.md')).toContain(
+      'Never call\n`generate_image` merely to increase dimensions',
+    )
     expect(read('src/skills/reference-video-studio/SKILL.md')).toContain(
       'Use the video-edit replication profile',
     )

@@ -113,10 +113,45 @@ function findAudioMarkers(prompt: string): Set<number> {
   ].filter(n => Number.isInteger(n) && n > 0));
 }
 
-function prepareSeedance20ReferenceMarkers(prompt: string): string {
-  return prompt
+export function prepareSeedance20References(options: {
+  prompt: string;
+  images: string[];
+  videoUrls: string[];
+}): { prompt: string; images: string[] } {
+  const refs = [...new Set(
+    Array.from(options.prompt.matchAll(/<<<(?:image|media)_(\d+)>>>/g), match => Number(match[1]))
+  )];
+  const mediaTags = new Map<number, string>();
+  const referencedImages: string[] = [];
+  let videoIndex = 0;
+
+  for (const ref of refs) {
+    const image = options.images[ref - 1];
+    if (image?.startsWith('http')) {
+      referencedImages.push(image);
+      mediaTags.set(ref, `@image${referencedImages.length}`);
+    } else if (videoIndex < options.videoUrls.length) {
+      videoIndex += 1;
+      mediaTags.set(ref, `@video${videoIndex}`);
+    }
+  }
+
+  let prompt = options.prompt.replace(/<<<(?:image|media)_(\d+)>>>/g, (marker, rawIndex) => {
+    return mediaTags.get(Number(rawIndex)) || marker;
+  });
+  prompt = prompt
     .replace(/<<<video_(\d+)>>>/gi, (_marker, rawIndex) => `@video${Number(rawIndex)}`)
     .replace(/<<<audio_(\d+)>>>/gi, (_marker, rawIndex) => `@audio${Number(rawIndex)}`);
+
+  if (videoIndex < options.videoUrls.length) {
+    const remaining = options.videoUrls
+      .slice(videoIndex)
+      .map((_, index) => `@video${videoIndex + index + 1}`)
+      .join(', ');
+    prompt = `${prompt}\nUse ${remaining} as motion, camera, and visual-style references.`;
+  }
+
+  return { prompt, images: referencedImages };
 }
 
 function prepareSeedance25References(options: {
@@ -339,6 +374,14 @@ export async function createVideo(input: CreateVideoInput): Promise<CreateVideoR
       });
       filteredImages = prepared.images;
       finalPrompt = prepared.prompt;
+    } else if (route.provider === 'seedance') {
+      const prepared = prepareSeedance20References({
+        prompt: script,
+        images,
+        videoUrls: providerVideoUrls,
+      });
+      filteredImages = prepared.images;
+      finalPrompt = prepared.prompt;
     } else if (isWan30) {
       const prepared = prepareWan30References({
         prompt: script,
@@ -473,9 +516,7 @@ export async function createVideo(input: CreateVideoInput): Promise<CreateVideoR
       const providerDuration = provider === 'seedance-2.5' && videoOperation === 'edit'
         ? -1
         : resolvedDuration != null ? resolvedDuration : undefined;
-      const providerPrompt = provider === 'seedance-2.5'
-        ? finalPrompt
-        : prepareSeedance20ReferenceMarkers(finalPrompt);
+      const providerPrompt = finalPrompt;
       taskId = await createEvolinkTask({
         prompt: providerPrompt,
         images: filteredImages,

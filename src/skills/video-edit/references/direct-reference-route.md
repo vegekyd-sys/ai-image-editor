@@ -71,6 +71,30 @@ reference-to-video. Do not set `video_operation: "edit"`. Seedance 2.5 may use
 Seedance 2.0 uses a supported explicit duration matching the source as closely
 as possible.
 
+## Deterministic Provider-Input Repair
+
+Before the first paid submission, inspect known reference dimensions. If a
+Seedance image is below the provider minimum, resize/pad the supplied pixels
+with `run_code({ runtime: "node", media_refs: [...] })`, save each result with
+`saveOutput`, then publish those workspace image outputs once with
+`write_file({ fromWorkspaceOutputs: true, mediaType: "image", limit: N,
+publish: true })`. Use the newly returned Media Index items in the final script.
+
+This is transport preparation, not creative regeneration. Never call
+`generate_image` merely to increase dimensions, convert format, or add padding;
+that changes identity and adds avoidable cost. Preserve aspect ratio and all
+source pixels. A robust Node return shape is:
+
+```js
+const saved = await saveOutput(out, workspacePath, 'image/png');
+outputs.push({ ...saved, path: out, contentType: 'image/png', description });
+return { type: 'files', outputs };
+```
+
+If deterministic preparation cannot produce a new public URL, stop before any
+video submission and report the input blocker. Do not fall back to image
+generation.
+
 ## QA and Correction
 
 Run the shared similarity gates. For a first P0 comparison, prioritize:

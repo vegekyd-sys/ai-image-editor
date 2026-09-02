@@ -23,6 +23,7 @@ chooses source-edit versus replication, and may return here for the provider
 prompt. Do not expose a provider `edit` mode as the product workflow.
 
 Reference-image preflight: EvoLink Seedance accepts JPEG/PNG/WebP images only, with width and height each 300-6000px, aspect ratio 0.4-2.5, and at most 30MB per image. The tool returns a specific `errorReason` (`too_small`, `too_large`, `invalid_aspect_ratio`, `unsupported_format`, or `unreadable`) plus actual dimensions and limits. `retryable: false` means do not resubmit the same URL. When `repairable: true`, decide whether to create a new resized/padded/converted public image URL or ask the user for a better source, then submit only with that new URL. A second unchanged submission becomes `terminal: true` and ends the retry loop.
+Pure size/format repair is deterministic transport work: use `run_code` + `saveOutput`, publish the prepared workspace images once, and reference their new Media Index items. Never call `generate_image` merely to upscale, pad, or convert a supplied reference; that changes identity and adds cost. For source-led replication, follow the exact return/publish contract in `skills/video-edit/references/direct-reference-route.md`.
 
 Reference-replication boundary: when the user wants measurable matching of a
 supplied reference's shot count/order/timing, framing, camera motion,
