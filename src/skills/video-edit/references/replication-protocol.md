@@ -41,12 +41,13 @@ not pixel identity or a vague "similar feeling".
    second shot before a batch. For a direct short clip, one complete attempt is
    the representative proof. Allow one evidence-driven correction; more paid
    work needs approval.
-6. **Generate or map content.** For direct structural replication, write one
-   complete natural `story_prompt` containing the measured duration, source
-   authority, performer anchors, replacement identities, environment policy,
-   timed actions, exclusions, and requested sound. Call `generate_animation`
-   once. The Skill owns this behavior; there is no separate replication schema
-   or runtime prompt compiler. Seedance uses reference-to-video, never typed edit.
+6. **Generate or map content.** For direct structural replication, pass the
+   measured identity/object/environment mappings in
+   `generate_animation.replication_contract`; put timed shots/actions and
+   natural sound direction in `story_prompt`. Runtime deterministically expands
+   the fragile invariant wording. This is an internal tool contract under the
+   same Skill, not a second product workflow. Seedance uses reference-to-video,
+   never typed edit.
 7. **Assemble only when needed.** A direct reference result may remain one
    provider output after QA. Structured routes put pixels into one editable
    Remotion composition; the Blueprint stays the master clock. Do not add a

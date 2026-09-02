@@ -61,7 +61,7 @@ describe('video-edit Skill replication profile', () => {
       'Never call\n`generate_image` merely to increase dimensions',
     )
     expect(read('src/skills/video-edit/references/direct-reference-route.md')).toContain(
-      'The Skill is the implementation',
+      '`replication_contract`',
     )
     expect(read('src/skills/video-edit/references/direct-reference-route.md')).toContain(
       'raw-video `preview_frame` once with 4-6 representative',
@@ -69,27 +69,25 @@ describe('video-edit Skill replication profile', () => {
     expect(read('src/skills/video-edit/references/direct-reference-route.md')).toContain(
       'stop before `generate_animation`',
     )
-    expect(read('src/lib/agent-tools.ts')).not.toContain('replication_contract')
-    expect(read('src/lib/agent-tools.ts')).not.toContain('compileVideoReplicationPrompt')
+    expect(read('src/lib/agent-tools.ts')).toContain('replication_contract')
+    expect(read('src/lib/agent-tools.ts')).toContain('compileVideoReplicationPrompt')
     expect(read('src/lib/agent-tools.ts')).toContain(
       "source: 'video-contact-sheet'",
     )
     const directReferenceRoute = read('src/skills/video-edit/references/direct-reference-route.md')
     const agentToolsSource = read('src/lib/agent-tools.ts')
-    expect(directReferenceRoute).not.toContain('replication_contract')
+    expect(directReferenceRoute).toContain('replication_contract')
     expect(directReferenceRoute).not.toContain('"audio_policy"')
     expect(directReferenceRoute).toContain(
-      'describe requested music, ambience, dialogue, voice, and effects naturally',
+      'requested music, ambience, dialogue, voice, and effects tied to visible',
     )
-    expect(directReferenceRoute).toContain('Unless the user explicitly asks for silence')
-    expect(directReferenceRoute).toContain('optimize this prompt for brevity')
-    expect(directReferenceRoute).toContain('sole temporal performance, edit, composition, and camera authority')
-    expect(directReferenceRoute).toContain("Do not infer that an\noccupation or story role requires preserving the source person's uniform")
-    expect(directReferenceRoute).toContain('literal replacement-conflict check')
-    expect(directReferenceRoute).toContain('this is a paid-submit blocker')
-    expect(directReferenceRoute).toContain('reference-sheet/contact-sheet leakage')
-    expect(directReferenceRoute).toContain('Exact temporal fidelity has higher')
-    expect(agentToolsSource).not.toContain('replication_contract')
+    expect(directReferenceRoute).toContain('unless the user explicitly asks for silence')
+    expect(directReferenceRoute).toContain('runtime owns the repeated')
+    expect(directReferenceRoute).toContain('A whole-person replacement includes the supplied clothing')
+    expect(directReferenceRoute).toContain('occupation or story role requires')
+    expect(directReferenceRoute).toContain('A conflict is a paid-submit blocker')
+    expect(read('src/lib/video-replication-prompt.ts')).toContain('source occupation or story role')
+    expect(agentToolsSource).not.toContain('replication_contract.audio_policy')
     expect(read('src/skills/reference-video-studio/SKILL.md')).toContain(
       'Use the video-edit replication profile',
     )

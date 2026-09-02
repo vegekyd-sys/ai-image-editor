@@ -30,101 +30,52 @@ Use the full schema when the candidate boundary detector finds multiple shots,
 confidence is low, captions/audio carry meaning, or the user requests an
 editable result.
 
-## One-Prompt Protocol
+## Prompt Contract
 
-After understanding the complete clip, call `generate_animation` once with one
-complete, natural `story_prompt`. The Skill is the implementation: do not look
-for a separate replication mode, schema, or runtime prompt compiler. Do not
-optimize this prompt for brevity: keep every measured fact that helps the model
-reproduce the source. Write the following prompt spine in this order and adapt
-it to the actual clip rather than pasting generic filler.
+After understanding the complete clip, call `generate_animation` once with both
+an evidence-based `story_prompt` and `replication_contract`. This contract is an
+internal deterministic tool input, not a second Skill, user mode, editor, or
+state machine. The Agent supplies measured semantics; runtime owns the repeated
+source-authority, identity, continuity, structure, and exclusion wording.
 
-### 1. Source Authority
+Populate:
 
-Name the complete reference-video Media Index and measured duration. State that
-it is the sole temporal performance, edit, composition, and camera authority
-from the first visible frame through the final held state. Require the same:
+- complete source video Media Index and measured duration;
+- every replaced performer, identified by stable source appearance/costume plus
+  an opening or distinctive action, mapped to one replacement Media Index and
+  its exact identity, face, hair, body, clothing, colors, footwear, and
+  accessories;
+- every replaced object, identified by source state/action/handler, mapped to
+  one replacement Media Index and its exact shape, material, color,
+  construction, surface details, and distinctive features;
+- replacement environment only when scenery changes; omission means preserve
+  the visible source environment;
+- requested style and clip-specific exclusions when they matter.
 
-- shot count/order, cut points, shot durations, and transitions;
-- camera path, lens perspective, framing changes, horizon, subject scale, and
-  screen direction;
-- performer/object spacing, floor contact, depth, and travel direction;
-- action/choreography, body and object trajectories, gestures, contacts,
-  impacts, reactions, pauses, motion blur, and outcome.
+A whole-person replacement includes the supplied clothing unless the user
+explicitly narrows it. Never infer that an occupation or story role requires
+preserving the source uniform. Never map a role only as left/right/front/back;
+subjects cross, turn, overlap, fall, and reverse screen direction.
 
-Replacement media controls only the layers the user asked to replace. It must
-not rewrite the reference action, timing, camera, editing, or result.
+Keep `story_prompt` focused on measured content the compiler cannot infer:
 
-### 2. Role and Object Mapping
+1. first line title;
+2. every shot or continuous action phase in source order, with measured or
+   best-evidence timing, framing/camera, opening state, preparation,
+   anticipation, action, impact, recoil, recovery, crossing, transition, and
+   ending hold;
+3. requested music, ambience, dialogue, voice, and effects tied to visible
+   beats; unless the user explicitly asks for silence, leave model-native audio
+   enabled;
+4. case-specific style or exceptions.
 
-For every replaced person or object, identify the source role by stable visible
-evidence plus an opening or distinctive action. Then bind it to one replacement
-Media Index and describe the traits that must stay stable. A person replacement
-includes face, hair, body, clothing, colors, and accessories from the supplied
-image unless the user explicitly narrows the change. Do not infer that an
-occupation or story role requires preserving the source person's uniform. For
-example, replacing a waiter with a full-body reference replaces the waiter's
-uniform too unless the user says to keep it. An object replacement must retain
-the supplied shape, material, color, and distinctive details throughout its
-complete state progression.
-
-Immediately before submission, perform a literal replacement-conflict check on
-the final `story_prompt`: no sentence may preserve or reintroduce a source face,
-hair, body, garment, color, accessory, or object property that the selected
-replacement reference is supposed to control. If there is a conflict, rewrite
-the prompt before calling `generate_animation`; this is a paid-submit blocker.
-
-Never map a role only as "left/right/front/back": subjects cross, turn, overlap,
-fall, and reverse screen direction. Track them through identity plus action.
-
-### 3. Identity, Causality, and Continuity Lock
-
-Require replacement identities and objects to remain stable during profiles,
-rear views, fast motion, overlap, partial occlusion, contact, falls, smoke, and
-motion blur. Preserve who initiates and receives each action, who interacts with
-each object, who wins or loses, every travel direction, and the exact final
-poses/object state.
-
-Explicitly prohibit morphing, blending, duplication, costume drift, role swap,
-transition back to the source subject, and reference-sheet/contact-sheet leakage.
-
-### 4. Environment Policy
-
-Say explicitly whether the source environment stays or is replaced. If it is
-replaced, remove conflicting source architecture, decoration, signage, props,
-lighting motifs, and scenery while preserving camera geometry, subject spacing,
-floor contact, depth, lens perspective, and lighting continuity. If it stays,
-name the visible background anchors that must survive every shot.
-
-### 5. Timed Shot Reconstruction
-
-Describe every shot in source order with measured or best-evidence duration.
-Include its opening pose/state, preparation, anticipation, action, impact,
-recoil, recovery, crossing, transition, and ending hold. Name important boundary
-and impact times. Preserve the original camera-to-subject relationship after
-replacement. Do not beautify, simplify, reinterpret, extend, shorten, or turn
-the clip into a merely similar new scene.
-
-### 6. Sound and Style
-
-Unless the user explicitly asks for silence, leave model-native audio enabled
-and describe requested music, ambience, dialogue, voice, and effects naturally
-in `story_prompt`, tied to visible beats where relevant. Do not add automatic
-audio post-processing. Describe style without allowing it to override timing,
-identity, physical coherence, or the source outcome.
-
-### 7. Hard Exclusions and Final Priority
-
-End with clip-specific exclusions plus all relevant invariants: no new or
-omitted shots/actions/impacts/reactions/pauses; no different opening or ending;
-no invented camera angle, lens, zoom, pan, tilt, dolly, orbit, or handheld
-motion; no slow motion, speed ramp, freeze, montage, or time remapping unless it
-exists in the source; and no invented props, people, text, logos, effects, or
-story events.
-
-Finish by telling the model this is a structural repaint of the supplied video,
-not a newly staged scene inspired by it. Exact temporal fidelity has higher
-priority than novelty or visual embellishment.
+Do not paste generic source/identity/structure locks into `story_prompt`; the
+compiler adds them deterministically. Immediately before submission, compare
+the contract with `story_prompt`: no sentence may preserve or reintroduce a
+source face, hair, body, garment, color, accessory, environment, or object
+property controlled by replacement media. A conflict is a paid-submit blocker;
+rewrite the free-form direction or correct the contract first. Do not add an
+automatic audio post-processing workflow or infer exact source-track reuse.
 
 ## Complete-Understanding Gate
 
