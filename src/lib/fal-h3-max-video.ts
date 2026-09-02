@@ -1,7 +1,9 @@
-const FAL_QUEUE_BASE = 'https://queue.fal.run/minimax/h3-max'
-const TEXT_ENDPOINT = 'minimax/h3-max/text-to-video'
-const IMAGE_ENDPOINT = 'minimax/h3-max/image-to-video'
-const TASK_PREFIX = 'fal-h3max-'
+const LEGACY_QUEUE_BASE = 'https://queue.fal.run/minimax/h3-max'
+const TURBO_QUEUE_BASE = 'https://queue.fal.run/minimax/h3-max-turbo'
+const TEXT_ENDPOINT = 'minimax/h3-max-turbo/text-to-video'
+const IMAGE_ENDPOINT = 'minimax/h3-max-turbo/image-to-video'
+const LEGACY_TASK_PREFIX = 'fal-h3max-'
+const TURBO_TASK_PREFIX = 'fal-h3max-turbo-'
 
 export type FalH3MaxResolution = '480p' | '768p'
 
@@ -38,12 +40,24 @@ function headers(): Record<string, string> {
   }
 }
 
-function rawRequestId(taskId: string): string {
-  return taskId.startsWith(TASK_PREFIX) ? taskId.slice(TASK_PREFIX.length) : taskId
+function taskRequest(taskId: string): { requestId: string; queueBase: string } {
+  if (taskId.startsWith(TURBO_TASK_PREFIX)) {
+    return {
+      requestId: taskId.slice(TURBO_TASK_PREFIX.length),
+      queueBase: TURBO_QUEUE_BASE,
+    }
+  }
+  if (taskId.startsWith(LEGACY_TASK_PREFIX)) {
+    return {
+      requestId: taskId.slice(LEGACY_TASK_PREFIX.length),
+      queueBase: LEGACY_QUEUE_BASE,
+    }
+  }
+  return { requestId: taskId, queueBase: TURBO_QUEUE_BASE }
 }
 
 function providerResolution(resolution?: FalH3MaxResolution): '480P' | '768P' {
-  return resolution === '768p' ? '768P' : '480P'
+  return resolution === '480p' ? '480P' : '768P'
 }
 
 function normalizePrompt(prompt: string): string {
@@ -73,9 +87,9 @@ export async function createFalH3MaxVideoTask(input: FalH3MaxTaskInput): Promise
   const images = input.images || []
   const duration = input.duration ?? 5
 
-  if (!prompt) throw new Error('MiniMax H3 Max requires a non-empty prompt.')
-  if (images.length > 1) throw new Error('MiniMax H3 Max currently supports exactly one start image, not multi-image references.')
-  if (![5, 10, 15].includes(duration)) throw new Error('MiniMax H3 Max duration must be one of 5, 10, or 15 seconds.')
+  if (!prompt) throw new Error('MiniMax H3 Max Turbo requires a non-empty prompt.')
+  if (images.length > 1) throw new Error('MiniMax H3 Max Turbo currently supports exactly one start image, not multi-image references.')
+  if (![5, 10, 15].includes(duration)) throw new Error('MiniMax H3 Max Turbo duration must be one of 5, 10, or 15 seconds.')
 
   const endpoint = images.length === 1 ? IMAGE_ENDPOINT : TEXT_ENDPOINT
   const payload: Record<string, unknown> = {
@@ -100,16 +114,16 @@ export async function createFalH3MaxVideoTask(input: FalH3MaxTaskInput): Promise
     headers: headers(),
     body: JSON.stringify(payload),
   })
-  const body = await readJson(response, 'MiniMax H3 Max submit')
+  const body = await readJson(response, 'MiniMax H3 Max Turbo submit')
   const requestId = typeof body.request_id === 'string' ? body.request_id : ''
-  if (!requestId) throw new Error(`MiniMax H3 Max did not return request_id: ${JSON.stringify(body)}`)
-  return `${TASK_PREFIX}${requestId}`
+  if (!requestId) throw new Error(`MiniMax H3 Max Turbo did not return request_id: ${JSON.stringify(body)}`)
+  return `${TURBO_TASK_PREFIX}${requestId}`
 }
 
 export async function getFalH3MaxVideoTask(taskId: string): Promise<FalH3MaxTaskResult> {
-  const requestId = rawRequestId(taskId)
+  const { requestId, queueBase } = taskRequest(taskId)
   const authHeaders = { Authorization: `Key ${apiKey()}` }
-  const statusResponse = await fetch(`${FAL_QUEUE_BASE}/requests/${encodeURIComponent(requestId)}/status`, {
+  const statusResponse = await fetch(`${queueBase}/requests/${encodeURIComponent(requestId)}/status`, {
     headers: authHeaders,
   })
   const statusBody = await readJson(statusResponse, 'MiniMax H3 Max status')
@@ -126,7 +140,7 @@ export async function getFalH3MaxVideoTask(taskId: string): Promise<FalH3MaxTask
   }
   if (providerStatus !== 'COMPLETED') return { taskId, status: 'processing' }
 
-  const resultResponse = await fetch(`${FAL_QUEUE_BASE}/requests/${encodeURIComponent(requestId)}`, {
+  const resultResponse = await fetch(`${queueBase}/requests/${encodeURIComponent(requestId)}`, {
     headers: authHeaders,
   })
   const resultBody = await readJson(resultResponse, 'MiniMax H3 Max result') as {

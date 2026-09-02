@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
-describe('fal MiniMax H3 Max adapter', () => {
+describe('fal MiniMax H3 Max Turbo adapter', () => {
   beforeEach(() => {
     vi.resetModules()
     vi.stubEnv('FAL_KEY', 'test-fal-key')
@@ -12,14 +12,14 @@ describe('fal MiniMax H3 Max adapter', () => {
     vi.resetModules()
   })
 
-  it('submits native 480P text-to-video with a fixed aspect ratio', async () => {
+  it('submits native 768P Turbo text-to-video by default with a fixed aspect ratio', async () => {
     vi.stubGlobal('fetch', vi.fn(async (url: string | URL | Request, init?: RequestInit) => {
-      expect(String(url)).toBe('https://queue.fal.run/minimax/h3-max/text-to-video')
+      expect(String(url)).toBe('https://queue.fal.run/minimax/h3-max-turbo/text-to-video')
       expect(init?.headers).toMatchObject({ Authorization: 'Key test-fal-key' })
       expect(JSON.parse(String(init?.body))).toEqual({
         prompt: 'A tiny red robot crosses a sunlit studio.',
         duration: 5,
-        resolution: '480P',
+        resolution: '768P',
         enable_safety_checker: true,
         prompt_expansion_mode: 'balanced',
         sync_mode: false,
@@ -33,12 +33,12 @@ describe('fal MiniMax H3 Max adapter', () => {
       prompt: 'A tiny red robot crosses a sunlit studio.',
       images: [],
       aspectRatio: '9:16',
-    })).resolves.toBe('fal-h3max-request-t2v')
+    })).resolves.toBe('fal-h3max-turbo-request-t2v')
   })
 
   it('submits one image through the native 768P image-to-video endpoint', async () => {
     vi.stubGlobal('fetch', vi.fn(async (url: string | URL | Request, init?: RequestInit) => {
-      expect(String(url)).toBe('https://queue.fal.run/minimax/h3-max/image-to-video')
+      expect(String(url)).toBe('https://queue.fal.run/minimax/h3-max-turbo/image-to-video')
       const body = JSON.parse(String(init?.body))
       expect(body).toMatchObject({
         prompt: 'the provided first frame turns toward the camera.',
@@ -57,7 +57,7 @@ describe('fal MiniMax H3 Max adapter', () => {
       images: ['https://example.com/start.jpg'],
       duration: 10,
       resolution: '768p',
-    })).resolves.toBe('fal-h3max-request-i2v')
+    })).resolves.toBe('fal-h3max-turbo-request-i2v')
   })
 
   it('routes createVideo to H3 Max I2V while leaving the global image workflow untouched', async () => {
@@ -75,9 +75,9 @@ describe('fal MiniMax H3 Max adapter', () => {
       videoModel: 'minimax-h3-max',
     })).resolves.toMatchObject({
       success: true,
-      taskId: 'fal-h3max-create-video-i2v',
+      taskId: 'fal-h3max-turbo-create-video-i2v',
       videoModel: 'minimax-h3-max',
-      providerModel: 'minimax/h3-max/image-to-video',
+      providerModel: 'minimax/h3-max-turbo/image-to-video',
     })
   })
 
@@ -94,7 +94,7 @@ describe('fal MiniMax H3 Max adapter', () => {
     })).rejects.toThrow('5, 10, or 15 seconds')
   })
 
-  it('polls the durable fal request and returns the completed MP4 URL', async () => {
+  it('keeps polling durable legacy H3 Max requests after the Turbo cutover', async () => {
     vi.stubGlobal('fetch', vi.fn(async (url: string | URL | Request) => {
       const value = String(url)
       if (value.endsWith('/status')) {
@@ -117,6 +117,7 @@ describe('fal MiniMax H3 Max adapter', () => {
     let statusCalls = 0
     vi.stubGlobal('fetch', vi.fn(async (url: string | URL | Request) => {
       const value = String(url)
+      expect(value).toContain('https://queue.fal.run/minimax/h3-max-turbo/requests/fast-app')
       if (value.endsWith('/status')) {
         statusCalls += 1
         return new Response(JSON.stringify({
@@ -129,11 +130,11 @@ describe('fal MiniMax H3 Max adapter', () => {
     }))
 
     const { waitForFalH3MaxVideoTask } = await import('@/lib/fal-h3-max-video')
-    await expect(waitForFalH3MaxVideoTask('fal-h3max-fast-app', {
+    await expect(waitForFalH3MaxVideoTask('fal-h3max-turbo-fast-app', {
       timeoutMs: 100,
       pollIntervalMs: 1,
     })).resolves.toEqual({
-      taskId: 'fal-h3max-fast-app',
+      taskId: 'fal-h3max-turbo-fast-app',
       status: 'completed',
       videoUrl: 'https://v3b.fal.media/files/h3-max.mp4',
     })

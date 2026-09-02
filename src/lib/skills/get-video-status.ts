@@ -125,10 +125,10 @@ export async function getVideoStatus(input: GetVideoStatusInput): Promise<GetVid
         videoUrl: result.videoUrl,
         error: result.error,
         message: result.status === 'completed'
-          ? 'MiniMax H3 Max video rendering completed!'
+          ? 'MiniMax H3 Max Turbo video rendering completed!'
           : result.status === 'failed'
-            ? `MiniMax H3 Max video rendering failed: ${result.error || 'Unknown error'}`
-            : 'MiniMax H3 Max video is rendering.',
+            ? `MiniMax H3 Max Turbo video rendering failed: ${result.error || 'Unknown error'}`
+            : 'MiniMax H3 Max Turbo video is rendering.',
       };
     }
 

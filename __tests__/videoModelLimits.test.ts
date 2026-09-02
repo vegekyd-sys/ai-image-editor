@@ -164,9 +164,10 @@ describe('video model reference limits', () => {
     expect(validateVideoResolutionRequest({ model: 'minimax-h3', resolution: '768p' })).toBeNull()
   })
 
-  it('registers H3 Max as the only T2V/single-image-I2V fast route', () => {
+  it('registers H3 Max Turbo as the only T2V/single-image-I2V fast route', () => {
     expect(normalizeVideoModelId('H3 Max')).toBe('minimax-h3-max')
-    expect(normalizeVideoResolution('minimax-h3-max', 'auto')).toBe('480p')
+    expect(normalizeVideoModelId('H3 Max Turbo')).toBe('minimax-h3-max')
+    expect(normalizeVideoResolution('minimax-h3-max', 'auto')).toBe('768p')
     expect(resolveVideoGenerationRoute({ model: 'minimax-h3-max', resolution: '768p' })).toMatchObject({
       model: 'minimax-h3-max',
       provider: 'fal-h3-max',
@@ -181,13 +182,13 @@ describe('video model reference limits', () => {
       supportsExplicitImageToVideo: true,
       supportsVideoReference: false,
       supportedResolutions: ['480p', '768p'],
-      defaultResolution: '480p',
+      defaultResolution: '768p',
     })
-    expect(resolveVideoProviderModel({ model: 'minimax-h3-max', imageReferenceCount: 0 })).toBe('minimax/h3-max/text-to-video')
-    expect(resolveVideoProviderModel({ model: 'minimax-h3-max', imageReferenceCount: 1 })).toBe('minimax/h3-max/image-to-video')
+    expect(resolveVideoProviderModel({ model: 'minimax-h3-max', imageReferenceCount: 0 })).toBe('minimax/h3-max-turbo/text-to-video')
+    expect(resolveVideoProviderModel({ model: 'minimax-h3-max', imageReferenceCount: 1 })).toBe('minimax/h3-max-turbo/image-to-video')
     expect(resolveVideoOutputDuration({ model: 'minimax-h3-max' })).toBe(5)
-    expect(estimateVideoCredits({ model: 'minimax-h3-max', resolution: '480p', durationSec: 5 })).toBe(50)
-    expect(estimateVideoCredits({ model: 'minimax-h3-max', resolution: '768p', durationSec: 5 })).toBe(80)
+    expect(estimateVideoCredits({ model: 'minimax-h3-max', resolution: '480p', durationSec: 5 })).toBe(25)
+    expect(estimateVideoCredits({ model: 'minimax-h3-max', resolution: '768p', durationSec: 5 })).toBe(40)
     expect(validateVideoModelRequest({ model: 'minimax-h3-max', outputDuration: 7 })).toContain('one of 5, 10, 15 seconds')
     expect(validateVideoModelRequest({ model: 'minimax-h3-max', outputDuration: 5, imageReferenceCount: 2 })).toContain('at most 1 reference images')
     expect(validateVideoModelRequest({ model: 'minimax-h3-max', outputDuration: 5, hasVideoReference: true })).toContain('does not support reference videos')

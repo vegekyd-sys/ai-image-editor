@@ -585,7 +585,7 @@ export async function createVideo(input: CreateVideoInput): Promise<CreateVideoR
       if (providerVideoUrls.length > 0 || (audioUrls?.length || 0) > 0) {
         return {
           success: false,
-          message: 'MiniMax H3 Max currently supports text-to-video or one-image-to-video only. Reference video and audio inputs are not available yet.',
+          message: 'MiniMax H3 Max Turbo currently supports text-to-video or one-image-to-video only. Reference video and audio inputs are not available yet.',
         };
       }
       const { createFalH3MaxVideoTask } = await import('../fal-h3-max-video');
@@ -603,13 +603,13 @@ export async function createVideo(input: CreateVideoInput): Promise<CreateVideoR
         aspectRatio: providerAspectRatio,
         resolution: route.resolution as '480p' | '768p',
       });
-      console.log(`✅ [create_video] MiniMax H3 Max task created: ${taskId}`);
+      console.log(`✅ [create_video] MiniMax H3 Max Turbo task created: ${taskId}`);
       return {
         success: true,
         taskId,
         videoModel: provider,
         providerModel,
-        message: `MiniMax H3 Max ${filteredImages.length ? 'image-to-video' : 'text-to-video'} task created. Task ID: ${taskId}. Use makaron_get_video_status to poll.`,
+        message: `MiniMax H3 Max Turbo ${filteredImages.length ? 'image-to-video' : 'text-to-video'} task created. Task ID: ${taskId}. Use makaron_get_video_status to poll.`,
       };
     } else if (route.provider === 'grok') {
       const { createXaiVideoTask } = await import('../xai-video');

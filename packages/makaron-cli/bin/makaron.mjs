@@ -1925,8 +1925,8 @@ Generation options:
   --help, -h                Show this help.
 
 Recent model choices:
-  minimax-h3-max  Near-real-time T2V or one-start-image I2V; 5/10/15s;
-                  480p default or 768p; no video/audio/multi-image references.
+  minimax-h3-max  H3 Max Turbo faster-than-real-time T2V or one-start-image I2V;
+                  5/10/15s; native 768p default or 480p; no video/audio/multi-image references.
   wan-3.0-prime   Faster Wan 3.0 tier; 2-30s; 480p through 4k; multimodal refs.
   wan-3.0         Wan standard tier with the same public duration/resolution range.
   seedance-2.5    4-30s; 480p/720p; generate/edit/extend and multimodal refs.
@@ -1935,7 +1935,7 @@ Recent model choices:
   sync-lipsync-v3 Exactly one video plus one MP3/WAV replacement track.
 
 Examples:
-  makaron video create --script "A tiny robot runs through a sunlit studio" --duration 5 --video-model minimax-h3-max --video-resolution 480p
+  makaron video create --script "A tiny robot runs through a sunlit studio" --duration 5 --video-model minimax-h3-max
   makaron video create --script "The subject turns toward camera" --image start.jpg --duration 5 --video-model minimax-h3-max --video-resolution 768p
   makaron video create --script "A crystal city wakes at dawn" --duration 5 --video-model wan-3.0-prime --video-resolution 4k
   makaron video create --script "Continue the camera move" --video clip.mp4 --duration 4 --video-model grok --video-operation extend
@@ -1950,7 +1950,7 @@ Use "makaron chat --project <id|auto> ..." for Agent-routed project work, then
 function printVideoHelp() {
   console.log(`Video commands:
   video script --image <file> [--image <file>] "direction"   Write video script
-  video create --script "..." --video-model minimax-h3-max   Near-real-time H3 Max (480p default)
+  video create --script "..." --video-model minimax-h3-max   H3 Max Turbo (native 768p default)
   video create --script "..." --video-model wan-3.0-prime    Fast Wan tier, up to 4k
   video create --script "..." --video-model seedance-2.5     4-30s multimodal generation/edit/extend
   video create --script "..." --video <file|url> --video-model grok --video-operation extend
@@ -2020,7 +2020,7 @@ Commands:
 Examples:
   makaron chat --project auto --image product.jpg "plan a launch poster"
   makaron chat --project <id> --skill "Football Captain" "make this cinematic"
-  makaron chat --project <id> "use H3 Max 480p to make a 5-second video"
+  makaron chat --project <id> "use H3 Max Turbo to make a 5-second 768p video"
   makaron edit --background transparent --out sticker.png "a magenta star sticker"
 
 Run makaron <command> --help for command-specific options.
@@ -2996,7 +2996,7 @@ if (!command || command === '--help' || command === '-h' || command === 'help') 
       }
       else if (args[i] === '--wait') wait = true;
     }
-    const selectedVideoModel = ['h3 max', 'h3-max', 'h3max', 'minimax-h3max'].includes(videoModel)
+    const selectedVideoModel = ['h3 max', 'h3-max', 'h3max', 'h3 max turbo', 'h3-max-turbo', 'h3maxturbo', 'minimax-h3max', 'minimax-h3-max-turbo'].includes(videoModel)
       ? 'minimax-h3-max'
       : ['wan3', 'wan3.0', 'wan30', 'wan-3', 'wan3-pro', 'wan3.0-pro', 'wan30-pro', 'wan-3-pro', 'berry-1.0-pro', 'w3.0-video-pro'].includes(videoModel)
       ? 'wan-3.0'
@@ -3025,10 +3025,10 @@ if (!command || command === '--help' || command === '-h' || command === 'help') 
     if (isMinimaxH3 && images.length > 9) { console.error('MiniMax H3 supports at most 9 image references.'); process.exit(1); }
     if (isMinimaxH3 && videos.length > 3) { console.error('MiniMax H3 supports at most 3 video references.'); process.exit(1); }
     if (isMinimaxH3 && audios.length > 3) { console.error('MiniMax H3 supports at most 3 audio references.'); process.exit(1); }
-    if (isFalH3Max && images.length > 1) { console.error('MiniMax H3 Max supports at most one start image.'); process.exit(1); }
-    if (isFalH3Max && (videos.length || audios.length)) { console.error('MiniMax H3 Max currently supports only text-to-video or one-image-to-video; remove video/audio references.'); process.exit(1); }
-    if (isFalH3Max && duration != null && ![5, 10, 15].includes(duration)) { console.error('MiniMax H3 Max duration must be 5, 10, or 15 seconds.'); process.exit(1); }
-    if (isFalH3Max && videoResolution && !['auto', '480p', '768p'].includes(videoResolution.toLowerCase())) { console.error('MiniMax H3 Max resolution must be auto, 480p, or 768p.'); process.exit(1); }
+    if (isFalH3Max && images.length > 1) { console.error('MiniMax H3 Max Turbo supports at most one start image.'); process.exit(1); }
+    if (isFalH3Max && (videos.length || audios.length)) { console.error('MiniMax H3 Max Turbo currently supports only text-to-video or one-image-to-video; remove video/audio references.'); process.exit(1); }
+    if (isFalH3Max && duration != null && ![5, 10, 15].includes(duration)) { console.error('MiniMax H3 Max Turbo duration must be 5, 10, or 15 seconds.'); process.exit(1); }
+    if (isFalH3Max && videoResolution && !['auto', '480p', '768p'].includes(videoResolution.toLowerCase())) { console.error('MiniMax H3 Max Turbo resolution must be auto, 480p, or 768p.'); process.exit(1); }
     if (isGrok && images.length > 7) { console.error('Grok Imagine Video 1.5 supports at most 7 image references.'); process.exit(1); }
     if (isGrok && videos.length > 1) { console.error('Grok video edit/extend accepts exactly one source video.'); process.exit(1); }
     if (isGrok && referenceVoices.length > 3) { console.error('Grok Imagine Video 1.5 supports at most 3 preset voices.'); process.exit(1); }

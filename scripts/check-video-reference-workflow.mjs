@@ -87,8 +87,8 @@ const h3MaxAdapter = await readFile(
   'utf8',
 )
 if (
-  !h3MaxAdapter.includes("const TEXT_ENDPOINT = 'minimax/h3-max/text-to-video'")
-  || !h3MaxAdapter.includes("const IMAGE_ENDPOINT = 'minimax/h3-max/image-to-video'")
+  !h3MaxAdapter.includes("const TEXT_ENDPOINT = 'minimax/h3-max-turbo/text-to-video'")
+  || !h3MaxAdapter.includes("const IMAGE_ENDPOINT = 'minimax/h3-max-turbo/image-to-video'")
   || !h3MaxAdapter.includes('if (images.length > 1)')
 ) {
   violations.push({

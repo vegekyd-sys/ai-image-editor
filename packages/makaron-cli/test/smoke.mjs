@@ -715,7 +715,8 @@ try {
     assert.match(videoResult.stdout, /--video-operation <mode>/);
     assert.match(videoResult.stdout, /minimax-h3/);
     assert.match(videoResult.stdout, /minimax-h3-max/);
-    assert.match(videoResult.stdout, /Near-real-time T2V or one-start-image I2V/);
+    assert.match(videoResult.stdout, /H3 Max Turbo faster-than-real-time T2V or one-start-image I2V/);
+    assert.match(videoResult.stdout, /native 768p default/);
     assert.match(videoResult.stdout, /wan-3\.0-prime\s+Faster Wan 3\.0 tier/);
     assert.match(videoResult.stdout, /sync-lipsync-v3 Exactly one video plus one MP3\/WAV/);
     assert.doesNotMatch(videoResult.stdout, /--operation <mode>/);

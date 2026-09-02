@@ -468,14 +468,14 @@ const MODEL_CAPABILITIES: Record<string, VideoModelCapability> = {
   },
   'minimax-h3-max': {
     id: 'minimax-h3-max',
-    label: 'MiniMax H3 Max',
+    label: 'MiniMax H3 Max Turbo',
     minOutputDuration: 5,
     maxOutputDuration: 15,
     supportedDurations: [5, 10, 15],
     maxReferenceVideoDuration: 0,
     supportsVideoReference: false,
     supportsBaseVideoEdit: false,
-    // H3 Max currently exposes only native T2V and single-start-frame I2V.
+    // H3 Max Turbo currently exposes only native T2V and single-start-frame I2V.
     // This is the one deliberate exception to Makaron's reference-image default.
     defaultImageWorkflow: 'image-to-video',
     supportsExplicitImageToVideo: true,
@@ -484,18 +484,18 @@ const MODEL_CAPABILITIES: Record<string, VideoModelCapability> = {
     maxVideoReferences: 0,
     maxAudioReferences: 0,
     maxTotalReferences: 1,
-    // fal launch pricing is discounted through 2026-09-07. Bill against the
-    // published steady-state rates so credits remain sufficient after expiry.
-    estimatedCostPerSecondUsd: 0.05,
+    // fal H3 Max Turbo launch pricing is discounted through 2026-09-07. Bill
+    // against steady-state rates so credits remain sufficient after expiry.
+    estimatedCostPerSecondUsd: 0.04,
     estimatedCostPerSecondUsdByResolution: {
-      '480p': 0.05,
-      '768p': 0.08,
+      '480p': 0.025,
+      '768p': 0.04,
     },
     supportedResolutions: ['480p', '768p'],
-    defaultResolution: '480p',
+    defaultResolution: '768p',
     supportedAspectRatios: ['16:9', '9:16', '1:1', '4:3', '3:4', '21:9'],
     provider: 'fal-h3-max',
-    providerModel: 'minimax/h3-max/text-to-video',
+    providerModel: 'minimax/h3-max-turbo/text-to-video',
   },
   piapi: {
     id: 'piapi',
@@ -554,7 +554,7 @@ export function normalizeVideoModelId(model?: string | null): string {
   if (normalized === 'minimax' || normalized === 'h3' || normalized === 'hailuo-h3' || normalized === 'minimax-h3') {
     return 'minimax-h3'
   }
-  if (normalized === 'h3 max' || normalized === 'h3-max' || normalized === 'h3max' || normalized === 'minimax-h3-max' || normalized === 'minimax-h3max') {
+  if (normalized === 'h3 max' || normalized === 'h3-max' || normalized === 'h3max' || normalized === 'h3 max turbo' || normalized === 'h3-max-turbo' || normalized === 'h3maxturbo' || normalized === 'minimax-h3-max' || normalized === 'minimax-h3max' || normalized === 'minimax-h3-max-turbo') {
     return 'minimax-h3-max'
   }
   if (normalized === 'seedance25' || normalized === 'seedance_2_5' || normalized === 'seedance-2-5') {
@@ -744,8 +744,8 @@ export function resolveVideoProviderModel(options: {
 
   if (route.model === 'minimax-h3-max') {
     return (options.imageReferenceCount ?? 0) > 0
-      ? 'minimax/h3-max/image-to-video'
-      : 'minimax/h3-max/text-to-video'
+      ? 'minimax/h3-max-turbo/image-to-video'
+      : 'minimax/h3-max-turbo/text-to-video'
   }
 
   if (route.model === 'seedance-2.5') {
