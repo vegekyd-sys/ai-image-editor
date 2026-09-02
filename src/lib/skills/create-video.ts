@@ -264,17 +264,11 @@ export async function createVideo(input: CreateVideoInput): Promise<CreateVideoR
   });
 
   if (modelError) return { success: false, message: modelError };
-  // Some agent runtimes serialize the documented Seedance default (`true`)
-  // even when another model is selected. It is safe to drop that no-op value:
-  // the MuleRouter request builder never forwards content_filter. Keep rejecting
-  // `false`, though, because that is an explicit request for Seedance Mature
-  // Mode and Wan does not offer an equivalent switch.
-  if (isWan30 && contentFilter === false) {
-    return {
-      success: false,
-      message: 'Wan 3.0 does not expose Seedance 2.5 Mature Mode through MuleRouter. Remove content_filter: false instead of assuming another provider\'s relaxed-filter option applies.',
-    };
-  }
+  // Agent runtimes may serialize optional booleans as either true or false even
+  // when the selected model does not own that option. Wan has no Makaron
+  // content-filter toggle, and its MuleRouter request builder never forwards
+  // this field, so both values are harmless no-ops. Seedance 2.5 remains the
+  // only route where contentFilter changes provider behavior or billing.
   if ((videoOperation === 'edit' || videoOperation === 'extend') && !hasVideoReference) {
     return {
       success: false,

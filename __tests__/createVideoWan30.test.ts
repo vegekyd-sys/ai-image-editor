@@ -223,9 +223,12 @@ describe('Wan 3.0 MuleRouter integration', () => {
     expect(providerBody).not.toHaveProperty('content_filter')
   })
 
-  it('rejects an attempted relaxed content-filter flag', async () => {
-    const fetchMock = vi.fn()
-    vi.stubGlobal('fetch', fetchMock)
+  it('drops a serialized false content-filter value before submitting Wan', async () => {
+    let providerBody: Record<string, unknown> | undefined
+    vi.stubGlobal('fetch', vi.fn(async (_url: string | URL | Request, init?: RequestInit) => {
+      providerBody = JSON.parse(String(init?.body || '{}'))
+      return taskCreated('25252525-2525-4525-8525-252525252525')
+    }))
     const { createVideo } = await import('@/lib/skills/create-video')
     const result = await createVideo({
       script: 'No Hidden Toggle\nShot 1 (2s): A studio light turns on.',
@@ -234,9 +237,8 @@ describe('Wan 3.0 MuleRouter integration', () => {
       videoModel: 'wan-3.0-prime',
       contentFilter: false,
     })
-    expect(result).toMatchObject({ success: false })
-    expect(result.message).toContain('does not expose Seedance 2.5 Mature Mode through MuleRouter')
-    expect(fetchMock).not.toHaveBeenCalled()
+    expect(result).toMatchObject({ success: true })
+    expect(providerBody).not.toHaveProperty('content_filter')
   })
 
   it('uses reference mode for one image and mixed media on Wan and Prime', async () => {
