@@ -112,4 +112,31 @@ describe('fal MiniMax H3 Max adapter', () => {
       videoUrl: 'https://example.com/h3-max.mp4',
     })
   })
+
+  it('waits through transient provider states so the App can receive the first playable URL', async () => {
+    let statusCalls = 0
+    vi.stubGlobal('fetch', vi.fn(async (url: string | URL | Request) => {
+      const value = String(url)
+      if (value.endsWith('/status')) {
+        statusCalls += 1
+        return new Response(JSON.stringify({
+          status: statusCalls < 3 ? 'IN_PROGRESS' : 'COMPLETED',
+        }), { status: 200 })
+      }
+      return new Response(JSON.stringify({
+        video: { url: 'https://v3b.fal.media/files/h3-max.mp4' },
+      }), { status: 200 })
+    }))
+
+    const { waitForFalH3MaxVideoTask } = await import('@/lib/fal-h3-max-video')
+    await expect(waitForFalH3MaxVideoTask('fal-h3max-fast-app', {
+      timeoutMs: 100,
+      pollIntervalMs: 1,
+    })).resolves.toEqual({
+      taskId: 'fal-h3max-fast-app',
+      status: 'completed',
+      videoUrl: 'https://v3b.fal.media/files/h3-max.mp4',
+    })
+    expect(statusCalls).toBe(3)
+  })
 })

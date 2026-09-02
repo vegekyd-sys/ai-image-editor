@@ -20,6 +20,11 @@ export interface FalH3MaxTaskResult {
   error?: string
 }
 
+export interface FalH3MaxWaitOptions {
+  timeoutMs?: number
+  pollIntervalMs?: number
+}
+
 function apiKey(): string {
   const value = process.env.FAL_KEY?.trim()
   if (!value) throw new Error('FAL_KEY not configured')
@@ -132,4 +137,22 @@ export async function getFalH3MaxVideoTask(taskId: string): Promise<FalH3MaxTask
     return { taskId, status: 'failed', error: 'MiniMax H3 Max completed without a video URL.' }
   }
   return { taskId, status: 'completed', videoUrl }
+}
+
+export async function waitForFalH3MaxVideoTask(
+  taskId: string,
+  options: FalH3MaxWaitOptions = {},
+): Promise<FalH3MaxTaskResult> {
+  const timeoutMs = Math.max(0, options.timeoutMs ?? 6_000)
+  const pollIntervalMs = Math.max(0, options.pollIntervalMs ?? 250)
+  const deadline = Date.now() + timeoutMs
+
+  while (true) {
+    const result = await getFalH3MaxVideoTask(taskId)
+    if (result.status === 'completed' || result.status === 'failed') return result
+
+    const remainingMs = deadline - Date.now()
+    if (remainingMs <= 0) return result
+    await new Promise(resolve => setTimeout(resolve, Math.min(pollIntervalMs, remainingMs)))
+  }
 }

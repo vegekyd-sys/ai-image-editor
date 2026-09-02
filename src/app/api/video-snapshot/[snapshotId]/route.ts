@@ -295,8 +295,11 @@ export async function GET(
       const { getMinimaxVideoTask } = await import('@/lib/minimax-video')
       result = await getMinimaxVideoTask(videoMeta.taskId)
     } else if (isFalH3Max) {
-      const { getFalH3MaxVideoTask } = await import('@/lib/fal-h3-max-video')
-      result = await getFalH3MaxVideoTask(videoMeta.taskId)
+      const { waitForFalH3MaxVideoTask } = await import('@/lib/fal-h3-max-video')
+      // H3 Max usually finishes a 5s/480p clip in roughly the time one normal
+      // provider poll takes end-to-end. Keep this request open briefly so the
+      // App receives the Fal playback URL without several authenticated round trips.
+      result = await waitForFalH3MaxVideoTask(videoMeta.taskId)
     } else if (isSyncLipsync) {
       const { getSyncLipsyncTask } = await import('@/lib/sync-lipsync')
       result = await getSyncLipsyncTask(videoMeta.taskId)
