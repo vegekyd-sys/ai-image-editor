@@ -58,6 +58,7 @@ export async function POST(req: NextRequest) {
       referenceImageCount,
       uploadedVideoCount,
       turnMediaCount,
+      turnMediaSnapshotIds,
       preferredModel,
       agentModel,
       isNsfw,
@@ -185,6 +186,7 @@ export async function POST(req: NextRequest) {
           referenceImageCount,
           uploadedVideoCount,
           turnMediaCount,
+          turnMediaSnapshotIds,
           isNsfw,
           audioAttachments,
           codexSubscriptionAllowed,
@@ -266,10 +268,12 @@ export async function POST(req: NextRequest) {
       referenceImageCount,
       uploadedVideoCount,
       turnMediaCount,
+      turnMediaSnapshotIds,
       audioAttachments,
       currentRunId: runId,
       agentModelId: resolvedAgentModel.id,
       agentModelProvider: resolvedAgentModel.provider,
+      supportsImageInput: resolvedAgentModel.supportsImageInput,
     });
     // Run agent after response is sent — next/server after() keeps the function alive
     after(async () => {
@@ -315,6 +319,7 @@ export async function POST(req: NextRequest) {
           audioAttachments: ctx.audioAttachments,
           snapshotImages: ctx.snapshotImages,
           explicitMediaIndices: ctx.explicitMediaIndices,
+          nativeVisionImages: ctx.nativeVisionImages,
           currentSnapshotIndex: ctx.currentSnapshotIndex,
           isNsfw,
           supabase,

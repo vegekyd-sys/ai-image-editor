@@ -55,6 +55,7 @@ interface ExecutionRequest {
   referenceImageCount?: number;
   uploadedVideoCount?: number;
   turnMediaCount?: number;
+  turnMediaSnapshotIds?: string[];
   isNsfw?: boolean;
   audioAttachments?: Array<{ audioUrl: string; title?: string; duration?: number; trackIndex?: number }>;
   codexSubscriptionAllowed?: boolean;
@@ -613,6 +614,7 @@ export async function runAgentExecutionAttempt(
     referenceImageCount: request.referenceImageCount,
     uploadedVideoCount: request.uploadedVideoCount,
     turnMediaCount: request.turnMediaCount,
+    turnMediaSnapshotIds: request.turnMediaSnapshotIds,
     audioAttachments: request.audioAttachments,
     currentRunId: runId,
     // Attempt 1 already has the original objective in userMessage. Keep the
@@ -622,6 +624,7 @@ export async function runAgentExecutionAttempt(
     contextPolicy: getAgentContextPolicy(resolvedModel.id),
     agentModelId: resolvedModel.id,
     agentModelProvider: resolvedModel.provider,
+    supportsImageInput: resolvedModel.supportsImageInput,
     durableContinuation: continuation,
     executionObjective: run.objective || claim.objective || run.prompt || undefined,
     executionAcceptanceCriteria: run.acceptance_criteria,
@@ -800,6 +803,14 @@ export async function runAgentExecutionAttempt(
         audioAttachments: ctx.audioAttachments,
         snapshotImages: attemptSnapshotImages,
         explicitMediaIndices: ctx.explicitMediaIndices,
+        nativeVisionImages: request.image && resolvedModel.supportsImageInput
+          ? [{
+              source: request.image,
+              ...(!request.hasAnnotation && !request.isDraft
+                ? { mediaIndex: attemptCurrentSnapshotIndex + 1 }
+                : {}),
+            }]
+          : ctx.nativeVisionImages,
         currentSnapshotIndex: attemptCurrentSnapshotIndex,
         isNsfw: request.isNsfw,
         supabase: admin,
