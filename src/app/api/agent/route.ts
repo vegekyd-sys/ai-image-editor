@@ -45,7 +45,7 @@ export async function POST(req: NextRequest) {
             tipReaction, committedTip, tipsTeaser, tipsPayload, nameProject, description,
             previewsReady, readyTips, preferredModel, agentModel, snapshotImages, currentSnapshotIndex, isNsfw,
             musicReady, musicAudioUrl, currentDesign, currentDesignPath, videoModel, videoResolution, videoAuto,
-            headless, hasAnnotation, isDraft, referenceImageCount, uploadedVideoCount, turnMediaCount, audioAttachments,
+            headless, hasAnnotation, isDraft, referenceImageCount, uploadedVideoCount, turnMediaCount, turnMediaSnapshotIds, audioAttachments,
             skillLaunchContext: rawSkillLaunchContext } = requestBody;
     perf.mark('request_ready', {
       projectId: projectId || null,
@@ -241,6 +241,7 @@ export async function POST(req: NextRequest) {
           referenceImageCount,
           uploadedVideoCount,
           turnMediaCount,
+          turnMediaSnapshotIds,
           isNsfw,
           audioAttachments,
           codexSubscriptionAllowed,
@@ -477,6 +478,7 @@ export async function POST(req: NextRequest) {
               referenceImageCount: referenceImageCount || undefined,
               uploadedVideoCount: uploadedVideoCount || undefined,
               turnMediaCount: turnMediaCount || undefined,
+              turnMediaSnapshotIds: Array.isArray(turnMediaSnapshotIds) ? turnMediaSnapshotIds : undefined,
               audioAttachments,
               currentRunId: runId,
               agentModelId: resolvedAgentModel.id,

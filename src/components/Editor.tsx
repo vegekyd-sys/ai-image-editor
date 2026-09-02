@@ -1563,11 +1563,12 @@ const isTipsFetchingRef = useRef(isTipsFetching);
   }, [projectId, onUpdateDescription, onSaveMessage, triggerTipsTeaser, initialTitle, triggerProjectNaming]);
 
   // Agent request: route user message through Makaron Agent
-  const handleAgentRequest = useCallback(async (text: string, attachedImages?: string[], overrideImage?: string, options?: { silent?: boolean; displayText?: string; displayImages?: string[]; uploadedVideoCount?: number; turnMediaCount?: number; skillLaunchContext?: SkillLaunchContext }) => {
+  const handleAgentRequest = useCallback(async (text: string, attachedImages?: string[], overrideImage?: string, options?: { silent?: boolean; displayText?: string; displayImages?: string[]; uploadedVideoCount?: number; turnMediaCount?: number; turnMediaSnapshotIds?: string[]; skillLaunchContext?: SkillLaunchContext }) => {
     const userVisibleText = options?.displayText ?? stripAgentInternalContextForDisplay(text);
     // Freeze the selected LLM at submit time. Upload waits below must not let a
     // later selector change mutate an already-submitted request.
     const agentModelForRequest = agentModelRef.current;
+    const turnMediaSnapshotIds = [...(options?.turnMediaSnapshotIds || [])];
     // CUI reference images → append as new snapshots (so agent sees them in Media Index)
     if (attachedImages?.length && !overrideImage) {
       const newSnaps: Snapshot[] = [];
@@ -1577,6 +1578,7 @@ const isTipsFetchingRef = useRef(isTipsFetching);
         newSnaps.push(snap);
       }
       if (newSnaps.length > 0) {
+        turnMediaSnapshotIds.push(...newSnaps.map((snap) => snap.id));
         const baseOrder = snapshotsRef.current.length;
         setSnapshots(prev => {
           const updated = [...prev, ...newSnaps];
@@ -1753,7 +1755,7 @@ const isTipsFetchingRef = useRef(isTipsFetching);
 
     try {
       await streamAgent(
-        { prompt: text, image: imageForApi, projectId, durable: true, ...(preferredModelRef.current !== 'auto' ? { preferredModel: preferredModelRef.current } : {}), ...(agentModelForRequest !== 'auto' ? { agentModel: agentModelForRequest } : {}), videoModel: videoModelRef.current, videoResolution: videoResolutionRef.current, videoAuto: videoAutoRef.current, skillLaunchContext: options?.skillLaunchContext, ...(hasTransientPixels ? { snapshotImages: snapshotImagesForApi } : {}), currentSnapshotIndex: contextSnapshotIndex, isNsfw: isNsfwRef.current || undefined, ...(snapshotsRef.current[contextSnapshotIndex]?.design && snapshotsRef.current[contextSnapshotIndex]?.type !== 'video' ? { currentDesign: snapshotsRef.current[contextSnapshotIndex].design, currentDesignPath: snapshotsRef.current[contextSnapshotIndex].designPath } : {}), hasAnnotation: !!overrideImage, isDraft: isDraftMode, referenceImageCount: attachedImages?.length || 0, uploadedVideoCount: options?.uploadedVideoCount || 0, turnMediaCount: options?.turnMediaCount || 0 },
+        { prompt: text, image: imageForApi, projectId, durable: true, ...(preferredModelRef.current !== 'auto' ? { preferredModel: preferredModelRef.current } : {}), ...(agentModelForRequest !== 'auto' ? { agentModel: agentModelForRequest } : {}), videoModel: videoModelRef.current, videoResolution: videoResolutionRef.current, videoAuto: videoAutoRef.current, skillLaunchContext: options?.skillLaunchContext, ...(hasTransientPixels ? { snapshotImages: snapshotImagesForApi } : {}), currentSnapshotIndex: contextSnapshotIndex, isNsfw: isNsfwRef.current || undefined, ...(snapshotsRef.current[contextSnapshotIndex]?.design && snapshotsRef.current[contextSnapshotIndex]?.type !== 'video' ? { currentDesign: snapshotsRef.current[contextSnapshotIndex].design, currentDesignPath: snapshotsRef.current[contextSnapshotIndex].designPath } : {}), hasAnnotation: !!overrideImage, isDraft: isDraftMode, referenceImageCount: attachedImages?.length || 0, uploadedVideoCount: options?.uploadedVideoCount || 0, turnMediaCount: options?.turnMediaCount || 0, turnMediaSnapshotIds },
         agentCallbacks,
         agentAbortRef.current.signal,
       );
@@ -1875,9 +1877,9 @@ const isTipsFetchingRef = useRef(isTipsFetching);
     }
 
     // Step 1: Create video snapshots (use snapshotsRef for accurate current length)
+    const newVideoSnaps: Snapshot[] = [];
     if (videos?.length) {
       const { createVideoDesign } = await import('@/lib/video-design');
-      const newVideoSnaps: Snapshot[] = [];
       for (const v of videos) {
         const snapId = generateId();
         const design = createVideoDesign(v.url, v.width, v.height, v.duration);
@@ -1929,6 +1931,7 @@ const isTipsFetchingRef = useRef(isTipsFetching);
       displayImages: displayAttachments.length > 0 ? displayAttachments : undefined,
       uploadedVideoCount: videos?.length,
       turnMediaCount: (imgs?.length || 0) + (videos?.length || 0),
+      turnMediaSnapshotIds: newVideoSnaps.map((snap) => snap.id),
     });
   };
 
@@ -2543,6 +2546,7 @@ Select the best 3-7 items for a compelling video. You do NOT need to use all or 
             silent: true,
             uploadedVideoCount: videoCount,
             turnMediaCount: workSnapshots.length,
+            turnMediaSnapshotIds: workSnapshots.map((snap) => snap.id),
           },
         );
       }
@@ -2561,6 +2565,7 @@ Select the best 3-7 items for a compelling video. You do NOT need to use all or 
             displayText: pendingPrompt!,
             uploadedVideoCount: pendingVideos?.length || 0,
             turnMediaCount: workSnapshots.length,
+            turnMediaSnapshotIds: workSnapshots.map((snap) => snap.id),
             skillLaunchContext: pendingSkillLaunchContext,
           });
         }

@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { buildTurnMediaInspectionContext } from '@/lib/agent-context';
+import { buildTurnMediaInspectionContext, selectTurnMediaBatch } from '@/lib/agent-context';
 import { readAgentAwareSource } from './helpers/agentRuntimeSource';
 
 const read = (path: string) => readAgentAwareSource(process.cwd(), path);
@@ -52,6 +52,29 @@ describe('current upload batch inspection', () => {
     expect(context).toContain('<<<media_2>>>');
   });
 
+  it('uses exact snapshot ids when sort-order collisions mean the turn is not the trailing slice', () => {
+    const snapshots = [
+      { id: 'old-image', type: 'image' },
+      { id: 'new-video-a', type: 'video' },
+      { id: 'old-reference', type: 'image' },
+      { id: 'new-video-b', type: 'video' },
+    ];
+    expect(selectTurnMediaBatch(snapshots, 2, ['new-video-a', 'new-video-b']))
+      .toEqual([
+        { snapshot: snapshots[1], mediaIndex: 2 },
+        { snapshot: snapshots[3], mediaIndex: 4 },
+      ]);
+    const context = buildTurnMediaInspectionContext(
+      snapshots,
+      2,
+      true,
+      ['new-video-a', 'new-video-b'],
+    );
+    expect(context).toContain('<<<media_2>>>: video');
+    expect(context).toContain('<<<media_4>>>: video');
+    expect(context).not.toContain('<<<media_3>>>');
+  });
+
   it('carries the batch contract through every entry and durable retry', () => {
     const editor = read('src/components/Editor.tsx');
     const stream = read('src/lib/agentStream.ts');
@@ -65,8 +88,10 @@ describe('current upload batch inspection', () => {
     expect(editor).toContain('turnMediaCount: (imgs?.length || 0) + (videos?.length || 0)');
     expect(editor).toContain('turnMediaCount: workSnapshots.length');
     expect(stream).toContain('turnMediaCount: body.turnMediaCount');
+    expect(stream).toContain('turnMediaSnapshotIds: body.turnMediaSnapshotIds');
     expect(route).toContain('turnMediaCount');
     expect(runner).toContain('turnMediaCount: request.turnMediaCount');
+    expect(runner).toContain('turnMediaSnapshotIds: request.turnMediaSnapshotIds');
     expect(cli).toContain('uploadedTurnMediaCount += addedCount');
     expect(cli).toContain('turnMediaCount: uploadedTurnMediaCount');
     expect(context).toContain('options.supportsImageInput === true');

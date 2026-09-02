@@ -56,6 +56,8 @@ export interface PromptContextOptions {
   uploadedVideoCount?: number;
   /** Number of timeline items created by the user's current upload batch. */
   turnMediaCount?: number;
+  /** Exact snapshot ids created by the current upload batch. */
+  turnMediaSnapshotIds?: string[];
   /** Audio references for this turn. Not part of Timeline Media Index. */
   audioAttachments?: AudioAttachmentContext[];
   /** Run being created for this request; excluded when locating a prior checkpoint. */
@@ -135,18 +137,16 @@ function compactMediaEvidence(value: string, maxChars: number): string {
 async function buildVerifiedTurnMediaEvidence(
   snapshots: DbSnapshot[],
   requestedCount: number | undefined,
+  requestedSnapshotIds: string[] | undefined,
   supabase: SupabaseClient,
   userId: string,
   supportsImageInput = false,
 ): Promise<string> {
-  const count = Math.min(snapshots.length, Math.max(0, Math.floor(requestedCount || 0)));
-  if (!count) return '';
+  const batch = selectTurnMediaBatch(snapshots, requestedCount, requestedSnapshotIds);
+  if (!batch.length) return '';
 
   const preflightStartedAt = Date.now();
-  const start = snapshots.length - count;
-  const batch = snapshots.slice(start);
   const evidenceBatch = batch
-    .map((snapshot, offset) => ({ snapshot, mediaIndex: start + offset + 1 }))
     // Multimodal Agents inspect still images directly. Raw video is not part of
     // their image input contract, so video evidence continues through Gemini.
     .filter(({ snapshot }) => !supportsImageInput || snapshot.type === 'video');
@@ -205,31 +205,44 @@ Use the whole batch as the source set for the user's request. Make an intentiona
 }
 
 export function buildTurnMediaInspectionContext(
-  snapshots: Array<Pick<DbSnapshot, 'type'>>,
+  snapshots: Array<Pick<DbSnapshot, 'type'> & { id?: string }>,
   requestedCount?: number,
   nativeVision = false,
+  requestedSnapshotIds?: string[],
 ): string {
-  const turnMediaCount = Math.min(
-    snapshots.length,
-    Math.max(0, Math.floor(requestedCount || 0)),
-  );
+  const turnMedia = selectTurnMediaBatch(snapshots, requestedCount, requestedSnapshotIds);
+  const turnMediaCount = turnMedia.length;
   if (turnMediaCount === 0) return '';
 
-  const turnMediaStart = snapshots.length - turnMediaCount;
   const evidenceInstruction = nativeVision
     ? 'Every still image below is attached to this same Agent request after its matching Media Index marker. Inspect those images directly. Videos are not image attachments; verified video evidence follows below. If video analysis failed or is insufficient for the request, call analyze_video once with all affected media_indices.'
     : 'A verified evidence block for this exact batch follows below; consume every line before deciding how each item contributes.';
 
   return `[Current upload batch — inspect every item before planning]
 The user added ${turnMediaCount} new Media Index item${turnMediaCount === 1 ? '' : 's'} in this turn:
-${snapshots.slice(turnMediaStart).map((snapshot, offset) => {
-  const mediaIndex = turnMediaStart + offset + 1;
+${turnMedia.map(({ snapshot, mediaIndex }) => {
   return `- <<<media_${mediaIndex}>>>: ${snapshot.type === 'video' ? 'video' : 'image'}`;
 }).join('\n')}
 Do not plan from only the current or first image.
 ${evidenceInstruction}
 
 `;
+}
+
+export function selectTurnMediaBatch<T extends { id?: string }>(
+  snapshots: T[],
+  requestedCount?: number,
+  requestedSnapshotIds?: string[],
+): Array<{ snapshot: T; mediaIndex: number }> {
+  const requestedIds = new Set((requestedSnapshotIds || []).filter(Boolean));
+  if (requestedIds.size > 0) {
+    return snapshots.flatMap((snapshot, index) => (
+      snapshot.id && requestedIds.has(snapshot.id) ? [{ snapshot, mediaIndex: index + 1 }] : []
+    ));
+  }
+  const count = Math.min(snapshots.length, Math.max(0, Math.floor(requestedCount || 0)));
+  const start = snapshots.length - count;
+  return snapshots.slice(start).map((snapshot, offset) => ({ snapshot, mediaIndex: start + offset + 1 }));
 }
 
 interface DbMessage {
@@ -456,6 +469,7 @@ export async function buildPromptContext(
   const verifiedTurnMediaEvidence = await buildVerifiedTurnMediaEvidence(
     snapshots,
     options.turnMediaCount,
+    options.turnMediaSnapshotIds,
     supabase,
     userId,
     options.supportsImageInput === true,
@@ -497,7 +511,7 @@ export async function buildPromptContext(
     acceptance_criteria?: unknown;
   } | null;
   const executionObjective = executionRow?.objective || executionRow?.prompt || originMessage?.content || userMessage;
-  const explicitMediaIndices = resolveExplicitTurnMediaIndices({
+  const resolvedMediaIndices = resolveExplicitTurnMediaIndices({
     totalMediaCount: snapshots.length,
     userMessage: options.executionRunId
       ? `${executionObjective}\n${userMessage}`
@@ -506,11 +520,18 @@ export async function buildPromptContext(
     referenceImageCount,
     uploadedVideoCount,
   });
+  const turnMediaIndices = selectTurnMediaBatch(
+    snapshots,
+    options.turnMediaCount,
+    options.turnMediaSnapshotIds,
+  ).map(({ mediaIndex }) => mediaIndex);
+  const explicitMediaIndices = [...new Set([...turnMediaIndices, ...resolvedMediaIndices])];
   const nativeVisionImages = selectNativeVisionImages(snapshots, {
     supportsImageInput: options.supportsImageInput === true,
     currentSnapshotIndex,
     explicitMediaIndices,
     turnMediaCount: options.turnMediaCount,
+    turnMediaSnapshotIds: options.turnMediaSnapshotIds,
   });
   const priorSnapshot = executionSnapshotRes.data?.content
     ? normalizeExecutionSnapshot(executionSnapshotRes.data.content, {
@@ -729,6 +750,7 @@ export async function buildPromptContext(
     snapshots,
     options.turnMediaCount,
     options.supportsImageInput === true,
+    options.turnMediaSnapshotIds,
   );
 
   const audioAttachmentContext = resolvedAudioAttachments.length

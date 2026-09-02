@@ -10,6 +10,7 @@ export interface NativeVisionImageInput {
 }
 
 export interface NativeVisionSnapshot {
+  id?: string;
   image_url?: string;
   type?: string;
   design_path?: string;
@@ -42,17 +43,18 @@ export function selectNativeVisionImages(
     currentSnapshotIndex: number;
     explicitMediaIndices?: number[];
     turnMediaCount?: number;
+    turnMediaSnapshotIds?: string[];
   },
 ): NativeVisionImageInput[] {
   if (!options.supportsImageInput || snapshots.length === 0) return [];
 
-  const trailingCount = Math.min(
-    snapshots.length,
-    Math.max(0, Math.floor(options.turnMediaCount || 0)),
-  );
-  const turnImages = trailingCount > 0
-    ? Array.from({ length: trailingCount }, (_, offset) => snapshots.length - trailingCount + offset + 1)
-    : (options.explicitMediaIndices ?? []);
+  const requestedIds = new Set((options.turnMediaSnapshotIds || []).filter(Boolean));
+  const trailingCount = Math.min(snapshots.length, Math.max(0, Math.floor(options.turnMediaCount || 0)));
+  const turnImages = requestedIds.size > 0
+    ? snapshots.flatMap((snapshot, index) => snapshot.id && requestedIds.has(snapshot.id) ? [index + 1] : [])
+    : trailingCount > 0
+      ? Array.from({ length: trailingCount }, (_, offset) => snapshots.length - trailingCount + offset + 1)
+      : (options.explicitMediaIndices ?? []);
   // The current canvas is always relevant. Fresh attachments/references are
   // additive visual context rather than a replacement for the edit target.
   const requested = [options.currentSnapshotIndex + 1, ...turnImages];

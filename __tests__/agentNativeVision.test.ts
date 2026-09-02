@@ -7,10 +7,10 @@ import {
 
 describe('Agent native image vision', () => {
   const snapshots = [
-    { image_url: 'https://cdn.example.com/first.jpg', type: 'image' },
-    { image_url: 'https://cdn.example.com/video.mp4', type: 'video' },
-    { image_url: 'https://cdn.example.com/design.jpg', type: 'image', design_path: 'code/design.json' },
-    { image_url: 'https://cdn.example.com/fourth.jpg', type: 'image' },
+    { id: 'first', image_url: 'https://cdn.example.com/first.jpg', type: 'image' },
+    { id: 'video', image_url: 'https://cdn.example.com/video.mp4', type: 'video' },
+    { id: 'design', image_url: 'https://cdn.example.com/design.jpg', type: 'image', design_path: 'code/design.json' },
+    { id: 'fourth', image_url: 'https://cdn.example.com/fourth.jpg', type: 'image' },
   ];
 
   it('uses the selected Agent for vision except for text-only models', () => {
@@ -49,6 +49,17 @@ describe('Agent native image vision', () => {
       explicitMediaIndices: [1],
     })).toEqual([
       { source: 'https://cdn.example.com/fourth.jpg', mediaIndex: 4 },
+      { source: 'https://cdn.example.com/first.jpg', mediaIndex: 1 },
+    ]);
+  });
+
+  it('selects exact turn snapshots instead of assuming they are the trailing rows', () => {
+    expect(selectNativeVisionImages(snapshots, {
+      supportsImageInput: true,
+      currentSnapshotIndex: 0,
+      turnMediaCount: 2,
+      turnMediaSnapshotIds: ['first', 'video'],
+    })).toEqual([
       { source: 'https://cdn.example.com/first.jpg', mediaIndex: 1 },
     ]);
   });

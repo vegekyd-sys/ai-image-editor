@@ -56,6 +56,7 @@ interface ExecutionRequest {
   referenceImageCount?: number;
   uploadedVideoCount?: number;
   turnMediaCount?: number;
+  turnMediaSnapshotIds?: string[];
   isNsfw?: boolean;
   audioAttachments?: Array<{ audioUrl: string; title?: string; duration?: number; trackIndex?: number }>;
   codexSubscriptionAllowed?: boolean;
@@ -614,6 +615,7 @@ export async function runAgentExecutionAttempt(
     referenceImageCount: request.referenceImageCount,
     uploadedVideoCount: request.uploadedVideoCount,
     turnMediaCount: request.turnMediaCount,
+    turnMediaSnapshotIds: request.turnMediaSnapshotIds,
     audioAttachments: request.audioAttachments,
     currentRunId: runId,
     // Attempt 1 already has the original objective in userMessage. Keep the
