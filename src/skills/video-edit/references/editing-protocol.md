@@ -12,9 +12,9 @@ Before tools, reduce the request to:
 {
   "base_video": "<<<media_1>>>",
   "change": ["replace the red car with the supplied blue car"],
-  "preserve": ["duration", "camera", "performance", "background", "audio"],
+  "preserve": ["duration", "camera", "performance", "background"],
   "range": { "start_sec": 0, "end_sec": 8.2 },
-  "delivery": { "editable": false, "keep_original_sound": true }
+  "delivery": { "editable": false, "sound": "natural and synchronized" }
 }
 ```
 
@@ -42,16 +42,18 @@ inventing pixels. Do not force FFmpeg to solve semantic pixel replacement.
 - Define every reference by role before describing action. Map identity by role
   and appearance, not only by left/right position.
 - State the invariant sentence explicitly: preserve original camera path,
-  choreography, timing, framing, cuts, background, and sound except for the
-  named replacement.
+  choreography, timing, framing, cuts, and background except for the named
+  replacement.
 - Seedance source edits use reference-to-video semantics. Do not expose or set a
   Seedance `edit` mode merely because the user said “编辑”; the Skill owns the
   intent, while the video is a motion/camera/content reference. Seedance 2.5 may
   use provider-managed duration (`duration: -1`) for full-source repainting.
 - Typed `edit` may remain an internal compatibility path for another provider
   only when its verified contract requires it. It is never a user-facing mode.
-- Keep original audio only when the provider/runtime can do so reliably;
-  otherwise restore the probed source audio deterministically after generation.
+- Describe the requested sound naturally in the video prompt and let the model
+  render it with the picture. Use a provider-native source-sound switch only
+  when the user explicitly asks for that result and the selected route supports
+  it. Do not add an automatic audio restoration or post-processing path.
 
 ## 4. Locality and Continuity
 
@@ -69,7 +71,8 @@ Always require:
 - duration is within one frame for deterministic edits, or within the agreed
   provider tolerance for generative edits;
 - requested change is visible for the required range;
-- preserved identity/background/action/camera/audio do not drift materially;
+- preserved identity/background/action/camera do not drift materially;
+- requested sound is present and synchronized, unless silence was requested;
 - first and last frames do not morph into a different subject;
 - local-edit seams do not jump in pose, lighting, scale, or sound.
 

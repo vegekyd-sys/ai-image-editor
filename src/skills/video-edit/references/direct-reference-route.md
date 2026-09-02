@@ -5,25 +5,11 @@ whole-clip motion, camera, timing, choreography, or background should control th
 result. This is the P0 proven by the CUI experiment; it is still supervised
 generation, not deterministic pixel replacement.
 
-## Input Contract
+## Input Checklist
 
-```json
-{
-  "reference_video": "<<<media_1>>>",
-  "replacements": [
-    { "media": "<<<media_2>>>", "role": "fighter A" },
-    { "media": "<<<media_3>>>", "role": "fighter B" },
-    { "media": "<<<media_4>>>", "role": "dojo background" }
-  ],
-  "preserve": [
-    "shot order and duration",
-    "camera path and framing",
-    "choreography and contact timing",
-    "transition and beat structure"
-  ],
-  "replace": ["fighter identities", "environment"]
-}
-```
+Identify the reference video, each replacement image and its role, what should
+stay structurally the same, and what should change. Keep this in the Agent's
+working notes and final prompt; do not create another runtime object for it.
 
 If the original video itself must remain visible underneath the change, route
 to `video-edit`. If the user wants only mood/style inspiration, route to
@@ -44,29 +30,23 @@ Use the full schema when the candidate boundary detector finds multiple shots,
 confidence is low, captions/audio carry meaning, or the user requests an
 editable result.
 
-## Prompt Contract
+## One-Prompt Protocol
 
-For exact structural replication, call `generate_animation` with a structured
-`replication_contract`. The runtime owns the invariant-heavy provider wording;
-the Agent supplies measured facts and semantic anchors:
+After understanding the complete clip, call `generate_animation` once with one
+complete, natural `story_prompt`. The Skill is the implementation: do not look
+for a separate replication mode, schema, or runtime prompt compiler. Include:
 
-- complete source video Media Index and measured duration;
+- the complete source video Media Index and measured duration;
 - each source performer identified by appearance/costume **plus** an opening or
   distinctive action, mapped to one replacement identity Media Index;
 - source and replacement environment anchors when scenery changes;
-- style direction and any case-specific exclusions.
+- timed actions, style direction, requested sound, and case-specific exclusions.
 
-Keep sound instructions in the ordinary `story_prompt`; do not encode them as a
-separate replication policy. Unless the user explicitly asks for silence, leave
-model-native audio enabled and let the selected video model interpret the sound
-request together with the reference.
+Unless the user explicitly asks for silence, leave model-native audio enabled
+and describe sound naturally in `story_prompt`. Never identify a performer only
+as "left fighter" or "right fighter" because screen direction may change.
 
-Keep `story_prompt` concise, but include the user's natural-language sound
-direction when present. Never identify a performer only as "left fighter" or
-"right fighter". The compiled prompt tracks performer identity through action
-and choreography even when screen direction changes.
-
-The script must begin with role mapping, then an invariant, then timed action:
+Write the prompt in this order:
 
 1. Define the reference video as motion/camera/timing/choreography authority.
 2. Define each replacement image by stable identity and role. Do not map only by

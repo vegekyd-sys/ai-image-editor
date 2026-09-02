@@ -126,7 +126,9 @@ Rules:
 - **Seedance 2.5 video size/duration limit**: .mp4/.mov, <=200MB each, width and height each 300-6000px, aspect ratio 0.4-2.5, frame pixels width*height between 409,600 and 8,295,044, and 4-30s per video with all video references totaling <=30s. A normal encoded 30s file may contain up to 0.5s of container/tail-frame metadata tolerance; treat it as 30s rather than asking the user to split it. For full-source reference repainting, omit `duration` or use `-1`; Makaron follows the source duration automatically.
 - **Kling video size limit**: one .mp4/.mov reference video, <=200MB, resolution <=2K. Kling docs do not state a video resolution lower bound.
 - Can combine images + videos in the same prompt
-- `keep_original_sound: true` to preserve the original audio
+- Describe requested sound in the prompt and leave native audio enabled unless
+  the user asks for silence. `keep_original_sound` is only a provider-native
+  switch for supported Kling routes, not a default cross-provider policy.
 
 Prompt examples:
 - Source edit: `在<<<media_1>>>（视频）的基础上，只加入飞舞的金色粒子特效，其余不变`
@@ -137,7 +139,8 @@ Prompt examples:
 
 ### Motion Control Mode
 Precise action transfer — the person in the photo performs the exact movements from the reference video. Best for dance, expression mimicry, pose transfer.
-- Pass `motion_control: true` + `keep_original_sound: true`
+- Pass `motion_control: true`; set `keep_original_sound: true` only when the
+  user explicitly asks to retain the reference sound
 - For timeline videos: reference the video with `<<<media_N>>>` in script (auto-routed)
 - For external videos: pass `video_ref_url`
 - No detailed prompt needed — just a short title as story_prompt

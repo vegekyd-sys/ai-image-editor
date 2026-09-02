@@ -79,7 +79,6 @@ import { sourceRangeFromVideoMeta } from './media-source-range';
 import { materializeSeedAudioReference } from './seed-audio-reference';
 import { resolveAudioRefs } from './audio-reference-resolver';
 import { isGrokSubscriptionAllowedUser } from './grok-subscription';
-import { compileVideoReplicationPrompt } from './video-replication-prompt';
 
 const MAX_VIDEO_DIMENSION_PROBE_BYTES = 220 * 1024 * 1024;
 
@@ -1482,8 +1481,6 @@ When the user requests multiple independent video variants, submit them one at a
 
 **BEFORE writing a video script**: call \`read_file('prompts/animate.md')\` to load the full video guide (modes, prompt styles, showcases, reference video usage). Do not re-read if already in this conversation's tool-result history.
 
-For exact source-led replication, first read \`skills/video-edit/SKILL.md\` and pass \`replication_contract\`. The runtime expands that measured semantic contract into the strict provider prompt; do not imitate, shorten, or paste the invariant template into \`story_prompt\` yourself.
-
 Hard constraints:
 - First line of script = short title (2-5 words). Then script body.
 - Use \`<<<media_N>>>\` to reference images AND videos (N starts at 1). Videos in the timeline are auto-routed — just reference them like images. For native SeeDance, Wan 3.0, or MiniMax H3 text-to-video with no source media, use no media markers and do not generate an intermediate image first. Gemini Omni 1.1 text-to-video follows the same no-marker rule.
@@ -1528,22 +1525,6 @@ Hard constraints:
         content_filter: z.boolean().optional().describe('Seedance 2.5-only output content filter. Omit it for every other model. Seedance 2.5 defaults to true; set false only after explicit user confirmation, including the Mature Mode recovery action, because it costs 10% more. Never infer or auto-enable Mature Mode from prompt wording.'),
         output_format: z.enum(['mp4', 'mov']).optional().describe('MP4 for playback or MOV for grading.'),
         web_search: z.boolean().optional().describe('Enable Seedance 2.5 text-to-video web grounding.'),
-        replication_contract: z.object({
-          reference_video_media_index: z.number().int().positive().describe('Timeline Media Index of the complete source video that controls time, action, editing, and camera.'),
-          source_duration_seconds: z.number().positive().max(30).describe('Measured source duration in seconds.'),
-          characters: z.array(z.object({
-            replacement_media_index: z.number().int().positive().describe('Timeline Media Index of the replacement character image.'),
-            source_actor_anchor: z.string().min(12).describe('Stable source performer evidence: appearance/costume plus an opening or distinctive action. Left/right alone is invalid.'),
-            replacement_identity: z.string().min(8).describe('Replacement identity details that must stay stable.'),
-          })).min(1).max(8),
-          environment: z.object({
-            replacement_media_index: z.number().int().positive().describe('Timeline Media Index of the replacement environment image.'),
-            source_environment_anchor: z.string().min(8).describe('Visible source environment features to remove.'),
-            replacement_environment: z.string().min(8).describe('Replacement environment and its required stable details.'),
-          }).optional(),
-          style_direction: z.string().optional(),
-          additional_exclusions: z.array(z.string()).max(12).optional(),
-        }).optional().describe('Measured semantic contract for exact source-led video replication. Use only after complete-video understanding; runtime compiles the invariant-heavy provider prompt.'),
         completion_actions: z.array(z.object({
           label: z.string().describe('Short button label shown when the video finishes, e.g. "合入原视频" or "加入剪辑".'),
           prompt: z.string().describe('Natural-language instruction to send back to the agent if the user chooses this action. Include concrete media refs/timing when known. For video segment replacement, include replaceStart, replaceEnd, replacementDuration, and require trimming/fitting the patch before FFmpeg merge so the final duration matches the original.'),
@@ -1551,7 +1532,7 @@ Hard constraints:
           policy: z.enum(['confirm', 'auto']).optional().describe('confirm = show an action for the user to click. auto is reserved for explicitly authorized end-to-end workflows. Default confirm.'),
         })).optional().describe('Optional next-step actions to show when this async video finishes. Use this for intermediate artifacts such as a generated segment that should later be merged, or generated clips that can be assembled. Do not use it for ordinary final videos.'),
       }),
-      execute: async ({ story_prompt, duration, aspect_ratio, model, video_resolution, media_refs, audio_refs, reference_voice_ids, video_ref_url, video_ref_type, keep_original_sound, motion_control, character_orientation, video_operation, extend_direction, generate_audio, content_filter, output_format, web_search, replication_contract, completion_actions }) => serializeVideoSubmission(async () => {
+      execute: async ({ story_prompt, duration, aspect_ratio, model, video_resolution, media_refs, audio_refs, reference_voice_ids, video_ref_url, video_ref_type, keep_original_sound, motion_control, character_orientation, video_operation, extend_direction, generate_audio, content_filter, output_format, web_search, completion_actions }) => serializeVideoSubmission(async () => {
         // Refresh base64 → URL from DB before video submission
         await refreshSnapshotUrls(ctx);
         // GUI animation mode: use animationImageUrls; CUI mode: use full snapshotImages (no filter — preserve index alignment)
@@ -1562,29 +1543,6 @@ Hard constraints:
         if (media_refs?.length) {
           imageUrls = [...(imageUrls || []), ...media_refs.filter(u => u.startsWith('http'))];
         }
-        if (replication_contract && video_operation && video_operation !== 'generate') {
-          return { success: false as const, message: 'replication_contract uses reference-to-video generation. Do not combine it with typed video edit or extend.' };
-        }
-        const effectiveStoryPrompt = replication_contract
-          ? compileVideoReplicationPrompt(story_prompt || 'Exact Video Replication', {
-              referenceVideoMediaIndex: replication_contract.reference_video_media_index,
-              sourceDurationSeconds: replication_contract.source_duration_seconds,
-              characters: replication_contract.characters.map(character => ({
-                replacementMediaIndex: character.replacement_media_index,
-                sourceActorAnchor: character.source_actor_anchor,
-                replacementIdentity: character.replacement_identity,
-              })),
-              environment: replication_contract.environment
-                ? {
-                    replacementMediaIndex: replication_contract.environment.replacement_media_index,
-                    sourceEnvironmentAnchor: replication_contract.environment.source_environment_anchor,
-                    replacementEnvironment: replication_contract.environment.replacement_environment,
-                  }
-                : undefined,
-              styleDirection: replication_contract.style_direction,
-              additionalExclusions: replication_contract.additional_exclusions,
-            })
-          : story_prompt;
         const requestedModel = normalizeVideoModelId(model);
         const videoSelection = requestedModel === 'sync-lipsync-v3'
           ? { model: requestedModel, resolution: video_resolution ?? 'auto', locked: false }
@@ -1624,7 +1582,7 @@ Hard constraints:
           // Video harness: validate before calling API
           const { validateVideoScript } = await import('./video-harness');
           const harnessError = validateVideoScript({
-            prompt: effectiveStoryPrompt,
+            prompt: story_prompt,
             imageCount: imageUrls.length,
             availableMediaIndices: imageUrls.flatMap((url, index) =>
               url && url !== '/video-placeholder.png' ? [index + 1] : [],
@@ -1649,7 +1607,7 @@ Hard constraints:
           // Auto-route video references: query DB for snapshot types
           const originalImageUrlsByIndex = [...imageUrls];
           const scriptRefs = [...new Set(
-            Array.from(effectiveStoryPrompt.matchAll(/<<<(?:image|media)_(\d+)>>>/g), m => Number(m[1]))
+            Array.from(story_prompt.matchAll(/<<<(?:image|media)_(\d+)>>>/g), m => Number(m[1]))
           )];
           const autoVideoUrls: string[] = [];
           const sourceVideoSnapshotIds: string[] = [];
@@ -1784,7 +1742,7 @@ Hard constraints:
           }
 
           const createVideoInput: Parameters<typeof createVideo>[0] = {
-            script: effectiveStoryPrompt,
+            script: story_prompt,
             images: imageUrls,
             duration: effectiveDuration,
             aspectRatio: selectedAspectRatio,
@@ -1921,7 +1879,7 @@ Hard constraints:
           const videoMeta: import('@/types').VideoMeta = {
             taskId,
             videoUrl: skillResult.videoUrl || null,
-            prompt: effectiveStoryPrompt,
+            prompt: story_prompt,
             sourceSnapshotIds: sourceVideoSnapshotIds,
             sourceUrls: sourceUrls.length > 0 ? sourceUrls : (originalFirstUrl ? [originalFirstUrl] : []),
             status: skillResult.status === 'completed' && skillResult.videoUrl ? 'completed' : 'processing',

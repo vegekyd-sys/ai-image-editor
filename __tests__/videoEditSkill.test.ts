@@ -61,7 +61,7 @@ describe('video-edit Skill replication profile', () => {
       'Never call\n`generate_image` merely to increase dimensions',
     )
     expect(read('src/skills/video-edit/references/direct-reference-route.md')).toContain(
-      '`replication_contract`',
+      'The Skill is the implementation',
     )
     expect(read('src/skills/video-edit/references/direct-reference-route.md')).toContain(
       'raw-video `preview_frame` once with 4-6 representative',
@@ -69,18 +69,18 @@ describe('video-edit Skill replication profile', () => {
     expect(read('src/skills/video-edit/references/direct-reference-route.md')).toContain(
       'stop before `generate_animation`',
     )
-    expect(read('src/lib/agent-tools.ts')).toContain(
-      'compileVideoReplicationPrompt',
-    )
+    expect(read('src/lib/agent-tools.ts')).not.toContain('replication_contract')
+    expect(read('src/lib/agent-tools.ts')).not.toContain('compileVideoReplicationPrompt')
     expect(read('src/lib/agent-tools.ts')).toContain(
       "source: 'video-contact-sheet'",
     )
     const directReferenceRoute = read('src/skills/video-edit/references/direct-reference-route.md')
     const agentToolsSource = read('src/lib/agent-tools.ts')
+    expect(directReferenceRoute).not.toContain('replication_contract')
     expect(directReferenceRoute).not.toContain('"audio_policy"')
-    expect(directReferenceRoute).toContain("sound instructions in the ordinary `story_prompt`")
+    expect(directReferenceRoute).toContain("describe sound naturally in `story_prompt`")
     expect(directReferenceRoute).toContain('Set `generate_audio: false` only when the user explicitly asks')
-    expect(agentToolsSource).not.toContain('replication_contract.audio_policy')
+    expect(agentToolsSource).not.toContain('replication_contract')
     expect(read('src/skills/reference-video-studio/SKILL.md')).toContain(
       'Use the video-edit replication profile',
     )

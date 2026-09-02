@@ -2,6 +2,10 @@
 
 日期：2026-08-30；Skill 架构更新：2026-09-02
 
+当前决策：复刻只由 `video-edit` Skill 编排。此前实验过的结构化复刻参数和确定性 prompt
+compiler 已在后续简化中删除；Agent 完整理解视频后，直接把角色映射、镜头节奏、替换要求和
+声音要求写入一次普通 `story_prompt`。下文保留旧实验数据，仅作为前后对比基线，不代表当前接口。
+
 分支：`codex/video-replication-skill-exploration`
 
 范围：独立 worktree 内的只读盘点、Skill 原型与零付费离线 spike；未合并、未推送、未部署，未触碰生产或 Vast。
@@ -21,8 +25,9 @@ Remotion、provider 与 materialize/review，不新增页面、编辑器、平�
 或 DB，也不依赖用户关键词硬编码。
 
 最可行路线是 **A 优先、C 默认扩展、B 最后**：已有素材先确定性重剪；缺镜才逐镜
-生成；整片的 timing、cut、transition、caption、beat 和最终音轨永远在 Remotion/
-FFmpeg 锁定。逐镜生成不能承担 frame-accurate 剪辑时钟。
+生成；需要可编辑或确定性拼装时，再由 Remotion/FFmpeg 锁定 timing、cut、transition 和
+caption。声音默认交给视频模型随画面生成，不自动恢复源音轨。逐镜生成不能承担
+frame-accurate 剪辑时钟。
 
 ## 状态口径与当前盘点
 
@@ -410,7 +415,7 @@ Index → 同一 prompt 重提。没有 `--skill` 硬路由；修复阶段没有
 时间线真实媒体类型把混排的 `<<<media_N>>>` 映射为 `@imageN/@videoN`，避免新增准备图后
 引用错位。Skill 同时明确禁止为了尺寸/格式修复调用生图模型。
 
-### 结构化 Contract / Preview 720p 回归
+### 已废弃的结构化参数实验 / Preview 720p 回归基线
 
 普通话 480p 回归的工具历史后来证明，`analyze_video` 当时因 Gemini 地域限制返回
 `User location is not supported for the API use`，Agent 实际没有完整视频证据，且最终
@@ -456,9 +461,10 @@ duration、每位源演员的“外观/服装 + 开场或关键动作”锚点�
 - 本轮自动 scene detector 在高速运动中把 motion change 大量误判为 cut（源 22 段、输出
   44 段），不能作为 shot-count 验收数字；P1 仍需专用 boundary detector/ground-truth EDL。
 
-本轮结论：Skill-first + 完整视频理解 + 确定性 strict prompt compiler 已显著修复“普通 CLI
-构图不一致”的主要链路问题，证明简单 CUI 请求能够自动走到接近人工成功 prompt 的结果；
-但 provider 仍有随机的 reference-board leak，P0 必须保留首尾帧/参考图泄漏 QA 和无付费的
+当时的结论是 Skill-first + 完整视频理解 + 确定性 strict prompt compiler 显著改善了“普通
+CLI 构图不一致”。后续复核认为 compiler 与 Skill 重复，当前实现已删除该层，改由 Skill
+直接生成完整自然 prompt。Provider 仍有随机的 reference-board leak，因此无 contract
+回归仍必须保留首尾帧/参考图泄漏 QA 和无付费的
 末帧冻结/裁切修复，不能仅凭 task completed 宣称成功。下一次最小付费实验应只改变 reference
-准备：从多视图人物板确定性裁出单一全身 hero view，再用相同 contract/task budget 跑一次，
+准备：从多视图人物板确定性裁出单一全身 hero view，再用相同素材、模型和 task budget 跑一次，
 验证是否消除结尾泄漏；不改 UI/API/DB，不自动重抽。
