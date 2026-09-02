@@ -203,7 +203,27 @@ describe('Wan 3.0 MuleRouter integration', () => {
     expect(providerUrl).toBe('https://api.mulerouter.ai/vendors/carrothub/v1/w3.0-video-prime-pro/generation')
   })
 
-  it('rejects an attempted provider-specific content-filter flag', async () => {
+  it('drops a generic enabled content-filter default before submitting Wan', async () => {
+    let providerBody: Record<string, unknown> | undefined
+    vi.stubGlobal('fetch', vi.fn(async (_url: string | URL | Request, init?: RequestInit) => {
+      providerBody = JSON.parse(String(init?.body || '{}'))
+      return taskCreated('24242424-2424-4424-8424-242424242424')
+    }))
+
+    const { createVideo } = await import('@/lib/skills/create-video')
+    const result = await createVideo({
+      script: 'Safe Default\nShot 1 (2s): A studio light turns on.',
+      images: [],
+      duration: 2,
+      videoModel: 'wan-3.0',
+      contentFilter: true,
+    })
+
+    expect(result).toMatchObject({ success: true })
+    expect(providerBody).not.toHaveProperty('content_filter')
+  })
+
+  it('rejects an attempted relaxed content-filter flag', async () => {
     const fetchMock = vi.fn()
     vi.stubGlobal('fetch', fetchMock)
     const { createVideo } = await import('@/lib/skills/create-video')
@@ -215,7 +235,7 @@ describe('Wan 3.0 MuleRouter integration', () => {
       contentFilter: false,
     })
     expect(result).toMatchObject({ success: false })
-    expect(result.message).toContain('does not expose a content-filter switch through MuleRouter')
+    expect(result.message).toContain('does not expose Seedance 2.5 Mature Mode through MuleRouter')
     expect(fetchMock).not.toHaveBeenCalled()
   })
 

@@ -1525,7 +1525,7 @@ Hard constraints:
         video_operation: z.enum(['generate', 'edit', 'extend']).optional().describe('Typed video operation. Grok, Gemini Omni, and Seedance 2.5 support edit/extend; both require a video reference. Grok edit preserves source duration/aspect and caps output at 720p; Grok extend adds 2-10s.'),
         extend_direction: z.enum(['forward', 'backward']).optional().describe('Direction for Seedance 2.5 video extension. Gemini Omni only extends forward.'),
         generate_audio: z.boolean().optional().describe('Generate synchronized native audio; Seedance 2.5 defaults to true.'),
-        content_filter: z.boolean().optional().describe('Seedance 2.5 output content filter. Default true. Set false only after explicit user confirmation, including the Mature Mode recovery action; it costs 10% more. Never infer or auto-enable Mature Mode from prompt wording.'),
+        content_filter: z.boolean().optional().describe('Seedance 2.5-only output content filter. Omit it for every other model. Seedance 2.5 defaults to true; set false only after explicit user confirmation, including the Mature Mode recovery action, because it costs 10% more. Never infer or auto-enable Mature Mode from prompt wording.'),
         output_format: z.enum(['mp4', 'mov']).optional().describe('MP4 for playback or MOV for grading.'),
         web_search: z.boolean().optional().describe('Enable Seedance 2.5 text-to-video web grounding.'),
         replication_contract: z.object({
