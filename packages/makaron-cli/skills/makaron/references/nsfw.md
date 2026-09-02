@@ -38,9 +38,8 @@ npx makaron-cli video create --video-model wan-3.0 --script "<shot script>" --du
   those flags. State those preferences in the chat brief or use the standalone
   commands.
 - Keep this routing for adult follow-ups and rerolls in the same job.
-- Use `wan-3.0-prime` only when the user explicitly asks for Prime, Fast, or
-  lower-latency output.
-- For Pro, super-resolution, 2K, or 4K output, keep `wan-3.0` or
-  `wan-3.0-prime` and pass `--video-resolution 2k|4k`.
+- Wan exposes `wan-3.0` and `wan-3.0-prime`; there is no separate Pro product
+  model. Resolution uses the same `--video-resolution` option as every other
+  video service.
 - If a selected provider rejects the request, surface the rejection. Do not
   silently remove the adult intent or switch to an unspecified model.
