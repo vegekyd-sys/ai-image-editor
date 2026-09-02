@@ -105,7 +105,6 @@ Rules:
 - **Seedance 2.5 video size/duration limit**: .mp4/.mov, <=200MB each, width and height each 300-6000px, aspect ratio 0.4-2.5, frame pixels width*height between 409,600 and 8,295,044, and 4-30s per video with all video references totaling <=30s. A normal encoded 30s file may contain up to 0.5s of container/tail-frame metadata tolerance; treat it as 30s rather than asking the user to split it. For `video_operation: "edit"`, omit `duration` or use `-1`; Makaron follows the source duration automatically.
 - **Kling video size limit**: one .mp4/.mov reference video, <=200MB, resolution <=2K. Kling docs do not state a video resolution lower bound.
 - Can combine images + videos in the same prompt
-- Keep prompt concise (under 200 chars when referencing video for motion)
 - `keep_original_sound: true` to preserve the original audio
 
 Prompt examples:
