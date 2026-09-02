@@ -468,3 +468,30 @@ CLI 构图不一致”。后续复核认为 compiler 与 Skill 重复，当前�
 末帧冻结/裁切修复，不能仅凭 task completed 宣称成功。下一次最小付费实验应只改变 reference
 准备：从多视图人物板确定性裁出单一全身 hero view，再用相同素材、模型和 task budget 跑一次，
 验证是否消除结尾泄漏；不改 UI/API/DB，不自动重抽。
+
+## 2026-09-02 Skill-only ablation
+
+Commit `952c2f47` 删除了运行时结构化复刻参数、prompt compiler 和对应专用测试。当前
+`generate_animation` 只接收普通 `story_prompt`；`animate.md` 仅做 Skill 索引，完整视频
+理解、角色映射、逐段 timing、声音方向、提交和 QA 都由 `video-edit` Skill 编排。
+
+在 Preview `https://ai-image-editor-cys7eulel-vegekyd-sys-projects.vercel.app` 使用与旧
+contract 基线相同的普通 CUI 请求、素材、模型和分辨率各运行一次：
+
+- 打斗 / Seedance 2.0 720p：Project `75f4d317-863e-4c63-bfb1-b5824addd1e3`，Run
+  `9e75e65e-b17d-486b-b407-d7c3a3d7125c`，task
+  `task-unified-1788360850-fy3mr60c`。Agent 仍自动检查并确定性准备三张低分辨率图片，
+  最终 prompt 从旧版 4,141 字符降至 1,006 字符；渲染 283s（旧版 262s）。原始 MP4
+  仍为 H.264/AAC、1280x720、24fps、10.080s，完整 decode 通过。逐秒抽帧保留高踢、
+  空中动作、组合攻防、反击与倒地顺序；旧版约 9 秒的银发三视图泄漏在本次没有出现。
+- 婚宴 / Wan 3.0 480p：Project `4f77a7a8-1270-4b69-8076-9460f6fefe6d`，Run
+  `f46c7031-a2f8-48bc-bebe-23b6b4b0a3f8`，task
+  `mr-wan30-609e2b3e-890e-44ce-89f9-1bd965c95257`。最终 prompt 从旧版 5,078 字符降至
+  990 字符；渲染 170s（旧版 242s）。原始 MP4 为 H.264/AAC、832x480、30fps、
+  8.034s，完整 decode 且音频非静音。开场、侧面、背面逃生/火焰、烟雾、正面回归、撞击
+  和蛋糕落地顺序与旧版接近。新版把女生置于原服务生制服，旧版更忠实保留了参考图的紫色
+  上衣；若服装也必须随人物替换，Skill 应明确写入 prompt，而不是恢复一个 Runtime contract。
+
+两例都表明 contract 不是完整理解、角色映射或逐段 prompt 的必要条件，删除后 prompt 减少
+约 76%-80%，输出没有观察到整体结构退化。打斗结尾反而更好，但单次随机生成不能证明这是
+删除 contract 的因果收益；它只证明保留 contract 没有被这两个 case 的可见结果所支持。
