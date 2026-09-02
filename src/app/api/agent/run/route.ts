@@ -270,6 +270,7 @@ export async function POST(req: NextRequest) {
       currentRunId: runId,
       agentModelId: resolvedAgentModel.id,
       agentModelProvider: resolvedAgentModel.provider,
+      supportsImageInput: resolvedAgentModel.supportsImageInput,
     });
     // Run agent after response is sent — next/server after() keeps the function alive
     after(async () => {
@@ -314,6 +315,7 @@ export async function POST(req: NextRequest) {
           audioAttachments: ctx.audioAttachments,
           snapshotImages: ctx.snapshotImages,
           explicitMediaIndices: ctx.explicitMediaIndices,
+          nativeVisionImages: ctx.nativeVisionImages,
           currentSnapshotIndex: ctx.currentSnapshotIndex,
           isNsfw,
           supabase,

@@ -25,6 +25,41 @@ function fakeSupabase(tables: Record<string, unknown[]>) {
 }
 
 describe('provider-neutral Media List understanding', () => {
+  it('attaches current upload pixels directly for a multimodal Agent without Gemini preflight', async () => {
+    const ctx = await buildPromptContext(
+      'project-native-vision',
+      fakeSupabase({
+        snapshots: [{
+          id: 'image-1',
+          image_url: 'https://cdn.example.com/upload.jpg',
+          description: 'Original upload',
+          type: 'image',
+          design_path: null,
+          tips: [],
+          sort_order: 0,
+          video_meta: null,
+          metadata: null,
+        }],
+        messages: [],
+        agent_tool_history: [],
+        project_music: [],
+      }) as never,
+      'user-1',
+      {
+        userMessage: '这张图里有什么？',
+        turnMediaCount: 1,
+        supportsImageInput: true,
+      },
+    );
+
+    expect(ctx.nativeVisionImages).toEqual([
+      { source: 'https://cdn.example.com/upload.jpg', mediaIndex: 1 },
+    ]);
+    expect(ctx.fullPrompt).toContain('attached to this same Agent request');
+    expect(ctx.fullPrompt).not.toContain('[Verified current upload batch');
+    expect(ctx.fullPrompt).not.toContain('[analysis failed:');
+  });
+
   it('passes the full video description to the Agent and teaches selective analysis', async () => {
     const description = [
       'A worker wraps the racket handle with black grip tape.',

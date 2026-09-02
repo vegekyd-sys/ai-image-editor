@@ -11,6 +11,10 @@
 import type { SupabaseClient } from '@supabase/supabase-js';
 import type { ModelMessage } from 'ai';
 import type { AgentModelProvider } from './agent-models';
+import {
+  selectNativeVisionImages,
+  type NativeVisionImageInput,
+} from './agent-image-analysis';
 import type { DesignPayload, Tip } from '@/types';
 import * as workspace from './workspace';
 import { buildModelHistoryFromRows, type DbToolHistoryRow } from './agentToolHistory';
@@ -64,6 +68,8 @@ export interface PromptContextOptions {
   agentModelId?: string;
   /** Resolved provider used to reject incompatible provider-native state. */
   agentModelProvider?: AgentModelProvider;
+  /** Whether the resolved Agent can receive image parts in its own request. */
+  supportsImageInput?: boolean;
   /** Durable server attempt after attempt 1. It retains the same conversation history. */
   durableContinuation?: boolean;
   /** Trusted run objective already loaded by the durable worker. */
@@ -87,6 +93,8 @@ export interface PromptContextResult {
   audioAttachments: AudioAttachmentContext[];
   /** Timeline media explicitly introduced or referenced by the current user turn. */
   explicitMediaIndices: number[];
+  /** Still images attached directly to the selected multimodal Agent request. */
+  nativeVisionImages: NativeVisionImageInput[];
   executionSnapshot?: DurableExecutionSnapshot;
   /** Persisted Studio workflow context for model guidance only. */
   activeStudioWorkflowStage?: string;
@@ -191,6 +199,7 @@ Use the whole batch as the source set for the user's request. Make an intentiona
 export function buildTurnMediaInspectionContext(
   snapshots: Array<Pick<DbSnapshot, 'type'>>,
   requestedCount?: number,
+  nativeVision = false,
 ): string {
   const turnMediaCount = Math.min(
     snapshots.length,
@@ -199,13 +208,18 @@ export function buildTurnMediaInspectionContext(
   if (turnMediaCount === 0) return '';
 
   const turnMediaStart = snapshots.length - turnMediaCount;
+  const evidenceInstruction = nativeVision
+    ? 'Every still image below is attached to this same Agent request after its matching Media Index marker. Inspect those images directly. Videos are not image attachments; use their existing Media Index evidence or analyze_video when that evidence is missing.'
+    : 'A verified evidence block for this exact batch follows below; consume every line before deciding how each item contributes.';
+
   return `[Current upload batch — inspect every item before planning]
 The user added ${turnMediaCount} new Media Index item${turnMediaCount === 1 ? '' : 's'} in this turn:
 ${snapshots.slice(turnMediaStart).map((snapshot, offset) => {
   const mediaIndex = turnMediaStart + offset + 1;
   return `- <<<media_${mediaIndex}>>>: ${snapshot.type === 'video' ? 'video' : 'image'}`;
 }).join('\n')}
-Do not plan from only the current or first image. A verified evidence block for this exact batch follows below; consume every line before deciding how each item contributes.
+Do not plan from only the current or first image.
+${evidenceInstruction}
 
 `;
 }
@@ -427,12 +441,18 @@ export async function buildPromptContext(
   ]);
 
   const snapshots: DbSnapshot[] = snapshotsRes.data ?? [];
-  const verifiedTurnMediaEvidence = await buildVerifiedTurnMediaEvidence(
-    snapshots,
-    options.turnMediaCount,
-    supabase,
-    userId,
-  );
+  const currentSnapshotIndex = options.currentSnapshotIndex ?? Math.max(0, snapshots.length - 1);
+  // Text-only Agents still need the Gemini bridge. Multimodal Agents receive
+  // the still images in their own first request and must not be blocked by a
+  // separate Gemini policy decision before they start.
+  const verifiedTurnMediaEvidence = options.supportsImageInput
+    ? ''
+    : await buildVerifiedTurnMediaEvidence(
+        snapshots,
+        options.turnMediaCount,
+        supabase,
+        userId,
+      );
   const originMessage = messages[0];
   const projectAudios: AudioAttachmentContext[] = ((musicRes.data ?? []) as DbProjectMusic[])
     .map((row) => {
@@ -470,6 +490,21 @@ export async function buildPromptContext(
     acceptance_criteria?: unknown;
   } | null;
   const executionObjective = executionRow?.objective || executionRow?.prompt || originMessage?.content || userMessage;
+  const explicitMediaIndices = resolveExplicitTurnMediaIndices({
+    totalMediaCount: snapshots.length,
+    userMessage: options.executionRunId
+      ? `${executionObjective}\n${userMessage}`
+      : userMessage,
+    turnMediaCount: options.turnMediaCount,
+    referenceImageCount,
+    uploadedVideoCount,
+  });
+  const nativeVisionImages = selectNativeVisionImages(snapshots, {
+    supportsImageInput: options.supportsImageInput === true,
+    currentSnapshotIndex,
+    explicitMediaIndices,
+    turnMediaCount: options.turnMediaCount,
+  });
   const priorSnapshot = executionSnapshotRes.data?.content
     ? normalizeExecutionSnapshot(executionSnapshotRes.data.content, {
         objective: executionObjective,
@@ -509,7 +544,6 @@ export async function buildPromptContext(
     : undefined;
   const executionContext = formatDurableExecutionSnapshot(executionSnapshot);
 
-  const currentSnapshotIndex = options.currentSnapshotIndex ?? Math.max(0, snapshots.length - 1);
   const currentSnap = snapshots[currentSnapshotIndex];
 
   // Load design from workspace if current snapshot has one (skip for video snapshots —
@@ -630,7 +664,9 @@ export async function buildPromptContext(
     : '';
 
   const mediaDescriptionPolicy = snapshots.length >= 1
-    ? `[Media description policy]\nA specific Media Index description may already contain media analysis supplied by an upload pipeline, asset library, earlier tool call, or another Agent. Treat that description as available evidence regardless of its provider. Read it before choosing tools. Do not call analyze_image or analyze_video merely to restate content already covered there. Analyze only when the description is missing/generic, explicitly uncertain or failed, or the user's question requires a concrete visual detail that the description does not cover. Never invent details beyond the supplied description. Use preview_frame for composition/layout/crop/boundary QA, not to repeat semantic analysis.\n\n`
+    ? options.supportsImageInput
+      ? `[Media description policy]\nA specific Media Index description may already contain useful prior evidence. For every still image attached to this request, inspect the pixels directly with your native vision in this same turn; do not call analyze_image to re-fetch an attached image. Use analyze_image only for a different Timeline image whose pixels were not attached and whose description is missing, generic, uncertain, or insufficient for the user's concrete question. Videos still require existing evidence, analyze_video, or preview_frame as appropriate. Never invent details beyond the supplied description or visible media.\n\n`
+      : `[Media description policy]\nA specific Media Index description may already contain media analysis supplied by an upload pipeline, asset library, earlier tool call, or another Agent. Treat that description as available evidence regardless of its provider. Read it before choosing tools. Do not call analyze_image or analyze_video merely to restate content already covered there. Analyze only when the description is missing/generic, explicitly uncertain or failed, or the user's question requires a concrete visual detail that the description does not cover. Never invent details beyond the supplied description. Use preview_frame for composition/layout/crop/boundary QA, not to repeat semantic analysis.\n\n`
     : '';
 
   // Video/composition mode warnings (mutually exclusive)
@@ -656,7 +692,9 @@ export async function buildPromptContext(
 
   // Frontend-only warnings
   const annotationWarning = hasAnnotation
-    ? `[ANNOTATION MODE] The current image has red annotations drawn by the user. You MUST edit THIS image based on the annotations — do NOT use media_index to switch to another snapshot. Call analyze_image first (without media_index) to see the annotations, then generate_image (without media_index) to edit.\n\n`
+    ? options.supportsImageInput
+      ? `[ANNOTATION MODE] The current annotated image is attached directly to this request. Inspect the red marks with your native vision now, then generate_image (without media_index) to edit THIS image. Do not call analyze_image first and do not switch to another snapshot.\n\n`
+      : `[ANNOTATION MODE] The current image has red annotations drawn by the user. You MUST edit THIS image based on the annotations — do NOT use media_index to switch to another snapshot. Call analyze_image first (without media_index) to see the annotations, then generate_image (without media_index) to edit.\n\n`
     : '';
 
   const draftWarning = isDraft
@@ -680,7 +718,11 @@ export async function buildPromptContext(
       })()
     : '';
 
-  const turnMediaInspectionContext = buildTurnMediaInspectionContext(snapshots, options.turnMediaCount);
+  const turnMediaInspectionContext = buildTurnMediaInspectionContext(
+    snapshots,
+    options.turnMediaCount,
+    options.supportsImageInput === true,
+  );
 
   const audioAttachmentContext = resolvedAudioAttachments.length
     ? `[Audio Index - not Timeline Media]\n${resolvedAudioAttachments.map((audio, i) => {
@@ -700,15 +742,6 @@ export async function buildPromptContext(
     const videoUrl = typeof videoMeta?.videoUrl === 'string' ? videoMeta.videoUrl : '';
     return s.type === 'video' && videoUrl ? videoUrl : (s.image_url || '');
   });
-  const explicitMediaIndices = resolveExplicitTurnMediaIndices({
-    totalMediaCount: snapshots.length,
-    userMessage: options.executionRunId
-      ? `${executionObjective}\n${userMessage}`
-      : userMessage,
-    turnMediaCount: options.turnMediaCount,
-    referenceImageCount,
-    uploadedVideoCount,
-  });
   const historyBoundary = [...messages, ...toolHistory]
     .map(row => row.created_at)
     .filter(Boolean)
@@ -724,6 +757,7 @@ export async function buildPromptContext(
     recoverableDesignPath: recoverableDraft?.path,
     audioAttachments: resolvedAudioAttachments,
     explicitMediaIndices,
+    nativeVisionImages,
     executionSnapshot,
     activeStudioWorkflowStage: activeStudioRun?.currentStage || undefined,
     contextStats: selectedHistory.stats,
