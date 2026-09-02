@@ -60,6 +60,21 @@ describe('video-edit Skill replication profile', () => {
     expect(read('src/skills/video-edit/references/direct-reference-route.md')).toContain(
       'Never call\n`generate_image` merely to increase dimensions',
     )
+    expect(read('src/skills/video-edit/references/direct-reference-route.md')).toContain(
+      '`replication_contract`',
+    )
+    expect(read('src/skills/video-edit/references/direct-reference-route.md')).toContain(
+      'raw-video `preview_frame` once with 4-6 representative',
+    )
+    expect(read('src/skills/video-edit/references/direct-reference-route.md')).toContain(
+      'stop before `generate_animation`',
+    )
+    expect(read('src/lib/agent-tools.ts')).toContain(
+      'compileVideoReplicationPrompt',
+    )
+    expect(read('src/lib/agent-tools.ts')).toContain(
+      "source: 'video-contact-sheet'",
+    )
     expect(read('src/skills/reference-video-studio/SKILL.md')).toContain(
       'Use the video-edit replication profile',
     )

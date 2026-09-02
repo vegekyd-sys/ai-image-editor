@@ -79,6 +79,7 @@ import { sourceRangeFromVideoMeta } from './media-source-range';
 import { materializeSeedAudioReference } from './seed-audio-reference';
 import { resolveAudioRefs } from './audio-reference-resolver';
 import { isGrokSubscriptionAllowedUser } from './grok-subscription';
+import { compileVideoReplicationPrompt } from './video-replication-prompt';
 
 const MAX_VIDEO_DIMENSION_PROBE_BYTES = 220 * 1024 * 1024;
 
@@ -1481,6 +1482,8 @@ When the user requests multiple independent video variants, submit them one at a
 
 **BEFORE writing a video script**: call \`read_file('prompts/animate.md')\` to load the full video guide (modes, prompt styles, showcases, reference video usage). Do not re-read if already in this conversation's tool-result history.
 
+For exact source-led replication, first read \`skills/video-edit/SKILL.md\` and pass \`replication_contract\`. The runtime expands that measured semantic contract into the strict provider prompt; do not imitate, shorten, or paste the invariant template into \`story_prompt\` yourself.
+
 Hard constraints:
 - First line of script = short title (2-5 words). Then script body.
 - Use \`<<<media_N>>>\` to reference images AND videos (N starts at 1). Videos in the timeline are auto-routed — just reference them like images. For native SeeDance, Wan 3.0, or MiniMax H3 text-to-video with no source media, use no media markers and do not generate an intermediate image first. Gemini Omni 1.1 text-to-video follows the same no-marker rule.
@@ -1525,6 +1528,23 @@ Hard constraints:
         content_filter: z.boolean().optional().describe('Seedance 2.5 output content filter. Default true. Set false only after explicit user confirmation, including the Mature Mode recovery action; it costs 10% more. Never infer or auto-enable Mature Mode from prompt wording.'),
         output_format: z.enum(['mp4', 'mov']).optional().describe('MP4 for playback or MOV for grading.'),
         web_search: z.boolean().optional().describe('Enable Seedance 2.5 text-to-video web grounding.'),
+        replication_contract: z.object({
+          reference_video_media_index: z.number().int().positive().describe('Timeline Media Index of the complete source video that controls time, action, editing, and camera.'),
+          source_duration_seconds: z.number().positive().max(30).describe('Measured source duration in seconds.'),
+          characters: z.array(z.object({
+            replacement_media_index: z.number().int().positive().describe('Timeline Media Index of the replacement character image.'),
+            source_actor_anchor: z.string().min(12).describe('Stable source performer evidence: appearance/costume plus an opening or distinctive action. Left/right alone is invalid.'),
+            replacement_identity: z.string().min(8).describe('Replacement identity details that must stay stable.'),
+          })).min(1).max(8),
+          environment: z.object({
+            replacement_media_index: z.number().int().positive().describe('Timeline Media Index of the replacement environment image.'),
+            source_environment_anchor: z.string().min(8).describe('Visible source environment features to remove.'),
+            replacement_environment: z.string().min(8).describe('Replacement environment and its required stable details.'),
+          }).optional(),
+          audio_policy: z.enum(['preserve_source', 'regenerate', 'silent']),
+          style_direction: z.string().optional(),
+          additional_exclusions: z.array(z.string()).max(12).optional(),
+        }).optional().describe('Measured semantic contract for exact source-led video replication. Use only after complete-video understanding; runtime compiles the invariant-heavy provider prompt.'),
         completion_actions: z.array(z.object({
           label: z.string().describe('Short button label shown when the video finishes, e.g. "合入原视频" or "加入剪辑".'),
           prompt: z.string().describe('Natural-language instruction to send back to the agent if the user chooses this action. Include concrete media refs/timing when known. For video segment replacement, include replaceStart, replaceEnd, replacementDuration, and require trimming/fitting the patch before FFmpeg merge so the final duration matches the original.'),
@@ -1532,7 +1552,7 @@ Hard constraints:
           policy: z.enum(['confirm', 'auto']).optional().describe('confirm = show an action for the user to click. auto is reserved for explicitly authorized end-to-end workflows. Default confirm.'),
         })).optional().describe('Optional next-step actions to show when this async video finishes. Use this for intermediate artifacts such as a generated segment that should later be merged, or generated clips that can be assembled. Do not use it for ordinary final videos.'),
       }),
-      execute: async ({ story_prompt, duration, aspect_ratio, model, video_resolution, media_refs, audio_refs, reference_voice_ids, video_ref_url, video_ref_type, keep_original_sound, motion_control, character_orientation, video_operation, extend_direction, generate_audio, content_filter, output_format, web_search, completion_actions }) => serializeVideoSubmission(async () => {
+      execute: async ({ story_prompt, duration, aspect_ratio, model, video_resolution, media_refs, audio_refs, reference_voice_ids, video_ref_url, video_ref_type, keep_original_sound, motion_control, character_orientation, video_operation, extend_direction, generate_audio, content_filter, output_format, web_search, replication_contract, completion_actions }) => serializeVideoSubmission(async () => {
         // Refresh base64 → URL from DB before video submission
         await refreshSnapshotUrls(ctx);
         // GUI animation mode: use animationImageUrls; CUI mode: use full snapshotImages (no filter — preserve index alignment)
@@ -1543,6 +1563,30 @@ Hard constraints:
         if (media_refs?.length) {
           imageUrls = [...(imageUrls || []), ...media_refs.filter(u => u.startsWith('http'))];
         }
+        if (replication_contract && video_operation && video_operation !== 'generate') {
+          return { success: false as const, message: 'replication_contract uses reference-to-video generation. Do not combine it with typed video edit or extend.' };
+        }
+        const effectiveStoryPrompt = replication_contract
+          ? compileVideoReplicationPrompt(story_prompt.split('\n')[0] || 'Exact Video Replication', {
+              referenceVideoMediaIndex: replication_contract.reference_video_media_index,
+              sourceDurationSeconds: replication_contract.source_duration_seconds,
+              characters: replication_contract.characters.map(character => ({
+                replacementMediaIndex: character.replacement_media_index,
+                sourceActorAnchor: character.source_actor_anchor,
+                replacementIdentity: character.replacement_identity,
+              })),
+              environment: replication_contract.environment
+                ? {
+                    replacementMediaIndex: replication_contract.environment.replacement_media_index,
+                    sourceEnvironmentAnchor: replication_contract.environment.source_environment_anchor,
+                    replacementEnvironment: replication_contract.environment.replacement_environment,
+                  }
+                : undefined,
+              audioPolicy: replication_contract.audio_policy,
+              styleDirection: replication_contract.style_direction,
+              additionalExclusions: replication_contract.additional_exclusions,
+            })
+          : story_prompt;
         const requestedModel = normalizeVideoModelId(model);
         const videoSelection = requestedModel === 'sync-lipsync-v3'
           ? { model: requestedModel, resolution: video_resolution ?? 'auto', locked: false }
@@ -1582,7 +1626,7 @@ Hard constraints:
           // Video harness: validate before calling API
           const { validateVideoScript } = await import('./video-harness');
           const harnessError = validateVideoScript({
-            prompt: story_prompt,
+            prompt: effectiveStoryPrompt,
             imageCount: imageUrls.length,
             availableMediaIndices: imageUrls.flatMap((url, index) =>
               url && url !== '/video-placeholder.png' ? [index + 1] : [],
@@ -1607,7 +1651,7 @@ Hard constraints:
           // Auto-route video references: query DB for snapshot types
           const originalImageUrlsByIndex = [...imageUrls];
           const scriptRefs = [...new Set(
-            Array.from(story_prompt.matchAll(/<<<(?:image|media)_(\d+)>>>/g), m => Number(m[1]))
+            Array.from(effectiveStoryPrompt.matchAll(/<<<(?:image|media)_(\d+)>>>/g), m => Number(m[1]))
           )];
           const autoVideoUrls: string[] = [];
           const sourceVideoSnapshotIds: string[] = [];
@@ -1742,7 +1786,7 @@ Hard constraints:
           }
 
           const createVideoInput: Parameters<typeof createVideo>[0] = {
-            script: story_prompt,
+            script: effectiveStoryPrompt,
             images: imageUrls,
             duration: effectiveDuration,
             aspectRatio: selectedAspectRatio,
@@ -1753,7 +1797,9 @@ Hard constraints:
             videoUrls: providerAutoVideoUrls.length ? providerAutoVideoUrls : undefined,
             referenceVideoDuration,
             referenceVideoMetas: referenceVideoMetas.length ? referenceVideoMetas : undefined,
-            keepOriginalSound: keep_original_sound,
+            keepOriginalSound: replication_contract
+              ? replication_contract.audio_policy === 'preserve_source'
+              : keep_original_sound,
             motionControl: motion_control,
             characterOrientation: character_orientation,
             audioUrls: resolvedAudioRefs.audioUrls.length ? resolvedAudioRefs.audioUrls : undefined,
@@ -1761,7 +1807,9 @@ Hard constraints:
             videoOperation: video_operation,
             previousInteractionId: isGoogleOmniStatefulExtend ? googleOmniPreviousInteractionId : undefined,
             videoExtendDirection: extend_direction,
-            generateAudio: generate_audio,
+            generateAudio: replication_contract
+              ? replication_contract.audio_policy === 'regenerate'
+              : generate_audio,
             contentFilter: content_filter,
             outputFormat: output_format,
             webSearch: web_search,
@@ -1879,7 +1927,7 @@ Hard constraints:
           const videoMeta: import('@/types').VideoMeta = {
             taskId,
             videoUrl: skillResult.videoUrl || null,
-            prompt: story_prompt,
+            prompt: effectiveStoryPrompt,
             sourceSnapshotIds: sourceVideoSnapshotIds,
             sourceUrls: sourceUrls.length > 0 ? sourceUrls : (originalFirstUrl ? [originalFirstUrl] : []),
             status: skillResult.status === 'completed' && skillResult.videoUrl ? 'completed' : 'processing',
@@ -3307,8 +3355,8 @@ function createPreviewFrameTool(
       description: `Capture one visual frame or a 2-6 frame contact sheet.
 Use media_index to target any timeline snapshot. Remotion compositions are rendered with Remotion; raw uploaded/generated videos are extracted with FFmpeg.
 When design_path is provided it is authoritative; media_index is ignored. Do not combine them to identify the same composition.
-For raw video snapshots: use timestamp to see specific moments in the actual MP4/MOV/WebM.
-For understanding video content (what happens, scenes, pacing), use analyze_video instead.
+For raw video snapshots: use timestamp for one moment, or timestamps/frames for a 2-6 frame contact sheet from the actual MP4/MOV/WebM.
+For understanding complete video content, use analyze_video first. If it fails or lacks temporal evidence, use one representative raw-video contact sheet as the deterministic visual fallback.
 Omit media_index to use the current (last edited) composition.
 For Studio Run review, prefer one call with frames or timestamps for hook/body/end. It renders the frames concurrently and returns one labeled contact sheet plus the individual workspace paths.
 Returns the rendered image so you can see it with your vision.`,
@@ -3317,12 +3365,12 @@ Returns the rendered image so you can see it with your vision.`,
         design_path: z.string().optional().describe('Workspace path of an autosaved or persisted Remotion composition. Use the exact path returned by run_code or shown in Recoverable Composition Draft.'),
         frame: z.number().optional().describe('0-based frame number.'),
         timestamp: z.number().optional().describe('Time in seconds (e.g. 2.5). Converted to frame using fps.'),
-        frames: z.array(z.number()).min(2).max(6).optional().describe('For a composition contact sheet: 2-6 frame numbers rendered in one call. Prefer three representative hook/body/end frames for Studio Run review.'),
-        timestamps: z.array(z.number()).min(2).max(6).optional().describe('For a composition contact sheet: 2-6 timestamps in seconds. Use instead of frames.'),
+        frames: z.array(z.number()).min(2).max(6).optional().describe('For a composition or raw-video contact sheet: 2-6 frame numbers rendered/extracted in one call.'),
+        timestamps: z.array(z.number()).min(2).max(6).optional().describe('For a composition or raw-video contact sheet: 2-6 timestamps in seconds. Prefer representative opening/action/impact/ending moments.'),
         question: z.string().optional().describe('What to focus on when viewing this frame.'),
       }),
       execute: async ({ media_index, design_path, frame, timestamp, frames, timestamps, question }) => {
-        const analyzeDurablePreview = async (image: Buffer, fallback: string) => {
+        const analyzeDurablePreview = async (image: Buffer, _fallback: string) => {
           if (!durableVisionBridge) return undefined;
           try {
             const { analyzeImageContent } = await import('./gemini');
@@ -3333,7 +3381,7 @@ Returns the rendered image so you can see it with your vision.`,
             );
           } catch (error) {
             console.warn('[preview_frame] durable vision bridge failed:', error);
-            return fallback;
+            return undefined;
           }
         };
         let design = (ctx as any).__lastDesignPayload;
@@ -3404,7 +3452,111 @@ Returns the rendered image so you can see it with your vision.`,
 
         const batchRequested = Boolean(frames?.length || timestamps?.length);
         if (batchRequested && rawVideo) {
-          return { error: 'Batch contact sheets currently target Remotion compositions. For raw video understanding use analyze_video, or call preview_frame once per required timestamp.' };
+          if (!rawVideo.url) return { error: `No video URL found at <<<media_${targetMediaIndex}>>>.` };
+          const videoFps = rawVideo.fps || 30;
+          const maxTimestamp = rawVideo.duration && rawVideo.duration > 0
+            ? Math.max(0, rawVideo.duration - (1 / videoFps))
+            : undefined;
+          const requestedTimestamps = frames?.length
+            ? frames.map(value => Math.max(0, Math.round(value)) / videoFps)
+            : (timestamps || []);
+          const targetTimestamps = [...new Set(requestedTimestamps.map(value => {
+            const clamped = Math.max(0, maxTimestamp !== undefined ? Math.min(value, maxTimestamp) : value);
+            return Number(clamped.toFixed(3));
+          }))];
+          if (targetTimestamps.length < 2) {
+            return { error: 'Contact sheet timestamps collapse to fewer than two unique in-range moments.' };
+          }
+
+          try {
+            const { extractVideoFrame } = await import('./video-frame');
+            const { createContactSheet } = await import('./contact-sheet');
+            const sourceStart = rawVideo.sourceRange?.start_sec || 0;
+            const sourceTimestamps = targetTimestamps.map(value => sourceStart + value);
+            const rendered = await Promise.all(sourceTimestamps.map(value =>
+              extractVideoFrame(rawVideo.url, { timestamp: value })
+            ));
+            const firstMetadata = await sharp(rendered[0]).metadata();
+            const sourceWidth = firstMetadata.width || 1280;
+            const sourceHeight = firstMetadata.height || 720;
+            const targetFrames = targetTimestamps.map(value => Math.max(0, Math.round(value * videoFps)));
+            const stamp = Date.now();
+            const framePaths = targetTimestamps.map(value =>
+              `${ctx.projectId}/drafts/video-media${targetMediaIndex || 'current'}-t${value.toFixed(2).replace('.', '-')}-${stamp}.jpg`
+            );
+            const frameUrls: string[] = [];
+            const userId = ctx.userId;
+            if (ctx.supabase && userId) {
+              const writes = await Promise.all(rendered.map((jpegBuffer, index) =>
+                workspace.writeFile(framePaths[index]!, jpegBuffer, ctx.supabase!, userId, 'image/jpeg')
+              ));
+              writes.forEach((write, index) => {
+                if (!write.storageUrl) return;
+                const storageUrl = toPublicStorageUrl(write.storageUrl);
+                frameUrls[index] = storageUrl;
+                rememberWorkspaceMediaOutputs(ctx, [{
+                  path: framePaths[index],
+                  storageUrl,
+                  contentType: 'image/jpeg',
+                  description: `raw video frame at ${targetTimestamps[index]?.toFixed(2)}s`,
+                  updatedAt: new Date().toISOString(),
+                }]);
+              });
+            }
+
+            const contactSheet = await createContactSheet(
+              rendered.map((image, index) => ({
+                image,
+                label: `#${index + 1} ${targetTimestamps[index]?.toFixed(1)}s`,
+              })),
+              sourceWidth,
+              sourceHeight,
+            );
+            const contactSheetPath = `${ctx.projectId}/drafts/video-media${targetMediaIndex || 'current'}-contact-${stamp}.jpg`;
+            let workspaceUrl = '';
+            if (ctx.supabase && userId) {
+              const write = await workspace.writeFile(contactSheetPath, contactSheet, ctx.supabase, userId, 'image/jpeg');
+              if (write.storageUrl) {
+                workspaceUrl = toPublicStorageUrl(write.storageUrl);
+                rememberWorkspaceMediaOutputs(ctx, [{
+                  path: contactSheetPath,
+                  storageUrl: workspaceUrl,
+                  contentType: 'image/jpeg',
+                  description: `raw video contact sheet at ${targetTimestamps.join(', ')}s`,
+                  updatedAt: new Date().toISOString(),
+                }]);
+              }
+            }
+
+            console.log(`🖼️ [agent] preview_frame: raw video contact sheet ${targetTimestamps.join(',')}s (${(contactSheet.length / 1024).toFixed(0)} KB)`);
+            const analysis = await analyzeDurablePreview(
+              contactSheet,
+              'The raw-video contact sheet rendered successfully. Use its attached pixels as temporal evidence.',
+            );
+            return {
+              base64Data: contactSheet.toString('base64'),
+              mimeType: 'image/jpeg',
+              analysis,
+              source: 'video-contact-sheet',
+              frames: targetFrames,
+              timestamps: targetTimestamps,
+              sourceTimestamps,
+              sourceRange: rawVideo.sourceRange,
+              framePaths,
+              frameUrls,
+              totalFrames: rawVideo.duration && rawVideo.duration > 0
+                ? Math.max(1, Math.round(rawVideo.duration * videoFps))
+                : undefined,
+              fps: videoFps,
+              question,
+              workspaceUrl,
+              workspacePath: contactSheetPath,
+            };
+          } catch (err) {
+            const msg = err instanceof Error ? err.message : String(err);
+            console.error(`⚠️ [agent] preview_frame raw video contact sheet failed: ${msg}`);
+            return { error: `Failed to extract raw-video contact sheet: ${msg}` };
+          }
         }
 
         if (batchRequested && design) {

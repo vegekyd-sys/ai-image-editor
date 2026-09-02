@@ -22,8 +22,11 @@ not pixel identity or a vague "similar feeling".
 2. **Understand the complete clip.** Extract deterministic file truth, candidate
    boundaries, frames, audio envelope, and beat candidates. Transcribe only when
    speech timing matters. Use a multimodal model to label composition,
-   choreography, camera, text/style, and uncertain boundaries. Do not confuse a
-   prose summary with measured evidence.
+   choreography, camera, text/style, and uncertain boundaries. If
+   `analyze_video` fails or lacks opening/action/impact/ending evidence, call
+   raw-video `preview_frame` once with 4-6 representative timestamps. If both
+   routes fail to reveal the temporal evidence, stop before paid generation. Do
+   not confuse a prose summary with measured evidence.
 3. **Lock Video DNA.** Write a Shot Blueprint with source ranges, confidence,
    evidence, preserve/replace fields, and acceptance priorities. A short
    continuous clip may use a compact Blueprint; multi-shot, low-confidence, or
@@ -38,9 +41,11 @@ not pixel identity or a vague "similar feeling".
    second shot before a batch. For a direct short clip, one complete attempt is
    the representative proof. Allow one evidence-driven correction; more paid
    work needs approval.
-6. **Generate or map content.** Assign every reference a stable role and state
-   that the source governs timing, framing, camera, choreography, cuts, and beat
-   structure. Seedance uses reference-to-video, never typed edit.
+6. **Generate or map content.** For direct structural replication, pass
+   `generate_animation.replication_contract` with measured duration, source
+   performer anchors, replacement identities, environment policy, and audio
+   policy. Runtime compiles the strict invariant wording. Seedance uses
+   reference-to-video, never typed edit.
 7. **Assemble only when needed.** A direct reference result may remain one
    provider output after QA. Structured routes put pixels into one editable
    Remotion composition; the Blueprint stays the master clock. Restore exact

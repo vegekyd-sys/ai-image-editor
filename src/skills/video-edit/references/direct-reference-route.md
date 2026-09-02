@@ -47,6 +47,21 @@ editable result.
 
 ## Prompt Contract
 
+For exact structural replication, call `generate_animation` with a structured
+`replication_contract`. The runtime owns the invariant-heavy provider wording;
+the Agent supplies measured facts and semantic anchors:
+
+- complete source video Media Index and measured duration;
+- each source performer identified by appearance/costume **plus** an opening or
+  distinctive action, mapped to one replacement identity Media Index;
+- source and replacement environment anchors when scenery changes;
+- audio policy, style direction, and any case-specific exclusions.
+
+Keep `story_prompt` to a short user-visible title or summary when the contract
+is present. Never identify a performer only as "left fighter" or "right
+fighter". The compiled prompt tracks performer identity through action and
+choreography even when screen direction changes.
+
 The script must begin with role mapping, then an invariant, then timed action:
 
 1. Define the reference video as motion/camera/timing/choreography authority.
@@ -64,6 +79,14 @@ The script must begin with role mapping, then an invariant, then timed action:
 7. Put music/ambience/SFX structure in the prompt only when native audio should
    be regenerated. If exact source sound must survive, restore it after the
    visual result instead of trusting synthesis.
+
+## Complete-Understanding Gate
+
+Do not submit a paid replication when complete-video understanding failed. If
+`analyze_video` errors or does not expose opening actions, crossings, impacts,
+and the final state, call raw-video `preview_frame` once with 4-6 representative
+`timestamps` and inspect the returned contact sheet. If neither source provides
+those temporal facts, stop before `generate_animation` and report the blocker.
 
 For Seedance, submit the clip and replacement references through
 reference-to-video. Do not set `video_operation: "edit"`. Seedance 2.5 may use
