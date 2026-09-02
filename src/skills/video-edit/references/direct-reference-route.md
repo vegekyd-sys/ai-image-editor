@@ -5,10 +5,10 @@ whole-clip motion, camera, timing, choreography, or background should control th
 result. This is the P0 proven by the CUI experiment; it is still supervised
 generation, not deterministic pixel replacement.
 
-When no model is selected explicitly by the user or app, use Wan 3.0 Prime at
-its native default resolution for this route. Keep explicit provider,
-resolution, latency, and cost requests authoritative; ordinary non-replication
-video generation keeps its own default.
+When no model or resolution is selected explicitly by the user or app, use Wan
+3.0 Prime at 720p for this route. Keep explicit provider, resolution, latency,
+and cost requests authoritative; ordinary non-replication video generation
+keeps its own default.
 
 ## Input Checklist
 

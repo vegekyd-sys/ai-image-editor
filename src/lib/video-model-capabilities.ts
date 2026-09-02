@@ -74,6 +74,7 @@ export interface VideoReferenceMeta {
 
 const DEFAULT_MODEL_ID = 'seedance-fast'
 export const DEFAULT_VIDEO_REPLICATION_MODEL_ID = 'wan-3.0-prime'
+export const DEFAULT_VIDEO_REPLICATION_RESOLUTION: VideoResolution = '720p'
 
 const MODEL_CAPABILITIES: Record<string, VideoModelCapability> = {
   kling: {
@@ -548,6 +549,14 @@ export function resolveVideoReplicationModelId(model?: string | null): string {
   return requested
     ? normalizeVideoModelId(requested)
     : DEFAULT_VIDEO_REPLICATION_MODEL_ID
+}
+
+export function resolveVideoReplicationResolution(
+  resolution?: VideoResolutionInput,
+): VideoResolution {
+  return !resolution || resolution === 'auto'
+    ? DEFAULT_VIDEO_REPLICATION_RESOLUTION
+    : resolution
 }
 
 export function getVideoModelCapability(model?: string | null): VideoModelCapability {

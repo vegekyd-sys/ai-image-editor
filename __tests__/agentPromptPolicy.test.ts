@@ -417,7 +417,9 @@ describe('agent prompt policy guards', () => {
     expect(agentTs).toContain('appAuto: (ctx as any).videoAuto')
     expect(agentTs).toContain('const replicationAwareToolModel = replication_contract')
     expect(agentTs).toContain('toolModel: replicationAwareToolModel')
-    expect(agentTs).toContain('toolResolution: video_resolution')
+    expect(agentTs).toContain('const replicationAwareToolResolution = replication_contract')
+    expect(agentTs).toContain('toolResolution: replicationAwareToolResolution')
+    expect(agentTs).toContain('resolveVideoReplicationResolution(selectedVideoRoute.resolution)')
     expect(agentTs).toContain('Default model is SeeDance 2.0 Fast')
   })
 

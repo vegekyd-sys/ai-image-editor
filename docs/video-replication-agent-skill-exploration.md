@@ -587,12 +587,11 @@ production-accepted 状态。
 | 舞厅/人物替换 | Project `8d2d4945-7480-45a6-92e9-2123ff727fa3`；task `mr-wan30-prime-62d51373-8c01-466b-a8e0-9ac3dbe0324a` | `/Users/tianyicai/Downloads/makaron-wan3-prime-ballroom-once-20260903.mp4`；H.264/AAC、1920x1080、30fps、7.035s、30,312,272 bytes；完整 decode，通过；音频非静音。短发、圆框眼镜和人物身份全程稳定，没有 Seedance 对照在约 3.5s 后出现的源人物回流。 |
 
 据此，本分支将“带 `replication_contract` 的精确源视频复刻”设为一个窄路由：用户和 App
-都没有明确选择模型时，runtime 默认 `wan-3.0-prime`，并使用模型原生默认 1080p；普通文生
+都没有明确选择模型或分辨率时，runtime 默认 `wan-3.0-prime` + `720p`；普通文生
 视频、图生视频继续使用现有默认，用户点名 Seedance、MiniMax、Gemini 等时也不覆盖。Agent
 必须在未指定模型时省略 tool 的 `model` 字段，防止它把普通生成默认值误当成用户选择。
 
 这一默认值目前只是 **branch-only/local-only**：上面两条成片验证了明确选择 Wan 3.0 Prime
 时的 provider 质量，单元测试验证了默认解析、App lock 和显式模型覆盖，但尚未部署新版后用
-“不写模型”的真实 CUI 请求做端到端验收。Wan Prime 当前默认 1080p，成本和输出体积显著高于
-低清草稿模型；后续若要提供便宜探索，应由用户明确选低成本模型或单独设计 draft policy，
-不应暗中改变精确复刻的默认质量。
+“不写模型和分辨率”的真实 CUI 请求做端到端验收。复刻专用 720p 默认用于控制测试成本；
+用户仍可明确选择 480p、1080p、2K 或 4K。

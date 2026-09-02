@@ -58,7 +58,7 @@ describe('video-edit Skill replication profile', () => {
       'skills/video-edit/references/similarity-qa.md',
     )
     expect(read('src/skills/video-edit/references/replication-protocol.md')).toContain(
-      'direct replication defaults to Wan 3.0 Prime',
+      'direct replication defaults to Wan 3.0 Prime at 720p',
     )
     expect(read('src/skills/video-edit/references/direct-reference-route.md')).toContain(
       'Never call\n`generate_image` merely to increase dimensions',
@@ -76,7 +76,7 @@ describe('video-edit Skill replication profile', () => {
     expect(read('src/lib/agent-tools.ts')).toContain('compileVideoReplicationPrompt')
     expect(read('src/lib/agent-tools.ts')).toContain('resolveVideoReplicationModelId(model)')
     expect(read('src/lib/prompts/animate.md')).toContain(
-      'a `replication_contract` request defaults to Wan 3.0 Prime',
+      'a `replication_contract` request defaults to Wan 3.0 Prime at 720p',
     )
     expect(read('src/lib/agent-tools.ts')).toContain(
       'no user-selected model, omit',

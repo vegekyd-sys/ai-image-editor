@@ -34,7 +34,7 @@ not pixel identity or a vague "similar feeling".
 4. **Choose one execution route.** Use direct reference replication for one
    provider-sized clip when whole-clip motion/camera/choreography should transfer
    in one call. When neither the user nor the app selector chooses a model,
-   direct replication defaults to Wan 3.0 Prime at its native default resolution;
+   direct replication defaults to Wan 3.0 Prime at 720p;
    this exception does not change the default for ordinary video generation.
    Preserve an explicit provider or cost/resolution request. Otherwise choose A
    = deterministic re-edit of supplied replacements, B = per-shot generation,

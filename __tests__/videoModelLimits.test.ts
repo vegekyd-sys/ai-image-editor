@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from 'vitest'
 import { createVideo, prepareSeedance20References } from '@/lib/skills/create-video'
-import { DEFAULT_VIDEO_REPLICATION_MODEL_ID, estimateVideoCredits, estimateVideoProviderCostUsd, getDefaultVideoModelId, getRequiredVideoCredits, getVideoModelCapability, listVideoModelCapabilities, normalizeVideoModelId, normalizeVideoResolution, resolveAgentVideoSelection, resolveClosestSupportedAspectRatio, resolvePersistedVideoDuration, resolveVideoGenerationRoute, resolveVideoImageWorkflow, resolveVideoOutputDuration, resolveVideoProviderAspectRatio, resolveVideoProviderModel, resolveVideoReplicationModelId, supportsNativeTextToVideo, validateVideoImageWorkflowRequest, validateVideoModelRequest, validateVideoResolutionRequest } from '@/lib/video-model-capabilities'
+import { DEFAULT_VIDEO_REPLICATION_MODEL_ID, DEFAULT_VIDEO_REPLICATION_RESOLUTION, estimateVideoCredits, estimateVideoProviderCostUsd, getDefaultVideoModelId, getRequiredVideoCredits, getVideoModelCapability, listVideoModelCapabilities, normalizeVideoModelId, normalizeVideoResolution, resolveAgentVideoSelection, resolveClosestSupportedAspectRatio, resolvePersistedVideoDuration, resolveVideoGenerationRoute, resolveVideoImageWorkflow, resolveVideoOutputDuration, resolveVideoProviderAspectRatio, resolveVideoProviderModel, resolveVideoReplicationModelId, resolveVideoReplicationResolution, supportsNativeTextToVideo, validateVideoImageWorkflowRequest, validateVideoModelRequest, validateVideoResolutionRequest } from '@/lib/video-model-capabilities'
 
 describe('video model reference limits', () => {
   it('maps mixed timeline image/video indices to Seedance 2.0 provider markers', () => {
@@ -921,15 +921,20 @@ describe('video model reference limits', () => {
 
   it('defaults replication to Wan 3.0 Prime without overriding explicit model choices', () => {
     expect(DEFAULT_VIDEO_REPLICATION_MODEL_ID).toBe('wan-3.0-prime')
+    expect(DEFAULT_VIDEO_REPLICATION_RESOLUTION).toBe('720p')
     expect(resolveVideoReplicationModelId()).toBe('wan-3.0-prime')
     expect(resolveVideoReplicationModelId('seedance-fast')).toBe('seedance-fast')
+    expect(resolveVideoReplicationResolution()).toBe('720p')
+    expect(resolveVideoReplicationResolution('auto')).toBe('720p')
+    expect(resolveVideoReplicationResolution('1080p')).toBe('1080p')
 
     expect(resolveAgentVideoSelection({
       appModel: 'seedance-fast',
       appResolution: 'auto',
       appAuto: true,
       toolModel: resolveVideoReplicationModelId(),
-    })).toEqual({ model: 'wan-3.0-prime', resolution: 'auto', locked: false })
+      toolResolution: resolveVideoReplicationResolution(),
+    })).toEqual({ model: 'wan-3.0-prime', resolution: '720p', locked: false })
 
     expect(resolveAgentVideoSelection({
       appModel: 'seedance',
