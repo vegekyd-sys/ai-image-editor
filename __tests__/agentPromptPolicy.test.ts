@@ -292,14 +292,15 @@ describe('agent prompt policy guards', () => {
     expect(animate).toContain('set `video_operation: "extend"`')
     expect(animate).toContain('Never write or submit a SeeDance generated video duration below 4s')
     expect(agent).toContain('Resolution is one shared video setting')
-    expect(agent).toContain('infer `video_resolution` from the full request and app selection for any model')
+    expect(agent).toContain('infer `video_resolution` from the full request for any model')
     expect(agent).not.toContain('Wan Prime/Fast ->')
     expect(agent).not.toContain('Wan Pro/2K/4K ->')
     expect(animate).toContain('`video_resolution` is the shared resolution control for every video service')
     expect(animate).toContain('Do not create provider-specific natural-language keyword routing for resolution')
     expect(animate).toContain('Both accept the shared `video_resolution` field')
-    expect(animate).toContain('The existing NSFW semantic route defaults to `wan-3.0-prime`')
-    expect(animate).toContain('preserve an explicit user or app selection of `wan-3.0`')
+    expect(animate).toContain('The NSFW semantic route defaults to `wan-3.0-prime`')
+    expect(animate).not.toContain('preserve an explicit user or app selection')
+    expect(animate).not.toContain('while the selector remains automatic')
     expect(animate).toContain('Wan 3.0 scripts may be **2 to 30 seconds**')
     expect(animate).toContain('reference-video duration + requested output duration must be 30 seconds or less')
 
@@ -311,7 +312,7 @@ describe('agent prompt policy guards', () => {
     expect(agentTs).toContain('Native SeeDance, Wan 3.0, or MiniMax H3 text-to-video uses no media markers')
     expect(agentTs).toContain('Reference audio is only supported by Seedance video models, Wan 3.0, or MiniMax H3')
     expect(agentTs).toContain('Seedance 2.5 is 4-30 seconds; Wan 3.0 is 2-30 seconds')
-    expect(agentTs).toContain('For any NSFW/adult-explicit video request, default to Wan 3.0 Prime')
+    expect(agentTs).toContain('An NSFW/adult-explicit video request defaults to Wan 3.0 Prime')
     expect(agentTs).toContain('analogous to choosing Qwen for NSFW image requests')
     expect(agentTs).toContain('overrides the 16-30 second Seedance 2.5 route')
     expect(agentTs).toContain('reference-video duration + requested output duration <= 30 seconds')
@@ -399,18 +400,19 @@ describe('agent prompt policy guards', () => {
     expect(agentTs).toContain('Outside this exception, \\`generate_audio\\` retains its full standalone scope')
   })
 
-  it('keeps SeeDance Fast as the default video model unless user or app selects another model', () => {
+  it('keeps model-selector enforcement in runtime instead of prompt context', () => {
     const agent = read('src/lib/prompts/agent.md')
     const agentTs = read('src/lib/agent.ts')
 
-    expect(agent).toContain('usually SeeDance 2.0 Fast')
+    expect(agent).toContain('Default video model is SeeDance 2.0 Fast')
     expect(agent).toContain('`seedance-fast`')
+    expect(agent).not.toContain('app selector')
+    expect(agent).not.toContain('app selection')
     expect(agentTs).toContain('resolveAgentVideoSelection')
     expect(agentTs).toContain('appAuto: (ctx as any).videoAuto')
     expect(agentTs).toContain('toolModel: model')
     expect(agentTs).toContain('toolResolution: video_resolution')
-    expect(agentTs).toContain('Default model follows app selection, usually SeeDance 2.0 Fast')
-    expect(agentTs).toContain('when the user asks for Seedance 2.5')
+    expect(agentTs).toContain('Default model is SeeDance 2.0 Fast')
   })
 
   it('uses path-based composition patching instead of full currentDesign code injection', () => {

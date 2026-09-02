@@ -133,8 +133,8 @@ describe('agent media scenario matrix', () => {
   })
 
   it('keeps video generation default on SeeDance Fast while separating standard SeeDance', () => {
-    expect(agent).toContain('Default video model follows the app selection, usually SeeDance 2.0 Fast')
-    expect(animate).toContain('usually SeeDance 2.0 Fast')
+    expect(agent).toContain('Default video model is SeeDance 2.0 Fast')
+    expect(animate).toContain('Default model behavior: use SeeDance 2.0 Fast')
     expect(animate).toContain('Treat `seedance-fast` and standard `seedance` as separate models')
     expect(ffmpegSkill).toContain('| SeeDance | 15s | 15.5s | <=50MB; width/height 300-6000px')
     expect(ffmpegSkill).toContain('Default video model, higher quality')
