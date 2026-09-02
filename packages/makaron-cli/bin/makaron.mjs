@@ -2054,7 +2054,7 @@ Not sure which built-in skill to use? Start with:
     console.log('Usage: makaron analyze --video <file|url> ["question"]');
   } else if (topic === 'video') {
     if (subtopic === 'script') console.log('Usage: makaron video script --image <file> [--image <file>] [--lang en|zh] "direction"');
-    else if (subtopic === 'create') console.log('Usage: makaron video create --script "..." [--image <url> ...] [--video <url> ...] [--audio <url> ...] [--voice <xai-preset-id> ...] [--duration 10] [--aspect 9:16] [--video-model seedance-fast|seedance-mini|seedance|seedance-2.5|wan-3.0|wan-3.0-prime|kling|grok|google-omni|minimax-h3|sync-lipsync-v3] [--operation generate|edit|extend] [--video-resolution auto|480p|720p|768p|1080p|2k|4k] [--keep-original-sound]');
+    else if (subtopic === 'create') console.log('Usage: makaron video create --script "..." [--image <url> ...] [--video <url> ...] [--audio <url> ...] [--voice <xai-preset-id> ...] [--duration 10] [--aspect 9:16] [--video-model seedance-fast|seedance-mini|seedance|seedance-2.5|wan-3.0|wan-3.0-prime|kling|grok|google-omni|minimax-h3|minimax-h3-max|sync-lipsync-v3] [--operation generate|edit|extend] [--video-resolution auto|480p|720p|768p|1080p|2k|4k] [--keep-original-sound]');
     else if (subtopic === 'status') console.log('Usage: makaron video status <taskId> | --snapshot <snapshotId> [--wait]');
     else console.log(`Video commands:
   video script --image <file> [--image <file>] "direction"   Write video script
@@ -2063,6 +2063,7 @@ Not sure which built-in skill to use? Start with:
   video create --script "..." --video-model wan-3.0-prime    Wan 3.0 Prime fast tier via MuleRouter
   video create --script "..." --video-model wan-3.0 --video-resolution 4k  Wan 3.0 with FlashVSR
   video create --script "..." --video-model minimax-h3                          MiniMax H3 text-to-video (default 768P)
+  video create --script "..." --video-model minimax-h3-max                      H3 Max near-real-time text-to-video (default 480P)
   video create --script "..." --image <url> [--duration 10]  Submit video task
   video create --script "..." --video <file|url> --video-model grok [--operation edit|extend]  Edit or extend one MP4 with Grok
   video create --script "Use the supplied audio" --video <url> --audio <url> --video-model sync-lipsync-v3  Lip-sync exact replacement audio
@@ -2908,7 +2909,9 @@ if (!command || command === '--help' || command === '-h' || command === 'help') 
       }
       else if (args[i] === '--wait') wait = true;
     }
-    const selectedVideoModel = ['wan3', 'wan3.0', 'wan30', 'wan-3', 'wan3-pro', 'wan3.0-pro', 'wan30-pro', 'wan-3-pro', 'berry-1.0-pro', 'w3.0-video-pro'].includes(videoModel)
+    const selectedVideoModel = ['h3 max', 'h3-max', 'h3max', 'minimax-h3max'].includes(videoModel)
+      ? 'minimax-h3-max'
+      : ['wan3', 'wan3.0', 'wan30', 'wan-3', 'wan3-pro', 'wan3.0-pro', 'wan30-pro', 'wan-3-pro', 'berry-1.0-pro', 'w3.0-video-pro'].includes(videoModel)
       ? 'wan-3.0'
       : ['wan3-prime', 'wan3.0-prime', 'wan30-prime', 'wan-3-prime', 'w3.0-video-prime', 'w3.0-video-prime-pro', 'wan-3.0-prime-pro', 'prime'].includes(videoModel)
         ? 'wan-3.0-prime'
@@ -2917,12 +2920,13 @@ if (!command || command === '--help' || command === '-h' || command === 'help') 
     const isWan30 = selectedVideoModel === 'wan-3.0' || selectedVideoModel === 'wan-3.0-prime';
     const isSeedanceModel = selectedVideoModel === 'seedance-fast' || selectedVideoModel === 'seedance-mini' || selectedVideoModel === 'seedance' || isSeedance25;
     const isMinimaxH3 = selectedVideoModel === 'minimax-h3';
+    const isFalH3Max = selectedVideoModel === 'minimax-h3-max';
     const isGrok = selectedVideoModel === 'grok';
     const isGoogleOmni = selectedVideoModel === 'google-omni';
     const isSyncLipsync = selectedVideoModel === 'sync-lipsync-v3';
-    const supportsNativeTextToVideo = isSeedanceModel || isWan30 || isMinimaxH3 || isGrok || isGoogleOmni;
+    const supportsNativeTextToVideo = isSeedanceModel || isWan30 || isMinimaxH3 || isFalH3Max || isGrok || isGoogleOmni;
     if (!script || (!images.length && !videos.length && !audios.length && !referenceVoices.length && !supportsNativeTextToVideo)) {
-      console.error('Usage: makaron video create --script "..." [--image <url>] [--video <file|url>] [--audio <file|url>] [--duration 30] [--video-model seedance-2.5|wan-3.0|wan-3.0-prime|minimax-h3]');
+      console.error('Usage: makaron video create --script "..." [--image <url>] [--video <file|url>] [--audio <file|url>] [--duration 30] [--video-model seedance-2.5|wan-3.0|wan-3.0-prime|minimax-h3|minimax-h3-max]');
       process.exit(1);
     }
     if (isSeedance25 && images.length > 30) { console.error('Seedance 2.5 supports at most 30 image references.'); process.exit(1); }
@@ -2934,6 +2938,10 @@ if (!command || command === '--help' || command === '-h' || command === 'help') 
     if (isMinimaxH3 && images.length > 9) { console.error('MiniMax H3 supports at most 9 image references.'); process.exit(1); }
     if (isMinimaxH3 && videos.length > 3) { console.error('MiniMax H3 supports at most 3 video references.'); process.exit(1); }
     if (isMinimaxH3 && audios.length > 3) { console.error('MiniMax H3 supports at most 3 audio references.'); process.exit(1); }
+    if (isFalH3Max && images.length > 1) { console.error('MiniMax H3 Max supports at most one start image.'); process.exit(1); }
+    if (isFalH3Max && (videos.length || audios.length)) { console.error('MiniMax H3 Max currently supports only text-to-video or one-image-to-video; remove video/audio references.'); process.exit(1); }
+    if (isFalH3Max && duration != null && ![5, 10, 15].includes(duration)) { console.error('MiniMax H3 Max duration must be 5, 10, or 15 seconds.'); process.exit(1); }
+    if (isFalH3Max && videoResolution && !['auto', '480p', '768p'].includes(videoResolution.toLowerCase())) { console.error('MiniMax H3 Max resolution must be auto, 480p, or 768p.'); process.exit(1); }
     if (isGrok && images.length > 7) { console.error('Grok Imagine Video 1.5 supports at most 7 image references.'); process.exit(1); }
     if (isGrok && videos.length > 1) { console.error('Grok video edit/extend accepts exactly one source video.'); process.exit(1); }
     if (isGrok && referenceVoices.length > 3) { console.error('Grok Imagine Video 1.5 supports at most 3 preset voices.'); process.exit(1); }
@@ -3022,6 +3030,8 @@ if (!command || command === '--help' || command === '-h' || command === 'help') 
       ? { script, images, videoUrls, audioUrls, referenceVoiceIds: referenceVoices, videoModel: selectedVideoModel, videoResolution, operation: resolvedOperation, extendDirection, outputFormat, generateAudio, contentFilter, webSearch }
       : isMinimaxH3
         ? { script, images, videoUrls, audioUrls, videoModel: selectedVideoModel, videoResolution }
+      : isFalH3Max
+        ? { script, images, videoModel: selectedVideoModel, videoResolution }
       : videoUrls[0]
         ? { videoUrl: videoUrls[0], editPrompt: script, images, videoModel: selectedVideoModel, videoResolution, referType: isSeedanceModel ? 'feature' : 'base' }
         : { script, images, videoModel: selectedVideoModel, videoResolution };
@@ -3078,6 +3088,7 @@ if (!command || command === '--help' || command === '-h' || command === 'help') 
   video create --script "..." --video-model wan-3.0-prime    Wan 3.0 Prime fast tier via MuleRouter
   video create --script "..." --video-model wan-3.0 --video-resolution 4k  Wan 3.0 with FlashVSR
   video create --script "..." --video-model minimax-h3                          MiniMax H3 text-to-video (default 768P)
+  video create --script "..." --video-model minimax-h3-max                      H3 Max near-real-time text-to-video (default 480P)
   video create --script "..." --image <url> [--duration 10]  Submit video task
   video create --script "..." --video <file|url> --video-model grok [--operation edit|extend]  Edit or extend one MP4 with Grok
   video create --script "Use the supplied audio" --video <url> --audio <url> --video-model sync-lipsync-v3  Lip-sync exact replacement audio

@@ -3,12 +3,21 @@ import { createVideo } from '@/lib/skills/create-video'
 import { estimateVideoCredits, estimateVideoProviderCostUsd, getDefaultVideoModelId, getRequiredVideoCredits, getVideoModelCapability, listVideoModelCapabilities, normalizeVideoModelId, normalizeVideoResolution, resolveAgentVideoSelection, resolveClosestSupportedAspectRatio, resolvePersistedVideoDuration, resolveVideoGenerationRoute, resolveVideoImageWorkflow, resolveVideoOutputDuration, resolveVideoProviderAspectRatio, resolveVideoProviderModel, supportsNativeTextToVideo, validateVideoImageWorkflowRequest, validateVideoModelRequest, validateVideoResolutionRequest } from '@/lib/video-model-capabilities'
 
 describe('video model reference limits', () => {
-  it('defaults every image-capable provider to reference-to-video', () => {
+  it('keeps reference-to-video as the global default with one explicit H3 Max I2V exception', () => {
     const imageCapableModels = listVideoModelCapabilities()
       .filter(capability => capability.maxImageReferences !== 0)
 
     expect(imageCapableModels.length).toBeGreaterThan(0)
     for (const capability of imageCapableModels) {
+      if (capability.id === 'minimax-h3-max') {
+        expect(capability.defaultImageWorkflow).toBe('image-to-video')
+        expect(capability.supportsExplicitImageToVideo).toBe(true)
+        expect(resolveVideoImageWorkflow({
+          model: capability.id,
+          imageReferenceCount: 1,
+        })).toBe('image-to-video')
+        continue
+      }
       expect(capability.defaultImageWorkflow, capability.id).toBe('reference-to-video')
       expect(resolveVideoImageWorkflow({
         model: capability.id,
@@ -127,6 +136,35 @@ describe('video model reference limits', () => {
 
   it('accepts MiniMax H3 768p without a server-side preview gate', () => {
     expect(validateVideoResolutionRequest({ model: 'minimax-h3', resolution: '768p' })).toBeNull()
+  })
+
+  it('registers H3 Max as the only T2V/single-image-I2V fast route', () => {
+    expect(normalizeVideoModelId('H3 Max')).toBe('minimax-h3-max')
+    expect(normalizeVideoResolution('minimax-h3-max', 'auto')).toBe('480p')
+    expect(resolveVideoGenerationRoute({ model: 'minimax-h3-max', resolution: '768p' })).toMatchObject({
+      model: 'minimax-h3-max',
+      provider: 'fal-h3-max',
+      resolution: '768p',
+    })
+    expect(getVideoModelCapability('minimax-h3-max')).toMatchObject({
+      supportedDurations: [5, 10, 15],
+      maxImageReferences: 1,
+      maxVideoReferences: 0,
+      maxAudioReferences: 0,
+      defaultImageWorkflow: 'image-to-video',
+      supportsExplicitImageToVideo: true,
+      supportsVideoReference: false,
+      supportedResolutions: ['480p', '768p'],
+      defaultResolution: '480p',
+    })
+    expect(resolveVideoProviderModel({ model: 'minimax-h3-max', imageReferenceCount: 0 })).toBe('minimax/h3-max/text-to-video')
+    expect(resolveVideoProviderModel({ model: 'minimax-h3-max', imageReferenceCount: 1 })).toBe('minimax/h3-max/image-to-video')
+    expect(resolveVideoOutputDuration({ model: 'minimax-h3-max' })).toBe(5)
+    expect(estimateVideoCredits({ model: 'minimax-h3-max', resolution: '480p', durationSec: 5 })).toBe(50)
+    expect(estimateVideoCredits({ model: 'minimax-h3-max', resolution: '768p', durationSec: 5 })).toBe(80)
+    expect(validateVideoModelRequest({ model: 'minimax-h3-max', outputDuration: 7 })).toContain('one of 5, 10, 15 seconds')
+    expect(validateVideoModelRequest({ model: 'minimax-h3-max', outputDuration: 5, imageReferenceCount: 2 })).toContain('at most 1 reference images')
+    expect(validateVideoModelRequest({ model: 'minimax-h3-max', outputDuration: 5, hasVideoReference: true })).toContain('does not support reference videos')
   })
 
   it('models Seedance 2.5 as an explicit 30-second Evolink route', () => {

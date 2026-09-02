@@ -839,6 +839,25 @@ describe('credits', () => {
       expect(mockRpc).not.toHaveBeenCalled();
     });
 
+    it('reserves fixed credits with one atomic RPC on the established-user fast path', async () => {
+      mockRpc.mockResolvedValue({ data: 390, error: null });
+      mockFrom.mockImplementation((t: string) => t === 'app_settings' ? billingSettingsChain : mockQuery(null));
+
+      const { reserveFixedCredits } = await import('@/lib/billing/credits');
+      const result = await reserveFixedCredits('user-1', 110, 'create_video', 'minimax-h3-max');
+
+      expect(result).toEqual({ charged: 110, remaining: 390 });
+      expect(mockRpc).toHaveBeenCalledTimes(1);
+      expect(mockRpc).toHaveBeenCalledWith('deduct_and_log', expect.objectContaining({
+        p_user_id: 'user-1',
+        p_amount: 110,
+        p_tool_name: 'create_video',
+        p_model_used: 'minimax-h3-max',
+      }));
+      const fromCalls = mockFrom.mock.calls.map((call: string[]) => call[0]);
+      expect(fromCalls).not.toContain('credit_balances');
+    });
+
     it('rejects an atomic overdraft without touching balance tables', async () => {
       mockRpc.mockResolvedValue({
         data: null,

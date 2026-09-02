@@ -384,6 +384,35 @@ export async function deductFixedCredits(
 }
 
 /**
+ * Reserve a fixed price on the fast path with the same atomic RPC that performs
+ * the debit. The legacy balance initialization path only runs after an atomic
+ * insufficient-balance result, keeping established users to one database RPC.
+ */
+export async function reserveFixedCredits(
+  userId: string,
+  credits: number,
+  toolName: string,
+  model?: string,
+  durationMs?: number,
+  apiKeyId?: string | null,
+): Promise<{ charged: number; remaining: number }> {
+  try {
+    return await deductFixedCredits(userId, credits, toolName, model, durationMs, apiKeyId)
+  } catch (error) {
+    if (!isInsufficientCreditsError(error)) throw error
+
+    // Old accounts may predate credit_balances. requireCredits initializes that
+    // row (and welcome credits) when absent. Existing insufficient accounts stay
+    // on the normal 402 path and are never charged a second time.
+    const creditCheck = await requireCredits(userId, credits)
+    if (!creditCheck.ok) {
+      throw new InsufficientCreditsError(creditCheck.balance, credits)
+    }
+    return deductFixedCredits(userId, credits, toolName, model, durationMs, apiKeyId)
+  }
+}
+
+/**
  * Get user's current credit balance.
  */
 export async function getBalance(userId: string): Promise<{ balance: number; lifetimePurchased: number; lifetimeUsed: number }> {

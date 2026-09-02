@@ -166,8 +166,9 @@ export async function GET(
         providerVideoUrl: videoMeta.videoUrl,
         currentImageUrl: snap.image_url,
       })
-      // Provider URL still in DB — persist hasn't finished yet, tell caller to keep polling
-      return NextResponse.json({ status: 'rendering', snapshotId, imageUrl: snap.image_url || undefined })
+      // The provider asset is already playable. Return it while Makaron Storage
+      // persistence continues in after(), matching the provider-first App contract.
+      return NextResponse.json({ status: 'completed', videoUrl: videoMeta.videoUrl, snapshotId, imageUrl: snap.image_url || undefined })
     }
     if (videoMeta.status === 'failed') {
       return NextResponse.json({
@@ -242,6 +243,7 @@ export async function GET(
     const isXai = videoMeta.taskId.startsWith('xai-')
     const isGoogleOmni = videoMeta.taskId.startsWith('google-omni-')
     const isMinimax = videoMeta.taskId.startsWith('minimax-h3-')
+    const isFalH3Max = videoMeta.taskId.startsWith('fal-h3max-')
     const isSyncLipsync = videoMeta.taskId.startsWith('sync3-')
     const provider = process.env.ANIMATE_PROVIDER || 'kling'
     let result: { taskId: string; status: string; videoUrl?: string; error?: string }
@@ -292,6 +294,9 @@ export async function GET(
     } else if (isMinimax) {
       const { getMinimaxVideoTask } = await import('@/lib/minimax-video')
       result = await getMinimaxVideoTask(videoMeta.taskId)
+    } else if (isFalH3Max) {
+      const { getFalH3MaxVideoTask } = await import('@/lib/fal-h3-max-video')
+      result = await getFalH3MaxVideoTask(videoMeta.taskId)
     } else if (isSyncLipsync) {
       const { getSyncLipsyncTask } = await import('@/lib/sync-lipsync')
       result = await getSyncLipsyncTask(videoMeta.taskId)

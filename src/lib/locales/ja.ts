@@ -115,6 +115,8 @@ const ja = {
   // Changelog
   'changelog.heading': '更新情報',
   'changelog.close': '更新情報を閉じる',
+  'changelog.minimaxH3Max.title': 'MiniMax H3 Max ほぼリアルタイム動画',
+  'changelog.minimaxH3Max.item1': 'fal 提供の MiniMax H3 Max が Makaron に登場し、5 秒の 480P 動画をほぼリアルタイムで生成でき、テキスト生成と1枚の開始画像からの動画生成に対応します。',
   'changelog.wan30.title': 'Wan 3.0 Standard & Pro',
   'changelog.wan30.item1': 'Wan 3.0をMuleRouter経由で追加しました。ネイティブ音声付きの2〜30秒動画を生成でき、Standardは最大1080p、Proの超解像版は最大4Kに対応します。',
   'changelog.wan30.item2': '画像・動画・音声の混在参照に対応しました。',
@@ -637,6 +639,8 @@ const ja = {
   'model.googleOmni.desc': '360p下書き、標準720p、4Kアップスケール、ネイティブ音声に対応した高速動画生成・編集。',
   'model.minimaxH3.name': 'MiniMax H3',
   'model.minimaxH3.desc': '15秒、768Pまたは2K出力、複数の参照素材に対応するオープンなマルチモーダル動画モデルです。',
+  'model.minimaxH3Max.name': 'MiniMax H3 Max',
+  'model.minimaxH3Max.desc': '480Pまたはネイティブ768Pで、5〜15秒のテキスト動画・単一画像動画をほぼリアルタイム生成します。',
   'model.gpt56Terra.name': 'GPT-5.6 Terra',
   'model.gpt56Terra.desc': '知能、速度、コストのバランスに優れた推奨デフォルトです。',
   'model.gpt56Sol.name': 'GPT-5.6 Sol',

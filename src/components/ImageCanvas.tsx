@@ -25,6 +25,11 @@ import {
 import { isFastVideoRenderModel } from '@/lib/video-model-capabilities';
 import { isRemotionExportTaskId } from '@/lib/remotion-export-flags';
 import {
+  buildVideoProxyUrl,
+  requiresAuthenticatedVideoProxy,
+  resolveNativeVideoPlaybackUrl,
+} from '@/lib/video-playback-url';
+import {
   buildLegacySceneRegistry,
   findSceneMediaElement,
 } from '@/lib/editor/scene-registry';
@@ -241,6 +246,7 @@ export default function ImageCanvas({
   const [videoLoading, setVideoLoading] = useState(false);
   const [videoBuffered, setVideoBuffered] = useState(0); // 0-1 progress
   const [videoError, setVideoError] = useState(false);
+  const [videoSourcePhase, setVideoSourcePhase] = useState<'direct' | 'proxy'>('direct');
   const [videoCurrentTime, setVideoCurrentTime] = useState(0);
   const [videoDuration, setVideoDuration] = useState(0);
   // Remotion Player custom controls — frame tracked via ref (no re-render during playback)
@@ -267,6 +273,11 @@ export default function ImageCanvas({
   const PULL_ACTIVATE = 20;   // px vertical before activating
   const PULL_MAX = 300;        // px for progress=1
   const PULL_COMMIT = 0.3;     // release threshold
+
+  useEffect(() => {
+    setVideoSourcePhase('direct');
+    setVideoError(false);
+  }, [videoUrl]);
 
   // Prevent click after handled touch gestures
   const skipClick = useRef(false);
@@ -1205,9 +1216,13 @@ export default function ImageCanvas({
     updateRemotionUI,
   ]);
 
-  // Only proxy third-party CDN URLs (Kling etc.) — Supabase URLs play directly (better audio on iOS)
-  const effectiveVideoUrl = videoUrl && !videoUrl.includes('cdn.makaron.app') && !videoUrl.includes('supabase.co')
-    ? `/api/proxy-video?url=${encodeURIComponent(videoUrl)}`
+  // Public provider CDNs play directly. Keep the proxy only for authenticated
+  // Google downloads and as a compatibility fallback after a direct load error.
+  const requiresServerProxy = videoUrl ? requiresAuthenticatedVideoProxy(videoUrl) : false;
+  const effectiveVideoUrl = videoUrl
+    ? (videoSourcePhase === 'proxy' && !requiresServerProxy
+        ? buildVideoProxyUrl(videoUrl)
+        : resolveNativeVideoPlaybackUrl(videoUrl))
     : videoUrl;
   const rangedVideoUrl = effectiveVideoUrl
     ? `${effectiveVideoUrl.split('#')[0]}#t=${clipStart || 0.001}${clipEnd !== undefined ? `,${clipEnd}` : ''}`
@@ -1317,7 +1332,14 @@ export default function ImageCanvas({
               }}
               onWaiting={() => setVideoLoading(true)}
               onCanPlay={() => setVideoLoading(false)}
-              onError={() => setVideoError(true)}
+              onError={() => {
+                if (videoUrl && !requiresServerProxy && videoSourcePhase === 'direct') {
+                  setVideoSourcePhase('proxy');
+                  setVideoLoading(true);
+                  return;
+                }
+                setVideoError(true);
+              }}
               onTimeUpdate={() => {
                 const v = videoRef.current;
                 if (v) {

@@ -708,6 +708,7 @@ try {
     assert.match(videoResult.stdout, /--video-model/);
     assert.match(videoResult.stdout, /--video-resolution/);
     assert.match(videoResult.stdout, /minimax-h3/);
+    assert.match(videoResult.stdout, /minimax-h3-max/);
     assert.match(videoResult.stdout, /2k/);
   }
 
@@ -1079,6 +1080,17 @@ try {
     assert.equal(mcpRequest?.body?.params?.arguments?.duration, 30);
     assert.equal(mcpRequest?.body?.params?.arguments?.outputFormat, 'mp4');
     assert.equal(mcpRequest?.body?.params?.arguments?.webSearch, true);
+  }
+
+  {
+    const result = await expectSuccess(['video', 'create', '--script', 'Fast Turn\nShot 1 (5s): <<<media_1>>> turns toward camera', '--image', tinyImagePath, '--duration', '5', '--video-model', 'h3-max', '--video-resolution', '768p']);
+    assert.match(result.stdout, /Task ID: task-unified-text-smoke/);
+    const mcpRequest = requests.filter(req => req.pathname === '/api/mcp').at(-1);
+    assert.equal(mcpRequest?.body?.params?.name, 'makaron_create_video');
+    assert.deepEqual(mcpRequest?.body?.params?.arguments?.images, ['https://cdn.example/uploaded-image.jpg']);
+    assert.equal(mcpRequest?.body?.params?.arguments?.videoModel, 'minimax-h3-max');
+    assert.equal(mcpRequest?.body?.params?.arguments?.videoResolution, '768p');
+    assert.equal(mcpRequest?.body?.params?.arguments?.duration, 5);
   }
 
   {

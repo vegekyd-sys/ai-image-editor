@@ -2663,23 +2663,25 @@ Select the best 3-7 items for a compelling video. You do NOT need to use all or 
     if (!isV2) return;
     const processing = snapshots.filter(s => s.type === 'video' && s.videoMeta?.status === 'processing' && s.videoMeta.taskId);
     if (processing.length === 0) return;
-    const interval = setInterval(async () => {
+    let cancelled = false;
+    let timeoutId: ReturnType<typeof setTimeout> | undefined;
+    const pollingStartedAt = Date.now();
+    const poll = async () => {
       for (const snap of processing) {
+        if (cancelled) return;
         try {
           const res = await fetch(`/api/video-snapshot/${snap.id}`);
           const data = await res.json();
           if (data.status === 'completed' && data.videoUrl) {
-            const { createVideoDesign, probeVideoDimensions } = await import('@/lib/video-design');
-            const dims = await probeVideoDimensions(data.videoUrl);
-            const design = createVideoDesign(data.videoUrl, dims.width, dims.height, dims.duration);
+            // Expose the playable provider URL immediately. Metadata probing is
+            // useful for the editable Remotion wrapper, but must not block the
+            // native player from leaving the processing state.
             setSnapshots(prev => prev.map(s =>
               s.id === snap.id ? {
                 ...s,
                 image: data.imageUrl || s.image,
                 imageUrl: data.imageUrl || s.imageUrl,
                 videoMeta: { ...s.videoMeta!, status: 'completed' as const, videoUrl: data.videoUrl },
-                design,
-                designPath: `code/${snap.id}.json`,
               } : s
             ));
             // Reset animationState if this was the task being polled
@@ -2700,6 +2702,20 @@ Select the best 3-7 items for a compelling video. You do NOT need to use all or 
               onSaveMessage?.(videoMsg);
               return [...prev, videoMsg];
             });
+            void (async () => {
+              try {
+                const { createVideoDesign, probeVideoDimensions } = await import('@/lib/video-design');
+                const dims = await probeVideoDimensions(data.videoUrl);
+                const design = createVideoDesign(data.videoUrl, dims.width, dims.height, dims.duration);
+                setSnapshots(prev => prev.map(s =>
+                  s.id === snap.id && s.videoMeta?.videoUrl === data.videoUrl
+                    ? { ...s, design, designPath: `code/${snap.id}.json` }
+                    : s
+                ));
+              } catch {
+                // Native playback is already available; design metadata repair is best-effort.
+              }
+            })();
           } else if (data.status === 'failed') {
             const actionLines = serializeCompletionActions(data.completionActions);
             const reason = data.error ? `\n${data.error}` : '';
@@ -2720,8 +2736,18 @@ Select the best 3-7 items for a compelling video. You do NOT need to use all or 
           }
         } catch { /* ignore */ }
       }
-    }, 4000);
-    return () => clearInterval(interval);
+      if (cancelled) return;
+      const { getVideoSnapshotPollIntervalMs } = await import('@/lib/video-snapshot-polling');
+      timeoutId = setTimeout(
+        poll,
+        getVideoSnapshotPollIntervalMs(processing, Date.now(), pollingStartedAt),
+      );
+    };
+    void poll();
+    return () => {
+      cancelled = true;
+      if (timeoutId) clearTimeout(timeoutId);
+    };
   }, [snapshots, isV2, inactive]);
 
 
