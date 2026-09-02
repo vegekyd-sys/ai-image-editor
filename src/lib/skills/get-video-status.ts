@@ -30,6 +30,7 @@ export async function getVideoStatus(input: GetVideoStatusInput): Promise<GetVid
     const isXai = taskId.startsWith('xai-');
     const isGoogleOmni = taskId.startsWith('google-omni-');
     const isMinimax = taskId.startsWith('minimax-h3-');
+    const isFalH3Max = taskId.startsWith('fal-h3max-');
     const isSyncLipsync = taskId.startsWith('sync3-');
 
     if (isSyncLipsync) {
@@ -112,6 +113,22 @@ export async function getVideoStatus(input: GetVideoStatusInput): Promise<GetVid
           : result.status === 'failed'
             ? `MiniMax H3 video rendering failed: ${result.error || 'Unknown error'}`
             : 'MiniMax H3 video is rendering.',
+      };
+    }
+
+    if (isFalH3Max) {
+      const { getFalH3MaxVideoTask } = await import('../fal-h3-max-video');
+      const result = await getFalH3MaxVideoTask(taskId);
+      return {
+        success: result.status !== 'failed',
+        status: result.status,
+        videoUrl: result.videoUrl,
+        error: result.error,
+        message: result.status === 'completed'
+          ? 'MiniMax H3 Max video rendering completed!'
+          : result.status === 'failed'
+            ? `MiniMax H3 Max video rendering failed: ${result.error || 'Unknown error'}`
+            : 'MiniMax H3 Max video is rendering.',
       };
     }
 

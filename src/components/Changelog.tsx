@@ -17,13 +17,14 @@ interface LegacyChangelogEntry {
 
 type LocalizedChangelogEntry = {
   date: string;
-  localeKey: 'videoReplication' | 'fastDurableAgent' | 'wan30' | 'googleOmni11' | 'externalImages' | 'videoTranslation' | 'talkingHeadEditing' | 'smarterEditableDiscovery' | 'tiktokVideoSkill' | 'sourcePlayback' | 'externalSourceRanges' | 'seedance25' | 'minimaxH3' | 'multilingualAsr' | 'editableRemotion' | 'editableLayers';
+  localeKey: 'videoReplication' | 'minimaxH3Max' | 'fastDurableAgent' | 'wan30' | 'googleOmni11' | 'externalImages' | 'videoTranslation' | 'talkingHeadEditing' | 'smarterEditableDiscovery' | 'tiktokVideoSkill' | 'sourcePlayback' | 'externalSourceRanges' | 'seedance25' | 'minimaxH3' | 'multilingualAsr' | 'editableRemotion' | 'editableLayers';
 };
 
 type ChangelogEntry = LegacyChangelogEntry | LocalizedChangelogEntry;
 
 const CHANGELOG: ChangelogEntry[] = [
   { date: '2026-09-03', localeKey: 'videoReplication' },
+  { date: '2026-09-02', localeKey: 'minimaxH3Max' },
   { date: '2026-09-01', en: { title: 'Personal Grok Plans for Test Accounts', items: ['Admins can now add registered test accounts to the Grok allowlist so their Agent chats and Grok Imagine videos use the owner’s personal SuperGrok plan.'] }, zh: { title: '测试账号可用个人 Grok 套餐', items: ['管理员现在可以把已注册的测试账号加入 Grok 名单，让这些账号的 Agent 对话和 Grok Imagine 视频使用 owner 的个人 SuperGrok 套餐。'] } },
   { date: '2026-09-01', localeKey: 'fastDurableAgent' },
   { date: '2026-09-01', localeKey: 'wan30' },
@@ -998,6 +999,10 @@ const LOCALIZED_CHANGELOG_KEYS = {
       'changelog.videoReplication.item2',
       'changelog.videoReplication.item3',
     ],
+  },
+  minimaxH3Max: {
+    title: 'changelog.minimaxH3Max.title',
+    items: ['changelog.minimaxH3Max.item1'],
   },
   fastDurableAgent: {
     title: 'changelog.fastDurableAgent.title',

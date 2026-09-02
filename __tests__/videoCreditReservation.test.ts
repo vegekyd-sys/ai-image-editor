@@ -18,12 +18,45 @@ describe('video credit reservation contract', () => {
 
     expect(snapshotRoute).not.toContain('requireCredits(userId, 50)')
     expect(animateRoute).not.toContain('requireCredits(user.id, 50)')
-    expect(snapshotRoute.indexOf('requireCredits(userId, creditsRequired)'))
+    expect(snapshotRoute.indexOf('reserveFixedCredits(userId, creditsRequired,'))
       .toBeLessThan(snapshotRoute.indexOf('const skillResult = await createVideo'))
     expect(animateRoute.indexOf('requireCredits(user.id, creditsRequired)'))
       .toBeLessThan(animateRoute.indexOf('const skillResult = await createVideo'))
     expect(agent.indexOf('requireCredits(ctx.userId, creditsRequired)'))
       .toBeLessThan(agent.indexOf('const skillResult = isGoogleOmniAsync'))
+  })
+
+  it('keeps the App snapshot reservation on the one-RPC fast path', () => {
+    const snapshotRoute = read('src/app/api/video-snapshot/route.ts')
+    const credits = read('src/lib/billing/credits.ts')
+
+    expect(snapshotRoute).not.toContain('requireCredits(userId, creditsRequired)')
+    expect(snapshotRoute).toContain('reserveFixedCredits(userId, creditsRequired')
+    expect(credits).toContain('return await deductFixedCredits(userId, credits, toolName')
+    expect(credits.indexOf('return await deductFixedCredits(userId, credits, toolName'))
+      .toBeLessThan(credits.indexOf('const creditCheck = await requireCredits(userId, credits)'))
+  })
+
+  it('uses one atomic database RPC for sort allocation and video snapshot insertion', () => {
+    const snapshotRoute = read('src/app/api/video-snapshot/route.ts')
+    const migration = read('supabase/migrations/20260902122747_optimize_video_snapshot_submission.sql')
+
+    expect(snapshotRoute).toContain("supabase.rpc('insert_video_snapshot_atomic'")
+    expect(migration).toContain('SECURITY INVOKER')
+    expect(migration).toContain('pg_advisory_xact_lock')
+    expect(migration).toContain('INSERT INTO public.snapshots')
+    expect(migration).toContain('TO authenticated, service_role')
+    expect(snapshotRoute).toContain(".select('id, type, video_meta, image_url, sort_order')")
+    expect(snapshotRoute).not.toContain("supabase.rpc('next_sort_order'")
+  })
+
+  it('publishes per-stage Server-Timing for real submission benchmarks', () => {
+    const snapshotRoute = read('src/app/api/video-snapshot/route.ts')
+
+    expect(snapshotRoute).toContain("response.headers.set('Server-Timing'")
+    for (const metric of ['auth', 'preflight_db', 'billing', 'provider_submit', 'persist', 'total']) {
+      expect(snapshotRoute).toContain(`${metric}:`)
+    }
   })
 
   it('stores only the successful reservation as refundable snapshot metadata', () => {

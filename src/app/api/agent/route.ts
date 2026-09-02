@@ -2,7 +2,7 @@ import { NextRequest } from 'next/server';
 import type { ModelMessage } from 'ai';
 import { authenticateRequest } from '@/lib/api-auth';
 import type { AgentDualWriter as AgentDualWriterType } from '@/lib/agentDualWriter';
-import { requireCredits, deductByTokens } from '@/lib/billing/credits';
+import { requireCredits, recordAgentTokenUsage } from '@/lib/billing/credits';
 import { AgentPerf } from '@/lib/agent-perf';
 import { getRequestLocale } from '@/lib/server-locale';
 import { resolvePersistedRunStatus } from '@/lib/agent-terminal';
@@ -45,7 +45,7 @@ export async function POST(req: NextRequest) {
             tipReaction, committedTip, tipsTeaser, tipsPayload, nameProject, description,
             previewsReady, readyTips, preferredModel, agentModel, snapshotImages, currentSnapshotIndex, isNsfw,
             musicReady, musicAudioUrl, currentDesign, currentDesignPath, videoModel, videoResolution, videoAuto,
-            headless, hasAnnotation, isDraft, referenceImageCount, uploadedVideoCount, turnMediaCount, audioAttachments,
+            headless, hasAnnotation, isDraft, referenceImageCount, uploadedVideoCount, turnMediaCount, turnMediaSnapshotIds, audioAttachments,
             skillLaunchContext: rawSkillLaunchContext } = requestBody;
     perf.mark('request_ready', {
       projectId: projectId || null,
@@ -241,6 +241,7 @@ export async function POST(req: NextRequest) {
           referenceImageCount,
           uploadedVideoCount,
           turnMediaCount,
+          turnMediaSnapshotIds,
           isNsfw,
           audioAttachments,
           codexSubscriptionAllowed,
@@ -458,6 +459,7 @@ export async function POST(req: NextRequest) {
           let agentHistory: ModelMessage[] = [];
           let agentAudioAttachments = audioAttachments;
           let agentExplicitMediaIndices: number[] = [];
+          let agentNativeVisionImages: Array<{ source: string; mediaIndex?: number }> = [];
           let agentCompactionRequired = false;
           let agentHistoryBoundary: string | undefined;
           let agentStudioWorkflowStage: string | undefined;
@@ -476,10 +478,12 @@ export async function POST(req: NextRequest) {
               referenceImageCount: referenceImageCount || undefined,
               uploadedVideoCount: uploadedVideoCount || undefined,
               turnMediaCount: turnMediaCount || undefined,
+              turnMediaSnapshotIds: Array.isArray(turnMediaSnapshotIds) ? turnMediaSnapshotIds : undefined,
               audioAttachments,
               currentRunId: runId,
               agentModelId: resolvedAgentModel.id,
               agentModelProvider: resolvedAgentModel.provider,
+              supportsImageInput: resolvedAgentModel.supportsImageInput,
             });
             endContext({
               promptChars: ctx.fullPrompt.length,
@@ -502,11 +506,20 @@ export async function POST(req: NextRequest) {
             agentCompactionRequired = ctx.contextStats.compactionRequired;
             agentHistoryBoundary = ctx.historyBoundary;
             agentStudioWorkflowStage = ctx.activeStudioWorkflowStage;
+            agentNativeVisionImages = ctx.nativeVisionImages;
           } else {
             perf.mark('build_prompt_context_skipped', {
               reason: 'analysisOnly_request_has_media',
               mediaCount: agentSnapshotImages.length,
             });
+          }
+          if (image && resolvedAgentModel.supportsImageInput && !isVideoAnalysis) {
+            agentNativeVisionImages = [{
+              source: image,
+              ...(!hasAnnotation && !isDraft
+                ? { mediaIndex: (agentCurrentSnapshotIndex ?? 0) + 1 }
+                : {}),
+            }];
           }
 
           if (headless) {
@@ -550,7 +563,7 @@ export async function POST(req: NextRequest) {
               // The timeline lookup started during admission and normally
               // resolves while prompt context is being built.
               const timelineVersion = await timelineVersionPromise;
-              for await (const event of runMakaronAgent(agentPrompt, agentImage, projectId, { analysisOnly, analysisContext, isVideoAnalysis, animationImageUrls: animationImageUrls?.length ? animationImageUrls : undefined, animationImages: animationImages?.length ? animationImages : undefined, locale, preferredModel, agentModel: requestedAgentModel, videoModel, videoResolution, videoAuto, skillLaunchContext, audioAttachments: agentAudioAttachments, snapshotImages: agentSnapshotImages, explicitMediaIndices: agentExplicitMediaIndices, currentSnapshotIndex: agentCurrentSnapshotIndex, isNsfw, supabase, userId: userId, codexSubscriptionAllowed, currentDesign: agentCurrentDesign, currentDesignPath: agentCurrentDesignPath, history: agentHistory, timelineVersion, perf, abortSignal: modelAbortController.signal, contextCompactAtTokens: agentCompactionRequired ? getAgentContextPolicy(resolvedAgentModel.id).providerCompactAtTokens : undefined, historyBoundary: agentHistoryBoundary, studioWorkflowStage: agentStudioWorkflowStage, agentRunId: runId || undefined })) {
+              for await (const event of runMakaronAgent(agentPrompt, agentImage, projectId, { analysisOnly, analysisContext, isVideoAnalysis, animationImageUrls: animationImageUrls?.length ? animationImageUrls : undefined, animationImages: animationImages?.length ? animationImages : undefined, nativeVisionImages: agentNativeVisionImages, locale, preferredModel, agentModel: requestedAgentModel, videoModel, videoResolution, videoAuto, skillLaunchContext, audioAttachments: agentAudioAttachments, snapshotImages: agentSnapshotImages, explicitMediaIndices: agentExplicitMediaIndices, currentSnapshotIndex: agentCurrentSnapshotIndex, isNsfw, supabase, userId: userId, codexSubscriptionAllowed, currentDesign: agentCurrentDesign, currentDesignPath: agentCurrentDesignPath, history: agentHistory, timelineVersion, perf, abortSignal: modelAbortController.signal, contextCompactAtTokens: agentCompactionRequired ? getAgentContextPolicy(resolvedAgentModel.id).providerCompactAtTokens : undefined, historyBoundary: agentHistoryBoundary, studioWorkflowStage: agentStudioWorkflowStage, agentRunId: runId || undefined })) {
                 if (event.type === 'done') sawDone = true;
                 if (event.type === 'error') {
                   sawError = true;
@@ -620,25 +633,26 @@ export async function POST(req: NextRequest) {
           }
           // Finalization below atomically persists failed + terminal metadata.
         } finally {
-          // Deduct credits based on token usage (fire-and-forget)
-          if (usageEvent && shouldRequireAgentCredits(resolvedAgentModel.provider)) {
+          // Charge API providers or record personal-plan usage at zero cost.
+          if (usageEvent) {
             const endBilling = perf.span('billing_deduct', { projectId, model: usageEvent.model });
-            deductByTokens(
-              userId, 'agent', usageEvent.model,
-              usageEvent.inputTokens, usageEvent.outputTokens,
-              undefined, undefined,
-              {
-                cacheRead: usageEvent.cacheReadTokens ?? 0,
-                cacheWrite: usageEvent.cacheWriteTokens ?? 0,
+            try {
+              await recordAgentTokenUsage({
+                userId,
+                provider: usageEvent.provider || resolvedAgentModel.provider,
+                modelId: usageEvent.model,
+                inputTokens: usageEvent.inputTokens,
+                outputTokens: usageEvent.outputTokens,
+                cacheReadTokens: usageEvent.cacheReadTokens ?? 0,
+                cacheWriteTokens: usageEvent.cacheWriteTokens ?? 0,
                 cacheWriteTelemetryComplete: usageEvent.cacheWriteTelemetryComplete,
-              },
-              usageEvent.providerCostUsd,
-            )
-              .then(() => endBilling({ ok: true }))
-              .catch(e => {
-                endBilling({ ok: false });
-                console.error('[billing] agent deduct error:', e);
+                providerCostUsd: usageEvent.providerCostUsd,
               });
+              endBilling({ ok: true });
+            } catch (e) {
+              endBilling({ ok: false });
+              console.error('[billing] agent usage logging error:', e);
+            }
           }
 
           if (writer) {

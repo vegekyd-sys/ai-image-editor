@@ -17,7 +17,7 @@ export const qwenBackend: ModelBackend = {
     // Multi-reference path
     if (req.references?.length) {
       const { generateWithQwenMulti } = await import('../comfyui-qwen');
-      return { image: await generateWithQwenMulti(req.references, req.prompt) };
+      return { image: await generateWithQwenMulti(req.references, req.prompt, req.aspectRatio) };
     }
 
     // Text-to-image
@@ -28,6 +28,6 @@ export const qwenBackend: ModelBackend = {
 
     // Single image (img2img)
     const { generateWithQwen } = await import('../comfyui-qwen');
-    return { image: await generateWithQwen(req.image, req.prompt) };
+    return { image: await generateWithQwen(req.image, req.prompt, req.aspectRatio) };
   },
 };

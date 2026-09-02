@@ -63,6 +63,14 @@ export function validateVideoScript(opts: {
   if (!providerManagedAdaptiveDuration && duration != null && duration > capability.maxOutputDuration) {
     return `${capability.label} video generation duration must be ${capability.maxOutputDuration} seconds or less, but duration=${duration}.`
   }
+  if (
+    !providerManagedAdaptiveDuration
+    && duration != null
+    && capability.supportedDurations?.length
+    && !capability.supportedDurations.includes(duration)
+  ) {
+    return `${capability.label} video generation duration must be one of ${capability.supportedDurations.join(', ')} seconds, but duration=${duration}.`
+  }
 
   // 1. Image reference check: prompt has images available but doesn't reference any
   // Skip when video_ref_url is provided (video editing doesn't require image references)

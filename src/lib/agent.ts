@@ -36,6 +36,10 @@ import {
 } from './locales';
 import { getSkillLaunchSystemDirective, type SkillLaunchContext } from './skill-launch-context';
 import { buildAgentOutputLanguageDirective } from './agent-response-policy';
+import {
+  buildNativeVisionUserContent,
+  type NativeVisionImageInput,
+} from './agent-image-analysis';
 import * as workspace from './workspace';
 import {
   createTools,
@@ -240,6 +244,8 @@ export interface RunMakaronAgentOptions {
   referenceImages?: string[];
   animationImageUrls?: string[];
   animationImages?: string[];
+  /** Still images to send with the current user text in one multimodal request. */
+  nativeVisionImages?: NativeVisionImageInput[];
   locale?: string;
   preferredModel?: ModelId;
   agentModel?: AgentModelPreference;
@@ -344,28 +350,38 @@ export async function* runMakaronAgent(
   const analysisPrompt = isVideoAnalysis ? ANALYSIS_PROMPT_VIDEO_TEMPLATE(videoMediaIndex)
     : options?.analysisContext === 'post-edit' ? ANALYSIS_PROMPT_POSTEDIT : ANALYSIS_PROMPT_INITIAL;
 
+  const nativeImageAnalysis = analysisOnly
+    && !isVideoAnalysis
+    && runtime.spec.supportsImageInput
+    && Boolean(currentImage);
+
   // Determine which tools to expose
   // tipReactionOnly: no tools (text-only response)
-  // analysisOnly: only analyze_image or analyze_video (agent uses tool to see the content)
+  // analysisOnly: multimodal Agents see the image in their first request;
+  // text-only image Agents and all video analysis retain their analyzer tool.
   // normal chat / animation: all tools including workspace (agent.md controls behavior)
   const tools = tipReactionOnly ? undefined : analysisOnly
-    ? (isVideoAnalysis ? { analyze_video: allTools.analyze_video } : { analyze_image: allTools.analyze_image })
+    ? nativeImageAnalysis
+      ? undefined
+      : (isVideoAnalysis ? { analyze_video: allTools.analyze_video } : { analyze_image: allTools.analyze_image })
     : allTools;
 
-  // Build user message content — animation mode includes all snapshot images as visual content
+  // Build user message content. Visual Agents receive the relevant still images
+  // in the same first request as the user's text. DeepSeek remains text-only and
+  // reaches images through analyze_image's Gemini fallback.
   const animImages = options?.animationImages;
+  const directVisionImages: NativeVisionImageInput[] = nativeImageAnalysis
+    ? [{ source: currentImage }]
+    : animImages?.length
+      ? animImages.map((source) => ({ source }))
+      : (options?.nativeVisionImages ?? []);
 
   let userContent: any;
-  if (animImages?.length && runtime.spec.supportsImageInput && !analysisOnly && !tipReactionOnly) {
-    // Multi-image user message: text + all snapshot images
-    userContent = [
-      { type: 'text' as const, text: prompt },
-      ...animImages.map((img: string) =>
-        img.startsWith('data:')
-          ? { type: 'image' as const, image: img }
-          : { type: 'image' as const, image: new URL(img) }
-      ),
-    ];
+  if (directVisionImages.length && runtime.spec.supportsImageInput && !tipReactionOnly) {
+    userContent = buildNativeVisionUserContent(
+      analysisOnly ? analysisPrompt : prompt,
+      directVisionImages,
+    );
   } else {
     // Inject only the pointer/metadata, never full composition code. The agent
     // must pass code_path explicitly in run_code patch mode for persisted compositions.
@@ -416,7 +432,9 @@ export async function* runMakaronAgent(
       ? userContent.reduce((s: number, p: { type?: string; text?: string }) => s + (p?.type === 'text' ? (p.text?.length ?? 0) : 0), 0)
       : 0;
   const userImagesCount = Array.isArray(userContent)
-    ? userContent.filter((p: { type?: string }) => p?.type === 'image').length
+    ? userContent.filter((p: { type?: string; mediaType?: string }) => (
+        p?.type === 'image' || (p?.type === 'file' && p.mediaType?.startsWith('image/'))
+      )).length
     : 0;
   // analysis / tipReaction modes intentionally skip history to keep
   // the request single-turn (matches prior behavior). Normal chat and video
@@ -451,7 +469,11 @@ export async function* runMakaronAgent(
       const userContentDump = typeof userContent === 'string'
         ? userContent
         : Array.isArray(userContent)
-          ? userContent.map((p: { type?: string; text?: string }) => p?.type === 'image' ? { type: 'image', omitted: true } : p)
+          ? userContent.map((p: { type?: string; text?: string; mediaType?: string }) => (
+              p?.type === 'image' || (p?.type === 'file' && p.mediaType?.startsWith('image/'))
+                ? { type: p.type, mediaType: p.mediaType, omitted: true }
+                : p
+            ))
           : userContent;
       await fs.writeFile(dumpPath, JSON.stringify({
         ts, mode: tipReactionOnly ? 'tipReaction' : analysisOnly ? 'analysis' : 'normal',
@@ -548,6 +570,7 @@ export async function* runMakaronAgent(
         cacheWriteTelemetryComplete,
         providerCostUsd,
         model: modelId,
+        provider: runtime.spec.provider,
       };
     };
 

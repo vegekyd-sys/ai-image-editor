@@ -325,7 +325,7 @@ export async function createVideo(input: CreateVideoInput): Promise<CreateVideoR
     if (!supportsNativeTextToVideo(provider)) {
       return {
         success: false,
-        message: `${capability.label} requires an image or video reference. Native text-to-video is currently available through SeeDance, Wan 3.0, Grok Imagine Video 1.5, Gemini Omni, and MiniMax H3.`,
+        message: `${capability.label} requires an image or video reference. Native text-to-video is currently available through SeeDance, Wan 3.0, Grok Imagine Video 1.5, Gemini Omni, MiniMax H3, and MiniMax H3 Max.`,
       };
     }
   }
@@ -580,6 +580,36 @@ export async function createVideo(input: CreateVideoInput): Promise<CreateVideoR
         videoModel: provider,
         providerModel: route.providerModel,
         message: `MiniMax H3 video task created. Task ID: ${taskId}. Use makaron_get_video_status to poll.`,
+      };
+    } else if (route.provider === 'fal-h3-max') {
+      if (providerVideoUrls.length > 0 || (audioUrls?.length || 0) > 0) {
+        return {
+          success: false,
+          message: 'MiniMax H3 Max currently supports text-to-video or one-image-to-video only. Reference video and audio inputs are not available yet.',
+        };
+      }
+      const { createFalH3MaxVideoTask } = await import('../fal-h3-max-video');
+      const providerModel = resolveVideoProviderModel({
+        model: provider,
+        resolution: route.resolution,
+        aspectRatio,
+        imageReferenceCount: filteredImages.length,
+        operation: videoOperation,
+      });
+      taskId = await createFalH3MaxVideoTask({
+        prompt: finalPrompt,
+        images: filteredImages,
+        duration: resolvedDuration ?? 5,
+        aspectRatio: providerAspectRatio,
+        resolution: route.resolution as '480p' | '768p',
+      });
+      console.log(`✅ [create_video] MiniMax H3 Max task created: ${taskId}`);
+      return {
+        success: true,
+        taskId,
+        videoModel: provider,
+        providerModel,
+        message: `MiniMax H3 Max ${filteredImages.length ? 'image-to-video' : 'text-to-video'} task created. Task ID: ${taskId}. Use makaron_get_video_status to poll.`,
       };
     } else if (route.provider === 'grok') {
       const { createXaiVideoTask } = await import('../xai-video');

@@ -6,6 +6,7 @@ import {
   deductFixedCredits,
   InsufficientCreditsError,
   isInsufficientCreditsError,
+  recordSubscriptionUsage,
   refundCredits,
   requireCredits,
 } from '@/lib/billing/credits'
@@ -177,6 +178,19 @@ export async function POST(req: NextRequest) {
         .single()
 
       if (error) throw error
+
+      if (skillResult.provider === 'grok-subscription') {
+        try {
+          await recordSubscriptionUsage(
+            user.id,
+            'grok-subscription',
+            toolName,
+            skillResult.providerModel || videoRoute.providerModel || selectedVideoModel,
+          )
+        } catch (usageError) {
+          console.error('[billing] animate subscription usage logging error:', usageError)
+        }
+      }
 
       reservedCredits = 0
       return NextResponse.json({ animationId: animation.id, taskId, provider: skillResult.provider })

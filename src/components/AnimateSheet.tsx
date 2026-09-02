@@ -36,8 +36,9 @@ export default function AnimateSheet({
   const videoModels = getVideoModels();
   const videoCapability = getVideoModelCapability(videoModel);
   const resolutionOptions = videoCapability.supportedResolutions ?? [];
-  const durationOptions = [3, 4, 5, 7, 10, 15, 20, 30]
-    .filter(seconds => seconds >= videoCapability.minOutputDuration && seconds <= videoCapability.maxOutputDuration);
+  const durationOptions = videoCapability.supportedDurations
+    ?? [3, 4, 5, 7, 10, 15, 20, 30]
+      .filter(seconds => seconds >= videoCapability.minOutputDuration && seconds <= videoCapability.maxOutputDuration);
   const resolvedResolution = videoResolution === 'auto'
     ? videoCapability.defaultResolution
     : normalizeVideoResolution(videoModel, videoResolution);

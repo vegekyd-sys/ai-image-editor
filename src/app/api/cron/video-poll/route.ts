@@ -80,6 +80,9 @@ export async function GET(req: NextRequest) {
       } else if (vm.taskId.startsWith('minimax-h3-')) {
         const { getMinimaxVideoTask } = await import('@/lib/minimax-video')
         result = await getMinimaxVideoTask(vm.taskId)
+      } else if (vm.taskId.startsWith('fal-h3max-')) {
+        const { getFalH3MaxVideoTask } = await import('@/lib/fal-h3-max-video')
+        result = await getFalH3MaxVideoTask(vm.taskId)
       } else if (vm.taskId.startsWith('sync3-')) {
         const { getSyncLipsyncTask } = await import('@/lib/sync-lipsync')
         result = await getSyncLipsyncTask(vm.taskId)

@@ -4,12 +4,11 @@ import { AgentDualWriter } from './agentDualWriter';
 import { AgentPerf } from './agent-perf';
 import { buildPromptContext } from './agent-context';
 import { getSupabaseAdmin } from './supabase/service';
-import { deductByTokens } from './billing/credits';
+import { recordAgentTokenUsage } from './billing/credits';
 import {
   resolveAgentModelSpec,
   resolveAgentModelSpecForUser,
   resolveCodexSubscriptionFallbackProvider,
-  shouldRequireAgentCredits,
   type AgentModelPreference,
 } from './agent-models';
 import {
@@ -56,6 +55,7 @@ interface ExecutionRequest {
   referenceImageCount?: number;
   uploadedVideoCount?: number;
   turnMediaCount?: number;
+  turnMediaSnapshotIds?: string[];
   isNsfw?: boolean;
   audioAttachments?: Array<{ audioUrl: string; title?: string; duration?: number; trackIndex?: number }>;
   codexSubscriptionAllowed?: boolean;
@@ -614,6 +614,7 @@ export async function runAgentExecutionAttempt(
     referenceImageCount: request.referenceImageCount,
     uploadedVideoCount: request.uploadedVideoCount,
     turnMediaCount: request.turnMediaCount,
+    turnMediaSnapshotIds: request.turnMediaSnapshotIds,
     audioAttachments: request.audioAttachments,
     currentRunId: runId,
     // Attempt 1 already has the original objective in userMessage. Keep the
@@ -623,6 +624,7 @@ export async function runAgentExecutionAttempt(
     contextPolicy: getAgentContextPolicy(resolvedModel.id),
     agentModelId: resolvedModel.id,
     agentModelProvider: resolvedModel.provider,
+    supportsImageInput: resolvedModel.supportsImageInput,
     durableContinuation: continuation,
     executionObjective: run.objective || claim.objective || run.prompt || undefined,
     executionAcceptanceCriteria: run.acceptance_criteria,
@@ -765,6 +767,7 @@ export async function runAgentExecutionAttempt(
   let cacheWriteTokens = 0;
   let providerCostUsd: number | undefined;
   let billingModel = resolvedModel.billingModelId;
+  let billingProvider = resolvedModel.provider;
   let attemptHadVisibleOutput = false;
   let attemptDeliveredArtifact = false;
   const attemptCommittedTools = new Set<string>();
@@ -800,6 +803,14 @@ export async function runAgentExecutionAttempt(
         audioAttachments: ctx.audioAttachments,
         snapshotImages: attemptSnapshotImages,
         explicitMediaIndices: ctx.explicitMediaIndices,
+        nativeVisionImages: request.image && resolvedModel.supportsImageInput
+          ? [{
+              source: request.image,
+              ...(!request.hasAnnotation && !request.isDraft
+                ? { mediaIndex: attemptCurrentSnapshotIndex + 1 }
+                : {}),
+            }]
+          : ctx.nativeVisionImages,
         currentSnapshotIndex: attemptCurrentSnapshotIndex,
         isNsfw: request.isNsfw,
         supabase: admin,
@@ -888,6 +899,7 @@ export async function runAgentExecutionAttempt(
         cacheWriteTokens += event.cacheWriteTokens || 0;
         providerCostUsd = event.providerCostUsd;
         billingModel = event.model || billingModel;
+        billingProvider = event.provider as typeof billingProvider;
         continue;
       }
       await writer.processAndEnqueue(event);
@@ -910,19 +922,17 @@ export async function runAgentExecutionAttempt(
     await writer.flush();
   }
 
-  if (shouldRequireAgentCredits(resolvedModel.provider)
-    && (inputTokens || outputTokens || cacheReadTokens || cacheWriteTokens)) {
-    void deductByTokens(
-      run.user_id,
-      'agent',
-      billingModel,
+  if (inputTokens || outputTokens || cacheReadTokens || cacheWriteTokens) {
+    await recordAgentTokenUsage({
+      userId: run.user_id,
+      provider: billingProvider,
+      modelId: billingModel,
       inputTokens,
       outputTokens,
-      undefined,
-      undefined,
-      { cacheRead: cacheReadTokens, cacheWrite: cacheWriteTokens },
+      cacheReadTokens,
+      cacheWriteTokens,
       providerCostUsd,
-    ).catch(error => console.error('[agent-execution] billing failed:', error));
+    }).catch(error => console.error('[agent-execution] usage logging failed:', error));
   }
   await admin.from('agent_runs').update({
     total_input_tokens: (run.total_input_tokens || 0) + inputTokens + cacheReadTokens + cacheWriteTokens,

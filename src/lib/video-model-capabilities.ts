@@ -3,6 +3,7 @@ export interface VideoModelCapability {
   label: string
   minOutputDuration: number
   maxOutputDuration: number
+  supportedDurations?: number[]
   maxReferenceVideoDuration: number
   maxCombinedReferenceAndOutputDuration?: number
   referenceVideoDurationTolerance?: number
@@ -21,17 +22,17 @@ export interface VideoModelCapability {
   maxTotalReferences?: number
   /**
    * Image inputs are feature references by default across Makaron. Models that
-   * do not accept images must say `none`; first-frame/image-to-video is never a
-   * valid default and requires a separate, explicit product contract.
+   * do not accept images must say `none`. A model may declare image-to-video
+   * only through an explicit product contract and capability entry.
    */
-  defaultImageWorkflow: 'reference-to-video' | 'none'
+  defaultImageWorkflow: 'reference-to-video' | 'image-to-video' | 'none'
   supportsExplicitImageToVideo?: boolean
   supportsVideoExtend?: boolean
   supportedResolutions?: VideoResolution[]
   defaultResolution?: VideoResolution
   supportedAspectRatios?: VideoAspectRatio[]
   estimatedCostPerSecondUsdByResolution?: Partial<Record<VideoResolution, number>>
-  provider?: 'kling' | 'seedance' | 'mulerouter' | 'grok' | 'google-omni' | 'minimax' | 'fal-sync' | 'piapi'
+  provider?: 'kling' | 'seedance' | 'mulerouter' | 'grok' | 'google-omni' | 'minimax' | 'fal-h3-max' | 'fal-sync' | 'piapi'
   providerModel?: string
 }
 
@@ -465,6 +466,37 @@ const MODEL_CAPABILITIES: Record<string, VideoModelCapability> = {
     provider: 'minimax',
     providerModel: 'MiniMax-H3',
   },
+  'minimax-h3-max': {
+    id: 'minimax-h3-max',
+    label: 'MiniMax H3 Max',
+    minOutputDuration: 5,
+    maxOutputDuration: 15,
+    supportedDurations: [5, 10, 15],
+    maxReferenceVideoDuration: 0,
+    supportsVideoReference: false,
+    supportsBaseVideoEdit: false,
+    // H3 Max currently exposes only native T2V and single-start-frame I2V.
+    // This is the one deliberate exception to Makaron's reference-image default.
+    defaultImageWorkflow: 'image-to-video',
+    supportsExplicitImageToVideo: true,
+    longVideoChunkSeconds: 15,
+    maxImageReferences: 1,
+    maxVideoReferences: 0,
+    maxAudioReferences: 0,
+    maxTotalReferences: 1,
+    // fal launch pricing is discounted through 2026-09-07. Bill against the
+    // published steady-state rates so credits remain sufficient after expiry.
+    estimatedCostPerSecondUsd: 0.05,
+    estimatedCostPerSecondUsdByResolution: {
+      '480p': 0.05,
+      '768p': 0.08,
+    },
+    supportedResolutions: ['480p', '768p'],
+    defaultResolution: '480p',
+    supportedAspectRatios: ['16:9', '9:16', '1:1', '4:3', '3:4', '21:9'],
+    provider: 'fal-h3-max',
+    providerModel: 'minimax/h3-max/text-to-video',
+  },
   piapi: {
     id: 'piapi',
     label: 'PiAPI Kling',
@@ -522,6 +554,9 @@ export function normalizeVideoModelId(model?: string | null): string {
   if (normalized === 'minimax' || normalized === 'h3' || normalized === 'hailuo-h3' || normalized === 'minimax-h3') {
     return 'minimax-h3'
   }
+  if (normalized === 'h3 max' || normalized === 'h3-max' || normalized === 'h3max' || normalized === 'minimax-h3-max' || normalized === 'minimax-h3max') {
+    return 'minimax-h3-max'
+  }
   if (normalized === 'seedance25' || normalized === 'seedance_2_5' || normalized === 'seedance-2-5') {
     return 'seedance-2.5'
   }
@@ -571,10 +606,9 @@ export function listVideoModelCapabilities(): VideoModelCapability[] {
 /**
  * Resolve how image inputs are interpreted before selecting a provider.
  *
- * One image is still a feature reference. Image count must never implicitly
- * switch generation into a first-frame/image-to-video route. A future model
- * may expose that workflow only through both an explicit request and an
- * explicit capability opt-in.
+ * One image is still a feature reference unless the selected model carries an
+ * explicit image-to-video capability contract. Image count alone must never
+ * switch an otherwise reference-capable model into first-frame mode.
  */
 export function resolveVideoImageWorkflow(options: {
   model?: string | null
@@ -682,7 +716,7 @@ function getSeedanceProviderBase(model?: string | null): string | undefined {
 
 export function supportsNativeTextToVideo(model?: string | null): boolean {
   const id = normalizeVideoModelId(model)
-  return getSeedanceProviderBase(id) != null || id === 'wan-3.0' || id === 'wan-3.0-prime' || id === 'minimax-h3' || id === 'google-omni' || id === 'grok'
+  return getSeedanceProviderBase(id) != null || id === 'wan-3.0' || id === 'wan-3.0-prime' || id === 'minimax-h3' || id === 'minimax-h3-max' || id === 'google-omni' || id === 'grok'
 }
 
 export function resolveVideoProviderModel(options: {
@@ -706,6 +740,12 @@ export function resolveVideoProviderModel(options: {
   if (route.model === 'grok') {
     if (options.operation === 'edit' || options.operation === 'extend') return 'grok-imagine-video'
     return 'grok-imagine-video-1.5'
+  }
+
+  if (route.model === 'minimax-h3-max') {
+    return (options.imageReferenceCount ?? 0) > 0
+      ? 'minimax/h3-max/image-to-video'
+      : 'minimax/h3-max/text-to-video'
   }
 
   if (route.model === 'seedance-2.5') {
@@ -871,7 +911,7 @@ export function getRequiredVideoCredits(
 
 export function isFastVideoRenderModel(model?: string | null): boolean {
   const normalized = normalizeVideoModelId(model)
-  return normalized === 'grok' || normalized === 'google-omni'
+  return normalized === 'grok' || normalized === 'google-omni' || normalized === 'minimax-h3-max'
 }
 
 export function resolveVideoOutputDuration(options: {
@@ -889,6 +929,7 @@ export function resolveVideoOutputDuration(options: {
     return options.requestedDuration ?? 6
   }
   if (options.requestedDuration != null) return options.requestedDuration
+  if (normalizedModel === 'minimax-h3-max') return 5
   if (options.operation === 'extend' && normalizeVideoModelId(options.model) === 'google-omni') {
     return capability.maxOutputDuration
   }
@@ -1002,6 +1043,16 @@ export function validateVideoModelRequest(options: {
 
   if (options.operation !== 'edit' && options.outputDuration != null && options.outputDuration > capability.maxOutputDuration) {
     return `${capability.label} duration must be ${capability.maxOutputDuration} seconds or less.`
+  }
+
+  if (
+    options.operation !== 'edit'
+    && options.outputDuration != null
+    && options.outputDuration !== -1
+    && capability.supportedDurations?.length
+    && !capability.supportedDurations.includes(options.outputDuration)
+  ) {
+    return `${capability.label} duration must be one of ${capability.supportedDurations.join(', ')} seconds.`
   }
 
   if (options.hasVideoReference && !capability.supportsVideoReference) {

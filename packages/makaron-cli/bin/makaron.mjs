@@ -1866,6 +1866,104 @@ function hasHelpFlag(values) {
   return values.includes('--help') || values.includes('-h');
 }
 
+function printEditHelp() {
+  console.log(`Makaron edit — generate or edit an image directly
+
+Usage:
+  makaron edit [options] "prompt"
+
+Options:
+  --image <file|url>        Base image to edit. Omit for text-to-image.
+  --ref <file|url>          Additional reference image. Repeatable, up to 3.
+  --image-model <id>        gemini, gemini-lite, qwen, openai, pony, or wai.
+  --skill <id>              enhance, creative, wild, or captions.
+  --aspect <ratio>          Output aspect ratio, for example 1:1, 16:9, or 9:16.
+  --background <mode>       auto, opaque, or transparent.
+  --out <file>              Save the generated image to this path.
+  --help, -h                Show this help.
+
+Notes:
+  Model selection is optional. Transparent output routes strictly to GPT Image 2
+  and fails instead of returning an opaque fallback.
+
+Examples:
+  makaron edit --image portrait.jpg --image-model qwen --out result.jpg "cinematic warm light"
+  makaron edit --image product.jpg --ref style.png --aspect 1:1 "use this visual style"
+  makaron edit --image-model openai --background transparent --out sticker.png "a magenta star sticker"
+`);
+}
+
+function printVideoCreateHelp() {
+  console.log(`Makaron video create — call a video model directly
+
+Usage:
+  makaron video create --script "..." [media options] [generation options]
+
+Inputs:
+  --script <text>           Video prompt or shot script.
+  --script-file <file>      Read the script from a UTF-8 file.
+  --image <file|url>        Image input. Repeatable where the model supports it.
+  --video <file|url>        Video input. Repeatable where the model supports it.
+  --audio <file|url>        Audio input. Repeatable where the model supports it.
+  --voice <preset-id>       Grok preset voice. Repeatable, up to 3.
+
+Generation options:
+  --video-model <id>        seedance-fast, seedance-mini, seedance, seedance-2.5,
+                            wan-3.0, wan-3.0-prime, kling, grok, google-omni,
+                            minimax-h3, minimax-h3-max, or sync-lipsync-v3.
+  --duration <seconds>      Output duration supported by the selected model.
+  --video-resolution <res> auto, 480p, 720p, 768p, 1080p, 2k, or 4k.
+  --aspect <ratio>          9:16, 16:9, 1:1, or another supported ratio.
+  --video-operation <mode> generate, edit, or extend (Seedance 2.5 / Grok).
+  --extend-direction <dir> forward or backward.
+  --output-format <format>  mp4 or mov.
+  --generated-audio        Ask the provider to generate audio.
+  --no-generated-audio     Disable provider-generated audio.
+  --keep-original-sound    Preserve source-video sound where supported.
+  --web-search             Enable Seedance 2.5 web search.
+  --relaxed-content-filter Seedance 2.5 only.
+  --help, -h                Show this help.
+
+Recent model choices:
+  minimax-h3-max  Near-real-time T2V or one-start-image I2V; 5/10/15s;
+                  480p default or 768p; no video/audio/multi-image references.
+  wan-3.0-prime   Faster Wan 3.0 tier; 2-30s; 480p through 4k; multimodal refs.
+  wan-3.0         Wan standard tier with the same public duration/resolution range.
+  seedance-2.5    4-30s; 480p/720p; generate/edit/extend and multimodal refs.
+  minimax-h3      4-15s; 768p default or 2k; image/video/audio feature refs.
+  grok            T2V/reference generation plus typed edit/extend.
+  sync-lipsync-v3 Exactly one video plus one MP3/WAV replacement track.
+
+Examples:
+  makaron video create --script "A tiny robot runs through a sunlit studio" --duration 5 --video-model minimax-h3-max --video-resolution 480p
+  makaron video create --script "The subject turns toward camera" --image start.jpg --duration 5 --video-model minimax-h3-max --video-resolution 768p
+  makaron video create --script "A crystal city wakes at dawn" --duration 5 --video-model wan-3.0-prime --video-resolution 4k
+  makaron video create --script "Continue the camera move" --video clip.mp4 --duration 4 --video-model grok --video-operation extend
+  makaron video create --script "Use the supplied audio" --video talk.mp4 --audio voice.wav --video-model sync-lipsync-v3
+
+This command returns a provider task ID and does not write to a project timeline.
+Use "makaron chat --project <id|auto> ..." for Agent-routed project work, then
+"makaron responses get <runId> --wait" to collect the result.
+`);
+}
+
+function printVideoHelp() {
+  console.log(`Video commands:
+  video script --image <file> [--image <file>] "direction"   Write video script
+  video create --script "..." --video-model minimax-h3-max   Near-real-time H3 Max (480p default)
+  video create --script "..." --video-model wan-3.0-prime    Fast Wan tier, up to 4k
+  video create --script "..." --video-model seedance-2.5     4-30s multimodal generation/edit/extend
+  video create --script "..." --video <file|url> --video-model grok --video-operation extend
+                                                               Edit or extend one MP4 with Grok
+  video create --script "..." --video <url> --audio <url> --video-model sync-lipsync-v3
+                                                               Lip-sync exact replacement audio
+  video status <taskId>                                      Check video status
+  video status --snapshot <snapshotId> [--wait]              Check v2 video snapshot
+
+Run "makaron video create --help" for every model, option, example, and limit.
+`);
+}
+
 function printRootHelp() {
   console.log(`Makaron CLI — Talk to Makaron Agent from the terminal
 
@@ -1888,6 +1986,7 @@ Commands:
   create --title "name"              Create empty project (text-to-image)
 
   chat --project <id> "message"      Chat (non-blocking, polls for result)
+  chat --project <id> --image <file> Attach an image or visual reference
   chat --project <id> --skill <id>   Use a built-in or marketplace skill
   chat --project <id> --agent-model <id> "message"
                                      Select only the Agent LLM (strict allowlist)
@@ -1911,17 +2010,18 @@ Commands:
   abort <runId>                      Abort a running Agent
   skills list|search|show|install    Browse built-in and marketplace skills
 
-  edit [--image <file>] "prompt"     AI image edit / text-to-image
+  edit [--image <file>] "prompt"     Image edit, text-to-image, or transparent PNG
   analyze --video <file|url>         Analyze video content
-  video script|create|status         Video generation
+  video script|create|status         H3 Max, Wan, Seedance, Grok, lip-sync, and more
   music create|status                Music generation
 
   admin                              Admin commands (skills, credits, upload, set-admin)
 
 Examples:
-  makaron chat --project auto "plan a launch poster"
-  makaron chat --project <id> "make it cinematic"
-  makaron chat --project <id> "turn this into a short video"
+  makaron chat --project auto --image product.jpg "plan a launch poster"
+  makaron chat --project <id> --skill "Football Captain" "make this cinematic"
+  makaron chat --project <id> "use H3 Max 480p to make a 5-second video"
+  makaron edit --background transparent --out sticker.png "a magenta star sticker"
 
 Run makaron <command> --help for command-specific options.
 Chat defaults the Agent LLM automatically; --agent-model can select an exact
@@ -2049,26 +2149,14 @@ Not sure which built-in skill to use? Start with:
   composition status <jobId> [--wait] [--json]
 `);
   } else if (topic === 'edit') {
-    console.log('Usage: makaron edit [--image <file|url>] [--image-model gemini|gemini-lite|qwen|openai|pony|wai] [--skill enhance|creative|wild|captions] [--ref <file>] [--aspect <ratio>] [--background auto|opaque|transparent] [--out <file>] "prompt"');
+    printEditHelp();
   } else if (topic === 'analyze') {
     console.log('Usage: makaron analyze --video <file|url> ["question"]');
   } else if (topic === 'video') {
     if (subtopic === 'script') console.log('Usage: makaron video script --image <file> [--image <file>] [--lang en|zh] "direction"');
-    else if (subtopic === 'create') console.log('Usage: makaron video create --script "..." [--image <url> ...] [--video <url> ...] [--audio <url> ...] [--voice <xai-preset-id> ...] [--duration 10] [--aspect 9:16] [--video-model seedance-fast|seedance-mini|seedance|seedance-2.5|wan-3.0|wan-3.0-prime|kling|grok|google-omni|minimax-h3|sync-lipsync-v3] [--operation generate|edit|extend] [--video-resolution auto|480p|720p|768p|1080p|2k|4k] [--keep-original-sound]');
+    else if (subtopic === 'create') printVideoCreateHelp();
     else if (subtopic === 'status') console.log('Usage: makaron video status <taskId> | --snapshot <snapshotId> [--wait]');
-    else console.log(`Video commands:
-  video script --image <file> [--image <file>] "direction"   Write video script
-  video create --script "..." --video-model seedance-fast    Native text-to-video (no image required)
-  video create --script "..." --video-model wan-3.0          Wan 3.0 Standard via MuleRouter
-  video create --script "..." --video-model wan-3.0-prime    Wan 3.0 Prime fast tier via MuleRouter
-  video create --script "..." --video-model wan-3.0 --video-resolution 4k  Wan 3.0 with FlashVSR
-  video create --script "..." --video-model minimax-h3                          MiniMax H3 text-to-video (default 768P)
-  video create --script "..." --image <url> [--duration 10]  Submit video task
-  video create --script "..." --video <file|url> --video-model grok [--operation edit|extend]  Edit or extend one MP4 with Grok
-  video create --script "Use the supplied audio" --video <url> --audio <url> --video-model sync-lipsync-v3  Lip-sync exact replacement audio
-  video status <taskId>                                      Check video status
-  video status --snapshot <snapshotId> [--wait]              Check v2 video snapshot
-`);
+    else printVideoHelp();
   } else if (topic === 'music') {
     if (subtopic === 'create') console.log('Usage: makaron music create [--vocals] [--style "genre"] "description"');
     else if (subtopic === 'status') console.log('Usage: makaron music status <taskId>');
@@ -2908,7 +2996,9 @@ if (!command || command === '--help' || command === '-h' || command === 'help') 
       }
       else if (args[i] === '--wait') wait = true;
     }
-    const selectedVideoModel = ['wan3', 'wan3.0', 'wan30', 'wan-3', 'wan3-pro', 'wan3.0-pro', 'wan30-pro', 'wan-3-pro', 'berry-1.0-pro', 'w3.0-video-pro'].includes(videoModel)
+    const selectedVideoModel = ['h3 max', 'h3-max', 'h3max', 'minimax-h3max'].includes(videoModel)
+      ? 'minimax-h3-max'
+      : ['wan3', 'wan3.0', 'wan30', 'wan-3', 'wan3-pro', 'wan3.0-pro', 'wan30-pro', 'wan-3-pro', 'berry-1.0-pro', 'w3.0-video-pro'].includes(videoModel)
       ? 'wan-3.0'
       : ['wan3-prime', 'wan3.0-prime', 'wan30-prime', 'wan-3-prime', 'w3.0-video-prime', 'w3.0-video-prime-pro', 'wan-3.0-prime-pro', 'prime'].includes(videoModel)
         ? 'wan-3.0-prime'
@@ -2917,12 +3007,13 @@ if (!command || command === '--help' || command === '-h' || command === 'help') 
     const isWan30 = selectedVideoModel === 'wan-3.0' || selectedVideoModel === 'wan-3.0-prime';
     const isSeedanceModel = selectedVideoModel === 'seedance-fast' || selectedVideoModel === 'seedance-mini' || selectedVideoModel === 'seedance' || isSeedance25;
     const isMinimaxH3 = selectedVideoModel === 'minimax-h3';
+    const isFalH3Max = selectedVideoModel === 'minimax-h3-max';
     const isGrok = selectedVideoModel === 'grok';
     const isGoogleOmni = selectedVideoModel === 'google-omni';
     const isSyncLipsync = selectedVideoModel === 'sync-lipsync-v3';
-    const supportsNativeTextToVideo = isSeedanceModel || isWan30 || isMinimaxH3 || isGrok || isGoogleOmni;
+    const supportsNativeTextToVideo = isSeedanceModel || isWan30 || isMinimaxH3 || isFalH3Max || isGrok || isGoogleOmni;
     if (!script || (!images.length && !videos.length && !audios.length && !referenceVoices.length && !supportsNativeTextToVideo)) {
-      console.error('Usage: makaron video create --script "..." [--image <url>] [--video <file|url>] [--audio <file|url>] [--duration 30] [--video-model seedance-2.5|wan-3.0|wan-3.0-prime|minimax-h3]');
+      console.error('Usage: makaron video create --script "..." [--image <url>] [--video <file|url>] [--audio <file|url>] [--duration 30] [--video-model seedance-2.5|wan-3.0|wan-3.0-prime|minimax-h3|minimax-h3-max]');
       process.exit(1);
     }
     if (isSeedance25 && images.length > 30) { console.error('Seedance 2.5 supports at most 30 image references.'); process.exit(1); }
@@ -2934,6 +3025,10 @@ if (!command || command === '--help' || command === '-h' || command === 'help') 
     if (isMinimaxH3 && images.length > 9) { console.error('MiniMax H3 supports at most 9 image references.'); process.exit(1); }
     if (isMinimaxH3 && videos.length > 3) { console.error('MiniMax H3 supports at most 3 video references.'); process.exit(1); }
     if (isMinimaxH3 && audios.length > 3) { console.error('MiniMax H3 supports at most 3 audio references.'); process.exit(1); }
+    if (isFalH3Max && images.length > 1) { console.error('MiniMax H3 Max supports at most one start image.'); process.exit(1); }
+    if (isFalH3Max && (videos.length || audios.length)) { console.error('MiniMax H3 Max currently supports only text-to-video or one-image-to-video; remove video/audio references.'); process.exit(1); }
+    if (isFalH3Max && duration != null && ![5, 10, 15].includes(duration)) { console.error('MiniMax H3 Max duration must be 5, 10, or 15 seconds.'); process.exit(1); }
+    if (isFalH3Max && videoResolution && !['auto', '480p', '768p'].includes(videoResolution.toLowerCase())) { console.error('MiniMax H3 Max resolution must be auto, 480p, or 768p.'); process.exit(1); }
     if (isGrok && images.length > 7) { console.error('Grok Imagine Video 1.5 supports at most 7 image references.'); process.exit(1); }
     if (isGrok && videos.length > 1) { console.error('Grok video edit/extend accepts exactly one source video.'); process.exit(1); }
     if (isGrok && referenceVoices.length > 3) { console.error('Grok Imagine Video 1.5 supports at most 3 preset voices.'); process.exit(1); }
@@ -3022,6 +3117,8 @@ if (!command || command === '--help' || command === '-h' || command === 'help') 
       ? { script, images, videoUrls, audioUrls, referenceVoiceIds: referenceVoices, videoModel: selectedVideoModel, videoResolution, operation: resolvedOperation, extendDirection, outputFormat, generateAudio, contentFilter, webSearch }
       : isMinimaxH3
         ? { script, images, videoUrls, audioUrls, videoModel: selectedVideoModel, videoResolution }
+      : isFalH3Max
+        ? { script, images, videoModel: selectedVideoModel, videoResolution }
       : videoUrls[0]
         ? { videoUrl: videoUrls[0], editPrompt: script, images, videoModel: selectedVideoModel, videoResolution, referType: isSeedanceModel ? 'feature' : 'base' }
         : { script, images, videoModel: selectedVideoModel, videoResolution };
@@ -3071,19 +3168,7 @@ if (!command || command === '--help' || command === '-h' || command === 'help') 
     }
 
   } else {
-    console.log(`Video commands:
-  video script --image <file> [--image <file>] "direction"   Write video script
-  video create --script "..." --video-model seedance-fast    Native text-to-video (no image required)
-  video create --script "..." --video-model wan-3.0          Wan 3.0 Standard via MuleRouter
-  video create --script "..." --video-model wan-3.0-prime    Wan 3.0 Prime fast tier via MuleRouter
-  video create --script "..." --video-model wan-3.0 --video-resolution 4k  Wan 3.0 with FlashVSR
-  video create --script "..." --video-model minimax-h3                          MiniMax H3 text-to-video (default 768P)
-  video create --script "..." --image <url> [--duration 10]  Submit video task
-  video create --script "..." --video <file|url> --video-model grok [--operation edit|extend]  Edit or extend one MP4 with Grok
-  video create --script "Use the supplied audio" --video <url> --audio <url> --video-model sync-lipsync-v3  Lip-sync exact replacement audio
-  video status <taskId>                                      Check video status
-  video status --snapshot <snapshotId> [--wait]              Check v2 video snapshot
-`);
+    printVideoHelp();
   }
 
 } else if (command === 'music') {

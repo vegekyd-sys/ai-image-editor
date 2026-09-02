@@ -30,7 +30,18 @@ export function isQwenAvailable(): boolean {
 // Image helpers
 // ---------------------------------------------------------------------------
 
-async function resolveImageToBuffer(image: string): Promise<Buffer> {
+function aspectRatioToInputDimensions(aspectRatio: string): { width: number; height: number } | null {
+  const [rawWidth, rawHeight] = aspectRatio.split(':').map(Number);
+  if (!rawWidth || !rawHeight) return null;
+
+  const ratio = rawWidth / rawHeight;
+  const roundToModelGrid = (value: number) => Math.max(16, Math.round(value / 16) * 16);
+  return ratio >= 1
+    ? { width: QWEN_MAX_INPUT_DIMENSION, height: roundToModelGrid(QWEN_MAX_INPUT_DIMENSION / ratio) }
+    : { width: roundToModelGrid(QWEN_MAX_INPUT_DIMENSION * ratio), height: QWEN_MAX_INPUT_DIMENSION };
+}
+
+async function resolveImageToBuffer(image: string, aspectRatio?: string): Promise<Buffer> {
   let raw: Buffer;
   if (image.startsWith('http')) {
     const res = await fetch(image);
@@ -39,8 +50,35 @@ async function resolveImageToBuffer(image: string): Promise<Buffer> {
     const match = image.match(/^data:image\/\w+;base64,(.+)$/);
     raw = match ? Buffer.from(match[1], 'base64') : Buffer.from(image, 'base64');
   }
-  return sharp(raw)
-    .resize(QWEN_MAX_INPUT_DIMENSION, QWEN_MAX_INPUT_DIMENSION, { fit: 'inside', withoutEnlargement: true })
+  const target = aspectRatio ? aspectRatioToInputDimensions(aspectRatio) : null;
+  if (!target) {
+    return sharp(raw)
+      .rotate()
+      .resize(QWEN_MAX_INPUT_DIMENSION, QWEN_MAX_INPUT_DIMENSION, { fit: 'inside', withoutEnlargement: true })
+      .jpeg({ quality: 90 })
+      .toBuffer();
+  }
+
+  // Qwen image-to-image preserves the uploaded canvas even when the sampler
+  // receives explicit width/height. Put the whole source on the requested
+  // canvas first so aspect-ratio edits do not silently inherit the old shape.
+  const background = await sharp(raw)
+    .rotate()
+    .resize(target.width, target.height, { fit: 'cover' })
+    .blur(24)
+    .jpeg({ quality: 82 })
+    .toBuffer();
+  const foreground = await sharp(raw)
+    .rotate()
+    .resize(target.width, target.height, {
+      fit: 'contain',
+      background: { r: 0, g: 0, b: 0, alpha: 0 },
+    })
+    .png()
+    .toBuffer();
+
+  return sharp(background)
+    .composite([{ input: foreground, gravity: 'center' }])
     .jpeg({ quality: 90 })
     .toBuffer();
 }
@@ -287,8 +325,14 @@ function buildTextToImageWorkflow(prompt: string, aspectRatio?: string, seed?: n
   };
 }
 
-function buildWorkflow(imageName: string, prompt: string, seed?: number): Record<string, unknown> {
+function buildWorkflow(
+  imageName: string,
+  prompt: string,
+  seed?: number,
+  aspectRatio?: string,
+): Record<string, unknown> {
   const actualSeed = seed ?? Math.floor(Math.random() * 999999);
+  const dimensions = aspectRatio ? aspectRatioToDimensions(aspectRatio) : { width: 0, height: 0 };
   return {
     '1': { class_type: 'CheckpointLoaderSimple', inputs: { ckpt_name: CHECKPOINT() } },
     '4': { class_type: 'LoadImage', inputs: { image: imageName } },
@@ -298,7 +342,7 @@ function buildWorkflow(imageName: string, prompt: string, seed?: number): Record
         model: ['1', 0], clip: ['1', 1], vae: ['1', 2], image1: ['4', 0],
         positive_prompt: prompt, negative_prompt: '',
         generation_mode: '\u56fe\u751f\u56fe image-to-image',
-        batch_size: 1, width: 0, height: 0, seed: actualSeed,
+        batch_size: 1, ...dimensions, seed: actualSeed,
         steps: 4, cfg: 1.0, sampler_name: 'euler', scheduler: 'simple',
         denoise: 1.0, auraflow_shift: 3.0, cfg_norm_strength: 1.0,
       },
@@ -390,9 +434,10 @@ export async function generateWithQwenText(
 export async function generateWithQwenMulti(
   images: Array<{ url: string; role: string }>,
   prompt: string,
+  aspectRatio?: string,
 ): Promise<string | null> {
   if (images.length === 0) return null;
-  if (images.length === 1) return generateWithQwen(images[0].url, prompt);
+  if (images.length === 1) return generateWithQwen(images[0].url, prompt, aspectRatio);
 
   if (shouldUseVastQwen()) {
     const t0 = Date.now();
@@ -400,7 +445,8 @@ export async function generateWithQwenMulti(
     console.log(`[vast-qwen] Starting multi-image edit (${capped.length} images), prompt: ${prompt.slice(0, 120)}...`);
 
     try {
-      const result = await callVastQwen({ prompt, images: capped });
+      const dimensions = aspectRatio ? aspectRatioToDimensions(aspectRatio) : {};
+      const result = await callVastQwen({ prompt, images: capped, ...dimensions });
       console.log(`[vast-qwen] Multi done in ${((Date.now() - t0) / 1000).toFixed(1)}s`);
       return result;
     } catch (e) {
@@ -423,7 +469,7 @@ export async function generateWithQwenMulti(
     // Upload all images in parallel
     const uploadedNames = await Promise.all(
       capped.map(async (img, i) => {
-        const buf = await resolveImageToBuffer(img.url);
+        const buf = await resolveImageToBuffer(img.url, aspectRatio);
         const filename = `input_multi_${Date.now()}_${i}.png`;
         const name = await uploadImage(buf, filename);
         console.log(`[comfyui-qwen] Uploaded image${i + 1} (${img.role}): ${(buf.length / 1024).toFixed(0)}KB`);
@@ -431,7 +477,7 @@ export async function generateWithQwenMulti(
       }),
     );
 
-    const workflow = buildWorkflow(uploadedNames[0], prompt);
+    const workflow = buildWorkflow(uploadedNames[0], prompt, undefined, aspectRatio);
 
     for (let i = 1; i < uploadedNames.length; i++) {
       const nodeId = String(10 + i);
@@ -458,13 +504,15 @@ export async function generateWithQwenMulti(
 export async function generateWithQwen(
   image: string,
   prompt: string,
+  aspectRatio?: string,
 ): Promise<string | null> {
   if (shouldUseVastQwen()) {
     const t0 = Date.now();
     console.log(`[vast-qwen] Starting edit, prompt: ${prompt.slice(0, 120)}...`);
 
     try {
-      const result = await callVastQwen({ image, prompt });
+      const dimensions = aspectRatio ? aspectRatioToDimensions(aspectRatio) : {};
+      const result = await callVastQwen({ image, prompt, ...dimensions });
       console.log(`[vast-qwen] Done in ${((Date.now() - t0) / 1000).toFixed(1)}s`);
       return result;
     } catch (e) {
@@ -483,12 +531,12 @@ export async function generateWithQwen(
   console.log(`[comfyui-qwen] Starting edit, prompt: ${prompt.slice(0, 120)}...`);
 
   try {
-    const buf = await resolveImageToBuffer(image);
+    const buf = await resolveImageToBuffer(image, aspectRatio);
     const filename = `input_${Date.now()}.png`;
     const uploadedName = await uploadImage(buf, filename);
     console.log(`[comfyui-qwen] Uploaded ${(buf.length / 1024).toFixed(0)}KB`);
 
-    const workflow = buildWorkflow(uploadedName, prompt);
+    const workflow = buildWorkflow(uploadedName, prompt, undefined, aspectRatio);
     const outputImg = await submitAndPoll(workflow);
     const result = await downloadImage(outputImg);
 

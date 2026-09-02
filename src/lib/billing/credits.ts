@@ -37,6 +37,95 @@ export async function isBillingEnabled(): Promise<boolean> {
 
 export function invalidateBillingCache() { _billingEnabled = null }
 
+export type SubscriptionUsageProvider = 'codex-subscription' | 'grok-subscription'
+
+function subscriptionUsageModelId(modelId: string, provider: SubscriptionUsageProvider): string {
+  const normalized = modelId.trim() || 'unknown'
+  return normalized.includes(provider) ? normalized : `${normalized}:${provider}`
+}
+
+/**
+ * Record usage served by a personal subscription without touching Makaron credits.
+ * This intentionally ignores the billing kill switch: Usage is telemetry, while
+ * credits_charged=0 makes the free subscription route explicit in the ledger.
+ */
+export async function recordSubscriptionUsage(
+  userId: string,
+  provider: SubscriptionUsageProvider,
+  toolName: string,
+  modelId: string,
+  options?: {
+    inputTokens?: number | null
+    outputTokens?: number | null
+    cacheReadTokens?: number | null
+    cacheWriteTokens?: number | null
+    durationMs?: number | null
+    apiKeyId?: string | null
+  },
+): Promise<void> {
+  const { error } = await getSupabaseAdmin().from('usage_logs').insert({
+    user_id: userId,
+    api_key_id: options?.apiKeyId ?? null,
+    tool_name: toolName,
+    model_used: subscriptionUsageModelId(modelId, provider),
+    credits_charged: 0,
+    input_tokens: options?.inputTokens ?? null,
+    output_tokens: options?.outputTokens ?? null,
+    cache_read_tokens: options?.cacheReadTokens ?? null,
+    cache_write_tokens: options?.cacheWriteTokens ?? null,
+    duration_ms: options?.durationMs ?? null,
+    source: options?.apiKeyId ? 'mcp' : 'app',
+  })
+  if (error) throw new Error(`Subscription usage logging failed: ${error.message}`)
+}
+
+/** Record Agent token usage, charging API providers and logging subscription providers at zero cost. */
+export async function recordAgentTokenUsage(input: {
+  userId: string
+  provider: string
+  modelId: string
+  inputTokens: number
+  outputTokens: number
+  cacheReadTokens?: number
+  cacheWriteTokens?: number
+  cacheWriteTelemetryComplete?: boolean
+  providerCostUsd?: number
+}): Promise<{ charged: number; remaining: number }> {
+  if (input.provider === 'codex-subscription' || input.provider === 'grok-subscription') {
+    await recordSubscriptionUsage(
+      input.userId,
+      input.provider,
+      'agent',
+      input.modelId,
+      {
+        inputTokens: input.inputTokens,
+        outputTokens: input.outputTokens,
+        cacheReadTokens: input.cacheReadTokens ?? 0,
+        cacheWriteTokens: input.cacheWriteTelemetryComplete === false
+          ? null
+          : input.cacheWriteTokens ?? 0,
+      },
+    )
+    return { charged: 0, remaining: 0 }
+  }
+
+  return deductByTokens(
+    input.userId,
+    'agent',
+    input.modelId,
+    input.inputTokens,
+    input.outputTokens,
+    undefined,
+    undefined,
+    {
+      cacheRead: input.cacheReadTokens ?? 0,
+      cacheWrite: input.cacheWriteTokens ?? 0,
+      cacheWriteTelemetryComplete: input.cacheWriteTelemetryComplete,
+    },
+    input.providerCostUsd,
+  )
+}
+
 async function expireAppleTrialCredits(userId: string): Promise<void> {
   try {
     const result = await getSupabaseAdmin().rpc('expire_apple_trial_credits', {
@@ -292,6 +381,35 @@ export async function deductFixedCredits(
 
   const remaining = await deductAndLog(userId, credits, toolName, model, null, null, durationMs, apiKeyId ? 'mcp' : 'app', apiKeyId)
   return { charged: credits, remaining }
+}
+
+/**
+ * Reserve a fixed price on the fast path with the same atomic RPC that performs
+ * the debit. The legacy balance initialization path only runs after an atomic
+ * insufficient-balance result, keeping established users to one database RPC.
+ */
+export async function reserveFixedCredits(
+  userId: string,
+  credits: number,
+  toolName: string,
+  model?: string,
+  durationMs?: number,
+  apiKeyId?: string | null,
+): Promise<{ charged: number; remaining: number }> {
+  try {
+    return await deductFixedCredits(userId, credits, toolName, model, durationMs, apiKeyId)
+  } catch (error) {
+    if (!isInsufficientCreditsError(error)) throw error
+
+    // Old accounts may predate credit_balances. requireCredits initializes that
+    // row (and welcome credits) when absent. Existing insufficient accounts stay
+    // on the normal 402 path and are never charged a second time.
+    const creditCheck = await requireCredits(userId, credits)
+    if (!creditCheck.ok) {
+      throw new InsufficientCreditsError(creditCheck.balance, credits)
+    }
+    return deductFixedCredits(userId, credits, toolName, model, durationMs, apiKeyId)
+  }
 }
 
 /**

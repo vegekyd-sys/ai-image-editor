@@ -60,13 +60,52 @@ for (const sourceRoot of sourceRoots) {
   }
 }
 
+// H3 Max is the sole approved exception: the provider currently exposes T2V
+// and single-start-frame I2V, but no reference-to-video route. Keep the
+// exception explicit in both the capability registry and its isolated adapter.
+const capabilitySource = await readFile(
+  path.join(repositoryRoot, 'src', 'lib', 'video-model-capabilities.ts'),
+  'utf8',
+)
+const h3MaxBlock = capabilitySource.match(/'minimax-h3-max':\s*\{[\s\S]*?\n\s*\},\n\s*piapi:/)?.[0] ?? ''
+if (
+  !h3MaxBlock.includes("defaultImageWorkflow: 'image-to-video'")
+  || !h3MaxBlock.includes('supportsExplicitImageToVideo: true')
+  || !h3MaxBlock.includes('maxImageReferences: 1')
+  || !h3MaxBlock.includes('supportsVideoReference: false')
+) {
+  violations.push({
+    file: 'src/lib/video-model-capabilities.ts',
+    line: 1,
+    reason: 'H3 Max image-to-video exception lacks its complete capability contract',
+    match: 'minimax-h3-max',
+  })
+}
+
+const h3MaxAdapter = await readFile(
+  path.join(repositoryRoot, 'src', 'lib', 'fal-h3-max-video.ts'),
+  'utf8',
+)
+if (
+  !h3MaxAdapter.includes("const TEXT_ENDPOINT = 'minimax/h3-max/text-to-video'")
+  || !h3MaxAdapter.includes("const IMAGE_ENDPOINT = 'minimax/h3-max/image-to-video'")
+  || !h3MaxAdapter.includes('if (images.length > 1)')
+) {
+  violations.push({
+    file: 'src/lib/fal-h3-max-video.ts',
+    line: 1,
+    reason: 'H3 Max adapter must keep T2V and single-image I2V routes explicit',
+    match: 'H3 Max endpoint contract',
+  })
+}
+
 if (violations.length > 0) {
   console.error('Video image workflow contract failed.')
-  console.error('Image inputs must default to reference-to-video. First-frame/image-to-video requires an explicit architecture change and corresponding capability contract.')
+  console.error('Image inputs must default to reference-to-video. Any image-to-video exception requires an explicit capability and adapter contract.')
   for (const violation of violations) {
     console.error(`- ${violation.file}:${violation.line} ${violation.reason}: ${violation.match}`)
   }
   process.exit(1)
 }
 
-console.log('Video image workflow contract passed: no implicit first-frame/image-to-video provider routes found.')
+console.log('Video image workflow contract passed: reference-to-video remains the default and the H3 Max I2V exception is explicit.')

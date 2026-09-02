@@ -601,11 +601,11 @@ try {
     [['skills', 'search', '--help'], /Usage: makaron skills search/],
     [['skills', 'show', '--help'], /Usage: makaron skills show/],
     [['skills', 'install', '--help'], /Usage: makaron skills install/],
-    [['edit', '--help'], /Usage: makaron edit/],
+    [['edit', '--help'], /Makaron edit — generate or edit an image directly/],
     [['analyze', '--help'], /Usage: makaron analyze/],
     [['video', '--help'], /Video commands:/],
     [['video', 'script', '--help'], /Usage: makaron video script/],
-    [['video', 'create', '--help'], /Usage: makaron video create/],
+    [['video', 'create', '--help'], /Makaron video create — call a video model directly/],
     [['video', 'status', '--help'], /Usage: makaron video status/],
     [['music', '--help'], /Music commands:/],
     [['music', 'create', '--help'], /Usage: makaron music create/],
@@ -632,6 +632,9 @@ try {
   {
     const result = await expectHelp(['--help'], /--agent-model <id>/);
     assert.match(result.stdout, /Select only the Agent LLM \(strict allowlist\)/);
+    assert.match(result.stdout, /--image <file> Attach an image or visual reference/);
+    assert.match(result.stdout, /H3 Max, Wan, Seedance, Grok, lip-sync/);
+    assert.match(result.stdout, /--background transparent/);
     assert.doesNotMatch(result.stdout, /--image-model/);
     assert.doesNotMatch(result.stdout, /--video-model/);
     assert.doesNotMatch(result.stdout, /MAKARON_AGENT_MODEL/);
@@ -704,10 +707,18 @@ try {
   {
     const result = await expectHelp(['edit', '--help'], /--image-model/);
     assert.match(result.stdout, /--image-model/);
+    assert.match(result.stdout, /Transparent output routes strictly to GPT Image 2/);
+    assert.match(result.stdout, /--ref <file\|url>\s+Additional reference image/);
     const videoResult = await expectHelp(['video', 'create', '--help'], /--video-model/);
     assert.match(videoResult.stdout, /--video-model/);
     assert.match(videoResult.stdout, /--video-resolution/);
+    assert.match(videoResult.stdout, /--video-operation <mode>/);
     assert.match(videoResult.stdout, /minimax-h3/);
+    assert.match(videoResult.stdout, /minimax-h3-max/);
+    assert.match(videoResult.stdout, /Near-real-time T2V or one-start-image I2V/);
+    assert.match(videoResult.stdout, /wan-3\.0-prime\s+Faster Wan 3\.0 tier/);
+    assert.match(videoResult.stdout, /sync-lipsync-v3 Exactly one video plus one MP3\/WAV/);
+    assert.doesNotMatch(videoResult.stdout, /--operation <mode>/);
     assert.match(videoResult.stdout, /2k/);
   }
 
@@ -1079,6 +1090,17 @@ try {
     assert.equal(mcpRequest?.body?.params?.arguments?.duration, 30);
     assert.equal(mcpRequest?.body?.params?.arguments?.outputFormat, 'mp4');
     assert.equal(mcpRequest?.body?.params?.arguments?.webSearch, true);
+  }
+
+  {
+    const result = await expectSuccess(['video', 'create', '--script', 'Fast Turn\nShot 1 (5s): <<<media_1>>> turns toward camera', '--image', tinyImagePath, '--duration', '5', '--video-model', 'h3-max', '--video-resolution', '768p']);
+    assert.match(result.stdout, /Task ID: task-unified-text-smoke/);
+    const mcpRequest = requests.filter(req => req.pathname === '/api/mcp').at(-1);
+    assert.equal(mcpRequest?.body?.params?.name, 'makaron_create_video');
+    assert.deepEqual(mcpRequest?.body?.params?.arguments?.images, ['https://cdn.example/uploaded-image.jpg']);
+    assert.equal(mcpRequest?.body?.params?.arguments?.videoModel, 'minimax-h3-max');
+    assert.equal(mcpRequest?.body?.params?.arguments?.videoResolution, '768p');
+    assert.equal(mcpRequest?.body?.params?.arguments?.duration, 5);
   }
 
   {

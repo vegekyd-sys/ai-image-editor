@@ -132,12 +132,14 @@ describe('agent prompt policy guards', () => {
     expect(reconnect).toContain('callbacks.onMusicTask?.')
   })
 
-  it('keeps uploaded video auto-analysis in the tool-aware history path', () => {
+  it('keeps later video uploads tool-aware while batching first-turn media', () => {
     const editor = read('src/components/Editor.tsx')
     const agentRoute = read('src/app/api/agent/route.ts')
 
     expect(editor).toContain('First call analyze_video with media_index')
-    expect(editor).toContain('First call analyze_video for each uploaded video media_index')
+    expect(editor).toContain('First-turn media understanding (no user prompt)')
+    expect(editor).toContain('consume every verified video-evidence line')
+    expect(editor).toContain('turnMediaCount: workSnapshots.length')
     expect(editor).toContain("analyze_video's result is persisted in agent_tool_history")
     expect(editor).not.toContain("handleAgentRequest('', undefined, undefined, { silent: true, uploadedVideoCount")
     expect(agentRoute).toContain('const isNormalMode = !tipsTeaser && !nameProject && !previewsReady && !tipReaction && !analysisOnly')
