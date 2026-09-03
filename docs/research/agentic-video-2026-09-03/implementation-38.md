@@ -1,5 +1,7 @@
 # Gemini 3.8 Flash 接入与真实线上对照
 
+> 后续状态：用户已确认切换，2026-09-03 20:51 已在正式域名完成 3.8 切换。下面保留切换前的比较快照；当前状态见 [release.md](./release.md)。
+
 核对日期：2026-09-03。分支 `codex/agentic-video-analysis`；worktree `/Users/tianyicai/ai-image-editor-agentic-video-analysis`。
 
 ## 当前状态
