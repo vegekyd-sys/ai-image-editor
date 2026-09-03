@@ -20,6 +20,10 @@ After `generate_image`, the result becomes the next `<<<media_N>>>` and is immed
 
 ## generate_image Tool Contract
 
+### Wan 2.7 Image
+
+Use `model: "wan2.7-image"` when explicitly requested or selected in the app. This is Alibaba international's fast standard image model, separate from Wan video. It generates one approximately 1K image per call, supports text-to-image and up to 9 ordered input images including the base, and defaults to 6 image credits. Do not promise exact face preservation. Keep prompts focused and pass all required reference images; never silently drop references. Transparent output still requires the GPT Image 2 contract below. Report failed or timed-out Wan calls without automatically repeating the request or choosing another model, since the provider may already have generated a paid output.
+
 Edit the current photo or generate a new image from text.
 
 `editPrompt` format depends on the mode. See Context Mode versus Edit Mode below.

@@ -4,17 +4,20 @@ import { z } from 'zod';
 import sharp from 'sharp';
 import { validateDesign } from './design-harness';
 import type { ImageBackground, ModelId } from './models/types';
+import { IMAGE_MODEL_IDS } from './models/types';
 import { editImage } from './skills/edit-image';
 import { rotateCamera } from './skills/rotate-camera';
 import { createVideo } from './skills/create-video';
 import { estimateVideoProviderCostUsd, getRequiredVideoCredits, normalizeVideoModelId, resolveAgentVideoSelection, resolvePersistedVideoDuration, resolveVideoGenerationRoute, resolveVideoOutputDuration, resolveVideoReplicationModelId, resolveVideoReplicationResolution, supportsNativeTextToVideo, validateVideoModelRequest } from './video-model-capabilities';
 import {
+  deductCredits,
   deductFixedCredits,
   isInsufficientCreditsError,
   recordSubscriptionUsage,
   refundCredits,
   requireCredits,
 } from './billing/credits';
+import { getToolPrice, resolveToolName } from './billing/pricing';
 import { deductSeedAudioCredits } from './billing/seed-audio';
 import { createAudio, SEED_AUDIO_AGENT_PROMPT_MAX_CHARS } from './skills/create-audio';
 import { formatAudioCapabilitiesForAgent } from './audio-model-capabilities';
@@ -1358,7 +1361,7 @@ function createGenerateImageTool(
       inputSchema: z.object({
         editPrompt: z.string().describe('The specific creative direction for this edit (English). When skill is set, you must have read and internalized that skill prompt once in this conversation; write an editPrompt that follows those rules.'),
         skill: z.string().optional().describe('Activate a skill template (e.g. enhance, creative, wild, captions). See tool description and available skills.'),
-        model: z.enum(['gemini', 'gemini-lite', 'qwen', 'pony', 'wai', 'openai']).optional().describe('NEVER set this unless the user literally says a model name like "用pony" or "use qwen" or "用openai" or "nano banana lite", or the active long-video-director workflow is generating director storyboard images, which MUST set "openai". For NSFW after Gemini refusal, set "qwen". Otherwise ALWAYS omit — the router handles everything automatically. Setting this without explicit user request is a bug.'),
+        model: z.enum(IMAGE_MODEL_IDS).optional().describe('NEVER set this unless the user literally says a model name like "用pony", "use qwen", "用openai", "nano banana lite", or "Wan 2.7 Image" (wan2.7-image: fast single-image generation/editing, up to 9 inputs, no transparent output; failures must not be automatically retried), or the active long-video-director workflow is generating director storyboard images, which MUST set "openai". For NSFW after Gemini refusal, set "qwen". Otherwise ALWAYS omit — the router handles everything automatically. Setting this without explicit user request is a bug.'),
         aspectRatio: z.string().optional().describe('Target aspect ratio e.g. "4:5", "1:1", "16:9". For a pure existing-image cutout, omit this field to preserve the source canvas. If the user explicitly requests a new transparent layout/canvas ratio, pass it.'),
         background: z.enum(['auto', 'opaque', 'transparent']).optional().describe('Output background contract. Set "transparent" when the user asks for transparent/no background, background removal, subject cutout/isolation, 抠图/抠像/去背景, or a reusable PNG/sticker/overlay/alpha asset. With a source image also pass media_index for GPT Image 2 image-to-image cutout; without one omit media_index for text-to-image. Never return an opaque fallback.'),
         media_index: z.number().optional().describe('1-based index of the snapshot to edit (<<<media_1>>> = 1, <<<media_2>>> = 2, ...). Omit the field entirely for text-to-image (no photo sent); never send 0. For most edits, pass the current snapshot index.'),
@@ -1392,6 +1395,15 @@ function createGenerateImageTool(
 
         // Priority: UI selector > agent tool param > auto-route
         const resolvedModel = (ctx.preferredModel ? ctx.preferredModel : model) as ModelId | undefined;
+        const billingModel = background === 'transparent' ? 'openai' : resolvedModel;
+        if (ctx.userId && billingModel && !(billingModel === 'openai' && runtime.spec.provider === 'codex-subscription')) {
+          const price = await getToolPrice(resolveToolName('edit_image', billingModel));
+          if (price && !price.isFree) {
+            const check = await requireCredits(ctx.userId, price.credits);
+            if (!check.ok) return { success: false, message: `Insufficient credits. Need ${price.credits}, have ${check.balance}.`, error: 'insufficient_credits' };
+          }
+        }
+        const imageStartedAt = Date.now();
         const skillResult = await editImage(
           { editPrompt, skill: skill as 'enhance' | 'creative' | 'wild' | 'captions' | undefined, aspectRatio, background, preferredModel: resolvedModel, isNsfw: ctx.isNsfw },
           {
@@ -1439,14 +1451,13 @@ function createGenerateImageTool(
           );
         } else if (
           skillResult.provider !== 'codex-subscription'
+          && skillResult.success
+          && skillResult.image
           && skillResult.usedModel
           && skillResult.usedModel !== 'gemini'
         ) {
-          // Per-action for ComfyUI models
-          import('./billing/credits').then(({ deductCredits }) =>
-            deductCredits(ctx.userId ?? '', null, `edit_image_${skillResult.usedModel}`)
-              .catch(e => console.error('[billing] generate_image deduct error:', e))
-          );
+          // Fixed-price image backends share one awaited debit + usage-log transaction.
+          await deductCredits(ctx.userId ?? '', null, 'edit_image', skillResult.usedModel, Date.now() - imageStartedAt);
         }
         // NSFW detection: flag session so all subsequent calls skip Gemini
         if (skillResult.contentBlocked) ctx.isNsfw = true;

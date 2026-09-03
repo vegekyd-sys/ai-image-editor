@@ -706,6 +706,7 @@ try {
 
   {
     const result = await expectHelp(['edit', '--help'], /--image-model/);
+    assert.match(result.stdout, /wan2\.7-image/);
     assert.match(result.stdout, /--image-model/);
     assert.match(result.stdout, /Transparent output routes strictly to GPT Image 2/);
     assert.match(result.stdout, /--ref <file\|url>\s+Additional reference image/);

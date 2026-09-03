@@ -395,6 +395,8 @@ const zh = {
   'model.qwen.name': 'Qwen Edit',
   'model.qwen.desc': '人脸保真最佳，可处理 NSFW 内容。',
   'model.openai.name': 'GPT Image 2',
+  'model.wan27Image.name': 'Wan 2.7 Image',
+  'model.wan27Image.desc': '快速生图与多图编辑，人脸细节可能变化。',
   'model.openai.desc': '文字渲染和创意生成能力突出。',
   'model.kling.name': 'Kling O3',
   'model.kling.desc': '4K 高规格输出，速度快，内置音效。',

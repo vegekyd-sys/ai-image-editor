@@ -13,6 +13,9 @@ const DEFAULT_TOOL_PRICING: Record<string, { credits: number; isFree: boolean }>
   // GPT Image 2 low-quality generation/edit fallback when the provider does
   // not return token usage. 1 credit = $0.01; includes the standard 2x markup.
   edit_image_openai: { credits: 4, isFree: false },
+  // Alibaba Singapore Wan 2.7: $0.03/output image × 2 / $0.01 = 6 credits.
+  // The adapter always requests exactly one image; input tokens are not billable.
+  'edit_image_wan2.7-image': { credits: 6, isFree: false },
 }
 
 // In-memory cache with TTL

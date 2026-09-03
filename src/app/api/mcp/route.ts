@@ -1,7 +1,7 @@
 import { createMakaronMcpServer } from '@/mcp/server';
 import { WebStandardStreamableHTTPServerTransport } from '@modelcontextprotocol/sdk/server/webStandardStreamableHttp.js';
 import { validateApiKey } from '@/lib/billing/api-keys';
-import { checkBalance, deductCredits, deductByTokens, recordSubscriptionUsage } from '@/lib/billing/credits';
+import { checkBalance, deductCredits, deductByTokens, isBillingEnabled, recordSubscriptionUsage } from '@/lib/billing/credits';
 import { resolveToolName } from '@/lib/billing/pricing';
 import { deductSeedAudioCredits } from '@/lib/billing/seed-audio';
 import { getRequiredVideoCredits, normalizeVideoModelId } from '@/lib/video-model-capabilities';
@@ -57,10 +57,11 @@ async function handleMcp(req: Request): Promise<Response> {
     userId: auth.userId,
     // Pre-check: ensure user has enough credits
     onToolStart: auth.type === 'user' ? async (toolName, model) => {
+      if (!(await isBillingEnabled())) return { allowed: true };
       if (normalizeVideoModelId(model) === 'grok' && await isGrokSubscriptionAllowedUser(auth.userId)) {
         return { allowed: true };
       }
-      const pricingName = resolveToolName(toolName, undefined); // model unknown at start, use base name
+      const pricingName = resolveToolName(toolName, model);
       const { ok, balance, cost } = await checkBalance(auth.userId!, pricingName);
       if (!ok) {
         return { allowed: false, message: `Insufficient credits. Need ${cost}, have ${balance}. Top up at https://www.makaron.app/dashboard` };

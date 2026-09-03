@@ -56,7 +56,7 @@ export async function editImage(
   let usedProvider: string | undefined;
   // A transparent request is a strict, paid provider call. Do not fan it out
   // or repeat it after failure; surface the capability error to the user.
-  const MAX_ATTEMPTS = background === 'transparent' ? 1 : 2;
+  const MAX_ATTEMPTS = background === 'transparent' || requestedModel === 'wan2.7-image' ? 1 : 2;
 
   for (let attempt = 1; attempt <= MAX_ATTEMPTS; attempt++) {
     const genResult = await generateImage({
