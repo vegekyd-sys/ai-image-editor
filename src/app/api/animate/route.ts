@@ -10,7 +10,8 @@ import {
   refundCredits,
   requireCredits,
 } from '@/lib/billing/credits'
-import { getRequiredVideoCredits, getVideoModelCapability, normalizeVideoModelId, resolveVideoGenerationRoute, resolveVideoOutputDuration, supportsNativeTextToVideo } from '@/lib/video-model-capabilities'
+import { getVideoModelCapability, normalizeVideoModelId, resolveVideoGenerationRoute, resolveVideoOutputDuration, supportsNativeTextToVideo } from '@/lib/video-model-capabilities'
+import { quoteVideo } from '@/lib/billing/media-pricing'
 import { isGrokSubscriptionAllowedUser } from '@/lib/grok-subscription'
 
 export const maxDuration = 1800
@@ -99,8 +100,8 @@ export async function POST(req: NextRequest) {
     }
 
     const { filteredImages, finalPrompt } = filterAndRemapImages(prompt, inputImageUrls, videoCapability.maxImageReferences ?? 7)
-    const videoSec = effectiveDuration || 10
-    const creditsRequired = getRequiredVideoCredits({
+    const videoSec = effectiveDuration === -1 ? referenceVideoDuration ?? 10 : effectiveDuration || 10
+    const { credits: creditsRequired } = await quoteVideo({
       model: selectedVideoModel,
       resolution: videoRoute.resolution,
       durationSec: videoSec,

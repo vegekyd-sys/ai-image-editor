@@ -19,16 +19,18 @@ function setup() {
   const editImage = vi.fn().mockResolvedValue({ success: true, image: 'data:image/jpeg;base64,YQ==', usedModel: 'wan2.7-image', provider: 'dashscope' });
   const requireCredits = vi.fn().mockResolvedValue({ ok: true, balance: 100 });
   const deductCredits = vi.fn().mockResolvedValue({ charged: 6, remaining: 94 });
+  const getToolPrice = vi.fn().mockResolvedValue({ credits: 6, isFree: false });
+  const isBillingEnabled = vi.fn().mockResolvedValue(true);
   const ctx = { preferredModel: 'wan2.7-image', userId: 'test-user', projectId: 'test-project', currentImage: '', snapshotImages: [] as string[], generatedImages: [] as string[], lastUsedModel: undefined };
   const context = vm.createContext({
     tool: (definition: unknown) => definition, z, IMAGE_MODEL_IDS,
     generateImageToolPrompt: '', normalizeGenerateImageMediaIndex,
-    validateImageIndex: vi.fn(), getToolPrice: vi.fn().mockResolvedValue({ credits: 6, isFree: false }),
+    validateImageIndex: vi.fn(), getToolPrice, isBillingEnabled,
     resolveToolName: (_name: string, model: string) => `edit_image_${model}`,
     editImage, requireCredits, deductCredits, refreshSnapshotUrls: vi.fn(), console,
   });
   const create = vm.runInContext(`${code}\ncreateGenerateImageTool`, context);
-  return { tool: create({ ctx, runtime: { spec: { provider: 'azure' } } }), ctx, editImage, requireCredits, deductCredits };
+  return { tool: create({ ctx, runtime: { spec: { provider: 'azure' } } }), ctx, editImage, requireCredits, deductCredits, getToolPrice, isBillingEnabled };
 }
 
 describe('App Agent Wan execution and billing', () => {
@@ -57,6 +59,24 @@ describe('App Agent Wan execution and billing', () => {
     editImage.mockResolvedValue({ success: false, usedModel: 'wan2.7-image', provider: 'dashscope', message: 'No image.' });
     expect((await tool.execute({ editPrompt: 'A mug.' })).success).toBe(false);
     expect(deductCredits).not.toHaveBeenCalled();
+  });
+
+  it('rejects missing Wan pricing before contacting the provider', async () => {
+    const { tool, editImage, getToolPrice, deductCredits } = setup();
+    getToolPrice.mockResolvedValue(null);
+    expect(await tool.execute({ editPrompt: 'A mug.' })).toMatchObject({ success: false, error: 'pricing_unavailable' });
+    expect(editImage).not.toHaveBeenCalled();
+    expect(deductCredits).not.toHaveBeenCalled();
+  });
+
+  it('does not require a price when the billing kill switch is off', async () => {
+    const { tool, editImage, getToolPrice, isBillingEnabled, requireCredits } = setup();
+    isBillingEnabled.mockResolvedValue(false);
+    getToolPrice.mockResolvedValue(null);
+    expect((await tool.execute({ editPrompt: 'A mug.' })).success).toBe(true);
+    expect(editImage).toHaveBeenCalledTimes(1);
+    expect(getToolPrice).not.toHaveBeenCalled();
+    expect(requireCredits).not.toHaveBeenCalled();
   });
 
   it('awaits the debit and does not swallow an accounting failure', async () => {

@@ -1,4 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { seededMediaPrices, seededTokenRates } from './helpers/media-prices';
 
 // Mock Supabase before importing billing modules
 const mockFrom = vi.fn();
@@ -285,7 +286,7 @@ describe('token-rates', () => {
   it('includes the exact Gemini vision-bridge rate used by DeepSeek', async () => {
     const chain = mockQuery([]);
     mockFrom.mockReturnValue(chain);
-    chain.order = vi.fn().mockResolvedValue({ data: [], error: null });
+    chain.order = vi.fn().mockResolvedValue({ data: seededTokenRates(), error: null });
 
     const { getTokenRate, invalidateTokenRateCache } = await import('@/lib/billing/token-rates');
     invalidateTokenRateCache();
@@ -299,10 +300,10 @@ describe('token-rates', () => {
     });
   });
 
-  it('includes the official Grok 4.6 OpenRouter fallback rate', async () => {
+  it('includes the migrated Grok 4.6 OpenRouter rate', async () => {
     const chain = mockQuery([]);
     mockFrom.mockReturnValue(chain);
-    chain.order = vi.fn().mockResolvedValue({ data: [], error: null });
+    chain.order = vi.fn().mockResolvedValue({ data: seededTokenRates(), error: null });
 
     const { getTokenRate, invalidateTokenRateCache } = await import('@/lib/billing/token-rates');
     invalidateTokenRateCache();
@@ -318,10 +319,10 @@ describe('token-rates', () => {
     });
   });
 
-  it('includes the exact GPT-5.6 Terra fallback rate and bills its usage', async () => {
+  it('includes the migrated GPT-5.6 Terra rate and bills its usage', async () => {
     const chain = mockQuery([]);
     mockFrom.mockReturnValue(chain);
-    chain.order = vi.fn().mockResolvedValue({ data: [], error: null });
+    chain.order = vi.fn().mockResolvedValue({ data: seededTokenRates(), error: null });
 
     const {
       getTokenRate,
@@ -573,7 +574,7 @@ describe('credits', () => {
   });
 
   describe('deductByTokens', () => {
-    it('uses fallback rate when no token rate found', async () => {
+    it('rejects unknown token prices without guessing or charging', async () => {
       const ratesChain = mockQuery([]);
 
       mockRpc.mockResolvedValue({ data: 50, error: null });
@@ -589,13 +590,8 @@ describe('credits', () => {
       const { invalidateTokenRateCache } = await import('@/lib/billing/token-rates');
       invalidateTokenRateCache();
 
-      const result = await deductByTokens('user-1', 'agent', 'unknown-model', 1000, 500);
-      expect(result.charged).toBeGreaterThan(0);
-      // Verify deduct_and_log RPC was called with unknown model
-      expect(mockRpc).toHaveBeenCalledWith('deduct_and_log', expect.objectContaining({
-        p_user_id: 'user-1',
-        p_model_used: 'unknown:unknown-model',
-      }));
+      await expect(deductByTokens('user-1', 'agent', 'unknown-model', 1000, 500)).rejects.toThrow('not configured');
+      expect(mockRpc).not.toHaveBeenCalled();
     });
 
     it('deducts correct credits and logs usage with tokens', async () => {
@@ -747,7 +743,7 @@ describe('credits', () => {
       }));
     });
 
-    it('uses the built-in Seed TTS voiceover price if the DB row is missing', async () => {
+    it('rejects missing voiceover prices without using an invisible built-in price', async () => {
       const pricingChain = {
         select: vi.fn().mockResolvedValue({ data: [], error: null }),
       };
@@ -764,14 +760,8 @@ describe('credits', () => {
       invalidatePricingCache();
 
       const { deductCredits } = await import('@/lib/billing/credits');
-      const result = await deductCredits('user-1', null, 'create_voiceover', 'seed-tts-2.0');
-
-      expect(result.charged).toBe(2);
-      expect(result.remaining).toBe(456);
-      expect(mockRpc).toHaveBeenCalledWith('deduct_and_log', expect.objectContaining({
-        p_amount: 2,
-        p_tool_name: 'create_voiceover',
-      }));
+      await expect(deductCredits('user-1', null, 'create_voiceover', 'seed-tts-2.0')).rejects.toThrow('not configured');
+      expect(mockRpc).not.toHaveBeenCalled();
     });
   });
 
@@ -910,7 +900,7 @@ describe('credits', () => {
 
     it('deducts Seed Audio as create_seed_audio using actual generated usage', async () => {
       mockRpc.mockResolvedValue({ data: 321, error: null });
-      mockFrom.mockImplementation((t: string) => t === 'app_settings' ? billingSettingsChain : mockQuery(null));
+      mockFrom.mockImplementation((t: string) => t === 'app_settings' ? billingSettingsChain : mockQuery(t === 'media_pricing' ? seededMediaPrices() : null));
 
       const { deductSeedAudioCredits } = await import('@/lib/billing/seed-audio');
       const result = await deductSeedAudioCredits('user-1', {

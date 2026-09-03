@@ -1,4 +1,5 @@
 import { getSupabaseAdmin } from '@/lib/supabase/service'
+import { PricingUnavailableError } from './media-pricing'
 
 export interface TokenRate {
   model_id: string
@@ -23,131 +24,18 @@ export interface TokenBreakdown {
 // 1 credit = $0.01
 const CREDIT_VALUE = 0.01
 
-const DEFAULT_TOKEN_RATES: TokenRate[] = [
-  {
-    model_id: 'openai/gpt-image-2',
-    display_name: 'GPT Image 2 (OpenRouter)',
-    input_per_1m: 8.00,
-    output_per_1m: 30.00,
-    cache_read_per_1m: 2.00,
-    cache_write_per_1m: 8.00,
-    markup: 2.0,
-    is_active: true,
-  },
-  // OpenRouter reports exact routed cost in provider metadata; these rows keep
-  // model attribution and markup stable if that metadata is ever unavailable.
-  {
-    model_id: 'openai/gpt-5.6-terra',
-    display_name: 'GPT-5.6 Terra (OpenRouter)',
-    input_per_1m: 1.00,
-    output_per_1m: 6.00,
-    cache_read_per_1m: 0.10,
-    cache_write_per_1m: 1.25,
-    markup: 2.0,
-    is_active: true,
-  },
-  {
-    model_id: 'openai/gpt-5.6-sol',
-    display_name: 'GPT-5.6 Sol (OpenRouter)',
-    input_per_1m: 5.00,
-    output_per_1m: 30.00,
-    cache_read_per_1m: 0.50,
-    cache_write_per_1m: 6.25,
-    markup: 2.0,
-    is_active: true,
-  },
-  {
-    model_id: 'openai/gpt-5.6-luna',
-    display_name: 'GPT-5.6 Luna (OpenRouter)',
-    input_per_1m: 0.10,
-    output_per_1m: 0.60,
-    cache_read_per_1m: 0.01,
-    cache_write_per_1m: 0.125,
-    markup: 2.0,
-    is_active: true,
-  },
-  {
-    model_id: 'gpt-5.6-terra',
-    display_name: 'GPT-5.6 Terra',
-    input_per_1m: 2.50,
-    output_per_1m: 15.00,
-    cache_read_per_1m: 0.25,
-    cache_write_per_1m: 3.125,
-    markup: 2.0,
-    is_active: true,
-  },
-  {
-    model_id: 'gpt-5.6-sol',
-    display_name: 'GPT-5.6 Sol',
-    input_per_1m: 5.00,
-    output_per_1m: 30.00,
-    cache_read_per_1m: 0.50,
-    cache_write_per_1m: 6.25,
-    markup: 2.0,
-    is_active: true,
-  },
-  {
-    model_id: 'gpt-5.6-luna',
-    display_name: 'GPT-5.6 Luna',
-    input_per_1m: 1.00,
-    output_per_1m: 6.00,
-    cache_read_per_1m: 0.10,
-    cache_write_per_1m: 1.25,
-    markup: 2.0,
-    is_active: true,
-  },
-  {
-    model_id: 'x-ai/grok-4.6',
-    display_name: 'Grok 4.6',
-    input_per_1m: 2.00,
-    output_per_1m: 6.00,
-    cache_read_per_1m: 0.50,
-    cache_write_per_1m: 0,
-    markup: 2.0,
-    is_active: true,
-  },
-  {
-    model_id: 'deepseek/deepseek-v4-pro',
-    display_name: 'DeepSeek V4 Pro',
-    input_per_1m: 0.435,
-    output_per_1m: 0.87,
-    cache_read_per_1m: 0.003625,
-    cache_write_per_1m: 0,
-    markup: 2.0,
-    is_active: true,
-  },
-  {
-    model_id: 'gemini-3-flash-preview',
-    display_name: 'Gemini 3 Flash Preview',
-    input_per_1m: 0.50,
-    output_per_1m: 3.00,
-    cache_read_per_1m: 0.05,
-    cache_write_per_1m: 0.50,
-    markup: 2.0,
-    is_active: true,
-  },
-]
-
-// In-memory cache with TTL (same pattern as pricing.ts)
-let cache: { data: TokenRate[]; ts: number } | null = null
-const CACHE_TTL = 5 * 60 * 1000 // 5 minutes
+// Authoritative DB prices; no implicit per-model or generic fallback.
 
 export async function getAllTokenRates(): Promise<TokenRate[]> {
-  if (cache && Date.now() - cache.ts < CACHE_TTL) return cache.data
   const admin = getSupabaseAdmin()
-  const { data } = await admin
+  const { data, error } = await admin
     .from('token_rates')
     .select('*')
     .eq('is_active', true)
     .order('model_id')
+  if (error) throw new PricingUnavailableError('Token pricing unavailable. Please retry.')
   const dbRates = (data ?? []) as TokenRate[]
-  const dbModelIds = new Set(dbRates.map(rate => rate.model_id))
-  const rates = [
-    ...dbRates,
-    ...DEFAULT_TOKEN_RATES.filter(rate => !dbModelIds.has(rate.model_id)),
-  ]
-  cache = { data: rates, ts: Date.now() }
-  return rates
+  return dbRates
 }
 
 /**
@@ -173,7 +61,7 @@ export async function getTokenRate(modelId: string): Promise<TokenRate | null> {
 
 /** Invalidate cache (called after admin updates rates) */
 export function invalidateTokenRateCache() {
-  cache = null
+  // Kept for callers; rates are read fresh across all server instances.
 }
 
 /**

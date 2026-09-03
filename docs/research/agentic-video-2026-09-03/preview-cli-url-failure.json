@@ -1,0 +1,54 @@
+{
+  "checkedAt": "2026-09-03T12:23:26.281Z",
+  "endpoint": "https://ai-image-editor-nu2ihj89i-vegekyd-sys-projects.vercel.app",
+  "video": "https://storage.googleapis.com/cloud-samples-data/generative-ai/video/pixel8.mp4",
+  "cases": [
+    {
+      "id": "editor-overview",
+      "question": "Describe the entire video chronologically for a creative editor. Cover subjects, setting, actions, scene changes, notable text, framing, mood, and the most useful moments. Be concise but specific."
+    },
+    {
+      "id": "visual-moment",
+      "question": "What is visibly shown around 00:46 to 00:48? Describe the camera composition and objects in this moment in at most three sentences. Do not infer from dialogue."
+    },
+    {
+      "id": "visible-text",
+      "question": "Read the person introduction labels visible near the beginning of this video, including the person name and pronouns if visible. Give only the visible labels, and say uncertain if you cannot read them."
+    },
+    {
+      "id": "makaron-intro",
+      "video": "/Users/tianyicai/ai-image-editor/makaron-intro/renders/makaron-intro_2026-05-07_02-05-55.mp4",
+      "question": "Describe the major sections of this short product video in chronological order, including the prominent text in each section and approximate transition times. Say whether any spoken dialogue or music is present. Be concise and do not invent text that is not legible."
+    }
+  ],
+  "runs": [
+    {
+      "id": "editor-overview",
+      "elapsedMs": 12720,
+      "ok": false,
+      "stdout": "Video analysis error: The caller does not have permission\n",
+      "stderr": "📹 Using public video URL for analysis; provider limits apply.\n🔎 Analyzing video...\n"
+    },
+    {
+      "id": "visual-moment",
+      "elapsedMs": 8867,
+      "ok": false,
+      "stdout": "Video analysis error: The caller does not have permission\n",
+      "stderr": "📹 Using public video URL for analysis; provider limits apply.\n🔎 Analyzing video...\n"
+    },
+    {
+      "id": "visible-text",
+      "elapsedMs": 9341,
+      "ok": false,
+      "stdout": "Video analysis error: The caller does not have permission\n",
+      "stderr": "📹 Using public video URL for analysis; provider limits apply.\n🔎 Analyzing video...\n"
+    },
+    {
+      "id": "makaron-intro",
+      "elapsedMs": 18392,
+      "ok": false,
+      "stdout": "Video analysis error: The caller does not have permission\n",
+      "stderr": "📹 Uploading makaron-intro_2026-05-07_02-05-55.mp4 (1.4MB)...\n📹 Uploaded: makaron-intro_2026-05-07_02-05-55.mp4\n🔎 Analyzing video...\n"
+    }
+  ]
+}

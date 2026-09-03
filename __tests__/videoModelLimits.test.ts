@@ -811,17 +811,42 @@ describe('video model reference limits', () => {
     expect(validateVideoModelRequest({ ...request, outputDuration: 30 })).toContain('duration=24')
   })
 
-  it('charges Wan 3.0 from MuleRouter resolution pricing with the standard 2x markup', () => {
-    expect(estimateVideoCredits({ model: 'wan-3.0', resolution: '480p', durationSec: 5 })).toBe(50)
-    expect(estimateVideoCredits({ model: 'wan-3.0', resolution: '720p', durationSec: 5 })).toBe(100)
-    expect(estimateVideoCredits({ model: 'wan-3.0', resolution: '1080p', durationSec: 5 })).toBe(200)
-    expect(estimateVideoCredits({ model: 'wan-3.0', resolution: '2k', durationSec: 5 })).toBe(200)
-    expect(estimateVideoCredits({ model: 'wan-3.0', resolution: '4k', durationSec: 5 })).toBe(230)
-    expect(estimateVideoCredits({ model: 'wan-3.0-prime', resolution: '480p', durationSec: 5 })).toBe(68)
-    expect(estimateVideoCredits({ model: 'wan-3.0-prime', resolution: '720p', durationSec: 5 })).toBe(140)
-    expect(estimateVideoCredits({ model: 'wan-3.0-prime', resolution: '1080p', durationSec: 5 })).toBe(280)
-    expect(estimateVideoCredits({ model: 'wan-3.0-prime', resolution: '2k', durationSec: 5 })).toBe(280)
-    expect(estimateVideoCredits({ model: 'wan-3.0-prime', resolution: '4k', durationSec: 5 })).toBe(310)
+  it.each([
+    ['wan-3.0', '480p', 0.03, 30],
+    ['wan-3.0', '720p', 0.06, 60],
+    ['wan-3.0', '1080p', 0.12, 120],
+    ['wan-3.0', '2k', 0.12, 120],
+    ['wan-3.0', '4k', 0.138, 138],
+    ['wan-3.0-prime', '480p', 0.0476, 48],
+    ['wan-3.0-prime', '720p', 0.098, 98],
+    ['wan-3.0-prime', '1080p', 0.196, 196],
+    ['wan-3.0-prime', '2k', 0.196, 196],
+    ['wan-3.0-prime', '4k', 0.217, 217],
+  ] as const)('charges %s %s from discounted MuleRouter cost with the standard 2x markup', (model, resolution, costPerSecond, credits) => {
+    const request = { model, resolution, durationSec: 5 }
+    expect(estimateVideoProviderCostUsd(request)).toBeCloseTo(costPerSecond * 5, 8)
+    expect(estimateVideoCredits(request)).toBe(credits)
+    expect(getRequiredVideoCredits(request)).toBe(credits)
+    // Reference inputs are still included in the supplier's output-second price.
+    expect(estimateVideoCredits({ ...request, imageCount: 3, referenceVideoDurationSec: 5 })).toBe(credits)
+  })
+
+  it.each([
+    ['wan-3.0', 0.12, 120, 'carrothub/w3.0-video'],
+    ['wan-3.0-prime', 0.196, 196, 'carrothub/w3.0-video-prime'],
+  ] as const)('keeps %s default pricing and routing on native 1080p', (model, costPerSecond, credits, providerModel) => {
+    expect(getVideoModelCapability(model)?.estimatedCostPerSecondUsd).toBe(costPerSecond)
+    expect(resolveVideoGenerationRoute({ model })).toMatchObject({ resolution: '1080p', providerModel })
+    expect(estimateVideoCredits({ model, durationSec: 5 })).toBe(credits)
+    expect(estimateVideoCredits({ model, resolution: 'auto', durationSec: 5 })).toBe(credits)
+  })
+
+  it('rounds discounted Wan credits once per task, not once per second', () => {
+    expect(estimateVideoCredits({ model: 'wan-3.0-prime', resolution: '480p', durationSec: 15 })).toBe(143)
+    expect(estimateVideoCredits({ model: 'wan-3.0-prime', resolution: '720p', durationSec: 15 })).toBe(294)
+    expect(estimateVideoCredits({ model: 'wan-3.0', resolution: '720p', durationSec: 15 })).toBe(180)
+    expect(estimateVideoCredits({ model: 'wan-3.0', resolution: '4k', durationSec: 5 })).toBe(138)
+    expect(estimateVideoCredits({ model: 'wan-3.0-prime', resolution: '480p', durationSec: 5, markup: 1 })).toBe(24)
   })
 
   it('requires explicit provider pricing for every registered video model', () => {

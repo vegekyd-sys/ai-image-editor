@@ -106,10 +106,14 @@ describe('Wan MCP → shared skill → provider → billing', () => {
     expect(state.fetch).toHaveBeenCalledTimes(2);
   });
 
-  it('does not become free before the pricing migration has run', async () => {
+  it('rejects missing pricing before contacting the provider', async () => {
     state.configured = false;
-    await callWan();
-    expect(state.balance).toBe(94);
+    const { payload } = await callWan();
+    expect(payload.result.isError).toBe(true);
+    expect(payload.result.content[0].text).toContain('Tool pricing is not configured');
+    expect(state.fetch).not.toHaveBeenCalled();
+    expect(state.balance).toBe(100);
+    expect(state.rpc.mock.calls.filter(([name]) => name === 'deduct_and_log')).toHaveLength(0);
   });
 
   it('uses the same administrator-controlled rate for preflight and debit', async () => {

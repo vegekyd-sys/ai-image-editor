@@ -10,6 +10,8 @@ import { resolveAudioRefs } from '@/lib/audio-reference-resolver';
 import { compileVideoReplicationPrompt } from '@/lib/video-replication-prompt';
 import { createVideoValidationReporter } from '@/lib/video-submission-validation';
 import { preserveOptionalToolFields } from '@/lib/agent-tool-schema';
+import { calculateMediaQuote, videoPriceId, type VideoQuoteInput } from '@/lib/billing/media-pricing';
+import { seededMediaPrices } from './media-prices';
 
 // Execute the real factory without booting every unrelated media SDK. Only
 // external effects are injected; script validation, routing and pricing are real.
@@ -45,6 +47,11 @@ export function generateAnimationHarness() {
     ...capabilities, z, tool: (value: unknown) => value, crypto: webcrypto,
     createVideoValidationReporter, compileVideoReplicationPrompt, resolveAudioRefs,
     refreshSnapshotUrls: vi.fn(), createVideo, requireCredits, deductFixedCredits, refundCredits,
+    quoteVideo: async (input: VideoQuoteInput) => {
+      const price = seededMediaPrices().find(row => row.id === videoPriceId(input));
+      if (!price) throw new Error(`Missing test price: ${videoPriceId(input)}`);
+      return calculateMediaQuote(price, input);
+    },
     isInsufficientCreditsError: () => false,
     isGrokSubscriptionAllowedUser: async () => false,
     console: { log: vi.fn(), warn: vi.fn(), error: vi.fn() },

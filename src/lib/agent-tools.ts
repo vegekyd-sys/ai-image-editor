@@ -8,10 +8,12 @@ import { IMAGE_MODEL_IDS } from './models/types';
 import { editImage } from './skills/edit-image';
 import { rotateCamera } from './skills/rotate-camera';
 import { createVideo } from './skills/create-video';
-import { estimateVideoProviderCostUsd, getRequiredVideoCredits, getVideoModelCapability, normalizeVideoModelId, resolveAgentVideoSelection, resolvePersistedVideoDuration, resolveVideoGenerationRoute, resolveVideoOutputDuration, resolveVideoReplicationModelId, resolveVideoReplicationResolution, supportsNativeTextToVideo, validateVideoModelRequest } from './video-model-capabilities';
+import { getVideoModelCapability, normalizeVideoModelId, resolveAgentVideoSelection, resolvePersistedVideoDuration, resolveVideoGenerationRoute, resolveVideoOutputDuration, resolveVideoReplicationModelId, resolveVideoReplicationResolution, supportsNativeTextToVideo, validateVideoModelRequest } from './video-model-capabilities';
+import { quoteVideo } from './billing/media-pricing';
 import {
   deductCredits,
   deductFixedCredits,
+  isBillingEnabled,
   isInsufficientCreditsError,
   recordSubscriptionUsage,
   refundCredits,
@@ -1398,8 +1400,11 @@ function createGenerateImageTool(
         // Priority: UI selector > agent tool param > auto-route
         const resolvedModel = (ctx.preferredModel ? ctx.preferredModel : model) as ModelId | undefined;
         const billingModel = background === 'transparent' ? 'openai' : resolvedModel;
-        if (ctx.userId && billingModel && !(billingModel === 'openai' && runtime.spec.provider === 'codex-subscription')) {
+        if (ctx.userId && billingModel && !(billingModel === 'openai' && runtime.spec.provider === 'codex-subscription') && await isBillingEnabled()) {
           const price = await getToolPrice(resolveToolName('edit_image', billingModel));
+          if (!price && billingModel === 'wan2.7-image') {
+            return { success: false, message: 'Tool pricing is not configured: edit_image_wan2.7-image', error: 'pricing_unavailable' };
+          }
           if (price && !price.isFree) {
             const check = await requireCredits(ctx.userId, price.credits);
             if (!check.ok) return { success: false, message: `Insufficient credits. Need ${price.credits}, have ${check.balance}.`, error: 'insufficient_credits' };
@@ -1900,7 +1905,7 @@ Hard constraints:
           const videoSec = effectiveDuration === -1
             ? referenceVideoDuration ?? 10
             : effectiveDuration || 10;
-          const creditsRequired = getRequiredVideoCredits({
+          const billingQuote = await quoteVideo({
             model: videoModel,
             resolution: videoRoute.resolution,
             durationSec: videoSec,
@@ -1912,6 +1917,7 @@ Hard constraints:
             contentFilter: content_filter,
           });
 
+          const creditsRequired = billingQuote.credits;
           const reserveGrokApiCredits = async () => {
             if (!ctx.userId || reservedVideoCredits > 0) return;
             const creditCheck = await requireCredits(ctx.userId, creditsRequired);
@@ -2021,6 +2027,7 @@ Hard constraints:
             providerUrl: skillResult.videoUrl,
             createdAt: new Date().toISOString(),
             creditsCharged: reservedVideoCredits,
+            ...(reservedVideoCredits > 0 ? { billingQuote } : {}),
             ...(completion_actions?.length ? {
               completionActions: completion_actions.slice(0, 4).map(action => ({
                 label: action.label,
@@ -2049,15 +2056,7 @@ Hard constraints:
           }
           reservedVideoCredits = 0;
 
-          const providerCostUsd = skillResult.provider === 'grok-subscription' ? undefined : estimateVideoProviderCostUsd({
-            model: actualVideoModel,
-            resolution: actualVideoRoute.resolution,
-            durationSec: videoSec,
-            imageCount: referencedImageUrls.length,
-            referenceVideoDurationSec: referenceVideoDuration,
-            operation: video_operation,
-            contentFilter: content_filter,
-          });
+          const providerCostUsd = skillResult.provider === 'grok-subscription' ? undefined : billingQuote.supplierCostUsd;
           if (providerCostUsd != null) videoMeta.providerCostUsd = providerCostUsd;
 
           if (!isGoogleOmniAsync && skillResult.status === 'completed' && skillResult.videoUrl && ctx.userId && !isPermanentUrl(skillResult.videoUrl)) {

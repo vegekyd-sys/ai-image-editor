@@ -9,7 +9,8 @@ import {
   reserveFixedCredits,
 } from '@/lib/billing/credits'
 import { VIDEO_PLACEHOLDER_IMAGE } from '@/lib/editor/timeline-derivations'
-import { estimateVideoProviderCostUsd, getRequiredVideoCredits, getVideoModelCapability, normalizeVideoModelId, resolvePersistedVideoDuration, resolveVideoGenerationRoute, resolveVideoOutputDuration, supportsNativeTextToVideo } from '@/lib/video-model-capabilities'
+import { getVideoModelCapability, normalizeVideoModelId, resolvePersistedVideoDuration, resolveVideoGenerationRoute, resolveVideoOutputDuration, supportsNativeTextToVideo } from '@/lib/video-model-capabilities'
+import { quoteVideo } from '@/lib/billing/media-pricing'
 import type { VideoMeta } from '@/types'
 import { isGrokSubscriptionAllowedUser } from '@/lib/grok-subscription'
 
@@ -153,9 +154,9 @@ export async function POST(req: NextRequest) {
       providerAutoVideoUrls = inputVideoUrl ? prepared.urls.slice(1) : prepared.urls
     }
 
-    const videoSec = effectiveDuration || 10
+    const videoSec = effectiveDuration === -1 ? referenceVideoDuration ?? 10 : effectiveDuration || 10
     const { filteredImages } = filterAndRemapImages(prompt, inputImageUrls, videoCapability.maxImageReferences ?? 7)
-    const creditsRequired = getRequiredVideoCredits({
+    const billingQuote = await quoteVideo({
       model: selectedVideoModel,
       resolution: videoRoute.resolution,
       durationSec: videoSec,
@@ -164,6 +165,7 @@ export async function POST(req: NextRequest) {
       operation: videoOperation,
       contentFilter,
     })
+    const creditsRequired = billingQuote.credits
     const toolName = selectedVideoModel === 'grok' ? 'create_video_grok' : 'create_video'
     let reservedCredits = 0
     const reserveApiCredits = async () => {
@@ -237,15 +239,7 @@ export async function POST(req: NextRequest) {
         .map(ref => originalImageUrlsByIndex[ref - 1])
         .filter((u): u is string => !!u && u.startsWith('http') && !u.endsWith('.mp4'))
       const sourceUrls = [...referencedImageUrls, ...(inputVideoUrl ? [inputVideoUrl] : []), ...autoVideoUrls].filter(Boolean)
-      const providerCostUsd = skillResult.provider === 'grok-subscription' ? undefined : estimateVideoProviderCostUsd({
-        model: actualVideoModel,
-        resolution: actualVideoRoute.resolution,
-        durationSec: videoSec,
-        imageCount: filteredImages.length,
-        referenceVideoDurationSec: referenceVideoDuration,
-        operation: videoOperation,
-        contentFilter,
-      })
+      const providerCostUsd = skillResult.provider === 'grok-subscription' ? undefined : billingQuote.supplierCostUsd
 
       const videoMeta: VideoMeta = {
         taskId,
@@ -273,6 +267,7 @@ export async function POST(req: NextRequest) {
         contentFilter: actualVideoModel === 'seedance-2.5' ? contentFilter !== false : undefined,
         createdAt: new Date().toISOString(),
         creditsCharged: reservedCredits,
+        ...(reservedCredits > 0 ? { billingQuote } : {}),
         ...(providerCostUsd != null ? { providerCostUsd } : {}),
       }
 

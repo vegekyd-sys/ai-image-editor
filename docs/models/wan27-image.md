@@ -13,8 +13,9 @@ Auto, Qwen, Gemini, GPT Image 2, video providers, or the production Qwen worker.
 - Use the native `/api/v1/services/aigc/multimodal-generation/generation`
   endpoint, not `/compatible-mode/v1`.
 - Apply `20260903111815_wan27_image_pricing.sql` during an approved release so
-  Admin → Billing can display/edit the price. The runtime fallback is also 6
-  credits, so an absent pricing row does not make this model free.
+  Admin → Billing can display/edit the price. Pricing follows dev's DB-only
+  catalog: with billing enabled, a missing row blocks submission before the
+  provider call. There is no hardcoded runtime price fallback.
 
 Do not commit keys or copy credentials into reports. Rotate credentials exposed
 in conversation before production configuration. This work does not deploy,
@@ -68,7 +69,7 @@ separate ledger, or token-rate entry.
 - HTTP MCP integration tests exercise the real server, shared image skill,
   provider adapter and billing code against isolated provider/DB fixtures:
   100→94 after one success; 5 credits rejects before POST; failure/download
-  failure leaves 100; missing price row still charges 6; Admin override charges
+  failure leaves 100; missing price row rejects before POST; Admin override charges
   8. App-source debit records the same model with a null API-key identity.
 - Selector interaction tests cover opt-in selection and unchanged video choice.
 - CLI transport tests cover the exact model/ratio, saved image bytes, and a
