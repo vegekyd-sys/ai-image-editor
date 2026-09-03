@@ -117,7 +117,7 @@ export async function POST(req: NextRequest) {
       const reservation = await deductFixedCredits(user.id, creditsRequired, toolName, selectedVideoModel, undefined)
       reservedCredits = reservation.charged
     }
-    const grokSubscriptionPreferred = selectedVideoModel === 'grok' && isGrokSubscriptionAllowedUser(user.id)
+    const grokSubscriptionPreferred = selectedVideoModel === 'grok' && await isGrokSubscriptionAllowedUser(user.id)
     if (!grokSubscriptionPreferred) {
       try {
         await reserveApiCredits()

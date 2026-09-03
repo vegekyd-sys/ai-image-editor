@@ -171,7 +171,7 @@ export async function POST(req: NextRequest) {
       const reservation = await reserveFixedCredits(userId, creditsRequired, toolName, selectedVideoModel, undefined)
       reservedCredits = reservation.charged
     }
-    const grokSubscriptionPreferred = selectedVideoModel === 'grok' && isGrokSubscriptionAllowedUser(userId)
+    const grokSubscriptionPreferred = selectedVideoModel === 'grok' && await isGrokSubscriptionAllowedUser(userId)
     if (!grokSubscriptionPreferred) {
       try {
         const billingStartedAt = performance.now()

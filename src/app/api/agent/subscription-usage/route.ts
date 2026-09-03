@@ -62,7 +62,7 @@ export async function GET(req: NextRequest) {
   const userId = authResult.auth.userId;
   const [codexAvailable, grokAvailable] = await Promise.all([
     isDynamicCodexSubscriptionUserAllowed(userId),
-    Promise.resolve(isGrokSubscriptionAllowedUser(userId)),
+    isGrokSubscriptionAllowedUser(userId),
   ]);
   if (!codexAvailable && !grokAvailable) {
     return NextResponse.json(

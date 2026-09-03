@@ -13,6 +13,7 @@ Environment=NODE_ENV=production
 Environment=HOST=127.0.0.1
 Environment=PORT=25985
 Environment=GROK_SUBSCRIPTION_OAUTH_PATH=/srv/vlab/makaron-grok-relay/state/xai-oauth.json
+Environment=GROK_SUBSCRIPTION_ALLOWLIST_PATH=/srv/vlab/makaron-grok-relay/state/allowed-users.json
 ExecStart=/usr/local/bin/node /srv/vlab/makaron-grok-relay/app/server.mjs
 Restart=always
 RestartSec=5

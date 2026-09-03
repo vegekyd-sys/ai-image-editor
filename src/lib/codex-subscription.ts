@@ -440,6 +440,19 @@ export async function getCodexSubscriptionUsage(
   });
 }
 
+export async function readCodexSubscriptionRelayAllowlist(ownerUserId: string): Promise<string[]> {
+  const url = resolveRelayUrl('/v1/allowlist');
+  if (!url) throw new Error('Codex relay is not configured');
+  const headers = createCodexRelayHeaders({ method: 'GET', url, body: '', userId: ownerUserId });
+  const response = await fetch(url, { method: 'GET', headers, cache: 'no-store', signal: AbortSignal.timeout(10_000) });
+  if (!response.ok) throw new Error(`Codex allowlist read failed (${response.status})`);
+  const payload = await response.json() as { userIds?: unknown };
+  if (!Array.isArray(payload.userIds) || !payload.userIds.every(id => typeof id === 'string')) {
+    throw new Error('Codex allowlist response is invalid');
+  }
+  return payload.userIds;
+}
+
 export async function syncCodexSubscriptionRelayAllowlist(
   userIds: string[],
   ownerUserId: string,
@@ -456,7 +469,7 @@ export async function syncCodexSubscriptionRelayAllowlist(
     userId: ownerUserId,
   });
   headers.set('content-type', 'application/json');
-  const response = await fetch(url, { method: 'POST', headers, body, cache: 'no-store' });
+  const response = await fetch(url, { method: 'POST', headers, body, cache: 'no-store', signal: AbortSignal.timeout(10_000) });
   if (!response.ok) {
     throw new Error(`CODEX_SUBSCRIPTION_RELAY_UNAVAILABLE: allowlist sync failed (${response.status})`);
   }

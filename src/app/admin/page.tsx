@@ -165,6 +165,7 @@ export default function AdminPage() {
   const [codexAllowlist, setCodexAllowlist] = useState<CodexAllowlistUser[]>([])
   const [codexEmail, setCodexEmail] = useState('')
   const [codexSaving, setCodexSaving] = useState(false)
+  const [planSync, setPlanSync] = useState<Record<'codex' | 'grok', 'synced' | 'pending' | 'unavailable' | 'checking'>>({ codex: 'checking', grok: 'checking' })
   const [codexMessage, setCodexMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null)
   const [pricing, setPricing] = useState<CreditPricing[]>([])
   const [editingPricing, setEditingPricing] = useState<Record<string, { credits?: string; supplier_cost?: string }>>({})
@@ -195,11 +196,17 @@ export default function AdminPage() {
   const [error, setError] = useState('')
 
   const fetchCodexAllowlist = useCallback(async () => {
-    const res = await fetch('/api/admin/codex-subscription-allowlist')
-    if (res.status === 403) { setError('Not authorized'); return }
-    const data = await res.json()
-    if (res.ok && Array.isArray(data.users)) setCodexAllowlist(data.users)
-  }, [])
+    try {
+      const res = await fetch('/api/admin/personal-subscription-allowlist', { cache: 'no-store' })
+      if (!res.ok) throw new Error('allowlist unavailable')
+      const data = await res.json()
+      if (Array.isArray(data.users)) setCodexAllowlist(data.users)
+      setPlanSync(data.providers || { codex: 'unavailable', grok: 'unavailable' })
+    } catch {
+      setPlanSync({ codex: 'unavailable', grok: 'unavailable' })
+      setCodexMessage({ type: 'error', text: t('admin.personalAllowlist.loadFailed') })
+    }
+  }, [t])
 
   const fetchPricing = useCallback(async () => {
     const res = await fetch('/api/admin/credit-pricing')
@@ -266,48 +273,44 @@ export default function AdminPage() {
     Promise.all([fetchCodexAllowlist(), fetchPricing(), fetchTokenRates(), fetchBillingToggle(), fetchHomeSkills(), fetchSkillCategories(), fetchMetaStatus()]).finally(() => setLoading(false))
   }, [fetchCodexAllowlist, fetchPricing, fetchTokenRates, fetchBillingToggle, fetchHomeSkills, fetchSkillCategories, fetchMetaStatus])
 
-  const handleAddCodexAccount = async () => {
-    if (!codexEmail.trim()) return
+  const mutatePersonalAllowlist = async (
+    method: 'POST' | 'DELETE' | 'PUT',
+    body: { email: string } | { userId: string } | undefined,
+    success: 'added' | 'removed' | 'synchronized',
+  ) => {
+    if (codexSaving) return
     setCodexSaving(true)
     setCodexMessage(null)
     try {
-      const res = await fetch('/api/admin/codex-subscription-allowlist', {
-        method: 'POST',
+      const res = await fetch('/api/admin/personal-subscription-allowlist', {
+        method,
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ email: codexEmail.trim() }),
+        body: body ? JSON.stringify(body) : undefined,
       })
       const data = await res.json()
       if (res.ok && Array.isArray(data.users)) {
         setCodexAllowlist(data.users)
-        setCodexEmail('')
-        setCodexMessage({ type: 'success', text: t('admin.codexAllowlist.added') })
+        setPlanSync(data.providers || { codex: 'unavailable', grok: 'unavailable' })
+        if (method === 'POST') setCodexEmail('')
+        setCodexMessage({ type: 'success', text: t(`admin.personalAllowlist.${success}`) })
       } else {
-        setCodexMessage({ type: 'error', text: data.error || t('admin.codexAllowlist.updateFailed') })
+        await fetchCodexAllowlist()
+        setCodexMessage({ type: 'error', text: t(res.status === 404 ? 'admin.personalAllowlist.accountNotFound' : 'admin.personalAllowlist.updateFailed') })
       }
+    } catch {
+      await fetchCodexAllowlist()
+      setCodexMessage({ type: 'error', text: t('admin.personalAllowlist.updateFailed') })
     } finally {
       setCodexSaving(false)
     }
   }
 
-  const handleRemoveCodexAccount = async (userId: string) => {
-    setCodexSaving(true)
-    setCodexMessage(null)
-    try {
-      const res = await fetch('/api/admin/codex-subscription-allowlist', {
-        method: 'DELETE',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ userId }),
-      })
-      const data = await res.json()
-      if (res.ok && Array.isArray(data.users)) {
-        setCodexAllowlist(data.users)
-        setCodexMessage({ type: 'success', text: t('admin.codexAllowlist.removed') })
-      } else {
-        setCodexMessage({ type: 'error', text: data.error || t('admin.codexAllowlist.updateFailed') })
-      }
-    } finally {
-      setCodexSaving(false)
-    }
+  const handleAddCodexAccount = async () => {
+    if (codexEmail.trim()) await mutatePersonalAllowlist('POST', { email: codexEmail.trim() }, 'added')
+  }
+
+  const handleRemoveCodexAccount = (userId: string) => {
+    return mutatePersonalAllowlist('DELETE', { userId }, 'removed')
   }
 
   const handleBackToApp = () => {
@@ -352,7 +355,7 @@ export default function AdminPage() {
             tab === 'codex' ? 'bg-fuchsia-600 text-white' : 'text-white/50 hover:text-white/70'
           }`}
         >
-          {t('admin.codexAllowlist.tab')} ({codexAllowlist.length})
+          {t('admin.personalAllowlist.tab')} ({codexAllowlist.length})
         </button>
         <button
           onClick={() => setTab('billing')}
@@ -384,10 +387,21 @@ export default function AdminPage() {
       {tab === 'codex' && (
         <div className="space-y-4">
           <div className="bg-white/5 rounded-xl p-4 border border-white/10">
-            <h2 className="text-sm font-semibold">{t('admin.codexAllowlist.title')}</h2>
+            <h2 className="text-sm font-semibold">{t('admin.personalAllowlist.title')}</h2>
             <p className="mt-1 text-xs leading-relaxed text-white/40">
-              {t('admin.codexAllowlist.desc')}
+              {t('admin.personalAllowlist.desc')}
             </p>
+            <div className="mt-3 flex flex-wrap items-center gap-2" data-testid="personal-plan-sync">
+              {(['codex', 'grok'] as const).map(provider => (
+                <span key={provider} className={`rounded-full border px-2.5 py-1 text-xs ${planSync[provider] === 'synced' ? 'border-emerald-400/20 text-emerald-300' : 'border-amber-400/20 text-amber-200'}`}>
+                  {t(`admin.personalAllowlist.${provider}Status`, t(`admin.personalAllowlist.${planSync[provider]}`))}
+                </span>
+              ))}
+              <button type="button" disabled={codexSaving} onClick={() => void mutatePersonalAllowlist('PUT', undefined, 'synchronized')}
+                className="rounded-lg border border-white/15 px-3 py-1.5 text-xs text-white/70 hover:bg-white/5 disabled:opacity-40">
+                {t('admin.personalAllowlist.sync')}
+              </button>
+            </div>
             <div className="mt-4 flex flex-col gap-2 sm:flex-row">
               <input
                 type="email"
@@ -396,8 +410,8 @@ export default function AdminPage() {
                 onKeyDown={(event) => {
                   if (event.key === 'Enter') void handleAddCodexAccount()
                 }}
-                placeholder={t('admin.codexAllowlist.emailPlaceholder')}
-                aria-label={t('admin.codexAllowlist.emailPlaceholder')}
+                placeholder={t('admin.personalAllowlist.emailPlaceholder')}
+                aria-label={t('admin.personalAllowlist.emailPlaceholder')}
                 className="min-w-0 flex-1 rounded-lg border border-white/10 bg-white/10 px-3 py-2 text-sm text-white placeholder-white/30 outline-none focus:border-fuchsia-500/50"
               />
               <button
@@ -406,7 +420,7 @@ export default function AdminPage() {
                 disabled={codexSaving || !codexEmail.trim()}
                 className="rounded-lg bg-fuchsia-600 px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-fuchsia-500 disabled:cursor-not-allowed disabled:opacity-40"
               >
-                {codexSaving ? t('admin.codexAllowlist.saving') : t('admin.codexAllowlist.add')}
+                {codexSaving ? t('admin.personalAllowlist.saving') : t('admin.personalAllowlist.add')}
               </button>
             </div>
             {codexMessage ? (
@@ -421,9 +435,9 @@ export default function AdminPage() {
               <div key={user.userId} className="flex items-center justify-between gap-3 rounded-xl border border-white/5 bg-white/[0.03] px-4 py-3">
                 <div className="min-w-0">
                   <div className="flex items-center gap-2">
-                    <span className="truncate text-sm font-medium">{user.email || t('admin.codexAllowlist.unknownEmail')}</span>
+                    <span className="truncate text-sm font-medium">{user.email || t('admin.personalAllowlist.unknownEmail')}</span>
                     <span className={`shrink-0 rounded-full px-2 py-0.5 text-[10px] font-medium ${user.isOwner ? 'bg-fuchsia-500/15 text-fuchsia-300' : 'bg-emerald-500/15 text-emerald-300'}`}>
-                      {user.isOwner ? t('admin.codexAllowlist.owner') : t('admin.codexAllowlist.allowed')}
+                      {user.isOwner ? t('admin.personalAllowlist.owner') : t('admin.personalAllowlist.allowed')}
                     </span>
                   </div>
                   <div className="mt-1 truncate font-mono text-[10px] text-white/25">{user.userId}</div>
@@ -435,7 +449,7 @@ export default function AdminPage() {
                     disabled={codexSaving}
                     className="shrink-0 rounded-lg border border-red-400/20 px-3 py-1.5 text-xs text-red-300 transition-colors hover:bg-red-400/10 disabled:opacity-40"
                   >
-                    {t('admin.codexAllowlist.remove')}
+                    {t('admin.personalAllowlist.remove')}
                   </button>
                 )}
               </div>

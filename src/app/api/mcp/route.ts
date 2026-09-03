@@ -57,7 +57,7 @@ async function handleMcp(req: Request): Promise<Response> {
     userId: auth.userId,
     // Pre-check: ensure user has enough credits
     onToolStart: auth.type === 'user' ? async (toolName, model) => {
-      if (normalizeVideoModelId(model) === 'grok' && isGrokSubscriptionAllowedUser(auth.userId)) {
+      if (normalizeVideoModelId(model) === 'grok' && await isGrokSubscriptionAllowedUser(auth.userId)) {
         return { allowed: true };
       }
       const pricingName = resolveToolName(toolName, undefined); // model unknown at start, use base name

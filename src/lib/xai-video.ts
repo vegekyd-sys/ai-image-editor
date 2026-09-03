@@ -169,7 +169,7 @@ export async function createXaiVideoTask(
   const bodyBytes = new TextEncoder().encode(bodyText)
   let res: Response
   let usedSubscription = false
-  const useSubscription = isGrokSubscriptionAllowedUser(options?.userId)
+  const useSubscription = await isGrokSubscriptionAllowedUser(options?.userId)
   if (useSubscription && options?.userId) {
     try {
       await preflightGrokSubscriptionRelay(options.userId)

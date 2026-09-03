@@ -1,4 +1,5 @@
 import { createHash, createHmac, randomUUID } from 'node:crypto';
+import { isDynamicCodexSubscriptionUserAllowed } from './codex-subscription-allowlist';
 
 const SIGNATURE_HEADER = {
   timestamp: 'x-makaron-relay-timestamp',
@@ -55,13 +56,9 @@ export function getGrokSubscriptionAllowedUserIds(): Set<string> {
   return ids;
 }
 
-export function isGrokSubscriptionAllowedUser(userId?: string): boolean {
-  return Boolean(
-    userId
-    && relayUrl()
-    && relaySecret()
-    && getGrokSubscriptionAllowedUserIds().has(userId),
-  );
+export async function isGrokSubscriptionAllowedUser(userId?: string): Promise<boolean> {
+  if (!userId || !relayUrl() || !relaySecret()) return false;
+  return isDynamicCodexSubscriptionUserAllowed(userId);
 }
 
 export function createGrokRelaySignature(input: {
@@ -139,6 +136,9 @@ async function bodyToBytes(body: BodyInit | null | undefined): Promise<Uint8Arra
  */
 export function createGrokSubscriptionFetch(userId: string): typeof fetch {
   return async (input, init) => {
+    if (!await isGrokSubscriptionAllowedUser(userId)) {
+      return Response.json({ error: 'not_allowlisted' }, { status: 403 });
+    }
     const request = input instanceof Request ? input : undefined;
     const url = new URL(request?.url ?? String(input));
     const method = (init?.method ?? request?.method ?? 'GET').toUpperCase();
@@ -162,6 +162,29 @@ export function createGrokSubscriptionFetch(userId: string): typeof fetch {
       );
     }
   };
+}
+
+/** Owner-signed control plane only; OAuth credentials never leave the relay. */
+export async function readGrokSubscriptionRelayAllowlist(ownerUserId: string): Promise<string[]> {
+  const response = await signedRelayFetch({
+    method: 'GET', pathname: '/v1/allowlist', userId: ownerUserId,
+    signal: AbortSignal.timeout(10_000),
+  });
+  if (!response.ok) throw new Error(`Grok allowlist read failed (${response.status})`);
+  const payload = await response.json() as { userIds?: unknown };
+  if (!Array.isArray(payload.userIds) || !payload.userIds.every(id => typeof id === 'string')) {
+    throw new Error('Grok allowlist response is invalid');
+  }
+  return payload.userIds;
+}
+
+export async function syncGrokSubscriptionRelayAllowlist(userIds: string[], ownerUserId: string): Promise<void> {
+  const response = await signedRelayFetch({
+    method: 'POST', pathname: '/v1/allowlist', userId: ownerUserId,
+    body: new TextEncoder().encode(JSON.stringify({ userIds })),
+    signal: AbortSignal.timeout(10_000),
+  });
+  if (!response.ok) throw new Error(`Grok allowlist sync failed (${response.status})`);
 }
 
 export async function preflightGrokSubscriptionRelay(userId: string): Promise<void> {

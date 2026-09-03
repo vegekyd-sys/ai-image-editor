@@ -4,6 +4,15 @@ import { getSupabaseAdmin } from '@/lib/supabase/service';
 
 export const CODEX_SUBSCRIPTION_ALLOWLIST_SETTING_KEY = 'codex_subscription_allowed_user_ids';
 
+// Keep the persisted key and exports compatible with existing deployments.
+// This is now the authoritative membership list for BOTH personal plans.
+export function getPersonalSubscriptionOwnerUserIds(): string[] {
+  return normalizeCodexSubscriptionUserIds([
+    process.env.CODEX_SUBSCRIPTION_OWNER_USER_ID,
+    process.env.GROK_SUBSCRIPTION_OWNER_USER_ID,
+  ]);
+}
+
 export function normalizeCodexSubscriptionUserIds(value: unknown): string[] {
   if (!Array.isArray(value)) return [];
   return [...new Set(value
@@ -12,43 +21,53 @@ export function normalizeCodexSubscriptionUserIds(value: unknown): string[] {
     .filter(Boolean))];
 }
 
-function parseStoredUserIds(value: unknown): string[] {
-  if (typeof value !== 'string' || !value.trim()) return [];
+function parseStoredUserIds(value: unknown, strict = false): string[] {
   try {
-    return normalizeCodexSubscriptionUserIds(JSON.parse(value));
+    if (typeof value !== 'string') throw new Error('invalid allowlist');
+    const parsed: unknown = JSON.parse(value);
+    if (!Array.isArray(parsed) || parsed.some(id => typeof id !== 'string')) throw new Error('invalid allowlist');
+    return normalizeCodexSubscriptionUserIds(parsed);
   } catch {
+    if (strict) throw new Error('Stored personal subscription allowlist is invalid');
     return [];
   }
 }
 
 export async function getDynamicCodexSubscriptionAllowedUserIds(
-  admin: SupabaseClient = getSupabaseAdmin(),
+  admin?: SupabaseClient,
+  options: { strict?: boolean } = {},
 ): Promise<string[]> {
-  const ownerUserId = process.env.CODEX_SUBSCRIPTION_OWNER_USER_ID?.trim();
-  const { data, error } = await admin
+  const owners = getPersonalSubscriptionOwnerUserIds();
+  let data;
+  try {
+    const result = await (admin ?? getSupabaseAdmin())
     .from('app_settings')
     .select('value')
     .eq('key', CODEX_SUBSCRIPTION_ALLOWLIST_SETTING_KEY)
     .maybeSingle();
-
-  if (error) {
+    if (result.error) throw result.error;
+    data = result.data;
+  } catch (error) {
+    if (options.strict) throw error;
     // Fail closed on a storage error. The owner remains available, but a stale
     // environment allowlist must not silently re-enable a removed test account.
-    return ownerUserId ? [ownerUserId] : [];
+    return owners;
   }
 
   const configured = data
-    ? parseStoredUserIds(data.value)
-    : [...getCodexSubscriptionAllowedUserIds()];
-  if (ownerUserId) configured.push(ownerUserId);
+    ? parseStoredUserIds(data.value, options.strict)
+    : [...getCodexSubscriptionAllowedUserIds(),
+        ...(process.env.GROK_SUBSCRIPTION_ALLOWED_USER_IDS || '').split(',')];
+  configured.push(...owners);
   return normalizeCodexSubscriptionUserIds(configured);
 }
 
 export async function isDynamicCodexSubscriptionUserAllowed(
   userId: string | undefined,
-  admin: SupabaseClient = getSupabaseAdmin(),
+  admin?: SupabaseClient,
 ): Promise<boolean> {
   if (!userId) return false;
+  if (getPersonalSubscriptionOwnerUserIds().includes(userId)) return true;
   return (await getDynamicCodexSubscriptionAllowedUserIds(admin)).includes(userId);
 }
 

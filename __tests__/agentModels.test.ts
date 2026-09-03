@@ -263,6 +263,12 @@ describe('agent model catalog', () => {
       });
       expect(normalizeAgentModelPreference(GROK_SUBSCRIPTION_AGENT_MODEL_PREFERENCE))
         .toBe(GROK_SUBSCRIPTION_AGENT_MODEL_PREFERENCE);
+      expect(resolveAgentModelSpecForUser(
+        GROK_SUBSCRIPTION_AGENT_MODEL_PREFERENCE, undefined, 'database-only-user', undefined, true,
+      ).provider).toBe('grok-subscription');
+      expect(resolveAgentModelSpecForUser(
+        GROK_SUBSCRIPTION_AGENT_MODEL_PREFERENCE, undefined, 'owner-id', undefined, false,
+      ).provider).toBe('openrouter');
     } finally {
       if (previous.url === undefined) delete process.env.GROK_SUBSCRIPTION_RELAY_URL;
       else process.env.GROK_SUBSCRIPTION_RELAY_URL = previous.url;
