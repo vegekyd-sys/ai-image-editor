@@ -1,5 +1,5 @@
 /** Minimal ISO BMFF movie header for metadata tests, no real media generation. */
-export function mp4Fixture(duration = 5.184, v1 = false): Uint8Array {
+export function mp4Fixture(duration = 5.184, v1 = false): Uint8Array<ArrayBuffer> {
   const mvhdSize = v1 ? 40 : 28;
   const bytes = new Uint8Array(8 + mvhdSize);
   const view = new DataView(bytes.buffer);

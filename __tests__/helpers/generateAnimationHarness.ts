@@ -38,7 +38,7 @@ export function generateAnimationHarness() {
   const requireCredits = vi.fn().mockResolvedValue({ ok: true, balance: 1000 });
   const deductFixedCredits = vi.fn().mockImplementation(async (_u, credits) => ({ charged: credits }));
   const refundCredits = vi.fn();
-  const probeVideoMetadataFromUrl = vi.fn(async (url: string) => ({
+  const probeVideoMetadataFromUrl = vi.fn(async (url: string): Promise<{ duration: number } | null> => ({
     duration: rows.find(row => row.video_meta?.videoUrl === url)?.video_meta?.duration ?? 1,
   }));
   const ctx: any = {
