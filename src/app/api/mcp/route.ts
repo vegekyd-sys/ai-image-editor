@@ -1,7 +1,7 @@
 import { createMakaronMcpServer } from '@/mcp/server';
 import { WebStandardStreamableHTTPServerTransport } from '@modelcontextprotocol/sdk/server/webStandardStreamableHttp.js';
 import { validateApiKey } from '@/lib/billing/api-keys';
-import { checkBalance, deductCredits, deductByTokens, recordSubscriptionUsage, requireCredits } from '@/lib/billing/credits';
+import { checkBalance, deductCredits, deductByTokens, isBillingEnabled, recordSubscriptionUsage, requireCredits } from '@/lib/billing/credits';
 import { resolveToolName } from '@/lib/billing/pricing';
 import { deductSeedAudioCredits } from '@/lib/billing/seed-audio';
 import { submitMcpVideo, settleMcpVideoStatus } from '@/lib/billing/mcp-video';
@@ -59,6 +59,7 @@ async function handleMcp(req: Request): Promise<Response> {
     onVideoStatus: auth.type === 'user' ? (taskId, status, queryFailed) => settleMcpVideoStatus(auth.userId!, taskId, status, queryFailed) : undefined,
     // Pre-check: ensure user has enough credits
     onToolStart: auth.type === 'user' ? async (toolName, model) => {
+      if (!(await isBillingEnabled())) return { allowed: true };
       // Video is atomically reserved after resolving provider inputs.
       if (toolName === 'makaron_create_video' || toolName === 'makaron_edit_video') {
         return { allowed: true };
@@ -69,7 +70,7 @@ async function handleMcp(req: Request): Promise<Response> {
         return check.ok ? { allowed: true } : { allowed: false, message: 'Insufficient credits.' };
       }
       if (['makaron_write_video_script', 'makaron_analyze_video'].includes(toolName)
-        || (toolName === 'makaron_edit_image' && !['qwen', 'pony', 'wai'].includes(model ?? ''))) {
+        || (toolName === 'makaron_edit_image' && !['qwen', 'pony', 'wai', 'wan2.7-image'].includes(model ?? ''))) {
         const check = await requireCredits(auth.userId!, 5);
         return check.ok ? { allowed: true } : { allowed: false, message: 'Insufficient credits.' };
       }

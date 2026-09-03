@@ -45,7 +45,8 @@ not pixel identity or a vague "similar feeling".
    second shot before a batch. For a direct short clip, one complete attempt is
    the representative proof. Allow one evidence-driven correction; more paid
    work needs approval.
-6. **Generate or map content.** For direct structural replication, pass the
+6. **Generate or map content.** For direct structural replication, explicitly
+   set `video_intent="replicate"` and pass the
    measured identity/object/environment mappings in
    `generate_animation.replication_contract`; put timed shots/actions and
    natural sound direction in `story_prompt`. Runtime deterministically expands

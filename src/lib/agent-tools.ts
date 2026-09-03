@@ -4,18 +4,22 @@ import { z } from 'zod';
 import sharp from 'sharp';
 import { validateDesign } from './design-harness';
 import type { ImageBackground, ModelId } from './models/types';
+import { IMAGE_MODEL_IDS } from './models/types';
 import { editImage } from './skills/edit-image';
 import { rotateCamera } from './skills/rotate-camera';
 import { createVideo } from './skills/create-video';
-import { normalizeVideoModelId, resolveAgentVideoSelection, resolvePersistedVideoDuration, resolveVideoGenerationRoute, resolveVideoOutputDuration, resolveVideoReplicationModelId, resolveVideoReplicationResolution, supportsNativeTextToVideo, validateVideoModelRequest } from './video-model-capabilities';
+import { getVideoModelCapability, normalizeVideoModelId, resolveAgentVideoSelection, resolvePersistedVideoDuration, resolveVideoGenerationRoute, resolveVideoOutputDuration, resolveVideoReplicationModelId, resolveVideoReplicationResolution, supportsNativeTextToVideo, validateVideoModelRequest } from './video-model-capabilities';
 import { quoteVideo } from './billing/media-pricing';
 import {
+  deductCredits,
   deductFixedCredits,
+  isBillingEnabled,
   isInsufficientCreditsError,
   recordSubscriptionUsage,
   refundCredits,
   requireCredits,
 } from './billing/credits';
+import { getToolPrice, resolveToolName } from './billing/pricing';
 import { deductSeedAudioCredits } from './billing/seed-audio';
 import { createAudio, SEED_AUDIO_AGENT_PROMPT_MAX_CHARS } from './skills/create-audio';
 import { formatAudioCapabilitiesForAgent } from './audio-model-capabilities';
@@ -82,6 +86,8 @@ import { materializeSeedAudioReference } from './seed-audio-reference';
 import { resolveAudioRefs } from './audio-reference-resolver';
 import { isGrokSubscriptionAllowedUser } from './grok-subscription';
 import { compileVideoReplicationPrompt } from './video-replication-prompt';
+import { preserveOptionalToolFields } from './agent-tool-schema';
+import { createVideoValidationReporter } from './video-submission-validation';
 
 const MAX_VIDEO_DIMENSION_PROBE_BYTES = 220 * 1024 * 1024;
 
@@ -1359,7 +1365,7 @@ function createGenerateImageTool(
       inputSchema: z.object({
         editPrompt: z.string().describe('The specific creative direction for this edit (English). When skill is set, you must have read and internalized that skill prompt once in this conversation; write an editPrompt that follows those rules.'),
         skill: z.string().optional().describe('Activate a skill template (e.g. enhance, creative, wild, captions). See tool description and available skills.'),
-        model: z.enum(['gemini', 'gemini-lite', 'qwen', 'pony', 'wai', 'openai']).optional().describe('NEVER set this unless the user literally says a model name like "用pony" or "use qwen" or "用openai" or "nano banana lite", or the active long-video-director workflow is generating director storyboard images, which MUST set "openai". For NSFW after Gemini refusal, set "qwen". Otherwise ALWAYS omit — the router handles everything automatically. Setting this without explicit user request is a bug.'),
+        model: z.enum(IMAGE_MODEL_IDS).optional().describe('NEVER set this unless the user literally says a model name like "用pony", "use qwen", "用openai", "nano banana lite", or "Wan 2.7 Image" (wan2.7-image: fast single-image generation/editing, up to 9 inputs, no transparent output; failures must not be automatically retried), or the active long-video-director workflow is generating director storyboard images, which MUST set "openai". For NSFW after Gemini refusal, set "qwen". Otherwise ALWAYS omit — the router handles everything automatically. Setting this without explicit user request is a bug.'),
         aspectRatio: z.string().optional().describe('Target aspect ratio e.g. "4:5", "1:1", "16:9". For a pure existing-image cutout, omit this field to preserve the source canvas. If the user explicitly requests a new transparent layout/canvas ratio, pass it.'),
         background: z.enum(['auto', 'opaque', 'transparent']).optional().describe('Output background contract. Set "transparent" when the user asks for transparent/no background, background removal, subject cutout/isolation, 抠图/抠像/去背景, or a reusable PNG/sticker/overlay/alpha asset. With a source image also pass media_index for GPT Image 2 image-to-image cutout; without one omit media_index for text-to-image. Never return an opaque fallback.'),
         media_index: z.number().optional().describe('1-based index of the snapshot to edit (<<<media_1>>> = 1, <<<media_2>>> = 2, ...). Omit the field entirely for text-to-image (no photo sent); never send 0. For most edits, pass the current snapshot index.'),
@@ -1393,6 +1399,18 @@ function createGenerateImageTool(
 
         // Priority: UI selector > agent tool param > auto-route
         const resolvedModel = (ctx.preferredModel ? ctx.preferredModel : model) as ModelId | undefined;
+        const billingModel = background === 'transparent' ? 'openai' : resolvedModel;
+        if (ctx.userId && billingModel && !(billingModel === 'openai' && runtime.spec.provider === 'codex-subscription') && await isBillingEnabled()) {
+          const price = await getToolPrice(resolveToolName('edit_image', billingModel));
+          if (!price && billingModel === 'wan2.7-image') {
+            return { success: false, message: 'Tool pricing is not configured: edit_image_wan2.7-image', error: 'pricing_unavailable' };
+          }
+          if (price && !price.isFree) {
+            const check = await requireCredits(ctx.userId, price.credits);
+            if (!check.ok) return { success: false, message: `Insufficient credits. Need ${price.credits}, have ${check.balance}.`, error: 'insufficient_credits' };
+          }
+        }
+        const imageStartedAt = Date.now();
         const skillResult = await editImage(
           { editPrompt, skill: skill as 'enhance' | 'creative' | 'wild' | 'captions' | undefined, aspectRatio, background, preferredModel: resolvedModel, isNsfw: ctx.isNsfw },
           {
@@ -1440,14 +1458,13 @@ function createGenerateImageTool(
           );
         } else if (
           skillResult.provider !== 'codex-subscription'
+          && skillResult.success
+          && skillResult.image
           && skillResult.usedModel
           && skillResult.usedModel !== 'gemini'
         ) {
-          // Per-action for ComfyUI models
-          import('./billing/credits').then(({ deductCredits }) =>
-            deductCredits(ctx.userId ?? '', null, `edit_image_${skillResult.usedModel}`)
-              .catch(e => console.error('[billing] generate_image deduct error:', e))
-          );
+          // Fixed-price image backends share one awaited debit + usage-log transaction.
+          await deductCredits(ctx.userId ?? '', null, 'edit_image', skillResult.usedModel, Date.now() - imageStartedAt);
         }
         // NSFW detection: flag session so all subsequent calls skip Gemini
         if (skillResult.contentBlocked) ctx.isNsfw = true;
@@ -1488,6 +1505,7 @@ function createGenerateImageTool(
 function createGenerateAnimationTool(
   { ctx, serializeVideoSubmission }: AgentToolFactoryScope,
 ) {
+  const invalidRequest = createVideoValidationReporter();
   return tool({
       description: `Submit a video script for rendering.
 
@@ -1499,7 +1517,7 @@ When the user requests multiple independent video variants, submit them one at a
 
 **BEFORE writing a video script**: call \`read_file('prompts/animate.md')\` to load the full video guide (modes, prompt styles, showcases, reference video usage). Do not re-read if already in this conversation's tool-result history.
 
-For exact source-led replication, first read \`skills/video-edit/SKILL.md\` and pass \`replication_contract\`. Put measured shot/action timing and natural sound direction in \`story_prompt\`; put source/replacement identity and environment mappings in the contract. The runtime expands both into the strict provider prompt. Do not imitate or paste the invariant template into \`story_prompt\`.
+For exact source-led replication ONLY, first read \`skills/video-edit/SKILL.md\`, set \`video_intent="replicate"\`, and pass \`replication_contract\` with a real source video. Ordinary generation, photo animation, lookbooks, loose style references, source edits and extensions MUST omit replication_contract; never fill it with placeholders. The default intent is generate and ignores stray replication fields without changing the selected image or model. Put measured shot/action timing and natural sound direction in \`story_prompt\`; put source/replacement identity and environment mappings in the contract. The runtime expands both into the strict provider prompt. Do not imitate or paste the invariant template into \`story_prompt\`.
 
 Hard constraints:
 - First line of script = short title (2-5 words). Then script body.
@@ -1520,6 +1538,7 @@ Hard constraints:
 - Reference image input limit: EvoLink Seedance requires JPEG/PNG/WebP, width and height each 300-6000px, aspect ratio 0.4-2.5, and <=30MB per image. The runtime returns a specific errorReason such as too_small or too_large. If repairable=true, decide whether to prepare a new compliant image URL or ask the user for a better source; never resubmit the same rejected URL.
 - Reference image input limit: MiniMax H3 accepts up to 9 reference images. The first 5 are free provider inputs; images 6-9 incur per-image provider cost. H3 also accepts up to 3 reference audio files, but audio cannot be the only reference input.
 - MiniMax H3 Max Turbo exception: only when \`minimax-h3-max\` is selected, zero images means text-to-video and exactly one selected image means image-to-video from that start frame. Never pass more than one image, any video, or any uploaded audio. Default to native 768p; use 480p only when the user explicitly prioritizes the lowest cost or latency.
+- Multiple supplied images do not by themselves make H3 Max unusable. If their requested roles can coexist in one opening frame (for example identity from one image and wardrobe/setting from another), first use \`generate_image\` with those references to create that frame, then pass ONLY its returned Media Index to H3 Max. Keep \`video_intent="generate"\` and omit \`replication_contract\`. Explain the image-preparation step; direct generation authorization covers necessary preparation unless the user forbids image generation or its cost. Reuse an existing frame only when it already satisfies every requested role. Never silently drop a reference role, switch the requested model, or claim source-video motion can be preserved by flattening it into a still. If one frame cannot satisfy the request or preparation fails, explain the specific remaining limitation.
 - Video edit duration lock: when editing timeline videos within the selected model's input limit, output duration should match the combined source duration from Media Index, clamped to 4-15s for SeeDance 2.0 or 4-30s for SeeDance 2.5. Dedicated Seedance 2.5 edit may use adaptive duration.
 - Default model is SeeDance 2.0 Fast (\`seedance-fast\`) at 720p. Exact source-led replication is the narrow exception: with \`replication_contract\` and no user-selected model, omit \`model\`; the runtime defaults to \`wan-3.0-prime\` at 720p while an explicit app selector lock or user model/resolution still wins. Use \`seedance-2.5\` for a non-NSFW single 16-30 second generation, higher reference limits, or its dedicated edit/extend features. The NSFW semantic route defaults to \`wan-3.0-prime\` and overrides the 16-30 second Seedance 2.5 route. Resolution is one shared control for every video service: infer \`video_resolution\` from the full request, use a value supported by the selected model, or keep its default when unspecified. Do not build provider-specific keyword routing for resolution. Wan exposes \`wan-3.0\` and \`wan-3.0-prime\`, both with 480p/720p/1080p/2K/4K. Both generate 2-30s with up to 10 image + 5 video + 5 audio references and do not expose typed edit/extend or a content-filter toggle. Use \`minimax-h3\` only when requested as MiniMax/H3/Hailuo H3; it supports public 768p and native 2K multimodal generation, defaulting to 768p. Use \`minimax-h3-max\` only when explicitly requested; its Turbo route defaults to native 768p and supports only native T2V or one-image I2V.
 - Grok modes: text-to-video supports 480p/720p/native 1080p. Any image or preset voice input uses reference-to-video and is capped at 720p, including a single image. Reference prompts must map every image to a role and may use a supported \`aspect_ratio\`. Optional \`reference_voice_ids\` accepts up to three xAI preset voices such as eve/leo; do not put uploaded audio URLs there.
@@ -1528,9 +1547,10 @@ Hard constraints:
 - The script must have been shown to the user and confirmed before this tool is called, unless the user's current request explicitly asks for direct submission without confirmation or the system prompt supplies the trusted Skill template launch exception.`,
       inputSchema: z.object({
         story_prompt: z.string().describe('The complete video script. First line = short title, then the body. Native SeeDance, Wan 3.0, or MiniMax H3 text-to-video uses no media markers. Gemini Omni 1.1 and H3 Max text-to-video follow the same no-marker rule; H3 Max image-to-video uses exactly one media marker. Makaron translates <<<media_N>>> / <<<audio_N>>> into each provider family\'s markers.'),
+        video_intent: z.enum(['generate', 'replicate']).nullish().describe('Default generate: ordinary new videos, photo animation, lookbooks, loose references, edits and extensions. Set replicate ONLY when the user wants to reproduce a supplied video\'s measured timing, action and camera with replaced content; requires replication_contract and an actual source video. Never select replicate merely to preserve a face.'),
         duration: z.number().optional().describe('Duration in seconds. Sync Lipsync v3 follows a 2-60s source; H3 Max accepts exactly 5, 10, or 15 seconds. Seedance 2.5 accepts 4-30s; pass -1 for Seedance 2.5 provider-managed source duration, including reference-to-video requests that repaint the full source clip and dedicated video_operation="edit". Wan 3.0 accepts 2-30s; SeeDance/SeeDance Mini and MiniMax H3 accept 4-15s; Kling accepts 5-15s; Grok accepts 1-15s; Google Omni accepts 3-10s.'),
         aspect_ratio: z.enum(['16:9', '9:16', '1:1', '4:3', '3:4', '21:9', '3:2', '2:3']).optional().describe('Output aspect ratio. Pass it only when the user asks for a specific shape and the selected model can honor it. Seedance supports 16:9/9:16/1:1/4:3/3:4/21:9/adaptive. Grok reference-to-video accepts supported fixed ratios.'),
-        model: z.string().optional().describe('Video model/provider id. Supported ids include seedance-fast, seedance-mini, seedance, seedance-2.5, wan-3.0, wan-3.0-prime, kling, grok, google-omni, minimax-h3, minimax-h3-max, and sync-lipsync-v3. When replication_contract is present and neither the user nor app selector chose a model, runtime defaults to wan-3.0-prime at 720p. Default to seedance-2.5 for non-NSFW direct 16-30s requests and wan-3.0-prime for the NSFW semantic route. H3 Max Turbo supports only native T2V or one-image I2V at 480p/768p for exactly 5/10/15s. Use sync-lipsync-v3 only with exactly one source video and one replacement audio ref.'),
+        model: z.string().optional().describe('Video model/provider id. Supported ids include seedance-fast, seedance-mini, seedance, seedance-2.5, wan-3.0, wan-3.0-prime, kling, grok, google-omni, minimax-h3, minimax-h3-max, and sync-lipsync-v3. Only video_intent="replicate" with a valid replication_contract defaults to wan-3.0-prime at 720p when neither the user nor app selector chose a model. Default to seedance-2.5 for non-NSFW direct 16-30s requests and wan-3.0-prime for the NSFW semantic route. H3 Max Turbo supports only native T2V or one-image I2V at 480p/768p for exactly 5/10/15s. Use sync-lipsync-v3 only with exactly one source video and one replacement audio ref.'),
         video_resolution: z.enum(['360p', '480p', '720p', '768p', '1080p', '2k', '4k', 'auto']).optional().describe('Shared output-resolution control for every video model. Infer it from the complete user intent, choose a value supported by the selected model, or use auto/default when unspecified. H3 Max Turbo supports 480p/768p and defaults to native 768p. Grok 1.5 supports 480p/720p/native 1080p for text-to-video; any image/voice reference and video edit/extend are capped at 720p. Gemini Omni 1.1 supports 360p drafts, 720p native/default, and upscaled 1080p/4k.'),
         media_refs: z.array(z.string()).optional().describe('Additional image URLs NOT already in Media Index (e.g. workspace files from list_files). Images in Media Index are auto-available — just use <<<media_N>>> in script. Passing Media Index URLs here will be rejected.'),
         audio_refs: z.array(z.string()).optional().describe('Reference audio labels from the Audio Index block, e.g. ["audio_1"], or HTTPS provider URLs returned by run_code Node media preparation. Use for voice identity, beat sync, pacing, or music reference. Mention each one as <<<audio_N>>> in story_prompt. Supported by SeeDance models, Wan 3.0, and MiniMax H3.'),
@@ -1566,7 +1586,7 @@ Hard constraints:
           }).optional().describe('Use only when replacing the environment with a separate image. Omit it to preserve the source environment; never pass the reference video itself as replacement_media_index.'),
           style_direction: z.string().optional(),
           additional_exclusions: z.array(z.string()).max(12).optional(),
-        }).optional().describe('Measured semantic contract for exact source-led video replication. Use only after complete-video understanding; runtime deterministically compiles the invariant-heavy provider prompt. Sound remains natural language in story_prompt.'),
+        }).nullish().describe('Only used with video_intent="replicate" after complete source-video understanding. Omit or pass null in every other scene; never fabricate placeholder values. Runtime compiles the invariant-heavy provider prompt. Sound remains natural language in story_prompt.'),
         completion_actions: z.array(z.object({
           label: z.string().describe('Short button label shown when the video finishes, e.g. "合入原视频" or "加入剪辑".'),
           prompt: z.string().describe('Natural-language instruction to send back to the agent if the user chooses this action. Include concrete media refs/timing when known. For video segment replacement, include replaceStart, replaceEnd, replacementDuration, and require trimming/fitting the patch before FFmpeg merge so the final duration matches the original.'),
@@ -1574,7 +1594,7 @@ Hard constraints:
           policy: z.enum(['confirm', 'auto']).optional().describe('confirm = show an action for the user to click. auto is reserved for explicitly authorized end-to-end workflows. Default confirm.'),
         })).optional().describe('Optional next-step actions to show when this async video finishes. Use this for intermediate artifacts such as a generated segment that should later be merged, or generated clips that can be assembled. Do not use it for ordinary final videos.'),
       }),
-      execute: async ({ story_prompt, duration, aspect_ratio, model, video_resolution, media_refs, audio_refs, reference_voice_ids, video_ref_url, video_ref_type, keep_original_sound, motion_control, character_orientation, video_operation, extend_direction, generate_audio, content_filter, output_format, web_search, replication_contract, completion_actions }) => serializeVideoSubmission(async () => {
+      execute: async ({ story_prompt, video_intent, duration, aspect_ratio, model, video_resolution, media_refs, audio_refs, reference_voice_ids, video_ref_url, video_ref_type, keep_original_sound, motion_control, character_orientation, video_operation, extend_direction, generate_audio, content_filter, output_format, web_search, replication_contract: suppliedReplicationContract, completion_actions }) => serializeVideoSubmission(async () => {
         // Refresh base64 → URL from DB before video submission
         await refreshSnapshotUrls(ctx);
         // GUI animation mode: use animationImageUrls; CUI mode: use full snapshotImages (no filter — preserve index alignment)
@@ -1585,8 +1605,27 @@ Hard constraints:
         if (media_refs?.length) {
           imageUrls = [...(imageUrls || []), ...media_refs.filter(u => u.startsWith('http'))];
         }
+        // Intent is explicit, never inferred from an optional object's presence.
+        // This also makes old all-fields/placeholder calls safe for ordinary I2V.
+        const replication_contract = video_intent === 'replicate' ? suppliedReplicationContract : undefined;
+        if (video_intent === 'replicate' && !replication_contract) {
+          return invalidRequest(model, 'video_intent="replicate" requires replication_contract with a real source video. For ordinary generation use video_intent="generate" and omit the contract.');
+        }
         if (replication_contract && video_operation && video_operation !== 'generate') {
-          return { success: false as const, message: 'replication_contract uses reference-to-video generation. Do not combine it with typed video edit or extend.' };
+          return invalidRequest(model, 'replication_contract uses reference-to-video generation. Do not combine it with typed video edit or extend.');
+        }
+        if (replication_contract) {
+          // A poster/photo cannot become a temporal video authority just because
+          // an Agent filled reference_video_media_index. Verify project metadata.
+          const sourceResult = ctx.supabase && await ctx.supabase.from('snapshots')
+            .select('id, type, video_meta').eq('project_id', ctx.projectId).order('sort_order');
+          if (!sourceResult || sourceResult.error) {
+            return invalidRequest(model, 'Could not verify the source video for replication. Resolve the project source video before submitting; do not invent a contract.');
+          }
+          const source = sourceResult.data?.[replication_contract.reference_video_media_index - 1];
+          if (source?.type !== 'video' || !source.video_meta?.videoUrl) {
+            return invalidRequest(model, 'replication_contract.reference_video_media_index must point to a real, ready video, not an image or poster. For photo animation use video_intent="generate" and omit replication_contract.');
+          }
         }
         const effectiveStoryPrompt = replication_contract
           ? compileVideoReplicationPrompt(story_prompt || 'Exact Video Replication', {
@@ -1641,6 +1680,9 @@ Hard constraints:
           model: videoModel,
           resolution: videoSelection.resolution,
         });
+        if (replication_contract && !getVideoModelCapability(videoModel).supportsVideoReference) {
+          return invalidRequest(videoModel, `${videoRoute.label} cannot replicate a source video. Keep the user's selected model; request a compatible model or use ordinary generation without replication constraints.`);
+        }
         if (!imageUrls?.length && !video_ref_url && !supportsNativeTextToVideo(videoModel)) {
           return { success: false as const, message: `${videoRoute.label} requires an image or video reference. Use SeeDance, Wan 3.0, Grok Imagine Video, Gemini Omni, MiniMax H3, or MiniMax H3 Max for native text-to-video.` };
         }
@@ -1680,7 +1722,12 @@ Hard constraints:
             operation: video_operation,
           });
           if (harnessError) {
-            return { success: false as const, message: harnessError };
+            return invalidRequest(videoModel, harnessError, {
+              mediaIndices: [...new Set(Array.from(effectiveStoryPrompt.matchAll(/<<<(?:image|media)_(\d+)>>>/g), match => Number(match[1])))],
+              videoIntent: video_intent || 'generate',
+              replicationEnabled: Boolean(replication_contract),
+              repair: 'Change the conflicting arguments, not just the prose. For H3 Max use exactly one chosen media marker. Never switch to the original image or a different model merely to bypass validation.',
+            });
           }
 
           // Save first valid image URL (not video) for poster
@@ -1789,10 +1836,7 @@ Hard constraints:
             operation: video_operation,
           });
           if (modelError) {
-            return {
-              success: false as const,
-              message: modelError,
-            };
+            return invalidRequest(videoModel, modelError);
           }
           const effectiveDuration = resolveVideoOutputDuration({
             requestedDuration: isSeedance25Edit ? undefined : duration,
@@ -5268,7 +5312,7 @@ export function createTools(ctx: AgentContext, runtime: AgentModelRuntime, local
     serializeVideoSubmission,
   };
 
-return {
+return preserveOptionalToolFields({
     generate_image: createGenerateImageTool(scope),
 
     generate_animation: createGenerateAnimationTool(scope),
@@ -5309,7 +5353,7 @@ return {
 
     generate_audio: createGenerateAudioTool(scope),
 
-  };
+  }, runtime.spec.provider);
 }
 
 /** Keep tool prompt telemetry independent from the Agent runner module. */

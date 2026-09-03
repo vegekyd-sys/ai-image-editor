@@ -367,7 +367,9 @@ npx makaron-cli edit --image photo.jpg --out result.jpg "make it dramatic"
 npx makaron-cli edit --image-model openai --background transparent --out sticker.png "a magenta star sticker"
 ```
 
-Options: `--image`, `--image-model gemini|gemini-lite|qwen|openai|pony|wai`, `--ref <file>` (up to 3), `--aspect <ratio>`, `--background auto|opaque|transparent`, `--out <path>`. Transparent output routes strictly to GPT Image 2 and is returned only when the provider supplies real PNG/WebP alpha.
+Options: `--image`, `--image-model gemini|gemini-lite|qwen|openai|wan2.7-image|pony|wai`, `--ref <file>` (up to 3), `--aspect <ratio>`, `--background auto|opaque|transparent`, `--out <path>`. Transparent output routes strictly to GPT Image 2 and is returned only when the provider supplies real PNG/WebP alpha.
+
+`wan2.7-image` uses Alibaba international for fast, approximately 1K generation and editing (default 6 credits/image). Failed or timed-out Wan requests are not automatically retried or switched to another model. Face identity can change. Example: `makaron edit --image portrait.jpg --image-model wan2.7-image --aspect 16:9 --out stadium.jpg "Place this woman in a baseball stadium, preserving her face."`
 
 ### `video` — Standalone video tools (no project timeline)
 

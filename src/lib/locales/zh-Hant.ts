@@ -645,6 +645,8 @@ const zhHant = {
   'model.geminiLite.desc': '成本較低，適合快速草稿。',
   'model.qwen.desc': '人臉保真效果最佳，可處理 NSFW 內容。',
   'model.openai.desc': '文字呈現與創意產生能力出色。',
+  'model.wan27Image.name': 'Wan 2.7 Image',
+  'model.wan27Image.desc': '快速生圖與多圖編輯，人臉細節可能改變。',
   'model.kling.desc': '高規格 4K 輸出、速度快，並內建音效。',
   'model.seedanceFast.desc': '預設影片模型，速度與成本更適合日常產生。',
   'model.seedanceMini.desc': '低成本 SeeDance 路徑，適合草稿與多尺寸測試。',

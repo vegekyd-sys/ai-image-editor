@@ -250,7 +250,7 @@ npx makaron-cli edit --image photo.jpg --out result.jpg "make it dramatic"
 npx makaron-cli edit --image-model openai --background transparent --out sticker.png "a magenta star sticker"
 ```
 
-Options: `--image`, `--image-model gemini|gemini-lite|qwen|openai|pony|wai`, `--skill enhance|creative|wild|captions`, `--ref <file>` (up to 3), `--aspect <ratio>`, `--background auto|opaque|transparent`, `--out <path>`. Transparent output routes strictly to GPT Image 2 and fails instead of returning an opaque fallback.
+Options: `--image`, `--image-model gemini|gemini-lite|qwen|openai|wan2.7-image|pony|wai`, `--skill enhance|creative|wild|captions`, `--ref <file>` (up to 3), `--aspect <ratio>`, `--background auto|opaque|transparent`, `--out <path>`. Transparent output routes strictly to GPT Image 2 and fails instead of returning an opaque fallback. Wan 2.7 Image is an explicit fast ~1K route; do not automatically retry failures/timeouts, and do not promise exact face preservation.
 
 ### `video` — Standalone video tools (no project timeline)
 

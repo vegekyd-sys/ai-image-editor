@@ -12,6 +12,7 @@ Core contract:
 - `image_refs` is only for workspace asset provider URLs, not timeline snapshots.
 - `skill` labels general intent; omit it for precise manual instructions.
 - `model` is optional. Use `qwen` for NSFW risk; `openai` for layout/mockup images and director storyboard images required by `long-video-director`; `gemini-lite` only on explicit Lite requests.
+- `wan2.7-image` is opt-in. Never automatically retry a failed/unknown Wan call or switch models.
 - Background removal, subject isolation/cutout, 去背景/抠图/抠像, or transparent PNG/sticker/overlay/alpha delivery means: set `background: "transparent"`; prompt wording alone is insufficient.
 - Existing-image cutout: pass its `media_index`; with no source, omit `media_index` for transparent text-to-image.
 - Pure cutout: omit `aspectRatio` to preserve the source canvas. If the user requests a new transparent layout (e.g. six stickers on 16:9), pass it; the requested layout wins.

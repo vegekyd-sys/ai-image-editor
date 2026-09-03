@@ -87,7 +87,7 @@ function EditPromptCard({ prompt, inputImages, editModel }: { prompt: string; in
   const { t } = useLocale();
   const [open, setOpen] = useState(false);
   const inputImageLabels = [t('chat.currentImage'), t('chat.referenceImage')];
-  const modelLabels: Record<string, string> = { gemini: 'nano banana 2', 'gemini-lite': 'nano banana 2 lite', qwen: 'qwen edit', pony: 'pony anime', wai: 'wai illustrious', openai: 'OpenAI Image 2' };
+  const modelLabels: Record<string, string> = { gemini: 'nano banana 2', 'gemini-lite': 'nano banana 2 lite', qwen: 'qwen edit', pony: 'pony anime', wai: 'wai illustrious', openai: 'OpenAI Image 2', 'wan2.7-image': 'Wan 2.7 Image' };
   const modelLabel = modelLabels[editModel || ''] || editModel || 'model';
   return (
     <div className="mt-2 rounded-xl overflow-hidden" style={{ border: '1px solid rgba(255,255,255,0.08)', background: 'rgba(255,255,255,0.04)', maxWidth: 308 }}>
@@ -494,7 +494,7 @@ function MarkdownBlock({ text, isPanel, snapshots, onNavigateToSnapshot, onPrevi
   );
 }
 
-export type PreferredModel = 'auto' | 'gemini' | 'gemini-lite' | 'qwen' | 'pony' | 'wai' | 'openai';
+export type PreferredModel = 'auto' | import('@/lib/models/types').ModelId;
 
 export interface ComposerDraftAttachment {
   id: string;

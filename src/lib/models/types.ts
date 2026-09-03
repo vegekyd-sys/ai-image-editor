@@ -1,4 +1,5 @@
-export type ModelId = 'gemini' | 'gemini-lite' | 'qwen' | 'pony' | 'wai' | 'openai';
+export const IMAGE_MODEL_IDS = ['gemini', 'gemini-lite', 'qwen', 'pony', 'wai', 'openai', 'wan2.7-image'] as const;
+export type ModelId = typeof IMAGE_MODEL_IDS[number];
 export type ReasoningEffort = 'minimal' | 'low' | 'medium' | 'high';
 export type ImageBackground = 'auto' | 'opaque' | 'transparent';
 

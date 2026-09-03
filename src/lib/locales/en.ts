@@ -435,6 +435,8 @@ const en = {
   'model.qwen.name': 'Qwen Edit',
   'model.qwen.desc': 'Best face preservation. Handles NSFW content.',
   'model.openai.name': 'GPT Image 2',
+  'model.wan27Image.name': 'Wan 2.7 Image',
+  'model.wan27Image.desc': 'Fast generation and multi-image editing. Faces may change.',
   'model.openai.desc': 'Superior text rendering and creative generation.',
   'model.kling.name': 'Kling O3',
   'model.kling.desc': 'Premium 4K output, fast, with built-in sound.',

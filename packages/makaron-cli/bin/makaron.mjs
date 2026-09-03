@@ -1468,6 +1468,10 @@ async function callMcpTool(baseUrl, headers, toolName, args) {
   if (!res.ok) { console.error(`MCP error ${res.status}:`, await res.text()); process.exit(1); }
   const data = await res.json();
   if (data.error) { console.error(`MCP error:`, data.error.message); process.exit(1); }
+  if (data.result?.isError) {
+    console.error('MCP tool failed:', data.result.content?.filter(c => c.type === 'text').map(c => c.text).join('\n') || 'Unknown tool error');
+    process.exit(1);
+  }
   return data.result;
 }
 
@@ -1875,7 +1879,7 @@ Usage:
 Options:
   --image <file|url>        Base image to edit. Omit for text-to-image.
   --ref <file|url>          Additional reference image. Repeatable, up to 3.
-  --image-model <id>        gemini, gemini-lite, qwen, openai, pony, or wai.
+  --image-model <id>        gemini, gemini-lite, qwen, openai, wan2.7-image, pony, or wai.
   --skill <id>              enhance, creative, wild, or captions.
   --aspect <ratio>          Output aspect ratio, for example 1:1, 16:9, or 9:16.
   --background <mode>       auto, opaque, or transparent.
@@ -2924,7 +2928,7 @@ if (!command || command === '--help' || command === '-h' || command === 'help') 
     else promptParts.push(args[i]);
   }
   editArgs.editPrompt = promptParts.join(' ');
-  if (!editArgs.editPrompt) { console.error('Usage: makaron edit [--image <file|url>] [--image-model gemini|gemini-lite|qwen|openai|pony|wai] [--ref <file>] [--aspect <ratio>] [--background auto|opaque|transparent] [--out <file>] "prompt"'); process.exit(1); }
+  if (!editArgs.editPrompt) { console.error('Usage: makaron edit [--image <file|url>] [--image-model gemini|gemini-lite|qwen|openai|wan2.7-image|pony|wai] [--ref <file>] [--aspect <ratio>] [--background auto|opaque|transparent] [--out <file>] "prompt"'); process.exit(1); }
   process.stderr.write('🎨 Generating...\n');
   const result = await callMcpTool(baseUrl, headers, 'makaron_edit_image', editArgs);
   saveMcpImage(result, outputPath);

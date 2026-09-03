@@ -3,6 +3,7 @@ import { z } from 'zod';
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'fs';
 import { join } from 'path';
 import { editImage } from '../lib/skills/edit-image';
+import { IMAGE_MODEL_IDS } from '../lib/models/types';
 import { rotateCamera } from '../lib/skills/rotate-camera';
 import { writeVideoScript } from '../lib/skills/write-video-script';
 import { createVideo, type CreateVideoInput, type CreateVideoResult } from '../lib/skills/create-video';
@@ -119,6 +120,7 @@ export function createMakaronMcpServer(options?: McpServerOptions) {
 | NSFW/sensitive editing | (omit) | qwen | Gemini will refuse |
 | Design/layout/poster/text | (omit) | openai | Best text rendering & design (~50s, premium pricing) |
 | Fast lower-cost drafts | (omit) | gemini-lite | Nano Banana 2 Lite for fast 1K image drafts |
+| Wan 2.7 generation/editing | (omit) | wan2.7-image | Fast ~1K output, up to 9 input images; no automatic retries |
 | Not sure | (omit) | (auto) | Auto routing with fallback |
 
 When skill is omitted, editPrompt is sent directly. When skill is set, a structured .md template is injected to guide the AI.
@@ -129,7 +131,7 @@ IMPORTANT: Image generation takes 15-30 seconds. Long and detailed prompts are f
       image: z.string().nullish().describe('Input image: local file path, URL, or base64 data URL. Omit for text-to-image generation.'),
       editPrompt: z.string().describe('English editing instructions describing what to change'),
       skill: z.enum(['enhance', 'creative', 'wild', 'captions']).nullish().describe('Activate a skill template for structured editing'),
-      model: z.enum(['gemini', 'gemini-lite', 'qwen', 'pony', 'wai', 'openai']).nullish().describe('NEVER set unless user literally names a model. Use gemini-lite only when the user asks for Nano Banana 2 Lite / Lite. Gemini refused→retry with qwen. For design/poster/text-heavy tasks, try openai. Otherwise ALWAYS omit.'),
+      model: z.enum(IMAGE_MODEL_IDS).nullish().describe('NEVER set unless user literally names a model. Wan 2.7 Image = wan2.7-image (fast single output; never automatically retry failed/unknown requests). Use gemini-lite only when the user asks for Nano Banana 2 Lite / Lite. Gemini refused→retry with qwen. For design/poster/text-heavy tasks, try openai. Otherwise ALWAYS omit.'),
       referenceImages: z.array(z.string()).nullish().describe('Additional reference images (up to 3). Put the original photo here when restoring face/color/details from it.'),
       aspectRatio: z.string().nullish().describe('Target aspect ratio e.g. "4:5", "1:1", "16:9"'),
       background: z.enum(['auto', 'opaque', 'transparent']).nullish().describe('Output background. Set transparent for transparent/no-background output, background removal, subject cutout/isolation, or a reusable PNG/sticker/overlay/alpha asset. With image input this is GPT Image 2 image-to-image cutout; without image input it is text-to-image. It never returns an opaque fallback.'),
@@ -138,8 +140,8 @@ IMPORTANT: Image generation takes 15-30 seconds. Long and detailed prompts are f
       try {
         // Credit check before execution
         if (options?.onToolStart) {
-          const check = await options.onToolStart('makaron_edit_image', params.model ?? undefined);
-          if (!check.allowed) return { content: [{ type: 'text' as const, text: check.message || 'Insufficient credits' }] };
+          const check = await options.onToolStart('makaron_edit_image', params.background === 'transparent' ? 'openai' : params.model ?? undefined);
+          if (!check.allowed) return { isError: true, content: [{ type: 'text' as const, text: check.message || 'Insufficient credits' }] };
         }
         const t0 = Date.now();
         const image = params.image ? resolveImage(params.image) : undefined;
@@ -162,7 +164,7 @@ IMPORTANT: Image generation takes 15-30 seconds. Long and detailed prompts are f
         );
 
         if (!result.success || !result.image) {
-          return { content: [{ type: 'text' as const, text: result.message }] };
+          return { isError: true, content: [{ type: 'text' as const, text: result.message }] };
         }
         // Bill after success
         await options?.onToolComplete?.('makaron_edit_image', result.usedModel, Date.now() - t0, result.usage);
@@ -173,7 +175,7 @@ IMPORTANT: Image generation takes 15-30 seconds. Long and detailed prompts are f
       } catch (e) {
         const msg = e instanceof Error ? e.message : String(e);
         console.error('[MCP edit_image error]', msg);
-        return { content: [{ type: 'text' as const, text: `Error: ${msg}` }] };
+        return { isError: true, content: [{ type: 'text' as const, text: `Error: ${msg}` }] };
       }
     },
   );

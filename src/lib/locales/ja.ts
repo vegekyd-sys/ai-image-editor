@@ -655,6 +655,8 @@ const ja = {
   'model.qwen.name': 'Qwen Edit',
   'model.qwen.desc': '顔の再現性に優れ、NSFWコンテンツにも対応します。',
   'model.openai.name': 'GPT Image 2',
+  'model.wan27Image.name': 'Wan 2.7 Image',
+  'model.wan27Image.desc': '高速な画像生成と複数画像の編集。顔の細部が変わる場合があります。',
   'model.openai.desc': '文字の描画とクリエイティブ生成に優れています。',
   'model.kling.name': 'Kling O3',
   'model.kling.desc': '高速な4K高品質出力。サウンドも内蔵しています。',

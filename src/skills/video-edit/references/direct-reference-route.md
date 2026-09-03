@@ -38,10 +38,16 @@ editable result.
 ## Prompt Contract
 
 After understanding the complete clip, call `generate_animation` once with both
-an evidence-based `story_prompt` and `replication_contract`. This contract is an
+an evidence-based `story_prompt` and `replication_contract`, and explicitly set
+`video_intent="replicate"`. This contract is an
 internal deterministic tool input, not a second Skill, user mode, editor, or
 state machine. The Agent supplies measured semantics; runtime owns the repeated
 source-authority, identity, continuity, structure, and exclusion wording.
+
+Use this intent only for exact source-led replication. Photo animation, new
+videos, loose inspiration, ordinary source edits and extensions keep the default
+`video_intent="generate"` and omit `replication_contract`. Never invent a source
+video or fill unused contract fields with placeholders.
 
 Populate:
 
