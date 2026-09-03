@@ -124,6 +124,36 @@ describe('video generation intent and one-submit regression', () => {
     expect(result.success).toBe(true);
   });
 
+  it('rejects a guessed duration before billing, then allows one corrected request', async () => {
+    const h = generateAnimationHarness();
+    h.rows[0] = { id: 'source', type: 'video', video_meta: { videoUrl: 'https://example.com/source.mp4', duration: null } };
+    h.probeVideoMetadataFromUrl.mockResolvedValue({ duration: 5.184 });
+    const input = { story_prompt: 'Blue cups\nShot 1 (5s): Replace the red cup.', duration: 5,
+      model: 'seedance-fast', video_intent: 'replicate', video_resolution: '480p',
+      replication_contract: { reference_video_media_index: 1, source_duration_seconds: 4, characters: [],
+        objects: [{ replacement_media_index: 2, source_object_anchor: 'Red glazed ceramic cup with handle on right', replacement_object: 'The matching blue glazed cup in the reference image' }] } };
+    const rejected = await h.tool.execute(input);
+    expect(rejected.success).toBe(false);
+    expect(rejected.message).toContain('5.184s');
+    expect(h.createVideo).not.toHaveBeenCalled();
+    expect(h.deductFixedCredits).not.toHaveBeenCalled();
+    const accepted = await h.tool.execute({ ...input, replication_contract: { ...input.replication_contract, source_duration_seconds: 5.184 } });
+    expect(accepted.success).toBe(true);
+    expect(h.createVideo).toHaveBeenCalledTimes(1);
+    expect(h.createVideo.mock.calls[0][0].script).toContain('measured source duration is 5.184 seconds');
+    expect(h.createVideo.mock.calls[0][0].script).not.toContain('4-second output');
+    expect(h.createVideo.mock.calls[0][0].duration).toBe(5);
+  });
+
+  it('does not use guessed or stored duration when the source cannot be measured', async () => {
+    const h = generateAnimationHarness();
+    h.rows[0] = { type: 'video', video_meta: { videoUrl: 'https://example.com/source.mp4', duration: 1 } };
+    h.probeVideoMetadataFromUrl.mockResolvedValue(null);
+    expect((await h.tool.execute({ ...lookbookRequest, video_intent: 'replicate' })).message).toContain('Could not measure');
+    expect(h.createVideo).not.toHaveBeenCalled();
+    expect(h.deductFixedCredits).not.toHaveBeenCalled();
+  });
+
   it('gives concrete feedback once and stops a repeated unchanged constraint', async () => {
     const h = generateAnimationHarness();
     const input = { ...lookbookRequest, story_prompt: 'Shot 1 (15s): Use <<<media_1>>> and <<<media_2>>>.' };

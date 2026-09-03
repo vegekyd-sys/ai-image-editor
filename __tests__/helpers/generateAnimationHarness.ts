@@ -38,6 +38,9 @@ export function generateAnimationHarness() {
   const requireCredits = vi.fn().mockResolvedValue({ ok: true, balance: 1000 });
   const deductFixedCredits = vi.fn().mockImplementation(async (_u, credits) => ({ charged: credits }));
   const refundCredits = vi.fn();
+  const probeVideoMetadataFromUrl = vi.fn(async (url: string) => ({
+    duration: rows.find(row => row.video_meta?.videoUrl === url)?.video_meta?.duration ?? 1,
+  }));
   const ctx: any = {
     userId: 'test-user', projectId: 'test-project', supabase: db,
     snapshotImages: ['https://example.com/original.jpg', 'https://example.com/generated.jpg'],
@@ -57,6 +60,7 @@ export function generateAnimationHarness() {
     console: { log: vi.fn(), warn: vi.fn(), error: vi.fn() },
     require: (name: string) => {
       if (name === './video-harness') return { validateVideoScript };
+      if (name === './video-metadata') return { probeVideoMetadataFromUrl };
       if (name === '@/lib/supabase/service') return { getSupabaseAdmin: () => db };
       if (name === '@/lib/editor/timeline-derivations') return { VIDEO_PLACEHOLDER_IMAGE: '/video-placeholder.png' };
       if (name === '@/lib/provider-video-reference') return {
@@ -68,7 +72,7 @@ export function generateAnimationHarness() {
   const create = vm.runInContext(`${code}\ncreateGenerateAnimationTool`, context);
   const tool = create({ ctx, serializeVideoSubmission: (operation: () => unknown) => operation() });
   preserveOptionalToolFields({ generate_animation: tool }, 'codex-subscription');
-  return { tool, ctx, rows, db, insert, createVideo, requireCredits, deductFixedCredits, refundCredits };
+  return { tool, ctx, rows, db, insert, createVideo, requireCredits, deductFixedCredits, refundCredits, probeVideoMetadataFromUrl };
 }
 
 // Reduced from the observed four failing calls: every unused optional field was

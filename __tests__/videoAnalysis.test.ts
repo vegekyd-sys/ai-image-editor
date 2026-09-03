@@ -2,6 +2,7 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { analyzeVideoWithProvider } from '@/lib/video-analysis';
 import { getVideoAnalysisDefaultRate } from '@/lib/billing/video-analysis-rate';
+import { mp4Fixture } from './helpers/mp4Fixture';
 
 const files = vi.hoisted(() => ({ upload: vi.fn(), get: vi.fn(), delete: vi.fn() }));
 vi.mock('@google/genai', () => ({ GoogleGenAI: class { files = files; } }));
@@ -20,6 +21,16 @@ function setup(mode = 'static') {
 afterEach(() => { vi.unstubAllEnvs(); vi.unstubAllGlobals(); vi.clearAllMocks(); });
 
 describe('video analysis provider contract', () => {
+  it('supplies real fractional duration to analysis instead of trusting summary timestamps', async () => {
+    const fetchMock = setup();
+    fetchMock.mockResolvedValueOnce(new Response(mp4Fixture()))
+      .mockResolvedValueOnce(Response.json(success));
+    const result = await analyzeVideoWithProvider('https://example.com/source.mp4');
+    const prompt = JSON.parse(fetchMock.mock.calls[1][1].body).contents[0].parts[1].text;
+    expect(prompt).toContain('Measured container duration: 5.184 seconds');
+    expect(prompt).toContain('Compare opening and ending framing');
+    expect(result.sourceDurationSeconds).toBe(5.184);
+  });
   it('uses 3.8 low thinking and preserves cache/thought usage without exposing thinking text', async () => {
     const fetchMock = setup();
     fetchMock.mockResolvedValueOnce(new Response(new Uint8Array([1, 2, 3])))

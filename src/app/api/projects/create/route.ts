@@ -5,6 +5,7 @@ import { readAttributionCookie, sendMetaCapiEvent } from '@/lib/marketing/meta-c
 import sharp from 'sharp';
 import type { SupabaseClient } from '@supabase/supabase-js';
 import type { VideoMeta } from '@/types';
+import { probeVideoMetadata, probeVideoMetadataFromUrl } from '@/lib/video-metadata';
 
 const MAX_VIDEO_DURATION = 900;
 const MAX_VIDEO_DURATION_TOLERANCE = 1;
@@ -66,30 +67,13 @@ async function resolveImageUrl(
   return storageUrl || url;
 }
 
-async function probeVideoDimensionsFromUrl(videoUrl: string): Promise<{ width: number; height: number } | null> {
-  try {
-    const res = await fetch(videoUrl);
-    if (!res.ok) return null;
-    const length = Number(res.headers.get('content-length') || 0);
-    if (length > MAX_VIDEO_DIMENSION_PROBE_BYTES) return null;
-
-    const buffer = new Uint8Array(await res.arrayBuffer());
-    if (buffer.length > MAX_VIDEO_DIMENSION_PROBE_BYTES) return null;
-
-    const { probeMP4Dimensions } = await import('@/lib/mp4-probe');
-    return probeMP4Dimensions(buffer);
-  } catch {
-    return null;
-  }
-}
-
-async function fillMissingVideoDimensions(
+async function fillMissingVideoMetadata(
   videoUrl: string,
-  current: { width?: number; height?: number },
-): Promise<{ width?: number; height?: number }> {
-  if (current.width && current.height) return current;
-  const dims = await probeVideoDimensionsFromUrl(videoUrl);
-  return dims ? { width: dims.width, height: dims.height } : current;
+  current: { width?: number; height?: number; duration?: number },
+): Promise<{ width?: number; height?: number; duration?: number }> {
+  if (current.width && current.height && current.duration) return current;
+  const probed = await probeVideoMetadataFromUrl(videoUrl, MAX_VIDEO_DIMENSION_PROBE_BYTES);
+  return { width: probed?.width ?? current.width, height: probed?.height ?? current.height, duration: probed?.duration ?? current.duration };
 }
 
 function resolveMarketingSourceUrl(req: NextRequest, attribution: Record<string, unknown>): string {
@@ -242,6 +226,7 @@ export async function POST(req: NextRequest) {
         let permanentUrl = videoUrl;
         let width: number | undefined = providedMeta?.width;
         let height: number | undefined = providedMeta?.height;
+        let duration: number | undefined = providedMeta?.duration;
 
         // Fetch + upload to our Storage if external URL
         if (!isPermanentUrl(videoUrl)) {
@@ -250,16 +235,15 @@ export async function POST(req: NextRequest) {
             if (res.ok) {
               const buffer = new Uint8Array(await res.arrayBuffer());
               try {
-                const { probeMP4Dimensions } = await import('@/lib/mp4-probe');
-                const dims = probeMP4Dimensions(buffer);
-                if (dims) { width = dims.width; height = dims.height; }
+                const meta = probeVideoMetadata(buffer);
+                width = meta.width ?? width; height = meta.height ?? height; duration = meta.duration ?? duration;
               } catch { /* non-fatal */ }
               const uploaded = await uploadVideo(supabase, userId, existingProjectId, snapshotId, buffer);
               if (uploaded) permanentUrl = uploaded;
             }
           } catch { /* use original URL */ }
         }
-        ({ width, height } = await fillMissingVideoDimensions(permanentUrl, { width, height }));
+        ({ width, height, duration } = await fillMissingVideoMetadata(permanentUrl, { width, height, duration }));
 
         // Extract poster frame from video
         let posterUrl = '';
@@ -280,7 +264,7 @@ export async function POST(req: NextRequest) {
           origin: 'source-upload',
           taskId: null, videoUrl: permanentUrl, prompt: '',
           sourceSnapshotIds: [], sourceUrls: [],
-          status: 'completed', duration: providedMeta?.duration ?? null, model: 'upload',
+          status: 'completed', duration: duration ?? null, model: 'upload',
           createdAt: new Date().toISOString(), width, height,
         };
         await supabase.from('snapshots').insert({
@@ -399,6 +383,7 @@ export async function POST(req: NextRequest) {
       let permanentUrl = videoUrl;
       let width: number | undefined = providedMeta?.width;
       let height: number | undefined = providedMeta?.height;
+      let duration: number | undefined = providedMeta?.duration;
 
       if (!isPermanentUrl(videoUrl)) {
         try {
@@ -406,16 +391,15 @@ export async function POST(req: NextRequest) {
           if (res.ok) {
             const buffer = new Uint8Array(await res.arrayBuffer());
             try {
-              const { probeMP4Dimensions } = await import('@/lib/mp4-probe');
-              const dims = probeMP4Dimensions(buffer);
-              if (dims) { width = dims.width; height = dims.height; }
+              const meta = probeVideoMetadata(buffer);
+              width = meta.width ?? width; height = meta.height ?? height; duration = meta.duration ?? duration;
             } catch { /* non-fatal */ }
             const uploaded = await uploadVideo(supabase, userId, projectId, snapshotId, buffer);
             if (uploaded) permanentUrl = uploaded;
           }
         } catch { /* use original URL */ }
       }
-      ({ width, height } = await fillMissingVideoDimensions(permanentUrl, { width, height }));
+      ({ width, height, duration } = await fillMissingVideoMetadata(permanentUrl, { width, height, duration }));
 
       // Extract poster frame
       let posterUrl = '';
@@ -436,7 +420,7 @@ export async function POST(req: NextRequest) {
         origin: 'source-upload',
         taskId: null, videoUrl: permanentUrl, prompt: '',
         sourceSnapshotIds: [], sourceUrls: [],
-        status: 'completed', duration: providedMeta?.duration ?? null, model: 'upload',
+        status: 'completed', duration: duration ?? null, model: 'upload',
         createdAt: new Date().toISOString(), width, height,
       };
       const { error: snapError } = await supabase.from('snapshots').insert({

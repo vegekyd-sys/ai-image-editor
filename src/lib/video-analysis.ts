@@ -1,4 +1,5 @@
 import { GoogleGenAI } from '@google/genai';
+import { probeMP4Duration } from './mp4-probe';
 
 /** Video understanding uses its own model and config; the shared SDK only uploads large fallback files. */
 export const VIDEO_ANALYSIS_MODEL = 'gemini-3.8-flash';
@@ -22,6 +23,7 @@ export interface VideoAnalysisResult {
   transport: 'url' | 'inline' | 'file';
   processingCalls: number;
   usage: VideoAnalysisUsage;
+  sourceDurationSeconds?: number;
 }
 
 const API = 'https://generativelanguage.googleapis.com/v1beta';
@@ -61,19 +63,23 @@ export async function analyzeVideoWithProvider(
   const mimeType = /\.mov$/i.test(source.pathname) ? 'video/quicktime' : /\.webm$/i.test(source.pathname) ? 'video/webm' : 'video/mp4';
   const startedAt = Date.now();
   const signal = AbortSignal.timeout(120_000); // includes bounded download and inference
+  let sourceDurationSeconds: number | undefined;
 
   async function run(data?: string, uploadedUri?: string) {
+    const analysisPrompt = sourceDurationSeconds
+      ? `Measured container duration: ${sourceDurationSeconds} seconds. Inspect the complete timeline through its final frame; do not infer duration from sampled timestamps. Compare opening and ending framing before calling a camera static.\n\n${prompt}`
+      : prompt;
     const body = processing === 'agentic' ? {
       model, store: false,
       input: [
         { type: 'video', mime_type: mimeType, processing: 'agentic', ...(data ? { data } : { uri: uploadedUri || videoUrl }) },
-        { type: 'text', text: prompt },
+        { type: 'text', text: analysisPrompt },
       ],
       generation_config: { thinking_level: 'low' },
     } : {
       contents: [{ role: 'user', parts: [
         data ? { inlineData: { mimeType, data } } : { fileData: { mimeType, fileUri: uploadedUri || videoUrl } },
-        { text: prompt },
+        { text: analysisPrompt },
       ] }],
       generationConfig: { thinkingConfig: { thinkingLevel: 'LOW' } },
     };
@@ -122,6 +128,7 @@ export async function analyzeVideoWithProvider(
       chunks.push(value);
     }
     const bytes = Buffer.concat(chunks);
+    sourceDurationSeconds = probeMP4Duration(bytes);
     if (size <= INLINE_LIMIT) {
       transport = 'inline';
       result = await run(bytes.toString('base64'));
@@ -171,5 +178,5 @@ export async function analyzeVideoWithProvider(
   const usage = normalizeVideoUsage(rawUsage, model, processing);
   const elapsedMs = Date.now() - startedAt;
   console.info(`[video-analysis] model=${model} processing=${processing} thinking=low transport=${transport} durationMs=${elapsedMs} input=${usage.inputTokens} output=${usage.outputTokens} cache=${usage.cacheReadTokens} processingCalls=${processingCalls}`);
-  return { analysis, usedModel: model, processing, thinking: 'low', elapsedMs, transport, processingCalls, usage };
+  return { analysis, usedModel: model, processing, thinking: 'low', elapsedMs, transport, processingCalls, usage, sourceDurationSeconds };
 }

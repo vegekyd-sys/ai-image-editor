@@ -14,6 +14,7 @@ export interface AnalyzeVideoResult {
   usedModel?: string;
   usage?: VideoAnalysisResult['usage'];
   processing?: VideoAnalysisResult['processing'];
+  sourceDurationSeconds?: number;
 }
 
 export async function analyzeVideo(input: AnalyzeVideoInput): Promise<AnalyzeVideoResult> {
@@ -35,6 +36,7 @@ export async function analyzeVideo(input: AnalyzeVideoInput): Promise<AnalyzeVid
       usedModel: result.usedModel,
       usage: result.usage,
       processing: result.processing,
+      sourceDurationSeconds: result.sourceDurationSeconds,
     };
   } catch (e) {
     const msg = e instanceof Error ? e.message : String(e);

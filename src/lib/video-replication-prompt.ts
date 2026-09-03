@@ -39,7 +39,7 @@ export function compileVideoReplicationPrompt(
   contract: VideoReplicationContract,
 ) {
   const source = mediaMarker(contract.referenceVideoMediaIndex);
-  const duration = contract.sourceDurationSeconds.toFixed(2).replace(/\.00$/, '');
+  const duration = String(contract.sourceDurationSeconds);
   const characterMappings = (contract.characters || []).map((character, index) => [
     `ROLE ${index + 1}: In ${source}, identify the source performer by this stable evidence: ${character.sourceActorAnchor}.`,
     `Replace that whole performer with the exact identity, face, hair, body, clothing, colors, footwear, and accessories from ${mediaMarker(character.replacementMediaIndex)}: ${character.replacementIdentity}.`,
@@ -85,7 +85,7 @@ export function compileVideoReplicationPrompt(
 
   return `${cleanTitle}
 
-Use ${source} as the sole and exact temporal performance, edit, composition, and camera authority for the full ${duration}-second output. Recreate the complete reference video beat for beat from its first visible frame through its final held state. Match the exact shot count and order, cut points, shot durations, transitions, camera path, lens perspective, framing changes, horizon, subject scale, screen direction, spatial relationships, choreography, footwork, body and object trajectories, gestures, contacts, impacts, reactions, pauses, motion blur, and outcome. Replacement media controls only the layers named below; it must not rewrite the reference action, timing, camera, editing, causality, or result.
+Use ${source} as the sole and exact temporal performance, edit, composition, and camera authority. Its measured source duration is ${duration} seconds; this is not the requested output duration. Recreate the complete reference video beat for beat from its first visible frame through its final held state. Match the exact shot count and order, cut points, shot durations, transitions, camera path, lens perspective, framing changes, horizon, subject scale, screen direction, spatial relationships, choreography, footwork, body and object trajectories, gestures, contacts, impacts, reactions, pauses, motion blur, and outcome. Replacement media controls only the layers named below; it must not rewrite the reference action, timing, camera, editing, causality, or result.
 
 ${characterMappings}
 ${objectMappings ? `\n${objectMappings}` : ''}

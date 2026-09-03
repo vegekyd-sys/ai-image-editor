@@ -1566,7 +1566,7 @@ Hard constraints:
         web_search: z.boolean().optional().describe('Enable Seedance 2.5 text-to-video web grounding.'),
         replication_contract: z.object({
           reference_video_media_index: z.number().int().positive().describe('Timeline Media Index of the complete source video that controls time, action, editing, and camera.'),
-          source_duration_seconds: z.number().positive().max(30).describe('Measured source duration in seconds.'),
+          source_duration_seconds: z.number().positive().max(30).describe('Measured source duration from media metadata, not the last timestamp in a visual summary or the requested output duration.'),
           characters: z.array(z.object({
             replacement_media_index: z.number().int().positive().describe('Timeline Media Index of the replacement character image.'),
             source_actor_anchor: z.string().min(12).describe('Stable source performer evidence: appearance/costume plus an opening or distinctive action. Left/right alone is invalid.'),
@@ -1606,6 +1606,7 @@ Hard constraints:
         // Intent is explicit, never inferred from an optional object's presence.
         // This also makes old all-fields/placeholder calls safe for ordinary I2V.
         const replication_contract = video_intent === 'replicate' ? suppliedReplicationContract : undefined;
+        let measuredSourceDuration: number | undefined;
         if (video_intent === 'replicate' && !replication_contract) {
           return invalidRequest(model, 'video_intent="replicate" requires replication_contract with a real source video. For ordinary generation use video_intent="generate" and omit the contract.');
         }
@@ -1624,11 +1625,21 @@ Hard constraints:
           if (source?.type !== 'video' || !source.video_meta?.videoUrl) {
             return invalidRequest(model, 'replication_contract.reference_video_media_index must point to a real, ready video, not an image or poster. For photo animation use video_intent="generate" and omit replication_contract.');
           }
+          const { probeVideoMetadataFromUrl } = await import('./video-metadata');
+          const measured = await probeVideoMetadataFromUrl(source.video_meta.videoUrl);
+          if (!measured?.duration) {
+            return invalidRequest(model, 'Could not measure the source video duration. Provide a readable MP4/MOV source before replication; do not estimate seconds from a visual description.');
+          }
+          // Accept normal container/frame rounding, not a different measured timeline.
+          if (Math.abs(replication_contract.source_duration_seconds - measured.duration) > 0.25) {
+            return invalidRequest(model, `Source duration is ${measured.duration}s from the media container, not ${replication_contract.source_duration_seconds}s. Correct source_duration_seconds and any conflicting shot timing, then resubmit once. Keep the requested output duration separate.`);
+          }
+          measuredSourceDuration = measured.duration;
         }
         const effectiveStoryPrompt = replication_contract
           ? compileVideoReplicationPrompt(story_prompt || 'Exact Video Replication', {
               referenceVideoMediaIndex: replication_contract.reference_video_media_index,
-              sourceDurationSeconds: replication_contract.source_duration_seconds,
+              sourceDurationSeconds: measuredSourceDuration!,
               characters: (replication_contract.characters || []).map(character => ({
                 replacementMediaIndex: character.replacement_media_index,
                 sourceActorAnchor: character.source_actor_anchor,
