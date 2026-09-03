@@ -1,6 +1,6 @@
 {
   "name": "makaron-cli",
-  "version": "0.14.6",
+  "version": "0.14.7",
   "description": "Give Codex a creative agent. Pass complete creative requests and source media to Makaron Chat.",
   "author": {
     "name": "Versa AI",
