@@ -418,7 +418,7 @@ export async function* runMakaronAgent(
     ? buildDurableCompositionGuidance()
     : '';
   const executionSystemPrompt = `${baseSystemPrompt}${durableExecutionDirective}${durableCompositionDirective}${durableCompositionGuidance}`;
-  const languageDirective = buildAgentOutputLanguageDirective(options?.locale);
+  const languageDirective = buildAgentOutputLanguageDirective(options?.locale, analysisOnly || tipReactionOnly ? 'ui' : 'user');
   const skillLaunchDirective = getSkillLaunchSystemDirective(options?.skillLaunchContext);
   const systemPrompt = `${executionSystemPrompt}${languageDirective}${skillLaunchDirective}`;
   const responseLocale = normalizeLocale(options?.locale, 'en');

@@ -76,10 +76,10 @@ import {
   studioCreativePacketSchema,
 } from './studio-run/creative-packet';
 import {
-  getReplyLanguageInstruction,
   normalizeLocale,
   translate,
 } from './locales';
+import { AGENT_REPLY_LANGUAGE_RULE } from './agent-response-policy';
 import { stableDraftPromotionSnapshotId } from './draft-promotion';
 import { sourceRangeFromVideoMeta } from './media-source-range';
 import { materializeSeedAudioReference } from './seed-audio-reference';
@@ -2185,12 +2185,11 @@ function createAnalyzeImageTool(
 
       toModelOutput({ output }: { output: any }) {
         if (output.analysis) {
-          const languageRule = getReplyLanguageInstruction(locale).replace(/^Reply/, 'Answer the user');
           return {
             type: 'content' as const,
             value: [{
               type: 'text' as const,
-              text: `${output.analysis}\n\nUse the analysis above as visual evidence. ${languageRule}`,
+              text: `${output.analysis}\n\nUse the analysis above as visual evidence. ${AGENT_REPLY_LANGUAGE_RULE}`,
             }],
           };
         }
