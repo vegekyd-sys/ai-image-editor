@@ -115,6 +115,8 @@ const ja = {
   // Changelog
   'changelog.heading': '更新情報',
   'changelog.close': '更新情報を閉じる',
+  'changelog.fasterVideoAnalysis.title': '動画分析がより速く',
+  'changelog.fasterVideoAnalysis.item1': 'Analyze Video は Gemini 3.8 Flash を採用し、短い動画の分析で待ち時間の短縮を重視するようになりました。Agent と CLI の両方で利用できます。',
   'changelog.minimaxH3Max.title': 'MiniMax H3 Max Turbo 超リアルタイム動画',
   'changelog.minimaxH3Max.item1': 'fal 提供の MiniMax H3 Max Turbo が Makaron に登場し、5 秒の動画をデフォルトのネイティブ 768P でリアルタイムより速く生成でき、テキスト生成と1枚の開始画像からの動画生成に対応します。',
   'changelog.wan30.title': 'Wan 3.0 Standard & Pro',

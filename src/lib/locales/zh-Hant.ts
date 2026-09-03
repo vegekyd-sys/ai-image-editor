@@ -118,6 +118,8 @@ const zhHant = {
   // Changelog
   'changelog.heading': '更新',
   'changelog.close': '關閉更新',
+  'changelog.fasterVideoAnalysis.title': '更快的影片分析',
+  'changelog.fasterVideoAnalysis.item1': 'Analyze Video 現使用 Gemini 3.8 Flash，優先縮短短影片分析的等待時間，Agent 與 CLI 同步更新。',
   'changelog.minimaxH3Max.title': 'MiniMax H3 Max Turbo 超即時影片',
   'changelog.minimaxH3Max.item1': '由 fal 提供的 MiniMax H3 Max Turbo 現已上線 Makaron，預設以原生 768P 超即時產生 5 秒影片，並支援文字生成影片和單張首幀生成影片。',
   'changelog.wan30.title': 'Wan 3.0 標準版與 Pro',
