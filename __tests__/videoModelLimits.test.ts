@@ -187,8 +187,23 @@ describe('video model reference limits', () => {
     expect(resolveVideoProviderModel({ model: 'minimax-h3-max', imageReferenceCount: 0 })).toBe('minimax/h3-max-turbo/text-to-video')
     expect(resolveVideoProviderModel({ model: 'minimax-h3-max', imageReferenceCount: 1 })).toBe('minimax/h3-max-turbo/image-to-video')
     expect(resolveVideoOutputDuration({ model: 'minimax-h3-max' })).toBe(5)
-    expect(estimateVideoCredits({ model: 'minimax-h3-max', resolution: '480p', durationSec: 5 })).toBe(25)
-    expect(estimateVideoCredits({ model: 'minimax-h3-max', resolution: '768p', durationSec: 5 })).toBe(40)
+    expect(estimateVideoProviderCostUsd({ model: 'minimax-h3-max', resolution: 'auto', durationSec: 5 })).toBe(0.2)
+    expect(estimateVideoCredits({ model: 'minimax-h3-max', resolution: 'auto', durationSec: 5 })).toBe(40)
+    const creditCases = [
+      ['480p', 5, 25],
+      ['480p', 10, 50],
+      ['480p', 15, 75],
+      ['768p', 5, 40],
+      ['768p', 10, 80],
+      ['768p', 15, 120],
+    ] as const
+    for (const [resolution, durationSec, expectedCredits] of creditCases) {
+      expect(estimateVideoCredits({
+        model: 'minimax-h3-max',
+        resolution,
+        durationSec,
+      })).toBe(expectedCredits)
+    }
     expect(validateVideoModelRequest({ model: 'minimax-h3-max', outputDuration: 7 })).toContain('one of 5, 10, 15 seconds')
     expect(validateVideoModelRequest({ model: 'minimax-h3-max', outputDuration: 5, imageReferenceCount: 2 })).toContain('at most 1 reference images')
     expect(validateVideoModelRequest({ model: 'minimax-h3-max', outputDuration: 5, hasVideoReference: true })).toContain('does not support reference videos')

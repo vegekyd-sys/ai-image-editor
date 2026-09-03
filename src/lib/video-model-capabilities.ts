@@ -484,8 +484,10 @@ const MODEL_CAPABILITIES: Record<string, VideoModelCapability> = {
     maxVideoReferences: 0,
     maxAudioReferences: 0,
     maxTotalReferences: 1,
-    // fal H3 Max Turbo launch pricing is discounted through 2026-09-07. Bill
-    // against steady-state rates so credits remain sufficient after expiry.
+    // Verified against fal's H3 Max Turbo rate card on 2026-09-03. The
+    // temporary launch promo is $0.00625/s at 480p and $0.01/s at 768p through
+    // 2026-09-07; customer billing uses the post-promo list rates below so it
+    // stays stable when the discount expires.
     estimatedCostPerSecondUsd: 0.04,
     estimatedCostPerSecondUsdByResolution: {
       '480p': 0.025,
