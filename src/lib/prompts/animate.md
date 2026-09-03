@@ -22,6 +22,39 @@ Source-video index: when an existing video controls the result, now read
 chooses source-edit versus replication, and may return here for the provider
 prompt. Do not expose a provider `edit` mode as the product workflow.
 
+## Conditional Prompt Guide Index
+
+- For Wan 3.0 / Wan 3.0 Prime adult/NSFW video requests, read
+  `skills/video-mature-themes/SKILL.md`. Do not load it for ordinary videos.
+  It supplies writing guidance only; this document's shared media markers,
+  reference-mode, timing, audio and API contracts still apply. Its examples are
+  not an alternative tool syntax or permission to submit without confirmation.
+
+## Shared Prompt Construction
+
+Start with who is in which setting and what changes on screen. Add the lighting,
+composition, visual treatment, and sound that matter to this specific brief.
+Use connected descriptions rather than a pile of quality tags; detail should
+resolve ambiguity, not repeat itself. There is no writing word/character quota;
+respect the selected tool's actual input limit.
+
+- **Text only:** establish the subject and setting, then describe the visible
+  action and its outcome. Do not invent reference identifiers.
+- **Feature references:** assign each selected asset a job: character identity,
+  environment, object, motion/timing, camera path, or voice. Say which aspect to
+  borrow and what the new scene changes. A reference image does not lock the
+  opening composition. Use only capabilities the selected model supports.
+- **Explicit first/last frames:** only on a supported, intentionally chosen
+  frame-conditioned route, let those frames define the composition and describe
+  the transition between them. Do not apply this shortcut to reference mode.
+
+For an interaction, make the action readable: initial position, direction and
+speed, contact or change, then the visible consequence. For example, a ceramic
+cup settles onto a wooden table and the tea ripples. Keep that cause and effect
+across cuts; do not restart the action or silently change who holds the prop.
+Where supplied motion and appearance references have different roles, preserve
+the requested motion without accidentally copying the source's rendering style.
+
 Reference-image preflight: EvoLink Seedance accepts JPEG/PNG/WebP images only, with width and height each 300-6000px, aspect ratio 0.4-2.5, and at most 30MB per image. The tool returns a specific `errorReason` (`too_small`, `too_large`, `invalid_aspect_ratio`, `unsupported_format`, or `unreadable`) plus actual dimensions and limits. `retryable: false` means do not resubmit the same URL. When `repairable: true`, decide whether to create a new resized/padded/converted public image URL or ask the user for a better source, then submit only with that new URL. A second unchanged submission becomes `terminal: true` and ends the retry loop.
 Pure size/format repair is deterministic transport work: use `run_code` + `saveOutput`, publish the prepared workspace images once, and reference their new Media Index items. Never call `generate_image` merely to upscale, pad, or convert a supplied reference; that changes identity and adds cost. For source-led replication, follow the exact return/publish contract in `skills/video-edit/references/direct-reference-route.md`.
 
@@ -49,7 +82,7 @@ Every SeeDance 2.0 script must be **4 to 15 seconds**. Seedance 2.5 scripts may 
 
 If the user asks for exactly 16-30s and selects Seedance 2.5, write one complete direct-generation script using the longer-form direction rules below. For anything beyond the selected model limit, use the long-video-director workflow.
 
-If the user gives a complete script whose total duration fits the selected model's single-call limit, keep it as **one video generation script**. The whole title + every `Shot N (Xs):` line + `Style:` line must be submitted together as one prompt, with the generation duration set to the total script duration when known. If the script totals less than 4s, extend it to a compact 4s script instead of submitting a shorter duration. Do not submit only a single shot or a single line from the script. Do not split a valid script into separate generations just because it has multiple `Shot N (Xs):` lines. Multiple shots are normal inside one 15s video, and a 16-30s Seedance 2.5 video should use the extra time for additional meaningful beats.
+If the user gives a complete script whose total duration fits the selected model's single-call limit, keep it as **one video generation script**. The whole title + every `Shot N (Xs):` line + `Style:` line must be submitted together as one prompt, with the generation duration set to the total script duration when known. For SeeDance, if the script totals less than 4s, extend it to a compact 4s script instead of submitting a shorter duration; do not apply this minimum to models that support shorter clips. Do not submit only a single shot or a single line from the script. Do not split a valid script into separate generations just because it has multiple `Shot N (Xs):` lines. Multiple shots are normal inside one 15s video, and a 16-30s video should use the extra time for additional meaningful beats.
 
 If the source/reference video itself is longer than the selected model's input limit (15s for SeeDance 2.0, 30s for SeeDance 2.5), do **not** compress the whole source into one short edit unless the user explicitly asks to summarize it. Treat it as long-video input: analyze its pacing, split it into model-sized self-contained segments, carry the seam requirements into each segment script, and wait for approval before rendering.
 
@@ -57,7 +90,10 @@ Uploaded/reference videos may total **15 seconds for SeeDance 2.0** or **30 seco
 
 Wan 3.0 has an additional combined budget: **reference-video duration + requested output duration must be 30 seconds or less**. Output duration is submitted in whole seconds, so a 5.04s reference permits at most a 24s output. Compute this before calling `generate_animation`; shorten the output or trim the reference instead of submitting an over-budget task.
 
-## Seedance 2.5 Longer-Form Direction (16-30s)
+## Longer-Form Direction (16-30s)
+
+Apply this craft guidance to any selected model that supports the requested
+length, including Seedance 2.5 and Wan. It does not choose the provider.
 
 Do not write a 15s idea and stretch it to 30s with slower camera motion, repeated coverage, vague ambience, or a long static hold. The extra duration must carry additional story information, visual development, escalation, or payoff.
 
@@ -75,7 +111,7 @@ Build a complete longer-form arc:
 
 Longer-form shot craft:
 - The sum of all `Shot N (Xs):` durations must equal the requested duration exactly.
-- Each shot still has one dominant subject action and one camera movement. More time means more purposeful beats, not more simultaneous instructions per shot.
+- Each shot still has one dominant subject action and a coherent camera path or fixed framing. More time means more purposeful beats, not more simultaneous instructions per shot.
 - Adjacent shots must change at least one meaningful dimension: framing, angle, camera path, action, scale, location, lighting state, or emotional intensity. Avoid two shots that communicate the same information.
 - Preserve identity, wardrobe, props, geography, screen direction, and cause-and-effect continuity across the whole generation. If the location changes, write the transition that motivates it.
 - Re-anchor the main subject or motif every 2-3 shots so richer coverage does not become a disconnected montage.
@@ -133,9 +169,9 @@ Rules:
 Prompt examples:
 - Source edit: `在<<<media_1>>>（视频）的基础上，只加入飞舞的金色粒子特效，其余不变`
 - Source edit: `Add only a glowing fairy sprite around the character in <<<media_1>>>; preserve everything else.`
-- Motion reference: `<<<media_2>>>模仿<<<media_1>>>的表情和动作` (media_1 is video)
-- Remix: `Based on <<<media_3>>>, <<<media_1>>> performs the same dance in a neon studio.`
-- Combine: `Put <<<media_2>>> (photo person) into the scene of <<<media_1>>> (video)`
+- Motion reference: `<<<media_2>>>（表演者）参考<<<media_1>>>（动作视频）的表情和动作。`
+- Remix: `The dancer in <<<media_1>>> (appearance reference) performs the choreography from <<<media_3>>> (motion reference) in a neon studio.`
+- Combine: `Put the person in <<<media_2>>> (character reference) into the scene of <<<media_1>>> (setting video).`
 
 ### Motion Control Mode
 Precise action transfer — the person in the photo performs the exact movements from the reference video. Best for dance, expression mimicry, pose transfer.
@@ -150,9 +186,9 @@ Precise action transfer — the person in the photo performs the exact movements
 
 ## Bringing Photos to Life (图片动起来)
 
-Most requests are **single photo → 5s video**. Your job is to make the scene ALIVE in those 5 seconds — not just slow-motion zoom. The worst output is a photo that barely moves. The best output has a clear action arc with beginning and end.
+For a **single photo → 5s video** request, make the requested change visible within those five seconds. The photo remains a feature reference unless a frame-conditioned route was intentionally selected. A clear action arc is useful; if the user wants a quiet portrait, stillness, or a held product shot, respect that intent rather than forcing a dramatic gesture.
 
-### Anti-patterns (DO NOT):
+### For an active-scene brief, avoid:
 - ❌ Slow push-in on a static scene for 5 seconds (Ken Burns)
 - ❌ "The scene comes alive with subtle movement" — too vague, produces nothing
 - ❌ Describing what's already visible instead of what HAPPENS next
@@ -177,7 +213,7 @@ The key: describe ONE clear action that fills the 5 seconds. Not three things ha
 - "Wind suddenly picks up — her dress billows, leaves scatter across the frame, she laughs and reaches up to hold her hat."
 
 **3. Camera + subject motion together:**
-Don't rely on camera alone. Combine:
+For an active scene, camera and subject motion can complement each other; a fixed camera is also a deliberate choice. Examples:
 - Push-in + subject turns toward camera
 - Slow orbit + subject's expression changes
 - Pull-out reveal + environment comes alive (lights, particles, movement)
@@ -192,7 +228,7 @@ Don't rely on camera alone. Combine:
 Choose based on the content. You decide.
 
 ### Continuous Take (一镜到底)
-One flowing description. No shot numbers. Describe what the camera sees as it moves.
+One flowing description. No shot numbers. Explicitly request a single continuous take with no cuts, then describe the sequence of visible changes. The camera can move or remain fixed.
 
 Good for: transformation, single-scene showcase, character reveal, product display.
 
@@ -203,11 +239,11 @@ Key techniques:
 - Progression: bottom-to-top for transformation, close-to-wide for reveal
 
 ### Shot-by-Shot
-Numbered shots with timing. Each shot = one camera setup.
+Start with a short overview of the scene and intended progression, followed by numbered shots with timing. Each shot = one camera setup. Keep the cast, wardrobe, props, geography, style, and action state consistent across cuts unless the story deliberately changes them.
 
 Good for: multi-scene narrative, dialogue, montage, story arc.
 
-Format (keep exactly — models require this):
+Use Makaron's shared script notation (an authoring convention, not a universal provider syntax requirement):
 ```
 Shot 1 (2s): Wide shot, ...
 Shot 2 (3s): Close-up, ...
@@ -215,9 +251,9 @@ Shot 2 (3s): Close-up, ...
 
 ## Writing Rules
 
-1. **Language**: Write all readable action, camera, dialogue, sound, and style descriptions in the same language the user is speaking. If the user writes Chinese, the script body should be Chinese because the video follows voice/dialogue context. BUT keep `Shot N (Xs):` format exactly as-is (not "镜头N" or "分镜N") — models require this exact format. Same for the `Style:` tag and `<<<media_N>>>` references.
+1. **Language**: Write action, camera, sound, and style descriptions in the user's language. Dialogue follows the requested spoken language, which may differ from the conversation language. Keep the shared `Shot N (Xs):` notation, `Style:` tag, and Makaron media markers; do not substitute a provider's example syntax such as `@Video1` or `Image 1`.
 
-2. **Character/media definition first** (HIGHEST PRIORITY — this produces the best results): Map every `<<<media_N>>>` to a role or label at the very start of the script. This applies to BOTH images and videos. After every `<<<media_N>>>` reference, always follow with the role name or a noun — never let it directly precede a verb or preposition.
+2. **Character/media definition first**: Map every `<<<media_N>>>` to a role or label at the very start of the script. This applies to both images and videos. Put a role name or noun next to each marker so the intended subject or reference function stays clear.
    - Good: `<<<media_1>>>（原视频）的基础上，加入粒子特效`
    - Good: `<<<media_1>>>（主角）跑向门口`
    - Good: `主角是<<<media_2>>>，参考视频是<<<media_1>>>（舞蹈动作）`
@@ -226,40 +262,40 @@ Shot 2 (3s): Close-up, ...
 
 3. **Image references**: `<<<media_N>>>` for images (N starts at 1). Reusable. In reference video mode, also available: `<<<video_N>>>`.
 
-4. **Camera direction**: Start each shot/segment with framing and motion. One camera motion per shot — never combine push + pan or dolly + tilt in the same shot (causes jittery output).
+4. **Camera direction**: Start each shot/segment with framing and an intentional camera path or a fixed camera. Prefer one dominant movement; if a compound move matters, describe it as a coherent path over time rather than simultaneous contradictory commands.
    - Framing: Wide shot, Mid-shot, Close-up, Extreme close-up
    - Angle: Top-down, Bird's-eye view, Low angle, Side view
    - Motion: Camera circles, Push-in, Pull-out, Whip pan, Dolly, Tracking
 
-5. **Dialogue & Voice** (Kling): Kling generates character speech with real voice synthesis. Write dialogue inline with emotion/tone cues. Supports Chinese, English, Japanese, and more.
+5. **Dialogue & Voice**: For a model with native audio, write exact requested speech inline, identify the speaker, and give relevant delivery cues: emotion, pace, timbre, language or accent. Keep character names and voices distinct, and specify turn order when multiple people speak. Fit the words and pauses to the shot's time; do not promise exact lip sync from a prompt alone.
    - Format: `角色名（语气描述）："台词内容"` or `Character (tone): "dialogue"`
-   - Example: `猫（小孩的声音，故作镇定）："老板，你找我？"` → Kling renders a child-like voice
+   - Example: `猫（小孩的声音，故作镇定）："老板，你找我？"`
    - Example: `主人（画外音，语气严肃）："你今年的KPI呢？"` → off-screen narration
    - Add ambient sound cues alongside dialogue: `Sound: 办公室空调嗡嗡声`
    - For pet/animal talking videos: describe the voice style (小孩声音, 奶声奶气, 低沉老练) in parentheses
 
-6. **Sound cues**: Add brief ambient/music hints inline (5-10 words). E.g. "Sound: soft piano fades in."
+6. **Sound cues**: Specify sound sources and their audible events, the surrounding ambience, and music style or progression when useful. Tie an important sound to its visible event. An omitted instruction leaves room for model interpretation: when the user wants no speech, say "no dialogue or narration"; when they want ambience without a score, say "no background music". Neither means total silence. Ask for silence only when intended, and keep these directions in the same video script.
 
 7. **Style tag**: End with a brief style direction (e.g. "Cinematic, warm golden light." or "Surreal, dreamlike, soft focus.")
 
-8. **Hook**: First 1-2 seconds decide if viewer keeps watching. Open with the most striking visual — never a generic establishing shot.
+8. **Opening intent**: For a short social video, put the hook in the first 1-2 seconds. For a contemplative scene or requested slow reveal, use an opening that serves that pacing instead of forcing a fast-cut hook.
 
 9. **Segment seams**: If this script is part of a long-video segment plan, any seam requirements must be written into the script itself. The first shot/action must satisfy the previous seam's required opening, and the final shot/action must satisfy the next seam's required ending. Do not leave continuity only as a separate note outside the script.
 
-10. **Duration**: 4s = minimum compact unit, 5s = default/common preset, 10s = complete detail. Recommend 10s for complex scenes. For an explicitly selected Seedance 2.5 request, use 16-30s when the concept benefits from a fuller story arc rather than compressing it into the 15s pattern. Never write or submit a SeeDance generated video duration below 4s.
+10. **Duration**: Use the requested length within the selected model's limits; otherwise choose enough time for the intended action and speech. The five-second pattern is a useful preset, not a universal rule. For a capable model, use 16-30s when the concept benefits from a fuller story arc rather than compressing it into the 15s pattern. Never write or submit a SeeDance generated video duration below 4s.
    - **Video editing exception**: if the prompt references an existing video within the selected model's input limit, match the source video's duration. Clamp to 4-15s for SeeDance 2.0 or 4-30s for SeeDance 2.5; dedicated SeeDance 2.5 edit may instead use adaptive duration (`-1`). Split sources longer than the selected model limit into long-video segments first. Do not use the single-photo 5s formula for video edits.
 
-11. **Select & reorder**: Pick 3-7 images from the Media Index. Skip duplicates and weak edits. Reorder freely for the strongest story — don't follow upload order.
+11. **Select & reorder**: Select only the references needed for the scene, within the model's limits. One image can be enough; do not add unrelated images to meet a quota. Skip duplicates, preserve the original Media Index identifiers, and organize the story independently of upload order.
 
-12. **Multi-person positioning**: When 2+ characters face the camera in the same shot, lock their spatial positions with explicit cues (e.g. "左侧穿灰蓝色作训服的角色" / "the character in black leather on the right"). Without this, models swap faces between characters.
+12. **Multi-person positioning**: For multiple characters, name each person consistently and establish their relative positions, gaze, and interaction. For example, "the character in black leather on the right passes the cup to the seated character on the left." Carry the changed prop ownership into the next shot.
 
-13. **Stability safeguard**: For shots with close-up faces or detailed character features, append a brief stability cue at the end of that shot: "人物面部稳定清晰" or "face stable, no distortion". This reduces face deformation in complex motion scenes.
+13. **Continuity check**: Before submitting, check the cast, reference roles, action sequence, shot-duration sum, style, and intended sound for contradictions. Prefer concrete continuity directions over repeated negative tags. Prompt cues guide a model; they do not guarantee identity, physics, exact timing, or spoken-word accuracy. Judge those from the resulting clip.
 ## Model Notes
 
 - **Provider-wide image contract**: Treat every video-generation image as a feature reference by default, including a request with exactly one image. Never infer image-to-video or first-frame mode from image count. The sole current exception is explicitly selected `minimax-h3-max`, whose capability contract maps one selected image to image-to-video because it does not yet support reference-to-video.
 
 - **Kling**: Supports dialogue with voice synthesis, real human faces, video editing (base mode). Reference video size: one .mp4/.mov, <=200MB, resolution <=2K; no documented video resolution lower bound. Use `Shot N (Xs):` format or continuous prose.
-- **SeeDance**: Best visual quality. Supports real human faces and reference video. Reference video size: .mp4/.mov, <=50MB, width/height 300-6000px, aspect ratio 0.4-2.5, frame pixels 409,600-2,086,876.
+- **SeeDance**: Supports real human faces and reference video. Reference video size: .mp4/.mov, <=50MB, width/height 300-6000px, aspect ratio 0.4-2.5, frame pixels 409,600-2,086,876.
 - **SeeDance Mini**: Lower-cost Seedance route for drafts and multi-size tests. Supports 480p/720p, real human faces, image/video/audio references, and the same reference-video size limits as SeeDance.
 - **Wan 3.0 / Wan 3.0 Prime**: MuleRouter generation routes for explicitly selected 2-30s text/image/multimodal videos. Both accept the shared `video_resolution` field at 480p/720p/1080p/2K/4K. Use `<<<media_N>>>` and `<<<audio_N>>>`; Makaron translates them to Wan's `Image N`, `Video N`, and `Audio N` provider markers. Supports up to 10 images, 5 videos, and 5 audio files (20 total). It is reference generation, not direct video edit/extend, and has no Makaron content-filter switch.
 - **Grok Imagine Video**: Fast generation uses `grok-imagine-video-1.5`: text-to-video or feature/reference-to-video with 1-7 image references, 1-15s, and native audio. Text-only generation supports 480p/720p/1080p; any image or preset voice reference is capped at 720p. Reference generation may use a supported fixed `aspect_ratio`, and every image must be assigned a prompt role. Timeline video edit/extend stays under the same Makaron `grok` selector but routes internally to `grok-imagine-video`: edit one MP4 up to 8.7s with the source duration/shape retained at up to 720p, or extend one 2-15s MP4 by 2-10s. Set `video_operation: "edit"` or `"extend"` explicitly when a source video is involved.
@@ -286,51 +322,32 @@ When a skill provides a reference video in workspace assets:
 
 ## Showcases
 
-### Motion control — precise action transfer (motion_control=true, video_ref_url, keep_original_sound=true):
+### Motion control — precise action transfer (motion_control=true, video_ref_url):
 搞怪表情挑战
 
-<<<media_1>>>
+<<<media_1>>>（动作表演者）
 
+### Reference roles — appearance and motion are separate:
+纸杯接力
 
-### Video editing — imitate motion/expression from timeline video:
-搞怪表情模仿
+<<<media_1>>>（店员外观），<<<media_2>>>（接杯动作参考视频）。新场景是一家暖光咖啡店，仅借用参考视频中的接杯时序，不复制其背景或画面风格。
+Shot 1 (3s): 固定中景，店员伸出右手接住从画面左侧递来的纸杯，手握稳后送杯者松手。声音是咖啡店的环境低语，无台词或旁白。
+Shot 2 (2s): 切手部近景，同一纸杯仍在店员右手中。店员将杯子放在木台面上，伴随轻轻的落杯声；无背景音乐。
+Style: 温暖写实，连续的柜台空间与人物服装。
 
-<<<media_1>>>模仿<<<media_2>>>的表情和动作
+### Continuous take — text only, deliberate sound exclusions:
+雨中的绿灯
 
-### Video editing — add effects to existing video:
-显卡小精灵入场
+一镜到底，无切镜，5秒。固定中景，一位穿灰色雨衣的通勤者停在人行道边，雨滴沿伞缘落下。信号灯变绿后，通勤者迈出一步，鞋底溅起一小片积水。声音只有雨声、远处车流和这一声脚步；无台词、无旁白、无背景音乐。
+Style: 自然城市观察，阴天柔光，湿润路面反光。
 
-在<<<media_1>>>（视频）的基础上，加入一个发光的显卡小精灵在画面中飞舞围绕主角转圈，留下蓝绿色粒子光迹。
-Style: Cyberpunk tech fantasy, neon particles.
+### Two characters — stable roles, ordered dialogue, native audio:
+最后一把伞
 
-### Video editing — same dance, different person (external video_ref_url):
-Neon Dance Challenge
-
-<<<media_1>>> performs the same choreography, matching every move and beat, in a neon-lit dance studio.
-
-### Multi-shot with characters:
-Shot 1 (2s): Wide shot, <<<media_1>>> and <<<media_2>>> face off in the center of the rooftop, feet apart in a boxing stance.
-Shot 2 (2s): Both move in, testing each other up close: <<<media_1>>> throws a quick punch, <<<media_2>>> sidesteps and blocks.
-Shot 3 (3s): <<<media_1>>> continues the attack, landing a punch on <<<media_2>>>'s head, and <<<media_2>>> retaliates.
-Shot 4 (4s): Wide shot, the two continue their intense fight.
-Shot 5 (2s): A bird's-eye view of the scene shows the two separated and having stopped fighting.
-
-### Character + dialogue:
-Long take. On a windy day in an Icelandic mountain range, <<<media_1>>> says with a barely contained smile, "Do you think our wedding is too simple—like there's no one here to bless us?" The camera circles the subjects to reveal <<<media_2>>> standing opposite, smiling and replying, "The wind—the wind is their blessing to us." Cinematic, handheld feel.
-
-### Dialogue in shots (台词整合到脚本中):
-When the video needs characters to speak, write dialogue directly inside each Shot using the format `角色（语气描述）：台词`. Kling will synthesize voice. Example:
-
-Shot 1 (3s): 近景，<<<media_1>>> 坐在沙发上。场景设定在家中，客厅空调发出轻微的嗡嗡声，营造出真实的日常生活氛围。妈妈（轻声说道，语气中带着一丝惊讶）：哇，我完全没想到剧情会是这样。爸爸（低声附和，语气平静）：是啊，真是意想不到。
-Shot 2 (3s): 切到近景，儿子和女儿的反应。儿子（兴奋地说道）：这简直是史上最棒的反转！女儿（热情地点头附和）：真不敢相信他们居然这么做了！
-
-### Photo edit story (typical for this app):
-Shot 1 (2s): Extreme close-up, push-in. <<<media_3>>> — a chameleon's eye snaps into focus, scales shifting neon. Sound: sharp synth hit.
-Shot 2 (2s): Pull-out to mid-shot. <<<media_3>>> — chameleon perched on subject's shoulder, surprised glance. Sound: playful pizzicato.
-Shot 3 (3s): Wide shot, slow push-in. <<<media_1>>> — original street scene, warm evening light. Sound: lo-fi beat fades in.
-Shot 4 (2s): Close-up, handheld. <<<media_4>>> — neon color grade, puddles reflecting cyan and magenta. Sound: synth bass pulse.
-Shot 5 (2s): Bird's-eye view, pulling up. <<<media_5>>> — full scene from above, neon reflections on wet pavement. Sound: music swells, fades to rain.
-Style: Urban cinematic, neon noir, handheld energy.
+<<<media_1>>>（左侧店员），<<<media_2>>>（右侧顾客）。打烊的门口，两人为一把伞短暂停留。
+Shot 1 (3s): 固定双人中景，左侧店员将蓝伞柄递向右侧顾客。店员（温和、语速自然）：“带上吧，还在下雨。”雨声在门外，音乐低于人声。
+Shot 2 (3s): 切顾客近景，顾客接稳同一把蓝伞，店员的手离开伞柄。顾客先点头，然后（轻声、稍有迟疑）：“那你呢？”门外雨声延续，一段轻柔钢琴在结尾收住。
+Style: 温暖室内与冷色雨夜形成对比，生活化表演。
 
 ---
 
