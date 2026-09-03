@@ -27,13 +27,12 @@ export const geminiBackend: ModelBackend = {
         ...(req.image ? [{ url: req.image, role: 'Photo to edit (base image)' }] : []),
         ...req.references,
       ];
-      const image = await generateImageWithReferences(
+      return generateImageWithReferences(
         allRefs,
         req.prompt,
         req.aspectRatio,
         multiRefThinking,
       );
-      return { image };
     }
 
     // Standard single-image or text-to-image

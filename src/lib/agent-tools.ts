@@ -1442,8 +1442,8 @@ function createGenerateImageTool(
             console.error('[billing] generate_image subscription usage logging error:', error);
           }
         } else if (skillResult.usage && skillResult.provider !== 'codex-subscription') {
-          import('./billing/credits').then(({ deductByTokens }) =>
-            deductByTokens(
+          const { deductByTokens } = await import('./billing/credits');
+          await deductByTokens(
               ctx.userId ?? '',
               'generate_image',
               skillResult.usage!.modelId,
@@ -1453,8 +1453,6 @@ function createGenerateImageTool(
               undefined,
               undefined,
               skillResult.usage!.providerCostUsd,
-            )
-              .catch(e => console.error('[billing] generate_image deduct error:', e))
           );
         } else if (
           skillResult.provider !== 'codex-subscription'
