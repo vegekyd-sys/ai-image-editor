@@ -217,6 +217,7 @@ export interface VideoMeta {
   width?: number;
   height?: number;
   creditsCharged?: number;
+  billingQuote?: import('@/lib/billing/media-pricing').MediaQuote;
   refunded?: boolean;
   transcript?: VideoTranscript;
   completionActions?: ArtifactCompletionAction[];

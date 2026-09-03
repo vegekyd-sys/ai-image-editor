@@ -3,7 +3,31 @@ import type { TranslationDictionary } from './index';
 
 const zhHant = {
   ...zh,
-
+  'mediaPricing.title': "影片與音訊價格",
+  'mediaPricing.description': "實際扣費直接讀取此表。美元成本 × 加價倍率換算 Credits，整次任務向上取整；修改對後續報價生效，已預扣任務保留原報價。",
+  'mediaPricing.included': "ASR、渲染與儲存尚未單獨計費；個人方案用量單獨記錄，不重複扣 Credits。",
+  'mediaPricing.refresh': "重新整理",
+  'mediaPricing.model': "模型",
+  'mediaPricing.variant': "解析度 / 操作",
+  'mediaPricing.output_usd_per_second': "輸出 USD/秒",
+  'mediaPricing.input_usd_per_second': "參考影片 USD/秒",
+  'mediaPricing.input_usd_per_image': "參考圖 USD/張",
+  'mediaPricing.free_image_references': "免費參考圖數",
+  'mediaPricing.markup': "加價倍率",
+  'mediaPricing.unfiltered_multiplier': "特殊模式倍率",
+  'mediaPricing.active': "啟用",
+  'mediaPricing.saving': "儲存中…",
+  'mediaPricing.saved': "已儲存",
+  'mediaPricing.error': "價格無法取得或儲存失敗，請檢查遷移設定後重試。",
+  'mediaPricing.conflict': "價格已被其他人修改，請重新整理後重試。",
+  'mediaPricing.loading': "載入價格…",
+  'mediaPricing.generate': "生成",
+  'mediaPricing.edit': "編輯",
+  'mediaPricing.extend': "延長",
+  'mediaPricing.fixedTitle': "按次工具價格",
+  'mediaPricing.fixedDescription': "下表用於按次收費；影片與 Seed Audio 使用上方多維價目，LLM 與 token 型圖片使用下方 Token Rates。",
+  'mediaPricing.quoteUnavailable': "暫時無法報價",
+  'mediaPricing.quoteCredits': "預估 {credits} Credits",
   // Locale
   'locale.selector': '選擇語言',
 

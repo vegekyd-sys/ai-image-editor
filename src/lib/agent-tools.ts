@@ -7,7 +7,8 @@ import type { ImageBackground, ModelId } from './models/types';
 import { editImage } from './skills/edit-image';
 import { rotateCamera } from './skills/rotate-camera';
 import { createVideo } from './skills/create-video';
-import { estimateVideoProviderCostUsd, getRequiredVideoCredits, normalizeVideoModelId, resolveAgentVideoSelection, resolvePersistedVideoDuration, resolveVideoGenerationRoute, resolveVideoOutputDuration, resolveVideoReplicationModelId, resolveVideoReplicationResolution, supportsNativeTextToVideo, validateVideoModelRequest } from './video-model-capabilities';
+import { normalizeVideoModelId, resolveAgentVideoSelection, resolvePersistedVideoDuration, resolveVideoGenerationRoute, resolveVideoOutputDuration, resolveVideoReplicationModelId, resolveVideoReplicationResolution, supportsNativeTextToVideo, validateVideoModelRequest } from './video-model-capabilities';
+import { quoteVideo } from './billing/media-pricing';
 import {
   deductFixedCredits,
   isInsufficientCreditsError,
@@ -1860,7 +1861,7 @@ Hard constraints:
           const videoSec = effectiveDuration === -1
             ? referenceVideoDuration ?? 10
             : effectiveDuration || 10;
-          const creditsRequired = getRequiredVideoCredits({
+          const billingQuote = await quoteVideo({
             model: videoModel,
             resolution: videoRoute.resolution,
             durationSec: videoSec,
@@ -1872,6 +1873,7 @@ Hard constraints:
             contentFilter: content_filter,
           });
 
+          const creditsRequired = billingQuote.credits;
           const reserveGrokApiCredits = async () => {
             if (!ctx.userId || reservedVideoCredits > 0) return;
             const creditCheck = await requireCredits(ctx.userId, creditsRequired);
@@ -1981,6 +1983,7 @@ Hard constraints:
             providerUrl: skillResult.videoUrl,
             createdAt: new Date().toISOString(),
             creditsCharged: reservedVideoCredits,
+            ...(reservedVideoCredits > 0 ? { billingQuote } : {}),
             ...(completion_actions?.length ? {
               completionActions: completion_actions.slice(0, 4).map(action => ({
                 label: action.label,
@@ -2009,15 +2012,7 @@ Hard constraints:
           }
           reservedVideoCredits = 0;
 
-          const providerCostUsd = skillResult.provider === 'grok-subscription' ? undefined : estimateVideoProviderCostUsd({
-            model: actualVideoModel,
-            resolution: actualVideoRoute.resolution,
-            durationSec: videoSec,
-            imageCount: referencedImageUrls.length,
-            referenceVideoDurationSec: referenceVideoDuration,
-            operation: video_operation,
-            contentFilter: content_filter,
-          });
+          const providerCostUsd = skillResult.provider === 'grok-subscription' ? undefined : billingQuote.supplierCostUsd;
           if (providerCostUsd != null) videoMeta.providerCostUsd = providerCostUsd;
 
           if (!isGoogleOmniAsync && skillResult.status === 'completed' && skillResult.videoUrl && ctx.userId && !isPermanentUrl(skillResult.videoUrl)) {

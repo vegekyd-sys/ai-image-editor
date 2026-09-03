@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { getSupabaseAdmin } from '@/lib/supabase/service'
 import { handleVideoFailure } from '@/lib/video-lifecycle'
 import type { VideoMeta } from '@/types'
+import { reconcileMcpVideos } from '@/lib/billing/mcp-video'
 
 export const maxDuration = 1800
 
@@ -36,6 +37,10 @@ export async function GET(req: NextRequest) {
   }
 
   const admin = getSupabaseAdmin()
+  const mcpReconciliation = reconcileMcpVideos().catch(error => {
+    console.error('[cron/video-poll] MCP billing reconciliation failed:', error)
+    return 0
+  })
   const tenMinAgo = new Date(Date.now() - 10 * 60 * 1000).toISOString()
 
   const { data: stale } = await admin
@@ -160,6 +165,7 @@ export async function GET(req: NextRequest) {
 
   return NextResponse.json({
     processed,
+    mcpProcessed: await mcpReconciliation,
     total: stale?.length || 0,
     remotionProcessed,
     ...(remotionError ? { remotionError } : {}),

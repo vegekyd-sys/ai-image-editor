@@ -1,4 +1,5 @@
 import { filterAndRemapImages, parseTotalDuration } from '../kling';
+import type { VideoQuoteInput } from '../billing/media-pricing';
 import { getVideoModelCapability, normalizeVideoModelId, resolveClosestSupportedAspectRatio, resolveVideoGenerationRoute, resolveVideoImageWorkflow, resolveVideoOutputDuration, resolveVideoProviderAspectRatio, resolveVideoProviderModel, supportsNativeTextToVideo, validateVideoModelRequest, type VideoAspectRatioInput, type VideoGenerationOperation, type VideoImageWorkflow, type VideoReferenceMeta, type VideoResolutionInput } from '@/lib/video-model-capabilities';
 
 const MAX_REFERENCE_VIDEO_PROBE_BYTES = 55 * 1024 * 1024;
@@ -36,6 +37,9 @@ export interface CreateVideoInput {
   userId?: string;
   /** Called before a safe subscription-to-API fallback creates a paid task. */
   onBeforeGrokApiFallback?: () => Promise<void>;
+  /** Hosted billing receives the resolved, selected provider inputs before submission. */
+  onBeforeProviderSubmit?: (usage: VideoQuoteInput) => Promise<void>;
+  billingRequestId?: string;
 }
 
 export interface CreateVideoResult {
@@ -56,6 +60,7 @@ export interface CreateVideoResult {
   suggestedAction?: string;
   userMessage?: { en: string; zh: string };
   invalidMediaUrls?: string[];
+  submissionUncertain?: boolean;
 }
 
 async function probeReferenceVideoMeta(url: string): Promise<VideoReferenceMeta | null> {
@@ -66,10 +71,11 @@ async function probeReferenceVideoMeta(url: string): Promise<VideoReferenceMeta 
     if (contentLength > MAX_REFERENCE_VIDEO_PROBE_BYTES) return { fileSizeBytes: contentLength };
 
     const buffer = new Uint8Array(await res.arrayBuffer());
-    const { probeMP4Dimensions } = await import('../mp4-probe');
+    const { probeMP4Dimensions, probeMP4Duration } = await import('../mp4-probe');
     const dims = probeMP4Dimensions(buffer);
     return {
       ...(dims || {}),
+      durationSec: probeMP4Duration(buffer),
       fileSizeBytes: contentLength || buffer.length,
     };
   } catch {
@@ -77,14 +83,14 @@ async function probeReferenceVideoMeta(url: string): Promise<VideoReferenceMeta 
   }
 }
 
-async function fillReferenceVideoMetas(urls: string[], metas?: VideoReferenceMeta[]): Promise<VideoReferenceMeta[] | undefined> {
+async function fillReferenceVideoMetas(urls: string[], metas?: VideoReferenceMeta[], requireDuration = false): Promise<VideoReferenceMeta[] | undefined> {
   if (!urls.length && !metas?.length) return metas;
   const next = [...(metas || [])];
   for (let i = 0; i < urls.length; i++) {
     const current = next[i] || {};
     const hasDimensions = Number(current.width) > 0 && Number(current.height) > 0;
     const hasSize = Number(current.fileSizeBytes) > 0;
-    if (hasDimensions && hasSize) continue;
+    if (hasDimensions && hasSize && (!requireDuration || Number(current.durationSec) > 0)) continue;
     const probed = await probeReferenceVideoMeta(urls[i]);
     next[i] = probed ? { ...current, ...probed } : current;
   }
@@ -313,7 +319,7 @@ export async function createVideo(input: CreateVideoInput): Promise<CreateVideoR
       message: `${capability.label} supports at most ${capability.maxAudioReferences ?? 3} reference audio files per generation.`,
     };
   }
-  const resolvedReferenceVideoMetas = await fillReferenceVideoMetas(providerVideoUrls, referenceVideoMetas);
+  const resolvedReferenceVideoMetas = await fillReferenceVideoMetas(providerVideoUrls, referenceVideoMetas, Boolean(input.onBeforeProviderSubmit));
 
   if (images.length === 0 && !hasVideoReference) {
     if (hasAudioReference && provider !== 'seedance-2.5' && !isWan30) {
@@ -424,19 +430,41 @@ export async function createVideo(input: CreateVideoInput): Promise<CreateVideoR
 
     // Resolve duration: explicit user choice > video edit source duration > parsed script > smart mode.
     // This prevents accidental 5s edits, while still allowing requests like "turn this 10s video into 8s".
-    const resolvedDuration = resolveVideoOutputDuration({
+    let resolvedDuration = resolveVideoOutputDuration({
       requestedDuration: duration,
       referenceVideoDuration,
       model: provider,
       operation: videoOperation,
     }) ?? parseTotalDuration(finalPrompt);
 
+    let billingUsage: VideoQuoteInput | undefined;
+    if (input.onBeforeProviderSubmit) {
+      // Smart output duration is fixed before a billed MCP submission so the
+      // provider and the reservation cannot choose different defaults.
+      const durations = resolvedReferenceVideoMetas?.map(meta => meta.durationSec);
+      if (providerVideoUrls.length && (!durations || durations.length !== providerVideoUrls.length || durations.some(n => !n || !Number.isFinite(n)))) {
+        return { success: false, retryable: false, message: 'Cannot measure reference-video duration for billing. Use a readable MP4/MOV before submitting.' };
+      }
+      const sourceSeconds = durations?.reduce<number>((sum, value) => sum + (value ?? 0), 0) ?? 0;
+      const retainsSource = route.provider === 'fal-sync' || (videoOperation === 'edit' && (provider === 'grok' || provider === 'seedance-2.5'));
+      if (retainsSource && !sourceSeconds) return { success: false, message: 'A measured source duration is required for video editing.' };
+      if (resolvedDuration == null || resolvedDuration === -1) {
+        resolvedDuration = retainsSource ? sourceSeconds : Math.min(5, capability.maxOutputDuration);
+      }
+      billingUsage = {
+        model: provider, resolution: route.resolution, operation: videoOperation,
+        durationSec: retainsSource ? sourceSeconds : resolvedDuration,
+        imageCount: filteredImages.length, referenceVideoDurationSec: sourceSeconds,
+        contentFilter,
+      };
+    }
+
     const filteredModelError = validateVideoModelRequest({
       model: provider,
       resolution: route.resolution,
       aspectRatio,
       outputDuration: provider === 'seedance-2.5' && videoOperation === 'edit' ? -1 : resolvedDuration,
-      referenceVideoDuration: previousInteractionId ? Math.min(referenceVideoDuration ?? 10, 10) : referenceVideoDuration,
+      referenceVideoDuration: billingUsage?.referenceVideoDurationSec ?? (previousInteractionId ? Math.min(referenceVideoDuration ?? 10, 10) : referenceVideoDuration),
       referenceVideoMetas: resolvedReferenceVideoMetas,
       hasVideoReference,
       imageReferenceCount: filteredImages.length,
@@ -477,6 +505,8 @@ export async function createVideo(input: CreateVideoInput): Promise<CreateVideoR
         message: 'Video reference is not supported by PiAPI provider.',
       };
     }
+
+    if (billingUsage) await input.onBeforeProviderSubmit!(billingUsage);
 
     if (route.provider === 'fal-sync') {
       if (filteredImages.length > 0) {
@@ -733,6 +763,7 @@ export async function createVideo(input: CreateVideoInput): Promise<CreateVideoR
     return {
       success: false,
       message: `Video creation error: ${msg}`,
+      submissionUncertain: true,
     };
   }
 }
