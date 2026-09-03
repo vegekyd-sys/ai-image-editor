@@ -167,12 +167,15 @@ export function shouldRequireAgentCredits(provider: AgentModelProvider): boolean
   return provider !== 'codex-subscription' && provider !== 'grok-subscription';
 }
 
-function isGrokSubscriptionAgentAllowedUser(userId: string | undefined): boolean {
+function isGrokSubscriptionAgentAllowedUser(userId: string | undefined, dynamicallyAllowed?: boolean): boolean {
   if (!userId
     || !process.env.GROK_SUBSCRIPTION_RELAY_URL?.trim()
     || !process.env.GROK_SUBSCRIPTION_RELAY_SECRET?.trim()) {
     return false;
   }
+  // Server entry points supply the shared live DB decision. An explicit false
+  // must never be overridden by an obsolete environment allowlist.
+  if (dynamicallyAllowed !== undefined) return dynamicallyAllowed;
   const allowed = new Set(
     (process.env.GROK_SUBSCRIPTION_ALLOWED_USER_IDS || '')
       .split(',')
@@ -393,7 +396,7 @@ export function resolveAgentModelSpecForUser(
     const selected = resolveAgentModelSpec(preference, configuredDefault, configuredGPT56Provider);
     // Keep the public model preference valid for all clients, but only route
     // allowlisted users through the owner's SuperGrok credential.
-    return isGrokSubscriptionAgentAllowedUser(userId)
+    return isGrokSubscriptionAgentAllowedUser(userId, codexSubscriptionAllowed)
       ? selected
       : AGENT_MODEL_SPECS['grok-4.6'];
   }

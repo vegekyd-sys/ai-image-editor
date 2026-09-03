@@ -1,10 +1,13 @@
 import {
   createHash,
   createHmac,
+  randomUUID,
   timingSafeEqual,
 } from 'node:crypto';
 import { createServer } from 'node:http';
 import { Readable } from 'node:stream';
+import { readFileSync, writeFileSync, renameSync } from 'node:fs';
+import { dirname, resolve } from 'node:path';
 import { getValidXaiOAuthCredential } from './xai-oauth.mjs';
 
 const XAI_BASE_URL = process.env.XAI_API_BASE?.trim() || 'https://api.x.ai';
@@ -18,13 +21,55 @@ const OWNER_USER_ID = process.env.GROK_SUBSCRIPTION_OWNER_USER_ID?.trim();
 const SIGNATURE_WINDOW_MS = 60_000;
 const MAX_BODY_BYTES = 8 * 1024 * 1024;
 
-const allowedUserIds = new Set(
+const legacyAllowedUserIds = new Set(
   (process.env.GROK_SUBSCRIPTION_ALLOWED_USER_IDS || '')
     .split(',')
     .map(value => value.trim())
     .filter(Boolean),
 );
-if (OWNER_USER_ID) allowedUserIds.add(OWNER_USER_ID);
+const ALLOWLIST_PATH = process.env.GROK_SUBSCRIPTION_ALLOWLIST_PATH?.trim()
+  || (process.env.GROK_SUBSCRIPTION_OAUTH_PATH?.trim()
+    ? resolve(dirname(process.env.GROK_SUBSCRIPTION_OAUTH_PATH), 'allowed-users.json')
+    : undefined);
+
+function normalizeAllowedUserIds(value) {
+  const ids = new Set(Array.isArray(value)
+    ? value.filter(id => typeof id === 'string').map(id => id.trim()).filter(Boolean)
+    : []);
+  if (OWNER_USER_ID) ids.add(OWNER_USER_ID);
+  return ids;
+}
+
+function loadAllowedUserIds() {
+  if (ALLOWLIST_PATH) {
+    try {
+      const stored = JSON.parse(readFileSync(ALLOWLIST_PATH, 'utf8'));
+      if (!Array.isArray(stored?.userIds)) throw new Error('invalid persisted allowlist');
+      return normalizeAllowedUserIds(stored.userIds);
+    } catch (error) {
+      if (error?.code !== 'ENOENT') {
+        console.error('[makaron-grok-relay] persisted allowlist unreadable; allowing owner only');
+        return normalizeAllowedUserIds([]);
+      }
+    }
+  }
+  return normalizeAllowedUserIds([...legacyAllowedUserIds]);
+}
+
+let allowedUserIds = loadAllowedUserIds();
+
+export function replaceRelayAllowedUserIds(userIds, options = {}) {
+  const next = normalizeAllowedUserIds(userIds);
+  if (next.size > 100) throw Object.assign(new Error('allowlist too large'), { statusCode: 400 });
+  if (options.persist !== false) {
+    if (!ALLOWLIST_PATH) throw Object.assign(new Error('allowlist persistence is not configured'), { statusCode: 503 });
+    const temporaryPath = resolve(dirname(ALLOWLIST_PATH), `.allowed-users-${randomUUID()}.tmp`);
+    writeFileSync(temporaryPath, `${JSON.stringify({ userIds: [...next] })}\n`, { mode: 0o600 });
+    renameSync(temporaryPath, ALLOWLIST_PATH);
+  }
+  allowedUserIds = next;
+  return [...next];
+}
 
 const HEADER = {
   timestamp: 'x-makaron-relay-timestamp',
@@ -99,6 +144,9 @@ export function verifyRelayRequest({ method, pathname, headers, body, now = Date
     return { ok: false, status: 401, error: 'missing_signature' };
   }
   if (!allowedUserIds.has(userId)) return { ok: false, status: 403, error: 'not_allowlisted' };
+  if (pathname === '/v1/allowlist' && userId !== OWNER_USER_ID) {
+    return { ok: false, status: 403, error: 'owner_required' };
+  }
   const numericTimestamp = Number(timestamp);
   if (!Number.isFinite(numericTimestamp) || Math.abs(now - numericTimestamp) > SIGNATURE_WINDOW_MS) {
     return { ok: false, status: 401, error: 'stale_signature' };
@@ -114,6 +162,7 @@ export function verifyRelayRequest({ method, pathname, headers, body, now = Date
 }
 
 function isAllowedPath(method, pathname) {
+  if (pathname === '/v1/allowlist') return method === 'GET' || method === 'POST';
   if (method === 'POST') {
     return [
       '/v1/chat/completions',
@@ -343,7 +392,18 @@ export function createRelayServer() {
         sendJson(res, verified.status, { error: verified.error }, { 'x-makaron-relay-outcome': 'rejected-before-upstream' });
         return;
       }
-      if (url.pathname === '/v1/usage') {
+      if (url.pathname === '/v1/allowlist') {
+        if (req.method === 'POST') {
+          let payload;
+          try { payload = JSON.parse(body.toString('utf8')); } catch {}
+          if (!Array.isArray(payload?.userIds) || !payload.userIds.every(id => typeof id === 'string')) {
+            sendJson(res, 400, { error: 'invalid_allowlist' });
+            return;
+          }
+          replaceRelayAllowedUserIds(payload.userIds);
+        }
+        sendJson(res, 200, { userIds: [...allowedUserIds] });
+      } else if (url.pathname === '/v1/usage') {
         await forwardGrokUsage(res);
       } else if (url.pathname === '/v1/chat/completions') {
         const validation = validateGrokAgentBody(body);
@@ -357,6 +417,10 @@ export function createRelayServer() {
       }
     } catch (error) {
       console.error(`[makaron-grok-relay] request failed: ${safeError(error)}`);
+      if (url.pathname === '/v1/allowlist' && !res.headersSent) {
+        sendJson(res, Number.isInteger(error?.statusCode) ? error.statusCode : 503, { error: 'allowlist_update_failed' });
+        return;
+      }
       if (!res.headersSent) sendJson(res, 502, { error: 'unknown_upstream_outcome' });
       else res.destroy();
     }

@@ -1895,7 +1895,7 @@ Hard constraints:
             }
           };
           const grokSubscriptionPreferred = videoModel === 'grok'
-            && isGrokSubscriptionAllowedUser(ctx.userId);
+            && await isGrokSubscriptionAllowedUser(ctx.userId);
           if (grokSubscriptionPreferred) {
             createVideoInput.onBeforeGrokApiFallback = reserveGrokApiCredits;
           } else if (ctx.userId) {
