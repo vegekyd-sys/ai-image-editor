@@ -1468,6 +1468,10 @@ async function callMcpTool(baseUrl, headers, toolName, args) {
   if (!res.ok) { console.error(`MCP error ${res.status}:`, await res.text()); process.exit(1); }
   const data = await res.json();
   if (data.error) { console.error(`MCP error:`, data.error.message); process.exit(1); }
+  if (data.result?.isError) {
+    console.error('MCP tool failed:', data.result.content?.filter(c => c.type === 'text').map(c => c.text).join('\n') || 'Unknown tool error');
+    process.exit(1);
+  }
   return data.result;
 }
 

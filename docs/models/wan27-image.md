@@ -71,6 +71,12 @@ separate ledger, or token-rate entry.
   failure leaves 100; missing price row still charges 6; Admin override charges
   8. App-source debit records the same model with a null API-key identity.
 - Selector interaction tests cover opt-in selection and unchanged video choice.
+- CLI transport tests cover the exact model/ratio, saved image bytes, and a
+  nonzero exit after MCP `isError`; failures are not repeated downstream.
+- Full local regression: 256 files / 1,519 tests, TypeScript, CLI smoke, lint,
+  i18n/startup/video guards, and the fixed runner's webpack production build.
+  The runner's pre-existing Apple annual-purchase UI test intermittently failed
+  before a subsequent complete suite passed; no Apple code was changed.
 - Live product-router smoke uses `benchmarks/wan27-product-smoke.ts`, with the
   supplied reference as full JPEG data URL and the existing short KBO prompt.
   Results in `outputs/wan27-integration/live-1/results.json` (ignored media):

@@ -139,7 +139,7 @@ IMPORTANT: Image generation takes 15-30 seconds. Long and detailed prompts are f
         // Credit check before execution
         if (options?.onToolStart) {
           const check = await options.onToolStart('makaron_edit_image', params.background === 'transparent' ? 'openai' : params.model ?? undefined);
-          if (!check.allowed) return { content: [{ type: 'text' as const, text: check.message || 'Insufficient credits' }] };
+          if (!check.allowed) return { isError: true, content: [{ type: 'text' as const, text: check.message || 'Insufficient credits' }] };
         }
         const t0 = Date.now();
         const image = params.image ? resolveImage(params.image) : undefined;
@@ -162,7 +162,7 @@ IMPORTANT: Image generation takes 15-30 seconds. Long and detailed prompts are f
         );
 
         if (!result.success || !result.image) {
-          return { content: [{ type: 'text' as const, text: result.message }] };
+          return { isError: true, content: [{ type: 'text' as const, text: result.message }] };
         }
         // Bill after success
         await options?.onToolComplete?.('makaron_edit_image', result.usedModel, Date.now() - t0, result.usage);
@@ -173,7 +173,7 @@ IMPORTANT: Image generation takes 15-30 seconds. Long and detailed prompts are f
       } catch (e) {
         const msg = e instanceof Error ? e.message : String(e);
         console.error('[MCP edit_image error]', msg);
-        return { content: [{ type: 'text' as const, text: `Error: ${msg}` }] };
+        return { isError: true, content: [{ type: 'text' as const, text: `Error: ${msg}` }] };
       }
     },
   );

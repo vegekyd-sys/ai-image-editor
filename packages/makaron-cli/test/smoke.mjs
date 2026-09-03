@@ -228,6 +228,16 @@ const server = http.createServer(async (req, res) => {
 
   if (req.method === 'POST' && url.pathname === '/api/mcp') {
     assert.equal(req.headers.authorization, 'Bearer mk_test_smoke');
+    if (body?.params?.name === 'makaron_edit_image' && body.params.arguments.model === 'wan2.7-image') {
+      const rejected = body.params.arguments.editPrompt === 'reject-wan-test';
+      sendJson(200, {
+        jsonrpc: '2.0', id: body.id,
+        result: rejected
+          ? { isError: true, content: [{ type: 'text', text: 'Wan 2.7 request failed. No automatic retry.' }] }
+          : { content: [{ type: 'text', text: 'Image generated successfully. (model: wan2.7-image)' }, { type: 'image', mimeType: 'image/jpeg', data: Buffer.from('image-transport-fixture').toString('base64') }] },
+      });
+      return;
+    }
     sendJson(200, {
       jsonrpc: '2.0',
       id: body?.id ?? 1,
@@ -1071,6 +1081,20 @@ try {
     const runRequest = requests.filter(req => req.pathname === '/api/agent/run').at(-1);
     assert.equal(runRequest?.body?.projectId, 'project-existing-1');
     assert.equal(runRequest?.body?.prompt, 'use this reference');
+  }
+
+  {
+    const out = path.join(tmpHome, 'wan-result.jpg');
+    const result = await expectSuccess(['edit', '--image-model', 'wan2.7-image', '--aspect', '16:9', '--out', out, 'A red mug.']);
+    assert.equal(result.stdout.trim(), out);
+    assert.equal(readFileSync(out, 'utf8'), 'image-transport-fixture');
+    const request = requests.filter(req => req.pathname === '/api/mcp').at(-1);
+    assert.equal(request.body.params.arguments.model, 'wan2.7-image');
+    assert.equal(request.body.params.arguments.aspectRatio, '16:9');
+    const before = requests.length;
+    const failure = await expectFailure(['edit', '--image-model', 'wan2.7-image', 'reject-wan-test']);
+    assert.match(failure.stderr, /No automatic retry/);
+    assert.equal(requests.length, before + 1);
   }
 
   {

@@ -83,6 +83,7 @@ describe('Wan MCP → shared skill → provider → billing', () => {
     state.balance = 5;
     const { payload } = await callWan();
     expect(payload.result.content[0].text).toContain('Need 6, have 5');
+    expect(payload.result.isError).toBe(true);
     expect(state.fetch).not.toHaveBeenCalled();
     expect(state.rpc.mock.calls.filter(([name]) => name === 'deduct_and_log')).toHaveLength(0);
   });
@@ -91,6 +92,7 @@ describe('Wan MCP → shared skill → provider → billing', () => {
     state.fetch.mockReset().mockResolvedValueOnce(Response.json({ code: 'Rejected', message: 'test-private-key' }, { status: 400 }));
     const { payload } = await callWan();
     expect(payload.result.content[0].text).toContain('HTTP 400');
+    expect(payload.result.isError).toBe(true);
     expect(JSON.stringify(payload)).not.toContain('test-private-key');
     expect(state.balance).toBe(100);
     expect(state.fetch).toHaveBeenCalledTimes(1);
