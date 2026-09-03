@@ -454,7 +454,7 @@ Use this as the standalone equivalent of the Agent's analyze_video tool.
 
 IMPORTANT:
 - videoUrl must be publicly accessible and downloadable.
-- For best compatibility with later SeeDance editing, use the normal Makaron upload constraints: MP4/MOV/WebM, target ≤15s with tiny metadata padding accepted, ≤200MB, ≤1080p / 2,086,876 pixels.
+- Downloadable MP4/MOV/WebM videos must be ≤38.5 MB. Public YouTube URLs and uploaded Google File URLs can be passed directly.
 - This tool only analyzes; it does not create or update a project timeline.`,
     {
       videoUrl: z.string().url().describe('Publicly accessible video URL to analyze'),

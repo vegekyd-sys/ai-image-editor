@@ -26,11 +26,7 @@ export interface VideoAnalysisResult {
 
 const API = 'https://generativelanguage.googleapis.com/v1beta';
 const INLINE_LIMIT = 14_000_000; // base64 + envelope remains below 20 MB
-const DOWNLOAD_LIMIT = 38_500_000; // preserve the existing fallback download ceiling
-
-class VideoApiError extends Error {
-  constructor(public status: number, message: string) { super(message); }
-}
+const DOWNLOAD_LIMIT = 38_500_000; // preserve the existing bounded video download ceiling
 
 function count(value: unknown): number {
   return typeof value === 'number' && Number.isFinite(value) && value >= 0 ? value : 0;
@@ -64,7 +60,7 @@ export async function analyzeVideoWithProvider(
   const prompt = question || 'Describe this video in detail: scenes, actions, pacing, visual style, audio/dialogue if any.';
   const mimeType = /\.mov$/i.test(source.pathname) ? 'video/quicktime' : /\.webm$/i.test(source.pathname) ? 'video/webm' : 'video/mp4';
   const startedAt = Date.now();
-  const signal = AbortSignal.timeout(120_000); // includes URL attempt and bounded fallback
+  const signal = AbortSignal.timeout(120_000); // includes bounded download and inference
 
   async function run(data?: string, uploadedUri?: string) {
     const body = processing === 'agentic' ? {
@@ -90,24 +86,26 @@ export async function analyzeVideoWithProvider(
       // Do not leak signed media URLs or credentials through errors/tool history.
       const message = String(result.error?.message || `Google video analysis HTTP ${response.status}`)
         .replaceAll(key!, '[redacted]').replace(/https?:\/\/[^\s"<>]+/g, '[media URL]');
-      throw new VideoApiError(response.status, message);
+      throw new Error(message);
     }
     return result;
   }
 
-  let transport: VideoAnalysisResult['transport'] = 'url';
+  // Ordinary HTTP media URLs are downloaded once: 3.8 rejects unregistered URLs
+  // with a generic 403, adding a slow failed inference round-trip before inline.
+  // YouTube and existing Google Files are native provider URIs, not media downloads.
+  const nativeUri = ['youtube.com', 'www.youtube.com', 'm.youtube.com', 'youtu.be'].includes(source.hostname)
+    || (source.hostname === 'generativelanguage.googleapis.com' && /^\/v1beta\/files\//.test(source.pathname));
+  let transport: VideoAnalysisResult['transport'] = nativeUri ? 'url' : 'inline';
   let result;
-  try {
+  if (nativeUri) {
     result = await run();
-  } catch (error) {
-    // A rate limit, model/config error, safety block or outage is not a file failure.
-    if (!(error instanceof VideoApiError) || ![400, 403, 404].includes(error.status)
-      || !/(file uri|fileuri|fetch.*(file|video|url)|download|unsupported.*uri|permission.*file)/i.test(error.message)) throw error;
+  } else {
     const response = await fetch(videoUrl, { signal });
     if (!response.ok) throw new Error(`Failed to fetch video: ${response.status}`);
     if (Number(response.headers.get('content-length')) > DOWNLOAD_LIMIT) {
       await response.body?.cancel();
-      throw new Error('Video URL was rejected and exceeds the 38.5 MB fallback limit. Use a provider-accessible URL or preview_frame.');
+      throw new Error('Video exceeds the 38.5 MB download limit. Use an uploaded Google File URL or preview_frame.');
     }
     if (!response.body) throw new Error('Video download returned no body.');
     const reader = response.body.getReader();
@@ -119,7 +117,7 @@ export async function analyzeVideoWithProvider(
       size += value.byteLength;
       if (size > DOWNLOAD_LIMIT) {
         await reader.cancel();
-        throw new Error('Video exceeds the 38.5 MB fallback limit. Use a provider-accessible URL or preview_frame.');
+        throw new Error('Video exceeds the 38.5 MB download limit. Use an uploaded Google File URL or preview_frame.');
       }
       chunks.push(value);
     }
