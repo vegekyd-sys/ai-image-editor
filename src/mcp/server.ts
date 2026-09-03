@@ -74,7 +74,7 @@ export interface McpServerOptions {
     toolName: string,
     model?: string,
     durationMs?: number,
-    usage?: { inputTokens: number; outputTokens: number; modelId: string; providerCostUsd?: number; provider?: string },
+    usage?: { inputTokens: number; outputTokens: number; modelId: string; cacheReadTokens?: number; providerCostUsd?: number; provider?: string },
     meta?: {
       videoDurationSec?: number
       imageCount?: number
@@ -473,7 +473,7 @@ IMPORTANT:
         });
 
         if (result.success) {
-          await options?.onToolComplete?.('makaron_analyze_video', undefined, Date.now() - t0);
+          await options?.onToolComplete?.('makaron_analyze_video', result.usedModel, Date.now() - t0, result.usage);
         }
         return { content: [{ type: 'text' as const, text: result.success
           ? `${result.message}\n\n${result.analysis}`
