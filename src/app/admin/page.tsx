@@ -7,6 +7,7 @@ import { LOCALE_CONFIG, type Locale } from '@/lib/locales'
 import { useLocale } from '@/lib/i18n'
 import { DEFAULT_WELCOME_CREDITS } from '@/lib/billing/welcome-credits'
 import { DEFAULT_IOS_TRIAL_CREDITS } from '@/lib/billing/ios-trial'
+import MediaPricingPanel from '@/components/admin/MediaPricingPanel'
 
 interface CodexAllowlistUser {
   userId: string
@@ -620,8 +621,9 @@ export default function AdminPage() {
             )}
           </div>
 
-          <h3 className="text-sm font-medium text-white/60 mb-3">Per-action tools (fixed credits)</h3>
-          <p className="text-xs text-white/30 mb-3">Video tools: credits = per second. Music/ComfyUI: per task. Token-based tools (Gemini, GPT-5.6, Grok, DeepSeek) use Token Rates below.</p>
+          <MediaPricingPanel />
+          <h3 className="text-sm font-medium text-white/60 mb-3">{t('mediaPricing.fixedTitle')}</h3>
+          <p className="text-xs text-white/30 mb-3">{t('mediaPricing.fixedDescription')}</p>
 
           <div className="bg-white/5 rounded-xl border border-white/10 overflow-hidden">
             <table className="w-full text-sm">
@@ -635,7 +637,7 @@ export default function AdminPage() {
                 </tr>
               </thead>
               <tbody>
-                {pricing.map((p) => {
+                {pricing.filter(p => !['create_video_kling', 'edit_video_kling', 'create_video_seedance', 'create_music', 'create_seed_audio', 'create_voiceover'].includes(p.tool_name)).map((p) => {
                   const editing = editingPricing[p.tool_name]
                   const isVideo = p.tool_name.includes('video') && !p.tool_name.includes('status')
                   return (

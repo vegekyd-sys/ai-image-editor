@@ -2,7 +2,8 @@ import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
 import { createAudio } from '@/lib/skills/create-audio'
 import { requireCredits } from '@/lib/billing/credits'
-import { deductSeedAudioCredits, seedAudioMakaronCredits } from '@/lib/billing/seed-audio'
+import { deductSeedAudioCredits } from '@/lib/billing/seed-audio'
+import { quoteSeedAudio } from '@/lib/billing/media-pricing'
 
 // A 120-second output can take longer than 120 seconds to render and persist.
 export const maxDuration = 300
@@ -48,7 +49,7 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: 'prompt is required unless kind=translation' }, { status: 400 })
     }
 
-    const estimatedCredits = seedAudioMakaronCredits({ durationSeconds: durationSeconds ?? duration_seconds ?? 20 })
+    const { credits: estimatedCredits } = await quoteSeedAudio({ durationSeconds: durationSeconds ?? duration_seconds ?? 20 })
     const creditCheck = await requireCredits(user.id, estimatedCredits || 10)
     if (!creditCheck.ok) return creditCheck.response
 

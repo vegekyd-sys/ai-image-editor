@@ -68,6 +68,7 @@ export interface VideoReferenceSizeCapability {
 }
 
 export interface VideoReferenceMeta {
+  durationSec?: number | null
   width?: number | null
   height?: number | null
   fileSizeBytes?: number | null
@@ -274,15 +275,15 @@ const MODEL_CAPABILITIES: Record<string, VideoModelCapability> = {
     maxVideoReferences: 5,
     maxAudioReferences: 5,
     maxTotalReferences: 20,
-    // MuleRouter W3.0 pricing, verified 2026-09-01. Audio is included at the
-    // same rate; references do not add a separate input charge.
-    estimatedCostPerSecondUsd: 0.2,
+    // MuleRouter Standard contracted pricing (60% of list), confirmed 2026-09-03.
+    // 1080p is native; only 2K/4K use FlashVSR Pro. Audio/references add no charge.
+    estimatedCostPerSecondUsd: 0.12,
     estimatedCostPerSecondUsdByResolution: {
-      '480p': 0.05,
-      '720p': 0.1,
-      '1080p': 0.2,
-      '2k': 0.2,
-      '4k': 0.23,
+      '480p': 0.03,
+      '720p': 0.06,
+      '1080p': 0.12,
+      '2k': 0.12,
+      '4k': 0.138,
     },
     supportedResolutions: ['480p', '720p', '1080p', '2k', '4k'],
     defaultResolution: '1080p',
@@ -317,15 +318,15 @@ const MODEL_CAPABILITIES: Record<string, VideoModelCapability> = {
     maxVideoReferences: 5,
     maxAudioReferences: 5,
     maxTotalReferences: 20,
-    // MuleRouter W3.0 Prime list pricing, verified 2026-09-02. Prime uses
-    // the same reference contract as Standard with a faster generation tier.
-    estimatedCostPerSecondUsd: 0.28,
+    // MuleRouter Prime contracted pricing (70% of list), confirmed 2026-09-03.
+    // 1080p is native; only 2K/4K use FlashVSR Prime Pro. Audio/references add no charge.
+    estimatedCostPerSecondUsd: 0.196,
     estimatedCostPerSecondUsdByResolution: {
-      '480p': 0.068,
-      '720p': 0.14,
-      '1080p': 0.28,
-      '2k': 0.28,
-      '4k': 0.31,
+      '480p': 0.0476,
+      '720p': 0.098,
+      '1080p': 0.196,
+      '2k': 0.196,
+      '4k': 0.217,
     },
     supportedResolutions: ['480p', '720p', '1080p', '2k', '4k'],
     defaultResolution: '1080p',
@@ -842,6 +843,7 @@ export function resolveClosestSupportedAspectRatio(
   return best
 }
 
+/** Seed/migration estimate only. Live charging and UI quotes must use billing/quoteVideo. */
 export function estimateVideoProviderCostUsd(options: {
   model?: string | null
   durationSec: number
@@ -895,6 +897,7 @@ export function estimateVideoCredits(options: {
   return Math.ceil(costUsd * 100 * (options.markup ?? 2) - 1e-9)
 }
 
+/** Legacy seed helper; do not use for live billing. */
 export function getRequiredVideoCredits(
   options: Parameters<typeof estimateVideoCredits>[0],
 ): number {

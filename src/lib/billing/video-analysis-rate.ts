@@ -1,5 +1,7 @@
 import type { TokenRate } from './token-rates';
 
+// Reference for migration seeds/tests only. Runtime billing reads token_rates;
+// do not reintroduce this as a fallback that is invisible in Admin.
 // Google published introductory pricing through 2026-12-31 (UTC).
 // https://ai.google.dev/gemini-api/docs/pricing#gemini-3.8-flash
 export function getVideoAnalysisDefaultRate(now = Date.now()): TokenRate {

@@ -5,7 +5,7 @@ import { join } from 'path';
 import { editImage } from '../lib/skills/edit-image';
 import { rotateCamera } from '../lib/skills/rotate-camera';
 import { writeVideoScript } from '../lib/skills/write-video-script';
-import { createVideo } from '../lib/skills/create-video';
+import { createVideo, type CreateVideoInput, type CreateVideoResult } from '../lib/skills/create-video';
 import { getVideoStatus } from '../lib/skills/get-video-status';
 import { analyzeVideo } from '../lib/skills/analyze-video';
 import { createAudio } from '../lib/skills/create-audio';
@@ -67,6 +67,8 @@ function formatResult(image: string, message: string, prefix: string) {
 }
 
 export interface McpServerOptions {
+  submitVideo?: (input: CreateVideoInput, toolName: string) => Promise<CreateVideoResult>;
+  onVideoStatus?: (taskId: string, status: string, queryFailed?: boolean) => Promise<void>;
   /** Authenticated Makaron owner for private subscription relay routing. */
   userId?: string;
   /** Called after each tool completes successfully. Used for billing. */
@@ -136,7 +138,7 @@ IMPORTANT: Image generation takes 15-30 seconds. Long and detailed prompts are f
       try {
         // Credit check before execution
         if (options?.onToolStart) {
-          const check = await options.onToolStart('makaron_edit_image');
+          const check = await options.onToolStart('makaron_edit_image', params.model ?? undefined);
           if (!check.allowed) return { content: [{ type: 'text' as const, text: check.message || 'Insufficient credits' }] };
         }
         const t0 = Date.now();
@@ -251,7 +253,7 @@ Tips:
         });
 
         if (result.success) {
-          await options?.onToolComplete?.('makaron_write_video_script', undefined, Date.now() - t0);
+          await options?.onToolComplete?.('makaron_write_video_script', result.usage?.modelId, Date.now() - t0, result.usage);
         }
         return { content: [{ type: 'text' as const, text: result.success
           ? `${result.message}\n\nTitle: ${result.title}\n\n${result.script}`
@@ -297,6 +299,7 @@ Shot 2 (3s): Close-up, <<<media_2>>> ...
 Style: Cinematic, warm golden light.`,
     {
       script: z.string().describe('Video script with <<<media_N>>> references'),
+      billingRequestId: z.string().uuid().optional().describe('Optional stable request UUID. Reuse when retrying the same billed submission to avoid duplicate charges/jobs.'),
       images: z.array(z.string().url()).max(30).default([]).describe('Optional public image URLs. Seedance 2.5 accepts up to 30; older routes may accept fewer.'),
       videoUrls: z.array(z.string().url()).max(10).optional().describe('Public reference video URLs. Sync Lipsync v3 requires exactly one; Seedance 2.5 accepts up to 10 with 30 seconds combined.'),
       audioUrls: z.array(z.string().url()).max(10).optional().describe('Public reference audio URLs. Sync Lipsync v3 requires exactly one replacement track; Seedance 2.5 accepts up to 10.'),
@@ -320,8 +323,9 @@ Style: Cinematic, warm golden light.`,
           if (!check.allowed) return { content: [{ type: 'text' as const, text: check.message || 'Insufficient credits' }] };
         }
         const t0 = Date.now();
-        const result = await createVideo({
+        const result = await (options?.submitVideo ?? createVideo)({
           script: params.script,
+          billingRequestId: params.billingRequestId,
           images: params.images,
           videoUrls: params.videoUrls,
           audioUrls: params.audioUrls,
@@ -341,7 +345,7 @@ Style: Cinematic, warm golden light.`,
           onBeforeGrokApiFallback: options?.onBeforeGrokApiFallback
             ? () => options.onBeforeGrokApiFallback!('makaron_create_video', params.videoModel)
             : undefined,
-        });
+        }, 'makaron_create_video');
 
         if (result.success) {
           await options?.onToolComplete?.('makaron_create_video', params.videoModel, Date.now() - t0, undefined, {
@@ -390,6 +394,7 @@ Example: Edit a video to add cinematic color grading:
     {
       videoUrl: z.string().url().describe('Video URL to edit (MP4/MOV/WebM, target ≤15s with tiny metadata padding accepted, ≤1080p, ≤200MB)'),
       editPrompt: z.string().describe('Editing instructions describing what to change'),
+      billingRequestId: z.string().uuid().optional().describe('Optional stable request UUID; reuse only for an identical submission retry.'),
       images: z.array(z.string().url()).max(7).optional().describe('Optional reference images (public URLs)'),
       duration: z.number().optional().describe('Output duration in seconds. SeeDance accepts integer output duration 4-15s (default 5s); Kling supports 5-15s; Grok edit retains a source up to 8.7s and Grok extend adds 2-10s to a 2-15s source; Gemini Omni supports 3-10s video editing in Makaron. Omit for smart mode.'),
       aspectRatio: z.enum(['auto', '16:9', '9:16', '1:1', '4:3', '3:4', '21:9', '3:2', '2:3']).optional().describe('Aspect ratio. Use auto/adaptive or a provider-supported ratio.'),
@@ -407,8 +412,9 @@ Example: Edit a video to add cinematic color grading:
         const t0 = Date.now();
         const resolvedModel = params.videoModel ?? 'seedance-fast';
         const resolvedReferType = params.referType ?? (resolvedModel === 'seedance' || resolvedModel === 'seedance-fast' || resolvedModel === 'seedance-mini' || resolvedModel === 'minimax-h3' ? 'feature' : 'base');
-        const result = await createVideo({
+        const result = await (options?.submitVideo ?? createVideo)({
           script: params.editPrompt,
+          billingRequestId: params.billingRequestId,
           images: params.images ?? [],
           duration: params.duration,
           aspectRatio: params.aspectRatio,
@@ -422,7 +428,7 @@ Example: Edit a video to add cinematic color grading:
           onBeforeGrokApiFallback: options?.onBeforeGrokApiFallback
             ? () => options.onBeforeGrokApiFallback!('makaron_edit_video', params.videoModel)
             : undefined,
-        });
+        }, 'makaron_edit_video');
 
         if (result.success) {
           await options?.onToolComplete?.('makaron_edit_video', resolvedModel, Date.now() - t0, undefined, {
@@ -470,6 +476,7 @@ IMPORTANT:
         const result = await analyzeVideo({
           videoUrl: params.videoUrl,
           question: params.question,
+          userId: options?.userId,
         });
 
         if (result.success) {
@@ -503,6 +510,7 @@ Poll every 10-15 seconds. Do NOT poll in a tight loop.`,
     async (params) => {
       try {
         const result = await getVideoStatus({ taskId: params.taskId, userId: options?.userId });
+        await options?.onVideoStatus?.(params.taskId, result.status, result.queryFailed);
 
         let response = result.message;
         if (result.status === 'completed' && result.videoUrl) {

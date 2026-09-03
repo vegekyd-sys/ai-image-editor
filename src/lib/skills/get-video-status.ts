@@ -8,6 +8,7 @@ export interface GetVideoStatusResult {
   status: 'pending' | 'processing' | 'completed' | 'failed';
   videoUrl?: string;
   error?: string;
+  queryFailed?: boolean;
   message: string;
 }
 
@@ -94,6 +95,9 @@ export async function getVideoStatus(input: GetVideoStatusInput): Promise<GetVid
         status: result.status,
         videoUrl: result.videoUrl,
         error: result.error,
+        // This synchronous API cannot retrieve a task by ID alone. Missing
+        // local output is not evidence of a failed (and refundable) generation.
+        queryFailed: result.status === 'failed',
         message: result.status === 'completed'
           ? 'Gemini Omni video completed.'
           : `Gemini Omni standalone task cannot be re-fetched from taskId alone: ${result.error || 'missing provider URL'}`,
@@ -247,6 +251,7 @@ export async function getVideoStatus(input: GetVideoStatusInput): Promise<GetVid
       success: false,
       status: 'failed',
       message: `Failed to query video status: ${msg}`,
+      queryFailed: true,
     };
   }
 }

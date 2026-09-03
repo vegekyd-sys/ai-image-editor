@@ -2,6 +2,7 @@ import { getSupabaseAdmin } from '@/lib/supabase/service'
 import { getToolPrice, resolveToolName } from './pricing'
 import { getTokenRate, providerCostToCredits, tokensToCredits, tokensToCreditsBreakdown } from './token-rates'
 import { getConfiguredWelcomeCredits } from './welcome-credits'
+import { PricingUnavailableError } from './media-pricing'
 
 // Billing kill switch — cached from DB app_settings
 let _billingEnabled: boolean | null = null
@@ -24,13 +25,12 @@ export function isInsufficientCreditsError(error: unknown): error is Insufficien
 
 export async function isBillingEnabled(): Promise<boolean> {
   if (_billingEnabled !== null && Date.now() - _billingCheckedAt < BILLING_CACHE_TTL) return _billingEnabled
-  try {
-    const admin = getSupabaseAdmin()
-    const { data } = await admin.from('app_settings').select('value').eq('key', 'billing_enabled').single()
-    _billingEnabled = data?.value === 'true'
-  } catch {
-    _billingEnabled = false
+  const admin = getSupabaseAdmin()
+  const { data, error } = await admin.from('app_settings').select('value').eq('key', 'billing_enabled').single()
+  if (error || !data || !['true', 'false'].includes(data.value)) {
+    throw new PricingUnavailableError('Billing configuration unavailable. Please retry.')
   }
+  _billingEnabled = data.value === 'true'
   _billingCheckedAt = Date.now()
   return _billingEnabled
 }
@@ -144,7 +144,7 @@ async function expireAppleTrialCredits(userId: string): Promise<void> {
  */
 export async function checkBalance(userId: string, toolName: string): Promise<{ ok: boolean; balance: number; cost: number }> {
   const price = await getToolPrice(toolName)
-  if (!price) return { ok: true, balance: 0, cost: 0 } // Unknown tool = free (fail open)
+  if (!price) throw new PricingUnavailableError(`Tool pricing is not configured: ${toolName}`)
   if (price.isFree) return { ok: true, balance: 0, cost: 0 }
 
   await expireAppleTrialCredits(userId)
@@ -303,7 +303,8 @@ export async function deductCredits(
   if (!(await isBillingEnabled())) return { charged: 0, remaining: 0 }
   const toolName = resolveToolName(mcpToolName, model)
   const price = await getToolPrice(toolName)
-  if (!price || price.isFree) return { charged: 0, remaining: 0 }
+  if (!price) throw new PricingUnavailableError(`Tool pricing is not configured: ${toolName}`)
+  if (price.isFree) return { charged: 0, remaining: 0 }
 
   const remaining = await deductAndLog(userId, price.credits, toolName, model, null, null, durationMs, apiKeyId ? 'mcp' : 'app', apiKeyId)
   return { charged: price.credits, remaining }
@@ -332,12 +333,9 @@ export async function deductByTokens(
   providerCostUsd?: number,
 ): Promise<{ charged: number; remaining: number }> {
   if (!(await isBillingEnabled())) return { charged: 0, remaining: 0 }
-  let rate = await getTokenRate(modelId)
-  let usedFallback = false
+  const rate = await getTokenRate(modelId)
   if (!rate) {
-    console.warn(`[billing] WARNING: No token rate for "${modelId}". Using fallback $5/$25. Add it via Admin → Billing → Token Rates.`)
-    rate = { model_id: `unknown:${modelId}`, display_name: 'Fallback', input_per_1m: 5, output_per_1m: 25, markup: 2, is_active: true }
-    usedFallback = true
+    throw new PricingUnavailableError(`Token pricing is not configured: ${modelId}`)
   }
 
   const credits = providerCostUsd != null
@@ -354,7 +352,7 @@ export async function deductByTokens(
 
   const remaining = await deductAndLog(
     userId, credits, toolName,
-    usedFallback ? `unknown:${modelId}` : modelId,
+    modelId,
     inputTokens, outputTokens, durationMs,
     apiKeyId ? 'mcp' : 'app', apiKeyId,
     cacheBreakdown?.cacheRead ?? null,

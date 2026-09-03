@@ -1,6 +1,31 @@
 import type { TranslationDictionary } from './index';
 
 const ja = {
+  'mediaPricing.title': "動画・音声の料金",
+  'mediaPricing.description': "実際の課金はこの表を参照します。USD 原価 × 倍率を Credits に換算し、タスク単位で切り上げます。変更は新しい見積りに適用され、予約済みの料金は維持されます。",
+  'mediaPricing.included': "ASR・レンダリング・ストレージは個別課金されません。個人プランの利用は重複課金せず記録します。",
+  'mediaPricing.refresh': "更新",
+  'mediaPricing.model': "モデル",
+  'mediaPricing.variant': "解像度 / 操作",
+  'mediaPricing.output_usd_per_second': "出力 USD/秒",
+  'mediaPricing.input_usd_per_second': "参照動画 USD/秒",
+  'mediaPricing.input_usd_per_image': "参照画像 USD/枚",
+  'mediaPricing.free_image_references': "無料参照画像数",
+  'mediaPricing.markup': "料金倍率",
+  'mediaPricing.unfiltered_multiplier': "特別モード倍率",
+  'mediaPricing.active': "有効",
+  'mediaPricing.saving': "保存中…",
+  'mediaPricing.saved': "保存済み",
+  'mediaPricing.error': "料金を取得または保存できません。マイグレーション設定を確認し、再試行してください。",
+  'mediaPricing.conflict': "他の編集者が料金を変更しました。更新して再試行してください。",
+  'mediaPricing.loading': "料金を読み込み中…",
+  'mediaPricing.generate': "生成",
+  'mediaPricing.edit': "編集",
+  'mediaPricing.extend': "延長",
+  'mediaPricing.fixedTitle': "ツールの従量料金",
+  'mediaPricing.fixedDescription': "以下は実行単位の料金です。動画と Seed Audio は上の料金表、LLM とトークン課金の画像は下の Token Rates を使用します。",
+  'mediaPricing.quoteUnavailable': "見積りを取得できません",
+  'mediaPricing.quoteCredits': "見積り {credits} Credits",
   // Locale
   'locale.selector': '言語を選択',
 
