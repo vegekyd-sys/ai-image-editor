@@ -2,7 +2,7 @@
 
 实现日期：2026-09-03。分支：`codex/wan-discount-billing`，基线：`733b387e`。
 
-状态：独立 worktree 本地实现、自动化验证；尚未合入 dev、执行共享数据库迁移或部署。没有修改历史流水和用户余额，没有提交付费生成请求。原始审计见 [Wan 折扣价与计费审计](./wan-discount-billing-audit-2026-09-03.md)。
+状态（2026-09-03 更新）：用户批准后已执行共享 Supabase 迁移，65 行媒体价目已入库；在独立本地 runner 上完成 7 个便宜真实请求，共扣 58 Credits，均找到流水。应用代码尚未合入 dev / 部署，不代表生产应用已经切换到新目录。未修改历史流水或手工调整余额。视频供应商已返回完成，但本地证书链错误阻断播放和永久存储验收。详见 [迁移与真实计费验收](./media-pricing-acceptance-2026-09-03.md)；原始审计见 [Wan 折扣价与计费审计](./wan-discount-billing-audit-2026-09-03.md)。
 
 ## 唯一运行时价格来源
 
@@ -89,7 +89,7 @@ order by created_at;
 1. 先审核迁移及目标 DB。Production、Preview、本地共享数据库；不得为本地测试自动执行共享数据库迁移。
 2. 得到共享数据库变更批准后，执行该迁移并核对媒体目录/权限/缺失 token 行。迁移是增量添加；不会回溯重算历史订单。
 3. 再部署代码。新代码缺表会明确报错，因此不能先上线代码再补表。回滚代码时保留新增表与预留记录；旧 cron 不会处理新 MCP 预留任务，需要保留新结算逻辑或人工处理未结任务。
-4. 正式验收应覆盖 Admin 改价、实际报价、余额不足不提交、至少一次便宜视频真实完成与失败退款；生产验收需要另行批准。本轮没有用 mock 通过冒充线上验收。
+4. 正式验收应覆盖 Admin 改价、实际报价、余额不足不提交、至少一次便宜视频真实完成与失败退款；生产应用部署及其验收需要另行批准。2026-09-03 已完成授权共享库迁移、本地真实请求计费与共享 PostgreSQL 的 rollback-only 事务验收，具体范围见验收报告。没有为测试改动共享 Admin 单价，也未故意提交收费失败任务。
 
 仍待单独处理：ASR 是否收费及实际合同价；Sandbox/渲染/Storage/CDN 是否由平台承担；Smart Layers 分支的目录；图片/音频等异步扣费失败的持久化重试；历史 149 条 token fallback 核账；GPT Image 无 usage 时数据库现有 20 Credits 的产品定价确认。此次移除了代码中 4 Credits 的运行时兜底，保留已有 DB 配置，没有替用户决定改为 4 Credits。
 
@@ -98,7 +98,7 @@ order by created_at;
 - Vitest：媒体报价与所有 registry 组合初始价一致、Admin 修改后下次报价生效、旧报价不变、停用/缺价/DB 故障阻断、整次任务取整、Seed Audio 单位换算。
 - MCP：预扣先于 provider、余额不足不提交、并行请求状态隔离、同请求回放、不确定提交保留预扣、Grok 个人套餐转 API 预扣、同步完成不重复轮询。
 - 真实 `createVideo` 函数 + 模拟 HTTP：smart 时长与实际 provider 参数一致、视频实测时长超限在预扣前拦截、预扣失败不发 provider POST。
-- Admin 组件/路由：身份权限、字段验证、版本冲突、保存/切换模型后的状态。没有启动真实 Next 浏览器验收。
+- Admin 组件/路由：身份权限、字段验证、版本冲突、保存/切换模型后的状态。后续本地真实 HTTP 验收确认管理员接口返回 65 行；未做共享价格修改或 Admin 浏览器表单验收。
 - PGlite 隔离 SQL：执行实际迁移和既有余额 RPC，验证 no-overdraft 回滚、幂等退款/重放、owner 隔离、终态不倒退、RLS/服务端专属权限。使用内存数据库，不接触共享 Supabase；它不替代真实多连接 PostgreSQL 压力测试。
 
 ```bash
@@ -108,4 +108,4 @@ npm run lint
 PGLITE_MODULE=/absolute/path/to/@electric-sql/pglite/dist/index.js node scripts/test-media-pricing-db.mjs
 ```
 
-PGlite 验证使用临时安装的 `@electric-sql/pglite@0.3.14`，不加入产品依赖。feature worktree 为 source-only，未启动 Next/build；不切换或停止用户正在使用的固定 runner。
+PGlite 验证使用临时安装的 `@electric-sql/pglite@0.3.14`，不加入产品依赖。feature worktree 为 source-only；真实验收另建 `/Users/tianyicai/ai-image-editor-runner-wan-billing`，运行固定提交 `ef0f88fc`，端口 3042，不切换或停止用户正在使用的固定 runner。
