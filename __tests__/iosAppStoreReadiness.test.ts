@@ -379,7 +379,7 @@ describe('iOS App Store readiness guardrails', () => {
     expect(agentContent).not.toContain('makaron-ios-page makaron-ios-page-x min-h-screen w-full bg-black text-gray-200 font-mono p-6 md:p-12 max-w-4xl mx-auto');
     expect(dashboard).toContain('<div className="max-w-2xl mx-auto">');
     expect(profile).toContain('<div className="max-w-lg mx-auto">');
-    expect(admin).toContain('<div className="max-w-2xl mx-auto">');
+    expect(admin).toContain("<div className={`mx-auto ${tab === 'billing' ? 'max-w-6xl' : 'max-w-2xl'}`}>");
     expect(agentContent).toContain('<div className="max-w-4xl mx-auto">');
     expect(adminStatus).toContain('makaron-ios-page');
     expect(demo3d).toContain('makaron-ios-page');

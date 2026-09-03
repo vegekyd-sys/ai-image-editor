@@ -340,7 +340,7 @@ export default function AdminPage() {
 
   return (
     <div className="makaron-ios-page makaron-ios-page-x min-h-dvh bg-black text-white p-6">
-      <div className="max-w-2xl mx-auto">
+      <div className={`mx-auto ${tab === 'billing' ? 'max-w-6xl' : 'max-w-2xl'}`}>
       <div className="flex items-center justify-between mb-8">
         <h1 className="text-2xl font-bold">Admin</h1>
         <button type="button" onClick={handleBackToApp} className="text-white/40 text-sm hover:text-white/60">
