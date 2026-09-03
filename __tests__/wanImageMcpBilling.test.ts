@@ -20,7 +20,11 @@ vi.mock('@/lib/models', async () => {
   return { getBackend: (id: string) => id === 'wan2.7-image' ? wanImageBackend : undefined };
 });
 // Force serverless inline-result mode; never write test images into the worktree.
-vi.mock('fs', async (importOriginal) => ({ ...await importOriginal<typeof import('fs')>(), mkdirSync: () => { throw new Error('serverless'); } }));
+vi.mock('fs', async (importOriginal) => ({
+  ...await importOriginal<typeof import('fs')>(),
+  mkdirSync: () => { throw new Error('serverless'); },
+  writeFileSync: () => { throw new Error('serverless'); },
+}));
 vi.mock('@/lib/supabase/service', () => ({ getSupabaseAdmin: () => ({
   rpc: state.rpc,
   from: (table: string) => {
