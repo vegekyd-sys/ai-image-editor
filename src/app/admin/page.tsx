@@ -348,10 +348,10 @@ export default function AdminPage() {
       </div>
 
       {/* Tabs */}
-      <div className="flex gap-1 mb-6 bg-white/5 rounded-lg p-1">
+      <div className="flex gap-1 mb-6 overflow-x-auto bg-white/5 rounded-lg p-1" data-testid="admin-tabs">
         <button
           onClick={() => setTab('codex')}
-          className={`flex-1 py-2 px-4 rounded-md text-sm font-medium transition-all ${
+          className={`shrink-0 whitespace-nowrap sm:flex-1 py-2 px-3 sm:px-4 rounded-md text-sm font-medium transition-all ${
             tab === 'codex' ? 'bg-fuchsia-600 text-white' : 'text-white/50 hover:text-white/70'
           }`}
         >
@@ -359,7 +359,7 @@ export default function AdminPage() {
         </button>
         <button
           onClick={() => setTab('billing')}
-          className={`flex-1 py-2 px-4 rounded-md text-sm font-medium transition-all ${
+          className={`shrink-0 whitespace-nowrap sm:flex-1 py-2 px-3 sm:px-4 rounded-md text-sm font-medium transition-all ${
             tab === 'billing' ? 'bg-fuchsia-600 text-white' : 'text-white/50 hover:text-white/70'
           }`}
         >
@@ -367,7 +367,7 @@ export default function AdminPage() {
         </button>
         <button
           onClick={() => setTab('skills')}
-          className={`flex-1 py-2 px-4 rounded-md text-sm font-medium transition-all ${
+          className={`shrink-0 whitespace-nowrap sm:flex-1 py-2 px-3 sm:px-4 rounded-md text-sm font-medium transition-all ${
             tab === 'skills' ? 'bg-fuchsia-600 text-white' : 'text-white/50 hover:text-white/70'
           }`}
         >
@@ -375,7 +375,7 @@ export default function AdminPage() {
         </button>
         <button
           onClick={() => setTab('meta')}
-          className={`flex-1 py-2 px-4 rounded-md text-sm font-medium transition-all ${
+          className={`shrink-0 whitespace-nowrap sm:flex-1 py-2 px-3 sm:px-4 rounded-md text-sm font-medium transition-all ${
             tab === 'meta' ? 'bg-fuchsia-600 text-white' : 'text-white/50 hover:text-white/70'
           }`}
         >

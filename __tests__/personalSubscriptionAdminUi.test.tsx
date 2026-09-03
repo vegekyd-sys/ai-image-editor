@@ -41,6 +41,8 @@ describe('personal plan management UI', () => {
   it.each(['zh', 'zh-Hant', 'en', 'ja'] as const)('renders one roster and two translated states in %s', async locale => {
     await mount(locale);
     expect(screen.getByRole('button', { name: `${translate(locale, 'admin.personalAllowlist.tab')} (2)` })).toBeTruthy();
+    expect(screen.getByTestId('admin-tabs').classList.contains('overflow-x-auto')).toBe(true);
+    expect(screen.getByRole('button', { name: `${translate(locale, 'admin.personalAllowlist.tab')} (2)` }).classList.contains('whitespace-nowrap')).toBe(true);
     const statuses = screen.getByTestId('personal-plan-sync').textContent;
     expect(statuses).toContain(translate(locale, 'admin.personalAllowlist.codexStatus', translate(locale, 'admin.personalAllowlist.synced')));
     expect(statuses).toContain(translate(locale, 'admin.personalAllowlist.grokStatus', translate(locale, 'admin.personalAllowlist.pending')));
