@@ -1,4 +1,5 @@
 import { getSupabaseAdmin } from '@/lib/supabase/service'
+import { getVideoAnalysisDefaultRate } from './video-analysis-rate'
 
 export interface TokenRate {
   model_id: string
@@ -144,7 +145,7 @@ export async function getAllTokenRates(): Promise<TokenRate[]> {
   const dbModelIds = new Set(dbRates.map(rate => rate.model_id))
   const rates = [
     ...dbRates,
-    ...DEFAULT_TOKEN_RATES.filter(rate => !dbModelIds.has(rate.model_id)),
+    ...[...DEFAULT_TOKEN_RATES, getVideoAnalysisDefaultRate()].filter(rate => !dbModelIds.has(rate.model_id)),
   ]
   cache = { data: rates, ts: Date.now() }
   return rates

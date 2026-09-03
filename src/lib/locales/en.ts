@@ -77,6 +77,8 @@ const en = {
   // Changelog
   'changelog.heading': 'Updates',
   'changelog.close': 'Close updates',
+  'changelog.fasterVideoAnalysis.title': 'Faster Video Analysis',
+  'changelog.fasterVideoAnalysis.item1': 'Analyze Video now uses Gemini 3.8 Flash with a focus on faster responses for short clips, in both Agent and CLI.',
   'changelog.minimaxH3Max.title': 'Faster-Than-Real-Time Video with MiniMax H3 Max Turbo',
   'changelog.minimaxH3Max.item1': 'MiniMax H3 Max Turbo by fal is now live in Makaron, generating five-second videos at native 768P by default, faster than real time, from text or a single start image.',
   'changelog.wan30.title': 'Wan 3.0 Standard & Pro',

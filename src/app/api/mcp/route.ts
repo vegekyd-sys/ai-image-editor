@@ -116,11 +116,11 @@ async function handleMcp(req: Request): Promise<Response> {
           auth.userId!,
           toolName,
           usage.modelId,
-          usage.inputTokens,
+          usage.inputTokens - (usage.cacheReadTokens ?? 0),
           usage.outputTokens,
           durationMs,
           auth.keyId,
-          undefined,
+          usage.cacheReadTokens == null ? undefined : { cacheRead: usage.cacheReadTokens, cacheWrite: 0 },
           usage.providerCostUsd,
         );
       } else if (meta?.videoDurationSec && meta.provider !== 'grok-subscription') {

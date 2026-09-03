@@ -74,7 +74,7 @@ export interface McpServerOptions {
     toolName: string,
     model?: string,
     durationMs?: number,
-    usage?: { inputTokens: number; outputTokens: number; modelId: string; providerCostUsd?: number; provider?: string },
+    usage?: { inputTokens: number; outputTokens: number; modelId: string; cacheReadTokens?: number; providerCostUsd?: number; provider?: string },
     meta?: {
       videoDurationSec?: number
       imageCount?: number
@@ -454,7 +454,7 @@ Use this as the standalone equivalent of the Agent's analyze_video tool.
 
 IMPORTANT:
 - videoUrl must be publicly accessible and downloadable.
-- For best compatibility with later SeeDance editing, use the normal Makaron upload constraints: MP4/MOV/WebM, target ≤15s with tiny metadata padding accepted, ≤200MB, ≤1080p / 2,086,876 pixels.
+- Downloadable MP4/MOV/WebM videos must be ≤38.5 MB. Public YouTube URLs and uploaded Google File URLs can be passed directly.
 - This tool only analyzes; it does not create or update a project timeline.`,
     {
       videoUrl: z.string().url().describe('Publicly accessible video URL to analyze'),
@@ -473,7 +473,7 @@ IMPORTANT:
         });
 
         if (result.success) {
-          await options?.onToolComplete?.('makaron_analyze_video', undefined, Date.now() - t0);
+          await options?.onToolComplete?.('makaron_analyze_video', result.usedModel, Date.now() - t0, result.usage);
         }
         return { content: [{ type: 'text' as const, text: result.success
           ? `${result.message}\n\n${result.analysis}`
