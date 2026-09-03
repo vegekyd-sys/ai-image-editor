@@ -10,6 +10,23 @@ import { generateAnimationHarness, lookbookRequest } from './helpers/generateAni
 afterEach(() => { vi.unstubAllGlobals(); vi.unstubAllEnvs(); });
 
 describe('video generation intent and one-submit regression', () => {
+  it('animates only the prepared frame in a multi-image H3 Max project', async () => {
+    const h = generateAnimationHarness();
+    h.ctx.snapshotImages.push('https://example.com/composed-start.jpg');
+    h.rows.push({ id: 'composed', type: 'image' });
+    const result = await h.tool.execute({
+      model: 'minimax-h3-max', video_resolution: '768p', duration: 5,
+      video_intent: 'generate',
+      story_prompt: 'Stadium Portrait\nShot 1 (5s): <<<media_3>>> is the prepared opening frame. She turns toward the camera during a slow push-in. Style: natural cinematic portrait.',
+    });
+    expect(result.success).toBe(true);
+    expect(h.createVideo).toHaveBeenCalledTimes(1);
+    expect(h.ctx.pendingVideoSnapshot.videoMeta.sourceUrls).toEqual(['https://example.com/composed-start.jpg']);
+    expect(h.deductFixedCredits).toHaveBeenCalledTimes(1);
+    expect(h.deductFixedCredits.mock.calls[0][1]).toBe(40);
+    expect(h.tool.description).toContain('Multiple supplied images do not by themselves make H3 Max unusable');
+  });
+
   it('replays the old all-fields lookbook call in one submit, charging once and keeping media_2', async () => {
     const h = generateAnimationHarness();
     vi.stubEnv('FAL_KEY', 'test-key');
