@@ -1,5 +1,7 @@
 # Google Agentic Video Understanding 对 Makaron Analyze Video 的替换评估
 
+> 本文是首轮 3.7 调研快照。用户随后决定接入 3.8 Flash；当前实现和线上对照见 [implementation-38.md](./implementation-38.md)。
+
 核对日期：2026-09-03（Asia/Shanghai）。代码基线：`dev@733b387e`。
 独立 worktree：`/Users/tianyicai/ai-image-editor-agentic-video-analysis`；分支：`codex/agentic-video-analysis`。
 

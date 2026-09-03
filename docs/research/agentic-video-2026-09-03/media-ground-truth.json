@@ -1,0 +1,25 @@
+{
+  "checkedDate": "2026-09-03",
+  "intro": {
+    "path": "makaron-intro/renders/makaron-intro_2026-05-07_02-05-55.mp4",
+    "durationSec": 15,
+    "bytes": 1498853,
+    "streams": [
+      {
+        "codec_name": "h264",
+        "codec_type": "video"
+      }
+    ],
+    "hasAudioStream": false,
+    "uploadContract": "packages/makaron-cli/bin/makaron.mjs uploadFileViaSignedUrl reads original file bytes and PUTs directly to storage; no audio insertion"
+  },
+  "pixel8": {
+    "durationSec": 57.208005,
+    "bytes": 4951975,
+    "sha256": "a9a5f28a7bd32bc58ad68e9f7b86efebc95bb7441afae537b006dfea6c87d7c3",
+    "source": "https://storage.googleapis.com/cloud-samples-data/generative-ai/video/pixel8.mp4",
+    "frameAt48Sec": "Green orb lamp, wood structure, foreground leaves inside an inset bordered by the puddle frame",
+    "frameCommand": "ffmpeg -ss 48.000 -i pixel8.mp4 -frames:v 1 -update 1 exact-48.jpg"
+  },
+  "productionDeploymentBeforeAndAfter": "dpl_E636sH1J2DatQH81K9YSdjR2z5g5"
+}

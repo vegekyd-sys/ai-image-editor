@@ -13,7 +13,7 @@ function option(name, fallback) {
   return args[index + 1];
 }
 if (args.includes('--help')) {
-  console.log('node probe.mjs --env /path/to/.env.local [--model gemini-3.7-flash] [--out /path/to/results.json]');
+  console.log('node probe.mjs --env /path/to/.env.local [--model gemini-3.7-flash] [--thinking medium|low] [--out /path/to/results.json]');
   process.exit(0);
 }
 const envFile = option('--env');
@@ -21,6 +21,8 @@ if (envFile) process.loadEnvFile(envFile);
 const key = process.env.GOOGLE_API_KEY || process.env.GEMINI_API_KEY;
 if (!key) throw new Error('GOOGLE_API_KEY or GEMINI_API_KEY required');
 const model = option('--model', 'gemini-3.7-flash');
+const thinking = option('--thinking', 'medium');
+if (!['low', 'medium', 'high'].includes(thinking)) throw new Error('Invalid thinking level');
 const outputPath = resolve(option('--out', fileURLToPath(new URL('./results.json', import.meta.url))));
 const source = 'https://storage.googleapis.com/cloud-samples-data/generative-ai/video/pixel8.mp4';
 const prompt = 'Describe the entire video chronologically for a creative editor. Cover subjects, setting, actions, scene changes, notable text, framing, mood, and the most useful moments. Be concise but specific.';
@@ -92,7 +94,7 @@ for (const processing of ['static', 'agentic']) {
   const reply = await request('interactions', {
     model, store: false,
     input: [{ type: 'video', mime_type: 'video/mp4', data: inlineData.data, processing }, { type: 'text', text: prompt }],
-    generation_config: { thinking_level: 'medium', max_output_tokens: 4096 },
+    generation_config: { thinking_level: thinking, max_output_tokens: 4096 },
   });
   const data = reply.data;
   const steps = data.steps || [];
@@ -101,7 +103,7 @@ for (const processing of ['static', 'agentic']) {
   const processingObserved = stepTypes.includes('processing_call') && stepTypes.includes('processing_result');
   result.runs.push({
     arm: `candidate-${processing}`, model, api: 'interactions', transport: 'inline',
-    config: { thinking_level: 'medium', max_output_tokens: 4096, store: false },
+    config: { thinking_level: thinking, max_output_tokens: 4096, store: false },
     httpStatus: reply.httpStatus, elapsedMs: reply.elapsedMs, status: data.status,
     text, completedWithText: reply.httpStatus === 200 && data.status === 'completed' && Boolean(text),
     processingObserved, stepTypes, usage: data.usage, error: data.error,
