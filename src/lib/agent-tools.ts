@@ -1571,7 +1571,7 @@ Hard constraints:
             replacement_media_index: z.number().int().positive().describe('Timeline Media Index of the replacement character image.'),
             source_actor_anchor: z.string().min(12).describe('Stable source performer evidence: appearance/costume plus an opening or distinctive action. Left/right alone is invalid.'),
             replacement_identity: z.string().min(8).describe('Exact replacement face, hair, body, clothing, colors, footwear, and accessories. Whole-person replacement includes clothing unless the user explicitly narrows it.'),
-          })).min(1).max(8),
+          })).max(8).optional().describe('Character replacements only. Omit or use [] for object-only or environment-only replication; never put an object in a character role.'),
           objects: z.array(z.object({
             replacement_media_index: z.number().int().positive().describe('Timeline Media Index of the replacement object image.'),
             source_object_anchor: z.string().min(8).describe('Stable source object evidence, including who handles it and its initial/final state or distinctive motion.'),
@@ -1629,7 +1629,7 @@ Hard constraints:
           ? compileVideoReplicationPrompt(story_prompt || 'Exact Video Replication', {
               referenceVideoMediaIndex: replication_contract.reference_video_media_index,
               sourceDurationSeconds: replication_contract.source_duration_seconds,
-              characters: replication_contract.characters.map(character => ({
+              characters: (replication_contract.characters || []).map(character => ({
                 replacementMediaIndex: character.replacement_media_index,
                 sourceActorAnchor: character.source_actor_anchor,
                 replacementIdentity: character.replacement_identity,

@@ -100,6 +100,30 @@ describe('video generation intent and one-submit regression', () => {
     expect(h.createVideo).not.toHaveBeenCalled();
   });
 
+  it.each([undefined, []])('submits object-only replication without fabricated characters (%s)', async characters => {
+    const h = generateAnimationHarness();
+    h.rows[0] = { id: 'source', type: 'video', video_meta: { videoUrl: 'https://example.com/source.mp4', duration: 5 } };
+    const input = h.tool.inputSchema.parse({
+      story_prompt: 'Cup replacement\nShot 1 (5s): Keep the shot; replace only the red cup.',
+      video_intent: 'replicate', model: 'seedance-fast', duration: 5, video_resolution: '480p',
+      replication_contract: { reference_video_media_index: 1, source_duration_seconds: 5, characters,
+        objects: [{ replacement_media_index: 2, source_object_anchor: 'Glossy red ceramic cup with its handle pointing right', replacement_object: 'The blue ceramic mug with a curved handle in the supplied image' }] },
+    });
+    expect((await h.tool.execute(input)).success).toBe(true);
+    expect(h.createVideo).toHaveBeenCalledTimes(1);
+    expect(h.createVideo.mock.calls[0][0].script).toContain('OBJECT 1');
+    expect(h.createVideo.mock.calls[0][0].script).not.toContain('ROLE 1');
+    expect(h.deductFixedCredits).toHaveBeenCalledTimes(1);
+  });
+
+  it('accepts environment-only replication without characters or objects', async () => {
+    const h = generateAnimationHarness();
+    const result = h.tool.inputSchema.safeParse({ story_prompt: 'Room replacement', video_intent: 'replicate',
+      replication_contract: { reference_video_media_index: 1, source_duration_seconds: 5,
+        environment: { replacement_media_index: 2, source_environment_anchor: 'Warm beige studio wall and tabletop', replacement_environment: 'The supplied cool blue studio environment' } } });
+    expect(result.success).toBe(true);
+  });
+
   it('gives concrete feedback once and stops a repeated unchanged constraint', async () => {
     const h = generateAnimationHarness();
     const input = { ...lookbookRequest, story_prompt: 'Shot 1 (15s): Use <<<media_1>>> and <<<media_2>>>.' };

@@ -19,7 +19,7 @@ export interface VideoReplicationEnvironmentRole {
 export interface VideoReplicationContract {
   referenceVideoMediaIndex: number;
   sourceDurationSeconds: number;
-  characters: VideoReplicationCharacterRole[];
+  characters?: VideoReplicationCharacterRole[];
   objects?: VideoReplicationObjectRole[];
   environment?: VideoReplicationEnvironmentRole;
   styleDirection?: string;
@@ -40,7 +40,7 @@ export function compileVideoReplicationPrompt(
 ) {
   const source = mediaMarker(contract.referenceVideoMediaIndex);
   const duration = contract.sourceDurationSeconds.toFixed(2).replace(/\.00$/, '');
-  const characterMappings = contract.characters.map((character, index) => [
+  const characterMappings = (contract.characters || []).map((character, index) => [
     `ROLE ${index + 1}: In ${source}, identify the source performer by this stable evidence: ${character.sourceActorAnchor}.`,
     `Replace that whole performer with the exact identity, face, hair, body, clothing, colors, footwear, and accessories from ${mediaMarker(character.replacementMediaIndex)}: ${character.replacementIdentity}.`,
     'The source occupation or story role does not preserve the source costume unless the user explicitly requested that exception.',

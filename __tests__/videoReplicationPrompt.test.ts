@@ -82,4 +82,12 @@ describe('video replication provider prompt compiler', () => {
     expect(prompt).toContain('ENVIRONMENT: Preserve the environment visible in <<<media_4>>>')
     expect(prompt).not.toContain('Replace the entire visible environment with <<<media_4>>>')
   })
+
+  it('compiles pure objects and environments without invented performer mappings', () => {
+    const prompt = compileVideoReplicationPrompt('Replace the cup', { ...contract, characters: undefined });
+    expect(prompt).toContain('OBJECT 1');
+    expect(prompt).toContain('ENVIRONMENT:');
+    expect(prompt).not.toContain('ROLE 1');
+    expect(prompt).not.toContain('Replace that whole performer');
+  });
 })
