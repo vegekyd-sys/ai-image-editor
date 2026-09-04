@@ -153,6 +153,9 @@ const ja = {
   // Changelog
   'changelog.heading': '更新情報',
   'changelog.close': '更新情報を閉じる',
+  'changelog.wan27Image.title': 'Wan 2.7 Image：すばやく生成、待ち時間を短く',
+  'changelog.wan27Image.item1': '実測で約 6〜11 秒の画像生成。テキストからの生成と複数画像の編集で、アイデアをすばやく形にできます。',
+  'changelog.wan27Image.item2': '画像モデルから Wan 2.7 Image を選ぶか、Agent に「Wan 2.7 で画像を生成して」と伝えてお試しください。',
   'changelog.fasterVideoAnalysis.title': '動画分析がより速く',
   'changelog.fasterVideoAnalysis.item1': 'Analyze Video は Gemini 3.8 Flash を採用し、短い動画の分析で待ち時間の短縮を重視するようになりました。Agent と CLI の両方で利用できます。',
   'changelog.minimaxH3Max.title': 'MiniMax H3 Max Turbo 超リアルタイム動画',

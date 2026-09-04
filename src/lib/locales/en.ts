@@ -115,6 +115,9 @@ const en = {
   // Changelog
   'changelog.heading': 'Updates',
   'changelog.close': 'Close updates',
+  'changelog.wan27Image.title': 'Wan 2.7 Image: Create Fast, Wait Less',
+  'changelog.wan27Image.item1': 'Images in around 6–11 seconds in our tests: bring ideas to life faster with text-to-image generation and multi-image editing.',
+  'changelog.wan27Image.item2': 'Select Wan 2.7 Image in the image model picker, or ask the Agent to generate an image with Wan 2.7.',
   'changelog.fasterVideoAnalysis.title': 'Faster Video Analysis',
   'changelog.fasterVideoAnalysis.item1': 'Analyze Video now uses Gemini 3.8 Flash with a focus on faster responses for short clips, in both Agent and CLI.',
   'changelog.minimaxH3Max.title': 'Faster-Than-Real-Time Video with MiniMax H3 Max Turbo',

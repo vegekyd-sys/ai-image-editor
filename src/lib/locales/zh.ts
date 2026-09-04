@@ -115,6 +115,9 @@ const zh = {
   // Changelog
   'changelog.heading': '更新',
   'changelog.close': '关闭更新',
+  'changelog.wan27Image.title': 'Wan 2.7 Image：快速出图，少等一会儿',
+  'changelog.wan27Image.item1': '实测约 6–11 秒出图，让灵感更快变成画面，支持文字生图与多图编辑。',
+  'changelog.wan27Image.item2': '在图片模型中选择 Wan 2.7 Image，或直接告诉 Agent「用 Wan 2.7 生图」即可体验。',
   'changelog.fasterVideoAnalysis.title': '更快的视频分析',
   'changelog.fasterVideoAnalysis.item1': 'Analyze Video 现使用 Gemini 3.8 Flash，优先缩短短视频分析的等待时间，Agent 与 CLI 同步更新。',
   'changelog.minimaxH3Max.title': 'MiniMax H3 Max Turbo 超实时视频',
