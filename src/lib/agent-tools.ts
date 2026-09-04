@@ -79,7 +79,6 @@ import {
   normalizeLocale,
   translate,
 } from './locales';
-import { AGENT_REPLY_LANGUAGE_RULE } from './agent-response-policy';
 import { stableDraftPromotionSnapshotId } from './draft-promotion';
 import { sourceRangeFromVideoMeta } from './media-source-range';
 import { materializeSeedAudioReference } from './seed-audio-reference';
@@ -2195,7 +2194,7 @@ function createAnalyzeImageTool(
             type: 'content' as const,
             value: [{
               type: 'text' as const,
-              text: `${output.analysis}\n\nUse the analysis above as visual evidence. ${AGENT_REPLY_LANGUAGE_RULE}`,
+              text: `${output.analysis}\n\nUse the analysis above as visual evidence.`,
             }],
           };
         }

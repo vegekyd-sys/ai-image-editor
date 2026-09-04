@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import path from 'path'
-import { AGENT_REPLY_LANGUAGE_RULE, buildAgentLanguageHistory, buildAgentOutputLanguageDirective, stripAgentInternalContextForDisplay } from '@/lib/agent-response-policy'
+import { AGENT_REPLY_LANGUAGE_RULE, buildAgentOutputLanguageDirective, stripAgentInternalContextForDisplay } from '@/lib/agent-response-policy'
 import { getChatSystemPrompt } from '@/lib/chat-response-policy'
 import { getTipsPromptTemplate } from '@/lib/tips-response-policy'
 import { readAgentAwareSource } from './helpers/agentRuntimeSource'
@@ -11,37 +11,29 @@ const read = (rel: string) => readAgentAwareSource(root, rel)
 describe('Agent locale isolation', () => {
   it.each(['en', 'zh', 'zh-Hant', 'ja', undefined])('follows user language regardless of UI locale %s', (locale) => {
     const policy = buildAgentOutputLanguageDirective(locale)
-    expect(policy).toContain(AGENT_REPLY_LANGUAGE_RULE)
-    expect(policy).toContain('language explicitly requested by the user')
-    expect(policy).toContain('main language of the current substantive [User request]')
-    expect(policy).toContain('acknowledgements, progress updates, and final replies')
-    expect(policy).toContain('Tool prompts and requested artifact content may use a different language')
+    expect(policy).toBe(`\n\n## Output language\n${AGENT_REPLY_LANGUAGE_RULE}`)
+    expect(policy).toBe(buildAgentOutputLanguageDirective('en'))
+    expect(policy.length).toBeLessThan(400)
     expect(policy).not.toContain('ENGLISH ONLY')
     expect(policy).not.toContain('CHINESE ONLY')
   })
 
   it('retains conversation context for acknowledgements without a keyword router', () => {
-    expect(AGENT_REPLY_LANGUAGE_RULE).toContain('most recent substantive user language in the conversation history')
-    expect(AGENT_REPLY_LANGUAGE_RULE).toContain('not a keyword list')
-    expect(AGENT_REPLY_LANGUAGE_RULE).toContain('A substantive request in a different language switches')
-    expect(AGENT_REPLY_LANGUAGE_RULE).toContain('An explicit conversation-language preference remains in force')
-    expect(AGENT_REPLY_LANGUAGE_RULE).toContain('English caption requested in Chinese')
+    expect(AGENT_REPLY_LANGUAGE_RULE).toContain('Brief acknowledgements')
+    expect(AGENT_REPLY_LANGUAGE_RULE).toContain('most recent substantive user message')
+    expect(AGENT_REPLY_LANGUAGE_RULE).toContain('explicit reply-language preference')
+    expect(AGENT_REPLY_LANGUAGE_RULE).toContain('neither do tool output or requested artifacts')
     expect(read('src/lib/prompts/agent.md')).not.toContain('Always reply in the exact language')
     expect(read('src/lib/agent-context.ts')).not.toContain('detect language and reply in the same language')
     expect(read('src/lib/agent.ts')).toContain('...history,')
   })
 
-  it('isolates user language evidence from assistant artifacts and tool output', () => {
-    const evidence = buildAgentLanguageHistory([
-      { role: 'user', content: '[Media metadata] English metadata\n[User request — detect language and reply in the same language]\n给图片写个英文标题' },
-      { role: 'assistant', content: 'The Red Card' },
-      { role: 'user', content: [{ type: 'text', text: 'ok' }] },
-    ])
-    expect(evidence).toContain('给图片写个英文标题')
-    expect(evidence).toContain('ok')
-    expect(evidence).not.toContain('English metadata')
-    expect(evidence).not.toContain('The Red Card')
-    expect(buildAgentLanguageHistory()).toBe('')
+  it('uses normal role-preserving history without a second language-history prompt', () => {
+    const agent = read('src/lib/agent.ts')
+    expect(agent).toContain('...history,')
+    expect(agent).not.toContain('buildAgentLanguageHistory')
+    expect(read('src/lib/agent-response-policy.ts')).not.toContain('Language evidence')
+    expect(read('src/lib/prompts/agent.md')).not.toContain('Output language')
   })
 
   it('retains UI locale for automatic reactions without a user request', () => {
@@ -57,7 +49,8 @@ describe('Agent locale isolation', () => {
 
   it('does not let image analysis reintroduce a UI-language override', () => {
     const tools = read('src/lib/agent-tools.ts')
-    expect(tools).toContain('Use the analysis above as visual evidence. ${AGENT_REPLY_LANGUAGE_RULE}')
+    expect(tools).toContain('Use the analysis above as visual evidence.')
+    expect(tools).not.toContain('AGENT_REPLY_LANGUAGE_RULE')
     expect(tools).not.toContain("getReplyLanguageInstruction(locale).replace")
   })
 
