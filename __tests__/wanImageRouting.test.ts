@@ -35,7 +35,7 @@ describe('explicit Wan routing', () => {
 
   it('surfaces an unknown paid outcome instead of retrying or falling back', async () => {
     generate.mockRejectedValue(new Error('Unknown paid outcome. No retry.'));
-    await expect(editImage({ editPrompt: 'Edit.', preferredModel: 'wan2.7-image' }, {})).rejects.toThrow('No retry');
+    await expect(editImage({ editPrompt: 'Edit.', preferredModel: 'wan2.7-image' }, {})).resolves.toMatchObject({ success: false, message: expect.stringContaining('Do not retry automatically') });
     expect(generate).toHaveBeenCalledTimes(1);
     expect(getBackend).toHaveBeenCalledTimes(1);
   });

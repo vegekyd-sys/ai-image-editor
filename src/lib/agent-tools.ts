@@ -1914,7 +1914,7 @@ Hard constraints:
           const videoSec = effectiveDuration === -1
             ? referenceVideoDuration ?? 10
             : effectiveDuration || 10;
-          const billingQuote = await quoteVideo({
+          let billingQuote = await quoteVideo({
             model: videoModel,
             resolution: videoRoute.resolution,
             durationSec: videoSec,
@@ -1926,7 +1926,7 @@ Hard constraints:
             contentFilter: content_filter,
           });
 
-          const creditsRequired = billingQuote.credits;
+          let creditsRequired = billingQuote.credits;
           const reserveGrokApiCredits = async () => {
             if (!ctx.userId || reservedVideoCredits > 0) return;
             const creditCheck = await requireCredits(ctx.userId, creditsRequired);
@@ -1953,6 +1953,12 @@ Hard constraints:
             && await isGrokSubscriptionAllowedUser(ctx.userId);
           if (grokSubscriptionPreferred) {
             createVideoInput.onBeforeGrokApiFallback = reserveGrokApiCredits;
+          } else if (videoRoute.provider === 'fal-h3-max' && ctx.userId) {
+            createVideoInput.onBeforeProviderSubmit = async usage => {
+              billingQuote = await quoteVideo(usage);
+              creditsRequired = billingQuote.credits;
+              await reserveGrokApiCredits();
+            };
           } else if (ctx.userId) {
             try {
               await reserveGrokApiCredits();

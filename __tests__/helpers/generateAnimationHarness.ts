@@ -34,7 +34,10 @@ export function generateAnimationHarness() {
     insert, update: () => query,
   };
   const db = { from: vi.fn(() => query), rpc: vi.fn().mockResolvedValue({ data: 2 }) };
-  const createVideo = vi.fn().mockResolvedValue({ success: true, taskId: 'fal-h3max-turbo-test' });
+  const createVideo = vi.fn().mockImplementation(async input => {
+    await input.onBeforeProviderSubmit?.({ model: input.videoModel, resolution: input.videoResolution, durationSec: input.duration ?? 5, imageCount: 1, operation: input.videoOperation });
+    return { success: true, taskId: 'fal-h3max-turbo-test' };
+  });
   const requireCredits = vi.fn().mockResolvedValue({ ok: true, balance: 1000 });
   const deductFixedCredits = vi.fn().mockImplementation(async (_u, credits) => ({ charged: credits }));
   const refundCredits = vi.fn();

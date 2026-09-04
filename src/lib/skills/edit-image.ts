@@ -1,6 +1,8 @@
 import { generateImage } from '../model-router';
 import type { ImageBackground, ModelId, TokenUsage } from '../models/types';
 import type { SkillContext, SkillResult } from './index';
+import { ProviderImageInputError } from '../provider-image-preflight';
+import { WanImageRequestError } from '../models/wan-image';
 
 export interface EditImageInput {
   editPrompt: string;
@@ -59,19 +61,32 @@ export async function editImage(
   const MAX_ATTEMPTS = background === 'transparent' || requestedModel === 'wan2.7-image' ? 1 : 2;
 
   for (let attempt = 1; attempt <= MAX_ATTEMPTS; attempt++) {
-    const genResult = await generateImage({
-      image: references ? undefined : ctx.currentImage,
-      prompt: finalPrompt,
-      model: requestedModel,
-      category: skill,
-      aspectRatio,
-      background,
-      thinkingEffort: 'minimal',
-      references,
-      fallbackPrompt: undefined,
-      isNsfw,
-      codexSubscription: ctx.codexSubscription,
-    });
+    let genResult;
+    try {
+      genResult = await generateImage({
+        image: references ? undefined : ctx.currentImage,
+        prompt: finalPrompt,
+        model: requestedModel,
+        category: skill,
+        aspectRatio,
+        background,
+        thinkingEffort: 'minimal',
+        references,
+        fallbackPrompt: undefined,
+        isNsfw,
+        codexSubscription: ctx.codexSubscription,
+      });
+    } catch (error) {
+      if (error instanceof ProviderImageInputError || error instanceof WanImageRequestError) {
+        return { success: false, message: `${error.message} Do not bypass a failed required image edit by sending the unedited original into dependent video generation.` };
+      }
+      if (requestedModel === 'wan2.7-image') {
+        // Return a durable tool result even for an unknown paid outcome. Never
+        // echo arbitrary transport errors or invite automatic paid resubmission.
+        return { success: false, message: 'Wan 2.7 did not complete. The provider outcome may be unknown. Do not retry automatically or silently switch models; explain the failure to the user. Do not bypass a failed required image edit by sending the unedited original into dependent video generation.' };
+      }
+      throw error;
+    }
 
     result = genResult.image;
     usedModel = genResult.model;

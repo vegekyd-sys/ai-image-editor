@@ -1,3 +1,5 @@
+import { ProviderImageInputError, validateProviderImages } from './provider-image-preflight'
+
 const LEGACY_QUEUE_BASE = 'https://queue.fal.run/minimax/h3-max'
 const TURBO_QUEUE_BASE = 'https://queue.fal.run/minimax/h3-max-turbo'
 const TEXT_ENDPOINT = 'minimax/h3-max-turbo/text-to-video'
@@ -13,6 +15,8 @@ export interface FalH3MaxTaskInput {
   duration?: number
   aspectRatio?: string
   resolution?: FalH3MaxResolution
+  /** Runs after input preflight, immediately before the single paid submission. */
+  onBeforeSubmit?: () => Promise<void>
 }
 
 export interface FalH3MaxTaskResult {
@@ -65,11 +69,11 @@ function normalizePrompt(prompt: string): string {
 }
 
 function errorMessage(body: Record<string, unknown>, fallback: string): string {
-  if (typeof body.detail === 'string') return body.detail
-  if (typeof body.error === 'string') return body.error
-  if (body.error && typeof body.error === 'object') {
-    const message = (body.error as Record<string, unknown>).message
-    if (typeof message === 'string') return message
+  // Provider errors may echo signed input URLs or credentials. Expose only curated reasons.
+  if (Array.isArray(body.detail)) {
+    const types = body.detail.map(item => item?.type)
+    if (types.includes('image_too_small')) return 'MiniMax H3 Max rejected the input image: width and height must each be at least 256px. Use the original or resize/pad before a new submission.'
+    if (types.some(type => typeof type === 'string' && /content_policy|content_violation|nsfw/.test(type))) return 'MiniMax H3 Max rejected this request under its content policy.'
   }
   return fallback
 }
@@ -77,7 +81,7 @@ function errorMessage(body: Record<string, unknown>, fallback: string): string {
 async function readJson(response: Response, label: string): Promise<Record<string, unknown>> {
   const body = await response.json().catch(() => ({})) as Record<string, unknown>
   if (!response.ok) {
-    throw new Error(`${label} error ${response.status}: ${errorMessage(body, JSON.stringify(body))}`)
+    throw new Error(`${label} error ${response.status}: ${errorMessage(body, 'Provider request failed; no automatic resubmission.')}`)
   }
   return body
 }
@@ -90,6 +94,7 @@ export async function createFalH3MaxVideoTask(input: FalH3MaxTaskInput): Promise
   if (!prompt) throw new Error('MiniMax H3 Max Turbo requires a non-empty prompt.')
   if (images.length > 1) throw new Error('MiniMax H3 Max Turbo currently supports exactly one start image, not multi-image references.')
   if (![5, 10, 15].includes(duration)) throw new Error('MiniMax H3 Max Turbo duration must be one of 5, 10, or 15 seconds.')
+  await validateProviderImages(images, 'minimax-h3-max')
 
   const endpoint = images.length === 1 ? IMAGE_ENDPOINT : TEXT_ENDPOINT
   const payload: Record<string, unknown> = {
@@ -109,14 +114,20 @@ export async function createFalH3MaxVideoTask(input: FalH3MaxTaskInput): Promise
       : '16:9'
   }
 
+  const auth = headers()
+  await input.onBeforeSubmit?.()
   const response = await fetch(`https://queue.fal.run/${endpoint}`, {
     method: 'POST',
-    headers: headers(),
+    headers: auth,
     body: JSON.stringify(payload),
   })
+  if (response.status === 422) {
+    const failure = await response.json().catch(() => ({}))
+    throw new ProviderImageInputError(errorMessage(failure ?? {}, 'MiniMax H3 Max rejected the submission (HTTP 422). Correct the input before submitting again.'))
+  }
   const body = await readJson(response, 'MiniMax H3 Max Turbo submit')
   const requestId = typeof body.request_id === 'string' ? body.request_id : ''
-  if (!requestId) throw new Error(`MiniMax H3 Max Turbo did not return request_id: ${JSON.stringify(body)}`)
+  if (!requestId) throw new Error('MiniMax H3 Max Turbo did not return request_id; submission outcome is unknown. Do not resubmit automatically.')
   return `${TURBO_TASK_PREFIX}${requestId}`
 }
 
@@ -143,6 +154,13 @@ export async function getFalH3MaxVideoTask(taskId: string): Promise<FalH3MaxTask
   const resultResponse = await fetch(`${queueBase}/requests/${encodeURIComponent(requestId)}`, {
     headers: authHeaders,
   })
+  // COMPLETED means the queue job ended, not that inference succeeded. Fal
+  // returns terminal validation/content failures as 422 from the result URL.
+  // Auth, rate limits, missing result and 5xx remain polling errors, not refunds.
+  if (resultResponse.status === 422) {
+    const failure = await resultResponse.json().catch(() => ({}))
+    return { taskId, status: 'failed', error: errorMessage(failure ?? {}, 'MiniMax H3 Max generation failed: provider rejected the input (HTTP 422).') }
+  }
   const resultBody = await readJson(resultResponse, 'MiniMax H3 Max result') as {
     video?: { url?: unknown }
   }

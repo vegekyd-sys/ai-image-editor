@@ -101,7 +101,7 @@ export async function POST(req: NextRequest) {
 
     const { filteredImages, finalPrompt } = filterAndRemapImages(prompt, inputImageUrls, videoCapability.maxImageReferences ?? 7)
     const videoSec = effectiveDuration === -1 ? referenceVideoDuration ?? 10 : effectiveDuration || 10
-    const { credits: creditsRequired } = await quoteVideo({
+    let { credits: creditsRequired } = await quoteVideo({
       model: selectedVideoModel,
       resolution: videoRoute.resolution,
       durationSec: videoSec,
@@ -119,7 +119,7 @@ export async function POST(req: NextRequest) {
       reservedCredits = reservation.charged
     }
     const grokSubscriptionPreferred = selectedVideoModel === 'grok' && await isGrokSubscriptionAllowedUser(user.id)
-    if (!grokSubscriptionPreferred) {
+    if (!grokSubscriptionPreferred && videoRoute.provider !== 'fal-h3-max') {
       try {
         await reserveApiCredits()
       } catch (error) {
@@ -145,6 +145,10 @@ export async function POST(req: NextRequest) {
         videoExtendDirection,
         userId: user.id,
         onBeforeGrokApiFallback: grokSubscriptionPreferred ? reserveApiCredits : undefined,
+        onBeforeProviderSubmit: videoRoute.provider === 'fal-h3-max' ? async usage => {
+          creditsRequired = (await quoteVideo(usage)).credits
+          await reserveApiCredits()
+        } : undefined,
       })
 
       if (!skillResult.success || !skillResult.taskId) {

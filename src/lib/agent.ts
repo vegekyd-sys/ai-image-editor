@@ -35,7 +35,7 @@ import {
   translate,
 } from './locales';
 import { getSkillLaunchSystemDirective, type SkillLaunchContext } from './skill-launch-context';
-import { buildAgentOutputLanguageDirective } from './agent-response-policy';
+import { buildAgentLanguageHistory, buildAgentOutputLanguageDirective } from './agent-response-policy';
 import {
   buildNativeVisionUserContent,
   type NativeVisionImageInput,
@@ -418,7 +418,8 @@ export async function* runMakaronAgent(
     ? buildDurableCompositionGuidance()
     : '';
   const executionSystemPrompt = `${baseSystemPrompt}${durableExecutionDirective}${durableCompositionDirective}${durableCompositionGuidance}`;
-  const languageDirective = buildAgentOutputLanguageDirective(options?.locale, analysisOnly || tipReactionOnly ? 'ui' : 'user');
+  const languageDirective = buildAgentOutputLanguageDirective(options?.locale, analysisOnly || tipReactionOnly ? 'ui' : 'user')
+    + (analysisOnly || tipReactionOnly ? '' : buildAgentLanguageHistory(options?.history));
   const skillLaunchDirective = getSkillLaunchSystemDirective(options?.skillLaunchContext);
   const systemPrompt = `${executionSystemPrompt}${languageDirective}${skillLaunchDirective}`;
   const responseLocale = normalizeLocale(options?.locale, 'en');

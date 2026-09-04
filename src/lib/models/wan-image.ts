@@ -1,5 +1,8 @@
 import sharp from 'sharp';
 import type { GenerateImageRequest, ModelBackend } from './types';
+import { validateProviderImages } from '../provider-image-preflight';
+
+export class WanImageRequestError extends Error {}
 
 const MODEL = 'wan2.7-image';
 const MAX_IMAGE_BYTES = 20 * 1024 * 1024;
@@ -84,6 +87,7 @@ export const wanImageBackend: ModelBackend = {
     if (!key) throw new Error('Wan 2.7 is not configured: missing DASHSCOPE_API_KEY.');
     const endpoint = wanImageEndpoint();
     const body = buildWanImageRequest(req);
+    await validateProviderImages(body.input.messages[0].content.flatMap(part => 'image' in part ? [part.image] : []), MODEL);
     const start = Date.now();
     // One POST only: a timeout is an unknown paid outcome, never a reason to resubmit.
     const signal = AbortSignal.timeout(120_000);
@@ -95,27 +99,37 @@ export const wanImageBackend: ModelBackend = {
         body: JSON.stringify(body),
       });
     } catch {
-      throw new Error('Wan 2.7 request did not complete. It was not retried; provider status may be unknown.');
+      throw new WanImageRequestError('Wan 2.7 request did not complete. It was not retried; provider status may be unknown. Do not resubmit automatically.');
     }
     // Never log raw provider errors: they can echo the request, source URLs or credentials.
     const data = await response.json().catch(() => null);
     const requestId = typeof data?.request_id === 'string' && /^[a-z0-9-]{1,80}$/i.test(data.request_id)
       ? data.request_id : undefined;
     const trace = requestId ? ` (request ${requestId})` : '';
-    if (!response.ok || data?.code) throw new Error(`Wan 2.7 rejected the request (HTTP ${response.status})${trace}. No automatic retry.`);
+    if (!response.ok || data?.code) {
+      const reasons: Record<string, string> = {
+        InvalidApiKey: 'Provider credentials were rejected; check the workspace key and region.',
+        AccessDenied: 'The workspace is not authorized for this model.',
+        InvalidParameter: 'The provider rejected an input parameter; check image dimensions, format and prompt limits.',
+        DataInspectionFailed: 'The provider rejected the content under its content policy.',
+        Throttling: 'The provider rate limit was reached.',
+      };
+      const reason = typeof data?.code === 'string' ? reasons[data.code] : undefined;
+      throw new WanImageRequestError(`Wan 2.7 rejected the request (HTTP ${response.status})${trace}. ${reason ?? 'Provider rejected the request; inspect the request ID before submitting again.'} No automatic retry.`);
+    }
     const outputs = data?.output?.choices?.flatMap((choice: { message?: { content?: { image?: string }[] } }) =>
       choice.message?.content?.flatMap(part => typeof part.image === 'string' ? [part.image] : []) ?? []) ?? [];
     if (outputs.length !== 1 || data?.output?.finished === false || (data?.usage?.image_count != null && data.usage.image_count !== 1)) {
-      throw new Error(`Wan 2.7 did not return exactly one completed image${trace}. No automatic retry.`);
+      throw new WanImageRequestError(`Wan 2.7 did not return exactly one completed image${trace}. No automatic retry.`);
     }
     const imageUrl = new URL(outputs[0]);
     if (imageUrl.protocol !== 'https:' || imageUrl.username || imageUrl.password
       || !/^.+\.oss-[a-z0-9-]+\.aliyuncs\.com$/.test(imageUrl.hostname)) {
-      throw new Error(`Wan 2.7 returned an unexpected output host${trace}.`);
+      throw new WanImageRequestError(`Wan 2.7 returned an unexpected output host${trace}. No automatic retry.`);
     }
     const urlReadyMs = Date.now() - start;
     const imageResponse = await fetch(imageUrl, { signal, redirect: 'error' });
-    if (!imageResponse.ok) throw new Error(`Wan 2.7 image download failed${trace}. No automatic generation retry.`);
+    if (!imageResponse.ok) throw new WanImageRequestError(`Wan 2.7 image download failed${trace}. No automatic generation retry.`);
     const buffer = Buffer.from(await imageResponse.arrayBuffer());
     if (buffer.length > MAX_IMAGE_BYTES) throw new Error('Wan 2.7 output exceeds the image size limit.');
     // Decode to reject corrupt/non-image output, and follow the normal Makaron JPEG storage contract.

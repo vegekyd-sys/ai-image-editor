@@ -506,7 +506,8 @@ export async function createVideo(input: CreateVideoInput): Promise<CreateVideoR
       };
     }
 
-    if (billingUsage) await input.onBeforeProviderSubmit!(billingUsage);
+    // H3 validates the actual first-frame bytes before reserving credits.
+    if (billingUsage && route.provider !== 'fal-h3-max') await input.onBeforeProviderSubmit!(billingUsage);
 
     if (route.provider === 'fal-sync') {
       if (filteredImages.length > 0) {
@@ -632,6 +633,7 @@ export async function createVideo(input: CreateVideoInput): Promise<CreateVideoR
         duration: resolvedDuration ?? 5,
         aspectRatio: providerAspectRatio,
         resolution: route.resolution as '480p' | '768p',
+        onBeforeSubmit: billingUsage ? () => input.onBeforeProviderSubmit!(billingUsage!) : undefined,
       });
       console.log(`✅ [create_video] MiniMax H3 Max Turbo task created: ${taskId}`);
       return {
@@ -741,6 +743,10 @@ export async function createVideo(input: CreateVideoInput): Promise<CreateVideoR
       message: `Video rendering task created. Task ID: ${taskId}. Rendering time depends on the selected model. Use makaron_get_video_status to poll.`,
     };
   } catch (e) {
+    const { ProviderImageInputError } = await import('../provider-image-preflight');
+    if (e instanceof ProviderImageInputError) {
+      return { success: false, message: e.message, retryable: false, repairable: true, terminal: false, errorCode: e.code, submissionUncertain: false };
+    }
     const { EvolinkInputError } = await import('../evolink');
     if (e instanceof EvolinkInputError) {
       console.warn('[create_video input rejected]', e.message);

@@ -7,9 +7,37 @@ import { preserveOptionalToolFields } from '@/lib/agent-tool-schema';
 import { shouldStopAfterTerminalToolFailure } from '@/lib/agent-terminal';
 import { generateAnimationHarness, lookbookRequest } from './helpers/generateAnimationHarness';
 
-afterEach(() => { vi.unstubAllGlobals(); vi.unstubAllEnvs(); });
+afterEach(() => { vi.restoreAllMocks(); vi.unstubAllGlobals(); vi.unstubAllEnvs(); });
 
 describe('video generation intent and one-submit regression', () => {
+  it('does not reserve App credits or publish a task when the actual H3 preflight rejects an image', async () => {
+    const { ProviderImageInputError } = await import('@/lib/provider-image-preflight');
+    vi.spyOn(await import('@/lib/provider-image-preflight'), 'validateProviderImages').mockRejectedValue(new ProviderImageInputError('384x215 requires 256px'));
+    const h = generateAnimationHarness();
+    const fetch = vi.fn(); vi.stubGlobal('fetch', fetch);
+    h.createVideo.mockImplementation(createVideo);
+    const result = await h.tool.execute(h.tool.inputSchema.parse(lookbookRequest));
+    expect(result).toMatchObject({ success: false, retryable: false, repairable: true });
+    expect(h.deductFixedCredits).not.toHaveBeenCalled();
+    expect(h.refundCredits).not.toHaveBeenCalled();
+    expect(h.insert).not.toHaveBeenCalled();
+    expect(fetch).not.toHaveBeenCalled();
+  });
+
+  it('refunds an explicit submit-time rejection once without publishing or resubmitting', async () => {
+    vi.stubEnv('FAL_KEY', 'test-key');
+    vi.spyOn(await import('@/lib/provider-image-preflight'), 'validateProviderImages').mockResolvedValue();
+    const h = generateAnimationHarness();
+    const fetch = vi.fn().mockResolvedValue(Response.json({ detail: [{ type: 'image_too_small' }] }, { status: 422 }));
+    vi.stubGlobal('fetch', fetch);
+    h.createVideo.mockImplementation(createVideo);
+    const result = await h.tool.execute(h.tool.inputSchema.parse(lookbookRequest));
+    expect(result).toMatchObject({ success: false, retryable: false });
+    expect(h.deductFixedCredits).toHaveBeenCalledTimes(1);
+    expect(h.refundCredits).toHaveBeenCalledTimes(1);
+    expect(h.insert).not.toHaveBeenCalled();
+    expect(fetch).toHaveBeenCalledTimes(1);
+  });
   it('animates only the prepared frame in a multi-image H3 Max project', async () => {
     const h = generateAnimationHarness();
     h.ctx.snapshotImages.push('https://example.com/composed-start.jpg');
@@ -28,6 +56,7 @@ describe('video generation intent and one-submit regression', () => {
   });
 
   it('replays the old all-fields lookbook call in one submit, charging once and keeping media_2', async () => {
+    vi.spyOn(await import('@/lib/provider-image-preflight'), 'validateProviderImages').mockResolvedValue();
     const h = generateAnimationHarness();
     vi.stubEnv('FAL_KEY', 'test-key');
     const fetch = vi.fn(async (url, init) => {

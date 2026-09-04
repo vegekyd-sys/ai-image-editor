@@ -7,6 +7,7 @@ describe('fal MiniMax H3 Max Turbo adapter', () => {
   })
 
   afterEach(() => {
+    vi.restoreAllMocks()
     vi.unstubAllGlobals()
     vi.unstubAllEnvs()
     vi.resetModules()
@@ -37,6 +38,7 @@ describe('fal MiniMax H3 Max Turbo adapter', () => {
   })
 
   it('submits one image through the native 768P image-to-video endpoint', async () => {
+    vi.spyOn(await import('@/lib/provider-image-preflight'), 'validateProviderImages').mockResolvedValue()
     vi.stubGlobal('fetch', vi.fn(async (url: string | URL | Request, init?: RequestInit) => {
       expect(String(url)).toBe('https://queue.fal.run/minimax/h3-max-turbo/image-to-video')
       const body = JSON.parse(String(init?.body))
@@ -61,6 +63,7 @@ describe('fal MiniMax H3 Max Turbo adapter', () => {
   })
 
   it('routes createVideo to H3 Max I2V while leaving the global image workflow untouched', async () => {
+    vi.spyOn(await import('@/lib/provider-image-preflight'), 'validateProviderImages').mockResolvedValue()
     vi.stubGlobal('fetch', vi.fn(async (_url: string | URL | Request, init?: RequestInit) => {
       const body = JSON.parse(String(init?.body))
       expect(body.image_url).toBe('https://example.com/start.jpg')
@@ -111,6 +114,46 @@ describe('fal MiniMax H3 Max Turbo adapter', () => {
       status: 'completed',
       videoUrl: 'https://example.com/h3-max.mp4',
     })
+  })
+
+  it('turns COMPLETED plus result 422 into a terminal failure without echoing private inputs', async () => {
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValueOnce(Response.json({ status: 'COMPLETED' }))
+      .mockResolvedValueOnce(Response.json({ detail: [{ type: 'image_too_small', input: 'https://private.test/?token=secret', msg: 'secret' }] }, { status: 422 })))
+    const { getFalH3MaxVideoTask } = await import('@/lib/fal-h3-max-video')
+    const result = await getFalH3MaxVideoTask('fal-h3max-turbo-small')
+    expect(result.status).toBe('failed')
+    expect(result.error).toContain('256px')
+    expect(result.error).not.toContain('secret')
+  })
+
+  it.each([401, 403, 404, 429, 500, 503])('does not terminalize/refund a result transport error %s', async status => {
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValueOnce(Response.json({ status: 'COMPLETED' }))
+      .mockResolvedValueOnce(Response.json({ detail: 'secret' }, { status })))
+    const { getFalH3MaxVideoTask } = await import('@/lib/fal-h3-max-video')
+    await expect(getFalH3MaxVideoTask('fal-h3max-turbo-transient')).rejects.toThrow(`error ${status}`)
+  })
+
+  it('validates before reserving credits or submitting through the shared video skill', async () => {
+    const { ProviderImageInputError } = await import('@/lib/provider-image-preflight')
+    vi.spyOn(await import('@/lib/provider-image-preflight'), 'validateProviderImages').mockRejectedValue(new ProviderImageInputError('384x215; requires 256px'))
+    const reserve = vi.fn()
+    const submit = vi.fn()
+    vi.stubGlobal('fetch', submit)
+    const { createVideo } = await import('@/lib/skills/create-video')
+    const result = await createVideo({ script: '<<<media_1>>> waves.', images: ['https://example.com/small.png'], duration: 5, videoModel: 'minimax-h3-max', onBeforeProviderSubmit: reserve })
+    expect(result).toMatchObject({ success: false, retryable: false, repairable: true, submissionUncertain: false, errorCode: 'INVALID_INPUT_IMAGE' })
+    expect(reserve).not.toHaveBeenCalled()
+    expect(submit).not.toHaveBeenCalled()
+  })
+
+  it('reserves once after preflight and before the paid POST', async () => {
+    const events: string[] = []
+    vi.spyOn(await import('@/lib/provider-image-preflight'), 'validateProviderImages').mockImplementation(async () => { events.push('validate') })
+    vi.stubGlobal('fetch', vi.fn(async () => { events.push('submit'); return Response.json({ request_id: 'valid' }) }))
+    const { createVideo } = await import('@/lib/skills/create-video')
+    const result = await createVideo({ script: '<<<media_1>>> waves.', images: ['https://example.com/valid.png'], duration: 5, videoModel: 'minimax-h3-max', onBeforeProviderSubmit: async () => { events.push('reserve') } })
+    expect(result.success).toBe(true)
+    expect(events).toEqual(['validate', 'reserve', 'submit'])
   })
 
   it('waits through transient provider states so the App can receive the first playable URL', async () => {
