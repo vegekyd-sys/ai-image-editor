@@ -9,6 +9,7 @@
 - 原 Core 54 段全部可追溯，12 份关键创作正文哈希不变；真实 `read_file` 验证视频、编码指南一次返回完整延迟合同。
 - 全量 Vitest：272 个测试文件通过、1 个跳过；1,658 项测试通过、1 项跳过。
 - ESLint、UI i18n、Agent startup、video reference workflow 和 TypeScript 检查通过。保留一项既有 unused locale warning。
+- 专用 runner `/Users/tianyicai/ai-image-editor-runner-core-prompt` 对代码提交 `90dd149d` 执行 `npm run build -- --webpack` 成功；延迟合同已进入服务端构建产物。构建有 HEIC 依赖静态分析 warning。feature worktree 未生成 `.next`，没有部署。
 
 ## 模型行为与速度
 
@@ -27,7 +28,7 @@
 ## 真实产物
 
 - 同一狗狗原图：局部改色、增强、风格化均生成双方真实图片并检查。第一次候选把领结纹样改变，判失败；补充精确编辑规则后两次候选复测保住黑条纹。有限样本不能证明像素级保真。
-- 两版 SeeDance Fast 均交付 10 秒 H.264/AAC 视频，完整解码通过，并检查动作抽帧。浏览器已加载完整尺寸与时长。未单独验收声音内容质量。
+- 两版 SeeDance Fast 均交付 10 秒 H.264/AAC 视频，完整解码通过，并检查动作抽帧。浏览器播放进度均达到 10.08 秒，`ended=true`；全部对照图片加载成功。未单独验收声音内容质量。
 - 两版捕获的 Node/FFmpeg 代码实际执行，把本地测试视频切成两段各 5 秒的 MP4，完整解码通过。
 - 两版 Remotion 原始首稿都有外层 JSX 语法错误；各进行一次保留视觉的受控语法修复后通过验证，实际渲染 5 秒动画，并验证只修改 title prop 可重新出图。这不等同于 hosted Agent 自动恢复通过。原请求没有规定画幅，两版画幅不同，不作为同画幅审美胜负证据。
 
