@@ -104,3 +104,18 @@ baseline/candidate data for greeting and rewriting. Show it as historical contex
 with its measurement boundary, not a directly equivalent browser-to-production
 A/B. Preserve the distinction between a permission regression check and a causal
 claim that the prompt refactor improved every scenario.
+
+## Verification completed before production approval
+
+- Tested implementation revision: `ae11802b` in a dedicated clean runner (the
+  shared runner was dirty and was not changed).
+- PostgreSQL isolation: 20 assertions passed, including transaction rollback.
+- Full suite: 274 test files, 1,669 tests passed; 1 existing test skipped.
+- TypeScript, CLI smoke, lint/i18n/startup/video-reference guards and optimized
+  Webpack production build passed. Existing libheif dynamic-require build warning
+  also occurs on the unchanged baseline.
+- Supabase read-only Security Advisors independently reports
+  `rls_disabled_in_public` for `public.app_settings`. Other advisor findings are
+  outside this table repair; this is not a claim that the entire project is clean.
+- Production SQL, deployment and live latency regression remain pending the
+  owner's requested production confirmation.
