@@ -29,34 +29,34 @@ export async function GET(req: NextRequest) {
 export async function PUT(req: NextRequest) {
   if (!(await checkAdmin(req))) return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
   const { enabled, welcomeCredits, iosTrialCredits } = await req.json()
-  const admin = getSupabaseAdmin()
-  if (enabled !== undefined) {
-    await admin.from('app_settings').upsert({
-      key: 'billing_enabled',
-      value: enabled ? 'true' : 'false',
-      updated_at: new Date().toISOString(),
-    }, { onConflict: 'key' })
-    invalidateBillingCache()
+  if (enabled !== undefined && typeof enabled !== 'boolean') {
+    return NextResponse.json({ error: 'Invalid billing toggle' }, { status: 400 })
   }
-  if (welcomeCredits !== undefined) {
-    await admin.from('app_settings').upsert({
-      key: 'welcome_credits',
-      value: String(welcomeCredits),
-      updated_at: new Date().toISOString(),
-    }, { onConflict: 'key' })
-  }
+  let normalizedTrialCredits: number | undefined
   if (iosTrialCredits !== undefined) {
     const parsedTrialCredits = Number(iosTrialCredits)
     if (!Number.isFinite(parsedTrialCredits) || parsedTrialCredits < 0) {
       return NextResponse.json({ error: 'Invalid iOS trial credits' }, { status: 400 })
     }
-    const normalizedTrialCredits = Math.floor(parsedTrialCredits)
-    await admin.from('app_settings').upsert({
-      key: 'ios_trial_credits',
-      value: String(normalizedTrialCredits),
-      updated_at: new Date().toISOString(),
-    }, { onConflict: 'key' })
-    return NextResponse.json({ enabled, welcomeCredits, iosTrialCredits: normalizedTrialCredits })
+    normalizedTrialCredits = Math.floor(parsedTrialCredits)
   }
-  return NextResponse.json({ enabled, welcomeCredits, iosTrialCredits })
+  if (welcomeCredits !== undefined && (!Number.isFinite(Number(welcomeCredits)) || Number(welcomeCredits) < 0)) {
+    return NextResponse.json({ error: 'Invalid welcome credits' }, { status: 400 })
+  }
+
+  const updated_at = new Date().toISOString()
+  const settings = []
+  if (enabled !== undefined) settings.push({ key: 'billing_enabled', value: String(enabled), updated_at })
+  if (welcomeCredits !== undefined) settings.push({ key: 'welcome_credits', value: String(welcomeCredits), updated_at })
+  if (normalizedTrialCredits !== undefined) settings.push({ key: 'ios_trial_credits', value: String(normalizedTrialCredits), updated_at })
+  if (settings.length) {
+    // One statement keeps a multi-setting change atomic. Never report success
+    // or invalidate the cache if the database rejected the write.
+    const { error } = await getSupabaseAdmin().from('app_settings').upsert(settings, { onConflict: 'key' })
+    if (error) {
+      return NextResponse.json({ error: 'Unable to save billing settings' }, { status: 503 })
+    }
+    if (enabled !== undefined) invalidateBillingCache()
+  }
+  return NextResponse.json({ enabled, welcomeCredits, iosTrialCredits: normalizedTrialCredits })
 }
