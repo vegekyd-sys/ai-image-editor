@@ -1,9 +1,9 @@
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
-import { readAgentRuntimeSource } from './helpers/agentRuntimeSource';
+import { readAgentContractSource } from './helpers/agentRuntimeSource';
 
-const agentSource = readAgentRuntimeSource();
+const agentSource = readAgentContractSource(process.cwd(), 'src/lib/agent.ts');
 const agentModelRuntimeSource = readFileSync(join(process.cwd(), 'src/lib/agent-model-runtime.ts'), 'utf8');
 const agentStreamSource = readFileSync(join(process.cwd(), 'src/lib/agentStream.ts'), 'utf8');
 const agentContextSource = readFileSync(join(process.cwd(), 'src/lib/agent-context.ts'), 'utf8');

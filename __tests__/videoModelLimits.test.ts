@@ -91,8 +91,8 @@ describe('video model reference limits', () => {
   })
 
   it('defaults video generation to SeeDance 2.0 Fast', () => {
-    expect(getDefaultVideoModelId()).toBe('seedance-fast')
-    expect(normalizeVideoModelId()).toBe('seedance-fast')
+    expect(getDefaultVideoModelId()).toBe('fal-h3-max')
+    expect(normalizeVideoModelId()).toBe('fal-h3-max')
     expect(normalizeVideoModelId('seedance')).toBe('seedance')
     expect(normalizeVideoModelId('seedance-fast')).toBe('seedance-fast')
     expect(normalizeVideoModelId('seedance-2.0-mini')).toBe('seedance-mini')

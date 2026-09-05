@@ -1,6 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { createVideo } from '@/lib/skills/create-video'
-import { normalizeVideoModelId, resolveVideoImageWorkflow, resolveVideoProviderModel, validateVideoModelRequest } from '@/lib/video-model-capabilities'
+import { getDefaultVideoModelId, normalizeVideoResolution, resolveAgentVideoSelection, normalizeVideoModelId, resolveVideoImageWorkflow, resolveVideoProviderModel, validateVideoModelRequest } from '@/lib/video-model-capabilities'
 import { calculateMediaQuote } from '@/lib/billing/media-pricing'
 import { seededMediaPrices } from './helpers/media-prices'
 const { prepare, submit } = vi.hoisted(() => ({ prepare: vi.fn(), submit: vi.fn() }))
@@ -15,6 +15,16 @@ describe('FAL H3 Max product integration', () => {
   it.each(['minimax-h3-max', 'h3 max', 'H3 Max Turbo', 'fal H3 Turbo'])('keeps explicit Turbo selector %s on Turbo', alias => {
     expect(normalizeVideoModelId(alias)).toBe('minimax-h3-max')
     expect(resolveVideoProviderModel({ model: alias, imageReferenceCount: 1 })).toBe('minimax/h3-max-turbo/image-to-video')
+  })
+  it('defaults an unspecified request to Max 768p while respecting explicit selections', async () => {
+    expect(getDefaultVideoModelId()).toBe('fal-h3-max')
+    expect(normalizeVideoResolution(undefined, 'auto')).toBe('768p')
+    expect(resolveAgentVideoSelection({})).toEqual({ model: 'fal-h3-max', resolution: 'auto', locked: false })
+    expect(resolveAgentVideoSelection({ toolModel: 'minimax-h3-max' })).toMatchObject({ model: 'minimax-h3-max', locked: false })
+    expect(resolveAgentVideoSelection({ appModel: 'seedance-fast', appAuto: false, toolModel: 'fal-h3-max' })).toMatchObject({ model: 'seedance-fast', locked: true })
+    const result = await createVideo({ script: 'A red book slowly opens', images: [], duration: 5 })
+    expect(result).toMatchObject({ success: true, videoModel: 'fal-h3-max', providerModel: 'minimax/h3-max/text-to-video' })
+    expect(submit).toHaveBeenCalledWith(expect.objectContaining({ resolution: '768p', duration: 5 }))
   })
   it('gives the new Max an independent selector and reference contract', () => {
     expect(normalizeVideoModelId('FAL H3 Max')).toBe('fal-h3-max')

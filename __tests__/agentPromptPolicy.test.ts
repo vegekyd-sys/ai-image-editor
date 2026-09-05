@@ -1,12 +1,10 @@
 import { describe, expect, it } from 'vitest'
 import path from 'path'
-import { readAgentAwareSource } from './helpers/agentRuntimeSource'
+import { readAgentContractSource } from './helpers/agentRuntimeSource'
 
 const root = path.resolve(__dirname, '..')
 
-function read(rel: string) {
-  return readAgentAwareSource(root, rel)
-}
+const read = (rel: string) => readAgentContractSource(root, rel)
 
 describe('agent prompt policy guards', () => {
   it('keeps image work on generate_image unless editable runtime is explicit', () => {
@@ -312,7 +310,7 @@ describe('agent prompt policy guards', () => {
     expect(agentTs).toContain('MiniMax H3 reference videos must each be .mp4/.mov, <=50MB, width and height each 256-5760px')
     expect(agentTs).toContain('MiniMax H3 accepts up to 9 reference images')
     expect(agentTs).toContain('Native SeeDance, Wan 3.0, or MiniMax H3 text-to-video uses no media markers')
-    expect(agentTs).toContain('Reference audio is only supported by Seedance video models, Wan 3.0, or MiniMax H3')
+    expect(agentTs).toContain('Reference audio is only supported by Seedance video models, Wan 3.0, MiniMax H3, or FAL H3 Max')
     expect(agentTs).toContain('Seedance 2.5 is 4-30 seconds; Wan 3.0 is 2-30 seconds')
     expect(agentTs).toContain('An NSFW/adult-explicit video request defaults to Wan 3.0 Prime')
     expect(agentTs).toContain('analogous to choosing Qwen for NSFW image requests')
@@ -411,8 +409,8 @@ describe('agent prompt policy guards', () => {
     const agent = read('src/lib/prompts/agent.md')
     const agentTs = read('src/lib/agent.ts')
 
-    expect(agent).toContain('Default video model is SeeDance 2.0 Fast')
-    expect(agent).toContain('`seedance-fast`')
+    expect(agent).toContain('Default video model is FAL H3 Max')
+    expect(agent).toContain('`fal-h3-max`')
     expect(agent).not.toContain('app selector')
     expect(agent).not.toContain('app selection')
     expect(agentTs).toContain('resolveAgentVideoSelection')
@@ -422,7 +420,7 @@ describe('agent prompt policy guards', () => {
     expect(agentTs).toContain('const replicationAwareToolResolution = replication_contract')
     expect(agentTs).toContain('toolResolution: replicationAwareToolResolution')
     expect(agentTs).toContain('resolveVideoReplicationResolution(selectedVideoRoute.resolution)')
-    expect(agentTs).toContain('Default model is SeeDance 2.0 Fast')
+    expect(agentTs).toContain('Default model is FAL H3 Max')
   })
 
   it('uses path-based composition patching instead of full currentDesign code injection', () => {

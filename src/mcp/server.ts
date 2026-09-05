@@ -7,6 +7,7 @@ import { IMAGE_MODEL_IDS } from '../lib/models/types';
 import { rotateCamera } from '../lib/skills/rotate-camera';
 import { writeVideoScript } from '../lib/skills/write-video-script';
 import { createVideo, type CreateVideoInput, type CreateVideoResult } from '../lib/skills/create-video';
+import { getDefaultVideoModelId } from '../lib/video-model-capabilities';
 import { getVideoStatus } from '../lib/skills/get-video-status';
 import { analyzeVideo } from '../lib/skills/analyze-video';
 import { createAudio } from '../lib/skills/create-audio';
@@ -282,7 +283,7 @@ IMPORTANT:
 - Seedance 2.5 accepts up to 30 image, 10 video, and 10 audio references, plus dedicated edit/extend modes. Gemini Omni accepts one timeline/external video and can extend it forward for 3-10 seconds (10 seconds by default).
 
 Models:
-- seedance-fast (default) — SeeDance 2.0 Fast via Evolink, 480p/720p, default 720p
+- seedance-fast — SeeDance 2.0 Fast via Evolink, 480p/720p, default 720p
 - seedance-mini — SeeDance 2.0 Mini via Evolink, lower-cost 480p/720p route for drafts and multi-size tests
 - seedance — SeeDance 2.0 standard via Evolink, supports 480p/720p/1080p
 - seedance-2.5 — Seedance 2.5 via Evolink, 4-30s, multimodal references, native audio, edit and extend
@@ -292,7 +293,7 @@ Models:
 - grok — one Makaron selector with split xAI routing: Grok Imagine Video 1.5 for text generation (up to 1080p) or feature/reference generation (1-7 images or preset voices, up to 720p, native audio), and Grok Imagine Video for one-video edit/extend (up to 720p)
 - google-omni — Gemini Omni 1.1 Flash via Google, fast text/image/video generation, editing, and forward extension, 360p/720p/upscaled 1080p/4k, up to 6 image references without a video reference, one video reference for edit/extend, native generated audio, no uploaded audio references
 - minimax-h3 — MiniMax H3 direct API, native text-to-video plus up to 9 image / 3 video / 3 audio references, 4-15s, public 768p/2K, default 768P
-- fal-h3-max — FAL H3 Max, native T2V or image/video/audio R2V, integer 5–15s, 480p/768p default 768p. Up to 9 images + 3 videos + 3 audios, 12 total. Video/audio each 2–15s and modality total <=15s. Use generate plus feature references for video modifications.
+- fal-h3-max (default) — FAL H3 Max, native T2V or image/video/audio R2V, integer 5–15s, 480p/768p default 768p. Up to 9 images + 3 videos + 3 audios, 12 total. Video/audio each 2–15s and modality total <=15s. Use generate plus feature references for video modifications.
 - minimax-h3-max — fal H3 Turbo faster-than-real-time route, native text-to-video or exactly one start-image image-to-video, exactly 5/10/15s, 480p/768p, default native 768p; no reference video/audio yet
 - sync-lipsync-v3 — exact replacement-audio lip sync; requires exactly one source video and one audio URL, preserves source framing and the supplied audio
 
@@ -413,7 +414,7 @@ Example: Edit a video to add cinematic color grading:
           if (!check.allowed) return { content: [{ type: 'text' as const, text: check.message || 'Insufficient credits' }] };
         }
         const t0 = Date.now();
-        const resolvedModel = params.videoModel ?? 'seedance-fast';
+        const resolvedModel = params.videoModel ?? getDefaultVideoModelId();
         const resolvedReferType = params.referType ?? (resolvedModel === 'seedance' || resolvedModel === 'seedance-fast' || resolvedModel === 'seedance-mini' || resolvedModel === 'minimax-h3' || resolvedModel === 'fal-h3-max' ? 'feature' : 'base');
         const result = await (options?.submitVideo ?? createVideo)({
           script: params.editPrompt,

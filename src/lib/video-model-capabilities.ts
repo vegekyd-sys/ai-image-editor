@@ -74,7 +74,7 @@ export interface VideoReferenceMeta {
   fileSizeBytes?: number | null
 }
 
-const DEFAULT_MODEL_ID = 'seedance-fast'
+const DEFAULT_MODEL_ID = 'fal-h3-max'
 export const DEFAULT_VIDEO_REPLICATION_MODEL_ID = 'wan-3.0-prime'
 export const DEFAULT_VIDEO_REPLICATION_RESOLUTION: VideoResolution = '720p'
 

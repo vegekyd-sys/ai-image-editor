@@ -1929,7 +1929,7 @@ Generation options:
   --help, -h                Show this help.
 
 Recent model choices:
-  fal-h3-max     FAL H3 Max reference-to-video: images, videos and audio;
+  fal-h3-max     FAL H3 Max (default, 768p) reference-to-video: images, videos and audio;
                  integer 5–15s, 480p/768p, default 768p. Reference inputs cost extra.
   minimax-h3-max  fal H3 Turbo faster-than-real-time T2V or one-start-image I2V;
                   5/10/15s; native 768p default or 480p; no video/audio/multi-image references.
@@ -3009,7 +3009,7 @@ if (!command || command === '--help' || command === '-h' || command === 'help') 
       ? 'wan-3.0'
       : ['wan3-prime', 'wan3.0-prime', 'wan30-prime', 'wan-3-prime', 'w3.0-video-prime', 'w3.0-video-prime-pro', 'wan-3.0-prime-pro', 'prime'].includes(videoModel)
         ? 'wan-3.0-prime'
-        : (videoModel || 'seedance-fast');
+        : (videoModel || 'fal-h3-max');
     const isSeedance25 = selectedVideoModel === 'seedance-2.5';
     const isWan30 = selectedVideoModel === 'wan-3.0' || selectedVideoModel === 'wan-3.0-prime';
     const isSeedanceModel = selectedVideoModel === 'seedance-fast' || selectedVideoModel === 'seedance-mini' || selectedVideoModel === 'seedance' || isSeedance25;

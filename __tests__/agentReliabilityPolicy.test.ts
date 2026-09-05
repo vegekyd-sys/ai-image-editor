@@ -1,8 +1,8 @@
 import { describe, expect, it } from 'vitest';
-import { readAgentAwareSource } from './helpers/agentRuntimeSource';
+import { readAgentContractSource } from './helpers/agentRuntimeSource';
 
 const root = process.cwd();
-const read = (file: string) => readAgentAwareSource(root, file);
+const read = (file: string) => readAgentContractSource(root, file);
 
 describe('agent reliability policy', () => {
   it('raises the normal agent budget while keeping an environment override', () => {

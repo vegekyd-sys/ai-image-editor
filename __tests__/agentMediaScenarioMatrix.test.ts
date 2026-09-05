@@ -1,9 +1,9 @@
 import { describe, expect, it } from 'vitest'
 import { validateVideoScript } from '@/lib/video-harness'
-import { readAgentAwareSource } from './helpers/agentRuntimeSource'
+import { readAgentContractSource, readAgentAwareSource } from './helpers/agentRuntimeSource'
 
 const root = process.cwd()
-const read = (relativePath: string) => readAgentAwareSource(root, relativePath)
+const read = (relativePath: string) => readAgentContractSource(root, relativePath)
 
 describe('agent media scenario matrix', () => {
   const agent = read('src/lib/prompts/agent.md')
@@ -33,7 +33,7 @@ describe('agent media scenario matrix', () => {
   const cli = read('packages/makaron-cli/bin/makaron.mjs')
 
   it('keeps the core agent prompt as a lightweight router', () => {
-    expect(agent.length).toBeLessThan(12_000)
+    expect(readAgentAwareSource(root, 'src/lib/prompts/agent.md').length).toBeLessThan(7_500)
     expect(agent).toContain("read_file('prompts/image.md')")
     expect(agent).toContain("read_file('prompts/animate.md')")
     expect(agent).toContain('`skills/video-ffmpeg-lab/SKILL.md`')
@@ -132,9 +132,9 @@ describe('agent media scenario matrix', () => {
     expect(remotion).toContain('never reference outer `props`')
   })
 
-  it('keeps video generation default on SeeDance Fast while separating standard SeeDance', () => {
-    expect(agent).toContain('Default video model is SeeDance 2.0 Fast')
-    expect(animate).toContain('Default model behavior: use SeeDance 2.0 Fast')
+  it('keeps video generation default on FAL H3 Max while separating standard SeeDance', () => {
+    expect(agent).toContain('Default video model is FAL H3 Max')
+    expect(animate).toContain('Default model behavior: use FAL H3 Max')
     expect(animate).toContain('Treat `seedance-fast` and standard `seedance` as separate models')
     expect(ffmpegSkill).toContain('| SeeDance | 15s | 15.5s | <=50MB; width/height 300-6000px')
     expect(ffmpegSkill).toContain('Default video model, higher quality')
@@ -144,8 +144,8 @@ describe('agent media scenario matrix', () => {
     expect(ffmpegSkill).not.toContain('Cheaper/default')
   })
 
-  it('keeps native SeeDance text-to-video reachable without generating an intermediate image', () => {
-    expect(agent).toContain('SeeDance supports native text-to-video')
+  it('keeps native default text-to-video reachable without generating an intermediate image', () => {
+    expect(agent).toContain('FAL H3 Max supports native text-to-video')
     expect(agent).toContain('Do not generate an intermediate image first')
     expect(animate).toContain('Zero images can use native SeeDance or Wan 3.0 text-to-video')
     expect(animate).toContain('do not call `generate_image` first')

@@ -47,7 +47,7 @@ export function generateAnimationHarness() {
   const ctx: any = {
     userId: 'test-user', projectId: 'test-project', supabase: db,
     snapshotImages: ['https://example.com/original.jpg', 'https://example.com/generated.jpg'],
-    videoAuto: true, videoModel: 'seedance-fast',
+    videoAuto: true, videoModel: 'fal-h3-max',
   };
   const context = vm.createContext({
     ...capabilities, z, tool: (value: unknown) => value, crypto: webcrypto,

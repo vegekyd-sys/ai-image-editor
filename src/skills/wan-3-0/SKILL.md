@@ -27,7 +27,7 @@ itself; NSFW routing overrides the normal 16-30 second Seedance 2.5 duration
 default. Wan exposes `wan-3.0` and
 `wan-3.0-prime`; there is no separate Pro product model. Pass output resolution
 through the same shared `video_resolution` field used by every video service.
-Keep the app default on `seedance-fast` for other requests.
+Keep the app default on `fal-h3-max` for other requests.
 
 ## Provider contract
 

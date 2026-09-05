@@ -1,0 +1,504 @@
+[
+  {
+    "id": "chat-greeting",
+    "domain": "chat",
+    "prompt": "你好，今天精神怎么样？",
+    "noTools": true
+  },
+  {
+    "id": "chat-question",
+    "domain": "chat",
+    "prompt": "你能帮我做哪些事情？简单说说。",
+    "noTools": true
+  },
+  {
+    "id": "chat-rewrite",
+    "domain": "chat",
+    "prompt": "把这句话写得简洁一点：我们将会在明天早晨的时候正式开始营业。",
+    "noTools": true
+  },
+  {
+    "id": "image-direct",
+    "domain": "image",
+    "prompt": "把这张照片的杯子变成蓝色，其他不变。",
+    "terminal": "generate_image",
+    "forbid": [
+      "analyze_image"
+    ],
+    "args": {
+      "media_index": 1
+    }
+  },
+  {
+    "id": "image-t2i",
+    "domain": "image",
+    "prompt": "画一只在窗边晒太阳的橘猫。",
+    "terminal": "generate_image",
+    "forbid": [
+      "analyze_image"
+    ],
+    "noMedia": true
+  },
+  {
+    "id": "image-enhance",
+    "domain": "image",
+    "prompt": "这张人像帮我修图，美颜好看点。",
+    "terminal": "generate_image",
+    "reads": [
+      "prompts/enhance.md"
+    ],
+    "args": {
+      "skill": "enhance"
+    }
+  },
+  {
+    "id": "image-creative",
+    "domain": "image",
+    "prompt": "让这张咖啡照片好玩点，加入一个跟画面有关的搞笑小故事。",
+    "terminal": "generate_image",
+    "reads": [
+      "prompts/creative.md"
+    ],
+    "args": {
+      "skill": "creative"
+    }
+  },
+  {
+    "id": "image-wild",
+    "domain": "image",
+    "prompt": "wild，把照片里的杯子做疯狂夸张变形。",
+    "terminal": "generate_image",
+    "reads": [
+      "prompts/wild.md"
+    ],
+    "args": {
+      "skill": "wild"
+    }
+  },
+  {
+    "id": "image-caption",
+    "domain": "image",
+    "prompt": "在图上加标题「周末快乐」。",
+    "terminal": "generate_image",
+    "reads": [
+      "prompts/captions.md"
+    ],
+    "args": {
+      "skill": "captions"
+    }
+  },
+  {
+    "id": "image-cutout",
+    "domain": "image",
+    "prompt": "把这张照片的人抠出来，透明 PNG，保持原图大小。",
+    "terminal": "generate_image",
+    "reads": [
+      "prompts/cutout.md"
+    ],
+    "args": {
+      "background": "transparent",
+      "media_index": 1
+    },
+    "absent": [
+      "aspectRatio"
+    ]
+  },
+  {
+    "id": "image-multiref",
+    "domain": "image",
+    "prompt": "用 @1 的人穿上 @2 的衣服，保持 @1 脸和构图。",
+    "terminal": "generate_image",
+    "reads": [
+      "prompts/image.md"
+    ],
+    "args": {
+      "media_index": 1
+    },
+    "includes": {
+      "reference_media_indices": 2
+    }
+  },
+  {
+    "id": "image-restore",
+    "domain": "image",
+    "prompt": "把当前 @2 修坏的人脸恢复成原图 @1 的样子，保留 @2 的背景。",
+    "terminal": "generate_image",
+    "reads": [
+      "prompts/image.md"
+    ],
+    "args": {
+      "media_index": 2
+    },
+    "includes": {
+      "reference_media_indices": 1
+    }
+  },
+  {
+    "id": "image-layout",
+    "domain": "image",
+    "prompt": "生成一张蓝白配色的电商产品详情页图片，产品是这张照片里的杯子。",
+    "terminal": "generate_image",
+    "args": {
+      "model": "openai"
+    }
+  },
+  {
+    "id": "image-transparent-layout",
+    "domain": "image",
+    "prompt": "生成六枚猫咪贴纸，透明背景，排在一张16:9画布里。",
+    "terminal": "generate_image",
+    "args": {
+      "background": "transparent",
+      "aspectRatio": "16:9"
+    },
+    "noMedia": true
+  },
+  {
+    "id": "video-review",
+    "domain": "video",
+    "prompt": "做一个10秒橘猫跳上窗台的视频，先给我看脚本。",
+    "reads": [
+      "prompts/animate.md"
+    ],
+    "forbid": [
+      "generate_animation",
+      "generate_image",
+      "generate_audio"
+    ],
+    "textIncludes": [
+      "10"
+    ]
+  },
+  {
+    "id": "video-direct",
+    "domain": "video",
+    "prompt": "直接生成视频，不用确认：10秒橘猫从地面跳上窗台晒太阳，有自然环境音。",
+    "noMedia": true,
+    "terminal": "generate_animation",
+    "reads": [
+      "prompts/animate.md"
+    ],
+    "forbid": [
+      "generate_image",
+      "generate_audio"
+    ],
+    "args": {
+      "duration": 10
+    },
+    "absent": [
+      "replication_contract"
+    ]
+  },
+  {
+    "id": "video-30s",
+    "domain": "video",
+    "prompt": "直接生成30秒城市早餐纪录短片，从开店到第一位顾客，带环境声，不用确认。",
+    "noMedia": true,
+    "terminal": "generate_animation",
+    "reads": [
+      "prompts/animate.md"
+    ],
+    "args": {
+      "duration": 30,
+      "model": "seedance-2.5"
+    },
+    "forbid": [
+      "run_code",
+      "generate_image",
+      "generate_audio"
+    ]
+  },
+  {
+    "id": "video-platform",
+    "domain": "video",
+    "prompt": "直接生成15秒9:16抖音咖啡广告，三个镜头，有字幕「早安」，有旁白和音乐，不用确认。",
+    "noMedia": true,
+    "terminal": "generate_animation",
+    "reads": [
+      "prompts/animate.md"
+    ],
+    "args": {
+      "duration": 15,
+      "aspect_ratio": "9:16"
+    },
+    "forbid": [
+      "run_code",
+      "generate_audio"
+    ]
+  },
+  {
+    "id": "video-photo",
+    "domain": "video",
+    "prompt": "让 @1 的人轻轻回头微笑，5秒，直接生成视频不用确认。",
+    "terminal": "generate_animation",
+    "reads": [
+      "prompts/animate.md"
+    ],
+    "forbid": [
+      "analyze_image"
+    ],
+    "absent": [
+      "replication_contract"
+    ]
+  },
+  {
+    "id": "video-h3-t2v",
+    "domain": "video",
+    "prompt": "用 H3 Max 生成10秒山间日出，无需确认。",
+    "noMedia": true,
+    "terminal": "generate_animation",
+    "reads": [
+      "prompts/animate.md"
+    ],
+    "args": {
+      "model": "minimax-h3-max",
+      "duration": 10
+    },
+    "forbid": [
+      "generate_image"
+    ]
+  },
+  {
+    "id": "video-h3-i2v",
+    "domain": "video",
+    "prompt": "用 H3 Max 让 @1 的人转身，10秒，直接提交不用确认。",
+    "terminal": "generate_animation",
+    "reads": [
+      "prompts/animate.md"
+    ],
+    "args": {
+      "model": "minimax-h3-max",
+      "duration": 10
+    },
+    "absent": [
+      "replication_contract"
+    ]
+  },
+  {
+    "id": "video-h3-multiref",
+    "domain": "video",
+    "prompt": "用 H3 Max 做10秒视频，@1 的人穿上 @2 的衣服走向镜头。必要的首帧可以先做，直接生成不用确认。",
+    "terminal": "generate_image",
+    "reads": [
+      "prompts/animate.md"
+    ],
+    "includes": {
+      "reference_media_indices": 2
+    }
+  },
+  {
+    "id": "video-wan",
+    "domain": "video",
+    "prompt": "用 Wan 3.0 Prime 做20秒夜市纪录片，直接生成不用确认。",
+    "noMedia": true,
+    "terminal": "generate_animation",
+    "args": {
+      "model": "wan-3.0-prime",
+      "duration": 20
+    }
+  },
+  {
+    "id": "video-long",
+    "domain": "video",
+    "prompt": "做60秒有完整故事的森林探险视频，先给我计划。",
+    "reads": [
+      "skills/long-video-director/SKILL.md"
+    ],
+    "forbid": [
+      "generate_animation",
+      "run_code"
+    ]
+  },
+  {
+    "id": "video-edit",
+    "domain": "video",
+    "prompt": "给 @1 视频里的人加一副眼镜，保持原有动作和时长，直接生成不用确认。",
+    "video": true,
+    "terminal": "generate_animation",
+    "reads": [
+      "prompts/animate.md",
+      "skills/video-edit/SKILL.md"
+    ],
+    "forbid": [
+      "analyze_video"
+    ]
+  },
+  {
+    "id": "video-extend",
+    "domain": "video",
+    "prompt": "用 Grok 让 @1 视频往后延续5秒，人物继续走，直接生成不用确认。",
+    "video": true,
+    "terminal": "generate_animation",
+    "reads": [
+      "prompts/animate.md"
+    ],
+    "args": {
+      "model": "grok",
+      "video_operation": "extend"
+    }
+  },
+  {
+    "id": "video-frame-repair",
+    "domain": "video",
+    "prompt": "@1 视频第3秒附近人脸崩了，定位这一帧并帮我局部修复。",
+    "video": true,
+    "terminal": "preview_frame",
+    "reads": [
+      "skills/video-segment-edit/SKILL.md"
+    ],
+    "args": {
+      "media_index": 1,
+      "timestamp": 3
+    }
+  },
+  {
+    "id": "video-transcript",
+    "domain": "video",
+    "prompt": "把 @1 视频里说的话逐字转录出来。",
+    "video": true,
+    "terminal": "transcribe_audio",
+    "forbid": [
+      "analyze_video"
+    ]
+  },
+  {
+    "id": "video-speech-cut",
+    "domain": "coding",
+    "prompt": "把 @1 视频里说「谢谢大家」之后的部分剪掉，导出 MP4。",
+    "video": true,
+    "terminal": "transcribe_audio",
+    "forbid": [
+      "run_code"
+    ]
+  },
+  {
+    "id": "coding-splice",
+    "domain": "coding",
+    "prompt": "把 @1 和 @2 两个竖屏视频剪在一起，保留可编辑时间线。",
+    "video": true,
+    "terminal": "write_code_file",
+    "reads": [
+      "prompts/agent-coding.md",
+      "prompts/remotion-composition.md"
+    ]
+  },
+  {
+    "id": "coding-ffmpeg",
+    "domain": "coding",
+    "prompt": "把 @1 分割成前5秒和后5秒两个独立 MP4 文件，直接执行。",
+    "video": true,
+    "terminal": "run_code",
+    "reads": [
+      "prompts/agent-coding.md",
+      "skills/video-ffmpeg-lab/SKILL.md"
+    ],
+    "args": {
+      "runtime": "node"
+    },
+    "includes": {
+      "media_refs": 1
+    }
+  },
+  {
+    "id": "coding-remotion",
+    "domain": "coding",
+    "prompt": "用 Remotion 做一个5秒可编辑的春季新品标题动画，直接做。",
+    "noMedia": true,
+    "terminal": "write_code_file",
+    "reads": [
+      "prompts/agent-coding.md",
+      "prompts/remotion-composition.md",
+      "skills/_shared/remotion-director-contract.md"
+    ]
+  },
+  {
+    "id": "coding-patch",
+    "domain": "coding",
+    "prompt": "把当前作品标题改成「春日上新」，其他不变。当前 composition code_path: code/test-draft.json，props.title 当前是「新品上市」。",
+    "terminal": "run_code",
+    "reads": [
+      "prompts/agent-coding.md"
+    ],
+    "codeIncludes": [
+      "patch",
+      "code/test-draft.json"
+    ]
+  },
+  {
+    "id": "audio-mixed",
+    "domain": "audio",
+    "prompt": "生成一条音频：女声说「欢迎光临」，同时带轻音乐和雨声，做成一个最终音轨。",
+    "noMedia": true,
+    "terminal": "generate_audio",
+    "reads": [
+      "prompts/audio.md"
+    ],
+    "args": {
+      "kind": "mixed"
+    }
+  },
+  {
+    "id": "audio-voice",
+    "domain": "audio",
+    "prompt": "生成纯女声旁白「欢迎来到我们的频道」，不要音乐和音效。",
+    "noMedia": true,
+    "terminal": "generate_audio",
+    "reads": [
+      "prompts/audio.md"
+    ],
+    "args": {
+      "kind": "voiceover"
+    }
+  },
+  {
+    "id": "language-en",
+    "domain": "chat",
+    "prompt": "Explain in English what an editable video timeline is, in one sentence.",
+    "noTools": true
+  },
+  {
+    "id": "language-ja",
+    "domain": "chat",
+    "prompt": "こんにちは。何ができますか？日本語で一文で答えて。",
+    "noTools": true
+  },
+  {
+    "id": "language-hant",
+    "domain": "chat",
+    "prompt": "用繁體中文一句話介紹你能做什麼。",
+    "noTools": true
+  },
+  {
+    "id": "media-dog-local",
+    "domain": "image",
+    "prompt": "只把 @1 狗狗的黄色领结变成红色，保持狗狗、姿势、表情、毛发、坐垫和房间不变。",
+    "terminal": "generate_image",
+    "fixture": "benchmarks/core-prompt/fixtures/dog.webp",
+    "mediaDescription": "<<<media_1>>> original: black curly-haired dog with a yellow-and-black bow tie sitting on a blue-green cushion in a room.",
+    "args": {
+      "media_index": 1
+    }
+  },
+  {
+    "id": "media-dog-enhance",
+    "domain": "image",
+    "prompt": "帮我专业修图，让 @1 的狗狗更清晰通透，自然电影感光影，保持它的样子和房间不变。",
+    "terminal": "generate_image",
+    "fixture": "benchmarks/core-prompt/fixtures/dog.webp",
+    "mediaDescription": "<<<media_1>>> original: black curly-haired dog with a yellow-and-black bow tie sitting on a blue-green cushion in a room.",
+    "args": {
+      "media_index": 1
+    }
+  },
+  {
+    "id": "media-dog-style",
+    "domain": "image",
+    "prompt": "把 @1 整张照片变成90年代手绘日漫赛璐璐风格，保持狗狗的姿势、黑色卷毛轮廓、黄色领结、蓝绿色坐垫和房间空间关系可识别。",
+    "terminal": "generate_image",
+    "fixture": "benchmarks/core-prompt/fixtures/dog.webp",
+    "mediaDescription": "<<<media_1>>> original: black curly-haired dog with a yellow-and-black bow tie sitting on a blue-green cushion in a room.",
+    "args": {
+      "media_index": 1
+    }
+  }
+]

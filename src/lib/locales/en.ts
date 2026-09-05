@@ -1,4 +1,12 @@
 const en = {
+  'admin.corePrompt.title': "Layered Core Prompt",
+  'admin.corePrompt.layered': "On: new layered path",
+  'admin.corePrompt.legacy': "Off: complete legacy path",
+  'admin.corePrompt.loading': "Loading…",
+  'admin.corePrompt.saving': "Saving…",
+  'admin.corePrompt.description': "Global switch for all users and test environments sharing this database. Normally applies to new Agent invocations within 15 seconds; running invocations keep their selected path. Turn off to restore the legacy Core, tool descriptions and guide loading without redeploying.",
+  'admin.corePrompt.failed': "Could not load or save. Refresh to verify the current setting.",
+
   'mediaPricing.title': "Video and audio pricing",
   'mediaPricing.defaultResolution': "Default",
   'mediaPricing.inactive': "Disabled",
