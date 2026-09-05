@@ -52,3 +52,11 @@ Research sources: [Max API](https://fal.ai/models/minimax/h3-max/reference-to-vi
 ## Review report
 
 [ChatGPT Sites report](https://h3max-reference-field-report.tianyi595926.chatgpt.site). Owner-private; access has not been expanded.
+
+## Preview acceptance
+
+Preview: https://ai-image-editor-2p9ou288d-vegekyd-sys-projects.vercel.app
+
+The actual cloud Preview video-reference call completed in 41.93 seconds including upload and preflight, returned HTTP 206/video/mp4, and settled at 219 credits. Task: `fal-h3max-reference-01a07120-31fc-7bf3-a1cd-ae3dbb82280f`. The Preview result card for the updated Ending Fairy correctly displayed `fal H3 Turbo`. Product source in this deployment matches commit `30264375`; the following commit only corrected the CLI help smoke assertion, which passed.
+
+Sites report version 2 published successfully at the existing owner-private URL. No production Makaron deployment or default-model switch was performed.
