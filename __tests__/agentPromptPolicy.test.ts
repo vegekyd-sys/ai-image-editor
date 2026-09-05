@@ -1,12 +1,10 @@
 import { describe, expect, it } from 'vitest'
 import path from 'path'
-import { readAgentAwareSource } from './helpers/agentRuntimeSource'
+import { readAgentContractSource } from './helpers/agentRuntimeSource'
 
 const root = path.resolve(__dirname, '..')
 
-function read(rel: string) {
-  return readAgentAwareSource(root, rel)
-}
+const read = (rel: string) => readAgentContractSource(root, rel)
 
 describe('agent prompt policy guards', () => {
   it('keeps image work on generate_image unless editable runtime is explicit', () => {

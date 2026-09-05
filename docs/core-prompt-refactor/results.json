@@ -1,0 +1,199 @@
+{
+  "status": "local candidate; full hosted quality non-regression not yet accepted",
+  "baseRevision": "3193cd36",
+  "host": "MacBook-Pro.local",
+  "agentModel": {
+    "id": "gpt-5.6-terra",
+    "provider": "azure-openai",
+    "providerModelId": "gpt-5.6-terra",
+    "billingModelId": "gpt-5.6-terra",
+    "cacheStrategy": "automatic",
+    "supportsImageInput": true,
+    "defaultReasoningEffort": "medium"
+  },
+  "inventory": {
+    "baseline": {
+      "systemChars": 20153,
+      "toolChars": 82425,
+      "systemSha256": "bd1025f9ce5b331f47b3da2f64c4e63b4ae25301eff79b891ad012e850dec3b7"
+    },
+    "candidate": {
+      "systemChars": 14002,
+      "toolChars": 65405,
+      "systemSha256": "0ad906fb365c200aced62e8b401336747c32ddf0ad9210391055512fd9a47d0f"
+    }
+  },
+  "modelRuns": 156,
+  "distinctCases": 41,
+  "latestRouting": {
+    "passed": 82,
+    "total": 82,
+    "oracleCorrection": "Timestamp-based frame repair first uses preview_frame, per video-segment-edit/SKILL.md lines 69-89; raw old failures are retained."
+  },
+  "originalFailures": [
+    {
+      "case": "image-cutout",
+      "variant": "baseline",
+      "capture": "cutout-retest/routing-1788594920451.json",
+      "failures": [
+        "missing read prompts/cutout.md"
+      ]
+    },
+    {
+      "case": "image-cutout",
+      "variant": "baseline",
+      "capture": "image-chat/routing-1788594700164.json",
+      "failures": [
+        "unexpected aspectRatio"
+      ]
+    },
+    {
+      "case": "image-cutout",
+      "variant": "candidate",
+      "capture": "image-chat/routing-1788594700164.json",
+      "failures": [
+        "missing read prompts/cutout.md",
+        "unexpected aspectRatio"
+      ]
+    },
+    {
+      "case": "video-frame-repair",
+      "variant": "baseline",
+      "capture": "video-code/routing-1788594701036.json",
+      "failures": [
+        "expected terminal analyze_video, got preview_frame",
+        "wrong mode"
+      ]
+    },
+    {
+      "case": "video-frame-repair",
+      "variant": "candidate",
+      "capture": "video-code/routing-1788594701036.json",
+      "failures": [
+        "expected terminal analyze_video, got preview_frame",
+        "wrong mode"
+      ]
+    }
+  ],
+  "timings": [
+    {
+      "id": "all",
+      "baseline": {
+        "n": 20,
+        "firstTextMs": 4293,
+        "firstActionMs": 10946,
+        "totalMs": 8607.5
+      },
+      "candidate": {
+        "n": 20,
+        "firstTextMs": 3826.5,
+        "firstActionMs": 9895.5,
+        "totalMs": 5581
+      }
+    },
+    {
+      "id": "chat-greeting",
+      "baseline": {
+        "n": 5,
+        "firstTextMs": 3955,
+        "firstActionMs": null,
+        "totalMs": 4595
+      },
+      "candidate": {
+        "n": 5,
+        "firstTextMs": 3695,
+        "firstActionMs": null,
+        "totalMs": 5453
+      }
+    },
+    {
+      "id": "chat-rewrite",
+      "baseline": {
+        "n": 5,
+        "firstTextMs": 4290,
+        "firstActionMs": null,
+        "totalMs": 4969
+      },
+      "candidate": {
+        "n": 5,
+        "firstTextMs": 3726,
+        "firstActionMs": null,
+        "totalMs": 4193
+      }
+    },
+    {
+      "id": "image-direct",
+      "baseline": {
+        "n": 5,
+        "firstTextMs": 6925,
+        "firstActionMs": 10184,
+        "totalMs": 10186
+      },
+      "candidate": {
+        "n": 5,
+        "firstTextMs": 3238,
+        "firstActionMs": 4760,
+        "totalMs": 4764
+      }
+    },
+    {
+      "id": "image-enhance",
+      "baseline": {
+        "n": 5,
+        "firstTextMs": 4251,
+        "firstActionMs": 11600,
+        "totalMs": 11601
+      },
+      "candidate": {
+        "n": 5,
+        "firstTextMs": 4347,
+        "firstActionMs": 14201,
+        "totalMs": 14201
+      }
+    }
+  ],
+  "videoProbes": [
+    {
+      "file": "media/video/video-direct-baseline-0.mp4",
+      "duration": 10.08,
+      "width": 1280,
+      "height": 720,
+      "codec": "h264",
+      "audio": true,
+      "fullyDecoded": true
+    },
+    {
+      "file": "media/video/video-direct-candidate-0.mp4",
+      "duration": 10.08,
+      "width": 1280,
+      "height": 720,
+      "codec": "h264",
+      "audio": true,
+      "fullyDecoded": true
+    },
+    {
+      "file": "code/composition-baseline.mp4",
+      "duration": 5.056,
+      "width": 1080,
+      "height": 1920,
+      "codec": "h264",
+      "audio": true,
+      "fullyDecoded": true
+    },
+    {
+      "file": "code/composition-candidate.mp4",
+      "duration": 5.056,
+      "width": 1920,
+      "height": 1080,
+      "codec": "h264",
+      "audio": true,
+      "fullyDecoded": true
+    }
+  ],
+  "mediaCaveats": [
+    "Initial local-color candidate changed bow-tie pattern; core fidelity rule added and retested.",
+    "One OpenRouter retest fell back to Qwen. Four Google-direct tests hit a location restriction and also fell back. Exclude those from same-model comparison.",
+    "Both Remotion first drafts had outer-JSX syntax errors. One controlled repair each passed validation and local rendering/props patch. This is not hosted recovery acceptance.",
+    "No general human-identity, complete multi-source production, or hosted CUI/CLI/Preview/Export acceptance claim."
+  ]
+}

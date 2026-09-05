@@ -1,9 +1,9 @@
 import { describe, expect, it } from 'vitest'
 import { validateVideoScript } from '@/lib/video-harness'
-import { readAgentAwareSource } from './helpers/agentRuntimeSource'
+import { readAgentContractSource, readAgentAwareSource } from './helpers/agentRuntimeSource'
 
 const root = process.cwd()
-const read = (relativePath: string) => readAgentAwareSource(root, relativePath)
+const read = (relativePath: string) => readAgentContractSource(root, relativePath)
 
 describe('agent media scenario matrix', () => {
   const agent = read('src/lib/prompts/agent.md')
@@ -33,7 +33,7 @@ describe('agent media scenario matrix', () => {
   const cli = read('packages/makaron-cli/bin/makaron.mjs')
 
   it('keeps the core agent prompt as a lightweight router', () => {
-    expect(agent.length).toBeLessThan(12_000)
+    expect(readAgentAwareSource(root, 'src/lib/prompts/agent.md').length).toBeLessThan(7_500)
     expect(agent).toContain("read_file('prompts/image.md')")
     expect(agent).toContain("read_file('prompts/animate.md')")
     expect(agent).toContain('`skills/video-ffmpeg-lab/SKILL.md`')

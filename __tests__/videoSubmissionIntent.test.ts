@@ -1,4 +1,5 @@
 // @vitest-environment node
+import { readFileSync } from 'node:fs';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { createOpenAI } from '@ai-sdk/openai';
 import { generateText } from 'ai';
@@ -52,7 +53,8 @@ describe('video generation intent and one-submit regression', () => {
     expect(h.ctx.pendingVideoSnapshot.videoMeta.sourceUrls).toEqual(['https://example.com/composed-start.jpg']);
     expect(h.deductFixedCredits).toHaveBeenCalledTimes(1);
     expect(h.deductFixedCredits.mock.calls[0][1]).toBe(40);
-    expect(h.tool.description).toContain('Multiple supplied images do not by themselves make H3 Max unusable');
+    expect(h.tool.description).toContain('read prompts/animate.md once');
+    expect(readFileSync('src/lib/prompts/video-submission.md', 'utf8')).toContain('Multiple supplied images do not by themselves make H3 Max unusable');
   });
 
   it('replays the old all-fields lookbook call in one submit, charging once and keeping media_2', async () => {

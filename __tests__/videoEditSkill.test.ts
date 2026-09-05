@@ -78,7 +78,7 @@ describe('video-edit Skill replication profile', () => {
     expect(read('src/lib/prompts/animate.md')).toContain(
       'a `replication_contract` request defaults to Wan 3.0 Prime at 720p',
     )
-    expect(read('src/lib/agent-tools.ts')).toContain(
+    expect(read('src/lib/prompts/video-submission.md')).toContain(
       'no user-selected model, omit',
     )
     expect(read('src/lib/agent-tools.ts')).toContain(
