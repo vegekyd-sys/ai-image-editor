@@ -19,6 +19,9 @@ async function run(name: string, input: H3MaxReferenceInput, wan = false) {
   if (existsSync(file)) { console.log(`${name}: existing result; not submitting again`); return }
   const start = performance.now()
   const record: Record<string, any> = { name, host: 'Mac', startedAt: new Date().toISOString(), endpoint: wan ? 'existing createVideo / wan-3.0-prime' : 'minimax/h3-max/reference-to-video', prompt: input.prompt, imageUrls: imageUrls.slice(0,input.images.length), duration: input.duration ?? 5, resolution: wan ? '720p' : input.resolution ?? '768p' }
+  record.videoReferences = input.videos
+  record.audioReferences = input.audios
+  record.seed = input.seed
   try {
     let taskId: string
     if (wan) {
@@ -56,6 +59,18 @@ async function run(name: string, input: H3MaxReferenceInput, wan = false) {
   }
 }
 async function main() {
+  if (process.argv.includes('--editing')) {
+    const source = JSON.parse(readFileSync(`${dir}/h3-double-1.json`, 'utf8'))
+    const sourceDuration = Number(execFileSync('ffprobe', ['-v','error','-show_entries','format=duration','-of','default=nw=1:nk=1',`${dir}/h3-double-1.mp4`], {encoding:'utf8'}).trim())
+    const shared = 'Edit the supplied video <<<video_1>>>. Treat it as the source footage to preserve, not merely a motion or style example. Preserve the original camera position, framing, lens, bookstore background, lighting, both men\'s identities and faces, their body positions, the exact book handover movement, its timing, the sequence of events, and the original audio. No cuts, no reframing, no new objects, no subtitles. '
+    const cases = [
+      ['h3-edit-control', 'Reconstruct the original video without making any visual changes. Keep the book red, the young man\'s jacket olive green, and the older man\'s jacket tan.'],
+      ['h3-edit-blue-book', 'Make exactly one change: change only the cover of the small red book being handed over to a saturated cobalt blue throughout the entire clip. Its pages, shape, thickness, position and movement must stay the same. Keep both jackets in their original colors.'],
+      ['h3-edit-red-jacket', 'Make exactly one change: recolor only the older mustached man\'s tan jacket on the RIGHT to a saturated red, maintaining its same fabric texture, seams, buttons, shape and folds. Keep his blue shirt, the young man\'s olive green jacket, the red book, both faces, all other objects and colors unchanged.'],
+    ]
+    await Promise.allSettled(cases.map(([name, prompt]) => run(name, {prompt:shared+prompt,images:[],videos:[{url:source.videoUrl,durationSec:sourceDuration}],duration:5,resolution:'768p',aspectRatio:'16:9',seed:31})))
+    return
+  }
   if (process.argv.includes('--multimodal')) {
     const source = JSON.parse(readFileSync(`${dir}/h3-double-1.json`,'utf8'))
     const sourceDuration = Number(execFileSync('ffprobe',['-v','error','-show_entries','format=duration','-of','default=nw=1:nk=1',`${dir}/h3-double-1.mp4`],{encoding:'utf8'}).trim())
