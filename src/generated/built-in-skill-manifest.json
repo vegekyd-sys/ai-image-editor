@@ -90,7 +90,7 @@
   },
   {
     "name": "photo-to-video",
-    "description": "Turn photos into a wild, imaginative video. Single photo: evolve it"
+    "description": "Use when the user explicitly selects Photo-to-Video or asks to create progressive story images before making a video. Single photo evolves into a wild 3-act visual story; multiple photos are selected and sequenced. Ordinary photo animation or requests for an interesting, stylish video do not by themselves activate this workflow."
   },
   {
     "name": "reference-video-studio",
