@@ -1,0 +1,87 @@
+# H3 Max reference-to-video 实验验收（2026-09-05）
+
+结论：fal 的 `minimax/h3-max/reference-to-video` 已可真实生成多参考视频。Makaron 的图片/视频/音频列表、引用标记、异步任务和播放合同可以复用。它是独立于现有 `minimax/h3-max-turbo` 的接口，不能直接套用 Turbo 的能力限制或价格。
+
+本次范围是独立 worktree 的可行性调查、实验适配和真实视频验收；没有改动模型选择器、共享数据库、部署、npm 或线上服务。产品级创建入口仍是原 Turbo，实验入口为 `createFalH3MaxReferenceVideoTask`。已有轮询器新增了 reference 任务前缀识别。
+
+- Worktree：`/Users/tianyicai/ai-image-editor-h3max-reference`
+- 分支：`codex/h3max-reference`，起点 `3193cd36`
+- 本地视频对照：`http://127.0.0.1:4387/`
+- 视频及请求证据：`artifacts/h3max-reference/`（git ignored）
+- 重开页面：`node artifacts/h3max-reference/serve.cjs`
+
+## 官方核查
+
+- [API 文档](https://fal.ai/models/minimax/h3-max/reference-to-video/api)
+- [OpenAPI schema](https://fal.ai/api/openapi/queue/openapi.json?endpoint_id=minimax/h3-max/reference-to-video)
+- [价格与演示](https://fal.ai/models/minimax/h3-max/reference-to-video)
+- [参考 token 计费说明](https://fal.ai/learn/tools/how-to-use-minimax-h3-max)
+
+Schema 明确：最多 9 图片、3 视频、3 音频，所有文件合计最多 12。视频和音频分别每段 2–15 秒，每种模态各自合计最多 15 秒；音频不能单独使用。输出 5–15 的整数秒，480P / 768P（默认），支持 adaptive / 21:9 / 16:9 / 4:3 / 1:1 / 3:4 / 9:16。图片为 subject/style reference，不锁定首帧。
+
+## 与当前其他模型的合同对照
+
+以下其他模型数据读取自本分支能力注册表，不代表本次重新验收了各供应商的全部边界。
+
+| 模型 | 图片/视频/音频上限 | 合计 | 最长输出 | 图片默认行为 |
+|---|---|---|---|---|
+| H3 Max 新参考接口 | 9 / 3 / 3 | 12 | 15 秒 | reference-to-video |
+| 当前 H3 Max Turbo | 1 / 0 / 0 | 1 | 15 秒 | 首帧 I2V |
+| Wan 3.0 Prime | 10 / 5 / 5 | 20 | 30 秒 | reference-to-video |
+| Seedance 2.5 | 30 / 10 / 10 | 50 | 30 秒 | reference-to-video |
+
+实验将 `<<<image_N>>>` / `<<<media_N>>>` 转为 `Image N`，`<<<video_N>>>` 转为 `Video N`，`<<<audio_N>>>` 转为 `Audio N`；保留各模态独立索引，越界标记提交前拒绝。输入预检后才允许计费回调，提交不自动重试。`fal-h3max-reference-` 路由到 H3 Max 队列；原有 Turbo 和 legacy 任务轮询保留。
+
+## 真实生成
+
+全部在 Mac 运行。H3 使用实验适配器，Wan 使用仓库现有共享 `createVideo`。测试素材为 fal 官方公开演示中的两张 1024×576 人物图。双图对比使用完全相同的原始英文提示词：把停车场中的两个人放到书店，保持人物、服装与左右站位，青年向年长男子递红书。未创建生产项目或扣除用户 Makaron credits；调用消耗供应商 API 额度。
+
+计时是开始提交到轮询拿到视频 URL，不含视频下载；H3 图像预检使用本地读入的原图 data URI，Wan 使用同图公开 URL。四个基准任务并发启动，3 秒轮询。下表是小样本观察，不能当作 P50/P95 或承诺 SLA。
+
+| 测试 | 提交耗时 | 视频 URL 就绪 | 供应商推理 | 结果 |
+|---|---:|---:|---:|---|
+| H3 单图 | 2.41s | 9.95s | 3.59s | 成功，首帧即书店；取书 |
+| H3 双图，第 1 次 | 4.05s | 20.42s | 4.04s | 成功，两人重新构图并递书 |
+| H3 双图，第 2 次 | 3.74s | 15.98s | 4.08s | 成功，换种子复测，仍递书 |
+| Wan 3.0 Prime 双图 | 1.07s | 67.07s | 未提供 | 成功，两人重新构图并递书 |
+| H3 2 图 + 1 视频 + 1 音频 | 2.82s | 30.54s | 12.77s | 修正音频 URL 后成功 |
+
+H3 三个纯图片测试与多模态测试均为 1344×768、24fps、H.264 + AAC，请求 5 秒，MP4 实际 5.184 秒。Wan 为 1280×720、30fps、H.264 + AAC，MP4 实际 5.038 秒。逐帧解码全部无错误。浏览器对照播放，H3 和 Wan 都到达 `ended=true`，`readyState=4`，无媒体错误；多模态成片同样实际播放至 `ended=true`；其余文件也已加载并解码。
+
+视觉抽查：主要发型、脸部特征和服装可辨认；两次双图都保留青年在左、年长男子在右，红书转移完成，输出场景没有锁定原停车场。没有进行身份相似度量化或所有帧的手指精度评分，因此不是绝对人物保真保证。
+
+多模态输入使用第 1 次双图生成的实际 5.184 秒视频和本地合成 3 秒脉冲音调，两个参考图片不变。它复现了参考视频的构图及递书运动。该测试证明组合媒体被接口接受并形成可解码成片，没有对音色/节奏跟随做独立因果评估，也没有测试语音克隆。
+
+### 实测踩坑
+
+第一次多模态请求排队完成后结果端点返回 422：`audio_url` 被认为是 `.bin`，不属于支持的音频格式。原因是 `data:audio/wav;base64,...` 丢失文件扩展名。
+
+修正为用 fal SDK 上传 `File(..., 'rhythm.wav', {type:'audio/wav'})` 后，使用 HTTPS `.wav` URL 重新提交成功。失败任务证据保留，修正后的任务使用不同的结果名称；没有自动重试失败任务。实验适配器现已提交前拒绝音频 data URI。
+
+## 价格与正式接入缺口
+
+当前官方输出价：480p $0.05/秒，768p $0.08/秒。参考输入按 token 合池：前 4096 免费，之后 $0.02/1000 tokens。
+
+- 图片：宽 × 高 / 1024 tokens。
+- 视频：按输出分辨率计价；480p 2886 tokens/秒；768p 官方示例 5 秒为 37296 tokens（正文将每秒数取整为 7459）。实验估算使用示例的 37296/5。
+- 音频：约 80 tokens/秒。
+
+本次双图 1152 tokens，在免费额度内。5 秒 768p 输出估算 $0.40，按现有 2x 加价折算 80 credits。组合输入约 40060.49 tokens，估算 $1.1193，2x 约 224 credits。这些是官方公式估算，未核对供应商最终账单，也没有写入客户账单。不能将参考视频输入费用忽略。
+
+现有 `media_pricing` 只有输出秒、输入视频秒、输入图片数量以及免费图片数量，不能正确表达“图片面积 + 视频 token + 音频 token 共用 4096 免费额度”。实验仅提供独立纯函数估算，没有绕过数据库动态价格给用户收费。
+
+正式对齐建议：
+
+1. 显式区分 H3 Max Reference 与当前 Turbo（可独立模型项，或让现有模型按明确工作流分流），选中参考模式后包括单图在内都走新 endpoint；首帧只在用户明确请求时走 Turbo。
+2. 补齐真实图片尺寸、视频/音频时长预检；实验目前由调用者提供已测时长，正式入口需可信测量。
+3. 扩展动态计价和计费快照，按参考 token 共池计算；价格区分 Reference 与 Turbo。保留预检→预留→提交→终态/退款的顺序，并针对 422 验证幂等。
+4. 能力注册、引用选择/重编号、Agent 描述/提示词、App 四语言、CLI help/README/Skill、MCP 和全部持久化任务轮询一起对齐。现有写死“只支持首帧”的说明须更新；不能只改供应商 payload。
+5. 完成共享 `createVideo`、认证 API、计费和用户播放器真实验收后再发布。当前无发布或合并动作。
+
+## 本地验证与复现
+
+- 4 组 Vitest、101 个测试通过：新参考适配、原 H3 Turbo、能力限制、图片预检。
+- 完整 `npm run lint` 通过（包含 i18n、Agent startup 与视频 reference guard）；`tsc --noEmit --incremental false` 通过。
+- 现有 `check:video-reference-workflow` 通过。
+- MP4 ffprobe / 全文件解码 / 关键帧 / 浏览器真实播放。
+- 付费实验脚本：`node --import tsx scripts/h3max-reference-lab.ts`；组合实验加 `--multimodal`。如果结果文件存在就跳过提交，避免重复费用。运行前准备官方图片与 `rhythm.wav`；凭据来自 `LAB_ENV_FILE` 指定的本地文件，只读 FAL/MuleRouter 相关字段，不保存凭据到产物。

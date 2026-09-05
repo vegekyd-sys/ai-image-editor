@@ -45,6 +45,9 @@ function headers(): Record<string, string> {
 }
 
 function taskRequest(taskId: string): { requestId: string; queueBase: string } {
+  if (taskId.startsWith('fal-h3max-reference-')) {
+    return { requestId: taskId.slice('fal-h3max-reference-'.length), queueBase: LEGACY_QUEUE_BASE }
+  }
   if (taskId.startsWith(TURBO_TASK_PREFIX)) {
     return {
       requestId: taskId.slice(TURBO_TASK_PREFIX.length),
