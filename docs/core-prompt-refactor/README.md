@@ -2,6 +2,8 @@
 
 独立分支 `codex/core-prompt-layered-refactor`，基线 `3193cd36`。本地候选，不代表已合入 dev、部署或通过生产验收。
 
+最新实物验收见 [acceptance.md](acceptance.md)，包括H3 Max/Grok/SeeDance Mini、47张图片、完整CLI保存/导出、真实编辑器改字与失败样本。最新速度见 [acceptance-speed.json](acceptance-speed.json)。旧 `results.md` 保留前一阶段证据，不代表最新全场景通过。
+
 ## 目标和验收顺序
 
 先确认能力与真实场景，再减少常驻上下文。字符减少、正确选工具、成功提交、画面质量、最终可播放交付是五个不同指标，不能互相替代。
@@ -69,7 +71,7 @@ node --import tsx --require ./md-loader.cjs benchmarks/core-prompt/evaluate.ts -
 node --import tsx --require ./md-loader.cjs benchmarks/core-prompt/render-media.ts --live --input <capture.json> --case video-direct --output <new-output-directory>
 ```
 
-凭据从本机未追踪环境文件读取；不把凭据、会话、DB 数据加入基线或报告。测试素材只含复用的狗狗图片。输出落在被 Git 忽略的 `artifacts/core-prompt/`；结构、测试和结果摘要可以提交。媒体渲染脚本通过原有应用 provider clients，不写用户项目或生产数据库。
+凭据从本机未追踪环境文件读取；不把凭据、会话、DB 数据加入基线或报告。首轮素材为复用狗狗图片；扩展验收加入人像参考、海报和源猫视频。输出落在被 Git 忽略的 `artifacts/core-prompt/`。仅capture媒体脚本不写项目；新增CLI验收使用共享数据库中的独立QA项目，详见最新验收说明。
 
 ## 后续扩展规则
 

@@ -37,6 +37,8 @@ Default tool: `generate_image`.
 
 Before complex image work (multi-image, skills, model choice, red marks, restoration, captions, layout/mockup image generation), call `read_file('prompts/image.md')`. Do not re-read guides already in history.
 
+Multi-image edits and identity restoration always require that image guide before generation, including when the user already specifies the exact edit and image model.
+
 Built-in skill triggers are routing, not optional polish. If the user says:
 - "美颜", "修图", "好看点", "enhance": read `prompts/enhance.md`, call `generate_image` with `skill: "enhance"`.
 - "好玩点", "有趣", "创意", "加个什么", "搞笑": read `prompts/creative.md`, call `generate_image` with `skill: "creative"`.

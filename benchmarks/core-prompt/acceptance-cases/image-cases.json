@@ -1,0 +1,163 @@
+[
+  {
+    "id": "accept-image-local",
+    "domain": "image",
+    "prompt": "只把 @1 狗狗领结的黄色部分变成红色，黑色条纹保持原样，其他完全不变。 使用 Gemini 图片模型。",
+    "fixture": "artifacts/core-prompt/acceptance/inputs/dog.webp",
+    "mediaDescription": "<<<media_1>>> original: black curly-haired dog with a yellow and black striped bow tie sitting on a blue-green cushion in a room. Current selection media_1.",
+    "terminal": "generate_image",
+    "args": {
+      "model": "gemini"
+    },
+    "quality": [
+      "requested color",
+      "black stripe pattern",
+      "dog identity and pose",
+      "unchanged cushion and room"
+    ]
+  },
+  {
+    "id": "accept-image-identity",
+    "domain": "image",
+    "prompt": "只把 @1 主人物黑色球衣的粉色袖口改成蓝色，脸、表情、文字数字、海报照片边框、箭头和背景全部不变。 使用 OpenAI GPT Image 2 图片模型。",
+    "fixture": "artifacts/core-prompt/acceptance/inputs/poster.jpg",
+    "mediaDescription": "<<<media_1>>> full poster with main female football player in black and pink shirt, pink stadium, taped reference photo at bottom left, pink arrow, black frame.",
+    "terminal": "generate_image",
+    "args": {
+      "model": "openai"
+    },
+    "quality": [
+      "blue cuffs only",
+      "same face and expression",
+      "shirt lettering and 97",
+      "inset photo arrow and frame"
+    ]
+  },
+  {
+    "id": "accept-image-enhance",
+    "domain": "image",
+    "prompt": "帮我专业修图，让 @1 狗狗更清晰通透、有自然电影感光影，保持它的样子和房间不变。 使用 Gemini 图片模型。",
+    "fixture": "artifacts/core-prompt/acceptance/inputs/dog.webp",
+    "mediaDescription": "<<<media_1>>> original: black curly-haired dog with a yellow and black striped bow tie sitting on a blue-green cushion in a room. Current selection media_1.",
+    "terminal": "generate_image",
+    "args": {
+      "model": "gemini"
+    },
+    "reads": [
+      "prompts/enhance.md"
+    ],
+    "quality": [
+      "visible tasteful enhancement",
+      "dog identity",
+      "no new room objects"
+    ]
+  },
+  {
+    "id": "accept-image-creative",
+    "domain": "image",
+    "prompt": "让 @1 好玩点：围绕狗狗坐在垫子上，加入一个跟原画面有关的幽默小故事，写实风，狗狗和领结不变。 使用 Gemini 图片模型。",
+    "fixture": "artifacts/core-prompt/acceptance/inputs/dog.webp",
+    "mediaDescription": "<<<media_1>>> original: black curly-haired dog with a yellow and black striped bow tie sitting on a blue-green cushion in a room. Current selection media_1.",
+    "terminal": "generate_image",
+    "args": {
+      "model": "gemini"
+    },
+    "reads": [
+      "prompts/creative.md"
+    ],
+    "quality": [
+      "causal visual humor",
+      "photorealistic addition",
+      "dog identity and bow tie"
+    ]
+  },
+  {
+    "id": "accept-image-wild",
+    "domain": "image",
+    "prompt": "wild，让 @1 中现有坐垫发生疯狂夸张的变形，让人一眼看出脑洞。狗狗本身和领结不变。 使用 Gemini 图片模型。",
+    "fixture": "artifacts/core-prompt/acceptance/inputs/dog.webp",
+    "mediaDescription": "<<<media_1>>> original: black curly-haired dog with a yellow and black striped bow tie sitting on a blue-green cushion in a room. Current selection media_1.",
+    "terminal": "generate_image",
+    "args": {
+      "model": "gemini"
+    },
+    "reads": [
+      "prompts/wild.md"
+    ],
+    "quality": [
+      "existing cushion transformation",
+      "clear exaggeration",
+      "dog preserved"
+    ]
+  },
+  {
+    "id": "accept-image-caption",
+    "domain": "image",
+    "prompt": "在 @1 上方空白墙面加标题「今天也要开心」，文字完整清晰，不遮挡狗狗，其他不变。 使用 OpenAI GPT Image 2 图片模型。",
+    "fixture": "artifacts/core-prompt/acceptance/inputs/dog.webp",
+    "mediaDescription": "<<<media_1>>> original: black curly-haired dog with a yellow and black striped bow tie sitting on a blue-green cushion in a room. Current selection media_1.",
+    "terminal": "generate_image",
+    "args": {
+      "model": "openai"
+    },
+    "reads": [
+      "prompts/captions.md"
+    ],
+    "quality": [
+      "exact Chinese title",
+      "legibility",
+      "not covering subject",
+      "image preservation"
+    ]
+  },
+  {
+    "id": "accept-image-cutout",
+    "domain": "image",
+    "prompt": "把 @1 的狗狗连同领结抠出来，透明 PNG，保持原图画布尺寸和位置，保留毛发边缘。 使用 OpenAI GPT Image 2 图片模型。",
+    "fixture": "artifacts/core-prompt/acceptance/inputs/dog.webp",
+    "mediaDescription": "<<<media_1>>> original: black curly-haired dog with a yellow and black striped bow tie sitting on a blue-green cushion in a room. Current selection media_1.",
+    "terminal": "generate_image",
+    "args": {
+      "model": "openai",
+      "background": "transparent"
+    },
+    "reads": [
+      "prompts/cutout.md"
+    ],
+    "absent": [
+      "aspectRatio"
+    ],
+    "quality": [
+      "real transparent alpha",
+      "same canvas and position",
+      "fur edge",
+      "bow tie included"
+    ]
+  },
+  {
+    "id": "accept-image-restore",
+    "domain": "image",
+    "prompt": "把 @1 海报里主人物的脸恢复成 @2 参考照片里的同一个人，保持 @1 球衣文字、头发、身体、背景、左下角照片、箭头和边框不变。 使用 OpenAI GPT Image 2 图片模型。",
+    "fixture": "artifacts/core-prompt/acceptance/inputs/poster.jpg",
+    "mediaDescription": "<<<media_1>>> current full football poster, main face differs from reference. <<<media_2>>> original face identity reference (small taped portrait). Current selection media_1.",
+    "terminal": "generate_image",
+    "args": {
+      "model": "openai"
+    },
+    "fixtures": [
+      "artifacts/core-prompt/acceptance/inputs/poster.jpg",
+      "artifacts/core-prompt/acceptance/inputs/reference-face.jpg"
+    ],
+    "reads": [
+      "prompts/image.md"
+    ],
+    "includes": {
+      "reference_media_indices": 2
+    },
+    "quality": [
+      "reference identity match",
+      "poster layout preserved",
+      "clothing text preserved"
+    ]
+  }
+]

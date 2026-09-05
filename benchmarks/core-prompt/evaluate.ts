@@ -17,8 +17,8 @@ import type { AgentModelPreference } from '../../src/lib/agent-models';
 
 const read = (p: string) => fs.readFileSync(p, 'utf8');
 const baseline = JSON.parse(read('benchmarks/core-prompt/baseline.json'));
-const cases = JSON.parse(read('benchmarks/core-prompt/cases.json'));
 const arg = (name: string, fallback = '') => { const i=process.argv.indexOf(name); return i < 0 ? fallback : process.argv[i+1]; };
+const cases = JSON.parse(read(arg('--cases', 'benchmarks/core-prompt/cases.json')));
 config({path: arg('--env', '/Users/tianyicai/ai-image-editor/.env.local'), quiet: true});
 const outputDir = arg('--output', 'artifacts/core-prompt');
 fs.mkdirSync(outputDir, {recursive:true});
@@ -55,7 +55,8 @@ async function main() {
   let usage:any=null;
   try{
    const media=scenario.mediaDescription?'[Media Index]\n'+scenario.mediaDescription:scenario.noMedia?'[Media Index]\nNo media.':scenario.video?'[Media Index]\n<<<media_1>>> video: person walking, duration 10s, 720x1280.\n<<<media_2>>> video: street, duration 10s, 720x1280.':'[Media Index]\n<<<media_1>>> current original photo: person seated with a white coffee cup.\n<<<media_2>>> photo: person wearing a blue coat.\nCurrent selection: media_1.';
-   const response=streamText({model:runtime.model,system:systems[variant],messages:[{role:'user',content:[{type:'text',text:media+'\n\n'+scenario.prompt},...(scenario.fixture?[{type:'file' as const,data:fs.readFileSync(scenario.fixture),mediaType:'image/webp'}]:[])]}],tools:tools as any,providerOptions:getAgentProviderOptions(runtime),stopWhen:[stepCountIs(10),()=>calls.some(c=>c.name!=='read_file')],abortSignal:AbortSignal.timeout(180_000),maxRetries:0});
+   const fixtures: string[] = scenario.fixtures || (scenario.fixture ? [scenario.fixture] : []);
+   const response=streamText({model:runtime.model,system:systems[variant],messages:[{role:'user',content:[{type:'text',text:media+'\n\n'+scenario.prompt},...fixtures.map(f=>({type:'file' as const,data:fs.readFileSync(f),mediaType:f.endsWith('.webp')?'image/webp':f.endsWith('.png')?'image/png':'image/jpeg'}))]}],tools:tools as any,providerOptions:getAgentProviderOptions(runtime),stopWhen:[stepCountIs(10),()=>calls.some(c=>c.name!=='read_file')],abortSignal:AbortSignal.timeout(180_000),maxRetries:0});
    for await(const part of response.fullStream){if(part.type==='text-delta'){if(part.text.trim())firstTextMs??=Math.round(performance.now()-start);fullText+=part.text;}if(part.type==='error')throw part.error;}
    usage=await response.totalUsage;
   }catch(e){error=e instanceof Error?e.message:String(e);}
