@@ -2,6 +2,7 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import { createHash } from 'node:crypto';
 import { createTools } from '../../src/lib/agent-tools';
+import { buildSystemPrompt } from '../../src/lib/agent';
 import { bundleAgentPrompt, AGENT_PROMPT_BUNDLES } from '../../src/lib/agent-prompt-bundles';
 
 async function main() {
@@ -38,6 +39,18 @@ async function main() {
  assert.ok(!String(tools.generate_animation.description).includes(baseline.toolDescriptions.video));
  assert.ok(!String(tools.run_code.description).includes(baseline.toolDescriptions.coding));
  assert.ok(effective.includes('Do not shorten narration, scenes, animation, or visual detail'));
+ // The rollback restores the complete frozen baseline, not only the Core text.
+ const layeredSystem = await buildSystemPrompt();
+ const legacySystem = await buildSystemPrompt(undefined, undefined, undefined, 'legacy');
+ const layeredAuthoring = 'Before coding, read `prompts/agent-coding.md` once. Before creating a reusable skill, read `skills/SKILL_README.md` and an existing skill (for example `skills/makaron-mascot/SKILL.md`). Skills must work across projects; describe a style, technique, or character, not one photo.';
+ assert.equal(legacySystem, layeredSystem.replace(core, baseline.agent).replace(layeredAuthoring, baseline.workspaceAuthoring));
+ const legacyTools = createTools({ ...ctx, corePromptMode: 'legacy' }, runtime);
+ assert.equal(legacyTools.generate_animation.description, baseline.toolDescriptions.video);
+ assert.equal(legacyTools.run_code.description, baseline.toolDescriptions.coding);
+ for (const guide of Object.keys(AGENT_PROMPT_BUNDLES)) {
+   const result:any = await legacyTools.read_file.execute!({ path: guide }, {} as any);
+   assert.equal(result.content, read('src/lib/' + guide));
+ }
  fs.mkdirSync('docs/core-prompt-refactor',{recursive:true});
  fs.writeFileSync('docs/core-prompt-refactor/rule-ownership.json',JSON.stringify({baseline:baseline.revision,coverage,protectedFiles:baseline.protectedFiles},null,2)+'\n');
  console.log(JSON.stringify({passed:true,coreParagraphs:coverage.length,protectedCreativeFiles:Object.keys(baseline.protectedFiles).length,actualReadFileBundles:2}));

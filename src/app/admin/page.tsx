@@ -1,5 +1,7 @@
 'use client'
 
+import CorePromptSwitch from '@/components/admin/CorePromptSwitch'
+
 import { useState, useEffect, useCallback } from 'react'
 import { useRouter } from 'next/navigation'
 import { navigateBackInIOSApp } from '@/lib/native-navigation'
@@ -347,6 +349,8 @@ export default function AdminPage() {
           ← Back to app
         </button>
       </div>
+
+      <CorePromptSwitch />
 
       {/* Tabs */}
       <div className="flex gap-1 mb-6 overflow-x-auto bg-white/5 rounded-lg p-1" data-testid="admin-tabs">

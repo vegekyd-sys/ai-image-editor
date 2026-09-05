@@ -1,4 +1,12 @@
 const zh = {
+  'admin.corePrompt.title': "新版分层 Core Prompt",
+  'admin.corePrompt.layered': "已开启：新版分层路径",
+  'admin.corePrompt.legacy': "已关闭：旧版完整路径",
+  'admin.corePrompt.loading': "正在加载…",
+  'admin.corePrompt.saving': "正在保存…",
+  'admin.corePrompt.description': "全局开关，影响所有用户及共享数据库的测试环境。正常情况下 15 秒内对新一轮请求生效；运行中的请求保持原路径。关闭可恢复旧版 Core、工具说明和指南加载方式，无需重新部署。",
+  'admin.corePrompt.failed': "读取或保存失败，请刷新确认当前状态。",
+
   'mediaPricing.title': "视频与音频价格",
   'mediaPricing.defaultResolution': "默认",
   'mediaPricing.inactive': "已停用",

@@ -2,6 +2,9 @@ import { streamText } from 'ai';
 import type { ModelMessage } from 'ai';
 import type { ModelId } from './models/types';
 import agentPrompt from './prompts/agent.md';
+import legacyAgentPrompt from './prompts/legacy/agent.md';
+import legacyWorkspaceAuthoring from './prompts/legacy/workspace-authoring.md';
+import { getCorePromptMode, type CorePromptMode } from './core-prompt-mode';
 import type { VideoModel } from '@/types';
 import type { AgentPerf } from './agent-perf';
 import { createTextDeltaState, normalizeTextDelta } from './agent-text-delta';
@@ -61,8 +64,8 @@ export type { AgentStreamEvent } from './agent-tools';
 // System prompt (bundled via webpack asset/source)
 // ---------------------------------------------------------------------------
 
-function getAgentSystemPrompt(): string {
-  return agentPrompt;
+function getAgentSystemPrompt(mode: CorePromptMode): string {
+  return mode === 'legacy' ? legacyAgentPrompt : agentPrompt;
 }
 
 function* flushPendingImageSnapshots(ctx: AgentContext): Generator<AgentStreamEvent> {
@@ -96,8 +99,8 @@ function estTokens(chars: number): number {
 
 /** Build system prompt with lightweight skill manifest (not full templates) */
 
-export async function buildSystemPrompt(supabase?: any, userId?: string, projectId?: string): Promise<string> {
-  const base = getAgentSystemPrompt();
+export async function buildSystemPrompt(supabase?: any, userId?: string, projectId?: string, mode: CorePromptMode = 'layered'): Promise<string> {
+  const base = getAgentSystemPrompt(mode);
   const manifest = await workspace.getSkillManifest(supabase, userId);
   const projectPath = projectId ? `${projectId}/` : '';
   const workspaceSection = `
@@ -113,7 +116,7 @@ Tools: \`list_files\`, \`read_file\`, \`write_code_file\`, \`write_file\`, \`del
 - **Project-level** (current project): \`${projectPath}code/\`${projectId ? ` — save composition/code files here` : ''}
 - **skills/{name}/SKILL.md** — Create reusable skills here. Read \`skills/SKILL_README.md\` for the format.
 
-Before coding, read \`prompts/agent-coding.md\` once. Before creating a reusable skill, read \`skills/SKILL_README.md\` and an existing skill (for example \`skills/makaron-mascot/SKILL.md\`). Skills must work across projects; describe a style, technique, or character, not one photo.
+${mode === 'legacy' ? legacyWorkspaceAuthoring : 'Before coding, read `prompts/agent-coding.md` once. Before creating a reusable skill, read `skills/SKILL_README.md` and an existing skill (for example `skills/makaron-mascot/SKILL.md`). Skills must work across projects; describe a style, technique, or character, not one photo.'}
 
 ${manifest}
 `;
@@ -141,7 +144,7 @@ ${manifest}
   const memLen = memorySection.length;
   const total = full.length;
   console.log(
-    `[agent-prompt] system base=${baseLen} workspace=${wsLen} memory=${memLen} total=${total} chars (~${estTokens(total)} tokens)`
+    `[agent-prompt] mode=${mode} system base=${baseLen} workspace=${wsLen} memory=${memLen} total=${total} chars (~${estTokens(total)} tokens)`
   );
 
   return full;
@@ -274,6 +277,8 @@ export async function* runMakaronAgent(
   options?: RunMakaronAgentOptions,
 ): AsyncGenerator<AgentStreamEvent> {
   const perf = options?.perf;
+  const corePromptMode = await getCorePromptMode();
+  perf?.mark('core_prompt_mode', { mode: corePromptMode });
   const runtime = createAgentModelRuntime(
     options?.agentModel,
     projectId,
@@ -282,6 +287,7 @@ export async function* runMakaronAgent(
     options?.codexSubscriptionAllowed,
   );
   const ctx: AgentContext = {
+    corePromptMode,
     currentImage,
     referenceImages: options?.referenceImages,
     projectId,
@@ -394,7 +400,7 @@ export async function* runMakaronAgent(
   });
   const baseSystemPrompt = (analysisOnly || tipReactionOnly)
     ? buildLightweightSystemPrompt(analysisOnly ? 'analysis' : 'tipReaction', options?.locale)
-    : await buildSystemPrompt(options?.supabase, options?.userId, projectId);
+    : await buildSystemPrompt(options?.supabase, options?.userId, projectId, corePromptMode);
   const continuationExecution = durableContinuation ? options?.execution : undefined;
   const durableExecutionDirective = continuationExecution
     ? `\n\n## Durable execution contract\nThis is attempt ${continuationExecution.attemptNo} of Agent Run ${continuationExecution.runId}. A later attempt may continue in a fresh model context only after a technical interruption, provider failure, context handoff, or newer user input. Preserve decisions and durable artifact pointers with execution_checkpoint after meaningful progress and before a long, risky generation step. Do not repeat expensive side effects whose tool result is already present. A Studio Run is only a persisted workflow that you follow with studio_run; its stage never decides whether this Agent Run ends or retries. Finish normally when you have completed the current user-facing turn, even if the workflow remains at Review or another stage. If this attempt advances the workflow into Composition, switch to numbered composition parts immediately and never begin a monolithic run_code payload. A newer queued user instruction has precedence over an older delivery target.`

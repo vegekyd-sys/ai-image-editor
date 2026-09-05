@@ -2,7 +2,16 @@ import zh from './zh';
 import type { TranslationDictionary } from './index';
 
 const zhHant = {
+
   ...zh,
+  'admin.corePrompt.title': "新版分層 Core Prompt",
+  'admin.corePrompt.layered': "已開啟：新版分層路徑",
+  'admin.corePrompt.legacy': "已關閉：舊版完整路徑",
+  'admin.corePrompt.loading': "正在載入…",
+  'admin.corePrompt.saving': "正在儲存…",
+  'admin.corePrompt.description': "全域開關，影響所有使用者及共用資料庫的測試環境。正常情況下 15 秒內對新一輪請求生效；執行中的請求維持原路徑。關閉可恢復舊版 Core、工具說明及指南載入方式，無需重新部署。",
+  'admin.corePrompt.failed': "讀取或儲存失敗，請重新整理確認目前狀態。",
+
   'mediaPricing.title': "影片與音訊價格",
   'mediaPricing.defaultResolution': "預設",
   'mediaPricing.inactive': "已停用",

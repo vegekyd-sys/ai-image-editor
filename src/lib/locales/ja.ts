@@ -1,6 +1,14 @@
 import type { TranslationDictionary } from './index';
 
 const ja = {
+  'admin.corePrompt.title': "階層型 Core Prompt",
+  'admin.corePrompt.layered': "オン：新しい階層型の処理",
+  'admin.corePrompt.legacy': "オフ：従来の処理全体",
+  'admin.corePrompt.loading': "読み込み中…",
+  'admin.corePrompt.saving': "保存中…",
+  'admin.corePrompt.description': "全ユーザーと同じデータベースを使うテスト環境に適用されます。通常は 15 秒以内に新しいリクエストへ反映され、実行中の処理は変更されません。オフにすると、再デプロイせずに従来の Core、ツール説明、ガイド読み込みへ戻せます。",
+  'admin.corePrompt.failed': "読み込みまたは保存に失敗しました。再読み込みして現在の設定を確認してください。",
+
   'mediaPricing.title': "動画・音声の料金",
   'mediaPricing.defaultResolution': "標準",
   'mediaPricing.inactive': "無効",

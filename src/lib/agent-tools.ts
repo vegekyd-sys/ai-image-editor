@@ -88,6 +88,9 @@ import { compileVideoReplicationPrompt } from './video-replication-prompt';
 import { preserveOptionalToolFields } from './agent-tool-schema';
 import { createVideoValidationReporter } from './video-submission-validation';
 import { bundleAgentPrompt } from './agent-prompt-bundles';
+import type { CorePromptMode } from './core-prompt-mode';
+import legacyVideoTool from './prompts/legacy/video-tool.md';
+import legacyCodingTool from './prompts/legacy/coding-tool.md';
 
 const MAX_VIDEO_DIMENSION_PROBE_BYTES = 220 * 1024 * 1024;
 
@@ -199,6 +202,8 @@ function modelFileContent(base64Data: string, mediaType: string) {
 // ---------------------------------------------------------------------------
 
 export interface AgentContext {
+  /** Pinned with the system prompt for this invocation, including model retries. */
+  corePromptMode?: CorePromptMode;
   currentImage: string;       // base64 data URL – updated after each generation
   referenceImages?: string[]; // base64 data URLs – user-uploaded references (up to 3)
   projectId: string;
@@ -4015,7 +4020,7 @@ Use this to read skill instructions (SKILL.md), reference images, or your memory
           return { base64Data: raw, mimeType: result.contentType, path: filePath };
         }
 
-        return { content: bundleAgentPrompt(filePath, result.content), type: result.contentType, path: filePath };
+        return { content: ctx.corePromptMode === 'legacy' ? result.content : bundleAgentPrompt(filePath, result.content), type: result.contentType, path: filePath };
       },
 
       toModelOutput({ output }: { output: any }) {
@@ -5259,7 +5264,7 @@ export function createTools(ctx: AgentContext, runtime: AgentModelRuntime, local
     serializeVideoSubmission,
   };
 
-return preserveOptionalToolFields({
+const tools = preserveOptionalToolFields({
     generate_image: createGenerateImageTool(scope),
 
     generate_animation: createGenerateAnimationTool(scope),
@@ -5301,6 +5306,11 @@ return preserveOptionalToolFields({
     generate_audio: createGenerateAudioTool(scope),
 
   }, runtime.spec.provider);
+  if (ctx.corePromptMode === 'legacy') {
+    tools.generate_animation.description = legacyVideoTool;
+    tools.run_code.description = legacyCodingTool;
+  }
+  return tools;
 }
 
 /** Keep tool prompt telemetry independent from the Agent runner module. */

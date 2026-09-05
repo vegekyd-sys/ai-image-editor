@@ -76,3 +76,13 @@ node --import tsx --require ./md-loader.cjs benchmarks/core-prompt/render-media.
 ## 后续扩展规则
 
 增加场景时先加入真实请求、选路/授权边界、必保留效果和最终交付证据；更新对应领域 owner。只有跨领域的路由信息进入 Core。需要随指南一起到达模型的合同加入静态 bundle，并更新实际 read_file 测试；不在 Core、工具说明、多个 Skill 各复制一份长正文。
+
+## 发布开关（2026-09-05）
+
+用户在查看盲评分数和剩余风险后，明确授权新增开关、默认启用新版、合入 dev 并上线。此决定不表示旧 `acceptance.md` 的所有质量门槛已经通过。
+
+Admin 页面顶部的「新版分层 Core Prompt」控制全局 `core_prompt_settings` 表中的 `core_prompt_mode`：`layered` 开启新版，`legacy` 完整恢复基线 `3193cd36` 的 Core、workspace authoring、两个重工具说明，并停用延迟合同 bundle。工具 schema、执行器、供应商默认选择不随开关改变。管理员 API：`GET/PUT /api/admin/core-prompt`，PUT 请求 `{ "mode": "legacy" }` 或 `{ "mode": "layered" }`。
+
+读取配置有 15 秒进程缓存和 1.5 秒超时；配置缺省默认新版，读取失败/非法值回退旧版。每次 Agent invocation 固定一个版本，模型重试不混用；后续消息/持久任务下一次续跑会重新取配置。开关正常情况下 15 秒内传播，不中断已运行请求。Preview 与 Production 共享数据库，操作会同时影响两者。没有新的必填环境变量。发布前执行 `20260905123000_core_prompt_settings.sql`：独立配置表启用 RLS，撤销 anon/authenticated 权限，仅服务端 service_role 可读写；Admin API 另行验证管理员身份。现有 app_settings 无 RLS，本次不修改其既有权限。
+
+运行日志 `[agent-prompt] mode=...` 和 `core_prompt_mode` perf 事件可核验实际路径。回退前已经进入会话历史的指南/工具结果会保留；要求完全干净的旧版对照时创建新项目。`src/lib/prompts/legacy/` 是发布回退快照，测试逐字对照冻结的 A/B 基线，不从 benchmark 文件加载生产正文。
