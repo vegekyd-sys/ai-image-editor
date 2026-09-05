@@ -479,7 +479,7 @@ const zh = {
   'model.minimaxH3.desc': '开放多模态视频模型，支持 15 秒、768P 或 2K 直出与多参考素材。',
   'model.minimaxH3Max.name': 'fal H3 Turbo',
   'model.minimaxH3Max.desc': '默认以原生 768P 超实时生成 5–15 秒文生视频或单图生视频，亦支持 480P。',
-  'model.falH3Max.name': 'FAL H3 Max',
+  'model.falH3Max.name': 'fal H3 Max',
   'model.falH3Max.desc': '支持图片、视频和音频参考生成，默认原生 768P，5–15 秒。',
   'model.gpt56Terra.name': 'GPT-5.6 Terra',
   'model.gpt56Terra.desc': '推荐默认，兼顾智能、速度与成本。',

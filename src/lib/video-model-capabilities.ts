@@ -501,7 +501,7 @@ const MODEL_CAPABILITIES: Record<string, VideoModelCapability> = {
     providerModel: 'minimax/h3-max-turbo/text-to-video',
   },
   'fal-h3-max': {
-    id: 'fal-h3-max', label: 'FAL H3 Max',
+    id: 'fal-h3-max', label: 'fal H3 Max',
     minOutputDuration: 5, maxOutputDuration: 15,
     maxReferenceVideoDuration: 15,
     supportsVideoReference: true, supportsBaseVideoEdit: false,

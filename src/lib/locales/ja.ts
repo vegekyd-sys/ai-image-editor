@@ -699,7 +699,7 @@ const ja = {
   'model.minimaxH3.desc': '15秒、768Pまたは2K出力、複数の参照素材に対応するオープンなマルチモーダル動画モデルです。',
   'model.minimaxH3Max.name': 'fal H3 Turbo',
   'model.minimaxH3Max.desc': 'デフォルトのネイティブ768Pで、5〜15秒のテキスト動画・単一画像動画をリアルタイムより速く生成し、480Pにも対応します。',
-  'model.falH3Max.name': 'FAL H3 Max',
+  'model.falH3Max.name': 'fal H3 Max',
   'model.falH3Max.desc': '画像・動画・音声を参照して生成。標準768P、5〜15秒。',
   'model.gpt56Terra.name': 'GPT-5.6 Terra',
   'model.gpt56Terra.desc': '知能、速度、コストのバランスに優れた推奨デフォルトです。',
