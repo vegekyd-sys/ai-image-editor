@@ -22,7 +22,7 @@ import {
   deriveSequenceStartFrame,
   sourceFrameToCompositionFrame,
 } from '@/lib/editor/video-trim-timeline';
-import { isFastVideoRenderModel } from '@/lib/video-model-capabilities';
+import { isFastVideoRenderModel, normalizeVideoModelId } from '@/lib/video-model-capabilities';
 import { isRemotionExportTaskId } from '@/lib/remotion-export-flags';
 import {
   buildVideoProxyUrl,
@@ -162,9 +162,11 @@ export default function ImageCanvas({
   const { t } = useLocale();
   const videoRenderTimeHint = isRemotionExportTaskId(videoTaskId)
     ? t('canvas.remotionExportUsuallyTakes')
-    : (isFastVideoRenderModel(videoModel)
-      ? t('canvas.grokUsuallyTakes')
-      : t('canvas.usuallyTakes'));
+    : normalizeVideoModelId(videoModel) === 'fal-h3-max'
+      ? t('canvas.falH3MaxUsuallyTakes')
+      : (isFastVideoRenderModel(videoModel)
+        ? t('canvas.grokUsuallyTakes')
+        : t('canvas.usuallyTakes'));
   const touchStartX = useRef(0);
   const touchStartY = useRef(0);
   const swiping = useRef(false);

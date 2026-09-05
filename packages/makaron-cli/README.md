@@ -532,7 +532,7 @@ send_message "All done!"
 - One project = one conversation thread. All history is preserved.
 - One active Agent Run at a time per project. A new message received while it is active is appended to that same Agent Run and processed at a durable work-unit boundary; it does not interrupt the execution or create a second owner for an in-progress Studio workflow.
 - Multi-image: `create --image a.jpg --image b.jpg` or `chat --image ref.jpg`.
-- Provider-generated videos can take 3-5 minutes; current Grok generation/edit probes are usually around 15-60 seconds; Gemini Omni is usually around 30-70 seconds plus Storage handoff. Remotion compositions should be converted with `materialize` / `responses get --materialize`, and timing should be read from `duration_seconds`, `render_seconds`, and `realtime_ratio`.
+- Video timing depends on the selected model: fal H3 Turbo and fal H3 Max usually finish in tens of seconds; Max with video references may take around 1-2 minutes. Queue and saving time can vary; other providers may take 3-5 minutes; current Grok generation/edit probes are usually around 15-60 seconds; Gemini Omni is usually around 30-70 seconds plus Storage handoff. Remotion compositions should be converted with `materialize` / `responses get --materialize`, and timing should be read from `duration_seconds`, `render_seconds`, and `realtime_ratio`.
 - Music takes ~60 seconds. Appears in output when done.
 - Images are typically ready in 15-30 seconds.
 - stdout is always machine-readable JSON/text. Human-friendly logs go to stderr.

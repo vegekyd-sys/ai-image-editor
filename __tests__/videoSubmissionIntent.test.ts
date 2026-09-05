@@ -110,6 +110,27 @@ describe('video generation intent and one-submit regression', () => {
     expect(h.createVideo).not.toHaveBeenCalled();
   });
 
+  it.each(['fal-h3-max', 'minimax-h3-max'])('uses a seconds estimate for a 15s image request on %s', async model => {
+    const h = generateAnimationHarness();
+    const result = await h.tool.execute({ ...lookbookRequest, model, replication_contract: undefined });
+    expect(result.success, result.message).toBe(true);
+    expect(result.message).toContain('tens of seconds');
+    expect(result.message).not.toContain('3-5 minutes');
+    expect(result.message).not.toContain('faster than real time');
+  });
+
+  it('allows a longer estimate when Max receives an actual source video', async () => {
+    const h = generateAnimationHarness();
+    h.rows[0] = { id: 'source-video', type: 'video', video_meta: { videoUrl: 'https://example.com/source.mp4', duration: 15, width: 1280, height: 720, fileSizeBytes: 1000000 } };
+    const result = await h.tool.execute({ ...lookbookRequest, model: 'fal-h3-max', replication_contract: undefined,
+      story_prompt: 'Recolor <<<media_1>>>. Keep the people and motion, turn the book blue.',
+    });
+    expect(result.success, result.message).toBe(true);
+    expect(h.createVideo.mock.calls[0][0].videoUrls).toEqual(['https://example.com/source.mp4']);
+    expect(result.message).toContain('1-2 minutes');
+    expect(result.message).not.toContain('3-5 minutes');
+  });
+
   it('keeps true replication, source video and Prime default working', async () => {
     const h = generateAnimationHarness();
     h.rows[0] = { id: 'source-video', type: 'video', video_meta: { videoUrl: 'https://example.com/source.mp4', duration: 15, width: 1280, height: 720, fileSizeBytes: 1000000 } };

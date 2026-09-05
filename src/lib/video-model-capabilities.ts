@@ -942,7 +942,7 @@ export function getRequiredVideoCredits(
 
 export function isFastVideoRenderModel(model?: string | null): boolean {
   const normalized = normalizeVideoModelId(model)
-  return normalized === 'grok' || normalized === 'google-omni' || normalized === 'minimax-h3-max'
+  return normalized === 'grok' || normalized === 'google-omni' || normalized === 'minimax-h3-max' || normalized === 'fal-h3-max'
 }
 
 export function resolveVideoOutputDuration(options: {

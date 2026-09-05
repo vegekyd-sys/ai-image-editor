@@ -2093,9 +2093,13 @@ function createGenerateAnimationTool(
             ? 'Grok is usually around 30-40 seconds.'
             : actualVideoModel === 'google-omni'
               ? 'Google Omni is usually around 30-70 seconds, then a short Storage handoff.'
-              : actualVideoModel === 'minimax-h3-max'
-                ? 'fal H3 Turbo usually finishes a 5-second 768p clip faster than real time.'
-              : 'Rendering usually takes 3-5 minutes.';
+              : actualVideoModel === 'fal-h3-max'
+                ? (createVideoInput.videoUrl || createVideoInput.videoUrls?.length
+                  ? 'fal H3 Max with video references may take around 1-2 minutes; shorter references can finish in tens of seconds. Queue and saving time can vary.'
+                  : 'fal H3 Max usually finishes in tens of seconds. Queue and saving time can vary.')
+                : actualVideoModel === 'minimax-h3-max'
+                  ? 'fal H3 Turbo usually finishes in tens of seconds. Queue and saving time can vary.'
+                  : 'Rendering usually takes 3-5 minutes.';
           return {
             success: true as const,
             taskId,

@@ -277,7 +277,7 @@ IMPORTANT:
 - SeeDance, Wan 3.0, Gemini Omni 1.1, MiniMax H3, and MiniMax H3 Max support native text-to-video with no images. H3 Max accepts at most one public image URL and treats it as image-to-video, not a feature reference.
 - EvoLink Seedance reference images must be JPEG/PNG/WebP, width and height each 300-6000px, aspect ratio 0.4-2.5, and <=30MB each. Input errors distinguish too_small, too_large, invalid_aspect_ratio, unsupported_format, and unreadable. NON_RETRYABLE means the same URL must not be resubmitted; prepare a new compliant URL or replace the source first.
 - When images are provided, script should use <<<media_N>>> format (from makaron_write_video_script output). Text-to-video scripts should not invent media markers.
-- Provider-generated video rendering takes 3-5 minutes; Grok is optimized for substantially faster generation; Gemini Omni is usually around 30-70 seconds plus Storage handoff. Use makaron_get_video_status to poll and measure the actual elapsed time.
+- Video timing depends on the selected model: fal H3 Turbo and fal H3 Max usually finish in tens of seconds; Max with video references may take around 1-2 minutes. Queue and saving time can vary; other providers may take 3-5 minutes; Grok is optimized for substantially faster generation; Gemini Omni is usually around 30-70 seconds plus Storage handoff. Use makaron_get_video_status to poll and measure the actual elapsed time.
 - Duration: omit for smart mode. H3 Max supports exactly 5/10/15s and defaults to 5s. Seedance 2.5 supports 4-30s; Wan 3.0 supports 2-30s; SeeDance 2.0 and MiniMax H3 support 4-15s; Kling supports 5-15s; Grok 1.5 supports 1-15s; Gemini Omni supports 3-10s.
 - Resolution: omit or use "auto" for the selected model default. wan-3.0 and wan-3.0-prime expose 480p/720p/1080p/2k/4k; 2k/4k automatically use the matching FlashVSR/Pro endpoint. minimax-h3-max uses the Turbo route, supports 480p/768p, and defaults to native 768p; minimax-h3 supports 768p/2k and defaults to 768p. Gemini Omni supports 360p/720p/1080p/4k; Seedance 2.5 supports 480p/720p; Grok text-to-video supports 480p/720p/1080p and caps image/voice references at 720p.
 - Seedance 2.5 accepts up to 30 image, 10 video, and 10 audio references, plus dedicated edit/extend modes. Gemini Omni accepts one timeline/external video and can extend it forward for 3-10 seconds (10 seconds by default).
@@ -391,7 +391,7 @@ IMPORTANT:
 - When referType is "feature": the video provides style/motion reference. Images define the actual content.
 - For videoModel "seedance-fast", "seedance-mini", or "seedance", use referType "feature" (default for SeeDance). Base/direct edit is Kling-only.
 - images (if any) must be publicly accessible URLs
-- Provider-generated video rendering takes 3-5 minutes; Grok is optimized for substantially faster generation; Gemini Omni is usually around 30-70 seconds plus Storage handoff. Use makaron_get_video_status to poll and measure actual elapsed time.
+- Video timing depends on the selected model: fal H3 Turbo and fal H3 Max usually finish in tens of seconds; Max with video references may take around 1-2 minutes. Queue and saving time can vary; other providers may take 3-5 minutes; Grok is optimized for substantially faster generation; Gemini Omni is usually around 30-70 seconds plus Storage handoff. Use makaron_get_video_status to poll and measure actual elapsed time.
 
 Example: Edit a video to add cinematic color grading:
   videoUrl: "https://...", editPrompt: "Apply warm cinematic color grading with film grain", videoModel: "seedance-fast"`,
@@ -503,7 +503,7 @@ IMPORTANT:
 
 Status values:
 - pending: task queued
-- processing: provider rendering in progress (usually 3-5 minutes; Grok generation is optimized for substantially lower latency)
+- processing: provider rendering in progress (fal usually takes tens of seconds; Max with video references may take 1-2 minutes; other models can take several minutes)
 - completed: done, videoUrl available
 - failed: error occurred
 
