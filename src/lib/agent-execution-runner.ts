@@ -1,3 +1,4 @@
+import { canRunAgentExecution, normalizeAgentExecutionOrigin } from './agent-execution-origin';
 import type { SupabaseClient } from '@supabase/supabase-js';
 import { runMakaronAgent, type AgentStreamEvent } from './agent';
 import { AgentDualWriter } from './agentDualWriter';
@@ -328,6 +329,14 @@ export async function runAgentExecutionAttempt(
   endRunLoad({ found: !!runData });
   const run = runData as AgentRunRecord | null;
   if (!run || run.status !== 'running') return { claimed: false, runId };
+  const workerOrigin = normalizeAgentExecutionOrigin(options.origin);
+  const taskOrigin = typeof run.metadata?.executionOwnerOrigin === 'string'
+    ? run.metadata.executionOwnerOrigin
+    : (run.metadata?.executionRequest as ExecutionRequest | undefined)?.origin;
+  if (!canRunAgentExecution(taskOrigin, workerOrigin)) {
+    perf.mark('execution_origin_mismatch', { taskOrigin: taskOrigin || null, workerOrigin });
+    return { claimed: false, runId };
+  }
   const inputVersionAtAttemptStart = run.input_version || 0;
 
   const policy = normalizeExecutionPolicy(run.execution_policy);
@@ -362,7 +371,8 @@ export async function runAgentExecutionAttempt(
     perf.mark('claim_execution_preclaimed', { workerId: options.initialClaim.workerId });
   } else {
     const endClaim = perf.span('claim_execution');
-    const { data: claimData, error: claimError } = await admin.rpc('claim_agent_execution', {
+    const { data: claimData, error: claimError } = await admin.rpc('claim_agent_execution_for_origin', {
+      p_origin: workerOrigin,
       p_run_id: runId,
       p_worker_id: workerId,
       p_lease_seconds: policy.leaseSeconds,
@@ -638,6 +648,9 @@ export async function runAgentExecutionAttempt(
     input_token_estimate: ctx.contextStats.estimatedTokens,
     metadata: {
       context: ctx.contextStats,
+      executionOrigin: workerOrigin,
+      workerId,
+      deploymentId: process.env.VERCEL_DEPLOYMENT_ID || null,
       model: resolvedModel.id,
       provider: resolvedModel.provider,
       requestedModel: requestedModel.id,
@@ -1081,7 +1094,7 @@ export async function runAgentExecutionAttempt(
         },
       },
     }).eq('id', runId).eq('status', 'running').eq('lease_token', claim.lease_token);
-    void dispatchAgentExecutionAttempt(runId, options.origin || request.origin);
+    void dispatchAgentExecutionAttempt(runId, workerOrigin!);
     return {
       claimed: true,
       runId,

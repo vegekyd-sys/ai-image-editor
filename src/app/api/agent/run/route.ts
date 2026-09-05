@@ -172,6 +172,7 @@ export async function POST(req: NextRequest) {
       headless: true,
       firstMessageId,
       ...(durableExecution ? {
+        executionOwnerOrigin: req.nextUrl.origin,
         executionRequest: {
           locale,
           preferredModel,
@@ -232,7 +233,7 @@ export async function POST(req: NextRequest) {
           // initialization path. The durable worker loads it after the browser
           // already has the run id and can begin its lightweight event watch.
           const { runAgentExecutionAttempt } = await import('@/lib/agent-execution-runner');
-          await runAgentExecutionAttempt(runId, { admin: supabase as any, workerId: `initial-${crypto.randomUUID()}` });
+          await runAgentExecutionAttempt(runId, { admin: supabase as any, workerId: `initial-${crypto.randomUUID()}`, origin: req.nextUrl.origin });
         } catch (executionError) {
           console.error(`[agent/run] durable attempt failed for ${runId}:`, executionError);
           // Leave the execution running with its due timestamp. Cron recovery

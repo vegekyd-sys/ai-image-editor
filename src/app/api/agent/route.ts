@@ -227,6 +227,7 @@ export async function POST(req: NextRequest) {
         isNsfw,
         analysisOnly,
         firstMessageId,
+        executionOwnerOrigin: req.nextUrl.origin,
         executionRequest: {
           locale,
           preferredModel,
