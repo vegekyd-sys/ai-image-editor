@@ -1,6 +1,6 @@
 # Core Prompt 分层重构
 
-独立分支 `codex/core-prompt-layered-refactor`，基线 `3193cd36`。本地候选，不代表已合入 dev、部署或通过生产验收。
+独立分支 `codex/core-prompt-layered-refactor`，基线 `3193cd36`。2026-09-05 用户明确授权上线后，产品代码 `bf07bede` 已合入 dev 并发布，默认启用 layered。发布证据与保留风险见 [release.md](release.md)。
 
 最新实物验收见 [acceptance.md](acceptance.md)，包括H3 Max/Grok/SeeDance Mini、47张图片、完整CLI保存/导出、真实编辑器改字与失败样本。最新速度见 [acceptance-speed.json](acceptance-speed.json)。旧 `results.md` 保留前一阶段证据，不代表最新全场景通过。
 
