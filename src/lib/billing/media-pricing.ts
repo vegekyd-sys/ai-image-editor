@@ -11,6 +11,11 @@ export interface MediaPrice {
   input_usd_per_second: number
   input_usd_per_image: number
   free_image_references: number
+  input_usd_per_1k_tokens?: number
+  free_input_tokens?: number
+  input_tokens_per_image_pixel?: number
+  input_tokens_per_video_second?: number
+  input_tokens_per_audio_second?: number
   markup: number
   unfiltered_multiplier: number
   is_active: boolean
@@ -26,6 +31,8 @@ export interface MediaQuote {
   imageCount: number
   referenceVideoDurationSec: number
   markup: number
+  referenceTokens?: number
+  billableReferenceTokens?: number
   multiplier: number
 }
 
@@ -36,6 +43,8 @@ export interface VideoQuoteInput {
   durationSec: number
   imageCount?: number
   referenceVideoDurationSec?: number
+  referenceImagePixels?: number
+  referenceAudioDurationSec?: number
   contentFilter?: boolean
 }
 
@@ -73,11 +82,19 @@ export function calculateMediaQuote(price: MediaPrice, input: Omit<VideoQuoteInp
   if (price.output_usd_per_second <= 0 || price.markup <= 0 || price.unfiltered_multiplier < 1) {
     throw new PricingUnavailableError(`Invalid media price: ${price.id}`)
   }
+  const referenceImagePixels = nonNegative(input.referenceImagePixels ?? 0, 'reference image pixels')
+  const referenceAudioDurationSec = nonNegative(input.referenceAudioDurationSec ?? 0, 'reference audio duration')
+  for (const field of ['input_usd_per_1k_tokens', 'free_input_tokens', 'input_tokens_per_image_pixel', 'input_tokens_per_video_second', 'input_tokens_per_audio_second'] as const) nonNegative(price[field] ?? 0, field)
+  const referenceTokens = referenceImagePixels * (price.input_tokens_per_image_pixel ?? 0)
+    + referenceVideoDurationSec * (price.input_tokens_per_video_second ?? 0)
+    + referenceAudioDurationSec * (price.input_tokens_per_audio_second ?? 0)
+  const billableReferenceTokens = Math.max(0, referenceTokens - (price.free_input_tokens ?? 0))
   const multiplier = input.contentFilter === false ? price.unfiltered_multiplier : 1
   const supplierCostUsd = (
     durationSec * price.output_usd_per_second
     + Math.max(0, imageCount - price.free_image_references) * price.input_usd_per_image
     + referenceVideoDurationSec * price.input_usd_per_second
+    + billableReferenceTokens * (price.input_usd_per_1k_tokens ?? 0) / 1000
   ) * multiplier
   const credits = Math.ceil(supplierCostUsd * 100 * price.markup - 1e-9)
   if (!Number.isSafeInteger(credits) || credits <= 0 || credits > 2_147_483_647) {
@@ -86,6 +103,7 @@ export function calculateMediaQuote(price: MediaPrice, input: Omit<VideoQuoteInp
   return {
     priceId: price.id, priceVersion: price.updated_at, supplierCostUsd,
     credits,
+    referenceTokens, billableReferenceTokens,
     durationSec, imageCount, referenceVideoDurationSec, markup: price.markup, multiplier,
   }
 }

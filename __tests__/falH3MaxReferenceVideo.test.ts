@@ -3,7 +3,7 @@ import { buildH3MaxReferencePayload as build, createFalH3MaxReferenceVideoTask a
 import { getFalH3MaxVideoTask } from '@/lib/fal-h3-max-video'
 const image = 'https://example.com/person.jpg'
 afterEach(()=>{ vi.restoreAllMocks(); vi.unstubAllGlobals(); vi.unstubAllEnvs() })
-describe('H3 Max reference experiment',()=>{
+describe('H3 Max reference adapter',()=>{
   it('keeps a single image as a reference, with a new output composition',()=>{
     expect(build({prompt:'<<<media_1>>> in a new room',images:[image],aspectRatio:'9:16'})).toMatchObject({prompt:'Image 1 in a new room', reference_image_urls:[image],aspect_ratio:'9:16',resolution:'768P'})
     expect(build({prompt:'<<<image_1>>>',images:[image]})).not.toHaveProperty('image_url')
@@ -44,6 +44,13 @@ describe('H3 Max reference experiment',()=>{
     }))
     expect(await create({prompt:'<<<media_1>>>',images:[image],onBeforeSubmit:async()=>{events.push('reserve')}})).toBe('fal-h3max-reference-abc')
     expect(events).toEqual(['preflight','reserve','submit'])
+  })
+  it('reports a confirmed input rejection without a receipt or automatic retry', async () => {
+    vi.stubEnv('FAL_KEY', 'test-key')
+    const request = vi.fn(async () => new Response('{}', { status: 422 }))
+    vi.stubGlobal('fetch', request)
+    await expect(create({ prompt: 'test', images: [] })).rejects.toMatchObject({ code: 'INVALID_REFERENCE_MEDIA' })
+    expect(request).toHaveBeenCalledTimes(1)
   })
   it('polls reference tasks on H3 Max, never the Turbo queue',async()=>{
     vi.stubEnv('FAL_KEY','test-key')

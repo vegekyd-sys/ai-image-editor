@@ -41,5 +41,5 @@ it('returns the saved row and does not cache the Admin catalog', async () => {
   expect((await PUT(req(edit()))).status).toBe(200)
   const response = await GET(req({}))
   expect(response.headers.get('Cache-Control')).toBe('no-store')
-  expect((await response.json()).length).toBe(65)
+  expect((await response.json()).length).toBe(67)
 })

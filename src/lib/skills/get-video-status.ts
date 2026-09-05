@@ -123,16 +123,17 @@ export async function getVideoStatus(input: GetVideoStatusInput): Promise<GetVid
     if (isFalH3Max) {
       const { getFalH3MaxVideoTask } = await import('../fal-h3-max-video');
       const result = await getFalH3MaxVideoTask(taskId);
+      const label = taskId.startsWith('fal-h3max-reference-') ? 'FAL H3 Max' : 'fal H3 Turbo';
       return {
         success: result.status !== 'failed',
         status: result.status,
         videoUrl: result.videoUrl,
         error: result.error,
         message: result.status === 'completed'
-          ? 'MiniMax H3 Max Turbo video rendering completed!'
+          ? `${label} video rendering completed!`
           : result.status === 'failed'
-            ? `MiniMax H3 Max Turbo video rendering failed: ${result.error || 'Unknown error'}`
-            : 'MiniMax H3 Max Turbo video is rendering.',
+            ? `${label} video rendering failed: ${result.error || 'Unknown error'}`
+            : `${label} video is rendering.`,
       };
     }
 

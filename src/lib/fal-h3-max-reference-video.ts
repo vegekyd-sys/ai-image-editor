@@ -1,4 +1,4 @@
-/** Experimental adapter: not registered in the product until token billing is wired.
+/** FAL H3 Max reference and native text generation adapter.
  * Contract checked 2026-09-05: https://fal.ai/models/minimax/h3-max/reference-to-video/api
  */
 import { validateProviderImages } from './provider-image-preflight'
@@ -16,6 +16,8 @@ export interface H3MaxReferenceInput {
   aspectRatio?: string
   seed?: number
   onBeforeSubmit?: () => Promise<void>
+  /** Internal only: createVideo already measured and validated the selected images. */
+  imagesVerified?: boolean
 }
 
 function validateClips(clips: Array<{ durationSec: number }>, kind: string): void {
@@ -35,7 +37,7 @@ export function buildH3MaxReferencePayload(input: H3MaxReferenceInput): Record<s
   if (images.length > 9 || videos.length > 3 || audios.length > 3 || images.length + videos.length + audios.length > 12) {
     throw new Error('H3 Max supports at most 9 images, 3 videos, 3 audios, and 12 total reference files.')
   }
-  if (!images.length && !videos.length) throw new Error('H3 Max reference requires at least one image or video; audio alone is unsupported.')
+  if (audios.length && !images.length && !videos.length) throw new Error('H3 Max reference requires at least one image or video; audio alone is unsupported.')
   validateClips(videos, 'video')
   validateClips(audios, 'audio')
   // Live 2026-09-05: audio data URIs are materialized as .bin and rejected.
@@ -64,16 +66,27 @@ export function buildH3MaxReferencePayload(input: H3MaxReferenceInput): Record<s
 
 export async function createFalH3MaxReferenceVideoTask(input: H3MaxReferenceInput): Promise<string> {
   const payload = buildH3MaxReferencePayload(input)
+  const hasReferences = input.images.length > 0 || Boolean(input.videos?.length)
+  if (!hasReferences) {
+    delete payload.reference_image_urls
+    delete payload.reference_video_urls
+    delete payload.reference_audio_urls
+    if (payload.aspect_ratio === 'adaptive') payload.aspect_ratio = '16:9'
+  }
   const key = process.env.FAL_KEY?.trim()
   if (!key) throw new Error('FAL_KEY not configured')
-  await validateProviderImages(input.images, 'minimax-h3-max')
+  if (!input.imagesVerified) await validateProviderImages(input.images, 'fal-h3-max')
   await input.onBeforeSubmit?.()
-  const response = await fetch(`https://queue.fal.run/${H3_MAX_REFERENCE_ENDPOINT}`, {
+  const response = await fetch(`https://queue.fal.run/${input.images.length || input.videos?.length ? H3_MAX_REFERENCE_ENDPOINT : 'minimax/h3-max/text-to-video'}`, {
     method: 'POST', headers: { Authorization: `Key ${key}`, 'Content-Type': 'application/json' },
     body: JSON.stringify(payload),
   })
   const body = await response.json().catch(() => ({}))
   // Do not expose upstream error bodies: they may echo signed inputs.
+  if ([400, 401, 403, 404, 422, 429].includes(response.status)) {
+    const { H3ReferenceInputError } = await import('./h3-reference-preflight')
+    throw new H3ReferenceInputError(`FAL H3 Max rejected submission (HTTP ${response.status}); no provider task was accepted.`)
+  }
   if (!response.ok) throw new Error(`H3 Max reference submission HTTP ${response.status}; no automatic resubmission.`)
   if (typeof body.request_id !== 'string' || !body.request_id) throw new Error('H3 Max reference submission outcome unknown; no automatic resubmission.')
   return `fal-h3max-reference-${body.request_id}`

@@ -224,7 +224,9 @@ export function useProject(projectId: string, userId: string) {
                 ? 'google-omni'
                 : taskId?.startsWith('minimax-h3-')
                   ? 'minimax-h3'
-                  : taskId?.startsWith('fal-h3max-')
+                  : taskId?.startsWith('fal-h3max-reference-')
+                    ? 'fal-h3-max'
+                    : taskId?.startsWith('fal-h3max-')
                     ? 'minimax-h3-max'
                     : taskId?.startsWith('sync3-')
                       ? 'sync-lipsync-v3'

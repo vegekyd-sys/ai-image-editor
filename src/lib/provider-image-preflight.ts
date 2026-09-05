@@ -60,9 +60,10 @@ export async function readProviderImage(source: string, limit: number): Promise<
   });
 }
 
-export async function validateProviderImages(images: string[], model: 'wan2.7-image' | 'minimax-h3-max'): Promise<void> {
+export async function measureProviderImages(images: string[], model: 'wan2.7-image' | 'minimax-h3-max' | 'fal-h3-max'): Promise<Array<{ width: number; height: number }>> {
   const wan = model === 'wan2.7-image';
-  const label = wan ? 'Wan 2.7' : 'MiniMax H3 Max Turbo';
+  const label = wan ? 'Wan 2.7' : model === 'fal-h3-max' ? 'FAL H3 Max' : 'fal H3 Turbo';
+  const measured: Array<{ width: number; height: number }> = [];
   const min = wan ? 240 : 256;
   const maxBytes = (wan ? 20 : 30) * 1024 * 1024;
   for (const [index, source] of images.entries()) {
@@ -77,8 +78,14 @@ export async function validateProviderImages(images: string[], model: 'wan2.7-im
     if (width < min || height < min || (wan && (width > 8000 || height > 8000 || width / height > 8 || height / width > 8))) {
       throw new ProviderImageInputError(`${label} input image ${index + 1} is ${width}x${height}; each dimension must be at least ${min}px${wan ? ', at most 8000px, with aspect ratio between 1:8 and 8:1' : ''}. Use the full-resolution original or explicitly resize/pad it without cropping. No generation was submitted; do not retry the same input.`);
     }
+    measured.push({ width, height });
     if (wan && (!['jpeg', 'png', 'webp', 'bmp'].includes(meta.format ?? '') || (meta.format === 'png' && meta.hasAlpha))) {
       throw new ProviderImageInputError('Wan 2.7 requires JPEG, opaque PNG, WebP or BMP. Convert the input before submitting; no generation was submitted.');
     }
   }
+  return measured;
+}
+
+export async function validateProviderImages(images: string[], model: 'wan2.7-image' | 'minimax-h3-max' | 'fal-h3-max'): Promise<void> {
+  await measureProviderImages(images, model);
 }

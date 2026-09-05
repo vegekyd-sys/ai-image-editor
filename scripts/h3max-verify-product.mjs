@@ -1,0 +1,6 @@
+import{readFileSync,writeFileSync}from'node:fs';import{parse}from'dotenv';import{createClient}from'@supabase/supabase-js';
+const env=parse(readFileSync('.env.local'));const db=createClient(env.NEXT_PUBLIC_SUPABASE_URL,env.SUPABASE_SERVICE_ROLE_KEY,{auth:{persistSession:false}});const root='artifacts/h3max-integration';
+const receipts=['turbo-legacy','max-single','max-multi','max-video','max-mixed'].map(n=>JSON.parse(readFileSync(`${root}/${n}.json`)));
+const ids=receipts.map(r=>r.billingRequestId).concat('a5f59249-c2bf-4b3b-8f10-313228106d91');
+const{data,error}=await db.from('mcp_video_reservations').select('id,model_id,credits,quote,status,task_id').in('id',ids);if(error)throw Error(error.message);writeFileSync(`${root}/billing-verified.json`,JSON.stringify(data,null,2));console.log(data.map(r=>({model:r.model_id,credits:r.credits,status:r.status,referenceTokens:r.quote.referenceTokens})));
+const{data:snapshots,error:e}=await db.from('snapshots').select('id,type,video_meta,project_id').eq('project_id','0833d67b-0614-4e6e-be84-90dc3fec3324');if(e)console.log('snapshot schema',e.message);else{writeFileSync(`${root}/agent-snapshot-verified.json`,JSON.stringify(snapshots,null,2));console.log(snapshots)}

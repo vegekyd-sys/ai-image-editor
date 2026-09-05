@@ -469,7 +469,7 @@ const MODEL_CAPABILITIES: Record<string, VideoModelCapability> = {
   },
   'minimax-h3-max': {
     id: 'minimax-h3-max',
-    label: 'MiniMax H3 Max Turbo',
+    label: 'fal H3 Turbo',
     minOutputDuration: 5,
     maxOutputDuration: 15,
     supportedDurations: [5, 10, 15],
@@ -499,6 +499,20 @@ const MODEL_CAPABILITIES: Record<string, VideoModelCapability> = {
     supportedAspectRatios: ['16:9', '9:16', '1:1', '4:3', '3:4', '21:9'],
     provider: 'fal-h3-max',
     providerModel: 'minimax/h3-max-turbo/text-to-video',
+  },
+  'fal-h3-max': {
+    id: 'fal-h3-max', label: 'FAL H3 Max',
+    minOutputDuration: 5, maxOutputDuration: 15,
+    maxReferenceVideoDuration: 15,
+    supportsVideoReference: true, supportsBaseVideoEdit: false,
+    defaultImageWorkflow: 'reference-to-video',
+    longVideoChunkSeconds: 15,
+    maxImageReferences: 9, maxVideoReferences: 3, maxAudioReferences: 3, maxTotalReferences: 12,
+    supportedResolutions: ['480p', '768p'], defaultResolution: '768p',
+    supportedAspectRatios: ['16:9', '9:16', '1:1', '4:3', '3:4', '21:9'],
+    estimatedCostPerSecondUsd: 0.08,
+    estimatedCostPerSecondUsdByResolution: { '480p': 0.05, '768p': 0.08 },
+    provider: 'fal-h3-max', providerModel: 'minimax/h3-max/reference-to-video',
   },
   piapi: {
     id: 'piapi',
@@ -545,6 +559,8 @@ const GENERIC_VIDEO_MODEL: VideoModelCapability = {
 export function normalizeVideoModelId(model?: string | null): string {
   if (!model) return DEFAULT_MODEL_ID
   const normalized = String(model).trim().toLowerCase()
+  if (['fal-h3-max', 'fal h3 max'].includes(normalized)) return 'fal-h3-max'
+  if (['fal h3 turbo'].includes(normalized)) return 'minimax-h3-max'
   if (normalized === 'seedance2-fast' || normalized === 'seedance-2.0-fast' || normalized === 'seedance_fast') {
     return 'seedance-fast'
   }
@@ -719,7 +735,7 @@ function getSeedanceProviderBase(model?: string | null): string | undefined {
 
 export function supportsNativeTextToVideo(model?: string | null): boolean {
   const id = normalizeVideoModelId(model)
-  return getSeedanceProviderBase(id) != null || id === 'wan-3.0' || id === 'wan-3.0-prime' || id === 'minimax-h3' || id === 'minimax-h3-max' || id === 'google-omni' || id === 'grok'
+  return getSeedanceProviderBase(id) != null || id === 'wan-3.0' || id === 'wan-3.0-prime' || id === 'minimax-h3' || id === 'minimax-h3-max' || id === 'fal-h3-max' || id === 'google-omni' || id === 'grok'
 }
 
 export function resolveVideoProviderModel(options: {
@@ -744,6 +760,8 @@ export function resolveVideoProviderModel(options: {
     if (options.operation === 'edit' || options.operation === 'extend') return 'grok-imagine-video'
     return 'grok-imagine-video-1.5'
   }
+
+  if (route.model === 'fal-h3-max') return hasReferenceMedia ? 'minimax/h3-max/reference-to-video' : 'minimax/h3-max/text-to-video'
 
   if (route.model === 'minimax-h3-max') {
     return (options.imageReferenceCount ?? 0) > 0
@@ -849,6 +867,8 @@ export function estimateVideoProviderCostUsd(options: {
   durationSec: number
   imageCount?: number
   referenceVideoDurationSec?: number
+  referenceImagePixels?: number
+  referenceAudioDurationSec?: number
   resolution?: VideoResolutionInput
   operation?: VideoGenerationOperation
   contentFilter?: boolean
@@ -874,7 +894,11 @@ export function estimateVideoProviderCostUsd(options: {
     : capability.estimatedInputCostUsdPerVideoSecondByResolution?.[route.resolution]
     ?? capability.estimatedInputCostUsdPerVideoSecond
     ?? 0
+  const referenceTokens = normalizedModel === 'fal-h3-max'
+    ? Math.max(0, (options.referenceImagePixels ?? 0) / 1024 + (options.referenceVideoDurationSec ?? 0) * (route.resolution === '480p' ? 2886 : 7459.2) + (options.referenceAudioDurationSec ?? 0) * 80 - 4096)
+    : 0
   const standardCost = options.durationSec * perSecond
+    + referenceTokens * 0.02 / 1000
     + billableImages * (capability.estimatedInputCostUsdPerImage ?? 0)
     + Math.max(0, options.referenceVideoDurationSec ?? 0) * inputVideoPerSecond
   return normalizeVideoModelId(options.model) === 'seedance-2.5' && options.contentFilter === false
@@ -887,6 +911,8 @@ export function estimateVideoCredits(options: {
   durationSec: number
   imageCount?: number
   referenceVideoDurationSec?: number
+  referenceImagePixels?: number
+  referenceAudioDurationSec?: number
   resolution?: VideoResolutionInput
   operation?: VideoGenerationOperation
   contentFilter?: boolean

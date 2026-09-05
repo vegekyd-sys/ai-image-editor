@@ -1914,7 +1914,7 @@ Inputs:
 Generation options:
   --video-model <id>        seedance-fast, seedance-mini, seedance, seedance-2.5,
                             wan-3.0, wan-3.0-prime, kling, grok, google-omni,
-                            minimax-h3, minimax-h3-max, or sync-lipsync-v3.
+                            minimax-h3, minimax-h3-max, fal-h3-max, or sync-lipsync-v3.
   --duration <seconds>      Output duration supported by the selected model.
   --video-resolution <res> auto, 480p, 720p, 768p, 1080p, 2k, or 4k.
   --aspect <ratio>          9:16, 16:9, 1:1, or another supported ratio.
@@ -1929,7 +1929,9 @@ Generation options:
   --help, -h                Show this help.
 
 Recent model choices:
-  minimax-h3-max  H3 Max Turbo faster-than-real-time T2V or one-start-image I2V;
+  fal-h3-max     FAL H3 Max reference-to-video: images, videos and audio;
+                 integer 5–15s, 480p/768p, default 768p. Reference inputs cost extra.
+  minimax-h3-max  fal H3 Turbo faster-than-real-time T2V or one-start-image I2V;
                   5/10/15s; native 768p default or 480p; no video/audio/multi-image references.
   wan-3.0-prime   Faster Wan 3.0 tier; 2-30s; 480p through 4k; multimodal refs.
   wan-3.0         Wan standard tier with the same public duration/resolution range.
@@ -3000,8 +3002,9 @@ if (!command || command === '--help' || command === '-h' || command === 'help') 
       }
       else if (args[i] === '--wait') wait = true;
     }
-    const selectedVideoModel = ['h3 max', 'h3-max', 'h3max', 'h3 max turbo', 'h3-max-turbo', 'h3maxturbo', 'minimax-h3max', 'minimax-h3-max-turbo'].includes(videoModel)
+    const selectedVideoModel = ['fal h3 turbo', 'h3 max', 'h3-max', 'h3max', 'h3 max turbo', 'h3-max-turbo', 'h3maxturbo', 'minimax-h3max', 'minimax-h3-max-turbo'].includes(videoModel)
       ? 'minimax-h3-max'
+      : ['fal h3 max'].includes(videoModel) ? 'fal-h3-max'
       : ['wan3', 'wan3.0', 'wan30', 'wan-3', 'wan3-pro', 'wan3.0-pro', 'wan30-pro', 'wan-3-pro', 'berry-1.0-pro', 'w3.0-video-pro'].includes(videoModel)
       ? 'wan-3.0'
       : ['wan3-prime', 'wan3.0-prime', 'wan30-prime', 'wan-3-prime', 'w3.0-video-prime', 'w3.0-video-prime-pro', 'wan-3.0-prime-pro', 'prime'].includes(videoModel)
@@ -3012,14 +3015,17 @@ if (!command || command === '--help' || command === '-h' || command === 'help') 
     const isSeedanceModel = selectedVideoModel === 'seedance-fast' || selectedVideoModel === 'seedance-mini' || selectedVideoModel === 'seedance' || isSeedance25;
     const isMinimaxH3 = selectedVideoModel === 'minimax-h3';
     const isFalH3Max = selectedVideoModel === 'minimax-h3-max';
+    const isFalReference = selectedVideoModel === 'fal-h3-max';
     const isGrok = selectedVideoModel === 'grok';
     const isGoogleOmni = selectedVideoModel === 'google-omni';
     const isSyncLipsync = selectedVideoModel === 'sync-lipsync-v3';
-    const supportsNativeTextToVideo = isSeedanceModel || isWan30 || isMinimaxH3 || isFalH3Max || isGrok || isGoogleOmni;
+    const supportsNativeTextToVideo = isSeedanceModel || isWan30 || isMinimaxH3 || isFalH3Max || isFalReference || isGrok || isGoogleOmni;
     if (!script || (!images.length && !videos.length && !audios.length && !referenceVoices.length && !supportsNativeTextToVideo)) {
       console.error('Usage: makaron video create --script "..." [--image <url>] [--video <file|url>] [--audio <file|url>] [--duration 30] [--video-model seedance-2.5|wan-3.0|wan-3.0-prime|minimax-h3|minimax-h3-max]');
       process.exit(1);
     }
+    if (isFalReference && (images.length > 9 || videos.length > 3 || audios.length > 3 || images.length + videos.length + audios.length > 12)) { console.error('FAL H3 Max accepts at most 9 images, 3 videos, 3 audios, 12 total.'); process.exit(1); }
+    if (isFalReference && duration != null && (!Number.isInteger(duration) || duration < 5 || duration > 15)) { console.error('FAL H3 Max output duration must be an integer from 5 to 15 seconds.'); process.exit(1); }
     if (isSeedance25 && images.length > 30) { console.error('Seedance 2.5 supports at most 30 image references.'); process.exit(1); }
     if (isSeedance25 && videos.length > 10) { console.error('Seedance 2.5 supports at most 10 video references.'); process.exit(1); }
     if (isSeedance25 && audios.length > 10) { console.error('Seedance 2.5 supports at most 10 audio references.'); process.exit(1); }
@@ -3119,7 +3125,7 @@ if (!command || command === '--help' || command === '-h' || command === 'help') 
       ? { script, images, videoUrls, audioUrls, videoModel: selectedVideoModel, videoResolution }
       : isSeedance25 || isWan30 || isGrok
       ? { script, images, videoUrls, audioUrls, referenceVoiceIds: referenceVoices, videoModel: selectedVideoModel, videoResolution, operation: resolvedOperation, extendDirection, outputFormat, generateAudio, contentFilter, webSearch }
-      : isMinimaxH3
+      : isMinimaxH3 || isFalReference
         ? { script, images, videoUrls, audioUrls, videoModel: selectedVideoModel, videoResolution }
       : isFalH3Max
         ? { script, images, videoModel: selectedVideoModel, videoResolution }
@@ -3131,7 +3137,7 @@ if (!command || command === '--help' || command === '-h' || command === 'help') 
     if (effectiveDuration) vArgs.duration = effectiveDuration;
     if (aspectRatio) vArgs.aspectRatio = aspectRatio;
     if (keepOriginalSound && videoUrls.length && !isSeedance25) vArgs.keepOriginalSound = true;
-    const result = await callMcpTool(baseUrl, headers, videoUrls.length && !isSeedance25 && !isWan30 && !isGrok && !isMinimaxH3 && !isSyncLipsync ? 'makaron_edit_video' : 'makaron_create_video', vArgs);
+    const result = await callMcpTool(baseUrl, headers, videoUrls.length && !isSeedance25 && !isWan30 && !isGrok && !isMinimaxH3 && !isFalReference && !isSyncLipsync ? 'makaron_edit_video' : 'makaron_create_video', vArgs);
     const text = result?.content?.find(c => c.type === 'text')?.text;
     if (text) {
       console.log(text);

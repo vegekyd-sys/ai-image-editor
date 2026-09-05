@@ -1,0 +1,27 @@
+--- SKILL.md
++++ SKILL.md
+@@ -13,7 +13,7 @@
+ 
+ # Card Magic Turbo — 纸牌魔术变身
+ 
+-用户上传一张人物照片，直接由 MiniMax H3 Max Turbo 生成一条 15 秒连续纸牌魔术变身视频。**用户原图直接进入视频模型；禁止生成、编辑或确认任何中间首帧。**
++用户上传一张人物照片，直接由 fal H3 Turbo 生成一条 15 秒连续纸牌魔术变身视频。**用户原图直接进入视频模型；禁止生成、编辑或确认任何中间首帧。**
+ 
+ ## Identity and camera-ready polish
+ 
+@@ -40,10 +40,14 @@
+ 
+ ## Budget and QC
+ 
+-- 单次 MiniMax H3 Max Turbo，15 秒，768p，优先 9:16；不自动付费重试。
++- 单次 fal H3 Turbo，15 秒，768p，优先 9:16；不自动付费重试。
+ - PASS：一镜到底因果链完整；牌型正确；巨牌碎裂触发现代黑色魔术师造型；结尾牌扇推镜；身份稳定、自然上镜。
+ - BLOCKED：无成片、身份明显丢失、牌形错误、硬切、过度美化或错误服装逻辑；通知用户，不自动重跑。
+ 
+ ## Output
+ 
+ - `card_magic_turbo.mp4`
++
++## Video model
++
++Use **fal H3 Turbo**, with `model: "minimax-h3-max"` for `generate_animation` or `--video-model minimax-h3-max` for the CLI. This skill uses one source image as the video start frame.

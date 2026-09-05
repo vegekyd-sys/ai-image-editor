@@ -63,7 +63,7 @@ export default function AnimateSheet({
   const activeUrls = activeSnapshots.map(s => s.imageUrl!);
   const imageCount = activeUrls.length;
   const [quote, setQuote] = useState<{ key: string; credits: number } | null>(null);
-  const quoteKey = JSON.stringify({ model: videoModel, resolution: videoResolution, durationSec: duration, imageCount });
+  const quoteKey = JSON.stringify({ model: videoModel, resolution: videoResolution, durationSec: duration, imageCount, ...(videoModel === 'fal-h3-max' ? { imageUrls: activeUrls } : {}) });
   useEffect(() => {
     if (isDetail || duration == null) return;
     const controller = new AbortController();

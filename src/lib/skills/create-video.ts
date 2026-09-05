@@ -293,7 +293,7 @@ export async function createVideo(input: CreateVideoInput): Promise<CreateVideoR
       message: 'Google Omni stateful extension supports a maximum cumulative duration of 40 seconds.',
     };
   }
-  if (hasAudioReference && route.provider !== 'seedance' && route.provider !== 'mulerouter' && route.provider !== 'minimax' && route.provider !== 'fal-sync') {
+  if (hasAudioReference && route.provider !== 'seedance' && route.provider !== 'mulerouter' && route.provider !== 'minimax' && route.provider !== 'fal-sync' && provider !== 'fal-h3-max') {
     return {
       success: false,
       message: route.provider === 'google-omni'
@@ -387,7 +387,7 @@ export async function createVideo(input: CreateVideoInput): Promise<CreateVideoR
       });
       filteredImages = prepared.images;
       finalPrompt = prepared.prompt;
-    } else if (isWan30) {
+    } else if (isWan30 || provider === 'fal-h3-max') {
       const prepared = prepareWan30References({
         prompt: script,
         images,
@@ -437,11 +437,14 @@ export async function createVideo(input: CreateVideoInput): Promise<CreateVideoR
       operation: videoOperation,
     }) ?? parseTotalDuration(finalPrompt);
 
+    const h3References = provider === 'fal-h3-max'
+      ? await (await import('../h3-reference-preflight')).prepareH3ReferenceMedia(filteredImages, providerVideoUrls, audioUrls || [])
+      : undefined;
     let billingUsage: VideoQuoteInput | undefined;
     if (input.onBeforeProviderSubmit) {
       // Smart output duration is fixed before a billed MCP submission so the
       // provider and the reservation cannot choose different defaults.
-      const durations = resolvedReferenceVideoMetas?.map(meta => meta.durationSec);
+      const durations = h3References?.videos.map(clip => clip.durationSec) ?? resolvedReferenceVideoMetas?.map(meta => meta.durationSec);
       if (providerVideoUrls.length && (!durations || durations.length !== providerVideoUrls.length || durations.some(n => !n || !Number.isFinite(n)))) {
         return { success: false, retryable: false, message: 'Cannot measure reference-video duration for billing. Use a readable MP4/MOV before submitting.' };
       }
@@ -456,6 +459,7 @@ export async function createVideo(input: CreateVideoInput): Promise<CreateVideoR
         durationSec: retainsSource ? sourceSeconds : resolvedDuration,
         imageCount: filteredImages.length, referenceVideoDurationSec: sourceSeconds,
         contentFilter,
+        ...(h3References ? { referenceImagePixels: h3References.referenceImagePixels, referenceVideoDurationSec: h3References.referenceVideoDurationSec, referenceAudioDurationSec: h3References.referenceAudioDurationSec } : {}),
       };
     }
 
@@ -612,6 +616,17 @@ export async function createVideo(input: CreateVideoInput): Promise<CreateVideoR
         providerModel: route.providerModel,
         message: `MiniMax H3 video task created. Task ID: ${taskId}. Use makaron_get_video_status to poll.`,
       };
+    } else if (provider === 'fal-h3-max' && h3References) {
+      const { createFalH3MaxReferenceVideoTask } = await import('../fal-h3-max-reference-video');
+      taskId = await createFalH3MaxReferenceVideoTask({
+        prompt: finalPrompt, images: filteredImages, videos: h3References.videos, audios: h3References.audios,
+        duration: resolvedDuration ?? 5, aspectRatio: providerAspectRatio,
+        resolution: route.resolution as '480p' | '768p', imagesVerified: true,
+        onBeforeSubmit: billingUsage ? () => input.onBeforeProviderSubmit!(billingUsage!) : undefined,
+      });
+      return { success: true, taskId, videoModel: provider,
+        providerModel: resolveVideoProviderModel({ model: provider, imageReferenceCount: filteredImages.length, hasVideoReference }),
+        message: `FAL H3 Max task created. Task ID: ${taskId}. Use makaron_get_video_status to poll.` };
     } else if (route.provider === 'fal-h3-max') {
       if (providerVideoUrls.length > 0 || (audioUrls?.length || 0) > 0) {
         return {
@@ -743,6 +758,8 @@ export async function createVideo(input: CreateVideoInput): Promise<CreateVideoR
       message: `Video rendering task created. Task ID: ${taskId}. Rendering time depends on the selected model. Use makaron_get_video_status to poll.`,
     };
   } catch (e) {
+    const { H3ReferenceInputError } = await import('../h3-reference-preflight');
+    if (e instanceof H3ReferenceInputError) return { success: false, message: e.message, retryable: false, repairable: true, errorCode: e.code, submissionUncertain: false };
     const { ProviderImageInputError } = await import('../provider-image-preflight');
     if (e instanceof ProviderImageInputError) {
       return { success: false, message: e.message, retryable: false, repairable: true, terminal: false, errorCode: e.code, submissionUncertain: false };

@@ -319,7 +319,7 @@ npx makaron-cli analyze --video input.mp4 "describe the key actions and pacing"
 npx makaron-cli video create --script "Shot 1 (5s): <<<image_1>>> ..." --image https://...jpg --duration 5 --video-model kling
 npx makaron-cli video create --script "Shot 1 (15s): <<<image_1>>> and <<<image_2>>> build a neon one-person studio" --image https://...jpg --image https://...webp --duration 15 --video-model seedance-mini --video-resolution 480p --aspect 9:16
 
-# 3b. Native SeeDance, Wan 3.0, MiniMax H3, or H3 Max Turbo text-to-video (no image required)
+# 3b. Native SeeDance, Wan 3.0, MiniMax H3, or fal H3 Turbo text-to-video (no image required)
 npx makaron-cli video create --script "Shot 1 (5s): A neon one-person studio wakes at dawn" --duration 5 --video-model seedance-fast --aspect 16:9
 npx makaron-cli video create --script "Shot 1 (15s): A premium creative editor comes alive" --duration 15 --video-model minimax-h3 --aspect 16:9
 npx makaron-cli video create --script "Shot 1 (5s): A tiny robot runs through a sunlit studio" --duration 5 --video-model minimax-h3-max
@@ -342,7 +342,7 @@ Options for `video create`: `--script "..."`, `--script-file <path>`, `--image <
 
 Provider integration contract: every image passed to video generation is a feature reference by default, even when there is exactly one image. Never infer image-to-video/first-frame mode from image count. The sole current exception is explicitly selected `minimax-h3-max`, whose declared capability maps exactly one selected image to native image-to-video; it does not accept reference video/audio or multiple images.
 
-MiniMax H3 Max Turbo uses the `minimax-h3-max` selector, supports exactly 5/10/15 seconds at 480p/768p, and defaults to native 768p for faster-than-real-time T2V or one-start-image I2V.
+fal H3 Turbo uses the `minimax-h3-max` selector, supports exactly 5/10/15 seconds at 480p/768p, and defaults to native 768p for faster-than-real-time T2V or one-start-image I2V.
 
 Seedance 2.5 uses `--video-model seedance-2.5` and supports 4-30s at 480p/720p, up to 30 images + 10 videos + 10 audios, repeatable local/URL references, `--video-operation generate|edit|extend`, `--extend-direction`, `--output-format mp4|mov`, and `--web-search`. The Evolink route does not currently expose 4K output.
 
@@ -488,3 +488,5 @@ send_message "All done!"
 - stdout is always machine-readable JSON/text. Human-friendly logs go to stderr.
 - Always use `chat` as the primary interface — even for single image edits.
 - `edit`/`video`/`music` are fallback tools for when `chat` is unavailable or you need raw model access without project context.
+
+FAL video models: **fal H3 Turbo** uses `minimax-h3-max` for single-start-frame I2V/T2V. **FAL H3 Max** uses the new selector `fal-h3-max`: native T2V or image/video/audio reference-to-video, default 768p, optional 480p, integer 5–15s; at most 9 images / 3 videos / 3 audios / 12 total. Reference video/audio each 2–15s and each modality totals at most 15s. Source-video modifications use generation with feature references, not typed edit/extend. Reference input tokens are billed in addition to output video; query current pricing.

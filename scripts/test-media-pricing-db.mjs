@@ -1,7 +1,7 @@
 // Isolated PostgreSQL/WASM test. No environment files, remote DB or user data.
 // PGLITE_MODULE=/absolute/path/to/@electric-sql/pglite/dist/index.js node scripts/test-media-pricing-db.mjs
 import assert from 'node:assert/strict'
-import { readFileSync } from 'node:fs'
+import { readFileSync, readdirSync } from 'node:fs'
 import { pathToFileURL } from 'node:url'
 
 if (!process.env.PGLITE_MODULE) throw new Error('Set PGLITE_MODULE to an installed PGlite module path.')
@@ -29,6 +29,12 @@ await db.exec(originalBilling.slice(0, originalBilling.indexOf('-- Marking a fai
 await db.exec(readFileSync('supabase/migrations/20260903113857_media_pricing_catalog.sql','utf8'))
 const count = await db.query('SELECT count(*)::int AS n FROM media_pricing')
 assert.equal(count.rows[0].n, 65)
+const beforeTariffs = (await db.query('SELECT id,output_usd_per_second,markup FROM media_pricing ORDER BY id')).rows
+const referenceMigration = readdirSync('supabase/migrations').find(file => file.endsWith('_h3_max_reference_token_pricing.sql'))
+await db.exec(readFileSync('supabase/migrations/' + referenceMigration, 'utf8'))
+assert.equal((await db.query('SELECT count(*)::int AS n FROM media_pricing')).rows[0].n, 67)
+assert.deepEqual((await db.query("SELECT id,output_usd_per_second,markup FROM media_pricing WHERE model_id <> 'fal-h3-max' ORDER BY id")).rows, beforeTariffs)
+assert.equal(Number((await db.query("SELECT input_tokens_per_video_second AS n FROM media_pricing WHERE id='video:fal-h3-max:768p:generate'")).rows[0].n),7459.2)
 assert.equal((await db.query('SELECT count(*)::int AS n FROM token_rates')).rows[0].n,10)
 assert.equal((await db.query("SELECT credits FROM credit_pricing WHERE tool_name='edit_image_openai'")).rows[0].credits,20)
 await db.exec('SET ROLE service_role')
@@ -75,4 +81,4 @@ await db.exec('RESET ROLE')
 const insecure = await db.query("SELECT proname FROM pg_proc WHERE proname IN ('reserve_mcp_video','finish_mcp_video_submission','settle_mcp_video') AND prosecdef")
 assert.equal(insecure.rows.length,0)
 await db.close()
-console.log('PASS: 65 tariffs; atomic no-overdraft reservation; idempotent replay/refund; owner isolation; terminal-state monotonicity; service-only table/RPC access.')
+console.log('PASS: 67 tariffs including pooled reference tokens; atomic no-overdraft reservation; idempotent replay/refund; owner isolation; terminal-state monotonicity; service-only table/RPC access.')
