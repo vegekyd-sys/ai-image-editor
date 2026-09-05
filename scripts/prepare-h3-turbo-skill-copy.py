@@ -20,7 +20,7 @@ for url,entries in groups.items():
     if info.filename.endswith('SKILL.md'):
      new=new.rstrip()+'\n\n## Video model\n\nUse **fal H3 Turbo**, with `model: "minimax-h3-max"` for `generate_animation` or `--video-model minimax-h3-max` for the CLI. This skill uses one source image as the video start frame.\n'
     if new!=old:
-     changes.append({'file':info.filename,'diff':''.join(difflib.unified_diff(old.splitlines(True),new.splitlines(True),fromfile=info.filename,tofile=info.filename))})
+     changes.append({'file':info.filename,'diff':''.join(difflib.unified_diff(old.splitlines(True),new.splitlines(True),fromfile=info.filename,tofile=info.filename,n=0))})
      payload=new.encode()
      if info.filename.endswith('SKILL.md'): (dest/'SKILL.md').write_bytes(payload)
    out.writestr(info,payload)

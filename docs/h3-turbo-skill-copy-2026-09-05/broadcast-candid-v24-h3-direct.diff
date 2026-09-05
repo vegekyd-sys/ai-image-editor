@@ -1,66 +1,29 @@
 --- SKILL.md
 +++ SKILL.md
-@@ -13,13 +13,13 @@
- 
- # Broadcast Candid — 体育转播抓拍（v24 H3 直连版）
- 
+@@ -16 +16 @@
 -用户上传自拍，**全程零交互**生成 KBO 棒球直播中被转播摄像机意外捕捉的观众画面。长焦压缩感、转播比分条 UI、MiniMax H3 Max Turbo 直接图生视频——一步到位。
 +用户上传自拍，**全程零交互**生成 KBO 棒球直播中被转播摄像机意外捕捉的观众画面。长焦压缩感、转播比分条 UI、fal H3 Turbo 直接图生视频——一步到位。
- 
- **🚨 零确认规则：** 收到照片立即执行全部步骤，不问任何问题。全自动从自拍到视频交付。
- 
- **⚡ 极速执行规则（v19）：** 全程只做一个工具调用——以用户照片为唯一首帧，直接 generate_animation 生成视频。不创建关键帧或中间文件（不写 prompt_used.md / plan.json / qc_report.md），不做任何额外视觉分析，不等待确认。生成后按下方 QC 规则快速判定（PASS 直接交付，REROLL 才重试），全程零交互。
- 
+@@ -22 +22 @@
 -Pipeline: 随机变量 → generate_animation(MiniMax H3 Max Turbo，以用户照片直接图生视频，10s) → QC → 交付
 +Pipeline: 随机变量 → generate_animation(fal H3 Turbo，以用户照片直接图生视频，10s) → QC → 交付
- 
- **v19 优化说明：** 取消中间关键帧生成，将原先的画面、身份保持、构图和转播 UI 要求一并放入视频提示词。全流程只保留一次图生视频调用，目标端到端时长约 40 秒。
- 
-@@ -66,8 +66,8 @@
- 
- | 轮次 | 模型 | 用途 |
- |:-----:|-------|------|
+@@ -69,2 +69,2 @@
 -| 1 | minimax-h3-max | H3 Max Turbo 直接图生视频（10s，768p） |
 -| 2 | seedance-mini | 视频降级（H3 Max Turbo 失败时） |
 +| 1 | minimax-h3-max | fal H3 Turbo 直接图生视频（10s，768p） |
 +| 2 | seedance-mini | 视频降级（fal H3 Turbo 失败时） |
- 
- - 最多图片：0 张（不生成中间关键帧）
- - 最多视频：1 个（含 1 次降级）
-@@ -129,7 +129,7 @@
- 
- ```
- Step 1 — Randomize variables (A/C/D/E) + fill prompt
+@@ -132 +132 @@
 -Step 2 — generate_animation (MiniMax H3 Max Turbo, directly from person_photo)
 +Step 2 — generate_animation (fal H3 Turbo, directly from person_photo)
- Step 3 — QC → Deliver
- ```
- 
-@@ -140,17 +140,17 @@
- - 填入 Prompt Template
- - **禁止翻译、改写、增删任何段落**
- 
+@@ -143 +143 @@
 -### Step 2 — 生成 MiniMax H3 Max Turbo 直接图生视频
 +### Step 2 — 生成 fal H3 Turbo 直接图生视频
- 
- **工具：generate_animation**
+@@ -146 +146 @@
 -- `model`: `"minimax-h3-max"` —— H3 Max Turbo 主模型
 +- `model`: `"minimax-h3-max"` —— fal H3 Turbo 主模型
- - `image`: `person_photo`（唯一首帧；禁止先生成或编辑中间图片）
- - `story_prompt`: 合并后的“画面需求 + 视频提示词”（从下方模板逐字填入）；包括完整的 BROADCAST UI OVERLAY 规则。画面需求必须完整置于运动指令之前，禁止缩写、改写、删减或新增任何原有 Prompt 要求。
- - `duration`: `10`（秒，默认）
- - `resolution`: `"768p"`
- - `aspect_ratio`: 默认首选 `"16:9"`，必须显式传入。若所选模型的图生视频能力只支持某些画幅、或锁定上传首帧比例，则以模型实际支持并返回的比例为准；不得强行裁切、拉伸或因未返回 16:9 而判失败。
- 
+@@ -153 +153 @@
 -MiniMax H3 Max Turbo 失败 → 降级 `model: "seedance-mini"`，同参数重试。再失败 → BLOCKED。
 +fal H3 Turbo 失败 → 降级 `model: "seedance-mini"`，同参数重试。再失败 → BLOCKED。
- 
- ### Step 3 — QC → 交付
- 
-@@ -260,3 +260,7 @@
- 
- - 主角不戴帽子、头盔、发箍或遮挡头发的配饰；保留原始发型。背景观众仅可零星戴球队帽，不得形成统一帽群。
- - 0–1 秒忠实保留输入人物近景；1–2 秒平滑拉远至头到膝盖的自然坐姿；2–10 秒保持中全景与可见双腿。KBO 看台、座位、匿名观众和部分绿色球场持续可见。
+@@ -262,0 +263,4 @@
 +
 +## Video model
 +

@@ -1,23 +1,12 @@
 --- SKILL.md
 +++ SKILL.md
-@@ -14,7 +14,7 @@
- 
- # Street Paparazzi Turbo v2
- 
+@@ -17 +17 @@
 -Use exactly one portrait as the identity and wardrobe source. Generate one direct H3 Max Turbo video only: no intermediate image, storyboard, separate music asset, overlay, or second render. Use native audio.
 +Use exactly one portrait as the identity and wardrobe source. Generate one direct fal H3 Turbo video only: no intermediate image, storyboard, separate music asset, overlay, or second render. Use native audio.
- 
- ## Duration modes
- - `5s`: one explosive direct-flash hero reveal.
-@@ -39,7 +39,11 @@
- - `15s`: 0–4s confident night-street arrival; 4–8s escalating flashes from left/right/front; 8–11s modest 180-degree arc while the subject holds control; 11–14s close direct gaze and a slight head turn; 14–15s hold a crisp, normally exposed full-face icon pose with two restrained edge flashes—never a white screen or overexposed face.
- 
- ## Render
+@@ -42 +42 @@
 -Call once with MiniMax H3 Max Turbo, one source image, 9:16, 768p, generated audio enabled, and requested duration. No automatic paid retry.
 +Call once with fal H3 Turbo, one source image, 9:16, 768p, generated audio enabled, and requested duration. No automatic paid retry.
- 
- ## QC
- Identity/outfit preserved; cold gritty direct-flash style; final face/outfit clearly exposed; no white-out or overexposure at end; no text/UI/watermark; no distorted hands or duplicate subject; duration matches selected mode.
+@@ -45,0 +46,4 @@
 +
 +## Video model
 +

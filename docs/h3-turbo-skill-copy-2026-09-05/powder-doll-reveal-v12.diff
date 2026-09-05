@@ -1,18 +1,9 @@
 --- SKILL.md
 +++ SKILL.md
-@@ -12,7 +12,7 @@
- 
- # 粉雕 BJD 玩偶 Turbo
- 
+@@ -15 +15 @@
 -One portrait in, one direct MiniMax H3 Max video out. No intermediate image, storyboard, cover, separate music asset, overlay, or second video. Use native instrumental BGM in the same render.
 +One portrait in, one direct fal H3 Turbo video out. No intermediate image, storyboard, cover, separate music asset, overlay, or second video. Use native instrumental BGM in the same render.
- 
- ## Opening and reveal rules
- 
-@@ -64,3 +64,7 @@
- - Final BJD is full-body, mature, and preserves the source anchors.
- - Final gloves lift and present without occlusion or anatomy defects.
- - BGM is gentle instrumental; output has no text, watermark, UI, logo or subtitle.
+@@ -66,0 +67,4 @@
 +
 +## Video model
 +

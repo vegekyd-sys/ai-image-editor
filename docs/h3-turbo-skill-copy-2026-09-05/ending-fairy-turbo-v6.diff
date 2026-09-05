@@ -1,17 +1,9 @@
 --- SKILL.md
 +++ SKILL.md
-@@ -1,6 +1,6 @@
- ---
- name: ending-fairy-turbo
+@@ -3 +3 @@
 -description: Analyze one person's portrait and tailor their stage styling and ending-fairy performance, then generate one identity-faithful 10-second video with MiniMax H3 Max Turbo.
 +description: Analyze one person's portrait and tailor their stage styling and ending-fairy performance, then generate one identity-faithful 10-second video with fal H3 Turbo.
- metadata:
-   makaron:
-     modelPreference: [minimax-h3-max]
-@@ -49,3 +49,7 @@
- The finished video is the deliverable; a submitted job is not completion. Let Makaron show the playable result and persist it normally. Judge the output against the actual source: facial proportions and distinctive hair/pose intact, a clearly changed suitable stage costume, post-performance breathing → small smile → heart → gaze, no deformed hands, face unobscured, complete stable broadcast graphics. Report observed defects honestly. Never call a changed face a pass, infer QC from success status, or automatically retry a paid generation. Further generations follow a user request. A 30-second total is a speed target, not a guarantee; do not trade away likeness or skip the person analysis to claim it.
- 
- QA fixture only: original marketplace `before_images[0]` is https://cdn.makaron.app/storage/v1/object/public/images/skills/ending-fairy/before.png . Use it for controlled tests only; never substitute it for a user's supplied portrait.
+@@ -51,0 +52,4 @@
 +
 +## Video model
 +

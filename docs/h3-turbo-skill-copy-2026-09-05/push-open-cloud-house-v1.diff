@@ -1,59 +1,26 @@
 --- SKILL.md
 +++ SKILL.md
-@@ -8,7 +8,7 @@
-     tags: [retro-surreal, one-image-video, miniature-house, scale-contrast, vertical-mv]
-     faceProtection: default
-     defaultAspectRatio: "9:16"
+@@ -11 +11 @@
 -    models: [minimax-h3-max-turbo, seedance-2.0, seedance-fast]
 +    models: [minimax-h3-max, seedance-2.0, seedance-fast]
- ---
- 
- # Push Open the Cloud House
-@@ -17,11 +17,11 @@
- 
- Turn **one authorized adult portrait or fashion photo** into one complete vertical retro-surreal MV clip. The uploaded person remains recognizable while becoming a giant outside a tiny pastel vintage room: they open its window, the camera pulls through clouds to discover the room is inside a bow-tied house in their hand, then enters a second window for a cake-and-candle ending.
- 
+@@ -20 +20 @@
 -The default is deliberately one-step: do not create an OpenAI first frame, a storyboard, or separately rendered clips. Generate one finished video from the uploaded image in one bound Makaron project with **MiniMax H3 Max Turbo, 768p**.
 +The default is deliberately one-step: do not create an OpenAI first frame, a storyboard, or separately rendered clips. Generate one finished video from the uploaded image in one bound Makaron project with **fal H3 Turbo, 768p**.
- 
- ## Default output
- 
+@@ -24 +24 @@
 -- **Model:** MiniMax H3 Max Turbo, 768p.
 +- **Model:** fal H3 Turbo, 768p.
- - **Format:** vertical 9:16 MP4, 10 seconds by default, never over 15 seconds.
- - **Input:** exactly one primary image. The image is the sole visual identity source.
- - **Run shape:** one video-model render with motivated internal camera transitions; never stitch scene clips externally.
-@@ -100,8 +100,8 @@
- 
- | Round | Model | When to use |
- |:--:|---|---|
+@@ -103,2 +103,2 @@
 -| 1 | MiniMax H3 Max Turbo, 768p | Default one-step render. |
 -| 2 | MiniMax H3 Max Turbo, 768p | One focused reroll only when `allow_reroll: true` and QC finds a repairable visual defect. |
 +| 1 | fal H3 Turbo, 768p | Default one-step render. |
 +| 2 | fal H3 Turbo, 768p | One focused reroll only when `allow_reroll: true` and QC finds a repairable visual defect. |
- | 3 | Seedance Fast | Only when `allow_fallback: true`, MiniMax is unavailable/failed, and the user accepts the fallback. |
- 
- If an authorized round cannot start because of credits, project access, or provider failure, report the exact condition. If all authorized rounds fail, mark **BLOCKED** and do not claim a final video exists.
-@@ -151,7 +151,7 @@
- ## Locked English video prompt template
- 
- ```text
+@@ -154 +154 @@
 -Render the actual video now with MiniMax H3 Max Turbo at 768p. Use <<<image_1>>> as the sole visual identity source for one recognizable authorized adult subject. Generate one complete {duration_seconds}-second vertical 9:16 retro-surreal music-video render. Do not return a plan, a storyboard, separate clips, an image, or external edits.
 +Render the actual video now with fal H3 Turbo at 768p. Use <<<image_1>>> as the sole visual identity source for one recognizable authorized adult subject. Generate one complete {duration_seconds}-second vertical 9:16 retro-surreal music-video render. Do not return a plan, a storyboard, separate clips, an image, or external edits.
- 
- IDENTITY: Preserve the subject’s adult face, gender presentation, skin tone, and hair silhouette from <<<image_1>>>. Apply this original non-sexualized retro styling: {subject_styling}. Never resemble a celebrity, named artist, or known group member.
- 
-@@ -183,9 +183,13 @@
- 
- - [ ] YAML parses; no API key, token, or credential is stored.
- - [ ] Exactly one required user upload is enough for the default run.
+@@ -186 +186 @@
 -- [ ] Default is MiniMax H3 Max Turbo, 768p, 9:16, 10 seconds, one video render.
 +- [ ] Default is fal H3 Turbo, 768p, 9:16, 10 seconds, one video render.
- - [ ] No OpenAI first-frame step, storyboard, separate scene render, or external stitch is introduced by default.
- - [ ] One persistent Makaron project is explicitly bound; no `--project auto` or standalone video call is used.
- - [ ] The fixed six-beat causal geography and empty held-house rule are in plan, prompt, and QC.
- - [ ] Adult identity is preserved for all gender presentations without celebrity imitation or sexualization.
- - [ ] Budget, safety, optional reference-video analysis, prompt template, QC outcomes, and output package are present.
+@@ -191,0 +192,4 @@
 +
 +## Video model
 +
