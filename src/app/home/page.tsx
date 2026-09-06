@@ -2294,7 +2294,65 @@ function HomePageInner() {
           </nav>
           <div className="creative-account"><TopBar page="home" authReturnPath={activeSkill?.id ? `/home/${activeSkill.id}` : null} /></div>
         </header>
-        <HomeCreativeHero skills={homeSkills} paused={motionPaused} suspended={!!selectedDetail || showAgentLanding} onSelect={handleSkillCardClick} />
+        <HomeCreativeHero skills={homeSkills} paused={motionPaused} suspended={!!selectedDetail || showAgentLanding} onSelect={handleSkillCardClick}>
+          {/* ── Inline Input Box ── */}
+          <div ref={inlineInputRef} data-makaron-home-inline-composer="true" className="relative z-10" style={{
+            marginTop: '32px', width: '100%', maxWidth: '500px', padding: '0 16px',
+            ...(isIOSAppShell && showFixedInput && !selectedDetail ? { opacity: 0, pointerEvents: 'none' as const } : {}),
+          }}>
+            <CreateInputBox
+              input={createInput}
+              slotWidth={inlineBoxHeight > 0 ? inlineBoxHeight : 52}
+              isInline={true}
+              collapseSlot={isGuestSkillAction}
+              isDesktop={isDesktop}
+              boxRef={inlineBoxRef}
+              textareaRef={inlineTextareaRef}
+              swipeRef={inlineCardSwipeRef}
+              placeholder={placeholders[placeholderIdx]}
+              createLabel={skillActionCreateLabel}
+              actionMode={isGuestSkillAction}
+              actionEyebrow={isPreAuthIOSSkillAction ? t('home.firstFree') : isGuestSkillAction ? t('home.previewFree') : undefined}
+              actionTitle={skillActionTitle}
+              actionSubtitle={skillActionSubtitle}
+              actionMeta={skillActionMeta || undefined}
+              actionIdleNote={isPreAuthIOSSkillAction ? t('home.trialGiftNote') : t('home.photosNeeded', formatPhotoCount(requiredPhotoCount))}
+              actionSelectedNote={hasEnoughPhotos
+                ? t('home.previewReady')
+                : t('home.morePhotosNeeded', formatPhotoCount(remainingPhotoCount))}
+              showLoginIcon={!renderUser}
+              submitWhenEmpty={shouldLoginOnEmptyCreate}
+              fallbackHref={shouldLoginOnEmptyCreate && !isPreAuthIOSGuest ? '/login' : undefined}
+              onSubmit={handleCreateOrUpload}
+              onSlotClick={handleInputSlotClick}
+              onFilesSelected={(files) => handleCreateFilesSelected(files, 'file_input')}
+              onTextareaFocus={keepSkillComposerAboveKeyboard}
+              onTextareaBlur={handleHomeTextareaBlur}
+              skills={availableSkills}
+              selectedSkill={selectedSkill}
+              onSkillChange={setSelectedSkill}
+              agentModel={createAgentModel}
+              onAgentModelChange={handleCreateAgentModelChange}
+              onDeleteSkill={(name) => {
+                setAvailableSkills(prev => {
+                  const next = prev.filter(s => s.name !== name)
+                  writeNativeJSONCache('/api/skills', { skills: next })
+                  return next
+                })
+                fetch('/api/skills', { method: 'DELETE', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ name }) }).catch(() => {})
+              }}
+              onUploadSkill={() => skillFileRef.current?.click()}
+              installingSkill={installingSkill}
+              overrideLabel={selectedSkill ? (availableSkills.find(s => s.name === selectedSkill)?.label || pickLocalizedValue(homeSkills.find(s => s.id === selectedSkill)?.labels, locale) || null) : null}
+              skillDirection="down"
+              dragOver={dragOver}
+              onDragEnter={(e) => { e.preventDefault(); dragCounterRef.current++; setDragOver(true) }}
+              onDragOver={(e) => { e.preventDefault(); e.dataTransfer.dropEffect = 'copy' }}
+              onDragLeave={(e) => { e.preventDefault(); dragCounterRef.current--; if (dragCounterRef.current <= 0) { dragCounterRef.current = 0; setDragOver(false) } }}
+              onDrop={handleDrop}
+            />
+          </div>
+        </HomeCreativeHero>
         <HomeCreativeRibbon paused={motionPaused} onToggle={() => setMotionPaused(value => !value)} />
 
         {/* ── Skill Template Grid ── */}
@@ -2445,68 +2503,12 @@ function HomePageInner() {
 
         </div>
 
-        <div className="creative-create" id="create">
+        <div className="creative-create">
           <div className="creative-create-copy">
             <h2>{t('homeDesign.createTitle1')}<br />{t('homeDesign.createTitle2')}</h2>
             <p>{t('homeDesign.createDescription')}</p>
           </div>
-          {/* ── Inline Input Box ── */}
-          <div ref={inlineInputRef} data-makaron-home-inline-composer="true" className="relative z-10" style={{
-            marginTop: '32px', width: '100%', maxWidth: '500px', padding: '0 16px',
-            ...(isIOSAppShell && showFixedInput && !selectedDetail ? { opacity: 0, pointerEvents: 'none' as const } : {}),
-          }}>
-            <CreateInputBox
-              input={createInput}
-              slotWidth={inlineBoxHeight > 0 ? inlineBoxHeight : 52}
-              isInline={true}
-              collapseSlot={isGuestSkillAction}
-              isDesktop={isDesktop}
-              boxRef={inlineBoxRef}
-              textareaRef={inlineTextareaRef}
-              swipeRef={inlineCardSwipeRef}
-              placeholder={placeholders[placeholderIdx]}
-              createLabel={skillActionCreateLabel}
-              actionMode={isGuestSkillAction}
-              actionEyebrow={isPreAuthIOSSkillAction ? t('home.firstFree') : isGuestSkillAction ? t('home.previewFree') : undefined}
-              actionTitle={skillActionTitle}
-              actionSubtitle={skillActionSubtitle}
-              actionMeta={skillActionMeta || undefined}
-              actionIdleNote={isPreAuthIOSSkillAction ? t('home.trialGiftNote') : t('home.photosNeeded', formatPhotoCount(requiredPhotoCount))}
-              actionSelectedNote={hasEnoughPhotos
-                ? t('home.previewReady')
-                : t('home.morePhotosNeeded', formatPhotoCount(remainingPhotoCount))}
-              showLoginIcon={!renderUser}
-              submitWhenEmpty={shouldLoginOnEmptyCreate}
-              fallbackHref={shouldLoginOnEmptyCreate && !isPreAuthIOSGuest ? '/login' : undefined}
-              onSubmit={handleCreateOrUpload}
-              onSlotClick={handleInputSlotClick}
-              onFilesSelected={(files) => handleCreateFilesSelected(files, 'file_input')}
-              onTextareaFocus={keepSkillComposerAboveKeyboard}
-              onTextareaBlur={handleHomeTextareaBlur}
-              skills={availableSkills}
-              selectedSkill={selectedSkill}
-              onSkillChange={setSelectedSkill}
-              agentModel={createAgentModel}
-              onAgentModelChange={handleCreateAgentModelChange}
-              onDeleteSkill={(name) => {
-                setAvailableSkills(prev => {
-                  const next = prev.filter(s => s.name !== name)
-                  writeNativeJSONCache('/api/skills', { skills: next })
-                  return next
-                })
-                fetch('/api/skills', { method: 'DELETE', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ name }) }).catch(() => {})
-              }}
-              onUploadSkill={() => skillFileRef.current?.click()}
-              installingSkill={installingSkill}
-              overrideLabel={selectedSkill ? (availableSkills.find(s => s.name === selectedSkill)?.label || pickLocalizedValue(homeSkills.find(s => s.id === selectedSkill)?.labels, locale) || null) : null}
-              skillDirection="down"
-              dragOver={dragOver}
-              onDragEnter={(e) => { e.preventDefault(); dragCounterRef.current++; setDragOver(true) }}
-              onDragOver={(e) => { e.preventDefault(); e.dataTransfer.dropEffect = 'copy' }}
-              onDragLeave={(e) => { e.preventDefault(); dragCounterRef.current--; if (dragCounterRef.current <= 0) { dragCounterRef.current = 0; setDragOver(false) } }}
-              onDrop={handleDrop}
-            />
-          </div>
+          <a className="creative-primary" href="#create">{t('homeDesign.create')}<span aria-hidden="true">↗</span></a>
         </div>
 
         <HomeCreativeFooter />

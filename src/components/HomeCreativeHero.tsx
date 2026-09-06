@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useRef, useState, type MouseEvent } from 'react'
+import { useEffect, useRef, useState, type MouseEvent, type ReactNode } from 'react'
 import { pickLocalizedValue, useLocale } from '@/lib/i18n'
 import type { HomeSkill } from '@/lib/home-skills'
 import { LazyVideo } from '@/components/HomeSkillMedia'
@@ -29,7 +29,8 @@ export function useHomeMotion() {
   return { paused, setPaused }
 }
 
-export default function HomeCreativeHero({ skills, paused, suspended, onSelect }: {
+export default function HomeCreativeHero({ skills, paused, suspended, onSelect, children }: {
+  children: ReactNode
   skills: HomeSkill[]
   paused: boolean
   suspended: boolean
@@ -75,10 +76,12 @@ export default function HomeCreativeHero({ skills, paused, suspended, onSelect }
         ))}
       </div>
       <div className="creative-hero-copy">
-        <h1 id="creative-hero-title"><span>{t('homeDesign.title1')}</span><span>{t('homeDesign.title2')}</span></h1>
-        <p>{t('homeDesign.description1')}<br />{t('homeDesign.description2')}</p>
+        <div className="creative-hero-intro">
+          <h1 id="creative-hero-title"><span>{t('homeDesign.title1')}</span><span>{t('homeDesign.title2')}</span></h1>
+          <p>{t('homeDesign.description1')}<br />{t('homeDesign.description2')}</p>
+        </div>
+        <div className="creative-hero-composer" id="create">{children}</div>
         <div className="creative-actions">
-          <a className="creative-primary" href="#create">{t('homeDesign.create')}<span aria-hidden="true">↗</span></a>
           <a className="creative-text-link" href="#templates">{t('homeDesign.explore')}<span aria-hidden="true">↓</span></a>
         </div>
       </div>
