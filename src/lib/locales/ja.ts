@@ -1,6 +1,31 @@
-import type { TranslationDictionary } from './index';
+import type {  TranslationDictionary } from './index';
 
 const ja = {
+  'homeDesign.brandTagline': 'one man studio',
+  'homeDesign.title1': "ひとりから、",
+  'homeDesign.title2': "広がる創造の宇宙。",
+  'homeDesign.description1': "ひとことで、画像も動画も音楽も。",
+  'homeDesign.description2': "最初のひらめきから完成まで、Makaronと。",
+  'homeDesign.create': "創作を始める",
+  'homeDesign.explore': "テンプレートを見る",
+  'homeDesign.ribbon': "想像は、待てない。",
+  'homeDesign.pause': "動きを止める",
+  'homeDesign.resume': "動きを再生",
+  'homeDesign.product': "プロダクト",
+  'homeDesign.templates': "テンプレート",
+  'homeDesign.home': "ホーム",
+  'homeDesign.navigation': "メインナビゲーション",
+  'homeDesign.galleryTitle': "好きな作品から始めよう。",
+  'homeDesign.galleryDescription': "テンプレートを選び、写真を追加。次の作品は、あなたのもの。",
+  'homeDesign.more': "もっとテンプレートを見る",
+  'homeDesign.createTitle1': "ひらめきは、あなた。",
+  'homeDesign.createTitle2': "あとはMakaronに。",
+  'homeDesign.createDescription': "画像生成、写真のレタッチ、動画制作、ポスターのデザイン、音楽作り。アイデアをMakaronに伝え、会話しながら作品にしていこう。",
+  'homeDesign.footer1': "次の作品は、",
+  'homeDesign.footer2': "ひとつの想いから。",
+  'homeDesign.privacy': "プライバシーポリシー",
+  'homeDesign.openTemplate': (name: string) => `テンプレートを開く：${name}`,
+
   'admin.corePrompt.title': "階層型 Core Prompt",
   'admin.corePrompt.layered': "オン：新しい階層型の処理",
   'admin.corePrompt.legacy': "オフ：従来の処理全体",

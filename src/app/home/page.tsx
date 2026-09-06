@@ -23,7 +23,8 @@ import {
 import { extractPhotoMetadata } from '@/lib/image/metadata'
 import type { PhotoMetadata } from '@/types'
 import { createMetaEventId, trackMetaEvent } from '@/lib/marketing/meta-pixel'
-import RollingTagline from '@/components/RollingTagline'
+import HomeCreativeHero, { HomeCreativeRibbon, HomeCreativeFooter, useHomeMotion } from '@/components/HomeCreativeHero'
+import './creative-home.css'
 import TopBar from '@/components/TopBar'
 import ModeToggle from '@/components/ModeToggle'
 import AgentContent from '@/components/AgentContent'
@@ -77,8 +78,8 @@ const IOS_SKILL_BACK_COMMIT_PX = 88
 const IOS_SKILL_BACK_CLOSE_MS = 180
 const IOS_RESET_HOME_SCROLL_KEY = 'makaron:ios-reset-home-scroll'
 const IOS_PENDING_HOME_SKILL_KEY = 'makaron:ios-pending-home-skill-id'
-const INITIAL_SKILL_CARD_COUNT = 12
-const SKILL_CARD_BATCH_SIZE = 12
+const INITIAL_SKILL_CARD_COUNT = 8
+const SKILL_CARD_BATCH_SIZE = 8
 
 function getHomeScrollContainer(node: HTMLElement | null): HTMLElement | null {
   if (!node) return null
@@ -99,6 +100,7 @@ export default function HomePage() {
 }
 
 function HomePageInner() {
+  const { paused: motionPaused, setPaused: setMotionPaused } = useHomeMotion()
   const { user, loading: authLoading } = useAuth()
   const hydrated = useHydrated()
   const renderUser = hydrated ? user : null
@@ -137,7 +139,6 @@ function HomePageInner() {
   const [activeCategory, setActiveCategory] = useState('all')
   const [categoryHasChanged, setCategoryHasChanged] = useState(false)
   const [visibleSkillCount, setVisibleSkillCount] = useState(INITIAL_SKILL_CARD_COUNT)
-  const skillLoadMoreRef = useRef<HTMLDivElement>(null)
   const skillSectionRef = useRef<HTMLDivElement>(null)
   const skillGridRef = useRef<HTMLDivElement>(null)
   const categoryScrollRef = useRef<HTMLDivElement>(null)
@@ -926,23 +927,6 @@ function HomePageInner() {
       controller.abort()
     }
   }, [])
-
-  useEffect(() => {
-    const sentinel = skillLoadMoreRef.current
-    if (!sentinel || visibleSkillCount >= filteredHomeSkills.length) return
-    if (typeof IntersectionObserver === 'undefined') {
-      startTransition(() => setVisibleSkillCount(filteredHomeSkills.length))
-      return
-    }
-    const observer = new IntersectionObserver(([entry]) => {
-      if (!entry.isIntersecting) return
-      startTransition(() => {
-        setVisibleSkillCount(count => Math.min(count + SKILL_CARD_BATCH_SIZE, filteredHomeSkills.length))
-      })
-    }, { rootMargin: '200px 0px' })
-    observer.observe(sentinel)
-    return () => observer.disconnect()
-  }, [filteredHomeSkills.length, visibleSkillCount])
 
   // Preload user's installed skills
   const skillsFetchedRef = useRef(false)
@@ -2025,7 +2009,7 @@ function HomePageInner() {
     const style: React.CSSProperties = { position: 'absolute', inset: 0, width: '100%', height: '100%', objectFit: variant === 'detail' ? 'contain' : 'cover', ...(variant === 'detail' ? { objectPosition: 'center 30%' } : {}), pointerEvents: 'none', ...opts?.extraStyle }
     if (isVideoUrl(url)) {
       if (variant === 'thumb') {
-        return <LazyVideo src={normalizeDomain(url)} style={style} fallbackSrc={opts?.fallbackSrc} eager={opts?.priority} suspended={opts?.suspended} />
+        return <LazyVideo src={normalizeDomain(url)} style={style} fallbackSrc={opts?.fallbackSrc} eager={opts?.priority} suspended={opts?.suspended} paused={motionPaused} />
       }
       return <SkillVideo src={normalizeDomain(url)} style={style} eager={opts?.priority} active={opts?.active ?? true} />
     }
@@ -2063,7 +2047,10 @@ function HomePageInner() {
     setSelectedDetail(template)
     setSelectedSkill(template.skill_path ? template.id : null)
     applyLocalizedSkillPrompt(template)
-    const idx = filteredHomeSkills.findIndex(t => t.id === template.id)
+    const visibleInCategory = filteredHomeSkills.some(skill => skill.id === template.id)
+    if (!visibleInCategory) setActiveCategory('all')
+    const detailSkills = visibleInCategory ? filteredHomeSkills : homeSkills
+    const idx = detailSkills.findIndex(t => t.id === template.id)
     requestAnimationFrame(() => {
       setHeroExpanded(true)
       // Position to the clicked slide via JS transform (no scroll-snap)
@@ -2282,7 +2269,7 @@ function HomePageInner() {
         .hide-scrollbar::-webkit-scrollbar { display: none; }
       `}</style>
 
-      <div className="mkr-page" style={{ minHeight: '100dvh', background: '#000', color: '#fff', overflowX: 'hidden', display: 'flex', flexDirection: 'column' }}>
+      <div className="mkr-page creative-home" data-motion-paused={motionPaused} style={{ minHeight: '100dvh', background: '#000', color: '#fff', overflowX: 'hidden', display: 'flex', flexDirection: 'column' }}>
         <input
           ref={skillFileRef}
           type="file"
@@ -2295,42 +2282,177 @@ function HomePageInner() {
           }}
         />
 
-        {/* Ambient glow */}
-        <div style={{
-          position: 'fixed', top: 0, left: 0, right: 0,
-          height: '520px', pointerEvents: 'none', zIndex: Z.AMBIENT,
-          background: 'radial-gradient(ellipse at 50% 40%, rgba(217,70,239,0.22) 0%, transparent 65%)',
-        }} />
-
         {showAgentLanding && <AgentContent />}
 
         <div style={{ display: showAgentLanding ? 'none' : undefined }}>
-        <div style={{ display: selectedDetail ? 'none' : undefined }}>
-          <TopBar page="home" authReturnPath={activeSkill?.id ? `/home/${activeSkill.id}` : null} />
-        </div>
+        <header className="creative-header" style={{ visibility: selectedDetail ? 'hidden' : undefined }}>
+          <a href="#product" className="creative-brand" aria-label={t('homeDesign.home')}><MakaronLogo markSize={34} /></a>
+          <nav className="creative-header-nav" aria-label={t('homeDesign.navigation')}>
+            <a href="#product">{t('homeDesign.product')}</a>
+            <a href="#templates">{t('homeDesign.templates')}</a>
+            <a href="#create">{t('homeDesign.create')}</a>
+          </nav>
+          <div className="creative-account"><TopBar page="home" authReturnPath={activeSkill?.id ? `/home/${activeSkill.id}` : null} /></div>
+        </header>
+        <HomeCreativeHero skills={homeSkills} paused={motionPaused} suspended={!!selectedDetail || showAgentLanding} onSelect={handleSkillCardClick} />
+        <HomeCreativeRibbon paused={motionPaused} onToggle={() => setMotionPaused(value => !value)} />
 
-        {/* ── Hero: Landing-page style ── */}
-        <div className="relative flex flex-col items-center" style={{ paddingBottom: '40px' }}>
-          {/* Glow */}
-          <div className="pointer-events-none absolute top-[-80px] left-1/2 -translate-x-1/2 w-[700px] h-[600px] rounded-full bg-[radial-gradient(ellipse,#d946ef18_0%,transparent_70%)]" />
-
-          <div className="relative z-10 flex flex-col items-center text-center pt-10 lg:pt-16 px-6 max-w-[660px]">
-            <MakaronLogo
-              markSize="clamp(34px, 6vw, 52px)"
-              className="mt-4"
-              textClassName="text-[52px] lg:text-[88px] font-extrabold tracking-[-0.04em] leading-[1]"
-            />
-            <p className="mt-3 leading-tight">
-              <RollingTagline className="text-2xl lg:text-[32px]" />
-            </p>
-            <p className="mt-6 text-[15px] lg:text-lg text-[#a1a1aa] leading-relaxed max-w-[480px]">
-              {t('landing.heroDesc1')}<br />{t('landing.heroDesc2')}
-            </p>
+        {/* ── Skill Template Grid ── */}
+        <div id="templates" className="creative-market" ref={skillSectionRef} data-testid="skill-market" style={{
+          flex: 1,
+          paddingLeft: isDesktop ? '24px' : '14px',
+          paddingRight: isDesktop ? '24px' : '14px',
+          paddingTop: 0,
+          paddingBottom: 'calc(160px + env(safe-area-inset-bottom, 0px))',
+          maxWidth: isDesktop ? '1200px' : '520px',
+          width: '100%',
+          margin: '0 auto',
+        }}>
+          <div className="creative-market-heading">
+            <h2>{t('homeDesign.galleryTitle')}</h2>
+            <p>{t('homeDesign.galleryDescription')}</p>
           </div>
 
+          {(skillCategoriesLoading || visibleSkillCategories.length > 0) && (
+            <nav
+              className="mkr-category-rail"
+              data-testid="skill-category-rail"
+              aria-label={t('skills.categories')}
+              aria-busy={skillCategoriesLoading}
+            >
+              <div
+                ref={categoryScrollRef}
+                className="mkr-category-scroll"
+                data-horizontal-swipe-region="true"
+                onPointerDown={handleCategoryPointerDown}
+                onPointerMove={handleCategoryPointerMove}
+                onPointerUp={finishCategoryDrag}
+                onPointerCancel={finishCategoryDrag}
+              >
+                {(skillCategoriesLoading ? [{ id: 'all', label: t('skills.categoryAll') }] : categoryTabs).map(category => {
+                  const isActive = activeCategory === category.id
+                  return (
+                    <button
+                      key={category.id}
+                      ref={element => {
+                        if (element) categoryButtonRefs.current.set(category.id, element)
+                        else categoryButtonRefs.current.delete(category.id)
+                      }}
+                      type="button"
+                      className="mkr-category-tab"
+                      style={skillCategoriesLoading ? { visibility: 'hidden' } : undefined}
+                      aria-pressed={isActive}
+                      aria-controls="skill-market-grid"
+                      data-testid={`skill-category-${category.id}`}
+                      onClick={() => {
+                        if (categoryClickSuppressedRef.current) return
+                        handleCategoryChange(category.id)
+                      }}
+                    >
+                      {category.label}
+                    </button>
+                  )
+                })}
+              </div>
+            </nav>
+          )}
+
+          <div
+            ref={skillGridRef}
+            id="skill-market-grid"
+            className="mkr-category-grid mkr-skill-category-swipe-region creative-market-grid"
+            data-testid="skill-grid"
+            data-skill-category-swipe-region="true"
+            onClickCapture={handleSkillGridClickCapture}
+            style={{
+              display: 'grid',
+              gridTemplateColumns: isDesktop ? 'repeat(auto-fill, minmax(200px, 1fr))' : 'repeat(2, 1fr)',
+              gap: isDesktop ? '14px' : '10px',
+            }}
+          >
+            {homeSkills.length === 0 && Array.from({ length: 8 }, (_, i) => (
+              <div key={`sk-${i}`} className="mkr-liquid-placeholder" style={{
+                aspectRatio: '3 / 4', borderRadius: 16,
+                animationDelay: `${i * 0.1}s`,
+              }}>
+                <div style={{ position: 'absolute', bottom: 14, left: 14, right: 14 }}>
+                  <div className="mkr-liquid-placeholder-line" style={{ width: '60%', height: 14, borderRadius: 6 }} />
+                </div>
+              </div>
+            ))}
+            {filteredHomeSkills.slice(0, visibleSkillCount).map((template, i) => (
+              <div
+                key={template.id}
+                data-testid="home-skill-card"
+                data-skill-id={template.id}
+                role="button"
+                tabIndex={0}
+                aria-label={pickLocalizedValue(template.labels, locale)}
+                className={`mkr-skill-card${categoryHasChanged ? '' : ' mkr-row-enter'}`}
+                onClick={(e) => handleSkillCardClick(template, e)}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); e.currentTarget.click() }
+                }}
+                style={{
+                  position: 'relative',
+                  aspectRatio: '3 / 4',
+                  borderRadius: '16px',
+                  overflow: 'hidden',
+                  background: 'linear-gradient(145deg, rgba(18,13,26,0.48), rgba(8,8,12,0.64))',
+                  border: '0.5px solid rgba(255,255,255,0.08)',
+                  animationDelay: categoryHasChanged ? undefined : `${Math.min(i, 8) * 0.045}s`,
+                  ...(heroRect && selectedDetail?.id === template.id ? { opacity: 0 } : {}),
+                }}
+              >
+                {renderCoverMedia(template.image, pickLocalizedValue(template.labels, locale), 'thumb', {
+                  priority: i < 1,
+                  suspended: !!selectedDetail || showAgentLanding,
+                  fallbackSrc: template.before_images?.[0]
+                    ? getThumbnailUrl(template.before_images[0], 400, 70, 533, 'cover')
+                    : undefined,
+                  extraStyle: { position: 'absolute', display: 'block' },
+                })}
+
+                <span className="creative-card-corner" aria-hidden="true">{isVideoUrl(template.image) ? '▷' : '↗'}</span>
+                {/* Bottom gradient for text readability */}
+                <div style={{
+                  position: 'absolute', inset: 0,
+                  background: 'linear-gradient(to top, rgba(0,0,0,0.65) 0%, transparent 45%)',
+                  pointerEvents: 'none',
+                }} />
+
+                {/* Label */}
+                <div style={{
+                  position: 'absolute', bottom: 0, left: 0, right: 0,
+                  padding: '14px',
+                }}>
+                  <div style={{
+                    fontSize: '0.95rem',
+                    fontWeight: 600,
+                    color: '#fff',
+                    lineHeight: 1.3,
+                  }}>
+                    {pickLocalizedValue(template.labels, locale)}
+                  </div>
+                </div>
+
+              </div>
+            ))}
+          </div>
+          {visibleSkillCount < filteredHomeSkills.length && (
+            <button type="button" className="creative-more" onClick={() => setVisibleSkillCount(count => count + SKILL_CARD_BATCH_SIZE)}>{t('homeDesign.more')}</button>
+          )}
+
+        </div>
+
+        <div className="creative-create" id="create">
+          <div className="creative-create-copy">
+            <h2>{t('homeDesign.createTitle1')}<br />{t('homeDesign.createTitle2')}</h2>
+            <p>{t('homeDesign.createDescription')}</p>
+          </div>
           {/* ── Inline Input Box ── */}
           <div ref={inlineInputRef} data-makaron-home-inline-composer="true" className="relative z-10" style={{
-            marginTop: '32px', width: '100%', maxWidth: '480px', padding: '0 16px',
+            marginTop: '32px', width: '100%', maxWidth: '500px', padding: '0 16px',
             ...(isIOSAppShell && showFixedInput && !selectedDetail ? { opacity: 0, pointerEvents: 'none' as const } : {}),
           }}>
             <CreateInputBox
@@ -2387,162 +2509,7 @@ function HomePageInner() {
           </div>
         </div>
 
-        {/* ── Skill Template Grid ── */}
-        <div ref={skillSectionRef} data-testid="skill-market" style={{
-          flex: 1,
-          paddingLeft: isDesktop ? '24px' : '14px',
-          paddingRight: isDesktop ? '24px' : '14px',
-          paddingTop: 0,
-          paddingBottom: 'calc(160px + env(safe-area-inset-bottom, 0px))',
-          maxWidth: isDesktop ? '1200px' : '520px',
-          width: '100%',
-          margin: '0 auto',
-        }}>
-          <div style={{
-            textAlign: 'center',
-            marginBottom: (skillCategoriesLoading || visibleSkillCategories.length > 0)
-              ? (isDesktop ? 8 : 6)
-              : (isDesktop ? 24 : 16),
-          }}>
-            <h2 style={{
-              fontSize: isDesktop ? '1.25rem' : '1.1rem',
-              fontWeight: 700,
-              color: 'rgba(255,255,255,0.9)',
-              margin: 0,
-              letterSpacing: '-0.01em',
-            }}>{t('skills.title')}</h2>
-          </div>
-
-          {(skillCategoriesLoading || visibleSkillCategories.length > 0) && (
-            <nav
-              className="mkr-category-rail"
-              data-testid="skill-category-rail"
-              aria-label={t('skills.categories')}
-              aria-busy={skillCategoriesLoading}
-            >
-              <div
-                ref={categoryScrollRef}
-                className="mkr-category-scroll"
-                data-horizontal-swipe-region="true"
-                onPointerDown={handleCategoryPointerDown}
-                onPointerMove={handleCategoryPointerMove}
-                onPointerUp={finishCategoryDrag}
-                onPointerCancel={finishCategoryDrag}
-              >
-                {(skillCategoriesLoading ? [{ id: 'all', label: t('skills.categoryAll') }] : categoryTabs).map(category => {
-                  const isActive = activeCategory === category.id
-                  return (
-                    <button
-                      key={category.id}
-                      ref={element => {
-                        if (element) categoryButtonRefs.current.set(category.id, element)
-                        else categoryButtonRefs.current.delete(category.id)
-                      }}
-                      type="button"
-                      className="mkr-category-tab"
-                      style={skillCategoriesLoading ? { visibility: 'hidden' } : undefined}
-                      aria-pressed={isActive}
-                      aria-controls="skill-market-grid"
-                      data-testid={`skill-category-${category.id}`}
-                      onClick={() => {
-                        if (categoryClickSuppressedRef.current) return
-                        handleCategoryChange(category.id)
-                      }}
-                    >
-                      {category.label}
-                    </button>
-                  )
-                })}
-              </div>
-            </nav>
-          )}
-
-          <div
-            ref={skillGridRef}
-            id="skill-market-grid"
-            className="mkr-category-grid mkr-skill-category-swipe-region"
-            data-testid="skill-grid"
-            data-skill-category-swipe-region="true"
-            onClickCapture={handleSkillGridClickCapture}
-            style={{
-              display: 'grid',
-              gridTemplateColumns: isDesktop ? 'repeat(auto-fill, minmax(200px, 1fr))' : 'repeat(2, 1fr)',
-              gap: isDesktop ? '14px' : '10px',
-            }}
-          >
-            {homeSkills.length === 0 && Array.from({ length: 8 }, (_, i) => (
-              <div key={`sk-${i}`} className="mkr-liquid-placeholder" style={{
-                aspectRatio: '3 / 4', borderRadius: 16,
-                animationDelay: `${i * 0.1}s`,
-              }}>
-                <div style={{ position: 'absolute', bottom: 14, left: 14, right: 14 }}>
-                  <div className="mkr-liquid-placeholder-line" style={{ width: '60%', height: 14, borderRadius: 6 }} />
-                </div>
-              </div>
-            ))}
-            {filteredHomeSkills.slice(0, visibleSkillCount).map((template, i) => (
-              <div
-                key={template.id}
-                data-testid="home-skill-card"
-                data-skill-id={template.id}
-                role="button"
-                tabIndex={0}
-                aria-label={pickLocalizedValue(template.labels, locale)}
-                className={`mkr-skill-card${categoryHasChanged ? '' : ' mkr-row-enter'}`}
-                onClick={(e) => handleSkillCardClick(template, e)}
-                onKeyDown={(e) => {
-                  if (e.key === 'Enter' || e.key === ' ') e.currentTarget.click()
-                }}
-                style={{
-                  position: 'relative',
-                  aspectRatio: '3 / 4',
-                  borderRadius: '16px',
-                  overflow: 'hidden',
-                  background: 'linear-gradient(145deg, rgba(18,13,26,0.48), rgba(8,8,12,0.64))',
-                  border: '0.5px solid rgba(255,255,255,0.08)',
-                  animationDelay: categoryHasChanged ? undefined : `${Math.min(i, 8) * 0.045}s`,
-                  ...(heroRect && selectedDetail?.id === template.id ? { opacity: 0 } : {}),
-                }}
-              >
-                {renderCoverMedia(template.image, pickLocalizedValue(template.labels, locale), 'thumb', {
-                  priority: i < 1,
-                  suspended: !!selectedDetail,
-                  fallbackSrc: template.before_images?.[0]
-                    ? getThumbnailUrl(template.before_images[0], 400, 70, 533, 'cover')
-                    : undefined,
-                  extraStyle: { position: 'absolute', display: 'block' },
-                })}
-
-                {/* Bottom gradient for text readability */}
-                <div style={{
-                  position: 'absolute', inset: 0,
-                  background: 'linear-gradient(to top, rgba(0,0,0,0.65) 0%, transparent 45%)',
-                  pointerEvents: 'none',
-                }} />
-
-                {/* Label */}
-                <div style={{
-                  position: 'absolute', bottom: 0, left: 0, right: 0,
-                  padding: '14px',
-                }}>
-                  <div style={{
-                    fontSize: '0.95rem',
-                    fontWeight: 600,
-                    color: '#fff',
-                    lineHeight: 1.3,
-                  }}>
-                    {pickLocalizedValue(template.labels, locale)}
-                  </div>
-                </div>
-
-              </div>
-            ))}
-          </div>
-          {visibleSkillCount < filteredHomeSkills.length && (
-            <div ref={skillLoadMoreRef} aria-hidden="true" style={{ height: 1, width: '100%' }} />
-          )}
-
-        </div>
+        <HomeCreativeFooter />
 
         {/* ── Bottom edge fade — fixed, below input, blends cards into system bar ── */}
         {!isDesktop && (showFixedInput || selectedDetail) && (
@@ -2667,7 +2634,7 @@ function HomePageInner() {
             opacity: heroExpanded ? 0 : 1,
           }}>
             { }
-            {renderCoverMedia(selectedDetail.image, '', 'hero', { priority: true, extraStyle: { position: 'absolute' } })}
+            {renderCoverMedia(selectedDetail.image, '', 'hero', { priority: !heroExpanded, active: !heroExpanded, extraStyle: { position: 'absolute' } })}
           </div>
         )
       })()}

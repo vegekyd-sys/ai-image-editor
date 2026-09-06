@@ -1,9 +1,32 @@
 import zh from './zh';
-import type { TranslationDictionary } from './index';
+import type {  TranslationDictionary } from './index';
 
 const zhHant = {
-
   ...zh,
+  'homeDesign.brandTagline': 'one man studio',
+  'homeDesign.title1': "一個人，",
+  'homeDesign.title2': "一整個創意宇宙。",
+  'homeDesign.description1': "用一句話，創作圖片、影片、音樂。",
+  'homeDesign.description2': "從靈感到成片，馬卡龍和你一起完成。",
+  'homeDesign.create': "開始創作",
+  'homeDesign.explore': "探索範本",
+  'homeDesign.ribbon': "想像，不必排隊。",
+  'homeDesign.pause': "暫停動畫",
+  'homeDesign.resume': "播放動畫",
+  'homeDesign.product': "產品",
+  'homeDesign.templates': "範本",
+  'homeDesign.home': "首頁",
+  'homeDesign.navigation': "主導覽",
+  'homeDesign.galleryTitle': "從喜歡的作品開始。",
+  'homeDesign.galleryDescription': "選一個範本，上傳你的照片。下一件作品，就是你的。",
+  'homeDesign.more': "探索更多範本",
+  'homeDesign.createTitle1': "靈感歸你。",
+  'homeDesign.createTitle2': "其餘交給馬卡龍。",
+  'homeDesign.createDescription': "生成圖片、精修照片、製作影片、設計海報、創作音樂。把你的想法告訴馬卡龍，在對話中一步步變成作品。",
+  'homeDesign.footer1': "你的下一件作品，",
+  'homeDesign.footer2': "從一個念頭開始。",
+  'homeDesign.privacy': "隱私權政策",
+  'homeDesign.openTemplate': (name: string) => `開啟範本：${name}`,
   'admin.corePrompt.title': "新版分層 Core Prompt",
   'admin.corePrompt.layered': "已開啟：新版分層路徑",
   'admin.corePrompt.legacy': "已關閉：舊版完整路徑",

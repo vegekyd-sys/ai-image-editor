@@ -29,12 +29,14 @@ export function LazyVideo({
   fallbackSrc,
   eager = false,
   suspended = false,
+  paused = false,
 }: {
   src: string
   style: CSSProperties
   fallbackSrc?: string
   eager?: boolean
   suspended?: boolean
+  paused?: boolean
 }) {
   const observerRef = useRef<HTMLSpanElement>(null)
   const videoRef = useRef<HTMLVideoElement>(null)
@@ -82,7 +84,7 @@ export function LazyVideo({
     video.muted = true
     video.playsInline = true
 
-    if (!isVisible) {
+    if (!isVisible || paused || suspended) {
       video.pause()
       return
     }
@@ -94,7 +96,7 @@ export function LazyVideo({
       window.cancelAnimationFrame(raf)
       video.pause()
     }
-  }, [isVisible, resolvedSrc, shouldAttach, suspended])
+  }, [isVisible, resolvedSrc, shouldAttach, suspended, paused])
 
   useEffect(() => {
     captureGenerationRef.current += 1
