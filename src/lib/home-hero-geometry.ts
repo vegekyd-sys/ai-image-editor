@@ -5,6 +5,7 @@ export type HomeHeroGeometry = {
   height: number
   rotation: number
   borderRadius: number
+  opacity: number
 }
 
 // The axis-aligned bounding box includes the empty corners around a tilted card.
@@ -28,5 +29,8 @@ export function readHomeHeroGeometry(element: HTMLElement): HomeHeroGeometry {
     height,
     rotation: Math.atan2(matrix.b, matrix.a) * 180 / Math.PI,
     borderRadius: (parseFloat(style.borderTopLeftRadius) || 0) * scaleX,
+    opacity: element.matches('.creative-art-frame') && element.firstElementChild
+      ? Number(getComputedStyle(element.firstElementChild).opacity)
+      : 1,
   }
 }

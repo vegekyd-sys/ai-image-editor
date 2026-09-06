@@ -158,7 +158,24 @@
 .creative-hero-orbital .creative-hero-copy p { margin-top:22px; font-size:clamp(12px,1vw,16px); line-height:1.8; }
 .creative-hero-orbital .creative-hero-composer { width:min(580px,42%); }
 .creative-hero-orbital .creative-orbit::before { content:""; position:absolute; left:5%; top:1%; width:90%; height:89%; border:1px solid #d946ef35; border-radius:50%; transform:rotate(-5deg); pointer-events:none; }
-.creative-hero-orbital .creative-art { animation:creative-orbital-breathe 12s ease-in-out infinite alternate; }
+.creative-hero-orbital .creative-art { animation:creative-orbital-breathe 10s ease-in-out infinite alternate; }
+.creative-hero-orbital .creative-art-frame { background:linear-gradient(145deg,#ffffff0d,#ffffff02 55%,#d946ef05); border-color:#ffffff24; box-shadow:inset 0 1px 0 #ffffff1a,0 12px 45px #0003; transition:transform .65s ease,border-color .65s ease,box-shadow .65s ease; }
+.creative-hero-orbital .creative-art-frame > :first-child { opacity:.46; transition:opacity .65s ease; }
+.creative-hero-orbital .creative-art-frame::after { content:""; position:absolute; inset:0; border-radius:inherit; pointer-events:none; background:linear-gradient(135deg,#ffffff10,transparent 35%,transparent 65%,#ffffff05); box-shadow:inset 1px 0 0 #ffffff12,inset -1px -1px 0 #ffffff08; transition:opacity .65s ease; }
+.creative-hero-orbital .creative-art-caption { opacity:.5; transition:opacity .65s ease; }
+.creative-hero-orbital .creative-art:focus-visible .creative-art-frame > :first-child,
+.creative-hero-orbital .creative-art:focus-visible .creative-art-caption { opacity:1; }
+@media(hover:hover) and (pointer:fine) {
+  .creative-hero-orbital .creative-art:hover { animation-play-state:paused; z-index:5; }
+  .creative-hero-orbital .creative-art:hover .creative-art-frame { transform:scale(1.015); border-color:#ffffff70; box-shadow:inset 0 1px 0 #ffffff30,0 18px 60px #0006; }
+  .creative-hero-orbital .creative-art:hover .creative-art-frame > :first-child,
+  .creative-hero-orbital .creative-art:hover .creative-art-caption { opacity:1; }
+  .creative-hero-orbital .creative-art:hover .creative-art-frame::after { opacity:.25; }
+}
+.creative-hero-orbital .creative-art:nth-child(2) { animation-delay:-3s; }
+.creative-hero-orbital .creative-art:nth-child(3) { animation-delay:-7s; }
+.creative-hero-orbital .creative-art:nth-child(4) { animation-delay:-5s; }
+.creative-hero-orbital .creative-art:nth-child(5) { animation-delay:-9s; }
 .creative-hero-orbital .creative-art-0 { --tilt:-13deg; left:-5%; top:21%; width:25%; height:69%; z-index:1; }
 .creative-hero-orbital .creative-art-1 { --tilt:-9deg; left:13%; top:-2%; width:16.5%; height:32%; z-index:2; }
 .creative-hero-orbital .creative-art-2 { --tilt:8deg; right:4%; top:-1%; width:22%; height:27%; z-index:1; }
@@ -166,7 +183,7 @@
 .creative-hero-orbital .creative-art-4 { --tilt:9deg; right:-4%; top:19%; width:23%; height:63%; aspect-ratio:auto; z-index:2; }
 .creative-ribbon-compact { margin:0; padding:30px 36px 62px; justify-content:flex-end; }
 .creative-ribbon-compact .creative-motion-toggle { font-size:11px; }
-@keyframes creative-orbital-breathe { from { transform:translateY(-3px) rotate(var(--tilt)); } to { transform:translateY(4px) rotate(calc(var(--tilt) + .7deg)); } }
+@keyframes creative-orbital-breathe { from { transform:translateY(-4px) rotate(calc(var(--tilt) - .5deg)); } to { transform:translateY(5px) rotate(calc(var(--tilt) + .6deg)); } }
 @media(max-width:1100px) and (min-width:768px) {
   .creative-hero-orbital .creative-art-1 { left:7%; width:19%; }
   .creative-hero-orbital .creative-art-2 { right:5%; width:23%; }
@@ -192,7 +209,8 @@
   .creative-hero-orbital .creative-orbit { inset:0; transform:none; }
   .creative-hero-orbital .creative-orbit::before { display:none; }
   .creative-hero-orbital .creative-orbit::after { content:""; position:absolute; z-index:3; inset:0 0 48%; background:linear-gradient(90deg,#000 0%,#000e 22%,#0009 48%,transparent 80%); pointer-events:none; }
-  .creative-hero-orbital .creative-art { animation:none; }
+  .creative-hero-orbital .creative-art { animation-duration:14s; }
+  .creative-hero-orbital .creative-art-frame > :first-child { opacity:.66; }
   .creative-hero-orbital .creative-art-1,
   .creative-hero-orbital .creative-art-2 { display:none; }
   .creative-hero-orbital .creative-art-0,

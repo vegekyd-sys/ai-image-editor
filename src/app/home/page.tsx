@@ -2647,7 +2647,7 @@ function HomePageInner() {
             borderRadius: heroExpanded ? (isDesktop ? 24 : 0) : heroRect.borderRadius,
             overflow: 'hidden',
             transition: 'all 0.35s cubic-bezier(0.22, 1, 0.36, 1)',
-            opacity: heroExpanded ? 0 : 1,
+            opacity: heroExpanded ? 0 : heroRect.opacity,
           }}>
             { }
             {renderCoverMedia(selectedDetail.image, '', 'hero', { priority: !heroExpanded, active: !heroExpanded, extraStyle: { position: 'absolute' } })}
