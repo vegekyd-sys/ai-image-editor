@@ -23,6 +23,7 @@ import {
 import { extractPhotoMetadata } from '@/lib/image/metadata'
 import type { PhotoMetadata } from '@/types'
 import { createMetaEventId, trackMetaEvent } from '@/lib/marketing/meta-pixel'
+import HomeCreativeStudio from '@/components/HomeCreativeStudio'
 import HomeCreativeHero, { HomeCreativeRibbon, HomeCreativeFooter, useHomeMotion } from '@/components/HomeCreativeHero'
 import './creative-home.css'
 import TopBar from '@/components/TopBar'
@@ -2288,7 +2289,7 @@ function HomePageInner() {
         <header className="creative-header" style={{ visibility: selectedDetail ? 'hidden' : undefined }}>
           <a href="#product" className="creative-brand" aria-label={t('homeDesign.home')}><MakaronLogo markSize={34} /></a>
           <nav className="creative-header-nav" aria-label={t('homeDesign.navigation')}>
-            <a href="#product">{t('homeDesign.product')}</a>
+            <a href="#studio">{t('homeDesign.product')}</a>
             <a href="#templates">{t('homeDesign.templates')}</a>
             <a href="#create">{t('homeDesign.create')}</a>
           </nav>
@@ -2471,7 +2472,6 @@ function HomePageInner() {
                   extraStyle: { position: 'absolute', display: 'block' },
                 })}
 
-                <span className="creative-card-corner" aria-hidden="true">{isVideoUrl(template.image) ? '▷' : '↗'}</span>
                 {/* Bottom gradient for text readability */}
                 <div style={{
                   position: 'absolute', inset: 0,
@@ -2503,13 +2503,12 @@ function HomePageInner() {
 
         </div>
 
-        <div className="creative-create">
-          <div className="creative-create-copy">
-            <h2>{t('homeDesign.createTitle1')}<br />{t('homeDesign.createTitle2')}</h2>
-            <p>{t('homeDesign.createDescription')}</p>
-          </div>
-          <a className="creative-primary" href="#create">{t('homeDesign.create')}<span aria-hidden="true">↗</span></a>
-        </div>
+        <HomeCreativeStudio skills={homeSkills} paused={motionPaused} suspended={!!selectedDetail || showAgentLanding} onUseIdea={(prompt) => {
+          setSelectedSkill(null)
+          createInput.setText(prompt)
+          inlineTextareaRef.current?.focus({ preventScroll: true })
+          document.getElementById('create')?.scrollIntoView({ block: 'center', behavior: motionPaused ? 'instant' : 'smooth' })
+        }} />
 
         <HomeCreativeFooter />
 

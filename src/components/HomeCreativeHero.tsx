@@ -102,7 +102,6 @@ export function HomeCreativeRibbon({ paused, onToggle }: { paused: boolean; onTo
 export function HomeCreativeFooter() {
   const { t } = useLocale()
   return <footer className="creative-footer">
-    <div><p>{t('homeDesign.footer1')}<br />{t('homeDesign.footer2')}</p><a className="creative-primary" href="#create">{t('homeDesign.create')}<span aria-hidden="true">↗</span></a></div>
     <div className="creative-footer-bottom"><span><MakaronLogo markSize={26} /><em>{t('homeDesign.brandTagline')}</em></span><a href="/privacy">{t('homeDesign.privacy')}</a></div>
   </footer>
 }
