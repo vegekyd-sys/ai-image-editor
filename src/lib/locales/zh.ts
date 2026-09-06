@@ -128,6 +128,10 @@ const zh = {
   // Changelog
   'changelog.heading': '更新',
   'changelog.close': '关闭更新',
+  'changelog.creativeSpeedUpgrade.title': 'Makaron 大提速，让灵感少等一会儿',
+  'changelog.creativeSpeedUpgrade.item1': '说出想法，更快开工。我们精简了 Agent 开始工作前的准备，让对话和模板启动更轻快，把更多时间留给创作。',
+  'changelog.creativeSpeedUpgrade.item2': '更快看到视频，也更快改出新想法。过去页面提示「预计 3–5 分钟」；现在默认使用 fal H3 Max，本次实测把图片变成 5 秒视频约需 16 秒，修改一段 5 秒视频约需 36–42 秒。换套衣服、换个场景，更快看到效果。',
+  'changelog.creativeSpeedUpgrade.item3': '喜欢的模板，更快出片。旧版视频模板曾实测等待 3 分 45 秒；这次使用 fal H3 Turbo，生成 5 秒视频实测约需 15 秒。少等一会儿，多试几个创意。',
   'changelog.wan27Image.title': 'Wan 2.7 Image：快速出图，少等一会儿',
   'changelog.wan27Image.item1': '实测约 6–11 秒出图，让灵感更快变成画面，支持文字生图与多图编辑。',
   'changelog.wan27Image.item2': '在图片模型中选择 Wan 2.7 Image，或直接告诉 Agent「用 Wan 2.7 生图」即可体验。',

@@ -128,6 +128,10 @@ const en = {
   // Changelog
   'changelog.heading': 'Updates',
   'changelog.close': 'Close updates',
+  'changelog.creativeSpeedUpgrade.title': 'A Faster Makaron. Less Waiting, More Creating.',
+  'changelog.creativeSpeedUpgrade.item1': 'Share an idea and get going sooner. We have reduced the preparation the Agent needs before starting, making chats and templates feel lighter and leaving more time for creating.',
+  'changelog.creativeSpeedUpgrade.item2': 'See your video sooner, then try a new idea. The previous on-screen estimate was 3–5 minutes. With fal H3 Max now the default, our tests turned an image into a five-second video in about 16 seconds, or edited a five-second video in about 36–42 seconds. Try a new outfit or a different setting and see the change sooner.',
+  'changelog.creativeSpeedUpgrade.item3': 'Your favorite video templates, with less waiting. An older video template took 3 minutes 45 seconds in a previous test; this time, fal H3 Turbo generated a five-second video in about 15 seconds. Wait less and try more ideas.',
   'changelog.wan27Image.title': 'Wan 2.7 Image: Create Fast, Wait Less',
   'changelog.wan27Image.item1': 'Images in around 6–11 seconds in our tests: bring ideas to life faster with text-to-image generation and multi-image editing.',
   'changelog.wan27Image.item2': 'Select Wan 2.7 Image in the image model picker, or ask the Agent to generate an image with Wan 2.7.',

@@ -166,6 +166,10 @@ const ja = {
   // Changelog
   'changelog.heading': '更新情報',
   'changelog.close': '更新情報を閉じる',
+  'changelog.creativeSpeedUpgrade.title': 'Makaron がもっと速く。ひらめきを、待たせない。',
+  'changelog.creativeSpeedUpgrade.item1': '思いついたら、すぐに制作へ。Agent が作業前に行う準備を減らし、チャットやテンプレートの開始をより軽快に。創作に使える時間を増やしました。',
+  'changelog.creativeSpeedUpgrade.item2': '動画を早く確認して、次のアイデアも試せます。以前の画面表示は「約 3〜5 分」でした。デフォルトとなった fal H3 Max では、今回の実測で画像から5 秒の動画を約 16 秒、5 秒の動画の編集を約 36〜42 秒で完了。衣装やシーンを変えて、その効果をより早く確認できます。',
+  'changelog.creativeSpeedUpgrade.item3': 'お気に入りのテンプレートも、待ち時間を短く。旧動画テンプレートでは実測 3 分 45 秒かかった例がありましたが、今回の fal H3 Turbo の実測では5 秒の動画を約 15 秒で生成できました。待つ時間を減らして、もっとアイデアを試しましょう。',
   'changelog.wan27Image.title': 'Wan 2.7 Image：すばやく生成、待ち時間を短く',
   'changelog.wan27Image.item1': '実測で約 6〜11 秒の画像生成。テキストからの生成と複数画像の編集で、アイデアをすばやく形にできます。',
   'changelog.wan27Image.item2': '画像モデルから Wan 2.7 Image を選ぶか、Agent に「Wan 2.7 で画像を生成して」と伝えてお試しください。',
