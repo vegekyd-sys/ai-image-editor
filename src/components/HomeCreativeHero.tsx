@@ -39,6 +39,14 @@ export default function HomeCreativeHero({ skills, paused, suspended, onSelect, 
 }) {
   const { t, locale } = useLocale()
   const heroRef = useRef<HTMLElement>(null)
+  const [mobileComposition, setMobileComposition] = useState(false)
+  useEffect(() => {
+    const query = window.matchMedia('(max-width: 767px)')
+    const update = () => setMobileComposition(query.matches)
+    update()
+    query.addEventListener('change', update)
+    return () => query.removeEventListener('change', update)
+  }, [])
   const featured = FEATURED_IDS.map(id => skills.find(skill => skill.id === id)).filter((skill): skill is HomeSkill => !!skill)
 
   useEffect(() => {
@@ -64,14 +72,14 @@ export default function HomeCreativeHero({ skills, paused, suspended, onSelect, 
     <section className={`creative-hero${orbital ? ' creative-hero-orbital' : ''}`} data-locale={locale} id="product" ref={heroRef} aria-labelledby="creative-hero-title">
       <div className="creative-orbit">
         {featured.map((skill, index) => (
-          <button type="button" key={skill.id} className={`creative-art creative-art-${index}`} onClick={event => onSelect(skill, event)} aria-label={t('homeDesign.openTemplate', pickLocalizedValue(skill.labels, locale))}>
+          <button type="button" key={skill.id} className={`creative-art creative-art-${index}`} inert={orbital && mobileComposition && index === 3 ? true : undefined} onClick={event => onSelect(skill, event)} aria-label={t('homeDesign.openTemplate', pickLocalizedValue(skill.labels, locale))}>
             <div className="creative-art-frame">
               {/\.(mp4|webm)(?:[?#]|$)/i.test(skill.image) ? (
                 <LazyVideo src={skill.image} eager={index < 2} suspended={suspended} paused={paused}
                   fallbackSrc={skill.before_images?.[0] ? getThumbnailUrl(skill.before_images[0], 600, 80) : undefined}
                   style={{ position: 'absolute', inset: 0, width: '100%', height: '100%', objectFit: 'cover' }} />
               ) : <img src={getThumbnailUrl(skill.image, 600, 85)} alt="" loading={index < 2 ? 'eager' : 'lazy'} />}
-              <span className="creative-art-caption">{pickLocalizedValue(skill.labels, locale)}<span aria-hidden="true">↗</span></span>
+              <span className="creative-art-caption">{pickLocalizedValue(skill.labels, locale)}</span>
             </div>
           </button>
         ))}
@@ -79,7 +87,7 @@ export default function HomeCreativeHero({ skills, paused, suspended, onSelect, 
       <div className="creative-hero-copy">
         <div className="creative-hero-intro">
           <h1 id="creative-hero-title"><span>{t(orbital ? 'homeOrbit.title1' : 'homeDesign.title1')}</span><span>{t(orbital ? 'homeOrbit.title2' : 'homeDesign.title2')}</span></h1>
-          <p>{t(orbital ? 'homeOrbit.description1' : 'homeDesign.description1')}<br />{t(orbital ? 'homeOrbit.description2' : 'homeDesign.description2')}</p>
+          <p>{t(orbital ? 'homeOrbit.description1' : 'homeDesign.description1')}<br /><span className={orbital ? 'creative-description-desktop' : undefined}>{t(orbital ? 'homeOrbit.description2' : 'homeDesign.description2')}</span>{orbital && <span className="creative-description-mobile">{t('homeOrbit.mobileDescription')}</span>}</p>
         </div>
         <div className="creative-hero-composer" id="create">{children}</div>
         <div className="creative-actions">

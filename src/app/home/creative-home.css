@@ -31,7 +31,7 @@
 .creative-art:hover .creative-art-frame { transform:scale(1.06) rotate(calc(var(--tilt)*-.5)); border-color:var(--home-accent); }
 .creative-art img { width:100%; height:100%; object-fit:cover; }
 .creative-art-caption { position:absolute; bottom:0; left:0; right:0; padding:35px 14px 14px; display:flex; justify-content:space-between; align-items:center; font-size:12px; text-align:left; background:linear-gradient(transparent,#0009); }
-.creative-art-caption > span { font-size:18px; }
+.creative-description-mobile { display:none; }
 .creative-art-0 { --tilt:-9deg; left:-3%; top:17%; width:21%; height:71%; animation-delay:-3s; }
 .creative-art-1 { --tilt:-7deg; left:14%; top:0; width:13%; height:27%; animation-delay:-7s; }
 .creative-art-2 { --tilt:7deg; right:6%; top:0; width:20%; height:27%; animation-delay:-1s; }
@@ -167,32 +167,38 @@
   .creative-hero-orbital .creative-hero-composer { width:48%; }
 }
 @media(max-width:767px) {
-  /* Compose for the narrow screen: clean header, title, two artworks, input.
-     Content determines height, so tall phones do not acquire an empty center. */
-  .creative-hero-orbital { display:flex; flex-direction:column; align-items:center; height:auto; min-height:0; max-height:none; padding:22px 24px 0; }
-  .creative-hero-orbital .creative-hero-copy { display:contents; }
-  .creative-hero-orbital .creative-hero-intro { order:0; align-self:auto; margin:0; width:100%; text-align:center; }
+  /* A diagonal, oversized artwork cascade. The foreground remains readable;
+     the landscape sliver is decorative while both large portraits stay usable. */
+  .creative-header:has(+ .creative-hero-orbital) { background:#000; }
+  .creative-hero-orbital { height:calc(100svh - 76px); min-height:700px; max-height:860px; padding:0; }
+  .creative-hero-orbital .creative-hero-copy { display:grid; grid-template-rows:1fr auto 1fr; inset:0 0 30px; padding:0 24px; text-align:left; }
+  .creative-hero-orbital .creative-hero-intro { align-self:end; width:100%; margin:0 0 26px; position:relative; }
   .creative-hero-orbital h1,
-  .creative-hero-orbital[data-locale="en"] h1 { font-size:clamp(43px,11.6vw,70px); line-height:1.04; }
-  .creative-hero-orbital:is([data-locale="zh"],[data-locale="zh-Hant"],[data-locale="ja"]) h1 { font-size:clamp(40px,10.8vw,64px); line-height:1.17; }
-  .creative-hero-orbital .creative-hero-intro p { margin:16px auto 0; max-width:330px; color:#a1a1aa; font-size:12px; line-height:1.8; text-wrap:pretty; }
-  .creative-hero-orbital .creative-orbit { order:1; position:relative; inset:auto; width:min(100%,330px); height:clamp(162px,47vw,210px); margin:20px auto 24px; flex-shrink:0; transform:none; }
+  .creative-hero-orbital[data-locale="en"] h1 { font-size:clamp(44px,12.7vw,74px); line-height:1.02; letter-spacing:-.065em; text-shadow:0 3px 28px #0008; }
+  .creative-hero-orbital[data-locale="en"] h1 span:last-child { margin:0; }
+  .creative-hero-orbital:is([data-locale="zh"],[data-locale="zh-Hant"],[data-locale="ja"]) h1 { font-size:clamp(46px,13vw,78px); line-height:1.12; letter-spacing:-.065em; }
+  .creative-hero-orbital:is([data-locale="zh"],[data-locale="zh-Hant"]) h1 span:first-child { font-size:1.3em; margin-bottom:8px; }
+  .creative-hero-orbital .creative-hero-intro p { margin:22px 0 0; max-width:290px; font-size:12px; line-height:1.85; color:#b5b5be; text-shadow:0 2px 12px #000; }
+  .creative-hero-orbital .creative-description-desktop { display:none; }
+  .creative-hero-orbital .creative-description-mobile { display:inline; }
+  .creative-hero-orbital .creative-hero-composer { width:100%; max-width:540px; }
+  .creative-hero-orbital .creative-hero-composer [data-makaron-home-inline-composer] > div { background:#111114f5 !important; border-color:#d946efb3 !important; box-shadow:0 16px 45px #0009 !important; }
+  .creative-hero-orbital .creative-orbit { inset:0; transform:none; }
   .creative-hero-orbital .creative-orbit::before { display:none; }
+  .creative-hero-orbital .creative-orbit::after { content:""; position:absolute; z-index:3; inset:0 0 48%; background:linear-gradient(90deg,#000 0%,#000e 22%,#0009 48%,transparent 80%); pointer-events:none; }
   .creative-hero-orbital .creative-art { animation:none; }
   .creative-hero-orbital .creative-art-1,
-  .creative-hero-orbital .creative-art-2,
-  .creative-hero-orbital .creative-art-3 { display:none; }
+  .creative-hero-orbital .creative-art-2 { display:none; }
   .creative-hero-orbital .creative-art-0,
-  .creative-hero-orbital:is([data-locale="en"],[data-locale="ja"]) .creative-art-0 { --tilt:-7deg; left:7%; top:0; bottom:auto; width:40%; height:92%; transform:rotate(var(--tilt)); }
-  .creative-hero-orbital .creative-art-4 { --tilt:7deg; right:7%; top:8%; bottom:auto; width:40%; height:92%; transform:rotate(var(--tilt)); }
-  .creative-hero-orbital .creative-art-frame { border-radius:9px; border-color:#ffffff30; }
-  .creative-hero-orbital .creative-art-caption { padding:22px 8px 8px; font-size:9px; }
-  .creative-hero-orbital .creative-art-caption > span { font-size:12px; }
-  .creative-hero-orbital .creative-hero-composer { order:2; width:100%; max-width:540px; }
-  .creative-hero-orbital .creative-actions { order:3; align-self:auto; margin-top:10px; }
-  .creative-hero-orbital .creative-text-link { font-size:12px; padding:10px 0; }
-  .creative-ribbon-compact { margin:0; padding:22px 24px 42px; justify-content:center; }
-  .creative-ribbon-compact .creative-motion-toggle { margin:0; border:0; padding:4px 8px; font-size:10px; }
+  .creative-hero-orbital:is([data-locale="en"],[data-locale="ja"]) .creative-art-0 { --tilt:-12deg; left:-29%; top:47%; bottom:auto; width:77%; height:50%; transform:rotate(var(--tilt)); }
+  .creative-hero-orbital .creative-art-3 { --tilt:9deg; left:auto; right:-24%; top:-2%; bottom:auto; width:66%; height:21%; aspect-ratio:auto; transform:rotate(var(--tilt)); pointer-events:none; }
+  .creative-hero-orbital .creative-art-4 { --tilt:9deg; right:-27%; top:11%; bottom:auto; width:77%; height:68%; transform:rotate(var(--tilt)); }
+  .creative-hero-orbital .creative-art-frame { border-radius:12px; border-color:#ffffff30; }
+  .creative-hero-orbital .creative-art-caption { display:none; }
+  .creative-hero-orbital .creative-actions { justify-self:end; margin-top:24px; margin-right:8px; }
+  .creative-hero-orbital .creative-text-link { font-size:13px; padding:10px 12px; background:#000a; backdrop-filter:blur(8px); }
+  .creative-ribbon-compact { margin:0; padding:8px 24px 42px; justify-content:flex-end; }
+  .creative-ribbon-compact .creative-motion-toggle { margin:0; padding:8px 12px; font-size:10px; }
 }
 @media(prefers-reduced-motion:reduce) { .creative-hero-orbital .creative-art { animation:none; } }
 

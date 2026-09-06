@@ -3,6 +3,7 @@ import type { TranslationDictionary } from './index';
 const ja = {
   "homeOrbit.title1": "想像を、",
   "homeOrbit.title2": "待たせない。",
+  "homeOrbit.mobileDescription": "画像、映像、デザイン、音楽",
   "homeOrbit.description1": "そのアイデアを、頭の中だけで終わらせない。",
   "homeOrbit.description2": "画像、映像、デザイン、音楽。Makaron に話して、形にしよう。",
   "homeStudio.title1": "ひとつの想い。",

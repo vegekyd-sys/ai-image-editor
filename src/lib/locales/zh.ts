@@ -1,6 +1,7 @@
 const zh = {
-  "homeOrbit.title1": "想象，",
-  "homeOrbit.title2": "不必等待。",
+  "homeOrbit.title1": "想象",
+  "homeOrbit.title2": "不必等待",
+  "homeOrbit.mobileDescription": "图片、电影、设计、音乐",
   "homeOrbit.description1": "别让好想法，只停在脑海里。",
   "homeOrbit.description2": "图片、电影、设计、音乐。说出来，和 Makaron 一起做出来。",
 
