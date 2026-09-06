@@ -1,4 +1,9 @@
 const en = {
+  "homeOrbit.title1": "Imagination",
+  "homeOrbit.title2": "can’t wait.",
+  "homeOrbit.description1": "Your ideas deserve to exist.",
+  "homeOrbit.description2": "Images, films, design, music. Just tell Makaron.",
+
   "homeStudio.title1": "One idea.",
   "homeStudio.title2": "Every possibility.",
   "homeStudio.intro1": "Images. Video. Design. Music.",

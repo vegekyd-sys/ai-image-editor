@@ -101,6 +101,8 @@ export default function HomePage() {
 }
 
 function HomePageInner() {
+  const [orbitalHero, setOrbitalHero] = useState(false)
+  useEffect(() => { setOrbitalHero(new URLSearchParams(window.location.search).get('hero') === 'b') }, [])
   const { paused: motionPaused, setPaused: setMotionPaused } = useHomeMotion()
   const { user, loading: authLoading } = useAuth()
   const hydrated = useHydrated()
@@ -688,11 +690,11 @@ function HomePageInner() {
 
   const writeSkillDetailPath = useCallback((skillId: string, mode: 'push' | 'replace') => {
     const state = isIOSAppShell ? { makaronHomeSkill: true, skillId } : null
-    const url = isIOSAppShell ? '/home' : `/home?skill=${encodeURIComponent(skillId)}`
+    const url = isIOSAppShell ? '/home' : `/home?${orbitalHero ? 'hero=b&' : ''}skill=${encodeURIComponent(skillId)}`
     if (mode === 'push') window.history.pushState(state, '', url)
     else window.history.replaceState(state, '', url)
     if (!user) rememberIOSSkillReturn(skillId)
-  }, [isIOSAppShell, rememberIOSSkillReturn, user])
+  }, [orbitalHero, isIOSAppShell, rememberIOSSkillReturn, user])
 
   const resetSkillBackPan = useCallback(() => {
     skillBackPanRef.current = { tracking: false, locked: false, startX: 0, startY: 0, lastX: 0, startTime: 0 }
@@ -731,9 +733,9 @@ function HomePageInner() {
     detailPathActiveRef.current = false
     if (historyMode === 'pushHome') {
       if (isIOSAppShell) window.history.replaceState(null, '', '/home')
-      else window.history.pushState(null, '', '/home')
+      else window.history.pushState(null, '', orbitalHero ? '/home?hero=b' : '/home')
     }
-  }, [clearDetailCloseTimer, clearIOSSkillReturn, createInput, isIOSAppShell, resetSkillBackPan])
+  }, [orbitalHero, clearDetailCloseTimer, clearIOSSkillReturn, createInput, isIOSAppShell, resetSkillBackPan])
 
   useEffect(() => () => clearDetailCloseTimer(), [clearDetailCloseTimer])
 
@@ -2295,7 +2297,7 @@ function HomePageInner() {
           </nav>
           <div className="creative-account"><TopBar page="home" authReturnPath={activeSkill?.id ? `/home/${activeSkill.id}` : null} /></div>
         </header>
-        <HomeCreativeHero skills={homeSkills} paused={motionPaused} suspended={!!selectedDetail || showAgentLanding} onSelect={handleSkillCardClick}>
+        <HomeCreativeHero orbital={orbitalHero} skills={homeSkills} paused={motionPaused} suspended={!!selectedDetail || showAgentLanding} onSelect={handleSkillCardClick}>
           {/* ── Inline Input Box ── */}
           <div ref={inlineInputRef} data-makaron-home-inline-composer="true" className="relative z-10" style={{
             marginTop: '32px', width: '100%', maxWidth: '500px', padding: '0 16px',
@@ -2354,7 +2356,7 @@ function HomePageInner() {
             />
           </div>
         </HomeCreativeHero>
-        <HomeCreativeRibbon paused={motionPaused} onToggle={() => setMotionPaused(value => !value)} />
+        <HomeCreativeRibbon compact={orbitalHero} paused={motionPaused} onToggle={() => setMotionPaused(value => !value)} />
 
         {/* ── Skill Template Grid ── */}
         <div id="templates" className="creative-market" ref={skillSectionRef} data-testid="skill-market" style={{

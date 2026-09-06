@@ -1,8 +1,12 @@
 import zh from './zh';
-import type {  TranslationDictionary } from './index';
+import type { TranslationDictionary } from './index';
 
 const zhHant = {
   ...zh,
+  "homeOrbit.title1": "想像，",
+  "homeOrbit.title2": "不必等待。",
+  "homeOrbit.description1": "別讓好想法，只停在腦海裡。",
+  "homeOrbit.description2": "圖片、電影、設計、音樂。說出來，和 Makaron 一起做出來。",
   "homeStudio.title1": "一個念頭。",
   "homeStudio.title2": "不止一種可能。",
   "homeStudio.intro1": "圖片、影片、設計、音樂。",

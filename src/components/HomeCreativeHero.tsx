@@ -29,7 +29,8 @@ export function useHomeMotion() {
   return { paused, setPaused }
 }
 
-export default function HomeCreativeHero({ skills, paused, suspended, onSelect, children }: {
+export default function HomeCreativeHero({ skills, paused, suspended, onSelect, children, orbital = false }: {
+  orbital?: boolean
   children: ReactNode
   skills: HomeSkill[]
   paused: boolean
@@ -42,7 +43,7 @@ export default function HomeCreativeHero({ skills, paused, suspended, onSelect, 
 
   useEffect(() => {
     const hero = heroRef.current
-    if (!hero || paused) return
+    if (!hero || paused || orbital) return
     let frame = 0
     const update = () => {
       frame = 0
@@ -57,10 +58,10 @@ export default function HomeCreativeHero({ skills, paused, suspended, onSelect, 
       cancelAnimationFrame(frame)
       hero.style.setProperty('--home-scroll', '0')
     }
-  }, [paused])
+  }, [paused, orbital])
 
   return (
-    <section className="creative-hero" data-locale={locale} id="product" ref={heroRef} aria-labelledby="creative-hero-title">
+    <section className={`creative-hero${orbital ? ' creative-hero-orbital' : ''}`} data-locale={locale} id="product" ref={heroRef} aria-labelledby="creative-hero-title">
       <div className="creative-orbit">
         {featured.map((skill, index) => (
           <button type="button" key={skill.id} className={`creative-art creative-art-${index}`} onClick={event => onSelect(skill, event)} aria-label={t('homeDesign.openTemplate', pickLocalizedValue(skill.labels, locale))}>
@@ -77,8 +78,8 @@ export default function HomeCreativeHero({ skills, paused, suspended, onSelect, 
       </div>
       <div className="creative-hero-copy">
         <div className="creative-hero-intro">
-          <h1 id="creative-hero-title"><span>{t('homeDesign.title1')}</span><span>{t('homeDesign.title2')}</span></h1>
-          <p>{t('homeDesign.description1')}<br />{t('homeDesign.description2')}</p>
+          <h1 id="creative-hero-title"><span>{t(orbital ? 'homeOrbit.title1' : 'homeDesign.title1')}</span><span>{t(orbital ? 'homeOrbit.title2' : 'homeDesign.title2')}</span></h1>
+          <p>{t(orbital ? 'homeOrbit.description1' : 'homeDesign.description1')}<br />{t(orbital ? 'homeOrbit.description2' : 'homeDesign.description2')}</p>
         </div>
         <div className="creative-hero-composer" id="create">{children}</div>
         <div className="creative-actions">
@@ -89,10 +90,10 @@ export default function HomeCreativeHero({ skills, paused, suspended, onSelect, 
   )
 }
 
-export function HomeCreativeRibbon({ paused, onToggle }: { paused: boolean; onToggle: () => void }) {
+export function HomeCreativeRibbon({ paused, onToggle, compact = false }: { paused: boolean; onToggle: () => void; compact?: boolean }) {
   const { t } = useLocale()
-  return <div className="creative-ribbon">
-    <p>{t('homeDesign.ribbon')}</p>
+  return <div className={`creative-ribbon${compact ? ' creative-ribbon-compact' : ''}`}>
+    {!compact && <p>{t('homeDesign.ribbon')}</p>}
     <button type="button" className="creative-motion-toggle" onClick={onToggle} aria-pressed={paused}>
       <svg width="16" height="16" viewBox="0 0 16 16" aria-hidden="true" fill="none" stroke="currentColor" strokeWidth="2">{paused ? <path d="m5 3 8 5-8 5Z" /> : <path d="M5 2v12M11 2v12" />}</svg>{t(paused ? 'homeDesign.resume' : 'homeDesign.pause')}
     </button>
