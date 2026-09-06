@@ -20,13 +20,15 @@ import HomeCreativeStudio from '@/components/HomeCreativeStudio'
 let visibility: IntersectionObserverCallback
 const disconnect = vi.fn()
 beforeEach(() => {
+  vi.spyOn(HTMLMediaElement.prototype, 'pause').mockImplementation(() => {})
+  vi.spyOn(HTMLMediaElement.prototype, 'play').mockResolvedValue()
   vi.stubGlobal('IntersectionObserver', class {
     constructor(callback: IntersectionObserverCallback) { visibility = callback }
     observe() {}
     disconnect = disconnect
   })
 })
-afterEach(() => { cleanup(); vi.unstubAllGlobals(); disconnect.mockClear() })
+afterEach(() => { cleanup(); vi.restoreAllMocks(); vi.unstubAllGlobals(); disconnect.mockClear() })
 
 const skills = [{ id: 'aef03797-9d32-46f9-ba90-88b4afe9981b', image: '/example.mp4', labels: {}, prompt: '', sort_order: 1 }]
 
@@ -35,10 +37,10 @@ describe('homepage creative studio', () => {
     const onUseIdea = vi.fn()
     const view = render(<HomeCreativeStudio skills={skills} paused={false} suspended={false} onUseIdea={onUseIdea} />)
     fireEvent.click(view.getByRole('tab', { name: '设计' }))
-    fireEvent.click(view.getByRole('button', { name: '冰蓝' }))
+    fireEvent.click(view.getByRole('button', { name: '未来构成' }))
     expect(onUseIdea).not.toHaveBeenCalled()
     fireEvent.click(view.getByRole('button', { name: '用这个想法开始' }))
-    expect(onUseIdea).toHaveBeenLastCalledWith(expect.stringContaining('冰蓝'))
+    expect(onUseIdea).toHaveBeenLastCalledWith(expect.stringContaining('未来构成'))
     fireEvent.click(view.getByRole('tab', { name: '音乐' }))
     fireEvent.click(view.getByRole('button', { name: '夜航' }))
     fireEvent.click(view.getByRole('button', { name: '用这个想法开始' }))
@@ -72,4 +74,26 @@ describe('homepage creative studio', () => {
     view.unmount()
     expect(disconnect).toHaveBeenCalled()
   })
+  it('plays only on request, switches the real source, and stops when hidden', () => {
+    const view = render(<HomeCreativeStudio skills={skills} paused={false} suspended={false} onUseIdea={vi.fn()} />)
+    act(() => visibility([{ isIntersecting: true } as IntersectionObserverEntry], {} as IntersectionObserver))
+    fireEvent.click(view.getByRole('tab', { name: '音乐' }))
+    const audio = view.container.querySelector('audio')!
+    expect(audio.play).not.toHaveBeenCalled()
+    expect(view.container.querySelector('.studio-music')?.getAttribute('data-playing')).toBe('false')
+    fireEvent.click(view.getByRole('button', { name: '播放配乐' }))
+    expect(audio.getAttribute('src')).toBe('/home-studio/dream.mp3')
+    fireEvent.playing(audio)
+    expect(view.container.querySelector('.studio-music')?.getAttribute('data-playing')).toBe('true')
+    fireEvent.click(view.getByRole('button', { name: '夜航' }))
+    expect(audio.getAttribute('src')).toBe('/home-studio/night.mp3')
+    expect(audio.play).toHaveBeenCalledTimes(2)
+    fireEvent.playing(audio)
+    act(() => visibility([{ isIntersecting: false } as IntersectionObserverEntry], {} as IntersectionObserver))
+    expect(audio.pause).toHaveBeenCalled()
+    expect(view.getByRole('button', { name: '播放配乐' })).toBeTruthy()
+    act(() => visibility([{ isIntersecting: true } as IntersectionObserverEntry], {} as IntersectionObserver))
+    expect(audio.play).toHaveBeenCalledTimes(2)
+  })
+
 })

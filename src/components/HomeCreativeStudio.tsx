@@ -30,6 +30,13 @@ export default function HomeCreativeStudio({ skills, paused, suspended, onUseIde
   const [reveal, setReveal] = useState(42)
   const [tone, setTone] = useState<Tone>('fuchsia')
   const [mood, setMood] = useState<Mood>('dream')
+  const audioRef = useRef<HTMLAudioElement>(null)
+  const [playing, setPlaying] = useState(false)
+  const [loading, setLoading] = useState(false)
+  const [audioError, setAudioError] = useState(false)
+  const [elapsed, setElapsed] = useState(0)
+  const [duration, setDuration] = useState(0)
+  const playRequest = useRef(0)
   const [inView, setInView] = useState(false)
   const sectionRef = useRef<HTMLElement>(null)
   const tabRefs = useRef<(HTMLButtonElement | null)[]>([])
@@ -43,6 +50,63 @@ export default function HomeCreativeStudio({ skills, paused, suspended, onUseIde
     observer.observe(section)
     return () => observer.disconnect()
   }, [])
+
+  const stopMusic = () => {
+    playRequest.current += 1
+    audioRef.current?.pause()
+    setPlaying(false)
+    setLoading(false)
+  }
+
+  useEffect(() => {
+    if (mode !== 'music' || suspended || !inView) {
+      playRequest.current += 1
+      audioRef.current?.pause()
+      setPlaying(false)
+      setLoading(false)
+    }
+  }, [mode, suspended, inView])
+
+  useEffect(() => {
+    const audio = audioRef.current
+    const hide = () => { if (document.hidden) stopMusic() }
+    document.addEventListener('visibilitychange', hide)
+    return () => { document.removeEventListener('visibilitychange', hide); audio?.pause() }
+  }, [])
+
+  const playMusic = (next: Mood = mood) => {
+    const audio = audioRef.current
+    if (!audio) return
+    const request = ++playRequest.current
+    if (audio.getAttribute('src') !== `/home-studio/${next}.mp3`) {
+      audio.pause()
+      audio.src = `/home-studio/${next}.mp3`
+      setElapsed(0)
+      setDuration(0)
+    }
+    setAudioError(false)
+    setLoading(true)
+    void audio.play().catch(() => {
+      if (playRequest.current === request) {
+        setLoading(false)
+        setPlaying(false)
+        setAudioError(true)
+      }
+    })
+  }
+
+  const selectMood = (next: Mood) => {
+    if (next === mood) return
+    const resume = playing || loading
+    stopMusic()
+    setMood(next)
+    setElapsed(0)
+    setDuration(0)
+    setAudioError(false)
+    if (audioRef.current) audioRef.current.src = `/home-studio/${next}.mp3`
+    if (resume) playMusic(next)
+  }
+  const time = (seconds: number) => `0:${Math.floor(seconds).toString().padStart(2, '0')}`
 
   const moveTab = (event: KeyboardEvent<HTMLButtonElement>, index: number) => {
     let next = index
@@ -64,6 +128,13 @@ export default function HomeCreativeStudio({ skills, paused, suspended, onUseIde
   }
 
   return <section className="creative-studio" id="studio" ref={sectionRef} aria-labelledby="creative-studio-title" data-still={still} data-mode={mode} data-locale={locale}>
+    <audio ref={audioRef} preload="none"
+      onPlaying={() => { setPlaying(true); setLoading(false) }}
+      onPause={() => setPlaying(false)} onEnded={() => { setPlaying(false); setLoading(false) }}
+      onWaiting={() => { setPlaying(false); setLoading(true) }}
+      onTimeUpdate={event => setElapsed(event.currentTarget.currentTime)}
+      onLoadedMetadata={event => setDuration(event.currentTarget.duration)}
+      onError={() => { setAudioError(true); setLoading(false); setPlaying(false) }} />
     <div className="creative-studio-heading">
       <h2 id="creative-studio-title">{t('homeStudio.title1')}<br /><span>{t('homeStudio.title2')}</span></h2>
       <p>{t('homeStudio.intro1')}<br />{t('homeStudio.intro2')}</p>
@@ -91,23 +162,31 @@ export default function HomeCreativeStudio({ skills, paused, suspended, onUseIde
             {videoSkill ? <LazyVideo src={videoSkill.image} paused={paused} suspended={suspended || !inView} fallbackSrc={videoSkill.before_images?.[0]} style={{ position: 'absolute', inset: 0, width: '100%', height: '100%', objectFit: 'contain' }} /> : <img src={AFTER} alt={t('homeStudio.afterAlt')} />}
             <span className="studio-video-caption">{t('homeStudio.video.note')}</span>
           </div>}
-          {mode === 'design' && <div className="studio-design" style={{ '--poster-tone': TONE_COLORS[tone] } as CSSProperties}>
+          {mode === 'design' && <div className="studio-design" data-tone={tone} style={{ '--poster-tone': TONE_COLORS[tone] } as CSSProperties}>
             <div className="studio-poster">
-              <img src={AFTER} alt="" loading="lazy" />
+              <div className="studio-poster-shape" aria-hidden="true" />
+              <img src={BEFORE} alt={t('homeStudio.beforeAlt')} loading="lazy" />
               <div className="studio-poster-top"><span>{t('homeStudio.poster.issue')}</span><span>{t('homeStudio.poster.studio')}</span></div>
               <p>{t('homeStudio.poster.title1')}<br /><span>{t('homeStudio.poster.title2')}</span></p>
               <div className="studio-poster-bottom"><span>{t('homeStudio.poster.caption')}</span><Arrow /></div>
             </div>
             <div className="studio-swatches" role="group" aria-label={t('homeStudio.palette')}>
-              {TONES.map(item => <button key={item} type="button" style={{ '--swatch': TONE_COLORS[item] } as CSSProperties} aria-label={t(`homeStudio.tone.${item}`)} aria-pressed={tone === item} onClick={() => setTone(item)}><span /></button>)}
+              {TONES.map(item => <button key={item} type="button" style={{ '--swatch': TONE_COLORS[item] } as CSSProperties} aria-pressed={tone === item} onClick={() => setTone(item)}><i aria-hidden="true" /><span>{t(`homeStudio.tone.${item}`)}</span></button>)}
             </div>
           </div>}
-          {mode === 'music' && <div className="studio-music" data-mood={mood}>
+          {mode === 'music' && <div className="studio-music" data-mood={mood} data-playing={playing}>
             <img className="studio-vinyl" src="/home-studio/makaron-vinyl.webp" alt={t('homeStudio.vinylAlt')} loading="lazy" />
             <div className="studio-music-copy"><p>{t(`homeStudio.mood.${mood}.label`)}</p><span>{t(`homeStudio.mood.${mood}.description`)}</span></div>
+            <div className="studio-audio-controls">
+              <button type="button" onClick={() => playing || loading ? stopMusic() : playMusic()} aria-label={t(playing || loading ? 'homeStudio.music.pause' : 'homeStudio.music.play')}>
+                <svg width="18" height="18" viewBox="0 0 18 18" fill="currentColor" aria-hidden="true">{playing || loading ? <path d="M4 3h3v12H4zm7 0h3v12h-3z" /> : <path d="m5 2 11 7-11 7z" />}</svg>
+              </button>
+              <span>{loading ? t('homeStudio.music.loading') : `${time(elapsed)} / ${time(duration || 8.5)}`}</span>
+            </div>
+            {audioError && <span className="studio-audio-error" role="alert">{t('homeStudio.music.error')}</span>}
             <div className="studio-wave" aria-hidden="true">{Array.from({ length: 36 }, (_, index) => <i key={index} style={{ '--bar': `${18 + ((index * 19 + 7) % 67)}%`, '--delay': `${index * -0.11}s` } as CSSProperties} />)}</div>
             <div className="studio-moods" role="group" aria-label={t('homeStudio.moodSelector')}>
-              {MOODS.map(item => <button type="button" key={item} aria-pressed={mood === item} onClick={() => setMood(item)}>{t(`homeStudio.mood.${item}.label`)}</button>)}
+              {MOODS.map(item => <button type="button" key={item} aria-pressed={mood === item} onClick={() => selectMood(item)}>{t(`homeStudio.mood.${item}.label`)}</button>)}
             </div>
             <span className="studio-music-note">{t('homeStudio.music.note')}</span>
           </div>}
