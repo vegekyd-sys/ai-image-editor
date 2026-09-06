@@ -29,9 +29,8 @@ export function useHomeMotion() {
   return { paused, setPaused }
 }
 
-export default function HomeCreativeHero({ skills, paused, suspended, activeSkillId, onSelect, children, orbital = false }: {
+export default function HomeCreativeHero({ skills, paused, suspended, activeSkillId, onSelect, children }: {
   activeSkillId?: string
-  orbital?: boolean
   children: ReactNode
   skills: HomeSkill[]
   paused: boolean
@@ -50,30 +49,12 @@ export default function HomeCreativeHero({ skills, paused, suspended, activeSkil
   }, [])
   const featured = FEATURED_IDS.map(id => skills.find(skill => skill.id === id)).filter((skill): skill is HomeSkill => !!skill)
 
-  useEffect(() => {
-    const hero = heroRef.current
-    if (!hero || paused || orbital) return
-    let frame = 0
-    const update = () => {
-      frame = 0
-      const progress = Math.min(1, Math.max(0, -hero.getBoundingClientRect().top / hero.offsetHeight))
-      hero.style.setProperty('--home-scroll', String(progress))
-    }
-    const onScroll = () => { if (!frame) frame = requestAnimationFrame(update) }
-    window.addEventListener('scroll', onScroll, { passive: true })
-    update()
-    return () => {
-      window.removeEventListener('scroll', onScroll)
-      cancelAnimationFrame(frame)
-      hero.style.setProperty('--home-scroll', '0')
-    }
-  }, [paused, orbital])
 
   return (
-    <section className={`creative-hero${orbital ? ' creative-hero-orbital' : ''}`} data-locale={locale} id="product" ref={heroRef} aria-labelledby="creative-hero-title">
+    <section className="creative-hero creative-hero-orbital" data-locale={locale} id="product" ref={heroRef} aria-labelledby="creative-hero-title">
       <div className="creative-orbit">
         {featured.map((skill, index) => (
-          <button type="button" key={skill.id} className={`creative-art creative-art-${index}`} style={activeSkillId === skill.id ? { opacity: 0 } : undefined} inert={orbital && mobileComposition && index === 3 ? true : undefined} onClick={event => onSelect(skill, event)} aria-label={t('homeDesign.openTemplate', pickLocalizedValue(skill.labels, locale))}>
+          <button type="button" key={skill.id} className={`creative-art creative-art-${index}`} style={activeSkillId === skill.id ? { opacity: 0 } : undefined} inert={mobileComposition && index === 3 ? true : undefined} onClick={event => onSelect(skill, event)} aria-label={t('homeDesign.openTemplate', pickLocalizedValue(skill.labels, locale))}>
             <div className="creative-art-frame">
               {/\.(mp4|webm)(?:[?#]|$)/i.test(skill.image) ? (
                 <LazyVideo src={skill.image} eager={index < 2} suspended={suspended} paused={paused}
@@ -87,8 +68,8 @@ export default function HomeCreativeHero({ skills, paused, suspended, activeSkil
       </div>
       <div className="creative-hero-copy">
         <div className="creative-hero-intro">
-          <h1 id="creative-hero-title"><span>{t(orbital ? 'homeOrbit.title1' : 'homeDesign.title1')}</span><span>{t(orbital ? 'homeOrbit.title2' : 'homeDesign.title2')}</span></h1>
-          <p>{t(orbital ? 'homeOrbit.description1' : 'homeDesign.description1')}<br /><span className={orbital ? 'creative-description-desktop' : undefined}>{t(orbital ? 'homeOrbit.description2' : 'homeDesign.description2')}</span>{orbital && <span className="creative-description-mobile">{t('homeOrbit.mobileDescription')}</span>}</p>
+          <h1 id="creative-hero-title"><span>{t('homeOrbit.title1')}</span><span>{t('homeOrbit.title2')}</span></h1>
+          <p>{t('homeOrbit.description1')}<br /><span className="creative-description-desktop">{t('homeOrbit.description2')}</span><span className="creative-description-mobile">{t('homeOrbit.mobileDescription')}</span></p>
         </div>
         <div className="creative-hero-composer" id="create">{children}</div>
         <div className="creative-actions">
@@ -99,10 +80,9 @@ export default function HomeCreativeHero({ skills, paused, suspended, activeSkil
   )
 }
 
-export function HomeCreativeRibbon({ paused, onToggle, compact = false }: { paused: boolean; onToggle: () => void; compact?: boolean }) {
+export function HomeCreativeRibbon({ paused, onToggle }: { paused: boolean; onToggle: () => void }) {
   const { t } = useLocale()
-  return <div className={`creative-ribbon${compact ? ' creative-ribbon-compact' : ''}`}>
-    {!compact && <p>{t('homeDesign.ribbon')}</p>}
+  return <div className="creative-ribbon creative-ribbon-compact">
     <button type="button" className="creative-motion-toggle" onClick={onToggle} aria-pressed={paused}>
       <svg width="16" height="16" viewBox="0 0 16 16" aria-hidden="true" fill="none" stroke="currentColor" strokeWidth="2">{paused ? <path d="m5 3 8 5-8 5Z" /> : <path d="M5 2v12M11 2v12" />}</svg>{t(paused ? 'homeDesign.resume' : 'homeDesign.pause')}
     </button>

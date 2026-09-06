@@ -11,7 +11,8 @@ const MOODS = ['dream', 'night', 'sunrise'] as const
 type Mood = typeof MOODS[number]
 const TONES = ['fuchsia', 'ice', 'paper'] as const
 type Tone = typeof TONES[number]
-const TONE_COLORS: Record<Tone, string> = { fuchsia: '#d946ef', ice: '#9de7f5', paper: '#f5eedb' }
+const TONE_COLORS: Record<Tone, string> = { fuchsia: '#f27635', ice: '#2469bc', paper: '#f5eedb' }
+const DESIGN_ART: Record<Tone, string> = { fuchsia: '/home-studio/design-peel.webp', ice: '/home-studio/design-light.webp', paper: '/home-studio/design-flight.webp' }
 const BEFORE = '/home-studio/portrait-before.webp'
 const AFTER = '/home-studio/cloud-house-after.webp'
 
@@ -122,7 +123,7 @@ export default function HomeCreativeStudio({ skills, paused, suspended, onUseIde
 
   const useIdea = () => {
     let prompt = t(`homeStudio.${mode}.prompt`)
-    if (mode === 'design') prompt += ` ${t(`homeStudio.tone.${tone}`)}`
+    if (mode === 'design') prompt += ` ${t(`homeStudio.tone.${tone}`)} — ${t(`homeStudio.concept.${tone}.description`)}`
     if (mode === 'music') prompt += ` ${t(`homeStudio.mood.${mood}.description`)}`
     onUseIdea(prompt)
   }
@@ -164,11 +165,10 @@ export default function HomeCreativeStudio({ skills, paused, suspended, onUseIde
           </div>}
           {mode === 'design' && <div className="studio-design" data-tone={tone} style={{ '--poster-tone': TONE_COLORS[tone] } as CSSProperties}>
             <div className="studio-poster">
-              <div className="studio-poster-shape" aria-hidden="true" />
-              <img src={BEFORE} alt={t('homeStudio.beforeAlt')} loading="lazy" />
+              <img key={tone} src={DESIGN_ART[tone]} alt={t(`homeStudio.concept.${tone}.description`)} loading="eager" />
               <div className="studio-poster-top"><span>{t('homeStudio.poster.issue')}</span><span>{t('homeStudio.poster.studio')}</span></div>
-              <p>{t('homeStudio.poster.title1')}<br /><span>{t('homeStudio.poster.title2')}</span></p>
-              <div className="studio-poster-bottom"><span>{t('homeStudio.poster.caption')}</span><Arrow /></div>
+              <p>{t(`homeStudio.concept.${tone}.title1`)}<br /><span>{t(`homeStudio.concept.${tone}.title2`)}</span></p>
+              <div className="studio-poster-bottom"><span>{t(`homeStudio.concept.${tone}.caption`)}</span><Arrow /></div>
             </div>
             <div className="studio-swatches" role="group" aria-label={t('homeStudio.palette')}>
               {TONES.map(item => <button key={item} type="button" style={{ '--swatch': TONE_COLORS[item] } as CSSProperties} aria-pressed={tone === item} onClick={() => setTone(item)}><i aria-hidden="true" /><span>{t(`homeStudio.tone.${item}`)}</span></button>)}

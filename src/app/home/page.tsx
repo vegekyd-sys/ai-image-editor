@@ -102,8 +102,6 @@ export default function HomePage() {
 }
 
 function HomePageInner() {
-  const [orbitalHero, setOrbitalHero] = useState(false)
-  useEffect(() => { setOrbitalHero(new URLSearchParams(window.location.search).get('hero') === 'b') }, [])
   const { paused: motionPaused, setPaused: setMotionPaused } = useHomeMotion()
   const { user, loading: authLoading } = useAuth()
   const hydrated = useHydrated()
@@ -185,6 +183,8 @@ function HomePageInner() {
   const [heroRect, setHeroRect] = useState<HomeHeroGeometry | null>(null)
   const heroSourceRef = useRef<HTMLElement | null>(null)
   const [heroExpanded, setHeroExpanded] = useState(false)
+  const [heroArrived, setHeroArrived] = useState(false)
+  const [heroPoster, setHeroPoster] = useState<string | null>(null)
 
   useEffect(() => {
     setCreateAgentModel(loadCreateAgentModelPreference())
@@ -692,11 +692,11 @@ function HomePageInner() {
 
   const writeSkillDetailPath = useCallback((skillId: string, mode: 'push' | 'replace') => {
     const state = isIOSAppShell ? { makaronHomeSkill: true, skillId } : null
-    const url = isIOSAppShell ? '/home' : `/home?${orbitalHero ? 'hero=b&' : ''}skill=${encodeURIComponent(skillId)}`
+    const url = isIOSAppShell ? '/home' : `/home?skill=${encodeURIComponent(skillId)}`
     if (mode === 'push') window.history.pushState(state, '', url)
     else window.history.replaceState(state, '', url)
     if (!user) rememberIOSSkillReturn(skillId)
-  }, [orbitalHero, isIOSAppShell, rememberIOSSkillReturn, user])
+  }, [isIOSAppShell, rememberIOSSkillReturn, user])
 
   const resetSkillBackPan = useCallback(() => {
     skillBackPanRef.current = { tracking: false, locked: false, startX: 0, startY: 0, lastX: 0, startTime: 0 }
@@ -726,6 +726,8 @@ function HomePageInner() {
       if (heroSourceRef.current?.isConnected) {
         setHeroRect(readHomeHeroGeometry(heroSourceRef.current))
       }
+      setHeroPoster(null)
+      setHeroArrived(false)
       setHeroExpanded(false)
       detailCloseTimerRef.current = window.setTimeout(() => {
         detailCloseTimerRef.current = null
@@ -742,9 +744,9 @@ function HomePageInner() {
     detailPathActiveRef.current = false
     if (historyMode === 'pushHome') {
       if (isIOSAppShell) window.history.replaceState(null, '', '/home')
-      else window.history.pushState(null, '', orbitalHero ? '/home?hero=b' : '/home')
+      else window.history.pushState(null, '', '/home')
     }
-  }, [orbitalHero, clearDetailCloseTimer, clearIOSSkillReturn, createInput, isIOSAppShell, resetSkillBackPan])
+  }, [clearDetailCloseTimer, clearIOSSkillReturn, createInput, isIOSAppShell, resetSkillBackPan])
 
   useEffect(() => () => clearDetailCloseTimer(), [clearDetailCloseTimer])
 
@@ -2057,6 +2059,19 @@ function HomePageInner() {
     const source = card.querySelector<HTMLElement>('.creative-art-frame') || card
     heroSourceRef.current = source
     setHeroRect(readHomeHeroGeometry(source))
+    const video = source.querySelector('video')
+    let poster: string | null = null
+    if (video && video.readyState >= 2) {
+      try {
+        const canvas = document.createElement('canvas')
+        canvas.width = video.videoWidth
+        canvas.height = video.videoHeight
+        canvas.getContext('2d')?.drawImage(video, 0, 0)
+        poster = canvas.toDataURL('image/jpeg', 0.9)
+      } catch { /* A cross-origin video can still use the live fly player. */ }
+    }
+    setHeroPoster(poster)
+    setHeroArrived(false)
     setHeroExpanded(false)
     setSelectedDetail(template)
     setSelectedSkill(template.skill_path ? template.id : null)
@@ -2066,7 +2081,8 @@ function HomePageInner() {
     const detailSkills = visibleInCategory ? filteredHomeSkills : homeSkills
     const idx = detailSkills.findIndex(t => t.id === template.id)
     requestAnimationFrame(() => {
-      setHeroExpanded(true)
+      // Paint the source geometry before starting the transition.
+      requestAnimationFrame(() => setHeroExpanded(true))
       // Position to the clicked slide via JS transform (no scroll-snap)
       if (detailInnerRef.current && detailSnapRef.current) {
         const slideH = detailSnapRef.current.clientHeight
@@ -2308,7 +2324,7 @@ function HomePageInner() {
           </nav>
           <div className="creative-account"><TopBar page="home" authReturnPath={activeSkill?.id ? `/home/${activeSkill.id}` : null} /></div>
         </header>
-        <HomeCreativeHero orbital={orbitalHero} skills={homeSkills} paused={motionPaused} activeSkillId={heroRect ? selectedDetail?.id : undefined} suspended={!!selectedDetail || showAgentLanding} onSelect={handleSkillCardClick}>
+        <HomeCreativeHero skills={homeSkills} paused={motionPaused} activeSkillId={heroRect ? selectedDetail?.id : undefined} suspended={!!selectedDetail || showAgentLanding} onSelect={handleSkillCardClick}>
           {/* ── Inline Input Box ── */}
           <div ref={inlineInputRef} data-makaron-home-inline-composer="true" className="relative z-10" style={{
             marginTop: '32px', width: '100%', maxWidth: '500px', padding: '0 16px',
@@ -2367,7 +2383,7 @@ function HomePageInner() {
             />
           </div>
         </HomeCreativeHero>
-        <HomeCreativeRibbon compact={orbitalHero} paused={motionPaused} onToggle={() => setMotionPaused(value => !value)} />
+        <HomeCreativeRibbon paused={motionPaused} onToggle={() => setMotionPaused(value => !value)} />
 
         {/* ── Skill Template Grid ── */}
         <div id="templates" className="creative-market" ref={skillSectionRef} data-testid="skill-market" style={{
@@ -2628,15 +2644,17 @@ function HomePageInner() {
       {heroRect && selectedDetail && (() => {
         const vw = typeof window !== 'undefined' ? window.innerWidth : 1280
         const vh = typeof window !== 'undefined' ? window.innerHeight : 800
-        const cardW = 440
-        const cardH = vh * 0.75
+        const cardW = Math.min(560, vw * 0.5, vh * 0.6)
+        const cardH = Math.min(cardW * 4 / 3, vh * 0.8)
         const pb = inputWrapperHeight + 16
         const targetTop = isDesktop ? Math.max(0, (vh - cardH - pb) / 2) : 0
         const targetLeft = isDesktop ? (vw - cardW) / 2 : 0
         const targetW = isDesktop ? cardW : vw
         const targetH = isDesktop ? cardH : vh
         return (
-          <div data-testid="home-hero-fly" style={{
+          <div data-testid="home-hero-fly" onTransitionEnd={event => {
+            if (event.target === event.currentTarget && ['width', 'height', 'transform'].includes(event.propertyName) && heroExpanded) setHeroArrived(true)
+          }} style={{
             position: 'fixed', zIndex: Z.HERO_FLY, pointerEvents: 'none',
             top: heroExpanded ? targetTop : heroRect.top,
             left: heroExpanded ? targetLeft : heroRect.left,
@@ -2646,11 +2664,11 @@ function HomePageInner() {
             transformOrigin: 'center',
             borderRadius: heroExpanded ? (isDesktop ? 24 : 0) : heroRect.borderRadius,
             overflow: 'hidden',
-            transition: 'all 0.35s cubic-bezier(0.22, 1, 0.36, 1)',
-            opacity: heroExpanded ? 0 : heroRect.opacity,
+            transition: 'top .35s cubic-bezier(0.22,1,0.36,1), left .35s cubic-bezier(0.22,1,0.36,1), width .35s cubic-bezier(0.22,1,0.36,1), height .35s cubic-bezier(0.22,1,0.36,1), transform .35s cubic-bezier(0.22,1,0.36,1), border-radius .35s ease',
+            opacity: heroExpanded ? (heroArrived ? 0 : 1) : heroRect.opacity,
           }}>
-            { }
-            {renderCoverMedia(selectedDetail.image, '', 'hero', { priority: !heroExpanded, active: !heroExpanded, extraStyle: { position: 'absolute' } })}
+            {renderCoverMedia(selectedDetail.image, '', 'hero', { priority: true, active: !heroArrived, extraStyle: { position: 'absolute' } })}
+            {heroPoster && !heroArrived && <img src={heroPoster} alt="" style={{ position:'absolute', inset:0, width:'100%', height:'100%', objectFit:'cover' }} />}
           </div>
         )
       })()}
@@ -2678,10 +2696,10 @@ function HomePageInner() {
           style={{
             position: 'fixed', inset: 0, zIndex: Z.OVERLAY,
             background: isDesktop ? 'rgba(0,0,0,0.7)' : '#000',
-            opacity: heroExpanded ? 1 : 0,
+            opacity: heroExpanded && (!heroRect || heroArrived) ? 1 : 0,
             pointerEvents: heroExpanded ? 'auto' : 'none',
             transform: isDesktop ? undefined : `translate3d(${skillBackPanX}px, 0, 0)`,
-            transition: skillBackPanSettling
+            transition: heroRect && heroExpanded ? 'none' : skillBackPanSettling
               ? 'opacity 0.3s ease 0.1s, transform 180ms ease-out'
               : 'opacity 0.3s ease 0.1s',
             willChange: skillBackPanActive || skillBackPanSettling ? 'transform, opacity' : 'opacity',
