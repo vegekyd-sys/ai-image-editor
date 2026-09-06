@@ -167,23 +167,32 @@
   .creative-hero-orbital .creative-hero-composer { width:48%; }
 }
 @media(max-width:767px) {
-  .creative-hero-orbital { min-height:740px; max-height:950px; }
-  .creative-hero-orbital .creative-hero-copy { bottom:60px; padding:0 20px; }
+  /* Compose for the narrow screen: clean header, title, two artworks, input.
+     Content determines height, so tall phones do not acquire an empty center. */
+  .creative-hero-orbital { display:flex; flex-direction:column; align-items:center; height:auto; min-height:0; max-height:none; padding:22px 24px 0; }
+  .creative-hero-orbital .creative-hero-copy { display:contents; }
+  .creative-hero-orbital .creative-hero-intro { order:0; align-self:auto; margin:0; width:100%; text-align:center; }
   .creative-hero-orbital h1,
-  .creative-hero-orbital[data-locale="en"] h1 { font-size:clamp(46px,12vw,76px); line-height:1.02; }
-  .creative-hero-orbital:is([data-locale="zh"],[data-locale="zh-Hant"],[data-locale="ja"]) h1 { font-size:clamp(43px,11vw,68px); line-height:1.16; }
-  .creative-hero-orbital .creative-hero-copy p { font-size:11px; margin-top:18px; }
-  .creative-hero-orbital .creative-hero-intro { margin-bottom:20px; }
-  .creative-hero-orbital .creative-hero-composer { width:100%; }
-  .creative-hero-orbital .creative-orbit::before { left:-30%; top:1%; width:160%; height:96%; transform:rotate(-12deg); }
-  .creative-hero-orbital .creative-art-0 { --tilt:-15deg; left:-22%; top:-8%; width:54%; height:24%; }
-  .creative-hero-orbital .creative-art-1 { --tilt:-9deg; left:5%; top:-12%; width:32%; height:24%; }
-  .creative-hero-orbital .creative-art-2 { --tilt:12deg; right:-12%; top:-9%; width:48%; height:21%; }
-  .creative-hero-orbital .creative-art-3 { --tilt:-7deg; left:-12%; right:auto; bottom:0; width:81%; height:23%; }
-  .creative-hero-orbital .creative-art-4 { --tilt:10deg; right:-15%; top:auto; bottom:-1%; width:49%; height:26%; }
-  .creative-hero-orbital:is([data-locale="en"],[data-locale="ja"]) .creative-art-0,
-  .creative-hero-orbital:is([data-locale="en"],[data-locale="ja"]) .creative-art-1 { height:24%; }
-  .creative-ribbon-compact { margin:0; padding:28px 20px 48px; }
+  .creative-hero-orbital[data-locale="en"] h1 { font-size:clamp(43px,11.6vw,70px); line-height:1.04; }
+  .creative-hero-orbital:is([data-locale="zh"],[data-locale="zh-Hant"],[data-locale="ja"]) h1 { font-size:clamp(40px,10.8vw,64px); line-height:1.17; }
+  .creative-hero-orbital .creative-hero-intro p { margin:16px auto 0; max-width:330px; color:#a1a1aa; font-size:12px; line-height:1.8; text-wrap:pretty; }
+  .creative-hero-orbital .creative-orbit { order:1; position:relative; inset:auto; width:min(100%,330px); height:clamp(162px,47vw,210px); margin:20px auto 24px; flex-shrink:0; transform:none; }
+  .creative-hero-orbital .creative-orbit::before { display:none; }
+  .creative-hero-orbital .creative-art { animation:none; }
+  .creative-hero-orbital .creative-art-1,
+  .creative-hero-orbital .creative-art-2,
+  .creative-hero-orbital .creative-art-3 { display:none; }
+  .creative-hero-orbital .creative-art-0,
+  .creative-hero-orbital:is([data-locale="en"],[data-locale="ja"]) .creative-art-0 { --tilt:-7deg; left:7%; top:0; bottom:auto; width:40%; height:92%; transform:rotate(var(--tilt)); }
+  .creative-hero-orbital .creative-art-4 { --tilt:7deg; right:7%; top:8%; bottom:auto; width:40%; height:92%; transform:rotate(var(--tilt)); }
+  .creative-hero-orbital .creative-art-frame { border-radius:9px; border-color:#ffffff30; }
+  .creative-hero-orbital .creative-art-caption { padding:22px 8px 8px; font-size:9px; }
+  .creative-hero-orbital .creative-art-caption > span { font-size:12px; }
+  .creative-hero-orbital .creative-hero-composer { order:2; width:100%; max-width:540px; }
+  .creative-hero-orbital .creative-actions { order:3; align-self:auto; margin-top:10px; }
+  .creative-hero-orbital .creative-text-link { font-size:12px; padding:10px 0; }
+  .creative-ribbon-compact { margin:0; padding:22px 24px 42px; justify-content:center; }
+  .creative-ribbon-compact .creative-motion-toggle { margin:0; border:0; padding:4px 8px; font-size:10px; }
 }
 @media(prefers-reduced-motion:reduce) { .creative-hero-orbital .creative-art { animation:none; } }
 
