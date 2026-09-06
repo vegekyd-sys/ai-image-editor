@@ -29,7 +29,8 @@ export function useHomeMotion() {
   return { paused, setPaused }
 }
 
-export default function HomeCreativeHero({ skills, paused, suspended, onSelect, children, orbital = false }: {
+export default function HomeCreativeHero({ skills, paused, suspended, activeSkillId, onSelect, children, orbital = false }: {
+  activeSkillId?: string
   orbital?: boolean
   children: ReactNode
   skills: HomeSkill[]
@@ -72,7 +73,7 @@ export default function HomeCreativeHero({ skills, paused, suspended, onSelect, 
     <section className={`creative-hero${orbital ? ' creative-hero-orbital' : ''}`} data-locale={locale} id="product" ref={heroRef} aria-labelledby="creative-hero-title">
       <div className="creative-orbit">
         {featured.map((skill, index) => (
-          <button type="button" key={skill.id} className={`creative-art creative-art-${index}`} inert={orbital && mobileComposition && index === 3 ? true : undefined} onClick={event => onSelect(skill, event)} aria-label={t('homeDesign.openTemplate', pickLocalizedValue(skill.labels, locale))}>
+          <button type="button" key={skill.id} className={`creative-art creative-art-${index}`} style={activeSkillId === skill.id ? { opacity: 0 } : undefined} inert={orbital && mobileComposition && index === 3 ? true : undefined} onClick={event => onSelect(skill, event)} aria-label={t('homeDesign.openTemplate', pickLocalizedValue(skill.labels, locale))}>
             <div className="creative-art-frame">
               {/\.(mp4|webm)(?:[?#]|$)/i.test(skill.image) ? (
                 <LazyVideo src={skill.image} eager={index < 2} suspended={suspended} paused={paused}

@@ -24,6 +24,7 @@ import { extractPhotoMetadata } from '@/lib/image/metadata'
 import type { PhotoMetadata } from '@/types'
 import { createMetaEventId, trackMetaEvent } from '@/lib/marketing/meta-pixel'
 import HomeCreativeStudio from '@/components/HomeCreativeStudio'
+import { readHomeHeroGeometry, type HomeHeroGeometry } from '@/lib/home-hero-geometry'
 import HomeCreativeHero, { HomeCreativeRibbon, HomeCreativeFooter, useHomeMotion } from '@/components/HomeCreativeHero'
 import './creative-home.css'
 import TopBar from '@/components/TopBar'
@@ -181,7 +182,8 @@ function HomePageInner() {
   const skillFileRef = useRef<HTMLInputElement>(null)
   const skillMenuRef = useRef<HTMLDivElement>(null)
   const [selectedDetail, setSelectedDetail] = useState<HomeSkill | null>(null)
-  const [heroRect, setHeroRect] = useState<DOMRect | null>(null)
+  const [heroRect, setHeroRect] = useState<HomeHeroGeometry | null>(null)
+  const heroSourceRef = useRef<HTMLElement | null>(null)
   const [heroExpanded, setHeroExpanded] = useState(false)
 
   useEffect(() => {
@@ -716,13 +718,20 @@ function HomePageInner() {
     if (options?.skipHeroCollapse) {
       setSelectedDetail(null)
       setHeroRect(null)
+      heroSourceRef.current = null
       resetSkillBackPan()
     } else {
+      // Hover, scrolling, and viewport changes can alter the original card while
+      // the detail is open. Land on its current frame, including its tilt.
+      if (heroSourceRef.current?.isConnected) {
+        setHeroRect(readHomeHeroGeometry(heroSourceRef.current))
+      }
       setHeroExpanded(false)
       detailCloseTimerRef.current = window.setTimeout(() => {
         detailCloseTimerRef.current = null
         setSelectedDetail(null)
         setHeroRect(null)
+        heroSourceRef.current = null
         resetSkillBackPan()
       }, 350)
     }
@@ -2044,8 +2053,10 @@ function HomePageInner() {
     clearDetailCloseTimer()
     blurHomeComposers()
     setViewMode('human')
-    const rect = (e.currentTarget as HTMLElement).getBoundingClientRect()
-    setHeroRect(rect)
+    const card = e.currentTarget as HTMLElement
+    const source = card.querySelector<HTMLElement>('.creative-art-frame') || card
+    heroSourceRef.current = source
+    setHeroRect(readHomeHeroGeometry(source))
     setHeroExpanded(false)
     setSelectedDetail(template)
     setSelectedSkill(template.skill_path ? template.id : null)
@@ -2272,7 +2283,7 @@ function HomePageInner() {
         .hide-scrollbar::-webkit-scrollbar { display: none; }
       `}</style>
 
-      <div className="mkr-page creative-home" data-motion-paused={motionPaused} style={{ minHeight: '100dvh', background: '#000', color: '#fff', overflowX: 'hidden', display: 'flex', flexDirection: 'column' }}>
+      <div className="mkr-page creative-home" data-motion-paused={motionPaused || !!selectedDetail} data-detail-open={!!selectedDetail} style={{ minHeight: '100dvh', background: '#000', color: '#fff', overflowX: 'hidden', display: 'flex', flexDirection: 'column' }}>
         <input
           ref={skillFileRef}
           type="file"
@@ -2297,7 +2308,7 @@ function HomePageInner() {
           </nav>
           <div className="creative-account"><TopBar page="home" authReturnPath={activeSkill?.id ? `/home/${activeSkill.id}` : null} /></div>
         </header>
-        <HomeCreativeHero orbital={orbitalHero} skills={homeSkills} paused={motionPaused} suspended={!!selectedDetail || showAgentLanding} onSelect={handleSkillCardClick}>
+        <HomeCreativeHero orbital={orbitalHero} skills={homeSkills} paused={motionPaused} activeSkillId={heroRect ? selectedDetail?.id : undefined} suspended={!!selectedDetail || showAgentLanding} onSelect={handleSkillCardClick}>
           {/* ── Inline Input Box ── */}
           <div ref={inlineInputRef} data-makaron-home-inline-composer="true" className="relative z-10" style={{
             marginTop: '32px', width: '100%', maxWidth: '500px', padding: '0 16px',
@@ -2369,7 +2380,7 @@ function HomePageInner() {
           width: '100%',
           margin: '0 auto',
         }}>
-          <div className="creative-market-heading">
+          <div className="creative-market-heading" data-locale={locale}>
             <h2>{t('homeDesign.galleryTitle')}</h2>
             <p>{t('homeDesign.galleryDescription')}</p>
           </div>
@@ -2625,13 +2636,15 @@ function HomePageInner() {
         const targetW = isDesktop ? cardW : vw
         const targetH = isDesktop ? cardH : vh
         return (
-          <div style={{
+          <div data-testid="home-hero-fly" style={{
             position: 'fixed', zIndex: Z.HERO_FLY, pointerEvents: 'none',
             top: heroExpanded ? targetTop : heroRect.top,
             left: heroExpanded ? targetLeft : heroRect.left,
             width: heroExpanded ? targetW : heroRect.width,
             height: heroExpanded ? targetH : heroRect.height,
-            borderRadius: heroExpanded ? (isDesktop ? 24 : 0) : 16,
+            transform: `rotate(${heroExpanded ? 0 : heroRect.rotation}deg)`,
+            transformOrigin: 'center',
+            borderRadius: heroExpanded ? (isDesktop ? 24 : 0) : heroRect.borderRadius,
             overflow: 'hidden',
             transition: 'all 0.35s cubic-bezier(0.22, 1, 0.36, 1)',
             opacity: heroExpanded ? 0 : 1,
