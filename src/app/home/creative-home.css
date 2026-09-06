@@ -24,6 +24,10 @@
 .creative-primary:hover { background:#e879f9; transform:translateY(-3px); }
 .creative-primary span { font-size:23px; line-height:1; }
 .creative-text-link { color:#fff; font-size:15px; text-decoration:none; display:inline-flex; align-items:center; gap:20px; padding:12px 0; border-bottom:1px solid var(--home-accent); }
+.creative-hero-orbital .creative-actions { justify-self:center; margin-top:14px; }
+.creative-hero-orbital .creative-text-link { gap:8px; padding:11px 16px; border:0; border-radius:999px; color:#b5b5be; font-size:13px; line-height:20px; transition:color .2s ease,background .2s ease; }
+.creative-hero-orbital .creative-text-link:hover { color:#fff; background:#ffffff08; }
+.creative-hero-orbital .creative-text-link span { color:#84848e; font-size:14px; }
 .creative-orbit { position:absolute; inset:0; z-index:1; transform:translateY(calc(var(--home-scroll)*-65px)); }
 .creative-art { position:absolute; border:0; padding:0; background:transparent; color:#fff; animation:creative-drift 10s ease-in-out infinite alternate; transform:rotate(var(--tilt)); }
 .creative-art-frame { position:relative; width:100%; height:100%; overflow:hidden; border-radius:5px; border:1px solid #ffffff40; background:#141414; transition:transform .35s,border-color .35s; }
@@ -197,8 +201,8 @@
   .creative-hero-orbital .creative-art-4 { --tilt:9deg; right:-27%; top:11%; bottom:auto; width:77%; height:68%; transform:rotate(var(--tilt)); }
   .creative-hero-orbital .creative-art-frame { border-radius:12px; border-color:#ffffff30; }
   .creative-hero-orbital .creative-art-caption { display:none; }
-  .creative-hero-orbital .creative-actions { justify-self:end; margin-top:24px; margin-right:8px; }
-  .creative-hero-orbital .creative-text-link { font-size:13px; padding:10px 12px; background:#000a; backdrop-filter:blur(8px); }
+  .creative-hero-orbital .creative-actions { justify-self:center; margin-top:16px; margin-right:0; }
+  .creative-hero-orbital .creative-text-link { color:#d4d4d8; background:#0005; backdrop-filter:blur(8px); }
   .creative-ribbon-compact { margin:0; padding:8px 24px 42px; justify-content:flex-end; }
   .creative-ribbon-compact .creative-motion-toggle { margin:0; padding:8px 12px; font-size:10px; }
 }
