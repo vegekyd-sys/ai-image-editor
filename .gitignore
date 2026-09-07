@@ -138,6 +138,7 @@ test-kling.mjs
 .claude/worktrees/
 .codex/
 
-# local agent instructions and experimental infra
+# Local nested agent instructions and experimental infra
 AGENTS.md
+!/AGENTS.md
 infra/
