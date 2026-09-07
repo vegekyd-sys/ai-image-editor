@@ -43,7 +43,9 @@ Do not use this prompt for static posters, infographics, e-commerce pages, or or
 
 ## Canvas Aspect Contract
 
-For timeline videos, derive the Remotion canvas from the selected Media Index video dimensions. Preserve the source aspect ratio unless the user explicitly asks to reframe.
+The user's explicit output aspect owns the Remotion canvas, even when every source video has a different aspect. For example, landscape footage requested as a 9:16 TikTok must return `width: 1080, height: 1920`; pass `target_aspect_ratio: "9:16"` on every `run_code` execution or patch. Preserve the footage proportions with `contain` and an intentional background (same-source blur or brand fill); crop only when authorized. A canvas mismatch is repaired in the saved composition, not by switching to FFmpeg.
+
+Only when no output aspect or reframe is requested, derive the canvas from the selected Media Index video dimensions:
 
 - If the selected videos share a 9:16 aspect (for example `360x640`, `720x1280`, or `1080x1920`), return a 9:16 canvas such as `width: 1080, height: 1920`. Never place 9:16 timeline videos into a 16:9 canvas.
 - If the selected videos share a 16:9 aspect, use a 16:9 canvas such as `width: 1920, height: 1080`.

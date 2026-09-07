@@ -18,7 +18,14 @@ async function main() {
  assert.ok(video.includes(baseline.toolDescriptions.video));
  assert.ok(coding.includes(baseline.toolDescriptions.coding));
  assert.ok(coding.includes(baseline.workspaceAuthoring));
- for(const [p,hash]of Object.entries(baseline.protectedFiles))assert.equal(createHash('sha256').update(read(p)).digest('hex'),hash,`Creative contract changed: ${p}`);
+ // Keep the historical refactor baseline frozen; later intentional fixes have
+ // explicit, reviewed amendments instead of silently rewriting the old baseline.
+ const amendments=JSON.parse(read('benchmarks/core-prompt/contract-amendments.json'));
+ for(const [p,amendment]of Object.entries(amendments) as Array<[string,{baselineSha256:string;sha256:string;reason:string}]>){
+  assert.equal(amendment.baselineSha256,baseline.protectedFiles[p],`Amendment baseline mismatch: ${p}`);
+  assert.ok(amendment.reason.trim(),`Amendment needs a reason: ${p}`);
+ }
+ for(const [p,hash]of Object.entries(baseline.protectedFiles))assert.equal(createHash('sha256').update(read(p)).digest('hex'),amendments[p]?.sha256 ?? hash,`Creative contract changed: ${p}`);
  assert.equal(bundleAgentPrompt('skills/custom/SKILL.md','user content'),'user content');
  assert.equal(bundleAgentPrompt('prompts/image.md','image content'),'image content');
  assert.ok(!core.includes('Reference video size:'));

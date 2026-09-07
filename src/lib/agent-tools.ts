@@ -679,11 +679,23 @@ async function createTranscriptArtifact(input: {
 async function validateCompositionMediaAspect(
   ctx: AgentContext,
   result: { code: string; props?: Record<string, unknown>; width?: number; height?: number },
+  targetAspectRatio?: string,
 ): Promise<string | null> {
   const outputWidth = Number(result.width || 1080);
   const outputHeight = Number(result.height || 1350);
   if (!Number.isFinite(outputWidth) || !Number.isFinite(outputHeight) || outputWidth <= 0 || outputHeight <= 0) {
     return null;
+  }
+  // An explicit output target owns the canvas, independently of source shape.
+  // This is a semantic tool argument, not a keyword guess from the user prompt.
+  if (targetAspectRatio !== undefined) {
+    const parts = /^(\d+(?:\.\d+)?):(\d+(?:\.\d+)?)$/.exec(targetAspectRatio);
+    const targetRatio = parts ? Number(parts[1]) / Number(parts[2]) : NaN;
+    if (!Number.isFinite(targetRatio) || targetRatio <= 0) {
+      return 'Invalid target_aspect_ratio. Use a positive width:height ratio such as "9:16".';
+    }
+    if (Math.abs((outputWidth / outputHeight) / targetRatio - 1) <= 0.01) return null;
+    return `Composition rejected: returned canvas ${Math.round(outputWidth)}x${Math.round(outputHeight)} does not match the requested target_aspect_ratio ${targetAspectRatio}. Keep the requested target, preserve source pixels with proportional scaling and contain/background (crop only when authorized), and repair the saved composition; do not switch to Node/FFmpeg.`;
   }
   if (!ctx.supabase || !ctx.projectId) return null;
 
@@ -750,7 +762,7 @@ async function validateCompositionMediaAspect(
         ? '1920x1080'
         : '1080x1080';
 
-    return `Composition rejected: selected timeline video(s) are ${dims} (${sourceAspect}), but the returned canvas is ${Math.round(outputWidth)}x${Math.round(outputHeight)} (${outputAspect}). Preserve the selected video aspect ratio; use a proportional canvas such as ${recommended}, then rerun runtime:"composition".`;
+    return `Composition rejected: selected timeline video(s) are ${dims} (${sourceAspect}), but the returned canvas is ${Math.round(outputWidth)}x${Math.round(outputHeight)} (${outputAspect}). Preserve the selected video aspect ratio; use a proportional canvas such as ${recommended}, then rerun runtime:"composition". If the user explicitly requested a different output aspect, keep that canvas and pass target_aspect_ratio (for example "9:16"); fit the source proportionally with contain/background or authorized cropping. Repair the saved composition, not a Node/FFmpeg replacement.`;
   } catch {
     return null;
   }
@@ -4499,11 +4511,15 @@ function createRunCodeTool(
         description: z.string().optional().describe('Brief description of what this code does. For compositions/videos, describe the content and visual style (e.g. "15s cinematic video: 4 scenes of temple visit with Ken Burns + fade transitions, Japanese text overlays"). This is stored as the snapshot description — be specific.'),
         media_refs: z.array(z.number()).optional().describe('1-based Media Index indices referenced by the user (e.g. [1] for <<<media_1>>>). REQUIRED for runtime:"node" FFmpeg work on timeline media; the system resolves them to local workspace-backed inputFiles[0], inputFiles[1], ... . Do not hardcode Media Index URLs for FFmpeg inputs. For ordinary editable splicing of two timeline videos, use runtime:"composition" instead.'),
         workspace_paths: z.array(z.string()).optional().describe('Workspace file paths from list_files/read_file, e.g. ["project-id/media/clip.mp4"]. For runtime:"node", pass these instead of downloading or copying storage URLs; they are resolved to local inputFiles after media_refs.'),
+        target_aspect_ratio: z.string().regex(/^(\d+(?:\.\d+)?):(\d+(?:\.\d+)?)$/).refine(value => {
+          const [width, height] = value.split(':').map(Number);
+          return Number.isFinite(width) && Number.isFinite(height) && width > 0 && height > 0 && Number.isFinite(width / height);
+        }, 'Use a positive width:height ratio').optional().describe('Composition only: output aspect explicitly requested by the user, e.g. "9:16", "16:9", "1:1", or "4:5". Pass on every run/patch when reframing source footage. Overrides the default source-aspect constraint and validates the returned canvas against this target. Keep sources proportional using contain/background; crop only when authorized. Omit when no output aspect/reframe was requested; do not invent a target just to bypass a validation error.'),
         runtime: z.enum(['composition', 'design', 'node']).optional().describe('composition = safe Remotion/editable composition runtime. design = legacy alias for composition. node = fully open backend Node runtime with fs/child_process/ffmpeg for real MP4 editing.'),
       }).refine(value => Boolean(value.code || value.code_path || value.composition?.code || value.composition_parts), {
         message: 'Provide executable code, a code_path, a direct composition payload, or durable composition parts.',
       }),
-      execute: async ({ code, code_path, composition, composition_parts, description: desc, media_refs, workspace_paths, runtime }) => {
+      execute: async ({ code, code_path, composition, composition_parts, description: desc, media_refs, workspace_paths, runtime, target_aspect_ratio }) => {
         let executableCode = code || '';
         if (code_path) {
           if (!ctx.supabase || !ctx.userId) {
@@ -4916,7 +4932,7 @@ function createRunCodeTool(
               props: resolvedProps,
               width: result.width,
               height: result.height,
-            });
+            }, target_aspect_ratio);
             if (aspectError) {
               return { type: 'text' as const, content: aspectError };
             }

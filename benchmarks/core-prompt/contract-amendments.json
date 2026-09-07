@@ -1,0 +1,12 @@
+{
+  "src/lib/prompts/agent-coding.md": {
+    "baselineSha256": "68d78cbede74aada9f82144b80c7db5b21af7d3a308e6eafd69a947fb7d10427",
+    "sha256": "655d2d2401a5254f72e44a488f719a2a5baf316e464779ae8c4b36ac0aed27cd",
+    "reason": "Explicit requested output aspect overrides source aspect; preserve source proportions and repair in Remotion. Regression: compositionTargetAspect.test.ts."
+  },
+  "src/lib/prompts/remotion-composition.md": {
+    "baselineSha256": "92d46c86086893059985e4e5210e150f50fc0d0142fb69c8014a55217447c6c7",
+    "sha256": "3a79e4b2b562d09f7247fe30cca64ff6da666ac500b56a921b672937db4279c8",
+    "reason": "Explicit requested output aspect overrides source aspect; preserve source proportions and repair in Remotion. Regression: compositionTargetAspect.test.ts."
+  }
+}

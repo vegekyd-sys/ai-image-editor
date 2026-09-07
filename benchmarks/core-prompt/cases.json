@@ -500,5 +500,18 @@
     "args": {
       "media_index": 1
     }
+  },
+  {
+    "id": "composition-explicit-reframe",
+    "domain": "composition",
+    "mediaDescription": "<<<media_1>>> video: exhibition hall, 20s, 1280x720.",
+    "prompt": "把这段横屏视频做成 9:16 竖屏 Remotion，前景保持完整比例，用同源模糊背景补满，不裁切、不拉伸，不加字幕和音频。只是一个 3 秒的最小可运行预览，请直接用 run_code 的 composition 参数提交，不要写文件。",
+    "terminal": "run_code",
+    "args": {
+      "target_aspect_ratio": "9:16"
+    },
+    "reads": [
+      "prompts/remotion-composition.md"
+    ]
   }
 ]
