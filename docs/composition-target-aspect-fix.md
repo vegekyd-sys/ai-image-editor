@@ -16,4 +16,6 @@
 - TypeScript、Agent startup 和 core prompt 合同检查通过；ESLint 无错误（agent-tools 保留既有 unused locale warning）。
 - 历史 core prompt baseline 保持冻结；两份指南的有意修正记录在 `benchmarks/core-prompt/contract-amendments.json`，继续严格检查其他创作合同和 legacy rollback。
 
+原始草稿本地 Remotion 成功输出 1080×1920、H.264/AAC、30.059 秒 MP4，完整解码无错误，并检查了 3 个 Preview 帧和编码后抽帧。
+
 本地真实素材渲染证据保存在忽略的 `artifacts/composition-aspect/`。使用项目原始 Remotion 草稿，源视频仅取授权片段并将绝对 trim 转成本地片段偏移。该检查仅验证 1080×1920 合成执行，不宣称修好了原稿的裁切、字幕设计、旧展信息及创作品质；没有覆盖或重新发布用户项目。Hosted Preview/Export 与生产部署尚未执行。
