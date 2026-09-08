@@ -1930,7 +1930,7 @@ Generation options:
 
 Recent model choices:
   fal-h3-max     FAL H3 Max (default, 768p) reference-to-video: images, videos and audio;
-                 integer 5–15s, 480p/768p, default 768p. Reference inputs cost extra.
+                 integer 5–15s, 480p/768p/1080p, default 768p. Reference inputs cost extra.
   minimax-h3-max  fal H3 Turbo faster-than-real-time T2V or one-start-image I2V;
                   5/10/15s; native 768p default or 480p; no video/audio/multi-image references.
   wan-3.0-prime   Faster Wan 3.0 tier; 2-30s; 480p through 4k; multimodal refs.

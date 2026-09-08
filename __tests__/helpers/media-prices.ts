@@ -9,8 +9,8 @@ export function seededMediaPrices(): MediaPrice[] {
     const [id, kind, model_id, resolution, operation, output_usd_per_second, input_usd_per_second, input_usd_per_image, free_image_references, markup, unfiltered_multiplier] = values
     return { id, kind, model_id, resolution, operation, output_usd_per_second, input_usd_per_second, input_usd_per_image, free_image_references, markup, unfiltered_multiplier, is_active: true, updated_at: '2026-09-03T00:00:00Z' }
   })
-  const migration = readdirSync('supabase/migrations').find(file => file.endsWith('_h3_max_reference_token_pricing.sql'))!
-  const additions = readFileSync('supabase/migrations/' + migration, 'utf8').split('\n').filter(line => line.startsWith("('video:fal-h3-max:")).map(line => {
+  const migrations = readdirSync('supabase/migrations').filter(file => /_h3_max_(reference_token|1080p)_pricing\.sql$/.test(file))
+  const additions = migrations.map(migration => readFileSync('supabase/migrations/' + migration, 'utf8')).join('\n').split('\n').filter(line => line.startsWith("('video:fal-h3-max:")).map(line => {
     const [id, kind, model_id, resolution, operation, output_usd_per_second, input_usd_per_1k_tokens, free_input_tokens, input_tokens_per_image_pixel, input_tokens_per_video_second, input_tokens_per_audio_second] = JSON.parse(`[${line.slice(1, line.lastIndexOf(')')).replaceAll("'", '"')}]`)
     return { id, kind, model_id, resolution, operation, output_usd_per_second, input_usd_per_1k_tokens, free_input_tokens, input_tokens_per_image_pixel, input_tokens_per_video_second, input_tokens_per_audio_second, input_usd_per_second: 0, input_usd_per_image: 0, free_image_references: 0, markup: 2, unfiltered_multiplier: 1, is_active: true, updated_at: '2026-09-05T00:00:00Z' }
   })

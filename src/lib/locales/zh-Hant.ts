@@ -688,7 +688,7 @@ const zhHant = {
   'model.minimaxH3Max.name': 'fal H3 Turbo',
   'model.minimaxH3Max.desc': '預設以原生 768P 超即時生成 5–15 秒文字生影片或單圖生影片，亦支援 480P。',
   'model.falH3Max.name': 'fal H3 Max',
-  'model.falH3Max.desc': '支援圖片、影片與音訊參考生成，預設原生 768P，5–15 秒。',
+  'model.falH3Max.desc': '支援圖片、影片與音訊參考生成，預設原生 768P，可選 1080P，5–15 秒。',
   'model.gpt56Terra.desc': '建議預設，兼顧智能、速度與成本。',
   'model.gpt56Sol.desc': '能力最強，適合複雜 Agent 任務與創作。',
   'model.gpt56Luna.desc': '速度快、成本低，適合高頻日常任務。',

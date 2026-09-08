@@ -42,6 +42,17 @@ describe('FAL H3 Max product integration', () => {
     expect(submit).toHaveBeenCalledWith(expect.objectContaining({ prompt: 'Image 1 in a new room', images: ['https://example.com/selected.jpg'], duration: 7 }))
     expect(reserve).toHaveBeenCalledWith(expect.objectContaining({ model: 'fal-h3-max', durationSec: 7, imageCount: 1, referenceImagePixels: 1048576 }))
   })
+  it('routes 1080p video references and reserves the matching tariff without enabling Turbo 1080p', async () => {
+    const reserve = vi.fn()
+    prepare.mockResolvedValue({videos:[{url:'https://example.com/video.mp4',durationSec:5.184}],audios:[],referenceImagePixels:0,referenceVideoDurationSec:5.184,referenceAudioDurationSec:0})
+    const result = await createVideo({videoModel:'fal-h3-max', videoResolution:'1080p', script:'Use <<<video_1>>> with a blue book', images:[], videoUrls:['https://example.com/video.mp4'], duration:5, onBeforeProviderSubmit:reserve})
+    expect(result).toMatchObject({success:true, providerModel:'minimax/h3-max/reference-to-video'})
+    expect(submit).toHaveBeenCalledWith(expect.objectContaining({resolution:'1080p'}))
+    expect(reserve).toHaveBeenCalledWith(expect.objectContaining({resolution:'1080p',referenceVideoDurationSec:5.184}))
+    const price=seededMediaPrices().find(row=>row.id==='video:fal-h3-max:1080p:generate')!
+    expect(calculateMediaQuote(price,{durationSec:5,referenceVideoDurationSec:5.184}).credits).toBe(160)
+    expect(validateVideoModelRequest({model:'minimax-h3-max',resolution:'1080p',outputDuration:5})).toContain('does not support')
+  })
   it('does not submit when the final measured quote cannot be reserved', async () => {
     submit.mockImplementation(async input => { await input.onBeforeSubmit?.(); throw new Error('must not reach provider') })
     const result = await createVideo({ videoModel: 'fal-h3-max', script: '<<<media_1>>>', images: ['https://example.com/image.jpg'], duration: 5, onBeforeProviderSubmit: async () => { throw new Error('Insufficient credits') } })

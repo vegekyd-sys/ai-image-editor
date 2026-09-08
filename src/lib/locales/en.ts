@@ -485,7 +485,7 @@ const en = {
   'model.minimaxH3Max.name': 'fal H3 Turbo',
   'model.minimaxH3Max.desc': 'Faster-than-real-time 5–15 second text-to-video or single-image-to-video, defaulting to native 768P with 480P also available.',
   'model.falH3Max.name': 'fal H3 Max',
-  'model.falH3Max.desc': 'Generate with image, video and audio references. Native 768P by default, 5–15 seconds.',
+  'model.falH3Max.desc': 'Generate with image, video and audio references. Native 768P by default, optional 1080P, 5–15 seconds.',
   'model.gpt56Terra.name': 'GPT-5.6 Terra',
   'model.gpt56Terra.desc': 'Recommended default balancing intelligence, speed, and cost.',
   'model.gpt56Sol.name': 'GPT-5.6 Sol',

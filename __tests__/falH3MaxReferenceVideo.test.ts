@@ -30,6 +30,10 @@ describe('H3 Max reference adapter',()=>{
     expect(result.estimatedCreditsAt2x).toBe(221)
     expect(quote({duration:5,resolution:'768p',images:[{width:2048,height:2048}],videoSeconds:0,audioSeconds:3}).referenceUsd).toBeCloseTo(0.0048)
   })
+  it('submits 1080p refinement with video references and matches live output billing', () => {
+    expect(build({prompt:'<<<video_1>>>', images:[], videos:[{url:'v', durationSec:5.184}], resolution:'1080p'})).toMatchObject({resolution:'1080P', reference_video_urls:['v']})
+    expect(quote({duration:5, resolution:'1080p', images:[], videoSeconds:5.184, audioSeconds:0})).toMatchObject({outputUsd:0.8, totalUsd:0.8, estimatedCreditsAt2x:160})
+  })
   it('rejects audio data URIs before they become unsupported .bin files at fal',()=>{
     expect(()=>build({prompt:'p',images:[image],audios:[{url:'data:audio/wav;base64,AA==',durationSec:3}]})).toThrow('HTTPS file URL')
   })
