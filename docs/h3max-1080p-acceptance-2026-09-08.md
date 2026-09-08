@@ -1,6 +1,6 @@
 # fal H3 Max 1080P 接入验收
 
-2026-09-08。分支 `codex/h3max-1080p`，运行时代码 `6e5a94a6`。已完成本地产品接口和真实供应商验收；尚未合入 dev、推送或部署生产。
+2026-09-08。已合入 dev、同步 GitHub 并上线，生产运行时代码 `03f6c969`；正式域名的 Makaron chat CLI 验收通过。下方保留第一阶段本地接入记录（`6e5a94a6`），末节为上线验收。
 
 ## 能力
 
@@ -43,7 +43,7 @@ fal 的逐请求 Billing events 显示上述两次视频参考请求分别仅收
 - 10s：`01a0801c-8dd5-73e0-add4-ab0b6733a983`
 - Makaron 幂等账单：`c5062193-fe6c-4800-8368-c474d76dfcb4`
 
-新增价格行已通过幂等 INSERT-equivalent 写入共享 catalog 以完成真实产品验收；没有覆盖既有价格。迁移 `20260908082500_h3_max_1080p_pricing.sql` 使用 `ON CONFLICT DO NOTHING`，部署时可安全执行，尚未登记迁移历史。旧生产应用仍拒绝此分辨率，因此增加价格不会开放尚未发布的功能。
+新增价格行已通过幂等 INSERT-equivalent 写入共享 catalog 以完成真实产品验收；没有覆盖既有价格。迁移 `20260908082500_h3_max_1080p_pricing.sql` 使用 `ON CONFLICT DO NOTHING`，部署时可安全执行，本地阶段未登记迁移历史；上线时已通过管理 API 在事务中执行幂等迁移并登记版本。价格预置期间，旧生产应用仍拒绝此分辨率，没有提前开放功能。
 
 ## 检查
 
@@ -54,3 +54,35 @@ fal 的逐请求 Billing events 显示上述两次视频参考请求分别仅收
 - 独立 runner 的 Next production webpack 构建通过；日志在 `artifacts/h3max-1080p/build.log`。
 
 本地证据在开发 worktree 的 `artifacts/h3max-1080p/`，包括原始请求、持久化幂等 receipt、catalog 前后值和完成账单；不纳入公开提交。
+
+
+## 正式上线与 chat CLI 验收（2026-09-08）
+
+- dev 已同步到 GitHub；生产代码 `03f6c9694291db1870d80108a14d6d5d3c3bc5b4`。
+- 正式部署 `dpl_BRAnaX9svkwCFxRJ98BRs9rsFKZf`，部署 URL `ai-image-editor-61md07d03-vegekyd-sys-projects.vercel.app`。`www.makaron.app` 与 `makaron.app` 均已核对指向此部署。
+- 从 canonical dev 执行 `npm run release:prod`；TypeScript、1715 项测试（1 skipped）、CLI smoke、本地生产构建、Vercel 远程构建通过；上线后 `/api/health` 13 项 healthy。
+- AI_PROVIDER、图片/Agent provider、FAL_KEY、Supabase 环境与已验收环境一致，没有修改共享环境变量。
+- 1080P 价格迁移 `20260908082500` 已登记；原价格项不变。
+- CLI 0.14.8 已发布，npm `latest` 为 0.14.8，fresh npx 可运行。
+
+实际生成通过 CLI 0.14.8 的 `chat --project auto --video <source> --json -b <prompt>` 提交到 `https://www.makaron.app`，随后 `responses get <runId> --wait --json` 等待产物。npm 发布处理期间使用仓库内同版本 CLI 程序执行生成；发布完成后，另用 `npx -y makaron-cli@0.14.8 responses get <runId> --wait --json` 再次确认成片。
+
+用户提示只要求“5 秒、1080P、16:9，参考书店视频，仅把红书改成蓝书”，没有指定模型。服务端 `executionRequest` 没有 videoModel/videoResolution 锁定字段。实际自动选择：
+
+- 模型：`fal-h3-max`
+- Endpoint：`minimax/h3-max/reference-to-video`
+- 分辨率：`1080p`
+- Task：`fal-h3max-reference-01a0802d-2772-7b90-97c0-c3498ebe2fea`
+- Agent run：`e62f96f7-162e-44bd-a2cc-ae67ed7fec87`，completed、attempt 1、owner 正式域名。
+- CLI 从提交到收到完整视频结果：105.739 秒；返回的 video elapsed_seconds 为 28 秒。只有一次线上样本。
+- 成片：1920×1080、24fps、H.264 + AAC、实际时长 5.184 秒。完整 FFmpeg 解码无错误。
+- 已持久化到项目 CDN，封面也已保存；刷新真实项目后完整播放到 5.184 秒、ended=true、无媒体错误。画面保持男子、绿外套、书店与拿书动作，蓝色封面在首尾一致。
+- usage_logs：create_video / fal-h3-max 扣 160 credits；analyze_video 扣 1 credit；个人 Codex 订阅 Agent 记录为 0。合计 161 credits。
+
+[线上验收项目](https://www.makaron.app/projects/706c9cb3-4666-419c-b8e4-67a6156900e9)
+
+[已保存的 1080P 成片](https://cdn.makaron.app/storage/v1/object/public/images/5955d413-cad2-4814-b094-7fdf62d20400/706c9cb3-4666-419c-b8e4-67a6156900e9/videos/f72ee11f-482d-4fa2-bf49-c07e4b24b6f5.mp4)
+
+正式验收本地证据位于 canonical dev 的 `artifacts/h3max-1080p-release/`：部署/alias/health、迁移回执、CLI 原始请求与响应、npm CLI 响应、最终 snapshot/执行记录、usage_logs、ffprobe 与可播放 MP4。均为忽略文件。
+
+回滚候选为上线前部署 `dpl_5nuMdEg3GSKDEXCGK7v7KwH9fYaX`（`ai-image-editor-leknimtnt-vegekyd-sys-projects.vercel.app`）；若需回退，只回退应用即可，新增价格行不影响旧版本。
