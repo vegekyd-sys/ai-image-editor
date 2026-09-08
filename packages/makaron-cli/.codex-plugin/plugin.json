@@ -1,6 +1,6 @@
 {
   "name": "makaron-cli",
-  "version": "0.14.7",
+  "version": "0.14.8",
   "description": "Give Codex a creative agent. Pass complete creative requests and source media to Makaron Chat.",
   "author": {
     "name": "Versa AI",
@@ -9,7 +9,14 @@
   },
   "homepage": "https://www.makaron.app/agent",
   "license": "MIT",
-  "keywords": ["creative-production", "image-editing", "video-generation", "music", "agent", "cli"],
+  "keywords": [
+    "creative-production",
+    "image-editing",
+    "video-generation",
+    "music",
+    "agent",
+    "cli"
+  ],
   "skills": "./skills/",
   "interface": {
     "displayName": "Makaron Creative Studio",
@@ -17,7 +24,10 @@
     "longDescription": "Pass any complete creative request and source media to Makaron Chat. Makaron plans and produces images, video, music, and motion design in a persistent project that a human can continue editing in makaron.app.",
     "developerName": "Versa AI",
     "category": "Creative Tools",
-    "capabilities": ["Read", "Write"],
+    "capabilities": [
+      "Read",
+      "Write"
+    ],
     "websiteURL": "https://www.makaron.app/agent",
     "privacyPolicyURL": "https://www.makaron.app/privacy",
     "defaultPrompt": [
