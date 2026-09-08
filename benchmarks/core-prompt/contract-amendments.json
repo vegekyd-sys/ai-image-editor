@@ -8,5 +8,10 @@
     "baselineSha256": "92d46c86086893059985e4e5210e150f50fc0d0142fb69c8014a55217447c6c7",
     "sha256": "3a79e4b2b562d09f7247fe30cca64ff6da666ac500b56a921b672937db4279c8",
     "reason": "Explicit requested output aspect overrides source aspect; preserve source proportions and repair in Remotion. Regression: compositionTargetAspect.test.ts."
+  },
+  "src/lib/prompts/animate.md": {
+    "baselineSha256": "694bb707e878fdaa1487109fc5c8e059d1cd28b59f7a8109011485d0a4ecf67c",
+    "sha256": "ebe6607e859a6133908a3b6e3e47c3fb1f8b5df95eb79eff87e6fa4999781a3d",
+    "reason": "User requested fal H3 Max 1080p support; update only the resolution capability. Existing workflow and creative rules are unchanged. Regression: h3MaxIntegration.test.ts."
   }
 }

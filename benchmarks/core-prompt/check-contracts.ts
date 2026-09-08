@@ -15,7 +15,12 @@ async function main() {
  const paragraphs=baseline.agent.split(/\n\s*\n/).filter((s:string)=>s.trim());
  const coverage=paragraphs.map((text:string,index:number)=>({id:`core-${index+1}`,text,owner:core.includes(text)?'core':video.includes(text)?'video':coding.includes(text)?'coding':null}));
  assert.deepEqual(coverage.filter((x:any)=>!x.owner),[], 'Every original core paragraph needs an exact owner');
- assert.ok(video.includes(baseline.toolDescriptions.video));
+ // The frozen rollback stays byte-for-byte intact; the active guide gains
+ // only the verified fal H3 Max 1080p capability requested on 2026-09-08.
+ const activeVideoDescription=baseline.toolDescriptions.video.replace(
+  'reference-to-video at 480p/768p (default',
+  'reference-to-video at 480p/768p/1080p (default');
+ assert.ok(video.includes(activeVideoDescription));
  assert.ok(coding.includes(baseline.toolDescriptions.coding));
  assert.ok(coding.includes(baseline.workspaceAuthoring));
  // Keep the historical refactor baseline frozen; later intentional fixes have
