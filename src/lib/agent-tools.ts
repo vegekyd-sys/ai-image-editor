@@ -1,3 +1,5 @@
+import { isFalImage25, resolveImageModel } from './models/types';
+import { getTokenRate } from './billing/token-rates';
 import { tool } from 'ai';
 import { after } from 'next/server';
 import { z } from 'zod';
@@ -1382,7 +1384,7 @@ function createGenerateImageTool(
       inputSchema: z.object({
         editPrompt: z.string().describe('The specific creative direction for this edit (English). When skill is set, you must have read and internalized that skill prompt once in this conversation; write an editPrompt that follows those rules.'),
         skill: z.string().optional().describe('Activate a skill template (e.g. enhance, creative, wild, captions). See tool description and available skills.'),
-        model: z.enum(IMAGE_MODEL_IDS).optional().describe('NEVER set this unless the user literally says a model name like "用pony", "use qwen", "用openai", "nano banana lite", or "Wan 2.7 Image" (wan2.7-image: fast single-image generation/editing, up to 9 inputs, no transparent output; failures must not be automatically retried), or the active long-video-director workflow is generating director storyboard images, which MUST set "openai". For NSFW after Gemini refusal, set "qwen". Otherwise ALWAYS omit — the router handles everything automatically. Setting this without explicit user request is a bug.'),
+        model: z.enum(IMAGE_MODEL_IDS).optional().describe('GPT Image 2.5 maps to gpt-image-2.5-flare; Sunburst maps to gpt-image-2.5-sunburst. Both use fal API at low quality, never subscription or another model as fallback. Legacy GPT Image 2 maps to openai. NEVER set this unless the user literally says a model name like "用pony", "use qwen", "用openai", "nano banana lite", or "Wan 2.7 Image" (wan2.7-image: fast single-image generation/editing, up to 9 inputs, no transparent output; failures must not be automatically retried), or the active long-video-director workflow is generating director storyboard images, which MUST set "openai". For NSFW after Gemini refusal, set "qwen". Otherwise ALWAYS omit — the router handles everything automatically. Setting this without explicit user request is a bug.'),
         aspectRatio: z.string().optional().describe('Target aspect ratio e.g. "4:5", "1:1", "16:9". For a pure existing-image cutout, omit this field to preserve the source canvas. If the user explicitly requests a new transparent layout/canvas ratio, pass it.'),
         background: z.enum(['auto', 'opaque', 'transparent']).optional().describe('Output background contract. Set "transparent" when the user asks for transparent/no background, background removal, subject cutout/isolation, 抠图/抠像/去背景, or a reusable PNG/sticker/overlay/alpha asset. With a source image also pass media_index for GPT Image 2 image-to-image cutout; without one omit media_index for text-to-image. Never return an opaque fallback.'),
         media_index: z.number().optional().describe('1-based index of the snapshot to edit (<<<media_1>>> = 1, <<<media_2>>> = 2, ...). Omit the field entirely for text-to-image (no photo sent); never send 0. For most edits, pass the current snapshot index.'),
@@ -1416,9 +1418,15 @@ function createGenerateImageTool(
 
         // Priority: UI selector > agent tool param > auto-route
         const resolvedModel = (ctx.preferredModel ? ctx.preferredModel : model) as ModelId | undefined;
-        const billingModel = background === 'transparent' ? 'openai' : resolvedModel;
+        const billingModel = resolveImageModel(resolvedModel, background);
         if (ctx.userId && billingModel && !(billingModel === 'openai' && runtime.spec.provider === 'codex-subscription') && await isBillingEnabled()) {
-          const price = await getToolPrice(resolveToolName('edit_image', billingModel));
+          if (isFalImage25(billingModel)) {
+            const rate = await getTokenRate(billingModel);
+            if (!rate || !Number.isFinite(rate.markup) || rate.markup <= 0) return { success: false, message: 'GPT Image 2.5 pricing is not configured.', error: 'pricing_unavailable' };
+            const check = await requireCredits(ctx.userId, 5);
+            if (!check.ok) return { success: false, message: 'Insufficient credits.', error: 'insufficient_credits' };
+          }
+          const price = isFalImage25(billingModel) ? null : await getToolPrice(resolveToolName('edit_image', billingModel));
           if (!price && billingModel === 'wan2.7-image') {
             return { success: false, message: 'Tool pricing is not configured: edit_image_wan2.7-image', error: 'pricing_unavailable' };
           }

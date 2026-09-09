@@ -3,6 +3,7 @@
  * Resolves model chain based on request, tries each in order with fallback.
  */
 import type { ModelId, GenerateImageRequest, GenerateImageResult } from './models/types';
+import { isFalImage25, resolveImageModel } from './models/types';
 import { getBackend } from './models';
 import { ContentBlockedError } from './gemini';
 
@@ -23,7 +24,8 @@ function getFallbacks(model: ModelId): ModelId[] {
 export function resolveModelChain(req: GenerateImageRequest): ModelId[] {
   // Transparent output is a strict capability contract. Do not silently return
   // an opaque image from a fallback backend that cannot honor the request.
-  if (req.background === 'transparent') return ['openai'];
+  if (req.background === 'transparent') return [resolveImageModel(req.model, req.background)!];
+  if (isFalImage25(req.model)) return [req.model];
   // Explicit paid Wan calls never fan out to another model, even on timeout.
   if (req.model === 'wan2.7-image') return ['wan2.7-image'];
   // 0. NSFW project → Qwen only, never touch Gemini
@@ -47,8 +49,8 @@ export async function generateImage(req: GenerateImageRequest): Promise<Generate
 
   for (const modelId of chain) {
     const backend = getBackend(modelId);
-    if (modelId === 'wan2.7-image' && !backend?.canHandle(req)) {
-      throw new Error('Wan 2.7 Image is not configured. No fallback model was called.');
+    if ((modelId === 'wan2.7-image' || isFalImage25(modelId)) && !backend?.canHandle(req)) {
+      throw new Error(`${modelId} is not configured. No fallback model was called.`);
     }
     if (!backend?.canHandle(req)) continue;
 
@@ -69,7 +71,7 @@ export async function generateImage(req: GenerateImageRequest): Promise<Generate
       console.log(`[model-router] ${modelId} returned null, trying next...`);
       failedModels.push(modelId);
     } catch (e) {
-      if (modelId === 'wan2.7-image') throw e;
+      if ((modelId === 'wan2.7-image' || isFalImage25(modelId))) throw e;
       if (e instanceof ContentBlockedError) {
         console.warn(`[model-router] ${modelId} content blocked (NSFW), trying fallback...`);
         contentBlocked = true;

@@ -1,5 +1,7 @@
 # Image Creation and Editing
 
+For GPT Image 2.5 use model="gpt-image-2.5-flare"; use "gpt-image-2.5-sunburst" only when Sunburst is requested. Both use fal with low quality. Legacy GPT Image 2 remains model="openai". Never silently substitute Image 2 or a subscription for Image 2.5.
+
 Use this file when the user asks for image editing, text-to-image generation, posters, marketing graphics, e-commerce pages, infographics, captions, photo enhancement, creative photo edits, wild transformations, reference-image composition, or any `generate_image` task that needs more than a single obvious instruction.
 
 ## Image Context
@@ -37,7 +39,7 @@ Before the first transparent generation or extraction in a conversation, call `r
 - Existing source image: pass that image's `media_index`. This is an image-to-image cutout/edit. In `editPrompt`, tell GPT Image 2 to remove the background to transparent alpha while preserving the complete intended subject, identity, shape, fine edges, holes, and interior details. Do not redesign the subject unless requested.
 - No source image: omit `media_index` entirely. This is transparent text-to-image. Describe only the wanted subject and composition; do not invent a colored, white, checkerboard, studio, or scenic background.
 - Ambiguous cleanup such as removing one background object does not automatically mean alpha. Use transparent output only when the intended deliverable has no background or is a cutout/overlay asset.
-- Transparent output is strict GPT Image 2 routing. Never fall back to an opaque image, synthetic checkerboard, chroma-key background, or a different image model. If the provider cannot return real alpha, report failure.
+- Transparent output strictly uses the selected GPT Image 2 or 2.5 model. Never fall back to an opaque image, synthetic checkerboard, chroma-key background, or a different image model. If the provider cannot return real alpha, report failure.
 - The canonical fidelity wording, keep/remove selection rules, content-specific details, and delivery line live in `prompts/cutout.md`. Do not improvise a weaker generic prompt.
 
 Omit `background` for normal images.

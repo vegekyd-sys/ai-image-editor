@@ -1,3 +1,4 @@
+import { resolveImageModel } from '../lib/models/types';
 import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { z } from 'zod';
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'fs';
@@ -132,16 +133,16 @@ IMPORTANT: Image generation takes 15-30 seconds. Long and detailed prompts are f
       image: z.string().nullish().describe('Input image: local file path, URL, or base64 data URL. Omit for text-to-image generation.'),
       editPrompt: z.string().describe('English editing instructions describing what to change'),
       skill: z.enum(['enhance', 'creative', 'wild', 'captions']).nullish().describe('Activate a skill template for structured editing'),
-      model: z.enum(IMAGE_MODEL_IDS).nullish().describe('NEVER set unless user literally names a model. Wan 2.7 Image = wan2.7-image (fast single output; never automatically retry failed/unknown requests). Use gemini-lite only when the user asks for Nano Banana 2 Lite / Lite. Gemini refused→retry with qwen. For design/poster/text-heavy tasks, try openai. Otherwise ALWAYS omit.'),
-      referenceImages: z.array(z.string()).nullish().describe('Additional reference images (up to 3). Put the original photo here when restoring face/color/details from it.'),
+      model: z.enum(IMAGE_MODEL_IDS).nullish().describe('NEVER set unless user literally names a model. GPT Image 2.5 = gpt-image-2.5-flare (default low quality, fal API); Sunburst = gpt-image-2.5-sunburst. Legacy GPT Image 2 = openai. Image 2.5 calls never use a subscription or fall back to another model. Wan 2.7 Image = wan2.7-image (fast single output; never automatically retry failed/unknown requests). Use gemini-lite only when the user asks for Nano Banana 2 Lite / Lite. Gemini refused→retry with qwen. For design/poster/text-heavy tasks, try openai. Otherwise ALWAYS omit.'),
+      referenceImages: z.array(z.string()).nullish().describe('Additional reference images (GPT Image 2.5 supports up to 16 total inputs including the base). Put the original photo here when restoring face/color/details from it.'),
       aspectRatio: z.string().nullish().describe('Target aspect ratio e.g. "4:5", "1:1", "16:9"'),
-      background: z.enum(['auto', 'opaque', 'transparent']).nullish().describe('Output background. Set transparent for transparent/no-background output, background removal, subject cutout/isolation, or a reusable PNG/sticker/overlay/alpha asset. With image input this is GPT Image 2 image-to-image cutout; without image input it is text-to-image. It never returns an opaque fallback.'),
+      background: z.enum(['auto', 'opaque', 'transparent']).nullish().describe('Output background. Set transparent for transparent/no-background output, background removal, subject cutout/isolation, or a reusable PNG/sticker/overlay/alpha asset. With image input this is GPT Image 2 or 2.5 image-to-image cutout; without image input it is text-to-image. It never returns an opaque fallback.'),
     },
     async (params) => {
       try {
         // Credit check before execution
         if (options?.onToolStart) {
-          const check = await options.onToolStart('makaron_edit_image', params.background === 'transparent' ? 'openai' : params.model ?? undefined);
+          const check = await options.onToolStart('makaron_edit_image', resolveImageModel(params.model ?? undefined, params.background ?? undefined));
           if (!check.allowed) return { isError: true, content: [{ type: 'text' as const, text: check.message || 'Insufficient credits' }] };
         }
         const t0 = Date.now();

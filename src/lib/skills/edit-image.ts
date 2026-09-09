@@ -2,13 +2,15 @@ import { generateImage } from '../model-router';
 import type { ImageBackground, ModelId, TokenUsage } from '../models/types';
 import type { SkillContext, SkillResult } from './index';
 import { ProviderImageInputError } from '../provider-image-preflight';
+import { isFalImage25, resolveImageModel } from '../models/types';
+import { FalImage25RequestError } from '../models/fal-image25';
 import { WanImageRequestError } from '../models/wan-image';
 
 export interface EditImageInput {
   editPrompt: string;
   skill?: 'enhance' | 'creative' | 'wild' | 'captions';
   aspectRatio?: string;
-  /** Explicit output background. Transparent requests route strictly to GPT Image 2. */
+  /** Explicit output background. Transparent requests preserve the selected GPT Image 2 or 2.5 model. */
   background?: ImageBackground;
   /** @deprecated Use workspace service instead. Kept for backward compat. */
   skillPrompts?: Record<string, string>;
@@ -23,7 +25,7 @@ export async function editImage(
   ctx: SkillContext,
 ): Promise<SkillResult> {
   const { editPrompt, skill, aspectRatio, background, preferredModel, isNsfw } = input;
-  const requestedModel = background === 'transparent' ? 'openai' : preferredModel;
+  const requestedModel = resolveImageModel(preferredModel, background);
   const hasReference = !!ctx.referenceImages?.length;
 
   // Agent reads skill templates via read_file and internalizes rules into editPrompt.
@@ -58,7 +60,7 @@ export async function editImage(
   let usedProvider: string | undefined;
   // A transparent request is a strict, paid provider call. Do not fan it out
   // or repeat it after failure; surface the capability error to the user.
-  const MAX_ATTEMPTS = background === 'transparent' || requestedModel === 'wan2.7-image' ? 1 : 2;
+  const MAX_ATTEMPTS = background === 'transparent' || requestedModel === 'wan2.7-image' || isFalImage25(requestedModel) ? 1 : 2;
 
   for (let attempt = 1; attempt <= MAX_ATTEMPTS; attempt++) {
     let genResult;
@@ -77,13 +79,13 @@ export async function editImage(
         codexSubscription: ctx.codexSubscription,
       });
     } catch (error) {
-      if (error instanceof ProviderImageInputError || error instanceof WanImageRequestError) {
+      if (error instanceof ProviderImageInputError || error instanceof WanImageRequestError || error instanceof FalImage25RequestError) {
         return { success: false, message: `${error.message} Do not bypass a failed required image edit by sending the unedited original into dependent video generation.` };
       }
-      if (requestedModel === 'wan2.7-image') {
+      if (requestedModel === 'wan2.7-image' || isFalImage25(requestedModel)) {
         // Return a durable tool result even for an unknown paid outcome. Never
         // echo arbitrary transport errors or invite automatic paid resubmission.
-        return { success: false, message: 'Wan 2.7 did not complete. The provider outcome may be unknown. Do not retry automatically or silently switch models; explain the failure to the user. Do not bypass a failed required image edit by sending the unedited original into dependent video generation.' };
+        return { success: false, message: 'Image generation did not complete. The provider outcome may be unknown. Do not retry automatically or silently switch models; explain the failure to the user. Do not bypass a failed required image edit by sending the unedited original into dependent video generation.' };
       }
       throw error;
     }
@@ -104,7 +106,7 @@ export async function editImage(
   if (!result) {
     console.error(`❌ [edit_image] all attempts failed after ${((Date.now() - t0) / 1000).toFixed(1)}s, failedModels=${lastFailedModels}`);
     const message = background === 'transparent'
-      ? 'Transparent image generation is not available from the configured GPT Image 2 provider yet. No opaque fallback was returned.'
+      ? 'Transparent image generation is not available from the configured GPT Image provider yet. No opaque fallback was returned.'
       : 'Image generation failed after retry. The AI model returned no image — this can happen with complex prompts or temporary API issues. Please try rephrasing your request.';
     return {
       success: false,
@@ -117,7 +119,7 @@ export async function editImage(
   let msg = 'Image generated successfully.';
   if (requestedModel && usedModel !== requestedModel) {
     msg += ` ⚠️ Note: requested model "${requestedModel}" failed, fell back to "${usedModel}". Tell the user.`;
-  } else if (background === 'transparent' && preferredModel && preferredModel !== 'openai') {
+  } else if (background === 'transparent' && preferredModel && preferredModel !== 'openai' && !isFalImage25(preferredModel)) {
     msg += ' Transparent output required the OpenAI image model.';
   }
   if (usedProvider === 'codex-subscription') {

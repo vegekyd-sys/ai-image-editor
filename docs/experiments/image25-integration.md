@@ -1,6 +1,6 @@
 # Image 2.5 接入与比较（2026-09-09）
 
-状态：仅独立 worktree 准备；产品接入未完成，未合并、未部署、未修改共享配置。
+状态：fal Image 2.5 已完成独立分支接入与真实 CLI 生成/编辑/扣费验收；未合并、未部署。共享数据库仅新增两个 Image 2.5 token_rates 行（markup=2），未改现有模型或共享环境变量。
 
 分支：`codex/image25-integration`，基线：`fc1217e5`。
 
@@ -11,14 +11,14 @@
 - 官方文档：https://developers.openai.com/api/docs/guides/image-generation
 - 官方模型：https://developers.openai.com/api/docs/models/gpt-image-2.5-flare 和 https://developers.openai.com/api/docs/models/gpt-image-2.5-sunburst
 
-## 当前可用性障碍
+## 前期调查（fal 接入前的历史结果）
 
 - 现有 OpenRouter `/api/v1/images` 对两个完整 2.5 模型 ID 都返回 HTTP 404 / No model found。
 - 现有 Azure 资源以两个官方模型名作为部署名调用，均返回 HTTP 404 / DeploymentNotFound。这不能排除资源使用不同部署名的可能。
 - PiAPI `/v1/models` 返回 HTTP 200，但未列出名称匹配 Image 2.5 的模型；这不是生成接口不支持的充分证明。
 - 项目已检查的本地环境文件未配置官方 `OPENAI_API_KEY`。
 
-因此尚无真实 2.5 输出，不能宣称质量提升或速度提升，也不迁移当前默认模型。下一步需要确认可用供应商、模型/部署 ID 和对应凭据来源。
+当时尚无可确认的真实 2.5 输出；后续已通过 fal 完成，下文保留调查依据。
 
 ## 个人 GPT 订阅实测
 
@@ -42,7 +42,7 @@ Azure 开通已由用户交给同事；本任务停止 Azure 管理门户操作�
 
 补充编辑验收：以第一张红杯为输入，请求只把杯釉改为钴蓝。个人订阅完成响应 145.962 秒，解码并保存完成 146.004 秒，输出 1448×1086 PNG。目视检查杯子已变蓝，MAKARON 字样、构图、布料和背景保持一致；未做逐像素保真声明。服务端仍回传统一订阅别名和 auto 参数，脚本按预期返回退出码 1，原因是 `explicitModelConfirmed=false`，并非编辑失败。产物为 `.artifacts/image25/subscription-edit/`。
 
-本次变更只有实验文档与比较脚本。TypeScript 全项目检查通过；未修改产品运行时代码、未合并或部署。
+以上个人订阅调查阶段仅修改实验脚本与文档；后续 fal 产品接入见下节。
 
 ## 对比脚本
 
@@ -64,3 +64,29 @@ node scripts/compare-image25.mjs /absolute/path/source.png
 已通过脚本语法检查与模拟响应的三个模型生成、PNG 解码、透明度和报告合同验证；模拟结果不属于模型质量或速度证据。
 
 后续接入范围：确认供应商后完成模型调用、实际模型与计费记录、文生图/编辑/多参考图/透明背景的真实验收，再提供同条件视觉比较。自然语言路由优化与产品清晰度选项留在后续任务。
+
+## fal 产品接入与实测
+
+- 模型 ID：`gpt-image-2.5-flare` / `gpt-image-2.5-sunburst`。App 选择器、Agent 工具、MCP 与 CLI 均可显式使用。无指定变体的 Image 2.5 映射到 Flare；旧 `openai` 仍为 Image 2，现有 Auto 路由保持不变。
+- 供应商端点：`openai/gpt-image-2.5/{flare|sunburst}/{text-to-image|edit}`，显式 `quality=low`，单张输出，最多 16 张有序输入。支持透明输出且检查真实 alpha。
+- 只发一次付费 POST；按原 request ID 轮询。失败/超时不重发、不切换旧模型、Gemini 或个人订阅。
+- 每次提交前读取 fal 价格接口；成功结果的 `x-fal-billable-units × unit_price` 作为供应商成本，通过现有 `deductByTokens` 的 providerCostUsd 分支和精确型号 markup 扣费，不虚构 token 数。普通 FAL_KEY 的账单事件接口返回 403，但价格接口和结果计费响应头可用。
+- 注册脚本：`scripts/register-fal-image25-pricing.mjs`，仅补缺失行，复用旧 Image 2 的倍率，不覆盖已有运营配置。运行环境读取私有 env；已经在共享数据库验证两个新行。新型号缺少精确定价时在调用前阻止，不能误匹配旧 Image 2 的前缀。
+
+| 实测 | 成图耗时 | fal 成本 | Makaron 扣费 |
+| --- | --- | --- | --- |
+| Image 2 文生图，fal 原始 API | 17.713 秒 | $0.0062 | 供应商对照，不经过应用 |
+| Flare 文生图，fal 原始 API | 13.285 秒 | $0.0062 | 供应商探针，不经过应用 |
+| Sunburst 文生图，CLI → MCP | 17.2 秒 | $0.0063 | 2 credits |
+| Flare 红杯变蓝杯，CLI → MCP | 20.2 秒 | $0.0145 | 3 credits |
+| Sunburst 透明抠图，CLI → MCP | 26.4 秒 | $0.0146 | 3 credits |
+
+均为 low、1024×1024、单次样本。前两项使用相同提示词，本次 Flare 快约 25%，成本相同；这不是速度 SLA 或系统性质量结论。CLI 包装了额外生成指令，Sunburst 不能作为严格三方速度对照。所有图片解码、保存并目视检查；两版文字拼写正确，Flare 本次材质细节更丰富，构图不同。编辑保留杯形、字样、布料与构图。透明 PNG 检测到 alpha，但边缘存在光晕，因此只通过透明格式合同，未通过高质量抠图验收。
+
+真实扣费记录：Sunburst 生图 `9ea161b3-3a43-49da-8f25-80c39d0bb116`；Flare 编辑 `539d1fe7-d1b1-46c5-8b13-a7f02d5bd187`；Sunburst 透明编辑 `0fd9fdde-1b1a-42f4-9a8c-bfc4ecb0040d`。已回读账本确认型号和扣费。
+
+验收页：本 worktree `.artifacts/image25/fal-probe/index.html`。本地服务端会将 MCP 图片保存到 `mcp-output`，所以本次 CLI 的 `--out` 不改变该服务端路径；验收页已归集实际文件。未修改这项既有 CLI 行为。
+
+来源：[fal Flare API](https://fal.ai/models/openai/gpt-image-2.5/flare/text-to-image/api)、[fal Image 2 API](https://fal.ai/models/openai/gpt-image-2/api)、[fal pricing](https://fal.ai/docs/documentation/model-apis/pricing)。
+
+验证：53 项相关测试通过（新供应商请求/费用/严格路由、选择器、Agent 扣费，以及旧 Image 2/Wan 回归）；全项目 TypeScript 检查通过；lint/i18n/Agent startup/video reference guards 通过，只有两条既有 warning。

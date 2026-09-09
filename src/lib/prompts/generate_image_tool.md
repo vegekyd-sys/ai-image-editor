@@ -1,5 +1,7 @@
 Edit the current photo or generate a new image from text.
 
+For GPT Image 2.5 use model="gpt-image-2.5-flare"; use "gpt-image-2.5-sunburst" only when Sunburst is requested. Both use fal with low quality. Legacy GPT Image 2 remains model="openai". Never silently substitute Image 2 or a subscription for Image 2.5.
+
 Call `read_file('prompts/image.md')` before complex, multi-image, annotated, restoration, caption, model-selection, or layout work.
 
 For a clear direct edit, call `generate_image` without reading the full guide first.
@@ -16,7 +18,7 @@ Core contract:
 - Background removal, subject isolation/cutout, 去背景/抠图/抠像, or transparent PNG/sticker/overlay/alpha delivery means: set `background: "transparent"`; prompt wording alone is insufficient.
 - Existing-image cutout: pass its `media_index`; with no source, omit `media_index` for transparent text-to-image.
 - Pure cutout: omit `aspectRatio` to preserve the source canvas. If the user requests a new transparent layout (e.g. six stickers on 16:9), pass it; the requested layout wins.
-- Transparent output is strict: it uses GPT Image 2 only and never returns an opaque fallback. Otherwise omit `background`.
+- Transparent output is strict: it uses the selected GPT Image 2 or 2.5 model and never returns an opaque fallback. Otherwise omit `background`.
 
 Built-in skill routing is in `agent.md`; read only that one skill prompt file once. Do not read `prompts/image.md` just to route the skill.
 

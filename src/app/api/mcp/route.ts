@@ -1,3 +1,5 @@
+import { isFalImage25 } from '@/lib/models/types';
+import { getTokenRate } from '@/lib/billing/token-rates';
 import { createMakaronMcpServer } from '@/mcp/server';
 import { WebStandardStreamableHTTPServerTransport } from '@modelcontextprotocol/sdk/server/webStandardStreamableHttp.js';
 import { validateApiKey } from '@/lib/billing/api-keys';
@@ -7,7 +9,7 @@ import { deductSeedAudioCredits } from '@/lib/billing/seed-audio';
 import { submitMcpVideo, settleMcpVideoStatus } from '@/lib/billing/mcp-video';
 import { quoteSeedAudio } from '@/lib/billing/media-pricing';
 
-export const maxDuration = 180;
+export const maxDuration = 300;
 
 interface AuthResult {
   type: 'user' | 'legacy' | 'none';
@@ -60,6 +62,10 @@ async function handleMcp(req: Request): Promise<Response> {
     // Pre-check: ensure user has enough credits
     onToolStart: auth.type === 'user' ? async (toolName, model) => {
       if (!(await isBillingEnabled())) return { allowed: true };
+      if (toolName === 'makaron_edit_image' && isFalImage25(model)) {
+        const rate = await getTokenRate(model);
+        if (!rate || !Number.isFinite(rate.markup) || rate.markup <= 0) return { allowed: false, message: 'GPT Image 2.5 pricing is not configured.' };
+      }
       // Video is atomically reserved after resolving provider inputs.
       if (toolName === 'makaron_create_video' || toolName === 'makaron_edit_video') {
         return { allowed: true };
