@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import sharp from 'sharp';
-import { buildFalImage25Request, createFalImage25Backend, falImage25Cost, image25Size } from '@/lib/models/fal-image25';
+import { buildFalImage25Request, createFalImage25Backend, falImage25Cost, image25Size, readFalImage25, checkFalImage25Response } from '@/lib/models/fal-image25';
 
 const model = 'gpt-image-2.5-flare';
 beforeEach(() => vi.stubEnv('FAL_KEY', 'test-key'));
@@ -40,15 +40,30 @@ describe('fal Image 2.5 paid request contract', () => {
     const endpoint = 'openai/gpt-image-2.5/flare/text-to-image';
     const fetcher = vi.fn().mockResolvedValueOnce(Response.json({ prices: [{ endpoint_id: endpoint, unit_price: 1, currency: 'USD' }] }))
       .mockResolvedValueOnce(Response.json({ request_id: 'request-123' }))
-      .mockRejectedValueOnce(new Error('secret signed URL'));
+      .mockRejectedValue(new Error('secret signed URL'));
     vi.stubGlobal('fetch', fetcher);
     await expect(createFalImage25Backend(model).generate({ prompt: 'Cup' })).rejects.toThrow('No automatic retry');
-    expect(fetcher).toHaveBeenCalledTimes(3);
+    expect(fetcher).toHaveBeenCalledTimes(5);
+    expect(fetcher.mock.calls.filter(([, init]) => init?.method === 'POST')).toHaveLength(1);
   });
   it('fails before spending when pricing cannot be obtained', async () => {
     const fetcher = vi.fn().mockResolvedValue(Response.json({}, { status: 403 }));
     vi.stubGlobal('fetch', fetcher);
     await expect(createFalImage25Backend(model).generate({ prompt: 'Cup' })).rejects.toThrow('No generation was submitted');
     expect(fetcher).toHaveBeenCalledTimes(1);
+  });
+});
+
+
+describe('read-only recovery and content policy failures', () => {
+  it('recovers a transient response without repeating generation', async () => {
+    const read = vi.fn().mockRejectedValueOnce(new TypeError('connection reset')).mockResolvedValue('existing-image');
+    expect(await readFalImage25(read)).toBe('existing-image');
+    expect(read).toHaveBeenCalledTimes(2);
+  });
+  it('surfaces policy rejections without retry or echoed private input', async () => {
+    const read = vi.fn(async () => checkFalImage25Response(new Response('', { status: 422 }), { detail: [{ type: 'content_policy_violation' }] }));
+    await expect(readFalImage25(read)).rejects.toThrow('provider content checker rejected');
+    expect(read).toHaveBeenCalledTimes(1);
   });
 });

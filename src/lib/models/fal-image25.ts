@@ -5,6 +5,27 @@ import { normalizeOpenAIImageOutput } from './openai-image-output';
 import type { FalImage25Id } from './types';
 export class FalImage25RequestError extends Error {}
 
+/** Retry read-only transport operations, never the paid generation submission. */
+export async function readFalImage25<T>(operation: () => Promise<T>, signal?: AbortSignal): Promise<T> {
+  for (let attempt = 0; ; attempt++) {
+    try { return await operation(); }
+    catch (error) {
+      if (error instanceof FalImage25RequestError || signal?.aborted || attempt >= 2) throw error;
+      await new Promise(resolve => setTimeout(resolve, 500 * (attempt + 1)));
+    }
+  }
+}
+
+export function checkFalImage25Response(response: Response, data?: { detail?: { type?: string }[] }): void {
+  if (response.ok) return;
+  if (data?.detail?.some(item => item.type === 'content_policy_violation')) {
+    throw new FalImage25RequestError('The provider content checker rejected this request. It may concern the input image, prompt or generated result; the provider did not specify which. Do not retry automatically or switch models to bypass the rejection.');
+  }
+  if (response.status === 429 || response.status >= 500) throw new Error(`Temporary provider response HTTP ${response.status}`);
+  throw new FalImage25RequestError(`Provider rejected the request (HTTP ${response.status}).`);
+}
+
+
 export function image25Size(aspectRatio?: string): 'auto' | { width: number; height: number } {
   if (!aspectRatio || aspectRatio === 'auto') return 'auto';
   const match = /^(\d+(?:\.\d+)?):(\d+(?:\.\d+)?)$/.exec(aspectRatio);
@@ -66,33 +87,46 @@ export function createFalImage25Backend(model: FalImage25Id): ModelBackend {
       }
       const started = Date.now();
       let requestId: string | undefined;
+      let stage = 'submission';
       try {
         // A single paid POST. Only poll the accepted request; never resubmit on timeout.
         const submission = await fetch(`https://queue.fal.run/${endpoint}`, { method: 'POST', headers, body: JSON.stringify(body), signal: AbortSignal.timeout(30000), redirect: 'error' });
         const task = await submission.json().catch(() => null);
-        if (!submission.ok) throw new Error(`Submission rejected (HTTP ${submission.status}).`);
+        checkFalImage25Response(submission, task);
         if (typeof task?.request_id !== 'string' || !/^[a-z0-9-]{1,100}$/i.test(task.request_id)) throw new Error('Submission outcome unknown.');
         requestId = task.request_id;
         const resultUrl = `https://queue.fal.run/openai/gpt-image-2.5/requests/${requestId}`;
         const signal = AbortSignal.timeout(240000);
+        stage = 'status';
         while (true) {
-          const statusResponse = await fetch(`${resultUrl}/status`, { headers, signal, redirect: 'error' });
-          const status = await statusResponse.json().catch(() => null);
-          if (!statusResponse.ok) throw new Error(`Status unavailable (HTTP ${statusResponse.status}).`);
+          const status = await readFalImage25(async () => {
+            const response = await fetch(`${resultUrl}/status`, { headers, signal, redirect: 'error' });
+            checkFalImage25Response(response);
+            return response.json();
+          }, signal);
           if (status?.status === 'COMPLETED') break;
           if (!['IN_QUEUE', 'IN_PROGRESS'].includes(status?.status)) throw new Error('Provider request failed.');
           await new Promise(resolve => setTimeout(resolve, 1500));
           signal.throwIfAborted();
         }
-        const response = await fetch(resultUrl, { headers, signal, redirect: 'error' });
-        const data = await response.json().catch(() => null);
-        if (!response.ok || data?.images?.length !== 1) throw new Error(`No completed image (HTTP ${response.status}).`);
+        stage = 'result';
+        const { response, data } = await readFalImage25(async () => {
+          const response = await fetch(resultUrl, { headers, signal, redirect: 'error' });
+          const data = await response.json();
+          checkFalImage25Response(response, data);
+          return { response, data };
+        }, signal);
+        if (data?.images?.length !== 1) throw new FalImage25RequestError('Provider returned no completed image.');
         const cost = falImage25Cost(response.headers.get('x-fal-billable-units'), price.unit_price);
         const outputUrl = new URL(data.images[0].url);
         if (outputUrl.protocol !== 'https:' || !outputUrl.hostname.endsWith('.fal.media') || outputUrl.username || outputUrl.password) throw new Error('Unexpected output host.');
-        const output = await fetch(outputUrl, { signal, redirect: 'error' });
-        if (!output.ok) throw new Error('Image download failed.');
-        const buffer = Buffer.from(await output.arrayBuffer());
+        stage = 'download';
+        const buffer = await readFalImage25(async () => {
+          const output = await fetch(outputUrl, { signal, redirect: 'error' });
+          checkFalImage25Response(output);
+          return Buffer.from(await output.arrayBuffer());
+        }, signal);
+        stage = 'decode';
         if (buffer.length > 50 * 1024 * 1024) throw new Error('Output exceeds image size limit.');
         await sharp(buffer, { failOn: 'error', limitInputPixels: 8294400 }).raw().toBuffer();
         const image = await normalizeOpenAIImageOutput(`data:image/png;base64,${buffer.toString('base64')}`, req.background);
@@ -101,7 +135,8 @@ export function createFalImage25Backend(model: FalImage25Id): ModelBackend {
         // fal supplies cost, not token counts. Do not invent token telemetry.
         return { image, provider: 'fal', usage: { modelId: model, inputTokens: 0, outputTokens: 0, provider: 'fal', providerCostUsd: cost } };
       } catch (error) {
-        const reason = error instanceof FalImage25RequestError ? error.message : 'The request did not complete successfully.';
+        console.warn(`[${model}] stage=${stage} request=${requestId ?? 'unknown'} errorType=${error instanceof Error ? error.name : 'unknown'}`);
+        const reason = error instanceof FalImage25RequestError ? error.message : `The request did not complete successfully during ${stage}.`;
         throw new FalImage25RequestError(`GPT Image 2.5: ${reason}${requestId ? ` Request: ${requestId}.` : ''} No automatic retry; inspect the provider request before resubmitting.`);
       }
     },

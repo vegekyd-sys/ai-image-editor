@@ -90,3 +90,9 @@ node scripts/compare-image25.mjs /absolute/path/source.png
 来源：[fal Flare API](https://fal.ai/models/openai/gpt-image-2.5/flare/text-to-image/api)、[fal Image 2 API](https://fal.ai/models/openai/gpt-image-2/api)、[fal pricing](https://fal.ai/docs/documentation/model-apis/pricing)。
 
 验证：53 项相关测试通过（新供应商请求/费用/严格路由、选择器、Agent 扣费，以及旧 Image 2/Wan 回归）；全项目 TypeScript 检查通过；lint/i18n/Agent startup/video reference guards 通过，只有两条既有 warning。
+
+## GUI 验收失败排查（2026-09-09 14:50）
+
+回查两个验收项目的四个失败请求：三个 fal result 返回 HTTP 422、`content_policy_violation`；一个原请求返回 HTTP 200 且存在可解码的 880×1184 PNG，已直接取回，未重新提交生成。旧 catch 把审核、查询、下载等错误都合成通用失败，无法追溯当时这个 200 请求在哪个阶段报错，因此不能把它确定归因于某一次网络故障。
+
+修复：保留审核拒绝的明确分类（不自动重试、不自动切换模型）；对状态 GET、结果 GET 和图片下载中的临时网络/429/5xx 错误最多重试三次，始终使用原 request ID，绝不重复付费 POST。新增脱敏阶段日志，后续可区分 submission/status/result/download/decode。25 项相关测试、TypeScript 与定向 ESLint 通过；真实已成功请求的 PNG 已下载并目视确认。三个审核拒绝的可用性问题仍由供应商决定，不宣称修复了其审核成功率。
