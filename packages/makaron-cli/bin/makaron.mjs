@@ -39,6 +39,7 @@ const CHAT_AGENT_MODELS = [
   'grok-4.6',
   'grok-4.6-grok-subscription',
   'deepseek-v4-pro',
+  'deepseek-flash',
 ];
 
 // Public anon key (safe to embed — only enables auth, not data access)
@@ -462,7 +463,7 @@ Options:
   --media-manifest <file|-> Import typed image/video media before this run.
   --skill <id|label|name>   Use an installed skill or auto-install a matched marketplace skill.
   --agent-model <id>        Agent LLM only: auto, gpt-5.6-terra, gpt-5.6-sol,
-                            gpt-5.6-luna, grok-4.6, deepseek-v4-pro, or a
+                            gpt-5.6-luna, grok-4.6, deepseek-v4-pro, deepseek-flash, or a
                             gpt-5.6-*-codex-subscription or
                             grok-4.6-grok-subscription personal-plan route.
   --background, -b          Submit and print a runId.

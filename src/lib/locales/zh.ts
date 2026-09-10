@@ -502,6 +502,8 @@ const zh = {
   'model.gpt56Luna.desc': '速度快、成本低，适合高频日常任务。',
   'model.grok46.name': 'Grok 4.6',
   'model.grok46.desc': '前沿模型，擅长编程、知识工作与多步 Agent 任务。',
+  'model.deepseekFlash.name': 'DeepSeek V4.1 Flash',
+  'model.deepseekFlash.desc': 'DeepSeek V4.1 Flash，支持视觉理解与快速推理。',
   'model.deepseekV4Pro.name': 'DeepSeek V4 Pro',
   'model.deepseekV4Pro.desc': '高性价比的长上下文与复杂推理模型。',
   'model.resolution': '清晰度',

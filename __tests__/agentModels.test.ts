@@ -22,13 +22,14 @@ import {
 } from '@/lib/agent-model-runtime';
 
 describe('agent model catalog', () => {
-  it('exposes the five product model ids in selector order', () => {
+  it('exposes the product model ids in selector order', () => {
     expect(AGENT_MODEL_IDS).toEqual([
       'gpt-5.6-terra',
       'gpt-5.6-sol',
       'gpt-5.6-luna',
       'grok-4.6',
       'deepseek-v4-pro',
+      'deepseek-flash',
     ]);
   });
 
@@ -547,5 +548,13 @@ describe('agent model catalog', () => {
       if (previousOpenRouterEffort === undefined) delete process.env.OPENROUTER_AGENT_REASONING_EFFORT;
       else process.env.OPENROUTER_AGENT_REASONING_EFFORT = previousOpenRouterEffort;
     }
+  });
+});
+
+describe('DeepSeek V4.1 Flash', () => {
+  it('selects the official multimodal model without changing Auto', () => {
+    expect(normalizeRequestedAgentModelPreference('deepseek-flash')).toBe('deepseek-flash');
+    expect(resolveAgentModelSpec('deepseek-flash')).toMatchObject({provider: 'deepseek', providerModelId: 'deepseek-flash', billingModelId: 'deepseek/deepseek-flash', supportsImageInput: true});
+    expect(resolveAgentModelSpec('auto').id).toBe('gpt-5.6-terra');
   });
 });

@@ -722,6 +722,8 @@ const ja = {
   'model.gpt56Luna.desc': '高速で低コスト。日常的な大量処理に適しています。',
   'model.grok46.name': 'Grok 4.6',
   'model.grok46.desc': 'コーディング、知識作業、複数ステップのエージェントタスクに強い最先端モデルです。',
+  'model.deepseekFlash.name': 'DeepSeek V4.1 Flash',
+  'model.deepseekFlash.desc': '画像理解と高速な推論に対応する DeepSeek V4.1 Flash。',
   'model.deepseekV4Pro.name': 'DeepSeek V4 Pro',
   'model.deepseekV4Pro.desc': '長いコンテキストと複雑な推論に強い高コストパフォーマンスモデルです。',
   'model.resolution': '解像度',

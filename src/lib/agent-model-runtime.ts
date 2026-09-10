@@ -1,4 +1,5 @@
 import { createHash } from 'node:crypto';
+import { createDeepSeek } from '@ai-sdk/deepseek';
 import { createOpenAI } from '@ai-sdk/openai';
 import { createOpenRouter } from '@openrouter/ai-sdk-provider';
 import type { LanguageModel, ModelMessage } from 'ai';
@@ -86,7 +87,11 @@ export function createAgentModelRuntime(
   if (spec.provider === 'deepseek') {
     const apiKey = process.env.DEEPSEEK_API_KEY?.trim();
     if (!apiKey) {
-      throw new Error('DEEPSEEK_API_KEY is required for DeepSeek V4 Pro');
+      throw new Error('DEEPSEEK_API_KEY is required for DeepSeek Agent models');
+    }
+    if (spec.id === 'deepseek-flash') {
+      const deepseek = createDeepSeek({ apiKey });
+      return { spec, model: deepseek.chat(spec.providerModelId), normalizeMessages: normalizeToolCallInputs };
     }
     const deepseek = createOpenAI({
       name: 'deepseek',
@@ -185,6 +190,10 @@ export function getAgentProviderOptions(
           : {}),
       },
     };
+  }
+
+  if (runtime.spec.id === 'deepseek-flash') {
+    return { deepseek: { thinking: { type: 'enabled' }, reasoningEffort: 'high' } };
   }
 
   if (runtime.spec.provider === 'deepseek') {

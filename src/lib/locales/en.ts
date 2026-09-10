@@ -502,6 +502,8 @@ const en = {
   'model.gpt56Luna.desc': 'Fast, affordable option for high-volume everyday work.',
   'model.grok46.name': 'Grok 4.6',
   'model.grok46.desc': 'Frontier model for coding, knowledge work, and multi-step agent tasks.',
+  'model.deepseekFlash.name': 'DeepSeek V4.1 Flash',
+  'model.deepseekFlash.desc': 'Fast multimodal reasoning with DeepSeek V4.1 Flash.',
   'model.deepseekV4Pro.name': 'DeepSeek V4 Pro',
   'model.deepseekV4Pro.desc': 'High-value long-context and complex reasoning model.',
   'model.resolution': 'Resolution',
