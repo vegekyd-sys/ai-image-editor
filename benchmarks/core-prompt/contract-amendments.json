@@ -13,5 +13,20 @@
     "baselineSha256": "694bb707e878fdaa1487109fc5c8e059d1cd28b59f7a8109011485d0a4ecf67c",
     "sha256": "ebe6607e859a6133908a3b6e3e47c3fb1f8b5df95eb79eff87e6fa4999781a3d",
     "reason": "User requested fal H3 Max 1080p support; update only the resolution capability. Existing workflow and creative rules are unchanged. Regression: h3MaxIntegration.test.ts."
+  },
+  "src/lib/prompts/image.md": {
+    "baselineSha256": "fc3ff3be94e2ce9d6921b2982a138b9a5503e1ac052426b9ceb6d5f4d0e32715",
+    "sha256": "4da5989545a41f788a80750544b5828cb505f8ed6f5b6d16a57669aab74b6d4a",
+    "reason": "User approved replacing Image 2 defaults with FAL GPT Image 2.5 Flare on 2026-09-10. Preserve context-mode briefs and transparent fidelity rules; migrate model names, proactive product/design routing and remove stale fixed latency promises. Regression: agentPromptPolicy.test.ts, agentMediaScenarioMatrix.test.ts, modelRouterTransparency.test.ts; 13 real scenario outputs reviewed."
+  },
+  "src/lib/prompts/generate_image_tool.md": {
+    "baselineSha256": "d0dad379bc778a008f0adeaa580868085bb0cbd2483c459ed891003c12c3a3e7",
+    "sha256": "7592ad686c4c99dd6c56109d24770275f086d00e3e8cfc678380c78fb8a51047",
+    "reason": "User approved replacing Image 2 defaults with FAL GPT Image 2.5 Flare on 2026-09-10. Preserve context-mode briefs and transparent fidelity rules; migrate model names, proactive product/design routing and remove stale fixed latency promises. Regression: agentPromptPolicy.test.ts, agentMediaScenarioMatrix.test.ts, modelRouterTransparency.test.ts; 13 real scenario outputs reviewed."
+  },
+  "src/lib/prompts/cutout.md": {
+    "baselineSha256": "e1ffb7d39f0cad95e702d7a3971c9fdd97e4bc4f9720c7b31c7ee5ca98d6d202",
+    "sha256": "b9d61c73ed05e94e4c2d6833cc9077fdbaa70b25a157df08d6fde34b0099204a",
+    "reason": "User approved replacing Image 2 defaults with FAL GPT Image 2.5 Flare on 2026-09-10. Preserve context-mode briefs and transparent fidelity rules; migrate model names, proactive product/design routing and remove stale fixed latency promises. Regression: agentPromptPolicy.test.ts, agentMediaScenarioMatrix.test.ts, modelRouterTransparency.test.ts; 13 real scenario outputs reviewed."
   }
 }
