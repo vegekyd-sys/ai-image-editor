@@ -798,6 +798,24 @@ try {
 
   {
     const requestStart = requests.length;
+    const result = await expectSuccess([
+      'chat', '--project', 'project-models-1', '--agent-model', 'deepseek-flash',
+      '--json', '-b', 'make a low-cost comparison run',
+    ]);
+    assert.equal(JSON.parse(result.stdout).runId, 'run_mock_1');
+    const flow = requests.slice(requestStart);
+    assert.deepEqual(flow.map(request => `${request.method} ${request.pathname}`), [
+      'POST /api/agent/run',
+    ]);
+    assert.deepEqual(flow[0].body, {
+      projectId: 'project-models-1',
+      prompt: 'make a low-cost comparison run',
+      agentModel: 'deepseek-flash',
+    });
+  }
+
+  {
+    const requestStart = requests.length;
     await expectSuccess([
       'chat', '--project', 'project-models-1', '--agent-model=auto',
       '--json', '-b', 'use automatic Agent LLM routing',
