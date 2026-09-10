@@ -121,3 +121,13 @@ node scripts/compare-image25.mjs /absolute/path/source.png
 本地详细结果位于 `.artifacts/image25/segmind-probe/`；私有 env 和用户图片未提交。相关 21 项测试、TypeScript 检查和 lint 通过（lint 保留既有 warnings）。
 
 官方合同：[Flare API](https://www.segmind.com/models/gpt-image-2.5-flare/api)、[v2 async](https://docs.segmind.com/docs/serverless-api/async-inference)、[input storage](https://docs.segmind.com/docs/serverless-api/segmind-storage)。
+
+### 同条件 fal 复测
+
+2026-09-10 随后在 fal 上复测 5 组图片/提示词 × 两个型号，共 10 个新请求；对比 Segmind 已完成的相同 low 样本。包含两张人物图的冷色日光编辑、图 1 的街拍、黑色服装照片的街拍与三视图。保持原图、提示词、quality=low、background=auto、尺寸一致；fal 使用默认审核设置，Segmind 使用 moderation=low。每格一次，不在拒绝后改写提示词重试。
+
+10 组配对的通过/拒绝结果完全相同：各 1/10 成功，只有黑色服装照片的 Flare 三视图成功；其他 9/10 均明确审核拒绝。不能据此推断总体通过率或两个供应商的上游实现相同。
+
+成功三视图：fal 20.305 秒、$0.0164；Segmind 26.097 秒、$0.0205。Segmind 此次实际费用高 25%。耗时包括各自准备和下载开销，非同时测量，不作为供应商稳定速度排名。两者均生成插画风正侧背三视图；fal 把原图尖头鞋改为露趾鞋，Segmind 保留尖头外观，均不是严格保真复刻。
+
+本地对照页面 `.artifacts/image25/fal-comparison/index.html` 含全部 10 组结果与两张成功图，`comparison.json` 保留耗时、费用、请求编号。此次没有改动应用供应商配置。
