@@ -96,3 +96,28 @@ node scripts/compare-image25.mjs /absolute/path/source.png
 回查两个验收项目的四个失败请求：三个 fal result 返回 HTTP 422、`content_policy_violation`；一个原请求返回 HTTP 200 且存在可解码的 880×1184 PNG，已直接取回，未重新提交生成。旧 catch 把审核、查询、下载等错误都合成通用失败，无法追溯当时这个 200 请求在哪个阶段报错，因此不能把它确定归因于某一次网络故障。
 
 修复：保留审核拒绝的明确分类（不自动重试、不自动切换模型）；对状态 GET、结果 GET 和图片下载中的临时网络/429/5xx 错误最多重试三次，始终使用原 request ID，绝不重复付费 POST。新增脱敏阶段日志，后续可区分 submission/status/result/download/decode。25 项相关测试、TypeScript 与定向 ESLint 通过；真实已成功请求的 PNG 已下载并目视确认。三个审核拒绝的可用性问题仍由供应商决定，不宣称修复了其审核成功率。
+
+## Segmind 接入与审核对照（2026-09-10）
+
+状态：独立分支本地接入；未合并、未部署，生产供应商和共享环境变量没有变更。
+
+- `GPT_IMAGE25_PROVIDER=fal|segmind` 显式选供应商，省略时仍为 fal；不按失败自动切换。Segmind 使用 `SEGMIND_API_KEY`，`SEGMIND_IMAGE25_MODERATION=auto|low`（默认 auto）。本地验收配置为 segmind / low。两种供应商都固定 `quality=low`。
+- Segmind 使用官方 v2 异步 API；data URL 先上传至官方 storage，保留所有引用图顺序。每次生成仅提交一次 POST，网络问题只重试已有请求的 GET。审核拒绝明确报错，不自动重提。
+- 供应商成本读取成功结果的 `metrics.cost`，沿用精确模型行的 markup 扣费。无有效成本则失败，不能静默免费；不虚构 token 数。供应商输出只从 `images.segmind.com` 下载并解码，透明图继续检查真实 alpha。
+
+### 用户样本对照
+
+两张用户提供的人物照片，分别在 Flare / Sunburst × auto / low 下各测试一次（共 8 次）。固定 prompt 为改变整体光线至冷色日光，保留人物、脸、姿势、服装、构图和场景物品；固定低质量、9:16（768×1360）。不改写提示词重试。
+
+| 样本 | Flare auto | Flare low | Sunburst auto | Sunburst low |
+|---|---|---|---|---|
+| 图 1 | 审核拒绝 18.4s | 审核拒绝 18.4s | 审核拒绝 21.6s | 审核拒绝 19.9s |
+| 图 2 | 审核拒绝 18.7s | 审核拒绝 18.8s | 审核拒绝 23.6s | 审核拒绝 21.5s |
+
+全部返回 HTTP 422，错误明确为 provider content moderation block，失败结果没有计费字段。对这两个样本，low 没有带来可观察到的改善；这不是总体过审率估计，也不能证明供应商没有透传参数。未针对这两张图新增 fal 同条件样本，因此不宣称供应商总体优劣。
+
+普通物品对照通过真实 `makaron edit → MCP → model-router → Segmind → 本地图片`：Flare 将红杯改为蓝杯，实际 27.3 秒、1024×1024 可解码 JPEG，费用 $0.01804625，usage_logs 确认扣 4 积分。原杯字样和场景保留。 Sunburst 透明图调用也成功，28.0 秒、$0.018165、扣 4 积分，PNG 1024×1024，alpha 范围 0–254。但目视仍有明显背景光晕、杯柄内部残留，不能视为抠图质量验收通过。两次成功对照合计供应商成本 $0.03621125。
+
+本地详细结果位于 `.artifacts/image25/segmind-probe/`；私有 env 和用户图片未提交。相关 21 项测试、TypeScript 检查和 lint 通过（lint 保留既有 warnings）。
+
+官方合同：[Flare API](https://www.segmind.com/models/gpt-image-2.5-flare/api)、[v2 async](https://docs.segmind.com/docs/serverless-api/async-inference)、[input storage](https://docs.segmind.com/docs/serverless-api/segmind-storage)。
