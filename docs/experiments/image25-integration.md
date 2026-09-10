@@ -1,11 +1,26 @@
 # Image 2.5 接入与比较（2026-09-09）
 
-状态（2026-09-10）：已在独立分支将原 Image 2 默认场景与旧 `openai` 参数迁移到 FAL Image 2.5 Flare。13 个默认场景实测均成功、未遇审核拦截，但复杂透明抠图和透明贴纸存在光晕，尚非全部质量验收通过。未合入 dev、未部署。以下各阶段供应商调查按时间保留；最新结论见下一节。
+状态（2026-09-10）：已合入 dev 并发布到正式域名，生产代码提交 `a9829223`。GPT Image 2.5 Flare 替代原 Image 2 默认场景；普通 Gemini 自动路由仍保持原状。CLI 0.14.9 已发布并安装验证。复杂透明抠图/透明贴纸的光晕问题仍保留，不因上线被标为质量通过。
 
 分支：`codex/image25-integration`，基线：`fc1217e5`。
 
 
-## Image 2 默认场景迁移验收（2026-09-10，当前）
+
+## 正式发布验收（2026-09-10）
+
+- 用户明确授权合入 dev 与生产发布。功能、四语 changelog、CLI 默认模型说明、公开 Skill discovery 与受保护提示词修订已提交；dev 已推送 origin。
+- 预发布及 canonical dev 发布检查均通过：283 个测试文件通过，1 个跳过；1742 项测试通过，1 项跳过；CLI 测试、TypeScript、构建与 lint/i18n/startup/workflow 检查通过。
+- Production deployment：`dpl_9utJMJ1ZxHaF5q49bgKMZAFJWCxY`，地址 `https://ai-image-editor-fccbk0exn-vegekyd-sys-projects.vercel.app`，代码 `a9829223`。
+- `vercel --prod` 仅自动更新项目 vercel.app alias，`www.makaron.app` 与 `makaron.app` 起初仍指向旧部署。本轮显式将两个正式域名绑定到新部署，并再次 inspect 核对。下一次发布不能只看 Production Ready 或健康检查，必须核对自定义域名的 deployment id。
+- 新正式域名 `/api/health` 为 healthy：13 项 healthy、0 项 unhealthy；线上 `skill.md` 与新版本源码一致。
+- 切换后自然语言信息图 run `0b246109-4aea-4a02-b479-ca2858b34c8a`，project `6541c7c7-6465-41ac-a04d-5709cb5d8e59`：不指定图片模型，实际使用 `gpt-image-2.5-flare`，31.295 秒完整交付，扣 2 credits。已下载并查看真实 JPEG，标题、四步中文说明和配图齐全。
+- 域名切换前启动的可乐 run `2bfdb3d9-ac47-4f51-89bd-1b0b431ed1ab` 实际仍使用旧订阅 Image 2，明确排除于新版生产验收，未将其算作 Image 2.5 成功。
+- `makaron-cli@0.14.9` npm 发布被接受后经历 registry 同步等待；已验证公开 latest、独立缓存安装后的 `--version` 为 0.14.9，`--help` 正常。
+- 回滚目标：上一生产 deployment `dpl_BRAnaX9svkwCFxRJ98BRs9rsFKZf` / `https://ai-image-editor-61md07d03-vegekyd-sys-projects.vercel.app`。若回滚，必须同时核实两个正式域名；本轮未改变生产模型环境变量。
+
+验收文件保存在 canonical dev 的 `.artifacts/image25-release/`。接下来的全局默认模型研究见 `image25-default-routing.md`；研究不改变本次上线范围。
+
+## Image 2 默认场景迁移验收（2026-09-10，上线前）
 
 用户选定 FAL，并要求本轮先验证，下轮才合入 dev 与上线。运行配置为 `GPT_IMAGE25_PROVIDER=fal`、`quality=low`，无失败重试、无换模型兜底。本轮未改生产配置或数据库价格。
 
