@@ -169,6 +169,10 @@ const zhHant = {
   // Changelog
   'changelog.heading': '更新',
   'changelog.close': '關閉更新',
+  'changelog.gptImage25.title': 'GPT Image 2.5 上線：從產品圖到資訊圖表',
+  'changelog.gptImage25.item1': '用一句話製作產品廣告、電商圖片、海報和資訊圖表，將品牌、文字與畫面組織在一起；也可以探索 App、網站介面的靜態概念圖和影片分鏡。',
+  'changelog.gptImage25.item2': '上傳產品或人物參考圖，就能更換背景、調整畫面，或結合多張參考圖創作新的場景，讓既有素材延伸出更多創意。',
+  'changelog.gptImage25.item3': 'GPT Image 2.5 Flare 已取代原 Image 2，產品圖、資訊圖表等設計任務會自動使用。你也可以在圖片模型中選擇 Flare 或 Sunburst，或直接告訴 Agent「用 GPT Image 2.5」。',
   'changelog.creativeSpeedUpgrade.title': 'Makaron 大提速，讓靈感少等一會兒',
   'changelog.creativeSpeedUpgrade.item1': '說出想法，更快開工。我們精簡了 Agent 開始工作前的準備，讓對話和範本啟動更輕快，把更多時間留給創作。',
   'changelog.creativeSpeedUpgrade.item2': '更快看到影片，也更快改出新想法。過去頁面提示「預計 3–5 分鐘」；現在預設使用 fal H3 Max，本次實測把圖片變成 5 秒影片約需 16 秒，修改一段 5 秒影片約需 36–42 秒。換套衣服、換個場景，更快看到效果。',

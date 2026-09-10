@@ -17,12 +17,13 @@ interface LegacyChangelogEntry {
 
 type LocalizedChangelogEntry = {
   date: string;
-  localeKey: 'creativeSpeedUpgrade' | 'wan27Image' | 'fasterVideoAnalysis' | 'videoReplication' | 'minimaxH3Max' | 'fastDurableAgent' | 'wan30' | 'googleOmni11' | 'externalImages' | 'videoTranslation' | 'talkingHeadEditing' | 'smarterEditableDiscovery' | 'tiktokVideoSkill' | 'sourcePlayback' | 'externalSourceRanges' | 'seedance25' | 'minimaxH3' | 'multilingualAsr' | 'editableRemotion' | 'editableLayers';
+  localeKey: 'gptImage25' | 'creativeSpeedUpgrade' | 'wan27Image' | 'fasterVideoAnalysis' | 'videoReplication' | 'minimaxH3Max' | 'fastDurableAgent' | 'wan30' | 'googleOmni11' | 'externalImages' | 'videoTranslation' | 'talkingHeadEditing' | 'smarterEditableDiscovery' | 'tiktokVideoSkill' | 'sourcePlayback' | 'externalSourceRanges' | 'seedance25' | 'minimaxH3' | 'multilingualAsr' | 'editableRemotion' | 'editableLayers';
 };
 
 type ChangelogEntry = LegacyChangelogEntry | LocalizedChangelogEntry;
 
 const CHANGELOG: ChangelogEntry[] = [
+  { date: '2026-09-10', localeKey: 'gptImage25' },
   { date: '2026-09-06', localeKey: 'creativeSpeedUpgrade' },
   { date: '2026-09-04', localeKey: 'wan27Image' },
   { date: '2026-09-03', localeKey: 'fasterVideoAnalysis' },
@@ -995,6 +996,10 @@ const iOSAppTopGap = 'max(96px, calc(env(safe-area-inset-top, 0px) + 40px))';
 const iOSAppBottomGap = 'max(14px, env(safe-area-inset-bottom, 0px))';
 
 const LOCALIZED_CHANGELOG_KEYS = {
+  gptImage25: {
+    title: 'changelog.gptImage25.title',
+    items: ['changelog.gptImage25.item1', 'changelog.gptImage25.item2', 'changelog.gptImage25.item3'],
+  },
   creativeSpeedUpgrade: {
     title: 'changelog.creativeSpeedUpgrade.title',
     items: ['changelog.creativeSpeedUpgrade.item1', 'changelog.creativeSpeedUpgrade.item2', 'changelog.creativeSpeedUpgrade.item3'],

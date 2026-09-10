@@ -166,6 +166,10 @@ const ja = {
   // Changelog
   'changelog.heading': '更新情報',
   'changelog.close': '更新情報を閉じる',
+  'changelog.gptImage25.title': 'GPT Image 2.5 登場：商品画像からインフォグラフィックまで',
+  'changelog.gptImage25.item1': '短い指示から商品広告、EC画像、ポスター、インフォグラフィックを制作。ブランド、文字、ビジュアルを一つの画面にまとめられます。アプリやWebサイトの静的なコンセプト画像、動画の絵コンテにも使えます。',
+  'changelog.gptImage25.item2': '商品や人物の参考画像をアップロードして、背景や構図を変更。複数の参考画像を組み合わせて新しいシーンを作り、手元の素材からアイデアを広げられます。',
+  'changelog.gptImage25.item3': 'GPT Image 2.5 Flare が Image 2 に代わり、商品画像やインフォグラフィックなどのデザイン制作で自動的に選ばれます。画像モデルから Flare または Sunburst を選ぶか、Agent に「GPT Image 2.5 を使って」と伝えてください。',
   'changelog.creativeSpeedUpgrade.title': 'Makaron がもっと速く。ひらめきを、待たせない。',
   'changelog.creativeSpeedUpgrade.item1': '思いついたら、すぐに制作へ。Agent が作業前に行う準備を減らし、チャットやテンプレートの開始をより軽快に。創作に使える時間を増やしました。',
   'changelog.creativeSpeedUpgrade.item2': '動画を早く確認して、次のアイデアも試せます。以前の画面表示は「約 3〜5 分」でした。デフォルトとなった fal H3 Max では、今回の実測で画像から5 秒の動画を約 16 秒、5 秒の動画の編集を約 36〜42 秒で完了。衣装やシーンを変えて、その効果をより早く確認できます。',

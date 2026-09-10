@@ -128,6 +128,10 @@ const en = {
   // Changelog
   'changelog.heading': 'Updates',
   'changelog.close': 'Close updates',
+  'changelog.gptImage25.title': 'GPT Image 2.5 Is Here: From Product Images to Infographics',
+  'changelog.gptImage25.item1': 'Create product ads, e-commerce images, posters, and infographics from a short brief, bringing branding, text, and visuals together. Explore static app and website concepts or storyboard images, too.',
+  'changelog.gptImage25.item2': 'Upload product or portrait references to change backgrounds, adjust a composition, or combine multiple reference images into a new scene and get more from your existing assets.',
+  'changelog.gptImage25.item3': 'GPT Image 2.5 Flare replaces Image 2 and is selected automatically for design tasks such as product images and infographics. You can also choose Flare or Sunburst in the image model picker, or ask the Agent to use GPT Image 2.5.',
   'changelog.creativeSpeedUpgrade.title': 'A Faster Makaron. Less Waiting, More Creating.',
   'changelog.creativeSpeedUpgrade.item1': 'Share an idea and get going sooner. We have reduced the preparation the Agent needs before starting, making chats and templates feel lighter and leaving more time for creating.',
   'changelog.creativeSpeedUpgrade.item2': 'See your video sooner, then try a new idea. The previous on-screen estimate was 3–5 minutes. With fal H3 Max now the default, our tests turned an image into a five-second video in about 16 seconds, or edited a five-second video in about 36–42 seconds. Try a new outfit or a different setting and see the change sooner.',
