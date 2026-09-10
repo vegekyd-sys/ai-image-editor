@@ -61,6 +61,7 @@
     "eval:core-prompt": "node --import tsx --require ./md-loader.cjs benchmarks/core-prompt/evaluate.ts"
   },
   "dependencies": {
+    "@ai-sdk/deepseek": "3.0.42",
     "@ai-sdk/openai": "^4.0.15",
     "@apple/app-store-server-library": "^3.1.0",
     "@aws-crypto/crc32c": "^5.2.0",

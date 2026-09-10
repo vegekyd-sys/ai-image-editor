@@ -4,6 +4,7 @@ export const AGENT_MODEL_IDS = [
   'gpt-5.6-luna',
   'grok-4.6',
   'deepseek-v4-pro',
+  'deepseek-flash',
 ] as const;
 
 export type AgentModelId = (typeof AGENT_MODEL_IDS)[number];
@@ -247,6 +248,15 @@ export const AGENT_MODEL_SPECS: Record<AgentModelId, AgentModelSpec> = {
     billingModelId: 'x-ai/grok-4.6',
     cacheStrategy: 'automatic',
     supportsImageInput: true,
+  },
+  'deepseek-flash': {
+    id: 'deepseek-flash',
+    provider: 'deepseek',
+    providerModelId: 'deepseek-flash',
+    billingModelId: 'deepseek/deepseek-flash',
+    cacheStrategy: 'automatic',
+    supportsImageInput: true,
+    defaultReasoningEffort: 'high',
   },
   'deepseek-v4-pro': {
     id: 'deepseek-v4-pro',
