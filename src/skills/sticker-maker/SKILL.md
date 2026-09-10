@@ -2,7 +2,7 @@
 name: sticker-maker
 description: >
   Generate, extract, and prepare transparent image assets for video composition. Prefers native
-  GPT Image 2 alpha, falls back to controlled chroma keying when needed, and verifies the result
+  GPT Image 2.5 alpha, falls back to controlled chroma keying when needed, and verifies the result
   on five backgrounds before handing the PNG to Remotion.
 allowed-tools: generate_image analyze_image prepare_visual_asset
 metadata:
@@ -43,7 +43,7 @@ If these answers are weak, do not generate the asset.
 ## 2. Prefer Native Transparent Generation Or Extraction
 
 Before native transparent generation or source extraction, read
-`prompts/cutout.md` once. It is the canonical GPT Image 2 `editPrompt`
+`prompts/cutout.md` once. It is the canonical GPT Image 2.5 `editPrompt`
 contract. This Skill adds asset staging, transparent padding, preparation, and
 video QA requirements; it does not replace the general cutout contract.
 

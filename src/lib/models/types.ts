@@ -9,7 +9,7 @@ export interface GenerateImageRequest {
   model?: ModelId;          // explicit model choice (agent tool param or UI selector)
   category?: string;        // tip category (for auto-routing)
   aspectRatio?: string;
-  /** Output background contract. Transparent output supports GPT Image 2 and 2.5. */
+  /** Output background contract. Transparent output defaults to GPT Image 2.5 Flare. */
   background?: ImageBackground;
   thinkingEffort?: ReasoningEffort;
   references?: { url: string; role: string }[];  // multi-image references (Gemini + Qwen)
@@ -56,5 +56,8 @@ export function isFalImage25(model?: string | null): model is FalImage25Id {
 }
 
 export function resolveImageModel(model?: ModelId, background?: ImageBackground): ModelId | undefined {
-  return background === 'transparent' && model !== 'openai' && !isFalImage25(model) ? 'openai' : model;
+  // Persisted selections and older clients used "openai" for Image 2.
+  // Migrate those requests before pricing and provider selection.
+  if (model === 'openai') return 'gpt-image-2.5-flare';
+  return background === 'transparent' && !isFalImage25(model) ? 'gpt-image-2.5-flare' : model;
 }

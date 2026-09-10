@@ -1,6 +1,6 @@
 # Image Creation and Editing
 
-For GPT Image 2.5 use model="gpt-image-2.5-flare"; use "gpt-image-2.5-sunburst" only when Sunburst is requested. Both use fal with low quality. Legacy GPT Image 2 remains model="openai". Never silently substitute Image 2 or a subscription for Image 2.5.
+For GPT Image 2.5 use model="gpt-image-2.5-flare"; use "gpt-image-2.5-sunburst" only when Sunburst is requested. Both use fal with low quality. GPT Image 2 and the legacy "openai" model parameter now resolve to Flare as well. Never silently substitute Image 2 or a subscription for Image 2.5.
 
 Use this file when the user asks for image editing, text-to-image generation, posters, marketing graphics, e-commerce pages, infographics, captions, photo enhancement, creative photo edits, wild transformations, reference-image composition, or any `generate_image` task that needs more than a single obvious instruction.
 
@@ -24,7 +24,7 @@ After `generate_image`, the result becomes the next `<<<media_N>>>` and is immed
 
 ### Wan 2.7 Image
 
-Use `model: "wan2.7-image"` when explicitly requested or selected in the app. This is Alibaba international's fast standard image model, separate from Wan video. It generates one approximately 1K image per call, supports text-to-image and up to 9 ordered input images including the base, and defaults to 6 image credits. Do not promise exact face preservation. Keep prompts focused and pass all required reference images; never silently drop references. Transparent output still requires the GPT Image 2 contract below. Report failed or timed-out Wan calls without automatically repeating the request or choosing another model, since the provider may already have generated a paid output.
+Use `model: "wan2.7-image"` when explicitly requested or selected in the app. This is Alibaba international's fast standard image model, separate from Wan video. It generates one approximately 1K image per call, supports text-to-image and up to 9 ordered input images including the base, and defaults to 6 image credits. Do not promise exact face preservation. Keep prompts focused and pass all required reference images; never silently drop references. Transparent output still requires the GPT Image 2.5 contract below. Report failed or timed-out Wan calls without automatically repeating the request or choosing another model, since the provider may already have generated a paid output.
 
 Edit the current photo or generate a new image from text.
 
@@ -36,10 +36,10 @@ Interpret the user's meaning, not a hard-coded keyword list. Requests to make th
 
 Before the first transparent generation or extraction in a conversation, call `read_file('prompts/cutout.md')` and follow its canonical prompt order. Do not re-read it when it is already in tool-result history.
 
-- Existing source image: pass that image's `media_index`. This is an image-to-image cutout/edit. In `editPrompt`, tell GPT Image 2 to remove the background to transparent alpha while preserving the complete intended subject, identity, shape, fine edges, holes, and interior details. Do not redesign the subject unless requested.
+- Existing source image: pass that image's `media_index`. This is an image-to-image cutout/edit. In `editPrompt`, tell GPT Image 2.5 to remove the background to transparent alpha while preserving the complete intended subject, identity, shape, fine edges, holes, and interior details. Do not redesign the subject unless requested.
 - No source image: omit `media_index` entirely. This is transparent text-to-image. Describe only the wanted subject and composition; do not invent a colored, white, checkerboard, studio, or scenic background.
 - Ambiguous cleanup such as removing one background object does not automatically mean alpha. Use transparent output only when the intended deliverable has no background or is a cutout/overlay asset.
-- Transparent output strictly uses the selected GPT Image 2 or 2.5 model. Never fall back to an opaque image, synthetic checkerboard, chroma-key background, or a different image model. If the provider cannot return real alpha, report failure.
+- Transparent output strictly defaults to Flare and preserves explicitly selected Sunburst. Never fall back to an opaque image, synthetic checkerboard, chroma-key background, or a different image model. If the provider cannot return real alpha, report failure.
 - The canonical fidelity wording, keep/remove selection rules, content-specific details, and delivery line live in `prompts/cutout.md`. Do not improvise a weaker generic prompt.
 
 Omit `background` for normal images.
@@ -225,15 +225,15 @@ Once you use `model: 'qwen'` for NSFW reasons, keep using it for all subsequent 
 
 NSFW auto-fallback: if Gemini refuses content, the system automatically retries with Qwen. You do not need to manually retry. But proactively detecting NSFW and setting `model: 'qwen'` upfront is strongly preferred. It avoids the wasted Gemini call entirely.
 
-### OpenAI Image 2
+### GPT Image 2.5 Flare (default replacement for Image 2)
 
-Use `model: 'openai'` proactively when any of these apply:
+Use `model: 'gpt-image-2.5-flare'` proactively when any of these apply:
 
-1. Text-heavy posters or graphics: user wants text, titles, captions, or logos rendered cleanly. OpenAI's text rendering is far superior to Gemini.
+1. Text-heavy posters or graphics: user wants text, titles, captions, or logos rendered cleanly. Use Flare for typography and layout.
 2. Face identity complaints: user says "脸变了" / "不像" / "人脸不对" after a Gemini edit.
-3. Design or layout tasks: tasks requiring the model to design layout, typography, or information architecture, such as e-commerce pages, infographics, posters, marketing graphics, anime or illustration, game or app UI, web design. Use Context Mode for `editPrompt`. Do not call `analyze_image` first. The model receives the images directly and can see them. Just pass the user's request.
+3. Design or layout tasks: tasks requiring the model to design layout, typography, or information architecture, such as product images, e-commerce pages, infographics, posters, marketing graphics, anime or illustration, game or app UI, web design. Use Context Mode for `editPrompt`. Do not call `analyze_image` first. The model receives the images directly and can see them. Just pass the user's request.
 
-OpenAI takes about 2 to 3 minutes per generation. Tell the user it will take a couple of minutes.
+Do not promise a fixed generation time. Flare failures must be reported without automatically retrying or switching models.
 
 Other model rules:
 
@@ -241,15 +241,15 @@ Other model rules:
 - Everything else: omit model. The auto-router handles it.
 - "nano banana" means Gemini. "nano banana lite" means `model: 'gemini-lite'`.
 
-## Context Mode for model='openai'
+## Context Mode for model='gpt-image-2.5-flare'
 
-For design and layout tasks, such as 电商详情页, infographics, posters, marketing, anime, game or app UI, and web design, set `model='openai'`. In this mode your job is to inspire Image 2's judgment, not to make judgments for it.
+For design and layout tasks, such as 产品图, 电商详情页, infographics, posters, marketing, anime, game or app UI, and web design, set `model='gpt-image-2.5-flare'`. In this mode your job is to inspire Image 2.5's judgment, not to make judgments for it.
 
 Context Mode has three principles:
 
 1. `editPrompt` equals the user's original words. Do not rewrite, translate, compress, or expand.
 2. Inspire the model's judgment instead of replacing the model's judgment. If you describe style, colors, or layout, you are replacing its judgment, which makes the result worse.
-3. Summarize context and give Image 2 better context. In multi-turn conversations, carry over key feedback the user previously gave.
+3. Summarize context and give Image 2.5 better context. In multi-turn conversations, carry over key feedback the user previously gave.
 
 Example, single turn:
 

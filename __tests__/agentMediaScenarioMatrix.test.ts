@@ -82,7 +82,7 @@ describe('agent media scenario matrix', () => {
       "skill='wild'",
       "skill='captions'",
       "model: 'qwen'",
-      "model: 'openai'",
+      "model: 'gpt-image-2.5-flare'",
       'Context Mode',
       'Keep every person',
       'Do NOT add any text, watermarks, or borders',
@@ -100,7 +100,7 @@ describe('agent media scenario matrix', () => {
     expect(generateImageTool).toContain('media_index')
     expect(generateImageTool).toContain('reference_media_indices')
     expect(generateImageTool).toContain('`image_refs` is only for workspace asset provider URLs')
-    expect(generateImageTool).toContain("Context Mode for `model='openai'`")
+    expect(generateImageTool).toContain("Context Mode for `model='gpt-image-2.5-flare'`")
   })
 
   it('routes natural-language transparency and cutouts through the explicit tool contract', () => {

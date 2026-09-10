@@ -1887,13 +1887,13 @@ Options:
   --help, -h                Show this help.
 
 Notes:
-  Model selection is optional. Transparent output routes strictly to GPT Image 2
+  Model selection is optional. Transparent output routes strictly to GPT Image 2.5 Flare
   and fails instead of returning an opaque fallback.
 
 Examples:
   makaron edit --image portrait.jpg --image-model qwen --out result.jpg "cinematic warm light"
   makaron edit --image product.jpg --ref style.png --aspect 1:1 "use this visual style"
-  makaron edit --image-model openai --background transparent --out sticker.png "a magenta star sticker"
+  makaron edit --image-model gpt-image-2.5-flare --background transparent --out sticker.png "a magenta star sticker"
 `);
 }
 

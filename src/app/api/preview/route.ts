@@ -2,7 +2,8 @@ import { NextRequest } from 'next/server';
 import { createClient } from '@/lib/supabase/server';
 import { generateImage } from '@/lib/model-router';
 import { generateTipsPreviewImageOpenRouter } from '@/lib/gemini';
-import { requireCredits, deductByTokens, deductCredits } from '@/lib/billing/credits';
+import { requireCredits, deductByTokens, deductCredits, isBillingEnabled } from '@/lib/billing/credits';
+import { getTokenRate } from '@/lib/billing/token-rates';
 
 export const maxDuration = 120;
 
@@ -45,6 +46,15 @@ export async function POST(req: NextRequest) {
       );
     }
 
+    if (background === 'transparent' && await isBillingEnabled()) {
+      const rate = await getTokenRate('gpt-image-2.5-flare');
+      if (!rate || !Number.isFinite(rate.markup) || rate.markup <= 0) {
+        return Response.json({ error: 'GPT Image 2.5 pricing is not configured.', code: 'pricing_unavailable' }, { status: 503 });
+      }
+      const check = await requireCredits(user.id, 5);
+      if (!check.ok) return check.response;
+    }
+
     let liteResult: Awaited<ReturnType<typeof generateTipsPreviewImageOpenRouter>> = { image: null };
     if (background !== 'transparent') {
       try {
@@ -83,7 +93,7 @@ export async function POST(req: NextRequest) {
       return new Response(
         JSON.stringify({
           error: transparentUnavailable
-            ? 'Transparent preview is unavailable from the configured GPT Image 2 provider. No opaque fallback was returned.'
+            ? 'Transparent preview is unavailable from the configured GPT Image 2.5 provider. No opaque fallback was returned.'
             : 'Failed to generate preview',
           code: transparentUnavailable ? 'transparent_provider_unavailable' : 'preview_generation_failed',
         }),

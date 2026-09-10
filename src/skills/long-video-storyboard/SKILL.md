@@ -32,7 +32,7 @@ Do not generate storyboards before anchors and the beat board are approved.
 
 ## Generation Rules
 
-- Generate exactly one storyboard image per segment with `generate_image` using `model: "openai"`.
+- Generate exactly one storyboard image per segment with `generate_image` using `model: "gpt-image-2.5-flare"`.
 - Always pass `aspectRatio` to `generate_image` using the approved target aspect ratio, e.g. `aspectRatio: "9:16"` for vertical video storyboards.
 - One segment = one storyboard image. Do not create one full-video storyboard sheet.
 - Generate storyboards sequentially in segment order. Do not generate storyboard images in parallel.

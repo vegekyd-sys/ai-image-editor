@@ -240,17 +240,17 @@ npx makaron-cli edit --image photo.jpg "add cinematic warm lighting"
 npx makaron-cli edit "a cyberpunk cityscape at night"
 
 # With model/skill/reference
-npx makaron-cli edit --image photo.jpg --image-model openai --skill captions "add title"
+npx makaron-cli edit --image photo.jpg --image-model gpt-image-2.5-flare --skill captions "add title"
 npx makaron-cli edit --image photo.jpg --ref style.jpg "match this style"
 
 # Output to file
 npx makaron-cli edit --image photo.jpg --out result.jpg "make it dramatic"
 
-# Strict transparent output through GPT Image 2
-npx makaron-cli edit --image-model openai --background transparent --out sticker.png "a magenta star sticker"
+# Strict transparent output through GPT Image 2.5 Flare
+npx makaron-cli edit --image-model gpt-image-2.5-flare --background transparent --out sticker.png "a magenta star sticker"
 ```
 
-Options: `--image`, `--image-model gemini|gemini-lite|qwen|openai|gpt-image-2.5-flare|gpt-image-2.5-sunburst|wan2.7-image|pony|wai`, `--skill enhance|creative|wild|captions`, `--ref <file>` (up to 3), `--aspect <ratio>`, `--background auto|opaque|transparent`, `--out <path>`. Transparent output routes strictly to GPT Image 2 and fails instead of returning an opaque fallback. Wan 2.7 Image is an explicit fast ~1K route; do not automatically retry failures/timeouts, and do not promise exact face preservation.
+Options: `--image`, `--image-model gemini|gemini-lite|qwen|openai|gpt-image-2.5-flare|gpt-image-2.5-sunburst|wan2.7-image|pony|wai`, `--skill enhance|creative|wild|captions`, `--ref <file>` (up to 3), `--aspect <ratio>`, `--background auto|opaque|transparent`, `--out <path>`. Transparent output routes strictly to GPT Image 2.5 Flare and fails instead of returning an opaque fallback. Wan 2.7 Image is an explicit fast ~1K route; do not automatically retry failures/timeouts, and do not promise exact face preservation.
 
 ### `video` — Standalone video tools (no project timeline)
 
@@ -405,3 +405,5 @@ send_message "All done!"
 - `edit`/`video`/`music` are fallback tools for when `chat` is unavailable or you need raw model access without project context.
 
 FAL video models: **fal H3 Turbo** uses `minimax-h3-max` for single-start-frame I2V/T2V. **FAL H3 Max** uses the new selector `fal-h3-max`: native T2V or image/video/audio reference-to-video, default 768p, optional 480p, integer 5–15s; at most 9 images / 3 videos / 3 audios / 12 total. Reference video/audio each 2–15s and each modality totals at most 15s. Source-video modifications use generation with feature references, not typed edit/extend. Reference input tokens are billed in addition to output video; query current pricing.
+
+The legacy `openai` image-model parameter now resolves to GPT Image 2.5 Flare.

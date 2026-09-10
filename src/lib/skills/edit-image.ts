@@ -10,7 +10,7 @@ export interface EditImageInput {
   editPrompt: string;
   skill?: 'enhance' | 'creative' | 'wild' | 'captions';
   aspectRatio?: string;
-  /** Explicit output background. Transparent requests preserve the selected GPT Image 2 or 2.5 model. */
+  /** Explicit output background. Transparent requests default to Flare and preserve selected Sunburst. */
   background?: ImageBackground;
   /** @deprecated Use workspace service instead. Kept for backward compat. */
   skillPrompts?: Record<string, string>;

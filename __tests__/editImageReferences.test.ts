@@ -82,7 +82,7 @@ describe('editImage reference contract', () => {
     }));
   });
 
-  it('passes the authenticated Codex subscription context to GPT Image 2', async () => {
+  it('normalizes legacy Image 2 while retaining caller context', async () => {
     await editImage(
       { editPrompt: 'Create a polished poster.', preferredModel: 'openai' },
       {
@@ -94,7 +94,7 @@ describe('editImage reference contract', () => {
     );
 
     expect(mockedGenerateImage).toHaveBeenCalledWith(expect.objectContaining({
-      model: 'openai',
+      model: 'gpt-image-2.5-flare',
       codexSubscription: {
         userId: 'allowed-user',
         projectId: 'project-1',
@@ -102,7 +102,7 @@ describe('editImage reference contract', () => {
     }));
   });
 
-  it('uses strict OpenAI text-to-image when transparent output has no source', async () => {
+  it('uses strict Flare text-to-image when transparent output has no source', async () => {
     await editImage(
       { editPrompt: 'Create a sticker.', background: 'transparent' },
       {},
@@ -110,13 +110,13 @@ describe('editImage reference contract', () => {
 
     expect(mockedGenerateImage).toHaveBeenCalledWith(expect.objectContaining({
       image: undefined,
-      model: 'openai',
+      model: 'gpt-image-2.5-flare',
       background: 'transparent',
       references: undefined,
     }));
   });
 
-  it('uses strict OpenAI image-to-image for background removal from a source', async () => {
+  it('uses strict Flare image-to-image for background removal from a source', async () => {
     await editImage(
       {
         editPrompt: 'Remove the background to transparent alpha while preserving the subject.',
@@ -128,7 +128,7 @@ describe('editImage reference contract', () => {
 
     expect(mockedGenerateImage).toHaveBeenCalledWith(expect.objectContaining({
       image: 'https://example.com/source.jpg',
-      model: 'openai',
+      model: 'gpt-image-2.5-flare',
       background: 'transparent',
       references: undefined,
     }));

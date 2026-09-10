@@ -17,19 +17,19 @@ describe('transparent image routing', () => {
     expect(resolveModelChain({
       prompt: 'a sticker',
       background: 'transparent',
-    })).toEqual(['openai']);
+    })).toEqual(['gpt-image-2.5-flare']);
 
     expect(resolveModelChain({
       prompt: 'a sticker',
       model: 'gemini',
       background: 'transparent',
-    })).toEqual(['openai']);
+    })).toEqual(['gpt-image-2.5-flare']);
   });
 
-  it('attempts only OpenAI when transparent generation fails', async () => {
+  it('attempts only Flare when transparent generation fails', async () => {
     const generate = vi.fn().mockResolvedValue({ image: null });
     mockedGetBackend.mockReturnValue({
-      id: 'openai',
+      id: 'gpt-image-2.5-flare',
       canHandle: () => true,
       generate,
     });
@@ -42,28 +42,28 @@ describe('transparent image routing', () => {
     });
 
     expect(mockedGetBackend).toHaveBeenCalledTimes(1);
-    expect(mockedGetBackend).toHaveBeenCalledWith('openai');
+    expect(mockedGetBackend).toHaveBeenCalledWith('gpt-image-2.5-flare');
     expect(generate).toHaveBeenCalledTimes(1);
     expect(result).toMatchObject({
       image: null,
-      model: 'openai',
+      model: 'gpt-image-2.5-flare',
       fallbackUsed: false,
-      failedModels: ['openai'],
+      failedModels: ['gpt-image-2.5-flare'],
     });
   });
 
-  it('preserves the actual subscription provider for billing and provenance', async () => {
+  it('migrates legacy Image 2 calls to paid fal even with subscription context', async () => {
     mockedGetBackend.mockReturnValue({
-      id: 'openai',
+      id: 'gpt-image-2.5-flare',
       canHandle: () => true,
       generate: vi.fn().mockResolvedValue({
         image: 'data:image/png;base64,cG5n',
-        provider: 'codex-subscription',
+        provider: 'fal',
         usage: {
           inputTokens: 0,
           outputTokens: 0,
-          modelId: 'gpt-image-2',
-          provider: 'codex-subscription',
+          modelId: 'gpt-image-2.5-flare',
+          provider: 'fal',
         },
       }),
     });
@@ -74,9 +74,9 @@ describe('transparent image routing', () => {
       codexSubscription: { userId: 'allowed-user', projectId: 'project-1' },
     })).resolves.toMatchObject({
       image: 'data:image/png;base64,cG5n',
-      model: 'openai',
-      provider: 'codex-subscription',
-      usage: { provider: 'codex-subscription' },
+      model: 'gpt-image-2.5-flare',
+      provider: 'fal',
+      usage: { provider: 'fal' },
     });
   });
 });

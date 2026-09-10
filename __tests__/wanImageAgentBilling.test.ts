@@ -15,7 +15,7 @@ const factory = parsed.statements.find(node => ts.isFunctionDeclaration(node) &&
 if (!factory) throw new Error('Missing generate_image factory');
 const code = ts.transpileModule(factory.getText(parsed), { compilerOptions: { target: ts.ScriptTarget.ES2022, module: ts.ModuleKind.CommonJS } }).outputText;
 
-function setup() {
+function setup(provider = 'azure') {
   const editImage = vi.fn().mockResolvedValue({ success: true, image: 'data:image/jpeg;base64,YQ==', usedModel: 'wan2.7-image', provider: 'dashscope' });
   const deductByTokens = vi.fn().mockResolvedValue({ charged: 9, remaining: 91 });
   const requireCredits = vi.fn().mockResolvedValue({ ok: true, balance: 100 });
@@ -36,7 +36,7 @@ function setup() {
     },
   });
   const create = vm.runInContext(`${code}\ncreateGenerateImageTool`, context);
-  return { tool: create({ ctx, runtime: { spec: { provider: 'azure' } } }), ctx, editImage, requireCredits, deductCredits, deductByTokens, getToolPrice, isBillingEnabled, getTokenRate };
+  return { tool: create({ ctx, runtime: { spec: { provider } } }), ctx, editImage, requireCredits, deductCredits, deductByTokens, getToolPrice, isBillingEnabled, getTokenRate };
 }
 
 describe('App Agent Wan execution and billing', () => {
@@ -121,6 +121,14 @@ describe('App Agent Wan execution and billing', () => {
 
 
 describe('App Agent Image 2.5 billing', () => {
+  it('checks Flare pricing for a legacy Image 2 selection even on a subscription agent', async () => {
+    const { tool, ctx, getTokenRate, editImage } = setup('codex-subscription');
+    ctx.preferredModel = 'openai';
+    getTokenRate.mockResolvedValue(null);
+    expect(await tool.execute({ editPrompt: 'Product image' })).toMatchObject({ success: false, error: 'pricing_unavailable' });
+    expect(getTokenRate).toHaveBeenCalledWith('gpt-image-2.5-flare');
+    expect(editImage).not.toHaveBeenCalled();
+  });
   it('rejects missing exact pricing before a paid call', async () => {
     const { tool, ctx, getTokenRate, editImage } = setup();
     ctx.preferredModel = 'gpt-image-2.5-flare';

@@ -22,10 +22,11 @@ function getFallbacks(model: ModelId): ModelId[] {
 }
 
 export function resolveModelChain(req: GenerateImageRequest): ModelId[] {
+  const model = resolveImageModel(req.model, req.background);
   // Transparent output is a strict capability contract. Do not silently return
   // an opaque image from a fallback backend that cannot honor the request.
-  if (req.background === 'transparent') return [resolveImageModel(req.model, req.background)!];
-  if (isFalImage25(req.model)) return [req.model];
+  if (req.background === 'transparent') return [model!];
+  if (isFalImage25(model)) return [model];
   // Explicit paid Wan calls never fan out to another model, even on timeout.
   if (req.model === 'wan2.7-image') return ['wan2.7-image'];
   // 0. NSFW project → Qwen only, never touch Gemini

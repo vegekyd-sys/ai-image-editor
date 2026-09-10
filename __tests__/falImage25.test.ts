@@ -36,6 +36,21 @@ describe('fal Image 2.5 paid request contract', () => {
     expect(fetcher.mock.calls.filter(([, init]) => init?.method === 'POST')).toHaveLength(1);
     expect(fetcher.mock.calls[2][0]).toBe('https://queue.fal.run/openai/gpt-image-2.5/requests/request-123/status');
   });
+  it.each([undefined, '16:9'])('keeps the transparent canvas contract for %s', async (aspectRatio) => {
+    const source = await sharp({ create: { width: 80, height: 60, channels: 3, background: 'red' } }).png().toBuffer();
+    const output = await sharp({ create: { width: 32, height: 32, channels: 4, background: { r: 255, g: 0, b: 0, alpha: 0.5 } } }).png().toBuffer();
+    const endpoint = 'openai/gpt-image-2.5/flare/edit';
+    const fetcher = vi.fn().mockResolvedValueOnce(Response.json({ prices: [{ endpoint_id: endpoint, unit_price: 1, currency: 'USD' }] }))
+      .mockResolvedValueOnce(Response.json({ request_id: 'request-123' }))
+      .mockResolvedValueOnce(Response.json({ status: 'COMPLETED' }))
+      .mockResolvedValueOnce(Response.json({ images: [{ url: 'https://v3.fal.media/result.png' }] }, { headers: { 'x-fal-billable-units': '0.014' } }))
+      .mockResolvedValueOnce(new Response(new Uint8Array(output)));
+    vi.stubGlobal('fetch', fetcher);
+    const result = await createFalImage25Backend(model).generate({ prompt: 'Cut out', image: `data:image/png;base64,${source.toString('base64')}`, background: 'transparent', aspectRatio });
+    const metadata = await sharp(Buffer.from(result.image!.split(',')[1], 'base64')).metadata();
+    expect(metadata).toMatchObject(aspectRatio ? { width: 32, height: 18, hasAlpha: true } : { width: 80, height: 60, hasAlpha: true });
+    expect(fetcher.mock.calls.filter(([, init]) => init?.method === 'POST')).toHaveLength(1);
+  });
   it('never resubmits after an accepted request fails', async () => {
     const endpoint = 'openai/gpt-image-2.5/flare/text-to-image';
     const fetcher = vi.fn().mockResolvedValueOnce(Response.json({ prices: [{ endpoint_id: endpoint, unit_price: 1, currency: 'USD' }] }))

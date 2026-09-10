@@ -5,6 +5,7 @@ import { createPortal } from 'react-dom';
 import type { PreferredModel } from './AgentChatView';
 import type { VideoModel, VideoResolution } from '@/types';
 import { getAgentModels, getImageModels, getVideoModels, type ModelInfo } from '@/lib/model-registry';
+import { resolveImageModel } from '@/lib/models/types';
 import {
   getCodexSubscriptionAgentModelPreference,
   GROK_SUBSCRIPTION_AGENT_MODEL_PREFERENCE,
@@ -448,7 +449,7 @@ function VideoModelRow({
 }
 
 export default function ModelSelector({
-  preferredModel,
+  preferredModel: storedPreferredModel,
   onModelChange,
   videoAuto = true,
   onVideoAutoChange,
@@ -460,6 +461,7 @@ export default function ModelSelector({
   onAgentModelChange,
   onOpenChange,
 }: ModelSelectorProps) {
+  const preferredModel = storedPreferredModel === 'auto' ? 'auto' : resolveImageModel(storedPreferredModel)!;
   const { locale, t } = useLocale();
   const popoverId = useId();
   const popoverTitleId = `${popoverId}-title`;

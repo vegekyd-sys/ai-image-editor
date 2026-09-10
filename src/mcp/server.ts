@@ -120,7 +120,7 @@ export function createMakaronMcpServer(options?: McpServerOptions) {
 | Add text/captions/titles | captions | (auto) | Gemini handles .md templates well |
 | Text-to-image | (omit) | (auto) | gemini→qwen auto fallback, handles all styles including anime |
 | NSFW/sensitive editing | (omit) | qwen | Gemini will refuse |
-| Design/layout/poster/text | (omit) | openai | Best text rendering & design (~50s, premium pricing) |
+| Product/e-commerce/infographic/design/layout/poster/text | (omit) | gpt-image-2.5-flare | Default design image route; preserve the user brief verbatim |
 | Fast lower-cost drafts | (omit) | gemini-lite | Nano Banana 2 Lite for fast 1K image drafts |
 | Wan 2.7 generation/editing | (omit) | wan2.7-image | Fast ~1K output, up to 9 input images; no automatic retries |
 | Not sure | (omit) | (auto) | Auto routing with fallback |
@@ -131,12 +131,12 @@ Input image can be a local file path (stdio), URL, or base64 data URL. Omit imag
 IMPORTANT: Image generation takes 15-30 seconds. Long and detailed prompts are fully supported and produce better results.`,
     {
       image: z.string().nullish().describe('Input image: local file path, URL, or base64 data URL. Omit for text-to-image generation.'),
-      editPrompt: z.string().describe('English editing instructions describing what to change'),
+      editPrompt: z.string().describe('For design/product/layout tasks, pass the user request verbatim in its original language with concise prior feedback. For ordinary edits, use specific English editing instructions'),
       skill: z.enum(['enhance', 'creative', 'wild', 'captions']).nullish().describe('Activate a skill template for structured editing'),
-      model: z.enum(IMAGE_MODEL_IDS).nullish().describe('NEVER set unless user literally names a model. GPT Image 2.5 = gpt-image-2.5-flare (default low quality, fal API); Sunburst = gpt-image-2.5-sunburst. Legacy GPT Image 2 = openai. Image 2.5 calls never use a subscription or fall back to another model. Wan 2.7 Image = wan2.7-image (fast single output; never automatically retry failed/unknown requests). Use gemini-lite only when the user asks for Nano Banana 2 Lite / Lite. Gemini refused→retry with qwen. For design/poster/text-heavy tasks, try openai. Otherwise ALWAYS omit.'),
+      model: z.enum(IMAGE_MODEL_IDS).nullish().describe('Default to gpt-image-2.5-flare for product imagery, e-commerce graphics, infographics, text-heavy posters, design/layout/mockups, face-identity restoration after a Gemini edit, and director storyboards. GPT Image 2 and the legacy openai parameter now resolve to Flare. Explicit Sunburst = gpt-image-2.5-sunburst. Both use fal at low quality with no subscription or automatic fallback. Honor other explicitly named models: Wan 2.7 Image = wan2.7-image; Lite = gemini-lite. Otherwise omit model for auto routing.'),
       referenceImages: z.array(z.string()).nullish().describe('Additional reference images (GPT Image 2.5 supports up to 16 total inputs including the base). Put the original photo here when restoring face/color/details from it.'),
       aspectRatio: z.string().nullish().describe('Target aspect ratio e.g. "4:5", "1:1", "16:9"'),
-      background: z.enum(['auto', 'opaque', 'transparent']).nullish().describe('Output background. Set transparent for transparent/no-background output, background removal, subject cutout/isolation, or a reusable PNG/sticker/overlay/alpha asset. With image input this is GPT Image 2 or 2.5 image-to-image cutout; without image input it is text-to-image. It never returns an opaque fallback.'),
+      background: z.enum(['auto', 'opaque', 'transparent']).nullish().describe('Output background. Set transparent for transparent/no-background output, background removal, subject cutout/isolation, or a reusable PNG/sticker/overlay/alpha asset. With image input this is GPT Image 2.5 image-to-image cutout; without image input it is text-to-image. It never returns an opaque fallback.'),
     },
     async (params) => {
       try {

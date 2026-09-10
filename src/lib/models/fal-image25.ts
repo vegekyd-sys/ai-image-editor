@@ -1,6 +1,7 @@
 import sharp from 'sharp';
 import type { GenerateImageRequest, ModelBackend } from './types';
 import { normalizeOpenAIImageOutput } from './openai-image-output';
+import { fitTransparentResultToAspectRatio, fitTransparentResultToSourceCanvas } from './transparent-source-canvas';
 
 import type { FalImage25Id } from './types';
 export class FalImage25RequestError extends Error {}
@@ -129,8 +130,14 @@ export function createFalImage25Backend(model: FalImage25Id): ModelBackend {
         stage = 'decode';
         if (buffer.length > 50 * 1024 * 1024) throw new Error('Output exceeds image size limit.');
         await sharp(buffer, { failOn: 'error', limitInputPixels: 8294400 }).raw().toBuffer();
-        const image = await normalizeOpenAIImageOutput(`data:image/png;base64,${buffer.toString('base64')}`, req.background);
+        let image = await normalizeOpenAIImageOutput(`data:image/png;base64,${buffer.toString('base64')}`, req.background);
         if (!image) throw new Error('Output did not satisfy the transparent background request.');
+        if (req.background === 'transparent') {
+          const source = req.image ?? req.references?.[0]?.url;
+          stage = 'canvas';
+          if (req.aspectRatio && req.aspectRatio !== 'auto') image = await fitTransparentResultToAspectRatio(image, req.aspectRatio);
+          else if (source) image = await fitTransparentResultToSourceCanvas(source, image);
+        }
         console.log(`[${model}] provider=fal request=${requestId} quality=low costUsd=${cost} totalMs=${Date.now() - started}`);
         // fal supplies cost, not token counts. Do not invent token telemetry.
         return { image, provider: 'fal', usage: { modelId: model, inputTokens: 0, outputTokens: 0, provider: 'fal', providerCostUsd: cost } };
