@@ -296,3 +296,17 @@ describe('onRender — draft without previewUrl', () => {
     expect(messages[0].image).toBeUndefined();
   });
 });
+
+
+describe('mixed static photos and dynamic video sequences', () => {
+  const code = `<Sequence from={501} durationInFrames={45}><Img /></Sequence>
+    {scenes.map(x => <Sequence from={x.from} durationInFrames={x.d}><Video /></Sequence>)}`;
+  it('keeps the declared 30 seconds when only the 18.2-second photo endpoint is inferable', () => {
+    expect(normalizeCompositionAnimation(code, { fps: 30, durationInSeconds: 30 }))
+      .toEqual({ fps: 30, durationInSeconds: 30 });
+  });
+  it('continues to honor an explicit frame count', () => {
+    expect(normalizeCompositionAnimation(code, { fps: 30, durationInSeconds: 30, durationInFrames: 600 }))
+      .toEqual({ fps: 30, durationInSeconds: 20 });
+  });
+});
