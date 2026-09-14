@@ -1,3 +1,4 @@
+import { partitionCompositionMediaRefs } from '@/lib/agent-media-index';
 import { describe, expect, it } from 'vitest';
 import {
   findSnapshotMediaIndex,
@@ -46,5 +47,24 @@ describe('Agent Media Index synchronization', () => {
       'https://cdn.example.com/image-1.jpg',
       'https://cdn.example.com/final.mp4',
     ]);
+  });
+});
+
+
+describe('composition input media types', () => {
+  it('does not send extensionless Scene videos to the image decoder', () => {
+    const urls = ['https://scenes-ai.com/v1/assets/video/media', 'https://scenes-ai.com/v1/assets/photo/media', 'https://cdn.makaron.app/imports/selfie.jpg'];
+    expect(partitionCompositionMediaRefs([1, 2, 3], urls, [
+      { type: 'video' }, { type: null }, { type: null },
+    ])).toEqual({ stillMediaRefs: [2, 3], skippedVideoRefs: [1] });
+  });
+  it('uses persisted types before misleading extensions and preserves requested order', () => {
+    expect(partitionCompositionMediaRefs([2, 1], ['https://cdn.test/photo.mp4', 'https://cdn.test/clip.jpg'], [
+      { type: null }, { type: 'video' },
+    ])).toEqual({ stillMediaRefs: [1], skippedVideoRefs: [2] });
+  });
+  it('retains extension detection for transient media without a stored row', () => {
+    expect(partitionCompositionMediaRefs([1, 2], ['https://cdn.test/a.mp4?x=1', 'data:image/jpeg;base64,/9j/'], []))
+      .toEqual({ stillMediaRefs: [2], skippedVideoRefs: [1] });
   });
 });

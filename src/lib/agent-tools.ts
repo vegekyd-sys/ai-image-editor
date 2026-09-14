@@ -52,6 +52,7 @@ import { VIDEO_PLACEHOLDER_IMAGE } from '@/lib/editor/timeline-derivations';
 import {
   rebuildAgentSnapshotUrls,
   type AgentSnapshotIndexRow,
+  partitionCompositionMediaRefs,
 } from './agent-media-index';
 import { mergePatchProps } from './patch-props';
 import { persistCompositionDraft } from './composition-draft';
@@ -4728,8 +4729,13 @@ function createRunCodeTool(
               const v = validateImageIndex(ctx.snapshotImages, ref);
               if (v.error) return { type: 'text' as const, content: v.error };
             }
-            const stillMediaRefs = media_refs.filter(ref => !isVideoUrl(ctx.snapshotImages[ref - 1]));
-            const skippedVideoRefs = media_refs.filter(ref => isVideoUrl(ctx.snapshotImages[ref - 1]));
+            const snapshotRows = await refreshSnapshotUrls(ctx);
+            if (ctx.supabase && ctx.projectId && !snapshotRows.length) {
+              throw new Error('Unable to load timeline media types for composition inputs.');
+            }
+            const { stillMediaRefs, skippedVideoRefs } = partitionCompositionMediaRefs(
+              media_refs, ctx.snapshotImages, snapshotRows,
+            );
             preloadedImages = await Promise.all(
               stillMediaRefs.map(ref => fetchImageBuffer(ctx.snapshotImages[ref - 1]))
             );
