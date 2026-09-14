@@ -17,12 +17,13 @@ interface LegacyChangelogEntry {
 
 type LocalizedChangelogEntry = {
   date: string;
-  localeKey: 'gptImage25' | 'creativeSpeedUpgrade' | 'wan27Image' | 'fasterVideoAnalysis' | 'videoReplication' | 'minimaxH3Max' | 'fastDurableAgent' | 'wan30' | 'googleOmni11' | 'externalImages' | 'videoTranslation' | 'talkingHeadEditing' | 'smarterEditableDiscovery' | 'tiktokVideoSkill' | 'sourcePlayback' | 'externalSourceRanges' | 'seedance25' | 'minimaxH3' | 'multilingualAsr' | 'editableRemotion' | 'editableLayers';
+  localeKey: 'sceneImportReliability' | 'gptImage25' | 'creativeSpeedUpgrade' | 'wan27Image' | 'fasterVideoAnalysis' | 'videoReplication' | 'minimaxH3Max' | 'fastDurableAgent' | 'wan30' | 'googleOmni11' | 'externalImages' | 'videoTranslation' | 'talkingHeadEditing' | 'smarterEditableDiscovery' | 'tiktokVideoSkill' | 'sourcePlayback' | 'externalSourceRanges' | 'seedance25' | 'minimaxH3' | 'multilingualAsr' | 'editableRemotion' | 'editableLayers';
 };
 
 type ChangelogEntry = LegacyChangelogEntry | LocalizedChangelogEntry;
 
 const CHANGELOG: ChangelogEntry[] = [
+  { date: '2026-09-15', localeKey: 'sceneImportReliability' },
   { date: '2026-09-10', en: { title: 'DeepSeek V4.1 Flash', items: ['DeepSeek V4.1 Flash is now available in Agent: a fast, lower-cost option that understands images and turns a simple prompt into an editable project or finished video.'] }, zh: { title: 'DeepSeek V4.1 Flash 上线', items: ['Agent 现已支持 DeepSeek V4.1 Flash：更快、更省成本，也能看懂图片，把一句话变成可编辑项目或成片。'] } },
   { date: '2026-09-10', localeKey: 'gptImage25' },
   { date: '2026-09-06', localeKey: 'creativeSpeedUpgrade' },
@@ -1042,6 +1043,10 @@ const LOCALIZED_CHANGELOG_KEYS = {
       'changelog.googleOmni11.item1',
       'changelog.googleOmni11.item2',
     ],
+  },
+  sceneImportReliability: {
+    title: 'changelog.sceneImportReliability.title',
+    items: ['changelog.sceneImportReliability.item1', 'changelog.sceneImportReliability.item2'],
   },
   externalImages: {
     title: 'changelog.externalImages.title',
