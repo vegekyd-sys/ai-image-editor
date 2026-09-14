@@ -1,3 +1,4 @@
+import { convertHeicToJpeg, isHeicImage } from '@/lib/external-image';
 import { after, NextRequest, NextResponse } from 'next/server';
 import { authenticateRequest } from '@/lib/api-auth';
 import { uploadImage, uploadVideo, isPermanentUrl } from '@/lib/supabase/storage';
@@ -51,7 +52,8 @@ async function resolveImageUrl(
   }
   const res = await fetch(url);
   if (!res.ok) throw new Error(`Failed to fetch image: ${res.status}`);
-  const buffer = Buffer.from(await res.arrayBuffer());
+  const input = Buffer.from(await res.arrayBuffer());
+  const buffer = isHeicImage(input) ? await convertHeicToJpeg(input) : input;
   const pipeline = sharp(buffer, { failOn: 'error' })
     .resize(2048, 2048, { fit: 'inside', withoutEnlargement: true });
   const metadata = await sharp(buffer, { failOn: 'error' }).metadata();
@@ -64,7 +66,8 @@ async function resolveImageUrl(
   const base64 = `data:${mimeType};base64,${normalized.toString('base64')}`;
   const filename = `snapshot-${crypto.randomUUID()}.${extension}`;
   const storageUrl = await uploadImage(supabase, userId, projectId, filename, base64);
-  return storageUrl || url;
+  if (!storageUrl) throw new Error('Failed to store normalized image');
+  return storageUrl;
 }
 
 async function fillMissingVideoMetadata(

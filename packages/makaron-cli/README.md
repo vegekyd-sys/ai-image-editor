@@ -219,6 +219,12 @@ and supports up to 20 media items for one Makaron task. Batch planning remains
 the upstream orchestrator's responsibility: convert each plan into one manifest
 and start one independent Makaron task.
 
+The server inspects imported image bytes, including extensionless Scene URLs.
+HEIC/HEIF images are converted to durable JPEGs before entering the Media List;
+use the returned media URL for generation and rendering. Compatible image URLs
+(including transparent PNGs) and video source ranges are preserved. Conversion
+or storage failure rejects the image import instead of saving an unusable URL.
+
 ### Export editable Remotion compositions
 
 Animated Remotion compositions are saved as editable timeline/code artifacts first. To materialize one into an MP4 that CLI, V, or another service can read, call the backend export worker:

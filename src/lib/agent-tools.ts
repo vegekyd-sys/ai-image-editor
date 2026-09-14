@@ -4156,7 +4156,7 @@ Path is auto-generated from the current project and output type. Just provide a 
           start: z.number().nonnegative().optional(),
           end: z.number().positive().optional(),
           description: z.string().min(1).optional(),
-        })).max(20).optional().describe('Publish external image or video media directly to the current Media List without uploading derivatives. Preserve Scene type="image" or type="video" when available. Images need source_url + type + description; videos also require start + end. Older callers may omit type, in which case the server detects it once from MIME/file bytes. Put known media analysis into description so later Agent turns can use it without repeating Analyze.'),
+        })).max(20).optional().describe('Publish external image or video media to the current Media List. HEIC images are converted to durable JPEG URLs; compatible images and video ranges retain source URLs. Preserve Scene type="image" or type="video" when available. Images need source_url + type + description; videos also require start + end. Older callers may omit type, in which case the server detects it once from MIME/file bytes. Put known media analysis into description so later Agent turns can use it without repeating Analyze.'),
         workspacePaths: z.array(z.string()).optional().describe('Specific workspace file paths to publish. If omitted with fromWorkspaceOutputs=true, publishes the most recent project media outputs.'),
         mediaType: z.enum(['image', 'video', 'all']).optional().describe('Filter workspace outputs when publishing. Default all.'),
         limit: z.number().int().min(1).max(20).optional().describe('Maximum recent workspace outputs to publish when workspacePaths is omitted. Use 3 for three exported clips, etc.'),
@@ -4198,16 +4198,17 @@ Path is auto-generated from the current project and output type. Just provide a 
             const published = await publishExternalVideoRanges({
               supabase: ctx.supabase,
               projectId: ctx.projectId,
+              userId: ctx.userId,
               ranges: sourceRanges,
             });
             await refreshSnapshotUrls(ctx);
             if (published.length) ctx.currentSnapshotIndex = published[published.length - 1].mediaIndex - 1;
             return {
               success: true,
-              message: `Published ${published.length} external media item${published.length === 1 ? '' : 's'} to the current Media List without uploading derivatives:\n${published.map((item, index) => item.sourceRange
+              message: `Published ${published.length} external media item${published.length === 1 ? '' : 's'} to the current Media List:\n${published.map((item, index) => item.sourceRange
                 ? `${index + 1}. ${item.ref} [video] source_url=${item.sourceRange.source_url} start=${item.sourceRange.start_sec} end=${item.sourceRange.end_sec}\n   Media description: ${item.description}`
                 : `${index + 1}. ${item.ref} [image] source_url=${item.url}\n   Media description: ${item.description}`
-              ).join('\n')}\nThese refs are available immediately to later tools in this same Agent session. Video refs are bounded to their source ranges; image refs use their source URL directly. Their Media List descriptions are existing media understanding; consume covered content directly and call Analyze only for missing or uncovered details.`,
+              ).join('\n')}\nThese refs are available immediately to later tools in this same Agent session. Video refs are bounded to their source ranges; image refs use browser-compatible URLs (HEIC images are converted to JPEG). Their Media List descriptions are existing media understanding; consume covered content directly and call Analyze only for missing or uncovered details.`,
               published,
             };
           } catch (error) {
