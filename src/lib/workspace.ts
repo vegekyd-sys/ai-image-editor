@@ -19,8 +19,8 @@ import { createHash } from 'crypto';
 import { mkdir, open, readFile as readLocalFile, stat, writeFile as writeLocalFile } from 'fs/promises';
 import { tmpdir } from 'os';
 import path from 'path';
-import { Readable } from 'stream';
-import { pipeline } from 'stream/promises';
+import { Readable } from 'node:stream';
+import { pipeline } from 'node:stream/promises';
 import { parseSkillMd, type ParsedSkill } from './skill-registry';
 import builtInSkillManifest from '../generated/built-in-skill-manifest.json';
 
