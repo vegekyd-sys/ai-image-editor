@@ -3,6 +3,10 @@ import { getToolPrice, resolveToolName } from './pricing'
 import { getTokenRate, providerCostToCredits, tokensToCredits, tokensToCreditsBreakdown } from './token-rates'
 import { getConfiguredWelcomeCredits } from './welcome-credits'
 import { PricingUnavailableError } from './media-pricing'
+import { resolveBillingAttribution, type BillingAttribution } from './attribution'
+
+export type { BillingAttribution, BillingSource } from './attribution'
+export { runWithBillingAttribution, enterBillingAttribution, currentBillingAttribution } from './attribution'
 
 // Billing kill switch — cached from DB app_settings
 let _billingEnabled: boolean | null = null
@@ -61,11 +65,14 @@ export async function recordSubscriptionUsage(
     cacheWriteTokens?: number | null
     durationMs?: number | null
     apiKeyId?: string | null
+    attribution?: BillingAttribution
   },
 ): Promise<void> {
-  const { error } = await getSupabaseAdmin().from('usage_logs').insert({
+  const attribution = resolveBillingAttribution(options?.attribution)
+  const apiKeyId = options?.apiKeyId ?? attribution.apiKeyId ?? null
+  const row = {
     user_id: userId,
-    api_key_id: options?.apiKeyId ?? null,
+    api_key_id: apiKeyId,
     tool_name: toolName,
     model_used: subscriptionUsageModelId(modelId, provider),
     credits_charged: 0,
@@ -74,8 +81,18 @@ export async function recordSubscriptionUsage(
     cache_read_tokens: options?.cacheReadTokens ?? null,
     cache_write_tokens: options?.cacheWriteTokens ?? null,
     duration_ms: options?.durationMs ?? null,
-    source: options?.apiKeyId ? 'mcp' : 'app',
+    source: attribution.source ?? (apiKeyId ? 'mcp' : 'app'),
+  }
+  const admin = getSupabaseAdmin()
+  let { error } = await admin.from('usage_logs').insert({
+    ...row,
+    run_id: attribution.runId ?? null,
+    project_id: attribution.projectId ?? null,
   })
+  if (error && isMissingAttributionColumnError(error)) {
+    warnAttributionMigrationMissing()
+    ;({ error } = await admin.from('usage_logs').insert(row))
+  }
   if (error) throw new Error(`Subscription usage logging failed: ${error.message}`)
 }
 
@@ -90,6 +107,7 @@ export async function recordAgentTokenUsage(input: {
   cacheWriteTokens?: number
   cacheWriteTelemetryComplete?: boolean
   providerCostUsd?: number
+  attribution?: BillingAttribution
 }): Promise<{ charged: number; remaining: number }> {
   if (input.provider === 'codex-subscription' || input.provider === 'grok-subscription') {
     await recordSubscriptionUsage(
@@ -104,6 +122,7 @@ export async function recordAgentTokenUsage(input: {
         cacheWriteTokens: input.cacheWriteTelemetryComplete === false
           ? null
           : input.cacheWriteTokens ?? 0,
+        attribution: input.attribution,
       },
     )
     return { charged: 0, remaining: 0 }
@@ -123,6 +142,7 @@ export async function recordAgentTokenUsage(input: {
       cacheWriteTelemetryComplete: input.cacheWriteTelemetryComplete,
     },
     input.providerCostUsd,
+    input.attribution,
   )
 }
 
@@ -253,6 +273,24 @@ export async function requireCredits(
   }
 }
 
+/** PostgREST could not match the RPC with p_run_id/p_project_id: migration 20260919000000 not applied. */
+function isMissingRpcSignatureError(error: { code?: string; message?: string }): boolean {
+  return error.code === 'PGRST202'
+    || /could not find the function/i.test(error.message ?? '')
+}
+
+function isMissingAttributionColumnError(error: { code?: string; message?: string }): boolean {
+  return error.code === '42703'
+    || (/column/i.test(error.message ?? '') && /(run_id|project_id)/.test(error.message ?? ''))
+}
+
+let _attributionWarned = false
+function warnAttributionMigrationMissing() {
+  if (_attributionWarned) return
+  _attributionWarned = true
+  console.warn('[billing] usage_logs run attribution unavailable — apply supabase/migrations/20260919000000_usage_logs_run_attribution.sql. Charges still recorded without run_id.')
+}
+
 /**
  * Atomic deduct + log via single RPC (one transaction — no lost logs, no double-charge).
  */
@@ -260,11 +298,14 @@ async function deductAndLog(
   userId: string, credits: number,
   toolName: string, model?: string | null,
   inputTokens?: number | null, outputTokens?: number | null,
-  durationMs?: number | null, source?: string, apiKeyId?: string | null,
+  durationMs?: number | null, apiKeyId?: string | null,
   cacheReadTokens?: number | null, cacheWriteTokens?: number | null,
+  explicitAttribution?: BillingAttribution | null,
 ): Promise<number> {
   const admin = getSupabaseAdmin()
-  const { data, error } = await admin.rpc('deduct_and_log', {
+  const attribution = resolveBillingAttribution(explicitAttribution)
+  const resolvedApiKeyId = apiKeyId || attribution.apiKeyId || null
+  const params = {
     p_user_id: userId,
     p_amount: credits,
     p_tool_name: toolName,
@@ -272,11 +313,22 @@ async function deductAndLog(
     p_input_tokens: inputTokens || null,
     p_output_tokens: outputTokens || null,
     p_duration_ms: durationMs || null,
-    p_source: source || 'app',
-    p_api_key_id: apiKeyId || null,
+    p_source: attribution.source ?? (resolvedApiKeyId ? 'mcp' : 'app'),
+    p_api_key_id: resolvedApiKeyId,
     p_cache_read_tokens: cacheReadTokens ?? null,
     p_cache_write_tokens: cacheWriteTokens ?? null,
+  }
+  let { data, error } = await admin.rpc('deduct_and_log', {
+    ...params,
+    p_run_id: attribution.runId ?? null,
+    p_project_id: attribution.projectId ?? null,
   })
+  if (error && isMissingRpcSignatureError(error)) {
+    // The run-attribution migration has not been applied yet. Never lose a
+    // charge over telemetry: retry with the previous signature.
+    warnAttributionMigrationMissing()
+    ;({ data, error } = await admin.rpc('deduct_and_log', params))
+  }
   if (!error) return data ?? 0
 
   if (error.code === 'P0001' || error.message?.includes('insufficient_credits')) {
@@ -299,6 +351,7 @@ export async function deductCredits(
   mcpToolName: string,
   model?: string,
   durationMs?: number,
+  attribution?: BillingAttribution,
 ): Promise<{ charged: number; remaining: number }> {
   if (!(await isBillingEnabled())) return { charged: 0, remaining: 0 }
   const toolName = resolveToolName(mcpToolName, model)
@@ -306,7 +359,7 @@ export async function deductCredits(
   if (!price) throw new PricingUnavailableError(`Tool pricing is not configured: ${toolName}`)
   if (price.isFree) return { charged: 0, remaining: 0 }
 
-  const remaining = await deductAndLog(userId, price.credits, toolName, model, null, null, durationMs, apiKeyId ? 'mcp' : 'app', apiKeyId)
+  const remaining = await deductAndLog(userId, price.credits, toolName, model, null, null, durationMs, apiKeyId, null, null, attribution)
   return { charged: price.credits, remaining }
 }
 
@@ -331,6 +384,7 @@ export async function deductByTokens(
   },
   /** Provider-reported actual cost. Prefer this for routed providers whose upstream price can vary. */
   providerCostUsd?: number,
+  attribution?: BillingAttribution,
 ): Promise<{ charged: number; remaining: number }> {
   if (!(await isBillingEnabled())) return { charged: 0, remaining: 0 }
   const rate = await getTokenRate(modelId)
@@ -354,11 +408,12 @@ export async function deductByTokens(
     userId, credits, toolName,
     modelId,
     inputTokens, outputTokens, durationMs,
-    apiKeyId ? 'mcp' : 'app', apiKeyId,
+    apiKeyId,
     cacheBreakdown?.cacheRead ?? null,
     cacheBreakdown?.cacheWriteTelemetryComplete === false
       ? null
       : cacheBreakdown?.cacheWrite ?? null,
+    attribution,
   )
   return { charged: credits, remaining }
 }
@@ -373,11 +428,12 @@ export async function deductFixedCredits(
   model?: string,
   durationMs?: number,
   apiKeyId?: string | null,
+  attribution?: BillingAttribution,
 ): Promise<{ charged: number; remaining: number }> {
   if (!(await isBillingEnabled())) return { charged: 0, remaining: 0 }
   if (credits <= 0) return { charged: 0, remaining: 0 }
 
-  const remaining = await deductAndLog(userId, credits, toolName, model, null, null, durationMs, apiKeyId ? 'mcp' : 'app', apiKeyId)
+  const remaining = await deductAndLog(userId, credits, toolName, model, null, null, durationMs, apiKeyId, null, null, attribution)
   return { charged: credits, remaining }
 }
 
@@ -393,9 +449,10 @@ export async function reserveFixedCredits(
   model?: string,
   durationMs?: number,
   apiKeyId?: string | null,
+  attribution?: BillingAttribution,
 ): Promise<{ charged: number; remaining: number }> {
   try {
-    return await deductFixedCredits(userId, credits, toolName, model, durationMs, apiKeyId)
+    return await deductFixedCredits(userId, credits, toolName, model, durationMs, apiKeyId, attribution)
   } catch (error) {
     if (!isInsufficientCreditsError(error)) throw error
 
@@ -406,7 +463,7 @@ export async function reserveFixedCredits(
     if (!creditCheck.ok) {
       throw new InsufficientCreditsError(creditCheck.balance, credits)
     }
-    return deductFixedCredits(userId, credits, toolName, model, durationMs, apiKeyId)
+    return deductFixedCredits(userId, credits, toolName, model, durationMs, apiKeyId, attribution)
   }
 }
 
@@ -457,15 +514,30 @@ export async function grantCreditsAndRecordPurchase(params: {
   }
 }
 
-export async function refundCredits(userId: string, credits: number, toolName: string): Promise<number> {
+export async function refundCredits(
+  userId: string,
+  credits: number,
+  toolName: string,
+  explicitAttribution?: BillingAttribution,
+): Promise<number> {
   if (credits <= 0) return 0
   const admin = getSupabaseAdmin()
-  const { data, error } = await admin.rpc('refund_credits_and_log', {
+  const attribution = resolveBillingAttribution(explicitAttribution)
+  const params = {
     p_user_id: userId,
     p_amount: credits,
     p_tool_name: toolName,
-    p_source: 'app',
+    p_source: attribution.source ?? (attribution.apiKeyId ? 'mcp' : 'app'),
+  }
+  let { data, error } = await admin.rpc('refund_credits_and_log', {
+    ...params,
+    p_run_id: attribution.runId ?? null,
+    p_project_id: attribution.projectId ?? null,
   })
+  if (error && isMissingRpcSignatureError(error)) {
+    warnAttributionMigrationMissing()
+    ;({ data, error } = await admin.rpc('refund_credits_and_log', params))
+  }
 
   if (error) {
     throw new Error(`Credit refund failed: ${error.message}`)
